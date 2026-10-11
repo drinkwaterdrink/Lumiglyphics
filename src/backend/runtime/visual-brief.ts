@@ -1,3 +1,4 @@
+import { applyAttireOverride } from "./attire.js";
 import type { VisualNovelConfig } from "../../config.js";
 import type { SceneState, VisualCue } from "../../shared/contracts.js";
 import type { CharacterAppearanceMap } from "../../shared/identity.js";
@@ -21,11 +22,15 @@ export function buildVisualBrief(config: VisualNovelConfig, scene: SceneState, c
   const resolved = cue.resolvedIdentity?.trim() || (name === scene.character ? scene.identityPrompt?.trim() : "") || "";
   const attire = cue.resolvedAttire !== undefined ? cue.resolvedAttire : cue.attire ?? (name === scene.character ? scene.attire : null);
   const conflicts = !noPeople && saved && resolved && saved !== resolved ? ["Saved appearance differs from scene evidence; the saved appearance is used."] : [];
+  const identity = saved || resolved;
+  const appearance = attire ? applyAttireOverride(identity, attire) : identity;
+  const subject = cue.subjectCategory ?? scene.subjectCategory;
+  const subjectLabel = subject === "female" ? "One visible woman" : subject === "male" ? "One visible man" : "One visible character";
   const pose = noPeople ? "" : poseById(POSE_EXPRESSION_CATALOGUE, cue.poseExpressionId).suffix;
   const environment = scene.environment;
   return {
     scene: text([environment.location, environment.description, ...environment.persistentElements, environment.timeOfDay, environment.weather]),
-    subjects: noPeople ? "" : text([name ? `Visible character: ${name}` : "One visible character", saved || resolved, attire ? `Wearing ${attire}` : "", template.category === "portrait" ? pose : ""]),
+    subjects: noPeople ? "" : text([subjectLabel, appearance, attire ? `Wearing ${attire}` : "", template.category === "portrait" ? pose : ""]),
     action: noPeople ? template.category === "detail" || template.category === "custom" ? (cue.visualFocus ?? "").slice(0, 1000) : "" : text([cue.visualDescription, compileActionProp(cue.action), template.category === "portrait" ? "" : pose]),
     composition: `${template.framing}; eye-level view; ${noPeople ? "no people" : "one visible character"}; keep the lower quarter clear for dialogue`,
     lighting: (environment.lighting ?? "").slice(0, 1000),

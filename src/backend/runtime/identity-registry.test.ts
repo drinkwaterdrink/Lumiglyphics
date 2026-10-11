@@ -78,7 +78,7 @@ describe("explicit alias resolution before the timeline", () => {
       expect(cue.resolvedIdentity).toContain("silver hair");
       expect(cue.resolvedAttire).toBe("red kimono");
       const prompt = compileImagePrompt(config, result.plan.scenes[0]!, cue);
-      expect(prompt).toContain("1girl, solo");
+      expect(prompt).toMatch(/One visible (?:woman|character)/);
       expect(prompt).toContain("silver hair");
       expect(prompt).toContain("red kimono");
       expect(prompt).not.toContain("1other");
@@ -148,7 +148,7 @@ describe("explicit alias resolution before the timeline", () => {
     expect(second?.resolvedIdentity).toContain("white hair");
     expect(second?.resolvedIdentity).not.toContain("silver hair");
     expect(second?.resolvedAttire).toBeNull();
-    expect(compileImagePrompt(config, result.plan.scenes[0]!, second!)).toContain("1girl, solo");
+    expect(compileImagePrompt(config, result.plan.scenes[0]!, second!)).toMatch(/One visible (?:woman|character)/);
   });
 
   test("a genuine switch to a different character adopts that character, and the return restores the original by id", async () => {
@@ -224,7 +224,7 @@ describe("explicit alias resolution before the timeline", () => {
       characters: [{ name: "Kitsune", description: "fox ears, fox tail", subjectCategory: "nonhuman" }]
     });
     expect(result.plan.visualCues[0]?.subjectCategory).toBe("female");
-    expect(compileImagePrompt(config, result.plan.scenes[0]!, result.plan.visualCues[0]!)).toContain("1girl, solo");
+    expect(compileImagePrompt(config, result.plan.scenes[0]!, result.plan.visualCues[0]!)).toMatch(/One visible (?:woman|character)/);
     expect(result.characterRegistry.kitsune?.subjectCategory).toBe("female");
     expect(result.rejectedSubjects).toEqual([{ name: "Kitsune", requested: "nonhuman", durable: "female" }]);
   });
@@ -441,7 +441,7 @@ describe("controller integration", () => {
     expect(cue.subjectCategory).toBe("female");
     expect(cue.resolvedIdentity).toBe(KITSUNE_TAGS);
     expect(cue.resolvedAttire).toBe("blue yukata");
-    expect(compileImagePrompt(config, record.plan.scenes[0]!, cue)).toContain("1girl, solo");
+    expect(compileImagePrompt(config, record.plan.scenes[0]!, cue)).toMatch(/One visible (?:woman|character)/);
     expect(state.latestScene).toMatchObject({ character: "Kitsune", characterId: "kitsune", attire: "blue yukata" });
     expect(Object.keys(data.get("chats/chat-reload/characters.json") as Record<string, string>)).toEqual(["Kitsune"]);
     const registry = await loadCharacterRegistry(spindle, "chat-reload");

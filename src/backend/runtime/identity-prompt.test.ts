@@ -121,11 +121,11 @@ describe("identity propagation", () => {
     expect(cue.poseExpressionId).toBeString();
     // Exactly one protagonist, centered, deterministic catalogue pose suffix, and no free-form visual delta.
     const prompt = compileImagePrompt(DEFAULT_CONFIG, scene, cue);
-    expect(prompt).toContain("1girl, solo");
-    expect(prompt).toContain("girl, silver hair, green eyes, red wool coat");
+    expect(prompt).toMatch(/One visible (?:woman|character)/);
+    expect(prompt).toContain("silver hair, green eyes, red wool coat");
     expect(prompt).not.toContain("identity:");
     expect(prompt).not.toContain("Mira");
-    expect(prompt).toContain("solo");
+    expect(prompt).toContain("one visible character");
     // The identity tags appear exactly once.
     expect(prompt.split("silver hair").length - 1).toBe(1);
     // No free-form action / expression / promptDelta leaks into the compiled prompt.

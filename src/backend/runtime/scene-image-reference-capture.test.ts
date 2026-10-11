@@ -8,6 +8,34 @@
 import { describe, expect, test } from "bun:test";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { DEFAULT_CONFIG, type VisualNovelConfig } from "../../config.js";
+import { resolveImageTemplate } from "../../shared/image-templates.js";
+
+test("environment generation never captures a portrait in captured or card mode", async () => {
+  for (const referenceSource of ["captured", "card"] as const) {
+    const h = harness();
+    const p = plan(`env-${referenceSource}`, [[0, "idle"]]);
+    p.visualCues[0]!.imageTemplate = resolveImageTemplate(DEFAULT_CONFIG, "environment").template;
+    const result = await run(h, new SceneImageCache(), p, { ...on, referenceSource });
+    expect(result[0]?.status).toBe("generated");
+    expect(h.calls).toHaveLength(1);
+    expect(h.calls[0]?.includeDataUrl).toBe(false);
+    expect(h.calls[0]?.anchored).toBe(false);
+    expect(Object.keys(portraits(h))).toHaveLength(0);
+  }
+});
+
+test("no-reference template excludes saved connection reference parameters", async () => {
+  const h = harness();
+  const p = plan("env-defaults", [[0, "idle"]]);
+  p.visualCues[0]!.imageTemplate = resolveImageTemplate(DEFAULT_CONFIG, "environment").template;
+  let received: Record<string, unknown> = {};
+  h.spindle.imageGen.getConnection = (async () => ({ id: "conn", provider: "novelai", updated_at: 1, default_parameters: { resolvedReferenceImages: ["old character reference"], seed: 42 } })) as any;
+  const original = h.spindle.imageGen.generate;
+  h.spindle.imageGen.generate = async input => { received = input.parameters ?? {}; return original(input); };
+  await generateAssets(h.spindle, p, createAssetJobs(p, on), { ...on, imageConnectionId: "conn" }, new AbortController().signal, () => {}, undefined, { beforeGenerate: async (_job, input) => input });
+  expect(received.resolvedReferenceImages).toBeUndefined();
+  expect(received.seed).toBe(42);
+});
 import { TurnPlanSchema, type AssetJob, type SceneState, type TurnPlan, type VisualCue } from "../../shared/contracts.js";
 import { createAssetJobs, generateAssets } from "./images.js";
 import { SceneImageCache } from "../core/scene-image-cache.js";

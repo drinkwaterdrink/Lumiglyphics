@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_CONFIG } from "../../config.js";
+import { DEFAULT_CONFIG, normalizeConfig } from "../../config.js";
+import { resolveImageTemplate, templateSnapshot } from "../../shared/image-templates.js";
 import { type SceneState, type VisualCue } from "../../shared/contracts.js";
 import { POSE_EXPRESSION_CATALOGUE, poseById } from "../../shared/character.js";
 import {
@@ -7,6 +8,35 @@ import {
   classifySubject,
   compileImagePrompt
 } from "./images.js";
+import { compileNegativePrompt, compileNovelAiRequest, sceneImageIdentityFor } from "./images.js";
+
+test("template compiler removes hidden subject/style additions for no-people pictures", () => {
+  const config = normalizeConfig({ promptPrefix: "", negativePrompt: "", referenceSource: "card" });
+  const environment = { ...cue(), imageTemplate: resolveImageTemplate(config, "environment").template };
+  const prompt = compileImagePrompt(config, scene, environment);
+  expect(prompt).toContain("Library");
+  expect(prompt).toContain("wide");
+  expect(prompt).not.toMatch(/1girl|solo|silver hair|anime|masterpiece/);
+  expect(compileNegativePrompt(config, scene, environment)).toBe("");
+  const identity = sceneImageIdentityFor(config, scene, environment, undefined, "nanogpt");
+  expect(identity.appearance.identity).toBe("");
+  expect(identity.request.referenceAnchoring).toBe(false);
+  const nai = compileNovelAiRequest(config, scene, environment);
+  expect(nai.parameters.characterTags).toEqual([]);
+  expect(nai.prompt).not.toMatch(/1girl|silver hair/);
+});
+
+test("template revision and scene focus isolate cache identities", () => {
+  const config = normalizeConfig({});
+  const template = resolveImageTemplate(config, "detail").template;
+  const first = { ...cue(), imageTemplate: template, visualFocus: "brass key" };
+  const second = { ...first, visualFocus: "silver ring" };
+  expect(sceneImageIdentityFor(config, scene, first, undefined, null)).not.toEqual(sceneImageIdentityFor(config, scene, second, undefined, null));
+  const { revision: _, ...body } = template;
+  const edited = { ...first, imageTemplate: templateSnapshot({ ...body, positive: "{{action}}" }) };
+  expect(compileImagePrompt(config, scene, edited)).toBe("brass key");
+  expect(sceneImageIdentityFor(config, scene, first, undefined, null)).not.toEqual(sceneImageIdentityFor(config, scene, edited, undefined, null));
+});
 import { renderPrompt } from "../inlay-prompt/index.js";
 
 const scene: SceneState = {

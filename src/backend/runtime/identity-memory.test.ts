@@ -182,7 +182,7 @@ describe("durable cross-chat character memory", () => {
     const cue = result.plan.visualCues[0]!;
     const prompt = compileImagePrompt(DEFAULT_CONFIG, scene, cue);
     expect(prompt).not.toContain("identity: Hina");
-    expect(prompt).toContain("solo");
+    expect(prompt).toContain("one visible character");
   });
 
   test("a usable frozen per-chat baseline is reused and never re-seeded", async () => {

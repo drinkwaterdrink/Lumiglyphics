@@ -1,3 +1,5 @@
+import { applyAttireOverride } from "./attire.js";
+export { applyAttireOverride, isClothingTag, cleanClothingFromPhrase } from "./attire.js";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import type { ImageGenerationRequest } from "./image-review.js";
 import type { VisualNovelConfig } from "../../config.js";
@@ -20,6 +22,8 @@ import {
 } from "../core/scene-image-cache.js";
 import { POSE_EXPRESSION_CATALOGUE, poseById } from "../../shared/character.js";
 import { compileActionProp } from "../../shared/action-prop.js";
+import { renderImageTemplate } from "../../shared/image-templates.js";
+import { buildVisualBrief } from "./visual-brief.js";
 import {
   appearanceMapKeyFor,
   characterAppearanceKey,
@@ -266,6 +270,23 @@ function compilePromptEntry(
   return describeCue(config, scene, cue, characterAppearance).entry;
 }
 
+export function cueUsesCharacterReference(cue: VisualCue): boolean {
+  return !cue.imageTemplate || cue.imageTemplate.subjectMode === "one" && cue.imageTemplate.referencePolicy === "character";
+}
+
+function withoutImageReferences(parameters: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(parameters).filter(([key]) => !/(?:reference|(?:resolved|source|input|init)Images?)/i.test(key)));
+}
+
+export function compileTemplateCue(config: VisualNovelConfig, scene: SceneState, cue: VisualCue, appearances?: CharacterAppearanceMap) {
+  if (!cue.imageTemplate) throw new Error("This cue has no image template snapshot.");
+  const brief = buildVisualBrief(config, scene, cue, appearances);
+  const format = (value: string) => config.imagePromptFormat === "tags" ? value.replace(/;\s*|\n+/g, ", ") : value;
+  const compiled = renderImageTemplate(cue.imageTemplate, { style: config.promptPrefix, scene: format(brief.scene), subjects: format(brief.subjects), action: format(brief.action), composition: format(brief.composition), lighting: brief.lighting, suffix: config.promptSuffix, negative: config.negativePrompt });
+  if (!compiled.prompt.trim()) throw new Error("The image template produced an empty prompt.");
+  return { ...compiled, brief };
+}
+
 export function compileImagePrompt(
   config: VisualNovelConfig,
   scene: SceneState,
@@ -274,6 +295,7 @@ export function compileImagePrompt(
   syntax?: Config["promptSyntax"],
   provider?: string | null
 ): string {
+  if (cue.imageTemplate) return compileTemplateCue(config, scene, cue, characterAppearance).prompt;
   if (provider === "novelai") return compileNovelAiRequest(config, scene, cue, characterAppearance).prompt;
   const selectedSyntax = syntax ?? (config as any).promptSyntax ?? "comfyui";
   const entry = describeCue(config, scene, cue, characterAppearance, provider ?? (selectedSyntax === "nai" ? "novelai" : null)).entry;
@@ -282,6 +304,12 @@ export function compileImagePrompt(
 
 /** One compiled payload is shared by generation and cache identity. */
 export function compileNovelAiRequest(config: VisualNovelConfig, scene: SceneState, cue: VisualCue, appearances?: CharacterAppearanceMap) {
+  if (cue.imageTemplate) {
+    const compiled = compileTemplateCue(config, scene, cue, appearances);
+    // The complete self-contained template is the scene caption. Duplicating its
+    // subjects into host character captions would silently change that prompt.
+    return { prompt: compiled.prompt, negativePrompt: compiled.negativePrompt, parameters: { qualityToggle: false, negativePrompt: compiled.negativePrompt, characterTags: [] as { tags: string }[] } };
+  }
   const model = config.imageModel;
   const caps = novelAiCapabilities(model);
   const adjusted = { ...config, promptPrefix: config.promptPrefix === DEFAULT_CONFIG.promptPrefix ? "anime visual novel scene" : config.promptPrefix };
@@ -308,6 +336,7 @@ export function compileNegativePrompt(
   cue: VisualCue,
   characterAppearance?: CharacterAppearanceMap
 ): string {
+  if (cue.imageTemplate) return compileTemplateCue(config, scene, cue, characterAppearance).negativePrompt;
   const entry = compilePromptEntry(config, scene, cue, characterAppearance);
   if (entry.negative) return entry.negative;
   const compilerConfig = normalizeConfig({
@@ -356,6 +385,25 @@ export function sceneImageIdentityFor(
   provider: string | null,
   reference?: SceneImageReference
 ): SceneImageIdentity {
+  if (cue.imageTemplate) {
+    const compiled = compileTemplateCue(config, scene, cue, characterAppearance);
+    const brief = compiled.brief;
+    const visual = resolveCueCharacterVisualState(scene, cue, characterAppearance);
+    const { connectionId, workflowId } = splitConnectionSelection(config.imageConnectionId);
+    return {
+      imageTemplate: cue.imageTemplate,
+      visualBrief: brief,
+      subject: brief.subjectMode === "none" ? { characterId: "none", subjectCategory: "none" } : { characterId: visual.characterId, subjectCategory: visual.subjectCategory },
+      appearance: { identity: brief.subjects, attire: brief.subjectMode === "none" ? "" : visual.attire },
+      environment: { location: scene.environment.location, timeWeather: [scene.environment.timeOfDay, scene.environment.weather].filter(Boolean).join(", "), lighting: scene.environment.lighting, description: scene.environment.description, persistentElements: scene.environment.persistentElements },
+      pose: { id: brief.subjectMode === "none" ? "none" : cue.poseExpressionId ?? "idle", suffix: "" },
+      action: brief.action || null,
+      framing: { framing: brief.framing, angle: "eye level", perspective: "straight-on" },
+      request: { prompt: compiled.prompt, negativePrompt: compiled.negativePrompt, provider, connectionId: connectionId ? workflowId ? `${connectionId}::${workflowId}` : connectionId : null, model: config.imageModel, parameters: userImageParameters(config), promptSyntax: config.imagePromptFormat,
+        referenceAnchoring: referenceAnchoringEnabled(config) && cueUsesCharacterReference(cue),
+        ...(referenceAnchoringEnabled(config) && cueUsesCharacterReference(cue) ? { reference: reference ?? { source: "none" as const }, ...(config.referenceSource === "card" ? { referenceSource: "card" as const } : {}) } : {}) }
+    };
+  }
   const description = describeCue(config, scene, cue, characterAppearance, provider);
   const nai = provider === "novelai" ? compileNovelAiRequest(config, scene, cue, characterAppearance) : null;
   const { connectionId, workflowId } = splitConnectionSelection(config.imageConnectionId);
@@ -439,6 +487,7 @@ export function retainPlanEpisodes(cache: SceneImageCache, scope: string, plan: 
  * class). Legacy or unresolved cues always take normal generation.
  */
 export function cacheEligibleCue(cue: VisualCue): boolean {
+  if (cue.imageTemplate?.subjectMode === "none") return true;
   return Boolean(cue.characterId?.trim()) && Boolean(cue.resolvedIdentity?.trim()) && cue.subjectCategory !== undefined;
 }
 
@@ -479,7 +528,7 @@ export async function resolveCacheCues(
   const log = options.log ?? (() => {});
   // Card mode keys carry the chosen reference, so candidates resolve it the
   // same way the budgeted path does (stored portraits + one context lookup).
-  const cardSource = referenceAnchoringEnabled(config) && config.referenceSource === "card"
+  const cardSource = pending.some(cueUsesCharacterReference) && referenceAnchoringEnabled(config) && config.referenceSource === "card"
     && provider !== null && REFERENCE_PROVIDERS.has(provider);
   let candidatePortraits: Record<string, StoredPortrait> = {};
   let candidateResolutions: Map<string, CardAssetResolution> | null = null;
@@ -512,7 +561,7 @@ export async function resolveCacheCues(
     let key: string;
     try {
       let reference: SceneImageReference | undefined;
-      if (cardSource) {
+      if (cardSource && cueUsesCharacterReference(cue)) {
         const visualState = resolveCueCharacterVisualState(scene, cue, characterAppearance);
         const cardPortrait = visualState.characterKey
           ? cardPortraitFor(candidatePortraits, visualState.characterKey)
@@ -661,6 +710,7 @@ export async function prepareAssetJobs(
     warm = warm.filter((job) => {
       const cue = plan.visualCues.find((cue) => cue.assetJobId === job.jobId);
       if (!cue) return false;
+      if (!cueUsesCharacterReference(cue)) return true;
       const state = resolveCueCharacterVisualState(sceneForCue(plan, cue), cue, characterAppearance);
       return Boolean(config.referenceSource === "card" && cardPortraitFor(portraits, state.characterKey))
         || Boolean(compatiblePortrait(portraits[state.characterKey], portraitIdentityFingerprint(state.characterName, state.baseIdentity, config, provider)));
@@ -801,7 +851,7 @@ export async function generateAssets(
   const profile = await resolveImageProfile(spindle, config, userId);
   const provider = profile.provider;
   if (provider === "novelai") config = { ...config, imageModel: config.imageModel || profile.model || "nai-diffusion-4-5-full" };
-  const anchorable = referenceAnchoringEnabled(config) && provider !== null && REFERENCE_PROVIDERS.has(provider);
+  const anchorable = plan.visualCues.some(cueUsesCharacterReference) && referenceAnchoringEnabled(config) && provider !== null && REFERENCE_PROVIDERS.has(provider);
   const cardSource = anchorable && config.referenceSource === "card";
 
   const [initialPortraits, characterAppearance] = await Promise.all([
@@ -956,7 +1006,8 @@ export async function generateAssets(
         if (signal.aborted) throw abortError(signal);
         const scene = sceneForCue(plan, cue);
         const visualState = resolveCueCharacterVisualState(scene, cue, characterAppearance);
-        if (cue.resolvedIdentity !== undefined && !cue.resolvedIdentity.trim()) throw new Error(`No usable appearance was resolved for "${visualState.characterName}". Replan this turn with a character description; the previous character will not be substituted.`);
+        const canAnchor = anchorable && cueUsesCharacterReference(cue);
+        if (cue.imageTemplate?.subjectMode !== "none" && cue.resolvedIdentity !== undefined && !cue.resolvedIdentity.trim()) throw new Error(`No usable appearance was resolved for "${visualState.characterName}". Replan this turn with a character description; the previous character will not be substituted.`);
         const prompt = compileImagePrompt(config, scene, cue, characterAppearance, undefined, provider);
         const nai = provider === "novelai" ? compileNovelAiRequest(config, scene, cue, characterAppearance) : null;
         const negativePrompt = nai?.negativePrompt ?? compileNegativePrompt(config, scene, cue, characterAppearance);
@@ -968,7 +1019,7 @@ export async function generateAssets(
         // at most once per character per batch and times out into the
         // captured path below.
         let cardPortrait: StoredPortrait | undefined;
-        if (cardSource && characterKey) {
+        if (cardSource && canAnchor && characterKey) {
           cardPortrait = cardPortraitFor(portraits, characterKey);
           if (!cardPortrait) {
             const resolution = cardContext?.resolutions.get(characterKey);
@@ -979,7 +1030,7 @@ export async function generateAssets(
         /* ---- reference anchoring decision first: unchanged, and it gates reuse ---- */
         // If another render is currently capturing this character, wait for it before proceeding.
         // Dependent renders wait; unrelated characters stay concurrent.
-        if (!cardPortrait && anchorable && characterKey && capturePromises.has(characterKey)) {
+        if (!cardPortrait && canAnchor && characterKey && capturePromises.has(characterKey)) {
           try {
             await capturePromises.get(characterKey);
           } catch {
@@ -988,11 +1039,11 @@ export async function generateAssets(
         }
 
         const identityFingerprint = portraitIdentityFingerprint(characterName, visualState.baseIdentity, config, provider);
-        let portrait = cardPortrait ?? (anchorable && characterKey ? compatiblePortrait(portraits[characterKey], identityFingerprint) : undefined);
+        let portrait = cardPortrait ?? (canAnchor && characterKey ? compatiblePortrait(portraits[characterKey], identityFingerprint) : undefined);
         let isCaptureOwner = false;
         let captureResolve: ((val: StoredPortrait | null) => void) | undefined;
 
-        const wantsCapture = anchorable && Boolean(characterKey) && Boolean(identityFingerprint) && !portrait && !capturePromises.has(characterKey);
+        const wantsCapture = canAnchor && Boolean(characterKey) && Boolean(identityFingerprint) && !portrait && !capturePromises.has(characterKey);
         if (wantsCapture) {
           isCaptureOwner = true;
           const promise = new Promise<StoredPortrait | null>((resolve) => {
@@ -1012,7 +1063,7 @@ export async function generateAssets(
           } else {
             cacheKey = sceneImageCacheKey(sceneImageIdentityFor(
               config, scene, cue, characterAppearance, provider,
-              cardSource ? cardReferenceForCache(cardPortrait, portrait) : undefined
+              cardSource ? cardReferenceForCache(cardPortrait, portrait) : cue.imageTemplate ? portrait ? { source: "captured", imageId: portrait.imageId } : { source: "none" } : undefined
             ));
             episode = sceneEpisodeOf(scene, cache.generation(scope));
             if (bypass.has(scheduledJob.jobId)) {
@@ -1107,17 +1158,18 @@ export async function generateAssets(
             ...(userId ? { userId } : {})
           };
           // Freeze exposed profile defaults/model before review, including a default-profile selection.
-          const frozen: ImageGenerationRequest = cacheOptions.beforeGenerate ? {
+          let frozen: ImageGenerationRequest = cacheOptions.beforeGenerate ? {
             ...input,
             ...(selected?.id ? { connection_id: selected.id } : {}),
             ...(config.imageModel || selected?.model ? { model: config.imageModel || selected!.model } : {}),
             parameters: { ...(selected?.default_parameters ?? {}), ...input.parameters }
           } : input;
+          if (!cueUsesCharacterReference(cue)) frozen = { ...frozen, parameters: withoutImageReferences(frozen.parameters ?? {}) };
           const approved = cacheOptions.beforeGenerate ? await cacheOptions.beforeGenerate(scheduledJob, frozen, {
             provider: selected?.provider ?? provider ?? "Unknown",
             ...(selected ? { connectionRevision: selected.updated_at } : {}),
             referenceSummary: portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference"
-          }, jobSignal) : input;
+          }, jobSignal) : frozen;
           if (signal.aborted) throw abortError(signal);
           if (jobSignal.aborted) throw abortError(jobSignal);
           if (cacheOptions.beforeGenerate && selected?.id) {
@@ -1228,65 +1280,6 @@ export async function generateAssets(
     signal.removeEventListener("abort", abort);
     unsubscribe();
   }
-}
-
-const CLOTHING_TAG_REGEX = /\b(?:clothes|clothing|attire|outfit|uniform|dress(?:es)?|sundress(?:es)?|skirt(?:s)?|shirt(?:s)?|t-?shirt(?:s)?|tee-?shirt(?:s)?|sweatshirt(?:s)?|blouse(?:s)?|sweater(?:s)?|cardigan(?:s)?|jacket(?:s)?|coat(?:s)?|hoodie(?:s)?|vest(?:s)?|suit(?:s)?|robe(?:s)?|kimono(?:s)?|yukata|hanfu|gi|pants|trousers|jeans|shorts|leggings|tights|pantyhose|socks?|stockings?|shoes?|boots?|sneakers?|heels?|sandals?|gloves?|hat(?:s)?|cap(?:s)?|hood(?:s)?|scarf|scarves|tie(?:s)?|necktie(?:s)?|ribbon(?:s)?|(?:hair\s*)?bows?(?!\s*[-]?\s*(?:shaped|lips|mouth))|collar(?:s)?|apron(?:s)?|swimsuit(?:s)?|bikini(?:s)?|pajamas?|leotard(?:s)?|bodysuit(?:s)?|armor|armour|breastplate(?:s)?|cloak(?:s)?|cape(?:s)?)\b/i;
-
-export function isClothingTag(tag: string): boolean {
-  if (/\b(?:bow[- ]shaped|cupid(?:'s)?\s+bow|lips?|mouth)\b/i.test(tag)) {
-    return false;
-  }
-  const normalized = tag.toLowerCase().replace(/_/g, " ");
-  return CLOTHING_TAG_REGEX.test(normalized);
-}
-
-export function cleanClothingFromPhrase(phrase: string): string {
-  const match = phrase.match(/^(.*?)\s+\b(?:wearing|dressed in|clad in|sporting)\s+(.+)$/i);
-  if (match && match[1] && match[2]) {
-    const clothingPart = match[2];
-    if (isClothingTag(clothingPart)) {
-      return match[1].trim();
-    }
-  }
-  return phrase;
-}
-
-export function applyAttireOverride(baseIdentity: string, newAttire: string): string {
-  const trimmedAttire = newAttire.trim();
-  if (!trimmedAttire && !baseIdentity.trim()) return "";
-  if (!baseIdentity.trim()) return trimmedAttire;
-
-  const tags = splitTopLevelCsv(baseIdentity);
-  const physicalTags: string[] = [];
-
-  for (const tag of tags) {
-    const parsed = parseWeightedGroup(tag);
-    if (parsed) {
-      const surviving: string[] = [];
-      for (const item of parsed.items) {
-        const cleaned = cleanClothingFromPhrase(item);
-        if (cleaned && !isClothingTag(cleaned)) {
-          surviving.push(cleaned);
-        }
-      }
-      if (surviving.length > 0) {
-        if (parsed.type === "comfy") {
-          physicalTags.push(`(${surviving.join(", ")}:${parsed.weight})`);
-        } else {
-          physicalTags.push(`${parsed.prefix}${surviving.join(", ")}${parsed.suffix}`);
-        }
-      }
-      continue;
-    }
-
-    const cleanedTag = cleanClothingFromPhrase(tag);
-    if (cleanedTag && !isClothingTag(cleanedTag)) {
-      physicalTags.push(cleanedTag);
-    }
-  }
-
-  const combined = trimmedAttire ? [...physicalTags, trimmedAttire].join(", ") : physicalTags.join(", ");
-  return validateAndRepairDelimiters(combined);
 }
 
 /**

@@ -124,8 +124,8 @@ describe("fresh single-character fallback", () => {
     // The prompt is not a bare "solo": it carries a nonempty identity/tag block.
     const cue = result.plan.visualCues[0]!;
     const prompt = compileImagePrompt(DEFAULT_CONFIG, scene, cue);
-    expect(prompt).toContain("1girl, solo");
-    expect(prompt).toContain("girl, silver hair, green eyes, red wool coat");
+    expect(prompt).toMatch(/One visible (?:woman|character)/);
+    expect(prompt).toContain("silver hair, green eyes, red wool coat");
     expect(prompt).not.toContain("identity:");
     expect(prompt).not.toContain("Mira");
     expect(prompt).not.toBe("solo");
@@ -213,7 +213,7 @@ describe("fresh single-character fallback", () => {
     const cue = result.plan.visualCues[0]!;
     const prompt = compileImagePrompt(DEFAULT_CONFIG, scene, cue);
     expect(prompt).not.toContain("identity:");
-    expect(prompt).toContain("solo");
+    expect(prompt).toContain("one visible character");
   });
 
   test("uses the literal Protagonist when there is no card and no speaker name", async () => {
