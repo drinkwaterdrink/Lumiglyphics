@@ -115,6 +115,12 @@ function runtime(record: StoredTurnRecord): { spindle: SpindleAPI; writes: Map<s
 }
 
 describe("runtime asset readiness", () => {
+  test("failed replacements expose the previous usable picture and preserve request inspection", () => {
+    const record: StoredTurnRecord = { schemaVersion: 1, speaker: "Mira", status: "ready", plan, jobs: [{ ...generatedJob(), status: "failed", imageId: null, imageUrl: null }], previousImages: { job: { imageId: "original", imageUrl: "/original" } }, updatedAt: now };
+    expect(turnView(record).assets[0]?.imageUrl).toBe("/original");
+    expect(turnView(record).assets[0]?.status).toBe("failed");
+    expect(turnView(record).assets[0]?.previousImage).toBe(true);
+  });
   test("turn views expose the stable job identity", () => {
     const record: StoredTurnRecord = { schemaVersion: 1, speaker: "Mira", status: "ready", plan, jobs: [generatedJob()], updatedAt: now };
     expect(turnView(record).assets[0]?.jobId).toBe("job");
@@ -345,12 +351,14 @@ function generationPayload(cues: number[]) {
 }
 
 function generationFixture() {
+  let frontend: (payload: unknown, userId: string) => void = () => {};
   const handlers = new Map<string, Array<(...args: unknown[]) => void>>();
   const data = new Map<string, unknown>();
   const sent: unknown[] = [];
   const gates: Array<{ resolve: (value: { imageId: string; imageUrl?: string | null }) => void; reject: (reason?: unknown) => void }> = [];
   data.set("config.json", {
     generateImages: true,
+    reviewImages: false,
     maxImagesPerTurn: 2,
     imageConcurrency: 1,
     includeCharacterContext: false,
@@ -363,7 +371,7 @@ function generationFixture() {
       list.push(handler);
       handlers.set(event, list);
     },
-    onFrontendMessage: () => {},
+    onFrontendMessage: (handler: typeof frontend) => { frontend = handler; },
     userStorage: {
       getJson: async (path: string, options: { fallback: unknown }) => data.get(path) ?? options.fallback,
       setJson: async (path: string, value: unknown) => { data.set(path, value); }
@@ -405,8 +413,80 @@ function generationFixture() {
   const assetStatuses = (): string[] => (sent as Array<Record<string, unknown>>)
     .filter((message) => message.type === "vn_asset")
     .map((message) => (message.asset as Record<string, unknown>).status as string);
-  return { spindle, fire, data, sent, gates, assetStatuses };
+  return { spindle, fire, data, sent, gates, assetStatuses, request: (payload: unknown, userId = "review-user") => frontend(payload, userId) };
 }
+
+describe("image review controller lifecycle", () => {
+  test("rejects cross-user and duplicate approval; retains old art after replacement failure", async () => {
+    const f = generationFixture();
+    f.data.set("config.json", { generateImages: true, reviewImages: true, referenceAnchoring: false, maxImagesPerTurn: 1, includeCharacterContext: false, includePersonaContext: false });
+    registerVisualNovelBackend(f.spindle);
+    await sendState(f.spindle, "chat", "review-user", { viewOpen: true });
+    const latestRequest = () => (f.data.get(turnPath("chat", "assistant-1", 0)) as StoredTurnRecord)?.imageRequests?.at(-1);
+    await waitFor(() => latestRequest()?.state === "review");
+    expect(f.gates).toHaveLength(0);
+    const first = latestRequest()!;
+    const action = { type: "vn_image_review", chatId: "chat", messageId: "assistant-1", sourceFingerprint: (f.data.get(turnPath("chat", "assistant-1", 0)) as StoredTurnRecord).plan.key.sourceFingerprint, requestId: first.requestId, action: "generate", edits: { prompt: "my exact portrait" } };
+    f.request(action, "other-user");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(f.gates).toHaveLength(0);
+    f.request(action);
+    f.request(action);
+    await waitFor(() => f.gates.length === 1);
+    f.gates[0]!.resolve({ imageId: "original", imageUrl: "/original" });
+    await waitFor(() => (f.data.get(turnPath("chat", "assistant-1", 0)) as StoredTurnRecord).jobs[0]?.status === "generated");
+    expect(latestRequest()?.prompt).toBe("my exact portrait");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    f.data.set("config.json", { ...(f.data.get("config.json") as object), generateImages: false });
+    f.request({ type: "vn_prepare_image", chatId: "chat", messageId: "assistant-1", sourceFingerprint: action.sourceFingerprint, jobId: first.jobId });
+    await waitFor(() => f.sent.some((entry: any) => entry.type === "vn_error" && /Enable generated pictures/.test(entry.error)));
+    expect((f.data.get(turnPath("chat", "assistant-1", 0)) as StoredTurnRecord).jobs[0]?.status).toBe("generated");
+    f.data.set("config.json", { ...(f.data.get("config.json") as object), generateImages: true });
+    f.request({ type: "vn_prepare_image", chatId: "chat", messageId: "assistant-1", sourceFingerprint: action.sourceFingerprint, jobId: first.jobId });
+    await waitFor(() => latestRequest()?.state === "review" && latestRequest()?.requestId !== first.requestId);
+    const replacement = latestRequest()!;
+    f.request({ ...action, requestId: replacement.requestId });
+    await waitFor(() => f.gates.length === 2);
+    f.gates[1]!.reject(new Error("provider failed"));
+    await waitFor(() => (f.data.get(turnPath("chat", "assistant-1", 0)) as StoredTurnRecord).jobs[0]?.status === "failed");
+    const view = turnView(f.data.get(turnPath("chat", "assistant-1", 0)) as StoredTurnRecord);
+    expect(view.assets[0]?.imageUrl).toBe("/original");
+    expect(view.assets[0]?.previousImage).toBe(true);
+    expect(view.assets[0]?.error).toContain("provider failed");
+    expect(f.gates).toHaveLength(2);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const stored = f.data.get(turnPath("chat", "assistant-1", 0)) as StoredTurnRecord;
+    stored.plan.cacheCues = stored.plan.visualCues;
+    stored.plan.visualCues = [];
+    f.request({ type: "vn_prepare_image", chatId: "chat", messageId: "assistant-1", sourceFingerprint: action.sourceFingerprint, jobId: first.jobId });
+    await waitFor(() => latestRequest()?.state === "review" && latestRequest()?.requestId !== replacement.requestId);
+    expect(f.gates).toHaveLength(2);
+    f.request({ type: "vn_view", chatId: "chat", open: false });
+  });
+
+  test("turning review off keeps an existing draft held; close cancels it without paid calls", async () => {
+    const f = generationFixture();
+    f.data.set("config.json", { generateImages: true, reviewImages: true, referenceAnchoring: false, maxImagesPerTurn: 1, includeCharacterContext: false, includePersonaContext: false });
+    registerVisualNovelBackend(f.spindle);
+    await sendState(f.spindle, "chat", "toggle-user", { viewOpen: true });
+    const saved = () => f.data.get(turnPath("chat", "assistant-1", 0)) as StoredTurnRecord;
+    await waitFor(() => saved().imageRequests?.at(-1)?.state === "review");
+    f.request({ type: "vn_set_config", patch: { reviewImages: false } }, "toggle-user");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(f.gates).toHaveLength(0);
+    f.request({ type: "vn_view", chatId: "chat", open: false }, "toggle-user");
+    await waitFor(() => saved().jobs[0]?.status === "cancelled");
+    expect(f.gates).toHaveLength(0);
+    await sendState(f.spindle, "chat", "toggle-user", { viewOpen: true });
+    expect((f.sent.filter((entry: any) => entry.type === "vn_state").at(-1) as any).turn.imageRequests.at(-1).state).toBe("cancelled");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const old = saved().imageRequests!.at(-1)!;
+    f.request({ type: "vn_prepare_image", chatId: "chat", messageId: "assistant-1", sourceFingerprint: saved().plan.key.sourceFingerprint, jobId: old.jobId }, "toggle-user");
+    await waitFor(() => saved().imageRequests?.at(-1)?.state === "review" && saved().imageRequests?.at(-1)?.requestId !== old.requestId);
+    expect(f.gates).toHaveLength(0);
+    f.request({ type: "vn_view", chatId: "chat", open: false }, "toggle-user");
+  });
+});
 
 describe("GENERATION_STARTED abort and ownership invalidation", () => {
   test("without GENERATION_STARTED a completion is still accepted", async () => {
@@ -494,6 +574,7 @@ describe("Finding #3: vn_retry_turn recovery and settings snapshotting", () => {
     data.set(turnPath("chat", message.id, 0), record);
     data.set("config.json", {
       generateImages: true,
+      reviewImages: false,
       maxImagesPerTurn: 2,
       imageConcurrency: 1,
       promptPrefix: "new quality tags"

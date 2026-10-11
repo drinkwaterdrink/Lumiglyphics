@@ -1,0 +1,29 @@
+{
+  "checkedAt": "2026-10-11T01:45:23.723Z",
+  "identifier": "lumiglyphics",
+  "version": "0.1.0-beta.1",
+  "entries": [
+    {
+      "entry": "dist/backend.js",
+      "bytes": 1192643,
+      "sha256": "d0dc370e38253a5bfa4f9ff04230f32d0a33932fa1ef4399daa9abfe1ff9e935"
+    },
+    {
+      "entry": "dist/frontend.js",
+      "bytes": 1264250,
+      "sha256": "ecf888fb12d6583d5c7f781c82c40d8910c4ba51f45391276dea6741007afe9e"
+    }
+  ],
+  "localStaticPatterns": {
+    "checked": [
+      "filesystem",
+      "processModules",
+      "systemApis",
+      "dynamicCode",
+      "bufferDecode"
+    ],
+    "matches": []
+  },
+  "limitation": "Local text checks only; not the host install-time scanner or a live Lumiverse runtime test.",
+  "reference": "https://docs.lumiverse.chat/getting-started/capabilities/"
+}

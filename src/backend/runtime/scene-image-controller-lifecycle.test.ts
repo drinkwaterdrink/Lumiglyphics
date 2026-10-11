@@ -37,7 +37,7 @@ function fixture() {
   const messages: Array<Record<string, unknown>> = [];
   let gate: { pending: boolean; release: () => void } | null = null;
   data.set("config.json", {
-    generateImages: true, maxImagesPerTurn: 2, imageConcurrency: 2, referenceAnchoring: false, debugLogging: false,
+    reviewImages: false, generateImages: true, maxImagesPerTurn: 2, imageConcurrency: 2, referenceAnchoring: false, debugLogging: false,
     includeCharacterContext: false, includePersonaContext: false, includeLorebookContext: false
   });
   const spindle = {

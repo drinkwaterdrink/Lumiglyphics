@@ -481,7 +481,7 @@ export class VisualNovelSettingsPanel {
         <ol>
           <li><div>
             <h3>Story reader</h3>
-            <small>Cue reads each reply to pick speakers, moods and scenes. This does not replace your chat model.</small>
+            <small>Lumiglyphics reads each reply to pick speakers, moods and scenes. This does not replace your chat model.</small>
             ${readinessRow("planner")}
             <label data-field><span>Connection</span><select name="setupParserConnectionId" data-connection-select="planner"><option value="">Lumiverse default</option></select></label>
           </div></li>
@@ -571,6 +571,7 @@ export class VisualNovelSettingsPanel {
           ${pane("pictures", `
             ${group("Where pictures come from", imageSourceOptions("imageSource"), { find: find("Picture source", "image source card generated illustrations text only") })}
             <div data-generated-only>
+              ${group("Prompt review", `<label data-check><input name="reviewImages" type="checkbox" /><span>Review before generating<small>Applies to the next image batch. Hold pictures to inspect and edit their prompts in the Image prompts panel. The inspector stays available in automatic mode.</small></span></label>`, { find: find("Prompt review", "inspect approve preview prompts automatic") })}
               ${group("Pictures per reply", `
                 <fieldset aria-label="Pictures per reply">
                   ${segments("budgetPreset", BUDGET_PRESETS.map((preset) => ({ label: preset.label, value: preset.id })), true)}
@@ -629,7 +630,7 @@ export class VisualNovelSettingsPanel {
               <div data-sound-empty>
                 ${icon(ICONS.sound)}
                 <p>No music yet</p>
-                <small>Import a folder of .mp3, .ogg, .wav, .m4a or .flac files. Cue plays them as background music and sound effects when a scene calls for them.</small>
+                <small>Import a folder of .mp3, .ogg, .wav, .m4a or .flac files. Lumiglyphics plays them as background music and sound effects when a scene calls for them.</small>
                 <div data-actions><button type="button" data-primary data-import-audio>Import music folder…</button><button type="button" data-scan-audio>Check library</button></div>
               </div>
               <div data-sound-ready hidden>
@@ -669,7 +670,7 @@ export class VisualNovelSettingsPanel {
                 <label data-field ${find("System One API URL", "jev endpoint url")}><span>API URL</span><input name="systemOneApiUrl" type="url" placeholder="https://api.typesafe.ai" /><small>Requests go through Lumiverse's HTTP proxy.</small></label>
                 <label data-field ${find("System One model", "jev model")}><span>Model</span><input name="systemOneModel" type="text" placeholder="jev-latest" /></label>
               </div>
-              <div data-field ${find("System One API key", "jev key secret password")}><span>API key</span><input name="systemOneApiKey" type="password" autocomplete="new-password" placeholder="Enter key" /><div data-actions><button type="button" data-save-system-one-key>Save key</button><button type="button" data-clear-system-one-key>Remove key</button><small data-system-one-key-status>Checking saved key…</small></div><small>The key saves at once, encrypted for this extension. It is never part of Cue settings.</small></div>
+              <div data-field ${find("System One API key", "jev key secret password")}><span>API key</span><input name="systemOneApiKey" type="password" autocomplete="new-password" placeholder="Enter key" /><div data-actions><button type="button" data-save-system-one-key>Save key</button><button type="button" data-clear-system-one-key>Remove key</button><small data-system-one-key-status>Checking saved key…</small></div><small>The key saves at once, encrypted for this extension. It is never part of Lumiglyphics settings.</small></div>
             `, { apply: true, help: "Optional. Mode, URL and model wait for Apply; the key saves on its own.", find: find("System One", "jev") })}
           `)}
 
@@ -1307,6 +1308,7 @@ export class VisualNovelSettingsPanel {
       case "generateChoices": return { generateChoices: checked };
       case "autoEnter": return { autoEnter: checked };
       case "referenceAnchoring": return { referenceAnchoring: checked };
+      case "reviewImages": return { reviewImages: checked };
       case "referenceSource": return { referenceSource: normalizeReferenceSource(target.value) };
       case "themePreset":
       case "setupThemePreset":
@@ -1713,6 +1715,7 @@ export class VisualNovelSettingsPanel {
     this.control<HTMLInputElement>("generateChoices").checked = config.generateChoices;
     this.control<HTMLInputElement>("autoEnter").checked = config.autoEnter;
     this.control<HTMLInputElement>("referenceAnchoring").checked = config.referenceAnchoring;
+    this.control<HTMLInputElement>("reviewImages").checked = config.reviewImages;
     this.setRadio("referenceSource", config.referenceSource);
     this.root.querySelector<HTMLElement>("[data-reference-source]")!.hidden = !config.referenceAnchoring;
 

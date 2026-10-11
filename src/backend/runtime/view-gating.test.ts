@@ -64,7 +64,7 @@ function fixture(options: FixtureOptions = {}) {
   let imageCalls = 0;
   let seq = 0;
   data.set("config.json", {
-    generateImages: true,
+    reviewImages: false, generateImages: true,
     maxImagesPerTurn: 2,
     imageConcurrency: 1,
     includeCharacterContext: false,

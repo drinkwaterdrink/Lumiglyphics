@@ -87,7 +87,7 @@ function fixture() {
   const data = new Map<string, unknown>();
   const sent: Array<Record<string, unknown>> = [];
   const calls: Array<Record<string, unknown>> = [];
-  data.set("config.json", { generateImages: true, maxImagesPerTurn: 2, imageConcurrency: 1, referenceAnchoring: false, includeCharacterContext: false, includePersonaContext: false, includeLorebookContext: false });
+  data.set("config.json", { reviewImages: false, generateImages: true, maxImagesPerTurn: 2, imageConcurrency: 1, referenceAnchoring: false, includeCharacterContext: false, includePersonaContext: false, includeLorebookContext: false });
   const spindle = {
     on: (event: string, handler: (...args: unknown[]) => void) => {
       const list = handlers.get(event) ?? [];

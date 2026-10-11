@@ -1,0 +1,42 @@
+{
+  "phase": "local_implementation",
+  "version": "0.1.0-beta.1",
+  "toolchain": "Bun 1.4.0 (isolated temporary install)",
+  "frozenInstall": {
+    "passed": true,
+    "lifecycleScripts": "disabled",
+    "dependencyVersionsChanged": false
+  },
+  "unitTests": {
+    "command": "bun test --isolate",
+    "passed": 1214,
+    "failed": 0,
+    "assertions": 5800,
+    "testFiles": 92,
+    "log": "final-unit-tests.log"
+  },
+  "typecheck": {
+    "command": "bun run typecheck",
+    "passed": true
+  },
+  "build": {
+    "command": "bun run build",
+    "passed": true
+  },
+  "browserFixtures": {
+    "imageReview": "passed",
+    "settings": "passed",
+    "reading": "passed",
+    "liveHost": false
+  },
+  "buildVerification": "build-verification.json",
+  "independentReview": {
+    "materialFindingsFixed": true,
+    "scopeDecision": "Review toggle applies to the next batch; dynamic mid-batch policy deferred"
+  },
+  "liveLumiverse": "not performed",
+  "hostInstallScanner": "not performed",
+  "liveProviders": "not performed",
+  "paidCalls": 0,
+  "remotePublication": "not performed"
+}

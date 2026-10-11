@@ -1,8 +1,32 @@
-# Cue — Living Novel
+# Lumiglyphics
+
+Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a local development build, version `0.1.0-beta.1`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance.
+
+Open **Image prompts** in the visual novel to inspect each prepared picture's positive and negative prompts, provider, model, safe parameters and reference summary. With **Review before generating** enabled (the default), edit a picture and choose **Generate this**, or **Skip**. You can continue reading while a picture waits. Matching prompts remain separate in review mode. Parameters are JSON overrides for this picture; omitted fields remain host managed.
+
+The review toggle is also in the existing Pictures settings. It applies to the next image batch; changing it does not release waiting drafts. Automatic mode keeps recording newly generated requests. Reused pictures and older turns may have no original request available. Preparation follows the existing concurrency and portrait dependencies, so later pictures can appear after earlier ones finish.
+
+After waiting pictures finish or are skipped, **Prepare replacement** creates a new draft for the selected picture, including previously reused pictures. It always asks for review. If the replacement fails, the previous usable picture remains displayed. Generated pictures must be enabled in settings.
+
+Existing model connections, image settings, prompt presets, style and reference controls remain available. Provider requests go through Lumiverse's image API, including NanoGPT or OpenRouter profiles when your host exposes them. The panel shows the extension request prepared for Lumiverse; the host may translate it into another provider payload. This build has not yet been tested inside a live Lumiverse installation or against either provider.
+
+For a first comparison, use one picture per reply, concurrency one, and review on. Check the inherited anime style/prefix and frozen character appearance against your chosen model. Change those existing settings if they conflict with the intended style. Prompt edits affect one picture; they do not rewrite the character's saved identity.
+
+Build with Bun 1.4.0 or newer:
+
+```sh
+bun install --frozen-lockfile --ignore-scripts
+bun run verify
+bun run test:image-review
+```
+
+The build writes `dist/backend.js` and `dist/frontend.js`, referenced by `spindle.json`. Lumiglyphics has a separate installation identifier and storage from Cue. Run one visual novel extension at a time during host testing. Nothing has been published to the destination GitHub repository by this local build.
+
+## Upstream functionality
 
 Cue is a Lumiverse extension that turns a chat into a living visual novel. It replaces the native message and input surfaces only while VN mode is active. Canonical chat messages remain the source of truth.
 
-> The project was previously named *Visual Novel Preview*. Its install identifier remains `visual_novel_preview` so existing installations upgrade in place.
+> The sections below describe inherited Cue functionality. Lumiglyphics uses its own `lumiglyphics` identifier.
 
 The preview includes:
 

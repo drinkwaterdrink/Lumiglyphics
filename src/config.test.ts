@@ -33,6 +33,11 @@ test("configuration preserves the CYOA and custom CSS controls", () => {
   assert.equal(config.mode, "cyoa");
   assert.match(config.customCss, /color: pink/);
 });
+test("image review defaults on and preserves an explicit automatic-mode choice", () => {
+  assert.equal(normalizeConfig({}).reviewImages, true);
+  assert.equal(normalizeConfig({ reviewImages: false }).reviewImages, false);
+  assert.equal(normalizeConfig({ reviewImages: "false" }).reviewImages, true);
+});
 
 test("scene image fit defaults to cover for absent or invalid values", () => {
   assert.equal(DEFAULT_CONFIG.sceneImageFit, "cover");

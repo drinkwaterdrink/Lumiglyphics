@@ -1,4 +1,5 @@
 import type { SpindleAPI } from "lumiverse-spindle-types";
+import type { ImageGenerationRequest } from "./image-review.js";
 import type { VisualNovelConfig } from "../../config.js";
 import { DEFAULT_CONFIG } from "../../config.js";
 import { novelAiCapabilities, novelAiQualityTags, NOVELAI_NEGATIVE_DEFAULT, renderNovelAiEmphasis } from "./novelai-prompt.js";
@@ -410,6 +411,10 @@ export function defaultSceneImageVerifier(spindle: SpindleAPI, userId?: string):
 }
 
 export type SceneCacheOptions = {
+  /** Reviewed pictures remain independent and never populate the automatic compiler cache. */
+  independentRequests?: boolean;
+  disableCacheStore?: boolean;
+  beforeGenerate?: (job: AssetJob, request: ImageGenerationRequest, metadata: { provider: string; connectionRevision?: number; referenceSummary: string }, signal: AbortSignal) => Promise<ImageGenerationRequest>;
   /** Exact content used to plan this turn; omitted for legacy records. */
   resolvedSourceText?: string;
   sceneCache?: SceneImageCache | null;
@@ -1088,7 +1093,10 @@ export async function generateAssets(
           if (signal.aborted) throw abortError(signal);
           if (jobSignal.aborted) throw abortError(jobSignal);
           const generationStarted = Date.now();
-          const result = await spindle.imageGen.generate({
+          const selected = cacheOptions.beforeGenerate && connectionId && typeof spindle.imageGen.getConnection === "function"
+            ? await spindle.imageGen.getConnection(connectionId, userId)
+            : cacheOptions.beforeGenerate && typeof spindle.imageGen.listConnections === "function" ? (await spindle.imageGen.listConnections(userId)).find((entry) => entry.is_default) ?? null : null;
+          const input: ImageGenerationRequest = {
             ...(connectionId ? { connection_id: connectionId } : {}),
             prompt,
             ...(negativePrompt ? { negativePrompt } : {}),
@@ -1097,7 +1105,30 @@ export async function generateAssets(
             owner_chat_id: plan.key.chatId,
             includeDataUrl: wantsCapture,
             ...(userId ? { userId } : {})
-          });
+          };
+          // Freeze exposed profile defaults/model before review, including a default-profile selection.
+          const frozen: ImageGenerationRequest = cacheOptions.beforeGenerate ? {
+            ...input,
+            ...(selected?.id ? { connection_id: selected.id } : {}),
+            ...(config.imageModel || selected?.model ? { model: config.imageModel || selected!.model } : {}),
+            parameters: { ...(selected?.default_parameters ?? {}), ...input.parameters }
+          } : input;
+          const approved = cacheOptions.beforeGenerate ? await cacheOptions.beforeGenerate(scheduledJob, frozen, {
+            provider: selected?.provider ?? provider ?? "Unknown",
+            ...(selected ? { connectionRevision: selected.updated_at } : {}),
+            referenceSummary: portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference"
+          }, jobSignal) : input;
+          if (signal.aborted) throw abortError(signal);
+          if (jobSignal.aborted) throw abortError(jobSignal);
+          if (cacheOptions.beforeGenerate && selected?.id) {
+            const latest = await spindle.imageGen.getConnection(selected.id, userId);
+            if (!latest || latest.updated_at !== selected.updated_at) throw new Error("Image connection changed during review. Prepare the picture again.");
+          }
+          if (signal.aborted) throw abortError(signal);
+          if (jobSignal.aborted) throw abortError(jobSignal);
+          // A locally edited request cannot populate the compiler's original cache key.
+          if (cacheOptions.disableCacheStore || JSON.stringify(approved) !== JSON.stringify(frozen)) { cacheKey = null; settle?.({ kind: "released" }); settle = null; }
+          const result = await spindle.imageGen.generate(approved);
           observedGenerationMs.push(Date.now() - generationStarted);
 
           if (signal.aborted) throw abortError(signal);
@@ -1113,7 +1144,7 @@ export async function generateAssets(
                 data: parsed.data,
                 mimeType: parsed.mimeType,
                 createdAt: new Date().toISOString(),
-                prompt,
+                prompt: approved.prompt,
                 identityFingerprint
               };
               try {
@@ -1169,7 +1200,7 @@ export async function generateAssets(
             capturePromises.delete(characterKey);
           }
         }
-      }).promise;
+      }, { independent: Boolean(cacheOptions.independentRequests) }).promise;
     });
     await Promise.allSettled(promises);
     await resolvingCandidates;

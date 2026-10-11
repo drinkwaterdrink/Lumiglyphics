@@ -73,6 +73,7 @@ export type VisualNovelConfig = {
   sceneImageFit: VisualNovelSceneImageFit;
   debugLogging: boolean;
   generateImages: boolean;
+  reviewImages: boolean;
   /** Anchor each character's appearance to their captured reference portrait. */
   referenceAnchoring: boolean;
   /** Where the reference anchor image comes from ("captured" render or "card" sprite). */
@@ -131,6 +132,7 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   sceneImageFit: "cover",
   debugLogging: false,
   generateImages: true,
+  reviewImages: true,
   referenceAnchoring: true,
   referenceSource: "captured",
   generateChoices: true,
@@ -283,6 +285,7 @@ export function normalizeConfig(value: unknown): VisualNovelConfig {
     sceneImageFit: sceneImageFit(input.sceneImageFit),
     debugLogging: bool(input.debugLogging, DEFAULT_CONFIG.debugLogging),
     generateImages: bool(input.generateImages, DEFAULT_CONFIG.generateImages),
+    reviewImages: bool(input.reviewImages, DEFAULT_CONFIG.reviewImages),
     referenceAnchoring: bool(input.referenceAnchoring, DEFAULT_CONFIG.referenceAnchoring),
     referenceSource: referenceSource(input.referenceSource),
     generateChoices: bool(input.generateChoices, DEFAULT_CONFIG.generateChoices),

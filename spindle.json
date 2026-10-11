@@ -1,9 +1,9 @@
 {
-  "version": "1.7.0-beta",
-  "name": "Cue — Living Novel",
-  "identifier": "visual_novel_preview",
-  "author": "japolino",
-  "description": "A full-screen visual-novel presentation for Lumiverse with paragraph reveal, choices, custom input, scene continuity, and generated scene art.",
+  "version": "0.1.0-beta.1",
+  "name": "Lumiglyphics",
+  "identifier": "lumiglyphics",
+  "author": "drinkwaterdrink; based on Cue by japolino",
+  "description": "A Lumiverse visual novel with inspectable image requests, optional prompt review, and per-picture editing and replacement. Based on Cue — Living Novel.",
   "permissions": [
     "app_manipulation",
     "generation",

@@ -54,6 +54,7 @@ const baseConfig: VisualNovelConfig = {
   sceneImageFit: "cover",
   debugLogging: false,
   generateImages: true,
+  reviewImages: false,
   referenceAnchoring: true,
   referenceSource: "captured",
   generateChoices: true,

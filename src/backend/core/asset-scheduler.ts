@@ -73,13 +73,13 @@ export class AssetScheduler {
     return () => this.listeners.delete(listener);
   }
 
-  schedule(jobInput: AssetJob, executor: AssetExecutor): { job: AssetJob; promise: Promise<AssetJob>; reused: boolean } {
+  schedule(jobInput: AssetJob, executor: AssetExecutor, options: { independent?: boolean } = {}): { job: AssetJob; promise: Promise<AssetJob>; reused: boolean } {
     const job = AssetJobSchema.parse(jobInput);
     if (job.status !== "queued") throw new Error("Only queued asset jobs can be scheduled.");
     const existing = this.scheduled.get(job.jobId);
     if (existing) return { job: existing.job, promise: existing.promise, reused: true };
 
-    const promptKey = JSON.stringify([job.ownerTurnKey.chatId, job.ownerTurnKey.assistantMessageId, job.ownerTurnKey.swipeId, job.ownerTurnKey.revision, job.promptFingerprint]);
+    const promptKey = JSON.stringify([job.ownerTurnKey.chatId, job.ownerTurnKey.assistantMessageId, job.ownerTurnKey.swipeId, job.ownerTurnKey.revision, job.promptFingerprint, ...(options.independent ? [job.jobId] : [])]);
     const matchingJobId = this.promptOwners.get(promptKey);
     const matching = matchingJobId ? this.scheduled.get(matchingJobId) : undefined;
 

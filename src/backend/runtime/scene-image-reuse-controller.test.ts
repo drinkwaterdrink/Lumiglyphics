@@ -52,7 +52,7 @@ function fixture(messages: Array<{ id: string; content: string }>) {
   const calls: Array<Record<string, unknown>> = [];
   let counter = 0;
   data.set("config.json", {
-    generateImages: true,
+    reviewImages: false, generateImages: true,
     maxImagesPerTurn: 1,
     imageConcurrency: 1,
     referenceAnchoring: false,

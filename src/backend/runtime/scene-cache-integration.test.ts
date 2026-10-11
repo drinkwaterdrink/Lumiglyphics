@@ -229,6 +229,20 @@ function makePlan(options: {
 // ===========================================================================
 
 describe("Scene Image Cache Integration", () => {
+  test("manual requests bypass reuse and cannot store the automatic compiled key", async () => {
+    const cache = new SceneImageCache();
+    const { spindle, generateCalls } = createMockSpindle();
+    const config = { ...DEFAULT_CONFIG, referenceAnchoring: false };
+    const turn = makePlan({});
+    const jobs = createAssetJobs(turn, config);
+    await generateAssets(spindle, turn, jobs, config, new AbortController().signal, () => {}, undefined, {
+      sceneCache: cache, bypassJobIds: jobs.map((job) => job.jobId), independentRequests: true, disableCacheStore: true,
+      beforeGenerate: async (_job, request) => request
+    });
+    expect(generateCalls).toHaveLength(1);
+    expect(cache.stats().stores).toBe(0);
+    expect(cache.size).toBe(0);
+  });
 
   // -------------------------------------------------------------------------
   // Suite 1: Alternating Characters across Turns (Mira -> Alex -> Mira)
@@ -1221,7 +1235,7 @@ describe("Scene Image Cache Integration", () => {
       let gate: { pending: boolean; release: () => void } | null = null;
 
       data.set("config.json", {
-        generateImages: true,
+        reviewImages: false, generateImages: true,
         maxImagesPerTurn: 2,
         imageConcurrency: 2,
         referenceAnchoring: false,

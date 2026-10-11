@@ -103,6 +103,11 @@ try {
 
   // Budget: presets map to numbers; unlimited is only reachable through Custom.
   await openTab("Pictures");
+  assert.equal(await settings.locator('input[name="reviewImages"]').isChecked(), true);
+  await settings.locator('input[name="reviewImages"]').uncheck();
+  assert.deepEqual(await lastPatch(page), { reviewImages: false });
+  await settings.locator('input[name="reviewImages"]').check();
+  assert.deepEqual(await lastPatch(page), { reviewImages: true });
   assert.equal(await settings.locator('input[name="budgetPreset"][value="balanced"]').isChecked(), true);
   await settings.locator('input[name="budgetPreset"][value="light"]').check();
   assert.deepEqual(await lastPatch(page), { maxImagesPerTurn: 1 });

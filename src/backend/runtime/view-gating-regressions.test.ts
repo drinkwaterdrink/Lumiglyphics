@@ -36,7 +36,7 @@ function plannerPayload() {
 describe("view gating regressions (from the audit probes)", () => {
 test("closing the view during post-plan awaits persists nothing and sends no vn_turn", async () => {
   let frontend!: (payload: any, userId: string) => void;
-  const data = new Map<string, any>([["config.json", { enabled: true, debugLogging: true, generateImages: true }]]);
+  const data = new Map<string, any>([["config.json", { enabled: true, debugLogging: true, reviewImages: false, generateImages: true }]]);
   const messages: any[] = [];
   const sent: any[] = [];
   const handlers = new Map<string, Array<(...args: any[]) => void>>();
@@ -156,7 +156,7 @@ test("a late view-close cleanup never overwrites a retried turn with cancelled",
   let seq = 0;
 
   data.set("config.json", {
-    generateImages: true,
+    reviewImages: false, generateImages: true,
     maxImagesPerTurn: 2,
     imageConcurrency: 1,
     includeCharacterContext: false,

@@ -5,6 +5,7 @@ import type { AssetView, BackendResponse, ConnectionCatalogOption, FrontendReque
 import { AudioEngine, VnStage, isAmbientEffect, isStageEffect } from "../stage/index.js";
 import type { AmbientEffect, StageEffect } from "../store/index.js";
 import { VisualNovelSettingsPanel } from "../settings/panel.js";
+import { ImageStudio } from "../image-review/studio.js";
 import type { VnChoice, VnTurnInput } from "../store/index.js";
 import { createVnHeaderLauncher } from "./manual-launcher.js";
 import { captureSimTrackerCards } from "./panel-capture.js";
@@ -24,7 +25,7 @@ import { createSpeechTransport } from "../speech/transport.js";
 import { SpeechDock } from "../speech/ui.js";
 import { SpeechSettingsSection } from "../speech/settings-ui.js";
 
-const CLEANUP_KEY = Symbol.for("visual-novel-preview.frontend-cleanup");
+const CLEANUP_KEY = Symbol.for("lumiglyphics.frontend-cleanup");
 
 /** Chunked bytes -> base64 that avoids call-stack limits on large audio files. */
 function base64FromBytes(bytes: Uint8Array): string {
@@ -80,7 +81,7 @@ function messageType(value: unknown): string {
 export function selectCurrentImage(turn: TurnView, paragraphIndex: number): AssetView | null {
   let match: AssetView | null = null;
   for (const asset of turn.assets) {
-    if (asset.status !== "generated" && asset.status !== "browser_ready") continue;
+    if (asset.status !== "generated" && asset.status !== "browser_ready" && !asset.previousImage) continue;
     if (!asset.imageUrl || asset.paragraphIndex > paragraphIndex) continue;
     if (!match || asset.paragraphIndex > match.paragraphIndex) match = asset;
   }
@@ -472,6 +473,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     isAutoAdvanceHeld: () => isSpeechHoldingAuto(),
     onExit: () => deactivate(),
     onPrevious: (paragraphIndex) => {
+      imageStudio.setCursor(paragraphIndex);
       panels.setCursor(paragraphIndex);
       syncSpeechCursor(turn, paragraphIndex);
       audioEngine.stopAll();
@@ -482,6 +484,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       void syncImageForParagraph(paragraphIndex);
     },
     onAdvance: (paragraphIndex) => {
+      imageStudio.setCursor(paragraphIndex);
       panels.setCursor(paragraphIndex);
       if (pendingNextTurn) {
         const next = pendingNextTurn;
@@ -563,6 +566,9 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const imageBridge = connectImageBridge(window, chatId, (request) => ctx.sendToBackend(request));
 
   const panels = new PanelDock(stage.panelMount);
+  const imageStudio = new ImageStudio(stage.panelMount, (request) => ctx.sendToBackend(request), (enabled) => {
+    ctx.sendToBackend({ type: "vn_set_config", patch: { reviewImages: enabled }, chatId: chatId() ?? "" });
+  });
   const panelRequests = new Map<string, { resolve: (template: string) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   panels.onResolveTemplate = (template) => new Promise((resolve, reject) => {
     const requestId = crypto.randomUUID();
@@ -579,7 +585,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   };
 
   const action = ctx.ui.registerInputBarAction({
-    id: "visual-novel-preview-toggle",
+    id: "lumiglyphics-toggle",
     label: "Open visual novel",
     subtitle: "Open this chat in the full-screen visual novel view",
     enabled: true
@@ -589,9 +595,9 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     () => toggleVisualNovel(),
   );
   const settingsHandle = ctx.ui.registerSettingsTab?.({
-    id: "visual-novel-preview",
-    title: "Visual novel",
-    shortName: "VN",
+    id: "lumiglyphics",
+    title: "Lumiglyphics",
+    shortName: "LG",
     description: "Visual-novel presentation, generation, and custom CSS settings",
     keywords: ["visual novel", "cyoa", "images", "custom css"],
     position: "after-display"
@@ -757,6 +763,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     const activeChatId = chatId();
     if (!turn || turn.chatId !== activeChatId) {
       turn = null;
+      imageStudio.setTurn(null);
       stage.reset();
     }
     speech.setActive(true);
@@ -845,6 +852,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       else panelCapture.fingerprint = next.sourceFingerprint;
     }
     turn = next;
+    imageStudio.setTurn(next);
+    imageStudio.setCursor(stage.getState().currentParagraphIndex);
     stage.setAssetProgress(computeAssetProgress(next));
     const decision = decideTurnApplication(previous, next, stage.getState().currentParagraphIndex, active, stage.getState().paragraphs.length > 0);
     vnDebug("turn decision", decision.kind, {
@@ -878,6 +887,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     const preserveImage = shouldPreserveImage(previous, next);
     turnOpeningBgm = preserveImage ? currentBgm : null;
     stage.loadTurn(stageTurnInput(next, mode, preserveImage, configRef.current?.effectIntensity ?? "full"));
+    imageStudio.setCursor(0);
     syncSpeechCursor(next, 0);
     void syncImageForParagraph(0);
     syncAudioForParagraph(next, 0);
@@ -915,6 +925,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     }
     if (type === "vn_state" && message.type === "vn_state") {
       configRef.current = message.config;
+      imageStudio.setReview(message.config.reviewImages);
       imageBridge.fit(message.config.sceneImageFit);
       applyVisualConfigToStage(stage, configRef.current);
       audioEngine.setBgmVolume(configRef.current.bgmVolume);
@@ -936,6 +947,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
         applyTurn(message.turn, turn);
       } else {
         turn = null;
+        imageStudio.setTurn(null);
         speech.setCursor(null);
         panels.setTurn(null);
         stage.reset();
@@ -948,6 +960,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       // The echo of a persisted config is the only save acknowledgment the
       // transport offers; "saved" is claimed here and nowhere earlier.
       configRef.current = message.config;
+      imageStudio.setReview(message.config.reviewImages);
       applyVisualConfigToStage(stage, configRef.current);
       audioEngine.setBgmVolume(configRef.current.bgmVolume);
       audioEngine.setSfxVolume(configRef.current.sfxVolume);
@@ -971,19 +984,27 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       vnDebug("received vn_asset", `p${message.asset.paragraphIndex}`, message.asset.status, message.asset.imageUrl ?? "(no url)", (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId) ? "(ignored: not the active turn)" : "");
       if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId) return;
       turn = replaceAsset(turn, message.asset);
+      imageStudio.setTurn(turn);
       stage.setAssetProgress(computeAssetProgress(turn));
       const cursor = stage.getState().currentParagraphIndex;
       if (message.asset.paragraphIndex <= cursor) void syncImageForParagraph(cursor);
       return;
     }
+    if (type === "vn_image_requests" && message.type === "vn_image_requests") {
+      if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId || turn.sourceFingerprint !== message.sourceFingerprint) return;
+      turn = { ...turn, imageRequests: message.requests };
+      imageStudio.setTurn(turn);
+      return;
+    }
     if (type === "vn_waiting" && message.type === "vn_waiting") {
       if (message.chatId !== chatId()) return;
       turn = null;
+      imageStudio.setTurn(null);
       pendingNextTurn = null;
       panels.setTurn(null);
       stage.reset();
       reportStageError({
-        message: "This opening message holds several scenes, and none is selected yet. Pick a starting scene in the chat view, then use Try again or reopen Cue.",
+        message: "This opening message holds several scenes, and none is selected yet. Pick a starting scene in the chat view, then use Try again or reopen Lumiglyphics.",
         source: "waiting",
         retryable: true,
         retryScope: "Checks the latest message again.",
@@ -1032,6 +1053,10 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       return;
     }
     if (type === "vn_error" && message.type === "vn_error") {
+      if (message.operation === "vn_image_review" || message.operation === "vn_prepare_image" || message.operation === "prepare_image") {
+        if (!message.chatId || message.chatId === chatId()) imageStudio.showError(message.error);
+        return;
+      }
       if (message.operation === "vn_set_config") {
         settingsPanel?.setSaveStatus?.({ kind: "error", error: message.error });
         return;
@@ -1054,6 +1079,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const unsubBackend = ctx.onBackendMessage(routeBackend);
   const unsubAction = action.onClick(toggleVisualNovel);
   const unsubChat = ctx.events.on("CHAT_SWITCHED", () => {
+    imageStudio.setTurn(null);
     panelCapture = null;
     panels.setTurn(null);
     turn = null;
@@ -1063,6 +1089,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     requestState();
   });
   const unsubFork = ctx.events.on("CHAT_FORKED", () => {
+    imageStudio.setTurn(null);
     panelCapture = null;
     panels.setTurn(null);
     turn = null;
@@ -1098,6 +1125,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     speechDock.destroy();
     speechSettings?.destroy();
     settingsPanel?.destroy();
+    imageStudio.destroy();
     settingsHandle?.destroy();
     audioEngine.destroy();
     panels.destroy();

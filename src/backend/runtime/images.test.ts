@@ -3,8 +3,86 @@ import { DEFAULT_CONFIG } from "../../config.js";
 import { TurnPlanSchema, type SceneState, type TurnPlan, type VisualCue } from "../../shared/contracts.js";
 import { POSE_EXPRESSION_CATALOGUE, poseById } from "../../shared/character.js";
 import { compileImagePrompt, compileNegativePrompt, createAssetJobs, generateAssets } from "./images.js";
+import { ImageReviewGate } from "./image-review.js";
 
 const now = new Date().toISOString();
+
+test("final provider boundary holds images and sends exactly the approved prompt/settings", async () => {
+  const sent: any[] = [];
+  const records: any[] = [];
+  const gate = new ImageReviewGate(async (record) => { records.push(record); });
+  const connection = { id: "nano", provider: "nanogpt", model: "model-a", updated_at: 10, default_parameters: { seed: 7 } };
+  const spindle = { userStorage: { getJson: async (_: string, options: any) => options.fallback }, imageGen: { getConnection: async () => connection, generate: async (input: any) => { sent.push(input); return { imageId: "image", imageUrl: "/image" }; } } } as any;
+  const turn = plan([cue("idle")]);
+  const config = { ...DEFAULT_CONFIG, imageConnectionId: "nano", referenceAnchoring: false };
+  const running = generateAssets(spindle, turn, createAssetJobs(turn, config), config, new AbortController().signal, () => {}, "alice", {
+    beforeGenerate: (job, request, metadata, signal) => gate.prepare(job.jobId, job.paragraphIndex, request, metadata, true, signal)
+  });
+  for (let attempt = 0; attempt < 30 && records.length === 0; attempt++) await new Promise((resolve) => setTimeout(resolve, 1));
+  expect(sent).toHaveLength(0);
+  expect(records[0]?.model).toBe("model-a");
+  expect(records[0]?.parameters.seed).toBe(7);
+  gate.decide(records[0].requestId, "generate", { prompt: "one calm portrait", parameters: { seed: 55 } });
+  await running;
+  expect(sent).toHaveLength(1);
+  expect(sent[0].prompt).toBe("one calm portrait");
+  expect(sent[0].parameters.seed).toBe(55);
+  expect(sent[0].userId).toBe("alice");
+});
+
+test("changed connection revision prevents dispatch after review", async () => {
+  let revision = 1;
+  let calls = 0;
+  const spindle = { userStorage: { getJson: async (_: string, options: any) => options.fallback }, imageGen: {
+    getConnection: async () => ({ id: "nano", provider: "nanogpt", model: "model-a", updated_at: revision }),
+    generate: async () => { calls++; return { imageId: "wrong" }; }
+  } } as any;
+  const turn = plan([cue("idle")]);
+  const config = { ...DEFAULT_CONFIG, imageConnectionId: "nano", referenceAnchoring: false };
+  const jobs = await generateAssets(spindle, turn, createAssetJobs(turn, config), config, new AbortController().signal, () => {}, "alice", {
+    beforeGenerate: async (_job, request) => { revision = 2; return request; }
+  });
+  expect(calls).toBe(0);
+  expect(jobs[0]?.error).toContain("connection changed");
+});
+
+test("cancellation during the final profile lookup cannot start a paid image", async () => {
+  let lookups = 0;
+  let release!: () => void;
+  let calls = 0;
+  const blocked = new Promise<void>((resolve) => { release = resolve; });
+  const connection = { id: "nano", provider: "nanogpt", model: "model-a", updated_at: 1 };
+  const spindle = { userStorage: { getJson: async (_: string, options: any) => options.fallback }, imageGen: {
+    getConnection: async () => { lookups++; if (lookups === 3) await blocked; return connection; },
+    generate: async () => { calls++; return { imageId: "wrong" }; }
+  } } as any;
+  const turn = plan([cue("idle")]);
+  const config = { ...DEFAULT_CONFIG, imageConnectionId: "nano", referenceAnchoring: false };
+  const abort = new AbortController();
+  const running = generateAssets(spindle, turn, createAssetJobs(turn, config), config, abort.signal, () => {}, "alice", { beforeGenerate: async (_job, request) => request });
+  for (let attempt = 0; attempt < 30 && lookups < 3; attempt++) await new Promise((resolve) => setTimeout(resolve, 1));
+  expect(lookups).toBe(3);
+  abort.abort();
+  release();
+  await running;
+  expect(calls).toBe(0);
+});
+test("reviewed matching pictures prepare independently and send their own edits", async () => {
+  const records: any[] = [];
+  const sent: any[] = [];
+  const gate = new ImageReviewGate(async (record) => { records.push(record); });
+  const base = plan([cue("idle")]);
+  const turn = TurnPlanSchema.parse({ ...base, paragraphs: [...base.paragraphs, { index: 1, sourceIndex: 1, text: "Second." }], visualCues: [base.visualCues[0], { ...base.visualCues[0], cueId: "second", assetJobId: "second", paragraphIndex: 1 }] });
+  const config = { ...DEFAULT_CONFIG, referenceAnchoring: false, imageConcurrency: 2 };
+  const spindle = { userStorage: { getJson: async (_: string, options: any) => options.fallback }, imageGen: { generate: async (input: any) => { sent.push(input); return { imageId: input.prompt, imageUrl: "/image" }; } } } as any;
+  const running = generateAssets(spindle, turn, createAssetJobs(turn, config), config, new AbortController().signal, () => {}, "alice", { independentRequests: true, disableCacheStore: true, beforeGenerate: (job, request, metadata, signal) => gate.prepare(job.jobId, job.paragraphIndex, request, metadata, true, signal) });
+  for (let attempt = 0; attempt < 30 && records.length < 2; attempt++) await new Promise((resolve) => setTimeout(resolve, 1));
+  expect(records).toHaveLength(2);
+  gate.decide(records[0].requestId, "generate", { prompt: "first edit" });
+  gate.decide(records[1].requestId, "generate", { prompt: "second edit" });
+  await running;
+  expect(sent.map((input) => input.prompt).sort()).toEqual(["first edit", "second edit"]);
+});
 const key = {
   chatId: "chat",
   assistantMessageId: "message",

@@ -1,4 +1,6 @@
 import type { SpindleAPI } from "lumiverse-spindle-types";
+import type { ImageRequestRecord } from "../../shared/image-review.js";
+import { safeImageHistory } from "./image-review.js";
 import { normalizeConfig, type VisualNovelConfig } from "../../config.js";
 import { AssetJobSchema, SceneStateSchema, TurnPlanSchema, type AssetJob, type SceneState, type TurnPlan } from "../../shared/contracts.js";
 import {
@@ -32,6 +34,8 @@ export type StoredTurnRecord = {
   status: "planning" | "ready" | "failed" | "cancelled";
   plan: TurnPlan;
   jobs: AssetJob[];
+  imageRequests?: ImageRequestRecord[];
+  previousImages?: Record<string, { imageId: string; imageUrl: string }>;
   error?: string;
   updatedAt: string;
   /**
@@ -611,6 +615,8 @@ export async function loadTurnRecord(
     status,
     plan: TurnPlanSchema.parse(raw.plan),
     jobs: Array.isArray(raw.jobs) ? raw.jobs.map((job) => AssetJobSchema.parse(job)) : [],
+    ...(Array.isArray(raw.imageRequests) ? { imageRequests: safeImageHistory(raw.imageRequests) } : {}),
+    ...(raw.previousImages && typeof raw.previousImages === "object" ? { previousImages: raw.previousImages } : {}),
     ...(typeof raw.error === "string" ? { error: raw.error } : {}),
     ...(typeof raw.resolvedSourceText === "string" ? { resolvedSourceText: raw.resolvedSourceText } : {}),
     ...(raw.source && typeof raw.source === "object" && raw.source.version === 2 && typeof raw.source.rawFingerprint === "string"

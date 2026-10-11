@@ -5,6 +5,9 @@ import type {
   SwipeEditedPayloadDTO,
   SpindleAPI
 } from "lumiverse-spindle-types";
+import { ImageReviewGate, safeImageHistory } from "./image-review.js";
+const imageReviewGates = new Map<string, ImageReviewGate>();
+const preparingSingleImages = new Set<string>();
 import { createExternalImages } from "./external-images.js";
 import {
   AssetJobSchema,
@@ -167,7 +170,7 @@ async function cancelIncompleteJobs(
     return AssetJobSchema.parse({ ...job, status: "cancelled", error: null, finishedAt: nowTime });
   });
   if (cancelled === 0 || !unclaimed()) return;
-  const next = { ...record, jobs, updatedAt: nowTime };
+  const next = { ...record, jobs, imageRequests: record.imageRequests?.map((request) => request.state === "review" ? { ...request, state: "cancelled" as const } : request) ?? [], updatedAt: nowTime };
   await saveTurnRecord(spindle, chatState.activeTurnPath, next, userId);
   dbg(spindle, userId, `view-gate persisted cancelled over ${cancelled} incomplete job(s) chat=${chatId}`);
   // A view that reopened before this landed already holds the pre-cancel
@@ -402,6 +405,7 @@ function effectViews(record: StoredTurnRecord): Pick<TurnView, "effects" | "ambi
 }
 
 function assetView(record: StoredTurnRecord, job: StoredTurnRecord["jobs"][number]): AssetView {
+  const previous = job.status !== "generated" && job.status !== "browser_ready" ? record.previousImages?.[job.jobId] : undefined;
   const cue = record.plan.visualCues.find((candidate) => candidate.assetJobId === job.jobId)
     ?? record.plan.cacheCues?.find((candidate) => candidate.assetJobId === job.jobId);
   return {
@@ -410,8 +414,9 @@ function assetView(record: StoredTurnRecord, job: StoredTurnRecord["jobs"][numbe
     paragraphIndex: job.paragraphIndex,
     status: job.status,
     ...(job.provider === CACHE_JOB_PROVIDER ? { source: "cache" as const } : {}),
-    ...(job.imageId ? { imageId: job.imageId } : {}),
-    ...(job.imageUrl ? { imageUrl: job.imageUrl } : {}),
+    ...(job.imageId || previous?.imageId ? { imageId: job.imageId || previous!.imageId } : {}),
+    ...(job.imageUrl || previous?.imageUrl ? { imageUrl: job.imageUrl || previous!.imageUrl } : {}),
+    ...(previous ? { previousImage: true } : {}),
     ...(job.error ? { error: job.error } : {})
   };
 }
@@ -464,6 +469,7 @@ export function turnView(record: StoredTurnRecord): TurnView {
     ...effectViews(record),
     choices: record.plan.choices.map((choice) => ({ id: choice.id, label: choice.label, value: choice.submission })),
     assets: record.jobs.map((job) => assetView(record, job)),
+    ...(record.imageRequests ? { imageRequests: record.imageRequests } : {}),
     ...(audioCues.length > 0 ? { audioCues } : {}),
     status: record.status,
     ...(record.error ? { error: record.error } : {})
@@ -592,6 +598,10 @@ export async function sendState(
       spindle.log.warn(`Stored turn freshness check failed; sending the stored turn: ${errorText(error)}`);
     }
   }
+  if (record && !stale && !assetControllers.has(runtimeKey(userId, chatId)) && record.imageRequests?.some((request) => request.state === "review")) {
+    record = { ...record, imageRequests: record.imageRequests.map((request) => request.state === "review" ? { ...request, state: "cancelled" as const } : request), jobs: record.jobs.map((job) => job.status === "queued" || job.status === "generating" ? AssetJobSchema.parse({ ...job, status: "cancelled", finishedAt: new Date().toISOString() }) : job) };
+    if (chatState.activeTurnPath) await saveTurnRecord(spindle, chatState.activeTurnPath, record, userId);
+  }
   spindle.sendToFrontend({
     type: "vn_state",
     chatId,
@@ -646,7 +656,7 @@ async function startAssets(
   record: StoredTurnRecord,
   path: string,
   userId?: string,
-  options: { bypassJobIds?: Iterable<string> } = {}
+  options: { bypassJobIds?: Iterable<string>; onlyJobId?: string } = {}
 ): Promise<void> {
   const config = await loadConfig(spindle, userId);
   rememberDebugFlag(userId, config);
@@ -670,19 +680,34 @@ async function startAssets(
   const scope = sceneImageScope(userId, record.plan.key.chatId);
   const admission = sceneCache.admission(scope);
   let current = record;
+  const gate = new ImageReviewGate(async (request) => {
+    if (assetControllers.get(key) !== controller) return;
+    if (controller.signal.aborted && request.state !== "cancelled" && request.state !== "skipped") return;
+    if (!compareTurnKeys(activeTurnKeys.get(key) ?? null, record.plan.key).accepted) return;
+    const requests = safeImageHistory([...(current.imageRequests ?? []).filter((entry) => entry.requestId !== request.requestId), request]);
+    current = { ...current, imageRequests: requests, updatedAt: new Date().toISOString() };
+    await saveTurnRecord(spindle, path, current, userId);
+    if (!compareTurnKeys(activeTurnKeys.get(key) ?? null, record.plan.key).accepted) return;
+    spindle.sendToFrontend({ type: "vn_image_requests", chatId: record.plan.key.chatId, messageId: record.plan.key.assistantMessageId, sourceFingerprint: record.plan.key.sourceFingerprint, requests }, userId);
+  });
+  imageReviewGates.set(key, gate);
+  const mergeJobs = (jobs: StoredTurnRecord["jobs"]): StoredTurnRecord["jobs"] => options.onlyJobId ? current.jobs.map((job) => jobs.find((entry) => entry.jobId === job.jobId) ?? job) : jobs;
+  const batchPlan = options.onlyJobId ? { ...record.plan, visualCues: [...record.plan.visualCues, ...(record.plan.cacheCues ?? [])].filter((cue) => cue.assetJobId === options.onlyJobId), cacheCues: [] } : record.plan;
+  const batchJobs = options.onlyJobId ? record.jobs.filter((job) => job.jobId === options.onlyJobId) : record.jobs;
 
   try {
     const finalJobs = await generateAssets(
       spindle,
-      record.plan,
-      record.jobs,
+      batchPlan,
+      batchJobs,
       config,
       controller.signal,
       async (jobs, changed) => {
         dbg(spindle, userId, `asset ${changed.jobId} p${changed.paragraphIndex} [${changed.priority}] -> ${changed.status}${changed.imageId ? ` image=${changed.imageId}` : ""}${changed.error ? ` error="${changed.error}"` : ""}`);
         const active = activeTurnKeys.get(key) ?? null;
+        if (assetControllers.get(key) !== controller) return;
         if (!compareTurnKeys(active, changed.ownerTurnKey).accepted) return;
-        current = { ...current, jobs, updatedAt: new Date().toISOString() };
+        current = { ...current, jobs: mergeJobs(jobs), updatedAt: new Date().toISOString() };
         await saveTurnRecord(spindle, path, current, userId);
         spindle.sendToFrontend({
           type: "vn_asset",
@@ -692,16 +717,62 @@ async function startAssets(
         }, userId);
       },
       userId,
-      { sceneCache, admission, ...(options.bypassJobIds ? { bypassJobIds: options.bypassJobIds } : {}), ...sourceTextOption(record) }
+      {
+        sceneCache, admission,
+        independentRequests: config.reviewImages || Boolean(options.onlyJobId),
+        disableCacheStore: config.reviewImages || Boolean(options.onlyJobId),
+        ...(config.reviewImages ? { bypassJobIds: batchJobs.map((job) => job.jobId) } : options.bypassJobIds ? { bypassJobIds: options.bypassJobIds } : {}),
+        ...sourceTextOption(record),
+        beforeGenerate: async (job, request, metadata, jobSignal) => {
+          return gate.prepare(job.jobId, job.paragraphIndex, request, metadata, config.reviewImages || Boolean(options.onlyJobId), jobSignal);
+        }
+      }
     );
     const active = activeTurnKeys.get(key) ?? null;
     if (compareTurnKeys(active, record.plan.key).accepted) {
-      current = { ...current, jobs: finalJobs, updatedAt: new Date().toISOString() };
+      current = { ...current, jobs: mergeJobs(finalJobs), updatedAt: new Date().toISOString() };
       await saveTurnRecord(spindle, path, current, userId);
     }
   } finally {
     if (assetControllers.get(key) === controller) assetControllers.delete(key);
+    if (imageReviewGates.get(key) === gate) imageReviewGates.delete(key);
   }
+}
+
+async function prepareSingleImage(spindle: SpindleAPI, request: Extract<FrontendRequest, { type: "vn_prepare_image" }>, userId: string): Promise<void> {
+  const key = runtimeKey(userId, request.chatId);
+  if (preparingSingleImages.has(key)) throw new Error("A picture is already being prepared.");
+  preparingSingleImages.add(key);
+  try { await prepareSingleImageUnlocked(spindle, request, userId); }
+  finally { preparingSingleImages.delete(key); }
+}
+
+async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<FrontendRequest, { type: "vn_prepare_image" }>, userId: string): Promise<void> {
+  const key = runtimeKey(userId, request.chatId);
+  if (!(await loadConfig(spindle, userId)).generateImages) throw new Error("Enable generated pictures in settings before preparing a replacement.");
+  if (!views.isOpen(userId, request.chatId)) throw new Error("Open the visual novel before preparing a picture.");
+  if (assetControllers.has(key)) throw new Error("Generate or skip the waiting pictures before preparing a replacement.");
+  const state = await loadChatState(spindle, request.chatId, userId);
+  const record = await loadTurnRecord(spindle, state.activeTurnPath, userId);
+  if (!record || record.plan.key.assistantMessageId !== request.messageId || record.plan.key.sourceFingerprint !== request.sourceFingerprint) throw new Error("This picture belongs to an older turn.");
+  const messages = await spindle.chat.getMessages(request.chatId) as NormalizedChatMessage[];
+  const latest = [...messages].reverse().find((message) => !message.is_user && message.content.trim());
+  if (!latest || latest.id !== request.messageId) throw new Error("A newer reply has replaced this picture.");
+  const intake = await resolveMessageIntake(spindle, request.chatId, latest.content, userId);
+  if (!intake.resolved || relateRecord(record, latest, intake) !== "current" || !views.isOpen(userId, request.chatId)) throw new Error("The source changed or the view closed. Refresh the visual novel first.");
+  const active = activeTurnKeys.get(key);
+  if (active && !compareTurnKeys(active, record.plan.key).accepted) throw new Error("This picture belongs to an older turn.");
+  activeTurnKeys.set(key, record.plan.key);
+  const job = record.jobs.find((entry) => entry.jobId === request.jobId);
+  if (!job || ![...record.plan.visualCues, ...(record.plan.cacheCues ?? [])].some((cue) => cue.assetJobId === job.jobId)) throw new Error("This picture cannot be prepared from this turn.");
+  const previousImages = { ...record.previousImages };
+  if (job.imageId && job.imageUrl) previousImages[job.jobId] = { imageId: job.imageId, imageUrl: job.imageUrl };
+  const queued = AssetJobSchema.parse({ ...job, status: "queued", imageId: null, imageUrl: null, error: null, queuedAt: new Date().toISOString(), startedAt: null, generatedAt: null, readyAt: null, finishedAt: null });
+  const next = { ...record, previousImages, jobs: record.jobs.map((entry) => entry.jobId === job.jobId ? queued : entry) };
+  const path = state.activeTurnPath!;
+  await saveTurnRecord(spindle, path, next, userId);
+  spindle.sendToFrontend({ type: "vn_turn", turn: turnView(next) }, userId);
+  await startAssets(spindle, next, path, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId] });
 }
 
 async function processAssistantMessage(
@@ -1157,6 +1228,18 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
   if (request.type === "vn_external_image_cancel") { externalImages(spindle).cancel(request.request, userId); return; }
   dbg(spindle, userId, `frontend request ${request.type}`);
   switch (request.type) {
+    case "vn_image_review": {
+      if (typeof request.chatId !== "string" || typeof request.requestId !== "string" || request.requestId.length > 100 || (request.action !== "generate" && request.action !== "skip")) throw new Error("Invalid image review action.");
+      const key = runtimeKey(userId, request.chatId);
+      const turn = activeTurnKeys.get(key);
+      if (!views.isOpen(userId, request.chatId) || !turn || turn.assistantMessageId !== request.messageId || turn.sourceFingerprint !== request.sourceFingerprint) throw new Error("This review belongs to an older or closed turn.");
+      if (!imageReviewGates.get(key)?.decide(request.requestId, request.action, request.edits ?? {})) throw new Error("This request has already been handled or cancelled. Prepare it again if needed.");
+      return;
+    }
+    case "vn_prepare_image":
+      if (typeof request.chatId !== "string" || typeof request.jobId !== "string") throw new Error("Invalid image selection.");
+      await prepareSingleImage(spindle, request, userId);
+      return;
     case "vn_resolve_panel_template": {
       if (typeof request.requestId !== "string" || request.requestId.length > 100 || typeof request.chatId !== "string") return;
       try {
@@ -1437,5 +1520,5 @@ export function registerVisualNovelBackend(spindle: SpindleAPI): void {
     rememberDebugFlag(undefined, cfg);
     void scanAudioCatalog(spindle, cfg.audioDirectory || "audio");
   }).catch(() => {});
-  spindle.log.info("Cue — Living Novel loaded.");
+  spindle.log.info("Lumiglyphics loaded (based on Cue — Living Novel).");
 }

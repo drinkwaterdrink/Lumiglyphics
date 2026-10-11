@@ -32,6 +32,7 @@ function runtime(messages: Msg[], opts: { resolveText?: Resolver; generateImages
   const data = new Map<string, unknown>();
   const writes: Array<[string, unknown]> = [];
   data.set("config.json", {
+    reviewImages: false,
     generateImages: opts.generateImages ?? false, maxImagesPerTurn: 2, imageConcurrency: 1,
     includeCharacterContext: false, includePersonaContext: false, includeLorebookContext: false, includeRecentMessages: 4
   });

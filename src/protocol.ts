@@ -1,8 +1,11 @@
 import type { VisualNovelConfig } from "./config.js";
 import type { PanelArtifact } from "./shared/panels.js";
 import type { CueImageRequest, CueImageResult } from "./shared/cue-images.js";
+import type { ImageRequestEdits, ImageRequestRecord } from "./shared/image-review.js";
 
 export type FrontendRequest =
+  | { type: "vn_image_review"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; action: "generate" | "skip"; edits?: ImageRequestEdits }
+  | { type: "vn_prepare_image"; chatId: string; messageId: string; sourceFingerprint: string; jobId: string }
   | { type: "vn_external_image"; request: CueImageRequest }
   | { type: "vn_external_image_cancel"; request: Pick<CueImageRequest, "version" | "provider" | "chatId" | "requestId"> }
   | { type: "vn_resolve_panel_template"; chatId: string; characterId?: string; requestId: string; template: string }
@@ -72,6 +75,7 @@ export type AssetView = {
    * terminal; they never count toward generation progress or retry wording.
    */
   source?: "cache";
+  previousImage?: boolean;
 };
 
 export type AudioCueView = {
@@ -101,6 +105,7 @@ export type TurnView = {
   ambients?: Array<string | null>;
   choices: Array<{ id: string; label: string; value: string }>;
   assets: AssetView[];
+  imageRequests?: ImageRequestRecord[];
   audioCues?: AudioCueView[];
   status: "planning" | "ready" | "failed" | "cancelled";
   error?: string;
@@ -120,6 +125,7 @@ export type ConnectionCatalogErrors = {
 };
 
 export type BackendResponse =
+  | { type: "vn_image_requests"; chatId: string; messageId: string; sourceFingerprint: string; requests: ImageRequestRecord[] }
   | { type: "vn_external_image"; result: CueImageResult }
   | { type: "vn_panel_template"; requestId: string; chatId: string; template?: string; error?: string }
   | { type: "vn_state"; chatId: string; config: VisualNovelConfig; turn: TurnView | null }
