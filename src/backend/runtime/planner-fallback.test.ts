@@ -28,19 +28,19 @@ type PlannerBehaviour = "success" | "fail" | "emptyCharacters";
 function spindleFor(
   behaviour: PlannerBehaviour,
   captured: { systemMessage: string },
-  options: { plannerCharacterName?: string; plannerCharacterDescription?: string; noCard?: boolean } = {}
+  options: { plannerCharacterName?: string; plannerCharacterDescription?: string; noCard?: boolean; cardName?: string; cardDescription?: string; sceneCharacter?: string } = {}
 ): SpindleAPI {
   return {
     chats: { get: async () => ({ character_id: options.noCard ? null : "character-1" }) },
     characters: {
       get: async () => ({
         id: "character-1",
-        name: "Mira",
-        description: "silver hair, green eyes, red wool coat",
+        name: options.cardName ?? "Mira",
+        description: options.cardDescription ?? "silver hair, green eyes, red wool coat",
         personality: "careful",
         scenario: "old observatory",
         creator_notes: "keep the red coat",
-        tags: ["silver hair", "red coat"],
+        tags: options.cardDescription ? [] : ["silver hair", "red coat"],
         world_book_ids: [],
         extensions: {}
       })
@@ -74,11 +74,13 @@ function spindleFor(
               description: "An old observatory",
               persistentElements: ["brass telescope"]
             },
-            cast: ["Mira"],
+            cast: options.sceneCharacter ? [options.sceneCharacter, options.plannerCharacterName ?? "Mira"] : ["Mira"],
+            character: options.sceneCharacter,
             basePrompt: "old observatory, brass telescope, lantern light",
             compositionLock: "Mira centered"
           }],
-          cues: [{ paragraphIndex: 0, action: "raises a lantern", expression: "alert", promptDelta: "lantern held high" }],
+          cues: [{ paragraphIndex: 0, character: options.sceneCharacter, action: "raises a lantern", expression: "alert", promptDelta: "lantern held high" }],
+          speakers: options.sceneCharacter ? [{ paragraphIndex: 0, name: options.sceneCharacter }] : [],
           choices: [],
           characters: behaviour === "emptyCharacters"
             ? []
@@ -109,6 +111,16 @@ function plan(
 }
 
 describe("fresh single-character fallback", () => {
+  test("repairs a scenario title selected instead of its described NPC", async () => {
+    const result = await plan(spindleFor("success", { systemMessage: "" }, {
+      cardName: "Rookhaven Academy", cardDescription: "A narrator for an academy scenario. Follow the students' daily lives.",
+      plannerCharacterName: "Aleister", plannerCharacterDescription: "brown hair, green eyes, tall man",
+      sceneCharacter: "Rookhaven Academy"
+    }), emptySingleCharacter(), { ...message, name: "Rookhaven Academy" });
+    expect(result.plan.visualCues[0]!.character).toBe("Aleister");
+    expect(result.plan.visualCues[0]!.resolvedIdentity).toContain("brown hair");
+    expect(result.plan.paragraphSpeakers[0]).toBe("");
+  });
   test("seeds exactly one stable protagonist from the character card when the sidecar fails", async () => {
     const captured = { systemMessage: "" };
     const result = await plan(spindleFor("fail", captured), emptySingleCharacter());

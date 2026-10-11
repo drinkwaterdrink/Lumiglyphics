@@ -26,6 +26,7 @@ import {
 import { normalizeActionProp, ActionPropSchema } from "../../shared/action-prop.js";
 import { reduceContinuity } from "../core/continuity.js";
 import { resolveCueTimeline } from "../core/cue-state.js";
+import { repairScenarioSubjects } from "./scenario-subjects.js";
 import { prepareNarrative } from "../core/paragraphs.js";
 import { decideSceneBoundary } from "../core/scene-boundary.js";
 import { validateTurnPlan } from "../core/turn-plan.js";
@@ -2214,6 +2215,12 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   debug.line(usedFallback
     ? `outcome=fallback attempts=${failedAttempts}/${PLANNER_ATTEMPTS} deterministic plan: scenes=${planner.scenes.length} cues=${planner.cues.length}`
     : `outcome=planner accepted attempt=${failedAttempts + 1}/${PLANNER_ATTEMPTS} scenes=${planner.scenes.length} cues=${planner.cues.length} characters=${planner.characters.length} speakers=${planner.speakers.length} choices=${planner.choices.length}`);
+
+  const cardIdentity = buildCardIdentity(visualContext);
+  planner = repairScenarioSubjects(planner, {
+    name: visualContext.characterIdentity?.name ?? "",
+    hasCharacterIdentity: Boolean(cardIdentity && isUsableIdentity(cardIdentity.name, cardIdentity.tags))
+  });
 
   // Merge the planner's explicit declarations (ids, aliases, subject class) and
   // canonicalize every reference before identity or timeline resolution.
