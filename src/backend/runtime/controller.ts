@@ -756,8 +756,8 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
   const key = runtimeKey(userId, request.chatId);
   const config = await loadConfig(spindle, userId);
   if (!config.generateImages) throw new Error("Enable generated pictures in settings before preparing a replacement.");
-  const template = request.templateId === undefined ? undefined : config.imageTemplates.find(item => item.id === request.templateId && item.enabled);
-  if (request.templateId !== undefined && !template) throw new Error("This template is disabled or unavailable.");
+  const template = request.templateId === undefined ? undefined : config.imageTemplates.find(item => item.id === request.templateId);
+  if (request.templateId !== undefined && !template) throw new Error("This template is unavailable.");
   if (!views.isOpen(userId, request.chatId)) throw new Error("Open the visual novel before preparing a picture.");
   if (assetControllers.has(key)) throw new Error("Generate or skip the waiting pictures before preparing a replacement.");
   const state = await loadChatState(spindle, request.chatId, userId);

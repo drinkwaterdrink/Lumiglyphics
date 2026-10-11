@@ -29,6 +29,24 @@ try {
     assert.equal(await page.getByLabel("Text panel size", { exact: true }).count(), 0, "sizes only live in settings");
     assert.equal(await page.locator("[data-vn-sheet-tools]").innerText(), "", "reader chrome is icon-only without a title");
     const panel = page.locator("[data-vn-dialogue]");
+    const header = page.locator("[data-vn-sheet-header]");
+    const grip = page.getByRole("button", { name: "Resize text panel", exact: true });
+    const headerBox = await header.boundingBox();
+    const gripBox = await grip.boundingBox();
+    const panelBox = await panel.boundingBox();
+    assert.ok(headerBox && gripBox && panelBox && gripBox.x - panelBox.x < 25 && headerBox.height < 60, "single compact header with left-corner grip");
+    const initialHeight = (await panel.boundingBox())!.height;
+    await page.mouse.move(gripBox!.x + 20, gripBox!.y + 20);
+    await page.mouse.down();
+    await page.mouse.move(gripBox!.x + 20, gripBox!.y - 37, { steps: 4 });
+    const duringHeight = (await panel.boundingBox())!.height;
+    await page.mouse.up();
+    const savedHeight = (await panel.boundingBox())!.height;
+    assert.ok(Math.abs(savedHeight - duringHeight) < 2, "release keeps intermediate height without snapping");
+    if (viewport.height > 500) assert.ok(savedHeight > initialHeight + 40, "drag adjusts height continuously");
+    await page.evaluate(() => { const f = (window as any).readingFixture; f.stage.setReaderPreferences(f.counters.readerPreferences); });
+    assert.ok(Math.abs((await panel.boundingBox())!.height - savedHeight) < 2, "saved preference echo retains dragged height");
+
     const text = page.locator("[data-vn-dialogue-text]");
     await assert.doesNotReject(() => panel.waitFor());
     const originalProgress = await page.locator("[data-vn-progress]").textContent();

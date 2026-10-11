@@ -6,7 +6,7 @@ import { BUILTIN_IMAGE_TEMPLATES, validateImageTemplates, resolveImageTemplate, 
 test("template_validation_is_atomic", () => {
   const portrait = BUILTIN_IMAGE_TEMPLATES[0]!;
   for (const invalid of [
-    [portrait, portrait], Array.from({ length: 25 }, (_, i) => ({ ...portrait, id: `t${i}` })),
+    [portrait, portrait], Array.from({ length: 33 }, (_, i) => ({ ...portrait, id: `t${i}` })),
     [{ ...portrait, name: "x".repeat(81) }], [{ ...portrait, useWhen: "x".repeat(1001) }],
     [{ ...portrait, positive: "x".repeat(8001) }], [{ ...portrait, negative: "x".repeat(8001) }],
     [{ ...portrait, category: "unknown" }], [{ ...portrait, positive: "{{password}}" }],
@@ -28,6 +28,18 @@ test("manga page is opt-in, grounded in the brief, and has editable independent 
   assert.doesNotMatch(output.negativePrompt, /speech bubble|border/);
   assert.match(output.negativePrompt, /identity drift/);
   assert.equal(config.maxImagesPerTurn, 4);
+});
+
+test("old catalogs automatically gain an unchecked manga template without replacing edits", () => {
+  const original = { ...BUILTIN_IMAGE_TEMPLATES[0]!, positive: "personal {{scene}}" };
+  const config = normalizeConfig({ imageTemplates: [original] });
+  assert.equal(config.imageTemplates.find(t => t.id === "manga-page")?.enabled, false);
+  assert.equal(config.imageTemplates[0]!.positive, original.positive);
+  assert.deepEqual(normalizeConfig(config).imageTemplates, config.imageTemplates);
+  const manual = normalizeConfig({ ...config, defaultImageTemplateId: "manga-page", dynamicImageTemplates: false });
+  assert.equal(resolveImageTemplate(manual).template.id, "manga-page");
+  const dynamic = normalizeConfig({ ...manual, dynamicImageTemplates: true });
+  assert.equal(resolveImageTemplate(dynamic, "manga-page").template.id, "portrait");
 });
 
 test("legacy_config_preserves_style_and_presets", () => {

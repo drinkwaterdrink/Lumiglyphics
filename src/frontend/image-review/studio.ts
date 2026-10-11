@@ -79,7 +79,7 @@ export class ImageStudio {
     for (const asset of turn?.assets ?? []) if ((turn?.imageRequests ?? []).some((record) => record.jobId === asset.jobId && record.state === "review") || asset.status === "failed" || asset.status === "cancelled") this.preparing.delete(asset.jobId);
     this.render();
   }
-  setConfig(config: VisualNovelConfig): void { this.templates = config.imageTemplates.filter(t => t.enabled).map(t => ({ ...t })); this.defaultTemplate = config.defaultImageTemplateId; this.render(); }
+  setConfig(config: VisualNovelConfig): void { this.templates = config.imageTemplates.map(t => ({ ...t })); this.defaultTemplate = config.defaultImageTemplateId; this.render(); }
   private rebuildTemplate(): void {
     const record = this.record(); const templateId = this.el<HTMLSelectElement>("[data-template]").value;
     if (!this.turn || record?.state !== "review" || !templateId || this.rebuilding.has(record.requestId) || this.submitted.has(record.requestId) || this.rebuilding.has(record.requestId)) return;

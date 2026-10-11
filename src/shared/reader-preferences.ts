@@ -3,6 +3,7 @@ export type ReaderPreferences = {
   layout: "overlay" | "image-first";
   sheetSize: "compact" | "reading" | "expanded";
   backgroundOpacity: number;
+  heightRatio?: number;
 };
 export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   adjustableSheetEnabled: false, layout: "overlay", sheetSize: "reading", backgroundOpacity: 0.9,
@@ -15,12 +16,13 @@ export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
     sheetSize: input.sheetSize === "compact" || input.sheetSize === "expanded" ? input.sheetSize : "reading",
     backgroundOpacity: typeof input.backgroundOpacity === "number" && Number.isFinite(input.backgroundOpacity)
       ? Math.max(0.35, Math.min(1, input.backgroundOpacity)) : 0.9,
+    ...(typeof input.heightRatio === "number" && Number.isFinite(input.heightRatio) ? { heightRatio: Math.max(.12, Math.min(1, input.heightRatio)) } : {}),
   };
 }
 const RATIOS = { compact: 0.22, reading: 0.34, expanded: 0.6 } as const;
-export function sheetHeight(size: ReaderPreferences["sheetSize"], usableHeight: number): number {
+export function sheetHeight(size: ReaderPreferences["sheetSize"], usableHeight: number, heightRatio?: number): number {
   const height = Number.isFinite(usableHeight) ? Math.max(0, usableHeight) : 224;
-  return Math.round(Math.min(height, Math.max(224, height * RATIOS[size])));
+  return Math.round(Math.min(height, Math.max(224, height * (heightRatio ?? RATIOS[size]))));
 }
 export function nearestSheetSize(height: number, usableHeight: number): ReaderPreferences["sheetSize"] {
   return (Object.keys(RATIOS) as ReaderPreferences["sheetSize"][]).reduce((best, size) =>

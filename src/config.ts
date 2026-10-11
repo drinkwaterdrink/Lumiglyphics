@@ -1,6 +1,6 @@
 import { DEFAULT_SPEECH_SETTINGS, normalizeSpeechSettings, type SpeechSettings } from "./speech-config.js";
 import { DEFAULT_READER_PREFERENCES, normalizeReaderPreferences, type ReaderPreferences } from "./shared/reader-preferences.js";
-import { BUILTIN_IMAGE_TEMPLATES, migrateImageTemplates, validateImageTemplates, type ImageTemplate } from "./shared/image-templates.js";
+import { BUILTIN_IMAGE_TEMPLATES, migrateImageTemplates, upgradeImageTemplates, type ImageTemplate } from "./shared/image-templates.js";
 
 export type VisualNovelMode = "standard" | "cyoa";
 
@@ -302,7 +302,7 @@ export function normalizeConfig(value: unknown): VisualNovelConfig {
     reviewImages: bool(input.reviewImages, DEFAULT_CONFIG.reviewImages),
     dynamicImageTemplates: bool(input.dynamicImageTemplates, false),
     defaultImageTemplateId: nullableString(input.defaultImageTemplateId) ?? "portrait",
-    imageTemplates: input.imageTemplates === undefined ? migrateImageTemplates(promptPresetList(input.promptPresets)) : validateImageTemplates(input.imageTemplates),
+    imageTemplates: input.imageTemplates === undefined ? migrateImageTemplates(promptPresetList(input.promptPresets)) : upgradeImageTemplates(input.imageTemplates),
     imagePromptFormat: input.imagePromptFormat === "tags" ? "tags" : "description",
     includeSimTrackerContext: bool(input.includeSimTrackerContext, true),
     referenceAnchoring: bool(input.referenceAnchoring, DEFAULT_CONFIG.referenceAnchoring),

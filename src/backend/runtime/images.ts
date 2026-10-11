@@ -1206,8 +1206,8 @@ export async function generateAssets(
             rebuildTemplate: async templateId => {
               if (signal.aborted || jobSignal.aborted) throw abortError(jobSignal);
               const latestConfig = await loadConfig(spindle, userId);
-              const template = latestConfig.imageTemplates.find(item => item.id === templateId && item.enabled);
-              if (!template) throw new Error("This template is disabled or unavailable.");
+              const template = latestConfig.imageTemplates.find(item => item.id === templateId);
+              if (!template) throw new Error("This template is unavailable.");
               const nextCue = { ...cue, imageTemplate: templateSnapshot(template), imageTemplateReason: "Manual template selection" };
               const nextCompiled = compileTemplateCue(config, scene, nextCue, characterAppearance);
               const usesReference = referenceAnchoringEnabled(config) && cueUsesCharacterReference(nextCue) && provider !== null && REFERENCE_PROVIDERS.has(provider);

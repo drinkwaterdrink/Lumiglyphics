@@ -188,6 +188,9 @@ code { font-family: var(--lumiverse-font-mono, ui-monospace, "Cascadia Mono", Co
 [data-group-head] > small { flex-basis: 100%; }
 [data-apply-chip] { display: inline-flex; align-items: center; gap: .3rem; padding: .05rem .55rem; border: 1px solid color-mix(in srgb, var(--set-warning) 55%, transparent); border-radius: 999px; color: var(--set-warning); font-size: .72rem; font-weight: 650; letter-spacing: .02em; white-space: nowrap; }
 [data-field] { display: grid; gap: .35rem; min-width: 0; }
+[data-template-fields] { display: grid; gap: .9rem; padding: .75rem 0; }
+[data-template-choices] { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .2rem .75rem; }
+[data-template-editor] summary { min-height: 44px; cursor: pointer; font-weight: 650; display: flex; align-items: center; }
 [data-template-editor] { display: grid; gap: .9rem; padding: .75rem 0; }
 [data-picture-group] > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 650; }
 [data-field] > span:first-child, legend { font-weight: 600; font-size: .93rem; }
@@ -486,13 +489,17 @@ export class VisualNovelSettingsPanel {
     dynamic.innerHTML = '<input name="dynamicImageTemplates" type="checkbox"><span>Choose templates from story context<small>When off, every picture uses the default template. This is independent of prompt review and keeps the existing picture budget.</small></span>';
     const prompts = section("Image prompts");
     prompts.append(dynamic);
-    const templates = document.createElement("details");
-    templates.dataset.pictureGroup = "";
-    templates.innerHTML = '<summary>Scene templates</summary>';
+    const templates = document.createElement("div");
     prompts.append(templates);
     this.templateEditor = new ImageTemplateEditor(templates, patch => this.options.onSave(patch), () => {});
     const composition = prompts;
-    composition.append(children[2]!, this.root.querySelector('[data-group-id="prompts"]')!);
+    const style = document.createElement("details"); style.dataset.pictureGroup = "";
+    style.innerHTML = '<summary>Shared style and exclusions</summary>';
+    style.append(this.root.querySelector('[data-group-id="prompts"]')!);
+    composition.append(style);
+    const consistency = document.createElement("details"); consistency.dataset.pictureGroup = "";
+    consistency.innerHTML = '<summary>Character consistency and references</summary>';
+    consistency.append(children[2]!); composition.append(consistency);
     const context = section("Context sources");
     context.append(this.root.querySelector('[data-group-id="context"]')!);
     const tracker = document.createElement("label"); tracker.dataset.check = "";
@@ -592,7 +599,7 @@ export class VisualNovelSettingsPanel {
             ${group("Text", `
               <label data-check><input name="adjustableSheetEnabled" type="checkbox" /><span>Adjustable text panel<small>Resize or hide text to see the picture. Drag the handle or choose a panel size.</small></span></label>
               <label data-field><span>Reader layout</span><select name="readerLayout"><option value="overlay">Text over picture</option><option value="image-first">Image first</option></select></label>
-              <label data-field><span>Text panel size</span><select name="readerSheetSize"><option value="compact">Compact</option><option value="reading">Reading</option><option value="expanded">Expanded</option></select></label>
+              <label data-field><span>Text panel size</span><select name="readerSheetSize"><option value="custom" disabled>Custom (dragged)</option><option value="compact">Compact</option><option value="reading">Reading</option><option value="expanded">Expanded</option></select></label>
               <label data-field><span>Text panel background opacity</span><input name="readerBackgroundOpacity" type="range" min="0.35" max="1" step="0.05" /></label>
               <fieldset ${find("Text size", "font scale bigger smaller large")}>
                 <legend>Text size</legend>
@@ -1364,7 +1371,13 @@ export class VisualNovelSettingsPanel {
       case "autoEnter": return { autoEnter: checked };
       case "referenceAnchoring": return { referenceAnchoring: checked };
       case "reviewImages": return { reviewImages: checked };
-      case "dynamicImageTemplates": return { dynamicImageTemplates: checked };
+      case "dynamicImageTemplates":
+        if (checked && !this.config.imageTemplates.some(template => template.enabled)) {
+          (target as HTMLInputElement).checked = false;
+          this.status.textContent = "Check at least one dynamic template and save your choices first.";
+          return null;
+        }
+        return { dynamicImageTemplates: checked };
       case "includeSimTrackerContext": return { includeSimTrackerContext: checked };
       case "defaultImageTemplateId": return { defaultImageTemplateId: target.value };
       case "imagePromptFormat": return { imagePromptFormat: target.value === "tags" ? "tags" : "description" };
@@ -1382,7 +1395,7 @@ export class VisualNovelSettingsPanel {
       case "textScale": return { textScale: clamp(Number(target.value), TEXT_SCALE_MIN, TEXT_SCALE_MAX, DEFAULT_CONFIG.textScale) };
       case "adjustableSheetEnabled": return { readerPreferences: { ...this.config.readerPreferences, adjustableSheetEnabled: checked } };
       case "readerLayout": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, layout: target.value }) };
-      case "readerSheetSize": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, sheetSize: target.value }) };
+      case "readerSheetSize": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, sheetSize: target.value, heightRatio: undefined }) };
       case "readerBackgroundOpacity": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, backgroundOpacity: Number(target.value) }) };
       case "bgmVolume": return { bgmVolume: clamp(Number(target.value), 0, 1, DEFAULT_CONFIG.bgmVolume) };
       case "sfxVolume": return { sfxVolume: clamp(Number(target.value), 0, 1, DEFAULT_CONFIG.sfxVolume) };
@@ -1807,7 +1820,7 @@ export class VisualNovelSettingsPanel {
     this.control<HTMLInputElement>("textScale").value = String(config.textScale);
     this.control<HTMLInputElement>("adjustableSheetEnabled").checked = config.readerPreferences.adjustableSheetEnabled;
     this.control<HTMLSelectElement>("readerLayout").value = config.readerPreferences.layout;
-    this.control<HTMLSelectElement>("readerSheetSize").value = config.readerPreferences.sheetSize;
+    this.control<HTMLSelectElement>("readerSheetSize").value = config.readerPreferences.heightRatio === undefined ? config.readerPreferences.sheetSize : "custom";
     this.control<HTMLInputElement>("readerBackgroundOpacity").value = String(config.readerPreferences.backgroundOpacity);
     this.showCustomQuiet("textScale", !scaleStep);
 

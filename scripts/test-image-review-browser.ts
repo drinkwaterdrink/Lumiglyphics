@@ -18,6 +18,8 @@ try {
   await page.evaluate(() => { const f = (window as any).imageFixture; f.studio.setTurn(structuredClone(f.turn)); });
   assert.equal(await prompt.inputValue(), "edited portrait", "host refresh preserves unsaved draft");
   await page.evaluate(() => { const f = (window as any).imageFixture; f.studio.setConfig(f.config); });
+  assert.equal(await studio.locator('[data-template] option[value="manga-page"]').count(), 1, "manual review lists unchecked templates");
+
   await studio.getByLabel("Picture template", { exact: true }).selectOption("environment");
   await studio.getByRole("button", { name: "Use template", exact: true }).click();
   await studio.getByRole("button", { name: "Keep edits", exact: true }).click();

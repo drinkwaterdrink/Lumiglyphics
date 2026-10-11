@@ -1,4 +1,4 @@
-import { normalizeReaderPreferences, nearestSheetSize, sheetHeight, type ReaderPreferences } from "../../shared/reader-preferences.js";
+import { normalizeReaderPreferences, sheetHeight, type ReaderPreferences } from "../../shared/reader-preferences.js";
 
 /** Owns only reader presentation. It cannot advance prose or request an image. */
 export class DialogueSheet {
@@ -8,6 +8,8 @@ export class DialogueSheet {
   private readonly tools: HTMLElement;
   private readonly handle: HTMLButtonElement;
   private readonly show: HTMLButtonElement;
+  private readonly header: HTMLElement;
+  private readonly hide: HTMLButtonElement;
   private readonly observer: ResizeObserver;
   private readonly abort = new AbortController();
 
@@ -15,7 +17,7 @@ export class DialogueSheet {
     private readonly pause: () => void, private readonly save: (preferences: ReaderPreferences) => void) {
     this.tools = document.createElement("div");
     this.tools.dataset.vnSheetTools = "";
-    this.tools.innerHTML = `<button type="button" data-vn-sheet-handle aria-label="Resize text panel" title="Drag to resize; arrow keys also adjust height"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10h12M6 14h12"/></svg></button>
+    this.tools.innerHTML = `<button type="button" data-vn-sheet-handle aria-label="Resize text panel" title="Drag to resize; arrow keys also adjust height"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10V4h6M4 4l6 6M14 20h6v-6M20 20l-6-6"/></svg></button>
       <button type="button" data-vn-hide-text aria-label="Hide text" title="Hide text"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>`;
     this.handle = this.tools.querySelector("button")!;
     this.show = document.createElement("button");
@@ -25,11 +27,17 @@ export class DialogueSheet {
     this.show.title = "Show text";
     this.show.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>';
     this.show.hidden = true;
-    dialogue.prepend(this.tools);
+    const header = this.header = document.createElement("div");
+    header.dataset.vnSheetHeader = "";
+    const controls = dialogue.querySelector("[data-vn-controls]")!;
+    const speaker = dialogue.querySelector("[data-vn-speaker]")!;
+    dialogue.prepend(header);
+    this.hide = this.tools.querySelector("[data-vn-hide-text]")!;
+    header.append(this.tools, speaker, controls, this.hide);
     root.append(this.show);
     const signal = this.abort.signal;
     this.tools.addEventListener("click", event => event.stopPropagation(), { signal });
-    this.tools.querySelector("[data-vn-hide-text]")!.addEventListener("click", () => this.setHidden(true), { signal });
+    this.hide.addEventListener("click", () => this.setHidden(true), { signal });
     this.show.addEventListener("click", event => { event.stopPropagation(); this.setHidden(false); this.handle.focus(); }, { signal });
     this.handle.addEventListener("pointerdown", event => {
       if (event.button !== 0) return;
@@ -45,17 +53,15 @@ export class DialogueSheet {
     }, { signal });
     this.handle.addEventListener("pointerup", event => {
       if (!this.drag || this.drag.id !== event.pointerId) return;
-      const size = nearestSheetSize(dialogue.getBoundingClientRect().height * this.coordinateScale(), this.usableHeight());
+      const height = dialogue.getBoundingClientRect().height * this.coordinateScale();
       this.cancelDrag();
-      this.changeSize(size);
+      this.changeHeight(height);
     }, { signal });
     this.handle.addEventListener("pointercancel", () => { this.cancelDrag(); this.resize(); }, { signal });
     this.handle.addEventListener("keydown", event => {
       if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
       event.preventDefault();
-      const sizes = ["compact", "reading", "expanded"] as const;
-      const index = sizes.indexOf(this.preferences.sheetSize);
-      this.changeSize(sizes[Math.max(0, Math.min(2, index + (event.key === "ArrowUp" ? 1 : -1)))]!);
+      this.changeHeight(dialogue.getBoundingClientRect().height * this.coordinateScale() + (event.key === "ArrowUp" ? 16 : -16));
     }, { signal });
     this.observer = new ResizeObserver(() => { this.cancelDrag(); this.resize(); });
     this.observer.observe(root);
@@ -83,10 +89,10 @@ export class DialogueSheet {
     const viewport = window.visualViewport;
     const inset = viewport ? Math.max(0, rootHeight - viewport.height * this.coordinateScale()) : 0;
     this.root.style.setProperty("--vn-sheet-keyboard-inset", `${inset}px`);
-    this.root.style.setProperty("--vn-sheet-height", `${sheetHeight(this.preferences.sheetSize, this.usableHeight())}px`);
+    this.root.style.setProperty("--vn-sheet-height", `${sheetHeight(this.preferences.sheetSize, this.usableHeight(), this.preferences.heightRatio)}px`);
   }
-  private changeSize(size: ReaderPreferences["sheetSize"]): void {
-    this.setPreferences({ ...this.preferences, sheetSize: size });
+  private changeHeight(height: number): void {
+    this.setPreferences({ ...this.preferences, heightRatio: height / Math.max(1, this.usableHeight()) });
     this.save({ ...this.preferences });
   }
   setPreferences(value: ReaderPreferences): void {
@@ -95,6 +101,7 @@ export class DialogueSheet {
     this.root.dataset.vnReaderLayout = this.preferences.layout;
     this.root.style.setProperty("--vn-sheet-opacity", String(this.preferences.backgroundOpacity));
     this.tools.hidden = !this.preferences.adjustableSheetEnabled;
+    this.hide.hidden = !this.preferences.adjustableSheetEnabled;
     if (!this.preferences.adjustableSheetEnabled) this.setHidden(false);
     this.resize();
   }
@@ -105,5 +112,9 @@ export class DialogueSheet {
     if (this.hidden) { this.pause(); this.show.focus(); }
   }
   isHidden(): boolean { return this.hidden; }
-  destroy(): void { this.cancelDrag(); this.abort.abort(); this.observer.disconnect(); this.tools.remove(); this.show.remove(); }
+  destroy(): void {
+    this.cancelDrag(); this.abort.abort(); this.observer.disconnect();
+    this.dialogue.prepend(this.header.querySelector("[data-vn-controls]")!, this.header.querySelector("[data-vn-speaker]")!);
+    this.header.remove(); this.show.remove();
+  }
 }

@@ -417,6 +417,29 @@ function generationFixture() {
 }
 
 describe("image review controller lifecycle", () => {
+  test("manual held and replacement choices accept templates excluded from dynamic mode", async () => {
+    const f = generationFixture();
+    f.data.set("config.json", { generateImages: true, reviewImages: true, referenceAnchoring: false, maxImagesPerTurn: 1, includeCharacterContext: false, includePersonaContext: false });
+    registerVisualNovelBackend(f.spindle);
+    await sendState(f.spindle, "chat", "review-user", { viewOpen: true });
+    const record = () => f.data.get(turnPath("chat", "assistant-1", 0)) as StoredTurnRecord;
+    const latest = () => record()?.imageRequests?.at(-1);
+    await waitFor(() => latest()?.state === "review");
+    const scope = { chatId: "chat", messageId: "assistant-1", sourceFingerprint: record().plan.key.sourceFingerprint };
+    f.request({ type: "vn_reprepare_image_template", ...scope, requestId: latest()!.requestId, templateId: "manga-page" });
+    await waitFor(() => latest()?.imagePromptMetadata?.template.id === "manga-page");
+    expect(f.gates).toHaveLength(0);
+    const first = latest()!;
+    f.request({ type: "vn_image_review", ...scope, requestId: first.requestId, action: "generate" });
+    await waitFor(() => f.gates.length === 1);
+    f.gates[0]!.resolve({ imageId: "original", imageUrl: "/original" });
+    await waitFor(() => record().jobs[0]?.status === "generated");
+    await new Promise(resolve => setTimeout(resolve, 5));
+    f.request({ type: "vn_prepare_image", ...scope, jobId: first.jobId, templateId: "manga-page" });
+    await waitFor(() => latest()?.requestId !== first.requestId && latest()?.state === "review");
+    expect(latest()?.imagePromptMetadata?.template.id).toBe("manga-page");
+    expect(f.gates).toHaveLength(1);
+  });
   test("rejects cross-user and duplicate approval; retains old art after replacement failure", async () => {
     const f = generationFixture();
     f.data.set("config.json", { generateImages: true, reviewImages: true, referenceAnchoring: false, maxImagesPerTurn: 1, includeCharacterContext: false, includePersonaContext: false });

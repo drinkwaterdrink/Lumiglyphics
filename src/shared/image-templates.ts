@@ -29,7 +29,7 @@ export type VisualBrief = z.infer<typeof VisualBriefSchema>;
 export const ImagePromptMetadataSchema = z.object({ template: ImageTemplateSnapshotSchema, selectionReason: z.string().max(300), format: z.enum(["description", "tags"]), brief: VisualBriefSchema,
   trackerStatus: z.enum(["detected", "not_found", "unsupported", "malformed", "disabled"]), trackerSourceMessageId: z.string().max(256).optional() }).strict();
 export type ImagePromptMetadata = z.infer<typeof ImagePromptMetadataSchema>;
-export const ImageTemplateListSchema = z.array(ImageTemplateSchema).max(24).refine(templates => new Set(templates.map(t => t.id)).size === templates.length, "Template IDs must be unique.");
+export const ImageTemplateListSchema = z.array(ImageTemplateSchema).max(32).refine(templates => new Set(templates.map(t => t.id)).size === templates.length, "Template IDs must be unique.");
 
 const body = "{{style}}\n{{subjects}}\n{{action}}\n{{scene}}\n{{composition}}\n{{lighting}}\n{{suffix}}";
 export const BUILTIN_IMAGE_TEMPLATES: readonly ImageTemplate[] = [
@@ -63,6 +63,14 @@ export function validateImageTemplates(value: unknown): ImageTemplate[] {
   return ImageTemplateListSchema.parse(value);
 }
 
+export function upgradeImageTemplates(value: unknown): ImageTemplate[] {
+  const templates = validateImageTemplates(value);
+  if (!templates.some(t => t.id === "manga-page") && templates.length < 32) {
+    templates.push({ ...BUILTIN_IMAGE_TEMPLATES.find(t => t.id === "manga-page")! });
+  }
+  return templates;
+}
+
 export function templateSnapshot(template: ImageTemplate): ImageTemplateSnapshot {
   const normalized = ImageTemplateSchema.parse(template);
   let hash = 2166136261;
@@ -84,7 +92,10 @@ export function migrateImageTemplates(presets: readonly VisualNovelPromptPreset[
 export function resolveImageTemplate(config: VisualNovelConfig, selectedId?: string): { template: ImageTemplateSnapshot; fallbackReason?: string } {
   const selected = selectedId && config.imageTemplates.find(t => t.id === selectedId && t.enabled);
   if (selected) return { template: templateSnapshot(selected) };
-  const fallback = config.imageTemplates.find(t => t.id === config.defaultImageTemplateId && t.enabled);
+  const dynamicSelection = config.dynamicImageTemplates;
+  if (dynamicSelection && !config.imageTemplates.some(t => t.enabled)) throw new Error("Choose at least one template for dynamic image generation.");
+  const fallback = config.imageTemplates.find(t => t.id === config.defaultImageTemplateId && (!dynamicSelection || t.enabled))
+    ?? (dynamicSelection ? config.imageTemplates.find(t => t.enabled) : undefined);
   return { template: templateSnapshot(fallback ?? { ...BUILTIN_IMAGE_TEMPLATES[0]! }),
     ...((selectedId || !fallback) ? { fallbackReason: "Requested template unavailable; using the default template." } : {}) };
 }

@@ -1739,6 +1739,7 @@ export class VnStage {
     );
     const speaker = view.paragraph?.speaker ?? "";
     if (this.speaker.textContent !== speaker) this.speaker.textContent = speaker;
+    this.speaker.title = speaker;
     this.speaker.hidden = !view.paragraph?.speaker;
     const progress = view.paragraph
       ? `${view.paragraphNumber} / ${view.paragraphCount}`
