@@ -53,8 +53,11 @@ export function templateSnapshot(template: ImageTemplate): ImageTemplateSnapshot
 
 export function migrateImageTemplates(presets: readonly VisualNovelPromptPreset[]): ImageTemplate[] {
   const templates = BUILTIN_IMAGE_TEMPLATES.map(t => ({ ...t }));
+  // Legacy presets were literal prefix text, not template programs. Preserve the
+  // original records and make unsupported macro notation literal in the import.
+  const importText = (value: string, limit: number) => value.replace(/\{\{([^{}]*)\}\}/g, (token, key: string) => (IMAGE_TEMPLATE_TOKENS as readonly string[]).includes(key) ? token : `{${key}}`).slice(0, limit).replace(/\{\{[^{}]*$/, "");
   for (const [index, preset] of presets.slice(0, 19).entries()) {
-    templates.push({ ...templates[0]!, id: `preset-${index}-${preset.id.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 60) || "import"}`, name: preset.name.slice(0, 80), positive: `${preset.positive}\n{{subjects}}\n{{action}}\n{{scene}}\n{{composition}}\n{{lighting}}\n{{suffix}}`.slice(0, 8000), negative: preset.negative.slice(0, 8000) });
+    templates.push({ ...templates[0]!, id: `preset-${index}-${preset.id.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 60) || "import"}`, name: preset.name.slice(0, 80), positive: `${importText(preset.positive, 7900)}\n{{subjects}}\n{{action}}\n{{scene}}\n{{composition}}\n{{lighting}}\n{{suffix}}`, negative: importText(preset.negative, 8000) });
   }
   return templates;
 }

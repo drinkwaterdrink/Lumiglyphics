@@ -1,3 +1,4 @@
+import { DEFAULT_CONFIG } from "../src/config.js";
 import { ImageStudio } from "../src/frontend/image-review/studio.js";
 import type { TurnView } from "../src/protocol.js";
 const mount = document.createElement("div");
@@ -11,4 +12,4 @@ const turn: TurnView = {
   imageRequests: [{ requestId: "request", jobId: "job", paragraphIndex: 0, state: "review", prompt: "original <script>hello</script>", negativePrompt: "blurry", model: "model-a", provider: "nanogpt", connectionId: "nano", parameters: { seed: 1 }, referenceSummary: "No reference", createdAt: "2026-10-10T00:00:00.000Z" }]
 };
 studio.setTurn(turn);
-(window as any).imageFixture = { actions, studio, turn };
+(window as any).imageFixture = { actions, studio, turn, config: DEFAULT_CONFIG };

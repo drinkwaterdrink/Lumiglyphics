@@ -34,6 +34,12 @@ test("legacy_config_preserves_style_and_presets", () => {
   assert.deepEqual(normalizeConfig(config).imageTemplates, config.imageTemplates);
 });
 
+test("legacy template migration survives unknown macros and length limits on reload", () => {
+  const config = normalizeConfig({ promptPresets: [{ id: "old", name: "Legacy", positive: "{{char}} " + "x".repeat(7980) + "{{scene}}", negative: "{{old_negative}}" }] });
+  assert.doesNotThrow(() => normalizeConfig(config));
+  assert.equal(config.promptPresets[0]!.negative, "{{old_negative}}", "original presets are preserved");
+});
+
 test("template_snapshot_is_stable_and_fallback_is_valid", () => {
   const config = normalizeConfig({});
   const first = resolveImageTemplate(config);

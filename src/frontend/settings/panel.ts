@@ -1,3 +1,5 @@
+import { ImageTemplateEditor } from "./image-templates.js";
+import type { ImagePromptMetadata } from "../../shared/image-templates.js";
 import {
   DEFAULT_CONFIG,
   type VisualNovelConfig,
@@ -145,7 +147,8 @@ code { font-family: var(--lumiverse-font-mono, ui-monospace, "Cascadia Mono", Co
 [data-layout] { display: grid; grid-template-columns: minmax(0, 1fr); gap: .9rem; align-items: start; }
 [data-nav] { min-width: 0; }
 [data-nav] { position: sticky; top: 0; z-index: 8; margin: 0 -1rem; padding: .35rem 1rem; background: var(--set-field); border-bottom: 1px solid var(--set-border); }
-[data-tablist] { display: flex; gap: .25rem; overflow-x: auto; scrollbar-width: thin; overscroll-behavior-x: contain; }
+[data-section-selector] { display: grid; gap: .25rem; }
+[data-tablist] { display: none; gap: .25rem; overflow-x: auto; scrollbar-width: thin; overscroll-behavior-x: contain; }
 [data-tab] { position: relative; flex: none; display: inline-flex; align-items: center; gap: .45rem; min-height: var(--set-control); padding: .4rem .8rem; border: 1px solid transparent; border-radius: .6rem; background: transparent; color: var(--set-muted); font-weight: 600; text-align: left; white-space: nowrap; }
 [data-tab] svg { flex: none; width: 1.1rem; height: 1.1rem; }
 [data-tab]:focus-visible { outline: 2px solid var(--set-accent); outline-offset: -2px; }
@@ -163,13 +166,16 @@ code { font-family: var(--lumiverse-font-mono, ui-monospace, "Cascadia Mono", Co
 @container (min-width: 700px) {
   [data-layout] { grid-template-columns: 12.5rem minmax(0, 1fr); gap: 1.25rem; }
   [data-nav] { top: .75rem; margin: 0; padding: 0; background: transparent; border: 0; }
-  [data-tablist] { flex-direction: column; overflow: visible; }
+  [data-section-selector] { display: none; }
+  [data-tablist] { display: flex; flex-direction: column; overflow: visible; }
   [data-tab] { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; width: 100%; min-height: 3.3rem; padding: .5rem .7rem; white-space: normal; }
   [data-tab][aria-selected="true"]::before { content: ""; position: absolute; left: -.2rem; top: .7rem; bottom: .7rem; width: 3px; border-radius: 3px; background: var(--set-accent); }
   [data-tab-summary] { display: block; overflow: hidden; font-size: .76rem; font-weight: 500; color: var(--set-muted); white-space: nowrap; text-overflow: ellipsis; }
 }
 
 /* Panes, groups and fields */
+[data-picture-group]>summary::before { content: "▸"; margin-right: .5rem; }
+[data-picture-group][open]>summary::before { content: "▾"; }
 [data-panes] { display: grid; gap: .9rem; min-width: 0; }
 [data-pane] { display: grid; gap: .9rem; min-width: 0; padding-bottom: 1rem; }
 [data-pane]:focus-visible { outline-offset: 6px; border-radius: .4rem; }
@@ -427,6 +433,8 @@ export class VisualNovelSettingsPanel {
     image: { status: "idle", options: [] },
   };
 
+  private templateEditor!: ImageTemplateEditor;
+
   constructor(options: SettingsPanelOptions) {
     this.options = options;
     this.storage = options.setupStorage === undefined ? safeStorage() : options.setupStorage;
@@ -443,6 +451,7 @@ export class VisualNovelSettingsPanel {
     this.status = this.root.querySelector("[data-status]")!;
     // The live sample starts in Reading; openSection moves it to Look when needed.
     this.root.querySelector('[data-pane="reading"] [data-sample-slot]')!.append(this.root.querySelector("[data-sample]")!);
+    this.organizePictures();
     this.renderTextEffectCards();
     this.wire();
     this.wireNavigation();
@@ -455,6 +464,37 @@ export class VisualNovelSettingsPanel {
   /* ---------------------------------------------------------------------- */
   /* Markup                                                                  */
   /* ---------------------------------------------------------------------- */
+
+  setImagePreviewMetadata(metadata?: ImagePromptMetadata): void { this.templateEditor.setPreviewMetadata(metadata); }
+
+  private organizePictures(): void {
+    const generated = this.root.querySelector<HTMLElement>('[data-pane="pictures"] [data-generated-only]')!;
+    const children = [...generated.children];
+    const section = (title: string, open = false) => {
+      const details = document.createElement("details"); details.open = open; details.dataset.pictureGroup = "";
+      const summary = document.createElement("summary"); summary.textContent = title;
+      summary.style.cssText = "min-height:44px;display:flex;align-items:center;cursor:pointer;font-weight:650";
+      details.append(summary); generated.append(details); return details;
+    };
+    generated.replaceChildren();
+    const generation = section("Generation", true);
+    for (const i of [0, 1, 3]) generation.append(children[i]!);
+    const dynamic = document.createElement("label"); dynamic.dataset.check = "";
+    dynamic.innerHTML = '<input name="dynamicImageTemplates" type="checkbox"><span>Choose templates from story context<small>When off, every picture uses the default template. This is independent of prompt review and keeps the existing picture budget.</small></span>';
+    generation.prepend(dynamic);
+    this.templateEditor = new ImageTemplateEditor(section("Templates"), patch => this.options.onSave(patch), () => {});
+    const composition = section("Shared style and consistency");
+    composition.append(children[2]!, this.root.querySelector('[data-group-id="prompts"]')!);
+    const context = section("Context sources");
+    context.append(this.root.querySelector('[data-group-id="context"]')!);
+    const tracker = document.createElement("label"); tracker.dataset.check = "";
+    tracker.innerHTML = '<input name="includeSimTrackerContext" type="checkbox"><span>Include SimTracker visual context<small>Uses supported tracker JSON in this chat, up to the current reply. Saved appearance overrides still take priority. The prompt inspector reports whether a tracker payload was found.</small></span>';
+    context.prepend(tracker);
+    const advanced = section("Advanced image parameters");
+    for (const name of ["imageModel", "imageConcurrency", "imageParameters"]) advanced.append(this.control(name).closest("label")!);
+    advanced.append(children[4]!);
+    for (const id of ["prompts", "context"]) this.root.querySelector(`[data-jump-to="${id}"]`)?.remove();
+  }
 
   private template(): string {
     const tabs = SETTINGS_SECTIONS.map(({ id, label }) => `
@@ -508,6 +548,7 @@ export class VisualNovelSettingsPanel {
 
       <div data-layout>
         <nav data-nav aria-label="Settings sections">
+          <label data-section-selector>Settings section<select data-section-select aria-label="Settings section">${SETTINGS_SECTIONS.map(s => `<option value="${s.id}">${esc(s.label)}</option>`).join("")}</select></label>
           <div role="tablist" data-tablist aria-orientation="vertical">${tabs}
           </div>
         </nav>
@@ -675,7 +716,7 @@ export class VisualNovelSettingsPanel {
           `)}
 
           ${pane("advanced", `
-            <p class="muted">Changes in this section wait until you choose <b>Apply</b>. Everything else saves on its own.</p>
+            <p class="muted">Fields marked Apply wait until you choose <b>Apply</b>, including shared style and advanced image options in Pictures. Everyday controls save immediately; templates have their own Save button.</p>
             <div data-jump aria-label="Jump to">
               <button type="button" data-jump-to="prompts">Image prompts</button>
               <button type="button" data-jump-to="context">Story reader</button>
@@ -781,6 +822,7 @@ export class VisualNovelSettingsPanel {
   openSection(id: SettingsSectionId | string, options: { focus?: boolean; remember?: boolean } = {}): void {
     const next = normalizeSettingsSection(id);
     this.section = next;
+    this.root.querySelector<HTMLSelectElement>("[data-section-select]")!.value = next;
     for (const tab of this.root.querySelectorAll<HTMLButtonElement>("[data-tab]")) {
       const selected = tab.dataset.tab === next;
       tab.setAttribute("aria-selected", String(selected));
@@ -827,6 +869,7 @@ export class VisualNovelSettingsPanel {
   }
 
   private wireNavigation(): void {
+    this.root.querySelector<HTMLSelectElement>("[data-section-select]")!.onchange = (event) => this.openSection((event.target as HTMLSelectElement).value);
     const tablist = this.root.querySelector<HTMLElement>("[data-tablist]")!;
     const tabs = () => Array.from(this.root.querySelectorAll<HTMLButtonElement>("[data-tab]"));
     tablist.addEventListener("click", (event) => {
@@ -1309,6 +1352,10 @@ export class VisualNovelSettingsPanel {
       case "autoEnter": return { autoEnter: checked };
       case "referenceAnchoring": return { referenceAnchoring: checked };
       case "reviewImages": return { reviewImages: checked };
+      case "dynamicImageTemplates": return { dynamicImageTemplates: checked };
+      case "includeSimTrackerContext": return { includeSimTrackerContext: checked };
+      case "defaultImageTemplateId": return { defaultImageTemplateId: target.value };
+      case "imagePromptFormat": return { imagePromptFormat: target.value === "tags" ? "tags" : "description" };
       case "referenceSource": return { referenceSource: normalizeReferenceSource(target.value) };
       case "themePreset":
       case "setupThemePreset":
@@ -1522,6 +1569,7 @@ export class VisualNovelSettingsPanel {
 
   /** Host acknowledgement of the last save. Optional: older hosts never call it. */
   setSaveStatus(status: SaveStatus): void {
+    if (status.kind === "error") this.templateEditor.setSaveError(status.error);
     if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; }
     if (status.kind === "saved") {
       if (Object.keys(this.pendingEverydayFields).length > 0) {
@@ -1674,6 +1722,7 @@ export class VisualNovelSettingsPanel {
   }
 
   private syncFromConfig(config: VisualNovelConfig): void {
+    this.templateEditor.setConfig(config);
     this.syncEveryday(config);
     const set = (name: AdvancedKey, apply: () => void) => {
       if (this.drafts.has(name)) return;
@@ -1716,6 +1765,8 @@ export class VisualNovelSettingsPanel {
     this.control<HTMLInputElement>("autoEnter").checked = config.autoEnter;
     this.control<HTMLInputElement>("referenceAnchoring").checked = config.referenceAnchoring;
     this.control<HTMLInputElement>("reviewImages").checked = config.reviewImages;
+    this.control<HTMLInputElement>("dynamicImageTemplates").checked = config.dynamicImageTemplates;
+    this.control<HTMLInputElement>("includeSimTrackerContext").checked = config.includeSimTrackerContext;
     this.setRadio("referenceSource", config.referenceSource);
     this.root.querySelector<HTMLElement>("[data-reference-source]")!.hidden = !config.referenceAnchoring;
 
@@ -1995,6 +2046,7 @@ export class VisualNovelSettingsPanel {
 
   destroy(): void {
     for (const timer of [this.statusTimer, this.resetTimer, this.saveTimer, this.sampleTimer, this.flashTimer, this.copyTimer]) if (timer) clearTimeout(timer);
+    this.templateEditor.destroy();
     this.resizeObserver?.disconnect();
     this.host.remove();
   }

@@ -30,7 +30,7 @@ try {
   await settings.waitFor();
   await mkdir(".cache/ux-redesign", { recursive: true });
   const tab = (name: string) => settings.getByRole("tab", { name, exact: true });
-  const openTab = (name: string) => tab(name).click();
+  const openTab = async (name: string) => { const select = settings.getByLabel("Settings section", { exact: true }); if (await select.isVisible()) await select.selectOption({ label: name }); else await tab(name).click(); };
 
   // Navigation: one tablist, seven sections, one visible pane, Reading first.
   const tabs = settings.getByRole("tab");
@@ -125,6 +125,7 @@ try {
 
   // Reference source: the radio shows only while the reference toggle is on,
   // saves a single-field patch, and remembers its choice across the toggle.
+  await settings.getByText("Shared style and consistency", { exact: true }).click();
   const referenceSource = settings.locator("[data-reference-source]");
   assert.equal(await referenceSource.isVisible(), true, "reference source shows while the toggle is on");
   assert.equal(await settings.locator('input[name="referenceSource"][value="captured"]').isChecked(), true, "captured is the default");
@@ -163,6 +164,8 @@ try {
   assert.equal(await settings.locator('[name="systemOneApiKey"]').inputValue(), "");
   assert.equal(await tab("Connections").locator("[data-tab-badge]").innerText(), "1", "the nav counts unapplied changes per section");
   await tab("Advanced").focus(); await page.keyboard.press("Enter");
+  await openTab("Pictures");
+  if (!(await settings.locator('[name="imageParameters"]').isVisible())) await settings.getByText("Advanced image parameters", { exact: true }).click();
   await settings.locator('[name="imageParameters"]').fill('{"steps":32}');
   assert.match(await settings.locator("[data-status]").innerText(), /not applied/);
   assert.equal(await settings.locator("[data-draft-bar]").isVisible(), true, "the bar appears with unapplied changes");
@@ -199,16 +202,18 @@ try {
   assert.equal(await settings.locator("[data-draft-bar]").isVisible(), false);
   assert.equal((await fixture(page)).patches.length, beforeDiscard, "Discard sends nothing");
   // Invalid JSON: Apply from another section opens the field that failed.
+  await openTab("Pictures");
   await settings.locator('[name="imageParameters"]').fill("invalid JSON");
   await openTab("Look");
   await settings.locator("[data-apply-bar]").click();
   assert.equal(await settings.locator('[name="imageParameters"]').isVisible(), true, "invalid hidden fields must be revealed");
-  assert.equal(await tab("Advanced").getAttribute("aria-selected"), "true");
+  assert.equal(await tab("Pictures").getAttribute("aria-selected"), "true");
   assert.match(await settings.locator("[data-status]").innerText(), /Image parameters/);
   await settings.locator('[name="imageParameters"]').fill('{"steps":32}');
   await page.keyboard.press("Control+s");
   assert.equal(await settings.locator("[data-status]").innerText(), "Advanced settings applied.");
 
+  await openTab("Advanced");
   // Reset keeps presets and the music folder, and needs confirmation.
   await page.evaluate(() => { const f = (window as any).settingsFixture; f.config = { ...f.config, promptPresets: [{ id: "p1", name: "Soft", positive: "soft", negative: "" }], audioDirectory: "packs" }; f.panel.setConfig(f.config); });
   await settings.locator("[data-reset]").click();
@@ -319,14 +324,14 @@ try {
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, `${name} fits ${width}px without horizontal scrolling`);
     }
   }
-  assert.equal(await settings.locator("[data-tablist]").getAttribute("aria-orientation"), "horizontal", "narrow containers use a horizontal tab strip");
-  const advancedBox = await tab("Advanced").boundingBox();
-  assert.ok(advancedBox && advancedBox.x >= 0 && advancedBox.x + advancedBox.width <= 361, "the active tab is scrolled into view on the strip");
+  assert.equal(await settings.locator("[data-tablist]").isVisible(), false, "mobile uses a section selector");
+  const advancedBox = await settings.getByLabel("Settings section", { exact: true }).boundingBox();
+  assert.ok(advancedBox && advancedBox.x >= 0 && advancedBox.x + advancedBox.width <= 361, "section selector fits the viewport");
   await openTab("Look");
   const tile = settings.locator('input[name="themePreset"][value="paper-novel"]').locator("..");
   const box = await tile.boundingBox();
   assert.ok(box && box.height >= 44 && box.width >= 44, "theme tiles are large targets");
-  const tabBox = await tab("Look").boundingBox();
+  const tabBox = await settings.getByLabel("Settings section", { exact: true }).boundingBox();
   assert.ok(tabBox && tabBox.height >= 44, "tabs are large targets");
   await page.screenshot({ path: ".cache/ux-redesign/settings-mobile.png" });
   await openTab("Advanced");
@@ -346,14 +351,15 @@ try {
   await settings.locator("[data-sample-replay]").click();
   assert.equal(await settings.locator("[data-sample-stage]").getAttribute("data-typing"), null);
 
-  // NovelAI-only prompt controls live under Advanced and preserve saved opt-outs.
+  // NovelAI-only prompt controls live under Pictures and preserve saved opt-outs.
   await page.evaluate(() => {
     const f = (window as any).settingsFixture;
     f.panel.setConnectionCatalog("image", { status: "ready", options: [{ id: "nai", name: "NovelAI", provider: "novelai", model: "nai-diffusion-4-5-full", isDefault: true }] });
     f.config = { ...f.config, imageConnectionId: "nai", generateImages: true, useNativeCardImages: false };
     f.panel.setConfig(f.config);
   });
-  await openTab("Advanced");
+  await openTab("Pictures");
+  await settings.getByText("Shared style and consistency", { exact: true }).click();
   const quality = settings.locator('[name="novelAiQualityTags"]');
   assert.equal(await quality.isVisible(), true);
   await quality.uncheck();

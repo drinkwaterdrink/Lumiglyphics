@@ -764,6 +764,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if (!turn || turn.chatId !== activeChatId) {
       turn = null;
       imageStudio.setTurn(null);
+      settingsPanel?.setImagePreviewMetadata();
       stage.reset();
     }
     speech.setActive(true);
@@ -853,6 +854,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     }
     turn = next;
     imageStudio.setTurn(next);
+    settingsPanel?.setImagePreviewMetadata(next?.imageRequests?.at(-1)?.imagePromptMetadata);
     imageStudio.setCursor(stage.getState().currentParagraphIndex);
     stage.setAssetProgress(computeAssetProgress(next));
     const decision = decideTurnApplication(previous, next, stage.getState().currentParagraphIndex, active, stage.getState().paragraphs.length > 0);
@@ -926,6 +928,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if (type === "vn_state" && message.type === "vn_state") {
       configRef.current = message.config;
       imageStudio.setReview(message.config.reviewImages);
+      imageStudio.setConfig(message.config);
       imageBridge.fit(message.config.sceneImageFit);
       applyVisualConfigToStage(stage, configRef.current);
       audioEngine.setBgmVolume(configRef.current.bgmVolume);
@@ -948,6 +951,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       } else {
         turn = null;
         imageStudio.setTurn(null);
+      settingsPanel?.setImagePreviewMetadata();
         speech.setCursor(null);
         panels.setTurn(null);
         stage.reset();
@@ -961,6 +965,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       // transport offers; "saved" is claimed here and nowhere earlier.
       configRef.current = message.config;
       imageStudio.setReview(message.config.reviewImages);
+      imageStudio.setConfig(message.config);
       applyVisualConfigToStage(stage, configRef.current);
       audioEngine.setBgmVolume(configRef.current.bgmVolume);
       audioEngine.setSfxVolume(configRef.current.sfxVolume);
@@ -985,6 +990,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId) return;
       turn = replaceAsset(turn, message.asset);
       imageStudio.setTurn(turn);
+      settingsPanel?.setImagePreviewMetadata(turn?.imageRequests?.at(-1)?.imagePromptMetadata);
       stage.setAssetProgress(computeAssetProgress(turn));
       const cursor = stage.getState().currentParagraphIndex;
       if (message.asset.paragraphIndex <= cursor) void syncImageForParagraph(cursor);
@@ -994,12 +1000,14 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId || turn.sourceFingerprint !== message.sourceFingerprint) return;
       turn = { ...turn, imageRequests: message.requests };
       imageStudio.setTurn(turn);
+      settingsPanel?.setImagePreviewMetadata(turn?.imageRequests?.at(-1)?.imagePromptMetadata);
       return;
     }
     if (type === "vn_waiting" && message.type === "vn_waiting") {
       if (message.chatId !== chatId()) return;
       turn = null;
       imageStudio.setTurn(null);
+      settingsPanel?.setImagePreviewMetadata();
       pendingNextTurn = null;
       panels.setTurn(null);
       stage.reset();
@@ -1053,7 +1061,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       return;
     }
     if (type === "vn_error" && message.type === "vn_error") {
-      if (message.operation === "vn_image_review" || message.operation === "vn_prepare_image" || message.operation === "prepare_image") {
+      if (message.operation === "vn_reprepare_image_template" || message.operation === "vn_image_review" || message.operation === "vn_prepare_image" || message.operation === "prepare_image") {
         if (!message.chatId || message.chatId === chatId()) imageStudio.showError(message.error);
         return;
       }
@@ -1080,6 +1088,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const unsubAction = action.onClick(toggleVisualNovel);
   const unsubChat = ctx.events.on("CHAT_SWITCHED", () => {
     imageStudio.setTurn(null);
+      settingsPanel?.setImagePreviewMetadata();
     panelCapture = null;
     panels.setTurn(null);
     turn = null;
@@ -1090,6 +1099,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   });
   const unsubFork = ctx.events.on("CHAT_FORKED", () => {
     imageStudio.setTurn(null);
+      settingsPanel?.setImagePreviewMetadata();
     panelCapture = null;
     panels.setTurn(null);
     turn = null;
