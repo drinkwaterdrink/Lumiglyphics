@@ -43,6 +43,7 @@ export class ImageStudio {
     this.el<HTMLButtonElement>("[data-close]").onclick = () => { this.el<HTMLElement>("section").hidden = true; this.el<HTMLButtonElement>("[data-launch]").setAttribute("aria-expanded", "false"); this.el<HTMLButtonElement>("[data-launch]").focus(); };
     this.el<HTMLInputElement>("[data-review]").onchange = () => { this.saveReview(this.el<HTMLInputElement>("[data-review]").checked); };
     this.el<HTMLSelectElement>("[data-picture]").onchange = () => { this.selectedJob = this.el<HTMLSelectElement>("[data-picture]").value; this.selectedRequest = ""; this.render(); };
+    this.el<HTMLSelectElement>("[data-template]").onchange = () => this.render();
     this.el<HTMLSelectElement>("[data-request]").onchange = () => { this.selectedRequest = this.el<HTMLSelectElement>("[data-request]").value; this.render(); };
     for (const selector of ["[data-positive]", "[data-negative]", "[data-parameters]"]) this.el<HTMLTextAreaElement>(selector).oninput = () => {
       const record = this.record();
@@ -62,7 +63,7 @@ export class ImageStudio {
     this.el<HTMLButtonElement>("[data-prepare]").onclick = () => {
       if (!this.turn || this.preparing.has(this.selectedJob)) return;
       this.preparing.add(this.selectedJob); this.render();
-      this.send({ type: "vn_prepare_image", chatId: this.turn.chatId, messageId: this.turn.messageId, sourceFingerprint: this.turn.sourceFingerprint, jobId: this.selectedJob, ...(this.el<HTMLSelectElement>("[data-template]").value && this.el<HTMLSelectElement>("[data-template]").value !== (this.record()?.imagePromptMetadata?.template.id ?? this.defaultTemplate) ? { templateId: this.el<HTMLSelectElement>("[data-template]").value } : {}) });
+      this.send({ type: "vn_prepare_image", chatId: this.turn.chatId, messageId: this.turn.messageId, sourceFingerprint: this.turn.sourceFingerprint, jobId: this.selectedJob, ...(this.el<HTMLSelectElement>("[data-template]").value ? { templateId: this.el<HTMLSelectElement>("[data-template]").value } : {}) });
     };
     this.el<HTMLButtonElement>("[data-copy]").onclick = () => { void this.copy(); };
     this.render();
@@ -134,7 +135,7 @@ export class ImageStudio {
     for (const selector of ["[data-generate]", "[data-skip]", "[data-reset]"]) { this.el<HTMLButtonElement>(selector).disabled = !editable; this.el<HTMLButtonElement>(selector).hidden = record?.state !== "review"; }
     const busy = this.turn?.assets.some((entry) => entry.status === "queued" || entry.status === "generating");
     this.el<HTMLButtonElement>("[data-prepare]").hidden = record?.state === "review";
-    this.el<HTMLButtonElement>("[data-prepare]").disabled = !asset || Boolean(busy) || this.preparing.has(this.selectedJob);
+    this.el<HTMLButtonElement>("[data-prepare]").disabled = !asset || Boolean(busy) || this.preparing.has(this.selectedJob) || !this.templates.some(t => t.id === templateSelect.value);
     this.el<HTMLButtonElement>("[data-copy]").disabled = !record;
     this.el<HTMLElement>("[data-notice]").textContent = asset?.error ?? (record && this.rebuilding.has(record.requestId) ? "Rebuilding template… Wait for a new preview before generating." : record?.state === "review" ? "Edits affect this picture only. Generate starts an image request." : "");
   }

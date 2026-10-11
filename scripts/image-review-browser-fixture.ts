@@ -1,3 +1,4 @@
+import { templateSnapshot, type ImagePromptMetadata } from "../src/shared/image-templates.js";
 import { DEFAULT_CONFIG } from "../src/config.js";
 import { ImageStudio } from "../src/frontend/image-review/studio.js";
 import type { TurnView } from "../src/protocol.js";
@@ -11,5 +12,6 @@ const turn: TurnView = {
   assets: [{ jobId: "job", cueId: "cue", paragraphIndex: 0, status: "generating" }],
   imageRequests: [{ requestId: "request", jobId: "job", paragraphIndex: 0, state: "review", prompt: "original <script>hello</script>", negativePrompt: "blurry", model: "model-a", provider: "nanogpt", connectionId: "nano", parameters: { seed: 1 }, referenceSummary: "No reference", createdAt: "2026-10-10T00:00:00.000Z" }]
 };
+const metadata: ImagePromptMetadata = { template: templateSnapshot(DEFAULT_CONFIG.imageTemplates[0]!), selectionReason: "A quiet character reaction", format: "description", trackerStatus: "detected", trackerSourceMessageId: "tracker-message", brief: { scene: "Library", subjects: "One character", action: "Looking through the window", composition: "portrait", lighting: "Window light", subjectMode: "one", framing: "portrait", referencePolicy: "character", sources: ["Saved appearance override", "Story scene"], conflicts: ["Saved identity retained"] } };
 studio.setTurn(turn);
-(window as any).imageFixture = { actions, studio, turn, config: DEFAULT_CONFIG };
+(window as any).imageFixture = { actions, studio, turn, config: DEFAULT_CONFIG, metadata };

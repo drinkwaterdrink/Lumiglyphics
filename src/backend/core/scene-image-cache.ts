@@ -65,6 +65,8 @@ export type SceneImageIdentity = {
      *  source/reference settings), hashed before the internal portrait merge. */
     parameters: Record<string, unknown>;
     promptSyntax: string;
+    /** Resolved profile identity/defaults for template requests. Legacy keys remain unchanged. */
+    profileRevision?: string;
     /** The reference-anchoring settings toggle (not the portrait itself). */
     referenceAnchoring: boolean;
     /** Set only when anchoring uses card sprites; absent for the default captured source. */

@@ -9,6 +9,7 @@ import { AssetJobSchema, type AssetJob, type SceneState, type TurnPlan, type Vis
 import { AssetScheduler } from "../core/asset-scheduler.js";
 import {
   SceneImageCache,
+  canonicalJson,
   sceneEpisodeOf,
   sceneImageCacheKey,
   sceneImageScope,
@@ -23,7 +24,7 @@ import {
 import { POSE_EXPRESSION_CATALOGUE, poseById } from "../../shared/character.js";
 import { compileActionProp } from "../../shared/action-prop.js";
 import { renderImageTemplate, templateSnapshot, type ImagePromptMetadata } from "../../shared/image-templates.js";
-import { buildVisualBrief } from "./visual-brief.js";
+import { buildVisualBrief, resolveTemplateIdentity } from "./visual-brief.js";
 import {
   appearanceMapKeyFor,
   characterAppearanceKey,
@@ -159,6 +160,7 @@ export function resolveCueCharacterVisualState(
   }
 
   if (cue.resolvedIdentity !== undefined) baseIdentity = cue.resolvedIdentity;
+  if (cue.imageTemplate) baseIdentity = resolveTemplateIdentity(scene, cue, characterAppearance).identity;
   const attire = cue.resolvedAttire !== undefined ? cue.resolvedAttire ?? "" : cue.attire || (characterKey === sceneCharacterKey ? scene.attire : null) || "";
   let identity = baseIdentity;
   if (attire && identity) {
@@ -276,7 +278,12 @@ export function cueUsesCharacterReference(cue: VisualCue): boolean {
 }
 
 function withoutImageReferences(parameters: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(parameters).filter(([key]) => !/(?:reference|(?:resolved|source|input|init)Images?)/i.test(key)));
+  // Explicit empty overrides survive the host's merge with connection defaults.
+  const cleared = Object.fromEntries(Object.entries(parameters).map(([key, value]) => [key,
+    /(?:reference|(?:resolved|source|input|init)Images?)/i.test(key)
+      ? Array.isArray(value) ? [] : typeof value === "string" ? "" : typeof value === "boolean" ? false : typeof value === "number" ? 0 : null
+      : value]));
+  return { ...cleared, resolvedReferenceImages: [] };
 }
 
 export function compileTemplateCue(config: VisualNovelConfig, scene: SceneState, cue: VisualCue, appearances?: CharacterAppearanceMap) {
@@ -384,7 +391,8 @@ export function sceneImageIdentityFor(
   cue: VisualCue,
   characterAppearance: CharacterAppearanceMap | undefined,
   provider: string | null,
-  reference?: SceneImageReference
+  reference?: SceneImageReference,
+  profileRevision?: string
 ): SceneImageIdentity {
   if (cue.imageTemplate) {
     const compiled = compileTemplateCue(config, scene, cue, characterAppearance);
@@ -400,7 +408,7 @@ export function sceneImageIdentityFor(
       pose: { id: brief.subjectMode === "none" ? "none" : cue.poseExpressionId ?? "idle", suffix: "" },
       action: brief.action || null,
       framing: { framing: brief.framing, angle: "eye level", perspective: "straight-on" },
-      request: { prompt: compiled.prompt, negativePrompt: compiled.negativePrompt, provider, connectionId: connectionId ? workflowId ? `${connectionId}::${workflowId}` : connectionId : null, model: config.imageModel, parameters: userImageParameters(config), promptSyntax: config.imagePromptFormat,
+      request: { prompt: compiled.prompt, negativePrompt: compiled.negativePrompt, provider, connectionId: connectionId ? workflowId ? `${connectionId}::${workflowId}` : connectionId : null, model: config.imageModel, parameters: userImageParameters(config), promptSyntax: config.imagePromptFormat, ...(profileRevision ? { profileRevision } : {}),
         referenceAnchoring: referenceAnchoringEnabled(config) && cueUsesCharacterReference(cue),
         ...(referenceAnchoringEnabled(config) && cueUsesCharacterReference(cue) ? { reference: reference ?? { source: "none" as const }, ...(config.referenceSource === "card" ? { referenceSource: "card" as const } : {}) } : {}) }
     };
@@ -529,15 +537,15 @@ export async function resolveCacheCues(
   const log = options.log ?? (() => {});
   // Card mode keys carry the chosen reference, so candidates resolve it the
   // same way the budgeted path does (stored portraits + one context lookup).
-  const cardSource = pending.some(cueUsesCharacterReference) && referenceAnchoringEnabled(config) && config.referenceSource === "card"
-    && provider !== null && REFERENCE_PROVIDERS.has(provider);
+  const referenceSource = pending.some(cueUsesCharacterReference) && referenceAnchoringEnabled(config) && provider !== null && REFERENCE_PROVIDERS.has(provider);
+  const cardSource = referenceSource && config.referenceSource === "card";
   let candidatePortraits: Record<string, StoredPortrait> = {};
   let candidateResolutions: Map<string, CardAssetResolution> | null = null;
-  if (cardSource) {
+  if (referenceSource) {
     try {
       const [loaded, ctx] = await Promise.all([
         loadPortraits(spindle, plan.key.chatId, userId).catch(() => ({} as Record<string, StoredPortrait>)),
-        loadCardReferenceContext(spindle, plan, userId, options).catch(() => null)
+        cardSource ? loadCardReferenceContext(spindle, plan, userId, options).catch(() => null) : Promise.resolve(null)
       ]);
       candidatePortraits = loaded;
       candidateResolutions = ctx?.resolutions ?? null;
@@ -589,7 +597,12 @@ export async function resolveCacheCues(
           : undefined;
         reference = cardReferenceForCache(cardPortrait ?? pendingAsPortrait, captured);
       }
-      key = sceneImageCacheKey(sceneImageIdentityFor(config, scene, cue, characterAppearance, provider, reference));
+      if (!cardSource && referenceSource && cue.imageTemplate && cueUsesCharacterReference(cue)) {
+        const visual = resolveCueCharacterVisualState(scene, cue, characterAppearance);
+        const captured = compatiblePortrait(candidatePortraits[visual.characterKey], portraitIdentityFingerprint(visual.characterName, visual.baseIdentity, config, provider));
+        reference = captured ? { source: "captured", imageId: captured.imageId } : { source: "none" };
+      }
+      key = sceneImageCacheKey(sceneImageIdentityFor(config, scene, cue, characterAppearance, provider, reference, profile.cacheProfile));
     } catch {
       continue;
     }
@@ -727,7 +740,7 @@ export async function prepareAssetJobs(
     const cue = plan.visualCues.find((cue) => cue.assetJobId === job.jobId)!;
     const scene = sceneForCue(plan, cue);
     const key = cacheEligibleCue(cue)
-      ? `${sceneEpisodeOf(scene, cache.generation(scope))}:${sceneImageCacheKey(sceneImageIdentityFor(config, scene, cue, characterAppearance, provider))}`
+      ? `${sceneEpisodeOf(scene, cache.generation(scope))}:${sceneImageCacheKey(sceneImageIdentityFor(config, scene, cue, characterAppearance, provider, undefined, profile.cacheProfile))}`
       : job.jobId;
     if (missingKeys.has(key) || missingKeys.size >= limit) continue;
     missingKeys.add(key);
@@ -818,18 +831,22 @@ async function resolveImageProviderId(
   return (await resolveImageProfile(spindle, config, userId)).provider;
 }
 
-async function resolveImageProfile(spindle: SpindleAPI, config: VisualNovelConfig, userId?: string): Promise<{ provider: string | null; model: string | null }> {
+function profileCacheIdentity(profile: { id?: string; provider?: string; model?: string; updated_at?: number; default_parameters?: Record<string, unknown> } | null | undefined): string {
+  return canonicalJson([profile?.id, profile?.provider, profile?.model, profile?.updated_at, profile?.default_parameters ?? {}]);
+}
+
+async function resolveImageProfile(spindle: SpindleAPI, config: VisualNovelConfig, userId?: string): Promise<{ provider: string | null; model: string | null; cacheProfile: string }> {
   try {
     const { connectionId } = splitConnectionSelection(config.imageConnectionId);
     if (connectionId) {
       const connection = await spindle.imageGen.getConnection(connectionId, userId);
-      return { provider: connection?.provider?.trim().toLowerCase() ?? null, model: connection?.model ?? null };
+      return { provider: connection?.provider?.trim().toLowerCase() ?? null, model: connection?.model ?? null, cacheProfile: profileCacheIdentity(connection) };
     }
     const connections = await spindle.imageGen.listConnections(userId);
     const chosen = connections.find((candidate) => candidate.is_default) ?? connections[0];
-    return { provider: chosen?.provider?.trim().toLowerCase() ?? null, model: chosen?.model ?? null };
+    return { provider: chosen?.provider?.trim().toLowerCase() ?? null, model: chosen?.model ?? null, cacheProfile: profileCacheIdentity(chosen) };
   } catch {
-    return { provider: null, model: null };
+    return { provider: null, model: null, cacheProfile: "unavailable" };
   }
 }
 
@@ -1064,7 +1081,8 @@ export async function generateAssets(
           } else {
             cacheKey = sceneImageCacheKey(sceneImageIdentityFor(
               config, scene, cue, characterAppearance, provider,
-              cardSource ? cardReferenceForCache(cardPortrait, portrait) : cue.imageTemplate ? portrait ? { source: "captured", imageId: portrait.imageId } : { source: "none" } : undefined
+              cardSource ? cardReferenceForCache(cardPortrait, portrait) : cue.imageTemplate ? portrait ? { source: "captured", imageId: portrait.imageId } : { source: "none" } : undefined,
+              profile.cacheProfile
             ));
             episode = sceneEpisodeOf(scene, cache.generation(scope));
             if (bypass.has(scheduledJob.jobId)) {
@@ -1151,7 +1169,7 @@ export async function generateAssets(
           const input: ImageGenerationRequest = {
             ...(connectionId ? { connection_id: connectionId } : {}),
             prompt,
-            ...(negativePrompt ? { negativePrompt } : {}),
+            ...(cue.imageTemplate || negativePrompt ? { negativePrompt } : {}),
             ...(config.imageModel ? { model: config.imageModel } : {}),
             parameters: effectiveParameters,
             owner_chat_id: plan.key.chatId,
@@ -1159,12 +1177,16 @@ export async function generateAssets(
             ...(userId ? { userId } : {})
           };
           // Freeze exposed profile defaults/model before review, including a default-profile selection.
-          let frozen: ImageGenerationRequest = cacheOptions.beforeGenerate ? {
+          let frozen: ImageGenerationRequest = cacheOptions.beforeGenerate || cue.imageTemplate ? {
             ...input,
             ...(selected?.id ? { connection_id: selected.id } : {}),
             ...(config.imageModel || selected?.model ? { model: config.imageModel || selected!.model } : {}),
             parameters: { ...(selected?.default_parameters ?? {}), ...input.parameters }
           } : input;
+          if (cue.imageTemplate) {
+            frozen = applyImageEdits(frozen, { prompt, negativePrompt });
+            frozen.parameters = { ...frozen.parameters, negativePrompt };
+          }
           if (!cueUsesCharacterReference(cue)) frozen = { ...frozen, parameters: withoutImageReferences(frozen.parameters ?? {}) };
           const metadataFor = (selectedCue: VisualCue): ImagePromptMetadata | undefined => selectedCue.imageTemplate ? {
             template: selectedCue.imageTemplate, selectionReason: selectedCue.imageTemplateReason ?? "Default template", format: config.imagePromptFormat,

@@ -42,3 +42,12 @@ test("tracker_extracts_visible_facts_only_and_does_not_merge_aliases", () => {
   assert.equal(matchTrackerCharacter(evidence, "Mira")?.name, "Mira");
   assert.doesNotMatch(trackerContext(evidence), /internal|accent_color|strength|guard/);
 });
+
+test("planner tracker context includes unique aliases and excludes ambiguous aliases", () => {
+  const evidence = extractSimTracker([message("a", { characters: [
+    { name: "Mira", aliases: ["Silver", "Captain"], appearance: { hair: "silver" } },
+    { name: "Robin", aliases: ["Captain"], appearance: { hair: "black" } }
+  ] })], "a");
+  assert.match(trackerContext(evidence), /Mira.*aliases: Silver/);
+  assert.doesNotMatch(trackerContext(evidence), /Captain/);
+});

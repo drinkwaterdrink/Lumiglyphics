@@ -1,0 +1,46 @@
+{
+  "version": "0.2.0-beta.1",
+  "review_base": "b2721e7f50c559a754c77a67f8f5ea0e02fcc85f",
+  "reviewed_head": "3c0478632b310f9c2744669ff4bd90ecba676c71",
+  "toolchain": "isolated Bun 1.4.0; global Bun unchanged",
+  "tests": {
+    "passed": 1243,
+    "failed": 0,
+    "assertions": 5881,
+    "files": 97
+  },
+  "checks": {
+    "typecheck": "passed",
+    "production_build": "passed",
+    "bundle_manifest_static": "passed",
+    "templates_browser": "passed",
+    "settings_browser": "passed",
+    "image_review_browser": "passed",
+    "reading_browser": "passed"
+  },
+  "review": {
+    "independent": true,
+    "critical_findings": 0,
+    "important_findings_fixed": 7,
+    "selection_usability_fixed": true,
+    "fixes": [
+      "Explicit empty reference overrides survive host default merge",
+      "Empty template negative synchronized at both request representations",
+      "Captured reference identity reconstructed for cache candidates",
+      "Effective connection profile model, defaults and revision participate in template cache keys",
+      "Explicit selected template retained for completed-picture regeneration",
+      "Compiler and reference compatibility use the same saved durable identity",
+      "Unique tracker aliases included in planner evidence; ambiguous aliases omitted",
+      "Template selection immediately updates enabled actions"
+    ]
+  },
+  "host_contract_reference": "https://docs.lumiverse.chat/backend-api/image-generation/",
+  "limitations": [
+    "No live Lumiverse installation or paid image-provider validation",
+    "One visible character or no people; multi-character support deferred",
+    "Negative prompts and provider parameters remain model dependent",
+    "Existing saved style is preserved; anime prefix is editable",
+    "Tracker support reads bounded recognized chat JSON, not another extension API"
+  ],
+  "publication": "Normal fast-forward of tested branch state to drinkwaterdrink/Lumiglyphics main; verify remote SHA after push"
+}

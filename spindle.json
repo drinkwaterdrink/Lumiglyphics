@@ -1,11 +1,11 @@
 {
-  "version": "0.1.0-beta.1",
+  "version": "0.2.0-beta.1",
   "name": "Lumiglyphics",
   "identifier": "lumiglyphics",
   "author": "drinkwaterdrink; based on Cue by japolino",
   "github": "https://github.com/drinkwaterdrink/Lumiglyphics",
   "homepage": "https://github.com/drinkwaterdrink/Lumiglyphics#readme",
-  "description": "A Lumiverse visual novel with inspectable image requests, optional prompt review, and per-picture editing and replacement. Based on Cue — Living Novel.",
+  "description": "A Lumiverse visual novel with editable image templates, optional context-based selection, prompt review and mobile controls. Based on Cue \u2014 Living Novel.",
   "permissions": [
     "app_manipulation",
     "generation",

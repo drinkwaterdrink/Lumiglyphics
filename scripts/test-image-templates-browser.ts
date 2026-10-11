@@ -41,5 +41,25 @@ try {
   assert.equal(await settings.getByLabel("Template to edit").locator("option").count(), 5);
   assert.equal(await settings.evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, "no mobile horizontal overflow");
   await page.screenshot({ path: ".cache/templates-settings-mobile.png", fullPage: true });
+  await page.setViewportSize({ width: 1000, height: 900 });
+  await page.goto(`http://127.0.0.1:${server.port}/?setupDone&noSpeech`);
+  await settings.getByRole("tab", { name: "Pictures", exact: true }).click();
+  await settings.getByText("Templates", { exact: true }).click();
+  await settings.getByLabel("Default template", { exact: true }).selectOption("environment");
+  await settings.getByLabel("Prompt format", { exact: true }).selectOption("tags");
+  assert.equal(await page.evaluate(() => (window as any).settingsFixture.config.defaultImageTemplateId), "environment");
+  assert.equal(await page.evaluate(() => (window as any).settingsFixture.config.imagePromptFormat), "tags");
+  await settings.getByLabel("Template to edit", { exact: true }).selectOption("environment");
+  assert.equal(await settings.getByLabel("Reference policy").isDisabled(), true);
+  await settings.getByLabel("Template enabled", { exact: true }).uncheck();
+  await settings.getByRole("button", { name: "Save templates", exact: true }).click();
+  assert.equal(await page.evaluate(() => (window as any).settingsFixture.config.defaultImageTemplateId), "portrait", "disabling default picks an enabled fallback atomically");
+  await settings.getByText("Shared style and consistency", { exact: true }).click();
+  await settings.locator('[name="promptPrefix"]').fill("");
+  await settings.locator('[data-apply]').click();
+  assert.equal(await page.evaluate(() => (window as any).settingsFixture.config.promptPrefix), "", "shared style can be cleared");
+  assert.equal(await settings.locator('[name="promptPrefix"]').count(), 1);
+  assert.equal(await page.evaluate(() => (window as any).settingsFixture.previews), 0, "template editor never starts host preview or generation");
+  await page.screenshot({ path: ".cache/templates-settings-desktop.png", fullPage: true });
   console.log("image template browser checks passed");
 } finally { await browser.close(); server.stop(true); }

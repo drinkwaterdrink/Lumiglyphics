@@ -1,6 +1,18 @@
 # Lumiglyphics implementation status
 
-Implemented as `0.1.0-beta.1` on `codex/image-review`, based on the pinned Cue 1.7.0-beta import (`a04f73b`). Origin points to the requested Lumiglyphics repository. The user subsequently authorized publishing the tested version on GitHub for live testing. The initial local verification below precedes that publication; the README contains installation instructions for `main`.
+## Current template upgrade: 0.2.0-beta.1
+
+Implemented editable templates and independently toggleable dynamic story-reader selection, with the existing budget (default 4, 0 unlimited). No additional provider adapter, planning call, dependency or permission was added. Existing shared styles, presets, connections and appearance overrides remain available in Pictures. Environment/detail templates omit character references and portrait capture; manual template rebuild retires the previous approval atomically. Supported SimTracker chat JSON is bounded to context through the target reply and is recorded as safe source metadata.
+
+Pictures has expandable Generation, Templates, Shared style and consistency, Context sources and Advanced image parameters groups. Mobile navigation uses a section selector. The opaque mobile reviewer scrolls fields while Close and image actions remain reachable. Template drafts survive host updates and failed saves. Catalog save/discard is separate from existing Apply fields. The preview labels sample context explicitly; prepared requests show actual metadata.
+
+Current local verification: 1,243 unit tests pass, zero failures; full typecheck, production build, bundle/manifest verification, and template/settings/image-review/reading Chromium checks pass. Regression checks cover migration reload, no-people references, tracker bounds, cache identity, scoped rebuild/approval races and draft retention. Independent read-only whole-change review completed; all seven Important findings and the selection-action usability finding were reproduced and fixed. The final suite and affected browser checks passed after fixes. No paid image call or live Lumiverse install was performed; real provider conversion and quality require host testing.
+
+Limits: one character or no people; provider/model-specific negative prompts and parameters may be ignored by the host/provider. Dynamic mode defaults off; review defaults on. An inherited anime prefix remains visible/editable. Tracker context requires a supported payload and does not directly query another extension. Legacy presets beyond the first 19 remain in the original preset list; unsupported legacy macro notation is literalized only in imported templates. Original presets are preserved. Rebuild uses frozen scene/style/model facts with the newly selected enabled template; settings changes apply to future preparations.
+
+## Historical first prompt-review release
+
+Initial prompt-review release implemented as `0.1.0-beta.1` on `codex/image-review`, based on the pinned Cue 1.7.0-beta import (`a04f73b`). Origin points to the requested Lumiglyphics repository. The user subsequently authorized publishing the tested version on GitHub for live testing. The initial local verification below precedes that publication; the README contains installation instructions for `main`.
 
 ## Delivered
 

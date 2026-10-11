@@ -1,6 +1,6 @@
 {
   "name": "lumiglyphics",
-  "version": "0.1.0-beta.1",
+  "version": "0.2.0-beta.1",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.0",
@@ -24,7 +24,8 @@
     "serve:demo": "bun run build:demo && bunx serve ./demo -l 4173",
     "verify": "bun run test && bun run typecheck && bun run build",
     "pack:audio": "bun run ./scripts/pack-audio.ts",
-    "shots": "bun run ./scripts/shoot-visual-gallery.ts"
+    "shots": "bun run ./scripts/shoot-visual-gallery.ts",
+    "test:image-templates": "bun run ./scripts/test-image-templates-browser.ts"
   },
   "dependencies": {
     "zod": "^4.4.3"

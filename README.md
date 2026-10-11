@@ -1,12 +1,22 @@
 # Lumiglyphics
 
-Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.1.0-beta.1`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance.
+Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.1`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance.
 
 Open **Image prompts** in the visual novel to inspect each prepared picture's positive and negative prompts, provider, model, safe parameters and reference summary. With **Review before generating** enabled (the default), edit a picture and choose **Generate this**, or **Skip**. You can continue reading while a picture waits. Matching prompts remain separate in review mode. Parameters are JSON overrides for this picture; omitted fields remain host managed.
 
 The review toggle is also in the existing Pictures settings. It applies to the next image batch; changing it does not release waiting drafts. Automatic mode keeps recording newly generated requests. Reused pictures and older turns may have no original request available. Preparation follows the existing concurrency and portrait dependencies, so later pictures can appear after earlier ones finish.
 
-After waiting pictures finish or are skipped, **Prepare replacement** creates a new draft for the selected picture, including previously reused pictures. It always asks for review. If the replacement fails, the previous usable picture remains displayed. Generated pictures must be enabled in settings.
+After waiting pictures finish or are skipped, **Edit and regenerate** creates a new draft for the selected picture, including previously reused pictures. It always asks for review. If the replacement fails, the previous usable picture remains displayed. Generated pictures must be enabled in settings.
+
+In **Pictures**, expand **Templates** to edit Character portrait, Environment, Story action, Detail / object, or Custom. Enable **Choose templates from story context** to let the existing story reader choose from enabled templates using your “When to use” guidance. Turn it off to use your selected default every time. This does not add another planning call or change the built-in budget: default **4**, range **0–12**, with **0 unlimited**. Prompt review is a separate toggle.
+
+You can edit each template's wording, negative prompt, framing, visible subject mode and reference policy, duplicate templates, and disable categories you do not want. The catalog supports 24 templates. **Save templates** and **Discard template changes** affect the catalog only. Shared prefix, suffix, negative, appearance/series controls and legacy presets remain in **Shared style and consistency**; fields marked Apply use the existing Apply bar. Clear the inherited anime prefix there if you want photographs or another style. Choose natural-language descriptions or comma-separated tags to suit your image model. This version supports one character or no people; multi-character composition is deferred.
+
+The local expanded preview is labeled as sample or latest-scene context and never generates an image. **Image prompts** shows the actual prepared extension request, with its selected template, reason, safe source information and SimTracker detection status. Changing a held picture's template rebuilds a new review draft; **Keep edits** retains your text, while **Replace with template** replaces prompt/parameter edits. Held pictures retain their prepared settings when you save the catalog. No-people templates omit character references and first-portrait capture. Portrait/action templates can retain character continuity.
+
+**Context sources** includes a SimTracker toggle. Supported tracker JSON in this chat can supply appearance, attire and environment evidence through the current reply; later snapshots cannot change an older picture's frozen context. This is not a direct SimTracker integration and unrecognized payloads are reported. Saved appearance overrides take priority over tracker/planner identity. The story reader still makes the visual choice; inspect it when accuracy matters.
+
+On mobile, choose a settings section from the selector. Pictures uses expandable groups. The reviewer has an opaque background, scrollable fields and fixed Close/generation controls.
 
 Existing model connections, image settings, prompt presets, style and reference controls remain available. Provider requests go through Lumiverse's image API, including NanoGPT or OpenRouter profiles when your host exposes them. The panel shows the extension request prepared for Lumiverse; the host may translate it into another provider payload. This build has not yet been tested inside a live Lumiverse installation or against either provider.
 
@@ -18,6 +28,7 @@ Build with Bun 1.4.0 or newer:
 bun install --frozen-lockfile --ignore-scripts
 bun run verify
 bun run test:image-review
+bun run test:image-templates
 ```
 
 The build writes `dist/backend.js` and `dist/frontend.js`, referenced by `spindle.json`. Lumiglyphics has a separate installation identifier and storage from Cue. Run one visual novel extension at a time during host testing.
@@ -48,7 +59,7 @@ Under Advanced, NovelAI has toggles for model-specific quality tags and default 
 - exactly one centered protagonist per frame: no second character, crowd, or bystander
 - a frozen per-chat character-identity/tag block, migrated automatically from the legacy visual-profile record
 - a closed pose/expression catalogue, with deterministic selection by default
-- fixed 16:9 camera scene planning and explicit scene-boundary checks
+- editable one-character and no-people framing, with explicit scene-boundary checks
 - swipe, edit, delete, duplicate-submit, and stale-image reconciliation
 - view-gated generation: Cue only plans turns and generates images for chats whose Cue view is open; closing the view (or leaving the chat) aborts the in-flight image batch and marks it cancelled, opening the view plans the latest reply only when nothing current is stored, and cancelled images wait for a manual Retry instead of resuming on their own
 - per-user and per-chat persisted continuity
@@ -67,9 +78,9 @@ The **Connections** settings section configures Cue's own System One URL and mod
 
 When System One is On and returns confident expression decisions, the picture limit applies to new renders after cache lookup. Cue checks expressions across the classified paragraphs, reuses compatible images without spending generation slots, and generates distinct missing images in paragraph order up to the limit. Repeated requests for the same missing image share its render. Other misses keep the current image; uncertain continuation paragraphs and repeated expressions do not force a swap. Jev currently classifies the first 24 paragraphs. Off, Compare, unavailable classifiers, and native card art retain their existing image-budget behavior.
 
-Generated scene images come from the one built-in path: `src/backend/runtime/planner.ts`, then `src/backend/runtime/images.ts`, then the per-provider `AssetScheduler`. The sidecar planner proposes only scene boundaries, environments, and paragraph cues. It never supplies free-form pose, expression, or a prompt delta; those fields are emitted empty and ignored by the prompt compiler.
+Generated scene images come from the one built-in path: `src/backend/runtime/planner.ts`, then `src/backend/runtime/images.ts`, then the per-provider `AssetScheduler`. The sidecar planner proposes scene boundaries, environments, paragraph cues and bounded visual focus. When dynamic selection is enabled it chooses an enabled template and explains the choice. The template compiler assembles the visual brief with saved appearance, current attire/action, scene facts and your shared style. Pose/expression selection still uses the finite catalogue.
 
-Every image shows exactly one centered protagonist composed from a stable identity/tag block and a pose suffix from a finite catalogue. The tag block is frozen per chat and is never auto-updated by a later turn. By default, pose is selected by a pure function of paragraph index and text; optional System One decisions can choose another pose from the same catalogue. The camera is fixed to a centered, eye-level, medium-wide 16:9 composition with the lower quarter clear for the dialogue surface.
+Templates choose one visible character or no people and portrait, upper-body, full-body, wide or close-up framing. Durable character identity is preserved separately from current attire and action. By default, pose is selected deterministically; optional System One decisions can choose another pose from the same catalogue. System One continuation shortcuts are used only with the fixed portrait default; dynamic or non-portrait selections go through the story reader. Existing provider dimensions remain controlled by image settings, independently of composition wording. Old cues without template metadata retain the legacy compiler.
 
 The pipeline never mutates canonical chat messages. It writes only extension-owned projections: per-turn records, per-chat state, and the single-character visual-state identity record.
 
@@ -95,8 +106,8 @@ syntax, and the reference-anchoring toggle). Scene ids, cue ids, paragraph
 numbers, the turn key and free-form
 `promptDelta` are not part of the match, so alternating speakers (Mira, Alex,
 Mira) in the same room still reuse. Composition and camera locks are not
-rendered into prompts and are ignored. Cues whose planner run did not persist
-a character id, resolved appearance and subject class never use the cache.
+rendered into prompts and are ignored. Character cues whose planner run did not persist
+a character id, resolved appearance and subject class never use the cache. No-people cues use scene and template identity instead. Template content, prompt format and structured visual focus also participate in matching.
 
 **Lifetime.**
 
