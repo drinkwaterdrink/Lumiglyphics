@@ -207,6 +207,8 @@ export const VisualCueSchema = z.object({
   visualDescription: z.string().max(4000).optional(),
   visualFocus: z.string().max(1000).optional(),
   visualSources: z.array(z.string().max(300)).max(24).optional(),
+  trackerStatus: z.enum(["detected", "not_found", "unsupported", "malformed", "disabled"]).optional(),
+  trackerSourceMessageId: z.string().max(256).optional(),
   character: z.string().trim().nullable().optional(),
   characterId: z.string().trim().min(1).optional(),
   subjectCategory: SubjectCategorySchema.optional(),

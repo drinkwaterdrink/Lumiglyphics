@@ -7,6 +7,7 @@ import type {
 } from "lumiverse-spindle-types";
 import { ImageReviewGate, safeImageHistory } from "./image-review.js";
 import { extractSimTracker } from "./simtracker.js";
+import { templateSnapshot } from "../../shared/image-templates.js";
 const imageReviewGates = new Map<string, ImageReviewGate>();
 const preparingSingleImages = new Set<string>();
 import { createExternalImages } from "./external-images.js";
@@ -750,7 +751,10 @@ async function prepareSingleImage(spindle: SpindleAPI, request: Extract<Frontend
 
 async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<FrontendRequest, { type: "vn_prepare_image" }>, userId: string): Promise<void> {
   const key = runtimeKey(userId, request.chatId);
-  if (!(await loadConfig(spindle, userId)).generateImages) throw new Error("Enable generated pictures in settings before preparing a replacement.");
+  const config = await loadConfig(spindle, userId);
+  if (!config.generateImages) throw new Error("Enable generated pictures in settings before preparing a replacement.");
+  const template = request.templateId === undefined ? undefined : config.imageTemplates.find(item => item.id === request.templateId && item.enabled);
+  if (request.templateId !== undefined && !template) throw new Error("This template is disabled or unavailable.");
   if (!views.isOpen(userId, request.chatId)) throw new Error("Open the visual novel before preparing a picture.");
   if (assetControllers.has(key)) throw new Error("Generate or skip the waiting pictures before preparing a replacement.");
   const state = await loadChatState(spindle, request.chatId, userId);
@@ -769,7 +773,8 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
   const previousImages = { ...record.previousImages };
   if (job.imageId && job.imageUrl) previousImages[job.jobId] = { imageId: job.imageId, imageUrl: job.imageUrl };
   const queued = AssetJobSchema.parse({ ...job, status: "queued", imageId: null, imageUrl: null, error: null, queuedAt: new Date().toISOString(), startedAt: null, generatedAt: null, readyAt: null, finishedAt: null });
-  const next = { ...record, previousImages, jobs: record.jobs.map((entry) => entry.jobId === job.jobId ? queued : entry) };
+  const updateCue = (cue: StoredTurnRecord["plan"]["visualCues"][number]) => template && cue.assetJobId === job.jobId ? { ...cue, imageTemplate: templateSnapshot(template), imageTemplateReason: "Manual template selection" } : cue;
+  const next = { ...record, plan: { ...record.plan, visualCues: record.plan.visualCues.map(updateCue), ...(record.plan.cacheCues ? { cacheCues: record.plan.cacheCues.map(updateCue) } : {}) }, previousImages, jobs: record.jobs.map((entry) => entry.jobId === job.jobId ? queued : entry) };
   const path = state.activeTurnPath!;
   await saveTurnRecord(spindle, path, next, userId);
   spindle.sendToFrontend({ type: "vn_turn", turn: turnView(next) }, userId);
@@ -1230,6 +1235,14 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
   if (request.type === "vn_external_image_cancel") { externalImages(spindle).cancel(request.request, userId); return; }
   dbg(spindle, userId, `frontend request ${request.type}`);
   switch (request.type) {
+    case "vn_reprepare_image_template": {
+      if (typeof request.requestId !== "string" || request.requestId.length > 100 || typeof request.templateId !== "string") throw new Error("Invalid template selection.");
+      const key = runtimeKey(userId, request.chatId);
+      const turn = activeTurnKeys.get(key);
+      if (!views.isOpen(userId, request.chatId) || !turn || turn.assistantMessageId !== request.messageId || turn.sourceFingerprint !== request.sourceFingerprint) throw new Error("This review belongs to an older or closed turn.");
+      if (!(await imageReviewGates.get(key)?.reprepare(request.requestId, request.templateId))) throw new Error("This request has already been handled or cancelled.");
+      return;
+    }
     case "vn_image_review": {
       if (typeof request.chatId !== "string" || typeof request.requestId !== "string" || request.requestId.length > 100 || (request.action !== "generate" && request.action !== "skip")) throw new Error("Invalid image review action.");
       const key = runtimeKey(userId, request.chatId);

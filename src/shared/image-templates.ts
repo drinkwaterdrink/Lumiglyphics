@@ -21,6 +21,14 @@ export const ImageTemplateSchema = z.object({
 export type ImageTemplate = z.infer<typeof ImageTemplateSchema>;
 export const ImageTemplateSnapshotSchema = ImageTemplateSchema.extend({ revision: z.string().regex(/^[a-f0-9]{8}$/) }).strict();
 export type ImageTemplateSnapshot = z.infer<typeof ImageTemplateSnapshotSchema>;
+export const VisualBriefSchema = z.object({
+  scene: z.string().max(4000), subjects: z.string().max(4000), action: z.string().max(4000), composition: z.string().max(1000), lighting: z.string().max(1000),
+  subjectMode: z.enum(["one", "none"]), framing: ImageTemplateFramingSchema, referencePolicy: z.enum(["character", "none"]), sources: z.array(z.string().max(300)).max(24), conflicts: z.array(z.string().max(1000)).max(16)
+}).strict();
+export type VisualBrief = z.infer<typeof VisualBriefSchema>;
+export const ImagePromptMetadataSchema = z.object({ template: ImageTemplateSnapshotSchema, selectionReason: z.string().max(300), format: z.enum(["description", "tags"]), brief: VisualBriefSchema,
+  trackerStatus: z.enum(["detected", "not_found", "unsupported", "malformed", "disabled"]), trackerSourceMessageId: z.string().max(256).optional() }).strict();
+export type ImagePromptMetadata = z.infer<typeof ImagePromptMetadataSchema>;
 export const ImageTemplateListSchema = z.array(ImageTemplateSchema).max(24).refine(templates => new Set(templates.map(t => t.id)).size === templates.length, "Template IDs must be unique.");
 
 const body = "{{style}}\n{{subjects}}\n{{action}}\n{{scene}}\n{{composition}}\n{{lighting}}\n{{suffix}}";

@@ -1,5 +1,6 @@
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import type { ImageRequestEdits, ImageRequestRecord } from "../../shared/image-review.js";
+import { ImagePromptMetadataSchema, type ImagePromptMetadata } from "../../shared/image-templates.js";
 
 export type ImageGenerationRequest = Parameters<SpindleAPI["imageGen"]["generate"]>[0];
 const blocked = /(?:api.?key|authorization|password|credential|token|secret|reference|(?:source|input|resolved|init)images?|(?:^|_)images?$|image(?:Data|Url|_data|_url|_bytes|_base64)|^v4_|^uc$|^negativePrompt$|^rawRequestOverride$|^__proto__$|^constructor$|^prototype$)/i;
@@ -36,6 +37,8 @@ export function safeImageHistory(input: unknown): ImageRequestRecord[] {
       ...(typeof item.connectionRevision === "number" ? { connectionRevision: item.connectionRevision } : {}),
       parameters: safeImageParameters(item.parameters), referenceSummary: item.referenceSummary, createdAt: item.createdAt
     };
+    const metadata = ImagePromptMetadataSchema.safeParse(item.imagePromptMetadata);
+    if (metadata.success) record.imagePromptMetadata = metadata.data;
     const length = JSON.stringify(record).length;
     if (size + length > 512000) continue;
     size += length; result.unshift(record);
@@ -80,8 +83,22 @@ export function applyImageEdits(request: ImageGenerationRequest, edits: ImageReq
   return { ...request, prompt, ...(negativePrompt !== undefined ? { negativePrompt } : {}), parameters };
 }
 
-type Metadata = { provider: string; connectionRevision?: number; referenceSummary?: string };
-type Pending = { request: ImageGenerationRequest; resolve: (request: ImageGenerationRequest) => void; reject: (error: Error) => void; skipped: boolean };
+export type ImagePreparationMetadata = { provider: string; connectionRevision?: number; referenceSummary?: string; imagePromptMetadata?: ImagePromptMetadata; rebuildTemplate?: (templateId: string) => Promise<{ request: ImageGenerationRequest; metadata: ImagePreparationMetadata }> };
+type Metadata = ImagePreparationMetadata;
+type Pending = { request: ImageGenerationRequest; record: ImageRequestRecord; signal: AbortSignal; rebuild?: Metadata["rebuildTemplate"]; resolve: (request: ImageGenerationRequest) => void; reject: (error: Error) => void; skipped: boolean };
+
+function reviewRecord(jobId: string, paragraphIndex: number, request: ImageGenerationRequest, metadata: Metadata, review: boolean): ImageRequestRecord {
+  const record: ImageRequestRecord = {
+    requestId: crypto.randomUUID(), jobId, paragraphIndex, state: review ? "review" : "prepared",
+    prompt: request.prompt, negativePrompt: request.negativePrompt ?? "", model: request.model ?? "Host default",
+    provider: metadata.provider, connectionId: request.connection_id ?? "Host default",
+    ...(metadata.connectionRevision !== undefined ? { connectionRevision: metadata.connectionRevision } : {}),
+    ...(metadata.imagePromptMetadata ? { imagePromptMetadata: ImagePromptMetadataSchema.parse(metadata.imagePromptMetadata) } : {}),
+    parameters: safeImageParameters(request.parameters ?? {}), referenceSummary: metadata.referenceSummary ?? "No extension reference", createdAt: new Date().toISOString()
+  };
+  if (record.prompt.length > 32000 || record.negativePrompt.length > 32000 || JSON.stringify(record).length > 80000) throw new Error("Image request is too large to inspect. Shorten the prompt/settings and prepare it again.");
+  return record;
+}
 
 function aborted(message: string): Error { const error = new Error(message); error.name = "AbortError"; return error; }
 
@@ -92,34 +109,51 @@ export class ImageReviewGate {
   async prepare(jobId: string, paragraphIndex: number, input: ImageGenerationRequest, metadata: Metadata, review: boolean, signal: AbortSignal): Promise<ImageGenerationRequest> {
     if (signal.aborted) throw aborted("Image request cancelled.");
     const request = structuredClone(input);
-    const record: ImageRequestRecord = {
-      requestId: crypto.randomUUID(), jobId, paragraphIndex, state: review ? "review" : "prepared",
-      prompt: request.prompt, negativePrompt: request.negativePrompt ?? "", model: request.model ?? "Host default",
-      provider: metadata.provider, connectionId: request.connection_id ?? "Host default",
-      ...(metadata.connectionRevision !== undefined ? { connectionRevision: metadata.connectionRevision } : {}),
-      parameters: safeImageParameters(request.parameters ?? {}), referenceSummary: metadata.referenceSummary ?? "No extension reference", createdAt: new Date().toISOString()
-    };
-    if (review && (record.prompt.length > 32000 || record.negativePrompt.length > 32000 || JSON.stringify(record).length > 80000)) throw new Error("Image request is too large to review. Shorten the prompt/settings and prepare it again.");
+    const record = reviewRecord(jobId, paragraphIndex, request, metadata, review);
     if (!review) { await this.onRecord(record); if (signal.aborted) throw aborted("Image request cancelled."); return request; }
     let item!: Pending;
-    const approved = new Promise<ImageGenerationRequest>((resolve, reject) => { item = { request, resolve, reject, skipped: false }; });
+    const approved = new Promise<ImageGenerationRequest>((resolve, reject) => { item = { request, record, signal, ...(metadata.rebuildTemplate ? { rebuild: metadata.rebuildTemplate } : {}), resolve, reject, skipped: false }; });
     // Attach rejection handling before notification/storage can yield to cancellation.
     const observed = approved.then((value) => ({ value }), (error: Error) => ({ error }));
     this.pending.set(record.requestId, item);
-    const abort = (): void => { this.pending.delete(record.requestId); item.reject(aborted("Image request cancelled.")); };
+    const abort = (): void => { this.pending.delete(item.record.requestId); item.reject(aborted("Image request cancelled.")); };
     signal.addEventListener("abort", abort, { once: true });
     try {
       await this.onRecord(record);
       const result = await observed;
       if ("error" in result || signal.aborted) {
-        await this.onRecord({ ...record, state: item.skipped ? "skipped" : "cancelled" });
+        await this.onRecord({ ...item.record, state: item.skipped ? "skipped" : "cancelled" });
         throw "error" in result ? result.error : aborted("Image request cancelled.");
       }
       const edited = result.value;
-      await this.onRecord({ ...record, state: "approved", prompt: edited.prompt, negativePrompt: edited.negativePrompt ?? "", parameters: safeImageParameters(edited.parameters ?? {}) });
+      await this.onRecord({ ...item.record, state: "approved", prompt: edited.prompt, negativePrompt: edited.negativePrompt ?? "", parameters: safeImageParameters(edited.parameters ?? {}) });
       if (signal.aborted) throw aborted("Image request cancelled.");
       return edited;
-    } finally { this.pending.delete(record.requestId); signal.removeEventListener("abort", abort); }
+    } finally { this.pending.delete(item.record.requestId); signal.removeEventListener("abort", abort); }
+  }
+
+  async reprepare(requestId: string, templateId: string): Promise<boolean> {
+    const item = this.pending.get(requestId);
+    if (!item?.rebuild || item.signal.aborted) return false;
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$/.test(templateId)) throw new Error("Invalid image template selection.");
+    // Claim synchronously: neither an old approval nor a second rebuild can win.
+    this.pending.delete(requestId);
+    try {
+      await this.onRecord({ ...item.record, state: "cancelled" });
+      const rebuilt = await item.rebuild(templateId);
+      if (item.signal.aborted) throw aborted("Image request cancelled during template preparation.");
+      const request = structuredClone(rebuilt.request);
+      const record = reviewRecord(item.record.jobId, item.record.paragraphIndex, request, rebuilt.metadata, true);
+      item.request = request; item.record = record;
+      this.pending.set(record.requestId, item);
+      await this.onRecord(record);
+      if (item.signal.aborted) throw aborted("Image request cancelled during template preparation.");
+      return true;
+    } catch (error) {
+      this.pending.delete(item.record.requestId);
+      item.reject(error instanceof Error ? error : new Error(String(error)));
+      throw error;
+    }
   }
 
   decide(requestId: string, action: "generate" | "skip", edits: ImageRequestEdits): boolean {

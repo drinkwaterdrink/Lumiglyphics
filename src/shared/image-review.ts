@@ -1,4 +1,6 @@
+import type { ImagePromptMetadata } from "./image-templates.js";
 export type ImageRequestRecord = {
+  imagePromptMetadata?: ImagePromptMetadata;
   requestId: string;
   jobId: string;
   paragraphIndex: number;

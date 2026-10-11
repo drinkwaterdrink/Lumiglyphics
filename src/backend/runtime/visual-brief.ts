@@ -5,13 +5,10 @@ import type { CharacterAppearanceMap } from "../../shared/identity.js";
 import { characterAppearanceKey } from "../../shared/identity.js";
 import { compileActionProp } from "../../shared/action-prop.js";
 import { resolveImageTemplate, type ImageTemplate } from "../../shared/image-templates.js";
+import type { VisualBrief } from "../../shared/image-templates.js";
+export type { VisualBrief } from "../../shared/image-templates.js";
 import { POSE_EXPRESSION_CATALOGUE, poseById } from "../../shared/character.js";
 
-export type VisualBrief = {
-  scene: string; subjects: string; action: string; composition: string; lighting: string;
-  subjectMode: ImageTemplate["subjectMode"]; framing: ImageTemplate["framing"]; referencePolicy: ImageTemplate["referencePolicy"];
-  sources: string[]; conflicts: string[];
-};
 const text = (values: (string | null | undefined)[], max = 4000) => [...new Set(values.map(value => value?.trim()).filter(Boolean))].join("; ").slice(0, max);
 
 export function buildVisualBrief(config: VisualNovelConfig, scene: SceneState, cue: VisualCue, appearances?: CharacterAppearanceMap): VisualBrief {

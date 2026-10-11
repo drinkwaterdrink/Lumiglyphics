@@ -35,7 +35,7 @@ export type SceneImageScope = string;
  */
 export type SceneImageIdentity = {
   imageTemplate?: import("../../shared/image-templates.js").ImageTemplateSnapshot;
-  visualBrief?: import("../runtime/visual-brief.js").VisualBrief;
+  visualBrief?: import("../../shared/image-templates.js").VisualBrief;
   /** Durable identity: registry id and persisted subject class, never the display name alone. */
   subject: { characterId: string; subjectCategory: string };
   /** Resolved identity tags after the wardrobe override, plus the wardrobe itself. */

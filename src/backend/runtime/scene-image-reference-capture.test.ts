@@ -9,6 +9,32 @@ import { describe, expect, test } from "bun:test";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { DEFAULT_CONFIG, type VisualNovelConfig } from "../../config.js";
 import { resolveImageTemplate } from "../../shared/image-templates.js";
+import { ImageReviewGate } from "./image-review.js";
+
+test("real preparation switches held templates and references without generating early", async () => {
+  for (const [before, after, capture] of [["portrait", "environment", false], ["environment", "portrait", true]] as const) {
+    const h = harness();
+    const p = plan(`rebuild-${before}`, [[0, "idle"]]);
+    p.visualCues[0]!.imageTemplate = resolveImageTemplate(DEFAULT_CONFIG, before).template;
+    const records: any[] = [];
+    const gate = new ImageReviewGate(async record => { records.push(record); });
+    const generation = generateAssets(h.spindle, p, createAssetJobs(p, on), on, new AbortController().signal, () => {}, undefined, { beforeGenerate: (job, request, metadata, signal) => gate.prepare(job.jobId, job.paragraphIndex, request, metadata, true, signal), independentRequests: true, disableCacheStore: true });
+    const start = Date.now();
+    while (!records.length) { if (Date.now() - start > 2000) throw new Error("No review prepared"); await new Promise(resolve => setTimeout(resolve, 5)); }
+    const oldId = records.at(-1).requestId;
+    expect(h.calls).toHaveLength(0);
+    await gate.reprepare(oldId, after);
+    expect(h.calls).toHaveLength(0);
+    expect(records.at(-1).imagePromptMetadata.template.id).toBe(after);
+    expect(gate.decide(oldId, "generate", {})).toBe(false);
+    expect(gate.decide(records.at(-1).requestId, "generate", {})).toBe(true);
+    const result = await generation;
+    expect(result[0]?.status).toBe("generated");
+    expect(h.calls).toHaveLength(1);
+    expect(h.calls[0]?.includeDataUrl).toBe(capture);
+    expect(Object.keys(portraits(h)).length).toBe(capture ? 1 : 0);
+  }
+});
 
 test("environment generation never captures a portrait in captured or card mode", async () => {
   for (const referenceSource of ["captured", "card"] as const) {

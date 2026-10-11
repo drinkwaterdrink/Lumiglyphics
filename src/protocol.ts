@@ -5,7 +5,8 @@ import type { ImageRequestEdits, ImageRequestRecord } from "./shared/image-revie
 
 export type FrontendRequest =
   | { type: "vn_image_review"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; action: "generate" | "skip"; edits?: ImageRequestEdits }
-  | { type: "vn_prepare_image"; chatId: string; messageId: string; sourceFingerprint: string; jobId: string }
+  | { type: "vn_prepare_image"; chatId: string; messageId: string; sourceFingerprint: string; jobId: string; templateId?: string }
+  | { type: "vn_reprepare_image_template"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; templateId: string }
   | { type: "vn_external_image"; request: CueImageRequest }
   | { type: "vn_external_image_cancel"; request: Pick<CueImageRequest, "version" | "provider" | "chatId" | "requestId"> }
   | { type: "vn_resolve_panel_template"; chatId: string; characterId?: string; requestId: string; template: string }

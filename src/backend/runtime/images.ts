@@ -1,7 +1,7 @@
 import { applyAttireOverride } from "./attire.js";
 export { applyAttireOverride, isClothingTag, cleanClothingFromPhrase } from "./attire.js";
 import type { SpindleAPI } from "lumiverse-spindle-types";
-import type { ImageGenerationRequest } from "./image-review.js";
+import { applyImageEdits, type ImageGenerationRequest, type ImagePreparationMetadata } from "./image-review.js";
 import type { VisualNovelConfig } from "../../config.js";
 import { DEFAULT_CONFIG } from "../../config.js";
 import { novelAiCapabilities, novelAiQualityTags, NOVELAI_NEGATIVE_DEFAULT, renderNovelAiEmphasis } from "./novelai-prompt.js";
@@ -22,7 +22,7 @@ import {
 } from "../core/scene-image-cache.js";
 import { POSE_EXPRESSION_CATALOGUE, poseById } from "../../shared/character.js";
 import { compileActionProp } from "../../shared/action-prop.js";
-import { renderImageTemplate } from "../../shared/image-templates.js";
+import { renderImageTemplate, templateSnapshot, type ImagePromptMetadata } from "../../shared/image-templates.js";
 import { buildVisualBrief } from "./visual-brief.js";
 import {
   appearanceMapKeyFor,
@@ -37,6 +37,7 @@ import {
 import { assemblePrompt, normalizeConfig, renderNegativeWithCurrentSelection, renderPrompt, splitTopLevelCsv, parseWeightedGroup, validateAndRepairDelimiters, type Config, type PromptEntry } from "../inlay-prompt/index.js";
 import {
   loadCharacterAppearance,
+  loadConfig,
   loadPortraits,
   savePortrait,
   VALID_IMAGE_MIMES,
@@ -462,7 +463,7 @@ export type SceneCacheOptions = {
   /** Reviewed pictures remain independent and never populate the automatic compiler cache. */
   independentRequests?: boolean;
   disableCacheStore?: boolean;
-  beforeGenerate?: (job: AssetJob, request: ImageGenerationRequest, metadata: { provider: string; connectionRevision?: number; referenceSummary: string }, signal: AbortSignal) => Promise<ImageGenerationRequest>;
+  beforeGenerate?: (job: AssetJob, request: ImageGenerationRequest, metadata: ImagePreparationMetadata, signal: AbortSignal) => Promise<ImageGenerationRequest>;
   /** Exact content used to plan this turn; omitted for legacy records. */
   resolvedSourceText?: string;
   sceneCache?: SceneImageCache | null;
@@ -1043,7 +1044,7 @@ export async function generateAssets(
         let isCaptureOwner = false;
         let captureResolve: ((val: StoredPortrait | null) => void) | undefined;
 
-        const wantsCapture = canAnchor && Boolean(characterKey) && Boolean(identityFingerprint) && !portrait && !capturePromises.has(characterKey);
+        let wantsCapture = canAnchor && Boolean(characterKey) && Boolean(identityFingerprint) && !portrait && !capturePromises.has(characterKey);
         if (wantsCapture) {
           isCaptureOwner = true;
           const promise = new Promise<StoredPortrait | null>((resolve) => {
@@ -1165,10 +1166,55 @@ export async function generateAssets(
             parameters: { ...(selected?.default_parameters ?? {}), ...input.parameters }
           } : input;
           if (!cueUsesCharacterReference(cue)) frozen = { ...frozen, parameters: withoutImageReferences(frozen.parameters ?? {}) };
-          const approved = cacheOptions.beforeGenerate ? await cacheOptions.beforeGenerate(scheduledJob, frozen, {
+          const metadataFor = (selectedCue: VisualCue): ImagePromptMetadata | undefined => selectedCue.imageTemplate ? {
+            template: selectedCue.imageTemplate, selectionReason: selectedCue.imageTemplateReason ?? "Default template", format: config.imagePromptFormat,
+            brief: compileTemplateCue(config, scene, selectedCue, characterAppearance).brief,
+            trackerStatus: selectedCue.trackerStatus ?? (config.includeSimTrackerContext ? "not_found" : "disabled"),
+            ...(selectedCue.trackerSourceMessageId ? { trackerSourceMessageId: selectedCue.trackerSourceMessageId } : {})
+          } : undefined;
+          const baseMetadata: ImagePreparationMetadata = {
             provider: selected?.provider ?? provider ?? "Unknown",
             ...(selected ? { connectionRevision: selected.updated_at } : {}),
             referenceSummary: portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference"
+          };
+          const initialMetadata = metadataFor(cue);
+          const approved = cacheOptions.beforeGenerate ? await cacheOptions.beforeGenerate(scheduledJob, frozen, {
+            ...baseMetadata,
+            ...(initialMetadata ? { imagePromptMetadata: initialMetadata } : {}),
+            rebuildTemplate: async templateId => {
+              if (signal.aborted || jobSignal.aborted) throw abortError(jobSignal);
+              const latestConfig = await loadConfig(spindle, userId);
+              const template = latestConfig.imageTemplates.find(item => item.id === templateId && item.enabled);
+              if (!template) throw new Error("This template is disabled or unavailable.");
+              const nextCue = { ...cue, imageTemplate: templateSnapshot(template), imageTemplateReason: "Manual template selection" };
+              const nextCompiled = compileTemplateCue(config, scene, nextCue, characterAppearance);
+              const usesReference = referenceAnchoringEnabled(config) && cueUsesCharacterReference(nextCue) && provider !== null && REFERENCE_PROVIDERS.has(provider);
+              let nextPortrait: StoredPortrait | undefined;
+              if (usesReference) {
+                const refreshed = await loadPortraits(spindle, plan.key.chatId, userId).catch(() => ({} as Record<string, StoredPortrait>));
+                Object.assign(portraits, refreshed);
+                if (config.referenceSource === "card") {
+                  nextPortrait = cardPortraitFor(portraits, characterKey);
+                  if (!nextPortrait) {
+                    const context = cardContext ?? await loadCardReferenceContext(spindle, { ...plan, visualCues: [nextCue] }, userId, cacheOptions).catch(() => null);
+                    const resolution = context?.resolutions.get(characterKey);
+                    if (resolution) nextPortrait = (await acquireCardPortrait(characterName, characterKey, resolution)) ?? undefined;
+                  }
+                }
+                nextPortrait ??= compatiblePortrait(portraits[characterKey], identityFingerprint);
+              }
+              if (signal.aborted || jobSignal.aborted) throw abortError(jobSignal);
+              portrait = nextPortrait;
+              wantsCapture = usesReference && Boolean(characterKey) && Boolean(identityFingerprint) && !nextPortrait;
+              const nextNai = provider === "novelai" ? compileNovelAiRequest(config, scene, nextCue, characterAppearance) : null;
+              const updated = applyImageEdits(frozen, { prompt: nextCompiled.prompt, negativePrompt: nextCompiled.negativePrompt });
+              const request: ImageGenerationRequest = { ...updated, includeDataUrl: wantsCapture, parameters: {
+                ...withoutImageReferences(updated.parameters ?? {}),
+                ...(nextPortrait && provider ? referenceParametersFor(provider, nextPortrait, config) : {}),
+                ...(nextNai?.parameters ?? {})
+              } };
+              return { request, metadata: { ...baseMetadata, imagePromptMetadata: metadataFor(nextCue)!, referenceSummary: nextPortrait ? `${nextPortrait.source ?? "captured"} portrait: ${nextPortrait.name} (${nextPortrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" } };
+            }
           }, jobSignal) : frozen;
           if (signal.aborted) throw abortError(signal);
           if (jobSignal.aborted) throw abortError(jobSignal);

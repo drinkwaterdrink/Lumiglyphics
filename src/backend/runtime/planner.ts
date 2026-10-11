@@ -2379,6 +2379,8 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
         visualDescription: cue.visualDescription ?? "",
         visualFocus: cue.visualFocus ?? "",
         visualSources: input.simTrackerEvidence?.sourceMessageId ? [`SimTracker:${input.simTrackerEvidence.sourceMessageId}`] : [],
+        trackerStatus: input.config.includeSimTrackerContext ? input.simTrackerEvidence?.status ?? "not_found" : "disabled",
+        ...(input.simTrackerEvidence?.sourceMessageId ? { trackerSourceMessageId: input.simTrackerEvidence.sourceMessageId } : {}),
         action: cueIsUser ? null : normalizeActionProp(cue.action),
         expression: null,
         poseExpressionId: pose.id,
