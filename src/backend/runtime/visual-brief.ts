@@ -1,3 +1,4 @@
+import { sharedStyleWarnings } from "../../shared/image-styles.js";
 import { applyAttireOverride } from "./attire.js";
 import type { VisualNovelConfig } from "../../config.js";
 import type { SceneState, VisualCue } from "../../shared/contracts.js";
@@ -40,6 +41,6 @@ export function buildVisualBrief(config: VisualNovelConfig, scene: SceneState, c
     framing: template.framing,
     referencePolicy: noPeople ? "none" : template.referencePolicy,
     sources: [...(cue.visualSources ?? []), "scene context", ...(!noPeople && saved ? ["saved appearance"] : [])].slice(0, 24),
-    conflicts
+    conflicts: [...conflicts, ...sharedStyleWarnings(template, config.promptPrefix, config.promptSuffix, config.negativePrompt)].slice(0, 16)
   };
 }

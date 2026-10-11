@@ -285,3 +285,5 @@ bun run build:demo
 See [SPEECH.md](./SPEECH.md) for the default-off paragraph speech (TTS) feature, its contracts, and its truthful limitations.
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for the viability decision, staging host contract, image pipeline, deterministic single-character identity, data ownership, state machines, and remaining preview limits.
+
+Shared image styles and suffix behavior are documented in [Image prompting](docs/image-prompting.md). Built-in looks are in Pictures → Image prompts → Shared style and exclusions; all wording remains editable.

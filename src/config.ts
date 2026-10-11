@@ -64,6 +64,8 @@ export type VisualNovelPromptPreset = {
   id: string;
   name: string;
   positive: string;
+  /** Absent on legacy presets: selecting one keeps the existing suffix. */
+  suffix?: string;
   negative: string;
 };
 
@@ -238,6 +240,7 @@ function promptPresetList(value: unknown): VisualNovelPromptPreset[] {
       id,
       name,
       positive: typeof record.positive === "string" ? record.positive : "",
+      ...(typeof record.suffix === "string" ? { suffix: record.suffix } : {}),
       negative: typeof record.negative === "string" ? record.negative : ""
     });
     if (presets.length >= 32) break;

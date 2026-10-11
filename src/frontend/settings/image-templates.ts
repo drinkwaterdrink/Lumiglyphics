@@ -1,3 +1,4 @@
+import { sharedStyleWarnings } from "../../shared/image-styles.js";
 import type { VisualNovelConfig } from "../../config.js";
 import { IMAGE_TEMPLATE_TOKENS, renderImageTemplate, templateSnapshot, upgradeImageTemplates, validateImageTemplates, type ImageTemplate, type ImageTemplateSnapshot, type ImagePromptMetadata } from "../../shared/image-templates.js";
 
@@ -117,7 +118,7 @@ export class ImageTemplateEditor {
       const output = renderImageTemplate(snapshot, values);
       const format = (text: string) => this.config.imagePromptFormat === "tags" ? text.replace(/[;\n]+/g, ", ") : text;
       this.el<HTMLElement>("[data-preview-kind]").textContent = brief ? "Preview using the latest prepared scene brief and saved shared style. Changing category may need a new story-reader focus." : "Sample scene preview with saved shared style. This is not a prepared image request.";
-      this.el<HTMLElement>("[data-template-preview]").textContent = `Positive\n${format(output.prompt)}\n\nNegative\n${format(output.negativePrompt)}`;
+      this.el<HTMLElement>("[data-template-preview]").textContent = `Positive\n${format(output.prompt)}\n\nNegative\n${format(output.negativePrompt)}${sharedStyleWarnings(template, values.style, values.suffix, values.negative).map(w => `\n\nNote: ${w}`).join("")}`;
       this.onPreview(snapshot);
     } catch { this.el<HTMLElement>("[data-template-preview]").textContent = "Fix the template fields to preview."; }
   }
