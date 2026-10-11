@@ -6,6 +6,7 @@ import type {
   SpindleAPI
 } from "lumiverse-spindle-types";
 import { ImageReviewGate, safeImageHistory } from "./image-review.js";
+import { extractSimTracker } from "./simtracker.js";
 const imageReviewGates = new Map<string, ImageReviewGate>();
 const preparingSingleImages = new Set<string>();
 import { createExternalImages } from "./external-images.js";
@@ -880,6 +881,7 @@ async function processAssistantMessage(
       characterAppearance,
       characterRegistry,
       gameHints: gameHintsForTurn(messages, message.id),
+      ...(config.includeSimTrackerContext ? { simTrackerEvidence: extractSimTracker(messages, message.id) } : {}),
       ...(userId ? { userId } : {})
     });
     if (operation.controller.signal.aborted) return;

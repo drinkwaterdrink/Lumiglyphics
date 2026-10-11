@@ -9,6 +9,18 @@ import type {
 } from "lumiverse-spindle-types";
 import { DEFAULT_CONFIG } from "../../config.js";
 import { identityFromVisualPrompt, loadVisualContext } from "./context.js";
+import { extractSimTracker } from "./simtracker.js";
+
+test("tracker evidence is optional reference context and respects its toggle", async () => {
+  const trackerEvidence = extractSimTracker([{ id: "reply", content: '<tracker>{"characters":[{"name":"Mira","appearance":{"hair":"silver"}}]}</tracker>' }], "reply");
+  const config = { ...DEFAULT_CONFIG, includeCharacterContext: false, includePersonaContext: false, includeLorebookContext: false };
+  const on = await loadVisualContext({} as SpindleAPI, { chatId: "c", target: "hello", config, trackerEvidence });
+  expect(on.plannerContext).toContain("silver");
+  expect(on.diagnostics.trackerStatus).toBe("detected");
+  const off = await loadVisualContext({} as SpindleAPI, { chatId: "c", target: "hello", config: { ...config, includeSimTrackerContext: false }, trackerEvidence });
+  expect(off.plannerContext).not.toContain("silver");
+  expect(off.diagnostics.trackerStatus).toBe("disabled");
+});
 
 const chat: ChatDTO = {
   id: "chat-1",

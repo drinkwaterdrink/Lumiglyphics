@@ -51,6 +51,7 @@ import {
   type RegistryMergeReport
 } from "../../shared/identity.js";
 import { loadVisualContext, type VisualContextDiagnostics, type VisualContextSnapshot } from "./context.js";
+import type { SimTrackerEvidence } from "./simtracker.js";
 import { resolvePlannerConnection, type ResolvedPlannerConnection } from "./connections.js";
 import { normalizeStageEffect, normalizeAmbientEffect, deriveWeatherAmbient } from "./planner-effects.js";
 import { getAudioCatalog, getAudioCatalogPromptSummary } from "./audio-catalog.js";
@@ -174,6 +175,7 @@ export type PlanTurnInput = {
   characterRegistry?: CharacterRegistry;
   /** Moods and notes a game-engine extension left on this turn (see gameHintsForTurn). */
   gameHints?: string;
+  simTrackerEvidence?: SimTrackerEvidence;
   /** An external scene selects a subject by name, never by appearance or pose. */
   externalScene?: { characterName: string; venue: string | null; timeOfDay: string | null };
   userId?: string;
@@ -2069,6 +2071,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     chatId: input.chatId,
     target: [recentContext(input.recentMessages, input.config.includeRecentMessages), stripTextEffectTags(input.content)].filter(Boolean).join("\n\n"),
     config: input.config,
+    ...(input.simTrackerEvidence ? { trackerEvidence: input.simTrackerEvidence } : {}),
     ...(input.userId ? { userId: input.userId } : {})
   });
 

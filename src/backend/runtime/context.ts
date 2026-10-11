@@ -7,6 +7,7 @@ import type {
   WorldBookSourceDTO
 } from "lumiverse-spindle-types";
 import type { VisualNovelConfig } from "../../config.js";
+import { trackerContext, type SimTrackerEvidence } from "./simtracker.js";
 
 const MAX_ACTIVATED_ENTRIES = 16;
 const MAX_LORE_LENGTH = 3600;
@@ -30,6 +31,8 @@ export type VisualContextDiagnostics = {
   loreActivated: number;
   loreIncluded: number;
   errors: string[];
+  trackerStatus?: SimTrackerEvidence["status"] | "disabled";
+  trackerSourceMessageId?: string;
 };
 
 export type StructuredCharacterIdentity = {
@@ -303,7 +306,8 @@ export async function loadVisualContext(
   input: {
     chatId: string;
     target: string;
-    config: Pick<VisualNovelConfig, "includeCharacterContext" | "includePersonaContext" | "includeLorebookContext">;
+    config: Pick<VisualNovelConfig, "includeCharacterContext" | "includePersonaContext" | "includeLorebookContext"> & Partial<Pick<VisualNovelConfig, "includeSimTrackerContext">>;
+    trackerEvidence?: SimTrackerEvidence;
     userId?: string;
   }
 ): Promise<VisualContextSnapshot> {
@@ -316,6 +320,12 @@ export async function loadVisualContext(
     errors: []
   };
   const needsChat = input.config.includeCharacterContext;
+  const tracker = input.config.includeSimTrackerContext !== false ? input.trackerEvidence : undefined;
+  if (input.trackerEvidence) {
+    diagnostics.trackerStatus = input.config.includeSimTrackerContext === false ? "disabled" : input.trackerEvidence.status;
+    if (tracker?.sourceMessageId) diagnostics.trackerSourceMessageId = tracker.sourceMessageId;
+    diagnostics.errors.push(...(tracker?.warnings ?? []));
+  }
   const [chat, persona, lore] = await Promise.all([
     needsChat ? settled(() => spindle.chats.get(input.chatId, input.userId), "chat", diagnostics) : Promise.resolve(null),
     input.config.includePersonaContext
@@ -345,7 +355,7 @@ export async function loadVisualContext(
     description: clean(persona.description)
   } : null;
   return {
-    plannerContext: [characterBlock, personaBlock, lore].filter(Boolean).join("\n\n"),
+    plannerContext: [characterBlock, personaBlock, lore, tracker ? trackerContext(tracker) : ""].filter(Boolean).join("\n\n"),
     identityPrompt: visualIdentity(character, persona),
     characterIdentity,
     personaIdentity,
