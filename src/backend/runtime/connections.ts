@@ -1,0 +1,126 @@
+import type { ConnectionProfileDTO, ImageGenConnectionDTO, SpindleAPI } from "lumiverse-spindle-types";
+import type { ConnectionCatalogErrors, ConnectionCatalogOption } from "../../protocol.js";
+
+export type ConnectionCatalog = {
+  planner: ConnectionCatalogOption[];
+  image: ConnectionCatalogOption[];
+  errors?: ConnectionCatalogErrors;
+};
+
+/** System One profiles share Lumiverse's connection store but cannot generate prose. */
+export function isSystemOneProfile(connection: Pick<ConnectionProfileDTO, "provider" | "model" | "metadata">): boolean {
+  const provider = text(connection.provider).toLowerCase();
+  const model = text(connection.model).toLowerCase();
+  const kind = connection.metadata?.connectionType;
+  return provider.includes("typesafe") || /system[-_]?one/.test(provider)
+    || /^jev(?:-|$)/.test(model)
+    || kind === "system_one" || kind === "systemOne";
+}
+
+function text(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function errorText(error: unknown): string {
+  const value = error instanceof Error ? error.message : String(error);
+  return value.length > 400 ? `${value.slice(0, 397)}...` : value;
+}
+
+function normalizedOptions(
+  connections: readonly (ConnectionProfileDTO | ImageGenConnectionDTO)[]
+): ConnectionCatalogOption[] {
+  const byId = new Map<string, ConnectionCatalogOption>();
+  for (const connection of connections) {
+    const id = text(connection.id);
+    if (!id) continue;
+    const connName = text(connection.name) || id;
+    const provider = text(connection.provider);
+    const model = text(connection.model);
+    const isDefault = connection.is_default === true;
+    const metadata = (connection as { metadata?: Record<string, unknown> }).metadata;
+    const workflows = Array.isArray(metadata?.comfyui_workflows) ? metadata.comfyui_workflows : [];
+
+    if (provider === "comfyui" && workflows.length > 0) {
+      const activeId = typeof metadata?.comfyui_active_workflow_id === "string" ? metadata.comfyui_active_workflow_id : null;
+      byId.set(id, {
+        id,
+        name: `${connName} (active workflow)`,
+        provider,
+        model,
+        isDefault: isDefault && !activeId
+      });
+      for (const wf of workflows) {
+        if (!wf || typeof wf !== "object") continue;
+        const wId = text((wf as { id?: unknown }).id);
+        const wName = text((wf as { name?: unknown }).name) || wId;
+        if (!wId) continue;
+        const compoundId = `${id}::${wId}`;
+        byId.set(compoundId, {
+          id: compoundId,
+          name: `${connName} — ${wName}`,
+          provider,
+          model,
+          isDefault: isDefault && activeId === wId
+        });
+      }
+    } else {
+      const option: ConnectionCatalogOption = {
+        id,
+        name: connName,
+        provider,
+        model,
+        isDefault
+      };
+      const existing = byId.get(id);
+      if (!existing || option.isDefault) byId.set(id, option);
+    }
+  }
+  return [...byId.values()].sort((left, right) =>
+    Number(right.isDefault) - Number(left.isDefault)
+    || left.name.localeCompare(right.name)
+    || left.provider.localeCompare(right.provider)
+    || left.model.localeCompare(right.model)
+    || left.id.localeCompare(right.id)
+  );
+}
+
+export type ResolvedPlannerConnection = {
+  id: string;
+  provider: string;
+  model: string;
+};
+
+export async function resolvePlannerConnection(
+  spindle: SpindleAPI,
+  config: { parserConnectionId: string | null },
+  userId?: string
+): Promise<ResolvedPlannerConnection | null> {
+  // Honor the user's explicitly chosen planner connection first.
+  if (config.parserConnectionId) {
+    const chosen = await spindle.connections?.get?.(config.parserConnectionId, userId);
+    if (chosen && !isSystemOneProfile(chosen)) return { id: chosen.id, provider: chosen.provider, model: chosen.model };
+  }
+  // Otherwise fall back to the default connection so "Lumiverse default" works instead of failing.
+  const connections = await spindle.connections?.list?.(userId);
+  if (!connections) return null;
+  const plannerConnections = connections.filter((connection) => !isSystemOneProfile(connection));
+  const fallback = plannerConnections.find((connection) => connection.is_default) ?? plannerConnections[0];
+  if (!fallback) return null;
+  return { id: fallback.id, provider: fallback.provider, model: fallback.model };
+}
+
+export async function loadConnectionCatalog(spindle: SpindleAPI, userId?: string): Promise<ConnectionCatalog> {
+  const [plannerResult, imageResult] = await Promise.allSettled([
+    spindle.connections.list(userId),
+    spindle.imageGen.listConnections(userId)
+  ]);
+  const errors: ConnectionCatalogErrors = {};
+  if (plannerResult.status === "rejected") errors.planner = errorText(plannerResult.reason);
+  if (imageResult.status === "rejected") errors.image = errorText(imageResult.reason);
+  return {
+    planner: plannerResult.status === "fulfilled" ? normalizedOptions(plannerResult.value.filter((connection) => !isSystemOneProfile(connection))) : [],
+    image: imageResult.status === "fulfilled" ? normalizedOptions(imageResult.value) : [],
+    ...(Object.keys(errors).length ? { errors } : {})
+  };
+}
+

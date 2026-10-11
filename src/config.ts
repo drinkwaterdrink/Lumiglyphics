@@ -1,0 +1,327 @@
+import { DEFAULT_SPEECH_SETTINGS, normalizeSpeechSettings, type SpeechSettings } from "./speech-config.js";
+
+export type VisualNovelMode = "standard" | "cyoa";
+
+export const SCENE_IMAGE_FITS = ["cover", "contain", "fill", "none", "scale-down"] as const;
+export type VisualNovelSceneImageFit = (typeof SCENE_IMAGE_FITS)[number];
+
+/**
+ * How strongly one-shot stage effects (shake, flash, zoom) are presented.
+ * - "full": every planned effect plays (the pre-redesign behavior, the default);
+ * - "gentle": strong shakes and screen flashes are dropped or softened;
+ * - "off": no one-shot effects at all.
+ * The OS `prefers-reduced-motion` setting is honored by the theme CSS on top of
+ * this and is never overridden by it.
+ */
+export const EFFECT_INTENSITIES = ["off", "gentle", "full"] as const;
+export type VisualNovelEffectIntensity = (typeof EFFECT_INTENSITIES)[number];
+/**
+ * How inline text effects (<shake>, <rainbow>, ... see src/shared/text-effects.ts)
+ * render in dialogue: "animated" plays them, "static" keeps their colour and
+ * styling without motion, "off" shows plain text. OS reduced-motion always
+ * downgrades "animated" to "static".
+ */
+export const TEXT_EFFECT_MODES = ["animated", "static", "off"] as const;
+export type VisualNovelTextEffectMode = (typeof TEXT_EFFECT_MODES)[number];
+
+/**
+ * Where a character's reference anchor image comes from.
+ * - "captured": the first render of the character in the chat (the default, unchanged behaviour);
+ * - "card": one fixed sprite per character resolved from the card's assets. Characters the card
+ *   does not know still use captured renders.
+ */
+export const REFERENCE_SOURCES = ["captured", "card"] as const;
+export type VisualNovelReferenceSource = (typeof REFERENCE_SOURCES)[number];
+
+/** Dialogue text scale bounds (multiplier over the theme's dialogue font size). */
+export const TEXT_SCALE_MIN = 0.8;
+export const TEXT_SCALE_MAX = 1.6;
+
+/**
+ * The canonical, host-neutral set of built-in visual-novel theme presets.
+ *
+ * These identifiers are the single source of truth shared by the backend config
+ * normalization (src/config.ts), the frontend preset CSS map, and the stage /
+ * settings wiring. They deliberately live here — not in the frontend `theme`
+ * module — so the shared config never imports browser or frontend code.
+ */
+export const THEME_PRESET_IDS = [
+  "lumiverse",
+  "golden-hour",
+  "boxed-console",
+  "paper-novel",
+  "midnight-noir",
+  "yamaku-classic",
+  "literature-club",
+] as const;
+
+export type VisualNovelThemePreset = (typeof THEME_PRESET_IDS)[number];
+
+/** A named prompt preset: a positive (prefix) and a negative block. */
+export type VisualNovelPromptPreset = {
+  id: string;
+  name: string;
+  positive: string;
+  negative: string;
+};
+
+export type VisualNovelConfig = {
+  themePreset: VisualNovelThemePreset;
+  enabled: boolean;
+  autoEnter: boolean;
+  mode: VisualNovelMode;
+  sceneImageFit: VisualNovelSceneImageFit;
+  debugLogging: boolean;
+  generateImages: boolean;
+  /** Anchor each character's appearance to their captured reference portrait. */
+  referenceAnchoring: boolean;
+  /** Where the reference anchor image comes from ("captured" render or "card" sprite). */
+  referenceSource: VisualNovelReferenceSource;
+  generateChoices: boolean;
+  parserConnectionId: string | null;
+  systemOneMode: "off" | "compare" | "on";
+  systemOneApiUrl: string;
+  systemOneModel: string;
+  parserParameters: Record<string, unknown>;
+  imageConnectionId: string | null;
+  imageModel: string;
+  imageParameters: Record<string, unknown>;
+  maxImagesPerTurn: number;
+  imageConcurrency: number;
+  includeRecentMessages: number;
+  includeCharacterContext: boolean;
+  includePersonaContext: boolean;
+  includeLorebookContext: boolean;
+  promptPrefix: string;
+  promptSuffix: string;
+  negativePrompt: string;
+  promptPresets: VisualNovelPromptPreset[];
+  /** Append character creation/source reference to character tags: Character \(Source\) */
+  originalReference: boolean;
+  /** Creation/source name (e.g. "doki doki literature club") */
+  originalCreationName: string;
+  novelAiQualityTags: boolean;
+  novelAiUseDefaultNegative: boolean;
+  customPlannerInstructions: string;
+  customCss: string;
+  ignoredTags: string;
+  displayRegexRules: string;
+  useNativeCardImages: boolean;
+  textSpeed: number;
+  autoPlayDelay: number;
+  skipMode: "read" | "all";
+  /** Presentation strength of one-shot stage effects. Default "full" keeps existing playback. */
+  effectIntensity: VisualNovelEffectIntensity;
+  /** Inline dialogue text effects (<shake>, <rainbow>, ...). Default "animated". */
+  textEffects: VisualNovelTextEffectMode;
+  /** Dialogue text size multiplier, 1 = the theme's own size. */
+  textScale: number;
+  audioDirectory: string;
+  bgmVolume: number;
+  sfxVolume: number;
+  /** Default-off speech (TTS) settings. See src/speech-config.ts. */
+  speech: SpeechSettings;
+};
+
+export const DEFAULT_CONFIG: VisualNovelConfig = {
+  themePreset: "lumiverse",
+  enabled: true,
+  autoEnter: false,
+  mode: "standard",
+  sceneImageFit: "cover",
+  debugLogging: false,
+  generateImages: true,
+  referenceAnchoring: true,
+  referenceSource: "captured",
+  generateChoices: true,
+  parserConnectionId: null,
+  systemOneMode: "off",
+  systemOneApiUrl: "https://api.typesafe.ai",
+  systemOneModel: "jev-latest",
+  parserParameters: {},
+  imageConnectionId: null,
+  imageModel: "",
+  imageParameters: {},
+  maxImagesPerTurn: 4,
+  imageConcurrency: 2,
+  includeRecentMessages: 8,
+  includeCharacterContext: true,
+  includePersonaContext: true,
+  includeLorebookContext: false,
+  promptPrefix: "masterpiece, best quality, anime visual novel scene",
+  promptSuffix: "",
+  negativePrompt: "low quality, blurry, malformed hands, text, subtitles, speech bubble, watermark, logo, frame, border",
+  promptPresets: [],
+  originalReference: false,
+  originalCreationName: "",
+  novelAiQualityTags: true,
+  novelAiUseDefaultNegative: true,
+  customPlannerInstructions: "",
+  customCss: "",
+  ignoredTags: "",
+  displayRegexRules: "",
+  useNativeCardImages: false,
+  textSpeed: 20,
+  autoPlayDelay: 2000,
+  skipMode: "read",
+  effectIntensity: "full",
+  textEffects: "animated",
+  textScale: 1,
+  audioDirectory: "",
+  bgmVolume: 0.7,
+  sfxVolume: 0.8,
+  speech: DEFAULT_SPEECH_SETTINGS,
+};
+
+function record(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function nullableString(value: unknown): string | null {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized || null;
+}
+
+function stringValue(value: unknown, fallback: string): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function bool(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function floatBetween(value: unknown, minimum: number, maximum: number, fallback: number): number {
+  if (value === null || value === undefined || value === "") return fallback;
+  const number = Number(value);
+  return Number.isFinite(number)
+    ? Math.min(maximum, Math.max(minimum, number))
+    : fallback;
+}
+
+function integer(value: unknown, minimum: number, maximum: number, fallback: number): number {
+  const number = Number(value);
+  return Number.isFinite(number)
+    ? Math.min(maximum, Math.max(minimum, Math.round(number)))
+    : fallback;
+}
+
+function promptPresetList(value: unknown): VisualNovelPromptPreset[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const presets: VisualNovelPromptPreset[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const record = raw as Record<string, unknown>;
+    const id = typeof record.id === "string" ? record.id.trim() : "";
+    const name = typeof record.name === "string" ? record.name.trim() : "";
+    if (!id || !name || seen.has(id)) continue;
+    seen.add(id);
+    presets.push({
+      id,
+      name,
+      positive: typeof record.positive === "string" ? record.positive : "",
+      negative: typeof record.negative === "string" ? record.negative : ""
+    });
+    if (presets.length >= 32) break;
+  }
+  return presets;
+}
+
+function referenceSource(value: unknown): VisualNovelReferenceSource {
+  return typeof value === "string" && (REFERENCE_SOURCES as readonly string[]).includes(value)
+    ? value as VisualNovelReferenceSource
+    : DEFAULT_CONFIG.referenceSource;
+}
+
+function effectIntensity(value: unknown): VisualNovelEffectIntensity {
+  return typeof value === "string" && (EFFECT_INTENSITIES as readonly string[]).includes(value)
+    ? value as VisualNovelEffectIntensity
+    : DEFAULT_CONFIG.effectIntensity;
+}
+
+function textEffectMode(value: unknown): VisualNovelTextEffectMode {
+  return typeof value === "string" && (TEXT_EFFECT_MODES as readonly string[]).includes(value)
+    ? value as VisualNovelTextEffectMode
+    : DEFAULT_CONFIG.textEffects;
+}
+
+function textScale(value: unknown): number {
+  const scale = floatBetween(value, TEXT_SCALE_MIN, TEXT_SCALE_MAX, DEFAULT_CONFIG.textScale);
+  return Math.round(scale * 100) / 100;
+}
+
+function sceneImageFit(value: unknown): VisualNovelSceneImageFit {
+  return typeof value === "string" && (SCENE_IMAGE_FITS as readonly string[]).includes(value)
+    ? value as VisualNovelSceneImageFit
+    : DEFAULT_CONFIG.sceneImageFit;
+}
+
+
+/**
+ * The pre-1.0 default prompt suffix duplicated camera framing as prose. The
+ * compact Inlay-style camera tags now own framing, so the exact legacy default
+ * is retired to an empty suffix; any user-customized suffix is preserved.
+ */
+const LEGACY_DEFAULT_PROMPT_SUFFIX = "wide composition, centered subject, stable eye-level camera, dialogue-safe lower frame";
+
+function retiredLegacySuffix(value: string): string {
+  return value.trim() === LEGACY_DEFAULT_PROMPT_SUFFIX ? "" : value;
+}
+
+export function normalizeConfig(value: unknown): VisualNovelConfig {
+  const input = record(value);
+  const themePreset = (THEME_PRESET_IDS as readonly string[]).includes(input.themePreset as string)
+    ? input.themePreset as VisualNovelThemePreset
+    : "lumiverse";
+  return {
+    themePreset,
+    enabled: bool(input.enabled, DEFAULT_CONFIG.enabled),
+    autoEnter: bool(input.autoEnter, DEFAULT_CONFIG.autoEnter),
+    mode: input.mode === "cyoa" ? "cyoa" : "standard",
+    sceneImageFit: sceneImageFit(input.sceneImageFit),
+    debugLogging: bool(input.debugLogging, DEFAULT_CONFIG.debugLogging),
+    generateImages: bool(input.generateImages, DEFAULT_CONFIG.generateImages),
+    referenceAnchoring: bool(input.referenceAnchoring, DEFAULT_CONFIG.referenceAnchoring),
+    referenceSource: referenceSource(input.referenceSource),
+    generateChoices: bool(input.generateChoices, DEFAULT_CONFIG.generateChoices),
+    parserConnectionId: nullableString(input.parserConnectionId),
+    systemOneMode: input.systemOneMode === "compare" || input.systemOneMode === "on" ? input.systemOneMode : "off",
+    systemOneApiUrl: stringValue(input.systemOneApiUrl, DEFAULT_CONFIG.systemOneApiUrl).trim() || DEFAULT_CONFIG.systemOneApiUrl,
+    systemOneModel: stringValue(input.systemOneModel, DEFAULT_CONFIG.systemOneModel).trim() || DEFAULT_CONFIG.systemOneModel,
+    parserParameters: record(input.parserParameters),
+    imageConnectionId: nullableString(input.imageConnectionId),
+    imageModel: stringValue(input.imageModel, DEFAULT_CONFIG.imageModel),
+    imageParameters: record(input.imageParameters),
+    maxImagesPerTurn: integer(input.maxImagesPerTurn, 0, 12, DEFAULT_CONFIG.maxImagesPerTurn),
+    imageConcurrency: integer(input.imageConcurrency, 1, 6, DEFAULT_CONFIG.imageConcurrency),
+    includeRecentMessages: integer(input.includeRecentMessages, 0, 30, DEFAULT_CONFIG.includeRecentMessages),
+    includeCharacterContext: bool(input.includeCharacterContext, DEFAULT_CONFIG.includeCharacterContext),
+    includePersonaContext: bool(input.includePersonaContext, DEFAULT_CONFIG.includePersonaContext),
+    includeLorebookContext: bool(input.includeLorebookContext, DEFAULT_CONFIG.includeLorebookContext),
+    promptPrefix: stringValue(input.promptPrefix, DEFAULT_CONFIG.promptPrefix),
+    promptSuffix: retiredLegacySuffix(stringValue(input.promptSuffix, DEFAULT_CONFIG.promptSuffix)),
+    negativePrompt: stringValue(input.negativePrompt, DEFAULT_CONFIG.negativePrompt),
+    promptPresets: promptPresetList(input.promptPresets),
+    originalReference: bool(input.originalReference, DEFAULT_CONFIG.originalReference),
+    originalCreationName: stringValue(input.originalCreationName, DEFAULT_CONFIG.originalCreationName).trim(),
+    novelAiQualityTags: bool(input.novelAiQualityTags, DEFAULT_CONFIG.novelAiQualityTags),
+    novelAiUseDefaultNegative: bool(input.novelAiUseDefaultNegative, DEFAULT_CONFIG.novelAiUseDefaultNegative),
+    customPlannerInstructions: stringValue(input.customPlannerInstructions, DEFAULT_CONFIG.customPlannerInstructions),
+    customCss: stringValue(input.customCss, DEFAULT_CONFIG.customCss),
+    ignoredTags: stringValue(input.ignoredTags, DEFAULT_CONFIG.ignoredTags),
+    displayRegexRules: stringValue(input.displayRegexRules, DEFAULT_CONFIG.displayRegexRules),
+    useNativeCardImages: bool(input.useNativeCardImages, DEFAULT_CONFIG.useNativeCardImages),
+    textSpeed: integer(input.textSpeed, 0, 100, DEFAULT_CONFIG.textSpeed),
+    autoPlayDelay: integer(input.autoPlayDelay, 500, 10000, DEFAULT_CONFIG.autoPlayDelay),
+    skipMode: input.skipMode === "all" ? "all" : "read",
+    effectIntensity: effectIntensity(input.effectIntensity),
+    textEffects: textEffectMode(input.textEffects),
+    textScale: textScale(input.textScale),
+    audioDirectory: stringValue(input.audioDirectory, DEFAULT_CONFIG.audioDirectory).trim(),
+    bgmVolume: floatBetween(input.bgmVolume, 0, 1, DEFAULT_CONFIG.bgmVolume),
+    sfxVolume: floatBetween(input.sfxVolume, 0, 1, DEFAULT_CONFIG.sfxVolume),
+    speech: normalizeSpeechSettings(input.speech),
+  };
+}
