@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 
 const manifest = JSON.parse(readFileSync("spindle.json", "utf8"));
 assert.equal(manifest.identifier, "lumiglyphics");
+assert.equal(manifest.github, "https://github.com/drinkwaterdrink/Lumiglyphics");
+assert.equal(manifest.homepage, "https://github.com/drinkwaterdrink/Lumiglyphics#readme");
 assert.equal(manifest.version, JSON.parse(readFileSync("package.json", "utf8")).version);
 for (const entry of [manifest.entry_backend, manifest.entry_frontend]) assert.ok(existsSync(entry), `Missing entry ${entry}`);
 const backend = readFileSync(manifest.entry_backend, "utf8");

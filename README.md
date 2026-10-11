@@ -1,6 +1,6 @@
 # Lumiglyphics
 
-Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a local development build, version `0.1.0-beta.1`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance.
+Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.1.0-beta.1`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance.
 
 Open **Image prompts** in the visual novel to inspect each prepared picture's positive and negative prompts, provider, model, safe parameters and reference summary. With **Review before generating** enabled (the default), edit a picture and choose **Generate this**, or **Skip**. You can continue reading while a picture waits. Matching prompts remain separate in review mode. Parameters are JSON overrides for this picture; omitted fields remain host managed.
 
@@ -20,7 +20,13 @@ bun run verify
 bun run test:image-review
 ```
 
-The build writes `dist/backend.js` and `dist/frontend.js`, referenced by `spindle.json`. Lumiglyphics has a separate installation identifier and storage from Cue. Run one visual novel extension at a time during host testing. Nothing has been published to the destination GitHub repository by this local build.
+The build writes `dist/backend.js` and `dist/frontend.js`, referenced by `spindle.json`. Lumiglyphics has a separate installation identifier and storage from Cue. Run one visual novel extension at a time during host testing.
+
+## Test in Lumiverse
+
+Install from `https://github.com/drinkwaterdrink/Lumiglyphics` using the `main` branch in Lumiverse's extension installer. Approve the requested permissions, enable Lumiglyphics, and disable Cue during testing. Open the Lumiglyphics settings, select your existing planning and image connections, and enable generated pictures. Start with one picture per reply and review enabled, then open the visual novel and choose **Image prompts** to edit and generate a waiting picture.
+
+The host builds the repository's TypeScript source during installation; Bun 1.4.0 or newer is required by the pinned dependencies. If installation fails, keep the build/error log so the failing host step can be diagnosed. The local build checks do not replace testing inside your Lumiverse installation.
 
 ## Upstream functionality
 

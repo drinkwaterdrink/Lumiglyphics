@@ -1,6 +1,6 @@
 # Lumiglyphics implementation status
 
-Implemented locally as `0.1.0-beta.1` on `codex/image-review`, based on the pinned Cue 1.7.0-beta import (`a04f73b`). Origin points to the requested Lumiglyphics repository. Nothing has been pushed or published.
+Implemented as `0.1.0-beta.1` on `codex/image-review`, based on the pinned Cue 1.7.0-beta import (`a04f73b`). Origin points to the requested Lumiglyphics repository. The user subsequently authorized publishing the tested version on GitHub for live testing. The initial local verification below precedes that publication; the README contains installation instructions for `main`.
 
 ## Delivered
 
