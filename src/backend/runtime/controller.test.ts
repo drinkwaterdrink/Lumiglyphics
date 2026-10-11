@@ -1,3 +1,5 @@
+import { normalizeConfig } from "../../config.js";
+import { templateSnapshot } from "../../shared/image-templates.js";
 import { describe, expect, test } from "bun:test";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { AssetJobSchema, TurnPlanSchema, type AssetJob } from "../../shared/contracts.js";
@@ -690,4 +692,13 @@ describe("paragraph effects and scene ambients", () => {
     expect(() => view({ effectCues: [{ paragraphIndex: 0, effect: "unknown" }] })).toThrow();
     expect(() => view({ effectCues: [{ paragraphIndex: -1, effect: "shake" }] })).toThrow();
   });
+});
+
+
+test("cached Manga pages carry page presentation without a prepared image request", () => {
+  const manga = normalizeConfig({}).imageTemplates.find(t => t.id === "manga-page")!;
+  const pagePlan = TurnPlanSchema.parse({ ...plan, visualCues: plan.visualCues.map(c => ({ ...c, imageTemplate: templateSnapshot(manga) })) });
+  const job = { ...generatedJob(), provider: "cache", imageId: "page", imageUrl: "/images/page" };
+  const record: StoredTurnRecord = { schemaVersion: 1, speaker: "Narrator", status: "ready", plan: pagePlan, jobs: [job], updatedAt: now };
+  expect(turnView(record).assets[0]?.presentation).toBe("page");
 });

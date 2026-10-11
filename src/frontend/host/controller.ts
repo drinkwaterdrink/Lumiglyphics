@@ -848,6 +848,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     vnDebug("image sync", `p${paragraphIndex}`, `using cue p${asset.paragraphIndex}`, asset.status, asset.imageUrl);
     const loaded = await stage.setSceneImage({
       url: asset.imageUrl,
+      ...(asset.presentation ? { presentation: asset.presentation } : {}),
       alt: `Generated scene for paragraph ${asset.paragraphIndex + 1}`,
       requestId: `${turn.sourceFingerprint}:${asset.cueId}:${asset.imageId ?? asset.imageUrl}`
     });

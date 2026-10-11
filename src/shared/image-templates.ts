@@ -16,7 +16,8 @@ export const ImageTemplateSchema = z.object({
   negative: templateText,
   subjectMode: z.enum(["one", "none"]),
   framing: ImageTemplateFramingSchema,
-  referencePolicy: z.enum(["character", "none"])
+  referencePolicy: z.enum(["character", "none"]),
+  outputAspectRatio: z.enum(["connection", "9:16"]).optional()
 }).strict();
 export type ImageTemplate = z.infer<typeof ImageTemplateSchema>;
 export const ImageTemplateSnapshotSchema = ImageTemplateSchema.extend({ revision: z.string().regex(/^[a-f0-9]{8}$/) }).strict();
@@ -38,7 +39,7 @@ export const BUILTIN_IMAGE_TEMPLATES: readonly ImageTemplate[] = [
   { id: "action", name: "Story action", category: "action", enabled: true, useWhen: "A significant movement or event matters more than a facial reaction. Focus on one visible character.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "full body", referencePolicy: "character" },
   { id: "detail", name: "Detail / object", category: "detail", enabled: true, useWhen: "An important object, clue, or other close-up is the visual focus.", positive: "{{style}}\n{{action}}\n{{scene}}\n{{composition}}\n{{lighting}}\nAn object detail without people.\n{{suffix}}", negative: "{{negative}}", subjectMode: "none", framing: "close-up", referencePolicy: "none" },
   { id: "custom", name: "Custom", category: "custom", enabled: false, useWhen: "Use this when its custom instructions suit the scene.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "upper body", referencePolicy: "character" },
-  { id: "manga-page", name: "Manga page", category: "action", enabled: false, useWhen: "A visual story beat benefits from several connected panels focusing on the same visible character. Use only events already in the brief; do not invent future story developments.", subjectMode: "one", framing: "full body", referencePolicy: "character",
+  { outputAspectRatio: "9:16", id: "manga-page", name: "Manga page", category: "action", enabled: false, useWhen: "A visual story beat benefits from several connected panels focusing on the same visible character. Use only events already in the brief; do not invent future story developments.", subjectMode: "one", framing: "full body", referencePolicy: "character",
     positive: `{{style}}
 IDENTITY CONTROL:
 Keep this subject recognizable throughout the page: {{subjects}}. Preserve face, hair, body proportions, skin tone, accessories and wardrobe. If a character image reference is supplied, use it as the visual authority. Do not add unrelated named characters.
@@ -54,7 +55,7 @@ STYLE AND LIGHTING:
 {{lighting}}
 Strong ink contours, manga shading, halftone textures, clean negative space, expressive contrast and a coherent color palette. Keep panel gutters clear and identity and clothing consistent.
 PRODUCTION:
-A detailed, editorially finished portrait-oriented page. Use a portrait aspect ratio in image parameters when supported by the selected model. This is one page image, not separate images per panel.
+A detailed, editorially finished tall portrait page, composed for a mobile screen. Keep every panel and gutter inside the page, with modest outer margins and no oversized white border. Follow the requested output dimensions. This is one page image, not separate images per panel.
 {{suffix}}`,
     negative: "identity drift, different face between panels, changed hairstyle, changed accessories, inconsistent wardrobe, repeated panel composition, broken reading order, extra limbs, fused hands, unreadable lettering, misspelled dialogue, random text, covered face, flat poses, weak contrast, muddy colors, photorealistic rendering, 3D CGI, watermark, logo" }
 ];
@@ -68,7 +69,7 @@ export function upgradeImageTemplates(value: unknown): ImageTemplate[] {
   if (!templates.some(t => t.id === "manga-page") && templates.length < 32) {
     templates.push({ ...BUILTIN_IMAGE_TEMPLATES.find(t => t.id === "manga-page")! });
   }
-  return templates;
+  return templates.map(t => t.id === "manga-page" && t.outputAspectRatio === undefined ? { ...t, outputAspectRatio: "9:16" as const } : t);
 }
 
 export function templateSnapshot(template: ImageTemplate): ImageTemplateSnapshot {

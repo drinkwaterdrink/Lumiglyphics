@@ -154,6 +154,7 @@ export interface VnStageOptions extends VnStageCallbacks {
 }
 
 export interface VnSceneImageRequest {
+  presentation?: "page";
   url: string;
   alt?: string;
   requestId?: string;
@@ -420,6 +421,8 @@ export class VnStage {
   private readonly root: HTMLElement;
   private readonly scene: HTMLElement;
   private readonly sceneImages: HTMLImageElement[];
+  private pageBackdrop?: HTMLImageElement;
+  private pageViewButton?: HTMLButtonElement;
   private activeImageEl: HTMLImageElement;
   private incomingImageEl: HTMLImageElement;
   private sceneImage: HTMLImageElement;
@@ -985,6 +988,7 @@ export class VnStage {
 
     const image: VnSceneImage = {
       url: request.url,
+      ...(request.presentation ? { presentation: request.presentation } : {}),
       alt: request.alt ?? "",
       requestId: request.requestId ?? `vn-image-${++this.imageRequestSequence}`,
     };
@@ -1425,9 +1429,46 @@ export class VnStage {
     this.incomingImageEl.dataset.vnEmpty = "true";
 
     this.currentDisplayedUrl = null;
+    this.setPagePresentation(null);
+  }
+
+  private setPagePresentation(image: VnSceneImage | null): void {
+    const page = image?.presentation === "page";
+    this.root.dataset.vnPage = String(page);
+    if (!page) this.root.dataset.vnPageFocus = "false";
+    if (page && !this.pageBackdrop) {
+      this.pageBackdrop = document.createElement("img");
+      this.pageBackdrop.dataset.vnPageBackdrop = "";
+      this.pageBackdrop.alt = "";
+      this.pageBackdrop.setAttribute("aria-hidden", "true");
+      this.scene.prepend(this.pageBackdrop);
+      const button = document.createElement("button");
+      button.type = "button"; button.dataset.vnPageView = "";
+      button.textContent = "⛶";
+      button.setAttribute("aria-label", "View whole page");
+      button.title = "View whole page";
+      button.setAttribute("aria-pressed", "false");
+      const toggle = () => {
+        this.toggleAutoPlay(false); this.toggleSkip(false);
+        const focused = this.root.dataset.vnPageFocus !== "true";
+        this.root.dataset.vnPageFocus = String(focused);
+        button.setAttribute("aria-pressed", String(focused));
+        button.setAttribute("aria-label", focused ? "Return to reading" : "View whole page");
+        button.title = focused ? "Return to reading" : "View whole page";
+      };
+      button.addEventListener("click", event => { event.stopPropagation(); toggle(); });
+      button.addEventListener("keydown", event => { if (event.key === "Escape" && this.root.dataset.vnPageFocus === "true") { event.stopPropagation(); toggle(); } });
+      this.pageViewButton = button; this.root.append(button);
+    }
+    if (this.pageBackdrop) { this.pageBackdrop.hidden = !page; if (page) this.pageBackdrop.src = image!.url; else this.pageBackdrop.removeAttribute("src"); }
+    if (this.pageViewButton) {
+      this.pageViewButton.hidden = !page;
+      if (this.root.dataset.vnPageFocus !== "true") { this.pageViewButton.setAttribute("aria-pressed", "false"); this.pageViewButton.setAttribute("aria-label", "View whole page"); this.pageViewButton.title = "View whole page"; }
+    }
   }
 
   private updateSceneImage(displayedImage: VnSceneImage): void {
+    this.setPagePresentation(displayedImage);
     if (this.currentDisplayedUrl === displayedImage.url) {
       this.activeImageEl.alt = displayedImage.alt;
       return;
@@ -1515,7 +1556,7 @@ export class VnStage {
     });
 
     this.root.addEventListener("wheel", (event) => {
-      if (this.dialogueSheet?.isHidden() || (this.root.dataset.vnAdjustableSheet === "true" && event.target instanceof Element && event.target.closest("[data-vn-dialogue]"))) return;
+      if (this.root.dataset.vnPageFocus === "true" || this.dialogueSheet?.isHidden() || (this.root.dataset.vnAdjustableSheet === "true" && event.target instanceof Element && event.target.closest("[data-vn-dialogue]"))) return;
       if (this.isBacklogOpen) return;
       if (event.deltaY < -30) {
         this.openBacklog();
@@ -1523,13 +1564,13 @@ export class VnStage {
     }, { passive: true });
 
     this.root.addEventListener("click", (event) => {
-      if (this.dialogueSheet?.isHidden() || (this.root.dataset.vnAdjustableSheet === "true" && event.target instanceof Element && event.target.closest("[data-vn-dialogue-text]"))) return;
+      if (this.root.dataset.vnPageFocus === "true" || this.dialogueSheet?.isHidden() || (this.root.dataset.vnAdjustableSheet === "true" && event.target instanceof Element && event.target.closest("[data-vn-dialogue-text]"))) return;
       if (this.isBacklogOpen) return;
       if (!isInteractiveTarget(event.target)) this.advance();
     });
 
     this.root.addEventListener("keydown", (event) => {
-      if (this.dialogueSheet?.isHidden()) return;
+      if (this.root.dataset.vnPageFocus === "true" || this.dialogueSheet?.isHidden()) return;
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
       if (this.isBacklogOpen) {
         if (event.key === "Escape") {

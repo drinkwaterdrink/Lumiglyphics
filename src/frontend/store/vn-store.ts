@@ -65,6 +65,8 @@ export interface VnChoice {
 }
 
 export interface VnSceneImage {
+  /** Complete page composition: keep panels intact independently of scene fit. */
+  presentation?: "page";
   url: string;
   alt: string;
   requestId: string;

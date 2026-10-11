@@ -1960,4 +1960,17 @@ ${VN_TEXT_EFFECTS_CSS}
   [data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-dialogue] { overflow-y: auto; }
   [data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-dialogue-text] { flex: 1 1 0; min-height: 3.2em; }
 }
+
+/* Complete pages keep every panel, even when ordinary pictures fill the stage. */
+[data-vn-root][data-vn-page="true"] [data-vn-scrim] { display: none; }
+[data-vn-page-backdrop] { position: absolute; inset: -5%; width: 110%; height: 110%; object-fit: cover; filter: blur(24px) brightness(.35); pointer-events: none; opacity: .7; }
+[data-vn-root][data-vn-page="true"] [data-vn-scene] { top: 4.5rem; bottom: calc(var(--vn-sheet-height, 11.5rem) + 3.5rem + var(--vn-sheet-keyboard-inset, 0px)); }
+[data-vn-root][data-vn-page="true"] [data-vn-scene-image] { object-fit: contain !important; transform: none !important; }
+[data-vn-page-view] { position: absolute; z-index: 8; top: 4.7rem; left: .65rem; width: 44px; height: 44px; padding: 0; border: 1px solid var(--vn-panel-border); border-radius: var(--vn-button-radius, .65rem); background: var(--vn-panel-bg); color: var(--vn-text); font-size: 1.4rem; cursor: pointer; }
+[data-vn-page-view]:focus-visible { outline: 2px solid var(--vn-accent); outline-offset: 3px; }
+[data-vn-root][data-vn-page="true"][data-vn-text-hidden="true"] [data-vn-scene],
+[data-vn-root][data-vn-page="true"][data-vn-page-focus="true"] [data-vn-scene] { bottom: 0; }
+[data-vn-root][data-vn-page-focus="true"] [data-vn-narrative],
+[data-vn-root][data-vn-page-focus="true"] [data-vn-interaction],
+[data-vn-root][data-vn-page-focus="true"] [data-vn-composer] { visibility: hidden; pointer-events: none; }
 `;

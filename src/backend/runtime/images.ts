@@ -1,3 +1,4 @@
+import { templateOutputParameters } from "./template-output.js";
 import { applyAttireOverride } from "./attire.js";
 export { applyAttireOverride, isClothingTag, cleanClothingFromPhrase } from "./attire.js";
 import type { SpindleAPI } from "lumiverse-spindle-types";
@@ -408,7 +409,7 @@ export function sceneImageIdentityFor(
       pose: { id: brief.subjectMode === "none" ? "none" : cue.poseExpressionId ?? "idle", suffix: "" },
       action: brief.action || null,
       framing: { framing: brief.framing, angle: "eye level", perspective: "straight-on" },
-      request: { prompt: compiled.prompt, negativePrompt: compiled.negativePrompt, provider, connectionId: connectionId ? workflowId ? `${connectionId}::${workflowId}` : connectionId : null, model: config.imageModel, parameters: userImageParameters(config), promptSyntax: config.imagePromptFormat, ...(profileRevision ? { profileRevision } : {}),
+      request: { prompt: compiled.prompt, negativePrompt: compiled.negativePrompt, provider, connectionId: connectionId ? workflowId ? `${connectionId}::${workflowId}` : connectionId : null, model: config.imageModel, parameters: templateOutputParameters(cue.imageTemplate, provider, userImageParameters(config), {}), promptSyntax: config.imagePromptFormat, ...(profileRevision ? { profileRevision } : {}),
         referenceAnchoring: referenceAnchoringEnabled(config) && cueUsesCharacterReference(cue),
         ...(referenceAnchoringEnabled(config) && cueUsesCharacterReference(cue) ? { reference: reference ?? { source: "none" as const }, ...(config.referenceSource === "card" ? { referenceSource: "card" as const } : {}) } : {}) }
     };
@@ -1181,7 +1182,7 @@ export async function generateAssets(
             ...input,
             ...(selected?.id ? { connection_id: selected.id } : {}),
             ...(config.imageModel || selected?.model ? { model: config.imageModel || selected!.model } : {}),
-            parameters: { ...(selected?.default_parameters ?? {}), ...input.parameters }
+            parameters: { ...templateOutputParameters(cue.imageTemplate, selected?.provider ?? provider, config.imageParameters, selected?.default_parameters ?? {}), ...input.parameters }
           } : input;
           if (cue.imageTemplate) {
             frozen = applyImageEdits(frozen, { prompt, negativePrompt });
@@ -1231,7 +1232,7 @@ export async function generateAssets(
               const nextNai = provider === "novelai" ? compileNovelAiRequest(config, scene, nextCue, characterAppearance) : null;
               const updated = applyImageEdits(frozen, { prompt: nextCompiled.prompt, negativePrompt: nextCompiled.negativePrompt });
               const request: ImageGenerationRequest = { ...updated, includeDataUrl: wantsCapture, parameters: {
-                ...withoutImageReferences(updated.parameters ?? {}),
+                ...withoutImageReferences({ ...templateOutputParameters(nextCue.imageTemplate, selected?.provider ?? provider, config.imageParameters, selected?.default_parameters ?? {}), ...effectiveParameters }),
                 ...(nextPortrait && provider ? referenceParametersFor(provider, nextPortrait, config) : {}),
                 ...(nextNai?.parameters ?? {})
               } };

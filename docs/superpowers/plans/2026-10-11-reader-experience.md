@@ -10,7 +10,7 @@
 
 **Spec:** ../specs/2026-10-11-reader-experience-design.md, plus the user's scenario-card clarification and supplied inline-dossier examples as inspiration only.
 
-**Status:** Implementation underway on `Testing`, 2026-10-11. Scenario-subject repair is pushed as `7c62d30`; adjustable dialogue controls and scoped resume are delivered in beta.2. The remainder of A and packages C–G remain pending. See `docs/review-evidence/2026-10-11-reader-mobile.md` for verified scope and runtime limitations. Unchecked steps below remain future work.
+**Status:** Implementation underway on `Testing`, 2026-10-11. Scenario-subject repair is pushed as `7c62d30`; package B is delivered with continuous resize, themed compact controls and scoped resume. Feedback increments through beta.5 add consolidated prompt settings, manual/dynamic template controls and portrait Manga page display. The remainder of A and packages C–G remain pending. Latest verification: `docs/review-evidence/2026-10-11-manga-fit.md`. Unchecked steps below remain future work.
 
 ## Global constraints
 

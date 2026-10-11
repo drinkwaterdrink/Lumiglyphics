@@ -415,6 +415,7 @@ function assetView(record: StoredTurnRecord, job: StoredTurnRecord["jobs"][numbe
   return {
     jobId: job.jobId,
     cueId: cue?.cueId ?? job.jobId,
+    ...((record.imageRequests?.filter(r => r.jobId === job.jobId && r.state === "approved").at(-1)?.imagePromptMetadata?.template ?? cue?.imageTemplate)?.id === "manga-page" ? { presentation: "page" as const } : {}),
     paragraphIndex: job.paragraphIndex,
     status: job.status,
     ...(job.provider === CACHE_JOB_PROVIDER ? { source: "cache" as const } : {}),

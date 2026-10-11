@@ -150,5 +150,37 @@ try {
     await scaled.screenshot({ path: `.cache/mobile-reader/paper-${scale}.png` });
     await scaled.close();
   }
+  const manga = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+  await manga.goto(`http://127.0.0.1:${server.port}/?preset=arcana`);
+  await manga.evaluate(async () => {
+    const stage = (window as any).readingFixture.stage;
+    stage.setReaderPreferences({ adjustableSheetEnabled: true, layout: "overlay", sheetSize: "reading", backgroundOpacity: .7 });
+    stage.setSceneImageFit("cover");
+    const canvas = document.createElement("canvas"); canvas.width = 864; canvas.height = 1536;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "#ded7cd"; ctx.fillRect(0, 0, 864, 1536);
+    ctx.strokeStyle = "#183c47"; ctx.lineWidth = 12;
+    for (let i = 0; i < 6; i++) { const x = (i % 2) * 420 + 18, y = Math.floor(i / 2) * 490 + 18; ctx.strokeRect(x, y, 400, 470); ctx.fillStyle = "#183c47"; ctx.font = "60px serif"; ctx.fillText(`Panel ${i + 1}`, x + 35, y + 200); }
+    await stage.setSceneImage({ url: canvas.toDataURL(), alt: "Six-panel page", requestId: "manga", presentation: "page" });
+  });
+  const pageImage = manga.locator('[data-vn-scene-image][data-vn-layer="active"]');
+  assert.equal(await pageImage.evaluate(el => getComputedStyle(el).objectFit), "contain", "whole page survives fill-stage preference");
+  const pageArea = await manga.locator('[data-vn-scene]').boundingBox();
+  const sheetArea = await manga.locator('[data-vn-dialogue]').boundingBox();
+  assert.ok(pageArea && sheetArea && pageArea.y + pageArea.height <= sheetArea.y, "text does not obscure the page");
+  assert.equal(await manga.locator('[data-vn-page-backdrop]').isVisible(), true);
+  await manga.screenshot({ path: ".cache/mobile-reader/manga-page.png" });
+  const progressBefore = await manga.locator('[data-vn-progress]').textContent();
+  await manga.getByRole('button', { name: 'View whole page', exact: true }).click();
+  assert.equal(await manga.locator('[data-vn-dialogue]').isVisible(), false);
+  await manga.locator('[data-vn-scene]').click();
+  assert.equal(await manga.locator('[data-vn-progress]').textContent(), progressBefore, "page inspection does not advance");
+  await manga.getByRole('button', { name: 'Return to reading', exact: true }).press('Escape');
+  assert.equal(await manga.locator('[data-vn-dialogue]').isVisible(), true);
+  await manga.evaluate(async () => (window as any).readingFixture.stage.setSceneImage({ url: 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=', alt: 'Ordinary scene', requestId: 'normal' }));
+  await manga.waitForTimeout(350);
+  assert.equal(await manga.getByRole('button', { name: 'View whole page', exact: true }).count(), 0);
+  assert.equal(await manga.locator('[data-vn-scene-image][data-vn-layer="active"]').evaluate(el => getComputedStyle(el).objectFit), "cover", "ordinary scene fit returns");
+  await manga.close();
   console.log("mobile reader browser checks passed");
 } finally { await browser.close(); server.stop(true); }

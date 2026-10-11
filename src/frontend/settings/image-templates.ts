@@ -23,6 +23,7 @@ export class ImageTemplateEditor {
       <details data-template-composition><summary>Composition and context guidance</summary><div data-template-fields><label data-field><span>Category</span><select data-t="category" aria-label="Template category"><option value="portrait">Character portrait</option><option value="environment">Environment</option><option value="action">Story action</option><option value="detail">Detail / object</option><option value="custom">Custom</option></select></label>
       <label data-field><span>When to use</span><textarea data-t="useWhen" aria-label="When to use template" maxlength="1000"></textarea><small>The story reader uses this guidance when dynamic selection is enabled.</small></label>
       <div data-row><label data-field><span>Visible subjects</span><select data-t="subjectMode" aria-label="Visible subjects"><option value="one">One character</option><option value="none">No people</option></select></label><label data-field><span>Framing</span><select data-t="framing" aria-label="Framing"><option>portrait</option><option>upper body</option><option>full body</option><option>wide</option><option>close-up</option></select></label></div>
+      <label data-field><span>Output shape</span><select data-t="outputAspectRatio" aria-label="Template output shape"><option value="connection">Use connection settings</option><option value="9:16">Tall portrait (9:16)</option></select><small>OpenRouter and Google use an aspect ratio; NanoGPT requests 864 × 1536. Model support varies. Explicit image parameters override this default.</small></label>
       <label data-field><span>Reference policy</span><select data-t="referencePolicy" aria-label="Reference policy"><option value="character">Use character reference when available</option><option value="none">No image references</option></select><small>No-people templates always omit character references.</small></label>
       </div></details><label data-field><span>Positive template</span><textarea data-t="positive" aria-label="Template positive prompt" maxlength="8000" spellcheck="false"></textarea></label>
       <label data-field><span>Negative template</span><textarea data-t="negative" aria-label="Template negative prompt" maxlength="8000" spellcheck="false"></textarea></label>
@@ -98,7 +99,7 @@ export class ImageTemplateEditor {
     const template = this.current();
     for (const field of this.host.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("[data-t]")) {
       const value = template?.[field.dataset.t as keyof ImageTemplate];
-      if (field instanceof HTMLInputElement && field.type === "checkbox") field.checked = Boolean(value); else field.value = String(value ?? "");
+      if (field instanceof HTMLInputElement && field.type === "checkbox") field.checked = Boolean(value); else field.value = String(value ?? (field.dataset.t === "outputAspectRatio" ? "connection" : ""));
       field.disabled = !template;
     }
     this.el<HTMLSelectElement>('[data-t="referencePolicy"]').disabled = !template || template.subjectMode === "none";
