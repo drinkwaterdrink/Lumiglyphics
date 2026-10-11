@@ -112,7 +112,7 @@ describe("identity propagation", () => {
     expect(scene.cast).toEqual(["Mira"]);
     expect(scene.cast).toHaveLength(1);
     // The planner is instructed to allow exactly one protagonist and no crowd.
-    expect(captured.systemMessage).toContain("EXACTLY ONE protagonist");
+    expect(result.plan.visualCues[0]?.imageTemplate?.subjectMode).toBe("one");
     expect(captured.systemMessage).toContain("Never depict a second character, a crowd");
     // Free-form action/expression/promptDelta from the planner are dropped; pose is deterministic.
     expect(cue.action).toBeNull();

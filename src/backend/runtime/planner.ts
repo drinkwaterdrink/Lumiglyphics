@@ -52,6 +52,7 @@ import {
 } from "../../shared/identity.js";
 import { loadVisualContext, type VisualContextDiagnostics, type VisualContextSnapshot } from "./context.js";
 import type { SimTrackerEvidence } from "./simtracker.js";
+import { resolveImageTemplate } from "../../shared/image-templates.js";
 import { resolvePlannerConnection, type ResolvedPlannerConnection } from "./connections.js";
 import { normalizeStageEffect, normalizeAmbientEffect, deriveWeatherAmbient } from "./planner-effects.js";
 import { getAudioCatalog, getAudioCatalogPromptSummary } from "./audio-catalog.js";
@@ -114,6 +115,10 @@ const PlannerSceneSchema = z.object({
 
 const PlannerCueSchema = z.object({
   paragraphIndex: z.number().int().nonnegative(),
+  templateId: z.string().max(96).optional(),
+  templateReason: z.string().max(300).optional(),
+  visualDescription: z.string().max(4000).optional(),
+  visualFocus: z.string().max(1000).optional(),
   action: z.union([ActionPropSchema, z.string().trim()]).nullable().optional(),
   expression: z.string().trim().nullable().optional(),
   character: z.string().trim().nullable().optional(),
@@ -279,8 +284,9 @@ function plannerInstruction(config: VisualNovelConfig, visualContext?: VisualCon
     "Paragraph indexes are zero-based. scenes must ALWAYS contain at least one scene with startParagraph: 0. Later scene starts must increase.",
     "If continuing the current setting without a major jump, set boundary.claimedNewScene: false and boundary.reason: 'none'. Only set claimedNewScene: true for a true location change, major time jump, or environment replacement.",
     "Do not create a new scene for emotion, pose, dialogue, camera, or action changes.",
-    "Keep the camera fixed at eye level with the companion centered and the lower quarter clear for dialogue UI.",
-    "EXACTLY ONE protagonist / character is visible in every frame. Never depict a second character, a crowd, a bystander, or any other person. The companion is always the single centered subject.",
+    "Use the selected template's framing. Keep the lower quarter clear for dialogue UI.",
+    "Portrait and action templates depict one visible companion. Environment and detail templates depict no people. Never depict a second character, a crowd, or bystanders; choose a single-subject viewpoint when an event involves several people. Preserve story character continuity independently of who is visible in the selected picture.",
+    inputTemplateInstructions(config),
     "basePrompt must be concise comma-separated Danbooru-style scene tags for persistent location, time, weather, lighting, and background elements. Include no camera or composition prose, character names, or character description. The companion's appearance belongs only in the single characters entry.",
     "environment: For an initial scene or true location change, specify full details: location, timeOfDay, weather, lighting, description, persistentElements. For continuing scenes, retain the established setting without rewriting it with generic atmospheric fluff that drops established props.",
     "environmentChanges: On continuing scenes, use 'environmentChanges' for intentional visual state mutations: {description?, lighting?, timeOfDay?, weather?, addElements?, removeElements?, replaceElements?: [{from, to}], clearElements?, clearLighting?, clearWeather?}. Setting lighting, timeOfDay, or weather to null (or using clearLighting/clearWeather) explicitly clears the field. Setting description replaces it (it cannot be cleared; when lighting/time/weather change without a description, the scene description is re-synthesized automatically). Location changes belong only in boundary and environment.location.",
@@ -305,7 +311,7 @@ function plannerInstruction(config: VisualNovelConfig, visualContext?: VisualCon
     "action: When the visible character interacts with a prominent visible prop or performs a bounded physical gesture, specify 'action' (e.g. 'holding brass key in right raised hand', or {action:'holding',object:'brass key',relationship:'in right raised hand'}); otherwise null. Free-form prose and injection tokens are forbidden.",
     "speakers: Attribute EVERY paragraph index to its literal on-screen nameplate name. Use the character's actual name for their dialogue and actions. When the text is written from the player's first-person point of view, use the player/persona name. Use \"Narrator\" for omniscient scene narration that belongs to no character. Never use the story or scenario card title as a speaker name.",
     hasAudio ? audioInstructions.join("\n") : "",
-    `Shape: {effects:[{paragraphIndex,effect}],scenes:[{startParagraph,boundary:{claimedNewScene,reason,location,timeOfDay,majorTimeJump,environmentReplacement,forced},environment:{location,timeOfDay,weather,lighting,description,persistentElements,removedElements?},environmentChanges?:{description?,lighting?,timeOfDay?,weather?,addElements?,removeElements?,replaceElements?:[{from,to}],clearElements?,clearLighting?,clearWeather?},cast,character?,characterId?,attire?,ambient?,basePrompt,compositionLock}],cues:[{paragraphIndex,expression,action?,character?,characterId?,attire?,effect?${hasAudio ? ",bgm?,sfx?" : ""}}],choices:[{label,submission}],characters:[{name,description,species?,anatomy?,characterId?,aliases?,subjectCategory?}],speakers:[{paragraphIndex,name}]}`,
+    `Shape: {effects:[{paragraphIndex,effect}],scenes:[{startParagraph,boundary:{claimedNewScene,reason,location,timeOfDay,majorTimeJump,environmentReplacement,forced},environment:{location,timeOfDay,weather,lighting,description,persistentElements,removedElements?},environmentChanges?:{description?,lighting?,timeOfDay?,weather?,addElements?,removeElements?,replaceElements?:[{from,to}],clearElements?,clearLighting?,clearWeather?},cast,character?,characterId?,attire?,ambient?,basePrompt,compositionLock}],cues:[{paragraphIndex,templateId,templateReason,visualDescription,visualFocus?,expression,action?,character?,characterId?,attire?,effect?${hasAudio ? ",bgm?,sfx?" : ""}}],choices:[{label,submission}],characters:[{name,description,species?,anatomy?,characterId?,aliases?,subjectCategory?}],speakers:[{paragraphIndex,name}]}`,
     config.customPlannerInstructions ? config.customPlannerInstructions.trim() : ""
   ].filter(Boolean).join("\n");
 }
@@ -558,6 +564,16 @@ function normalizeScene(value: unknown, defaultLoc?: string): unknown {
   };
 }
 
+function inputTemplateInstructions(config: VisualNovelConfig): string {
+  const selected = resolveImageTemplate(config).template;
+  const templates = config.dynamicImageTemplates ? config.imageTemplates.filter(template => template.enabled) : [selected];
+  return [
+    config.dynamicImageTemplates ? "Choose templateId from this enabled catalog for each meaningful visual cue. New locations favor environment, reactions favor portrait, motion favors action, focal props favor detail. A category change alone does not justify a new image." : `Use templateId ${selected.id} on every cue. Dynamic selection is off.`,
+    "Template catalog (Use when guidance): " + JSON.stringify(templates.map(t => ({ id: t.id, name: t.name, category: t.category, useWhen: t.useWhen, subjectMode: t.subjectMode, framing: t.framing }))),
+    "templateReason is a short decision label, not hidden reasoning. visualDescription is a grounded visible event, with only the selected visible subject for portrait/action. visualFocus names the actual object for detail. Do not include character actions in environment descriptions. Resolve usable appearance from reference evidence; retain saved identity and separate temporary wardrobe/action from lasting traits. Report no invented identity facts."
+  ].join("\n");
+}
+
 function normalizeCue(value: unknown): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const record = value as Record<string, unknown>;
@@ -570,6 +586,10 @@ function normalizeCue(value: unknown): unknown {
     ?? 0;
   return {
     paragraphIndex: Math.max(0, Math.floor(rawPIdx)),
+    ...(typeof record.templateId === "string" ? { templateId: record.templateId.trim().slice(0, 96) } : {}),
+    ...(typeof record.templateReason === "string" ? { templateReason: record.templateReason.trim().slice(0, 300) } : {}),
+    ...(typeof record.visualDescription === "string" ? { visualDescription: record.visualDescription.trim().slice(0, 4000) } : {}),
+    ...(typeof record.visualFocus === "string" ? { visualFocus: record.visualFocus.trim().slice(0, 1000) } : {}),
     action: normalizeActionProp(record.action),
     expression: typeof record.expression === "string" ? record.expression.trim() : null,
     character: typeof record.character === "string" ? record.character.trim() : null,
@@ -2117,7 +2137,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   let lastError: unknown = null;
   planner = fallbackPlanner(input, narrative.paragraphs.length);
   usedFallback = true;
-  const useContinuation = input.config.systemOneMode === "on" && systemOne !== null && input.previousScene !== null
+  const useContinuation = !input.config.dynamicImageTemplates && resolveImageTemplate(input.config).template.category === "portrait" && input.config.systemOneMode === "on" && systemOne !== null && input.previousScene !== null
     && !systemOne.sceneChange && !systemOne.needsDescription
     && narrative.paragraphs.length <= 7
     && (Boolean(input.previousScene.identityPrompt) || isUsableIdentity(input.singleCharacter.protagonist.name, input.singleCharacter.protagonist.tags))
@@ -2347,12 +2367,18 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
       const pose = cueIsUser
         ? selectPoseExpression(POSE_EXPRESSION_CATALOGUE, cue.paragraphIndex, "", "listen")
         : selectPoseExpression(POSE_EXPRESSION_CATALOGUE, cue.paragraphIndex, paragraph?.text ?? "", cue.expression);
+      const selection = resolveImageTemplate(input.config, input.config.dynamicImageTemplates ? cue.templateId : undefined);
       return VisualCueSchema.parse({
         cueId: id("cue", `${sourceFingerprint}:${cue.paragraphIndex}:${index}`),
         paragraphIndex: cue.paragraphIndex,
         sceneId: scene.sceneId,
         sceneRevision: scene.revision,
         kind: "flattened_scene",
+        imageTemplate: selection.template,
+        imageTemplateReason: (selection.fallbackReason ?? (input.config.dynamicImageTemplates ? cue.templateReason || "Selected from story context" : "Default template; dynamic selection is off")).slice(0, 300),
+        visualDescription: cue.visualDescription ?? "",
+        visualFocus: cue.visualFocus ?? "",
+        visualSources: input.simTrackerEvidence?.sourceMessageId ? [`SimTracker:${input.simTrackerEvidence.sourceMessageId}`] : [],
         action: cueIsUser ? null : normalizeActionProp(cue.action),
         expression: null,
         poseExpressionId: pose.id,
@@ -2375,11 +2401,11 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   if (classifierVisuals) {
     // An uncertain continuation holds the current image. Keep an opening cue,
     // and preserve planner-authored changes when a full visual plan was needed.
-    if (useContinuation) cues = cues.filter((cue) => cue.paragraphIndex === 0 || systemOne!.expressions.has(cue.paragraphIndex));
+    if (useContinuation) cues = cues.filter((cue) => cue.imageTemplate?.category !== "portrait" || cue.paragraphIndex === 0 || systemOne!.expressions.has(cue.paragraphIndex));
     let previousVisual: string | undefined;
     cues = cues.filter((cue) => {
       const visual = JSON.stringify([cue.sceneId, cue.sceneRevision, cue.characterId, cue.resolvedIdentity,
-        cue.resolvedAttire, cue.poseExpressionId, cue.action]);
+        cue.resolvedAttire, cue.poseExpressionId, cue.action, cue.imageTemplate?.revision, cue.visualDescription, cue.visualFocus]);
       const changed = visual !== previousVisual;
       previousVisual = visual;
       return changed;
