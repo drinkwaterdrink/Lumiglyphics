@@ -529,6 +529,22 @@ describe("cache keys, invalidation, and object URLs", () => {
 });
 
 describe("autoplay opt-in", () => {
+  test("silent resume survives rebroadcast and still lets the next advance autoplay", async () => {
+    const { transport, controller } = rig({ settings: enabledSettings({ autoplay: true }) });
+    controller.setCursor(cursor());
+    const { done } = await dispatchPlay(controller);
+    transport.requests[0]!.resolve(audioBlob());
+    await done;
+    const resumed = cursor({ paragraphIndex: 2, text: "Resumed." });
+    controller.setCursor(resumed, { autoplay: false });
+    controller.setCursor(resumed);
+    await tick();
+    expect(transport.requests.length).toBe(1);
+    controller.setCursor(cursor({ paragraphIndex: 3, text: "Next." }));
+    await tick();
+    expect(transport.requests.length).toBe(2);
+    controller.dispose();
+  });
   test("autoplay never fires before a successful user-gesture play", async () => {
     const { transport, controller } = rig({ settings: enabledSettings({ autoplay: true }) });
     controller.setCursor(cursor());

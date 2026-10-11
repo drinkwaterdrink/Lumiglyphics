@@ -171,13 +171,13 @@ export class SpeechController {
    * message, fingerprint, paragraph, text) is a no-op so same-turn rebroadcasts
    * and image/asset updates never replay speech.
    */
-  setCursor(cursor: SpeechCursor | null): void {
+  setCursor(cursor: SpeechCursor | null, options: { autoplay?: boolean } = {}): void {
     if (this.disposed) return;
     if (cursor && this.cursor && sameCursorIdentity(this.cursor, cursor)) return;
     this.cursor = cursor;
     this.stop("cursor-changed");
     this.publishBaseline();
-    if (cursor && this.settings.autoplay && this.gestureUnlocked && this.eligible()) {
+    if (cursor && options.autoplay !== false && this.settings.autoplay && this.gestureUnlocked && this.eligible()) {
       void this.playCurrent({ auto: true });
     }
   }

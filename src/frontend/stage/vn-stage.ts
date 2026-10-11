@@ -5,6 +5,8 @@ import {
   type CustomRegexRule,
 } from "./rich-text.js";
 import { applyTextEffects, TEXT_EFFECT_LETTER_ATTRIBUTE } from "./text-effects.js";
+import { DialogueSheet } from "./dialogue-sheet.js";
+import type { ReaderPreferences } from "../../shared/reader-preferences.js";
 import {
   createInitialVnStageState,
   reduceVnStage,
@@ -124,6 +126,7 @@ export interface VnGameChoice {
 }
 
 export interface VnStageCallbacks {
+  onReaderPreferencesChange?: (preferences: ReaderPreferences) => void;
   onAdvance?: (paragraphIndex: number, inputUnlocked: boolean) => void;
   onPrevious?: (paragraphIndex: number) => void;
   onChoice?: (choice: VnChoice) => void | Promise<void>;
@@ -406,6 +409,8 @@ export class VnStage {
   readonly panelMount: HTMLElement;
   private state: VnStageState;
   private readonly callbacks: VnStageCallbacks;
+  private dialogueSheet: DialogueSheet | null = null;
+  private resumeNotice: HTMLElement | null = null;
   private readonly host: HTMLDivElement;
   private readonly shadow: ShadowRoot;
   private readonly presetStyle: HTMLStyleElement;
@@ -637,6 +642,18 @@ export class VnStage {
     this.root.dataset.vnTextScale = String(this.textScale);
   }
 
+  setReaderPreferences(preferences: ReaderPreferences): void {
+    if (!this.dialogueSheet && preferences.adjustableSheetEnabled) {
+      this.dialogueSheet = new DialogueSheet(this.root, queryRequired(this.themeRoot, "[data-vn-dialogue]"), () => {
+        this.toggleAutoPlay(false);
+        this.toggleSkip(false);
+      }, next => this.callbacks.onReaderPreferencesChange?.(next));
+    }
+    this.dialogueSheet?.setPreferences(preferences);
+  }
+
+  showReaderText(): void { this.dialogueSheet?.setHidden(false); }
+
   getTextScale(): number {
     return this.textScale;
   }
@@ -841,12 +858,40 @@ export class VnStage {
   }
 
   loadTurn(turn: VnTurnInput): void {
+    this.dialogueSheet?.setHidden(false);
+    this.resumeNotice?.remove();
+    this.resumeNotice = null;
+    if ((turn.initialParagraphIndex ?? 0) > 0) {
+      this.toggleAutoPlay(false);
+      this.toggleSkip(false);
+      this.isRewinding = true;
+    }
     this.resetZoom();
     this.ambientOverride = undefined;
     this.errorDetails = null;
     this.hostImageError = null;
     this.lastSkipStop = null;
-    this.dispatch({ type: "load-turn", turn });
+    try { this.dispatch({ type: "load-turn", turn }); }
+    finally { this.isRewinding = false; }
+    if ((turn.initialParagraphIndex ?? 0) > 0) {
+      this.completeTypewriter();
+      this.resumeNotice = document.createElement("div");
+      this.resumeNotice.dataset.vnResumeNotice = "";
+      this.resumeNotice.setAttribute("role", "status");
+      this.resumeNotice.textContent = `Resumed at paragraph ${this.state.currentParagraphIndex + 1}. `;
+      const restart = document.createElement("button");
+      restart.type = "button";
+      restart.textContent = "Start reply over";
+      restart.addEventListener("click", event => {
+        event.stopPropagation();
+        const draft = this.state.draft;
+        this.loadTurn({ ...turn, initialParagraphIndex: 0, preserveImage: true });
+        this.dispatch({ type: "set-draft", draft });
+        this.callbacks.onPrevious?.(0);
+      });
+      this.resumeNotice.append(restart);
+      this.root.append(this.resumeNotice);
+    }
     this.focus();
   }
 
@@ -963,6 +1008,7 @@ export class VnStage {
   }
 
   destroy(): void {
+    this.dialogueSheet?.destroy();
     this.clearAllTimers();
     this.resetEffects();
     if (this.crossfadeTimer !== null) {
@@ -1469,6 +1515,7 @@ export class VnStage {
     });
 
     this.root.addEventListener("wheel", (event) => {
+      if (this.dialogueSheet?.isHidden() || (this.root.dataset.vnAdjustableSheet === "true" && event.target instanceof Element && event.target.closest("[data-vn-dialogue]"))) return;
       if (this.isBacklogOpen) return;
       if (event.deltaY < -30) {
         this.openBacklog();
@@ -1476,11 +1523,13 @@ export class VnStage {
     }, { passive: true });
 
     this.root.addEventListener("click", (event) => {
+      if (this.dialogueSheet?.isHidden() || (this.root.dataset.vnAdjustableSheet === "true" && event.target instanceof Element && event.target.closest("[data-vn-dialogue-text]"))) return;
       if (this.isBacklogOpen) return;
       if (!isInteractiveTarget(event.target)) this.advance();
     });
 
     this.root.addEventListener("keydown", (event) => {
+      if (this.dialogueSheet?.isHidden()) return;
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
       if (this.isBacklogOpen) {
         if (event.key === "Escape") {
@@ -1555,7 +1604,13 @@ export class VnStage {
   private dispatch(action: VnStageAction): void {
     if (this.destroyed) return;
     const previousPhase = this.state.phase;
+    const previousIndex = this.state.currentParagraphIndex;
     this.state = reduceVnStage(this.state, action);
+    if (previousIndex !== this.state.currentParagraphIndex) {
+      this.dialogueText.scrollTop = 0;
+      this.resumeNotice?.remove();
+      this.resumeNotice = null;
+    }
     this.render(previousPhase);
   }
 

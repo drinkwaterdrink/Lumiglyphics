@@ -1,6 +1,6 @@
 # Lumiglyphics reader experience — proposed design
 
-Status: reviewed planning specification, 2026-10-11. Planning only; product implementation has not started.
+Status: implementation underway on Testing, 2026-10-11. Scenario-subject repair and mobile controls/resume are implemented; the remaining design is planned work. See the implementation plan and dated verification evidence for delivered scope.
 
 Planning clarification: Rookhaven Academy is a scenario/world/narrator card, and this is the user's primary card type. It has successfully generated images before; investigate intermittent extraction/resolution failures rather than assuming scenario cards cannot work. Support character, scenario/world, narrator, ensemble, and nonhuman cards without requiring manual classification for normal use. The user requests built-in optional tooltips for NPCs, locations, and important objects, with category and detail controls. Supplied preset prompts are inspiration only: no dependency, preset branding, or required markup. See the companion implementation plan for concrete contracts, task order, and acceptance criteria.
 

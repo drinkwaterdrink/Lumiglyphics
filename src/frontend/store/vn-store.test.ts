@@ -12,6 +12,14 @@ const paragraphs = [
   { id: "p2", text: "Second" },
 ];
 
+test("resume loads the saved paragraph without advances or unlocking the reply", () => {
+  const state = reduceVnStage(createInitialVnStageState(), { type: "load-turn", turn: { mode: "standard", paragraphs, initialParagraphIndex: 1 } });
+  assert.equal(state.currentParagraphIndex, 1);
+  assert.equal(state.phase, "revealing");
+  assert.equal(state.highestRevealedIndex, 1);
+  assert.equal(state.turnFinished, false);
+});
+
 test("previous restores reading state, preserves draft and invalidates future images", () => {
   let state = reduceVnStage(createInitialVnStageState(), { type: "load-turn", turn: { mode: "cyoa", paragraphs, choices: [{ id: "a", label: "Answer", value: "answer" }] } });
   assert.equal(selectVnStageView(state).canGoBack, false);

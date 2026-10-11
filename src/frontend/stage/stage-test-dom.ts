@@ -171,6 +171,9 @@ export class FakeNode {
     this.dispatchEvent(new FakeEvent("click"));
   }
   focus(): void { FakeDocument.activeElement = this; }
+  getBoundingClientRect(): { width: number; height: number; top: number; left: number; right: number; bottom: number } {
+    return { width: 360, height: 800, top: 0, left: 0, right: 360, bottom: 800 };
+  }
   blur(): void { if (FakeDocument.activeElement === this) FakeDocument.activeElement = null; }
   requestSubmit(): void { this.dispatchEvent(new FakeEvent("submit")); }
   attachShadow(): FakeNode { const s = new FakeNode("#shadow-root"); this.appendChild(s); return s; }
@@ -306,10 +309,12 @@ export const FakeDocument = {
 /** Install the fake document for one test; returns a restore function. */
 export function installFakeDocument(): () => void {
   const g = globalThis as Record<string, unknown>;
-  const previous = { document: g.document, requestAnimationFrame: g.requestAnimationFrame, Element: g.Element };
+  const previous = { document: g.document, requestAnimationFrame: g.requestAnimationFrame, Element: g.Element, window: g.window, ResizeObserver: g.ResizeObserver };
   FakeDocument.activeElement = null;
   g.document = FakeDocument;
   g.Element = FakeNode;
+  g.window = { innerHeight: 800, addEventListener() {}, removeEventListener() {} };
+  g.ResizeObserver = class { observe() {} disconnect() {} };
   g.requestAnimationFrame = (cb: () => void) => setTimeout(cb, 0);
-  return () => { g.document = previous.document; g.requestAnimationFrame = previous.requestAnimationFrame; g.Element = previous.Element; };
+  return () => { g.document = previous.document; g.requestAnimationFrame = previous.requestAnimationFrame; g.Element = previous.Element; g.window = previous.window; g.ResizeObserver = previous.ResizeObserver; };
 }

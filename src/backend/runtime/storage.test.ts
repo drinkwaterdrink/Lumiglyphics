@@ -16,6 +16,8 @@ import {
   savePortrait,
   loadPortraits,
   updateConfig,
+  loadReadingPosition,
+  saveReadingPosition,
   type StoredPortrait
 } from "./storage.js";
 import { DEFAULT_CONFIG } from "../../config.js";
@@ -40,6 +42,18 @@ function storageRuntime(initial: ReadonlyMap<string, unknown> = new Map()): {
   } as unknown as SpindleAPI;
   return { spindle, data };
 }
+
+test("reading positions use safe chat paths and preserve unsupported saved records", async () => {
+  const { spindle, data } = storageRuntime();
+  const position = { version: 1 as const, key: { chatId: "chat/other", assistantMessageId: "message", swipeId: 0, sourceFingerprint: "fingerprint", revision: 1 }, paragraphIndex: 2 };
+  await saveReadingPosition(spindle, position, "reader");
+  expect(data.get("chats/chat_2Fother/reading-position.json")).toEqual(position);
+  expect(await loadReadingPosition(spindle, "chat/other", "reader")).toEqual(position);
+  const future = { ...position, version: 2 };
+  data.set("chats/chat_2Fother/reading-position.json", future);
+  expect(await loadReadingPosition(spindle, "chat/other", "reader")).toBeNull();
+  expect(data.get("chats/chat_2Fother/reading-position.json")).toEqual(future);
+});
 
 test("invalid template catalog cannot partially overwrite saved user settings", async () => {
   const initial = { ...DEFAULT_CONFIG, promptPrefix: "my saved style" };

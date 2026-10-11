@@ -50,6 +50,8 @@ import {
   loadCharacterRegistry,
   loadChatState,
   loadConfig,
+  loadReadingPosition,
+  saveReadingPosition,
   loadSingleCharacterState,
   loadTurnRecord,
   mergeCharacterAppearanceFromState,
@@ -608,7 +610,8 @@ export async function sendState(
     type: "vn_state",
     chatId,
     config,
-    turn: record && !stale ? await turnViewWithAudio(spindle, record) : null
+    turn: record && !stale ? await turnViewWithAudio(spindle, record) : null,
+    readingPosition: await loadReadingPosition(spindle, chatId, userId)
   }, userId);
   const canPlan = config.enabled && views.isOpen(userId, chatId);
   if (!record) {
@@ -1274,6 +1277,18 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
     case "vn_get_state":
       await sendState(spindle, request.chatId ?? "", userId, request.viewOpen === undefined ? {} : { viewOpen: request.viewOpen });
       return;
+    case "vn_reading_position": {
+      const { position } = request;
+      const state = await loadChatState(spindle, position.key.chatId, userId);
+      const record = await loadTurnRecord(spindle, state.activeTurnPath, userId);
+      if (!record || record.plan.key.chatId !== position.key.chatId
+        || record.plan.key.assistantMessageId !== position.key.assistantMessageId
+        || String(record.plan.key.swipeId ?? 0) !== String(position.key.swipeId ?? 0)
+        || record.plan.key.sourceFingerprint !== position.key.sourceFingerprint
+        || position.paragraphIndex >= record.plan.paragraphs.length) return;
+      await saveReadingPosition(spindle, position, userId);
+      return;
+    }
     case "vn_get_connection_catalog": {
       const catalog = await loadConnectionCatalog(spindle, userId);
       spindle.sendToFrontend({ type: "vn_connection_catalog", ...catalog }, userId);

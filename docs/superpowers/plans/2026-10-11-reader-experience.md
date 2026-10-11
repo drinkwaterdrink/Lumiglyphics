@@ -10,7 +10,7 @@
 
 **Spec:** ../specs/2026-10-11-reader-experience-design.md, plus the user's scenario-card clarification and supplied inline-dossier examples as inspiration only.
 
-**Status:** Reviewed planning deliverable, 2026-10-11. Product implementation has not started. Defaults below are implementation decisions for this plan, not claims about existing functionality.
+**Status:** Implementation underway on `Testing`, 2026-10-11. Scenario-subject repair is pushed as `7c62d30`; adjustable dialogue controls and scoped resume are delivered in beta.2. The remainder of A and packages C–G remain pending. See `docs/review-evidence/2026-10-11-reader-mobile.md` for verified scope and runtime limitations. Unchecked steps below remain future work.
 
 ## Global constraints
 

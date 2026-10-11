@@ -1,4 +1,5 @@
 import { DEFAULT_SPEECH_SETTINGS, normalizeSpeechSettings, type SpeechSettings } from "./speech-config.js";
+import { DEFAULT_READER_PREFERENCES, normalizeReaderPreferences, type ReaderPreferences } from "./shared/reader-preferences.js";
 import { BUILTIN_IMAGE_TEMPLATES, migrateImageTemplates, validateImageTemplates, type ImageTemplate } from "./shared/image-templates.js";
 
 export type VisualNovelMode = "standard" | "cyoa";
@@ -123,6 +124,7 @@ export type VisualNovelConfig = {
   textEffects: VisualNovelTextEffectMode;
   /** Dialogue text size multiplier, 1 = the theme's own size. */
   textScale: number;
+  readerPreferences: ReaderPreferences;
   audioDirectory: string;
   bgmVolume: number;
   sfxVolume: number;
@@ -180,6 +182,7 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   effectIntensity: "full",
   textEffects: "animated",
   textScale: 1,
+  readerPreferences: DEFAULT_READER_PREFERENCES,
   audioDirectory: "",
   bgmVolume: 0.7,
   sfxVolume: 0.8,
@@ -338,6 +341,7 @@ export function normalizeConfig(value: unknown): VisualNovelConfig {
     effectIntensity: effectIntensity(input.effectIntensity),
     textEffects: textEffectMode(input.textEffects),
     textScale: textScale(input.textScale),
+    readerPreferences: normalizeReaderPreferences(input.readerPreferences),
     audioDirectory: stringValue(input.audioDirectory, DEFAULT_CONFIG.audioDirectory).trim(),
     bgmVolume: floatBetween(input.bgmVolume, 0, 1, DEFAULT_CONFIG.bgmVolume),
     sfxVolume: floatBetween(input.sfxVolume, 0, 1, DEFAULT_CONFIG.sfxVolume),

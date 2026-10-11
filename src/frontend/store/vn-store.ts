@@ -109,6 +109,7 @@ export interface VnStageState {
 }
 
 export interface VnTurnInput {
+  initialParagraphIndex?: number;
   mode: VnMode;
   paragraphs: readonly VnParagraph[];
   choices?: readonly VnChoice[];
@@ -218,12 +219,13 @@ export const reduceVnStage = (
     case "load-turn": {
       const paragraphs = [...action.turn.paragraphs];
       const hasNoParagraphs = paragraphs.length === 0;
+      const cursor = Number.isInteger(action.turn.initialParagraphIndex) ? Math.max(0, Math.min(paragraphs.length - 1, action.turn.initialParagraphIndex!)) : 0;
       return {
         ...state,
         mode: action.turn.mode,
         phase: hasNoParagraphs ? "awaiting-input" : "revealing",
         paragraphs,
-        currentParagraphIndex: 0,
+        currentParagraphIndex: cursor,
         choices: [...(action.turn.choices ?? [])],
         draft: "",
         displayedImage: action.turn.preserveImage ? state.displayedImage : null,
@@ -238,7 +240,7 @@ export const reduceVnStage = (
         showRerollPrompt: hasNoParagraphs,
         isUserTurn: false,
         ambient: action.turn.ambient !== undefined ? action.turn.ambient : state.ambient,
-        highestRevealedIndex: 0,
+        highestRevealedIndex: cursor,
       };
     }
 

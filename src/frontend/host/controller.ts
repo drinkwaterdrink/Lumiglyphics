@@ -1,4 +1,6 @@
 import type { SpindleFrontendContext } from "lumiverse-spindle-types";
+import { restoreReadingPosition, LoadedReadingCursor } from "./reading-position.js";
+import type { ReadingPosition } from "../../shared/reading-position.js";
 import type { VisualNovelConfig, VisualNovelEffectIntensity, VisualNovelTextEffectMode } from "../../config.js";
 import { REFERENCE_IMAGE_MAX_BYTES, REFERENCE_IMAGE_MIMES } from "../../protocol.js";
 import type { AssetView, BackendResponse, ConnectionCatalogOption, FrontendRequest, TurnView } from "../../protocol.js";
@@ -301,6 +303,7 @@ export type VisualStageThemeTarget = Pick<
   setSkipMode?: (mode: "read" | "all") => void;
   /** Dialogue text size multiplier (stage sets `--vn-text-scale`). */
   setTextScale?: (scale: number) => void;
+  setReaderPreferences?: (preferences: VisualNovelConfig["readerPreferences"]) => void;
   /** Lets the stage also gate its own heuristic effects (text-triggered shake). */
   setEffectIntensity?: (level: VisualNovelEffectIntensity) => void;
   /** Inline dialogue text effects mode (stage sets `data-vn-text-effects`). */
@@ -326,6 +329,7 @@ export function applyVisualConfigToStage(
   stage.setAutoPlayDelay?.(config.autoPlayDelay);
   stage.setSkipMode?.(config.skipMode);
   stage.setTextScale?.(config.textScale);
+  stage.setReaderPreferences?.(config.readerPreferences);
   stage.setEffectIntensity?.(config.effectIntensity);
   stage.setTextEffects?.(config.textEffects);
 }
@@ -414,6 +418,19 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if (configRef.current?.debugLogging) console.info("[VN]", ...parts);
   };
   let turn: TurnView | null = null;
+  const loadedReadingCursor = new LoadedReadingCursor();
+  let savedReadingPosition: ReadingPosition | null = null;
+  let readingPositionTimer: ReturnType<typeof setTimeout> | null = null;
+  function saveCursor(paragraphIndex: number, immediate = false): void {
+    if (stage.isReadingUserParagraph()) return;
+    const position = loadedReadingCursor.position(paragraphIndex);
+    if (!position) return;
+    savedReadingPosition = position;
+    if (readingPositionTimer) clearTimeout(readingPositionTimer);
+    readingPositionTimer = null;
+    const send = () => { readingPositionTimer = null; ctx.sendToBackend({ type: "vn_reading_position", position }); };
+    if (immediate) send(); else readingPositionTimer = setTimeout(send, 250);
+  }
   let pendingNextTurn: TurnView | null = null;
   let overrideHandles: ComponentOverrideHandle[] = [];
   const acknowledgedAssets = new Set<string>();
@@ -472,7 +489,11 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     themePreset: configRef.current?.themePreset ?? "lumiverse",
     isAutoAdvanceHeld: () => isSpeechHoldingAuto(),
     onExit: () => deactivate(),
+    onReaderPreferencesChange: readerPreferences => {
+      ctx.sendToBackend({ type: "vn_set_config", patch: { readerPreferences }, chatId: chatId() });
+    },
     onPrevious: (paragraphIndex) => {
+      saveCursor(paragraphIndex);
       imageStudio.setCursor(paragraphIndex);
       panels.setCursor(paragraphIndex);
       syncSpeechCursor(turn, paragraphIndex);
@@ -492,6 +513,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
         applyTurn(next, turn);
         return;
       }
+      saveCursor(paragraphIndex);
       syncSpeechCursor(turn, paragraphIndex);
       if (turn) syncAudioForParagraph(turn, paragraphIndex);
       void syncImageForParagraph(paragraphIndex);
@@ -765,6 +787,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       turn = null;
       imageStudio.setTurn(null);
       settingsPanel?.setImagePreviewMetadata();
+      loadedReadingCursor.load(null);
       stage.reset();
     }
     speech.setActive(true);
@@ -776,6 +799,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   function deactivate(): void {
     if (destroyed) return;
     const wasActive = active;
+    if (wasActive) saveCursor(stage.getState().currentParagraphIndex, true);
+    stage.showReaderText();
     active = false;
     // Tell the backend this chat's view closed so it stops paying for the
     // in-flight batch and skips upcoming replies. Only when actually open;
@@ -857,7 +882,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     settingsPanel?.setImagePreviewMetadata(next?.imageRequests?.at(-1)?.imagePromptMetadata);
     imageStudio.setCursor(stage.getState().currentParagraphIndex);
     stage.setAssetProgress(computeAssetProgress(next));
-    const decision = decideTurnApplication(previous, next, stage.getState().currentParagraphIndex, active, stage.getState().paragraphs.length > 0);
+    const decision = decideTurnApplication(loadedReadingCursor.turn, next, stage.getState().currentParagraphIndex, active, stage.getState().paragraphs.length > 0);
     vnDebug("turn decision", decision.kind, {
       message: next.messageId,
       paragraphs: next.paragraphs.length,
@@ -876,6 +901,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       return;
     }
     if (decision.kind === "same-turn") {
+      loadedReadingCursor.load(next);
       // Identical cursor identity: SpeechController treats this as a no-op, so
       // a same-turn rebroadcast (e.g. an image/asset update) never replays speech.
       syncSpeechCursor(next, decision.paragraphIndex);
@@ -888,11 +914,16 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     const mode = requestedMode === "cyoa" && next.choices.length > 0 ? "cyoa" : "standard";
     const preserveImage = shouldPreserveImage(previous, next);
     turnOpeningBgm = preserveImage ? currentBgm : null;
-    stage.loadTurn(stageTurnInput(next, mode, preserveImage, configRef.current?.effectIntensity ?? "full"));
-    imageStudio.setCursor(0);
-    syncSpeechCursor(next, 0);
-    void syncImageForParagraph(0);
-    syncAudioForParagraph(next, 0);
+    const restored = restoreReadingPosition(savedReadingPosition, next);
+    const cursor = restored ?? 0;
+    if (restored !== null) { stage.toggleAutoPlay(false); stage.toggleSkip(false); }
+    stage.loadTurn({ ...stageTurnInput(next, mode, preserveImage, configRef.current?.effectIntensity ?? "full"), initialParagraphIndex: cursor });
+    loadedReadingCursor.load(next);
+    panels.setCursor(cursor);
+    imageStudio.setCursor(cursor);
+    if (restored !== null) speech.setCursor(speechCursorFor(next, cursor), { autoplay: false }); else syncSpeechCursor(next, 0);
+    void syncImageForParagraph(cursor);
+    if (restored === null) syncAudioForParagraph(next, 0);
   }
 
   function routeBackend(payload: unknown): void {
@@ -927,6 +958,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     }
     if (type === "vn_state" && message.type === "vn_state") {
       configRef.current = message.config;
+      savedReadingPosition = message.readingPosition ?? savedReadingPosition;
       imageStudio.setReview(message.config.reviewImages);
       imageStudio.setConfig(message.config);
       imageBridge.fit(message.config.sceneImageFit);
@@ -954,6 +986,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       settingsPanel?.setImagePreviewMetadata();
         speech.setCursor(null);
         panels.setTurn(null);
+        loadedReadingCursor.load(null);
         stage.reset();
         if (active) stage.setPhase("idle");
       }
@@ -1010,6 +1043,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       settingsPanel?.setImagePreviewMetadata();
       pendingNextTurn = null;
       panels.setTurn(null);
+      loadedReadingCursor.load(null);
       stage.reset();
       reportStageError({
         message: "This opening message holds several scenes, and none is selected yet. Pick a starting scene in the chat view, then use Try again or reopen Lumiglyphics.",
@@ -1094,6 +1128,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     turn = null;
     pendingNextTurn = null;
     speech.onChatChanged();
+    loadedReadingCursor.load(null);
     stage.reset();
     requestState();
   });
@@ -1105,6 +1140,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     turn = null;
     pendingNextTurn = null;
     speech.onChatChanged();
+    loadedReadingCursor.load(null);
     stage.reset();
     requestState();
   });

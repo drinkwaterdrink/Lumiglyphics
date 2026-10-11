@@ -44,6 +44,7 @@ function spyStage(): VisualStageThemeTarget & { calls: string[] } {
 }
 
 const baseConfig: VisualNovelConfig = {
+  readerPreferences: DEFAULT_CONFIG.readerPreferences,
   dynamicImageTemplates: DEFAULT_CONFIG.dynamicImageTemplates,
   defaultImageTemplateId: DEFAULT_CONFIG.defaultImageTemplateId,
   imageTemplates: DEFAULT_CONFIG.imageTemplates,

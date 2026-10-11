@@ -1,9 +1,11 @@
 import type { VisualNovelConfig } from "./config.js";
+import { ReadingPositionSchema, type ReadingPosition } from "./shared/reading-position.js";
 import type { PanelArtifact } from "./shared/panels.js";
 import type { CueImageRequest, CueImageResult } from "./shared/cue-images.js";
 import type { ImageRequestEdits, ImageRequestRecord } from "./shared/image-review.js";
 
 export type FrontendRequest =
+  | { type: "vn_reading_position"; position: ReadingPosition }
   | { type: "vn_image_review"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; action: "generate" | "skip"; edits?: ImageRequestEdits }
   | { type: "vn_prepare_image"; chatId: string; messageId: string; sourceFingerprint: string; jobId: string; templateId?: string }
   | { type: "vn_reprepare_image_template"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; templateId: string }
@@ -129,7 +131,7 @@ export type BackendResponse =
   | { type: "vn_image_requests"; chatId: string; messageId: string; sourceFingerprint: string; requests: ImageRequestRecord[] }
   | { type: "vn_external_image"; result: CueImageResult }
   | { type: "vn_panel_template"; requestId: string; chatId: string; template?: string; error?: string }
-  | { type: "vn_state"; chatId: string; config: VisualNovelConfig; turn: TurnView | null }
+  | { type: "vn_state"; chatId: string; config: VisualNovelConfig; turn: TurnView | null; readingPosition?: ReadingPosition | null }
   | { type: "vn_config"; config: VisualNovelConfig }
   | { type: "vn_system_one_key_status"; saved: boolean }
   | {
@@ -166,6 +168,7 @@ export type BackendResponse =
 
 export function isFrontendRequest(value: unknown): value is FrontendRequest {
   if (value === null || typeof value !== "object") return false;
+  if ((value as { type?: unknown }).type === "vn_reading_position") return ReadingPositionSchema.safeParse((value as { position?: unknown }).position).success;
   return typeof (value as { type?: unknown }).type === "string"
     && String((value as { type: string }).type).startsWith("vn_");
 }

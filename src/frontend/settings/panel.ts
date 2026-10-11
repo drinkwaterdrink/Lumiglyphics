@@ -1,4 +1,5 @@
 import { ImageTemplateEditor } from "./image-templates.js";
+import { normalizeReaderPreferences } from "../../shared/reader-preferences.js";
 import type { ImagePromptMetadata } from "../../shared/image-templates.js";
 import {
   DEFAULT_CONFIG,
@@ -582,6 +583,10 @@ export class VisualNovelSettingsPanel {
             <div data-sample-slot></div>
             ${group("Theme", themeTiles(), { find: find("Theme", "preset style colours colors skin golden paper noir console yamaku literature") })}
             ${group("Text", `
+              <label data-check><input name="adjustableSheetEnabled" type="checkbox" /><span>Adjustable text panel<small>Resize or hide text to see the picture. Drag the handle or choose a panel size.</small></span></label>
+              <label data-field><span>Reader layout</span><select name="readerLayout"><option value="overlay">Text over picture</option><option value="image-first">Image first</option></select></label>
+              <label data-field><span>Text panel size</span><select name="readerSheetSize"><option value="compact">Compact</option><option value="reading">Reading</option><option value="expanded">Expanded</option></select></label>
+              <label data-field><span>Text panel background opacity</span><input name="readerBackgroundOpacity" type="range" min="0.35" max="1" step="0.05" /></label>
               <fieldset ${find("Text size", "font scale bigger smaller large")}>
                 <legend>Text size</legend>
                 ${segments("textScaleStep", TEXT_SCALE_STEPS, true)}
@@ -1368,6 +1373,10 @@ export class VisualNovelSettingsPanel {
         return { textScale: Number(target.value) };
       }
       case "textScale": return { textScale: clamp(Number(target.value), TEXT_SCALE_MIN, TEXT_SCALE_MAX, DEFAULT_CONFIG.textScale) };
+      case "adjustableSheetEnabled": return { readerPreferences: { ...this.config.readerPreferences, adjustableSheetEnabled: checked } };
+      case "readerLayout": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, layout: target.value }) };
+      case "readerSheetSize": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, sheetSize: target.value }) };
+      case "readerBackgroundOpacity": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, backgroundOpacity: Number(target.value) }) };
       case "bgmVolume": return { bgmVolume: clamp(Number(target.value), 0, 1, DEFAULT_CONFIG.bgmVolume) };
       case "sfxVolume": return { sfxVolume: clamp(Number(target.value), 0, 1, DEFAULT_CONFIG.sfxVolume) };
       case "imageSource":
@@ -1789,6 +1798,10 @@ export class VisualNovelSettingsPanel {
     const scaleStep = namedStepFor(TEXT_SCALE_STEPS, config.textScale);
     this.setRadio("textScaleStep", scaleStep ? String(scaleStep.value) : "custom");
     this.control<HTMLInputElement>("textScale").value = String(config.textScale);
+    this.control<HTMLInputElement>("adjustableSheetEnabled").checked = config.readerPreferences.adjustableSheetEnabled;
+    this.control<HTMLSelectElement>("readerLayout").value = config.readerPreferences.layout;
+    this.control<HTMLSelectElement>("readerSheetSize").value = config.readerPreferences.sheetSize;
+    this.control<HTMLInputElement>("readerBackgroundOpacity").value = String(config.readerPreferences.backgroundOpacity);
     this.showCustomQuiet("textScale", !scaleStep);
 
     const source = imageSourceFromConfig(config);

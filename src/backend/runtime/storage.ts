@@ -1,4 +1,5 @@
 import type { SpindleAPI } from "lumiverse-spindle-types";
+import { ReadingPositionSchema, type ReadingPosition } from "../../shared/reading-position.js";
 import type { ImageRequestRecord } from "../../shared/image-review.js";
 import { safeImageHistory } from "./image-review.js";
 import { normalizeConfig, type VisualNovelConfig } from "../../config.js";
@@ -100,6 +101,17 @@ export function turnPath(chatId: string, messageId: string, swipeId: string | nu
 
 export function chatStatePath(chatId: string): string {
   return `chats/${safeSegment(chatId)}/state.json`;
+}
+
+export async function loadReadingPosition(spindle: SpindleAPI, chatId: string, userId?: string): Promise<ReadingPosition | null> {
+  const raw = await spindle.userStorage.getJson<unknown>(`chats/${safeSegment(chatId)}/reading-position.json`, { fallback: null, ...(userOptions(userId) ?? {}) });
+  const parsed = ReadingPositionSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+export async function saveReadingPosition(spindle: SpindleAPI, position: ReadingPosition, userId?: string): Promise<void> {
+  const parsed = ReadingPositionSchema.parse(position);
+  const path = `chats/${safeSegment(parsed.key.chatId)}/reading-position.json`;
+  await serializedWrite(scopedKey(userId, path), () => spindle.userStorage.setJson(path, parsed, userOptions(userId)));
 }
 
 /** Path of the persisted single-character visual state for a chat. */
