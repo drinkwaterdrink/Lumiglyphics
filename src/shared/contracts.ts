@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ActionPropFieldSchema, ActionPropSchema, type ActionProp } from "./action-prop.js";
 import { PanelArtifactSchema } from "./panels.js";
+import { ImageTemplateSnapshotSchema } from "./image-templates.js";
 
 export { ActionPropFieldSchema, ActionPropSchema, type ActionProp };
 
@@ -201,6 +202,11 @@ export const VisualCueSchema = z.object({
   action: ActionPropFieldSchema.default(null),
   expression: z.string().trim().nullable().default(null),
   poseExpressionId: z.string().trim().optional(),
+  imageTemplate: ImageTemplateSnapshotSchema.optional(),
+  imageTemplateReason: z.string().max(300).optional(),
+  visualDescription: z.string().max(4000).optional(),
+  visualFocus: z.string().max(1000).optional(),
+  visualSources: z.array(z.string().max(300)).max(24).optional(),
   character: z.string().trim().nullable().optional(),
   characterId: z.string().trim().min(1).optional(),
   subjectCategory: SubjectCategorySchema.optional(),

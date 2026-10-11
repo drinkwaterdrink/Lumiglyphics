@@ -44,6 +44,11 @@ function spyStage(): VisualStageThemeTarget & { calls: string[] } {
 }
 
 const baseConfig: VisualNovelConfig = {
+  dynamicImageTemplates: DEFAULT_CONFIG.dynamicImageTemplates,
+  defaultImageTemplateId: DEFAULT_CONFIG.defaultImageTemplateId,
+  imageTemplates: DEFAULT_CONFIG.imageTemplates,
+  imagePromptFormat: DEFAULT_CONFIG.imagePromptFormat,
+  includeSimTrackerContext: DEFAULT_CONFIG.includeSimTrackerContext,
   novelAiQualityTags: true,
   novelAiUseDefaultNegative: true,
   speech: DEFAULT_CONFIG.speech,

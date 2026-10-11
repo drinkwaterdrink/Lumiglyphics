@@ -15,8 +15,10 @@ import {
   resetPortraits,
   savePortrait,
   loadPortraits,
+  updateConfig,
   type StoredPortrait
 } from "./storage.js";
+import { DEFAULT_CONFIG } from "../../config.js";
 import {
   DEFAULT_ENVIRONMENT_DESCRIPTOR,
   emptySingleCharacter,
@@ -38,6 +40,13 @@ function storageRuntime(initial: ReadonlyMap<string, unknown> = new Map()): {
   } as unknown as SpindleAPI;
   return { spindle, data };
 }
+
+test("invalid template catalog cannot partially overwrite saved user settings", async () => {
+  const initial = { ...DEFAULT_CONFIG, promptPrefix: "my saved style" };
+  const { spindle, data } = storageRuntime(new Map([["config.json", initial]]));
+  await expect(updateConfig(spindle, { promptPrefix: "changed", imageTemplates: [initial.imageTemplates[0]!, initial.imageTemplates[0]!] }, "user")).rejects.toThrow();
+  expect(data.get("config.json")).toEqual(initial);
+});
 
 describe("single-character state path", () => {
   test("singleCharacterStatePath points at the existing visual-state.json path", () => {

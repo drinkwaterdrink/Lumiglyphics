@@ -1,4 +1,5 @@
 import { DEFAULT_SPEECH_SETTINGS, normalizeSpeechSettings, type SpeechSettings } from "./speech-config.js";
+import { BUILTIN_IMAGE_TEMPLATES, migrateImageTemplates, validateImageTemplates, type ImageTemplate } from "./shared/image-templates.js";
 
 export type VisualNovelMode = "standard" | "cyoa";
 
@@ -74,6 +75,11 @@ export type VisualNovelConfig = {
   debugLogging: boolean;
   generateImages: boolean;
   reviewImages: boolean;
+  dynamicImageTemplates: boolean;
+  defaultImageTemplateId: string;
+  imageTemplates: ImageTemplate[];
+  imagePromptFormat: "description" | "tags";
+  includeSimTrackerContext: boolean;
   /** Anchor each character's appearance to their captured reference portrait. */
   referenceAnchoring: boolean;
   /** Where the reference anchor image comes from ("captured" render or "card" sprite). */
@@ -133,6 +139,11 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   debugLogging: false,
   generateImages: true,
   reviewImages: true,
+  dynamicImageTemplates: false,
+  defaultImageTemplateId: "portrait",
+  imageTemplates: BUILTIN_IMAGE_TEMPLATES.map(template => ({ ...template })),
+  imagePromptFormat: "description",
+  includeSimTrackerContext: true,
   referenceAnchoring: true,
   referenceSource: "captured",
   generateChoices: true,
@@ -286,6 +297,11 @@ export function normalizeConfig(value: unknown): VisualNovelConfig {
     debugLogging: bool(input.debugLogging, DEFAULT_CONFIG.debugLogging),
     generateImages: bool(input.generateImages, DEFAULT_CONFIG.generateImages),
     reviewImages: bool(input.reviewImages, DEFAULT_CONFIG.reviewImages),
+    dynamicImageTemplates: bool(input.dynamicImageTemplates, false),
+    defaultImageTemplateId: nullableString(input.defaultImageTemplateId) ?? "portrait",
+    imageTemplates: input.imageTemplates === undefined ? migrateImageTemplates(promptPresetList(input.promptPresets)) : validateImageTemplates(input.imageTemplates),
+    imagePromptFormat: input.imagePromptFormat === "tags" ? "tags" : "description",
+    includeSimTrackerContext: bool(input.includeSimTrackerContext, true),
     referenceAnchoring: bool(input.referenceAnchoring, DEFAULT_CONFIG.referenceAnchoring),
     referenceSource: referenceSource(input.referenceSource),
     generateChoices: bool(input.generateChoices, DEFAULT_CONFIG.generateChoices),

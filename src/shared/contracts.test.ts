@@ -1,6 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { AssetJobSchema, SceneStateSchema, TurnKeySchema, TurnPlanSchema, VisualCueSchema, type ContinuityState, type TurnPlan } from "./contracts.js";
 import { validateTurnPlan } from "../backend/core/turn-plan.js";
+import { templateSnapshot, BUILTIN_IMAGE_TEMPLATES } from "./image-templates.js";
+
+test("cue snapshots persist template selection without requiring legacy metadata", () => {
+  const base = { cueId: "cue", paragraphIndex: 0, sceneId: "scene", sceneRevision: 0, kind: "flattened_scene", assetJobId: "job" };
+  expect(VisualCueSchema.parse(base).imageTemplate).toBeUndefined();
+  const snapshot = templateSnapshot(BUILTIN_IMAGE_TEMPLATES[1]!);
+  const cue = VisualCueSchema.parse({ ...base, imageTemplate: snapshot, imageTemplateReason: "New location", visualDescription: "An empty garden", visualFocus: "fountain", visualSources: ["chat:reply"] });
+  expect(cue.imageTemplate?.subjectMode).toBe("none");
+  expect(cue.visualFocus).toBe("fountain");
+  expect(() => VisualCueSchema.parse({ ...base, imageTemplate: { ...snapshot, subjectMode: "many" } })).toThrow();
+});
 
 const continuity: ContinuityState = { revision: 0, characters: {}, facts: {} };
 
