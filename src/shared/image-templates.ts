@@ -37,7 +37,26 @@ export const BUILTIN_IMAGE_TEMPLATES: readonly ImageTemplate[] = [
   { id: "environment", name: "Environment", category: "environment", enabled: true, useWhen: "Entering a new place, revealing scenery, or a meaningful change in atmosphere.", positive: "{{style}}\n{{scene}}\n{{composition}}\n{{lighting}}\nAn environment view without people.\n{{suffix}}", negative: "{{negative}}", subjectMode: "none", framing: "wide", referencePolicy: "none" },
   { id: "action", name: "Story action", category: "action", enabled: true, useWhen: "A significant movement or event matters more than a facial reaction. Focus on one visible character.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "full body", referencePolicy: "character" },
   { id: "detail", name: "Detail / object", category: "detail", enabled: true, useWhen: "An important object, clue, or other close-up is the visual focus.", positive: "{{style}}\n{{action}}\n{{scene}}\n{{composition}}\n{{lighting}}\nAn object detail without people.\n{{suffix}}", negative: "{{negative}}", subjectMode: "none", framing: "close-up", referencePolicy: "none" },
-  { id: "custom", name: "Custom", category: "custom", enabled: false, useWhen: "Use this when its custom instructions suit the scene.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "upper body", referencePolicy: "character" }
+  { id: "custom", name: "Custom", category: "custom", enabled: false, useWhen: "Use this when its custom instructions suit the scene.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "upper body", referencePolicy: "character" },
+  { id: "manga-page", name: "Manga page", category: "action", enabled: false, useWhen: "A visual story beat benefits from several connected panels focusing on the same visible character. Use only events already in the brief; do not invent future story developments.", subjectMode: "one", framing: "full body", referencePolicy: "character",
+    positive: `{{style}}
+IDENTITY CONTROL:
+Keep this subject recognizable throughout the page: {{subjects}}. Preserve face, hair, body proportions, skin tone, accessories and wardrobe. If a character image reference is supplied, use it as the visual authority. Do not add unrelated named characters.
+PAGE STRUCTURE:
+Create one full-color manga page with 5–7 interconnected panels, an asymmetrical layout and clear left-to-right, top-to-bottom reading order. Depict only the supplied scene and action; develop their visual presentation without inventing new events or outcomes.
+SCENE AND ACTION:
+{{scene}}
+{{action}}
+Use an establishing view, action details and reaction close-ups as appropriate. Vary wide shots, low angles, close-ups and profiles without repeating composition. Keep character expressions consistent with the action. Use cinematic perspective and restrained motion lines.
+LETTERING:
+Wordless panels by default: no dialogue bubbles, captions or random text. If this template is edited to include approved dialogue or sound effects, reproduce only those exact lines, preserve spelling, and leave safe space around faces and important gestures.
+STYLE AND LIGHTING:
+{{lighting}}
+Strong ink contours, manga shading, halftone textures, clean negative space, expressive contrast and a coherent color palette. Keep panel gutters clear and identity and clothing consistent.
+PRODUCTION:
+A detailed, editorially finished portrait-oriented page. Use a portrait aspect ratio in image parameters when supported by the selected model. This is one page image, not separate images per panel.
+{{suffix}}`,
+    negative: "identity drift, different face between panels, changed hairstyle, changed accessories, inconsistent wardrobe, repeated panel composition, broken reading order, extra limbs, fused hands, unreadable lettering, misspelled dialogue, random text, covered face, flat poses, weak contrast, muddy colors, photorealistic rendering, 3D CGI, watermark, logo" }
 ];
 
 export function validateImageTemplates(value: unknown): ImageTemplate[] {
@@ -56,7 +75,7 @@ export function migrateImageTemplates(presets: readonly VisualNovelPromptPreset[
   // Legacy presets were literal prefix text, not template programs. Preserve the
   // original records and make unsupported macro notation literal in the import.
   const importText = (value: string, limit: number) => value.replace(/\{\{([^{}]*)\}\}/g, (token, key: string) => (IMAGE_TEMPLATE_TOKENS as readonly string[]).includes(key) ? token : `{${key}}`).slice(0, limit).replace(/\{\{[^{}]*$/, "");
-  for (const [index, preset] of presets.slice(0, 19).entries()) {
+  for (const [index, preset] of presets.slice(0, 24 - templates.length).entries()) {
     templates.push({ ...templates[0]!, id: `preset-${index}-${preset.id.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 60) || "import"}`, name: preset.name.slice(0, 80), positive: `${importText(preset.positive, 7900)}\n{{subjects}}\n{{action}}\n{{scene}}\n{{composition}}\n{{lighting}}\n{{suffix}}`, negative: importText(preset.negative, 8000) });
   }
   return templates;

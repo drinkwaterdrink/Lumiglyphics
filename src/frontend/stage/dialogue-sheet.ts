@@ -7,7 +7,6 @@ export class DialogueSheet {
   private drag: { id: number; y: number; height: number } | null = null;
   private readonly tools: HTMLElement;
   private readonly handle: HTMLButtonElement;
-  private readonly size: HTMLSelectElement;
   private readonly show: HTMLButtonElement;
   private readonly observer: ResizeObserver;
   private readonly abort = new AbortController();
@@ -16,21 +15,20 @@ export class DialogueSheet {
     private readonly pause: () => void, private readonly save: (preferences: ReaderPreferences) => void) {
     this.tools = document.createElement("div");
     this.tools.dataset.vnSheetTools = "";
-    this.tools.innerHTML = `<button type="button" data-vn-sheet-handle aria-label="Resize text panel" title="Drag to resize text panel">↕</button>
-      <label>Text panel <select aria-label="Text panel size"><option value="compact">Compact</option><option value="reading">Reading</option><option value="expanded">Expanded</option></select></label>
-      <button type="button" data-vn-hide-text>Hide text</button>`;
+    this.tools.innerHTML = `<button type="button" data-vn-sheet-handle aria-label="Resize text panel" title="Drag to resize; arrow keys also adjust height"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10h12M6 14h12"/></svg></button>
+      <button type="button" data-vn-hide-text aria-label="Hide text" title="Hide text"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>`;
     this.handle = this.tools.querySelector("button")!;
-    this.size = this.tools.querySelector("select")!;
     this.show = document.createElement("button");
     this.show.type = "button";
     this.show.dataset.vnShowText = "";
-    this.show.textContent = "Show text";
+    this.show.setAttribute("aria-label", "Show text");
+    this.show.title = "Show text";
+    this.show.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>';
     this.show.hidden = true;
     dialogue.prepend(this.tools);
     root.append(this.show);
     const signal = this.abort.signal;
     this.tools.addEventListener("click", event => event.stopPropagation(), { signal });
-    this.tools.addEventListener("change", () => this.changeSize(this.size.value as ReaderPreferences["sheetSize"]), { signal });
     this.tools.querySelector("[data-vn-hide-text]")!.addEventListener("click", () => this.setHidden(true), { signal });
     this.show.addEventListener("click", event => { event.stopPropagation(); this.setHidden(false); this.handle.focus(); }, { signal });
     this.handle.addEventListener("pointerdown", event => {
@@ -97,7 +95,6 @@ export class DialogueSheet {
     this.root.dataset.vnReaderLayout = this.preferences.layout;
     this.root.style.setProperty("--vn-sheet-opacity", String(this.preferences.backgroundOpacity));
     this.tools.hidden = !this.preferences.adjustableSheetEnabled;
-    this.size.value = this.preferences.sheetSize;
     if (!this.preferences.adjustableSheetEnabled) this.setHidden(false);
     this.resize();
   }

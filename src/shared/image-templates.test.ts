@@ -15,6 +15,21 @@ test("template_validation_is_atomic", () => {
   assert.equal(validateImageTemplates([portrait])[0]!.name, portrait.name);
 });
 
+test("manga page is opt-in, grounded in the brief, and has editable independent negatives", () => {
+  const manga = BUILTIN_IMAGE_TEMPLATES.find(t => t.id === "manga-page")!;
+  assert.ok(manga);
+  assert.equal(manga.enabled, false);
+  const config = normalizeConfig({ imageTemplates: [{ ...manga, enabled: true }], defaultImageTemplateId: manga.id });
+  const output = renderImageTemplate(resolveImageTemplate(config).template, { style: "ink illustration", scene: "Library at sunset", subjects: "Aleister, dark hair, green coat", action: "Opening a sealed letter", composition: "portrait", lighting: "warm light", suffix: "", negative: "text, speech bubble, border" });
+  assert.match(output.prompt, /Aleister, dark hair, green coat/);
+  assert.match(output.prompt, /5–7/);
+  assert.match(output.prompt, /Opening a sealed letter/);
+  assert.match(output.prompt, /wordless/i);
+  assert.doesNotMatch(output.negativePrompt, /speech bubble|border/);
+  assert.match(output.negativePrompt, /identity drift/);
+  assert.equal(config.maxImagesPerTurn, 4);
+});
+
 test("legacy_config_preserves_style_and_presets", () => {
   const preset = { id: "portrait", name: "Flux personal", positive: "my precise style", negative: "my negative" };
   const config = normalizeConfig({ promptPrefix: "old anime prefix", promptSuffix: "old suffix", negativePrompt: "old negative", promptPresets: [preset] });

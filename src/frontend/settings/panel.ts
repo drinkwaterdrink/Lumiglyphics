@@ -188,6 +188,8 @@ code { font-family: var(--lumiverse-font-mono, ui-monospace, "Cascadia Mono", Co
 [data-group-head] > small { flex-basis: 100%; }
 [data-apply-chip] { display: inline-flex; align-items: center; gap: .3rem; padding: .05rem .55rem; border: 1px solid color-mix(in srgb, var(--set-warning) 55%, transparent); border-radius: 999px; color: var(--set-warning); font-size: .72rem; font-weight: 650; letter-spacing: .02em; white-space: nowrap; }
 [data-field] { display: grid; gap: .35rem; min-width: 0; }
+[data-template-editor] { display: grid; gap: .9rem; padding: .75rem 0; }
+[data-picture-group] > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 650; }
 [data-field] > span:first-child, legend { font-weight: 600; font-size: .93rem; }
 [data-field] > span:first-child small { display: inline; }
 fieldset { margin: 0; padding: 0; border: 0; min-width: 0; display: grid; gap: .45rem; }
@@ -482,9 +484,14 @@ export class VisualNovelSettingsPanel {
     for (const i of [0, 1, 3]) generation.append(children[i]!);
     const dynamic = document.createElement("label"); dynamic.dataset.check = "";
     dynamic.innerHTML = '<input name="dynamicImageTemplates" type="checkbox"><span>Choose templates from story context<small>When off, every picture uses the default template. This is independent of prompt review and keeps the existing picture budget.</small></span>';
-    generation.prepend(dynamic);
-    this.templateEditor = new ImageTemplateEditor(section("Templates"), patch => this.options.onSave(patch), () => {});
-    const composition = section("Shared style and consistency");
+    const prompts = section("Image prompts");
+    prompts.append(dynamic);
+    const templates = document.createElement("details");
+    templates.dataset.pictureGroup = "";
+    templates.innerHTML = '<summary>Scene templates</summary>';
+    prompts.append(templates);
+    this.templateEditor = new ImageTemplateEditor(templates, patch => this.options.onSave(patch), () => {});
+    const composition = prompts;
     composition.append(children[2]!, this.root.querySelector('[data-group-id="prompts"]')!);
     const context = section("Context sources");
     context.append(this.root.querySelector('[data-group-id="context"]')!);
@@ -731,7 +738,7 @@ export class VisualNovelSettingsPanel {
               <button type="button" data-jump-to="storage">Storage and logs</button>
               <button type="button" data-jump-to="maintenance">Reset</button>
             </div>
-            ${group("Image prompts", `
+            ${group("Shared style", `
               <div data-field ${find("Prompt presets", "preset save delete positive negative")}>
                 <span>Preset</span>
                 <div data-preset-row>

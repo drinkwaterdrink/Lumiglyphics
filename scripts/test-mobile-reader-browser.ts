@@ -26,6 +26,8 @@ try {
       f.stage.setTextScale(1.6);
       f.stage.loadTurn({ ...f.turn, paragraphs: f.turn.paragraphs.map((p: any) => ({ ...p, text: p.text.repeat(18) })) });
     });
+    assert.equal(await page.getByLabel("Text panel size", { exact: true }).count(), 0, "sizes only live in settings");
+    assert.equal(await page.locator("[data-vn-sheet-tools]").innerText(), "", "reader chrome is icon-only without a title");
     const panel = page.locator("[data-vn-dialogue]");
     const text = page.locator("[data-vn-dialogue-text]");
     await assert.doesNotReject(() => panel.waitFor());
@@ -33,7 +35,7 @@ try {
     await text.click();
     assert.equal(await page.locator("[data-vn-progress]").textContent(), originalProgress, "selecting text does not advance");
     for (const size of ["compact", "expanded", "reading"]) {
-      await page.getByLabel("Text panel size", { exact: true }).selectOption(size);
+      await page.evaluate(size => (window as any).readingFixture.stage.setReaderPreferences({ adjustableSheetEnabled: true, layout: "image-first", sheetSize: size, backgroundOpacity: .55 }), size);
       const box = await panel.boundingBox();
       const metrics = await page.evaluate(() => ({ height: innerHeight, viewport: visualViewport?.height, scale: visualViewport?.scale, width: document.documentElement.scrollWidth, inset: getComputedStyle((window as any).readingFixture.stage.root).getPropertyValue("--vn-sheet-keyboard-inset") }));
       assert.ok(box && box.y >= 60 && box.y + box.height <= viewport.height + 1, `sheet stays on screen at ${viewport.width}/${size}: ${JSON.stringify({box,metrics})}`);
@@ -50,7 +52,7 @@ try {
     assert.equal(await page.getByRole("button", { name: "Auto play", exact: true }).getAttribute("aria-pressed"), "false");
     assert.equal(await panel.isVisible(), true);
     await page.getByRole("button", { name: "Resize text panel", exact: true }).press("ArrowUp");
-    assert.equal(await page.getByLabel("Text panel size", { exact: true }).inputValue(), "expanded");
+    assert.equal(await page.locator("[data-vn-root]").evaluate(el => el.style.getPropertyValue("--vn-sheet-height") !== ""), true);
     if (viewport.height > 500) {
       await page.evaluate(() => {
         Object.defineProperty(window.visualViewport!, "height", { configurable: true, value: 420 });
@@ -64,7 +66,7 @@ try {
       });
     }
     await page.setViewportSize({ width: viewport.width, height: Math.min(viewport.height, 480) });
-    await page.getByLabel("Text panel size", { exact: true }).selectOption("compact");
+    await page.evaluate(() => (window as any).readingFixture.stage.setReaderPreferences({ adjustableSheetEnabled: true, layout: "image-first", sheetSize: "compact", backgroundOpacity: .55 }));
     assert.equal(await page.getByRole("button", { name: "Continue", exact: true }).isVisible(), true);
     await page.screenshot({ path: `.cache/mobile-reader/${viewport.width}.png` });
     await page.close();
@@ -112,8 +114,8 @@ try {
     await scaled.evaluate(() => (window as any).readingFixture.stage.setReaderPreferences({ adjustableSheetEnabled: true, layout: "overlay", sheetSize: "expanded", backgroundOpacity: 1 }));
     const box = await scaled.locator("[data-vn-dialogue]").boundingBox();
     assert.ok(box && box.y >= 60 && box.height < 600, "zoomed sheet uses local CSS coordinates");
-    const selectBox = await scaled.getByLabel("Text panel size", { exact: true }).boundingBox();
-    assert.ok(selectBox && selectBox.width >= 43 && selectBox.height >= 35, `scaled size selector remains usable: ${JSON.stringify(selectBox)}`);
+    const selectBox = await scaled.getByRole("button", { name: "Hide text", exact: true }).boundingBox();
+    assert.ok(selectBox && selectBox.width >= 35 && selectBox.height >= 35, `scaled icon remains usable: ${JSON.stringify(selectBox)}`);
     const controls = await scaled.locator('[data-vn-control="previous"], [data-vn-control="log"], [data-vn-control="auto"], [data-vn-control="skip"]').all();
     let previousRight = 0;
     for (const control of controls) {

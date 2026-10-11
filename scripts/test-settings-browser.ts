@@ -125,7 +125,7 @@ try {
 
   // Reference source: the radio shows only while the reference toggle is on,
   // saves a single-field patch, and remembers its choice across the toggle.
-  await settings.getByText("Shared style and consistency", { exact: true }).click();
+  await settings.getByText("Image prompts", { exact: true }).click();
   const referenceSource = settings.locator("[data-reference-source]");
   assert.equal(await referenceSource.isVisible(), true, "reference source shows while the toggle is on");
   assert.equal(await settings.locator('input[name="referenceSource"][value="captured"]').isChecked(), true, "captured is the default");
@@ -359,7 +359,7 @@ try {
     f.panel.setConfig(f.config);
   });
   await openTab("Pictures");
-  await settings.getByText("Shared style and consistency", { exact: true }).click();
+  await settings.getByText("Image prompts", { exact: true }).click();
   const quality = settings.locator('[name="novelAiQualityTags"]');
   assert.equal(await quality.isVisible(), true);
   await quality.uncheck();

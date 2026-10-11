@@ -10,11 +10,22 @@ try {
   await page.goto(`http://127.0.0.1:${server.port}/?setupDone&noSpeech`);
   const settings = page.locator("[data-vn-settings]");
   await settings.getByLabel("Settings section", { exact: true }).selectOption("pictures");
+  assert.equal(await settings.locator("summary").filter({ hasText: /^Image prompts$/ }).count(), 1, "one unified image prompt section");
+  await settings.getByText("Image prompts", { exact: true }).click();
   await settings.getByLabel("Choose templates from story context").check();
   assert.equal(await page.evaluate(() => (window as any).settingsFixture.config.dynamicImageTemplates), true);
   assert.equal(await settings.locator('[name="reviewImages"]').isChecked(), true);
-  await settings.getByText("Templates", { exact: true }).click();
+  await settings.getByText("Scene templates", { exact: true }).click();
+  // An older saved catalog must gain the new template without losing edits.
+  await page.evaluate(() => { const f = (window as any).settingsFixture; f.config = { ...f.config, imageTemplates: f.config.imageTemplates.filter((t: any) => t.id !== "manga-page") }; f.panel.setConfig(f.config); });
+  await settings.getByRole("button", { name: "Add manga page", exact: true }).click();
+  assert.equal(await settings.getByLabel("Template to edit").inputValue(), "manga-page");
+  await settings.getByRole("button", { name: "Add manga page", exact: true }).click();
+  assert.equal(await settings.getByLabel("Template to edit").locator('option[value="manga-page"]').count(), 1);
+  await settings.getByRole("button", { name: "Save templates", exact: true }).click();
+  assert.equal(await page.evaluate(() => (window as any).settingsFixture.config.imageTemplates.find((t: any) => t.id === "manga-page").enabled), false);
   await settings.getByLabel("Template to edit", { exact: true }).selectOption("environment");
+  assert.equal(await settings.getByLabel("Template name", { exact: true }).getAttribute("type"), "text", "template name uses the themed text input");
   const body = settings.getByLabel("Template positive prompt", { exact: true });
   await body.fill("cinematic {{scene}} {{composition}}");
   await page.evaluate(() => { const f = (window as any).settingsFixture; f.panel.setConfig(structuredClone(f.config)); });
@@ -38,13 +49,15 @@ try {
   await settings.getByRole("button", { name: "Duplicate template", exact: true }).click();
   assert.match(await settings.getByLabel("Template name", { exact: true }).inputValue(), /copy/i);
   await settings.getByRole("button", { name: "Delete template", exact: true }).click();
-  assert.equal(await settings.getByLabel("Template to edit").locator("option").count(), 5);
+  assert.equal(await settings.getByLabel("Template to edit").locator("option").count(), 6);
   assert.equal(await settings.evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, "no mobile horizontal overflow");
   await page.screenshot({ path: ".cache/templates-settings-mobile.png", fullPage: true });
   await page.setViewportSize({ width: 1000, height: 900 });
   await page.goto(`http://127.0.0.1:${server.port}/?setupDone&noSpeech`);
   await settings.getByRole("tab", { name: "Pictures", exact: true }).click();
-  await settings.getByText("Templates", { exact: true }).click();
+  assert.equal(await settings.locator("summary").filter({ hasText: /^Image prompts$/ }).count(), 1, "one unified image prompt section");
+  await settings.getByText("Image prompts", { exact: true }).click();
+  await settings.getByText("Scene templates", { exact: true }).click();
   await settings.getByLabel("Default template", { exact: true }).selectOption("environment");
   await settings.getByLabel("Prompt format", { exact: true }).selectOption("tags");
   assert.equal(await page.evaluate(() => (window as any).settingsFixture.config.defaultImageTemplateId), "environment");
@@ -54,12 +67,19 @@ try {
   await settings.getByLabel("Template enabled", { exact: true }).uncheck();
   await settings.getByRole("button", { name: "Save templates", exact: true }).click();
   assert.equal(await page.evaluate(() => (window as any).settingsFixture.config.defaultImageTemplateId), "portrait", "disabling default picks an enabled fallback atomically");
-  await settings.getByText("Shared style and consistency", { exact: true }).click();
+
   await settings.locator('[name="promptPrefix"]').fill("");
   await settings.locator('[data-apply]').click();
   assert.equal(await page.evaluate(() => (window as any).settingsFixture.config.promptPrefix), "", "shared style can be cleared");
   assert.equal(await settings.locator('[name="promptPrefix"]').count(), 1);
   assert.equal(await page.evaluate(() => (window as any).settingsFixture.previews), 0, "template editor never starts host preview or generation");
   await page.screenshot({ path: ".cache/templates-settings-desktop.png", fullPage: true });
+  await settings.evaluate(el => { (el as HTMLElement).style.setProperty("--lumiverse-bg-elevated", "#ffffff"); (el as HTMLElement).style.setProperty("--lumiverse-text", "#222222"); });
+  assert.equal(await settings.getByLabel("Template name", { exact: true }).evaluate(el => getComputedStyle(el).backgroundColor), "rgb(255, 255, 255)");
+  assert.equal(await settings.getByLabel("Template name", { exact: true }).evaluate(el => getComputedStyle(el).color), "rgb(34, 34, 34)");
+  await page.evaluate(() => { const f = (window as any).settingsFixture; f.config = { ...f.config, imageTemplates: Array.from({ length: 24 }, (_, i) => ({ ...f.config.imageTemplates[0], id: `saved-${i}` })) }; f.panel.setConfig(f.config); });
+  await settings.getByRole("button", { name: "Add manga page", exact: true }).click();
+  assert.equal(await settings.getByLabel("Template to edit").locator("option").count(), 24);
+  assert.match(await settings.locator('[data-template-status]').innerText(), /24 templates/);
   console.log("image template browser checks passed");
 } finally { await browser.close(); server.stop(true); }
