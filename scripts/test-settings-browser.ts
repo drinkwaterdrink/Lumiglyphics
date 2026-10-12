@@ -375,6 +375,21 @@ try {
     f.panel.setConnectionCatalog("image", { status: "ready", options: [{ id: "nai", name: "Other", provider: "comfyui", model: "m", isDefault: true }] });
   });
   assert.equal(await quality.isVisible(), false);
+  await openTab('Pictures');
+  const contextSources=settings.locator('[data-context-sources]');
+  await contextSources.locator('xpath=..').locator('summary').first().click();
+  await contextSources.locator('[data-books]').check();
+  assert.equal(((await lastPatch(page))?.contextSources as any)?.lumibooks,true);
+  await contextSources.getByRole('button',{name:'Refresh source status',exact:true}).click();
+  assert.match(await contextSources.locator('[data-source-status]').innerText(),/LumiBooks: available.*3 reference records/);
+  await contextSources.getByText('LumiScript reference endpoint',{exact:true}).click();
+  await contextSources.locator('[data-endpoint]').fill('other-extension.danger');
+  await contextSources.getByRole('button',{name:'Save endpoint',exact:true}).click();
+  assert.match(await contextSources.locator('[data-endpoint-error]').innerText(),/published lumiscript/);
+  await contextSources.locator('[data-endpoint]').fill('lumiscript.story-tracker.state');
+  await contextSources.getByRole('button',{name:'Save endpoint',exact:true}).click();
+  assert.equal(((await lastPatch(page))?.contextSources as any)?.lumiscriptEndpoint,'lumiscript.story-tracker.state');
+  assert.match(await contextSources.locator('[data-source-status]').innerText(),/not been checked/,'changing a source clears its old report');
   assert.deepEqual(external, [], "settings page must not contact the network");
   console.log("settings browser checks passed");
 } finally {

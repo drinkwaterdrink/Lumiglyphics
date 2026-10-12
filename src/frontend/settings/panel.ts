@@ -1,3 +1,5 @@
+import { ContextSourcesPanel } from './context-sources.js';
+import type { ContextSourceReport } from '../../shared/context-sources.js';
 import { BUILTIN_SHARED_STYLES, applySharedStyle } from "../../shared/image-styles.js";
 import { ImageTemplateEditor } from "./image-templates.js";
 import { normalizeReaderPreferences } from "../../shared/reader-preferences.js";
@@ -94,6 +96,8 @@ export type SettingsPanelOptions = {
   onSave: (patch: Partial<VisualNovelConfig>) => void;
   onOpenPreview: () => void;
   onRefreshConnections: () => void;
+  onRefreshContextSources?: (chatId:string,requestId:string)=>void;
+  getChatId?: ()=>string;
   onSaveSystemOneKey?: (key: string) => void;
   onClearSystemOneKey?: () => void;
   onScanAudio?: (directory: string) => Promise<{ bgmCount: number; sfxCount: number } | void> | void;
@@ -440,6 +444,7 @@ export class VisualNovelSettingsPanel {
     image: { status: "idle", options: [] },
   };
 
+  private contextSourcesPanel!: ContextSourcesPanel;
   private templateEditor!: ImageTemplateEditor;
 
   constructor(options: SettingsPanelOptions) {
@@ -506,6 +511,8 @@ export class VisualNovelSettingsPanel {
     const tracker = document.createElement("label"); tracker.dataset.check = "";
     tracker.innerHTML = '<input name="includeSimTrackerContext" type="checkbox"><span>Include SimTracker visual context<small>Uses supported tracker JSON in this chat, up to the current reply. Saved appearance overrides still take priority. The prompt inspector reports whether a tracker payload was found.</small></span>';
     context.prepend(tracker);
+    this.contextSourcesPanel=new ContextSourcesPanel(value=>this.options.onSave({contextSources:value}),(chat,id)=>this.options.onRefreshContextSources?.(chat,id),()=>this.options.getChatId?.()??'');
+    context.append(this.contextSourcesPanel.host);
     const advanced = section("Advanced image parameters");
     for (const name of ["imageModel", "imageConcurrency", "imageParameters"]) advanced.append(this.control(name).closest("label")!);
     advanced.append(children[4]!);
@@ -1766,6 +1773,7 @@ export class VisualNovelSettingsPanel {
 
   private syncFromConfig(config: VisualNovelConfig): void {
     this.templateEditor.setConfig(config);
+    this.contextSourcesPanel.setConfig(config.contextSources);
     this.syncEveryday(config);
     const set = (name: AdvancedKey, apply: () => void) => {
       if (this.drafts.has(name)) return;
@@ -2092,7 +2100,11 @@ export class VisualNovelSettingsPanel {
     select.value = [...this.promptPresets, ...BUILTIN_SHARED_STYLES].some((preset) => preset.id === selectedId) ? selectedId : "";
   }
 
+  setContextSourceReport(report:ContextSourceReport):void{this.contextSourcesPanel.receive(report);}
+  contextSourceError():void{this.contextSourcesPanel.fail();}
+
   destroy(): void {
+    this.contextSourcesPanel.destroy();
     for (const timer of [this.statusTimer, this.resetTimer, this.saveTimer, this.sampleTimer, this.flashTimer, this.copyTimer]) if (timer) clearTimeout(timer);
     this.templateEditor.destroy();
     this.resizeObserver?.disconnect();

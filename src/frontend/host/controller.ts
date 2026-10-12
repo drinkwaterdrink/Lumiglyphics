@@ -632,6 +632,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     position: "after-display"
   });
   const settingsPanel: (VisualNovelSettingsPanel & SettingsFeedbackTarget) | null = settingsHandle ? new VisualNovelSettingsPanel({
+    getChatId:()=>chatId(),
+    onRefreshContextSources:(chatId,requestId)=>ctx.sendToBackend({type:"vn_get_context_sources",chatId,requestId}),
     mount: settingsHandle.root,
     onOpenPreview: () => activate(),
     onRefreshConnections: () => requestConnectionCatalog(),
@@ -955,6 +957,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       settingsPanel?.setConnectionCatalog("image", states.image);
       return;
     }
+    if(type==='vn_context_sources' && message.type==='vn_context_sources') {settingsPanel?.setContextSourceReport(message.report);return;}
+    if(type==='vn_error' && message.type==='vn_error' && message.operation==='vn_get_context_sources') {settingsPanel?.contextSourceError();return;}
     if (type === "vn_system_one_key_status" && message.type === "vn_system_one_key_status") {
       settingsPanel?.setSystemOneKeyStatus(message.saved);
       return;

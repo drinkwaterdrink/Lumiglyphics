@@ -41,6 +41,8 @@ const panelOptions: SettingsPanelOptions = {
   },
   onOpenPreview: () => { fixture.previews += 1; },
   onRefreshConnections: () => { fixture.refreshes += 1; },
+  getChatId: () => 'context-chat',
+  onRefreshContextSources: (chatId,requestId) => { panel.setContextSourceReport({chatId,requestId,sources:[{provider:'lumibooks',status:'available',recordCount:3,publicFactCount:0,updatedAt:Date.now(),freshness:'current_reference'},{provider:'lumiscript',status:'disabled',recordCount:0,publicFactCount:0,updatedAt:null,freshness:'unknown'}]}); },
   onSaveSystemOneKey: (key) => { fixture.savedSystemOneKeys.push(key); panel.setSystemOneKeyStatus(true); },
   onClearSystemOneKey: () => { fixture.clearedSystemOneKeys += 1; panel.setSystemOneKeyStatus(false); },
   onScanAudio: (directory) => { fixture.scans.push(directory); return { bgmCount: 3, sfxCount: 12 }; },

@@ -10,7 +10,7 @@
 
 **Spec:** ../specs/2026-10-11-reader-experience-design.md, plus the user's scenario-card clarification and supplied inline-dossier examples as inspiration only.
 
-**Status:** Beta.10 on `Testing`, 2026-10-11. A recovery, B mobile reader, prompt/Manga/shared-style feedback and three additional UI themes are delivered. C has its first typed entity/timeline foundation: bounded, sourced snapshots derived from existing validated plans, additive persistence and backward-safe nameplate selection. C remains incomplete: normalized context adapters, optional planner entity proposals and context status/precedence UI are next. D–G remain pending. Earlier unchecked steps remain a design checklist rather than a claim of identical implementation.
+**Status:** Beta.12 on `Testing`, 2026-10-11. A recovery, B mobile reader, prompt/Manga/shared-style feedback and three additional UI themes are delivered. C has its first typed entity/timeline foundation: bounded, sourced snapshots derived from existing validated plans, additive persistence and backward-safe nameplate selection. C remains incomplete: normalized context adapters, optional planner entity proposals and context status/precedence UI are next. D–G remain pending. Earlier unchecked steps remain a design checklist rather than a claim of identical implementation.
 
 ## Global constraints
 
@@ -150,6 +150,8 @@ Do not treat each paragraph as a new model call. Extend the existing single plan
 - [ ] Implement freshness handling: optional reads have a 1500ms deadline and never block the initial reader shell or ordinary planning. Use one bounded collection per turn/context refresh rather than polling each paragraph. A late valid result may populate a labeled current-reference card; it may not rewrite a saved turn or advance a reveal. Turn-end state becomes a later-turn baseline only after its originating turn is fully revealed. Wipes/disable clear current contribution while immutable historical projections stay historical.
 - [ ] Add tests for absent extensions, revocation, malformed payloads, duplicate aliases, noInject files/records, wipes, and late results. Run focused tests and typecheck against installed Spindle types.
 - [ ] Add Context sources status/precedence controls within existing settings. User override wins its explicit field; observed scene changes update mutable state; conflicting provider assertions stay attributed rather than silently merged. Commit this foundation.
+
+Beta.12 increment: optional read-only LumiBooks codex and explicitly selected versioned LumiScript RPC adapters, scope/bounds/privacy filtering, provider deadlines and ephemeral source-status controls are delivered. Reads are user-triggered in existing Context sources and ordered after configuration saves. Imported facts/names are not sent to the frontend, injected into image prompts or merged into historical snapshots. SimTracker normalized bridge/custom mappings, Warp normalized scene evidence, optional planner entity proposals, field-precedence selection and reference/dossier rendering remain pending. Existing SimTracker visual extraction and Warp game/panel integrations remain functional.
 
 ## Work package D — clickable NPC/place/object dossiers (4)
 

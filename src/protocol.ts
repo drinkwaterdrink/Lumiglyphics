@@ -1,3 +1,4 @@
+import type { ContextSourceReport } from './shared/context-sources.js';
 import type { ReaderPresentation } from "./shared/presentation-entities.js";
 import { z } from "zod";
 import { CardRoleSchema, type CardRole } from "./shared/card-role.js";
@@ -13,7 +14,9 @@ const recoveryScope={version:z.literal(1),chatId:z.string().min(1).max(200),mess
 export const CorrectImageSubjectRequestSchema=z.object({type:z.literal('vn_correct_image_subject'),...recoveryScope,jobId:z.string().min(1).max(200),templateId:z.string().min(1).max(100).optional(),subject:SubjectCorrectionSchema}).strict();
 export const SetCardRoleRequestSchema=z.object({type:z.literal('vn_set_card_role'),...recoveryScope,role:CardRoleSchema}).strict();
 export const ReplanTurnRequestSchema=z.object({type:z.literal('vn_replan_turn'),...recoveryScope}).strict();
+export const ContextSourcesRequestSchema = z.object({type:z.literal("vn_get_context_sources"),chatId:z.string().min(1).max(256),requestId:z.string().min(1).max(100)}).strict();
 export type FrontendRequest =
+  | z.infer<typeof ContextSourcesRequestSchema>
   | z.infer<typeof ReplanTurnRequestSchema>
   | z.infer<typeof CorrectImageSubjectRequestSchema>
   | z.infer<typeof SetCardRoleRequestSchema>
@@ -146,6 +149,7 @@ export type ConnectionCatalogErrors = {
 };
 
 export type BackendResponse =
+  | { type: "vn_context_sources"; report: ContextSourceReport }
   | { type: "vn_image_requests"; chatId: string; messageId: string; sourceFingerprint: string; requests: ImageRequestRecord[] }
   | { type: "vn_external_image"; result: CueImageResult }
   | { type: "vn_panel_template"; requestId: string; chatId: string; template?: string; error?: string }
@@ -186,6 +190,7 @@ export type BackendResponse =
 
 export function isFrontendRequest(value: unknown): value is FrontendRequest {
   if (value === null || typeof value !== "object") return false;
+  if ((value as {type?:unknown}).type === "vn_get_context_sources") return ContextSourcesRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === 'vn_replan_turn') return ReplanTurnRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_correct_image_subject") return CorrectImageSubjectRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_set_card_role") return SetCardRoleRequestSchema.safeParse(value).success;

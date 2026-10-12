@@ -1,3 +1,8 @@
+import { ContextSourceSession } from './context-providers/session.js';
+import type { VisualNovelConfig } from '../../config.js';
+import { ContextSourcesRequestSchema } from '../../protocol.js';
+const contextSourceSession = new ContextSourceSession();
+const contextConfigSaves = new Map<string, Promise<VisualNovelConfig>>();
 import { readerPresentationFor } from "./entity-projection.js";
 import { modelOutputParameters } from './template-output.js';
 import { correctVisualSubject } from "./subject-resolution.js";
@@ -134,6 +139,7 @@ function releaseSceneCacheScope(spindle: SpindleAPI, userId: string | undefined,
 function noteActiveChat(spindle: SpindleAPI, userId: string | undefined, chatId: string): void {
   const userKey = userId ?? "owner";
   const previous = activeChatByUser.get(userKey);
+  if (previous !== chatId) contextSourceSession.cancel(userKey);
   if (previous && previous !== chatId) releaseSceneCacheScope(spindle, userId, previous, "chat_switch");
   if (chatId) activeChatByUser.set(userKey, chatId);
 }
@@ -1485,8 +1491,20 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       await spindle.enclave.delete(SYSTEM_ONE_KEY, userId);
       spindle.sendToFrontend({ type: "vn_system_one_key_status", saved: false }, userId);
       return;
+    case "vn_get_context_sources": {
+      const action=ContextSourcesRequestSchema.parse(request);
+      const sourceConfig=async()=>{await contextConfigSaves.get(userId);return (await loadConfig(spindle,userId)).contextSources;};
+      const report=await contextSourceSession.refresh(spindle,sourceConfig(),userId,action.chatId,action.requestId);
+      if(report) spindle.sendToFrontend({type:'vn_context_sources',report},userId);
+      return;
+    }
     case "vn_set_config": {
-      const config = await updateConfig(spindle, request.patch, userId);
+      if(request.patch.contextSources!==undefined) contextSourceSession.cancel(userId);
+      const saving = updateConfig(spindle, request.patch, userId);
+      if(request.patch.contextSources!==undefined) contextConfigSaves.set(userId,saving);
+      let config:VisualNovelConfig;
+      try { config=await saving; }
+      finally { if(contextConfigSaves.get(userId)===saving)contextConfigSaves.delete(userId); }
       rememberDebugFlag(userId, config);
       dbg(spindle, userId, `config saved (${Object.keys(request.patch).length} field(s) in patch)`);
       if (request.patch.audioDirectory !== undefined) {

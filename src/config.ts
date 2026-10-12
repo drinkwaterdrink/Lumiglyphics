@@ -1,3 +1,4 @@
+import { normalizeContextSources, type ContextSourcesConfig } from './shared/context-sources.js';
 import { DEFAULT_SPEECH_SETTINGS, normalizeSpeechSettings, type SpeechSettings } from "./speech-config.js";
 import { DEFAULT_READER_PREFERENCES, normalizeReaderPreferences, type ReaderPreferences } from "./shared/reader-preferences.js";
 import { BUILTIN_IMAGE_TEMPLATES, migrateImageTemplates, upgradeImageTemplates, type ImageTemplate } from "./shared/image-templates.js";
@@ -86,6 +87,7 @@ export type VisualNovelConfig = {
   imageTemplates: ImageTemplate[];
   imagePromptFormat: "description" | "tags";
   includeSimTrackerContext: boolean;
+  contextSources: ContextSourcesConfig;
   /** Anchor each character's appearance to their captured reference portrait. */
   referenceAnchoring: boolean;
   /** Where the reference anchor image comes from ("captured" render or "card" sprite). */
@@ -151,6 +153,7 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   imageTemplates: BUILTIN_IMAGE_TEMPLATES.map(template => ({ ...template })),
   imagePromptFormat: "description",
   includeSimTrackerContext: true,
+  contextSources: normalizeContextSources({}),
   referenceAnchoring: true,
   referenceSource: "captured",
   generateChoices: true,
@@ -311,6 +314,7 @@ export function normalizeConfig(value: unknown): VisualNovelConfig {
     imageTemplates: input.imageTemplates === undefined ? migrateImageTemplates(promptPresetList(input.promptPresets)) : upgradeImageTemplates(input.imageTemplates),
     imagePromptFormat: input.imagePromptFormat === "tags" ? "tags" : "description",
     includeSimTrackerContext: bool(input.includeSimTrackerContext, true),
+    contextSources: normalizeContextSources(input.contextSources),
     referenceAnchoring: bool(input.referenceAnchoring, DEFAULT_CONFIG.referenceAnchoring),
     referenceSource: referenceSource(input.referenceSource),
     generateChoices: bool(input.generateChoices, DEFAULT_CONFIG.generateChoices),
