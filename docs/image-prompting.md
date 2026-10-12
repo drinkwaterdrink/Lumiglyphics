@@ -76,3 +76,14 @@ Replanning reuses only exact semantic cache matches whose host image still exist
 **Picture diagnostics** reports the selected subject/template, SimTracker detection, story-reader model versus fallback mode, and a bounded explanation. Missing subject and missing appearance have different remedies; no-people templates require neither. Older records without resolved metadata report unavailable. A passing subject check does not prove model compatibility. **Copy diagnostics** includes names and status only, excluding chat text, appearance descriptions, prompts, reference bytes and raw provider errors. Technical error text and the actual prepared prompt can still be inspected separately.
 
 The existing Try again control retries unfinished images where a usable plan exists; its legacy recovery can plan again when no usable plan/appearance exists. Use explicit Replan when you want to reconsider scene selection and inspect new prompts before paying for images.
+
+
+## Prompt length and mobile editing
+
+Every outgoing primary positive and negative prompt is limited to 3,000 UTF-16 characters each. Overlong generated prompts first shed line-edge whitespace and exact duplicate lines. Unique facts are not automatically truncated. If still too long, the normal pipeline holds an editable preview even when review is off; generation requires a valid prompt within the limit. Requests without a review surface fail locally before spending on an image. Host-managed positive/negative copies remain synchronized. Provider/host-specific translation and other model limits still depend on the selected connection.
+
+The built-in Manga instructions and negatives are shorter, retaining identity/wardrobe consistency, panel count/order, grounded scene/action, wordless/approved-lettering rules, composition, lighting and visual quality controls. Exact unchanged older defaults migrate field by field. Customized wording and already-held request snapshots stay intact. This is a wording refinement, not a measured image-quality guarantee.
+
+After a picture fails or finishes, its request fields can be edited directly as a **local replacement draft**. Tap the field normally to focus it, edit positive/negative/parameters, then choose **Prepare edited preview**. No image is generated until approval. Finish or skip other waiting pictures before preparing a replacement. History remains unchanged; same-turn refreshes retain local edits. Prompts may temporarily exceed the final limit in the editor so pasted details are not silently cut. The counters warn, and submission is blocked until shortened. Preparation errors retain the local draft.
+
+The studio isolates clicks, typing and scrolling from reader navigation while preserving native input behavior. Textarea font size is 16px. Browser fixture checks cover focus/editability, typing, hotkey isolation, long paste preservation, counters and fixed mobile controls. A physical Android keyboard/IME was not exercised.

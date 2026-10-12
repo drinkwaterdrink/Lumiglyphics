@@ -80,3 +80,12 @@ describe("image request review", () => {
     expect(safeImageHistory(Array.from({ length: 50 }, (_, index) => ({ ...base, prompt: "short", negativePrompt: "short", requestId: String(index) })))).toHaveLength(32);
   });
 });
+
+test('oversize automatic requests are held for editing, and cannot be approved over 3000',async()=>{
+ const records:any[]=[];const gate=new ImageReviewGate(async r=>{records.push(r);});
+ const controller=new AbortController();const pending=gate.prepare('limit-job',0,{prompt:'x'.repeat(3111)},{provider:'nanogpt'},false,controller.signal);
+ await Promise.resolve();expect(records[0]?.state).toBe('review');
+ expect(()=>gate.decide(records[0]!.requestId,'generate',{prompt:'x'.repeat(3001)})).toThrow('3,000');
+ expect(gate.decide(records[0]!.requestId,'generate',{prompt:'Detailed silver-haired character in an observatory.'})).toBe(true);
+ expect((await pending).prompt).toContain('silver-haired');
+});

@@ -866,3 +866,17 @@ test('an edit without a host event invalidates a replan before persistence',asyn
  expect((f.data.get(path) as StoredTurnRecord).plan.key.revision).toBe(old.plan.key.revision);expect(f.gates).toHaveLength(0);
  f.request({type:'vn_view',chatId:'chat',open:false},'replan-edit');
 });
+
+test('local replacement edits become a held preview and oversize edits leave completed art intact',async()=>{
+ const f=generationFixture();f.data.set('config.json',{generateImages:true,reviewImages:false,referenceAnchoring:false,maxImagesPerTurn:1,includeCharacterContext:false,includePersonaContext:false});
+ registerVisualNovelBackend(f.spindle);await sendState(f.spindle,'chat','editable-user',{viewOpen:true});
+ const path=turnPath('chat','assistant-1',0);const saved=()=>f.data.get(path) as StoredTurnRecord;
+ await waitFor(()=>f.gates.length===1);f.gates[0]!.resolve({imageId:'original',imageUrl:'/original'});await waitFor(()=>saved().jobs[0]?.status==='generated');await new Promise(r=>setTimeout(r,10));
+ const action={type:'vn_prepare_image',chatId:'chat',messageId:'assistant-1',sourceFingerprint:saved().plan.key.sourceFingerprint,jobId:saved().jobs[0]!.jobId,edits:{prompt:'A silver-haired character opens a sealed letter.',negativePrompt:'blurry, watermark',parameters:{seed:42}}};
+ f.request({...action,edits:{...action.edits,prompt:'x'.repeat(3001)}},'editable-user');
+ await waitFor(()=>f.sent.some((m:any)=>m.type==='vn_error'&&m.operation==='vn_prepare_image'));
+ expect(saved().jobs[0]?.imageId).toBe('original');expect(f.gates).toHaveLength(1);
+ f.request(action,'editable-user');await waitFor(()=>saved().imageRequests?.at(-1)?.state==='review');
+ expect(saved().imageRequests?.at(-1)?.prompt).toBe(action.edits.prompt);expect(saved().imageRequests?.at(-1)?.negativePrompt).toBe('blurry, watermark');expect(saved().imageRequests?.at(-1)?.parameters.seed).toBe(42);expect(f.gates).toHaveLength(1);
+ f.request({type:'vn_view',chatId:'chat',open:false},'editable-user');
+});

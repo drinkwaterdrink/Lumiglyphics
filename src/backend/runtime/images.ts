@@ -2,7 +2,8 @@ import { templateOutputParameters } from "./template-output.js";
 import { applyAttireOverride } from "./attire.js";
 export { applyAttireOverride, isClothingTag, cleanClothingFromPhrase } from "./attire.js";
 import type { SpindleAPI } from "lumiverse-spindle-types";
-import { applyImageEdits, type ImageGenerationRequest, type ImagePreparationMetadata } from "./image-review.js";
+import { applyImageEdits, compactImageRequest, type ImageGenerationRequest, type ImagePreparationMetadata } from "./image-review.js";
+import { assertPromptLengths } from '../../shared/prompt-length.js';
 import type { VisualNovelConfig } from "../../config.js";
 import { DEFAULT_CONFIG } from "../../config.js";
 import { novelAiCapabilities, novelAiQualityTags, NOVELAI_NEGATIVE_DEFAULT, renderNovelAiEmphasis } from "./novelai-prompt.js";
@@ -1185,7 +1186,7 @@ export async function generateAssets(
             parameters: { ...templateOutputParameters(cue.imageTemplate, selected?.provider ?? provider, config.imageParameters, selected?.default_parameters ?? {}), ...input.parameters }
           } : input;
           if (cue.imageTemplate) {
-            frozen = applyImageEdits(frozen, { prompt, negativePrompt });
+            frozen = applyImageEdits({...frozen,prompt,negativePrompt}, {});
             frozen.parameters = { ...frozen.parameters, negativePrompt };
           }
           if (!cueUsesCharacterReference(cue)) frozen = { ...frozen, parameters: withoutImageReferences(frozen.parameters ?? {}) };
@@ -1201,6 +1202,7 @@ export async function generateAssets(
             referenceSummary: portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference"
           };
           const initialMetadata = metadataFor(cue);
+          frozen = compactImageRequest(frozen);
           const approved = cacheOptions.beforeGenerate ? await cacheOptions.beforeGenerate(scheduledJob, frozen, {
             ...baseMetadata,
             ...(initialMetadata ? { imagePromptMetadata: initialMetadata } : {}),
@@ -1230,7 +1232,7 @@ export async function generateAssets(
               portrait = nextPortrait;
               wantsCapture = usesReference && Boolean(characterKey) && Boolean(identityFingerprint) && !nextPortrait;
               const nextNai = provider === "novelai" ? compileNovelAiRequest(config, scene, nextCue, characterAppearance) : null;
-              const updated = applyImageEdits(frozen, { prompt: nextCompiled.prompt, negativePrompt: nextCompiled.negativePrompt });
+              const updated = applyImageEdits({...frozen,prompt:nextCompiled.prompt,negativePrompt:nextCompiled.negativePrompt}, {});
               const request: ImageGenerationRequest = { ...updated, includeDataUrl: wantsCapture, parameters: {
                 ...withoutImageReferences({ ...templateOutputParameters(nextCue.imageTemplate, selected?.provider ?? provider, config.imageParameters, selected?.default_parameters ?? {}), ...effectiveParameters }),
                 ...(nextPortrait && provider ? referenceParametersFor(provider, nextPortrait, config) : {}),
@@ -1249,6 +1251,7 @@ export async function generateAssets(
           if (jobSignal.aborted) throw abortError(jobSignal);
           // A locally edited request cannot populate the compiler's original cache key.
           if (cacheOptions.disableCacheStore || JSON.stringify(approved) !== JSON.stringify(frozen)) { cacheKey = null; settle?.({ kind: "released" }); settle = null; }
+          assertPromptLengths(approved.prompt,approved.negativePrompt);
           const result = await spindle.imageGen.generate(approved);
           observedGenerationMs.push(Date.now() - generationStarted);
 

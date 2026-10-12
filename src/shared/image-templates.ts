@@ -32,15 +32,7 @@ export const ImagePromptMetadataSchema = z.object({ template: ImageTemplateSnaps
 export type ImagePromptMetadata = z.infer<typeof ImagePromptMetadataSchema>;
 export const ImageTemplateListSchema = z.array(ImageTemplateSchema).max(32).refine(templates => new Set(templates.map(t => t.id)).size === templates.length, "Template IDs must be unique.");
 
-const body = "{{style}}\n{{subjects}}\n{{action}}\n{{scene}}\n{{composition}}\n{{lighting}}\n{{suffix}}";
-export const BUILTIN_IMAGE_TEMPLATES: readonly ImageTemplate[] = [
-  { id: "portrait", name: "Character portrait", category: "portrait", enabled: true, useWhen: "A named character's expression or reaction is the main visual beat.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "portrait", referencePolicy: "character" },
-  { id: "environment", name: "Environment", category: "environment", enabled: true, useWhen: "Entering a new place, revealing scenery, or a meaningful change in atmosphere.", positive: "{{style}}\n{{scene}}\n{{composition}}\n{{lighting}}\nAn environment view without people.\n{{suffix}}", negative: "{{negative}}", subjectMode: "none", framing: "wide", referencePolicy: "none" },
-  { id: "action", name: "Story action", category: "action", enabled: true, useWhen: "A significant movement or event matters more than a facial reaction. Focus on one visible character.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "full body", referencePolicy: "character" },
-  { id: "detail", name: "Detail / object", category: "detail", enabled: true, useWhen: "An important object, clue, or other close-up is the visual focus.", positive: "{{style}}\n{{action}}\n{{scene}}\n{{composition}}\n{{lighting}}\nAn object detail without people.\n{{suffix}}", negative: "{{negative}}", subjectMode: "none", framing: "close-up", referencePolicy: "none" },
-  { id: "custom", name: "Custom", category: "custom", enabled: false, useWhen: "Use this when its custom instructions suit the scene.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "upper body", referencePolicy: "character" },
-  { outputAspectRatio: "9:16", id: "manga-page", name: "Manga page", category: "action", enabled: false, useWhen: "A visual story beat benefits from several connected panels focusing on the same visible character. Use only events already in the brief; do not invent future story developments.", subjectMode: "one", framing: "full body", referencePolicy: "character",
-    positive: `{{style}}
+const LEGACY_MANGA_POSITIVE = `{{style}}
 IDENTITY CONTROL:
 Keep this subject recognizable throughout the page: {{subjects}}. Preserve face, hair, body proportions, skin tone, accessories and wardrobe. If a character image reference is supplied, use it as the visual authority. Do not add unrelated named characters.
 PAGE STRUCTURE:
@@ -56,8 +48,29 @@ STYLE AND LIGHTING:
 Strong ink contours, manga shading, halftone textures, clean negative space, expressive contrast and a coherent color palette. Keep panel gutters clear and identity and clothing consistent.
 PRODUCTION:
 A detailed, editorially finished tall portrait page, composed for a mobile screen. Keep every panel and gutter inside the page, with modest outer margins and no oversized white border. Follow the requested output dimensions. This is one page image, not separate images per panel.
+{{suffix}}`;
+const LEGACY_MANGA_NEGATIVE = "identity drift, different face between panels, changed hairstyle, changed accessories, inconsistent wardrobe, repeated panel composition, broken reading order, extra limbs, fused hands, unreadable lettering, misspelled dialogue, random text, covered face, flat poses, weak contrast, muddy colors, photorealistic rendering, 3D CGI, watermark, logo";
+
+const body = "{{style}}\n{{subjects}}\n{{action}}\n{{scene}}\n{{composition}}\n{{lighting}}\n{{suffix}}";
+export const BUILTIN_IMAGE_TEMPLATES: readonly ImageTemplate[] = [
+  { id: "portrait", name: "Character portrait", category: "portrait", enabled: true, useWhen: "A named character's expression or reaction is the main visual beat.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "portrait", referencePolicy: "character" },
+  { id: "environment", name: "Environment", category: "environment", enabled: true, useWhen: "Entering a new place, revealing scenery, or a meaningful change in atmosphere.", positive: "{{style}}\n{{scene}}\n{{composition}}\n{{lighting}}\nAn environment view without people.\n{{suffix}}", negative: "{{negative}}", subjectMode: "none", framing: "wide", referencePolicy: "none" },
+  { id: "action", name: "Story action", category: "action", enabled: true, useWhen: "A significant movement or event matters more than a facial reaction. Focus on one visible character.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "full body", referencePolicy: "character" },
+  { id: "detail", name: "Detail / object", category: "detail", enabled: true, useWhen: "An important object, clue, or other close-up is the visual focus.", positive: "{{style}}\n{{action}}\n{{scene}}\n{{composition}}\n{{lighting}}\nAn object detail without people.\n{{suffix}}", negative: "{{negative}}", subjectMode: "none", framing: "close-up", referencePolicy: "none" },
+  { id: "custom", name: "Custom", category: "custom", enabled: false, useWhen: "Use this when its custom instructions suit the scene.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "upper body", referencePolicy: "character" },
+  { outputAspectRatio: "9:16", id: "manga-page", name: "Manga page", category: "action", enabled: false, useWhen: "A visual story beat benefits from several connected panels focusing on the same visible character. Use only events already in the brief; do not invent future story developments.", subjectMode: "one", framing: "full body", referencePolicy: "character",
+    positive: `{{style}}
+SUBJECT: {{subjects}}
+Keep face, hair, proportions, skin, accessories and clothing consistent across panels. Use a supplied character reference as identity authority; no unrelated named cast.
+SCENE: {{scene}}
+ACTION: {{action}}
+Create one full-color tall manga page with 5–7 connected panels. Use asymmetrical layout and clear left-to-right, top-to-bottom reading order. Show only this scene/action, without invented events or outcomes. Vary establishing views, action details and reaction close-ups; avoid repeated compositions. Match expressions to the action, with cinematic perspective and restrained motion lines.
+Wordless by default: no dialogue, captions or random text. If explicitly approved lines are supplied, reproduce only those lines with correct spelling; keep faces and gestures clear.
+LIGHTING: {{lighting}}
+Strong ink contours, manga shading, halftones, expressive contrast, coherent colors and clean negative space. Keep all panels/gutters inside a mobile portrait page with modest margins; no oversized white border. Follow requested dimensions. Render one page, not separate panel images.
+{{composition}}
 {{suffix}}`,
-    negative: "identity drift, different face between panels, changed hairstyle, changed accessories, inconsistent wardrobe, repeated panel composition, broken reading order, extra limbs, fused hands, unreadable lettering, misspelled dialogue, random text, covered face, flat poses, weak contrast, muddy colors, photorealistic rendering, 3D CGI, watermark, logo" }
+    negative: "identity drift, wardrobe drift, repeated compositions, broken reading order, extra limbs, malformed hands, unreadable or misspelled lettering, unrequested text, obscured faces, stiff poses, weak contrast, muddy colors, photorealism, 3D CGI, watermark, logo" }
 ];
 
 export function validateImageTemplates(value: unknown): ImageTemplate[] {
@@ -69,7 +82,13 @@ export function upgradeImageTemplates(value: unknown): ImageTemplate[] {
   if (!templates.some(t => t.id === "manga-page") && templates.length < 32) {
     templates.push({ ...BUILTIN_IMAGE_TEMPLATES.find(t => t.id === "manga-page")! });
   }
-  return templates.map(t => t.id === "manga-page" && t.outputAspectRatio === undefined ? { ...t, outputAspectRatio: "9:16" as const } : t);
+  return templates.map(t => {
+    if (t.id !== 'manga-page') return t;
+    const builtin = BUILTIN_IMAGE_TEMPLATES.find(template => template.id === 'manga-page')!;
+    return {...t,...(t.outputAspectRatio === undefined ? {outputAspectRatio:'9:16' as const} : {}),
+      ...(t.positive === LEGACY_MANGA_POSITIVE ? {positive:builtin.positive} : {}),
+      ...(t.negative === LEGACY_MANGA_NEGATIVE ? {negative:builtin.negative} : {})};
+  });
 }
 
 export function templateSnapshot(template: ImageTemplate): ImageTemplateSnapshot {

@@ -1,6 +1,7 @@
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import type { ImageRequestEdits, ImageRequestRecord } from "../../shared/image-review.js";
 import { ImagePromptMetadataSchema, type ImagePromptMetadata } from "../../shared/image-templates.js";
+import { compactPromptText, assertPromptLengths, IMAGE_PROMPT_MAX_CHARS } from '../../shared/prompt-length.js';
 
 export type ImageGenerationRequest = Parameters<SpindleAPI["imageGen"]["generate"]>[0];
 const blocked = /(?:api.?key|authorization|password|credential|token|secret|reference|(?:source|input|resolved|init)images?|(?:^|_)images?$|image(?:Data|Url|_data|_url|_bytes|_base64)|^v4_|^uc$|^negativePrompt$|^rawRequestOverride$|^__proto__$|^constructor$|^prototype$)/i;
@@ -47,8 +48,9 @@ export function safeImageHistory(input: unknown): ImageRequestRecord[] {
 }
 
 export function applyImageEdits(request: ImageGenerationRequest, edits: ImageRequestEdits): ImageGenerationRequest {
+  if (!edits || typeof edits !== 'object' || Array.isArray(edits)) throw new Error('Image edits must be an object.');
   const text = (value: unknown, required: boolean): string => {
-    if (typeof value !== "string" || value.length > 32000 || (required && !value.trim())) throw new Error("Prompt must be text, nonempty, and at most 32,000 characters.");
+    if (typeof value !== "string" || value.length > IMAGE_PROMPT_MAX_CHARS || (required && !value.trim())) throw new Error("Prompt must be text, nonempty, and at most 3,000 characters.");
     return value;
   };
   const prompt = edits.prompt === undefined ? request.prompt : text(edits.prompt, true);
@@ -84,6 +86,12 @@ export function applyImageEdits(request: ImageGenerationRequest, edits: ImageReq
 }
 
 export type ImagePreparationMetadata = { provider: string; connectionRevision?: number; referenceSummary?: string; imagePromptMetadata?: ImagePromptMetadata; rebuildTemplate?: (templateId: string) => Promise<{ request: ImageGenerationRequest; metadata: ImagePreparationMetadata }> };
+/** Also synchronize NovelAI/host-managed prompt copies after compaction. */
+export function compactImageRequest(request: ImageGenerationRequest): ImageGenerationRequest {
+  return applyImageEdits({...request,prompt:compactPromptText(request.prompt),
+    ...(request.negativePrompt !== undefined ? {negativePrompt:compactPromptText(request.negativePrompt)} : {})},{});
+}
+
 type Metadata = ImagePreparationMetadata;
 type Pending = { request: ImageGenerationRequest; record: ImageRequestRecord; signal: AbortSignal; rebuild?: Metadata["rebuildTemplate"]; resolve: (request: ImageGenerationRequest) => void; reject: (error: Error) => void; skipped: boolean };
 
@@ -108,7 +116,8 @@ export class ImageReviewGate {
 
   async prepare(jobId: string, paragraphIndex: number, input: ImageGenerationRequest, metadata: Metadata, review: boolean, signal: AbortSignal): Promise<ImageGenerationRequest> {
     if (signal.aborted) throw aborted("Image request cancelled.");
-    const request = structuredClone(input);
+    const request = compactImageRequest(structuredClone(input));
+    review = review || request.prompt.length > IMAGE_PROMPT_MAX_CHARS || (request.negativePrompt?.length ?? 0) > IMAGE_PROMPT_MAX_CHARS;
     const record = reviewRecord(jobId, paragraphIndex, request, metadata, review);
     if (!review) { await this.onRecord(record); if (signal.aborted) throw aborted("Image request cancelled."); return request; }
     let item!: Pending;
@@ -142,7 +151,7 @@ export class ImageReviewGate {
       await this.onRecord({ ...item.record, state: "cancelled" });
       const rebuilt = await item.rebuild(templateId);
       if (item.signal.aborted) throw aborted("Image request cancelled during template preparation.");
-      const request = structuredClone(rebuilt.request);
+      const request = compactImageRequest(structuredClone(rebuilt.request));
       const record = reviewRecord(item.record.jobId, item.record.paragraphIndex, request, rebuilt.metadata, true);
       item.request = request; item.record = record;
       this.pending.set(record.requestId, item);
@@ -161,6 +170,7 @@ export class ImageReviewGate {
     if (!item) return false;
     if (action === "skip") { this.pending.delete(requestId); item.skipped = true; item.reject(aborted("Image skipped.")); return true; }
     const edited = applyImageEdits(item.request, edits);
+    assertPromptLengths(edited.prompt,edited.negativePrompt);
     this.pending.delete(requestId);
     item.resolve(edited);
     return true;

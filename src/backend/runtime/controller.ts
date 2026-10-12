@@ -8,7 +8,8 @@ import type {
   SwipeEditedPayloadDTO,
   SpindleAPI
 } from "lumiverse-spindle-types";
-import { ImageReviewGate, safeImageHistory } from "./image-review.js";
+import { ImageReviewGate, safeImageHistory, applyImageEdits } from "./image-review.js";
+import type { ImageRequestEdits } from '../../shared/image-review.js';
 import { extractSimTracker } from "./simtracker.js";
 import { templateSnapshot } from "../../shared/image-templates.js";
 const imageReviewGates = new Map<string, ImageReviewGate>();
@@ -684,7 +685,7 @@ async function startAssets(
   record: StoredTurnRecord,
   path: string,
   userId?: string,
-  options: { bypassJobIds?: Iterable<string>; onlyJobId?: string; forceReview?: boolean } = {}
+  options: { bypassJobIds?: Iterable<string>; onlyJobId?: string; forceReview?: boolean; initialEdits?: ImageRequestEdits } = {}
 ): Promise<void> {
   const config = await loadConfig(spindle, userId);
   rememberDebugFlag(userId, config);
@@ -754,7 +755,8 @@ async function startAssets(
         ...(config.reviewImages ? { bypassJobIds: batchJobs.map((job) => job.jobId) } : options.bypassJobIds ? { bypassJobIds: options.bypassJobIds } : {}),
         ...sourceTextOption(record),
         beforeGenerate: async (job, request, metadata, jobSignal) => {
-          return gate.prepare(job.jobId, job.paragraphIndex, request, metadata, requiresReview, jobSignal);
+          const draft = options.onlyJobId === job.jobId && options.initialEdits ? applyImageEdits(request,options.initialEdits) : request;
+          return gate.prepare(job.jobId, job.paragraphIndex, draft, metadata, requiresReview, jobSignal);
         }
       }
     );
@@ -783,6 +785,7 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
   const correction=request.type==='vn_correct_image_subject' ? CorrectImageSubjectRequestSchema.parse(request) : undefined;
   const config = await loadConfig(spindle, userId);
   if (!config.generateImages) throw new Error("Enable generated pictures in settings before preparing a replacement.");
+  if(request.type === 'vn_prepare_image' && request.edits !== undefined) applyImageEdits({prompt:'Validation'},request.edits);
   const template = request.templateId === undefined ? undefined : config.imageTemplates.find(item => item.id === request.templateId);
   if (request.templateId !== undefined && !template) throw new Error("This template is unavailable.");
   if (!views.isOpen(userId, request.chatId)) throw new Error("Open the visual novel before preparing a picture.");
@@ -824,7 +827,7 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
   if(!isCurrent() || !await saveTurnRecordIfCurrent(spindle,path,next,userId,isCurrent)) return;
   if(!isCurrent()) return;
   spindle.sendToFrontend({ type: "vn_turn", turn: turnView(next) }, userId);
-  await startAssets(spindle, next, path, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId] });
+  await startAssets(spindle, next, path, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId],...(request.type === 'vn_prepare_image' && request.edits ? {initialEdits:request.edits} : {}) });
 }
 
 async function processAssistantMessage(

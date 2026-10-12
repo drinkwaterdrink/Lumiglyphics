@@ -410,3 +410,12 @@ describe("Finding #2: repeated expressions generate all cues without lingering q
     expect(finalJobs.some((j) => j.status === "queued")).toBe(false);
   });
 });
+
+test('final length guard blocks overlong automatic or callback requests without a provider call',async()=>{
+ for(const reviewed of [false,true]){
+  let calls=0;const spindle={userStorage:{getJson:async(_:string,o:any)=>o.fallback},imageGen:{generate:async()=>{calls++;return {imageId:'unexpected'};}}} as any;
+  const turn=plan([cue('idle')]);const config={...DEFAULT_CONFIG,referenceAnchoring:false,...(!reviewed ? {promptPrefix:'x'.repeat(3101)} : {})};
+  const jobs=await generateAssets(spindle,turn,createAssetJobs(turn,config),config,new AbortController().signal,()=>{},'limit-user',reviewed ? {beforeGenerate:async(_job,request)=>({...request,prompt:'x'.repeat(3001)})} : {});
+  expect(calls).toBe(0);expect(jobs[0]?.status).toBe('failed');expect(jobs[0]?.error).toContain('3,000');
+ }
+});
