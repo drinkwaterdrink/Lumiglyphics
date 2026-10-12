@@ -45,6 +45,8 @@ export type StructuredCharacterIdentity = {
 };
 
 export type VisualContextSnapshot = {
+  cardId?: string;
+  cardRole?: import("../../shared/card-role.js").CardRole;
   plannerContext: string;
   identityPrompt: string;
   /** Structured, non-lossy character identity (name + full description + stable tags). */
@@ -319,7 +321,7 @@ export async function loadVisualContext(
     loreIncluded: 0,
     errors: []
   };
-  const needsChat = input.config.includeCharacterContext;
+  const needsChat = true; // Card-role scope needs the attached card id even when card prompt context is disabled.
   const tracker = input.config.includeSimTrackerContext !== false ? input.trackerEvidence : undefined;
   if (input.trackerEvidence) {
     diagnostics.trackerStatus = input.config.includeSimTrackerContext === false ? "disabled" : input.trackerEvidence.status;
@@ -358,6 +360,7 @@ export async function loadVisualContext(
     plannerContext: [characterBlock, personaBlock, lore, tracker ? trackerContext(tracker) : ""].filter(Boolean).join("\n\n"),
     identityPrompt: visualIdentity(character, persona),
     characterIdentity,
+    ...(chat?.character_id ? {cardId:chat.character_id} : {}),
     personaIdentity,
     diagnostics
   };

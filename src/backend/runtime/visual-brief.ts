@@ -17,7 +17,7 @@ export function resolveTemplateIdentity(scene: SceneState, cue: VisualCue, appea
   const sameCharacter = characterAppearanceKey(name) === characterAppearanceKey(scene.character || scene.cast[0] || "");
   const saved = Object.entries(appearances ?? {}).find(([key]) => characterAppearanceKey(key) === characterAppearanceKey(name))?.[1]?.trim();
   const resolved = cue.resolvedIdentity?.trim() || (sameCharacter ? scene.identityPrompt?.trim() : "") || "";
-  return { name, sameCharacter, saved, resolved, identity: saved || resolved };
+  return { name, sameCharacter, saved, resolved, identity: cue.visualSources?.includes("manual subject correction") ? resolved : saved || resolved };
 }
 
 export function buildVisualBrief(config: VisualNovelConfig, scene: SceneState, cue: VisualCue, appearances?: CharacterAppearanceMap): VisualBrief {
@@ -25,7 +25,8 @@ export function buildVisualBrief(config: VisualNovelConfig, scene: SceneState, c
   const noPeople = template.subjectMode === "none";
   const { sameCharacter, saved, resolved, identity } = resolveTemplateIdentity(scene, cue, appearances);
   const attire = cue.resolvedAttire !== undefined ? cue.resolvedAttire : cue.attire ?? (sameCharacter ? scene.attire : null);
-  const conflicts = !noPeople && saved && resolved && saved !== resolved ? ["Saved appearance differs from scene evidence; the saved appearance is used."] : [];
+  const manual = cue.visualSources?.includes("manual subject correction");
+  const conflicts = !noPeople && saved && resolved && saved !== resolved ? [manual ? "Manual appearance replaces saved appearance for this picture." : "Saved appearance differs from scene evidence; the saved appearance is used."] : [];
   const appearance = attire ? applyAttireOverride(identity, attire) : identity;
   const subject = cue.subjectCategory ?? scene.subjectCategory;
   const subjectLabel = subject === "female" ? "One visible woman" : subject === "male" ? "One visible man" : "One visible character";
@@ -40,7 +41,7 @@ export function buildVisualBrief(config: VisualNovelConfig, scene: SceneState, c
     subjectMode: template.subjectMode,
     framing: template.framing,
     referencePolicy: noPeople ? "none" : template.referencePolicy,
-    sources: [...(cue.visualSources ?? []), "scene context", ...(!noPeople && saved ? ["saved appearance"] : [])].slice(0, 24),
+    sources: [...(cue.visualSources ?? []), "scene context", ...(!noPeople && saved && !manual ? ["saved appearance"] : [])].slice(0, 24),
     conflicts: [...conflicts, ...sharedStyleWarnings(template, config.promptPrefix, config.promptSuffix, config.negativePrompt)].slice(0, 16)
   };
 }

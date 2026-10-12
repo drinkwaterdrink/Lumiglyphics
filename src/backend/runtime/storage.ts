@@ -1,3 +1,4 @@
+import { CardRoleSchema, StoredCardRoleSchema, type CardRole } from "../../shared/card-role.js";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { ReadingPositionSchema, type ReadingPosition } from "../../shared/reading-position.js";
 import type { ImageRequestRecord } from "../../shared/image-review.js";
@@ -21,6 +22,7 @@ import {
   normalizeCharacterName,
   normalizeCharacterRegistry,
   splitTags,
+  subjectCategoryFromTags,
   toUsableTags,
   type CharacterAppearanceMap,
   type CharacterDeclaration,
@@ -30,6 +32,9 @@ import {
 
 export type StoredTurnRecord = {
   schemaVersion: 1;
+  correctionRequestIds?: string[];
+  cardRole?: CardRole;
+  cardId?: string;
   speaker: string;
   userSpeaker?: string;
   status: "planning" | "ready" | "failed" | "cancelled";
@@ -624,6 +629,9 @@ export async function loadTurnRecord(
   return {
     schemaVersion: 1,
     speaker: raw.speaker,
+    ...(Array.isArray(raw.correctionRequestIds) ? {correctionRequestIds:raw.correctionRequestIds.filter(id=>typeof id === "string" && id.length <= 100).slice(-32)} : {}),
+    ...(CardRoleSchema.safeParse(raw.cardRole).success ? {cardRole: CardRoleSchema.parse(raw.cardRole)} : {}),
+    ...(typeof raw.cardId === "string" ? {cardId:raw.cardId} : {}),
     status,
     plan: TurnPlanSchema.parse(raw.plan),
     jobs: Array.isArray(raw.jobs) ? raw.jobs.map((job) => AssetJobSchema.parse(job)) : [],
@@ -837,4 +845,53 @@ export async function resetPortraits(
       ...(userOptions(userId) ?? {})
     });
   });
+}
+
+
+export async function loadCardRole(spindle:SpindleAPI,chatId:string,cardId:string|undefined,userId?:string):Promise<CardRole> {
+ if(!cardId || !spindle.userStorage) return 'auto';
+ const parsed=StoredCardRoleSchema.safeParse(await spindle.userStorage.getJson(`chats/${safeSegment(chatId)}/card-role.json`,{fallback:null,...(userOptions(userId)??{})}));
+ return parsed.success && parsed.data.cardId===cardId ? parsed.data.role : 'auto';
+}
+export async function saveCardRole(spindle:SpindleAPI,chatId:string,cardId:string,role:CardRole,userId?:string):Promise<void> {
+ const path=`chats/${safeSegment(chatId)}/card-role.json`;
+ const value=StoredCardRoleSchema.parse({version:1,cardId,role});
+ await serializedWrite(scopedKey(userId,path),()=>spindle.userStorage.setJson(path,value,{indent:2,...(userOptions(userId)??{})}));
+}
+/** Explicit user correction, scoped to this character in this chat. */
+export async function saveCorrectedAppearance(spindle:SpindleAPI,chatId:string,name:string,tags:string,userId:string):Promise<void> {
+ const path=chatRosterPath(chatId);
+ await serializedWrite(scopedKey(userId,path),async()=>{
+  const map=await loadCharacterAppearance(spindle,userId,chatId);
+  const old=appearanceMapKeyFor(map,name); if(old) delete map[old]; map[name]=tags;
+  await spindle.userStorage.setJson(path,map,{indent:2,userId});
+ });
+ const visual=await loadSingleCharacterState(spindle,chatId,userId);
+ if(characterAppearanceKey(visual.protagonist.name)===characterAppearanceKey(name)) {
+   const visualPath=singleCharacterStatePath(chatId);
+   await serializedWrite(scopedKey(userId,visualPath),async()=>{
+     const current=await loadSingleCharacterState(spindle,chatId,userId);
+     if(characterAppearanceKey(current.protagonist.name)!==characterAppearanceKey(name)) return;
+     // Explicit user corrections may replace the frozen seed; automatic planner saves may not.
+     await spindle.userStorage.setJson(visualPath,{...current,protagonist:{name:current.protagonist.name,tags:splitTags(tags)},updatedAt:new Date().toISOString()},{indent:2,userId});
+   });
+ }
+ const registry=await loadCharacterRegistry(spindle,chatId,userId);
+ const entry=Object.values(registry).find(e=>characterAppearanceKey(e.name)===characterAppearanceKey(name));
+ if(entry) {entry.tags=tags; const category=subjectCategoryFromTags(tags); if(category!=="unknown") entry.subjectCategory=category;}
+ const report=mergeCharacterDeclarations(registry,[{name,tags}]);
+ const registryPath=characterRegistryPath(chatId);
+ await serializedWrite(scopedKey(userId,registryPath),()=>spindle.userStorage.setJson(registryPath,{schemaVersion:CHARACTER_REGISTRY_SCHEMA_VERSION,characters:report.registry,updatedAt:new Date().toISOString()},{indent:2,userId}));
+}
+
+
+/** Conditional writes run inside the existing queue so an obsolete operation cannot write after a newer turn. */
+export async function saveTurnRecordIfCurrent(spindle: SpindleAPI, path: string, record: StoredTurnRecord, userId: string, isCurrent: () => boolean): Promise<boolean> {
+  let saved = false;
+  await serializedWrite(scopedKey(userId, path), async () => {
+    if (!isCurrent()) return;
+    await spindle.userStorage.setJson(path, record, { indent: 2, userId });
+    saved = isCurrent();
+  });
+  return saved;
 }

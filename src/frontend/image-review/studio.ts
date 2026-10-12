@@ -6,10 +6,10 @@ import type { ImageRequestRecord } from "../../shared/image-review.js";
 type Draft = { prompt: string; negative: string; parameters: string };
 const CSS = `
 :host{position:absolute;inset:0;pointer-events:none;z-index:9;font:14px/1.45 var(--vn-shell-family,system-ui);color:var(--vn-shell-text,#eee);--paper:#171822;--edge:var(--vn-shell-border,#535565);--accent:var(--vn-shell-accent,#c1b0eb)}
-[hidden]{display:none!important}button,input,textarea,select{font:inherit;color:inherit;box-sizing:border-box}button{cursor:pointer;min-height:44px;padding:8px 12px;border:1px solid var(--edge);border-radius:9px;background:var(--vn-shell-button,#252632)}button:disabled{opacity:.55;cursor:default}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}button,input,input:not([type=checkbox]),textarea,select{font:inherit;color:inherit;box-sizing:border-box}button{cursor:pointer;min-height:44px;padding:8px 12px;border:1px solid var(--edge);border-radius:9px;background:var(--vn-shell-button,#252632)}button:disabled{opacity:.55;cursor:default}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 [data-launch]{position:absolute;top:70px;right:max(12px,env(safe-area-inset-right));pointer-events:auto;background:var(--paper)}section{pointer-events:auto;position:absolute;right:12px;top:124px;width:min(490px,calc(100% - 24px));max-height:calc(100% - 144px);display:flex;flex-direction:column;overflow:hidden;overscroll-behavior:contain;box-sizing:border-box;border:1px solid var(--edge);border-radius:12px;padding:0;background:var(--paper);box-shadow:0 12px 40px #0009}
 h2{margin:0;font-size:19px}small,p{color:var(--vn-shell-muted,#bbc);overflow-wrap:anywhere}label{display:block;margin:12px 0}textarea,select{width:100%;background:var(--vn-shell-field,#101119);border:1px solid var(--edge);border-radius:6px;padding:8px}textarea{min-height:90px;font:13px/1.5 ui-monospace,monospace}textarea[readonly]{opacity:.85}.row{display:flex;gap:8px;flex-wrap:wrap}.row button:first-child{border-color:var(--accent)}[data-notice]{color:var(--accent);white-space:pre-wrap}details{margin:10px 0}summary::before{content:"▸";margin-right:8px}details[open]>summary::before{content:"▾"}summary{cursor:pointer;min-height:44px;display:flex;align-items:center}.toggle{display:flex;align-items:center;gap:8px}.toggle input{width:20px;height:20px}
-[data-studio-header],[data-studio-footer]{padding:12px 16px;flex:none;background:var(--paper)}[data-studio-header]{border-bottom:1px solid var(--edge);justify-content:space-between;align-items:center}[data-studio-body]{padding:0 16px 12px;overflow:auto;overscroll-behavior:contain;min-height:0}[data-studio-footer]{border-top:1px solid var(--edge)}[data-studio-footer] [data-notice]{margin:8px 0 0}select{min-height:44px}[data-provenance]{white-space:pre-wrap}section{color:#eee}section small,section p{color:#c6c7d2}:host{container-type:inline-size}
+[data-studio-header],[data-studio-footer]{padding:12px 16px;flex:none;background:var(--paper)}[data-studio-header]{border-bottom:1px solid var(--edge);justify-content:space-between;align-items:center}[data-studio-body]{padding:0 16px 12px;overflow:auto;overscroll-behavior:contain;min-height:0}[data-studio-footer]{border-top:1px solid var(--edge)}[data-studio-footer] [data-notice]{margin:8px 0 0}select{min-height:44px}[data-provenance]{white-space:pre-wrap}[data-recovery]>small{display:block;margin:8px 0 12px}[data-subject-name]{min-height:44px;font:inherit}section{color:#eee}section small,section p{color:#c6c7d2}:host{container-type:inline-size}
 @container (max-width:600px){section{inset:12px 8px max(12px,env(safe-area-inset-bottom));width:auto;max-height:none;border-radius:12px}[data-studio-footer]{padding:10px 12px}[data-studio-header]{padding:10px 12px}}
 `;
 
@@ -28,12 +28,13 @@ export class ImageStudio {
   private defaultTemplate = "portrait";
   private rebuilding = new Set<string>();
   private cursor = 0;
+  private recoveryJob = "";
 
   constructor(mount: HTMLElement, private readonly send: (request: FrontendRequest) => void, private readonly saveReview: (enabled: boolean) => void) {
     this.host = document.createElement("div");
     this.host.dataset.imageStudio = "";
     this.root = this.host.attachShadow({ mode: "open" });
-    this.root.innerHTML = `<style>${CSS}</style><button type="button" data-launch aria-expanded="false">Image prompts</button><section hidden aria-label="Image prompts"><div class="row" data-studio-header><h2>Image prompts</h2><button type="button" data-close aria-label="Close image prompts">Close</button></div><div data-studio-body><label class="toggle"><input type="checkbox" data-review checked>Review before generating</label><small>Applies to the next image batch. Held pictures stay held. You can keep reading.</small><label>Picture<select data-picture aria-label="Picture"></select></label><label data-history hidden>Recorded request<select data-request aria-label="Recorded request"></select></label><p data-scene></p><p data-meta></p><label>Picture template<select data-template aria-label="Picture template"></select></label><button type="button" data-use-template>Use template</button><div data-template-confirm hidden><p>Replacing rebuilds this prompt and parameters from the selected template. Your current edits will be replaced.</p><div class="row"><button type="button" data-keep>Keep edits</button><button type="button" data-replace>Replace with template</button></div></div><details><summary>Prompt sources</summary><p data-provenance></p></details><label>Positive prompt<textarea data-positive aria-label="Positive prompt" spellcheck="false"></textarea></label><label>Negative prompt<textarea data-negative aria-label="Negative prompt" spellcheck="false"></textarea></label><small>Negative prompts and individual settings are model dependent.</small><details><summary>Parameters and references</summary><p data-reference></p><label>Parameters (JSON)<textarea data-parameters aria-label="Parameters (JSON)" spellcheck="false"></textarea></label><small>Advanced overrides for this picture only. Reference bytes and host-managed fields are omitted. Your provider may ignore unsupported parameters.</small></details><small>Shows the extension request prepared for Lumiverse; the host converts it for the provider.</small></div><footer data-studio-footer><div class="row"><button type="button" data-generate>Generate this</button><button type="button" data-skip>Skip</button><button type="button" data-reset>Reset edits</button><button type="button" data-prepare>Edit and regenerate</button><button type="button" data-copy>Copy prompt</button></div><p data-notice role="status"></p></footer></section>`;
+    this.root.innerHTML = `<style>${CSS}</style><button type="button" data-launch aria-expanded="false">Image prompts</button><section hidden aria-label="Image prompts"><div class="row" data-studio-header><h2>Image prompts</h2><button type="button" data-close aria-label="Close image prompts">Close</button></div><div data-studio-body><label class="toggle"><input type="checkbox" data-review checked>Review before generating</label><small>Applies to the next image batch. Held pictures stay held. You can keep reading.</small><details data-card-role><summary>Card role for this chat</summary><label>Card role<select data-role aria-label="Card role"><option value="auto">Auto</option><option value="character">Character</option><option value="scenario">Scenario / world / narrator</option></select></label><button type="button" data-save-role>Save card role</button><small data-role-help>Applies to future replies. Existing pictures and held prompts stay unchanged. Auto uses available visual evidence.</small></details><label>Picture<select data-picture aria-label="Picture"></select></label><label data-history hidden>Recorded request<select data-request aria-label="Recorded request"></select></label><p data-scene></p><p data-meta></p><label>Picture template<select data-template aria-label="Picture template"></select></label><button type="button" data-use-template>Use template</button><div data-template-confirm hidden><p>Replacing rebuilds this prompt and parameters from the selected template. Your current edits will be replaced.</p><div class="row"><button type="button" data-keep>Keep edits</button><button type="button" data-replace>Replace with template</button></div></div><details data-recovery hidden><summary>Correct this picture’s subject</summary><small>Prepare a new preview for this picture only. No image is generated until you approve it.</small><label>Picture subject<select data-subject-mode aria-label="Picture subject"><option value="character">Character</option><option value="environment">Environment / no people</option></select></label><div data-person-fields><label>Character name<input data-subject-name aria-label="Character name" list="vn-subject-candidates" maxlength="160"></label><datalist id="vn-subject-candidates" data-candidates></datalist><label>Appearance<textarea data-subject-appearance aria-label="Appearance" maxlength="2000" placeholder="Concrete visual details, separated by commas: hair, eyes, skin, clothes, species…"></textarea></label><small>Use known appearance by leaving this blank, or supply details for this picture.</small><label class="toggle"><input type="checkbox" data-save-appearance>Save appearance for this character in this chat</label></div><small data-environment-help hidden>Choose a no-people template above. Character appearance and references are omitted.</small><button type="button" data-correct>Prepare corrected preview</button></details><details><summary>Prompt sources</summary><p data-provenance></p></details><label>Positive prompt<textarea data-positive aria-label="Positive prompt" spellcheck="false"></textarea></label><label>Negative prompt<textarea data-negative aria-label="Negative prompt" spellcheck="false"></textarea></label><small>Negative prompts and individual settings are model dependent.</small><details><summary>Parameters and references</summary><p data-reference></p><label>Parameters (JSON)<textarea data-parameters aria-label="Parameters (JSON)" spellcheck="false"></textarea></label><small>Advanced overrides for this picture only. Reference bytes and host-managed fields are omitted. Your provider may ignore unsupported parameters.</small></details><small>Shows the extension request prepared for Lumiverse; the host converts it for the provider.</small></div><footer data-studio-footer><div class="row"><button type="button" data-generate>Generate this</button><button type="button" data-skip>Skip</button><button type="button" data-reset>Reset edits</button><button type="button" data-prepare>Edit and regenerate</button><button type="button" data-copy>Copy prompt</button></div><p data-notice role="status"></p></footer></section>`;
     mount.append(this.host);
     this.el<HTMLButtonElement>("[data-launch]").onclick = () => {
       const section = this.el<HTMLElement>("section"); section.hidden = !section.hidden;
@@ -65,15 +66,47 @@ export class ImageStudio {
       this.preparing.add(this.selectedJob); this.render();
       this.send({ type: "vn_prepare_image", chatId: this.turn.chatId, messageId: this.turn.messageId, sourceFingerprint: this.turn.sourceFingerprint, jobId: this.selectedJob, ...(this.el<HTMLSelectElement>("[data-template]").value ? { templateId: this.el<HTMLSelectElement>("[data-template]").value } : {}) });
     };
+    this.el<HTMLSelectElement>('[data-subject-mode]').onchange=()=>{
+      const none=this.el<HTMLSelectElement>('[data-subject-mode]').value==='environment';
+      const picker=this.el<HTMLSelectElement>('[data-template]');
+      if(this.templates.find(t=>t.id===picker.value)?.subjectMode!==(none?'none':'one')) {
+        picker.value=this.templates.find(t=>t.category===(none?'environment':'portrait') && t.subjectMode===(none?'none':'one'))?.id??this.templates.find(t=>t.subjectMode===(none?'none':'one'))?.id??'';
+      }
+      this.renderRecoveryMode();
+    };
+    this.el<HTMLInputElement>('[data-subject-name]').onchange=()=>{
+      const name=this.el<HTMLInputElement>('[data-subject-name]').value;
+      this.el<HTMLTextAreaElement>('[data-subject-appearance]').value=this.turn?.subjectCandidates?.find(c=>c.name===name)?.appearance??'';
+    };
+    this.el<HTMLButtonElement>('[data-save-role]').onclick=()=>{
+      if(!this.turn) return;
+      this.send({type:'vn_set_card_role',version:1,...this.recoveryScope(),role:this.el<HTMLSelectElement>('[data-role]').value as 'auto'|'character'|'scenario'});
+    };
+    this.el<HTMLButtonElement>('[data-correct]').onclick=()=>{
+      if(!this.turn || this.preparing.has(this.selectedJob)) return;
+      const environment=this.el<HTMLSelectElement>('[data-subject-mode]').value==='environment';
+      const name=this.el<HTMLInputElement>('[data-subject-name]').value.trim();
+      if(!environment && !name) {this.el<HTMLElement>('[data-notice]').textContent='Enter the character name first.';return;}
+      const templateId=this.el<HTMLSelectElement>('[data-template]').value;
+      this.send({type:'vn_correct_image_subject',version:1,...this.recoveryScope(),jobId:this.selectedJob,templateId,
+        subject:environment?{kind:'environment',templateId}:{kind:'character',name,appearance:this.el<HTMLTextAreaElement>('[data-subject-appearance]').value,saveAppearance:this.el<HTMLInputElement>('[data-save-appearance]').checked}});
+      this.preparing.add(this.selectedJob);this.render();
+    };
     this.el<HTMLButtonElement>("[data-copy]").onclick = () => { void this.copy(); };
     this.render();
   }
   private el<T extends HTMLElement>(selector: string): T { return this.root.querySelector<T>(selector)!; }
+  private recoveryScope() {return {chatId:this.turn!.chatId,messageId:this.turn!.messageId,swipeId:this.turn!.swipeId,sourceFingerprint:this.turn!.sourceFingerprint,requestId:globalThis.crypto?.randomUUID?.() ?? `vn-recovery-${Date.now()}-${Math.random().toString(36).slice(2)}`};}
+  private renderRecoveryMode():void {
+    const environment=this.el<HTMLSelectElement>('[data-subject-mode]').value==='environment';
+    this.el<HTMLElement>('[data-person-fields]').hidden=environment;
+    this.el<HTMLElement>('[data-environment-help]').hidden=!environment;
+  }
   private records(): ImageRequestRecord[] { return this.turn?.imageRequests?.filter((record) => record.jobId === this.selectedJob) ?? []; }
   private record(): ImageRequestRecord | undefined { return this.records().find((record) => record.requestId === this.selectedRequest) ?? this.records().at(-1); }
 
   setTurn(turn: TurnView | null): void {
-    if (this.turn?.chatId !== turn?.chatId || this.turn?.sourceFingerprint !== turn?.sourceFingerprint || this.turn?.messageId !== turn?.messageId) { this.drafts.clear(); this.submitted.clear(); this.preparing.clear(); this.rebuilding.clear(); this.selectedJob = ""; this.selectedRequest = ""; }
+    if (this.turn?.chatId !== turn?.chatId || this.turn?.sourceFingerprint !== turn?.sourceFingerprint || this.turn?.messageId !== turn?.messageId) { this.drafts.clear(); this.submitted.clear(); this.preparing.clear(); this.rebuilding.clear(); this.selectedJob = ""; this.selectedRequest = ""; this.recoveryJob = ""; }
     this.turn = turn;
     for (const record of turn?.imageRequests ?? []) if (record.state !== "review") { this.submitted.delete(record.requestId); this.drafts.delete(record.requestId); }
     for (const asset of turn?.assets ?? []) if ((turn?.imageRequests ?? []).some((record) => record.jobId === asset.jobId && record.state === "review") || asset.status === "failed" || asset.status === "cancelled") this.preparing.delete(asset.jobId);
@@ -117,15 +150,15 @@ export class ImageStudio {
     this.el<HTMLElement>("[data-meta]").textContent = record ? `${record.provider} · ${record.model} · ${friendlyStatus(record.state)}` : asset?.status === "queued" || asset?.status === "generating" ? "Waiting for prompt/reference preparation. Later pictures may depend on an earlier portrait." : "The original request is unavailable for this older or reused picture.";
     const editable = record?.state === "review" && !this.submitted.has(record.requestId) && !this.rebuilding.has(record.requestId);
     const templateSelect = this.el<HTMLSelectElement>("[data-template]");
-    const previousTemplate = this.templateRequest === record?.requestId ? templateSelect.value : "";
-    this.templateRequest = record?.requestId ?? "";
+    const previousTemplate = this.templateRequest === (record?.requestId ?? `job:${this.selectedJob}`) ? templateSelect.value : "";
+    this.templateRequest = record?.requestId ?? `job:${this.selectedJob}`;
     templateSelect.replaceChildren();
     const available = [...this.templates];
     const snapshot = record?.imagePromptMetadata?.template;
     if (snapshot && !available.some(t => t.id === snapshot.id)) available.push(snapshot);
     for (const template of available) { const option = document.createElement("option"); option.value = template.id; option.textContent = template.name; templateSelect.append(option); }
     templateSelect.value = available.some(t => t.id === previousTemplate) ? previousTemplate : snapshot?.id ?? this.defaultTemplate;
-    templateSelect.disabled = !record || this.rebuilding.has(record.requestId) || this.submitted.has(record.requestId);
+    templateSelect.disabled = !asset || Boolean(record && (this.rebuilding.has(record.requestId) || this.submitted.has(record.requestId)));
     this.el<HTMLButtonElement>("[data-use-template]").hidden = record?.state !== "review";
     this.el<HTMLButtonElement>("[data-use-template]").disabled = !editable || !this.templates.some(t => t.id === templateSelect.value);
     const metadata = record?.imagePromptMetadata;
@@ -136,6 +169,21 @@ export class ImageStudio {
     const busy = this.turn?.assets.some((entry) => entry.status === "queued" || entry.status === "generating");
     this.el<HTMLButtonElement>("[data-prepare]").hidden = record?.state === "review";
     this.el<HTMLButtonElement>("[data-prepare]").disabled = !asset || Boolean(busy) || this.preparing.has(this.selectedJob) || !this.templates.some(t => t.id === templateSelect.value);
+    this.el<HTMLElement>('[data-recovery]').hidden=!asset || asset.source==='cache' || Boolean(busy) || record?.state==='review';
+    this.el<HTMLButtonElement>('[data-correct]').disabled=!asset || Boolean(busy) || this.preparing.has(this.selectedJob);
+    this.el<HTMLElement>('[data-card-role]').hidden=!this.turn?.cardRoleAvailable;
+    this.el<HTMLButtonElement>('[data-save-role]').disabled=Boolean(busy);
+    this.el<HTMLSelectElement>('[data-role]').value=this.turn?.cardRole??'auto';
+    if(this.recoveryJob!==this.selectedJob){
+      this.recoveryJob=this.selectedJob;
+      this.el<HTMLInputElement>('[data-subject-name]').value='';
+      this.el<HTMLTextAreaElement>('[data-subject-appearance]').value='';
+      this.el<HTMLInputElement>('[data-save-appearance]').checked=false;
+      this.el<HTMLSelectElement>('[data-subject-mode]').value='character';
+      const candidates=this.el<HTMLElement>('[data-candidates]');candidates.replaceChildren();
+      for(const candidate of this.turn?.subjectCandidates??[]){const option=document.createElement('option');option.value=candidate.name;candidates.append(option);}
+    }
+    this.renderRecoveryMode();
     this.el<HTMLButtonElement>("[data-copy]").disabled = !record;
     this.el<HTMLElement>("[data-notice]").textContent = asset?.error ?? (record && this.rebuilding.has(record.requestId) ? "Rebuilding template… Wait for a new preview before generating." : record?.state === "review" ? "Edits affect this picture only. Generate starts an image request." : "");
   }

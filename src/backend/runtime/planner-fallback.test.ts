@@ -243,3 +243,35 @@ describe("fresh single-character fallback", () => {
   });
 
 });
+
+
+describe("explicit scenario card role", () => {
+ test("world-card fallback never draws the wrapper even when it has appearance-like fields", async () => {
+  const captured={systemMessage:""};
+  const spindle=spindleFor("fail",captured,{cardName:"Rookhaven Academy",cardDescription:"silver hair, green eyes",sceneCharacter:"Rookhaven Academy"});
+  const result=await planTurn(spindle,{chatId:"chat-1",message:{...message,name:"Rookhaven Academy"},content:"The courtyard is empty.",previousScene:null,previousContinuity:null,recentMessages:[],config:DEFAULT_CONFIG,singleCharacter:emptySingleCharacter(),characterAppearance:{},cardRole:"scenario"});
+  expect(result.singleCharacter.protagonist.name).not.toBe("Rookhaven Academy");
+  expect(result.plan.visualCues.some(c=>c.character==="Rookhaven Academy")).toBe(false);
+ });
+ test("scenario keeps an explicitly described real NPC", async () => {
+  const captured={systemMessage:""};
+  const result=await planTurn(spindleFor("success",captured,{cardName:"Rookhaven Academy",plannerCharacterName:"Aleister",plannerCharacterDescription:"black hair, brown eyes",sceneCharacter:"Rookhaven Academy"}),{chatId:"chat-1",message:{...message,name:"Rookhaven Academy"},content:"Aleister enters the courtyard.",previousScene:null,previousContinuity:null,recentMessages:[],config:DEFAULT_CONFIG,singleCharacter:emptySingleCharacter(),characterAppearance:{},cardRole:"scenario"});
+  expect(result.singleCharacter.protagonist.name).toBe("Aleister");
+  expect(result.plan.visualCues.some(c=>c.character==="Rookhaven Academy")).toBe(false);
+ });
+});
+
+
+test('explicit scenario rejects a planner inventing an appearance for the card title',async()=>{
+ const result=await planTurn(spindleFor('success',{systemMessage:''},{cardName:'Rookhaven Academy',plannerCharacterName:'Rookhaven Academy',plannerCharacterDescription:'silver hair, green eyes',sceneCharacter:'Rookhaven Academy'}),{chatId:'chat-1',message:{...message,name:'Rookhaven Academy'},content:'The courtyard is empty.',previousScene:null,previousContinuity:null,recentMessages:[],config:DEFAULT_CONFIG,singleCharacter:emptySingleCharacter(),characterAppearance:{},cardRole:'scenario'});
+ expect(result.plan.visualCues.some(c=>c.character==='Rookhaven Academy')).toBe(false);
+ expect(Object.values(result.characterRegistry).some(e=>e.name==='Rookhaven Academy')).toBe(false);
+ expect(result.plan.paragraphSpeakers?.some(s=>s==='Rookhaven Academy')).toBe(false);
+});
+
+
+test('explicit Character allows the card subject and does not apply wrapper repair',async()=>{
+ const result=await planTurn(spindleFor('success',{systemMessage:''},{cardName:'Mira',cardDescription:'A person with no stated appearance.',plannerCharacterName:'Aleister',plannerCharacterDescription:'black hair, brown eyes',sceneCharacter:'Mira'}),{chatId:'chat-1',message,content:'Mira talks to Aleister.',previousScene:null,previousContinuity:null,recentMessages:[],config:DEFAULT_CONFIG,singleCharacter:emptySingleCharacter(),characterAppearance:{},cardRole:'character'});
+ expect(result.plan.visualCues[0]?.character).toBe('Mira');
+ expect(result.plan.visualCues[0]?.resolvedIdentity).toBe('');
+});

@@ -9,7 +9,7 @@ import type { VnStageErrorDetails, VnStageErrorSource } from "../stage/index.js"
  * - otherwise finished images (`generated` / `browser_ready`) are kept and
  *   only the unfinished ones (queued / generating / failed / cancelled) are
  *   remade.
- * The host never retries automatically; single-image retry does not exist.
+ * The host never retries automatically; the Image prompts panel can prepare one selected picture for review.
  */
 export type RetryScope = {
   scope: "replan-turn" | "unfinished-images";

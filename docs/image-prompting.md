@@ -56,3 +56,12 @@ Selecting fills editable drafts. Apply changes future preparations. Save preset 
 - [ByteDance Seedream 5.0 Lite introduction](https://seed.bytedance.com/en/blog/deeper-thinking-more-accurate-generation-introducing-seedream-5-0-lite): instruction following and reference-based style transfer. This family guidance does not verify capabilities of every NanoGPT/OpenRouter model alias, including Flash.
 
 Validation covers compilation, storage compatibility and UI workflow. No paid side-by-side image-quality comparison has been run. Compare a few identical scene briefs and references on your actual connection, altering one style detail at a time.
+
+
+## Correcting a picture and card role
+
+After the image batch settles, Image prompts provides **Correct this picture’s subject** for a generated, failed or cancelled picture. Choose Character and enter its name, then leave Appearance empty to use this chat’s known baseline or supply concrete visual details. Old subject direction is cleared; add desired action in the new preview. Choose Environment / no people for scenery; the template picker selects a compatible template and remains editable. Both routes hold a preview for approval even with normal review off. Other finished pictures stay intact.
+
+**Save appearance for this character in this chat** defaults off. Checking it explicitly replaces that character’s appearance baseline in this chat; it does not rewrite other chats or global memory. An explicit, unambiguous subject class in the supplied appearance also corrects a mistaken classification. Inspection never sends a provider request; approved replacements can incur an image-generation charge.
+
+**Card role for this chat** applies to future plans. Scenario / world / narrator treats the card title as a wrapper, excludes it from automatic drawable subjects and narrator fallback, and keeps separately named cast members. Character and Auto retain existing ordinary-card behavior. Changing the attached card resets the effective preference to Auto. Missing real-person appearance still blocks generation rather than borrowing another character’s body.

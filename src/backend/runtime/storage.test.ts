@@ -1,3 +1,4 @@
+import { loadCardRole, saveCardRole, saveCorrectedAppearance, loadCharacterRegistry } from "./storage.js";
 import { describe, expect, test } from "bun:test";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import {
@@ -463,4 +464,29 @@ describe("Finding #11: portrait storage validation and replacement/reset", () =>
     expect(loaded.mira?.imageId).toBe("img-replaced");
     expect(loaded.mira?.mimeType).toBe("image/webp");
   });
+});
+
+
+describe('chat card roles and explicit appearance corrections',()=>{
+ test('card role is scoped to the attached card and preserves unsupported stored data',async()=>{
+  const {spindle,data}=storageRuntime();
+  await saveCardRole(spindle,'chat/one','card-1','scenario','user');
+  expect(await loadCardRole(spindle,'chat/one','card-1','user')).toBe('scenario');
+  expect(await loadCardRole(spindle,'chat/one','card-2','user')).toBe('auto');
+  const future={version:2,cardId:'card-1',role:'scenario'};data.set('chats/chat_2Fone/card-role.json',future);
+  expect(await loadCardRole(spindle,'chat/one','card-1','user')).toBe('auto');expect(data.get('chats/chat_2Fone/card-role.json')).toEqual(future);
+ });
+ test('manual save updates this chat baseline without changing another chat or global memory',async()=>{
+  const {spindle,data}=storageRuntime(new Map<string,unknown>([
+   [singleCharacterStatePath('one'),seedSingleCharacter('Mira','silver hair, green eyes')],
+   ['chats/one/characters.json',{Mira:'silver hair, green eyes'}],
+   ['chats/two/characters.json',{Mira:'red hair, blue eyes'}],
+   [characterAppearancePath(),{Mira:'blonde hair, gray eyes'}]
+  ]));
+  await saveCorrectedAppearance(spindle,'one','Mira','black hair, brown eyes','user');
+  expect((await loadCharacterRegistry(spindle,'one','user')).mira?.tags).toBe('black hair, brown eyes');
+  expect((await loadSingleCharacterState(spindle,'one','user')).protagonist.tags).toEqual(['black hair','brown eyes']);
+  expect(data.get('chats/two/characters.json')).toEqual({Mira:'red hair, blue eyes'});
+  expect(data.get(characterAppearancePath())).toEqual({Mira:'blonde hair, gray eyes'});
+ });
 });

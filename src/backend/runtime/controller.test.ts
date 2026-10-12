@@ -702,3 +702,86 @@ test("cached Manga pages carry page presentation without a prepared image reques
   const record: StoredTurnRecord = { schemaVersion: 1, speaker: "Narrator", status: "ready", plan: pagePlan, jobs: [job], updatedAt: now };
   expect(turnView(record).assets[0]?.presentation).toBe("page");
 });
+
+
+describe('scoped picture subject recovery',()=>{
+ test('corrects one failed picture, preserves completed art and holds review with review mode off',async()=>{
+  const f=generationFixture();registerVisualNovelBackend(f.spindle);
+  await sendState(f.spindle,'chat','recovery-user',{viewOpen:true});
+  const saved=()=>f.data.get(turnPath('chat','assistant-1',0)) as StoredTurnRecord;
+  await waitFor(()=>f.gates.length===1);f.gates[0]!.resolve({imageId:'first',imageUrl:'/first'});
+  await waitFor(()=>f.gates.length===2 || saved().jobs.every(j=>j.status==='generated'));
+  if(f.gates[1]) f.gates[1].resolve({imageId:'second',imageUrl:'/second'});
+  await waitFor(()=>saved().jobs.every(j=>j.status==='generated'));
+  const paidBefore=f.gates.length;const keptImage=saved().jobs[1]!.imageId;
+  await new Promise(r=>setTimeout(r,10));
+  const failed=saved().jobs[0]!;
+  f.data.set(turnPath('chat','assistant-1',0),{...saved(),plan:{...saved().plan,visualCues:saved().plan.visualCues.map(c=>c.assetJobId===failed.jobId?{...c,visualDescription:'Mira in a silver dress waves',action:'Mira adjusts her silver dress'}:c)},jobs:saved().jobs.map(j=>j.jobId===failed.jobId?{...j,status:'failed',imageId:null,imageUrl:null,generatedAt:null,readyAt:null,finishedAt:new Date().toISOString(),error:'No usable appearance'}:j)});
+  const action={type:'vn_correct_image_subject',version:1,chatId:'chat',messageId:'assistant-1',swipeId:0,sourceFingerprint:saved().plan.key.sourceFingerprint,requestId:'manual-recovery',jobId:failed.jobId,templateId:'portrait',subject:{kind:'character',name:'Mira',appearance:'black hair, brown eyes',saveAppearance:false}};
+  f.request({...action,sourceFingerprint:'stale'},'recovery-user');
+  await waitFor(()=>f.sent.some((m:any)=>m.type==='vn_error'&&m.operation==='vn_correct_image_subject'));
+  expect(saved().jobs[0]?.status).toBe('failed');expect(f.gates).toHaveLength(paidBefore);
+  f.request(action,'recovery-user');
+  await waitFor(()=>saved().imageRequests?.at(-1)?.state==='review');
+  const review=saved().imageRequests!.at(-1)!;
+  expect(review.prompt).toContain('black hair');expect(review.prompt).not.toContain('silver hair');expect(review.prompt).not.toContain('silver dress');
+  expect(f.gates).toHaveLength(paidBefore);expect(saved().jobs[1]?.imageId).toBe(keptImage);
+  expect((f.data.get('chats/chat/characters.json') as Record<string,string>).Mira).toContain('silver hair');
+  f.request({type:'vn_image_review',chatId:'chat',messageId:'assistant-1',sourceFingerprint:action.sourceFingerprint,requestId:review.requestId,action:'skip'},'recovery-user');
+  await waitFor(()=>saved().imageRequests?.at(-1)?.state==='skipped');
+  await new Promise(r=>setTimeout(r,10));
+  f.request(action,'recovery-user');await new Promise(r=>setTimeout(r,10));
+  expect(saved().imageRequests?.at(-1)?.requestId).toBe(review.requestId);expect(f.gates).toHaveLength(paidBefore);
+  f.request({type:'vn_view',chatId:'chat',open:false},'recovery-user');
+ });
+ test('environment repair prepares without a character or paid call',async()=>{
+  const f=generationFixture();f.data.set('config.json',{generateImages:true,reviewImages:false,referenceAnchoring:false,maxImagesPerTurn:1,includeCharacterContext:false,includePersonaContext:false});
+  registerVisualNovelBackend(f.spindle);await sendState(f.spindle,'chat','environment-user',{viewOpen:true});
+  const saved=()=>f.data.get(turnPath('chat','assistant-1',0)) as StoredTurnRecord;
+  await waitFor(()=>f.gates.length===1);f.gates[0]!.resolve({imageId:'first',imageUrl:'/first'});await waitFor(()=>saved().jobs[0]?.status==='generated');await new Promise(r=>setTimeout(r,10));
+  f.request({type:'vn_correct_image_subject',version:1,chatId:'chat',messageId:'assistant-1',swipeId:0,sourceFingerprint:saved().plan.key.sourceFingerprint,requestId:'environment-recovery',jobId:saved().jobs[0]!.jobId,subject:{kind:'environment',templateId:'environment'}},'environment-user');
+  await waitFor(()=>saved().imageRequests?.at(-1)?.state==='review');
+  expect(saved().imageRequests?.at(-1)?.imagePromptMetadata?.brief.subjectMode).toBe('none');expect(f.gates).toHaveLength(1);
+  f.request({type:'vn_view',chatId:'chat',open:false},'environment-user');
+ });
+});
+
+
+test('role choice persists for the attached card and applies to future planning only',async()=>{
+ const f=generationFixture();
+ (f.spindle as any).chats={get:async()=>({character_id:'world-card'})};
+ f.data.set('config.json',{generateImages:false,includeCharacterContext:false,includePersonaContext:false,includeLorebookContext:false});
+ registerVisualNovelBackend(f.spindle);await sendState(f.spindle,'chat','role-user',{viewOpen:true});
+ const path=turnPath('chat','assistant-1',0);
+ const saved=()=>f.data.get(path) as StoredTurnRecord;
+ const action={type:'vn_set_card_role',version:1,chatId:'chat',messageId:'assistant-1',swipeId:0,sourceFingerprint:saved().plan.key.sourceFingerprint,requestId:'role-choice',role:'scenario'};
+ f.request({...action,swipeId:1},'role-user');await new Promise(r=>setTimeout(r,10));
+ expect(f.data.has('chats/chat/card-role.json')).toBe(false);
+ f.request(action,'role-user');await waitFor(()=>f.data.has('chats/chat/card-role.json'));
+ await new Promise(r=>setTimeout(r,10));expect(saved().speaker).toBe('Mira');
+ f.data.delete(path);f.data.delete(chatStatePath('chat'));
+ await sendState(f.spindle,'chat','role-user',{viewOpen:true});
+ expect(saved().speaker).toBe('Narrator');expect(saved().cardRole).toBe('scenario');expect(f.gates).toHaveLength(0);
+ f.request({type:'vn_view',chatId:'chat',open:false},'role-user');
+});
+
+
+test('new generation during appearance save cannot restart or broadcast the old correction',async()=>{
+ const f=generationFixture();f.data.set('config.json',{generateImages:true,reviewImages:false,referenceAnchoring:false,maxImagesPerTurn:1,includeCharacterContext:false,includePersonaContext:false});
+ registerVisualNovelBackend(f.spindle);await sendState(f.spindle,'chat','race-user',{viewOpen:true});
+ const path=turnPath('chat','assistant-1',0);const saved=()=>f.data.get(path) as StoredTurnRecord;
+ await waitFor(()=>f.gates.length===1);f.gates[0]!.resolve({imageId:'original',imageUrl:'/original'});await waitFor(()=>saved().jobs[0]?.status==='generated');await new Promise(r=>setTimeout(r,10));
+ const original=saved();const hold=deferred<void>();let reached=false;
+ const write=f.spindle.userStorage.setJson.bind(f.spindle.userStorage);
+ (f.spindle.userStorage as any).setJson=async(path:string,value:unknown,options:any)=>{
+   if(path==='chats/chat/characters.json'&&!reached){reached=true;await hold.promise;}
+   return write(path,value,options);
+ };
+ f.request({type:'vn_correct_image_subject',version:1,chatId:'chat',messageId:'assistant-1',swipeId:0,sourceFingerprint:original.plan.key.sourceFingerprint,requestId:'save-race',jobId:original.jobs[0]!.jobId,templateId:'portrait',subject:{kind:'character',name:'Mira',appearance:'black hair, brown eyes',saveAppearance:true}},'race-user');
+ await waitFor(()=>reached);
+ const turnsBefore=f.sent.filter((m:any)=>m.type==='vn_turn').length;
+ f.fire('GENERATION_STARTED',{chatId:'chat'},'race-user');hold.resolve();await new Promise(r=>setTimeout(r,25));
+ expect(f.sent.filter((m:any)=>m.type==='vn_turn')).toHaveLength(turnsBefore);
+ expect(saved().jobs[0]?.imageId).toBe('original');expect(f.gates).toHaveLength(1);
+ f.request({type:'vn_view',chatId:'chat',open:false},'race-user');
+});

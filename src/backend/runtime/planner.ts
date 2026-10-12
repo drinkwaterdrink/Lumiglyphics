@@ -1,3 +1,5 @@
+import { loadCardRole } from "./storage.js";
+import type { CardRole } from "../../shared/card-role.js";
 import type { ChatMessageDTO, SpindleAPI } from "lumiverse-spindle-types";
 import { z } from "zod";
 import type { VisualNovelConfig } from "../../config.js";
@@ -162,6 +164,7 @@ const PlannerOutputSchema = z.object({
 }).strict();
 
 export type PlanTurnInput = {
+  cardRole?: CardRole;
   chatId: string;
   message: ChatMessageDTO & { role?: string };
   content: string;
@@ -271,7 +274,7 @@ function plannerInstruction(config: VisualNovelConfig, visualContext?: VisualCon
   }
 
   const personaName = visualContext?.personaIdentity?.name?.trim() || "the User";
-  const cardName = visualContext?.characterIdentity?.name?.trim();
+  const cardName = visualContext?.cardRole === "scenario" ? undefined : visualContext?.characterIdentity?.name?.trim();
   const companionName = cardName || "the Companion";
 
   return [
@@ -1741,7 +1744,7 @@ function sceneForParagraph(scenes: SceneState[], paragraphIndex: number): SceneS
 function referenceCharacterName(input: PlanTurnInput, visualContext: VisualContextSnapshot): string {
   const frozenName = normalizeCharacterName(input.singleCharacter.protagonist.name);
   if (frozenName) return frozenName;
-  const cardName = normalizeCharacterName(visualContext.characterIdentity?.name ?? "");
+  const cardName = normalizeCharacterName(visualContext.cardRole === "scenario" ? "" : visualContext.characterIdentity?.name ?? "");
   if (cardName) return cardName;
   return normalizeCharacterName(input.message.name?.trim() ?? "") || "Protagonist";
 }
@@ -1807,7 +1810,7 @@ function knownCharacterBlock(input: PlanTurnInput, visualContext: VisualContextS
 
 function buildCardIdentity(visualContext: VisualContextSnapshot): { name: string; tags: string[] } | null {
   const card = visualContext.characterIdentity;
-  if (!card) return null;
+  if (!card || visualContext.cardRole === "scenario") return null;
   const name = normalizeCharacterName(card.name);
   if (!name) return null;
   // The card is planner context first. This deterministic path is only a
@@ -1895,7 +1898,7 @@ function resolveSingleCharacter(
   const plannerTags = plannerCharacter ? distillVisualTags(plannerCharacter.description) : [];
   const plannerUsable = plannerTags.length >= 2 && isUsableIdentity(plannerName, plannerTags);
   const plannerIsPersona = Boolean(personaName) && characterAppearanceKey(plannerName) === characterAppearanceKey(personaName);
-  const cardName = normalizeCharacterName(visualContext.characterIdentity?.name ?? "");
+  const cardName = normalizeCharacterName(visualContext.cardRole === "scenario" ? "" : visualContext.characterIdentity?.name ?? "");
   const speakerName = normalizeCharacterName(input.message.name?.trim() ?? "");
   const name = frozenName
     || (plannerUsable && !plannerIsPersona ? plannerName : "")
@@ -2073,6 +2076,8 @@ async function resolveDisplayMacros(
 export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promise<{
   plan: TurnPlan;
   usedFallback: boolean;
+  cardRole: CardRole;
+  cardId?: string;
   contextDiagnostics: VisualContextDiagnostics;
   singleCharacter: SingleCharacterState;
   extractedCharacters?: Array<{ name: string; description: string }>;
@@ -2096,6 +2101,19 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     ...(input.userId ? { userId: input.userId } : {})
   });
 
+  const cardRole=input.cardRole??await loadCardRole(spindle,input.chatId,visualContext.cardId,input.userId);
+  visualContext.cardRole=cardRole;
+  if(cardRole==='scenario') {
+    const wrapper=characterAppearanceKey(visualContext.characterIdentity?.name??input.message.name??'');
+    const isWrapper=(name:string|null|undefined)=>Boolean(wrapper)&&characterAppearanceKey(name??'')===wrapper;
+    const frozen=input.singleCharacter;
+    input={...input,message:{...input.message,name:''},
+      singleCharacter:isWrapper(frozen.protagonist.name)?{...frozen,protagonist:{name:'',tags:[]}}:frozen,
+      characterAppearance:Object.fromEntries(Object.entries(input.characterAppearance).filter(([name])=>!isWrapper(name))),
+      characterRegistry:Object.fromEntries(Object.entries(input.characterRegistry??{}).filter(([,entry])=>!isWrapper(entry.name))),
+      previousScene:input.previousScene && isWrapper(input.previousScene.character)?{...input.previousScene,character:null,identityPrompt:'',cast:input.previousScene.cast.filter(name=>!isWrapper(name))}:input.previousScene};
+    visualContext.plannerContext+='\nCard role: scenario/world/narrator. The card title is a wrapper, not a drawable person or dialogue speaker. Select actual described on-screen people, or an environment template for scenery. Narration uses Narrator.';
+  }
   const personaName = visualContext.personaIdentity?.name;
   const isPersona = (name: string | null | undefined): boolean => {
     if (!name) return false;
@@ -2219,7 +2237,8 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   const cardIdentity = buildCardIdentity(visualContext);
   planner = repairScenarioSubjects(planner, {
     name: visualContext.characterIdentity?.name ?? "",
-    hasCharacterIdentity: Boolean(cardIdentity && isUsableIdentity(cardIdentity.name, cardIdentity.tags))
+    explicitScenario: cardRole === "scenario",
+    hasCharacterIdentity: cardRole === "character" || Boolean(cardIdentity && isUsableIdentity(cardIdentity.name, cardIdentity.tags))
   });
 
   // Merge the planner's explicit declarations (ids, aliases, subject class) and
@@ -2494,7 +2513,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   for (const name of Object.keys(continuity.characters)) addCanonical(name);
   addCanonical(input.singleCharacter.protagonist.name);
   addCanonical(protagonistName);
-  addCanonical(cardDisplayName);
+  if (cardRole !== "scenario") addCanonical(cardDisplayName);
   addCanonical(input.message.name);
   const paragraphSpeakerByIndex = new Map<number, string>();
   for (const entry of planner.speakers) {
@@ -2572,7 +2591,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     }
   }
   return {
-    plan, usedFallback, contextDiagnostics: visualContext.diagnostics, singleCharacter,
+    plan, usedFallback, cardRole, ...(visualContext.cardId ? {cardId:visualContext.cardId} : {}), contextDiagnostics: visualContext.diagnostics, singleCharacter,
     extractedCharacters: planner.characters.map((character) => ({ name: character.name, description: character.description })),
     characterRegistry: registry,
     rejectedAliases: registryReport.rejectedAliases,

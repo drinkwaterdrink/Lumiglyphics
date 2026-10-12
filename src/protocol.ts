@@ -1,10 +1,18 @@
+import { z } from "zod";
+import { CardRoleSchema, type CardRole } from "./shared/card-role.js";
+import { SubjectCorrectionSchema } from "./shared/subject-correction.js";
 import type { VisualNovelConfig } from "./config.js";
 import { ReadingPositionSchema, type ReadingPosition } from "./shared/reading-position.js";
 import type { PanelArtifact } from "./shared/panels.js";
 import type { CueImageRequest, CueImageResult } from "./shared/cue-images.js";
 import type { ImageRequestEdits, ImageRequestRecord } from "./shared/image-review.js";
 
+const recoveryScope={version:z.literal(1),chatId:z.string().min(1).max(200),messageId:z.string().min(1).max(200),swipeId:z.number().int().min(0),sourceFingerprint:z.string().min(1).max(200),requestId:z.string().min(1).max(100)};
+export const CorrectImageSubjectRequestSchema=z.object({type:z.literal('vn_correct_image_subject'),...recoveryScope,jobId:z.string().min(1).max(200),templateId:z.string().min(1).max(100).optional(),subject:SubjectCorrectionSchema}).strict();
+export const SetCardRoleRequestSchema=z.object({type:z.literal('vn_set_card_role'),...recoveryScope,role:CardRoleSchema}).strict();
 export type FrontendRequest =
+  | z.infer<typeof CorrectImageSubjectRequestSchema>
+  | z.infer<typeof SetCardRoleRequestSchema>
   | { type: "vn_reading_position"; position: ReadingPosition }
   | { type: "vn_image_review"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; action: "generate" | "skip"; edits?: ImageRequestEdits }
   | { type: "vn_prepare_image"; chatId: string; messageId: string; sourceFingerprint: string; jobId: string; templateId?: string }
@@ -91,6 +99,9 @@ export type AudioCueView = {
 };
 
 export type TurnView = {
+  cardRole?: CardRole;
+  cardRoleAvailable?: boolean;
+  subjectCandidates?: Array<{name:string;appearance:string}>;
   chatId: string;
   messageId: string;
   swipeId: number;
@@ -169,6 +180,8 @@ export type BackendResponse =
 
 export function isFrontendRequest(value: unknown): value is FrontendRequest {
   if (value === null || typeof value !== "object") return false;
+  if ((value as {type?:unknown}).type === "vn_correct_image_subject") return CorrectImageSubjectRequestSchema.safeParse(value).success;
+  if ((value as {type?:unknown}).type === "vn_set_card_role") return SetCardRoleRequestSchema.safeParse(value).success;
   if ((value as { type?: unknown }).type === "vn_reading_position") return ReadingPositionSchema.safeParse((value as { position?: unknown }).position).success;
   return typeof (value as { type?: unknown }).type === "string"
     && String((value as { type: string }).type).startsWith("vn_");

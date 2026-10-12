@@ -9,15 +9,16 @@ type SubjectPlan = {
 };
 
 /** Repair only unsupported card-wrapper references, never unknown real people. */
-export function repairScenarioSubjects<T extends SubjectPlan>(plan: T, card: { name: string; hasCharacterIdentity: boolean }): T {
+export function repairScenarioSubjects<T extends SubjectPlan>(plan: T, card: { name: string; hasCharacterIdentity: boolean; explicitScenario?: boolean }): T {
   const key = characterAppearanceKey(card.name);
   if (!key || card.hasCharacterIdentity) return plan;
   const described = plan.characters.filter(person => {
+    if(card.explicitScenario && characterAppearanceKey(person.name)===key) return false;
     const tags = distillVisualTags(person.description);
     return tags.length >= 2 && isUsableIdentity(person.name, tags);
   });
   // A separately described entity may legitimately have the same name as its card.
-  if (described.length === 0 || described.some(person => characterAppearanceKey(person.name) === key)) return plan;
+  if ((!card.explicitScenario && described.length === 0) || (!card.explicitScenario && described.some(person => characterAppearanceKey(person.name) === key))) return plan;
   const wrapper = (name: string | null | undefined) => !!name && characterAppearanceKey(name) === key;
   const personFor = (name: string | null | undefined) => described.find(person => characterAppearanceKey(person.name) === characterAppearanceKey(name ?? ""));
   const replacementFor = (scene: SubjectPlan["scenes"][number]) => {
@@ -28,13 +29,13 @@ export function repairScenarioSubjects<T extends SubjectPlan>(plan: T, card: { n
   };
   const scenes = plan.scenes.map(scene => {
     const person = wrapper(scene.character) ? replacementFor(scene) : undefined;
-    return { ...scene, cast: scene.cast.filter(name => !wrapper(name)), ...(person ? { character: person.name, characterId: person.characterId ?? null } : {}) };
+    return { ...scene, cast: scene.cast.filter(name => !wrapper(name)), ...(person ? { character: person.name, characterId: person.characterId ?? null } : card.explicitScenario && wrapper(scene.character) ? {character:null,characterId:null} : {}) };
   });
   const cues = plan.cues.map(cue => {
     if (!wrapper(cue.character)) return cue;
     const scene = [...plan.scenes].reverse().find(s => s.startParagraph <= cue.paragraphIndex);
     const person = scene ? replacementFor(scene) : undefined;
-    return person ? { ...cue, character: person.name, characterId: person.characterId ?? null } : cue;
+    return person ? { ...cue, character: person.name, characterId: person.characterId ?? null } : card.explicitScenario ? {...cue,character:null,characterId:null} : cue;
   });
-  return { ...plan, scenes, cues, speakers: plan.speakers.map(speaker => wrapper(speaker.name) ? { ...speaker, name: "Narrator" } : speaker) };
+  return { ...plan, scenes, cues, characters: card.explicitScenario ? plan.characters.filter(person=>!wrapper(person.name)) : plan.characters, speakers: plan.speakers.map(speaker => wrapper(speaker.name) ? { ...speaker, name: "Narrator" } : speaker) };
 }

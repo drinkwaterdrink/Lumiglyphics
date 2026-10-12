@@ -1,3 +1,5 @@
+import { correctVisualSubject } from "./subject-resolution.js";
+import { CorrectImageSubjectRequestSchema, SetCardRoleRequestSchema } from "../../protocol.js";
 import type {
   ChatMessageDTO,
   GenerationEndedPayloadDTO,
@@ -46,6 +48,9 @@ import {
   SUPPORTED_AUDIO_EXTENSIONS
 } from "./audio-catalog.js";
 import {
+  loadCardRole,
+  saveCardRole,
+  saveCorrectedAppearance,
   loadCharacterAppearance,
   loadCharacterRegistry,
   loadChatState,
@@ -60,6 +65,7 @@ import {
   saveCharacterRegistry,
   saveChatState,
   saveSingleCharacterState,
+  saveTurnRecordIfCurrent,
   saveTurnRecord,
   turnPath,
   updateConfig,
@@ -463,6 +469,9 @@ export function turnView(record: StoredTurnRecord): TurnView {
     swipeId: typeof swipe === "number" ? swipe : Number(swipe ?? 0) || 0,
     sourceFingerprint: record.plan.key.sourceFingerprint,
     revision: record.plan.key.revision,
+    cardRole:record.cardRole??'auto',
+    cardRoleAvailable:Boolean(record.cardId),
+    subjectCandidates:[...new Map(record.plan.visualCues.filter(c=>c.character).map(c=>[c.character!,{name:c.character!,appearance:c.resolvedIdentity??''}])).values()].slice(0,32),
     speaker: record.speaker,
     userSpeaker: record.userSpeaker || "You",
     paragraphs: record.plan.paragraphs.map((paragraph) => paragraph.text),
@@ -607,6 +616,12 @@ export async function sendState(
     record = { ...record, imageRequests: record.imageRequests.map((request) => request.state === "review" ? { ...request, state: "cancelled" as const } : request), jobs: record.jobs.map((job) => job.status === "queued" || job.status === "generating" ? AssetJobSchema.parse({ ...job, status: "cancelled", finishedAt: new Date().toISOString() }) : job) };
     if (chatState.activeTurnPath) await saveTurnRecord(spindle, chatState.activeTurnPath, record, userId);
   }
+  if(record && !stale && spindle.chats?.get) {
+    try {
+      const chat=await spindle.chats.get(chatId,userId);
+      if(chat?.character_id) record={...record,cardId:chat.character_id,cardRole:await loadCardRole(spindle,chatId,chat.character_id,userId)};
+    } catch(error) {spindle.log.warn(`Card role unavailable: ${errorText(error)}`);}
+  }
   spindle.sendToFrontend({
     type: "vn_state",
     chatId,
@@ -677,6 +692,7 @@ async function startAssets(
   const cacheServed = record.jobs.filter((job) => job.provider === CACHE_JOB_PROVIDER).length;
   dbg(spindle, userId, `assets starting: ${record.jobs.length - cacheServed} generated job(s)${cacheServed ? ` + ${cacheServed} cache-served swap(s) (not generated)` : ""} for chat=${record.plan.key.chatId} message=${record.plan.key.assistantMessageId} concurrency=${config.imageConcurrency}`);
   const key = runtimeKey(userId, record.plan.key.chatId);
+  if (!compareTurnKeys(activeTurnKeys.get(key) ?? null, record.plan.key).accepted) return;
   assetControllers.get(key)?.abort("A newer turn replaced this asset batch.");
   const controller = new AbortController();
   assetControllers.set(key, controller);
@@ -745,7 +761,7 @@ async function startAssets(
   }
 }
 
-async function prepareSingleImage(spindle: SpindleAPI, request: Extract<FrontendRequest, { type: "vn_prepare_image" }>, userId: string): Promise<void> {
+async function prepareSingleImage(spindle: SpindleAPI, request: Extract<FrontendRequest, { type: "vn_prepare_image" | "vn_correct_image_subject" }>, userId: string): Promise<void> {
   const key = runtimeKey(userId, request.chatId);
   if (preparingSingleImages.has(key)) throw new Error("A picture is already being prepared.");
   preparingSingleImages.add(key);
@@ -753,8 +769,10 @@ async function prepareSingleImage(spindle: SpindleAPI, request: Extract<Frontend
   finally { preparingSingleImages.delete(key); }
 }
 
-async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<FrontendRequest, { type: "vn_prepare_image" }>, userId: string): Promise<void> {
+async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<FrontendRequest, { type: "vn_prepare_image" | "vn_correct_image_subject" }>, userId: string): Promise<void> {
   const key = runtimeKey(userId, request.chatId);
+  const epoch=intakeEpochs.get(key)??0;
+  const correction=request.type==='vn_correct_image_subject' ? CorrectImageSubjectRequestSchema.parse(request) : undefined;
   const config = await loadConfig(spindle, userId);
   if (!config.generateImages) throw new Error("Enable generated pictures in settings before preparing a replacement.");
   const template = request.templateId === undefined ? undefined : config.imageTemplates.find(item => item.id === request.templateId);
@@ -763,7 +781,7 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
   if (assetControllers.has(key)) throw new Error("Generate or skip the waiting pictures before preparing a replacement.");
   const state = await loadChatState(spindle, request.chatId, userId);
   const record = await loadTurnRecord(spindle, state.activeTurnPath, userId);
-  if (!record || record.plan.key.assistantMessageId !== request.messageId || record.plan.key.sourceFingerprint !== request.sourceFingerprint) throw new Error("This picture belongs to an older turn.");
+  if (!record || record.plan.key.chatId !== request.chatId || record.plan.key.assistantMessageId !== request.messageId || record.plan.key.sourceFingerprint !== request.sourceFingerprint) throw new Error("This picture belongs to an older turn.");
   const messages = await spindle.chat.getMessages(request.chatId) as NormalizedChatMessage[];
   const latest = [...messages].reverse().find((message) => !message.is_user && message.content.trim());
   if (!latest || latest.id !== request.messageId) throw new Error("A newer reply has replaced this picture.");
@@ -771,16 +789,32 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
   if (!intake.resolved || relateRecord(record, latest, intake) !== "current" || !views.isOpen(userId, request.chatId)) throw new Error("The source changed or the view closed. Refresh the visual novel first.");
   const active = activeTurnKeys.get(key);
   if (active && !compareTurnKeys(active, record.plan.key).accepted) throw new Error("This picture belongs to an older turn.");
+  if((intakeEpochs.get(key)??0)!==epoch) throw new Error("A newer generation replaced this correction.");
   activeTurnKeys.set(key, record.plan.key);
+  if(correction && record.correctionRequestIds?.includes(correction.requestId)) throw new Error("This correction has already been prepared.");
+  if(correction && Number(record.plan.key.swipeId??0)!==correction.swipeId) throw new Error('This correction belongs to an older swipe.');
   const job = record.jobs.find((entry) => entry.jobId === request.jobId);
   if (!job || ![...record.plan.visualCues, ...(record.plan.cacheCues ?? [])].some((cue) => cue.assetJobId === job.jobId)) throw new Error("This picture cannot be prepared from this turn.");
+  if(job.provider===CACHE_JOB_PROVIDER) throw new Error("This is a reuse-only picture outside the image budget. Choose one of this reply’s generated pictures instead.");
   const previousImages = { ...record.previousImages };
   if (job.imageId && job.imageUrl) previousImages[job.jobId] = { imageId: job.imageId, imageUrl: job.imageUrl };
   const queued = AssetJobSchema.parse({ ...job, status: "queued", imageId: null, imageUrl: null, error: null, queuedAt: new Date().toISOString(), startedAt: null, generatedAt: null, readyAt: null, finishedAt: null });
-  const updateCue = (cue: StoredTurnRecord["plan"]["visualCues"][number]) => template && cue.assetJobId === job.jobId ? { ...cue, imageTemplate: templateSnapshot(template), imageTemplateReason: "Manual template selection" } : cue;
-  const next = { ...record, plan: { ...record.plan, visualCues: record.plan.visualCues.map(updateCue), ...(record.plan.cacheCues ? { cacheCues: record.plan.cacheCues.map(updateCue) } : {}) }, previousImages, jobs: record.jobs.map((entry) => entry.jobId === job.jobId ? queued : entry) };
+  const registry=correction ? await loadCharacterRegistry(spindle,request.chatId,userId) : {};
+  let corrected: StoredTurnRecord['plan']['visualCues'][number] | undefined;
+  const updateCue = (cue: StoredTurnRecord['plan']['visualCues'][number]) => {
+    if(cue.assetJobId!==job.jobId) return cue;
+    const selected=template ? {...cue,imageTemplate:templateSnapshot(template),imageTemplateReason:'Manual template selection'} : cue;
+    if(!correction) return selected;
+    corrected={...correctVisualSubject(selected,correction.subject,registry,config.imageTemplates),visualSources:['manual subject correction'],imageTemplateReason:'Manual subject correction'};
+    return corrected;
+  };
+  const next = { ...record, ...(correction ? {correctionRequestIds:[...(record.correctionRequestIds??[]),correction.requestId].slice(-32)} : {}), plan: { ...record.plan, visualCues: record.plan.visualCues.map(updateCue), ...(record.plan.cacheCues ? { cacheCues: record.plan.cacheCues.map(updateCue) } : {}) }, previousImages, jobs: record.jobs.map((entry) => entry.jobId === job.jobId ? queued : entry) };
   const path = state.activeTurnPath!;
-  await saveTurnRecord(spindle, path, next, userId);
+  const isCurrent=()=>views.isOpen(userId,request.chatId) && !assetControllers.has(key) && (intakeEpochs.get(key)??0)===epoch && compareTurnKeys(activeTurnKeys.get(key)??null,record.plan.key).accepted;
+  if(!isCurrent()) throw new Error('This picture changed while preparing the correction.');
+  if(correction?.subject.kind==='character' && correction.subject.saveAppearance && corrected?.character && corrected.resolvedIdentity) await saveCorrectedAppearance(spindle,request.chatId,corrected.character,corrected.resolvedIdentity,userId);
+  if(!isCurrent() || !await saveTurnRecordIfCurrent(spindle,path,next,userId,isCurrent)) return;
+  if(!isCurrent()) return;
   spindle.sendToFrontend({ type: "vn_turn", turn: turnView(next) }, userId);
   await startAssets(spindle, next, path, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId] });
 }
@@ -978,7 +1012,9 @@ async function processAssistantMessage(
     const nowTime = new Date().toISOString();
     const record: StoredTurnRecord = {
       schemaVersion: 1,
-      speaker: message.name || "Narrator",
+      cardRole:result.cardRole,
+      ...(result.cardId ? {cardId:result.cardId} : {}),
+      speaker: result.cardRole === "scenario" ? "Narrator" : message.name || "Narrator",
       userSpeaker,
       status: "ready",
       plan: result.plan,
@@ -1255,6 +1291,30 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       if (!imageReviewGates.get(key)?.decide(request.requestId, request.action, request.edits ?? {})) throw new Error("This request has already been handled or cancelled. Prepare it again if needed.");
       return;
     }
+    case "vn_set_card_role": {
+      const action=SetCardRoleRequestSchema.parse(request);
+      const roleKey=runtimeKey(userId,action.chatId);
+      const epoch=intakeEpochs.get(roleKey)??0;
+      if(!views.isOpen(userId,action.chatId) || assetControllers.has(runtimeKey(userId,action.chatId))) throw new Error('Finish or skip the waiting pictures before changing the card role.');
+      const state=await loadChatState(spindle,action.chatId,userId);
+      const record=await loadTurnRecord(spindle,state.activeTurnPath,userId);
+      if(!record || record.plan.key.chatId!==action.chatId || record.plan.key.assistantMessageId!==action.messageId || record.plan.key.sourceFingerprint!==action.sourceFingerprint || Number(record.plan.key.swipeId??0)!==action.swipeId) throw new Error('This role selection belongs to an older turn.');
+      const chat=await spindle.chats.get(action.chatId,userId);
+      if(!chat?.character_id) throw new Error('No card is attached to this chat.');
+      const messages=await spindle.chat.getMessages(action.chatId) as NormalizedChatMessage[];
+      const latest=[...messages].reverse().find(m=>!m.is_user&&m.content.trim());
+      if(!latest || latest.id!==action.messageId || Number(latest.swipe_id??0)!==action.swipeId) throw new Error('A newer reply or swipe replaced this role selection.');
+      const intake=await resolveMessageIntake(spindle,action.chatId,latest.content,userId);
+      if(!intake.resolved || relateRecord(record,latest,intake)!=='current' || !views.isOpen(userId,action.chatId)) throw new Error('The source changed. Refresh the reader first.');
+      if((intakeEpochs.get(roleKey)??0)!==epoch || assetControllers.has(roleKey) || preparingSingleImages.has(roleKey) || !compareTurnKeys(activeTurnKeys.get(roleKey)??null,record.plan.key).accepted) throw new Error('This turn changed while saving the card role.');
+      await saveCardRole(spindle,action.chatId,chat.character_id,action.role,userId);
+      const next={...record,cardId:chat.character_id,cardRole:action.role};
+      const isCurrent=()=>views.isOpen(userId,action.chatId) && !assetControllers.has(roleKey) && (intakeEpochs.get(roleKey)??0)===epoch && compareTurnKeys(activeTurnKeys.get(roleKey)??null,record.plan.key).accepted;
+      if(!await saveTurnRecordIfCurrent(spindle,state.activeTurnPath!,next,userId,isCurrent) || !isCurrent()) return;
+      spindle.sendToFrontend({type:'vn_turn',turn:turnView(next)},userId);
+      return;
+    }
+    case "vn_correct_image_subject":
     case "vn_prepare_image":
       if (typeof request.chatId !== "string" || typeof request.jobId !== "string") throw new Error("Invalid image selection.");
       await prepareSingleImage(spindle, request, userId);
