@@ -8,7 +8,7 @@ const server=Bun.serve({hostname:'127.0.0.1',port:0,fetch:r=>new URL(r.url).path
 await mkdir(".cache/dossiers",{recursive:true});
 const browser=await chromium.launch({headless:true});
 try {
- for(const viewport of [{width:390,height:844},{width:1200,height:800}]) {
+ for(const viewport of [{width:360,height:800},{width:390,height:844},{width:844,height:390},{width:1200,height:800}]) {
   const page=await browser.newPage({viewport,reducedMotion:"reduce"});let external=0;
   page.on('request',r=>{if(!r.url().startsWith(`http://127.0.0.1:${server.port}`))external++;});
   await page.goto(`http://127.0.0.1:${server.port}`);
@@ -20,11 +20,19 @@ try {
    const snap=(i:number)=>({at:{key,paragraphIndex:i},entities:i===0?[mira,place]:[mira,place,object],stateByEntity:{m:{outfit:i===0?'coat':'uniform'}},presentEntityIds:['m'],locationId:'p',speakerEntityId:'m',drawableEntityId:'m'});
    f.prefs={enabled:true,categories:{npcs:true,locations:true,objects:true},detail:'expanded',linking:'all-known',maxLinksPerParagraph:3,overrides:[]};
    f.dossierTurn={mode:'standard',paragraphs:[{id:'a',speaker:'Mira',text:'Mira enters Lantern House.'},{id:'b',speaker:'Mira',text:'Mira carries the black key.'}],presentation:{version:1,snapshots:[snap(0),snap(1)]}};
-   f.stage.setTooltipPreferences(f.prefs);f.stage.loadTurn(f.dossierTurn);
+   f.stage.setReaderPreferences({adjustableSheetEnabled:true,layout:'overlay',sheetSize:'reading',backgroundOpacity:.8});f.stage.setTooltipPreferences(f.prefs);f.stage.loadTurn(f.dossierTurn);
   });
   const text=page.locator('[data-vn-dialogue-text]');
   assert.equal(await text.innerText(),'Mira enters Lantern House.');
   assert.equal(await text.locator('[data-entity-anchor]').count(),2);
+  const referenceButton=page.getByRole('button',{name:'Scene references',exact:true});
+  const refBox=await referenceButton.boundingBox();assert.ok(refBox&&refBox.width>=44&&refBox.height>=44,'reference menu has a usable touch target');
+  assert.equal(await referenceButton.locator('svg').count(),1,'reference menu has a recognizable icon');
+  const iconBox=await referenceButton.locator('svg').boundingBox();assert.ok(iconBox&&iconBox.width>=18&&iconBox.height>=18);
+  assert.equal(await page.locator('[data-vn-controls]').innerText(),'','toolbar is icon only');
+  assert.notEqual(await text.locator('[data-entity-anchor]').first().evaluate(e=>getComputedStyle(e).backgroundColor),'rgba(0, 0, 0, 0)','references have a visible highlight');
+
+  await page.screenshot({path:`.cache/dossiers/header-${viewport.width}.png`});
   await text.getByRole('button',{name:'About Mira',exact:true}).click();
   const card=page.getByRole('dialog',{name:'About Mira',exact:true});
   assert.match(await card.innerText(),/silver hair/);assert.doesNotMatch(await card.innerText(),/uniform|black key/);
@@ -65,10 +73,21 @@ try {
   assert.equal(await text.locator('code [data-entity-anchor]').count(),0);
   assert.equal(await text.getByRole('button',{name:'About Mira',exact:true}).count(),1,'plain mention remains linkable after a code mention');
   await page.evaluate(()=>{const f=(window as any).readingFixture;f.stage.setDisplayRegexRules('Mira => Someone');});
-  assert.equal(await text.locator('[data-entity-anchor]').count(),0,'uncertain display transforms omit links');
+  await page.waitForFunction(()=>!(window as any).readingFixture.stage.isTyping);
+  assert.equal(await text.getByRole('button',{name:'About Mira',exact:true}).count(),0,'renamed text never links to the original name');
+  assert.equal(await text.getByRole('button',{name:'About Lantern House',exact:true}).count(),1,'unaffected names remain clickable with display rules');
   await page.evaluate(()=>{const f=(window as any).readingFixture;f.stage.setDisplayRegexRules('');f.stage.setTextSpeed(0);f.stage.loadTurn(f.dossierTurn);});
   for(const preset of THEME_PRESET_IDS) {
    await page.evaluate(preset=>(window as any).readingFixture.stage.setThemePreset(preset),preset);
+
+   const panelBox=await page.locator('[data-vn-dialogue]').boundingBox();
+   const speaker=await page.locator('[data-vn-speaker]').boundingBox();
+   assert.ok(speaker&&speaker.width>=40&&panelBox&&speaker.x>=panelBox.x&&speaker.x+speaker.width<=panelBox.x+panelBox.width,`speaker name remains visible in ${preset}`);
+   for(const control of await page.locator('[data-vn-sheet-header] button').all()){
+    if(!await control.isVisible())continue;const b=await control.boundingBox();
+    if(await control.locator("[data-vn-control-icon]").count())assert.equal(await control.locator("[data-vn-control-icon]").isVisible(),true,`icon visible in ${preset}`);
+    assert.ok(b&&b.width>=44&&b.height>=44&&panelBox&&b.x>=panelBox.x&&b.x+b.width<=panelBox.x+panelBox.width+.5,`touch target fits ${preset}: ${await control.getAttribute("data-vn-control")} ${JSON.stringify(b)} panel=${JSON.stringify(panelBox)}`);
+   }
    await page.getByRole('button',{name:'Scene references',exact:true}).click();
    await page.getByRole('dialog',{name:'Scene references',exact:true}).getByRole('button',{name:'Mira',exact:true}).click();
    const themed=await page.getByRole('dialog',{name:'About Mira',exact:true}).boundingBox();

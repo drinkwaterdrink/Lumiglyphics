@@ -53,8 +53,10 @@ export class DossierCard {
 }
 export const DOSSIER_CSS=`
 [data-vn-references][hidden]{display:none!important}
-[data-vn-references]{min-width:36px!important;width:36px;height:36px;font-size:1.2em}
-[data-entity-anchor]{font:inherit;color:inherit;background:none;border:0;border-bottom:1px dotted var(--vn-accent,#9ec6f0);border-radius:0;padding:0;cursor:pointer;text-align:inherit;display:inline;line-height:inherit}
+[data-vn-root] [data-vn-references]{min-width:44px!important;min-height:44px!important;width:44px;height:44px;padding:0!important;display:inline-flex;align-items:center;justify-content:center}
+[data-vn-references] svg{width:20px;height:20px;display:block;flex:none}
+[data-vn-root] [data-entity-anchor]{font:inherit;font-weight:650;color:inherit;background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 16%,transparent);border:0;border-bottom:1px dotted var(--vn-accent,#9ec6f0);border-radius:.2em;padding:0 .08em;cursor:pointer;text-align:inherit;display:inline;line-height:inherit;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+[data-vn-root] [data-entity-anchor]:hover{background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 28%,transparent)}
 [data-entity-anchor]:focus-visible{outline:2px solid var(--vn-accent,#9ec6f0);outline-offset:3px}
 [data-vn-dossier][hidden]{display:none!important}
 [data-vn-dossier]{position:absolute;inset:0;z-index:200;display:flex;align-items:flex-end;justify-content:center;background:#0008;padding:16px;box-sizing:border-box}

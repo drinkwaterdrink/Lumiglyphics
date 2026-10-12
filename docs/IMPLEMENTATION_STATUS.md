@@ -1,5 +1,11 @@
 # Lumiglyphics implementation status
 
+## Latest Testing increment: 0.2.0-beta.17
+
+The reader header uses accessible icon-only controls with mobile touch targets and a floating, theme-aware speaker badge for attributed dialogue. Known NPC, location and item names are highlighted and clickable; the open-book button retains the current-reference menu. Display rules only prevent linking names that are no longer present in rendered prose. Tap prose or empty dialogue-panel space to continue; buttons, reference cards, scrolling, selection and resize gestures preserve their own behavior. While text is typing, the first tap finishes the current paragraph. Tooltip settings and category gates remain optional. This increment responds to reader UI feedback; E2 cast staging remains pending.
+
+See `docs/review-evidence/2026-10-12-reader-header-links.md` for local checks and runtime limits.
+
 ## Latest Testing increment: 0.2.0-beta.16
 
 Optional persistent place art is available under Pictures. Enable Reuse saved place art to retain completed Environment-template pictures and reuse exact-compatible variants across visits/restarts. Saved place art provides preview/prefer/forget/reset controls, with user/chat isolation and no host image deletion. Reused art costs zero new image slots; new jobs retain the existing budget/review route. Edited requests remain independent. This is E1; cast staging and external source reconciliation remain pending.

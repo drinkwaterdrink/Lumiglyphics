@@ -49,9 +49,26 @@ try {
 
     const text = page.locator("[data-vn-dialogue-text]");
     await assert.doesNotReject(() => panel.waitFor());
-    const originalProgress = await page.locator("[data-vn-progress]").textContent();
+    const beforeTap = await page.locator("[data-vn-progress]").textContent();
     await text.click();
-    assert.equal(await page.locator("[data-vn-progress]").textContent(), originalProgress, "selecting text does not advance");
+    assert.notEqual(await page.locator("[data-vn-progress]").textContent(), beforeTap, "tapping prose advances exactly once");
+    await page.getByRole("button", { name: "Previous paragraph", exact: true }).click();
+    assert.equal(await page.locator("[data-vn-progress]").textContent(), beforeTap, "previous button does not also advance");
+    await panel.click({ position: { x: 3, y: (await panel.boundingBox())!.height / 2 } });
+    assert.notEqual(await page.locator("[data-vn-progress]").textContent(), beforeTap, "tapping empty panel space advances");
+    const originalProgress = await page.locator("[data-vn-progress]").textContent();
+    await text.dispatchEvent("pointerdown", { pointerId: 1, clientX: 100, clientY: 200 });
+    await text.dispatchEvent("pointermove", { pointerId: 1, clientX: 100, clientY: 250 });
+    await text.dispatchEvent("pointerup", { pointerId: 1, clientX: 100, clientY: 250 });
+    await text.dispatchEvent("click");
+    assert.equal(await page.locator("[data-vn-progress]").textContent(), originalProgress, "scroll gestures do not advance");
+    await text.evaluate(el => {
+      const range = document.createRange(); range.selectNodeContents(el);
+      const selection = window.getSelection()!; selection.removeAllRanges(); selection.addRange(range);
+    });
+    await text.dispatchEvent("click");
+    assert.equal(await page.locator("[data-vn-progress]").textContent(), originalProgress, "selected prose does not advance");
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
     for (const size of ["compact", "expanded", "reading"]) {
       await page.evaluate(size => (window as any).readingFixture.stage.setReaderPreferences({ adjustableSheetEnabled: true, layout: "image-first", sheetSize: size, backgroundOpacity: .55 }), size);
       const box = await panel.boundingBox();

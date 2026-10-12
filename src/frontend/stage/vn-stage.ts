@@ -628,7 +628,7 @@ export class VnStage {
   setDisplayRegexRules(rulesText: string): void {
     this.customRegexRules = parseCustomRegexRules(rulesText);
     this.renderDialogueContent();
-    if(!this.isTyping)this.dossiers.refresh(this.state.currentParagraphIndex,this.customRegexRules.length>0);
+    if(!this.isTyping)this.dossiers.refresh(this.state.currentParagraphIndex);
   }
 
   setTextSpeed(speed: number): void {
@@ -1575,9 +1575,25 @@ export class VnStage {
       }
     }, { passive: true });
 
+    // A tap advances; dragging/scrolling the sheet must not become a tap on release.
+    let sheetGesture: { id: number; x: number; y: number; moved: boolean } | null = null;
+    this.root.addEventListener("pointerdown", event => {
+      sheetGesture = event.target instanceof Element && event.target.closest("[data-vn-dialogue]")
+        ? { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false } : null;
+    }, { passive: true });
+    this.root.addEventListener("pointermove", event => {
+      if (sheetGesture?.id === event.pointerId && Math.hypot(event.clientX - sheetGesture.x, event.clientY - sheetGesture.y) > 8) sheetGesture.moved = true;
+    }, { passive: true });
+    this.root.addEventListener("pointercancel", () => { if (sheetGesture) sheetGesture.moved = true; }, { passive: true });
     this.root.addEventListener("click", (event) => {
-      if (this.root.dataset.vnPageFocus === "true" || this.dialogueSheet?.isHidden() || (this.root.dataset.vnAdjustableSheet === "true" && event.target instanceof Element && event.target.closest("[data-vn-dialogue-text]"))) return;
+      const dragged = sheetGesture?.moved;
+      sheetGesture = null;
+      if (this.root.dataset.vnPageFocus === "true" || this.dialogueSheet?.isHidden()) return;
       if (this.isBacklogOpen || this.dossiers.isOpen()) return;
+      if (event.target instanceof Element && event.target.closest("[data-vn-dialogue]")) {
+        const selection = window.getSelection();
+        if (dragged || (selection && !selection.isCollapsed)) return;
+      }
       if (!isInteractiveTarget(event.target)) this.advance();
     });
 
@@ -1925,7 +1941,7 @@ export class VnStage {
 
   private onTextRenderFinished(): void {
     if (this.destroyed) return;
-    this.dossiers.refresh(this.state.currentParagraphIndex,this.customRegexRules.length>0);
+    this.dossiers.refresh(this.state.currentParagraphIndex);
     if (this.isSkipping) {
       this.scheduleSkipAdvance();
     } else if (this.isAutoPlay) {
