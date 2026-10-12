@@ -256,3 +256,9 @@ test('tracker field mappings migrate without changing standard extraction defaul
  assert.deepEqual(normalizeConfig({simTrackerMappings:{identity:['custom.look','constructor.name']}}).simTrackerMappings.identity,['custom.look']);
  assert.equal(normalizeConfig({includeSimTrackerContext:false,simTrackerMappings:{attire:['custom.outfit']}}).includeSimTrackerContext,false);
 });
+
+test('tooltips default off and normalize density while preserving category opt-outs',()=>{
+ assert.equal(normalizeConfig({}).tooltips.enabled,false);
+ const config=normalizeConfig({tooltips:{enabled:true,categories:{objects:false},detail:'expanded',maxLinksPerParagraph:99}});
+ assert.equal(config.tooltips.categories.objects,false);assert.equal(config.tooltips.categories.npcs,true);assert.equal(config.tooltips.maxLinksPerParagraph,6);assert.equal(config.tooltips.detail,'expanded');
+});

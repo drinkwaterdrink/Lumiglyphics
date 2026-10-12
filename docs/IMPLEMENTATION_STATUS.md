@@ -1,5 +1,9 @@
 # Lumiglyphics implementation status
 
+## Latest Testing increment: 0.2.0-beta.15
+
+Optional built-in story tooltips are available under Reading → Tooltips. NPCs, locations and items can be enabled separately, with detail/link density controls and local pin/hide/notes. Facts come from grounded visible-story references in the existing planner call; tapping a card makes no provider request. Mobile sheets and desktop cards inherit the current theme, pause reading automation and preserve cursor visibility. Existing replies without reference metadata require future planning to populate tooltips. External companion dossier integration remains pending. See the latest reader-experience plan increment for scope and validation limits.
+
 ## Current template upgrade: 0.2.0-beta.1
 
 Implemented editable templates and independently toggleable dynamic story-reader selection, with the existing budget (default 4, 0 unlimited). No additional provider adapter, planning call, dependency or permission was added. Existing shared styles, presets, connections and appearance overrides remain available in Pictures. Environment/detail templates omit character references and portrait capture; manual template rebuild retires the previous approval atomically. Supported SimTracker chat JSON is bounded to context through the target reply and is recorded as safe source metadata.

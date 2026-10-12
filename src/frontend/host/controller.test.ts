@@ -44,6 +44,7 @@ function spyStage(): VisualStageThemeTarget & { calls: string[] } {
 }
 
 const baseConfig: VisualNovelConfig = {
+  tooltips: DEFAULT_CONFIG.tooltips,
   simTrackerMappings: DEFAULT_CONFIG.simTrackerMappings,
   imageOutputAspectRatio: "default",
   collectEntityReferences: false,
@@ -562,4 +563,13 @@ describe("relayReferenceFetch (card reference data relay)", () => {
     }
     expect(replies[1]?.error).toMatch(/8 MiB/);
   });
+});
+
+test('stage rejects tooltip presentation from a different turn scope',()=>{
+ const view=turn();
+ const key={chatId:view.chatId,assistantMessageId:view.messageId,swipeId:view.swipeId,sourceFingerprint:view.sourceFingerprint,revision:view.revision};
+ const snapshot={at:{key,paragraphIndex:0},entities:[],stateByEntity:{},presentEntityIds:[],locationId:null,speakerEntityId:null,drawableEntityId:null};
+ const presentation={version:1 as const,snapshots:view.paragraphs.map((_,i)=>({...snapshot,at:{key,paragraphIndex:i}}))};
+ expect(stageTurnInput({...view,presentation},'standard',false).presentation).toEqual(presentation);
+ expect(stageTurnInput({...view,presentation:{...presentation,snapshots:presentation.snapshots.map(s=>({...s,at:{...s.at,key:{...key,chatId:'foreign'}}}))}},'standard',false).presentation).toBeUndefined();
 });

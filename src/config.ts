@@ -1,3 +1,4 @@
+import { normalizeTooltipPreferences, type TooltipPreferences } from "./shared/dossiers.js";
 import { normalizeTrackerMappings, type TrackerMappings } from "./shared/tracker-mappings.js";
 import { normalizeImageOutputRatio, type ImageOutputRatio } from "./shared/image-output.js";
 import { normalizeContextSources, type ContextSourcesConfig } from './shared/context-sources.js';
@@ -90,6 +91,7 @@ export type VisualNovelConfig = {
   imagePromptFormat: "description" | "tags";
   imageOutputAspectRatio: ImageOutputRatio;
   collectEntityReferences: boolean;
+  tooltips: TooltipPreferences;
   includeSimTrackerContext: boolean;
   simTrackerMappings: TrackerMappings;
   contextSources: ContextSourcesConfig;
@@ -159,6 +161,7 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   imagePromptFormat: "description",
   imageOutputAspectRatio: "default",
   collectEntityReferences: false,
+  tooltips: normalizeTooltipPreferences({}),
   includeSimTrackerContext: true,
   simTrackerMappings: normalizeTrackerMappings({}),
   contextSources: normalizeContextSources({}),
@@ -323,6 +326,7 @@ export function normalizeConfig(value: unknown): VisualNovelConfig {
     imagePromptFormat: input.imagePromptFormat === "tags" ? "tags" : "description",
     imageOutputAspectRatio: normalizeImageOutputRatio(input.imageOutputAspectRatio),
     collectEntityReferences: input.collectEntityReferences === true,
+    tooltips: normalizeTooltipPreferences(input.tooltips),
     includeSimTrackerContext: bool(input.includeSimTrackerContext, true),
     simTrackerMappings: normalizeTrackerMappings(input.simTrackerMappings),
     contextSources: normalizeContextSources(input.contextSources),

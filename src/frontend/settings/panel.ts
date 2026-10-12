@@ -1,3 +1,4 @@
+import { TooltipSettingsPanel } from "./tooltips.js";
 import { TrackerMappingsPanel } from "./tracker-mappings.js";
 import { IMAGE_OUTPUT_RATIOS, normalizeImageOutputRatio } from "../../shared/image-output.js";
 import { ContextSourcesPanel } from './context-sources.js';
@@ -448,6 +449,7 @@ export class VisualNovelSettingsPanel {
 
   private contextSourcesPanel!: ContextSourcesPanel;
   private trackerMappingsPanel!: TrackerMappingsPanel;
+  private tooltipSettingsPanel!: TooltipSettingsPanel;
   private templateEditor!: ImageTemplateEditor;
 
   constructor(options: SettingsPanelOptions) {
@@ -467,6 +469,8 @@ export class VisualNovelSettingsPanel {
     // The live sample starts in Reading; openSection moves it to Look when needed.
     this.root.querySelector('[data-pane="reading"] [data-sample-slot]')!.append(this.root.querySelector("[data-sample]")!);
     this.organizePictures();
+    this.tooltipSettingsPanel=new TooltipSettingsPanel(value=>this.options.onSave({tooltips:value}));
+    this.root.querySelector('[data-pane="reading"]')!.append(this.tooltipSettingsPanel.host);
     this.renderTextEffectCards();
     this.wire();
     this.wireNavigation();
@@ -1791,6 +1795,7 @@ export class VisualNovelSettingsPanel {
     this.templateEditor.setConfig(config);
     this.contextSourcesPanel.setConfig(config.contextSources);
     this.trackerMappingsPanel.setConfig(config.simTrackerMappings);
+    this.tooltipSettingsPanel.setConfig(config.tooltips);
     this.syncEveryday(config);
     const set = (name: AdvancedKey, apply: () => void) => {
       if (this.drafts.has(name)) return;
@@ -2123,6 +2128,7 @@ export class VisualNovelSettingsPanel {
   destroy(): void {
     this.contextSourcesPanel.destroy();
     this.trackerMappingsPanel.destroy();
+    this.tooltipSettingsPanel.destroy();
     for (const timer of [this.statusTimer, this.resetTimer, this.saveTimer, this.sampleTimer, this.flashTimer, this.copyTimer]) if (timer) clearTimeout(timer);
     this.templateEditor.destroy();
     this.resizeObserver?.disconnect();

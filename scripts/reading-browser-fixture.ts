@@ -19,7 +19,7 @@ const mount = document.createElement("div");
 Object.assign(mount.style, { position: "fixed", inset: "0", width: "100%", height: "calc(100dvh / var(--lumiverse-ui-scale, 1))", background: "#08090d" });
 appRoot.append(mount);
 const mode = params.get("mode") === "cyoa" ? "cyoa" : "standard";
-const counters = { rerolls: 0, submits: 0, choices: 0, exits: 0, readerPreferences: null as unknown };
+const counters = { rerolls: 0, submits: 0, choices: 0, exits: 0, tooltipPreferences: null as unknown, readerPreferences: null as unknown };
 const stage = new VnStage({
   mount,
   textSpeed: 0,
@@ -29,6 +29,7 @@ const stage = new VnStage({
   onSubmit: async () => { counters.submits++; },
   onChoice: async () => { counters.choices++; },
   onExit: () => { counters.exits++; },
+  onTooltipPreferencesChange: preferences => { counters.tooltipPreferences = preferences; },
   onReaderPreferencesChange: preferences => { counters.readerPreferences = preferences; },
 });
 const turn: VnTurnInput = {

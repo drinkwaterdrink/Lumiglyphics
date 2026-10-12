@@ -1,0 +1,82 @@
+import {chromium} from 'playwright';
+import assert from 'node:assert/strict';
+import {mkdir} from 'node:fs/promises';
+import {THEME_PRESET_IDS} from '../src/config.js';
+const build=await Bun.build({entrypoints:['scripts/reading-browser-fixture.ts'],target:'browser'});
+assert.ok(build.success);const bundle=await build.outputs[0]!.text();
+const server=Bun.serve({hostname:'127.0.0.1',port:0,fetch:r=>new URL(r.url).pathname==='/fixture.js'?new Response(bundle,{headers:{'Content-Type':'application/javascript'}}):new Response('<html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0"><script type="module" src="/fixture.js"></script></body></html>',{headers:{'Content-Type':'text/html'}})});
+await mkdir(".cache/dossiers",{recursive:true});
+const browser=await chromium.launch({headless:true});
+try {
+ for(const viewport of [{width:390,height:844},{width:1200,height:800}]) {
+  const page=await browser.newPage({viewport,reducedMotion:"reduce"});let external=0;
+  page.on('request',r=>{if(!r.url().startsWith(`http://127.0.0.1:${server.port}`))external++;});
+  await page.goto(`http://127.0.0.1:${server.port}`);
+  await page.evaluate(()=>{
+   const f=(window as any).readingFixture;
+   const key={chatId:'chat',assistantMessageId:'message',swipeId:0,sourceFingerprint:'12345678',revision:0};
+   const entity=(id:string,kind:string,name:string,value:string,at:number)=>({id,kind,name,aliases:[],firstParagraph:at,facts:[{id:'f'+id,entityId:id,field:'description',value,visibility:'observed',source:{provider:'story',recordId:'message',chatId:'chat',messageId:'message',sourceFingerprint:'12345678',observedAt:'2026-10-11'},revealedAt:{key,paragraphIndex:at}}]});
+   const mira=entity('m','npc','Mira','silver hair',0),place=entity('p','place','Lantern House','blue shutters',0),object=entity('o','object','the black key','black key',1);
+   const snap=(i:number)=>({at:{key,paragraphIndex:i},entities:i===0?[mira,place]:[mira,place,object],stateByEntity:{m:{outfit:i===0?'coat':'uniform'}},presentEntityIds:['m'],locationId:'p',speakerEntityId:'m',drawableEntityId:'m'});
+   f.prefs={enabled:true,categories:{npcs:true,locations:true,objects:true},detail:'expanded',linking:'all-known',maxLinksPerParagraph:3,overrides:[]};
+   f.dossierTurn={mode:'standard',paragraphs:[{id:'a',speaker:'Mira',text:'Mira enters Lantern House.'},{id:'b',speaker:'Mira',text:'Mira carries the black key.'}],presentation:{version:1,snapshots:[snap(0),snap(1)]}};
+   f.stage.setTooltipPreferences(f.prefs);f.stage.loadTurn(f.dossierTurn);
+  });
+  const text=page.locator('[data-vn-dialogue-text]');
+  assert.equal(await text.innerText(),'Mira enters Lantern House.');
+  assert.equal(await text.locator('[data-entity-anchor]').count(),2);
+  await text.getByRole('button',{name:'About Mira',exact:true}).click();
+  const card=page.getByRole('dialog',{name:'About Mira',exact:true});
+  assert.match(await card.innerText(),/silver hair/);assert.doesNotMatch(await card.innerText(),/uniform|black key/);
+  await page.screenshot({path:`.cache/dossiers/${viewport.width}.png`});
+  await page.keyboard.press('Shift+Tab');
+  assert.equal(await card.locator('summary').evaluate(e=>(e.getRootNode() as ShadowRoot).activeElement===e),true);
+  await page.keyboard.press('Enter');await page.keyboard.press('Tab');
+  assert.equal(await card.locator('textarea').evaluate(e=>(e.getRootNode() as ShadowRoot).activeElement===e),true);
+  await card.locator('textarea').fill('Remember the silver hair');
+  await page.keyboard.press('Tab');await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(()=>(window as any).readingFixture.counters.tooltipPreferences.overrides[0].note),'Remember the silver hair');
+  await text.getByRole('button',{name:'About Mira',exact:true}).click();
+  const progress=await page.locator('[data-vn-progress]').innerText();
+  await page.keyboard.press('ArrowRight');assert.equal(await page.locator('[data-vn-progress]').innerText(),progress);
+  const bounds=await card.boundingBox();assert.ok(bounds&&bounds.x>=0&&bounds.x+bounds.width<=viewport.width&&bounds.y+bounds.height<=viewport.height);
+  await page.keyboard.press('Escape');assert.equal(await card.count(),0);
+  assert.equal(await text.getByRole('button',{name:'About Mira',exact:true}).evaluate(e=>e.getRootNode() instanceof ShadowRoot&&(e.getRootNode() as ShadowRoot).activeElement===e),true);
+  await page.evaluate(()=>{const f=(window as any).readingFixture;f.stage.setTooltipPreferences({...f.prefs,categories:{...f.prefs.categories,npcs:false}});});
+  assert.equal(await text.getByRole('button',{name:'About Mira',exact:true}).count(),0);
+  assert.equal(await text.getByRole('button',{name:'About Lantern House',exact:true}).count(),1);
+  await page.evaluate(()=>{const f=(window as any).readingFixture;f.stage.setTooltipPreferences(f.prefs);});
+  await page.locator('[data-vn-continue]').click();
+  await text.getByRole('button',{name:'About the black key',exact:true}).click();
+  await page.getByRole('dialog',{name:'About the black key',exact:true}).getByRole('button',{name:'Hide this reference',exact:true}).click();
+  assert.equal(await text.getByRole('button',{name:'About the black key',exact:true}).count(),0);
+  assert.equal(await page.evaluate(()=>(window as any).readingFixture.counters.tooltipPreferences.overrides[0].suppressed),true);
+  await page.getByRole('button',{name:'Previous paragraph',exact:true}).click();
+  await text.getByRole('button',{name:'About Mira',exact:true}).click();
+  assert.match(await page.getByRole('dialog',{name:'About Mira',exact:true}).innerText(),/coat/);
+  assert.doesNotMatch(await page.getByRole('dialog',{name:'About Mira',exact:true}).innerText(),/uniform/);
+  await page.keyboard.press('Escape');
+  await page.evaluate(()=>{const f=(window as any).readingFixture;f.stage.setTooltipPreferences({...f.prefs,enabled:false});});
+  assert.equal(await text.locator('[data-entity-anchor]').count(),0);assert.equal(await text.innerText(),'Mira enters Lantern House.');
+  assert.equal(await page.getByRole('button',{name:'Scene references',exact:true}).isVisible(),false);
+  await page.evaluate(()=>{const f=(window as any).readingFixture;f.stage.setTooltipPreferences(f.prefs);f.stage.setTextSpeed(5);f.stage.loadTurn({...f.dossierTurn,paragraphs:[{...f.dossierTurn.paragraphs[0],text:'`Mira` and **Mira** enter Lantern House.'},f.dossierTurn.paragraphs[1]]});});
+  assert.equal(await text.locator('[data-entity-anchor]').count(),0,'typing text is not linked early');
+  await page.waitForFunction(()=>!(window as any).readingFixture.stage.isTyping);
+  assert.equal(await text.locator('code [data-entity-anchor]').count(),0);
+  assert.equal(await text.getByRole('button',{name:'About Mira',exact:true}).count(),1,'plain mention remains linkable after a code mention');
+  await page.evaluate(()=>{const f=(window as any).readingFixture;f.stage.setDisplayRegexRules('Mira => Someone');});
+  assert.equal(await text.locator('[data-entity-anchor]').count(),0,'uncertain display transforms omit links');
+  await page.evaluate(()=>{const f=(window as any).readingFixture;f.stage.setDisplayRegexRules('');f.stage.setTextSpeed(0);f.stage.loadTurn(f.dossierTurn);});
+  for(const preset of THEME_PRESET_IDS) {
+   await page.evaluate(preset=>(window as any).readingFixture.stage.setThemePreset(preset),preset);
+   await page.getByRole('button',{name:'Scene references',exact:true}).click();
+   await page.getByRole('dialog',{name:'Scene references',exact:true}).getByRole('button',{name:'Mira',exact:true}).click();
+   const themed=await page.getByRole('dialog',{name:'About Mira',exact:true}).boundingBox();
+   assert.ok(themed&&themed.x>=0&&themed.x+themed.width<=viewport.width&&themed.y+themed.height<=viewport.height,`card fits theme ${preset}`);
+   await page.keyboard.press('Escape');
+  }
+  assert.equal(external,0,'dossiers never contact models/providers');
+  await page.close();
+ }
+ console.log('dossier browser checks passed');
+} finally {await browser.close();server.stop(true);}

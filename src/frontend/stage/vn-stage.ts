@@ -1,3 +1,5 @@
+import { StageDossiers } from "./dossiers.js";
+import type { TooltipPreferences } from "../../shared/dossiers.js";
 import {
   escapeHtml,
   formatDialogueText,
@@ -126,6 +128,7 @@ export interface VnGameChoice {
 }
 
 export interface VnStageCallbacks {
+  onTooltipPreferencesChange?: (preferences: TooltipPreferences) => void;
   onReaderPreferencesChange?: (preferences: ReaderPreferences) => void;
   onAdvance?: (paragraphIndex: number, inputUnlocked: boolean) => void;
   onPrevious?: (paragraphIndex: number) => void;
@@ -438,6 +441,7 @@ export class VnStage {
   private readonly narrative: HTMLElement;
   private readonly speaker: HTMLElement;
   private readonly dialogueText: HTMLElement;
+  private dossiers!: StageDossiers;
   private readonly progress: HTMLElement;
   private readonly readingState: HTMLElement;
   private readonly interactionHint: HTMLElement;
@@ -597,10 +601,13 @@ export class VnStage {
     if (options.skipMode) this.setSkipMode(options.skipMode);
     this.skipDescriptionEl.textContent = skipDescription(this.skipMode);
 
+    this.dossiers=new StageDossiers(this.root,this.dialogueText,queryRequired(this.themeRoot,"[data-vn-controls]"),()=>{this.toggleSkip(false);this.holdAutoPlay();},()=>this.checkAutoPlay(),prefs=>this.callbacks.onTooltipPreferencesChange?.(prefs));
     this.bindEvents();
     this.updateControlButtons();
     this.render(null);
   }
+
+  setTooltipPreferences(prefs:TooltipPreferences):void {this.dossiers.setPreferences(prefs);}
 
   getState(): Readonly<VnStageState> {
     return this.state;
@@ -621,6 +628,7 @@ export class VnStage {
   setDisplayRegexRules(rulesText: string): void {
     this.customRegexRules = parseCustomRegexRules(rulesText);
     this.renderDialogueContent();
+    if(!this.isTyping)this.dossiers.refresh(this.state.currentParagraphIndex,this.customRegexRules.length>0);
   }
 
   setTextSpeed(speed: number): void {
@@ -844,6 +852,7 @@ export class VnStage {
   }
 
   reset(): void {
+    this.dossiers.setContext(undefined,[]);
     this.clearAllTimers();
     this.resetEffects();
     this.clearSceneImages();
@@ -861,6 +870,7 @@ export class VnStage {
   }
 
   loadTurn(turn: VnTurnInput): void {
+    this.dossiers.setContext(turn.presentation,turn.paragraphs.map(p=>p.text));
     this.dialogueSheet?.setHidden(false);
     this.resumeNotice?.remove();
     this.resumeNotice = null;
@@ -899,6 +909,7 @@ export class VnStage {
   }
 
   presentUserParagraph(text: string, speaker: string = "You"): void {
+    this.dossiers.setContext(undefined,[]);
     this.dispatch({
       type: "present-user-paragraph",
       paragraph: {
@@ -1012,6 +1023,7 @@ export class VnStage {
   }
 
   destroy(): void {
+    this.dossiers.destroy();
     this.dialogueSheet?.destroy();
     this.clearAllTimers();
     this.resetEffects();
@@ -1557,7 +1569,7 @@ export class VnStage {
 
     this.root.addEventListener("wheel", (event) => {
       if (this.root.dataset.vnPageFocus === "true" || this.dialogueSheet?.isHidden() || (this.root.dataset.vnAdjustableSheet === "true" && event.target instanceof Element && event.target.closest("[data-vn-dialogue]"))) return;
-      if (this.isBacklogOpen) return;
+      if (this.isBacklogOpen || this.dossiers.isOpen()) return;
       if (event.deltaY < -30) {
         this.openBacklog();
       }
@@ -1565,7 +1577,7 @@ export class VnStage {
 
     this.root.addEventListener("click", (event) => {
       if (this.root.dataset.vnPageFocus === "true" || this.dialogueSheet?.isHidden() || (this.root.dataset.vnAdjustableSheet === "true" && event.target instanceof Element && event.target.closest("[data-vn-dialogue-text]"))) return;
-      if (this.isBacklogOpen) return;
+      if (this.isBacklogOpen || this.dossiers.isOpen()) return;
       if (!isInteractiveTarget(event.target)) this.advance();
     });
 
@@ -1656,7 +1668,7 @@ export class VnStage {
   }
 
   previous(): void {
-    if (this.destroyed || this.isBacklogOpen || !selectVnStageView(this.state).canGoBack) return;
+    if (this.destroyed || this.isBacklogOpen || this.dossiers.isOpen() || !selectVnStageView(this.state).canGoBack) return;
     this.isSkipping = false;
     this.isAutoPlay = false;
     this.lastSkipStop = null;
@@ -1677,7 +1689,7 @@ export class VnStage {
   }
 
   private advance(): void {
-    if (this.isBacklogOpen) return;
+    if (this.isBacklogOpen || this.dossiers.isOpen()) return;
     if (this.lastSkipStop !== null) {
       this.lastSkipStop = null;
       this.renderReadingState();
@@ -1773,6 +1785,7 @@ export class VnStage {
 
     this.narrative.hidden = view.paragraph === null;
     this.emptyState.hidden = view.paragraph !== null || this.state.phase !== "idle";
+    this.dossiers.cursor(this.state.currentParagraphIndex);
     this.renderDialogueContent();
     this.dialogueText.dataset.vnParagraphId = view.paragraph?.id ?? "";
     this.dialogueText.dataset.vnParagraphIndex = String(
@@ -1912,12 +1925,13 @@ export class VnStage {
 
   private onTextRenderFinished(): void {
     if (this.destroyed) return;
+    this.dossiers.refresh(this.state.currentParagraphIndex,this.customRegexRules.length>0);
     if (this.isSkipping) {
       this.scheduleSkipAdvance();
     } else if (this.isAutoPlay) {
       const view = selectVnStageView(this.state);
       if (view.canAdvance) {
-        if (this.isAutoAdvanceHeld?.()) {
+        if (this.dossiers.isOpen() || this.isAutoAdvanceHeld?.()) {
           this.resetAutoRing();
           return;
         }
@@ -1937,7 +1951,7 @@ export class VnStage {
     if (this.destroyed || !this.isAutoPlay || this.isTyping || this.isSkipping) return;
     const view = selectVnStageView(this.state);
     if (!view.canAdvance) return;
-    if (this.isAutoAdvanceHeld?.()) {
+    if (this.dossiers.isOpen() || this.isAutoAdvanceHeld?.()) {
       this.clearAutoPlayTimer();
       return;
     }

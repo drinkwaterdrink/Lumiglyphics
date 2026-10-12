@@ -235,6 +235,8 @@ export function stageTurnInput(
   preserveImage: boolean,
   intensity: VisualNovelEffectIntensity = "full",
 ): VnTurnInput {
+  const key={chatId:next.chatId,assistantMessageId:next.messageId,swipeId:next.swipeId,sourceFingerprint:next.sourceFingerprint,revision:next.revision};
+  const presentation=next.presentation?.snapshots.length===next.paragraphs.length&&next.presentation.snapshots.every((s,i)=>s.at.paragraphIndex===i&&samePresentationTurn(s.at.key,key))?next.presentation:undefined;
   return {
     mode,
     paragraphs: next.paragraphs.map((text, index) => ({
@@ -246,6 +248,7 @@ export function stageTurnInput(
     })),
     choices: next.choices.map((choice) => ({ id: choice.id, label: choice.label, value: choice.value })),
     preserveImage,
+    ...(presentation ? {presentation} : {}),
     ...(next.ambients !== undefined ? { ambient: firstAmbient(next, intensity) } : {})
   };
 }
@@ -310,6 +313,7 @@ export type VisualStageThemeTarget = Pick<
   setSkipMode?: (mode: "read" | "all") => void;
   /** Dialogue text size multiplier (stage sets `--vn-text-scale`). */
   setTextScale?: (scale: number) => void;
+  setTooltipPreferences?: (prefs: VisualNovelConfig["tooltips"]) => void;
   setReaderPreferences?: (preferences: VisualNovelConfig["readerPreferences"]) => void;
   /** Lets the stage also gate its own heuristic effects (text-triggered shake). */
   setEffectIntensity?: (level: VisualNovelEffectIntensity) => void;
@@ -337,6 +341,7 @@ export function applyVisualConfigToStage(
   stage.setSkipMode?.(config.skipMode);
   stage.setTextScale?.(config.textScale);
   stage.setReaderPreferences?.(config.readerPreferences);
+  stage.setTooltipPreferences?.(config.tooltips);
   stage.setEffectIntensity?.(config.effectIntensity);
   stage.setTextEffects?.(config.textEffects);
 }
@@ -496,6 +501,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     themePreset: configRef.current?.themePreset ?? "lumiverse",
     isAutoAdvanceHeld: () => isSpeechHoldingAuto(),
     onExit: () => deactivate(),
+    onTooltipPreferencesChange: tooltips => { ctx.sendToBackend({type:"vn_set_config",patch:{tooltips},chatId:chatId()}); },
     onReaderPreferencesChange: readerPreferences => {
       ctx.sendToBackend({ type: "vn_set_config", patch: { readerPreferences }, chatId: chatId() });
     },

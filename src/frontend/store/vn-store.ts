@@ -1,3 +1,4 @@
+import type { ReaderPresentation } from "../../shared/presentation-entities.js";
 export type VnMode = "cyoa" | "standard";
 
 export type VnPhase =
@@ -111,6 +112,7 @@ export interface VnStageState {
 }
 
 export interface VnTurnInput {
+  presentation?: ReaderPresentation;
   initialParagraphIndex?: number;
   mode: VnMode;
   paragraphs: readonly VnParagraph[];

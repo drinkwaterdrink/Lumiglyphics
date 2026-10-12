@@ -281,7 +281,7 @@ function plannerInstruction(config: VisualNovelConfig, visualContext?: VisualCon
 
   return [
     "You plan illustrations and atmosphere for a visual-novel presentation. Return one JSON object and no prose.",
-    ...(config.collectEntityReferences ? ['Optional storyReferences: up to 32 brief references to important explicitly mentioned NPCs, places or objects. Add storyReferences:[{kind:"npc"|"place"|"object",name,paragraphIndex,field:"description"|"appearance"|"outfit"|"condition",value,evidence}]. Evidence must be an exact contiguous quote from that visible paragraph, containing both the exact name and the exact value (max 400 characters). Do not invent facts, classify a narrator/world card as an NPC, expose private context, motives, secrets or future discoveries. Omit unsupported references. This does not change the story or illustration budget.'] : []),
+    ...((config.collectEntityReferences || config.tooltips.enabled) ? ['Optional storyReferences: up to 32 brief references to important explicitly mentioned NPCs, places or objects. Add storyReferences:[{kind:"npc"|"place"|"object",name,paragraphIndex,field:"description"|"appearance"|"outfit"|"condition",value,evidence}]. Evidence must be an exact contiguous quote from that visible paragraph, containing both the exact name and the exact value (max 400 characters). Do not invent facts, classify a narrator/world card as an NPC, expose private context, motives, secrets or future discoveries. Omit unsupported references. This does not change the story or illustration budget.'] : []),
     "FIRST-PERSON PERSPECTIVE (POV) & CHARACTER ATTRIBUTION:",
     `The visual novel is presented strictly from the first-person POV of the User/Persona (${personaName}).`,
     `- ${personaName} is the camera/observer and is NEVER drawn on screen. NEVER output ${personaName} as a character in cues.`,
@@ -2548,7 +2548,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   const plan = validateTurnPlan(TurnPlanSchema.parse({
     schemaVersion: 1,
     key,
-    ...(input.config.collectEntityReferences ? { storyReferences: normalizeStoryReferences(planner.storyReferences, promptParagraphs).filter(r => !(cardRole === "scenario" && r.kind === "npc" && Boolean(scenarioReferenceName) && characterAppearanceKey(r.name) === scenarioReferenceName)) } : {}),
+    ...((input.config.collectEntityReferences || input.config.tooltips.enabled) ? { storyReferences: normalizeStoryReferences(planner.storyReferences, promptParagraphs).filter(r => !(cardRole === "scenario" && r.kind === "npc" && Boolean(scenarioReferenceName) && characterAppearanceKey(r.name) === scenarioReferenceName)) } : {}),
     paragraphs: narrative.paragraphs,
     panels: narrative.panels,
     panelSource: resolvedContent.slice(0, 200_000),

@@ -1284,3 +1284,11 @@ test('scenario title is rejected as an NPC reference but remains a valid place',
  const result=await planTurn(spindle,{cardRole:'scenario',chatId:'chat-1',message:{...message,name:'Rookhaven Academy',content},content,previousScene:null,previousContinuity:null,recentMessages:[],config:{...DEFAULT_CONFIG,collectEntityReferences:true},singleCharacter:emptySingleCharacter(),characterAppearance:{}});
  assert.deepEqual(result.plan.storyReferences,[{...base,kind:'place'}]);
 });
+
+test('tooltips request optional story references in the same planner call',async()=>{
+ let calls=0;let instruction='';
+ const content='Mira carries the black key.';
+ const spindle={generate:{raw:async(request:any)=>{calls++;instruction=JSON.stringify(request);return {content:JSON.stringify({scenes:[],cues:[],characters:[],speakers:[],storyReferences:[{kind:'object',name:'the black key',paragraphIndex:0,field:'description',value:'black key',evidence:content}]})};}},log:{warn(){}}} as unknown as SpindleAPI;
+ const result=await planTurn(spindle,{chatId:'chat-1',message:{...message,content},content,previousScene:null,previousContinuity:null,recentMessages:[],config:{...DEFAULT_CONFIG,tooltips:{...DEFAULT_CONFIG.tooltips,enabled:true}},singleCharacter:emptySingleCharacter(),characterAppearance:{}});
+ assert.equal(calls,1);assert.equal(instruction.includes('Optional storyReferences'),true);assert.equal(result.plan.storyReferences?.length,1);
+});

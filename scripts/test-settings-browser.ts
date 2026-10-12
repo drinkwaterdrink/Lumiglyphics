@@ -412,6 +412,14 @@ try {
   assert.deepEqual((await lastPatch(page))?.simTrackerMappings,{identity:['custom.look'],attire:['custom.outfit'],sceneState:[],world:[]});
   await mappings.getByRole('button',{name:'Use standard fields',exact:true}).click();
   assert.deepEqual((await lastPatch(page))?.simTrackerMappings,{identity:[],attire:[],sceneState:[],world:[]});
+  await openTab('Reading');
+  const tooltips=settings.locator('[data-tooltip-settings]');
+  await tooltips.locator('[data-tooltip="enabled"]').check();
+  assert.equal((await lastPatch(page))?.tooltips?.enabled,true);
+  await tooltips.locator('[data-tooltip="locations"]').uncheck();
+  assert.equal((await lastPatch(page))?.tooltips?.categories.locations,false);
+  await tooltips.locator('[data-tooltip="detail"]').selectOption('expanded');
+  assert.equal((await lastPatch(page))?.tooltips?.detail,'expanded');
   assert.deepEqual(external, [], "settings page must not contact the network");
   console.log("settings browser checks passed");
 } finally {
