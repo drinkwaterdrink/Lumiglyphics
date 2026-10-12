@@ -91,6 +91,7 @@ export type VisualNovelConfig = {
   imagePromptFormat: "description" | "tags";
   imageOutputAspectRatio: ImageOutputRatio;
   collectEntityReferences: boolean;
+  persistentLocationArt: boolean;
   tooltips: TooltipPreferences;
   includeSimTrackerContext: boolean;
   simTrackerMappings: TrackerMappings;
@@ -161,6 +162,7 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   imagePromptFormat: "description",
   imageOutputAspectRatio: "default",
   collectEntityReferences: false,
+  persistentLocationArt: false,
   tooltips: normalizeTooltipPreferences({}),
   includeSimTrackerContext: true,
   simTrackerMappings: normalizeTrackerMappings({}),
@@ -327,6 +329,7 @@ export function normalizeConfig(value: unknown): VisualNovelConfig {
     imageOutputAspectRatio: normalizeImageOutputRatio(input.imageOutputAspectRatio),
     collectEntityReferences: input.collectEntityReferences === true,
     tooltips: normalizeTooltipPreferences(input.tooltips),
+    persistentLocationArt: input.persistentLocationArt === true,
     includeSimTrackerContext: bool(input.includeSimTrackerContext, true),
     simTrackerMappings: normalizeTrackerMappings(input.simTrackerMappings),
     contextSources: normalizeContextSources(input.contextSources),

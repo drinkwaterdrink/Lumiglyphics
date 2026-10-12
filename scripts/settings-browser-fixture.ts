@@ -21,6 +21,7 @@ const fixture = {
   previews: 0,
   refreshes: 0,
   scans: [] as string[],
+  placeActions: [] as unknown[],
   savedSystemOneKeys: [] as string[],
   clearedSystemOneKeys: 0,
   panel: null as VisualNovelSettingsPanel | null,
@@ -42,6 +43,11 @@ const panelOptions: SettingsPanelOptions = {
   onOpenPreview: () => { fixture.previews += 1; },
   onRefreshConnections: () => { fixture.refreshes += 1; },
   getChatId: () => 'context-chat',
+  onLocationArt:(chatId,requestId,action)=>{
+    fixture.placeActions.push(action);
+    const library={version:1 as const,locations:action.action==='reset'||action.action==='forget'?[]:[{entityId:'observatory',name:'Observatory',artRevision:1,description:'Brass telescope',preferredVariantId:action.action==='select'?'v':null,variants:[{id:'v',imageId:'saved-art',requestFingerprint:'scene-v2:123456789',environmentFingerprint:'env:123456789',approved:true as const,createdAt:'2026-10-12T00:00:00Z'}]}]};
+    panel.setLocationArt(chatId,requestId,library);
+  },
   onRefreshContextSources: (chatId,requestId) => { panel.setContextSourceReport({chatId,requestId,sources:[{provider:'lumibooks',status:'available',recordCount:3,publicFactCount:0,updatedAt:Date.now(),freshness:'current_reference'},{provider:'lumiscript',status:'disabled',recordCount:0,publicFactCount:0,updatedAt:null,freshness:'unknown'}]}); },
   onSaveSystemOneKey: (key) => { fixture.savedSystemOneKeys.push(key); panel.setSystemOneKeyStatus(true); },
   onClearSystemOneKey: () => { fixture.clearedSystemOneKeys += 1; panel.setSystemOneKeyStatus(false); },

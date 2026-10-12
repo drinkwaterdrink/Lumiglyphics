@@ -1,5 +1,9 @@
 # Lumiglyphics implementation status
 
+## Latest Testing increment: 0.2.0-beta.16
+
+Optional persistent place art is available under Pictures. Enable Reuse saved place art to retain completed Environment-template pictures and reuse exact-compatible variants across visits/restarts. Saved place art provides preview/prefer/forget/reset controls, with user/chat isolation and no host image deletion. Reused art costs zero new image slots; new jobs retain the existing budget/review route. Edited requests remain independent. This is E1; cast staging and external source reconciliation remain pending.
+
 ## Latest Testing increment: 0.2.0-beta.15
 
 Optional built-in story tooltips are available under Reading → Tooltips. NPCs, locations and items can be enabled separately, with detail/link density controls and local pin/hide/notes. Facts come from grounded visible-story references in the existing planner call; tapping a card makes no provider request. Mobile sheets and desktop cards inherit the current theme, pause reading automation and preserve cursor visibility. Existing replies without reference metadata require future planning to populate tooltips. External companion dossier integration remains pending. See the latest reader-experience plan increment for scope and validation limits.

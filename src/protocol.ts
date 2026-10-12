@@ -1,3 +1,4 @@
+import {LocationArtRequestSchema,type LocationArtLibrary} from './shared/stage-assets.js';
 import type { ContextSourceReport } from './shared/context-sources.js';
 import type { ReaderPresentation } from "./shared/presentation-entities.js";
 import { z } from "zod";
@@ -16,6 +17,7 @@ export const SetCardRoleRequestSchema=z.object({type:z.literal('vn_set_card_role
 export const ReplanTurnRequestSchema=z.object({type:z.literal('vn_replan_turn'),...recoveryScope}).strict();
 export const ContextSourcesRequestSchema = z.object({type:z.literal("vn_get_context_sources"),chatId:z.string().min(1).max(256),requestId:z.string().min(1).max(100)}).strict();
 export type FrontendRequest =
+  | z.infer<typeof LocationArtRequestSchema>
   | z.infer<typeof ContextSourcesRequestSchema>
   | z.infer<typeof ReplanTurnRequestSchema>
   | z.infer<typeof CorrectImageSubjectRequestSchema>
@@ -149,6 +151,8 @@ export type ConnectionCatalogErrors = {
 };
 
 export type BackendResponse =
+  | {type:"vn_location_art";chatId:string;requestId:string;library:LocationArtLibrary}
+  | {type:"vn_location_art_notice";chatId:string;error:string}
   | { type: "vn_context_sources"; report: ContextSourceReport }
   | { type: "vn_image_requests"; chatId: string; messageId: string; sourceFingerprint: string; requests: ImageRequestRecord[] }
   | { type: "vn_external_image"; result: CueImageResult }

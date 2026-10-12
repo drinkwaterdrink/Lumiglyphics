@@ -41,6 +41,21 @@ try {
   assert.equal(await settings.locator('[data-pane="reading"]').isVisible(), true);
   assert.equal(await settings.locator('[name="mode"]').isVisible(), true, "everyday reading controls show first");
 
+  // Persistent place art: existing Pictures controls, explicit opt-in and local metadata actions.
+  await openTab('Pictures');
+  const reuse=settings.locator('[name="persistentLocationArt"]');
+  assert.equal(await reuse.isChecked(),false);await reuse.check();
+  assert.equal((await lastPatch(page))?.persistentLocationArt,true);
+  await settings.locator('summary').filter({hasText:/^Saved place art$/}).click();
+  await settings.getByRole('button',{name:'Load saved places',exact:true}).click();
+  assert.match(await settings.locator('[data-art-place]').innerText(),/Observatory/);
+  await settings.getByRole('button',{name:'Prefer this variant',exact:true}).click();
+  assert.match(await settings.locator('[data-art-variant]').innerText(),/Preferred/);
+  await settings.getByRole('button',{name:'Forget this variant',exact:true}).click();
+  assert.equal(await settings.locator('[data-art-catalog]').isVisible(),false);
+  assert.equal(await page.evaluate(()=>(window as any).settingsFixture.placeActions.length),3);
+  await reuse.uncheck();await openTab('Reading');
+
   // First use: the guide is visible, uses listed connections, and saves choices immediately.
   const setup = settings.locator("[data-setup]");
   assert.equal(await setup.isVisible(), true, "setup guide shows on first use");

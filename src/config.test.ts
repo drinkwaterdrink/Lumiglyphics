@@ -262,3 +262,5 @@ test('tooltips default off and normalize density while preserving category opt-o
  const config=normalizeConfig({tooltips:{enabled:true,categories:{objects:false},detail:'expanded',maxLinksPerParagraph:99}});
  assert.equal(config.tooltips.categories.objects,false);assert.equal(config.tooltips.categories.npcs,true);assert.equal(config.tooltips.maxLinksPerParagraph,6);assert.equal(config.tooltips.detail,'expanded');
 });
+
+test('persistent place art is explicit opt-in',()=>{assert.equal(normalizeConfig({}).persistentLocationArt,false);assert.equal(normalizeConfig({persistentLocationArt:true}).persistentLocationArt,true);assert.equal(normalizeConfig({persistentLocationArt:'true'}).persistentLocationArt,false);});

@@ -199,6 +199,7 @@ function makePlan(options: {
   visualCues?: VisualCue[];
   cacheCues?: VisualCue[];
   revision?: number;
+  paragraphs?: TurnPlan["paragraphs"];
 }): TurnPlan {
   const scenes = options.scenes ?? [makeScene()];
   const visualCues = options.visualCues ?? [makeCue({ sceneId: scenes[0]!.sceneId, sceneRevision: scenes[0]!.revision })];
@@ -211,7 +212,7 @@ function makePlan(options: {
       sourceFingerprint: "fp-12345678",
       revision: options.revision ?? 0
     },
-    paragraphs: [{ index: 0, sourceIndex: 0, text: "First paragraph beat." }],
+    paragraphs: options.paragraphs ?? [{ index: 0, sourceIndex: 0, text: "First paragraph beat." }],
     scenes,
     visualCues,
     ...(options.cacheCues ? { cacheCues: options.cacheCues } : {}),
@@ -1525,4 +1526,54 @@ describe("Scene Image Cache Integration", () => {
     });
   });
 
+});
+
+
+describe('persistent location art allocation',()=>{
+ test('approved environment art survives episode/cache restart and costs zero new slots',async()=>{
+  const {BUILTIN_IMAGE_TEMPLATES,templateSnapshot}=await import('../../shared/image-templates.js');
+  const {prepareAssetJobs}=await import('./images.js');
+  const f=createMockSpindle();
+  const template=templateSnapshot(BUILTIN_IMAGE_TEMPLATES.find(t=>t.id==='environment')!);
+  const cue=makeCue({imageTemplate:template,character:null,kind:'background'});
+  const config={...DEFAULT_CONFIG,persistentLocationArt:true,referenceAnchoring:false,reviewImages:true,maxImagesPerTurn:1};
+  const first=makePlan({visualCues:[cue]});
+  await generateAssets(f.spindle,first,createAssetJobs(first,config),config,new AbortController().signal,async()=>{},'u',{sceneCache:new SceneImageCache(),independentRequests:true,disableCacheStore:true,beforeGenerate:async(_j,r)=>r});
+  expect(f.generateCalls).toHaveLength(1);
+  const laterCue={...cue,cueId:'return',assetJobId:'return',sceneId:'return-scene'};
+  const second=makePlan({messageId:'return',paragraphs:[{index:0,sourceIndex:0,text:'Return.'},{index:1,sourceIndex:1,text:'Mira speaks.'}],scenes:[makeScene({sceneId:'return-scene',priorSceneId:'left-the-library'})],visualCues:[laterCue],cacheCues:[makeCue({cueId:'new',assetJobId:'new',paragraphIndex:1,sceneId:'return-scene'})]});
+  const jobs=await prepareAssetJobs(f.spindle,second,config,undefined,new SceneImageCache(),'u');
+  expect(jobs.find(j=>j.jobId==='return')?.provider).toBe(CACHE_JOB_PROVIDER);
+  expect(jobs.filter(j=>j.status==='queued')).toHaveLength(1);
+  expect(second.visualCues.some(c=>c.assetJobId==='new')).toBe(true);
+  expect(f.generateCalls).toHaveLength(1);
+  const changed=makePlan({visualCues:[cue]});
+  const changedJobs=await prepareAssetJobs(f.spindle,changed,{...config,imageModel:'different'},undefined,new SceneImageCache(),'u');
+  expect(changedJobs[0]?.status).toBe('queued');
+ });
+});
+
+test('connection changes between batch and job cannot poison persistent art',async()=>{
+ const {BUILTIN_IMAGE_TEMPLATES,templateSnapshot}=await import('../../shared/image-templates.js');
+ const {loadLocationArt}=await import('./location-art.js');
+ const f=createMockSpindle();let reads=0;
+ (f.spindle.imageGen as any).getConnection=async()=>({provider:'comfyui',model:++reads===1?'old':'new',default_parameters:{steps:reads===1?10:20}});
+ const cue=makeCue({imageTemplate:templateSnapshot(BUILTIN_IMAGE_TEMPLATES.find(t=>t.id==='environment')!),character:null,kind:'background'});
+ const plan=makePlan({visualCues:[cue]});
+ const config={...DEFAULT_CONFIG,persistentLocationArt:true,imageConnectionId:'profile',referenceAnchoring:false};
+ await generateAssets(f.spindle,plan,createAssetJobs(plan,config),config,new AbortController().signal,async()=>{},'u');
+ expect(f.generateCalls).toHaveLength(1);
+ expect((await loadLocationArt(f.spindle,plan.key.chatId,'u')).locations).toHaveLength(0);
+});
+
+test('edited review prompts stay independent from automatic place reuse',async()=>{
+ const {BUILTIN_IMAGE_TEMPLATES,templateSnapshot}=await import('../../shared/image-templates.js');
+ const {loadLocationArt}=await import('./location-art.js');
+ const f=createMockSpindle();
+ const cue=makeCue({imageTemplate:templateSnapshot(BUILTIN_IMAGE_TEMPLATES.find(t=>t.id==='environment')!),character:null,kind:'background'});
+ const plan=makePlan({visualCues:[cue]}),config={...DEFAULT_CONFIG,persistentLocationArt:true};
+ await generateAssets(f.spindle,plan,createAssetJobs(plan,config),config,new AbortController().signal,async()=>{},'u',{beforeGenerate:async(_j,r)=>({...r,prompt:'Different custom environment'})});
+ expect(f.generateCalls).toHaveLength(1);expect(f.generateCalls[0].includeDataUrl).toBe(false);
+ expect(f.generateCalls[0].parameters.resolvedSourceImages).toBeUndefined();
+ expect((await loadLocationArt(f.spindle,plan.key.chatId,'u')).locations).toHaveLength(0);
 });

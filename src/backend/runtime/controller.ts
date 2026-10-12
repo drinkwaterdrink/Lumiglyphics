@@ -1,3 +1,5 @@
+import {LocationArtRequestSchema} from '../../shared/stage-assets.js';
+import {manageLocationArt} from './location-art.js';
 import { ContextSourceSession } from './context-providers/session.js';
 import type { VisualNovelConfig } from '../../config.js';
 import { ContextSourcesRequestSchema } from '../../protocol.js';
@@ -1496,6 +1498,13 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       const sourceConfig=async()=>{await contextConfigSaves.get(userId);return (await loadConfig(spindle,userId)).contextSources;};
       const report=await contextSourceSession.refresh(spindle,sourceConfig(),userId,action.chatId,action.requestId);
       if(report) spindle.sendToFrontend({type:'vn_context_sources',report},userId);
+      return;
+    }
+    case "vn_location_art": {
+      const action=LocationArtRequestSchema.parse(request);
+      const library=await manageLocationArt(spindle,action.chatId,action,userId);
+      if(action.action!=="list")releaseSceneCacheScope(spindle,userId,action.chatId,"scope_cleared");
+      spindle.sendToFrontend({type:'vn_location_art',chatId:action.chatId,requestId:action.requestId,library},userId);
       return;
     }
     case "vn_set_config": {

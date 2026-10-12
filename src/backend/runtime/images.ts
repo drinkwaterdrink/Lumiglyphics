@@ -1,3 +1,4 @@
+import {findLocationArt,saveLocationArt,locationArtToken,type LocationArtIdentity} from './location-art.js';
 import { globalOutputParameters, templateOutputParameters, modelOutputParameters, assertModelOutputParameters, providerOutputParameters } from "./template-output.js";
 import { applyAttireOverride } from "./attire.js";
 export { applyAttireOverride, isClothingTag, cleanClothingFromPhrase } from "./attire.js";
@@ -608,6 +609,11 @@ export async function resolveCacheCues(
     } catch {
       continue;
     }
+    const locationIdentity=locationArtIdentityFor(config,scene,cue,characterAppearance,provider,profile.cacheProfile);
+    if(locationIdentity){
+      const art=await findLocationArt(spindle,plan.key.chatId,locationIdentity,userId).catch(()=>null);
+      if(art){resolved.push(locationArtJob(plan,cue,art,locationIdentity.requestFingerprint));continue;}
+    }
     const episode = sceneEpisodeOf(scene, cache.generation(scope));
     const found = cache.lookup(scope, key, episode);
     if (found.status === "miss") {
@@ -666,6 +672,18 @@ async function verifyEntry(
   return reason;
 }
 
+/** Only explicit environment templates enter the reusable place library. */
+export function locationArtIdentityFor(config:VisualNovelConfig,scene:SceneState,cue:VisualCue,appearance:CharacterAppearanceMap|undefined,provider:string|null,profileRevision:string):LocationArtIdentity|null {
+  if(!config.persistentLocationArt||provider===null||cue.imageTemplate?.category!=='environment'||cue.imageTemplate.subjectMode!=='none'||!scene.environment.location.trim())return null;
+  const identity=sceneImageIdentityFor(config,scene,cue,appearance,provider,{source:'none'},profileRevision);
+  const environment=canonicalJson(scene.environment);
+  return {location:scene.environment.location,description:scene.environment.description.slice(0,4000),requestFingerprint:sceneImageCacheKey(identity),environmentFingerprint:`env:${hash(environment)}${hash(environment.split('').reverse().join(''))}`};
+}
+function locationArtJob(plan:TurnPlan,cue:VisualCue,art:{imageId:string,imageUrl:string},key:string):AssetJob {
+ const timestamp=new Date().toISOString();
+ return AssetJobSchema.parse({jobId:cue.assetJobId,ownerTurnKey:plan.key,sceneId:cue.sceneId,sceneRevision:cue.sceneRevision,paragraphIndex:cue.paragraphIndex,promptFingerprint:key,provider:CACHE_JOB_PROVIDER,priority:'background',status:'generated',imageId:art.imageId,imageUrl:art.imageUrl,error:null,queuedAt:timestamp,startedAt:timestamp,generatedAt:timestamp,readyAt:null,finishedAt:null});
+}
+
 export function createAssetJobs(
   plan: TurnPlan,
   config: VisualNovelConfig,
@@ -712,6 +730,25 @@ export async function prepareAssetJobs(
   userId?: string,
   options: Pick<SceneCacheOptions, "resolvedSourceText" | "verifyImage"> = {}
 ): Promise<AssetJob[]> {
+  if(config.persistentLocationArt&&!(plan.classifierVisuals&&config.systemOneMode==='on')){
+    const profile=await resolveImageProfile(spindle,config,userId);
+    const effective=profile.provider==='novelai'?{...config,imageModel:config.imageModel||profile.model||'nai-diffusion-4-5-full'}:config;
+    const all=[...plan.visualCues,...(plan.cacheCues??[])].sort((a,b)=>a.paragraphIndex-b.paragraphIndex);
+    const queued=createAssetJobs({...plan,visualCues:all},effective,characterAppearance);
+    const selected:AssetJob[]=[],admitted:VisualCue[]=[],remaining:VisualCue[]=[];
+    const seen=new Set<string>();let slots=0;const limit=config.maxImagesPerTurn>0?config.maxImagesPerTurn:Infinity;
+    for(const cue of all){
+      const identity=locationArtIdentityFor(effective,sceneForCue(plan,cue),cue,characterAppearance,profile.provider,profile.cacheProfile);
+      const art=identity?await findLocationArt(spindle,plan.key.chatId,identity,userId).catch(()=>null):null;
+      if(art&&identity){selected.push(locationArtJob(plan,cue,art,identity.requestFingerprint));admitted.push(cue);continue;}
+      if(slots>=limit||(identity&&seen.has(identity.requestFingerprint))){remaining.push(cue);continue;}
+      slots++;if(identity)seen.add(identity.requestFingerprint);admitted.push(cue);selected.push(queued.find(j=>j.jobId===cue.assetJobId)!);
+    }
+    // Allocation owns this newly accepted plan: promote free reuse and funded misses
+    // before persisting/scheduling. Failed and retried jobs keep their admitted slots.
+    plan.visualCues=admitted;plan.cacheCues=remaining;
+    return selected;
+  }
   const candidates = createAssetJobs(plan, config, characterAppearance);
   if (!plan.classifierVisuals || config.systemOneMode !== "on") return candidates;
   const scope = sceneImageScope(userId, plan.key.chatId);
@@ -863,6 +900,7 @@ export async function generateAssets(
   cacheOptions: SceneCacheOptions = {}
 ): Promise<AssetJob[]> {
   let jobs = [...initialJobs];
+  const placeToken=locationArtToken(spindle,plan.key.chatId,userId);
   const providerKey = `image:${config.imageConnectionId ?? "default"}`;
   const scheduler = new AssetScheduler({ [providerKey]: { concurrency: config.imageConcurrency } });
   const cache = cacheOptions.sceneCache ?? null;
@@ -1289,6 +1327,17 @@ export async function generateAssets(
             }
           }
           const imageUrl = result.imageUrl ?? `/api/v1/images/${encodeURIComponent(result.imageId)}`;
+          // Store only completed requests matching the compiler preparation. Edited
+          // requests remain independent; they cannot poison automatic compatibility.
+          const placeIdentity=profileCacheIdentity(selected)===profile.cacheProfile&&JSON.stringify(approved)===JSON.stringify(frozen)?locationArtIdentityFor(config,scene,cue,characterAppearance,provider,profile.cacheProfile):null;
+          if(placeIdentity){
+            try{
+              if(await saveLocationArt(spindle,plan.key.chatId,{...placeIdentity,imageId:result.imageId},userId,{token:placeToken,signal:jobSignal}))void resolveCandidatesNow();
+            }catch(error){
+              spindle.sendToFrontend({type:'vn_location_art_notice',chatId:plan.key.chatId,error:error instanceof Error?error.message:String(error)},userId);
+            }
+          }
+
           if (cache && admission && cacheKey) {
             const stored = cache.store(scope, cacheKey, {
               imageId: result.imageId,

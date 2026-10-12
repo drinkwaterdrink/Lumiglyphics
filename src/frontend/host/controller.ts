@@ -639,6 +639,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   });
   const settingsPanel: (VisualNovelSettingsPanel & SettingsFeedbackTarget) | null = settingsHandle ? new VisualNovelSettingsPanel({
     getChatId:()=>chatId(),
+    onLocationArt:(chatId,requestId,action)=>ctx.sendToBackend({type:'vn_location_art',version:1,chatId,requestId,...action}),
     onRefreshContextSources:(chatId,requestId)=>ctx.sendToBackend({type:"vn_get_context_sources",chatId,requestId}),
     mount: settingsHandle.root,
     onOpenPreview: () => activate(),
@@ -963,6 +964,9 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       settingsPanel?.setConnectionCatalog("image", states.image);
       return;
     }
+    if(type==='vn_location_art'&&message.type==='vn_location_art'){settingsPanel?.setLocationArt(message.chatId,message.requestId,message.library);return;}
+    if(type==='vn_location_art_notice'&&message.type==='vn_location_art_notice'){if(message.chatId===chatId())settingsPanel?.locationArtNotice(message.error);return;}
+    if(type==='vn_error'&&message.type==='vn_error'&&message.operation==='vn_location_art'){if(!message.chatId||message.chatId===chatId())settingsPanel?.locationArtError(message.error);return;}
     if(type==='vn_context_sources' && message.type==='vn_context_sources') {settingsPanel?.setContextSourceReport(message.report);return;}
     if(type==='vn_error' && message.type==='vn_error' && message.operation==='vn_get_context_sources') {settingsPanel?.contextSourceError();return;}
     if (type === "vn_system_one_key_status" && message.type === "vn_system_one_key_status") {
@@ -1139,6 +1143,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const unsubBackend = ctx.onBackendMessage(routeBackend);
   const unsubAction = action.onClick(toggleVisualNovel);
   const unsubChat = ctx.events.on("CHAT_SWITCHED", () => {
+    settingsPanel?.clearLocationArt();
     imageStudio.setTurn(null);
       settingsPanel?.setImagePreviewMetadata();
     panelCapture = null;
@@ -1151,6 +1156,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     requestState();
   });
   const unsubFork = ctx.events.on("CHAT_FORKED", () => {
+    settingsPanel?.clearLocationArt();
     imageStudio.setTurn(null);
       settingsPanel?.setImagePreviewMetadata();
     panelCapture = null;

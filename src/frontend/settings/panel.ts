@@ -1,3 +1,5 @@
+import {LocationArtPanel} from './location-art.js';
+import type {LocationArtLibrary,LocationArtAction} from '../../shared/stage-assets.js';
 import { TooltipSettingsPanel } from "./tooltips.js";
 import { TrackerMappingsPanel } from "./tracker-mappings.js";
 import { IMAGE_OUTPUT_RATIOS, normalizeImageOutputRatio } from "../../shared/image-output.js";
@@ -99,6 +101,7 @@ export type SettingsPanelOptions = {
   onSave: (patch: Partial<VisualNovelConfig>) => void;
   onOpenPreview: () => void;
   onRefreshConnections: () => void;
+  onLocationArt?: (chatId:string,requestId:string,action:LocationArtAction)=>void;
   onRefreshContextSources?: (chatId:string,requestId:string)=>void;
   getChatId?: ()=>string;
   onSaveSystemOneKey?: (key: string) => void;
@@ -449,6 +452,7 @@ export class VisualNovelSettingsPanel {
 
   private contextSourcesPanel!: ContextSourcesPanel;
   private trackerMappingsPanel!: TrackerMappingsPanel;
+  private locationArtPanel!: LocationArtPanel;
   private tooltipSettingsPanel!: TooltipSettingsPanel;
   private templateEditor!: ImageTemplateEditor;
 
@@ -502,6 +506,12 @@ export class VisualNovelSettingsPanel {
     const ratioLabels: Record<string,string> = {default: 'Template / connection default', '1:1': '1:1 — Square', '9:16': '9:16 — Mobile portrait', '16:9': '16:9 — Widescreen', '3:4': '3:4 — Portrait', '4:3': '4:3 — Landscape', '2:3': '2:3 — Tall portrait', '3:2': '3:2 — Wide landscape'};
     outputShape.innerHTML = `<span>Generated image shape</span><select name="imageOutputAspectRatio">${IMAGE_OUTPUT_RATIOS.map(r=>`<option value="${r}">${ratioLabels[r]}</option>`).join('')}</select><small>Requests this shape for new pictures across all templates. Model support varies. Held prompts keep their dimensions; Picture fit controls display only. Raw overrides and custom workflows require Template / connection default.</small>`;
     generation.append(outputShape);
+    const placeReuse=document.createElement('label');placeReuse.dataset.check='';
+    placeReuse.innerHTML='<input type="checkbox" name="persistentLocationArt"><span>Reuse saved place art<small>Environment templates only. Compatible saved pictures cost no new image slots; new pictures still follow the image budget and prompt review. Off by default.</small></span>';
+    generation.append(placeReuse);
+    const places=section('Saved place art');
+    this.locationArtPanel=new LocationArtPanel(()=>this.options.getChatId?.()??'',(chat,id,action)=>this.options.onLocationArt?.(chat,id,action));places.append(this.locationArtPanel.host);
+
     const dynamic = document.createElement("label"); dynamic.dataset.check = "";
     dynamic.innerHTML = '<input name="dynamicImageTemplates" type="checkbox"><span>Choose templates from story context<small>When off, every picture uses the default template. This is independent of prompt review and keeps the existing picture budget.</small></span>';
     const prompts = section("Image prompts");
@@ -1416,6 +1426,7 @@ export class VisualNovelSettingsPanel {
         }
         return { dynamicImageTemplates: checked };
       case "imageOutputAspectRatio": return { imageOutputAspectRatio: normalizeImageOutputRatio(target.value) };
+      case "persistentLocationArt": return {persistentLocationArt:checked};
       case "collectEntityReferences": return { collectEntityReferences: checked };
       case "includeSimTrackerContext": return { includeSimTrackerContext: checked };
       case "defaultImageTemplateId": return { defaultImageTemplateId: target.value };
@@ -1791,6 +1802,7 @@ export class VisualNovelSettingsPanel {
 
   private syncFromConfig(config: VisualNovelConfig): void {
     this.control<HTMLSelectElement>("imageOutputAspectRatio").value = config.imageOutputAspectRatio;
+    this.control<HTMLInputElement>("persistentLocationArt").checked = config.persistentLocationArt;
     this.control<HTMLInputElement>("collectEntityReferences").checked = config.collectEntityReferences;
     this.templateEditor.setConfig(config);
     this.contextSourcesPanel.setConfig(config.contextSources);
@@ -2122,11 +2134,16 @@ export class VisualNovelSettingsPanel {
     select.value = [...this.promptPresets, ...BUILTIN_SHARED_STYLES].some((preset) => preset.id === selectedId) ? selectedId : "";
   }
 
+  setLocationArt(chatId:string,requestId:string,library:LocationArtLibrary):void{this.locationArtPanel.receive(chatId,requestId,library);}
+  locationArtError(error:string):void{this.locationArtPanel.fail(error);}
+  locationArtNotice(error:string):void{this.locationArtPanel.notice(error);}
+  clearLocationArt():void{this.locationArtPanel.clear();}
   setContextSourceReport(report:ContextSourceReport):void{this.contextSourcesPanel.receive(report);}
   contextSourceError():void{this.contextSourcesPanel.fail();}
 
   destroy(): void {
     this.contextSourcesPanel.destroy();
+    this.locationArtPanel.destroy();
     this.trackerMappingsPanel.destroy();
     this.tooltipSettingsPanel.destroy();
     for (const timer of [this.statusTimer, this.resetTimer, this.saveTimer, this.sampleTimer, this.flashTimer, this.copyTimer]) if (timer) clearTimeout(timer);
