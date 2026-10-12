@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { templateOutputParameters, modelOutputParameters, assertModelOutputParameters } from './template-output.js';
+import { globalOutputParameters, templateOutputParameters, modelOutputParameters, assertModelOutputParameters } from './template-output.js';
 import { normalizeConfig } from '../../config.js';
 import { templateSnapshot } from '../../shared/image-templates.js';
 import { applyImageEdits, safeImageParameters } from './image-review.js';
@@ -43,4 +43,16 @@ test('explicit dimensions and raw overrides win and unrelated providers remain u
 test('connection shape and old snapshots remain valid without applying portrait defaults', () => {
   expect(templateOutputParameters({ ...manga(), outputAspectRatio: 'connection' }, 'openrouter', {}, { aspectRatio: '1:1' })).toEqual({ aspectRatio: '1:1' });
   expect(templateOutputParameters(undefined, 'nanogpt', {}, { size: '1024x1024' })).toEqual({ size: '1024x1024' });
+});
+
+test('global shape overrides merged template dimensions while preserving other parameters', () => {
+  expect(globalOutputParameters('9:16', 'nanogpt', 'flux', { size: '1024x1024', seed: 4 })).toEqual({ size: '864x1536', seed: 4 });
+  expect(globalOutputParameters('16:9', 'openrouter', '', { aspectRatio: '9:16', imageSize: '2K' })).toEqual({ aspectRatio: '16:9', imageSize: '2K' });
+  expect(globalOutputParameters('9:16', 'novelai', '', { resolution: '1216x832' })).toEqual({ resolution: '576x1024' });
+});
+test('default preserves parameters and fixed shape rejects unsupported adapters and raw overrides', () => {
+  expect(globalOutputParameters('default', 'comfyui', '', { workflow: 'x' })).toEqual({ workflow: 'x' });
+  expect(() => globalOutputParameters('9:16', 'comfyui', '', {})).toThrow(/workflow/);
+  expect(() => globalOutputParameters('9:16', 'nanogpt', '', { rawRequestOverride: {} })).toThrow(/raw/);
+  expect(globalOutputParameters('9:16', 'nanogpt', anima, {size:'1.5k'})).toMatchObject({size:'1.5k',aspectRatio:'9:16'});
 });

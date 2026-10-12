@@ -1,3 +1,5 @@
+import { normalizeStoryReferences } from "../../shared/story-references.js";
+import { stripTextEffectTags } from "../../shared/text-effects.js";
 import { applyContinuityDelta } from '../core/continuity.js';
 import type { TurnPlan } from '../../shared/contracts.js';
 import { ReaderPresentationSchema, samePresentationTurn, type ReaderPresentation, type PresentationEntity, type EntityStateDelta, type PresentationState } from '../../shared/presentation-entities.js';
@@ -32,6 +34,7 @@ export function projectTurnPresentation(plan:TurnPlan):ReaderPresentation|undefi
   const fact=(e:PresentationEntity,at:number,field:string,value:string)=>{
     if(value.trim()&&factCount<128)e.facts.push({id:`f${++factCount}`,entityId:e.id,field,value:value.slice(0,1200),visibility:'observed',source,revealedAt:anchor(at)});
   };
+  const references=normalizeStoryReferences(plan.storyReferences,plan.paragraphs.map(p=>({text:stripTextEffectTags(p.text)})));
   const beats:PresentationBeat[]=[];
   let locationId:string|null=null;let drawableEntityId:string|null=null;
   let cast=new Set<string>();
@@ -70,6 +73,10 @@ export function projectTurnPresentation(plan:TurnPlan):ReaderPresentation|undefi
       drawableEntityId=person?.id??null;
       if(person && cue.resolvedIdentity){fact(person,at,'appearance',cue.resolvedIdentity);change(person,at,{appearance:cue.resolvedIdentity.slice(0,1200)});}
       if(person && cue.attire)change(person,at,{outfit:cue.attire.slice(0,1200)});
+    }
+    for(const reference of references.filter(r=>r.paragraphIndex===at)) {
+      const subject=entity(reference.kind,reference.name,at);
+      if(subject)fact(subject,at,reference.field,reference.value);
     }
     beats.push({paragraphIndex:at,locationId,drawableEntityId,speakerEntityId:speaking?.id??null});
   }

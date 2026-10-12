@@ -1258,3 +1258,29 @@ test("game-engine hints come from the reply or the player message it answers", (
   assert.equal(gameHintsForTurn(messages, "missing"), "");
   assert.equal(gameHintsForTurn([{ id: "a", is_user: false, metadata: { vn_hints: "nope" } }], "a"), "");
 });
+
+test('optional story references are grounded, opt-in and do not cause repair calls',async()=>{
+ const {projectTurnPresentation}=await import('./entity-projection.js');
+ const content='Mira enters.\n\nMira carries the black key.';
+ const reference={kind:'object',name:'the black key',paragraphIndex:1,field:'description',value:'black key',evidence:'Mira carries the black key.'};
+ for(const enabled of [false,true])for(const proposed of [[reference,{...reference,value:'secret curse'}],{malformed:true}]) {
+  let calls=0;let instruction='';
+  const spindle={generate:{raw:async(request:any)=>{calls++;instruction=JSON.stringify(request);return {content:JSON.stringify({scenes:[],cues:[],characters:[],speakers:[],storyReferences:proposed})};}},log:{warn(){}}} as unknown as SpindleAPI;
+  const result=await planTurn(spindle,{chatId:'chat-1',message:{...message,content},content,previousScene:null,previousContinuity:null,recentMessages:[],config:{...DEFAULT_CONFIG,collectEntityReferences:enabled},singleCharacter:emptySingleCharacter(),characterAppearance:{}});
+  assert.equal(calls,1);
+  assert.equal(instruction.includes('Optional storyReferences'),enabled);
+  assert.deepEqual(result.plan.storyReferences,enabled?(Array.isArray(proposed)?[reference]:[]):undefined);
+  const presentation=projectTurnPresentation(result.plan);
+  assert.equal(presentation?.snapshots[0]?.entities.some(e=>e.kind==='object'),false);
+  assert.equal(presentation?.snapshots[1]?.entities.some(e=>e.kind==='object'),enabled&&Array.isArray(proposed));
+  assert.equal(JSON.stringify(presentation).includes('secret curse'),false);
+ }
+});
+
+test('scenario title is rejected as an NPC reference but remains a valid place',async()=>{
+ const content='Rookhaven Academy has blue shutters.';
+ const base={name:'Rookhaven Academy',paragraphIndex:0,field:'description',value:'blue shutters',evidence:content};
+ const spindle={generate:{raw:async()=>({content:JSON.stringify({scenes:[],cues:[],characters:[],speakers:[],storyReferences:[{...base,kind:'npc'},{...base,kind:'place'}]})})},log:{warn(){}}} as unknown as SpindleAPI;
+ const result=await planTurn(spindle,{cardRole:'scenario',chatId:'chat-1',message:{...message,name:'Rookhaven Academy',content},content,previousScene:null,previousContinuity:null,recentMessages:[],config:{...DEFAULT_CONFIG,collectEntityReferences:true},singleCharacter:emptySingleCharacter(),characterAppearance:{}});
+ assert.deepEqual(result.plan.storyReferences,[{...base,kind:'place'}]);
+});

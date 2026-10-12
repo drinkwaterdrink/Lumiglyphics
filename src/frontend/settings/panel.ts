@@ -1,3 +1,4 @@
+import { IMAGE_OUTPUT_RATIOS, normalizeImageOutputRatio } from "../../shared/image-output.js";
 import { ContextSourcesPanel } from './context-sources.js';
 import type { ContextSourceReport } from '../../shared/context-sources.js';
 import { BUILTIN_SHARED_STYLES, applySharedStyle } from "../../shared/image-styles.js";
@@ -491,6 +492,10 @@ export class VisualNovelSettingsPanel {
     generated.replaceChildren();
     const generation = section("Generation", true);
     for (const i of [0, 1, 3]) generation.append(children[i]!);
+    const outputShape = document.createElement("label");
+    const ratioLabels: Record<string,string> = {default: 'Template / connection default', '1:1': '1:1 — Square', '9:16': '9:16 — Mobile portrait', '16:9': '16:9 — Widescreen', '3:4': '3:4 — Portrait', '4:3': '4:3 — Landscape', '2:3': '2:3 — Tall portrait', '3:2': '3:2 — Wide landscape'};
+    outputShape.innerHTML = `<span>Generated image shape</span><select name="imageOutputAspectRatio">${IMAGE_OUTPUT_RATIOS.map(r=>`<option value="${r}">${ratioLabels[r]}</option>`).join('')}</select><small>Requests this shape for new pictures across all templates. Model support varies. Held prompts keep their dimensions; Picture fit controls display only. Raw overrides and custom workflows require Template / connection default.</small>`;
+    generation.append(outputShape);
     const dynamic = document.createElement("label"); dynamic.dataset.check = "";
     dynamic.innerHTML = '<input name="dynamicImageTemplates" type="checkbox"><span>Choose templates from story context<small>When off, every picture uses the default template. This is independent of prompt review and keeps the existing picture budget.</small></span>';
     const prompts = section("Image prompts");
@@ -511,6 +516,9 @@ export class VisualNovelSettingsPanel {
     const tracker = document.createElement("label"); tracker.dataset.check = "";
     tracker.innerHTML = '<input name="includeSimTrackerContext" type="checkbox"><span>Include SimTracker visual context<small>Uses supported tracker JSON in this chat, up to the current reply. Saved appearance overrides still take priority. The prompt inspector reports whether a tracker payload was found.</small></span>';
     context.prepend(tracker);
+    const references = document.createElement('label'); references.dataset.check = '';
+    references.innerHTML = '<input name="collectEntityReferences" type="checkbox"><span>Prepare story references<small>Collects brief, visible NPC, location and object facts in the existing story-reader response. Optional groundwork for interactive references; no extra model call.</small></span>';
+    context.append(references);
     this.contextSourcesPanel=new ContextSourcesPanel(value=>this.options.onSave({contextSources:value}),(chat,id)=>this.options.onRefreshContextSources?.(chat,id),()=>this.options.getChatId?.()??'');
     context.append(this.contextSourcesPanel.host);
     const advanced = section("Advanced image parameters");
@@ -1399,6 +1407,8 @@ export class VisualNovelSettingsPanel {
           return null;
         }
         return { dynamicImageTemplates: checked };
+      case "imageOutputAspectRatio": return { imageOutputAspectRatio: normalizeImageOutputRatio(target.value) };
+      case "collectEntityReferences": return { collectEntityReferences: checked };
       case "includeSimTrackerContext": return { includeSimTrackerContext: checked };
       case "defaultImageTemplateId": return { defaultImageTemplateId: target.value };
       case "imagePromptFormat": return { imagePromptFormat: target.value === "tags" ? "tags" : "description" };
@@ -1772,6 +1782,8 @@ export class VisualNovelSettingsPanel {
   }
 
   private syncFromConfig(config: VisualNovelConfig): void {
+    this.control<HTMLSelectElement>("imageOutputAspectRatio").value = config.imageOutputAspectRatio;
+    this.control<HTMLInputElement>("collectEntityReferences").checked = config.collectEntityReferences;
     this.templateEditor.setConfig(config);
     this.contextSourcesPanel.setConfig(config.contextSources);
     this.syncEveryday(config);

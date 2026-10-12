@@ -390,6 +390,13 @@ try {
   await contextSources.getByRole('button',{name:'Save endpoint',exact:true}).click();
   assert.equal(((await lastPatch(page))?.contextSources as any)?.lumiscriptEndpoint,'lumiscript.story-tracker.state');
   assert.match(await contextSources.locator('[data-source-status]').innerText(),/not been checked/,'changing a source clears its old report');
+  const generation=settings.locator('[name="imageOutputAspectRatio"]');
+  await generation.locator('xpath=..').locator('xpath=..').locator('summary').first().evaluate((e:any)=>{e.parentElement.open=true;});
+  assert.equal(await generation.isVisible(),true);
+  await generation.selectOption('9:16');
+  assert.equal((await lastPatch(page))?.imageOutputAspectRatio,'9:16');
+  await settings.locator('[name="collectEntityReferences"]').check();
+  assert.equal((await lastPatch(page))?.collectEntityReferences,true);
   assert.deepEqual(external, [], "settings page must not contact the network");
   console.log("settings browser checks passed");
 } finally {

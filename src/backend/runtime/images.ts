@@ -1,4 +1,4 @@
-import { templateOutputParameters, modelOutputParameters, assertModelOutputParameters, providerOutputParameters } from "./template-output.js";
+import { globalOutputParameters, templateOutputParameters, modelOutputParameters, assertModelOutputParameters, providerOutputParameters } from "./template-output.js";
 import { applyAttireOverride } from "./attire.js";
 export { applyAttireOverride, isClothingTag, cleanClothingFromPhrase } from "./attire.js";
 import type { SpindleAPI } from "lumiverse-spindle-types";
@@ -410,7 +410,7 @@ export function sceneImageIdentityFor(
       pose: { id: brief.subjectMode === "none" ? "none" : cue.poseExpressionId ?? "idle", suffix: "" },
       action: brief.action || null,
       framing: { framing: brief.framing, angle: "eye level", perspective: "straight-on" },
-      request: { prompt: compiled.prompt, negativePrompt: compiled.negativePrompt, provider, connectionId: connectionId ? workflowId ? `${connectionId}::${workflowId}` : connectionId : null, model: config.imageModel, parameters: templateOutputParameters(cue.imageTemplate, provider, userImageParameters(config), {}), promptSyntax: config.imagePromptFormat, ...(profileRevision ? { profileRevision } : {}),
+      request: { prompt: compiled.prompt, negativePrompt: compiled.negativePrompt, provider, connectionId: connectionId ? workflowId ? `${connectionId}::${workflowId}` : connectionId : null, model: config.imageModel, parameters: { ...templateOutputParameters(cue.imageTemplate, provider, userImageParameters(config), {}), ...(config.imageOutputAspectRatio !== "default" ? { imageOutputAspectRatio: config.imageOutputAspectRatio } : {}) }, promptSyntax: config.imagePromptFormat, ...(profileRevision ? { profileRevision } : {}),
         referenceAnchoring: referenceAnchoringEnabled(config) && cueUsesCharacterReference(cue),
         ...(referenceAnchoringEnabled(config) && cueUsesCharacterReference(cue) ? { reference: reference ?? { source: "none" as const }, ...(config.referenceSource === "card" ? { referenceSource: "card" as const } : {}) } : {}) }
     };
@@ -437,7 +437,7 @@ export function sceneImageIdentityFor(
       provider,
       connectionId: connectionId ? (workflowId ? `${connectionId}::${workflowId}` : connectionId) : null,
       model: config.imageModel,
-      parameters: { ...userImageParameters(config), ...(nai?.parameters ?? {}) },
+      parameters: { ...userImageParameters(config), ...(nai?.parameters ?? {}), ...(config.imageOutputAspectRatio !== "default" ? { imageOutputAspectRatio: config.imageOutputAspectRatio } : {}) },
       promptSyntax: nai ? "nai" : description.promptSyntax,
       referenceAnchoring: referenceAnchoringEnabled(config),
       // Only present in card mode, so default ("captured") cache keys keep
@@ -675,7 +675,7 @@ export function createAssetJobs(
   return plan.visualCues.map((cue, index) => {
     const scene = sceneForCue(plan, cue);
     const pose = poseById(POSE_EXPRESSION_CATALOGUE, cue.poseExpressionId);
-    const promptIdentity = `${compileImagePrompt(config, scene, cue, characterAppearance)}\0${pose.id}`;
+    const promptIdentity = `${compileImagePrompt(config, scene, cue, characterAppearance)}\0${pose.id}${config.imageOutputAspectRatio !== "default" ? `\0${config.imageOutputAspectRatio}` : ""}`;
     return AssetJobSchema.parse({
       jobId: cue.assetJobId,
       ownerTurnKey: plan.key,
@@ -1202,7 +1202,7 @@ export async function generateAssets(
             referenceSummary: portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference"
           };
           const initialMetadata = metadataFor(cue);
-          frozen.parameters = modelOutputParameters(selected?.provider ?? provider, frozen.model, frozen.parameters ?? {});
+          frozen.parameters = modelOutputParameters(selected?.provider ?? provider, frozen.model, globalOutputParameters(config.imageOutputAspectRatio, selected?.provider ?? provider, frozen.model, frozen.parameters ?? {}));
           frozen = compactImageRequest(frozen);
           const approved = cacheOptions.beforeGenerate ? await cacheOptions.beforeGenerate(scheduledJob, frozen, {
             ...baseMetadata,
@@ -1239,7 +1239,7 @@ export async function generateAssets(
                 ...(nextPortrait && provider ? referenceParametersFor(provider, nextPortrait, config) : {}),
                 ...(nextNai?.parameters ?? {})
               } };
-              request.parameters = modelOutputParameters(selected?.provider ?? provider, request.model, request.parameters ?? {});
+              request.parameters = modelOutputParameters(selected?.provider ?? provider, request.model, globalOutputParameters(config.imageOutputAspectRatio, selected?.provider ?? provider, request.model, request.parameters ?? {}));
               return { request, metadata: { ...baseMetadata, imagePromptMetadata: metadataFor(nextCue)!, referenceSummary: nextPortrait ? `${nextPortrait.source ?? "captured"} portrait: ${nextPortrait.name} (${nextPortrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" } };
             }
           }, jobSignal) : frozen;

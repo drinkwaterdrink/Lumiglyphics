@@ -1,3 +1,4 @@
+import type { ImageOutputRatio } from "../../shared/image-output.js";
 import type { ImageTemplateSnapshot } from "../../shared/image-templates.js";
 
 const ANIMA_MODELS = new Set(['anima', 'wavespeed-ai/anima/text-to-image', 'wavespeed-ai/anima/text-to-image-lora']);
@@ -53,5 +54,29 @@ export function templateOutputParameters(template: ImageTemplateSnapshot | undef
   if (profile.rawRequestOverride !== undefined) return result;
   if (provider === "openrouter" || provider === "google") result.aspectRatio = "9:16";
   else if (provider === "nanogpt") result.size = "864x1536";
+  return result;
+}
+
+/** Fixed output shape applies after template/profile merging and before review.
+ * Raw payloads/workflows cannot be safely inferred; fail locally rather than ignore a fixed shape. */
+export function globalOutputParameters(ratio: ImageOutputRatio, provider: string | null, model: string | undefined, parameters: Record<string, unknown>): Record<string, unknown> {
+  if (ratio === "default") return { ...parameters };
+  if (parameters.rawRequestOverride !== undefined) throw new Error('Fixed generated image shape conflicts with a raw request override. Remove the raw override or select Template / connection default.');
+  const result = { ...parameters };
+  for (const key of ['size', 'width', 'height', 'resolution', 'aspectRatio', 'aspect_ratio', 'image_config', 'imageGenerationConfig']) delete result[key];
+  const [w, h] = ratio.split(':').map(Number) as [number, number];
+  if (provider === 'openrouter') result.aspectRatio = ratio;
+  else if (provider === 'nanogpt') {
+    if (isAnima(provider, model)) {
+      result.size = parameters.size === '1.5k' ? '1.5k' : '1k';
+      result.aspectRatio = ratio;
+    } else {
+      const unit = ratio === '1:1' ? 1024 : ratio === '9:16' || ratio === '16:9' ? 96 : 256;
+      result.size = `${w * unit}x${h * unit}`;
+    }
+  } else if (provider === 'novelai') {
+    const unit = ratio === '1:1' ? 1024 : ratio === '9:16' || ratio === '16:9' ? 64 : 256;
+    result.resolution = `${w * unit}x${h * unit}`;
+  } else throw new Error('Fixed generated image shape is not supported by this connection/workflow. Set dimensions in the workflow and select Template / connection default.');
   return result;
 }

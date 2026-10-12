@@ -10,7 +10,7 @@
 
 **Spec:** ../specs/2026-10-11-reader-experience-design.md, plus the user's scenario-card clarification and supplied inline-dossier examples as inspiration only.
 
-**Status:** Beta.12 on `Testing`, 2026-10-11. A recovery, B mobile reader, prompt/Manga/shared-style feedback and three additional UI themes are delivered. C has its first typed entity/timeline foundation: bounded, sourced snapshots derived from existing validated plans, additive persistence and backward-safe nameplate selection. C remains incomplete: normalized context adapters, optional planner entity proposals and context status/precedence UI are next. D–G remain pending. Earlier unchecked steps remain a design checklist rather than a claim of identical implementation.
+**Status:** Beta.13 on `Testing`, 2026-10-11. A recovery, B mobile reader, prompt/Manga/shared-style feedback and three additional UI themes are delivered. C has its first typed entity/timeline foundation: bounded, sourced snapshots derived from existing validated plans, additive persistence and backward-safe nameplate selection. C remains incomplete: normalized context adapters, optional planner entity proposals and context status/precedence UI are next. D–G remain pending. Earlier unchecked steps remain a design checklist rather than a claim of identical implementation.
 
 ## Global constraints
 
@@ -272,3 +272,14 @@ Required named new browser commands: B `test:mobile-reader`; D `test:dossiers`; 
 Self-review completed against current source: corrected premature A->C dependency, missing entityId in facts, conflicting phase names, unspecified provider timing, mobile enable/default mismatch, retry-budget accounting, and editable provider-move odds. Removed unsupported preset-parser expansion. This review validates the plan's internal consistency; it does not establish runtime/provider correctness before implementation.
 
 Review the default sheet sizes, optional cast mode, dossier visibility, and package order before execution. Recommended execution method: native, implementing one package at a time in this session; use delegated execution only if explicitly selected.
+
+
+## Beta.13 increment — generated image shape and bounded story references
+
+Delivered on Testing: existing Pictures → Generation now offers a global generated-image shape: default, 1:1, 9:16, 16:9, 3:4, 4:3, 2:3 and 3:2. Fixed choices override template/profile dimension fields before review, including Manga defaults; held/approved requests remain frozen and manual per-picture review remains authoritative. Cache identities distinguish fixed shapes without changing legacy default keys. NanoGPT uses pixel size, OpenRouter uses aspectRatio, NovelAI uses resolution; Anima retains 1k/1.5k with separate aspect_ratio. Model support remains provider-dependent. Raw overrides/custom workflows get a local explanatory error rather than ignoring a fixed choice. Display Picture fit is unchanged.
+
+Ruling: bounded literal proposals are the next C increment; tooltip rendering stays in D. Prepare story references is optional/default-off in Context sources and adds up to 32 NPC/place/object facts to the existing planner response. Entries require exact name/value evidence in their indicated visible paragraph. Invalid enrichment is ignored without repairing an otherwise valid plan. Projection revalidates evidence and reveal timing; it does not introduce inferred secrets, aliases, presence, ownership or new canon. No extra model calls or companion requirement. State fields from these references are informational facts; later precedence/reconciliation remains unfinished.
+
+C remains incomplete: normalized SimTracker/Warp adapters, source selection/precedence, richer reference state reconciliation and D's clickable optional category controls are still pending. This release does not claim interactive tooltips are delivered.
+
+Validation: targeted red/green tests, actual-request mock tests including merged dimensions and cache separation, opt-in/nonfatal planner-reference tests, settings browser interaction, full unit suite, speech transport suite, typecheck/build and static bundle validation. Live paid image providers, Lumiverse host and physical Android keyboard were not exercised.

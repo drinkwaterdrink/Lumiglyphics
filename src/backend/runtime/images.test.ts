@@ -448,3 +448,20 @@ test('final length guard blocks overlong automatic or callback requests without 
   expect(calls).toBe(0);expect(jobs[0]?.status).toBe('failed');expect(jobs[0]?.error).toContain('3,000');
  }
 });
+
+test('global shape reaches actual provider after merged settings and separates cache identities', async()=>{
+ const turn=plan([cue('idle')]);
+ for(const provider of ['nanogpt','openrouter']) {
+  const sent:any[]=[];
+  const connection={id:'shape',provider,model:'flux',updated_at:1,default_parameters:{size:'1024x1024',aspectRatio:'1:1'}};
+  const spindle={userStorage:{getJson:async(_:string,o:any)=>o.fallback},imageGen:{getConnection:async()=>connection,generate:async(r:any)=>{sent.push(r);return {imageId:'image'};}}} as any;
+  const config={...DEFAULT_CONFIG,imageConnectionId:'shape',referenceAnchoring:false,imageOutputAspectRatio:'9:16' as const,imageParameters:{size:'512x512',seed:17}};
+  const jobs=createAssetJobs(turn,config);
+  expect(jobs[0]?.promptFingerprint).not.toBe(createAssetJobs(turn,{...config,imageOutputAspectRatio:'1:1'})[0]?.promptFingerprint);
+  await generateAssets(spindle,turn,jobs,config,new AbortController().signal,()=>{},'user',{beforeGenerate:async(_,request)=>{
+   expect(request.parameters?.[provider==='nanogpt'?'size':'aspectRatio']).toBe(provider==='nanogpt'?'864x1536':'9:16');
+   return request;
+  }});
+  expect(sent).toHaveLength(1);expect(sent[0].parameters.seed).toBe(17);
+ }
+});

@@ -44,6 +44,8 @@ function spyStage(): VisualStageThemeTarget & { calls: string[] } {
 }
 
 const baseConfig: VisualNovelConfig = {
+  imageOutputAspectRatio: "default",
+  collectEntityReferences: false,
   contextSources: DEFAULT_CONFIG.contextSources,
   readerPreferences: DEFAULT_CONFIG.readerPreferences,
   dynamicImageTemplates: DEFAULT_CONFIG.dynamicImageTemplates,

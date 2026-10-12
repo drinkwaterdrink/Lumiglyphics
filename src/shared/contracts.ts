@@ -1,3 +1,4 @@
+import { StoryReferenceSchema } from "./story-references.js";
 import { z } from "zod";
 import { ActionPropFieldSchema, ActionPropSchema, type ActionProp } from "./action-prop.js";
 import { PanelArtifactSchema } from "./panels.js";
@@ -304,6 +305,7 @@ export const MAX_CACHE_CUES_PER_TURN = 16;
 
 export const TurnPlanSchema = z.object({
   schemaVersion: z.literal(1),
+  storyReferences: z.array(StoryReferenceSchema).max(32).optional(),
   key: TurnKeySchema,
   paragraphs: z.array(ParagraphSchema).min(1),
   panels: z.array(PanelArtifactSchema).max(12).optional(),

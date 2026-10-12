@@ -1,3 +1,4 @@
+import { normalizeStoryReferences } from "../../shared/story-references.js";
 import { loadCardRole } from "./storage.js";
 import type { CardRole } from "../../shared/card-role.js";
 import type { ChatMessageDTO, SpindleAPI } from "lumiverse-spindle-types";
@@ -155,6 +156,7 @@ const PlannerSpeakerSchema = z.object({
 });
 
 const PlannerOutputSchema = z.object({
+  storyReferences: z.unknown().optional(),
   scenes: z.array(PlannerSceneSchema).default([]),
   cues: z.array(PlannerCueSchema).default([]),
   effects: z.array(z.object({ paragraphIndex: z.number().int().nonnegative(), effect: StageEffectSchema })).default([]),
@@ -279,6 +281,7 @@ function plannerInstruction(config: VisualNovelConfig, visualContext?: VisualCon
 
   return [
     "You plan illustrations and atmosphere for a visual-novel presentation. Return one JSON object and no prose.",
+    ...(config.collectEntityReferences ? ['Optional storyReferences: up to 32 brief references to important explicitly mentioned NPCs, places or objects. Add storyReferences:[{kind:"npc"|"place"|"object",name,paragraphIndex,field:"description"|"appearance"|"outfit"|"condition",value,evidence}]. Evidence must be an exact contiguous quote from that visible paragraph, containing both the exact name and the exact value (max 400 characters). Do not invent facts, classify a narrator/world card as an NPC, expose private context, motives, secrets or future discoveries. Omit unsupported references. This does not change the story or illustration budget.'] : []),
     "FIRST-PERSON PERSPECTIVE (POV) & CHARACTER ATTRIBUTION:",
     `The visual novel is presented strictly from the first-person POV of the User/Persona (${personaName}).`,
     `- ${personaName} is the camera/observer and is NEVER drawn on screen. NEVER output ${personaName} as a character in cues.`,
@@ -802,6 +805,7 @@ function normalizePlannerOutput(value: unknown, defaultLoc?: string, trace: Effe
           .filter((c): c is { label: string; submission: string } => c !== null)
           .slice(0, 6)
       : [],
+    storyReferences: record.storyReferences,
     characters: rawCharacters.map(normalizeCharacter),
     speakers: Array.isArray(record.speakers)
       ? record.speakers
@@ -2103,6 +2107,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
 
   const cardRole=input.cardRole??await loadCardRole(spindle,input.chatId,visualContext.cardId,input.userId);
   visualContext.cardRole=cardRole;
+  const scenarioReferenceName = cardRole === "scenario" ? characterAppearanceKey(visualContext.characterIdentity?.name ?? input.message.name ?? "") : "";
   if(cardRole==='scenario') {
     const wrapper=characterAppearanceKey(visualContext.characterIdentity?.name??input.message.name??'');
     const isWrapper=(name:string|null|undefined)=>Boolean(wrapper)&&characterAppearanceKey(name??'')===wrapper;
@@ -2543,6 +2548,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   const plan = validateTurnPlan(TurnPlanSchema.parse({
     schemaVersion: 1,
     key,
+    ...(input.config.collectEntityReferences ? { storyReferences: normalizeStoryReferences(planner.storyReferences, promptParagraphs).filter(r => !(cardRole === "scenario" && r.kind === "npc" && Boolean(scenarioReferenceName) && characterAppearanceKey(r.name) === scenarioReferenceName)) } : {}),
     paragraphs: narrative.paragraphs,
     panels: narrative.panels,
     panelSource: resolvedContent.slice(0, 200_000),
