@@ -2,11 +2,14 @@ import { templateSnapshot, type ImagePromptMetadata } from "../src/shared/image-
 import { DEFAULT_CONFIG } from "../src/config.js";
 import { ImageStudio } from "../src/frontend/image-review/studio.js";
 import type { TurnView } from "../src/protocol.js";
+import { VnStage } from '../src/frontend/stage/vn-stage.js';
 const mount = document.createElement("div");
 Object.assign(mount.style, { position: "relative", width: "100vw", height: "100vh", background: "#161824" });
 document.body.append(mount);
 const actions: unknown[] = [];
-const studio = new ImageStudio(mount, (request) => actions.push(request), (enabled) => actions.push({ reviewImages: enabled }));
+const stage = new VnStage({ mount, textSpeed: 0, exitLabel: 'Back to chat' });
+stage.loadTurn({ mode: 'standard', paragraphs: [{ id: 'paragraph', text: 'A quiet library.', speaker: 'Mira' }], choices: [] });
+const studio = new ImageStudio(stage.panelMount, (request) => actions.push(request), (enabled) => actions.push({ reviewImages: enabled }));
 const turn: TurnView = {
   chatId: "chat", messageId: "message", swipeId: 0, sourceFingerprint: "fingerprint", revision: 0, speaker: "Mira", paragraphs: ["A quiet library."], choices: [], status: "ready",
   assets: [{ jobId: "job", cueId: "cue", paragraphIndex: 0, status: "generating" }],
@@ -14,4 +17,4 @@ const turn: TurnView = {
 };
 const metadata: ImagePromptMetadata = { template: templateSnapshot(DEFAULT_CONFIG.imageTemplates[0]!), selectionReason: "A quiet character reaction", format: "description", trackerStatus: "detected", trackerSourceMessageId: "tracker-message", brief: { scene: "Library", subjects: "One character", action: "Looking through the window", composition: "portrait", lighting: "Window light", subjectMode: "one", framing: "portrait", referencePolicy: "character", sources: ["Saved appearance override", "Story scene"], conflicts: ["Saved identity retained"] } };
 studio.setTurn(turn);
-(window as any).imageFixture = { actions, studio, turn, config: DEFAULT_CONFIG, metadata };
+(window as any).imageFixture = { actions, stage, studio, turn, config: DEFAULT_CONFIG, metadata };

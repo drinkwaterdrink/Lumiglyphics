@@ -1,8 +1,10 @@
+import { LUMIGLYPHICS_VERSION } from '../src/shared/build-info.js';
 import assert from "node:assert/strict";
 import { readFileSync, existsSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 
 const manifest = JSON.parse(readFileSync("spindle.json", "utf8"));
+assert.equal(manifest.version, LUMIGLYPHICS_VERSION);
 assert.equal(manifest.identifier, "lumiglyphics");
 assert.equal(manifest.github, "https://github.com/drinkwaterdrink/Lumiglyphics");
 assert.equal(manifest.homepage, "https://github.com/drinkwaterdrink/Lumiglyphics#readme");

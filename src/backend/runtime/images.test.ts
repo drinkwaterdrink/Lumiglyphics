@@ -7,6 +7,35 @@ import { ImageReviewGate } from "./image-review.js";
 
 const now = new Date().toISOString();
 
+test('Anima portrait resolution is frozen before review and dispatched without a retry', async () => {
+  for (const reviewed of [false, true]) {
+    const sent: any[] = [];
+    const connection = { id: 'nano', provider: 'nanogpt', model: 'wavespeed-ai/anima/text-to-image', updated_at: 1, default_parameters: { size: '1024x1024' } };
+    const spindle = { userStorage: { getJson: async (_: string, o: any) => o.fallback }, imageGen: { getConnection: async () => connection, generate: async (request: any) => { sent.push(request); return { imageId: 'image' }; } } } as any;
+    const turn = plan([cue('idle')]);
+    const config = { ...DEFAULT_CONFIG, imageConnectionId: 'nano', referenceAnchoring: false, imageParameters: { size: '864x1536' } };
+    const jobs = await generateAssets(spindle, turn, createAssetJobs(turn, config), config, new AbortController().signal, () => {}, 'user', reviewed ? { beforeGenerate: async (_job, request) => {
+      expect(request.parameters?.size).toBe('1k');
+      expect(request.parameters?.rawRequestOverride).toEqual({ aspect_ratio: '9:16' });
+      return request;
+    } } : {});
+    expect(sent).toHaveLength(1);
+    expect(sent[0].parameters.size).toBe('1k');
+    expect(jobs[0]?.status).toBe('generated');
+  }
+});
+
+test('unsupported Anima resolution edited after preview cannot reach the provider', async () => {
+  let calls = 0;
+  const connection = { id: 'nano', provider: 'nanogpt', model: 'wavespeed-ai/anima/text-to-image', updated_at: 1 };
+  const spindle = { userStorage: { getJson: async (_: string, o: any) => o.fallback }, imageGen: { getConnection: async () => connection, generate: async () => { calls++; return { imageId: 'wrong' }; } } } as any;
+  const turn = plan([cue('idle')]);
+  const config = { ...DEFAULT_CONFIG, imageConnectionId: 'nano', referenceAnchoring: false };
+  const jobs = await generateAssets(spindle, turn, createAssetJobs(turn, config), config, new AbortController().signal, () => {}, 'user', { beforeGenerate: async (_job, request) => ({ ...request, parameters: { size: '864x1536' } }) });
+  expect(calls).toBe(0);
+  expect(jobs[0]?.error).toContain('1k or 1.5k');
+});
+
 test("final provider boundary holds images and sends exactly the approved prompt/settings", async () => {
   const sent: any[] = [];
   const records: any[] = [];

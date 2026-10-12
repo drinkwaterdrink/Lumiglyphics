@@ -1,4 +1,5 @@
 import { readerPresentationFor } from "./entity-projection.js";
+import { modelOutputParameters } from './template-output.js';
 import { correctVisualSubject } from "./subject-resolution.js";
 import { CorrectImageSubjectRequestSchema, SetCardRoleRequestSchema, ReplanTurnRequestSchema } from "../../protocol.js";
 import { imageDiagnostic } from '../../shared/image-diagnostics.js';
@@ -759,6 +760,7 @@ async function startAssets(
         ...sourceTextOption(record),
         beforeGenerate: async (job, request, metadata, jobSignal) => {
           const draft = options.onlyJobId === job.jobId && options.initialEdits ? applyImageEdits(request,options.initialEdits) : request;
+          draft.parameters = modelOutputParameters(metadata.provider, draft.model, draft.parameters ?? {});
           return gate.prepare(job.jobId, job.paragraphIndex, draft, metadata, requiresReview, jobSignal);
         }
       }

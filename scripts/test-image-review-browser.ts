@@ -3,17 +3,22 @@ import assert from "node:assert/strict";
 const build = await Bun.build({ entrypoints: ["scripts/image-review-browser-fixture.ts"], target: "browser" });
 assert.equal(build.success, true, String(build.logs));
 const bundle = await build.outputs[0]!.text();
-const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: (request) => new URL(request.url).pathname === "/fixture.js" ? new Response(bundle, { headers: { "Content-Type": "application/javascript" } }) : new Response('<html><body style="margin:0"><script type="module" src="/fixture.js"></script></body></html>', { headers: { "Content-Type": "text/html" } }) });
+const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: (request) => new URL(request.url).pathname === "/fixture.js" ? new Response(bundle, { headers: { "Content-Type": "application/javascript" } }) : new Response('<html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0"><script type="module" src="/fixture.js"></script></body></html>', { headers: { "Content-Type": "text/html" } }) });
 const browser = await chromium.launch({ headless: true });
 try {
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   await page.goto(`http://127.0.0.1:${server.port}`);
   const studio = page.locator("[data-image-studio]");
   await studio.getByRole("button", { name: /Image prompts/ }).click();
+  const exitBox = await page.getByRole('button', { name: 'Back to chat', exact: true }).boundingBox();
+  const closeBox = await studio.getByRole('button', { name: 'Close image prompts', exact: true }).boundingBox();
+  assert.ok(exitBox && closeBox && closeBox.y >= exitBox.y + exitBox.height + 4, 'review close sits below outer navigation');
   assert.equal(await studio.getByLabel("Review before generating").isChecked(), true);
   await studio.getByLabel("Review before generating").uncheck();
   assert.deepEqual(await page.evaluate(() => (window as any).imageFixture.actions.at(-1)), { reviewImages: false });
   const prompt = studio.getByLabel("Positive prompt", { exact: true });
+  await prompt.tap();
+  assert.ok(await prompt.evaluate(el => el.getRootNode() instanceof ShadowRoot && (el.getRootNode() as ShadowRoot).activeElement === el), 'touch focuses native editable textarea inside real stage');
   await prompt.fill("edited portrait");
   await page.evaluate(() => { const f = (window as any).imageFixture; f.studio.setTurn(structuredClone(f.turn)); });
   assert.equal(await prompt.inputValue(), "edited portrait", "host refresh preserves unsaved draft");
@@ -34,6 +39,11 @@ try {
   assert.equal(await prompt.inputValue(), "original <script>hello</script>", "new prepared request does not inherit obsolete edits");
   await prompt.fill("edited portrait");
   await studio.getByText("Parameters and references", { exact: true }).click();
+  for (const label of ['Negative prompt', 'Parameters (JSON)']) {
+    const field = studio.getByLabel(label, { exact: true });
+    await field.tap();
+    assert.ok(await field.evaluate(el => (el.getRootNode() as ShadowRoot).activeElement === el), `${label} opens native editing focus on touch`);
+  }
   await studio.getByLabel("Parameters (JSON)").fill('{"seed":99}');
   await studio.getByRole("button", { name: "Generate this", exact: true }).click();
   assert.equal(await studio.getByRole("button", { name: "Generate this", exact: true }).isDisabled(), true);

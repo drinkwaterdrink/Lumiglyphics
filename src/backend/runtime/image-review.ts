@@ -1,10 +1,11 @@
 import type { SpindleAPI } from "lumiverse-spindle-types";
+import { syncGeneratedAnimaAspect } from './template-output.js';
 import type { ImageRequestEdits, ImageRequestRecord } from "../../shared/image-review.js";
 import { ImagePromptMetadataSchema, type ImagePromptMetadata } from "../../shared/image-templates.js";
 import { compactPromptText, compactNegativePrompt, assertPromptLengths, IMAGE_PROMPT_MAX_CHARS } from '../../shared/prompt-length.js';
 
 export type ImageGenerationRequest = Parameters<SpindleAPI["imageGen"]["generate"]>[0];
-const blocked = /(?:api.?key|authorization|password|credential|token|secret|reference|(?:source|input|resolved|init)images?|(?:^|_)images?$|image(?:Data|Url|_data|_url|_bytes|_base64)|^v4_|^uc$|^negativePrompt$|^rawRequestOverride$|^__proto__$|^constructor$|^prototype$)/i;
+const blocked = /(?:api.?key|authorization|password|credential|token|secret|reference|(?:source|input|resolved|init)images?|(?:^|_)images?$|image(?:Data|Url|_data|_url|_bytes|_base64)|^_lumiglyphics|^v4_|^uc$|^negativePrompt$|^rawRequestOverride$|^__proto__$|^constructor$|^prototype$)/i;
 
 /** History/editor values contain no credential fields or reference-image bytes. */
 export function safeImageParameters(parameters: Record<string, unknown>): Record<string, unknown> {
@@ -78,6 +79,7 @@ export function applyImageEdits(request: ImageGenerationRequest, edits: ImageReq
     return result;
   };
   const parameters = structuredClone(merge(request.parameters ?? {}, patch));
+  syncGeneratedAnimaAspect(parameters);
   for (const [key, caption] of [["v4_prompt", prompt], ["v4_negative_prompt", negativePrompt ?? ""]] as const) {
     const block = parameters[key] as { caption?: { base_caption?: string } } | undefined;
     if (block?.caption) block.caption.base_caption = caption;

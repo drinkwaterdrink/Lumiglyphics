@@ -1,4 +1,4 @@
-import { templateOutputParameters } from "./template-output.js";
+import { templateOutputParameters, modelOutputParameters, assertModelOutputParameters, providerOutputParameters } from "./template-output.js";
 import { applyAttireOverride } from "./attire.js";
 export { applyAttireOverride, isClothingTag, cleanClothingFromPhrase } from "./attire.js";
 import type { SpindleAPI } from "lumiverse-spindle-types";
@@ -1165,9 +1165,9 @@ export async function generateAssets(
           if (signal.aborted) throw abortError(signal);
           if (jobSignal.aborted) throw abortError(jobSignal);
           const generationStarted = Date.now();
-          const selected = cacheOptions.beforeGenerate && connectionId && typeof spindle.imageGen.getConnection === "function"
+          const selected = connectionId && typeof spindle.imageGen.getConnection === "function"
             ? await spindle.imageGen.getConnection(connectionId, userId)
-            : cacheOptions.beforeGenerate && typeof spindle.imageGen.listConnections === "function" ? (await spindle.imageGen.listConnections(userId)).find((entry) => entry.is_default) ?? null : null;
+            : typeof spindle.imageGen.listConnections === "function" ? (await spindle.imageGen.listConnections(userId)).find((entry) => entry.is_default) ?? null : null;
           const input: ImageGenerationRequest = {
             ...(connectionId ? { connection_id: connectionId } : {}),
             prompt,
@@ -1179,7 +1179,7 @@ export async function generateAssets(
             ...(userId ? { userId } : {})
           };
           // Freeze exposed profile defaults/model before review, including a default-profile selection.
-          let frozen: ImageGenerationRequest = cacheOptions.beforeGenerate || cue.imageTemplate ? {
+          let frozen: ImageGenerationRequest = cacheOptions.beforeGenerate || cue.imageTemplate || selected ? {
             ...input,
             ...(selected?.id ? { connection_id: selected.id } : {}),
             ...(config.imageModel || selected?.model ? { model: config.imageModel || selected!.model } : {}),
@@ -1202,6 +1202,7 @@ export async function generateAssets(
             referenceSummary: portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference"
           };
           const initialMetadata = metadataFor(cue);
+          frozen.parameters = modelOutputParameters(selected?.provider ?? provider, frozen.model, frozen.parameters ?? {});
           frozen = compactImageRequest(frozen);
           const approved = cacheOptions.beforeGenerate ? await cacheOptions.beforeGenerate(scheduledJob, frozen, {
             ...baseMetadata,
@@ -1238,6 +1239,7 @@ export async function generateAssets(
                 ...(nextPortrait && provider ? referenceParametersFor(provider, nextPortrait, config) : {}),
                 ...(nextNai?.parameters ?? {})
               } };
+              request.parameters = modelOutputParameters(selected?.provider ?? provider, request.model, request.parameters ?? {});
               return { request, metadata: { ...baseMetadata, imagePromptMetadata: metadataFor(nextCue)!, referenceSummary: nextPortrait ? `${nextPortrait.source ?? "captured"} portrait: ${nextPortrait.name} (${nextPortrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" } };
             }
           }, jobSignal) : frozen;
@@ -1252,7 +1254,8 @@ export async function generateAssets(
           // A locally edited request cannot populate the compiler's original cache key.
           if (cacheOptions.disableCacheStore || JSON.stringify(approved) !== JSON.stringify(frozen)) { cacheKey = null; settle?.({ kind: "released" }); settle = null; }
           assertPromptLengths(approved.prompt,approved.negativePrompt);
-          const result = await spindle.imageGen.generate(approved);
+          assertModelOutputParameters(selected?.provider ?? provider, approved.model, approved.parameters ?? {});
+          const result = await spindle.imageGen.generate({ ...approved, parameters: providerOutputParameters(approved.parameters ?? {}) });
           observedGenerationMs.push(Date.now() - generationStarted);
 
           if (signal.aborted) throw abortError(signal);
