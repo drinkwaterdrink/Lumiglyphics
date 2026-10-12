@@ -250,3 +250,9 @@ test("configuration preserves and normalizes originalReference and originalCreat
   assert.equal(defaults.originalReference, false);
   assert.equal(defaults.originalCreationName, "");
 });
+
+test('tracker field mappings migrate without changing standard extraction defaults',()=>{
+ assert.deepEqual(normalizeConfig({}).simTrackerMappings,{identity:[],attire:[],sceneState:[],world:[]});
+ assert.deepEqual(normalizeConfig({simTrackerMappings:{identity:['custom.look','constructor.name']}}).simTrackerMappings.identity,['custom.look']);
+ assert.equal(normalizeConfig({includeSimTrackerContext:false,simTrackerMappings:{attire:['custom.outfit']}}).includeSimTrackerContext,false);
+});

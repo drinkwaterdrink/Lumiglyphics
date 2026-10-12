@@ -1,3 +1,4 @@
+import { normalizeTrackerMappings, readMappedTrackerValues, type TrackerMappings } from "../../shared/tracker-mappings.js";
 export type TrackerMessage = { id: string; content: string };
 export type TrackerCharacter = { name: string; aliases: string[]; present: boolean | null; identity: string; attire: string; sceneState: string };
 export type SimTrackerEvidence = {
@@ -12,7 +13,7 @@ const scalar = (value: unknown, max = 500): string => typeof value === "string" 
 const join = (values: unknown[], max = 3000): string => [...new Set(values.map(value => scalar(value)).filter(Boolean))].join("; ").slice(0, max);
 const first = (...values: unknown[]): string => values.map(value => scalar(value)).find(Boolean) ?? "";
 
-function character(value: unknown): TrackerCharacter | null {
+function character(value: unknown, mappings: TrackerMappings): TrackerCharacter | null {
   const record = object(value);
   const r = { ...record, ...object(record.stats) };
   const name = first(r.name, r.characterName, r.character_name);
@@ -25,19 +26,20 @@ function character(value: unknown): TrackerCharacter | null {
   const live = object(r.live), performance = object(object(r.performance).current);
   return {
     name: name.slice(0, 160), aliases, present,
-    identity: join([first(r.age, r.approx_age, a.age), first(a.species, r.species, r.species_ancestry), first(r.gender, a.gender, r.sex), first(a.height, r.height), first(a.weight, r.weight), first(a.build, body.build, body.frame, r.body_type), first(a.skin, r.skin), face.shape, face.features, scalar(a.face), first(a.eyes, face.eyes, r.eyes), scalar(a.hair), hair.color, hair.length, hair.texture, hair.style, first(a.marks, r.marks), first(a.summary, r.visual_desc, r.identity_anchor)]),
-    attire: first(wardrobe.summary, r.clothing, scalar(r.wardrobe)).slice(0, 1000),
-    sceneState: join([r.position, r.zone, r.condition, r.hands, r.blocking, r.visual_state, r.current_action, r.action, live.position, live.condition, performance.expression, performance.gesture], 1400)
+    identity: join([first(r.age, r.approx_age, a.age), first(a.species, r.species, r.species_ancestry), first(r.gender, a.gender, r.sex), first(a.height, r.height), first(a.weight, r.weight), first(a.build, body.build, body.frame, r.body_type), first(a.skin, r.skin), face.shape, face.features, scalar(a.face), first(a.eyes, face.eyes, r.eyes), scalar(a.hair), hair.color, hair.length, hair.texture, hair.style, first(a.marks, r.marks), first(a.summary, r.visual_desc, r.identity_anchor), ...readMappedTrackerValues(r,mappings.identity)]),
+    attire: first(join(readMappedTrackerValues(r,mappings.attire),1000), wardrobe.summary, r.clothing, scalar(r.wardrobe)).slice(0, 1000),
+    sceneState: join([r.position, r.zone, r.condition, r.hands, r.blocking, r.visual_state, r.current_action, r.action, live.position, live.condition, performance.expression, performance.gesture, ...readMappedTrackerValues(r,mappings.sceneState)], 1400)
   };
 }
 
-function worldDescription(value: unknown): string {
+function worldDescription(value: unknown, mappings: TrackerMappings): string {
   const w = object(value);
-  return join([w.location, w.environment, w.description, w.weather, w.lighting, w.timeOfDay, w.time_of_day, object(w.location).name, object(w.location).description], 3000);
+  return join([w.location, w.environment, w.description, w.weather, w.lighting, w.timeOfDay, w.time_of_day, object(w.location).name, object(w.location).description, ...readMappedTrackerValues(w,mappings.world)], 3000);
 }
 
 /** Only recognized chat payloads through the requested turn are considered. */
-export function extractSimTracker(messages: readonly TrackerMessage[], targetMessageId: string): SimTrackerEvidence {
+export function extractSimTracker(messages: readonly TrackerMessage[], targetMessageId: string, customMappings?: TrackerMappings): SimTrackerEvidence {
+  const mappings=normalizeTrackerMappings(customMappings);
   const empty: SimTrackerEvidence = { status: "not_found", cast: [], world: "", warnings: [] };
   const target = messages.findIndex(message => message.id === targetMessageId);
   if (target < 0) return empty;
@@ -52,8 +54,8 @@ export function extractSimTracker(messages: readonly TrackerMessage[], targetMes
       catch { if (failure === "not_found") failure = "malformed"; warnings.push("A tracker block could not be parsed."); continue; }
       const rawCast = parsed.characters ?? parsed.characterData;
       if (!Array.isArray(rawCast) && !parsed.worldData) { if (failure === "not_found") failure = "unsupported"; continue; }
-      const cast = (Array.isArray(rawCast) ? rawCast.slice(0, 20) : []).map(character).filter((item): item is TrackerCharacter => item !== null);
-      const world = worldDescription(parsed.worldData);
+      const cast = (Array.isArray(rawCast) ? rawCast.slice(0, 20) : []).map(value=>character(value,mappings)).filter((item): item is TrackerCharacter => item !== null);
+      const world = worldDescription(parsed.worldData,mappings);
       if (!cast.length && !world) { if (failure === "not_found") failure = "unsupported"; continue; }
       // Bound the evidence itself, not just its rendered representation.
       const bounded: TrackerCharacter[] = [];

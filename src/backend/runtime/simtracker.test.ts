@@ -51,3 +51,27 @@ test("planner tracker context includes unique aliases and excludes ambiguous ali
   assert.match(trackerContext(evidence), /Mira.*aliases: Silver/);
   assert.doesNotMatch(trackerContext(evidence), /Captain/);
 });
+
+test('explicit custom mappings supplement identity and scene and prioritize mapped clothing',()=>{
+ const mappings={identity:['custom.look'],attire:['custom.outfit'],sceneState:['custom.motion'],world:['custom.scene']};
+ const evidence=extractSimTracker([message('a',{characters:[{name:'Mira',appearance:{hair:'silver'},clothing:'old coat',stats:{custom:{look:'freckles',outfit:'blue raincoat',motion:'at the doorway',secret:'hidden'}}}],worldData:{location:'garden',custom:{scene:'misty courtyard'}}})],'a',mappings);
+ assert.match(evidence.cast[0]!.identity,/silver.*freckles/);
+ assert.equal(evidence.cast[0]!.attire,'blue raincoat');
+ assert.match(evidence.cast[0]!.sceneState,/doorway/);
+ assert.match(evidence.world,/garden.*misty courtyard/);
+ assert.doesNotMatch(trackerContext(evidence),/hidden/);
+ const defaultEvidence=extractSimTracker([message('a',{characters:[{name:'Mira',clothing:'old coat',custom:{outfit:'blue raincoat'}}]})],'a');
+ assert.equal(defaultEvidence.cast[0]!.attire,'old coat');
+});
+
+test('custom mappings retain historical boundaries and standard-field fallback',()=>{
+ const mappings={identity:['custom.look'],attire:['custom.outfit'],sceneState:[],world:[]};
+ const evidence=extractSimTracker([
+ message('target',{characters:[{name:'Mira',clothing:'raincoat',custom:{look:'freckles'}}]}),
+ message('future',{characters:[{name:'Mira',custom:{look:'a future injury',outfit:'uniform'}}]})
+ ],'target',mappings);
+ assert.match(evidence.cast[0]!.identity,/freckles/);
+ assert.equal(evidence.cast[0]!.attire,'raincoat');
+ assert.doesNotMatch(trackerContext(evidence),/injury|uniform/);
+ assert.equal(extractSimTracker([message('a',{characters:[{name:'Mira',custom:{look:'x'.repeat(5000)}}]})],'a',mappings).cast[0]!.identity.length,500);
+});

@@ -946,7 +946,7 @@ async function processAssistantMessage(
       characterAppearance,
       characterRegistry,
       gameHints: gameHintsForTurn(messages, message.id),
-      ...(config.includeSimTrackerContext ? { simTrackerEvidence: extractSimTracker(messages, message.id) } : {}),
+      ...(config.includeSimTrackerContext ? { simTrackerEvidence: extractSimTracker(messages, message.id, config.simTrackerMappings) } : {}),
       ...(userId ? { userId } : {})
     });
     if (operation.controller.signal.aborted) return;
@@ -1334,7 +1334,7 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
         previousScene:old.plan.scenes[0] ?? null,previousContinuity:old.plan.initialContinuity,
         recentMessages,config,singleCharacter,characterAppearance,characterRegistry,userId,
         gameHints:gameHintsForTurn(messages,latest.id),
-        ...(config.includeSimTrackerContext ? {simTrackerEvidence:extractSimTracker(messages,latest.id)} : {})});
+        ...(config.includeSimTrackerContext ? {simTrackerEvidence:extractSimTracker(messages,latest.id,config.simTrackerMappings)} : {})});
       if (!current()) return;
       const plan = {...result.plan,key:{...result.plan.key,revision:old.plan.key.revision + 1}};
       let jobs: StoredTurnRecord['jobs'] = [];

@@ -1,3 +1,4 @@
+import { TrackerMappingsPanel } from "./tracker-mappings.js";
 import { IMAGE_OUTPUT_RATIOS, normalizeImageOutputRatio } from "../../shared/image-output.js";
 import { ContextSourcesPanel } from './context-sources.js';
 import type { ContextSourceReport } from '../../shared/context-sources.js';
@@ -446,6 +447,7 @@ export class VisualNovelSettingsPanel {
   };
 
   private contextSourcesPanel!: ContextSourcesPanel;
+  private trackerMappingsPanel!: TrackerMappingsPanel;
   private templateEditor!: ImageTemplateEditor;
 
   constructor(options: SettingsPanelOptions) {
@@ -516,6 +518,8 @@ export class VisualNovelSettingsPanel {
     const tracker = document.createElement("label"); tracker.dataset.check = "";
     tracker.innerHTML = '<input name="includeSimTrackerContext" type="checkbox"><span>Include SimTracker visual context<small>Uses supported tracker JSON in this chat, up to the current reply. Saved appearance overrides still take priority. The prompt inspector reports whether a tracker payload was found.</small></span>';
     context.prepend(tracker);
+    this.trackerMappingsPanel=new TrackerMappingsPanel(value=>this.options.onSave({simTrackerMappings:value}));
+    context.append(this.trackerMappingsPanel.host);
     const references = document.createElement('label'); references.dataset.check = '';
     references.innerHTML = '<input name="collectEntityReferences" type="checkbox"><span>Prepare story references<small>Collects brief, visible NPC, location and object facts in the existing story-reader response. Optional groundwork for interactive references; no extra model call.</small></span>';
     context.append(references);
@@ -1786,6 +1790,7 @@ export class VisualNovelSettingsPanel {
     this.control<HTMLInputElement>("collectEntityReferences").checked = config.collectEntityReferences;
     this.templateEditor.setConfig(config);
     this.contextSourcesPanel.setConfig(config.contextSources);
+    this.trackerMappingsPanel.setConfig(config.simTrackerMappings);
     this.syncEveryday(config);
     const set = (name: AdvancedKey, apply: () => void) => {
       if (this.drafts.has(name)) return;
@@ -2117,6 +2122,7 @@ export class VisualNovelSettingsPanel {
 
   destroy(): void {
     this.contextSourcesPanel.destroy();
+    this.trackerMappingsPanel.destroy();
     for (const timer of [this.statusTimer, this.resetTimer, this.saveTimer, this.sampleTimer, this.flashTimer, this.copyTimer]) if (timer) clearTimeout(timer);
     this.templateEditor.destroy();
     this.resizeObserver?.disconnect();

@@ -397,6 +397,21 @@ try {
   assert.equal((await lastPatch(page))?.imageOutputAspectRatio,'9:16');
   await settings.locator('[name="collectEntityReferences"]').check();
   assert.equal((await lastPatch(page))?.collectEntityReferences,true);
+  const mappings=settings.locator('[data-tracker-mappings]');
+  await mappings.locator('summary').click();
+  await mappings.locator('[data-mapping="identity"]').fill('custom.look');
+  await page.evaluate(()=>{const f=(window as any).settingsFixture;f.panel.setConfig({...f.config,textSpeed:31});});
+  assert.equal(await mappings.locator('[data-mapping="identity"]').inputValue(),'custom.look','unrelated host updates preserve mapping drafts');
+  await mappings.locator('[data-mapping="attire"]').fill('constructor.name');
+  const beforeMapping=await lastPatch(page);
+  await mappings.getByRole('button',{name:'Save mappings',exact:true}).click();
+  assert.deepEqual(await lastPatch(page),beforeMapping,'invalid mappings never save');
+  assert.match(await mappings.locator('[data-mapping-status]').innerText(),/reserved properties/);
+  await mappings.locator('[data-mapping="attire"]').fill('custom.outfit');
+  await mappings.getByRole('button',{name:'Save mappings',exact:true}).click();
+  assert.deepEqual((await lastPatch(page))?.simTrackerMappings,{identity:['custom.look'],attire:['custom.outfit'],sceneState:[],world:[]});
+  await mappings.getByRole('button',{name:'Use standard fields',exact:true}).click();
+  assert.deepEqual((await lastPatch(page))?.simTrackerMappings,{identity:[],attire:[],sceneState:[],world:[]});
   assert.deepEqual(external, [], "settings page must not contact the network");
   console.log("settings browser checks passed");
 } finally {

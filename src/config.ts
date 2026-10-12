@@ -1,3 +1,4 @@
+import { normalizeTrackerMappings, type TrackerMappings } from "./shared/tracker-mappings.js";
 import { normalizeImageOutputRatio, type ImageOutputRatio } from "./shared/image-output.js";
 import { normalizeContextSources, type ContextSourcesConfig } from './shared/context-sources.js';
 import { DEFAULT_SPEECH_SETTINGS, normalizeSpeechSettings, type SpeechSettings } from "./speech-config.js";
@@ -90,6 +91,7 @@ export type VisualNovelConfig = {
   imageOutputAspectRatio: ImageOutputRatio;
   collectEntityReferences: boolean;
   includeSimTrackerContext: boolean;
+  simTrackerMappings: TrackerMappings;
   contextSources: ContextSourcesConfig;
   /** Anchor each character's appearance to their captured reference portrait. */
   referenceAnchoring: boolean;
@@ -158,6 +160,7 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   imageOutputAspectRatio: "default",
   collectEntityReferences: false,
   includeSimTrackerContext: true,
+  simTrackerMappings: normalizeTrackerMappings({}),
   contextSources: normalizeContextSources({}),
   referenceAnchoring: true,
   referenceSource: "captured",
@@ -321,6 +324,7 @@ export function normalizeConfig(value: unknown): VisualNovelConfig {
     imageOutputAspectRatio: normalizeImageOutputRatio(input.imageOutputAspectRatio),
     collectEntityReferences: input.collectEntityReferences === true,
     includeSimTrackerContext: bool(input.includeSimTrackerContext, true),
+    simTrackerMappings: normalizeTrackerMappings(input.simTrackerMappings),
     contextSources: normalizeContextSources(input.contextSources),
     referenceAnchoring: bool(input.referenceAnchoring, DEFAULT_CONFIG.referenceAnchoring),
     referenceSource: referenceSource(input.referenceSource),

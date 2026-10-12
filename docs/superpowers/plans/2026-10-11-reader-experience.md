@@ -10,7 +10,7 @@
 
 **Spec:** ../specs/2026-10-11-reader-experience-design.md, plus the user's scenario-card clarification and supplied inline-dossier examples as inspiration only.
 
-**Status:** Beta.13 on `Testing`, 2026-10-11. A recovery, B mobile reader, prompt/Manga/shared-style feedback and three additional UI themes are delivered. C has its first typed entity/timeline foundation: bounded, sourced snapshots derived from existing validated plans, additive persistence and backward-safe nameplate selection. C remains incomplete: normalized context adapters, optional planner entity proposals and context status/precedence UI are next. D–G remain pending. Earlier unchecked steps remain a design checklist rather than a claim of identical implementation.
+**Status:** Beta.14 on `Testing`, 2026-10-11. A recovery, B mobile reader, prompt/Manga/shared-style feedback and three additional UI themes are delivered. C has its first typed entity/timeline foundation: bounded, sourced snapshots derived from existing validated plans, additive persistence and backward-safe nameplate selection. C remains incomplete: normalized context adapters, optional planner entity proposals and context status/precedence UI are next. D–G remain pending. Earlier unchecked steps remain a design checklist rather than a claim of identical implementation.
 
 ## Global constraints
 
@@ -283,3 +283,14 @@ Ruling: bounded literal proposals are the next C increment; tooltip rendering st
 C remains incomplete: normalized SimTracker/Warp adapters, source selection/precedence, richer reference state reconciliation and D's clickable optional category controls are still pending. This release does not claim interactive tooltips are delivered.
 
 Validation: targeted red/green tests, actual-request mock tests including merged dimensions and cache separation, opt-in/nonfatal planner-reference tests, settings browser interaction, full unit suite, speech transport suite, typecheck/build and static bundle validation. Live paid image providers, Lumiverse host and physical Android keyboard were not exercised.
+
+
+## Beta.14 increment — custom SimTracker visual fields
+
+Delivered: Pictures → Context sources → Custom SimTracker fields adds an explicit-save editor for appearance, clothing, scene-state and world paths. Up to six dotted paths per group select own scalar properties or bounded scalar arrays; no expressions, bracket traversal, macros, template execution, arbitrary object serialization or reserved prototype keys. Paths are relative to each merged character entry/stats or worldData. Custom appearance/scene/world values supplement automatic extraction; mapped clothing wins when found, with standard clothing fallback. Defaults are empty and existing extraction remains unchanged.
+
+Both normal planning and recovery pass the saved mappings through the existing selected-turn tracker scan. The existing SimTracker toggle controls all extracted evidence; no new RPC, model call, external writes or mandatory companion. The editor rejects malformed paths without saving, preserves drafts during config hydration and offers Use standard fields. Existing prepared requests are unaffected; mappings apply to future preparations.
+
+Ruling: ship custom-field support as a bounded C increment rather than guessing an unsupported SimTracker public RPC. Normalized SimTracker/Warp bridges, provider precedence/current-reference presentation and interactive dossier UI remain pending. This increment does not certify arbitrary tracker formats or perfect visibility detection; the user explicitly chooses visible custom fields.
+
+Validation: failing/passing extractor and mapping tests, configuration migration, historical boundary and oversized value checks; browser save/reject/reset; full unit suite/typecheck/build/bundle validation and final fresh-context review. Paid providers and live companion installations were not exercised.

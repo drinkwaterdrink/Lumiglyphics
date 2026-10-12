@@ -44,6 +44,7 @@ function spyStage(): VisualStageThemeTarget & { calls: string[] } {
 }
 
 const baseConfig: VisualNovelConfig = {
+  simTrackerMappings: DEFAULT_CONFIG.simTrackerMappings,
   imageOutputAspectRatio: "default",
   collectEntityReferences: false,
   contextSources: DEFAULT_CONFIG.contextSources,
