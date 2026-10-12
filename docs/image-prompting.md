@@ -65,3 +65,14 @@ After the image batch settles, Image prompts provides **Correct this picture’s
 **Save appearance for this character in this chat** defaults off. Checking it explicitly replaces that character’s appearance baseline in this chat; it does not rewrite other chats or global memory. An explicit, unambiguous subject class in the supplied appearance also corrects a mistaken classification. Inspection never sends a provider request; approved replacements can incur an image-generation charge.
 
 **Card role for this chat** applies to future plans. Scenario / world / narrator treats the card title as a wrapper, excludes it from automatic drawable subjects and narrator fallback, and keeps separately named cast members. Character and Auto retain existing ordinary-card behavior. Changing the attached card resets the effective preference to Auto. Missing real-person appearance still blocks generation rather than borrowing another character’s body.
+
+
+## Replanning and diagnostics
+
+In **Image prompts → Reply recovery**, **Replan this reply** calls the story-reader model for the current reply. It can incur model-token charges. Finish or skip held images first. Unlike ordinary automatic generation, new image requests from an explicit replan always wait for approval; this preference persists for that same reply through retries. A newer reply, edit, swipe, generation, closed reader or duplicate request invalidates pending recovery.
+
+Replanning reuses only exact semantic cache matches whose host image still exists. The cache comparison includes templates, prompts, negative prompts, model/profile, parameters and reference policy. When an exact match cannot be verified (including an empty cache after restart), existing art for the same paragraph and person is kept as previous-picture fallback rather than being claimed as a match. An unrelated character is never substituted. Approved request history for unchanged job IDs remains inspectable. Image budget and connection settings are unchanged. Native card pictures do not make image-provider calls.
+
+**Picture diagnostics** reports the selected subject/template, SimTracker detection, story-reader model versus fallback mode, and a bounded explanation. Missing subject and missing appearance have different remedies; no-people templates require neither. Older records without resolved metadata report unavailable. A passing subject check does not prove model compatibility. **Copy diagnostics** includes names and status only, excluding chat text, appearance descriptions, prompts, reference bytes and raw provider errors. Technical error text and the actual prepared prompt can still be inspected separately.
+
+The existing Try again control retries unfinished images where a usable plan exists; its legacy recovery can plan again when no usable plan/appearance exists. Use explicit Replan when you want to reconsider scene selection and inspect new prompts before paying for images.

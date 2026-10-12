@@ -1,5 +1,6 @@
 import { correctVisualSubject } from "./subject-resolution.js";
-import { CorrectImageSubjectRequestSchema, SetCardRoleRequestSchema } from "../../protocol.js";
+import { CorrectImageSubjectRequestSchema, SetCardRoleRequestSchema, ReplanTurnRequestSchema } from "../../protocol.js";
+import { imageDiagnostic } from '../../shared/image-diagnostics.js';
 import type {
   ChatMessageDTO,
   GenerationEndedPayloadDTO,
@@ -12,6 +13,7 @@ import { extractSimTracker } from "./simtracker.js";
 import { templateSnapshot } from "../../shared/image-templates.js";
 const imageReviewGates = new Map<string, ImageReviewGate>();
 const preparingSingleImages = new Set<string>();
+const generatingChats = new Set<string>();
 import { createExternalImages } from "./external-images.js";
 import {
   AssetJobSchema,
@@ -420,6 +422,7 @@ function assetView(record: StoredTurnRecord, job: StoredTurnRecord["jobs"][numbe
     ?? record.plan.cacheCues?.find((candidate) => candidate.assetJobId === job.jobId);
   return {
     jobId: job.jobId,
+    diagnostic: {...imageDiagnostic(cue, job.status === 'failed'),...(record.plannerMode ? {planner:record.plannerMode} : {})},
     cueId: cue?.cueId ?? job.jobId,
     ...((record.imageRequests?.filter(r => r.jobId === job.jobId && r.state === "approved").at(-1)?.imagePromptMetadata?.template ?? cue?.imageTemplate)?.id === "manga-page" ? { presentation: "page" as const } : {}),
     paragraphIndex: job.paragraphIndex,
@@ -650,9 +653,13 @@ async function persistActiveTurn(
   spindle: SpindleAPI,
   record: StoredTurnRecord,
   path: string,
-  userId?: string
+  userId?: string,
+  isCurrent?: () => boolean
 ): Promise<void> {
-  await saveTurnRecord(spindle, path, record, userId);
+  if (isCurrent && userId) {
+    if (!await saveTurnRecordIfCurrent(spindle, path, record, userId, isCurrent)) return;
+  } else await saveTurnRecord(spindle, path, record, userId);
+  if (isCurrent && !isCurrent()) return;
   const lastScene = record.plan.scenes.at(-1) ?? null;
   await saveChatState(spindle, record.plan.key.chatId, {
     schemaVersion: 1,
@@ -669,7 +676,7 @@ async function persistActiveTurn(
     } : lastScene,
     terminalContinuity: record.plan.terminalContinuity,
     updatedAt: new Date().toISOString()
-  }, userId);
+  }, userId, isCurrent);
 }
 
 async function startAssets(
@@ -677,11 +684,12 @@ async function startAssets(
   record: StoredTurnRecord,
   path: string,
   userId?: string,
-  options: { bypassJobIds?: Iterable<string>; onlyJobId?: string } = {}
+  options: { bypassJobIds?: Iterable<string>; onlyJobId?: string; forceReview?: boolean } = {}
 ): Promise<void> {
   const config = await loadConfig(spindle, userId);
   rememberDebugFlag(userId, config);
   if (!config.generateImages || record.jobs.length === 0) return;
+  const requiresReview = config.reviewImages || Boolean(options.onlyJobId) || Boolean(options.forceReview) || record.forceImageReview === true;
   // The view may have closed between planning and this batch start; a closed
   // view means nobody sees (or pays for) these images.
   if (!views.isOpen(userId, record.plan.key.chatId)) {
@@ -741,12 +749,12 @@ async function startAssets(
       userId,
       {
         sceneCache, admission,
-        independentRequests: config.reviewImages || Boolean(options.onlyJobId),
-        disableCacheStore: config.reviewImages || Boolean(options.onlyJobId),
+        independentRequests: requiresReview,
+        disableCacheStore: requiresReview,
         ...(config.reviewImages ? { bypassJobIds: batchJobs.map((job) => job.jobId) } : options.bypassJobIds ? { bypassJobIds: options.bypassJobIds } : {}),
         ...sourceTextOption(record),
         beforeGenerate: async (job, request, metadata, jobSignal) => {
-          return gate.prepare(job.jobId, job.paragraphIndex, request, metadata, config.reviewImages || Boolean(options.onlyJobId), jobSignal);
+          return gate.prepare(job.jobId, job.paragraphIndex, request, metadata, requiresReview, jobSignal);
         }
       }
     );
@@ -1013,6 +1021,9 @@ async function processAssistantMessage(
     const record: StoredTurnRecord = {
       schemaVersion: 1,
       cardRole:result.cardRole,
+      plannerMode: result.usedFallback ? 'fallback' : 'model',
+      ...(relation === 'current' && existing?.forceImageReview ? {forceImageReview:true} : {}),
+      ...(relation === 'current' && existing?.replanRequestIds ? {replanRequestIds:existing.replanRequestIds} : {}),
       ...(result.cardId ? {cardId:result.cardId} : {}),
       speaker: result.cardRole === "scenario" ? "Narrator" : message.name || "Narrator",
       userSpeaker,
@@ -1062,6 +1073,7 @@ async function processAssistantMessage(
 }
 
 async function generationEnded(spindle: SpindleAPI, payload: GenerationEndedPayloadDTO, userId?: string): Promise<void> {
+  generatingChats.delete(runtimeKey(userId,payload.chatId));
   spindle.sendToFrontend({
     type: "vn_generation",
     chatId: payload.chatId,
@@ -1185,7 +1197,7 @@ async function retryTurn(
   const characterAppearance = await loadCharacterAppearance(spindle, userId, chatId);
 
   if (!existing || existing.status === "failed" || existing.jobs.length === 0
-    || existing.plan.visualCues.some((cue) => cue.resolvedIdentity !== undefined && !cue.resolvedIdentity.trim())) {
+    || existing.plan.visualCues.some((cue) => cue.imageTemplate?.subjectMode !== 'none' && cue.resolvedIdentity !== undefined && !cue.resolvedIdentity.trim())) {
     await processAssistantMessage(spindle, chatId, message, message.content, userId, { retry: true });
     return;
   }
@@ -1270,11 +1282,107 @@ async function retryTurn(
   }
 }
 
+/** Explicit recovery calls the planner, but never authorizes fresh image calls. */
+async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendRequest, {type:'vn_replan_turn'}>, userId: string): Promise<void> {
+  const action = ReplanTurnRequestSchema.parse(request);
+  const key = runtimeKey(userId, action.chatId);
+  const epoch = intakeEpochs.get(key) ?? 0;
+  if (!views.isOpen(userId, action.chatId)) throw new Error('Open the reader before replanning.');
+  if (generatingChats.has(key) || assetControllers.has(key) || preparingSingleImages.has(key) || planningQueue.active().some(op => op.userId === userId && op.chatId === action.chatId)) throw new Error('Finish the chat reply, skip waiting pictures, and let current preparation finish before replanning.');
+  preparingSingleImages.add(key);
+  try {
+    const state = await loadChatState(spindle, action.chatId, userId);
+    const old = await loadTurnRecord(spindle, state.activeTurnPath, userId);
+    if (!old || old.plan.key.chatId !== action.chatId || old.plan.key.assistantMessageId !== action.messageId || old.plan.key.sourceFingerprint !== action.sourceFingerprint || Number(old.plan.key.swipeId ?? 0) !== action.swipeId) throw new Error('This replan belongs to an older reply or swipe.');
+    if (old.replanRequestIds?.includes(action.requestId)) throw new Error('This replan request has already been handled.');
+    const isCurrent = () => views.isOpen(userId, action.chatId) && (intakeEpochs.get(key) ?? 0) === epoch && compareTurnKeys(activeTurnKeys.get(key) ?? null, old.plan.key).accepted;
+    const messages = await spindle.chat.getMessages(action.chatId) as NormalizedChatMessage[];
+    const latest = [...messages].reverse().find(m => !m.is_user && m.content.trim());
+    if (!latest || latest.id !== action.messageId || Number(latest.swipe_id ?? 0) !== action.swipeId) throw new Error('A newer reply or swipe replaced this replan.');
+    const intake = await resolveMessageIntake(spindle, action.chatId, latest.content, userId);
+    if (!intake.resolved || relateRecord(old, latest, intake) !== 'current' || !views.isOpen(userId,action.chatId) || (intakeEpochs.get(key) ?? 0) !== epoch || generatingChats.has(key)) throw new Error('The source changed or the reader closed. Refresh it first.');
+    // A reopened reader / restarted backend has no owner until recovery claims
+    // the fully validated stored key. Never displace a different active turn.
+    const active = activeTurnKeys.get(key);
+    if (active && !compareTurnKeys(active,old.plan.key).accepted) throw new Error('A newer turn replaced this replan.');
+    activeTurnKeys.set(key,old.plan.key);
+    const config = await loadConfig(spindle, userId);
+    const singleCharacter = await loadSingleCharacterState(spindle, action.chatId, userId);
+    const characterAppearance = await loadCharacterAppearance(spindle, userId, action.chatId);
+    const characterRegistry = await loadCharacterRegistry(spindle, action.chatId, userId);
+    const recentMessages = config.includeRecentMessages > 0 ? await resolveContextMessages(spindle, action.chatId, messages.slice(-config.includeRecentMessages), new Map(), userId) : [];
+    if (!isCurrent()) return;
+    const scheduled = planningQueue.enqueue(userId, action.chatId, action.messageId, async operation => {
+      const current = () => !operation.controller.signal.aborted && isCurrent();
+      if (!current()) return;
+      spindle.sendToFrontend({type:'vn_planning',chatId:action.chatId},userId);
+      const result = await planTurn(spindle, {chatId:action.chatId,message:latest,content:intake.text,sourceFingerprint:action.sourceFingerprint,
+        previousScene:old.plan.scenes[0] ?? null,previousContinuity:old.plan.initialContinuity,
+        recentMessages,config,singleCharacter,characterAppearance,characterRegistry,userId,
+        gameHints:gameHintsForTurn(messages,latest.id),
+        ...(config.includeSimTrackerContext ? {simTrackerEvidence:extractSimTracker(messages,latest.id)} : {})});
+      if (!current()) return;
+      const plan = {...result.plan,key:{...result.plan.key,revision:old.plan.key.revision + 1}};
+      let jobs: StoredTurnRecord['jobs'] = [];
+      if (config.useNativeCardImages) jobs = await resolveNativeCardJobs({spindle,chatId:action.chatId,plan,content:intake.text,speakerName:latest.name,userId});
+      else if (config.generateImages) {
+        jobs = await prepareAssetJobs(spindle,plan,config,characterAppearance,sceneCache,userId,sourceTextOption({resolvedSourceText:intake.text}));
+        // Exact verified cache matches can survive; paragraph/prompt hashes alone
+        // cannot prove model, negative-prompt, parameter or reference compatibility.
+        const hits = await resolveCacheCues(spindle,plan,config,characterAppearance,[],sceneCache,userId,{...sourceTextOption({resolvedSourceText:intake.text}),includeBudgeted:true});
+        jobs = jobs.map(job => hits.find(hit => hit.jobId === job.jobId) ?? job);
+      }
+      if (!current()) return;
+      // Re-check source data after the planner/provider metadata awaits too.
+      // Hosts do not always deliver edit/swipe events before this callback.
+      const freshMessages = await spindle.chat.getMessages(action.chatId) as NormalizedChatMessage[];
+      const freshLatest = [...freshMessages].reverse().find(m => !m.is_user && m.content.trim());
+      if (!freshLatest || freshLatest.id !== latest.id || Number(freshLatest.swipe_id ?? 0) !== action.swipeId) throw new Error('A newer reply or swipe replaced the replan.');
+      const freshIntake = await resolveMessageIntake(spindle,action.chatId,freshLatest.content,userId);
+      if (!current()) return;
+      if (!freshIntake.resolved || relateRecord(old,freshLatest,freshIntake) !== 'current') throw new Error('The reply changed while replanning. Refresh the reader first.');
+      const previousImages: NonNullable<StoredTurnRecord['previousImages']> = {};
+      for (const job of jobs) {
+        if (job.status === 'generated' || job.status === 'browser_ready') continue;
+        const cue = plan.visualCues.find(c => c.assetJobId === job.jobId);
+        const prior = old.jobs.find(j => j.paragraphIndex === job.paragraphIndex);
+        const priorCue = old.plan.visualCues.find(c => c.assetJobId === prior?.jobId);
+        // Old art is only a labelled fallback for the same prose and person,
+        // never a claimed match or a substitute character.
+        if (!prior || !cue || !priorCue || cue.character !== priorCue.character || cue.resolvedIdentity !== priorCue.resolvedIdentity || plan.paragraphs[job.paragraphIndex]?.text !== old.plan.paragraphs[prior.paragraphIndex]?.text) continue;
+        const image = (prior.status === 'generated' || prior.status === 'browser_ready') && prior.imageId && prior.imageUrl ? {imageId:prior.imageId,imageUrl:prior.imageUrl} : old.previousImages?.[prior.jobId];
+        if (image) previousImages[job.jobId] = image;
+      }
+      const now = new Date().toISOString();
+      const record: StoredTurnRecord = {schemaVersion:1,speaker:result.cardRole === 'scenario' ? 'Narrator' : latest.name || 'Narrator',...(old.userSpeaker ? {userSpeaker:old.userSpeaker} : {}),status:'ready',plan,jobs,previousImages,forceImageReview:true,
+        imageRequests:safeImageHistory((old.imageRequests ?? []).filter(r => r.state === 'approved' && jobs.some(job => job.jobId === r.jobId))),
+        cardRole:result.cardRole,plannerMode:result.usedFallback ? 'fallback' : 'model',...(result.cardId ? {cardId:result.cardId} : {}),
+        replanRequestIds:[...(old.replanRequestIds ?? []),action.requestId].slice(-32),
+        ...(old.correctionRequestIds ? {correctionRequestIds:old.correctionRequestIds} : {}),resolvedSourceText:intake.text,...(old.source ? {source:old.source} : {}),updatedAt:now,
+        attempts:[...(old.attempts ?? []).slice(-15),{attemptNumber:(old.attempts?.at(-1)?.attemptNumber ?? 0)+1,timestamp:now,settings:{replan:true,forcedImageReview:true}}]};
+      await persistActiveTurn(spindle,record,state.activeTurnPath!,userId,current);
+      if (!current()) return;
+      const view = await turnViewWithAudio(spindle,record);
+      if (!current()) return;
+      activeTurnKeys.set(key,plan.key);
+      spindle.sendToFrontend({type:'vn_turn',turn:view},userId);
+      if (!config.useNativeCardImages && config.generateImages) void startAssets(spindle,record,state.activeTurnPath!,userId,{forceReview:true}).catch(error => {
+        if (!isAbortError(error)) spindle.sendToFrontend({type:'vn_error',chatId:action.chatId,operation:'prepare_image',error:errorText(error)},userId);
+      });
+    },`replan:${action.requestId}`);
+    try { await scheduled.promise; }
+    catch (error) { if (!isAbortError(error,scheduled.operation.controller.signal)) throw error; }
+  } finally { preparingSingleImages.delete(key); }
+}
+
 async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendRequest, userId: string): Promise<void> {
   if (request.type === "vn_external_image") { await externalImages(spindle).request(request.request, userId); return; }
   if (request.type === "vn_external_image_cancel") { externalImages(spindle).cancel(request.request, userId); return; }
   dbg(spindle, userId, `frontend request ${request.type}`);
   switch (request.type) {
+    case 'vn_replan_turn':
+      await replanCurrentTurn(spindle,request,userId);
+      return;
     case "vn_reprepare_image_template": {
       if (typeof request.requestId !== "string" || request.requestId.length > 100 || typeof request.templateId !== "string") throw new Error("Invalid template selection.");
       const key = runtimeKey(userId, request.chatId);
@@ -1541,6 +1649,7 @@ export function registerVisualNovelBackend(spindle: SpindleAPI): void {
     });
   });
   spindle.on("GENERATION_STARTED", (payload, userId) => {
+    generatingChats.add(runtimeKey(userId,payload.chatId));
     dbg(spindle, userId, `event GENERATION_STARTED chat=${payload.chatId}`);
     // A new generation is starting (a user message was submitted). Drop any
     // ownership of the previous turn's assets so queued old-turn ComfyUI calls
@@ -1561,6 +1670,7 @@ export function registerVisualNovelBackend(spindle: SpindleAPI): void {
     });
   });
   spindle.on("GENERATION_STOPPED", (payload, userId) => {
+    generatingChats.delete(runtimeKey(userId,payload.chatId));
     dbg(spindle, userId, `event GENERATION_STOPPED chat=${payload.chatId}`);
     spindle.sendToFrontend({ type: "vn_generation", chatId: payload.chatId, active: false }, userId);
   });

@@ -521,9 +521,9 @@ export async function resolveCacheCues(
   existingJobs: readonly AssetJob[],
   cache: SceneImageCache,
   userId?: string,
-  options: { resolvedSourceText?: string; provider?: string | null; verifyImage?: SceneImageVerifier; log?: (line: string) => void } = {}
+  options: { resolvedSourceText?: string; provider?: string | null; verifyImage?: SceneImageVerifier; log?: (line: string) => void; includeBudgeted?: boolean } = {}
 ): Promise<AssetJob[]> {
-  const candidates = plan.classifierVisuals && config.systemOneMode === "on"
+  const candidates = options.includeBudgeted || (plan.classifierVisuals && config.systemOneMode === "on")
     ? [...plan.visualCues, ...(plan.cacheCues ?? [])]
     : plan.cacheCues ?? [];
   if (candidates.length === 0) return [];

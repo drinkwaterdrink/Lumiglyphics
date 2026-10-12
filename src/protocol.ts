@@ -6,11 +6,14 @@ import { ReadingPositionSchema, type ReadingPosition } from "./shared/reading-po
 import type { PanelArtifact } from "./shared/panels.js";
 import type { CueImageRequest, CueImageResult } from "./shared/cue-images.js";
 import type { ImageRequestEdits, ImageRequestRecord } from "./shared/image-review.js";
+import type { ImageDiagnostic } from './shared/image-diagnostics.js';
 
 const recoveryScope={version:z.literal(1),chatId:z.string().min(1).max(200),messageId:z.string().min(1).max(200),swipeId:z.number().int().min(0),sourceFingerprint:z.string().min(1).max(200),requestId:z.string().min(1).max(100)};
 export const CorrectImageSubjectRequestSchema=z.object({type:z.literal('vn_correct_image_subject'),...recoveryScope,jobId:z.string().min(1).max(200),templateId:z.string().min(1).max(100).optional(),subject:SubjectCorrectionSchema}).strict();
 export const SetCardRoleRequestSchema=z.object({type:z.literal('vn_set_card_role'),...recoveryScope,role:CardRoleSchema}).strict();
+export const ReplanTurnRequestSchema=z.object({type:z.literal('vn_replan_turn'),...recoveryScope}).strict();
 export type FrontendRequest =
+  | z.infer<typeof ReplanTurnRequestSchema>
   | z.infer<typeof CorrectImageSubjectRequestSchema>
   | z.infer<typeof SetCardRoleRequestSchema>
   | { type: "vn_reading_position"; position: ReadingPosition }
@@ -73,6 +76,7 @@ export const REFERENCE_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
 export const REFERENCE_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/avif"]);
 
 export type AssetView = {
+  diagnostic?: ImageDiagnostic;
   presentation?: "page";
   jobId: string;
   cueId: string;
@@ -180,6 +184,7 @@ export type BackendResponse =
 
 export function isFrontendRequest(value: unknown): value is FrontendRequest {
   if (value === null || typeof value !== "object") return false;
+  if ((value as {type?:unknown}).type === 'vn_replan_turn') return ReplanTurnRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_correct_image_subject") return CorrectImageSubjectRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_set_card_role") return SetCardRoleRequestSchema.safeParse(value).success;
   if ((value as { type?: unknown }).type === "vn_reading_position") return ReadingPositionSchema.safeParse((value as { position?: unknown }).position).success;

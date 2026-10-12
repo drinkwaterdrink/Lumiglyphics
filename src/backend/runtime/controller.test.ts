@@ -785,3 +785,84 @@ test('new generation during appearance save cannot restart or broadcast the old 
  expect(saved().jobs[0]?.imageId).toBe('original');expect(f.gates).toHaveLength(1);
  f.request({type:'vn_view',chatId:'chat',open:false},'race-user');
 });
+
+describe('explicit scoped replanning',()=>{
+ test('replans once, keeps old art as fallback and holds new prompts even with review off',async()=>{
+  const f=generationFixture();registerVisualNovelBackend(f.spindle);
+  await sendState(f.spindle,'chat','replan-user',{viewOpen:true});
+  const path=turnPath('chat','assistant-1',0);const saved=()=>f.data.get(path) as StoredTurnRecord;
+  await waitFor(()=>f.gates.length===1);f.gates[0]!.resolve({imageId:'original',imageUrl:'/original'});
+  await waitFor(()=>f.gates.length===2 || saved().jobs.every(j=>j.status==='generated'));
+  if(f.gates[1])f.gates[1].resolve({imageId:'second',imageUrl:'/second'});
+  await waitFor(()=>saved().jobs.every(j=>j.status==='generated'));await new Promise(r=>setTimeout(r,10));
+  const old=saved();const paidBefore=f.gates.length;let plannerCalls=0;
+  (f.spindle.generate as any).raw=async()=>{plannerCalls++;const payload=generationPayload([0,1]);payload.scenes[0]!.environment.lighting='bright sunlight';return {content:JSON.stringify(payload)};};
+  const action={type:'vn_replan_turn',version:1,chatId:'chat',messageId:'assistant-1',swipeId:0,sourceFingerprint:old.plan.key.sourceFingerprint,requestId:'explicit-replan'};
+  f.request({...action,swipeId:1},'replan-user');await new Promise(r=>setTimeout(r,10));expect(plannerCalls).toBe(0);
+  f.request(action,'replan-user');
+  await waitFor(()=>Boolean(saved().imageRequests?.some(r=>r.state==='review')));
+  expect(plannerCalls).toBe(1);expect(f.gates).toHaveLength(paidBefore);
+  expect(saved().plan.key.revision).toBe(old.plan.key.revision+1);
+  expect(turnView(saved()).assets[0]).toMatchObject({imageId:'original',previousImage:true});
+  f.request(action,'replan-user');await new Promise(r=>setTimeout(r,10));expect(plannerCalls).toBe(1);
+  f.request({type:'vn_view',chatId:'chat',open:false},'replan-user');
+  await new Promise(r=>setTimeout(r,15));
+  await sendState(f.spindle,'chat','replan-user',{viewOpen:true});
+  f.request({type:'vn_retry_turn',chatId:'chat',messageId:'assistant-1'},'replan-user');
+  await waitFor(()=>Boolean(saved().imageRequests?.some(r=>r.state==='review')));
+  expect(saved().forceImageReview).toBe(true);expect(f.gates).toHaveLength(paidBefore);
+  f.request({type:'vn_view',chatId:'chat',open:false},'replan-user');
+ });
+ test('a generation starting during replanning leaves the existing record and cannot publish old work',async()=>{
+  const f=generationFixture();f.data.set('config.json',{generateImages:false,includeCharacterContext:false,includePersonaContext:false});
+  registerVisualNovelBackend(f.spindle);await sendState(f.spindle,'chat','replan-race',{viewOpen:true});
+  const path=turnPath('chat','assistant-1',0);const old=f.data.get(path) as StoredTurnRecord;
+  const hold=deferred<{content:string}>();let reached=false;
+  (f.spindle.generate as any).raw=async()=>{reached=true;return hold.promise;};
+  f.request({type:'vn_replan_turn',version:1,chatId:'chat',messageId:'assistant-1',swipeId:0,sourceFingerprint:old.plan.key.sourceFingerprint,requestId:'replan-race'},'replan-race');
+  await waitFor(()=>reached);const before=f.sent.filter((m:any)=>m.type==='vn_turn').length;
+  f.fire('GENERATION_STARTED',{chatId:'chat'},'replan-race');hold.resolve({content:JSON.stringify(generationPayload([0,1]))});
+  await new Promise(r=>setTimeout(r,35));
+  expect((f.data.get(path) as StoredTurnRecord).plan.key.revision).toBe(old.plan.key.revision);
+  expect(f.sent.filter((m:any)=>m.type==='vn_turn')).toHaveLength(before);expect(f.gates).toHaveLength(0);
+  f.request({type:'vn_view',chatId:'chat',open:false},'replan-race');
+ });
+});
+
+
+test('replan claims a reopened stored reply and preserves verified exact cached pictures',async()=>{
+ const f=generationFixture();
+ f.data.set('config.json',{generateImages:true,reviewImages:false,referenceAnchoring:false,maxImagesPerTurn:1,includeCharacterContext:false,includePersonaContext:false,imageConnectionId:'images'});
+ (f.spindle.imageGen as any).getConnection=async()=>({id:'images',provider:'nanogpt',model:'test-model',updated_at:1});
+ (f.spindle as any).images={get:async(id:string)=>({id})};
+ registerVisualNovelBackend(f.spindle);await sendState(f.spindle,'chat','replan-cache',{viewOpen:true});
+ const path=turnPath('chat','assistant-1',0);const saved=()=>f.data.get(path) as StoredTurnRecord;
+ await waitFor(()=>f.gates.length===1);f.gates[0]!.resolve({imageId:'cached-original',imageUrl:'/cached-original'});
+ await waitFor(()=>saved().jobs.every(j=>j.status==='generated'));await new Promise(r=>setTimeout(r,15));
+ const old=saved();
+ f.request({type:'vn_view',chatId:'chat',open:false},'replan-cache');await new Promise(r=>setTimeout(r,15));
+ await sendState(f.spindle,'chat','replan-cache',{viewOpen:true});
+ f.request({type:'vn_replan_turn',version:1,chatId:'chat',messageId:'assistant-1',swipeId:0,sourceFingerprint:old.plan.key.sourceFingerprint,requestId:'replan-cache'},'replan-cache');
+ await waitFor(()=>saved().plan.key.revision===old.plan.key.revision+1);
+ await new Promise(r=>setTimeout(r,15));
+ expect(saved().jobs[0]).toMatchObject({status:'generated',provider:'cache',imageId:'cached-original'});
+ expect(f.gates).toHaveLength(1);expect(saved().imageRequests?.some(r=>r.state==='review')??false).toBe(false);
+ f.request({type:'vn_view',chatId:'chat',open:false},'replan-cache');
+});
+
+
+test('an edit without a host event invalidates a replan before persistence',async()=>{
+ const f=generationFixture();f.data.set('config.json',{generateImages:false,includeCharacterContext:false,includePersonaContext:false});
+ registerVisualNovelBackend(f.spindle);await sendState(f.spindle,'chat','replan-edit',{viewOpen:true});
+ const path=turnPath('chat','assistant-1',0);const old=f.data.get(path) as StoredTurnRecord;
+ const hold=deferred<{content:string}>();let reached=false;
+ (f.spindle.generate as any).raw=async()=>{reached=true;return hold.promise;};
+ f.request({type:'vn_replan_turn',version:1,chatId:'chat',messageId:'assistant-1',swipeId:0,sourceFingerprint:old.plan.key.sourceFingerprint,requestId:'replan-edit'},'replan-edit');
+ await waitFor(()=>reached);
+ const getMessages=f.spindle.chat.getMessages.bind(f.spindle.chat);
+ (f.spindle.chat as any).getMessages=async()=> (await getMessages('chat')).map(m=>({...m,content:'Changed reply after planning began.'}));
+ hold.resolve({content:JSON.stringify(generationPayload([0,1]))});
+ await waitFor(()=>f.sent.some((m:any)=>m.type==='vn_error'&&m.operation==='vn_replan_turn'));
+ expect((f.data.get(path) as StoredTurnRecord).plan.key.revision).toBe(old.plan.key.revision);expect(f.gates).toHaveLength(0);
+ f.request({type:'vn_view',chatId:'chat',open:false},'replan-edit');
+});

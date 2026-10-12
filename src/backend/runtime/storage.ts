@@ -33,6 +33,9 @@ import {
 export type StoredTurnRecord = {
   schemaVersion: 1;
   correctionRequestIds?: string[];
+  replanRequestIds?: string[];
+  forceImageReview?: boolean;
+  plannerMode?: 'model' | 'fallback';
   cardRole?: CardRole;
   cardId?: string;
   speaker: string;
@@ -605,13 +608,14 @@ export async function saveChatState(
   spindle: SpindleAPI,
   chatId: string,
   state: StoredChatState,
-  userId?: string
+  userId?: string,
+  isCurrent: () => boolean = () => true
 ): Promise<void> {
   const path = chatStatePath(chatId);
-  await serializedWrite(scopedKey(userId, path), () => spindle.userStorage.setJson(path, state, {
+  await serializedWrite(scopedKey(userId, path), () => isCurrent() ? spindle.userStorage.setJson(path, state, {
     indent: 2,
     ...(userOptions(userId) ?? {})
-  }));
+  }) : Promise.resolve());
 }
 
 export async function loadTurnRecord(
@@ -630,6 +634,9 @@ export async function loadTurnRecord(
     schemaVersion: 1,
     speaker: raw.speaker,
     ...(Array.isArray(raw.correctionRequestIds) ? {correctionRequestIds:raw.correctionRequestIds.filter(id=>typeof id === "string" && id.length <= 100).slice(-32)} : {}),
+    ...(Array.isArray(raw.replanRequestIds) ? {replanRequestIds:raw.replanRequestIds.filter(id=>typeof id === "string" && id.length <= 100).slice(-32)} : {}),
+    ...(raw.forceImageReview === true ? {forceImageReview:true} : {}),
+    ...(raw.plannerMode === 'model' || raw.plannerMode === 'fallback' ? {plannerMode:raw.plannerMode} : {}),
     ...(CardRoleSchema.safeParse(raw.cardRole).success ? {cardRole: CardRoleSchema.parse(raw.cardRole)} : {}),
     ...(typeof raw.cardId === "string" ? {cardId:raw.cardId} : {}),
     status,
