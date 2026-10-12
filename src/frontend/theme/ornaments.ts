@@ -1,3 +1,4 @@
+import { ATELIER_ORNAMENTS } from "./atelier.js";
 import type { VisualNovelThemePreset } from "../../config.js";
 
 /**
@@ -167,6 +168,7 @@ export const VN_ORNAMENT_GROUPS: Record<VisualNovelThemePreset, string> = {
       <path d="M 1496 64 L 1536 64 L 1536 104"/>
     </g>
   </g>`,
+  ...ATELIER_ORNAMENTS,
   "literature-club": `<g data-vn-ornament-group="" data-vn-preset="literature-club" aria-hidden="true" focusable="false" vector-effect="non-scaling-stroke" fill="currentColor" stroke="none">
     <!-- Sweet floating hearts along the open sides of the scene -->
     <g opacity="0.38" transform="translate(70 230) scale(1.1)"><path d="M 0 -4 C -4 -12 -14 -8 -14 0 C -14 7 0 14 0 16 C 0 14 14 7 14 0 C 14 -8 4 -12 0 -4 Z"/></g>

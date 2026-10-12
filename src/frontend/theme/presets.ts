@@ -1,3 +1,4 @@
+import { ATELIER_CSS } from "./atelier.js";
 import { THEME_PRESET_IDS, type VisualNovelThemePreset } from "../../config.js";
 
 /** Built-in visual presets. Every rule stays under its own preset root. */
@@ -1578,6 +1579,7 @@ const LITERATURE_CLUB_CSS = `
 `;
 
 export const THEME_PRESET_CSS: Record<ThemePresetId, string> = {
+  ...ATELIER_CSS,
   lumiverse: LUMIVERSE_CSS,
   "golden-hour": GOLDEN_HOUR_CSS,
   "boxed-console": BOXED_CONSOLE_CSS,

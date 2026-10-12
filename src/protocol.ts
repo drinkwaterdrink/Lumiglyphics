@@ -1,3 +1,4 @@
+import type { ReaderPresentation } from "./shared/presentation-entities.js";
 import { z } from "zod";
 import { CardRoleSchema, type CardRole } from "./shared/card-role.js";
 import { SubjectCorrectionSchema } from "./shared/subject-correction.js";
@@ -103,6 +104,7 @@ export type AudioCueView = {
 };
 
 export type TurnView = {
+  presentation?: ReaderPresentation;
   cardRole?: CardRole;
   cardRoleAvailable?: boolean;
   subjectCandidates?: Array<{name:string;appearance:string}>;

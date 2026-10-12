@@ -1,3 +1,4 @@
+import { compactImageRequest } from './image-review.js';
 import { describe, expect, test } from "bun:test";
 import { ImageReviewGate, applyImageEdits, safeImageParameters, safeImageHistory } from "./image-review.js";
 
@@ -88,4 +89,19 @@ test('oversize automatic requests are held for editing, and cannot be approved o
  expect(()=>gate.decide(records[0]!.requestId,'generate',{prompt:'x'.repeat(3001)})).toThrow('3,000');
  expect(gate.decide(records[0]!.requestId,'generate',{prompt:'Detailed silver-haired character in an observatory.'})).toBe(true);
  expect((await pending).prompt).toContain('silver-haired');
+});
+
+test('combined oversize automatic requests hold even when each field fits',async()=>{
+ const records:any[]=[]; const gate=new ImageReviewGate(async r=>{records.push(r);});
+ const pending=gate.prepare('combined',0,{prompt:'x'.repeat(2800),negativePrompt:'y'.repeat(201)},{provider:'nanogpt'},false,new AbortController().signal);
+ await Promise.resolve();expect(records[0]?.state).toBe('review');
+ expect(()=>gate.decide(records[0]!.requestId,'generate',{})).toThrow('Combined');
+ expect(gate.decide(records[0]!.requestId,'generate',{negativePrompt:'y'.repeat(200)})).toBe(true);
+ expect((await pending).negativePrompt?.length).toBe(200);
+});
+
+test('negative dedupe alone preserves repeated positive emphasis verbatim',()=>{
+ const prompt='Important identity.\n'.repeat(140);const request={prompt,negativePrompt:'blur, '.repeat(100)};
+ const compact=compactImageRequest(request);
+ expect(compact.prompt).toBe(prompt);expect(compact.negativePrompt).toBe('blur');
 });

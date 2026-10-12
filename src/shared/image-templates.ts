@@ -70,7 +70,7 @@ LIGHTING: {{lighting}}
 Strong ink contours, manga shading, halftones, expressive contrast, coherent colors and clean negative space. Keep all panels/gutters inside a mobile portrait page with modest margins; no oversized white border. Follow requested dimensions. Render one page, not separate panel images.
 {{composition}}
 {{suffix}}`,
-    negative: "identity drift, wardrobe drift, repeated compositions, broken reading order, extra limbs, malformed hands, unreadable or misspelled lettering, unrequested text, obscured faces, stiff poses, weak contrast, muddy colors, photorealism, 3D CGI, watermark, logo" }
+    negative: "identity drift, wardrobe drift, repeated panels, broken reading order, extra limbs, malformed hands, illegible or unrequested text, obscured faces, stiff poses, muddy contrast, photo, CGI, watermark, logo" }
 ];
 
 export function validateImageTemplates(value: unknown): ImageTemplate[] {
@@ -87,7 +87,7 @@ export function upgradeImageTemplates(value: unknown): ImageTemplate[] {
     const builtin = BUILTIN_IMAGE_TEMPLATES.find(template => template.id === 'manga-page')!;
     return {...t,...(t.outputAspectRatio === undefined ? {outputAspectRatio:'9:16' as const} : {}),
       ...(t.positive === LEGACY_MANGA_POSITIVE ? {positive:builtin.positive} : {}),
-      ...(t.negative === LEGACY_MANGA_NEGATIVE ? {negative:builtin.negative} : {})};
+      ...([LEGACY_MANGA_NEGATIVE, 'identity drift, wardrobe drift, repeated compositions, broken reading order, extra limbs, malformed hands, unreadable or misspelled lettering, unrequested text, obscured faces, stiff poses, weak contrast, muddy colors, photorealism, 3D CGI, watermark, logo'].includes(t.negative) ? {negative:builtin.negative} : {})};
   });
 }
 

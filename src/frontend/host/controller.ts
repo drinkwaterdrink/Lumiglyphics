@@ -1,3 +1,4 @@
+import { samePresentationTurn } from "../../shared/presentation-entities.js";
 import type { SpindleFrontendContext } from "lumiverse-spindle-types";
 import { restoreReadingPosition, LoadedReadingCursor } from "./reading-position.js";
 import type { ReadingPosition } from "../../shared/reading-position.js";
@@ -165,6 +166,12 @@ export function shouldPreserveImage(previous: TurnView | null, next: TurnView): 
  *   which is exactly the pre-attribution behavior.
  */
 export function nameplateForParagraph(view: TurnView, index: number): string {
+  const snapshot=view.presentation?.snapshots[index];
+  const key={chatId:view.chatId,assistantMessageId:view.messageId,swipeId:view.swipeId,sourceFingerprint:view.sourceFingerprint,revision:view.revision};
+  if(snapshot && snapshot.at.paragraphIndex===index && samePresentationTurn(snapshot.at.key,key) && snapshot.speakerEntityId) {
+    const speaker=snapshot.entities.find(e=>e.id===snapshot.speakerEntityId&&e.kind==='npc');
+    if(speaker)return speaker.name;
+  }
   const attributed = view.paragraphSpeakers?.[index];
   return attributed === undefined || attributed === null ? view.speaker : attributed;
 }

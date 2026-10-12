@@ -1,7 +1,7 @@
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import type { ImageRequestEdits, ImageRequestRecord } from "../../shared/image-review.js";
 import { ImagePromptMetadataSchema, type ImagePromptMetadata } from "../../shared/image-templates.js";
-import { compactPromptText, assertPromptLengths, IMAGE_PROMPT_MAX_CHARS } from '../../shared/prompt-length.js';
+import { compactPromptText, compactNegativePrompt, assertPromptLengths, IMAGE_PROMPT_MAX_CHARS } from '../../shared/prompt-length.js';
 
 export type ImageGenerationRequest = Parameters<SpindleAPI["imageGen"]["generate"]>[0];
 const blocked = /(?:api.?key|authorization|password|credential|token|secret|reference|(?:source|input|resolved|init)images?|(?:^|_)images?$|image(?:Data|Url|_data|_url|_bytes|_base64)|^v4_|^uc$|^negativePrompt$|^rawRequestOverride$|^__proto__$|^constructor$|^prototype$)/i;
@@ -55,6 +55,7 @@ export function applyImageEdits(request: ImageGenerationRequest, edits: ImageReq
   };
   const prompt = edits.prompt === undefined ? request.prompt : text(edits.prompt, true);
   const negativePrompt = edits.negativePrompt === undefined ? request.negativePrompt : text(edits.negativePrompt, false);
+  if (edits.prompt !== undefined || edits.negativePrompt !== undefined) assertPromptLengths(prompt, negativePrompt);
   const patch = edits.parameters ?? {};
   if (!patch || typeof patch !== "object" || Array.isArray(patch) || JSON.stringify(patch).length > 16000) throw new Error("Image parameters must be a JSON object under 16 KB.");
   const check = (value: unknown, depth: number): void => {
@@ -88,8 +89,11 @@ export function applyImageEdits(request: ImageGenerationRequest, edits: ImageReq
 export type ImagePreparationMetadata = { provider: string; connectionRevision?: number; referenceSummary?: string; imagePromptMetadata?: ImagePromptMetadata; rebuildTemplate?: (templateId: string) => Promise<{ request: ImageGenerationRequest; metadata: ImagePreparationMetadata }> };
 /** Also synchronize NovelAI/host-managed prompt copies after compaction. */
 export function compactImageRequest(request: ImageGenerationRequest): ImageGenerationRequest {
-  return applyImageEdits({...request,prompt:compactPromptText(request.prompt),
-    ...(request.negativePrompt !== undefined ? {negativePrompt:compactPromptText(request.negativePrompt)} : {})},{});
+  const over = request.prompt.length + (request.negativePrompt?.length ?? 0) > IMAGE_PROMPT_MAX_CHARS;
+  const negative=request.negativePrompt !== undefined && over ? compactNegativePrompt(request.negativePrompt) : request.negativePrompt;
+  const stillOver=request.prompt.length+(negative?.length??0)>IMAGE_PROMPT_MAX_CHARS;
+  return applyImageEdits({...request,prompt:compactPromptText(request.prompt, stillOver),
+    ...(negative !== undefined ? {negativePrompt:negative} : {})},{});
 }
 
 type Metadata = ImagePreparationMetadata;
@@ -117,7 +121,7 @@ export class ImageReviewGate {
   async prepare(jobId: string, paragraphIndex: number, input: ImageGenerationRequest, metadata: Metadata, review: boolean, signal: AbortSignal): Promise<ImageGenerationRequest> {
     if (signal.aborted) throw aborted("Image request cancelled.");
     const request = compactImageRequest(structuredClone(input));
-    review = review || request.prompt.length > IMAGE_PROMPT_MAX_CHARS || (request.negativePrompt?.length ?? 0) > IMAGE_PROMPT_MAX_CHARS;
+    review = review || request.prompt.length + (request.negativePrompt?.length ?? 0) > IMAGE_PROMPT_MAX_CHARS;
     const record = reviewRecord(jobId, paragraphIndex, request, metadata, review);
     if (!review) { await this.onRecord(record); if (signal.aborted) throw aborted("Image request cancelled."); return request; }
     let item!: Pending;

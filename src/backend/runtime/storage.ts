@@ -1,3 +1,4 @@
+import { projectTurnPresentation } from "./entity-projection.js";
 import { CardRoleSchema, StoredCardRoleSchema, type CardRole } from "../../shared/card-role.js";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { ReadingPositionSchema, type ReadingPosition } from "../../shared/reading-position.js";
@@ -31,6 +32,8 @@ import {
 } from "../../shared/identity.js";
 
 export type StoredTurnRecord = {
+  /** Versioned projection; unsupported future data is preserved, not reset. */
+  presentation?: unknown;
   schemaVersion: 1;
   correctionRequestIds?: string[];
   replanRequestIds?: string[];
@@ -632,6 +635,7 @@ export async function loadTurnRecord(
   const status = raw.status === "planning" || raw.status === "failed" || raw.status === "cancelled" ? raw.status : "ready";
   return {
     schemaVersion: 1,
+    ...(raw.presentation !== undefined ? {presentation:raw.presentation} : {}),
     speaker: raw.speaker,
     ...(Array.isArray(raw.correctionRequestIds) ? {correctionRequestIds:raw.correctionRequestIds.filter(id=>typeof id === "string" && id.length <= 100).slice(-32)} : {}),
     ...(Array.isArray(raw.replanRequestIds) ? {replanRequestIds:raw.replanRequestIds.filter(id=>typeof id === "string" && id.length <= 100).slice(-32)} : {}),
@@ -661,7 +665,7 @@ export async function saveTurnRecord(
   record: StoredTurnRecord,
   userId?: string
 ): Promise<void> {
-  await serializedWrite(scopedKey(userId, path), () => spindle.userStorage.setJson(path, record, {
+  await serializedWrite(scopedKey(userId, path), () => spindle.userStorage.setJson(path, recordWithPresentation(record), {
     indent: 2,
     ...(userOptions(userId) ?? {})
   }));
@@ -897,8 +901,13 @@ export async function saveTurnRecordIfCurrent(spindle: SpindleAPI, path: string,
   let saved = false;
   await serializedWrite(scopedKey(userId, path), async () => {
     if (!isCurrent()) return;
-    await spindle.userStorage.setJson(path, record, { indent: 2, userId });
+    await spindle.userStorage.setJson(path, recordWithPresentation(record), { indent: 2, userId });
     saved = isCurrent();
   });
   return saved;
+}
+
+function recordWithPresentation(record:StoredTurnRecord):StoredTurnRecord {
+  if(record.presentation!==undefined && (record.presentation as {version?:unknown})?.version!==1)return record;
+  return {...record,presentation:projectTurnPresentation(record.plan)};
 }

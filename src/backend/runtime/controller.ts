@@ -1,3 +1,4 @@
+import { readerPresentationFor } from "./entity-projection.js";
 import { correctVisualSubject } from "./subject-resolution.js";
 import { CorrectImageSubjectRequestSchema, SetCardRoleRequestSchema, ReplanTurnRequestSchema } from "../../protocol.js";
 import { imageDiagnostic } from '../../shared/image-diagnostics.js';
@@ -467,7 +468,9 @@ export function turnView(record: StoredTurnRecord): TurnView {
     : record.plan.visualCues.filter((cue) => Boolean(cue.bgm || cue.sfx))
   ).map(toAudioView);
 
+  const presentation=readerPresentationFor(record.plan,record.presentation);
   return {
+    ...(presentation ? {presentation} : {}),
     chatId: record.plan.key.chatId,
     messageId: record.plan.key.assistantMessageId,
     swipeId: typeof swipe === "number" ? swipe : Number(swipe ?? 0) || 0,
@@ -785,7 +788,7 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
   const correction=request.type==='vn_correct_image_subject' ? CorrectImageSubjectRequestSchema.parse(request) : undefined;
   const config = await loadConfig(spindle, userId);
   if (!config.generateImages) throw new Error("Enable generated pictures in settings before preparing a replacement.");
-  if(request.type === 'vn_prepare_image' && request.edits !== undefined) applyImageEdits({prompt:'Validation'},request.edits);
+  if(request.type === 'vn_prepare_image' && request.edits !== undefined) applyImageEdits({prompt:''},request.edits);
   const template = request.templateId === undefined ? undefined : config.imageTemplates.find(item => item.id === request.templateId);
   if (request.templateId !== undefined && !template) throw new Error("This template is unavailable.");
   if (!views.isOpen(userId, request.chatId)) throw new Error("Open the visual novel before preparing a picture.");

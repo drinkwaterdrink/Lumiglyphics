@@ -880,3 +880,14 @@ test('local replacement edits become a held preview and oversize edits leave com
  expect(saved().imageRequests?.at(-1)?.prompt).toBe(action.edits.prompt);expect(saved().imageRequests?.at(-1)?.negativePrompt).toBe('blurry, watermark');expect(saved().imageRequests?.at(-1)?.parameters.seed).toBe(42);expect(f.gates).toHaveLength(1);
  f.request({type:'vn_view',chatId:'chat',open:false},'editable-user');
 });
+
+test('turn views expose bounded immutable presentation and keep old/future records compatible',()=>{
+ const record:StoredTurnRecord={schemaVersion:1,speaker:'Narrator',status:'ready',plan:structuredClone(plan),jobs:[],updatedAt:now};
+ const view=turnView(record);
+ expect(view.presentation?.version).toBe(1);
+ expect(view.presentation?.snapshots[0]?.entities.some(e=>e.kind==='place'&&e.name==='Library')).toBe(true);
+ expect(view.presentation?.snapshots[0]?.presentEntityIds).toHaveLength(1);
+ record.presentation={version:99,opaque:'preserve'};
+ expect(turnView(record).presentation).toBeUndefined();
+ expect(record.presentation).toEqual({version:99,opaque:'preserve'});
+});

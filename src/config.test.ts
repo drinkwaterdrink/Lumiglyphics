@@ -111,10 +111,10 @@ test("a pre-redesign stored config keeps its generation settings and gains only 
   assert.equal(config.textScale, 1);
 });
 
-test("the host-neutral preset id list is exactly the seven supported presets", () => {
+test("the host-neutral preset id list is all supported presets", () => {
   assert.deepEqual(
     [...THEME_PRESET_IDS],
-    ["lumiverse", "golden-hour", "boxed-console", "paper-novel", "midnight-noir", "yamaku-classic", "literature-club"],
+    ["lumiverse", "golden-hour", "boxed-console", "paper-novel", "midnight-noir", "yamaku-classic", "literature-club", "astral-glass", "neon-rain", "obsidian-reliquary"],
   );
   assert.equal(DEFAULT_CONFIG.themePreset, "lumiverse");
 });

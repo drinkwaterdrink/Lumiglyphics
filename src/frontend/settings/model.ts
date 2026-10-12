@@ -201,6 +201,9 @@ export const THEME_PRESET_LABELS: Record<VisualNovelThemePreset, string> = {
   "midnight-noir": "Midnight noir",
   "yamaku-classic": "Yamaku classic (sentimental)",
   "literature-club": "Literature club (pastel pop)",
+  "astral-glass": "Astral glass (celestial prism)",
+  "neon-rain": "Neon rain (night terminal)",
+  "obsidian-reliquary": "Obsidian reliquary (silver & amethyst)",
 };
 
 export const THEME_PRESET_OPTIONS: ReadonlyArray<{

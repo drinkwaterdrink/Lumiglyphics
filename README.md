@@ -1,6 +1,6 @@
 # Lumiglyphics
 
-Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.9`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance.
+Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.10`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance.
 
 Open **Image prompts** in the visual novel to inspect each prepared picture's positive and negative prompts, provider, model, safe parameters and reference summary. With **Review before generating** enabled (the default), edit a picture and choose **Generate this**, or **Skip**. You can continue reading while a picture waits. Matching prompts remain separate in review mode. Parameters are JSON overrides for this picture; omitted fields remain host managed.
 
@@ -18,7 +18,7 @@ You can edit each template's wording, negative prompt, framing, visible subject 
 
 The local expanded preview is labeled as sample or latest-scene context and never generates an image. **Image prompts** shows the actual prepared extension request, with its selected template, reason, safe source information and SimTracker detection status. Changing a held picture's template rebuilds a new review draft; **Keep edits** retains your text, while **Replace with template** replaces prompt/parameter edits. Held pictures retain their prepared settings when you save the catalog. No-people templates omit character references and first-portrait capture. Portrait/action templates can retain character continuity.
 
-Outgoing positive and negative prompts are each limited to **3,000 characters**. The Manga default uses shorter instructions and exclusions; unchanged older defaults migrate, while custom templates and already-held requests stay intact. Overlong automatic prompts pause for editing rather than losing unique details or reaching the provider. Failed/completed request fields support a local replacement draft: edit directly, choose **Prepare edited preview**, then approve the new prompt. Counters show the limit; saved request history stays unchanged.
+Outgoing positive and negative prompts share a **3,000-character combined limit**. Over-budget preparation removes exact duplicate negative exclusions first. The Manga default uses shorter instructions and exclusions; unchanged older defaults migrate, while custom templates and already-held requests stay intact. Overlong automatic prompts pause for editing rather than losing unique details or reaching the provider. Failed/completed request fields support a local replacement draft: edit directly, choose **Prepare edited preview**, then approve the new prompt. Counters show the limit; saved request history stays unchanged.
 
 **Reply recovery** inside Image prompts offers **Replan this reply**. It calls the story reader again (which may use tokens), reuses exact verified cached pictures and holds every new image prompt for approval even when normal review is off. Existing art for the same paragraph and person remains a previous-picture fallback while a replacement waits or fails. **Picture diagnostics** distinguishes missing subjects, missing appearance, no-people templates and other failures; its copy button excludes chat text, appearance bodies, prompts and raw provider errors.
 
@@ -71,7 +71,7 @@ Under Advanced, NovelAI has toggles for model-specific quality tags and default 
 - swipe, edit, delete, duplicate-submit, and stale-image reconciliation
 - view-gated generation: Cue only plans turns and generates images for chats whose Cue view is open; closing the view (or leaving the chat) aborts the in-flight image batch and marks it cancelled, opening the view plans the latest reply only when nothing current is stored, and cancelled images wait for a manual Retry instead of resuming on their own
 - per-user and per-chat persisted continuity
-- a settings tab, a user-selectable scene-image fit (Cover / Contain / Stretch / Original size / Scale down), seven built-in theme presets (Lumiverse, Golden hour, Boxed console, Paper novel, Midnight noir, Yamaku classic, Literature club), and a shadow-DOM custom CSS contract that is always the final styling layer
+- a settings tab, a user-selectable scene-image fit (Cover / Contain / Stretch / Original size / Scale down), ten built-in theme presets (Lumiverse, Golden hour, Boxed console, Paper novel, Midnight noir, Yamaku classic, Literature club, Astral glass, Neon rain, Obsidian reliquary), and a shadow-DOM custom CSS contract that is always the final styling layer
 - an always-accessible **Back to chat** control that restores native Lumiverse
 
 It targets Lumiverse staging `1.1.6`, audited at commit `33dfa9ee62999fa3e2567066ed5cdadf61635323`, and `lumiverse-spindle-types` `0.6.23`.
@@ -295,3 +295,5 @@ See [SPEECH.md](./SPEECH.md) for the default-off paragraph speech (TTS) feature,
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for the viability decision, staging host contract, image pipeline, deterministic single-character identity, data ownership, state machines, and remaining preview limits.
 
 Shared image styles and suffix behavior are documented in [Image prompting](docs/image-prompting.md). Built-in looks are in Pictures → Image prompts → Shared style and exclusions; all wording remains editable.
+
+The first paragraph-timed presentation foundation derives sourced location, cast, drawable subject and speaker snapshots from the existing validated reader plan. Snapshots restore earlier outfit and presence state on backward reading, omit private/unclassified facts, and remain scoped to one turn. This is the foundation for upcoming context-source adapters and configurable tooltips; those controls are not yet shipped. No extra model call or image generation is added. Unsupported or oversized optional metadata leaves ordinary reading available.

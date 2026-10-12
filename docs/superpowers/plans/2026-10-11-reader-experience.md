@@ -10,7 +10,7 @@
 
 **Spec:** ../specs/2026-10-11-reader-experience-design.md, plus the user's scenario-card clarification and supplied inline-dossier examples as inspiration only.
 
-**Status:** Beta.8 on `Testing`, 2026-10-11. A recovery controls now include per-chat card roles, scoped picture corrections, structured diagnostics and explicit current-reply replanning. Exact verified cached images are reused; other images wait for approval, with same-subject prior-art fallbacks. Package B and prior prompt/Manga/style increments are delivered. Packages C–G remain pending; next is typed entities/timed presentation. Verification: `docs/review-evidence/2026-10-11-replan-recovery.md`. Earlier unchecked implementation details remain a historical design checklist rather than a claim of identical implementation.
+**Status:** Beta.10 on `Testing`, 2026-10-11. A recovery, B mobile reader, prompt/Manga/shared-style feedback and three additional UI themes are delivered. C has its first typed entity/timeline foundation: bounded, sourced snapshots derived from existing validated plans, additive persistence and backward-safe nameplate selection. C remains incomplete: normalized context adapters, optional planner entity proposals and context status/precedence UI are next. D–G remain pending. Earlier unchecked steps remain a design checklist rather than a claim of identical implementation.
 
 ## Global constraints
 
@@ -130,6 +130,8 @@ Add `adjustableSheetEnabled:boolean` to ReaderPreferences, default false for exi
 - [ ] Run existing reading/settings/speech browser checks plus the new mobile check; commit after reviewing each theme at least in fixture screenshots.
 
 ## Work package C — typed entities and timed presentation (6)
+
+Beta.10 increment: common schema, safe story-plan projection, reveal-timed immutable snapshots, additive turn persistence and public frontend boundary are implemented. Legacy turns derive from existing plans locally; unsupported/future or oversized metadata is unavailable without resetting saved data. This foundation uses existing planner scenes/cues/continuity rather than adding an extraction request. Context adapters, source controls, optional entity proposals and later tooltip UI remain pending.
 
 **Outcome:** Every later feature has a common identity and correct reveal time.
 

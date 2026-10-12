@@ -6,9 +6,9 @@ import { THEME_PRESET_LABELS, THEME_PRESET_OPTIONS } from "./panel";
 import { TEXT_EFFECT_CATALOGUE } from "../../shared/text-effects.js";
 
 describe("theme preset settings options", () => {
-  test("the selector exposes exactly the canonical five presets", () => {
+  test("the selector exposes all canonical presets", () => {
     expect(THEME_PRESET_OPTIONS.map(({ value }) => value)).toEqual([...THEME_PRESET_IDS]);
-    expect(THEME_PRESET_OPTIONS.length).toBe(7);
+    expect(THEME_PRESET_OPTIONS.length).toBe(THEME_PRESET_IDS.length);
   });
 
   test("every option carries a non-empty, distinct label", () => {

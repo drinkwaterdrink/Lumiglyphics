@@ -18,10 +18,13 @@ const EXPECTED_PRESETS = [
   "midnight-noir",
   "yamaku-classic",
   "literature-club",
+  "astral-glass",
+  "neon-rain",
+  "obsidian-reliquary",
 ] as const;
 
 describe("canonical theme preset ids", () => {
-  test("exposes exactly the seven supported presets, in order", () => {
+  test("exposes all supported presets, in order", () => {
     expect(THEME_PRESET_IDS).toEqual(EXPECTED_PRESETS);
   });
 
