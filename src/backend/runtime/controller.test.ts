@@ -891,3 +891,15 @@ test('turn views expose bounded immutable presentation and keep old/future recor
  expect(turnView(record).presentation).toBeUndefined();
  expect(record.presentation).toEqual({version:99,opaque:'preserve'});
 });
+
+
+test('stage asset roles derive from explicit templates and legacy jobs remain scenes',()=>{
+ const record:StoredTurnRecord={schemaVersion:1,speaker:'Mira',status:'ready',plan,jobs:[generatedJob()],updatedAt:now};
+ expect(turnView(record).assets[0]?.stageAsset).toEqual({role:'scene',sceneId:'scene',sceneRevision:0});
+ for(const [id,role] of [['portrait','portrait'],['environment','background'],['manga-page','scene']] as const){
+  const config=normalizeConfig({});const template=templateSnapshot(config.imageTemplates.find(t=>t.id===id)!);
+  const updated={...record,plan:{...plan,visualCues:[{...plan.visualCues[0]!,character:'Mira',resolvedAttire:'raincoat',imageTemplate:template}]}};
+  expect(turnView(updated).assets[0]?.stageAsset).toMatchObject({role,sceneId:'scene'});
+  if(role==='portrait')expect(turnView(updated).assets[0]?.stageAsset?.character).toBe('Mira');
+ }
+});

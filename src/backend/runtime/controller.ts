@@ -431,7 +431,10 @@ function assetView(record: StoredTurnRecord, job: StoredTurnRecord["jobs"][numbe
   const previous = job.status !== "generated" && job.status !== "browser_ready" ? record.previousImages?.[job.jobId] : undefined;
   const cue = record.plan.visualCues.find((candidate) => candidate.assetJobId === job.jobId)
     ?? record.plan.cacheCues?.find((candidate) => candidate.assetJobId === job.jobId);
+  const template = record.imageRequests?.filter(r => r.jobId === job.jobId && r.state === "approved").at(-1)?.imagePromptMetadata?.template ?? cue?.imageTemplate;
+  const role = template?.id === 'manga-page' ? 'scene' : template?.category === 'portrait' ? 'portrait' : template?.category === 'environment' && template.subjectMode === 'none' ? 'background' : 'scene';
   return {
+    ...(cue ? {stageAsset:{role,sceneId:cue.sceneId,sceneRevision:cue.sceneRevision,...(role==='portrait'&&cue.character?{character:cue.character,attire:cue.resolvedAttire??cue.attire??null}:{})}} : {}),
     jobId: job.jobId,
     diagnostic: {...imageDiagnostic(cue, job.status === 'failed'),...(record.plannerMode ? {planner:record.plannerMode} : {})},
     cueId: cue?.cueId ?? job.jobId,

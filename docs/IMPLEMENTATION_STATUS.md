@@ -1,5 +1,13 @@
 # Lumiglyphics implementation status
 
+## Latest Testing increment: 0.2.0-beta.18
+
+New planning requests richer grounded visual direction aiming for 2,500–2,800 combined positive/negative characters, with actual shared-style/template reservations. Short, sparse scenes remain shorter; there is no artificial padding or extra model call. The existing 3,000-character dispatch guard remains authoritative and overlong unique wording stays reviewable rather than silently losing facts. Targets are instructions to the planner, not guaranteed model output. Existing held prompts/templates/styles remain unchanged.
+
+Look → Scene → Cast view is optional/default-off. It arranges completed Environment and Character portrait template pictures from the current turn/scene, shows at most two portraits, highlights the attributed speaker, and allows switching additional available portraits via a tray. It makes no image requests. Cursor bounds, absent-character state and outfit incompatibility prevent inappropriate reuse. Action, detail, Manga, legacy assets or insufficient background art retain scene display. This is the first bounded E2 presentation increment: supplied-art selection and persistent cross-turn cast libraries remain pending.
+
+See `docs/review-evidence/2026-10-12-prompt-detail-cast.md` for checks and limits.
+
 ## Latest Testing increment: 0.2.0-beta.17
 
 The reader header uses accessible icon-only controls with mobile touch targets and a floating, theme-aware speaker badge for attributed dialogue. Known NPC, location and item names are highlighted and clickable; the open-book button retains the current-reference menu. Display rules only prevent linking names that are no longer present in rendered prose. Tap prose or empty dialogue-panel space to continue; buttons, reference cards, scrolling, selection and resize gestures preserve their own behavior. While text is typing, the first tap finishes the current paragraph. Tooltip settings and category gates remain optional. This increment responds to reader UI feedback; E2 cast staging remains pending.

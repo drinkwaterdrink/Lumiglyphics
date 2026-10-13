@@ -1,3 +1,5 @@
+import {CastStage} from "./cast-stage.js";
+import type {TurnView,AssetView} from "../../protocol.js";
 import { StageDossiers } from "./dossiers.js";
 import type { TooltipPreferences } from "../../shared/dossiers.js";
 import {
@@ -468,6 +470,7 @@ export class VnStage {
   private readonly createImage: VnImageFactory | undefined;
   private imageRequestSequence = 0;
   private destroyed = false;
+  private readonly castStage: CastStage;
   private customRegexRules: CustomRegexRule[] = [];
   private textSpeed = 20;
   private autoPlayDelay = 2000;
@@ -563,6 +566,7 @@ export class VnStage {
     this.root = queryRequired(this.themeRoot, "[data-vn-root]");
     this.applyThemePreset(options.themePreset ?? "lumiverse");
     this.scene = queryRequired(this.themeRoot, "[data-vn-scene]");
+    this.castStage = new CastStage(this.root,this.createImage);
     this.sceneImages = Array.from(this.themeRoot.querySelectorAll<HTMLImageElement>("[data-vn-scene-image]"));
     this.activeImageEl = queryRequired(this.themeRoot, "[data-vn-scene-image][data-vn-layer='active']");
     this.incomingImageEl = queryRequired(this.themeRoot, "[data-vn-scene-image][data-vn-layer='incoming']");
@@ -851,7 +855,11 @@ export class VnStage {
     this.renderInteraction(view.showChoices, view.showStandardInput, view.isBusy);
   }
 
+  setCastMode(enabled:boolean):void {this.castStage.setEnabled(enabled);}
+  setCastTurn(turn:TurnView|null,index:number):AssetView|null {return this.castStage.set(turn,index);}
+
   reset(): void {
+    this.castStage.set(null,0);
     this.dossiers.setContext(undefined,[]);
     this.clearAllTimers();
     this.resetEffects();
@@ -870,6 +878,7 @@ export class VnStage {
   }
 
   loadTurn(turn: VnTurnInput): void {
+    this.castStage.set(null,0);
     this.dossiers.setContext(turn.presentation,turn.paragraphs.map(p=>p.text));
     this.dialogueSheet?.setHidden(false);
     this.resumeNotice?.remove();
@@ -1023,6 +1032,7 @@ export class VnStage {
   }
 
   destroy(): void {
+    this.castStage.destroy();
     this.dossiers.destroy();
     this.dialogueSheet?.destroy();
     this.clearAllTimers();

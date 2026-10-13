@@ -1,6 +1,6 @@
 {
   "name": "lumiglyphics",
-  "version": "0.2.0-beta.17",
+  "version": "0.2.0-beta.18",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.0",
@@ -28,7 +28,8 @@
     "pack:audio": "bun run ./scripts/pack-audio.ts",
     "shots": "bun run ./scripts/shoot-visual-gallery.ts",
     "test:image-styles": "bun run ./scripts/test-image-styles-browser.ts",
-    "test:image-templates": "bun run ./scripts/test-image-templates-browser.ts"
+    "test:image-templates": "bun run ./scripts/test-image-templates-browser.ts",
+    "test:cast": "bun run ./scripts/test-cast-browser.ts"
   },
   "dependencies": {
     "zod": "^4.4.3"

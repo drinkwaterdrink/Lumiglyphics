@@ -1,3 +1,4 @@
+import {imageDetailGuidance} from './prompt-detail.js';
 import { normalizeStoryReferences } from "../../shared/story-references.js";
 import { loadCardRole } from "./storage.js";
 import type { CardRole } from "../../shared/card-role.js";
@@ -294,6 +295,7 @@ function plannerInstruction(config: VisualNovelConfig, visualContext?: VisualCon
     "Use the selected template's framing. Keep the lower quarter clear for dialogue UI.",
     "Portrait and action templates depict one visible companion. Environment and detail templates depict no people. Never depict a second character, a crowd, or bystanders; choose a single-subject viewpoint when an event involves several people. Preserve story character continuity independently of who is visible in the selected picture.",
     inputTemplateInstructions(config),
+    imageDetailGuidance(config),
     "basePrompt must be concise comma-separated Danbooru-style scene tags for persistent location, time, weather, lighting, and background elements. Include no camera or composition prose, character names, or character description. The companion's appearance belongs only in the single characters entry.",
     "environment: For an initial scene or true location change, specify full details: location, timeOfDay, weather, lighting, description, persistentElements. For continuing scenes, retain the established setting without rewriting it with generic atmospheric fluff that drops established props.",
     "environmentChanges: On continuing scenes, use 'environmentChanges' for intentional visual state mutations: {description?, lighting?, timeOfDay?, weather?, addElements?, removeElements?, replaceElements?: [{from, to}], clearElements?, clearLighting?, clearWeather?}. Setting lighting, timeOfDay, or weather to null (or using clearLighting/clearWeather) explicitly clears the field. Setting description replaces it (it cannot be cleared; when lighting/time/weather change without a description, the scene description is re-synthesized automatically). Location changes belong only in boundary and environment.location.",

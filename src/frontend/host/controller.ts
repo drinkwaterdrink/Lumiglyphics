@@ -313,6 +313,7 @@ export type VisualStageThemeTarget = Pick<
   setSkipMode?: (mode: "read" | "all") => void;
   /** Dialogue text size multiplier (stage sets `--vn-text-scale`). */
   setTextScale?: (scale: number) => void;
+  setCastMode?: (enabled:boolean) => void;
   setTooltipPreferences?: (prefs: VisualNovelConfig["tooltips"]) => void;
   setReaderPreferences?: (preferences: VisualNovelConfig["readerPreferences"]) => void;
   /** Lets the stage also gate its own heuristic effects (text-triggered shake). */
@@ -334,6 +335,7 @@ export function applyVisualConfigToStage(
 ): void {
   stage.setThemePreset(config.themePreset);
   stage.setSceneImageFit(config.sceneImageFit);
+  stage.setCastMode?.(config.castMode);
   stage.setUserCss(config.customCss);
   stage.setDisplayRegexRules(config.displayRegexRules);
   stage.setTextSpeed?.(config.textSpeed);
@@ -830,6 +832,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     audioEngine.stopAll();
     destroyOverrides();
     app.setVisible(false);
+    stage.setCastTurn(null,0);
     action.setLabel("Open visual novel");
     headerLauncher.setActive(false);
   }
@@ -856,7 +859,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if (!turn) return;
     const assetFailure = currentAssetFailure(turn, paragraphIndex);
     if (assetFailure) reportStageError(assetFailure);
-    const asset = selectCurrentImage(turn, paragraphIndex);
+    const asset = stage.setCastTurn(turn,paragraphIndex) ?? selectCurrentImage(turn, paragraphIndex);
     if (!asset?.imageUrl) {
       vnDebug("image sync", `p${paragraphIndex}`, "no decodable asset yet");
       return;
@@ -985,6 +988,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       imageStudio.setConfig(message.config);
       imageBridge.fit(message.config.sceneImageFit);
       applyVisualConfigToStage(stage, configRef.current);
+
       audioEngine.setBgmVolume(configRef.current.bgmVolume);
       audioEngine.setSfxVolume(configRef.current.sfxVolume);
       speech.setSettings(configRef.current.speech);
@@ -1022,6 +1026,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       imageStudio.setReview(message.config.reviewImages);
       imageStudio.setConfig(message.config);
       applyVisualConfigToStage(stage, configRef.current);
+      if(turn && active)void syncImageForParagraph(stage.getState().currentParagraphIndex);
       audioEngine.setBgmVolume(configRef.current.bgmVolume);
       audioEngine.setSfxVolume(configRef.current.sfxVolume);
       speech.setSettings(configRef.current.speech);

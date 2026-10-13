@@ -82,6 +82,7 @@ export type VisualNovelConfig = {
   autoEnter: boolean;
   mode: VisualNovelMode;
   sceneImageFit: VisualNovelSceneImageFit;
+  castMode: boolean;
   debugLogging: boolean;
   generateImages: boolean;
   reviewImages: boolean;
@@ -153,6 +154,7 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   autoEnter: false,
   mode: "standard",
   sceneImageFit: "cover",
+  castMode: false,
   debugLogging: false,
   generateImages: true,
   reviewImages: true,
@@ -319,6 +321,7 @@ export function normalizeConfig(value: unknown): VisualNovelConfig {
     autoEnter: bool(input.autoEnter, DEFAULT_CONFIG.autoEnter),
     mode: input.mode === "cyoa" ? "cyoa" : "standard",
     sceneImageFit: sceneImageFit(input.sceneImageFit),
+    castMode: bool(input.castMode, false),
     debugLogging: bool(input.debugLogging, DEFAULT_CONFIG.debugLogging),
     generateImages: bool(input.generateImages, DEFAULT_CONFIG.generateImages),
     reviewImages: bool(input.reviewImages, DEFAULT_CONFIG.reviewImages),

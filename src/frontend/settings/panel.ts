@@ -646,6 +646,7 @@ export class VisualNovelSettingsPanel {
               </fieldset>
             `)}
             ${group("Scene", `
+              <label data-check><input name="castMode" type="checkbox" /><span>Cast view<small>Requires an existing Environment picture and Character portrait in the current scene. Arranges them separately, shows up to two portraits and highlights the speaker. No extra image requests; action scenes and Manga keep their normal view. Off by default.</small></span></label>
               <fieldset ${find("Scene effects", "rain sparkles shake flash intensity gentle motion")}>
                 <legend>Scene effects</legend>
                 ${optionList("effectIntensity", EFFECT_INTENSITY_OPTIONS)}
@@ -1435,6 +1436,7 @@ export class VisualNovelSettingsPanel {
       case "themePreset":
       case "setupThemePreset":
         return { themePreset: normalizeThemePreset(target.value) };
+      case "castMode": return {castMode:checked};
       case "sceneImageFit": return { sceneImageFit: normalizeSceneImageFit(target.value) };
       case "effectIntensity": return { effectIntensity: normalizeEffectIntensity(target.value) };
       case "textEffects": return { textEffects: normalizeTextEffects(target.value) };
@@ -1868,6 +1870,7 @@ export class VisualNovelSettingsPanel {
     this.setRadio("themePreset", config.themePreset);
     this.setRadio("setupThemePreset", config.themePreset);
     this.setRadio("sceneImageFit", config.sceneImageFit);
+    this.control<HTMLInputElement>("castMode").checked = config.castMode;
     this.setRadio("effectIntensity", config.effectIntensity);
     this.setRadio("textEffects", config.textEffects);
     this.syncTextEffectMode(config);

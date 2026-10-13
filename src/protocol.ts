@@ -82,6 +82,7 @@ export const REFERENCE_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
 export const REFERENCE_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/avif"]);
 
 export type AssetView = {
+  stageAsset?: import("./shared/cast-composition.js").StageAssetMetadata;
   diagnostic?: ImageDiagnostic;
   presentation?: "page";
   jobId: string;

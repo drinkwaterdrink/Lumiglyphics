@@ -264,3 +264,10 @@ test('tooltips default off and normalize density while preserving category opt-o
 });
 
 test('persistent place art is explicit opt-in',()=>{assert.equal(normalizeConfig({}).persistentLocationArt,false);assert.equal(normalizeConfig({persistentLocationArt:true}).persistentLocationArt,true);assert.equal(normalizeConfig({persistentLocationArt:'true'}).persistentLocationArt,false);});
+
+
+test('cast view is optional and survives normalized configuration',()=>{
+ assert.equal(normalizeConfig({}).castMode,false);
+ assert.equal(normalizeConfig({castMode:'true'}).castMode,false);
+ assert.equal(normalizeConfig(normalizeConfig({castMode:true})).castMode,true);
+});
