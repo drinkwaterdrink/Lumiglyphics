@@ -34,3 +34,12 @@ test('turn-scoped absence state hides absent cast and rejects stale state from a
  t.presentation.snapshots[0]!.at.key.chatId='different';
  expect(selectCastComposition(t,0)!.portraits[0]!.name).toBe('Mira');
 });
+
+ test('supplied art replaces only an established cast portrait, not its underlying job',()=>{
+ const portrait={...asset('Mira',1),stageAsset:{role:'portrait' as const,sceneId:'s',character:'Mira',displayImageUrl:'/supplied'}};
+ const t=turn([asset('place',0,'background'),portrait]);
+ expect(selectCastComposition(t,0)).toBeNull();
+ expect(selectCastComposition(t,1)?.portraits[0]?.asset?.imageUrl).toBe('/supplied');
+ expect(t.assets[1]?.imageUrl).toBe('/Mira');
+ expect(selectCastComposition({...t,assets:[...t.assets,asset('page',2,'scene')]},2)).toBeNull();
+ });

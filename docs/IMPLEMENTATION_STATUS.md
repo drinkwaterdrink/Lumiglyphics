@@ -1,5 +1,17 @@
 # Lumiglyphics implementation status
 
+## Latest Testing increment: 0.2.0-beta.20
+
+Pictures → Saved portrait art now lets you choose supplied artwork from your Lumiverse gallery for an existing saved appearance, or restore its generated portrait. The gallery is paged in groups of 12, uses host-provided small-image URLs, filters PNG/JPEG/WebP/AVIF, and revalidates image access under the originating user when assigning. Transparent PNGs retain their transparency. Upload files to Lumiverse's own gallery first; direct file upload is not added in this increment.
+
+Enable Look → Scene → Cast view to display chosen artwork. The mapping applies only to matching character identity/appearance/outfit and established cursor-scoped portrait cues. It does not replace provider jobs, alter prompts, consume image slots or turn supplied pictures into image-model references. Original scene images, Manga pages and action pictures retain their existing behavior. Missing supplied art falls back to the generated portrait or its ordinary placeholder. Assignment/restoration makes the selected variant preferred. Forget/reset removes the mapping with the library metadata and preserves host images.
+
+All outgoing turn/asset views share display enrichment, including generation status updates, browser-ready acknowledgements, correction and cancellation paths. Library epochs invalidate both individual lookups and a whole parallel projection. Chat/request-scoped gallery responses and errors reject stale replies. Existing reader settings/themes and mobile controls remain in place.
+
+This is another bounded E2 increment: supplied artwork selection is now available for saved appearances. Direct upload, character setup before any saved portrait, independent background/portrait generation allocation, normalized external context reconciliation, F rules and G interactions remain pending. No extra permissions or dependencies.
+
+See `docs/review-evidence/2026-10-12-supplied-cast-art.md` for evidence and runtime limits.
+
 ## Latest Testing increment: 0.2.0-beta.19
 
 Pictures → Generation now includes optional Reuse saved portrait art (off by default). Completed, unedited Character portrait requests can be saved per user/chat and reused across turns/restarts when the full compiled request, character appearance, outfit, environment, template/style, model/connection and dimensions match. Compatible hits cost zero new image slots and can appear in the existing Cast view through normal cue assets; no whole-cast generation or extra provider request is added.

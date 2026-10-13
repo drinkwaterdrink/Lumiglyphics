@@ -70,9 +70,22 @@ try {
   assert.equal(await cast.evaluate(e=>e.scrollWidth<=e.clientWidth+1),true,'portrait library fits phone width');
   await page.screenshot({path:'.cache/ux-redesign/saved-portrait-phone.png'});
   await page.setViewportSize({width:1000,height:900});
+  await cast.getByRole('button',{name:'Choose gallery artwork',exact:true}).click();
+  assert.equal(await cast.getByRole('button',{name:'Previous images',exact:true}).isDisabled(),true);
+  await page.setViewportSize({width:390,height:844});
+  await cast.locator('[data-cast-art-gallery-grid]').scrollIntoViewIfNeeded();
+  assert.equal(await cast.evaluate(e=>e.scrollWidth<=e.clientWidth+1),true,'gallery grid fits mobile width');
+  await page.screenshot({path:'.cache/ux-redesign/cast-gallery-phone.png'});
+  await page.setViewportSize({width:1000,height:900});
+
+  await cast.getByRole('button',{name:'Use Aleister.png',exact:true}).click();
+  assert.match(await cast.locator('[data-cast-art-preview]').getAttribute('src')??'',/supplied/);
+  assert.equal(await cast.getByRole('button',{name:'Use generated portrait',exact:true}).isEnabled(),true);
+  await cast.getByRole('button',{name:'Use generated portrait',exact:true}).click();
+  assert.match(await cast.locator('[data-cast-art-preview]').getAttribute('src')??'',/saved-art/);
   await cast.getByRole('button',{name:'Forget this variant',exact:true}).click();
   assert.equal(await cast.locator('[data-cast-art-catalog]').isVisible(),false);
-  assert.equal(await page.evaluate(()=>(window as any).settingsFixture.castActions.length),3);
+  assert.equal(await page.evaluate(()=>(window as any).settingsFixture.castActions.length),5);
   await castReuse.uncheck();await openTab('Reading');
 
   // First use: the guide is visible, uses listed connections, and saves choices immediately.

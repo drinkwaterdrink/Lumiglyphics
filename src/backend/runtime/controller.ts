@@ -1,5 +1,5 @@
-import {CastArtRequestSchema} from '../../shared/cast-art.js';
-import {manageCastArt} from './cast-art.js';
+import {CastGalleryRequestSchema,CastArtRequestSchema} from '../../shared/cast-art.js';
+import {castArtToken,findCastDisplayArt,listCastGallery,manageCastArt} from './cast-art.js';
 import {LocationArtRequestSchema} from '../../shared/stage-assets.js';
 import {manageLocationArt} from './location-art.js';
 import { ContextSourceSession } from './context-providers/session.js';
@@ -203,7 +203,7 @@ async function cancelIncompleteJobs(
   if (views.isOpen(userId, chatId)) {
     for (const job of jobs) {
       if (job.status !== "cancelled" || job.finishedAt !== nowTime) continue;
-      spindle.sendToFrontend({ type: "vn_asset", chatId, messageId: record.plan.key.assistantMessageId, asset: assetView(next, job) }, userId);
+      spindle.sendToFrontend({ type: "vn_asset", chatId, messageId: record.plan.key.assistantMessageId, asset: await assetViewWithCastArt(spindle,next,job,userId) }, userId);
     }
   }
 }
@@ -455,7 +455,7 @@ function assetView(record: StoredTurnRecord, job: StoredTurnRecord["jobs"][numbe
  * Load the data URLs for a turn's audio cues into the bounded cache, then
  * build the view. Keeps `turnView` synchronous while audio bytes stay lazy.
  */
-export async function turnViewWithAudio(spindle: SpindleAPI, record: StoredTurnRecord): Promise<TurnView> {
+export async function turnViewWithAudio(spindle: SpindleAPI, record: StoredTurnRecord, userId?:string): Promise<TurnView> {
   const cues = record.plan.audioCues?.length
     ? record.plan.audioCues
     : record.plan.visualCues.filter((cue) => Boolean(cue.bgm || cue.sfx));
@@ -464,7 +464,32 @@ export async function turnViewWithAudio(spindle: SpindleAPI, record: StoredTurnR
   } catch {
     // Audio is best-effort: a failed preload only mutes the cue.
   }
-  return turnView(record);
+  const view=turnView(record);
+  await decorateCastAssets(spindle,record,view.assets,userId);
+  return view;
+}
+
+/** All outgoing turn/asset messages share this display-only projection. */
+async function decorateCastAssets(spindle:SpindleAPI,record:StoredTurnRecord,assets:AssetView[],userId?:string):Promise<void>{
+ const token=castArtToken(spindle,record.plan.key.chatId,userId);
+ const config=await loadConfig(spindle,userId).catch(()=>null);
+ if(!config?.castMode)return;
+ const {castAppearanceIdentity,sceneForCue}=await import('./images.js');
+ const appearance=await loadCharacterAppearance(spindle,userId,record.plan.key.chatId).catch(()=>({}));
+ await Promise.all(assets.map(async asset=>{
+  const cue=[...record.plan.visualCues,...(record.plan.cacheCues??[])].find(c=>c.assetJobId===asset.jobId);
+  if(!cue||asset.stageAsset?.role!=='portrait')return;
+  try{
+   const identity=castAppearanceIdentity(sceneForCue(record.plan,cue),cue,appearance);if(!identity)return;
+   const url=await findCastDisplayArt(spindle,record.plan.key.chatId,identity.character,identity.fingerprint,userId);
+   if(url)asset.stageAsset.displayImageUrl=url;
+  }catch{/* Display artwork must never block ordinary reading. */}
+ }));
+ // An early resolved portrait must not survive management while another is pending.
+ if(token!==castArtToken(spindle,record.plan.key.chatId,userId))for(const asset of assets)if(asset.stageAsset)delete asset.stageAsset.displayImageUrl;
+}
+async function assetViewWithCastArt(spindle:SpindleAPI,record:StoredTurnRecord,job:StoredTurnRecord["jobs"][number],userId?:string):Promise<AssetView>{
+ const asset=assetView(record,job);await decorateCastAssets(spindle,record,[asset],userId);return asset;
 }
 
 export function turnView(record: StoredTurnRecord): TurnView {
@@ -647,7 +672,7 @@ export async function sendState(
     type: "vn_state",
     chatId,
     config,
-    turn: record && !stale ? await turnViewWithAudio(spindle, record) : null,
+    turn: record && !stale ? await turnViewWithAudio(spindle, record,userId) : null,
     readingPosition: await loadReadingPosition(spindle, chatId, userId)
   }, userId);
   const canPlan = config.enabled && views.isOpen(userId, chatId);
@@ -757,11 +782,15 @@ async function startAssets(
         if (!compareTurnKeys(active, changed.ownerTurnKey).accepted) return;
         current = { ...current, jobs: mergeJobs(jobs), updatedAt: new Date().toISOString() };
         await saveTurnRecord(spindle, path, current, userId);
+        const asset=await assetViewWithCastArt(spindle,current,changed,userId);
+        if(controller.signal.aborted||(assetControllers.has(key)&&assetControllers.get(key)!==controller)||!compareTurnKeys(activeTurnKeys.get(key)??null,changed.ownerTurnKey).accepted)return;
+        const latestJob=current.jobs.find(j=>j.jobId===changed.jobId);
+        if(latestJob?.status!==changed.status||latestJob.imageId!==changed.imageId)return;
         spindle.sendToFrontend({
           type: "vn_asset",
           chatId: record.plan.key.chatId,
           messageId: record.plan.key.assistantMessageId,
-          asset: assetView(current, changed)
+          asset
         }, userId);
       },
       userId,
@@ -844,7 +873,9 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
   if(correction?.subject.kind==='character' && correction.subject.saveAppearance && corrected?.character && corrected.resolvedIdentity) await saveCorrectedAppearance(spindle,request.chatId,corrected.character,corrected.resolvedIdentity,userId);
   if(!isCurrent() || !await saveTurnRecordIfCurrent(spindle,path,next,userId,isCurrent)) return;
   if(!isCurrent()) return;
-  spindle.sendToFrontend({ type: "vn_turn", turn: turnView(next) }, userId);
+  const view=await turnViewWithAudio(spindle,next,userId);
+  if(!isCurrent())return;
+  spindle.sendToFrontend({ type: "vn_turn", turn:view }, userId);
   await startAssets(spindle, next, path, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId],...(request.type === 'vn_prepare_image' && request.edits ? {initialEdits:request.edits} : {}) });
 }
 
@@ -885,7 +916,7 @@ async function processAssistantMessage(
     const key = runtimeKey(userId, chatId);
     activeTurnKeys.set(key, existing.plan.key);
     await persistActiveTurn(spindle, existing, path, userId);
-    spindle.sendToFrontend({ type: "vn_turn", turn: await turnViewWithAudio(spindle, existing) }, userId);
+    spindle.sendToFrontend({ type: "vn_turn", turn: await turnViewWithAudio(spindle, existing,userId) }, userId);
     return;
   }
   if (isUnselectedGreeting(content, resolved)) {
@@ -904,7 +935,7 @@ async function processAssistantMessage(
       const key = runtimeKey(userId, chatId);
       activeTurnKeys.set(key, existing.plan.key);
       await persistActiveTurn(spindle, existing, path, userId);
-      spindle.sendToFrontend({ type: "vn_turn", turn: await turnViewWithAudio(spindle, existing) }, userId);
+      spindle.sendToFrontend({ type: "vn_turn", turn: await turnViewWithAudio(spindle, existing,userId) }, userId);
       return;
     }
   }
@@ -1073,7 +1104,7 @@ async function processAssistantMessage(
     activeTurnKeys.set(key, record.plan.key);
     await persistActiveTurn(spindle, record, path, userId);
     if (operation.controller.signal.aborted) return;
-    spindle.sendToFrontend({ type: "vn_turn", turn: await turnViewWithAudio(spindle, record) }, userId);
+    spindle.sendToFrontend({ type: "vn_turn", turn: await turnViewWithAudio(spindle, record,userId) }, userId);
     if (!config.useNativeCardImages && config.generateImages) {
       void startAssets(spindle, record, path, userId).catch((error) => {
         if (!isAbortError(error)) {
@@ -1182,7 +1213,7 @@ export async function markAssetReady(
     type: "vn_asset",
     chatId: request.chatId,
     messageId: request.messageId,
-    asset: assetView(next, readyJob)
+    asset: await assetViewWithCastArt(spindle,next,readyJob,userId)
   }, userId);
 }
 
@@ -1291,7 +1322,7 @@ async function retryTurn(
   activeTurnKeys.set(key, updatedRecord.plan.key);
   await saveTurnRecord(spindle, path, updatedRecord, userId);
   await persistActiveTurn(spindle, updatedRecord, path, userId);
-  spindle.sendToFrontend({ type: "vn_turn", turn: await turnViewWithAudio(spindle, updatedRecord) }, userId);
+  spindle.sendToFrontend({ type: "vn_turn", turn: await turnViewWithAudio(spindle, updatedRecord,userId) }, userId);
 
   if (!config.useNativeCardImages && config.generateImages) {
     void startAssets(spindle, updatedRecord, path, userId, { bypassJobIds }).catch((error) => {
@@ -1383,7 +1414,7 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
         attempts:[...(old.attempts ?? []).slice(-15),{attemptNumber:(old.attempts?.at(-1)?.attemptNumber ?? 0)+1,timestamp:now,settings:{replan:true,forcedImageReview:true}}]};
       await persistActiveTurn(spindle,record,state.activeTurnPath!,userId,current);
       if (!current()) return;
-      const view = await turnViewWithAudio(spindle,record);
+      const view = await turnViewWithAudio(spindle,record,userId);
       if (!current()) return;
       activeTurnKeys.set(key,plan.key);
       spindle.sendToFrontend({type:'vn_turn',turn:view},userId);
@@ -1440,7 +1471,8 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       const next={...record,cardId:chat.character_id,cardRole:action.role};
       const isCurrent=()=>views.isOpen(userId,action.chatId) && !assetControllers.has(roleKey) && (intakeEpochs.get(roleKey)??0)===epoch && compareTurnKeys(activeTurnKeys.get(roleKey)??null,record.plan.key).accepted;
       if(!await saveTurnRecordIfCurrent(spindle,state.activeTurnPath!,next,userId,isCurrent) || !isCurrent()) return;
-      spindle.sendToFrontend({type:'vn_turn',turn:turnView(next)},userId);
+      const view=await turnViewWithAudio(spindle,next,userId);if(!isCurrent())return;
+      spindle.sendToFrontend({type:'vn_turn',turn:view},userId);
       return;
     }
     case "vn_correct_image_subject":
@@ -1503,6 +1535,12 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       const sourceConfig=async()=>{await contextConfigSaves.get(userId);return (await loadConfig(spindle,userId)).contextSources;};
       const report=await contextSourceSession.refresh(spindle,sourceConfig(),userId,action.chatId,action.requestId);
       if(report) spindle.sendToFrontend({type:'vn_context_sources',report},userId);
+      return;
+    }
+    case "vn_cast_gallery": {
+      const action=CastGalleryRequestSchema.parse(request);
+      const gallery=await listCastGallery(spindle,action.offset,userId);
+      spindle.sendToFrontend({type:'vn_cast_gallery',chatId:action.chatId,requestId:action.requestId,gallery},userId);
       return;
     }
     case "vn_cast_art": {
@@ -1761,7 +1799,7 @@ export function registerVisualNovelBackend(spindle: SpindleAPI): void {
     void handleFrontendMessage(spindle, payload, userId).catch((error) => {
       const chatId = "chatId" in payload && typeof payload.chatId === "string" ? payload.chatId : undefined;
       spindle.log.error(`Visual novel frontend request failed: ${errorText(error)}`);
-      spindle.sendToFrontend({ type: "vn_error", ...(chatId ? { chatId } : {}), operation: payload.type, error: errorText(error) }, userId);
+      spindle.sendToFrontend({ type: "vn_error", ...(chatId ? { chatId } : {}), ...("requestId" in payload&&typeof payload.requestId==="string"?{requestId:payload.requestId}:{}),operation: payload.type, error: errorText(error) }, userId);
     });
   });
   void loadConfig(spindle).then((cfg) => {

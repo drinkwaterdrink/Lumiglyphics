@@ -1,7 +1,7 @@
 import {samePresentationTurn} from './presentation-entities.js';
 import type {AssetView,TurnView} from '../protocol.js';
 import type {StageAssetRole} from './stage-assets.js';
-export type StageAssetMetadata={role:StageAssetRole;sceneId:string;sceneRevision?:number;character?:string;attire?:string|null};
+export type StageAssetMetadata={role:StageAssetRole;sceneId:string;sceneRevision?:number;character?:string;attire?:string|null;displayImageUrl?:string};
 export type CastPortrait={name:string;asset:AssetView|null;active:boolean};
 export type CastComposition={background:AssetView;portraits:CastPortrait[];otherCast:CastPortrait[];scope:string};
 const nameKey=(s:string)=>s.trim().toLocaleLowerCase();
@@ -22,7 +22,7 @@ export function selectCastComposition(turn:TurnView,index:number,selectedName?:s
   if(asset.stageAsset?.role!=='portrait'||!asset.stageAsset.character)continue;
   const name=asset.stageAsset.character;
   if(!byName.has(nameKey(name))&&byName.size>=32){if(nameKey(name)!==nameKey(speaker))continue;byName.delete(byName.keys().next().value!);}
-  byName.set(nameKey(name),{name,asset:usable(asset)?asset:null,active:nameKey(name)===nameKey(speaker)});
+  byName.set(nameKey(name),{name,asset:asset.stageAsset.displayImageUrl?{...asset,imageUrl:asset.stageAsset.displayImageUrl,previousImage:false,status:"generated"}:usable(asset)?asset:null,active:nameKey(name)===nameKey(speaker)});
  }
  const candidate=turn.presentation?.snapshots[index];
  const snapshot=candidate&&samePresentationTurn(candidate.at.key,{chatId:turn.chatId,assistantMessageId:turn.messageId,swipeId:turn.swipeId,sourceFingerprint:turn.sourceFingerprint,revision:turn.revision})?candidate:undefined;

@@ -44,9 +44,10 @@ const panelOptions: SettingsPanelOptions = {
   onOpenPreview: () => { fixture.previews += 1; },
   onRefreshConnections: () => { fixture.refreshes += 1; },
   getChatId: () => 'context-chat',
+  onCastGallery:(chatId,requestId,offset)=>panel.setCastGallery(chatId,requestId,{offset,total:13,images:[{id:'supplied',name:'Aleister.png',url:'/api/v1/images/supplied?size=sm'}]}),
   onCastArt:(chatId,requestId,action)=>{
     fixture.castActions.push(action);
-    const library={version:1 as const,characters:action.action==='reset'||action.action==='forget'?[]:[{entityId:'aleister',name:'Aleister',artRevision:1,description:'Dark hair, blue coat',preferredVariantId:action.action==='select'?'v':null,variants:[{id:'v',imageId:'saved-art',description:'Dark hair, blue coat',requestFingerprint:'scene-v2:123456789',appearanceFingerprint:'look:123456789',approved:true as const,createdAt:'2026-10-12T00:00:00Z'}]}]};
+    const library={version:1 as const,characters:action.action==='reset'||action.action==='forget'?[]:[{entityId:'aleister',name:'Aleister',artRevision:1,description:'Dark hair, blue coat',preferredVariantId:action.action==='select'?'v':null,variants:[{id:'v',imageId:'saved-art',description:'Dark hair, blue coat',requestFingerprint:'scene-v2:123456789',appearanceFingerprint:'look:123456789',approved:true as const,createdAt:'2026-10-12T00:00:00Z',...(action.action==='supply'?{displayImageId:action.imageId!}:{})}]}]};
     panel.setCastArt(chatId,requestId,library);
   },
   onLocationArt:(chatId,requestId,action)=>{

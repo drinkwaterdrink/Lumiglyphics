@@ -1,5 +1,5 @@
 import {CastArtPanel} from './cast-art.js';
-import type {CastArtLibrary,CastArtAction} from '../../shared/cast-art.js';
+import type {CastArtLibrary,CastArtAction,CastGallery} from '../../shared/cast-art.js';
 import {LocationArtPanel} from './location-art.js';
 import type {LocationArtLibrary,LocationArtAction} from '../../shared/stage-assets.js';
 import { TooltipSettingsPanel } from "./tooltips.js";
@@ -103,6 +103,7 @@ export type SettingsPanelOptions = {
   onSave: (patch: Partial<VisualNovelConfig>) => void;
   onOpenPreview: () => void;
   onRefreshConnections: () => void;
+  onCastGallery?: (chatId:string,requestId:string,offset:number)=>void;
   onCastArt?: (chatId:string,requestId:string,action:CastArtAction)=>void;
   onLocationArt?: (chatId:string,requestId:string,action:LocationArtAction)=>void;
   onRefreshContextSources?: (chatId:string,requestId:string)=>void;
@@ -517,7 +518,7 @@ export class VisualNovelSettingsPanel {
     castReuse.innerHTML='<input type="checkbox" name="persistentCastArt"><span>Reuse saved portrait art<small>Reuses matching Character portrait pictures across turns, without spending new image slots. Appearance, outfit, scene, prompt, model and dimensions must match. Reference-based generation keeps its existing path. Off by default.</small></span>';
     generation.append(castReuse);
     const cast=section('Saved portrait art');
-    this.castArtPanel=new CastArtPanel(()=>this.options.getChatId?.()??'',(chat,id,action)=>this.options.onCastArt?.(chat,id,action));cast.append(this.castArtPanel.host);
+    this.castArtPanel=new CastArtPanel(()=>this.options.getChatId?.()??'',(chat,id,action)=>this.options.onCastArt?.(chat,id,action),(chat,id,offset)=>this.options.onCastGallery?.(chat,id,offset));cast.append(this.castArtPanel.host);
     const places=section('Saved place art');
     this.locationArtPanel=new LocationArtPanel(()=>this.options.getChatId?.()??'',(chat,id,action)=>this.options.onLocationArt?.(chat,id,action));places.append(this.locationArtPanel.host);
 
@@ -2148,8 +2149,9 @@ export class VisualNovelSettingsPanel {
     select.value = [...this.promptPresets, ...BUILTIN_SHARED_STYLES].some((preset) => preset.id === selectedId) ? selectedId : "";
   }
 
-  setCastArt(chatId:string,requestId:string,library:CastArtLibrary):void{this.castArtPanel.receive(chatId,requestId,library);}
-  castArtError(error:string):void{this.castArtPanel.fail(error);}
+  setCastArt(chatId:string,requestId:string,library:CastArtLibrary):boolean{return this.castArtPanel.receive(chatId,requestId,library);}
+  setCastGallery(chatId:string,requestId:string,gallery:CastGallery):void{this.castArtPanel.receiveGallery(chatId,requestId,gallery);}
+  castArtError(error:string,requestId?:string):void{this.castArtPanel.fail(error,requestId);}
   castArtNotice(error:string):void{this.castArtPanel.notice(error);}
   clearCastArt():void{this.castArtPanel.clear();}
   setLocationArt(chatId:string,requestId:string,library:LocationArtLibrary):void{this.locationArtPanel.receive(chatId,requestId,library);}

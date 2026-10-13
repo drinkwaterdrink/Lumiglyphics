@@ -641,6 +641,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   });
   const settingsPanel: (VisualNovelSettingsPanel & SettingsFeedbackTarget) | null = settingsHandle ? new VisualNovelSettingsPanel({
     getChatId:()=>chatId(),
+    onCastGallery:(chatId,requestId,offset)=>ctx.sendToBackend({type:'vn_cast_gallery',chatId,requestId,offset}),
     onCastArt:(chatId,requestId,action)=>ctx.sendToBackend({type:'vn_cast_art',version:1,chatId,requestId,...action}),
     onLocationArt:(chatId,requestId,action)=>ctx.sendToBackend({type:'vn_location_art',version:1,chatId,requestId,...action}),
     onRefreshContextSources:(chatId,requestId)=>ctx.sendToBackend({type:"vn_get_context_sources",chatId,requestId}),
@@ -968,9 +969,11 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       settingsPanel?.setConnectionCatalog("image", states.image);
       return;
     }
-    if(type==='vn_cast_art'&&message.type==='vn_cast_art'){settingsPanel?.setCastArt(message.chatId,message.requestId,message.library);return;}
+    if(type==='vn_cast_art'&&message.type==='vn_cast_art'){const accepted=settingsPanel?.setCastArt(message.chatId,message.requestId,message.library);if(accepted&&active&&turn&&message.chatId===chatId())ctx.sendToBackend({type:'vn_get_state',chatId:message.chatId,viewOpen:true});return;}
+    if(type==='vn_cast_gallery'&&message.type==='vn_cast_gallery'){settingsPanel?.setCastGallery(message.chatId,message.requestId,message.gallery);return;}
+    if(type==='vn_error'&&message.type==='vn_error'&&message.operation==='vn_cast_gallery'){if(message.chatId===chatId())settingsPanel?.castArtError(message.error,message.requestId);return;}
     if(type==='vn_cast_art_notice'&&message.type==='vn_cast_art_notice'){if(message.chatId===chatId())settingsPanel?.castArtNotice(message.error);return;}
-    if(type==='vn_error'&&message.type==='vn_error'&&message.operation==='vn_cast_art'){if(!message.chatId||message.chatId===chatId())settingsPanel?.castArtError(message.error);return;}
+    if(type==='vn_error'&&message.type==='vn_error'&&message.operation==='vn_cast_art'){if(!message.chatId||message.chatId===chatId())settingsPanel?.castArtError(message.error,message.requestId);return;}
     if(type==='vn_location_art'&&message.type==='vn_location_art'){settingsPanel?.setLocationArt(message.chatId,message.requestId,message.library);return;}
     if(type==='vn_location_art_notice'&&message.type==='vn_location_art_notice'){if(message.chatId===chatId())settingsPanel?.locationArtNotice(message.error);return;}
     if(type==='vn_error'&&message.type==='vn_error'&&message.operation==='vn_location_art'){if(!message.chatId||message.chatId===chatId())settingsPanel?.locationArtError(message.error);return;}
@@ -1026,7 +1029,9 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       imageBridge.fit(message.config.sceneImageFit);
       // The echo of a persisted config is the only save acknowledgment the
       // transport offers; "saved" is claimed here and nowhere earlier.
+      const castWasEnabled=configRef.current?.castMode??false;
       configRef.current = message.config;
+      if(!castWasEnabled&&message.config.castMode&&active&&turn)ctx.sendToBackend({type:"vn_get_state",chatId:chatId(),viewOpen:true});
       imageStudio.setReview(message.config.reviewImages);
       imageStudio.setConfig(message.config);
       applyVisualConfigToStage(stage, configRef.current);

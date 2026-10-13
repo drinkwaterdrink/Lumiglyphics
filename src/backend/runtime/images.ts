@@ -66,7 +66,7 @@ function hash(source: string): string {
   return value.toString(16).padStart(8, "0");
 }
 
-function sceneForCue(plan: TurnPlan, cue: VisualCue): SceneState {
+export function sceneForCue(plan: TurnPlan, cue: VisualCue): SceneState {
   const scene = plan.scenes.find((candidate) => candidate.sceneId === cue.sceneId && candidate.revision === cue.sceneRevision);
   if (!scene) throw new Error(`No scene owns visual cue ${cue.cueId}.`);
   return scene;
@@ -687,6 +687,13 @@ export function locationArtIdentityFor(config:VisualNovelConfig,scene:SceneState
 }
 /** Whole rectangular portrait reuse; never substitute it for an image reference.
  * Reference-capable providers retain their anchoring/capture pipeline. */
+export function castAppearanceIdentity(scene:SceneState,cue:VisualCue,appearance?:CharacterAppearanceMap):{character:string,fingerprint:string}|null {
+ if(cue.imageTemplate?.category!=='portrait'||cue.imageTemplate.subjectMode!=='one'||(cue.resolvedIdentity!==undefined&&!cue.resolvedIdentity.trim()))return null;
+ const visual=resolveCueCharacterVisualState(scene,cue,appearance);
+ if(!visual.characterName.trim()||!visual.baseIdentity.trim())return null;
+ const text=canonicalJson([visual.characterId,visual.baseIdentity,visual.attire]);
+ return {character:visual.characterName,fingerprint:`look:${hash(text)}${hash(text.split('').reverse().join(''))}`};
+}
 export function castArtIdentityFor(config:VisualNovelConfig,scene:SceneState,cue:VisualCue,appearance:CharacterAppearanceMap|undefined,provider:string|null,profileRevision:string):CastArtIdentity|null {
  if(!config.persistentCastArt||provider===null||cue.imageTemplate?.category!=='portrait'||cue.imageTemplate.subjectMode!=='one')return null;
  if(referenceAnchoringEnabled(config)&&cueUsesCharacterReference(cue)&&REFERENCE_PROVIDERS.has(provider))return null;

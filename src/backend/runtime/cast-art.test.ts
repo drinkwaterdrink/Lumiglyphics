@@ -73,3 +73,47 @@ test('unknown storage versions are preserved rather than overwritten',async()=>{
  await manageCastArt(api,'c',{action:'reset'},'u');release({id:'image'});
  expect(await finding).toBeNull();
  });
+
+ test('supplied gallery art is verified under its user and stays display-only',async()=>{
+ const {api,ids}=fixture();ids.add('supplied');await saveCastArt(api,'c',art,'u');
+ const record=(await loadCastArt(api,'c','u')).characters[0]!,variant=record.variants[0]!;
+ (api.images as any).get=async(id:string,user:string)=>ids.has(id)&&user==='u'?{id,mime_type:'image/png'}:null;
+ await manageCastArt(api,'c',{action:'supply',characterId:record.entityId,variantId:variant.id,imageId:'supplied'},'u');
+ const {findCastDisplayArt}=await import('./cast-art.js');
+ expect(await findCastDisplayArt(api,'c',art.character,art.appearanceFingerprint,'u')).toBe('/api/v1/images/supplied');
+ expect(await findCastDisplayArt(api,'c',art.character,'changed-outfit','u')).toBeNull();
+ expect((await findCastArt(api,'c',art,'u'))?.imageId).toBe('image');
+ await manageCastArt(api,'c',{action:'restore',characterId:record.entityId,variantId:variant.id},'u');
+ expect(await findCastDisplayArt(api,'c',art.character,art.appearanceFingerprint,'u')).toBeNull();
+ await expect(manageCastArt(api,'c',{action:'supply',characterId:record.entityId,variantId:variant.id,imageId:'missing'},'u')).rejects.toThrow(/available/);
+ });
+
+ test('gallery listing is paged, scoped and filters videos or active image formats',async()=>{
+ const {api}=fixture();let options:any;
+ (api.images as any).list=async(o:any)=>{options=o;return {total:14,data:[{id:'png',original_filename:'Portrait.png',mime_type:'image/png',url:'/api/v1/images/png?size=sm'},{id:'video',mime_type:'video/mp4'},{id:'svg',mime_type:'image/svg+xml'}]};};
+ const {listCastGallery}=await import('./cast-art.js');
+ expect(await listCastGallery(api,12,'u')).toEqual({offset:12,total:14,images:[{id:'png',name:'Portrait.png',url:'/api/v1/images/png?size=sm'}]});
+ expect(options).toEqual({offset:12,limit:12,specificity:'sm',userId:'u'});
+ });
+ test('supplied display rejects late resets and preserves unknown library schemas',async()=>{
+ const {api}=fixture();await saveCastArt(api,'c',art,'u');
+ (api.images as any).get=async(id:string)=>({id,mime_type:'image/png'});
+ const record=(await loadCastArt(api,'c','u')).characters[0]!;
+ await manageCastArt(api,'c',{action:'supply',characterId:record.entityId,variantId:record.variants[0]!.id,imageId:'supplied'},'u');
+ let release!:(value:any)=>void,entered!:()=>void;const ready=new Promise<void>(r=>entered=r);
+ (api.images as any).get=()=>{entered();return new Promise(r=>release=r);};
+ const {findCastDisplayArt}=await import('./cast-art.js');
+ const finding=findCastDisplayArt(api,'c',art.character,art.appearanceFingerprint,'u');await ready;
+ await manageCastArt(api,'c',{action:'reset'},'u');release({id:'supplied',mime_type:'image/png'});
+ expect(await finding).toBeNull();
+ });
+
+ test('restore chooses the restored appearance even when another supplied variant is preferred',async()=>{
+ const {api}=fixture();(api.images as any).get=async(id:string)=>({id,mime_type:'image/png'});
+ await saveCastArt(api,'c',art,'u');await saveCastArt(api,'c',{...art,imageId:'second'},'u');
+ const r=(await loadCastArt(api,'c','u')).characters[0]!;
+ await manageCastArt(api,'c',{action:'supply',characterId:r.entityId,variantId:r.variants[1]!.id,imageId:'supplied'},'u');
+ await manageCastArt(api,'c',{action:'restore',characterId:r.entityId,variantId:r.variants[0]!.id},'u');
+ const {findCastDisplayArt}=await import('./cast-art.js');
+ expect(await findCastDisplayArt(api,'c',art.character,art.appearanceFingerprint,'u')).toBeNull();
+ });

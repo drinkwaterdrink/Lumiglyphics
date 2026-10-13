@@ -1,5 +1,5 @@
 import type {SpindleAPI} from 'lumiverse-spindle-types';
-import {CastArtLibrarySchema,type CastArtLibrary,type CastArtAction} from '../../shared/cast-art.js';
+import {CastArtLibrarySchema,type CastArtLibrary,type CastArtAction,CastGallerySchema,type CastGallery} from '../../shared/cast-art.js';
 import {canonicalJson} from '../core/scene-image-cache.js';
 
 type Runtime={tails:Map<string,Promise<void>>,epochs:Map<string,number>};
@@ -64,11 +64,40 @@ export async function manageCastArt(api:SpindleAPI,chat:string,action:CastArtAct
   if(action.action==='reset')library.characters=[];
   else{
    const record=library.characters.find(r=>r.entityId===action.characterId);if(!record)throw new Error('This character is no longer saved. Refresh the list.');
-   if(action.action==='select'){
+   if(action.action==='supply'||action.action==='restore'){
+    const variant=record.variants.find(v=>v.id===action.variantId);if(!variant)throw new Error('This appearance is no longer saved. Refresh the list.');
+    if(action.action==='supply'){
+     const image=await api.images.get(action.imageId!,user);
+     if(!image||!isCastStillImage(image.mime_type))throw new Error('Artwork is not available as a supported still image for this user.');
+     variant.displayImageId=image.id;record.preferredVariantId=variant.id;
+    }else {delete variant.displayImageId;record.preferredVariantId=variant.id;}
+    record.artRevision++;
+   }else if(action.action==='select'){
     if(!record.variants.some(v=>v.id===action.variantId))throw new Error('This variant is no longer saved. Refresh the list.');record.preferredVariantId=action.variantId!;
    }else if(action.variantId){record.variants=record.variants.filter(v=>v.id!==action.variantId);if(record.preferredVariantId===action.variantId)record.preferredVariantId=null;if(!record.variants.length)library.characters=library.characters.filter(r=>r!==record);}
    else library.characters=library.characters.filter(r=>r!==record);
   }
   await api.userStorage.setJson(path(chat),CastArtLibrarySchema.parse(library),options(user));return library;
  });
+}
+
+const isCastStillImage=(mime:string)=>['image/png','image/jpeg','image/webp','image/avif'].includes(mime);
+/** Explicit display override only; never an input to provider generation or scene reuse. */
+export async function findCastDisplayArt(api:SpindleAPI,chat:string,character:string,appearanceFingerprint:string,user?:string):Promise<string|null>{
+ const token=castArtToken(api,chat,user),library=await loadCastArt(api,chat,user);
+ if(token!==castArtToken(api,chat,user))return null;
+ const record=library.characters.find(r=>r.entityId===characterId(character));if(!record)return null;
+ const compatible=record.variants.filter(v=>v.appearanceFingerprint===appearanceFingerprint);
+ compatible.sort((a,b)=>Number(b.id===record.preferredVariantId)-Number(a.id===record.preferredVariantId)||b.createdAt.localeCompare(a.createdAt));
+ // A preferred appearance without an override means use the generated portrait.
+ const variant=compatible[0];if(!variant?.displayImageId)return null;
+ try{
+  const image=await api.images.get(variant.displayImageId,user);
+  if(token!==castArtToken(api,chat,user)||!image||!isCastStillImage(image.mime_type))return null;
+  return `/api/v1/images/${encodeURIComponent(image.id)}`;
+ }catch{return null;}
+}
+export async function listCastGallery(api:SpindleAPI,offset:number,user?:string):Promise<CastGallery>{
+ const result=await api.images.list({offset,limit:12,specificity:'sm',...(user?{userId:user}:{})});
+ return CastGallerySchema.parse({offset,total:result.total,images:result.data.filter(i=>isCastStillImage(i.mime_type)).map(i=>({id:i.id,name:i.original_filename.slice(0,256),url:i.url}))});
 }

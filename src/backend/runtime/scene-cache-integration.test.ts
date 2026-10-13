@@ -1643,3 +1643,49 @@ test('edited review prompts stay independent from automatic portrait reuse',asyn
  expect(castArtIdentityFor({...config,referenceAnchoring:true},scene,cue,undefined,'comfyui','profile')).toBeNull();
  expect(castArtIdentityFor({...config,persistentCastArt:false},scene,cue,undefined,'nanogpt','profile')).toBeNull();
  });
+
+ test('turn enrichment scopes supplied art, leaves original jobs intact and respects outfit changes',async()=>{
+ const {BUILTIN_IMAGE_TEMPLATES,templateSnapshot}=await import('../../shared/image-templates.js');
+ const {castAppearanceIdentity}=await import('./images.js');
+ const {saveCastArt,manageCastArt}=await import('./cast-art.js');
+ const {turnViewWithAudio}=await import('./controller.js');
+ const f=createMockSpindle();f.storage.set('config.json',{castMode:true});
+ const cue=makeCue({imageTemplate:templateSnapshot(BUILTIN_IMAGE_TEMPLATES.find(t=>t.category==='portrait')!),character:'Mira'});
+ const plan=makePlan({visualCues:[cue]}),look=castAppearanceIdentity(plan.scenes[0]!,cue)!;
+ await saveCastArt(f.spindle,plan.key.chatId,{character:look.character,description:'Silver hair, red coat',appearanceFingerprint:look.fingerprint,requestFingerprint:'request',imageId:'original'},'u');
+ let imageUser:string|undefined;
+ (f.spindle.images as any).get=async(id:string,user:string)=>{imageUser=user;return {id,mime_type:'image/png'};};
+ const library=await import('./cast-art.js').then(m=>m.loadCastArt(f.spindle,plan.key.chatId,'u'));
+ await manageCastArt(f.spindle,plan.key.chatId,{action:'supply',characterId:library.characters[0]!.entityId,variantId:library.characters[0]!.variants[0]!.id,imageId:'supplied'},'u');
+ const record={schemaVersion:1,speaker:'Mira',status:'ready',plan,jobs:createAssetJobs(plan,DEFAULT_CONFIG),updatedAt:now} as StoredTurnRecord;
+ expect((await turnViewWithAudio(f.spindle,record,'u')).assets[0]?.stageAsset?.displayImageUrl).toBe('/api/v1/images/supplied');
+ expect(imageUser).toBe('u');expect(record.jobs[0]?.imageId).toBeNull();expect(f.generateCalls).toHaveLength(0);
+ const path=turnPath(plan.key.chatId,plan.key.assistantMessageId,0);
+ const generated={...record,jobs:record.jobs.map(j=>({...j,status:'generated' as const,startedAt:now,generatedAt:now,imageId:'original',imageUrl:'/original'}))};
+ f.storage.set(path,generated);f.storage.set(chatStatePath(plan.key.chatId),{schemaVersion:1,activeTurnPath:path,latestScene:plan.scenes[0],terminalContinuity:plan.terminalContinuity,updatedAt:now});
+ await markAssetReady(f.spindle,{type:'vn_asset_ready',chatId:plan.key.chatId,messageId:plan.key.assistantMessageId,sourceFingerprint:plan.key.sourceFingerprint,jobId:record.jobs[0]!.jobId},'u');
+ expect((f.sent.at(-1) as any).asset.stageAsset.displayImageUrl).toBe('/api/v1/images/supplied');
+
+ const changed={...record,plan:makePlan({visualCues:[{...cue,resolvedAttire:'Blue uniform'}]})};
+ expect((await turnViewWithAudio(f.spindle,changed,'u')).assets[0]?.stageAsset?.displayImageUrl).toBeUndefined();
+ });
+
+ test('reset during a parallel turn projection clears already resolved portrait overrides',async()=>{
+ const {BUILTIN_IMAGE_TEMPLATES,templateSnapshot}=await import('../../shared/image-templates.js');
+ const {castAppearanceIdentity}=await import('./images.js');
+ const {saveCastArt,manageCastArt,loadCastArt}=await import('./cast-art.js');
+ const {turnViewWithAudio}=await import('./controller.js');
+ const f=createMockSpindle();f.storage.set('config.json',{castMode:true});
+ const cue=makeCue({imageTemplate:templateSnapshot(BUILTIN_IMAGE_TEMPLATES.find(t=>t.category==='portrait')!),character:'Mira'});
+ const plan=makePlan({paragraphs:[{index:0,sourceIndex:0,text:'Mira.'},{index:1,sourceIndex:1,text:'Mira again.'}],visualCues:[cue,{...cue,assetJobId:'second',cueId:'second',paragraphIndex:1}]}),look=castAppearanceIdentity(plan.scenes[0]!,cue)!;
+ await saveCastArt(f.spindle,plan.key.chatId,{character:look.character,description:'Silver hair',appearanceFingerprint:look.fingerprint,requestFingerprint:'request',imageId:'original'},'u');
+ (f.spindle.images as any).get=async(id:string)=>({id,mime_type:'image/png'});
+ const r=(await loadCastArt(f.spindle,plan.key.chatId,'u')).characters[0]!;
+ await manageCastArt(f.spindle,plan.key.chatId,{action:'supply',characterId:r.entityId,variantId:r.variants[0]!.id,imageId:'supplied'},'u');
+ let calls=0;const waiting=deferred<void>(),result=deferred<any>();
+ (f.spindle.images as any).get=async(id:string)=>{if(++calls===2){waiting.resolve();return result.promise;}return {id,mime_type:'image/png'};};
+ const record={schemaVersion:1,speaker:'Mira',status:'ready',plan,jobs:createAssetJobs(plan,DEFAULT_CONFIG),updatedAt:now} as StoredTurnRecord;
+ const projected=turnViewWithAudio(f.spindle,record,'u');await waiting.promise;await Promise.resolve();
+ await manageCastArt(f.spindle,plan.key.chatId,{action:'reset'},'u');result.resolve({id:'supplied',mime_type:'image/png'});
+ expect((await projected).assets.every(a=>!a.stageAsset?.displayImageUrl)).toBe(true);
+ });
