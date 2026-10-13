@@ -1,3 +1,4 @@
+import {findCastArt,saveCastArt,castArtToken,type CastArtIdentity} from './cast-art.js';
 import {findLocationArt,saveLocationArt,locationArtToken,type LocationArtIdentity} from './location-art.js';
 import { globalOutputParameters, templateOutputParameters, modelOutputParameters, assertModelOutputParameters, providerOutputParameters } from "./template-output.js";
 import { applyAttireOverride } from "./attire.js";
@@ -614,6 +615,11 @@ export async function resolveCacheCues(
       const art=await findLocationArt(spindle,plan.key.chatId,locationIdentity,userId).catch(()=>null);
       if(art){resolved.push(locationArtJob(plan,cue,art,locationIdentity.requestFingerprint));continue;}
     }
+    const castIdentity=castArtIdentityFor(config,scene,cue,characterAppearance,provider,profile.cacheProfile);
+    if(castIdentity){
+      const art=await findCastArt(spindle,plan.key.chatId,castIdentity,userId).catch(()=>null);
+      if(art){resolved.push(locationArtJob(plan,cue,art,castIdentity.requestFingerprint));continue;}
+    }
     const episode = sceneEpisodeOf(scene, cache.generation(scope));
     const found = cache.lookup(scope, key, episode);
     if (found.status === "miss") {
@@ -679,6 +685,18 @@ export function locationArtIdentityFor(config:VisualNovelConfig,scene:SceneState
   const environment=canonicalJson(scene.environment);
   return {location:scene.environment.location,description:scene.environment.description.slice(0,4000),requestFingerprint:sceneImageCacheKey(identity),environmentFingerprint:`env:${hash(environment)}${hash(environment.split('').reverse().join(''))}`};
 }
+/** Whole rectangular portrait reuse; never substitute it for an image reference.
+ * Reference-capable providers retain their anchoring/capture pipeline. */
+export function castArtIdentityFor(config:VisualNovelConfig,scene:SceneState,cue:VisualCue,appearance:CharacterAppearanceMap|undefined,provider:string|null,profileRevision:string):CastArtIdentity|null {
+ if(!config.persistentCastArt||provider===null||cue.imageTemplate?.category!=='portrait'||cue.imageTemplate.subjectMode!=='one')return null;
+ if(referenceAnchoringEnabled(config)&&cueUsesCharacterReference(cue)&&REFERENCE_PROVIDERS.has(provider))return null;
+ if(cue.resolvedIdentity!==undefined&&!cue.resolvedIdentity.trim())return null;
+ const visual=resolveCueCharacterVisualState(scene,cue,appearance);
+ if(!visual.characterName.trim()||!visual.baseIdentity.trim())return null;
+ const identity=sceneImageIdentityFor(config,scene,cue,appearance,provider,{source:'none'},profileRevision);
+ const description=canonicalJson([visual.characterId,visual.baseIdentity,visual.attire]);
+ return {character:visual.characterName,description:visual.identity.slice(0,4000),requestFingerprint:sceneImageCacheKey(identity),appearanceFingerprint:`look:${hash(description)}${hash(description.split('').reverse().join(''))}`};
+}
 function locationArtJob(plan:TurnPlan,cue:VisualCue,art:{imageId:string,imageUrl:string},key:string):AssetJob {
  const timestamp=new Date().toISOString();
  return AssetJobSchema.parse({jobId:cue.assetJobId,ownerTurnKey:plan.key,sceneId:cue.sceneId,sceneRevision:cue.sceneRevision,paragraphIndex:cue.paragraphIndex,promptFingerprint:key,provider:CACHE_JOB_PROVIDER,priority:'background',status:'generated',imageId:art.imageId,imageUrl:art.imageUrl,error:null,queuedAt:timestamp,startedAt:timestamp,generatedAt:timestamp,readyAt:null,finishedAt:null});
@@ -730,7 +748,7 @@ export async function prepareAssetJobs(
   userId?: string,
   options: Pick<SceneCacheOptions, "resolvedSourceText" | "verifyImage"> = {}
 ): Promise<AssetJob[]> {
-  if(config.persistentLocationArt&&!(plan.classifierVisuals&&config.systemOneMode==='on')){
+  if((config.persistentLocationArt||config.persistentCastArt)&&!(plan.classifierVisuals&&config.systemOneMode==='on')){
     const profile=await resolveImageProfile(spindle,config,userId);
     const effective=profile.provider==='novelai'?{...config,imageModel:config.imageModel||profile.model||'nai-diffusion-4-5-full'}:config;
     const all=[...plan.visualCues,...(plan.cacheCues??[])].sort((a,b)=>a.paragraphIndex-b.paragraphIndex);
@@ -738,8 +756,11 @@ export async function prepareAssetJobs(
     const selected:AssetJob[]=[],admitted:VisualCue[]=[],remaining:VisualCue[]=[];
     const seen=new Set<string>();let slots=0;const limit=config.maxImagesPerTurn>0?config.maxImagesPerTurn:Infinity;
     for(const cue of all){
-      const identity=locationArtIdentityFor(effective,sceneForCue(plan,cue),cue,characterAppearance,profile.provider,profile.cacheProfile);
-      const art=identity?await findLocationArt(spindle,plan.key.chatId,identity,userId).catch(()=>null):null;
+      const scene=sceneForCue(plan,cue);
+      const place=locationArtIdentityFor(effective,scene,cue,characterAppearance,profile.provider,profile.cacheProfile);
+      const cast=castArtIdentityFor(effective,scene,cue,characterAppearance,profile.provider,profile.cacheProfile);
+      const identity=place??cast;
+      const art=place?await findLocationArt(spindle,plan.key.chatId,place,userId).catch(()=>null):cast?await findCastArt(spindle,plan.key.chatId,cast,userId).catch(()=>null):null;
       if(art&&identity){selected.push(locationArtJob(plan,cue,art,identity.requestFingerprint));admitted.push(cue);continue;}
       if(slots>=limit||(identity&&seen.has(identity.requestFingerprint))){remaining.push(cue);continue;}
       slots++;if(identity)seen.add(identity.requestFingerprint);admitted.push(cue);selected.push(queued.find(j=>j.jobId===cue.assetJobId)!);
@@ -901,6 +922,7 @@ export async function generateAssets(
 ): Promise<AssetJob[]> {
   let jobs = [...initialJobs];
   const placeToken=locationArtToken(spindle,plan.key.chatId,userId);
+  const castToken=castArtToken(spindle,plan.key.chatId,userId);
   const providerKey = `image:${config.imageConnectionId ?? "default"}`;
   const scheduler = new AssetScheduler({ [providerKey]: { concurrency: config.imageConcurrency } });
   const cache = cacheOptions.sceneCache ?? null;
@@ -1338,6 +1360,14 @@ export async function generateAssets(
             }
           }
 
+          const castIdentity=profileCacheIdentity(selected)===profile.cacheProfile&&JSON.stringify(approved)===JSON.stringify(frozen)?castArtIdentityFor(config,scene,cue,characterAppearance,provider,profile.cacheProfile):null;
+          if(castIdentity){
+            try{
+              if(await saveCastArt(spindle,plan.key.chatId,{...castIdentity,imageId:result.imageId},userId,{token:castToken,signal:jobSignal}))void resolveCandidatesNow();
+            }catch(error){
+              spindle.sendToFrontend({type:'vn_cast_art_notice',chatId:plan.key.chatId,error:error instanceof Error?error.message:String(error)},userId);
+            }
+          }
           if (cache && admission && cacheKey) {
             const stored = cache.store(scope, cacheKey, {
               imageId: result.imageId,

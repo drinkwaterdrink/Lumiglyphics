@@ -22,6 +22,7 @@ const fixture = {
   refreshes: 0,
   scans: [] as string[],
   placeActions: [] as unknown[],
+  castActions: [] as unknown[],
   savedSystemOneKeys: [] as string[],
   clearedSystemOneKeys: 0,
   panel: null as VisualNovelSettingsPanel | null,
@@ -43,6 +44,11 @@ const panelOptions: SettingsPanelOptions = {
   onOpenPreview: () => { fixture.previews += 1; },
   onRefreshConnections: () => { fixture.refreshes += 1; },
   getChatId: () => 'context-chat',
+  onCastArt:(chatId,requestId,action)=>{
+    fixture.castActions.push(action);
+    const library={version:1 as const,characters:action.action==='reset'||action.action==='forget'?[]:[{entityId:'aleister',name:'Aleister',artRevision:1,description:'Dark hair, blue coat',preferredVariantId:action.action==='select'?'v':null,variants:[{id:'v',imageId:'saved-art',description:'Dark hair, blue coat',requestFingerprint:'scene-v2:123456789',appearanceFingerprint:'look:123456789',approved:true as const,createdAt:'2026-10-12T00:00:00Z'}]}]};
+    panel.setCastArt(chatId,requestId,library);
+  },
   onLocationArt:(chatId,requestId,action)=>{
     fixture.placeActions.push(action);
     const library={version:1 as const,locations:action.action==='reset'||action.action==='forget'?[]:[{entityId:'observatory',name:'Observatory',artRevision:1,description:'Brass telescope',preferredVariantId:action.action==='select'?'v':null,variants:[{id:'v',imageId:'saved-art',requestFingerprint:'scene-v2:123456789',environmentFingerprint:'env:123456789',approved:true as const,createdAt:'2026-10-12T00:00:00Z'}]}]};

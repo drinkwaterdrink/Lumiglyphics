@@ -47,6 +47,7 @@ const baseConfig: VisualNovelConfig = {
   castMode:false,
   tooltips: DEFAULT_CONFIG.tooltips,
   persistentLocationArt: false,
+  persistentCastArt: false,
   simTrackerMappings: DEFAULT_CONFIG.simTrackerMappings,
   imageOutputAspectRatio: "default",
   collectEntityReferences: false,

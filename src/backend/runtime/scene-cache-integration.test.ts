@@ -1577,3 +1577,69 @@ test('edited review prompts stay independent from automatic place reuse',async()
  expect(f.generateCalls[0].parameters.resolvedSourceImages).toBeUndefined();
  expect((await loadLocationArt(f.spindle,plan.key.chatId,'u')).locations).toHaveLength(0);
 });
+
+describe('persistent cast art allocation',()=>{
+ test('approved portrait art survives episode/cache restart and costs zero new slots',async()=>{
+  const {BUILTIN_IMAGE_TEMPLATES,templateSnapshot}=await import('../../shared/image-templates.js');
+  const {prepareAssetJobs}=await import('./images.js');
+  const f=createMockSpindle();
+  const template=templateSnapshot(BUILTIN_IMAGE_TEMPLATES.find(t=>t.category==='portrait')!);
+  const cue=makeCue({imageTemplate:template,character:'Mira'});
+  const config={...DEFAULT_CONFIG,persistentCastArt:true,referenceAnchoring:false,reviewImages:true,maxImagesPerTurn:1};
+  const first=makePlan({visualCues:[cue]});
+  await generateAssets(f.spindle,first,createAssetJobs(first,config),config,new AbortController().signal,async()=>{},'u',{sceneCache:new SceneImageCache(),independentRequests:true,disableCacheStore:true,beforeGenerate:async(_j,r)=>r});
+  expect(f.generateCalls).toHaveLength(1);
+  const laterCue={...cue,cueId:'return',assetJobId:'return',sceneId:'return-scene'};
+  const second=makePlan({messageId:'return',paragraphs:[{index:0,sourceIndex:0,text:'Return.'},{index:1,sourceIndex:1,text:'Mira speaks.'}],scenes:[makeScene({sceneId:'return-scene',priorSceneId:'left-the-library'})],visualCues:[laterCue],cacheCues:[makeCue({cueId:'new',assetJobId:'new',paragraphIndex:1,sceneId:'return-scene'})]});
+  const jobs=await prepareAssetJobs(f.spindle,second,config,undefined,new SceneImageCache(),'u');
+  expect(jobs.find(j=>j.jobId==='return')?.provider).toBe(CACHE_JOB_PROVIDER);
+  expect(jobs.filter(j=>j.status==='queued')).toHaveLength(1);
+  expect(second.visualCues.some(c=>c.assetJobId==='new')).toBe(true);
+  expect(f.generateCalls).toHaveLength(1);
+  const changed=makePlan({visualCues:[cue]});
+  const changedJobs=await prepareAssetJobs(f.spindle,changed,{...config,imageModel:'different'},undefined,new SceneImageCache(),'u');
+  expect(changedJobs[0]?.status).toBe('queued');
+ });
+});
+
+test('connection changes between batch and job cannot poison persistent art',async()=>{
+ const {BUILTIN_IMAGE_TEMPLATES,templateSnapshot}=await import('../../shared/image-templates.js');
+ const {loadCastArt}=await import('./cast-art.js');
+ const f=createMockSpindle();let reads=0;
+ (f.spindle.imageGen as any).getConnection=async()=>({provider:'comfyui',model:++reads===1?'old':'new',default_parameters:{steps:reads===1?10:20}});
+ const cue=makeCue({imageTemplate:templateSnapshot(BUILTIN_IMAGE_TEMPLATES.find(t=>t.category==='portrait')!),character:'Mira'});
+ const plan=makePlan({visualCues:[cue]});
+ const config={...DEFAULT_CONFIG,persistentCastArt:true,imageConnectionId:'profile',referenceAnchoring:false};
+ await generateAssets(f.spindle,plan,createAssetJobs(plan,config),config,new AbortController().signal,async()=>{},'u');
+ expect(f.generateCalls).toHaveLength(1);
+ expect((await loadCastArt(f.spindle,plan.key.chatId,'u')).characters).toHaveLength(0);
+});
+
+test('edited review prompts stay independent from automatic portrait reuse',async()=>{
+ const {BUILTIN_IMAGE_TEMPLATES,templateSnapshot}=await import('../../shared/image-templates.js');
+ const {loadCastArt}=await import('./cast-art.js');
+ const f=createMockSpindle();
+ const cue=makeCue({imageTemplate:templateSnapshot(BUILTIN_IMAGE_TEMPLATES.find(t=>t.category==='portrait')!),character:'Mira'});
+ const plan=makePlan({visualCues:[cue]}),config={...DEFAULT_CONFIG,persistentCastArt:true,referenceAnchoring:false};
+ await generateAssets(f.spindle,plan,createAssetJobs(plan,config),config,new AbortController().signal,async()=>{},'u',{beforeGenerate:async(_j,r)=>({...r,prompt:'Different custom portrait'})});
+ expect(f.generateCalls).toHaveLength(1);expect(f.generateCalls[0].includeDataUrl).toBe(false);
+ expect(f.generateCalls[0].parameters.resolvedSourceImages).toBeUndefined();
+ expect((await loadCastArt(f.spindle,plan.key.chatId,'u')).characters).toHaveLength(0);
+});
+
+ test('portrait library rejects changed appearance, outfit, shape and unsupported roles',async()=>{
+ const {BUILTIN_IMAGE_TEMPLATES,templateSnapshot}=await import('../../shared/image-templates.js');
+ const {castArtIdentityFor}=await import('./images.js');
+ const template=templateSnapshot(BUILTIN_IMAGE_TEMPLATES.find(t=>t.category==='portrait')!);
+ const cue=makeCue({imageTemplate:template,character:'Mira'}),scene=makeScene();
+ const config={...DEFAULT_CONFIG,persistentCastArt:true,referenceAnchoring:false};
+ const identity=castArtIdentityFor(config,scene,cue,undefined,'nanogpt','profile')!;
+ expect(identity).not.toBeNull();
+ for(const changed of [{...cue,resolvedIdentity:'Red hair, green eyes'},{...cue,resolvedAttire:'Red coat'}])
+ expect(castArtIdentityFor(config,scene,changed,undefined,'nanogpt','profile')?.appearanceFingerprint).not.toBe(identity.appearanceFingerprint);
+ expect(castArtIdentityFor({...config,imageOutputAspectRatio:'9:16'},scene,cue,undefined,'nanogpt','profile')?.requestFingerprint).not.toBe(identity.requestFingerprint);
+ expect(castArtIdentityFor(config,scene,{...cue,imageTemplate:templateSnapshot(BUILTIN_IMAGE_TEMPLATES.find(t=>t.id==='manga-page')!)},undefined,'nanogpt','profile')).toBeNull();
+ expect(castArtIdentityFor(config,scene,{...cue,resolvedIdentity:''},undefined,'nanogpt','profile')).toBeNull();
+ expect(castArtIdentityFor({...config,referenceAnchoring:true},scene,cue,undefined,'comfyui','profile')).toBeNull();
+ expect(castArtIdentityFor({...config,persistentCastArt:false},scene,cue,undefined,'nanogpt','profile')).toBeNull();
+ });

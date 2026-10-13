@@ -1,3 +1,5 @@
+import {CastArtPanel} from './cast-art.js';
+import type {CastArtLibrary,CastArtAction} from '../../shared/cast-art.js';
 import {LocationArtPanel} from './location-art.js';
 import type {LocationArtLibrary,LocationArtAction} from '../../shared/stage-assets.js';
 import { TooltipSettingsPanel } from "./tooltips.js";
@@ -101,6 +103,7 @@ export type SettingsPanelOptions = {
   onSave: (patch: Partial<VisualNovelConfig>) => void;
   onOpenPreview: () => void;
   onRefreshConnections: () => void;
+  onCastArt?: (chatId:string,requestId:string,action:CastArtAction)=>void;
   onLocationArt?: (chatId:string,requestId:string,action:LocationArtAction)=>void;
   onRefreshContextSources?: (chatId:string,requestId:string)=>void;
   getChatId?: ()=>string;
@@ -452,6 +455,7 @@ export class VisualNovelSettingsPanel {
 
   private contextSourcesPanel!: ContextSourcesPanel;
   private trackerMappingsPanel!: TrackerMappingsPanel;
+  private castArtPanel!: CastArtPanel;
   private locationArtPanel!: LocationArtPanel;
   private tooltipSettingsPanel!: TooltipSettingsPanel;
   private templateEditor!: ImageTemplateEditor;
@@ -509,6 +513,11 @@ export class VisualNovelSettingsPanel {
     const placeReuse=document.createElement('label');placeReuse.dataset.check='';
     placeReuse.innerHTML='<input type="checkbox" name="persistentLocationArt"><span>Reuse saved place art<small>Environment templates only. Compatible saved pictures cost no new image slots; new pictures still follow the image budget and prompt review. Off by default.</small></span>';
     generation.append(placeReuse);
+    const castReuse=document.createElement('label');castReuse.dataset.check='';
+    castReuse.innerHTML='<input type="checkbox" name="persistentCastArt"><span>Reuse saved portrait art<small>Reuses matching Character portrait pictures across turns, without spending new image slots. Appearance, outfit, scene, prompt, model and dimensions must match. Reference-based generation keeps its existing path. Off by default.</small></span>';
+    generation.append(castReuse);
+    const cast=section('Saved portrait art');
+    this.castArtPanel=new CastArtPanel(()=>this.options.getChatId?.()??'',(chat,id,action)=>this.options.onCastArt?.(chat,id,action));cast.append(this.castArtPanel.host);
     const places=section('Saved place art');
     this.locationArtPanel=new LocationArtPanel(()=>this.options.getChatId?.()??'',(chat,id,action)=>this.options.onLocationArt?.(chat,id,action));places.append(this.locationArtPanel.host);
 
@@ -1427,6 +1436,7 @@ export class VisualNovelSettingsPanel {
         }
         return { dynamicImageTemplates: checked };
       case "imageOutputAspectRatio": return { imageOutputAspectRatio: normalizeImageOutputRatio(target.value) };
+      case "persistentCastArt": return {persistentCastArt:checked};
       case "persistentLocationArt": return {persistentLocationArt:checked};
       case "collectEntityReferences": return { collectEntityReferences: checked };
       case "includeSimTrackerContext": return { includeSimTrackerContext: checked };
@@ -1804,6 +1814,7 @@ export class VisualNovelSettingsPanel {
 
   private syncFromConfig(config: VisualNovelConfig): void {
     this.control<HTMLSelectElement>("imageOutputAspectRatio").value = config.imageOutputAspectRatio;
+    this.control<HTMLInputElement>("persistentCastArt").checked = config.persistentCastArt;
     this.control<HTMLInputElement>("persistentLocationArt").checked = config.persistentLocationArt;
     this.control<HTMLInputElement>("collectEntityReferences").checked = config.collectEntityReferences;
     this.templateEditor.setConfig(config);
@@ -2137,6 +2148,10 @@ export class VisualNovelSettingsPanel {
     select.value = [...this.promptPresets, ...BUILTIN_SHARED_STYLES].some((preset) => preset.id === selectedId) ? selectedId : "";
   }
 
+  setCastArt(chatId:string,requestId:string,library:CastArtLibrary):void{this.castArtPanel.receive(chatId,requestId,library);}
+  castArtError(error:string):void{this.castArtPanel.fail(error);}
+  castArtNotice(error:string):void{this.castArtPanel.notice(error);}
+  clearCastArt():void{this.castArtPanel.clear();}
   setLocationArt(chatId:string,requestId:string,library:LocationArtLibrary):void{this.locationArtPanel.receive(chatId,requestId,library);}
   locationArtError(error:string):void{this.locationArtPanel.fail(error);}
   locationArtNotice(error:string):void{this.locationArtPanel.notice(error);}
@@ -2146,6 +2161,7 @@ export class VisualNovelSettingsPanel {
 
   destroy(): void {
     this.contextSourcesPanel.destroy();
+    this.castArtPanel.destroy();
     this.locationArtPanel.destroy();
     this.trackerMappingsPanel.destroy();
     this.tooltipSettingsPanel.destroy();

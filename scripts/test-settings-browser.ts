@@ -54,7 +54,26 @@ try {
   await settings.getByRole('button',{name:'Forget this variant',exact:true}).click();
   assert.equal(await settings.locator('[data-art-catalog]').isVisible(),false);
   assert.equal(await page.evaluate(()=>(window as any).settingsFixture.placeActions.length),3);
-  await reuse.uncheck();await openTab('Reading');
+  await reuse.uncheck();
+  const castReuse=settings.locator('[name="persistentCastArt"]');
+  assert.equal(await castReuse.isChecked(),false);await castReuse.check();
+  assert.equal((await lastPatch(page))?.persistentCastArt,true);
+  const cast=settings.locator('[data-cast-art]');
+  await cast.locator('xpath=..').locator('summary').click();
+  await cast.getByRole('button',{name:'Load saved characters',exact:true}).click();
+  assert.match(await cast.locator('[data-cast-art-character]').innerText(),/Aleister/);
+  assert.equal(await cast.locator('[data-cast-art-description]').innerText(),'Dark hair, blue coat');
+  await cast.getByRole('button',{name:'Prefer this variant',exact:true}).click();
+  assert.match(await cast.locator('[data-cast-art-variant]').innerText(),/Preferred/);
+  await page.setViewportSize({width:390,height:844});
+  await cast.scrollIntoViewIfNeeded();
+  assert.equal(await cast.evaluate(e=>e.scrollWidth<=e.clientWidth+1),true,'portrait library fits phone width');
+  await page.screenshot({path:'.cache/ux-redesign/saved-portrait-phone.png'});
+  await page.setViewportSize({width:1000,height:900});
+  await cast.getByRole('button',{name:'Forget this variant',exact:true}).click();
+  assert.equal(await cast.locator('[data-cast-art-catalog]').isVisible(),false);
+  assert.equal(await page.evaluate(()=>(window as any).settingsFixture.castActions.length),3);
+  await castReuse.uncheck();await openTab('Reading');
 
   // First use: the guide is visible, uses listed connections, and saves choices immediately.
   const setup = settings.locator("[data-setup]");

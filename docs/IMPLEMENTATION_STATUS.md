@@ -1,5 +1,15 @@
 # Lumiglyphics implementation status
 
+## Latest Testing increment: 0.2.0-beta.19
+
+Pictures → Generation now includes optional Reuse saved portrait art (off by default). Completed, unedited Character portrait requests can be saved per user/chat and reused across turns/restarts when the full compiled request, character appearance, outfit, environment, template/style, model/connection and dimensions match. Compatible hits cost zero new image slots and can appear in the existing Cast view through normal cue assets; no whole-cast generation or extra provider request is added.
+
+Pictures → Saved portrait art provides previews, compatible variant preferences, forget variant/character and reset controls. Each variant retains its own appearance description. Management removes metadata only; existing reader images and host gallery images remain. Missing/unverifiable images fall back to normal budgeted generation. Reset/forget/preference epochs reject stale lookup and save results. Edited review prompts stay independent. Reference-capable anchored generation retains its existing capture route; this library does not turn ordinary portraits into reference cutouts.
+
+This continues E2 with exact cross-turn persistence. Supplied artwork upload/selection, independent background/portrait generation allocation, normalized external context reconciliation, F presentation rules and G interactions remain pending. Exact matching is intentionally conservative: changed scene wording may require a new image.
+
+See `docs/review-evidence/2026-10-12-saved-portrait-art.md` for checks and limits.
+
 ## Latest Testing increment: 0.2.0-beta.18
 
 New planning requests richer grounded visual direction aiming for 2,500–2,800 combined positive/negative characters, with actual shared-style/template reservations. Short, sparse scenes remain shorter; there is no artificial padding or extra model call. The existing 3,000-character dispatch guard remains authoritative and overlong unique wording stays reviewable rather than silently losing facts. Targets are instructions to the planner, not guaranteed model output. Existing held prompts/templates/styles remain unchanged.

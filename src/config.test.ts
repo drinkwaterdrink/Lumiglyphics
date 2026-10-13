@@ -271,3 +271,5 @@ test('cast view is optional and survives normalized configuration',()=>{
  assert.equal(normalizeConfig({castMode:'true'}).castMode,false);
  assert.equal(normalizeConfig(normalizeConfig({castMode:true})).castMode,true);
 });
+
+test('persistent portrait art is explicit opt-in',()=>{assert.equal(normalizeConfig({}).persistentCastArt,false);assert.equal(normalizeConfig({persistentCastArt:true}).persistentCastArt,true);assert.equal(normalizeConfig({persistentCastArt:'true'}).persistentCastArt,false);});
