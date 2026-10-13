@@ -727,7 +727,7 @@ async function startAssets(
   record: StoredTurnRecord,
   path: string,
   userId?: string,
-  options: { bypassJobIds?: Iterable<string>; onlyJobId?: string; forceReview?: boolean; initialEdits?: ImageRequestEdits } = {}
+  options: { bypassJobIds?: Iterable<string>; onlyJobId?: string; forceReview?: boolean; initialEdits?: ImageRequestEdits; regeneratePrompt?:boolean } = {}
 ): Promise<void> {
   const config = await loadConfig(spindle, userId);
   rememberDebugFlag(userId, config);
@@ -801,7 +801,11 @@ async function startAssets(
         ...(config.reviewImages ? { bypassJobIds: batchJobs.map((job) => job.jobId) } : options.bypassJobIds ? { bypassJobIds: options.bypassJobIds } : {}),
         ...sourceTextOption(record),
         beforeGenerate: async (job, request, metadata, jobSignal) => {
-          const draft = options.onlyJobId === job.jobId && options.initialEdits ? applyImageEdits(request,options.initialEdits) : request;
+          let draft = options.onlyJobId === job.jobId && options.initialEdits ? applyImageEdits(request,options.initialEdits) : request;
+          if(options.onlyJobId===job.jobId && options.regeneratePrompt){
+            if(!metadata.regeneratePrompt)throw new Error('Prompt regeneration is unavailable for this picture.');
+            draft=await metadata.regeneratePrompt(draft);
+          }
           draft.parameters = modelOutputParameters(metadata.provider, draft.model, draft.parameters ?? {});
           return gate.prepare(job.jobId, job.paragraphIndex, draft, metadata, requiresReview, jobSignal);
         }
@@ -876,7 +880,7 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
   const view=await turnViewWithAudio(spindle,next,userId);
   if(!isCurrent())return;
   spindle.sendToFrontend({ type: "vn_turn", turn:view }, userId);
-  await startAssets(spindle, next, path, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId],...(request.type === 'vn_prepare_image' && request.edits ? {initialEdits:request.edits} : {}) });
+  await startAssets(spindle, next, path, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId],...(request.type === 'vn_prepare_image' && request.edits ? {initialEdits:request.edits} : {}),...(request.type==='vn_prepare_image' && request.regeneratePrompt===true ? {regeneratePrompt:true} : {}) });
 }
 
 async function processAssistantMessage(
@@ -1435,6 +1439,13 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
     case 'vn_replan_turn':
       await replanCurrentTurn(spindle,request,userId);
       return;
+    case "vn_regenerate_image_prompt": {
+      if(typeof request.requestId!=='string'||!request.requestId||request.requestId.length>100)throw new Error('Invalid prompt selection.');
+      const key=runtimeKey(userId,request.chatId),turn=activeTurnKeys.get(key);
+      if(!views.isOpen(userId,request.chatId)||!turn||turn.assistantMessageId!==request.messageId||turn.sourceFingerprint!==request.sourceFingerprint)throw new Error('This prompt belongs to an older or closed turn.');
+      if(!await imageReviewGates.get(key)?.regenerate(request.requestId))throw new Error('This prompt is already being handled or cancelled.');
+      return;
+    }
     case "vn_reprepare_image_template": {
       if (typeof request.requestId !== "string" || request.requestId.length > 100 || typeof request.templateId !== "string") throw new Error("Invalid template selection.");
       const key = runtimeKey(userId, request.chatId);

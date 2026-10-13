@@ -1,5 +1,6 @@
 import type { ImagePromptMetadata } from "./image-templates.js";
 export type ImageRequestRecord = {
+  canRegeneratePrompt?: boolean;
   imagePromptMetadata?: ImagePromptMetadata;
   requestId: string;
   jobId: string;

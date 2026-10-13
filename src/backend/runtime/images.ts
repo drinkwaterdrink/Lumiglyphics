@@ -6,6 +6,7 @@ export { applyAttireOverride, isClothingTag, cleanClothingFromPhrase } from "./a
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { applyImageEdits, compactImageRequest, type ImageGenerationRequest, type ImagePreparationMetadata } from "./image-review.js";
 import { assertPromptLengths } from '../../shared/prompt-length.js';
+import {rewriteImagePrompt,assertEffectivePromptBudget} from './prompt-rewrite.js';
 import type { VisualNovelConfig } from "../../config.js";
 import { DEFAULT_CONFIG } from "../../config.js";
 import { novelAiCapabilities, novelAiQualityTags, NOVELAI_NEGATIVE_DEFAULT, renderNovelAiEmphasis } from "./novelai-prompt.js";
@@ -1269,10 +1270,24 @@ export async function generateAssets(
             referenceSummary: portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference"
           };
           const initialMetadata = metadataFor(cue);
+          const regenerateFor=(selectedCue:VisualCue)=>(request:ImageGenerationRequest)=>rewriteImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,'reroll');
           frozen.parameters = modelOutputParameters(selected?.provider ?? provider, frozen.model, globalOutputParameters(config.imageOutputAspectRatio, selected?.provider ?? provider, frozen.model, frozen.parameters ?? {}));
           frozen = compactImageRequest(frozen);
+          let promptWasRewritten=false;
+          if(frozen.prompt.length+(frozen.negativePrompt?.length??0)>3000){
+            try{
+              frozen=await rewriteImagePrompt(spindle,frozen,initialMetadata,config,userId,jobSignal,'fit');
+              promptWasRewritten=true;
+              cacheKey=null;settle?.({kind:'released'});settle=null;
+            }catch(error){
+              if(signal.aborted||jobSignal.aborted)throw abortError(jobSignal);
+              // The review gate retains the complete original when repair fails.
+              spindle.log?.warn?.('Image prompt length repair failed; retaining the original for review.');
+            }
+          }
           const approved = cacheOptions.beforeGenerate ? await cacheOptions.beforeGenerate(scheduledJob, frozen, {
             ...baseMetadata,
+            regeneratePrompt:regenerateFor(cue),
             ...(initialMetadata ? { imagePromptMetadata: initialMetadata } : {}),
             rebuildTemplate: async templateId => {
               if (signal.aborted || jobSignal.aborted) throw abortError(jobSignal);
@@ -1307,7 +1322,7 @@ export async function generateAssets(
                 ...(nextNai?.parameters ?? {})
               } };
               request.parameters = modelOutputParameters(selected?.provider ?? provider, request.model, globalOutputParameters(config.imageOutputAspectRatio, selected?.provider ?? provider, request.model, request.parameters ?? {}));
-              return { request, metadata: { ...baseMetadata, imagePromptMetadata: metadataFor(nextCue)!, referenceSummary: nextPortrait ? `${nextPortrait.source ?? "captured"} portrait: ${nextPortrait.name} (${nextPortrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" } };
+              return { request, metadata: { ...baseMetadata, regeneratePrompt:regenerateFor(nextCue), imagePromptMetadata: metadataFor(nextCue)!, referenceSummary: nextPortrait ? `${nextPortrait.source ?? "captured"} portrait: ${nextPortrait.name} (${nextPortrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" } };
             }
           }, jobSignal) : frozen;
           if (signal.aborted) throw abortError(signal);
@@ -1321,6 +1336,7 @@ export async function generateAssets(
           // A locally edited request cannot populate the compiler's original cache key.
           if (cacheOptions.disableCacheStore || JSON.stringify(approved) !== JSON.stringify(frozen)) { cacheKey = null; settle?.({ kind: "released" }); settle = null; }
           assertPromptLengths(approved.prompt,approved.negativePrompt);
+          assertEffectivePromptBudget(approved);
           assertModelOutputParameters(selected?.provider ?? provider, approved.model, approved.parameters ?? {});
           const result = await spindle.imageGen.generate({ ...approved, parameters: providerOutputParameters(approved.parameters ?? {}) });
           observedGenerationMs.push(Date.now() - generationStarted);
@@ -1358,7 +1374,7 @@ export async function generateAssets(
           const imageUrl = result.imageUrl ?? `/api/v1/images/${encodeURIComponent(result.imageId)}`;
           // Store only completed requests matching the compiler preparation. Edited
           // requests remain independent; they cannot poison automatic compatibility.
-          const placeIdentity=profileCacheIdentity(selected)===profile.cacheProfile&&JSON.stringify(approved)===JSON.stringify(frozen)?locationArtIdentityFor(config,scene,cue,characterAppearance,provider,profile.cacheProfile):null;
+          const placeIdentity=!promptWasRewritten&&profileCacheIdentity(selected)===profile.cacheProfile&&JSON.stringify(approved)===JSON.stringify(frozen)?locationArtIdentityFor(config,scene,cue,characterAppearance,provider,profile.cacheProfile):null;
           if(placeIdentity){
             try{
               if(await saveLocationArt(spindle,plan.key.chatId,{...placeIdentity,imageId:result.imageId},userId,{token:placeToken,signal:jobSignal}))void resolveCandidatesNow();
@@ -1367,7 +1383,7 @@ export async function generateAssets(
             }
           }
 
-          const castIdentity=profileCacheIdentity(selected)===profile.cacheProfile&&JSON.stringify(approved)===JSON.stringify(frozen)?castArtIdentityFor(config,scene,cue,characterAppearance,provider,profile.cacheProfile):null;
+          const castIdentity=!promptWasRewritten&&profileCacheIdentity(selected)===profile.cacheProfile&&JSON.stringify(approved)===JSON.stringify(frozen)?castArtIdentityFor(config,scene,cue,characterAppearance,provider,profile.cacheProfile):null;
           if(castIdentity){
             try{
               if(await saveCastArt(spindle,plan.key.chatId,{...castIdentity,imageId:result.imageId},userId,{token:castToken,signal:jobSignal}))void resolveCandidatesNow();

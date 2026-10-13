@@ -17,7 +17,7 @@ async function plan(configPatch: Record<string, unknown>, selectedId?: string) {
 test("routing_respects_modes_and_enabled_catalog_in_one_pass", async () => {
   const dynamic = await plan({ dynamicImageTemplates: true }, "environment");
   assert.equal(dynamic.calls, 1);
-  assert.match(dynamic.instruction, /2,500–2,800/);
+  assert.match(dynamic.instruction, /2,750–2,900/);
   assert.match(dynamic.instruction, /positive \+ negative combined/);
   assert.equal(dynamic.usedFallback, false);
   assert.equal(dynamic.plan.visualCues[0]?.imageTemplate?.category, "environment");

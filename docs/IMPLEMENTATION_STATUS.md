@@ -1,5 +1,13 @@
 # Lumiglyphics implementation status
 
+## Latest Testing increment: 0.2.0-beta.21
+
+Image prompts now includes Regenerate prompt. Held previews are rerolled through the configured story-reader text connection and receive a fresh approval ID. Failed rerolls restore the original pending preview; duplicate approval/reroll and cancellation races remain guarded. Completed or failed generated pictures can prepare a regenerated replacement preview with previous usable art retained. Rerolling uses text-generation tokens and does not dispatch an image until approval.
+
+Planning now aims for 2,750–2,900 combined positive/negative characters, explicitly not tokens. Oversized compiled prompts receive a bounded semantic shortening attempt, prioritizing verbose negatives and redundancy; generated rewrite output must fit within 2,950 characters. Exact protected subject wording is retained when present. Failed length repair preserves the full request for manual review, and the existing 3,000-character image-dispatch guard still blocks it. Hidden raw prompt overrides, including JSON strings, are checked and cannot silently replace reviewed wording. Changed wording is excluded from original cache/library identities.
+
+The researched potential feature/update/mechanics catalog is in `docs/2026-10-13-feature-catalog.md`; it does not enable new gesture controls or implement the proposed future systems. No dependencies or permissions were added. Provider image quality and physical Android behavior still need host testing.
+
 ## Latest Testing increment: 0.2.0-beta.20
 
 Pictures → Saved portrait art now lets you choose supplied artwork from your Lumiverse gallery for an existing saved appearance, or restore its generated portrait. The gallery is paged in groups of 12, uses host-provided small-image URLs, filters PNG/JPEG/WebP/AVIF, and revalidates image access under the originating user when assigning. Transparent PNGs retain their transparency. Upload files to Lumiverse's own gallery first; direct file upload is not added in this increment.

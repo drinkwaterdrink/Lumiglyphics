@@ -7,6 +7,18 @@ import { ImageReviewGate } from "./image-review.js";
 
 const now = new Date().toISOString();
 
+test('overlong compiled prompts are rewritten once before review and remain under the combined ceiling',async()=>{
+ const sent:any[]=[];let textCalls=0;
+ const spindle={userStorage:{getJson:async(_:string,o:any)=>o.fallback},connections:{list:async()=>[{id:'writer',provider:'openrouter',model:'writer',is_default:true}]},
+  generate:{raw:async()=>{textCalls++;return {content:JSON.stringify({prompt:'A silver-haired traveller in the established scene.',negativePrompt:'blur, text'})};}},
+  imageGen:{generate:async(r:any)=>{sent.push(r);return {imageId:'image'};}}} as any;
+ const turn=plan([cue('idle')]),config={...DEFAULT_CONFIG,referenceAnchoring:false,promptPrefix:'x'.repeat(3500)};
+ const jobs=await generateAssets(spindle,turn,createAssetJobs(turn,config),config,new AbortController().signal,()=>{},'user',{
+  beforeGenerate:async(_job,request)=>{expect(request.prompt.length+(request.negativePrompt?.length??0)).toBeLessThan(3000);return request;}
+ });
+ expect(textCalls).toBe(1);expect(sent).toHaveLength(1);expect(jobs[0]?.status).toBe('generated');expect(sent[0].prompt).toContain('silver-haired');
+});
+
 test('Anima portrait resolution is frozen before review and dispatched without a retry', async () => {
   for (const reviewed of [false, true]) {
     const sent: any[] = [];

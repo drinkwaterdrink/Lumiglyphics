@@ -34,6 +34,7 @@ export function safeImageHistory(input: unknown): ImageRequestRecord[] {
     if (!["requestId", "jobId", "prompt", "negativePrompt", "model", "provider", "connectionId", "referenceSummary", "createdAt"].every((key) => typeof item[key] === "string" && item[key].length <= 32000)) continue;
     if (!Number.isInteger(item.paragraphIndex) || item.paragraphIndex < 0 || !item.parameters || typeof item.parameters !== "object" || Array.isArray(item.parameters)) continue;
     const record: ImageRequestRecord = {
+      ...(typeof item.canRegeneratePrompt === 'boolean' ? {canRegeneratePrompt:item.canRegeneratePrompt} : {}),
       requestId: item.requestId, jobId: item.jobId, paragraphIndex: item.paragraphIndex, state: item.state,
       prompt: item.prompt, negativePrompt: item.negativePrompt, model: item.model, provider: item.provider, connectionId: item.connectionId,
       ...(typeof item.connectionRevision === "number" ? { connectionRevision: item.connectionRevision } : {}),
@@ -88,7 +89,7 @@ export function applyImageEdits(request: ImageGenerationRequest, edits: ImageReq
   return { ...request, prompt, ...(negativePrompt !== undefined ? { negativePrompt } : {}), parameters };
 }
 
-export type ImagePreparationMetadata = { provider: string; connectionRevision?: number; referenceSummary?: string; imagePromptMetadata?: ImagePromptMetadata; rebuildTemplate?: (templateId: string) => Promise<{ request: ImageGenerationRequest; metadata: ImagePreparationMetadata }> };
+export type ImagePreparationMetadata = { provider: string; connectionRevision?: number; referenceSummary?: string; imagePromptMetadata?: ImagePromptMetadata; regeneratePrompt?: (request:ImageGenerationRequest) => Promise<ImageGenerationRequest>; rebuildTemplate?: (templateId: string) => Promise<{ request: ImageGenerationRequest; metadata: ImagePreparationMetadata }> };
 /** Also synchronize NovelAI/host-managed prompt copies after compaction. */
 export function compactImageRequest(request: ImageGenerationRequest): ImageGenerationRequest {
   const over = request.prompt.length + (request.negativePrompt?.length ?? 0) > IMAGE_PROMPT_MAX_CHARS;
@@ -99,10 +100,11 @@ export function compactImageRequest(request: ImageGenerationRequest): ImageGener
 }
 
 type Metadata = ImagePreparationMetadata;
-type Pending = { request: ImageGenerationRequest; record: ImageRequestRecord; signal: AbortSignal; rebuild?: Metadata["rebuildTemplate"]; resolve: (request: ImageGenerationRequest) => void; reject: (error: Error) => void; skipped: boolean };
+type Pending = { request: ImageGenerationRequest; record: ImageRequestRecord; signal: AbortSignal; metadata:Metadata; rebuild?: Metadata["rebuildTemplate"]; resolve: (request: ImageGenerationRequest) => void; reject: (error: Error) => void; skipped: boolean };
 
 function reviewRecord(jobId: string, paragraphIndex: number, request: ImageGenerationRequest, metadata: Metadata, review: boolean): ImageRequestRecord {
   const record: ImageRequestRecord = {
+    canRegeneratePrompt: Boolean(metadata.regeneratePrompt),
     requestId: crypto.randomUUID(), jobId, paragraphIndex, state: review ? "review" : "prepared",
     prompt: request.prompt, negativePrompt: request.negativePrompt ?? "", model: request.model ?? "Host default",
     provider: metadata.provider, connectionId: request.connection_id ?? "Host default",
@@ -127,7 +129,7 @@ export class ImageReviewGate {
     const record = reviewRecord(jobId, paragraphIndex, request, metadata, review);
     if (!review) { await this.onRecord(record); if (signal.aborted) throw aborted("Image request cancelled."); return request; }
     let item!: Pending;
-    const approved = new Promise<ImageGenerationRequest>((resolve, reject) => { item = { request, record, signal, ...(metadata.rebuildTemplate ? { rebuild: metadata.rebuildTemplate } : {}), resolve, reject, skipped: false }; });
+    const approved = new Promise<ImageGenerationRequest>((resolve, reject) => { item = { request, record, signal, metadata, ...(metadata.rebuildTemplate ? { rebuild: metadata.rebuildTemplate } : {}), resolve, reject, skipped: false }; });
     // Attach rejection handling before notification/storage can yield to cancellation.
     const observed = approved.then((value) => ({ value }), (error: Error) => ({ error }));
     this.pending.set(record.requestId, item);
@@ -160,6 +162,7 @@ export class ImageReviewGate {
       const request = compactImageRequest(structuredClone(rebuilt.request));
       const record = reviewRecord(item.record.jobId, item.record.paragraphIndex, request, rebuilt.metadata, true);
       item.request = request; item.record = record;
+      item.metadata = rebuilt.metadata;
       this.pending.set(record.requestId, item);
       await this.onRecord(record);
       if (item.signal.aborted) throw aborted("Image request cancelled during template preparation.");
@@ -167,6 +170,30 @@ export class ImageReviewGate {
     } catch (error) {
       this.pending.delete(item.record.requestId);
       item.reject(error instanceof Error ? error : new Error(String(error)));
+      throw error;
+    }
+  }
+
+  async regenerate(requestId:string):Promise<boolean> {
+    const item=this.pending.get(requestId);
+    if(!item?.metadata.regeneratePrompt||item.signal.aborted)return false;
+    // An in-flight reroll exclusively owns this approval. Failed rewrites
+    // restore the original preview instead of losing a usable request.
+    this.pending.delete(requestId);
+    try {
+      const request=await item.metadata.regeneratePrompt(structuredClone(item.request));
+      if(item.signal.aborted)throw aborted('Prompt regeneration cancelled.');
+      assertPromptLengths(request.prompt,request.negativePrompt);
+      const record=reviewRecord(item.record.jobId,item.record.paragraphIndex,request,item.metadata,true);
+      await this.onRecord({...item.record,state:'cancelled'});
+      if(item.signal.aborted)throw aborted('Prompt regeneration cancelled.');
+      item.request=request;item.record=record;
+      this.pending.set(record.requestId,item);
+      await this.onRecord(record);
+      if(item.signal.aborted)throw aborted('Prompt regeneration cancelled.');
+      return true;
+    }catch(error){
+      if(!item.signal.aborted)this.pending.set(item.record.requestId,item);
       throw error;
     }
   }

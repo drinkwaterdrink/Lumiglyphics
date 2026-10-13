@@ -1,10 +1,12 @@
 # Lumiglyphics
 
-Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.12`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance.
+Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.21`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance.
 
 Open **Image prompts** in the visual novel to inspect each prepared picture's positive and negative prompts, provider, model, safe parameters and reference summary. With **Review before generating** enabled (the default), edit a picture and choose **Generate this**, or **Skip**. You can continue reading while a picture waits. Matching prompts remain separate in review mode. Parameters are JSON overrides for this picture; omitted fields remain host managed.
 
 The review toggle is also in the existing Pictures settings. It applies to the next image batch; changing it does not release waiting drafts. Automatic mode keeps recording newly generated requests. Reused pictures and older turns may have no original request available. Preparation follows the existing concurrency and portrait dependencies, so later pictures can appear after earlier ones finish.
+
+**Regenerate prompt** asks your story-reader text connection for fresh wording for one picture, then opens a new approval preview. It uses text tokens; it does not generate an image. Failed rerolls retain the held preview, and completed generated pictures can prepare a replacement while keeping their usable art. New planning targets 2,750–2,900 combined positive/negative characters when useful detail supports it. Overlong compiled prompts receive a bounded shortening pass; the final image request must stay within **3,000 characters combined**. See [image prompting](docs/image-prompting.md) and the [potential feature catalog](docs/2026-10-13-feature-catalog.md).
 
 After waiting pictures finish or are skipped, **Prepare editable preview** creates a new draft when the original request is unavailable for the selected picture, including pictures reused within the generation budget. It always asks for review. If the replacement fails, the previous usable picture remains displayed. Generated pictures must be enabled in settings.
 

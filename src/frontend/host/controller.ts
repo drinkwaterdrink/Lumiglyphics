@@ -1131,7 +1131,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       return;
     }
     if (type === "vn_error" && message.type === "vn_error") {
-      if (message.operation === "vn_replan_turn" || message.operation === "vn_correct_image_subject" || message.operation === "vn_set_card_role" || message.operation === "vn_reprepare_image_template" || message.operation === "vn_image_review" || message.operation === "vn_prepare_image" || message.operation === "prepare_image") {
+      if (message.operation === "vn_replan_turn" || message.operation === "vn_correct_image_subject" || message.operation === "vn_set_card_role" || message.operation === "vn_regenerate_image_prompt" || message.operation === "vn_reprepare_image_template" || message.operation === "vn_image_review" || message.operation === "vn_prepare_image" || message.operation === "prepare_image") {
         if (!message.chatId || message.chatId === chatId()) imageStudio.showError(message.error);
         return;
       }

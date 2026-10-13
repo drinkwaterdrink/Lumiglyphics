@@ -3,7 +3,7 @@ import {normalizeConfig} from '../../config.js';
 import {imageDetailGuidance} from './prompt-detail.js';
 test('detail guidance budgets combined output and grounds expansion',()=>{
  const guidance=imageDetailGuidance(normalizeConfig({}));
- expect(guidance).toContain('2,500–2,800');expect(guidance).toContain('positive + negative');
+ expect(guidance).toContain('2,750–2,900');expect(guidance).toContain('positive + negative');expect(guidance).toContain('not tokens');
  expect(guidance).toContain('never invent');expect(guidance).toContain('visualDescription');
  expect(guidance).toContain('no padding');
 });
