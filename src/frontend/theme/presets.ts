@@ -1570,7 +1570,8 @@ const LITERATURE_CLUB_CSS = `
 [data-vn-root][data-vn-preset="literature-club"] [data-vn-backlog-speaker] { color: #c43868; text-transform: none; letter-spacing: 0.02em; font-size: 0.95rem; }
 [data-vn-root][data-vn-preset="literature-club"] [data-vn-backlog-text] { color: #44162e; font-weight: 600; }
 [data-vn-root][data-vn-preset="literature-club"] [data-vn-backlog-content]::-webkit-scrollbar-thumb { background: #ffb3cd; }
-[data-vn-root][data-vn-preset="literature-club"] [data-vn-backlog-close] {
+[data-vn-root][data-vn-preset="literature-club"] [data-vn-backlog-close],
+[data-vn-root][data-vn-preset="literature-club"] [data-vn-backlog-return] {
   border: 2px solid #ffa0bc;
   background: #ffffff;
   color: #c43868;

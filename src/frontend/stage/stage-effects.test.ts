@@ -320,9 +320,11 @@ function buildStandardStageDOM(parent: MockNode) {
   backlog.setAttribute("data-vn-backlog", "");
   const backlogClose = new MockNode("button");
   backlogClose.setAttribute("data-vn-backlog-close", "");
+  const backlogReturn = new MockNode("button");
+  backlogReturn.setAttribute("data-vn-backlog-return", "");
   const backlogContent = new MockNode("div");
   backlogContent.setAttribute("data-vn-backlog-content", "");
-  backlog.append(backlogClose, backlogContent);
+  backlog.append(backlogClose, backlogContent, backlogReturn);
 
   root.append(scene, fx, flash, status, empty, narrative, interaction, backlog);
   parent.append(root);

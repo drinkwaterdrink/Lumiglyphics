@@ -4,7 +4,11 @@
 
 The user added full cast setup, tooltip actions, in-world documents, quiet reference quick access and previous-message image browsing. Cast setup is E3; quiet references D2; actions G; documents H; image library I. Beta.23 delivers the first read-only image library. The other additions remain planned. Global image deduplication with multiple source uses, additional legacy host-gallery backfill and native/card/supplied-display artwork indexing remain I follow-ups. Existing cast controls/current tooltips are foundations rather than completion of E3/D2/G/H.
 
-## Latest Testing increment: 0.2.0-beta.23
+## Latest Testing increment: 0.2.0-beta.24
+
+History now sits below the top navigation with a persistent 44px Close control and a bottom Back to reader button. Only history entries scroll; the exits stay visible. Overlapping panel/image tools are hidden temporarily and restored on close, and resetting the reader closes History. Literature Club uses its existing dark-pink close-button colors for the new footer action. No generation/settings changes. See `review-evidence/2026-10-13-history-exits.md`.
+
+## Previous Testing increment: 0.2.0-beta.23
 
 The reader's picture icon opens a chat-scoped image library. Browse up to 24 lazy thumbnails per page grouped by reply, with read-so-far/all-story range, active/alternate versions, replaced-image toggle, order, picture-type and template-name filters. Open a picture for whole-image fit, zoom/scroll, source excerpt and available read-only prompt/model details. Missing images and requests are labelled. The reader pauses auto/skip while it is open, and chat/source/cursor changes invalidate stale selections. Browsing makes no paid calls or storage writes.
 

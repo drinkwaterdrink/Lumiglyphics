@@ -1699,7 +1699,7 @@ button[data-vn-badge]:active {
  */
 [data-vn-backlog] {
   position: absolute;
-  inset: 0;
+  inset: max(76px, calc(env(safe-area-inset-top) + 64px)) 12px max(12px, env(safe-area-inset-bottom));
   z-index: 20;
   display: flex;
   flex-direction: column;
@@ -1721,11 +1721,12 @@ button[data-vn-badge]:active {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  flex-shrink: 0;
   width: min(52rem, 100%);
   margin: 0 auto 1rem;
   /* The outer "Back to chat" button owns the top-right corner; keep Close clear
      of it when the centred header reaches that corner. */
-  padding: 0 clamp(0rem, calc(7.5rem - (100 * var(--vn-vw, 1vw) - 52rem) / 2), 7.5rem) 0.9rem 0;
+  padding: 0 0 0.9rem;
   border-bottom: 1px solid color-mix(in srgb, var(--vn-accent) 35%, transparent);
 }
 
@@ -1742,8 +1743,8 @@ button[data-vn-badge]:active {
   display: grid;
   flex: none;
   place-items: center;
-  width: 2.4rem;
-  height: 2.4rem;
+  width: max(44px, 2.4rem);
+  height: max(44px, 2.4rem);
   padding: 0;
   border: 1px solid var(--vn-chrome-border);
   border-radius: 999px;
@@ -1770,6 +1771,7 @@ button[data-vn-badge]:active {
 
 [data-vn-backlog-content] {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
@@ -1778,6 +1780,30 @@ button[data-vn-badge]:active {
   padding-right: 0.75rem;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+[data-vn-backlog-footer] {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  width: min(52rem, 100%);
+  margin: 0.75rem auto 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--vn-accent) 35%, transparent);
+}
+[data-vn-backlog-return] {
+  min-height: 44px;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--vn-chrome-border);
+  border-radius: 0.6rem;
+  background: var(--vn-chrome-bg);
+  color: var(--vn-text);
+  font: inherit;
+  cursor: pointer;
+}
+[data-vn-backlog-return]:focus-visible {
+  outline: 2px solid var(--vn-focus-ring);
+  outline-offset: 2px;
 }
 
 [data-vn-backlog-content]:focus-visible {

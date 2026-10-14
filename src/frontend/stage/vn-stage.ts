@@ -245,6 +245,7 @@ const THEME_MARKUP = `
         <button data-vn-backlog-close type="button" aria-label="Close history"><svg viewBox="0 0 16 16" width="14" height="14" focusable="false" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l8 8" /><path d="M12 4l-8 8" /></svg></button>
       </div>
       <div data-vn-backlog-content tabindex="0"></div>
+      <footer data-vn-backlog-footer><button data-vn-backlog-return type="button">Back to reader</button></footer>
     </div>
   </main>
 `;
@@ -747,6 +748,7 @@ export class VnStage {
   openBacklog(): void {
     if (this.destroyed) return;
     this.isBacklogOpen = true;
+    this.panelMount.dataset.vnHistoryOpen='true';
     this.backlogModal.hidden = false;
     this.logButton.setAttribute("aria-expanded", "true");
     this.backlogContent.innerHTML = this.backlogEntries
@@ -769,6 +771,7 @@ export class VnStage {
   closeBacklog(): void {
     if (this.destroyed) return;
     this.isBacklogOpen = false;
+    delete this.panelMount.dataset.vnHistoryOpen;
     this.backlogModal.hidden = true;
     this.logButton.setAttribute("aria-expanded", "false");
     // Return focus to the control that opened the dialog so keyboard readers
@@ -859,6 +862,7 @@ export class VnStage {
   setCastTurn(turn:TurnView|null,index:number):AssetView|null {return this.castStage.set(turn,index);}
 
   reset(): void {
+    if(this.isBacklogOpen)this.closeBacklog();
     this.castStage.set(null,0);
     this.dossiers.setContext(undefined,[]);
     this.clearAllTimers();
@@ -1570,6 +1574,7 @@ export class VnStage {
       event.stopPropagation();
       this.closeBacklog();
     });
+    queryRequired<HTMLButtonElement>(this.themeRoot,'[data-vn-backlog-return]').addEventListener('click',event=>{event.preventDefault();event.stopPropagation();this.closeBacklog();});
 
     this.backlogModal.addEventListener("click", (event) => {
       if (event.target === this.backlogModal) {
