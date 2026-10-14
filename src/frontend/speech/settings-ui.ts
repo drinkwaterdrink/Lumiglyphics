@@ -131,6 +131,18 @@ export class SpeechSettingsSection {
     }
   }
 
+  /** Cast setup opens an ordinary unsaved Voice override; no profile read or synthesis. */
+  prepareCharacter(name:string):void{
+    if(this.destroyed)return;
+    const chatId=this.options.getChatId();if(!chatId||!speakerNameKey(name))return;
+    this.render();const key=characterOverrideKey(chatId,name);
+    if(!this.settings.characters[key])this.pendingOverrideNames.add(key);
+    this.draftAddName='';this.render();
+    const suffix=key.slice(`chat::${chatId}::`.length);
+    const row=[...this.shadow.querySelectorAll<HTMLElement>('[data-speech-override-row],[data-speech-draft-row]')].find(el=>(el.getAttribute('data-speech-override-row')??el.getAttribute('data-speech-draft-row'))===suffix);
+    row?.scrollIntoView({block:'nearest'});row?.querySelector<HTMLSelectElement>('select')?.focus({preventScroll:true});
+  }
+
   destroy(): void {
     this.destroyed = true;
     this.host.remove();

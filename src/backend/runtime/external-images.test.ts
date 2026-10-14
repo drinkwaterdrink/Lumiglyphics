@@ -1,3 +1,5 @@
+import {manageCastArt} from "./cast-art.js";
+import {loadCharacterRegistry} from "./storage.js";
 import { expect, test } from "bun:test";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { DEFAULT_CONFIG } from "../../config.js";
@@ -165,4 +167,16 @@ test("native-card mode uses the selected card image and refuses a different char
   expect(f.sent.at(-1).result.status).toBe("error");
   expect(f.sent.at(-1).result.error).toContain("cannot confirm");
   expect(f.images).toHaveLength(0);
+});
+
+test('removing cast setup while external planning waits cannot bake manual guidance into registry', async()=>{
+ const f=fixture();
+ await manageCastArt(f.host,'c',{action:'setup',name:'Mira',setup:{appearance:'blue hair, amber eyes',aliases:['Mir'],outfits:[],defaultOutfitId:null}},'user');
+ let release!:()=>void;f.planGate=new Promise<void>(resolve=>{release=resolve;});
+ const pending=f.service.request(request,'user');
+ while(f.planner.length===0)await new Promise(resolve=>setTimeout(resolve,1));
+ await manageCastArt(f.host,'c',{action:'clear_setup',characterId:'mira'},'user');release();await pending;
+ const registry=await loadCharacterRegistry(f.host,'c','user');
+ expect(Object.values(registry).some(entry=>entry.aliases.includes('Mir')||entry.tags.includes('blue hair'))).toBe(false);
+ expect(f.writes).not.toContain('chats/c/character-registry.json');
 });

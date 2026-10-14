@@ -2,7 +2,7 @@
 
 ## Selected roadmap update — 2026-10-13
 
-The user added full cast setup, tooltip actions, in-world documents, quiet reference quick access and previous-message image browsing. Cast setup is E3; quiet references D2; actions G; documents H; image library I. Beta.23 delivers the first read-only image library. The other additions remain planned. Global image deduplication with multiple source uses, additional legacy host-gallery backfill and native/card/supplied-display artwork indexing remain I follow-ups. Existing cast controls/current tooltips are foundations rather than completion of E3/D2/G/H.
+The user added full cast setup, tooltip actions, in-world documents, quiet reference quick access and previous-message image browsing. Cast setup is E3; quiet references D2; actions G; documents H; image library I. Beta.23 delivers the first read-only image library. Beta.25 delivers the cast setup foundation; its expression/independent-placement follow-ups and the other additions remain planned. Global image deduplication with multiple source uses, additional legacy host-gallery backfill and native/card/supplied-display artwork indexing remain I follow-ups. Existing cast controls/current tooltips are foundations rather than completion of E3/D2/G/H.
 
 ## Latest Testing increment: 0.2.0-beta.24
 
@@ -124,3 +124,9 @@ Using isolated Bun 1.4.0; the global Bun installation was not changed. Frozen in
 Meaningful regressions were observed failing before fixes: hold/approval gate, final-lookup cancellation, malformed-parameter Skip, oversize omitted parameters and reopen preparation recovery. Browser tests use local fixtures; no paid image calls were made.
 
 Current machine-readable evidence: `docs/review-evidence/implementation-validation.json` and `build-verification.json`. The original `validation.json` records the earlier unsupported-toolchain audit; it is historical.
+
+## Beta.25 cast setup foundation — 2026-10-13
+
+Pictures → Cast setup and portraits now supports registration before generation, explicit aliases, editable base appearance, seven named outfits, a default outfit and user-verified gallery artwork. Configure voice opens an unsaved override in existing Voice settings. Setup is reversible presentation guidance; learned identity persistence is separate and guards against setup edits during reader or external illustration planning. Gallery selection checks the full saved draft again before assigning artwork. Management refreshes cannot start planning.
+
+Assigned art decorates an existing matching portrait cue in Cast view, including a queued cue. It does not add characters to scenes, create a generated variant or become an image-model reference. Artwork remains bound to the saved look at assignment and requires reassignment after appearance/outfit changes. Expression artwork, independent background/portrait allocation and standalone placement without a planned portrait cue remain E2/E3 follow-ups. D2, G and H remain pending; image-library follow-ups remain I work. See the dated cast setup verification evidence.

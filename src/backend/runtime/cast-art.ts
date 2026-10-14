@@ -1,5 +1,7 @@
 import type {SpindleAPI} from 'lumiverse-spindle-types';
-import {CastArtLibrarySchema,type CastArtLibrary,type CastArtAction,CastGallerySchema,type CastGallery} from '../../shared/cast-art.js';
+import {CastArtLibrarySchema,CastSetupInputSchema,setupAppearance,type CastArtLibrary,type CastArtAction,CastGallerySchema,type CastGallery} from '../../shared/cast-art.js';
+import {normalizeCharacterName,characterAppearanceKey,isUsableIdentity,splitTags,findRegistryEntryByName} from '../../shared/identity.js';
+import {loadCharacterRegistry} from './storage.js';
 import {canonicalJson} from '../core/scene-image-cache.js';
 
 type Runtime={tails:Map<string,Promise<void>>,epochs:Map<string,number>};
@@ -61,10 +63,40 @@ export async function manageCastArt(api:SpindleAPI,chat:string,action:CastArtAct
  const r=runtime(api),key=scope(chat,user);r.epochs.set(key,castArtToken(api,chat,user)+1);
  return transaction(api,chat,user,async()=>{
   const library=await loadCastArt(api,chat,user);
-  if(action.action==='reset')library.characters=[];
+  if(action.action==='setup'){
+   const name=normalizeCharacterName(action.name),setup=CastSetupInputSchema.parse(action.setup);
+   if(!name||!isUsableIdentity(name,splitTags(setup.appearance)))throw new Error('Enter a concrete visual appearance for this character.');
+   let record=action.characterId?library.characters.find(r=>r.entityId===action.characterId):library.characters.find(r=>characterAppearanceKey(r.name)===characterAppearanceKey(name));
+   if(action.characterId&&!record)throw new Error('This character is no longer saved. Refresh the list.');
+   if(record&&characterAppearanceKey(record.name)!==characterAppearanceKey(name))throw new Error('Keep the canonical name; add an explicit alias instead of renaming this character.');
+   const registry=await loadCharacterRegistry(api,chat,user);
+   for(const alias of [name,...setup.aliases]){
+    const owner=findRegistryEntryByName(registry,alias);
+    if(owner&&characterAppearanceKey(owner.name)!==characterAppearanceKey(name))throw new Error(`${alias} already belongs to ${owner.name}. Choose a distinct name or alias.`);
+    const other=library.characters.find(r=>r!==record&&[r.name,...(r.setup?.aliases??[])].some(n=>characterAppearanceKey(n)===characterAppearanceKey(alias)));
+    if(other)throw new Error(`${alias} already belongs to ${other.name}. Choose a distinct name or alias.`);
+   }
+   if(!record){if(library.characters.length>=128)throw new Error('Cast limit reached (128 characters). Forget one to make room.');record={entityId:characterId(name),name,description:setup.appearance,artRevision:0,preferredVariantId:null,variants:[]};library.characters.push(record);}
+   const previous=record.setup;
+   record.setup={...setup,aliases:[...new Set(setup.aliases.map(normalizeCharacterName).filter(a=>a&&characterAppearanceKey(a)!==characterAppearanceKey(name)))],outfits:setup.outfits.map(o=>{
+    const old=previous?.outfits.find(v=>v.id===o.id);return {...o,...(old?.imageId?{imageId:old.imageId,imageAppearance:old.imageAppearance??previous!.appearance,imageAttire:old.imageAttire??old.description}:{})};
+   }),...(previous?.imageId?{imageId:previous.imageId,imageAppearance:previous.imageAppearance??previous.appearance}:{})};record.artRevision++;
+  }else if(action.action==='reset')library.characters=[];
   else{
    const record=library.characters.find(r=>r.entityId===action.characterId);if(!record)throw new Error('This character is no longer saved. Refresh the list.');
-   if(action.action==='supply'||action.action==='restore'){
+   if(action.action==='clear_setup'){
+    delete record.setup;record.artRevision++;if(!record.variants.length)library.characters=library.characters.filter(r=>r!==record);
+   }else if(action.action==='setup_supply'||action.action==='setup_restore'){
+    if(!record.setup)throw new Error('Save this character’s setup first.');
+    const target=action.outfitId?record.setup.outfits.find(o=>o.id===action.outfitId):record.setup;
+    if(!target)throw new Error('This outfit is no longer saved. Refresh the list.');
+    if(action.action==='setup_supply'){
+     const image=await api.images.get(action.imageId!,user);if(!image||!isCastStillImage(image.mime_type))throw new Error('Artwork is not available as a supported still image for this user.');
+     target.imageId=image.id;target.imageAppearance=record.setup.appearance;
+     if('description' in target)target.imageAttire=target.description;
+    }else{delete target.imageId;delete target.imageAppearance;if('imageAttire' in target)delete target.imageAttire;}
+    record.artRevision++;
+   }else if(action.action==='supply'||action.action==='restore'){
     const variant=record.variants.find(v=>v.id===action.variantId);if(!variant)throw new Error('This appearance is no longer saved. Refresh the list.');
     if(action.action==='supply'){
      const image=await api.images.get(action.imageId!,user);
@@ -74,11 +106,24 @@ export async function manageCastArt(api:SpindleAPI,chat:string,action:CastArtAct
     record.artRevision++;
    }else if(action.action==='select'){
     if(!record.variants.some(v=>v.id===action.variantId))throw new Error('This variant is no longer saved. Refresh the list.');record.preferredVariantId=action.variantId!;
-   }else if(action.variantId){record.variants=record.variants.filter(v=>v.id!==action.variantId);if(record.preferredVariantId===action.variantId)record.preferredVariantId=null;if(!record.variants.length)library.characters=library.characters.filter(r=>r!==record);}
+   }else if(action.variantId){record.variants=record.variants.filter(v=>v.id!==action.variantId);if(record.preferredVariantId===action.variantId)record.preferredVariantId=null;if(!record.variants.length&&!record.setup)library.characters=library.characters.filter(r=>r!==record);}
    else library.characters=library.characters.filter(r=>r!==record);
   }
   await api.userStorage.setJson(path(chat),CastArtLibrarySchema.parse(library),options(user));return library;
  });
+}
+
+/** Manual artwork is display-only and bound to the appearance/outfit at assignment. */
+export async function findSetupDisplayArt(api:SpindleAPI,chat:string,identity:{character:string,baseIdentity:string,attire:string|null},user?:string):Promise<string|null>{
+ const token=castArtToken(api,chat,user),library=await loadCastArt(api,chat,user);
+ if(token!==castArtToken(api,chat,user))return null;
+ const record=library.characters.find(r=>[r.name,...(r.setup?.aliases??[])].some(n=>characterAppearanceKey(n)===characterAppearanceKey(identity.character))),setup=record?.setup;
+ if(!setup||setupAppearance(setup)!==identity.baseIdentity)return null;
+ const preferred=setup.outfits.find(o=>o.id===setup.defaultOutfitId);
+ const outfit=identity.attire===null?preferred:preferred?.description===identity.attire?preferred:setup.outfits.find(o=>o.description===identity.attire);
+ const target=outfit??(!identity.attire&&!setup.defaultOutfitId?setup:undefined);
+ if(!target?.imageId||target.imageAppearance!==setup.appearance||('description' in target&&target.imageAttire!==target.description))return null;
+ try{const image=await api.images.get(target.imageId,user);if(token!==castArtToken(api,chat,user)||!image||!isCastStillImage(image.mime_type))return null;return `/api/v1/images/${encodeURIComponent(image.id)}`;}catch{return null;}
 }
 
 const isCastStillImage=(mime:string)=>['image/png','image/jpeg','image/webp','image/avif'].includes(mime);

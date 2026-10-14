@@ -650,6 +650,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const settingsPanel: (VisualNovelSettingsPanel & SettingsFeedbackTarget) | null = settingsHandle ? new VisualNovelSettingsPanel({
     getChatId:()=>chatId(),
     onCastGallery:(chatId,requestId,offset)=>ctx.sendToBackend({type:'vn_cast_gallery',chatId,requestId,offset}),
+    onCastVoice:name=>speechSettings?.prepareCharacter(name),
     onCastArt:(chatId,requestId,action)=>ctx.sendToBackend({type:'vn_cast_art',version:1,chatId,requestId,...action}),
     onLocationArt:(chatId,requestId,action)=>ctx.sendToBackend({type:'vn_location_art',version:1,chatId,requestId,...action}),
     onRefreshContextSources:(chatId,requestId)=>ctx.sendToBackend({type:"vn_get_context_sources",chatId,requestId}),
@@ -984,7 +985,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       settingsPanel?.setConnectionCatalog("image", states.image);
       return;
     }
-    if(type==='vn_cast_art'&&message.type==='vn_cast_art'){const accepted=settingsPanel?.setCastArt(message.chatId,message.requestId,message.library);if(accepted&&active&&turn&&message.chatId===chatId())ctx.sendToBackend({type:'vn_get_state',chatId:message.chatId,viewOpen:true});return;}
+    if(type==='vn_cast_art'&&message.type==='vn_cast_art'){const accepted=settingsPanel?.setCastArt(message.chatId,message.requestId,message.library);if(accepted&&active&&turn&&message.chatId===chatId())ctx.sendToBackend({type:'vn_get_state',chatId:message.chatId,viewOpen:true,prepare:false});return;}
     if(type==='vn_cast_gallery'&&message.type==='vn_cast_gallery'){settingsPanel?.setCastGallery(message.chatId,message.requestId,message.gallery);return;}
     if(type==='vn_error'&&message.type==='vn_error'&&message.operation==='vn_cast_gallery'){if(message.chatId===chatId())settingsPanel?.castArtError(message.error,message.requestId);return;}
     if(type==='vn_cast_art_notice'&&message.type==='vn_cast_art_notice'){if(message.chatId===chatId())settingsPanel?.castArtNotice(message.error);return;}

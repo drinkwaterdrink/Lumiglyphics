@@ -105,6 +105,7 @@ export type SettingsPanelOptions = {
   onRefreshConnections: () => void;
   onCastGallery?: (chatId:string,requestId:string,offset:number)=>void;
   onCastArt?: (chatId:string,requestId:string,action:CastArtAction)=>void;
+  onCastVoice?: (name:string)=>void;
   onLocationArt?: (chatId:string,requestId:string,action:LocationArtAction)=>void;
   onRefreshContextSources?: (chatId:string,requestId:string)=>void;
   getChatId?: ()=>string;
@@ -517,8 +518,8 @@ export class VisualNovelSettingsPanel {
     const castReuse=document.createElement('label');castReuse.dataset.check='';
     castReuse.innerHTML='<input type="checkbox" name="persistentCastArt"><span>Reuse saved portrait art<small>Reuses matching Character portrait pictures across turns, without spending new image slots. Appearance, outfit, scene, prompt, model and dimensions must match. Reference-based generation keeps its existing path. Off by default.</small></span>';
     generation.append(castReuse);
-    const cast=section('Saved portrait art');
-    this.castArtPanel=new CastArtPanel(()=>this.options.getChatId?.()??'',(chat,id,action)=>this.options.onCastArt?.(chat,id,action),(chat,id,offset)=>this.options.onCastGallery?.(chat,id,offset));cast.append(this.castArtPanel.host);
+    const cast=section('Cast setup and portraits');
+    this.castArtPanel=new CastArtPanel(()=>this.options.getChatId?.()??'',(chat,id,action)=>this.options.onCastArt?.(chat,id,action),(chat,id,offset)=>this.options.onCastGallery?.(chat,id,offset),name=>{this.openSection('voice',{focus:true});this.options.onCastVoice?.(name);});cast.append(this.castArtPanel.host);
     const places=section('Saved place art');
     this.locationArtPanel=new LocationArtPanel(()=>this.options.getChatId?.()??'',(chat,id,action)=>this.options.onLocationArt?.(chat,id,action));places.append(this.locationArtPanel.host);
 

@@ -1,5 +1,7 @@
 import { projectTurnPresentation } from "./entity-projection.js";
 import {mergeImageLibrary} from './image-library.js';
+import {loadCastArt} from './cast-art.js';
+import {setupAppearance,type CastArtRecord} from '../../shared/cast-art.js';
 import { CardRoleSchema, StoredCardRoleSchema, type CardRole } from "../../shared/card-role.js";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { ReadingPositionSchema, type ReadingPosition } from "../../shared/reading-position.js";
@@ -191,7 +193,8 @@ export async function saveSingleCharacterState(
   spindle: SpindleAPI,
   chatId: string,
   state: SingleCharacterState,
-  userId?: string
+  userId?: string,
+  isCurrent: () => boolean = () => true
 ): Promise<void> {
   const path = singleCharacterStatePath(chatId);
   await serializedWrite(scopedKey(userId, path), async () => {
@@ -200,6 +203,10 @@ export async function saveSingleCharacterState(
       ...(userOptions(userId) ?? {})
     });
     const existing = migrateVisualProfilesToSingleCharacter(existingRaw);
+    if (manualOwnsName(await manualCastRecords(spindle, chatId, userId), state.protagonist.name)) {
+      // Setup is reversible presentation guidance, never a learned identity seed.
+      state = { ...state, protagonist: existing.protagonist };
+    }
     // Freeze only a USEABLE appearance baseline. A poisoned name-only / empty
     // state is not frozen, so it can be repaired once a richer identity exists.
     const existingName = normalizeCharacterName(existing.protagonist.name);
@@ -222,6 +229,7 @@ export async function saveSingleCharacterState(
       const name = incomingName || existingName;
       protagonist = { name, tags: [] };
     }
+    if (!isCurrent()) return;
     await spindle.userStorage.setJson(path, {
       schemaVersion: SINGLE_CHARACTER_SCHEMA_VERSION,
       protagonist,
@@ -267,7 +275,11 @@ export async function loadCharacterAppearance(
   userId?: string,
   chatId?: string
 ): Promise<CharacterAppearanceMap> {
-  if (chatId) return normalizeAppearanceMap(await spindle.userStorage.getJson<unknown>(`chats/${safeSegment(chatId)}/characters.json`, { fallback: {}, ...(userOptions(userId) ?? {}) }));
+  if (chatId) {
+    const map=normalizeAppearanceMap(await spindle.userStorage.getJson<unknown>(`chats/${safeSegment(chatId)}/characters.json`, { fallback: {}, ...(userOptions(userId) ?? {}) }));
+    for(const record of await manualCastRecords(spindle,chatId,userId)){const key=appearanceMapKeyFor(map,record.name);if(key)delete map[key];map[record.name]=setupAppearance(record.setup!);}
+    return map;
+  }
   const raw = await spindle.userStorage.getJson<unknown>(characterAppearancePath(), {
     fallback: {},
     ...(userOptions(userId) ?? {})
@@ -299,9 +311,11 @@ export async function mergeCharacterAppearanceFromState(
   spindle: SpindleAPI,
   state: SingleCharacterState,
   userId?: string,
-  chatId?: string
+  chatId?: string,
+  isCurrent: () => boolean = () => true
 ): Promise<void> {
   const name = normalizeCharacterName(state.protagonist.name);
+  if (chatId && manualOwnsName(await manualCastRecords(spindle, chatId, userId), name)) return;
   const tags = toUsableTags(name, state.protagonist.tags);
   if (!name || tags.length === 0) return;
   const path = chatId ? `chats/${safeSegment(chatId)}/characters.json` : characterAppearancePath();
@@ -315,6 +329,7 @@ export async function mergeCharacterAppearanceFromState(
     if (existingKey && isUsableIdentity(name, splitTags(existing[existingKey] ?? ""))) return;
     if (existingKey) delete existing[existingKey];
     existing[name] = tags.join(", ");
+    if (!isCurrent()) return;
     await spindle.userStorage.setJson(path, existing, {
       indent: 2,
       ...(userOptions(userId) ?? {})
@@ -330,9 +345,11 @@ export async function mergePlannerCharacters(
   spindle: SpindleAPI,
   characters: Array<{ name: string; description: string }>,
   userId?: string,
-  chatId?: string
+  chatId?: string,
+  isCurrent: () => boolean = () => true
 ): Promise<void> {
   if (!characters || characters.length === 0) return;
+  const manual = chatId ? await manualCastRecords(spindle, chatId, userId) : [];
   const path = chatId ? `chats/${safeSegment(chatId)}/characters.json` : characterAppearancePath();
   await serializedWrite(scopedKey(userId, path), async () => {
     const existingRaw = await spindle.userStorage.getJson<unknown>(path, {
@@ -343,7 +360,7 @@ export async function mergePlannerCharacters(
     let changed = false;
     for (const char of characters) {
       const name = normalizeCharacterName(char.name);
-      if (!name) continue;
+      if (!name || manualOwnsName(manual, name)) continue;
       const key = characterAppearanceKey(name);
       if (!key) continue;
       const tags = distillVisualTags(char.description);
@@ -356,6 +373,7 @@ export async function mergePlannerCharacters(
       }
     }
     if (changed) {
+      if (!isCurrent()) return;
       await spindle.userStorage.setJson(path, existing, {
         indent: 2,
         ...(userOptions(userId) ?? {})
@@ -413,7 +431,7 @@ function chatRosterPath(chatId: string): string {
  * subject category taken only from explicit gender words in the tags. Nothing
  * is written on load.
  */
-export async function loadCharacterRegistry(
+async function loadLearnedCharacterRegistry(
   spindle: SpindleAPI,
   chatId: string,
   userId?: string
@@ -430,6 +448,27 @@ export async function loadCharacterRegistry(
   return mergeCharacterDeclarations(stored, declarations).registry;
 }
 
+export async function loadCharacterRegistry(spindle: SpindleAPI, chatId: string, userId?: string): Promise<CharacterRegistry> {
+  let registry = await loadLearnedCharacterRegistry(spindle, chatId, userId);
+  for(const record of await manualCastRecords(spindle,chatId,userId)){
+    const setup=record.setup!;
+    registry=mergeCharacterDeclarations(registry,[{name:record.name,tags:setupAppearance(setup),aliases:setup.aliases}]).registry;
+    const entry=Object.values(registry).find(e=>characterAppearanceKey(e.name)===characterAppearanceKey(record.name));
+    if(entry){entry.tags=setupAppearance(setup);entry.aliases=setup.aliases.filter(alias=>!Object.values(registry).some(other=>other.id!==entry.id&&[other.name,...other.aliases].some(n=>characterAppearanceKey(n)===characterAppearanceKey(alias))));entry.subjectCategory=subjectCategoryFromTags(setup.appearance);}
+  }
+  return registry;
+}
+
+function manualOwnsName(records: CastArtRecord[], name: string): boolean {
+  const key = characterAppearanceKey(name);
+  return records.some(record => [record.name, ...record.setup!.aliases].some(value => characterAppearanceKey(value) === key));
+}
+
+async function manualCastRecords(spindle:SpindleAPI,chatId:string,userId?:string):Promise<CastArtRecord[]>{
+ try{return (await loadCastArt(spindle,chatId,userId)).characters.filter(record=>record.setup!==undefined);}
+ catch{spindle.log?.warn?.('Manual cast setup is unavailable; saved identity state remains intact.');return [];}
+}
+
 /**
  * Merge explicit declarations into the persisted registry (serialized
  * read-merge-write). Existing ids, canonical names and usable baselines are
@@ -439,14 +478,16 @@ export async function mergeCharacterRegistry(
   spindle: SpindleAPI,
   chatId: string,
   declarations: readonly CharacterDeclaration[],
-  userId?: string
+  userId?: string,
+  isCurrent: () => boolean = () => true
 ): Promise<RegistryMergeReport> {
   const path = characterRegistryPath(chatId);
   let report: RegistryMergeReport = { registry: {}, changed: false, rejectedAliases: [], rejectedSubjects: [] };
   await serializedWrite(scopedKey(userId, path), async () => {
-    const existing = await loadCharacterRegistry(spindle, chatId, userId);
+    const existing = await loadLearnedCharacterRegistry(spindle, chatId, userId);
     const existingRaw = await spindle.userStorage.getJson<unknown>(path, { fallback: null, ...(userOptions(userId) ?? {}) });
-    report = mergeCharacterDeclarations(existing, declarations);
+    const manual = await manualCastRecords(spindle, chatId, userId);
+    report = mergeCharacterDeclarations(existing, declarations.filter(entry => !manualOwnsName(manual, entry.name)).map(entry => ({...entry, aliases: entry.aliases?.filter(alias => !manualOwnsName(manual, alias))})));
     // Persist when anything changed, or when legacy sources were promoted for the first time.
     const promoted = !existingRaw && Object.keys(existing).length > 0;
     if (!report.changed && !promoted) return;
@@ -455,6 +496,7 @@ export async function mergeCharacterRegistry(
       characters: report.registry,
       updatedAt: new Date().toISOString()
     };
+    if (!isCurrent()) return;
     await spindle.userStorage.setJson(path, record, { indent: 2, ...(userOptions(userId) ?? {}) });
   });
   return report;
@@ -465,7 +507,8 @@ export async function saveCharacterRegistry(
   spindle: SpindleAPI,
   chatId: string,
   registry: CharacterRegistry,
-  userId?: string
+  userId?: string,
+  isCurrent: () => boolean = () => true
 ): Promise<RegistryMergeReport> {
   const declarations: CharacterDeclaration[] = Object.values(registry).map((entry) => ({
     name: entry.name,
@@ -474,7 +517,7 @@ export async function saveCharacterRegistry(
     tags: entry.tags,
     subjectCategory: entry.subjectCategory
   }));
-  return mergeCharacterRegistry(spindle, chatId, declarations, userId);
+  return mergeCharacterRegistry(spindle, chatId, declarations, userId, isCurrent);
 }
 
 /**

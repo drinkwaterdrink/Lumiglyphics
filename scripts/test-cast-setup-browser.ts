@@ -1,0 +1,35 @@
+import {chromium} from 'playwright';import assert from 'node:assert/strict';
+const build=await Bun.build({entrypoints:['scripts/cast-setup-browser-fixture.ts'],target:'browser'});assert.ok(build.success,String(build.logs));const bundle=await build.outputs[0]!.text();
+const server=Bun.serve({hostname:'127.0.0.1',port:0,fetch:r=>new URL(r.url).pathname==='/fixture.js'?new Response(bundle,{headers:{'Content-Type':'application/javascript'}}):new Response('<html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0"><script type="module" src="/fixture.js"></script></body></html>',{headers:{'Content-Type':'text/html'}})});
+const browser=await chromium.launch({headless:true});
+try{
+ const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});page.setDefaultTimeout(5000);
+ await page.route('**/api/v1/images/**',route=>route.fulfill({status:200,contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400"><rect width="300" height="400" fill="#536077"/></svg>'}));
+ await page.goto(`http://127.0.0.1:${server.port}`);
+ const cast=page.locator('[data-cast-art]');await cast.locator('xpath=..').locator(':scope > summary').click();
+ await cast.getByRole('button',{name:'Add character',exact:true}).tap();
+ await cast.getByLabel('Cast character name').fill('Rena');await cast.getByLabel('Cast aliases').fill('Ren');await cast.getByLabel('Cast base appearance').fill('silver fur, blue eyes, fox ears');
+ await cast.getByRole('button',{name:'Save cast setup',exact:true}).tap();await page.waitForFunction(()=>(window as any).castSetupFixture.state.library.characters.length===1);
+ assert.equal(await cast.getByLabel('Cast character name').isEditable(),false,'canonical name remains stable');
+ await cast.getByRole('button',{name:'Add outfit',exact:true}).tap();await cast.getByLabel('Cast outfit name').fill('Winter');await cast.getByLabel('Cast clothing description').fill('red coat');
+ const outfitId=await cast.getByLabel('Cast outfit',{exact:true}).inputValue();await cast.getByLabel('Default cast outfit').selectOption(outfitId);
+ await cast.getByRole('button',{name:'Save cast setup',exact:true}).tap();await page.waitForFunction(()=>(window as any).castSetupFixture.state.library.characters[0].setup.outfits.length===1);
+ await cast.getByLabel('Cast outfit',{exact:true}).selectOption(outfitId);await cast.getByRole('button',{name:'Choose setup artwork',exact:true}).tap();
+ await cast.getByLabel('Cast base appearance').fill('white fur, blue eyes, fox ears');
+ const before=await page.evaluate(()=>(window as any).castSetupFixture.state.actions.length);
+ await cast.getByRole('button',{name:'Use Portrait.png',exact:true}).tap();
+ assert.equal(await page.evaluate(()=>(window as any).castSetupFixture.state.actions.length),before,'gallery does not discard unsaved edits');
+ assert.equal(await cast.getByLabel('Cast base appearance').inputValue(),'white fur, blue eyes, fox ears');
+ await cast.getByLabel('Cast base appearance').fill('silver fur, blue eyes, fox ears');
+ await cast.getByRole('button',{name:'Use Portrait.png',exact:true}).tap();
+ assert.match(await cast.locator('[data-cast-setup-preview]').getAttribute('src')??'',/photo/);
+ assert.equal(await cast.getByRole('button',{name:'Prefer this variant',exact:true}).isDisabled(),true,'manual setup does not fabricate a generated variant');
+ const state=await page.evaluate(()=>(window as any).castSetupFixture.state);assert.equal(state.patches.length,0,'setup fields do not leak into global Apply settings');assert.equal(state.actions.at(-1).action,'setup_supply');assert.equal(state.actions.at(-1).outfitId,outfitId);
+ assert.equal(await cast.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,'editor fits mobile width');
+ await cast.getByRole('button',{name:'Configure voice',exact:true}).tap();
+ assert.equal(await page.locator('[data-speech-draft-row="rena"]').isVisible(),true,'voice shortcut uses existing unsaved override controls');
+ assert.equal(await page.evaluate(()=>(window as any).castSetupFixture.state.profileCalls),0);assert.equal(await page.evaluate(()=>(window as any).castSetupFixture.state.speechPatches.length),0,'voice shortcut saves nothing');
+ await page.evaluate(()=>{const f=(window as any).castSetupFixture;f.state.chatId='other';f.panel.clearCastArt();f.panel.openSection('pictures');});
+ assert.equal(await cast.locator('[data-cast-setup]').isVisible(),false,'chat switch clears setup drafts');
+ console.log('Mobile cast registration, outfits, artwork, Voice draft shortcut and scope checks passed.');
+}finally{await browser.close();server.stop(true);}

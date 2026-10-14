@@ -4,6 +4,7 @@ import type { ChatMessageDTO, SpindleAPI } from "lumiverse-spindle-types";
 import { parseImageRequest, imageIdentity, type CueImageRequest, type CueImageResult } from "../../shared/cue-images.js";
 import { resolveCharacterReference } from "../../shared/identity.js";
 import { SceneImageCache } from "../core/scene-image-cache.js";
+import {castArtToken} from "./cast-art.js";
 import { planTurn } from "./planner.js";
 import { generateAssets, prepareAssetJobs } from "./images.js";
 import { resolveNativeCardJobs } from "./native-assets.js";
@@ -65,6 +66,8 @@ export function createExternalImages(spindle: SpindleAPI, deps = pipeline, timeo
       if (!current()) return;
       if (!config.enabled || (!config.generateImages && !config.useNativeCardImages)) throw new Error("Enable Cue and image generation in Cue's settings to illustrate dates.");
       if (!config.useNativeCardImages && config.maxImagesPerTurn === 0) throw new Error("Cue's image budget is zero. Increase it in Cue's settings to illustrate dates.");
+      const setupToken = castArtToken(spindle, r.chatId, userId);
+      const identityCurrent = () => current() && setupToken === castArtToken(spindle, r.chatId, userId);
       const [singleCharacter, characterAppearance, characterRegistry, chatState, messages] = await Promise.all([
         loadSingleCharacterState(spindle, r.chatId, userId), loadCharacterAppearance(spindle, userId, r.chatId),
         loadCharacterRegistry(spindle, r.chatId, userId), loadChatState(spindle, r.chatId, userId),
@@ -96,10 +99,10 @@ export function createExternalImages(spindle: SpindleAPI, deps = pipeline, timeo
       const depicted = cue && resolveCharacterReference(result.characterRegistry, { name: cue.character ?? "" });
       if (!cue || (selected ? selected.id !== depicted?.id : cue.character?.toLowerCase() !== characterName.toLowerCase()))
         throw new Error("Cue could not resolve the date's character. Add or correct their identity in Cue, then retry.");
-      await mergeCharacterAppearanceFromState(spindle, result.singleCharacter, userId, r.chatId);
+      await mergeCharacterAppearanceFromState(spindle, result.singleCharacter, userId, r.chatId, identityCurrent);
       if (!current()) return;
-      await mergePlannerCharacters(spindle, result.extractedCharacters ?? [], userId, r.chatId);
-      await saveCharacterRegistry(spindle, r.chatId, result.characterRegistry, userId);
+      await mergePlannerCharacters(spindle, result.extractedCharacters ?? [], userId, r.chatId, identityCurrent);
+      await saveCharacterRegistry(spindle, r.chatId, result.characterRegistry, userId, identityCurrent);
       if (!current()) return;
       const appearance = await loadCharacterAppearance(spindle, userId, r.chatId);
       // The date asks for one image; Cue decides the cue, pose and composition.

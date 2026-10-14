@@ -46,7 +46,7 @@ export type FrontendRequest =
    * True opens the view, false closes it; absent changes nothing (a state
    * request that says nothing about the view never opens it).
    */
-  | { type: "vn_get_state"; chatId?: string; viewOpen?: boolean }
+  | { type: "vn_get_state"; chatId?: string; viewOpen?: boolean; prepare?:boolean }
   | { type: "vn_get_connection_catalog" }
   | { type: "vn_get_system_one_key_status" }
   | { type: "vn_set_system_one_key"; key: string }

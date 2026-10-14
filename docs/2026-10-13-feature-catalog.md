@@ -23,7 +23,7 @@ Prompt planning targets 2,750–2,900 combined positive/negative characters when
 | Candidate | Experience | Existing coverage | Effort / priority |
 |---|---|---|---|
 | 1. Reliable source and reveal timing | Correct outfits, presence and known facts at the paragraph being read | Roadmap C foundation exists; external reconciliation unfinished | High / first foundation |
-| 2. Complete cast setup | Choose identity, supplied art, outfits, expression art and voice together, before the first generated portrait | E2 partially delivered | High / high value |
+| 2. Complete cast setup | Choose identity, supplied art, outfits, expression art and voice together, before the first generated portrait | Beta.25 registration/outfit/artwork/Voice foundations delivered; expressions and independent placement pending | High / high value |
 | 3. Independent scene assets | Hold a room background while switching portraits; replace only the needed layer | Cast display exists; shared-budget allocation unfinished | High / high value |
 | 4. Remember presentation corrections | Keep backgrounds, prefer object shots, reduce effects; save transparent per-chat/global rules | Roadmap F pending | Medium / high value |
 | 5. Tooltip action tray | Ask an NPC, examine an object or approach a place from its reference card | Tooltips exist; roadmap G pending | Medium / high value |

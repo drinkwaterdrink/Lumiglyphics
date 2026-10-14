@@ -1,5 +1,5 @@
 import {CastGalleryRequestSchema,CastArtRequestSchema} from '../../shared/cast-art.js';
-import {castArtToken,findCastDisplayArt,listCastGallery,manageCastArt} from './cast-art.js';
+import {castArtToken,findCastDisplayArt,findSetupDisplayArt,listCastGallery,manageCastArt} from './cast-art.js';
 import {LocationArtRequestSchema} from '../../shared/stage-assets.js';
 import {manageLocationArt} from './location-art.js';
 import { ContextSourceSession } from './context-providers/session.js';
@@ -475,14 +475,16 @@ async function decorateCastAssets(spindle:SpindleAPI,record:StoredTurnRecord,ass
  const token=castArtToken(spindle,record.plan.key.chatId,userId);
  const config=await loadConfig(spindle,userId).catch(()=>null);
  if(!config?.castMode)return;
- const {castAppearanceIdentity,sceneForCue}=await import('./images.js');
+ const {castAppearanceIdentity,resolveCueCharacterVisualState,sceneForCue}=await import('./images.js');
  const appearance=await loadCharacterAppearance(spindle,userId,record.plan.key.chatId).catch(()=>({}));
  await Promise.all(assets.map(async asset=>{
   const cue=[...record.plan.visualCues,...(record.plan.cacheCues??[])].find(c=>c.assetJobId===asset.jobId);
   if(!cue||asset.stageAsset?.role!=='portrait')return;
   try{
-   const identity=castAppearanceIdentity(sceneForCue(record.plan,cue),cue,appearance);if(!identity)return;
-   const url=await findCastDisplayArt(spindle,record.plan.key.chatId,identity.character,identity.fingerprint,userId);
+   const scene=sceneForCue(record.plan,cue),identity=castAppearanceIdentity(scene,cue,appearance);if(!identity)return;
+   const visual=resolveCueCharacterVisualState(scene,cue,appearance);
+   const url=await findSetupDisplayArt(spindle,record.plan.key.chatId,{character:visual.characterName,baseIdentity:visual.baseIdentity,attire:cue.resolvedAttire!==undefined?cue.resolvedAttire:cue.attire??scene.attire??null},userId)
+     ??await findCastDisplayArt(spindle,record.plan.key.chatId,identity.character,identity.fingerprint,userId);
    if(url)asset.stageAsset.displayImageUrl=url;
   }catch{/* Display artwork must never block ordinary reading. */}
  }));
@@ -598,7 +600,7 @@ export async function sendState(
   spindle: SpindleAPI,
   chatId: string,
   userId?: string,
-  options: { viewOpen?: boolean } = {}
+  options: { viewOpen?: boolean;readOnly?:boolean } = {}
 ): Promise<void> {
   // No active chat (home screen): whatever view was open is gone. Close it
   // before the first await so a reply landing meanwhile is already gated.
@@ -676,7 +678,7 @@ export async function sendState(
     turn: record && !stale ? await turnViewWithAudio(spindle, record,userId) : null,
     readingPosition: await loadReadingPosition(spindle, chatId, userId)
   }, userId);
-  const canPlan = config.enabled && views.isOpen(userId, chatId);
+  const canPlan = !options.readOnly&&config.enabled && views.isOpen(userId, chatId);
   if (!record) {
     if (canPlan) await bootstrapLatestAssistantTurn(spindle, chatId, userId);
     else dbg(spindle, userId, `skipped bootstrap: ${config.enabled ? "view closed" : "extension disabled (enabled=false)"} chat=${chatId}`);
@@ -970,6 +972,8 @@ async function processAssistantMessage(
       releaseSceneCacheScope(spindle, userId, chatId, "scope_cleared");
     }
     const chatState = await loadChatState(spindle, chatId, userId);
+    const setupToken = castArtToken(spindle, chatId, userId);
+    const identityCurrent = () => !operation.controller.signal.aborted && setupToken === castArtToken(spindle, chatId, userId);
     const singleCharacter = await loadSingleCharacterState(spindle, chatId, userId);
     const characterAppearance = await loadCharacterAppearance(spindle, userId, chatId);
     const characterRegistry = await loadCharacterRegistry(spindle, chatId, userId);
@@ -1010,14 +1014,14 @@ async function processAssistantMessage(
       ...(result.rejectedSubjects.length ? [`rejectedSubjects=[${result.rejectedSubjects.map((item) => `${item.name}: ${item.requested} kept ${item.durable}`).join("; ")}]`] : []),
       `context: ${summarizeDiagnostics(result.contextDiagnostics)}`
     ].join(" | "));
-    await mergeCharacterAppearanceFromState(spindle, singleCharacter, userId, chatId);
-    await saveSingleCharacterState(spindle, chatId, result.singleCharacter, userId);
-    await mergeCharacterAppearanceFromState(spindle, result.singleCharacter, userId, chatId);
+    await mergeCharacterAppearanceFromState(spindle, singleCharacter, userId, chatId, identityCurrent);
+    await saveSingleCharacterState(spindle, chatId, result.singleCharacter, userId, identityCurrent);
+    await mergeCharacterAppearanceFromState(spindle, result.singleCharacter, userId, chatId, identityCurrent);
     if (result.extractedCharacters && result.extractedCharacters.length > 0) {
-      await mergePlannerCharacters(spindle, result.extractedCharacters, userId, chatId);
+      await mergePlannerCharacters(spindle, result.extractedCharacters, userId, chatId, identityCurrent);
     }
     // Persist stable ids, explicit aliases and subject categories learned this turn.
-    await saveCharacterRegistry(spindle, chatId, result.characterRegistry, userId);
+    await saveCharacterRegistry(spindle, chatId, result.characterRegistry, userId, identityCurrent);
         let jobs: StoredTurnRecord["jobs"] = [];
     if (config.useNativeCardImages) {
       try {
@@ -1514,7 +1518,7 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       return;
     }
     case "vn_get_state":
-      await sendState(spindle, request.chatId ?? "", userId, request.viewOpen === undefined ? {} : { viewOpen: request.viewOpen });
+      await sendState(spindle, request.chatId ?? "", userId, {...(request.viewOpen === undefined ? {} : { viewOpen: request.viewOpen }),...(request.prepare===false?{readOnly:true}:{})});
       return;
     case "vn_reading_position": {
       const { position } = request;

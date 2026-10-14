@@ -10,7 +10,7 @@
 
 **Spec:** ../specs/2026-10-11-reader-experience-design.md, plus the user's scenario-card clarification and supplied inline-dossier examples as inspiration only.
 
-**Status:** Beta.24 on `Testing`, 2026-10-13. A recovery and B mobile reader are delivered. C has typed reveal-scoped snapshots, tracker mappings and optional source-status checks, but normalized external reconciliation remains incomplete. D standalone tooltips/inline links are delivered; tooltip actions remain G work. E has saved place art, basic cast presentation, saved portraits and supplied gallery artwork; full cast setup and independent generation remain pending. F rules and G interactions remain pending. Beta.21 adds prompt rerolls and combined-length repair; beta.22 addresses the saved-place lookup/reset race (audit A1). Beta.23 delivers the first read-only image library; beta.24 fixes mobile History exits; E3/D2/G/H and remaining I follow-ups are pending. Earlier unchecked steps and dated increments retain their historical context.
+**Status:** Beta.25 on `Testing`, 2026-10-13. A recovery and B mobile reader are delivered. C has typed reveal-scoped snapshots, tracker mappings and optional source-status checks, but normalized external reconciliation remains incomplete. D standalone tooltips/inline links are delivered; tooltip actions remain G work. E has saved place art, basic cast presentation, saved portraits and supplied gallery artwork; cast setup registration/outfits/gallery/Voice foundations are delivered; expression artwork and independent generation remain pending. F rules and G interactions remain pending. Beta.21 adds prompt rerolls and combined-length repair; beta.22 addresses the saved-place lookup/reset race (audit A1). Beta.23 delivers the first read-only image library; beta.24 fixes mobile History exits; beta.25 adds cast setup; E3 follow-ups, D2/G/H and remaining I follow-ups are pending. Earlier unchecked steps and dated increments retain their historical context.
 
 ## Selected roadmap additions — 2026-10-13
 
@@ -18,7 +18,7 @@ The user selected **cast setup, tooltip actions, in-world documents, quiet refer
 
 | Selected feature | Roadmap home | Current state | Completion goal |
 |---|---|---|---|
-| Cast setup | E3, building on E2 | Supplied artwork currently requires an existing saved appearance | Register/configure a character before first generation; connect identity, outfits, artwork and existing voice controls |
+| Cast setup | E3, building on E2 | Beta.25 supports registration, aliases, base/outfit guidance, artwork and Voice draft shortcut; expression and independent-placement follow-ups remain | Register/configure a character before first generation; connect identity, outfits, artwork and existing voice controls |
 | Tooltip actions | G, explicit entry from D cards | Information cards exist; action drafts are pending | Ask, Examine, Approach, Use and Custom create editable intentions or verified engine moves |
 | In-world documents | H, new | Proposed | Readable letters, journals, phones and terminals reveal exact established text |
 | Quiet reference quick access | D2, building on D | Current-reference menu exists | Compact searchable, category-filtered access without compulsory inline highlighting or automatic popups |
@@ -436,3 +436,9 @@ Use existing Pictures → Saved portrait art controls for a paged picker, previe
 Fresh read-only review found three issues: status updates stripped overrides; restore could leave another supplied variant preferred; parallel projections could retain an early resolved portrait after reset. Each reproduced with a failing test and passed after shared outgoing-asset decoration, restored-variant preference and whole-projection epoch invalidation. The broad suite then found a final retry notification being dropped after controller completion; the guard now allows a completed matching batch while rejecting aborts, replacements and stale job statuses. Retry/lifecycle checks passed after the fix.
 
 Remaining E2: direct upload/initial character setup and independent asset generation allocation. Normalized source reconciliation, F and G remain pending. This change adds no generation request route, permission, dependency or host image deletion.
+
+## Beta.25 cast setup foundation — 2026-10-13
+
+Pictures → Cast setup and portraits now supports registration before generation, explicit aliases, editable base appearance, seven named outfits, a default outfit and user-verified gallery artwork. Configure voice opens an unsaved override in existing Voice settings. Setup is reversible presentation guidance; learned identity persistence is separate and guards against setup edits during reader or external illustration planning. Gallery selection checks the full saved draft again before assigning artwork. Management refreshes cannot start planning.
+
+Assigned art decorates an existing matching portrait cue in Cast view, including a queued cue. It does not add characters to scenes, create a generated variant or become an image-model reference. Artwork remains bound to the saved look at assignment and requires reassignment after appearance/outfit changes. Expression artwork, independent background/portrait allocation and standalone placement without a planned portrait cue remain E2/E3 follow-ups. D2, G and H remain pending; image-library follow-ups remain I work. See the dated cast setup verification evidence.
