@@ -1,6 +1,6 @@
 # Lumiglyphics reader experience — proposed design
 
-Status: implementation underway on Testing, 2026-10-11. Scenario-subject repair and mobile controls/resume are implemented; the remaining design is planned work. See the implementation plan and dated verification evidence for delivered scope.
+Status: implementation underway on Testing, beta.21, 2026-10-13. Recovery, mobile controls/resume, standalone tooltips, basic cast display, saved place/portrait art and supplied portrait selection are implemented. Full cast setup, tooltip actions and the selected additions below remain planned. See the implementation plan and dated verification evidence for exact delivered scope.
 
 Planning clarification: Rookhaven Academy is a scenario/world/narrator card, and this is the user's primary card type. It has successfully generated images before; investigate intermittent extraction/resolution failures rather than assuming scenario cards cannot work. Support character, scenario/world, narrator, ensemble, and nonhuman cards without requiring manual classification for normal use. The user requests built-in optional tooltips for NPCs, locations, and important objects, with category and detail controls. Supplied preset prompts are inspiration only: no dependency, preset branding, or required markup. See the companion implementation plan for concrete contracts, task order, and acceptance criteria.
 
@@ -9,6 +9,20 @@ Planning clarification: Rookhaven Academy is a scenario/world/narrator card, and
 Improve the mobile visual-novel experience and develop the six selected ideas: persistent locations/cast staging (1), contextual reading companion (4), teachable presentation rules (5), paragraph-timed changes (6), scene interaction tray (7), and mobile reader controls (8).
 
 Defer storyboard editing, reading timeline/bookmarks, and shareable presentation packs. Exact resume remains within the selected mobile-reader idea. Keep photo/image controls in the existing Pictures settings. Lumiglyphics must remain functional without SimTracker, LumiBooks, LumiScript, LumiAgent, or Warp.
+
+### Selected additions — 2026-10-13
+
+The user selected cast setup, tooltip actions, in-world documents, quiet reference quick access and a library for previous-message images. These additions extend the existing scope. They are roadmap commitments to plan/implement in bounded increments, not a claim that the features already exist or an instruction to implement the whole research catalog.
+
+- **Cast setup:** Register an actual character before a saved generated appearance exists. Connect identity/aliases, appearance, outfits, supplied portrait/expression art and existing voice controls. Keep setup in current Pictures/scene/Voice surfaces. Scenario card titles are not cast members by default; setup does not generate pictures or rewrite prose. Independent background/portrait generation remains E2 and shares the existing budget.
+- **Tooltip actions:** Reach Ask, Examine, Approach, Use and Custom from an inline entity card or quiet sheet using one common composer flow. Draft an intention, preserve existing typed text and send through the normal reply gate. Engine moves retain their owner/current-state validation; a click cannot declare success, unlock contents or roll independently.
+- **In-world documents:** Show exact established letters, journals, notices, phone messages and terminal contents as readable themed text. Distinguish exterior from revealed contents; unavailable/private contents remain unavailable. Source and reveal timing apply to every section. Opening a document makes no paid call or external write. Artwork is decoration, not the authoritative lettering.
+- **Quiet reference quick access:** One compact, searchable sheet for relevant known cast/items/places with independent category controls and a menu-only mode. Inline highlighting is optional; no automatic popups or persistent information clutter. Reuse existing facts, suppression, pins and notes while retaining reveal gates and cursor/focus behavior.
+- **Previous-message image library:** Browse verified images already made for this chat, grouped by source message. Default to active-story versions through the reading position; alternate swipes/replaced images are explicit filters. Provide lazy thumbnails, full-image zoom/pan, available safe prompt/model details and source excerpts. Opening/paging does not generate images or change the active turn. Backfill only recoverable historical records and identify missing metadata; do not promise every overwritten/deleted legacy image can be reconstructed.
+
+The image library is a display/history feature, not the deferred reading-bookmark timeline or a second photo-settings system. It remains separate from saved place/cast art reuse. External-source adapters may be added incrementally; standalone versions of these features must not wait for every companion integration.
+
+Recommended order and checkable milestones are maintained in the implementation plan under E3, D2, G, H and I. The earlier research catalog remains a menu of unselected possibilities beyond this approved scope.
 
 ## Observed failure and limits of diagnosis
 

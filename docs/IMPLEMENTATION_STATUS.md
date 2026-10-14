@@ -1,5 +1,9 @@
 # Lumiglyphics implementation status
 
+## Selected roadmap update — 2026-10-13
+
+The user added full cast setup, tooltip actions, in-world documents, quiet reference quick access and a library of images from previous messages to the roadmap. These are planned, not delivered. Cast setup extends E2 as E3; quiet references extend D as D2; tooltip actions use G; documents and the image library are H and I. Existing cast art controls/current tooltips are foundations, not completion of these additions. The library will be chat-scoped, read-only by default, paged and source-aware, with explicit alternate-swipe/replaced-image filters and no paid generation on open. See the current reader-experience plan/spec and feature catalog. This update changes documentation only; the runtime remains beta.21.
+
 ## Latest Testing increment: 0.2.0-beta.21
 
 Image prompts now includes Regenerate prompt. Held previews are rerolled through the configured story-reader text connection and receive a fresh approval ID. Failed rerolls restore the original pending preview; duplicate approval/reroll and cancellation races remain guarded. Completed or failed generated pictures can prepare a regenerated replacement preview with previous usable art retained. Rerolling uses text-generation tokens and does not dispatch an image until approval.

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans for native execution, or superpowers:subagent-driven-development only if the user selects delegation. Implement and review one work package at a time. Steps use checkbox syntax for tracking.
 
-**Goal:** Deliver features 1, 4, 5, 6, 7, and 8 for a mobile-first scenario/world-card reader, with native clickable entity dossiers and optional extension synergy.
+**Goal:** Deliver features 1, 4, 5, 6, 7, and 8 for a mobile-first scenario/world-card reader, plus the selected cast setup, tooltip actions, in-world documents, quiet reference access and previous-message image library.
 
 **Architecture:** Extend the existing planner, per-turn projections, asset scheduler, and shadow-DOM stage. Add a small presentation entity model shared by scene staging, dossiers, rules, and interactions; it is a sourced projection, not a competing story-memory engine. Separate permanent descriptions, paragraph-specific state, and viewpoint-visible knowledge.
 
@@ -10,11 +10,25 @@
 
 **Spec:** ../specs/2026-10-11-reader-experience-design.md, plus the user's scenario-card clarification and supplied inline-dossier examples as inspiration only.
 
-**Status:** Beta.14 on `Testing`, 2026-10-11. A recovery, B mobile reader, prompt/Manga/shared-style feedback and three additional UI themes are delivered. C has its first typed entity/timeline foundation: bounded, sourced snapshots derived from existing validated plans, additive persistence and backward-safe nameplate selection. C remains incomplete: normalized context adapters, optional planner entity proposals and context status/precedence UI are next. D–G remain pending. Earlier unchecked steps remain a design checklist rather than a claim of identical implementation.
+**Status:** Beta.21 on `Testing`, 2026-10-13. A recovery and B mobile reader are delivered. C has typed reveal-scoped snapshots, tracker mappings and optional source-status checks, but normalized external reconciliation remains incomplete. D standalone tooltips/inline links are delivered; tooltip actions remain G work. E has saved place art, basic cast presentation, saved portraits and supplied gallery artwork; full cast setup and independent generation remain pending. F rules and G interactions remain pending. Beta.21 adds prompt rerolls and combined-length repair. The five selected additions below are planned, not implemented. Earlier unchecked steps and dated increments retain their historical context.
+
+## Selected roadmap additions — 2026-10-13
+
+The user selected **cast setup, tooltip actions, in-world documents, quiet reference quick access and a library of images from previous messages**. These extend the existing roadmap; they do not authorize implementing every candidate in the research catalog.
+
+| Selected feature | Roadmap home | Current state | Completion goal |
+|---|---|---|---|
+| Cast setup | E3, building on E2 | Supplied artwork currently requires an existing saved appearance | Register/configure a character before first generation; connect identity, outfits, artwork and existing voice controls |
+| Tooltip actions | G, explicit entry from D cards | Information cards exist; action drafts are pending | Ask, Examine, Approach, Use and Custom create editable intentions or verified engine moves |
+| In-world documents | H, new | Proposed | Readable letters, journals, phones and terminals reveal exact established text |
+| Quiet reference quick access | D2, building on D | Current-reference menu exists | Compact searchable, category-filtered access without compulsory inline highlighting or automatic popups |
+| Previous-message image library | I, new | Saved art controls and per-picture request history exist; no story image browser | Browse this chat's earlier generated pictures, inspect their source and available prompt, and view full images without regeneration |
+
+Recommended delivery order: targeted reliability/timing work → I read-only image library → E3 cast setup → D2 quiet references → G tooltip actions → H documents. E2 independent generation remains a related pending asset milestone; it does not block a read-only image library. Previously approved F rules remain on the roadmap. Other catalog candidates and the previously deferred storyboard editor/bookmark timeline/presentation packs retain their earlier status.
 
 ## Global constraints
 
-- Scope: persistent locations/cast (1), clickable companion (4), presentation rules (5), timed changes (6), interactions (7), mobile reader (8). Storyboard editor, bookmark timeline, and presentation packs remain deferred.
+- Scope: persistent locations/cast (1), clickable companion (4), presentation rules (5), timed changes (6), interactions (7), mobile reader (8), and the five explicitly selected additions above. Storyboard editor, bookmark timeline, and presentation packs remain deferred.
 - Scenario card title is not automatically a drawable person, location, or dialogue speaker. Preserve support for ordinary character cards and nonhuman characters.
 - Canonical chat remains unchanged. All markup normalization, entity links, and presentation changes are extension-owned projections.
 - Preserve the current image pipeline, held-request snapshots, provider compatibility, review toggle, dynamic-template toggle, and budget: default 4, range 0–12, 0 unlimited. All generated stage assets share that budget.
@@ -206,6 +220,32 @@ Automatic planned jobs consume a generation slot when admitted, not when they su
 - [ ] Verify review controls for each asset role and transactional compatible reuse. Changing templates/source settings cannot corrupt old snapshots or regenerate unrelated cast.
 - [ ] Run image/cache/reference tests and mobile browser fixtures with delayed decoding, failed portrait/background, chat switch, and close. Verify new jobs never exceed configured budget. Commit.
 
+### E3 — complete cast setup (selected 2026-10-13)
+
+**Outcome:** Configure an actual character before a generated portrait exists. A scenario/narrator card remains a wrapper, not an automatically registered person.
+
+**Boundaries:** Extend the existing character registry, appearance and cast-art systems. Use Pictures/scene cast controls and the existing Voice configuration; no separate photo-settings subsystem. Preserve supplied-art display overrides as distinct from provider image references.
+
+- [ ] Add a cast manager with stable character identity, display name/explicit aliases, editable appearance, outfit variants and supplied gallery artwork. Character registration must not require an earlier generated-image variant.
+- [ ] Connect existing voice selection/pronunciation controls without inventing a second speech engine. Expression artwork is an optional variant; absent art uses the current portrait/placeholder and never generates automatically merely because an expression changes.
+- [ ] Make selection, replacement and reset scope explicit. Respect existing per-user/chat storage and current library limits; capacity errors must not silently discard artwork or identity. Exact/manual identity wins over uncertain external name matching.
+- [ ] Ensure the registered cast is available to the existing scene planner/stage, while drawable subject, speaking character and physical presence remain distinct. Setup alone must not create image requests or add people to canonical prose.
+- [ ] Validate a fresh scenario chat with two actual NPCs, a nonhuman character, outfit changes, missing/deleted supplied art, same-named entities, disabled companions and chat switches. Test voice and picture configuration together on mobile.
+
+Independent background/portrait admission stays in E2 and shares the existing per-reply image budget. Cast setup can ship first; a roster does not imply automatic generation of every character.
+
+### D2 — quiet reference quick access (selected 2026-10-13)
+
+**Outcome:** Open relevant known NPC/place/item information from one compact reference sheet, even when inline highlights are turned off.
+
+**Boundaries:** Build on `StageDossiers`, existing tooltip preferences and reveal-scoped entities. The quiet sheet and inline links share facts, suppression/pinning/notes and category gates; no competing Codex or new extraction call on open.
+
+- [ ] Provide a references entry with an accessible icon/touch target, search and NPC/location/item filters. Do not open cards automatically, show constant notifications or add a large toolbar label.
+- [ ] Offer a menu-only display mode under the existing tooltip controls. Preserve the tooltip master switch and independent categories; turning off inline links must not unintentionally remove quick access when menu-only mode is selected.
+- [ ] Prioritize current scene references and pinned known entries. Keep absent/elsewhere people clearly distinguished; hidden, suppressed, private and not-yet-revealed facts stay excluded. A pin cannot override a reveal gate.
+- [ ] Preserve cursor, existing composer draft, focus return and auto-advance pause while the sheet is open. Changing chat/cursor/source invalidates stale selections.
+- [ ] Verify long names, ambiguous aliases, empty/search-no-result states, large text, all themes, mobile keyboard, disabled sources and zero model/image calls when browsing.
+
 ## Work package F — teachable presentation rules (5)
 
 **Outcome:** Users can make repeatable presentation preferences without writing a large prompt.
@@ -228,6 +268,8 @@ Define `RuleCondition` as tagged variants `{kind:'dialogue'}`, `{kind:'location_
 
 **Outcome:** Important people/places/objects provide editable action ideas without bypassing the story or a rules engine.
 
+**Selected clarification, 2026-10-13:** Make these **tooltip actions** reachable directly from the inline entity card and the D2 quick-reference sheet. Reuse one action/composer flow; do not implement a second independent interaction tray for each entry point. Keep actions optional within the existing tooltip controls.
+
 **Files:** Create `src/shared/scene-interactions.ts`, `src/frontend/stage/interaction-tray.ts` and tests. Modify dossier card/frontend controller/game bridge/protocol validation and add `scripts/test-scene-interactions-browser.ts`.
 
 **Interfaces:** `InteractionDraft = {entityId:string,verb:'ask'|'examine'|'approach'|'use'|'custom',text:string,origin:'local'|'warp',key:TurnKey}`; `buildInteractionDraft(entity:ReaderEntity,verb:InteractionDraft['verb'],scope:TurnKey):InteractionDraft`. Local drafts are grammatical intentions, not claims of success. Warp moves retain provider IDs/odds and execute through the existing pick contract rather than being reinterpreted as local mechanics.
@@ -241,9 +283,37 @@ Show Ask for known NPCs, Examine for known objects/places, and Custom. Show Use 
 - [ ] Integrate Warp moves without duplicate local choices, invented odds, automatic rolls, or writes to Warp state. Disabled/disconnected Warp falls back to ordinary prose drafts.
 - [ ] Browser-check mobile keyboard, focus, reopening dossier, click races, submission error, and CYOA/standard modes. Run game bridge/controller regression tests. Commit.
 
+## Work package H — in-world documents (selected 2026-10-13)
+
+**Outcome:** Important letters, notes, journals, notices, phone conversations and terminal readouts can open as readable themed objects with exact text.
+
+**Implementation boundaries:** Proposed focused units: `src/shared/story-documents.ts`, `src/backend/runtime/document-projection.ts`, `src/frontend/stage/document-reader.ts` and their tests. Integrate with the existing planner's optional enrichment, saved turn projection, entity references and G action drafts. Resolve final interfaces against the host/source contracts before implementation.
+
+- [ ] Define a sourced document record with stable ID, owning chat/turn/revision, title/type, exact text or sections, origin, visibility and reveal anchor. Distinguish observable exterior, revealed contents and unrevealed contents. Personal annotations remain separate from established story text.
+- [ ] Extract only literal established contents from resolved prose, or explicitly classified supported public source data. Validate story offsets/excerpts; unsupported or unclassified Codex text must not become public document contents. A missing body stays missing instead of inviting an invented letter.
+- [ ] Render text directly in a themed reader with readable font sizing, selection/copy, scroll, focus return and mobile safe areas. Artwork may decorate the surface, but generated image lettering is not the authoritative document text. Treat contents as text, never executable markup/scripts or prompt instructions.
+- [ ] Link a known document from its item reference/quiet sheet. Opening the exterior does not unlock hidden text. Offer an Examine/Read intention through G when access has not been established; clicking cannot assert that a seal was broken, a device unlocked or a password succeeded.
+- [ ] Preserve incremental revelation and earlier snapshots when reading backward. Opening a document makes no model/image call and does not write chat, inventory or another extension's state.
+- [ ] Test a sealed letter, partially revealed journal, phone conversation and terminal text; include malicious markup, absent contents, later discovery, old swipes, source removal, Unicode/long text and mobile reader/dossier transitions.
+
+## Work package I — previous-message image library (selected 2026-10-13)
+
+**Outcome:** A mobile-friendly library of images already made for this chat, including earlier messages. This is a viewer/history surface, distinct from saved place/cast art reuse controls and prompt-attempt history.
+
+**Implementation boundaries:** Proposed focused units: `src/shared/image-library.ts`, `src/backend/runtime/image-library.ts`, `src/frontend/image-library/library.ts`, and unit/browser tests. Integrate asset completion/record persistence and the existing user-scoped host image API. Inspect available historical gallery metadata before promising recovery of every old image.
+
+- [ ] Define chat/message/swipe/fingerprint/revision provenance for each image, including job/cue, paragraph, image ID, role/template when known, creation state and whether it is current or replaced. Keep metadata separate from image bytes and reference credentials.
+- [ ] Build a bounded, paged index from saved turn records and verified host image records. Backfill earlier saved replies on demand in bounded batches. Capture future replacements before their old image references are overwritten. Report legacy metadata gaps rather than fabricating prompts, subjects or source messages.
+- [ ] Default to the current story's active message versions through the reading position. Offer explicit filters for alternate swipes/replaced images and all active-story images. Never mix another chat's images or stale branch metadata into the default list. Deduplicate repeated image IDs while retaining their source uses.
+- [ ] Show lazy native thumbnails grouped by message, with newest/oldest sort, template/role filters and source excerpt when available. Start with 24 entries per page and bounded backend responses; do not load full-size image bytes or every turn into memory on opening.
+- [ ] Open a full-image viewer with whole-picture fit, zoom/pan and return-to-grid. Show available saved prompt/model/details using existing safe review records; explicitly identify missing legacy requests. View source text locally, and only offer host message navigation if the host supports it.
+- [ ] Keep browsing/copying/viewing free of model/image calls. V1 does not regenerate old turns or alter the active reading state. Any later reuse/replacement action must be an explicit, scoped workflow through existing review/budget controls, not a click side effect.
+- [ ] Revalidate image access under the originating user and resolve fresh host URLs. A deleted/unavailable image gets a truthful placeholder; removing a library entry must not silently delete a host image. Handle old/unsupported index versions and storage quota errors without clearing history.
+- [ ] Verify earlier replies after restart, supplied versus generated artwork, duplicate reuse, manual replacements, edited/deleted messages, alternate swipes, branch changes, missing images/prompts, cross-user/chat requests, rapid page changes and mobile orientation. Assert zero paid calls when opening or paging the library.
+
 ## Delivery, verification, and release gates
 
-Order: A then B for the first useful release; C then D for safe dossiers/timed state; E for cast/location presentation; F and G afterward. Each package is independently reviewed and testable. Do not merge an incomplete downstream feature behind an apparently functioning control.
+Original foundation order: A then B; C then D; E; F and G. For remaining work, use the selected 2026-10-13 sequence above, with source/reveal prerequisites completed before dependent features. Each package is independently reviewed and testable. Do not merge an incomplete downstream feature behind an apparently functioning control.
 
 For each package run focused failing/passing tests as described, then `bun run verify` and `bun run verify:bundle`. Run browser checks appropriate to changed behavior, including existing `test:reading`, `test:settings`, `test:image-review`, `test:image-templates`, and speech checks where touched. Add named browser scripts to package.json in their owning tasks. Do not claim live provider tests from fixture success.
 

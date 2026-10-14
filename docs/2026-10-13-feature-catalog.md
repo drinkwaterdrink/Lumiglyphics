@@ -1,6 +1,10 @@
 # Potential feature, update and mechanics catalog
 
-Based on the 13 October audit of Testing beta.20 and research into Voyage, NovelAI, AI Dungeon, Chinese character/story apps, SillyTavern tools and the user's companion extensions. These are candidates, not implementation commitments. Touch gestures were not the intended request and are not the focus of this catalog.
+Based on the 13 October audit of Testing beta.20 and research into Voyage, NovelAI, AI Dungeon, Chinese character/story apps, SillyTavern tools and the user's companion extensions. Unselected entries remain candidates. Touch gestures were not the intended request and are not the focus of this catalog.
+
+## Selected for the roadmap — 2026-10-13
+
+The user selected **2 cast setup, 5 tooltip actions, 7 in-world documents, 20 quiet reference quick access**, and newly requested **21 previous-message image library**. These are planned in the [reader roadmap](superpowers/plans/2026-10-11-reader-experience.md) as E3, G, H, D2 and I respectively. Selection does not mean implementation is complete. Other entries retain their existing proposed or previously approved status.
 
 ## Recommended product identity
 
@@ -45,6 +49,7 @@ These form one cohesive next phase. Source timing should precede external dossie
 | 18. Session request allowance | Optional limit for new image requests and optional text rewrites; show cache savings and held work | Provider usage only if actually exposed | Medium / practical control |
 | 19. In-context correction preview | Compare original and proposed prompts; keep useful edits and revert a wording change | LumiAgent proposals through a future reviewed endpoint | Medium / practical control |
 | 20. Quiet reference quick access | Relevant known cast/items/place in a compact sheet with search and category filters | LumiBooks public references when available | Low–medium / usability |
+| 21. Previous-message image library | Browse earlier story images by message, inspect available prompts and zoom full pictures | Native host gallery and saved turn metadata; no companion required | Medium / selected |
 
 ## How the strongest new ideas would work
 
@@ -100,6 +105,8 @@ SimTracker supplies supported visible appearance/state; LumiBooks supplies recor
 Every imported fact needs user/chat/source scope and visibility. Latest external state must not rewrite an old paragraph. A rendered panel is not automatically a reliable historical API, and detecting an extension does not imply its private data is safe to import.
 
 ## Suggested sequence
+
+The selected roadmap now prioritizes a read-only image library, cast setup, quiet reference access, tooltip actions and documents after targeted reliability/timing checks. These standalone features do not require completing every external adapter. The broader suggestions below remain optional beyond the selected scope.
 
 1. Fix the audit's place-art race and address tracker format/presentation capacity limits.
 2. Finish source timing, cast setup and independent scene assets.
