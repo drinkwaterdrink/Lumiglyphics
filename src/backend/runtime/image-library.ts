@@ -68,7 +68,16 @@ export async function readImageLibraryPage(api:SpindleAPI,input:ImageLibraryRequ
  const anchor=parseRecord(await api.userStorage.getJson(anchorPath,{fallback:null,userId:user}));
  const matchesMessage=(record:StoredTurnRecord,message:typeof messages[number])=>String(record.plan.key.swipeId??0)===String(message.swipe_id??0)&&(record.source?.rawFingerprint??record.plan.key.sourceFingerprint)===fingerprintForMessage(message);
  if(!anchor||anchor.plan.key.chatId!==request.chatId||anchor.plan.key.assistantMessageId!==request.anchor.messageId||anchor.plan.key.sourceFingerprint!==request.anchor.sourceFingerprint||!matchesMessage(anchor,messages[anchorIndex]!))throw new Error('The reading source changed. Refresh the library.');
- const listed=await api.userStorage.list(prefix,user);
+ // The host lists paths relative to the requested directory (including native
+ // separators on Windows). Older adapters may return storage-root-relative paths.
+ const listed=(await api.userStorage.list(prefix,user)).flatMap(entry=>{
+  if(typeof entry!=='string')return [];
+  const relative=entry.replaceAll('\\','/');
+  const path=relative.startsWith(prefix)?relative:relative.startsWith('turns/')?'':prefix+relative;
+  const tail=path.slice(prefix.length);
+  if(!path.startsWith(prefix)||path.length>1200||! /^[^/]+\/[^/]+\.json$/.test(tail)||tail.split('/').some(part=>part==='.'||part==='..')||/[\r\n\0:]/.test(tail))return [];
+  return [path];
+ });
  const listedSet=new Set(listed),byDirectory=new Map<string,string[]>();
  for(const path of listed){if(!path.startsWith(prefix)||path.length>1200)continue;const slash=path.lastIndexOf('/'),directory=path.slice(0,slash+1);if(!/^[^/]+\.json$/.test(path.slice(slash+1)))continue;const paths=byDirectory.get(directory)??[];paths.push(path);byDirectory.set(directory,paths);}
  const eligible=request.range==='read'?messages.slice(0,anchorIndex+1):messages;

@@ -139,3 +139,19 @@ test('range and optional role/template filters cannot expose later paragraphs by
  expect((await readImageLibraryPage(f.api,request({role:'portrait'}),'u')).entries).toHaveLength(0);
  expect((await readImageLibraryPage(f.api,request({templateQuery:'not-present'}),'u')).entries).toHaveLength(0);
 });
+
+test('host folder-relative listings discover saved reply images on Unix and Windows',async()=>{
+ for(const separator of ['/','\\']){
+  const f=fixture();await saveTurnRecord(f.api,turnPath('chat','m1',0),record(),'u');
+  f.api.userStorage.list=async(prefix,user)=>[...f.data.keys()].filter(p=>p.startsWith(`${user}:${prefix}`)).map(p=>p.slice(`${user}:${prefix}`.length).replaceAll('/',separator));
+  const page=await readImageLibraryPage(f.api,request(),'u');
+  expect(page.entries).toHaveLength(1);expect(page.entries[0]!.imageId).toBe('image');expect(page.entries[0]!.available).toBe(true);
+ }
+});
+
+test('relative enumeration cannot traverse storage or borrow another chat directory',async()=>{
+ const f=fixture();await saveTurnRecord(f.api,turnPath('chat','m1',0),record(),'u');
+ f.api.userStorage.list=async()=>['m1/0.json','../0.json','m1/../0.json','/outside/0.json','turns/other/m1/0.json','C:\\outside\\0.json'];
+ const page=await readImageLibraryPage(f.api,request(),'u');expect(page.entries).toHaveLength(1);
+ expect(page.entries[0]!.key.chatId).toBe('chat');
+});
