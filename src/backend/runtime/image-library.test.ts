@@ -155,3 +155,31 @@ test('relative enumeration cannot traverse storage or borrow another chat direct
  const page=await readImageLibraryPage(f.api,request(),'u');expect(page.entries).toHaveLength(1);
  expect(page.entries[0]!.key.chatId).toBe('chat');
 });
+
+test('Story history includes text-only replies and associates images with their exact reply',async()=>{
+ const f=fixture();await saveTurnRecord(f.api,turnPath('chat','m1',0),record(),'u');
+ const empty=record('m2');empty.jobs=[];await saveTurnRecord(f.api,turnPath('chat','m2',0),empty,'u');
+ const page=await readImageLibraryPage(f.api,request({mode:'story'}),'u') as any;
+ expect(page.replies.map((r:any)=>r.key.assistantMessageId)).toEqual(['m29','m2','m1']);
+ expect(page.replies.at(-1).paragraphs[0].text).toBe('A library.');
+ expect(page.entries[0]!.key.assistantMessageId).toBe('m1');
+ const anchor=record('m29');anchor.plan.paragraphs.push({index:1,sourceIndex:1,text:'Not read yet.'});await saveTurnRecord(f.api,turnPath('chat','m29',0),anchor,'u');
+ const read=await readImageLibraryPage(f.api,request({mode:'story'}),'u') as any;
+ expect(read.replies[0].paragraphs).toHaveLength(1);
+ expect(JSON.stringify(read.replies)).not.toContain('Not read yet.');
+});
+
+test('Story reply previews are bounded and alternate swipes are explicitly labelled',async()=>{
+ const f=fixture();const large=record('m1');large.plan.paragraphs[0]!.text='x'.repeat(15000);await saveTurnRecord(f.api,turnPath('chat','m1',0),large,'u');
+ await saveTurnRecord(f.api,turnPath('chat','m2',1),record('m2','alternate',1),'u');
+ const page=await readImageLibraryPage(f.api,request({mode:'story',versions:'all'}),'u');
+ const reply=page.replies.find(r=>r.key.assistantMessageId==='m1')!;expect(reply.paragraphs[0]!.text.length).toBe(12000);expect(reply.truncated).toBe(true);
+ expect(page.replies.find(r=>r.key.assistantMessageId==='m2')!.versionLabel).toBe('alternate');
+});
+
+test('Story history recovers valid images and text when a saved speaker is malformed',async()=>{
+ for(const speaker of [undefined,42]){
+  const f=fixture();const saved=record() as any;saved.speaker=speaker;f.data.set(`u:${turnPath('chat','m1',0)}`,saved);
+  const page=await readImageLibraryPage(f.api,request({mode:'story'}),'u');expect(page.entries).toHaveLength(1);expect(page.replies.at(-1)!.speaker).toBe('');expect(page.replies.at(-1)!.paragraphs[0]!.text).toBe('A library.');
+ }
+});

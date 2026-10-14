@@ -414,6 +414,7 @@ const errorMessage = (error: unknown): string =>
 
 export class VnStage {
   readonly panelMount: HTMLElement;
+  historyOpener?: (opener: HTMLElement) => void;
   private state: VnStageState;
   private readonly callbacks: VnStageCallbacks;
   private dialogueSheet: DialogueSheet | null = null;
@@ -747,6 +748,7 @@ export class VnStage {
 
   openBacklog(): void {
     if (this.destroyed) return;
+    if(this.historyOpener){this.historyOpener(this.logButton);return;}
     this.isBacklogOpen = true;
     this.panelMount.dataset.vnHistoryOpen='true';
     this.backlogModal.hidden = false;

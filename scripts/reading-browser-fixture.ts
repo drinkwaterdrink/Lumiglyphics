@@ -1,3 +1,4 @@
+import {ImageLibrary} from "../src/frontend/image-library/library.js";
 import { VnStage } from "../src/frontend/stage/vn-stage.js";
 import type { VnTurnInput } from "../src/frontend/store/index.js";
 import { PanelDock } from "../src/frontend/stage/panel-dock.js";
@@ -45,3 +46,9 @@ stage.loadTurn(turn);
 // The host mounts the pinned-panel dock (with its "Panels" launcher) on the stage, as in src/frontend/host/controller.ts.
 const panels = new PanelDock(stage.panelMount);
 Object.assign(window, { readingFixture: { stage, turn, counters, panels } });
+
+if(params.has('unified')){
+ const key={chatId:'chat',assistantMessageId:'m1',swipeId:0,sourceFingerprint:'12345678',revision:0};
+ const library=new ImageLibrary(stage.panelMount,request=>{if(request.type==='vn_image_library')library.receive('chat',request.requestId,{entries:[],replies:[{key,messageNumber:1,speaker:'Narrator',paragraphs:[{index:0,text:turn.paragraphs[0]!.text,speaker:'Speaker 0'}],truncated:false}],nextCursor:null,notice:''});},open=>{if(open){stage.panelMount.dataset.vnHistoryOpen='true';stage.holdAutoPlay();}else delete stage.panelMount.dataset.vnHistoryOpen;});
+ library.setContext({chatId:'chat',messageId:'m1',swipeId:0,sourceFingerprint:'12345678',revision:0} as any,0);library.useHistoryEntry();stage.historyOpener=opener=>library.open('story',opener);
+}

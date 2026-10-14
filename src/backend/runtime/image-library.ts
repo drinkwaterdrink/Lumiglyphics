@@ -51,7 +51,7 @@ function parseRecord(raw:unknown):StoredTurnRecord|null{
  const previousImages:NonNullable<StoredTurnRecord['previousImages']>={};
  if(r.previousImages&&typeof r.previousImages==='object')for(const [id,value] of Object.entries(r.previousImages))if(value&&typeof value.imageId==='string'&&value.imageId.length<=256)previousImages[id]={imageId:value.imageId,imageUrl:''};
  const source=r.source?.version===2&&typeof r.source.rawFingerprint==='string'?r.source:undefined;
- const result={...r,previousImages,updatedAt:typeof r.updatedAt==='string'?r.updatedAt:plan.data.createdAt,plan:plan.data,jobs:r.jobs.flatMap(j=>{const parsed=AssetJobSchema.safeParse(j);return parsed.success?[parsed.data]:[];}),imageRequests:safeImageHistory(r.imageRequests??[])};
+ const result={...r,speaker:typeof r.speaker==='string'?r.speaker:'',previousImages,updatedAt:typeof r.updatedAt==='string'?r.updatedAt:plan.data.createdAt,plan:plan.data,jobs:r.jobs.flatMap(j=>{const parsed=AssetJobSchema.safeParse(j);return parsed.success?[parsed.data]:[];}),imageRequests:safeImageHistory(r.imageRequests??[])};
  delete result.source;if(source)result.source=source;return result;
 }
 /** Read-only pagination: at most 24 turn files and 24 verified images per request. */
@@ -88,6 +88,7 @@ export async function readImageLibraryPage(api:SpindleAPI,input:ImageLibraryRequ
   return paths.map(path=>({path,message,index}));
  }).sort((a,b)=>(request.order==='newest'?b.index-a.index:a.index-b.index)||a.path.localeCompare(b.path)).slice(0,10000);
  const [start,skip]=(request.cursor??'0:0').split(':').map(Number);let file=start!,entrySkip=skip!,scanned=0;
+ const replies:ImageLibraryPage['replies']=[];
  const entries:LibraryImageView[]=[];const notices=new Set<string>();
  if(listed.length>10000)notices.add('The scan is limited to 10,000 saved turn files.');
  while(file<sources.length&&entries.length<24&&scanned<24){
@@ -114,6 +115,12 @@ export async function readImageLibraryPage(api:SpindleAPI,input:ImageLibraryRequ
    if(request.range==='read'&&source.message.id===request.anchor.messageId&&(e.paragraphIndex>request.anchor.paragraphIndex|| (sameVersion&&e.key.sourceFingerprint!==request.anchor.sourceFingerprint)))return [];
    return [{...e,messageNumber:source.index+1,versionLabel:(sameVersion?(current?'current':'replaced'):'alternate') as LibraryImageView['versionLabel']}];
   }).sort((a,b)=>request.order==='newest'?b.createdAt.localeCompare(a.createdAt):a.createdAt.localeCompare(b.createdAt));
+  if(request.mode==='story'&&(active||request.versions==='all')&&(!request.templateQuery&&request.role==='all'||rows.length)){
+   const visible=record.plan.paragraphs.filter(p=>request.range!=='read'||source.message.id!==request.anchor.messageId||p.index<=request.anchor.paragraphIndex);
+   let budget=12000;const paragraphs:ImageLibraryPage['replies'][number]['paragraphs']=[];let truncated=false;
+   for(const paragraph of visible){if(paragraphs.length>=256||budget<=0){truncated=true;break;}const text=paragraph.text.slice(0,budget);if(text.length<paragraph.text.length)truncated=true;budget-=text.length;paragraphs.push({index:paragraph.index,text,speaker:(record.plan.paragraphSpeakers[paragraph.index]??record.speaker).slice(0,256)});}
+   replies.push({versionLabel:active?'current':'alternate',key:record.plan.key,messageNumber:source.index+1,speaker:record.speaker.slice(0,256),paragraphs,truncated});
+  }
   let i=entrySkip;
   for(;i<rows.length&&entries.length<24;i++){
    const row=rows[i]!;let thumbnailUrl:string|undefined;
@@ -126,5 +133,5 @@ export async function readImageLibraryPage(api:SpindleAPI,input:ImageLibraryRequ
  const currentMessages=await readMessages();
  const currentAnchor=parseRecord(await api.userStorage.getJson(anchorPath,{fallback:null,userId:user}));
  if(signature!==JSON.stringify(currentMessages.map(m=>[m.id,m.swipe_id??0,fingerprintForMessage(m)]))||!currentAnchor||!sameKey(anchor.plan.key,currentAnchor.plan.key))throw new Error('The story changed while loading. Refresh the library.');
- return ImageLibraryPageSchema.parse({entries,nextCursor:file<sources.length?`${file}:${entrySkip}`:null,notice:[...notices].join(' ')});
+ return ImageLibraryPageSchema.parse({entries,replies,nextCursor:file<sources.length?`${file}:${entrySkip}`:null,notice:[...notices].join(' ')});
 }

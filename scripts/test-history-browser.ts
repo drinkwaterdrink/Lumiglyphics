@@ -24,5 +24,12 @@ try{
   assert.equal(await page.locator('[data-image-studio]').isVisible(),true,'floating controls return');
   await page.close();
  }
+ const unified=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});await unified.goto(`http://127.0.0.1:${server.port}/?unified=1`);
+ const before=await unified.locator('[data-vn-progress]').textContent();await unified.getByRole('button',{name:'Open history',exact:true}).tap();
+ assert.equal(await unified.locator('[data-image-library] section').isVisible(),true,'real reader History opens unified window');
+ assert.equal(await unified.locator('[data-vn-backlog]').isVisible(),false,'legacy backlog does not open underneath');
+ await unified.getByText('Read reply',{exact:true}).tap();assert.ok(await unified.locator('[data-image-library]').getByText('Speaker 0',{exact:true}).isVisible());
+ await unified.getByRole('button',{name:'Back to reader',exact:true}).tap();
+ assert.equal(await unified.locator('[data-vn-progress]').textContent(),before);assert.equal(await unified.locator('[data-vn-control="log"]').getAttribute('aria-expanded'),'false');await unified.close();
  console.log('History exits remain visible and tappable across mobile sizes and themes.');
 }finally{await browser.close();server.stop(true);}

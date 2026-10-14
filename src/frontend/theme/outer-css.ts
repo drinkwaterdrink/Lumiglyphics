@@ -154,7 +154,7 @@ ${ATELIER_SHELL_CSS}
 /* History owns its navigation area; temporarily hide overlapping floating tools. */
 [data-vn-shell][data-vn-history-open="true"] > [data-vn-panel-layer],
 [data-vn-shell][data-vn-history-open="true"] > [data-image-studio],
-[data-vn-shell][data-vn-history-open="true"] > [data-image-library] {
+[data-vn-shell][data-vn-history-open="true"] > [data-image-library]:not([data-open="true"]) {
   visibility: hidden;
 }
 

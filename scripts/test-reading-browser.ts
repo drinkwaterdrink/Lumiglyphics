@@ -188,7 +188,8 @@ try {
     assert.ok(!overlaps(c!, text!), `${preset}: phone toolbar does not overlap the dialogue text`);
     for (const name of ["log", "auto", "skip"]) {
       const box = await p.locator(`[data-vn-control="${name}"]`).boundingBox();
-      assert.ok(box && box.height >= 44, `${preset}: ${name} is 44px tall on phones (got ${box?.height}, coarse pointer: ${pointer})`);
+      // Chromium can report a 44px CSS target as 43.99997 after fractional scaling.
+      assert.ok(box && box.height >= 43.99, `${preset}: ${name} is 44px tall on phones (got ${box?.height}, coarse pointer: ${pointer})`);
     }
     await p.screenshot({ path: `.cache/ux-redesign/reading-mobile-${preset}.png` });
     await ctx.close();

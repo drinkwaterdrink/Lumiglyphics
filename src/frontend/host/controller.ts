@@ -609,8 +609,11 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const panels = new PanelDock(stage.panelMount);
   const imageLibrary=new ImageLibrary(stage.panelMount,request=>ctx.sendToBackend(request),open=>{
     imageLibraryOpen=open;
+    if(open)stage.panelMount.dataset.vnHistoryOpen='true';else delete stage.panelMount.dataset.vnHistoryOpen;
     if(open){stage.toggleSkip(false);stage.holdAutoPlay();}else if(active)stage.checkAutoPlay();
   });
+  imageLibrary.useHistoryEntry();
+  stage.historyOpener=opener=>imageLibrary.open('story',opener);
   const imageStudio = new ImageStudio(stage.panelMount, (request) => ctx.sendToBackend(request), (enabled) => {
     ctx.sendToBackend({ type: "vn_set_config", patch: { reviewImages: enabled }, chatId: chatId() ?? "" });
   });
