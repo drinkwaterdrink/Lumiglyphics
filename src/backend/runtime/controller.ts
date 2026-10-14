@@ -42,6 +42,7 @@ import { handleReferenceImageResponse } from "./reference-source.js";
 import { CACHE_JOB_PROVIDER, createAssetJobs, prepareAssetJobs, generateAssets, resolveCacheCues, retainPlanEpisodes } from "./images.js";
 import { SceneImageCache, sceneImageScope } from "../core/scene-image-cache.js";
 import { fingerprintForMessage, gameHintsForTurn, planTurn } from "./planner.js";
+import {readImageLibraryPage} from './image-library.js';
 import {
   isUnselectedGreeting,
   needsResolution,
@@ -1436,6 +1437,11 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
   if (request.type === "vn_external_image_cancel") { externalImages(spindle).cancel(request.request, userId); return; }
   dbg(spindle, userId, `frontend request ${request.type}`);
   switch (request.type) {
+    case 'vn_image_library': {
+      const page=await readImageLibraryPage(spindle,request,userId);
+      spindle.sendToFrontend({type:'vn_image_library',chatId:request.chatId,requestId:request.requestId,page},userId);
+      return;
+    }
     case 'vn_replan_turn':
       await replanCurrentTurn(spindle,request,userId);
       return;

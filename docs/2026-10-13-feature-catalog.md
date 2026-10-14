@@ -49,7 +49,7 @@ These form one cohesive next phase. Source timing should precede external dossie
 | 18. Session request allowance | Optional limit for new image requests and optional text rewrites; show cache savings and held work | Provider usage only if actually exposed | Medium / practical control |
 | 19. In-context correction preview | Compare original and proposed prompts; keep useful edits and revert a wording change | LumiAgent proposals through a future reviewed endpoint | Medium / practical control |
 | 20. Quiet reference quick access | Relevant known cast/items/place in a compact sheet with search and category filters | LumiBooks public references when available | Low–medium / usability |
-| 21. Previous-message image library | Browse earlier story images by message, inspect available prompts and zoom full pictures | Native host gallery and saved turn metadata; no companion required | Medium / selected |
+| 21. Previous-message image library | Browse earlier story images by message, inspect available prompts and zoom full pictures | Native host gallery and saved turn metadata; no companion required | Medium / first viewer delivered in beta.23 |
 
 ## How the strongest new ideas would work
 

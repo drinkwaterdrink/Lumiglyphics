@@ -1,0 +1,9 @@
+import {ImageLibrary} from '../src/frontend/image-library/library.js';
+const mount=document.createElement('div');mount.style.cssText='position:fixed;inset:0;--vn-shell-bg:#141c2a;--vn-shell-text:#f4f1e9;--vn-shell-muted:#b4c1d4;--vn-shell-border:#53647c;--vn-shell-accent:#b6d9ff;';document.body.append(mount);
+const exit=document.createElement('button');exit.textContent='Back to chat';exit.style.cssText='position:fixed;top:8px;right:8px;z-index:60;height:44px';document.body.append(exit);
+const actions:any[]=[];let held=false;
+const library=new ImageLibrary(mount,r=>actions.push(r),open=>{held=open;});
+library.setContext({chatId:'chat',messageId:'m1',swipeId:0,sourceFingerprint:'12345678',revision:0} as any,0);
+const image='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="700"><rect width="400" height="700" fill="#273f58"/><circle cx="200" cy="280" r="100" fill="#e6bd62"/></svg>');
+const page={entries:[{key:{chatId:'chat',assistantMessageId:'m1',swipeId:0,sourceFingerprint:'12345678',revision:0},jobId:'j1',imageId:'image1',paragraphIndex:0,createdAt:'2026-10-13T12:00:00.000Z',excerpt:'A quiet reading room.',role:'scene',template:'Manga page',prompt:'<script>not executable</script> A detailed page.',negativePrompt:'blur',model:'model',provider:'provider',available:true,thumbnailUrl:'/api/v1/images/image1?size=sm',imageUrl:'/api/v1/images/image1',versionLabel:'current'},{key:{chatId:'chat',assistantMessageId:'m0',swipeId:0,sourceFingerprint:'12345678',revision:0},jobId:'j2',imageId:'missing',paragraphIndex:0,createdAt:'2026-10-13T11:00:00.000Z',excerpt:'Earlier story.',role:'scene',available:false,versionLabel:'replaced'}],nextCursor:'1:0',notice:''};
+(window as any).imageLibraryFixture={library,actions,page,get held(){return held;},image};

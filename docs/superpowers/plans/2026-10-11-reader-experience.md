@@ -10,7 +10,7 @@
 
 **Spec:** ../specs/2026-10-11-reader-experience-design.md, plus the user's scenario-card clarification and supplied inline-dossier examples as inspiration only.
 
-**Status:** Beta.22 on `Testing`, 2026-10-13. A recovery and B mobile reader are delivered. C has typed reveal-scoped snapshots, tracker mappings and optional source-status checks, but normalized external reconciliation remains incomplete. D standalone tooltips/inline links are delivered; tooltip actions remain G work. E has saved place art, basic cast presentation, saved portraits and supplied gallery artwork; full cast setup and independent generation remain pending. F rules and G interactions remain pending. Beta.21 adds prompt rerolls and combined-length repair; beta.22 addresses the saved-place lookup/reset race (audit A1). The five selected additions below are planned, not implemented. Earlier unchecked steps and dated increments retain their historical context.
+**Status:** Beta.23 on `Testing`, 2026-10-13. A recovery and B mobile reader are delivered. C has typed reveal-scoped snapshots, tracker mappings and optional source-status checks, but normalized external reconciliation remains incomplete. D standalone tooltips/inline links are delivered; tooltip actions remain G work. E has saved place art, basic cast presentation, saved portraits and supplied gallery artwork; full cast setup and independent generation remain pending. F rules and G interactions remain pending. Beta.21 adds prompt rerolls and combined-length repair; beta.22 addresses the saved-place lookup/reset race (audit A1). Beta.23 delivers the first read-only image library; E3/D2/G/H and remaining I follow-ups are pending. Earlier unchecked steps and dated increments retain their historical context.
 
 ## Selected roadmap additions — 2026-10-13
 
@@ -22,7 +22,7 @@ The user selected **cast setup, tooltip actions, in-world documents, quiet refer
 | Tooltip actions | G, explicit entry from D cards | Information cards exist; action drafts are pending | Ask, Examine, Approach, Use and Custom create editable intentions or verified engine moves |
 | In-world documents | H, new | Proposed | Readable letters, journals, phones and terminals reveal exact established text |
 | Quiet reference quick access | D2, building on D | Current-reference menu exists | Compact searchable, category-filtered access without compulsory inline highlighting or automatic popups |
-| Previous-message image library | I, new | Saved art controls and per-picture request history exist; no story image browser | Browse this chat's earlier generated pictures, inspect their source and available prompt, and view full images without regeneration |
+| Previous-message image library | I, new | Beta.23 read-only saved-turn browser delivered; broader indexing/deduplication follow-ups pending | Browse this chat's earlier generated pictures, inspect their source and available prompt, and view full images without regeneration |
 
 Recommended delivery order: targeted reliability/timing work → I read-only image library → E3 cast setup → D2 quiet references → G tooltip actions → H documents. E2 independent generation remains a related pending asset milestone; it does not block a read-only image library. Previously approved F rules remain on the roadmap. Other catalog candidates and the previously deferred storyboard editor/bookmark timeline/presentation packs retain their earlier status.
 
@@ -310,6 +310,12 @@ Show Ask for known NPCs, Examine for known objects/places, and Custom. Show Use 
 - [ ] Keep browsing/copying/viewing free of model/image calls. V1 does not regenerate old turns or alter the active reading state. Any later reuse/replacement action must be an explicit, scoped workflow through existing review/budget controls, not a click side effect.
 - [ ] Revalidate image access under the originating user and resolve fresh host URLs. A deleted/unavailable image gets a truthful placeholder; removing a library entry must not silently delete a host image. Handle old/unsupported index versions and storage quota errors without clearing history.
 - [ ] Verify earlier replies after restart, supplied versus generated artwork, duplicate reuse, manual replacements, edited/deleted messages, alternate swipes, branch changes, missing images/prompts, cross-user/chat requests, rapid page changes and mobile orientation. Assert zero paid calls when opening or paging the library.
+
+### I1 delivered — beta.23
+
+Read-only saved-turn browsing is implemented: 24-thumbnail pages, reply grouping, range/version/replacement/order/type/template filters, full image zoom/scroll and available prompt/model/excerpt details. Future replacement/replan references are retained in bounded embedded turn history. Scoped ownership and source freshness are checked; missing images and historical gaps are truthful. The original checklist above remains the complete I target, not a claim that every bullet is fully delivered.
+
+Ruling: ship source occurrences per reply rather than promise a global unique-image index in this increment. Global deduplication retaining multiple uses, host-gallery backfill beyond recoverable turn records, native/card and supplied display-override indexing, richer provenance and deeper storage/quota fixtures remain follow-ups. The verified host API returns the chat message list and storage path list in full; saved turn bodies and image verification are bounded to 24 per page, plus two anchor reads. No full-size image bytes are loaded until viewing. External companions are not required.
 
 ## Delivery, verification, and release gates
 

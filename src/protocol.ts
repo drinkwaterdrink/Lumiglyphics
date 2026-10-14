@@ -1,4 +1,5 @@
 import {CastGalleryRequestSchema,type CastGallery,CastArtRequestSchema,type CastArtLibrary} from './shared/cast-art.js';
+import {ImageLibraryRequestSchema,type ImageLibraryPage} from './shared/image-library.js';
 import {LocationArtRequestSchema,type LocationArtLibrary} from './shared/stage-assets.js';
 import type { ContextSourceReport } from './shared/context-sources.js';
 import type { ReaderPresentation } from "./shared/presentation-entities.js";
@@ -18,6 +19,7 @@ export const SetCardRoleRequestSchema=z.object({type:z.literal('vn_set_card_role
 export const ReplanTurnRequestSchema=z.object({type:z.literal('vn_replan_turn'),...recoveryScope}).strict();
 export const ContextSourcesRequestSchema = z.object({type:z.literal("vn_get_context_sources"),chatId:z.string().min(1).max(256),requestId:z.string().min(1).max(100)}).strict();
 export type FrontendRequest =
+  | z.infer<typeof ImageLibraryRequestSchema>
   | z.infer<typeof CastGalleryRequestSchema>
   | z.infer<typeof CastArtRequestSchema>
   | z.infer<typeof LocationArtRequestSchema>
@@ -156,6 +158,7 @@ export type ConnectionCatalogErrors = {
 };
 
 export type BackendResponse =
+  | {type:'vn_image_library';chatId:string;requestId:string;page:ImageLibraryPage}
   | {type:"vn_cast_gallery";chatId:string;requestId:string;gallery:CastGallery}
   | {type:"vn_cast_art";chatId:string;requestId:string;library:CastArtLibrary}
   | {type:"vn_cast_art_notice";chatId:string;error:string}
@@ -202,6 +205,7 @@ export type BackendResponse =
 
 export function isFrontendRequest(value: unknown): value is FrontendRequest {
   if (value === null || typeof value !== "object") return false;
+  if((value as {type?:unknown}).type==='vn_image_library')return ImageLibraryRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_cast_gallery") return CastGalleryRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_cast_art") return CastArtRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_get_context_sources") return ContextSourcesRequestSchema.safeParse(value).success;

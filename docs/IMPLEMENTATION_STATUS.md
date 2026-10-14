@@ -2,9 +2,15 @@
 
 ## Selected roadmap update — 2026-10-13
 
-The user added full cast setup, tooltip actions, in-world documents, quiet reference quick access and a library of images from previous messages to the roadmap. These are planned, not delivered. Cast setup extends E2 as E3; quiet references extend D as D2; tooltip actions use G; documents and the image library are H and I. Existing cast art controls/current tooltips are foundations, not completion of these additions. The library will be chat-scoped, read-only by default, paged and source-aware, with explicit alternate-swipe/replaced-image filters and no paid generation on open. See the current reader-experience plan/spec and feature catalog. This update changes documentation only; the runtime remains beta.21.
+The user added full cast setup, tooltip actions, in-world documents, quiet reference quick access and previous-message image browsing. Cast setup is E3; quiet references D2; actions G; documents H; image library I. Beta.23 delivers the first read-only image library. The other additions remain planned. Global image deduplication with multiple source uses, additional legacy host-gallery backfill and native/card/supplied-display artwork indexing remain I follow-ups. Existing cast controls/current tooltips are foundations rather than completion of E3/D2/G/H.
 
-## Latest Testing increment: 0.2.0-beta.22
+## Latest Testing increment: 0.2.0-beta.23
+
+The reader's picture icon opens a chat-scoped image library. Browse up to 24 lazy thumbnails per page grouped by reply, with read-so-far/all-story range, active/alternate versions, replaced-image toggle, order, picture-type and template-name filters. Open a picture for whole-image fit, zoom/scroll, source excerpt and available read-only prompt/model details. Missing images and requests are labelled. The reader pauses auto/skip while it is open, and chat/source/cursor changes invalidate stale selections. Browsing makes no paid calls or storage writes.
+
+Normal and conditional turn saves now retain bounded image occurrence history before replacement/replan overwrites. Unsupported archive versions are preserved; unreadable prior JSON does not block recovery and marks historical gaps. Cached artwork does not borrow a possibly unrelated approved request. Source fingerprints and message/swipe/deletion changes are revalidated during loads. No new dependencies or permissions. See `review-evidence/2026-10-13-image-library.md` for verification and remaining I scope.
+
+## Previous Testing increment: 0.2.0-beta.22
 
 Saved location-art lookups now reject results invalidated by reset, forget or preferred-variant changes while storage/gallery verification is pending. Invalidation stays scoped to the originating user/chat; unrelated resets do not cancel a valid lookup. No host images are deleted. This addresses audit A1; the image library and other selected additions remain planned. See `review-evidence/2026-10-13-place-art-invalidation.md` for reproduction and verification.
 

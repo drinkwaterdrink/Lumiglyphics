@@ -1,4 +1,5 @@
 import { projectTurnPresentation } from "./entity-projection.js";
+import {mergeImageLibrary} from './image-library.js';
 import { CardRoleSchema, StoredCardRoleSchema, type CardRole } from "../../shared/card-role.js";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { ReadingPositionSchema, type ReadingPosition } from "../../shared/reading-position.js";
@@ -32,6 +33,8 @@ import {
 } from "../../shared/identity.js";
 
 export type StoredTurnRecord = {
+  /** Additive bounded image occurrence history; future formats are preserved. */
+  imageLibrary?: unknown;
   /** Versioned projection; unsupported future data is preserved, not reset. */
   presentation?: unknown;
   schemaVersion: 1;
@@ -636,6 +639,7 @@ export async function loadTurnRecord(
   return {
     schemaVersion: 1,
     ...(raw.presentation !== undefined ? {presentation:raw.presentation} : {}),
+    ...(raw.imageLibrary!==undefined?{imageLibrary:raw.imageLibrary}:{}),
     speaker: raw.speaker,
     ...(Array.isArray(raw.correctionRequestIds) ? {correctionRequestIds:raw.correctionRequestIds.filter(id=>typeof id === "string" && id.length <= 100).slice(-32)} : {}),
     ...(Array.isArray(raw.replanRequestIds) ? {replanRequestIds:raw.replanRequestIds.filter(id=>typeof id === "string" && id.length <= 100).slice(-32)} : {}),
@@ -665,10 +669,10 @@ export async function saveTurnRecord(
   record: StoredTurnRecord,
   userId?: string
 ): Promise<void> {
-  await serializedWrite(scopedKey(userId, path), () => spindle.userStorage.setJson(path, recordWithPresentation(record), {
-    indent: 2,
-    ...(userOptions(userId) ?? {})
-  }));
+  await serializedWrite(scopedKey(userId, path), async () => {
+    const next=await recordWithImageLibrary(spindle,path,record,userId);
+    await spindle.userStorage.setJson(path, recordWithPresentation(next), {indent:2,...(userOptions(userId)??{})});
+  });
 }
 
 /* ------------------------------------------------------------------ *
@@ -901,10 +905,23 @@ export async function saveTurnRecordIfCurrent(spindle: SpindleAPI, path: string,
   let saved = false;
   await serializedWrite(scopedKey(userId, path), async () => {
     if (!isCurrent()) return;
-    await spindle.userStorage.setJson(path, recordWithPresentation(record), { indent: 2, userId });
+    const next=await recordWithImageLibrary(spindle,path,record,userId);
+    if(!isCurrent())return;
+    await spindle.userStorage.setJson(path, recordWithPresentation(next), { indent: 2, userId });
     saved = isCurrent();
   });
   return saved;
+}
+
+async function recordWithImageLibrary(spindle:SpindleAPI,path:string,record:StoredTurnRecord,userId?:string):Promise<StoredTurnRecord>{
+ let previous:StoredTurnRecord|null=null;
+ try{previous=await spindle.userStorage.getJson<StoredTurnRecord|null>(path,{fallback:null,...(userOptions(userId)??{})});}
+ catch{
+  spindle.log?.warn?.('Previous image history could not be read; recovery will retain only available image references.');
+  const imageLibrary=mergeImageLibrary(undefined,record);
+  return {...record,imageLibrary:imageLibrary&&typeof imageLibrary==='object'&&(imageLibrary as {version?:unknown}).version===1?{...imageLibrary,incomplete:true}:imageLibrary};
+ }
+ return {...record,imageLibrary:mergeImageLibrary(previous??undefined,record)};
 }
 
 function recordWithPresentation(record:StoredTurnRecord):StoredTurnRecord {

@@ -9,6 +9,7 @@ import { AudioEngine, VnStage, isAmbientEffect, isStageEffect } from "../stage/i
 import type { AmbientEffect, StageEffect } from "../store/index.js";
 import { VisualNovelSettingsPanel } from "../settings/panel.js";
 import { ImageStudio } from "../image-review/studio.js";
+import {ImageLibrary} from '../image-library/library.js';
 import type { VnChoice, VnTurnInput } from "../store/index.js";
 import { createVnHeaderLauncher } from "./manual-launcher.js";
 import { captureSimTrackerCards } from "./panel-capture.js";
@@ -498,10 +499,11 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     stage.setGameChoices(choices.map(({ id: choiceId, label, group, detail, odds }) => ({ id: choiceId, label, group, detail, odds })), gameBridge?.busyFor(id) ?? false);
   };
 
+  let imageLibraryOpen=false;
   const stage = new VnStage({
     mount: app.root,
     themePreset: configRef.current?.themePreset ?? "lumiverse",
-    isAutoAdvanceHeld: () => isSpeechHoldingAuto(),
+    isAutoAdvanceHeld: () => isSpeechHoldingAuto()||imageLibraryOpen,
     onExit: () => deactivate(),
     onTooltipPreferencesChange: tooltips => { ctx.sendToBackend({type:"vn_set_config",patch:{tooltips},chatId:chatId()}); },
     onReaderPreferencesChange: readerPreferences => {
@@ -510,6 +512,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     onPrevious: (paragraphIndex) => {
       saveCursor(paragraphIndex);
       imageStudio.setCursor(paragraphIndex);
+      imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
       panels.setCursor(paragraphIndex);
       syncSpeechCursor(turn, paragraphIndex);
       audioEngine.stopAll();
@@ -521,6 +524,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     },
     onAdvance: (paragraphIndex) => {
       imageStudio.setCursor(paragraphIndex);
+      imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
       panels.setCursor(paragraphIndex);
       if (pendingNextTurn) {
         const next = pendingNextTurn;
@@ -603,6 +607,10 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const imageBridge = connectImageBridge(window, chatId, (request) => ctx.sendToBackend(request));
 
   const panels = new PanelDock(stage.panelMount);
+  const imageLibrary=new ImageLibrary(stage.panelMount,request=>ctx.sendToBackend(request),open=>{
+    imageLibraryOpen=open;
+    if(open){stage.toggleSkip(false);stage.holdAutoPlay();}else if(active)stage.checkAutoPlay();
+  });
   const imageStudio = new ImageStudio(stage.panelMount, (request) => ctx.sendToBackend(request), (enabled) => {
     ctx.sendToBackend({ type: "vn_set_config", patch: { reviewImages: enabled }, chatId: chatId() ?? "" });
   });
@@ -806,6 +814,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if (!turn || turn.chatId !== activeChatId) {
       turn = null;
       imageStudio.setTurn(null);
+    imageLibrary.setContext(null,0);
       settingsPanel?.setImagePreviewMetadata();
       loadedReadingCursor.load(null);
       stage.reset();
@@ -817,6 +826,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   }
 
   function deactivate(): void {
+    imageLibrary.close();
     if (destroyed) return;
     const wasActive = active;
     if (wasActive) saveCursor(stage.getState().currentParagraphIndex, true);
@@ -901,8 +911,10 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     }
     turn = next;
     imageStudio.setTurn(next);
+    imageLibrary.setContext(next,stage.getState().currentParagraphIndex);
     settingsPanel?.setImagePreviewMetadata(next?.imageRequests?.at(-1)?.imagePromptMetadata);
     imageStudio.setCursor(stage.getState().currentParagraphIndex);
+      imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
     stage.setAssetProgress(computeAssetProgress(next));
     const decision = decideTurnApplication(loadedReadingCursor.turn, next, stage.getState().currentParagraphIndex, active, stage.getState().paragraphs.length > 0);
     vnDebug("turn decision", decision.kind, {
@@ -943,6 +955,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     loadedReadingCursor.load(next);
     panels.setCursor(cursor);
     imageStudio.setCursor(cursor);
+      imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
     if (restored !== null) speech.setCursor(speechCursorFor(next, cursor), { autoplay: false }); else syncSpeechCursor(next, 0);
     void syncImageForParagraph(cursor);
     if (restored === null) syncAudioForParagraph(next, 0);
@@ -951,6 +964,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   function routeBackend(payload: unknown): void {
     const type = messageType(payload);
     const message = payload as BackendResponse;
+    if(message.type==='vn_image_library'){imageLibrary.receive(message.chatId,message.requestId,message.page);return;}
+    if(message.type==='vn_error'&&message.operation==='vn_image_library'){imageLibrary.error(message.chatId??'',message.requestId,message.error);return;}
     if (message.type === "vn_external_image") { imageBridge.result(message.result); return; }
     if (message.type === "vn_panel_template") {
       const pending = panelRequests.get(message.requestId);
@@ -1016,6 +1031,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       } else {
         turn = null;
         imageStudio.setTurn(null);
+    imageLibrary.setContext(null,0);
       settingsPanel?.setImagePreviewMetadata();
         speech.setCursor(null);
         panels.setTurn(null);
@@ -1059,6 +1075,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId) return;
       turn = replaceAsset(turn, message.asset);
       imageStudio.setTurn(turn);
+      imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
       settingsPanel?.setImagePreviewMetadata(turn?.imageRequests?.at(-1)?.imagePromptMetadata);
       stage.setAssetProgress(computeAssetProgress(turn));
       const cursor = stage.getState().currentParagraphIndex;
@@ -1069,6 +1086,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId || turn.sourceFingerprint !== message.sourceFingerprint) return;
       turn = { ...turn, imageRequests: message.requests };
       imageStudio.setTurn(turn);
+      imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
       settingsPanel?.setImagePreviewMetadata(turn?.imageRequests?.at(-1)?.imagePromptMetadata);
       return;
     }
@@ -1076,6 +1094,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       if (message.chatId !== chatId()) return;
       turn = null;
       imageStudio.setTurn(null);
+    imageLibrary.setContext(null,0);
       settingsPanel?.setImagePreviewMetadata();
       pendingNextTurn = null;
       panels.setTurn(null);
@@ -1160,6 +1179,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     settingsPanel?.clearCastArt();
     settingsPanel?.clearLocationArt();
     imageStudio.setTurn(null);
+    imageLibrary.setContext(null,0);
       settingsPanel?.setImagePreviewMetadata();
     panelCapture = null;
     panels.setTurn(null);
@@ -1174,6 +1194,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     settingsPanel?.clearCastArt();
     settingsPanel?.clearLocationArt();
     imageStudio.setTurn(null);
+    imageLibrary.setContext(null,0);
       settingsPanel?.setImagePreviewMetadata();
     panelCapture = null;
     panels.setTurn(null);
@@ -1212,6 +1233,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     speechSettings?.destroy();
     settingsPanel?.destroy();
     imageStudio.destroy();
+    imageLibrary.destroy();
     settingsHandle?.destroy();
     audioEngine.destroy();
     panels.destroy();
