@@ -4,7 +4,11 @@
 
 The user added full cast setup, tooltip actions, in-world documents, quiet reference quick access and a library of images from previous messages to the roadmap. These are planned, not delivered. Cast setup extends E2 as E3; quiet references extend D as D2; tooltip actions use G; documents and the image library are H and I. Existing cast art controls/current tooltips are foundations, not completion of these additions. The library will be chat-scoped, read-only by default, paged and source-aware, with explicit alternate-swipe/replaced-image filters and no paid generation on open. See the current reader-experience plan/spec and feature catalog. This update changes documentation only; the runtime remains beta.21.
 
-## Latest Testing increment: 0.2.0-beta.21
+## Latest Testing increment: 0.2.0-beta.22
+
+Saved location-art lookups now reject results invalidated by reset, forget or preferred-variant changes while storage/gallery verification is pending. Invalidation stays scoped to the originating user/chat; unrelated resets do not cancel a valid lookup. No host images are deleted. This addresses audit A1; the image library and other selected additions remain planned. See `review-evidence/2026-10-13-place-art-invalidation.md` for reproduction and verification.
+
+## Previous Testing increment: 0.2.0-beta.21
 
 Image prompts now includes Regenerate prompt. Held previews are rerolled through the configured story-reader text connection and receive a fresh approval ID. Failed rerolls restore the original pending preview; duplicate approval/reroll and cancellation races remain guarded. Completed or failed generated pictures can prepare a regenerated replacement preview with previous usable art retained. Rerolling uses text-generation tokens and does not dispatch an image until approval.
 

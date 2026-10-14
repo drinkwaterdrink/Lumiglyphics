@@ -29,13 +29,16 @@ function variantId(art:LocationArtIdentity&{imageId:string}):string{
  return `place:${hash(text)}${hash(text.split('').reverse().join(''))}:${text.length}`;
 }
 export async function findLocationArt(api:SpindleAPI,chat:string,identity:LocationArtIdentity,user?:string):Promise<{imageId:string,imageUrl:string}|null>{
+ const token=locationArtToken(api,chat,user);
  const library=await loadLocationArt(api,chat,user);
+ if(token!==locationArtToken(api,chat,user))return null;
  const record=library.locations.find(r=>r.entityId===locationId(identity.location));if(!record)return null;
  const compatible=record.variants.filter(v=>v.requestFingerprint===identity.requestFingerprint&&v.environmentFingerprint===identity.environmentFingerprint);
  compatible.sort((a,b)=>Number(b.id===record.preferredVariantId)-Number(a.id===record.preferredVariantId)||b.createdAt.localeCompare(a.createdAt));
  for(const v of compatible){
+  if(token!==locationArtToken(api,chat,user))return null;
   // Resolve existence under the originating user; never reuse stale signed URLs.
-  try{if(await api.images.get(v.imageId,user))return {imageId:v.imageId,imageUrl:`/api/v1/images/${encodeURIComponent(v.imageId)}`};}catch{/* unverifiable => normal generation */}
+  try{const image=await api.images.get(v.imageId,user);if(token!==locationArtToken(api,chat,user))return null;if(image)return {imageId:v.imageId,imageUrl:`/api/v1/images/${encodeURIComponent(v.imageId)}`};}catch{/* unverifiable => normal generation */}
  }
  return null;
 }

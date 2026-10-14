@@ -39,3 +39,47 @@ test('unknown storage versions are preserved rather than overwritten',async()=>{
  await expect(saveLocationArt(api,'c',art)).rejects.toThrow(/unsupported/i);
  expect(data.get(path)).toEqual({version:2,locations:[]});
 });
+
+function deferred<T>(){
+ let resolve!:(value:T)=>void;
+ const promise=new Promise<T>(done=>{resolve=done;});
+ return {promise,resolve};
+}
+
+for(const action of ['reset','forget','select'] as const){
+ test(`${action} cancels a location lookup awaiting host image verification`,async()=>{
+  const {api}=fixture();await saveLocationArt(api,'c',art,'u');
+  const variant=(await loadLocationArt(api,'c','u')).locations[0]!.variants[0]!;
+  const entered=deferred<void>(),image=deferred<any>();
+  api.images.get=async()=>{entered.resolve();return image.promise;};
+  const lookup=findLocationArt(api,'c',art,'u');await entered.promise;
+  await manageLocationArt(api,'c',{action,locationId:'observatory',variantId:variant.id},'u');
+  image.resolve({id:'image'});
+  expect(await lookup).toBeNull();
+ });
+}
+
+test('reset cancels a lookup awaiting a stale storage snapshot',async()=>{
+ const {api}=fixture();await saveLocationArt(api,'c',art,'u');
+ const getJson=api.userStorage.getJson.bind(api.userStorage);
+ const entered=deferred<void>(),resume=deferred<void>();let delayed=false;
+ api.userStorage.getJson=async(...args:any[])=>{
+  const snapshot=await (getJson as any)(...args);
+  if(!delayed){delayed=true;entered.resolve();await resume.promise;}
+  return snapshot;
+ };
+ const lookup=findLocationArt(api,'c',art,'u');await entered.promise;
+ await manageLocationArt(api,'c',{action:'reset'},'u');resume.resolve();
+ expect(await lookup).toBeNull();
+ expect((await loadLocationArt(api,'c','u')).locations).toHaveLength(0);
+});
+
+test('another user or chat resetting art does not cancel the originating lookup',async()=>{
+ const {api}=fixture();await saveLocationArt(api,'c',art,'u');
+ const entered=deferred<void>(),image=deferred<any>();
+ api.images.get=async()=>{entered.resolve();return image.promise;};
+ const lookup=findLocationArt(api,'c',art,'u');await entered.promise;
+ await manageLocationArt(api,'c',{action:'reset'},'other');
+ await manageLocationArt(api,'other',{action:'reset'},'u');image.resolve({id:'image'});
+ expect(await lookup).toEqual({imageId:'image',imageUrl:'/api/v1/images/image'});
+});

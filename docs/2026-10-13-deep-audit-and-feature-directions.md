@@ -66,6 +66,8 @@ These are targeted findings, not an exhaustive security certification. Two behav
 
 ### A1 — Medium: saved place-art lookup can outlive a reset
 
+**Follow-up:** Addressed in beta.22 with scoped epoch checks around storage/gallery reads. Deterministic regression tests cover reset, forget, preferred selection, stale storage snapshots and unrelated user/chat resets. The original finding below describes the audited beta.20 baseline.
+
 `src/backend/runtime/location-art.ts:30` loads a library, awaits `images.get`, then returns the old variant without checking its management epoch. `manageLocationArt` increments an epoch, but only saves currently use it. The equivalent cast lookup has stronger invalidation.
 
 **Reproduced:** start lookup; pause image existence verification; reset the library; complete verification. The library has zero locations, but lookup returns the old image. Call sites in `images.ts:615` and `images.ts:770` consume this result. The controller clears scene-cache scope after management, but this helper does not validate the location epoch.
