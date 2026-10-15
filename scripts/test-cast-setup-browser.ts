@@ -36,6 +36,8 @@ try{
  assert.equal(await cast.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,'context scan fits mobile width');
  const savesBefore=await page.evaluate(()=>(window as any).castSetupFixture.state.actions.filter((a:any)=>a.action==='setup').length);
  await cast.getByRole('button',{name:'Fill empty fields',exact:true}).tap();assert.match(await cast.getByLabel('Cast base appearance').inputValue(),/silver fur/,'fill preserves existing draft');
+ await cast.getByLabel('Scanned character source').selectOption('1');assert.equal(await cast.getByRole('button',{name:'Replace appearance',exact:true}).isDisabled(),true,'name-only reference cannot erase appearance');assert.match(await cast.getByLabel('Cast base appearance').inputValue(),/silver fur/);
+ await cast.getByLabel('Scanned character source').selectOption('0');
  await cast.getByRole('button',{name:'Replace appearance',exact:true}).tap();assert.match(await cast.getByLabel('Cast base appearance').inputValue(),/white fur/);
  assert.equal(await page.evaluate(()=>(window as any).castSetupFixture.state.actions.filter((a:any)=>a.action==='setup').length),savesBefore,'scan filling does not save');
  await page.evaluate(()=>{const f=(window as any).castSetupFixture;f.state.chatId='other';f.panel.clearCastArt();f.panel.openSection('pictures');});

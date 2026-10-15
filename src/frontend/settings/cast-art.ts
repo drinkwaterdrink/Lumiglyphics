@@ -22,7 +22,7 @@ export class CastArtPanel {
   this.host.insertBefore(editor,this.el('[data-cast-art-catalog]'));
   for(const input of this.host.querySelectorAll<HTMLInputElement>('input:not([type])'))input.type='text';
   this.host.insertBefore(this.el('[data-cast-art-gallery-panel]'),this.el('[data-cast-art-catalog]'));
-  const scanPanel=document.createElement('details');scanPanel.dataset.castContext='';scanPanel.innerHTML='<summary>Fill from context</summary><p>Scan saved story appearances and enabled SimTracker context. Review a source, fill your draft, then save to apply it to future image prompts.</p><button type="button" data-cast-scan>Scan context</button><div data-cast-scan-results hidden><label>Character and source<select aria-label="Scanned character source" data-cast-scan-source></select></label><label>Source preview<textarea aria-label="Scanned character preview" data-cast-scan-preview readonly rows="5"></textarea></label><button type="button" data-cast-scan-fill>Fill empty fields</button><button type="button" data-cast-scan-replace>Replace appearance</button></div><p data-cast-scan-notice role="status"></p>';
+  const scanPanel=document.createElement('details');scanPanel.dataset.castContext='';scanPanel.innerHTML='<summary>Fill from context</summary><p>Scan saved story appearances, revealed NPC references and enabled SimTracker snapshots. Review a source, fill your draft, then save to apply it to future image prompts.</p><button type="button" data-cast-scan>Scan context</button><div data-cast-scan-results hidden><label>Character and source<select aria-label="Scanned character source" data-cast-scan-source></select></label><label>Source preview<textarea aria-label="Scanned character preview" data-cast-scan-preview readonly rows="5"></textarea></label><button type="button" data-cast-scan-fill>Fill empty fields</button><button type="button" data-cast-scan-replace>Replace appearance</button></div><p data-cast-scan-notice role="status"></p>';
   this.host.insertBefore(scanPanel,editor);
   this.el<HTMLButtonElement>('[data-cast-scan]').onclick=()=>{if(this.loadedChat!==this.chat()){this.scanAfterLoad=true;this.request({action:'list'});}else this.request({action:'scan'});};
   this.el<HTMLSelectElement>('[data-cast-scan-source]').onchange=()=>this.previewScan();
@@ -130,11 +130,11 @@ export class CastArtPanel {
   this.el('[data-cast-scan-results]').hidden=!this.scan.candidates.length;this.el('[data-cast-scan-notice]').textContent=this.scan.candidates.length?this.scan.notice:'No usable character descriptions found. Prepare a story reply or enable SimTracker context, or enter an appearance manually.';
   this.previewScan();this.status('Context scan complete. Nothing saved or generated.');return true;
  }
- private previewScan(){const candidate=this.scan?.candidates[Number(this.el<HTMLSelectElement>('[data-cast-scan-source]').value)];this.el<HTMLTextAreaElement>('[data-cast-scan-preview]').value=candidate?`${candidate.name}
-${candidate.setup.appearance}
+ private previewScan(){const candidate=this.scan?.candidates[Number(this.el<HTMLSelectElement>('[data-cast-scan-source]').value)];this.el<HTMLButtonElement>('[data-cast-scan-replace]').disabled=!candidate?.setup.appearance.trim();this.el<HTMLTextAreaElement>('[data-cast-scan-preview]').value=candidate?`${candidate.name}
+${candidate.setup.appearance||'No visual description available. Add an appearance before saving.'}
 ${candidate.setup.outfits.map(o=>o.name+': '+o.description).join('\n')}`:'';}
  private fillScan(replace:boolean){
-  const candidate=this.scan?.candidates[Number(this.el<HTMLSelectElement>('[data-cast-scan-source]').value)];if(!candidate)return;
+  const candidate=this.scan?.candidates[Number(this.el<HTMLSelectElement>('[data-cast-scan-source]').value)];if(!candidate)return;if(replace&&!candidate.setup.appearance.trim()){this.status('No appearance is available from this source. Your existing description was kept.');return;}
   if(!this.draft)this.startNew();const name=this.el<HTMLInputElement>('[data-cast-setup-name]').value.trim();
   if(name&&name.toLowerCase()!==candidate.name.toLowerCase()){this.status('Choose this character or Add character before filling a different name. Your edits were kept.');return;}
   const draft=this.readDraft()!;if(replace||!draft.appearance)draft.appearance=candidate.setup.appearance;

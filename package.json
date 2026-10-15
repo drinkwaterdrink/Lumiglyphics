@@ -1,6 +1,6 @@
 {
   "name": "lumiglyphics",
-  "version": "0.2.0-beta.29",
+  "version": "0.2.0-beta.30",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.0",
@@ -35,6 +35,7 @@
     "test:cast-setup": "bun run ./scripts/test-cast-setup-browser.ts"
   },
   "dependencies": {
+    "yaml": "2.9.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

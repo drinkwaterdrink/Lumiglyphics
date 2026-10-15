@@ -75,3 +75,13 @@ test('custom mappings retain historical boundaries and standard-field fallback',
  assert.doesNotMatch(trackerContext(evidence),/injury|uniform/);
  assert.equal(extractSimTracker([message('a',{characters:[{name:'Mira',custom:{look:'x'.repeat(5000)}}]})],'a',mappings).cast[0]!.identity.length,500);
 });
+
+test('tracker accepts scalar appearance and name-keyed JSON/YAML NPC records',()=>{
+ for(const content of ['<tracker>{"characters":[{"name":"NPC","appearance":"silver hair, green eyes"}]}</tracker>','<tracker>{"NPC":{"appearance":"silver hair, green eyes"}}</tracker>','<tracker>characters:\n  - name: NPC\n    appearance: silver hair, green eyes\n    clothing: blue coat</tracker>']){
+  const result=extractSimTracker([{id:'m',content}],'m');assert.equal(result.cast[0]?.name,'NPC');assert.match(result.cast[0]!.identity,/silver hair/);
+ }
+});
+
+test('YAML duplicate keys and excessive alias expansion fail nonfatally',()=>{
+ for(const raw of ['characters: []\ncharacters: []','a: &a [x,x,x,x,x,x,x,x,x,x,x]\ncharacters: [*a,*a,*a,*a,*a,*a,*a,*a,*a,*a,*a]'])assert.equal(extractSimTracker([{id:'m',content:`<tracker>${raw}</tracker>`}],'m').status,'malformed');
+});

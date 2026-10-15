@@ -142,3 +142,7 @@ Cast setup → Fill from context → Scan context previews known story appearanc
 ## Beta.29 quiet references — 2026-10-14
 
 D2 delivered within existing Tooltips/Scene references. Reference display adds Menu only; master switch, categories, notes, pins and suppression remain shared with inline tooltips. The book control opens name/alias search, NPC/location/item filters and a conservative current-scene/known/elsewhere list. Pins/current-scene references rank first. Card Back to references preserves filters; source/cursor/chat changes invalidate the sheet. No backend call is added when browsing. Lists use available reveal-scoped presentation snapshots rather than a new persistent Codex. G actions and H documents remain next.
+
+## Beta.30 NPC cast-scan discovery fix — 2026-10-14
+
+Cast scanning now includes recent recognized SimTracker snapshots within30 chat messages, handling scalar appearance and character-name-keyed JSON/YAML, with newest usable identity per exact name. This historical import is separate from live latest-snapshot presence. Current reader tooltip NPCs are also offered through the reader's canonical reveal/source projection validation and matching reading position. Name-only references appear with appearance needed; blank sources cannot erase existing appearance and remain unsavable until described. Malformed optional reader metadata does not discard valid tracker results. Re-scan after updating; nothing saves or generates automatically. Raw prose extraction remains outside this fix.

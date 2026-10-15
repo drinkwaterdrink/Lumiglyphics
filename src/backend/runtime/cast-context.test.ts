@@ -1,9 +1,11 @@
+import {TurnPlanSchema,AssetJobSchema} from "../../shared/contracts.js";
+import {fingerprintForMessage} from "./planner.js";
 import {registerVisualNovelBackend} from "./controller.js";
 import {test,expect} from 'bun:test';
 import type {SpindleAPI} from 'lumiverse-spindle-types';
 import {scanCastContext} from './cast-context.js';
 import {manageCastArt} from './cast-art.js';
-import {loadCharacterAppearance} from './storage.js';
+import {loadCharacterAppearance,type StoredTurnRecord} from './storage.js';
 import {resolveTemplateIdentity} from './visual-brief.js';
 function fixture(){
  const data=new Map<string,any>();const messages:any[]=[{id:'m1',is_user:false,swipe_id:0,content:'<tracker>{"characters":[{"name":"Rena","appearance":{"summary":"silver fur, blue eyes, fox ears"},"clothing":"red coat","aliases":["Ren"]}]}</tracker>'}];
@@ -43,4 +45,43 @@ test('registered scan handler returns scoped candidates without image or model c
 test('new tracker characters remain importable when saved cast fills the suggestion limit',async()=>{
  const f=fixture();f.data.set('u:chats/chat/cast-art.json',{version:1,characters:Array.from({length:32},(_,i)=>({entityId:'old'+i,name:'Saved '+i,description:'black hair, green eyes',artRevision:0,preferredVariantId:null,variants:[],setup:{appearance:'black hair, green eyes',aliases:[],outfits:[],defaultOutfitId:null}}))});
  const scan=await scanCastContext(f.api,'chat','u');expect(scan.candidates[0]!.name).toBe('Rena');expect(scan.candidates).toHaveLength(32);expect(scan.notice).toMatch(/limit|omitted/i);
+});
+
+test('cast scan includes NPCs from recent tracker snapshots alongside a player-only latest snapshot',async()=>{
+ const f=fixture();f.messages.unshift({id:'older',is_user:false,swipe_id:0,content:'<tracker>{"characters":[{"name":"NPC","appearance":"silver hair, green eyes","clothing":"blue coat"}]}</tracker>'});f.messages[1].content='<tracker>{"characters":[{"name":"Player","appearance":{"summary":"black hair, brown eyes"}}]}</tracker>';
+ const scan=await scanCastContext(f.api,'chat','u');expect(scan.candidates.map(c=>c.name)).toContain('NPC');expect(scan.candidates.map(c=>c.name)).toContain('Player');
+});
+
+test('scan reads multiple tracker blocks with newest usable appearance per NPC',async()=>{
+ const f=fixture();f.messages[0].content='<tracker>{"characters":[{"name":"NPC","appearance":"red hair, green eyes"}]}</tracker><tracker>characters:\n  NPC:\n    appearance: silver hair, green eyes\n  Player:\n    appearance: black hair, brown eyes</tracker>';
+ const scan=await scanCastContext(f.api,'chat','u');const npcs=scan.candidates.filter(c=>c.name==='NPC');expect(npcs).toHaveLength(1);expect(npcs[0]!.setup.appearance).toContain('silver hair');
+});
+test('tracker history window is bounded and name-only newer records do not erase an older appearance',async()=>{
+ const f=fixture();const old={id:'older',swipe_id:0,is_user:false,content:'<tracker>{"NPC":{"appearance":"silver hair, green eyes"}}</tracker>'};f.messages.unshift(old);f.messages[1].content='<tracker>{"characters":[{"name":"NPC"}]}</tracker>';
+ expect((await scanCastContext(f.api,'chat','u')).candidates.map(c=>c.name)).toContain('NPC');
+ f.messages.splice(1,0,...Array.from({length:30},(_,i)=>({id:'plain'+i,swipe_id:0,is_user:false,content:'Ordinary story text.'})));
+ expect((await scanCastContext(f.api,'chat','u')).candidates.map(c=>c.name)).not.toContain('NPC');
+});
+
+const date='2026-10-14T12:00:00.000Z';
+function storyRecord(messageId='m1',imageId='image',swipeId=0):StoredTurnRecord{
+ const key={chatId:'chat',assistantMessageId:messageId,swipeId,sourceFingerprint:fingerprintForMessage({id:messageId,swipe_id:swipeId,content:'A library.'}),revision:0};
+ const plan=TurnPlanSchema.parse({schemaVersion:1,key,paragraphs:[{index:0,sourceIndex:0,text:'A library.'}],scenes:[{sceneId:'scene',revision:0,startParagraph:0,environment:{location:'Library',timeOfDay:'day',weather:null,lighting:'daylight',description:'Book shelves.',persistentElements:[]},cast:[],continuity:{revision:0,characters:{},facts:{}},basePrompt:'library',cameraLock:{framing:'wide',angle:'eye level',perspective:'fixed',lens:'50mm',subjectAnchor:'center',horizon:'upper third',safeDialogueRegion:'lower third',aspectRatio:'16:9'},compositionLock:'shelves',activeAssetId:null,priorSceneId:null}],visualCues:[{cueId:'cue',paragraphIndex:0,sceneId:'scene',sceneRevision:0,kind:'background',assetJobId:'job',promptDelta:'Shelves'}],choices:[],initialContinuity:{revision:0,characters:{},facts:{}},continuityDeltas:[],terminalContinuity:{revision:0,characters:{},facts:{}},planningStatus:'planned',createdAt:date});
+ return {schemaVersion:1,speaker:'Narrator',status:'ready',plan,jobs:[AssetJobSchema.parse({jobId:'job',ownerTurnKey:key,sceneId:'scene',sceneRevision:0,paragraphIndex:0,promptFingerprint:'12345678',provider:'provider',status:'generated',imageId,imageUrl:`/api/v1/images/${imageId}`,queuedAt:date,startedAt:date,generatedAt:date})],updatedAt:date,imageRequests:[{requestId:'approved',jobId:'job',paragraphIndex:0,state:'approved',prompt:'Detailed shelves',negativePrompt:'blur',model:'model',provider:'provider',connectionId:'private-connection',parameters:{api_key:'never-copy'},referenceSummary:'none',createdAt:date}]};
+}
+test('NPCs visible in tooltips are included even when the learned registry contains only the player',async()=>{
+ const f=fixture();f.messages[0].content='A library.';const saved=storyRecord('m1');saved.jobs=[];const key=saved.plan.key;
+ const entity=(id:string,name:string,appearance:string,at=0)=>({id,kind:'npc',name,aliases:[],firstParagraph:at,facts:appearance?[{id:'fact'+id,entityId:id,field:'appearance',value:appearance,visibility:'observed',source:{provider:'story',recordId:'m1',chatId:'chat',messageId:'m1',sourceFingerprint:key.sourceFingerprint,observedAt:date},revealedAt:{key,paragraphIndex:at}}]:[]});
+ saved.presentation={version:1,snapshots:[{at:{key,paragraphIndex:0},entities:[entity('npc','Mira','silver hair, green eyes'),entity('name-only','Robin','')],stateByEntity:{},presentEntityIds:['npc'],locationId:null,speakerEntityId:null,drawableEntityId:null}]};
+ f.data.set('u:turns/chat/m1/0.json',saved);f.data.set('u:chats/chat/characters.json',{Player:'black hair, brown eyes'});
+ const scan=await scanCastContext(f.api,'chat','u');expect(scan.candidates.find(c=>c.name==='Mira')!.setup.appearance).toContain('silver hair');
+ expect(scan.candidates.find(c=>c.name==='Robin')!.setup.appearance).toBe('');expect(scan.candidates.some(c=>c.name==='Not yet revealed')).toBe(false);
+ await expect(manageCastArt(f.api,'chat',{action:'setup',name:'Robin',setup:scan.candidates.find(c=>c.name==='Robin')!.setup},'u')).rejects.toThrow();
+});
+
+test('invalid tooltip projections and malformed optional saved turns do not block tracker results',async()=>{
+ const f=fixture();const saved=storyRecord('m1');saved.source={version:2,rawFingerprint:fingerprintForMessage(f.messages[0])};
+ saved.presentation={version:1,snapshots:[{at:{key:saved.plan.key,paragraphIndex:0},entities:[{id:'bad',kind:'npc',name:'Future NPC',aliases:[],firstParagraph:5,facts:[]}],stateByEntity:{},presentEntityIds:[],locationId:null,speakerEntityId:null,drawableEntityId:null}]};
+ f.data.set('u:turns/chat/m1/0.json',saved);const scan=await scanCastContext(f.api,'chat','u');expect(scan.candidates.map(c=>c.name)).toContain('Rena');expect(scan.candidates.some(c=>c.name==='Future NPC')).toBe(false);
+ f.data.set('u:turns/chat/m1/0.json',{speaker:'Narrator',plan:{broken:true}});const recovered=await scanCastContext(f.api,'chat','u');expect(recovered.candidates.map(c=>c.name)).toContain('Rena');expect(recovered.notice).toContain('could not be read');
 });

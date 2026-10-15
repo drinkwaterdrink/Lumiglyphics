@@ -42,5 +42,6 @@ export const CastGalleryRequestSchema=z.object({type:z.literal('vn_cast_gallery'
 export const CastGallerySchema=z.object({offset:z.number().int().nonnegative(),total:z.number().int().nonnegative(),images:z.array(z.object({id,name:z.string().max(256),url:z.string().max(1024).refine(v=>v.startsWith('/')&&!v.startsWith('//')&&!v.includes('\\'))}).strict()).max(12)}).strict();
 export type CastGallery=z.infer<typeof CastGallerySchema>;
 
-export const CastContextScanSchema=z.object({candidates:z.array(z.object({name:z.string().min(1).max(160),source:z.string().max(256),setup:CastSetupInputSchema}).strict()).max(32),notice:z.string().max(1000)}).strict();
+const CastSetupDraftSchema=z.object({...setupShape,appearance:z.string().trim().max(2000),outfits:z.array(z.object(outfitShape).strict()).max(7).default([])}).strict().superRefine(validateSetup);
+export const CastContextScanSchema=z.object({candidates:z.array(z.object({name:z.string().min(1).max(160),source:z.string().max(256),setup:CastSetupDraftSchema}).strict()).max(32),notice:z.string().max(1000)}).strict();
 export type CastContextScan=z.infer<typeof CastContextScanSchema>;

@@ -8,7 +8,7 @@ const state={chatId:'chat',actions:[] as any[],patches:[] as any[],profileCalls:
 const panel=new VisualNovelSettingsPanel({mount,getChatId:()=>state.chatId,setupStorage:{getItem:()=> '1',setItem:()=>{}},onSave:p=>state.patches.push(p),onOpenPreview:()=>{},onRefreshConnections:()=>{},
  onCastArt:(chatId,requestId,action)=>{
   state.actions.push(action);queueMicrotask(()=>{
-   if(action.action==='scan'){panel.setCastContext(chatId,requestId,{candidates:[{name:'Rena',source:'SimTracker · current reply',setup:{appearance:'white fur, blue eyes, fox ears',aliases:['Ren'],outfits:[{id:'scan',name:'Current outfit',description:'blue coat'}],defaultOutfitId:'scan'}}],notice:'Nothing saved or generated.'});return;}
+   if(action.action==='scan'){panel.setCastContext(chatId,requestId,{candidates:[{name:'Rena',source:'SimTracker · current reply',setup:{appearance:'white fur, blue eyes, fox ears',aliases:['Ren'],outfits:[{id:'scan',name:'Current outfit',description:'blue coat'}],defaultOutfitId:'scan'}},{name:'Rena',source:'Story reference · appearance needed',setup:{appearance:'',aliases:[],outfits:[],defaultOutfitId:null}}],notice:'Nothing saved or generated.'});return;}
    if(action.action==='setup'){
     let record=state.library.characters.find(r=>r.entityId===(action.characterId??action.name!.toLowerCase()));
     if(!record){record={entityId:action.name!.toLowerCase(),name:action.name!,description:action.setup!.appearance,artRevision:0,preferredVariantId:null,variants:[]};state.library.characters.push(record);}
