@@ -13,6 +13,30 @@ async function flush(): Promise<void> {
 }
 
 describe("planning queue", () => {
+  test("a deadline fails visibly, releases ownership and ignores a late result", async () => {
+    const queue = new PlanningQueue(15);
+    const gate = deferred();
+    const first = queue.enqueue("user", "a", "m1", async () => gate.promise);
+    const outcome = first.promise.then(() => "resolved", error => error.name);
+    expect(await Promise.race([outcome, new Promise(resolve => setTimeout(() => resolve("still blocked"), 60))])).toBe("PreparationTimeoutError");
+    expect(first.operation.controller.signal.aborted).toBe(true);
+    expect(first.operation.stage).toBe("failed");
+    expect(await queue.enqueue("user", "a", "m1", async () => "retry ready").promise).toBe("retry ready");
+    gate.resolve();
+    await flush();
+    expect(first.operation.stage).toBe("failed");
+    expect(queue.active()).toHaveLength(0);
+  });
+  test("cancelling an unresponsive task releases the chat for a fresh request", async () => {
+    const queue = new PlanningQueue();
+    const first = queue.enqueue("user", "a", "m1", async () => new Promise<void>(() => {}));
+    const rejection = first.promise.then(() => "resolved", error => error.name);
+    await flush();
+    queue.cancelChat("user", "a");
+    expect(await Promise.race([rejection, new Promise(resolve => setTimeout(() => resolve("still blocked"), 30))])).toBe("AbortError");
+    const next = queue.enqueue("user", "a", "m2", async () => "ready");
+    expect(await next.promise).toBe("ready");
+  }, 300);
   test("orders one chat while another chat runs independently", async () => {
     const queue = new PlanningQueue();
     const gate = deferred();

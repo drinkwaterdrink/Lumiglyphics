@@ -982,6 +982,7 @@ async function processAssistantMessage(
       ? await resolveContextMessages(spindle, chatId, messages.slice(-config.includeRecentMessages), resolutionCache, userId)
       : [];
     const result = await planTurn(spindle, {
+      signal: operation.controller.signal,
       chatId,
       message,
       content: resolved,
@@ -1112,9 +1113,11 @@ async function processAssistantMessage(
     }
     const key = runtimeKey(userId, chatId);
     activeTurnKeys.set(key, record.plan.key);
-    await persistActiveTurn(spindle, record, path, userId);
+    await persistActiveTurn(spindle, record, path, userId, () => !operation.controller.signal.aborted);
     if (operation.controller.signal.aborted) return;
-    spindle.sendToFrontend({ type: "vn_turn", turn: await turnViewWithAudio(spindle, record,userId) }, userId);
+    const view = await turnViewWithAudio(spindle, record,userId);
+    if (operation.controller.signal.aborted) return;
+    spindle.sendToFrontend({ type: "vn_turn", turn: view }, userId);
     if (!config.useNativeCardImages && config.generateImages) {
       void startAssets(spindle, record, path, userId).catch((error) => {
         if (!isAbortError(error)) {
@@ -1378,7 +1381,7 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
       const current = () => !operation.controller.signal.aborted && isCurrent();
       if (!current()) return;
       spindle.sendToFrontend({type:'vn_planning',chatId:action.chatId},userId);
-      const result = await planTurn(spindle, {chatId:action.chatId,message:latest,content:intake.text,sourceFingerprint:action.sourceFingerprint,
+      const result = await planTurn(spindle, {signal:operation.controller.signal,chatId:action.chatId,message:latest,content:intake.text,sourceFingerprint:action.sourceFingerprint,
         previousScene:old.plan.scenes[0] ?? null,previousContinuity:old.plan.initialContinuity,
         recentMessages,config,singleCharacter,characterAppearance,characterRegistry,userId,
         gameHints:gameHintsForTurn(messages,latest.id),

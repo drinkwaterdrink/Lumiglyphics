@@ -1,5 +1,12 @@
 export type PlanningStage = "queued" | "running" | "completed" | "failed" | "cancelled";
 
+export class PreparationTimeoutError extends Error {
+  constructor() {
+    super("Scene preparation took too long. Check the story reader connection/model, then try again. The image model has not necessarily been called. A provider request may still finish remotely.");
+    this.name = "PreparationTimeoutError";
+  }
+}
+
 export type PlanningOperation = {
   id: string;
   userId: string | undefined;
@@ -28,6 +35,7 @@ function operationId(): string {
 }
 
 export function abortError(reason: unknown = "Planning cancelled."): Error {
+  if (reason instanceof Error) return reason;
   const error = new Error(typeof reason === "string" ? reason : "Planning cancelled.");
   error.name = "AbortError";
   return error;
@@ -38,11 +46,13 @@ export function throwIfAborted(signal?: AbortSignal): void {
 }
 
 export function isAbortError(error: unknown, signal?: AbortSignal): boolean {
+  if (error instanceof PreparationTimeoutError) return false;
   return Boolean(signal?.aborted || (error instanceof Error && error.name === "AbortError"));
 }
 
 /** Serializes narrative planning per chat. Different chats remain independent. */
 export class PlanningQueue {
+  constructor(private readonly timeoutMs = 180_000) {}
   private readonly operations = new Map<string, ScheduledPlanning<unknown>>();
   private readonly chatTails = new Map<string, Promise<void>>();
 
@@ -74,14 +84,26 @@ export class PlanningQueue {
         throwIfAborted(operation.controller.signal);
       }
       operation.stage = "running";
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let onAbort: (() => void) | undefined;
       try {
-        const result = await task(operation);
+        // Releasing a cancelled wait must not depend on the provider settling.
+        // Callers still check the signal before applying late results.
+        const interrupted = new Promise<never>((_, reject) => {
+          onAbort = () => reject(abortError(operation.controller.signal.reason));
+          operation.controller.signal.addEventListener("abort", onAbort, { once: true });
+          timer = setTimeout(() => operation.controller.abort(new PreparationTimeoutError()), this.timeoutMs);
+        });
+        const result = await Promise.race([task(operation), interrupted]);
         throwIfAborted(operation.controller.signal);
         operation.stage = "completed";
         return result;
       } catch (error) {
         operation.stage = isAbortError(error, operation.controller.signal) ? "cancelled" : "failed";
         throw error;
+      } finally {
+        clearTimeout(timer);
+        if (onAbort) operation.controller.signal.removeEventListener("abort", onAbort);
       }
     };
     const promise = previous.then(execute, execute);

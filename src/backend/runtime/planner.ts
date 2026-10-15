@@ -64,6 +64,7 @@ import { getAudioCatalog, getAudioCatalogPromptSummary } from "./audio-catalog.j
 import { debugErrorSummary, debugJson, debugQuote, plannerDebugLogger, type PlannerDebugScope } from "./debug-trace.js";
 import { decidePresentation, type SystemOneDecisions } from "./system-one.js";
 import { stripTextEffectTags } from "../../shared/text-effects.js";
+import { throwIfAborted } from "../core/planning-queue.js";
 
 export const PlannerEnvironmentChangesSchema = z.object({
   description: z.string().trim().min(1).optional(),
@@ -191,6 +192,7 @@ export type PlanTurnInput = {
   /** An external scene selects a subject by name, never by appearance or pose. */
   externalScene?: { characterName: string; venue: string | null; timeOfDay: string | null };
   userId?: string;
+  signal?: AbortSignal;
 };
 
 type HintMessage = { id: string; is_user: boolean; metadata?: Record<string, unknown> };
@@ -2136,6 +2138,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   let planner: z.infer<typeof PlannerOutputSchema>;
   let usedFallback = false;
   const plannerConnection = await resolvePlannerConnection(spindle, input.config, input.userId);
+  throwIfAborted(input.signal);
   // Text effect tags (<shake>, <rainbow>, ...) are display markup: the plan
   // keeps them for the stage, but prompts and pose matching read plain words.
   const promptParagraphs = narrative.paragraphs.map((paragraph) => ({ ...paragraph, text: stripTextEffectTags(paragraph.text) }));
@@ -2170,8 +2173,10 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     && (input.config.mode !== "cyoa" || narrative.choices.length > 0);
   if (useContinuation) usedFallback = false;
   for (let attempt = 1; !useContinuation && attempt <= PLANNER_ATTEMPTS; attempt += 1) {
+    throwIfAborted(input.signal);
     try {
       planner = await requestPlannerOutput(spindle, input, paragraphText, visualContext, plannerConnection, seedRegistry);
+      throwIfAborted(input.signal);
       // Require usable visual coverage when image generation is expected
       if (narrative.paragraphs.length > 0) {
         const validCues = planner.cues.filter(
@@ -2202,6 +2207,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
       usedFallback = false;
       break;
     } catch (error) {
+      throwIfAborted(input.signal);
       lastError = error;
       failedAttempts += 1;
       debug.line(`attempt ${attempt}/${PLANNER_ATTEMPTS} failed: ${debugErrorSummary(error)}`);

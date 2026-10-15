@@ -6,7 +6,7 @@
  * bumpEpoch/invalidateScope calls: every cache transition must come from the
  * controller's own wiring.
  */
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, spyOn } from "bun:test";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { registerVisualNovelBackend, sceneImageCache, viewRegistry } from "./controller.js";
 import { sceneImageScope } from "../core/scene-image-cache.js";
@@ -91,10 +91,46 @@ function fixture() {
   const record = (chatId: string, id: string) => data.get(turnPath(chatId, id, 0)) as StoredTurnRecord;
   const openGate = () => { gate = { pending: true, release: () => {} }; };
   const closeGate = () => { gate!.pending = false; gate!.release(); };
-  return { spindle, fire, request, say, record, sent, providerCalls, images, deletes, data, openGate, closeGate };
+  return { spindle, fire, request, say, record, sent, providerCalls, images, deletes, data, messages, openGate, closeGate };
 }
 
 describe("probe: real controller lifecycle with the scene cache", () => {
+  test("a stalled reader reports a retryable error and its late reply cannot replace a fresh turn", async () => {
+    const f = fixture();
+    const chatId = "deadline-chat";
+    const id = "deadline-message";
+    f.data.set("config.json", { generateImages: false, includeCharacterContext: false, includePersonaContext: false, includeLorebookContext: false });
+    f.messages.push({ id, chat_id: chatId, content: CONTENT, is_user: false, name: "Mira", swipe_id: 0 });
+    const normal = f.spindle.generate.raw.bind(f.spindle.generate);
+    let release!: (reason: Error) => void;
+    let calls = 0;
+    f.spindle.generate.raw = (async (...args: any[]) => {
+      calls++;
+      if (calls === 1) return new Promise((_, reject) => { release = reject; });
+      return normal(...args as [any]);
+    }) as any;
+    const originalTimer = globalThis.setTimeout;
+    const timer = spyOn(globalThis, "setTimeout").mockImplementation(((fn: any, ms: number, ...args: any[]) => originalTimer(fn, ms === 180_000 ? 30 : ms, ...args)) as any);
+    try {
+      registerVisualNovelBackend(f.spindle);
+      viewRegistry().open("user-1", chatId);
+      f.fire("GENERATION_ENDED", { chatId, messageId: id, content: CONTENT }, "user-1");
+      await waitFor(() => f.sent.some(m => m.type === "vn_error" && String(m.error).includes("took too long")));
+      expect(calls).toBe(1); // No automatic second paid request after a timeout.
+      expect(f.record(chatId, id)).toBeUndefined();
+      timer.mockRestore();
+      f.request({ type: "vn_refresh", chatId });
+      await waitFor(() => f.sent.some(m => m.type === "vn_turn"));
+      const before = JSON.stringify(f.record(chatId, id));
+      const turns = f.sent.filter(m => m.type === "vn_turn").length;
+      release(new Error("The old provider request finally failed."));
+      await settle();
+      expect(JSON.stringify(f.record(chatId, id))).toBe(before);
+      expect(f.sent.filter(m => m.type === "vn_turn")).toHaveLength(turns);
+      expect(f.providerCalls).toHaveLength(0);
+      expect(calls).toBe(2); // Late failures must not trigger the planner's normal retry.
+    } finally { timer.mockRestore(); viewRegistry().close("user-1", chatId); }
+  });
   test("end-to-end: reuse, extra swaps before first vn_turn, retry, chat switch, delete, stale late result", async () => {
     const f = fixture();
     registerVisualNovelBackend(f.spindle);
