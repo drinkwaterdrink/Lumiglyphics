@@ -59,6 +59,7 @@ export async function saveCastArt(api:SpindleAPI,chat:string,art:CastArtIdentity
  });
 }
 export async function manageCastArt(api:SpindleAPI,chat:string,action:CastArtAction,user?:string):Promise<CastArtLibrary>{
+ if(action.action==='scan')throw new Error('Context scanning is read-only; use the context scan handler.');
  if(action.action==='list')return transaction(api,chat,user,()=>loadCastArt(api,chat,user));
  const r=runtime(api),key=scope(chat,user);r.epochs.set(key,castArtToken(api,chat,user)+1);
  return transaction(api,chat,user,async()=>{

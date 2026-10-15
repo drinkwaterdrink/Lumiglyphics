@@ -29,7 +29,16 @@ try{
  await cast.getByRole('button',{name:'Configure voice',exact:true}).tap();
  assert.equal(await page.locator('[data-speech-draft-row="rena"]').isVisible(),true,'voice shortcut uses existing unsaved override controls');
  assert.equal(await page.evaluate(()=>(window as any).castSetupFixture.state.profileCalls),0);assert.equal(await page.evaluate(()=>(window as any).castSetupFixture.state.speechPatches.length),0,'voice shortcut saves nothing');
+ await page.evaluate(()=>(window as any).castSetupFixture.panel.openSection('pictures'));
+ await cast.getByText('Fill from context',{exact:true}).tap();await cast.getByRole('button',{name:'Scan context',exact:true}).tap();
+ assert.match(await cast.getByLabel('Scanned character preview').inputValue(),/white fur/);
+ await cast.getByLabel('Scanned character preview').scrollIntoViewIfNeeded();await page.screenshot({path:'.cache/cast-context-mobile.png'});
+ assert.equal(await cast.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,'context scan fits mobile width');
+ const savesBefore=await page.evaluate(()=>(window as any).castSetupFixture.state.actions.filter((a:any)=>a.action==='setup').length);
+ await cast.getByRole('button',{name:'Fill empty fields',exact:true}).tap();assert.match(await cast.getByLabel('Cast base appearance').inputValue(),/silver fur/,'fill preserves existing draft');
+ await cast.getByRole('button',{name:'Replace appearance',exact:true}).tap();assert.match(await cast.getByLabel('Cast base appearance').inputValue(),/white fur/);
+ assert.equal(await page.evaluate(()=>(window as any).castSetupFixture.state.actions.filter((a:any)=>a.action==='setup').length),savesBefore,'scan filling does not save');
  await page.evaluate(()=>{const f=(window as any).castSetupFixture;f.state.chatId='other';f.panel.clearCastArt();f.panel.openSection('pictures');});
- assert.equal(await cast.locator('[data-cast-setup]').isVisible(),false,'chat switch clears setup drafts');
+ assert.equal(await cast.getByLabel('Scanned character preview').inputValue(),'');assert.equal(await cast.locator('[data-cast-setup]').isVisible(),false,'chat switch clears setup drafts');
  console.log('Mobile cast registration, outfits, artwork, Voice draft shortcut and scope checks passed.');
 }finally{await browser.close();server.stop(true);}

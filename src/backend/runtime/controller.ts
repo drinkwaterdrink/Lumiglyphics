@@ -1,3 +1,4 @@
+import {scanCastContext} from "./cast-context.js";
 import {CastGalleryRequestSchema,CastArtRequestSchema} from '../../shared/cast-art.js';
 import {castArtToken,findCastDisplayArt,findSetupDisplayArt,listCastGallery,manageCastArt} from './cast-art.js';
 import {LocationArtRequestSchema} from '../../shared/stage-assets.js';
@@ -1566,6 +1567,7 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
     }
     case "vn_cast_art": {
       const action=CastArtRequestSchema.parse(request);
+      if(action.action==='scan'){const scan=await scanCastContext(spindle,action.chatId,userId);spindle.sendToFrontend({type:'vn_cast_context',chatId:action.chatId,requestId:action.requestId,scan},userId);return;}
       const library=await manageCastArt(spindle,action.chatId,action,userId);
       if(action.action!=="list")releaseSceneCacheScope(spindle,userId,action.chatId,"scope_cleared");
       spindle.sendToFrontend({type:"vn_cast_art",chatId:action.chatId,requestId:action.requestId,library},userId);

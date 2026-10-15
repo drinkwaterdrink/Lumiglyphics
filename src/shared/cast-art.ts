@@ -27,7 +27,7 @@ export type CastArtRecord=z.infer<typeof CastArtRecordSchema>;
 export type CastArtVariant=z.infer<typeof CastArtVariantSchema>;
 export const CastArtRequestSchema=z.object({
  type:z.literal('vn_cast_art'),version:z.literal(1),chatId:id,requestId:id,
- action:z.enum(['list','select','forget','reset','supply','restore','setup','clear_setup','setup_supply','setup_restore']),characterId:id.optional(),variantId:id.optional(),imageId:id.optional(),outfitId:id.optional(),name:z.string().trim().min(1).max(160).optional(),setup:CastSetupInputSchema.optional()
+ action:z.enum(['list','scan','select','forget','reset','supply','restore','setup','clear_setup','setup_supply','setup_restore']),characterId:id.optional(),variantId:id.optional(),imageId:id.optional(),outfitId:id.optional(),name:z.string().trim().min(1).max(160).optional(),setup:CastSetupInputSchema.optional()
 }).strict().superRefine((value,ctx)=>{
  if((['select','forget','supply','restore'].includes(value.action))&&!value.characterId)ctx.addIssue({code:'custom',path:['characterId'],message:'Choose a character.'});
  if(['select','supply','restore'].includes(value.action)&&!value.variantId)ctx.addIssue({code:'custom',path:['variantId'],message:'Choose a variant.'});
@@ -41,3 +41,6 @@ export type CastArtAction=Pick<z.infer<typeof CastArtRequestSchema>,'action'|'ch
 export const CastGalleryRequestSchema=z.object({type:z.literal('vn_cast_gallery'),chatId:id,requestId:id,offset:z.number().int().min(0).max(10000)}).strict();
 export const CastGallerySchema=z.object({offset:z.number().int().nonnegative(),total:z.number().int().nonnegative(),images:z.array(z.object({id,name:z.string().max(256),url:z.string().max(1024).refine(v=>v.startsWith('/')&&!v.startsWith('//')&&!v.includes('\\'))}).strict()).max(12)}).strict();
 export type CastGallery=z.infer<typeof CastGallerySchema>;
+
+export const CastContextScanSchema=z.object({candidates:z.array(z.object({name:z.string().min(1).max(160),source:z.string().max(256),setup:CastSetupInputSchema}).strict()).max(32),notice:z.string().max(1000)}).strict();
+export type CastContextScan=z.infer<typeof CastContextScanSchema>;

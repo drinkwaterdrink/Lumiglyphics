@@ -1,4 +1,4 @@
-import {CastArtLibrarySchema,CastSetupInputSchema,type CastSetupInput,type CastArtLibrary,type CastArtAction,CastGallerySchema,type CastGallery} from '../../shared/cast-art.js';
+import {CastContextScanSchema,type CastContextScan,CastArtLibrarySchema,CastSetupInputSchema,type CastSetupInput,type CastArtLibrary,type CastArtAction,CastGallerySchema,type CastGallery} from '../../shared/cast-art.js';
 
 /** Explicit metadata management only. Image generation stays in the existing reviewer. */
 export class CastArtPanel {
@@ -8,6 +8,7 @@ export class CastArtPanel {
  private loadedChat='';private pending:{chatId:string,requestId:string}|null=null;
  private timer:ReturnType<typeof setTimeout>|null=null;
  private draft:CastSetupInput|null=null;private newCharacter=false;private newAfterLoad=false;private savedName='';
+ private scan:CastContextScan|null=null;private scanAfterLoad=false;
  private artworkTarget:{characterId:string,outfitId?:string,snapshot:string}|null=null;
  private renderedCharacter='';
  constructor(private chat:()=>string,private send:(chatId:string,requestId:string,action:CastArtAction)=>void,private gallery:(chatId:string,requestId:string,offset:number)=>void,private voice:(name:string)=>void=()=>{}){
@@ -19,7 +20,14 @@ export class CastArtPanel {
   const editor=document.createElement('details');editor.dataset.castSetup='';
   editor.innerHTML='<summary>Character setup</summary><label>Name<input data-cast-setup-name aria-label="Cast character name" maxlength="160"></label><small>Existing names identify the character. Use aliases for other names.</small><label>Aliases — one per line<textarea data-cast-setup-aliases aria-label="Cast aliases" maxlength="2600" rows="2"></textarea></label><label>Base appearance<textarea data-cast-setup-appearance aria-label="Cast base appearance" maxlength="2000" rows="4" placeholder="Concrete visual details: species, build, hair or fur, eyes, distinguishing features…"></textarea></label><label>Outfit to edit<select data-cast-setup-outfit aria-label="Cast outfit"><option value="">Base appearance / no outfit</option></select></label><div data-cast-setup-outfit-fields hidden><label>Outfit name<input data-cast-setup-outfit-name aria-label="Cast outfit name" maxlength="100"></label><label>Clothing description<textarea data-cast-setup-outfit-description aria-label="Cast clothing description" maxlength="1000" rows="2"></textarea></label><button type="button" data-cast-setup-outfit-remove>Remove outfit</button></div><button type="button" data-cast-setup-outfit-add>Add outfit</button><label>Default outfit guidance<select data-cast-setup-default aria-label="Default cast outfit"></select></label><small>Story clothing can override this guidance. Seven named outfits plus base artwork are supported. Generated portrait variants keep their separate existing limit.</small><button type="button" data-cast-setup-save>Save cast setup</button><button type="button" data-cast-setup-clear>Remove setup guidance</button><hr><img data-cast-setup-preview alt="Supplied cast artwork" hidden style="max-width:100%;max-height:180px;object-fit:contain;display:block;margin:12px auto"><p data-cast-setup-art-help></p><button type="button" data-cast-setup-art>Choose setup artwork</button><button type="button" data-cast-setup-art-clear>Clear setup artwork</button><button type="button" data-cast-setup-voice>Configure voice</button><small>Artwork is display-only in Cast view when a matching portrait cue is present. It is not sent to the image model. Appearance/outfit edits require reassigning artwork before it can be used for the new look. Voice opens the existing Voice controls; nothing is synthesized here.</small>';
   this.host.insertBefore(editor,this.el('[data-cast-art-catalog]'));
+  for(const input of this.host.querySelectorAll<HTMLInputElement>('input:not([type])'))input.type='text';
   this.host.insertBefore(this.el('[data-cast-art-gallery-panel]'),this.el('[data-cast-art-catalog]'));
+  const scanPanel=document.createElement('details');scanPanel.dataset.castContext='';scanPanel.innerHTML='<summary>Fill from context</summary><p>Scan saved story appearances and enabled SimTracker context. Review a source, fill your draft, then save to apply it to future image prompts.</p><button type="button" data-cast-scan>Scan context</button><div data-cast-scan-results hidden><label>Character and source<select aria-label="Scanned character source" data-cast-scan-source></select></label><label>Source preview<textarea aria-label="Scanned character preview" data-cast-scan-preview readonly rows="5"></textarea></label><button type="button" data-cast-scan-fill>Fill empty fields</button><button type="button" data-cast-scan-replace>Replace appearance</button></div><p data-cast-scan-notice role="status"></p>';
+  this.host.insertBefore(scanPanel,editor);
+  this.el<HTMLButtonElement>('[data-cast-scan]').onclick=()=>{if(this.loadedChat!==this.chat()){this.scanAfterLoad=true;this.request({action:'list'});}else this.request({action:'scan'});};
+  this.el<HTMLSelectElement>('[data-cast-scan-source]').onchange=()=>this.previewScan();
+  this.el<HTMLButtonElement>('[data-cast-scan-fill]').onclick=()=>this.fillScan(false);
+  this.el<HTMLButtonElement>('[data-cast-scan-replace]').onclick=()=>this.fillScan(true);
   add.onclick=()=>{if(this.loadedChat!==this.chat()){this.newAfterLoad=true;this.request({action:'list'});}else this.startNew();};
   this.el<HTMLButtonElement>('[data-cast-art-refresh]').onclick=()=>this.request({action:'list'});
   this.el<HTMLSelectElement>('[data-cast-art-character]').onchange=()=>this.renderVariants();
@@ -68,7 +76,7 @@ export class CastArtPanel {
   if(this.savedName){const saved=this.library.characters.find(r=>r.name.toLocaleLowerCase()===this.savedName.toLocaleLowerCase());if(saved)picker.value=saved.entityId;this.savedName='';}
   this.newCharacter=false;
   this.el('[data-cast-art-catalog]').hidden=!this.library.characters.length;this.renderVariants();
-  this.status(this.library.characters.length?`${this.library.characters.length} saved character(s). No generation requested.`:'No cast setup yet. Add a character without generating a portrait.');if(this.newAfterLoad){this.newAfterLoad=false;this.startNew();}return true;
+  this.status(this.library.characters.length?`${this.library.characters.length} saved character(s). No generation requested.`:'No cast setup yet. Add a character without generating a portrait.');if(this.scanAfterLoad){this.scanAfterLoad=false;this.request({action:'scan'});}if(this.newAfterLoad){this.newAfterLoad=false;this.startNew();}return true;
  }
  private renderVariants():void{
   const record=this.library.characters.find(r=>r.entityId===this.el<HTMLSelectElement>('[data-cast-art-character]').value);
@@ -111,9 +119,30 @@ export class CastArtPanel {
  private finish():void{if(this.timer)clearTimeout(this.timer);this.timer=null;this.pending=null;this.busy(false);this.updateAvailability();}
  fail(error:string,requestId?:string):void{if(requestId&&requestId!==this.pending?.requestId)return;this.finish();this.status(error);}
  notice(error:string):void{this.status(`Picture completed, but portrait art was not saved: ${error}`);}
- clear():void{this.finish();this.loadedChat='';this.library={version:1,characters:[]};this.draft=null;this.newCharacter=false;this.newAfterLoad=false;this.savedName='';this.artworkTarget=null;this.el('[data-cast-art-gallery-panel]').hidden=true;this.el('[data-cast-art-gallery-grid]').replaceChildren();this.el('[data-cast-art-catalog]').hidden=true;this.el<HTMLImageElement>('[data-cast-art-preview]').removeAttribute('src');this.renderSetup();this.status('Load the current chat’s saved characters.');}
+ clear():void{this.scan=null;this.scanAfterLoad=false;this.el('[data-cast-scan-results]').hidden=true;this.el('[data-cast-scan-notice]').textContent='';this.el<HTMLTextAreaElement>('[data-cast-scan-preview]').value='';this.el<HTMLSelectElement>('[data-cast-scan-source]').replaceChildren();this.finish();this.loadedChat='';this.library={version:1,characters:[]};this.draft=null;this.newCharacter=false;this.newAfterLoad=false;this.savedName='';this.artworkTarget=null;this.el('[data-cast-art-gallery-panel]').hidden=true;this.el('[data-cast-art-gallery-grid]').replaceChildren();this.el('[data-cast-art-catalog]').hidden=true;this.el<HTMLImageElement>('[data-cast-art-preview]').removeAttribute('src');this.renderSetup();this.status('Load the current chat’s saved characters.');}
  destroy():void{this.finish();this.host.remove();}
 
+ receiveScan(chatId:string,requestId:string,value:CastContextScan):boolean{
+  if(!this.pending||chatId!==this.chat()||chatId!==this.pending.chatId||requestId!==this.pending.requestId)return false;
+  const parsed=CastContextScanSchema.safeParse(value);if(!parsed.success){this.fail('Invalid context response. Nothing was changed.');return false;}
+  this.finish();this.scan=parsed.data;const picker=this.el<HTMLSelectElement>('[data-cast-scan-source]');picker.replaceChildren();
+  for(const [index,candidate] of this.scan.candidates.entries()){const option=document.createElement('option');option.value=String(index);option.textContent=`${candidate.name} · ${candidate.source}`;picker.append(option);}
+  this.el('[data-cast-scan-results]').hidden=!this.scan.candidates.length;this.el('[data-cast-scan-notice]').textContent=this.scan.candidates.length?this.scan.notice:'No usable character descriptions found. Prepare a story reply or enable SimTracker context, or enter an appearance manually.';
+  this.previewScan();this.status('Context scan complete. Nothing saved or generated.');return true;
+ }
+ private previewScan(){const candidate=this.scan?.candidates[Number(this.el<HTMLSelectElement>('[data-cast-scan-source]').value)];this.el<HTMLTextAreaElement>('[data-cast-scan-preview]').value=candidate?`${candidate.name}
+${candidate.setup.appearance}
+${candidate.setup.outfits.map(o=>o.name+': '+o.description).join('\n')}`:'';}
+ private fillScan(replace:boolean){
+  const candidate=this.scan?.candidates[Number(this.el<HTMLSelectElement>('[data-cast-scan-source]').value)];if(!candidate)return;
+  if(!this.draft)this.startNew();const name=this.el<HTMLInputElement>('[data-cast-setup-name]').value.trim();
+  if(name&&name.toLowerCase()!==candidate.name.toLowerCase()){this.status('Choose this character or Add character before filling a different name. Your edits were kept.');return;}
+  const draft=this.readDraft()!;if(replace||!draft.appearance)draft.appearance=candidate.setup.appearance;
+  if(!draft.aliases.length)draft.aliases=[...candidate.setup.aliases];
+  if(!draft.outfits.length){draft.outfits=structuredClone(candidate.setup.outfits);draft.defaultOutfitId=candidate.setup.defaultOutfitId;}
+  this.renderSetup(true);this.el<HTMLInputElement>('[data-cast-setup-name]').value=name||candidate.name;this.el<HTMLDetailsElement>('[data-cast-setup]').open=true;
+  this.status('Draft filled. Review and Save cast setup to apply it to future image prompts. Existing prepared pictures keep their prompts.');
+ }
  private selectedRecord(){return this.library.characters.find(r=>r.entityId===this.el<HTMLSelectElement>('[data-cast-art-character]').value);}
  private startNew(){this.newCharacter=true;this.draft={appearance:'',aliases:[],outfits:[],defaultOutfitId:null};this.renderSetup(true);this.el<HTMLDetailsElement>('[data-cast-setup]').open=true;this.el<HTMLInputElement>('[data-cast-setup-name]').focus();}
  private renderSetup(keepDraft=false){

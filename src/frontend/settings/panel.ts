@@ -1,5 +1,5 @@
 import {CastArtPanel} from './cast-art.js';
-import type {CastArtLibrary,CastArtAction,CastGallery} from '../../shared/cast-art.js';
+import type {CastArtLibrary,CastArtAction,CastGallery,CastContextScan} from '../../shared/cast-art.js';
 import {LocationArtPanel} from './location-art.js';
 import type {LocationArtLibrary,LocationArtAction} from '../../shared/stage-assets.js';
 import { TooltipSettingsPanel } from "./tooltips.js";
@@ -2150,6 +2150,7 @@ export class VisualNovelSettingsPanel {
     select.value = [...this.promptPresets, ...BUILTIN_SHARED_STYLES].some((preset) => preset.id === selectedId) ? selectedId : "";
   }
 
+  setCastContext(chatId:string,requestId:string,scan:CastContextScan):boolean{return this.castArtPanel.receiveScan(chatId,requestId,scan);}
   setCastArt(chatId:string,requestId:string,library:CastArtLibrary):boolean{return this.castArtPanel.receive(chatId,requestId,library);}
   setCastGallery(chatId:string,requestId:string,gallery:CastGallery):void{this.castArtPanel.receiveGallery(chatId,requestId,gallery);}
   castArtError(error:string,requestId?:string):void{this.castArtPanel.fail(error,requestId);}

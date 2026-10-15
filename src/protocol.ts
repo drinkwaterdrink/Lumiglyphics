@@ -1,4 +1,4 @@
-import {CastGalleryRequestSchema,type CastGallery,CastArtRequestSchema,type CastArtLibrary} from './shared/cast-art.js';
+import {CastGalleryRequestSchema,type CastGallery,CastArtRequestSchema,type CastArtLibrary,type CastContextScan} from './shared/cast-art.js';
 import {ImageLibraryRequestSchema,type ImageLibraryPage} from './shared/image-library.js';
 import {LocationArtRequestSchema,type LocationArtLibrary} from './shared/stage-assets.js';
 import type { ContextSourceReport } from './shared/context-sources.js';
@@ -160,6 +160,7 @@ export type ConnectionCatalogErrors = {
 export type BackendResponse =
   | {type:'vn_image_library';chatId:string;requestId:string;page:ImageLibraryPage}
   | {type:"vn_cast_gallery";chatId:string;requestId:string;gallery:CastGallery}
+  | {type:"vn_cast_context";chatId:string;requestId:string;scan:CastContextScan}
   | {type:"vn_cast_art";chatId:string;requestId:string;library:CastArtLibrary}
   | {type:"vn_cast_art_notice";chatId:string;error:string}
   | {type:"vn_location_art";chatId:string;requestId:string;library:LocationArtLibrary}
