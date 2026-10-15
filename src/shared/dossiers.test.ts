@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {normalizeTooltipPreferences,linkEntityMentions,selectReaderDossier} from './dossiers.js';
+import {normalizeTooltipPreferences,linkEntityMentions,selectReaderDossier,referenceEntries,eligibleEntities} from './dossiers.js';
 const entity={id:'m',kind:'npc' as const,name:'Mira',aliases:[],firstParagraph:0,facts:[]};
 test('category gates, boundaries, ambiguous names and density preserve prose',()=>{
  const prefs=normalizeTooltipPreferences({enabled:true});
@@ -47,4 +47,22 @@ test('first-mention exclusions preserve all known name and alias owners',()=>{
  expect(linkEntityMentions('Mira',[entity],prefs,'c',3,[],new Set(['m']))).toEqual([]);
  const pinned=normalizeTooltipPreferences({enabled:true,overrides:[{chatId:'c',kind:'npc',name:'Mira',pinned:true}]});
  expect(linkEntityMentions('Mira',[entity],pinned,'c',3,[],new Set(['m']))).toHaveLength(1);
+});
+
+test('menu-only keeps category-gated reference access while suppressing inline anchors',()=>{
+ const prefs=normalizeTooltipPreferences({enabled:true,linking:'menu-only'});
+ expect(prefs.linking).toBe('menu-only');expect(linkEntityMentions('Mira',[entity],prefs)).toEqual([]);expect(eligibleEntities([entity],prefs)).toHaveLength(1);
+});
+test('reference search prioritizes pins and scene entries without revealing future or suppressed entities',()=>{
+ const key={chatId:'c',assistantMessageId:'m',swipeId:0,sourceFingerprint:'12345678',revision:0};
+ const snapshot:any={at:{key,paragraphIndex:0},entities:[entity,{...entity,id:'away',name:'Rena',aliases:['Fox']},{...entity,id:'future',name:'Later',firstParagraph:1},{...entity,id:'hidden',name:'Hidden'},{...entity,id:'place',kind:'place',name:'Garden'}],presentEntityIds:['m'],locationId:'place',stateByEntity:{away:{presence:'absent'}}};
+ const prefs=normalizeTooltipPreferences({enabled:true,overrides:[{chatId:'c',kind:'npc',name:'Rena',pinned:true},{chatId:'c',kind:'npc',name:'Hidden',suppressed:true}]});
+ expect(referenceEntries(snapshot,prefs,'','all').map(e=>e.entity.name)).toEqual(['Rena','Garden','Mira']);
+ expect(referenceEntries(snapshot,prefs,'fox','npc')[0]!.label).toContain('Not in this scene');expect(referenceEntries(snapshot,prefs,'silver','all')).toEqual([]);
+});
+
+test('location names and IDs describe the same current scene conservatively',()=>{
+ const snapshot:any={at:{key:{chatId:'c'},paragraphIndex:0},entities:[entity,{id:'garden',kind:'place',name:'Garden',aliases:[],firstParagraph:0,facts:[]},{id:'inn',kind:'place',name:'Inn',aliases:[],firstParagraph:0,facts:[]}],presentEntityIds:['m'],locationId:'garden',stateByEntity:{m:{location:'Garden'}}};
+ const prefs=normalizeTooltipPreferences({enabled:true});expect(referenceEntries(snapshot,prefs).find(e=>e.entity.id==='m')!.label).toBe('In this scene');
+ snapshot.stateByEntity.m.location='Inn';expect(referenceEntries(snapshot,prefs).find(e=>e.entity.id==='m')!.label).toBe('Elsewhere');
 });

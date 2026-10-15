@@ -901,6 +901,8 @@ export class VnStage {
     this.lastSkipStop = null;
     try { this.dispatch({ type: "load-turn", turn }); }
     finally { this.isRewinding = false; }
+    // A refreshed source may keep identical prose; its new references still need hydration.
+    if(!this.isTyping)this.dossiers.refresh(this.state.currentParagraphIndex);
     if ((turn.initialParagraphIndex ?? 0) > 0) {
       this.completeTypewriter();
       this.resumeNotice = document.createElement("div");

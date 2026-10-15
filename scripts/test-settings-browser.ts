@@ -467,6 +467,8 @@ try {
   assert.equal((await lastPatch(page))?.tooltips?.categories.locations,false);
   await tooltips.locator('[data-tooltip="detail"]').selectOption('expanded');
   assert.equal((await lastPatch(page))?.tooltips?.detail,'expanded');
+  await tooltips.locator('[data-tooltip="linking"]').selectOption('menu-only');assert.equal((await lastPatch(page))?.tooltips?.linking,'menu-only');assert.equal(await tooltips.locator('[data-tooltip="maxLinksPerParagraph"]').isDisabled(),true);
+  await tooltips.locator('[data-tooltip="linking"]').selectOption('important');assert.equal(await tooltips.locator('[data-tooltip="maxLinksPerParagraph"]').isDisabled(),false);
   assert.deepEqual(external, [], "settings page must not contact the network");
   console.log("settings browser checks passed");
 } finally {

@@ -1,4 +1,4 @@
-import {normalizeTooltipPreferences,linkEntityMentions,eligibleEntities,selectReaderDossier,entityOverride,type TooltipPreferences} from '../../shared/dossiers.js';
+import {referenceEntries,normalizeTooltipPreferences,linkEntityMentions,eligibleEntities,selectReaderDossier,entityOverride,type TooltipPreferences} from '../../shared/dossiers.js';
 import {ReaderPresentationSchema,samePresentationTurn,type ReaderPresentation,type PresentationEntity} from '../../shared/presentation-entities.js';
 import {applyEntityAnchors,clearEntityAnchors,protectedEntityRanges} from './entity-anchors.js';
 import {DossierCard,DOSSIER_CSS} from './dossier-card.js';
@@ -9,7 +9,7 @@ export class StageDossiers {
   const style=document.createElement('style');style.textContent=DOSSIER_CSS;root.append(style);
   this.card=new DossierCard(root,()=>this.release(),(entity,patch)=>this.updateOverride(entity,patch));
   this.tray.type='button';this.tray.dataset.vnReferences='';this.tray.dataset.vnControl='references';this.tray.innerHTML='<span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M12 5.5c-3-2-6.5-2-9-1v14c2.5-1 6-1 9 1 3-2 6.5-2 9-1v-14c-2.5-1-6-1-9 1Z"/><path d="M12 5.5v14M6 8h3M6 11h3M15 8h3M15 11h3"/></svg></span>';this.tray.title='Scene references';this.tray.setAttribute('aria-label','Scene references');this.tray.hidden=true;
-  this.tray.onclick=event=>{event.stopPropagation();const snapshot=this.snapshot();if(!snapshot)return;this.hold();this.card.openTray(eligibleEntities(snapshot.entities,this.prefs,snapshot.at.key.chatId),this.tray,(id,trigger)=>this.open(id,trigger));};controls.append(this.tray);
+  this.tray.onclick=event=>{event.stopPropagation();const snapshot=this.snapshot();if(!snapshot)return;this.hold();this.card.openTray(referenceEntries(snapshot,this.prefs),this.tray,(id,trigger)=>this.open(id,trigger));};controls.append(this.tray);
  }
  isOpen():boolean{return this.card.isOpen();}
  setContext(value:ReaderPresentation|undefined,paragraphs:readonly string[]):void {
@@ -24,7 +24,7 @@ export class StageDossiers {
  refresh(index:number):void {
   this.cursor(index);this.ready=true;clearEntityAnchors(this.text);
   const snapshot=this.snapshot();const eligible=snapshot?eligibleEntities(snapshot.entities,this.prefs,snapshot.at.key.chatId):[];
-  this.tray.hidden=!eligible.length;if(!snapshot||!eligible.length)return;
+  this.tray.hidden=!eligible.length;if(!snapshot||!eligible.length||this.prefs.linking==='menu-only')return;
   // Global deterministic 24-link reply cap, evaluated only through this cursor.
   let used=0;const priorIds=new Set<string>();
   for(let i=0;i<index;i++) {

@@ -10,7 +10,7 @@
 
 **Spec:** ../specs/2026-10-11-reader-experience-design.md, plus the user's scenario-card clarification and supplied inline-dossier examples as inspiration only.
 
-**Status:** Beta.28 on `Testing`, 2026-10-13. A recovery and B mobile reader are delivered. C has typed reveal-scoped snapshots, tracker mappings and optional source-status checks, but normalized external reconciliation remains incomplete. D standalone tooltips/inline links are delivered; tooltip actions remain G work. E has saved place art, basic cast presentation, saved portraits and supplied gallery artwork; cast setup registration/outfits/gallery/Voice foundations are delivered; expression artwork and independent generation remain pending. F rules and G interactions remain pending. Beta.21 adds prompt rerolls and combined-length repair; beta.22 addresses the saved-place lookup/reset race (audit A1). Beta.23 delivers the first read-only image library; beta.24 fixes mobile History exits; beta.25 adds cast setup; E3 follow-ups, D2/G/H and remaining I follow-ups are pending. Earlier unchecked steps and dated increments retain their historical context.
+**Status:** Beta.29 on `Testing`, 2026-10-13. A recovery and B mobile reader are delivered. C has typed reveal-scoped snapshots, tracker mappings and optional source-status checks, but normalized external reconciliation remains incomplete. D standalone tooltips/inline links are delivered; tooltip actions remain G work. E has saved place art, basic cast presentation, saved portraits and supplied gallery artwork; cast setup registration/outfits/gallery/Voice foundations are delivered; expression artwork and independent generation remain pending. F rules and G interactions remain pending. Beta.21 adds prompt rerolls and combined-length repair; beta.22 addresses the saved-place lookup/reset race (audit A1). Beta.23 delivers the first read-only image library; beta.24 fixes mobile History exits; beta.25 adds cast setup; E3 follow-ups, G/H and remaining I follow-ups are pending; beta.29 delivers D2 quiet references. Earlier unchecked steps and dated increments retain their historical context.
 
 ## Selected roadmap additions — 2026-10-13
 
@@ -21,7 +21,7 @@ The user selected **cast setup, tooltip actions, in-world documents, quiet refer
 | Cast setup | E3, building on E2 | Beta.25 supports registration, aliases, base/outfit guidance, artwork and Voice draft shortcut; expression and independent-placement follow-ups remain | Register/configure a character before first generation; connect identity, outfits, artwork and existing voice controls |
 | Tooltip actions | G, explicit entry from D cards | Information cards exist; action drafts are pending | Ask, Examine, Approach, Use and Custom create editable intentions or verified engine moves |
 | In-world documents | H, new | Proposed | Readable letters, journals, phones and terminals reveal exact established text |
-| Quiet reference quick access | D2, building on D | Current-reference menu exists | Compact searchable, category-filtered access without compulsory inline highlighting or automatic popups |
+| Quiet reference quick access | D2, building on D | Beta.29 searchable, category-filtered menu and menu-only mode delivered | Compact searchable, category-filtered access without compulsory inline highlighting or automatic popups |
 | Previous-message image library | I, new | Beta.23 read-only saved-turn browser delivered; broader indexing/deduplication follow-ups pending | Browse this chat's earlier generated pictures, inspect their source and available prompt, and view full images without regeneration |
 
 Recommended delivery order: targeted reliability/timing work → I read-only image library → E3 cast setup → D2 quiet references → G tooltip actions → H documents. E2 independent generation remains a related pending asset milestone; it does not block a read-only image library. Previously approved F rules remain on the roadmap. Other catalog candidates and the previously deferred storyboard editor/bookmark timeline/presentation packs retain their earlier status.
@@ -240,11 +240,11 @@ Independent background/portrait admission stays in E2 and shares the existing pe
 
 **Boundaries:** Build on `StageDossiers`, existing tooltip preferences and reveal-scoped entities. The quiet sheet and inline links share facts, suppression/pinning/notes and category gates; no competing Codex or new extraction call on open.
 
-- [ ] Provide a references entry with an accessible icon/touch target, search and NPC/location/item filters. Do not open cards automatically, show constant notifications or add a large toolbar label.
-- [ ] Offer a menu-only display mode under the existing tooltip controls. Preserve the tooltip master switch and independent categories; turning off inline links must not unintentionally remove quick access when menu-only mode is selected.
-- [ ] Prioritize current scene references and pinned known entries. Keep absent/elsewhere people clearly distinguished; hidden, suppressed, private and not-yet-revealed facts stay excluded. A pin cannot override a reveal gate.
-- [ ] Preserve cursor, existing composer draft, focus return and auto-advance pause while the sheet is open. Changing chat/cursor/source invalidates stale selections.
-- [ ] Verify long names, ambiguous aliases, empty/search-no-result states, large text, all themes, mobile keyboard, disabled sources and zero model/image calls when browsing.
+- [x] Provide a references entry with an accessible icon/touch target, search and NPC/location/item filters. Do not open cards automatically, show constant notifications or add a large toolbar label.
+- [x] Offer a menu-only display mode under the existing tooltip controls. Preserve the tooltip master switch and independent categories; turning off inline links must not unintentionally remove quick access when menu-only mode is selected.
+- [x] Prioritize current scene references and pinned known entries. Keep absent/elsewhere people clearly distinguished; hidden, suppressed, private and not-yet-revealed facts stay excluded. A pin cannot override a reveal gate.
+- [x] Preserve cursor, existing composer draft, focus return and auto-advance pause while the sheet is open. Changing chat/cursor/source invalidates stale selections.
+- [x] Verify long names, ambiguous aliases, empty/search-no-result states, large text, all themes, mobile keyboard, disabled sources and zero model/image calls when browsing.
 
 ## Work package F — teachable presentation rules (5)
 
@@ -454,3 +454,7 @@ I2 delivery (beta.27,2026-10-14): approved unified History implemented; compact 
 ## E3 context-scan addition — requested 2026-10-14
 
 Add Scan context inside Cast setup to collect recognized saved story appearances, current setup and enabled SimTracker descriptions/outfits/aliases. Preview each source and fill editable draft fields; preserve existing values unless the user explicitly replaces appearance. Saving uses the existing setup overlay for future image prompts. No scan-time model/image call, no private companion storage access, no scenario-title inference and no automatic persistence. Reject stale scan responses and scope reads to chat/user. D2 remains next after this user-requested addition. Broader free-prose extraction and unverified tracker RPC integrations remain separate work.
+
+## Beta.29 D2 quiet references — 2026-10-14
+
+Existing reference tray now supports name/alias search, category filtering, conservative presence labels, pinned/current-scene ordering and card-to-sheet return preserving filters. Existing Tooltips linking preference adds Menu only while retaining the master switch and category gates. No new backend extraction, companion dependency or generation call. The list uses the current reveal-scoped presentation snapshot; it does not become a second persistent Codex. G tooltip actions and H documents remain pending.
