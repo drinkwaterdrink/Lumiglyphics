@@ -1,17 +1,17 @@
 {
-  "checkedAt": "2026-10-15T02:37:28.298Z",
+  "checkedAt": "2026-10-15T02:57:53.470Z",
   "identifier": "lumiglyphics",
-  "version": "0.2.0-beta.30",
+  "version": "0.2.0-beta.31",
   "entries": [
     {
       "entry": "dist/backend.js",
-      "bytes": 1635860,
-      "sha256": "aad5f4443364adb359ede4ae72fd527d0aad09dee7d869cb9cce80dcfeab72fd"
+      "bytes": 1725066,
+      "sha256": "63f3127205da36d93e70f5dd9c528085d9b742e70d80dea62d3597fac9996542"
     },
     {
       "entry": "dist/frontend.js",
-      "bytes": 1578604,
-      "sha256": "afcf9282031ff05f6f5d077d3692589a7ee8170a5baa7faba64f34d579cb8b13"
+      "bytes": 1535179,
+      "sha256": "3c0eec9fbea1750be225cb436fd53b5e0888371a4a6d060d96c922b8fd2a77f9"
     }
   ],
   "localStaticPatterns": {
@@ -19,10 +19,15 @@
       "filesystem",
       "processModules",
       "systemApis",
-      "dynamicCode",
-      "bufferDecode"
+      "dynamicCode"
     ],
     "matches": []
+  },
+  "capabilities": {
+    "declared": [
+      "base64_decode"
+    ],
+    "base64Decode": true
   },
   "limitation": "Local text checks only; not the host install-time scanner or a live Lumiverse runtime test.",
   "reference": "https://docs.lumiverse.chat/getting-started/capabilities/"

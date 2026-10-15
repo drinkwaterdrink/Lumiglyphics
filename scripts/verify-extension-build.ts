@@ -16,14 +16,21 @@ const patterns = {
   processModules: /["'](?:node:)?(?:child_process|net|tls|dgram|http|https|worker_threads|cluster|sqlite)["']|["']bun:sqlite["']/,
   systemApis: /\bBun\s*\.\s*(?:file|write|spawn|spawnSync|serve|connect|listen)\b|\bprocess\s*\.\s*(?:env|exit|kill|chdir|dlopen)\b/,
   dynamicCode: /\beval\s*\(|\bFunction\s*\(/,
-  bufferDecode: /\bBuffer\s*\.\s*from\s*\([^\n]*["']base64["']/
 };
 const matches = Object.entries(patterns).filter(([, pattern]) => pattern.test(backend)).map(([name]) => name);
 assert.deepEqual(matches, [], "Backend contains patterns requiring investigation");
+// Lumiverse builds the backend with --target bun. YAML's Node binary helper
+// needs the documented declaration even when only the core schema is used.
+// This is a conservative local check, not a replacement for the host scanner.
+const base64Decode = /\bBuffer\s*\.\s*from\s*\([^)]*["'`]base64["'`]|\batob\s*\(/.test(backend);
+const declaredCapabilities: unknown[] = manifest.requested_capabilities ?? [];
+assert.ok(!base64Decode || declaredCapabilities.includes("base64_decode"),
+  "Backend bundles base64 decoding; declare base64_decode in spindle.json");
 const evidence = {
   checkedAt: new Date().toISOString(), identifier: manifest.identifier, version: manifest.version,
   entries: [manifest.entry_backend, manifest.entry_frontend].map((entry: string) => { const data = readFileSync(entry); return { entry, bytes: data.length, sha256: createHash("sha256").update(data).digest("hex") }; }),
   localStaticPatterns: { checked: Object.keys(patterns), matches },
+  capabilities: { declared: declaredCapabilities, base64Decode },
   limitation: "Local text checks only; not the host install-time scanner or a live Lumiverse runtime test.",
   reference: "https://docs.lumiverse.chat/getting-started/capabilities/"
 };
