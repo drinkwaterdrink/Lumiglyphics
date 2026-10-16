@@ -511,7 +511,7 @@ export class VnStage {
   private errorDetails: VnStageErrorDetails | null = null;
   /** Host-reported image failure that must not stop reading. */
   private hostImageError: VnStageErrorDetails | null = null;
-  private dismissedImageErrors = new Set<string>();
+  private dismissedErrors = new Set<string>();
   private lastSkipStop: "unread" | null = null;
 
   constructor(options: VnStageOptions) {
@@ -916,7 +916,7 @@ export class VnStage {
 
   loadTurn(turn: VnTurnInput): void {
     this.moveDraftEpoch++;this.closeMoveDraft();
-    this.dismissedImageErrors.clear();
+    this.dismissedErrors.clear();
     this.castStage.set(null,0);
     this.dossiers.setContext(turn.presentation,turn.paragraphs.map(p=>p.text));
     this.dialogueSheet?.setHidden(false);
@@ -1025,7 +1025,7 @@ export class VnStage {
    */
   setError(error: VnStageErrorInput): void {
     if (error === null) {
-      this.dismissedImageErrors.clear();
+      this.dismissedErrors.clear();
       this.errorDetails = null;
       this.hostImageError = null;
       this.dispatch({ type: "set-error", error: null });
@@ -1048,7 +1048,7 @@ export class VnStage {
 
   async setSceneImage(request: VnSceneImageRequest): Promise<boolean> {
     if (this.destroyed) return false;
-    this.dismissedImageErrors.clear();
+    this.dismissedErrors.clear();
 
     const image: VnSceneImage = {
       url: request.url,
@@ -2208,6 +2208,7 @@ export class VnStage {
       detail?: string;
       actions?: Array<{ label: string; action: () => void; note?: string }>;
       dismissible?: boolean;
+      dismissLabel?: string;
     };
 
     const badges: BadgeSpec[] = [];
@@ -2251,7 +2252,7 @@ export class VnStage {
 
     const canReroll = Boolean(this.callbacks.onReroll || this.callbacks.onSwipe);
     const handleReroll = () => {
-      this.dismissedImageErrors.clear();
+      this.dismissedErrors.clear();
       if (this.callbacks.onReroll) {
         void this.callbacks.onReroll();
       } else if (this.callbacks.onSwipe) {
@@ -2275,7 +2276,8 @@ export class VnStage {
         title: errorTitle(details?.source ?? fallbackSource),
         label: message,
         icon: "alert",
-        dismissible: (details?.source ?? fallbackSource) === "image",
+        dismissible: true,
+        dismissLabel: (details?.source ?? fallbackSource) === "image" ? "Dismiss image error" : "Dismiss error",
       };
       if (details?.detail && details.detail.trim() && details.detail.trim() !== message) {
         spec.detail = details.detail.trim();
@@ -2319,7 +2321,7 @@ export class VnStage {
       JSON.stringify([b.title ?? "", b.label, b.detail ?? "", (b.actions ?? []).map((a) => [a.label, a.note ?? ""])]);
 
     for (let i = badges.length - 1; i >= 0; i--) {
-      if (badges[i]!.dismissible && this.dismissedImageErrors.has(errorSignature(badges[i]!))) badges.splice(i, 1);
+      if (badges[i]!.dismissible && this.dismissedErrors.has(errorSignature(badges[i]!))) badges.splice(i, 1);
     }
 
     // Reconcile status badges in-place if structure matches to prevent restarting spinner/dash animations
@@ -2345,7 +2347,7 @@ export class VnStage {
     }
 
     this.statusStack.replaceChildren(
-      ...badges.map(({ kind, label, icon, interactive, action, title, detail, actions, dismissible }) => {
+      ...badges.map(({ kind, label, icon, interactive, action, title, detail, actions, dismissible, dismissLabel }) => {
         const badge = document.createElement(interactive ? "button" : "span");
         if (interactive) {
           (badge as HTMLButtonElement).type = "button";
@@ -2423,13 +2425,13 @@ export class VnStage {
           const close = document.createElement("button");
           close.type = "button";
           close.setAttribute("data-vn-dismiss-error", "");
-          close.setAttribute("aria-label", "Dismiss image error");
-          close.title = "Dismiss image error";
+          close.setAttribute("aria-label", dismissLabel ?? "Dismiss error");
+          close.title = dismissLabel ?? "Dismiss error";
           close.textContent = "×";
           close.addEventListener("click", event => {
             event.stopPropagation();
-            if (this.dismissedImageErrors.size >= 32) this.dismissedImageErrors.clear();
-            this.dismissedImageErrors.add(errorSignature({ label, title, detail, actions }));
+            if (this.dismissedErrors.size >= 32) this.dismissedErrors.clear();
+            this.dismissedErrors.add(errorSignature({ label, title, detail, actions }));
             this.renderStatus();
             this.focus();
           });

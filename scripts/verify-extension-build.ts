@@ -10,6 +10,10 @@ assert.equal(manifest.github, "https://github.com/drinkwaterdrink/Lumiglyphics")
 assert.equal(manifest.homepage, "https://github.com/drinkwaterdrink/Lumiglyphics#readme");
 assert.equal(manifest.version, JSON.parse(readFileSync("package.json", "utf8")).version);
 for (const entry of [manifest.entry_backend, manifest.entry_frontend]) assert.ok(existsSync(entry), `Missing entry ${entry}`);
+const validatorVersion=JSON.parse(readFileSync('package.json','utf8')).dependencies.zod;
+assert.match(validatorVersion,/^\d+\.\d+\.\d+$/,'Pin the runtime validator to an exact tested version.');
+assert.equal(JSON.parse(readFileSync('node_modules/zod/package.json','utf8')).version,validatorVersion,'Installed validator differs from the release pin.');
+assert.ok(readFileSync('bun.lock','utf8').includes(`"zod": ["zod@${validatorVersion}",`),'Lockfile validator differs from the release pin.');
 const backend = readFileSync(manifest.entry_backend, "utf8");
 const patterns = {
   filesystem: /(?:from\s*|import\s*\(|require\s*\()\s*["'](?:node:)?fs(?:\/promises)?["']|\breadFileSync\s*\(/,

@@ -6,7 +6,7 @@
       "name": "lumiverse-visual-novel-preview",
       "dependencies": {
         "yaml": "2.9.1",
-        "zod": "^4.4.3",
+        "zod": "4.5.4",
       },
       "devDependencies": {
         "bun-types": "^1.4.0",

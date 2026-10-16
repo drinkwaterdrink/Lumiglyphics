@@ -1,6 +1,6 @@
 # Lumiglyphics
 
-Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.36`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance.
+Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.37`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance.
 
 **Image library:** Open the picture icon below Image prompts to browse saved pictures from earlier replies in this chat. The default shows active story versions through your reading position. Choose All story images, alternate versions or replaced pictures explicitly; optional filters select picture type or template name. Pages contain up to 24 lazy thumbnails grouped by reply. Open a picture for whole-image fit, zoom/scroll, a source excerpt and available read-only prompt/model details. Browsing makes no generation calls and pauses auto/skip. Missing images and legacy metadata are labelled. Future replacement/replan references are retained in bounded per-turn history; overwritten legacy references cannot always be recovered. Reused images can appear under each source reply. Native/card pictures and supplied portrait display overrides without saved jobs are not indexed in this first release.
 
@@ -323,3 +323,6 @@ In-world documents: with **Reading → Tooltips → Items** enabled, known lette
 
 
 Picture recovery: in **Image prompts**, select the picture and choose **Retry this picture** (or **Regenerate this picture** for completed art). This rebuilds that slot from the saved scene/current settings and holds a new preview for approval; it does not apply unsaved prompt edits. Use **Prepare edited preview** for edits. If other pictures are waiting/running, finish them or use **Stop pending pictures** first. **Reply recovery → Retry unfinished pictures** prepares all unfinished slots again while keeping completed images. It always requires fresh approval, even with automatic review off. Stopping cannot retract a request already sent to the provider, but late results cannot replace the new attempt. Replan this reply remains the separate story-reader operation.
+
+
+Runtime notices: general reader errors now have a dismiss button as well as image errors. Dismissal hides the notice without retrying or clearing the underlying failure. Technical details include the operation name for general backend errors. Unreadable optional scene/continuity caches no longer block loading a valid saved reply or preparing a new one; cache reads preserve the saved data. Runtime validation is pinned to the version checked by the release suite.

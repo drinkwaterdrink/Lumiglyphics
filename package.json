@@ -1,6 +1,6 @@
 {
   "name": "lumiglyphics",
-  "version": "0.2.0-beta.36",
+  "version": "0.2.0-beta.37",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.0",
@@ -11,6 +11,8 @@
     "test": "bun test --isolate",
     "test:panels": "bun run ./scripts/test-panels-browser.ts",
     "test:settings": "bun run ./scripts/test-settings-browser.ts",
+    "test:validation-sandbox": "bun test --preload ./scripts/validation-sandbox-preload.ts src/shared/contracts.test.ts src/backend/runtime/storage.test.ts src/backend/runtime/controller.test.ts",
+    "test:error-notices": "bun run ./scripts/test-error-notices-browser.ts",
     "test:image-recovery": "bun run ./scripts/test-image-recovery-browser.ts",
     "test:image-review": "bun run ./scripts/test-image-review-browser.ts",
     "test:image-library": "bun run ./scripts/test-image-library-browser.ts",
@@ -40,7 +42,7 @@
   },
   "dependencies": {
     "yaml": "2.9.1",
-    "zod": "^4.4.3"
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "playwright": "1.63.0",

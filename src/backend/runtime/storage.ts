@@ -641,16 +641,24 @@ export async function updateConfig(
 }
 
 export async function loadChatState(spindle: SpindleAPI, chatId: string, userId?: string): Promise<StoredChatState> {
-  const raw = await spindle.userStorage.getJson<Partial<StoredChatState>>(chatStatePath(chatId), {
+  const stored = await spindle.userStorage.getJson<unknown>(chatStatePath(chatId), {
     fallback: {},
     ...(userOptions(userId) ?? {})
   });
+  const raw=stored&&typeof stored==='object'&&!Array.isArray(stored)?stored as Partial<StoredChatState>:{};
+  // Scene/continuity are optional planning caches, not the saved story. An
+  // incompatible cache must not prevent loading the active turn or a new reply.
+  // Preserve storage unchanged here; ordinary future planning can refresh it.
+  const optionalCache=<T>(value:unknown,parse:(v:unknown)=>T,label:string):T|null=>{
+    if(value===undefined||value===null)return null;
+    try{return parse(value);}catch{spindle.log?.warn?.(`Saved ${label} cache is unavailable; continuing without that optional cache.`);return null;}
+  };
   return {
     schemaVersion: 1,
-    activeTurnPath: typeof raw.activeTurnPath === "string" ? raw.activeTurnPath : null,
-    latestScene: raw.latestScene ? SceneStateSchema.parse(raw.latestScene) : null,
-    terminalContinuity: raw.terminalContinuity ? TurnPlanSchema.shape.terminalContinuity.parse(raw.terminalContinuity) : null,
-    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : new Date(0).toISOString()
+    activeTurnPath: typeof raw.activeTurnPath === 'string' ? raw.activeTurnPath : null,
+    latestScene: optionalCache(raw.latestScene,value=>SceneStateSchema.parse(value),'scene'),
+    terminalContinuity: optionalCache(raw.terminalContinuity,value=>TurnPlanSchema.shape.terminalContinuity.parse(value),'continuity'),
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : new Date(0).toISOString()
   };
 }
 

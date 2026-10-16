@@ -272,6 +272,16 @@ describe("reading UX", () => {
     expect(root(s).querySelector("[data-vn-badge-kind='error']")).toBeNull();
   });
 
+  test("general runtime errors can be dismissed without clearing failure state or starting work",()=>{
+    let retries=0;const s=create({onReroll:()=>{retries++;}});s.loadTurn({mode:'standard',paragraphs:paragraphs(2)});
+    const failure={source:'other' as const,message:'Something went wrong.',detail:"undefined is not an object (evaluating 'key of value.allKeys')",retryable:false};
+    s.setError(failure);const before=s.getState();const close=q(s,'[data-vn-dismiss-error]');expect(close.getAttribute('aria-label')).toBe('Dismiss error');close.click();
+    expect(root(s).querySelector('[data-vn-badge-kind="error"]')).toBeNull();expect(s.getState().error).toBe(before.error);expect(s.getState().phase).toBe(before.phase);expect(s.getState().currentParagraphIndex).toBe(before.currentParagraphIndex);expect(retries).toBe(0);
+    s.setAssetProgress(null);expect(root(s).querySelector('[data-vn-badge-kind="error"]')).toBeNull();
+    s.setError({...failure,detail:'A different failure'});expect(root(s).querySelector('[data-vn-badge-kind="error"]')).not.toBeNull();
+    s.loadTurn({mode:'standard',paragraphs:paragraphs(1)});s.setError(failure);expect(root(s).querySelector('[data-vn-badge-kind="error"]')).not.toBeNull();
+  });
+
   test("image error can be dismissed without retrying or advancing, and a new turn can show it again", () => {
     let retries = 0;
     const s = create({ onReroll: () => { retries++; } });

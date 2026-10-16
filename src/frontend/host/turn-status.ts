@@ -80,7 +80,7 @@ export function describeOperationError(
     case "generation_ended":
       return { message: "The reply finished, but the scene could not be updated.", detail: error, source: "generation", retryable: false };
     default:
-      return { message: "Something went wrong.", detail: error, source: "other", retryable: false };
+      return { message: "A reader operation failed.", detail: `Operation: ${operation.slice(0,100)}\n${error}`, source: "other", retryable: false };
   }
 }
 

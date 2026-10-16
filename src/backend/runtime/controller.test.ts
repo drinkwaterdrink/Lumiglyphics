@@ -989,3 +989,17 @@ test('stopping during deferred retry initialization cannot resurrect an image ba
  expect(saved().jobs[0]?.status).toBe('cancelled');expect(saved().imageRequests?.some(r=>r.state==='review')).toBe(false);expect(f.gates).toHaveLength(0);
  f.request({type:'vn_view',chatId:'chat',open:false},user);
 });
+
+
+test('unreadable optional scene cache does not block saved reply reload or a new reply',async()=>{
+ const oldPath=turnPath('chat','message',0);
+ const {fingerprintForMessage}=await import('./planner.js');const storedKey={...plan.key,sourceFingerprint:fingerprintForMessage({id:'message',swipe_id:0,content:'The door opens.'})};
+ const saved:StoredTurnRecord={schemaVersion:1,speaker:'Mira',status:'ready',plan:{...plan,key:storedKey},jobs:[{...generatedJob(),ownerTurnKey:storedKey}],updatedAt:now};
+ const broken={schemaVersion:1,activeTurnPath:oldPath,latestScene:{obsolete:true},terminalContinuity:{obsolete:true},updatedAt:now};
+ const old=planningRuntime([{id:'message',content:'The door opens.',is_user:false,name:'Mira'}],{initial:new Map<string,unknown>([[chatStatePath('chat'),broken],[oldPath,saved]]),generateRaw:()=>{throw new Error('must not regenerate saved story');}});
+ await sendState(old.spindle,'chat','cache-reload-user',{viewOpen:true});
+ expect(old.generateCalls()).toBe(0);expect((old.sent.find((m:any)=>m.type==='vn_state') as any)?.turn.messageId).toBe('message');expect(old.data.get(chatStatePath('chat'))).toEqual(broken);
+ const fresh=planningRuntime([{id:'new-reply',content:'Mira steps into the observatory.',is_user:false,name:'Mira'}],{initial:new Map([[chatStatePath('chat-controller'),{...broken,activeTurnPath:null}]]),generateRaw:()=>singleCharacterPayload('silver hair, green eyes')});
+ await sendState(fresh.spindle,'chat-controller','cache-new-user',{viewOpen:true});
+ expect(fresh.generateCalls()).toBe(1);expect((fresh.sent.find((m:any)=>m.type==='vn_turn') as any)?.turn.messageId).toBe('new-reply');
+});

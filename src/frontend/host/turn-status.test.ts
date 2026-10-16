@@ -82,7 +82,7 @@ describe("host stage errors", () => {
     expect(withTurn.source).toBe("image");
     expect(withTurn.retryScope).toBe("Try again makes 1 image again.");
     expect(describeOperationError("submit", "offline", turn("ready", [])).retryable).toBe(false);
-    expect(describeOperationError("vn_get_state", "x", null)).toEqual({ message: "Something went wrong.", detail: "x", source: "other", retryable: false });
+    expect(describeOperationError("vn_get_state", "x", null)).toEqual({ message: "A reader operation failed.", detail: "Operation: vn_get_state\nx", source: "other", retryable: false });
   });
 
   test("plain-text fallback joins message, detail, and retry scope without duplicates", () => {
