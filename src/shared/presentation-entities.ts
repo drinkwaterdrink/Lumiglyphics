@@ -1,3 +1,4 @@
+import {StoryDocumentSchema} from './story-documents.js';
 import { z } from 'zod';
 import { TurnKeySchema } from './contracts.js';
 const id=z.string().trim().min(1).max(256);
@@ -9,7 +10,7 @@ export const PresentationStateSchema=z.object({appearance:z.string().max(1200).o
 export const EntityStateDeltaSchema=z.object({entityId:id,at:PresentationAnchorSchema,changes:PresentationStateSchema.partial().extend({appearance:z.string().max(1200).nullable().optional(),outfit:z.string().max(1200).nullable().optional(),condition:z.string().max(1200).nullable().optional(),owner:z.string().max(256).nullable().optional(),location:z.string().max(256).nullable().optional(),presence:z.enum(['present','absent']).nullable().optional()})}).strict();
 export const ReaderEntitySchema=PresentationEntitySchema.omit({facts:true}).extend({facts:z.array(EntityFactSchema.extend({visibility:z.literal('observed')})).max(128)});
 export const PresentationSnapshotSchema=z.object({at:PresentationAnchorSchema,locationId:id.nullable(),presentEntityIds:z.array(id).max(32),speakerEntityId:id.nullable(),drawableEntityId:id.nullable(),stateByEntity:z.record(id,PresentationStateSchema),entities:z.array(ReaderEntitySchema).max(32)}).strict();
-export const ReaderPresentationSchema=z.object({version:z.literal(1),snapshots:z.array(PresentationSnapshotSchema).max(10000)}).strict();
+export const ReaderPresentationSchema=z.object({version:z.literal(1),snapshots:z.array(PresentationSnapshotSchema).max(10000),documents:z.array(StoryDocumentSchema).max(12).optional()}).strict();
 export type PresentationAnchor=z.infer<typeof PresentationAnchorSchema>;
 export type EvidenceSource=z.infer<typeof EvidenceSourceSchema>;
 export type EntityFact=z.infer<typeof EntityFactSchema>;

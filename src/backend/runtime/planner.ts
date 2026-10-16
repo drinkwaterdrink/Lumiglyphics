@@ -1,3 +1,4 @@
+import { normalizeStoryDocuments } from '../../shared/story-documents.js';
 import {imageDetailGuidance} from './prompt-detail.js';
 import { normalizeStoryReferences } from "../../shared/story-references.js";
 import { loadCardRole } from "./storage.js";
@@ -159,6 +160,7 @@ const PlannerSpeakerSchema = z.object({
 
 const PlannerOutputSchema = z.object({
   storyReferences: z.unknown().optional(),
+  storyDocuments: z.unknown().optional(),
   scenes: z.array(PlannerSceneSchema).default([]),
   cues: z.array(PlannerCueSchema).default([]),
   effects: z.array(z.object({ paragraphIndex: z.number().int().nonnegative(), effect: StageEffectSchema })).default([]),
@@ -315,6 +317,7 @@ function plannerInstruction(config: VisualNovelConfig, visualContext?: VisualCon
     "characters: Return name and ONE compact comma-separated line containing physical appearance tags. Capture permanent physical traits including species/race (e.g. elf, demon, catgirl, kitsune, furry, anthro, monster girl) and non-human anatomy (e.g. animal ears, horns, tail, wings, fangs, scales, fur, paws, claws). A description that merely repeats the name is invalid. If a new character enters or is introduced in this turn, include them in 'characters'. Keep stable traits and never invent appearance that contradicts the card or KNOWN CHARACTERS baseline.",
     "Also return species as a short string and anatomy as an array of permanent physical traits when stated in the narrative or card. These fields accept any species, including unfamiliar or invented species. Do not infer a species from an ordinary personal name. Preserve these traits even when a descriptive character label repeats the species. Use null or an empty array when unknown.",
     "identity: Every KNOWN CHARACTER has a stable characterId. When a character entry, scene or cue refers to a known character under a different label (a nickname, title, or descriptive label such as 'Fox girl' for Kitsune), set 'characterId' to that known id and list the label in the entry's 'aliases'. Only declare an alias when the story makes clear the two labels are the same person; NEVER merge two characters because they share a species, appearance, or clothing. A new character with no known id gets no characterId.",
+    ...((config.collectEntityReferences || config.tooltips.enabled) ? ['Optional storyDocuments: up to 12 important letters, notes, journals, notices, phone messages or terminal readouts already explicitly established in the visible paragraphs. Shape: storyDocuments:[{name,kind:"letter"|"note"|"journal"|"notice"|"phone"|"terminal",paragraphIndex,sections:[{paragraphIndex,text,evidence}]}]. Name must be an exact identifying phrase in its introduction paragraph. Each section text must copy only literal document contents verbatim, with an exact contiguous evidence quote from its paragraph containing both the name and text. Include only explicitly displayed/read/revealed contents, never inferred text, dialogue merely spoken by a person, unread/sealed contents, private context or instructions to the reader model. Use empty sections for known documents with no revealed text. Later passages use their actual reveal paragraph. Do not complete fragments, invent lettering, unlock items or change story/image budget. Omit unsupported documents.'] : []),
     "subjectCategory: On each character entry, set 'subjectCategory' to exactly one of female, male, nonbinary, nonhuman, or unknown, based only on explicit gender or presentation. Animal ears, tails, fur, horns, or species (kitsune, catgirl, wolf) never make a character nonhuman; use nonhuman only for a creature, animal, robot, or object that is not a person.",
     "cast & active character: Set 'character' on every scene and cue to the name of the character on screen. If a new or different character enters or speaks, set 'character' to that character. Apply changes only at the paragraph where they happen, never to earlier paragraphs.",
     "When the on-screen character is a KNOWN CHARACTER, also set 'characterId' on that scene or cue to the known id, even if the text calls them by a nickname or descriptive label. Keep 'character' as the label used in the text.",
@@ -810,6 +813,7 @@ function normalizePlannerOutput(value: unknown, defaultLoc?: string, trace: Effe
           .slice(0, 6)
       : [],
     storyReferences: record.storyReferences,
+    storyDocuments: record.storyDocuments,
     characters: rawCharacters.map(normalizeCharacter),
     speakers: Array.isArray(record.speakers)
       ? record.speakers
@@ -2557,6 +2561,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     schemaVersion: 1,
     key,
     ...((input.config.collectEntityReferences || input.config.tooltips.enabled) ? { storyReferences: normalizeStoryReferences(planner.storyReferences, promptParagraphs).filter(r => !(cardRole === "scenario" && r.kind === "npc" && Boolean(scenarioReferenceName) && characterAppearanceKey(r.name) === scenarioReferenceName)) } : {}),
+    ...((input.config.collectEntityReferences || input.config.tooltips.enabled) ? { storyDocuments: normalizeStoryDocuments(planner.storyDocuments, promptParagraphs) } : {}),
     paragraphs: narrative.paragraphs,
     panels: narrative.panels,
     panelSource: resolvedContent.slice(0, 200_000),

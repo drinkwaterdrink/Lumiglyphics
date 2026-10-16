@@ -634,7 +634,7 @@ export class VnStage {
       current:()=>this.state.draft,
       apply:text=>this.storeReplyDraft(text),
       focus:()=>{if(selectVnStageView(this.state).showStandardInput)this.input.focus();else{this.setActivity('Action saved for Your turn.','success');this.focus();}}
-    });
+    },open=>{if(open)this.panelMount.dataset.vnDocumentOpen='true';else delete this.panelMount.dataset.vnDocumentOpen;});
     this.bindEvents();
     this.updateControlButtons();
     this.render(null);

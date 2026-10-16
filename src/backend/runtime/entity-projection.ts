@@ -1,3 +1,4 @@
+import {validateStoryDocuments} from '../../shared/story-documents.js';
 import { normalizeStoryReferences } from "../../shared/story-references.js";
 import { stripTextEffectTags } from "../../shared/text-effects.js";
 import { applyContinuityDelta } from '../core/continuity.js';
@@ -34,6 +35,7 @@ export function projectTurnPresentation(plan:TurnPlan):ReaderPresentation|undefi
   const fact=(e:PresentationEntity,at:number,field:string,value:string)=>{
     if(value.trim()&&factCount<128)e.facts.push({id:`f${++factCount}`,entityId:e.id,field,value:value.slice(0,1200),visibility:'observed',source,revealedAt:anchor(at)});
   };
+  const documents=validateStoryDocuments(plan.storyDocuments,plan.paragraphs.map(p=>({text:stripTextEffectTags(p.text)})));
   const references=normalizeStoryReferences(plan.storyReferences,plan.paragraphs.map(p=>({text:stripTextEffectTags(p.text)})));
   const beats:PresentationBeat[]=[];
   let locationId:string|null=null;let drawableEntityId:string|null=null;
@@ -74,6 +76,7 @@ export function projectTurnPresentation(plan:TurnPlan):ReaderPresentation|undefi
       if(person && cue.resolvedIdentity){fact(person,at,'appearance',cue.resolvedIdentity);change(person,at,{appearance:cue.resolvedIdentity.slice(0,1200)});}
       if(person && cue.attire)change(person,at,{outfit:cue.attire.slice(0,1200)});
     }
+    for(const document of documents.filter(d=>d.paragraphIndex===at))entity('object',document.name,at);
     for(const reference of references.filter(r=>r.paragraphIndex===at)) {
       const subject=entity(reference.kind,reference.name,at);
       if(subject)fact(subject,at,reference.field,reference.value);
@@ -81,7 +84,7 @@ export function projectTurnPresentation(plan:TurnPlan):ReaderPresentation|undefi
     beats.push({paragraphIndex:at,locationId,drawableEntityId,speakerEntityId:speaking?.id??null});
   }
   if(overflow)return undefined;
-  const result=ReaderPresentationSchema.parse({version:1,snapshots:buildPresentationTimeline({key:plan.key,paragraphCount:plan.paragraphs.length,entities,baseline,deltas,beats})});
+  const result=ReaderPresentationSchema.parse({version:1,...(documents.length?{documents}:{}),snapshots:buildPresentationTimeline({key:plan.key,paragraphCount:plan.paragraphs.length,entities,baseline,deltas,beats})});
   return JSON.stringify(result).length<=512000 ? result : undefined;
 }
 
@@ -96,5 +99,6 @@ export function readerPresentationFor(plan:TurnPlan,saved?:unknown):ReaderPresen
     if(snapshot.entities.some(e=>e.firstParagraph>snapshot.at.paragraphIndex || e.facts.some(f=>f.entityId!==e.id || f.source.chatId!==plan.key.chatId || f.source.messageId!==plan.key.assistantMessageId || f.source.sourceFingerprint!==plan.key.sourceFingerprint || !f.revealedAt || !samePresentationTurn(f.revealedAt.key,plan.key) || f.revealedAt.paragraphIndex>snapshot.at.paragraphIndex)))return undefined;
     if(Object.keys(snapshot.stateByEntity).some(id=>!ids.has(id)) || snapshot.presentEntityIds.some(id=>!ids.has(id)) || [snapshot.speakerEntityId,snapshot.drawableEntityId,snapshot.locationId].some(id=>id!==null&&!ids.has(id)))return undefined;
   }
+  if(parsed.data.documents)parsed.data.documents=validateStoryDocuments(parsed.data.documents,plan.paragraphs.map(p=>({text:stripTextEffectTags(p.text)})));
   return parsed.data;
 }

@@ -1292,3 +1292,26 @@ test('tooltips request optional story references in the same planner call',async
  const result=await planTurn(spindle,{chatId:'chat-1',message:{...message,content},content,previousScene:null,previousContinuity:null,recentMessages:[],config:{...DEFAULT_CONFIG,tooltips:{...DEFAULT_CONFIG.tooltips,enabled:true}},singleCharacter:emptySingleCharacter(),characterAppearance:{}});
  assert.equal(calls,1);assert.equal(instruction.includes('Optional storyReferences'),true);assert.equal(result.plan.storyReferences?.length,1);
 });
+
+test('optional documents are literal, source-scoped and never trigger a repair call',async()=>{
+ const {projectTurnPresentation,readerPresentationFor}=await import('./entity-projection.js');
+ const content='The letter is sealed.\n\nThe letter reads: Meet me at dawn.';
+ const proposed={name:'letter',kind:'letter',paragraphIndex:0,sections:[{paragraphIndex:1,text:'Meet me at dawn.',evidence:'The letter reads: Meet me at dawn.'},{paragraphIndex:1,text:'Invented secret',evidence:'The letter reads: Meet me at dawn.'}]};
+ for(const enabled of [false,true])for(const malformed of [false,true]){
+  let calls=0,instruction='';
+  const spindle={generate:{raw:async(request:any)=>{calls++;instruction=JSON.stringify(request);return {content:JSON.stringify({scenes:[],cues:[],characters:[],speakers:[],storyDocuments:malformed?{bad:true}:[proposed]})};}},log:{warn(){}}} as unknown as SpindleAPI;
+  const result=await planTurn(spindle,{chatId:'chat-1',message:{...message,content},content,previousScene:null,previousContinuity:null,recentMessages:[],config:{...DEFAULT_CONFIG,collectEntityReferences:enabled},singleCharacter:emptySingleCharacter(),characterAppearance:{}});
+  assert.equal(calls,1);assert.equal(instruction.includes('Optional storyDocuments'),enabled);
+  assert.equal(result.plan.storyDocuments?.length,enabled&&!malformed?1:enabled?0:undefined);
+  const presentation=projectTurnPresentation(result.plan);
+  assert.equal(presentation?.documents?.[0]?.sections.length,enabled&&!malformed?1:undefined);
+  assert.equal(JSON.stringify(presentation).includes('Invented secret'),false);
+  if(enabled&&!malformed){
+   assert.equal(presentation?.snapshots[0]?.entities.some(e=>e.kind==='object'&&e.name==='letter'),true);
+   const altered=structuredClone(result.plan);altered.paragraphs[1]!.text='The letter is blank.';
+   assert.equal(readerPresentationFor(altered,presentation)?.documents?.[0]?.sections.length,0);
+   const oldSwipe=structuredClone(presentation!);oldSwipe.snapshots.forEach(s=>s.at.key.swipeId='other');
+   assert.equal(readerPresentationFor(result.plan,oldSwipe),undefined);
+  }
+ }
+});

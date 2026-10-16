@@ -2050,6 +2050,7 @@ ${VN_TEXT_EFFECTS_CSS}
 [data-vn-move-draft] p { font-size:.85rem; line-height:1.5; }
 [data-vn-move-draft] label { display:block; }
 [data-vn-move-draft] textarea { box-sizing:border-box; width:100%; min-height:90px; margin:.5rem 0; padding:.6rem; font:16px/1.5 var(--vn-font-family,system-ui); color:inherit; background:var(--vn-dialogue-bg); border:1px solid var(--vn-panel-border); border-radius:.5rem; }
+[data-vn-root]:not([data-vn-adjustable-sheet="true"]) [data-vn-dialogue-text] { max-height:min(22rem,max(3.2em,calc(100 * var(--vn-dvh,1dvh) - 16rem))); overflow-y:auto; overscroll-behavior:contain; }
 [data-vn-move-draft] button { min-height:44px; margin:3px; padding:.5rem .75rem; font:inherit; color:inherit; background:var(--vn-button-bg); border:1px solid var(--vn-panel-border); border-radius:.5rem; cursor:pointer; }
 [data-vn-game-moves] summary:focus-visible,[data-vn-edit-game-move]:focus-visible,[data-vn-move-draft] :focus-visible { outline:2px solid var(--vn-accent); outline-offset:2px; }
 `;

@@ -1,3 +1,5 @@
+import {validateStoryDocuments,visibleStoryDocuments} from '../../shared/story-documents.js';
+import {stripTextEffectTags} from '../../shared/text-effects.js';
 import {availableInteractionVerbs,buildInteractionDraft,mergeInteractionDraft} from '../../shared/scene-interactions.js';
 import {referenceEntries,normalizeTooltipPreferences,linkEntityMentions,eligibleEntities,selectReaderDossier,entityOverride,type TooltipPreferences} from '../../shared/dossiers.js';
 import {ReaderPresentationSchema,samePresentationTurn,type ReaderPresentation,type PresentationEntity} from '../../shared/presentation-entities.js';
@@ -6,9 +8,9 @@ import {DossierCard,DOSSIER_CSS} from './dossier-card.js';
 export class StageDossiers {
  private prefs=normalizeTooltipPreferences({});private presentation:ReaderPresentation|undefined;private paragraphs:readonly string[]=[];private index=-1;
  private card:DossierCard;private tray=document.createElement('button');private ready=false;
- constructor(private root:HTMLElement,private text:HTMLElement,controls:HTMLElement,private hold:()=>void,private release:()=>void,private save:(prefs:TooltipPreferences)=>void,private draftTools?:{current:()=>string;apply:(text:string)=>boolean;focus:()=>void}) {
+ constructor(private root:HTMLElement,private text:HTMLElement,controls:HTMLElement,private hold:()=>void,private release:()=>void,private save:(prefs:TooltipPreferences)=>void,private draftTools?:{current:()=>string;apply:(text:string)=>boolean;focus:()=>void},documentOpen?:(open:boolean)=>void) {
   const style=document.createElement('style');style.textContent=DOSSIER_CSS;root.append(style);
-  this.card=new DossierCard(root,()=>this.release(),(entity,patch)=>this.updateOverride(entity,patch));
+  this.card=new DossierCard(root,()=>this.release(),(entity,patch)=>this.updateOverride(entity,patch),documentOpen);
   this.tray.type='button';this.tray.dataset.vnReferences='';this.tray.dataset.vnControl='references';this.tray.innerHTML='<span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M12 5.5c-3-2-6.5-2-9-1v14c2.5-1 6-1 9 1 3-2 6.5-2 9-1v-14c-2.5-1-6-1-9 1Z"/><path d="M12 5.5v14M6 8h3M6 11h3M15 8h3M15 11h3"/></svg></span>';this.tray.title='Scene references';this.tray.setAttribute('aria-label','Scene references');this.tray.hidden=true;
   this.tray.onclick=event=>{event.stopPropagation();const snapshot=this.snapshot();if(!snapshot)return;this.hold();this.card.openTray(referenceEntries(snapshot,this.prefs),this.tray,(id,trigger)=>this.open(id,trigger));};controls.append(this.tray);
  }
@@ -17,6 +19,7 @@ export class StageDossiers {
   this.card.close();this.index=-1;this.ready=false;this.paragraphs=paragraphs;
   const parsed=ReaderPresentationSchema.safeParse(value);
   this.presentation=parsed.success&&JSON.stringify(parsed.data).length<=512000&&parsed.data.snapshots.length===paragraphs.length&&parsed.data.snapshots.every((s,i)=>s.at.paragraphIndex===i&&samePresentationTurn(s.at.key,parsed.data.snapshots[0]!.at.key))?parsed.data:undefined;
+  if(this.presentation?.documents)this.presentation.documents=validateStoryDocuments(this.presentation.documents,paragraphs.map(text=>({text:stripTextEffectTags(text)})));
   clearEntityAnchors(this.text);this.tray.hidden=true;
  }
  setPreferences(value:TooltipPreferences):void{const next=normalizeTooltipPreferences(value);if(JSON.stringify(next)===JSON.stringify(this.prefs))return;this.prefs=next;this.card.close();if(this.ready)this.refresh(this.index);else{clearEntityAnchors(this.text);this.tray.hidden=true;}}
@@ -48,7 +51,8 @@ export class StageDossiers {
     const text=mergeInteractionDraft(this.draftTools!.current(),draft.text,mode);return text!==null&&this.draftTools!.apply(text);
    }
   }:undefined;
-  this.card.open(dossier,this.prefs,snapshot.at.key.chatId,trigger,actions);
+  const storyDocument=dossier.entity.kind==='object'?visibleStoryDocuments(this.presentation?.documents??[],this.index).find(d=>d.name===dossier.entity.name):undefined;
+  this.card.open(dossier,this.prefs,snapshot.at.key.chatId,trigger,actions,storyDocument);
  }
  private updateOverride(entity:PresentationEntity,patch:{suppressed?:boolean;pinned?:boolean;note?:string}):boolean {
   const snapshot=this.snapshot();if(!snapshot)return false;const chatId=snapshot.at.key.chatId;

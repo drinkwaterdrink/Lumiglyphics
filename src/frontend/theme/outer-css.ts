@@ -152,6 +152,8 @@ ${ATELIER_SHELL_CSS}
 }
 
 /* History owns its navigation area; temporarily hide overlapping floating tools. */
+[data-vn-shell][data-vn-document-open="true"] > [data-image-studio],
+[data-vn-shell][data-vn-document-open="true"] > [data-vn-panel-layer],
 [data-vn-shell][data-vn-move-draft-open="true"] > [data-image-studio],
 [data-vn-shell][data-vn-history-open="true"] > [data-vn-panel-layer],
 [data-vn-shell][data-vn-history-open="true"] > [data-image-studio],

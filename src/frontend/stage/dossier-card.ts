@@ -1,9 +1,11 @@
+import {createDocumentReader,DOCUMENT_READER_CSS} from './document-reader.js';
+import type {StoryDocument} from '../../shared/story-documents.js';
 import {InteractionTray} from './interaction-tray.js';
 import type {InteractionDraft,DraftMergeMode} from '../../shared/scene-interactions.js';
 import {entityOverride,type ReferenceKind,type referenceEntries,type ReaderDossier,type TooltipPreferences} from '../../shared/dossiers.js';
 export class DossierCard {
  readonly host=document.createElement('div');private returnFocus:HTMLElement|null=null;private trayReturn:(()=>void)|null=null;private query='';private category:ReferenceKind='all';
- constructor(mount:HTMLElement,private closeCallback:()=>void,private update:(entity:ReaderDossier['entity'],patch:{suppressed?:boolean;pinned?:boolean;note?:string})=>boolean) {
+ constructor(mount:HTMLElement,private closeCallback:()=>void,private update:(entity:ReaderDossier['entity'],patch:{suppressed?:boolean;pinned?:boolean;note?:string})=>boolean,private documentState:(open:boolean)=>void=()=>{}) {
   this.host.dataset.vnDossier='';this.host.hidden=true;
   this.host.addEventListener('click',event=>{event.stopPropagation();if(event.target===this.host)this.close();});
   this.host.addEventListener('pointerdown',event=>event.stopPropagation());
@@ -12,7 +14,7 @@ export class DossierCard {
    event.stopPropagation();
    if(event.key==='Escape'){event.preventDefault();this.close();}
    if(event.key==='Tab') {
-    const focusable=[...this.host.querySelectorAll<HTMLElement>('button,input,select,textarea,summary')].filter(e=>e.getClientRects().length>0&&(!e.closest('details:not([open])')||e.tagName==='SUMMARY')&&(e.tabIndex>=0||e.tagName==='SUMMARY')&&!e.hasAttribute('disabled'));
+    const focusable=[...this.host.querySelectorAll<HTMLElement>('button,input,select,textarea,summary,[tabindex]')].filter(e=>e.getClientRects().length>0&&(!e.closest('details:not([open])')||e.tagName==='SUMMARY')&&(e.tabIndex>=0||e.tagName==='SUMMARY')&&!e.hasAttribute('disabled'));
     const current=this.host.getRootNode() as ShadowRoot;
     const index=focusable.indexOf(current.activeElement as HTMLElement);
     if(index<0||event.shiftKey&&index===0||!event.shiftKey&&index===focusable.length-1){event.preventDefault();(event.shiftKey?focusable.at(-1):focusable[0])?.focus();}
@@ -21,8 +23,8 @@ export class DossierCard {
   mount.append(this.host);
  }
  isOpen():boolean{return !this.host.hidden;}
- open(dossier:ReaderDossier,prefs:TooltipPreferences,chatId:string,trigger:HTMLElement,actions?:{drafts:InteractionDraft[];current:()=>string;apply:(draft:InteractionDraft,mode:DraftMergeMode)=>boolean;focus:()=>void}):void {
-  this.returnFocus=trigger;this.host.replaceChildren();
+ open(dossier:ReaderDossier,prefs:TooltipPreferences,chatId:string,trigger:HTMLElement,actions?:{drafts:InteractionDraft[];current:()=>string;apply:(draft:InteractionDraft,mode:DraftMergeMode)=>boolean;focus:()=>void},storyDocument?:StoryDocument):void {
+  this.documentState(false);this.returnFocus=trigger;this.host.replaceChildren();
   const panel=document.createElement('section');panel.dataset.vnDossierCard='';panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label',`About ${dossier.entity.name}`);
   const header=document.createElement('header'),title=document.createElement('h2');title.textContent=dossier.entity.name;
   const close=document.createElement('button');close.type='button';close.textContent='×';close.setAttribute('aria-label','Close information');close.onclick=()=>this.close();header.append(title,close);panel.append(header);
@@ -32,6 +34,16 @@ export class DossierCard {
   for(const fact of dossier.facts){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=fact.field;dd.textContent=fact.value;const source=document.createElement('small');source.textContent=`Source: ${fact.source.provider} · revealed paragraph ${(fact.revealedAt?.paragraphIndex??0)+1}`;dd.append(source);list.append(dt,dd);}
   for(const [field,value] of Object.entries(dossier.state)){if(dossier.facts.some(f=>f.field===field&&f.value===value))continue;const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=field;dd.textContent=value;list.append(dt,dd);}
   if(!list.children.length){const p=document.createElement('p');p.textContent='No additional facts have been revealed yet.';panel.append(p);}else panel.append(list);
+  if(storyDocument){
+   if(storyDocument.sections.length){
+    const read=document.createElement('button');read.type='button';read.textContent='Read revealed text';read.dataset.vnReadDocument='';
+    read.onclick=()=>{
+     if(this.host.hidden||panel.parentElement!==this.host)return;
+     const reader=createDocumentReader(storyDocument,()=>{if(this.host.hidden||reader.parentElement!==this.host)return;this.open(dossier,prefs,chatId,trigger,actions,storyDocument);this.host.querySelector<HTMLElement>('[data-vn-read-document]')?.focus();},()=>{if(!this.host.hidden&&reader.parentElement===this.host)this.close();});
+     this.documentState(true);this.host.replaceChildren(reader);reader.querySelector<HTMLElement>('button')?.focus();
+    };panel.append(read);
+   }else{const missing=document.createElement('p');missing.textContent='No document text has been revealed. Examining the item is a story action; opening this card does not unlock it.';panel.append(missing);}
+  }
   if(actions?.drafts.length)panel.append(new InteractionTray(actions.drafts,actions.current,(draft,mode)=>{if(!actions.apply(draft,mode))return false;this.close();actions.focus();return true;}).host);
   const override=entityOverride(prefs,chatId,dossier.entity);
   const status=document.createElement('p');status.setAttribute('role','status');status.hidden=true;panel.append(status);
@@ -47,7 +59,7 @@ export class DossierCard {
   this.host.append(panel);this.host.hidden=false;close.focus();
  }
  openTray(entries:ReturnType<typeof referenceEntries>,trigger:HTMLElement,open:(id:string,trigger:HTMLElement)=>void):void {
-  if(!this.isOpen()){this.query='';this.category='all';}
+  this.documentState(false);if(!this.isOpen()){this.query='';this.category='all';}
   this.returnFocus=trigger;this.trayReturn=()=>this.openTray(entries,trigger,open);this.host.replaceChildren();const panel=document.createElement('section');panel.dataset.vnDossierCard='';panel.dataset.vnReferenceSheet='';panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','Scene references');
   const header=document.createElement('header'),title=document.createElement('h2'),close=document.createElement('button');title.textContent='Scene references';close.type='button';close.textContent='×';close.title='Close references';close.setAttribute('aria-label','Close information');close.onclick=()=>this.close();header.append(title,close);panel.append(header);
   const filters=document.createElement('div');filters.dataset.referenceFilters='';
@@ -63,8 +75,8 @@ export class DossierCard {
   search.oninput=render;category.onchange=render;render();this.host.append(panel);this.host.hidden=false;close.focus();
  }
 
- close():void{if(this.host.hidden)return;this.host.hidden=true;this.trayReturn=null;this.query='';this.category='all';const target=this.returnFocus;this.returnFocus=null;if(target?.isConnected)target.focus();else this.host.parentElement?.focus();this.closeCallback();}
- destroy():void{this.host.remove();}
+ close():void{this.documentState(false);if(this.host.hidden)return;this.host.hidden=true;this.trayReturn=null;this.query='';this.category='all';const target=this.returnFocus;this.returnFocus=null;if(target?.isConnected)target.focus();else this.host.parentElement?.focus();this.closeCallback();}
+ destroy():void{this.documentState(false);this.host.remove();}
 }
 export const DOSSIER_CSS=`
 [data-vn-references][hidden]{display:none!important}
@@ -75,7 +87,7 @@ export const DOSSIER_CSS=`
 [data-entity-anchor]:focus-visible{outline:2px solid var(--vn-accent,#9ec6f0);outline-offset:3px}
 [data-vn-dossier][hidden]{display:none!important}
 [data-vn-dossier]{position:absolute;inset:0;z-index:200;display:flex;align-items:flex-end;justify-content:center;background:#0008;padding:16px;box-sizing:border-box}
-[data-vn-dossier-card]{box-sizing:border-box;width:min(100%,540px);max-height:75dvh;overflow:auto;overscroll-behavior:contain;padding:20px;border:1px solid var(--vn-panel-border,#666);border-radius:18px;background:var(--vn-panel-solid,#171b26);color:var(--vn-text,#eef1f7);box-shadow:0 12px 50px #0008;touch-action:pan-y;font:inherit}
+[data-vn-dossier-card]{box-sizing:border-box;width:min(100%,540px);max-height:75dvh;overflow:auto;overscroll-behavior:contain;padding:20px;border:1px solid var(--vn-panel-border,#666);border-radius:18px;background:var(--vn-panel-solid,#171b26);color:var(--vn-chrome-text,var(--vn-text,#eef1f7));box-shadow:0 12px 50px #0008;touch-action:pan-y;font:inherit}
 [data-vn-dossier-card] header{display:flex;align-items:center;justify-content:space-between;gap:12px}
 [data-vn-dossier-card] h2{margin:0;font-size:1.2em;overflow-wrap:anywhere}
 [data-vn-dossier-card] button{font:inherit;min-height:44px;padding:8px 12px;margin:4px;color:inherit;background:var(--vn-button-bg,#ffffff0d);border:1px solid var(--vn-panel-border,#666);border-radius:9px;cursor:pointer}
@@ -93,4 +105,4 @@ export const DOSSIER_CSS=`
 [data-reference-list]{display:grid;gap:6px}[data-reference-list] button{display:flex;flex-direction:column;text-align:left;margin:0;min-width:0;overflow-wrap:anywhere;gap:3px}[data-reference-list] small{font-size:.75em;opacity:.75}
 [data-vn-dossier-card] :is(button,input,select,textarea):focus-visible{outline:2px solid var(--vn-accent,#9ec6f0);outline-offset:2px}
 @media(min-width:700px){[data-vn-dossier]{align-items:center}}
-`;
+`+DOCUMENT_READER_CSS;

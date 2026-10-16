@@ -1,0 +1,21 @@
+import {VnStage} from '../src/frontend/stage/vn-stage.js';
+import {normalizeTooltipPreferences} from '../src/shared/dossiers.js';
+import {normalizeStoryDocuments} from '../src/shared/story-documents.js';
+import {buildPresentationTimeline} from '../src/backend/runtime/presentation-timeline.js';
+import {ImageStudio} from '../src/frontend/image-review/studio.js';
+import {PanelDock} from '../src/frontend/stage/panel-dock.js';
+const mount=document.createElement('div');Object.assign(mount.style,{position:'fixed',inset:'0',background:'#08090d'});document.body.append(mount);
+let submissions=0;const stage=new VnStage({mount,textSpeed:0,onSubmit:async()=>{submissions++;}});
+new ImageStudio(stage.panelMount,()=>{},()=>{});new PanelDock(stage.panelMount);
+const key={chatId:'documents-chat',assistantMessageId:'m1',swipeId:0,sourceFingerprint:'12345678',revision:0};
+const paragraphs=[{text:'The sealed letter lies on the desk.'},{text:'The sealed letter reads: Meet me at dawn. 🌙'},{text:'The sealed letter continues: <img src=x onerror="window.hacked=true"> Bring the blue key.'}];
+const documents=normalizeStoryDocuments([{name:'sealed letter',kind:'letter',paragraphIndex:0,sections:[{paragraphIndex:1,text:'Meet me at dawn. 🌙',evidence:paragraphs[1]!.text},{paragraphIndex:2,text:'<img src=x onerror="window.hacked=true"> Bring the blue key.',evidence:paragraphs[2]!.text}]}],paragraphs);
+const snapshots=buildPresentationTimeline({key,paragraphCount:3,entities:[{id:'letter',kind:'object',name:'sealed letter',aliases:[],firstParagraph:0,facts:[]}],baseline:{},deltas:[],beats:[]});
+const turn={paragraphs:paragraphs.map((p,i)=>({id:'p'+i,...p})),presentation:{version:1 as const,snapshots,documents}};
+const prefs=normalizeTooltipPreferences({enabled:true,actionsEnabled:true,linking:'all-known'});stage.setTooltipPreferences(prefs);stage.loadTurn(turn);
+Object.assign(window,{documentsFixture:{stage,turn,prefs,key,loadLong:()=>{
+ const body='Entry 1: Keep the lantern lit.\n'.repeat(160);
+ const ps=[{text:'The journal lies open.'},{text:'The journal reads: '+body}];
+ const docs=normalizeStoryDocuments([{name:'journal',kind:'journal',paragraphIndex:0,sections:[{paragraphIndex:1,text:body,evidence:ps[1]!.text}]}],ps);
+ stage.loadTurn({paragraphs:ps.map((p,i)=>({id:'j'+i,...p})),presentation:{version:1,snapshots:buildPresentationTimeline({key,paragraphCount:2,entities:[{id:'journal',kind:'object',name:'journal',aliases:[],firstParagraph:0,facts:[]}],baseline:{},deltas:[],beats:[]}),documents:docs}});
+},get submissions(){return submissions;}}});
