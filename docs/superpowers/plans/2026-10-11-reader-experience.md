@@ -10,7 +10,7 @@
 
 **Spec:** ../specs/2026-10-11-reader-experience-design.md, plus the user's scenario-card clarification and supplied inline-dossier examples as inspiration only.
 
-**Status:** Beta.33 on `Testing`, 2026-10-14. A recovery and B mobile reader are delivered. C has typed reveal-scoped snapshots, tracker mappings and optional source-status checks, but normalized external reconciliation remains incomplete. D standalone tooltips/inline links are delivered; tooltip actions remain G work. E has saved place art, basic cast presentation, saved portraits and supplied gallery artwork; cast setup registration/outfits/gallery/Voice foundations are delivered; expression artwork and independent generation remain pending. F rules and G interactions remain pending. Beta.21 adds prompt rerolls and combined-length repair; beta.22 addresses the saved-place lookup/reset race (audit A1). Beta.23 delivers the first read-only image library; beta.24 fixes mobile History exits; beta.25 adds cast setup; E3 follow-ups, G/H and remaining I follow-ups are pending; beta.29 delivers D2 quiet references. Earlier unchecked steps and dated increments retain their historical context.
+**Status:** Beta.34 on `Testing`, 2026-10-15. A recovery and B mobile reader are delivered. C has typed reveal-scoped snapshots, tracker mappings and optional source-status checks, but normalized external reconciliation remains incomplete. D standalone tooltips/inline links and G local/provider-move action paths are delivered. E has saved place art, basic cast presentation, saved portraits and supplied gallery artwork; cast setup registration/outfits/gallery/Voice foundations are delivered; expression artwork and independent generation remain pending. F rules remain pending; G capability-based Use awaits an explicit source contract. Beta.21 adds prompt rerolls and combined-length repair; beta.22 addresses the saved-place lookup/reset race (audit A1). Beta.23 delivers the first read-only image library; beta.24 fixes mobile History exits; beta.25 adds cast setup; E3 follow-ups, G/H and remaining I follow-ups are pending; beta.29 delivers D2 quiet references. Earlier unchecked steps and dated increments retain their historical context.
 
 ## Selected roadmap additions — 2026-10-13
 
@@ -19,7 +19,7 @@ The user selected **cast setup, tooltip actions, in-world documents, quiet refer
 | Selected feature | Roadmap home | Current state | Completion goal |
 |---|---|---|---|
 | Cast setup | E3, building on E2 | Beta.25 supports registration, aliases, base/outfit guidance, artwork and Voice draft shortcut; expression and independent-placement follow-ups remain | Register/configure a character before first generation; connect identity, outfits, artwork and existing voice controls |
-| Tooltip actions | G, explicit entry from D cards | Beta.33 optional local action drafts delivered; provider move and capability-based Use integration pending | Ask, Examine, Approach, Use and Custom create editable intentions or verified engine moves |
+| Tooltip actions | G, explicit entry from D cards | Beta.33 local drafts and beta.34 provider moves/edit-as-message delivered; Use awaits a capability contract | Ask, Examine, Approach, Use and Custom create editable intentions or verified engine moves |
 | In-world documents | H, new | Proposed | Readable letters, journals, phones and terminals reveal exact established text |
 | Quiet reference quick access | D2, building on D | Beta.29 searchable, category-filtered menu and menu-only mode delivered | Compact searchable, category-filtered access without compulsory inline highlighting or automatic popups |
 | Previous-message image library | I, new | Beta.23 read-only saved-turn browser delivered; broader indexing/deduplication follow-ups pending | Browse this chat's earlier generated pictures, inspect their source and available prompt, and view full images without regeneration |
@@ -278,10 +278,10 @@ Separate local drafts from provider moves: `SceneInteraction = {kind:'draft',dra
 
 Show Ask for known NPCs, Examine for known objects/places, and Custom. Show Use only when supported by public capabilities/current context; no menu item promises secret contents. Exclude absent NPCs from Approach; offscreen communication requires explicit supported context. The drawer is available at Your turn; while reading, cards may prepare a draft but sending remains disabled until the existing reply gate is reached. Preserve a user's existing draft and offer Insert versus Replace.
 
-- [ ] Add failing tests: opening card changes no state; draft does not submit; hidden contents do not become suggested actions; absent character cannot be approached; existing typed draft survives; stale key prevents send; double tap sends once.
-- [ ] Implement draft flow through the existing composer/submission lifecycle. Confirmation is the normal Send action, not an extra approval popup.
-- [ ] Integrate Warp moves without duplicate local choices, invented odds, automatic rolls, or writes to Warp state. Disabled/disconnected Warp falls back to ordinary prose drafts.
-- [ ] Browser-check mobile keyboard, focus, reopening dossier, click races, submission error, and CYOA/standard modes. Run game bridge/controller regression tests. Commit.
+- [x] Add failing tests: opening card changes no state; draft does not submit; hidden contents do not become suggested actions; absent character cannot be approached; existing typed draft survives; stale key prevents send; double tap sends once.
+- [x] Implement draft flow through the existing composer/submission lifecycle. Confirmation is the normal Send action, not an extra approval popup.
+- [x] Integrate Warp moves without duplicate local choices, invented odds, automatic rolls, or writes to Warp state. Disabled/disconnected Warp falls back to ordinary prose drafts.
+- [x] Browser-check mobile keyboard, focus, reopening dossier, click races, submission error, and CYOA/standard modes. Run game bridge/controller regression tests. Commit.
 
 ## Work package H — in-world documents (selected 2026-10-13)
 
@@ -415,7 +415,7 @@ E2 first presentation increment: opt-in Look → Scene → Cast view uses curren
 
 A cursor-bounded, scene-scoped selector finds an available background, picks at most two established portrait assets (active speaker first), and exposes other available cast in a tray. It never imports a future cue or a face from another scene. Latest failed or incompatible-outfit portraits use neutral placeholders. Applicable absent-state filters are turn-key validated. Composition keys include user-delivered chat/turn/swipe/fingerprint/revision/scene scope. UI epochs reject stale image decoding after cursor/scope/reset/destroy; compatible displayed portraits stay while replacements decode. Portraits are rectangular/contain-fit, not assumed cutouts. Theme borders and speaker highlight remain native. ResizeObserver fits portraits above the dialogue; very short viewports without usable art space collapse cast until space returns.
 
-Ruling: ship the useful cast presentation foundation separately from supplied-art selection, persistent cross-turn cast libraries and generation allocation for independent assets. Those E2 portions, normalized external context reconciliation, F rules and G interactions remain pending. New view depends on existing Environment plus portrait pictures in the current scene; fixed action/Manga templates continue their regular display. No hidden background/portrait generation to activate the toggle.
+Ruling: ship the useful cast presentation foundation separately from supplied-art selection, persistent cross-turn cast libraries and generation allocation for independent assets. Those E2 portions, normalized external context reconciliation, F rules remain pending; G capability-based Use awaits an explicit source contract. New view depends on existing Environment plus portrait pictures in the current scene; fixed action/Manga templates continue their regular display. No hidden background/portrait generation to activate the toggle.
 
 ## Beta.19 increment — E2 exact saved portrait reuse
 
@@ -467,3 +467,14 @@ G1 extends the existing reference card with optional Action drafts in Reading > 
 No capability contract for Use is available in the current projection, so Use is withheld. G2 verified provider-owned moves/Use remains unfinished. Existing Warp moves continue through the existing authoritative game bridge; no local action claims odds, rolls or success. H documents remains after G2, followed by previously listed follow-ups. This increment does not mark the whole G package complete.
 
 Image error cards and Image prompts notices gain accessible dismiss controls without changing failed job data or initiating work. Dismissals survive same-error updates, but a new request/turn or different failure may show again. The reply scroll region is clipped above the reader toolbar. At Your turn only, an oversized adjustable panel temporarily makes room for the composer; saved reading preferences remain intact. See docs/review-evidence/2026-10-14-action-drafts-error-dismissal.md for validation and limits.
+
+
+## Beta.34 G2 provider moves - 2026-10-15
+
+The existing public game bridge retains provider identity and a local snapshot revision through the stage. Picks validate the exact provider/chat/id/label/odds/detail snapshot and reject stale, busy, forged or spent moves. Refresh drops cached choices until the owner publishes again. Same IDs from different providers no longer select the wrong owner. Validation occurs before presenting a user intention.
+
+Available moves is a compact expandable section at Your turn, including standard mode where an older CSS rule hid moves behind the ordinary composer. With Action drafts enabled, a pencil opens the same editable intention component used by reference cards. Insert preserves typed text; Replace is explicit. This conversion carries no engine odds or pick action and uses normal Send. Live moves retain their unchanged owner and odds. Changes to the turn, scope, source snapshot or busy state invalidate old edits. No entity association is inferred from a move label.
+
+The editor temporarily hides the overlapping Image prompts launcher and restores it on close. Reply scrolling is clipped below fixed navigation, and an oversized reading sheet temporarily leaves extra room at Your turn without changing saved preferences.
+
+G's planned local/provider paths are implemented and locally tested. Use remains a conditional follow-up because current public entity data has no capability contract; it is withheld rather than guessed. H in-world documents is the next selected work package. Checkmarks above describe local implementation/browser tests, not certification against live Warp or physical Android. See docs/review-evidence/2026-10-15-provider-moves.md.

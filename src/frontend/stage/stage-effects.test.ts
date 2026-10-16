@@ -146,6 +146,15 @@ class MockNode {
     return node;
   }
 
+  insertBefore(node: MockNode, reference: MockNode | null) {
+    if (!reference) return this.appendChild(node);
+    node.remove();
+    const index=this.children.indexOf(reference);
+    node.parentNode=this;
+    this.children.splice(index<0?this.children.length:index,0,node);
+    return node;
+  }
+
   prepend(...nodes: MockNode[]) {
     for (const node of [...nodes].reverse()) {
       node.remove();

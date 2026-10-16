@@ -1005,8 +1005,7 @@ button[data-vn-badge]:active {
   opacity: 0.5;
 }
 
-[data-vn-interaction]:has([data-vn-input-form]:not([hidden])) [data-vn-interaction-heading],
-[data-vn-interaction]:has([data-vn-input-form]:not([hidden])) [data-vn-game-choices] {
+[data-vn-interaction]:has([data-vn-input-form]:not([hidden])) [data-vn-interaction-heading] {
   width: var(--vn-composer-width);
 }
 
@@ -2029,14 +2028,28 @@ ${VN_TEXT_EFFECTS_CSS}
 /* Clip the reply area's scrolling above the reader toolbar, including short
    landscape screens. Padding alone lets scrollable controls cover the toolbar. */
 [data-vn-root][data-vn-adjustable-sheet="true"]:not([data-vn-text-hidden="true"]):has([data-vn-interaction]:not([hidden])) {
-  --vn-reply-sheet-height: min(var(--vn-sheet-height), max(9rem, calc(100 * var(--vn-dvh, 1dvh) - 16rem)));
+  --vn-reply-sheet-height: min(var(--vn-sheet-height), max(9rem, calc(100 * var(--vn-dvh, 1dvh) - 20rem)));
   --vn-interaction-clearance: calc(var(--vn-reply-sheet-height) + 3rem);
 }
 [data-vn-root][data-vn-adjustable-sheet="true"]:not([data-vn-text-hidden="true"]):has([data-vn-interaction]:not([hidden])) [data-vn-narrative] { height: calc(var(--vn-reply-sheet-height) + 3rem); }
 [data-vn-root][data-vn-adjustable-sheet="true"]:not([data-vn-text-hidden="true"]):has([data-vn-interaction]:not([hidden])) [data-vn-dialogue] { height: var(--vn-reply-sheet-height); }
 [data-vn-root][data-vn-preset] [data-vn-interaction] {
+  top: max(4.5rem, env(safe-area-inset-top));
   bottom: calc(var(--vn-interaction-clearance) + var(--vn-sheet-keyboard-inset, 0px));
+  padding-top: .5rem;
   padding-bottom: 1rem;
   min-height: 0;
 }
+[data-vn-game-moves] { width: var(--vn-composer-width); max-width: 100%; }
+[data-vn-game-moves] > summary { min-height:44px; cursor:pointer; padding:.65rem .85rem; border:1px solid var(--vn-panel-border); border-radius:.8rem; background:var(--vn-panel-bg); color:var(--vn-text); box-sizing:border-box; }
+[data-vn-game-move-row] { display:flex; align-items:stretch; gap:.4rem; }
+[data-vn-game-move-row] [data-vn-game-choice] { flex:1; min-width:0; }
+[data-vn-game-provider] { display:block; margin-top:.25rem; font-size:.75em; opacity:.75; }
+[data-vn-edit-game-move] { flex:none; width:44px; min-height:44px; padding:0; color:var(--vn-text); background:var(--vn-button-bg); border:1px solid var(--vn-panel-border); border-radius:.65rem; font-size:1.25rem; cursor:pointer; }
+[data-vn-move-draft] { width:var(--vn-composer-width); max-width:100%; padding:.85rem; box-sizing:border-box; border:1px solid var(--vn-panel-border); border-radius:.8rem; color:var(--vn-text); background:var(--vn-panel-bg); }
+[data-vn-move-draft] p { font-size:.85rem; line-height:1.5; }
+[data-vn-move-draft] label { display:block; }
+[data-vn-move-draft] textarea { box-sizing:border-box; width:100%; min-height:90px; margin:.5rem 0; padding:.6rem; font:16px/1.5 var(--vn-font-family,system-ui); color:inherit; background:var(--vn-dialogue-bg); border:1px solid var(--vn-panel-border); border-radius:.5rem; }
+[data-vn-move-draft] button { min-height:44px; margin:3px; padding:.5rem .75rem; font:inherit; color:inherit; background:var(--vn-button-bg); border:1px solid var(--vn-panel-border); border-radius:.5rem; cursor:pointer; }
+[data-vn-game-moves] summary:focus-visible,[data-vn-edit-game-move]:focus-visible,[data-vn-move-draft] :focus-visible { outline:2px solid var(--vn-accent); outline-offset:2px; }
 `;

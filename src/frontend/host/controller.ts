@@ -496,7 +496,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const syncGameChoices = (): void => {
     const id = chatId();
     const choices = gameBridge?.choicesFor(id) ?? [];
-    stage.setGameChoices(choices.map(({ id: choiceId, label, group, detail, odds }) => ({ id: choiceId, label, group, detail, odds })), gameBridge?.busyFor(id) ?? false);
+    stage.setGameChoices(choices, gameBridge?.busyFor(id) ?? false);
   };
 
   let imageLibraryOpen=false;
@@ -548,11 +548,11 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     },
     onGameChoice: async (choice) => {
       const activeChatId = chatId();
-      const picked = gameBridge?.choicesFor(activeChatId).find((entry) => entry.id === choice.id);
-      if (!picked || !gameBridge) throw new Error("That move isn't available anymore.");
+      const picked = gameBridge?.resolve(activeChatId,choice);
+      if (!picked || !gameBridge) {gameBridge?.request(activeChatId);throw new Error("That move changed or isn't available anymore. Refresh the available moves and choose again.");}
+      if (!gameBridge.pick(activeChatId,picked)) throw new Error("That move is no longer available. Refresh the available moves.");
       speech.setCursor(null);
       stage.presentUserParagraph(picked.label, turn?.userSpeaker || "You");
-      gameBridge.pick(activeChatId, picked);
     },
     onReroll: () => {
       const activeChatId = chatId();

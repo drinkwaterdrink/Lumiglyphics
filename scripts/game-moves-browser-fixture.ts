@@ -1,0 +1,24 @@
+import {VnStage} from '../src/frontend/stage/vn-stage.js';
+import {GameBridge,GAME_STATE_EVENT,GAME_PICK_EVENT} from '../src/frontend/host/game-bridge.js';
+import {normalizeTooltipPreferences} from '../src/shared/dossiers.js';
+import {ImageStudio} from '../src/frontend/image-review/studio.js';
+import {PanelDock} from '../src/frontend/stage/panel-dock.js';
+const mount=document.createElement('div');Object.assign(mount.style,{position:'fixed',inset:'0',background:'#08090d'});document.body.append(mount);
+const mode=new URL(location.href).searchParams.get('mode')==='cyoa'?'cyoa':'standard';
+const picks:unknown[]=[],submissions:string[]=[];
+let chatId='moves-chat',failSubmission=false;
+let bridge:GameBridge;
+const stage=new VnStage({mount,textSpeed:0,onSubmit:async text=>{if(failSubmission)throw new Error('Test submission failed');submissions.push(text);},onGameChoice:choice=>{
+ const current=bridge.resolve(chatId,choice);if(!current)throw new Error('That move changed. Refresh available moves.');
+ if(!bridge.pick(chatId,current))throw new Error('That move is no longer available.');stage.presentUserParagraph(current.label);
+}});
+bridge=new GameBridge(window,()=>stage.setGameChoices(bridge.choicesFor(chatId),bridge.busyFor(chatId)));
+new ImageStudio(stage.panelMount,()=>{},()=>{});new PanelDock(stage.panelMount);
+window.addEventListener(GAME_PICK_EVENT,event=>picks.push((event as CustomEvent).detail));
+const turn={mode,paragraphs:[{id:'p1',text:'Mira waits beside the locked door.',speaker:'Mira'}],choices:mode==='cyoa'?[{id:'wait',label:'Wait quietly',value:'wait'}]:[]} as const;
+const prefs=normalizeTooltipPreferences({enabled:true,actionsEnabled:true});
+const reset=()=>{stage.loadTurn(structuredClone(turn) as any);};
+const publish=(provider:string,label:string,odds:number|null=.62,busy=false)=>window.dispatchEvent(new CustomEvent(GAME_STATE_EVENT,{detail:{version:1,provider,chatId,choices:[{id:'shared-id',label,odds,group:'Story moves',detail:'A provider-owned move'}],busy}}));
+stage.setReaderPreferences({adjustableSheetEnabled:true,layout:'overlay',sheetSize:'reading',backgroundOpacity:.85,heightRatio:.98});
+stage.setTooltipPreferences(prefs);reset();publish('warp','Ask Mira about the door');publish('other','Look through the window',.8);
+Object.assign(window,{gameFixture:{stage,bridge,reset,publish,prefs,picks,submissions,setFailure:(value:boolean)=>{failSubmission=value;},setChat:(value:string)=>{chatId=value;bridge.clear();stage.setGameChoices([]);}}});

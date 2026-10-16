@@ -8,6 +8,14 @@ const moves: VnGameChoice[] = [
 ];
 
 describe("game-engine moves on the stage", () => {
+  test("moves with the same id retain their provider on selection", async()=>{
+    const picked:string[]=[];
+    stage=new VnStage({mount:new FakeNode('div') as unknown as HTMLElement,textSpeed:0,onGameChoice:c=>{picked.push((c as any).provider);}});
+    stage.loadTurn({mode:'standard',paragraphs:[{id:'p',text:'Hello.'}]});advance(stage);
+    stage.setGameChoices([{...moves[0]!,provider:'warp',revision:1},{...moves[0]!,provider:'other',revision:2}] as any);
+    root(stage).querySelectorAll('[data-vn-game-choice]')[1]!.click();await Promise.resolve();
+    expect(picked).toEqual(['other']);
+  });
   let restore: () => void;
   let stage: VnStage | null = null;
   const root = (s: VnStage): FakeNode => (s as unknown as { root: FakeNode }).root;

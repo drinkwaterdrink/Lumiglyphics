@@ -10,6 +10,7 @@
  * validated and capped; nothing here is sent over the network.
  */
 
+import { gameMoveKey } from '../../shared/game-moves.js';
 export const GAME_STATE_EVENT = "vn-game-state-v1";
 export const GAME_REQUEST_EVENT = "vn-game-request-v1";
 export const GAME_PICK_EVENT = "vn-game-pick-v1";
@@ -17,6 +18,7 @@ export const GAME_PICK_EVENT = "vn-game-pick-v1";
 const MAX_CHOICES = 12;
 
 export interface GameChoice {
+  revision?: number;
   provider: string;
   id: string;
   label: string;
@@ -65,6 +67,7 @@ export function parseGameState(detail: unknown): GameState | null {
 export class GameBridge {
   private states = new Map<string, GameState>();
   private dead = false;
+  private revision = 0;
 
   constructor(
     private readonly target: Pick<Window, "addEventListener" | "removeEventListener" | "dispatchEvent">,
@@ -77,14 +80,14 @@ export class GameBridge {
     if (this.dead) return;
     const state = parseGameState((event as CustomEvent).detail);
     if (!state) return;
-    this.states.set(state.provider, state);
+    this.states.set(state.provider, {...state, choices:state.choices.map(choice=>({...choice,revision:++this.revision}))});
     this.onChange();
   };
 
   /** Every provider's choices for this chat, in arrival order. */
   choicesFor(chatId: string): GameChoice[] {
     if (!chatId) return [];
-    return [...this.states.values()].filter((s) => s.chatId === chatId).flatMap((s) => s.choices);
+    return [...this.states.values()].filter((s) => s.chatId === chatId).flatMap((s) => s.choices.map(choice=>({...choice})));
   }
 
   /** A provider is busy resolving the last pick (its buttons should wait). */
@@ -95,16 +98,26 @@ export class GameBridge {
   /** Ask providers to (re)send their state, e.g. after a chat switch or reopening the stage. */
   request(chatId: string): void {
     if (this.dead || !chatId) return;
+    for (const [provider,state] of this.states) if(state.chatId===chatId)this.states.delete(provider);
+    this.onChange();
     this.target.dispatchEvent(new CustomEvent(GAME_REQUEST_EVENT, { detail: { version: 1, chatId } }));
   }
 
-  pick(chatId: string, choice: GameChoice): void {
-    if (this.dead) return;
+  resolve(chatId: string, choice: import('../../shared/game-moves.js').GameMoveSnapshot): GameChoice | null {
+    if(this.dead||!choice.provider)return null;
+    const state=this.states.get(choice.provider);
+    if(!state||state.chatId!==chatId||state.busy)return null;
+    return state.choices.find(entry=>gameMoveKey(entry)===gameMoveKey(choice))??null;
+  }
+
+  pick(chatId: string, choice: GameChoice): boolean {
+    if (!this.resolve(chatId,choice)) return false;
     // Picked choices are spent until the provider sends a fresh set.
     const state = this.states.get(choice.provider);
     if (state?.chatId === chatId) this.states.set(choice.provider, { ...state, choices: [], busy: true });
     this.target.dispatchEvent(new CustomEvent(GAME_PICK_EVENT, { detail: { version: 1, provider: choice.provider, chatId, id: choice.id } }));
     this.onChange();
+    return true;
   }
 
   clear(): void {

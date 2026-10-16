@@ -2,6 +2,9 @@ import {CastStage} from "./cast-stage.js";
 import type {TurnView,AssetView} from "../../protocol.js";
 import { StageDossiers } from "./dossiers.js";
 import type { TooltipPreferences } from "../../shared/dossiers.js";
+import { gameMoveKey, type GameMoveSnapshot } from '../../shared/game-moves.js';
+import { mergeInteractionDraft } from '../../shared/scene-interactions.js';
+import { ReplyDraftEditor } from './interaction-tray.js';
 import {
   escapeHtml,
   formatDialogueText,
@@ -120,7 +123,7 @@ import {
 } from "./image-loader";
 
 /** A move offered by a game-engine extension (see host/game-bridge.ts). */
-export interface VnGameChoice {
+export interface VnGameChoice extends GameMoveSnapshot {
   id: string;
   label: string;
   group: string | null;
@@ -457,6 +460,12 @@ export class VnStage {
   private readonly choiceList: HTMLOListElement;
   private readonly gameChoiceList: HTMLElement;
   private gameChoices: readonly VnGameChoice[] = [];
+  private readonly gameMoves: HTMLDetailsElement;
+  private readonly gameMovesSummary: HTMLElement;
+  private readonly moveDraftEditor: ReplyDraftEditor;
+  private moveDraftSelection: {key:string;epoch:number} | null = null;
+  private moveDraftEpoch = 0;
+  private actionDraftsEnabled = false;
   private gameBusy = false;
   private readonly inputForm: HTMLFormElement;
   private readonly input: HTMLTextAreaElement;
@@ -592,9 +601,22 @@ export class VnStage {
     this.interaction = queryRequired(this.themeRoot, "[data-vn-interaction]");
     this.choiceList = queryRequired(this.themeRoot, "[data-vn-choice-list]");
     this.gameChoiceList = queryRequired(this.themeRoot, "[data-vn-game-choices]");
+    this.gameMoves=document.createElement('details');this.gameMoves.dataset.vnGameMoves='';
+    this.gameMovesSummary=document.createElement('summary');this.gameMovesSummary.textContent='Available moves';
+    this.gameChoiceList.parentElement!.insertBefore(this.gameMoves,this.gameChoiceList);this.gameMoves.append(this.gameMovesSummary,this.gameChoiceList);
     this.inputForm = queryRequired(this.themeRoot, "[data-vn-input-form]");
     this.input = queryRequired(this.themeRoot, "[data-vn-input]");
     this.submitButton = queryRequired(this.themeRoot, "[data-vn-submit]");
+    this.moveDraftEditor=new ReplyDraftEditor(()=>this.state.draft,(text,mode)=>{
+      const selection=this.moveDraftSelection;
+      if(!selection||selection.epoch!==this.moveDraftEpoch||!this.actionDraftsEnabled||this.gameBusy||!selectVnStageView(this.state).acceptsInput||!this.gameChoices.some(choice=>gameMoveKey(choice)===selection.key))return false;
+      const merged=mergeInteractionDraft(this.state.draft,text,mode);
+      if(merged===null||!this.storeReplyDraft(merged))return false;
+      this.closeMoveDraft();this.input.focus();return true;
+    },()=>{this.closeMoveDraft();if(!this.gameMoves.hidden)this.gameMovesSummary.focus();else if(selectVnStageView(this.state).showStandardInput)this.input.focus();else this.focus();});
+    this.moveDraftEditor.host.dataset.vnMoveDraft='';
+    const moveHelp=document.createElement('p');moveHelp.textContent='Edit as an ordinary story reply. Move odds and automatic checks do not apply; nothing is sent until Send.';
+    this.moveDraftEditor.host.prepend(moveHelp);this.interaction.insertBefore(this.moveDraftEditor.host,this.gameMoves);
     this.logButton = queryRequired(this.themeRoot, "[data-vn-control='log']");
     this.autoButton = queryRequired(this.themeRoot, "[data-vn-control='auto']");
     this.autoBar = this.themeRoot.querySelector<HTMLElement>(".vn-auto-bar");
@@ -610,7 +632,7 @@ export class VnStage {
 
     this.dossiers=new StageDossiers(this.root,this.dialogueText,queryRequired(this.themeRoot,"[data-vn-controls]"),()=>{this.toggleSkip(false);this.holdAutoPlay();},()=>this.checkAutoPlay(),prefs=>this.callbacks.onTooltipPreferencesChange?.(prefs),{
       current:()=>this.state.draft,
-      apply:text=>{if(this.destroyed||selectVnStageView(this.state).isBusy||this.state.isUserTurn)return false;this.toggleAutoPlay(false);this.toggleSkip(false);this.dispatch({type:'set-draft',draft:text});return true;},
+      apply:text=>this.storeReplyDraft(text),
       focus:()=>{if(selectVnStageView(this.state).showStandardInput)this.input.focus();else{this.setActivity('Action saved for Your turn.','success');this.focus();}}
     });
     this.bindEvents();
@@ -618,7 +640,10 @@ export class VnStage {
     this.render(null);
   }
 
-  setTooltipPreferences(prefs:TooltipPreferences):void {this.dossiers.setPreferences(prefs);}
+  setTooltipPreferences(prefs:TooltipPreferences):void {this.actionDraftsEnabled=prefs.enabled&&prefs.actionsEnabled;this.dossiers.setPreferences(prefs);if(!this.actionDraftsEnabled)this.closeMoveDraft();const view=selectVnStageView(this.state);this.renderInteraction(view.showChoices,view.showStandardInput,view.isBusy);}
+
+  private storeReplyDraft(text:string):boolean {if(this.destroyed||selectVnStageView(this.state).isBusy||this.state.isUserTurn)return false;this.toggleAutoPlay(false);this.toggleSkip(false);this.dispatch({type:'set-draft',draft:text});return true;}
+  private closeMoveDraft():void {this.moveDraftSelection=null;this.moveDraftEditor.close();delete this.panelMount.dataset.vnMoveDraftOpen;}
 
   getState(): Readonly<VnStageState> {
     return this.state;
@@ -859,7 +884,7 @@ export class VnStage {
 
   /** Moves from a game-engine extension, shown with the reply options whenever it's the player's turn. */
   setGameChoices(choices: readonly VnGameChoice[], busy = false): void {
-    this.gameChoices = [...choices];
+    this.gameChoices = choices.map(choice=>({...choice}));
     this.gameBusy = busy;
     const view = selectVnStageView(this.state);
     this.renderInteraction(view.showChoices, view.showStandardInput, view.isBusy);
@@ -869,6 +894,7 @@ export class VnStage {
   setCastTurn(turn:TurnView|null,index:number):AssetView|null {return this.castStage.set(turn,index);}
 
   reset(): void {
+    this.moveDraftEpoch++;this.closeMoveDraft();
     if(this.isBacklogOpen)this.closeBacklog();
     this.castStage.set(null,0);
     this.dossiers.setContext(undefined,[]);
@@ -889,6 +915,7 @@ export class VnStage {
   }
 
   loadTurn(turn: VnTurnInput): void {
+    this.moveDraftEpoch++;this.closeMoveDraft();
     this.dismissedImageErrors.clear();
     this.castStage.set(null,0);
     this.dossiers.setContext(turn.presentation,turn.paragraphs.map(p=>p.text));
@@ -932,6 +959,7 @@ export class VnStage {
   }
 
   presentUserParagraph(text: string, speaker: string = "You"): void {
+    this.moveDraftEpoch++;this.closeMoveDraft();
     this.dossiers.setContext(undefined,[]);
     this.dispatch({
       type: "present-user-paragraph",
@@ -1677,7 +1705,7 @@ export class VnStage {
           ? event.target.closest<HTMLButtonElement>("[data-vn-game-choice]")
           : null;
       if (!button || button.disabled) return;
-      const choice = this.gameChoices.find((item) => item.id === button.dataset.vnGameChoiceId);
+      const choice = this.gameChoices.find((item) => gameMoveKey(item) === button.dataset.vnGameChoiceKey);
       if (choice) void this.submitGameChoice(choice);
     });
 
@@ -1781,7 +1809,7 @@ export class VnStage {
 
   private async submitGameChoice(choice: VnGameChoice): Promise<void> {
     const view = selectVnStageView(this.state);
-    if (!view.acceptsInput || view.isBusy || this.gameBusy || !this.callbacks.onGameChoice) return;
+    if (!view.acceptsInput || view.isBusy || this.gameBusy || !this.callbacks.onGameChoice || !this.gameChoices.some(item=>gameMoveKey(item)===gameMoveKey(choice))) return;
     this.dispatch({ type: "submit-started" });
     try {
       await this.callbacks.onGameChoice(choice);
@@ -2413,6 +2441,8 @@ export class VnStage {
   }
 
   private renderGameChoices(show: boolean, isBusy: boolean): void {
+    this.gameMoves.hidden=!show;
+    this.gameMovesSummary.textContent=`Available moves (${this.gameChoices.length})`;
     if (!show) {
       if (this.gameChoiceList.childElementCount > 0) this.gameChoiceList.replaceChildren();
       return;
@@ -2437,10 +2467,12 @@ export class VnStage {
           button.type = "button";
           button.setAttribute("data-vn-game-choice", "");
           button.dataset.vnGameChoiceId = choice.id;
+          button.dataset.vnGameChoiceKey = gameMoveKey(choice);
           button.disabled = isBusy;
           if (choice.detail) button.title = choice.detail;
           const label = document.createElement("span");
           label.textContent = choice.label;
+          if(choice.provider){const provider=document.createElement('small');provider.dataset.vnGameProvider='';provider.textContent=choice.provider;label.append(provider);}
           button.append(label);
           if (choice.odds !== null) {
             const odds = document.createElement("span");
@@ -2448,7 +2480,15 @@ export class VnStage {
             odds.textContent = `${Math.round(choice.odds * 100)}%`;
             button.append(odds);
           }
-          section.append(button);
+          const row=document.createElement('div');row.dataset.vnGameMoveRow='';row.append(button);
+          if(this.actionDraftsEnabled){
+            const edit=document.createElement('button');edit.type='button';edit.dataset.vnEditGameMove='';edit.disabled=isBusy;
+            edit.setAttribute('aria-label',`Edit ${choice.label} as message`);edit.title='Edit as message';edit.textContent='✎';
+            edit.addEventListener('click',event=>{event.stopPropagation();if(!this.actionDraftsEnabled||this.gameBusy||!selectVnStageView(this.state).acceptsInput||!this.gameChoices.some(item=>gameMoveKey(item)===gameMoveKey(choice)))return;
+              this.moveDraftSelection={key:gameMoveKey(choice),epoch:this.moveDraftEpoch};this.panelMount.dataset.vnMoveDraftOpen='true';this.moveDraftEditor.open(choice.label);
+            });row.append(edit);
+          }
+          section.append(row);
         }
         return section;
       }),
@@ -2460,6 +2500,7 @@ export class VnStage {
     showStandardInput: boolean,
     isBusy: boolean,
   ): void {
+    if(!selectVnStageView(this.state).acceptsInput)this.closeMoveDraft();
     const showGame = (showChoices || showStandardInput) && this.gameChoices.length > 0;
     this.interaction.hidden = !showChoices && !showStandardInput;
     this.choiceList.hidden = !showChoices;

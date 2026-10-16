@@ -17,6 +17,40 @@ class Bus {
 const state = (choices: unknown[], extra: Record<string, unknown> = {}) => ({ version: 1, provider: "warp", chatId: "c1", choices, ...extra });
 
 describe("game bridge", () => {
+  test("rejects stale, forged, busy and already spent picks without dispatching", () => {
+    const bus=new Bus(),bridge=new GameBridge(bus as unknown as Window,()=>{});
+    bus.emit(state([{id:'a',label:'Ask Mira',odds:.6}]));
+    const old=bridge.choicesFor('c1')[0]!;
+    bus.emit(state([{id:'a',label:'Approach Mira',odds:.2}]));
+    expect(bridge.pick('c1',old)).toBe(false);
+    const current=bridge.choicesFor('c1')[0]!;
+    expect(bridge.pick('c1',{...current,label:'Unlock the vault'})).toBe(false);
+    expect(bridge.pick('another-chat',current)).toBe(false);
+    bus.emit(state([{id:'a',label:'Approach Mira',odds:.2}],{busy:true}));
+    expect(bridge.pick('c1',bridge.choicesFor('c1')[0]!)).toBe(false);
+    bus.emit(state([{id:'a',label:'Approach Mira',odds:.2}]));
+    const fresh=bridge.choicesFor('c1')[0]!;
+    expect(bridge.pick('c1',fresh)).toBe(true);
+    expect(bridge.pick('c1',fresh)).toBe(false);
+    expect(bus.sent.filter(e=>e.type===GAME_PICK_EVENT)).toHaveLength(1);
+  });
+  test("refresh drops cached moves and a new identical snapshot invalidates old choices",()=>{
+    const bus=new Bus(),bridge=new GameBridge(bus as unknown as Window,()=>{});
+    bus.emit(state([{id:'a',label:'Ask Mira'}]));const old=bridge.choicesFor('c1')[0]!;
+    bridge.request('c1');expect(bridge.choicesFor('c1')).toEqual([]);
+    bus.emit(state([{id:'a',label:'Ask Mira'}]));
+    expect(bridge.pick('c1',old)).toBe(false);
+    expect(bridge.pick('c1',bridge.choicesFor('c1')[0]!)).toBe(true);
+  });
+  test("same ids across providers stay separate and returned snapshots cannot mutate bridge state",()=>{
+    const bus=new Bus(),bridge=new GameBridge(bus as unknown as Window,()=>{});
+    bus.emit(state([{id:'a',label:'Warp move'}]));bus.emit(state([{id:'a',label:'Other move'}],{provider:'other'}));
+    const copies=bridge.choicesFor('c1');copies[0]!.label='Changed externally';
+    expect(bridge.pick('c1',copies[0]!)).toBe(false);
+    expect(bridge.pick('c1',copies[1]!)).toBe(true);
+    expect(bus.sent.filter(e=>e.type===GAME_PICK_EVENT).at(-1)?.detail).toEqual({version:1,provider:'other',chatId:'c1',id:'a'});
+    expect(bridge.choicesFor('c1').map(c=>c.label)).toEqual(['Warp move']);
+  });
   test("validates and caps payloads", () => {
     expect(parseGameState(null)).toBeNull();
     expect(parseGameState({ version: 2, provider: "warp", chatId: "c1", choices: [] })).toBeNull();
