@@ -41,6 +41,7 @@ export type StoredTurnRecord = {
   presentation?: unknown;
   schemaVersion: 1;
   correctionRequestIds?: string[];
+  imageRecoveryRequestIds?: string[];
   replanRequestIds?: string[];
   forceImageReview?: boolean;
   plannerMode?: 'model' | 'fallback';
@@ -701,6 +702,7 @@ export async function loadTurnRecord(
       ? { source: { version: 2 as const, rawFingerprint: raw.source.rawFingerprint } }
       : {}),
     ...(raw.settingsSnapshot && typeof raw.settingsSnapshot === "object" ? { settingsSnapshot: raw.settingsSnapshot as Record<string, unknown> } : {}),
+    ...(Array.isArray(raw.imageRecoveryRequestIds) ? {imageRecoveryRequestIds:raw.imageRecoveryRequestIds.filter((id):id is string=>typeof id==='string'&&id.length<=100).slice(-32)} : {}),
     ...(Array.isArray(raw.attempts) ? { attempts: raw.attempts as NonNullable<StoredTurnRecord["attempts"]> } : {}),
     updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : new Date(0).toISOString()
   };

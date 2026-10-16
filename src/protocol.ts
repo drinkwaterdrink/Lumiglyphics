@@ -18,12 +18,14 @@ export const CorrectImageSubjectRequestSchema=z.object({type:z.literal('vn_corre
 export const SetCardRoleRequestSchema=z.object({type:z.literal('vn_set_card_role'),...recoveryScope,role:CardRoleSchema}).strict();
 export const ReplanTurnRequestSchema=z.object({type:z.literal('vn_replan_turn'),...recoveryScope}).strict();
 export const ContextSourcesRequestSchema = z.object({type:z.literal("vn_get_context_sources"),chatId:z.string().min(1).max(256),requestId:z.string().min(1).max(100)}).strict();
+export const RecoverImagesRequestSchema=z.object({type:z.literal('vn_recover_images'),...recoveryScope,revision:z.number().int().nonnegative(),action:z.enum(['stop','retry'])}).strict();
 export type FrontendRequest =
   | z.infer<typeof ImageLibraryRequestSchema>
   | z.infer<typeof CastGalleryRequestSchema>
   | z.infer<typeof CastArtRequestSchema>
   | z.infer<typeof LocationArtRequestSchema>
   | z.infer<typeof ContextSourcesRequestSchema>
+  | z.infer<typeof RecoverImagesRequestSchema>
   | z.infer<typeof ReplanTurnRequestSchema>
   | z.infer<typeof CorrectImageSubjectRequestSchema>
   | z.infer<typeof SetCardRoleRequestSchema>

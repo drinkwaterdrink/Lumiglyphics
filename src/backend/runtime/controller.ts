@@ -11,7 +11,7 @@ const contextConfigSaves = new Map<string, Promise<VisualNovelConfig>>();
 import { readerPresentationFor } from "./entity-projection.js";
 import { modelOutputParameters } from './template-output.js';
 import { correctVisualSubject } from "./subject-resolution.js";
-import { CorrectImageSubjectRequestSchema, SetCardRoleRequestSchema, ReplanTurnRequestSchema } from "../../protocol.js";
+import { CorrectImageSubjectRequestSchema, SetCardRoleRequestSchema, ReplanTurnRequestSchema, RecoverImagesRequestSchema } from "../../protocol.js";
 import { imageDiagnostic } from '../../shared/image-diagnostics.js';
 import type {
   ChatMessageDTO,
@@ -25,7 +25,8 @@ import type { ImageRequestEdits } from '../../shared/image-review.js';
 import { extractSimTracker } from "./simtracker.js";
 import { templateSnapshot } from "../../shared/image-templates.js";
 const imageReviewGates = new Map<string, ImageReviewGate>();
-const preparingSingleImages = new Set<string>();
+const preparingSingleImages = new Map<string,symbol>();
+const recoveringImageBatches = new Map<string,string>();
 const generatingChats = new Set<string>();
 import { createExternalImages } from "./external-images.js";
 import {
@@ -101,6 +102,7 @@ function externalImages(spindle: SpindleAPI) {
   return service;
 }
 const assetControllers = new Map<string, AbortController>();
+const pendingAssetStarts = new Map<string,symbol>();
 /**
  * Per-chat intake epoch. Macro resolution awaits the host before the planning
  * queue can see the job, so a cancel, a new generation, a deletion, or a
@@ -220,6 +222,7 @@ function abortChatWork(spindle: SpindleAPI, userId: string | undefined, chatId: 
   planningQueue.cancelChat(userId, chatId, undefined, reason);
   const abortedTurn = activeTurnKeys.get(key) ?? null;
   activeTurnKeys.delete(key);
+  pendingAssetStarts.delete(key);
   assetControllers.get(key)?.abort(reason);
   releaseSceneCacheAdmission(spindle, userId, chatId, "view_closed");
   void cancelIncompleteJobs(spindle, chatId, userId, abortedTurn).catch((error) => {
@@ -733,7 +736,11 @@ async function startAssets(
   userId?: string,
   options: { bypassJobIds?: Iterable<string>; onlyJobId?: string; forceReview?: boolean; initialEdits?: ImageRequestEdits; regeneratePrompt?:boolean } = {}
 ): Promise<void> {
-  const config = await loadConfig(spindle, userId);
+  const key=runtimeKey(userId,record.plan.key.chatId),start=Symbol();pendingAssetStarts.set(key,start);
+  let config:VisualNovelConfig;
+  try{config=await loadConfig(spindle,userId);}catch(error){if(pendingAssetStarts.get(key)===start)pendingAssetStarts.delete(key);throw error;}
+  if(pendingAssetStarts.get(key)!==start)return;
+  pendingAssetStarts.delete(key);
   rememberDebugFlag(userId, config);
   if (!config.generateImages || record.jobs.length === 0) return;
   const requiresReview = config.reviewImages || Boolean(options.onlyJobId) || Boolean(options.forceReview) || record.forceImageReview === true;
@@ -746,7 +753,6 @@ async function startAssets(
   }
   const cacheServed = record.jobs.filter((job) => job.provider === CACHE_JOB_PROVIDER).length;
   dbg(spindle, userId, `assets starting: ${record.jobs.length - cacheServed} generated job(s)${cacheServed ? ` + ${cacheServed} cache-served swap(s) (not generated)` : ""} for chat=${record.plan.key.chatId} message=${record.plan.key.assistantMessageId} concurrency=${config.imageConcurrency}`);
-  const key = runtimeKey(userId, record.plan.key.chatId);
   if (!compareTurnKeys(activeTurnKeys.get(key) ?? null, record.plan.key).accepted) return;
   assetControllers.get(key)?.abort("A newer turn replaced this asset batch.");
   const controller = new AbortController();
@@ -757,13 +763,16 @@ async function startAssets(
   const scope = sceneImageScope(userId, record.plan.key.chatId);
   const admission = sceneCache.admission(scope);
   let current = record;
+  const ownsBatch=()=>assetControllers.get(key)===controller&&compareTurnKeys(activeTurnKeys.get(key)??null,record.plan.key).accepted;
+  const saveBatch=async()=>{if(userId)await saveTurnRecordIfCurrent(spindle,path,current,userId,ownsBatch);else if(ownsBatch())await saveTurnRecord(spindle,path,current,userId);};
   const gate = new ImageReviewGate(async (request) => {
     if (assetControllers.get(key) !== controller) return;
     if (controller.signal.aborted && request.state !== "cancelled" && request.state !== "skipped") return;
     if (!compareTurnKeys(activeTurnKeys.get(key) ?? null, record.plan.key).accepted) return;
     const requests = safeImageHistory([...(current.imageRequests ?? []).filter((entry) => entry.requestId !== request.requestId), request]);
     current = { ...current, imageRequests: requests, updatedAt: new Date().toISOString() };
-    await saveTurnRecord(spindle, path, current, userId);
+    await saveBatch();
+    if (!ownsBatch())return;
     if (!compareTurnKeys(activeTurnKeys.get(key) ?? null, record.plan.key).accepted) return;
     spindle.sendToFrontend({ type: "vn_image_requests", chatId: record.plan.key.chatId, messageId: record.plan.key.assistantMessageId, sourceFingerprint: record.plan.key.sourceFingerprint, requests }, userId);
   });
@@ -785,7 +794,7 @@ async function startAssets(
         if (assetControllers.get(key) !== controller) return;
         if (!compareTurnKeys(active, changed.ownerTurnKey).accepted) return;
         current = { ...current, jobs: mergeJobs(jobs), updatedAt: new Date().toISOString() };
-        await saveTurnRecord(spindle, path, current, userId);
+        await saveBatch();
         const asset=await assetViewWithCastArt(spindle,current,changed,userId);
         if(controller.signal.aborted||(assetControllers.has(key)&&assetControllers.get(key)!==controller)||!compareTurnKeys(activeTurnKeys.get(key)??null,changed.ownerTurnKey).accepted)return;
         const latestJob=current.jobs.find(j=>j.jobId===changed.jobId);
@@ -816,9 +825,9 @@ async function startAssets(
       }
     );
     const active = activeTurnKeys.get(key) ?? null;
-    if (compareTurnKeys(active, record.plan.key).accepted) {
+    if (assetControllers.get(key)===controller && compareTurnKeys(active, record.plan.key).accepted) {
       current = { ...current, jobs: mergeJobs(finalJobs), updatedAt: new Date().toISOString() };
-      await saveTurnRecord(spindle, path, current, userId);
+      await saveBatch();
     }
   } finally {
     if (assetControllers.get(key) === controller) assetControllers.delete(key);
@@ -826,12 +835,20 @@ async function startAssets(
   }
 }
 
+/** Provider calls may ignore abort. Release only the aborted owner; its late
+ * callbacks are rejected by controller identity and serialized write guards. */
+function releaseAbortedImageBatch(key:string):void {
+ if(!assetControllers.get(key)?.signal.aborted)return;
+ assetControllers.delete(key);imageReviewGates.delete(key);preparingSingleImages.delete(key);
+}
+
 async function prepareSingleImage(spindle: SpindleAPI, request: Extract<FrontendRequest, { type: "vn_prepare_image" | "vn_correct_image_subject" }>, userId: string): Promise<void> {
   const key = runtimeKey(userId, request.chatId);
-  if (preparingSingleImages.has(key)) throw new Error("A picture is already being prepared.");
-  preparingSingleImages.add(key);
+  releaseAbortedImageBatch(key);
+  if (preparingSingleImages.has(key)||recoveringImageBatches.has(key)||pendingAssetStarts.has(key)) throw new Error("A picture is already being prepared or recovered.");
+  const preparation=Symbol();preparingSingleImages.set(key,preparation);
   try { await prepareSingleImageUnlocked(spindle, request, userId); }
-  finally { preparingSingleImages.delete(key); }
+  finally { if(preparingSingleImages.get(key)===preparation)preparingSingleImages.delete(key); }
 }
 
 async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<FrontendRequest, { type: "vn_prepare_image" | "vn_correct_image_subject" }>, userId: string): Promise<void> {
@@ -1347,14 +1364,57 @@ async function retryTurn(
   }
 }
 
+async function recoverImages(spindle:SpindleAPI,request:Extract<FrontendRequest,{type:'vn_recover_images'}>,userId:string):Promise<void>{
+ const action=RecoverImagesRequestSchema.parse(request),key=runtimeKey(userId,action.chatId),epoch=intakeEpochs.get(key)??0;
+ if(recoveringImageBatches.get(key)===action.requestId)return;
+ if(recoveringImageBatches.has(key))throw new Error('Image recovery is already in progress.');
+ releaseAbortedImageBatch(key);
+ if(!views.isOpen(userId,action.chatId)||generatingChats.has(key)||planningQueue.active().some(op=>op.userId===userId&&op.chatId===action.chatId)||preparingSingleImages.has(key)&&!assetControllers.has(key))throw new Error('Wait for reply planning or picture preparation to finish, then try again.');
+ recoveringImageBatches.set(key,action.requestId);
+ try{
+  const state=await loadChatState(spindle,action.chatId,userId);
+  let record=await loadTurnRecord(spindle,state.activeTurnPath,userId);
+  if(!record||record.plan.key.chatId!==action.chatId||record.plan.key.assistantMessageId!==action.messageId||record.plan.key.sourceFingerprint!==action.sourceFingerprint||Number(record.plan.key.swipeId??0)!==action.swipeId||record.plan.key.revision!==action.revision)throw new Error('This recovery belongs to an older reply or swipe.');
+  if(record.imageRecoveryRequestIds?.includes(action.requestId))return;
+  const messages=await spindle.chat.getMessages(action.chatId) as NormalizedChatMessage[];
+  const latest=[...messages].reverse().find(m=>!m.is_user&&m.content.trim());
+  if(!latest||latest.id!==action.messageId)throw new Error('A newer reply replaced these pictures.');
+  const intake=await resolveMessageIntake(spindle,action.chatId,latest.content,userId);
+  if(!intake.resolved||relateRecord(record,latest,intake)!=='current')throw new Error('The reply changed. Refresh the reader before recovering pictures.');
+  const config=await loadConfig(spindle,userId);
+  if(action.action==='retry'&&(!config.generateImages||config.useNativeCardImages))throw new Error('Enable generated pictures before retrying.');
+  const current=()=>views.isOpen(userId,action.chatId)&&(intakeEpochs.get(key)??0)===epoch&&recoveringImageBatches.get(key)===action.requestId&&(!activeTurnKeys.has(key)||compareTurnKeys(activeTurnKeys.get(key)??null,record!.plan.key).accepted);
+  if(!current())throw new Error('This reply changed during image recovery.');
+  // Detach before aborting: an old provider may never settle, and cancellation
+  // notifications must not race the new recovery record.
+  pendingAssetStarts.delete(key);
+  const oldController=assetControllers.get(key);assetControllers.delete(key);imageReviewGates.delete(key);preparingSingleImages.delete(key);oldController?.abort('Stopped pending pictures for explicit recovery.');
+  releaseSceneCacheAdmission(spindle,userId,action.chatId,'image_recovery');
+  record=await loadTurnRecord(spindle,state.activeTurnPath,userId);
+  if(!record||!current())return;
+  const stamp=new Date().toISOString(),retryIds=new Set<string>();
+  const jobs=record.jobs.map(job=>{
+   if(job.status==='generated'||job.status==='browser_ready')return job;
+   if(action.action==='retry'&&job.provider!==CACHE_JOB_PROVIDER)retryIds.add(job.jobId);
+   return AssetJobSchema.parse({...job,status:retryIds.has(job.jobId)?'queued':'cancelled',imageId:null,imageUrl:null,error:null,queuedAt:retryIds.has(job.jobId)?stamp:job.queuedAt,startedAt:null,generatedAt:null,readyAt:null,finishedAt:retryIds.has(job.jobId)?null:stamp});
+  });
+  const next:StoredTurnRecord={...record,jobs,imageRequests:record.imageRequests?.map(r=>r.state==='review'?{...r,state:'cancelled' as const}:r)??[],imageRecoveryRequestIds:[...(record.imageRecoveryRequestIds??[]),action.requestId].slice(-32),updatedAt:stamp};
+  activeTurnKeys.set(key,next.plan.key);
+  if(!current()||!await saveTurnRecordIfCurrent(spindle,state.activeTurnPath!,next,userId,current))return;
+  const view=await turnViewWithAudio(spindle,next,userId);if(!current())return;
+  spindle.sendToFrontend({type:'vn_turn',turn:view},userId);
+  if(retryIds.size)void startAssets(spindle,next,state.activeTurnPath!,userId,{bypassJobIds:retryIds,forceReview:true}).catch(error=>{if(!isAbortError(error))spindle.sendToFrontend({type:'vn_error',chatId:action.chatId,operation:'prepare_image',error:errorText(error)},userId);});
+ }finally{if(recoveringImageBatches.get(key)===action.requestId)recoveringImageBatches.delete(key);}
+}
+
 /** Explicit recovery calls the planner, but never authorizes fresh image calls. */
 async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendRequest, {type:'vn_replan_turn'}>, userId: string): Promise<void> {
   const action = ReplanTurnRequestSchema.parse(request);
   const key = runtimeKey(userId, action.chatId);
   const epoch = intakeEpochs.get(key) ?? 0;
   if (!views.isOpen(userId, action.chatId)) throw new Error('Open the reader before replanning.');
-  if (generatingChats.has(key) || assetControllers.has(key) || preparingSingleImages.has(key) || planningQueue.active().some(op => op.userId === userId && op.chatId === action.chatId)) throw new Error('Finish the chat reply, skip waiting pictures, and let current preparation finish before replanning.');
-  preparingSingleImages.add(key);
+  if (recoveringImageBatches.has(key) || pendingAssetStarts.has(key) || generatingChats.has(key) || assetControllers.has(key) || preparingSingleImages.has(key) || planningQueue.active().some(op => op.userId === userId && op.chatId === action.chatId)) throw new Error('Finish the chat reply, skip waiting pictures, and let current preparation finish before replanning.');
+  const preparation=Symbol();preparingSingleImages.set(key,preparation);
   try {
     const state = await loadChatState(spindle, action.chatId, userId);
     const old = await loadTurnRecord(spindle, state.activeTurnPath, userId);
@@ -1437,7 +1497,7 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
     },`replan:${action.requestId}`);
     try { await scheduled.promise; }
     catch (error) { if (!isAbortError(error,scheduled.operation.controller.signal)) throw error; }
-  } finally { preparingSingleImages.delete(key); }
+  } finally { if(preparingSingleImages.get(key)===preparation)preparingSingleImages.delete(key); }
 }
 
 async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendRequest, userId: string): Promise<void> {
@@ -1480,7 +1540,7 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       const action=SetCardRoleRequestSchema.parse(request);
       const roleKey=runtimeKey(userId,action.chatId);
       const epoch=intakeEpochs.get(roleKey)??0;
-      if(!views.isOpen(userId,action.chatId) || assetControllers.has(runtimeKey(userId,action.chatId))) throw new Error('Finish or skip the waiting pictures before changing the card role.');
+      if(!views.isOpen(userId,action.chatId) || recoveringImageBatches.has(runtimeKey(userId,action.chatId)) || pendingAssetStarts.has(runtimeKey(userId,action.chatId)) || assetControllers.has(runtimeKey(userId,action.chatId))) throw new Error('Finish or skip the waiting pictures before changing the card role.');
       const state=await loadChatState(spindle,action.chatId,userId);
       const record=await loadTurnRecord(spindle,state.activeTurnPath,userId);
       if(!record || record.plan.key.chatId!==action.chatId || record.plan.key.assistantMessageId!==action.messageId || record.plan.key.sourceFingerprint!==action.sourceFingerprint || Number(record.plan.key.swipeId??0)!==action.swipeId) throw new Error('This role selection belongs to an older turn.');
@@ -1491,7 +1551,7 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       if(!latest || latest.id!==action.messageId || Number(latest.swipe_id??0)!==action.swipeId) throw new Error('A newer reply or swipe replaced this role selection.');
       const intake=await resolveMessageIntake(spindle,action.chatId,latest.content,userId);
       if(!intake.resolved || relateRecord(record,latest,intake)!=='current' || !views.isOpen(userId,action.chatId)) throw new Error('The source changed. Refresh the reader first.');
-      if((intakeEpochs.get(roleKey)??0)!==epoch || assetControllers.has(roleKey) || preparingSingleImages.has(roleKey) || !compareTurnKeys(activeTurnKeys.get(roleKey)??null,record.plan.key).accepted) throw new Error('This turn changed while saving the card role.');
+      if((intakeEpochs.get(roleKey)??0)!==epoch || recoveringImageBatches.has(roleKey) || pendingAssetStarts.has(roleKey) || assetControllers.has(roleKey) || preparingSingleImages.has(roleKey) || !compareTurnKeys(activeTurnKeys.get(roleKey)??null,record.plan.key).accepted) throw new Error('This turn changed while saving the card role.');
       await saveCardRole(spindle,action.chatId,chat.character_id,action.role,userId);
       const next={...record,cardId:chat.character_id,cardRole:action.role};
       const isCurrent=()=>views.isOpen(userId,action.chatId) && !assetControllers.has(roleKey) && (intakeEpochs.get(roleKey)??0)===epoch && compareTurnKeys(activeTurnKeys.get(roleKey)??null,record.plan.key).accepted;
@@ -1500,6 +1560,9 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       spindle.sendToFrontend({type:'vn_turn',turn:view},userId);
       return;
     }
+    case "vn_recover_images":
+      await recoverImages(spindle,request,userId);
+      return;
     case "vn_correct_image_subject":
     case "vn_prepare_image":
       if (typeof request.chatId !== "string" || typeof request.jobId !== "string") throw new Error("Invalid image selection.");
@@ -1670,6 +1733,7 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
     case "vn_cancel": {
       bumpIntakeEpoch(userId, request.chatId);
       planningQueue.cancelChat(userId, request.chatId);
+      pendingAssetStarts.delete(runtimeKey(userId,request.chatId));
       assetControllers.get(runtimeKey(userId, request.chatId))?.abort("Cancelled from the visual novel UI.");
       releaseSceneCacheAdmission(spindle, userId, request.chatId, "cancel");
       return;
@@ -1770,6 +1834,7 @@ export function registerVisualNovelBackend(spindle: SpindleAPI): void {
     const key = runtimeKey(userId, payload.chatId);
     bumpIntakeEpoch(userId, payload.chatId);
     activeTurnKeys.delete(key);
+    pendingAssetStarts.delete(key);
     assetControllers.get(key)?.abort("A new generation started before this turn's assets settled.");
     releaseSceneCacheAdmission(spindle, userId, payload.chatId, "generation_started");
     spindle.sendToFrontend({ type: "vn_generation", chatId: payload.chatId, active: true }, userId);

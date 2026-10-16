@@ -933,3 +933,59 @@ test('stage asset roles derive from explicit templates and legacy jobs remain sc
   if(role==='portrait')expect(turnView(updated).assets[0]?.stageAsset?.character).toBe('Mira');
  }
 });
+
+
+describe('single picture recovery',()=>{
+ test('an aborted provider batch cannot block a new single preview or overwrite it later',async()=>{
+  const f=generationFixture(),user='single-recover-abort';
+  f.data.set('config.json',{generateImages:true,reviewImages:false,referenceAnchoring:false,maxImagesPerTurn:1,includeCharacterContext:false,includePersonaContext:false});
+  registerVisualNovelBackend(f.spindle);await sendState(f.spindle,'chat',user,{viewOpen:true});
+  const saved=()=>f.data.get(turnPath('chat','assistant-1',0)) as StoredTurnRecord;
+  await waitFor(()=>f.gates.length===1);const job=saved().jobs[0]!.jobId;
+  f.request({type:'vn_view',chatId:'chat',open:false},user);await waitFor(()=>saved().jobs[0]?.status==='cancelled');
+  await sendState(f.spindle,'chat',user,{viewOpen:true});
+  f.request({type:'vn_prepare_image',chatId:'chat',messageId:'assistant-1',sourceFingerprint:saved().plan.key.sourceFingerprint,jobId:job},user);
+  await waitFor(()=>saved().imageRequests?.at(-1)?.state==='review');
+  const pending=saved().imageRequests!.at(-1)!.requestId;expect(f.gates).toHaveLength(1);
+  f.gates[0]!.resolve({imageId:'obsolete',imageUrl:'/obsolete'});await new Promise(r=>setTimeout(r,15));
+  expect(saved().jobs[0]?.status).toBe('generating');expect(saved().jobs[0]?.imageId).toBeNull();expect(saved().imageRequests?.at(-1)?.requestId).toBe(pending);
+  f.request({type:'vn_view',chatId:'chat',open:false},user);
+ });
+ test('scoped stop keeps completed images and retry unfinished requires fresh approval',async()=>{
+  const f=generationFixture(),user='batch-recover';
+  f.data.set('config.json',{generateImages:true,reviewImages:true,referenceAnchoring:false,maxImagesPerTurn:2,includeCharacterContext:false,includePersonaContext:false});
+  registerVisualNovelBackend(f.spindle);await sendState(f.spindle,'chat',user,{viewOpen:true});
+  const saved=()=>f.data.get(turnPath('chat','assistant-1',0)) as StoredTurnRecord;
+  await waitFor(()=>saved().imageRequests?.at(-1)?.state==='review');const first=saved().imageRequests!.at(-1)!;
+  f.request({type:'vn_image_review',chatId:'chat',messageId:'assistant-1',sourceFingerprint:saved().plan.key.sourceFingerprint,requestId:first.requestId,action:'generate'},user);
+  await waitFor(()=>f.gates.length===1);f.gates[0]!.resolve({imageId:'keep',imageUrl:'/keep'});
+  await waitFor(()=>saved().imageRequests?.some(r=>r.jobId!==first.jobId&&r.state==='review')===true);
+  const scope={type:'vn_recover_images',version:1,chatId:'chat',messageId:'assistant-1',swipeId:0,revision:saved().plan.key.revision,sourceFingerprint:saved().plan.key.sourceFingerprint};
+  f.request({...scope,requestId:'wrong',action:'stop',swipeId:99},user);await waitFor(()=>f.sent.some((m:any)=>m.type==='vn_error'&&m.requestId==='wrong'));
+  expect(saved().jobs.find(j=>j.jobId===first.jobId)?.imageId).toBe('keep');expect(saved().imageRequests?.some(r=>r.state==='review')).toBe(true);
+  f.request({...scope,requestId:'stop',action:'stop'},user);await waitFor(()=>saved().jobs.some(j=>j.status==='cancelled'));
+  expect(saved().imageRequests?.some(r=>r.state==='review')).toBe(false);
+  f.request({...scope,requestId:'retry',action:'retry'},user);f.request({...scope,requestId:'retry',action:'retry'},user);
+  await waitFor(()=>saved().imageRequests?.some(r=>r.jobId!==first.jobId&&r.state==='review')===true);
+  expect(f.gates).toHaveLength(1);expect(saved().jobs.find(j=>j.jobId===first.jobId)?.imageId).toBe('keep');
+  expect(saved().jobs).toHaveLength(2);f.request({type:'vn_view',chatId:'chat',open:false},user);
+ });
+});
+
+
+test('stopping during deferred retry initialization cannot resurrect an image batch',async()=>{
+ const f=generationFixture(),user='recover-delayed-start';f.data.set('config.json',{generateImages:true,reviewImages:true,referenceAnchoring:false,maxImagesPerTurn:1,includeCharacterContext:false,includePersonaContext:false});
+ registerVisualNovelBackend(f.spindle);await sendState(f.spindle,'chat',user,{viewOpen:true});
+ const saved=()=>f.data.get(turnPath('chat','assistant-1',0)) as StoredTurnRecord;
+ await waitFor(()=>saved().imageRequests?.at(-1)?.state==='review');
+ const scope={type:'vn_recover_images',version:1,chatId:'chat',messageId:'assistant-1',swipeId:0,revision:saved().plan.key.revision,sourceFingerprint:saved().plan.key.sourceFingerprint};
+ f.request({...scope,requestId:'initial-stop',action:'stop'},user);await waitFor(()=>saved().jobs[0]?.status==='cancelled');
+ const configGate=deferred<any>();let block=false,blocked=false;const get=f.spindle.userStorage.getJson.bind(f.spindle.userStorage),send=f.spindle.sendToFrontend.bind(f.spindle);
+ (f.spindle.userStorage as any).getJson=async(path:string,options:any)=>{if(path==='config.json'&&block){block=false;blocked=true;return configGate.promise;}return get(path,options);};
+ (f.spindle as any).sendToFrontend=(message:any,id:any)=>{send(message,id);if(message.type==='vn_turn'&&message.turn.assets.some((a:any)=>a.status==='queued'))block=true;};
+ f.request({...scope,requestId:'retry-start',action:'retry'},user);await waitFor(()=>blocked);
+ f.request({...scope,requestId:'stop-during-start',action:'stop'},user);await waitFor(()=>saved().imageRecoveryRequestIds?.includes('stop-during-start')===true);
+ configGate.resolve(f.data.get('config.json'));await new Promise(r=>setTimeout(r,20));
+ expect(saved().jobs[0]?.status).toBe('cancelled');expect(saved().imageRequests?.some(r=>r.state==='review')).toBe(false);expect(f.gates).toHaveLength(0);
+ f.request({type:'vn_view',chatId:'chat',open:false},user);
+});
