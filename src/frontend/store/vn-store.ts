@@ -90,6 +90,7 @@ export interface VnStageState {
   currentParagraphIndex: number;
   choices: readonly VnChoice[];
   draft: string;
+  customReplyOpen: boolean;
   displayedImage: VnSceneImage | null;
   pendingImage: VnSceneImage | null;
   imageError: string | null;
@@ -165,6 +166,7 @@ export const createInitialVnStageState = (
   currentParagraphIndex: 0,
   choices: [],
   draft: "",
+  customReplyOpen: false,
   displayedImage: null,
   pendingImage: null,
   imageError: null,
@@ -207,7 +209,7 @@ export const selectVnStageView = (state: VnStageState): VnStageView => {
       && !state.isUserTurn && state.currentParagraphIndex > 0,
     acceptsInput,
     showChoices: acceptsInput && state.mode === "cyoa",
-    showStandardInput: acceptsInput && state.mode === "standard",
+    showStandardInput: acceptsInput && (state.mode === "standard" || state.customReplyOpen),
     isBusy:
       state.phase === "waiting-for-response" ||
       state.phase === "planning" ||
@@ -232,6 +234,7 @@ export const reduceVnStage = (
         currentParagraphIndex: cursor,
         choices: [...(action.turn.choices ?? [])],
         draft: "",
+        customReplyOpen: false,
         displayedImage: action.turn.preserveImage ? state.displayedImage : null,
         pendingImage: null,
         imageError: null,
@@ -307,10 +310,10 @@ export const reduceVnStage = (
     }
 
     case "set-mode":
-      return { ...state, mode: action.mode };
+      return { ...state, mode: action.mode, customReplyOpen: state.customReplyOpen || Boolean(state.draft.trim()) };
 
     case "set-draft":
-      return { ...state, draft: action.draft };
+      return { ...state, draft: action.draft, customReplyOpen: state.customReplyOpen || (state.mode === "cyoa" && Boolean(action.draft.trim())) };
 
     case "set-phase": {
       const isResetPhase =

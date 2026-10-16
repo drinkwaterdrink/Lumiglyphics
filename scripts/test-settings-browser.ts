@@ -463,6 +463,9 @@ try {
   const tooltips=settings.locator('[data-tooltip-settings]');
   await tooltips.locator('[data-tooltip="enabled"]').check();
   assert.equal((await lastPatch(page))?.tooltips?.enabled,true);
+  assert.equal(await tooltips.locator('[data-tooltip="actionsEnabled"]').isChecked(),false);
+  await tooltips.locator('[data-tooltip="actionsEnabled"]').check();
+  assert.equal((await lastPatch(page))?.tooltips?.actionsEnabled,true);
   await tooltips.locator('[data-tooltip="locations"]').uncheck();
   assert.equal((await lastPatch(page))?.tooltips?.categories.locations,false);
   await tooltips.locator('[data-tooltip="detail"]').selectOption('expanded');

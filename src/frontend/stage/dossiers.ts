@@ -1,3 +1,4 @@
+import {availableInteractionVerbs,buildInteractionDraft,mergeInteractionDraft} from '../../shared/scene-interactions.js';
 import {referenceEntries,normalizeTooltipPreferences,linkEntityMentions,eligibleEntities,selectReaderDossier,entityOverride,type TooltipPreferences} from '../../shared/dossiers.js';
 import {ReaderPresentationSchema,samePresentationTurn,type ReaderPresentation,type PresentationEntity} from '../../shared/presentation-entities.js';
 import {applyEntityAnchors,clearEntityAnchors,protectedEntityRanges} from './entity-anchors.js';
@@ -5,7 +6,7 @@ import {DossierCard,DOSSIER_CSS} from './dossier-card.js';
 export class StageDossiers {
  private prefs=normalizeTooltipPreferences({});private presentation:ReaderPresentation|undefined;private paragraphs:readonly string[]=[];private index=-1;
  private card:DossierCard;private tray=document.createElement('button');private ready=false;
- constructor(private root:HTMLElement,private text:HTMLElement,controls:HTMLElement,private hold:()=>void,private release:()=>void,private save:(prefs:TooltipPreferences)=>void) {
+ constructor(private root:HTMLElement,private text:HTMLElement,controls:HTMLElement,private hold:()=>void,private release:()=>void,private save:(prefs:TooltipPreferences)=>void,private draftTools?:{current:()=>string;apply:(text:string)=>boolean;focus:()=>void}) {
   const style=document.createElement('style');style.textContent=DOSSIER_CSS;root.append(style);
   this.card=new DossierCard(root,()=>this.release(),(entity,patch)=>this.updateOverride(entity,patch));
   this.tray.type='button';this.tray.dataset.vnReferences='';this.tray.dataset.vnControl='references';this.tray.innerHTML='<span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M12 5.5c-3-2-6.5-2-9-1v14c2.5-1 6-1 9 1 3-2 6.5-2 9-1v-14c-2.5-1-6-1-9 1Z"/><path d="M12 5.5v14M6 8h3M6 11h3M15 8h3M15 11h3"/></svg></span>';this.tray.title='Scene references';this.tray.setAttribute('aria-label','Scene references');this.tray.hidden=true;
@@ -36,7 +37,18 @@ export class StageDossiers {
  }
  private open(id:string,trigger:HTMLElement):void {
   const snapshot=this.snapshot();if(!snapshot||!eligibleEntities(snapshot.entities,this.prefs,snapshot.at.key.chatId).some(e=>e.id===id))return;
-  const dossier=selectReaderDossier(id,snapshot,this.prefs.detail);if(!dossier)return;this.hold();this.card.open(dossier,this.prefs,snapshot.at.key.chatId,trigger);
+  const dossier=selectReaderDossier(id,snapshot,this.prefs.detail);if(!dossier)return;this.hold();
+  const actions=this.prefs.actionsEnabled&&this.draftTools?{
+   drafts:availableInteractionVerbs(dossier.entity,snapshot).flatMap(verb=>{const draft=buildInteractionDraft(dossier.entity,verb,snapshot);return draft?[draft]:[];}),
+   current:this.draftTools.current,focus:this.draftTools.focus,
+   apply:(draft:import('../../shared/scene-interactions.js').InteractionDraft,mode:import('../../shared/scene-interactions.js').DraftMergeMode)=>{
+    const now=this.snapshot();if(!now||!this.ready||!this.prefs.enabled||!this.prefs.actionsEnabled||!samePresentationTurn(now.at.key,draft.key)||now.at.paragraphIndex!==draft.paragraphIndex)return false;
+    const entity=eligibleEntities(now.entities,this.prefs,now.at.key.chatId).find(e=>e.id===draft.entityId);
+    if(!entity||!buildInteractionDraft(entity,draft.verb,now))return false;
+    const text=mergeInteractionDraft(this.draftTools!.current(),draft.text,mode);return text!==null&&this.draftTools!.apply(text);
+   }
+  }:undefined;
+  this.card.open(dossier,this.prefs,snapshot.at.key.chatId,trigger,actions);
  }
  private updateOverride(entity:PresentationEntity,patch:{suppressed?:boolean;pinned?:boolean;note?:string}):boolean {
   const snapshot=this.snapshot();if(!snapshot)return false;const chatId=snapshot.at.key.chatId;

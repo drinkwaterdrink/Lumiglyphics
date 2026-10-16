@@ -1,6 +1,11 @@
 import {test,expect} from 'bun:test';
 import {normalizeTooltipPreferences,linkEntityMentions,selectReaderDossier,referenceEntries,eligibleEntities} from './dossiers.js';
 const entity={id:'m',kind:'npc' as const,name:'Mira',aliases:[],firstParagraph:0,facts:[]};
+test('action drafts are opt-in and normalized independently of categories',()=>{
+ expect(normalizeTooltipPreferences({enabled:true}).actionsEnabled).toBe(false);
+ expect(normalizeTooltipPreferences({enabled:true,actionsEnabled:true,categories:{npcs:false}}).actionsEnabled).toBe(true);
+ expect(normalizeTooltipPreferences({actionsEnabled:'true'}).actionsEnabled).toBe(false);
+});
 test('category gates, boundaries, ambiguous names and density preserve prose',()=>{
  const prefs=normalizeTooltipPreferences({enabled:true});
  expect(linkEntityMentions('Mira meets Mirabel.',[entity],prefs)).toEqual([{start:0,end:4,entityId:'m'}]);

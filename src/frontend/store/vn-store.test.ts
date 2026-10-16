@@ -12,6 +12,27 @@ const paragraphs = [
   { id: "p2", text: "Second" },
 ];
 
+test("a prepared CYOA draft exposes the normal composer only at Your turn", () => {
+  let state=reduceVnStage(createInitialVnStageState(),{type:'load-turn',turn:{mode:'cyoa',paragraphs}});
+  state=reduceVnStage(state,{type:'set-draft',draft:'I try to examine the key.'});
+  assert.equal(selectVnStageView(state).showStandardInput,false);
+  state={...state,phase:'awaiting-input'};
+  assert.equal(selectVnStageView(state).showStandardInput,true);
+  assert.equal(selectVnStageView(state).showChoices,true);
+  state=reduceVnStage(state,{type:'set-draft',draft:''});
+  assert.equal(selectVnStageView(state).showStandardInput,true);
+  state=reduceVnStage(state,{type:'submit-started'});
+  assert.equal(selectVnStageView(state).showStandardInput,false);
+});
+
+test("switching a typed standard reply to CYOA preserves composer access",()=>{
+  let state={...createInitialVnStageState(),phase:'awaiting-input' as const};
+  state=reduceVnStage(state,{type:'set-draft',draft:'My existing reply'}) as typeof state;
+  state=reduceVnStage(state,{type:'set-mode',mode:'cyoa'}) as typeof state;
+  assert.equal(selectVnStageView(state).showStandardInput,true);
+  assert.equal(state.draft,'My existing reply');
+});
+
 test("resume loads the saved paragraph without advances or unlocking the reply", () => {
   const state = reduceVnStage(createInitialVnStageState(), { type: "load-turn", turn: { mode: "standard", paragraphs, initialParagraphIndex: 1 } });
   assert.equal(state.currentParagraphIndex, 1);

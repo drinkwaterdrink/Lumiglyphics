@@ -1,6 +1,6 @@
 {
   "name": "lumiglyphics",
-  "version": "0.2.0-beta.32",
+  "version": "0.2.0-beta.33",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.0",
@@ -15,6 +15,7 @@
     "test:image-library": "bun run ./scripts/test-image-library-browser.ts",
     "test:history": "bun run ./scripts/test-history-browser.ts",
     "test:reading": "bun run ./scripts/test-reading-browser.ts",
+    "test:scene-interactions": "bun run ./scripts/test-scene-interactions-browser.ts",
     "test:dossiers": "bun run ./scripts/test-dossiers-browser.ts",
     "test:mobile-reader": "bun run ./scripts/test-mobile-reader-browser.ts",
     "test:speech": "bun run ./scripts/test-speech-browser.ts",

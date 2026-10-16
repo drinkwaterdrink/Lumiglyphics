@@ -364,6 +364,16 @@ button[data-vn-badge]:active {
   margin-top: 0.15rem;
 }
 
+[data-vn-badge-kind="error"]:has([data-vn-dismiss-error]) { padding-right: 3rem; }
+[data-vn-dismiss-error] {
+  position: absolute; right: 0; top: 0; width: 44px; height: 44px;
+  display: grid; place-items: center; padding: 0; border: 0;
+  background: transparent; color: inherit; font: inherit; font-size: 1.4rem;
+  cursor: pointer; border-radius: inherit;
+}
+[data-vn-dismiss-error]:hover { background: rgba(128,128,128,.15); }
+[data-vn-dismiss-error]:focus-visible { outline: 2px solid currentColor; outline-offset: -4px; }
+
 /* Errors keep a red edge, title and icon in every preset (presets restyle the card itself). */
 [data-vn-badge-kind="error"] {
   position: relative;
@@ -2015,4 +2025,18 @@ ${VN_TEXT_EFFECTS_CSS}
 [data-vn-root][data-vn-page-focus="true"] [data-vn-narrative],
 [data-vn-root][data-vn-page-focus="true"] [data-vn-interaction],
 [data-vn-root][data-vn-page-focus="true"] [data-vn-composer] { visibility: hidden; pointer-events: none; }
+
+/* Clip the reply area's scrolling above the reader toolbar, including short
+   landscape screens. Padding alone lets scrollable controls cover the toolbar. */
+[data-vn-root][data-vn-adjustable-sheet="true"]:not([data-vn-text-hidden="true"]):has([data-vn-interaction]:not([hidden])) {
+  --vn-reply-sheet-height: min(var(--vn-sheet-height), max(9rem, calc(100 * var(--vn-dvh, 1dvh) - 16rem)));
+  --vn-interaction-clearance: calc(var(--vn-reply-sheet-height) + 3rem);
+}
+[data-vn-root][data-vn-adjustable-sheet="true"]:not([data-vn-text-hidden="true"]):has([data-vn-interaction]:not([hidden])) [data-vn-narrative] { height: calc(var(--vn-reply-sheet-height) + 3rem); }
+[data-vn-root][data-vn-adjustable-sheet="true"]:not([data-vn-text-hidden="true"]):has([data-vn-interaction]:not([hidden])) [data-vn-dialogue] { height: var(--vn-reply-sheet-height); }
+[data-vn-root][data-vn-preset] [data-vn-interaction] {
+  bottom: calc(var(--vn-interaction-clearance) + var(--vn-sheet-keyboard-inset, 0px));
+  padding-bottom: 1rem;
+  min-height: 0;
+}
 `;

@@ -10,7 +10,7 @@
 
 **Spec:** ../specs/2026-10-11-reader-experience-design.md, plus the user's scenario-card clarification and supplied inline-dossier examples as inspiration only.
 
-**Status:** Beta.29 on `Testing`, 2026-10-13. A recovery and B mobile reader are delivered. C has typed reveal-scoped snapshots, tracker mappings and optional source-status checks, but normalized external reconciliation remains incomplete. D standalone tooltips/inline links are delivered; tooltip actions remain G work. E has saved place art, basic cast presentation, saved portraits and supplied gallery artwork; cast setup registration/outfits/gallery/Voice foundations are delivered; expression artwork and independent generation remain pending. F rules and G interactions remain pending. Beta.21 adds prompt rerolls and combined-length repair; beta.22 addresses the saved-place lookup/reset race (audit A1). Beta.23 delivers the first read-only image library; beta.24 fixes mobile History exits; beta.25 adds cast setup; E3 follow-ups, G/H and remaining I follow-ups are pending; beta.29 delivers D2 quiet references. Earlier unchecked steps and dated increments retain their historical context.
+**Status:** Beta.33 on `Testing`, 2026-10-14. A recovery and B mobile reader are delivered. C has typed reveal-scoped snapshots, tracker mappings and optional source-status checks, but normalized external reconciliation remains incomplete. D standalone tooltips/inline links are delivered; tooltip actions remain G work. E has saved place art, basic cast presentation, saved portraits and supplied gallery artwork; cast setup registration/outfits/gallery/Voice foundations are delivered; expression artwork and independent generation remain pending. F rules and G interactions remain pending. Beta.21 adds prompt rerolls and combined-length repair; beta.22 addresses the saved-place lookup/reset race (audit A1). Beta.23 delivers the first read-only image library; beta.24 fixes mobile History exits; beta.25 adds cast setup; E3 follow-ups, G/H and remaining I follow-ups are pending; beta.29 delivers D2 quiet references. Earlier unchecked steps and dated increments retain their historical context.
 
 ## Selected roadmap additions — 2026-10-13
 
@@ -19,7 +19,7 @@ The user selected **cast setup, tooltip actions, in-world documents, quiet refer
 | Selected feature | Roadmap home | Current state | Completion goal |
 |---|---|---|---|
 | Cast setup | E3, building on E2 | Beta.25 supports registration, aliases, base/outfit guidance, artwork and Voice draft shortcut; expression and independent-placement follow-ups remain | Register/configure a character before first generation; connect identity, outfits, artwork and existing voice controls |
-| Tooltip actions | G, explicit entry from D cards | Information cards exist; action drafts are pending | Ask, Examine, Approach, Use and Custom create editable intentions or verified engine moves |
+| Tooltip actions | G, explicit entry from D cards | Beta.33 optional local action drafts delivered; provider move and capability-based Use integration pending | Ask, Examine, Approach, Use and Custom create editable intentions or verified engine moves |
 | In-world documents | H, new | Proposed | Readable letters, journals, phones and terminals reveal exact established text |
 | Quiet reference quick access | D2, building on D | Beta.29 searchable, category-filtered menu and menu-only mode delivered | Compact searchable, category-filtered access without compulsory inline highlighting or automatic popups |
 | Previous-message image library | I, new | Beta.23 read-only saved-turn browser delivered; broader indexing/deduplication follow-ups pending | Browse this chat's earlier generated pictures, inspect their source and available prompt, and view full images without regeneration |
@@ -458,3 +458,12 @@ Add Scan context inside Cast setup to collect recognized saved story appearances
 ## Beta.29 D2 quiet references — 2026-10-14
 
 Existing reference tray now supports name/alias search, category filtering, conservative presence labels, pinned/current-scene ordering and card-to-sheet return preserving filters. Existing Tooltips linking preference adds Menu only while retaining the master switch and category gates. No new backend extraction, companion dependency or generation call. The list uses the current reveal-scoped presentation snapshot; it does not become a second persistent Codex. G tooltip actions and H documents remain pending.
+
+
+## Beta.33 G1 action drafts and dismissible image errors - 2026-10-14
+
+G1 extends the existing reference card with optional Action drafts in Reading > Tooltips (off by default). Present NPCs offer Ask and Approach; known locations/items offer Examine; all known eligible references offer Custom. Drafts are editable intentions, use revealed/current context only, preserve typed text through Insert versus explicit Replace, and enter the normal composer without submitting. While reading, they wait for Your turn. CYOA keeps its choices while an action draft opens the normal reply composer. Clearing the draft leaves that composer usable. Turn/revision/paragraph/category changes reject detached old actions.
+
+No capability contract for Use is available in the current projection, so Use is withheld. G2 verified provider-owned moves/Use remains unfinished. Existing Warp moves continue through the existing authoritative game bridge; no local action claims odds, rolls or success. H documents remains after G2, followed by previously listed follow-ups. This increment does not mark the whole G package complete.
+
+Image error cards and Image prompts notices gain accessible dismiss controls without changing failed job data or initiating work. Dismissals survive same-error updates, but a new request/turn or different failure may show again. The reply scroll region is clipped above the reader toolbar. At Your turn only, an oversized adjustable panel temporarily makes room for the composer; saved reading preferences remain intact. See docs/review-evidence/2026-10-14-action-drafts-error-dismissal.md for validation and limits.

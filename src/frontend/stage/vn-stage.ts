@@ -502,6 +502,7 @@ export class VnStage {
   private errorDetails: VnStageErrorDetails | null = null;
   /** Host-reported image failure that must not stop reading. */
   private hostImageError: VnStageErrorDetails | null = null;
+  private dismissedImageErrors = new Set<string>();
   private lastSkipStop: "unread" | null = null;
 
   constructor(options: VnStageOptions) {
@@ -607,7 +608,11 @@ export class VnStage {
     if (options.skipMode) this.setSkipMode(options.skipMode);
     this.skipDescriptionEl.textContent = skipDescription(this.skipMode);
 
-    this.dossiers=new StageDossiers(this.root,this.dialogueText,queryRequired(this.themeRoot,"[data-vn-controls]"),()=>{this.toggleSkip(false);this.holdAutoPlay();},()=>this.checkAutoPlay(),prefs=>this.callbacks.onTooltipPreferencesChange?.(prefs));
+    this.dossiers=new StageDossiers(this.root,this.dialogueText,queryRequired(this.themeRoot,"[data-vn-controls]"),()=>{this.toggleSkip(false);this.holdAutoPlay();},()=>this.checkAutoPlay(),prefs=>this.callbacks.onTooltipPreferencesChange?.(prefs),{
+      current:()=>this.state.draft,
+      apply:text=>{if(this.destroyed||selectVnStageView(this.state).isBusy||this.state.isUserTurn)return false;this.toggleAutoPlay(false);this.toggleSkip(false);this.dispatch({type:'set-draft',draft:text});return true;},
+      focus:()=>{if(selectVnStageView(this.state).showStandardInput)this.input.focus();else{this.setActivity('Action saved for Your turn.','success');this.focus();}}
+    });
     this.bindEvents();
     this.updateControlButtons();
     this.render(null);
@@ -884,6 +889,7 @@ export class VnStage {
   }
 
   loadTurn(turn: VnTurnInput): void {
+    this.dismissedImageErrors.clear();
     this.castStage.set(null,0);
     this.dossiers.setContext(turn.presentation,turn.paragraphs.map(p=>p.text));
     this.dialogueSheet?.setHidden(false);
@@ -991,6 +997,7 @@ export class VnStage {
    */
   setError(error: VnStageErrorInput): void {
     if (error === null) {
+      this.dismissedImageErrors.clear();
       this.errorDetails = null;
       this.hostImageError = null;
       this.dispatch({ type: "set-error", error: null });
@@ -1013,6 +1020,7 @@ export class VnStage {
 
   async setSceneImage(request: VnSceneImageRequest): Promise<boolean> {
     if (this.destroyed) return false;
+    this.dismissedImageErrors.clear();
 
     const image: VnSceneImage = {
       url: request.url,
@@ -2171,6 +2179,7 @@ export class VnStage {
       title?: string;
       detail?: string;
       actions?: Array<{ label: string; action: () => void; note?: string }>;
+      dismissible?: boolean;
     };
 
     const badges: BadgeSpec[] = [];
@@ -2214,6 +2223,7 @@ export class VnStage {
 
     const canReroll = Boolean(this.callbacks.onReroll || this.callbacks.onSwipe);
     const handleReroll = () => {
+      this.dismissedImageErrors.clear();
       if (this.callbacks.onReroll) {
         void this.callbacks.onReroll();
       } else if (this.callbacks.onSwipe) {
@@ -2237,6 +2247,7 @@ export class VnStage {
         title: errorTitle(details?.source ?? fallbackSource),
         label: message,
         icon: "alert",
+        dismissible: (details?.source ?? fallbackSource) === "image",
       };
       if (details?.detail && details.detail.trim() && details.detail.trim() !== message) {
         spec.detail = details.detail.trim();
@@ -2279,6 +2290,10 @@ export class VnStage {
     const errorSignature = (b: Pick<BadgeSpec, "label"> & { title?: string | undefined; detail?: string | undefined; actions?: BadgeSpec["actions"] | undefined }): string =>
       JSON.stringify([b.title ?? "", b.label, b.detail ?? "", (b.actions ?? []).map((a) => [a.label, a.note ?? ""])]);
 
+    for (let i = badges.length - 1; i >= 0; i--) {
+      if (badges[i]!.dismissible && this.dismissedImageErrors.has(errorSignature(badges[i]!))) badges.splice(i, 1);
+    }
+
     // Reconcile status badges in-place if structure matches to prevent restarting spinner/dash animations
     const currentElements = Array.from(this.statusStack.children) as HTMLElement[];
     const canReconcile = currentElements.length === badges.length &&
@@ -2302,7 +2317,7 @@ export class VnStage {
     }
 
     this.statusStack.replaceChildren(
-      ...badges.map(({ kind, label, icon, interactive, action, title, detail, actions }) => {
+      ...badges.map(({ kind, label, icon, interactive, action, title, detail, actions, dismissible }) => {
         const badge = document.createElement(interactive ? "button" : "span");
         if (interactive) {
           (badge as HTMLButtonElement).type = "button";
@@ -2376,6 +2391,22 @@ export class VnStage {
           body.appendChild(row);
         }
         badge.appendChild(body);
+        if (dismissible) {
+          const close = document.createElement("button");
+          close.type = "button";
+          close.setAttribute("data-vn-dismiss-error", "");
+          close.setAttribute("aria-label", "Dismiss image error");
+          close.title = "Dismiss image error";
+          close.textContent = "×";
+          close.addEventListener("click", event => {
+            event.stopPropagation();
+            if (this.dismissedImageErrors.size >= 32) this.dismissedImageErrors.clear();
+            this.dismissedImageErrors.add(errorSignature({ label, title, detail, actions }));
+            this.renderStatus();
+            this.focus();
+          });
+          badge.append(close);
+        }
         return badge;
       }),
     );

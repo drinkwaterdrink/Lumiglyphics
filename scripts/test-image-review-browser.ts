@@ -16,6 +16,17 @@ try {
   assert.equal(await studio.getByLabel("Review before generating").isChecked(), true);
   await studio.getByLabel("Review before generating").uncheck();
   assert.deepEqual(await page.evaluate(() => (window as any).imageFixture.actions.at(-1)), { reviewImages: false });
+  await page.evaluate(() => { const f=(window as any).imageFixture;f.failedTurn=structuredClone(f.turn);f.failedTurn.assets[0].status='failed';f.failedTurn.assets[0].error='Provider resolution error';f.studio.setTurn(f.failedTurn); });
+  const noticesBefore=await page.evaluate(() => (window as any).imageFixture.actions.length);
+  assert.equal(await studio.getByRole('button',{name:'Dismiss image prompt notice',exact:true}).innerText(),'×');
+  await studio.getByRole('button',{name:'Dismiss image prompt notice',exact:true}).click();
+  await page.evaluate(() => {const f=(window as any).imageFixture;f.studio.setTurn(structuredClone(f.failedTurn));});
+  assert.equal(await studio.locator('[data-notice]').innerText(),'','same provider error stays dismissed');
+  assert.equal(await page.evaluate(() => (window as any).imageFixture.failedTurn.assets[0].error),'Provider resolution error','dismiss keeps failed asset diagnostics');
+  assert.equal(await page.evaluate(() => (window as any).imageFixture.actions.length),noticesBefore,'dismiss starts no provider request');
+  await page.evaluate(() => {const f=(window as any).imageFixture;const next=structuredClone(f.failedTurn);next.imageRequests.push({...next.imageRequests[0],requestId:'new-attempt',state:'failed'});f.studio.setTurn(next);});
+  assert.equal(await studio.locator('[data-notice]').innerText(),'Provider resolution error','a new request can show an identical provider failure');
+  await page.evaluate(() => {const f=(window as any).imageFixture;f.studio.setTurn(f.turn);});
   const prompt = studio.getByLabel("Positive prompt", { exact: true });
   await prompt.tap();
   assert.ok(await prompt.evaluate(el => el.getRootNode() instanceof ShadowRoot && (el.getRootNode() as ShadowRoot).activeElement === el), 'touch focuses native editable textarea inside real stage');

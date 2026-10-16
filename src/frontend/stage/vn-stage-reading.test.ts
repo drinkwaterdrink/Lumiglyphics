@@ -272,6 +272,26 @@ describe("reading UX", () => {
     expect(root(s).querySelector("[data-vn-badge-kind='error']")).toBeNull();
   });
 
+  test("image error can be dismissed without retrying or advancing, and a new turn can show it again", () => {
+    let retries = 0;
+    const s = create({ onReroll: () => { retries++; } });
+    s.loadTurn({ mode: "standard", paragraphs: paragraphs(2) });
+    const failure = { source: "image" as const, message: "Image failed", detail: "HTTP 400", retryable: true };
+    s.setError(failure);
+    q(s, "[data-vn-dismiss-error]").click();
+    expect(root(s).querySelector("[data-vn-badge-kind='error']")).toBeNull();
+    s.setError(failure);
+    s.setAssetProgress(null);
+    expect(root(s).querySelector("[data-vn-badge-kind='error']")).toBeNull();
+    expect(s.getState().currentParagraphIndex).toBe(0);
+    expect(retries).toBe(0);
+    s.setError({ ...failure, detail: "HTTP 503" });
+    expect(root(s).querySelector("[data-vn-badge-kind='error']")).not.toBeNull();
+    s.loadTurn({ mode: "standard", paragraphs: paragraphs(1) });
+    s.setError(failure);
+    expect(root(s).querySelector("[data-vn-badge-kind='error']")).not.toBeNull();
+  });
+
   test("image error body explains what the reader can do instead of restating the title", () => {
     const s = create({ onReroll: () => {} });
     s.loadTurn({ mode: "standard", paragraphs: paragraphs(1) });

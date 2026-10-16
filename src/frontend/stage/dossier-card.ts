@@ -1,3 +1,5 @@
+import {InteractionTray} from './interaction-tray.js';
+import type {InteractionDraft,DraftMergeMode} from '../../shared/scene-interactions.js';
 import {entityOverride,type ReferenceKind,type referenceEntries,type ReaderDossier,type TooltipPreferences} from '../../shared/dossiers.js';
 export class DossierCard {
  readonly host=document.createElement('div');private returnFocus:HTMLElement|null=null;private trayReturn:(()=>void)|null=null;private query='';private category:ReferenceKind='all';
@@ -19,7 +21,7 @@ export class DossierCard {
   mount.append(this.host);
  }
  isOpen():boolean{return !this.host.hidden;}
- open(dossier:ReaderDossier,prefs:TooltipPreferences,chatId:string,trigger:HTMLElement):void {
+ open(dossier:ReaderDossier,prefs:TooltipPreferences,chatId:string,trigger:HTMLElement,actions?:{drafts:InteractionDraft[];current:()=>string;apply:(draft:InteractionDraft,mode:DraftMergeMode)=>boolean;focus:()=>void}):void {
   this.returnFocus=trigger;this.host.replaceChildren();
   const panel=document.createElement('section');panel.dataset.vnDossierCard='';panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label',`About ${dossier.entity.name}`);
   const header=document.createElement('header'),title=document.createElement('h2');title.textContent=dossier.entity.name;
@@ -30,13 +32,14 @@ export class DossierCard {
   for(const fact of dossier.facts){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=fact.field;dd.textContent=fact.value;const source=document.createElement('small');source.textContent=`Source: ${fact.source.provider} · revealed paragraph ${(fact.revealedAt?.paragraphIndex??0)+1}`;dd.append(source);list.append(dt,dd);}
   for(const [field,value] of Object.entries(dossier.state)){if(dossier.facts.some(f=>f.field===field&&f.value===value))continue;const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=field;dd.textContent=value;list.append(dt,dd);}
   if(!list.children.length){const p=document.createElement('p');p.textContent='No additional facts have been revealed yet.';panel.append(p);}else panel.append(list);
+  if(actions?.drafts.length)panel.append(new InteractionTray(actions.drafts,actions.current,(draft,mode)=>{if(!actions.apply(draft,mode))return false;this.close();actions.focus();return true;}).host);
   const override=entityOverride(prefs,chatId,dossier.entity);
   const status=document.createElement('p');status.setAttribute('role','status');status.hidden=true;panel.append(status);
   const commit=(patch:{suppressed?:boolean;pinned?:boolean;note?:string})=>{if(this.update(dossier.entity,patch))this.close();else{status.textContent='Reference customization limit reached (64). Reset local reference customizations in Reading settings to make room.';status.hidden=false;}};
-  const actions=document.createElement('div'),pin=document.createElement('button'),suppress=document.createElement('button');
+  const localActions=document.createElement('div'),pin=document.createElement('button'),suppress=document.createElement('button');
   pin.type=suppress.type='button';pin.textContent=override?.pinned?'Unpin':'Pin reference';pin.setAttribute('aria-pressed',String(override?.pinned===true));
   pin.onclick=()=>{commit({pinned:!override?.pinned});};
-  suppress.textContent='Hide this reference';suppress.onclick=()=>{commit({suppressed:true});};actions.append(pin,suppress);panel.append(actions);
+  suppress.textContent='Hide this reference';suppress.onclick=()=>{commit({suppressed:true});};localActions.append(pin,suppress);panel.append(localActions);
   const notes=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Local display note';
   const label=document.createElement('label');label.textContent='Your note (does not change the story)';const input=document.createElement('textarea');input.maxLength=600;input.value=override?.note??'';label.append(input);
   const save=document.createElement('button');save.type='button';save.textContent='Save note';save.onclick=()=>{commit({note:input.value});};notes.append(summary,label,save);panel.append(notes);
