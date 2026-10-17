@@ -1259,6 +1259,7 @@ export async function generateAssets(
           }
           if (!cueUsesCharacterReference(cue)) frozen = { ...frozen, parameters: withoutImageReferences(frozen.parameters ?? {}) };
           const metadataFor = (selectedCue: VisualCue): ImagePromptMetadata | undefined => selectedCue.imageTemplate ? {
+            ...(selectedCue.presentationRuleTrace ? {presentationRuleTrace:selectedCue.presentationRuleTrace} : {}),
             template: selectedCue.imageTemplate, selectionReason: selectedCue.imageTemplateReason ?? "Default template", format: config.imagePromptFormat,
             brief: compileTemplateCue(config, scene, selectedCue, characterAppearance).brief,
             trackerStatus: selectedCue.trackerStatus ?? (config.includeSimTrackerContext ? "not_found" : "disabled"),
@@ -1294,7 +1295,7 @@ export async function generateAssets(
               const latestConfig = await loadConfig(spindle, userId);
               const template = latestConfig.imageTemplates.find(item => item.id === templateId);
               if (!template) throw new Error("This template is unavailable.");
-              const nextCue = { ...cue, imageTemplate: templateSnapshot(template), imageTemplateReason: "Manual template selection" };
+              const nextCue = { ...cue, imageTemplate: templateSnapshot(template), imageTemplateReason: "Manual template selection", presentationRuleTrace: undefined };
               const nextCompiled = compileTemplateCue(config, scene, nextCue, characterAppearance);
               const usesReference = referenceAnchoringEnabled(config) && cueUsesCharacterReference(nextCue) && provider !== null && REFERENCE_PROVIDERS.has(provider);
               let nextPortrait: StoredPortrait | undefined;

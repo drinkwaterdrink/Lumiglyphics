@@ -1,3 +1,5 @@
+import {PresentationRulesPanel} from './presentation-rules.js';
+import type {PresentationRuleRequest,PresentationRuleCatalog} from '../../shared/presentation-rules.js';
 import {CastArtPanel} from './cast-art.js';
 import type {CastArtLibrary,CastArtAction,CastGallery,CastContextScan} from '../../shared/cast-art.js';
 import {LocationArtPanel} from './location-art.js';
@@ -103,6 +105,7 @@ export type SettingsPanelOptions = {
   onSave: (patch: Partial<VisualNovelConfig>) => void;
   onOpenPreview: () => void;
   onRefreshConnections: () => void;
+  onPresentationRules?: (request:PresentationRuleRequest)=>void;
   onCastGallery?: (chatId:string,requestId:string,offset:number)=>void;
   onCastArt?: (chatId:string,requestId:string,action:CastArtAction)=>void;
   onCastVoice?: (name:string)=>void;
@@ -460,6 +463,7 @@ export class VisualNovelSettingsPanel {
   private castArtPanel!: CastArtPanel;
   private locationArtPanel!: LocationArtPanel;
   private tooltipSettingsPanel!: TooltipSettingsPanel;
+  private presentationRules!: PresentationRulesPanel;
   private templateEditor!: ImageTemplateEditor;
 
   constructor(options: SettingsPanelOptions) {
@@ -525,12 +529,17 @@ export class VisualNovelSettingsPanel {
     this.locationArtPanel=new LocationArtPanel(()=>this.options.getChatId?.()??'',(chat,id,action)=>this.options.onLocationArt?.(chat,id,action));places.append(this.locationArtPanel.host);
 
     const dynamic = document.createElement("label"); dynamic.dataset.check = "";
-    dynamic.innerHTML = '<input name="dynamicImageTemplates" type="checkbox"><span>Choose templates from story context<small>When off, every picture uses the default template. This is independent of prompt review and keeps the existing picture budget.</small></span>';
+    dynamic.innerHTML = '<input name="dynamicImageTemplates" type="checkbox"><span>Choose templates from story context<small>When off, pictures start with the default template. Saved template preferences may override it. This is independent of prompt review and keeps the existing picture budget.</small></span>';
     const prompts = section("Image prompts");
     prompts.append(dynamic);
     const templates = document.createElement("div");
     prompts.append(templates);
     this.templateEditor = new ImageTemplateEditor(templates, patch => this.options.onSave(patch), () => {});
+    const preferences=section("Template preferences");
+    this.presentationRules=new PresentationRulesPanel(()=>this.options.getChatId?.()??"",request=>this.options.onPresentationRules?.(request));
+    preferences.append(this.presentationRules.host);
+    const preferenceSummary=preferences.querySelector<HTMLElement>("summary")!;preferenceSummary.dataset.findLabel="Template preferences";preferenceSummary.dataset.find="rules remember teach arrival dialogue automatic template scope priority";
+    preferences.addEventListener("toggle",()=>{if(preferences.open)this.presentationRules.ensureLoaded();});
     const composition = prompts;
     const style = document.createElement("details"); style.dataset.pictureGroup = "";
     style.innerHTML = '<summary>Shared style and exclusions</summary>';
@@ -1821,6 +1830,7 @@ export class VisualNovelSettingsPanel {
     this.control<HTMLInputElement>("persistentLocationArt").checked = config.persistentLocationArt;
     this.control<HTMLInputElement>("collectEntityReferences").checked = config.collectEntityReferences;
     this.templateEditor.setConfig(config);
+    this.presentationRules.setConfig(config);
     this.contextSourcesPanel.setConfig(config.contextSources);
     this.trackerMappingsPanel.setConfig(config.simTrackerMappings);
     this.tooltipSettingsPanel.setConfig(config.tooltips);
@@ -2156,6 +2166,9 @@ export class VisualNovelSettingsPanel {
   setCastGallery(chatId:string,requestId:string,gallery:CastGallery):void{this.castArtPanel.receiveGallery(chatId,requestId,gallery);}
   castArtError(error:string,requestId?:string):void{this.castArtPanel.fail(error,requestId);}
   castArtNotice(error:string):void{this.castArtPanel.notice(error);}
+  setPresentationRules(chat:string,id:string,catalog:PresentationRuleCatalog){return this.presentationRules.receive(chat,id,catalog);}
+  presentationRulesError(error:string,id?:string){this.presentationRules.error(error,id);}
+  clearPresentationRules(){this.presentationRules.clear();}
   clearCastArt():void{this.castArtPanel.clear();}
   setLocationArt(chatId:string,requestId:string,library:LocationArtLibrary):void{this.locationArtPanel.receive(chatId,requestId,library);}
   locationArtError(error:string):void{this.locationArtPanel.fail(error);}
@@ -2167,6 +2180,7 @@ export class VisualNovelSettingsPanel {
   destroy(): void {
     this.contextSourcesPanel.destroy();
     this.castArtPanel.destroy();
+    this.presentationRules.destroy();
     this.locationArtPanel.destroy();
     this.trackerMappingsPanel.destroy();
     this.tooltipSettingsPanel.destroy();

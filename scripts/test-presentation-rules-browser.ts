@@ -1,0 +1,47 @@
+import {chromium} from 'playwright';import assert from 'node:assert/strict';
+const build=await Bun.build({entrypoints:['scripts/presentation-rules-browser-fixture.ts'],target:'browser'});assert.ok(build.success,String(build.logs));const bundle=await build.outputs[0]!.text();
+const server=Bun.serve({hostname:'127.0.0.1',port:0,fetch:r=>new URL(r.url).pathname==='/fixture.js'?new Response(bundle,{headers:{'Content-Type':'application/javascript'}}):new Response('<html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0"><script type="module" src="/fixture.js"></script></body></html>',{headers:{'Content-Type':'text/html'}})});
+const browser=await chromium.launch({headless:true});
+try{
+ const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});page.setDefaultTimeout(5000);
+ const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));await page.goto(`http://127.0.0.1:${server.port}`);
+ await page.getByText('Template preferences',{exact:true}).tap();
+ const rules=page.locator('[data-presentation-rules]');
+ await rules.getByText('Start from an example',{exact:true}).tap();await rules.getByRole('button',{name:'Environment on arrival',exact:true}).tap();
+ assert.equal(await rules.getByLabel('Preferred template').inputValue(),'environment');assert.equal(await rules.getByRole('button',{name:'Save preference',exact:true}).isDisabled(),true);
+ await rules.getByRole('button',{name:'Preview preference',exact:true}).tap();assert.match(await rules.locator('[data-preference-preview]').innerText(),/confirmed location change.*Environment/s);
+ await rules.getByRole('button',{name:'Save preference',exact:true}).tap();await page.waitForFunction(()=>(window as any).rulesFixture.state.catalog.chat.rules.length===1);
+ assert.match(await rules.locator('[data-list]').innerText(),/Prefer Environment.*On/s);
+ await rules.getByRole('button',{name:'Edit',exact:true}).tap();await rules.getByLabel('Preference name').fill('Arrival scenes');
+ await rules.getByLabel('Preference scope').selectOption('user');assert.equal(await rules.getByLabel('Preference scope').inputValue(),'chat');assert.match(await rules.locator('[data-preference-status]').innerText(),/Save or discard/);
+ await rules.getByRole('button',{name:'Refresh preferences',exact:true}).tap();await page.waitForFunction(()=>(window as any).rulesFixture.state.requests.at(-1).action==='list');
+ assert.equal(await rules.getByLabel('Preference name').inputValue(),'Arrival scenes','refresh preserves unsaved draft');
+ await rules.getByRole('button',{name:'Preview preference',exact:true}).tap();await rules.getByRole('button',{name:'Save preference',exact:true}).tap();await page.waitForFunction(()=>(window as any).rulesFixture.state.catalog.chat.rules[0].name==='Arrival scenes');
+ await rules.getByRole('button',{name:'Turn off',exact:true}).tap();await page.waitForFunction(()=>(window as any).rulesFixture.state.catalog.chat.rules[0].enabled===false);
+ await rules.getByRole('button',{name:'Remove',exact:true}).tap();assert.equal(await page.evaluate(()=>(window as any).rulesFixture.state.catalog.chat.rules.length),1,'delete needs confirmation');await rules.getByRole('button',{name:'Confirm removal',exact:true}).tap();await page.waitForFunction(()=>(window as any).rulesFixture.state.catalog.chat.rules.length===0);
+ await rules.getByLabel('Preference scope').selectOption('user');await rules.getByRole('button',{name:'Portrait during dialogue',exact:true}).tap();await rules.getByRole('button',{name:'Preview preference',exact:true}).tap();await rules.getByRole('button',{name:'Save preference',exact:true}).tap();await page.waitForFunction(()=>(window as any).rulesFixture.state.catalog.user.rules.length===1);
+ assert.equal(await page.evaluate(()=>(window as any).rulesFixture.state.catalog.chat.rules.length),0,'account rules do not become chat rules');
+ await rules.getByRole('button',{name:'Edit',exact:true}).tap();await rules.getByLabel('Preferred template').selectOption('environment');assert.equal(await rules.getByRole('button',{name:'Save preference',exact:true}).isDisabled(),true,'field edit invalidates preview');
+ await page.evaluate(()=>{const f=(window as any).rulesFixture;f.panel.setConfig({...f.config,imageTemplates:f.config.imageTemplates.filter((t:any)=>t.id!=='environment')});});
+ assert.equal(await rules.getByLabel('Preferred template').inputValue(),'environment','configuration refresh keeps a removed draft target visible');
+ await rules.getByRole('button',{name:'Preview preference',exact:true}).tap();assert.match(await rules.locator('[data-preference-status]').innerText(),/Enable the target/);
+ await page.evaluate(()=>{const f=(window as any).rulesFixture;f.panel.setConfig(f.config);});
+ await rules.getByRole('button',{name:'Discard draft',exact:true}).tap();await rules.getByRole('button',{name:'New preference',exact:true}).tap();await rules.getByLabel('Preference name').fill('<script>plain title</script>');await rules.getByRole('button',{name:'Preview preference',exact:true}).tap();await rules.getByRole('button',{name:'Save preference',exact:true}).tap();await page.waitForFunction(()=>(window as any).rulesFixture.state.catalog.user.rules.length===2);assert.equal(await rules.locator('script').count(),0,'rule names are rendered as text');
+ // A response from the previous chat must not repopulate the current scope.
+ await page.evaluate(()=>{const f=(window as any).rulesFixture;f.state.hold=true;});await rules.getByRole('button',{name:'Refresh preferences',exact:true}).tap();await page.evaluate(()=>{const f=(window as any).rulesFixture;f.switchChat('chat-b');f.reply(f.state.held.pop());f.state.hold=false;});assert.match(await rules.locator('[data-list]').innerText(),/Refresh to load/);
+ await rules.getByRole('button',{name:'Refresh preferences',exact:true}).tap();await page.waitForFunction(()=>(window as any).rulesFixture.state.requests.at(-1).chatId==='chat-b');
+ // Check touch targets, text scaling and inherited light/dark tokens.
+ for(const light of [false,true])for(const width of [320,390,768]){
+  await page.setViewportSize({width,height:844});await page.evaluate(light=>{document.documentElement.style.cssText=light?'--lumiverse-text:#18212e;--lumiverse-text-muted:#46546b;--lumiverse-bg:#f6f7fa;--lumiverse-card-bg:#fff;--lumiverse-bg-elevated:#fff;--lumiverse-border:#9da7b6;--lumiverse-primary:#5044a0;':'--lumiverse-text:#eee;--lumiverse-text-muted:#bbc;--lumiverse-bg:#08090d;--lumiverse-bg-elevated:#181925;';},light);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true,`no overflow at ${width}`);
+  const target=await rules.getByRole('button',{name:'New preference',exact:true}).boundingBox();assert.ok(target&&target.height>=44);
+ }
+ await page.setViewportSize({width:390,height:844});await rules.getByRole('button',{name:'New preference',exact:true}).tap();await rules.getByLabel('Preference name').tap();assert.ok(await rules.getByLabel('Preference name').evaluate(el=>(el.getRootNode() as ShadowRoot).activeElement===el),'native input receives touch focus');await rules.getByRole('button',{name:'Preview preference',exact:true}).scrollIntoViewIfNeeded();await page.screenshot({path:'.cache/beta40-preferences-mobile.png'});
+ assert.deepEqual(await page.evaluate(()=>(window as any).rulesFixture.state.patches),[],'rules do not change global prompt configuration');assert.deepEqual(errors,[]);
+ await rules.getByLabel('Preference name').fill('Uncertain save');await rules.getByRole('button',{name:'Preview preference',exact:true}).tap();
+ await page.clock.install();await page.evaluate(()=>{(window as any).rulesFixture.state.hold=true;});await rules.getByRole('button',{name:'Save preference',exact:true}).tap();await page.clock.fastForward(16000);
+ assert.match(await rules.locator('[data-preference-status]').innerText(),/Save status is unknown/);assert.equal(await rules.getByLabel('Preference name').inputValue(),'Uncertain save');assert.equal(await rules.getByRole('button',{name:'Save preference',exact:true}).isDisabled(),true,'unknown status needs refresh before another mutation');
+ await page.evaluate(()=>{const f=(window as any).rulesFixture;f.reply(f.state.held.pop());f.state.hold=false;});assert.match(await rules.locator('[data-preference-status]').innerText(),/unknown/,'late response cannot replace timeout status or draft');await rules.getByRole('button',{name:'Refresh preferences',exact:true}).tap();
+ assert.match(await rules.locator('[data-list]').innerText(),/Uncertain save/,'refresh verifies a late completed write without resubmitting');
+ console.log('PASS mobile template preferences: preview, scoped CRUD, protected drafts, stale/unknown responses, touch focus, light/dark layout.');
+}finally{await browser.close();server.stop(true);}

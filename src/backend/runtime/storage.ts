@@ -1,4 +1,5 @@
 import { projectTurnPresentation } from "./entity-projection.js";
+import {PresentationRuleDocumentSchema,type PresentationRuleDocument} from '../../shared/presentation-rules.js';
 import {mergeImageLibrary} from './image-library.js';
 import {loadCastArt} from './cast-art.js';
 import {setupAppearance,type CastArtRecord} from '../../shared/cast-art.js';
@@ -110,6 +111,27 @@ async function serializedWrite(taskKey: string, writer: () => Promise<void>): Pr
 
 function userOptions(userId?: string): { userId: string } | undefined {
   return userId ? { userId } : undefined;
+}
+
+function presentationRulePath(scope:'user'|'chat',chatId?:string):string{
+ if(scope==='chat'&&!chatId)throw new Error('Open a chat to manage chat preferences.');
+ return scope==='user'?'presentation-rules.json':`chats/${safeSegment(chatId!)}/presentation-entities.json`;
+}
+export async function loadPresentationRuleDocument(spindle:SpindleAPI,scope:'user'|'chat',chatId:string|undefined,userId:string):Promise<PresentationRuleDocument>{
+ const raw=await spindle.userStorage.getJson(presentationRulePath(scope,chatId),{fallback:{version:1,revision:0,rules:[]},userId});
+ const value=PresentationRuleDocumentSchema.safeParse(raw);
+ if(!value.success||value.data.rules.some(rule=>rule.scope!==scope))throw new Error(`${scope==='chat'?'Chat':'Account'} presentation preferences are unavailable or use an unsupported format. Stored data was preserved.`);
+ return value.data;
+}
+/** Reuse the shared storage queue; revision check and mutation are one operation. */
+export async function updatePresentationRuleDocument(spindle:SpindleAPI,scope:'user'|'chat',chatId:string|undefined,userId:string,expectedRevision:number,change:(current:PresentationRuleDocument)=>PresentationRuleDocument):Promise<PresentationRuleDocument>{
+ const path=presentationRulePath(scope,chatId);let saved!:PresentationRuleDocument;
+ await serializedWrite(scopedKey(userId,path),async()=>{
+  const current=await loadPresentationRuleDocument(spindle,scope,chatId,userId);
+  if(current.revision!==expectedRevision)throw new Error('Presentation preferences changed in another editor. Refresh, review your draft, and save again.');
+  saved=PresentationRuleDocumentSchema.parse(change(current));
+  await spindle.userStorage.setJson(path,saved,{userId,indent:2});
+ });return saved;
 }
 
 export function turnPath(chatId: string, messageId: string, swipeId: string | number | null): string {

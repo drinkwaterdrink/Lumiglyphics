@@ -1,0 +1,96 @@
+import type {VisualNovelConfig} from '../../config.js';
+import {PresentationRuleCatalogSchema,PresentationRuleDraftSchema,describePresentationCondition,type PresentationRuleCatalog,type PresentationRuleRequest,type PresentationRule,type PresentationRuleDraft} from '../../shared/presentation-rules.js';
+
+const CSS=`:host{display:block;color:var(--set-text,var(--vn-shell-text,#eee));font:15px/1.5 var(--lumiverse-font-family,var(--vn-shell-family,system-ui,sans-serif));min-width:0}*{box-sizing:border-box}[hidden]{display:none!important}p{line-height:1.5;margin:8px 0;overflow-wrap:anywhere}small{display:block;color:var(--set-muted,var(--vn-shell-muted,#bbc));line-height:1.5}label{display:block;margin:12px 0}label>span{display:block;margin-bottom:5px;font-weight:600}button,input,select{font:inherit;color:inherit;max-width:100%}button,select,input{min-height:44px;border:1px solid var(--set-border,var(--vn-shell-border,#646575));border-radius:9px;background:var(--set-field,var(--vn-shell-field,#181925));padding:9px 12px}input,select{width:100%;font-size:16px}button{cursor:pointer}button:disabled{opacity:.5;cursor:default}button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--set-accent,var(--vn-shell-accent,#c1b0eb));outline-offset:2px}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.row>*{flex:1 1 auto}.rule{padding:12px;border:1px solid var(--set-border,var(--vn-shell-border,#646575));border-radius:12px;margin:10px 0}.rule h4{margin:0 0 5px;font-size:1em;overflow-wrap:anywhere}.rule .row{margin-top:10px}.check{display:flex;gap:9px;align-items:center}.check input{width:20px;min-height:20px}.check span{margin:0}summary{min-height:44px;cursor:pointer;display:flex;align-items:center;gap:8px;font-weight:600}summary::before{content:"▸";color:var(--set-accent,var(--vn-shell-accent,#c1b0eb))}details[open]>summary::before{content:"▾"}h4{margin:8px 0}fieldset{border:0;padding:0;margin:0;min-width:0}form{margin-top:16px;padding-top:8px;border-top:1px solid var(--set-border,var(--vn-shell-border,#646575))}[data-preference-preview]{padding:12px;border-left:3px solid var(--set-accent,var(--vn-shell-accent,#c1b0eb));background:var(--set-surface,transparent);white-space:pre-wrap}[data-preference-status]{color:var(--set-accent,var(--vn-shell-accent,#c1b0eb));white-space:pre-wrap}[data-preference-save]{border-color:var(--set-accent,var(--vn-shell-accent,#c1b0eb))}`;
+
+/** Shared native settings / prompt-review composer. Responses are request and chat scoped. */
+export class PresentationRulesPanel{
+ readonly host=document.createElement('div');
+ readonly root:ShadowRoot;
+ private config:VisualNovelConfig|null=null;
+ private catalog:PresentationRuleCatalog|null=null;
+ private scope:'user'|'chat'='chat';
+ private loadedChat='';
+ private pending:{id:string;chat:string;mutation:boolean}|null=null;
+ private timer:ReturnType<typeof setTimeout>|undefined;
+ private editingId='';
+ private dirty=false;
+ private previewed=false;
+ private destroyed=false;
+ constructor(private getChat:()=>string,private send:(request:PresentationRuleRequest)=>void){
+  this.host.dataset.presentationRules='';
+  this.root=this.host.attachShadow({mode:'open'});
+  this.root.innerHTML=`<style>${CSS}</style><p>Teach the reader which image template you prefer in a situation.</p><small>Optional. Applies to future reply preparations only. No extra images or model calls; appearance guidance and picture budgets stay intact.</small><label><span>Applies to</span><select data-scope aria-label="Preference scope"><option value="chat">This chat</option><option value="user">All my chats</option></select></label><div class="row"><button type="button" data-refresh>Refresh preferences</button><button type="button" data-new>New preference</button></div><p data-preference-status role="status" aria-live="polite"></p><div data-list></div><details data-examples><summary>Start from an example</summary><div class="row"><button type="button" data-example="location_changed">Environment on arrival</button><button type="button" data-example="dialogue">Portrait during dialogue</button></div><small>Examples open a draft. Preview and save to enable one.</small></details><form hidden><h4 data-preference-heading>New preference</h4><fieldset><label><span>Name</span><input data-preference-name aria-label="Preference name" maxlength="80" autocomplete="off"></label><label><span>When</span><select data-condition aria-label="Preference condition"><option value="dialogue">During attributed dialogue</option><option value="location_changed">At a confirmed location change</option><option value="template">When a template would otherwise be chosen</option></select></label><label data-source-label hidden><span>Original template</span><select data-source aria-label="Original template"></select></label><label><span>Prefer template</span><select data-target aria-label="Preferred template"></select></label><label class="check"><input data-preference-enabled type="checkbox" checked><span>Enabled after saving</span></label><details><summary>Priority and precedence</summary><small>This chat overrides All my chats. Within a scope, higher priority wins; the last saved rule breaks ties. Conditions use the planner's original choice and do not chain.</small><label><span>Priority (0–100)</span><input data-priority type="number" min="0" max="100" value="50" aria-label="Preference priority"></label></details><p data-preference-preview hidden></p><div class="row"><button type="button" data-preference-preview-button>Preview preference</button><button type="submit" data-preference-save disabled>Save preference</button><button type="button" data-preference-discard>Discard draft</button></div></fieldset></form>`;
+  this.el<HTMLSelectElement>('[data-scope]').onchange=()=>{
+   if(this.dirty||this.pending){this.el<HTMLSelectElement>('[data-scope]').value=this.scope;this.status('Save or discard your draft before changing scope.');return;}
+   this.scope=this.el<HTMLSelectElement>('[data-scope]').value as 'user'|'chat';this.closeDraft();this.renderList();this.ensureLoaded();
+  };
+  this.el('[data-refresh]').onclick=()=>this.request({action:'list'});
+  this.el('[data-new]').onclick=()=>this.begin();
+  this.root.querySelectorAll<HTMLButtonElement>('[data-example]').forEach(button=>button.onclick=()=>this.propose(button.dataset.example==='dialogue'?'portrait':'environment',button.dataset.example as 'dialogue'|'location_changed'));
+  this.el<HTMLFormElement>('form').oninput=()=>{this.dirty=true;this.previewed=false;this.el('[data-preference-preview]').hidden=true;this.el<HTMLButtonElement>('[data-preference-save]').disabled=true;this.el('[data-source-label]').hidden=this.el<HTMLSelectElement>('[data-condition]').value!=='template';};
+  this.el('[data-preference-preview-button]').onclick=()=>this.preview();
+  this.el<HTMLFormElement>('form').onsubmit=e=>{e.preventDefault();if(!this.previewed)return;const draft=this.draft();if(draft)this.request({action:'save',scope:this.scope,rule:draft});};
+  this.el('[data-preference-discard]').onclick=()=>{if(!this.pending){this.closeDraft();this.status('Draft discarded. Saved preferences are unchanged.');}};
+ }
+ private el<T extends HTMLElement=HTMLElement>(selector:string):T{return this.root.querySelector<T>(selector)!;}
+ private status(text:string){this.el('[data-preference-status]').textContent=text;}
+ private document(){return this.catalog?.[this.scope]??null;}
+ private name(id:string){return this.config?.imageTemplates.find(t=>t.id===id)?.name??id;}
+ setConfig(config:VisualNovelConfig){this.config=config;for(const key of ['source','target']){const select=this.el<HTMLSelectElement>(`[data-${key}]`),old=select.value;select.replaceChildren();for(const template of config.imageTemplates){const option=document.createElement('option');option.value=template.id;option.textContent=template.name+(template.enabled?'':' (disabled)');option.disabled=key==='target'&&!template.enabled;select.append(option);}if([...select.options].some(o=>o.value===old))select.value=old;else if(old&&this.dirty){const missing=document.createElement('option');missing.value=old;missing.textContent=`Unavailable template (${old})`;missing.disabled=true;select.append(missing);select.value=old;}else if(key==='target')select.value=config.imageTemplates.find(t=>t.enabled)?.id??'';}
+  if(this.dirty){this.previewed=false;this.el<HTMLButtonElement>('[data-preference-save]').disabled=true;}this.renderList();}
+ ensureLoaded(){if(!this.pending&&(!this.catalog||this.loadedChat!==this.getChat()))this.request({action:'list'});}
+ private request(action:Pick<PresentationRuleRequest,'action'>&Partial<PresentationRuleRequest>){
+  if(this.destroyed||this.pending)return;
+  if(action.action!=='list'&&!this.document()){this.status('Refresh this scope before saving. Stored records will not be replaced.');return;}
+  if(action.scope==='chat'&&!this.getChat()){this.status('Open a chat before saving a chat preference.');return;}
+  const id=`preference-${Date.now()}-${Math.random().toString(36).slice(2)}`,chat=this.getChat();
+  const request={...action,type:'vn_presentation_rules',version:1,requestId:id,...(chat?{chatId:chat}:{}),...(action.action==='list'?{}:{expectedRevision:this.document()!.revision})} as PresentationRuleRequest;
+  this.pending={id,chat,mutation:action.action!=='list'};this.busy(true);this.status(action.action==='list'?'Loading preferences…':'Saving preference…');
+  this.timer=setTimeout(()=>{if(this.pending?.id!==id)return;const mutation=this.pending.mutation;this.pending=null;this.catalog=null;this.busy(false);this.renderList();this.status(mutation?'Save status is unknown. Refresh to verify before trying again. Your draft is kept.':'Preferences took too long to load. You can refresh to try again.');},15000);
+  try{this.send(request);}catch{this.error('Could not send the request. Refresh to verify saved state.',id);}
+ }
+ private busy(value:boolean){this.el<HTMLFieldSetElement>('fieldset').disabled=value;this.el<HTMLSelectElement>('[data-scope]').disabled=value;for(const button of this.root.querySelectorAll<HTMLButtonElement>('[data-list] button,[data-new],[data-refresh],[data-example]'))button.disabled=value;}
+ receive(chat:string,requestId:string,raw:PresentationRuleCatalog):boolean{
+  if(this.destroyed||!this.pending||this.pending.id!==requestId||this.pending.chat!==chat||this.getChat()!==chat)return false;
+  const parsed=PresentationRuleCatalogSchema.safeParse(raw);if(!parsed.success){this.error('Unsupported preference response. Stored records were preserved.',requestId);return false;}
+  const mutation=this.pending.mutation;this.finish();this.catalog=parsed.data;this.loadedChat=chat;
+  if(mutation&&parsed.data[this.scope])this.closeDraft();this.renderList();this.status(parsed.data.diagnostics.join('\n')||(mutation?'Preference saved. It applies to future reply preparations.':'Preferences are up to date.'));return true;
+ }
+ error(text:string,requestId?:string){if(!this.pending||requestId!==this.pending.id)return;this.finish();this.catalog=null;this.renderList();this.status(`${text}\nRefresh to verify saved state. Your draft is kept.`);}
+ private finish(){if(this.timer)clearTimeout(this.timer);this.timer=undefined;this.pending=null;this.busy(false);}
+ private renderList(){const list=this.el('[data-list]');list.replaceChildren();const doc=this.document();
+  this.el<HTMLButtonElement>('[data-preference-save]').disabled=Boolean(this.pending)||!this.previewed||!doc;
+  if(!doc){const p=document.createElement('p');p.textContent='Refresh to load this scope. Unavailable records are preserved.';list.append(p);return;}
+  const count=document.createElement('small');count.textContent=`${doc.rules.length} / 12 preferences · ${this.scope==='chat'?'This chat':'All my chats'}`;list.append(count);
+  if(!doc.rules.length){const p=document.createElement('p');p.textContent='No preferences here. The planner uses your template settings.';list.append(p);}
+  for(const rule of [...doc.rules].sort((a,b)=>b.priority-a.priority||b.savedOrder-a.savedOrder)){
+   const card=document.createElement('article');card.className='rule';const title=document.createElement('h4');title.textContent=rule.name;const description=document.createElement('small');description.textContent=`${describePresentationCondition(rule.when,id=>this.name(id))} → ${this.name(rule.then.templateId)} · ${rule.enabled?'On':'Off'} · priority ${rule.priority}${this.config?.imageTemplates.some(t=>t.id===rule.then.templateId&&t.enabled)?'':' · target unavailable; skipped'}`;
+   const row=document.createElement('div');row.className='row';for(const [label,action] of [['Edit',()=>this.begin(rule)],[rule.enabled?'Turn off':'Turn on',()=>this.mutate({action:'toggle',scope:this.scope,id:rule.id,enabled:!rule.enabled})],['Remove',()=>{
+    if(this.dirty){this.status('Save or discard your draft before removing a preference.');return;}
+    if(card.querySelector('[data-confirm]'))return;const confirm=document.createElement('button');confirm.type='button';confirm.dataset.confirm='';confirm.textContent='Confirm removal';confirm.onclick=()=>this.mutate({action:'delete',scope:this.scope,id:rule.id});row.append(confirm);
+   }]] as const){const button=document.createElement('button');button.type='button';button.textContent=label;button.disabled=Boolean(this.pending);button.onclick=action;row.append(button);}
+   card.append(title,description,row);list.append(card);
+  }
+ }
+ private mutate(action:Partial<PresentationRuleRequest>&Pick<PresentationRuleRequest,'action'>){if(this.dirty){this.status('Save or discard your draft before changing saved preferences.');return;}this.request(action);}
+ private begin(rule?:PresentationRule){
+  if(this.pending)return;if(this.dirty){this.status('Save or discard your current draft first.');return;}
+  this.editingId=rule?.id??`rule-${Date.now()}-${Math.random().toString(36).slice(2)}`;this.el<HTMLFormElement>('form').hidden=false;this.el('[data-preference-heading]').textContent=rule?'Edit preference':'New preference';
+  this.el<HTMLInputElement>('[data-preference-name]').value=rule?.name??'';this.el<HTMLSelectElement>('[data-condition]').value=rule?.when.kind??'dialogue';this.el('[data-source-label]').hidden=rule?.when.kind!=='template';if(rule?.when.kind==='template')this.el<HTMLSelectElement>('[data-source]').value=rule.when.templateId;if(rule)this.el<HTMLSelectElement>('[data-target]').value=rule.then.templateId;this.el<HTMLInputElement>('[data-priority]').value=String(rule?.priority??50);this.el<HTMLInputElement>('[data-preference-enabled]').checked=rule?.enabled??true;this.dirty=true;this.previewed=false;this.el('[data-preference-preview]').hidden=true;this.el<HTMLButtonElement>('[data-preference-save]').disabled=true;this.ensureLoaded();
+ }
+ propose(target:string,condition:'dialogue'|'location_changed'|'template'='dialogue',source?:string){
+  if(this.dirty||this.pending){this.status('Save or discard your current draft first.');return;}
+  this.begin();this.el<HTMLInputElement>('[data-preference-name]').value=`Prefer ${this.name(target)}`.slice(0,80);this.el<HTMLSelectElement>('[data-target]').value=target;this.el<HTMLSelectElement>('[data-condition]').value=condition;this.el('[data-source-label]').hidden=condition!=='template';if(source)this.el<HTMLSelectElement>('[data-source]').value=source;this.status('Review this draft, then preview and save. Existing pictures stay unchanged.');
+ }
+ private draft():PresentationRuleDraft|null{
+  const kind=this.el<HTMLSelectElement>('[data-condition]').value;
+  const parsed=PresentationRuleDraftSchema.safeParse({id:this.editingId,name:this.el<HTMLInputElement>('[data-preference-name]').value,enabled:this.el<HTMLInputElement>('[data-preference-enabled]').checked,priority:Number(this.el<HTMLInputElement>('[data-priority]').value),when:kind==='template'?{kind,templateId:this.el<HTMLSelectElement>('[data-source]').value}:{kind},then:{kind:'prefer_template',templateId:this.el<HTMLSelectElement>('[data-target]').value}});
+  if(!parsed.success){this.status(parsed.error.issues[0]?.message??'Check the preference fields.');return null;}
+  if(!this.config?.imageTemplates.some(t=>t.id===parsed.data.then.templateId&&t.enabled)){this.status('Enable the target in Scene templates before choosing it.');return null;}return parsed.data;
+ }
+ private preview(){const rule=this.draft();if(!rule)return;this.el('[data-preference-preview]').textContent=`${describePresentationCondition(rule.when,id=>this.name(id))}, prefer ${this.name(rule.then.templateId)}.\nScope: ${this.scope==='chat'?'this chat':'all my chats'}. Priority: ${rule.priority}. ${rule.enabled?'Enabled':'Saved off'}.\nExisting picture slots only. Character templates require a usable appearance. Manual picture edits take priority. Applies when a future reply is prepared.`;this.el('[data-preference-preview]').hidden=false;this.previewed=true;this.el<HTMLButtonElement>('[data-preference-save]').disabled=Boolean(this.pending)||!this.document();}
+ private closeDraft(){this.dirty=false;this.previewed=false;this.editingId='';this.el<HTMLFormElement>('form').hidden=true;this.el<HTMLButtonElement>('[data-preference-save]').disabled=true;}
+ clear(){this.finish();this.catalog=null;this.loadedChat='';this.closeDraft();this.status('');this.renderList();}
+ destroy(){this.destroyed=true;this.clear();this.host.remove();}
+}

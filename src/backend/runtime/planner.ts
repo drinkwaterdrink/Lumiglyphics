@@ -1,3 +1,4 @@
+import {freshPlanPreferences} from './presentation-rules.js';
 import { normalizeStoryDocuments } from '../../shared/story-documents.js';
 import {imageDetailGuidance} from './prompt-detail.js';
 import { normalizeStoryReferences } from "../../shared/story-references.js";
@@ -2557,7 +2558,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   const terminalContinuity = reduceContinuity(continuity, continuityDeltas);
   const terminalSnapshot = timeline.snapshots.at(-1);
 
-  const plan = validateTurnPlan(TurnPlanSchema.parse({
+  let plan = validateTurnPlan(TurnPlanSchema.parse({
     schemaVersion: 1,
     key,
     ...((input.config.collectEntityReferences || input.config.tooltips.enabled) ? { storyReferences: normalizeStoryReferences(planner.storyReferences, promptParagraphs).filter(r => !(cardRole === "scenario" && r.kind === "npc" && Boolean(scenarioReferenceName) && characterAppearanceKey(r.name) === scenarioReferenceName)) } : {}),
@@ -2585,6 +2586,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     planningStatus: usedFallback || cues.some((cue) => !cue.resolvedIdentity) || (cues.length === 0 && narrative.paragraphs.length > 0) ? "partial" : "planned",
     createdAt: new Date().toISOString()
   }));
+  plan = await freshPlanPreferences(spindle,plan,input.config,input.previousScene,input.characterAppearance,input.userId);
   const latestEnvironment = scenes.at(-1)?.environment.description;
   const terminal = timeline.snapshots.at(-1);
   const singleCharacter = {

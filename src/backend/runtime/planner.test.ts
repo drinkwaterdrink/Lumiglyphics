@@ -31,6 +31,23 @@ function fallbackSpindle(): SpindleAPI {
   } as unknown as SpindleAPI;
 }
 
+test('fresh planner loads optional template preferences without additional model calls or picture slots',async()=>{
+ const run=async(enabled:boolean,bad=false)=>{
+  let calls=0;const api=fallbackSpindle();api.generate.raw=async()=>{calls++;throw Error('offline');};
+  Object.assign(api,{userStorage:{getJson:async(path:string,options:any)=>path==='presentation-rules.json'?(bad?{version:99}:{version:1,revision:1,rules:enabled?[{id:'arrival',name:'Landscape preference',enabled:true,priority:50,scope:'user',savedOrder:1,when:{kind:'template',templateId:'portrait'},then:{kind:'prefer_template',templateId:'environment'}}]:[]}):options.fallback}});
+  const result=await planTurn(api,{chatId:'chat-1',userId:'alice',message,content:message.content,previousScene:null,previousContinuity:null,recentMessages:[],config:DEFAULT_CONFIG,singleCharacter:emptySingleCharacter(),characterAppearance:{}});
+  return {result,calls};
+ };
+ const baseline=await run(false),preferred=await run(true),unavailable=await run(true,true);
+ assert.equal(preferred.calls,baseline.calls);assert.equal(preferred.result.plan.visualCues.length,baseline.result.plan.visualCues.length);
+ assert.equal(preferred.result.plan.visualCues[0]?.imageTemplate?.id,'environment');
+ assert.match(preferred.result.plan.visualCues[0]?.presentationRuleTrace?.summary??'',/Landscape preference/);
+ assert.deepEqual(preferred.result.plan.terminalContinuity,baseline.result.plan.terminalContinuity);
+ assert.deepEqual(preferred.result.plan.visualCues.map(c=>c.resolvedIdentity),baseline.result.plan.visualCues.map(c=>c.resolvedIdentity));
+ assert.equal(unavailable.result.plan.visualCues[0]?.imageTemplate?.id,baseline.result.plan.visualCues[0]?.imageTemplate?.id);
+ assert.match(unavailable.result.plan.visualCues[0]?.presentationRuleTrace?.summary??'',/unavailable/);
+});
+
 test("planner fallback still creates a valid revealable turn and authored choices", async () => {
   const content = `First paragraph.\n\nSecond paragraph.\n\n<Choice value="We stay.">Stay here</Choice>`;
   const result = await planTurn(fallbackSpindle(), {

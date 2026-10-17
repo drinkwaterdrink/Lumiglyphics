@@ -1,3 +1,4 @@
+import {PresentationRuleRequestSchema,type PresentationRuleRequest,type PresentationRuleCatalog} from './shared/presentation-rules.js';
 import {CastGalleryRequestSchema,type CastGallery,CastArtRequestSchema,type CastArtLibrary,type CastContextScan} from './shared/cast-art.js';
 import {ImageLibraryRequestSchema,type ImageLibraryPage} from './shared/image-library.js';
 import {LocationArtRequestSchema,type LocationArtLibrary} from './shared/stage-assets.js';
@@ -20,6 +21,7 @@ export const ReplanTurnRequestSchema=z.object({type:z.literal('vn_replan_turn'),
 export const ContextSourcesRequestSchema = z.object({type:z.literal("vn_get_context_sources"),chatId:z.string().min(1).max(256),requestId:z.string().min(1).max(100)}).strict();
 export const RecoverImagesRequestSchema=z.object({type:z.literal('vn_recover_images'),...recoveryScope,revision:z.number().int().nonnegative(),action:z.enum(['stop','retry'])}).strict();
 export type FrontendRequest =
+  | PresentationRuleRequest
   | z.infer<typeof ImageLibraryRequestSchema>
   | z.infer<typeof CastGalleryRequestSchema>
   | z.infer<typeof CastArtRequestSchema>
@@ -160,6 +162,7 @@ export type ConnectionCatalogErrors = {
 };
 
 export type BackendResponse =
+  | {type:"vn_presentation_rules";chatId:string;requestId:string;catalog:PresentationRuleCatalog}
   | {type:'vn_image_library';chatId:string;requestId:string;page:ImageLibraryPage}
   | {type:"vn_cast_gallery";chatId:string;requestId:string;gallery:CastGallery}
   | {type:"vn_cast_context";chatId:string;requestId:string;scan:CastContextScan}
@@ -207,6 +210,7 @@ export type BackendResponse =
   | { type: "vn_error"; chatId?: string; requestId?:string; operation: string; error: string };
 
 export function isFrontendRequest(value: unknown): value is FrontendRequest {
+  if ((value as {type?:unknown}|null)?.type === "vn_presentation_rules") return PresentationRuleRequestSchema.safeParse(value).success;
   if (value === null || typeof value !== "object") return false;
   if((value as {type?:unknown}).type==='vn_image_library')return ImageLibraryRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_cast_gallery") return CastGalleryRequestSchema.safeParse(value).success;

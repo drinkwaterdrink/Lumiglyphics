@@ -1,3 +1,4 @@
+import {PresentationRuleTraceSchema} from './presentation-rules.js';
 import { StoryDocumentSchema } from './story-documents.js';
 import { StoryReferenceSchema } from "./story-references.js";
 import { z } from "zod";
@@ -206,6 +207,7 @@ export const VisualCueSchema = z.object({
   poseExpressionId: z.string().trim().optional(),
   imageTemplate: ImageTemplateSnapshotSchema.optional(),
   imageTemplateReason: z.string().max(300).optional(),
+  presentationRuleTrace: PresentationRuleTraceSchema.optional(),
   visualDescription: z.string().max(4000).optional(),
   visualFocus: z.string().max(1000).optional(),
   visualSources: z.array(z.string().max(300)).max(24).optional(),

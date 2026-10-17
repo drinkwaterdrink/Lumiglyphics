@@ -652,6 +652,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   });
   const settingsPanel: (VisualNovelSettingsPanel & SettingsFeedbackTarget) | null = settingsHandle ? new VisualNovelSettingsPanel({
     getChatId:()=>chatId(),
+    onPresentationRules:request=>ctx.sendToBackend(request),
     onCastGallery:(chatId,requestId,offset)=>ctx.sendToBackend({type:'vn_cast_gallery',chatId,requestId,offset}),
     onCastVoice:name=>speechSettings?.prepareCharacter(name),
     onCastArt:(chatId,requestId,action)=>ctx.sendToBackend({type:'vn_cast_art',version:1,chatId,requestId,...action}),
@@ -988,6 +989,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       settingsPanel?.setConnectionCatalog("image", states.image);
       return;
     }
+    if(type==='vn_presentation_rules'&&message.type==='vn_presentation_rules'){settingsPanel?.setPresentationRules(message.chatId,message.requestId,message.catalog);imageStudio.setPresentationRules(message.chatId,message.requestId,message.catalog);return;}
+    if(type==='vn_error'&&message.type==='vn_error'&&message.operation==='vn_presentation_rules'){settingsPanel?.presentationRulesError(message.error,message.requestId);imageStudio.presentationRulesError(message.error,message.requestId);return;}
     if(type==='vn_cast_context'&&message.type==='vn_cast_context'){settingsPanel?.setCastContext(message.chatId,message.requestId,message.scan);return;}
     if(type==='vn_cast_art'&&message.type==='vn_cast_art'){const accepted=settingsPanel?.setCastArt(message.chatId,message.requestId,message.library);if(accepted&&active&&turn&&message.chatId===chatId())ctx.sendToBackend({type:'vn_get_state',chatId:message.chatId,viewOpen:true,prepare:false});return;}
     if(type==='vn_cast_gallery'&&message.type==='vn_cast_gallery'){settingsPanel?.setCastGallery(message.chatId,message.requestId,message.gallery);return;}
@@ -1182,6 +1185,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const unsubAction = action.onClick(toggleVisualNovel);
   const unsubChat = ctx.events.on("CHAT_SWITCHED", () => {
     settingsPanel?.clearCastArt();
+    settingsPanel?.clearPresentationRules();
     settingsPanel?.clearLocationArt();
     imageStudio.setTurn(null);
     imageLibrary.setContext(null,0);
@@ -1197,6 +1201,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   });
   const unsubFork = ctx.events.on("CHAT_FORKED", () => {
     settingsPanel?.clearCastArt();
+    settingsPanel?.clearPresentationRules();
     settingsPanel?.clearLocationArt();
     imageStudio.setTurn(null);
     imageLibrary.setContext(null,0);

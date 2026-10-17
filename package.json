@@ -1,6 +1,6 @@
 {
   "name": "lumiglyphics",
-  "version": "0.2.0-beta.39",
+  "version": "0.2.0-beta.40",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.0",
@@ -37,6 +37,7 @@
     "shots": "bun run ./scripts/shoot-visual-gallery.ts",
     "test:image-styles": "bun run ./scripts/test-image-styles-browser.ts",
     "test:image-templates": "bun run ./scripts/test-image-templates-browser.ts",
+    "test:template-preferences": "bun run ./scripts/test-presentation-rules-browser.ts",
     "test:cast": "bun run ./scripts/test-cast-browser.ts",
     "test:cast-setup": "bun run ./scripts/test-cast-setup-browser.ts"
   },

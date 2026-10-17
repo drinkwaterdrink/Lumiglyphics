@@ -1,0 +1,28 @@
+import {test,expect} from 'bun:test';
+import {PresentationRuleDocumentSchema,PresentationRuleRequestSchema,evaluatePresentationRules,type PresentationRule} from './presentation-rules.js';
+const rule=(id:string,scope:'user'|'chat',priority=50,savedOrder=1,templateId='portrait'):PresentationRule=>({id,name:id,scope,enabled:true,priority,savedOrder,when:{kind:'dialogue'},then:{kind:'prefer_template',templateId}});
+const input={isDialogue:true,locationChanged:false,templateId:'action',enabledTemplateIds:['portrait','environment','action']};
+test('chat preferences beat user preferences; equal-scope priority then save order break ties',()=>{
+ const rules=[rule('user','user',100,99,'environment'),rule('early','chat',1,1,'action'),rule('late','chat',1,2,'portrait')];
+ const decision=evaluatePresentationRules(input,rules);expect(decision.preferredTemplateId).toBe('portrait');expect(decision.selectedRuleId).toBe('late');expect(rules[0]?.id).toBe('user');
+ expect(evaluatePresentationRules(input,[rule('high','chat',80,1,'environment'),rule('low','chat',1,99,'portrait')]).preferredTemplateId).toBe('environment');
+});
+test('disabled rules and unavailable template actions cannot override a valid preference',()=>{
+ const disabled={...rule('disabled','chat',100,4,'environment'),enabled:false};
+ const decision=evaluatePresentationRules(input,[rule('valid','user'),disabled,rule('missing','chat',90,2,'manga-page')]);
+ expect(decision.preferredTemplateId).toBe('portrait');expect(decision.matchedRuleIds).not.toContain('disabled');expect(decision.diagnostics.join(' ')).toMatch(/missing.*disabled|missing.*unavailable/i);
+});
+test('conditions use confirmed input; preferences do not chain through changed templates',()=>{
+ const location={...rule('location','chat',100,3,'environment'),when:{kind:'location_changed' as const}};
+ const template={...rule('template','chat',99,4,'environment'),when:{kind:'template' as const,templateId:'portrait'}};
+ expect(evaluatePresentationRules(input,[rule('dialogue','user'),location,template]).preferredTemplateId).toBe('portrait');
+ expect(evaluatePresentationRules({...input,locationChanged:true},[location]).preferredTemplateId).toBe('environment');
+ expect(evaluatePresentationRules({...input,isDialogue:false},[rule('dialogue','user')]).preferredTemplateId).toBeUndefined();
+});
+test('strict documents and commands reject unsupported actions, duplicate IDs and oversized scopes',()=>{
+ expect(PresentationRuleDocumentSchema.safeParse({version:2,revision:0,rules:[]}).success).toBe(false);
+ expect(PresentationRuleDocumentSchema.safeParse({version:1,revision:0,rules:[rule('same','user'),rule('same','user')]}).success).toBe(false);
+ expect(PresentationRuleDocumentSchema.safeParse({version:1,revision:0,rules:Array.from({length:13},(_,i)=>rule(String(i),'user'))}).success).toBe(false);
+ expect(PresentationRuleRequestSchema.safeParse({type:'vn_presentation_rules',version:1,requestId:'r',action:'delete',scope:'chat',id:'x',expectedRevision:0}).success).toBe(false);
+ expect(PresentationRuleRequestSchema.safeParse({type:'vn_presentation_rules',version:1,requestId:'r',action:'save',scope:'user',expectedRevision:0,rule:{...rule('r','user'),then:{kind:'motion_cap',intensity:'off'}}}).success).toBe(false);
+});

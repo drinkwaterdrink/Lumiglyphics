@@ -1,3 +1,4 @@
+import {managePresentationRules} from './presentation-rules.js';
 import {scanCastContext} from "./cast-context.js";
 import {CastGalleryRequestSchema,CastArtRequestSchema} from '../../shared/cast-art.js';
 import {castArtToken,findCastDisplayArt,findSetupDisplayArt,listCastGallery,manageCastArt} from './cast-art.js';
@@ -886,9 +887,9 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
   let corrected: StoredTurnRecord['plan']['visualCues'][number] | undefined;
   const updateCue = (cue: StoredTurnRecord['plan']['visualCues'][number]) => {
     if(cue.assetJobId!==job.jobId) return cue;
-    const selected=template ? {...cue,imageTemplate:templateSnapshot(template),imageTemplateReason:'Manual template selection'} : cue;
+    const selected=template ? {...cue,imageTemplate:templateSnapshot(template),imageTemplateReason:'Manual template selection',presentationRuleTrace:undefined} : cue;
     if(!correction) return selected;
-    corrected={...correctVisualSubject(selected,correction.subject,registry,config.imageTemplates),visualSources:['manual subject correction'],imageTemplateReason:'Manual subject correction'};
+    corrected={...correctVisualSubject(selected,correction.subject,registry,config.imageTemplates),visualSources:['manual subject correction'],imageTemplateReason:'Manual subject correction',presentationRuleTrace:undefined};
     return corrected;
   };
   const next = { ...record, ...(correction ? {correctionRequestIds:[...(record.correctionRequestIds??[]),correction.requestId].slice(-32)} : {}), plan: { ...record.plan, visualCues: record.plan.visualCues.map(updateCue), ...(record.plan.cacheCues ? { cacheCues: record.plan.cacheCues.map(updateCue) } : {}) }, previousImages, jobs: record.jobs.map((entry) => entry.jobId === job.jobId ? queued : entry) };
@@ -1623,6 +1624,11 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       const sourceConfig=async()=>{await contextConfigSaves.get(userId);return (await loadConfig(spindle,userId)).contextSources;};
       const report=await contextSourceSession.refresh(spindle,sourceConfig(),userId,action.chatId,action.requestId);
       if(report) spindle.sendToFrontend({type:'vn_context_sources',report},userId);
+      return;
+    }
+    case "vn_presentation_rules": {
+      const catalog=await managePresentationRules(spindle,request,userId);
+      spindle.sendToFrontend({type:"vn_presentation_rules",chatId:request.chatId??"",requestId:request.requestId,catalog},userId);
       return;
     }
     case "vn_cast_gallery": {

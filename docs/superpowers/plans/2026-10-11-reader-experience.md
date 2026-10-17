@@ -541,3 +541,22 @@ User requests intuitive per-character context scanning, editing/removal and clea
 RED/GREEN scoped scan and mobile active-guidance/draft tests; reviewer alias normalization and artwork-clear draft-loss findings reproduced and fixed. Native theme tokens and 360/844/1280 layouts checked. Final full checks and Testing push pending. F presentation rules remains the next independent package after this user-requested polish.
 
 Beta.39 verified: 1,478 isolated +18 speech =1,496 tests pass, cold87, mobile cast/setup/full settings/image-review browser checks, strict types/build/bundle/host scanner/sandbox startup pass. Dark/light and responsive screenshots inspected. New read-only auto-load and stale-confirmation guards verified; fresh review follow-ups no blockers. See docs/review-evidence/2026-10-17-cast-workspace.md. No live image-provider or physical Android verification. Push Testing authorized; F remains queued.
+
+
+## F1 template preferences - beta.40 implementation brief
+
+Ruling: ship the first complete rules workflow for prefer-template actions before effects/audio/background policies. User and chat scopes, 12 rules each, deterministic priority/saved-order precedence, explicit preview/save/edit/toggle/delete, built-in examples, and Remember template preference in Image prompts. Conditions in F1: attributed dialogue, confirmed location transition (first eligible existing cue), and the template the planner would otherwise choose. Entity/object conditions and motion/effect/music/hold actions remain F2; do not expose nonfunctional controls. Empty collections are off by default; saving an enabled rule is the opt-in. Dynamic selection and budget/review switches remain independent.
+
+Use versioned user-scoped documents: user presentation-rules.json and chat presentation-entities.json with rules/revision. Existing storage serialized-write queue owns read-modify-write; expected revision prevents lost updates. Unsupported records are preserved and independently unavailable. Planning loads optional rules with a bounded wait, applies only to fresh plans, adds no cues/calls, keeps appearance/continuity unchanged and snapshots applied/skipped reasons in review metadata. Explicit per-picture template choices operate after rules and win. Never rewrite saved history/held approvals on rule management.
+
+Steps: (1) RED/GREEN shared schemas/evaluator and isolated scoped persistence; (2) fresh-plan integration with location/identity/budget/source safety and trace; (3) mobile native settings plus inline remembered-correction composer, protected drafts and request scope lifecycle; (4) browser/theme/integration/full checks, fresh review, beta.40 Testing push. F remains incomplete until F2 policies are implemented.
+
+
+### F1 beta.40 delivered
+
+- [x] Typed prefer-template evaluator and versioned per-user/per-chat records (12 per scope), revision conflict guards and independent optional-source deadlines.
+- [x] Fresh-plan-only dialogue/location/original-template application, enabled/identity checks, deterministic precedence and frozen image-review provenance. Manual picture edits win; held/history plans stay frozen.
+- [x] Native Pictures preference editor and Image prompts remembered-correction composer, examples, exact preview/save, scoped edit/on-off/remove, settings search and protected drafts/unknown saves.
+- [x] Shared/backend/planner regressions, mobile settings/review/cast browser checks, fresh review and release verification. See [beta.40 evidence](../../review-evidence/2026-10-17-template-preferences.md).
+
+F2 remains next within package F: entity/object conditions and background/effect/motion/music policies, with reduced-motion precedence tests. The full F checkboxes above remain open until those policies are implemented.
