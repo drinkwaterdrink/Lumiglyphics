@@ -3,16 +3,24 @@ import {SpeechSettingsSection} from '../src/frontend/speech/settings-ui.js';
 import {DEFAULT_CONFIG} from '../src/config.js';
 import {DEFAULT_SPEECH_SETTINGS} from '../src/speech-config.js';
 import type {CastArtLibrary} from '../src/shared/cast-art.js';
+import {characterAppearanceKey} from '../src/shared/identity.js';
 const mount=document.createElement('div');mount.style.cssText='min-height:100vh;background:#08090d';document.body.append(mount);
 const state={chatId:'chat',actions:[] as any[],patches:[] as any[],profileCalls:0,speechPatches:[] as any[],library:{version:1,characters:[]} as CastArtLibrary};
 const panel=new VisualNovelSettingsPanel({mount,getChatId:()=>state.chatId,setupStorage:{getItem:()=> '1',setItem:()=>{}},onSave:p=>state.patches.push(p),onOpenPreview:()=>{},onRefreshConnections:()=>{},
  onCastArt:(chatId,requestId,action)=>{
   state.actions.push(action);queueMicrotask(()=>{
-   if(action.action==='scan'){panel.setCastContext(chatId,requestId,{candidates:[{name:'Rena',source:'SimTracker · current reply',setup:{appearance:'white fur, blue eyes, fox ears',aliases:['Ren'],outfits:[{id:'scan',name:'Current outfit',description:'blue coat'}],defaultOutfitId:'scan'}},{name:'Rena',source:'Story reference · appearance needed',setup:{appearance:'',aliases:[],outfits:[],defaultOutfitId:null}}],notice:'Nothing saved or generated.'});return;}
+   if(action.action==='scan'){
+    const candidates=[{name:'Rena',source:'SimTracker · current reply',setup:{appearance:'white fur, blue eyes, fox ears',aliases:['Ren'],outfits:[{id:'scan',name:'Current outfit',description:'blue coat'}],defaultOutfitId:'scan'}},{name:'Rena',source:'Story reference · appearance needed',setup:{appearance:'',aliases:[],outfits:[],defaultOutfitId:null}},{name:'Mira',source:'Known story appearance',setup:{appearance:'auburn hair, green eyes',aliases:[],outfits:[],defaultOutfitId:null}}];
+    candidates.push({name:'Captain Rena',source:'Older tracker alias',setup:{appearance:'silver fur, blue eyes',aliases:['Ren (captain)'],outfits:[],defaultOutfitId:null}});
+    const record=state.library.characters.find(r=>r.entityId===action.characterId);
+    panel.setCastContext(chatId,requestId,{candidates:record?candidates.filter(c=>[c.name,...c.setup.aliases].some(name=>[record.name,...(record.setup?.aliases??[])].map(characterAppearanceKey).includes(characterAppearanceKey(name)))):candidates,notice:'Nothing saved or generated.'});return;
+   }
    if(action.action==='setup'){
     let record=state.library.characters.find(r=>r.entityId===(action.characterId??action.name!.toLowerCase()));
     if(!record){record={entityId:action.name!.toLowerCase(),name:action.name!,description:action.setup!.appearance,artRevision:0,preferredVariantId:null,variants:[]};state.library.characters.push(record);}
     record.setup={...action.setup!,outfits:action.setup!.outfits.map(o=>({...o}))};
+   }else if(action.action==='forget'){
+    state.library.characters=state.library.characters.filter(r=>r.entityId!==action.characterId);
    }else if(action.action==='setup_supply'){
     const record=state.library.characters.find(r=>r.entityId===action.characterId)!,target=action.outfitId?record.setup!.outfits.find(o=>o.id===action.outfitId)!:record.setup!;
     target.imageId=action.imageId!;target.imageAppearance=record.setup!.appearance;if('description' in target)target.imageAttire=target.description;

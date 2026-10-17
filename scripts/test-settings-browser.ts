@@ -60,7 +60,8 @@ try {
   assert.equal((await lastPatch(page))?.persistentCastArt,true);
   const cast=settings.locator('[data-cast-art]');
   await cast.locator('xpath=..').locator(':scope > summary').click();
-  await cast.getByRole('button',{name:'Load saved characters',exact:true}).click();
+  await page.waitForFunction(()=>(window as any).settingsFixture.castActions.length===1,{},{timeout:1000});
+  await cast.getByText('Saved portraits & advanced cleanup',{exact:true}).click();
   assert.match(await cast.locator('[data-cast-art-character]').innerText(),/Aleister/);
   assert.equal(await cast.locator('[data-cast-art-description]').innerText(),'Dark hair, blue coat');
   await cast.getByRole('button',{name:'Prefer this variant',exact:true}).click();
@@ -84,6 +85,7 @@ try {
   await cast.getByRole('button',{name:'Use generated portrait',exact:true}).click();
   assert.match(await cast.locator('[data-cast-art-preview]').getAttribute('src')??'',/saved-art/);
   await cast.getByRole('button',{name:'Forget this variant',exact:true}).click();
+  await cast.getByRole('button',{name:'Remove',exact:true}).click();
   assert.equal(await cast.locator('[data-cast-art-catalog]').isVisible(),false);
   assert.equal(await page.evaluate(()=>(window as any).settingsFixture.castActions.length),5);
   await castReuse.uncheck();await openTab('Reading');

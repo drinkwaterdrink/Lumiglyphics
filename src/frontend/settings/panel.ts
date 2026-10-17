@@ -520,6 +520,7 @@ export class VisualNovelSettingsPanel {
     generation.append(castReuse);
     const cast=section('Cast setup and portraits');
     this.castArtPanel=new CastArtPanel(()=>this.options.getChatId?.()??'',(chat,id,action)=>this.options.onCastArt?.(chat,id,action),(chat,id,offset)=>this.options.onCastGallery?.(chat,id,offset),name=>{this.openSection('voice',{focus:true});this.options.onCastVoice?.(name);});cast.append(this.castArtPanel.host);
+    cast.addEventListener('toggle',()=>{if(cast.open)this.castArtPanel.ensureLoaded();});
     const places=section('Saved place art');
     this.locationArtPanel=new LocationArtPanel(()=>this.options.getChatId?.()??'',(chat,id,action)=>this.options.onLocationArt?.(chat,id,action));places.append(this.locationArtPanel.host);
 

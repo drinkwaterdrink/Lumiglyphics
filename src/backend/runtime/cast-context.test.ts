@@ -64,6 +64,17 @@ test('tracker history window is bounded and name-only newer records do not erase
 });
 
 const date='2026-10-14T12:00:00.000Z';
+test('a selected-character scan filters before the limit and recognizes saved aliases',async()=>{
+ const f=fixture();await manageCastArt(f.api,'chat',{action:'setup',name:'Rena',setup:{appearance:'silver fur, blue eyes',aliases:['Ren'],outfits:[],defaultOutfitId:null}},'u');
+ f.messages[0].content='<tracker>'+JSON.stringify({characters:[{name:'Ren',appearance:'white fur, blue eyes'}]})+'</tracker>';
+ for(let batch=0;batch<2;batch++)f.messages.push({id:'new'+batch,is_user:false,content:'<tracker>'+JSON.stringify({characters:Array.from({length:20},(_,i)=>({name:'Other '+batch+' '+i,appearance:'brown hair, green eyes'}))})+'</tracker>'});
+ const before=JSON.stringify([...f.data]);
+ const scan=await scanCastContext(f.api,'chat','u','rena');
+ expect(scan.candidates.some(c=>c.name==='Ren'&&c.source.includes('SimTracker'))).toBe(true);
+ expect(scan.candidates.every(c=>['Ren','Rena'].includes(c.name))).toBe(true);
+ expect(JSON.stringify([...f.data])).toBe(before);
+ await expect(scanCastContext(f.api,'chat','u','missing')).rejects.toThrow(/no longer|refresh/i);
+});
 function storyRecord(messageId='m1',imageId='image',swipeId=0):StoredTurnRecord{
  const key={chatId:'chat',assistantMessageId:messageId,swipeId,sourceFingerprint:fingerprintForMessage({id:messageId,swipe_id:swipeId,content:'A library.'}),revision:0};
  const plan=TurnPlanSchema.parse({schemaVersion:1,key,paragraphs:[{index:0,sourceIndex:0,text:'A library.'}],scenes:[{sceneId:'scene',revision:0,startParagraph:0,environment:{location:'Library',timeOfDay:'day',weather:null,lighting:'daylight',description:'Book shelves.',persistentElements:[]},cast:[],continuity:{revision:0,characters:{},facts:{}},basePrompt:'library',cameraLock:{framing:'wide',angle:'eye level',perspective:'fixed',lens:'50mm',subjectAnchor:'center',horizon:'upper third',safeDialogueRegion:'lower third',aspectRatio:'16:9'},compositionLock:'shelves',activeAssetId:null,priorSceneId:null}],visualCues:[{cueId:'cue',paragraphIndex:0,sceneId:'scene',sceneRevision:0,kind:'background',assetJobId:'job',promptDelta:'Shelves'}],choices:[],initialContinuity:{revision:0,characters:{},facts:{}},continuityDeltas:[],terminalContinuity:{revision:0,characters:{},facts:{}},planningStatus:'planned',createdAt:date});

@@ -9,15 +9,19 @@ import {scanTrackerCastHistory} from './simtracker.js';
 import {fingerprintForMessage} from './planner.js';
 import {isUsableIdentity,splitTags,normalizeCharacterName} from '../../shared/identity.js';
 /** Explicit read-only scan of recognized evidence; no extraction/model call or canon writes. */
-export async function scanCastContext(api:SpindleAPI,chatId:string,userId:string):Promise<CastContextScan>{
+export async function scanCastContext(api:SpindleAPI,chatId:string,userId:string,characterId?:string):Promise<CastContextScan>{
  if(!await api.chats.get(chatId,userId))throw new Error('This chat is unavailable.');
  const token=castArtToken(api,chatId,userId),messages=await api.chat.getMessages(chatId);
  const signature=(rows:typeof messages)=>JSON.stringify(rows.map(m=>[m.id,fingerprintForMessage(m)]));
  const before=signature(messages),latest=[...messages].reverse().find(m=>!m.is_user&&m.role!=='system');
  const [config,registry,library]=await Promise.all([loadConfig(api,userId),loadCharacterRegistry(api,chatId,userId),loadCastArt(api,chatId,userId)]);
+ const target=characterId?library.characters.find(record=>record.entityId===characterId):undefined;
+ if(characterId&&!target)throw new Error('This character is no longer saved. Refresh the cast list.');
+ const targetNames=target?new Set([target.name,...(target.setup?.aliases??[])].map(name=>normalizeCharacterName(name).toLowerCase())):null;
  const candidates:CastContextScan['candidates']=[],seen=new Set<string>();let omitted=false;let referenceNotice='';let referenceScope:{path:string,key:string,position:string}|undefined;
  const add=(name:string,appearance:string,aliases:string[],attire:string,source:string,setup?:unknown,allowNameOnly=false)=>{
   name=normalizeCharacterName(name);if(!name||name.length>160||!allowNameOnly&&!isUsableIdentity(name,splitTags(appearance)))return;
+  if(targetNames&&!targetNames.has(name.toLowerCase())&&!aliases.some(alias=>targetNames.has(normalizeCharacterName(alias).toLowerCase())))return;
   const raw=setup??{appearance:appearance.slice(0,2000),aliases:aliases.filter(a=>a.length<=160).slice(0,16),outfits:attire?[{id:'scanned-outfit',name:'Current outfit',description:attire.slice(0,1000)}]:[],defaultOutfitId:attire?'scanned-outfit':null};
   const draft=CastContextScanSchema.safeParse({candidates:[{name,source:source.slice(0,256),setup:raw}],notice:''});
   const input=allowNameOnly?(draft.success?{success:true as const,data:draft.data.candidates[0]!.setup}:{success:false as const}):CastSetupInputSchema.safeParse(raw);
