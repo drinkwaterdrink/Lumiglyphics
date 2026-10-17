@@ -1251,7 +1251,7 @@ export async function generateAssets(
             ...input,
             ...(selected?.id ? { connection_id: selected.id } : {}),
             ...(config.imageModel || selected?.model ? { model: config.imageModel || selected!.model } : {}),
-            parameters: { ...templateOutputParameters(cue.imageTemplate, selected?.provider ?? provider, config.imageParameters, selected?.default_parameters ?? {}), ...input.parameters }
+            parameters: { ...templateOutputParameters(cue.imageTemplate, selected?.provider ?? provider, config.imageParameters, selected?.default_parameters ?? {}, config.imageModel || selected?.model), ...input.parameters }
           } : input;
           if (cue.imageTemplate) {
             frozen = applyImageEdits({...frozen,prompt,negativePrompt}, {});
@@ -1317,7 +1317,7 @@ export async function generateAssets(
               const nextNai = provider === "novelai" ? compileNovelAiRequest(config, scene, nextCue, characterAppearance) : null;
               const updated = applyImageEdits({...frozen,prompt:nextCompiled.prompt,negativePrompt:nextCompiled.negativePrompt}, {});
               const request: ImageGenerationRequest = { ...updated, includeDataUrl: wantsCapture, parameters: {
-                ...withoutImageReferences({ ...templateOutputParameters(nextCue.imageTemplate, selected?.provider ?? provider, config.imageParameters, selected?.default_parameters ?? {}), ...effectiveParameters }),
+                ...withoutImageReferences({ ...templateOutputParameters(nextCue.imageTemplate, selected?.provider ?? provider, config.imageParameters, selected?.default_parameters ?? {}, config.imageModel || selected?.model), ...effectiveParameters }),
                 ...(nextPortrait && provider ? referenceParametersFor(provider, nextPortrait, config) : {}),
                 ...(nextNai?.parameters ?? {})
               } };

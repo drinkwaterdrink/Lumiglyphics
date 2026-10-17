@@ -1,21 +1,35 @@
 import type { ImageOutputRatio } from "../../shared/image-output.js";
 import type { ImageTemplateSnapshot } from "../../shared/image-templates.js";
+import { ANIMA_OUTPUT_RATIOS, imageOutputRule, KLEIN_OUTPUT_SIZES } from '../../shared/image-model-output.js';
 
-const ANIMA_MODELS = new Set(['anima', 'wavespeed-ai/anima/text-to-image', 'wavespeed-ai/anima/text-to-image-lora']);
 function isAnima(provider: string | null, model: string | undefined): boolean {
-  return provider === 'nanogpt' && ANIMA_MODELS.has((model ?? '').toLowerCase());
+  return imageOutputRule(provider, model) === 'anima';
 }
 /** Normalize known model constraints before preview. Never modify an approved request. */
 export function modelOutputParameters(provider: string | null, model: string | undefined, parameters: Record<string, unknown>): Record<string, unknown> {
-  if (!isAnima(provider, model) || parameters.rawRequestOverride !== undefined) return { ...parameters };
+  const rule = imageOutputRule(provider, model);
+  if (!rule || parameters.rawRequestOverride !== undefined) return { ...parameters };
   const result = { ...parameters };
+  if (rule === 'klein-square') {
+    if (!KLEIN_OUTPUT_SIZES.includes(result.size as typeof KLEIN_OUTPUT_SIZES[number])) result.size = '1024x1024';
+    return result;
+  }
   const pixels = typeof result.size === 'string' ? /^(\d+)x(\d+)$/.exec(result.size) : null;
   const ratio = result.aspect_ratio ?? result.aspectRatio ?? (pixels ? `${Number(pixels[1]) / gcd(Number(pixels[1]), Number(pixels[2]))}:${Number(pixels[2]) / gcd(Number(pixels[1]), Number(pixels[2]))}` : undefined);
   if (result.size !== '1k' && result.size !== '1.5k') result.size = '1k';
   if (ratio) {
-    result.aspectRatio = ratio;
+    // Nonstandard pixel dimensions may reduce to an unsupported fraction.
+    // Pick the closest published ratio before preview, never after approval.
+    const [w, h] = String(ratio).split(':').map(Number);
+    const supported = ANIMA_OUTPUT_RATIOS.includes(ratio as typeof ANIMA_OUTPUT_RATIOS[number]) ? ratio
+      : Number.isFinite(w) && Number.isFinite(h) && w! > 0 && h! > 0 ? [...ANIMA_OUTPUT_RATIOS].sort((a, b) => {
+        const distance = (value: string) => { const [x, y] = value.split(':').map(Number); return Math.abs(Math.log(x! / y!) - Math.log(w! / h!)); };
+        return distance(a) - distance(b);
+      })[0] : undefined;
+    if (!supported) throw new Error('Anima aspectRatio must be a supported W:H ratio, for example "9:16".');
+    result.aspectRatio = supported;
     delete result.aspect_ratio;
-    result.rawRequestOverride = { aspect_ratio: ratio };
+    result.rawRequestOverride = { aspect_ratio: supported };
     result._lumiglyphicsAnimaAspect = true;
   }
   return result;
@@ -30,22 +44,40 @@ export function syncGeneratedAnimaAspect(parameters: Record<string, unknown>): v
 export function providerOutputParameters(parameters: Record<string, unknown>): Record<string, unknown> {
   const result = { ...parameters };
   delete result._lumiglyphicsAnimaAspect;
+  // Lumiverse's native applyRawOverride accepts JSON text. Internal generated
+  // objects stay editable until this wire boundary; their values do not change.
+  if (result.rawRequestOverride && typeof result.rawRequestOverride === 'object' && !Array.isArray(result.rawRequestOverride)) result.rawRequestOverride = JSON.stringify(result.rawRequestOverride);
   return result;
 }
 function gcd(a: number, b: number): number { return b ? gcd(b, a % b) : a || 1; }
 /** Manual edits get a local error instead of a silent adjustment or paid retry. */
 export function assertModelOutputParameters(provider: string | null, model: string | undefined, parameters: Record<string, unknown>): void {
-  if (!isAnima(provider, model)) return;
-  const raw = parameters.rawRequestOverride;
+  const rule = imageOutputRule(provider, model);
+  if (!rule) return;
+  let raw = parameters.rawRequestOverride;
+  if (typeof raw === 'string' && raw.trim()) {
+    try { raw = JSON.parse(raw); }
+    catch { throw new Error('The image connection raw request override must be valid JSON. Correct it in the connection, then prepare a new preview.'); }
+  }
   const override = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
-  const resolution = override.resolution ?? override.size ?? parameters.size ?? '1024x1024';
-  if (resolution !== '1k' && resolution !== '1.5k') throw new Error('Anima resolution must be 1k or 1.5k. In Parameters (JSON), set size to "1k" or "1.5k" (or correct your raw request override), then prepare a new preview.');
+  // The native adapter always sends size, then merges the raw object. There is
+  // no verified precedence for a second resolution field at NanoGPT: validate
+  // both rather than letting a valid alias mask an unsupported outgoing size.
+  const size = override.size !== undefined ? override.size : parameters.size || '1024x1024';
+  const resolutions = override.resolution === undefined ? [size] : [size, override.resolution];
+  if (rule === 'klein-square') {
+    if (resolutions.some(value => !KLEIN_OUTPUT_SIZES.includes(value as typeof KLEIN_OUTPUT_SIZES[number]))) throw new Error(`FLUX.3 Klein supports square images only (${KLEIN_OUTPUT_SIZES.join(', ')}). Set size to "1024x1024", or correct the connection's raw size/resolution fields, then prepare a new preview. This model cannot generate 9:16.`);
+    return;
+  }
+  if (resolutions.some(value => value !== '1k' && value !== '1.5k')) throw new Error('Anima resolution must be 1k or 1.5k. In Parameters (JSON), set size to "1k" or "1.5k" (or correct the raw size/resolution fields in your connection), then prepare a new preview.');
+  const aspect = override.aspect_ratio !== undefined ? override.aspect_ratio : parameters.aspect_ratio ?? parameters.aspectRatio;
+  if (aspect !== undefined && !ANIMA_OUTPUT_RATIOS.includes(aspect as typeof ANIMA_OUTPUT_RATIOS[number])) throw new Error('Anima aspectRatio must be a supported ratio, for example "9:16". Correct the ratio and prepare a new preview.');
 }
 
 /** Shape defaults use the host adapter's fields, never an unrecognized API field.
  * Extension JSON and raw overrides remain authoritative. Profile shape is the
  * fallback when the template uses connection settings or the adapter is unknown. */
-export function templateOutputParameters(template: ImageTemplateSnapshot | undefined, provider: string | null, explicit: Record<string, unknown>, profile: Record<string, unknown>): Record<string, unknown> {
+export function templateOutputParameters(template: ImageTemplateSnapshot | undefined, provider: string | null, explicit: Record<string, unknown>, profile: Record<string, unknown>, model?: string): Record<string, unknown> {
   const result = { ...profile, ...explicit };
   if (template?.outputAspectRatio !== "9:16") return result;
   const shapeKeys = ["size", "width", "height", "aspectRatio", "aspect_ratio", "imageGenerationConfig", "image_config", "rawRequestOverride"];
@@ -53,7 +85,16 @@ export function templateOutputParameters(template: ImageTemplateSnapshot | undef
   // A profile raw override can replace the entire adapter payload. Respect it.
   if (profile.rawRequestOverride !== undefined) return result;
   if (provider === "openrouter" || provider === "google") result.aspectRatio = "9:16";
-  else if (provider === "nanogpt") result.size = "864x1536";
+  else if (provider === "nanogpt") {
+    const rule = imageOutputRule(provider, model);
+    if (rule === 'anima') {
+      result.size = result.size === '1.5k' ? '1.5k' : '1k';
+      result.aspectRatio = '9:16';
+      delete result.aspect_ratio;
+    } else if (rule === 'klein-square') {
+      if (!KLEIN_OUTPUT_SIZES.includes(result.size as typeof KLEIN_OUTPUT_SIZES[number])) result.size = '1024x1024';
+    } else result.size = "864x1536";
+  }
   return result;
 }
 
@@ -70,6 +111,8 @@ export function globalOutputParameters(ratio: ImageOutputRatio, provider: string
     if (isAnima(provider, model)) {
       result.size = parameters.size === '1.5k' ? '1.5k' : '1k';
       result.aspectRatio = ratio;
+    } else if (imageOutputRule(provider, model) === 'klein-square') {
+      result.size = KLEIN_OUTPUT_SIZES.includes(parameters.size as typeof KLEIN_OUTPUT_SIZES[number]) ? parameters.size : '1024x1024';
     } else {
       const unit = ratio === '1:1' ? 1024 : ratio === '9:16' || ratio === '16:9' ? 96 : 256;
       result.size = `${w * unit}x${h * unit}`;

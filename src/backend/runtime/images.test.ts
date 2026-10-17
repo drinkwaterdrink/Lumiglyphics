@@ -4,8 +4,66 @@ import { TurnPlanSchema, type SceneState, type TurnPlan, type VisualCue } from "
 import { POSE_EXPRESSION_CATALOGUE, poseById } from "../../shared/character.js";
 import { compileImagePrompt, compileNegativePrompt, createAssetJobs, generateAssets } from "./images.js";
 import { ImageReviewGate } from "./image-review.js";
+import { normalizeConfig } from '../../config.js';
+import { templateSnapshot } from '../../shared/image-templates.js';
 
 const now = new Date().toISOString();
+
+test('default connection model controls supported shape before review and only one image is dispatched', async () => {
+  for (const model of ['anima/text-to-image', 'blackforestlabs/flux-3/klein/base/text-to-image']) {
+    const sent: any[] = [];
+    const expectedSize = model.startsWith('anima') ? '1.5k' : '1536x1536';
+    const connection = { id: 'nano-default', provider: 'nanogpt', model, is_default: true, updated_at: 1, default_parameters: { size: expectedSize } };
+    const spindle = { userStorage: { getJson: async (_: string, o: any) => o.fallback }, imageGen: {
+      listConnections: async () => [connection], getConnection: async () => connection,
+      generate: async (request: any) => { sent.push(request); return { imageId: 'image' }; }
+    } } as any;
+    const turn = plan([cue('idle')]);
+    const config = { ...DEFAULT_CONFIG, referenceAnchoring: false, imageOutputAspectRatio: '9:16' as const };
+    const jobs = await generateAssets(spindle, turn, createAssetJobs(turn, config), config, new AbortController().signal, () => {}, 'user', {
+      beforeGenerate: async (_job, request) => {
+        expect(request.model).toBe(model);
+        expect(request.parameters?.size).toBe(expectedSize);
+        if (model.startsWith('anima')) expect(request.parameters?.rawRequestOverride).toEqual({ aspect_ratio: '9:16' });
+        return request;
+      }
+    });
+    expect(jobs[0]?.status).toBe('generated');
+    expect(sent).toHaveLength(1);
+    expect(sent[0].parameters.size).toBe(expectedSize);
+    expect(sent[0].parameters._lumiglyphicsAnimaAspect).toBeUndefined();
+    if (model.startsWith('anima')) expect(JSON.parse(sent[0].parameters.rawRequestOverride)).toEqual({ aspect_ratio: '9:16' });
+  }
+});
+
+test('Manga portrait defaults preserve supported Anima and Klein connection resolution choices', async () => {
+  for (const [model, size] of [['anima/text-to-image', '1.5k'], ['blackforestlabs/flux-3/klein/base/text-to-image', '1536x1536']]) {
+    const connection = { id: 'nano', provider: 'nanogpt', model, updated_at: 1, default_parameters: { size } };
+    const sent: any[] = [];
+    const spindle = { userStorage: { getJson: async (_: string, o: any) => o.fallback }, imageGen: { getConnection: async () => connection, generate: async (request: any) => { sent.push(request); return { imageId: 'image' }; } } } as any;
+    const visual = { ...cue('idle'), imageTemplate: templateSnapshot(normalizeConfig({}).imageTemplates.find(t => t.id === 'manga-page')!) };
+    const turn = plan([visual]);
+    const config = { ...DEFAULT_CONFIG, imageConnectionId: 'nano', referenceAnchoring: false, imageOutputAspectRatio: '9:16' as const };
+    const jobs = await generateAssets(spindle, turn, createAssetJobs(turn, config), config, new AbortController().signal, () => {}, 'user');
+    expect(jobs[0]?.status).toBe('generated');
+    expect(sent).toHaveLength(1);
+    expect(sent[0].parameters.size).toBe(size);
+  }
+});
+
+test('a reviewed unsupported Klein size fails without calling or retrying the provider', async () => {
+  let calls = 0;
+  const connection = { id: 'nano', provider: 'nanogpt', model: 'blackforestlabs/flux-3/klein/base/text-to-image', updated_at: 1 };
+  const spindle = { userStorage: { getJson: async (_: string, o: any) => o.fallback }, imageGen: { getConnection: async () => connection, generate: async () => { calls++; return { imageId: 'wrong' }; } } } as any;
+  const turn = plan([cue('idle')]);
+  const config = { ...DEFAULT_CONFIG, imageConnectionId: 'nano', referenceAnchoring: false, imageOutputAspectRatio: '9:16' as const };
+  const jobs = await generateAssets(spindle, turn, createAssetJobs(turn, config), config, new AbortController().signal, () => {}, 'user', {
+    beforeGenerate: async (_job, request) => ({ ...request, parameters: { size: '864x1536' } })
+  });
+  expect(calls).toBe(0);
+  expect(jobs[0]?.status).toBe('failed');
+  expect(jobs[0]?.error).toContain('square');
+});
 
 test('overlong compiled prompts are rewritten once before review and remain under the combined ceiling',async()=>{
  const sent:any[]=[];let textCalls=0;

@@ -14,6 +14,16 @@ try {
   const closeBox = await studio.getByRole('button', { name: 'Close image prompts', exact: true }).boundingBox();
   assert.ok(exitBox && closeBox && closeBox.y >= exitBox.y + exitBox.height + 4, 'review close sits below outer navigation');
   assert.equal(await studio.getByLabel("Review before generating").isChecked(), true);
+  await page.evaluate(() => { const f=(window as any).imageFixture; const turn=structuredClone(f.turn); Object.assign(turn.imageRequests[0], {provider:'nanogpt',model:'blackforestlabs/flux-3/klein/base/text-to-image',parameters:{size:'1024x1024'}}); f.studio.setTurn(turn); });
+  assert.equal(await studio.locator('[data-model-help]').isVisible(),true,'model output limits are visible before opening advanced parameters');
+  assert.match(await studio.locator('[data-model-help]').innerText(),/square images only.*9:16 is unavailable.*1024x1024/);
+  await studio.locator('[data-model-help]').scrollIntoViewIfNeeded();
+  await page.screenshot({path:'.cache/beta38-klein-mobile.png'});
+  await page.evaluate(() => { const f=(window as any).imageFixture; const turn=structuredClone(f.turn); Object.assign(turn.imageRequests[0], {provider:'nanogpt',model:'anima/text-to-image',parameters:{size:'1.5k',aspectRatio:'9:16'}}); f.studio.setTurn(turn); });
+  assert.match(await studio.locator('[data-model-help]').innerText(),/1.5k.*9:16.*reference/);
+  await page.screenshot({path:'.cache/beta38-anima-mobile.png'});
+  await page.evaluate(() => { const f=(window as any).imageFixture; f.studio.setTurn(f.turn); });
+  assert.equal(await studio.locator('[data-model-help]').isVisible(),false,'unrelated model clears the previous compatibility notice');
   await studio.getByLabel("Review before generating").uncheck();
   assert.deepEqual(await page.evaluate(() => (window as any).imageFixture.actions.at(-1)), { reviewImages: false });
   await page.evaluate(() => { const f=(window as any).imageFixture;f.failedTurn=structuredClone(f.turn);f.failedTurn.assets[0].status='failed';f.failedTurn.assets[0].error='Provider resolution error';f.studio.setTurn(f.failedTurn); });

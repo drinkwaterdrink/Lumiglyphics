@@ -523,3 +523,12 @@ Beta.37 user follow-up: error appeared reopening a generated reply, and a later 
 
 
 Beta.37 verified 2026-10-16: 1,467 isolated + 18 speech tests passed (1,485 total), plus 87 cold tests with Function/eval disabled, general-error/reader/image-recovery mobile browsers, strict types/build/bundle/pinned-dependency checks, host scanner and sandbox startup. Fresh review and cache-loading follow-up found no important issues. See docs/review-evidence/2026-10-16-runtime-notices.md. Exact allKeys trigger remains unconfirmed; no live host storage or physical Android run. F stays pending while this hotfix ships.
+
+
+## Beta.38 model output compatibility (2026-10-17)
+
+User confirmed connection default works while 9:16 fails on Anima and FLUX.3 Klein. Ruling: treat global shape as a preference constrained by verified model rules before preview; exact supported 9:16 for Anima text-to-image, supported square for Klein Base with visible disclosure. Do not switch models, crop saved art, alter held approvals or retry paid requests automatically. Preserve custom raw overrides and validate known constraints again after review. Native Lumiverse source has no per-model size schema in Spindle getModels; avoid claims of universal automatic support.
+
+Reproduced missing Anima short-ID handling, generic portrait pixels reaching square-only Klein, and object raw overrides failing native applyRawOverride (expects JSON text). Shared exact-ID rules and wire serialization fix these paths. Add unit/integration/browser regressions, native adapter mocked payload probe, full validation/build/scanner/sandbox checks and fresh review before pushing Testing. F presentation rules remains the next independent roadmap package.
+
+Beta.38 verified: 1,477 isolated + 18 speech = 1,495 tests pass; cold87, mobile image-review/template/recovery browsers, strict types/build/bundle, native adapter mocked3, scanner and sandbox startup pass. Fresh review fixes close conflicting/null raw fields and clarify visible-parameter wording; follow-up no Important issues. Manga supported-tier retention also reproduced RED then GREEN. See docs/review-evidence/2026-10-17-model-output-sizing.md. No live paid-provider or physical Android run. Push Testing authorized; F remains queued.
