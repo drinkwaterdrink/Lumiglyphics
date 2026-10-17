@@ -1,9 +1,12 @@
 import type { ImageOutputRatio } from "../../shared/image-output.js";
 import type { ImageTemplateSnapshot } from "../../shared/image-templates.js";
-import { ANIMA_OUTPUT_RATIOS, imageOutputRule, KLEIN_OUTPUT_SIZES } from '../../shared/image-model-output.js';
+import { ANIMA_OUTPUT_RATIOS, imageOutputRule, KLEIN_OUTPUT_SIZES, QWEN_TURBO_OUTPUT_RATIOS } from '../../shared/image-model-output.js';
 
 function isAnima(provider: string | null, model: string | undefined): boolean {
   return imageOutputRule(provider, model) === 'anima';
+}
+function qwenResolution(parameters:Record<string,unknown>):'1k'|'2k'{
+  return (parameters.resolution??parameters.size)==='2k'?'2k':'1k';
 }
 /** Normalize known model constraints before preview. Never modify an approved request. */
 export function modelOutputParameters(provider: string | null, model: string | undefined, parameters: Record<string, unknown>): Record<string, unknown> {
@@ -12,6 +15,25 @@ export function modelOutputParameters(provider: string | null, model: string | u
   const result = { ...parameters };
   if (rule === 'klein-square') {
     if (!KLEIN_OUTPUT_SIZES.includes(result.size as typeof KLEIN_OUTPUT_SIZES[number])) result.size = '1024x1024';
+    return result;
+  }
+  if (rule === 'qwen-turbo') {
+    const pixels=typeof result.size==='string'?/^(\d+)x(\d+)$/.exec(result.size):null;
+    const ratio=result.aspect_ratio??result.aspectRatio??(pixels?`${pixels[1]}:${pixels[2]}`:undefined);
+    result.size=qwenResolution(result);
+    delete result.resolution;
+    const raw:Record<string,unknown>={resolution:result.size};
+    if(ratio!==undefined){
+      const [w,h]=String(ratio).split(':').map(Number);
+      if(!Number.isFinite(w)||!Number.isFinite(h)||w!<=0||h!<=0)throw new Error('Qwen Turbo aspectRatio must be a valid W:H ratio, for example "9:16".');
+      const supported=[...QWEN_TURBO_OUTPUT_RATIOS].sort((a,b)=>{
+        const distance=(value:string)=>{const [x,y]=value.split(':').map(Number);return Math.abs(Math.log(x!/y!)-Math.log(w!/h!));};
+        return distance(a)-distance(b);
+      })[0]!;
+      result.aspectRatio=supported;raw.aspect_ratio=supported;
+    }
+    delete result.aspect_ratio;
+    result.rawRequestOverride=raw;result._lumiglyphicsQwenOutput=true;
     return result;
   }
   const pixels = typeof result.size === 'string' ? /^(\d+)x(\d+)$/.exec(result.size) : null;
@@ -36,14 +58,18 @@ export function modelOutputParameters(provider: string | null, model: string | u
 }
 /** The editor cannot alter raw overrides. Keep only our generated override in sync
  * with its visible ratio; profile/user overrides never receive this marker. */
-export function syncGeneratedAnimaAspect(parameters: Record<string, unknown>): void {
+export function syncGeneratedModelOutput(parameters: Record<string, unknown>): void {
   if (parameters._lumiglyphicsAnimaAspect === true) {
     parameters.rawRequestOverride = { aspect_ratio: parameters.aspectRatio };
+  }
+  if(parameters._lumiglyphicsQwenOutput===true){
+    parameters.rawRequestOverride={resolution:parameters.size,...(parameters.aspectRatio!==undefined?{aspect_ratio:parameters.aspectRatio}:{})};
   }
 }
 export function providerOutputParameters(parameters: Record<string, unknown>): Record<string, unknown> {
   const result = { ...parameters };
   delete result._lumiglyphicsAnimaAspect;
+  delete result._lumiglyphicsQwenOutput;
   // Lumiverse's native applyRawOverride accepts JSON text. Internal generated
   // objects stay editable until this wire boundary; their values do not change.
   if (result.rawRequestOverride && typeof result.rawRequestOverride === 'object' && !Array.isArray(result.rawRequestOverride)) result.rawRequestOverride = JSON.stringify(result.rawRequestOverride);
@@ -69,6 +95,12 @@ export function assertModelOutputParameters(provider: string | null, model: stri
     if (resolutions.some(value => !KLEIN_OUTPUT_SIZES.includes(value as typeof KLEIN_OUTPUT_SIZES[number]))) throw new Error(`FLUX.3 Klein supports square images only (${KLEIN_OUTPUT_SIZES.join(', ')}). Set size to "1024x1024", or correct the connection's raw size/resolution fields, then prepare a new preview. This model cannot generate 9:16.`);
     return;
   }
+  if(rule==='qwen-turbo'){
+    if(resolutions.some(value=>value!=='1k'&&value!=='2k'))throw new Error('Qwen Image 2.1 Turbo resolution must be 1k or 2k. Set size to "1k" or "2k" in Parameters (JSON), or correct the connection raw size/resolution fields, then prepare a new preview.');
+    const ratio=override.aspect_ratio!==undefined?override.aspect_ratio:parameters.aspect_ratio??parameters.aspectRatio;
+    if(ratio!==undefined&&!QWEN_TURBO_OUTPUT_RATIOS.includes(ratio as typeof QWEN_TURBO_OUTPUT_RATIOS[number]))throw new Error(`Qwen Turbo aspectRatio must be a supported ratio (${QWEN_TURBO_OUTPUT_RATIOS.join(', ')}). Correct it before generating.`);
+    return;
+  }
   if (resolutions.some(value => value !== '1k' && value !== '1.5k')) throw new Error('Anima resolution must be 1k or 1.5k. In Parameters (JSON), set size to "1k" or "1.5k" (or correct the raw size/resolution fields in your connection), then prepare a new preview.');
   const aspect = override.aspect_ratio !== undefined ? override.aspect_ratio : parameters.aspect_ratio ?? parameters.aspectRatio;
   if (aspect !== undefined && !ANIMA_OUTPUT_RATIOS.includes(aspect as typeof ANIMA_OUTPUT_RATIOS[number])) throw new Error('Anima aspectRatio must be a supported ratio, for example "9:16". Correct the ratio and prepare a new preview.');
@@ -91,6 +123,9 @@ export function templateOutputParameters(template: ImageTemplateSnapshot | undef
       result.size = result.size === '1.5k' ? '1.5k' : '1k';
       result.aspectRatio = '9:16';
       delete result.aspect_ratio;
+    } else if(rule==='qwen-turbo'){
+      result.size=qwenResolution(result);
+      result.aspectRatio='9:16';delete result.aspect_ratio;delete result.resolution;
     } else if (rule === 'klein-square') {
       if (!KLEIN_OUTPUT_SIZES.includes(result.size as typeof KLEIN_OUTPUT_SIZES[number])) result.size = '1024x1024';
     } else result.size = "864x1536";
@@ -110,6 +145,9 @@ export function globalOutputParameters(ratio: ImageOutputRatio, provider: string
   else if (provider === 'nanogpt') {
     if (isAnima(provider, model)) {
       result.size = parameters.size === '1.5k' ? '1.5k' : '1k';
+      result.aspectRatio = ratio;
+    } else if(imageOutputRule(provider,model)==='qwen-turbo'){
+      result.size=qwenResolution(parameters);
       result.aspectRatio = ratio;
     } else if (imageOutputRule(provider, model) === 'klein-square') {
       result.size = KLEIN_OUTPUT_SIZES.includes(parameters.size as typeof KLEIN_OUTPUT_SIZES[number]) ? parameters.size : '1024x1024';

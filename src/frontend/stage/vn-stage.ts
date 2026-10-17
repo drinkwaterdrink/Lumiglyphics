@@ -142,6 +142,7 @@ export interface VnStageCallbacks {
   onSubmit?: (text: string) => void | Promise<void>;
   onExit?: () => void;
   onReroll?: () => void | Promise<void>;
+  onReviewImages?: () => void;
   onSwipe?: () => void | Promise<void>;
 }
 
@@ -2284,6 +2285,9 @@ export class VnStage {
       }
       if (Boolean(details?.retryable) && canReroll) {
         spec.actions = [{ label: "Try again", action: handleReroll, ...(details?.retryScope ? { note: details.retryScope } : {}) }];
+      }
+      if((details?.source??fallbackSource)==='image'&&this.callbacks.onReviewImages){
+        spec.actions=[{label:'Review picture',action:()=>this.callbacks.onReviewImages?.()},...(spec.actions??[])];
       }
       return spec;
     };

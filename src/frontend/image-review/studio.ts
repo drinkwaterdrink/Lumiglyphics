@@ -12,8 +12,8 @@ type Draft = { prompt: string; negative: string; parameters: string };
 const CSS = `
 :host{position:absolute;inset:0;pointer-events:none;z-index:9;font:14px/1.45 var(--vn-shell-family,system-ui);color:var(--vn-shell-text,#eee);--paper:#171822;--edge:var(--vn-shell-border,#535565);--accent:var(--vn-shell-accent,#c1b0eb)}
 [hidden]{display:none!important}button,input,input:not([type=checkbox]),textarea,select{font:inherit;color:inherit;box-sizing:border-box}button{cursor:pointer;min-height:44px;padding:8px 12px;border:1px solid var(--edge);border-radius:9px;background:var(--vn-shell-button,#252632)}button:disabled{opacity:.55;cursor:default}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-[data-launch]{position:absolute;top:70px;right:max(12px,env(safe-area-inset-right));pointer-events:auto;background:var(--paper)}section{pointer-events:auto;position:absolute;right:12px;top:124px;width:min(490px,calc(100% - 24px));max-height:calc(100% - 144px);display:flex;flex-direction:column;overflow:hidden;overscroll-behavior:contain;box-sizing:border-box;border:1px solid var(--edge);border-radius:12px;padding:0;background:var(--paper);box-shadow:0 12px 40px #0009}
-h2{margin:0;font-size:19px}small,p{color:var(--vn-shell-muted,#bbc);overflow-wrap:anywhere}label{display:block;margin:12px 0}textarea,select{width:100%;background:var(--vn-shell-field,#101119);border:1px solid var(--edge);border-radius:6px;padding:8px}textarea{min-height:90px;font:16px/1.5 ui-monospace,monospace}textarea[readonly]{opacity:.85}.row{display:flex;gap:8px;flex-wrap:wrap}.row button:first-child{border-color:var(--accent)}[data-notice]{color:var(--accent);white-space:pre-wrap}details{margin:10px 0}summary::before{content:"▸";margin-right:8px}details[open]>summary::before{content:"▾"}summary{cursor:pointer;min-height:44px;display:flex;align-items:center}.toggle{display:flex;align-items:center;gap:8px}.toggle input{width:20px;height:20px}
+[data-launch]{max-width:130px;position:absolute;top:70px;right:max(12px,env(safe-area-inset-right));pointer-events:auto;background:var(--paper)}section{pointer-events:auto;position:absolute;right:12px;top:124px;width:min(490px,calc(100% - 24px));max-height:calc(100% - 144px);display:flex;flex-direction:column;overflow:hidden;overscroll-behavior:contain;box-sizing:border-box;border:1px solid var(--edge);border-radius:12px;padding:0;background:var(--paper);box-shadow:0 12px 40px #0009}
+[data-launch][data-waiting]:not([data-waiting="0"])::after{content:attr(data-waiting);position:absolute;top:-7px;right:-4px;min-width:20px;height:20px;padding:0 3px;display:grid;place-items:center;border-radius:999px;background:var(--accent);color:var(--paper);font:700 11px/1 system-ui;border:1px solid var(--edge);box-sizing:border-box}h2{margin:0;font-size:19px}small,p{color:var(--vn-shell-muted,#bbc);overflow-wrap:anywhere}label{display:block;margin:12px 0}textarea,select{width:100%;background:var(--vn-shell-field,#101119);border:1px solid var(--edge);border-radius:6px;padding:8px}textarea{min-height:90px;font:16px/1.5 ui-monospace,monospace}textarea[readonly]{opacity:.85}.row{display:flex;gap:8px;flex-wrap:wrap}.row button:first-child{border-color:var(--accent)}[data-notice]{color:var(--accent);white-space:pre-wrap}details{margin:10px 0}summary::before{content:"▸";margin-right:8px}details[open]>summary::before{content:"▾"}summary{cursor:pointer;min-height:44px;display:flex;align-items:center}.toggle{display:flex;align-items:center;gap:8px}.toggle input{width:20px;height:20px}
 [data-studio-header],[data-studio-footer]{padding:12px 16px;flex:none;background:var(--paper)}[data-studio-header]{border-bottom:1px solid var(--edge);justify-content:space-between;align-items:center}[data-studio-body]{padding:0 16px 12px;overflow:auto;overscroll-behavior:contain;min-height:0}[data-studio-footer]{border-top:1px solid var(--edge)}[data-studio-footer] [data-notice]{margin:8px 0 0}select{min-height:44px}[data-provenance],[data-diagnostic]{white-space:pre-wrap;overflow-wrap:anywhere}[data-card-role]>small,[data-turn-recovery]>small,[data-diagnostics]>small{display:block;margin:8px 0 12px}[data-recovery]>small{display:block;margin:8px 0 12px}[data-subject-name]{min-height:44px;font:inherit}section{color:#eee}section small,section p{color:#c6c7d2}:host{container-type:inline-size}[data-close]{width:44px;padding:0;font-size:24px;flex:none}[data-build]{font:11px/1.3 system-ui;opacity:.8}
 [data-notice-row]{display:flex;gap:4px;align-items:flex-start}[data-notice-row] [data-notice]{flex:1;min-width:0;max-height:20dvh;overflow:auto}[data-dismiss-notice]{flex:none;width:44px;padding:0;font-size:24px}
 @container (max-width:600px){section{inset:max(76px,calc(env(safe-area-inset-top) + 64px)) 8px max(12px,env(safe-area-inset-bottom));width:auto;max-height:none;border-radius:12px}[data-studio-footer]{padding:10px 12px}[data-studio-header]{padding:10px 12px}}
@@ -42,7 +42,7 @@ export class ImageStudio {
   private recovering: "stop"|"retry"|null=null;
   private dismissedNotices = new Set<string>();
 
-  constructor(mount: HTMLElement, private readonly send: (request: FrontendRequest) => void, private readonly saveReview: (enabled: boolean) => void) {
+  constructor(mount: HTMLElement, private readonly send: (request: FrontendRequest) => void, private readonly saveReview: (enabled: boolean) => void,private readonly onVisibility?:(open:boolean)=>void) {
     this.host = document.createElement("div");
     this.host.dataset.imageStudio = "";
     this.root = this.host.attachShadow({ mode: "open" });
@@ -56,16 +56,14 @@ export class ImageStudio {
 
     mount.append(this.host);
     this.el<HTMLButtonElement>("[data-launch]").onclick = () => {
-      const section = this.el<HTMLElement>("section"); section.hidden = !section.hidden;
-      this.el<HTMLButtonElement>("[data-launch]").setAttribute("aria-expanded", String(!section.hidden));
-      if (!section.hidden) { this.selectedJob = this.turn?.assets.filter((asset) => asset.paragraphIndex <= this.cursor).at(-1)?.jobId ?? this.selectedJob; this.selectedRequest = ""; this.render(); this.el<HTMLElement>("[data-studio-body]").scrollTop = 0; }
+      if(this.el<HTMLElement>('section').hidden)this.open();else this.setOpen(false);
     };
     this.el<HTMLButtonElement>('[data-dismiss-notice]').onclick=()=>{
       const text=this.el<HTMLElement>('[data-notice]').textContent??'';
       if(this.dismissedNotices.size>=32)this.dismissedNotices.clear();
       this.dismissedNotices.add(this.noticeKey(text));this.setNotice('');this.el<HTMLButtonElement>('[data-close]').focus();
     };
-    this.el<HTMLButtonElement>("[data-close]").onclick = () => { this.el<HTMLElement>("section").hidden = true; this.el<HTMLButtonElement>("[data-launch]").setAttribute("aria-expanded", "false"); this.el<HTMLButtonElement>("[data-launch]").focus(); };
+    this.el<HTMLButtonElement>("[data-close]").onclick = () => { this.setOpen(false);this.el<HTMLButtonElement>("[data-launch]").focus(); };
     this.el<HTMLInputElement>("[data-review]").onchange = () => { this.saveReview(this.el<HTMLInputElement>("[data-review]").checked); };
     this.el<HTMLSelectElement>("[data-picture]").onchange = () => { this.selectedJob = this.el<HTMLSelectElement>("[data-picture]").value; this.selectedRequest = ""; this.render(); };
     this.el<HTMLSelectElement>("[data-template]").onchange = () => this.render();
@@ -182,6 +180,7 @@ export class ImageStudio {
   private record(): ImageRequestRecord | undefined { return this.records().find((record) => record.requestId === this.selectedRequest) ?? this.records().at(-1); }
 
   setTurn(turn: TurnView | null): void {
+    if(this.turn?.chatId!==turn?.chatId||!turn)this.setOpen(false);
     if(this.turn?.chatId!==turn?.chatId)this.preferences.clear();
     if (this.turn?.chatId !== turn?.chatId || this.turn?.sourceFingerprint !== turn?.sourceFingerprint || this.turn?.messageId !== turn?.messageId || this.turn?.swipeId !== turn?.swipeId || this.turn?.revision !== turn?.revision) { this.drafts.clear(); this.submitted.clear(); this.preparing.clear(); this.rebuilding.clear(); this.rerolling.clear(); this.selectedJob = ""; this.selectedRequest = ""; this.recoveryJob = ""; }
     this.replanning = false;this.recovering=null;
@@ -200,6 +199,16 @@ export class ImageStudio {
   }
   setReview(enabled: boolean): void { this.review = enabled; this.el<HTMLInputElement>("[data-review]").checked = enabled; }
   setCursor(cursor: number): void { this.cursor = cursor; }
+  private setOpen(open:boolean):void{
+    const section=this.el<HTMLElement>('section'),changed=section.hidden===open;
+    section.hidden=!open;this.el<HTMLButtonElement>('[data-launch]').setAttribute('aria-expanded',String(open));
+    if(changed)this.onVisibility?.(open);
+  }
+  open():void{
+    if(!this.el<HTMLElement>('section').hidden)return;
+    this.selectedJob=this.turn?.assets.filter(asset=>asset.paragraphIndex<=this.cursor).at(-1)?.jobId??this.selectedJob;this.selectedRequest='';
+    this.render();this.setOpen(true);this.el<HTMLElement>('[data-studio-body]').scrollTop=0;this.el<HTMLButtonElement>('[data-close]').focus({preventScroll:true});
+  }
   private noticeKey(text:string):string {return JSON.stringify([this.turn?.chatId,this.turn?.messageId,this.turn?.swipeId,this.turn?.sourceFingerprint,this.turn?.revision,this.selectedJob,this.selectedRequest,this.records().at(-1)?.requestId,text]);}
   private setNotice(text:string):void {
     const visible=!!text&&!this.dismissedNotices.has(this.noticeKey(text));
@@ -224,7 +233,7 @@ export class ImageStudio {
   private render(): void {
     this.el<HTMLElement>("[data-template-confirm]").hidden = true;
     const waiting = (this.turn?.imageRequests ?? []).filter((record) => record.state === "review").length;
-    this.el<HTMLButtonElement>("[data-launch]").textContent = `Image prompts${waiting ? ` (${waiting} waiting)` : ""}`;
+    const launcher=this.el<HTMLButtonElement>("[data-launch]");launcher.textContent="Image prompts";launcher.dataset.waiting=String(waiting);launcher.setAttribute("aria-label",`Image prompts${waiting?` (${waiting} waiting)`:""}`);
     if (!this.turn?.assets.some((asset) => asset.jobId === this.selectedJob)) { this.selectedJob = this.turn?.assets[0]?.jobId ?? ""; this.selectedRequest = ""; }
     const picker = this.el<HTMLSelectElement>("[data-picture]");
     picker.replaceChildren();
@@ -334,7 +343,7 @@ export class ImageStudio {
   }
   setPresentationRules(chat:string,id:string,catalog:PresentationRuleCatalog){return this.preferences.receive(chat,id,catalog);}
   presentationRulesError(error:string,id?:string){this.preferences.error(error,id);}
-  destroy(): void { this.preferences.destroy(); this.drafts.clear(); this.host.remove(); }
+  destroy(): void { this.setOpen(false);this.preferences.destroy(); this.drafts.clear(); this.host.remove(); }
 }
 
 function friendlyStatus(status: string): string { return ({ browser_ready: "Ready", generated: "Ready", queued: "Waiting", generating: "Generating", review: "Awaiting review", approved: "Approved", cancelled: "Cancelled", skipped: "Skipped", failed: "Failed" } as Record<string, string>)[status] ?? status; }

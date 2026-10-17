@@ -481,6 +481,7 @@ button[data-vn-badge]:active {
 }
 
 [data-vn-badge-note] {
+  flex-basis: 100%;
   color: rgba(254, 205, 211, 0.85);
   font-size: 0.76rem;
   font-weight: 450;

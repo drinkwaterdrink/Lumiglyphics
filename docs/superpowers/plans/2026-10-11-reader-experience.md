@@ -560,3 +560,8 @@ Steps: (1) RED/GREEN shared schemas/evaluator and isolated scoped persistence; (
 - [x] Shared/backend/planner regressions, mobile settings/review/cast browser checks, fresh review and release verification. See [beta.40 evidence](../../review-evidence/2026-10-17-template-preferences.md).
 
 F2 remains next within package F: entity/object conditions and background/effect/motion/music policies, with reduced-motion precedence tests. The full F checkboxes above remain open until those policies are implemented.
+
+
+### beta.41 compatibility and recovery polish
+
+User-reported Qwen Turbo resolution failure takes priority over F2. Add exact-model 1K/2K and supported ratio preparation/validation from the verified NanoGPT catalog, preserving custom overrides and approved requests. Add read-only Review picture on image errors, pause advancement during review, keep retry scope text on its own line, and verify native mobile/theme behavior. This maintenance step does not mark F2 policies complete. Evidence: [beta.41 audit](../../review-evidence/2026-10-17-qwen-recovery.md).

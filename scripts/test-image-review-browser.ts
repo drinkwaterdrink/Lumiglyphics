@@ -9,6 +9,21 @@ try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   await page.goto(`http://127.0.0.1:${server.port}`);
   const studio = page.locator("[data-image-studio]");
+  await page.evaluate(()=>{const f=(window as any).imageFixture;f.stage.setError({source:'image',message:'Scene image could not be made',detail:'Qwen Image 2.1 Turbo supports only 1K and 2K resolution.',retryable:true,retryScope:'Try again makes 4 images again.'});});
+  for(const width of [320,390]){
+    await page.setViewportSize({width,height:844});
+    const card=await page.locator('[data-vn-badge-kind="error"]').boundingBox(),launch=await studio.locator('[data-launch]').boundingBox();
+    assert.ok(card&&launch&&launch.x>=card.x+card.width+2,'pending-count launcher must not cover the error card');
+  }
+  await page.screenshot({path:'.cache/beta41-qwen-recovery.png',animations:'disabled'});
+  await page.getByRole('button',{name:'Review picture',exact:true}).tap();
+  assert.equal(await studio.getByRole('button',{name:'Close image prompts',exact:true}).isVisible(),true);
+  assert.equal(await studio.getByLabel('Picture',{exact:true}).inputValue(),'job');
+  assert.deepEqual(await page.evaluate(()=>(window as any).imageFixture.actions),[],'reviewing an error sends no retry or image request');
+  assert.deepEqual(await page.evaluate(()=>(window as any).imageFixture.visibility),[true]);
+  await studio.getByRole('button',{name:'Close image prompts',exact:true}).tap();
+  assert.deepEqual(await page.evaluate(()=>(window as any).imageFixture.visibility),[true,false]);
+  await page.evaluate(()=>(window as any).imageFixture.stage.setError(null));
   await studio.getByRole("button", { name: /Image prompts/ }).click();
   const exitBox = await page.getByRole('button', { name: 'Back to chat', exact: true }).boundingBox();
   const closeBox = await studio.getByRole('button', { name: 'Close image prompts', exact: true }).boundingBox();
@@ -183,6 +198,8 @@ try {
   const completedReroll=await page.evaluate(()=>(window as any).imageFixture.actions.at(-1));
   assert.equal(completedReroll.type,'vn_prepare_image');assert.equal(completedReroll.regeneratePrompt,true);assert.equal(completedReroll.jobId,'job');
   await page.evaluate(()=>(window as any).imageFixture.studio.showError('Fixture reset'));
+  await page.evaluate(()=>{const f=(window as any).imageFixture;f.turn.imageRequests[0].model='qwen-image-2.1-turbo';f.turn.imageRequests[0].parameters={size:'2k',aspectRatio:'9:16'};f.studio.setTurn(f.turn);});
+  assert.match(await studio.locator('[data-model-help]').innerText(),/Qwen Image 2.1 Turbo.*9:16.*2k/s,'review explains the recorded Qwen tier and framing');
   await page.evaluate(()=>{const f=(window as any).imageFixture;f.turn.imageRequests[0].imagePromptMetadata={...f.metadata,presentationRuleTrace:{matchedRuleIds:['arrival'],summary:'Applied Portrait from Dialogue (this chat).'}};f.studio.setTurn(f.turn);});
   assert.match(await studio.locator('[data-provenance]').textContent()??'',/Template preferences:.*Applied Portrait/s,'review displays frozen preference provenance');
   const frozenBefore=await page.evaluate(()=>JSON.stringify((window as any).imageFixture.turn.imageRequests));

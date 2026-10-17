@@ -6,6 +6,32 @@ import { applyImageEdits, safeImageParameters } from './image-review.js';
 const manga = () => templateSnapshot(normalizeConfig({}).imageTemplates.find(t => t.id === 'manga-page')!);
 const anima = 'wavespeed-ai/anima/text-to-image';
 const klein = 'blackforestlabs/flux-3/klein/base/text-to-image';
+const qwen = 'qwen-image-2.1-turbo';
+
+test('Qwen Turbo uses verified resolution tiers and separate portrait framing before review',()=>{
+ const original={size:'864x1536',seed:4};
+ const prepared=modelOutputParameters('nanogpt',qwen,original);
+ expect(prepared).toMatchObject({size:'1k',aspectRatio:'9:16',rawRequestOverride:{resolution:'1k',aspect_ratio:'9:16'}});
+ expect(original).toEqual({size:'864x1536',seed:4});expect(modelOutputParameters('nanogpt',qwen,prepared)).toEqual(prepared);
+ expect(globalOutputParameters('9:16','nanogpt',qwen,{size:'2k'})).toMatchObject({size:'2k',aspectRatio:'9:16'});
+ expect(templateOutputParameters(manga(),'nanogpt',{}, {size:'2k'},qwen)).toMatchObject({size:'2k',aspectRatio:'9:16'});
+ const wire=providerOutputParameters(prepared);expect(JSON.parse(wire.rawRequestOverride as string)).toEqual({resolution:'1k',aspect_ratio:'9:16'});expect(wire._lumiglyphicsQwenOutput).toBeUndefined();
+});
+
+test('Qwen output edits synchronize generated fields, respect custom overrides and validate before spending',()=>{
+ const prepared=modelOutputParameters('nanogpt',qwen,{size:'864x1536'});
+ const edited=applyImageEdits({prompt:'scene',model:qwen,parameters:prepared},{parameters:{size:'2k',aspectRatio:'3:4'}});
+ expect(edited.parameters?.rawRequestOverride).toEqual({resolution:'2k',aspect_ratio:'3:4'});
+ expect(()=>assertModelOutputParameters('nanogpt',qwen,edited.parameters!)).not.toThrow();
+ expect(()=>assertModelOutputParameters('nanogpt',qwen,{size:'864x1536'})).toThrow(/1k or 2k/);
+ expect(()=>assertModelOutputParameters('nanogpt',qwen,{size:'1k',aspectRatio:'4:3'})).toThrow(/ratio/);
+ const custom={size:'864x1536',rawRequestOverride:'{"size":"2k","resolution":"2k","aspect_ratio":"9:16"}'};
+ expect(modelOutputParameters('nanogpt',qwen,custom)).toEqual(custom);expect(()=>assertModelOutputParameters('nanogpt',qwen,custom)).not.toThrow();
+ expect(()=>assertModelOutputParameters('nanogpt',qwen,{size:'864x1536',rawRequestOverride:{resolution:'2k'}})).toThrow(/1k or 2k/);
+ expect(modelOutputParameters('openrouter',qwen,{size:'864x1536'})).toEqual({size:'864x1536'});
+ expect(modelOutputParameters('nanogpt','qwen-image',{size:'864x1536'})).toEqual({size:'864x1536'});
+ expect(()=>applyImageEdits({prompt:'scene'},{parameters:{_lumiglyphicsQwenOutput:true}})).toThrow();
+});
 
 test('current Anima aliases get portrait tiers without matching unrelated animation or other providers', () => {
   for (const model of ['anima/text-to-image', 'anima/text-to-image-lora', ' WAVESPEED-AI/anima/text-to-image ']) {

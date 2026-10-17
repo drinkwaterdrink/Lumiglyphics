@@ -500,10 +500,11 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   };
 
   let imageLibraryOpen=false;
+  let imageStudioOpen=false;
   const stage = new VnStage({
     mount: app.root,
     themePreset: configRef.current?.themePreset ?? "lumiverse",
-    isAutoAdvanceHeld: () => isSpeechHoldingAuto()||imageLibraryOpen,
+    isAutoAdvanceHeld: () => isSpeechHoldingAuto()||imageLibraryOpen||imageStudioOpen,
     onExit: () => deactivate(),
     onTooltipPreferencesChange: tooltips => { ctx.sendToBackend({type:"vn_set_config",patch:{tooltips},chatId:chatId()}); },
     onReaderPreferencesChange: readerPreferences => {
@@ -554,6 +555,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       speech.setCursor(null);
       stage.presentUserParagraph(picked.label, turn?.userSpeaker || "You");
     },
+    onReviewImages:()=>imageStudio.open(),
     onReroll: () => {
       const activeChatId = chatId();
       if (!activeChatId) return;
@@ -616,7 +618,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   stage.historyOpener=opener=>imageLibrary.open('story',opener);
   const imageStudio = new ImageStudio(stage.panelMount, (request) => ctx.sendToBackend(request), (enabled) => {
     ctx.sendToBackend({ type: "vn_set_config", patch: { reviewImages: enabled }, chatId: chatId() ?? "" });
-  });
+  },open=>{imageStudioOpen=open;if(open){stage.toggleSkip(false);stage.holdAutoPlay();}else if(active)stage.checkAutoPlay();});
   const panelRequests = new Map<string, { resolve: (template: string) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   panels.onResolveTemplate = (template) => new Promise((resolve, reject) => {
     const requestId = crypto.randomUUID();

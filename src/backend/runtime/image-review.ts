@@ -1,5 +1,5 @@
 import type { SpindleAPI } from "lumiverse-spindle-types";
-import { syncGeneratedAnimaAspect } from './template-output.js';
+import { syncGeneratedModelOutput } from './template-output.js';
 import type { ImageRequestEdits, ImageRequestRecord } from "../../shared/image-review.js";
 import { ImagePromptMetadataSchema, type ImagePromptMetadata } from "../../shared/image-templates.js";
 import { compactPromptText, compactNegativePrompt, assertPromptLengths, IMAGE_PROMPT_MAX_CHARS } from '../../shared/prompt-length.js';
@@ -80,7 +80,7 @@ export function applyImageEdits(request: ImageGenerationRequest, edits: ImageReq
     return result;
   };
   const parameters = structuredClone(merge(request.parameters ?? {}, patch));
-  syncGeneratedAnimaAspect(parameters);
+  syncGeneratedModelOutput(parameters);
   for (const [key, caption] of [["v4_prompt", prompt], ["v4_negative_prompt", negativePrompt ?? ""]] as const) {
     const block = parameters[key] as { caption?: { base_caption?: string } } | undefined;
     if (block?.caption) block.caption.base_caption = caption;

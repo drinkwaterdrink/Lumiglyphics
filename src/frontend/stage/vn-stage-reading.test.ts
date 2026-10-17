@@ -272,6 +272,16 @@ describe("reading UX", () => {
     expect(root(s).querySelector("[data-vn-badge-kind='error']")).toBeNull();
   });
 
+  test('image errors offer a review shortcut without retrying or advancing the story',()=>{
+    let reviews=0,retries=0;const s=create({onReviewImages:()=>{reviews++;},onReroll:()=>{retries++;}});
+    s.loadTurn({mode:'standard',paragraphs:paragraphs(2)});const before=s.getState().currentParagraphIndex;
+    s.setError({source:'image',message:'Scene image could not be made',detail:'Qwen resolution must be1k or2k',retryable:true});
+    const buttons=q(s,'[data-vn-badge-kind="error"]').querySelectorAll('[data-vn-badge-action]');
+    const review=[...buttons].find(button=>button.textContent==='Review picture');expect(review).toBeDefined();review!.click();
+    expect(reviews).toBe(1);expect(retries).toBe(0);expect(s.getState().currentParagraphIndex).toBe(before);
+    s.setError(null);s.setError({source:'planner',message:'Planning failed',retryable:true});expect([...q(s,'[data-vn-badge-kind="error"]').querySelectorAll('[data-vn-badge-action]')].some(button=>button.textContent==='Review picture')).toBe(false);
+  });
+
   test("general runtime errors can be dismissed without clearing failure state or starting work",()=>{
     let retries=0;const s=create({onReroll:()=>{retries++;}});s.loadTurn({mode:'standard',paragraphs:paragraphs(2)});
     const failure={source:'other' as const,message:'Something went wrong.',detail:"undefined is not an object (evaluating 'key of value.allKeys')",retryable:false};
