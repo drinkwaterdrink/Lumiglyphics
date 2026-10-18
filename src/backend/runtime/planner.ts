@@ -172,6 +172,8 @@ const PlannerOutputSchema = z.object({
 }).strict();
 
 export type PlanTurnInput = {
+  /** Escaped UI transport consumes the same parsed prose before model enrichment. */
+  onNarrativePrepared?: (paragraphs: readonly string[]) => void;
   cardRole?: CardRole;
   chatId: string;
   message: ChatMessageDTO & { role?: string };
@@ -288,7 +290,11 @@ function plannerInstruction(config: VisualNovelConfig, visualContext?: VisualCon
 
   return [
     "You plan illustrations and atmosphere for a visual-novel presentation. Return one JSON object and no prose.",
-    ...((config.collectEntityReferences || config.tooltips.enabled) ? ['Optional storyReferences: up to 32 brief references to important explicitly mentioned NPCs, places or objects. Add storyReferences:[{kind:"npc"|"place"|"object",name,paragraphIndex,field:"description"|"appearance"|"outfit"|"condition",value,evidence}]. Evidence must be an exact contiguous quote from that visible paragraph, containing both the exact name and the exact value (max 400 characters). Do not invent facts, classify a narrator/world card as an NPC, expose private context, motives, secrets or future discoveries. Omit unsupported references. This does not change the story or illustration budget.'] : []),
+    ...((config.collectEntityReferences || config.tooltips.enabled) ? [
+      'Optional storyReferences: collect a useful descriptive profile of important explicitly named NPCs, places and objects throughout this visible reply, not just a list of names or wardrobe tags. Return at most 32 observations total, favoring several supported details about focal subjects. Add storyReferences:[{kind:"npc"|"place"|"object",name,paragraphIndex,field,value,evidence}]. Every field is optional; never fill a profile template with guesses or unknown placeholders.',
+      'Reference fields shared by all categories: description, appearance, outfit, condition. Additional NPC fields: role, affiliations, relationships, mannerisms, voice, statedGoals, history. Place fields: layout, routes, surroundings, customs, services, publicHistory, risks. Object fields: provenance, function, limits, access, revealedContents, owner, significance. Use separate observations for distinct details; retain clearly stated descriptive phrases rather than reducing everything to an impression. Stated goals must be explicitly said or publicly declared, relationships explicitly identified, risks explicitly known, and contents actually revealed in the visible prose.',
+      'Reference evidence must be an exact contiguous quote (max 1200 characters) from that one visible paragraph, containing both the exact subject name and the exact value (max 400 characters). The value is an extractive phrase from the quote, not a paraphrase or inference. Do not invent biography, classify a narrator/world card as an NPC, or expose private context, hidden motives, unrevealed secrets, unread contents or future discoveries. Omit unsupported references. This is built-in optional enrichment in this planner response; it does not change the story, require special source markup or change the illustration budget.'
+    ] : []),
     "FIRST-PERSON PERSPECTIVE (POV) & CHARACTER ATTRIBUTION:",
     `Single-character pictures use the first-person POV of the User/Persona (${personaName}); ensemble pictures use an external scene view.`,
     `- ${personaName} is the camera/observer for single-character templates. For an ensemble template, use an external camera and include ${personaName} in visibleCharacters when physically present. Keep the primary cue character as the companion.`,
@@ -2107,6 +2113,8 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   const resolvedContent = await resolveDisplayMacros(spindle, input, input.content);
   const narrative = prepareNarrative(resolvedContent, { ignoredTags });
   if (narrative.paragraphs.length === 0) throw new Error("The assistant response does not contain a revealable paragraph.");
+  // Preview delivery is optional enrichment; a disconnected frontend must not fail planning.
+  try{input.onNarrativePrepared?.(narrative.paragraphs.map(paragraph=>paragraph.text));}catch{}
 
   const visualContext = await loadVisualContext(spindle, {
     chatId: input.chatId,

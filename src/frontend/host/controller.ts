@@ -1,4 +1,5 @@
 import {createUiId} from '../request-id.js';
+import {NarrativePreviewSchema} from '../../shared/preparation-preview.js';
 import { samePresentationTurn } from "../../shared/presentation-entities.js";
 import type { SpindleFrontendContext } from "lumiverse-spindle-types";
 import { restoreReadingPosition, LoadedReadingCursor } from "./reading-position.js";
@@ -518,6 +519,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
 
   let imageLibraryOpen=false;
   let imageStudioOpen=false;
+  let preparationActive=false;
   const stage = new VnStage({
     mount: app.root,
     themePreset: configRef.current?.themePreset ?? "lumiverse",
@@ -798,6 +800,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
    * "Try again" only when `retryable` is true. Never retries by itself.
    */
   function reportStageError(error: HostStageError | null): void {
+    if(error&&preparationActive){preparationActive=false;imageStudio.setPlanning(chatId(),false);stage.stopPreparationPreview();}
     stage.setError(error);
   }
 
@@ -855,6 +858,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   }
 
   function deactivate(): void {
+    preparationActive=false;stage.clearPreparationPreview();imageStudio.setPlanning(chatId(),false);
     imageLibrary.close();
     if (destroyed) return;
     const wasActive = active;
@@ -944,6 +948,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   function applyTurn(next: TurnView, previous: TurnView | null): void {
     if (next.chatId !== chatId()) return;
     if (turn && sameTurnIdentity(turn, next) && turn.swipeId === next.swipeId && next.revision < turn.revision) return;
+    preparationActive=false;imageStudio.setPlanning(next.chatId,false);
+    const previewCursor=stage.preparationCursorFor(next);
     if (panelCapture) {
       if (panelCapture.chatId !== next.chatId || panelCapture.messageId !== next.messageId || (panelCapture.fingerprint !== null && panelCapture.fingerprint !== next.sourceFingerprint)) panelCapture = null;
       else panelCapture.fingerprint = next.sourceFingerprint;
@@ -969,6 +975,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       return;
     }
     if (decision.kind === "error") {
+      stage.stopPreparationPreview();
       speech.setCursor(null);
       reportStageError(describePlanningFailure(next));
       return;
@@ -991,21 +998,30 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     const revised = decision.kind === "revised-turn" || recovering;
     const draft = revised ? stage.getState().draft : "";
     const restored = decision.kind === "revised-turn" || decision.kind === "same-turn" ? Math.min(decision.paragraphIndex, Math.max(0, next.paragraphs.length - 1)) : restoreReadingPosition(savedReadingPosition, next);
-    const cursor = restored ?? 0;
-    if (restored !== null) { stage.toggleAutoPlay(false); stage.toggleSkip(false); }
+    const cursor = previewCursor ?? restored ?? 0;
+    if (restored !== null || previewCursor!==null) { stage.toggleAutoPlay(false); stage.toggleSkip(false); }
     stage.loadTurn({ ...stageTurnInput(next, mode, preserveImage, configRef.current?.effectIntensity ?? "full"), initialParagraphIndex: cursor });
     if (revised) stage.restoreReplyDraft(draft);
     loadedReadingCursor.load(next);
     panels.setCursor(cursor);
     imageStudio.setCursor(cursor);
       imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
-    if (restored !== null) speech.setCursor(speechCursorFor(next, cursor), { autoplay: false }); else syncSpeechCursor(next, 0);
+    if (restored !== null || previewCursor!==null) speech.setCursor(speechCursorFor(next, cursor), { autoplay: false }); else syncSpeechCursor(next, 0);
     void syncImageForParagraph(cursor);
-    if (restored === null) syncAudioForParagraph(next, 0);
+    if (restored === null && previewCursor===null) syncAudioForParagraph(next, 0);
   }
 
   function routeBackend(payload: unknown): void {
     const type = messageType(payload);
+    if(type==='vn_narrative_preview'){
+      const parsed=NarrativePreviewSchema.safeParse(payload);if(!parsed.success)return;
+      const preview=parsed.data;
+      if(!active||!preparationActive||preview.chatId!==chatId()||preview.sessionId!==stateRequestId||stage.isReadingUserParagraph())return;
+      const latest=ctx.messages.getLatestMessageId();if(latest&&latest!==preview.messageId)return;
+      // Replanning an already displayed reply keeps its existing controls and local draft.
+      if(turn&&turn.chatId===preview.chatId&&turn.messageId===preview.messageId&&turn.swipeId===preview.swipeId&&turn.sourceFingerprint===preview.sourceFingerprint)return;
+      speech.setCursor(null);stage.showPreparationPreview(preview);return;
+    }
     const message = payload as BackendResponse;
     if(message.type==='vn_image_library'){imageLibrary.receive(message.chatId,message.requestId,message.page);return;}
     if(message.type==='vn_error'&&message.operation==='vn_image_library'){imageLibrary.error(message.chatId??'',message.requestId,message.error);return;}
@@ -1152,6 +1168,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     }
     if (type === "vn_waiting" && message.type === "vn_waiting") {
       if (message.chatId !== chatId()) return;
+      preparationActive=false;imageStudio.setPlanning(message.chatId,false);
       turn = null;
       imageStudio.setTurn(null);
     imageLibrary.setContext(null,0);
@@ -1176,7 +1193,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       return;
     }
     if (type === "vn_planning" && message.type === "vn_planning") {
-      if (message.chatId === chatId() && active) stage.setPhase("planning");
+      if (message.chatId === chatId() && active) {preparationActive=true;imageStudio.setPlanning(message.chatId,true);stage.setPhase("planning");}
       return;
     }
     if (type === "vn_generation" && message.type === "vn_generation") {
@@ -1211,6 +1228,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       return;
     }
     if (type === "vn_error" && message.type === "vn_error") {
+      if(message.operation==='vn_replan_turn'&&(!message.chatId||message.chatId===chatId())){preparationActive=false;imageStudio.setPlanning(chatId(),false);stage.stopPreparationPreview();}
       if (message.operation === "vn_recover_images" || message.operation === "vn_replan_turn" || message.operation === "vn_correct_image_subject" || message.operation === "vn_set_card_role" || message.operation === "vn_regenerate_image_prompt" || message.operation === "vn_reprepare_image_template" || message.operation === "vn_image_review" || message.operation === "vn_prepare_image" || message.operation === "prepare_image") {
         if (!message.chatId || message.chatId === chatId()) imageStudio.showError(message.error);
         return;
@@ -1237,6 +1255,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const unsubBackend = ctx.onBackendMessage(routeBackend);
   const unsubAction = action.onClick(toggleVisualNovel);
   const unsubChat = ctx.events.on("CHAT_SWITCHED", () => {
+    preparationActive=false;
     externalReview.cancel(); imageBridge.cancelAll();
     settingsPanel?.clearCastArt();
     settingsPanel?.clearPresentationRules();
@@ -1255,6 +1274,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     requestState();
   });
   const unsubFork = ctx.events.on("CHAT_FORKED", () => {
+    preparationActive=false;stage.clearPreparationPreview();
     externalReview.cancel(); imageBridge.cancelAll();
     settingsPanel?.clearCastArt();
     settingsPanel?.clearPresentationRules();

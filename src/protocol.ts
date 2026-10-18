@@ -5,6 +5,7 @@ import {LocationArtRequestSchema,type LocationArtLibrary} from './shared/stage-a
 import type { ContextSourceReport } from './shared/context-sources.js';
 import type { ReaderPresentation } from "./shared/presentation-entities.js";
 import { z } from "zod";
+import type {NarrativePreview} from './shared/preparation-preview.js';
 import { CardRoleSchema, type CardRole } from "./shared/card-role.js";
 import { SubjectCorrectionSchema } from "./shared/subject-correction.js";
 import type { VisualNovelConfig } from "./config.js";
@@ -189,6 +190,7 @@ export type BackendResponse =
   | { type: "vn_turn"; turn: TurnView }
   | { type: "vn_asset"; chatId: string; messageId: string; asset: AssetView; sourceFingerprint?: string; swipeId?: number; revision?: number }
   | { type: "vn_planning"; chatId: string }
+  | NarrativePreview
   /**
    * The latest assistant message has no narrative left after macro
    * resolution (an unselected multi-scene greeting). Nothing was planned and

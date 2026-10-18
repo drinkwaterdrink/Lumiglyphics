@@ -38,7 +38,7 @@ try {
   assert.match(await card.innerText(),/silver hair/);assert.doesNotMatch(await card.innerText(),/uniform|black key/);
   await page.screenshot({path:`.cache/dossiers/${viewport.width}.png`});
   await page.keyboard.press('Shift+Tab');
-  assert.equal(await card.locator('summary').evaluate(e=>(e.getRootNode() as ShadowRoot).activeElement===e),true);
+  assert.equal(await card.locator('summary').filter({hasText:'Local display note'}).evaluate(e=>(e.getRootNode() as ShadowRoot).activeElement===e),true);
   await page.keyboard.press('Enter');await page.keyboard.press('Tab');
   assert.equal(await card.locator('textarea').evaluate(e=>(e.getRootNode() as ShadowRoot).activeElement===e),true);
   await card.locator('textarea').fill('Remember the silver hair');

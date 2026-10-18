@@ -1,4 +1,5 @@
 import {managePresentationRules} from './presentation-rules.js';
+import {NarrativePreviewSchema} from '../../shared/preparation-preview.js';
 import {scanCastContext} from "./cast-context.js";
 import {CastGalleryRequestSchema,CastArtRequestSchema} from '../../shared/cast-art.js';
 import {castArtToken,findCastDisplayArt,findSetupDisplayArt,listCastGallery,manageCastArt} from './cast-art.js';
@@ -154,6 +155,7 @@ function noteActiveChat(spindle: SpindleAPI, userId: string | undefined, chatId:
   if (chatId) activeChatByUser.set(userKey, chatId);
 }
 
+const preparationSessions=new Map<string,string>();
 function runtimeKey(userId: string | undefined, chatId: string): string {
   return `${userId ?? "owner"}:${chatId}`;
 }
@@ -239,6 +241,7 @@ function openView(spindle: SpindleAPI, userId: string | undefined, chatId: strin
   const displaced = views.open(userId, chatId);
   if (!wasOpen) dbg(spindle, userId, `view open chat=${chatId}`);
   if (displaced) {
+    preparationSessions.delete(runtimeKey(userId,displaced));
     dbg(spindle, userId, `view closed chat=${displaced} reason=view_switched`);
     abortChatWork(spindle, userId, displaced, "The visual novel view moved to another chat.");
   }
@@ -252,6 +255,7 @@ function closeOpenView(spindle: SpindleAPI, userId: string | undefined, reason: 
 
 /** Mark a chat's view closed and abort its in-flight work. Idempotent. */
 function closeView(spindle: SpindleAPI, userId: string | undefined, chatId: string, reason: string): void {
+  preparationSessions.delete(runtimeKey(userId,chatId));
   if (!views.close(userId, chatId)) return;
   dbg(spindle, userId, `view closed chat=${chatId} reason=${reason}`);
   abortChatWork(spindle, userId, chatId, "The visual novel view closed before this turn settled.");
@@ -550,7 +554,6 @@ async function bootstrapLatestAssistantTurn(spindle: SpindleAPI, chatId: string,
   const messages = await spindle.chat.getMessages(chatId) as NormalizedChatMessage[];
   const latest = [...messages].reverse().find((message) => !message.is_user && message.content.trim());
   if (!latest) return;
-  spindle.sendToFrontend({ type: "vn_planning", chatId }, userId);
   await processAssistantMessage(spindle, chatId, latest, latest.content, userId);
 }
 
@@ -612,6 +615,7 @@ export async function sendState(
   // No active chat (home screen): whatever view was open is gone. Close it
   // before the first await so a reply landing meanwhile is already gated.
   if (!chatId) closeOpenView(spindle, userId, "no_active_chat");
+  if(chatId&&options.requestId&&options.viewOpen!==false)preparationSessions.set(runtimeKey(userId,chatId),options.requestId);
   const config = await loadConfig(spindle, userId);
   rememberDebugFlag(userId, config);
   if (!chatId) {
@@ -696,7 +700,6 @@ export async function sendState(
   dbg(spindle, userId, stale.relation === "reselected"
     ? `scene selection changed; replanning with the resolved text chat=${chatId}`
     : `stored turn is stale (newer or changed reply); planning the latest reply chat=${chatId}`);
-  spindle.sendToFrontend({ type: "vn_planning", chatId }, userId);
   await processAssistantMessage(spindle, chatId, stale.message, stale.message.content, userId, stale.intake ? { precomputedIntake: stale.intake } : {});
   // A close mid-batch leaves cancelled jobs behind. They are not resumed
   // automatically on reopen (a GENERATION_STARTED abort looks the same and a
@@ -976,6 +979,7 @@ async function processAssistantMessage(
   dbg(spindle, userId, `planning enqueued chat=${chatId} message=${message.id} swipe=${message.swipe_id} fingerprint=${fingerprint}`);
   const scheduled = planningQueue.enqueue(userId, chatId, message.id, async (operation) => {
     const planningStartedAt = Date.now();
+    if(views.isOpen(userId,chatId))spindle.sendToFrontend({type:'vn_planning',chatId},userId);
     const config = await loadConfig(spindle, userId);
     rememberDebugFlag(userId, config);
     const messages = await spindle.chat.getMessages(chatId) as NormalizedChatMessage[];
@@ -1006,6 +1010,12 @@ async function processAssistantMessage(
       ? await resolveContextMessages(spindle, chatId, messages.slice(-config.includeRecentMessages), resolutionCache, userId)
       : [];
     const result = await planTurn(spindle, {
+      onNarrativePrepared: paragraphs=>{
+        const sessionId=preparationSessions.get(intakeKey);
+        if(!sessionId||operation.controller.signal.aborted||!views.isOpen(userId,chatId)||(intakeEpochs.get(intakeKey)??0)!==intakeEpoch)return;
+        const preview=NarrativePreviewSchema.safeParse({type:'vn_narrative_preview',chatId,messageId:message.id,swipeId:message.swipe_id??0,sourceFingerprint:fingerprint,sessionId,paragraphs});
+        if(preview.success)spindle.sendToFrontend(preview.data,userId);
+      },
       signal: operation.controller.signal,
       chatId,
       message,

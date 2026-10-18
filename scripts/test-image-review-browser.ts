@@ -39,6 +39,7 @@ try {
   await page.screenshot({path:'.cache/beta38-anima-mobile.png'});
   await page.evaluate(() => { const f=(window as any).imageFixture; f.studio.setTurn(f.turn); });
   assert.equal(await studio.locator('[data-model-help]').isVisible(),false,'unrelated model clears the previous compatibility notice');
+  await studio.locator('[data-reply-settings] > summary').click();
   await studio.getByLabel("Review before generating").uncheck();
   assert.deepEqual(await page.evaluate(() => (window as any).imageFixture.actions.at(-1)), { reviewImages: false });
   await page.evaluate(() => { const f=(window as any).imageFixture;f.failedTurn=structuredClone(f.turn);f.failedTurn.assets[0].status='failed';f.failedTurn.assets[0].error='Provider resolution error';f.studio.setTurn(f.failedTurn); });
@@ -61,6 +62,7 @@ try {
   await page.evaluate(() => { const f = (window as any).imageFixture; f.studio.setConfig(f.config); });
   assert.equal(await studio.locator('[data-template] option[value="manga-page"]').count(), 1, "manual review lists unchecked templates");
 
+  await studio.locator('[data-template-tools]').evaluate(el=>(el as HTMLDetailsElement).open=true);
   await studio.getByLabel("Picture template", { exact: true }).selectOption("environment");
   await studio.getByRole("button", { name: "Use template", exact: true }).click();
   await studio.getByRole("button", { name: "Keep edits", exact: true }).click();
@@ -70,7 +72,7 @@ try {
   await studio.getByRole("button", { name: "Use template", exact: true }).click();
   await studio.getByRole("button", { name: "Replace with template", exact: true }).click();
   assert.deepEqual(await page.evaluate(() => (window as any).imageFixture.actions.at(-1)), { type: "vn_reprepare_image_template", chatId: "chat", messageId: "message", sourceFingerprint: "fingerprint", requestId: "request", templateId: "environment" });
-  assert.equal(await studio.getByRole("button", { name: "Generate this", exact: true }).isDisabled(), true, "obsolete request cannot be dispatched while rebuilding");
+  assert.equal(await studio.locator("[data-generate]").isDisabled(), true, "obsolete request cannot be dispatched while rebuilding");
   await page.evaluate(() => { const f = (window as any).imageFixture; f.studio.showError("Test failed rebuild"); f.turn.imageRequests[0].requestId = "rebuilt-request"; f.studio.setTurn(f.turn); });
   assert.equal(await prompt.inputValue(), "original <script>hello</script>", "new prepared request does not inherit obsolete edits");
   await prompt.fill("edited portrait");
@@ -81,8 +83,8 @@ try {
     assert.ok(await field.evaluate(el => (el.getRootNode() as ShadowRoot).activeElement === el), `${label} opens native editing focus on touch`);
   }
   await studio.getByLabel("Parameters (JSON)").fill('{"seed":99}');
-  await studio.getByRole("button", { name: "Generate this", exact: true }).click();
-  assert.equal(await studio.getByRole("button", { name: "Generate this", exact: true }).isDisabled(), true);
+  await studio.getByRole("button", { name: "Generate picture", exact: true }).click();
+  assert.equal(await studio.locator("[data-generate]").isDisabled(), true);
   const action = await page.evaluate(() => (window as any).imageFixture.actions.at(-1));
   assert.equal(action.type, "vn_image_review");
   assert.equal(action.edits.prompt, "edited portrait");
@@ -95,7 +97,7 @@ try {
   assert.equal(await page.evaluate(()=>(window as any).studioEscapedEvents),0,'editing cannot advance the reader or activate its hotkeys');
   await page.evaluate(()=>{const f=(window as any).imageFixture;f.studio.setTurn(f.turn);});
   assert.equal(await prompt.inputValue(),'a silver-haired character at a desk','local edits survive same-turn refresh');
-  await studio.getByRole("button", { name: "Prepare edited preview" }).click();
+  await studio.getByRole("button", { name: "Prepare replacement" }).click();
   assert.equal((await page.evaluate(()=>(window as any).imageFixture.actions.at(-1))).edits.prompt,'a silver-haired character at a desk');
   assert.equal((await page.evaluate(() => (window as any).imageFixture.actions.at(-1))).type, "vn_prepare_image");
   assert.equal((await page.evaluate(() => (window as any).imageFixture.actions.at(-1))).templateId, "environment", "replacement retains the explicitly rebuilt template");
@@ -107,13 +109,13 @@ try {
   await prompt.fill('x'.repeat(3001));
   assert.equal((await prompt.inputValue()).length,3001,'oversize pasted text stays intact for editing');
   assert.match(await studio.locator('[data-combined-count]').innerText(),/shorten before generating/);
-  await studio.getByRole('button',{name:'Prepare edited preview',exact:true}).click();
-  assert.match(await studio.locator('[data-notice]').innerText(),/3,000/);
+  assert.equal(await studio.getByRole('button',{name:'Retry picture',exact:true}).isDisabled(),true);
+  assert.match(await studio.locator('[data-validation]').innerText(),/3,000/);
   await prompt.fill('x'.repeat(2800));
   await studio.getByLabel('Negative prompt',{exact:true}).fill('y'.repeat(201));
   assert.match(await studio.locator('[data-combined-count]').innerText(),/3,001 \/ 3,000 combined/);
-  await studio.getByRole('button',{name:'Prepare edited preview',exact:true}).click();
-  assert.match(await studio.locator('[data-notice]').innerText(),/Combined/);
+  assert.equal(await studio.getByRole('button',{name:'Retry picture',exact:true}).isDisabled(),true);
+  assert.match(await studio.locator('[data-validation]').innerText(),/3,000 characters combined/);
   await studio.getByLabel('Negative prompt',{exact:true}).fill('');
   await prompt.fill('short replacement');
   await page.evaluate(() => { const f = (window as any).imageFixture; f.turn.imageRequests[0].requestId = "removed-template"; f.turn.imageRequests[0].state = "review"; f.turn.imageRequests[0].imagePromptMetadata.template = { ...f.metadata.template, id: "removed" }; f.studio.setTurn(f.turn); });
@@ -122,6 +124,7 @@ try {
   assert.equal(await studio.getByRole("button", { name: "Use template", exact: true }).isDisabled(), false, "enabled selection restores template action");
   await page.evaluate(() => { const f = (window as any).imageFixture; f.turn.imageRequests[0].requestId = "skip-request"; f.turn.imageRequests[0].state = "review"; f.turn.assets[0].status = "generating"; f.studio.setTurn(f.turn); });
   await studio.getByLabel("Parameters (JSON)").fill('{ unfinished');
+  await studio.locator('[data-prompt-actions] > summary').click();
   await studio.getByRole("button", { name: "Skip", exact: true }).click();
   assert.equal((await page.evaluate(() => (window as any).imageFixture.actions.at(-1))).action, "skip", "Skip ignores unfinished edits");
   await page.evaluate(() => { const f = (window as any).imageFixture; f.turn.imageRequests = []; f.turn.assets[0].status = "generated"; f.studio.setTurn(f.turn); });
@@ -182,19 +185,19 @@ try {
   await page.evaluate(()=>(window as any).imageFixture.studio.showError('Test replan unavailable'));
   assert.equal(await studio.getByRole('button',{name:'Replan this reply',exact:true}).isDisabled(),false);
   await page.evaluate(()=>{const f=(window as any).imageFixture;f.turn.assets=[{jobId:'job',cueId:'cue',paragraphIndex:0,status:'generated'}];f.turn.imageRequests=[{requestId:'reroll-source',jobId:'job',paragraphIndex:0,state:'review',canRegeneratePrompt:true,prompt:'Original station',negativePrompt:'blur',model:'model-a',provider:'nanogpt',connectionId:'nano',parameters:{seed:1},referenceSummary:'No reference',createdAt:'now'}];f.studio.setTurn(f.turn);});
-  await studio.getByLabel('Picture',{exact:true}).selectOption('job');
-  await studio.getByRole('button',{name:'Regenerate prompt',exact:true}).click();
+  await studio.getByLabel('Picture',{exact:true}).selectOption('job',{force:true});
+  await studio.getByRole('button',{name:'Rewrite prompt',exact:true}).click();
   const rerollAction=await page.evaluate(()=>(window as any).imageFixture.actions.at(-1));
   assert.deepEqual(rerollAction,{type:'vn_regenerate_image_prompt',chatId:'chat',messageId:'message',sourceFingerprint:'fingerprint',requestId:'reroll-source'});
-  assert.equal(await studio.getByRole('button',{name:'Preparing prompt…',exact:true}).isDisabled(),true);
-  assert.equal(await studio.getByRole('button',{name:'Generate this',exact:true}).isDisabled(),true);
+  assert.equal(await studio.getByRole('button',{name:'Rewriting prompt…',exact:true}).isDisabled(),true);
+  assert.equal(await studio.locator('[data-generate]').isDisabled(),true);
   await page.evaluate(()=>{const f=(window as any).imageFixture;f.studio.showError('Writer unavailable');});
-  assert.equal(await studio.getByRole('button',{name:'Regenerate prompt',exact:true}).isDisabled(),false);
+  assert.equal(await studio.getByRole('button',{name:'Rewrite prompt',exact:true}).isDisabled(),false);
   await page.evaluate(()=>{const f=(window as any).imageFixture;f.turn.imageRequests[0].requestId='reroll-new';f.turn.imageRequests[0].prompt='A fresh view of the quiet library.';f.studio.setTurn(f.turn);});
   assert.equal(await prompt.inputValue(),'A fresh view of the quiet library.');
-  assert.equal(await studio.getByRole('button',{name:'Generate this',exact:true}).isDisabled(),false);
+  assert.equal(await studio.locator('[data-generate]').isDisabled(),false);
   await page.evaluate(()=>{const f=(window as any).imageFixture;f.turn.imageRequests[0].state='approved';f.studio.setTurn(f.turn);});
-  await studio.getByRole('button',{name:'Regenerate prompt',exact:true}).click();
+  await studio.getByRole('button',{name:'Rewrite prompt',exact:true}).click();
   const completedReroll=await page.evaluate(()=>(window as any).imageFixture.actions.at(-1));
   assert.equal(completedReroll.type,'vn_prepare_image');assert.equal(completedReroll.regeneratePrompt,true);assert.equal(completedReroll.jobId,'job');
   await page.evaluate(()=>(window as any).imageFixture.studio.showError('Fixture reset'));

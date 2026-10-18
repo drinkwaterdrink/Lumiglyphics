@@ -1,0 +1,34 @@
+import {chromium} from 'playwright';
+import assert from 'node:assert/strict';
+const build=await Bun.build({entrypoints:['scripts/host-lifecycle-fixture.ts'],target:'browser'});
+assert.ok(build.success,String(build.logs));const bundle=await build.outputs[0]!.text();
+const server=Bun.serve({hostname:'127.0.0.1',port:0,fetch:request=>new URL(request.url).pathname==='/fixture.js'?new Response(bundle,{headers:{'Content-Type':'application/javascript'}}):new Response('<html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0"><script type="module" src="/fixture.js"></script></body></html>',{headers:{'Content-Type':'text/html'}})});
+const browser=await chromium.launch({headless:true});
+try{
+ const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});const errors:string[]=[];
+ page.on('pageerror',error=>errors.push(error.message));await page.goto(`http://127.0.0.1:${server.port}/`);await page.waitForFunction(()=>Boolean((window as any).hostFixture));
+ await page.evaluate(()=>{const f=(window as any).hostFixture;f.state(null);f.open();f.state(null);f.receive({type:'vn_planning',chatId:'A'});});
+ const preview=await page.evaluate(()=>{const f=(window as any).hostFixture;return {type:'vn_narrative_preview',chatId:'A',messageId:'m',swipeId:0,sourceFingerprint:'abcdef12345678',sessionId:f.sent.filter((m:any)=>m.type==='vn_get_state').at(-1).requestId,paragraphs:['<marigold>First paragraph</marigold>','Second paragraph']};});
+ const surface=page.locator('[data-vn-preparation-preview]');
+ await page.evaluate(value=>(window as any).hostFixture.receive({...value,sessionId:'obsolete'}),preview);assert.equal(await surface.isVisible(),false);
+ await page.evaluate(value=>(window as any).hostFixture.receive(value),preview);await surface.waitFor({state:'visible'});
+ assert.match(await surface.locator('[data-preview-text]').innerText(),/<marigold>First paragraph/);assert.equal(await surface.locator('marigold').count(),0,'preset content is escaped, never interpreted as arbitrary HTML');
+ await surface.getByRole('button',{name:'Next preview paragraph',exact:true}).click();assert.equal(await surface.locator('[data-preview-text]').innerText(),'Second paragraph');
+ const before=await page.evaluate(()=>(window as any).hostFixture.sent.filter((m:any)=>m.type==='vn_reading_position').length);assert.equal(before,0,'temporary preview never saves a reading acknowledgment');
+ await surface.getByRole('button',{name:'Hide reply preview',exact:true}).click();await surface.getByRole('button',{name:'Read reply while preparing',exact:true}).click();assert.equal(await surface.locator('[data-preview-progress]').innerText(),'2 / 2');
+ const dimensions=await surface.getByRole('button',{name:'Next preview paragraph',exact:true}).boundingBox();assert.ok(dimensions&&dimensions.width>=44&&dimensions.height>=44);
+ await page.screenshot({path:'.cache/preparation-preview-mobile.png'});
+ const final=await page.evaluate(value=>{const f=(window as any).hostFixture;f.receive({type:'vn_turn',turn:f.turn('A',0,{paragraphs:value.paragraphs})});return f.stage().getState();},preview);
+ assert.equal(final.currentParagraphIndex,1);assert.equal(await surface.isVisible(),false);
+ await page.evaluate(value=>(window as any).hostFixture.receive(value),preview);assert.equal(await surface.isVisible(),false,'late previews cannot replace a finished reply');
+ await page.evaluate(()=>{const f=(window as any).hostFixture;f.changeChat('B');f.state(null);f.changeChat('A');f.state(null);f.receive({type:'vn_planning',chatId:'A'});});
+ await page.evaluate(value=>(window as any).hostFixture.receive(value),preview);assert.equal(await surface.isVisible(),false,'returning to a chat rejects previews from its old view session');
+ await page.evaluate(()=>{const f=(window as any).hostFixture;f.receive({type:'vn_narrative_preview',chatId:'A',messageId:'m',swipeId:0,sourceFingerprint:'new-fingerprint',sessionId:f.sent.filter((m:any)=>m.type==='vn_get_state').at(-1).requestId,paragraphs:['Current preview']});});
+ assert.equal(await surface.isVisible(),true);
+ await page.evaluate(()=>{const f=(window as any).hostFixture;f.receive({type:'vn_error',chatId:'A',operation:'processAssistantMessage',error:'Story model unavailable'});});
+ assert.match(await surface.locator('small').innerText(),/Preparation stopped/);
+ await page.evaluate(()=>{const f=(window as any).hostFixture;f.receive({type:'vn_planning',chatId:'A'});f.receive({type:'vn_narrative_preview',chatId:'A',messageId:'m',swipeId:0,sourceFingerprint:'retry-fingerprint',sessionId:f.sent.filter((m:any)=>m.type==='vn_get_state').at(-1).requestId,paragraphs:['Retry preview']});});
+ assert.match(await surface.locator('small').innerText(),/still being prepared/,'retry restores the preparation status');
+ await page.evaluate(()=>(window as any).hostFixture.open());assert.equal(await surface.isVisible(),false,'closing the reader clears temporary prose');
+ assert.deepEqual(errors,[]);console.log('Preparation preview: safe preset text, native touch controls, no read acknowledgment, exact-source cursor transfer, final/closed/old-session rejection passed.');
+}finally{await browser.close();server.stop(true);}

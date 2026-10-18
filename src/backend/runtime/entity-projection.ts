@@ -37,6 +37,7 @@ export function projectTurnPresentation(plan:TurnPlan):ReaderPresentation|undefi
   };
   const documents=validateStoryDocuments(plan.storyDocuments,plan.paragraphs.map(p=>({text:stripTextEffectTags(p.text)})));
   const references=normalizeStoryReferences(plan.storyReferences,plan.paragraphs.map(p=>({text:stripTextEffectTags(p.text)})));
+  const itemStates:Array<{entityId:string;at:number;field:'owner'|'condition';value:string}>=[];
   const beats:PresentationBeat[]=[];
   let locationId:string|null=null;let drawableEntityId:string|null=null;
   let cast=new Set<string>();
@@ -79,12 +80,27 @@ export function projectTurnPresentation(plan:TurnPlan):ReaderPresentation|undefi
     for(const document of documents.filter(d=>d.paragraphIndex===at))entity('object',document.name,at);
     for(const reference of references.filter(r=>r.paragraphIndex===at)) {
       const subject=entity(reference.kind,reference.name,at);
-      if(subject)fact(subject,at,reference.field,reference.value);
+      if(subject){
+        fact(subject,at,reference.field,reference.value);
+        if(reference.kind==='object'&&(reference.field==='owner'||reference.field==='condition')&&(reference.field!=='owner'||reference.value.length<=256))itemStates.push({entityId:subject.id,at,field:reference.field,value:reference.value});
+      }
     }
     beats.push({paragraphIndex:at,locationId,drawableEntityId,speakerEntityId:speaking?.id??null});
   }
   if(overflow)return undefined;
-  const result=ReaderPresentationSchema.parse({version:1,...(documents.length?{documents}:{}),snapshots:buildPresentationTimeline({key:plan.key,paragraphCount:plan.paragraphs.length,entities,baseline,deltas,beats})});
+  const snapshots=buildPresentationTimeline({key:plan.key,paragraphCount:plan.paragraphs.length,entities,baseline,deltas,beats});
+  // At most 32 optional references. Keep item observations outside the required
+  // continuity delta budget, replaying them into detached cursor snapshots.
+  // Original facts/source anchors remain intact when an owner/condition changes.
+  const observedItemState:Record<string,PresentationState>={};let itemStateIndex=0;
+  for(const snapshot of snapshots){
+    while(itemStates[itemStateIndex]&&itemStates[itemStateIndex]!.at<=snapshot.at.paragraphIndex){
+      const item=itemStates[itemStateIndex++]!;
+      (observedItemState[item.entityId]??={})[item.field]=item.value;
+    }
+    for(const [entityId,state] of Object.entries(observedItemState))if(snapshot.stateByEntity[entityId])Object.assign(snapshot.stateByEntity[entityId]!,state);
+  }
+  const result=ReaderPresentationSchema.parse({version:1,...(documents.length?{documents}:{}),snapshots});
   return JSON.stringify(result).length<=512000 ? result : undefined;
 }
 

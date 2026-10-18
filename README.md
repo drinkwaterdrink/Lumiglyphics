@@ -1,6 +1,10 @@
 # Lumiglyphics
 
-Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.44`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance and [STATUS.md](STATUS.md) for the current delivered/pending matrix.
+Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.45`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance and [STATUS.md](STATUS.md) for the current delivered/pending matrix.
+
+**Reader and image review:** When supported by the current view session, parsed reply prose is readable while the story reader prepares pictures and references. The temporary preview keeps its position when the exact final reply arrives; it does not save read progress, submit replies, or start extra generation. Image prompts separates planning, review, generation, failure, reuse and older-picture states, with one main action and advanced controls in disclosures. **Rewrite prompt** uses text tokens; **Generate picture** starts the image request. Editing keeps the combined 3,000-character guard and offers previous wording after a rewrite.
+
+**Reference cards:** Reading → References keeps NPC/location/item toggles and detail levels, with optional information groups. Populated cards group established roles, connections, appearance, behavior, places, item use and revealed contents. Sources and current state stay distinct; conflicting tracked state and observed text are both shown with labels. Richer observations are collected during normal new-reply planning, without another model call. Existing replies retain their saved information. Facts must be supported by visible source text; secrets and unread contents are excluded. Cross-reply knowledge retention is a separate pending phase.
 
 In Images → Scene templates, **Full scene / ensemble** depicts the physically present cast, including the persona when present. It starts unchecked for dynamic mode; choose it as your default or enable it in the dynamic list. Named appearances come from the story-reader cast snapshot, saved appearance guidance and enabled persona context. Each person keeps a separate description; a single portrait image is not applied to the entire group. Appearance summaries share the existing 3,000-character combined prompt budget. Scenes exceeding 16 named subjects require a smaller group/template instead of silently generating an incomplete cast.
 
@@ -46,7 +50,7 @@ For NanoGPT Anima text-to-image, new preparations use supported `1k` resolution 
 
 After updating, prepare a new preview (or use **Retry this picture**) to apply these rules to a failed older request; held previews retain their recorded settings.
 
-The Image prompts header shows the loaded build version. After updating from Testing, reload Lumiverse and check for **0.2.0-beta.12**. Tapping an editable textarea explicitly focuses native text input; records that cannot be edited explain which preparation action is needed. The mobile close icon sits below Back to chat.
+The Image prompts header shows the loaded build version. After updating from Testing, reload Lumiverse and check for **0.2.0-beta.45**. Tapping an editable textarea explicitly focuses native text input; records that cannot be edited explain which preparation action is needed. The mobile close icon sits below Back to chat.
 
 On mobile, choose a settings section from the selector. Pictures uses expandable groups. The reviewer has an opaque background, scrollable fields and fixed Close/generation controls.
 

@@ -1,6 +1,12 @@
 import {test,expect} from 'bun:test';
 import {normalizeTooltipPreferences,linkEntityMentions,selectReaderDossier,referenceEntries,eligibleEntities} from './dossiers.js';
 const entity={id:'m',kind:'npc' as const,name:'Mira',aliases:[],firstParagraph:0,facts:[]};
+test('reference field groups default on and reject malformed saved preferences',()=>{
+ expect(normalizeTooltipPreferences({}).fieldGroups.appearance).toBe(true);
+ const prefs=normalizeTooltipPreferences({fieldGroups:{appearance:false,history:'false',invented:false}});
+ expect(prefs.fieldGroups.appearance).toBe(false);expect(prefs.fieldGroups.history).toBe(true);
+ expect(Object.hasOwn(prefs.fieldGroups,'invented')).toBe(false);
+});
 test('action drafts are opt-in and normalized independently of categories',()=>{
  expect(normalizeTooltipPreferences({enabled:true}).actionsEnabled).toBe(false);
  expect(normalizeTooltipPreferences({enabled:true,actionsEnabled:true,categories:{npcs:false}}).actionsEnabled).toBe(true);
@@ -21,6 +27,15 @@ test('dossiers expose observed timed facts only',()=>{
  const snapshot={at:{key,paragraphIndex:0},entities:[{...entity,facts:[fact,{...fact,id:'secret',visibility:'private' as any,value:'hidden'},{...fact,id:'future',value:'later',revealedAt:{key,paragraphIndex:1}}]}],stateByEntity:{},presentEntityIds:[],locationId:null,speakerEntityId:null,drawableEntityId:null};
  expect(selectReaderDossier('m',snapshot,'expanded')?.facts.map(f=>f.value)).toEqual(['silver hair']);
  expect(JSON.stringify(selectReaderDossier('m',snapshot,'expanded'))).not.toMatch(/hidden|later/);
+});
+test('disabled reference groups do not consume the detail allowance or leak through anchor descriptions',()=>{
+ const key={chatId:'c',assistantMessageId:'m',swipeId:0,sourceFingerprint:'12345678',revision:0};
+ const source={provider:'story' as const,recordId:'m',chatId:'c',messageId:'m',sourceFingerprint:'12345678',observedAt:'today'};
+ const facts=['appearance','role','voice'].map((field,i)=>({id:`f${i}`,entityId:'m',field,value:field,visibility:'observed' as const,source,revealedAt:{key,paragraphIndex:0}}));
+ const snapshot={at:{key,paragraphIndex:0},entities:[{...entity,facts}],stateByEntity:{m:{appearance:'silver hair',outfit:'blue coat'}},presentEntityIds:[],locationId:null,speakerEntityId:null,drawableEntityId:null};
+ const selected=selectReaderDossier('m',snapshot,'brief',{appearance:false});
+ expect(selected?.facts.map(f=>f.field)).toEqual(['role']);expect(JSON.stringify(selected)).not.toContain('silver hair');
+ expect(selectReaderDossier('m',snapshot,'expanded',{state:false})?.state).toEqual({});
 });
 
 test('Unicode offsets, reserved pronouns, pin/suppression and hostile densities stay bounded',()=>{

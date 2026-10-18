@@ -3,6 +3,7 @@ import type {StoryDocument} from '../../shared/story-documents.js';
 import {InteractionTray} from './interaction-tray.js';
 import type {InteractionDraft,DraftMergeMode} from '../../shared/scene-interactions.js';
 import {entityOverride,type ReferenceKind,type referenceEntries,type ReaderDossier,type TooltipPreferences} from '../../shared/dossiers.js';
+import {referenceFieldInfo,REFERENCE_FIELD_GROUPS} from '../../shared/reference-fields.js';
 export class DossierCard {
  readonly host=document.createElement('div');private returnFocus:HTMLElement|null=null;private trayReturn:(()=>void)|null=null;private query='';private category:ReferenceKind='all';
  constructor(mount:HTMLElement,private closeCallback:()=>void,private update:(entity:ReaderDossier['entity'],patch:{suppressed?:boolean;pinned?:boolean;note?:string})=>boolean,private documentState:(open:boolean)=>void=()=>{}) {
@@ -29,11 +30,28 @@ export class DossierCard {
   const header=document.createElement('header'),title=document.createElement('h2');title.textContent=dossier.entity.name;
   const close=document.createElement('button');close.type='button';close.textContent='×';close.setAttribute('aria-label','Close information');close.onclick=()=>this.close();header.append(title,close);panel.append(header);
   if(this.trayReturn){const back=document.createElement('button');back.type='button';back.textContent='‹';back.title='Back to references';back.setAttribute('aria-label','Back to references');back.onclick=()=>this.trayReturn?.();header.insertBefore(back,title);}
-  const type=document.createElement('small');type.textContent=dossier.entity.kind==='npc'?'Character':dossier.entity.kind==='place'?'Location':'Item';panel.append(type);
-  const list=document.createElement('dl');
-  for(const fact of dossier.facts){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=fact.field;dd.textContent=fact.value;const source=document.createElement('small');source.textContent=`Source: ${fact.source.provider} · revealed paragraph ${(fact.revealedAt?.paragraphIndex??0)+1}`;dd.append(source);list.append(dt,dd);}
-  for(const [field,value] of Object.entries(dossier.state)){if(dossier.facts.some(f=>f.field===field&&f.value===value))continue;const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=field;dd.textContent=value;list.append(dt,dd);}
-  if(!list.children.length){const p=document.createElement('p');p.textContent='No additional facts have been revealed yet.';panel.append(p);}else panel.append(list);
+  const type=document.createElement('small');type.dataset.referenceKind='';type.textContent=`${dossier.entity.kind==='npc'?'Character':dossier.entity.kind==='place'?'Location':'Item'} · Established story information`;panel.append(type);
+  const facts=dossier.facts.filter(f=>f.value.trim()&&prefs.fieldGroups[referenceFieldInfo(f.field).section]!==false);
+  const lasting=facts.filter(f=>!referenceFieldInfo(f.field).living);
+  const overview=lasting.filter(f=>['overview','identity'].includes(referenceFieldInfo(f.field).section)).slice(0,2);
+  if(!overview.length&&lasting.length)overview.push(lasting[0]!);
+  const appendFact=(list:HTMLElement,field:string,value:string)=>{const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=referenceFieldInfo(field).label;dd.textContent=value;list.append(dt,dd);};
+  if(overview.length){const section=document.createElement('section'),list=document.createElement('dl');section.dataset.referenceOverview='';for(const fact of overview)appendFact(list,fact.field,fact.value);section.append(list);panel.append(section);}
+  const current=new Map<string,string>();
+  for(const fact of facts)if(referenceFieldInfo(fact.field).living)current.set(fact.field,fact.value);
+  // Timeline state and extractive observations have independent provenance.
+  // Without a state timestamp we cannot decide which conflicting value is newer.
+  const observations=facts.filter(f=>referenceFieldInfo(f.field).living&&dossier.state[f.field]?.trim()&&dossier.state[f.field]!==f.value);
+  for(const [field,value] of Object.entries(dossier.state))if(value.trim()&&prefs.fieldGroups.state!==false&&prefs.fieldGroups[referenceFieldInfo(field).section]!==false)current.set(field,value);
+  if(current.size){const section=document.createElement('section'),heading=document.createElement('h3'),list=document.createElement('dl');section.dataset.referenceCurrent='';heading.textContent=observations.length?'Tracked scene state':'Current state';for(const [field,value] of current)appendFact(list,field,value);section.append(heading,list);panel.append(section);}
+  if(observations.length){const section=document.createElement('section'),heading=document.createElement('h3'),list=document.createElement('dl');section.dataset.referenceObservations='';heading.textContent='Story observations';for(const fact of observations){appendFact(list,fact.field,fact.value);const label=list.lastElementChild?.previousElementSibling;if(label&&fact.revealedAt)label.textContent+=` · paragraph ${fact.revealedAt.paragraphIndex+1}`;}section.append(heading,list);panel.append(section);}
+  for(const group of REFERENCE_FIELD_GROUPS){const grouped=lasting.filter(f=>referenceFieldInfo(f.field).section===group.id&&!overview.includes(f));if(!grouped.length)continue;
+   const section=document.createElement('details'),summary=document.createElement('summary'),list=document.createElement('dl');section.dataset.referenceSection=group.id;summary.textContent=group.label;for(const fact of grouped)appendFact(list,fact.field,fact.value);section.append(summary,list);panel.append(section);
+  }
+  if(!facts.length&&!current.size){const p=document.createElement('p');p.dataset.referenceEmpty='';p.textContent='No additional information is available with these display settings.';panel.append(p);}
+  if(facts.length){const sources=document.createElement('details'),summary=document.createElement('summary'),list=document.createElement('ul');sources.dataset.referenceSources='';summary.textContent='Sources';
+   for(const fact of facts){const item=document.createElement('li');item.textContent=`${referenceFieldInfo(fact.field).label} · ${fact.source.provider}${fact.revealedAt?` · revealed paragraph ${fact.revealedAt.paragraphIndex+1}`:''}`;list.append(item);}sources.append(summary,list);panel.append(sources);
+  }
   if(storyDocument){
    if(storyDocument.sections.length){
     const read=document.createElement('button');read.type='button';read.textContent='Read revealed text';read.dataset.vnReadDocument='';
@@ -48,11 +66,11 @@ export class DossierCard {
   const override=entityOverride(prefs,chatId,dossier.entity);
   const status=document.createElement('p');status.setAttribute('role','status');status.hidden=true;panel.append(status);
   const commit=(patch:{suppressed?:boolean;pinned?:boolean;note?:string})=>{if(this.update(dossier.entity,patch))this.close();else{status.textContent='Reference customization limit reached (64). Reset local reference customizations in Reading settings to make room.';status.hidden=false;}};
-  const localActions=document.createElement('div'),pin=document.createElement('button'),suppress=document.createElement('button');
+  const localActions=document.createElement('div'),pin=document.createElement('button'),suppress=document.createElement('button');localActions.dataset.referenceActions='';
   pin.type=suppress.type='button';pin.textContent=override?.pinned?'Unpin':'Pin reference';pin.setAttribute('aria-pressed',String(override?.pinned===true));
   pin.onclick=()=>{commit({pinned:!override?.pinned});};
   suppress.textContent='Hide this reference';suppress.onclick=()=>{commit({suppressed:true});};localActions.append(pin,suppress);panel.append(localActions);
-  const notes=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Local display note';
+  const notes=document.createElement('details'),summary=document.createElement('summary');notes.dataset.referenceNotes='';summary.textContent='Local display note';
   const label=document.createElement('label');label.textContent='Your note (does not change the story)';const input=document.createElement('textarea');input.maxLength=600;input.value=override?.note??'';label.append(input);
   const save=document.createElement('button');save.type='button';save.textContent='Save note';save.onclick=()=>{commit({note:input.value});};notes.append(summary,label,save);panel.append(notes);
   if(override?.note){const p=document.createElement('p');p.textContent=`Your note: ${override.note}`;panel.append(p);}
@@ -70,7 +88,7 @@ export class DossierCard {
   const render=()=>{this.query=search.value;this.category=category.value as ReferenceKind;list.replaceChildren();
    const filtered=entries.filter(({entity})=>(this.category==='all'||entity.kind===this.category)&&(!this.query.trim()||[entity.name,...entity.aliases].some(name=>name.toLocaleLowerCase().includes(this.query.trim().toLocaleLowerCase()))));
    count.textContent=filtered.length?`${filtered.length} reference${filtered.length===1?'':'s'}`:'No references match. Try another name or category.';
-   for(const {entity,pinned,label} of filtered){const button=document.createElement('button');button.type='button';button.setAttribute('aria-label',entity.name);button.setAttribute('aria-description',`${pinned?'Pinned. ':''}${label}`);const name=document.createElement('span');name.textContent=entity.name;const detail=document.createElement('small');detail.textContent=`${pinned?'Pinned · ':''}${label}`;button.append(name,detail);button.onclick=()=>open(entity.id,trigger);list.append(button);}
+   for(const {entity,pinned,label,current} of filtered){const button=document.createElement('button');button.type='button';button.dataset.referenceCurrent=String(current);button.setAttribute('aria-label',entity.name);button.setAttribute('aria-description',`${pinned?'Pinned. ':''}${label}`);const name=document.createElement('span');name.textContent=entity.name;const detail=document.createElement('small');detail.textContent=`${pinned?'Pinned · ':''}${entity.kind==='npc'?'Character':entity.kind==='place'?'Location':'Item'} · ${label}`;button.append(name,detail);button.onclick=()=>open(entity.id,trigger);list.append(button);}
   };
   search.oninput=render;category.onchange=render;render();this.host.append(panel);this.host.hidden=false;close.focus();
  }
@@ -86,23 +104,38 @@ export const DOSSIER_CSS=`
 [data-vn-root] [data-entity-anchor]:hover{background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 28%,transparent)}
 [data-entity-anchor]:focus-visible{outline:2px solid var(--vn-accent,#9ec6f0);outline-offset:3px}
 [data-vn-dossier][hidden]{display:none!important}
-[data-vn-dossier]{position:absolute;inset:0;z-index:200;display:flex;align-items:flex-end;justify-content:center;background:#0008;padding:16px;box-sizing:border-box}
-[data-vn-dossier-card]{box-sizing:border-box;width:min(100%,540px);max-height:75dvh;overflow:auto;overscroll-behavior:contain;padding:20px;border:1px solid var(--vn-panel-border,#666);border-radius:18px;background:var(--vn-panel-solid,#171b26);color:var(--vn-chrome-text,var(--vn-text,#eef1f7));box-shadow:0 12px 50px #0008;touch-action:pan-y;font:inherit}
-[data-vn-dossier-card] header{display:flex;align-items:center;justify-content:space-between;gap:12px}
-[data-vn-dossier-card] h2{margin:0;font-size:1.2em;overflow-wrap:anywhere}
-[data-vn-dossier-card] button{font:inherit;min-height:44px;padding:8px 12px;margin:4px;color:inherit;background:var(--vn-button-bg,#ffffff0d);border:1px solid var(--vn-panel-border,#666);border-radius:9px;cursor:pointer}
-[data-vn-dossier-card] dt{text-transform:capitalize;font-size:.8em;opacity:.72;margin-top:12px}
-[data-vn-dossier-card] dd{margin:3px 0 0;overflow-wrap:anywhere;white-space:pre-wrap}
-[data-vn-dossier-card] dd small{display:block;font-size:.72em;opacity:.65;margin-top:5px}
+[data-vn-dossier]{position:absolute;inset:0;z-index:200;display:flex;align-items:flex-end;justify-content:center;background:#0008;padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));box-sizing:border-box}
+[data-vn-dossier-card]{box-sizing:border-box;width:min(100%,580px);max-height:min(82dvh,calc(100dvh - 32px));overflow:auto;overscroll-behavior:contain;padding:20px;border:1px solid var(--vn-panel-border,#666);border-radius:18px;background:var(--vn-panel-solid,#171b26);color:var(--vn-chrome-text,var(--vn-text,#eef1f7));box-shadow:0 12px 50px #0008;touch-action:pan-y;font:inherit;line-height:1.55;scroll-padding-top:76px}
+[data-vn-dossier-card] header{position:sticky;top:-20px;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:8px;margin:-4px 0 0;padding:4px 0 10px;background:var(--vn-panel-solid,#171b26);border-bottom:1px solid var(--vn-panel-border,#666)}
+[data-vn-dossier-card] h2{flex:1;min-width:0;margin:0;font-size:1.2em;line-height:1.3;overflow-wrap:anywhere}
+[data-vn-dossier-card] button{box-sizing:border-box;font:inherit;min-width:44px;min-height:44px;padding:8px 12px;margin:4px;color:inherit;background:var(--vn-button-bg,#ffffff0d);border:1px solid var(--vn-panel-border,#666);border-radius:9px;cursor:pointer;white-space:normal}
+[data-vn-dossier-card] header button{flex:none;margin:0;width:44px;padding:6px;font-size:1.35em;line-height:1}
+[data-reference-kind]{display:block;margin:12px 0;font-size:.75em;opacity:.8;line-height:1.5}
+[data-vn-dossier-card] dl{margin:0}
+[data-vn-dossier-card] dt{font-size:.76em;opacity:.8;margin-top:12px;line-height:1.4;font-weight:600}
+[data-vn-dossier-card] dt:first-child{margin-top:0}
+[data-vn-dossier-card] dd{margin:3px 0 0;overflow-wrap:anywhere;white-space:pre-wrap;line-height:1.65}
+[data-reference-overview]{padding:14px 16px;background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 9%,transparent);border:1px solid color-mix(in srgb,var(--vn-accent,#9ec6f0) 26%,transparent);border-radius:12px;margin:12px 0 16px}
+section[data-reference-current],section[data-reference-observations]{margin:16px 0;padding:0 0 16px;border-bottom:1px solid var(--vn-panel-border,#666)}
+section[data-reference-current] h3,section[data-reference-observations] h3{font-size:.85em;letter-spacing:.02em;margin:0 0 12px}
+[data-reference-section]{border-bottom:1px solid var(--vn-panel-border,#666)}
+[data-reference-section] dl{padding:0 4px 16px}
+[data-reference-sources]{font-size:.8em;margin:12px 0;opacity:.85}
+[data-reference-sources] ul{list-style:none;margin:0;padding:0 0 12px;overflow-wrap:anywhere}
+[data-reference-sources] li+li{margin-top:6px}
+[data-reference-actions]{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;padding-top:12px;border-top:1px solid var(--vn-panel-border,#666)}
+[data-reference-actions] button{margin:0;flex:1}
+[data-reference-notes] label{display:block;font-size:.85em}
 [data-vn-dossier-card] textarea{display:block;box-sizing:border-box;width:100%;min-height:90px;margin:8px 0;font:inherit;color:inherit;background:#0002;border:1px solid var(--vn-panel-border,#666);border-radius:8px;padding:10px}
-[data-vn-dossier-card] summary{cursor:pointer;padding:12px 0}
+[data-vn-dossier-card] summary{box-sizing:border-box;cursor:pointer;min-height:44px;padding:12px 0;font-weight:600;line-height:1.4}
 [data-reference-filters]{display:grid;grid-template-columns:minmax(0,1fr) minmax(100px,.65fr);gap:8px;margin:16px 0 8px}
 [data-reference-filters] input,[data-reference-filters] select{box-sizing:border-box;min-width:0;width:100%;min-height:44px;font:inherit;font-size:16px;color:inherit;background:var(--vn-button-bg,#ffffff0d);border:1px solid var(--vn-panel-border,#666);border-radius:9px;padding:8px}
 [data-vn-reference-sheet]{display:flex;flex-direction:column;overflow:hidden}
 [data-vn-reference-sheet] header,[data-reference-filters],[data-reference-count]{flex:none}
 [data-reference-list]{min-height:0;overflow:auto;overscroll-behavior:contain}
 [data-reference-count]{font-size:.8em;opacity:.75;margin:8px 0}
-[data-reference-list]{display:grid;gap:6px}[data-reference-list] button{display:flex;flex-direction:column;text-align:left;margin:0;min-width:0;overflow-wrap:anywhere;gap:3px}[data-reference-list] small{font-size:.75em;opacity:.75}
-[data-vn-dossier-card] :is(button,input,select,textarea):focus-visible{outline:2px solid var(--vn-accent,#9ec6f0);outline-offset:2px}
+[data-reference-list]{display:grid;gap:8px;padding:2px 2px 6px}[data-reference-list] button{display:flex;flex-direction:column;text-align:left;margin:0;min-width:0;overflow-wrap:anywhere;gap:4px;padding:12px 14px}[data-reference-list] button>span{font-weight:600}[data-reference-list] small{font-size:.75em;opacity:.8}[data-reference-list] [data-reference-current=true]{border-left:3px solid var(--vn-accent,#9ec6f0)}
+[data-vn-dossier-card] :is(button,input,select,textarea,summary):focus-visible{outline:2px solid var(--vn-accent,#9ec6f0);outline-offset:2px}
 @media(min-width:700px){[data-vn-dossier]{align-items:center}}
+@media(max-width:420px){[data-vn-dossier-card]{padding:16px;border-radius:14px}[data-vn-dossier-card] header{top:-16px}[data-reference-filters]{grid-template-columns:1fr}[data-reference-overview]{padding:12px}}
 `+DOCUMENT_READER_CSS;

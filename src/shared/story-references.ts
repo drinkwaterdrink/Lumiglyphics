@@ -1,10 +1,11 @@
 import { z } from 'zod';
+import { REFERENCE_FIELDS, referenceFieldMatchesKind } from './reference-fields.js';
 export const StoryReferenceSchema = z.object({
  kind: z.enum(['npc','place','object']), name: z.string().trim().min(1).max(256),
  paragraphIndex: z.number().int().nonnegative(),
- field: z.enum(['description','appearance','outfit','condition']),
+ field: z.enum(REFERENCE_FIELDS),
  value: z.string().trim().min(1).max(400), evidence: z.string().trim().min(1).max(1200),
-}).strict();
+}).strict().refine(reference=>referenceFieldMatchesKind(reference.field,reference.kind),{message:'Reference field does not apply to this entity category.'});
 export type StoryReference = z.infer<typeof StoryReferenceSchema>;
 /** Optional enrichment cannot invalidate the primary plan. Evidence is literal
  * visible prose from this paragraph, never hidden context or inferred biography. */

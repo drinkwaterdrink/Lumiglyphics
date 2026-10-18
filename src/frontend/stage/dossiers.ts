@@ -36,11 +36,11 @@ export class StageDossiers {
    const anchors=linkEntityMentions(this.paragraphs[i]??'',s.entities,this.prefs,s.at.key.chatId,Math.min(this.prefs.maxLinksPerParagraph,24-used),[],this.prefs.linking==='important'?priorIds:new Set());used+=anchors.length;for(const a of anchors)priorIds.add(a.entityId);
   }
   const anchors=linkEntityMentions(this.text.textContent??'',snapshot.entities,this.prefs,snapshot.at.key.chatId,Math.min(this.prefs.maxLinksPerParagraph,24-used),protectedEntityRanges(this.text),this.prefs.linking==='important'?priorIds:new Set());
-  applyEntityAnchors(this.text,anchors,(id,trigger)=>this.open(id,trigger),id=>selectReaderDossier(id,snapshot,'brief')?.facts[0]?.value??'View established story information');
+  applyEntityAnchors(this.text,anchors,(id,trigger)=>this.open(id,trigger),id=>selectReaderDossier(id,snapshot,'brief',this.prefs.fieldGroups)?.facts[0]?.value??'View established story information');
  }
  private open(id:string,trigger:HTMLElement):void {
   const snapshot=this.snapshot();if(!snapshot||!eligibleEntities(snapshot.entities,this.prefs,snapshot.at.key.chatId).some(e=>e.id===id))return;
-  const dossier=selectReaderDossier(id,snapshot,this.prefs.detail);if(!dossier)return;this.hold();
+  const dossier=selectReaderDossier(id,snapshot,this.prefs.detail,this.prefs.fieldGroups);if(!dossier)return;this.hold();
   const actions=this.prefs.actionsEnabled&&this.draftTools?{
    drafts:availableInteractionVerbs(dossier.entity,snapshot).flatMap(verb=>{const draft=buildInteractionDraft(dossier.entity,verb,snapshot);return draft?[draft]:[];}),
    current:this.draftTools.current,focus:this.draftTools.focus,

@@ -469,6 +469,34 @@ function generationFixture() {
   return { spindle, fire, data, sent, gates, assetStatuses, request: (payload: unknown, userId = "review-user") => frontend(payload, userId) };
 }
 
+test('preparation preview arrives before the planning model settles and is view-session scoped',async()=>{
+ const f=generationFixture(),gate=deferred<any>();let calls=0;
+ f.spindle.generate.raw=async()=>{calls++;return gate.promise;};
+ registerVisualNovelBackend(f.spindle);
+ void sendState(f.spindle,'chat','preview-user',{viewOpen:true,requestId:'preview-session'});
+ await waitFor(()=>f.sent.some((m:any)=>m.type==='vn_narrative_preview'));
+ const preview=f.sent.find((m:any)=>m.type==='vn_narrative_preview') as any;
+ expect(preview).toMatchObject({chatId:'chat',messageId:'assistant-1',sessionId:'preview-session',swipeId:0});
+ expect(preview.paragraphs.length).toBeGreaterThan(0);expect(f.gates).toHaveLength(0);
+ expect(f.sent.some((m:any)=>m.type==='vn_turn')).toBe(false);
+ await waitFor(()=>calls>0);expect(calls).toBe(1);
+ gate.resolve({content:JSON.stringify(generationPayload([0,1]))});
+ await waitFor(()=>f.sent.some((m:any)=>m.type==='vn_turn'));
+ const final=f.sent.find((m:any)=>m.type==='vn_turn') as any;
+ expect(preview.paragraphs).toEqual(final.turn.paragraphs);expect(preview.sourceFingerprint).toBe(final.turn.sourceFingerprint);
+ f.request({type:'vn_view',chatId:'chat',open:false},'preview-user');
+});
+
+test('closing the reader before narrative preparation suppresses the optional preview',async()=>{
+ const f=generationFixture(),gate=deferred<any[]>(),original=f.spindle.chat.getMessages.bind(f.spindle.chat);let reads=0;
+ f.spindle.chat.getMessages=async(...args:any[])=>{reads++;if(reads===2)return gate.promise;return original(...args as [string]);};
+ registerVisualNovelBackend(f.spindle);
+ void sendState(f.spindle,'chat','closed-preview',{viewOpen:true,requestId:'closed-session'});
+ await waitFor(()=>reads===2);f.request({type:'vn_view',chatId:'chat',open:false},'closed-preview');
+ gate.resolve(await original('chat'));await new Promise(resolve=>setTimeout(resolve,25));
+ expect(f.sent.some((m:any)=>m.type==='vn_narrative_preview')).toBe(false);expect(f.gates).toHaveLength(0);
+});
+
 test("concurrent submissions reserve one append before reading persisted metadata", async () => {
   const f = generationFixture();
   const gate = deferred<any[]>();

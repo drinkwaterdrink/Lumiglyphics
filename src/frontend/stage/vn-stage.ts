@@ -1,4 +1,6 @@
 import {CastStage} from "./cast-stage.js";
+import {PreparationPreview} from './preparation-preview.js';
+import type {NarrativePreview} from '../../shared/preparation-preview.js';
 import type {TurnView,AssetView} from "../../protocol.js";
 import { StageDossiers } from "./dossiers.js";
 import type { TooltipPreferences } from "../../shared/dossiers.js";
@@ -432,6 +434,7 @@ export class VnStage {
   private readonly themeRoot: ShadowRoot;
   private readonly userStyle: HTMLStyleElement;
   private readonly root: HTMLElement;
+  private readonly preparationPreview:PreparationPreview;
   private readonly scene: HTMLElement;
   private readonly sceneImages: HTMLImageElement[];
   private pageBackdrop?: HTMLImageElement;
@@ -579,6 +582,7 @@ export class VnStage {
     options.mount.append(this.host);
 
     this.root = queryRequired(this.themeRoot, "[data-vn-root]");
+    this.preparationPreview=new PreparationPreview(this.root);
     this.applyThemePreset(options.themePreset ?? "lumiverse");
     this.scene = queryRequired(this.themeRoot, "[data-vn-scene]");
     this.castStage = new CastStage(this.root,this.createImage);
@@ -919,6 +923,7 @@ export class VnStage {
   setCastTurn(turn:TurnView|null,index:number):AssetView|null {return this.castStage.set(turn,index);}
 
   reset(): void {
+    this.preparationPreview.clear();
     this.moveDraftEpoch++;this.closeMoveDraft();
     if(this.isBacklogOpen)this.closeBacklog();
     this.castStage.set(null,0);
@@ -940,6 +945,7 @@ export class VnStage {
   }
 
   loadTurn(turn: VnTurnInput): void {
+    this.preparationPreview.clear();
     this.moveDraftEpoch++;this.closeMoveDraft();
     this.dismissedErrors.clear();
     this.castStage.set(null,0);
@@ -1003,6 +1009,11 @@ export class VnStage {
   setPhase(phase: VnPhase): void {
     this.dispatch({ type: "set-phase", phase });
   }
+
+  showPreparationPreview(preview:NarrativePreview):void {this.toggleAutoPlay(false);this.toggleSkip(false);this.preparationPreview.show(preview);}
+  preparationCursorFor(turn:TurnView):number|null{return this.preparationPreview.cursorFor(turn);}
+  clearPreparationPreview():void{this.preparationPreview.clear();}
+  stopPreparationPreview():void{this.preparationPreview.stopped();}
 
   setActivity(
     label: string | null,

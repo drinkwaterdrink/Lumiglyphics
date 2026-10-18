@@ -7,16 +7,17 @@ await mkdir('.cache/image-recovery',{recursive:true});const browser=await chromi
 try{for(const viewport of [{width:360,height:800},{width:844,height:390}]){
  const page=await browser.newPage({viewport,reducedMotion:'reduce'});await page.goto(`http://127.0.0.1:${server.port}/`);
  await page.evaluate(()=>{const f=(window as any).imageFixture;f.studio.setConfig(f.config);f.recovery=structuredClone(f.turn);f.recovery.assets[0].status='cancelled';f.recovery.imageRequests[0].state='prepared';f.recovery.assets.push({jobId:'keep',cueId:'keep',paragraphIndex:0,status:'browser_ready',imageId:'saved',imageUrl:'/saved'});f.studio.setTurn(f.recovery);});
- const studio=page.locator('[data-image-studio]');await studio.getByRole('button',{name:/^Image prompts/}).click();await studio.getByLabel('Picture',{exact:true}).selectOption('job');
- const retry=studio.getByRole('button',{name:'Retry this picture',exact:true});assert.equal(await retry.isEnabled(),true);
- assert.match(await studio.locator('[data-notice]').innerText(),/cancelled/);
+ const studio=page.locator('[data-image-studio]');await studio.getByRole('button',{name:/^Image prompts/}).click();await studio.getByLabel('Picture',{exact:true}).selectOption('job',{force:true});
+ const retry=studio.locator('[data-retry-image]');assert.equal(await retry.isEnabled(),true);
+ assert.match(await studio.locator('[data-status]').innerText(),/cancelled/);
  await retry.evaluate((e:any)=>{e.click();e.click();});let actions=await page.evaluate(()=>(window as any).imageFixture.actions);
  assert.equal(actions.length,1);assert.deepEqual(actions[0],{type:'vn_prepare_image',chatId:'chat',messageId:'message',sourceFingerprint:'fingerprint',jobId:'job'});
  assert.equal(await retry.isDisabled(),true);
  await page.evaluate(()=>{const f=(window as any).imageFixture;const next=structuredClone(f.recovery);next.assets[0].status='generating';next.imageRequests.push({...next.imageRequests[0],requestId:'retry-preview',state:'review'});f.studio.setTurn(next);});
- assert.equal(await studio.getByRole('button',{name:'Generate this',exact:true}).isEnabled(),true);await studio.getByRole('button',{name:'Generate this',exact:true}).click();
+ assert.equal(await studio.getByRole('button',{name:'Generate picture',exact:true}).isEnabled(),true);await studio.getByRole('button',{name:'Generate picture',exact:true}).click();
  actions=await page.evaluate(()=>(window as any).imageFixture.actions);assert.equal(actions.at(-1).type,'vn_image_review');assert.equal(actions.at(-1).requestId,'retry-preview');
  await page.evaluate(()=>{const f=(window as any).imageFixture;const next=structuredClone(f.recovery);next.assets.push({jobId:'waiting',cueId:'waiting',paragraphIndex:0,status:'generating'});next.imageRequests.push({...next.imageRequests[0],jobId:'waiting',requestId:'held',state:'review'});f.studio.setTurn(next);});
+ await studio.locator('[data-reply-settings] > summary').click();
  assert.equal(await retry.isDisabled(),true);assert.match(await studio.locator('[data-batch-status]').innerText(),/awaiting review/);
  await studio.getByRole('button',{name:'Stop pending pictures',exact:true}).click();actions=await page.evaluate(()=>(window as any).imageFixture.actions);const stop=actions.at(-1);assert.equal(stop.type,'vn_recover_images');assert.equal(stop.action,'stop');assert.equal(stop.swipeId,0);assert.equal(stop.revision,0);assert.ok(stop.requestId);
  await page.evaluate(()=>{const f=(window as any).imageFixture;f.studio.setTurn(f.recovery);});assert.equal(await retry.isEnabled(),true);

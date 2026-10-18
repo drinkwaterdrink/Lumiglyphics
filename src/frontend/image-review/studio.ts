@@ -1,3 +1,4 @@
+import {inspectorState} from './inspector-model.js';
 import {PresentationRulesPanel} from '../settings/presentation-rules.js';
 import type {PresentationRuleCatalog} from '../../shared/presentation-rules.js';
 import { modelOutputHelp } from '../../shared/image-model-output.js';
@@ -19,6 +20,11 @@ const CSS = `
 @container (max-width:600px){section{inset:max(76px,calc(env(safe-area-inset-top) + 64px)) 8px max(12px,env(safe-area-inset-bottom));width:auto;max-height:none;border-radius:12px}[data-studio-footer]{padding:10px 12px}[data-studio-header]{padding:10px 12px}}
 @media(max-height:500px){section{inset:max(76px,calc(env(safe-area-inset-top) + 64px)) 8px max(12px,env(safe-area-inset-bottom));width:auto;max-height:none}[data-studio-header],[data-studio-footer]{padding:8px 12px}[data-studio-footer] .row{flex-wrap:nowrap;overflow-x:auto}[data-studio-footer] .row button{flex:none}[data-studio-footer] [data-notice]{max-height:12dvh}}
 `;
+const INSPECTOR_CSS=`
+:host{--paper:var(--vn-shell-panel,#171822)}section{width:min(510px,calc(100% - 24px));color:var(--vn-shell-text,#eee)}section small,section p{color:var(--vn-shell-muted,#bbc)}[data-studio-body]{padding-top:14px}details{border-top:1px solid var(--edge);margin:8px 0 0}summary{font-weight:600}[data-context]{display:flex;gap:12px;align-items:flex-start;margin:12px 0 8px}[data-context-text]{min-width:0;flex:1}[data-status]{font-size:16px;display:block}[data-paragraph]{display:block;margin-top:3px}[data-scene]{margin:6px 0 0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;font-size:13px}[data-thumbnail]{width:68px;height:84px;flex:none;border:1px solid var(--edge);border-radius:8px;background:var(--vn-shell-field,#101119);display:grid;place-items:center;overflow:hidden}[data-thumbnail] img{width:100%;height:100%;object-fit:cover}[data-placeholder]{font-size:30px;color:var(--accent)}[data-state-detail]{margin:8px 0}[data-meta]{font-size:12px;margin:8px 0}[data-prompt-editor]{margin:16px 0}[data-edit-help]{font-size:12px;margin:0 0 6px}label{font-weight:500;margin:10px 0}label small{float:right;font-weight:400;font-size:11px}textarea{margin-top:6px;font:16px/1.5 var(--vn-shell-family,system-ui)}[data-positive]{min-height:145px;resize:vertical}[data-negative]{min-height:72px;resize:vertical}[data-combined-count]{display:block;font-variant-numeric:tabular-nums;text-align:right}[data-validation]{display:block;color:var(--vn-shell-danger,#ffb4ab);margin:6px 0}[aria-invalid="true"]{border-color:var(--vn-shell-danger,#ffb4ab)}[data-picture-strip]{display:flex;gap:8px}[data-picture-strip] button{flex:1;min-width:0;padding:6px;font-size:12px;display:flex;align-items:center;gap:6px}[data-picture-strip] img{width:28px;height:32px;object-fit:cover;border-radius:3px}[data-picture-strip] [aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}[data-picture-navigation] label{margin:0}[data-studio-footer] .row{display:block}[data-studio-footer] button{width:100%;border-color:var(--accent);font-weight:650}[data-action-help]{display:block;font-size:12px;text-align:center;margin-top:6px}[data-notice-row]{border-top:1px solid var(--edge);margin-top:10px}[data-notice]{font-size:12px}[data-rewrite-changed]{padding:8px;border:1px solid var(--accent);border-radius:6px;margin:8px 0}[data-rewrite-changed] p{margin:0 0 8px}[data-reply-settings] details{margin-left:8px}[data-secondary-actions]{margin-bottom:8px}[data-secondary-actions] button{font-size:13px}[data-subject-name]{width:100%}
+section[data-state="planning"],section[data-state="empty"],section[data-state="zero-budget"],section[data-state="idle"]{bottom:auto;max-height:calc(100% - 92px)}
+@container(max-width:600px){section{width:auto}[data-context]{gap:10px}[data-studio-body]{padding:12px}[data-thumbnail]{width:56px;height:72px}}
+`;
 
 export class ImageStudio {
   private readonly host: HTMLElement;
@@ -26,6 +32,9 @@ export class ImageStudio {
   private preferences:PresentationRulesPanel;
   private turn: TurnView | null = null;
   private selectedJob = "";
+  private planningChat = '';
+  private maxImagesPerTurn: number | undefined;
+  private previousWording = new Map<string, Draft & {requestId:string}>();
   private selectedRequest = "";
   private drafts = new Map<string, Draft>();
   private submitted = new Set<string>();
@@ -47,6 +56,7 @@ export class ImageStudio {
     this.host.dataset.imageStudio = "";
     this.root = this.host.attachShadow({ mode: "open" });
     this.root.innerHTML = `<style>${CSS}</style><button type="button" data-launch aria-expanded="false">Image prompts</button><section hidden aria-label="Image prompts"><div class="row" data-studio-header><div><h2>Image prompts</h2><small data-build>${LUMIGLYPHICS_VERSION}</small></div><button type="button" data-close aria-label="Close image prompts" title="Close image prompts">×</button></div><div data-studio-body><label class="toggle"><input type="checkbox" data-review checked>Review before generating</label><small>Applies to the next image batch. Held pictures stay held. You can keep reading.</small><details data-card-role><summary>Card role for this chat</summary><label>Card role<select data-role aria-label="Card role"><option value="auto">Auto</option><option value="character">Character</option><option value="scenario">Scenario / world / narrator</option></select></label><button type="button" data-save-role>Save card role</button><small data-role-help>Applies to future replies. Existing pictures and held prompts stay unchanged. Auto uses available visual evidence.</small></details><details data-turn-recovery><summary>Reply recovery</summary><small>Retry unfinished pictures prepares only unfinished slots again and stops their current work. Completed pictures stay. New previews always need approval. Replan asks the story-reader model to reconsider the whole reply and may use text tokens.</small><button type="button" data-retry-unfinished>Retry unfinished pictures</button><button type="button" data-replan>Replan this reply</button></details><label>Picture<select data-picture aria-label="Picture"></select></label><label data-history hidden>Recorded request<select data-request aria-label="Recorded request"></select></label><div data-batch-recovery hidden><p data-batch-status role="status"></p><button type="button" data-stop-images>Stop pending pictures</button><small>Stops this reply’s waiting image work. Requests already sent may still finish at the provider. Completed pictures stay.</small></div><p data-scene></p><p data-meta></p><p data-model-help role="status" hidden></p><label>Picture template<select data-template aria-label="Picture template"></select></label><button type="button" data-use-template>Use template</button><div data-template-confirm hidden><p>Replacing rebuilds this prompt and parameters from the selected template. Your current edits will be replaced.</p><div class="row"><button type="button" data-keep>Keep edits</button><button type="button" data-replace>Replace with template</button></div></div><details data-recovery hidden><summary>Correct this picture’s subject</summary><small>Prepare a new preview for this picture only. No image is generated until you approve it.</small><label>Picture subject<select data-subject-mode aria-label="Picture subject"><option value="character">Character</option><option value="environment">Environment / no people</option></select></label><div data-person-fields><label>Character name<input data-subject-name aria-label="Character name" list="vn-subject-candidates" maxlength="160"></label><datalist id="vn-subject-candidates" data-candidates></datalist><label>Appearance<textarea data-subject-appearance aria-label="Appearance" maxlength="2000" placeholder="Concrete visual details, separated by commas: hair, eyes, skin, clothes, species…"></textarea></label><small>Use known appearance by leaving this blank, or supply details for this picture.</small><label class="toggle"><input type="checkbox" data-save-appearance>Save appearance for this character in this chat</label></div><small data-environment-help hidden>Choose a no-people template above. Character appearance and references are omitted.</small><button type="button" data-correct>Prepare corrected preview</button></details><details data-diagnostics><summary>Picture diagnostics</summary><p data-diagnostic></p><button type="button" data-copy-diagnostic>Copy diagnostics</button><small>Copies subject and template names and status only. No appearance descriptions, chat text, prompts or provider error payloads are included.</small></details><details><summary>Prompt sources</summary><p data-provenance></p></details><p data-edit-help role="status"></p><label>Positive prompt <small data-positive-count></small><textarea data-positive maxlength="32000" aria-label="Positive prompt" spellcheck="false" inputmode="text"></textarea></label><label>Negative prompt <small data-negative-count></small><textarea data-negative maxlength="32000" aria-label="Negative prompt" spellcheck="false" inputmode="text"></textarea></label><small data-combined-count role="status"></small><small>Regenerate prompt uses your story-reader model to prepare fresh wording. It uses text tokens; an image is generated only after approval.</small><small>Negative prompts and individual settings are model dependent.</small><details><summary>Parameters and references</summary><p data-reference></p><label>Parameters (JSON)<textarea data-parameters aria-label="Parameters (JSON)" spellcheck="false" inputmode="text"></textarea></label><small>Advanced overrides for this picture only. Reference bytes and host-managed fields are omitted. Your provider may ignore unsupported parameters.</small></details><small>Shows the extension request prepared for Lumiverse; the host converts it for the provider.</small></div><footer data-studio-footer><div class="row"><button type="button" data-generate>Generate this</button><button type="button" data-skip>Skip</button><button type="button" data-reset>Reset edits</button><button type="button" data-retry-image>Retry this picture</button><button type="button" data-prepare>Edit and regenerate</button><button type="button" data-regenerate-prompt>Regenerate prompt</button><button type="button" data-copy>Copy prompt</button></div><div data-notice-row hidden><p data-notice role="status"></p><button type="button" data-dismiss-notice aria-label="Dismiss image prompt notice" title="Dismiss image prompt notice">&#215;</button></div></footer></section>`;
+    this.layoutInspector();
     const preferences=document.createElement('details');preferences.innerHTML='<summary>Remember a template preference</summary><button type="button" data-remember>Use selected template in a preference</button><div data-preferences></div>';
     this.el('[data-template-confirm]').after(preferences);
     this.preferences=new PresentationRulesPanel(()=>this.turn?.chatId??'',request=>this.send(request));
@@ -54,6 +64,13 @@ export class ImageStudio {
     preferences.addEventListener('toggle',()=>{if(preferences.open)this.preferences.ensureLoaded();});
     preferences.querySelector<HTMLButtonElement>('[data-remember]')!.onclick=()=>{const target=this.el<HTMLSelectElement>('[data-template]').value;const source=this.record()?.imagePromptMetadata?.template.id;this.preferences.propose(target,source&&source!==target?'template':'dialogue',source);};
 
+    this.el<HTMLButtonElement>('[data-restore-wording]').onclick=()=>{
+      const record=this.record(), previous=this.previousWording.get(this.selectedJob);
+      if(!record||!previous)return;
+      this.drafts.set(this.draftKey(record),{prompt:previous.prompt,negative:previous.negative,parameters:this.el<HTMLTextAreaElement>('[data-parameters]').value});
+      this.previousWording.delete(this.selectedJob);this.render();
+    };
+    this.el<HTMLButtonElement>('[data-retry-saved]').onclick=()=>this.prepareSavedScene();
     mount.append(this.host);
     this.el<HTMLButtonElement>("[data-launch]").onclick = () => {
       if(this.el<HTMLElement>('section').hidden)this.open();else this.setOpen(false);
@@ -95,8 +112,9 @@ export class ImageStudio {
     this.el<HTMLButtonElement>('[data-regenerate-prompt]').onclick=()=>this.regeneratePrompt();
     this.el<HTMLButtonElement>('[data-retry-image]').onclick=()=>{
       if(!this.turn||this.el<HTMLButtonElement>('[data-retry-image]').disabled)return;
-      const jobId=this.selectedJob;this.preparing.add(jobId);this.render();
-      this.send({type:'vn_prepare_image',chatId:this.turn.chatId,messageId:this.turn.messageId,sourceFingerprint:this.turn.sourceFingerprint,jobId});
+      const record=this.record();
+      if(record&&this.drafts.has(this.draftKey(record)))this.el<HTMLButtonElement>('[data-prepare]').click();
+      else this.prepareSavedScene();
     };
     for(const [selector,action] of [['[data-stop-images]','stop'],['[data-retry-unfinished]','retry']] as const)this.el<HTMLButtonElement>(selector).onclick=()=>{
       if(!this.turn||this.recovering||this.el<HTMLButtonElement>(selector).disabled)return;
@@ -154,6 +172,43 @@ export class ImageStudio {
     this.render();
   }
   private el<T extends HTMLElement>(selector: string): T { return this.root.querySelector<T>(selector)!; }
+  private prepareSavedScene():void {
+    if(!this.turn||this.preparing.has(this.selectedJob))return;
+    const jobId=this.selectedJob;this.preparing.add(jobId);this.render();
+    this.send({type:'vn_prepare_image',chatId:this.turn.chatId,messageId:this.turn.messageId,sourceFingerprint:this.turn.sourceFingerprint,jobId});
+  }
+  private layoutInspector():void {
+    const body=this.el<HTMLElement>('[data-studio-body]');
+    const context=document.createElement('div');context.dataset.context='';
+    context.innerHTML='<div data-thumbnail><img data-preview hidden alt="Selected picture"><span data-placeholder aria-hidden="true">◇</span></div><div data-context-text><strong data-status role="status"></strong><small data-paragraph></small></div>';
+    context.querySelector('[data-context-text]')!.append(this.el('[data-scene]'));
+    const detail=document.createElement('p');detail.dataset.stateDetail='';
+    const navigation=document.createElement('div');navigation.dataset.pictureNavigation='';
+    navigation.innerHTML='<div data-picture-strip role="group" aria-label="Pictures in this reply"></div>';
+    navigation.append(this.el('[data-picture]').closest('label')!);
+    const editor=document.createElement('div');editor.dataset.promptEditor='';
+    for(const selector of ['[data-edit-help]','[data-positive]','[data-negative]','[data-combined-count]']){
+      const element=this.el(selector);editor.append(element instanceof HTMLTextAreaElement?element.closest('label')!:element);
+    }
+    const validation=document.createElement('small');validation.dataset.validation='';validation.role='alert';validation.hidden=true;editor.append(validation);
+    const changed=document.createElement('div');changed.dataset.rewriteChanged='';changed.hidden=true;
+    changed.innerHTML='<p>Prompt wording changed. Review it before generating.</p><button type="button" data-restore-wording>Restore previous wording</button>';editor.append(changed);
+    const actions=document.createElement('details');actions.dataset.promptActions='';actions.innerHTML='<summary>Prompt actions</summary><div class="row" data-secondary-actions></div><small>Rewrite prompt uses your story-reader model and text tokens. It replaces the preview wording. Image generation is a separate action after approval.</small>';
+    for(const selector of ['[data-regenerate-prompt]','[data-reset]','[data-copy]','[data-skip]'])actions.querySelector('[data-secondary-actions]')!.append(this.el(selector));
+    const retry=document.createElement('button');retry.type='button';retry.dataset.retrySaved='';retry.textContent='Prepare from saved scene';actions.querySelector('[data-secondary-actions]')!.append(retry);editor.append(actions);
+    const tools=document.createElement('div');tools.dataset.pictureTools='';
+    const template=document.createElement('details');template.dataset.templateTools='';template.innerHTML='<summary>Template and framing</summary>';
+    for(const selector of ['[data-template]','[data-use-template]','[data-template-confirm]']){const element=this.el(selector);template.append(element instanceof HTMLSelectElement?element.closest('label')!:element);}tools.append(template);
+    for(const selector of ['[data-recovery]','[data-diagnostics]','[data-provenance]','[data-parameters]']){const element=this.el(selector);tools.append(element.closest('details')!);}
+    const history=document.createElement('details');history.dataset.requestHistory='';history.innerHTML='<summary>Request history</summary>';history.append(this.el('[data-history]'));tools.append(history);
+    const settings=document.createElement('details');settings.dataset.replySettings='';settings.innerHTML='<summary>Reply and review settings</summary>';
+    const toggle=this.el('[data-review]').closest('label')!,help=toggle.nextElementSibling!;settings.append(toggle,help);
+    for(const selector of ['[data-card-role]','[data-turn-recovery]','[data-batch-recovery]'])settings.append(this.el(selector));
+    const meta=this.el('[data-meta]'),model=this.el('[data-model-help]'),notice=this.el('[data-notice-row]');
+    body.replaceChildren(navigation,context,detail,meta,model,editor,tools,settings,notice);
+    const actionHelp=document.createElement('small');actionHelp.dataset.actionHelp='';this.el('[data-studio-footer]').append(actionHelp);
+    const style=document.createElement('style');style.textContent=INSPECTOR_CSS;this.root.append(style);
+  }
   private diagnosticText(): string {
     const asset = this.turn?.assets.find(entry => entry.jobId === this.selectedJob);
     const d = asset?.diagnostic;
@@ -168,6 +223,14 @@ export class ImageStudio {
       this.el<HTMLElement>(`[data-${name}-count]`).textContent=`${length.toLocaleString()} characters`;
     }
     this.el<HTMLElement>('[data-combined-count]').textContent=`${total.toLocaleString()} / 3,000 combined${total>IMAGE_PROMPT_MAX_CHARS ? ' — shorten before generating' : ''}`;
+    let error=total>IMAGE_PROMPT_MAX_CHARS?'Shorten positive and negative prompts to 3,000 characters combined.':'';
+    if(!error&&!this.el<HTMLTextAreaElement>('[data-positive]').value.trim())error='Enter a positive prompt before generating.';
+    if(!error)try{const parameters:unknown=JSON.parse(this.el<HTMLTextAreaElement>('[data-parameters]').value);if(!parameters||typeof parameters!=='object'||Array.isArray(parameters))throw new Error();}catch{error='Parameters must be a valid JSON object.';}
+    const validation=this.el<HTMLElement>('[data-validation]');validation.textContent=error;validation.hidden=!error||!this.record();
+    for(const selector of ['[data-positive]','[data-negative]'])this.el(selector).setAttribute('aria-invalid',String(total>IMAGE_PROMPT_MAX_CHARS));
+    for(const selector of ['[data-generate]','[data-prepare]']){const button=this.el<HTMLButtonElement>(selector);if(button.dataset.available!==undefined)button.disabled=button.dataset.available!=='true'||Boolean(error);}
+    const retry=this.el<HTMLButtonElement>('[data-retry-image]'),record=this.record();
+    if(retry.dataset.available!==undefined)retry.disabled=retry.dataset.available!=='true'||Boolean(error&&record&&this.drafts.has(this.draftKey(record)));
   }
 
   private recoveryScope() {return {chatId:this.turn!.chatId,messageId:this.turn!.messageId,swipeId:this.turn!.swipeId,sourceFingerprint:this.turn!.sourceFingerprint,requestId:globalThis.crypto?.randomUUID?.() ?? `vn-recovery-${Date.now()}-${Math.random().toString(36).slice(2)}`};}
@@ -180,9 +243,10 @@ export class ImageStudio {
   private record(): ImageRequestRecord | undefined { return this.records().find((record) => record.requestId === this.selectedRequest) ?? this.records().at(-1); }
 
   setTurn(turn: TurnView | null): void {
+    if(!turn||(this.planningChat&&turn.chatId!==this.planningChat))this.planningChat='';
     if(this.turn?.chatId!==turn?.chatId||!turn)this.setOpen(false);
     if(this.turn?.chatId!==turn?.chatId)this.preferences.clear();
-    if (this.turn?.chatId !== turn?.chatId || this.turn?.sourceFingerprint !== turn?.sourceFingerprint || this.turn?.messageId !== turn?.messageId || this.turn?.swipeId !== turn?.swipeId || this.turn?.revision !== turn?.revision) { this.drafts.clear(); this.submitted.clear(); this.preparing.clear(); this.rebuilding.clear(); this.rerolling.clear(); this.selectedJob = ""; this.selectedRequest = ""; this.recoveryJob = ""; }
+    if (this.turn?.chatId !== turn?.chatId || this.turn?.sourceFingerprint !== turn?.sourceFingerprint || this.turn?.messageId !== turn?.messageId || this.turn?.swipeId !== turn?.swipeId || this.turn?.revision !== turn?.revision) { this.drafts.clear(); this.previousWording.clear(); this.submitted.clear(); this.preparing.clear(); this.rebuilding.clear(); this.rerolling.clear(); this.selectedJob = ""; this.selectedRequest = ""; this.recoveryJob = ""; }
     this.replanning = false;this.recovering=null;
     this.turn = turn;
     for(const id of this.rerolling)if(!turn?.imageRequests?.some(r=>r.requestId===id&&r.state==='review'))this.rerolling.delete(id);
@@ -190,7 +254,8 @@ export class ImageStudio {
     for (const asset of turn?.assets ?? []) if ((turn?.imageRequests ?? []).some((record) => record.jobId === asset.jobId && record.state === "review") || asset.status === "failed" || asset.status === "cancelled") this.preparing.delete(asset.jobId);
     this.render();
   }
-  setConfig(config: VisualNovelConfig): void { this.preferences.setConfig(config); this.templates = config.imageTemplates.map(t => ({ ...t })); this.defaultTemplate = config.defaultImageTemplateId; this.render(); }
+  setPlanning(chatId:string,planning:boolean):void {this.planningChat=planning?chatId:this.planningChat===chatId?'':this.planningChat;this.render();}
+  setConfig(config: VisualNovelConfig): void { this.maxImagesPerTurn=config.maxImagesPerTurn;this.preferences.setConfig(config); this.templates = config.imageTemplates.map(t => ({ ...t })); this.defaultTemplate = config.defaultImageTemplateId; this.render(); }
   private rebuildTemplate(): void {
     const record = this.record(); const templateId = this.el<HTMLSelectElement>("[data-template]").value;
     if (!this.turn || record?.state !== "review" || !templateId || this.rebuilding.has(record.requestId) || this.submitted.has(record.requestId) || this.rebuilding.has(record.requestId)) return;
@@ -220,6 +285,10 @@ export class ImageStudio {
   private regeneratePrompt():void {
     if(!this.turn||this.el<HTMLButtonElement>('[data-regenerate-prompt]').disabled)return;
     const record=this.record();
+    if(record){
+      if(this.previousWording.size>=12)this.previousWording.delete(this.previousWording.keys().next().value!);
+      this.previousWording.set(this.selectedJob,{requestId:record.requestId,prompt:this.el<HTMLTextAreaElement>('[data-positive]').value,negative:this.el<HTMLTextAreaElement>('[data-negative]').value,parameters:this.el<HTMLTextAreaElement>('[data-parameters]').value});
+    }
     if(record?.state==='review'){
       this.rerolling.add(record.requestId);this.render();
       this.send({type:'vn_regenerate_image_prompt',chatId:this.turn.chatId,messageId:this.turn.messageId,sourceFingerprint:this.turn.sourceFingerprint,requestId:record.requestId});
@@ -253,8 +322,8 @@ export class ImageStudio {
     const record = this.record();
     const asset = this.turn?.assets.find((entry) => entry.jobId === this.selectedJob);
     const draft = record ? this.drafts.get(this.draftKey(record)) : undefined;
-    this.el<HTMLElement>("[data-scene]").textContent = asset ? this.turn?.paragraphs[asset.paragraphIndex] ?? "" : "No planned pictures for this turn.";
-    this.el<HTMLElement>("[data-meta]").textContent = record ? `${record.provider} · ${record.model} · ${friendlyStatus(record.state)}` : asset?.status === "queued" || asset?.status === "generating" ? "Waiting for prompt/reference preparation. Later pictures may depend on an earlier portrait." : "The original request is unavailable for this older or reused picture.";
+    this.el<HTMLElement>("[data-scene]").textContent = asset ? this.turn?.paragraphs[asset.paragraphIndex] ?? "" : '';
+    this.el<HTMLElement>("[data-meta]").textContent = record ? `${record.provider} · ${record.model}` : '';
     const localEditable=Boolean(record && asset && asset.source!=='cache' && ['failed','cancelled','generated','browser_ready'].includes(asset.status) && record.state!=='review' && !this.preparing.has(this.selectedJob) && !this.replanning);
     const editable = localEditable || record?.state === "review" && !this.submitted.has(record.requestId) && !this.rebuilding.has(record.requestId) && !this.rerolling.has(record.requestId);
     const templateSelect = this.el<HTMLSelectElement>("[data-template]");
@@ -274,7 +343,7 @@ export class ImageStudio {
     if(metadata?.presentationRuleTrace)this.el<HTMLElement>("[data-provenance]").textContent+=`\nTemplate preferences:\n${metadata.presentationRuleTrace.summary}`;
     for (const [selector, value] of [["[data-positive]", draft?.prompt ?? record?.prompt ?? ""], ["[data-negative]", draft?.negative ?? record?.negativePrompt ?? ""], ["[data-parameters]", draft?.parameters ?? JSON.stringify(record?.parameters ?? {}, null, 2)]] as const) { const field = this.el<HTMLTextAreaElement>(selector); if(field.value!==value) field.value = value; field.readOnly = !editable; }
     this.updateCounts();
-    this.el<HTMLElement>('[data-edit-help]').textContent=localEditable ? 'Edit a local replacement draft below, then Prepare edited preview. The recorded request stays unchanged; generation still needs approval.' : record?.state==='review' ? 'Editable preview. Positive and negative share a 3,000-character limit.' : !record ? 'No editable request is saved for this picture. Choose Prepare editable preview first; generation still needs approval.' : 'Recorded request — read-only while this picture is running. Finish or skip waiting pictures to prepare a replacement.';
+    this.el<HTMLElement>('[data-edit-help]').textContent=localEditable ? 'Edit a local replacement draft below, then Prepare replacement. The recorded request stays unchanged; generation still needs approval.' : record?.state==='review' ? 'Editable preview. Positive and negative share a 3,000-character limit.' : !record ? 'No editable request is saved for this picture. Choose Prepare new preview first; generation still needs approval.' : 'Recorded request — read-only while this picture is running. Finish or skip waiting pictures to prepare a replacement.';
     this.el<HTMLElement>("[data-reference]").textContent = record?.referenceSummary ?? "";
     const modelHelp = this.el<HTMLElement>('[data-model-help]');
     modelHelp.textContent = modelOutputHelp(record?.provider, record?.model, record?.parameters ?? {});
@@ -295,9 +364,9 @@ export class ImageStudio {
 
     const reroll=this.el<HTMLButtonElement>('[data-regenerate-prompt]');
     const rolling=Boolean(record&&this.rerolling.has(record.requestId));
-    reroll.textContent=rolling||this.preparing.has(this.selectedJob)?'Preparing prompt…':'Regenerate prompt';
+    reroll.textContent=rolling||this.preparing.has(this.selectedJob)?'Rewriting prompt…':'Rewrite prompt';
     reroll.disabled=!asset||asset.source==='cache'||this.replanning||this.preparing.has(this.selectedJob)||!!this.recovering||rolling||Boolean(record&&(this.submitted.has(record.requestId)||this.rebuilding.has(record.requestId)))||(record?.state==='review'?record.canRegeneratePrompt===false:Boolean(busy));
-    reroll.title='Uses the story-reader model to reroll this picture’s prompt. Replaces the preview wording; generating the image still requires approval.';
+    reroll.title='Uses the story-reader model and text tokens to rewrite wording. Image generation is separate and still requires approval.';
     this.el<HTMLButtonElement>('[data-prepare]').textContent = record ? 'Prepare edited preview' : 'Prepare editable preview';
     this.el<HTMLButtonElement>("[data-prepare]").hidden = record?.state === "review";
     this.el<HTMLButtonElement>("[data-prepare]").disabled = !asset || Boolean(busy) || this.replanning || !!this.recovering || this.preparing.has(this.selectedJob) || !this.templates.some(t => t.id === templateSelect.value);
@@ -322,7 +391,54 @@ export class ImageStudio {
     }
     this.renderRecoveryMode();
     this.el<HTMLButtonElement>("[data-copy]").disabled = !record;
-    this.setNotice(this.recovering ? (this.recovering==='stop'?'Stopping pending pictures…':'Preparing unfinished pictures for review…') : rolling ? "Regenerating prompt with the story-reader model… Image generation still needs approval." : (asset?.error ?? (asset?.status==='cancelled'&&record?.state!=='review' ? (record?.state==='skipped'?'This picture was skipped. Retry this picture prepares a new preview.':'This picture was cancelled before it completed. Retry this picture prepares a new preview; no image is sent until you approve.') : '')) || (record && this.rebuilding.has(record.requestId) ? "Rebuilding template… Wait for a new preview before generating." : record?.state === "review" ? "Edits affect this picture only. Generate starts an image request." : ""));
+    this.renderInspector();
+    this.setNotice(this.recovering ? (this.recovering==='stop'?'Stopping pending pictures…':'Preparing unfinished pictures for review…') : rolling ? "Rewriting prompt with the story-reader model… Uses text tokens; image generation still needs approval." : (asset?.error ?? '') || (record && this.rebuilding.has(record.requestId) ? "Rebuilding template… Wait for a new preview before generating." : ''));
+  }
+  private renderInspector():void {
+    const asset=this.turn?.assets.find(entry=>entry.jobId===this.selectedJob),record=this.record();
+    const planning=Boolean(this.planningChat)||this.turn?.status==='planning';
+    const pending=this.preparing.has(this.selectedJob)||Boolean(record&&(this.rebuilding.has(record.requestId)||this.rerolling.has(record.requestId)));
+    const requestState=record&&this.submitted.has(record.requestId)?'approved':record?.state;
+    const state=inspectorState({asset,requestState,planning,preparing:pending,hasTurn:!!this.turn,zeroBudget:this.maxImagesPerTurn===0});
+    this.el('section').dataset.state=state.kind;
+    this.el('[data-status]').textContent=state.title;this.el('[data-state-detail]').textContent=state.detail;
+    this.el('[data-paragraph]').textContent=asset&&!planning?`Picture ${(this.turn?.assets.indexOf(asset)??0)+1} of ${this.turn?.assets.length} · Paragraph ${asset.paragraphIndex+1}`:'';
+    this.el('[data-picture-navigation]').hidden=!asset||planning||(this.turn?.assets.length??0)<2;
+    this.el('[data-scene]').hidden=planning;
+    this.el('[data-meta]').hidden=!record||planning;
+    this.el('[data-prompt-editor]').hidden=!record||planning;
+    this.el('[data-picture-tools]').hidden=!asset||planning;
+    this.el('[data-thumbnail]').hidden=!asset||planning;
+    this.el('[data-model-help]').hidden=!record||planning||!this.el('[data-model-help]').textContent;
+    this.el('[data-turn-recovery]').hidden=planning||!this.turn;
+    if(planning)this.el('[data-card-role]').hidden=true;
+    const image=this.el<HTMLImageElement>('[data-preview]');
+    const url=asset?.imageUrl;
+    image.hidden=!url;this.el('[data-placeholder]').hidden=!!url;
+    if(url){if(image.getAttribute('src')!==url)image.src=url;image.alt=asset?.previousImage?'Previous picture while replacement is pending':'Selected picture';}else image.removeAttribute('src');
+    image.onerror=()=>{image.hidden=true;this.el('[data-placeholder]').hidden=false;};
+    const strip=this.el('[data-picture-strip]');strip.replaceChildren();
+    const assets=this.turn?.assets??[];strip.hidden=assets.length<2||assets.length>3;
+    if(!strip.hidden)for(const [index,entry] of assets.entries()){
+      const button=document.createElement('button');button.type='button';button.setAttribute('aria-pressed',String(entry.jobId===this.selectedJob));button.setAttribute('aria-label',`Picture ${index+1}, paragraph ${entry.paragraphIndex+1}`);
+      if(entry.imageUrl){const thumb=document.createElement('img');thumb.src=entry.imageUrl;thumb.alt='';button.append(thumb);}button.append(`Picture ${index+1}`);
+      button.onclick=()=>{this.selectedJob=entry.jobId;this.selectedRequest='';this.render();};strip.append(button);
+    }
+    this.el('[data-picture]').closest('label')!.hidden=assets.length>=2&&assets.length<=3;
+    this.el('[data-request-history]').hidden=this.records().length<2;
+    const previous=this.previousWording.get(this.selectedJob);
+    this.el('[data-rewrite-changed]').hidden=record?.state!=='review'||!previous||previous.requestId===record.requestId||pending;
+    const selected={generate:'[data-generate]',retry:'[data-retry-image]',prepare:'[data-prepare]'};
+    for(const [action,selector] of Object.entries(selected)){
+      const button=this.el<HTMLButtonElement>(selector);button.hidden=state.action!==action;
+      button.dataset.available=String(!button.disabled);
+    }
+    this.el('[data-generate]').textContent='Generate picture';this.el('[data-retry-image]').textContent='Retry picture';this.el('[data-prepare]').textContent=state.kind==='historical'?'Prepare new preview':'Prepare replacement';
+    this.el('[data-studio-footer]').hidden=!state.action;
+    this.el('[data-action-help]').textContent=state.action==='generate'?'Starts an image request with this prompt.':'Prepares a preview. Generate only after approval.';
+    const saved=this.el<HTMLButtonElement>('[data-retry-saved]');saved.hidden=state.kind!=='completed';saved.disabled=this.el<HTMLButtonElement>('[data-retry-image]').disabled;
+    this.updateCounts();
+    if(!record)this.el<HTMLButtonElement>('[data-prepare]').disabled=this.el<HTMLButtonElement>('[data-prepare]').dataset.available!=='true';
   }
   private decide(action: "generate" | "skip"): void {
     const record = this.record(); if (!this.turn || record?.state !== "review" || this.submitted.has(record.requestId) || this.rebuilding.has(record.requestId) || this.rerolling.has(record.requestId)) return;
