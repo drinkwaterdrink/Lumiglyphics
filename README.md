@@ -1,6 +1,6 @@
 # Lumiglyphics
 
-Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.41`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance.
+Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.42`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance.
 
 **Qwen Turbo compatibility and recovery:** NanoGPT's Qwen Image 2.1 Turbo now prepares supported 1K/2K resolution with separate framing, including 9:16. Existing custom raw overrides remain authoritative. Image errors offer **Review picture** to reach the current picture's prompt and individual retry controls without starting generation. Image review holds Auto advancement and stops Skip while open. Update, open Review picture, then use Retry this picture to prepare a fresh approval preview for an old failed request.
 

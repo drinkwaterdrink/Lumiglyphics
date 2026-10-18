@@ -6,7 +6,7 @@ import { normalizeSpeechSettings } from "../src/speech-config.js";
 // A tiny in-page host: applies patches like the real controller, records every
 // call, and acknowledges saves so the panel can show "Saved".
 const mount = document.createElement("div");
-Object.assign(mount.style, { position: "relative", minHeight: "100vh", background: "#08090d" });
+Object.assign(mount.style, { position: "relative", minHeight: "100vh", background: "var(--lumiverse-bg, #08090d)" });
 document.body.append(mount);
 
 const query = new URL(location.href).searchParams;
@@ -17,11 +17,16 @@ if (query.has("setupDone")) memory.set("cue.visual-novel.setup-done", "1");
 const fixture = {
   config: { ...DEFAULT_CONFIG, imageParameters: { steps: 28 }, customCss: "[data-vn-dialogue] { opacity: .9; }", ignoredTags: "status, inventory" } as VisualNovelConfig,
   patches: [] as Array<Partial<VisualNovelConfig>>,
-  ackMode: (query.get("ack") ?? "sync") as "sync" | "manual",
+  ackMode: (query.get("ack") ?? "sync") as "sync" | "manual" | "fail" | "hold",
   previews: 0,
   refreshes: 0,
   scans: [] as string[],
   placeActions: [] as unknown[],
+  chatId:'context-chat',
+  holdPlaces:false,
+  placeRequests:[] as Array<{chatId:string;requestId:string}>,
+  holdSources:false,
+  sourceRequests:[] as Array<{chatId:string;requestId:string}>,
   castActions: [] as unknown[],
   savedSystemOneKeys: [] as string[],
   clearedSystemOneKeys: 0,
@@ -35,15 +40,18 @@ const fixture = {
 const panelOptions: SettingsPanelOptions = {
   mount,
   setupStorage: storage,
-  onSave: (patch) => {
+  onSave: (patch,requestId) => {
     fixture.patches.push(patch);
+    (fixture as any).saveRequests??=[];(fixture as any).saveRequests.push({patch,requestId});
+    if(fixture.ackMode==='fail'){queueMicrotask(()=>panel.setSaveStatus({kind:'error',error:'Storage unavailable'},requestId));return;}
+    if(fixture.ackMode==='hold')return;
     fixture.config = { ...fixture.config, ...patch };
-    panel.setConfig(fixture.config);
-    if (fixture.ackMode === "sync") queueMicrotask(() => panel.setSaveStatus({ kind: "saved" }));
+    panel.setConfig(fixture.config,requestId);
+    if (fixture.ackMode === "sync") queueMicrotask(() => panel.setSaveStatus({ kind: "saved" },requestId));
   },
   onOpenPreview: () => { fixture.previews += 1; },
   onRefreshConnections: () => { fixture.refreshes += 1; },
-  getChatId: () => 'context-chat',
+  getChatId: () => fixture.chatId,
   onCastGallery:(chatId,requestId,offset)=>panel.setCastGallery(chatId,requestId,{offset,total:13,images:[{id:'supplied',name:'Aleister.png',url:'/api/v1/images/supplied?size=sm'}]}),
   onCastArt:(chatId,requestId,action)=>{
     fixture.castActions.push(action);
@@ -52,10 +60,11 @@ const panelOptions: SettingsPanelOptions = {
   },
   onLocationArt:(chatId,requestId,action)=>{
     fixture.placeActions.push(action);
+    fixture.placeRequests.push({chatId,requestId});if(fixture.holdPlaces)return;
     const library={version:1 as const,locations:action.action==='reset'||action.action==='forget'?[]:[{entityId:'observatory',name:'Observatory',artRevision:1,description:'Brass telescope',preferredVariantId:action.action==='select'?'v':null,variants:[{id:'v',imageId:'saved-art',requestFingerprint:'scene-v2:123456789',environmentFingerprint:'env:123456789',approved:true as const,createdAt:'2026-10-12T00:00:00Z'}]}]};
     panel.setLocationArt(chatId,requestId,library);
   },
-  onRefreshContextSources: (chatId,requestId) => { panel.setContextSourceReport({chatId,requestId,sources:[{provider:'lumibooks',status:'available',recordCount:3,publicFactCount:0,updatedAt:Date.now(),freshness:'current_reference'},{provider:'lumiscript',status:'disabled',recordCount:0,publicFactCount:0,updatedAt:null,freshness:'unknown'}]}); },
+  onRefreshContextSources: (chatId,requestId) => { fixture.sourceRequests.push({chatId,requestId});if(fixture.holdSources)return;panel.setContextSourceReport({chatId,requestId,sources:[{provider:'lumibooks',status:'available',recordCount:3,publicFactCount:0,updatedAt:Date.now(),freshness:'current_reference'},{provider:'lumiscript',status:'disabled',recordCount:0,publicFactCount:0,updatedAt:null,freshness:'unknown'}]}); },
   onSaveSystemOneKey: (key) => { fixture.savedSystemOneKeys.push(key); panel.setSystemOneKeyStatus(true); },
   onClearSystemOneKey: () => { fixture.clearedSystemOneKeys += 1; panel.setSystemOneKeyStatus(false); },
   onScanAudio: (directory) => { fixture.scans.push(directory); return { bgmCount: 3, sfxCount: 12 }; },

@@ -1,3 +1,4 @@
+import {createUiId} from '../request-id.js';
 import type { TurnView } from "../../protocol.js";
 import { MAX_PANELS, PanelArtifactSchema, panelHash, type PanelArtifact } from "../../shared/panels.js";
 import { panelDocument } from "./panel-document.js";
@@ -252,7 +253,7 @@ export class PanelDock {
       if (!this.turn) { this.error("Open an assistant turn before saving a panel rule."); return; }
       if (!title.value.trim() || !pattern.value || !template.value) { this.error("Fill in the rule name, pattern, and HTML replacement."); return; }
       if (this.rules.length >= 12) { this.error("Remove a rule before adding another. The limit is 12."); return; }
-      const rule: PanelRule = { id: crypto.randomUUID(), title: title.value.trim().slice(0, 120), pattern: pattern.value, flags: flags.value, template: template.value };
+      const rule: PanelRule = { id: createUiId(), title: title.value.trim().slice(0, 120), pattern: pattern.value, flags: flags.value, template: template.value };
       this.rules.push(rule); this.epoch++; this.save(); void this.runRules();
     }));
     return details;

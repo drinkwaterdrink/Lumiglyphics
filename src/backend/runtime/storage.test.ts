@@ -44,6 +44,13 @@ function storageRuntime(initial: ReadonlyMap<string, unknown> = new Map()): {
   return { spindle, data };
 }
 
+test('concurrent settings saves merge inside the user write queue instead of losing fields',async()=>{
+  const {spindle,data}=storageRuntime();
+  const [first,second]=await Promise.all([updateConfig(spindle,{textSpeed:7},'alice'),updateConfig(spindle,{reviewImages:false},'alice')]);
+  expect(first.textSpeed).toBe(7);expect(second.textSpeed).toBe(7);expect(second.reviewImages).toBe(false);
+  expect(data.get('config.json')).toMatchObject({textSpeed:7,reviewImages:false});
+});
+
 test("reading positions use safe chat paths and preserve unsupported saved records", async () => {
   const { spindle, data } = storageRuntime();
   const position = { version: 1 as const, key: { chatId: "chat/other", assistantMessageId: "message", swipeId: 0, sourceFingerprint: "fingerprint", revision: 1 }, paragraphIndex: 2 };

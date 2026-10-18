@@ -1,3 +1,4 @@
+import {createUiId} from '../request-id.js';
 import { samePresentationTurn } from "../../shared/presentation-entities.js";
 import type { SpindleFrontendContext } from "lumiverse-spindle-types";
 import { restoreReadingPosition, LoadedReadingCursor } from "./reading-position.js";
@@ -355,12 +356,12 @@ export function applyVisualConfigToStage(
  * has not adopted the redesign feedback yet.
  */
 export type SettingsFeedbackTarget = {
-  setConfig(config: VisualNovelConfig): void;
+  setConfig(config: VisualNovelConfig, requestId?: string): void;
   setConnectionCatalog(kind: "planner" | "image", state: ConnectionCatalogFeedback): void;
   setSystemOneKeyStatus(saved: boolean, message?: string): void;
   setAudioStatus(message: string): void;
   /** Acknowledged save result: "saved" only after the backend echoes `vn_config`. */
-  setSaveStatus?(status: { kind: "saved" } | { kind: "error"; error: string }): void;
+  setSaveStatus?(status: { kind: "saved" } | { kind: "error"; error: string }, requestId?: string): void;
   /** Exact library counts from the last scan/import. */
   setAudioLibrary?(library: { bgmCount: number; sfxCount: number }): void;
 };
@@ -621,7 +622,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   },open=>{imageStudioOpen=open;if(open){stage.toggleSkip(false);stage.holdAutoPlay();}else if(active)stage.checkAutoPlay();});
   const panelRequests = new Map<string, { resolve: (template: string) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   panels.onResolveTemplate = (template) => new Promise((resolve, reject) => {
-    const requestId = crypto.randomUUID();
+    const requestId = createUiId();
     const timer = setTimeout(() => { panelRequests.delete(requestId); reject(new Error("Host template resolution timed out.")); }, 10_000);
     panelRequests.set(requestId, { resolve, reject, timer });
     const context = ctx.getActiveChat();
@@ -715,7 +716,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       ctx.sendToBackend({ type: "vn_import_audio_done", fileCount: sent });
       settingsPanel?.setAudioStatus(`Sent ${sent} file(s)${skipped ? `, skipped ${skipped}` : ""}; scanning…`);
     },
-    onSave: (patch) => {
+    onSave: (patch, requestId) => {
       const current = configRef.current;
       if (current) {
         const next = { ...current, ...patch };
@@ -723,9 +724,9 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
         applyVisualConfigToStage(stage, next);
         audioEngine.setBgmVolume(next.bgmVolume);
         audioEngine.setSfxVolume(next.sfxVolume);
-        settingsPanel?.setConfig(next);
+        // Preview stage changes locally; only backend messages confirm persistence.
       }
-      ctx.sendToBackend({ type: "vn_set_config", patch, chatId: chatId() });
+      ctx.sendToBackend({ type: "vn_set_config", patch, chatId: chatId(), requestId });
     }
   }) : null;
   // Speech settings render inside the panel's Voice section (own shadow root,
@@ -1001,9 +1002,9 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if(type==='vn_error'&&message.type==='vn_error'&&message.operation==='vn_cast_art'){if(!message.chatId||message.chatId===chatId())settingsPanel?.castArtError(message.error,message.requestId);return;}
     if(type==='vn_location_art'&&message.type==='vn_location_art'){settingsPanel?.setLocationArt(message.chatId,message.requestId,message.library);return;}
     if(type==='vn_location_art_notice'&&message.type==='vn_location_art_notice'){if(message.chatId===chatId())settingsPanel?.locationArtNotice(message.error);return;}
-    if(type==='vn_error'&&message.type==='vn_error'&&message.operation==='vn_location_art'){if(!message.chatId||message.chatId===chatId())settingsPanel?.locationArtError(message.error);return;}
+    if(type==='vn_error'&&message.type==='vn_error'&&message.operation==='vn_location_art'){if(!message.chatId||message.chatId===chatId())settingsPanel?.locationArtError(message.error,message.requestId);return;}
     if(type==='vn_context_sources' && message.type==='vn_context_sources') {settingsPanel?.setContextSourceReport(message.report);return;}
-    if(type==='vn_error' && message.type==='vn_error' && message.operation==='vn_get_context_sources') {settingsPanel?.contextSourceError();return;}
+    if(type==='vn_error' && message.type==='vn_error' && message.operation==='vn_get_context_sources') {if(!message.chatId||message.chatId===chatId())settingsPanel?.contextSourceError(message.requestId);return;}
     if (type === "vn_system_one_key_status" && message.type === "vn_system_one_key_status") {
       settingsPanel?.setSystemOneKeyStatus(message.saved);
       return;
@@ -1067,8 +1068,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       speech.setSettings(configRef.current.speech);
       speechDock.setEnabled(configRef.current.speech.enabled);
       speechSettings?.setConfig(configRef.current.speech);
-      settingsPanel?.setConfig(configRef.current);
-      settingsPanel?.setSaveStatus?.({ kind: "saved" });
+      settingsPanel?.setConfig(configRef.current, message.requestId);
+      settingsPanel?.setSaveStatus?.({ kind: "saved" }, message.requestId);
       return;
     }
     if (type === "vn_turn" && message.type === "vn_turn") {
@@ -1165,7 +1166,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
         return;
       }
       if (message.operation === "vn_set_config") {
-        settingsPanel?.setSaveStatus?.({ kind: "error", error: message.error });
+        settingsPanel?.setSaveStatus?.({ kind: "error", error: message.error }, message.requestId);
         return;
       }
       if (message.operation === "vn_set_system_one_key" || message.operation === "vn_clear_system_one_key" || message.operation === "vn_get_system_one_key_status") {
@@ -1189,6 +1190,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     settingsPanel?.clearCastArt();
     settingsPanel?.clearPresentationRules();
     settingsPanel?.clearLocationArt();
+    settingsPanel?.clearContextSources();
     imageStudio.setTurn(null);
     imageLibrary.setContext(null,0);
       settingsPanel?.setImagePreviewMetadata();
@@ -1205,6 +1207,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     settingsPanel?.clearCastArt();
     settingsPanel?.clearPresentationRules();
     settingsPanel?.clearLocationArt();
+    settingsPanel?.clearContextSources();
     imageStudio.setTurn(null);
     imageLibrary.setContext(null,0);
       settingsPanel?.setImagePreviewMetadata();

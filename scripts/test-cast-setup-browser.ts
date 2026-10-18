@@ -4,6 +4,7 @@ const server=Bun.serve({hostname:'127.0.0.1',port:0,fetch:r=>new URL(r.url).path
 const browser=await chromium.launch({headless:true});
 try{
  const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});page.setDefaultTimeout(5000);
+ await page.addInitScript(()=>Object.defineProperty(globalThis.crypto,'randomUUID',{value:undefined,configurable:true}));
  await page.route('**/api/v1/images/**',route=>route.fulfill({status:200,contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400"><rect width="300" height="400" fill="#536077"/></svg>'}));
  await page.goto(`http://127.0.0.1:${server.port}`);
  const cast=page.locator('[data-cast-art]');await cast.locator('xpath=..').locator(':scope > summary').click();

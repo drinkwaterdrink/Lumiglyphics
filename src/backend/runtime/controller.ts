@@ -1664,7 +1664,7 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       if (request.patch.audioDirectory !== undefined) {
         void scanAudioCatalog(spindle, config.audioDirectory);
       }
-      spindle.sendToFrontend({ type: "vn_config", config }, userId);
+      spindle.sendToFrontend({ type: "vn_config", config, requestId: request.requestId }, userId);
       return;
     }
     case "vn_scan_audio": {

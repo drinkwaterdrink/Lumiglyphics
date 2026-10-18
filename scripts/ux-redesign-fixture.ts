@@ -21,7 +21,7 @@ if (searchParams.has("setup")) {
   };
   const settings = new VisualNovelSettingsPanel({
     mount,
-    onSave: (patch) => { fixture.saved.push(patch); },
+    onSave: (patch,requestId) => { fixture.saved.push(patch); },
     onOpenPreview: () => { fixture.previewOpened = true; },
     onRefreshConnections: () => { fixture.refreshCalls++; },
     onScanAudio: async () => {
@@ -49,7 +49,7 @@ if (searchParams.has("setup")) {
   const fixture = { saved: [] as Array<Partial<VisualNovelConfig>> };
   const settings = new VisualNovelSettingsPanel({
     mount,
-    onSave: (patch) => { fixture.saved.push(patch); },
+    onSave: (patch,requestId) => { fixture.saved.push(patch); },
     onOpenPreview: () => {},
     onRefreshConnections: () => {},
   });
@@ -80,14 +80,14 @@ if (searchParams.has("setup")) {
   };
   const settings = new VisualNovelSettingsPanel({
     mount,
-    onSave: (patch) => {
+    onSave: (patch,requestId) => {
       fixture.saved.push(patch);
       queueMicrotask(() => {
         if (fixture.simulateError) {
-          settings.setSaveStatus({ kind: "error", error: "Simulated transport rejection" });
+          settings.setSaveStatus({ kind: "error", error: "Simulated transport rejection" },requestId);
         } else {
           fixture.currentConfig = { ...fixture.currentConfig, ...patch };
-          settings.setSaveStatus({ kind: "saved" });
+          settings.setConfig(fixture.currentConfig,requestId);settings.setSaveStatus({ kind: "saved" },requestId);
         }
       });
     },

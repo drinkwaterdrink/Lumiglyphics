@@ -1,3 +1,4 @@
+import {createUiId} from '../request-id.js';
 import { ContextSourceReportSchema, normalizeContextSources, type ContextSourcesConfig, type ContextSourceReport } from '../../shared/context-sources.js';
 
 export class ContextSourcesPanel {
@@ -23,7 +24,7 @@ export class ContextSourcesPanel {
     };
     this.el<HTMLButtonElement>('[data-refresh]').onclick=()=>{
       this.chat=this.getChatId();if(!this.chat){this.el<HTMLElement>('[data-source-status]').textContent='Open a chat before checking its sources.';return;}
-      this.clearTimeout();this.pending=crypto.randomUUID();this.report=null;this.render();
+      this.clearTimeout();this.pending=createUiId();this.report=null;this.render();
       this.timeout=setTimeout(()=>this.fail(),4000);this.request(this.chat,this.pending);
     };
     this.render();
@@ -42,7 +43,8 @@ export class ContextSourcesPanel {
     if(!parsed.success || parsed.data.requestId!==this.pending || parsed.data.chatId!==this.getChatId())return;
     this.clearTimeout();this.pending='';this.report=parsed.data;this.render();
   }
-  fail():void{if(!this.pending)return;this.clearTimeout();this.pending='';this.el<HTMLElement>('[data-source-status]').textContent='Source status is unavailable. Refresh to try again.';this.el<HTMLButtonElement>('[data-refresh]').disabled=false;}
+  fail(requestId?:string):void{if(!this.pending||(requestId&&requestId!==this.pending))return;this.clearTimeout();this.pending='';this.el<HTMLElement>('[data-source-status]').textContent='Source status is unavailable. Refresh to try again.';this.el<HTMLButtonElement>('[data-refresh]').disabled=false;}
+  clear():void{this.chat=this.getChatId();this.invalidate();}
   destroy():void{this.clearTimeout();this.pending='';this.host.remove();}
   private render():void {
     this.el<HTMLButtonElement>('[data-refresh]').disabled=Boolean(this.pending);

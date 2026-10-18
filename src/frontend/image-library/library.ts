@@ -1,3 +1,4 @@
+import {createUiId} from '../request-id.js';
 import type {TurnView,FrontendRequest} from '../../protocol.js';
 import {ImageLibraryPageSchema,type ImageLibraryPage,type ImageLibraryRequest,type LibraryImageView} from '../../shared/image-library.js';
 
@@ -83,7 +84,7 @@ export class ImageLibrary{
  close(){this.opener?.setAttribute('aria-expanded','false');delete this.host.dataset.open;this.cancel();this.selected=null;this.el<HTMLImageElement>('[data-full-image]').removeAttribute('src');this.el<HTMLElement>('section').hidden=true;this.el<HTMLElement>('[data-library-launch]').setAttribute('aria-expanded','false');if(this.opened){this.opened=false;this.onOpen(false);(this.opener??this.el<HTMLButtonElement>('[data-library-launch]')).focus();}}
  private load(){
   if(!this.context||!this.opened)return;this.cancel();this.back(false);this.page=null;this.el<HTMLElement>('[data-grid]').replaceChildren();this.status(this.mode==='story'?'Loading story history…':'Loading saved pictures…');this.el<HTMLElement>('[data-retry]').hidden=true;
-  const requestId=crypto.randomUUID();this.pending=requestId;
+  const requestId=createUiId();this.pending=requestId;
   const request:ImageLibraryRequest={type:'vn_image_library',mode:this.mode,chatId:this.context.chatId,requestId,anchor:{messageId:this.context.messageId,swipeId:this.context.swipeId,sourceFingerprint:this.context.sourceFingerprint,paragraphIndex:this.cursor},range:this.el<HTMLSelectElement>('[data-range]').value as 'read'|'all',versions:this.el<HTMLSelectElement>('[data-versions]').value as 'active'|'all',includeReplaced:this.el<HTMLInputElement>('[data-replaced]').checked,order:this.el<HTMLSelectElement>('[data-order]').value as 'newest'|'oldest',role:'all',templateQuery:'',...(this.pages[this.pageIndex]!=='0:0'?{cursor:this.pages[this.pageIndex]}:{})};
   request.role=this.el<HTMLSelectElement>('[data-role]').value as 'all'|'scene'|'background'|'portrait';request.templateQuery=this.el<HTMLInputElement>('[data-template-query]').value.trim();
   this.timer=setTimeout(()=>this.error(this.context?.chatId??'',requestId,'Loading timed out. You can retry.'),15000);this.updatePaging();

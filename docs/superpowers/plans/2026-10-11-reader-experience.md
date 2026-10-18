@@ -565,3 +565,8 @@ F2 remains next within package F: entity/object conditions and background/effect
 ### beta.41 compatibility and recovery polish
 
 User-reported Qwen Turbo resolution failure takes priority over F2. Add exact-model 1K/2K and supported ratio preparation/validation from the verified NanoGPT catalog, preserving custom overrides and approved requests. Add read-only Review picture on image errors, pause advancement during review, keep retry scope text on its own line, and verify native mobile/theme behavior. This maintenance step does not mark F2 policies complete. Evidence: [beta.41 audit](../../review-evidence/2026-10-17-qwen-recovery.md).
+
+
+### beta.42 settings reliability and mobile polish audit
+
+User-requested audit maintenance pass: serialized config merge/write; backend-correlated Advanced saves with failed/unknown draft retention, edited-key patches, retry ownership and concurrent NovelAI parameter safety; stale optional request guards and chat-source reset; secure-context-independent UI IDs; touch-sized Pictures purpose headers/search and light/dark status contrast. Existing advanced controls remain available. Fresh review and automated/browser validation recorded in [beta.42 evidence](../../review-evidence/2026-10-17-settings-audit.md). No paid calls, history reset, new dependency or permission. F2 remains pending.

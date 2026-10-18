@@ -653,12 +653,17 @@ export async function updateConfig(
   patch: Partial<VisualNovelConfig>,
   userId?: string
 ): Promise<VisualNovelConfig> {
-  const current = await loadConfig(spindle, userId);
-  const next = normalizeConfig({ ...current, ...patch });
-  await serializedWrite(scopedKey(userId, "config.json"), () => spindle.userStorage.setJson("config.json", next, {
-    indent: 2,
-    ...(userOptions(userId) ?? {})
-  }));
+  let next!:VisualNovelConfig;
+  await serializedWrite(scopedKey(userId, "config.json"), async () => {
+    // Read and merge under the same queue as the write. Independent fast
+    // changes must see the preceding save rather than a shared stale snapshot.
+    const current = await loadConfig(spindle, userId);
+    next = normalizeConfig({ ...current, ...patch });
+    await spindle.userStorage.setJson("config.json", next, {
+      indent: 2,
+      ...(userOptions(userId) ?? {})
+    });
+  });
   return next;
 }
 

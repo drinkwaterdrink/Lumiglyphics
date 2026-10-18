@@ -1,3 +1,4 @@
+import {createUiId} from '../request-id.js';
 import {setupAppearance,CastContextScanSchema,type CastContextScan,CastArtLibrarySchema,CastSetupInputSchema,type CastSetupInput,type CastArtLibrary,type CastArtAction,CastGallerySchema,type CastGallery} from '../../shared/cast-art.js';
 import {characterAppearanceKey} from '../../shared/identity.js';
 
@@ -42,7 +43,7 @@ export class CastArtPanel {
   this.el<HTMLButtonElement>('[data-cast-art-restore]').onclick=()=>this.guardedRequest({action:'restore',characterId:this.el<HTMLSelectElement>('[data-cast-art-character]').value,variantId:this.el<HTMLSelectElement>('[data-cast-art-variant]').value});
   this.el<HTMLButtonElement>('[data-cast-setup-save]').onclick=()=>this.saveSetup();
   this.el<HTMLButtonElement>('[data-cast-setup-clear]').onclick=()=>this.request({action:'clear_setup',characterId:this.el<HTMLSelectElement>('[data-cast-art-character]').value});
-  this.el<HTMLButtonElement>('[data-cast-setup-outfit-add]').onclick=()=>{if(!this.draft)return;this.readDraft();if(this.draft.outfits.length>=7){this.status('Seven named outfits are already configured. Remove one to make room.');return;}const outfit={id:crypto.randomUUID(),name:`Outfit ${this.draft.outfits.length+1}`,description:''};this.draft.outfits.push(outfit);this.renderOutfits(outfit.id);};
+  this.el<HTMLButtonElement>('[data-cast-setup-outfit-add]').onclick=()=>{if(!this.draft)return;this.readDraft();if(this.draft.outfits.length>=7){this.status('Seven named outfits are already configured. Remove one to make room.');return;}const outfit={id:createUiId(),name:`Outfit ${this.draft.outfits.length+1}`,description:''};this.draft.outfits.push(outfit);this.renderOutfits(outfit.id);};
   this.el<HTMLButtonElement>('[data-cast-setup-outfit-remove]').onclick=()=>{if(!this.draft)return;const id=this.el<HTMLSelectElement>('[data-cast-setup-outfit]').value;this.draft.outfits=this.draft.outfits.filter(o=>o.id!==id);if(this.draft.defaultOutfitId===id)this.draft.defaultOutfitId=null;this.renderOutfits('');};
   this.el<HTMLSelectElement>('[data-cast-setup-outfit]').onchange=()=>this.renderOutfitFields();
   for(const selector of ['[data-cast-setup-outfit-name]','[data-cast-setup-outfit-description]'])this.el<HTMLElement>(selector).oninput=()=>this.readDraft();
@@ -147,7 +148,7 @@ export class CastArtPanel {
   if(this.pending)return;
   if(action.action!=='list'&&this.loadedChat!==chatId){this.clear();this.status('Chat changed. Load its saved characters first.');return;}
   this.cancelConfirm();
-  const requestId=crypto.randomUUID();this.pending={chatId,requestId};this.busy(true);this.status('Loading…');
+  const requestId=createUiId();this.pending={chatId,requestId};this.busy(true);this.status('Loading…');
   this.timer=setTimeout(()=>this.fail('No response yet. Try loading the library again.'),15000);
   try{this.send(chatId,requestId,action);}catch(error){this.fail(error instanceof Error?error.message:String(error));}
  }
@@ -183,7 +184,7 @@ export class CastArtPanel {
   const chatId=this.chat();if(this.pending)return;
   if(!chatId||this.loadedChat!==chatId){this.clear();this.status('Load this chat’s saved characters first.');return;}
   this.cancelConfirm();
-  const requestId=crypto.randomUUID();this.pending={chatId,requestId};this.busy(true);this.status('Loading gallery…');
+  const requestId=createUiId();this.pending={chatId,requestId};this.busy(true);this.status('Loading gallery…');
   this.timer=setTimeout(()=>this.fail('No gallery response yet. Try again.'),15000);
   try{this.gallery(chatId,requestId,offset);}catch(e){this.fail(String(e));}
  }

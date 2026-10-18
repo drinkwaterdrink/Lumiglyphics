@@ -526,8 +526,9 @@ describe("image review controller lifecycle", () => {
     await sendState(f.spindle, "chat", "toggle-user", { viewOpen: true });
     const saved = () => f.data.get(turnPath("chat", "assistant-1", 0)) as StoredTurnRecord;
     await waitFor(() => saved().imageRequests?.at(-1)?.state === "review");
-    f.request({ type: "vn_set_config", patch: { reviewImages: false } }, "toggle-user");
+    f.request({ type: "vn_set_config", patch: { reviewImages: false }, requestId: "config-toggle-test" }, "toggle-user");
     await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(f.sent.some((entry:any)=>entry.type==="vn_config"&&entry.requestId==="config-toggle-test")).toBe(true);
     expect(f.gates).toHaveLength(0);
     f.request({ type: "vn_view", chatId: "chat", open: false }, "toggle-user");
     await waitFor(() => saved().jobs[0]?.status === "cancelled");

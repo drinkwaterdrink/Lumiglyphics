@@ -17,6 +17,9 @@ export const SETTINGS_TOKENS_CSS = `
   --set-success: var(--lumiverse-success, #8ce8b0);
   --set-warning: var(--lumiverse-warning, #ffd08a);
   --set-danger: var(--lumiverse-danger, #ff8ca0);
+  --set-success-ink: color-mix(in srgb, var(--set-success) 35%, var(--set-text));
+  --set-warning-ink: color-mix(in srgb, var(--set-warning) 35%, var(--set-text));
+  --set-danger-ink: color-mix(in srgb, var(--set-danger) 35%, var(--set-text));
   --set-radius: .8rem;
   --set-control: 2.75rem;
   display: block;

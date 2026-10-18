@@ -1,3 +1,4 @@
+import {createUiId} from '../request-id.js';
 import {LocationArtLibrarySchema,type LocationArtLibrary,type LocationArtAction} from '../../shared/stage-assets.js';
 
 /** Explicit metadata management only. Image generation stays in the existing reviewer. */
@@ -23,7 +24,7 @@ export class LocationArtPanel {
   const chatId=this.chat();if(!chatId){this.status('Open a chat to manage its place art.');return;}
   if(this.pending)return;
   if(action.action!=='list'&&this.loadedChat!==chatId){this.clear();this.status('Chat changed. Load its saved places first.');return;}
-  const requestId=crypto.randomUUID();this.pending={chatId,requestId};this.busy(true);this.status('Loading…');
+  const requestId=createUiId();this.pending={chatId,requestId};this.busy(true);this.status('Loading…');
   this.timer=setTimeout(()=>this.fail('No response yet. Try loading the library again.'),15000);
   try{this.send(chatId,requestId,action);}catch(error){this.fail(error instanceof Error?error.message:String(error));}
  }
@@ -49,7 +50,7 @@ export class LocationArtPanel {
   image.hidden=!variant;if(variant){image.src=`/api/v1/images/${encodeURIComponent(variant.imageId)}`;image.onerror=()=>{image.hidden=true;this.status('Preview unavailable. Missing images are never reused automatically.');};}else image.removeAttribute('src');
  }
  private finish():void{if(this.timer)clearTimeout(this.timer);this.timer=null;this.pending=null;this.busy(false);}
- fail(error:string):void{this.finish();this.status(error);}
+ fail(error:string,requestId?:string):void{if(requestId&&requestId!==this.pending?.requestId)return;this.finish();this.status(error);}
  notice(error:string):void{this.status(`Picture completed, but place art was not saved: ${error}`);}
  clear():void{this.finish();this.loadedChat='';this.library={version:1,locations:[]};this.el('[data-art-catalog]').hidden=true;this.el<HTMLImageElement>('[data-art-preview]').removeAttribute('src');this.status('Load the current chat’s saved places.');}
  destroy():void{this.finish();this.host.remove();}

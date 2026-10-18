@@ -55,7 +55,7 @@ export type FrontendRequest =
   | { type: "vn_get_system_one_key_status" }
   | { type: "vn_set_system_one_key"; key: string }
   | { type: "vn_clear_system_one_key" }
-  | { type: "vn_set_config"; patch: Partial<VisualNovelConfig>; chatId?: string }
+  | { type: "vn_set_config"; patch: Partial<VisualNovelConfig>; chatId?: string; requestId?: string }
   | { type: "vn_submit"; chatId: string; content: string; requestId: string }
   | { type: "vn_asset_ready"; chatId: string; messageId: string; jobId: string; sourceFingerprint: string }
   | { type: "vn_cancel"; chatId: string }
@@ -175,7 +175,7 @@ export type BackendResponse =
   | { type: "vn_external_image"; result: CueImageResult }
   | { type: "vn_panel_template"; requestId: string; chatId: string; template?: string; error?: string }
   | { type: "vn_state"; chatId: string; config: VisualNovelConfig; turn: TurnView | null; readingPosition?: ReadingPosition | null }
-  | { type: "vn_config"; config: VisualNovelConfig }
+  | { type: "vn_config"; config: VisualNovelConfig; requestId?: string }
   | { type: "vn_system_one_key_status"; saved: boolean }
   | {
     type: "vn_connection_catalog";

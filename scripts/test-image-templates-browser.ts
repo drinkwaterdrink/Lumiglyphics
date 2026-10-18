@@ -47,9 +47,9 @@ try {
   await settings.getByRole("button", { name: "Save templates", exact: true }).click();
   assert.equal(await page.evaluate(() => (window as any).settingsFixture.config.imageTemplates.find((t: any) => t.id === "environment").positive), "cinematic {{scene}}");
   await body.fill("failed save draft {{scene}}");
-  await page.evaluate(() => { const f = (window as any).settingsFixture; f.ackMode = "manual"; f.panel.options.onSave = (patch: any) => f.patches.push(patch); });
+  await page.evaluate(() => { const f = (window as any).settingsFixture; f.ackMode = "manual"; f.panel.options.onSave = (patch: any,requestId?:string) => {f.patches.push(patch);f.saveRequests.push({patch,requestId});}; });
   await settings.getByRole("button", { name: "Save templates", exact: true }).click();
-  await page.evaluate(() => { const f = (window as any).settingsFixture; f.panel.setSaveStatus({ kind: "error", error: "offline" }); f.panel.setConfig(f.config); });
+  await page.evaluate(() => { const f = (window as any).settingsFixture; f.panel.setSaveStatus({ kind: "error", error: "offline" },f.saveRequests.at(-1).requestId); f.panel.setConfig(f.config); });
   assert.equal(await body.inputValue(), "failed save draft {{scene}}");
   assert.match(await settings.locator('[data-template-status]').innerText(), /offline/);
   await settings.getByRole("button", { name: "Discard template changes", exact: true }).click();

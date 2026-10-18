@@ -1,3 +1,4 @@
+import { createUiId } from "../request-id.js";
 import {PresentationRulesPanel} from './presentation-rules.js';
 import type {PresentationRuleRequest,PresentationRuleCatalog} from '../../shared/presentation-rules.js';
 import {CastArtPanel} from './cast-art.js';
@@ -102,7 +103,7 @@ export type SaveStatus = { kind: "saved" } | { kind: "error"; error: string };
 export type SettingsPanelOptions = {
   mount: HTMLElement;
   /** Receives partial patches. Everyday controls call this on every change; Advanced calls it on Apply. */
-  onSave: (patch: Partial<VisualNovelConfig>) => void;
+  onSave: (patch: Partial<VisualNovelConfig>, requestId?: string) => void;
   onOpenPreview: () => void;
   onRefreshConnections: () => void;
   onPresentationRules?: (request:PresentationRuleRequest)=>void;
@@ -158,9 +159,9 @@ code { font-family: var(--lumiverse-font-mono, ui-monospace, "Cascadia Mono", Co
 [data-search-results] button small { grid-column: 1 / -1; font-size: .78rem; }
 [data-search-empty] { padding: .6rem .7rem; font-size: .88rem; color: var(--set-muted); }
 [data-status] { flex: 0 1 auto; min-height: 1.4rem; font-size: .88rem; font-weight: 550; }
-[data-status][data-kind="saved"] { color: var(--set-success); }
-:is([data-status][data-kind="dirty"], [data-status][data-kind="saving"]) { color: var(--set-warning); }
-[data-status][data-kind="error"] { color: var(--set-danger); }
+[data-status][data-kind="saved"] { color: var(--set-success-ink); }
+:is([data-status][data-kind="dirty"], [data-status][data-kind="saving"]) { color: var(--set-warning-ink); }
+[data-status][data-kind="error"] { color: var(--set-danger-ink); }
 [data-topbar] > [data-open-preview] { margin-left: auto; }
 
 /* Layout: rail + panes on wide containers, tab strip on narrow ones */
@@ -205,13 +206,20 @@ code { font-family: var(--lumiverse-font-mono, ui-monospace, "Cascadia Mono", Co
 [data-group-head] { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem .65rem; }
 [data-group-head] h3 { flex: 1 1 auto; }
 [data-group-head] > small { flex-basis: 100%; }
-[data-apply-chip] { display: inline-flex; align-items: center; gap: .3rem; padding: .05rem .55rem; border: 1px solid color-mix(in srgb, var(--set-warning) 55%, transparent); border-radius: 999px; color: var(--set-warning); font-size: .72rem; font-weight: 650; letter-spacing: .02em; white-space: nowrap; }
+[data-apply-chip] { display: inline-flex; align-items: center; gap: .3rem; padding: .05rem .55rem; border: 1px solid color-mix(in srgb, var(--set-warning) 55%, transparent); border-radius: 999px; color: var(--set-warning-ink); font-size: .72rem; font-weight: 650; letter-spacing: .02em; white-space: nowrap; }
 [data-field] { display: grid; gap: .35rem; min-width: 0; }
 [data-template-fields] { display: grid; gap: .9rem; padding: .75rem 0; }
 [data-template-choices] { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .2rem .75rem; }
 [data-template-editor] summary { min-height: 44px; cursor: pointer; font-weight: 650; display: flex; align-items: center; }
 [data-template-editor] { display: grid; gap: .9rem; padding: .75rem 0; }
 [data-picture-group] > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 650; }
+[data-picture-group][data-picture-section] { border-top:1px solid var(--set-border); padding-top:.3rem; }
+[data-picture-section] > summary { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.2rem .7rem;padding:.6rem 0;list-style:none;line-height:1.35; }
+[data-picture-section] > summary::-webkit-details-marker { display:none; }
+[data-picture-group][data-picture-section] > summary::before { content:none;display:none; }
+[data-picture-section] > summary small { grid-column:1;font-size:.78rem;font-weight:400; }
+[data-picture-section] > summary::after { content:"";grid-column:2;grid-row:1 / 3;width:.45rem;height:.45rem;margin-right:.3rem;border-right:1.5px solid var(--set-muted);border-bottom:1.5px solid var(--set-muted);transform:rotate(45deg); }
+[data-picture-section][open] > summary::after { transform:rotate(225deg); }
 [data-field] > span:first-child, legend { font-weight: 600; font-size: .93rem; }
 [data-field] > span:first-child small { display: inline; }
 fieldset { margin: 0; padding: 0; border: 0; min-width: 0; display: grid; gap: .45rem; }
@@ -324,7 +332,7 @@ label[data-check] small { margin-top: .1rem; }
 [data-audio-status] { font-style: italic; }
 [data-novelai-controls] a { color: var(--set-accent); text-decoration: underline; text-underline-offset: 2px; }
 [data-voice-empty] { padding: 1rem; border: 1px dashed var(--set-border); border-radius: .75rem; }
-[data-reset][data-confirming] { border-color: var(--set-danger); color: var(--set-danger); background: transparent; }
+[data-reset][data-confirming] { border-color: var(--set-danger); color: var(--set-danger-ink); background: transparent; }
 input, select, textarea, button { scroll-margin: 4.5rem 0 8.5rem; }
 
 @media (pointer: coarse) {
@@ -483,7 +491,7 @@ export class VisualNovelSettingsPanel {
     // The live sample starts in Reading; openSection moves it to Look when needed.
     this.root.querySelector('[data-pane="reading"] [data-sample-slot]')!.append(this.root.querySelector("[data-sample]")!);
     this.organizePictures();
-    this.tooltipSettingsPanel=new TooltipSettingsPanel(value=>this.options.onSave({tooltips:value}));
+    this.tooltipSettingsPanel=new TooltipSettingsPanel(value=>this.save({tooltips:value}));
     this.root.querySelector('[data-pane="reading"]')!.append(this.tooltipSettingsPanel.host);
     this.renderTextEffectCards();
     this.wire();
@@ -503,10 +511,22 @@ export class VisualNovelSettingsPanel {
   private organizePictures(): void {
     const generated = this.root.querySelector<HTMLElement>('[data-pane="pictures"] [data-generated-only]')!;
     const children = [...generated.children];
+    const sections:Record<string,{help:string;keywords:string}>={
+      'Generation':{help:'Connection, budget, review and image shape.',keywords:'image dimensions resolution aspect ratio size mobile 9:16 budget provider review'},
+      'Cast setup and portraits':{help:'Appearance, outfits and saved portraits.',keywords:'cast character npc appearance hair eyes consistency scan trackers outfit portrait'},
+      'Saved place art':{help:'Browse and manage reusable environments.',keywords:'locations environment backgrounds places art reuse library'},
+      'Image prompts':{help:'Scene templates, shared style and references.',keywords:'prompt templates manga style positive negative suffix prefix reference'},
+      'Template preferences':{help:'Optional rules for future pictures.',keywords:'rules remember teach arrival dialogue automatic template scope priority'},
+      'Context sources':{help:'Trackers and optional companion data.',keywords:'simtracker lumibooks lumiscript tracker context source status endpoint mapping'},
+      'Advanced image parameters':{help:'Model overrides and provider parameters.',keywords:'model overrides parameters json concurrency novelai workflow'}
+    };
     const section = (title: string, open = false) => {
       const details = document.createElement("details"); details.open = open; details.dataset.pictureGroup = "";
-      const summary = document.createElement("summary"); summary.textContent = title;
-      summary.style.cssText = "min-height:44px;display:flex;align-items:center;cursor:pointer;font-weight:650";
+      details.dataset.pictureSection='';
+      const summary = document.createElement("summary");
+      const label=document.createElement('span');label.textContent=title;summary.append(label);
+      summary.dataset.findLabel=title;summary.dataset.find=sections[title]?.keywords??title;
+      if(sections[title]){const hint=document.createElement('small');hint.textContent=sections[title]!.help;summary.append(hint);}
       details.append(summary); generated.append(details); return details;
     };
     generated.replaceChildren();
@@ -534,11 +554,10 @@ export class VisualNovelSettingsPanel {
     prompts.append(dynamic);
     const templates = document.createElement("div");
     prompts.append(templates);
-    this.templateEditor = new ImageTemplateEditor(templates, patch => this.options.onSave(patch), () => {});
+    this.templateEditor = new ImageTemplateEditor(templates, patch => this.save(patch), () => {});
     const preferences=section("Template preferences");
     this.presentationRules=new PresentationRulesPanel(()=>this.options.getChatId?.()??"",request=>this.options.onPresentationRules?.(request));
     preferences.append(this.presentationRules.host);
-    const preferenceSummary=preferences.querySelector<HTMLElement>("summary")!;preferenceSummary.dataset.findLabel="Template preferences";preferenceSummary.dataset.find="rules remember teach arrival dialogue automatic template scope priority";
     preferences.addEventListener("toggle",()=>{if(preferences.open)this.presentationRules.ensureLoaded();});
     const composition = prompts;
     const style = document.createElement("details"); style.dataset.pictureGroup = "";
@@ -553,12 +572,12 @@ export class VisualNovelSettingsPanel {
     const tracker = document.createElement("label"); tracker.dataset.check = "";
     tracker.innerHTML = '<input name="includeSimTrackerContext" type="checkbox"><span>Include SimTracker visual context<small>Uses supported tracker JSON in this chat, up to the current reply. Saved appearance overrides still take priority. The prompt inspector reports whether a tracker payload was found.</small></span>';
     context.prepend(tracker);
-    this.trackerMappingsPanel=new TrackerMappingsPanel(value=>this.options.onSave({simTrackerMappings:value}));
+    this.trackerMappingsPanel=new TrackerMappingsPanel(value=>this.save({simTrackerMappings:value}));
     context.append(this.trackerMappingsPanel.host);
     const references = document.createElement('label'); references.dataset.check = '';
     references.innerHTML = '<input name="collectEntityReferences" type="checkbox"><span>Prepare story references<small>Collects brief, visible NPC, location and object facts in the existing story-reader response. Optional groundwork for interactive references; no extra model call.</small></span>';
     context.append(references);
-    this.contextSourcesPanel=new ContextSourcesPanel(value=>this.options.onSave({contextSources:value}),(chat,id)=>this.options.onRefreshContextSources?.(chat,id),()=>this.options.getChatId?.()??'');
+    this.contextSourcesPanel=new ContextSourcesPanel(value=>this.save({contextSources:value}),(chat,id)=>this.options.onRefreshContextSources?.(chat,id),()=>this.options.getChatId?.()??'');
     context.append(this.contextSourcesPanel.host);
     const advanced = section("Advanced image parameters");
     for (const name of ["imageModel", "imageConcurrency", "imageParameters"]) advanced.append(this.control(name).closest("label")!);
@@ -1343,6 +1362,7 @@ export class VisualNovelSettingsPanel {
       resetButton.removeAttribute("data-confirming");
       resetButton.textContent = "Reset defaults";
       this.pendingEverydayFields = {};
+      this.pendingAdvanced.clear();this.advancedSaveRequestId=undefined;this.advancedSaveUnconfirmed=false;
       const patch = resetPatch(this.config);
       this.drafts.clear();
       this.refreshStatus();
@@ -1514,7 +1534,7 @@ export class VisualNovelSettingsPanel {
     // 1. Everyday onSave merges into the acknowledged host config plus any in-flight
     // pending everyday fields, without overwriting unrelated incoming keys.
     const nextForHost = {
-      ...(this.config.imageParameters ?? {}),
+      ...((this.pendingAdvanced.get("imageParameters")?.value as Record<string,unknown> | undefined) ?? this.config.imageParameters ?? {}),
       ...this.pendingEverydayFields,
     };
     const changed = this.applyNovelAiField(target, nextForHost);
@@ -1652,10 +1672,14 @@ export class VisualNovelSettingsPanel {
   }
 
   private save(patch: Partial<VisualNovelConfig>, savedMessage = "Saved"): void {
+    this.pendingSavedMessage = savedMessage;
+    const requestId=createUiId();
+    this.latestSaveRequestId=requestId;
+    if(this.pendingAdvanced.size&&!this.advancedSaveRequestId)this.advancedSaveRequestId=requestId;
     try {
-      this.options.onSave(patch);
+      this.options.onSave(patch,requestId);
     } catch (error) {
-      this.setStatus(error instanceof Error ? error.message : String(error), "error");
+      this.setSaveStatus({kind:'error',error:error instanceof Error?error.message:String(error)},requestId);
       return;
     }
     this.setStatus("Saving…", "saving");
@@ -1663,28 +1687,44 @@ export class VisualNovelSettingsPanel {
     this.pendingSavedMessage = savedMessage;
     // Hosts that do not acknowledge saves still get an honest status line.
     this.saveTimer = setTimeout(() => {
-      if (this.status.dataset.kind === "saving") this.setStatus("Sent to Lumiverse. Waiting for confirmation…", "saving");
+      if(this.pendingAdvanced.size){this.advancedSaveUnconfirmed=true;this.refreshStatus();this.setStatus('Save is unconfirmed. Your draft is kept; retry Apply or wait for confirmation.', 'error');}
+      else if (this.status.dataset.kind === "saving") this.setStatus("Sent to Lumiverse. Waiting for confirmation…", "saving");
     }, 5000);
   }
 
+  private latestSaveRequestId: string | undefined;
+  private advancedSaveRequestId: string | undefined;
   private pendingSavedMessage = "Saved";
   private pendingEverydayFields: Record<string, unknown> = {};
+  private pendingAdvanced=new Map<AdvancedKey,{value:unknown;text:string}>();
+  private advancedSaveUnconfirmed=false;
 
   /** Host acknowledgement of the last save. Optional: older hosts never call it. */
-  setSaveStatus(status: SaveStatus): void {
+  setSaveStatus(status: SaveStatus, requestId?: string): void {
+    // Ignore stale or unrelated acknowledgements while another save owns the draft.
+    if(requestId !== (this.pendingAdvanced.size ? this.advancedSaveRequestId : this.latestSaveRequestId)) {
+      if(status.kind==='error'&&requestId===this.latestSaveRequestId){
+        this.pendingEverydayFields={};
+        this.templateEditor.setSaveError(status.error);
+        this.setStatus(`Could not save: ${status.error}. Advanced save is still awaiting confirmation.`, 'error');
+      }
+      return;
+    }
     if (status.kind === "error") this.templateEditor.setSaveError(status.error);
-    if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; }
+    if (this.saveTimer&&(status.kind==='error'||!this.pendingAdvanced.size)) { clearTimeout(this.saveTimer); this.saveTimer = null; }
     if (status.kind === "saved") {
-      if (Object.keys(this.pendingEverydayFields).length > 0) {
+      if (Object.keys(this.pendingEverydayFields).length > 0||this.pendingAdvanced.size>0) {
         // In-flight edits still pending later echo: keep honest saving status
         this.setStatus("Saving…", "saving");
       } else {
-        this.setStatus(this.pendingSavedMessage, "saved", 3000);
+        if(this.drafts.size)this.setStatus(`${this.pendingSavedMessage} ${this.drafts.size} newer change${this.drafts.size===1?' is':'s are'} not applied yet.`, 'dirty');
+        else this.setStatus(this.pendingSavedMessage, "saved", 3000);
       }
     } else {
       // Save error: clear pending fields so rejected edits never become phantom state
       this.pendingEverydayFields = {};
-      this.setStatus(`Could not save: ${status.error}`, "error");
+      const retained=this.pendingAdvanced.size>0;this.pendingAdvanced.clear();this.advancedSaveRequestId=undefined;this.advancedSaveUnconfirmed=false;this.refreshStatus();
+      this.setStatus(`Could not save: ${status.error}${retained?'. Your advanced draft is kept.':''}`, "error");
     }
   }
 
@@ -1695,7 +1735,8 @@ export class VisualNovelSettingsPanel {
   private markDraft(name: AdvancedKey): void {
     // A control that reads exactly what the host last gave us is not a draft. This also
     // absorbs the blur-time change event browsers fire after a programmatic value sync.
-    if (this.advancedValue(name) === this.synced.get(name)) this.drafts.delete(name);
+    if(this.pendingAdvanced.has(name))this.drafts.add(name);
+    else if (this.advancedValue(name) === this.synced.get(name)) this.drafts.delete(name);
     else this.drafts.add(name);
     this.refreshStatus();
   }
@@ -1712,6 +1753,9 @@ export class VisualNovelSettingsPanel {
     const dirty = this.drafts.size > 0;
     const bar = this.root.querySelector<HTMLElement>("[data-draft-bar]")!;
     bar.hidden = !dirty;
+    const saving=this.pendingAdvanced.size>0&&!this.advancedSaveUnconfirmed;
+    this.root.querySelector<HTMLButtonElement>('[data-apply]')!.disabled=saving;
+    this.root.querySelector<HTMLButtonElement>('[data-discard]')!.disabled=saving;
     this.root.querySelector<HTMLElement>("[data-draft-count]")!.textContent =
       `${this.drafts.size} change${this.drafts.size === 1 ? "" : "s"} not applied yet`;
     // Mark each changed field, and count changes per section for the nav badges.
@@ -1733,18 +1777,22 @@ export class VisualNovelSettingsPanel {
       badge.textContent = String(count);
       badge.setAttribute("aria-label", `${count} unapplied`);
     }
-    if (dirty) this.setStatus("Advanced changes are not applied yet.", "dirty");
+    if(this.pendingAdvanced.size&&this.advancedSaveUnconfirmed)this.setStatus('Save is unconfirmed. Your draft is kept; retry Apply or wait for confirmation.','error');
+    else if(saving)this.setStatus('Saving advanced settings… You can keep editing.','saving');
+    else if (dirty) this.setStatus("Advanced changes are not applied yet.", "dirty");
     else if (this.status.dataset.kind === "dirty") this.setStatus("", "idle");
   }
 
   private applyAdvanced(): void {
+    if(this.pendingAdvanced.size&&!this.advancedSaveUnconfirmed)return;
     if (this.drafts.size === 0) {
       this.setStatus("Nothing to apply. Everyday settings save on their own.", "saved", 3000);
       return;
     }
     let patch: Partial<VisualNovelConfig>;
     try {
-      patch = this.readAdvanced();
+      const values=this.readAdvanced();
+      patch=Object.fromEntries([...this.drafts].map(name=>[name,values[name]])) as Partial<VisualNovelConfig>;
     } catch (error) {
       // Show the field that failed, wherever the user is.
       for (const [name, label] of [["parserParameters", "Story reader parameters"], ["imageParameters", "Image parameters"]] as const) {
@@ -1755,13 +1803,16 @@ export class VisualNovelSettingsPanel {
       return;
     }
     this.pendingEverydayFields = {};
-    this.config = { ...this.config, ...patch };
-    this.drafts.clear();
+    this.advancedSaveRequestId=undefined;
+    this.pendingAdvanced=new Map([...this.drafts].map(name=>[name,{value:patch[name],text:this.advancedValue(name)}]));
+    this.advancedSaveUnconfirmed=false;
     this.refreshStatus();
     this.save(patch, "Advanced settings applied.");
   }
 
   private discardAdvanced(): void {
+    if(this.pendingAdvanced.size&&!this.advancedSaveUnconfirmed)return;
+    this.pendingAdvanced.clear();this.advancedSaveRequestId=undefined;this.advancedSaveUnconfirmed=false;
     const count = this.drafts.size;
     this.drafts.clear();
     this.syncFromConfig(this.config);
@@ -1803,7 +1854,19 @@ export class VisualNovelSettingsPanel {
   /* ---------------------------------------------------------------------- */
 
   /** Host-driven update. Advanced controls with unapplied drafts keep their draft text. */
-  setConfig(config: VisualNovelConfig): void {
+  setConfig(config: VisualNovelConfig, requestId?: string): void {
+    for(const [name,submitted] of this.pendingAdvanced){
+      if(requestId!==undefined&&requestId!==this.advancedSaveRequestId)continue;
+      if(JSON.stringify(config[name])!==JSON.stringify(submitted.value))continue;
+      this.synced.set(name,submitted.text);
+      let matches=this.advancedValue(name)===submitted.text;
+      if(!matches&&name==='imageParameters'){
+        try{matches=JSON.stringify(jsonObject(this.advancedValue(name),'Image parameters'))===JSON.stringify({...submitted.value as Record<string,unknown>,...this.pendingEverydayFields});}catch{/* Keep invalid or independently edited JSON as a draft. */}
+      }
+      if(matches)this.drafts.delete(name);else this.drafts.add(name);
+      this.pendingAdvanced.delete(name);
+    }
+    if(!this.pendingAdvanced.size){this.advancedSaveUnconfirmed=false;this.advancedSaveRequestId=undefined;}
     const incoming = config.imageParameters ?? {};
     for (const [k, v] of Object.entries(this.pendingEverydayFields)) {
       if (incoming[k] === v) {
@@ -1817,11 +1880,12 @@ export class VisualNovelSettingsPanel {
       };
     } else {
       this.config = config;
-      if (this.status.dataset.kind === "saving") {
+      if (this.status.dataset.kind === "saving"&&!this.pendingAdvanced.size) {
         this.setStatus(this.pendingSavedMessage, "saved", 3000);
       }
     }
     this.syncFromConfig(this.config);
+    this.refreshStatus();
   }
 
   private syncFromConfig(config: VisualNovelConfig): void {
@@ -2171,11 +2235,12 @@ export class VisualNovelSettingsPanel {
   clearPresentationRules(){this.presentationRules.clear();}
   clearCastArt():void{this.castArtPanel.clear();}
   setLocationArt(chatId:string,requestId:string,library:LocationArtLibrary):void{this.locationArtPanel.receive(chatId,requestId,library);}
-  locationArtError(error:string):void{this.locationArtPanel.fail(error);}
+  locationArtError(error:string,requestId?:string):void{this.locationArtPanel.fail(error,requestId);}
   locationArtNotice(error:string):void{this.locationArtPanel.notice(error);}
   clearLocationArt():void{this.locationArtPanel.clear();}
   setContextSourceReport(report:ContextSourceReport):void{this.contextSourcesPanel.receive(report);}
-  contextSourceError():void{this.contextSourcesPanel.fail();}
+  contextSourceError(requestId?:string):void{this.contextSourcesPanel.fail(requestId);}
+  clearContextSources():void{this.contextSourcesPanel.clear();}
 
   destroy(): void {
     this.contextSourcesPanel.destroy();

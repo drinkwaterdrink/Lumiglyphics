@@ -63,6 +63,7 @@ try {
 
   // Open the Images section
   await settings.getByRole("tab", { name: "Pictures" }).click();
+  await settings.locator("details").evaluateAll(items=>items.forEach(item=>(item as HTMLDetailsElement).open=true));
   const naiControls = settings.locator("[data-novelai-controls]");
 
   // --- Test 1: Stability connection active, NovelAI not selected -> Hidden ---
@@ -299,15 +300,14 @@ try {
   );
 
   // --- Test 10: Advanced JSON draft safety: valid draft seed remains unapplied; invalid draft retained ---
-  // The JSON editor lives in Advanced and the NovelAI controls in Pictures: the
-  // draft must survive switching between the two sections.
-  await settings.getByRole("tab", { name: "Advanced" }).click();
+  // The JSON editor and NovelAI controls share Pictures; drafts stay unapplied.
+  await settings.getByRole("tab", { name: "Pictures" }).click();
   const jsonTextarea = settings.locator('[name="imageParameters"]');
 
   // Subtest 10A: Valid draft with seed change must NOT be silently saved by everyday NovelAI controls
   await jsonTextarea.fill('{"steps": 28, "seed": 777888}');
   assert.match(await settings.locator("[data-status]").innerText(), /not applied/);
-  assert.equal(await settings.locator("[data-apply-bar]").isVisible(), true);
+  assert.equal(await settings.locator("[data-draft-bar]").isVisible(), true);
 
   // User changes everyday control: novelAiSteps to 22
   await settings.getByRole("tab", { name: "Pictures" }).click();
@@ -320,11 +320,11 @@ try {
   assert.equal("seed" in (patch?.imageParameters as any), false, "unapplied seed draft MUST NOT be submitted by everyday controls");
 
   // In the Advanced editor, draft is rebased (steps: 22) and seed is retained, still marked dirty
-  await settings.getByRole("tab", { name: "Advanced" }).click();
+  await settings.getByRole("tab", { name: "Pictures" }).click();
   const rebasedEditorDraft = JSON.parse(await jsonTextarea.inputValue());
   assert.equal(rebasedEditorDraft.seed, 777888, "unapplied seed preserved in editor draft");
   assert.equal(rebasedEditorDraft.steps, 22, "steps rebased in editor draft");
-  assert.equal(await settings.locator("[data-apply-bar]").isVisible(), true, "apply bar remains visible for dirty draft");
+  assert.equal(await settings.locator("[data-draft-bar]").isVisible(), true, "apply bar remains visible for dirty draft");
 
   // Subtest 10B: Invalid draft is retained completely untouched in editor
   await jsonTextarea.fill('{"seed": 777888, INVALID_JSON');
@@ -338,13 +338,13 @@ try {
   assert.equal("seed" in (patch?.imageParameters as any), false);
 
   // Invalid draft in editor is retained untouched
-  await settings.getByRole("tab", { name: "Advanced" }).click();
+  await settings.getByRole("tab", { name: "Pictures" }).click();
   assert.equal(
     await jsonTextarea.inputValue(),
     '{"seed": 777888, INVALID_JSON',
     "invalid draft is retained completely untouched in editor"
   );
-  assert.equal(await settings.locator("[data-apply-bar]").isVisible(), true);
+  assert.equal(await settings.locator("[data-draft-bar]").isVisible(), true);
 
   // Clean up: restore valid json and apply
   await jsonTextarea.fill('{"steps": 20, "guidance": 5, "sampler": "k_euler_ancestral", "resolution": "1216x832"}');
@@ -369,13 +369,13 @@ try {
   // --- Test 11A: Rapid edits (steps then sampler) with delayed echo ordering & optimistic retention ---
   await page.evaluate(() => {
     const f = (window as any).settingsFixture;
-    f.delayedEchos = [];
+    f.delayedEchos = []; f.delayedIds = [];
     f.savedPatches = [];
-    f.panel.options.onSave = (patch: any) => {
-      f.patches.push(patch);
+    f.panel.options.onSave = (patch: any, requestId?:string) => {
+      f.patches.push(patch);f.lastSaveId=requestId;
       f.savedPatches.push(patch);
       f.config = { ...f.config, ...patch };
-      f.delayedEchos.push({ ...f.config });
+      f.delayedEchos.push({ ...f.config });f.delayedIds.push(requestId);
     };
   });
 
@@ -397,7 +397,7 @@ try {
     const f = (window as any).settingsFixture;
     const echo1 = f.delayedEchos[0];
     f.panel.setConfig(echo1);
-    f.panel.setSaveStatus({ kind: "saved" });
+    f.panel.setSaveStatus({ kind: "saved" },f.delayedIds[0]);
   });
 
   // Status must remain "Saving…" because the second edit is still pending acknowledgement!
@@ -415,13 +415,13 @@ try {
     const f = (window as any).settingsFixture;
     const echo2 = f.delayedEchos[1];
     f.panel.setConfig(echo2);
-    f.panel.setSaveStatus({ kind: "saved" });
+    f.panel.setSaveStatus({ kind: "saved" },f.delayedIds[1]);
     // restore normal fixture onSave behavior
-    f.panel.options.onSave = (p: any) => {
-      f.patches.push(p);
+    f.panel.options.onSave = (p: any, requestId?:string) => {
+      f.patches.push(p);f.lastSaveId=requestId;
       f.config = { ...f.config, ...p };
       f.panel.setConfig(f.config);
-      if (f.ackMode === "sync") queueMicrotask(() => f.panel.setSaveStatus({ kind: "saved" }));
+      if (f.ackMode === "sync") queueMicrotask(() => f.panel.setSaveStatus({ kind: "saved" },requestId));
     };
   });
   // Now that all in-flight edits are acknowledged, status transitions to "Saved"
@@ -454,7 +454,7 @@ try {
   // Simulate backend rejection error
   await page.evaluate(() => {
     const f = (window as any).settingsFixture;
-    f.panel.setSaveStatus({ kind: "error", error: "Simulated quota rejection" });
+    f.panel.setSaveStatus({ kind: "error", error: "Simulated quota rejection" },f.lastSaveId);
   });
   assert.match(await settings.locator("[data-status]").innerText(), /Simulated quota rejection/);
 
@@ -479,8 +479,8 @@ try {
     f.config = { ...f.config, imageParameters: { steps: 28, seed: 12345 } };
     f.panel.setConfig(f.config);
     // Pause synchronous setConfig echo to simulate an in-flight save
-    f.panel.options.onSave = (patch: any) => {
-      f.patches.push(patch);
+    f.panel.options.onSave = (patch: any, requestId?:string) => {
+      f.patches.push(patch);f.lastSaveId=requestId;
       f.config = { ...f.config, ...patch };
     };
   });
@@ -496,11 +496,11 @@ try {
       imageParameters: { steps: 28, seed: 12345, characterTags: ["test_tag"] },
     });
     // Restore normal fixture onSave
-    f.panel.options.onSave = (p: any) => {
-      f.patches.push(p);
+    f.panel.options.onSave = (p: any, requestId?:string) => {
+      f.patches.push(p);f.lastSaveId=requestId;
       f.config = { ...f.config, ...p };
       f.panel.setConfig(f.config);
-      if (f.ackMode === "sync") queueMicrotask(() => f.panel.setSaveStatus({ kind: "saved" }));
+      if (f.ackMode === "sync") queueMicrotask(() => f.panel.setSaveStatus({ kind: "saved" },requestId));
     };
   });
   const currentParams = await page.evaluate(() => (window as any).settingsFixture.panel.config.imageParameters);

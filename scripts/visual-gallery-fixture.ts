@@ -35,7 +35,7 @@ if (view === "settings") {
   let config = { ...DEFAULT_CONFIG } as VisualNovelConfig;
   const panel = new VisualNovelSettingsPanel({
     mount, setupStorage: storage as never,
-    onSave: (patch) => { config = { ...config, ...patch }; panel.setConfig(config); queueMicrotask(() => panel.setSaveStatus({ kind: "saved" })); },
+    onSave: (patch,requestId) => { config = { ...config, ...patch }; panel.setConfig(config,requestId); queueMicrotask(() => panel.setSaveStatus({ kind: "saved" },requestId)); },
     onOpenPreview: () => {}, onRefreshConnections: () => {},
     onSaveSystemOneKey: () => panel.setSystemOneKeyStatus(true), onClearSystemOneKey: () => panel.setSystemOneKeyStatus(false),
     onScanAudio: () => ({ bgmCount: 3, sfxCount: 12 }), onImportAudio: () => {},
