@@ -358,7 +358,7 @@ describe("text effects mode options", () => {
 
 describe("settings sections", () => {
   test("seven sections with unique ids, labels and blurbs", () => {
-    expect(SETTINGS_SECTIONS.map((section) => section.id)).toEqual(["reading", "look", "pictures", "sound", "voice", "connections", "advanced"]);
+    expect(SETTINGS_SECTIONS.map((section) => section.id)).toEqual(["reading", "look", "pictures", "characters", "sound", "connections", "advanced"]);
     expect(new Set(SETTINGS_SECTIONS.map((section) => section.label)).size).toBe(SETTINGS_SECTIONS.length);
     for (const section of SETTINGS_SECTIONS) expect(section.blurb.trim().length).toBeGreaterThan(0);
   });
@@ -370,7 +370,7 @@ describe("settings sections", () => {
 
   test("normalizes unknown or missing sections to Reading", () => {
     expect(normalizeSettingsSection("advanced")).toBe("advanced");
-    expect(normalizeSettingsSection("appearance")).toBe("reading");
+    expect(normalizeSettingsSection("appearance")).toBe("look");
     expect(normalizeSettingsSection(null)).toBe("reading");
     expect(normalizeSettingsSection(undefined)).toBe("reading");
     expect(normalizeSettingsSection(3)).toBe("reading");

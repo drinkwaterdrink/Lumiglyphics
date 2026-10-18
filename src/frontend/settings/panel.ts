@@ -1,4 +1,6 @@
 import { createUiId } from "../request-id.js";
+import {SETTINGS_PAGES,SETTINGS_FIELD_PAGES,settingsPage,type SettingsPageId} from "./routes.js";
+import {WORKSPACE_CSS} from "./workspace-css.js";
 import {PresentationRulesPanel} from './presentation-rules.js';
 import type {PresentationRuleRequest,PresentationRuleCatalog} from '../../shared/presentation-rules.js';
 import {CastArtPanel} from './cast-art.js';
@@ -370,7 +372,7 @@ function segments(name: string, steps: ReadonlyArray<{ label: string; value: num
 }
 
 function imageSourceOptions(name: string): string {
-  return `<div data-options>${IMAGE_SOURCE_OPTIONS.map((option) =>
+  return `<div data-options data-source-options>${IMAGE_SOURCE_OPTIONS.map((option) =>
     `<label><input type="radio" name="${name}" value="${option.value}" /><span><b>${esc(option.label)}</b><small>${esc(option.help)}</small></span></label>`).join("")}</div>`;
 }
 
@@ -384,6 +386,7 @@ function themeTiles(name = "themePreset"): string {
 
 
 const ICONS: Record<SettingsSectionId, string> = {
+  characters: '<circle cx="9" cy="8" r="3"/><path d="M3 20v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 5"/>',
   reading: '<path d="M4 5.5C6.5 4.5 9.5 4.6 12 6.3c2.5-1.7 5.5-1.8 8-.8v13c-2.5-1-5.5-.9-8 .8-2.5-1.7-5.5-1.8-8-.8z"/><path d="M12 6.3v13"/>',
   look: '<path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.9 1.4-1.9-.5-1.2.3-2.4 1.6-2.4h1.6a3.9 3.9 0 0 0 3.9-3.9C20.5 7.3 16.7 3.5 12 3.5z"/><circle cx="7.6" cy="11.2" r="1.1"/><circle cx="10.6" cy="7.5" r="1.1"/><circle cx="15" cy="8" r="1.1"/>',
   pictures: '<rect x="3.5" y="5" width="17" height="14" rx="2.2"/><circle cx="9" cy="10" r="1.7"/><path d="m4 17 5-4.5 3.5 3 3-2.5L20 17"/>',
@@ -408,7 +411,7 @@ function more(html: string): string {
 }
 
 function group(title: string, body: string, options: { id?: string; apply?: boolean; help?: string; find?: string } = {}): string {
-  const chip = options.apply ? `<span data-apply-chip title="Changes here wait for the Apply button">Applies with Apply</span>` : "";
+  const chip = options.apply ? `<span data-apply-chip>Save changes</span>` : "";
   const help = options.help ? `<small>${options.help}</small>` : "";
   return `<section data-group${options.id ? ` data-group-id="${options.id}"` : ""}${options.apply ? " data-apply-group" : ""} ${options.find ?? find(title)}><header data-group-head><h3>${esc(title)}</h3>${chip}${help}</header>${body}</section>`;
 }
@@ -423,8 +426,8 @@ function readinessRow(kind: ConnectionCatalogKind): string {
 }
 
 function paneHead(id: SettingsSectionId): string {
-  const section = SETTINGS_SECTIONS.find((candidate) => candidate.id === id)!;
-  return `<header data-pane-head><h2 id="pane-${id}-title">${esc(section.label)}</h2><p>${esc(section.blurb)}</p></header>`;
+  const section = SETTINGS_SECTIONS.find((candidate) => candidate.id === id) ?? {label: "Speech", blurb: "Read paragraphs aloud with your Lumiverse TTS profiles."};
+  return `<header data-pane-head><h2 tabindex="-1" id="pane-${id}-title">${esc(section.label)}</h2><p>${esc(section.blurb)}</p></header>`;
 }
 
 function pane(id: SettingsSectionId, body: string, extra = ""): string {
@@ -458,6 +461,12 @@ export class VisualNovelSettingsPanel {
   private copyTimer: ReturnType<typeof setTimeout> | null = null;
   private sampleLine = 0;
   private section: SettingsSectionId = "reading";
+  private page:SettingsPageId="home";
+  private voiceReturn=false;
+  private pageScroll=new Map<SettingsPageId,number>();
+  private navigationSequence=0;
+  private deferredNavigation:(()=>void)|null=null;
+  private afterSaveNavigation:(()=>void)|null=null;
   private voiceMounted = false;
   private resizeObserver: ResizeObserver | null = null;
   private audioLibrary: { bgmCount: number; sfxCount: number } | null = null;
@@ -481,24 +490,25 @@ export class VisualNovelSettingsPanel {
     this.host.setAttribute("data-vn-settings", "");
     this.root = this.host.attachShadow({ mode: "open" });
     const style = document.createElement("style");
-    style.textContent = PANEL_CSS;
+    style.textContent = PANEL_CSS + WORKSPACE_CSS;
     const body = document.createElement("div");
     body.innerHTML = this.template();
     this.root.append(style, ...Array.from(body.childNodes));
     options.mount.append(this.host);
     this.form = this.root.querySelector("form")!;
     this.status = this.root.querySelector("[data-status]")!;
-    // The live sample starts in Reading; openSection moves it to Look when needed.
-    this.root.querySelector('[data-pane="reading"] [data-sample-slot]')!.append(this.root.querySelector("[data-sample]")!);
-    this.organizePictures();
+    this.root.querySelector('[data-pane="look"] [data-sample-slot]')!.append(this.root.querySelector("[data-sample]")!);
+    this.composePanels();
     this.tooltipSettingsPanel=new TooltipSettingsPanel(value=>this.save({tooltips:value}));
-    this.root.querySelector('[data-pane="reading"]')!.append(this.tooltipSettingsPanel.host);
+    const reading=this.root.querySelector('[data-pane="reading"]')!;
+    reading.insertAdjacentHTML("beforeend",'<label data-check><input name="collectEntityReferences" type="checkbox"><span>Prepare story references<small>Collect visible NPC, place and object facts within the existing story-reader response.</small></span></label>');
+    reading.append(this.tooltipSettingsPanel.host);
     this.renderTextEffectCards();
     this.wire();
     this.wireNavigation();
     this.wireSearch();
     this.renderSetupVisibility();
-    this.openSection(this.rememberedSection(), { remember: false });
+    this.openPage(this.rememberedSection(), { remember: false });
     this.syncFromConfig(DEFAULT_CONFIG);
   }
 
@@ -508,100 +518,76 @@ export class VisualNovelSettingsPanel {
 
   setImagePreviewMetadata(metadata?: ImagePromptMetadata): void { this.templateEditor.setPreviewMetadata(metadata); }
 
-  private organizePictures(): void {
-    const generated = this.root.querySelector<HTMLElement>('[data-pane="pictures"] [data-generated-only]')!;
-    const children = [...generated.children];
-    const sections:Record<string,{help:string;keywords:string}>={
-      'Generation':{help:'Connection, budget, review and image shape.',keywords:'image dimensions resolution aspect ratio size mobile 9:16 budget provider review'},
-      'Cast setup and portraits':{help:'Appearance, outfits and saved portraits.',keywords:'cast character npc appearance hair eyes consistency scan trackers outfit portrait'},
-      'Saved place art':{help:'Browse and manage reusable environments.',keywords:'locations environment backgrounds places art reuse library'},
-      'Image prompts':{help:'Scene templates, shared style and references.',keywords:'prompt templates manga style positive negative suffix prefix reference'},
-      'Template preferences':{help:'Optional rules for future pictures.',keywords:'rules remember teach arrival dialogue automatic template scope priority'},
-      'Context sources':{help:'Trackers and optional companion data.',keywords:'simtracker lumibooks lumiscript tracker context source status endpoint mapping'},
-      'Advanced image parameters':{help:'Model overrides and provider parameters.',keywords:'model overrides parameters json concurrency novelai workflow'}
-    };
-    const section = (title: string, open = false) => {
-      const details = document.createElement("details"); details.open = open; details.dataset.pictureGroup = "";
-      details.dataset.pictureSection='';
-      const summary = document.createElement("summary");
-      const label=document.createElement('span');label.textContent=title;summary.append(label);
-      summary.dataset.findLabel=title;summary.dataset.find=sections[title]?.keywords??title;
-      if(sections[title]){const hint=document.createElement('small');hint.textContent=sections[title]!.help;summary.append(hint);}
-      details.append(summary); generated.append(details); return details;
-    };
-    generated.replaceChildren();
-    const generation = section("Generation", true);
-    for (const i of [0, 1, 3]) generation.append(children[i]!);
-    const outputShape = document.createElement("label");
-    const ratioLabels: Record<string,string> = {default: 'Template / connection default', '1:1': '1:1 — Square', '9:16': '9:16 — Mobile portrait', '16:9': '16:9 — Widescreen', '3:4': '3:4 — Portrait', '4:3': '4:3 — Landscape', '2:3': '2:3 — Tall portrait', '3:2': '3:2 — Wide landscape'};
-    outputShape.innerHTML = `<span>Generated image shape</span><select name="imageOutputAspectRatio">${IMAGE_OUTPUT_RATIOS.map(r=>`<option value="${r}">${ratioLabels[r]}</option>`).join('')}</select><small>Preferred shape for new pictures across all templates. Known models use a supported size: Anima and Qwen Image 2.1 Turbo support 9:16; FLUX.3 Klein uses square output. Other model support varies. Held prompts keep their dimensions; Picture fit controls display only. Raw overrides and custom workflows require Template / connection default.</small>`;
-    generation.append(outputShape);
-    const placeReuse=document.createElement('label');placeReuse.dataset.check='';
-    placeReuse.innerHTML='<input type="checkbox" name="persistentLocationArt"><span>Reuse saved place art<small>Environment templates only. Compatible saved pictures cost no new image slots; new pictures still follow the image budget and prompt review. Off by default.</small></span>';
-    generation.append(placeReuse);
-    const castReuse=document.createElement('label');castReuse.dataset.check='';
-    castReuse.innerHTML='<input type="checkbox" name="persistentCastArt"><span>Reuse saved portrait art<small>Reuses matching Character portrait pictures across turns, without spending new image slots. Appearance, outfit, scene, prompt, model and dimensions must match. Reference-based generation keeps its existing path. Off by default.</small></span>';
-    generation.append(castReuse);
-    const cast=section('Cast setup and portraits');
-    this.castArtPanel=new CastArtPanel(()=>this.options.getChatId?.()??'',(chat,id,action)=>this.options.onCastArt?.(chat,id,action),(chat,id,offset)=>this.options.onCastGallery?.(chat,id,offset),name=>{this.openSection('voice',{focus:true});this.options.onCastVoice?.(name);});cast.append(this.castArtPanel.host);
-    cast.addEventListener('toggle',()=>{if(cast.open)this.castArtPanel.ensureLoaded();});
-    const places=section('Saved place art');
-    this.locationArtPanel=new LocationArtPanel(()=>this.options.getChatId?.()??'',(chat,id,action)=>this.options.onLocationArt?.(chat,id,action));places.append(this.locationArtPanel.host);
-
-    const dynamic = document.createElement("label"); dynamic.dataset.check = "";
-    dynamic.innerHTML = '<input name="dynamicImageTemplates" type="checkbox"><span>Choose templates from story context<small>When off, pictures start with the default template. Saved template preferences may override it. This is independent of prompt review and keeps the existing picture budget.</small></span>';
-    const prompts = section("Image prompts");
-    prompts.append(dynamic);
-    const templates = document.createElement("div");
-    prompts.append(templates);
-    this.templateEditor = new ImageTemplateEditor(templates, patch => this.save(patch), () => {});
-    const preferences=section("Template preferences");
-    this.presentationRules=new PresentationRulesPanel(()=>this.options.getChatId?.()??"",request=>this.options.onPresentationRules?.(request));
-    preferences.append(this.presentationRules.host);
-    preferences.addEventListener("toggle",()=>{if(preferences.open)this.presentationRules.ensureLoaded();});
-    const composition = prompts;
-    const style = document.createElement("details"); style.dataset.pictureGroup = "";
-    style.innerHTML = '<summary>Shared style and exclusions</summary>';
-    style.append(this.root.querySelector('[data-group-id="prompts"]')!);
-    composition.append(style);
-    const consistency = document.createElement("details"); consistency.dataset.pictureGroup = "";
-    consistency.innerHTML = '<summary>Character consistency and references</summary>';
-    consistency.append(children[2]!); composition.append(consistency);
-    const context = section("Context sources");
-    context.append(this.root.querySelector('[data-group-id="context"]')!);
-    const tracker = document.createElement("label"); tracker.dataset.check = "";
-    tracker.innerHTML = '<input name="includeSimTrackerContext" type="checkbox"><span>Include SimTracker visual context<small>Uses supported tracker JSON in this chat, up to the current reply. Saved appearance overrides still take priority. The prompt inspector reports whether a tracker payload was found.</small></span>';
-    context.prepend(tracker);
+  private composePanels(): void {
+    const mount=(selector:string)=>this.root.querySelector<HTMLElement>(selector)!;
+    this.castArtPanel=new CastArtPanel(()=>this.options.getChatId?.()??'',(chat,id,action)=>this.options.onCastArt?.(chat,id,action),(chat,id,offset)=>this.options.onCastGallery?.(chat,id,offset),name=>{this.voiceReturn=true;this.openPage('speech',{focus:true});this.options.onCastVoice?.(name);});
+    mount('[data-cast-mount]').append(this.castArtPanel.host);
+    this.locationArtPanel=new LocationArtPanel(()=>this.options.getChatId?.()??'',(chat,id,action)=>this.options.onLocationArt?.(chat,id,action));
+    mount('[data-places-mount]').append(this.locationArtPanel.host);
+    this.templateEditor=new ImageTemplateEditor(mount('[data-templates-mount]'),patch=>this.save(patch),()=>{});
+    this.presentationRules=new PresentationRulesPanel(()=>this.options.getChatId?.()??'',request=>this.options.onPresentationRules?.(request));
+    mount('[data-rules-mount]').append(this.presentationRules.host);
     this.trackerMappingsPanel=new TrackerMappingsPanel(value=>this.save({simTrackerMappings:value}));
-    context.append(this.trackerMappingsPanel.host);
-    const references = document.createElement('label'); references.dataset.check = '';
-    references.innerHTML = '<input name="collectEntityReferences" type="checkbox"><span>Prepare story references<small>Collects brief, visible NPC, location and object facts in the existing story-reader response. Optional groundwork for interactive references; no extra model call.</small></span>';
-    context.append(references);
+    mount('[data-tracker-mount]').append(this.trackerMappingsPanel.host);
     this.contextSourcesPanel=new ContextSourcesPanel(value=>this.save({contextSources:value}),(chat,id)=>this.options.onRefreshContextSources?.(chat,id),()=>this.options.getChatId?.()??'');
-    context.append(this.contextSourcesPanel.host);
-    const advanced = section("Advanced image parameters");
-    for (const name of ["imageModel", "imageConcurrency", "imageParameters"]) advanced.append(this.control(name).closest("label")!);
-    advanced.append(children[4]!);
-    for (const id of ["prompts", "context"]) this.root.querySelector(`[data-jump-to="${id}"]`)?.remove();
+    mount('[data-sources-mount]').append(this.contextSourcesPanel.host);
+  }
+  private pageLink(id:string,title?:string):string {
+    const page=settingsPage(id);
+    return `<button type="button" data-page-link="${page.id}"><span><b>${esc(title??page.title)}</b><small>${esc(page.description)}</small></span><span aria-hidden="true">›</span></button>`;
   }
 
   private template(): string {
+    const sharedStyle = group("Shared style", `
+              <div data-field ${find("Prompt presets", "preset save delete positive negative")}>
+                <span>Preset</span>
+                <div data-preset-row>
+                  <select name="promptPresetSelect" aria-label="Prompt preset"><option value="">Custom (no preset)</option></select>
+                  <input name="promptPresetName" type="text" placeholder="Preset name" aria-label="Preset name" />
+                  <button type="button" data-preset-save>Save preset</button>
+                  <button type="button" data-preset-delete>Delete</button>
+                </div>
+                <small>Choose a built-in style or your own preset, then Apply to use the edited fields for future pictures. Save preset stores a personal copy immediately; it does not apply it. Held pictures keep their prepared prompts.</small>
+              </div>
+              <p data-style-description role="status"></p>
+              <div data-row>
+                <label data-field ${find("Positive prefix", "prompt prefix tags")}><span>Style / positive prefix</span><textarea name="promptPrefix" aria-label="Style / positive prefix" rows="2"></textarea><small>{{style}} inserts this wording. Keep the main medium here.</small></label>
+                <label data-field ${find("Positive suffix", "prompt suffix tags")}><span>Finishing details / positive suffix</span><textarea name="promptSuffix" aria-label="Finishing details / positive suffix" rows="3"></textarea><small>{{suffix}} inserts exactly this text wherever the template places it. It comes from this field, not story context.</small></label>
+              </div>
+              <label data-field ${find("Negative prompt", "negative tags")}><span>Negative prompt</span><textarea name="negativePrompt" aria-label="Shared negative prompt" rows="2"></textarea><small>{{negative}} inserts these exclusions. Support depends on your model; FLUX.2 relies on positive descriptions instead.</small></label>
+              <div data-novelai-prompt-controls hidden>
+                <label data-check ${find("NovelAI quality tags", "novelai quality tags")}><input name="novelAiQualityTags" type="checkbox" /><span>Add NovelAI model-specific quality tags${more("Tags are included in the sent prompt. V4.5 Curated also adds rating:general and reduces feet emphasis. Turn off for full control.")}</span></label>
+                <label data-check ${find("NovelAI default negative", "novelai negative default")}><input name="novelAiUseDefaultNegative" type="checkbox" /><span>Use NovelAI defaults for an unchanged negative prompt${more("Your edited negative prompt is always preserved. An empty field stays empty. Native emphasis and separate character prompts are selected automatically for supported models.")}</span></label>
+              </div>
+              <label data-check ${find("Series reference tag", "creation series original reference")}><input name="originalReference" type="checkbox" /><span>Include character creation / series reference tag</span></label>
+              <label data-field ${find("Creation / series name", "series franchise original")}><span>Creation / series name</span><input name="originalCreationName" type="text" placeholder="e.g. doki doki literature club" />${more("When enabled, NovelAI uses: Character, series name. Other profiles use: Character \\(Creation\\). Appearance tags follow as usual.")}</label>
+            `, { id: "prompts", apply: true });
+    const storyContext = group("What the story reader sees", `
+              <label data-field ${find("Recent messages", "context history messages story reader")}><span>Recent messages</span><input name="includeRecentMessages" type="number" min="0" max="30" step="1" /></label>
+              <label data-check ${find("Character-card context", "character card context")}><input name="includeCharacterContext" type="checkbox" /><span>Include character-card context</span></label>
+              <label data-check ${find("Persona context", "persona user context")}><input name="includePersonaContext" type="checkbox" /><span>Include active persona context</span></label>
+              <label data-check ${find("Lorebook context", "lorebook world info context")}><input name="includeLorebookContext" type="checkbox" /><span>Include activated lorebook context</span></label>
+              <label data-field ${find("Story reader instructions", "planner custom instructions prompt")}><span>Story reader instructions</span><textarea name="customPlannerInstructions"></textarea></label>
+            `, { id: "context", apply: true });
     const tabs = SETTINGS_SECTIONS.map(({ id, label }) => `
           <button type="button" role="tab" id="tab-${id}" data-tab="${id}" aria-controls="pane-${id}" aria-selected="false" tabindex="-1" aria-labelledby="tab-${id}-label" aria-describedby="tab-${id}-summary">
             ${icon(ICONS[id])}<span data-tab-text><span id="tab-${id}-label" data-tab-label>${esc(label)}</span><span id="tab-${id}-summary" data-tab-summary></span></span>${id === "connections" ? '<span data-tab-dot data-level="loading" aria-hidden="true"></span>' : ""}<span data-tab-badge hidden></span>
           </button>`).join("");
     return `
     <div data-shell>
-      <div data-topbar>
-        <div data-search role="search">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
-          <input type="search" data-settings-search aria-label="Find a setting" placeholder="Find a setting…" autocomplete="off" spellcheck="false" aria-controls="settings-search-results" />
-          <span data-search-announcement role="status" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap"></span>
-          <div id="settings-search-results" data-search-results hidden></div>
-        </div>
-        <span data-status role="status" aria-live="polite"></span>
-        <button type="button" data-open-preview>Open preview</button>
+      <div data-workspace-header>
+        <button type="button" data-all-settings aria-label="All settings">‹ <span>All settings</span></button>
+        <button type="button" data-category-picker aria-haspopup="dialog"><span data-page-label>All settings</span><span aria-hidden="true">⌄</span></button>
+        <button type="button" data-toggle-search aria-label="Search Lumiglyphics">${icon('<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>')}</button>
       </div>
+      <div data-topbar><div data-search role="search" hidden>
+          <input type="search" data-settings-search aria-label="Search Lumiglyphics" placeholder="Search Lumiglyphics…" autocomplete="off" spellcheck="false" aria-controls="settings-search-results" />
+          <span data-search-announcement role="status" aria-live="polite" class="sr-only"></span>
+          <div id="settings-search-results" data-search-results hidden></div>
+        </div><span data-status role="status" aria-live="polite"></span>
+      </div>
+      <dialog data-category-dialog aria-label="Settings categories"><header><h2>All settings</h2><button type="button" data-close-categories aria-label="Close categories">×</button></header><div data-category-options>${SETTINGS_SECTIONS.map(section=>`<button type="button" data-page-link="${section.id==='sound'?'audio':section.id}">${esc(section.label)}<span>›</span></button>`).join('')}</div></dialog>
+      <dialog data-leave-dialog aria-label="Unsaved changes"><h2>Unsaved changes</h2><p>Save this page, discard its edits, or stay here.</p><div data-actions><button type="button" data-leave-save data-primary>Save changes</button><button type="button" data-leave-discard>Discard</button><button type="button" data-leave-stay>Stay</button></div></dialog>
 
       <section data-setup aria-labelledby="setup-title" hidden>
         <header>
@@ -631,21 +617,20 @@ export class VisualNovelSettingsPanel {
         </ol>
         <footer>
           <button type="button" data-primary data-setup-done>Done</button>
-          <button type="button" data-open-preview>Open preview</button>
+          <button type="button" data-open-preview>Open reader</button>
           <small>You can change any of this later. Choices here are saved as you make them.</small>
         </footer>
       </section>
 
       <div data-layout>
         <nav data-nav aria-label="Settings sections">
-          <label data-section-selector>Settings section<select data-section-select aria-label="Settings section">${SETTINGS_SECTIONS.map(s => `<option value="${s.id}">${esc(s.label)}</option>`).join("")}</select></label>
           <div role="tablist" data-tablist aria-orientation="vertical">${tabs}
           </div>
         </nav>
 
         <form novalidate data-panes>
+          <section data-home data-workspace-page="home"><header><h1>Lumiglyphics</h1><p>Make the reader your own.</p></header><label data-check><input type="checkbox" name="enabled"><span>Enable Lumiglyphics<small>All chats</small></span></label><div data-home-categories>${SETTINGS_SECTIONS.map(section=>`<button type="button" data-page-link="${section.id==='sound'?'audio':section.id}">${icon(ICONS[section.id])}<span><b>${esc(section.label)}</b><small>${esc(section.blurb)}</small></span><span aria-hidden="true">›</span></button>`).join('')}</div><button type="button" data-open-preview>Open reader</button><small>Opening the reader can prepare the current reply using your existing settings.</small></section>
           ${pane("reading", `
-            <div data-sample-slot></div>
             ${group("Pace", `
               <fieldset ${find("Text speed", "typing typewriter letters milliseconds")}>
                 <legend>Text speed</legend>
@@ -669,7 +654,7 @@ export class VisualNovelSettingsPanel {
           `)}
 
           ${pane("look", `
-            <div data-sample-slot></div>
+            <details data-appearance-preview><summary>Preview appearance</summary><div data-sample-slot></div></details>
             ${group("Theme", themeTiles(), { find: find("Theme", "preset style colours colors skin golden paper noir console yamaku literature") })}
             ${group("Text", `
               <label data-check><input name="adjustableSheetEnabled" type="checkbox" /><span>Adjustable text panel<small>Resize or hide text to see the picture. Drag the handle or choose a panel size.</small></span></label>
@@ -706,6 +691,7 @@ export class VisualNovelSettingsPanel {
 
           ${pane("pictures", `
             ${group("Where pictures come from", imageSourceOptions("imageSource"), { find: find("Picture source", "image source card generated illustrations text only") })}
+            <p data-generation-inactive hidden>Generation settings are kept. Choose Generate illustrations to use them.</p>
             <div data-generated-only>
               ${group("Prompt review", `<label data-check><input name="reviewImages" type="checkbox" /><span>Review before generating<small>Applies to the next image batch. Hold pictures to inspect and edit their prompts in the Image prompts panel. The inspector stays available in automatic mode.</small></span></label>`, { find: find("Prompt review", "inspect approve preview prompts automatic") })}
               ${group("Pictures per reply", `
@@ -715,6 +701,21 @@ export class VisualNovelSettingsPanel {
                   <label data-field data-custom="maxImagesPerTurn" hidden><span>Maximum pictures per reply</span><input name="maxImagesPerTurn" type="number" min="0" max="12" step="1" /><small>0 removes the limit. Long replies can then cost more than you expect.</small></label>
                 </fieldset>
               `, { find: find("Pictures per reply", "budget limit images cost light balanced rich") })}
+              ${group("Image connection", `
+                <div data-field>
+                  ${readinessRow("image")}
+                  <select name="imageConnectionId" data-connection-select="image" aria-label="Image connection"><option value="">Lumiverse default</option></select>
+                </div>
+              `, { find: find("Image connection", "image model provider stability comfyui novelai") })}
+
+            </div>
+            <label data-field ${find("Generated image shape","dimensions resolution aspect ratio mobile 9:16 size")}><span>Generated image shape</span><select name="imageOutputAspectRatio">${IMAGE_OUTPUT_RATIOS.map(r=>`<option value="${r}">${r==='default'?'Template / connection default':r}</option>`).join('')}</select><small>Preferred output shape. Verified model constraints can limit it. Held pictures keep their prepared size; display fit is separate.</small></label>
+            <div data-page-links>${this.pageLink('templates')}${this.pageLink('style')}${this.pageLink('rules')}${this.pageLink('consistency')}${this.pageLink('generation')}${this.pageLink('characters','Manage characters & places')}${this.pageLink('appearance','Change display picture fit')}</div>
+            <section data-workspace-page="templates"><label data-check><input name="dynamicImageTemplates" type="checkbox"><span>Choose templates from story context<small>Only included templates are available. Budget and review remain independent.</small></span></label><div data-templates-mount ${find('Scene templates','manga ensemble character portrait dynamic prompt format')}></div></section>
+            <section data-workspace-page="style">${sharedStyle}</section>
+            <section data-workspace-page="rules"><div data-rules-mount ${find('Template rules','preferences dialogue arrival priority scope remember')}></div></section>
+            <section data-workspace-page="consistency">
+              <p>Generation references may be sent to the image model. Compatible picture reuse avoids a new image request. Display portraits are gallery assignments managed under Characters & places.</p>
               ${group("Consistent characters", `
                 <label data-check><input name="referenceAnchoring" type="checkbox" /><span>Keep each character looking the same between pictures<small>Reuses a character's first portrait as a reference for later ones.</small></span></label>
                 <fieldset data-reference-source hidden>
@@ -722,13 +723,15 @@ export class VisualNovelSettingsPanel {
                   ${optionList("referenceSource", REFERENCE_SOURCE_OPTIONS)}
                 </fieldset>
               `, { find: find("Consistent characters", "reference anchoring portrait same look sprites") })}
-              ${group("Image connection", `
-                <div data-field>
-                  ${readinessRow("image")}
-                  <select name="imageConnectionId" data-connection-select="image" aria-label="Image connection"><option value="">Lumiverse default</option></select>
-                </div>
-              `, { find: find("Image connection", "image model provider stability comfyui novelai") })}
-              <section data-group data-novelai-controls hidden ${find("NovelAI", "novelai dimensions steps sampler seed guidance cfg anlas")}>
+              <label data-check><input name="persistentLocationArt" type="checkbox"><span>Reuse saved place art<small>Compatible environment pictures only; new pictures still follow budget and review.</small></span></label>
+              <label data-check><input name="persistentCastArt" type="checkbox"><span>Reuse saved portrait art<small>Appearance, outfit, scene, prompt, model and dimensions must match.</small></span></label>
+              ${this.pageLink('characters','Manage display portraits and saved art')}
+            </section>
+            <section data-workspace-page="generation">
+              <label data-field ${find('Image model override','checkpoint model')}><span>Image model override</span><input name="imageModel" type="text" placeholder="Use the selected connection model"><small data-image-model-hint>Leave blank to use the connection model.</small></label>
+              <label data-field ${find('Images at the same time','concurrency parallel')}><span>Images generated at the same time</span><input name="imageConcurrency" type="number" min="1" max="6"></label>
+              <label data-field ${find('Image parameters (JSON)','parameters guidance cfg steps size')}><span>Image parameters (JSON)</span><textarea name="imageParameters" spellcheck="false"></textarea></label>
+                            <section data-group data-novelai-controls hidden ${find("NovelAI", "novelai dimensions steps sampler seed guidance cfg anlas")}>
                 <header data-group-head><h3>NovelAI</h3><small>Shown because the image connection is NovelAI.</small></header>
                 <fieldset>
                   <legend>Image dimensions</legend>
@@ -758,10 +761,11 @@ export class VisualNovelSettingsPanel {
                   </div>
                 </div>
               </section>
-            </div>
+            </section>
           `)}
-
+          ${pane("characters", `<div data-character-tabs><button type="button" data-entity-tab="cast" aria-pressed="true">Characters</button><button type="button" data-entity-tab="places" aria-pressed="false">Places</button></div><div data-cast-mount ${find('Characters & places','cast npc character appearance outfits portrait gallery scan context voice')}></div><div data-places-mount hidden></div>`)}
           ${pane("sound", `
+            <section data-workspace-page="audio"><div data-page-links>${this.pageLink('speech')}${this.pageLink('music')}</div></section>
             ${group("Music library", `
               <div data-sound-empty>
                 ${icon(ICONS.sound)}
@@ -789,6 +793,7 @@ export class VisualNovelSettingsPanel {
           `)}
 
           ${pane("connections", `
+            <div data-page-links>${this.pageLink('context')}${this.pageLink('system-one')}</div>
             <div data-actions><button type="button" data-refresh-connections>Refresh connection list</button><small>Refreshing is free. Connections are listed, not tested.</small></div>
             ${group("Story reader", `
               <div data-field>
@@ -798,95 +803,52 @@ export class VisualNovelSettingsPanel {
               </div>
             `, { find: find("Story reader connection", "planner parser model llm connection") })}
             ${group("Image connection", `
-              <div data-actions><small>Chosen in Pictures, next to where pictures come from.</small><button type="button" data-goto="pictures" data-goto-target="imageConnectionId">Go to Pictures</button></div>
+              <div data-actions><small><span data-image-connection-summary>Image connection is listed in Images.</span></small><button type="button" data-goto="pictures" data-goto-target="imageConnectionId">Go to Images</button></div>
             `, { find: "" })}
-            ${group("System One", `
+            <section data-workspace-page="context">${storyContext}<label data-check><input name="includeSimTrackerContext" type="checkbox"><span>Include SimTracker visual context<small>Saved appearance overrides retain priority.</small></span></label><div data-tracker-mount ${find("Tracker field mapping","simtracker custom fields hair eyes appearance clothing mappings")}></div><p>Companion status is available reference status only; it does not import private facts.</p><div data-sources-mount ${find("Companion context sources","lumibooks lumiscript endpoint refresh status context")}></div></section>
+            <section data-workspace-page="system-one">${group("System One", `
               <label data-field ${find("System One decisions", "jev typesafe mode compare")}><span>System One decisions</span><select name="systemOneMode"><option value="off">Off</option><option value="compare">Compare with story reader</option><option value="on">Use for presentation and familiar scenes</option></select>${more("Jev makes bounded speaker, expression, audio, and scene decisions. Compare logs agreement without changing the turn.")}</label>
               <div data-row>
                 <label data-field ${find("System One API URL", "jev endpoint url")}><span>API URL</span><input name="systemOneApiUrl" type="url" placeholder="https://api.typesafe.ai" /><small>Requests go through Lumiverse's HTTP proxy.</small></label>
                 <label data-field ${find("System One model", "jev model")}><span>Model</span><input name="systemOneModel" type="text" placeholder="jev-latest" /></label>
               </div>
               <div data-field ${find("System One API key", "jev key secret password")}><span>API key</span><input name="systemOneApiKey" type="password" autocomplete="new-password" placeholder="Enter key" /><div data-actions><button type="button" data-save-system-one-key>Save key</button><button type="button" data-clear-system-one-key>Remove key</button><small data-system-one-key-status>Checking saved key…</small></div><small>The key saves at once, encrypted for this extension. It is never part of Lumiglyphics settings.</small></div>
-            `, { apply: true, help: "Optional. Mode, URL and model wait for Apply; the key saves on its own.", find: find("System One", "jev") })}
+            `, { apply: true, help: "Optional. Mode, URL and model wait for Apply; the key saves on its own.", find: find("System One", "jev") })}</section>
           `)}
 
           ${pane("advanced", `
-            <p class="muted">Fields marked Apply wait until you choose <b>Apply</b>, including shared style and advanced image options in Pictures. Everyday controls save immediately; templates have their own Save button.</p>
-            <div data-jump aria-label="Jump to">
-              <button type="button" data-jump-to="prompts">Image prompts</button>
-              <button type="button" data-jump-to="context">Story reader</button>
-              <button type="button" data-jump-to="filtering">Text filtering</button>
-              <button type="button" data-jump-to="models">Models and parameters</button>
-              <button type="button" data-jump-to="css">Custom CSS</button>
-              <button type="button" data-jump-to="storage">Storage and logs</button>
-              <button type="button" data-jump-to="maintenance">Reset</button>
-            </div>
-            ${group("Shared style", `
-              <div data-field ${find("Prompt presets", "preset save delete positive negative")}>
-                <span>Preset</span>
-                <div data-preset-row>
-                  <select name="promptPresetSelect" aria-label="Prompt preset"><option value="">Custom (no preset)</option></select>
-                  <input name="promptPresetName" type="text" placeholder="Preset name" aria-label="Preset name" />
-                  <button type="button" data-preset-save>Save preset</button>
-                  <button type="button" data-preset-delete>Delete</button>
-                </div>
-                <small>Choose a built-in style or your own preset, then Apply to use the edited fields for future pictures. Save preset stores a personal copy immediately; it does not apply it. Held pictures keep their prepared prompts.</small>
-              </div>
-              <p data-style-description role="status"></p>
-              <div data-row>
-                <label data-field ${find("Positive prefix", "prompt prefix tags")}><span>Style / positive prefix</span><textarea name="promptPrefix" aria-label="Style / positive prefix" rows="2"></textarea><small>{{style}} inserts this wording. Keep the main medium here.</small></label>
-                <label data-field ${find("Positive suffix", "prompt suffix tags")}><span>Finishing details / positive suffix</span><textarea name="promptSuffix" aria-label="Finishing details / positive suffix" rows="3"></textarea><small>{{suffix}} inserts exactly this text wherever the template places it. It comes from this field, not story context.</small></label>
-              </div>
-              <label data-field ${find("Negative prompt", "negative tags")}><span>Negative prompt</span><textarea name="negativePrompt" aria-label="Shared negative prompt" rows="2"></textarea><small>{{negative}} inserts these exclusions. Support depends on your model; FLUX.2 relies on positive descriptions instead.</small></label>
-              <div data-novelai-prompt-controls hidden>
-                <label data-check ${find("NovelAI quality tags", "novelai quality tags")}><input name="novelAiQualityTags" type="checkbox" /><span>Add NovelAI model-specific quality tags${more("Tags are included in the sent prompt. V4.5 Curated also adds rating:general and reduces feet emphasis. Turn off for full control.")}</span></label>
-                <label data-check ${find("NovelAI default negative", "novelai negative default")}><input name="novelAiUseDefaultNegative" type="checkbox" /><span>Use NovelAI defaults for an unchanged negative prompt${more("Your edited negative prompt is always preserved. An empty field stays empty. Native emphasis and separate character prompts are selected automatically for supported models.")}</span></label>
-              </div>
-              <label data-check ${find("Series reference tag", "creation series original reference")}><input name="originalReference" type="checkbox" /><span>Include character creation / series reference tag</span></label>
-              <label data-field ${find("Creation / series name", "series franchise original")}><span>Creation / series name</span><input name="originalCreationName" type="text" placeholder="e.g. doki doki literature club" />${more("When enabled, NovelAI uses: Character, series name. Other profiles use: Character \\(Creation\\). Appearance tags follow as usual.")}</label>
-            `, { id: "prompts", apply: true })}
-            ${group("What the story reader sees", `
-              <label data-field ${find("Recent messages", "context history messages story reader")}><span>Recent messages</span><input name="includeRecentMessages" type="number" min="0" max="30" step="1" /></label>
-              <label data-check ${find("Character-card context", "character card context")}><input name="includeCharacterContext" type="checkbox" /><span>Include character-card context</span></label>
-              <label data-check ${find("Persona context", "persona user context")}><input name="includePersonaContext" type="checkbox" /><span>Include active persona context</span></label>
-              <label data-check ${find("Lorebook context", "lorebook world info context")}><input name="includeLorebookContext" type="checkbox" /><span>Include activated lorebook context</span></label>
-              <label data-field ${find("Story reader instructions", "planner custom instructions prompt")}><span>Story reader instructions</span><textarea name="customPlannerInstructions"></textarea></label>
-            `, { id: "context", apply: true })}
-            ${group("Text filtering", `
+            <p class="muted">Focused technical editors. Save each page explicitly; ordinary preferences save as you change them.</p>
+            <div data-page-links>${['parameters','filtering','css','storage','reset'].map(id=>this.pageLink(id)).join('')}</div>
+            <section data-workspace-page="filtering">${group("Text filtering", `
               <label data-field ${find("Ignored tags", "status inventory hide strip blocks filter")}><span>Ignored tags</span><input name="ignoredTags" type="text" placeholder="status, stats, system, inventory" /><small>Comma-separated tag names. Removes the whole matching block from dialogue and image planning.</small>${more("For example status, inventory, WORLD_VOICE. Multiline blocks are removed too. Recognized status blocks stay available as plain-text cards in Panels. The chat message is not edited.")}</label>
               <label data-field ${find("Display regex rules", "regex replace formatting dialogue pattern")}><span>Display regex rules</span><textarea name="displayRegexRules" spellcheck="false" placeholder="/§([^§]+)§/g => <em class=&quot;vn-transmission&quot;>$1</em>"></textarea><small>One rule per line: <code>/pattern/flags =&gt; replacement</code>. Dialogue formatting only.</small>${more("<code>pattern =&gt; replacement</code> also works. An empty replacement hides a match from dialogue, not from image planning. Only safe inline formatting renders here. For full HTML/SVG cards, open Panels in the novel view.")}</label>
-            `, { id: "filtering", apply: true })}
-            ${group("Models and parameters", `
-              <div data-row>
-                <label data-field ${find("Image model override", "image model checkpoint")}><span>Image model override</span><input name="imageModel" type="text" placeholder="Use the selected connection model" /><small data-image-model-hint>Leave blank to use the model configured on the selected image connection.</small></label>
-                <label data-field ${find("Images at the same time", "concurrency parallel images")}><span>Images generated at the same time</span><input name="imageConcurrency" type="number" min="1" max="6" step="1" /></label>
-              </div>
+            `, { id: "filtering", apply: true })}</section>
+            <section data-workspace-page="parameters">${group("Models and parameters", `
               <div data-row>
                 <label data-field ${find("Story reader parameters (JSON)", "planner parser json temperature parameters")}><span>Story reader parameters (JSON)</span><textarea name="parserParameters" spellcheck="false"></textarea></label>
-                <label data-field ${find("Image parameters (JSON)", "image json parameters steps")}><span>Image parameters (JSON)</span><textarea name="imageParameters" spellcheck="false"></textarea></label>
               </div>
-            `, { id: "models", apply: true })}
-            ${group("Custom CSS", `
+            `, { id: "models", apply: true })}</section>
+            <section data-workspace-page="css">${group("Custom CSS", `
               <label data-field ${find("Theme CSS", "custom css style stylesheet")}><span>Theme CSS</span><textarea name="customCss" spellcheck="false"></textarea><small>Selectors beginning with data-vn are stable. Remote imports and URL fetches are removed.</small></label>
-            `, { id: "css", apply: true, find: find("Custom CSS", "style stylesheet") })}
-            ${group("Storage and logs", `
+            `, { id: "css", apply: true, find: find("Custom CSS", "style stylesheet") })}</section>
+            <section data-workspace-page="storage">${group("Storage and logs", `
               <label data-field ${find("Music storage folder", "audio directory folder scoped storage")}><span>Music storage folder</span><input name="audioDirectory" type="text" placeholder="audio" /><small>Folder inside the extension's scoped Lumiverse storage, scanned for music and sound effects.</small></label>
               <label data-check ${find("Verbose debug logging", "debug log console verbose")}><input name="debugLogging" type="checkbox" /><span>Verbose debug logging<small>Writes host events, planning, assets and anchoring to the Lumiverse log and browser console.</small>${more("While on, story text, the raw planner response and resolved character, wardrobe and environment state are written to the log.")}</span></label>
-            `, { id: "storage", apply: true, find: "" })}
-            ${group("Reset and setup", `
+            `, { id: "storage", apply: true, find: "" })}</section>
+            <section data-workspace-page="reset">${group("Reset and setup", `
               <div data-actions>
                 <button type="button" data-reset>Reset defaults</button>
                 <button type="button" data-quiet data-show-setup>Show setup guide</button>
               </div>
               <small>Reset returns every setting to its default and saves at once. Your saved prompt presets and music folder are kept.</small>
-            `, { id: "maintenance", find: find("Reset defaults", "reset defaults setup guide onboarding start over") })}
+            `, { id: "maintenance", find: find("Reset defaults", "reset defaults setup guide onboarding start over") })}</section>
           `, " data-advanced-settings")}
 
           <div data-draft-bar hidden>
-            <div><span data-draft-count></span><small>Advanced changes are applied together.</small></div>
+            <div><span data-draft-count></span><small>Changes on this page only.</small></div>
             <div data-actions>
               <button type="button" data-discard>Discard</button>
-              <button type="submit" data-primary data-apply data-apply-bar>Apply</button>
+              <button type="submit" data-primary data-apply data-apply-bar>Save changes</button>
             </div>
           </div>
         </form>
@@ -915,39 +877,68 @@ export class VisualNovelSettingsPanel {
    * Shows one section (deep link). Remembers it for the next visit unless
    * `remember: false`. `focus: true` moves keyboard focus to the section's tab.
    */
-  openSection(id: SettingsSectionId | string, options: { focus?: boolean; remember?: boolean } = {}): void {
-    const next = normalizeSettingsSection(id);
-    this.section = next;
-    this.root.querySelector<HTMLSelectElement>("[data-section-select]")!.value = next;
-    for (const tab of this.root.querySelectorAll<HTMLButtonElement>("[data-tab]")) {
-      const selected = tab.dataset.tab === next;
-      tab.setAttribute("aria-selected", String(selected));
-      tab.tabIndex = selected ? 0 : -1;
-      if (selected && options.focus) tab.focus({ preventScroll: true });
-      if (selected) {
-        // Keep the active tab in view on the narrow, horizontally scrolling strip.
-        const list = tab.parentElement!;
-        if (list.scrollWidth > list.clientWidth) {
-          const left = tab.offsetLeft - list.offsetLeft;
-          if (left < list.scrollLeft) list.scrollLeft = left - 8;
-          else if (left + tab.offsetWidth > list.scrollLeft + list.clientWidth) list.scrollLeft = left + tab.offsetWidth - list.clientWidth + 8;
-        }
+  openSection(id:SettingsSectionId|string,options:{focus?:boolean;remember?:boolean;after?:()=>void}={}):void {this.openPage(id,options);}
+  getPage():SettingsPageId {return this.page;}
+  openPage(id:string,options:{focus?:boolean;remember?:boolean;after?:()=>void}={}):void {
+    this.afterSaveNavigation=null;
+    const next=settingsPage(id);
+    if(this.page==='speech'&&next.id!=='speech')this.voiceReturn=false;
+    const proceed=()=>this.applyPage(next.id,options);
+    if(next.id===this.page){proceed();return;}
+    if(this.page==='characters'){this.castArtPanel.guardNavigation(proceed);return;}
+    if(this.page==='templates'){this.templateEditor.guardNavigation(proceed);return;}
+    if(this.currentDraftKeys().length){
+      this.deferredNavigation=proceed;
+      const dialog=this.root.querySelector<HTMLDialogElement>('[data-leave-dialog]')!;
+      if(!dialog.open)dialog.showModal();
+      return;
+    }
+    proceed();
+  }
+  private scrollOwner():HTMLElement {
+    for(let parent=this.host.parentElement;parent;parent=parent.parentElement){
+      if(/auto|scroll/.test(getComputedStyle(parent).overflowY)&&parent.scrollHeight>parent.clientHeight)return parent;
+    }
+    return document.scrollingElement as HTMLElement;
+  }
+  private applyPage(id:SettingsPageId,options:{focus?:boolean;remember?:boolean;after?:()=>void}={}):void {
+    const navigation=++this.navigationSequence;
+    const next=settingsPage(id),owner=this.scrollOwner();
+    this.pageScroll.set(this.page,owner.scrollTop);
+    this.page=next.id;this.section=next.section;
+    this.renderSetupVisibility();
+    this.root.querySelector<HTMLElement>('[data-page-label]')!.textContent=next.title;
+    this.root.querySelector<HTMLElement>('[data-all-settings]')!.hidden=next.id==='home';
+    const back=this.root.querySelector<HTMLElement>('[data-all-settings]')!,backTitle=next.id==='speech'&&this.voiceReturn?'Character':settingsPage(next.parent??'home').title;
+    back.querySelector('span')!.textContent=backTitle;back.setAttribute('aria-label',`Back to ${backTitle}`);
+    const category=next.section==='voice'?'sound':next.section;
+    for(const tab of this.root.querySelectorAll<HTMLButtonElement>('[data-tab]')){
+      const active=tab.dataset.tab===category&&next.id!=='home';
+      tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;
+    }
+    this.root.querySelector<HTMLElement>('[data-home]')!.hidden=next.id!=='home';
+    const defaults:Record<string,string>={reading:'reading',look:'appearance',pictures:'images',characters:'characters',sound:'music',voice:'speech',connections:'connections',advanced:'advanced'};
+    for(const pane of this.root.querySelectorAll<HTMLElement>('[data-pane]')){
+      pane.hidden=next.id==='home'||pane.dataset.pane!==next.section;
+      for(const child of Array.from(pane.children) as HTMLElement[]){
+        if(child.matches('[data-pane-head]'))continue;
+        child.toggleAttribute('data-route-hidden',child.dataset.workspacePage?child.dataset.workspacePage!==next.id:defaults[pane.dataset.pane!]!==next.id);
       }
+      const title=pane.querySelector<HTMLElement>('[data-pane-head] h2'),description=pane.querySelector<HTMLElement>('[data-pane-head] p');
+      if(!pane.hidden){if(title)title.textContent=next.title;if(description)description.textContent=next.description;}
     }
-    for (const pane of this.root.querySelectorAll<HTMLElement>("[data-pane]")) pane.hidden = pane.dataset.pane !== next;
-    // One live sample, shown only where it helps: Reading and Look.
-    const slot = this.root.querySelector<HTMLElement>(`[data-pane="${next}"] [data-sample-slot]`);
-    const sample = this.root.querySelector<HTMLElement>("[data-sample]")!;
-    if (slot) {
-      if (sample.parentElement !== slot) slot.append(sample);
-      this.restartSample();
-    } else if (this.sampleTimer) {
-      clearTimeout(this.sampleTimer);
-      this.sampleTimer = null;
-    }
-    if (options.remember !== false) {
-      try { this.storage?.setItem(SETTINGS_SECTION_KEY, next); } catch { /* storage is optional */ }
-    }
+    if(next.id==='characters')this.castArtPanel.ensureLoaded();
+    if(next.id==='rules')this.presentationRules.ensureLoaded();
+    if(this.sampleTimer){clearTimeout(this.sampleTimer);this.sampleTimer=null;}
+    if(next.id==='appearance'&&this.root.querySelector<HTMLDetailsElement>('[data-appearance-preview]')!.open)this.restartSample();
+    if(options.remember!==false){try{this.storage?.setItem(SETTINGS_SECTION_KEY,next.id);}catch{}}
+    this.refreshStatus();
+    requestAnimationFrame(()=>{
+      if(this.page!==id||navigation!==this.navigationSequence)return;
+      owner.scrollTop=this.pageScroll.get(id)??Math.max(0,this.host.offsetTop-12);
+      options.after?.();
+      if(options.focus)this.root.querySelector<HTMLElement>(next.id==='home'?'[data-home] h1':`[data-pane="${next.section}"] [data-pane-head] h2`)?.focus({preventScroll:true});
+    });
   }
 
   /**
@@ -960,60 +951,54 @@ export class VisualNovelSettingsPanel {
     return this.root.querySelector<HTMLElement>("[data-speech-mount]")!;
   }
 
-  private rememberedSection(): SettingsSectionId {
-    try { return normalizeSettingsSection(this.storage?.getItem(SETTINGS_SECTION_KEY)); } catch { return "reading"; }
+  private rememberedSection():string {
+    try{return this.storage?.getItem(SETTINGS_SECTION_KEY)??'home';}catch{return 'home';}
   }
-
-  private wireNavigation(): void {
-    this.root.querySelector<HTMLSelectElement>("[data-section-select]")!.onchange = (event) => this.openSection((event.target as HTMLSelectElement).value);
-    const tablist = this.root.querySelector<HTMLElement>("[data-tablist]")!;
-    const tabs = () => Array.from(this.root.querySelectorAll<HTMLButtonElement>("[data-tab]"));
-    tablist.addEventListener("click", (event) => {
-      const tab = (event.target as Element | null)?.closest<HTMLButtonElement>("[data-tab]");
-      if (tab) this.openSection(tab.dataset.tab!);
+  private wireNavigation():void {
+    for(const type of ['pointerdown','keydown','input','focusin'])this.root.addEventListener(type,()=>{this.navigationSequence++;},{capture:true});
+    const categories=this.root.querySelector<HTMLDialogElement>('[data-category-dialog]')!;
+    const leave=this.root.querySelector<HTMLDialogElement>('[data-leave-dialog]')!;
+    const cancelLeave=()=>{leave.close();this.deferredNavigation=null;this.afterSaveNavigation=null;};
+    this.root.querySelector<HTMLElement>('[data-leave-stay]')!.onclick=cancelLeave;
+    leave.oncancel=()=>{this.deferredNavigation=null;this.afterSaveNavigation=null;};
+    this.root.querySelector<HTMLElement>('[data-leave-discard]')!.onclick=()=>{const next=this.deferredNavigation;cancelLeave();this.discardAdvanced();next?.();};
+    this.root.querySelector<HTMLElement>('[data-leave-save]')!.onclick=()=>{const next=this.deferredNavigation;cancelLeave();this.afterSaveNavigation=next;this.applyAdvanced();};
+    this.root.querySelector<HTMLElement>('[data-all-settings]')!.onclick=()=>{if(this.page==='speech'&&this.voiceReturn){this.voiceReturn=false;this.openPage('characters');}else this.openPage(settingsPage(this.page).parent??'home');};
+    this.root.querySelector<HTMLElement>('[data-category-picker]')!.onclick=()=>categories.showModal();
+    this.root.querySelector<HTMLElement>('[data-close-categories]')!.onclick=()=>categories.close();
+    this.root.querySelector<HTMLElement>('[data-toggle-search]')!.onclick=()=>{
+      const search=this.root.querySelector<HTMLElement>('[data-search]')!;search.hidden=!search.hidden;
+      if(!search.hidden)this.root.querySelector<HTMLInputElement>('[data-settings-search]')!.focus();
+    };
+    this.root.addEventListener('click',event=>{
+      const element=(event.target as Element)?.closest<HTMLElement>('[data-page-link],[data-tab],[data-goto],[data-jump-to]');
+      if(!element)return;
+      categories.close();
+      if(element.dataset.gotoTarget){const target=this.root.querySelector<HTMLElement>(`[name="${element.dataset.gotoTarget}"]`);if(target){this.reveal(target);return;}}
+      this.openPage(element.dataset.pageLink??(element.dataset.tab==='sound'?'audio':element.dataset.tab)??element.dataset.goto??element.dataset.jumpTo??'home',{focus:true});
     });
-    tablist.addEventListener("keydown", (event) => {
-      const list = tabs();
-      const index = list.findIndex((tab) => tab === this.root.activeElement);
-      if (index < 0) return;
-      let next = -1;
-      if (event.key === "ArrowDown" || event.key === "ArrowRight") next = (index + 1) % list.length;
-      else if (event.key === "ArrowUp" || event.key === "ArrowLeft") next = (index - 1 + list.length) % list.length;
-      else if (event.key === "Home") next = 0;
-      else if (event.key === "End") next = list.length - 1;
-      if (next < 0) return;
-      event.preventDefault();
-      this.openSection(list[next]!.dataset.tab!, { focus: true });
-    });
-    // The rail is vertical on wide containers and a horizontal strip on narrow ones.
-    if (typeof ResizeObserver === "function") {
-      this.resizeObserver = new ResizeObserver(() => {
-        const nav = this.root.querySelector<HTMLElement>("[data-nav]")!;
-        const vertical = getComputedStyle(this.root.querySelector<HTMLElement>("[data-tablist]")!).flexDirection === "column";
-        tablist.setAttribute("aria-orientation", vertical ? "vertical" : "horizontal");
-        nav.dataset.orientation = vertical ? "vertical" : "horizontal";
-      });
-      this.resizeObserver.observe(this.host);
-    }
-    for (const button of this.root.querySelectorAll<HTMLButtonElement>("[data-goto]")) {
-      button.addEventListener("click", () => {
-        const target = button.dataset.gotoTarget ? this.root.querySelector<HTMLElement>(`[name="${button.dataset.gotoTarget}"]`) : null;
-        if (target) this.reveal(target);
-        else this.openSection(button.dataset.goto!);
-      });
-    }
-    for (const button of this.root.querySelectorAll<HTMLButtonElement>("[data-jump-to]")) {
-      button.addEventListener("click", () => {
-        const group = this.root.querySelector<HTMLElement>(`[data-group-id="${button.dataset.jumpTo}"]`);
-        if (group) this.reveal(group);
-      });
-    }
+    const tablist=this.root.querySelector<HTMLElement>('[data-tablist]')!;
+    tablist.onkeydown=event=>{
+      const tabs=[...tablist.querySelectorAll<HTMLButtonElement>('[data-tab]')],index=tabs.indexOf(this.root.activeElement as HTMLButtonElement);
+      let next=index;
+      if(event.key==='ArrowDown'||event.key==='ArrowRight')next=(index+1)%tabs.length;
+      else if(event.key==='ArrowUp'||event.key==='ArrowLeft')next=(index-1+tabs.length)%tabs.length;
+      else if(event.key==='Home')next=0;else if(event.key==='End')next=tabs.length-1;else return;
+      event.preventDefault();const target=tabs[next];if(target){this.openPage(target.dataset.tab==='sound'?'audio':target.dataset.tab!);target.focus();}
+    };
+    this.root.querySelector<HTMLDetailsElement>('[data-appearance-preview]')!.ontoggle=()=>this.restartSample();
+    for(const button of this.root.querySelectorAll<HTMLButtonElement>('[data-entity-tab]'))button.onclick=()=>{
+      const apply=()=>{const places=button.dataset.entityTab==='places';this.root.querySelector<HTMLElement>('[data-cast-mount]')!.hidden=places;this.root.querySelector<HTMLElement>('[data-places-mount]')!.hidden=!places;for(const tab of this.root.querySelectorAll('[data-entity-tab]'))tab.setAttribute('aria-pressed',String(tab===button));if(places)this.locationArtPanel.ensureLoaded();else this.castArtPanel.ensureLoaded();};
+      this.castArtPanel.guardNavigation(apply);
+    };
   }
 
   /** Opens the section holding `element`, any closed disclosure around it, scrolls to it and focuses it. */
-  private reveal(element: HTMLElement, options: { flash?: boolean; focus?: boolean } = {}): void {
-    const pane = element.closest<HTMLElement>("[data-pane]");
-    if (pane) this.openSection(pane.dataset.pane!);
+  private reveal(element:HTMLElement,options:{flash?:boolean;focus?:boolean}={}):void {
+    const pane=element.closest<HTMLElement>('[data-pane]');
+    const name=element.matches('[name]')?element.getAttribute('name'):element.querySelector('[name]')?.getAttribute('name');
+    const destination=element.closest<HTMLElement>('[data-workspace-page]')?.dataset.workspacePage ?? (name&&SETTINGS_FIELD_PAGES[name as keyof VisualNovelConfig]) ?? pane?.dataset.pane ?? 'home';
+    const show=()=>{
     for (let parent = element.parentElement; parent; parent = parent.parentElement) {
       if (parent instanceof HTMLDetailsElement) parent.open = true;
     }
@@ -1037,6 +1022,8 @@ export class VisualNovelSettingsPanel {
         : target.querySelector<HTMLElement>("input:checked, input:not([type=hidden]), select, textarea, button");
       focusable?.focus({ preventScroll: true });
     }
+    };
+    this.openPage(destination,{after:show});
   }
 
   /* ---------------------------------------------------------------------- */
@@ -1097,7 +1084,7 @@ export class VisualNovelSettingsPanel {
           const label = document.createElement("span");
           label.textContent = match.label;
           const where = document.createElement("span");
-          where.textContent = SETTINGS_SECTIONS.find((section) => section.id === match.section)!.label;
+          where.textContent = SETTINGS_SECTIONS.find((section) => section.id === match.section)?.label ?? "Audio";
           button.append(label, where);
           const target = this.searchTargets.get(match.id);
           const pane = target?.closest("[data-pane]");
@@ -1456,6 +1443,7 @@ export class VisualNovelSettingsPanel {
     const name = target.name;
     const checked = target instanceof HTMLInputElement && target.checked;
     switch (name) {
+      case "enabled": return {enabled:checked};
       case "mode": return { mode: target.value === "cyoa" ? "cyoa" : "standard" };
       case "skipMode": return { skipMode: target.value === "all" ? "all" : "read" };
       case "generateChoices": return { generateChoices: checked };
@@ -1677,6 +1665,7 @@ export class VisualNovelSettingsPanel {
     this.pendingSavedMessage = savedMessage;
     const requestId=createUiId();
     this.latestSaveRequestId=requestId;
+    if(patch.imageTemplates)this.templateSaveRequestId=requestId;
     if(this.pendingAdvanced.size&&!this.advancedSaveRequestId)this.advancedSaveRequestId=requestId;
     try {
       this.options.onSave(patch,requestId);
@@ -1695,6 +1684,7 @@ export class VisualNovelSettingsPanel {
   }
 
   private latestSaveRequestId: string | undefined;
+  private templateSaveRequestId:string|undefined;
   private advancedSaveRequestId: string | undefined;
   private pendingSavedMessage = "Saved";
   private pendingEverydayFields: Record<string, unknown> = {};
@@ -1703,16 +1693,15 @@ export class VisualNovelSettingsPanel {
 
   /** Host acknowledgement of the last save. Optional: older hosts never call it. */
   setSaveStatus(status: SaveStatus, requestId?: string): void {
+    if(status.kind==='error'&&requestId!==undefined&&requestId===this.templateSaveRequestId){this.templateEditor.setSaveError(status.error);this.templateSaveRequestId=undefined;}
     // Ignore stale or unrelated acknowledgements while another save owns the draft.
     if(requestId !== (this.pendingAdvanced.size ? this.advancedSaveRequestId : this.latestSaveRequestId)) {
       if(status.kind==='error'&&requestId===this.latestSaveRequestId){
         this.pendingEverydayFields={};
-        this.templateEditor.setSaveError(status.error);
         this.setStatus(`Could not save: ${status.error}. Advanced save is still awaiting confirmation.`, 'error');
       }
       return;
     }
-    if (status.kind === "error") this.templateEditor.setSaveError(status.error);
     if (this.saveTimer&&(status.kind==='error'||!this.pendingAdvanced.size)) { clearTimeout(this.saveTimer); this.saveTimer = null; }
     if (status.kind === "saved") {
       if (Object.keys(this.pendingEverydayFields).length > 0||this.pendingAdvanced.size>0) {
@@ -1724,6 +1713,7 @@ export class VisualNovelSettingsPanel {
       }
     } else {
       // Save error: clear pending fields so rejected edits never become phantom state
+      this.afterSaveNavigation=null;
       this.pendingEverydayFields = {};
       const retained=this.pendingAdvanced.size>0;this.pendingAdvanced.clear();this.advancedSaveRequestId=undefined;this.advancedSaveUnconfirmed=false;this.refreshStatus();
       this.setStatus(`Could not save: ${status.error}${retained?'. Your advanced draft is kept.':''}`, "error");
@@ -1735,6 +1725,7 @@ export class VisualNovelSettingsPanel {
   /* ---------------------------------------------------------------------- */
 
   private markDraft(name: AdvancedKey): void {
+    this.afterSaveNavigation=null;
     // A control that reads exactly what the host last gave us is not a draft. This also
     // absorbs the blur-time change event browsers fire after a programmatic value sync.
     if(this.pendingAdvanced.has(name))this.drafts.add(name);
@@ -1742,6 +1733,8 @@ export class VisualNovelSettingsPanel {
     else this.drafts.add(name);
     this.refreshStatus();
   }
+
+  private currentDraftKeys():AdvancedKey[]{return [...this.drafts].filter(key=>SETTINGS_FIELD_PAGES[key]===this.page);}
 
   /** Last value written by a host sync, per Advanced control, in the control's own string form. */
   private readonly synced = new Map<AdvancedKey, string>();
@@ -1752,14 +1745,15 @@ export class VisualNovelSettingsPanel {
   }
 
   private refreshStatus(): void {
-    const dirty = this.drafts.size > 0;
+    const keys=this.currentDraftKeys();
+    const dirty = keys.length > 0;
     const bar = this.root.querySelector<HTMLElement>("[data-draft-bar]")!;
     bar.hidden = !dirty;
     const saving=this.pendingAdvanced.size>0&&!this.advancedSaveUnconfirmed;
     this.root.querySelector<HTMLButtonElement>('[data-apply]')!.disabled=saving;
     this.root.querySelector<HTMLButtonElement>('[data-discard]')!.disabled=saving;
     this.root.querySelector<HTMLElement>("[data-draft-count]")!.textContent =
-      `${this.drafts.size} change${this.drafts.size === 1 ? "" : "s"} not applied yet`;
+      `${keys.length} change${keys.length === 1 ? "" : "s"} not applied yet`;
     // Mark each changed field, and count changes per section for the nav badges.
     const perSection = new Map<string, number>();
     for (const name of ADVANCED_KEYS) {
@@ -1787,18 +1781,19 @@ export class VisualNovelSettingsPanel {
 
   private applyAdvanced(): void {
     if(this.pendingAdvanced.size&&!this.advancedSaveUnconfirmed)return;
-    if (this.drafts.size === 0) {
+    const keys=this.currentDraftKeys();
+    if (keys.length === 0) {
       this.setStatus("Nothing to apply. Everyday settings save on their own.", "saved", 3000);
       return;
     }
     let patch: Partial<VisualNovelConfig>;
     try {
-      const values=this.readAdvanced();
-      patch=Object.fromEntries([...this.drafts].map(name=>[name,values[name]])) as Partial<VisualNovelConfig>;
+      const values=this.readAdvanced(keys);
+      patch=Object.fromEntries(keys.map(name=>[name,values[name]])) as Partial<VisualNovelConfig>;
     } catch (error) {
       // Show the field that failed, wherever the user is.
       for (const [name, label] of [["parserParameters", "Story reader parameters"], ["imageParameters", "Image parameters"]] as const) {
-        try { jsonObject(this.control<HTMLTextAreaElement>(name).value, label); }
+        try { if(keys.includes(name))jsonObject(this.control<HTMLTextAreaElement>(name).value, label); }
         catch { this.reveal(this.control<HTMLTextAreaElement>(name)); break; }
       }
       this.setStatus(error instanceof Error ? error.message : String(error), "error");
@@ -1806,7 +1801,7 @@ export class VisualNovelSettingsPanel {
     }
     this.pendingEverydayFields = {};
     this.advancedSaveRequestId=undefined;
-    this.pendingAdvanced=new Map([...this.drafts].map(name=>[name,{value:patch[name],text:this.advancedValue(name)}]));
+    this.pendingAdvanced=new Map(keys.map(name=>[name,{value:patch[name],text:this.advancedValue(name)}]));
     this.advancedSaveUnconfirmed=false;
     this.refreshStatus();
     this.save(patch, "Advanced settings applied.");
@@ -1815,22 +1810,22 @@ export class VisualNovelSettingsPanel {
   private discardAdvanced(): void {
     if(this.pendingAdvanced.size&&!this.advancedSaveUnconfirmed)return;
     this.pendingAdvanced.clear();this.advancedSaveRequestId=undefined;this.advancedSaveUnconfirmed=false;
-    const count = this.drafts.size;
-    this.drafts.clear();
+    const keys=this.currentDraftKeys(),count=keys.length;
+    for(const key of keys)this.drafts.delete(key);
     this.syncFromConfig(this.config);
     this.refreshStatus();
     if (count > 0) this.setStatus(`Discarded ${count} change${count === 1 ? "" : "s"}.`, "saved", 3000);
   }
 
-  private readAdvanced(): Partial<VisualNovelConfig> {
+  private readAdvanced(keys:readonly AdvancedKey[]=ADVANCED_KEYS): Partial<VisualNovelConfig> {
     return {
       imageModel: this.control<HTMLInputElement>("imageModel").value.trim(),
       imageConcurrency: clamp(Math.round(Number(this.control<HTMLInputElement>("imageConcurrency").value)), 1, 6, DEFAULT_CONFIG.imageConcurrency),
-      parserParameters: jsonObject(this.control<HTMLTextAreaElement>("parserParameters").value, "Story reader parameters"),
+      parserParameters: keys.includes('parserParameters')?jsonObject(this.control<HTMLTextAreaElement>("parserParameters").value, "Story reader parameters"):this.config.parserParameters,
       systemOneMode: this.control<HTMLSelectElement>("systemOneMode").value as VisualNovelConfig["systemOneMode"],
       systemOneApiUrl: this.control<HTMLInputElement>("systemOneApiUrl").value.trim() || DEFAULT_CONFIG.systemOneApiUrl,
       systemOneModel: this.control<HTMLInputElement>("systemOneModel").value.trim() || DEFAULT_CONFIG.systemOneModel,
-      imageParameters: jsonObject(this.control<HTMLTextAreaElement>("imageParameters").value, "Image parameters"),
+      imageParameters: keys.includes('imageParameters')?jsonObject(this.control<HTMLTextAreaElement>("imageParameters").value, "Image parameters"):this.config.imageParameters,
       audioDirectory: this.control<HTMLInputElement>("audioDirectory").value.trim(),
       includeRecentMessages: clamp(Math.round(Number(this.control<HTMLInputElement>("includeRecentMessages").value)), 0, 30, DEFAULT_CONFIG.includeRecentMessages),
       includeCharacterContext: this.control<HTMLInputElement>("includeCharacterContext").checked,
@@ -1888,6 +1883,7 @@ export class VisualNovelSettingsPanel {
     }
     this.syncFromConfig(this.config);
     this.refreshStatus();
+    if(this.afterSaveNavigation&&!this.pendingAdvanced.size&&!this.currentDraftKeys().length){const next=this.afterSaveNavigation;this.afterSaveNavigation=null;next();}
   }
 
   private syncFromConfig(config: VisualNovelConfig): void {
@@ -1977,6 +1973,8 @@ export class VisualNovelSettingsPanel {
     this.setRadio("imageSource", source);
     this.setRadio("setupImageSource", source);
     this.root.querySelector<HTMLElement>("[data-generated-only]")!.hidden = source !== "generated";
+    this.root.querySelector<HTMLElement>("[data-generation-inactive]")!.hidden = source === "generated";
+    this.control<HTMLInputElement>("enabled").checked=config.enabled;
     this.root.querySelector<HTMLElement>("[data-setup-image-connection]")!.hidden = source !== "generated";
 
     const budget = budgetPresetFor(config.maxImagesPerTurn);
@@ -2025,7 +2023,7 @@ export class VisualNovelSettingsPanel {
     const library = this.audioLibrary ? `${this.audioLibrary.bgmCount} track${this.audioLibrary.bgmCount === 1 ? "" : "s"}` : "No music yet";
     summary("sound", `${library} · ${Math.round(config.bgmVolume * 100)}%`);
     summary("voice", config.speech?.enabled ? "On" : "Off");
-    summary("advanced", "Applies with Apply");
+    summary("advanced", "Focused editors");
   }
 
   /* ---------------------------------------------------------------------- */
@@ -2060,7 +2058,7 @@ export class VisualNovelSettingsPanel {
     speaker.textContent = line.speaker;
     next.textContent = "";
     // No typing loop while the sample sits in a hidden section.
-    const visible = Boolean(this.root.querySelector(`[data-pane="${this.section}"] [data-sample]`));
+    const visible = this.page==='appearance' && !!this.root.querySelector<HTMLDetailsElement>('[data-appearance-preview]')?.open;
     const reduced = !visible || (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches);
     const perChar = reduced ? 0 : clamp(Number(this.control<HTMLInputElement>("textSpeed").value), 0, 100, this.config.textSpeed);
     const pause = clamp(Number(this.control<HTMLInputElement>("autoPlayDelay").value), 500, 10000, this.config.autoPlayDelay);
@@ -2125,6 +2123,11 @@ export class VisualNovelSettingsPanel {
       action.textContent = readiness.action ?? "";
       action.hidden = !readiness.action;
       row.querySelector<HTMLElement>("[data-actions]")!.hidden = readiness.fix !== "refresh";
+    }
+    if(kind==='image'){
+      const selected=state.options.find(option=>option.id===selectedId)??(!selectedId?state.options.find(option=>option.isDefault):undefined);
+      const summary=this.root.querySelector<HTMLElement>('[data-image-connection-summary]');
+      if(summary)summary.textContent=selected?`${selected.name} · ${selected.provider} · Listed — not tested`:selectedId?'Saved connection unavailable; choose one in Images.':'Lumiverse default · Listed — not tested';
     }
     if (kind === "planner") {
       const dot = this.root.querySelector<HTMLElement>('[data-tab="connections"] [data-tab-dot]');
@@ -2192,6 +2195,7 @@ export class VisualNovelSettingsPanel {
     const card = this.root.querySelector<HTMLElement>("[data-setup]")!;
     card.hidden = this.sessionSetupHidden || this.setupDone();
     this.root.querySelector<HTMLElement>("[data-show-setup]")!.hidden = !card.hidden;
+    this.root.querySelector<HTMLElement>('[data-shell]')!.toggleAttribute('data-show-onboarding',!card.hidden&&this.page==='reset');
   }
 
   /* ---------------------------------------------------------------------- */

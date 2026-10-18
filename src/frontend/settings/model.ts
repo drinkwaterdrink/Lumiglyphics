@@ -23,8 +23,8 @@ import { THEME_PRESET_CSS } from "../theme/presets.js";
 export type ImageSource = "card" | "generated" | "text";
 
 export const IMAGE_SOURCE_OPTIONS: ReadonlyArray<{ value: ImageSource; label: string; help: string }> = [
-  { value: "card", label: "Character pictures", help: "Uses the pictures already on the character card. Free." },
-  { value: "generated", label: "Generated illustrations", help: "Draws a new picture for each scene with your image connection. Costs depend on that connection." },
+  { value: "card", label: "Use card artwork", help: "Uses the pictures already on the character card. No image generation." },
+  { value: "generated", label: "Generate illustrations", help: "Uses your image connection. Budget and review apply to new pictures." },
   { value: "text", label: "Text only", help: "No pictures. Just the novel-style reading view." },
 ];
 
@@ -65,9 +65,9 @@ export function normalizeReferenceSource(value: string): VisualNovelReferenceSou
 export type BudgetPresetId = "light" | "balanced" | "rich" | "custom";
 
 export const BUDGET_PRESETS: ReadonlyArray<{ id: Exclude<BudgetPresetId, "custom">; label: string; value: number; help: string }> = [
-  { id: "light", label: "Light", value: 1, help: "1 picture per reply" },
-  { id: "balanced", label: "Balanced", value: 4, help: "Up to 4 pictures per reply" },
-  { id: "rich", label: "Rich", value: 8, help: "Up to 8 pictures per reply" },
+  { id: "light", label: "1", value: 1, help: "1 picture per reply" },
+  { id: "balanced", label: "4", value: 4, help: "Up to 4 pictures per reply" },
+  { id: "rich", label: "8", value: 8, help: "Up to 8 pictures per reply" },
 ];
 
 export function budgetPresetFor(maxImagesPerTurn: number): BudgetPresetId {
@@ -390,23 +390,25 @@ export function resetPatch(current: Pick<VisualNovelConfig, "promptPresets" | "a
 /* Settings navigation and search.                                           */
 /* ------------------------------------------------------------------------ */
 
-export type SettingsSectionId = "reading" | "look" | "pictures" | "sound" | "voice" | "connections" | "advanced";
+export type SettingsSectionId = "reading" | "look" | "pictures" | "characters" | "sound" | "voice" | "connections" | "advanced";
 
 export const SETTINGS_SECTIONS: ReadonlyArray<{ id: SettingsSectionId; label: string; blurb: string }> = [
   { id: "reading", label: "Reading", blurb: "How the story plays and how you answer." },
-  { id: "look", label: "Look", blurb: "Theme, text and scene effects." },
-  { id: "pictures", label: "Pictures", blurb: "Where pictures come from and how many." },
-  { id: "sound", label: "Sound", blurb: "Music, sound effects and volume." },
-  { id: "voice", label: "Voice", blurb: "Read paragraphs aloud with your Lumiverse TTS profiles." },
-  { id: "connections", label: "Connections", blurb: "The models Cue uses to read the story." },
-  { id: "advanced", label: "Advanced", blurb: "Prompts, filters, CSS and technical controls." },
+  { id: "look", label: "Appearance", blurb: "Theme, text and scene effects." },
+  { id: "pictures", label: "Images", blurb: "Source, budget, styles and templates." },
+  { id: "characters", label: "Characters & places", blurb: "Appearance, outfits and saved art for this story." },
+  { id: "sound", label: "Audio", blurb: "Speech, music and sound effects." },
+  { id: "connections", label: "Connections", blurb: "Story-reader services and context sources." },
+  { id: "advanced", label: "Advanced", blurb: "Technical editors and recovery." },
 ];
 
 /** Where the last open settings section is remembered (same storage as the setup flag). */
 export const SETTINGS_SECTION_KEY = "cue.visual-novel.settings-section";
 
 export function normalizeSettingsSection(value: unknown): SettingsSectionId {
-  return SETTINGS_SECTIONS.some((section) => section.id === value) ? value as SettingsSectionId : "reading";
+  const aliases:Record<string,SettingsSectionId>={appearance:'look',images:'pictures',audio:'sound',cast:'characters'};
+  if(value==='voice')return 'voice';
+  return typeof value==='string'?(aliases[value]??(SETTINGS_SECTIONS.some(section=>section.id===value)?value as SettingsSectionId:'reading')):'reading';
 }
 
 export type SettingsSearchEntry = {

@@ -1,6 +1,6 @@
-# Lumiglyphics status — beta.43
+# Lumiglyphics status — beta.44
 
-This matrix describes beta.43 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
+This matrix describes beta.44 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
 
 | Area | Status | Current behavior / remaining scope |
 |---|---|---|
@@ -12,6 +12,7 @@ This matrix describes beta.43 on Testing. Dated plans and evidence describe thei
 | References and interactions | Delivered foundation | Category toggles, inline highlights, quiet menu, reveal-scoped tooltips, editable intentions and validated provider-owned moves. |
 | Documents | Delivered foundation | Literal current-reply document reading. Cross-turn aggregation and classified external adapters remain pending. |
 | History | Delivered foundation | Unified saved prose/images with version-aware navigation. Broader bounded indexing/backfill/dedup remains pending. |
+| Settings workspace | Delivered for Testing | Seven categories, focused pages, searchable cast/place management and page-specific technical saves. Physical host/device acceptance remains manual. |
 | F1 template preferences | Delivered | Scoped rules, previews, remembered corrections and trace. |
 | F2 presentation policies | Pending | Entity/object conditions and background/effect/motion/music policies. |
 | Companion context | Partial / contract-bound | Optional SimTracker/public companion data; broad historical/reveal reconciliation requires verified public contracts. |
@@ -19,4 +20,4 @@ This matrix describes beta.43 on Testing. Dated plans and evidence describe thei
 | Audio and speech | Delivered, optional | Full-path audio cache identity and explicit speech lifecycle. Stable public TTS API/host autoplay coexistence remain compatibility limits. |
 | Deferred ideas | Deferred | Storyboard, bookmark timeline, presentation packs, autonomous simulation and a parallel memory/RPG engine. |
 
-Release evidence: [beta.43 audit fixes](docs/review-evidence/2026-10-18-audit-fixes.md). Neither automated checks nor source inspection certify every provider, physical device or supported host version.
+Release evidence: [beta.44 settings workspace](docs/review-evidence/2026-10-18-settings-workspace.md). Neither automated checks nor source inspection certify every provider, physical device or supported host version.

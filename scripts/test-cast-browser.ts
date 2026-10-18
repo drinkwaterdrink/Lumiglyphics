@@ -43,7 +43,7 @@ try{
   await page.close();
  }
  const settings=await browser.newPage({viewport:{width:390,height:844}});await settings.goto(`http://127.0.0.1:${server.port}/settings?setupDone&noSpeech`);
- await settings.getByLabel('Settings section',{exact:true}).selectOption('look');
+ await settings.evaluate(()=>(window as any).settingsFixture.panel.openPage('appearance'));
  assert.equal(await settings.locator('[name="castMode"]').isChecked(),false);
  await settings.locator('[name="castMode"]').check();
  assert.equal(await settings.evaluate(()=>(window as any).settingsFixture.config.castMode),true,'cast opt-in persists through existing settings route');

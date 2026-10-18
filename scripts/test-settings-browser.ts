@@ -23,76 +23,60 @@ try {
   const context = await browser.newContext({ viewport: { width: 1000, height: 900 } });
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: `http://127.0.0.1:${server.port}` });
   const page = await context.newPage();
+  page.on('pageerror',error=>console.error('Settings page error:',error.message));
+  page.setDefaultTimeout(7000);
   const external: string[] = [];
   page.on("request", (request) => { if (/^https?:/.test(request.url()) && !request.url().startsWith(`http://127.0.0.1:${server.port}`)) external.push(request.url()); });
   await page.goto(`http://127.0.0.1:${server.port}/`);
   const settings = page.locator("[data-vn-settings]");
   await settings.waitFor();
   await mkdir(".cache/ux-redesign", { recursive: true });
-  const tab = (name: string) => settings.getByRole("tab", { name, exact: true });
-  const openTab = async (name: string) => { const select = settings.getByLabel("Settings section", { exact: true }); if (await select.isVisible()) await select.selectOption({ label: name }); else await tab(name).click(); };
+  const labels: Record<string, string> = { Look: "Appearance", Pictures: "Images", Sound: "Audio", Voice: "Audio" };
+  const pages: Record<string, string> = { Reading: "reading", Look: "appearance", Pictures: "images", Sound: "music", Voice: "speech", Connections: "connections", Advanced: "advanced", Appearance: "appearance", Images: "images", Audio: "audio", "Characters & places": "characters" };
+  const tab = (name: string) => settings.getByRole("tab", { name: labels[name] ?? name, exact: true });
+  const openPage = async (id: string) => page.evaluate(id => (window as any).settingsFixture.panel.openPage(id), id);
+  const openTab = async (name: string) => openPage(pages[name] ?? name);
 
-  // Navigation: one tablist, seven sections, one visible pane, Reading first.
+  // Navigation: seven categories and a lightweight first-open index.
   const tabs = settings.getByRole("tab");
   assert.equal(await tabs.count(), 7, "seven sections");
-  assert.deepEqual(await tabs.evaluateAll((items) => items.map((item) => item.querySelector("[data-tab-label]")!.textContent)), ["Reading", "Look", "Pictures", "Sound", "Voice", "Connections", "Advanced"]);
+  assert.deepEqual(await tabs.evaluateAll((items) => items.map((item) => item.querySelector("[data-tab-label]")!.textContent)), ["Reading", "Appearance", "Images", "Characters & places", "Audio", "Connections", "Advanced"]);
+  assert.equal(await settings.locator('[data-workspace-page="home"]').isVisible(), true, "first opening shows the category index");
+  await openPage("reading");
   assert.equal(await tab("Reading").getAttribute("aria-selected"), "true");
-  assert.equal(await settings.getByRole("tabpanel").count(), 1, "exactly one section is shown");
   assert.equal(await settings.locator('[data-pane="reading"]').isVisible(), true);
   assert.equal(await settings.locator('[name="mode"]').isVisible(), true, "everyday reading controls show first");
 
-  // Persistent place art: existing Pictures controls, explicit opt-in and local metadata actions.
-  await openTab('Pictures');
+  // Existing reuse policies and story-scoped libraries retain their metadata-only actions.
+  await openPage('consistency');
   const reuse=settings.locator('[name="persistentLocationArt"]');
-  assert.equal(await reuse.isChecked(),false);await reuse.check();
-  assert.equal((await lastPatch(page))?.persistentLocationArt,true);
-  await settings.locator('summary').filter({hasText:/^Saved place art/}).click();
-  await settings.getByRole('button',{name:'Load saved places',exact:true}).click();
-  assert.match(await settings.locator('[data-art-place]').innerText(),/Observatory/);
-  await settings.getByRole('button',{name:'Prefer this variant',exact:true}).click();
-  assert.match(await settings.locator('[data-art-variant]').innerText(),/Preferred/);
-  await settings.getByRole('button',{name:'Forget this variant',exact:true}).click();
-  assert.equal(await settings.locator('[data-art-catalog]').isVisible(),false);
-  assert.equal(await page.evaluate(()=>(window as any).settingsFixture.placeActions.length),3);
-  await reuse.uncheck();
-  const castReuse=settings.locator('[name="persistentCastArt"]');
-  assert.equal(await castReuse.isChecked(),false);await castReuse.check();
-  assert.equal((await lastPatch(page))?.persistentCastArt,true);
-  const cast=settings.locator('[data-cast-art]');
-  await cast.locator('xpath=..').locator(':scope > summary').click();
-  await page.waitForFunction(()=>(window as any).settingsFixture.castActions.length===1,{},{timeout:1000});
-  await cast.getByText('Saved portraits & advanced cleanup',{exact:true}).click();
-  assert.match(await cast.locator('[data-cast-art-character]').innerText(),/Aleister/);
-  assert.equal(await cast.locator('[data-cast-art-description]').innerText(),'Dark hair, blue coat');
-  await cast.getByRole('button',{name:'Prefer this variant',exact:true}).click();
-  assert.match(await cast.locator('[data-cast-art-variant]').innerText(),/Preferred/);
-  await page.setViewportSize({width:390,height:844});
-  await cast.scrollIntoViewIfNeeded();
-  assert.equal(await cast.evaluate(e=>e.scrollWidth<=e.clientWidth+1),true,'portrait library fits phone width');
-  await page.screenshot({path:'.cache/ux-redesign/saved-portrait-phone.png'});
-  await page.setViewportSize({width:1000,height:900});
-  await cast.getByRole('button',{name:'Choose gallery artwork',exact:true}).click();
-  assert.equal(await cast.getByRole('button',{name:'Previous images',exact:true}).isDisabled(),true);
-  await page.setViewportSize({width:390,height:844});
-  await cast.locator('[data-cast-art-gallery-grid]').scrollIntoViewIfNeeded();
-  assert.equal(await cast.evaluate(e=>e.scrollWidth<=e.clientWidth+1),true,'gallery grid fits mobile width');
-  await page.screenshot({path:'.cache/ux-redesign/cast-gallery-phone.png'});
-  await page.setViewportSize({width:1000,height:900});
-
-  await cast.getByRole('button',{name:'Use Aleister.png',exact:true}).click();
-  assert.match(await cast.locator('[data-cast-art-preview]').getAttribute('src')??'',/supplied/);
-  assert.equal(await cast.getByRole('button',{name:'Use generated portrait',exact:true}).isEnabled(),true);
-  await cast.getByRole('button',{name:'Use generated portrait',exact:true}).click();
-  assert.match(await cast.locator('[data-cast-art-preview]').getAttribute('src')??'',/saved-art/);
-  await cast.getByRole('button',{name:'Forget this variant',exact:true}).click();
-  await cast.getByRole('button',{name:'Remove',exact:true}).click();
-  assert.equal(await cast.locator('[data-cast-art-catalog]').isVisible(),false);
-  assert.equal(await page.evaluate(()=>(window as any).settingsFixture.castActions.length),5);
-  await castReuse.uncheck();await openTab('Reading');
+  assert.equal(await reuse.isChecked(),false);await reuse.check();assert.equal((await lastPatch(page))?.persistentLocationArt,true);
+  await openPage('characters');await settings.getByRole('button',{name:'Places',exact:true}).click();
+  const places=settings.locator('[data-location-art]');await places.getByRole('button',{name:/Open Observatory/}).click();
+  assert.match(await places.locator('[data-art-description]').innerText(),/Brass telescope/);
+  await places.getByRole('button',{name:'Prefer this variant',exact:true}).click();assert.match(await places.locator('[data-art-variant]').innerText(),/Preferred/);
+  await places.getByRole('button',{name:'Forget this variant',exact:true}).click();await places.getByRole('button',{name:'Confirm removal',exact:true}).click();
+  assert.equal(await places.locator('[data-art-catalog]').isVisible(),false);assert.equal(await page.evaluate(()=>(window as any).settingsFixture.placeActions.length),3);
+  await openPage('consistency');await reuse.uncheck();const castReuse=settings.locator('[name="persistentCastArt"]');assert.equal(await castReuse.isChecked(),false);await castReuse.check();assert.equal((await lastPatch(page))?.persistentCastArt,true);
+  await openPage('characters');await settings.getByRole('button',{name:'Characters',exact:true}).click();
+  const cast=settings.locator('[data-cast-art]');await cast.getByRole('button',{name:/Open Aleister/}).click();
+  await page.evaluate(()=>(window as any).settingsFixture.panel.castArtPanel.navigate('portrait'));
+  await cast.locator('[data-cast-portrait-library] > summary').click();
+  assert.match(await cast.locator('[data-cast-title]').innerText(),/Display portrait/);assert.equal(await cast.locator('[data-cast-art-description]').innerText(),'Dark hair, blue coat');
+  await cast.getByRole('button',{name:'Prefer this variant',exact:true}).click();assert.match(await cast.locator('[data-cast-art-variant]').innerText(),/Preferred/);
+  await page.setViewportSize({width:390,height:844});await cast.scrollIntoViewIfNeeded();assert.equal(await cast.evaluate(e=>e.scrollWidth<=e.clientWidth+1),true,'portrait library fits phone width');await page.screenshot({path:'.cache/ux-redesign/saved-portrait-phone.png'});await page.setViewportSize({width:1000,height:900});
+  await cast.getByRole('button',{name:'Assign gallery art to variant',exact:true}).click();assert.equal(await cast.getByRole('button',{name:'Previous images',exact:true}).isDisabled(),true);
+  await page.setViewportSize({width:390,height:844});await cast.locator('[data-cast-art-gallery-grid]').scrollIntoViewIfNeeded();assert.equal(await cast.evaluate(e=>e.scrollWidth<=e.clientWidth+1),true,'gallery fits phone width');await page.screenshot({path:'.cache/ux-redesign/cast-gallery-phone.png'});await page.setViewportSize({width:1000,height:900});
+  await cast.getByRole('button',{name:'Use Aleister.png',exact:true}).click();assert.match(await cast.locator('[data-cast-art-preview]').getAttribute('src')??'',/supplied/);assert.equal(await cast.getByRole('button',{name:'Remove variant assignment',exact:true}).isEnabled(),true);
+  await cast.getByRole('button',{name:'Remove variant assignment',exact:true}).click();assert.match(await cast.locator('[data-cast-art-preview]').getAttribute('src')??'',/saved-art/);
+  await cast.getByRole('button',{name:'Forget this variant',exact:true}).click();await cast.getByRole('button',{name:'Forget variant',exact:true}).click();assert.equal(await cast.locator('[data-cast-art-catalog]').isVisible(),false);assert.equal(await page.evaluate(()=>(window as any).settingsFixture.castActions.length),5);
+  await openPage('consistency');await castReuse.uncheck();await openTab('Reading');
 
   // First use: the guide is visible, uses listed connections, and saves choices immediately.
   const setup = settings.locator("[data-setup]");
-  assert.equal(await setup.isVisible(), true, "setup guide shows on first use");
+  assert.equal(await setup.isVisible(), false, "home stays compact until setup is requested");
+  await openPage('reset');
+  assert.equal(await setup.isVisible(), true, "setup guide remains available in Reset & setup");
   assert.match(await setup.locator('[data-readiness="planner"] [data-readiness-title]').innerText(), /Studio text/);
   assert.match(await setup.locator('[data-readiness="planner"] [data-readiness-title]').innerText(), /not tested/);
   await setup.locator('input[name="setupImageSource"][value="card"]').check();
@@ -107,6 +91,7 @@ try {
   assert.match(await setup.locator('[data-readiness="planner"] [data-readiness-title]').innerText(), /Local text/);
   await page.screenshot({ path: ".cache/ux-redesign/settings-setup-desktop.png" });
   await setup.getByRole("button", { name: "Done", exact: true }).click();
+  await openPage('reading');
   assert.equal(await setup.isVisible(), false, "Done hides the guide");
   assert.equal((await fixture(page)).refreshes, 0, "nothing was called on the host during setup");
 
@@ -116,7 +101,8 @@ try {
   assert.deepEqual(await lastPatch(page), { textSpeed: 0 });
   assert.equal(await settings.locator("[data-status]").innerText(), "Saved");
   await openTab("Look");
-  assert.equal(await settings.locator('[data-pane="look"] [data-sample]').isVisible(), true, "the live sample moves to Look");
+  await settings.locator("[data-appearance-preview] > summary").click();
+  assert.equal(await settings.locator('[data-pane="look"] [data-sample]').isVisible(), true, "Appearance provides the optional local preview");
   await settings.locator('input[name="themePreset"][value="paper-novel"]').check();
   assert.deepEqual(await lastPatch(page), { themePreset: "paper-novel" });
   const accent = await settings.locator("[data-sample-stage]").evaluate((element) => getComputedStyle(element).getPropertyValue("--sample-accent").trim());
@@ -174,8 +160,7 @@ try {
 
   // Reference source: the radio shows only while the reference toggle is on,
   // saves a single-field patch, and remembers its choice across the toggle.
-  await settings.getByText("Image prompts", { exact: true }).click();
-  await settings.getByText("Character consistency and references", { exact: true }).click();
+  await openPage("consistency");
   const referenceSource = settings.locator("[data-reference-source]");
   assert.equal(await referenceSource.isVisible(), true, "reference source shows while the toggle is on");
   assert.equal(await settings.locator('input[name="referenceSource"][value="captured"]').isChecked(), true, "captured is the default");
@@ -199,72 +184,68 @@ try {
   await page.evaluate(() => (window as any).settingsFixture.panel.setAudioStatus("Scanned 0 BGM, 0 SFX."));
   assert.equal(await settings.locator("[data-sound-empty]").isVisible(), true, "text-only host reports still drive the empty state");
 
-  // Advanced: hidden by default, drafts survive host updates and tab switches, Apply sends them, invalid JSON is revealed.
+  // Focused technical editors retain drafts, save only their own keys and validate locally.
   for (const name of ["parserParameters", "imageParameters", "customCss", "ignoredTags", "debugLogging", "imageModel"]) {
-    assert.equal(await settings.locator(`[name="${name}"]`).isVisible(), false, name + " should be advanced");
+    assert.equal(await settings.locator(`[name="${name}"]`).isVisible(), false, name + " stays on its focused page");
   }
-  assert.equal(await settings.locator("[data-draft-bar]").isVisible(), false, "no unapplied-changes bar without drafts");
+  assert.equal(await settings.locator("[data-draft-bar]").isVisible(), false, "no save footer without a draft");
   await openTab("Connections");
-  assert.equal(await settings.locator('[data-pane="connections"] [data-readiness]').count(), 1, "one readiness widget in Connections");
+  assert.equal(await settings.locator('[data-pane="connections"] [data-readiness]').count(), 1, "one story-reader readiness widget");
+  await openPage("system-one");
   await settings.locator('[name="systemOneMode"]').selectOption("compare");
   await settings.locator('[name="systemOneModel"]').fill("jev-latest");
   await settings.locator('[name="systemOneApiKey"]').fill("test-key-123");
   await settings.locator('[data-save-system-one-key]').click();
   assert.deepEqual((await fixture(page)).savedSystemOneKeys, ["test-key-123"]);
   assert.equal(await settings.locator('[name="systemOneApiKey"]').inputValue(), "");
-  assert.equal(await tab("Connections").locator("[data-tab-badge]").innerText(), "1", "the nav counts unapplied changes per section");
-  await tab("Advanced").focus(); await page.keyboard.press("Enter");
-  await openTab("Pictures");
-  if (!(await settings.locator('[name="imageParameters"]').isVisible())) await settings.getByText("Advanced image parameters", { exact: true }).click();
+  assert.equal(await tab("Connections").locator("[data-tab-badge]").innerText(), "1", "category counts its edited fields");
+  await settings.locator("[data-apply]").click();
+  const systemOneApplied = await lastPatch(page);
+  assert.deepEqual(systemOneApplied, { systemOneMode: "compare" }, "System One saves only the edited setting");
+  assert.equal("systemOneApiKey" in systemOneApplied!, false, "enclave keys stay outside config");
+  await openPage("generation");
   await settings.locator('[name="imageParameters"]').fill('{"steps":32}');
-  assert.match(await settings.locator("[data-status]").innerText(), /not applied/);
-  assert.equal(await settings.locator("[data-draft-bar]").isVisible(), true, "the bar appears with unapplied changes");
-  assert.match(await settings.locator("[data-draft-count]").innerText(), /^2 changes not applied/);
+  assert.match(await settings.locator("[data-status]").innerText(), /not applied|unsaved/i);
+  assert.equal(await settings.locator("[data-draft-bar]").isVisible(), true, "dirty editor shows Save/Discard");
+  assert.match(await settings.locator("[data-draft-count]").innerText(), /^1 change/);
   assert.equal(await settings.locator('[name="imageParameters"]').locator("xpath=..").getAttribute("data-dirty"), "", "changed fields are marked");
-  await openTab("Reading");
-  await settings.locator('input[name="textSpeedStep"][value="10"]').check();
-  assert.deepEqual(await lastPatch(page), { textSpeed: 10 });
-  assert.equal(await settings.locator("[data-draft-bar]").isVisible(), true, "the bar follows the user to other sections");
-  await openTab("Advanced");
-  assert.equal(await settings.locator('[name="imageParameters"]').inputValue(), '{"steps":32}', "everyday save and a tab switch must not wipe an advanced draft");
-  await page.evaluate(() => { const f = (window as any).settingsFixture; f.config={ ...f.config, customCss: "/* host */" };f.panel.setConfig(f.config); });
+  await openPage("reading");
+  await settings.getByRole("button", { name: "Stay", exact: true }).click();
+  assert.equal(await settings.locator('[name="imageParameters"]').inputValue(), '{"steps":32}', "navigation guard preserves the draft");
+  await page.evaluate(() => { const f = (window as any).settingsFixture; f.config={ ...f.config, customCss: "/* host */", textSpeed: 10 };f.panel.setConfig(f.config); });
   assert.equal(await settings.locator('[name="imageParameters"]').inputValue(), '{"steps":32}', "host echo keeps the draft");
-  assert.equal(await settings.locator('[name="customCss"]').inputValue(), "/* host */", "host echo updates untouched advanced fields");
+  assert.equal(await settings.locator('[name="customCss"]').inputValue(), "/* host */", "host echo updates untouched editors");
   await settings.locator("[data-apply]").click();
   const applied = await lastPatch(page);
-  assert.deepEqual(applied?.imageParameters, { steps: 32 });
-  assert.equal(applied?.systemOneMode, "compare");
-  assert.equal("systemOneModel" in applied!,false,"untouched fields are not resent");
-  assert.equal("systemOneApiKey" in applied!, false);
-  assert.equal("customCss" in applied!,false,"Apply omits untouched current host fields");
-  assert.equal((await fixture(page)).config.customCss,"/* host */","Apply preserves authoritative untouched values");
-  assert.equal("ignoredTags" in applied!,false,"hidden untouched values are not resent");
-  assert.equal("themePreset" in applied!, false, "apply never touches everyday keys");
-  assert.equal(await settings.locator("[data-status]").innerText(), "Advanced settings applied.");
-  assert.equal(await settings.locator("[data-draft-bar]").isVisible(), false, "the bar leaves once applied");
-  // Discard restores the last host values and sends nothing.
+  assert.deepEqual(applied, { imageParameters: { steps: 32 } }, "generation saves its edited key without unrelated settings");
+  assert.equal((await fixture(page)).config.customCss,"/* host */","save preserves authoritative untouched values");
+  assert.match(await settings.locator("[data-status]").innerText(), /applied|saved/i);
+  assert.equal(await settings.locator("[data-draft-bar]").isVisible(), false, "footer leaves after acknowledgement");
+  await openPage("reading");
+  await settings.locator('input[name="textSpeedStep"][value="20"]').check();
+  assert.deepEqual(await lastPatch(page), { textSpeed: 20 }, "simple preferences still save independently");
+  // Each focused Discard restores authoritative text/checkbox state without a write.
   const beforeDiscard = (await fixture(page)).patches.length;
-  await settings.locator('[name="customCss"]').fill("/* draft */");
-  await settings.locator('[name="debugLogging"]').check();
-  assert.match(await settings.locator("[data-draft-count]").innerText(), /^2 changes/);
+  await openPage("css");await settings.locator('[name="customCss"]').fill("/* draft */");
   await settings.locator("[data-discard]").click();
   assert.equal(await settings.locator('[name="customCss"]').inputValue(), "/* host */", "Discard restores text fields");
+  await openPage("storage");await settings.locator('[name="debugLogging"]').check();
+  await settings.locator("[data-discard]").click();
   assert.equal(await settings.locator('[name="debugLogging"]').isChecked(), false, "Discard restores checkboxes");
   assert.equal(await settings.locator("[data-draft-bar]").isVisible(), false);
   assert.equal((await fixture(page)).patches.length, beforeDiscard, "Discard sends nothing");
-  // Invalid JSON: Apply from another section opens the field that failed.
-  await openTab("Pictures");
-  await settings.locator('[name="imageParameters"]').fill("invalid JSON");
-  await openTab("Look");
+  // Invalid JSON cannot be saved or escape to another page accidentally.
+  await openPage("generation");await settings.locator('[name="imageParameters"]').fill("invalid JSON");
   await settings.locator("[data-apply-bar]").click();
-  assert.equal(await settings.locator('[name="imageParameters"]').isVisible(), true, "invalid hidden fields must be revealed");
+  assert.equal(await settings.locator('[name="imageParameters"]').isVisible(), true, "invalid field stays visible");
   assert.equal(await tab("Pictures").getAttribute("aria-selected"), "true");
   assert.match(await settings.locator("[data-status]").innerText(), /Image parameters/);
-  await settings.locator('[name="imageParameters"]').fill('{"steps":32}');
+  await settings.locator('[name="imageParameters"]').fill('{"steps":31}');
   await page.keyboard.press("Control+s");
-  assert.equal(await settings.locator("[data-status]").innerText(), "Advanced settings applied.");
+  assert.deepEqual(await lastPatch(page), { imageParameters: { steps: 31 } }, "keyboard save uses this editor");
+  assert.match(await settings.locator("[data-status]").innerText(), /applied|saved/i);
 
-  await openTab("Advanced");
+  await openPage("reset");
   // Reset keeps presets and the music folder, and needs confirmation.
   await page.evaluate(() => { const f = (window as any).settingsFixture; f.config = { ...f.config, promptPresets: [{ id: "p1", name: "Soft", positive: "soft", negative: "" }], audioDirectory: "packs" }; f.panel.setConfig(f.config); });
   await settings.locator("[data-reset]").click();
@@ -288,14 +269,16 @@ try {
   assert.equal(await tab("Pictures").getAttribute("aria-selected"), "true", "Connections links to the image connection in Pictures");
   assert.equal(await settings.locator('select[name="imageConnectionId"]').evaluate((element) => element === (element.getRootNode() as ShadowRoot).activeElement), true);
   await page.evaluate(() => (window as any).settingsFixture.panel.setConnectionCatalog("planner", { status: "error", options: [], error: "Host offline." }));
-  const plannerRow = settings.locator('[data-setup] [data-readiness="planner"]');
+  await openPage('connections');
+  const plannerRow = settings.locator('[data-pane="connections"] [data-readiness="planner"]');
   assert.match(await plannerRow.locator("[data-readiness-title]").innerText(), /Could not load/);
   await plannerRow.getByRole("button", { name: "Refresh", exact: true }).click();
   assert.equal((await fixture(page)).refreshes, 1);
   assert.match(await plannerRow.locator("[data-readiness-title]").innerText(), /Checking/);
 
   // Open preview is wired everywhere.
-  await settings.locator("[data-topbar] [data-open-preview]").click();
+  await openPage("home");
+  await settings.locator("[data-home] [data-open-preview]").click();
   assert.equal((await fixture(page)).previews, 1);
 
   await page.screenshot({ path: ".cache/ux-redesign/settings-desktop.png" });
@@ -318,9 +301,10 @@ try {
   await page.keyboard.press("Home");
   assert.equal(await tab("Reading").getAttribute("aria-selected"), "true");
   assert.deepEqual(await tabs.evaluateAll((items) => items.map((item) => (item as HTMLElement).tabIndex)), [0, -1, -1, -1, -1, -1, -1], "only the selected tab is in the tab order");
-  assert.equal(await settings.getByRole("tabpanel").getAttribute("aria-labelledby"), "pane-reading-title");
+  assert.equal(await settings.locator('[data-pane="reading"]').isVisible(), true, "keyboard navigation opens the page");
 
   // Search: typing lists matching settings; Enter jumps to the first and focuses it.
+  await settings.locator("[data-toggle-search]").click();
   const search = settings.locator("[data-settings-search]");
   await search.fill("music vol");
   const results = settings.locator("[data-search-result]");
@@ -333,6 +317,7 @@ try {
   await results.filter({ hasText: "Theme CSS" }).click();
   assert.equal(await settings.locator('[name="customCss"]').isVisible(), true, "results open Advanced settings too");
   await search.fill("narrator");
+  if(!(await results.first().innerText()).includes('Narrator'))console.log('Search diagnostic',await page.evaluate(()=>{const f=(window as any).settingsFixture,p=f.panel,r=document.querySelector('[data-vn-settings]')!.shadowRoot!;return {value:r.querySelector<HTMLInputElement>('[data-settings-search]')!.value,active:(r.activeElement as HTMLElement)?.outerHTML.slice(0,150),voiceMounted:p.voiceMounted,entries:p.searchEntries().filter((x:any)=>x.label.includes('Narrator')),result:r.querySelector('[data-search-results]')!.outerHTML.slice(0,650)};}));
   assert.match(await results.first().innerText(), /Narrator voice/);
   await search.press("ArrowDown");
   await page.keyboard.press("Enter");
@@ -354,12 +339,13 @@ try {
   assert.equal(await tab("Connections").getAttribute("aria-selected"), "true", "the panel reopens on the last section");
   assert.equal(await page.evaluate(() => (window as any).settingsFixture.storage.get("cue.visual-novel.settings-section")), "connections");
   await page.evaluate(() => { const f = (window as any).settingsFixture; f.storage.set("cue.visual-novel.settings-section", "nonsense"); f.remount(); });
-  assert.equal(await tab("Reading").getAttribute("aria-selected"), "true", "an unknown remembered section falls back to Reading");
+  assert.equal(await settings.locator('[data-workspace-page="home"]').isVisible(), true, "an unknown remembered section falls back to the category index");
   await page.evaluate(() => (window as any).settingsFixture.panel.openSection("look"));
   assert.equal(await tab("Look").getAttribute("aria-selected"), "true", "openSection deep-links a section");
 
   // The guide mirrors the saved config instead of preselecting a default.
   await page.goto(`http://127.0.0.1:${server.port}/?card`);
+  await openPage('reset');
   await setup.waitFor();
   assert.equal(await setup.locator('input[name="setupImageSource"][value="card"]').isChecked(), true, "guide reflects saved card choice");
   assert.equal(await setup.locator('input[name="setupThemePreset"][value="midnight-noir"]').isChecked(), true, "guide reflects saved theme");
@@ -370,27 +356,27 @@ try {
   await settings.waitFor();
   for (const width of [390, 360]) {
     await page.setViewportSize({ width, height: 760 });
-    for (const name of ["Reading", "Look", "Pictures", "Sound", "Voice", "Connections", "Advanced"]) {
+    for (const name of ["Reading", "Appearance", "Images", "Characters & places", "Audio", "Connections", "Advanced"]) {
       await openTab(name);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, `${name} fits ${width}px without horizontal scrolling`);
     }
   }
-  assert.equal(await settings.locator("[data-tablist]").isVisible(), false, "mobile uses a section selector");
-  const advancedBox = await settings.getByLabel("Settings section", { exact: true }).boundingBox();
-  assert.ok(advancedBox && advancedBox.x >= 0 && advancedBox.x + advancedBox.width <= 361, "section selector fits the viewport");
+  assert.equal(await settings.locator("[data-tablist]").isVisible(), false, "mobile hides the wide rail");
+  assert.equal(await settings.getByLabel("Settings section", { exact: true }).count(), 0, "mobile removes the persistent dropdown");
+  const advancedBox = await settings.locator("[data-category-picker]").boundingBox();
+  assert.ok(advancedBox && advancedBox.x >= 0 && advancedBox.x + advancedBox.width <= 361, "category picker fits the viewport");
   await openTab("Look");
   const tile = settings.locator('input[name="themePreset"][value="paper-novel"]').locator("..");
   const box = await tile.boundingBox();
   assert.ok(box && box.height >= 44 && box.width >= 44, "theme tiles are large targets");
-  const tabBox = await settings.getByLabel("Settings section", { exact: true }).boundingBox();
+  const tabBox = await settings.locator("[data-category-picker]").boundingBox();
   assert.ok(tabBox && tabBox.height >= 44, "tabs are large targets");
   await page.screenshot({ path: ".cache/ux-redesign/settings-mobile.png" });
-  await openTab("Advanced");
+  await openPage("css");
   await settings.locator('[name="customCss"]').fill("/* mobile draft */");
-  await openTab("Sound");
-  const lastControl = await settings.locator('input[name="sfxVolume"]').evaluate((element) => { element.scrollIntoView({ block: "end" }); return element.getBoundingClientRect().bottom; });
+  const lastControl = await settings.locator('[name="customCss"]').evaluate((element) => { element.scrollIntoView({ block: "end" }); return element.getBoundingClientRect().bottom; });
   const draftBar = await settings.locator("[data-draft-bar]").boundingBox();
-  assert.ok(draftBar && lastControl <= draftBar.y + 1, `controls scrolled into view sit above the unapplied-changes bar (${lastControl} vs ${draftBar?.y})`);
+  assert.ok(draftBar && lastControl <= draftBar.y + 1, `editor scrolls above its save footer (${lastControl} vs ${draftBar?.y})`);
   await settings.locator("[data-discard]").click();
   await page.setViewportSize({ width: 1000, height: 900 });
   await page.waitForTimeout(100);
@@ -398,7 +384,8 @@ try {
 
   // Reduced motion: sample shows the whole line at once.
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await openTab("Reading");
+  await openTab("Look");
+  await settings.locator('[data-appearance-preview]').evaluate((node:HTMLDetailsElement)=>node.open=true);
   await settings.locator("[data-sample-replay]").click();
   assert.equal(await settings.locator("[data-sample-stage]").getAttribute("data-typing"), null);
 
@@ -409,9 +396,7 @@ try {
     f.config = { ...f.config, imageConnectionId: "nai", generateImages: true, useNativeCardImages: false };
     f.panel.setConfig(f.config);
   });
-  await openTab("Pictures");
-  await settings.getByText("Image prompts", { exact: true }).click();
-  await settings.getByText("Shared style and exclusions", { exact: true }).click();
+  await openPage("style");
   const quality = settings.locator('[name="novelAiQualityTags"]');
   assert.equal(await quality.isVisible(), true);
   await quality.uncheck();
@@ -425,9 +410,8 @@ try {
     f.panel.setConnectionCatalog("image", { status: "ready", options: [{ id: "nai", name: "Other", provider: "comfyui", model: "m", isDefault: true }] });
   });
   assert.equal(await quality.isVisible(), false);
-  await openTab('Pictures');
+  await openPage('context');
   const contextSources=settings.locator('[data-context-sources]');
-  await contextSources.locator('xpath=..').locator('summary').first().click();
   await contextSources.locator('[data-books]').check();
   assert.equal(((await lastPatch(page))?.contextSources as any)?.lumibooks,true);
   await contextSources.getByRole('button',{name:'Refresh source status',exact:true}).click();
@@ -441,12 +425,14 @@ try {
   assert.equal(((await lastPatch(page))?.contextSources as any)?.lumiscriptEndpoint,'lumiscript.story-tracker.state');
   assert.match(await contextSources.locator('[data-source-status]').innerText(),/not been checked/,'changing a source clears its old report');
   const generation=settings.locator('[name="imageOutputAspectRatio"]');
-  await generation.locator('xpath=..').locator('xpath=..').locator('summary').first().evaluate((e:any)=>{e.parentElement.open=true;});
+  await openPage('images');
   assert.equal(await generation.isVisible(),true);
   await generation.selectOption('9:16');
   assert.equal((await lastPatch(page))?.imageOutputAspectRatio,'9:16');
+  await openPage('reading');
   await settings.locator('[name="collectEntityReferences"]').check();
   assert.equal((await lastPatch(page))?.collectEntityReferences,true);
+  await openPage('context');
   const mappings=settings.locator('[data-tracker-mappings]');
   await mappings.locator('summary').click();
   await mappings.locator('[data-mapping="identity"]').fill('custom.look');

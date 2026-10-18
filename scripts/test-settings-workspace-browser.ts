@@ -1,0 +1,63 @@
+import {chromium} from 'playwright';
+import assert from 'node:assert/strict';
+import {mkdir} from 'node:fs/promises';
+const build=await Bun.build({entrypoints:['scripts/settings-browser-fixture.ts'],target:'browser'});
+if(!build.success)throw Error(String(build.logs));
+const bundle=await build.outputs[0]!.text();
+const server=Bun.serve({hostname:'127.0.0.1',port:0,fetch:r=>new URL(r.url).pathname==='/fixture.js'?new Response(bundle,{headers:{'Content-Type':'application/javascript'}}):new Response('<html><title>Settings workspace</title><body style="margin:0"><script type="module" src="/fixture.js"></script></body></html>',{headers:{'Content-Type':'text/html'}})});
+const browser=await chromium.launch({headless:true});
+try{
+ const page=await browser.newPage({viewport:{width:390,height:844}}),errors:string[]=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(`http://127.0.0.1:${server.port}/`);
+ const settings=page.locator('[data-vn-settings]');await settings.waitFor();
+ assert.equal(await page.title(),'Settings workspace');
+ assert.equal(await settings.locator('[data-home]').isVisible(),true);
+ assert.equal(await settings.locator('[data-section-select]').count(),0);
+ assert.equal(await settings.locator('[data-home-categories] button').count(),7);
+ await mkdir('.cache/settings-workspace',{recursive:true});
+ await page.screenshot({path:'.cache/settings-workspace/home-mobile.png',fullPage:true});
+ await settings.locator('[data-home-categories] [data-page-link="pictures"]').click();
+ assert.equal(await settings.locator('[name="maxImagesPerTurn"]').count(),1);
+ assert.equal(await settings.locator('[name="imageOutputAspectRatio"]').isVisible(),true);
+ await page.screenshot({path:'.cache/settings-workspace/images-mobile.png',fullPage:true});
+ await settings.locator('[data-page-links] [data-page-link="generation"]').click();
+ await settings.locator('[name="imageParameters"]').fill('{"customOption":true}');
+ await settings.locator('[data-all-settings]').click();
+ assert.equal(await settings.locator('[data-leave-dialog]').isVisible(),true);
+ await settings.locator('[data-leave-stay]').click();
+ assert.equal(await settings.locator('[name="imageParameters"]').inputValue(),'{"customOption":true}');
+ await settings.locator('[data-apply]').click();
+ assert.equal(await page.evaluate(()=>(window as any).settingsFixture.patches.at(-1).imageParameters.customOption),true);
+ await settings.locator('[data-all-settings]').click();
+ await settings.locator('[data-toggle-search]').click();
+ await settings.getByRole('searchbox',{name:'Search Lumiglyphics',exact:true}).fill('CSS');
+ await settings.locator('[data-search-result]').first().click();
+ assert.equal(await settings.locator('[name="customCss"]').isVisible(),true);
+ assert.equal(await settings.locator('[name="customCss"]').evaluate(el=>el===el.getRootNode().activeElement),true);
+ // A later Stay cancels the old Save-and-leave intention without cancelling its save.
+ await page.evaluate(()=>(window as any).settingsFixture.ackMode='hold');
+ await settings.locator('[name="customCss"]').fill('/* pending navigation */');
+ await page.evaluate(()=>(window as any).settingsFixture.panel.openPage('reading'));
+ await settings.locator('[data-leave-save]').click();
+ await page.evaluate(()=>(window as any).settingsFixture.panel.openPage('images'));
+ await settings.locator('[data-leave-stay]').click();
+ await page.evaluate(()=>{const f=(window as any).settingsFixture,r=f.saveRequests.at(-1);f.config={...f.config,...r.patch};f.panel.setConfig(f.config,r.requestId);f.panel.setSaveStatus({kind:'saved'},r.requestId);});
+ assert.equal(await page.evaluate(()=>(window as any).settingsFixture.panel.getPage()),'css','Stay cancels any earlier navigation intention');
+ await page.evaluate(()=>(window as any).settingsFixture.ackMode='sync');
+ for(const width of [360,390,412,1000]){
+  await page.setViewportSize({width,height:900});
+  await page.evaluate(()=>(window as any).settingsFixture.panel.openPage('images'));
+  await page.waitForTimeout(40);
+  assert.equal(await settings.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,`no overflow ${width}`);
+ }
+ await page.screenshot({path:'.cache/settings-workspace/images-desktop.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ await page.evaluate(()=>{document.documentElement.style.cssText='--lumiverse-text:#18212e;--lumiverse-text-muted:#46546b;--lumiverse-bg:#f6f7fa;--lumiverse-card-bg:#fff;--lumiverse-bg-elevated:#fff;--lumiverse-border:#9da7b6;--lumiverse-primary:#5044a0;';});
+ await page.screenshot({path:'.cache/settings-workspace/images-light.png',fullPage:true,animations:'disabled'});
+ await page.evaluate(()=>{document.documentElement.style.fontSize='200%';});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true,'200% text stays within phone width');
+ assert.equal((await page.evaluate(()=>(window as any).settingsFixture.previews)),0,'navigation never opens reader');
+ assert.deepEqual(errors,[]);
+ console.log('Settings workspace: home, focused routes, scoped save, search focus and responsive navigation passed');
+}finally{await browser.close();server.stop(true);}

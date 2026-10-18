@@ -10,17 +10,42 @@ export class ImageTemplateEditor {
   private selected = "";
   private dirty = false;
   private pending = "";
+  private leaveAfterSave: (() => void) | undefined;
+  private navigation: (() => void) | undefined;
   private metadata: ImagePromptMetadata | undefined;
   private readonly host: HTMLDivElement;
   constructor(mount: HTMLElement, private readonly onSave: (patch: Partial<VisualNovelConfig>) => void, private readonly onPreview: (template: ImageTemplateSnapshot) => void) {
     this.host = document.createElement("div");
     this.host.dataset.templateEditor = "";
-    this.host.innerHTML = `<p>Choose the picture type below. Dynamic mode uses only the templates you check. Customize wording when you need finer control; held pictures keep their prepared prompts.</p>
+    this.host.innerHTML = `<style>
+      [data-template-editor]{min-width:0;overflow-wrap:anywhere}
+      [data-template-editor] [hidden]{display:none!important}
+      [data-template-editor] [data-template-choices]{display:grid;gap:0}
+      [data-template-editor] [data-template-list]{display:grid;gap:16px}
+      [data-template-editor] [data-template-row]{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;border-bottom:1px solid var(--set-border,var(--lumiverse-border,#5556));padding:8px 0}
+      [data-template-editor] [data-open-template]{text-align:start;display:grid;gap:4px;min-width:0;white-space:normal;background:transparent;color:inherit;border:0;padding:8px 0}
+      [data-template-editor] [data-open-template] small{font-size:1em;font-weight:400;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--set-muted,inherit)}
+      [data-template-editor] [data-template-dynamic-control]{display:grid;justify-items:center;gap:4px;min-width:44px;min-height:44px;padding:8px;cursor:pointer;font-size:1em}
+      [data-template-editor] input[type=checkbox]{width:24px;height:24px;min-height:24px}
+      [data-template-editor] [data-template-fields]{display:grid;gap:16px;min-width:0}
+      [data-template-editor] [data-template-fields] [data-field]{min-width:0}
+      [data-template-editor] button,[data-template-editor] select,[data-template-editor] input:not([type=checkbox]),[data-template-editor] summary{min-height:44px;font:inherit}
+      [data-template-editor] input,[data-template-editor] select,[data-template-editor] textarea{max-width:100%;min-width:0;box-sizing:border-box}
+      [data-template-editor] textarea{font:inherit;min-height:8em;resize:vertical}
+      [data-template-editor] [data-template-heading]{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+      [data-template-editor] [data-template-heading] h3{margin:0;font-size:1.125em}
+      [data-template-editor] [data-template-save-actions]{display:flex;flex-wrap:wrap;gap:8px;padding:16px 0}
+      [data-template-editor] [data-template-navigation]{padding:16px;border:1px solid var(--set-border,var(--lumiverse-border,#5556));border-radius:12px;background:var(--set-field,var(--lumiverse-bg-elevated,#202127));color:inherit;margin-block:16px}
+      [data-template-editor] [data-template-navigation] [data-actions]{display:flex;gap:8px;flex-wrap:wrap}
+      [data-template-editor] [data-template-default]{font-size:1em;color:var(--set-accent,var(--lumiverse-primary,#aebeff))}
+      [data-template-editor] [aria-invalid=true]{outline:2px solid var(--set-danger,var(--lumiverse-danger,#d76f79));outline-offset:2px}
+      @container (max-width:420px){[data-template-editor] [data-row]{display:grid;grid-template-columns:minmax(0,1fr)}}
+    </style>
+    <section data-template-list aria-label="Template catalog"><p>Choose a template to edit its wording. Dynamic mode uses only included templates; the default remains a separate choice. Changes affect future preparations.</p>
       <label data-field><span>Default template</span><select name="defaultImageTemplateId" aria-label="Default template"></select></label>
       <label data-field><span>Prompt format</span><select name="imagePromptFormat" aria-label="Prompt format"><option value="description">Natural-language description</option><option value="tags">Comma-separated tags</option></select><small>Choose wording suited to your model. This changes formatting, not model capabilities.</small></label>
-      <fieldset data-dynamic-templates><legend>Templates used by dynamic mode</legend><small>Checked templates are available when context selection is on. Unchecked templates can still be your default when it is off.</small><div data-template-choices></div></fieldset>
-      <details data-template-customize><summary>Customize a template</summary><div data-template-fields>
-      <label data-field><span>Template to edit</span><select data-template-picker aria-label="Template to edit"></select></label>
+      <div data-dynamic-templates><h3>Templates</h3><p>Included templates are available for selection from story context. Open a name to customize it.</p><div data-template-choices></div></div></section>
+      <section data-template-detail hidden aria-label="Template editor"><div data-template-heading><button type="button" data-template-back>← Templates</button><h3 data-template-title></h3></div><p data-template-summary></p><p>Individual template wording uses the saved shared style through placeholders. To change one prepared picture, use its Image prompts panel.</p><div data-template-fields>
       <label data-field><span>Template name</span><input type="text" data-t="name" aria-label="Template name" maxlength="80"></label>
       <details data-template-composition><summary>Composition and context guidance</summary><div data-template-fields><label data-field><span>Category</span><select data-t="category" aria-label="Template category"><option value="portrait">Character portrait</option><option value="environment">Environment</option><option value="action">Story action</option><option value="detail">Detail / object</option><option value="custom">Custom</option></select></label>
       <label data-field><span>When to use</span><textarea data-t="useWhen" aria-label="When to use template" maxlength="1000"></textarea><small>The story reader uses this guidance when dynamic selection is enabled.</small></label>
@@ -32,9 +57,10 @@ export class ImageTemplateEditor {
       <details><summary>Placeholder guide</summary><small>Placeholders: ${IMAGE_TEMPLATE_TOKENS.map(t => `{{${t}}}`).join(" · ")}. Scene, subjects, action, composition and lighting come from the visual brief. Style, suffix and negative come from shared settings. Omit a shared placeholder to use independent wording.</small></details>
       <details><summary>Expanded prompt preview</summary><p data-preview-kind></p><pre data-template-preview style="white-space:pre-wrap;overflow-wrap:anywhere;font:inherit"></pre><small>Local preview only; opening this never requests an image. The held picture's Image prompts panel shows its actual prepared request.</small></details>
       <div data-actions><button type="button" data-duplicate>Duplicate template</button><button type="button" data-delete-template>Delete template</button></div>
-      </div></details><div data-actions><button type="button" data-save-templates>Save templates</button><button type="button" data-discard-templates>Discard template changes</button></div><p data-template-status role="status"></p>`;
+      </div></section><div data-template-save-actions hidden><button type="button" data-primary data-save-templates>Save templates</button><button type="button" data-discard-templates>Discard template changes</button></div><p data-template-status role="status" aria-live="polite"></p>
+      <section data-template-navigation hidden role="alertdialog" aria-modal="false" aria-label="Unsaved template changes"><p>Save template changes before leaving?</p><p>Your changes apply to this template catalog. Stay to keep editing.</p><div data-actions><button type="button" data-template-leave-save>Save and leave</button><button type="button" data-template-leave-discard>Discard and leave</button><button type="button" data-template-stay>Stay</button></div></section>`;
     mount.append(this.host);
-    this.el<HTMLSelectElement>("[data-template-picker]").onchange = () => { this.selected = this.el<HTMLSelectElement>("[data-template-picker]").value; this.renderFields(); };
+    this.el<HTMLButtonElement>("[data-template-back]").onclick = () => this.showList();
     this.host.addEventListener("input", e => {
       const field = e.target as HTMLInputElement;
       const dynamicId = field.dataset.dynamicTemplate;
@@ -43,44 +69,100 @@ export class ImageTemplateEditor {
       if (!key || !template) return;
       Object.assign(template, { [key]: field.type === "checkbox" ? field.checked : field.value });
       if (template.subjectMode !== "one") template.referencePolicy = "none";
-      this.dirty = true; this.pending = "";
+      this.markChanged();
       this.status("Unsaved template changes. Save templates applies the whole catalog.");
       this.options(); this.preview();
       this.el<HTMLSelectElement>('[data-t="referencePolicy"]').value = this.current()!.referencePolicy;
       this.el<HTMLSelectElement>('[data-t="referencePolicy"]').disabled = this.current()?.subjectMode !== "one";
     });
-    this.el<HTMLButtonElement>("[data-save-templates]").onclick = () => {
-      try {
-        const templates = validateImageTemplates(this.templates);
-        if (this.config.dynamicImageTemplates && !templates.some(t => t.enabled)) throw new Error("Check at least one template for dynamic mode, or turn context selection off.");
-        const defaultId = templates.some(t => t.id === this.config.defaultImageTemplateId) ? this.config.defaultImageTemplateId : templates[0]!.id;
-        this.pending = JSON.stringify(templates);
-        this.status("Saving templates…");
-        this.onSave({ imageTemplates: templates, defaultImageTemplateId: defaultId });
-      } catch (e) { this.pending = ""; this.status(e instanceof Error ? e.message : String(e)); }
-    };
-    this.el<HTMLButtonElement>("[data-discard-templates]").onclick = () => { this.dirty = false; this.pending = ""; this.setConfig(this.config); this.status("Template changes discarded."); };
+    this.el<HTMLButtonElement>("[data-save-templates]").onclick = () => this.saveTemplates();
+    this.el<HTMLButtonElement>("[data-discard-templates]").onclick = () => this.discard();
+    this.el<HTMLButtonElement>("[data-template-leave-save]").onclick = () => { this.leaveAfterSave = this.navigation; this.saveTemplates(); };
+    this.el<HTMLButtonElement>("[data-template-leave-discard]").onclick = () => { const navigate = this.navigation; this.discard(); navigate?.(); };
+    this.el<HTMLButtonElement>("[data-template-stay]").onclick = () => this.cancelNavigation();
+    this.el<HTMLElement>("[data-template-navigation]").addEventListener("keydown", event => { if (event.key === "Escape") { event.preventDefault(); this.cancelNavigation(); } });
     this.el<HTMLButtonElement>("[data-duplicate]").onclick = () => {
       const template = this.current(); if (!template || this.templates.length >= 32) { this.status("The catalog supports up to 32 templates."); return; }
       const copy = { ...template, id: `custom-${createUiId()}`, name: `${template.name.slice(0, 73)} (copy)` };
-      this.templates.push(copy); this.selected = copy.id; this.dirty = true; this.pending = ""; this.options(); this.renderFields(); this.status("Duplicate created. Save templates to keep it.");
+      this.templates.push(copy); this.selected = copy.id; this.markChanged(); this.options(); this.renderFields(); this.status("Duplicate created. Save templates to keep it.");
     };
     this.el<HTMLButtonElement>("[data-delete-template]").onclick = () => {
         if (this.selected === "manga-page" || this.selected === "ensemble") { this.status(`${this.current()?.name} is built in. Uncheck it in the dynamic list to keep it off.`); return; }
       if (this.templates.length <= 1) { this.status("Keep at least one template."); return; }
-      this.templates = this.templates.filter(t => t.id !== this.selected); this.selected = this.templates[0]!.id; this.dirty = true; this.pending = ""; this.options(); this.renderFields(); this.status("Template removed from draft. Save templates to apply, or discard to restore.");
+      this.templates = this.templates.filter(t => t.id !== this.selected); this.selected = this.templates[0]!.id; this.markChanged(); this.options(); this.showList(); this.renderFields(); this.status("Template removed from draft. Save templates to apply, or discard to restore.");
     };
   }
   private el<T extends HTMLElement>(selector: string): T { return this.host.querySelector<T>(selector)!; }
   private current(): ImageTemplate | undefined { return this.templates.find(t => t.id === this.selected); }
   private status(text: string): void { this.el<HTMLElement>("[data-template-status]").textContent = text; }
+  private markChanged(): void {
+    this.dirty = true; this.pending = ""; this.leaveAfterSave = undefined;
+    this.el<HTMLElement>("[data-template-save-actions]").hidden = false;
+    this.clearValidation();
+  }
+  private clearValidation(): void { for (const field of this.host.querySelectorAll<HTMLElement>("[data-t]")) field.removeAttribute("aria-invalid"); }
+  private saveTemplates(): void {
+    this.clearValidation();
+    try {
+      const templates = validateImageTemplates(this.templates);
+      if (!templates.length) throw new Error("Keep at least one template.");
+      if (this.config.dynamicImageTemplates && !templates.some(t => t.enabled)) throw new Error("Include at least one template for dynamic mode, or turn context selection off.");
+      const defaultId = templates.some(t => t.id === this.config.defaultImageTemplateId) ? this.config.defaultImageTemplateId : templates[0]!.id;
+      this.pending = JSON.stringify(templates);
+      this.status("Saving templates…");
+      this.onSave({ imageTemplates: templates, defaultImageTemplateId: defaultId });
+    } catch (error) {
+      this.pending = ""; this.leaveAfterSave = undefined;
+      const issues = (error as { issues?: { path: PropertyKey[]; message: string }[] })?.issues;
+      const issue = issues?.[0];
+      if (issue) {
+        const template = this.templates[Number(issue.path[0])];
+        if (template) { this.selected = template.id; this.showEditor(); }
+        const key = String(issue.path[1] ?? "");
+        const field = this.host.querySelector<HTMLElement>(`[data-t="${key.replace(/[^a-zA-Z]/g, "")}"]`);
+        const guidance = field?.closest<HTMLDetailsElement>("[data-template-composition]");
+        if (guidance) guidance.open = true;
+        field?.setAttribute("aria-invalid", "true"); field?.focus();
+        this.status(`${template?.name || "Template"}: ${key ? `${key} — ` : ""}${issue.message} Your draft is retained.`);
+      } else this.status(`${error instanceof Error ? error.message : String(error)} Your draft is retained.`);
+    }
+  }
+  private discard(): void {
+    this.dirty = false; this.pending = ""; this.cancelNavigation();
+    this.clearValidation(); this.setConfig(this.config); this.status("Template changes discarded.");
+  }
+  private cancelNavigation(): void {
+    this.navigation = undefined; this.leaveAfterSave = undefined;
+    this.el<HTMLElement>("[data-template-navigation]").hidden = true;
+  }
+  /** The shell calls this before leaving the workspace; internal browsing shares its catalog draft. */
+  guardNavigation(navigate: () => void): boolean {
+    if (!this.dirty) { navigate(); return true; }
+    this.navigation = navigate; this.leaveAfterSave = undefined;
+    this.el<HTMLElement>("[data-template-navigation]").hidden = false;
+    this.el<HTMLButtonElement>("[data-template-stay]").focus();
+    return false;
+  }
+  private showList(): void {
+    this.el<HTMLElement>("[data-template-list]").hidden = false;
+    this.el<HTMLElement>("[data-template-detail]").hidden = true;
+    this.options();
+    this.host.querySelector<HTMLButtonElement>(`[data-open-template="${this.selected}"]`)?.focus();
+  }
+  private showEditor(): void {
+    this.el<HTMLElement>("[data-template-list]").hidden = true;
+    this.el<HTMLElement>("[data-template-detail]").hidden = false;
+    this.renderFields();
+    this.el<HTMLInputElement>('[data-t="name"]').focus();
+  }
   private options(): void {
-    for (const [selector, templates, value] of [["[data-template-picker]", this.templates, this.selected], ['[name="defaultImageTemplateId"]', this.config.imageTemplates, this.config.defaultImageTemplateId]] as const) {
+    for (const [selector, templates, value] of [[ '[name="defaultImageTemplateId"]', this.config.imageTemplates, this.config.defaultImageTemplateId]] as const) {
       const select = this.el<HTMLSelectElement>(selector); select.replaceChildren();
       for (const template of templates) { const option = document.createElement("option"); option.value = template.id; option.textContent = template.name; select.append(option); }
       select.value = value;
     }
     this.renderChoices();
+    this.renderSummary();
   }
   private renderChoices(): void {
     const list = this.el<HTMLElement>("[data-template-choices]");
@@ -88,17 +170,30 @@ export class ImageTemplateEditor {
       ?? (this.host.getRootNode() as ShadowRoot).activeElement?.getAttribute("data-dynamic-template");
     list.replaceChildren();
     for (const template of this.templates) {
-      const label = document.createElement("label"); label.dataset.check = "";
+      const row = document.createElement("div"); row.dataset.templateRow = template.id;
+      const open = document.createElement("button"); open.type = "button"; open.dataset.openTemplate = template.id;
+      const name = document.createElement("strong"); name.textContent = template.name || "Unnamed template";
+      const purpose = document.createElement("small"); purpose.textContent = template.useWhen || "Custom template wording.";
+      open.append(name, purpose);
+      if (template.id === this.config.defaultImageTemplateId) { const badge = document.createElement("span"); badge.dataset.templateDefault = ""; badge.textContent = "Default"; open.append(badge); }
+      open.onclick = () => { this.selected = template.id; this.showEditor(); };
+      const label = document.createElement("label"); label.dataset.templateDynamicControl = "";
       const checkbox = document.createElement("input"); checkbox.type = "checkbox";
       checkbox.dataset.dynamicTemplate = template.id; checkbox.checked = template.enabled;
       checkbox.setAttribute("aria-label", `${template.name} in dynamic mode`);
-      const name = document.createElement("span"); name.textContent = template.name;
-      label.append(checkbox, name); list.append(label);
+      const state = document.createElement("span"); state.textContent = template.enabled ? "Included" : "Off";
+      label.append(checkbox, state); row.append(open, label); list.append(row);
       if (focused === template.id) checkbox.focus();
     }
   }
+  private renderSummary(): void {
+    const template = this.current();
+    this.el<HTMLElement>("[data-template-title]").textContent = template?.name || "Template";
+    this.el<HTMLElement>("[data-template-summary]").textContent = `${template?.enabled ? "Included in dynamic selection" : "Not included in dynamic selection"}${template?.id === this.config.defaultImageTemplateId ? " · Saved default" : ""}. Template ID: ${template?.id ?? ""}.`;
+  }
   private renderFields(): void {
     const template = this.current();
+    this.renderSummary();
     for (const field of this.host.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("[data-t]")) {
       const value = template?.[field.dataset.t as keyof ImageTemplate];
       if (field instanceof HTMLInputElement && field.type === "checkbox") field.checked = Boolean(value); else field.value = String(value ?? (field.dataset.t === "outputAspectRatio" ? "connection" : ""));
@@ -124,12 +219,16 @@ export class ImageTemplateEditor {
     } catch { this.el<HTMLElement>("[data-template-preview]").textContent = "Fix the template fields to preview."; }
   }
   setPreviewMetadata(metadata?: ImagePromptMetadata): void { this.metadata = metadata; this.preview(); }
-  setSaveError(error: string): void { if (this.pending) { this.pending = ""; this.status(`Could not save templates: ${error}. Your draft is retained.`); } }
+  setSaveError(error: string): void { if (this.pending) { this.pending = ""; this.leaveAfterSave = undefined; this.status(`Could not save templates: ${error}. Your draft is retained.`); } }
   setConfig(config: VisualNovelConfig): void {
     this.config = { ...config, imageTemplates: upgradeImageTemplates(config.imageTemplates) };
-    if (this.pending && this.pending === JSON.stringify(config.imageTemplates)) { this.pending = ""; this.dirty = false; this.status("Templates saved."); }
+    let navigate: (() => void) | undefined;
+    if (this.pending && this.pending === JSON.stringify(config.imageTemplates)) { this.pending = ""; this.dirty = false; this.status("Templates saved."); navigate = this.leaveAfterSave; this.cancelNavigation(); }
     if (!this.dirty) { this.templates = upgradeImageTemplates(config.imageTemplates).map(t => ({ ...t })); if (!this.current()) this.selected = this.templates[0]?.id ?? ""; }
-    this.options(); this.el<HTMLSelectElement>('[name="imagePromptFormat"]').value = config.imagePromptFormat; this.renderFields();
+    this.options(); this.el<HTMLSelectElement>('[name="imagePromptFormat"]').value = config.imagePromptFormat;
+    this.el<HTMLElement>("[data-template-save-actions]").hidden = !this.dirty;
+    if (!this.dirty) this.renderFields(); else this.preview();
+    navigate?.();
   }
   destroy(): void { this.host.remove(); }
 }

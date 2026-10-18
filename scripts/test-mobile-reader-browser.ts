@@ -108,7 +108,7 @@ try {
   }
   const settings = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await settings.goto(`http://127.0.0.1:${server.port}/settings?setupDone&noSpeech`);
-  await settings.getByLabel("Settings section", { exact: true }).selectOption("look");
+  await settings.evaluate(() => (window as any).settingsFixture.panel.openPage("appearance"));
   await settings.locator('[name="adjustableSheetEnabled"]').check();
   await settings.locator('[name="readerLayout"]').selectOption("image-first");
   await settings.locator('[name="readerSheetSize"]').selectOption("expanded");

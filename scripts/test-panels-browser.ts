@@ -80,26 +80,27 @@ try {
   // Settings smoke check only: the full settings flow lives in scripts/test-settings-browser.ts.
   await page.goto(`http://127.0.0.1:${server.port}/?settings`);
   const settings = page.locator("[data-vn-settings]");
+  await page.evaluate(() => (window as any).settingsFixture.panel.openPage("reading"));
   assert.equal(await settings.locator('[name="mode"]').isVisible(), true);
   for (const name of ["parserParameters", "imageParameters", "customCss", "ignoredTags", "debugLogging", "imageModel"]) {
     assert.equal(await settings.locator(`[name="${name}"]`).isVisible(), false, name + " should be advanced");
   }
-  const search = settings.getByRole("searchbox", { name: "Find a setting" });
+  await settings.locator("[data-toggle-search]").click();
+  const search = settings.locator("[data-settings-search]");
   assert.equal(await search.getAttribute("aria-expanded"), null, "ordinary search has no unsupported expanded state");
   await search.fill("music vol");
   assert.match(await settings.locator("[data-search-announcement]").innerText(), /\d+ settings? found/);
   await search.press("ArrowDown");
   assert.equal(await settings.locator("[data-search-result]").first().evaluate((element) => element === (element.getRootNode() as ShadowRoot).activeElement), true, "ArrowDown focuses a result");
   await page.keyboard.press("Enter");
-  assert.equal(await settings.getByLabel("Settings section", { exact: true }).inputValue(), "sound", "search result opens the matching mobile section");
+  assert.equal(await settings.locator('[data-pane="sound"]').isVisible(), true, "search result opens the music page");
   assert.equal(await settings.locator("[data-search-results]").isVisible(), false);
   await search.fill("zzzz-nothing");
   assert.match(await settings.locator("[data-search-announcement]").innerText(), /No settings found/);
   await search.press("Escape");
   assert.equal(await search.inputValue(), "");
-  const sectionSelect = settings.getByLabel("Settings section", { exact: true });
-  assert.equal(await sectionSelect.isVisible(), true, "mobile settings use the section selector");
-  await sectionSelect.selectOption({ label: "Look" });
+  assert.equal(await settings.getByLabel("Settings section", { exact: true }).count(), 0, "mobile settings remove the permanent dropdown");
+  await page.evaluate(() => (window as any).settingsFixture.panel.openPage("appearance"));
   await settings.locator('input[name="themePreset"][value="paper-novel"]').check();
   assert.deepEqual(await page.evaluate(() => (window as any).settingsFixture.saved), { themePreset: "paper-novel" });
   await page.screenshot({ path: ".cache/settings-basic-mobile.png", fullPage: true });

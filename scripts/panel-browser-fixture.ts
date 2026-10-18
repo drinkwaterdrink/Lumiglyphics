@@ -12,7 +12,7 @@ if (new URL(location.href).searchParams.has("settings")) {
   const fixture = { saved: {} };
   const settings = new VisualNovelSettingsPanel({ mount, onSave: (patch) => { fixture.saved = patch; }, onOpenPreview() {}, onRefreshConnections() {} });
   settings.setConfig({ ...DEFAULT_CONFIG, imageParameters: { steps: 28 }, customCss: "[data-vn-dialogue] { opacity: .9; }", ignoredTags: "status, inventory" });
-  Object.assign(window, { settingsFixture: fixture });
+  Object.assign(window, { settingsFixture: { ...fixture, panel: settings, get saved() { return fixture.saved; } } });
 } else if (new URL(location.href).searchParams.has("navigation")) {
   const previous: number[] = [];
   const stage = new VnStage({ mount, textSpeed: 0, onPrevious: (index) => previous.push(index) });

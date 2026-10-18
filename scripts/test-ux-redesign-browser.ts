@@ -41,6 +41,7 @@ try {
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
   const page = await context.newPage();
+  const openSettingsPage = async (id: string) => page.evaluate(id => { const w = window as any; return (w.settingsFixture ?? w.setupFixture ?? w.missingFixture).settings.openPage(id); }, id);
 
   // Network monitor: track any outbound https or external requests
   const networkRequests: string[] = [];
@@ -58,9 +59,11 @@ try {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(`http://127.0.0.1:${server.port}/?setup`);
 
-  // Verify onboarding card is shown
+  // Setup remains available without occupying the category home.
   const setupCard = page.locator("[data-setup]");
-  assert.equal(await setupCard.isVisible(), true, "First-use onboarding setup card must be visible");
+  assert.equal(await setupCard.isVisible(), false, "Settings home stays compact");
+  await openSettingsPage('reset');
+  assert.equal(await setupCard.isVisible(), true, "Setup guide remains reachable");
   assert.equal(await setupCard.getByRole("heading", { name: "Get started" }).isVisible(), true);
 
   // Verify truthful readiness: no saved connections
@@ -72,14 +75,14 @@ try {
 
   const imageReadiness = page.locator('[data-pane="pictures"] [data-readiness="image"]');
   // Open the Pictures section to inspect
-  await page.getByRole("tab", { name: "Pictures" }).click();
+  await openSettingsPage("images");
   assert.ok(
     (await imageReadiness.textContent())?.includes("No saved"),
     "Image readiness must truthfully reflect 'No saved image connections'"
   );
 
   // Verify sound empty state
-  await page.getByRole("tab", { name: "Sound" }).click();
+  await openSettingsPage("music");
   const soundEmpty = page.locator("[data-sound-empty]");
   assert.equal(await soundEmpty.isVisible(), true, "Sound empty state must be visible when 0 audio assets");
   assert.ok(
@@ -107,6 +110,7 @@ try {
   console.log("Saved .cache/ux-redesign/qa-first-setup-desktop.png");
 
   // Complete setup
+  await openSettingsPage('reset');
   await setupCard.locator("[data-setup-done]").click();
   assert.equal(await setupCard.isVisible(), false, "Setup card dismissed upon clicking Done");
 
@@ -115,7 +119,7 @@ try {
   // =========================================================================
   console.log("\n--- Running Scenario 2: Missing Saved Connection ---");
   await page.goto(`http://127.0.0.1:${server.port}/?missing-connection`);
-  await page.getByRole("tab", { name: "Pictures" }).click();
+  await openSettingsPage("images");
   const missingImgReadiness = page.locator('[data-pane="pictures"] [data-readiness="image"]');
   const readinessText = await missingImgReadiness.textContent();
   assert.ok(
@@ -131,7 +135,7 @@ try {
   const initialReqCount = networkRequests.length;
 
   // Open the Pictures section
-  await page.getByRole("tab", { name: "Pictures" }).click();
+  await openSettingsPage("images");
 
   // Test Image Source switching
   const cardRadio = page.locator('[data-pane="pictures"] input[name="imageSource"][value="card"]');
@@ -169,8 +173,9 @@ try {
   assert.equal(await sample.isVisible(), false, "Story sample stays out of the Pictures section");
 
   // Open the Look section and switch theme preset
-  await page.getByRole("tab", { name: "Look" }).click();
-  assert.equal(await sample.isVisible(), true, "Story sample is rendered in Look");
+  await openSettingsPage("appearance");
+  await page.locator("[data-appearance-preview] > summary").click();
+  assert.equal(await sample.isVisible(), true, "Appearance has an optional local sample");
   const sampleSpeaker = sample.locator("[data-sample-speaker]");
   assert.equal(await sampleSpeaker.textContent(), "Mira");
   const goldenHourTile = page.locator('[data-pane="look"] [data-tiles] input[value="golden-hour"]');
@@ -190,9 +195,9 @@ try {
 
   // Test Advanced Config Draft Preservation on Error
   console.log("Testing Advanced Config Draft Preservation on Error...");
-  await page.getByRole("tab", { name: "Pictures" }).click();
-  const customJsonInput = page.locator('[data-pane="pictures"] textarea[name="imageParameters"]');
-  if (!(await customJsonInput.isVisible())) await page.getByText("Advanced image parameters", { exact: true }).click();
+  await openSettingsPage("images");
+  await openSettingsPage("generation");
+  const customJsonInput = page.locator('textarea[name="imageParameters"]');
   await customJsonInput.fill('{"steps": 35, "cfg": 7.5}');
 
   // Simulate transport rejection
@@ -384,11 +389,11 @@ try {
 
   // 6A: Mobile Settings Layout
   await mobilePage.goto(`http://127.0.0.1:${server.port}/?settings`);
-  const mobileSection = mobilePage.getByLabel("Settings section", { exact: true });
-  assert.equal(await mobileSection.isVisible(), true, "Mobile settings expose the section selector");
-  await mobileSection.selectOption({ label: "Look" });
+  assert.equal(await mobilePage.getByLabel("Settings section", { exact: true }).count(), 0, "Mobile settings have no persistent category dropdown");
+  await mobilePage.evaluate(() => (window as any).settingsFixture.settings.openPage("appearance"));
   assert.equal(await mobilePage.locator('[data-pane="look"]').isVisible(), true, "Mobile section selection opens Look");
-  assert.equal(await mobilePage.locator("[data-sample]").isVisible(), true, "Mobile Look retains the local sample");
+  await mobilePage.locator("[data-appearance-preview] > summary").click();
+  assert.equal(await mobilePage.locator("[data-sample]").isVisible(), true, "Mobile Appearance retains its local sample");
   const settingsScrollWidth = await mobilePage.evaluate(() => document.documentElement.scrollWidth);
   assert.ok(settingsScrollWidth <= 360, `Settings panel fits mobile width: ${settingsScrollWidth} <= 360`);
 

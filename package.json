@@ -1,6 +1,6 @@
 {
   "name": "lumiglyphics",
-  "version": "0.2.0-beta.43",
+  "version": "0.2.0-beta.44",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.0",
@@ -11,6 +11,8 @@
     "test": "bun test --isolate",
     "test:panels": "bun run ./scripts/test-panels-browser.ts",
     "test:settings": "bun run ./scripts/test-settings-browser.ts",
+    "test:settings-workspace": "bun run ./scripts/test-settings-workspace-browser.ts",
+    "test:cast-workspace": "bun run ./scripts/test-cast-workspace-browser.ts",
     "test:settings-resilience": "bun run ./scripts/test-settings-resilience-browser.ts",
     "test:host-lifecycle": "bun run ./scripts/test-host-lifecycle-browser.ts",
     "test:story-css": "bun run ./scripts/test-story-css-browser.ts",

@@ -10,9 +10,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await page.goto(`http://127.0.0.1:${server.port}/?setupDone&noSpeech`);
   const settings = page.locator('[data-vn-settings]');
-  await settings.getByLabel('Settings section', { exact: true }).selectOption('pictures');
-  await settings.getByText('Image prompts', { exact: true }).click();
-  await settings.getByText('Shared style and exclusions', { exact: true }).click();
+  await page.evaluate(() => (window as any).settingsFixture.panel.openPage('style'));
   const select = settings.getByLabel('Prompt preset', { exact: true });
   assert.equal(await select.locator('option').count(), 13);
   const before = await page.evaluate(() => (window as any).settingsFixture.patches.length);

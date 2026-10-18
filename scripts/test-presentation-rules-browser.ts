@@ -5,7 +5,7 @@ const browser=await chromium.launch({headless:true});
 try{
  const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});page.setDefaultTimeout(5000);
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));await page.goto(`http://127.0.0.1:${server.port}`);
- await page.getByText('Template preferences',{exact:true}).tap();
+ await page.locator('[data-pane="pictures"] [data-page-link="rules"]').tap();
  const rules=page.locator('[data-presentation-rules]');
  await rules.getByText('Start from an example',{exact:true}).tap();await rules.getByRole('button',{name:'Environment on arrival',exact:true}).tap();
  assert.equal(await rules.getByLabel('Preferred template').inputValue(),'environment');assert.equal(await rules.getByRole('button',{name:'Save preference',exact:true}).isDisabled(),true);
