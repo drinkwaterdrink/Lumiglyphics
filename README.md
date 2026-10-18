@@ -1,6 +1,10 @@
 # Lumiglyphics
 
-Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.42`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance.
+Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.43`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance and [STATUS.md](STATUS.md) for the current delivered/pending matrix.
+
+In Pictures → Image prompts, **Full scene / ensemble** depicts the physically present cast, including the persona when present. It starts unchecked for dynamic mode; choose it as your default or enable it in the dynamic list. Named appearances come from the story-reader cast snapshot, saved appearance guidance and enabled persona context. Each person keeps a separate description; a single portrait image is not applied to the entire group. Appearance summaries share the existing 3,000-character combined prompt budget. Scenes exceeding 16 named subjects require a smaller group/template instead of silently generating an incomplete cast.
+
+Warp illustrations now respect **Review before generating**, including with the reader closed. Their separate approval dialog supports prompt/parameter edits and cancellation; zero removes the image limit consistently. Native card artwork uses existing pictures without a new image request.
 
 **Qwen Turbo compatibility and recovery:** NanoGPT's Qwen Image 2.1 Turbo now prepares supported 1K/2K resolution with separate framing, including 9:16. Existing custom raw overrides remain authoritative. Image errors offer **Review picture** to reach the current picture's prompt and individual retry controls without starting generation. Image review holds Auto advancement and stops Skip while open. Update, open Review picture, then use Retry this picture to prepare a fresh approval preview for an old failed request.
 

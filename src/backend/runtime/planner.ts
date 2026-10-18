@@ -127,6 +127,7 @@ const PlannerCueSchema = z.object({
   templateReason: z.string().max(300).optional(),
   visualDescription: z.string().max(4000).optional(),
   visualFocus: z.string().max(1000).optional(),
+  visibleCharacters: z.array(z.string().trim().min(1).max(256)).max(16).optional(),
   action: z.union([ActionPropSchema, z.string().trim()]).nullable().optional(),
   expression: z.string().trim().nullable().optional(),
   character: z.string().trim().nullable().optional(),
@@ -289,19 +290,19 @@ function plannerInstruction(config: VisualNovelConfig, visualContext?: VisualCon
     "You plan illustrations and atmosphere for a visual-novel presentation. Return one JSON object and no prose.",
     ...((config.collectEntityReferences || config.tooltips.enabled) ? ['Optional storyReferences: up to 32 brief references to important explicitly mentioned NPCs, places or objects. Add storyReferences:[{kind:"npc"|"place"|"object",name,paragraphIndex,field:"description"|"appearance"|"outfit"|"condition",value,evidence}]. Evidence must be an exact contiguous quote from that visible paragraph, containing both the exact name and the exact value (max 400 characters). Do not invent facts, classify a narrator/world card as an NPC, expose private context, motives, secrets or future discoveries. Omit unsupported references. This does not change the story or illustration budget.'] : []),
     "FIRST-PERSON PERSPECTIVE (POV) & CHARACTER ATTRIBUTION:",
-    `The visual novel is presented strictly from the first-person POV of the User/Persona (${personaName}).`,
-    `- ${personaName} is the camera/observer and is NEVER drawn on screen. NEVER output ${personaName} as a character in cues.`,
-    `- The visible on-screen character is ${companionName} (or whichever companion or character is active in the scene), never ${personaName}.`,
+    `Single-character pictures use the first-person POV of the User/Persona (${personaName}); ensemble pictures use an external scene view.`,
+    `- ${personaName} is the camera/observer for single-character templates. For an ensemble template, use an external camera and include ${personaName} in visibleCharacters when physically present. Keep the primary cue character as the companion.`,
+    `- For single-character pictures, the visible on-screen character is ${companionName} (or whichever companion is active), never ${personaName}. Ensemble visibleCharacters may include the persona.`,
     `- Never set 'character' on a scene or cue to '${personaName}', 'User', or 'Player'.`,
     `- When narrative or dialogue describes what ${personaName} does or says (e.g. ${personaName} says they are sleepy, speaks, or takes an action), the on-screen cue expression must depict ${companionName}'s emotional reaction TO the user (e.g. listening, amused, fond, curious, surprised, playful, gentle), NOT ${personaName}'s private physical state (never make ${companionName} sleepy just because ${personaName} wants to sleep).`,
     "Paragraph indexes are zero-based. scenes must ALWAYS contain at least one scene with startParagraph: 0. Later scene starts must increase.",
     "If continuing the current setting without a major jump, set boundary.claimedNewScene: false and boundary.reason: 'none'. Only set claimedNewScene: true for a true location change, major time jump, or environment replacement.",
     "Do not create a new scene for emotion, pose, dialogue, camera, or action changes.",
     "Use the selected template's framing. Keep the lower quarter clear for dialogue UI.",
-    "Portrait and action templates depict one visible companion. Environment and detail templates depict no people. Never depict a second character, a crowd, or bystanders; choose a single-subject viewpoint when an event involves several people. Preserve story character continuity independently of who is visible in the selected picture.",
+    "Templates with subjectMode one depict one visible companion: Never depict a second character, a crowd, or bystanders in those pictures. Templates with subjectMode none depict no people. Ensemble templates depict every listed physically present subject, including the persona, in one scene. Preserve story character continuity independently of the selected framing.",
     inputTemplateInstructions(config),
     imageDetailGuidance(config),
-    "basePrompt must be concise comma-separated Danbooru-style scene tags for persistent location, time, weather, lighting, and background elements. Include no camera or composition prose, character names, or character description. The companion's appearance belongs only in the single characters entry.",
+    "basePrompt must be concise comma-separated Danbooru-style scene tags for persistent location, time, weather, lighting, and background elements. Include no camera or composition prose, character names, or character description. Keep each person's appearance in their separate characters entry; ensemble cues list their names in visibleCharacters.",
     "environment: For an initial scene or true location change, specify full details: location, timeOfDay, weather, lighting, description, persistentElements. For continuing scenes, retain the established setting without rewriting it with generic atmospheric fluff that drops established props.",
     "environmentChanges: On continuing scenes, use 'environmentChanges' for intentional visual state mutations: {description?, lighting?, timeOfDay?, weather?, addElements?, removeElements?, replaceElements?: [{from, to}], clearElements?, clearLighting?, clearWeather?}. Setting lighting, timeOfDay, or weather to null (or using clearLighting/clearWeather) explicitly clears the field. Setting description replaces it (it cannot be cleared; when lighting/time/weather change without a description, the scene description is re-synthesized automatically). Location changes belong only in boundary and environment.location.",
     "cues selects paragraph indexes where illustration updates should occur. For each cue, select an expression from the expression catalogue matching the companion's emotional reaction at that moment: [idle, speak, smile, smirk, laugh, think, sad, angry, surprise, wave, shy, listen, pouting, teary_pouting, nervous, nervous_pouting, blushing_shyly, full_face_blush, lovestruck, aroused, lustful, excited, joyful, giggling, happy_smiling, happy_tears, playful_winking, bored, confused, curious, depressed, determined, disappointed, disgusted, embarrassed, enraged, exhausted, flustered, forced_smiling, guilty, indifferent, jealous, melancholic, relieved, scared, seductive_smiling, serious, shocked, sleepy, smug, suspicious, taunting, thinking, worried, acting_cute, acting_coy, admiring, cozy].",
@@ -585,7 +586,7 @@ function inputTemplateInstructions(config: VisualNovelConfig): string {
   return [
     config.dynamicImageTemplates ? "Choose templateId from this enabled catalog for each meaningful visual cue. New locations favor environment, reactions favor portrait, motion favors action, focal props favor detail. A category change alone does not justify a new image." : `Use templateId ${selected.id} on every cue. Dynamic selection is off.`,
     "Template catalog (Use when guidance): " + JSON.stringify(templates.map(t => ({ id: t.id, name: t.name, category: t.category, useWhen: t.useWhen, subjectMode: t.subjectMode, framing: t.framing }))),
-    "templateReason is a short decision label, not hidden reasoning. visualDescription is a grounded visible event, with only the selected visible subject for portrait/action. visualFocus names the actual object for detail. Do not include character actions in environment descriptions. Resolve usable appearance from reference evidence; retain saved identity and separate temporary wardrobe/action from lasting traits. Report no invented identity facts."
+    "templateReason is a short decision label, not hidden reasoning. visualDescription is a grounded visible event, with only the selected subject for single-character templates. For ensemble templates, provide visibleCharacters: the names of EVERY physically present character at that exact paragraph, including the user/persona when present; exclude offscreen, departed, remembered or merely mentioned people. Describe their visible interaction and spatial arrangement. visualFocus names the actual object for detail. Do not include character actions in environment descriptions. Resolve appearance from reference evidence; retain saved identity and separate temporary wardrobe/action from lasting traits. Report no invented identity facts."
   ].join("\n");
 }
 
@@ -605,6 +606,7 @@ function normalizeCue(value: unknown): unknown {
     ...(typeof record.templateReason === "string" ? { templateReason: record.templateReason.trim().slice(0, 300) } : {}),
     ...(typeof record.visualDescription === "string" ? { visualDescription: record.visualDescription.trim().slice(0, 4000) } : {}),
     ...(typeof record.visualFocus === "string" ? { visualFocus: record.visualFocus.trim().slice(0, 1000) } : {}),
+    ...(Array.isArray(record.visibleCharacters) ? { visibleCharacters: record.visibleCharacters.filter((name):name is string => typeof name === "string" && Boolean(name.trim())).slice(0,16).map(name => name.trim().slice(0,256)) } : {}),
     action: normalizeActionProp(record.action),
     expression: typeof record.expression === "string" ? record.expression.trim() : null,
     character: typeof record.character === "string" ? record.character.trim() : null,
@@ -2412,6 +2414,20 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
         ? selectPoseExpression(POSE_EXPRESSION_CATALOGUE, cue.paragraphIndex, "", "listen")
         : selectPoseExpression(POSE_EXPRESSION_CATALOGUE, cue.paragraphIndex, paragraph?.text ?? "", cue.expression);
       const selection = resolveImageTemplate(input.config, input.config.dynamicImageTemplates ? cue.templateId : undefined);
+      const visible = cue.visibleCharacters ?? [...scene.cast, ...(personaName ? [personaName] : [])];
+      const ensembleSubjects: Array<{name:string;appearance:string;attire?:string;persona?:boolean}> = [];
+      for (const name of visible) {
+        const person = resolveCharacterReference(registry, { name });
+        const persona = isPersona(name);
+        const canonical = persona ? personaName : person?.name;
+        if (!canonical || ensembleSubjects.some(item => characterAppearanceKey(item.name) === characterAppearanceKey(canonical))) continue;
+        const savedKey = appearanceMapKeyFor(input.characterAppearance, canonical);
+        const saved = savedKey ? input.characterAppearance[savedKey] : "";
+        const description = saved || (persona ? distillVisualTags(visualContext.personaIdentity?.description ?? "").join(", ") : person?.tags ?? "");
+        const current = timeline.snapshots[cue.paragraphIndex]!;
+        const outfit = characterAppearanceKey(canonical) === characterAppearanceKey(current.character ?? "") ? current.attire : null;
+        ensembleSubjects.push({ name: canonical, appearance: description.slice(0,1200), ...(outfit ? {attire:outfit.slice(0,600)} : {}), ...(persona ? {persona:true} : {}) });
+      }
       return VisualCueSchema.parse({
         cueId: id("cue", `${sourceFingerprint}:${cue.paragraphIndex}:${index}`),
         paragraphIndex: cue.paragraphIndex,
@@ -2422,6 +2438,8 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
         imageTemplateReason: (selection.fallbackReason ?? (input.config.dynamicImageTemplates ? cue.templateReason || "Selected from story context" : "Default template; dynamic selection is off")).slice(0, 300),
         visualDescription: cue.visualDescription ?? "",
         visualFocus: cue.visualFocus ?? "",
+        ensembleSubjects: ensembleSubjects.length <= 16 ? ensembleSubjects : [...ensembleSubjects.filter(item => !item.persona).slice(0, ensembleSubjects.some(item => item.persona) ? 15 : 16), ...ensembleSubjects.filter(item => item.persona).slice(0, 1)].slice(0,16),
+        ...(ensembleSubjects.length > 16 ? {ensembleOverflow:ensembleSubjects.length-16} : {}),
         visualSources: input.simTrackerEvidence?.sourceMessageId ? [`SimTracker:${input.simTrackerEvidence.sourceMessageId}`] : [],
         trackerStatus: input.config.includeSimTrackerContext ? input.simTrackerEvidence?.status ?? "not_found" : "disabled",
         ...(input.simTrackerEvidence?.sourceMessageId ? { trackerSourceMessageId: input.simTrackerEvidence.sourceMessageId } : {}),

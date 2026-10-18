@@ -142,23 +142,40 @@ function bytesToBase64(bytes: Uint8Array): string {
 
 let cachedCatalog: AudioCatalog = { bgm: [], sfx: [], all: [] };
 let cachedPrefix = "";
+let cachedStorage: SpindleAPI["storage"] | null = null;
+let scanEpoch = 0;
+const entryEpochs = new WeakMap<AudioCatalogEntry, number>();
+const storageIds = new WeakMap<SpindleAPI["storage"], number>();
+let nextStorageId = 0;
+
+function audioCacheKey(storage: SpindleAPI["storage"], entry: AudioCatalogEntry): string {
+  let storageId = storageIds.get(storage);
+  if (storageId === undefined) {
+    storageId = ++nextStorageId;
+    storageIds.set(storage, storageId);
+  }
+  return JSON.stringify([storageId, entryEpochs.get(entry) ?? scanEpoch, normalizedPath(entry.filePath)]);
+}
 
 /**
  * Scan audio files through Lumiverse's scoped storage API. No host filesystem
  * module or Bun.file access is used. The binary is converted to a browser-safe
- * data URL once during catalog creation.
+ * data URL lazily when a cue first uses a track.
  */
 export async function scanAudioCatalog(spindle: SpindleAPI, requestedPrefix = "audio"): Promise<AudioCatalog> {
   const prefix = normalizeAudioStoragePrefix(requestedPrefix);
-  if (cachedPrefix === prefix && cachedCatalog.all.length > 0) return cachedCatalog;
+  if (cachedStorage === spindle.storage && cachedPrefix === prefix && cachedCatalog.all.length > 0) return cachedCatalog;
+  const epoch = ++scanEpoch;
+  cachedCatalog = { bgm: [], sfx: [], all: [] };
+  cachedPrefix = prefix;
+  cachedStorage = spindle.storage;
+  clearAudioUrlCache();
 
   let files: string[];
   try {
     files = await spindle.storage.list(prefix);
   } catch {
-    cachedCatalog = { bgm: [], sfx: [], all: [] };
-    cachedPrefix = prefix;
-    return cachedCatalog;
+    return { bgm: [], sfx: [], all: [] };
   }
 
   const entries: AudioCatalogEntry[] = [];
@@ -170,24 +187,26 @@ export async function scanAudioCatalog(spindle: SpindleAPI, requestedPrefix = "a
     // Metadata only: file bytes are read lazily per cue (ensureAudioUrl), so a
     // large imported library no longer sits in worker memory as base64.
     const category = categorizeAudioFile(storagePath, relativePath);
-    entries.push({
+    const entry: AudioCatalogEntry = {
       id: relativePath.replace(/\.[^.]+$/, ""),
       name: stemOf(relativePath),
       filePath: storagePath,
       relativePath,
       category,
       tags: extractAudioTags(relativePath, category),
-    });
+    };
+    entryEpochs.set(entry, epoch);
+    entries.push(entry);
   }
 
   entries.sort((left, right) => left.id.localeCompare(right.id));
-  cachedCatalog = {
+  const catalog: AudioCatalog = {
     bgm: entries.filter((entry) => entry.category === "bgm"),
     sfx: entries.filter((entry) => entry.category === "sfx"),
     all: entries,
   };
-  cachedPrefix = prefix;
-  return cachedCatalog;
+  if (epoch === scanEpoch) cachedCatalog = catalog;
+  return catalog;
 }
 
 export function getAudioCatalog(): AudioCatalog {
@@ -197,6 +216,8 @@ export function getAudioCatalog(): AudioCatalog {
 export function clearAudioCatalogCache(): void {
   cachedCatalog = { bgm: [], sfx: [], all: [] };
   cachedPrefix = "";
+  cachedStorage = null;
+  scanEpoch++;
   clearAudioUrlCache();
 }
 
@@ -213,14 +234,19 @@ export function findAudioEntry(query: string, preferredCategory?: AudioCategory)
     entry.id.toLowerCase() === normalized
     || entry.id.toLowerCase() === withoutExtension
     || entry.name.toLowerCase() === normalized
-    || entry.name.toLowerCase() === withoutExtension
-    || entry.relativePath.toLowerCase() === normalized;
+    || entry.name.toLowerCase() === withoutExtension;
+
+  // An explicit path wins over extension-stripped aliases, including when a
+  // category hint would otherwise select a different same-named track.
+  const exactPaths = cachedCatalog.all.filter((entry) => entry.relativePath.toLowerCase() === normalized);
+  if (exactPaths.length > 0) return exactPaths.length === 1 ? exactPaths[0]! : null;
 
   if (preferredCategory && cachedCatalog[preferredCategory]?.length > 0) {
-    const candidate = cachedCatalog[preferredCategory].find(matches);
-    if (candidate) return candidate;
+    const candidates = cachedCatalog[preferredCategory].filter(matches);
+    if (candidates.length > 0) return candidates.length === 1 ? candidates[0]! : null;
   }
-  return cachedCatalog.all.find(matches) ?? null;
+  const candidates = cachedCatalog.all.filter(matches);
+  return candidates.length === 1 ? candidates[0]! : null;
 }
 
 /**
@@ -230,6 +256,7 @@ export function findAudioEntry(query: string, preferredCategory?: AudioCategory)
  */
 const audioUrlCache = new Map<string, string>();
 const AUDIO_URL_CACHE_BUDGET = 48_000_000;
+let audioUrlEpoch = 0;
 
 function cacheAudioUrl(id: string, url: string): void {
   audioUrlCache.delete(id);
@@ -246,20 +273,25 @@ function cacheAudioUrl(id: string, url: string): void {
 
 /** Clear the lazy data-URL cache (used on rescans and in tests). */
 export function clearAudioUrlCache(): void {
+  audioUrlEpoch++;
   audioUrlCache.clear();
 }
 
 /** Load (and cache) the playable data URL for a catalog entry. */
 export async function ensureAudioUrl(spindle: SpindleAPI, entry: AudioCatalogEntry): Promise<string | null> {
-  const cached = audioUrlCache.get(entry.id);
+  if ((entryEpochs.get(entry) ?? scanEpoch) !== scanEpoch) return null;
+  const epoch = audioUrlEpoch;
+  const key = audioCacheKey(spindle.storage, entry);
+  const cached = audioUrlCache.get(key);
   if (cached) {
-    cacheAudioUrl(entry.id, cached);
+    cacheAudioUrl(key, cached);
     return cached;
   }
   try {
     const bytes = await spindle.storage.readBinary(entry.filePath);
+    if (epoch !== audioUrlEpoch) return null;
     const url = `data:${mimeForExtension(extensionOf(entry.relativePath))};base64,${bytesToBase64(bytes)}`;
-    cacheAudioUrl(entry.id, url);
+    cacheAudioUrl(key, url);
     return url;
   } catch {
     return null;
@@ -286,8 +318,8 @@ export async function preloadAudioForCues(
 export function resolveAudioUrl(query: string, category?: AudioCategory): string | null {
   if (!query) return null;
   const entry = findAudioEntry(query, category);
-  if (entry) {
-    const cached = audioUrlCache.get(entry.id);
+  if (entry && cachedStorage) {
+    const cached = audioUrlCache.get(audioCacheKey(cachedStorage, entry));
     if (cached) return cached;
   }
   return /^(?:https?:|data:|blob:)/i.test(query) ? query : null;
@@ -299,10 +331,11 @@ export function resolveAudioUrl(query: string, category?: AudioCategory): string
 export function getAudioCatalogPromptSummary(): { bgmLines: string[]; sfxSamples: string[] } {
   const catalog = getAudioCatalog();
   const bgmLines: string[] = [];
+  const choice = (entry: AudioCatalogEntry) => findAudioEntry(entry.name, entry.category) === entry ? entry.name : entry.relativePath;
   if (catalog.bgm.length > 0) {
-    const bgmList = catalog.bgm.map((e) => e.name).slice(0, 25).join(", ");
+    const bgmList = catalog.bgm.map(choice).slice(0, 25).join(", ");
     bgmLines.push(`  * Available BGM: [${bgmList}]`);
   }
-  const sfxSamples = catalog.sfx.slice(0, 30).map((e) => e.name);
+  const sfxSamples = catalog.sfx.slice(0, 30).map(choice);
   return { bgmLines, sfxSamples };
 }

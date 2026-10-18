@@ -28,7 +28,8 @@ try {
   assert.equal(await mobile.evaluate(() => matchMedia("(pointer: coarse)").matches), true, "phone context emulates a coarse pointer");
   for (const name of ["previous", "log", "auto", "skip"]) {
     const box = await mobile.locator(`[data-vn-control="${name}"]`).boundingBox();
-    assert.ok(box && box.height >= 44 && box.width >= 44, `${name} control is a 44px touch target (got ${box?.width}x${box?.height})`);
+    // CSS pixels can differ by a floating-point fraction after device scaling.
+    assert.ok(box && box.height >= 43.99 && box.width >= 43.99, `${name} control is a 44px touch target (got ${box?.width}x${box?.height})`);
   }
   const continueBox = await mobile.getByRole("button", { name: "Continue", exact: true }).boundingBox();
   assert.ok(continueBox && continueBox.height >= 44 && continueBox.width >= 44, "Continue is a 44px touch target");

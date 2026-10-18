@@ -210,6 +210,8 @@ export const VisualCueSchema = z.object({
   presentationRuleTrace: PresentationRuleTraceSchema.optional(),
   visualDescription: z.string().max(4000).optional(),
   visualFocus: z.string().max(1000).optional(),
+  ensembleSubjects: z.array(z.object({name:z.string().trim().min(1).max(256),appearance:z.string().max(1200),attire:z.string().max(600).optional(),persona:z.boolean().optional()}).strict()).max(16).optional(),
+  ensembleOverflow: z.number().int().nonnegative().optional(),
   visualSources: z.array(z.string().max(300)).max(24).optional(),
   trackerStatus: z.enum(["detected", "not_found", "unsupported", "malformed", "disabled"]).optional(),
   trackerSourceMessageId: z.string().max(256).optional(),

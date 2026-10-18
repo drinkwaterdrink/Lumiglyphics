@@ -64,6 +64,31 @@ describe("reading UX", () => {
     expect(shell(s).querySelector("[data-vn-exit]")!.getAttribute("aria-label")).toBe("Leave the story");
   });
 
+  test("suspension stops skip and timers without changing the reading position or draft", async () => {
+    const s = create({ skipMode: "all" });
+    s.loadTurn({ mode: "standard", paragraphs: paragraphs(6) });
+    s.toggleSkip(true);
+    s.suspend();
+    const before = s.getState().currentParagraphIndex;
+    await wait(200);
+    expect(s.getState().currentParagraphIndex).toBe(before);
+    expect(q(s, "[data-vn-control='skip']").getAttribute("aria-pressed")).toBe("false");
+    s.resume();
+    expect(s.getState().currentParagraphIndex).toBe(before);
+  });
+
+  test("scene synchronization does not revive a dismissed image failure", async () => {
+    const s = create();
+    s.loadTurn({ mode: "standard", paragraphs: paragraphs(2) });
+    s.setError({ source: "image", message: "Image failed", detail: "HTTP 400", retryable: true });
+    q(s, "[data-vn-dismiss-error]").click();
+    const pending = s.setSceneImage({ url: "/example.png", requestId: "same-picture" });
+    expect(root(s).querySelector("[data-vn-badge-kind='error']")).toBeNull();
+    void pending;
+    s.setError({ source: "image", failureId: "new-attempt", message: "Image failed", detail: "HTTP 400", retryable: true });
+    expect(root(s).querySelector("[data-vn-badge-kind='error']")).not.toBeNull();
+  });
+
   test("Skip explains its mode through aria-describedby", () => {
     const s = create();
     const skip = q(s, "[data-vn-control='skip']");

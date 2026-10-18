@@ -38,6 +38,7 @@ export type FrontendRequest =
   | { type: "vn_reprepare_image_template"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; templateId: string }
   | { type: "vn_external_image"; request: CueImageRequest }
   | { type: "vn_external_image_cancel"; request: Pick<CueImageRequest, "version" | "provider" | "chatId" | "requestId"> }
+  | ({ type: "vn_external_image_review" } & import("./backend/runtime/external-images.js").ExternalImageReviewAction)
   | { type: "vn_resolve_panel_template"; chatId: string; characterId?: string; requestId: string; template: string }
   /**
    * Announce whether the Cue view is open for a chat. The backend only plans
@@ -50,14 +51,14 @@ export type FrontendRequest =
    * True opens the view, false closes it; absent changes nothing (a state
    * request that says nothing about the view never opens it).
    */
-  | { type: "vn_get_state"; chatId?: string; viewOpen?: boolean; prepare?:boolean }
+  | { type: "vn_get_state"; chatId?: string; viewOpen?: boolean; prepare?:boolean; requestId?: string }
   | { type: "vn_get_connection_catalog" }
   | { type: "vn_get_system_one_key_status" }
   | { type: "vn_set_system_one_key"; key: string }
   | { type: "vn_clear_system_one_key" }
   | { type: "vn_set_config"; patch: Partial<VisualNovelConfig>; chatId?: string; requestId?: string }
   | { type: "vn_submit"; chatId: string; content: string; requestId: string }
-  | { type: "vn_asset_ready"; chatId: string; messageId: string; jobId: string; sourceFingerprint: string }
+  | { type: "vn_asset_ready"; chatId: string; messageId: string; jobId: string; sourceFingerprint: string; swipeId?: number; revision?: number; imageId?: string; imageUrl?: string }
   | { type: "vn_cancel"; chatId: string }
   | { type: "vn_retry_turn"; chatId: string; messageId: string }
   /** Re-check the chat's latest assistant message (macro selection may have changed). */
@@ -92,6 +93,7 @@ export const REFERENCE_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
 export const REFERENCE_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/avif"]);
 
 export type AssetView = {
+  failureId?: string;
   stageAsset?: import("./shared/cast-composition.js").StageAssetMetadata;
   diagnostic?: ImageDiagnostic;
   presentation?: "page";
@@ -173,8 +175,9 @@ export type BackendResponse =
   | { type: "vn_context_sources"; report: ContextSourceReport }
   | { type: "vn_image_requests"; chatId: string; messageId: string; sourceFingerprint: string; requests: ImageRequestRecord[] }
   | { type: "vn_external_image"; result: CueImageResult }
+  | { type: "vn_external_image_review"; chatId: string; requestId: string; characterName: string; record: ImageRequestRecord }
   | { type: "vn_panel_template"; requestId: string; chatId: string; template?: string; error?: string }
-  | { type: "vn_state"; chatId: string; config: VisualNovelConfig; turn: TurnView | null; readingPosition?: ReadingPosition | null }
+  | { type: "vn_state"; chatId: string; config: VisualNovelConfig; turn: TurnView | null; readingPosition?: ReadingPosition | null; requestId?: string }
   | { type: "vn_config"; config: VisualNovelConfig; requestId?: string }
   | { type: "vn_system_one_key_status"; saved: boolean }
   | {
@@ -184,7 +187,7 @@ export type BackendResponse =
     errors?: ConnectionCatalogErrors;
   }
   | { type: "vn_turn"; turn: TurnView }
-  | { type: "vn_asset"; chatId: string; messageId: string; asset: AssetView }
+  | { type: "vn_asset"; chatId: string; messageId: string; asset: AssetView; sourceFingerprint?: string; swipeId?: number; revision?: number }
   | { type: "vn_planning"; chatId: string }
   /**
    * The latest assistant message has no narrative left after macro
@@ -212,6 +215,7 @@ export type BackendResponse =
 export function isFrontendRequest(value: unknown): value is FrontendRequest {
   if ((value as {type?:unknown}|null)?.type === "vn_presentation_rules") return PresentationRuleRequestSchema.safeParse(value).success;
   if (value === null || typeof value !== "object") return false;
+  if ((value as {type?:unknown}).type === "vn_external_image_review") return z.object({type:z.literal("vn_external_image_review"),chatId:z.string().min(1).max(128),requestId:z.string().min(1).max(128),reviewRequestId:z.string().min(1).max(100),action:z.enum(["generate","skip"]),edits:z.object({prompt:z.string().min(1).max(3000).optional(),negativePrompt:z.string().max(3000).optional(),parameters:z.record(z.string(),z.unknown()).optional()}).strict().optional()}).strict().safeParse(value).success;
   if((value as {type?:unknown}).type==='vn_image_library')return ImageLibraryRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_cast_gallery") return CastGalleryRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_cast_art") return CastArtRequestSchema.safeParse(value).success;

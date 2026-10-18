@@ -176,7 +176,7 @@ test("the span attribute form accepts catalogue ids only", () => {
     '<span data-vn-text-fx="wave">la</span>',
   );
   assert.equal(formatDialogueText('<span data-vn-text-fx="x&quot; onclick=alert(1)">la</span>'), "<span>la</span>");
-  assert.equal(formatDialogueText("<span data-vn-text-fx='nope' class=\"a\">la</span>"), '<span class="a">la</span>');
+  assert.equal(formatDialogueText("<span data-vn-text-fx='nope' class=\"a\">la</span>"), '<span>la</span>');
 });
 
 test("display regex rules can emit effect tags", () => {
@@ -190,4 +190,38 @@ test("display regex rules can emit effect tags", () => {
 test("effects survive the markdown-stripping presets and forced quotes", () => {
   const result = formatDialogueText("<shake>**No!**</shake>", [], { stripMarkdown: true, forceQuotes: true, hasSpeaker: true });
   assert.equal(result, '"<span data-vn-text-fx="shake">No!</span>"');
+});
+
+test("story CSS rejects fetching properties, CSS syntax tricks and indirect values", () => {
+  const attacks = [
+    String.raw`background-image:u\72l(https://audit.invalid/pixel)`,
+    'background-image:u/**/rl(https://audit.invalid/pixel)',
+    'background-image:image-set("https://audit.invalid/pixel" 1x)',
+    String.raw`b\61ckground:red`,
+    '--image:url(https://audit.invalid/pixel);background:var(--image)',
+    'color:var(--remote);font-family:AuditRemote',
+    'font:16px AuditRemote;list-style:inside url(https://audit.invalid/pixel)',
+    'color:red!important;position:fixed;inset:0',
+    'color:&#114;ed',
+    'color:red/*comment*/',
+    'color:rgb(1);background-color:hsl(12, 20, 30)',
+  ];
+  for (const style of attacks) {
+    assert.equal(formatDialogueText(`<span style="${style.replace(/"/g, "'")}">x</span>`), '<span>x</span>', style);
+  }
+});
+
+test("story CSS preserves only validated text formatting declarations", () => {
+  assert.equal(
+    formatDialogueText('<span style="color:#D98AE8; background-color:rgb(10, 20, 30); font-weight:bold; font-style:italic; letter-spacing:0.03em; text-decoration:underline; position:fixed">safe</span>'),
+    '<span style="color:#D98AE8;background-color:rgb(10, 20, 30);font-weight:bold;font-style:italic;letter-spacing:0.03em;text-decoration:underline">safe</span>',
+  );
+  assert.equal(formatDialogueText('<ruby>漢<rt>kan</rt><rp>(</rp></ruby> **bold** <wave>effect</wave>'), '<ruby>漢<rt>kan</rt><rp>(</rp></ruby> <strong>bold</strong> <span data-vn-text-fx="wave">effect</span>');
+  assert.equal(formatDialogueText('<span style="color:rgba(12, 34, 56, 0.5);background-color:hsl(120 50% 50% / 25%)">x</span>'), '<span style="color:rgba(12, 34, 56, 0.5);background-color:hsl(120 50% 50% / 25%)">x</span>');
+});
+
+test("story classes and font attributes cannot select fetching rules or custom fonts", () => {
+  assert.equal(formatDialogueText('<em class="remote vn-transmission other">radio</em>'), '<em class="vn-transmission">radio</em>');
+  assert.equal(formatDialogueText('<font face="AuditRemote" color="red" size="7">x</font>'), '<font color="red" size="7">x</font>');
+  assert.equal(formatDialogueText('<font face="monospace" color="urlx" size="900">x</font>'), '<font face="monospace">x</font>');
 });

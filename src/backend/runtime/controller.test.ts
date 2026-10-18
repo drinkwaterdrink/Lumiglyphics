@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { AssetJobSchema, TurnPlanSchema, type AssetJob } from "../../shared/contracts.js";
 import { markAssetReady, registerVisualNovelBackend, sendState, turnView, viewRegistry } from "./controller.js";
-import { chatStatePath, singleCharacterStatePath, turnPath, type StoredChatState, type StoredTurnRecord } from "./storage.js";
+import { chatStatePath, singleCharacterStatePath, turnPath, saveTurnRecord, saveChatState, type StoredChatState, type StoredTurnRecord } from "./storage.js";
 import { seedSingleCharacter } from "../core/visual-state.js";
 import { SINGLE_CHARACTER_SCHEMA_VERSION } from "../../shared/character.js";
 
@@ -117,6 +117,57 @@ function runtime(record: StoredTurnRecord): { spindle: SpindleAPI; writes: Map<s
 }
 
 describe("runtime asset readiness", () => {
+  for (const selection of [null, "turns/chat/new/0.json"]) {
+    test(`readiness does not restore a selection changed to ${selection}`, async () => {
+      const record: StoredTurnRecord = { schemaVersion: 1, speaker: "Mira", status: "ready", plan, jobs: [generatedJob()], updatedAt: now };
+      const f = runtime(record);
+      const gate = deferred<void>();
+      const original = f.spindle.userStorage.getJson.bind(f.spindle.userStorage);
+      let blocked = false;
+      f.spindle.userStorage.getJson = (async (...args: Parameters<typeof original>) => {
+        const value = await original(...args);
+        if (args[0] === chatStatePath("chat") && !blocked) { blocked = true; await gate.promise; }
+        return value;
+      }) as typeof original;
+      const acknowledging = markAssetReady(f.spindle, { type: "vn_asset_ready", chatId: "chat", messageId: "message", jobId: "job", sourceFingerprint: key.sourceFingerprint });
+      await waitFor(() => blocked);
+      await saveChatState(f.spindle, "chat", { schemaVersion: 1, activeTurnPath: selection, latestScene: null, terminalContinuity: null, updatedAt: now });
+      gate.resolve();
+      await acknowledging;
+      expect(f.writes.has(turnPath("chat", "message", 0))).toBe(false);
+      expect(f.sent).toHaveLength(0);
+    });
+  }
+  test("a queued acknowledgement cannot restore a replaced turn snapshot", async () => {
+    const record: StoredTurnRecord = { schemaVersion: 1, speaker: "Mira", status: "ready", plan, jobs: [generatedJob()], updatedAt: now };
+    const f = runtime(record);
+    const gate = deferred<void>();
+    const original = f.spindle.userStorage.setJson.bind(f.spindle.userStorage);
+    let blocked = false;
+    f.spindle.userStorage.setJson = (async (...args: Parameters<typeof original>) => {
+      if (!blocked) { blocked = true; await gate.promise; }
+      return original(...args);
+    }) as typeof original;
+    const replacement = { ...record, speaker: "Replacement", plan: { ...plan, key: { ...key, revision: 1 } } };
+    const saving = saveTurnRecord(f.spindle, turnPath("chat", "message", 0), replacement);
+    await waitFor(() => blocked);
+    const acknowledging = markAssetReady(f.spindle, { type: "vn_asset_ready", chatId: "chat", messageId: "message", jobId: "job", sourceFingerprint: key.sourceFingerprint, revision: 0 } as any);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    gate.resolve();
+    await Promise.all([saving, acknowledging]);
+    const stored = f.writes.get(turnPath("chat", "message", 0)) as StoredTurnRecord;
+    expect(stored.speaker).toBe("Replacement");
+    expect(stored.jobs[0]?.status).toBe("generated");
+    expect(f.sent).toHaveLength(0);
+  });
+
+  test("an old image acknowledgement cannot ready a replacement with the same job id", async () => {
+    const record: StoredTurnRecord = { schemaVersion: 1, speaker: "Mira", status: "ready", plan, jobs: [{ ...generatedJob(), imageId: "replacement", imageUrl: "/replacement" }], updatedAt: now };
+    const f = runtime(record);
+    await markAssetReady(f.spindle, { type: "vn_asset_ready", chatId: "chat", messageId: "message", jobId: "job", sourceFingerprint: key.sourceFingerprint, revision: 0, swipeId: 0, imageId: "image", imageUrl: "/api/v1/images/image" } as any);
+    expect(f.writes.size).toBe(0);
+    expect(f.sent).toHaveLength(0);
+  });
   test("failed replacements expose the previous usable picture and preserve request inspection", () => {
     const record: StoredTurnRecord = { schemaVersion: 1, speaker: "Mira", status: "ready", plan, jobs: [{ ...generatedJob(), status: "failed", imageId: null, imageUrl: null }], previousImages: { job: { imageId: "original", imageUrl: "/original" } }, updatedAt: now };
     expect(turnView(record).assets[0]?.imageUrl).toBe("/original");
@@ -417,6 +468,73 @@ function generationFixture() {
     .map((message) => (message.asset as Record<string, unknown>).status as string);
   return { spindle, fire, data, sent, gates, assetStatuses, request: (payload: unknown, userId = "review-user") => frontend(payload, userId) };
 }
+
+test("concurrent submissions reserve one append before reading persisted metadata", async () => {
+  const f = generationFixture();
+  const gate = deferred<any[]>();
+  let reads = 0;
+  let appends = 0;
+  f.spindle.chat.getMessages = async () => { reads++; return gate.promise; };
+  f.spindle.chat.appendMessage = async () => { appends++; return {} as any; };
+  registerVisualNovelBackend(f.spindle);
+  const request = { type: "vn_submit", chatId: "submit-race", requestId: "same-request", content: "Continue" };
+  f.request(request, "submit-user");
+  f.request(request, "submit-user");
+  await waitFor(() => reads > 0);
+  gate.resolve([]);
+  await waitFor(() => appends > 0);
+  await new Promise(resolve => setTimeout(resolve, 10));
+  expect(appends).toBe(1);
+});
+
+test("submission reservations release on failure and never join across users", async () => {
+  const f = generationFixture();
+  const gate = deferred<any[]>();
+  let reads = 0;
+  let appends = 0;
+  f.spindle.chat.getMessages = async () => { reads++; return gate.promise; };
+  f.spindle.chat.appendMessage = async () => { appends++; throw new Error("offline"); };
+  registerVisualNovelBackend(f.spindle);
+  const request = { type: "vn_submit", chatId: "submit-users", requestId: "same-request", content: "Continue" };
+  f.request(request, "alice");
+  f.request(request, "bob");
+  await waitFor(() => reads === 2);
+  gate.resolve([]);
+  await waitFor(() => f.sent.filter((m: any) => m.type === "vn_error").length === 2);
+  expect(appends).toBe(2);
+  f.request(request, "alice");
+  await waitFor(() => appends === 3);
+});
+
+test("a saved submission with failed generation remains deduplicated after reservation cleanup", async () => {
+  const f = generationFixture();
+  const messages: any[] = [];
+  let appends = 0;
+  f.spindle.chat.getMessages = async () => messages;
+  f.spindle.chat.appendMessage = async (_chatId, message) => {
+    appends++;
+    messages.push(message);
+    throw new Error("provider unavailable");
+  };
+  registerVisualNovelBackend(f.spindle);
+  const request = { type: "vn_submit", chatId: "submit-saved", requestId: "persisted-request", content: "Continue" };
+  f.request(request, "saved-user");
+  await waitFor(() => f.sent.some((m: any) => m.error?.includes("Your response was saved, but Lumiverse could not start generation")));
+  f.request(request, "saved-user");
+  await waitFor(() => f.sent.some((m: any) => m.error?.includes("already saved")));
+  expect(appends).toBe(1);
+});
+
+test("state replies echo the requesting identity for active and empty chat selections", async () => {
+  const f = generationFixture();
+  f.data.set("config.json", { enabled: false });
+  registerVisualNovelBackend(f.spindle);
+  f.request({ type: "vn_get_state", chatId: "chat", requestId: "active-selection", prepare: false });
+  f.request({ type: "vn_get_state", chatId: "", requestId: "empty-selection", prepare: false });
+  await waitFor(() => f.sent.filter((m: any) => m.type === "vn_state").length === 2);
+  expect(f.sent).toContainEqual(expect.objectContaining({ type: "vn_state", chatId: "chat", requestId: "active-selection" }));
+  expect(f.sent).toContainEqual(expect.objectContaining({ type: "vn_state", chatId: "", requestId: "empty-selection" }));
+});
 
 describe("image review controller lifecycle", () => {
   test('prompt reroll is scoped, uses a text call, and still requires image approval',async()=>{

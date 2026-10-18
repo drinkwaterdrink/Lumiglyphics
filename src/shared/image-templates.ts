@@ -15,7 +15,7 @@ export const ImageTemplateSchema = z.object({
   useWhen: z.string().max(1000),
   positive: templateText,
   negative: templateText,
-  subjectMode: z.enum(["one", "none"]),
+  subjectMode: z.enum(["one", "none", "ensemble"]),
   framing: ImageTemplateFramingSchema,
   referencePolicy: z.enum(["character", "none"]),
   outputAspectRatio: z.enum(["connection", "9:16"]).optional()
@@ -25,7 +25,7 @@ export const ImageTemplateSnapshotSchema = ImageTemplateSchema.extend({ revision
 export type ImageTemplateSnapshot = z.infer<typeof ImageTemplateSnapshotSchema>;
 export const VisualBriefSchema = z.object({
   scene: z.string().max(4000), subjects: z.string().max(4000), action: z.string().max(4000), composition: z.string().max(1000), lighting: z.string().max(1000),
-  subjectMode: z.enum(["one", "none"]), framing: ImageTemplateFramingSchema, referencePolicy: z.enum(["character", "none"]), sources: z.array(z.string().max(300)).max(24), conflicts: z.array(z.string().max(1000)).max(16)
+  subjectMode: z.enum(["one", "none", "ensemble"]), framing: ImageTemplateFramingSchema, referencePolicy: z.enum(["character", "none"]), sources: z.array(z.string().max(300)).max(24), conflicts: z.array(z.string().max(1000)).max(16)
 }).strict();
 export type VisualBrief = z.infer<typeof VisualBriefSchema>;
 export const ImagePromptMetadataSchema = z.object({ template: ImageTemplateSnapshotSchema, selectionReason: z.string().max(300), format: z.enum(["description", "tags"]), brief: VisualBriefSchema,
@@ -72,7 +72,12 @@ LIGHTING: {{lighting}}
 Strong ink contours, manga shading, halftones, expressive contrast, coherent colors and clean negative space. Keep all panels/gutters inside a mobile portrait page with modest margins; no oversized white border. Follow requested dimensions. Render one page, not separate panel images.
 {{composition}}
 {{suffix}}`,
-    negative: "identity drift, wardrobe drift, repeated panels, broken reading order, extra limbs, malformed hands, illegible or unrequested text, obscured faces, stiff poses, muddy contrast, photo, CGI, watermark, logo" }
+    negative: "identity drift, wardrobe drift, repeated panels, broken reading order, extra limbs, malformed hands, illegible or unrequested text, obscured faces, stiff poses, muddy contrast, photo, CGI, watermark, logo" },
+  { id: "ensemble", name: "Full scene / ensemble", category: "action", enabled: false,
+    useWhen: "A shared scene or interaction should show everyone physically present, including the user's persona. List visibleCharacters for this exact moment; omit offscreen, departed, remembered and merely mentioned characters.",
+    subjectMode: "ensemble", framing: "wide", referencePolicy: "none",
+    positive: "{{style}}\nDepict one coherent scene with the complete visible cast below, including the user's persona when listed. Each named appearance belongs only to that individual; keep faces, hair, build and clothing distinct.\nCAST:\n{{subjects}}\nSETTING: {{scene}}\nMOMENT: {{action}}\n{{composition}}\n{{lighting}}\nUse an external camera view so the listed persona is visible too. Compose readable interactions and spatial relationships, with natural poses and clear silhouettes. Show only the supplied moment, no extra people, duplicated individuals, merged bodies, split panels or invented events.\n{{suffix}}",
+    negative: "{{negative}}, duplicate person, merged identities, swapped hair or clothing, fused bodies, extra limbs, cropped-out cast, split screen" }
 ];
 
 export function validateImageTemplates(value: unknown): ImageTemplate[] {
@@ -84,6 +89,7 @@ export function upgradeImageTemplates(value: unknown): ImageTemplate[] {
   if (!templates.some(t => t.id === "manga-page") && templates.length < 32) {
     templates.push({ ...BUILTIN_IMAGE_TEMPLATES.find(t => t.id === "manga-page")! });
   }
+  if (!templates.some(t => t.id === "ensemble") && templates.length < 32) templates.push({ ...BUILTIN_IMAGE_TEMPLATES.find(t => t.id === "ensemble")! });
   return templates.map(t => {
     if (t.id !== 'manga-page') return t;
     const builtin = BUILTIN_IMAGE_TEMPLATES.find(template => template.id === 'manga-page')!;

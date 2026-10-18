@@ -232,6 +232,14 @@ function asset(overrides: Partial<AssetView> = {}): AssetView {
   };
 }
 
+test("a revised plan reloads presentation at a clamped cursor instead of acting as an asset rebroadcast", () => {
+  const old = turn({ paragraphs: ["One", "Two", "Three"], revision: 1 });
+  const next = turn({ paragraphs: ["One", "Two"], revision: 2, speaker: "Jo" });
+  expect(decideTurnApplication(old, next, 2, true, true)).toEqual({ kind: "revised-turn", paragraphIndex: 1 });
+  expect(decideTurnApplication(next, old, 1, true, true)).toEqual({ kind: "none" });
+  expect(decideTurnApplication(old, { ...old, swipeId: 1 }, 1, true, true)).toEqual({ kind: "load-turn" });
+});
+
 describe("selectCurrentImage (pure frontend image selection)", () => {
   test("picks the highest ready paragraph at or before the cursor", () => {
     const source = turn({

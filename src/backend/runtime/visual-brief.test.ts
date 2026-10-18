@@ -39,3 +39,25 @@ test("detail_visual_brief_uses_prop_focus_and_custom_framing", () => {
   assert.match(brief.composition, /close-up/);
   assert.equal(brief.subjectMode, "none");
 });
+
+test("ensemble brief includes named present subjects and persona without borrowing portrait identity", () => {
+  const config = normalizeConfig({ defaultImageTemplateId: "ensemble" });
+  const template = resolveImageTemplate(config).template;
+  assert.equal(template.id, "ensemble");
+  const members = [{ name: "Mira", appearance: "silver hair, green eyes", attire: "red coat" }, { name: "Josh", appearance: "brown hair, glasses", persona: true }];
+  const group = VisualCueSchema.parse({ ...cue, imageTemplate: template, ensembleSubjects: members });
+  const brief = buildVisualBrief(config, scene, group);
+  assert.match(brief.subjects, /Mira.*silver hair.*red coat/);
+  assert.match(brief.subjects, /Josh.*brown hair.*glasses/);
+  assert.doesNotMatch(brief.subjects, /One visible|old red hair/);
+  assert.equal(brief.referencePolicy, "none");
+  assert.match(brief.composition, /2 visible characters/);
+});
+
+test("long ensemble appearances retain every named subject and disclose condensation", () => {
+  const config=normalizeConfig({defaultImageTemplateId:"ensemble"});
+  const brief=buildVisualBrief(config,scene,{...cue,imageTemplate:resolveImageTemplate(config).template,ensembleSubjects:Array.from({length:6},(_,i)=>({name:i===5?'Josh':`Cast ${i}`,appearance:'silver hair, green eyes, '.repeat(50).slice(0,1200),persona:i===5}))});
+  for(const name of ['Cast 0','Cast 1','Cast 2','Cast 3','Cast 4','Josh'])assert.ok(brief.subjects.includes(name));
+  assert.ok(brief.subjects.length<=1800);
+  assert.ok(brief.conflicts.some(note=>note.includes('condensed')));
+});

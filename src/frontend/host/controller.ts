@@ -10,6 +10,7 @@ import { AudioEngine, VnStage, isAmbientEffect, isStageEffect } from "../stage/i
 import type { AmbientEffect, StageEffect } from "../store/index.js";
 import { VisualNovelSettingsPanel } from "../settings/panel.js";
 import { ImageStudio } from "../image-review/studio.js";
+import { ExternalImageReview } from "../image-review/external-review.js";
 import {ImageLibrary} from '../image-library/library.js';
 import type { VnChoice, VnTurnInput } from "../store/index.js";
 import { createVnHeaderLauncher } from "./manual-launcher.js";
@@ -107,7 +108,7 @@ export function currentAssetError(turn: TurnView, paragraphIndex: number): strin
 export function currentAssetFailure(turn: TurnView, paragraphIndex: number): HostStageError | null {
   const current = turn.assets.filter((asset) => asset.paragraphIndex <= paragraphIndex)
     .sort((a, b) => b.paragraphIndex - a.paragraphIndex)[0];
-  return current?.status === "failed" ? describeImageFailure(turn, current.error) : null;
+  return current?.status === "failed" ? { ...describeImageFailure(turn, current.error), ...(current.failureId ? {failureId: current.failureId} : {}) } : null;
 }
 
 /**
@@ -139,6 +140,7 @@ export type TurnApplicationDecision =
   | { kind: "planning" }
   | { kind: "error"; error: string }
   | { kind: "same-turn"; paragraphIndex: number }
+  | { kind: "revised-turn"; paragraphIndex: number }
   | { kind: "load-turn" };
 
 /**
@@ -268,7 +270,9 @@ export function decideTurnApplication(
   // Only treat a re-broadcast as the same turn when the stage is actually showing
   // it. A vn_state that arrives while inactive records the turn but never loads
   // the paragraphs, so the first active delivery still needs a real load-turn.
-  if (previous && hasLoadedTurn && sameTurnIdentity(previous, next)) {
+  if (previous && hasLoadedTurn && sameTurnIdentity(previous, next) && previous.swipeId === next.swipeId) {
+    if (next.revision < previous.revision) return { kind: "none" };
+    if (next.revision !== previous.revision) return { kind: "revised-turn", paragraphIndex: Math.max(0, Math.min(cursor, next.paragraphs.length - 1)) };
     return { kind: "same-turn", paragraphIndex: cursor };
   }
   return { kind: "load-turn" };
@@ -416,6 +420,18 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
 
   const ctx = stagingContext(baseContext);
   const app = ctx.ui.mountApp({ className: "visual-novel-preview-mount", position: "app-overlay" });
+  const externalReviewMount = ctx.ui.mountApp({ className: "lumiglyphics-external-review", position: "app-overlay" });
+  Object.assign(externalReviewMount.root.style, { position: "fixed", inset: "0", pointerEvents: "none", zIndex: "10020" });
+  externalReviewMount.setVisible(true);
+  let externalReviewOpen = false;
+  const externalReview = new ExternalImageReview(externalReviewMount.root, request => {
+    if(request.type === "vn_external_image_cancel") imageBridge.cancelRequest(request.request.chatId, request.request.requestId);
+    else ctx.sendToBackend(request);
+  }, open => {
+    externalReviewOpen = open;
+    if (open) { stage.toggleSkip(false); stage.holdAutoPlay(); }
+    else if (active) stage.checkAutoPlay();
+  });
   Object.assign(app.root.style, {
     position: "fixed",
     inset: "0",
@@ -505,7 +521,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const stage = new VnStage({
     mount: app.root,
     themePreset: configRef.current?.themePreset ?? "lumiverse",
-    isAutoAdvanceHeld: () => isSpeechHoldingAuto()||imageLibraryOpen||imageStudioOpen,
+    isAutoAdvanceHeld: () => isSpeechHoldingAuto()||imageLibraryOpen||imageStudioOpen||externalReviewOpen,
     onExit: () => deactivate(),
     onTooltipPreferencesChange: tooltips => { ctx.sendToBackend({type:"vn_set_config",patch:{tooltips},chatId:chatId()}); },
     onReaderPreferencesChange: readerPreferences => {
@@ -607,7 +623,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   });
 
   gameBridge = new GameBridge(window, syncGameChoices);
-  const imageBridge = connectImageBridge(window, chatId, (request) => ctx.sendToBackend(request));
+  const imageBridge = connectImageBridge(window, chatId, (request) => ctx.sendToBackend(request), (chatId, requestId) => externalReview.result(chatId, requestId));
 
   const panels = new PanelDock(stage.panelMount);
   const imageLibrary=new ImageLibrary(stage.panelMount,request=>ctx.sendToBackend(request),open=>{
@@ -751,6 +767,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   // True until the first vn_state answers the boot request; that reply decides
   // whether the view opens (autoEnter) or is explicitly closed.
   let bootPending = true;
+  let stateRequestId: string | undefined;
   function requestState(options: { boot?: boolean } = {}): void {
     const current = chatId();
     // Leaving a chat (home screen, or another chat) closes the previous view
@@ -759,7 +776,10 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       ctx.sendToBackend({ type: "vn_view", chatId: lastAnnouncedChatId, open: false });
     }
     lastAnnouncedChatId = current;
-    for (const message of viewStateMessages(current, options.boot ? undefined : active)) ctx.sendToBackend(message);
+    stateRequestId = createUiId();
+    for (const message of viewStateMessages(current, options.boot ? undefined : active)) {
+      ctx.sendToBackend(message.type === "vn_get_state" ? { ...message, requestId: stateRequestId } : message);
+    }
     syncGameChoices();
     gameBridge?.request(current);
   }
@@ -812,6 +832,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       throw new Error("This Lumiverse build does not expose the staging component override contract.");
     }
     active = true;
+    stage.resume();
     const captureMessageId = turn?.messageId ?? ctx.messages.getLatestMessageId();
     panelCapture = captureMessageId ? { chatId: chatId(), messageId: captureMessageId, fingerprint: turn?.sourceFingerprint ?? null, cards: captureSimTrackerCards(ctx.dom.findMessageElement(captureMessageId), document) } : null;
     registerOverrides();
@@ -837,6 +858,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     imageLibrary.close();
     if (destroyed) return;
     const wasActive = active;
+    stage.suspend();
     if (wasActive) saveCursor(stage.getState().currentParagraphIndex, true);
     stage.showReaderText();
     active = false;
@@ -877,6 +899,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
 
   async function syncImageForParagraph(paragraphIndex: number): Promise<void> {
     if (!turn) return;
+    const sourceTurn = turn;
     const assetFailure = currentAssetFailure(turn, paragraphIndex);
     if (assetFailure) reportStageError(assetFailure);
     const asset = stage.setCastTurn(turn,paragraphIndex) ?? selectCurrentImage(turn, paragraphIndex);
@@ -889,18 +912,24 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       url: asset.imageUrl,
       ...(asset.presentation ? { presentation: asset.presentation } : {}),
       alt: `Generated scene for paragraph ${asset.paragraphIndex + 1}`,
-      requestId: `${turn.sourceFingerprint}:${asset.cueId}:${asset.imageId ?? asset.imageUrl}`
+      requestId: `${sourceTurn.chatId}:${sourceTurn.messageId}:${sourceTurn.swipeId}:${sourceTurn.sourceFingerprint}:${sourceTurn.revision}:${asset.jobId}:${asset.imageId ?? asset.imageUrl}`
     });
-    if (!loaded || asset.status === "browser_ready") return;
-    const acknowledgementKey = `${turn.sourceFingerprint}:${asset.jobId}`;
+    if (!loaded || asset.status === "browser_ready" || !turn || !active
+      || !sameTurnIdentity(sourceTurn, turn) || sourceTurn.revision !== turn.revision || sourceTurn.swipeId !== turn.swipeId
+      || !turn.assets.some(candidate => candidate.jobId === asset.jobId && candidate.imageId === asset.imageId && candidate.imageUrl === asset.imageUrl)) return;
+    const acknowledgementKey = `${sourceTurn.chatId}:${sourceTurn.messageId}:${sourceTurn.swipeId}:${sourceTurn.sourceFingerprint}:${sourceTurn.revision}:${asset.jobId}:${asset.imageId ?? asset.imageUrl}`;
     if (acknowledgedAssets.has(acknowledgementKey)) return;
     acknowledgedAssets.add(acknowledgementKey);
     ctx.sendToBackend({
       type: "vn_asset_ready",
-      chatId: turn.chatId,
-      messageId: turn.messageId,
+      chatId: sourceTurn.chatId,
+      messageId: sourceTurn.messageId,
       jobId: asset.jobId,
-      sourceFingerprint: turn.sourceFingerprint
+      sourceFingerprint: sourceTurn.sourceFingerprint,
+      swipeId: sourceTurn.swipeId,
+      revision: sourceTurn.revision,
+      imageId: asset.imageId,
+      imageUrl: asset.imageUrl
     });
   }
 
@@ -913,6 +942,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
    * generated, preventing a blank screen between turns.
    */
   function applyTurn(next: TurnView, previous: TurnView | null): void {
+    if (next.chatId !== chatId()) return;
+    if (turn && sameTurnIdentity(turn, next) && turn.swipeId === next.swipeId && next.revision < turn.revision) return;
     if (panelCapture) {
       if (panelCapture.chatId !== next.chatId || panelCapture.messageId !== next.messageId || (panelCapture.fingerprint !== null && panelCapture.fingerprint !== next.sourceFingerprint)) panelCapture = null;
       else panelCapture.fingerprint = next.sourceFingerprint;
@@ -942,7 +973,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       reportStageError(describePlanningFailure(next));
       return;
     }
-    if (decision.kind === "same-turn") {
+    const recovering = decision.kind === "same-turn" && (stage.getState().phase === "planning" || stage.getState().phase === "error");
+    if (decision.kind === "same-turn" && !recovering) {
       loadedReadingCursor.load(next);
       // Identical cursor identity: SpeechController treats this as a no-op, so
       // a same-turn rebroadcast (e.g. an image/asset update) never replays speech.
@@ -956,10 +988,13 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     const mode = requestedMode === "cyoa" && next.choices.length > 0 ? "cyoa" : "standard";
     const preserveImage = shouldPreserveImage(previous, next);
     turnOpeningBgm = preserveImage ? currentBgm : null;
-    const restored = restoreReadingPosition(savedReadingPosition, next);
+    const revised = decision.kind === "revised-turn" || recovering;
+    const draft = revised ? stage.getState().draft : "";
+    const restored = decision.kind === "revised-turn" || decision.kind === "same-turn" ? Math.min(decision.paragraphIndex, Math.max(0, next.paragraphs.length - 1)) : restoreReadingPosition(savedReadingPosition, next);
     const cursor = restored ?? 0;
     if (restored !== null) { stage.toggleAutoPlay(false); stage.toggleSkip(false); }
     stage.loadTurn({ ...stageTurnInput(next, mode, preserveImage, configRef.current?.effectIntensity ?? "full"), initialParagraphIndex: cursor });
+    if (revised) stage.restoreReplyDraft(draft);
     loadedReadingCursor.load(next);
     panels.setCursor(cursor);
     imageStudio.setCursor(cursor);
@@ -974,7 +1009,17 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     const message = payload as BackendResponse;
     if(message.type==='vn_image_library'){imageLibrary.receive(message.chatId,message.requestId,message.page);return;}
     if(message.type==='vn_error'&&message.operation==='vn_image_library'){imageLibrary.error(message.chatId??'',message.requestId,message.error);return;}
-    if (message.type === "vn_external_image") { imageBridge.result(message.result); return; }
+    if (message.type === "vn_external_image") {
+      if (message.result.status !== "accepted") externalReview.result(message.result.chatId, message.result.requestId);
+      imageBridge.result(message.result); return;
+    }
+    if (message.type === "vn_external_image_review") {
+      if (message.chatId === chatId() && imageBridge.owns(message.chatId, message.requestId)) externalReview.receive(message);
+      return;
+    }
+    if (message.type === "vn_error" && message.operation === "vn_external_image_review") {
+      externalReview.error(message.chatId, message.requestId, message.error); return;
+    }
     if (message.type === "vn_panel_template") {
       const pending = panelRequests.get(message.requestId);
       if (!pending) return;
@@ -1015,6 +1060,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       return;
     }
     if (type === "vn_state" && message.type === "vn_state") {
+      if (message.chatId !== chatId() || (message.requestId !== undefined && message.requestId !== stateRequestId)) return;
       configRef.current = message.config;
       savedReadingPosition = message.readingPosition ?? savedReadingPosition;
       imageStudio.setReview(message.config.reviewImages);
@@ -1084,6 +1130,9 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if (type === "vn_asset" && message.type === "vn_asset") {
       vnDebug("received vn_asset", `p${message.asset.paragraphIndex}`, message.asset.status, message.asset.imageUrl ?? "(no url)", (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId) ? "(ignored: not the active turn)" : "");
       if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId) return;
+      if ((message.sourceFingerprint !== undefined && message.sourceFingerprint !== turn.sourceFingerprint)
+        || (message.revision !== undefined && message.revision !== turn.revision)
+        || (message.swipeId !== undefined && message.swipeId !== turn.swipeId)) return;
       turn = replaceAsset(turn, message.asset);
       imageStudio.setTurn(turn);
       imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
@@ -1150,6 +1199,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     }
     if (type === "vn_permission" && message.type === "vn_permission") {
       if (!message.granted) {
+        externalReview.cancel(); imageBridge.cancelAll();
         deactivate();
         reportStageError({
           message: "Visual novel mode needs a permission that was turned off.",
@@ -1187,6 +1237,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const unsubBackend = ctx.onBackendMessage(routeBackend);
   const unsubAction = action.onClick(toggleVisualNovel);
   const unsubChat = ctx.events.on("CHAT_SWITCHED", () => {
+    externalReview.cancel(); imageBridge.cancelAll();
     settingsPanel?.clearCastArt();
     settingsPanel?.clearPresentationRules();
     settingsPanel?.clearLocationArt();
@@ -1204,6 +1255,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     requestState();
   });
   const unsubFork = ctx.events.on("CHAT_FORKED", () => {
+    externalReview.cancel(); imageBridge.cancelAll();
     settingsPanel?.clearCastArt();
     settingsPanel?.clearPresentationRules();
     settingsPanel?.clearLocationArt();
@@ -1223,7 +1275,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const unsubPermission = ctx.events.on("PERMISSION_CHANGED", (payload) => {
     if (!payload || typeof payload !== "object") return;
     const detail = payload as { permission?: unknown; granted?: unknown };
-    if (detail.granted === false) deactivate();
+    if (detail.granted === false) { externalReview.cancel(); imageBridge.cancelAll(); deactivate(); }
   });
 
   requestConnectionCatalog();
@@ -1254,6 +1306,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     panels.destroy();
     gameBridge?.destroy();
     imageBridge.destroy();
+    externalReview.destroy();
+    externalReviewMount.destroy();
     for (const pending of panelRequests.values()) { clearTimeout(pending.timer); pending.reject(new Error("Panel layer closed.")); }
     panelRequests.clear();
     stage.destroy();

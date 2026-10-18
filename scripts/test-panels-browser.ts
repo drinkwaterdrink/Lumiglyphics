@@ -84,7 +84,22 @@ try {
   for (const name of ["parserParameters", "imageParameters", "customCss", "ignoredTags", "debugLogging", "imageModel"]) {
     assert.equal(await settings.locator(`[name="${name}"]`).isVisible(), false, name + " should be advanced");
   }
-  await settings.getByRole("tab", { name: "Look" }).click();
+  const search = settings.getByRole("searchbox", { name: "Find a setting" });
+  assert.equal(await search.getAttribute("aria-expanded"), null, "ordinary search has no unsupported expanded state");
+  await search.fill("music vol");
+  assert.match(await settings.locator("[data-search-announcement]").innerText(), /\d+ settings? found/);
+  await search.press("ArrowDown");
+  assert.equal(await settings.locator("[data-search-result]").first().evaluate((element) => element === (element.getRootNode() as ShadowRoot).activeElement), true, "ArrowDown focuses a result");
+  await page.keyboard.press("Enter");
+  assert.equal(await settings.getByLabel("Settings section", { exact: true }).inputValue(), "sound", "search result opens the matching mobile section");
+  assert.equal(await settings.locator("[data-search-results]").isVisible(), false);
+  await search.fill("zzzz-nothing");
+  assert.match(await settings.locator("[data-search-announcement]").innerText(), /No settings found/);
+  await search.press("Escape");
+  assert.equal(await search.inputValue(), "");
+  const sectionSelect = settings.getByLabel("Settings section", { exact: true });
+  assert.equal(await sectionSelect.isVisible(), true, "mobile settings use the section selector");
+  await sectionSelect.selectOption({ label: "Look" });
   await settings.locator('input[name="themePreset"][value="paper-novel"]').check();
   assert.deepEqual(await page.evaluate(() => (window as any).settingsFixture.saved), { themePreset: "paper-novel" });
   await page.screenshot({ path: ".cache/settings-basic-mobile.png", fullPage: true });

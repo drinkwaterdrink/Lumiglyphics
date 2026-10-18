@@ -15,6 +15,18 @@ test("template_validation_is_atomic", () => {
   assert.equal(validateImageTemplates([portrait])[0]!.name, portrait.name);
 });
 
+test("old catalogs gain an opt-in full scene ensemble without replacing user edits", () => {
+  const old = { ...BUILTIN_IMAGE_TEMPLATES[0]!, positive: "personal {{subjects}}" };
+  const config = normalizeConfig({ imageTemplates: [old], defaultImageTemplateId: "ensemble" });
+  const ensemble = config.imageTemplates.find(t => t.id === "ensemble");
+  assert.ok(ensemble);
+  assert.equal(ensemble.enabled, false);
+  assert.equal(ensemble.subjectMode, "ensemble");
+  assert.equal(ensemble.referencePolicy, "none");
+  assert.equal(config.imageTemplates[0]!.positive, old.positive);
+  assert.equal(resolveImageTemplate(config).template.id, "ensemble");
+});
+
 test("manga page is opt-in, grounded in the brief, and has editable independent negatives", () => {
   const manga = BUILTIN_IMAGE_TEMPLATES.find(t => t.id === "manga-page")!;
   assert.ok(manga);

@@ -293,6 +293,7 @@ function withoutImageReferences(parameters: Record<string, unknown>): Record<str
 
 export function compileTemplateCue(config: VisualNovelConfig, scene: SceneState, cue: VisualCue, appearances?: CharacterAppearanceMap) {
   if (!cue.imageTemplate) throw new Error("This cue has no image template snapshot.");
+  if (cue.imageTemplate.subjectMode === "ensemble" && cue.ensembleOverflow) throw new Error("This scene exceeds the 16-person ensemble limit. Choose a smaller group or another picture template; no cast members were silently omitted from a generated image.");
   const brief = buildVisualBrief(config, scene, cue, appearances);
   const format = (value: string) => config.imagePromptFormat === "tags" ? value.replace(/;\s*|\n+/g, ", ") : value;
   const compiled = renderImageTemplate(cue.imageTemplate, { style: config.promptPrefix, scene: format(brief.scene), subjects: format(brief.subjects), action: format(brief.action), composition: format(brief.composition), lighting: brief.lighting, suffix: config.promptSuffix, negative: config.negativePrompt });
@@ -501,6 +502,7 @@ export function retainPlanEpisodes(cache: SceneImageCache, scope: string, plan: 
  * class). Legacy or unresolved cues always take normal generation.
  */
 export function cacheEligibleCue(cue: VisualCue): boolean {
+  if (cue.imageTemplate?.subjectMode === "ensemble") return false;
   if (cue.imageTemplate?.subjectMode === "none") return true;
   return Boolean(cue.characterId?.trim()) && Boolean(cue.resolvedIdentity?.trim()) && cue.subjectCategory !== undefined;
 }
@@ -1095,7 +1097,7 @@ export async function generateAssets(
         const scene = sceneForCue(plan, cue);
         const visualState = resolveCueCharacterVisualState(scene, cue, characterAppearance);
         const canAnchor = anchorable && cueUsesCharacterReference(cue);
-        if (cue.imageTemplate?.subjectMode !== "none" && cue.resolvedIdentity !== undefined && !cue.resolvedIdentity.trim()) throw new Error(`No usable appearance was resolved for "${visualState.characterName}". Replan this turn with a character description; the previous character will not be substituted.`);
+        if (cue.imageTemplate?.subjectMode !== "none" && cue.imageTemplate?.subjectMode !== "ensemble" && cue.resolvedIdentity !== undefined && !cue.resolvedIdentity.trim()) throw new Error(`No usable appearance was resolved for "${visualState.characterName}". Replan this turn with a character description; the previous character will not be substituted.`);
         const prompt = compileImagePrompt(config, scene, cue, characterAppearance, undefined, provider);
         const nai = provider === "novelai" ? compileNovelAiRequest(config, scene, cue, characterAppearance) : null;
         const negativePrompt = nai?.negativePrompt ?? compileNegativePrompt(config, scene, cue, characterAppearance);

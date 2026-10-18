@@ -11,6 +11,8 @@ try {
   const settings = page.locator("[data-vn-settings]");
   await settings.getByLabel("Settings section", { exact: true }).selectOption("pictures");
   await settings.getByText("Image prompts", { exact: true }).click();
+  assert.equal(await settings.getByLabel("Default template").locator('option[value="ensemble"]').count(),1);
+  assert.equal(await settings.getByLabel("Full scene / ensemble in dynamic mode").isChecked(),false);
   assert.equal(await settings.getByRole("button", { name: "Add manga page", exact: true }).count(), 0);
   // Simulate the pre-Manga saved catalog without erasing user wording.
   await page.evaluate(() => { const f = (window as any).settingsFixture; f.config = { ...f.config, imageTemplates: f.config.imageTemplates.filter((t: any) => t.id !== "manga-page") }; f.panel.setConfig(f.config); });
@@ -57,7 +59,7 @@ try {
   await settings.getByRole("button", { name: "Duplicate template", exact: true }).click();
   assert.match(await settings.getByLabel("Template name").inputValue(), /copy/i);
   await settings.getByRole("button", { name: "Delete template", exact: true }).click();
-  assert.equal(await settings.getByLabel("Template to edit").locator("option").count(), 6);
+  assert.equal(await settings.getByLabel("Template to edit").locator("option").count(), 7);
   assert.equal(await settings.evaluate(el => el.scrollWidth <= el.clientWidth + 1), true);
   await page.setViewportSize({ width: 1000, height: 900 });
   await page.goto(`http://127.0.0.1:${server.port}/?setupDone&noSpeech`);

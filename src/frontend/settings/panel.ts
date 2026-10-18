@@ -595,7 +595,8 @@ export class VisualNovelSettingsPanel {
       <div data-topbar>
         <div data-search role="search">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
-          <input type="search" data-settings-search aria-label="Find a setting" placeholder="Find a setting…" autocomplete="off" spellcheck="false" aria-controls="settings-search-results" aria-expanded="false" />
+          <input type="search" data-settings-search aria-label="Find a setting" placeholder="Find a setting…" autocomplete="off" spellcheck="false" aria-controls="settings-search-results" />
+          <span data-search-announcement role="status" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap"></span>
           <div id="settings-search-results" data-search-results hidden></div>
         </div>
         <span data-status role="status" aria-live="polite"></span>
@@ -1068,7 +1069,8 @@ export class VisualNovelSettingsPanel {
   private wireSearch(): void {
     const input = this.root.querySelector<HTMLInputElement>("[data-settings-search]")!;
     const results = this.root.querySelector<HTMLElement>("[data-search-results]")!;
-    const close = () => { results.hidden = true; input.setAttribute("aria-expanded", "false"); };
+    const announcement = this.root.querySelector<HTMLElement>("[data-search-announcement]")!;
+    const close = () => { results.hidden = true; announcement.textContent = ""; };
     const jump = (id: string | undefined) => {
       const target = id ? this.searchTargets.get(id) : undefined;
       if (!target) return;
@@ -1080,6 +1082,7 @@ export class VisualNovelSettingsPanel {
       const query = input.value.trim();
       if (!query) { results.replaceChildren(); close(); return; }
       const matches = searchSettings(this.searchEntries(), query);
+      announcement.textContent = matches.length ? `${matches.length} setting${matches.length === 1 ? "" : "s"} found. Use Down Arrow to browse results.` : "No settings found.";
       if (matches.length === 0) {
         const empty = document.createElement("p");
         empty.setAttribute("data-search-empty", "");
@@ -1109,7 +1112,6 @@ export class VisualNovelSettingsPanel {
         }));
       }
       results.hidden = false;
-      input.setAttribute("aria-expanded", "true");
     };
     input.addEventListener("input", render);
     input.addEventListener("focus", () => { if (input.value.trim()) render(); });

@@ -109,6 +109,99 @@ describe("audio-catalog scoped storage scanner & cache", () => {
     expect(findAudioEntry("sfx/action/sword_hit")?.category).toBe("sfx");
   });
 
+  test("selects exact paths and keeps same-stem formats and MIME types separate", async () => {
+    const api = storageSpindle({ "audio/theme.mp3": "mp3", "audio/theme.ogg": "ogg" });
+    await scanAudioCatalog(api);
+    const mp3 = findAudioEntry("theme.mp3")!;
+    const ogg = findAudioEntry("theme.ogg")!;
+    expect(mp3.relativePath).toBe("theme.mp3");
+    expect(ogg.relativePath).toBe("theme.ogg");
+    expect(findAudioEntry("theme")).toBeNull();
+    expect(await ensureAudioUrl(api, mp3)).toBe("data:audio/mpeg;base64,bXAz");
+    expect(await ensureAudioUrl(api, ogg)).toBe("data:audio/ogg;base64,b2dn");
+    expect(resolveAudioUrl("theme.mp3")).toBe("data:audio/mpeg;base64,bXAz");
+    expect(resolveAudioUrl("theme.ogg")).toBe("data:audio/ogg;base64,b2dn");
+  });
+
+  test("isolates identical relative paths across prefixes and storage owners", async () => {
+    const first = storageSpindle({ "audio/theme.mp3": "a", "pack/theme.mp3": "b" });
+    const second = storageSpindle({ "pack/theme.mp3": "c" });
+    await scanAudioCatalog(first);
+    expect(await ensureAudioUrl(first, findAudioEntry("theme")!)).toBe("data:audio/mpeg;base64,YQ==");
+    await scanAudioCatalog(first, "pack");
+    expect(resolveAudioUrl("theme")).toBeNull();
+    expect(await ensureAudioUrl(first, findAudioEntry("theme")!)).toBe("data:audio/mpeg;base64,Yg==");
+    await scanAudioCatalog(second, "pack");
+    expect(resolveAudioUrl("theme")).toBeNull();
+    expect(await ensureAudioUrl(second, findAudioEntry("theme")!)).toBe("data:audio/mpeg;base64,Yw==");
+  });
+
+  test("loads each full path and storage owner independently within one scan", async () => {
+    const first = storageSpindle({ "audio/theme.mp3": "a", "pack/theme.mp3": "b" });
+    const second = storageSpindle({ "audio/theme.mp3": "c" });
+    await scanAudioCatalog(first);
+    const entry = findAudioEntry("theme")!;
+    expect(await ensureAudioUrl(first, entry)).toBe("data:audio/mpeg;base64,YQ==");
+    expect(await ensureAudioUrl(first, { ...entry, filePath: "pack/theme.mp3" })).toBe("data:audio/mpeg;base64,Yg==");
+    expect(await ensureAudioUrl(second, entry)).toBe("data:audio/mpeg;base64,Yw==");
+    expect(resolveAudioUrl("theme")).toBe("data:audio/mpeg;base64,YQ==");
+  });
+
+  test("reloads overwritten files after an explicit catalog rescan", async () => {
+    const files = { "audio/theme.mp3": "old" };
+    const api = storageSpindle(files);
+    await scanAudioCatalog(api);
+    const oldEntry = findAudioEntry("theme")!;
+    await ensureAudioUrl(api, oldEntry);
+    files["audio/theme.mp3"] = "new";
+    clearAudioCatalogCache();
+    await scanAudioCatalog(api);
+    expect(await ensureAudioUrl(api, oldEntry)).toBeNull();
+    expect(resolveAudioUrl("theme")).toBeNull();
+    expect(await ensureAudioUrl(api, findAudioEntry("theme")!)).toBe("data:audio/mpeg;base64,bmV3");
+  });
+
+  test("does not cache failed reads and permits a later successful read", async () => {
+    const files: Record<string, string> = { "audio/theme.mp3": "ok" };
+    const api = storageSpindle(files);
+    await scanAudioCatalog(api);
+    const entry = findAudioEntry("theme")!;
+    delete files["audio/theme.mp3"];
+    expect(await ensureAudioUrl(api, entry)).toBeNull();
+    expect(resolveAudioUrl("theme")).toBeNull();
+    files["audio/theme.mp3"] = "ok";
+    expect(await ensureAudioUrl(api, entry)).toBe("data:audio/mpeg;base64,b2s=");
+  });
+
+  test("a late read from an old scan cannot replace the current scan's URL", async () => {
+    const api = storageSpindle({ "audio/theme.mp3": "new" });
+    const read = api.storage.readBinary;
+    let finishOld!: (bytes: Uint8Array) => void;
+    api.storage.readBinary = () => new Promise<Uint8Array>((resolve) => { finishOld = resolve; });
+    await scanAudioCatalog(api);
+    const pending = ensureAudioUrl(api, findAudioEntry("theme")!);
+    clearAudioCatalogCache();
+    api.storage.readBinary = read;
+    await scanAudioCatalog(api);
+    finishOld(new TextEncoder().encode("old"));
+    await pending;
+    expect(resolveAudioUrl("theme")).toBeNull();
+    expect(await ensureAudioUrl(api, findAudioEntry("theme")!)).toBe("data:audio/mpeg;base64,bmV3");
+  });
+
+  test("a late catalog scan cannot publish entries over a newer scan", async () => {
+    const old = storageSpindle({});
+    let finishOld!: (paths: string[]) => void;
+    old.storage.list = () => new Promise<string[]>((resolve) => { finishOld = resolve; });
+    const pending = scanAudioCatalog(old);
+    const current = storageSpindle({ "audio/current.ogg": "current" });
+    await scanAudioCatalog(current);
+    finishOld(["old.mp3"]);
+    await pending;
+    expect(getAudioCatalog().all.map((entry) => entry.relativePath)).toEqual(["current.ogg"]);
+    expect(findAudioEntry("old")).toBeNull();
+  });
+
   test("handles empty or unavailable storage gracefully", async () => {
     expect((await scanAudioCatalog(storageSpindle({}), "audio")).all).toEqual([]);
     clearAudioCatalogCache();
@@ -148,5 +241,13 @@ describe("audio-catalog scoped storage scanner & cache", () => {
     expect(summary.bgmLines).toEqual(["  * Available BGM: [track_a, track_b]"]);
     expect(summary.sfxSamples).toEqual(["sfx_hit"]);
     clearAudioCatalogCache();
+  });
+
+  test("planner summaries advertise exact selectable paths for duplicate friendly names", async () => {
+    await scanAudioCatalog(storageSpindle({"audio/bgm/theme.mp3":"mp3","audio/bgm/theme.ogg":"ogg","audio/sfx/hit.wav":"a","audio/sfx/other/hit.wav":"b"}));
+    const summary=getAudioCatalogPromptSummary();
+    expect(summary.bgmLines).toEqual(["  * Available BGM: [bgm/theme.mp3, bgm/theme.ogg]"]);
+    expect(summary.sfxSamples).toEqual(["sfx/hit.wav","sfx/other/hit.wav"]);
+    for(const path of ["bgm/theme.mp3","bgm/theme.ogg",...summary.sfxSamples]) expect(findAudioEntry(path)?.relativePath).toBe(path);
   });
 });

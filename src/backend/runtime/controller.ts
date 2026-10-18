@@ -85,6 +85,7 @@ import {
   saveSingleCharacterState,
   saveTurnRecordIfCurrent,
   saveTurnRecord,
+  mutateActiveTurnRecord,
   turnPath,
   updateConfig,
   type StoredTurnRecord
@@ -208,7 +209,7 @@ async function cancelIncompleteJobs(
   if (views.isOpen(userId, chatId)) {
     for (const job of jobs) {
       if (job.status !== "cancelled" || job.finishedAt !== nowTime) continue;
-      spindle.sendToFrontend({ type: "vn_asset", chatId, messageId: record.plan.key.assistantMessageId, asset: await assetViewWithCastArt(spindle,next,job,userId) }, userId);
+      spindle.sendToFrontend({ type: "vn_asset", chatId, messageId: record.plan.key.assistantMessageId, sourceFingerprint: next.plan.key.sourceFingerprint, swipeId: next.plan.key.swipeId, revision: next.plan.key.revision, asset: await assetViewWithCastArt(spindle,next,job,userId) }, userId);
     }
   }
 }
@@ -449,6 +450,7 @@ function assetView(record: StoredTurnRecord, job: StoredTurnRecord["jobs"][numbe
     ...((record.imageRequests?.filter(r => r.jobId === job.jobId && r.state === "approved").at(-1)?.imagePromptMetadata?.template ?? cue?.imageTemplate)?.id === "manga-page" ? { presentation: "page" as const } : {}),
     paragraphIndex: job.paragraphIndex,
     status: job.status,
+    ...(job.status === "failed" ? {failureId: `${record.plan.key.revision}:${job.jobId}:${job.startedAt}:${job.finishedAt}`} : {}),
     ...(job.provider === CACHE_JOB_PROVIDER ? { source: "cache" as const } : {}),
     ...(job.imageId || previous?.imageId ? { imageId: job.imageId || previous!.imageId } : {}),
     ...(job.imageUrl || previous?.imageUrl ? { imageUrl: job.imageUrl || previous!.imageUrl } : {}),
@@ -605,7 +607,7 @@ export async function sendState(
   spindle: SpindleAPI,
   chatId: string,
   userId?: string,
-  options: { viewOpen?: boolean;readOnly?:boolean } = {}
+  options: { viewOpen?: boolean;readOnly?:boolean; requestId?: string | undefined } = {}
 ): Promise<void> {
   // No active chat (home screen): whatever view was open is gone. Close it
   // before the first await so a reply landing meanwhile is already gated.
@@ -613,7 +615,7 @@ export async function sendState(
   const config = await loadConfig(spindle, userId);
   rememberDebugFlag(userId, config);
   if (!chatId) {
-    spindle.sendToFrontend({ type: "vn_state", chatId: "", config, turn: null }, userId);
+    spindle.sendToFrontend({ type: "vn_state", chatId: "", config, turn: null, requestId: options.requestId }, userId);
     return;
   }
   // Only an explicit flag changes the view state. A state request that says
@@ -678,6 +680,7 @@ export async function sendState(
   }
   spindle.sendToFrontend({
     type: "vn_state",
+    requestId: options.requestId,
     chatId,
     config,
     turn: record && !stale ? await turnViewWithAudio(spindle, record,userId) : null,
@@ -804,6 +807,9 @@ async function startAssets(
           type: "vn_asset",
           chatId: record.plan.key.chatId,
           messageId: record.plan.key.assistantMessageId,
+          sourceFingerprint: current.plan.key.sourceFingerprint,
+          swipeId: current.plan.key.swipeId,
+          revision: current.plan.key.revision,
           asset
         }, userId);
       },
@@ -1179,7 +1185,22 @@ function submissionMetadata(message: NormalizedChatMessage): Record<string, unkn
   return metadata && typeof metadata === "object" ? metadata : {};
 }
 
-async function submit(spindle: SpindleAPI, request: Extract<FrontendRequest, { type: "vn_submit" }>, userId: string): Promise<void> {
+const pendingSubmissions = new Map<string, Promise<void>>();
+
+function submit(spindle: SpindleAPI, request: Extract<FrontendRequest, { type: "vn_submit" }>, userId: string): Promise<void> {
+  const key = JSON.stringify([userId, request.chatId, request.requestId]);
+  const existing = pendingSubmissions.get(key);
+  if (existing) return existing;
+  // Reserve synchronously, before either metadata read or append can yield.
+  const pending = Promise.resolve().then(() => submitOnce(spindle, request, userId));
+  pendingSubmissions.set(key, pending);
+  void pending.finally(() => {
+    if (pendingSubmissions.get(key) === pending) pendingSubmissions.delete(key);
+  }).catch(() => {});
+  return pending;
+}
+
+async function submitOnce(spindle: SpindleAPI, request: Extract<FrontendRequest, { type: "vn_submit" }>, userId: string): Promise<void> {
   const existing = await spindle.chat.getMessages(request.chatId) as NormalizedChatMessage[];
   const alreadyWritten = existing.some((message) => {
     const vn = submissionMetadata(message).visualNovelPreview;
@@ -1219,16 +1240,22 @@ export async function markAssetReady(
   request: Extract<FrontendRequest, { type: "vn_asset_ready" }>,
   userId?: string
 ): Promise<void> {
+  const scope = runtimeKey(userId, request.chatId);
+  const epoch = intakeEpochs.get(scope) ?? 0;
+  const isCurrent = () => (intakeEpochs.get(scope) ?? 0) === epoch;
   const chatState = await loadChatState(spindle, request.chatId, userId);
-  const record = await loadTurnRecord(spindle, chatState.activeTurnPath, userId);
-  if (!record || !chatState.activeTurnPath) return;
+  if (!chatState.activeTurnPath || !isCurrent()) return;
+  const next = await mutateActiveTurnRecord(spindle, request.chatId, chatState.activeTurnPath, userId, record => {
   if (record.plan.key.assistantMessageId !== request.messageId
-    || record.plan.key.sourceFingerprint !== request.sourceFingerprint) return;
+    || record.plan.key.sourceFingerprint !== request.sourceFingerprint
+    || (request.swipeId !== undefined && String(record.plan.key.swipeId ?? 0) !== String(request.swipeId ?? 0))
+    || (request.revision !== undefined && record.plan.key.revision !== request.revision)) return null;
   const index = record.jobs.findIndex((job) => job.jobId === request.jobId);
-  if (index < 0) return;
+  if (index < 0) return null;
   const job = record.jobs[index]!;
-  if (job.status === "browser_ready") return;
-  if (job.status !== "generated") return;
+  if (job.status !== "generated"
+    || (request.imageId !== undefined && job.imageId !== request.imageId)
+    || (request.imageUrl !== undefined && job.imageUrl !== request.imageUrl)) return null;
   const readyAt = new Date().toISOString();
   const readyJob = AssetJobSchema.parse({
     ...job,
@@ -1238,12 +1265,17 @@ export async function markAssetReady(
   });
   dbg(spindle, userId, `asset ${readyJob.jobId} p${readyJob.paragraphIndex} -> browser_ready (decoded in browser)`);
   const jobs = record.jobs.map((candidate, candidateIndex) => candidateIndex === index ? readyJob : candidate);
-  const next = { ...record, jobs, updatedAt: readyAt };
-  await saveTurnRecord(spindle, chatState.activeTurnPath, next, userId);
+  return { ...record, jobs, updatedAt: readyAt };
+  }, isCurrent);
+  if (!next || !isCurrent()) return;
+  const readyJob = next.jobs.find(job => job.jobId === request.jobId)!;
   spindle.sendToFrontend({
     type: "vn_asset",
     chatId: request.chatId,
     messageId: request.messageId,
+    sourceFingerprint: next.plan.key.sourceFingerprint,
+    swipeId: next.plan.key.swipeId,
+    revision: next.plan.key.revision,
     asset: await assetViewWithCastArt(spindle,next,readyJob,userId)
   }, userId);
 }
@@ -1504,6 +1536,10 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
 async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendRequest, userId: string): Promise<void> {
   if (request.type === "vn_external_image") { await externalImages(spindle).request(request.request, userId); return; }
   if (request.type === "vn_external_image_cancel") { externalImages(spindle).cancel(request.request, userId); return; }
+  if (request.type === "vn_external_image_review") {
+    if (!await externalImages(spindle).review(request, userId)) throw new Error("This external image preview has expired or was cancelled. Request a new picture from its source.");
+    return;
+  }
   dbg(spindle, userId, `frontend request ${request.type}`);
   switch (request.type) {
     case 'vn_image_library': {
@@ -1586,7 +1622,7 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       return;
     }
     case "vn_get_state":
-      await sendState(spindle, request.chatId ?? "", userId, {...(request.viewOpen === undefined ? {} : { viewOpen: request.viewOpen }),...(request.prepare===false?{readOnly:true}:{})});
+      await sendState(spindle, request.chatId ?? "", userId, {requestId: request.requestId,...(request.viewOpen === undefined ? {} : { viewOpen: request.viewOpen }),...(request.prepare===false?{readOnly:true}:{})});
       return;
     case "vn_reading_position": {
       const { position } = request;
@@ -1670,6 +1706,7 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
     case "vn_scan_audio": {
       const config = await loadConfig(spindle, userId);
       const dir = request.directory?.trim() || config.audioDirectory;
+      clearAudioCatalogCache();
       const catalog = await scanAudioCatalog(spindle, dir);
       spindle.sendToFrontend({
         type: "vn_audio_scanned",

@@ -28,6 +28,7 @@ export function correctVisualSubject(cue: VisualCue, subject: SubjectCorrection,
     throw new Error(`Enter concrete appearance details for "${name}" (for example hair, eyes, skin, clothing or species). No other character's appearance will be used.`);
   }
   if (cue.imageTemplate?.subjectMode === "none") throw new Error("Choose a character template before preparing this subject.");
+  if (cue.imageTemplate?.subjectMode === "ensemble") throw new Error("For an ensemble, edit the named cast in the prompt or update Cast setup and replan. Choose a single-character template to replace the picture's subject.");
   const identity = tags.join(", ");
   const explicitCategory = subject.appearance?.trim() ? subjectCategoryFromTags(identity) : "unknown";
   return {

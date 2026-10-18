@@ -24,7 +24,7 @@ export class ImageTemplateEditor {
       <label data-field><span>Template name</span><input type="text" data-t="name" aria-label="Template name" maxlength="80"></label>
       <details data-template-composition><summary>Composition and context guidance</summary><div data-template-fields><label data-field><span>Category</span><select data-t="category" aria-label="Template category"><option value="portrait">Character portrait</option><option value="environment">Environment</option><option value="action">Story action</option><option value="detail">Detail / object</option><option value="custom">Custom</option></select></label>
       <label data-field><span>When to use</span><textarea data-t="useWhen" aria-label="When to use template" maxlength="1000"></textarea><small>The story reader uses this guidance when dynamic selection is enabled.</small></label>
-      <div data-row><label data-field><span>Visible subjects</span><select data-t="subjectMode" aria-label="Visible subjects"><option value="one">One character</option><option value="none">No people</option></select></label><label data-field><span>Framing</span><select data-t="framing" aria-label="Framing"><option>portrait</option><option>upper body</option><option>full body</option><option>wide</option><option>close-up</option></select></label></div>
+      <div data-row><label data-field><span>Visible subjects</span><select data-t="subjectMode" aria-label="Visible subjects"><option value="one">One character</option><option value="none">No people</option><option value="ensemble">Everyone in the scene, including persona</option></select><small>Ensemble uses named scene appearances. A single portrait reference is omitted to avoid applying one face to everyone.</small></label><label data-field><span>Framing</span><select data-t="framing" aria-label="Framing"><option>portrait</option><option>upper body</option><option>full body</option><option>wide</option><option>close-up</option></select></label></div>
       <label data-field><span>Output shape</span><select data-t="outputAspectRatio" aria-label="Template output shape"><option value="connection">Use connection settings</option><option value="9:16">Tall portrait (9:16)</option></select><small>Generation → Generated image shape applies across templates. With template defaults, known models use supported sizes: Anima and Qwen Turbo keep portrait framing; Klein uses square output. Explicit parameters and model support can limit the result.</small></label>
       <label data-field><span>Reference policy</span><select data-t="referencePolicy" aria-label="Reference policy"><option value="character">Use character reference when available</option><option value="none">No image references</option></select><small>No-people templates always omit character references.</small></label>
       </div></details><label data-field><span>Positive template</span><textarea data-t="positive" aria-label="Template positive prompt" maxlength="8000" spellcheck="false"></textarea></label>
@@ -42,12 +42,12 @@ export class ImageTemplateEditor {
       const template = dynamicId ? this.templates.find(t => t.id === dynamicId) : this.current();
       if (!key || !template) return;
       Object.assign(template, { [key]: field.type === "checkbox" ? field.checked : field.value });
-      if (template.subjectMode === "none") template.referencePolicy = "none";
+      if (template.subjectMode !== "one") template.referencePolicy = "none";
       this.dirty = true; this.pending = "";
       this.status("Unsaved template changes. Save templates applies the whole catalog.");
       this.options(); this.preview();
       this.el<HTMLSelectElement>('[data-t="referencePolicy"]').value = this.current()!.referencePolicy;
-      this.el<HTMLSelectElement>('[data-t="referencePolicy"]').disabled = this.current()?.subjectMode === "none";
+      this.el<HTMLSelectElement>('[data-t="referencePolicy"]').disabled = this.current()?.subjectMode !== "one";
     });
     this.el<HTMLButtonElement>("[data-save-templates]").onclick = () => {
       try {
@@ -66,7 +66,7 @@ export class ImageTemplateEditor {
       this.templates.push(copy); this.selected = copy.id; this.dirty = true; this.pending = ""; this.options(); this.renderFields(); this.status("Duplicate created. Save templates to keep it.");
     };
     this.el<HTMLButtonElement>("[data-delete-template]").onclick = () => {
-      if (this.selected === "manga-page") { this.status("Manga page is built in. Uncheck it in the dynamic list to keep it off."); return; }
+        if (this.selected === "manga-page" || this.selected === "ensemble") { this.status(`${this.current()?.name} is built in. Uncheck it in the dynamic list to keep it off.`); return; }
       if (this.templates.length <= 1) { this.status("Keep at least one template."); return; }
       this.templates = this.templates.filter(t => t.id !== this.selected); this.selected = this.templates[0]!.id; this.dirty = true; this.pending = ""; this.options(); this.renderFields(); this.status("Template removed from draft. Save templates to apply, or discard to restore.");
     };
@@ -104,7 +104,7 @@ export class ImageTemplateEditor {
       if (field instanceof HTMLInputElement && field.type === "checkbox") field.checked = Boolean(value); else field.value = String(value ?? (field.dataset.t === "outputAspectRatio" ? "connection" : ""));
       field.disabled = !template;
     }
-    this.el<HTMLSelectElement>('[data-t="referencePolicy"]').disabled = !template || template.subjectMode === "none";
+    this.el<HTMLSelectElement>('[data-t="referencePolicy"]').disabled = !template || template.subjectMode !== "one";
     this.preview();
   }
   private preview(): void {
@@ -115,7 +115,7 @@ export class ImageTemplateEditor {
       const values = { style: this.config.promptPrefix, suffix: this.config.promptSuffix, negative: this.config.negativePrompt,
         scene: brief?.scene ?? "A quiet library in late afternoon.", subjects: template.subjectMode === "none" ? "" : brief?.subjects ?? "One visible character with silver hair and a red coat.",
         action: template.subjectMode === "none" ? (template.category === "detail" ? "An old brass key on a wooden table." : "") : brief?.action ?? "Looking toward a rain-streaked window.",
-        composition: `${template.framing}, ${template.subjectMode === "none" ? "without people" : "one visible character"}`, lighting: brief?.lighting ?? "Soft window light." };
+        composition: `${template.framing}, ${template.subjectMode === "none" ? "without people" : template.subjectMode === "ensemble" ? "all listed scene characters, including persona" : "one visible character"}`, lighting: brief?.lighting ?? "Soft window light." };
       const output = renderImageTemplate(snapshot, values);
       const format = (text: string) => this.config.imagePromptFormat === "tags" ? text.replace(/[;\n]+/g, ", ") : text;
       this.el<HTMLElement>("[data-preview-kind]").textContent = brief ? "Preview using the latest prepared scene brief and saved shared style. Changing category may need a new story-reader focus." : "Sample scene preview with saved shared style. This is not a prepared image request.";

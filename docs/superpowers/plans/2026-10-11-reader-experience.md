@@ -570,3 +570,7 @@ User-reported Qwen Turbo resolution failure takes priority over F2. Add exact-mo
 ### beta.42 settings reliability and mobile polish audit
 
 User-requested audit maintenance pass: serialized config merge/write; backend-correlated Advanced saves with failed/unknown draft retention, edited-key patches, retry ownership and concurrent NovelAI parameter safety; stale optional request guards and chat-source reset; secure-context-independent UI IDs; touch-sized Pictures purpose headers/search and light/dark status contrast. Existing advanced controls remain available. Fresh review and automated/browser validation recorded in [beta.42 evidence](../../review-evidence/2026-10-17-settings-audit.md). No paid calls, history reset, new dependency or permission. F2 remains pending.
+
+### beta.43 independent audit fixes and ensemble illustrations
+
+Implemented F01–F13 coverage from the supplied audit (F03 retained from beta.42), including reader revision/chat ownership, guarded image acknowledgments, duplicate submissions, safe story CSS, closed-reader external review, audio cache identity and accessible search. User-requested Full scene / ensemble is an opt-in template with separate named cast/persona guidance and bounded group descriptions. Current delivery boundaries are in [STATUS](../../../STATUS.md); validation and limitations are in [beta.43 evidence](../../review-evidence/2026-10-18-audit-fixes.md). F2 presentation policies remain pending.

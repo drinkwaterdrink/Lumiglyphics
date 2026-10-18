@@ -9,13 +9,18 @@ import { planTurn } from "./planner.js";
 import { generateAssets, prepareAssetJobs } from "./images.js";
 import { resolveNativeCardJobs } from "./native-assets.js";
 import type { SceneState } from "../../shared/contracts.js";
+import { ImageReviewGate, safeImageHistory } from "./image-review.js";
+import type { ImageRequestEdits, ImageRequestRecord } from "../../shared/image-review.js";
+import { chatStatePath } from "./storage.js";
 import { loadConfig, loadChatState, loadCharacterAppearance, loadCharacterRegistry, loadSingleCharacterState,
   mergePlannerCharacters, saveCharacterRegistry, mergeCharacterAppearanceFromState } from "./storage.js";
 
 const pipeline = { plan: planTurn, prepare: prepareAssetJobs, generate: generateAssets };
+export type ExternalImageReviewAction = { chatId: string; requestId: string; reviewRequestId: string; action: "generate" | "skip"; edits?: ImageRequestEdits };
 export function createExternalImages(spindle: SpindleAPI, deps = pipeline, timeoutMs = 300_000) {
   const cache = new SceneImageCache();
-  const active = new Map<string, { request: CueImageRequest; controller: AbortController }>();
+  const active = new Map<string, { request: CueImageRequest; controller: AbortController; gate?: ImageReviewGate }>();
+  const historyWrites = new Map<string, Promise<void>>();
   const completed = new Map<string, { result: CueImageResult; at: number }>();
   const scenes = new Map<string, SceneState>();
   const key = (chatId: string, userId?: string) => JSON.stringify([userId ?? "owner", chatId]);
@@ -28,6 +33,11 @@ export function createExternalImages(spindle: SpindleAPI, deps = pipeline, timeo
       op.controller.abort("Date image cancelled.");
       active.delete(key(value.chatId, userId));
     }
+  }
+  async function review(action: ExternalImageReviewAction, userId?: string): Promise<boolean> {
+    const op = active.get(key(action.chatId, userId));
+    if (!op || op.request.requestId !== action.requestId || op.controller.signal.aborted) return false;
+    return op.gate?.decide(action.reviewRequestId, action.action, action.edits ?? {}) ?? false;
   }
   async function request(value: unknown, userId?: string): Promise<void> {
     const r = parseImageRequest(value);
@@ -42,7 +52,7 @@ export function createExternalImages(spindle: SpindleAPI, deps = pipeline, timeo
     const existing = active.get(scope);
     if (existing?.request.requestId === r.requestId) { emit({ ...identity(r), status: "accepted" }, userId); return; }
     existing?.controller.abort("Replaced by a newer date image.");
-    const controller = new AbortController(), op = { request: r, controller };
+    const controller = new AbortController(), op: { request: CueImageRequest; controller: AbortController; gate?: ImageReviewGate } = { request: r, controller };
     active.set(scope, op);
     const current = () => active.get(scope) === op && !controller.signal.aborted;
     const finish = (result: CueImageResult) => {
@@ -65,7 +75,6 @@ export function createExternalImages(spindle: SpindleAPI, deps = pipeline, timeo
       const config = await loadConfig(spindle, userId);
       if (!current()) return;
       if (!config.enabled || (!config.generateImages && !config.useNativeCardImages)) throw new Error("Enable Cue and image generation in Cue's settings to illustrate dates.");
-      if (!config.useNativeCardImages && config.maxImagesPerTurn === 0) throw new Error("Cue's image budget is zero. Increase it in Cue's settings to illustrate dates.");
       const setupToken = castArtToken(spindle, r.chatId, userId);
       const identityCurrent = () => current() && setupToken === castArtToken(spindle, r.chatId, userId);
       const [singleCharacter, characterAppearance, characterRegistry, chatState, messages] = await Promise.all([
@@ -129,8 +138,27 @@ export function createExternalImages(spindle: SpindleAPI, deps = pipeline, timeo
       }
       const jobs = await deps.prepare(spindle, plan, config, appearance, cache, userId, { resolvedSourceText: content });
       if (!current()) return;
+      // Use the same frozen request, validation and approval boundary as reader images.
+      // External work has its own history and never replaces the reader's active turn.
+      op.gate = new ImageReviewGate(async record => {
+        const previous = historyWrites.get(scope) ?? Promise.resolve();
+        const write = previous.catch(() => {}).then(async () => {
+          const path = chatStatePath(r.chatId).replace(/state\.json$/, "external-image-history.json");
+          const options = { fallback: null, ...(userId ? { userId } : {}) };
+          const stored = await spindle.userStorage.getJson<{ version: number; requests: ImageRequestRecord[] } | null>(path, options);
+          if (stored && stored.version !== 1) throw new Error("External image history has an unsupported version; it was preserved.");
+          const history = safeImageHistory(stored?.requests);
+          const next = history.filter(item => item.requestId !== record.requestId);
+          next.push(record);
+          await spindle.userStorage.setJson(path, { version: 1, requests: safeImageHistory(next) }, { ...(userId ? { userId } : {}) });
+        });
+        historyWrites.set(scope, write);
+        try { await write; } finally { if (historyWrites.get(scope) === write) historyWrites.delete(scope); }
+        if (current()) spindle.sendToFrontend({ type: "vn_external_image_review", chatId: r.chatId, requestId: r.requestId, characterName, record }, userId);
+      });
       const assets = await deps.generate(spindle, plan, jobs, config, controller.signal, () => {}, userId,
-        { sceneCache: cache, resolvedSourceText: content });
+        { sceneCache: cache, resolvedSourceText: content,
+          beforeGenerate: (job, prepared, metadata, signal) => op.gate!.prepare(job.jobId, job.paragraphIndex, prepared, metadata, config.reviewImages, signal) });
       if (!current()) return;
       const image = assets.find((a) => (a.status === "generated" || a.status === "browser_ready") && a.imageUrl);
       if (!image?.imageUrl) throw new Error(assets.find((a) => a.error)?.error ?? "Cue did not produce a date image. Check its image settings, then retry.");
@@ -142,5 +170,5 @@ export function createExternalImages(spindle: SpindleAPI, deps = pipeline, timeo
       if (active.get(scope) === op) active.delete(scope);
     }
   }
-  return { request, cancel };
+  return { request, cancel, review };
 }

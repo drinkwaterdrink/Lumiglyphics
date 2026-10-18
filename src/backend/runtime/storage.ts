@@ -755,6 +755,31 @@ export async function saveTurnRecord(
   });
 }
 
+/** Lock chat selection and turn together; the mutation sees the latest queued record. */
+export async function mutateActiveTurnRecord(
+  spindle: SpindleAPI, chatId: string, path: string, userId: string | undefined,
+  change: (current: StoredTurnRecord) => StoredTurnRecord | null,
+  isCurrent: () => boolean = () => true
+): Promise<StoredTurnRecord | null> {
+  let saved: StoredTurnRecord | null = null;
+  await serializedWrite(scopedKey(userId, chatStatePath(chatId)), async () => {
+    await serializedWrite(scopedKey(userId, path), async () => {
+      if (!isCurrent()) return;
+      const state = await loadChatState(spindle, chatId, userId);
+      if (state.activeTurnPath !== path || !isCurrent()) return;
+      const current = await loadTurnRecord(spindle, path, userId);
+      if (!current || current.plan.key.chatId !== chatId || !isCurrent()) return;
+      const next = change(current);
+      if (!next || !isCurrent()) return;
+      // Preserve history from this exact snapshot without nesting another queued save.
+      const value = recordWithPresentation({ ...next, imageLibrary: mergeImageLibrary(current, next) });
+      await spindle.userStorage.setJson(path, value, { indent: 2, ...(userOptions(userId) ?? {}) });
+      if (isCurrent()) saved = value;
+    });
+  });
+  return saved;
+}
+
 /* ------------------------------------------------------------------ *
  * Character reference portraits (image anchoring).
  * ------------------------------------------------------------------ */

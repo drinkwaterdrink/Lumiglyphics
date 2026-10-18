@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatMessageDTO, SpindleAPI } from "lumiverse-spindle-types";
-import { DEFAULT_CONFIG } from "../../config.js";
+import { DEFAULT_CONFIG, normalizeConfig } from "../../config.js";
 import { emptySingleCharacter, seedSingleCharacter } from "../core/visual-state.js";
 import { compileImagePrompt } from "./images.js";
 import { planTurn } from "./planner.js";
+import { resolveImageTemplate } from "../../shared/image-templates.js";
 
 const message: ChatMessageDTO & { role: "assistant" } = {
   id: "assistant-identity",
@@ -83,6 +84,27 @@ function characterSpindle(captured: { systemMessage: string; rawRequest?: Record
 }
 
 describe("identity propagation", () => {
+  test("ensemble planning snapshots present cast plus persona and keeps offscreen names out of the compiled prompt", async () => {
+    const captured={systemMessage:""};const spindle=characterSpindle(captured);
+    (spindle.personas as any).getActive=async()=>({name:"Josh",description:"red hair, scarred face",title:"Player"});
+    const original=spindle.generate.raw.bind(spindle.generate);
+    (spindle.generate as any).raw=async(request:any)=>{
+      const result=await original(request);const output=JSON.parse((result as any).content);
+      output.scenes[0].cast=["Mira","Jo","Josh"];
+      output.characters.push({name:"Jo",description:"black hair, blue eyes, blue coat"},{name:"Remote",description:"pink hair, gold eyes"});
+      output.cues[0].visibleCharacters=["Mira","Jo","Josh"];output.cues[0].visualDescription="Mira and Jo show Josh the telescope.";
+      return {content:JSON.stringify(output)};
+    };
+    const config=normalizeConfig({...DEFAULT_CONFIG,defaultImageTemplateId:"ensemble"});
+    const result=await planTurn(spindle,{chatId:"chat-1",message,content:"Mira and Jo show Josh the telescope.",previousScene:null,previousContinuity:null,recentMessages:[],config,singleCharacter:emptySingleCharacter(),characterAppearance:{Josh:"brown hair, glasses"}});
+    expect(result.usedFallback).toBe(false);
+    const cue=result.plan.visualCues[0]!;
+    expect(cue.ensembleSubjects?.map(subject=>subject.name)).toEqual(["Mira","Jo","Josh"]);
+    const prompt=compileImagePrompt(config,result.plan.scenes[0]!,cue);
+    expect(prompt).toContain("Josh: brown hair, glasses");expect(prompt).toContain("Jo: black hair");expect(prompt).toContain("Mira: silver hair");
+    expect(prompt).not.toContain("Remote");expect(prompt).not.toContain("red hair");expect(prompt).not.toContain("one visible character");
+    expect(captured.systemMessage).toContain("ensemble pictures use an external scene view");
+  });
   test("feeds card context to the planner and pins the profile identity into image prompts", async () => {
     const captured: { systemMessage: string; rawRequest?: Record<string, unknown> } = { systemMessage: "" };
     const result = await planTurn(characterSpindle(captured), {
@@ -132,6 +154,25 @@ describe("identity propagation", () => {
     expect(prompt).not.toContain("action:");
     expect(prompt).not.toContain("expression:");
     expect(prompt).not.toContain("lantern held high");
+  });
+
+  test("large cast metadata cannot break ordinary portrait planning or silently truncate an ensemble render", async () => {
+    const captured={systemMessage:""};const spindle=characterSpindle(captured);
+    (spindle.personas as any).getActive=async()=>({name:"Josh",description:"brown hair, glasses",title:"Player"});
+    const original=spindle.generate.raw.bind(spindle.generate);
+    (spindle.generate as any).raw=async(request:any)=>{
+      const result=await original(request),output=JSON.parse((result as any).content);
+      const names=Array.from({length:16},(_,i)=>`Cast ${i}`);
+      output.scenes[0].cast=names;output.characters=names.map(name=>({name,description:"black hair, blue eyes"}));
+      return {content:JSON.stringify(output)};
+    };
+    const result=await planTurn(spindle,{chatId:"chat-1",message,content:message.content,previousScene:null,previousContinuity:null,recentMessages:[],config:DEFAULT_CONFIG,singleCharacter:emptySingleCharacter(),characterAppearance:{}});
+    const cue=result.plan.visualCues[0]!,scene=result.plan.scenes[0]!;
+    expect(cue.ensembleSubjects).toHaveLength(16);expect(cue.ensembleOverflow).toBe(1);
+    expect(cue.ensembleSubjects?.some(subject=>subject.name==='Josh')).toBe(true);
+    expect(()=>compileImagePrompt(DEFAULT_CONFIG,scene,cue)).not.toThrow();
+    const config=normalizeConfig({defaultImageTemplateId:'ensemble'});
+    expect(()=>compileImagePrompt(config,scene,{...cue,imageTemplate:resolveImageTemplate(config).template})).toThrow('16-person');
   });
 
   test("carries the frozen identity forward and never re-seeds on later turns", async () => {

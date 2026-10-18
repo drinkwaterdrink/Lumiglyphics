@@ -17,6 +17,7 @@ export function imageDiagnostic(cue: VisualCue | undefined, failed: boolean): Im
     ...(cue?.imageTemplate?.name ? { template: cue.imageTemplate.name.slice(0, 120) } : {}),
     ...(cue?.character ? { subject: cue.character.slice(0, 160) } : {}) };
   if (!cue) return { ...common, status: 'unavailable', explanation: 'This older picture has no resolved subject metadata.' };
+  if (cue.imageTemplate?.subjectMode === 'ensemble') return {...common,status:failed?'generation_failed':'resolved',explanation:'Ensemble scene uses the named visible cast and persona descriptions. Review the prepared cast blocks; character references and single-person portrait reuse are omitted.'};
   if (cue.imageTemplate?.subjectMode !== 'none') {
     if (!cue.character && !cue.characterId) return { ...common, status: 'needs_subject', explanation: 'No person was selected. Choose a named character, or use a no-people template.' };
     if (cue.resolvedIdentity !== undefined && !cue.resolvedIdentity.trim()) return { ...common, status: 'needs_appearance', explanation: 'The selected person has no usable visual description. Supply appearance details for this picture. Another character will not be substituted.' };

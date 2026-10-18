@@ -190,10 +190,9 @@ try {
 
   // Test Advanced Config Draft Preservation on Error
   console.log("Testing Advanced Config Draft Preservation on Error...");
-  const advDetails = page.locator("[data-advanced-settings]");
-  await page.getByRole("tab", { name: "Advanced" }).click();
-
-  const customJsonInput = advDetails.locator('textarea[name="imageParameters"]');
+  await page.getByRole("tab", { name: "Pictures" }).click();
+  const customJsonInput = page.locator('[data-pane="pictures"] textarea[name="imageParameters"]');
+  if (!(await customJsonInput.isVisible())) await page.getByText("Advanced image parameters", { exact: true }).click();
   await customJsonInput.fill('{"steps": 35, "cfg": 7.5}');
 
   // Simulate transport rejection
@@ -385,6 +384,11 @@ try {
 
   // 6A: Mobile Settings Layout
   await mobilePage.goto(`http://127.0.0.1:${server.port}/?settings`);
+  const mobileSection = mobilePage.getByLabel("Settings section", { exact: true });
+  assert.equal(await mobileSection.isVisible(), true, "Mobile settings expose the section selector");
+  await mobileSection.selectOption({ label: "Look" });
+  assert.equal(await mobilePage.locator('[data-pane="look"]').isVisible(), true, "Mobile section selection opens Look");
+  assert.equal(await mobilePage.locator("[data-sample]").isVisible(), true, "Mobile Look retains the local sample");
   const settingsScrollWidth = await mobilePage.evaluate(() => document.documentElement.scrollWidth);
   assert.ok(settingsScrollWidth <= 360, `Settings panel fits mobile width: ${settingsScrollWidth} <= 360`);
 

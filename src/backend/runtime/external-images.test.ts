@@ -13,7 +13,7 @@ function fixture(patch: Record<string, unknown> = {}) {
   const store = new Map<string, any>([
     ["config.json", { ...DEFAULT_CONFIG, parserConnectionId: "cue-helper", imageConnectionId: "cue-images::workflow",
       imageModel: "cue-model", imageParameters: { width: 1024 }, referenceAnchoring: false, systemOneMode: "off",
-      promptPrefix: "CUE_STYLE", negativePrompt: "CUE_NEGATIVE", sceneImageFit: "contain", ...patch }],
+      promptPrefix: "CUE_STYLE", negativePrompt: "CUE_NEGATIVE", sceneImageFit: "contain", reviewImages: false, ...patch }],
     ["chats/c/characters.json", { Mira: "girl, silver hair, green eyes, red coat" }],
   ]);
   const f: any = { sent, planner, images, writes, store, image: async () => ({ imageId: "image", imageUrl: "/api/v1/images/image" }) };
@@ -66,12 +66,47 @@ test("real Cue planner and image compiler use Cue settings and its authoritative
   expect(f.images).toHaveLength(1); expect(f.planner).toHaveLength(1);
 });
 
-test("disabled Cue, disabled generation and a zero budget never call the model or provider", async () => {
-  for (const patch of [{ enabled: false }, { generateImages: false }, { maxImagesPerTurn: 0 }]) {
+test("disabled Cue or disabled generation never calls the model or provider", async () => {
+  for (const patch of [{ enabled: false }, { generateImages: false }]) {
     const f = fixture(patch); await f.service.request(request, "user");
     expect(f.sent.at(-1).result.status).toBe("error");
     expect(f.planner).toEqual([]); expect(f.images).toEqual([]);
   }
+});
+
+test("zero means unlimited for external images as it does in the reader", async () => {
+  const f = fixture({ maxImagesPerTurn: 0 });
+  await f.service.request(request, "user");
+  expect(f.images).toHaveLength(1);
+  expect(f.sent.at(-1).result.status).toBe("ready");
+});
+
+test("external images are held for scoped explicit prompt approval even with the reader closed", async () => {
+  const f = fixture({ reviewImages: true });
+  const running = f.service.request(request, "user");
+  const waitForReview = async () => { for(let i=0;i<200&&!f.sent.some((m:any)=>m.type==='vn_external_image_review');i++)await new Promise(r=>setTimeout(r,1)); };
+  await waitForReview();
+  const review = f.sent.find((m:any)=>m.type==='vn_external_image_review');
+  expect(review?.record.state).toBe("review");
+  expect(f.images).toHaveLength(0);
+  const action = { chatId: "c", requestId: "r", reviewRequestId: review.record.requestId, action: "generate" as const, edits: { prompt: "Mira with silver hair in the cafe", negativePrompt: "blur" } };
+  expect(await f.service.review(action, "other-user")).toBe(false);
+  expect(await f.service.review(action, "user")).toBe(true);
+  await running;
+  expect(f.images).toHaveLength(1);
+  expect(f.images[0].prompt).toBe(action.edits.prompt);
+  expect(f.sent.at(-1).result.status).toBe("ready");
+  expect(f.writes.some((path:string)=>path.endsWith('external-image-history.json'))).toBe(true);
+  expect(await f.service.review(action, "user")).toBe(false);
+});
+
+test("cancelled external reviews cannot be approved or generate later", async () => {
+  const f=fixture({reviewImages:true});const running=f.service.request(request,'user');
+  for(let i=0;i<200&&!f.sent.some((m:any)=>m.type==='vn_external_image_review');i++)await new Promise(r=>setTimeout(r,1));
+  const preview=f.sent.find((m:any)=>m.type==='vn_external_image_review');expect(preview).toBeDefined();
+  f.service.cancel(request,'user');await running;
+  expect(await f.service.review({chatId:'c',requestId:'r',reviewRequestId:preview.record.requestId,action:'generate'},'user')).toBe(false);
+  expect(f.images).toHaveLength(0);
 });
 
 test("traits and pose overrides are rejected before planning; the wrong subject cannot be generated", async () => {
@@ -96,7 +131,7 @@ test("duplicate requests join one operation and cancellation drops a late provid
   f.service.cancel(request, "user");
   release(); await running;
   expect(f.images).toHaveLength(0);
-  expect(f.sent.some((m: any) => m.result.status === "ready")).toBe(false);
+  expect(f.sent.some((m: any) => m.result?.status === "ready")).toBe(false);
   expect(f.writes).toEqual([]);
 });
 
@@ -127,7 +162,7 @@ test("a canceled provider completion cannot publish, and retry uses the current 
   await called;
   f.service.cancel(request, "user");
   release({ imageId: "old", imageUrl: "/api/v1/images/old" }); await running;
-  expect(f.sent.some((m: any) => m.result.status === "ready")).toBe(false);
+  expect(f.sent.some((m: any) => m.result?.status === "ready")).toBe(false);
   f.image = async () => {
     f.store.set("config.json", { ...f.store.get("config.json"), sceneImageFit: "fill" });
     return { imageId: "new", imageUrl: "/api/v1/images/new" };

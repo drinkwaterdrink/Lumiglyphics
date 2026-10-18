@@ -2,7 +2,7 @@ import { CUE_IMAGE_REQUEST, CUE_IMAGE_RESULT, CUE_IMAGE_CANCEL, CUE_IMAGE_FIT, p
   type ImageFit, type CueImageResult } from "../../shared/cue-images.js";
 import type { FrontendRequest } from "../../protocol.js";
 
-export function connectImageBridge(target: EventTarget, chatId: () => string | null, send: (r: FrontendRequest) => void) {
+export function connectImageBridge(target: EventTarget, chatId: () => string | null, send: (r: FrontendRequest) => void, onCancelled?: (chatId: string, requestId: string) => void) {
   const pending = new Map<string, string>();
   const onRequest = (event: Event) => {
     const r = parseImageRequest((event as CustomEvent).detail);
@@ -17,6 +17,7 @@ export function connectImageBridge(target: EventTarget, chatId: () => string | n
     const r = (event as CustomEvent).detail;
     if (!imageIdentity(r) || pending.get(r.requestId) !== r.chatId) return;
     pending.delete(r.requestId);
+    onCancelled?.(r.chatId, r.requestId);
     send({ type: "vn_external_image_cancel", request: r });
   };
   target.addEventListener(CUE_IMAGE_REQUEST, onRequest);
@@ -30,12 +31,20 @@ export function connectImageBridge(target: EventTarget, chatId: () => string | n
   function destroy() {
     target.removeEventListener(CUE_IMAGE_REQUEST, onRequest);
     target.removeEventListener(CUE_IMAGE_CANCEL, onCancel);
-    for (const [requestId, chatId] of pending) send({ type: "vn_external_image_cancel", request: { version: 1, provider: "warp", chatId, requestId } });
-    pending.clear();
+    cancelAll();
+  }
+  function cancelAll() {
+    const requests = [...pending]; pending.clear();
+    for (const [requestId, chatId] of requests) { onCancelled?.(chatId,requestId); send({ type: "vn_external_image_cancel", request: { version: 1, provider: "warp", chatId, requestId } }); }
+  }
+  function cancelRequest(chatId: string, requestId: string) {
+    if (pending.get(requestId) !== chatId) return;
+    pending.delete(requestId);
+    send({type:"vn_external_image_cancel",request:{version:1,provider:"warp",chatId,requestId}});
   }
   function fit(fit: ImageFit) {
     const id = chatId();
     if (id) target.dispatchEvent(new CustomEvent(CUE_IMAGE_FIT, { detail: { version: 1, chatId: id, fit } }));
   }
-  return { result, destroy, fit };
+  return { result, destroy, fit, cancelAll, cancelRequest, owns: (chatId: string, requestId: string) => pending.get(requestId) === chatId };
 }

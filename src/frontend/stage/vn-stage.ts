@@ -297,6 +297,8 @@ export type VnStageErrorSource =
  * true and a reroll callback exists.
  */
 export interface VnStageErrorDetails {
+  /** Stable failure attempt identity, separate from user-visible wording. */
+  failureId?: string;
   message: string;
   /** Raw technical text, shown inside a collapsed "Technical details" disclosure. */
   detail?: string;
@@ -648,6 +650,28 @@ export class VnStage {
 
   getState(): Readonly<VnStageState> {
     return this.state;
+  }
+
+  /** Keep a local unsent reply when only its presentation plan was revised. */
+  restoreReplyDraft(draft: string): void {
+    this.dispatch({ type: "set-draft", draft });
+  }
+
+  private isSuspended = false;
+
+  resume(): void {
+    this.isSuspended = false;
+    if (this.isTyping) this.completeTypewriter();
+    this.render(this.state.phase);
+  }
+
+  /** Freeze the reader before hiding it; reopening loads the saved cursor. */
+  suspend(): void {
+    this.toggleAutoPlay(false);
+    this.toggleSkip(false);
+    this.clearAllTimers();
+    this.resetEffects();
+    this.isSuspended = true;
   }
 
   getElement(): HTMLElement {
@@ -1039,6 +1063,7 @@ export class VnStage {
     }
     const message = error.message.trim() || "The request failed.";
     if (error.source === "image") {
+      if (error.failureId && error.failureId !== this.hostImageError?.failureId) this.dismissedErrors.clear();
       this.hostImageError = { ...error, message };
       this.render(this.state.phase);
       return;
@@ -1049,7 +1074,6 @@ export class VnStage {
 
   async setSceneImage(request: VnSceneImageRequest): Promise<boolean> {
     if (this.destroyed) return false;
-    this.dismissedErrors.clear();
 
     const image: VnSceneImage = {
       url: request.url,
@@ -1761,6 +1785,7 @@ export class VnStage {
   }
 
   private advance(): void {
+    if (this.isSuspended) return;
     if (this.isBacklogOpen || this.dossiers.isOpen()) return;
     if (this.lastSkipStop !== null) {
       this.lastSkipStop = null;
@@ -1834,6 +1859,7 @@ export class VnStage {
   }
 
   private render(previousPhase: VnPhase | null): void {
+    if (this.isSuspended) return;
     const view = selectVnStageView(this.state);
     this.root.dataset.vnMode = this.state.mode;
     this.root.dataset.vnPhase = this.state.phase;

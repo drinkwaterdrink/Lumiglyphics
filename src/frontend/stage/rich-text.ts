@@ -123,6 +123,79 @@ const ALLOWED_ATTRS: Record<string, Set<string>> = {
   mark: new Set(["class", "style"]),
 };
 
+// Story markup is untrusted. Keep a deliberately small CSS language rather
+// than trying to recognize every spelling of CSS functions that can fetch.
+// In particular, no escapes, comments, entities, custom properties, var(),
+// font shorthands or arbitrary classes/font names cross this boundary.
+const NAMED_COLORS = new Set(("aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen transparent currentcolor").split(" "));
+const GENERIC_FONTS = /^(?:serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-serif|ui-sans-serif|ui-monospace|ui-rounded)$/i;
+const TEXT_LENGTH = /^(?:0|-?(?:\d{1,3}(?:\.\d{1,3})?|\.\d{1,3})(?:px|em|rem|%))$/i;
+
+function isTextColor(value: string): boolean {
+  if (NAMED_COLORS.has(value.toLowerCase()) || /^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i.test(value)) return true;
+  const functional = /^(rgb|rgba|hsl|hsla)\(([^()]+)\)$/i.exec(value);
+  if (!functional) return false;
+  const body = functional[2]!.trim();
+  let parts: string[];
+  if (body.includes(",")) {
+    if (body.includes("/")) return false;
+    parts = body.split(",").map((part) => part.trim());
+  } else {
+    const groups = body.split("/");
+    if (groups.length > 2) return false;
+    parts = groups[0]!.trim().split(/\s+/);
+    if (parts.length !== 3) return false;
+    if (groups[1] !== undefined) parts.push(groups[1].trim());
+  }
+  if (parts.length !== 3 && parts.length !== 4) return false;
+  const channel = (part: string, max: number, percentOnly = false) => {
+    if (!/^(?:\d{1,3}(?:\.\d{1,3})?|\.\d{1,3})%?$/.test(part)) return false;
+    const percent = part.endsWith("%");
+    return (!percentOnly || percent) && Number.parseFloat(part) <= (percent ? 100 : max);
+  };
+  const hsl = functional[1]!.toLowerCase().startsWith("hsl");
+  return parts.slice(0, 3).every((part, index) => channel(part, hsl ? 360 : 255, hsl && index > 0))
+    && (parts[3] === undefined || channel(parts[3], 1));
+}
+
+const TEXT_STYLE_VALUES: Record<string, (value: string) => boolean> = {
+  color: isTextColor,
+  "background-color": isTextColor,
+  "text-decoration-color": isTextColor,
+  "font-family": (value) => GENERIC_FONTS.test(value),
+  "font-weight": (value) => /^(?:normal|bold|bolder|lighter|[1-9]00)$/.test(value),
+  "font-style": (value) => /^(?:normal|italic|oblique)$/.test(value),
+  "font-size": (value) => TEXT_LENGTH.test(value) || /^(?:xx-small|x-small|small|medium|large|x-large|xx-large|smaller|larger)$/.test(value),
+  "font-variant": (value) => /^(?:normal|small-caps)$/.test(value),
+  "letter-spacing": (value) => value === "normal" || TEXT_LENGTH.test(value),
+  "word-spacing": (value) => value === "normal" || TEXT_LENGTH.test(value),
+  "line-height": (value) => value === "normal" || TEXT_LENGTH.test(value) || /^(?:\d{1,2}(?:\.\d{1,3})?|\.\d{1,3})$/.test(value),
+  "text-decoration": (value) => /^(?:none|(?:underline|overline|line-through)(?: (?:underline|overline|line-through))*)$/.test(value),
+  "text-decoration-line": (value) => /^(?:none|(?:underline|overline|line-through)(?: (?:underline|overline|line-through))*)$/.test(value),
+  "text-decoration-style": (value) => /^(?:solid|double|dotted|dashed|wavy)$/.test(value),
+  "text-transform": (value) => /^(?:none|capitalize|uppercase|lowercase)$/.test(value),
+  "vertical-align": (value) => /^(?:baseline|sub|super|text-top|text-bottom|middle|top|bottom)$/.test(value) || TEXT_LENGTH.test(value),
+  "text-shadow": (value) => value === "none" || value.split(",").every((shadow) => {
+    const parts = shadow.trim().split(/\s+/);
+    if (isTextColor(parts[0] ?? "")) parts.shift();
+    else if (isTextColor(parts.at(-1) ?? "")) parts.pop();
+    return parts.length >= 2 && parts.length <= 3 && parts.every((part) => TEXT_LENGTH.test(part));
+  }),
+};
+
+function sanitizeTextStyle(style: string): string {
+  return style.split(";").flatMap((declaration) => {
+    const match = /^\s*([a-z-]+)\s*:\s*([^:]+?)\s*$/i.exec(declaration);
+    if (!match) return [];
+    const property = match[1]!.toLowerCase();
+    const value = match[2]!.trim();
+    // Reject syntax outside this tiny grammar before property validation.
+    if (/[^a-z\d#.%+\-(),\/\s]/i.test(value) || /\/\*|\*\//.test(value)) return [];
+    const validate = Object.hasOwn(TEXT_STYLE_VALUES, property) ? TEXT_STYLE_VALUES[property] : undefined;
+    return validate?.(value) ? [`${property}:${value}`] : [];
+  }).join(";");
+}
+
 /**
  * Safely restore allowed HTML tags and sanitize their attributes.
  * Prevents XSS (scripts, event handlers, javascript: URIs, untrusted tags).
@@ -162,17 +235,21 @@ function sanitizeAndRestoreAllowedHtml(escapedText: string): string {
       let val = match[2] ?? match[3] ?? match[4] ?? "";
 
       if (attrName === "style") {
-        // Disallow dangerous CSS expressions or url imports
-        if (/javascript:|expression\(|url\(|behavior:|vbscript:/i.test(val)) {
-          continue;
-        }
-        val = val.replace(/"/g, "&quot;");
+        val = sanitizeTextStyle(val);
+        if (!val) continue;
       } else if (attrName === "data-vn-text-fx") {
         // Only catalogue ids; anything else drops the attribute.
         val = val.trim().toLowerCase();
         if (!isTextEffectId(val)) continue;
-      } else if (attrName === "class" || attrName === "face" || attrName === "color" || attrName === "size") {
-        val = val.replace(/[^a-zA-Z0-9_#.,\s-]/g, "");
+      } else if (attrName === "class") {
+        val = val.split(/\s+/).filter((token) => token === "vn-transmission").join(" ");
+        if (!val) continue;
+      } else if (attrName === "face") {
+        if (!GENERIC_FONTS.test(val)) continue;
+      } else if (attrName === "color") {
+        if (!isTextColor(val)) continue;
+      } else if (attrName === "size") {
+        if (!/^[+-]?[1-7]$/.test(val)) continue;
       }
 
       safeAttrs.push(`${attrName}="${val}"`);

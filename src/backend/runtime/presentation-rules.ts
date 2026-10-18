@@ -22,7 +22,7 @@ export function applyTemplatePreferences(plan:TurnPlan,config:VisualNovelConfig,
   const location=normalize(scene.environment.location),before=normalize(prior?.environment.location);
   const identity=resolveTemplateIdentity(scene,cue,appearances);
   const usable=Boolean(identity.name&&isUsableIdentity(identity.name,splitTags(identity.identity)));
-  const enabled=config.imageTemplates.filter(t=>t.enabled&&(t.subjectMode==='none'||usable));
+  const enabled=config.imageTemplates.filter(t=>t.enabled&&(t.subjectMode!=='one'||usable));
   const decision=evaluatePresentationRules({isDialogue:Boolean(plan.paragraphSpeakers[cue.paragraphIndex]?.trim()),locationChanged:Boolean(location&&before&&location!==before&&first.get(sceneKey(cue))===cue.cueId),templateId:cue.imageTemplate.id,enabledTemplateIds:enabled.map(t=>t.id)},rules);
   if(!decision.matchedRuleIds.length&&!diagnostics.length)return cue;
   const target=enabled.find(t=>t.id===decision.preferredTemplateId);
