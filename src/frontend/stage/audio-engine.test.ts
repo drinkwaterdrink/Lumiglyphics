@@ -72,6 +72,34 @@ describe("AudioEngine", () => {
     clock = new FakeClock();
   });
 
+  test('music attenuation survives fades, restores the same track and never changes sound effects',()=>{
+    const engine=new AudioEngine({bgmVolume:.8,sfxVolume:.6,crossfadeDuration:50,audioFactory:playerFactory,now:clock.now,setInterval:clock.setInterval,clearInterval:clock.clearInterval});
+    engine.playBgm('theme.mp3');clock.tick(25);const track=createdPlayers[0]!;track.currentTime=123;
+    (engine as any).setBgmAttenuation(0);expect(track.volume).toBe(0);clock.tick(100);expect(track.volume).toBe(0);
+    engine.playSfx('bell.mp3');expect(createdPlayers[1]!.volume).toBe(.6);
+    (engine as any).setBgmAttenuation(.35);expect(track.volume).toBeCloseTo(.28);
+    (engine as any).setBgmAttenuation(1);expect(track.volume).toBe(.8);expect(track.currentTime).toBe(123);expect(engine.getBgmVolume()).toBe(.8);expect(createdPlayers).toHaveLength(2);engine.destroy();
+  });
+
+  test('music caps cover all outgoing crossfades and cannot override global mute',()=>{
+    const engine=new AudioEngine({bgmVolume:.8,crossfadeDuration:100,audioFactory:playerFactory,now:clock.now,setInterval:clock.setInterval,clearInterval:clock.clearInterval});
+    engine.playBgm('one');clock.tick(25);engine.playBgm('two');clock.tick(25);engine.playBgm('three');
+    (engine as any).setBgmAttenuation(0);expect(createdPlayers.every(p=>p.volume===0)).toBe(true);clock.tick(200);expect(createdPlayers.every(p=>p.volume===0)).toBe(true);
+    engine.setBgmVolume(0);(engine as any).setBgmAttenuation(1);expect(createdPlayers.every(p=>p.volume===0)).toBe(true);engine.stopAll();expect(createdPlayers.every(p=>p.paused)).toBe(true);
+  });
+
+  test('changing global volume during a fade cannot later escape its ceiling',()=>{
+    const engine=new AudioEngine({bgmVolume:.8,crossfadeDuration:100,audioFactory:playerFactory,now:clock.now,setInterval:clock.setInterval,clearInterval:clock.clearInterval});
+    engine.playBgm('theme');clock.tick(25);engine.setBgmVolume(0);clock.tick(150);expect(createdPlayers[0]!.volume).toBe(0);
+    engine.setBgmVolume(.4);expect(createdPlayers[0]!.volume).toBe(.4);engine.destroy();
+  });
+
+  test('raising global volume from zero during a fade restores the live configured volume',()=>{
+    const engine=new AudioEngine({bgmVolume:0,crossfadeDuration:100,audioFactory:playerFactory,now:clock.now,setInterval:clock.setInterval,clearInterval:clock.clearInterval});
+    engine.playBgm('theme');clock.tick(25);engine.setBgmVolume(.8);clock.tick(150);expect(createdPlayers[0]!.volume).toBe(.8);
+    engine.setBgmAttenuation(.35);expect(createdPlayers[0]!.volume).toBeCloseTo(.28);engine.destroy();
+  });
+
   test("initializes with default or custom volumes and clamps values", () => {
     const engine = new AudioEngine({
       audioFactory: playerFactory,

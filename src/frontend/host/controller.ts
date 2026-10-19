@@ -222,6 +222,11 @@ function paragraphEffectIntensity(view:TurnView,index:number,global:VisualNovelE
  return global==='off'||cap==='off'?'off':global==='gentle'||cap==='gentle'?'gentle':'full';
 }
 
+export function musicAttenuationForParagraph(view:TurnView|null,index:number):number {
+ if(!view||view.musicLimits?.length!==view.paragraphs.length)return 1;
+ return view.musicLimits[index]==='mute'?0:view.musicLimits[index]==='quiet'?.35:1;
+}
+
 /** The validated ambient effect for a paragraph, as a spreadable object. */
 export function ambientForParagraph(
   view: TurnView,
@@ -502,6 +507,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   let currentBgm: string | null = null;
   let turnOpeningBgm: string | null = null;
   function syncAudioForParagraph(activeTurn: TurnView, paragraphIndex: number): void {
+    audioEngine.setBgmAttenuation(musicAttenuationForParagraph(activeTurn,paragraphIndex));
     if (!activeTurn.audioCues || activeTurn.audioCues.length === 0) return;
     const cue = activeTurn.audioCues.find((c) => c.paragraphIndex === paragraphIndex);
     if (!cue) return;
@@ -548,6 +554,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       panels.setCursor(paragraphIndex);
       syncSpeechCursor(turn, paragraphIndex);
       audioEngine.stopAll();
+      audioEngine.setBgmAttenuation(musicAttenuationForParagraph(turn,paragraphIndex));
       const earlierMusic = turn?.audioCues?.filter((cue) => cue.paragraphIndex <= paragraphIndex && (cue.bgmUrl || cue.bgm))
         .sort((a, b) => b.paragraphIndex - a.paragraphIndex)[0];
       currentBgm = earlierMusic?.bgmUrl || earlierMusic?.bgm || turnOpeningBgm;
@@ -996,6 +1003,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     const recovering = decision.kind === "same-turn" && (stage.getState().phase === "planning" || stage.getState().phase === "error");
     if (decision.kind === "same-turn" && !recovering) {
       stage.setReferenceHistory(next.referenceHistory);
+      audioEngine.setBgmAttenuation(musicAttenuationForParagraph(next,decision.paragraphIndex));
       loadedReadingCursor.load(next);
       // Identical cursor identity: SpeechController treats this as a no-op, so
       // a same-turn rebroadcast (e.g. an image/asset update) never replays speech.
@@ -1022,6 +1030,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
     if (restored !== null || previewCursor!==null) speech.setCursor(speechCursorFor(next, cursor), { autoplay: false }); else syncSpeechCursor(next, 0);
     void syncImageForParagraph(cursor);
+    audioEngine.setBgmAttenuation(musicAttenuationForParagraph(next,cursor));
     if (restored === null && previewCursor===null) syncAudioForParagraph(next, 0);
   }
 

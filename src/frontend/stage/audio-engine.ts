@@ -86,6 +86,8 @@ export interface AudioEngineOptions {
 }
 
 interface ActiveBgm {
+  /** Fade envelope independent of global music volume and presentation attenuation. */
+  gain: number;
   player: AudioPlayerElement;
   src: string;
   fadeTimer?: TimerHandle | undefined;
@@ -95,6 +97,8 @@ const DEFAULT_CROSSFADE_DURATION_MS = 1500;
 
 export class AudioEngine {
   private bgmVolume: number;
+  private bgmAttenuation=1;
+  private readonly bgmTracks=new Set<ActiveBgm>();
   private sfxVolume: number;
   private readonly crossfadeDuration: number;
   private readonly audioFactory: AudioFactory;
@@ -122,9 +126,18 @@ export class AudioEngine {
 
   setBgmVolume(volume: number): void {
     this.bgmVolume = Math.max(0, Math.min(1, volume));
-    if (this.activeBgm && !this.activeBgm.fadeTimer) {
-      this.activeBgm.player.volume = this.bgmVolume;
-    }
+    for(const item of this.bgmTracks)this.setTrackVolume(item,item===this.activeBgm&&item.fadeTimer===undefined?1:item.gain);
+  }
+
+  /** Presentation-only gain: keep the track and its playback position. */
+  setBgmAttenuation(factor:number):void {
+    this.bgmAttenuation=Number.isFinite(factor)?Math.max(0,Math.min(1,factor)):1;
+    for(const item of this.bgmTracks)this.setTrackVolume(item,item.gain);
+  }
+
+  private setTrackVolume(item:ActiveBgm,gain:number):void {
+    item.gain=Math.max(0,Math.min(1,gain));
+    item.player.volume=item.gain*this.bgmVolume*this.bgmAttenuation;
   }
 
   getSfxVolume(): number {
@@ -162,7 +175,7 @@ export class AudioEngine {
       if (this.activeBgm.player.paused) {
         this.activeBgm.player.play().catch(() => {});
       }
-      this.fadeVolume(this.activeBgm, this.bgmVolume, duration);
+      this.fadeVolume(this.activeBgm, 1, duration);
       return;
     }
 
@@ -177,14 +190,15 @@ export class AudioEngine {
     player.loop = true;
     player.volume = 0;
 
-    const bgm: ActiveBgm = { player, src: cleanSrc };
+    const bgm: ActiveBgm = { player, src: cleanSrc, gain:0 };
+    this.bgmTracks.add(bgm);
     this.activeBgm = bgm;
 
     player.play().catch(() => {
       // Browser autoplay policy or headless stub error
     });
 
-    this.fadeVolume(bgm, this.bgmVolume, duration);
+    this.fadeVolume(bgm, 1, duration);
   }
 
   /**
@@ -235,16 +249,10 @@ export class AudioEngine {
    * Stop all audio immediately.
    */
   stopAll(): void {
-    if (this.activeBgm) {
-      this.clearFade(this.activeBgm);
-      this.activeBgm.player.pause();
-      this.activeBgm = null;
-    }
-    if (this.outgoingBgm) {
-      this.clearFade(this.outgoingBgm);
-      this.outgoingBgm.player.pause();
-      this.outgoingBgm = null;
-    }
+    for(const item of this.bgmTracks){this.clearFade(item);item.player.pause();}
+    this.bgmTracks.clear();
+    this.activeBgm = null;
+    this.outgoingBgm = null;
     for (const sfx of this.activeSfx) {
       sfx.pause();
     }
@@ -266,11 +274,11 @@ export class AudioEngine {
   private fadeVolume(item: ActiveBgm, targetVolume: number, durationMs: number): void {
     this.clearFade(item);
     if (durationMs <= 0) {
-      item.player.volume = targetVolume;
+      this.setTrackVolume(item,targetVolume);
       return;
     }
 
-    const startVolume = item.player.volume;
+    const startVolume = item.gain;
     const startTime = this.now();
     const intervalMs = 25;
 
@@ -278,11 +286,11 @@ export class AudioEngine {
       const elapsed = this.now() - startTime;
       const progress = Math.min(1, elapsed / durationMs);
       const newVolume = startVolume + (targetVolume - startVolume) * progress;
-      item.player.volume = Math.max(0, Math.min(1, newVolume));
+      this.setTrackVolume(item,newVolume);
 
       if (progress >= 1) {
         this.clearFade(item);
-        item.player.volume = targetVolume;
+        this.setTrackVolume(item,targetVolume);
       }
     }, intervalMs);
   }
@@ -293,11 +301,12 @@ export class AudioEngine {
 
     if (durationMs <= 0) {
       item.player.pause();
+      this.bgmTracks.delete(item);
       if (this.outgoingBgm === item) this.outgoingBgm = null;
       return;
     }
 
-    const startVolume = item.player.volume;
+    const startVolume = item.gain;
     const startTime = this.now();
     const intervalMs = 25;
 
@@ -305,11 +314,12 @@ export class AudioEngine {
       const elapsed = this.now() - startTime;
       const progress = Math.min(1, elapsed / durationMs);
       const newVolume = startVolume * (1 - progress);
-      item.player.volume = Math.max(0, Math.min(1, newVolume));
+      this.setTrackVolume(item,newVolume);
 
       if (progress >= 1) {
         this.clearFade(item);
         item.player.pause();
+        this.bgmTracks.delete(item);
         if (this.outgoingBgm === item) this.outgoingBgm = null;
       }
     }, intervalMs);

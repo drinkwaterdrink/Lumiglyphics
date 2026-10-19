@@ -73,6 +73,8 @@ test('turn views transport scoped effect caps and ignore misaligned optional arr
  const saved={schemaVersion:1,speaker:'Mira',status:'ready',plan:{...plan,effectLimits:['off']},jobs:[],updatedAt:now} as StoredTurnRecord;
  expect(turnView(saved).effectLimits).toEqual(['off']);
  expect(turnView({...saved,plan:{...plan,effectLimits:['off','gentle']}}).effectLimits).toBeUndefined();
+ expect(turnView({...saved,plan:{...plan,musicLimits:['quiet']}}).musicLimits).toEqual(['quiet']);
+ expect(turnView({...saved,plan:{...plan,musicLimits:['quiet','mute']}}).musicLimits).toBeUndefined();
 });
 
 function generatedJob(): AssetJob {

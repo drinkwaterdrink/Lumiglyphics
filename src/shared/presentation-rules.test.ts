@@ -3,6 +3,16 @@ import {PresentationRuleDocumentSchema,PresentationRuleRequestSchema,Presentatio
 const rule=(id:string,scope:'user'|'chat',priority=50,savedOrder=1,templateId='portrait'):PresentationRule=>({id,name:id,scope,enabled:true,priority,savedOrder,when:{kind:'dialogue'},then:{kind:'prefer_template',templateId}});
 const input={isDialogue:true,locationChanged:false,templateId:'action',enabledTemplateIds:['portrait','environment','action']};
 
+test('music preferences validate and resolve independently from template and effect actions',()=>{
+ const music={...rule('music','chat'),then:{kind:'limit_music',level:'quiet'}} as any;
+ const {scope,savedOrder,...draft}=music;expect(PresentationRuleDraftSchema.safeParse(draft).success).toBe(true);
+ const effect={...rule('effects','chat'),then:{kind:'limit_effects',intensity:'off'}} as any;
+ const decision=evaluatePresentationRules(input,[rule('image','chat'),effect,music]) as any;
+ expect(decision.preferredTemplateId).toBe('portrait');expect(decision.effectIntensity).toBe('off');expect(decision.musicLevel).toBe('quiet');
+ expect((evaluatePresentationRules(input,[{...music,scope:'user',priority:100,then:{kind:'limit_music',level:'mute'}},music]) as any).musicLevel).toBe('quiet');
+ expect(PresentationRuleDraftSchema.safeParse({...draft,then:{kind:'limit_music',level:'loud'}}).success).toBe(false);
+});
+
 test('effect limits validate and resolve independently of template choices',()=>{
  const cap={...rule('cap','chat'),then:{kind:'limit_effects',intensity:'off'}} as any;
  expect(PresentationRuleDraftSchema.safeParse({id:cap.id,name:cap.name,enabled:true,priority:50,when:cap.when,then:cap.then}).success).toBe(true);

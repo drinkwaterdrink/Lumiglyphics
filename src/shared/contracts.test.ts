@@ -82,6 +82,8 @@ function plan(): TurnPlan {
 
 describe("shared contracts", () => {
   test('invalid optional effect caps cannot block a valid saved story',()=>{
+    expect(TurnPlanSchema.parse({...plan(),musicLimits:['quiet']}).musicLimits).toEqual(['quiet']);
+    expect(TurnPlanSchema.parse({...plan(),musicLimits:{version:99}}).musicLimits).toBeUndefined();
     expect(TurnPlanSchema.parse({...plan(),effectLimits:['gentle']}).effectLimits).toEqual(['gentle']);
     expect(TurnPlanSchema.parse({...plan(),effectLimits:{version:99}}).effectLimits).toBeUndefined();
     expect(TurnPlanSchema.parse({...plan(),effectLimits:['full']}).effectLimits).toBeUndefined();

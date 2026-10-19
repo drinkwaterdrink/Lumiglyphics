@@ -43,6 +43,14 @@ const draft=(id='r',templateId='portrait')=>({id,name:'Portrait dialogue',enable
 function fixture(){const data=new Map<string,any>();const writes:string[]=[];const api={userStorage:{getJson:async(p:string,o:any)=>structuredClone(data.get(o.userId+':'+p)??o.fallback),setJson:async(p:string,v:any,o:any)=>{writes.push(o.userId+':'+p);data.set(o.userId+':'+p,structuredClone(v));}},chats:{get:async()=>({})}} as any;return {api,data,writes};}
 const save=(scope:'user'|'chat',rule=draft(),expectedRevision=0)=>({type:'vn_presentation_rules' as const,version:1 as const,requestId:'request',chatId:'chat',action:'save' as const,scope,rule,expectedRevision});
 
+test('music preferences apply to paragraphs without image or audio cues and preserve planned tracks',async()=>{
+ const plan={paragraphs:[{text:'A'},{text:'B'}],paragraphSpeakers:['Mira',null],scenes:[{sceneId:'s',revision:0,startParagraph:0,environment:{location:'Library'},cast:[]}],visualCues:[],audioCues:[{paragraphIndex:0,bgm:'theme',sfx:'bell'}]} as any;
+ const music={...draft('music'),scope:'chat',savedOrder:1,then:{kind:'limit_music',level:'mute'}} as any;
+ const before=JSON.stringify(plan),result=applyTemplatePreferences(plan,DEFAULT_CONFIG,[music],null,{});
+ expect((result as any).musicLimits).toEqual(['mute',null]);expect(result.audioCues).toEqual(plan.audioCues);expect(JSON.stringify(plan)).toBe(before);
+ const f=fixture();const {scope,savedOrder,...command}=music;expect((await managePresentationRules(f.api,save('chat',command),'alice')).chat!.rules[0]!.then.kind).toBe('limit_music');
+});
+
 test('effect limits apply without picture slots and preserve original effects, audio and images',async()=>{
  const plan={paragraphs:[{text:'Hello.'},{text:'Quiet reply.'},{text:'Silence.'}],paragraphSpeakers:['Mira','Mira',null],scenes:[{sceneId:'s',revision:0,startParagraph:0,environment:{location:'Library'},cast:[]}],visualCues:[],effectCues:[{paragraphIndex:1,effect:'flash_white'}],audioCues:[{paragraphIndex:0,bgm:'theme',sfx:null}]} as any;
  const cap={...draft('quiet'),scope:'chat',savedOrder:1,then:{kind:'limit_effects',intensity:'gentle'}} as any;

@@ -41,7 +41,7 @@ export function applyTemplatePreferences(plan:TurnPlan,config:VisualNovelConfig,
   const summary=[outcome,...diagnostics,...decision.diagnostics,...(!usable&&decision.matchedRuleIds.some(id=>rules.some(r=>r.id===id&&config.imageTemplates.some(t=>r.then.kind==='prefer_template'&&t.id===r.then.templateId&&t.subjectMode==='one')))?['Character preferences need a usable identity; existing subject guidance was kept.']:[])].join('\n').slice(0,4000);
   return {...cue,...(target?{imageTemplate:templateSnapshot(target),imageTemplateReason:`Saved preference: ${target.name}`.slice(0,300)}:{}),presentationRuleTrace:{matchedRuleIds:decision.matchedRuleIds,summary}};
  };
- const effectRules=rules.filter(rule=>rule.then.kind==='limit_effects');
+ const effectRules=rules.filter(rule=>rule.then.kind==='limit_effects'||rule.then.kind==='limit_music');
  const effectDecisions=effectRules.length?plan.paragraphs.map((_,paragraphIndex)=>{
   const scene=[...plan.scenes].reverse().find(s=>s.startParagraph<=paragraphIndex);
   const cue=[...plan.visualCues,...(plan.cacheCues??[])].find(c=>c.paragraphIndex===paragraphIndex);
@@ -52,15 +52,17 @@ export function applyTemplatePreferences(plan:TurnPlan,config:VisualNovelConfig,
   return evaluatePresentationRules({isDialogue:Boolean(plan.paragraphSpeakers[paragraphIndex]?.trim()),locationChanged:Boolean(scene&&scene.startParagraph===paragraphIndex&&normalize(scene.environment.location)&&normalize(prior?.environment.location)&&normalize(scene.environment.location)!==normalize(prior?.environment.location)),templateId:cue?.imageTemplate?.id??'',enabledTemplateIds:[],subjects},effectRules);
  }):[];
  const effectLimits=effectDecisions.map(decision=>decision.effectIntensity??null);
+ const musicLimits=effectDecisions.map(decision=>decision.musicLevel??null);
  const decorate=(cue:VisualCue)=>{
   const next=apply(cue),decision=effectDecisions[cue.paragraphIndex];
-  if(!decision?.effectIntensity)return next;
-  const rule=effectRules.find(r=>r.id===decision.selectedEffectRuleId&&r.scope===decision.selectedEffectScope)!;
+  if(!decision?.effectIntensity&&!decision?.musicLevel)return next;
+  const rule=effectRules.find(r=>r.id===decision.selectedEffectRuleId&&r.scope===decision.selectedEffectScope);
+  const musicRule=effectRules.find(r=>r.id===decision.selectedMusicRuleId&&r.scope===decision.selectedMusicScope);
   const trace=next.presentationRuleTrace;
-  return {...next,presentationRuleTrace:{matchedRuleIds:[...new Set([...(trace?.matchedRuleIds??[]),...decision.matchedRuleIds])].slice(0,24),summary:[trace?.summary,`Effects: ${decision.effectIntensity} from ${rule.name} (${rule.scope==='chat'?'this chat':'all chats'}). Global and OS comfort settings remain authoritative.`].filter(Boolean).join('\n').slice(0,4000)}};
+  return {...next,presentationRuleTrace:{matchedRuleIds:[...new Set([...(trace?.matchedRuleIds??[]),...decision.matchedRuleIds])].slice(0,24),summary:[trace?.summary,rule?`Effects: ${decision.effectIntensity} from ${rule.name} (${rule.scope==='chat'?'this chat':'all chats'}). Global and OS comfort settings remain authoritative.`:null,musicRule?`Music: ${decision.musicLevel} from ${musicRule.name} (${musicRule.scope==='chat'?'this chat':'all chats'}). Saved volume remains the maximum; speech and sound effects are unchanged.`:null].filter(Boolean).join('\n').slice(0,4000)}};
  };
- const {effectLimits:oldLimits,...base}=plan;
- return {...base,...(effectLimits.some(Boolean)?{effectLimits}:{}),visualCues:plan.visualCues.map(decorate),...(plan.cacheCues?{cacheCues:plan.cacheCues.map(decorate)}:{})};
+ const {effectLimits:oldLimits,musicLimits:oldMusicLimits,...base}=plan;
+ return {...base,...(effectLimits.some(Boolean)?{effectLimits}:{}),...(musicLimits.some(Boolean)?{musicLimits}:{}),visualCues:plan.visualCues.map(decorate),...(plan.cacheCues?{cacheCues:plan.cacheCues.map(decorate)}:{})};
 }
 
 /** Optional storage must never hold scene preparation open indefinitely. */

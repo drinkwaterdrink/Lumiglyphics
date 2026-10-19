@@ -9,6 +9,7 @@ import {
   currentAssetFailure,
   decideTurnApplication,
   nameplateForParagraph,
+  musicAttenuationForParagraph,
   relayReferenceFetch,
   sameTurnIdentity,
   selectCurrentImage,
@@ -20,6 +21,14 @@ import {
 import type { AssetView, TurnView } from "../../protocol.js";
 import { REFERENCE_IMAGE_MAX_BYTES } from "../../protocol.js";
 import type { FrontendRequest } from "../../protocol.js";
+
+test('music attenuation ignores missing/misaligned metadata and never amplifies saved volume',()=>{
+ const view={paragraphs:['A','B','C'],musicLimits:['quiet','mute',null]} as TurnView;
+ expect([0,1,2].map(i=>musicAttenuationForParagraph(view,i))).toEqual([.35,0,1]);
+ expect(musicAttenuationForParagraph(null,0)).toBe(1);
+ expect(musicAttenuationForParagraph({...view,musicLimits:['quiet']},0)).toBe(1);
+ expect(musicAttenuationForParagraph({...view,musicLimits:['loud',null,null] as any},0)).toBe(1);
+});
 
 test("image errors follow the reading cursor without revealing future failures", () => {
   const assets: AssetView[] = [

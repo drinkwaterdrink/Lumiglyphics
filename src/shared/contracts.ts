@@ -336,6 +336,7 @@ export const TurnPlanSchema = z.object({
   effectCues: z.array(EffectCueSchema).optional(),
   // Optional presentation caps never invalidate primary saved story state.
   effectLimits: z.array(z.enum(['gentle','off']).nullable()).max(10000).optional().catch(undefined),
+  musicLimits: z.array(z.enum(['quiet','mute']).nullable()).max(10000).optional().catch(undefined),
   choices: z.array(ChoiceSchema).default([]),
   initialContinuity: ContinuityStateSchema,
   continuityDeltas: z.array(IndexedContinuityDeltaSchema).default([]),
