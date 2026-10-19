@@ -1,6 +1,6 @@
 {
   "name": "lumiglyphics",
-  "version": "0.2.0-beta.45",
+  "version": "0.2.0-beta.46",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.0",
@@ -18,6 +18,7 @@
     "test:preparation-preview": "bun run ./scripts/test-preparation-preview-browser.ts",
     "test:image-inspector": "bun run ./scripts/test-image-inspector-browser.ts",
     "test:reader-reference-workspace": "bun run ./scripts/test-reader-reference-workspace-browser.ts",
+    "test:reference-retention": "bun run ./scripts/test-reference-retention-browser.ts",
     "test:story-css": "bun run ./scripts/test-story-css-browser.ts",
     "test:validation-sandbox": "bun test --preload ./scripts/validation-sandbox-preload.ts src/shared/contracts.test.ts src/backend/runtime/storage.test.ts src/backend/runtime/controller.test.ts",
     "test:error-notices": "bun run ./scripts/test-error-notices-browser.ts",

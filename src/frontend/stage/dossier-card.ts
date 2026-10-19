@@ -5,7 +5,7 @@ import type {InteractionDraft,DraftMergeMode} from '../../shared/scene-interacti
 import {entityOverride,type ReferenceKind,type referenceEntries,type ReaderDossier,type TooltipPreferences} from '../../shared/dossiers.js';
 import {referenceFieldInfo,REFERENCE_FIELD_GROUPS} from '../../shared/reference-fields.js';
 export class DossierCard {
- readonly host=document.createElement('div');private returnFocus:HTMLElement|null=null;private trayReturn:(()=>void)|null=null;private query='';private category:ReferenceKind='all';
+ readonly host=document.createElement('div');private returnFocus:HTMLElement|null=null;private trayReturn:(()=>void)|null=null;private query='';private category:ReferenceKind='all';private scope='all';
  constructor(mount:HTMLElement,private closeCallback:()=>void,private update:(entity:ReaderDossier['entity'],patch:{suppressed?:boolean;pinned?:boolean;note?:string})=>boolean,private documentState:(open:boolean)=>void=()=>{}) {
   this.host.dataset.vnDossier='';this.host.hidden=true;
   this.host.addEventListener('click',event=>{event.stopPropagation();if(event.target===this.host)this.close();});
@@ -32,6 +32,7 @@ export class DossierCard {
   if(this.trayReturn){const back=document.createElement('button');back.type='button';back.textContent='‹';back.title='Back to references';back.setAttribute('aria-label','Back to references');back.onclick=()=>this.trayReturn?.();header.insertBefore(back,title);}
   const type=document.createElement('small');type.dataset.referenceKind='';type.textContent=`${dossier.entity.kind==='npc'?'Character':dossier.entity.kind==='place'?'Location':'Item'} · Established story information`;panel.append(type);
   const facts=dossier.facts.filter(f=>f.value.trim()&&prefs.fieldGroups[referenceFieldInfo(f.field).section]!==false);
+  const earlier=prefs.rememberReferences?(dossier.earlier??[]).filter(e=>prefs.fieldGroups[referenceFieldInfo(e.reference.field).section]!==false):[];
   const lasting=facts.filter(f=>!referenceFieldInfo(f.field).living);
   const overview=lasting.filter(f=>['overview','identity'].includes(referenceFieldInfo(f.field).section)).slice(0,2);
   if(!overview.length&&lasting.length)overview.push(lasting[0]!);
@@ -48,7 +49,12 @@ export class DossierCard {
   for(const group of REFERENCE_FIELD_GROUPS){const grouped=lasting.filter(f=>referenceFieldInfo(f.field).section===group.id&&!overview.includes(f));if(!grouped.length)continue;
    const section=document.createElement('details'),summary=document.createElement('summary'),list=document.createElement('dl');section.dataset.referenceSection=group.id;summary.textContent=group.label;for(const fact of grouped)appendFact(list,fact.field,fact.value);section.append(summary,list);panel.append(section);
   }
-  if(!facts.length&&!current.size){const p=document.createElement('p');p.dataset.referenceEmpty='';p.textContent='No additional information is available with these display settings.';panel.append(p);}
+  if(earlier.length){
+   const section=document.createElement('details'),summary=document.createElement('summary'),help=document.createElement('p');section.dataset.referenceEarlier='';summary.textContent=`Earlier in this story · ${earlier.length}`;help.textContent='Descriptions from earlier verified replies. Current scene state is shown separately.';section.append(summary,help);section.open=!facts.length&&!current.size;
+   for(const entry of earlier){const list=document.createElement('dl');appendFact(list,entry.reference.field,entry.reference.value);const source=document.createElement('details'),label=document.createElement('summary'),quote=document.createElement('blockquote');label.textContent=`Reply ${entry.replyNumber} · paragraph ${entry.reference.paragraphIndex+1}`;quote.textContent=entry.reference.evidence;source.dataset.earlierSource='';source.append(label,quote);section.append(list,source);}
+   panel.append(section);
+  }
+  if(!facts.length&&!current.size&&!earlier.length){const p=document.createElement('p');p.dataset.referenceEmpty='';p.textContent='No additional information is available with these display settings.';panel.append(p);}
   if(facts.length){const sources=document.createElement('details'),summary=document.createElement('summary'),list=document.createElement('ul');sources.dataset.referenceSources='';summary.textContent='Sources';
    for(const fact of facts){const item=document.createElement('li');item.textContent=`${referenceFieldInfo(fact.field).label} · ${fact.source.provider}${fact.revealedAt?` · revealed paragraph ${fact.revealedAt.paragraphIndex+1}`:''}`;list.append(item);}sources.append(summary,list);panel.append(sources);
   }
@@ -76,21 +82,23 @@ export class DossierCard {
   if(override?.note){const p=document.createElement('p');p.textContent=`Your note: ${override.note}`;panel.append(p);}
   this.host.append(panel);this.host.hidden=false;close.focus();
  }
- openTray(entries:ReturnType<typeof referenceEntries>,trigger:HTMLElement,open:(id:string,trigger:HTMLElement)=>void):void {
-  this.documentState(false);if(!this.isOpen()){this.query='';this.category='all';}
-  this.returnFocus=trigger;this.trayReturn=()=>this.openTray(entries,trigger,open);this.host.replaceChildren();const panel=document.createElement('section');panel.dataset.vnDossierCard='';panel.dataset.vnReferenceSheet='';panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','Scene references');
+ openTray(entries:ReturnType<typeof referenceEntries>,trigger:HTMLElement,open:(id:string,trigger:HTMLElement)=>void,note?:string):void {
+  this.documentState(false);if(!this.isOpen()){this.query='';this.category='all';this.scope='all';}
+  this.returnFocus=trigger;this.trayReturn=()=>this.openTray(entries,trigger,open,note);this.host.replaceChildren();const panel=document.createElement('section');panel.dataset.vnDossierCard='';panel.dataset.vnReferenceSheet='';panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','Scene references');
   const header=document.createElement('header'),title=document.createElement('h2'),close=document.createElement('button');title.textContent='Scene references';close.type='button';close.textContent='×';close.title='Close references';close.setAttribute('aria-label','Close information');close.onclick=()=>this.close();header.append(title,close);panel.append(header);
   const filters=document.createElement('div');filters.dataset.referenceFilters='';
   const search=document.createElement('input');search.type='search';search.maxLength=160;search.placeholder='Find a name…';search.setAttribute('aria-label','Search references');search.value=this.query;
   const category=document.createElement('select');category.setAttribute('aria-label','Reference category');
   for(const [value,label] of [['all','All references'],['npc','NPCs'],['place','Locations'],['object','Items']]){const option=document.createElement('option');option.value=value!;option.textContent=label!;category.append(option);}category.value=this.category;filters.append(search,category);panel.append(filters);
+  const scope=document.createElement('select');scope.setAttribute('aria-label','Reference scope');scope.dataset.referenceScope='';for(const [value,label] of [['all','Reply & earlier'],['reply','This reply']]){const option=document.createElement('option');option.value=value!;option.textContent=label!;scope.append(option);}scope.value=this.scope;scope.hidden=!entries.some(e=>e.entity.id.startsWith('earlier:'));filters.append(scope);
+  if(note){const hint=document.createElement('small');hint.dataset.referenceHistoryNote='';hint.textContent=note;panel.append(hint);}
   const count=document.createElement('p');count.dataset.referenceCount='';count.setAttribute('role','status');const list=document.createElement('div');list.dataset.referenceList='';panel.append(count,list);
-  const render=()=>{this.query=search.value;this.category=category.value as ReferenceKind;list.replaceChildren();
-   const filtered=entries.filter(({entity})=>(this.category==='all'||entity.kind===this.category)&&(!this.query.trim()||[entity.name,...entity.aliases].some(name=>name.toLocaleLowerCase().includes(this.query.trim().toLocaleLowerCase()))));
+  const render=()=>{this.query=search.value;this.category=category.value as ReferenceKind;this.scope=scope.value;list.replaceChildren();
+   const filtered=entries.filter(({entity})=>(this.scope==='all'||!entity.id.startsWith('earlier:'))&&(this.category==='all'||entity.kind===this.category)&&(!this.query.trim()||[entity.name,...entity.aliases].some(name=>name.toLocaleLowerCase().includes(this.query.trim().toLocaleLowerCase()))));
    count.textContent=filtered.length?`${filtered.length} reference${filtered.length===1?'':'s'}`:'No references match. Try another name or category.';
    for(const {entity,pinned,label,current} of filtered){const button=document.createElement('button');button.type='button';button.dataset.referenceCurrent=String(current);button.setAttribute('aria-label',entity.name);button.setAttribute('aria-description',`${pinned?'Pinned. ':''}${label}`);const name=document.createElement('span');name.textContent=entity.name;const detail=document.createElement('small');detail.textContent=`${pinned?'Pinned · ':''}${entity.kind==='npc'?'Character':entity.kind==='place'?'Location':'Item'} · ${label}`;button.append(name,detail);button.onclick=()=>open(entity.id,trigger);list.append(button);}
   };
-  search.oninput=render;category.onchange=render;render();this.host.append(panel);this.host.hidden=false;close.focus();
+  search.oninput=render;category.onchange=render;scope.onchange=render;render();this.host.append(panel);this.host.hidden=false;close.focus();
  }
 
  close():void{this.documentState(false);if(this.host.hidden)return;this.host.hidden=true;this.trayReturn=null;this.query='';this.category='all';const target=this.returnFocus;this.returnFocus=null;if(target?.isConnected)target.focus();else this.host.parentElement?.focus();this.closeCallback();}
@@ -123,6 +131,10 @@ section[data-reference-current] h3,section[data-reference-observations] h3{font-
 [data-reference-sources]{font-size:.8em;margin:12px 0;opacity:.85}
 [data-reference-sources] ul{list-style:none;margin:0;padding:0 0 12px;overflow-wrap:anywhere}
 [data-reference-sources] li+li{margin-top:6px}
+[data-reference-earlier]{border-top:1px solid var(--vn-panel-border,#666);margin-top:16px;padding-top:4px}
+[data-reference-earlier]>p{font-size:.8em;color:var(--vn-muted-text);line-height:1.5;margin:0 0 14px}
+[data-reference-earlier] dl{padding-top:12px}[data-earlier-source]{font-size:.8em;margin-bottom:12px;border-bottom:1px solid var(--vn-panel-border,#666)}
+[data-earlier-source] summary{font-weight:400;color:var(--vn-muted-text)}[data-earlier-source] blockquote{margin:0;padding:0 0 12px;white-space:pre-wrap;overflow-wrap:anywhere}
 [data-reference-actions]{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;padding-top:12px;border-top:1px solid var(--vn-panel-border,#666)}
 [data-reference-actions] button{margin:0;flex:1}
 [data-reference-notes] label{display:block;font-size:.85em}
@@ -130,6 +142,9 @@ section[data-reference-current] h3,section[data-reference-observations] h3{font-
 [data-vn-dossier-card] summary{box-sizing:border-box;cursor:pointer;min-height:44px;padding:12px 0;font-weight:600;line-height:1.4}
 [data-reference-filters]{display:grid;grid-template-columns:minmax(0,1fr) minmax(100px,.65fr);gap:8px;margin:16px 0 8px}
 [data-reference-filters] input,[data-reference-filters] select{box-sizing:border-box;min-width:0;width:100%;min-height:44px;font:inherit;font-size:16px;color:inherit;background:var(--vn-button-bg,#ffffff0d);border:1px solid var(--vn-panel-border,#666);border-radius:9px;padding:8px}
+[data-reference-filters]:has([data-reference-scope]:not([hidden])){grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+[data-reference-filters]:has([data-reference-scope]:not([hidden])) input{grid-column:1 / -1}
+[data-reference-history-note]{font-size:.75em;line-height:1.4;color:var(--vn-muted-text)}
 [data-vn-reference-sheet]{display:flex;flex-direction:column;overflow:hidden}
 [data-vn-reference-sheet] header,[data-reference-filters],[data-reference-count]{flex:none}
 [data-reference-list]{min-height:0;overflow:auto;overscroll-behavior:contain}

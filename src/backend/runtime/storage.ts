@@ -40,6 +40,8 @@ export type StoredTurnRecord = {
   imageLibrary?: unknown;
   /** Versioned projection; unsupported future data is preserved, not reset. */
   presentation?: unknown;
+  /** Optional ancestry certificate; unknown future versions remain saved. */
+  referenceLineage?: unknown;
   schemaVersion: 1;
   correctionRequestIds?: string[];
   imageRecoveryRequestIds?: string[];
@@ -718,6 +720,7 @@ export async function loadTurnRecord(
   return {
     schemaVersion: 1,
     ...(raw.presentation !== undefined ? {presentation:raw.presentation} : {}),
+    ...(raw.referenceLineage !== undefined ? {referenceLineage:raw.referenceLineage} : {}),
     ...(raw.imageLibrary!==undefined?{imageLibrary:raw.imageLibrary}:{}),
     speaker: raw.speaker,
     ...(Array.isArray(raw.correctionRequestIds) ? {correctionRequestIds:raw.correctionRequestIds.filter(id=>typeof id === "string" && id.length <= 100).slice(-32)} : {}),

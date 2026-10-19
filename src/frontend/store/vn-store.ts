@@ -1,4 +1,5 @@
 import type { ReaderPresentation } from "../../shared/presentation-entities.js";
+import type {ReferenceHistory} from '../../shared/reference-history.js';
 export type VnMode = "cyoa" | "standard";
 
 export type VnPhase =
@@ -113,6 +114,7 @@ export interface VnStageState {
 }
 
 export interface VnTurnInput {
+  referenceHistory?:ReferenceHistory;
   presentation?: ReaderPresentation;
   initialParagraphIndex?: number;
   mode: VnMode;

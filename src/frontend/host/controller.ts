@@ -1,5 +1,6 @@
 import {createUiId} from '../request-id.js';
 import {NarrativePreviewSchema} from '../../shared/preparation-preview.js';
+import {referenceHistoryFor} from '../../shared/reference-history.js';
 import { samePresentationTurn } from "../../shared/presentation-entities.js";
 import type { SpindleFrontendContext } from "lumiverse-spindle-types";
 import { restoreReadingPosition, LoadedReadingCursor } from "./reading-position.js";
@@ -242,6 +243,7 @@ export function stageTurnInput(
 ): VnTurnInput {
   const key={chatId:next.chatId,assistantMessageId:next.messageId,swipeId:next.swipeId,sourceFingerprint:next.sourceFingerprint,revision:next.revision};
   const presentation=next.presentation?.snapshots.length===next.paragraphs.length&&next.presentation.snapshots.every((s,i)=>s.at.paragraphIndex===i&&samePresentationTurn(s.at.key,key))?next.presentation:undefined;
+  const referenceHistory=referenceHistoryFor(next.referenceHistory,key);
   return {
     mode,
     paragraphs: next.paragraphs.map((text, index) => ({
@@ -254,6 +256,7 @@ export function stageTurnInput(
     choices: next.choices.map((choice) => ({ id: choice.id, label: choice.label, value: choice.value })),
     preserveImage,
     ...(presentation ? {presentation} : {}),
+    ...(referenceHistory?{referenceHistory}:{}),
     ...(next.ambients !== undefined ? { ambient: firstAmbient(next, intensity) } : {})
   };
 }
@@ -520,6 +523,9 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   let imageLibraryOpen=false;
   let imageStudioOpen=false;
   let preparationActive=false;
+  let invalidatedReferenceTurn:string|null=null;
+  const referenceTurnToken=(value:TurnView)=>JSON.stringify([value.chatId,value.messageId,value.swipeId,value.sourceFingerprint,value.revision]);
+  const withoutReferenceHistory=(value:TurnView):TurnView=>{const {referenceHistory:_,...rest}=value;return rest;};
   const stage = new VnStage({
     mount: app.root,
     themePreset: configRef.current?.themePreset ?? "lumiverse",
@@ -770,7 +776,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   // whether the view opens (autoEnter) or is explicitly closed.
   let bootPending = true;
   let stateRequestId: string | undefined;
-  function requestState(options: { boot?: boolean } = {}): void {
+  function requestState(options: { boot?: boolean;prepare?:boolean } = {}): void {
     const current = chatId();
     // Leaving a chat (home screen, or another chat) closes the previous view
     // explicitly; the backend must not keep paying for a chat nobody is watching.
@@ -780,7 +786,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     lastAnnouncedChatId = current;
     stateRequestId = createUiId();
     for (const message of viewStateMessages(current, options.boot ? undefined : active)) {
-      ctx.sendToBackend(message.type === "vn_get_state" ? { ...message, requestId: stateRequestId } : message);
+      ctx.sendToBackend(message.type === "vn_get_state" ? { ...message, requestId: stateRequestId,...(options.prepare!==undefined?{prepare:options.prepare}:{}) } : message);
     }
     syncGameChoices();
     gameBridge?.request(current);
@@ -858,6 +864,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   }
 
   function deactivate(): void {
+    if(turn){invalidatedReferenceTurn=referenceTurnToken(turn);turn=withoutReferenceHistory(turn);}stage.setReferenceHistory(undefined);
     preparationActive=false;stage.clearPreparationPreview();imageStudio.setPlanning(chatId(),false);
     imageLibrary.close();
     if (destroyed) return;
@@ -982,6 +989,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     }
     const recovering = decision.kind === "same-turn" && (stage.getState().phase === "planning" || stage.getState().phase === "error");
     if (decision.kind === "same-turn" && !recovering) {
+      stage.setReferenceHistory(next.referenceHistory);
       loadedReadingCursor.load(next);
       // Identical cursor identity: SpeechController treats this as a no-op, so
       // a same-turn rebroadcast (e.g. an image/asset update) never replays speech.
@@ -1023,6 +1031,11 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       speech.setCursor(null);stage.showPreparationPreview(preview);return;
     }
     const message = payload as BackendResponse;
+    if(message.type==='vn_reference_history_invalidated'){
+      if(message.chatId!==chatId())return;
+      if(turn){invalidatedReferenceTurn=referenceTurnToken(turn);turn=withoutReferenceHistory(turn);}
+      stage.setReferenceHistory(undefined);if(active)requestState({prepare:false});return;
+    }
     if(message.type==='vn_image_library'){imageLibrary.receive(message.chatId,message.requestId,message.page);return;}
     if(message.type==='vn_error'&&message.operation==='vn_image_library'){imageLibrary.error(message.chatId??'',message.requestId,message.error);return;}
     if (message.type === "vn_external_image") {
@@ -1100,7 +1113,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
         if (!active && bootChatId) ctx.sendToBackend({ type: "vn_view", chatId: bootChatId, open: false });
       }
       if (message.turn && message.turn.chatId === chatId()) {
-        applyTurn(message.turn, turn);
+        const next=invalidatedReferenceTurn===referenceTurnToken(message.turn)&&message.requestId!==stateRequestId?withoutReferenceHistory(message.turn):message.turn;
+        applyTurn(next, turn);
       } else {
         turn = null;
         imageStudio.setTurn(null);
@@ -1119,7 +1133,9 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       // The echo of a persisted config is the only save acknowledgment the
       // transport offers; "saved" is claimed here and nowhere earlier.
       const castWasEnabled=configRef.current?.castMode??false;
+      const rememberedBefore=Boolean(configRef.current?.tooltips.enabled&&configRef.current.tooltips.rememberReferences);
       configRef.current = message.config;
+      if(!rememberedBefore&&message.config.tooltips.enabled&&message.config.tooltips.rememberReferences&&active)requestState({prepare:false});
       if(!castWasEnabled&&message.config.castMode&&active&&turn)ctx.sendToBackend({type:"vn_get_state",chatId:chatId(),viewOpen:true});
       imageStudio.setReview(message.config.reviewImages);
       imageStudio.setConfig(message.config);
@@ -1136,10 +1152,13 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     }
     if (type === "vn_turn" && message.type === "vn_turn") {
       if (message.turn.chatId !== chatId()) return;
+      // Uncorrelated late turn broadcasts cannot restore invalidated history.
+      // A fresh correlated vn_state may restore it after read-only validation.
+      const next=invalidatedReferenceTurn===referenceTurnToken(message.turn)?withoutReferenceHistory(message.turn):message.turn;
       if (stage.isReadingUserParagraph()) {
-        pendingNextTurn = message.turn;
+        pendingNextTurn = next;
       } else {
-        applyTurn(message.turn, turn);
+        applyTurn(next, turn);
       }
       return;
     }

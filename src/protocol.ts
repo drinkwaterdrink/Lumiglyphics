@@ -6,6 +6,7 @@ import type { ContextSourceReport } from './shared/context-sources.js';
 import type { ReaderPresentation } from "./shared/presentation-entities.js";
 import { z } from "zod";
 import type {NarrativePreview} from './shared/preparation-preview.js';
+import type {ReferenceHistory} from './shared/reference-history.js';
 import { CardRoleSchema, type CardRole } from "./shared/card-role.js";
 import { SubjectCorrectionSchema } from "./shared/subject-correction.js";
 import type { VisualNovelConfig } from "./config.js";
@@ -123,6 +124,7 @@ export type AudioCueView = {
 };
 
 export type TurnView = {
+  referenceHistory?:ReferenceHistory;
   presentation?: ReaderPresentation;
   cardRole?: CardRole;
   cardRoleAvailable?: boolean;
@@ -188,6 +190,7 @@ export type BackendResponse =
     errors?: ConnectionCatalogErrors;
   }
   | { type: "vn_turn"; turn: TurnView }
+  | {type:'vn_reference_history_invalidated';chatId:string}
   | { type: "vn_asset"; chatId: string; messageId: string; asset: AssetView; sourceFingerprint?: string; swipeId?: number; revision?: number }
   | { type: "vn_planning"; chatId: string }
   | NarrativePreview

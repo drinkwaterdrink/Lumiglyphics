@@ -1,6 +1,7 @@
 import {CastStage} from "./cast-stage.js";
 import {PreparationPreview} from './preparation-preview.js';
 import type {NarrativePreview} from '../../shared/preparation-preview.js';
+import type {ReferenceHistory} from '../../shared/reference-history.js';
 import type {TurnView,AssetView} from "../../protocol.js";
 import { StageDossiers } from "./dossiers.js";
 import type { TooltipPreferences } from "../../shared/dossiers.js";
@@ -949,7 +950,7 @@ export class VnStage {
     this.moveDraftEpoch++;this.closeMoveDraft();
     this.dismissedErrors.clear();
     this.castStage.set(null,0);
-    this.dossiers.setContext(turn.presentation,turn.paragraphs.map(p=>p.text));
+    this.dossiers.setContext(turn.presentation,turn.paragraphs.map(p=>p.text),turn.referenceHistory);
     this.dialogueSheet?.setHidden(false);
     this.resumeNotice?.remove();
     this.resumeNotice = null;
@@ -1014,6 +1015,7 @@ export class VnStage {
   preparationCursorFor(turn:TurnView):number|null{return this.preparationPreview.cursorFor(turn);}
   clearPreparationPreview():void{this.preparationPreview.clear();}
   stopPreparationPreview():void{this.preparationPreview.stopped();}
+  setReferenceHistory(history:ReferenceHistory|undefined):void{this.dossiers.setHistory(history);}
 
   setActivity(
     label: string | null,

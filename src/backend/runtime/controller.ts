@@ -1,5 +1,6 @@
 import {managePresentationRules} from './presentation-rules.js';
 import {NarrativePreviewSchema} from '../../shared/preparation-preview.js';
+import {captureReferenceLineage,referenceMessages,readReferenceHistory,preserveReferenceLineage} from './reference-history.js';
 import {scanCastContext} from "./cast-context.js";
 import {CastGalleryRequestSchema,CastArtRequestSchema} from '../../shared/cast-art.js';
 import {castArtToken,findCastDisplayArt,findSetupDisplayArt,listCastGallery,manageCastArt} from './cast-art.js';
@@ -477,15 +478,16 @@ export async function turnViewWithAudio(spindle: SpindleAPI, record: StoredTurnR
     // Audio is best-effort: a failed preload only mutes the cue.
   }
   const view=turnView(record);
-  await decorateCastAssets(spindle,record,view.assets,userId);
+  const config=await decorateCastAssets(spindle,record,view.assets,userId);
+  try{if(config?.tooltips.enabled&&config.tooltips.rememberReferences){const history=await readReferenceHistory(spindle,record,userId);if(history)view.referenceHistory=history;}}catch{/* Optional references never block primary reading. */}
   return view;
 }
 
 /** All outgoing turn/asset messages share this display-only projection. */
-async function decorateCastAssets(spindle:SpindleAPI,record:StoredTurnRecord,assets:AssetView[],userId?:string):Promise<void>{
+async function decorateCastAssets(spindle:SpindleAPI,record:StoredTurnRecord,assets:AssetView[],userId?:string):Promise<VisualNovelConfig|null>{
  const token=castArtToken(spindle,record.plan.key.chatId,userId);
  const config=await loadConfig(spindle,userId).catch(()=>null);
- if(!config?.castMode)return;
+ if(!config?.castMode)return config;
  const {castAppearanceIdentity,resolveCueCharacterVisualState,sceneForCue}=await import('./images.js');
  const appearance=await loadCharacterAppearance(spindle,userId,record.plan.key.chatId).catch(()=>({}));
  await Promise.all(assets.map(async asset=>{
@@ -501,6 +503,7 @@ async function decorateCastAssets(spindle:SpindleAPI,record:StoredTurnRecord,ass
  }));
  // An early resolved portrait must not survive management while another is pending.
  if(token!==castArtToken(spindle,record.plan.key.chatId,userId))for(const asset of assets)if(asset.stageAsset)delete asset.stageAsset.displayImageUrl;
+ return config;
 }
 async function assetViewWithCastArt(spindle:SpindleAPI,record:StoredTurnRecord,job:StoredTurnRecord["jobs"][number],userId?:string):Promise<AssetView>{
  const asset=assetView(record,job);await decorateCastAssets(spindle,record,[asset],userId);return asset;
@@ -983,6 +986,7 @@ async function processAssistantMessage(
     const config = await loadConfig(spindle, userId);
     rememberDebugFlag(userId, config);
     const messages = await spindle.chat.getMessages(chatId) as NormalizedChatMessage[];
+    const referenceSnapshot=referenceMessages(messages,message.id);
     // Greeting replacement: the same stored message re-resolved to a different
     // scene while it is the chat's only assistant turn. The durable identity
     // state (frozen protagonist, registry, appearance roster, scene lineage)
@@ -1130,6 +1134,7 @@ async function processAssistantMessage(
       updatedAt: nowTime,
       resolvedSourceText: resolved,
       source: { version: 2, rawFingerprint },
+      referenceLineage:preserveReferenceLineage(existing?.referenceLineage,await captureReferenceLineage(referenceSnapshot??[],result.plan,content)),
       settingsSnapshot,
       attempts: [
         {
@@ -1465,9 +1470,11 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
     if (old.replanRequestIds?.includes(action.requestId)) throw new Error('This replan request has already been handled.');
     const isCurrent = () => views.isOpen(userId, action.chatId) && (intakeEpochs.get(key) ?? 0) === epoch && compareTurnKeys(activeTurnKeys.get(key) ?? null, old.plan.key).accepted;
     const messages = await spindle.chat.getMessages(action.chatId) as NormalizedChatMessage[];
+    const referenceSnapshot=referenceMessages(messages,action.messageId);
     const latest = [...messages].reverse().find(m => !m.is_user && m.content.trim());
     if (!latest || latest.id !== action.messageId || Number(latest.swipe_id ?? 0) !== action.swipeId) throw new Error('A newer reply or swipe replaced this replan.');
-    const intake = await resolveMessageIntake(spindle, action.chatId, latest.content, userId);
+    const rawReplanSource=latest.content;
+    const intake = await resolveMessageIntake(spindle, action.chatId, rawReplanSource, userId);
     if (!intake.resolved || relateRecord(old, latest, intake) !== 'current' || !views.isOpen(userId,action.chatId) || (intakeEpochs.get(key) ?? 0) !== epoch || generatingChats.has(key)) throw new Error('The source changed or the reader closed. Refresh it first.');
     // A reopened reader / restarted backend has no owner until recovery claims
     // the fully validated stored key. Never displace a different active turn.
@@ -1526,7 +1533,7 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
         imageRequests:safeImageHistory((old.imageRequests ?? []).filter(r => r.state === 'approved' && jobs.some(job => job.jobId === r.jobId))),
         cardRole:result.cardRole,plannerMode:result.usedFallback ? 'fallback' : 'model',...(result.cardId ? {cardId:result.cardId} : {}),
         replanRequestIds:[...(old.replanRequestIds ?? []),action.requestId].slice(-32),
-        ...(old.correctionRequestIds ? {correctionRequestIds:old.correctionRequestIds} : {}),resolvedSourceText:intake.text,...(old.source ? {source:old.source} : {}),updatedAt:now,
+        ...(old.correctionRequestIds ? {correctionRequestIds:old.correctionRequestIds} : {}),resolvedSourceText:intake.text,...(old.source ? {source:old.source} : {}),referenceLineage:preserveReferenceLineage(old.referenceLineage,await captureReferenceLineage(referenceSnapshot??[],plan,rawReplanSource)),updatedAt:now,
         attempts:[...(old.attempts ?? []).slice(-15),{attemptNumber:(old.attempts?.at(-1)?.attemptNumber ?? 0)+1,timestamp:now,settings:{replan:true,forcedImageReview:true}}]};
       await persistActiveTurn(spindle,record,state.activeTurnPath!,userId,current);
       if (!current()) return;
@@ -1834,6 +1841,7 @@ async function clearDeletedTurn(spindle: SpindleAPI, payload: unknown, userId?: 
   if (!payload || typeof payload !== "object") return;
   const candidate = payload as { chatId?: unknown; messageId?: unknown };
   if (typeof candidate.chatId !== "string" || typeof candidate.messageId !== "string") return;
+  spindle.sendToFrontend({type:'vn_reference_history_invalidated',chatId:candidate.chatId},userId);
   const state = await loadChatState(spindle, candidate.chatId, userId);
   const record = await loadTurnRecord(spindle, state.activeTurnPath, userId);
   if (!record || record.plan.key.assistantMessageId !== candidate.messageId) return;
@@ -1856,9 +1864,15 @@ async function clearDeletedTurn(spindle: SpindleAPI, payload: unknown, userId?: 
 
 function reconcileMessageEvent(spindle: SpindleAPI, payload: unknown, userId?: string): void {
   const event = eventMessage(payload);
-  if (!event || event.message.is_user) return;
+  if (!event)return;
+  spindle.sendToFrontend({type:'vn_reference_history_invalidated',chatId:event.chatId},userId);
+  if(event.message.is_user)return;
   void (async () => {
     if (!(await allowAutomaticWork(spindle, userId, event.chatId, "message reconcile"))) return;
+    // An ancestor edit invalidates remembered descriptions but must not move
+    // the reader backwards or start planning that older response.
+    const messages=await spindle.chat.getMessages(event.chatId) as NormalizedChatMessage[];
+    if([...messages].reverse().find(m=>!m.is_user&&m.content.trim())?.id!==event.message.id)return;
     // A newer version of the message supersedes any intake still resolving.
     bumpIntakeEpoch(userId, event.chatId);
     releaseSceneCacheAdmission(spindle, userId, event.chatId, "message_changed");

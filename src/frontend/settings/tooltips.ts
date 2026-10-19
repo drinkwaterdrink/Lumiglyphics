@@ -8,11 +8,13 @@ export class TooltipSettingsPanel {
   const groups=document.createElement('details'),summary=document.createElement('summary'),help=document.createElement('small');groups.dataset.more='';summary.textContent='Information shown in reference cards';help.textContent='Choose the kinds of established information to display. Empty sections are omitted. These controls update locally.';groups.append(summary,help);
   for(const group of REFERENCE_FIELD_GROUPS){const label=document.createElement('label'),input=document.createElement('input'),text=document.createElement('span');label.dataset.check='';input.type='checkbox';input.dataset.tooltipGroup=group.id;text.textContent=group.label;label.append(input,text);groups.append(label);}
   this.host.querySelector('[data-tooltip-options]')!.insertBefore(groups,this.host.querySelector('[data-reset-tooltip-overrides]'));
+  const remember=document.createElement('label');remember.dataset.check='';remember.innerHTML='<input type="checkbox" data-tooltip="rememberReferences"><span>Remember earlier references<small>Keep verified earlier descriptions with their source replies. Older saved replies and histories with dynamic scene macros may not qualify. Current state stays separate.</small></span>';this.host.querySelector('[data-tooltip-options]')!.prepend(remember);
   this.host.addEventListener('input',e=>e.stopPropagation());
   this.host.addEventListener('change',event=>{
    event.stopPropagation();const target=event.target as HTMLInputElement|HTMLSelectElement;const field=target.dataset.tooltip,group=target.dataset.tooltipGroup;if(!field&&!group)return;
    const candidate={...this.prefs,categories:{...this.prefs.categories},fieldGroups:{...this.prefs.fieldGroups}};
    if(group)candidate.fieldGroups[group]=(target as HTMLInputElement).checked;
+   else if(field==='rememberReferences')candidate.rememberReferences=(target as HTMLInputElement).checked;
    else if(field==='actionsEnabled')candidate.actionsEnabled=(target as HTMLInputElement).checked;
    else if(field==='enabled')candidate.enabled=(target as HTMLInputElement).checked;
    else if(field==='npcs'||field==='locations'||field==='objects')candidate.categories[field]=(target as HTMLInputElement).checked;
@@ -24,6 +26,7 @@ export class TooltipSettingsPanel {
  setConfig(prefs:TooltipPreferences):void{this.prefs=normalizeTooltipPreferences(prefs);this.render();}
  private render():void{
   for(const key of ['enabled','actionsEnabled','npcs','locations','objects'] as const)this.host.querySelector<HTMLInputElement>(`[data-tooltip="${key}"]`)!.checked=key==='enabled'?this.prefs.enabled:key==='actionsEnabled'?this.prefs.actionsEnabled:this.prefs.categories[key];
+  this.host.querySelector<HTMLInputElement>('[data-tooltip="rememberReferences"]')!.checked=this.prefs.rememberReferences;
   for(const key of ['detail','linking','maxLinksPerParagraph'] as const)this.host.querySelector<HTMLInputElement>(`[data-tooltip="${key}"]`)!.value=String(this.prefs[key]);
   for(const group of REFERENCE_FIELD_GROUPS)this.host.querySelector<HTMLInputElement>(`[data-tooltip-group="${group.id}"]`)!.checked=this.prefs.fieldGroups[group.id]!==false;
   this.host.querySelector<HTMLInputElement>('[data-tooltip="maxLinksPerParagraph"]')!.disabled=this.prefs.linking==='menu-only';

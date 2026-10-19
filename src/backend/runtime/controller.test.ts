@@ -3,7 +3,7 @@ import { templateSnapshot } from "../../shared/image-templates.js";
 import { describe, expect, test } from "bun:test";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { AssetJobSchema, TurnPlanSchema, type AssetJob } from "../../shared/contracts.js";
-import { markAssetReady, registerVisualNovelBackend, sendState, turnView, viewRegistry } from "./controller.js";
+import { markAssetReady, registerVisualNovelBackend, sendState, turnView, turnViewWithAudio, viewRegistry } from "./controller.js";
 import { chatStatePath, singleCharacterStatePath, turnPath, saveTurnRecord, saveChatState, type StoredChatState, type StoredTurnRecord } from "./storage.js";
 import { seedSingleCharacter } from "../core/visual-state.js";
 import { SINGLE_CHARACTER_SCHEMA_VERSION } from "../../shared/character.js";
@@ -495,6 +495,39 @@ test('closing the reader before narrative preparation suppresses the optional pr
  await waitFor(()=>reads===2);f.request({type:'vn_view',chatId:'chat',open:false},'closed-preview');
  gate.resolve(await original('chat'));await new Promise(resolve=>setTimeout(resolve,25));
  expect(f.sent.some((m:any)=>m.type==='vn_narrative_preview')).toBe(false);expect(f.gates).toHaveLength(0);
+});
+test('new plans capture reference ancestry and views retain only verified earlier source observations',async()=>{
+ const f=generationFixture(),template=(await f.spindle.chat.getMessages('chat'))[0]!,messages=[{...template,id:'prior-ref',content:'Mira has silver hair.'}];let calls=0;
+ f.spindle.chat.getMessages=async()=>messages;
+ f.data.set('config.json',{generateImages:false,maxImagesPerTurn:0,tooltips:{enabled:true},includeCharacterContext:false,includePersonaContext:false,includeLorebookContext:false});
+ f.spindle.generate.raw=async()=>{calls++;return {content:JSON.stringify({...generationPayload([]),storyReferences:[{kind:'npc',name:'Mira',field:'appearance',value:'silver hair',paragraphIndex:0,evidence:'Mira has silver hair.'}]})} as any;};
+ registerVisualNovelBackend(f.spindle);await sendState(f.spindle,'chat','retained-reader',{viewOpen:true,requestId:'retained-session'});
+ const prior=f.data.get(turnPath('chat','prior-ref',0)) as StoredTurnRecord;expect((prior.referenceLineage as any)?.version).toBe(1);
+ messages.push({...template,id:'current-ref',content:'Mira opens the door.'});
+ await sendState(f.spindle,'chat','retained-reader',{viewOpen:true,requestId:'current-session'});
+ const current=f.data.get(turnPath('chat','current-ref',0)) as StoredTurnRecord;expect((current.referenceLineage as any)?.version).toBe(1);
+ const view=await turnViewWithAudio(f.spindle,current,'retained-reader');expect(view.referenceHistory?.entries[0]).toMatchObject({sourceKey:prior.plan.key,reference:{name:'Mira',value:'silver hair'}});
+ const before=calls;messages[0]!.content='An edited earlier reply.';const after=await turnViewWithAudio(f.spindle,current,'retained-reader');
+ expect(after.referenceHistory).toBeUndefined();expect(after.status).toBe('ready');expect(calls).toBe(before);
+ f.fire('MESSAGE_EDITED',{chatId:'chat',message:messages[0]!},'retained-reader');await new Promise(resolve=>setTimeout(resolve,20));
+ expect(calls).toBe(before);expect((f.sent.filter((m:any)=>m.type==='vn_turn').at(-1) as any).turn.messageId).toBe('current-ref');
+ f.request({type:'vn_view',chatId:'chat',open:false},'retained-reader');
+});
+test('user edits and ancestor deletion immediately invalidate displayed earlier references without generation',async()=>{
+ const f=generationFixture();f.data.set('config.json',{enabled:false});registerVisualNovelBackend(f.spindle);await sendState(f.spindle,'chat','reference-events',{viewOpen:true});
+ const count=()=>f.sent.filter((m:any)=>m.type==='vn_reference_history_invalidated').length;
+ f.fire('MESSAGE_EDITED',{chatId:'chat',message:{id:'earlier-user',content:'Changed choice',is_user:true}},'reference-events');expect(count()).toBe(1);
+ f.fire('MESSAGE_DELETED',{chatId:'chat',messageId:'earlier-assistant'},'reference-events');expect(count()).toBe(2);expect(f.gates).toHaveLength(0);
+ f.request({type:'vn_view',chatId:'chat',open:false},'reference-events');
+});
+test('a target changed between initial intake and the planning history read receives no ancestry certificate',async()=>{
+ const f=generationFixture(),original=(await f.spindle.chat.getMessages('chat'))[0]!;let reads=0;
+ f.spindle.chat.getMessages=async()=>{reads++;return [{...original,content:reads===1?original.content:'The target changed before planning.'}];};
+ f.data.set('config.json',{generateImages:false,includeCharacterContext:false,includePersonaContext:false,includeLorebookContext:false});
+ registerVisualNovelBackend(f.spindle);await sendState(f.spindle,'chat','changed-intake',{viewOpen:true});
+ const saved=f.data.get(turnPath('chat','assistant-1',0)) as StoredTurnRecord;
+ expect(saved.plan.paragraphs[0]?.text).toBe('First paragraph.');expect(saved.referenceLineage).toBeUndefined();
+ f.request({type:'vn_view',chatId:'chat',open:false},'changed-intake');
 });
 
 test("concurrent submissions reserve one append before reading persisted metadata", async () => {

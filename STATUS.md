@@ -1,6 +1,6 @@
-# Lumiglyphics status — beta.45
+# Lumiglyphics status — beta.46
 
-This matrix describes beta.45 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
+This matrix describes beta.46 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
 
 | Area | Status | Current behavior / remaining scope |
 |---|---|---|
@@ -9,7 +9,7 @@ This matrix describes beta.45 on Testing. Dated plans and evidence describe thei
 | Image prompts and recovery | Delivered | State-specific inspector, editable templates/shared styles, optional dynamic selection, combined 3,000-character cap, approval, prompt rewrite/restore, individual retry and failure dismissal. |
 | Full scene / ensemble | Delivered, opt-in | Named physically present cast plus persona, separate appearances, bounded descriptions, no single-face reference or portrait reuse. Up to 16 subjects; actual model accuracy varies. |
 | Cast and saved place art | Delivered foundation | Context scan, manual appearance/outfit guidance, gallery art and optional compatible reuse. Independent background/portrait allocation remains pending. |
-| References and interactions | Delivered foundation | Grouped descriptive cards, field/category/detail toggles, inline highlights, quiet menu, reveal-scoped facts/sources, editable intentions and validated provider-owned moves. Cross-reply retention awaits verified lineage. |
+| References and interactions | Delivered foundation | Grouped cards, category/field/detail toggles, inline highlights, quiet menu, reveal-scoped sources and interaction drafts. Optional earlier descriptions have verified ancestry and original source labels. Legacy/dynamic-macro history and broad identity reconciliation remain pending. |
 | Documents | Delivered foundation | Literal current-reply document reading. Cross-turn aggregation and classified external adapters remain pending. |
 | History | Delivered foundation | Unified saved prose/images with version-aware navigation. Broader bounded indexing/backfill/dedup remains pending. |
 | Settings workspace | Delivered for Testing | Seven categories, focused pages, searchable cast/place management and page-specific technical saves. Physical host/device acceptance remains manual. |
@@ -20,4 +20,4 @@ This matrix describes beta.45 on Testing. Dated plans and evidence describe thei
 | Audio and speech | Delivered, optional | Full-path audio cache identity and explicit speech lifecycle. Stable public TTS API/host autoplay coexistence remain compatibility limits. |
 | Deferred ideas | Deferred | Storyboard, bookmark timeline, presentation packs, autonomous simulation and a parallel memory/RPG engine. |
 
-Release evidence: [beta.45 reader and inspector polish](docs/review-evidence/2026-10-18-reader-inspector-polish.md), [beta.44 settings workspace](docs/review-evidence/2026-10-18-settings-workspace.md). Neither automated checks nor source inspection certify every provider, physical device or supported host version.
+Release evidence: [beta.46 earlier references](docs/review-evidence/2026-10-18-reference-retention.md), [beta.45 reader and inspector polish](docs/review-evidence/2026-10-18-reader-inspector-polish.md), [beta.44 settings workspace](docs/review-evidence/2026-10-18-settings-workspace.md). Neither automated checks nor source inspection certify every provider, physical device or supported host version.
