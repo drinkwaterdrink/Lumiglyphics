@@ -574,3 +574,10 @@ User-requested audit maintenance pass: serialized config merge/write; backend-co
 ### beta.43 independent audit fixes and ensemble illustrations
 
 Implemented F01–F13 coverage from the supplied audit (F03 retained from beta.42), including reader revision/chat ownership, guarded image acknowledgments, duplicate submissions, safe story CSS, closed-reader external review, audio cache identity and accessible search. User-requested Full scene / ensemble is an opt-in template with separate named cast/persona guidance and bounded group descriptions. Current delivery boundaries are in [STATUS](../../../STATUS.md); validation and limitations are in [beta.43 evidence](../../review-evidence/2026-10-18-audit-fixes.md). F2 presentation policies remain pending.
+
+
+## Beta.47 increment — named-subject template conditions (2026-10-19)
+
+Continues F2 with a bounded extension to the existing F1 editor and evaluator. New optional conditions match the selected picture subject by full name, the current scene location, or a literal verified item description in the picture paragraph. Category and exact full-name matching ignore case; aliases, partial names and older references are not inferred. Selected picture subject does not claim physical presence: review found that production planning cannot reliably capture every departure within an unchanged scene. No new presence-extraction subsystem is added.
+
+Scoped persistence, revision guards, priority, disabled-template checks, identity eligibility, manual overrides, cue count and review settings stay intact. Mobile native name input, category-specific explanations, preview-before-save and editable saved conditions are provided. Prompt sources explains the winning condition. Existing version-1 rules remain valid. No extra model call, dependency, permission, or historical rewrite. Background hold/effect/motion/music policies remain F2 follow-ups. Verification and limits: [beta.47 evidence](../../review-evidence/2026-10-19-subject-preferences.md).

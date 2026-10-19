@@ -3,7 +3,8 @@ const id=z.string().trim().min(1).max(128);
 export const RuleConditionSchema=z.discriminatedUnion('kind',[
  z.object({kind:z.literal('dialogue')}).strict(),
  z.object({kind:z.literal('location_changed')}).strict(),
- z.object({kind:z.literal('template'),templateId:id}).strict()
+ z.object({kind:z.literal('template'),templateId:id}).strict(),
+ z.object({kind:z.literal('subject'),subjectKind:z.enum(['npc','place','object']),name:z.string().trim().min(1).max(256)}).strict()
 ]);
 const draftShape={id,name:z.string().trim().min(1).max(80),enabled:z.boolean(),priority:z.number().int().min(0).max(100),when:RuleConditionSchema,then:z.object({kind:z.literal('prefer_template'),templateId:id}).strict()};
 export const PresentationRuleDraftSchema=z.object(draftShape).strict().refine(r=>r.when.kind!=='template'||r.when.templateId!==r.then.templateId,'Choose a different preferred template, or another condition.');
@@ -25,7 +26,8 @@ export const PresentationRuleRequestSchema=z.object({type:z.literal('vn_presenta
  if(r.action==='toggle'&&r.enabled===undefined)ctx.addIssue({code:'custom',message:'Choose enabled or disabled.'});
 });
 export type PresentationRuleRequest=z.infer<typeof PresentationRuleRequestSchema>;
-export type RuleInput={isDialogue:boolean,locationChanged:boolean,templateId:string,enabledTemplateIds:readonly string[]};
+export type RuleSubject={kind:'npc'|'place'|'object';name:string};
+export type RuleInput={isDialogue:boolean,locationChanged:boolean,templateId:string,enabledTemplateIds:readonly string[],subjects?:readonly RuleSubject[]};
 export type RuleDecision={preferredTemplateId?:string,selectedRuleId?:string,selectedScope?:'user'|'chat',matchedRuleIds:string[],diagnostics:string[]};
 /** Conditions always examine the original planner choice; rules never chain. */
 export function evaluatePresentationRules(input:RuleInput,rules:readonly PresentationRule[]):RuleDecision{
@@ -33,7 +35,8 @@ export function evaluatePresentationRules(input:RuleInput,rules:readonly Present
  const ordered=[...rules].sort((a,b)=>Number(a.scope==='chat')-Number(b.scope==='chat')||a.priority-b.priority||a.savedOrder-b.savedOrder||a.id.localeCompare(b.id));
  for(const rule of ordered){
   if(!rule.enabled)continue;
-  const matches=rule.when.kind==='dialogue'?input.isDialogue:rule.when.kind==='location_changed'?input.locationChanged:rule.when.templateId===input.templateId;
+  const condition=rule.when;
+  const matches=condition.kind==='dialogue'?input.isDialogue:condition.kind==='location_changed'?input.locationChanged:condition.kind==='template'?condition.templateId===input.templateId:input.subjects?.some(subject=>subject.kind===condition.subjectKind&&subject.name.trim().toLowerCase()===condition.name.trim().toLowerCase())===true;
   if(!matches)continue;decision.matchedRuleIds.push(rule.id);
   if(!input.enabledTemplateIds.includes(rule.then.templateId)){decision.diagnostics.push(`${rule.name}: preferred template is disabled or unavailable; skipped.`);continue;}
   decision.preferredTemplateId=rule.then.templateId;decision.selectedRuleId=rule.id;decision.selectedScope=rule.scope;
@@ -41,5 +44,5 @@ export function evaluatePresentationRules(input:RuleInput,rules:readonly Present
  return decision;
 }
 export function describePresentationCondition(condition:PresentationRule['when'],name:(id:string)=>string=(id)=>id):string{
- return condition.kind==='dialogue'?'During attributed dialogue':condition.kind==='location_changed'?'At a confirmed location change':`When ${name(condition.templateId)} would otherwise be chosen`;
+ return condition.kind==='dialogue'?'During attributed dialogue':condition.kind==='location_changed'?'At a confirmed location change':condition.kind==='template'?`When ${name(condition.templateId)} would otherwise be chosen`:condition.subjectKind==='npc'?`When ${condition.name.trim()} is the selected picture subject`:condition.subjectKind==='place'?`At ${condition.name.trim()}`:`When ${condition.name.trim()} is described in the picture paragraph`;
 }

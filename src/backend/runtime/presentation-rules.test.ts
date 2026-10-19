@@ -42,6 +42,42 @@ test('a stalled optional scope cannot discard the other scope or stall fresh pla
 const draft=(id='r',templateId='portrait')=>({id,name:'Portrait dialogue',enabled:true,priority:50,when:{kind:'dialogue' as const},then:{kind:'prefer_template' as const,templateId}});
 function fixture(){const data=new Map<string,any>();const writes:string[]=[];const api={userStorage:{getJson:async(p:string,o:any)=>structuredClone(data.get(o.userId+':'+p)??o.fallback),setJson:async(p:string,v:any,o:any)=>{writes.push(o.userId+':'+p);data.set(o.userId+':'+p,structuredClone(v));}},chats:{get:async()=>({})}} as any;return {api,data,writes};}
 const save=(scope:'user'|'chat',rule=draft(),expectedRevision=0)=>({type:'vn_presentation_rules' as const,version:1 as const,requestId:'request',chatId:'chat',action:'save' as const,scope,rule,expectedRevision});
+
+test('subject preferences use explicit picture focus, current place and literal item descriptions',()=>{
+ const key={chatId:'chat',assistantMessageId:'reply',swipeId:0,sourceFingerprint:'12345678',revision:0};
+ const plan={key,createdAt:'2026-10-19',paragraphs:[{index:0,text:'Radio speaks. The black key has a chipped tooth.'},{index:1,text:'Mira leaves.'}],paragraphSpeakers:['Radio',null],initialContinuity:{revision:0,characters:{},facts:{}},continuityDeltas:[{paragraphIndex:1,delta:{characterUpdates:{Mira:{present:false}},forgetCharacters:[],factUpdates:{}}}],scenes:[{sceneId:'s',revision:0,startParagraph:0,environment:{location:'Library',description:'Rainy windows'},cast:['Mira']}],visualCues:[0,1].map(paragraphIndex=>({cueId:`c${paragraphIndex}`,sceneId:'s',sceneRevision:0,paragraphIndex,...(paragraphIndex===0?{character:"Mira"}:{}),imageTemplate:templateSnapshot(DEFAULT_CONFIG.imageTemplates[0]!)})),storyReferences:[{kind:'object',name:'black key',paragraphIndex:0,field:'condition',value:'chipped tooth',evidence:'The black key has a chipped tooth.'}]} as any;
+ const rule=(subjectKind:string,name:string)=>({...draft('named','environment'),when:{kind:'subject',subjectKind,name},scope:'chat',savedOrder:1}) as any;
+ const apply=(kind:string,name:string)=>applyTemplatePreferences(plan,DEFAULT_CONFIG,[rule(kind,name)],null,{});
+ expect(apply('npc','Mira').visualCues.map(c=>c.imageTemplate!.id)).toEqual(['environment','portrait']);
+ expect(apply('npc','Radio').visualCues.map(c=>c.imageTemplate!.id)).toEqual(['portrait','portrait']);
+ expect(apply('place','Library').visualCues.map(c=>c.imageTemplate!.id)).toEqual(['environment','environment']);
+ expect(apply('object','black key').visualCues.map(c=>c.imageTemplate!.id)).toEqual(['environment','portrait']);
+ expect(apply('place','Courtyard').visualCues[0]!.imageTemplate!.id).toBe('portrait');
+ expect(apply('object','key').visualCues[0]!.imageTemplate!.id).toBe('portrait');
+ const before=JSON.stringify(plan);apply('place','Library');expect(JSON.stringify(plan)).toBe(before);
+ const manual={...plan,visualCues:[{...plan.visualCues[0],imageTemplateReason:'Manual template selection'}]};
+ expect(applyTemplatePreferences(manual,DEFAULT_CONFIG,[rule('place','Library')],null,{}).visualCues[0]!.imageTemplate!.id).toBe('portrait');
+ const futureItem={...plan,storyReferences:[{...plan.storyReferences[0],paragraphIndex:1}]};
+ expect(applyTemplatePreferences(futureItem,DEFAULT_CONFIG,[rule('object','black key')],null,{}).visualCues[0]!.imageTemplate!.id).toBe('portrait');
+ const forged={...plan,storyReferences:[{...plan.storyReferences[0],evidence:'A black key appears from nowhere.'}]};
+ expect(applyTemplatePreferences(forged,DEFAULT_CONFIG,[rule('object','black key')],null,{}).visualCues[0]!.imageTemplate!.id).toBe('portrait');
+ const castOnly={...plan,visualCues:plan.visualCues.map(({character,...cue}:any)=>cue)};
+ expect(applyTemplatePreferences(castOnly,DEFAULT_CONFIG,[rule('npc','Mira')],null,{}).visualCues[0]!.imageTemplate!.id).toBe('portrait');
+ expect(applyTemplatePreferences(castOnly,DEFAULT_CONFIG,[rule('npc','Mira'),{...draft('dialogue','environment'),scope:'user',savedOrder:1}],null,{}).visualCues[0]!.imageTemplate!.id).toBe('environment');
+ const cached={...plan,cacheCues:[{...plan.visualCues[0],cueId:'cached'}]};
+ expect(applyTemplatePreferences(cached,DEFAULT_CONFIG,[rule('place','Library')],null,{}).cacheCues?.[0]?.imageTemplate?.id).toBe('environment');
+});
+
+test('subject preferences round-trip with legacy rules and preserve scoped revision protection',async()=>{
+ const f=fixture();await managePresentationRules(f.api,save('chat',draft('legacy','environment')),'alice');
+ const subject={...draft('subject','environment'),when:{kind:'subject',subjectKind:'place',name:'Library'}} as any;
+ const catalog=await managePresentationRules(f.api,save('chat',subject,1),'alice');
+ expect(catalog.chat!.rules.map(r=>r.when.kind)).toEqual(['dialogue','subject']);
+ expect(catalog.chat!.rules[1]!.when).toEqual(subject.when);
+ expect((await readPresentationRuleCatalog(f.api,'other','alice')).chat!.rules).toHaveLength(0);
+ expect((await readPresentationRuleCatalog(f.api,'chat','bob')).chat!.rules).toHaveLength(0);
+ const before=JSON.stringify([...f.data]);await expect(managePresentationRules(f.api,save('chat',subject,1),'alice')).rejects.toThrow();expect(JSON.stringify([...f.data])).toBe(before);
+});
 test('rules are opt-in, scoped to user/chat and revisions reject stale edits',async()=>{
  const f=fixture();expect((await readPresentationRuleCatalog(f.api,'chat','alice')).user!.rules).toEqual([]);
  await managePresentationRules(f.api,save('user'),'alice');await managePresentationRules(f.api,save('chat',draft('local','environment')),'alice');

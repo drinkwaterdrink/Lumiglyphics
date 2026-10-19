@@ -1,7 +1,9 @@
 import type {SpindleAPI} from 'lumiverse-spindle-types';
 import {PresentationRuleRequestSchema,type PresentationRuleCatalog,type PresentationRuleRequest} from '../../shared/presentation-rules.js';
 import {loadConfig,loadPresentationRuleDocument,updatePresentationRuleDocument} from './storage.js';
-import {evaluatePresentationRules,type PresentationRule} from '../../shared/presentation-rules.js';
+import {evaluatePresentationRules,describePresentationCondition,type PresentationRule,type RuleSubject} from '../../shared/presentation-rules.js';
+import {normalizeStoryReferences} from '../../shared/story-references.js';
+import {stripTextEffectTags} from '../../shared/text-effects.js';
 import type {VisualNovelConfig} from '../../config.js';
 import type {TurnPlan,SceneState,VisualCue} from '../../shared/contracts.js';
 import {templateSnapshot} from '../../shared/image-templates.js';
@@ -13,6 +15,10 @@ export function applyTemplatePreferences(plan:TurnPlan,config:VisualNovelConfig,
  const normalize=(value:string|undefined)=>value?.trim().toLowerCase().replace(/\s+/g,' ')??'';
  const sceneKey=(cue:Pick<VisualCue,'sceneId'|'sceneRevision'>)=>`${cue.sceneId}:${cue.sceneRevision}`;
  const first=new Map<string,string>();
+ let itemReferences:ReturnType<typeof normalizeStoryReferences>=[];
+ if(rules.some(rule=>rule.enabled&&rule.when.kind==='subject')){
+  itemReferences=normalizeStoryReferences(plan.storyReferences,plan.paragraphs.map(p=>({text:stripTextEffectTags(p.text)}))).filter(r=>r.kind==='object');
+ }
  for(const cue of [...plan.visualCues,...(plan.cacheCues??[])].sort((a,b)=>a.paragraphIndex-b.paragraphIndex))if(!first.has(sceneKey(cue)))first.set(sceneKey(cue),cue.cueId);
  const apply=(cue:VisualCue):VisualCue=>{
   if(!cue.imageTemplate||cue.imageTemplateReason==='Manual template selection'||cue.visualSources?.includes('manual subject correction'))return cue;
@@ -23,11 +29,15 @@ export function applyTemplatePreferences(plan:TurnPlan,config:VisualNovelConfig,
   const identity=resolveTemplateIdentity(scene,cue,appearances);
   const usable=Boolean(identity.name&&isUsableIdentity(identity.name,splitTags(identity.identity)));
   const enabled=config.imageTemplates.filter(t=>t.enabled&&(t.subjectMode!=='one'||usable));
-  const decision=evaluatePresentationRules({isDialogue:Boolean(plan.paragraphSpeakers[cue.paragraphIndex]?.trim()),locationChanged:Boolean(location&&before&&location!==before&&first.get(sceneKey(cue))===cue.cueId),templateId:cue.imageTemplate.id,enabledTemplateIds:enabled.map(t=>t.id)},rules);
+  // Explicit picture subject only: scene cast and speakers do not prove presence.
+  const subjects:RuleSubject[]=[{kind:'place',name:scene.environment.location}];
+  if(cue.character?.trim())subjects.push({kind:'npc',name:cue.character});
+  subjects.push(...itemReferences.filter(r=>r.paragraphIndex===cue.paragraphIndex).map(r=>({kind:r.kind,name:r.name})));
+  const decision=evaluatePresentationRules({isDialogue:Boolean(plan.paragraphSpeakers[cue.paragraphIndex]?.trim()),locationChanged:Boolean(location&&before&&location!==before&&first.get(sceneKey(cue))===cue.cueId),templateId:cue.imageTemplate.id,enabledTemplateIds:enabled.map(t=>t.id),subjects},rules);
   if(!decision.matchedRuleIds.length&&!diagnostics.length)return cue;
   const target=enabled.find(t=>t.id===decision.preferredTemplateId);
   const winning=[...rules].reverse().find(r=>r.id===decision.selectedRuleId&&r.scope===decision.selectedScope&&r.then.templateId===target?.id);
-  const outcome=target?`Applied ${target.name}${winning?` from ${winning.name} (${winning.scope==='chat'?'this chat':'all chats'})`:''}.`:'Kept the planner template.';
+  const outcome=target?`Applied ${target.name}${winning?` from ${winning.name} (${winning.scope==='chat'?'this chat':'all chats'}) — ${describePresentationCondition(winning.when,id=>config.imageTemplates.find(t=>t.id===id)?.name??id)}`:''}.`:'Kept the planner template.';
   const summary=[outcome,...diagnostics,...decision.diagnostics,...(!usable&&decision.matchedRuleIds.some(id=>rules.some(r=>r.id===id&&config.imageTemplates.some(t=>t.id===r.then.templateId&&t.subjectMode==='one')))?['Character preferences need a usable identity; existing subject guidance was kept.']:[])].join('\n').slice(0,4000);
   return {...cue,...(target?{imageTemplate:templateSnapshot(target),imageTemplateReason:`Saved preference: ${target.name}`.slice(0,300)}:{}),presentationRuleTrace:{matchedRuleIds:decision.matchedRuleIds,summary}};
  };

@@ -1,7 +1,18 @@
 import {test,expect} from 'bun:test';
-import {PresentationRuleDocumentSchema,PresentationRuleRequestSchema,evaluatePresentationRules,type PresentationRule} from './presentation-rules.js';
+import {PresentationRuleDocumentSchema,PresentationRuleRequestSchema,PresentationRuleDraftSchema,describePresentationCondition,evaluatePresentationRules,type PresentationRule} from './presentation-rules.js';
 const rule=(id:string,scope:'user'|'chat',priority=50,savedOrder=1,templateId='portrait'):PresentationRule=>({id,name:id,scope,enabled:true,priority,savedOrder,when:{kind:'dialogue'},then:{kind:'prefer_template',templateId}});
 const input={isDialogue:true,locationChanged:false,templateId:'action',enabledTemplateIds:['portrait','environment','action']};
+
+test('named subject preferences validate names and match exact categories without aliases or partial names',()=>{
+ const draft={id:'subject',name:'Library scenes',enabled:true,priority:50,when:{kind:'subject',subjectKind:'place',name:' Library '},then:{kind:'prefer_template',templateId:'environment'}};
+ expect(PresentationRuleDraftSchema.safeParse(draft).success).toBe(true);
+ expect(PresentationRuleDraftSchema.safeParse({...draft,when:{...draft.when,name:'  '}}).success).toBe(false);
+ expect(PresentationRuleDraftSchema.safeParse({...draft,when:{...draft.when,name:'x'.repeat(257)}}).success).toBe(false);
+ const r={...draft,scope:'chat',savedOrder:1} as any;
+ expect(evaluatePresentationRules({...input,subjects:[{kind:'place',name:'library'}]} as any,[r]).preferredTemplateId).toBe('environment');
+ for(const subjects of [undefined,[],[{kind:'npc',name:'Library'}],[{kind:'place',name:'Old Library'}]])expect(evaluatePresentationRules({...input,subjects} as any,[r]).preferredTemplateId).toBeUndefined();
+ expect(describePresentationCondition(r.when)).toContain('Library');
+});
 test('chat preferences beat user preferences; equal-scope priority then save order break ties',()=>{
  const rules=[rule('user','user',100,99,'environment'),rule('early','chat',1,1,'action'),rule('late','chat',1,2,'portrait')];
  const decision=evaluatePresentationRules(input,rules);expect(decision.preferredTemplateId).toBe('portrait');expect(decision.selectedRuleId).toBe('late');expect(rules[0]?.id).toBe('user');

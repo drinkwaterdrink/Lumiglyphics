@@ -1,6 +1,6 @@
-# Lumiglyphics status — beta.46
+# Lumiglyphics status — beta.47
 
-This matrix describes beta.46 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
+This matrix describes beta.47 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
 
 | Area | Status | Current behavior / remaining scope |
 |---|---|---|
@@ -14,10 +14,10 @@ This matrix describes beta.46 on Testing. Dated plans and evidence describe thei
 | History | Delivered foundation | Unified saved prose/images with version-aware navigation. Broader bounded indexing/backfill/dedup remains pending. |
 | Settings workspace | Delivered for Testing | Seven categories, focused pages, searchable cast/place management and page-specific technical saves. Physical host/device acceptance remains manual. |
 | F1 template preferences | Delivered | Scoped rules, previews, remembered corrections and trace. |
-| F2 presentation policies | Pending | Entity/object conditions and background/effect/motion/music policies. |
+| F2 presentation policies | Partial | Named selected-picture-subject, current-place and verified paragraph-item conditions delivered. Background/effect/motion/music policies remain pending; broad physical-presence rules require stronger planner evidence. |
 | Companion context | Partial / contract-bound | Optional SimTracker/public companion data; broad historical/reveal reconciliation requires verified public contracts. |
 | Warp illustrations | Delivered | Independent of reader visibility; shared request review gate, closed-reader approval/edit/cancel surface and scoped request snapshots. |
 | Audio and speech | Delivered, optional | Full-path audio cache identity and explicit speech lifecycle. Stable public TTS API/host autoplay coexistence remain compatibility limits. |
 | Deferred ideas | Deferred | Storyboard, bookmark timeline, presentation packs, autonomous simulation and a parallel memory/RPG engine. |
 
-Release evidence: [beta.46 earlier references](docs/review-evidence/2026-10-18-reference-retention.md), [beta.45 reader and inspector polish](docs/review-evidence/2026-10-18-reader-inspector-polish.md), [beta.44 settings workspace](docs/review-evidence/2026-10-18-settings-workspace.md). Neither automated checks nor source inspection certify every provider, physical device or supported host version.
+Release evidence: [beta.47 named-subject preferences](docs/review-evidence/2026-10-19-subject-preferences.md), [beta.46 earlier references](docs/review-evidence/2026-10-18-reference-retention.md), [beta.45 reader and inspector polish](docs/review-evidence/2026-10-18-reader-inspector-polish.md), [beta.44 settings workspace](docs/review-evidence/2026-10-18-settings-workspace.md). Neither automated checks nor source inspection certify every provider, physical device or supported host version.
