@@ -412,7 +412,7 @@ function summarizeDiagnostics(diagnostics: {
  * first scene). Both arrays are omitted when the turn has nothing to show so
  * old records keep their legacy behavior. Explicit ambient nulls are sent to clear.
  */
-function effectViews(record: StoredTurnRecord): Pick<TurnView, "effects" | "ambients"> {
+function effectViews(record: StoredTurnRecord): Pick<TurnView, "effects" | "ambients" | "effectLimits"> {
   const paragraphCount = record.plan.paragraphs.length;
   if (paragraphCount === 0) return {};
   const effects: Array<string | null> = new Array(paragraphCount).fill(null);
@@ -437,6 +437,7 @@ function effectViews(record: StoredTurnRecord): Pick<TurnView, "effects" | "ambi
   const hasAmbient = scenes.some((scene) => scene.ambient !== undefined);
   return {
     ...(hasEffect ? { effects } : {}),
+    ...(record.plan.effectLimits?.length===paragraphCount?{effectLimits:record.plan.effectLimits}:{}),
     ...(hasAmbient ? { ambients } : {})
   };
 }

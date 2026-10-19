@@ -3,6 +3,17 @@ import {PresentationRuleDocumentSchema,PresentationRuleRequestSchema,Presentatio
 const rule=(id:string,scope:'user'|'chat',priority=50,savedOrder=1,templateId='portrait'):PresentationRule=>({id,name:id,scope,enabled:true,priority,savedOrder,when:{kind:'dialogue'},then:{kind:'prefer_template',templateId}});
 const input={isDialogue:true,locationChanged:false,templateId:'action',enabledTemplateIds:['portrait','environment','action']};
 
+test('effect limits validate and resolve independently of template choices',()=>{
+ const cap={...rule('cap','chat'),then:{kind:'limit_effects',intensity:'off'}} as any;
+ expect(PresentationRuleDraftSchema.safeParse({id:cap.id,name:cap.name,enabled:true,priority:50,when:cap.when,then:cap.then}).success).toBe(true);
+ const decision=evaluatePresentationRules(input,[rule('image','chat'),cap]);
+ expect(decision.preferredTemplateId).toBe('portrait');expect((decision as any).effectIntensity).toBe('off');
+ expect(evaluatePresentationRules({...input,isDialogue:false},[cap]) as any).not.toHaveProperty('effectIntensity');
+ const gentler={...cap,id:'gentle',priority:99,then:{kind:'limit_effects',intensity:'gentle'}};
+ expect((evaluatePresentationRules(input,[cap,gentler]) as any).effectIntensity).toBe('gentle');
+ const {scope,savedOrder,...draft}=cap;expect(PresentationRuleDraftSchema.safeParse({...draft,then:{kind:'limit_effects',intensity:'full'}}).success).toBe(false);
+});
+
 test('named subject preferences validate names and match exact categories without aliases or partial names',()=>{
  const draft={id:'subject',name:'Library scenes',enabled:true,priority:50,when:{kind:'subject',subjectKind:'place',name:' Library '},then:{kind:'prefer_template',templateId:'environment'}};
  expect(PresentationRuleDraftSchema.safeParse(draft).success).toBe(true);

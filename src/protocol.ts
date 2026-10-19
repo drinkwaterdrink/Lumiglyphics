@@ -143,6 +143,7 @@ export type TurnView = {
   paragraphSpeakers?: Array<string | null>;
   /** Per-paragraph one-shot stage effect ids; null entries mean no effect. */
   effects?: Array<string | null>;
+  effectLimits?: Array<'gentle'|'off'|null>;
   /** Per-paragraph persistent ambient effect ids; null entries mean no ambient. */
   ambients?: Array<string | null>;
   choices: Array<{ id: string; label: string; value: string }>;

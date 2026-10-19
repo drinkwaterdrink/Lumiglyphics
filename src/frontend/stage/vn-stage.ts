@@ -1,3 +1,4 @@
+import {presentEffect} from '../host/effect-presentation.js';
 import {CastStage} from "./cast-stage.js";
 import {PreparationPreview} from './preparation-preview.js';
 import type {NarrativePreview} from '../../shared/preparation-preview.js';
@@ -1146,7 +1147,9 @@ export class VnStage {
 
   triggerEffect(effect: StageEffect): void {
     if (this.destroyed) return;
-    if (this.effectIntensity === "off") return;
+    const limit=this.state.paragraphs[this.state.currentParagraphIndex]?.effectLimit;
+    const intensity=this.effectIntensity==='off'||limit==='off'?'off':this.effectIntensity==='gentle'||limit==='gentle'?'gentle':'full';
+    const presented=presentEffect(effect,intensity);if(!presented)return;effect=presented;
     switch (effect) {
       case "shake":
         this.triggerShake();
@@ -1370,7 +1373,7 @@ export class VnStage {
     }
   }
 
-  resetEffects(): void {
+  resetEffects(preserveAmbient = false): void {
     if (this.shakeTimer !== null) {
       clearTimeout(this.shakeTimer);
       this.shakeTimer = null;
@@ -1405,8 +1408,7 @@ export class VnStage {
     delete this.fxOverlay.dataset.vnEffect;
     this.fxOverlay.innerHTML = "";
 
-    this.ambientOverride = undefined;
-    this.applyAmbient(null);
+    if(!preserveAmbient){this.ambientOverride = undefined;this.applyAmbient(null);}
 
     this.resetZoom();
   }
@@ -1497,6 +1499,7 @@ export class VnStage {
   }
 
   private triggerParagraphEffects(paragraph: VnParagraph): void {
+    if(paragraph.effectLimit)this.resetEffects(true);
     let triggeredEffect: StageEffect | null = null;
     const explicitEffect = paragraph.effect ?? paragraph.cue?.effect;
     if (explicitEffect && isStageEffect(explicitEffect)) {

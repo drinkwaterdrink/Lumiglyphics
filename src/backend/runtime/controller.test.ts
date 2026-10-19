@@ -69,6 +69,12 @@ const plan = TurnPlanSchema.parse({
   createdAt: now
 });
 
+test('turn views transport scoped effect caps and ignore misaligned optional arrays',()=>{
+ const saved={schemaVersion:1,speaker:'Mira',status:'ready',plan:{...plan,effectLimits:['off']},jobs:[],updatedAt:now} as StoredTurnRecord;
+ expect(turnView(saved).effectLimits).toEqual(['off']);
+ expect(turnView({...saved,plan:{...plan,effectLimits:['off','gentle']}}).effectLimits).toBeUndefined();
+});
+
 function generatedJob(): AssetJob {
   return {
     jobId: "job",

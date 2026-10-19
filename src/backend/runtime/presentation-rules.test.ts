@@ -43,6 +43,21 @@ const draft=(id='r',templateId='portrait')=>({id,name:'Portrait dialogue',enable
 function fixture(){const data=new Map<string,any>();const writes:string[]=[];const api={userStorage:{getJson:async(p:string,o:any)=>structuredClone(data.get(o.userId+':'+p)??o.fallback),setJson:async(p:string,v:any,o:any)=>{writes.push(o.userId+':'+p);data.set(o.userId+':'+p,structuredClone(v));}},chats:{get:async()=>({})}} as any;return {api,data,writes};}
 const save=(scope:'user'|'chat',rule=draft(),expectedRevision=0)=>({type:'vn_presentation_rules' as const,version:1 as const,requestId:'request',chatId:'chat',action:'save' as const,scope,rule,expectedRevision});
 
+test('effect limits apply without picture slots and preserve original effects, audio and images',async()=>{
+ const plan={paragraphs:[{text:'Hello.'},{text:'Quiet reply.'},{text:'Silence.'}],paragraphSpeakers:['Mira','Mira',null],scenes:[{sceneId:'s',revision:0,startParagraph:0,environment:{location:'Library'},cast:[]}],visualCues:[],effectCues:[{paragraphIndex:1,effect:'flash_white'}],audioCues:[{paragraphIndex:0,bgm:'theme',sfx:null}]} as any;
+ const cap={...draft('quiet'),scope:'chat',savedOrder:1,then:{kind:'limit_effects',intensity:'gentle'}} as any;
+ const before=JSON.stringify(plan),result=applyTemplatePreferences(plan,DEFAULT_CONFIG,[cap],null,{});
+ expect(applyTemplatePreferences(plan,{...DEFAULT_CONFIG,imageTemplates:[]},[cap],null,{}).effectLimits).toEqual(['gentle','gentle',null]);
+ const place={...cap,when:{kind:'subject',subjectKind:'place',name:'Library'}};
+ expect(applyTemplatePreferences(plan,DEFAULT_CONFIG,[place],null,{}).effectLimits).toEqual(['gentle','gentle','gentle']);
+ const itemPlan={...plan,storyReferences:[{kind:'object',name:'reply',paragraphIndex:1,field:'description',value:'Quiet',evidence:'Quiet reply.'}]};
+ const item={...cap,when:{kind:'subject',subjectKind:'object',name:'reply'}};
+ expect(applyTemplatePreferences(itemPlan,DEFAULT_CONFIG,[item],null,{}).effectLimits).toEqual([null,'gentle',null]);
+ expect((result as any).effectLimits).toEqual(['gentle','gentle',null]);expect(result.effectCues).toEqual(plan.effectCues);expect(result.audioCues).toEqual(plan.audioCues);expect(result.visualCues).toEqual([]);expect(JSON.stringify(plan)).toBe(before);
+ const f=fixture();const request=save('chat',cap);delete (request.rule as any).scope;delete (request.rule as any).savedOrder;
+ expect((await managePresentationRules(f.api,request,'alice')).chat!.rules[0]!.then.kind).toBe('limit_effects');
+});
+
 test('subject preferences use explicit picture focus, current place and literal item descriptions',()=>{
  const key={chatId:'chat',assistantMessageId:'reply',swipeId:0,sourceFingerprint:'12345678',revision:0};
  const plan={key,createdAt:'2026-10-19',paragraphs:[{index:0,text:'Radio speaks. The black key has a chipped tooth.'},{index:1,text:'Mira leaves.'}],paragraphSpeakers:['Radio',null],initialContinuity:{revision:0,characters:{},facts:{}},continuityDeltas:[{paragraphIndex:1,delta:{characterUpdates:{Mira:{present:false}},forgetCharacters:[],factUpdates:{}}}],scenes:[{sceneId:'s',revision:0,startParagraph:0,environment:{location:'Library',description:'Rainy windows'},cast:['Mira']}],visualCues:[0,1].map(paragraphIndex=>({cueId:`c${paragraphIndex}`,sceneId:'s',sceneRevision:0,paragraphIndex,...(paragraphIndex===0?{character:"Mira"}:{}),imageTemplate:templateSnapshot(DEFAULT_CONFIG.imageTemplates[0]!)})),storyReferences:[{kind:'object',name:'black key',paragraphIndex:0,field:'condition',value:'chipped tooth',evidence:'The black key has a chipped tooth.'}]} as any;

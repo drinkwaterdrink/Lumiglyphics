@@ -445,6 +445,14 @@ describe("stageTurnInput (production host-to-stage mapping)", () => {
 });
 
 describe("stageTurnInput (effect presentation preference)", () => {
+  test('conditional caps can only lower global effects and soften danger pulses',()=>{
+    const view=turn({paragraphs:['A','B','C'],effects:['shake_hard','confetti','flash_white'],ambients:['danger_pulse','rain',null],effectLimits:['gentle','off',null]} as any);
+    expect(stageTurnInput(view,'standard',false,'full').paragraphs.map(p=>p.effect)).toEqual(['shake',undefined,'flash_white']);
+    expect(stageTurnInput(view,'standard',false,'off').paragraphs.map(p=>p.effect)).toEqual([undefined,undefined,undefined]);
+    expect(stageTurnInput(view,'standard',false,'full').ambient).toBe('vignette_dark');
+    expect(stageTurnInput(view,'standard',false,'gentle').paragraphs.map(p=>p.effect)).toEqual(['shake',undefined,undefined]);
+    expect(stageTurnInput({...view,effectLimits:['garbage'] as any},'standard',false,'full').paragraphs[0]?.effect).toBe('shake_hard');
+  });
   const view = () => turn({
     paragraphs: ["Boom.", "Flash.", "Danger."],
     effects: ["shake_hard", "flash_white", "confetti"],

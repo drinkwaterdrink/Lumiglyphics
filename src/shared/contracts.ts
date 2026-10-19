@@ -334,6 +334,8 @@ export const TurnPlanSchema = z.object({
   audioCues: z.array(AudioCueSchema).default([]),
   // Uncapped paragraph effects. Absent on legacy records; [] is authoritative.
   effectCues: z.array(EffectCueSchema).optional(),
+  // Optional presentation caps never invalidate primary saved story state.
+  effectLimits: z.array(z.enum(['gentle','off']).nullable()).max(10000).optional().catch(undefined),
   choices: z.array(ChoiceSchema).default([]),
   initialContinuity: ContinuityStateSchema,
   continuityDeltas: z.array(IndexedContinuityDeltaSchema).default([]),

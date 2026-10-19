@@ -213,8 +213,13 @@ export function effectForParagraph(
 ): { effect?: StageEffect } {
   const effect = view.effects?.[index];
   if (!isStageEffect(effect)) return {};
-  const presented = presentEffect(effect, intensity);
+  const presented = presentEffect(effect, paragraphEffectIntensity(view,index,intensity));
   return presented ? { effect: presented } : {};
+}
+
+function paragraphEffectIntensity(view:TurnView,index:number,global:VisualNovelEffectIntensity):VisualNovelEffectIntensity {
+ const cap=view.effectLimits?.length===view.paragraphs.length?view.effectLimits[index]:null;
+ return global==='off'||cap==='off'?'off':global==='gentle'||cap==='gentle'?'gentle':'full';
 }
 
 /** The validated ambient effect for a paragraph, as a spreadable object. */
@@ -225,13 +230,13 @@ export function ambientForParagraph(
 ): { ambient?: AmbientEffect | null } {
   const ambient = view.ambients?.[index];
   if (ambient === null) return { ambient: null };
-  return isAmbientEffect(ambient) ? { ambient: presentAmbient(ambient, intensity) } : {};
+  return isAmbientEffect(ambient) ? { ambient: presentAmbient(ambient, paragraphEffectIntensity(view,index,intensity)) } : {};
 }
 
 /** The turn-level opening ambient (paragraph 0's ambient, when valid). */
 export function firstAmbient(view: TurnView, intensity: VisualNovelEffectIntensity = "full"): AmbientEffect | null {
   const ambient = view.ambients?.[0];
-  return isAmbientEffect(ambient) ? presentAmbient(ambient, intensity) : null;
+  return isAmbientEffect(ambient) ? presentAmbient(ambient, paragraphEffectIntensity(view,0,intensity)) : null;
 }
 
 /** Build the stage input without turning absent ambient data into a clear. */
@@ -250,6 +255,7 @@ export function stageTurnInput(
       id: `${next.sourceFingerprint}:${index}`,
       text,
       speaker: nameplateForParagraph(next, index),
+      ...(next.effectLimits?.length===next.paragraphs.length&&(next.effectLimits[index]==='gentle'||next.effectLimits[index]==='off')?{effectLimit:next.effectLimits[index]!}:{}),
       ...effectForParagraph(next, index, intensity),
       ...ambientForParagraph(next, index, intensity)
     })),

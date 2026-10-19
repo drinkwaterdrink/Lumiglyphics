@@ -8,7 +8,7 @@ export const SETTINGS_PAGES = [
  {id:'images',section:'pictures',title:'Images',description:'Choose how new illustrations are prepared.',parent:'home'},
  {id:'templates',section:'pictures',title:'Scene templates',description:'Choose what each kind of picture shows.',parent:'images'},
  {id:'style',section:'pictures',title:'Shared style',description:'Reusable style and exclusions for future pictures.',parent:'images'},
- {id:'rules',section:'pictures',title:'Template rules',description:'Optional preferences for future pictures.',parent:'images'},
+ {id:'rules',section:'pictures',title:'Presentation rules',description:'Optional template and stage-effect preferences.',parent:'images'},
  {id:'consistency',section:'pictures',title:'Consistency & reuse',description:'Generation references and compatible saved pictures.',parent:'images'},
  {id:'generation',section:'pictures',title:'Advanced generation',description:'Model-specific controls and image overrides.',parent:'images'},
  {id:'characters',section:'characters',title:'Characters & places',description:'Saved presentation guidance for this story.',parent:'home'},

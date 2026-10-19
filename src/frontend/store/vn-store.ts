@@ -50,6 +50,7 @@ export interface VnParagraph {
   id: string;
   text: string;
   speaker?: string;
+  effectLimit?: 'gentle'|'off';
   effect?: StageEffect;
   ambient?: AmbientEffect | null;
   cue?: {

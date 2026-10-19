@@ -33,15 +33,34 @@ export function applyTemplatePreferences(plan:TurnPlan,config:VisualNovelConfig,
   const subjects:RuleSubject[]=[{kind:'place',name:scene.environment.location}];
   if(cue.character?.trim())subjects.push({kind:'npc',name:cue.character});
   subjects.push(...itemReferences.filter(r=>r.paragraphIndex===cue.paragraphIndex).map(r=>({kind:r.kind,name:r.name})));
-  const decision=evaluatePresentationRules({isDialogue:Boolean(plan.paragraphSpeakers[cue.paragraphIndex]?.trim()),locationChanged:Boolean(location&&before&&location!==before&&first.get(sceneKey(cue))===cue.cueId),templateId:cue.imageTemplate.id,enabledTemplateIds:enabled.map(t=>t.id),subjects},rules);
+  const decision=evaluatePresentationRules({isDialogue:Boolean(plan.paragraphSpeakers[cue.paragraphIndex]?.trim()),locationChanged:Boolean(location&&before&&location!==before&&first.get(sceneKey(cue))===cue.cueId),templateId:cue.imageTemplate.id,enabledTemplateIds:enabled.map(t=>t.id),subjects},rules.filter(rule=>rule.then.kind==='prefer_template'));
   if(!decision.matchedRuleIds.length&&!diagnostics.length)return cue;
   const target=enabled.find(t=>t.id===decision.preferredTemplateId);
-  const winning=[...rules].reverse().find(r=>r.id===decision.selectedRuleId&&r.scope===decision.selectedScope&&r.then.templateId===target?.id);
+  const winning=[...rules].reverse().find(r=>r.id===decision.selectedRuleId&&r.scope===decision.selectedScope&&r.then.kind==='prefer_template'&&r.then.templateId===target?.id);
   const outcome=target?`Applied ${target.name}${winning?` from ${winning.name} (${winning.scope==='chat'?'this chat':'all chats'}) — ${describePresentationCondition(winning.when,id=>config.imageTemplates.find(t=>t.id===id)?.name??id)}`:''}.`:'Kept the planner template.';
-  const summary=[outcome,...diagnostics,...decision.diagnostics,...(!usable&&decision.matchedRuleIds.some(id=>rules.some(r=>r.id===id&&config.imageTemplates.some(t=>t.id===r.then.templateId&&t.subjectMode==='one')))?['Character preferences need a usable identity; existing subject guidance was kept.']:[])].join('\n').slice(0,4000);
+  const summary=[outcome,...diagnostics,...decision.diagnostics,...(!usable&&decision.matchedRuleIds.some(id=>rules.some(r=>r.id===id&&config.imageTemplates.some(t=>r.then.kind==='prefer_template'&&t.id===r.then.templateId&&t.subjectMode==='one')))?['Character preferences need a usable identity; existing subject guidance was kept.']:[])].join('\n').slice(0,4000);
   return {...cue,...(target?{imageTemplate:templateSnapshot(target),imageTemplateReason:`Saved preference: ${target.name}`.slice(0,300)}:{}),presentationRuleTrace:{matchedRuleIds:decision.matchedRuleIds,summary}};
  };
- return {...plan,visualCues:plan.visualCues.map(apply),...(plan.cacheCues?{cacheCues:plan.cacheCues.map(apply)}:{})};
+ const effectRules=rules.filter(rule=>rule.then.kind==='limit_effects');
+ const effectDecisions=effectRules.length?plan.paragraphs.map((_,paragraphIndex)=>{
+  const scene=[...plan.scenes].reverse().find(s=>s.startParagraph<=paragraphIndex);
+  const cue=[...plan.visualCues,...(plan.cacheCues??[])].find(c=>c.paragraphIndex===paragraphIndex);
+  const prior=scene?plan.scenes[plan.scenes.indexOf(scene)-1]??previous:null;
+  const subjects:RuleSubject[]=scene?[{kind:'place',name:scene.environment.location}]:[];
+  if(cue?.character)subjects.push({kind:'npc',name:cue.character});
+  subjects.push(...itemReferences.filter(r=>r.paragraphIndex===paragraphIndex).map(r=>({kind:r.kind,name:r.name})));
+  return evaluatePresentationRules({isDialogue:Boolean(plan.paragraphSpeakers[paragraphIndex]?.trim()),locationChanged:Boolean(scene&&scene.startParagraph===paragraphIndex&&normalize(scene.environment.location)&&normalize(prior?.environment.location)&&normalize(scene.environment.location)!==normalize(prior?.environment.location)),templateId:cue?.imageTemplate?.id??'',enabledTemplateIds:[],subjects},effectRules);
+ }):[];
+ const effectLimits=effectDecisions.map(decision=>decision.effectIntensity??null);
+ const decorate=(cue:VisualCue)=>{
+  const next=apply(cue),decision=effectDecisions[cue.paragraphIndex];
+  if(!decision?.effectIntensity)return next;
+  const rule=effectRules.find(r=>r.id===decision.selectedEffectRuleId&&r.scope===decision.selectedEffectScope)!;
+  const trace=next.presentationRuleTrace;
+  return {...next,presentationRuleTrace:{matchedRuleIds:[...new Set([...(trace?.matchedRuleIds??[]),...decision.matchedRuleIds])].slice(0,24),summary:[trace?.summary,`Effects: ${decision.effectIntensity} from ${rule.name} (${rule.scope==='chat'?'this chat':'all chats'}). Global and OS comfort settings remain authoritative.`].filter(Boolean).join('\n').slice(0,4000)}};
+ };
+ const {effectLimits:oldLimits,...base}=plan;
+ return {...base,...(effectLimits.some(Boolean)?{effectLimits}:{}),visualCues:plan.visualCues.map(decorate),...(plan.cacheCues?{cacheCues:plan.cacheCues.map(decorate)}:{})};
 }
 
 /** Optional storage must never hold scene preparation open indefinitely. */
@@ -71,7 +90,8 @@ export async function managePresentationRules(api:SpindleAPI,raw:PresentationRul
  if(request.action!=='list'){
   if(request.action==='save'){
    const config=await loadConfig(api,userId);
-   if(!config.imageTemplates.some(template=>template.id===request.rule!.then.templateId&&template.enabled))throw new Error('Choose an enabled, available image template before saving this preference.');
+   const action=request.rule!.then;
+   if(action.kind==='prefer_template'&&!config.imageTemplates.some(template=>template.id===action.templateId&&template.enabled))throw new Error('Choose an enabled, available image template before saving this preference.');
   }
   await updatePresentationRuleDocument(api,request.scope!,request.chatId,userId,request.expectedRevision!,current=>{
    const rules=[...current.rules];const id=request.action==='save'?request.rule!.id:request.id!;

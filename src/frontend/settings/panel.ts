@@ -713,7 +713,7 @@ export class VisualNovelSettingsPanel {
             <div data-page-links>${this.pageLink('templates')}${this.pageLink('style')}${this.pageLink('rules')}${this.pageLink('consistency')}${this.pageLink('generation')}${this.pageLink('characters','Manage characters & places')}${this.pageLink('appearance','Change display picture fit')}</div>
             <section data-workspace-page="templates"><label data-check><input name="dynamicImageTemplates" type="checkbox"><span>Choose templates from story context<small>Only included templates are available. Budget and review remain independent.</small></span></label><div data-templates-mount ${find('Scene templates','manga ensemble character portrait dynamic prompt format')}></div></section>
             <section data-workspace-page="style">${sharedStyle}</section>
-            <section data-workspace-page="rules"><div data-rules-mount ${find('Template rules','preferences dialogue arrival priority scope remember')}></div></section>
+            <section data-workspace-page="rules"><div data-rules-mount ${find('Presentation rules','template preferences effects gentle off dialogue arrival priority scope remember')}></div></section>
             <section data-workspace-page="consistency">
               <p>Generation references may be sent to the image model. Compatible picture reuse avoids a new image request. Display portraits are gallery assignments managed under Characters & places.</p>
               ${group("Consistent characters", `
