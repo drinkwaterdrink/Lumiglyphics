@@ -1,12 +1,27 @@
 import {chromium} from 'playwright';import assert from 'node:assert/strict';
-const build=await Bun.build({entrypoints:['scripts/presentation-rules-browser-fixture.ts'],target:'browser'});assert.ok(build.success,String(build.logs));const bundle=await build.outputs[0]!.text();
-const server=Bun.serve({hostname:'127.0.0.1',port:0,fetch:r=>new URL(r.url).pathname==='/fixture.js'?new Response(bundle,{headers:{'Content-Type':'application/javascript'}}):new Response('<html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0"><script type="module" src="/fixture.js"></script></body></html>',{headers:{'Content-Type':'text/html'}})});
+// Browser plugin not available; use the project Playwright fixtures under Node.
+import {execFileSync} from 'node:child_process';import {readFileSync,mkdirSync} from 'node:fs';import {createServer} from 'node:http';
+mkdirSync('.cache/background-hold',{recursive:true});execFileSync('bun',['build','scripts/presentation-rules-browser-fixture.ts','--target','browser','--outfile','.cache/background-hold/rules.js'],{windowsHide:true});
+const bundle=readFileSync('.cache/background-hold/rules.js','utf8');const server=createServer((req,res)=>{const js=(req.url??'').endsWith('.js');res.setHeader('Content-Type',js?'application/javascript':'text/html');res.end(js?bundle:'<html><meta name="viewport" content="width=device-width,initial-scale=1"><body><script type="module" src="/fixture.js"></script></body></html>');});
+await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const port=(server.address() as {port:number}).port;
 const browser=await chromium.launch({headless:true});
 try{
  const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});page.setDefaultTimeout(5000);
- const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));await page.goto(`http://127.0.0.1:${server.port}`);
+ const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));await page.goto(`http://127.0.0.1:${port}`);
  await page.locator('[data-pane="pictures"] [data-page-link="rules"]').tap();
  const rules=page.locator('[data-presentation-rules]');
+ await rules.getByRole('button',{name:'New preference',exact:true}).tap();
+ await rules.getByLabel('Preference name').fill('Stable dialogue backgrounds');
+ await rules.getByLabel('Preference action').selectOption('hold_background');
+ await rules.getByRole('button',{name:'Preview preference',exact:true}).tap();
+ assert.match(await rules.locator('[data-preference-preview]').innerText(),/scene boundary.*manual artwork/s);
+ await rules.getByRole('button',{name:'Save preference',exact:true}).tap();
+ assert.match(await rules.locator('[data-list]').innerText(),/keep the background until the scene changes/);
+ await rules.getByRole('button',{name:'Edit',exact:true}).tap();
+ assert.equal(await rules.getByLabel('Preference action').inputValue(),'hold_background');
+ await rules.getByRole('button',{name:'Discard draft',exact:true}).tap();
+ await rules.getByRole('button',{name:'Remove',exact:true}).tap();await rules.getByRole('button',{name:'Confirm removal',exact:true}).tap();
+
  await rules.getByRole('button',{name:'New preference',exact:true}).tap();
  await rules.getByLabel('Preference name').fill('Quiet conversations');
  await rules.getByLabel('Preference action',{exact:true}).selectOption('limit_music');
@@ -117,4 +132,4 @@ try{
  await page.evaluate(()=>{const f=(window as any).rulesFixture;f.reply(f.state.held.pop());f.state.hold=false;});assert.match(await rules.locator('[data-preference-status]').innerText(),/unknown/,'late response cannot replace timeout status or draft');await rules.getByRole('button',{name:'Refresh preferences',exact:true}).tap();
  assert.match(await rules.locator('[data-list]').innerText(),/Uncertain save/,'refresh verifies a late completed write without resubmitting');
  console.log('PASS mobile template preferences: preview, scoped CRUD, protected drafts, stale/unknown responses, touch focus, light/dark layout.');
-}finally{await browser.close();server.stop(true);}
+}finally{await browser.close();server.close();}

@@ -1,7 +1,8 @@
+import {selectHeldBackground} from './background-hold.js';
 import {samePresentationTurn} from './presentation-entities.js';
 import type {AssetView,TurnView} from '../protocol.js';
 import type {StageAssetRole} from './stage-assets.js';
-export type StageAssetMetadata={role:StageAssetRole;sceneId:string;sceneRevision?:number;character?:string;attire?:string|null;displayImageUrl?:string};
+export type StageAssetMetadata={role:StageAssetRole;manual?:boolean;sceneId:string;sceneRevision?:number;character?:string;attire?:string|null;displayImageUrl?:string};
 export type CastPortrait={name:string;asset:AssetView|null;active:boolean};
 export type CastComposition={background:AssetView;portraits:CastPortrait[];otherCast:CastPortrait[];scope:string};
 const nameKey=(s:string)=>s.trim().toLocaleLowerCase();
@@ -14,7 +15,8 @@ export function selectCastComposition(turn:TurnView,index:number,selectedName?:s
  const sceneRevision=latest?.stageAsset?.sceneRevision??0;
  const local=visible.filter(a=>a.stageAsset?.sceneId===sceneId&&(a.stageAsset.sceneRevision??0)===sceneRevision);
  const usable=(a:AssetView)=>(a.status==='generated'||a.status==='browser_ready')&&Boolean(a.imageUrl)&&!a.previousImage;
- const background=local.filter(a=>a.stageAsset?.role==='background').at(-1);
+ const latestBackground=local.filter(a=>a.stageAsset?.role==='background').at(-1);
+ const background=latestBackground?selectHeldBackground(turn,index,latestBackground):undefined;
  if(!background||!usable(background))return null;
  const byName=new Map<string,CastPortrait>();
  const speaker=turn.paragraphSpeakers?.[index]??turn.speaker;

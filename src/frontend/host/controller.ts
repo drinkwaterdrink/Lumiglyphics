@@ -1,3 +1,4 @@
+import {selectHeldBackground} from '../../shared/background-hold.js';
 import {createUiId} from '../request-id.js';
 import {NarrativePreviewSchema} from '../../shared/preparation-preview.js';
 import {referenceHistoryFor} from '../../shared/reference-history.js';
@@ -93,7 +94,7 @@ export function selectCurrentImage(turn: TurnView, paragraphIndex: number): Asse
     if (!asset.imageUrl || asset.paragraphIndex > paragraphIndex) continue;
     if (!match || asset.paragraphIndex > match.paragraphIndex) match = asset;
   }
-  return match;
+  return match?selectHeldBackground(turn,paragraphIndex,match):null;
 }
 
 export function currentAssetError(turn: TurnView, paragraphIndex: number): string | null {

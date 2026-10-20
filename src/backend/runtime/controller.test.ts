@@ -71,6 +71,8 @@ const plan = TurnPlanSchema.parse({
 
 test('turn views transport scoped effect caps and ignore misaligned optional arrays',()=>{
  const saved={schemaVersion:1,speaker:'Mira',status:'ready',plan:{...plan,effectLimits:['off']},jobs:[],updatedAt:now} as StoredTurnRecord;
+ expect(turnView({...saved,plan:{...plan,backgroundHoldStarts:[0]}}).backgroundHoldStarts).toEqual([0]);
+ expect(turnView({...saved,plan:{...plan,backgroundHoldStarts:[0,0]}}).backgroundHoldStarts).toBeUndefined();
  expect(turnView(saved).effectLimits).toEqual(['off']);
  expect(turnView({...saved,plan:{...plan,effectLimits:['off','gentle']}}).effectLimits).toBeUndefined();
  expect(turnView({...saved,plan:{...plan,musicLimits:['quiet']}}).musicLimits).toEqual(['quiet']);

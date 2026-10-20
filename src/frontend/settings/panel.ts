@@ -13,7 +13,7 @@ import { TrackerMappingsPanel } from "./tracker-mappings.js";
 import { IMAGE_OUTPUT_RATIOS, normalizeImageOutputRatio } from "../../shared/image-output.js";
 import { ContextSourcesPanel } from './context-sources.js';
 import type { ContextSourceReport } from '../../shared/context-sources.js';
-import { BUILTIN_SHARED_STYLES, applySharedStyle } from "../../shared/image-styles.js";
+import { BUILTIN_SHARED_STYLES, applySharedStyle, restoredSharedStyleId } from "../../shared/image-styles.js";
 import { ImageTemplateEditor } from "./image-templates.js";
 import { normalizeReaderPreferences } from "../../shared/reader-preferences.js";
 import type { ImagePromptMetadata } from "../../shared/image-templates.js";
@@ -130,7 +130,7 @@ const ADVANCED_KEYS = [
   "novelAiQualityTags", "novelAiUseDefaultNegative",
   "imageModel", "imageConcurrency", "parserParameters", "imageParameters", "audioDirectory", "systemOneMode", "systemOneApiUrl", "systemOneModel",
   "includeRecentMessages", "includeCharacterContext", "includePersonaContext", "includeLorebookContext", "debugLogging",
-  "promptPrefix", "promptSuffix", "negativePrompt", "originalReference", "originalCreationName", "customPlannerInstructions",
+  "selectedSharedStyleId", "promptPrefix", "promptSuffix", "negativePrompt", "originalReference", "originalCreationName", "customPlannerInstructions",
   "ignoredTags", "displayRegexRules", "customCss",
 ] as const;
 type AdvancedKey = (typeof ADVANCED_KEYS)[number];
@@ -543,7 +543,7 @@ export class VisualNovelSettingsPanel {
               <div data-field ${find("Prompt presets", "preset save delete positive negative")}>
                 <span>Preset</span>
                 <div data-preset-row>
-                  <select name="promptPresetSelect" aria-label="Prompt preset"><option value="">Custom (no preset)</option></select>
+                  <input type="hidden" name="selectedSharedStyleId"><select name="promptPresetSelect" aria-label="Prompt preset"><option value="">Custom (no preset)</option></select>
                   <input name="promptPresetName" type="text" placeholder="Preset name" aria-label="Preset name" />
                   <button type="button" data-preset-save>Save preset</button>
                   <button type="button" data-preset-delete>Delete</button>
@@ -1370,6 +1370,8 @@ export class VisualNovelSettingsPanel {
     const presetSelect = this.control<HTMLSelectElement>("promptPresetSelect");
     const presetName = this.control<HTMLInputElement>("promptPresetName");
     presetSelect.addEventListener("change", () => {
+      this.control<HTMLInputElement>("selectedSharedStyleId").value=presetSelect.value;
+      this.markDraft("selectedSharedStyleId");
       const preset = this.promptPresets.find((candidate) => candidate.id === presetSelect.value) ?? BUILTIN_SHARED_STYLES.find(candidate => candidate.id === presetSelect.value);
       if (!preset) {
         presetName.value = "";
@@ -1409,6 +1411,8 @@ export class VisualNovelSettingsPanel {
         id = `preset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
         this.promptPresets.push({ id, name, positive, suffix, negative });
       }
+      this.control<HTMLInputElement>("selectedSharedStyleId").value=id;
+      this.markDraft("selectedSharedStyleId");
       this.renderPromptPresetOptions(id);
       this.save({ promptPresets: this.promptPresets.map((preset) => ({ ...preset })) }, `Preset “${name}” ${existing ? "updated" : "saved"}.`);
     });
@@ -1419,6 +1423,8 @@ export class VisualNovelSettingsPanel {
         return;
       }
       this.promptPresets = this.promptPresets.filter((candidate) => candidate.id !== selected.id);
+      this.control<HTMLInputElement>("selectedSharedStyleId").value="";
+      this.markDraft("selectedSharedStyleId");
       this.renderPromptPresetOptions("");
       presetName.value = "";
       this.save({ promptPresets: this.promptPresets.map((preset) => ({ ...preset })) }, `Preset “${selected.name}” deleted.`);
@@ -1846,6 +1852,7 @@ export class VisualNovelSettingsPanel {
       includePersonaContext: this.control<HTMLInputElement>("includePersonaContext").checked,
       includeLorebookContext: this.control<HTMLInputElement>("includeLorebookContext").checked,
       debugLogging: this.control<HTMLInputElement>("debugLogging").checked,
+      selectedSharedStyleId: this.control<HTMLInputElement>("selectedSharedStyleId").value,
       promptPrefix: this.control<HTMLTextAreaElement>("promptPrefix").value,
       promptSuffix: this.control<HTMLTextAreaElement>("promptSuffix").value,
       negativePrompt: this.control<HTMLTextAreaElement>("negativePrompt").value,
@@ -1929,6 +1936,7 @@ export class VisualNovelSettingsPanel {
     set("includePersonaContext", () => { this.control<HTMLInputElement>("includePersonaContext").checked = config.includePersonaContext; });
     set("includeLorebookContext", () => { this.control<HTMLInputElement>("includeLorebookContext").checked = config.includeLorebookContext; });
     set("debugLogging", () => { this.control<HTMLInputElement>("debugLogging").checked = config.debugLogging; });
+    set("selectedSharedStyleId", () => { this.control<HTMLInputElement>("selectedSharedStyleId").value = restoredSharedStyleId(config); });
     set("promptPrefix", () => { this.control<HTMLTextAreaElement>("promptPrefix").value = config.promptPrefix; });
     set("promptSuffix", () => { this.control<HTMLTextAreaElement>("promptSuffix").value = config.promptSuffix; });
     set("negativePrompt", () => { this.control<HTMLTextAreaElement>("negativePrompt").value = config.negativePrompt; });
@@ -1941,7 +1949,7 @@ export class VisualNovelSettingsPanel {
     set("displayRegexRules", () => { this.control<HTMLTextAreaElement>("displayRegexRules").value = config.displayRegexRules; });
     set("customCss", () => { this.control<HTMLTextAreaElement>("customCss").value = config.customCss; });
     this.promptPresets = config.promptPresets.map((preset) => ({ ...preset }));
-    this.renderPromptPresetOptions(this.control<HTMLSelectElement>("promptPresetSelect").value);
+    this.renderPromptPresetOptions(this.control<HTMLInputElement>("selectedSharedStyleId").value);
     this.updateImageModelHint();
   }
 
@@ -2238,6 +2246,7 @@ export class VisualNovelSettingsPanel {
 
   private renderPromptPresetOptions(selectedId: string): void {
     const select = this.control<HTMLSelectElement>("promptPresetSelect");
+    const previousSelection=select.value;
     const options = [
       { value: "", label: "Custom (no preset)" },
       ...BUILTIN_SHARED_STYLES.map(preset => ({ value: preset.id, label: `Built-in: ${preset.name}` })),
@@ -2250,6 +2259,11 @@ export class VisualNovelSettingsPanel {
       return option;
     }));
     select.value = [...this.promptPresets, ...BUILTIN_SHARED_STYLES].some((preset) => preset.id === selectedId) ? selectedId : "";
+    const chosen=[...this.promptPresets,...BUILTIN_SHARED_STYLES].find(p=>p.id===select.value);
+    const name=this.control<HTMLInputElement>("promptPresetName");
+    if(previousSelection!==select.value||!name.value)name.value=chosen?.name??'';
+    const description=this.root.querySelector<HTMLElement>('[data-style-description]');
+    if(description)description.textContent=BUILTIN_SHARED_STYLES.find(p=>p.id===select.value)?.description??(chosen?'Your saved style. Edit the fields, then Apply.':'Custom wording. Edit the fields, then Apply.');
   }
 
   setCastContext(chatId:string,requestId:string,scan:CastContextScan):boolean{return this.castArtPanel.receiveScan(chatId,requestId,scan);}

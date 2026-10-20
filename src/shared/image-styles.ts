@@ -39,3 +39,10 @@ export function sharedStyleWarnings(template: Pick<ImageTemplate, "positive" | "
   if (/\b(?:grain|noise|compression)\b/i.test(shared) && /\b(?:grain|noise|compression)\b/i.test(exclusions)) warnings.push("The positive style and negative prompt both mention grain, noise or compression. Check that the exclusions allow the photographic texture you want.");
   return warnings;
 }
+
+/** Older settings saved wording but no selected ID. Infer only an exact match. */
+export function restoredSharedStyleId(config:{selectedSharedStyleId?:string|null;promptPrefix:string;promptSuffix:string;negativePrompt:string;promptPresets:VisualNovelPromptPreset[]}):string {
+ const styles=[...config.promptPresets,...BUILTIN_SHARED_STYLES];
+ if(config.selectedSharedStyleId!=null)return styles.some(s=>s.id===config.selectedSharedStyleId)?config.selectedSharedStyleId:'';
+ return styles.find(s=>s.positive===config.promptPrefix&&s.negative===config.negativePrompt&&(s.suffix===undefined||s.suffix===config.promptSuffix))?.id??'';
+}

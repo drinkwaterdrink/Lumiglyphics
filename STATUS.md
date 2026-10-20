@@ -1,6 +1,6 @@
-# Lumiglyphics status — beta.53
+# Lumiglyphics status — beta.54
 
-This matrix describes beta.53 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
+This matrix describes beta.54 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
 
 | Area | Status | Current behavior / remaining scope |
 |---|---|---|
@@ -14,7 +14,7 @@ This matrix describes beta.53 on Testing. Dated plans and evidence describe thei
 | History | Delivered foundation | Unified saved prose/images with version-aware navigation. Broader bounded indexing/backfill/dedup remains pending. |
 | Settings workspace | Delivered for Testing | Seven categories, focused pages, searchable cast/place management and page-specific technical saves. Physical host/device acceptance remains manual. |
 | F1 template preferences | Delivered | Scoped rules, previews, remembered corrections and trace. |
-| F2 presentation policies | Partial | Named selected-picture-subject, current-place and verified paragraph-item conditions delivered. Conditional Gentle/Off one-shot effect caps delivered, including automatic-shake enforcement and global/OS precedence. Conditional music Quiet/Mute delivered. Background hold remains pending; broad physical-presence rules require stronger planner evidence. |
+| F2 presentation policies | Partial | Named selected-picture-subject, current-place and verified paragraph-item conditions delivered. Conditional Gentle/Off one-shot effect caps delivered, including automatic-shake enforcement and global/OS precedence. Conditional music Quiet/Mute delivered. Opt-in within-reply background hold delivered, releasing at scene/revision boundaries and respecting manual artwork and full-scene/page compositions; broad physical-presence rules require stronger planner evidence. |
 | Companion context | Partial / contract-bound | Optional SimTracker/public companion data; broad historical/reveal reconciliation requires verified public contracts. |
 | Warp illustrations | Delivered | Independent of reader visibility; shared request review gate, closed-reader approval/edit/cancel surface and scoped request snapshots. |
 | Audio and speech | Delivered, optional | Full-path audio cache identity and explicit speech lifecycle. Stable public TTS API/host autoplay coexistence remain compatibility limits. |
@@ -22,4 +22,4 @@ This matrix describes beta.53 on Testing. Dated plans and evidence describe thei
 
 Remaining work: [current roadmap](docs/ROADMAP.md).
 
-Release evidence: [beta.53 prompt repair](docs/review-evidence/2026-10-19-prompt-repair.md), [beta.52 model output compatibility](docs/review-evidence/2026-10-19-model-output-compatibility.md), [beta.51 model-aware image prompts](docs/review-evidence/2026-10-19-model-aware-prompts.md), [beta.50 cast overlay dismissal](docs/review-evidence/2026-10-19-cast-dismissal.md), [beta.49 music preferences](docs/review-evidence/2026-10-19-music-preferences.md), [beta.48 effect preferences](docs/review-evidence/2026-10-19-effect-preferences.md), [beta.47 named-subject preferences](docs/review-evidence/2026-10-19-subject-preferences.md), [beta.46 earlier references](docs/review-evidence/2026-10-18-reference-retention.md), [beta.45 reader and inspector polish](docs/review-evidence/2026-10-18-reader-inspector-polish.md), [beta.44 settings workspace](docs/review-evidence/2026-10-18-settings-workspace.md). Neither automated checks nor source inspection certify every provider, physical device or supported host version.
+Release evidence: [beta.54 background hold and style persistence](docs/review-evidence/2026-10-19-background-hold-style-persistence.md), [beta.53 prompt repair](docs/review-evidence/2026-10-19-prompt-repair.md), [beta.52 model output compatibility](docs/review-evidence/2026-10-19-model-output-compatibility.md), [beta.51 model-aware image prompts](docs/review-evidence/2026-10-19-model-aware-prompts.md), [beta.50 cast overlay dismissal](docs/review-evidence/2026-10-19-cast-dismissal.md), [beta.49 music preferences](docs/review-evidence/2026-10-19-music-preferences.md), [beta.48 effect preferences](docs/review-evidence/2026-10-19-effect-preferences.md), [beta.47 named-subject preferences](docs/review-evidence/2026-10-19-subject-preferences.md), [beta.46 earlier references](docs/review-evidence/2026-10-18-reference-retention.md), [beta.45 reader and inspector polish](docs/review-evidence/2026-10-18-reader-inspector-polish.md), [beta.44 settings workspace](docs/review-evidence/2026-10-18-settings-workspace.md). Neither automated checks nor source inspection certify every provider, physical device or supported host version.

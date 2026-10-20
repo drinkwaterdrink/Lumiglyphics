@@ -41,7 +41,7 @@ export function applyTemplatePreferences(plan:TurnPlan,config:VisualNovelConfig,
   const summary=[outcome,...diagnostics,...decision.diagnostics,...(!usable&&decision.matchedRuleIds.some(id=>rules.some(r=>r.id===id&&config.imageTemplates.some(t=>r.then.kind==='prefer_template'&&t.id===r.then.templateId&&t.subjectMode==='one')))?['Character preferences need a usable identity; existing subject guidance was kept.']:[])].join('\n').slice(0,4000);
   return {...cue,...(target?{imageTemplate:templateSnapshot(target),imageTemplateReason:`Saved preference: ${target.name}`.slice(0,300)}:{}),presentationRuleTrace:{matchedRuleIds:decision.matchedRuleIds,summary}};
  };
- const effectRules=rules.filter(rule=>rule.then.kind==='limit_effects'||rule.then.kind==='limit_music');
+ const effectRules=rules.filter(rule=>rule.then.kind==='limit_effects'||rule.then.kind==='limit_music'||rule.then.kind==='hold_background');
  const effectDecisions=effectRules.length?plan.paragraphs.map((_,paragraphIndex)=>{
   const scene=[...plan.scenes].reverse().find(s=>s.startParagraph<=paragraphIndex);
   const cue=[...plan.visualCues,...(plan.cacheCues??[])].find(c=>c.paragraphIndex===paragraphIndex);
@@ -51,18 +51,28 @@ export function applyTemplatePreferences(plan:TurnPlan,config:VisualNovelConfig,
   subjects.push(...itemReferences.filter(r=>r.paragraphIndex===paragraphIndex).map(r=>({kind:r.kind,name:r.name})));
   return evaluatePresentationRules({isDialogue:Boolean(plan.paragraphSpeakers[paragraphIndex]?.trim()),locationChanged:Boolean(scene&&scene.startParagraph===paragraphIndex&&normalize(scene.environment.location)&&normalize(prior?.environment.location)&&normalize(scene.environment.location)!==normalize(prior?.environment.location)),templateId:cue?.imageTemplate?.id??'',enabledTemplateIds:[],subjects},effectRules);
  }):[];
+ let holdStart:number|null=null;let holdScene='';
+ const backgroundHoldStarts=effectDecisions.map((decision,index)=>{
+  const scene=[...plan.scenes].reverse().find(s=>s.startParagraph<=index);
+  const key=scene?JSON.stringify([scene.sceneId,scene.revision]):'';
+  if(key!==holdScene||!key){holdStart=null;holdScene=key;}
+  if(key&&decision.holdBackground&&holdStart===null)holdStart=index;
+  return holdStart;
+ });
  const effectLimits=effectDecisions.map(decision=>decision.effectIntensity??null);
  const musicLimits=effectDecisions.map(decision=>decision.musicLevel??null);
  const decorate=(cue:VisualCue)=>{
   const next=apply(cue),decision=effectDecisions[cue.paragraphIndex];
-  if(!decision?.effectIntensity&&!decision?.musicLevel)return next;
+  if(!decision)return next;
+  const held=backgroundHoldStarts[cue.paragraphIndex];
+  if(!decision?.effectIntensity&&!decision?.musicLevel&&held==null)return next;
   const rule=effectRules.find(r=>r.id===decision.selectedEffectRuleId&&r.scope===decision.selectedEffectScope);
   const musicRule=effectRules.find(r=>r.id===decision.selectedMusicRuleId&&r.scope===decision.selectedMusicScope);
   const trace=next.presentationRuleTrace;
-  return {...next,presentationRuleTrace:{matchedRuleIds:[...new Set([...(trace?.matchedRuleIds??[]),...decision.matchedRuleIds])].slice(0,24),summary:[trace?.summary,rule?`Effects: ${decision.effectIntensity} from ${rule.name} (${rule.scope==='chat'?'this chat':'all chats'}). Global and OS comfort settings remain authoritative.`:null,musicRule?`Music: ${decision.musicLevel} from ${musicRule.name} (${musicRule.scope==='chat'?'this chat':'all chats'}). Saved volume remains the maximum; speech and sound effects are unchanged.`:null].filter(Boolean).join('\n').slice(0,4000)}};
+  return {...next,presentationRuleTrace:{matchedRuleIds:[...new Set([...(trace?.matchedRuleIds??[]),...(decision?.matchedRuleIds??[]),...(held!=null?effectDecisions[held]?.matchedRuleIds??[]:[])])].slice(0,24),summary:[trace?.summary,held!=null?'Background hold requested within this scene. Manual artwork and full-scene/page compositions take priority; image jobs remain unchanged.':null,rule?`Effects: ${decision.effectIntensity} from ${rule.name} (${rule.scope==='chat'?'this chat':'all chats'}). Global and OS comfort settings remain authoritative.`:null,musicRule?`Music: ${decision.musicLevel} from ${musicRule.name} (${musicRule.scope==='chat'?'this chat':'all chats'}). Saved volume remains the maximum; speech and sound effects are unchanged.`:null].filter(Boolean).join('\n').slice(0,4000)}};
  };
- const {effectLimits:oldLimits,musicLimits:oldMusicLimits,...base}=plan;
- return {...base,...(effectLimits.some(Boolean)?{effectLimits}:{}),...(musicLimits.some(Boolean)?{musicLimits}:{}),visualCues:plan.visualCues.map(decorate),...(plan.cacheCues?{cacheCues:plan.cacheCues.map(decorate)}:{})};
+ const {effectLimits:oldLimits,musicLimits:oldMusicLimits,backgroundHoldStarts:oldHold,...base}=plan;
+ return {...base,...(backgroundHoldStarts.some(v=>v!==null)?{backgroundHoldStarts}:{}),...(effectLimits.some(Boolean)?{effectLimits}:{}),...(musicLimits.some(Boolean)?{musicLimits}:{}),visualCues:plan.visualCues.map(decorate),...(plan.cacheCues?{cacheCues:plan.cacheCues.map(decorate)}:{})};
 }
 
 /** Optional storage must never hold scene preparation open indefinitely. */

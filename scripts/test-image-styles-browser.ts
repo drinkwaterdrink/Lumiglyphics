@@ -1,14 +1,20 @@
 import { chromium } from "playwright";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
-const build = await Bun.build({ entrypoints: ["scripts/settings-browser-fixture.ts"], target: "browser" });
-assert.ok(build.success, String(build.logs));
-const bundle = await build.outputs[0]!.text();
-const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: request => new URL(request.url).pathname === "/fixture.js" ? new Response(bundle, { headers: { "Content-Type": "application/javascript" } }) : new Response('<html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0"><script type="module" src="/fixture.js"></script></body></html>', { headers: { "Content-Type": "text/html" } }) });
+// Browser plugin not available; use the project Playwright fixtures under Node.
+import {execFileSync} from 'node:child_process';
+import {readFileSync,mkdirSync} from 'node:fs';
+import {createServer} from 'node:http';
+mkdirSync('.cache/shared-styles',{recursive:true});
+execFileSync('bun',['build','scripts/settings-browser-fixture.ts','--target','browser','--outfile','.cache/shared-styles/fixture.js'],{windowsHide:true});
+const bundle=readFileSync('.cache/shared-styles/fixture.js','utf8');
+const server=createServer((req,res)=>{const js=(req.url??'').endsWith('.js');res.setHeader('Content-Type',js?'application/javascript':'text/html');res.end(js?bundle:'<html><meta name="viewport" content="width=device-width,initial-scale=1"><body><script type="module" src="/fixture.js"></script></body></html>');});
+await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+const port=(server.address() as {port:number}).port;
 const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
-  await page.goto(`http://127.0.0.1:${server.port}/?setupDone&noSpeech`);
+  await page.goto(`http://127.0.0.1:${port}/?setupDone&noSpeech`);
   const settings = page.locator('[data-vn-settings]');
   await page.evaluate(() => (window as any).settingsFixture.panel.openPage('style'));
   const select = settings.getByLabel('Prompt preset', { exact: true });
@@ -33,6 +39,21 @@ try {
   assert.equal(await suffix.inputValue(), personal.suffix, 'personal style restores its suffix');
   await settings.locator('[data-apply-bar]').click();
   assert.equal(await page.evaluate(() => (window as any).settingsFixture.config.promptSuffix), personal.suffix);
+  assert.equal(await page.evaluate(()=>(window as any).settingsFixture.config.selectedSharedStyleId),personal.id);
+  await page.evaluate(()=>{const f=(window as any).settingsFixture;f.remount();f.panel.openPage('style');});
+  assert.equal(await select.inputValue(),personal.id,'personal selection survives complete settings reconstruction');
+  assert.equal(await suffix.inputValue(),personal.suffix);
+  await select.selectOption('builtin-style:anime');
+  await suffix.fill('My custom texture');
+  await settings.locator('[data-apply-bar]').click();
+  await page.evaluate(()=>{const f=(window as any).settingsFixture;f.remount();f.panel.openPage('style');});
+  assert.equal(await select.inputValue(),'builtin-style:anime','built-in selection survives with edited wording');
+  assert.equal(await suffix.inputValue(),'My custom texture');
+  await select.selectOption('');
+  await settings.locator('[data-apply-bar]').click();
+  await page.evaluate(()=>{const f=(window as any).settingsFixture;f.remount();f.panel.openPage('style');});
+  assert.equal(await select.inputValue(),'','explicit custom selection survives reopen');
+  assert.equal(await suffix.inputValue(),'My custom texture','custom selection never clears saved wording');
   await select.selectOption('builtin-style:neutral');
   assert.equal(await suffix.inputValue(), '', 'explicit empty style clears finishing details');
   await settings.getByRole('button', { name: 'Delete', exact: true }).click();
@@ -44,5 +65,5 @@ try {
   await page.screenshot({ path: '.cache/shared-styles/mobile.png', fullPage: true });
   await page.close();
   console.log('shared styles browser checks passed');
-} finally { await browser.close(); server.stop(true); }
+} finally { await browser.close(); server.close(); }
 

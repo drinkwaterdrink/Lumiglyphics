@@ -58,3 +58,11 @@ test('strict documents and commands reject unsupported actions, duplicate IDs an
  expect(PresentationRuleRequestSchema.safeParse({type:'vn_presentation_rules',version:1,requestId:'r',action:'delete',scope:'chat',id:'x',expectedRevision:0}).success).toBe(false);
  expect(PresentationRuleRequestSchema.safeParse({type:'vn_presentation_rules',version:1,requestId:'r',action:'save',scope:'user',expectedRevision:0,rule:{...rule('r','user'),then:{kind:'motion_cap',intensity:'off'}}}).success).toBe(false);
 });
+
+test('background hold validates independently of image templates and other actions',()=>{
+ const hold={...rule('hold','chat'),then:{kind:'hold_background'}} as any;
+ const {scope,savedOrder,...draft}=hold;expect(PresentationRuleDraftSchema.safeParse(draft).success).toBe(true);
+ expect(evaluatePresentationRules(input,[rule('template','chat'),hold]).holdBackground).toBe(true);
+ expect(evaluatePresentationRules({...input,isDialogue:false},[hold]).holdBackground).toBeUndefined();
+ expect(evaluatePresentationRules(input,[{...hold,enabled:false}]).holdBackground).toBeUndefined();
+});

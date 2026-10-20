@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { BUILTIN_SHARED_STYLES, applySharedStyle } from './image-styles.js';
+import { BUILTIN_SHARED_STYLES, applySharedStyle, restoredSharedStyleId } from './image-styles.js';
 import { normalizeConfig } from '../config.js';
 import { renderImageTemplate, templateSnapshot } from './image-templates.js';
 test('shared styles contain the requested editable looks and no scene placeholders', () => {
@@ -23,3 +23,13 @@ test('suffix is literal user text, placed only by its placeholder and never recu
   expect(renderImageTemplate(template, values).prompt).toContain('Subtle grain. {{scene}}');
   expect(renderImageTemplate({ ...template, positive: '{{subjects}}' }, values).prompt).toBe('A fox');
 });
+
+ test('saved style selection survives normalization while legacy matching and custom wording stay honest',()=>{
+ const style=BUILTIN_SHARED_STYLES[1]!;
+ const fields={promptPrefix:style.positive,promptSuffix:style.suffix??'',negativePrompt:style.negative,promptPresets:[]};
+ expect(restoredSharedStyleId(normalizeConfig(fields))).toBe(style.id);
+ expect(restoredSharedStyleId(normalizeConfig({...fields,selectedSharedStyleId:style.id,promptSuffix:'My own finish'}))).toBe(style.id);
+ expect(restoredSharedStyleId(normalizeConfig({...fields,selectedSharedStyleId:''}))).toBe('');
+ expect(restoredSharedStyleId(normalizeConfig({...fields,selectedSharedStyleId:'deleted'}))).toBe('');
+ expect(restoredSharedStyleId(normalizeConfig({...fields,promptPrefix:'Custom drawing'}))).toBe('');
+ });

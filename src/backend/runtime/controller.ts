@@ -412,7 +412,7 @@ function summarizeDiagnostics(diagnostics: {
  * first scene). Both arrays are omitted when the turn has nothing to show so
  * old records keep their legacy behavior. Explicit ambient nulls are sent to clear.
  */
-function effectViews(record: StoredTurnRecord): Pick<TurnView, "effects" | "ambients" | "effectLimits" | "musicLimits"> {
+function effectViews(record: StoredTurnRecord): Pick<TurnView, "effects" | "ambients" | "effectLimits" | "musicLimits" | "backgroundHoldStarts"> {
   const paragraphCount = record.plan.paragraphs.length;
   if (paragraphCount === 0) return {};
   const effects: Array<string | null> = new Array(paragraphCount).fill(null);
@@ -438,6 +438,7 @@ function effectViews(record: StoredTurnRecord): Pick<TurnView, "effects" | "ambi
   return {
     ...(hasEffect ? { effects } : {}),
     ...(record.plan.effectLimits?.length===paragraphCount?{effectLimits:record.plan.effectLimits}:{}),
+    ...(record.plan.backgroundHoldStarts?.length===paragraphCount?{backgroundHoldStarts:record.plan.backgroundHoldStarts}:{}),
     ...(record.plan.musicLimits?.length===paragraphCount?{musicLimits:record.plan.musicLimits}:{}),
     ...(hasAmbient ? { ambients } : {})
   };
@@ -450,7 +451,7 @@ function assetView(record: StoredTurnRecord, job: StoredTurnRecord["jobs"][numbe
   const template = record.imageRequests?.filter(r => r.jobId === job.jobId && r.state === "approved").at(-1)?.imagePromptMetadata?.template ?? cue?.imageTemplate;
   const role = template?.id === 'manga-page' ? 'scene' : template?.category === 'portrait' ? 'portrait' : template?.category === 'environment' && template.subjectMode === 'none' ? 'background' : 'scene';
   return {
-    ...(cue ? {stageAsset:{role,sceneId:cue.sceneId,sceneRevision:cue.sceneRevision,...(role==='portrait'&&cue.character?{character:cue.character,attire:cue.resolvedAttire??cue.attire??null}:{})}} : {}),
+    ...(cue ? {stageAsset:{role,...(cue.imageTemplateReason==='Manual template selection'||(cue.visualSources?.includes('manual subject correction')||cue.visualSources?.includes('manual artwork replacement'))?{manual:true}:{}),sceneId:cue.sceneId,sceneRevision:cue.sceneRevision,...(role==='portrait'&&cue.character?{character:cue.character,attire:cue.resolvedAttire??cue.attire??null}:{})}} : {}),
     jobId: job.jobId,
     diagnostic: {...imageDiagnostic(cue, job.status === 'failed'),...(record.plannerMode ? {planner:record.plannerMode} : {})},
     cueId: cue?.cueId ?? job.jobId,
@@ -905,7 +906,8 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
   const updateCue = (cue: StoredTurnRecord['plan']['visualCues'][number]) => {
     if(cue.assetJobId!==job.jobId) return cue;
     const selected=template ? {...cue,imageTemplate:templateSnapshot(template),imageTemplateReason:'Manual template selection',presentationRuleTrace:undefined} : cue;
-    if(!correction) return selected;
+    const manual={...selected,visualSources:[...(selected.visualSources??[]).filter(s=>s!=='manual artwork replacement').slice(0,23),'manual artwork replacement']};
+    if(!correction) return manual;
     corrected={...correctVisualSubject(selected,correction.subject,registry,config.imageTemplates),visualSources:['manual subject correction'],imageTemplateReason:'Manual subject correction',presentationRuleTrace:undefined};
     return corrected;
   };

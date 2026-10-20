@@ -43,3 +43,11 @@ test('turn-scoped absence state hides absent cast and rejects stale state from a
  expect(t.assets[1]?.imageUrl).toBe('/Mira');
  expect(selectCastComposition({...t,assets:[...t.assets,asset('page',2,'scene')]},2)).toBeNull();
  });
+
+test('cast mode shares held background selection while retaining independently selected portraits',()=>{
+ const t={...turn([asset('place',0,'background'),asset('Mira',0),asset('new-place',1,'background'),asset('Rin',1)]),backgroundHoldStarts:[null,1,1]};
+ // Hold starts at paragraph 1: artwork at that cursor is the anchor.
+ expect(selectCastComposition(t,2)?.background.jobId).toBe('new-place');
+ t.backgroundHoldStarts=[0,0,0];expect(selectCastComposition(t,2)?.background.jobId).toBe('place');
+ expect(selectCastComposition(t,2)?.portraits.map(p=>p.name)).toEqual(['Mira','Rin']);
+});

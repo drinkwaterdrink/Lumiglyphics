@@ -122,3 +122,13 @@ test('disabled templates and unauthorized chats cannot be saved, and rule manage
  await expect(managePresentationRules(f.api,save('chat'),'alice')).rejects.toThrow(/unavailable/i);expect(f.writes).toHaveLength(0);
  f.api.chats.get=async()=>({});await expect(managePresentationRules(f.api,save('user',draft('manga','manga-page')),'alice')).rejects.toThrow(/enabled|unavailable/i);expect(f.writes).toHaveLength(0);
 });
+
+test('background preference latches within a scene and resets on scene revision without adding cues',()=>{
+ const scene={sceneId:'s',revision:0,startParagraph:0,environment:{location:'Library'},cast:[]};
+ const plan={paragraphs:[{text:'A'},{text:'B'},{text:'C'},{text:'D'}],paragraphSpeakers:[null,'Mira',null,null],scenes:[scene,{...scene,revision:1,startParagraph:3}],visualCues:[]} as any;
+ const hold={id:'hold',name:'Hold during dialogue',scope:'chat',savedOrder:1,priority:50,enabled:true,when:{kind:'dialogue'},then:{kind:'hold_background'}} as any;
+ const before=JSON.stringify(plan);const next=applyTemplatePreferences(plan,DEFAULT_CONFIG,[hold],null,{});
+ expect((next as any).backgroundHoldStarts).toEqual([null,1,1,null]);
+ expect(next.visualCues).toEqual([]);expect(JSON.stringify(plan)).toBe(before);
+ expect((applyTemplatePreferences(next,DEFAULT_CONFIG,[],null,{}) as any).backgroundHoldStarts).toBeUndefined();
+});

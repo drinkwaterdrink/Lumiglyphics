@@ -604,3 +604,14 @@ test('stage rejects tooltip presentation from a different turn scope',()=>{
  expect(stageTurnInput({...view,presentation},'standard',false).presentation).toEqual(presentation);
  expect(stageTurnInput({...view,presentation:{...presentation,snapshots:presentation.snapshots.map(s=>({...s,at:{...s.at,key:{...key,chatId:'foreign'}}}))}},'standard',false).presentation).toBeUndefined();
 });
+
+test('held backgrounds do not hide current failures or alter generation progress',()=>{
+ const first=asset({jobId:'first',cueId:'first',paragraphIndex:0,imageUrl:'/first',stageAsset:{role:'background',sceneId:'s'}});
+ const second=asset({jobId:'second',cueId:'second',paragraphIndex:1,imageUrl:'/second',stageAsset:{role:'background',sceneId:'s'}});
+ const failed=asset({jobId:'failed',cueId:'failed',paragraphIndex:2,status:'failed',error:'Provider unavailable'});
+ const t=turn({paragraphs:['a','b','c'],backgroundHoldStarts:[0,0,0],assets:[first,second,failed]});
+ expect(selectCurrentImage(t,1)?.imageUrl).toBe('/first');
+ expect(selectCurrentImage(t,0)?.imageUrl).toBe('/first');
+ expect(currentAssetError(t,2)).toBe('Provider unavailable');
+ expect(computeAssetProgress(t)).toEqual(computeAssetProgress({...t,backgroundHoldStarts:[null,null,null]}));
+});

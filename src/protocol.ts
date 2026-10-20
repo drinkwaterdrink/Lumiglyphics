@@ -144,6 +144,7 @@ export type TurnView = {
   /** Per-paragraph one-shot stage effect ids; null entries mean no effect. */
   effects?: Array<string | null>;
   effectLimits?: Array<'gentle'|'off'|null>;
+  backgroundHoldStarts?: Array<number|null>;
   musicLimits?: Array<'quiet'|'mute'|null>;
   /** Per-paragraph persistent ambient effect ids; null entries mean no ambient. */
   ambients?: Array<string | null>;

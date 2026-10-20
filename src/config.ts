@@ -123,6 +123,7 @@ export type VisualNovelConfig = {
   promptPrefix: string;
   promptSuffix: string;
   negativePrompt: string;
+  selectedSharedStyleId?: string|null;
   promptPresets: VisualNovelPromptPreset[];
   /** Append character creation/source reference to character tags: Character \(Source\) */
   originalReference: boolean;
@@ -197,6 +198,7 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   promptPrefix: "masterpiece, best quality, anime visual novel scene",
   promptSuffix: "",
   negativePrompt: "low quality, blurry, malformed hands, text, subtitles, speech bubble, watermark, logo, frame, border",
+  selectedSharedStyleId: null,
   promptPresets: [],
   originalReference: false,
   originalCreationName: "",
@@ -368,6 +370,7 @@ export function normalizeConfig(value: unknown): VisualNovelConfig {
     promptPrefix: stringValue(input.promptPrefix, DEFAULT_CONFIG.promptPrefix),
     promptSuffix: retiredLegacySuffix(stringValue(input.promptSuffix, DEFAULT_CONFIG.promptSuffix)),
     negativePrompt: stringValue(input.negativePrompt, DEFAULT_CONFIG.negativePrompt),
+    selectedSharedStyleId: typeof input.selectedSharedStyleId==='string'?input.selectedSharedStyleId.slice(0,256):null,
     promptPresets: promptPresetList(input.promptPresets),
     originalReference: bool(input.originalReference, DEFAULT_CONFIG.originalReference),
     originalCreationName: stringValue(input.originalCreationName, DEFAULT_CONFIG.originalCreationName).trim(),
