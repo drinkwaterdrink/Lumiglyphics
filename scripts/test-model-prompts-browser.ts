@@ -83,5 +83,28 @@ try{
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:`.cache/model-prompt-research/output-${theme}.png`,fullPage:true});
  }
 
+ // Reproduce the reported 5,825 + 192 character draft and repair the edited wording.
+ await page.evaluate(profile=>{const f=(window as any).imageFixture;f.turn.imageRequests[0]={...f.turn.imageRequests[0],requestId:'oversized',prompt:'x'.repeat(5825),negativePrompt:'y'.repeat(192),promptProfile:{...profile,maxCharacters:3000},parameters:{seed:12}};f.studio.setTurn(f.turn);},profile);
+ await studio.getByLabel('Positive prompt',{exact:true}).fill('Edited cast appearance. '+'x'.repeat(5801));
+ if(!await studio.locator('[data-prompt-actions]').evaluate((el:HTMLDetailsElement)=>el.open))await studio.locator('[data-prompt-actions]>summary').click();
+ assert.equal(await studio.locator('[data-regenerate-prompt]').innerText(),'Fit to budget');
+ await studio.getByRole('button',{name:'Fit to budget',exact:true}).click();
+ const repair=await page.evaluate(()=>(window as any).imageFixture.actions.at(-1));
+ assert.equal(repair.type,'vn_regenerate_image_prompt');assert.ok(repair.edits.prompt.startsWith('Edited cast appearance.'));assert.equal(repair.edits.negativePrompt.length,192);assert.equal(repair.edits.parameters.seed,12);
+ await page.evaluate(()=>(window as any).imageFixture.studio.showError('Prompt repair failed after two attempts: The writer returned 3,511 combined characters; the limit is 3,000. Your previous draft is retained.'));
+ assert.equal(await studio.getByRole('button',{name:'Fit to budget',exact:true}).isEnabled(),true);
+ assert.ok((await studio.getByLabel('Positive prompt',{exact:true}).inputValue()).startsWith('Edited cast appearance.'));
+ await studio.locator('[data-notice]').scrollIntoViewIfNeeded();await page.screenshot({path:'.cache/model-prompt-research/prompt-repair-mobile.png',fullPage:true});
+ await studio.getByRole('button',{name:'Dismiss image prompt notice',exact:true}).click();
+ const before=await page.evaluate(()=>(window as any).imageFixture.actions.length);
+ await studio.locator('[data-parameters]').evaluate((el:HTMLTextAreaElement)=>{el.value='{invalid';el.dispatchEvent(new Event('input',{bubbles:true}));});
+ await studio.getByRole('button',{name:'Fit to budget',exact:true}).click();
+ assert.equal(await page.evaluate(()=>(window as any).imageFixture.actions.length),before,'invalid JSON never starts repair or leaves it busy');
+ assert.equal(await studio.getByRole('button',{name:'Fit to budget',exact:true}).isEnabled(),true);
+ await studio.locator('[data-parameters]').evaluate((el:HTMLTextAreaElement)=>{el.value='{"seed":12}';el.dispatchEvent(new Event('input',{bubbles:true}));});
+ await page.evaluate(()=>{const f=(window as any).imageFixture;f.turn.imageRequests[0].state='cancelled';f.turn.assets[0].status='failed';f.studio.setTurn(f.turn);});
+ await studio.getByRole('button',{name:'Fit to budget',exact:true}).click();
+ const replacement=await page.evaluate(()=>(window as any).imageFixture.actions.at(-1));assert.equal(replacement.type,'vn_prepare_image');assert.equal(replacement.regeneratePrompt,true);assert.ok(replacement.edits.prompt.startsWith('Edited cast appearance.'));
+ assert.equal(await page.evaluate(()=>(window as any).imageFixture.actions.some((a:any)=>a.type==='vn_image_review')),false,'repair stays separate from image approval');
  assert.deepEqual(errors,[]);console.log('Model prompt browser QA passed: budget persistence, provider cap, frozen review counts, blocked drafts and responsive layout.');
 }finally{await browser.close();server.close();}

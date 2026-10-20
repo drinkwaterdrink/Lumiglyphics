@@ -36,7 +36,7 @@ export type FrontendRequest =
   | { type: "vn_reading_position"; position: ReadingPosition }
   | { type: "vn_image_review"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; action: "generate" | "skip"; edits?: ImageRequestEdits }
   | { type: "vn_prepare_image"; chatId: string; messageId: string; sourceFingerprint: string; jobId: string; templateId?: string; edits?: ImageRequestEdits; regeneratePrompt?: boolean }
-  | { type: "vn_regenerate_image_prompt"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string }
+  | { type: "vn_regenerate_image_prompt"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; edits?:ImageRequestEdits }
   | { type: "vn_reprepare_image_template"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; templateId: string }
   | { type: "vn_external_image"; request: CueImageRequest }
   | { type: "vn_external_image_cancel"; request: Pick<CueImageRequest, "version" | "provider" | "chatId" | "requestId"> }
@@ -222,6 +222,7 @@ export type BackendResponse =
 export function isFrontendRequest(value: unknown): value is FrontendRequest {
   if ((value as {type?:unknown}|null)?.type === "vn_presentation_rules") return PresentationRuleRequestSchema.safeParse(value).success;
   if (value === null || typeof value !== "object") return false;
+  if((value as {type?:unknown}).type==='vn_regenerate_image_prompt')return z.object({type:z.literal('vn_regenerate_image_prompt'),chatId:z.string().min(1).max(128),messageId:z.string().min(1).max(128),sourceFingerprint:z.string().min(1).max(256),requestId:z.string().min(1).max(100),edits:z.object({prompt:z.string().trim().min(1).max(65000).optional(),negativePrompt:z.string().max(65000).optional(),parameters:z.record(z.string(),z.unknown()).optional()}).strict().optional()}).strict().safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_external_image_review") return z.object({type:z.literal("vn_external_image_review"),chatId:z.string().min(1).max(128),requestId:z.string().min(1).max(128),reviewRequestId:z.string().min(1).max(100),action:z.enum(["generate","skip"]),edits:z.object({prompt:z.string().min(1).max(65000).optional(),negativePrompt:z.string().max(65000).optional(),parameters:z.record(z.string(),z.unknown()).optional()}).strict().optional()}).strict().safeParse(value).success;
   if((value as {type?:unknown}).type==='vn_image_library')return ImageLibraryRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_cast_gallery") return CastGalleryRequestSchema.safeParse(value).success;

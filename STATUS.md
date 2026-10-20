@@ -1,6 +1,6 @@
-# Lumiglyphics status — beta.52
+# Lumiglyphics status — beta.53
 
-This matrix describes beta.52 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
+This matrix describes beta.53 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
 
 | Area | Status | Current behavior / remaining scope |
 |---|---|---|
@@ -22,4 +22,4 @@ This matrix describes beta.52 on Testing. Dated plans and evidence describe thei
 
 Remaining work: [current roadmap](docs/ROADMAP.md).
 
-Release evidence: [beta.52 model output compatibility](docs/review-evidence/2026-10-19-model-output-compatibility.md), [beta.51 model-aware image prompts](docs/review-evidence/2026-10-19-model-aware-prompts.md), [beta.50 cast overlay dismissal](docs/review-evidence/2026-10-19-cast-dismissal.md), [beta.49 music preferences](docs/review-evidence/2026-10-19-music-preferences.md), [beta.48 effect preferences](docs/review-evidence/2026-10-19-effect-preferences.md), [beta.47 named-subject preferences](docs/review-evidence/2026-10-19-subject-preferences.md), [beta.46 earlier references](docs/review-evidence/2026-10-18-reference-retention.md), [beta.45 reader and inspector polish](docs/review-evidence/2026-10-18-reader-inspector-polish.md), [beta.44 settings workspace](docs/review-evidence/2026-10-18-settings-workspace.md). Neither automated checks nor source inspection certify every provider, physical device or supported host version.
+Release evidence: [beta.53 prompt repair](docs/review-evidence/2026-10-19-prompt-repair.md), [beta.52 model output compatibility](docs/review-evidence/2026-10-19-model-output-compatibility.md), [beta.51 model-aware image prompts](docs/review-evidence/2026-10-19-model-aware-prompts.md), [beta.50 cast overlay dismissal](docs/review-evidence/2026-10-19-cast-dismissal.md), [beta.49 music preferences](docs/review-evidence/2026-10-19-music-preferences.md), [beta.48 effect preferences](docs/review-evidence/2026-10-19-effect-preferences.md), [beta.47 named-subject preferences](docs/review-evidence/2026-10-19-subject-preferences.md), [beta.46 earlier references](docs/review-evidence/2026-10-18-reference-retention.md), [beta.45 reader and inspector polish](docs/review-evidence/2026-10-18-reader-inspector-polish.md), [beta.44 settings workspace](docs/review-evidence/2026-10-18-settings-workspace.md). Neither automated checks nor source inspection certify every provider, physical device or supported host version.

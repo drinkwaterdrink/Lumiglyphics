@@ -94,6 +94,14 @@ export function applyImageEdits(request: ImageGenerationRequest, edits: ImageReq
   return { ...request, prompt, ...(negativePrompt !== undefined ? { negativePrompt } : {}), parameters };
 }
 
+/** A repair input may exceed the generation ceiling. Validate its type/size and
+ * parameter ownership here; only the successfully rewritten output can be approved. */
+export function applyImageRewriteDraft(request:ImageGenerationRequest,edits:ImageRequestEdits={}):ImageGenerationRequest{
+  if(!edits||typeof edits!=='object'||Array.isArray(edits)||Object.keys(edits).some(key=>!['prompt','negativePrompt','parameters'].includes(key)))throw new Error('Invalid prompt repair edits.');
+  for(const key of ['prompt','negativePrompt'] as const){const value=edits[key];if(value!==undefined&&(typeof value!=='string'||value.length>PROMPT_STORAGE_MAX||key==='prompt'&&!value.trim()))throw new Error('Prompt repair input must be text within the supported inspection size.');}
+  return applyImageEdits({...request,prompt:edits.prompt??request.prompt,...(edits.negativePrompt!==undefined?{negativePrompt:edits.negativePrompt}:{})},edits.parameters!==undefined?{parameters:edits.parameters}:{});
+}
+
 export type ImagePreparationMetadata = { provider: string; connectionRevision?: number; referenceSummary?: string; imagePromptMetadata?: ImagePromptMetadata; regeneratePrompt?: (request:ImageGenerationRequest) => Promise<ImageGenerationRequest>; rebuildTemplate?: (templateId: string) => Promise<{ request: ImageGenerationRequest; metadata: ImagePreparationMetadata }> };
 /** Also synchronize NovelAI/host-managed prompt copies after compaction. */
 export function compactImageRequest(request: ImageGenerationRequest): ImageGenerationRequest {
@@ -180,14 +188,15 @@ export class ImageReviewGate {
     }
   }
 
-  async regenerate(requestId:string):Promise<boolean> {
+  async regenerate(requestId:string,edits?:ImageRequestEdits):Promise<boolean> {
     const item=this.pending.get(requestId);
     if(!item?.metadata.regeneratePrompt||item.signal.aborted)return false;
+    const draft=applyImageRewriteDraft(item.request,edits);
     // An in-flight reroll exclusively owns this approval. Failed rewrites
     // restore the original preview instead of losing a usable request.
     this.pending.delete(requestId);
     try {
-      const request=await item.metadata.regeneratePrompt(structuredClone(item.request));
+      const request=await item.metadata.regeneratePrompt(structuredClone(draft));
       if(item.signal.aborted)throw aborted('Prompt regeneration cancelled.');
       assertPromptLengths(request.prompt,request.negativePrompt,request.promptProfile);
       const record=reviewRecord(item.record.jobId,item.record.paragraphIndex,request,item.metadata,true);

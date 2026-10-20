@@ -58,3 +58,46 @@ test('raw override validation follows small and large frozen budgets',()=>{
  const prompt='x'.repeat(5000);
  expect(()=>assertEffectivePromptBudget({...request,prompt,negativePrompt:'',promptProfile:large,parameters:{rawRequestOverride:{prompt,negative_prompt:''}}})).not.toThrow();
 });
+
+test('ensemble repair can rearrange cast descriptions while preserving each persons appearance',async()=>{
+ const subjects='Mira Vale: silver hair, green eyes, blue coat\nJon Reed: black hair, brown eyes, grey jacket';
+ const original={...request,prompt:subjects+'\n'+'Rainy station details. '.repeat(240)};
+ const result={prompt:'Mira Vale: blue coat; silver hair, green eyes. Jon Reed: grey jacket; black hair, brown eyes. Both wait at the rainy station.',negativePrompt:'blur'};
+ const {spindle,calls}=api([{content:JSON.stringify(result)}]);
+ const metadata={brief:{subjects,subjectMode:'ensemble'},template:{name:'Full scene',category:'custom'}} as any;
+ const rewritten=await rewriteImagePrompt(spindle,original,metadata,normalizeConfig({}),'u',new AbortController().signal,'fit');
+ expect(rewritten.prompt).toBe(result.prompt);expect(calls).toHaveLength(1);
+});
+
+test('valid near-ceiling wording is accepted instead of rejected by an artificial safety ceiling',async()=>{
+ const prompt='A traveller waits. '+ 'x'.repeat(2950);
+ const {spindle}=api([{content:JSON.stringify({prompt,negativePrompt:''})}]);
+ const rewritten=await rewriteImagePrompt(spindle,request,undefined,normalizeConfig({}),'u',new AbortController().signal,'fit');
+ expect(rewritten.prompt.length).toBeLessThanOrEqual(3000);expect(rewritten.prompt).toBe(prompt);
+});
+
+test('ensemble repair rejects swapped appearances and recovers the original identity facts',async()=>{
+ const subjects='Mira Vale: silver hair, green eyes\nJon Reed: black hair, brown eyes';
+ const original={...request,prompt:subjects+' at the station.'};
+ const bad={prompt:'Mira Vale: black hair, brown eyes. Jon Reed: silver hair, green eyes.',negativePrompt:''};
+ const good={prompt:'Jon Reed: brown eyes, black hair. Mira Vale: green eyes, silver hair. At the station.',negativePrompt:''};
+ const {spindle,calls}=api([{content:JSON.stringify(bad)},{content:JSON.stringify(good)}]);
+ const metadata={brief:{subjects,subjectMode:'ensemble'},template:{name:'Full scene',category:'custom'}} as any;
+ expect((await rewriteImagePrompt(spindle,original,metadata,normalizeConfig({}),'u',new AbortController().signal,'fit')).prompt).toBe(good.prompt);
+ expect(calls).toHaveLength(2);expect(calls[1].messages.at(-1).content).toContain('assigned to another person');
+});
+
+test('wrapped JSON text blocks are accepted without treating quoted braces as object boundaries',async()=>{
+ const text='Here is the prompt:\n```json\n'+JSON.stringify({prompt:'A traveller holds a sign marked "{A}" at the station.',negativePrompt:'blur'})+'\n```';
+ const {spindle}=api([{content:[{type:'text',text}]}]);
+ expect((await rewriteImagePrompt(spindle,request,undefined,normalizeConfig({}),'u',new AbortController().signal,'fit')).prompt).toContain('{A}');
+});
+
+test('length repair feeds back the measured candidate and failure reports its actual size',async()=>{
+ const bad={prompt:'x'.repeat(3500),negativePrompt:'unique blur'};
+ const {spindle,calls}=api([{content:JSON.stringify(bad)},{content:JSON.stringify(bad)}]);
+ await expect(rewriteImagePrompt(spindle,request,undefined,normalizeConfig({}),'u',new AbortController().signal,'fit')).rejects.toThrow('3,511 combined characters');
+ const second=JSON.parse(calls[1].messages[1].content);
+ expect(second.previousCandidate.prompt).toBe(bad.prompt);expect(second.targetCombinedCharacters).toBeLessThan(2900);
+ expect(request.prompt).toContain('silver-haired');
+});

@@ -11,7 +11,7 @@ export function imageDetailGuidance(config:VisualNovelConfig,profile:ImagePrompt
   const {revision: _, ...body} = t as typeof t & {revision?:string};
   const output=renderImageTemplate(templateSnapshot(body),{style:config.promptPrefix,suffix:config.promptSuffix,negative:config.negativePrompt,scene:'',subjects:'',action:'',composition:'',lighting:''});
   const fixed=output.prompt.length+output.negativePrompt.length;
-  return {templateId:t.id,sharedAndTemplateCharacters:fixed,sceneDirectionBudget:Math.max(0,high-fixed-(t.subjectMode==='none'?250:700)),directionField:t.category==='environment'?'environment.description':t.category==='detail'?'visualFocus':'visualDescription'};
+  return {templateId:t.id,sharedAndTemplateCharacters:fixed,sceneDirectionBudget:Math.max(0,high-fixed-(t.subjectMode==='ensemble'?1800:t.subjectMode==='none'?250:700)),directionField:t.category==='environment'?'environment.description':t.category==='detail'?'visualFocus':'visualDescription'};
  });
  return [
   `IMAGE DETAIL: Aim for ${low.toLocaleString()}–${high.toLocaleString()} characters in each finished image prompt (positive + negative combined); the absolute limit is ${maximum.toLocaleString()} CHARACTERS, not tokens. Shared style, suffix, template wording, identity, clothing, environment, framing and negatives all consume that same budget. This is a useful-detail target, not a minimum: no padding or repetitive quality adjectives. Prefer concise negatives and put useful evidenced visual detail in the positive prompt.`,

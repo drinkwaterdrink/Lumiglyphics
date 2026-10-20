@@ -610,11 +610,11 @@ describe("image review controller lifecycle", () => {
     const f=generationFixture();
     f.data.set('config.json',{generateImages:true,reviewImages:true,referenceAnchoring:false,maxImagesPerTurn:1,includeCharacterContext:false,includePersonaContext:false});
     const originalRaw=f.spindle.generate.raw.bind(f.spindle.generate);
-    let rewrites=0;
+    let rewrites=0;const repairInputs:any[]=[];
     (f.spindle as any).connections={list:async()=>[{id:'writer',provider:'openrouter',model:'writer',is_default:true}]};
     (f.spindle.generate as any).raw=async(request:any)=>{
       if(request.messages?.[0]?.content.includes('You rewrite ONE image prompt')){
-        rewrites++;const source=JSON.parse(request.messages[1].content);
+        rewrites++;const source=JSON.parse(request.messages[1].content);repairInputs.push(source);
         return {content:JSON.stringify({prompt:`${source.brief?.subjects??''}. A fresh composition in the existing library.`,negativePrompt:'blur, watermark'})};
       }
       return originalRaw(request);
@@ -623,17 +623,17 @@ describe("image review controller lifecycle", () => {
     const saved=()=>f.data.get(turnPath('chat','assistant-1',0)) as StoredTurnRecord;
     const latest=()=>saved()?.imageRequests?.at(-1);
     await waitFor(()=>latest()?.state==='review');const old=latest()!;
-    const action={type:'vn_regenerate_image_prompt',chatId:'chat',messageId:'assistant-1',sourceFingerprint:saved().plan.key.sourceFingerprint,requestId:old.requestId};
+    const action={type:'vn_regenerate_image_prompt',chatId:'chat',messageId:'assistant-1',sourceFingerprint:saved().plan.key.sourceFingerprint,requestId:old.requestId,edits:{prompt:old.prompt+' Edited draft. '+'x'.repeat(4000),negativePrompt:'blur',parameters:{seed:8}}};
     f.request(action,'wrong-reroll-user');await new Promise(r=>setTimeout(r,3));expect(rewrites).toBe(0);
     f.request(action,'reroll-user');await waitFor(()=>latest()?.requestId!==old.requestId&&latest()?.state==='review');
-    expect(rewrites).toBe(1);expect(f.gates).toHaveLength(0);expect(latest()?.prompt).toContain('fresh composition');
+    expect(rewrites).toBe(1);expect(repairInputs[0].prompt).toContain('Edited draft.');expect(f.gates).toHaveLength(0);expect(latest()?.prompt).toContain('fresh composition');
     f.request({type:'vn_image_review',chatId:'chat',messageId:'assistant-1',sourceFingerprint:action.sourceFingerprint,requestId:latest()!.requestId,action:'generate'},'reroll-user');
     await waitFor(()=>f.gates.length===1);f.gates[0]!.resolve({imageId:'rerolled-image',imageUrl:'/rerolled'});
     await waitFor(()=>saved().jobs[0]?.status==='generated');await new Promise(r=>setTimeout(r,3));
     const completed=latest()!;
-    f.request({type:'vn_prepare_image',chatId:'chat',messageId:'assistant-1',sourceFingerprint:action.sourceFingerprint,jobId:completed.jobId,regeneratePrompt:true},'reroll-user');
+    f.request({type:'vn_prepare_image',chatId:'chat',messageId:'assistant-1',sourceFingerprint:action.sourceFingerprint,jobId:completed.jobId,regeneratePrompt:true,edits:{prompt:old.prompt+' Replacement edited draft. '+'x'.repeat(4000),negativePrompt:'blur',parameters:{seed:8}}},'reroll-user');
     await waitFor(()=>latest()?.requestId!==completed.requestId&&latest()?.state==='review');
-    expect(rewrites).toBe(2);expect(f.gates).toHaveLength(1);expect(saved().previousImages?.[completed.jobId]?.imageId).toBe('rerolled-image');
+    expect(rewrites).toBe(2);expect(repairInputs[1].prompt).toContain('Replacement edited draft.');expect(f.gates).toHaveLength(1);expect(saved().previousImages?.[completed.jobId]?.imageId).toBe('rerolled-image');
     f.request({type:'vn_image_review',chatId:'chat',messageId:'assistant-1',sourceFingerprint:action.sourceFingerprint,requestId:latest()!.requestId,action:'skip'},'reroll-user');
   });
   test("manual held and replacement choices accept templates excluded from dynamic mode", async () => {

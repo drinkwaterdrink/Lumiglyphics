@@ -479,6 +479,8 @@ export type SceneCacheOptions = {
   /** Reviewed pictures remain independent and never populate the automatic compiler cache. */
   independentRequests?: boolean;
   disableCacheStore?: boolean;
+  /** Explicit prompt repair handles its own draft; avoid rewriting the old compiled prompt first. */
+  skipAutomaticPromptRepair?:boolean;
   beforeGenerate?: (job: AssetJob, request: ImageGenerationRequest, metadata: ImagePreparationMetadata, signal: AbortSignal) => Promise<ImageGenerationRequest>;
   /** Exact content used to plan this turn; omitted for legacy records. */
   resolvedSourceText?: string;
@@ -1275,13 +1277,13 @@ export async function generateAssets(
             referenceSummary: portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference"
           };
           const initialMetadata = metadataFor(cue);
-          const regenerateFor=(selectedCue:VisualCue)=>(request:ImageGenerationRequest)=>rewriteImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,'reroll');
+          const regenerateFor=(selectedCue:VisualCue)=>(request:ImageGenerationRequest)=>rewriteImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,request.prompt.length+(request.negativePrompt?.length??0)>(request.promptProfile?.maxCharacters??3000)||request.promptProfile?.negativeMode==='positive-only'&&Boolean(request.negativePrompt?.trim())?'fit':'reroll');
           frozen.parameters = modelOutputParameters(selected?.provider ?? provider, frozen.model, globalOutputParameters(config.imageOutputAspectRatio, selected?.provider ?? provider, frozen.model, frozen.parameters ?? {}));
           frozen.promptProfile=await loadImagePromptProfile(spindle,config,selected?.provider??provider,frozen.model);
           frozen=prepareCapabilityOutput(frozen,config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined);
           frozen = compactImageRequest(frozen);
           let promptWasRewritten=false;
-          if(frozen.prompt.length+(frozen.negativePrompt?.length??0)>frozen.promptProfile!.maxCharacters || frozen.promptProfile?.negativeMode==='positive-only'&&Boolean(frozen.negativePrompt?.trim())){
+          if(!cacheOptions.skipAutomaticPromptRepair&&(frozen.prompt.length+(frozen.negativePrompt?.length??0)>frozen.promptProfile!.maxCharacters || frozen.promptProfile?.negativeMode==='positive-only'&&Boolean(frozen.negativePrompt?.trim()))){
             try{
               frozen=await rewriteImagePrompt(spindle,frozen,initialMetadata,config,userId,jobSignal,'fit');
               promptWasRewritten=true;

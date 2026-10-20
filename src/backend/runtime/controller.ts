@@ -23,7 +23,7 @@ import type {
   SwipeEditedPayloadDTO,
   SpindleAPI
 } from "lumiverse-spindle-types";
-import { ImageReviewGate, safeImageHistory, applyImageEdits } from "./image-review.js";
+import { ImageReviewGate, safeImageHistory, applyImageEdits, applyImageRewriteDraft } from "./image-review.js";
 import type { ImageRequestEdits } from '../../shared/image-review.js';
 import { extractSimTracker } from "./simtracker.js";
 import { templateSnapshot } from "../../shared/image-templates.js";
@@ -826,10 +826,11 @@ async function startAssets(
         sceneCache, admission,
         independentRequests: requiresReview,
         disableCacheStore: requiresReview,
+        ...(options.regeneratePrompt?{skipAutomaticPromptRepair:true}:{}),
         ...(config.reviewImages ? { bypassJobIds: batchJobs.map((job) => job.jobId) } : options.bypassJobIds ? { bypassJobIds: options.bypassJobIds } : {}),
         ...sourceTextOption(record),
         beforeGenerate: async (job, request, metadata, jobSignal) => {
-          let draft = options.onlyJobId === job.jobId && options.initialEdits ? applyImageEdits(request,options.initialEdits) : request;
+          let draft = options.onlyJobId === job.jobId && options.initialEdits ? options.regeneratePrompt ? applyImageRewriteDraft(request,options.initialEdits) : applyImageEdits(request,options.initialEdits) : request;
           if(options.onlyJobId===job.jobId && options.regeneratePrompt){
             if(!metadata.regeneratePrompt)throw new Error('Prompt regeneration is unavailable for this picture.');
             draft=await metadata.regeneratePrompt(draft);
@@ -872,7 +873,9 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
   const correction=request.type==='vn_correct_image_subject' ? CorrectImageSubjectRequestSchema.parse(request) : undefined;
   const config = await loadConfig(spindle, userId);
   if (!config.generateImages) throw new Error("Enable generated pictures in settings before preparing a replacement.");
-  if(request.type === 'vn_prepare_image' && request.edits !== undefined) applyImageEdits({prompt:''},request.edits);
+  if(request.type === 'vn_prepare_image' && request.edits !== undefined) {
+    if(request.regeneratePrompt)applyImageRewriteDraft({prompt:''},request.edits);else applyImageEdits({prompt:''},request.edits);
+  }
   const template = request.templateId === undefined ? undefined : config.imageTemplates.find(item => item.id === request.templateId);
   if (request.templateId !== undefined && !template) throw new Error("This template is unavailable.");
   if (!views.isOpen(userId, request.chatId)) throw new Error("Open the visual novel before preparing a picture.");
@@ -1573,7 +1576,7 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       if(typeof request.requestId!=='string'||!request.requestId||request.requestId.length>100)throw new Error('Invalid prompt selection.');
       const key=runtimeKey(userId,request.chatId),turn=activeTurnKeys.get(key);
       if(!views.isOpen(userId,request.chatId)||!turn||turn.assistantMessageId!==request.messageId||turn.sourceFingerprint!==request.sourceFingerprint)throw new Error('This prompt belongs to an older or closed turn.');
-      if(!await imageReviewGates.get(key)?.regenerate(request.requestId))throw new Error('This prompt is already being handled or cancelled.');
+      if(!await imageReviewGates.get(key)?.regenerate(request.requestId,request.edits))throw new Error('This prompt is already being handled or cancelled.');
       return;
     }
     case "vn_reprepare_image_template": {

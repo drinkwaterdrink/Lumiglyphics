@@ -1,6 +1,6 @@
 # Lumiglyphics
 
-Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.52`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance and [STATUS.md](STATUS.md) for the current delivered/pending matrix.
+Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.53`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance and [STATUS.md](STATUS.md) for the current delivered/pending matrix.
 
 **Reader and image review:** When supported by the current view session, parsed reply prose is readable while the story reader prepares pictures and references. The temporary preview keeps its position when the exact final reply arrives; it does not save read progress, submit replies, or start extra generation. Image prompts separates planning, review, generation, failure, reuse and older-picture states, with one main action and advanced controls in disclosures. **Rewrite prompt** uses text tokens; **Generate picture** starts the image request. Editing keeps the combined 3,000-character guard and offers previous wording after a rewrite.
 
@@ -384,3 +384,18 @@ size or ratio for that picture without editing JSON. The advanced JSON editor re
 These controls never generate an image by themselves. Raw connection overrides are preserved,
 but known incompatible outgoing values block locally before generation. Supported sizes vary
 by exact route: some FLUX 3 Klein routes are square-only, while other Flux routes offer portrait.
+
+
+### Repairing oversized image drafts
+
+An oversized prepared draft is blocked, not sent to the image provider. In Prompt actions,
+**Fit to budget** compresses the current edited wording using the story-reader text model.
+Ensemble repair protects each named subject and appearance clause while allowing the block
+layout to change. A valid result anywhere within the actual ceiling can be reviewed; the
+shorter target remains guidance rather than a second hard limit.
+
+Repairs keep image approval separate, preserve the selected picture's parameters/references,
+and leave other pictures alone. If two writer attempts fail, the notice explains the latest
+reason and retains your draft. You can edit it and retry, including on a cancelled picture.
+Automatic preparation now reserves more space for the ensemble roster before requesting
+scene detail. Saved templates and shared styles are not modified by a repair.

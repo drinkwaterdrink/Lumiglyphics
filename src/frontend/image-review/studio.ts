@@ -9,7 +9,7 @@ import { IMAGE_PROMPT_MAX_CHARS, assertPromptLengths } from '../../shared/prompt
 import type { VisualNovelConfig } from "../../config.js";
 import type { ImageTemplate } from "../../shared/image-templates.js";
 import type { FrontendRequest, TurnView } from "../../protocol.js";
-import type { ImageRequestRecord } from "../../shared/image-review.js";
+import type { ImageRequestRecord,ImageRequestEdits } from "../../shared/image-review.js";
 
 type Draft = { prompt: string; negative: string; parameters: string };
 const CSS = `
@@ -228,7 +228,7 @@ export class ImageStudio {
     const d = asset?.diagnostic;
     return d ? [`Status: ${d.status.replaceAll('_', ' ')}`, `Subject: ${d.subject ?? 'None'}`, `Template: ${d.template ?? 'Legacy / unavailable'}`, `SimTracker: ${d.tracker}`, `Story reader: ${d.planner ?? 'Unavailable'}`, d.explanation, ...(asset?.previousImage ? ['The previous picture is displayed while its replacement waits or fails.'] : [])].join('\n') : 'Diagnostics are unavailable for this older picture. Refresh the reader after updating.';
   }
-  private draftKey(record:ImageRequestRecord): string {return record.state==='review' ? record.requestId : `replacement:${this.selectedJob}:${record.requestId}`;}
+  private draftKey(record:ImageRequestRecord): string {return record.state==='review' ? record.requestId : `replacement:${record.jobId}:${record.requestId}`;}
   private updateCounts(): void {
     let total=0;
     for(const name of ['positive','negative'] as const) {
@@ -246,6 +246,7 @@ export class ImageStudio {
     try{const value:unknown=JSON.parse(this.el<HTMLTextAreaElement>('[data-parameters]').value);if(!value||typeof value!=='object'||Array.isArray(value))throw new Error();parameters=value as Record<string,unknown>;}catch{if(!error)error='Parameters must be a valid JSON object.';}
     if(!error&&profile?.output&&profile.outputManaged&&parameters)try{assertCapabilityOutput(profile.output,parameters);}catch(cause){error=cause instanceof Error?cause.message:String(cause);}
     this.renderOutputControls(parameters);
+    this.updateRewriteLabel();
     const validation=this.el<HTMLElement>('[data-validation]');validation.textContent=error;validation.hidden=!error||!this.record();
     for(const selector of ['[data-positive]','[data-negative]'])this.el(selector).setAttribute('aria-invalid',String(Boolean(error)));
     for(const selector of ['[data-generate]','[data-prepare]']){const button=this.el<HTMLButtonElement>(selector);if(button.dataset.available!==undefined)button.disabled=button.dataset.available!=='true'||Boolean(error);}
@@ -288,7 +289,11 @@ export class ImageStudio {
     this.replanning = false;this.recovering=null;
     this.turn = turn;
     for(const id of this.rerolling)if(!turn?.imageRequests?.some(r=>r.requestId===id&&r.state==='review'))this.rerolling.delete(id);
-    for (const record of turn?.imageRequests ?? []) if (record.state !== "review") { this.submitted.delete(record.requestId); this.drafts.delete(record.requestId); }
+    for (const record of turn?.imageRequests ?? []) if (record.state !== "review") {
+      const draft=this.drafts.get(record.requestId);
+      if(record.state==='cancelled'&&draft&&!this.drafts.has(this.draftKey(record)))this.drafts.set(this.draftKey(record),draft);
+      this.submitted.delete(record.requestId); this.drafts.delete(record.requestId);
+    }
     for (const asset of turn?.assets ?? []) if ((turn?.imageRequests ?? []).some((record) => record.jobId === asset.jobId && record.state === "review") || asset.status === "failed" || asset.status === "cancelled") this.preparing.delete(asset.jobId);
     this.render();
   }
@@ -323,18 +328,34 @@ export class ImageStudio {
   private regeneratePrompt():void {
     if(!this.turn||this.el<HTMLButtonElement>('[data-regenerate-prompt]').disabled)return;
     const record=this.record();
+    let edits:ImageRequestEdits|undefined;
+    if(record)try{
+      const parameters:unknown=JSON.parse(this.el<HTMLTextAreaElement>('[data-parameters]').value);
+      if(!parameters||typeof parameters!=='object'||Array.isArray(parameters))throw new Error('Parameters must be a valid JSON object before repairing the prompt.');
+      edits={prompt:this.el<HTMLTextAreaElement>('[data-positive]').value,negativePrompt:this.el<HTMLTextAreaElement>('[data-negative]').value,parameters:parameters as Record<string,unknown>};
+      if(!edits.prompt?.trim())throw new Error('Enter a positive prompt before rewriting it.');
+    }catch(error){this.showError(error instanceof Error?error.message:String(error));return;}
     if(record){
       if(this.previousWording.size>=12)this.previousWording.delete(this.previousWording.keys().next().value!);
       this.previousWording.set(this.selectedJob,{requestId:record.requestId,prompt:this.el<HTMLTextAreaElement>('[data-positive]').value,negative:this.el<HTMLTextAreaElement>('[data-negative]').value,parameters:this.el<HTMLTextAreaElement>('[data-parameters]').value});
     }
     if(record?.state==='review'){
       this.rerolling.add(record.requestId);this.render();
-      this.send({type:'vn_regenerate_image_prompt',chatId:this.turn.chatId,messageId:this.turn.messageId,sourceFingerprint:this.turn.sourceFingerprint,requestId:record.requestId});
+      this.send({type:'vn_regenerate_image_prompt',chatId:this.turn.chatId,messageId:this.turn.messageId,sourceFingerprint:this.turn.sourceFingerprint,requestId:record.requestId,...(edits?{edits}:{})});
     }else{
       this.preparing.add(this.selectedJob);this.render();
-      this.send({type:'vn_prepare_image',chatId:this.turn.chatId,messageId:this.turn.messageId,sourceFingerprint:this.turn.sourceFingerprint,jobId:this.selectedJob,regeneratePrompt:true,
+      this.send({type:'vn_prepare_image',chatId:this.turn.chatId,messageId:this.turn.messageId,sourceFingerprint:this.turn.sourceFingerprint,jobId:this.selectedJob,regeneratePrompt:true,...(edits?{edits}:{}),
         ...(this.el<HTMLSelectElement>('[data-template]').value?{templateId:this.el<HTMLSelectElement>('[data-template]').value}:{})});
     }
+  }
+
+  private updateRewriteLabel():void{
+    const record=this.record(),button=this.el<HTMLButtonElement>('[data-regenerate-prompt]');
+    const total=this.el<HTMLTextAreaElement>('[data-positive]').value.length+this.el<HTMLTextAreaElement>('[data-negative]').value.length;
+    const needsFit=Boolean(record)&&total>(record?.promptProfile?.maxCharacters??3000);
+    const busy=this.preparing.has(this.selectedJob)||Boolean(record&&this.rerolling.has(record.requestId));
+    button.textContent=busy?needsFit?'Fitting prompt…':'Rewriting prompt…':needsFit?'Fit to budget':'Rewrite prompt';
+    button.title=needsFit?'Compresses the current edited draft while preserving named subjects and their appearance facts. Uses story-reader text tokens; generation still requires approval.':'Uses the current edited wording to describe the same scene again. Uses story-reader text tokens; generation still requires approval.';
   }
 
   private render(): void {
@@ -402,9 +423,8 @@ export class ImageStudio {
 
     const reroll=this.el<HTMLButtonElement>('[data-regenerate-prompt]');
     const rolling=Boolean(record&&this.rerolling.has(record.requestId));
-    reroll.textContent=rolling||this.preparing.has(this.selectedJob)?'Rewriting prompt…':'Rewrite prompt';
+    this.updateRewriteLabel();
     reroll.disabled=!asset||asset.source==='cache'||this.replanning||this.preparing.has(this.selectedJob)||!!this.recovering||rolling||Boolean(record&&(this.submitted.has(record.requestId)||this.rebuilding.has(record.requestId)))||(record?.state==='review'?record.canRegeneratePrompt===false:Boolean(busy));
-    reroll.title='Uses the story-reader model and text tokens to rewrite wording. Image generation is separate and still requires approval.';
     this.el<HTMLButtonElement>('[data-prepare]').textContent = record ? 'Prepare edited preview' : 'Prepare editable preview';
     this.el<HTMLButtonElement>("[data-prepare]").hidden = record?.state === "review";
     this.el<HTMLButtonElement>("[data-prepare]").disabled = !asset || Boolean(busy) || this.replanning || !!this.recovering || this.preparing.has(this.selectedJob) || !this.templates.some(t => t.id === templateSelect.value);
