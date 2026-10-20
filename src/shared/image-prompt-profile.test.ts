@@ -27,3 +27,11 @@ test('validator uses the frozen profile for smaller and larger combined budgets'
  expect(()=>assertPromptLengths('x'.repeat(5000),'',large)).not.toThrow();
  expect(()=>assertPromptLengths('x'.repeat(5900),'y'.repeat(101),large)).toThrow('6,000');
 });
+
+
+test('known Flux routes get positive-only guidance without treating unrelated providers as equivalent',()=>{
+ for(const id of ['flux-2-dev','flux-2-klein-4b','black-forest-labs/flux-3/text-to-image','blackforestlabs/flux-3/klein/text-to-image'])expect(resolveImagePromptProfile('nanogpt',id).negativeMode).toBe('positive-only');
+ expect(resolveImagePromptProfile('other','flux-2-dev').negativeMode).toBe('supported-or-unknown');
+ expect(resolveImagePromptProfile('nanogpt','flux-2-mystery').negativeMode).toBe('supported-or-unknown');
+ expect(resolveImagePromptProfile('nanogpt','flux-2-dev',{automaticImagePromptSettings:false}).output).toBeUndefined();
+});

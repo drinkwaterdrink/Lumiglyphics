@@ -1,5 +1,7 @@
 import {z} from 'zod';
 import {NANOGPT_PROMPT_CAPABILITIES} from './image-prompt-capabilities.js';
+import {ModelOutputCapabilitiesSchema,type ModelOutputCapabilities} from './model-output-capabilities.js';
+import {NANOGPT_OUTPUT_CAPABILITIES} from './model-output-catalogue.js';
 
 export const PROMPT_STORAGE_MAX = 65000;
 export const ImagePromptProfileSchema = z.object({
@@ -9,6 +11,7 @@ export const ImagePromptProfileSchema = z.object({
  providerLimit:z.number().int().min(256).max(50000).optional(),
  format:z.enum(['description','tags','hybrid']), negativeMode:z.enum(['supported-or-unknown','positive-only']),
  guidance:z.string().max(2400), manualBudget:z.number().int().min(256).max(50000).optional(),
+ output:ModelOutputCapabilitiesSchema.optional(),outputSource:z.enum(['live','catalogue']).optional(),outputSummary:z.string().max(1024).optional(),outputManaged:z.boolean().optional(),
 }).strict();
 export type ImagePromptProfile=z.infer<typeof ImagePromptProfileSchema>;
 export type PromptProfileSettings={automaticImagePromptSettings?:boolean;imagePromptBudgetOverride?:boolean;imagePromptBudget?:number;imagePromptFormat?:'description'|'tags'};
@@ -46,17 +49,20 @@ const guidance:Record<ImagePromptProfile['family'],string>={
  novelai:'Use version-aware tag syntax and existing native weighting. Keep subject identities distinct. Native tokenizer limits are separate from this character ceiling; do not label character counts as tokens.',
  generic:'Use clear visual descriptions with principal subject and action first. Preserve identity, wardrobe, scene and composition. Model-specific syntax and tokenizer limits are unverified.',
 };
-export function resolveImagePromptProfile(provider:string|null|undefined,model:string|null|undefined,settings:PromptProfileSettings={},live?:ReadonlyMap<string,number>):ImagePromptProfile{
+export function resolveImagePromptProfile(provider:string|null|undefined,model:string|null|undefined,settings:PromptProfileSettings={},live?:ReadonlyMap<string,number>,liveOutputs?:ReadonlyMap<string,ModelOutputCapabilities>):ImagePromptProfile{
  const p=provider?.trim().toLowerCase()??'',id=model?.trim()??'',f=family(id.toLowerCase(),p),auto=settings.automaticImagePromptSettings!==false;
  const liveLimit=p==='nanogpt'?live?.get(id):undefined;
  const providerLimit=liveLimit??(p==='nanogpt'?Object.hasOwn(NANOGPT_PROMPT_CAPABILITIES,id)?NANOGPT_PROMPT_CAPABILITIES[id]:undefined:undefined);
  const budget=typeof settings.imagePromptBudget==='number'&&Number.isFinite(settings.imagePromptBudget)?settings.imagePromptBudget:3000;
  const manual=settings.imagePromptBudgetOverride?Math.min(50000,Math.max(256,Math.trunc(budget))):undefined;
  const maximum=Math.min(manual??(auto?providerLimit??3000:3000),providerLimit??50000);
+ const liveOutput=p==='nanogpt'?liveOutputs?.get(id):undefined;
+ const output=auto&&p==='nanogpt'?(liveOutput??(Object.hasOwn(NANOGPT_OUTPUT_CAPABILITIES,id)?NANOGPT_OUTPUT_CAPABILITIES[id]:undefined)):undefined;
  return {version:1,family:f,maxCharacters:maximum,source:manual!==undefined?'manual':auto&&providerLimit!==undefined?liveLimit!==undefined?'live':'catalogue':'fallback',
   ...(providerLimit!==undefined?{providerLimit}:{}),...(manual!==undefined?{manualBudget:manual}:{}),
   format:!auto?settings.imagePromptFormat??'description':f==='novelai'?'tags':f==='anima'?'hybrid':'description',
-  negativeMode:auto&&p==='nanogpt'&&/^blackforestlabs\/flux-3\/(?:klein|pro|dev)(?:\/|$)/.test(id)?'positive-only':'supported-or-unknown',
+  ...(output?{output,outputSource:liveOutput?'live' as const:'catalogue' as const}:{}),
+  negativeMode:auto&&p==='nanogpt'&&((Boolean(output)&&/^flux-2-/.test(id))||/^blackforestlabs\/flux-3\/(?:klein|pro|dev)(?:\/|$)/.test(id)||/^black-forest-labs\/flux-3\/(?:text-to-image|edit)$/.test(id))?'positive-only':'supported-or-unknown',
   guidance:auto?guidance[f]:`Keep the user's ${settings.imagePromptFormat??'description'} prompt format and weighting syntax.`,};
 }
 export function promptProfileSummary(profile:ImagePromptProfile):string{

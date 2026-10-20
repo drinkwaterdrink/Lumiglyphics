@@ -1,5 +1,6 @@
 import {ImagePromptProfileSchema,PROMPT_STORAGE_MAX} from "../../shared/image-prompt-profile.js";
 import type {ImagePromptProfile} from "../../shared/image-prompt-profile.js";
+import {assertCapabilityOutput} from '../../shared/model-output-capabilities.js';
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { syncGeneratedModelOutput } from './template-output.js';
 import type { ImageRequestEdits, ImageRequestRecord } from "../../shared/image-review.js";
@@ -209,6 +210,7 @@ export class ImageReviewGate {
     if (action === "skip") { this.pending.delete(requestId); item.skipped = true; item.reject(aborted("Image skipped.")); return true; }
     const edited = applyImageEdits(item.request, edits);
     assertPromptLengths(edited.prompt,edited.negativePrompt,edited.promptProfile);
+    if(edited.promptProfile?.output)assertCapabilityOutput(edited.promptProfile.output,edited.parameters??{});
     this.pending.delete(requestId);
     item.resolve(edited);
     return true;

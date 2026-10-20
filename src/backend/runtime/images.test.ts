@@ -550,3 +550,19 @@ test('actual dispatch enforces exact model budget and strips internal profile me
   else expect(jobs[0]?.error).toContain('1,200');
  }
 });
+
+
+test('catalogue output shapes reach the real dispatch boundary for the requested model families',async()=>{
+ const cases=[['flux-2-dev','720*1280'],['qwen-image','576x1024'],['z-image-turbo','720*1280'],['grok-imagine-image','9:16'],['meta/muse-image/text-to-image','9:16'],['nano-banana-2','1k'],['blackforestlabs/flux-3/klein/text-to-image','1024x1024']];
+ for(const [model,expectedSize] of cases){
+  const sent:any[]=[];const connection={id:'image',provider:'nanogpt',model,updated_at:1};
+  const spindle={userStorage:{getJson:async(_:string,o:any)=>o.fallback},connections:{list:async()=>[{id:'writer',provider:'openrouter',model:'writer',is_default:true}]},generate:{raw:async()=>({content:JSON.stringify({prompt:'A lone silver-haired traveller in the quiet station.',negativePrompt:''})})},imageGen:{getConnection:async()=>connection,generate:async(r:any)=>{sent.push(r);return {imageId:'result'};}}} as any;
+  const turn=plan([cue('idle')]);const config={...DEFAULT_CONFIG,imageConnectionId:'image',referenceAnchoring:false,imageOutputAspectRatio:'9:16' as const};
+  const jobs=await generateAssets(spindle,turn,createAssetJobs(turn,config),config,new AbortController().signal,()=>{},'user',{
+   beforeGenerate:async(_job,request)=>{expect(request.parameters?.size,model).toBe(expectedSize);expect(request.promptProfile?.outputSummary).toBeTruthy();return request;}
+  });
+  expect(jobs[0]?.status,model).toBe('generated');expect(sent).toHaveLength(1);expect(sent[0].parameters.size).toBe(expectedSize);
+  expect(sent[0].promptProfile).toBeUndefined();expect(sent[0].parameters._lumiglyphicsCatalogOutput).toBeUndefined();
+  if(model==='nano-banana-2')expect(JSON.parse(sent[0].parameters.rawRequestOverride)).toEqual({aspect_ratio:'9:16'});
+ }
+});

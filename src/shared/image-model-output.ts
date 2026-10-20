@@ -11,7 +11,7 @@ export function imageOutputRule(provider: string | null | undefined, model: stri
   const id = model?.trim().toLowerCase() ?? '';
   if (ANIMA_MODELS.has(id)) return 'anima';
   if (id === 'qwen-image-2.1-turbo') return 'qwen-turbo';
-  return id === 'blackforestlabs/flux-3/klein/base/text-to-image' ? 'klein-square' : null;
+  return ['blackforestlabs/flux-3/klein/base/text-to-image','blackforestlabs/flux-3/klein/text-to-image'].includes(id) ? 'klein-square' : null;
 }
 
 /** Derived from the recorded request, so old/held previews keep their own size. */

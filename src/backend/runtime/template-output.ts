@@ -59,6 +59,9 @@ export function modelOutputParameters(provider: string | null, model: string | u
 /** The editor cannot alter raw overrides. Keep only our generated override in sync
  * with its visible ratio; profile/user overrides never receive this marker. */
 export function syncGeneratedModelOutput(parameters: Record<string, unknown>): void {
+  if(parameters._lumiglyphicsCatalogOutput===true){
+    parameters.rawRequestOverride={aspect_ratio:parameters.aspectRatio};
+  }
   if (parameters._lumiglyphicsAnimaAspect === true) {
     parameters.rawRequestOverride = { aspect_ratio: parameters.aspectRatio };
   }
@@ -70,6 +73,7 @@ export function providerOutputParameters(parameters: Record<string, unknown>): R
   const result = { ...parameters };
   delete result._lumiglyphicsAnimaAspect;
   delete result._lumiglyphicsQwenOutput;
+  delete result._lumiglyphicsCatalogOutput;
   // Lumiverse's native applyRawOverride accepts JSON text. Internal generated
   // objects stay editable until this wire boundary; their values do not change.
   if (result.rawRequestOverride && typeof result.rawRequestOverride === 'object' && !Array.isArray(result.rawRequestOverride)) result.rawRequestOverride = JSON.stringify(result.rawRequestOverride);

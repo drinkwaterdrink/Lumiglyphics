@@ -1,5 +1,6 @@
 import {assertPromptLengths} from "../../shared/prompt-length.js";
 import {promptProfileSummary} from "../../shared/image-prompt-profile.js";
+import {assertCapabilityOutput} from '../../shared/model-output-capabilities.js';
 import type { BackendResponse, FrontendRequest } from "../../protocol.js";
 import type { ImageRequestEdits } from "../../shared/image-review.js";
 
@@ -61,6 +62,7 @@ export class ExternalImageReview {
     this.opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.heading.textContent = `Review picture · ${preview.characterName}`;
     this.receipt.textContent = `Warp illustration · ${preview.record.provider} · ${preview.record.model}. One picture; no image request is sent until you approve.`;
+    if(preview.record.promptProfile?.outputSummary)this.receipt.textContent+=' '+preview.record.promptProfile.outputSummary;
     this.dialog.querySelector("[data-reference]")!.textContent = preview.record.referenceSummary;
     this.prompt.value = preview.record.prompt;
     this.negative.value = preview.record.negativePrompt;
@@ -76,6 +78,7 @@ export class ExternalImageReview {
     assertPromptLengths(this.prompt.value,this.negative.value,this.preview?.record.promptProfile);
     const parameters: unknown = JSON.parse(this.parameters.value);
     if (!parameters || typeof parameters !== "object" || Array.isArray(parameters) || this.parameters.value.length > 16000) throw new Error("Parameters must be a JSON object under 16 KB.");
+    if(this.preview?.record.promptProfile?.output&&this.preview.record.promptProfile.outputManaged)assertCapabilityOutput(this.preview.record.promptProfile.output,parameters as Record<string,unknown>);
     return { prompt: this.prompt.value, negativePrompt: this.negative.value, parameters: parameters as Record<string, unknown> };
   }
   private validate(): void {

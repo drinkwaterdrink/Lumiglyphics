@@ -24,3 +24,23 @@ test('manual-only mode makes no discovery call and preserves format preference',
  const profile=await loadImagePromptProfile(spindle,normalizeConfig({automaticImagePromptSettings:false,imagePromptBudgetOverride:true,imagePromptBudget:6000,imagePromptFormat:'tags'}),'nanogpt','anima');
  expect(profile.maxCharacters).toBe(6000);expect(profile.format).toBe('tags');
 });
+
+
+test('live output discovery supplies native sizes even when the prompt ceiling is unknown',async()=>{
+ const spindle={cors:async()=>({status:200,body:{data:[{id:'private-route',supported_parameters:{max_prompt_characters:null,prompt_length:{status:'unknown'},resolutions:['1k','2k'],aspect_ratio:['1:1','9:16']}}]}})} as unknown as SpindleAPI;
+ const profile=await loadImagePromptProfile(spindle,normalizeConfig({}),'nanogpt','private-route');
+ expect(profile.maxCharacters).toBe(3000);expect(profile.source).toBe('fallback');
+ expect(profile.output).toEqual({sizes:['1k','2k'],ratios:['1:1','9:16']});expect(profile.outputSource).toBe('live');
+});
+
+test('expired discovery cannot be presented as live after a refresh failure',async()=>{
+ let offline=false;const now=Date.now,base=now();let time=base;
+ const spindle={cors:async()=>{if(offline)throw new Error('offline');return {data:[{id:'custom',supported_parameters:{max_prompt_characters:8000,prompt_length:{status:'known',unit:'utf16_code_units'},resolutions:['1k']}}]};}} as unknown as SpindleAPI;
+ try{
+  Date.now=()=>time;
+  expect((await loadImagePromptProfile(spindle,normalizeConfig({}),'nanogpt','custom')).source).toBe('live');
+  time+=3600001;offline=true;
+  const profile=await loadImagePromptProfile(spindle,normalizeConfig({}),'nanogpt','custom');
+  expect(profile.source).toBe('fallback');expect(profile.maxCharacters).toBe(3000);expect(profile.output).toBeUndefined();
+ }finally{Date.now=now;}
+});

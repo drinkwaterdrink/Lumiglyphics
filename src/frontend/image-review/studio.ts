@@ -1,4 +1,5 @@
 import {promptProfileSummary} from "../../shared/image-prompt-profile.js";
+import {assertCapabilityOutput} from '../../shared/model-output-capabilities.js';
 import {inspectorState} from './inspector-model.js';
 import {PresentationRulesPanel} from '../settings/presentation-rules.js';
 import type {PresentationRuleCatalog} from '../../shared/presentation-rules.js';
@@ -58,6 +59,15 @@ export class ImageStudio {
     this.root = this.host.attachShadow({ mode: "open" });
     this.root.innerHTML = `<style>${CSS}</style><button type="button" data-launch aria-expanded="false">Image prompts</button><section hidden aria-label="Image prompts"><div class="row" data-studio-header><div><h2>Image prompts</h2><small data-build>${LUMIGLYPHICS_VERSION}</small></div><button type="button" data-close aria-label="Close image prompts" title="Close image prompts">×</button></div><div data-studio-body><label class="toggle"><input type="checkbox" data-review checked>Review before generating</label><small>Applies to the next image batch. Held pictures stay held. You can keep reading.</small><details data-card-role><summary>Card role for this chat</summary><label>Card role<select data-role aria-label="Card role"><option value="auto">Auto</option><option value="character">Character</option><option value="scenario">Scenario / world / narrator</option></select></label><button type="button" data-save-role>Save card role</button><small data-role-help>Applies to future replies. Existing pictures and held prompts stay unchanged. Auto uses available visual evidence.</small></details><details data-turn-recovery><summary>Reply recovery</summary><small>Retry unfinished pictures prepares only unfinished slots again and stops their current work. Completed pictures stay. New previews always need approval. Replan asks the story-reader model to reconsider the whole reply and may use text tokens.</small><button type="button" data-retry-unfinished>Retry unfinished pictures</button><button type="button" data-replan>Replan this reply</button></details><label>Picture<select data-picture aria-label="Picture"></select></label><label data-history hidden>Recorded request<select data-request aria-label="Recorded request"></select></label><div data-batch-recovery hidden><p data-batch-status role="status"></p><button type="button" data-stop-images>Stop pending pictures</button><small>Stops this reply’s waiting image work. Requests already sent may still finish at the provider. Completed pictures stay.</small></div><p data-scene></p><p data-meta></p><p data-model-help role="status" hidden></p><label>Picture template<select data-template aria-label="Picture template"></select></label><button type="button" data-use-template>Use template</button><div data-template-confirm hidden><p>Replacing rebuilds this prompt and parameters from the selected template. Your current edits will be replaced.</p><div class="row"><button type="button" data-keep>Keep edits</button><button type="button" data-replace>Replace with template</button></div></div><details data-recovery hidden><summary>Correct this picture’s subject</summary><small>Prepare a new preview for this picture only. No image is generated until you approve it.</small><label>Picture subject<select data-subject-mode aria-label="Picture subject"><option value="character">Character</option><option value="environment">Environment / no people</option></select></label><div data-person-fields><label>Character name<input data-subject-name aria-label="Character name" list="vn-subject-candidates" maxlength="160"></label><datalist id="vn-subject-candidates" data-candidates></datalist><label>Appearance<textarea data-subject-appearance aria-label="Appearance" maxlength="2000" placeholder="Concrete visual details, separated by commas: hair, eyes, skin, clothes, species…"></textarea></label><small>Use known appearance by leaving this blank, or supply details for this picture.</small><label class="toggle"><input type="checkbox" data-save-appearance>Save appearance for this character in this chat</label></div><small data-environment-help hidden>Choose a no-people template above. Character appearance and references are omitted.</small><button type="button" data-correct>Prepare corrected preview</button></details><details data-diagnostics><summary>Picture diagnostics</summary><p data-diagnostic></p><button type="button" data-copy-diagnostic>Copy diagnostics</button><small>Copies subject and template names and status only. No appearance descriptions, chat text, prompts or provider error payloads are included.</small></details><details><summary>Prompt sources</summary><p data-provenance></p></details><p data-edit-help role="status"></p><label>Positive prompt <small data-positive-count></small><textarea data-positive maxlength="65000" aria-label="Positive prompt" spellcheck="false" inputmode="text"></textarea></label><label>Negative prompt <small data-negative-count></small><textarea data-negative maxlength="65000" aria-label="Negative prompt" spellcheck="false" inputmode="text"></textarea></label><small data-prompt-profile></small><small data-combined-count role="status"></small><small>Regenerate prompt uses your story-reader model to prepare fresh wording. It uses text tokens; an image is generated only after approval.</small><small>Negative prompts and individual settings are model dependent.</small><details><summary>Parameters and references</summary><p data-reference></p><label>Parameters (JSON)<textarea data-parameters aria-label="Parameters (JSON)" spellcheck="false" inputmode="text"></textarea></label><small>Advanced overrides for this picture only. Reference bytes and host-managed fields are omitted. Your provider may ignore unsupported parameters.</small></details><small>Shows the extension request prepared for Lumiverse; the host converts it for the provider.</small></div><footer data-studio-footer><div class="row"><button type="button" data-generate>Generate this</button><button type="button" data-skip>Skip</button><button type="button" data-reset>Reset edits</button><button type="button" data-retry-image>Retry this picture</button><button type="button" data-prepare>Edit and regenerate</button><button type="button" data-regenerate-prompt>Regenerate prompt</button><button type="button" data-copy>Copy prompt</button></div><div data-notice-row hidden><p data-notice role="status"></p><button type="button" data-dismiss-notice aria-label="Dismiss image prompt notice" title="Dismiss image prompt notice">&#215;</button></div></footer></section>`;
     this.layoutInspector();
+    for(const [selector,key] of [['[data-output-size]','size'],['[data-output-ratio]','aspectRatio']] as const)this.el<HTMLSelectElement>(selector).onchange=()=>{
+      try{
+        const parameters=JSON.parse(this.el<HTMLTextAreaElement>('[data-parameters]').value);
+        if(!parameters||typeof parameters!=='object'||Array.isArray(parameters))throw new Error('Parameters must be a JSON object.');
+        parameters[key]=this.el<HTMLSelectElement>(selector).value;
+        this.el<HTMLTextAreaElement>('[data-parameters]').value=JSON.stringify(parameters,null,2);
+        this.el<HTMLTextAreaElement>('[data-parameters]').dispatchEvent(new Event('input',{bubbles:true}));
+      }catch(error){this.showError(error instanceof Error?error.message:String(error));}
+    };
     const preferences=document.createElement('details');preferences.innerHTML='<summary>Remember a template preference</summary><button type="button" data-remember>Use selected template in a preference</button><div data-preferences></div>';
     this.el('[data-template-confirm]').after(preferences);
     this.preferences=new PresentationRulesPanel(()=>this.turn?.chatId??'',request=>this.send(request));
@@ -206,6 +216,9 @@ export class ImageStudio {
     const toggle=this.el('[data-review]').closest('label')!,help=toggle.nextElementSibling!;settings.append(toggle,help);
     for(const selector of ['[data-card-role]','[data-turn-recovery]','[data-batch-recovery]'])settings.append(this.el(selector));
     const meta=this.el('[data-meta]'),model=this.el('[data-model-help]'),notice=this.el('[data-notice-row]');
+    const output=document.createElement('div');output.dataset.outputControls='';
+    output.innerHTML='<p data-output-summary role="status"></p><div data-output-fields><label>Image size<select data-output-size aria-label="Image size"></select></label><label data-output-ratio-field>Aspect ratio<select data-output-ratio aria-label="Image aspect ratio"></select></label><small>Published values for this model. Changes apply to this picture only.</small></div>';
+    const outputOptions=document.createElement('details');outputOptions.dataset.outputOptions='';outputOptions.innerHTML='<summary>Image size &amp; framing</summary>';outputOptions.append(output);tools.prepend(outputOptions);
     body.replaceChildren(navigation,context,detail,meta,model,editor,tools,settings,notice);
     const actionHelp=document.createElement('small');actionHelp.dataset.actionHelp='';this.el('[data-studio-footer]').append(actionHelp);
     const style=document.createElement('style');style.textContent=INSPECTOR_CSS;this.root.append(style);
@@ -229,12 +242,33 @@ export class ImageStudio {
     this.el<HTMLElement>('[data-combined-count]').textContent=`${total.toLocaleString()} / ${maximum.toLocaleString()} combined characters${error?' — blocked draft; repair required':''}`;
     this.el<HTMLElement>('[data-prompt-profile]').textContent=profile?promptProfileSummary(profile):'Legacy request · 3,000 combined characters. Counts are characters, not tokens.';
     if(!error&&!this.el<HTMLTextAreaElement>('[data-positive]').value.trim())error='Enter a positive prompt before generating.';
-    if(!error)try{const parameters:unknown=JSON.parse(this.el<HTMLTextAreaElement>('[data-parameters]').value);if(!parameters||typeof parameters!=='object'||Array.isArray(parameters))throw new Error();}catch{error='Parameters must be a valid JSON object.';}
+    let parameters:Record<string,unknown>|undefined;
+    try{const value:unknown=JSON.parse(this.el<HTMLTextAreaElement>('[data-parameters]').value);if(!value||typeof value!=='object'||Array.isArray(value))throw new Error();parameters=value as Record<string,unknown>;}catch{if(!error)error='Parameters must be a valid JSON object.';}
+    if(!error&&profile?.output&&profile.outputManaged&&parameters)try{assertCapabilityOutput(profile.output,parameters);}catch(cause){error=cause instanceof Error?cause.message:String(cause);}
+    this.renderOutputControls(parameters);
     const validation=this.el<HTMLElement>('[data-validation]');validation.textContent=error;validation.hidden=!error||!this.record();
     for(const selector of ['[data-positive]','[data-negative]'])this.el(selector).setAttribute('aria-invalid',String(Boolean(error)));
     for(const selector of ['[data-generate]','[data-prepare]']){const button=this.el<HTMLButtonElement>(selector);if(button.dataset.available!==undefined)button.disabled=button.dataset.available!=='true'||Boolean(error);}
     const retry=this.el<HTMLButtonElement>('[data-retry-image]'),record=this.record();
     if(retry.dataset.available!==undefined)retry.disabled=retry.dataset.available!=='true'||Boolean(error&&record&&this.drafts.has(this.draftKey(record)));
+  }
+
+  private renderOutputControls(parameters?:Record<string,unknown>):void{
+    const profile=this.record()?.promptProfile,caps=profile?.output,managed=profile?.outputManaged===true;
+    this.el<HTMLElement>('[data-output-options]').hidden=!caps;
+    if(!caps)return;
+    const editable=!this.el<HTMLTextAreaElement>('[data-parameters]').readOnly;
+    this.el<HTMLElement>('[data-output-summary]').textContent=[profile.outputSummary??'Published model output values are available.',managed&&parameters?`Current size: ${String(parameters.size??'connection default')}${parameters.aspectRatio!==undefined?`; ratio: ${String(parameters.aspectRatio)}`:''}.`:'Custom raw settings remain authoritative; edit them in the image connection.'].join('\n');
+    this.el<HTMLElement>('[data-output-fields]').hidden=!managed;
+    const fill=(selector:string,values:string[],current:unknown)=>{
+      const select=this.el<HTMLSelectElement>(selector),selected=typeof current==='string'?current:values[0]??'';
+      const choices=[...values];if(selected&&!choices.includes(selected))choices.unshift(selected);
+      select.replaceChildren(...choices.map(value=>{const option=document.createElement('option');option.value=value;option.textContent=values.includes(value)?value:`Unsupported: ${value}`;return option;}));
+      select.value=selected;select.disabled=!editable;
+    };
+    fill('[data-output-size]',caps.sizes,parameters?.size);
+    this.el<HTMLElement>('[data-output-ratio-field]').hidden=!caps.ratios;
+    if(caps.ratios)fill('[data-output-ratio]',caps.ratios,parameters?.aspectRatio??parameters?.aspect_ratio);
   }
 
   private recoveryScope() {return {chatId:this.turn!.chatId,messageId:this.turn!.messageId,swipeId:this.turn!.swipeId,sourceFingerprint:this.turn!.sourceFingerprint,requestId:globalThis.crypto?.randomUUID?.() ?? `vn-recovery-${Date.now()}-${Math.random().toString(36).slice(2)}`};}
@@ -350,7 +384,7 @@ export class ImageStudio {
     this.el<HTMLElement>('[data-edit-help]').textContent=localEditable ? 'Edit a local replacement draft below, then Prepare replacement. The recorded request stays unchanged; generation still needs approval.' : record?.state==='review' ? 'Editable preview. Positive and negative share the prepared budget shown below.' : !record ? 'No editable request is saved for this picture. Choose Prepare new preview first; generation still needs approval.' : 'Recorded request — read-only while this picture is running. Finish or skip waiting pictures to prepare a replacement.';
     this.el<HTMLElement>("[data-reference]").textContent = record?.referenceSummary ?? "";
     const modelHelp = this.el<HTMLElement>('[data-model-help]');
-    modelHelp.textContent = modelOutputHelp(record?.provider, record?.model, record?.parameters ?? {});
+    modelHelp.textContent = [modelOutputHelp(record?.provider, record?.model, record?.parameters ?? {}),record?.promptProfile?.outputSummary].filter(Boolean).join(' ');
     modelHelp.hidden = !modelHelp.textContent;
     for (const selector of ["[data-generate]", "[data-skip]", "[data-reset]"]) { this.el<HTMLButtonElement>(selector).disabled = !editable; this.el<HTMLButtonElement>(selector).hidden = record?.state !== "review"; }
     const busy = this.turn?.assets.some((entry) => entry.status === "queued" || entry.status === "generating");

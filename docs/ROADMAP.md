@@ -1,6 +1,6 @@
 # Remaining Lumiglyphics roadmap
 
-Current scope: beta.51 on Testing. This page summarizes unfinished work; [STATUS.md](../STATUS.md) is the delivered-feature matrix. Earlier dated plans retain their original checklists and should not be read as the current completion count.
+Current scope: beta.52 on Testing. This page summarizes unfinished work; [STATUS.md](../STATUS.md) is the delivered-feature matrix. Earlier dated plans retain their original checklists and should not be read as the current completion count.
 
 ## Next delivery sequence
 
@@ -26,7 +26,10 @@ The ordering is the current implementation sequence, not a delivery-date estimat
 
 ## Image generation follow-ups
 
-Model-aware character budgets, family guidance and manual budget controls ship in beta.51.
+Model-aware character budgets, family guidance and manual budget controls shipped in beta.51.
+Catalogue-driven NanoGPT sizes, Flux route compatibility and per-picture size/ratio controls
+ship in beta.52. Current public NanoGPT adapter forwarding was inspected; that does not verify
+the host version running on a user device.
 Remaining: exact native tokenizer counters where public tokenizers are available, additional
 provider-specific capability adapters, current-host parameter-forwarding verification, and
 opt-in same-scene prompt comparisons. Metadata proves supported fields and limits, not an

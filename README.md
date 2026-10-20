@@ -1,6 +1,6 @@
 # Lumiglyphics
 
-Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.51`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance and [STATUS.md](STATUS.md) for the current delivered/pending matrix.
+Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.52`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance and [STATUS.md](STATUS.md) for the current delivered/pending matrix.
 
 **Reader and image review:** When supported by the current view session, parsed reply prose is readable while the story reader prepares pictures and references. The temporary preview keeps its position when the exact final reply arrives; it does not save read progress, submit replies, or start extra generation. Image prompts separates planning, review, generation, failure, reuse and older-picture states, with one main action and advanced controls in disclosures. **Rewrite prompt** uses text tokens; **Generate picture** starts the image request. Editing keeps the combined 3,000-character guard and offers previous wording after a rewrite.
 
@@ -369,3 +369,18 @@ changes apply to new preparations. Oversized drafts are visibly blocked; Regener
 uses the story-reader connection to repair wording without automatically buying an image.
 For identified positive-only endpoints, essential exclusions are rewritten as positive visual
 intent or the draft remains blocked. Templates, shared style and image-size controls remain editable.
+
+
+### Model-compatible image sizes
+
+With Automatic model settings enabled, NanoGPT public resolution metadata also guides output
+sizes. The extension selects a published size closest to your requested shape before review,
+keeps a valid existing resolution tier where possible, and explains when the endpoint offers
+only a different shape or controls the shape itself. A dated bundled catalogue is available
+when discovery is unavailable. Unknown formats remain unchanged rather than guessed.
+
+In the reader's Image prompts panel, open **Image size & framing** to choose a published
+size or ratio for that picture without editing JSON. The advanced JSON editor remains available.
+These controls never generate an image by themselves. Raw connection overrides are preserved,
+but known incompatible outgoing values block locally before generation. Supported sizes vary
+by exact route: some FLUX 3 Klein routes are square-only, while other Flux routes offer portrait.

@@ -118,7 +118,7 @@ test('frozen model budgets survive history and enforce small and large approvals
  expect(()=>gate.decide(records[0].requestId,'generate',{negativePrompt:'y'.repeat(2000)})).toThrow('6,000');
  gate.decide(records[0].requestId,'generate',{});expect((await pending).prompt).toBe(prompt);
  const small=resolveImagePromptProfile('nanogpt','z-image-turbo');
- const next=gate.prepare('small',0,{prompt:'x'.repeat(1300),promptProfile:small},{provider:'nanogpt'},false,new AbortController().signal);
+ const next=gate.prepare('small',0,{prompt:'x'.repeat(1300),promptProfile:small,parameters:{size:'1024*1024'}},{provider:'nanogpt'},false,new AbortController().signal);
  await Promise.resolve();const record=records.at(-1);expect(record.state).toBe('review');
  expect(()=>gate.decide(record.requestId,'generate',{})).toThrow('1,200');
  gate.decide(record.requestId,'generate',{prompt:'A traveller.'});await next;
@@ -131,4 +131,17 @@ test('positive-only endpoints hold negative constraints for adaptation instead o
  await Promise.resolve();expect(records[0].negativePrompt).toBe('crowds');
  expect(()=>gate.decide(records[0].requestId,'generate',{})).toThrow('positive-only');
  gate.decide(records[0].requestId,'generate',{prompt:'An empty quiet station.',negativePrompt:''});await pending;
+});
+
+
+test('review size edits reject invalid native values before resolving the approval',async()=>{
+ const profile=resolveImagePromptProfile('nanogpt','nano-banana-2');
+ const records:any[]=[];const gate=new ImageReviewGate(async r=>{records.push(r);});
+ const parameters={size:'1k',aspectRatio:'9:16',rawRequestOverride:{aspect_ratio:'9:16'},_lumiglyphicsCatalogOutput:true};
+ const pending=gate.prepare('size',0,{prompt:'A quiet library.',negativePrompt:'blur',promptProfile:profile,parameters},{provider:'nanogpt'},true,new AbortController().signal);
+ await Promise.resolve();const id=records[0].requestId;
+ expect(()=>gate.decide(id,'generate',{parameters:{size:'8k'}})).toThrow('8k');
+ expect(()=>gate.decide(id,'generate',{parameters:{aspectRatio:'6:1'}})).toThrow('ratio');
+ expect(gate.decide(id,'generate',{parameters:{size:'2k',aspectRatio:'1:1'}})).toBe(true);
+ expect((await pending).parameters?.rawRequestOverride).toEqual({aspect_ratio:'1:1'});
 });

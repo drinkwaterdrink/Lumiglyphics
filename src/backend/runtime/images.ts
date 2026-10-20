@@ -1,4 +1,5 @@
-import {loadImagePromptProfile} from "./image-prompt-profile.js";
+import {loadImagePromptProfile,prepareCapabilityOutput} from "./image-prompt-profile.js";
+import {assertCapabilityOutput} from '../../shared/model-output-capabilities.js';
 import {findCastArt,saveCastArt,castArtToken,type CastArtIdentity} from './cast-art.js';
 import {findLocationArt,saveLocationArt,locationArtToken,type LocationArtIdentity} from './location-art.js';
 import { globalOutputParameters, templateOutputParameters, modelOutputParameters, assertModelOutputParameters, providerOutputParameters } from "./template-output.js";
@@ -1277,6 +1278,7 @@ export async function generateAssets(
           const regenerateFor=(selectedCue:VisualCue)=>(request:ImageGenerationRequest)=>rewriteImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,'reroll');
           frozen.parameters = modelOutputParameters(selected?.provider ?? provider, frozen.model, globalOutputParameters(config.imageOutputAspectRatio, selected?.provider ?? provider, frozen.model, frozen.parameters ?? {}));
           frozen.promptProfile=await loadImagePromptProfile(spindle,config,selected?.provider??provider,frozen.model);
+          frozen=prepareCapabilityOutput(frozen,config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined);
           frozen = compactImageRequest(frozen);
           let promptWasRewritten=false;
           if(frozen.prompt.length+(frozen.negativePrompt?.length??0)>frozen.promptProfile!.maxCharacters || frozen.promptProfile?.negativeMode==='positive-only'&&Boolean(frozen.negativePrompt?.trim())){
@@ -1327,7 +1329,8 @@ export async function generateAssets(
                 ...(nextNai?.parameters ?? {})
               } };
               request.parameters = modelOutputParameters(selected?.provider ?? provider, request.model, globalOutputParameters(config.imageOutputAspectRatio, selected?.provider ?? provider, request.model, request.parameters ?? {}));
-              return { request, metadata: { ...baseMetadata, regeneratePrompt:regenerateFor(nextCue), imagePromptMetadata: metadataFor(nextCue)!, referenceSummary: nextPortrait ? `${nextPortrait.source ?? "captured"} portrait: ${nextPortrait.name} (${nextPortrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" } };
+              const preparedRequest=prepareCapabilityOutput(request,config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:nextCue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined);
+              return { request:preparedRequest, metadata: { ...baseMetadata, regeneratePrompt:regenerateFor(nextCue), imagePromptMetadata: metadataFor(nextCue)!, referenceSummary: nextPortrait ? `${nextPortrait.source ?? "captured"} portrait: ${nextPortrait.name} (${nextPortrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" } };
             }
           }, jobSignal) : frozen;
           if (signal.aborted) throw abortError(signal);
@@ -1345,6 +1348,7 @@ export async function generateAssets(
           assertPromptLengths(approved.prompt,approved.negativePrompt,approved.promptProfile);
           assertEffectivePromptBudget(approved);
           assertModelOutputParameters(selected?.provider ?? provider, approved.model, approved.parameters ?? {});
+          if(approved.promptProfile?.output)assertCapabilityOutput(approved.promptProfile.output,approved.parameters??{});
           const {promptProfile:_promptProfile,...providerRequest}=approved;
           const result = await spindle.imageGen.generate({ ...providerRequest, parameters: providerOutputParameters(approved.parameters ?? {}) });
           observedGenerationMs.push(Date.now() - generationStarted);
