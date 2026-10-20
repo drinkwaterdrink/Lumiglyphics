@@ -90,6 +90,9 @@ export type VisualNovelConfig = {
   defaultImageTemplateId: string;
   imageTemplates: ImageTemplate[];
   imagePromptFormat: "description" | "tags";
+  automaticImagePromptSettings: boolean;
+  imagePromptBudgetOverride: boolean;
+  imagePromptBudget: number;
   imageOutputAspectRatio: ImageOutputRatio;
   collectEntityReferences: boolean;
   persistentLocationArt: boolean;
@@ -163,6 +166,9 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   defaultImageTemplateId: "portrait",
   imageTemplates: BUILTIN_IMAGE_TEMPLATES.map(template => ({ ...template })),
   imagePromptFormat: "description",
+  automaticImagePromptSettings: true,
+  imagePromptBudgetOverride: false,
+  imagePromptBudget: 3000,
   imageOutputAspectRatio: "default",
   collectEntityReferences: false,
   persistentLocationArt: false,
@@ -331,6 +337,9 @@ export function normalizeConfig(value: unknown): VisualNovelConfig {
     defaultImageTemplateId: nullableString(input.defaultImageTemplateId) ?? "portrait",
     imageTemplates: input.imageTemplates === undefined ? migrateImageTemplates(promptPresetList(input.promptPresets)) : upgradeImageTemplates(input.imageTemplates),
     imagePromptFormat: input.imagePromptFormat === "tags" ? "tags" : "description",
+    automaticImagePromptSettings: bool(input.automaticImagePromptSettings, true),
+    imagePromptBudgetOverride: input.imagePromptBudgetOverride === true,
+    imagePromptBudget: typeof input.imagePromptBudget === "number" && Number.isFinite(input.imagePromptBudget) ? Math.min(50000, Math.max(256, Math.trunc(input.imagePromptBudget))) : 3000,
     imageOutputAspectRatio: normalizeImageOutputRatio(input.imageOutputAspectRatio),
     collectEntityReferences: input.collectEntityReferences === true,
     tooltips: normalizeTooltipPreferences(input.tooltips),

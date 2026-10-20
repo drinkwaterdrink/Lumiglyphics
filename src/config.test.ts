@@ -273,3 +273,13 @@ test('cast view is optional and survives normalized configuration',()=>{
 });
 
 test('persistent portrait art is explicit opt-in',()=>{assert.equal(normalizeConfig({}).persistentCastArt,false);assert.equal(normalizeConfig({persistentCastArt:true}).persistentCastArt,true);assert.equal(normalizeConfig({persistentCastArt:'true'}).persistentCastArt,false);});
+
+
+test('model prompt settings migrate safely and bound the manual budget',()=>{
+ assert.equal(normalizeConfig({}).automaticImagePromptSettings,true);
+ assert.equal(normalizeConfig({}).imagePromptBudgetOverride,false);
+ assert.equal(normalizeConfig({imagePromptBudget:Infinity}).imagePromptBudget,3000);
+ assert.equal(normalizeConfig({imagePromptBudget:1000000}).imagePromptBudget,50000);
+ assert.equal(normalizeConfig({imagePromptBudget:10}).imagePromptBudget,256);
+ assert.equal(normalizeConfig({imagePromptBudgetOverride:true,imagePromptBudget:8000}).imagePromptBudget,8000);
+});

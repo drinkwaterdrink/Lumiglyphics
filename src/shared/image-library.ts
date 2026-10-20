@@ -5,7 +5,7 @@ export const SavedLibraryImageSchema=z.object({
  key:TurnKeySchema,imageId:id,jobId:id,paragraphIndex:z.number().int().nonnegative(),
  createdAt:z.string().max(64),excerpt:z.string().max(600),rawFingerprint:id.optional(),
  template:z.string().max(256).optional(),role:z.enum(['scene','background','portrait']).default('scene'),
- prompt:z.string().max(32000).optional(),negativePrompt:z.string().max(32000).optional(),
+ prompt:z.string().max(65000).optional(),negativePrompt:z.string().max(65000).optional(),
  model:z.string().max(256).optional(),provider:z.string().max(256).optional(),
  legacyPrevious:z.boolean().optional()
 }).strict();

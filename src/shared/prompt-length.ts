@@ -1,3 +1,4 @@
+import type {ImagePromptProfile} from './image-prompt-profile.js';
 export const IMAGE_PROMPT_MAX_CHARS = 3000;
 
 /** Preserve normal prompts verbatim. For overlong prompts, remove only
@@ -23,7 +24,9 @@ export function compactNegativePrompt(text: string): string {
   }).join(', ');
 }
 
-export function assertPromptLengths(prompt: string, negative = ''): void {
+export function assertPromptLengths(prompt: string, negative = '', profile?:ImagePromptProfile): void {
   const total = prompt.length + negative.length;
-  if (total > IMAGE_PROMPT_MAX_CHARS) throw new Error(`Combined positive and negative prompts are ${total.toLocaleString()} characters (${prompt.length.toLocaleString()} positive + ${negative.length.toLocaleString()} negative). Shorten them to 3,000 characters total or fewer; unique details were not silently removed.`);
+  const maximum=profile?.maxCharacters??IMAGE_PROMPT_MAX_CHARS;
+  if (total > maximum) throw new Error(`Combined positive and negative prompts are ${total.toLocaleString()} characters (${prompt.length.toLocaleString()} positive + ${negative.length.toLocaleString()} negative). Shorten them to ${maximum.toLocaleString()} characters total or fewer; unique details were not silently removed.`);
+  if(profile?.negativeMode==='positive-only'&&negative.trim())throw new Error('This endpoint requires positive-only wording. Regenerate the prompt to incorporate essential constraints into the positive description, or clear the negative field after reviewing it.');
 }

@@ -1,3 +1,4 @@
+import {resolveImagePromptProfile,promptProfileSummary} from "../../shared/image-prompt-profile.js";
 import { createUiId } from "../request-id.js";
 import {SETTINGS_PAGES,SETTINGS_FIELD_PAGES,settingsPage,type SettingsPageId} from "./routes.js";
 import {WORKSPACE_CSS} from "./workspace-css.js";
@@ -710,6 +711,12 @@ export class VisualNovelSettingsPanel {
 
             </div>
             <label data-field ${find("Generated image shape","dimensions resolution aspect ratio mobile 9:16 size")}><span>Generated image shape</span><select name="imageOutputAspectRatio">${IMAGE_OUTPUT_RATIOS.map(r=>`<option value="${r}">${r==='default'?'Template / connection default':r}</option>`).join('')}</select><small>Preferred output shape. Verified model constraints can limit it. Held pictures keep their prepared size; display fit is separate.</small></label>
+            <fieldset data-prompt-model-settings ${find('Automatic image prompting','prompt budget characters limit model profile auto detect')}><legend>Image prompting</legend>
+              <label data-check><input name="automaticImagePromptSettings" type="checkbox"><span>Automatic model settings<small>Uses model-specific wording guidance and published prompt limits. Existing size controls still apply.</small></span></label>
+              <label data-check><input name="imagePromptBudgetOverride" type="checkbox"><span>Set a manual prompt budget<small>Combined positive + negative characters. Verified provider ceilings still apply.</small></span></label>
+              <label data-field data-prompt-budget-field><span>Character budget</span><input name="imagePromptBudget" type="number" min="256" max="50000" step="1" inputmode="numeric"><small>256–50,000. A ceiling, not a minimum; useful detail matters more than filling it.</small></label>
+              <p data-prompt-profile-status role="status"></p><small>Settings summary uses the bundled catalogue. Prepared pictures show live metadata when available. Unknown limits use a 3,000-character fallback. Held pictures keep their prepared budget. Counts use conservative UTF-16 characters, not tokens.</small>
+            </fieldset>
             <div data-page-links>${this.pageLink('templates')}${this.pageLink('style')}${this.pageLink('rules')}${this.pageLink('consistency')}${this.pageLink('generation')}${this.pageLink('characters','Manage characters & places')}${this.pageLink('appearance','Change display picture fit')}</div>
             <section data-workspace-page="templates"><label data-check><input name="dynamicImageTemplates" type="checkbox"><span>Choose templates from story context<small>Only included templates are available. Budget and review remain independent.</small></span></label><div data-templates-mount ${find('Scene templates','manga ensemble character portrait dynamic prompt format')}></div></section>
             <section data-workspace-page="style">${sharedStyle}</section>
@@ -1457,6 +1464,13 @@ export class VisualNovelSettingsPanel {
           return null;
         }
         return { dynamicImageTemplates: checked };
+      case "automaticImagePromptSettings": return {automaticImagePromptSettings:checked};
+      case "imagePromptBudgetOverride": return {imagePromptBudgetOverride:checked};
+      case "imagePromptBudget": {
+        const value=Number(target.value);
+        if(!target.value.trim()||!Number.isInteger(value)||value<256||value>50000){target.setAttribute('aria-invalid','true');this.status.textContent='Enter a whole character budget from 256 to 50,000.';return null;}
+        target.removeAttribute('aria-invalid');return {imagePromptBudget:value};
+      }
       case "imageOutputAspectRatio": return { imageOutputAspectRatio: normalizeImageOutputRatio(target.value) };
       case "persistentCastArt": return {persistentCastArt:checked};
       case "persistentLocationArt": return {persistentLocationArt:checked};
@@ -1932,6 +1946,12 @@ export class VisualNovelSettingsPanel {
   }
 
   private syncEveryday(config: VisualNovelConfig): void {
+    this.control<HTMLInputElement>("automaticImagePromptSettings").checked=config.automaticImagePromptSettings;
+    this.control<HTMLInputElement>("imagePromptBudgetOverride").checked=config.imagePromptBudgetOverride;
+    this.control<HTMLInputElement>("imagePromptBudget").value=String(config.imagePromptBudget);
+    this.control<HTMLInputElement>("imagePromptBudget").disabled=!config.imagePromptBudgetOverride;
+    this.root.querySelector<HTMLElement>('[data-prompt-budget-field]')!.hidden=!config.imagePromptBudgetOverride;
+
     this.control<HTMLSelectElement>("mode").value = config.mode;
     this.control<HTMLSelectElement>("skipMode").value = config.skipMode;
     this.control<HTMLInputElement>("generateChoices").checked = config.generateChoices;
@@ -2138,7 +2158,8 @@ export class VisualNovelSettingsPanel {
   }
 
   private updateImageModelHint(): void {
-    const selected = this.connectionStates.image.options.find((option) => option.id === this.config.imageConnectionId);
+    const selected = this.connectionStates.image.options.find((option) => this.config.imageConnectionId?option.id === this.config.imageConnectionId:option.isDefault);
+    this.root.querySelector<HTMLElement>("[data-prompt-profile-status]")!.textContent=promptProfileSummary(resolveImagePromptProfile(selected?.provider,this.config.imageModel||selected?.model,this.config));
     const modelInput = this.control<HTMLInputElement>("imageModel");
     const hint = this.root.querySelector<HTMLElement>("[data-image-model-hint]")!;
     if (selected?.model) {

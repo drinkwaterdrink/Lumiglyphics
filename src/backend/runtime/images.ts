@@ -1,3 +1,4 @@
+import {loadImagePromptProfile} from "./image-prompt-profile.js";
 import {findCastArt,saveCastArt,castArtToken,type CastArtIdentity} from './cast-art.js';
 import {findLocationArt,saveLocationArt,locationArtToken,type LocationArtIdentity} from './location-art.js';
 import { globalOutputParameters, templateOutputParameters, modelOutputParameters, assertModelOutputParameters, providerOutputParameters } from "./template-output.js";
@@ -1275,9 +1276,10 @@ export async function generateAssets(
           const initialMetadata = metadataFor(cue);
           const regenerateFor=(selectedCue:VisualCue)=>(request:ImageGenerationRequest)=>rewriteImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,'reroll');
           frozen.parameters = modelOutputParameters(selected?.provider ?? provider, frozen.model, globalOutputParameters(config.imageOutputAspectRatio, selected?.provider ?? provider, frozen.model, frozen.parameters ?? {}));
+          frozen.promptProfile=await loadImagePromptProfile(spindle,config,selected?.provider??provider,frozen.model);
           frozen = compactImageRequest(frozen);
           let promptWasRewritten=false;
-          if(frozen.prompt.length+(frozen.negativePrompt?.length??0)>3000){
+          if(frozen.prompt.length+(frozen.negativePrompt?.length??0)>frozen.promptProfile!.maxCharacters || frozen.promptProfile?.negativeMode==='positive-only'&&Boolean(frozen.negativePrompt?.trim())){
             try{
               frozen=await rewriteImagePrompt(spindle,frozen,initialMetadata,config,userId,jobSignal,'fit');
               promptWasRewritten=true;
@@ -1338,10 +1340,13 @@ export async function generateAssets(
           if (jobSignal.aborted) throw abortError(jobSignal);
           // A locally edited request cannot populate the compiler's original cache key.
           if (cacheOptions.disableCacheStore || JSON.stringify(approved) !== JSON.stringify(frozen)) { cacheKey = null; settle?.({ kind: "released" }); settle = null; }
-          assertPromptLengths(approved.prompt,approved.negativePrompt);
+          // Review callbacks cannot replace the frozen budget used to prepare this request.
+          if(frozen.promptProfile)approved.promptProfile=frozen.promptProfile;else delete approved.promptProfile;
+          assertPromptLengths(approved.prompt,approved.negativePrompt,approved.promptProfile);
           assertEffectivePromptBudget(approved);
           assertModelOutputParameters(selected?.provider ?? provider, approved.model, approved.parameters ?? {});
-          const result = await spindle.imageGen.generate({ ...approved, parameters: providerOutputParameters(approved.parameters ?? {}) });
+          const {promptProfile:_promptProfile,...providerRequest}=approved;
+          const result = await spindle.imageGen.generate({ ...providerRequest, parameters: providerOutputParameters(approved.parameters ?? {}) });
           observedGenerationMs.push(Date.now() - generationStarted);
 
           if (signal.aborted) throw abortError(signal);

@@ -1,6 +1,6 @@
 {
   "name": "lumiglyphics",
-  "version": "0.2.0-beta.50",
+  "version": "0.2.0-beta.51",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.0",
@@ -50,7 +50,8 @@
     "test:effect-policies": "bun run ./scripts/test-effect-policies-browser.ts",
     "test:template-preferences": "bun run ./scripts/test-presentation-rules-browser.ts",
     "test:cast": "bun run ./scripts/test-cast-browser.ts",
-    "test:cast-setup": "bun run ./scripts/test-cast-setup-browser.ts"
+    "test:cast-setup": "bun run ./scripts/test-cast-setup-browser.ts",
+    "test:model-prompts": "node --experimental-strip-types ./scripts/test-model-prompts-browser.ts"
   },
   "dependencies": {
     "yaml": "2.9.1",

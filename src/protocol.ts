@@ -222,7 +222,7 @@ export type BackendResponse =
 export function isFrontendRequest(value: unknown): value is FrontendRequest {
   if ((value as {type?:unknown}|null)?.type === "vn_presentation_rules") return PresentationRuleRequestSchema.safeParse(value).success;
   if (value === null || typeof value !== "object") return false;
-  if ((value as {type?:unknown}).type === "vn_external_image_review") return z.object({type:z.literal("vn_external_image_review"),chatId:z.string().min(1).max(128),requestId:z.string().min(1).max(128),reviewRequestId:z.string().min(1).max(100),action:z.enum(["generate","skip"]),edits:z.object({prompt:z.string().min(1).max(3000).optional(),negativePrompt:z.string().max(3000).optional(),parameters:z.record(z.string(),z.unknown()).optional()}).strict().optional()}).strict().safeParse(value).success;
+  if ((value as {type?:unknown}).type === "vn_external_image_review") return z.object({type:z.literal("vn_external_image_review"),chatId:z.string().min(1).max(128),requestId:z.string().min(1).max(128),reviewRequestId:z.string().min(1).max(100),action:z.enum(["generate","skip"]),edits:z.object({prompt:z.string().min(1).max(65000).optional(),negativePrompt:z.string().max(65000).optional(),parameters:z.record(z.string(),z.unknown()).optional()}).strict().optional()}).strict().safeParse(value).success;
   if((value as {type?:unknown}).type==='vn_image_library')return ImageLibraryRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_cast_gallery") return CastGalleryRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_cast_art") return CastArtRequestSchema.safeParse(value).success;

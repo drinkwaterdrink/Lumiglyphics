@@ -63,6 +63,8 @@ describe("stage effects heuristics & schemas", () => {
 
 // Minimal Mock DOM for full VnStage integration tests
 class MockNode {
+  getRootNode(): Document { return document; }
+  contains(node: MockNode | null): boolean { return node === this || this.children.some(child => child.contains(node)); }
   tagName: string;
   dataset: Record<string, string> = {};
   attributes = new Map<string, string>();

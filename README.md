@@ -1,6 +1,6 @@
 # Lumiglyphics
 
-Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.50`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance and [STATUS.md](STATUS.md) for the current delivered/pending matrix.
+Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.51`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance and [STATUS.md](STATUS.md) for the current delivered/pending matrix.
 
 **Reader and image review:** When supported by the current view session, parsed reply prose is readable while the story reader prepares pictures and references. The temporary preview keeps its position when the exact final reply arrives; it does not save read progress, submit replies, or start extra generation. Image prompts separates planning, review, generation, failure, reuse and older-picture states, with one main action and advanced controls in disclosures. **Rewrite prompt** uses text tokens; **Generate picture** starts the image request. Editing keeps the combined 3,000-character guard and offers previous wording after a rewrite.
 
@@ -349,3 +349,23 @@ Runtime notices: general reader errors now have a dismiss button as well as imag
 
 
 **Cast view portraits:** Appearance → Cast view arranges existing compatible environment and character-portrait artwork separately. Up to two portrait cards can appear, with a name and speaker highlight. They appear only when the current scene has suitable artwork; action/Manga scenes keep their normal view. The portrait is displayed as supplied, not automatically cut out from its own background. Showing it makes no extra image request. Use **×** in the portrait caption to hide the overlays; a small **Cast** button above the dialogue restores them. Dismissal stays local across reply refreshes until restored or Cast view is toggled off/on. It does not advance reading, discard a draft or delete artwork. Turn off **Appearance → Cast view** to disable the feature persistently.
+
+
+### Automatic image prompting
+
+In **Images → Image prompting**, Automatic model settings uses the selected image connection
+and model override to resolve a prompt profile. Family guidance covers FLUX, Qwen, Anima,
+Z Image, Grok Imagine, GPT Image, Nano Banana, Seedream, MiniMax and Muse; an unknown endpoint
+limit remains explicitly unknown. NanoGPT public discovery is cached, bounded by a two-second
+wait and backed by a bundled catalogue snapshot. No story text or credentials are sent to discovery.
+
+Enable **Set a manual prompt budget** for a combined positive/negative character ceiling from
+256 to 50,000. Verified provider ceilings still apply. Unknown limits default to 3,000;
+a larger manual value is not proof that the provider accepts it. Counts conservatively use
+UTF-16 characters, not model tokens. Native token limits may impose additional constraints.
+
+The prepared profile is shown in Image prompts and stays frozen while reviewing. Settings
+changes apply to new preparations. Oversized drafts are visibly blocked; Regenerate prompt
+uses the story-reader connection to repair wording without automatically buying an image.
+For identified positive-only endpoints, essential exclusions are rewritten as positive visual
+intent or the draft remains blocked. Templates, shared style and image-size controls remain editable.

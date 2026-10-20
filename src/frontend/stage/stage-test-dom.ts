@@ -26,6 +26,9 @@ const toCamel = (name: string): string => name.replace(/-([a-z])/g, (_, c: strin
 const toKebab = (name: string): string => name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 
 export class FakeNode {
+  /** Native DOM APIs used by cast-overlay focus restoration. */
+  getRootNode(): typeof FakeDocument { return FakeDocument; }
+  contains(node: FakeNode | null): boolean { return node === this || this.children.some(child => child.contains(node)); }
   tagName: string;
   attributes = new Map<string, string>();
   children: FakeNode[] = [];

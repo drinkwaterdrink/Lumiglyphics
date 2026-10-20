@@ -1,3 +1,4 @@
+import {resolveImagePromptProfile} from "../../shared/image-prompt-profile.js";
 import {expect,test} from 'bun:test';
 import {normalizeConfig} from '../../config.js';
 import {rewriteImagePrompt,assertEffectivePromptBudget} from './prompt-rewrite.js';
@@ -38,4 +39,22 @@ test('connection raw prompt overrides are checked against the effective combined
  expect(()=>assertEffectivePromptBudget({...request,parameters:{rawRequestOverride:'{"prompt":"Different hidden prompt"}'}})).toThrow('reviewed wording');
  expect(()=>assertEffectivePromptBudget({...request,prompt:'x'.repeat(2800),negativePrompt:'y'.repeat(201)})).toThrow('3,000');
  expect(()=>assertEffectivePromptBudget({...request,parameters:{rawRequestOverride:{aspect_ratio:'9:16'}}})).not.toThrow();
+});
+
+
+test('rewrite uses the frozen small budget and positive-only endpoint guidance',async()=>{
+ const promptProfile=resolveImagePromptProfile('nanogpt','blackforestlabs/flux-3/klein/text-to-image',{imagePromptBudgetOverride:true,imagePromptBudget:1000});
+ const {spindle,calls}=api([{content:JSON.stringify({prompt:'An empty rain-lit station with a silver-haired traveller.',negativePrompt:''})}]);
+ const result=await rewriteImagePrompt(spindle,{...request,promptProfile},undefined,normalizeConfig({imagePromptBudgetOverride:true,imagePromptBudget:8000}),'u',new AbortController().signal,'fit');
+ expect(calls[0].messages[0].content).toContain('1,000 combined character ceiling');
+ expect(calls[0].messages[0].content).toContain('no native negative field');
+ expect(result.promptProfile?.maxCharacters).toBe(1000);expect(result.negativePrompt).toBe('');
+});
+
+test('raw override validation follows small and large frozen budgets',()=>{
+ const small=resolveImagePromptProfile('nanogpt','z-image-turbo');
+ expect(()=>assertEffectivePromptBudget({...request,prompt:'x'.repeat(1201),negativePrompt:'',promptProfile:small})).toThrow('1,200');
+ const large=resolveImagePromptProfile('nanogpt','unknown',{imagePromptBudgetOverride:true,imagePromptBudget:6000});
+ const prompt='x'.repeat(5000);
+ expect(()=>assertEffectivePromptBudget({...request,prompt,negativePrompt:'',promptProfile:large,parameters:{rawRequestOverride:{prompt,negative_prompt:''}}})).not.toThrow();
 });

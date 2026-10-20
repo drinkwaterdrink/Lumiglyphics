@@ -1,10 +1,12 @@
+import {ImagePromptProfileSchema,PROMPT_STORAGE_MAX} from "../../shared/image-prompt-profile.js";
+import type {ImagePromptProfile} from "../../shared/image-prompt-profile.js";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { syncGeneratedModelOutput } from './template-output.js';
 import type { ImageRequestEdits, ImageRequestRecord } from "../../shared/image-review.js";
 import { ImagePromptMetadataSchema, type ImagePromptMetadata } from "../../shared/image-templates.js";
 import { compactPromptText, compactNegativePrompt, assertPromptLengths, IMAGE_PROMPT_MAX_CHARS } from '../../shared/prompt-length.js';
 
-export type ImageGenerationRequest = Parameters<SpindleAPI["imageGen"]["generate"]>[0];
+export type ImageGenerationRequest = Parameters<SpindleAPI["imageGen"]["generate"]>[0] & {promptProfile?:ImagePromptProfile};
 const blocked = /(?:api.?key|authorization|password|credential|token|secret|reference|(?:source|input|resolved|init)images?|(?:^|_)images?$|image(?:Data|Url|_data|_url|_bytes|_base64)|^_lumiglyphics|^v4_|^uc$|^negativePrompt$|^rawRequestOverride$|^__proto__$|^constructor$|^prototype$)/i;
 
 /** History/editor values contain no credential fields or reference-image bytes. */
@@ -31,7 +33,7 @@ export function safeImageHistory(input: unknown): ImageRequestRecord[] {
   // Retain active drafts before older attempts so history limits cannot hide an approval.
   for (const item of [...candidates].reverse().sort((a, b) => Number(b?.state === "review") - Number(a?.state === "review"))) {
     if (!item || typeof item !== "object" || !["review", "prepared", "approved", "skipped", "cancelled"].includes(item.state)) continue;
-    if (!["requestId", "jobId", "prompt", "negativePrompt", "model", "provider", "connectionId", "referenceSummary", "createdAt"].every((key) => typeof item[key] === "string" && item[key].length <= 32000)) continue;
+    if (!["requestId", "jobId", "prompt", "negativePrompt", "model", "provider", "connectionId", "referenceSummary", "createdAt"].every((key) => typeof item[key] === "string" && item[key].length <= PROMPT_STORAGE_MAX)) continue;
     if (!Number.isInteger(item.paragraphIndex) || item.paragraphIndex < 0 || !item.parameters || typeof item.parameters !== "object" || Array.isArray(item.parameters)) continue;
     const record: ImageRequestRecord = {
       ...(typeof item.canRegeneratePrompt === 'boolean' ? {canRegeneratePrompt:item.canRegeneratePrompt} : {}),
@@ -40,6 +42,8 @@ export function safeImageHistory(input: unknown): ImageRequestRecord[] {
       ...(typeof item.connectionRevision === "number" ? { connectionRevision: item.connectionRevision } : {}),
       parameters: safeImageParameters(item.parameters), referenceSummary: item.referenceSummary, createdAt: item.createdAt
     };
+    const profile=ImagePromptProfileSchema.safeParse(item.promptProfile);
+    if(profile.success) record.promptProfile=profile.data;
     const metadata = ImagePromptMetadataSchema.safeParse(item.imagePromptMetadata);
     if (metadata.success) record.imagePromptMetadata = metadata.data;
     const length = JSON.stringify(record).length;
@@ -52,12 +56,12 @@ export function safeImageHistory(input: unknown): ImageRequestRecord[] {
 export function applyImageEdits(request: ImageGenerationRequest, edits: ImageRequestEdits): ImageGenerationRequest {
   if (!edits || typeof edits !== 'object' || Array.isArray(edits)) throw new Error('Image edits must be an object.');
   const text = (value: unknown, required: boolean): string => {
-    if (typeof value !== "string" || value.length > IMAGE_PROMPT_MAX_CHARS || (required && !value.trim())) throw new Error("Prompt must be text, nonempty, and at most 3,000 characters.");
+    if (typeof value !== "string" || value.length > PROMPT_STORAGE_MAX || (required && !value.trim())) throw new Error("Prompt must be nonempty text and within the supported inspection size.");
     return value;
   };
   const prompt = edits.prompt === undefined ? request.prompt : text(edits.prompt, true);
   const negativePrompt = edits.negativePrompt === undefined ? request.negativePrompt : text(edits.negativePrompt, false);
-  if (edits.prompt !== undefined || edits.negativePrompt !== undefined) assertPromptLengths(prompt, negativePrompt);
+  if (edits.prompt !== undefined || edits.negativePrompt !== undefined) assertPromptLengths(prompt, negativePrompt,request.promptProfile);
   const patch = edits.parameters ?? {};
   if (!patch || typeof patch !== "object" || Array.isArray(patch) || JSON.stringify(patch).length > 16000) throw new Error("Image parameters must be a JSON object under 16 KB.");
   const check = (value: unknown, depth: number): void => {
@@ -92,10 +96,10 @@ export function applyImageEdits(request: ImageGenerationRequest, edits: ImageReq
 export type ImagePreparationMetadata = { provider: string; connectionRevision?: number; referenceSummary?: string; imagePromptMetadata?: ImagePromptMetadata; regeneratePrompt?: (request:ImageGenerationRequest) => Promise<ImageGenerationRequest>; rebuildTemplate?: (templateId: string) => Promise<{ request: ImageGenerationRequest; metadata: ImagePreparationMetadata }> };
 /** Also synchronize NovelAI/host-managed prompt copies after compaction. */
 export function compactImageRequest(request: ImageGenerationRequest): ImageGenerationRequest {
-  const over = request.prompt.length + (request.negativePrompt?.length ?? 0) > IMAGE_PROMPT_MAX_CHARS;
+  const over = request.prompt.length + (request.negativePrompt?.length ?? 0) > (request.promptProfile?.maxCharacters??IMAGE_PROMPT_MAX_CHARS);
   const negative=request.negativePrompt !== undefined && over ? compactNegativePrompt(request.negativePrompt) : request.negativePrompt;
-  const stillOver=request.prompt.length+(negative?.length??0)>IMAGE_PROMPT_MAX_CHARS;
-  return applyImageEdits({...request,prompt:compactPromptText(request.prompt, stillOver),
+  const stillOver=request.prompt.length+(negative?.length??0)>(request.promptProfile?.maxCharacters??IMAGE_PROMPT_MAX_CHARS);
+  return applyImageEdits({...request,prompt:stillOver?compactPromptText(request.prompt, true):request.prompt,
     ...(negative !== undefined ? {negativePrompt:negative} : {})},{});
 }
 
@@ -105,6 +109,7 @@ type Pending = { request: ImageGenerationRequest; record: ImageRequestRecord; si
 function reviewRecord(jobId: string, paragraphIndex: number, request: ImageGenerationRequest, metadata: Metadata, review: boolean): ImageRequestRecord {
   const record: ImageRequestRecord = {
     canRegeneratePrompt: Boolean(metadata.regeneratePrompt),
+    ...(request.promptProfile?{promptProfile:request.promptProfile}:{}),
     requestId: crypto.randomUUID(), jobId, paragraphIndex, state: review ? "review" : "prepared",
     prompt: request.prompt, negativePrompt: request.negativePrompt ?? "", model: request.model ?? "Host default",
     provider: metadata.provider, connectionId: request.connection_id ?? "Host default",
@@ -112,7 +117,7 @@ function reviewRecord(jobId: string, paragraphIndex: number, request: ImageGener
     ...(metadata.imagePromptMetadata ? { imagePromptMetadata: ImagePromptMetadataSchema.parse(metadata.imagePromptMetadata) } : {}),
     parameters: safeImageParameters(request.parameters ?? {}), referenceSummary: metadata.referenceSummary ?? "No extension reference", createdAt: new Date().toISOString()
   };
-  if (record.prompt.length > 32000 || record.negativePrompt.length > 32000 || JSON.stringify(record).length > 80000) throw new Error("Image request is too large to inspect. Shorten the prompt/settings and prepare it again.");
+  if (record.prompt.length > PROMPT_STORAGE_MAX || record.negativePrompt.length > PROMPT_STORAGE_MAX || JSON.stringify(record).length > 160000) throw new Error("Image request is too large to inspect. Shorten the prompt/settings and prepare it again.");
   return record;
 }
 
@@ -125,7 +130,7 @@ export class ImageReviewGate {
   async prepare(jobId: string, paragraphIndex: number, input: ImageGenerationRequest, metadata: Metadata, review: boolean, signal: AbortSignal): Promise<ImageGenerationRequest> {
     if (signal.aborted) throw aborted("Image request cancelled.");
     const request = compactImageRequest(structuredClone(input));
-    review = review || request.prompt.length + (request.negativePrompt?.length ?? 0) > IMAGE_PROMPT_MAX_CHARS;
+    try{assertPromptLengths(request.prompt,request.negativePrompt,request.promptProfile);}catch{review=true;}
     const record = reviewRecord(jobId, paragraphIndex, request, metadata, review);
     if (!review) { await this.onRecord(record); if (signal.aborted) throw aborted("Image request cancelled."); return request; }
     let item!: Pending;
@@ -183,7 +188,7 @@ export class ImageReviewGate {
     try {
       const request=await item.metadata.regeneratePrompt(structuredClone(item.request));
       if(item.signal.aborted)throw aborted('Prompt regeneration cancelled.');
-      assertPromptLengths(request.prompt,request.negativePrompt);
+      assertPromptLengths(request.prompt,request.negativePrompt,request.promptProfile);
       const record=reviewRecord(item.record.jobId,item.record.paragraphIndex,request,item.metadata,true);
       await this.onRecord({...item.record,state:'cancelled'});
       if(item.signal.aborted)throw aborted('Prompt regeneration cancelled.');
@@ -203,7 +208,7 @@ export class ImageReviewGate {
     if (!item) return false;
     if (action === "skip") { this.pending.delete(requestId); item.skipped = true; item.reject(aborted("Image skipped.")); return true; }
     const edited = applyImageEdits(item.request, edits);
-    assertPromptLengths(edited.prompt,edited.negativePrompt);
+    assertPromptLengths(edited.prompt,edited.negativePrompt,edited.promptProfile);
     this.pending.delete(requestId);
     item.resolve(edited);
     return true;

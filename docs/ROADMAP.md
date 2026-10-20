@@ -1,6 +1,6 @@
 # Remaining Lumiglyphics roadmap
 
-Current scope: beta.50 on Testing. This page summarizes unfinished work; [STATUS.md](../STATUS.md) is the delivered-feature matrix. Earlier dated plans retain their original checklists and should not be read as the current completion count.
+Current scope: beta.51 on Testing. This page summarizes unfinished work; [STATUS.md](../STATUS.md) is the delivered-feature matrix. Earlier dated plans retain their original checklists and should not be read as the current completion count.
 
 ## Next delivery sequence
 
@@ -23,6 +23,14 @@ The ordering is the current implementation sequence, not a delivery-date estimat
 - Quiet/Mute reduces background music relative to its saved volume. It does not select new tracks, change speech/SFX volume, or generate audio. Extra music-selection policies are possible follow-ups rather than required for this quieting increment.
 - Dialogue, current-place and verified paragraph-item conditions can match without an image. Selected-NPC and original-template conditions require retained assigned picture metadata and do not infer discarded planner candidates or physical presence.
 - Wider automatic presence tracking is unfinished and must not be advertised as already reliable.
+
+## Image generation follow-ups
+
+Model-aware character budgets, family guidance and manual budget controls ship in beta.51.
+Remaining: exact native tokenizer counters where public tokenizers are available, additional
+provider-specific capability adapters, current-host parameter-forwarding verification, and
+opt-in same-scene prompt comparisons. Metadata proves supported fields and limits, not an
+artistic optimum. No automatic paid comparison generations are enabled.
 
 ## Deferred ideas
 

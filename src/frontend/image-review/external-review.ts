@@ -1,3 +1,5 @@
+import {assertPromptLengths} from "../../shared/prompt-length.js";
+import {promptProfileSummary} from "../../shared/image-prompt-profile.js";
 import type { BackendResponse, FrontendRequest } from "../../protocol.js";
 import type { ImageRequestEdits } from "../../shared/image-review.js";
 
@@ -70,13 +72,14 @@ export class ExternalImageReview {
 
   private edits(): ImageRequestEdits {
     const length = this.prompt.value.length + this.negative.value.length;
-    if (!this.prompt.value.trim() || length > 3000) throw new Error("Keep positive and negative prompts within 3,000 combined characters.");
+    if(!this.prompt.value.trim())throw new Error("Enter a positive prompt.");
+    assertPromptLengths(this.prompt.value,this.negative.value,this.preview?.record.promptProfile);
     const parameters: unknown = JSON.parse(this.parameters.value);
     if (!parameters || typeof parameters !== "object" || Array.isArray(parameters) || this.parameters.value.length > 16000) throw new Error("Parameters must be a JSON object under 16 KB.");
     return { prompt: this.prompt.value, negativePrompt: this.negative.value, parameters: parameters as Record<string, unknown> };
   }
   private validate(): void {
-    try { this.edits(); this.generate.disabled = this.sending; this.status.textContent = `${this.prompt.value.length + this.negative.value.length} / 3,000 combined characters. Approval starts image generation.`; }
+    try { this.edits(); this.generate.disabled = this.sending; this.status.textContent = `${this.prompt.value.length + this.negative.value.length} / ${(this.preview?.record.promptProfile?.maxCharacters??3000).toLocaleString()} combined characters. ${this.preview?.record.promptProfile?promptProfileSummary(this.preview.record.promptProfile):'Legacy budget.'} Approval starts image generation.`; }
     catch (error) { this.generate.disabled = true; this.status.textContent = error instanceof Error ? error.message : String(error); }
   }
   private approve(): void {

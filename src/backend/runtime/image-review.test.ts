@@ -1,4 +1,5 @@
 import { compactImageRequest } from './image-review.js';
+import {resolveImagePromptProfile} from '../../shared/image-prompt-profile.js';
 import { describe, expect, test } from "bun:test";
 import { ImageReviewGate, applyImageEdits, safeImageParameters, safeImageHistory } from "./image-review.js";
 
@@ -104,4 +105,30 @@ test('negative dedupe alone preserves repeated positive emphasis verbatim',()=>{
  const prompt='Important identity.\n'.repeat(140);const request={prompt,negativePrompt:'blur, '.repeat(100)};
  const compact=compactImageRequest(request);
  expect(compact.prompt).toBe(prompt);expect(compact.negativePrompt).toBe('blur');
+});
+
+
+test('frozen model budgets survive history and enforce small and large approvals',async()=>{
+ const profile=resolveImagePromptProfile('nanogpt','unknown',{imagePromptBudgetOverride:true,imagePromptBudget:6000});
+ const records:any[]=[];const gate=new ImageReviewGate(async r=>{records.push(r);});
+ const prompt='Unique identity and material detail. '.repeat(130);
+ const pending=gate.prepare('large',0,{prompt,promptProfile:profile},{provider:'nanogpt'},true,new AbortController().signal);
+ await Promise.resolve();expect(records[0].prompt).toBe(prompt);
+ expect(safeImageHistory(records)[0]?.promptProfile?.maxCharacters).toBe(6000);
+ expect(()=>gate.decide(records[0].requestId,'generate',{negativePrompt:'y'.repeat(2000)})).toThrow('6,000');
+ gate.decide(records[0].requestId,'generate',{});expect((await pending).prompt).toBe(prompt);
+ const small=resolveImagePromptProfile('nanogpt','z-image-turbo');
+ const next=gate.prepare('small',0,{prompt:'x'.repeat(1300),promptProfile:small},{provider:'nanogpt'},false,new AbortController().signal);
+ await Promise.resolve();const record=records.at(-1);expect(record.state).toBe('review');
+ expect(()=>gate.decide(record.requestId,'generate',{})).toThrow('1,200');
+ gate.decide(record.requestId,'generate',{prompt:'A traveller.'});await next;
+});
+
+test('positive-only endpoints hold negative constraints for adaptation instead of discarding them',async()=>{
+ const profile=resolveImagePromptProfile('nanogpt','blackforestlabs/flux-3/klein/text-to-image');
+ const records:any[]=[];const gate=new ImageReviewGate(async r=>{records.push(r);});
+ const pending=gate.prepare('positive',0,{prompt:'A quiet station.',negativePrompt:'crowds',promptProfile:profile},{provider:'nanogpt'},false,new AbortController().signal);
+ await Promise.resolve();expect(records[0].negativePrompt).toBe('crowds');
+ expect(()=>gate.decide(records[0].requestId,'generate',{})).toThrow('positive-only');
+ gate.decide(records[0].requestId,'generate',{prompt:'An empty quiet station.',negativePrompt:''});await pending;
 });

@@ -34,7 +34,7 @@ export function settingsPage(value:unknown):typeof SETTINGS_PAGES[number]{
 export const SETTINGS_FIELD_PAGES={
  autoEnter:'reading',mode:'reading',generateChoices:'reading',textSpeed:'reading',autoPlayDelay:'reading',skipMode:'reading',tooltips:'reading',collectEntityReferences:'reading',
  themePreset:'appearance',sceneImageFit:'appearance',castMode:'appearance',effectIntensity:'appearance',textEffects:'appearance',textScale:'appearance',readerPreferences:'appearance',
- generateImages:'images',useNativeCardImages:'images',reviewImages:'images',imageConnectionId:'images',maxImagesPerTurn:'images',imageOutputAspectRatio:'images',
+ automaticImagePromptSettings:'images',imagePromptBudgetOverride:'images',imagePromptBudget:'images',generateImages:'images',useNativeCardImages:'images',reviewImages:'images',imageConnectionId:'images',maxImagesPerTurn:'images',imageOutputAspectRatio:'images',
  dynamicImageTemplates:'templates',defaultImageTemplateId:'templates',imageTemplates:'templates',imagePromptFormat:'templates',promptPrefix:'style',promptSuffix:'style',negativePrompt:'style',promptPresets:'style',originalReference:'style',originalCreationName:'style',novelAiQualityTags:'style',novelAiUseDefaultNegative:'style',
  persistentLocationArt:'consistency',persistentCastArt:'consistency',referenceAnchoring:'consistency',referenceSource:'consistency',imageModel:'generation',imageParameters:'generation',imageConcurrency:'generation',
  bgmVolume:'music',sfxVolume:'music',speech:'speech',parserConnectionId:'connections',parserParameters:'parameters',systemOneMode:'system-one',systemOneApiUrl:'system-one',systemOneModel:'system-one',
