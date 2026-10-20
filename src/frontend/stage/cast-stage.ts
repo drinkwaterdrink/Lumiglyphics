@@ -2,24 +2,33 @@ import type {AssetView,TurnView} from '../../protocol.js';
 import {selectCastComposition,type CastPortrait} from '../../shared/cast-composition.js';
 import {preloadAndDecodeVnImage,type VnImageFactory} from './image-loader.js';
 const CSS=`
-[data-vn-cast]{position:absolute;z-index:3;inset:5rem 1rem auto;pointer-events:none;display:grid;gap:.6rem;justify-items:center}
+[data-vn-cast]{position:absolute;z-index:3;inset:var(--vn-cast-top,5rem) 1rem auto;pointer-events:none;display:grid;gap:.6rem;justify-items:center}
 [data-vn-cast][hidden]{display:none}
-[data-vn-cast-portraits]{display:flex;gap:.75rem;justify-content:center;max-width:100%;width:min(100%,700px)}
-[data-vn-cast-card]{margin:0;flex:1 1 0;min-width:0;max-width:320px;overflow:hidden;border:1px solid var(--vn-dialogue-border);border-radius:.8rem;background:var(--vn-panel-solid);box-shadow:0 .4rem 1.5rem #0004}
+[data-vn-cast][data-collapsed=true]{justify-items:start}
+[data-vn-cast-portraits]{position:relative;display:flex;gap:.75rem;justify-content:center;max-width:100%;width:min(100%,700px)}
+[data-vn-cast-card]{position:relative;margin:0;flex:1 1 0;min-width:0;max-width:320px;overflow:hidden;border:1px solid var(--vn-dialogue-border);border-radius:.8rem;background:var(--vn-panel-solid);box-shadow:0 .4rem 1.5rem #0004}
 [data-vn-cast-card][data-active=true]{border-color:var(--vn-accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--vn-accent) 50%,transparent),0 .4rem 1.5rem #0004}
 [data-vn-cast-card] img{display:block;width:100%;height:min(clamp(80px,32vh,320px),var(--vn-cast-height,320px));object-fit:contain;background:var(--vn-panel)}
 [data-vn-cast-placeholder]{height:min(clamp(80px,32vh,320px),var(--vn-cast-height,320px));display:grid;place-content:center;text-align:center;padding:.5rem;box-sizing:border-box;color:var(--vn-muted);font-size:.8rem}
-[data-vn-cast-card] figcaption{color:var(--vn-text);font-size:.8rem;font-weight:650;text-align:center;padding:.45rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+[data-vn-cast-card] figcaption{color:var(--vn-text);font-size:.8rem;font-weight:650;text-align:center;padding:.45rem;box-sizing:border-box;height:44px;display:grid;align-items:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+[data-vn-cast-card]:last-of-type figcaption{padding-inline-end:48px}
+[data-vn-cast-toggle]{pointer-events:auto;min-width:44px;min-height:44px;box-sizing:border-box;border:1px solid var(--vn-dialogue-border);border-radius:.65rem;background:var(--vn-panel-solid);color:var(--vn-text);font:inherit;cursor:pointer}
+[data-vn-cast-toggle=hide]{position:absolute;inset:auto 0 0 auto;font-size:1.4rem;line-height:1}
+[data-vn-cast-toggle=show]{padding:.4rem .75rem;font-size:.8rem;box-shadow:0 .3rem 1rem #0003}
+[data-vn-cast-toggle]:focus-visible{outline:2px solid var(--vn-accent);outline-offset:2px}
+[data-vn-cast-toggle=hide]:focus-visible{outline-offset:-3px}
+[data-vn-cast-toggle]:hover{border-color:var(--vn-accent)}
 [data-vn-cast-tray]{display:flex;flex-wrap:wrap;justify-content:center;gap:.35rem;max-height:5.5rem;overflow:auto;pointer-events:auto}
 [data-vn-cast-tray] button{min-height:44px;padding:.4rem .7rem;border:1px solid var(--vn-dialogue-border);border-radius:.6rem;background:var(--vn-panel-solid);color:var(--vn-text);font:inherit;font-size:.8rem;cursor:pointer}
-@media(max-height:500px){[data-vn-cast]{inset:4rem 1rem auto}[data-vn-cast-card] img,[data-vn-cast-placeholder]{height:min(clamp(60px,23vh,120px),var(--vn-cast-height,120px))}}
+@media(max-height:500px){[data-vn-cast]{inset:var(--vn-cast-top,4rem) 1rem auto}[data-vn-cast-card] img,[data-vn-cast-placeholder]{height:min(clamp(60px,23vh,120px),var(--vn-cast-height,120px))}}
 `;
 /** Reuses ready art only. No transparent-cutout assumption, storage or provider calls. */
 export class CastStage {
- private host=document.createElement('section');private style=document.createElement('style');private enabled=false;
+ private host=document.createElement('section');private style=document.createElement('style');private enabled=false;private collapsed=false;
  private turn:TurnView|null=null;private index=0;private selected='';private scope='';private epoch=0;private signature='';private disposed=false;private observer:ResizeObserver|null=null;
  constructor(private root:HTMLElement,private createImage?:VnImageFactory){this.style.textContent=CSS;this.host.dataset.vnCast='';this.host.hidden=true;this.host.setAttribute('aria-label','Scene cast');root.append(this.style,this.host);}
  setEnabled(enabled:boolean):void{
+  if(enabled&&!this.enabled)this.collapsed=false;
   this.enabled=enabled;
   if(enabled&&!this.observer&&typeof ResizeObserver!=='undefined'){
    this.observer=new ResizeObserver(()=>this.fit());this.observer.observe(this.root);
@@ -29,17 +38,28 @@ export class CastStage {
  }
  set(turn:TurnView|null,index:number):AssetView|null{this.turn=turn;this.index=index;return this.refresh();}
  private refresh():AssetView|null{
+  const active=(this.host.getRootNode() as Document|ShadowRoot).activeElement;
+  const keepFocus=Boolean(active&&this.host.contains(active)&&active.hasAttribute('data-vn-cast-toggle'));
   let composition=this.enabled&&this.turn?selectCastComposition(this.turn,this.index,this.selected):null;
   if(!composition){this.clearDisplay();return null;}
   if(composition.scope!==this.scope){this.selected='';this.host.replaceChildren();this.scope=composition.scope;composition=selectCastComposition(this.turn!,this.index)!;}
-  const signature=JSON.stringify([composition.scope,composition.portraits,composition.otherCast]);
+  const signature=JSON.stringify([composition.scope,composition.portraits,composition.otherCast,this.collapsed]);
   if(signature===this.signature)return composition.background;
   this.signature=signature;const epoch=++this.epoch;this.host.hidden=false;
+  this.host.dataset.collapsed=String(this.collapsed);
+  if(this.collapsed){this.host.replaceChildren(this.toggleButton('show'));this.fit();if(keepFocus)this.host.querySelector<HTMLButtonElement>('[data-vn-cast-toggle]')?.focus({preventScroll:true});return composition.background;}
   const portraits=document.createElement('div');portraits.dataset.vnCastPortraits='';
   for(const portrait of composition.portraits)this.renderPortrait(portraits,portrait,epoch);
+  portraits.lastElementChild?.append(this.toggleButton('hide'));
   const tray=document.createElement('nav');tray.dataset.vnCastTray='';tray.setAttribute('aria-label','Other scene portraits');
   for(const portrait of composition.otherCast){const button=document.createElement('button');button.type='button';button.textContent=portrait.name;button.title=`Show ${portrait.name}`;button.setAttribute("aria-label",button.title);button.onclick=e=>{e.stopPropagation();this.selected=portrait.name;this.refresh();};tray.append(button);}
-  this.host.replaceChildren(portraits,tray);this.fit();return composition.background;
+  this.host.replaceChildren(portraits,tray);this.fit();if(keepFocus)this.host.querySelector<HTMLButtonElement>('[data-vn-cast-toggle]')?.focus({preventScroll:true});return composition.background;
+ }
+ private toggleButton(action:'show'|'hide'):HTMLButtonElement {
+  const button=document.createElement('button');button.type='button';button.dataset.vnCastToggle=action;button.textContent=action==='hide'?'×':'Cast';button.title=action==='hide'?'Hide cast portraits':'Show cast portraits';button.setAttribute('aria-label',button.title);
+  button.onkeydown=e=>e.stopPropagation();
+  button.onclick=e=>{e.preventDefault();e.stopPropagation();this.collapsed=action==='hide';this.refresh();this.host.querySelector<HTMLButtonElement>('[data-vn-cast-toggle]')?.focus({preventScroll:true});};
+  return button;
  }
  private renderPortrait(parent:HTMLElement,portrait:CastPortrait,epoch:number):void{
   const old=[...this.host.querySelectorAll<HTMLElement>('[data-vn-cast-card]')].find(c=>c.dataset.vnCastIdentity===JSON.stringify([portrait.name,portrait.asset?.stageAsset?.attire??null]));
@@ -55,13 +75,14 @@ export class CastStage {
  }
  private fit():void{
   if(!this.signature||this.disposed)return;
-  this.host.hidden=false;
+  this.host.style.removeProperty('--vn-cast-top');this.host.hidden=false;
   const root=this.root.getBoundingClientRect(),host=this.host.getBoundingClientRect();
   const dialogue=this.root.querySelector<HTMLElement>('[data-vn-dialogue]');
   const scale=root.width/this.root.clientWidth||1;
   const bottom=dialogue&&dialogue.getClientRects().length?dialogue.getBoundingClientRect().top:root.bottom;
+  if(this.collapsed){const top=(bottom-root.top)/scale-52;this.host.style.setProperty('--vn-cast-top',`${Math.max(64,top)}px`);this.host.hidden=top<64;return;}
   const tray=this.host.querySelector<HTMLElement>('[data-vn-cast-tray]');
-  const room=(bottom-host.top)/scale-40-(tray?.getBoundingClientRect().height??0)/scale;
+  const room=(bottom-host.top)/scale-64-(tray?.getBoundingClientRect().height??0)/scale;
   this.host.hidden=room<32;
   this.host.style.setProperty('--vn-cast-height',`${Math.max(32,room)}px`);
  }
