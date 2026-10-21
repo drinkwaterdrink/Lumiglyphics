@@ -1193,3 +1193,62 @@ test('unreadable optional scene cache does not block saved reply reload or a new
  await sendState(fresh.spindle,'chat-controller','cache-new-user',{viewOpen:true});
  expect(fresh.generateCalls()).toBe(1);expect((fresh.sent.find((m:any)=>m.type==='vn_turn') as any)?.turn.messageId).toBe('new-reply');
 });
+
+test('quick retry queues multiple cancelled pictures without review, preserves completed artwork and cancels queued spending on close',async()=>{
+ const f=generationFixture(),user='queued-retries';f.data.set('config.json',{...(f.data.get('config.json') as object),reviewImages:true});
+ registerVisualNovelBackend(f.spindle);await sendState(f.spindle,'chat',user,{viewOpen:true});
+ const saved=()=>f.data.get(turnPath('chat','assistant-1',0)) as StoredTurnRecord;
+ await waitFor(()=>saved().imageRequests?.some(r=>r.state==='review')===true);
+ const key=saved().plan.key;const scope={type:'vn_queue_image_retries',version:1,chatId:'chat',messageId:key.assistantMessageId,sourceFingerprint:key.sourceFingerprint,swipeId:0,revision:key.revision,action:'enqueue'};
+ f.request({type:'vn_recover_images',version:1,chatId:'chat',messageId:key.assistantMessageId,sourceFingerprint:key.sourceFingerprint,swipeId:0,revision:key.revision,requestId:'stop-before-queue',action:'stop'},user);
+ await waitFor(()=>saved().jobs.every(j=>j.status==='cancelled'));
+ const ids=saved().jobs.map(j=>j.jobId);
+ f.request({...scope,requestId:'queue-two',jobIds:ids},user);
+ f.request({...scope,requestId:'queue-two',jobIds:ids},user);
+ f.request({...scope,requestId:'racing-duplicate-click',jobIds:ids},user);
+ await waitFor(()=>f.gates.length===1);
+ f.request({...scope,requestId:'duplicate-click',jobIds:ids},user);
+ await new Promise(r=>setTimeout(r,10));expect(f.gates).toHaveLength(1);
+ expect(saved().imageRequests?.filter(r=>r.state==='review')).toHaveLength(0);
+ f.gates[0]!.resolve({imageId:'first-retry',imageUrl:'/first-retry'});
+ await waitFor(()=>f.gates.length===2);f.gates[1]!.reject(new Error('one provider failure'));
+ await waitFor(()=>saved().jobs[1]?.status==='failed');await new Promise(r=>setTimeout(r,10));
+ expect(saved().jobs[0]?.imageId).toBe('first-retry');expect(f.gates).toHaveLength(2);
+ f.request({...scope,requestId:'regen-ready-and-failed',jobIds:ids},user);
+ await waitFor(()=>f.gates.length===3);
+ expect(saved().previousImages?.[ids[0]!]?.imageId).toBe('first-retry');
+ expect(saved().imageRequests?.filter(r=>r.state==='review')).toHaveLength(0);
+ f.request({type:'vn_view',chatId:'chat',open:false},user);f.gates[2]!.resolve({imageId:'late',imageUrl:'/late'});
+ await new Promise(r=>setTimeout(r,30));expect(f.gates).toHaveLength(3);
+ expect(saved().jobs[0]?.imageId).not.toBe('late');
+});
+
+test('retry unfinished approves only the selected existing batch and never schedules a duplicate image',async()=>{
+ const f=generationFixture(),user='quick-existing-batch';f.data.set('config.json',{...(f.data.get('config.json') as object),reviewImages:true});
+ registerVisualNovelBackend(f.spindle);await sendState(f.spindle,'chat',user,{viewOpen:true});
+ const saved=()=>f.data.get(turnPath('chat','assistant-1',0)) as StoredTurnRecord;
+ await waitFor(()=>saved().imageRequests?.some(r=>r.state==='review')===true);
+ const key=saved().plan.key,scope={type:'vn_queue_image_retries',version:1,chatId:'chat',messageId:key.assistantMessageId,sourceFingerprint:key.sourceFingerprint,swipeId:0,revision:key.revision,action:'enqueue',requestId:'existing-batch',jobIds:saved().jobs.map(j=>j.jobId)};
+ f.request({...scope,revision:key.revision+1,requestId:'stale'},user);
+ await waitFor(()=>f.sent.some((m:any)=>m.type==='vn_error'&&m.operation==='vn_queue_image_retries'));expect(f.gates).toHaveLength(0);
+ f.request(scope,user);await waitFor(()=>f.gates.length===1);f.gates[0]!.resolve({imageId:'one',imageUrl:'/one'});
+ await waitFor(()=>f.gates.length===2);expect(saved().imageRequests?.some(r=>r.state==='review')).toBe(false);
+ f.gates[1]!.resolve({imageId:'two',imageUrl:'/two'});await waitFor(()=>saved().jobs.every(j=>j.status==='generated'));
+ f.request(scope,user);await new Promise(r=>setTimeout(r,20));expect(f.gates).toHaveLength(2);
+ f.request({type:'vn_view',chatId:'chat',open:false},user);
+});
+
+test('clearing queued retries during delayed admission cannot start a paid request afterwards',async()=>{
+ const f=generationFixture(),user='clear-queue-admission';registerVisualNovelBackend(f.spindle);await sendState(f.spindle,'chat',user,{viewOpen:true});
+ await waitFor(()=>f.gates.length===1);const opening=f.data.get(turnPath('chat','assistant-1',0)) as StoredTurnRecord;f.request({type:'vn_recover_images',version:1,chatId:'chat',messageId:'assistant-1',sourceFingerprint:opening.plan.key.sourceFingerprint,revision:opening.plan.key.revision,swipeId:0,requestId:'stop-initial-work',action:'stop'},user);
+ await waitFor(()=>(f.data.get(turnPath('chat','assistant-1',0)) as StoredTurnRecord).jobs.every(j=>j.status==='cancelled'));
+ const saved=f.data.get(turnPath('chat','assistant-1',0)) as StoredTurnRecord;
+ const scope={type:'vn_queue_image_retries',version:1,chatId:'chat',messageId:'assistant-1',sourceFingerprint:saved.plan.key.sourceFingerprint,revision:saved.plan.key.revision,swipeId:0};
+ const original=f.spindle.userStorage.getJson.bind(f.spindle.userStorage),held=deferred<any>();let delayed=false;
+ f.spindle.userStorage.getJson=(async(path:string,options:any)=>{if(path==='config.json'&&!delayed){delayed=true;return held.promise;}return original(path,options);}) as any;
+ f.request({...scope,requestId:'delayed-enqueue',action:'enqueue',jobIds:saved.jobs.map(j=>j.jobId)},user);
+ await waitFor(()=>delayed);f.request({...scope,requestId:'clear-during-admission',action:'clear'},user);
+ await waitFor(()=>f.sent.some((m:any)=>m.type==='vn_image_retry_queue'&&m.queue.activeJobId===null&&m.queue.jobIds.length===0));
+ held.resolve(f.data.get('config.json'));await new Promise(r=>setTimeout(r,40));expect(f.gates).toHaveLength(1);
+ f.gates[0]!.resolve({imageId:'old-late',imageUrl:'/old-late'});f.request({type:'vn_view',chatId:'chat',open:false},user);
+});

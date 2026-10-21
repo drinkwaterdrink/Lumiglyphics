@@ -3,15 +3,16 @@ import assert from 'node:assert/strict';
 
 // Browser plugin not available. Use the repository's Playwright fixture workflow.
 // Flow: reader → inspector → select/edit/rewrite/recover a picture → approval remains explicit.
-const build=await Bun.build({entrypoints:['scripts/image-inspector-browser-fixture.ts'],target:'browser'});
-assert.equal(build.success,true,String(build.logs));
-const bundle=await build.outputs[0]!.text();
-const server=Bun.serve({hostname:'127.0.0.1',port:41983,fetch:request=>new URL(request.url).pathname==='/fixture.js'?new Response(bundle,{headers:{'Content-Type':'application/javascript'}}):new Response('<html><head><title>Image inspector QA</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0"><script type="module" src="/fixture.js"></script></body></html>',{headers:{'Content-Type':'text/html'}})});
+import {execFileSync} from 'node:child_process';import {readFileSync,mkdirSync} from 'node:fs';import {createServer} from 'node:http';
+mkdirSync('.cache/image-retry-queue',{recursive:true});execFileSync('bun',['build','scripts/image-inspector-browser-fixture.ts','--target','browser','--outfile','.cache/image-retry-queue/inspector.js'],{windowsHide:true});
+const bundle=readFileSync('.cache/image-retry-queue/inspector.js','utf8');
+const server=createServer((req,res)=>{const js=(req.url??'').endsWith('.js');res.setHeader('Content-Type',js?'application/javascript':'text/html');res.end(js?bundle:'<html><head><title>Image inspector QA</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0"><script type="module" src="/fixture.js"></script></body></html>');});
+await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const port=(server.address() as {port:number}).port;
 const browser=await chromium.launch({headless:true});
 try{
   const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
-  await page.goto('http://127.0.0.1:41983');assert.equal(await page.title(),'Image inspector QA');
+  await page.goto(`http://127.0.0.1:${port}`);assert.equal(await page.title(),'Image inspector QA');
   const studio=page.locator('[data-image-studio]'),section=studio.locator('section');
   await studio.locator('[data-launch]').click();
   assert.equal(await section.getAttribute('data-state'),'held');
@@ -37,7 +38,7 @@ try{
   assert.equal(await positive.inputValue(),'New wording');
   await studio.getByRole('button',{name:'Restore previous wording',exact:true}).click();assert.equal(await positive.inputValue(),'Picture two draft');
   const count=await page.evaluate(()=>(window as any).imageFixture.actions.length);
-  for(const [status,expected,primary] of [['failed','failed','Retry picture'],['cancelled','cancelled','Retry picture'],['generated','completed','Prepare replacement'],['generating','generating',null]] as const){
+  for(const [status,expected,primary] of [['failed','failed','Retry picture'],['cancelled','cancelled','Retry picture'],['generated','completed','Regenerate picture'],['generating','generating',null]] as const){
     await page.evaluate(status=>{const f=(window as any).imageFixture;const t=structuredClone(f.turn);t.assets[0].status=status;t.imageRequests[0].state='approved';f.studio.setTurn(t);},status);
     assert.equal(await section.getAttribute('data-state'),expected);
     assert.equal(await studio.locator('[data-studio-footer] button:visible').count(),primary?1:0);
@@ -47,7 +48,7 @@ try{
   await page.evaluate(()=>{const f=(window as any).imageFixture;const t=structuredClone(f.turn);t.assets[0].status='failed';t.imageRequests[0].state='approved';f.studio.setTurn(t);});
   await positive.fill('x'.repeat(3001));assert.equal(await studio.locator('[data-retry-image]').isDisabled(),true);
   assert.equal((await positive.inputValue()).length,3001,'oversize paste remains intact');
-  await positive.fill('An edited failed portrait');await studio.getByRole('button',{name:'Retry picture',exact:true}).click();
+  await positive.fill('An edited failed portrait');await studio.getByRole('button',{name:'Edit before retry',exact:true}).click();
   const editedRetry=await page.evaluate(()=>(window as any).imageFixture.actions.at(-1));
   assert.equal(editedRetry.type,'vn_prepare_image');assert.equal(editedRetry.edits.prompt,'An edited failed portrait');
   await page.evaluate(()=>(window as any).imageFixture.studio.showError('Fixture preparation complete'));
@@ -77,4 +78,4 @@ try{
   }
   assert.deepEqual(errors,[],'no runtime errors or framework overlays');
   console.log('Image inspector browser checks passed (planning, empty, budget, held, draft switching, rewrite restore, terminal states, mobile focus and responsive bounds).');
-}finally{await browser.close();server.stop(true);}
+}finally{await browser.close();server.close();}

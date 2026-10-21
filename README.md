@@ -1,6 +1,6 @@
 # Lumiglyphics
 
-Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.54`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance and [STATUS.md](STATUS.md) for the current delivered/pending matrix.
+Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.55`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance and [STATUS.md](STATUS.md) for the current delivered/pending matrix.
 
 **Reader and image review:** When supported by the current view session, parsed reply prose is readable while the story reader prepares pictures and references. The temporary preview keeps its position when the exact final reply arrives; it does not save read progress, submit replies, or start extra generation. Image prompts separates planning, review, generation, failure, reuse and older-picture states, with one main action and advanced controls in disclosures. **Rewrite prompt** uses text tokens; **Generate picture** starts the image request. Editing keeps the combined 3,000-character guard and offers previous wording after a rewrite.
 
@@ -405,3 +405,11 @@ scene detail. Saved templates and shared styles are not modified by a repair.
 In Shared style, choose a style and press **Apply**. The selected style and all three editable wording fields survive settings reopen and extension updates. Older saved settings with no selected ID recover an exact matching library style; unmatched custom wording stays custom. Saving a preset adds it to your library; Apply still controls which wording is used.
 
 In Images → Presentation rules, create a preference, choose **Keep the current background**, then preview and save. When its condition matches, compatible background artwork stays for the rest of that scene within the prepared reply. A scene/revision change, manual replacement, full-scene illustration or manga page takes priority. This does not reduce or increase image requests; prompt review and failed-picture recovery remain available. The rule is off until you save an enabled preference, and affects future preparations.
+
+### Queue image retries
+
+In the reader's Image prompts panel, select a failed or cancelled picture and use **Retry picture**, or use **Regenerate picture** on a completed image. You can queue several pictures while another is running. **Retry unfinished** selects the unfinished generated-image slots together; completed pictures are kept.
+
+Quick retries use the saved scene and current image settings and start without prompt review, even when normal image review is on. Local prompt edits are not applied by quick retry. To edit first, open Prompt actions and prepare a replacement preview; that flow still requires approval. An existing held request selected by Retry unfinished is approved as prepared, subject to the same prompt length and model checks.
+
+Each queued picture gets one attempt, in order, after existing image work finishes. A failed attempt does not stop the remaining queue. **Clear queued retries** removes waiting retries; an already running provider request can finish. Closing the reader, changing chats or starting a new reply clears the queue and cancels active reader work under the existing cancellation rules. Requests already sent may still be billed by the provider. Queues are session-only and never resume paid work after an extension restart.

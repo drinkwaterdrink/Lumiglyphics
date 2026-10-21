@@ -1193,6 +1193,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       if (message.asset.paragraphIndex <= cursor) void syncImageForParagraph(cursor);
       return;
     }
+    if(type==="vn_image_retry_queue"&&message.type==="vn_image_retry_queue"){imageStudio.setRetryQueue(message.queue);return;}
     if (type === "vn_image_requests" && message.type === "vn_image_requests") {
       if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId || turn.sourceFingerprint !== message.sourceFingerprint) return;
       turn = { ...turn, imageRequests: message.requests };
@@ -1264,7 +1265,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     }
     if (type === "vn_error" && message.type === "vn_error") {
       if(message.operation==='vn_replan_turn'&&(!message.chatId||message.chatId===chatId())){preparationActive=false;imageStudio.setPlanning(chatId(),false);stage.stopPreparationPreview();}
-      if (message.operation === "vn_recover_images" || message.operation === "vn_replan_turn" || message.operation === "vn_correct_image_subject" || message.operation === "vn_set_card_role" || message.operation === "vn_regenerate_image_prompt" || message.operation === "vn_reprepare_image_template" || message.operation === "vn_image_review" || message.operation === "vn_prepare_image" || message.operation === "prepare_image") {
+      if (message.operation === "vn_queue_image_retries" || message.operation === "queue_image_retry" || message.operation === "vn_recover_images" || message.operation === "vn_replan_turn" || message.operation === "vn_correct_image_subject" || message.operation === "vn_set_card_role" || message.operation === "vn_regenerate_image_prompt" || message.operation === "vn_reprepare_image_template" || message.operation === "vn_image_review" || message.operation === "vn_prepare_image" || message.operation === "prepare_image") {
         if (!message.chatId || message.chatId === chatId()) imageStudio.showError(message.error);
         return;
       }

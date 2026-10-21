@@ -1,3 +1,4 @@
+import {QueueImageRetriesSchema,type QueueImageRetriesRequest,type ImageRetryQueueView} from './shared/image-retries.js';
 import {PresentationRuleRequestSchema,type PresentationRuleRequest,type PresentationRuleCatalog} from './shared/presentation-rules.js';
 import {CastGalleryRequestSchema,type CastGallery,CastArtRequestSchema,type CastArtLibrary,type CastContextScan} from './shared/cast-art.js';
 import {ImageLibraryRequestSchema,type ImageLibraryPage} from './shared/image-library.js';
@@ -23,6 +24,7 @@ export const ReplanTurnRequestSchema=z.object({type:z.literal('vn_replan_turn'),
 export const ContextSourcesRequestSchema = z.object({type:z.literal("vn_get_context_sources"),chatId:z.string().min(1).max(256),requestId:z.string().min(1).max(100)}).strict();
 export const RecoverImagesRequestSchema=z.object({type:z.literal('vn_recover_images'),...recoveryScope,revision:z.number().int().nonnegative(),action:z.enum(['stop','retry'])}).strict();
 export type FrontendRequest =
+  | QueueImageRetriesRequest
   | PresentationRuleRequest
   | z.infer<typeof ImageLibraryRequestSchema>
   | z.infer<typeof CastGalleryRequestSchema>
@@ -170,6 +172,7 @@ export type ConnectionCatalogErrors = {
 };
 
 export type BackendResponse =
+  | {type:"vn_image_retry_queue";queue:ImageRetryQueueView}
   | {type:"vn_presentation_rules";chatId:string;requestId:string;catalog:PresentationRuleCatalog}
   | {type:'vn_image_library';chatId:string;requestId:string;page:ImageLibraryPage}
   | {type:"vn_cast_gallery";chatId:string;requestId:string;gallery:CastGallery}
@@ -221,6 +224,7 @@ export type BackendResponse =
   | { type: "vn_error"; chatId?: string; requestId?:string; operation: string; error: string };
 
 export function isFrontendRequest(value: unknown): value is FrontendRequest {
+  if ((value as {type?:unknown}|null)?.type === "vn_queue_image_retries") return QueueImageRetriesSchema.safeParse(value).success;
   if ((value as {type?:unknown}|null)?.type === "vn_presentation_rules") return PresentationRuleRequestSchema.safeParse(value).success;
   if (value === null || typeof value !== "object") return false;
   if((value as {type?:unknown}).type==='vn_regenerate_image_prompt')return z.object({type:z.literal('vn_regenerate_image_prompt'),chatId:z.string().min(1).max(128),messageId:z.string().min(1).max(128),sourceFingerprint:z.string().min(1).max(256),requestId:z.string().min(1).max(100),edits:z.object({prompt:z.string().trim().min(1).max(65000).optional(),negativePrompt:z.string().max(65000).optional(),parameters:z.record(z.string(),z.unknown()).optional()}).strict().optional()}).strict().safeParse(value).success;

@@ -12,9 +12,9 @@ export function inspectorState(input:Input):{kind:string;title:string;detail:str
   if(input.preparing)return state('preparing','Preparing a prompt…','Wait for a new preview. Image generation still needs your approval.');
   if(asset.source==='cache')return state('reused','Reused picture','A saved picture was reused without a new image request.');
   if(requestState==='review')return state('held','Ready for your review','Review or edit the prompt, then generate this picture. No image request has been sent.', 'generate');
-  if(asset.status==='failed')return state('failed','Picture failed','Retry prepares a new preview for approval. It does not immediately generate an image.','retry');
-  if(asset.status==='cancelled')return state('cancelled',requestState==='skipped'?'Picture skipped':'Picture cancelled','Prepare another preview when you are ready. Generation still needs approval.','retry');
+  if(asset.status==='failed')return state('failed','Picture failed','Quick retry starts another image attempt without review. Edit before retry opens a separate preview.','retry');
+  if(asset.status==='cancelled')return state('cancelled',requestState==='skipped'?'Picture skipped':'Picture cancelled','Quick retry queues another attempt without review, or edit a preview first.','retry');
   if(asset.status==='queued'||asset.status==='generating')return requestState ? state('generating','Generating picture…','The image request has been approved. You can keep reading.') : state('preparing','Preparing a prompt…','Waiting for prompt and reference preparation. Later pictures may depend on an earlier portrait.');
   if(!requestState)return state('historical','Saved picture','The original request is unavailable for this older picture. You can prepare a new preview.','prepare');
-  return state('completed','Picture ready','Edit a replacement draft or prepare a new preview. Your current picture stays until its replacement is ready.','prepare');
+  return state('completed','Picture ready','Regenerate immediately without review, or edit a replacement preview first. Your current picture stays while its replacement runs.','prepare');
 }

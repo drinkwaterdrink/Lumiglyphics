@@ -1,11 +1,14 @@
 import {chromium} from 'playwright';
 import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
-const build=await Bun.build({entrypoints:['scripts/image-review-browser-fixture.ts'],target:'browser'});assert.ok(build.success);const bundle=await build.outputs[0]!.text();
-const server=Bun.serve({hostname:'127.0.0.1',port:0,fetch:r=>new URL(r.url).pathname==='/fixture.js'?new Response(bundle,{headers:{'Content-Type':'application/javascript'}}):new Response('<html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0"><script type="module" src="/fixture.js"></script></body></html>',{headers:{'Content-Type':'text/html'}})});
-await mkdir('.cache/image-recovery',{recursive:true});const browser=await chromium.launch({headless:true});
+import {execFileSync} from 'node:child_process';import {readFileSync,mkdirSync} from 'node:fs';import {createServer} from 'node:http';
+mkdirSync('.cache/image-retry-queue',{recursive:true});execFileSync('bun',['build','scripts/image-review-browser-fixture.ts','--target','browser','--outfile','.cache/image-retry-queue/recovery.js'],{windowsHide:true});
+const bundle=readFileSync('.cache/image-retry-queue/recovery.js','utf8');
+const server=createServer((req,res)=>{const js=(req.url??'').endsWith('.js');res.setHeader('Content-Type',js?'application/javascript':'text/html');res.end(js?bundle:'<html><head><title>Image recovery QA</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0"><script type="module" src="/fixture.js"></script></body></html>');});
+await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const port=(server.address() as {port:number}).port;
+const browser=await chromium.launch({headless:true});
 try{for(const viewport of [{width:360,height:800},{width:844,height:390}]){
- const page=await browser.newPage({viewport,reducedMotion:'reduce'});await page.goto(`http://127.0.0.1:${server.port}/`);
+ const page=await browser.newPage({viewport,reducedMotion:'reduce'});await page.goto(`http://127.0.0.1:${port}/`);
  await page.evaluate(()=>{const f=(window as any).imageFixture;f.studio.setConfig(f.config);f.recovery=structuredClone(f.turn);f.recovery.assets[0].status='cancelled';f.recovery.imageRequests[0].state='prepared';f.recovery.assets.push({jobId:'keep',cueId:'keep',paragraphIndex:0,status:'browser_ready',imageId:'saved',imageUrl:'/saved'});f.studio.setTurn(f.recovery);});
  const studio=page.locator('[data-image-studio]');await studio.getByRole('button',{name:/^Image prompts/}).click();await studio.getByLabel('Picture',{exact:true}).selectOption('job',{force:true});
  const retry=studio.locator('[data-retry-image]');assert.equal(await retry.isEnabled(),true);
@@ -21,11 +24,11 @@ try{for(const viewport of [{width:360,height:800},{width:844,height:390}]){
  assert.equal(await retry.isDisabled(),true);assert.match(await studio.locator('[data-batch-status]').innerText(),/awaiting review/);
  await studio.getByRole('button',{name:'Stop pending pictures',exact:true}).click();actions=await page.evaluate(()=>(window as any).imageFixture.actions);const stop=actions.at(-1);assert.equal(stop.type,'vn_recover_images');assert.equal(stop.action,'stop');assert.equal(stop.swipeId,0);assert.equal(stop.revision,0);assert.ok(stop.requestId);
  await page.evaluate(()=>{const f=(window as any).imageFixture;f.studio.setTurn(f.recovery);});assert.equal(await retry.isEnabled(),true);
- await studio.locator('[data-turn-recovery] > summary').click();await studio.getByRole('button',{name:'Retry unfinished pictures',exact:true}).click();actions=await page.evaluate(()=>(window as any).imageFixture.actions);assert.equal(actions.at(-1).type,'vn_recover_images');assert.equal(actions.at(-1).action,'retry');
- await page.evaluate(()=>(window as any).imageFixture.studio.showError('Recovery unavailable'));assert.equal(await studio.getByRole('button',{name:'Retry unfinished pictures',exact:true}).isEnabled(),true);
+ await studio.locator('[data-turn-recovery] > summary').click();await studio.getByRole('button',{name:'Prepare unfinished previews',exact:true}).click();actions=await page.evaluate(()=>(window as any).imageFixture.actions);assert.equal(actions.at(-1).type,'vn_recover_images');assert.equal(actions.at(-1).action,'retry');
+ await page.evaluate(()=>(window as any).imageFixture.studio.showError('Recovery unavailable'));assert.equal(await studio.getByRole('button',{name:'Prepare unfinished previews',exact:true}).isEnabled(),true);
  await page.screenshot({path:`.cache/image-recovery/${viewport.width}.png`});
  const bodyHeight=await studio.locator('[data-studio-body]').evaluate(e=>e.clientHeight);assert.ok(bodyHeight>=80,`prompt body remains usable: ${bodyHeight}px`);
  const footer=await studio.locator('[data-studio-footer]').boundingBox();assert.ok(footer&&footer.y>=0&&footer.y+footer.height<=viewport.height);
  assert.equal(await studio.locator('section').evaluate(e=>e.scrollWidth<=e.clientWidth),true);
  await page.close();
-}console.log('Individual retry, pending batch recovery, approval gates and mobile controls passed.');}finally{await browser.close();server.stop(true);}
+}console.log('Individual retry, pending batch recovery, approval gates and mobile controls passed.');}finally{await browser.close();server.close();}

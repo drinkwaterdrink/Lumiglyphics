@@ -1,6 +1,6 @@
 # Remaining Lumiglyphics roadmap
 
-Current scope: beta.54 on Testing. This page summarizes unfinished work; [STATUS.md](../STATUS.md) is the delivered-feature matrix. Earlier dated plans retain their original checklists and should not be read as the current completion count.
+Current scope: beta.55 on Testing. This page summarizes unfinished work; [STATUS.md](../STATUS.md) is the delivered-feature matrix. Earlier dated plans retain their original checklists and should not be read as the current completion count.
 
 ## Next delivery sequence
 
@@ -43,3 +43,5 @@ prompt comparisons remain unfinished; this repair increment does not add automat
 ## Deferred ideas
 
 Storyboard editing, a bookmark timeline, reusable presentation packs, autonomous simulation and a parallel memory/RPG engine remain deferred. They are not prerequisites for finishing the selected roadmap and will not silently expand the current implementation scope.
+
+Image recovery polish in beta.55 adds a bounded session retry queue, one attempt per selected picture, a Retry unfinished action, completed-picture regeneration, and explicit clear/close cancellation. Quick retries skip review; edited previews retain approval. No autonomous retry loops or persisted paid jobs are introduced. Independent background/cast allocation remains next.
