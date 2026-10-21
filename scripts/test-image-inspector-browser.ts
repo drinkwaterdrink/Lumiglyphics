@@ -76,6 +76,10 @@ try{
     assert.equal(await studio.locator('[data-close]').evaluate(el=>el.getBoundingClientRect().height>=44),true);
     await page.screenshot({path:`.cache/image-inspector-${viewport.width}.png`});
   }
+  await page.evaluate(()=>{const f=(window as any).imageFixture;const t=structuredClone(f.turn);t.assets=Array.from({length:4},(_,i)=>({...t.assets[0],jobId:`cast-${i}`,cueId:`cast-${i}`,paragraphIndex:0,stageAsset:{role:i===0?'background':'portrait',sceneId:'same',...(i>0?{character:i===1?'Mira':'Rin'}:{})}}));t.imageRequests=t.assets.map((a:any,i:number)=>({...t.imageRequests[0],jobId:a.jobId,requestId:`cast-request-${i}`}));f.studio.setTurn(t);});
+  const options=await studio.getByLabel('Picture',{exact:true}).locator('option').allTextContents();
+  assert.match(options[0]!,/Background/);assert.match(options[1]!,/Portrait.*Mira/);
+  await studio.getByLabel('Picture',{exact:true}).selectOption('cast-1');assert.match(await studio.locator('[data-paragraph]').innerText(),/Portrait.*Paragraph 1/);
   assert.deepEqual(errors,[],'no runtime errors or framework overlays');
   console.log('Image inspector browser checks passed (planning, empty, budget, held, draft switching, rewrite restore, terminal states, mobile focus and responsive bounds).');
 }finally{await browser.close();server.close();}

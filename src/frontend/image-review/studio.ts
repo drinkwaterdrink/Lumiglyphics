@@ -388,7 +388,8 @@ export class ImageStudio {
     for (const asset of this.turn?.assets ?? []) {
       const option = document.createElement("option"); option.value = asset.jobId;
       const latest = this.turn?.imageRequests?.filter((record) => record.jobId === asset.jobId).at(-1);
-      option.textContent = `Paragraph ${asset.paragraphIndex + 1} — ${this.retryQueueJobs.has(asset.jobId)?"queued for retry":this.retryActive===asset.jobId?"retry in progress":latest?.state === "review" ? "awaiting review" : asset.status === "generating" && !latest ? "preparing" : friendlyStatus(asset.status)}`;
+      const role=asset.stageAsset?.role;const label=role==='background'?'Background':role==='portrait'?`Portrait${asset.stageAsset?.character?` · ${asset.stageAsset.character}`:''}`:'Picture';
+      option.textContent = `${label} · Paragraph ${asset.paragraphIndex + 1} — ${this.retryQueueJobs.has(asset.jobId)?"queued for retry":this.retryActive===asset.jobId?"retry in progress":latest?.state === "review" ? "awaiting review" : asset.status === "generating" && !latest ? "preparing" : friendlyStatus(asset.status)}`;
       picker.append(option);
     }
     picker.value = this.selectedJob;
@@ -480,7 +481,7 @@ export class ImageStudio {
     const state=inspectorState({asset,requestState,planning,preparing:pending,hasTurn:!!this.turn,zeroBudget:this.maxImagesPerTurn===0});
     this.el('section').dataset.state=state.kind;
     this.el('[data-status]').textContent=state.title;this.el('[data-state-detail]').textContent=state.detail;
-    this.el('[data-paragraph]').textContent=asset&&!planning?`Picture ${(this.turn?.assets.indexOf(asset)??0)+1} of ${this.turn?.assets.length} · Paragraph ${asset.paragraphIndex+1}`:'';
+    this.el('[data-paragraph]').textContent=asset&&!planning?`Picture ${(this.turn?.assets.indexOf(asset)??0)+1} of ${this.turn?.assets.length} · ${asset.stageAsset?.role==='background'?'Background':asset.stageAsset?.role==='portrait'?'Portrait':'Scene'} · Paragraph ${asset.paragraphIndex+1}`:'';
     this.el('[data-picture-navigation]').hidden=!asset||planning||(this.turn?.assets.length??0)<2;
     this.el('[data-scene]').hidden=planning;
     this.el('[data-meta]').hidden=!record||planning;

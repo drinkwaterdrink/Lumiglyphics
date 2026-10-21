@@ -1,6 +1,6 @@
 # Lumiglyphics
 
-Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.55`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance and [STATUS.md](STATUS.md) for the current delivered/pending matrix.
+Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.56`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance and [STATUS.md](STATUS.md) for the current delivered/pending matrix.
 
 **Reader and image review:** When supported by the current view session, parsed reply prose is readable while the story reader prepares pictures and references. The temporary preview keeps its position when the exact final reply arrives; it does not save read progress, submit replies, or start extra generation. Image prompts separates planning, review, generation, failure, reuse and older-picture states, with one main action and advanced controls in disclosures. **Rewrite prompt** uses text tokens; **Generate picture** starts the image request. Editing keeps the combined 3,000-character guard and offers previous wording after a rewrite.
 
@@ -413,3 +413,11 @@ In the reader's Image prompts panel, select a failed or cancelled picture and us
 Quick retries use the saved scene and current image settings and start without prompt review, even when normal image review is on. Local prompt edits are not applied by quick retry. To edit first, open Prompt actions and prepare a replacement preview; that flow still requires approval. An existing held request selected by Retry unfinished is approved as prepared, subject to the same prompt length and model checks.
 
 Each queued picture gets one attempt, in order, after existing image work finishes. A failed attempt does not stop the remaining queue. **Clear queued retries** removes waiting retries; an already running provider request can finish. Closing the reader, changing chats or starting a new reply clears the queue and cancels active reader work under the existing cancellation rules. Requests already sent may still be billed by the provider. Queues are session-only and never resume paid work after an extension restart.
+
+### Cast view shares the picture budget
+
+Enable **Appearance → Cast view** before preparing a new reply. For eligible portrait scenes, the reader reserves a compatible Environment background, then portraits for up to two characters already selected in the picture plan and established as present at those paragraphs. It does not generate a portrait for every cast entry or turn an off-screen speaker into a visible character.
+
+All new artwork shares Maximum pictures per reply. A limit of one allows one new picture, so a fresh background may consume that slot; with two, an eligible scene can receive a background and one portrait. Compatible saved place/cast art and exact verified temporary-cache hits use no new slot. Persistent reuse still follows its own settings and compatibility checks. The existing value of 0 continues to mean no limit; the per-scene cast selection remains bounded.
+
+Manga, ensemble, action and manually selected compositions keep their existing flow, as do uncertain subjects or unavailable background templates. Existing saved replies are not automatically regenerated. Backgrounds and portraits have separate prompt-review entries, even on the same paragraph; their labels and failures identify the separate artwork. User-supplied display overrides retain their existing display-only behavior. Expression variants and richer placement remain on the roadmap.

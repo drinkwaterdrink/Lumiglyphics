@@ -1,17 +1,20 @@
 import {chromium} from 'playwright';
 import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
-import {THEME_PRESET_IDS} from '../src/config.js';
-const build=await Bun.build({entrypoints:['scripts/reading-browser-fixture.ts'],target:'browser'});
-assert.ok(build.success);const bundle=await build.outputs[0]!.text();
-const settingsBuild=await Bun.build({entrypoints:['scripts/settings-browser-fixture.ts'],target:'browser'});assert.ok(settingsBuild.success);const settingsBundle=await settingsBuild.outputs[0]!.text();
-const server=Bun.serve({hostname:'127.0.0.1',port:0,fetch:r=>new URL(r.url).pathname==='/fixture.js'?new Response(bundle,{headers:{'Content-Type':'application/javascript'}}):new URL(r.url).pathname==='/settings.js'?new Response(settingsBundle,{headers:{'Content-Type':'application/javascript'}}):new Response(`<html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0"><script type="module" src="${new URL(r.url).pathname==='/settings'?'/settings.js':'/fixture.js'}"></script></body></html>`,{headers:{'Content-Type':'text/html'}})});
+
+// Browser plugin unavailable; use the repository Playwright fixtures under Node.
+import {execFileSync} from 'node:child_process';import {readFileSync,mkdirSync} from 'node:fs';import {createServer} from 'node:http';
+const THEME_PRESET_IDS:string[]=JSON.parse(execFileSync('bun',['-e','import {THEME_PRESET_IDS} from "./src/config.ts"; console.log(JSON.stringify(THEME_PRESET_IDS));'],{encoding:'utf8',windowsHide:true}));
+mkdirSync('.cache/cast',{recursive:true});const bundles=new Map<string,string>();
+for(const [name,path] of [['reading','scripts/reading-browser-fixture.ts'],['settings','scripts/settings-browser-fixture.ts']]){const output=`.cache/cast/${name}.js`;execFileSync('bun',['build',path!,'--target','browser','--outfile',output],{windowsHide:true});bundles.set(name!,readFileSync(output,'utf8'));}
+const server=createServer((req,res)=>{const pathname=new URL(req.url??'/','http://localhost').pathname,name=pathname.includes('settings')?'settings':'reading',js=pathname.endsWith('.js');res.setHeader('Content-Type',js?'application/javascript':'text/html');res.end(js?bundles.get(name):`<html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0"><script type="module" src="/${name}.js"></script></body></html>`);});
+await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const port=(server.address() as {port:number}).port;
 const browser=await chromium.launch({headless:true});await mkdir('.cache/cast',{recursive:true});
 try{
  for(const viewport of [{width:390,height:844},{width:844,height:390},{width:1200,height:800}]){
   const page=await browser.newPage({viewport,reducedMotion:'reduce'});
   page.setDefaultTimeout(5000);
-  await page.goto(`http://127.0.0.1:${server.port}`);
+  await page.goto(`http://127.0.0.1:${port}`);
   await page.evaluate(()=>{
    const f=(window as any).readingFixture;
    const image=(color:string)=>'data:image/svg+xml,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600"><rect width="400" height="600" fill="${color}"/><circle cx="200" cy="180" r="65" fill="#ddd"/><path d="M100 550V320Q200 250 300 320V550" fill="#bbb"/></svg>`);
@@ -64,10 +67,11 @@ try{
   assert.equal(await page.locator('[data-vn-cast]').isVisible(),false,'late decoding after reset cannot restore prior cast');
   await page.close();
  }
- const settings=await browser.newPage({viewport:{width:390,height:844}});await settings.goto(`http://127.0.0.1:${server.port}/settings?setupDone&noSpeech`);
+ const settings=await browser.newPage({viewport:{width:390,height:844}});await settings.goto(`http://127.0.0.1:${port}/settings?setupDone&noSpeech`);
  await settings.evaluate(()=>(window as any).settingsFixture.panel.openPage('appearance'));
  assert.equal(await settings.locator('[name="castMode"]').isChecked(),false);
+ assert.match(await settings.locator('[name="castMode"]').locator('..').innerText(),/within your existing picture budget/);
  await settings.locator('[name="castMode"]').check();
  assert.equal(await settings.evaluate(()=>(window as any).settingsFixture.config.castMode),true,'cast opt-in persists through existing settings route');
  await settings.close();console.log('cast browser checks passed');
-}finally{await browser.close();server.stop(true);}
+}finally{await browser.close();server.close();}

@@ -1689,3 +1689,40 @@ test('edited review prompts stay independent from automatic portrait reuse',asyn
  await manageCastArt(f.spindle,plan.key.chatId,{action:'reset'},'u');result.resolve({id:'supplied',mime_type:'image/png'});
  expect((await projected).assets.every(a=>!a.stageAsset?.displayImageUrl)).toBe(true);
  });
+
+test('cast backgrounds reuse compatible saved place art before spending the portrait allowance',async()=>{
+ const {templateSnapshot}=await import('../../shared/image-templates.js');
+ const {prepareAssetJobs}=await import('./images.js');
+ const f=createMockSpindle();
+ const portrait=templateSnapshot(DEFAULT_CONFIG.imageTemplates.find(t=>t.id==='portrait')!);
+ const config={...DEFAULT_CONFIG,castMode:true,persistentLocationArt:true,referenceAnchoring:false,maxImagesPerTurn:1};
+ const legacyEnvironment=templateSnapshot(DEFAULT_CONFIG.imageTemplates.find(t=>t.id==='environment')!);
+ const first=makePlan({visualCues:[makeCue({imageTemplate:legacyEnvironment,character:null,resolvedIdentity:'',resolvedAttire:null,kind:'background'})]});
+ const initial=await prepareAssetJobs(f.spindle,first,{...config,castMode:false},undefined,new SceneImageCache(),'cast-allocation-user');
+ expect(initial).toHaveLength(1);expect(first.visualCues[0]?.imageTemplate?.category).toBe('environment');
+ const requests:any[]=[];
+ await generateAssets(f.spindle,first,initial,config,new AbortController().signal,()=>{},'cast-allocation-user',{beforeGenerate:async(_j,r)=>{requests.push(r);return r;}});
+ expect(requests).toHaveLength(1);expect(requests[0].includeDataUrl).toBe(false);expect(requests[0].prompt).not.toContain('silver hair');
+ const second=makePlan({messageId:'cast-return',visualCues:[makeCue({imageTemplate:portrait})]});
+ const jobs=await prepareAssetJobs(f.spindle,second,config,undefined,new SceneImageCache(),'cast-allocation-user');
+ expect(jobs.filter(j=>j.provider===CACHE_JOB_PROVIDER)).toHaveLength(1);
+ expect(jobs.filter(j=>j.provider!==CACHE_JOB_PROVIDER)).toHaveLength(1);
+ expect(second.visualCues.map(c=>c.imageTemplate?.category)).toEqual(['environment','portrait']);
+ expect(f.generateCalls).toHaveLength(1);
+ const rainy=makePlan({messageId:'rainy-cast-return',scenes:[makeScene({environment:{...makeScene().environment,weather:'heavy rain'}})],visualCues:[makeCue({imageTemplate:portrait})]});
+ const rainyJobs=await prepareAssetJobs(f.spindle,rainy,config,undefined,new SceneImageCache(),'cast-allocation-user');
+ expect(rainyJobs.filter(j=>j.provider===CACHE_JOB_PROVIDER)).toHaveLength(0);expect(rainyJobs.filter(j=>j.provider!==CACHE_JOB_PROVIDER)).toHaveLength(1);
+});
+
+test('cast admission counts an exact temporary background cache hit as free',async()=>{
+ const {templateSnapshot}=await import('../../shared/image-templates.js');const {prepareAssetJobs}=await import('./images.js');
+ const f=createMockSpindle(),cache=new SceneImageCache();const portrait=templateSnapshot(DEFAULT_CONFIG.imageTemplates.find(t=>t.id==='portrait')!);
+ const config={...DEFAULT_CONFIG,castMode:true,referenceAnchoring:false,maxImagesPerTurn:1};
+ const first=makePlan({visualCues:[makeCue({imageTemplate:portrait})]});
+ const initial=await prepareAssetJobs(f.spindle,first,config,undefined,cache,'warm-cast');
+ await generateAssets(f.spindle,first,initial,config,new AbortController().signal,()=>{},'warm-cast',{sceneCache:cache});
+ const second=makePlan({messageId:'warm-cast-return',visualCues:[makeCue({imageTemplate:portrait})]});
+ const jobs=await prepareAssetJobs(f.spindle,second,config,undefined,cache,'warm-cast');
+ expect(jobs.filter(j=>j.provider===CACHE_JOB_PROVIDER)).toHaveLength(1);expect(jobs.filter(j=>j.provider!==CACHE_JOB_PROVIDER)).toHaveLength(1);
+ expect(second.visualCues.map(c=>c.imageTemplate?.category)).toEqual(['environment','portrait']);expect(f.generateCalls).toHaveLength(1);
+});

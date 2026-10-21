@@ -1252,3 +1252,23 @@ test('clearing queued retries during delayed admission cannot start a paid reque
  held.resolve(f.data.get('config.json'));await new Promise(r=>setTimeout(r,40));expect(f.gates).toHaveLength(1);
  f.gates[0]!.resolve({imageId:'old-late',imageUrl:'/old-late'});f.request({type:'vn_view',chatId:'chat',open:false},user);
 });
+
+test('cast-mode planning uses shared background and portrait slots and keeps review independent',async()=>{
+ const f=generationFixture(),user='cast-shared-budget';f.data.set('config.json',{...(f.data.get('config.json') as object),castMode:true,reviewImages:true,maxImagesPerTurn:2,referenceAnchoring:false});
+ let textCalls=0;const original=f.spindle.generate.raw.bind(f.spindle.generate);f.spindle.generate.raw=(async(...args:any[])=>{textCalls++;return original(...args as [any]);}) as any;
+ registerVisualNovelBackend(f.spindle);await sendState(f.spindle,'chat',user,{viewOpen:true});
+ const saved=()=>f.data.get(turnPath('chat','assistant-1',0)) as StoredTurnRecord;
+ await waitFor(()=>saved()?.imageRequests?.some(r=>r.state==='review')===true);
+ expect(saved().jobs).toHaveLength(2);expect(saved().plan.visualCues.map(c=>c.imageTemplate?.category)).toEqual(['environment','portrait']);
+ expect(saved().jobs.map(j=>j.paragraphIndex)).toEqual([0,0]);expect(textCalls).toBe(1);expect(f.gates).toHaveLength(0);
+ for(let i=0;i<2;i++){
+  await waitFor(()=>saved().imageRequests?.some(r=>r.state==='review')===true);
+  const held=saved().imageRequests!.find(r=>r.state==='review')!;
+  f.request({type:'vn_image_review',chatId:'chat',messageId:'assistant-1',sourceFingerprint:saved().plan.key.sourceFingerprint,requestId:held.requestId,action:'generate'},user);
+  await waitFor(()=>f.gates.length===i+1);f.gates[i]!.resolve({imageId:`cast-${i}`,imageUrl:`/cast-${i}`});
+ }
+ await waitFor(()=>saved().jobs.every(j=>j.status==='generated'));
+ const view=turnView(saved());expect(view.assets.map(a=>a.stageAsset?.role)).toEqual(['background','portrait']);
+ expect(view.assets[1]?.stageAsset?.character).toBe('Mira');expect(textCalls).toBe(1);
+ f.request({type:'vn_view',chatId:'chat',open:false},user);
+});

@@ -615,3 +615,8 @@ test('held backgrounds do not hide current failures or alter generation progress
  expect(currentAssetError(t,2)).toBe('Provider unavailable');
  expect(computeAssetProgress(t)).toEqual(computeAssetProgress({...t,backgroundHoldStarts:[null,null,null]}));
 });
+
+test('same-paragraph cast artwork reports a failed portrait even when its background succeeded',()=>{
+ const source=turn({assets:[{jobId:'background',cueId:'background',paragraphIndex:0,status:'generated',imageUrl:'/room'},{jobId:'portrait',cueId:'portrait',paragraphIndex:0,status:'failed',error:'Portrait failed'},{jobId:'future',cueId:'future',paragraphIndex:1,status:'failed',error:'Future error'}]});
+ expect(currentAssetError(source,0)).toBe('Portrait failed');expect(currentAssetFailure(source,0)?.detail).toContain('Portrait failed');
+});

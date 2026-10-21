@@ -1,12 +1,12 @@
 # Remaining Lumiglyphics roadmap
 
-Current scope: beta.55 on Testing. This page summarizes unfinished work; [STATUS.md](../STATUS.md) is the delivered-feature matrix. Earlier dated plans retain their original checklists and should not be read as the current completion count.
+Current scope: beta.56 on Testing. This page summarizes unfinished work; [STATUS.md](../STATUS.md) is the delivered-feature matrix. Earlier dated plans retain their original checklists and should not be read as the current completion count.
 
 ## Next delivery sequence
 
 | Order | Work | Existing foundation | Remaining outcome |
 |---|---|---|---|
-| 1 | E2/E3 complete scene and cast | Cast scanning/editing, outfits, supplied/saved portraits, place art and compatible reuse | Allocate backgrounds and portraits independently inside the same image budget. Add expression artwork/variant management and richer placement without generating a portrait for every roster entry or confusing speakers with physically present characters. |
+| 1 | E2/E3 complete scene and cast | Cast scanning/editing, outfits, supplied/saved portraits, place art and compatible reuse | Independent base background/portrait allocation shipped in beta.56. Add expression/outfit artwork variant management, broader supplied-art allocation and richer placement without generating a portrait for every roster entry or confusing speakers with physically present characters. |
 | 2 | C/D reference and source reconciliation | Reveal-scoped current cards, inline links, quiet reference menu and verified earlier descriptions | Explicit identity/alias reconciliation, clearer conflicting-source precedence, and additional eligible cross-reply/companion evidence. Dynamic macro histories remain excluded until historical choices can be verified. Private or unclassified data must not become revealed knowledge. |
 | 3 | H expanded world documents | Literal current-reply document viewer and item links | Combine legitimately revealed document fragments across replies, preserve earlier access states, and admit explicitly classified public companion sources. Missing or sealed contents remain unavailable. |
 | 4 | G capability-based item actions | Local Ask/Examine/Approach drafts and supported provider moves | Offer meaningful Use actions only when a verified source describes the capability. Keep the user's editable intention and existing draft; clicking never declares success or silently submits a turn. |
@@ -44,4 +44,6 @@ prompt comparisons remain unfinished; this repair increment does not add automat
 
 Storyboard editing, a bookmark timeline, reusable presentation packs, autonomous simulation and a parallel memory/RPG engine remain deferred. They are not prerequisites for finishing the selected roadmap and will not silently expand the current implementation scope.
 
-Image recovery polish in beta.55 adds a bounded session retry queue, one attempt per selected picture, a Retry unfinished action, completed-picture regeneration, and explicit clear/close cancellation. Quick retries skip review; edited previews retain approval. No autonomous retry loops or persisted paid jobs are introduced. Independent background/cast allocation remains next.
+Image recovery polish in beta.55 adds a bounded session retry queue, one attempt per selected picture, a Retry unfinished action, completed-picture regeneration, and explicit clear/close cancellation. Quick retries skip review; edited previews retain approval. No autonomous retry loops or persisted paid jobs are introduced. Independent base background/cast allocation follows in beta.56; expression/variant management remains next.
+
+beta.56 completes the first E2 allocation increment for opt-in Cast view: one compatible environment and up to two subjects already selected by the planner and marked present at their cue. Existing saved art and verified temporary-cache hits cost no new slot. Uncertain presence, manually selected pictures and mixed manga/action/ensemble compositions keep their prior flow. This does not finish E3 expression variants, broader supplied-art allocation or cross-reply cast presence reconciliation.

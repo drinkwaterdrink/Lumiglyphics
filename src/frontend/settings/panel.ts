@@ -673,7 +673,7 @@ export class VisualNovelSettingsPanel {
               </fieldset>
             `)}
             ${group("Scene", `
-              <label data-check><input name="castMode" type="checkbox" /><span>Cast view<small>Requires an existing Environment picture and Character portrait in the current scene. Arranges them separately, shows up to two portraits and highlights the speaker. No extra image requests; action scenes and Manga keep their normal view. Off by default.</small></span></label>
+              <label data-check><input name="castMode" type="checkbox" /><span>Cast view<small>New replies can allocate an Environment background and up to two selected, present characters within your existing picture budget. Compatible saved art uses no new slot. A budget of one permits one new picture, not one of each. Arranges rectangular portraits and highlights the speaker; action, ensemble and Manga pictures keep their normal view. Off by default.</small></span></label>
               <fieldset ${find("Scene effects", "rain sparkles shake flash intensity gentle motion")}>
                 <legend>Scene effects</legend>
                 ${optionList("effectIntensity", EFFECT_INTENSITY_OPTIONS)}

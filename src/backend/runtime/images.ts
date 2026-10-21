@@ -1,3 +1,4 @@
+import {castAllocationCandidates} from './cast-allocation.js';
 import {loadImagePromptProfile,prepareCapabilityOutput} from "./image-prompt-profile.js";
 import {assertCapabilityOutput} from '../../shared/model-output-capabilities.js';
 import {findCastArt,saveCastArt,castArtToken,type CastArtIdentity} from './cast-art.js';
@@ -12,7 +13,7 @@ import {rewriteImagePrompt,assertEffectivePromptBudget} from './prompt-rewrite.j
 import type { VisualNovelConfig } from "../../config.js";
 import { DEFAULT_CONFIG } from "../../config.js";
 import { novelAiCapabilities, novelAiQualityTags, NOVELAI_NEGATIVE_DEFAULT, renderNovelAiEmphasis } from "./novelai-prompt.js";
-import { AssetJobSchema, type AssetJob, type SceneState, type TurnPlan, type VisualCue } from "../../shared/contracts.js";
+import { AssetJobSchema, MAX_CACHE_CUES_PER_TURN, type AssetJob, type SceneState, type TurnPlan, type VisualCue } from "../../shared/contracts.js";
 import { AssetScheduler } from "../core/asset-scheduler.js";
 import {
   SceneImageCache,
@@ -762,11 +763,23 @@ export async function prepareAssetJobs(
   userId?: string,
   options: Pick<SceneCacheOptions, "resolvedSourceText" | "verifyImage"> = {}
 ): Promise<AssetJob[]> {
-  if((config.persistentLocationArt||config.persistentCastArt)&&!(plan.classifierVisuals&&config.systemOneMode==='on')){
+  const castAllocation=castAllocationCandidates(plan,config,characterAppearance);
+  if(castAllocation||(config.persistentLocationArt||config.persistentCastArt)&&!(plan.classifierVisuals&&config.systemOneMode==='on')){
     const profile=await resolveImageProfile(spindle,config,userId);
     const effective=profile.provider==='novelai'?{...config,imageModel:config.imageModel||profile.model||'nai-diffusion-4-5-full'}:config;
-    const all=[...plan.visualCues,...(plan.cacheCues??[])].sort((a,b)=>a.paragraphIndex-b.paragraphIndex);
+    const all=castAllocation?.candidates??[...plan.visualCues,...(plan.cacheCues??[])].sort((a,b)=>a.paragraphIndex-b.paragraphIndex);
     const queued=createAssetJobs({...plan,visualCues:all},effective,characterAppearance);
+    let warm:AssetJob[]=[];
+    if(castAllocation){
+      retainPlanEpisodes(cache,sceneImageScope(userId,plan.key.chatId),plan);
+      warm=await resolveCacheCues(spindle,{...plan,visualCues:all,cacheCues:[]},effective,characterAppearance,[],cache,userId,{...options,provider:profile.provider,includeBudgeted:true});
+      // A cache hit must not skip a required first reference capture.
+      if(referenceAnchoringEnabled(effective)&&profile.provider&&REFERENCE_PROVIDERS.has(profile.provider)){
+        const portraits=await loadPortraits(spindle,plan.key.chatId,userId).catch(()=>({} as Record<string,StoredPortrait>));
+        warm=warm.filter(job=>{const cue=all.find(c=>c.assetJobId===job.jobId)!;if(!cueUsesCharacterReference(cue))return true;const visual=resolveCueCharacterVisualState(sceneForCue(plan,cue),cue,characterAppearance);return Boolean(effective.referenceSource==='card'&&cardPortraitFor(portraits,visual.characterKey))||Boolean(compatiblePortrait(portraits[visual.characterKey],portraitIdentityFingerprint(visual.characterName,visual.baseIdentity,effective,profile.provider)));});
+      }
+    }
+    const warmById=new Map(warm.map(job=>[job.jobId,job]));
     const selected:AssetJob[]=[],admitted:VisualCue[]=[],remaining:VisualCue[]=[];
     const seen=new Set<string>();let slots=0;const limit=config.maxImagesPerTurn>0?config.maxImagesPerTurn:Infinity;
     for(const cue of all){
@@ -776,12 +789,13 @@ export async function prepareAssetJobs(
       const identity=place??cast;
       const art=place?await findLocationArt(spindle,plan.key.chatId,place,userId).catch(()=>null):cast?await findCastArt(spindle,plan.key.chatId,cast,userId).catch(()=>null):null;
       if(art&&identity){selected.push(locationArtJob(plan,cue,art,identity.requestFingerprint));admitted.push(cue);continue;}
+      const hit=warmById.get(cue.assetJobId);if(hit){selected.push(hit);admitted.push(cue);continue;}
       if(slots>=limit||(identity&&seen.has(identity.requestFingerprint))){remaining.push(cue);continue;}
       slots++;if(identity)seen.add(identity.requestFingerprint);admitted.push(cue);selected.push(queued.find(j=>j.jobId===cue.assetJobId)!);
     }
     // Allocation owns this newly accepted plan: promote free reuse and funded misses
     // before persisting/scheduling. Failed and retried jobs keep their admitted slots.
-    plan.visualCues=admitted;plan.cacheCues=remaining;
+    plan.visualCues=admitted;plan.cacheCues=[...remaining,...(castAllocation?.reuseOnly??[])].slice(0,MAX_CACHE_CUES_PER_TURN);
     return selected;
   }
   const candidates = createAssetJobs(plan, config, characterAppearance);

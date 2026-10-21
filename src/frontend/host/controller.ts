@@ -98,8 +98,10 @@ export function selectCurrentImage(turn: TurnView, paragraphIndex: number): Asse
 }
 
 export function currentAssetError(turn: TurnView, paragraphIndex: number): string | null {
-  const current = turn.assets.filter((asset) => asset.paragraphIndex <= paragraphIndex)
-    .sort((a, b) => b.paragraphIndex - a.paragraphIndex)[0];
+  const visible = turn.assets.filter((asset) => asset.paragraphIndex <= paragraphIndex)
+    .sort((a, b) => b.paragraphIndex - a.paragraphIndex);
+  const at = visible[0]?.paragraphIndex;
+  const current = visible.find(asset=>asset.paragraphIndex===at&&asset.status==='failed')??visible[0];
   return current?.status === "failed" ? current.error || "Image generation failed. Retry this turn." : null;
 }
 
@@ -109,8 +111,10 @@ export function currentAssetError(turn: TurnView, paragraphIndex: number): strin
  * images are kept; the whole turn is retried, never a single image).
  */
 export function currentAssetFailure(turn: TurnView, paragraphIndex: number): HostStageError | null {
-  const current = turn.assets.filter((asset) => asset.paragraphIndex <= paragraphIndex)
-    .sort((a, b) => b.paragraphIndex - a.paragraphIndex)[0];
+  const visible = turn.assets.filter((asset) => asset.paragraphIndex <= paragraphIndex)
+    .sort((a, b) => b.paragraphIndex - a.paragraphIndex);
+  const at = visible[0]?.paragraphIndex;
+  const current = visible.find(asset=>asset.paragraphIndex===at&&asset.status==='failed')??visible[0];
   return current?.status === "failed" ? { ...describeImageFailure(turn, current.error), ...(current.failureId ? {failureId: current.failureId} : {}) } : null;
 }
 
