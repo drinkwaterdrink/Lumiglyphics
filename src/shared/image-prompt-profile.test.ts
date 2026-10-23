@@ -2,6 +2,11 @@ import {expect,test} from 'bun:test';
 import {resolveImagePromptProfile,parsePromptCapabilities} from './image-prompt-profile.js';
 import {assertPromptLengths} from './prompt-length.js';
 
+test('only verified NanoGPT Z-Image Turbo routes use automatic positive-only guidance',()=>{
+ for(const id of ['z-image-turbo','z-image-turbo-lora','z-image-turbo-image-to-image'])expect(resolveImagePromptProfile('nanogpt',id).negativeMode).toBe('positive-only');
+ for(const [provider,id,settings] of [['nanogpt','z-image-base',{}],['other','z-image-turbo',{}],['nanogpt','z-image-turbo-custom',{}],['nanogpt','z-image-turbo',{automaticImagePromptSettings:false}]] as const)expect(resolveImagePromptProfile(provider,id,settings).negativeMode).toBe('supported-or-unknown');
+});
+
 test('provider routes have exact limits and family detection never invents limits',()=>{
  expect(resolveImagePromptProfile('nanogpt','z-image-turbo').maxCharacters).toBe(1200);
  expect(resolveImagePromptProfile('nanogpt','qwen-image').maxCharacters).toBe(3000);

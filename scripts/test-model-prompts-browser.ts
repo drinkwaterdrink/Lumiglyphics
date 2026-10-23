@@ -106,5 +106,15 @@ try{
  await studio.getByRole('button',{name:'Fit to budget',exact:true}).click();
  const replacement=await page.evaluate(()=>(window as any).imageFixture.actions.at(-1));assert.equal(replacement.type,'vn_prepare_image');assert.equal(replacement.regeneratePrompt,true);assert.ok(replacement.edits.prompt.startsWith('Edited cast appearance.'));
  assert.equal(await page.evaluate(()=>(window as any).imageFixture.actions.some((a:any)=>a.type==='vn_image_review')),false,'repair stays separate from image approval');
- assert.deepEqual(errors,[]);console.log('Model prompt browser QA passed: budget persistence, provider cap, frozen review counts, blocked drafts and responsive layout.');
+ // A failed automatic Z-Image fit explains why the original draft was retained.
+ await page.evaluate(profile=>{const f=(window as any).imageFixture;f.turn.imageRequests[0]={...f.turn.imageRequests[0],requestId:'z-image-blocked',state:'review',prompt:'x'.repeat(2796),negativePrompt:'y'.repeat(118),promptAdaptationError:'Automatic model adaptation could not finish. Your complete draft is retained.',promptProfile:{...profile,family:'z-image',source:'live',maxCharacters:1200,negativeMode:'positive-only'},parameters:{size:'720*1280'}};f.studio.setTurn(f.turn);},profile);
+ assert.match(await studio.locator('[data-combined-count]').innerText(),/2,914 \/ 1,200/);
+ assert.match(await studio.locator('[data-validation]').innerText(),/Automatic model adaptation could not finish/);
+ assert.equal(await studio.locator('[data-generate]').isDisabled(),true);
+ await studio.getByLabel('Positive prompt',{exact:true}).fill('One silver-haired traveller waits at the station in natural daylight.');
+ await studio.getByLabel('Negative prompt',{exact:true}).fill('');
+ assert.equal(await studio.locator('[data-validation]').isVisible(),false);
+ assert.equal(await studio.locator('[data-generate]').isDisabled(),false);
+ await page.screenshot({path:'.cache/model-prompt-research/z-image-fitted-mobile.png',fullPage:true});
+ assert.deepEqual(errors,[]);console.log('Model prompt browser QA passed: budget persistence, provider cap, frozen review counts, blocked drafts, Z-Image failure recovery and responsive layout.');
 }finally{await browser.close();server.close();}

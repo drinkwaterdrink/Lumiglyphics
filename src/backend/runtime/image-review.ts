@@ -38,6 +38,7 @@ export function safeImageHistory(input: unknown): ImageRequestRecord[] {
     if (!Number.isInteger(item.paragraphIndex) || item.paragraphIndex < 0 || !item.parameters || typeof item.parameters !== "object" || Array.isArray(item.parameters)) continue;
     const record: ImageRequestRecord = {
       ...(typeof item.canRegeneratePrompt === 'boolean' ? {canRegeneratePrompt:item.canRegeneratePrompt} : {}),
+      ...(typeof item.promptAdaptationError==='string'&&item.promptAdaptationError.length<=1000?{promptAdaptationError:item.promptAdaptationError}:{}),
       requestId: item.requestId, jobId: item.jobId, paragraphIndex: item.paragraphIndex, state: item.state,
       prompt: item.prompt, negativePrompt: item.negativePrompt, model: item.model, provider: item.provider, connectionId: item.connectionId,
       ...(typeof item.connectionRevision === "number" ? { connectionRevision: item.connectionRevision } : {}),
@@ -102,7 +103,7 @@ export function applyImageRewriteDraft(request:ImageGenerationRequest,edits:Imag
   return applyImageEdits({...request,prompt:edits.prompt??request.prompt,...(edits.negativePrompt!==undefined?{negativePrompt:edits.negativePrompt}:{})},edits.parameters!==undefined?{parameters:edits.parameters}:{});
 }
 
-export type ImagePreparationMetadata = { provider: string; connectionRevision?: number; referenceSummary?: string; imagePromptMetadata?: ImagePromptMetadata; regeneratePrompt?: (request:ImageGenerationRequest) => Promise<ImageGenerationRequest>; rebuildTemplate?: (templateId: string) => Promise<{ request: ImageGenerationRequest; metadata: ImagePreparationMetadata }> };
+export type ImagePreparationMetadata = { provider: string; connectionRevision?: number; referenceSummary?: string; promptAdaptationError?:string; imagePromptMetadata?: ImagePromptMetadata; regeneratePrompt?: (request:ImageGenerationRequest) => Promise<ImageGenerationRequest>; rebuildTemplate?: (templateId: string) => Promise<{ request: ImageGenerationRequest; metadata: ImagePreparationMetadata }> };
 /** Also synchronize NovelAI/host-managed prompt copies after compaction. */
 export function compactImageRequest(request: ImageGenerationRequest): ImageGenerationRequest {
   const over = request.prompt.length + (request.negativePrompt?.length ?? 0) > (request.promptProfile?.maxCharacters??IMAGE_PROMPT_MAX_CHARS);
@@ -118,6 +119,7 @@ type Pending = { request: ImageGenerationRequest; record: ImageRequestRecord; si
 function reviewRecord(jobId: string, paragraphIndex: number, request: ImageGenerationRequest, metadata: Metadata, review: boolean): ImageRequestRecord {
   const record: ImageRequestRecord = {
     canRegeneratePrompt: Boolean(metadata.regeneratePrompt),
+    ...(metadata.promptAdaptationError?{promptAdaptationError:metadata.promptAdaptationError.slice(0,1000)}:{}),
     ...(request.promptProfile?{promptProfile:request.promptProfile}:{}),
     requestId: crypto.randomUUID(), jobId, paragraphIndex, state: review ? "review" : "prepared",
     prompt: request.prompt, negativePrompt: request.negativePrompt ?? "", model: request.model ?? "Host default",
@@ -199,10 +201,11 @@ export class ImageReviewGate {
       const request=await item.metadata.regeneratePrompt(structuredClone(draft));
       if(item.signal.aborted)throw aborted('Prompt regeneration cancelled.');
       assertPromptLengths(request.prompt,request.negativePrompt,request.promptProfile);
-      const record=reviewRecord(item.record.jobId,item.record.paragraphIndex,request,item.metadata,true);
+      const {promptAdaptationError: _previousAdaptationError,...metadata}=item.metadata;
+      const record=reviewRecord(item.record.jobId,item.record.paragraphIndex,request,metadata,true);
       await this.onRecord({...item.record,state:'cancelled'});
       if(item.signal.aborted)throw aborted('Prompt regeneration cancelled.');
-      item.request=request;item.record=record;
+      item.request=request;item.record=record;item.metadata=metadata;
       this.pending.set(record.requestId,item);
       await this.onRecord(record);
       if(item.signal.aborted)throw aborted('Prompt regeneration cancelled.');

@@ -8,6 +8,11 @@ import { buildVisualBrief } from "./visual-brief";
 const scene = SceneStateSchema.parse({ sceneId: "s", revision: 0, startParagraph: 0, environment: { location: "garden", description: "A fountain beneath tall trees", timeOfDay: "night", weather: null, lighting: "moonlight", persistentElements: ["fountain"] }, cast: ["Mira"], character: "Mira", identityPrompt: "silver hair, green eyes", attire: "raincoat", basePrompt: "garden", compositionLock: "wide", continuity: { revision: 0, characters: {}, facts: {} }, cameraLock: { framing: "wide", angle: "eye level", perspective: "straight-on", lens: null, subjectAnchor: "center", horizon: "stable", safeDialogueRegion: "lower quarter", aspectRatio: "16:9" } });
 const cue = VisualCueSchema.parse({ cueId: "c", paragraphIndex: 0, sceneId: "s", sceneRevision: 0, kind: "flattened_scene", assetJobId: "j", character: "Mira", resolvedIdentity: "old red hair", resolvedAttire: "raincoat", visualDescription: "Mira opens the garden gate" });
 
+test('single-subject brief includes the resolved outfit once',()=>{
+ const brief=buildVisualBrief(normalizeConfig({}),scene,cue);
+ assert.equal(brief.subjects.match(/raincoat/g)?.length,1);
+});
+
 test("durable_and_temporary_precedence_in_visual_brief", () => {
   const config = normalizeConfig({});
   const brief = buildVisualBrief(config, scene, cue, { mira: "silver hair, green eyes" });

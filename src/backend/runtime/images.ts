@@ -1305,6 +1305,8 @@ export async function generateAssets(
             }catch(error){
               if(signal.aborted||jobSignal.aborted)throw abortError(jobSignal);
               // The review gate retains the complete original when repair fails.
+              const reason=error instanceof Error?error.message:'';
+              baseMetadata.promptAdaptationError=/^(?:Required cast identity details|Prompt repair failed|Configure a story-reader text connection)/.test(reason)?reason.slice(0,1000):'Automatic model adaptation could not finish. Your complete draft is retained. Check the story-reader connection, then use Fit to budget or edit the prompt.';
               spindle.log?.warn?.('Image prompt length repair failed; retaining the original for review.');
             }
           }

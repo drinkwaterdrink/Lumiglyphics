@@ -77,6 +77,34 @@ test('overlong compiled prompts are rewritten once before review and remain unde
  expect(textCalls).toBe(1);expect(sent).toHaveLength(1);expect(jobs[0]?.status).toBe('generated');expect(sent[0].prompt).toContain('silver-haired');
 });
 
+test('Z-Image automatic preparation fits reordered identity facts and chooses a supported portrait size',async()=>{
+ const sent:any[]=[];let writers=0;
+ const connection={id:'image',provider:'nanogpt',model:'z-image-turbo',updated_at:1};
+ const spindle={userStorage:{getJson:async(_:string,o:any)=>o.fallback},connections:{list:async()=>[{id:'writer',provider:'openrouter',model:'writer',is_default:true}]},generate:{raw:async()=>{writers++;return {content:JSON.stringify({prompt:'One visible character: red coat, green eyes, silver hair. In a quiet library at night under lamplight; eye-level full body view, lower quarter clear for dialogue. Candid cellphone photograph, natural texture.',negativePrompt:''})};}},imageGen:{getConnection:async()=>connection,generate:async(r:any)=>{sent.push(r);return {imageId:'result'};}}} as any;
+ const config=normalizeConfig({imageConnectionId:'image',referenceAnchoring:false,imageOutputAspectRatio:'9:16',promptPrefix:'Natural candid cellphone photograph. '.repeat(70)});
+ const template={...config.imageTemplates.find(t=>t.id==='action')!,positive:'{{style}} {{subjects}} {{scene}} {{composition}}',negative:'{{negative}}'};
+ const turn=plan([{...cue(undefined),imageTemplate:templateSnapshot(template),resolvedIdentity:'silver hair, green eyes, red coat'}]);
+ const jobs=await generateAssets(spindle,turn,createAssetJobs(turn,config),config,new AbortController().signal,()=>{},'user',{
+  beforeGenerate:async(_job,request,metadata)=>{
+   expect(request.prompt.length+(request.negativePrompt?.length??0)).toBeLessThanOrEqual(1200);
+   expect(request.negativePrompt).toBe('');expect(request.parameters?.size).toBe('720*1280');
+   expect(metadata.promptAdaptationError).toBeUndefined();return request;
+  }
+ });
+ expect(writers).toBe(1);expect(jobs[0]?.status).toBe('generated');expect(sent).toHaveLength(1);
+ expect(sent[0].promptProfile).toBeUndefined();expect(sent[0].prompt).toContain('silver hair');
+});
+
+test('failed automatic model adaptation explains the failure and retains the complete draft',async()=>{
+ const connection={id:'image',provider:'nanogpt',model:'z-image-turbo',updated_at:1};let sent=0,reviewed=false;
+ const spindle={userStorage:{getJson:async(_:string,o:any)=>o.fallback},imageGen:{getConnection:async()=>connection,generate:async()=>{sent++;return {imageId:'wrong'};}}} as any;
+ const config=normalizeConfig({imageConnectionId:'image',referenceAnchoring:false,promptPrefix:'Detailed photograph. '.repeat(100)}),turn=plan([cue(undefined)]);
+ await generateAssets(spindle,turn,createAssetJobs(turn,config),config,new AbortController().signal,()=>{},'user',{
+  beforeGenerate:async(_job,request,metadata)=>{reviewed=true;expect(request.prompt.length).toBeGreaterThan(1200);expect(metadata.promptAdaptationError).toContain('Automatic model adaptation could not finish');return request;}
+ });
+ expect(reviewed).toBe(true);expect(sent).toBe(0);
+});
+
 test('Anima portrait resolution is frozen before review and dispatched without a retry', async () => {
   for (const reviewed of [false, true]) {
     const sent: any[] = [];

@@ -5,6 +5,25 @@ import {rewriteImagePrompt,assertEffectivePromptBudget} from './prompt-rewrite.j
 import type {SpindleAPI} from 'lumiverse-spindle-types';
 const request={prompt:'A silver-haired traveller waits at a rainy station.',negativePrompt:'blurry, text',parameters:{seed:9,negativePrompt:'old'},connection_id:'image',model:'flux'};
 function api(outputs:unknown[]){const calls:any[]=[];return {calls,spindle:{connections:{list:async()=>[{id:'writer',provider:'openrouter',model:'writer',is_default:true}]},generate:{raw:async(r:any)=>{calls.push(r);return outputs.shift();}}} as unknown as SpindleAPI};}
+
+test('Z-Image fitting can reorder single-subject facts and collapse repeated outfit wording',async()=>{
+ const subjects='One visible woman; silver hair, green eyes, blue coat; Wearing blue coat';
+ const original={...request,model:'z-image-turbo',promptProfile:resolveImagePromptProfile('nanogpt','z-image-turbo'),prompt:subjects+' at the station. '+'Wet rails. '.repeat(160)};
+ const good={prompt:'One visible woman waits at the station: blue coat, green eyes, silver hair. Wet rails reflect soft daylight.',negativePrompt:''};
+ const {spindle,calls}=api([{content:JSON.stringify(good)}]);
+ const metadata={brief:{subjects,subjectMode:'one'},template:{name:'Portrait',category:'portrait'}} as any;
+ const result=await rewriteImagePrompt(spindle,original,metadata,normalizeConfig({}),'u',new AbortController().signal,'fit');
+ expect(result.prompt).toBe(good.prompt);expect(calls).toHaveLength(1);
+ expect(calls[0].messages[0].content).toContain('no native negative field');
+ expect(result.prompt.length+result.negativePrompt!.length).toBeLessThanOrEqual(1200);
+});
+
+test('single-subject fitting still rejects missing identity facts',async()=>{
+ const subjects='One visible woman; silver hair, green eyes, blue coat';
+ const original={...request,prompt:subjects+' at the station.'};
+ const {spindle}=api(Array.from({length:2},()=>({content:JSON.stringify({prompt:'One visible woman, green eyes, blue coat at the station.',negativePrompt:''})})));
+ await expect(rewriteImagePrompt(spindle,original,{brief:{subjects,subjectMode:'one'},template:{name:'Portrait',category:'portrait'}} as any,normalizeConfig({}),'u',new AbortController().signal,'fit')).rejects.toThrow('appearance');
+});
 test('reroll uses the writer connection, keeps image parameters and synchronizes prompt copies',async()=>{
  const {spindle,calls}=api([{content:JSON.stringify({prompt:'At the rain-lit station, a silver-haired traveller waits beside wet rails.',negativePrompt:'blurry, text'})}]);
  const result=await rewriteImagePrompt(spindle,request,undefined,normalizeConfig({}), 'u',new AbortController().signal,'reroll');

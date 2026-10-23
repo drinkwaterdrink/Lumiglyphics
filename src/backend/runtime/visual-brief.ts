@@ -47,7 +47,7 @@ export function buildVisualBrief(config: VisualNovelConfig, scene: SceneState, c
   }).join("\n");
   return {
     scene: text([environment.location, environment.description, ...environment.persistentElements, environment.timeOfDay, environment.weather]),
-    subjects: noPeople ? "" : ensemble ? group : text([subjectLabel, appearance, attire ? `Wearing ${attire}` : "", template.category === "portrait" ? pose : ""]),
+    subjects: noPeople ? "" : ensemble ? group : text([subjectLabel, appearance, template.category === "portrait" ? pose : ""]),
     action: noPeople ? template.category === "detail" || template.category === "custom" ? (cue.visualFocus ?? "").slice(0, 1000) : "" : text([cue.visualDescription, compileActionProp(cue.action), template.category === "portrait" ? "" : pose]),
     composition: `${template.framing}; eye-level view; ${noPeople ? "no people" : ensemble ? `${members.length} visible characters, including every listed subject; distinct faces and silhouettes` : "one visible character"}; keep the lower quarter clear for dialogue`,
     lighting: (environment.lighting ?? "").slice(0, 1000),

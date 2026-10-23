@@ -267,7 +267,7 @@ export class ImageStudio {
     if(!error&&profile?.output&&profile.outputManaged&&parameters)try{assertCapabilityOutput(profile.output,parameters);}catch(cause){error=cause instanceof Error?cause.message:String(cause);}
     this.renderOutputControls(parameters);
     this.updateRewriteLabel();
-    const validation=this.el<HTMLElement>('[data-validation]');validation.textContent=error;validation.hidden=!error||!this.record();
+    const validation=this.el<HTMLElement>('[data-validation]');validation.textContent=[error,error?this.record()?.promptAdaptationError:''].filter(Boolean).join('\n');validation.hidden=!error||!this.record();
     for(const selector of ['[data-positive]','[data-negative]'])this.el(selector).setAttribute('aria-invalid',String(Boolean(error)));
     for(const selector of ['[data-generate]','[data-prepare]']){const button=this.el<HTMLButtonElement>(selector);if(button.dataset.available!==undefined)button.disabled=button.dataset.available!=='true'||Boolean(error);}
     const retry=this.el<HTMLButtonElement>('[data-retry-image]'),record=this.record();

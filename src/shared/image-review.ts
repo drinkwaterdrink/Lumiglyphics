@@ -2,6 +2,7 @@ import type {ImagePromptProfile} from "./image-prompt-profile.js";
 import type { ImagePromptMetadata } from "./image-templates.js";
 export type ImageRequestRecord = {
   canRegeneratePrompt?: boolean;
+  promptAdaptationError?: string;
   promptProfile?: ImagePromptProfile;
   imagePromptMetadata?: ImagePromptMetadata;
   requestId: string;

@@ -1,6 +1,6 @@
 # Remaining Lumiglyphics roadmap
 
-Current scope: beta.56 on Testing. This page summarizes unfinished work; [STATUS.md](../STATUS.md) is the delivered-feature matrix. Earlier dated plans retain their original checklists and should not be read as the current completion count.
+Current scope: beta.57 on Testing. This page summarizes unfinished work; [STATUS.md](../STATUS.md) is the delivered-feature matrix. Earlier dated plans retain their original checklists and should not be read as the current completion count.
 
 ## Next delivery sequence
 

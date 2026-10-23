@@ -83,7 +83,7 @@ export class ExternalImageReview {
   }
   private validate(): void {
     try { this.edits(); this.generate.disabled = this.sending; this.status.textContent = `${this.prompt.value.length + this.negative.value.length} / ${(this.preview?.record.promptProfile?.maxCharacters??3000).toLocaleString()} combined characters. ${this.preview?.record.promptProfile?promptProfileSummary(this.preview.record.promptProfile):'Legacy budget.'} Approval starts image generation.`; }
-    catch (error) { this.generate.disabled = true; this.status.textContent = error instanceof Error ? error.message : String(error); }
+    catch (error) { this.generate.disabled = true; this.status.textContent = [error instanceof Error ? error.message : String(error),this.preview?.record.promptAdaptationError].filter(Boolean).join('\n'); }
   }
   private approve(): void {
     const preview = this.preview;

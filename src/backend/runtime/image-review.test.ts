@@ -6,6 +6,16 @@ import { ImageReviewGate, applyImageEdits, safeImageParameters, safeImageHistory
 const request = { connection_id: "nano", prompt: "original", negativePrompt: "blurry", model: "model-a", parameters: { seed: 12, width: 1024 }, owner_chat_id: "chat", userId: "alice" };
 const meta = { provider: "nanogpt", connectionRevision: 3 };
 
+test('automatic adaptation failure survives history but clears after a successful fit',async()=>{
+ const records:any[]=[];const gate=new ImageReviewGate(async record=>{records.push(record);});
+ const pending=gate.prepare('job',0,request,{...meta,promptAdaptationError:'Automatic adaptation failed: identity facts need more space.',regeneratePrompt:async draft=>({...draft,prompt:'A silver-haired traveller.',negativePrompt:''})},true,new AbortController().signal);
+ await Promise.resolve();
+ expect(safeImageHistory(records)[0]?.promptAdaptationError).toContain('identity facts');
+ expect(await gate.regenerate(records[0].requestId)).toBe(true);
+ expect(records.at(-1).promptAdaptationError).toBeUndefined();
+ gate.decide(records.at(-1).requestId,'generate',{});await pending;
+});
+
 describe("image request review", () => {
   test("holds without dispatch and claims exactly the edited request once", async () => {
     const records: any[] = [];

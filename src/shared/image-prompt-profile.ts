@@ -62,7 +62,7 @@ export function resolveImagePromptProfile(provider:string|null|undefined,model:s
   ...(providerLimit!==undefined?{providerLimit}:{}),...(manual!==undefined?{manualBudget:manual}:{}),
   format:!auto?settings.imagePromptFormat??'description':f==='novelai'?'tags':f==='anima'?'hybrid':'description',
   ...(output?{output,outputSource:liveOutput?'live' as const:'catalogue' as const}:{}),
-  negativeMode:auto&&p==='nanogpt'&&((Boolean(output)&&/^flux-2-/.test(id))||/^blackforestlabs\/flux-3\/(?:klein|pro|dev)(?:\/|$)/.test(id)||/^black-forest-labs\/flux-3\/(?:text-to-image|edit)$/.test(id))?'positive-only':'supported-or-unknown',
+  negativeMode:auto&&p==='nanogpt'&&(/^z-image-turbo(?:-lora|-image-to-image)?$/.test(id)||(Boolean(output)&&/^flux-2-/.test(id))||/^blackforestlabs\/flux-3\/(?:klein|pro|dev)(?:\/|$)/.test(id)||/^black-forest-labs\/flux-3\/(?:text-to-image|edit)$/.test(id))?'positive-only':'supported-or-unknown',
   guidance:auto?guidance[f]:`Keep the user's ${settings.imagePromptFormat??'description'} prompt format and weighting syntax.`,};
 }
 export function promptProfileSummary(profile:ImagePromptProfile):string{
