@@ -32,6 +32,7 @@ import {
 import { POSE_EXPRESSION_CATALOGUE, poseById } from "../../shared/character.js";
 import { compileActionProp } from "../../shared/action-prop.js";
 import { renderImageTemplate, templateSnapshot, type ImagePromptMetadata } from "../../shared/image-templates.js";
+import {adaptImagePrompt} from './prompt-adaptation.js';
 import { buildVisualBrief, resolveTemplateIdentity } from "./visual-brief.js";
 import {
   appearanceMapKeyFor,
@@ -1295,21 +1296,11 @@ export async function generateAssets(
           frozen.parameters = modelOutputParameters(selected?.provider ?? provider, frozen.model, globalOutputParameters(config.imageOutputAspectRatio, selected?.provider ?? provider, frozen.model, frozen.parameters ?? {}));
           frozen.promptProfile=await loadImagePromptProfile(spindle,config,selected?.provider??provider,frozen.model);
           frozen=prepareCapabilityOutput(frozen,config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined);
-          frozen = compactImageRequest(frozen);
-          let promptWasRewritten=false;
-          if(!cacheOptions.skipAutomaticPromptRepair&&(frozen.prompt.length+(frozen.negativePrompt?.length??0)>frozen.promptProfile!.maxCharacters || frozen.promptProfile?.negativeMode==='positive-only'&&Boolean(frozen.negativePrompt?.trim()))){
-            try{
-              frozen=await rewriteImagePrompt(spindle,frozen,initialMetadata,config,userId,jobSignal,'fit');
-              promptWasRewritten=true;
-              cacheKey=null;settle?.({kind:'released'});settle=null;
-            }catch(error){
-              if(signal.aborted||jobSignal.aborted)throw abortError(jobSignal);
-              // The review gate retains the complete original when repair fails.
-              const reason=error instanceof Error?error.message:'';
-              baseMetadata.promptAdaptationError=/^(?:Required cast identity details|Prompt repair failed|Configure a story-reader text connection)/.test(reason)?reason.slice(0,1000):'Automatic model adaptation could not finish. Your complete draft is retained. Check the story-reader connection, then use Fit to budget or edit the prompt.';
-              spindle.log?.warn?.('Image prompt length repair failed; retaining the original for review.');
-            }
-          }
+          const adaptation=await adaptImagePrompt(spindle,frozen,initialMetadata,config,userId,jobSignal,cacheOptions.skipAutomaticPromptRepair);
+          frozen=adaptation.request;
+          const promptWasRewritten=adaptation.rewritten;
+          if(adaptation.error)baseMetadata.promptAdaptationError=adaptation.error;
+          if(promptWasRewritten){cacheKey=null;settle?.({kind:'released'});settle=null;}
           const approved = cacheOptions.beforeGenerate ? await cacheOptions.beforeGenerate(scheduledJob, frozen, {
             ...baseMetadata,
             regeneratePrompt:regenerateFor(cue),
@@ -1348,7 +1339,10 @@ export async function generateAssets(
               } };
               request.parameters = modelOutputParameters(selected?.provider ?? provider, request.model, globalOutputParameters(config.imageOutputAspectRatio, selected?.provider ?? provider, request.model, request.parameters ?? {}));
               const preparedRequest=prepareCapabilityOutput(request,config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:nextCue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined);
-              return { request:preparedRequest, metadata: { ...baseMetadata, regeneratePrompt:regenerateFor(nextCue), imagePromptMetadata: metadataFor(nextCue)!, referenceSummary: nextPortrait ? `${nextPortrait.source ?? "captured"} portrait: ${nextPortrait.name} (${nextPortrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" } };
+              const nextMetadata=metadataFor(nextCue)!;
+              const adapted=await adaptImagePrompt(spindle,preparedRequest,nextMetadata,config,userId,jobSignal);
+              const {promptAdaptationError:_previousAdaptationError,...cleanMetadata}=baseMetadata;
+              return { request:adapted.request, metadata: { ...cleanMetadata,...(adapted.error?{promptAdaptationError:adapted.error}:{}), regeneratePrompt:regenerateFor(nextCue), imagePromptMetadata: nextMetadata, referenceSummary: nextPortrait ? `${nextPortrait.source ?? "captured"} portrait: ${nextPortrait.name} (${nextPortrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" } };
             }
           }, jobSignal) : frozen;
           if (signal.aborted) throw abortError(signal);

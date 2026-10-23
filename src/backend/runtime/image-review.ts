@@ -171,12 +171,16 @@ export class ImageReviewGate {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$/.test(templateId)) throw new Error("Invalid image template selection.");
     // Claim synchronously: neither an old approval nor a second rebuild can win.
     this.pending.delete(requestId);
+    const original={request:item.request,record:item.record,metadata:item.metadata};
+    let retired=false;
     try {
-      await this.onRecord({ ...item.record, state: "cancelled" });
       const rebuilt = await item.rebuild(templateId);
       if (item.signal.aborted) throw aborted("Image request cancelled during template preparation.");
       const request = compactImageRequest(structuredClone(rebuilt.request));
       const record = reviewRecord(item.record.jobId, item.record.paragraphIndex, request, rebuilt.metadata, true);
+      retired=true;
+      await this.onRecord({ ...original.record, state: "cancelled" });
+      if(item.signal.aborted)throw aborted('Image request cancelled during template preparation.');
       item.request = request; item.record = record;
       item.metadata = rebuilt.metadata;
       this.pending.set(record.requestId, item);
@@ -185,7 +189,10 @@ export class ImageReviewGate {
       return true;
     } catch (error) {
       this.pending.delete(item.record.requestId);
-      item.reject(error instanceof Error ? error : new Error(String(error)));
+      if(!item.signal.aborted){
+        Object.assign(item,original);this.pending.set(original.record.requestId,item);
+        if(retired)await this.onRecord(original.record).catch(()=>{});
+      }
       throw error;
     }
   }

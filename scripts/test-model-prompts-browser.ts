@@ -111,10 +111,22 @@ try{
  assert.match(await studio.locator('[data-combined-count]').innerText(),/2,914 \/ 1,200/);
  assert.match(await studio.locator('[data-validation]').innerText(),/Automatic model adaptation could not finish/);
  assert.equal(await studio.locator('[data-generate]').isDisabled(),true);
+ assert.equal(await studio.locator('[data-studio-footer] [data-regenerate-prompt]').isVisible(),true,'repair is always reachable outside collapsed tools');
+ assert.equal(await studio.locator('[data-queue-retry]').isVisible(),false,'quick image retry is not offered in place of prompt repair');
+ await page.screenshot({path:'.cache/model-prompt-research/z-image-repair-primary-mobile.png',fullPage:true});
  await studio.getByLabel('Positive prompt',{exact:true}).fill('One silver-haired traveller waits at the station in natural daylight.');
  await studio.getByLabel('Negative prompt',{exact:true}).fill('');
  assert.equal(await studio.locator('[data-validation]').isVisible(),false);
  assert.equal(await studio.locator('[data-generate]').isDisabled(),false);
+ assert.equal(await studio.locator('[data-studio-footer] [data-regenerate-prompt]').count(),0,'ordinary rewrite returns to prompt tools after repair');
  await page.screenshot({path:'.cache/model-prompt-research/z-image-fitted-mobile.png',fullPage:true});
+ await page.evaluate(()=>{const f=(window as any).imageFixture;f.studio.setConfig(f.config);});
+ await studio.locator('[data-template]').evaluate((el:HTMLSelectElement)=>{el.closest('details')!.open=true;});
+ await studio.locator('[data-template]').selectOption('environment');
+ await studio.locator('[data-use-template]').click();
+ if(await studio.locator('[data-template-confirm]').isVisible())await studio.locator('[data-replace]').click();
+ await page.evaluate(()=>(window as any).imageFixture.studio.showError('Template preparation failed. Your previous draft is retained.'));
+ assert.equal(await studio.locator('[data-use-template]').isEnabled(),true,'a failed template rebuild releases its busy controls');
+ assert.equal(await studio.getByLabel('Positive prompt',{exact:true}).inputValue(),'One silver-haired traveller waits at the station in natural daylight.');
  assert.deepEqual(errors,[]);console.log('Model prompt browser QA passed: budget persistence, provider cap, frozen review counts, blocked drafts, Z-Image failure recovery and responsive layout.');
 }finally{await browser.close();server.close();}

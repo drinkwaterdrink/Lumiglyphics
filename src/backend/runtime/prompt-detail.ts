@@ -1,11 +1,11 @@
-import {resolveImagePromptProfile,type ImagePromptProfile} from "../../shared/image-prompt-profile.js";
+import {resolveImagePromptProfile,promptBudgetTargets,type ImagePromptProfile} from "../../shared/image-prompt-profile.js";
 import type {VisualNovelConfig} from '../../config.js';
 import {renderImageTemplate,resolveImageTemplate,templateSnapshot} from '../../shared/image-templates.js';
 /** Reserve actual shared/template wording before asking for scene direction.
  * A target is guidance, not permission to fabricate evidence or pad simple scenes. */
 export function imageDetailGuidance(config:VisualNovelConfig,profile:ImagePromptProfile=resolveImagePromptProfile(undefined,config.imageModel,config)):string {
  const maximum=profile.maxCharacters;
- const low=maximum-Math.min(250,Math.floor(maximum*.15)),high=maximum-Math.min(100,Math.floor(maximum*.05));
+ const {low,high}=promptBudgetTargets(profile);
  const templates=config.dynamicImageTemplates?config.imageTemplates.filter(t=>t.enabled):[resolveImageTemplate(config).template];
  const budgets=templates.map(t=>{
   const {revision: _, ...body} = t as typeof t & {revision?:string};

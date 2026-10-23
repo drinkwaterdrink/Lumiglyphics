@@ -1,6 +1,13 @@
 import {expect,test} from 'bun:test';
-import {resolveImagePromptProfile,parsePromptCapabilities} from './image-prompt-profile.js';
+import {resolveImagePromptProfile,parsePromptCapabilities,promptBudgetTargets} from './image-prompt-profile.js';
 import {assertPromptLengths} from './prompt-length.js';
+
+test('automatic detail target stays useful while large ceilings and explicit manual targets remain available',()=>{
+ const large=resolveImagePromptProfile('nanogpt','unknown',{},new Map([['unknown',32000]]));
+ expect(promptBudgetTargets(large)).toEqual({low:2750,high:2900});
+ expect(promptBudgetTargets({...large,source:'manual',manualBudget:6000,maxCharacters:6000})).toEqual({low:5750,high:5900});
+ expect(promptBudgetTargets(resolveImagePromptProfile('nanogpt','z-image-turbo'))).toEqual({low:1020,high:1140});
+});
 
 test('only verified NanoGPT Z-Image Turbo routes use automatic positive-only guidance',()=>{
  for(const id of ['z-image-turbo','z-image-turbo-lora','z-image-turbo-image-to-image'])expect(resolveImagePromptProfile('nanogpt',id).negativeMode).toBe('positive-only');
@@ -8,6 +15,7 @@ test('only verified NanoGPT Z-Image Turbo routes use automatic positive-only gui
 });
 
 test('provider routes have exact limits and family detection never invents limits',()=>{
+ expect(resolveImagePromptProfile('nanogpt','animagine-xl-31').family).not.toBe('grok');
  expect(resolveImagePromptProfile('nanogpt','z-image-turbo').maxCharacters).toBe(1200);
  expect(resolveImagePromptProfile('nanogpt','qwen-image').maxCharacters).toBe(3000);
  expect(resolveImagePromptProfile('other','z-image-turbo').source).toBe('fallback');

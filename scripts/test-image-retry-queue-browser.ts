@@ -26,6 +26,8 @@ try{
   actions=await page.evaluate(()=>(window as any).imageFixture.actions);assert.deepEqual(actions.at(-1).jobIds,['job-3'],'second picture queues without waiting for first');
   await page.evaluate(()=>{const f=(window as any).imageFixture;f.studio.setRetryQueue({...f.multi,activeJobId:'job-2',jobIds:['job-3']});});
   assert.match(await studio.locator('[data-queue-status]').innerText(),/1 queued.*1 retry running/);
+  await page.evaluate(()=>(window as any).imageFixture.studio.showError('A prompt rewrite failed; queued pictures stay queued.'));
+  assert.match(await studio.locator('[data-queue-status]').innerText(),/1 queued.*1 retry running/,'prompt failures preserve the queue view');
   await studio.getByRole('button',{name:'Retry unfinished',exact:true}).click();actions=await page.evaluate(()=>(window as any).imageFixture.actions);assert.deepEqual(actions.at(-1).jobIds,['job-4','job-5']);
   await picker.selectOption('job-0');await studio.getByRole('button',{name:'Regenerate picture',exact:true}).click();actions=await page.evaluate(()=>(window as any).imageFixture.actions);assert.deepEqual(actions.at(-1).jobIds,['job-0']);
   assert.equal(actions.some((a:any)=>a.type==='vn_prepare_image'||a.type==='vn_image_review'),false,'quick actions never open a review');

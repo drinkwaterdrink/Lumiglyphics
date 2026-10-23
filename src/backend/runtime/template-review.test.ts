@@ -4,6 +4,16 @@ import { normalizeConfig } from "../../config";
 import { resolveImageTemplate } from "../../shared/image-templates";
 const input = { prompt: "old portrait", parameters: { resolvedReferenceImages: ["private bytes"], seed: 4 } };
 
+test('failed template preparation keeps the original held prompt usable instead of cancelling its picture',async()=>{
+ const records:any[]=[];const gate=new ImageReviewGate(async record=>{records.push(record);});
+ const pending=gate.prepare('job',0,input,{provider:'nanogpt',rebuildTemplate:async()=>{throw new Error('Selected template cannot fit this model');}},true,new AbortController().signal);
+ const observed=pending.catch(error=>error);await Promise.resolve();const id=records[0].requestId;
+ await expect(gate.reprepare(id,'environment')).rejects.toThrow('cannot fit');
+ expect(records.at(-1).state).toBe('review');
+ expect(gate.decide(id,'generate',{})).toBe(true);
+ expect((await observed).prompt).toBe('old portrait');
+});
+
 test("reprepare retires old approval and dispatches only the new exact draft", async () => {
   const records: any[] = [];
   const gate = new ImageReviewGate(async record => { records.push(record); });

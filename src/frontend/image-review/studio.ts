@@ -267,6 +267,19 @@ export class ImageStudio {
     if(!error&&profile?.output&&profile.outputManaged&&parameters)try{assertCapabilityOutput(profile.output,parameters);}catch(cause){error=cause instanceof Error?cause.message:String(cause);}
     this.renderOutputControls(parameters);
     this.updateRewriteLabel();
+    const repair=this.el<HTMLButtonElement>('[data-regenerate-prompt]');
+    const needsAdaptation=Boolean(this.record())&&(total>maximum||profile?.negativeMode==='positive-only'&&Boolean(this.el<HTMLTextAreaElement>('[data-negative]').value.trim()));
+    const repairPrimary=needsAdaptation&&this.record()?.canRegeneratePrompt!==false;
+    const destination=this.el<HTMLElement>(repairPrimary?'[data-studio-footer]':'[data-secondary-actions]');
+    if(repair.parentElement!==destination)destination.prepend(repair);
+    repair.toggleAttribute('data-primary-repair',repairPrimary);
+    if(repairPrimary){
+      this.el('[data-studio-footer]').hidden=false;
+      this.el('[data-queue-retry]').hidden=true;
+      this.el('[data-action-help]').textContent='Fits this draft using text tokens. Preserves character details; no image is generated.';
+    }else if(this.el('[data-queue-retry]').dataset.eligible!==undefined){
+      this.el('[data-queue-retry]').hidden=this.el('[data-queue-retry]').dataset.eligible!=='true';
+    }
     const validation=this.el<HTMLElement>('[data-validation]');validation.textContent=[error,error?this.record()?.promptAdaptationError:''].filter(Boolean).join('\n');validation.hidden=!error||!this.record();
     for(const selector of ['[data-positive]','[data-negative]'])this.el(selector).setAttribute('aria-invalid',String(Boolean(error)));
     for(const selector of ['[data-generate]','[data-prepare]']){const button=this.el<HTMLButtonElement>(selector);if(button.dataset.available!==undefined)button.disabled=button.dataset.available!=='true'||Boolean(error);}
@@ -343,7 +356,7 @@ export class ImageStudio {
     this.el<HTMLElement>('[data-notice]').textContent=visible?text:'';
     this.el<HTMLElement>('[data-notice-row]').hidden=!visible;
   }
-  showError(error: string): void { this.retryQueueJobs.clear(); this.replanning = false;this.recovering=null; this.submitted.clear(); this.preparing.clear(); this.rerolling.clear(); this.render(); this.setNotice(error); }
+  showError(error: string): void { this.replanning = false;this.recovering=null; this.submitted.clear(); this.preparing.clear(); this.rerolling.clear();this.rebuilding.clear(); this.render(); this.setNotice(error); }
 
   private regeneratePrompt():void {
     if(!this.turn||this.el<HTMLButtonElement>('[data-regenerate-prompt]').disabled)return;
@@ -372,7 +385,7 @@ export class ImageStudio {
   private updateRewriteLabel():void{
     const record=this.record(),button=this.el<HTMLButtonElement>('[data-regenerate-prompt]');
     const total=this.el<HTMLTextAreaElement>('[data-positive]').value.length+this.el<HTMLTextAreaElement>('[data-negative]').value.length;
-    const needsFit=Boolean(record)&&total>(record?.promptProfile?.maxCharacters??3000);
+    const needsFit=Boolean(record)&&(total>(record?.promptProfile?.maxCharacters??3000)||record?.promptProfile?.negativeMode==='positive-only'&&Boolean(this.el<HTMLTextAreaElement>('[data-negative]').value.trim()));
     const busy=this.preparing.has(this.selectedJob)||Boolean(record&&this.rerolling.has(record.requestId));
     button.textContent=busy?needsFit?'Fitting prompt…':'Rewriting prompt…':needsFit?'Fit to budget':'Rewrite prompt';
     button.title=needsFit?'Compresses the current edited draft while preserving named subjects and their appearance facts. Uses story-reader text tokens; generation still requires approval.':'Uses the current edited wording to describe the same scene again. Uses story-reader text tokens; generation still requires approval.';
@@ -516,6 +529,7 @@ export class ImageStudio {
     const queued=this.retryQueueJobs.has(this.selectedJob)||this.retryActive===this.selectedJob;
     const quickEligible=!!asset&&asset.source!=='cache'&&['failed','cancelled','generated','browser_ready'].includes(asset.status);
     const quick=this.el<HTMLButtonElement>('[data-queue-retry]');quick.hidden=!quickEligible&&!queued;quick.disabled=queued||planning||this.replanning||!!this.recovering;
+    quick.dataset.eligible=String(quickEligible||queued);
     quick.textContent=queued?'Retry queued':asset&&['generated','browser_ready'].includes(asset.status)?'Regenerate picture':'Retry picture';
     quick.title='Starts one image attempt without prompt review, using the saved scene and current image settings. Local prompt edits are not applied.';
     this.el('[data-retry-queue]').hidden=!this.turn||planning;

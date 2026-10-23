@@ -23,10 +23,31 @@ export function promptProtection(prompt:string,metadata?:ImagePromptMetadata,com
   const exact=prompt.includes(source)?source:'';return {...empty,exact,minimumCharacters:exact.length};
  }
  const original=canonical(prompt),subjects:SubjectLock[]=[];
- for(const row of source.split(/\r?\n/)){
+ const rows=source.split(/\r?\n/).filter(row=>row.indexOf(':')>0);
+ const declarations:Array<{name:string;index:number;end:number}>=[];
+ for(const row of rows){
+  const name=row.slice(0,row.indexOf(':')).trim();
+  if(name.length>160||!canonical(name))continue;
+  const escaped=name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  for(const match of prompt.matchAll(new RegExp(escaped+'\\s*:','giu'))){
+   if(match.index>0&&/[\p{L}\p{N}]/u.test(prompt[match.index-1]!))continue;
+   declarations.push({name,index:match.index,end:match.index+match[0].length});
+  }
+ }
+ declarations.sort((a,b)=>a.index-b.index);
+ for(const row of rows){
   const colon=row.indexOf(':');if(colon<1)continue;
   const name=row.slice(0,colon).trim();if(name.length>160||!canonical(name)||!(` ${original} `).includes(` ${canonical(name)} `))continue;
-  const facts=[...new Set(row.slice(colon+1).split(/[,;\n]+/).map(value=>value.trim()).filter(value=>Boolean(canonical(value))&&original.includes(canonical(value))))];
+  const declared=declarations.find(d=>d.name===name);
+  const next=declared?declarations.find(d=>d.index>declared.index):undefined;
+  const newline=declared?prompt.indexOf('\n',declared.end):-1;
+  const current=declared?prompt.slice(declared.end,Math.min(next?.index??prompt.length,newline<0?prompt.length:newline)).trim():'';
+  // Explicit Name: rows are authoritative after edits. A fact appearing under
+  // another person must never restore a removed trait from stale metadata.
+  const unchanged=declared&&(`${canonical(current)} `).startsWith(`${canonical(row.slice(colon+1))} `);
+  const values=declared&&!unchanged?current:row.slice(colon+1);
+  const scope=declared?canonical(current):original;
+  const facts=[...new Set(values.split(/[,;\n]+/).map(value=>value.trim()).filter(value=>Boolean(canonical(value))&&scope.includes(canonical(value))))];
   subjects.push({name,facts});
  }
  // Unrecognized legacy formats retain strict protection, never silently weaken it.

@@ -105,6 +105,23 @@ test('failed automatic model adaptation explains the failure and retains the com
  expect(reviewed).toBe(true);expect(sent).toBe(0);
 });
 
+test('template replacement uses the same automatic fitting policy before returning its preview',async()=>{
+ let writers=0;const sent:any[]=[];
+ const connection={id:'image',provider:'nanogpt',model:'z-image-turbo',updated_at:1};
+ const spindle={userStorage:{getJson:async(_:string,o:any)=>o.fallback},connections:{list:async()=>[{id:'writer',provider:'openrouter',model:'writer',is_default:true}]},generate:{raw:async(r:any)=>{writers++;const context=JSON.parse(r.messages[1].content);return {content:JSON.stringify({prompt:context.brief.subjects+'\nOne manga page of the established library scene, varied framing, left-to-right reading order, consistent appearances and legible supplied lettering only.',negativePrompt:''})};}},imageGen:{getConnection:async()=>connection,generate:async(r:any)=>{sent.push(r);return {imageId:'result'};}}} as any;
+ const config=normalizeConfig({imageConnectionId:'image',referenceAnchoring:false,promptPrefix:'',promptSuffix:'',negativePrompt:''});
+ const turn=plan([{...cue(undefined),imageTemplate:templateSnapshot(config.imageTemplates.find(t=>t.id==='environment')!)}]);
+ const jobs=await generateAssets(spindle,turn,createAssetJobs(turn,config),config,new AbortController().signal,()=>{},'user',{
+  beforeGenerate:async(_job,_request,metadata)=>{
+   const replacement=await metadata.rebuildTemplate!('manga-page');
+   expect(replacement.request.prompt.length+(replacement.request.negativePrompt?.length??0)).toBeLessThanOrEqual(1200);
+   expect(replacement.request.prompt).not.toContain('[[LG_CAST');expect(replacement.metadata.promptAdaptationError).toBeUndefined();
+   return replacement.request;
+  }
+ });
+ expect(writers).toBe(1);expect(jobs[0]?.status).toBe('generated');expect(sent).toHaveLength(1);
+});
+
 test('Anima portrait resolution is frozen before review and dispatched without a retry', async () => {
   for (const reviewed of [false, true]) {
     const sent: any[] = [];

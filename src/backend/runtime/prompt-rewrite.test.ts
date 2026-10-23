@@ -6,6 +6,41 @@ import type {SpindleAPI} from 'lumiverse-spindle-types';
 const request={prompt:'A silver-haired traveller waits at a rainy station.',negativePrompt:'blurry, text',parameters:{seed:9,negativePrompt:'old'},connection_id:'image',model:'flux'};
 function api(outputs:unknown[]){const calls:any[]=[];return {calls,spindle:{connections:{list:async()=>[{id:'writer',provider:'openrouter',model:'writer',is_default:true}]},generate:{raw:async(r:any)=>{calls.push(r);return outputs.shift();}}} as unknown as SpindleAPI};}
 
+test('fit materializes immutable cast blocks after rewriting and never sends markers as image text',async()=>{
+ const subjects='Mira Vale: silver hair, blue coat, standing beside Jon Reed\nJon Reed: black hair, grey jacket';
+ const {spindle,calls}=api([]);
+ (spindle.generate as any).raw=async(r:any)=>{calls.push(r);const context=JSON.parse(r.messages[1].content);return {content:JSON.stringify({prompt:context.brief.subjects+'\nAt a rain-lit station, both wait beside wet rails.',negativePrompt:''})};};
+ const result=await rewriteImagePrompt(spindle,{...request,prompt:subjects+'\n'+'Atmosphere. '.repeat(300)},{brief:{subjects,subjectMode:'ensemble'},template:{name:'Full scene',category:'custom'}} as any,normalizeConfig({}),'u',new AbortController().signal,'fit');
+ expect(calls).toHaveLength(1);expect(result.prompt).toContain(subjects);expect(result.prompt).not.toContain('[[LG_CAST');expect(result.prompt.length).toBeLessThan(3000);
+});
+
+test('a rejected freeform cast rewrite is corrected with anchors in the same fit operation',async()=>{
+ const subjects='Mira: silver hair\nJon: black hair';const {spindle,calls}=api([]);
+ (spindle.generate as any).raw=async(r:any)=>{calls.push(r);const context=JSON.parse(r.messages[1].content);return {content:JSON.stringify({prompt:calls.length===1?'Mira with black hair and Jon with silver hair.':context.brief.subjects+' At the station.',negativePrompt:''})};};
+ const result=await rewriteImagePrompt(spindle,{...request,prompt:subjects+' at the station.'},{brief:{subjects,subjectMode:'ensemble'},template:{name:'Full scene',category:'custom'}} as any,normalizeConfig({}),'u',new AbortController().signal,'fit');
+ expect(calls).toHaveLength(2);expect(result.prompt).toContain(subjects);expect(calls[1].messages.at(-1).content).toContain('EVERY immutable identity anchor');
+});
+
+test('expanded identity characters count toward the actual budget and cannot hide behind short markers',async()=>{
+ const subjects='Mira: '+'silver hair '.repeat(18);const {spindle,calls}=api([]);
+ (spindle.generate as any).raw=async(r:any)=>{calls.push(r);const context=JSON.parse(r.messages[1].content);return {content:JSON.stringify({prompt:context.brief.subjects+'x'.repeat(1080),negativePrompt:''})};};
+ await expect(rewriteImagePrompt(spindle,{...request,prompt:subjects,promptProfile:resolveImagePromptProfile('nanogpt','z-image-turbo')},{brief:{subjects,subjectMode:'ensemble'},template:{name:'Full scene',category:'custom'}} as any,normalizeConfig({}),'u',new AbortController().signal,'fit')).rejects.toThrow('limit is 1,200');
+ expect(calls).toHaveLength(2);
+});
+
+test('impossible locked identity budgets explain the conflict before spending writer tokens',async()=>{
+ const subjects='Mira: '+('distinctive silver hair '.repeat(55));const {spindle,calls}=api([]);
+ await expect(rewriteImagePrompt(spindle,{...request,prompt:subjects,promptProfile:resolveImagePromptProfile('nanogpt','z-image-turbo')},{brief:{subjects,subjectMode:'ensemble'},template:{name:'Full scene',category:'custom'}} as any,normalizeConfig({}),'u',new AbortController().signal,'fit')).rejects.toThrow('Clicking Fit again cannot resolve');
+ expect(calls).toHaveLength(0);
+});
+
+test('rewrite context does not reintroduce stale scene evidence after manual edits',async()=>{
+ const {spindle,calls}=api([{content:JSON.stringify({prompt:'A traveller in the forest.',negativePrompt:''})}]);
+ await rewriteImagePrompt(spindle,{...request,prompt:'A traveller in the forest.'},{brief:{subjects:'',subjectMode:'none',scene:'old beach',action:'old action'},template:{name:'Environment',category:'environment'}} as any,normalizeConfig({}),'u',new AbortController().signal,'fit');
+ const context=JSON.parse(calls[0].messages[1].content);
+ expect(context.prompt).toContain('forest');expect(JSON.stringify(context)).not.toContain('old beach');expect(context.brief.scene).toBeUndefined();
+});
+
 test('Z-Image fitting can reorder single-subject facts and collapse repeated outfit wording',async()=>{
  const subjects='One visible woman; silver hair, green eyes, blue coat; Wearing blue coat';
  const original={...request,model:'z-image-turbo',promptProfile:resolveImagePromptProfile('nanogpt','z-image-turbo'),prompt:subjects+' at the station. '+'Wet rails. '.repeat(160)};

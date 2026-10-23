@@ -14,6 +14,12 @@ export const ImagePromptProfileSchema = z.object({
  output:ModelOutputCapabilitiesSchema.optional(),outputSource:z.enum(['live','catalogue']).optional(),outputSummary:z.string().max(1024).optional(),outputManaged:z.boolean().optional(),
 }).strict();
 export type ImagePromptProfile=z.infer<typeof ImagePromptProfileSchema>;
+/** A provider ceiling is not a useful-detail quota. Explicit manual budgets keep
+ * their chosen target; automatic large-context routes do not demand pages of padding. */
+export function promptBudgetTargets(profile:ImagePromptProfile):{low:number;high:number}{
+ const target=profile.manualBudget!==undefined?profile.maxCharacters:Math.min(3000,profile.maxCharacters);
+ return {low:target-Math.min(250,Math.floor(target*.15)),high:target-Math.min(100,Math.floor(target*.05))};
+}
 export type PromptProfileSettings={automaticImagePromptSettings?:boolean;imagePromptBudgetOverride?:boolean;imagePromptBudget?:number;imagePromptFormat?:'description'|'tags'};
 export function parsePromptCapabilities(value:unknown):Map<string,number>{
  const result=new Map<string,number>();
@@ -29,7 +35,7 @@ function family(model:string,provider:string):ImagePromptProfile['family']{
  if(provider==='novelai')return 'novelai';
  if(/(?:^|[\s/_.-])flux(?:[\s/_.-]|\d|$)/.test(model))return 'flux';
  if(/qwen/.test(model))return 'qwen';if(/anima(?:[\s/_.-]|$)/.test(model))return 'anima';
- if(/z[\s_-]?image/.test(model))return 'z-image';if(/grok|imagine/.test(model))return 'grok';
+ if(/z[\s_-]?image/.test(model))return 'z-image';if(/grok/.test(model))return 'grok';
  if(/gpt[\s_-]?image|chat[\s_-]?gpt|dall[\s_-]?e/.test(model))return 'gpt-image';
  if(/nano[\s_-]?banana|gemini.*image/.test(model))return 'nano-banana';
  if(/see[\s_-]?dream/.test(model))return 'seedream';if(/minimax/.test(model))return 'minimax';
@@ -38,11 +44,11 @@ function family(model:string,provider:string):ImagePromptProfile['family']{
 const guidance:Record<ImagePromptProfile['family'],string>={
  flux:'Use direct visual descriptions: medium, named subjects and action first, then explicit spatial relationships, setting, lighting and framing. Avoid repetitive quality tags and contradictory instructions. Adapt negative constraints into positive visual intent when the endpoint lacks negative prompting.',
  qwen:'Use clear descriptive language. Associate each named subject with its own appearance and position. State count, spatial relationships, action and any approved exact lettering explicitly; keep scene and style instructions coherent.',
- anima:'Use concise lowercase visual tags with spaces, followed by descriptive captions where useful. Bind each character name to their own appearance, clothing and action. Do not invent score tags or force quality tags onto an unknown variant. Keep lettering brief and only use approved dialogue.',
+ anima:'Use a hybrid of concise lowercase visual tags with spaces and descriptive English captions. Keep character/series name capitalization. Name each character then describe their own appearance, clothes and action; separate people spatially. Natural-language prompts should use at least two informative sentences when evidence permits. Do not invent score tags or add quality tags without knowing the exact variant; Aesthetic variants differ. This family favors illustration, not reliable photographic realism or long lettering. Preserve requested style intent without promising unsupported fidelity.',
  'z-image':'Use focused natural-language visual direction: primary subject and action first, appearance and materials next, then composition and lighting. Avoid long repetitive quality/exclusion lists, unsupported weights and contradictory style adjectives.',
- grok:'Use a coherent visual description with explicit subject, action, framing, atmosphere and desired medium. Put essential identity and scene constraints early; avoid invented provider-specific weighting syntax.',
+ grok:'Use a coherent visual brief with explicit subject, action, composition, lighting and medium. Give spatial relationships and quoted exact lettering when supplied. Describe reference roles only when actual references are attached. Prefer concise meaningful detail over repeated aesthetic adjectives. Put essential identity and scene constraints early; avoid invented provider-specific weighting syntax.',
  'gpt-image':'Describe the desired image clearly, with subject identity, action, composition and rendering style separated conceptually. For ensemble or manga, explicitly associate appearances and actions and preserve only supplied exact lettering.',
- 'nano-banana':'Use clear scene and composition descriptions, naming what each reference controls when references exist. Preserve each subject identity and wardrobe separately. Specify changes and visual relationships concretely; never claim a reference exists when none was supplied.',
+ 'nano-banana':'Describe a coherent scene in natural sentences rather than a keyword list. Include subject/action, shot framing, spatial relationships, light and surface texture. Name what each attached reference controls: identity, composition or style. Preserve each subject identity and wardrobe separately. For edits, state the intended change and what stays fixed. Use exact quoted text only when supplied. Express important exclusions as desired visual properties when possible; never claim an unattached reference exists.',
  seedream:'Use descriptive visual direction with subjects and action first, followed by composition, medium, lighting and material detail. Keep each character appearance attached to that character; preserve supplied lettering exactly.',
  minimax:'Describe a single evidenced scene with explicit subject, action, location, framing and style. Prefer useful visual facts over repeated quality terms. Do not assume unsupported sampler or weighting controls.',
  muse:'Use clear, concise scene descriptions and preserve established appearances and spatial relationships. Exact Muse variant capabilities are unverified; do not invent special syntax or sampler settings.',
