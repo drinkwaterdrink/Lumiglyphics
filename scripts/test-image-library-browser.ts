@@ -1,8 +1,7 @@
 import {chromium} from 'playwright';
 import assert from 'node:assert/strict';
-const build=await Bun.build({entrypoints:['scripts/image-library-browser-fixture.ts'],target:'browser'});assert.ok(build.success,String(build.logs));
-const bundle=await build.outputs[0]!.text();
-const server=Bun.serve({hostname:'127.0.0.1',port:0,fetch:r=>new URL(r.url).pathname==='/fixture.js'?new Response(bundle,{headers:{'Content-Type':'application/javascript'}}):new Response('<html><meta name="viewport" content="width=device-width,initial-scale=1"><script type="module" src="/fixture.js"></script></html>',{headers:{'Content-Type':'text/html'}})});
+import {browserFixtureServer} from './browser-fixture-server.ts';
+const server=await browserFixtureServer('scripts/image-library-browser-fixture.ts');
 const browser=await chromium.launch({headless:true});
 try{
  const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
@@ -49,4 +48,4 @@ try{
   }
  }
  console.log('Mobile image library, prompt safety, filters, zoom and stale-page checks passed.');
-}finally{await browser.close();server.stop(true);}
+}finally{await browser.close();await server.stop();}

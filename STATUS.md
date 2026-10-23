@@ -1,6 +1,6 @@
 # Lumiglyphics status — beta.58
 
-This matrix describes beta.58 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
+This matrix describes beta.59 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
 
 | Area | Status | Current behavior / remaining scope |
 |---|---|---|
@@ -23,3 +23,5 @@ This matrix describes beta.58 on Testing. Dated plans and evidence describe thei
 Remaining work: [current roadmap](docs/ROADMAP.md).
 
 Release evidence: [beta.58 image pipeline audit](docs/review-evidence/2026-10-22-image-pipeline-audit.md), [beta.57 Z-Image adaptation](docs/review-evidence/2026-10-22-z-image-adaptation.md), [beta.56 cast allocation](docs/review-evidence/2026-10-20-cast-allocation.md), [beta.55 queued image retries](docs/review-evidence/2026-10-20-queued-image-retries.md), [beta.54 background hold and style persistence](docs/review-evidence/2026-10-19-background-hold-style-persistence.md), [beta.53 prompt repair](docs/review-evidence/2026-10-19-prompt-repair.md), [beta.52 model output compatibility](docs/review-evidence/2026-10-19-model-output-compatibility.md), [beta.51 model-aware image prompts](docs/review-evidence/2026-10-19-model-aware-prompts.md), [beta.50 cast overlay dismissal](docs/review-evidence/2026-10-19-cast-dismissal.md), [beta.49 music preferences](docs/review-evidence/2026-10-19-music-preferences.md), [beta.48 effect preferences](docs/review-evidence/2026-10-19-effect-preferences.md), [beta.47 named-subject preferences](docs/review-evidence/2026-10-19-subject-preferences.md), [beta.46 earlier references](docs/review-evidence/2026-10-18-reference-retention.md), [beta.45 reader and inspector polish](docs/review-evidence/2026-10-18-reader-inspector-polish.md), [beta.44 settings workspace](docs/review-evidence/2026-10-18-settings-workspace.md). Neither automated checks nor source inspection certify every provider, physical device or supported host version.
+
+Beta.59: [cross-system polish audit](docs/extension-polish-audit.md), History filter-race recovery, exact archive accounting and reduced refresh/merge work. Existing feature scope is unchanged.

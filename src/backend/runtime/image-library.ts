@@ -34,14 +34,17 @@ export function mergeImageLibrary(previous:StoredTurnRecord|undefined,next:Store
  const parsed=ImageLibraryArchiveSchema.safeParse(existing);
  if(existing!==undefined&&!parsed.success)return existing;
  const entries=parsed.success?[...parsed.data.entries]:[];let full=parsed.success&&parsed.data.full;
+ // Serialize the existing archive once, not again for every candidate on every save.
+ let serializedLength=JSON.stringify(entries).length;
  const seen=new Set(entries.map(occurrence));
  const prior=parseRecord(previous),current=parseRecord(next);
  for(const candidate of [...(prior?collect(prior):[]),...(current?collect(current):[])]){
   const identity=occurrence(candidate);if(seen.has(identity))continue;
   // A legacy fallback may have lacked prompt attribution; keep the first known real completion.
   if(candidate.legacyPrevious&&entries.some(e=>e.imageId===candidate.imageId&&e.jobId===candidate.jobId))continue;
-  if(entries.length>=128||JSON.stringify(entries).length+JSON.stringify(candidate).length>480000){full=true;continue;}
-  entries.push(candidate);seen.add(identity);
+  const addedLength=JSON.stringify(candidate).length+(entries.length?1:0);
+  if(entries.length>=128||serializedLength+addedLength>480000){full=true;continue;}
+  entries.push(candidate);serializedLength+=addedLength;seen.add(identity);
  }
  return {version:1,entries,full,...(parsed.success&&parsed.data.incomplete?{incomplete:true}:{})};
 }

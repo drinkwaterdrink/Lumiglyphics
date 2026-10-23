@@ -23,6 +23,21 @@ function fixture(){
 }
 const request=(extra:any={})=>({type:'vn_image_library' as const,chatId:'chat',requestId:'r',anchor:{messageId:'m29',swipeId:0,sourceFingerprint:record('m29').plan.key.sourceFingerprint,paragraphIndex:0},range:'read' as const,versions:'active' as const,includeReplaced:false,order:'newest' as const,role:'all' as const,templateQuery:'',...extra});
 
+test('archive character ceiling includes the comma between stored entries',()=>{
+ const seed=ImageLibraryArchiveSchema.parse(mergeImageLibrary(undefined,record())).entries[0]!;
+ const entries=Array.from({length:7},(_,i)=>({...seed,imageId:`old${i}`,prompt:'x'.repeat(64000)}));
+ const next=record('m1','new');
+ next.imageRequests![0]!.prompt='';
+ const candidate=ImageLibraryArchiveSchema.parse(mergeImageLibrary(undefined,next)).entries[0]!;
+ const remaining=480000-JSON.stringify(entries).length-JSON.stringify(candidate).length;
+ next.imageRequests![0]!.prompt='x'.repeat(remaining);
+ next.imageLibrary={version:1,entries,full:false};
+ const result=ImageLibraryArchiveSchema.parse(mergeImageLibrary(undefined,next));
+ expect(JSON.stringify(result.entries).length).toBeLessThanOrEqual(480000);
+ expect(result.full).toBe(true);
+ expect(result.entries).toHaveLength(7);
+});
+
 test('archive preserves old images across replacement/replan without associating later prompts',()=>{
  const old=record();const next=record('m1','replacement');next.imageRequests![0]!.prompt='New shelves';
  const history=ImageLibraryArchiveSchema.parse(mergeImageLibrary(old,next));

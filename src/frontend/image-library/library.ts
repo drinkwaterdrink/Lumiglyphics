@@ -79,11 +79,11 @@ export class ImageLibrary{
   if(!next){this.close();return;}
   if(changed){this.expanded.clear();this.cancel();this.page=null;this.pages=['0:0'];this.pageIndex=0;if(this.opened)this.load();}
  }
- private cancel(){clearTimeout(this.timer);clearTimeout(this.searchTimer);this.pending='';}
+ private cancel(cancelSearch=true){clearTimeout(this.timer);if(cancelSearch)clearTimeout(this.searchTimer);this.pending='';}
  open(mode: 'story'|'images' = 'images', opener?:HTMLElement){if(!this.context)return;this.mode=mode;this.opener=opener??null;this.opener?.setAttribute('aria-expanded','true');this.pages=['0:0'];this.pageIndex=0;if(!this.context)return;this.opened=true;this.host.dataset.open='true';this.el<HTMLElement>('section').hidden=false;this.el<HTMLElement>('[data-library-launch]').setAttribute('aria-expanded','true');this.onOpen(true);this.load();this.el<HTMLButtonElement>('[data-library-close]').focus();}
  close(){this.opener?.setAttribute('aria-expanded','false');delete this.host.dataset.open;this.cancel();this.selected=null;this.el<HTMLImageElement>('[data-full-image]').removeAttribute('src');this.el<HTMLElement>('section').hidden=true;this.el<HTMLElement>('[data-library-launch]').setAttribute('aria-expanded','false');if(this.opened){this.opened=false;this.onOpen(false);(this.opener??this.el<HTMLButtonElement>('[data-library-launch]')).focus();}}
  private load(){
-  if(!this.context||!this.opened)return;this.cancel();this.back(false);this.page=null;this.el<HTMLElement>('[data-grid]').replaceChildren();this.status(this.mode==='story'?'Loading story history…':'Loading saved pictures…');this.el<HTMLElement>('[data-retry]').hidden=true;
+  if(!this.context||!this.opened)return;this.cancel();this.page=null;this.back(false);this.el<HTMLElement>('[data-grid]').replaceChildren();this.status(this.mode==='story'?'Loading story history…':'Loading saved pictures…');this.el<HTMLElement>('[data-retry]').hidden=true;
   const requestId=createUiId();this.pending=requestId;
   const request:ImageLibraryRequest={type:'vn_image_library',mode:this.mode,chatId:this.context.chatId,requestId,anchor:{messageId:this.context.messageId,swipeId:this.context.swipeId,sourceFingerprint:this.context.sourceFingerprint,paragraphIndex:this.cursor},range:this.el<HTMLSelectElement>('[data-range]').value as 'read'|'all',versions:this.el<HTMLSelectElement>('[data-versions]').value as 'active'|'all',includeReplaced:this.el<HTMLInputElement>('[data-replaced]').checked,order:this.el<HTMLSelectElement>('[data-order]').value as 'newest'|'oldest',role:'all',templateQuery:'',...(this.pages[this.pageIndex]!=='0:0'?{cursor:this.pages[this.pageIndex]}:{})};
   request.role=this.el<HTMLSelectElement>('[data-role]').value as 'all'|'scene'|'background'|'portrait';request.templateQuery=this.el<HTMLInputElement>('[data-template-query]').value.trim();
@@ -94,9 +94,9 @@ export class ImageLibrary{
   if(!this.opened||chatId!==this.context?.chatId||requestId!==this.pending)return;
   const parsed=ImageLibraryPageSchema.safeParse(input);if(!parsed.success){this.error(chatId,requestId,'The library response could not be read.');return;}
   if([...parsed.data.entries,...parsed.data.replies].some(e=>e.key.chatId!==chatId)){this.error(chatId,requestId,'The library response belongs to a different chat.');return;}
-  this.cancel();this.page=parsed.data;this.render();
+  this.cancel(false);this.page=parsed.data;this.render();
  }
- error(chatId:string,requestId:string|undefined,message:string){if(!this.opened||chatId!==this.context?.chatId||requestId!==this.pending)return;this.cancel();this.status(message);this.el<HTMLElement>('[data-retry]').hidden=false;this.updatePaging();}
+ error(chatId:string,requestId:string|undefined,message:string){if(!this.opened||chatId!==this.context?.chatId||requestId!==this.pending)return;this.cancel(false);this.status(message);this.el<HTMLElement>('[data-retry]').hidden=false;this.updatePaging();}
  private updatePaging(){this.el<HTMLButtonElement>('[data-page-prev]').disabled=!!this.pending||this.pageIndex===0;this.el<HTMLButtonElement>('[data-page-next]').disabled=!!this.pending||!this.page?.nextCursor;this.el<HTMLElement>('[data-page-label]').textContent=`Page ${this.pageIndex+1}`;}
  private render(){
   const grid=this.el<HTMLElement>('[data-grid]');grid.replaceChildren();grid.dataset.mode=this.mode;
