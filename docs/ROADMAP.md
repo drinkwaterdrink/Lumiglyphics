@@ -1,6 +1,6 @@
 # Remaining Lumiglyphics roadmap
 
-Current scope: beta.63 on Testing. This page summarizes unfinished work; [STATUS.md](../STATUS.md) is the delivered-feature matrix. Earlier dated plans retain their original checklists and should not be read as the current completion count.
+Current scope: beta.64 on Testing. This page summarizes unfinished work; [STATUS.md](../STATUS.md) is the delivered-feature matrix. Earlier dated plans retain their original checklists and should not be read as the current completion count.
 
 beta.58 refines image prompting and recovery: protected identity anchors, shared adaptation for new/replacement templates, useful-detail targets separate from provider limits, and primary repair controls. The [pipeline audit](image-pipeline-audit.md) records verified behavior and remaining runtime/quality limits. This maintenance increment does not complete the physical-device/provider benchmark work below.
 
@@ -61,3 +61,5 @@ Beta.61 delivers display-rule syntax diagnostics and settings heading cleanup. E
 The [phased plan](superpowers/plans/2026-10-23-cohesive-experience.md) tracks all ten user-approved suggestions: consistent picture workflow, prepared visual brief, cast injection transparency, prompt priorities, capability explanation, stable reader layout, overlay navigation, History moments, settings scope and measured quality acceptance. Beta.62 starts Phase 1 with shared selector/thumbnail states and reply totals. Cross-surface reader status integration and later phases remain unfinished. These increments continue on Testing; main was promoted to the beta.61 snapshot before this work.
 
 Beta.63 extends picture status into reader progress. Cross-overlay recovery controls and local-operation mirroring remain follow-ups; prepared visual brief work is next.
+
+Beta.64 delivers the metadata-backed prepared brief and model explanation slice of the cohesive-experience plan. Shared-style snapshot attribution and remaining reader operation/recovery integration remain pending. Cast injection transparency is the next major phase.

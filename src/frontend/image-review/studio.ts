@@ -2,6 +2,7 @@ import type {ImageRetryQueueView} from '../../shared/image-retries.js';
 import {promptProfileSummary} from "../../shared/image-prompt-profile.js";
 import {assertCapabilityOutput} from '../../shared/model-output-capabilities.js';
 import {inspectorState,pictureStateLabel,pictureStateSummary} from './inspector-model.js';
+import {PreparedBriefView,PREPARED_BRIEF_CSS,type BriefDestination} from './prepared-brief-view.js';
 import {PresentationRulesPanel} from '../settings/presentation-rules.js';
 import type {PresentationRuleCatalog} from '../../shared/presentation-rules.js';
 import { modelOutputHelp } from '../../shared/image-model-output.js';
@@ -30,6 +31,7 @@ section[data-state="planning"],section[data-state="empty"],section[data-state="z
 `;
 
 export class ImageStudio {
+  private readonly brief=new PreparedBriefView(destination=>this.navigateBrief(destination));
   private readonly host: HTMLElement;
   private readonly root: ShadowRoot;
   private preferences:PresentationRulesPanel;
@@ -240,14 +242,21 @@ export class ImageStudio {
     output.innerHTML='<p data-output-summary role="status"></p><div data-output-fields><label>Image size<select data-output-size aria-label="Image size"></select></label><label data-output-ratio-field>Aspect ratio<select data-output-ratio aria-label="Image aspect ratio"></select></label><small>Published values for this model. Changes apply to this picture only.</small></div>';
     const outputOptions=document.createElement('details');outputOptions.dataset.outputOptions='';outputOptions.innerHTML='<summary>Image size &amp; framing</summary>';outputOptions.append(output);tools.prepend(outputOptions);
     const overview=document.createElement('p');overview.dataset.pictureOverview='';overview.setAttribute('role','status');overview.setAttribute('aria-atomic','true');overview.style.cssText='font-size:12px;margin:0 0 10px;overflow-wrap:anywhere';
-    body.replaceChildren(overview,navigation,context,detail,meta,model,editor,tools,settings,notice);
+    body.replaceChildren(overview,navigation,context,detail,meta,model,this.brief.element,editor,tools,settings,notice);
     const actionHelp=document.createElement('small');actionHelp.dataset.actionHelp='';this.el('[data-studio-footer]').append(actionHelp);
-    const style=document.createElement('style');style.textContent=INSPECTOR_CSS;this.root.append(style);
+    const style=document.createElement('style');style.textContent=INSPECTOR_CSS+PREPARED_BRIEF_CSS;this.root.append(style);
   }
   private diagnosticText(): string {
     const asset = this.turn?.assets.find(entry => entry.jobId === this.selectedJob);
     const d = asset?.diagnostic;
     return d ? [`Status: ${d.status.replaceAll('_', ' ')}`, `Subject: ${d.subject ?? 'None'}`, `Template: ${d.template ?? 'Legacy / unavailable'}`, `SimTracker: ${d.tracker}`, `Story reader: ${d.planner ?? 'Unavailable'}`, d.explanation, ...(asset?.previousImage ? ['The previous picture is displayed while its replacement waits or fails.'] : [])].join('\n') : 'Diagnostics are unavailable for this older picture. Refresh the reader after updating.';
+  }
+  private navigateBrief(destination:BriefDestination):void{
+    const selector=destination==='prompt'?'[data-positive]':destination==='subject'?'[data-subject-mode]':destination==='template'?'[data-template]':this.el('[data-output-options]').hidden||this.el('[data-output-fields]').hidden?'[data-parameters]':'[data-output-size]';
+    let target=this.el<HTMLElement>(selector);
+    if(destination==='output')try{JSON.parse(this.el<HTMLTextAreaElement>('[data-parameters]').value);}catch{target=this.el('[data-parameters]');}
+    for(let parent=target.parentElement;parent;parent=parent.parentElement)if(parent instanceof HTMLDetailsElement)parent.open=true;
+    target.scrollIntoView({block:'nearest'});target.focus({preventScroll:true});
   }
   private draftKey(record:ImageRequestRecord): string {return record.state==='review' ? record.requestId : `replacement:${record.jobId}:${record.requestId}`;}
   private updateCounts(): void {
@@ -267,6 +276,12 @@ export class ImageStudio {
     try{const value:unknown=JSON.parse(this.el<HTMLTextAreaElement>('[data-parameters]').value);if(!value||typeof value!=='object'||Array.isArray(value))throw new Error();parameters=value as Record<string,unknown>;}catch{if(!error)error='Parameters must be a valid JSON object.';}
     if(!error&&profile?.output&&profile.outputManaged&&parameters)try{assertCapabilityOutput(profile.output,parameters);}catch(cause){error=cause instanceof Error?cause.message:String(cause);}
     this.renderOutputControls(parameters);
+    this.brief.render(this.planningChat||this.turn?.status==='planning'?undefined:this.record(),{prompt:this.el<HTMLTextAreaElement>('[data-positive]').value,negativePrompt:this.el<HTMLTextAreaElement>('[data-negative]').value,...(parameters?{parameters}:{})},{
+      prompt:!this.el<HTMLTextAreaElement>('[data-positive]').readOnly,
+      subject:!this.el('[data-recovery]').hidden,
+      template:!this.el<HTMLSelectElement>('[data-template]').disabled,
+      output:Boolean(this.record()),
+    });
     this.updateRewriteLabel();
     const repair=this.el<HTMLButtonElement>('[data-regenerate-prompt]');
     const needsAdaptation=Boolean(this.record())&&(total>maximum||profile?.negativeMode==='positive-only'&&Boolean(this.el<HTMLTextAreaElement>('[data-negative]').value.trim()));

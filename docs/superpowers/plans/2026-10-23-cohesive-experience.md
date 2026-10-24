@@ -42,10 +42,12 @@ Files: `src/frontend/image-review/inspector-model.ts`, its tests, `studio.ts`, a
 
 Files: new focused frontend brief projection and view modules next to `studio.ts`; shared request/metadata contracts only if necessary.
 
-- [ ] Project subjects, action, composition, style and output from the actual frozen prepared request.
-- [ ] Show absent/legacy metadata honestly. Raw edited wording remains authoritative; identify when the brief belongs to the saved preparation rather than new free-text edits.
-- [ ] Link brief fields to existing editors; preserve unrelated draft fields.
-- [ ] Explain verified capabilities versus family guidance/manual settings; verify square-only and nearest supported portrait output, positive-only routes and unknown models.
+- [x] Project subjects, action, composition, lighting, template and output from saved request evidence. Delivered beta.64; do not infer an unrecorded style preset.
+- [x] Show absent/legacy metadata honestly. Raw edited wording remains authoritative; identify when the brief belongs to the saved preparation rather than new free-text edits.
+- [x] Link brief fields to existing editors; preserve unrelated draft fields.
+- [x] Explain verified capabilities versus family guidance/manual settings; verify square-only and nearest supported portrait output, positive-only routes and unknown models.
+
+- [ ] Persist and expose a separate shared-style snapshot for future requests, if added to the compiler contract; existing requests must remain unavailable rather than borrowing current settings.
 
 ## Phase 3 — cast injection transparency
 

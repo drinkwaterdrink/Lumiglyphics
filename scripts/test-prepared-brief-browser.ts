@@ -1,0 +1,53 @@
+import {chromium} from 'playwright';
+import assert from 'node:assert/strict';
+import {browserFixtureServer} from './browser-fixture-server.ts';
+const server=await browserFixtureServer('scripts/image-review-browser-fixture.ts');
+const browser=await chromium.launch();
+try{
+ for(const width of [320,390,1280]){
+  const page=await browser.newPage({viewport:{width,height:844}});page.setDefaultTimeout(5000);
+  await page.goto(`http://127.0.0.1:${server.port}`);
+  await page.waitForFunction(()=>Boolean((window as any).imageFixture));
+  await page.evaluate(()=>{
+   const f=(window as any).imageFixture,t=structuredClone(f.turn);f.studio.setConfig(f.config);
+   t.imageRequests[0].imagePromptMetadata={...f.metadata,brief:{...f.metadata.brief,subjects:'Mira <script>inert</script>',action:'Reading a letter'}};
+   t.imageRequests[0].parameters={size:'1024x1024'};
+   t.imageRequests[0].promptProfile={version:1,family:'flux',maxCharacters:3000,source:'catalogue',format:'description',negativeMode:'positive-only',guidance:'Natural language.',output:{sizes:['768x768','1024x1024']},outputSource:'catalogue',outputManaged:true};
+   t.imageRequests[0].negativePrompt='';f.prepared=t;f.studio.setTurn(t);f.studio.open();
+  });
+  const studio=page.locator('[data-image-studio]'),brief=studio.locator('[data-prepared-brief]');
+  await brief.locator(':scope > summary').click();
+  assert.match(await brief.locator('[data-brief-rows]').innerText(),/Reading a letter/);
+  assert.match(await brief.locator('[data-brief-rows]').innerText(),/<script>inert<\/script>/);
+  assert.equal(await brief.locator('script').count(),0,'metadata is rendered as inert text');
+  await brief.getByText('Why these model settings?',{exact:true}).click();
+  assert.match(await brief.innerText(),/square outputs/);assert.match(await brief.innerText(),/positive-only/);
+  await brief.getByRole('button',{name:'Edit wording',exact:true}).click();
+  const positive=studio.getByLabel('Positive prompt',{exact:true});
+  assert.equal(await positive.evaluate(el=>(el.getRootNode() as ShadowRoot).activeElement===el),true);
+  await positive.fill('My current edited scene');
+  assert.match(await brief.locator('[data-brief-note]').innerText(),/draft differs/);
+  assert.match(await brief.locator('[data-brief-rows]').innerText(),/Reading a letter/,'metadata is not reinterpreted from arbitrary edits');
+  await brief.getByRole('button',{name:'Template',exact:true}).click();
+  assert.equal(await studio.getByLabel('Picture template',{exact:true}).evaluate(el=>(el.getRootNode() as ShadowRoot).activeElement===el),true);
+  await brief.getByRole('button',{name:'Output settings',exact:true}).click();
+  assert.ok(await studio.getByLabel('Image size',{exact:true}).isVisible());
+  assert.equal(await positive.inputValue(),'My current edited scene');
+  assert.deepEqual(await page.evaluate(()=>(window as any).imageFixture.actions),[],'brief browsing and navigation send no requests');
+  const parameters=studio.getByLabel('Parameters (JSON)',{exact:true});
+  await parameters.evaluate(el=>{(el as HTMLTextAreaElement).value='{broken';el.dispatchEvent(new Event('input',{bubbles:true}));});
+  await brief.getByRole('button',{name:'Output settings',exact:true}).click();
+  assert.equal(await parameters.evaluate(el=>(el.getRootNode() as ShadowRoot).activeElement===el),true,'invalid JSON navigation focuses the field that needs repair');
+  await parameters.fill('{"size":"1024x1024"}');
+  await brief.scrollIntoViewIfNeeded();
+  assert.equal(await studio.locator('section').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+  await page.screenshot({path:`.cache/browser-fixtures/prepared-brief-${width}.png`});
+  await page.evaluate(()=>{const f=(window as any).imageFixture;const t=structuredClone(f.prepared);delete t.imageRequests[0].imagePromptMetadata;delete t.imageRequests[0].promptProfile;f.studio.setTurn(t);});
+  assert.match(await brief.locator('[data-brief-note]').innerText(),/not saved/);
+  assert.equal(await brief.locator('dt').count(),0,'older requests do not borrow current settings as evidence');
+  await page.evaluate(()=>(window as any).imageFixture.studio.setPlanning('chat',true));
+  assert.equal(await brief.isVisible(),false,'planning a reply cannot display stale brief notes');
+  await page.close();
+ }
+ console.log('Prepared brief: provenance, draft warning, inert metadata, capability explanations and non-mutating navigation passed at 320/390/1280px.');
+}finally{await browser.close();await server.stop();}

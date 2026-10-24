@@ -2,11 +2,13 @@ import {execFileSync} from 'node:child_process';
 import {mkdirSync,readFileSync} from 'node:fs';
 import {createServer} from 'node:http';
 import {basename} from 'node:path';
+import {randomUUID} from 'node:crypto';
 
 /** Node owns Playwright and HTTP; Bun remains the project's browser bundler. */
 export async function browserFixtureServer(entrypoint:string){
  mkdirSync('.cache/browser-fixtures',{recursive:true});
- const output=`.cache/browser-fixtures/${basename(entrypoint,'.ts')}.js`;
+ // Parallel suites may build the same fixture. Never read another build's partial file.
+ const output=`.cache/browser-fixtures/${basename(entrypoint,'.ts')}-${randomUUID()}.js`;
  execFileSync('bun',['build',entrypoint,'--target','browser','--outfile',output],{windowsHide:true,stdio:'pipe',timeout:60000});
  const bundle=readFileSync(output,'utf8');
  const server=createServer((request,response)=>{
