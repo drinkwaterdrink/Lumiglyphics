@@ -1,47 +1,11 @@
 import { TEXT_EFFECT_IDS, isTextEffectId } from "../../shared/text-effects.js";
 
-export type CustomRegexRule = {
-  pattern: RegExp;
-  replacement: string;
-};
+import {compileDisplayRules,type CustomRegexRule} from '../../shared/display-rules.js';
+export type {CustomRegexRule} from '../../shared/display-rules.js';
 
-/**
- * Parse custom regex rules from user settings.
- * Supports:
- *   /pattern/flags => replacement
- *   pattern => replacement
- */
+/** Invalid rows are omitted; settings exposes the same parser's diagnostics. */
 export function parseCustomRegexRules(input: string | undefined): CustomRegexRule[] {
-  if (!input) return [];
-  const rules: CustomRegexRule[] = [];
-  for (const line of input.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("//")) continue;
-
-    const regexMatch = trimmed.match(/^\/(.+)\/([a-z]*)\s*=>\s*(.*)$/);
-    if (regexMatch) {
-      try {
-        const pattern = new RegExp(regexMatch[1]!, regexMatch[2] || "g");
-        rules.push({ pattern, replacement: regexMatch[3] ?? "" });
-        continue;
-      } catch {
-        // Skip invalid regex
-      }
-    }
-
-    const simpleMatch = trimmed.split("=>");
-    if (simpleMatch.length >= 2) {
-      try {
-        const rawPattern = simpleMatch[0]!.trim();
-        const replacement = simpleMatch.slice(1).join("=>").trim();
-        const pattern = new RegExp(rawPattern, "g");
-        rules.push({ pattern, replacement });
-      } catch {
-        // Skip invalid regex
-      }
-    }
-  }
-  return rules;
+  return compileDisplayRules(input).rules;
 }
 
 /**

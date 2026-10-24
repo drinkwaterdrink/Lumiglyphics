@@ -1,6 +1,6 @@
 # Remaining Lumiglyphics roadmap
 
-Current scope: beta.60 on Testing. This page summarizes unfinished work; [STATUS.md](../STATUS.md) is the delivered-feature matrix. Earlier dated plans retain their original checklists and should not be read as the current completion count.
+Current scope: beta.61 on Testing. This page summarizes unfinished work; [STATUS.md](../STATUS.md) is the delivered-feature matrix. Earlier dated plans retain their original checklists and should not be read as the current completion count.
 
 beta.58 refines image prompting and recovery: protected identity anchors, shared adaptation for new/replacement templates, useful-detail targets separate from provider limits, and primary repair controls. The [pipeline audit](image-pipeline-audit.md) records verified behavior and remaining runtime/quality limits. This maintenance increment does not complete the physical-device/provider benchmark work below.
 
@@ -53,3 +53,5 @@ beta.56 completes the first E2 allocation increment for opt-in Cast view: one co
 Beta.59 maintenance audit fixes History filter races and archive sizing, avoids redundant refresh rendering, and stabilizes three browser test runners. See [cross-system polish audit](extension-polish-audit.md) for findings and prioritized follow-ups; roadmap feature completion is unchanged.
 
 Beta.60 refines selected-picture operation feedback and edited-preview recovery. Broader unified operation feedback, display-regex resilience, settings decomposition and device/provider acceptance remain follow-ups.
+
+Beta.61 delivers display-rule syntax diagnostics and settings heading cleanup. Execution-time isolation of potentially slow regular expressions is still pending; valid syntax does not establish execution safety.

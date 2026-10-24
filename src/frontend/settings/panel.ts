@@ -1,4 +1,5 @@
 import {resolveImagePromptProfile,promptProfileSummary} from "../../shared/image-prompt-profile.js";
+import {compileDisplayRules} from '../../shared/display-rules.js';
 import { createUiId } from "../request-id.js";
 import {SETTINGS_PAGES,SETTINGS_FIELD_PAGES,settingsPage,type SettingsPageId} from "./routes.js";
 import {WORKSPACE_CSS} from "./workspace-css.js";
@@ -933,6 +934,9 @@ export class VisualNovelSettingsPanel {
       }
       const title=pane.querySelector<HTMLElement>('[data-pane-head] h2'),description=pane.querySelector<HTMLElement>('[data-pane-head] p');
       if(!pane.hidden){if(title)title.textContent=next.title;if(description)description.textContent=next.description;}
+      for(const heading of pane.querySelectorAll<HTMLElement>('[data-workspace-page] > [data-group] > [data-group-head] h3')){
+        heading.hidden=heading.textContent?.trim().toLocaleLowerCase()===next.title.trim().toLocaleLowerCase();
+      }
     }
     if(next.id==='characters')this.castArtPanel.ensureLoaded();
     if(next.id==='rules')this.presentationRules.ensureLoaded();
@@ -1752,6 +1756,21 @@ export class VisualNovelSettingsPanel {
     else if (this.advancedValue(name) === this.synced.get(name)) this.drafts.delete(name);
     else this.drafts.add(name);
     this.refreshStatus();
+    if(name==='displayRegexRules')this.refreshDisplayRules();
+  }
+
+  private refreshDisplayRules(){
+    const field=this.control<HTMLTextAreaElement>('displayRegexRules');
+    const result=compileDisplayRules(field.value);
+    let feedback=this.root.querySelector<HTMLElement>('[data-display-rules-feedback]');
+    if(!feedback){
+      feedback=document.createElement('small');feedback.dataset.displayRulesFeedback='';feedback.id='vn-display-rules-feedback';feedback.setAttribute('role','status');feedback.setAttribute('aria-atomic','true');
+      field.insertAdjacentElement('afterend',feedback);field.setAttribute('aria-describedby',feedback.id);
+    }
+    field.setAttribute('aria-invalid',String(result.issues.length>0));
+    feedback.style.whiteSpace='pre-line';
+    feedback.textContent=result.issues.length?`${result.rules.length} valid rule${result.rules.length===1?'':'s'}. Fix ${result.issues.length} row${result.issues.length===1?'':'s'} before applying.\n${result.issues.slice(0,5).map(issue=>`Line ${issue.line}: ${issue.message}`).join('\n')}${result.issues.length>5?'\nMore invalid rows follow.':''}`:result.rules.length?`${result.rules.length} rule${result.rules.length===1?'':'s'} ready to apply. Syntax checked; patterns have not been run.`:'No custom rules. Dialogue keeps its normal formatting.';
+    return result;
   }
 
   private currentDraftKeys():AdvancedKey[]{return [...this.drafts].filter(key=>SETTINGS_FIELD_PAGES[key]===this.page);}
@@ -1838,6 +1857,16 @@ export class VisualNovelSettingsPanel {
   }
 
   private readAdvanced(keys:readonly AdvancedKey[]=ADVANCED_KEYS): Partial<VisualNovelConfig> {
+    if(keys.includes('displayRegexRules')){
+      const result=this.refreshDisplayRules();
+      if(result.issues.length){
+        const field=this.control<HTMLTextAreaElement>('displayRegexRules'),line=result.issues[0]!.line;
+        this.reveal(field);field.focus({preventScroll:true});
+        const rows=field.value.split('\n'),start=rows.slice(0,line-1).reduce((sum,row)=>sum+row.length+1,0);
+        field.setSelectionRange(start,start+(rows[line-1]?.length??0));
+        throw new Error(`Display regex rules: fix line ${line} before applying. Your draft is kept.`);
+      }
+    }
     return {
       imageModel: this.control<HTMLInputElement>("imageModel").value.trim(),
       imageConcurrency: clamp(Math.round(Number(this.control<HTMLInputElement>("imageConcurrency").value)), 1, 6, DEFAULT_CONFIG.imageConcurrency),
@@ -1947,6 +1976,7 @@ export class VisualNovelSettingsPanel {
     set("customPlannerInstructions", () => { this.control<HTMLTextAreaElement>("customPlannerInstructions").value = config.customPlannerInstructions; });
     set("ignoredTags", () => { this.control<HTMLInputElement>("ignoredTags").value = config.ignoredTags; });
     set("displayRegexRules", () => { this.control<HTMLTextAreaElement>("displayRegexRules").value = config.displayRegexRules; });
+    this.refreshDisplayRules();
     set("customCss", () => { this.control<HTMLTextAreaElement>("customCss").value = config.customCss; });
     this.promptPresets = config.promptPresets.map((preset) => ({ ...preset }));
     this.renderPromptPresetOptions(this.control<HTMLInputElement>("selectedSharedStyleId").value);

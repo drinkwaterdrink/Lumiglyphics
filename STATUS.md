@@ -1,6 +1,6 @@
 # Lumiglyphics status — beta.58
 
-This matrix describes beta.60 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
+This matrix describes beta.61 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
 
 | Area | Status | Current behavior / remaining scope |
 |---|---|---|
@@ -27,3 +27,5 @@ Release evidence: [beta.58 image pipeline audit](docs/review-evidence/2026-10-22
 Beta.59: [cross-system polish audit](docs/extension-polish-audit.md), History filter-race recovery, exact archive accounting and reduced refresh/merge work. Existing feature scope is unchanged.
 
 Beta.60: prompt-review operation states, visible edited-preview actions and saved-draft reset; queued/running retries no longer masquerade as failures. See [verification](docs/review-evidence/2026-10-23-image-workflow.md).
+
+Beta.61: display-rule syntax feedback with line selection, invalid-draft save protection and duplicate settings heading cleanup. [Evidence and limits](docs/review-evidence/2026-10-23-display-rules.md).

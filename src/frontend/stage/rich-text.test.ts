@@ -10,6 +10,10 @@ test("parses custom regex rules with flags", () => {
   assert.equal(rules[0]!.replacement, '<em class="vn-transmission">$1</em>');
 });
 
+test('invalid literal flags do not compile a fallback pattern',()=>{
+  assert.equal(parseCustomRegexRules('/foo/gg => bar').length,0);
+});
+
 test("renders markdown bold and italic safely", () => {
   const result = formatDialogueText("Hello **bold** and *italic* world!");
   assert.match(result, /<strong>bold<\/strong>/);
