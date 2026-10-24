@@ -1,3 +1,4 @@
+import { ReaderWorkspace } from "./reader-workspace.js";
 import {presentEffect} from '../host/effect-presentation.js';
 import {CastStage} from "./cast-stage.js";
 import {PreparationPreview} from './preparation-preview.js';
@@ -457,6 +458,7 @@ export class VnStage {
   private readonly speaker: HTMLElement;
   private readonly dialogueText: HTMLElement;
   private dossiers!: StageDossiers;
+  readonly workspace: ReaderWorkspace;
   private readonly progress: HTMLElement;
   private readonly readingState: HTMLElement;
   private readonly interactionHint: HTMLElement;
@@ -584,6 +586,8 @@ export class VnStage {
     options.mount.append(this.host);
 
     this.root = queryRequired(this.themeRoot, "[data-vn-root]");
+    this.root.dataset.vnReaderFirst = "true";
+    this.workspace = new ReaderWorkspace(shell, themeHost, () => { this.toggleSkip(false); this.toggleAutoPlay(false); }, () => this.focus());
     this.preparationPreview=new PreparationPreview(this.root);
     this.applyThemePreset(options.themePreset ?? "lumiverse");
     this.scene = queryRequired(this.themeRoot, "[data-vn-scene]");
@@ -644,6 +648,7 @@ export class VnStage {
       apply:text=>this.storeReplyDraft(text),
       focus:()=>{if(selectVnStageView(this.state).showStandardInput)this.input.focus();else{this.setActivity('Action saved for Your turn.','success');this.focus();}}
     },open=>{if(open)this.panelMount.dataset.vnDocumentOpen='true';else delete this.panelMount.dataset.vnDocumentOpen;});
+    this.dossiers.connectWorkspace(this.workspace, shell);
     this.bindEvents();
     this.updateControlButtons();
     this.render(null);
@@ -673,6 +678,7 @@ export class VnStage {
 
   /** Freeze the reader before hiding it; reopening loads the saved cursor. */
   suspend(): void {
+    this.workspace.suspend();
     this.toggleAutoPlay(false);
     this.toggleSkip(false);
     this.clearAllTimers();
@@ -925,6 +931,7 @@ export class VnStage {
   setCastTurn(turn:TurnView|null,index:number):AssetView|null {return this.castStage.set(turn,index);}
 
   reset(): void {
+    this.workspace.suspend();
     this.preparationPreview.clear();
     this.moveDraftEpoch++;this.closeMoveDraft();
     if(this.isBacklogOpen)this.closeBacklog();
@@ -1115,6 +1122,7 @@ export class VnStage {
   }
 
   destroy(): void {
+    this.workspace.destroy();
     this.castStage.destroy();
     this.dossiers.destroy();
     this.dialogueSheet?.destroy();
@@ -1665,7 +1673,7 @@ export class VnStage {
 
     this.root.addEventListener("wheel", (event) => {
       if (this.root.dataset.vnPageFocus === "true" || this.dialogueSheet?.isHidden() || (this.root.dataset.vnAdjustableSheet === "true" && event.target instanceof Element && event.target.closest("[data-vn-dialogue]"))) return;
-      if (this.isBacklogOpen || this.dossiers.isOpen()) return;
+      if (this.workspace.isOpen() || this.isBacklogOpen || this.dossiers.isOpen()) return;
       if (event.deltaY < -30) {
         this.openBacklog();
       }
@@ -1685,7 +1693,7 @@ export class VnStage {
       const dragged = sheetGesture?.moved;
       sheetGesture = null;
       if (this.root.dataset.vnPageFocus === "true" || this.dialogueSheet?.isHidden()) return;
-      if (this.isBacklogOpen || this.dossiers.isOpen()) return;
+      if (this.workspace.isOpen() || this.isBacklogOpen || this.dossiers.isOpen()) return;
       if (event.target instanceof Element && event.target.closest("[data-vn-dialogue]")) {
         const selection = window.getSelection();
         if (dragged || (selection && !selection.isCollapsed)) return;
@@ -1695,7 +1703,7 @@ export class VnStage {
 
     this.root.addEventListener("keydown", (event) => {
       if (this.root.dataset.vnPageFocus === "true" || this.dialogueSheet?.isHidden()) return;
-      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || this.workspace.isOpen()) return;
       if (this.isBacklogOpen) {
         if (event.key === "Escape") {
           event.preventDefault();
@@ -1780,7 +1788,7 @@ export class VnStage {
   }
 
   previous(): void {
-    if (this.destroyed || this.isBacklogOpen || this.dossiers.isOpen() || !selectVnStageView(this.state).canGoBack) return;
+    if (this.destroyed || this.workspace.isOpen() || this.isBacklogOpen || this.dossiers.isOpen() || !selectVnStageView(this.state).canGoBack) return;
     this.isSkipping = false;
     this.isAutoPlay = false;
     this.lastSkipStop = null;
@@ -1802,7 +1810,7 @@ export class VnStage {
 
   private advance(): void {
     if (this.isSuspended) return;
-    if (this.isBacklogOpen || this.dossiers.isOpen()) return;
+    if (this.workspace.isOpen() || this.isBacklogOpen || this.dossiers.isOpen()) return;
     if (this.lastSkipStop !== null) {
       this.lastSkipStop = null;
       this.renderReadingState();
@@ -1907,6 +1915,7 @@ export class VnStage {
     );
     const speaker = view.paragraph?.speaker ?? "";
     if (this.speaker.textContent !== speaker) this.speaker.textContent = speaker;
+    this.workspace.setCaption(speaker ? `${speaker} · ${view.paragraphNumber} / ${view.paragraphCount}` : view.paragraph ? `Reading · ${view.paragraphNumber} / ${view.paragraphCount}` : "Visual novel");
     this.speaker.title = speaker;
     this.speaker.hidden = !view.paragraph?.speaker;
     const progress = view.paragraph
@@ -2045,7 +2054,7 @@ export class VnStage {
     } else if (this.isAutoPlay) {
       const view = selectVnStageView(this.state);
       if (view.canAdvance) {
-        if (this.dossiers.isOpen() || this.isAutoAdvanceHeld?.()) {
+        if (this.workspace.isOpen() || this.dossiers.isOpen() || this.isAutoAdvanceHeld?.()) {
           this.resetAutoRing();
           return;
         }
@@ -2065,7 +2074,7 @@ export class VnStage {
     if (this.destroyed || !this.isAutoPlay || this.isTyping || this.isSkipping) return;
     const view = selectVnStageView(this.state);
     if (!view.canAdvance) return;
-    if (this.dossiers.isOpen() || this.isAutoAdvanceHeld?.()) {
+    if (this.workspace.isOpen() || this.dossiers.isOpen() || this.isAutoAdvanceHeld?.()) {
       this.clearAutoPlayTimer();
       return;
     }

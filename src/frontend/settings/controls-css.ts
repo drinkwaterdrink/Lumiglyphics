@@ -1,19 +1,20 @@
 /**
  * Shared look for Cue's settings surfaces. The main settings panel and the
  * speech section live in separate shadow roots, so both inline this string to
- * stay visually identical. Host tokens (`--lumiverse-*`) win; the fallbacks
+ * stay visually identical. Docked reader shell tokens win; native host tokens (`--lumiverse-*`)
+ * remain the fallback outside the reader. The final fallbacks
  * are a dark theme.
  */
 export const SETTINGS_TOKENS_CSS = `
 :host {
-  --set-accent: var(--lumiverse-primary, #a986ff);
-  --set-accent-text: var(--lumiverse-primary-contrast, #121018);
-  --set-text: var(--lumiverse-text, #f5f5f7);
-  --set-muted: var(--lumiverse-text-muted, rgba(255,255,255,.7));
-  --set-border: var(--lumiverse-border, rgba(255,255,255,.16));
-  --set-surface: var(--lumiverse-card-bg, rgba(255,255,255,.035));
-  --set-field: var(--lumiverse-bg-elevated, #171822);
-  --set-hover: var(--lumiverse-fill-medium, rgba(255,255,255,.07));
+  --set-accent: var(--vn-shell-accent, var(--lumiverse-primary, #a986ff));
+  --set-accent-text: var(--vn-shell-accent-contrast, var(--lumiverse-primary-contrast, #121018));
+  --set-text: var(--vn-shell-text, var(--lumiverse-text, #f5f5f7));
+  --set-muted: var(--vn-shell-muted, var(--lumiverse-text-muted, rgba(255,255,255,.7)));
+  --set-border: var(--vn-shell-border, var(--lumiverse-border, rgba(255,255,255,.16)));
+  --set-surface: var(--vn-shell-panel, var(--lumiverse-card-bg, rgba(255,255,255,.035)));
+  --set-field: var(--vn-shell-field, var(--lumiverse-bg-elevated, #171822));
+  --set-hover: var(--vn-shell-button, var(--lumiverse-fill-medium, rgba(255,255,255,.07)));
   --set-success: var(--lumiverse-success, #8ce8b0);
   --set-warning: var(--lumiverse-warning, #ffd08a);
   --set-danger: var(--lumiverse-danger, #ff8ca0);
@@ -24,7 +25,7 @@ export const SETTINGS_TOKENS_CSS = `
   --set-control: 2.75rem;
   display: block;
   color: var(--set-text);
-  font: 15px/1.5 var(--lumiverse-font-family, system-ui, sans-serif);
+  font: 15px/1.5 var(--vn-shell-family, var(--lumiverse-font-family, system-ui, sans-serif));
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }

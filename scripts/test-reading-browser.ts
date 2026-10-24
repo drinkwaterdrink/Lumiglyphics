@@ -219,9 +219,9 @@ try {
       assert.ok(rects.shell && rects.root, `${label}: stage rendered`);
       assert.ok(Math.abs(px(rects.shell!.right) - w) <= 1, `${label}: stage reaches the right edge (right=${px(rects.shell!.right)})`);
       assert.ok(Math.abs(px(rects.shell!.bottom) - h) <= 1, `${label}: stage reaches the bottom edge (bottom=${px(rects.shell!.bottom)})`);
-      assert.ok(Math.abs(px(rects.root!.right) - w) <= 1 && Math.abs(px(rects.root!.bottom) - h) <= 1, `${label}: theme root fills the stage`);
+      assert.ok(rects.root!.right <= w + 1 && rects.root!.bottom <= h + 1 && rects.root!.width > w * .8 && rects.root!.height > h * .75, `${label}: reader fits inside the protected navigation shell`);
       const center = px((rects.dialogue!.x + rects.dialogue!.right) / 2);
-      assert.ok(Math.abs(center - w / 2) <= 2, `${label}: dialogue is centered on the screen (center=${center})`);
+      assert.ok(Math.abs(center - (rects.root!.x + rects.root!.right) / 2) <= 2, `${label}: dialogue is centered within the reader (center=${center})`);
       if (w === 1920 && h === 1080 && scale === 0.9) await p.screenshot({ path: ".cache/ux-redesign/reading-1080p-uiscale-0.9.png" });
       await ctx.close();
     }

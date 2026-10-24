@@ -10,7 +10,7 @@ const browser=await chromium.launch({headless:true});
 try{for(const viewport of [{width:360,height:800},{width:844,height:390}]){
  const page=await browser.newPage({viewport,reducedMotion:'reduce'});await page.goto(`http://127.0.0.1:${port}/`);
  await page.evaluate(()=>{const f=(window as any).imageFixture;f.studio.setConfig(f.config);f.recovery=structuredClone(f.turn);f.recovery.assets[0].status='cancelled';f.recovery.imageRequests[0].state='prepared';f.recovery.assets.push({jobId:'keep',cueId:'keep',paragraphIndex:0,status:'browser_ready',imageId:'saved',imageUrl:'/saved'});f.studio.setTurn(f.recovery);});
- const studio=page.locator('[data-image-studio]');await studio.getByRole('button',{name:/^Image prompts/}).click();await studio.getByLabel('Picture',{exact:true}).selectOption('job',{force:true});
+ const studio=page.locator('[data-image-studio]');await page.locator('[data-vn-navigation] [data-reader-destination="artwork"]').click();await studio.getByLabel('Picture',{exact:true}).selectOption('job',{force:true});
  const retry=studio.locator('[data-retry-image]');assert.equal(await retry.isEnabled(),true);
  assert.match(await studio.locator('[data-status]').innerText(),/cancelled/);
  await retry.evaluate((e:any)=>{e.click();e.click();});let actions=await page.evaluate(()=>(window as any).imageFixture.actions);

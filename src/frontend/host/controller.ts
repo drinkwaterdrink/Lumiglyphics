@@ -331,6 +331,16 @@ export function computeAssetProgress(turn: TurnView | null, queue?:ImageRetryQue
   return null;
 }
 
+/** Actionable reviews only: local preparation/rewrite is work, not approval. */
+export function computeReviewAttention(turn:TurnView|null,local?:LocalPictureOperations|null):number {
+  if(!turn)return 0;
+  const operations=scopedPictureOperations(turn,local);
+  return turn.assets.filter(asset=>{
+    const operation=operations.get(asset.jobId)?.kind;
+    return inspectorState({asset,requestState:turn.imageRequests?.filter(record=>record.jobId===asset.jobId).at(-1)?.state,preparing:operation==='prepare',operation:operation==='rewrite'||operation==='template'?operation:undefined}).kind==='held';
+  }).length;
+}
+
 /**
  * The subset of VnStage the controller pushes saved-config presentation onto.
  * Keeping this narrow lets tests exercise the live stage calls without a DOM.
@@ -661,16 +671,21 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const panels = new PanelDock(stage.panelMount);
   const imageLibrary=new ImageLibrary(stage.panelMount,request=>ctx.sendToBackend(request),open=>{
     imageLibraryOpen=open;
-    if(open)stage.panelMount.dataset.vnHistoryOpen='true';else delete stage.panelMount.dataset.vnHistoryOpen;
+    if(open){stage.panelMount.dataset.vnHistoryOpen='true';stage.workspace.open('history');}else{delete stage.panelMount.dataset.vnHistoryOpen;stage.workspace.toolClosed('history');}
     if(open){stage.toggleSkip(false);stage.holdAutoPlay();}else if(active)stage.checkAutoPlay();
   });
   imageLibrary.useHistoryEntry();
   stage.historyOpener=opener=>imageLibrary.open('story',opener);
   const imageStudio = new ImageStudio(stage.panelMount, (request) => ctx.sendToBackend(request), (enabled) => {
     ctx.sendToBackend({ type: "vn_set_config", patch: { reviewImages: enabled }, chatId: chatId() ?? "" });
-  },open=>{imageStudioOpen=open;if(open){stage.toggleSkip(false);stage.holdAutoPlay();}else if(active)stage.checkAutoPlay();},operations=>{
+  },open=>{imageStudioOpen=open;if(open){stage.workspace.open('artwork');stage.toggleSkip(false);stage.holdAutoPlay();}else{stage.workspace.toolClosed('artwork');if(active)stage.checkAutoPlay();}},operations=>{
     localPictureOperations=operations;stage.setAssetProgress(computeAssetProgress(turn,retryQueue,operations));
+    stage.workspace.setAttention(computeReviewAttention(turn,operations));
   });
+  stage.workspace.register('artwork',{element:imageStudio.getElement(),hideAtHome:true,enter:()=>imageStudio.open(),leave:()=>imageStudio.close()});
+  stage.workspace.register('history',{element:imageLibrary.getElement(),hideAtHome:true,enter:()=>{if(!imageLibrary.isOpen())imageLibrary.openWorkspace();},leave:()=>imageLibrary.close(),back:()=>imageLibrary.backWithinWorkspace()});
+  imageLibrary.setDocked();
+  imageStudio.setLibraryOpener(()=>imageLibrary.open('images'));
   const panelRequests = new Map<string, { resolve: (template: string) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   panels.onResolveTemplate = (template) => new Promise((resolve, reject) => {
     const requestId = createUiId();
@@ -704,7 +719,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     keywords: ["visual novel", "cyoa", "images", "custom css"],
     position: "after-display"
   });
-  const settingsPanel: (VisualNovelSettingsPanel & SettingsFeedbackTarget) | null = settingsHandle ? new VisualNovelSettingsPanel({
+  const settingsPanel: VisualNovelSettingsPanel & SettingsFeedbackTarget = new VisualNovelSettingsPanel({
     getChatId:()=>chatId(),
     onPresentationRules:request=>ctx.sendToBackend(request),
     onCastGallery:(chatId,requestId,offset)=>ctx.sendToBackend({type:'vn_cast_gallery',chatId,requestId,offset}),
@@ -712,7 +727,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     onCastArt:(chatId,requestId,action)=>ctx.sendToBackend({type:'vn_cast_art',version:1,chatId,requestId,...action}),
     onLocationArt:(chatId,requestId,action)=>ctx.sendToBackend({type:'vn_location_art',version:1,chatId,requestId,...action}),
     onRefreshContextSources:(chatId,requestId)=>ctx.sendToBackend({type:"vn_get_context_sources",chatId,requestId}),
-    mount: settingsHandle.root,
+    mount: settingsHandle?.root ?? stage.panelMount,
     onOpenPreview: () => activate(),
     onRefreshConnections: () => requestConnectionCatalog(),
     onSaveSystemOneKey: (key) => ctx.sendToBackend({ type: "vn_set_system_one_key", key }),
@@ -779,20 +794,23 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       }
       ctx.sendToBackend({ type: "vn_set_config", patch, chatId: chatId(), requestId });
     }
-  }) : null;
+  });
   // Speech settings render inside the panel's Voice section (own shadow root,
   // own save path). Profile/voice listing happens only on explicit button
   // presses inside it (metadata calls, no synthesis).
   const speechTransport = createSpeechTransport();
-  const speechSettings = settingsHandle ? new SpeechSettingsSection({
-    mount: settingsPanel?.voiceMount() ?? settingsHandle.root,
+  stage.workspace.register('settings',{element:settingsPanel.getElement(),hideAtHome:!settingsHandle,enter:()=>{settingsPanel.getElement().dataset.vnWorkspaceTool='settings';},leave:()=>{settingsPanel.leaveWorkspace();delete settingsPanel.getElement().dataset.vnWorkspaceTool;},back:()=>settingsPanel.backWithinWorkspace()});
+  delete settingsPanel.getElement().dataset.vnWorkspaceTool;
+  stage.workspace.onSettingsPage=page=>settingsPanel.openPage(page,{focus:true});
+  const speechSettings = new SpeechSettingsSection({
+    mount: settingsPanel.voiceMount(),
     onSave: (speechPatch) => {
       ctx.sendToBackend({ type: "vn_set_config", patch: { speech: speechPatch }, chatId: chatId() });
     },
     listProfiles: () => speechTransport.listProfiles(new AbortController().signal),
     listVoices: (connectionId) => speechTransport.listVoices(connectionId, new AbortController().signal),
     getChatId: () => chatId(),
-  }) : null;
+  });
 
   function chatId(): string {
     return ctx.getActiveChat().chatId ?? "";
@@ -996,6 +1014,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     imageStudio.setCursor(stage.getState().currentParagraphIndex);
       imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
     stage.setAssetProgress(computeAssetProgress(next,retryQueue,localPictureOperations));
+    stage.workspace.setAttention(computeReviewAttention(next,localPictureOperations));
     const decision = decideTurnApplication(loadedReadingCursor.turn, next, stage.getState().currentParagraphIndex, active, stage.getState().paragraphs.length > 0);
     vnDebug("turn decision", decision.kind, {
       message: next.messageId,
@@ -1040,6 +1059,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     stage.loadTurn({ ...stageTurnInput(next, mode, preserveImage, configRef.current?.effectIntensity ?? "full"), initialParagraphIndex: cursor });
     // Loading a turn resets store progress. Restore it after the new stage exists.
     stage.setAssetProgress(computeAssetProgress(next,retryQueue,localPictureOperations));
+    stage.workspace.setAttention(computeReviewAttention(next,localPictureOperations));
     if (revised) stage.restoreReplyDraft(draft);
     loadedReadingCursor.load(next);
     panels.setCursor(cursor);
@@ -1205,18 +1225,21 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
       settingsPanel?.setImagePreviewMetadata(turn?.imageRequests?.at(-1)?.imagePromptMetadata);
       stage.setAssetProgress(computeAssetProgress(turn,retryQueue,localPictureOperations));
+      stage.workspace.setAttention(computeReviewAttention(turn,localPictureOperations));
       const cursor = stage.getState().currentParagraphIndex;
       if (message.asset.paragraphIndex <= cursor) void syncImageForParagraph(cursor);
       return;
     }
     if(type==="vn_image_retry_queue"&&message.type==="vn_image_retry_queue"){
       if(!turn||message.queue.chatId!==turn.chatId||message.queue.messageId!==turn.messageId||message.queue.sourceFingerprint!==turn.sourceFingerprint||message.queue.swipeId!==turn.swipeId||message.queue.revision!==turn.revision)return;
-      retryQueue=message.queue;imageStudio.setRetryQueue(message.queue);stage.setAssetProgress(computeAssetProgress(turn,retryQueue,localPictureOperations));return;
+      retryQueue=message.queue;imageStudio.setRetryQueue(message.queue);stage.setAssetProgress(computeAssetProgress(turn,retryQueue,localPictureOperations));
+      stage.workspace.setAttention(computeReviewAttention(turn,localPictureOperations));return;
     }
     if (type === "vn_image_requests" && message.type === "vn_image_requests") {
       if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId || turn.sourceFingerprint !== message.sourceFingerprint) return;
       turn = { ...turn, imageRequests: message.requests };
       stage.setAssetProgress(computeAssetProgress(turn,retryQueue,localPictureOperations));
+      stage.workspace.setAttention(computeReviewAttention(turn,localPictureOperations));
       imageStudio.setTurn(turn);
       imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
       settingsPanel?.setImagePreviewMetadata(turn?.imageRequests?.at(-1)?.imagePromptMetadata);
@@ -1256,7 +1279,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       if (message.chatId !== chatId()) return;
       if (message.active) {
         stage.setError(null);
-        stage.setAssetProgress(null);
+        stage.setAssetProgress(null);stage.workspace.setAttention(0);
         if (!stage.isReadingUserParagraph()) {
           stage.setPhase("waiting-for-response");
         }
@@ -1362,6 +1385,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const cleanup = (): void => {
     if (destroyed) return;
     deactivate();
+    stage.workspace.destroy();
     destroyed = true;
     unsubBackend();
     unsubAction();

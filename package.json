@@ -59,7 +59,9 @@
     "test:template-preferences": "bun run ./scripts/test-presentation-rules-browser.ts",
     "test:cast": "node --experimental-strip-types ./scripts/test-cast-browser.ts",
     "test:cast-setup": "bun run ./scripts/test-cast-setup-browser.ts",
-    "test:model-prompts": "node --experimental-strip-types ./scripts/test-model-prompts-browser.ts"
+    "test:model-prompts": "node --experimental-strip-types ./scripts/test-model-prompts-browser.ts",
+    "test:reader-first": "bun run ./scripts/test-reader-first-browser.ts",
+    "serve:reader-first": "bun run ./scripts/serve-reader-first.ts"
   },
   "dependencies": {
     "yaml": "2.9.1",

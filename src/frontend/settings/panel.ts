@@ -492,7 +492,7 @@ export class VisualNovelSettingsPanel {
     this.host.setAttribute("data-vn-settings", "");
     this.root = this.host.attachShadow({ mode: "open" });
     const style = document.createElement("style");
-    style.textContent = PANEL_CSS + WORKSPACE_CSS;
+    style.textContent = PANEL_CSS + WORKSPACE_CSS + READER_SETTINGS_CSS;
     const body = document.createElement("div");
     body.innerHTML = this.template();
     this.root.append(style, ...Array.from(body.childNodes));
@@ -886,6 +886,15 @@ export class VisualNovelSettingsPanel {
    * `remember: false`. `focus: true` moves keyboard focus to the section's tab.
    */
   openSection(id:SettingsSectionId|string,options:{focus?:boolean;remember?:boolean;after?:()=>void}={}):void {this.openPage(id,options);}
+  getElement():HTMLElement {return this.host;}
+  leaveWorkspace():void {
+    // Detaching a shadow host must not leave a native modal in the top layer.
+    // Dismiss chrome only: the existing editors keep their unsaved drafts.
+    this.navigationSequence++;
+    this.deferredNavigation=null;this.afterSaveNavigation=null;
+    for(const dialog of this.root.querySelectorAll<HTMLDialogElement>('dialog[open]'))dialog.close();
+  }
+  backWithinWorkspace():boolean {const parent=settingsPage(this.page).parent;if(!parent)return false;this.openPage(parent,{focus:true});return true;}
   getPage():SettingsPageId {return this.page;}
   openPage(id:string,options:{focus?:boolean;remember?:boolean;after?:()=>void}={}):void {
     this.afterSaveNavigation=null;
@@ -986,7 +995,7 @@ export class VisualNovelSettingsPanel {
       if(!element)return;
       categories.close();
       if(element.dataset.gotoTarget){const target=this.root.querySelector<HTMLElement>(`[name="${element.dataset.gotoTarget}"]`);if(target){this.reveal(target);return;}}
-      this.openPage(element.dataset.pageLink??(element.dataset.tab==='sound'?'audio':element.dataset.tab)??element.dataset.goto??element.dataset.jumpTo??'home',{focus:true});
+      this.openPage(element.dataset.pageLink??(element.dataset.tab==='sound'?'audio':element.dataset.tab)??element.dataset.goto??element.dataset.jumpTo??'home',{focus:!element.matches('[data-tab]')});
     });
     const tablist=this.root.querySelector<HTMLElement>('[data-tablist]')!;
     tablist.onkeydown=event=>{
@@ -2330,3 +2339,13 @@ export class VisualNovelSettingsPanel {
 function clamp(value: number, minimum: number, maximum: number, fallback: number): number {
   return Number.isFinite(value) ? Math.min(maximum, Math.max(minimum, value)) : fallback;
 }
+
+const READER_SETTINGS_CSS=`
+:host([data-vn-workspace-tool]){--set-accent:var(--vn-shell-accent);--set-accent-text:var(--vn-shell-accent-contrast);--set-text:var(--vn-shell-text);--set-muted:var(--vn-shell-muted);--set-border:var(--vn-shell-border);--set-surface:var(--vn-shell-panel);--set-field:var(--vn-shell-field);--set-hover:var(--vn-shell-button);font-family:var(--vn-shell-family);}
+:host([data-vn-workspace-tool]) [data-shell]{padding:18px;max-width:none}
+:host([data-vn-workspace-tool]) [data-layout]{display:block}
+:host([data-vn-workspace-tool]) [data-nav]{display:none}
+:host([data-vn-workspace-tool]) [data-options]{grid-template-columns:1fr}
+:host([data-vn-workspace-tool]) [data-row]{grid-template-columns:1fr}
+:host([data-vn-workspace-tool]) [data-home] h1{font-size:1.5rem}
+`;

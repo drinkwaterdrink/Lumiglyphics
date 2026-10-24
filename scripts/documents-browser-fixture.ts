@@ -6,7 +6,7 @@ import {ImageStudio} from '../src/frontend/image-review/studio.js';
 import {PanelDock} from '../src/frontend/stage/panel-dock.js';
 const mount=document.createElement('div');Object.assign(mount.style,{position:'fixed',inset:'0',background:'#08090d'});document.body.append(mount);
 let submissions=0;const stage=new VnStage({mount,textSpeed:0,onSubmit:async()=>{submissions++;}});
-new ImageStudio(stage.panelMount,()=>{},()=>{});new PanelDock(stage.panelMount);
+const studio=new ImageStudio(stage.panelMount,()=>{},()=>{},open=>{if(open)stage.workspace.open('artwork');else stage.workspace.toolClosed('artwork');});stage.workspace.register('artwork',{element:studio.getElement(),hideAtHome:true,enter:()=>studio.open(),leave:()=>studio.close()});new PanelDock(stage.panelMount);
 const key={chatId:'documents-chat',assistantMessageId:'m1',swipeId:0,sourceFingerprint:'12345678',revision:0};
 const paragraphs=[{text:'The sealed letter lies on the desk.'},{text:'The sealed letter reads: Meet me at dawn. 🌙'},{text:'The sealed letter continues: <img src=x onerror="window.hacked=true"> Bring the blue key.'}];
 const documents=normalizeStoryDocuments([{name:'sealed letter',kind:'letter',paragraphIndex:0,sections:[{paragraphIndex:1,text:'Meet me at dawn. 🌙',evidence:paragraphs[1]!.text},{paragraphIndex:2,text:'<img src=x onerror="window.hacked=true"> Bring the blue key.',evidence:paragraphs[2]!.text}]}],paragraphs);

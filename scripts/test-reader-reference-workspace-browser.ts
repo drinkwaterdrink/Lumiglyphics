@@ -30,7 +30,7 @@ try{
   const current=card.locator('[data-reference-current]');assert.match(await current.innerText(),/rain-soaked coat/);assert.doesNotMatch(await current.innerText(),/six years/);
   const sources=card.locator('[data-reference-sources]');assert.equal(await sources.getAttribute('open'),null);
   await sources.locator('summary').click();assert.match(await sources.innerText(),/paragraph 1/i);assert.doesNotMatch(await card.innerText(),/secret|unrevealed|unknown biography/i);
-  for(const button of await card.locator('header button').all()){const b=await button.boundingBox();assert.ok(b&&b.width>=44&&b.height>=44);}
+  for(const button of await card.locator('header button:visible').all()){const b=await button.boundingBox();assert.ok(b&&b.width>=44&&b.height>=44);}
   const bounds=await card.boundingBox();assert.ok(bounds&&bounds.x>=0&&bounds.x+bounds.width<=viewport.width+.5);
   await page.screenshot({path:`.cache/reader-reference-workspace/card-${viewport.width}.png`});
   await page.keyboard.press('Escape');assert.equal(await page.getByRole('button',{name:'About Mira',exact:true}).evaluate(e=>(e.getRootNode() as ShadowRoot).activeElement===e),true);

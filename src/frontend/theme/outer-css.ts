@@ -1,9 +1,10 @@
+import { READER_SHELL_CSS } from "./reader-shell-css.js";
 import { ATELIER_SHELL_CSS } from "./atelier.js";
 /**
  * The exit control lives in this outer shadow root. User theme CSS is installed
  * in a nested shadow root and cannot select or hide the exit control.
  */
-export const VN_OUTER_CSS = `
+const LEGACY_OUTER_CSS = `
 ${ATELIER_SHELL_CSS}
 :host {
   /* Lumiverse scales its UI with body > * { zoom: var(--lumiverse-ui-scale) }.
@@ -239,3 +240,5 @@ ${ATELIER_SHELL_CSS}
   }
 }
 `;
+
+export const VN_OUTER_CSS = LEGACY_OUTER_CSS + READER_SHELL_CSS;

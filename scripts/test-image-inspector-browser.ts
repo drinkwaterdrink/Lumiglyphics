@@ -14,7 +14,7 @@ try{
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
   await page.goto(`http://127.0.0.1:${port}`);assert.equal(await page.title(),'Image inspector QA');
   const studio=page.locator('[data-image-studio]'),section=studio.locator('section');
-  await studio.locator('[data-launch]').click();
+  await page.locator('[data-vn-navigation] [data-reader-destination="artwork"]').click();
   assert.equal(await section.getAttribute('data-state'),'held');
   assert.equal(await studio.locator('[data-studio-footer] button:visible').count(),1);
   assert.equal(await studio.getByRole('button',{name:'Generate picture',exact:true}).isEnabled(),true);
@@ -96,19 +96,19 @@ try{
   await page.evaluate(()=>{const f=(window as any).imageFixture;f.studio.setPlanning('chat',false);f.studio.setTurn(structuredClone(f.turn));});
   for(const viewport of [{width:320,height:720},{width:390,height:844},{width:1280,height:800}]){
     await page.setViewportSize(viewport);
-    const exit=await page.getByRole('button',{name:'Back to chat',exact:true}).boundingBox(),close=await studio.locator('[data-close]').boundingBox(),panel=await section.boundingBox();
-    assert.ok(exit&&close&&close.y>=exit.y+exit.height+4,'inspector close clears Back to chat');assert.ok(panel&&panel.width<=viewport.width&&panel.x>=0,'panel stays in viewport');
-    assert.equal(await studio.locator('[data-close]').evaluate(el=>el.getBoundingClientRect().height>=44),true);
+    const exit=await page.getByRole('button',{name:'Back to chat',exact:true}).boundingBox(),close=await page.locator('[data-workspace-close]').boundingBox(),panel=await section.boundingBox();
+    assert.ok(exit&&close&&(close.y>=exit.y+exit.height||close.x>=exit.x+exit.width),'workspace close clears Back to chat');assert.ok(panel&&panel.width<=viewport.width&&panel.x>=0,'panel stays in viewport');
+    assert.equal(await page.locator('[data-workspace-close]').evaluate(el=>el.getBoundingClientRect().height>=44),true);
     await page.screenshot({path:`.cache/image-inspector-${viewport.width}.png`});
   }
   await page.evaluate(()=>{const f=(window as any).imageFixture;const t=structuredClone(f.turn);t.assets=Array.from({length:4},(_,i)=>({...t.assets[0],jobId:`cast-${i}`,cueId:`cast-${i}`,paragraphIndex:0,stageAsset:{role:i===0?'background':'portrait',sceneId:'same',...(i>0?{character:i===1?'Mira':'Rin'}:{})}}));t.imageRequests=t.assets.map((a:any,i:number)=>({...t.imageRequests[0],jobId:a.jobId,requestId:`cast-request-${i}`}));f.studio.setTurn(t);});
   const options=await studio.getByLabel('Picture',{exact:true}).locator('option').allTextContents();
   assert.match(options[0]!,/Background/);assert.match(options[1]!,/Portrait.*Mira/);
   await studio.getByLabel('Picture',{exact:true}).selectOption('cast-1');assert.match(await studio.locator('[data-paragraph]').innerText(),/Portrait.*Paragraph 1/);
-  await studio.locator('[data-close]').click();
+  await page.locator('[data-workspace-close]').click();
   await page.evaluate(()=>{const f=(window as any).imageFixture;const t=structuredClone(f.turn);t.assets[0].status='failed';t.assets[0].error='No usable appearance was resolved for "Made in Abyss RPG".';t.imageRequests=[];t.cardRoleAvailable=true;t.cardRole='auto';f.studio.setTurn(t);});
   const beforeRecovery=await page.evaluate(()=>(window as any).imageFixture.actions.length);
-  await studio.locator('[data-launch]').click();
+  await page.locator('[data-vn-navigation] [data-reader-destination="artwork"]').click();
   assert.equal(await studio.locator('[data-card-role]').getAttribute('open'),'');
   assert.equal(await studio.getByLabel('Card role',{exact:true}).isVisible(),true);
   assert.equal(await page.evaluate(()=>(window as any).imageFixture.actions.length),beforeRecovery,'opening subject recovery is local');

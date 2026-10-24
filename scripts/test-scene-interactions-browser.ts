@@ -50,7 +50,7 @@ try {
   await page.evaluate(()=>{const f=(window as any).readingFixture;const next=structuredClone(f.actionTurn);next.presentation.snapshots[0].at.key.revision++;f.stage.loadTurn(next);});
   await stale!.evaluate(e=>(e as HTMLButtonElement).click());assert.equal(await page.evaluate(()=>(window as any).readingFixture.stage.getState().draft),'');
   // Optional, and present NPC actions are not offered for an absent person.
-  await page.evaluate(()=>{const f=(window as any).readingFixture;f.stage.setTooltipPreferences({...f.actionPrefs,actionsEnabled:false});});await open();assert.equal(await card.locator('[data-vn-interaction-draft]').count(),0);await card.getByRole('button',{name:'Close information',exact:true}).click();
+  await page.evaluate(()=>{const f=(window as any).readingFixture;f.stage.setTooltipPreferences({...f.actionPrefs,actionsEnabled:false});});await open();assert.equal(await card.locator('[data-vn-interaction-draft]').count(),0);await page.locator('[data-workspace-close]').click();
   await page.evaluate(()=>{const f=(window as any).readingFixture;const turn=structuredClone(f.actionTurn);turn.presentation.snapshots[0].stateByEntity={m:{presence:'absent'}};f.stage.loadTurn(turn);f.stage.setTooltipPreferences(f.actionPrefs);});
   await open();await card.locator('[data-vn-interaction-draft] summary').click();assert.equal(await card.getByRole('button',{name:'Approach',exact:true}).count(),0);assert.equal(await card.getByRole('button',{name:'Ask',exact:true}).count(),0);
   const bounds=await card.boundingBox();assert.ok(bounds&&bounds.x>=0&&bounds.x+bounds.width<=viewport.width&&bounds.y+bounds.height<=viewport.height);

@@ -42,7 +42,7 @@ try{
  assert.equal(await settings.locator('[name="imagePromptBudget"]').isVisible(),false);
  await page.goto(`http://127.0.0.1:${port}/review`);
  assert.equal(await page.title(),'Model prompt QA');
- const studio=page.locator('[data-image-studio]');await studio.locator('[data-launch]').click();
+ const studio=page.locator('[data-image-studio]');await page.locator('[data-vn-navigation] [data-reader-destination="artwork"]').click();
  const profile={version:1,family:'generic',maxCharacters:6000,source:'manual',manualBudget:6000,format:'description',negativeMode:'supported-or-unknown',guidance:'Preserve evidence.'};
  await page.evaluate(profile=>{const f=(window as any).imageFixture;f.turn.imageRequests[0].promptProfile=profile;f.studio.setTurn(f.turn);},profile);
  await studio.getByLabel('Positive prompt',{exact:true}).fill('x'.repeat(5000));

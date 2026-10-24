@@ -26,14 +26,14 @@ try{
  await studio.locator('[data-prompt-actions] summary').click();
  await studio.getByRole('button',{name:'Rewrite prompt',exact:true}).click();
  assert.match(await badge.innerText(),/1 rewriting prompt/);
- assert.equal(await studio.locator('[data-launch]').getAttribute('data-waiting'),'0','busy text work is not advertised as an actionable review');
+ assert.equal(await page.locator('[data-reader-attention]').isVisible(),false,'busy text work is not advertised as an actionable review');
  assert.equal(await page.evaluate(()=>(window as any).hostFixture.stage().getState().assetProgress.busy),true);
- await studio.locator('[data-close]').click();
+ await page.locator('[data-workspace-close]').click();
  assert.match(await badge.innerText(),/1 rewriting prompt/,'closing review does not pretend background text work finished');
  for(const width of [320,390,1280]){
   await page.setViewportSize({width,height:844});
   const bounds=await badge.boundingBox();assert.ok(bounds&&bounds.x>=0&&bounds.x+bounds.width<=width+1,'operation badge stays within the viewport');
-  const launcher=await studio.locator('[data-launch]').boundingBox();
+  const launcher=await page.locator('[data-reader-destination="artwork"]').boundingBox();
   assert.ok(bounds&&launcher&&(bounds.x+bounds.width<=launcher.x||bounds.y>=launcher.y+launcher.height||bounds.y+bounds.height<=launcher.y),'progress never covers the prompt launcher');
   if(width===320)await page.screenshot({path:'.cache/browser-fixtures/reader-rewriting-narrow.png'});
  }
@@ -53,7 +53,7 @@ try{
  await page.evaluate(()=>{const f=(window as any).hostFixture;f.current.imageRequests=[{...f.current.imageRequests[0],state:'cancelled'},{...f.current.imageRequests[0],requestId:'new-preview',state:'review',prompt:'An empty library.'}];f.receive({type:'vn_image_requests',chatId:'A',messageId:'m',sourceFingerprint:f.current.sourceFingerprint,requests:f.current.imageRequests});});
  assert.match(await badge.innerText(),/1 needs review/,'new preview clears the old template operation');
  assert.equal(await page.evaluate(()=>(window as any).hostFixture.stage().getState().assetProgress.busy),false);
- await page.locator('[data-image-studio] [data-close]').click();
+ await page.locator('[data-workspace-close]').click();
  await page.evaluate(()=>{const f=(window as any).hostFixture;f.receive({type:'vn_image_requests',chatId:'A',messageId:'m',sourceFingerprint:f.current.sourceFingerprint,requests:f.current.imageRequests.map((r:any)=>({...r,state:'approved'}))});});
  assert.match(await badge.innerText(),/1 generating/,'review updates refresh reader status');
  await page.evaluate(()=>{const f=(window as any).hostFixture;f.receive({type:'vn_asset',chatId:'A',messageId:'m',asset:{...f.current.assets[0],status:'failed'}});f.receive({type:'vn_image_retry_queue',queue:{...f.current,activeJobId:null,jobIds:['job']}});});
@@ -62,7 +62,7 @@ try{
  assert.match(await badge.innerText(),/1 retry queued/,'stale queue cannot override current reader');
  await page.screenshot({path:'.cache/browser-fixtures/reader-picture-status.png'});
  await page.evaluate(()=>{const f=(window as any).hostFixture;const t=f.turn('A',1);t.assets=[{jobId:'job',cueId:'cue',paragraphIndex:0,status:'failed'}];t.imageRequests=[{...f.current.imageRequests.at(-1),requestId:'failed-request',state:'approved'}];f.current=t;f.state(t);});
- await page.locator('[data-image-studio] [data-launch]').click();
+ await page.locator('[data-vn-navigation] [data-reader-destination="artwork"]').click();
  await studio.getByLabel('Positive prompt',{exact:true}).fill('An edited recovery portrait');
  await studio.getByRole('button',{name:'Prepare edited preview',exact:true}).click();
  assert.match(await badge.innerText(),/1 preparing/);

@@ -43,3 +43,7 @@ Beta.66 hotfix: prevent unfunded cache-cue overlaps during cast allocation and n
 Beta.67: cast source review distinguishes saved guidance from the unsaved draft and offers isolated appearance, alias and outfit suggestion actions. Existing defaults/outfits are protected; Save changes stays explicit.
 
 Beta.68: Fit/rewrite accepts bounded, unambiguous writer field variants and reports specific invalid-field failures while retaining budgets and identity checks. Cast appearance source notes now survive explicit saves only while their exact wording matches.
+
+## Reader-first integration — 2026-10-24 Arena branch
+
+The beta.72-based `arena/bcd536d4-lumiglyphics` branch now integrates labeled reader navigation, responsive Story/Artwork/History/Settings workspaces, focus reading and menu search with the actual extension tools. All configuration, adjustable dialogue controls and all 10 current theme presets are retained. This is not a new published release. [Implementation, verification and manual acceptance limits](docs/review-evidence/2026-10-24-reader-first.md).

@@ -1,11 +1,11 @@
 /** Settings-only layout. Reader themes and user CSS remain independent. */
 export const WORKSPACE_CSS=`
-:host{font-size:1rem;--set-radius:14px;--set-control:44px}
+:host{overflow-wrap:anywhere;font-size:1rem;--set-radius:14px;--set-control:44px}
 [data-shell]{padding:16px;gap:12px;max-width:1120px;margin:auto}
-[data-workspace-header]{display:flex;align-items:center;gap:8px;background:var(--set-field);border:1px solid var(--set-border);border-radius:12px;padding:4px;min-width:0}
+[data-workspace-header]{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--set-field);border:1px solid var(--set-border);border-radius:12px;padding:4px;min-width:0}
 [data-workspace-header] button{border:0;background:transparent;border-radius:8px;min-width:44px;padding:8px 10px}
 [data-toggle-search] svg{display:block;width:20px;height:20px}
-[data-category-picker]{flex:1;display:flex;justify-content:space-between;align-items:center;gap:8px;min-width:0;text-align:left}
+[data-category-picker]{flex:1 1 8rem;display:flex;justify-content:space-between;align-items:center;gap:8px;min-width:0;text-align:left}
 [data-page-label]{overflow-wrap:anywhere}
 [data-all-settings]{font-weight:500}
 [data-topbar]{gap:0;min-height:0}

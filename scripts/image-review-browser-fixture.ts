@@ -10,7 +10,8 @@ const actions: unknown[] = [];
 const visibility:boolean[]=[];
 const stage = new VnStage({ mount, textSpeed: 0, exitLabel: 'Back to chat',onReviewImages:()=>studio.open(),onReroll:()=>{actions.push({type:'fixture_retry'});} });
 stage.loadTurn({ mode: 'standard', paragraphs: [{ id: 'paragraph', text: 'A quiet library.', speaker: 'Mira' }], choices: [] });
-const studio = new ImageStudio(stage.panelMount, (request) => actions.push(request), (enabled) => actions.push({ reviewImages: enabled }),open=>visibility.push(open));
+const studio = new ImageStudio(stage.panelMount, (request) => actions.push(request), (enabled) => actions.push({ reviewImages: enabled }),open=>{visibility.push(open);if(open)stage.workspace.open('artwork');else stage.workspace.toolClosed('artwork');});
+stage.workspace.register('artwork',{element:studio.getElement(),hideAtHome:true,enter:()=>studio.open(),leave:()=>studio.close()});
 const turn: TurnView = {
   chatId: "chat", messageId: "message", swipeId: 0, sourceFingerprint: "fingerprint", revision: 0, speaker: "Mira", paragraphs: ["A quiet library."], choices: [], status: "ready",
   assets: [{ jobId: "job", cueId: "cue", paragraphIndex: 0, status: "generating" }],

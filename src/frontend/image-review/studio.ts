@@ -34,6 +34,9 @@ section[data-state="planning"],section[data-state="empty"],section[data-state="z
 `;
 
 export class ImageStudio {
+  private lastOpenCursor:number|null=null;
+  private workspaceScroll=0;
+  private browseLibrary:(()=>void)|undefined;
   private readonly brief=new PreparedBriefView(destination=>this.navigateBrief(destination));
   private readonly host: HTMLElement;
   private readonly root: ShadowRoot;
@@ -121,7 +124,7 @@ export class ImageStudio {
     };
     this.el<HTMLButtonElement>("[data-use-template]").onclick = () => {
       const record = this.record(); if (!record || record.state !== "review" || this.rebuilding.has(record.requestId) || this.submitted.has(record.requestId) || this.rebuilding.has(record.requestId)) return;
-      if (this.drafts.has(record.requestId)) this.el<HTMLElement>("[data-template-confirm]").hidden = false;
+      if (this.drafts.has(this.draftKey(record))) this.el<HTMLElement>("[data-template-confirm]").hidden = false;
       else this.rebuildTemplate();
     };
     this.el<HTMLButtonElement>("[data-keep]").onclick = () => { this.el<HTMLElement>("[data-template-confirm]").hidden = true; this.el<HTMLSelectElement>("[data-template]").value = this.record()?.imagePromptMetadata?.template.id ?? this.defaultTemplate; };
@@ -258,7 +261,7 @@ export class ImageStudio {
     const overview=document.createElement('p');overview.dataset.pictureOverview='';overview.setAttribute('role','status');overview.setAttribute('aria-atomic','true');overview.style.cssText='font-size:12px;margin:0 0 10px;overflow-wrap:anywhere';
     body.replaceChildren(overview,navigation,context,detail,meta,model,this.brief.element,editor,tools,settings,notice);
     const actionHelp=document.createElement('small');actionHelp.dataset.actionHelp='';this.el('[data-studio-footer]').append(actionHelp);
-    const style=document.createElement('style');style.textContent=INSPECTOR_CSS+PREPARED_BRIEF_CSS;this.root.append(style);
+    const style=document.createElement('style');style.textContent=INSPECTOR_CSS+PREPARED_BRIEF_CSS+DOCKED_STUDIO_CSS;this.root.append(style);
   }
   private diagnosticText(): string {
     const asset = this.turn?.assets.find(entry => entry.jobId === this.selectedJob);
@@ -387,7 +390,7 @@ export class ImageStudio {
     if(!turn||(this.planningChat&&turn.chatId!==this.planningChat))this.planningChat='';
     if(this.turn?.chatId!==turn?.chatId||!turn)this.setOpen(false);
     if(this.turn?.chatId!==turn?.chatId)this.preferences.clear();
-    if (this.turn?.chatId !== turn?.chatId || this.turn?.sourceFingerprint !== turn?.sourceFingerprint || this.turn?.messageId !== turn?.messageId || this.turn?.swipeId !== turn?.swipeId || this.turn?.revision !== turn?.revision) { this.drafts.clear(); this.previousWording.clear(); this.submitted.clear(); this.preparing.clear();this.preparationStarts.clear(); this.rebuilding.clear(); this.rerolling.clear(); this.selectedJob = ""; this.selectedRequest = ""; this.recoveryJob = "";this.retryQueueJobs.clear();this.retryActive=null; }
+    if (this.turn?.chatId !== turn?.chatId || this.turn?.sourceFingerprint !== turn?.sourceFingerprint || this.turn?.messageId !== turn?.messageId || this.turn?.swipeId !== turn?.swipeId || this.turn?.revision !== turn?.revision) { this.workspaceScroll=0;this.lastOpenCursor=null;this.drafts.clear(); this.previousWording.clear(); this.submitted.clear(); this.preparing.clear();this.preparationStarts.clear(); this.rebuilding.clear(); this.rerolling.clear(); this.selectedJob = ""; this.selectedRequest = ""; this.recoveryJob = "";this.retryQueueJobs.clear();this.retryActive=null; }
     this.replanning = false;this.recovering=null;
     this.turn = turn;
     for(const pending of [this.rerolling,this.rebuilding])for(const id of pending){
@@ -419,6 +422,14 @@ export class ImageStudio {
     this.rebuilding.add(record.requestId); this.render();
     this.send({ type: "vn_reprepare_image_template", chatId: this.turn.chatId, messageId: this.turn.messageId, sourceFingerprint: this.turn.sourceFingerprint, requestId: record.requestId, templateId });
   }
+  getElement():HTMLElement {return this.host;}
+  close():void {if(!this.el<HTMLElement>('section').hidden)this.workspaceScroll=this.el<HTMLElement>('[data-studio-body]').scrollTop;this.setOpen(false);}
+  setLibraryOpener(open:()=>void):void {
+    this.browseLibrary=open;
+    if(this.root.querySelector('[data-workspace-library]'))return;
+    const button=document.createElement('button');button.type='button';button.dataset.workspaceLibrary='';button.textContent='Browse saved artwork';button.onclick=()=>this.browseLibrary?.();
+    this.el('[data-studio-body]').prepend(button);
+  }
   setReview(enabled: boolean): void { this.review = enabled; this.el<HTMLInputElement>("[data-review]").checked = enabled; }
   setCursor(cursor: number): void { this.cursor = cursor; }
   private setOpen(open:boolean):void{
@@ -428,8 +439,9 @@ export class ImageStudio {
   }
   open():void{
     if(!this.el<HTMLElement>('section').hidden)return;
-    this.selectedJob=this.turn?.assets.filter(asset=>asset.paragraphIndex<=this.cursor).at(-1)?.jobId??this.selectedJob;this.selectedRequest='';
-    this.render();this.setOpen(true);this.el<HTMLElement>('[data-studio-body]').scrollTop=0;this.el<HTMLButtonElement>('[data-close]').focus({preventScroll:true});
+    if(!this.host.dataset.vnWorkspaceTool||this.lastOpenCursor!==this.cursor||!this.turn?.assets.some(asset=>asset.jobId===this.selectedJob)){this.workspaceScroll=0;this.selectedJob=this.turn?.assets.filter(asset=>asset.paragraphIndex<=this.cursor).at(-1)?.jobId??this.selectedJob;this.selectedRequest='';}
+    this.lastOpenCursor=this.cursor;
+    this.render();this.setOpen(true);this.el<HTMLElement>('[data-studio-body]').scrollTop=this.workspaceScroll;this.el<HTMLButtonElement>('[data-close]').focus({preventScroll:true});
     const asset=this.turn?.assets.find(entry=>entry.jobId===this.selectedJob);
     if(asset?.error?.startsWith('No usable appearance was resolved for ')){
       this.el<HTMLDetailsElement>('[data-reply-settings]').open=true;
@@ -676,3 +688,14 @@ export class ImageStudio {
 }
 
 function friendlyStatus(status: string): string { return ({ browser_ready: "Ready", generated: "Ready", queued: "Waiting", generating: "Generating", review: "Awaiting review", approved: "Approved", cancelled: "Cancelled", skipped: "Skipped", failed: "Failed" } as Record<string, string>)[status] ?? status; }
+
+const DOCKED_STUDIO_CSS=`
+:host([data-vn-workspace-tool]){position:relative;inset:auto;display:block;width:100%;height:100%;z-index:auto;pointer-events:auto}
+:host([data-vn-workspace-tool]) [data-launch]{display:none}
+:host([data-vn-workspace-tool]) section,:host([data-vn-workspace-tool]) section[data-state]{position:relative;inset:auto;width:100%;max-width:none;height:100%;max-height:none;border:0;border-radius:0;box-shadow:none}
+:host([data-vn-workspace-tool]) [data-studio-header]{display:none}
+:host([data-vn-workspace-tool]) [data-studio-body]{padding:18px;flex:1}
+:host([data-vn-workspace-tool]) [data-studio-footer]{padding:12px 18px}
+[data-workspace-library]{display:none}
+:host([data-vn-workspace-tool]) [data-workspace-library]{display:block;width:100%;background:transparent;margin-bottom:16px}
+`;

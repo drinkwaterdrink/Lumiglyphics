@@ -1,0 +1,301 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lumiglyphics · Reader-first redesign guide</title><style>*{box-sizing:border-box}body{margin:0;background:#171e1e;color:#e7e8de;font:16px/1.8 system-ui,sans-serif}header{position:sticky;top:0;background:#171e1ef5;border-bottom:1px solid #ffffff20;padding:14px 24px;display:flex;justify-content:space-between;gap:20px;z-index:1}a{color:#dcc397;text-underline-offset:4px}main{max-width:980px;padding:36px 24px 100px;margin:auto}h1,h2,h3{font-family:Georgia,serif;color:#f0e9d8;line-height:1.25}h1{font-size:clamp(32px,6vw,48px)}h2{margin-top:46px;font-size:30px}h3{font-size:23px;margin-top:30px}img{max-width:100%;height:auto;border-radius:12px;border:1px solid #ffffff20}img[src*=mobile]{max-height:700px;width:auto;display:block;margin:auto}blockquote{border-left:3px solid #dcc397;padding:5px 20px;margin:20px 0;background:#ffffff04}table{display:block;width:100%;overflow:auto;border-collapse:collapse;font-size:14px}th,td{padding:13px;text-align:left;vertical-align:top;border:1px solid #ffffff20;min-width:150px}th{color:#dcc397;background:#ffffff05}pre{overflow:auto;background:#0f1816;border:1px solid #ffffff20;padding:16px;border-radius:8px}code{font-size:.9em}hr{border:0;border-top:1px solid #ffffff20;margin:32px 0}header a{font-size:13px}a:focus-visible{outline:2px solid #dcc397;outline-offset:4px}@media(max-width:500px){main{padding:18px 20px 70px}header{padding:12px 20px}body{font-size:15px}}</style></head><body><header><a href="./">← Open interactive mockup</a><a href="./2026-10-24-reader-first-redesign.md" download>Download Markdown</a></header><main><h1>Lumiglyphics: a reader-first overhaul</h1>
+<p><strong>24 October 2026 · Design proposal, not an approved migration or shipped extension update</strong></p>
+<h2>The idea: a quiet reader, a predictable workspace</h2>
+<p>Lumiglyphics should feel like <strong>a polished visual novel with an optional backstage</strong>, not a chat extension with a growing collection of floating tools.</p>
+<p>The overhaul is structural first, cosmetic second:</p>
+<blockquote>
+<p><strong>Read in the center. Explore and adjust in one consistent workspace. Return without losing your place.</strong></p>
+</blockquote>
+<p>This proposal is based on the beta.72 reader, stage, settings routes, dossiers, reviewer and theme implementation. It does not claim a complete hands-on audit of the installed Lumiverse experience.</p>
+<h3>Try the concept</h3>
+<p>An isolated interactive prototype lives at <a href="./index.html"><code>./index.html</code></a>. A live preview is available under <strong>Lumiglyphics redesign concept</strong> while its preview process is running.</p>
+<p>It demonstrates reader navigation, a shared workspace, character details, reveal-gated sample documents, saved moments, a sample artwork approval, settings previews, local reply drafts, menu search, focus reading and mobile navigation.</p>
+<p><strong>All content is sample data.</strong> No host API, real generation, payments, provider configuration or persistent storage is connected. Sound is a visual control example; no audio plays. New mechanics such as Moments are illustrative proposals, not claims about today's extension.</p>
+<p><img alt="Desktop concept with Story workspace" src="./preview-workspace.png" /></p>
+<hr />
+<h2>1. The new information architecture</h2>
+<p>Five destinations on desktop. Each answers a distinct question:</p>
+<table>
+<thead>
+<tr>
+<th>Destination</th>
+<th>User question</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Read</strong></td>
+<td>What is happening now?</td>
+<td>Stage, dialogue, advance, reply, immediate reading controls</td>
+</tr>
+<tr>
+<td><strong>Story</strong></td>
+<td>Who or what is this?</td>
+<td>People, Places, Documents; proposed Moments</td>
+</tr>
+<tr>
+<td><strong>Artwork</strong></td>
+<td>What is being shown, prepared or repaired?</td>
+<td>Current-scene pictures, review, replacements, compatible art, library</td>
+</tr>
+<tr>
+<td><strong>History</strong></td>
+<td>Where was that passage or version?</td>
+<td>Conversation, source versions, pictures tied to passages, saved return points</td>
+</tr>
+<tr>
+<td><strong>Settings</strong></td>
+<td>How should the experience work?</td>
+<td>Reading comfort, appearance/sound, provider/setup, specialist controls</td>
+</tr>
+</tbody>
+</table>
+<p><strong>On phones:</strong> Read, Story, Artwork and More form a labeled bottom bar. History and Settings live in More. No unlabeled hamburger as the only way to find everything; no eight-item bottom dock.</p>
+<p><strong>The rule:</strong> reader subjects live in Story; image operations live in Artwork; navigation through earlier material lives in History; configuration lives in Settings. Shortcuts can deep-link between them, but they never create a second independent implementation.</p>
+<h3>Where existing features go</h3>
+<table>
+<thead>
+<tr>
+<th>Existing surface or responsibility</th>
+<th>Proposed home</th>
+<th>What stays distinct</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Main VN stage and paragraph navigation</td>
+<td>Read</td>
+<td>Existing modes and full-scene compositions remain supported</td>
+</tr>
+<tr>
+<td>Cast portraits and active-speaker state</td>
+<td>Read</td>
+<td>Speaking, physically present and drawable are not conflated</td>
+</tr>
+<tr>
+<td>Character dossier and scene-reference menu</td>
+<td>Story → People / Places</td>
+<td>Reader facts versus editable presentation guidance</td>
+</tr>
+<tr>
+<td>Document viewer and object references</td>
+<td>Story → Documents</td>
+<td>Literal text, access state and reveal position</td>
+</tr>
+<tr>
+<td>Image reviewer, prepared brief and replacement editor</td>
+<td>Artwork → This scene → selected picture</td>
+<td>Prepare, approve, regenerate and replace retain separate meanings</td>
+</tr>
+<tr>
+<td>Supplied/display art and image browsing</td>
+<td>Artwork → Library</td>
+<td>Provenance and compatibility remain visible</td>
+</tr>
+<tr>
+<td>Backlog</td>
+<td>History → Conversation</td>
+<td>Current conversation versus older/alternate source versions</td>
+</tr>
+<tr>
+<td>Saved image history</td>
+<td>History, linked to source; Artwork for asset selection</td>
+<td>An asset's uses are not erased by deduplication</td>
+</tr>
+<tr>
+<td>Theme, text speed, audio and reader preferences</td>
+<td>Settings → everyday preferences</td>
+<td>No automatic model/spending change</td>
+</tr>
+<tr>
+<td>Connections, prompt tools, raw parameters, filtering and CSS</td>
+<td>Settings → Setup / Advanced</td>
+<td>Technical depth remains available; it is not deleted</td>
+</tr>
+<tr>
+<td>Pinned companion panels</td>
+<td>Optional stage dock or workspace integration</td>
+<td>Preserve sandboxing, independent providers and reset-to-visible recovery</td>
+</tr>
+<tr>
+<td>Return to host chat</td>
+<td>Stable Back to chat action</td>
+<td>Not the same action as closing a workspace</td>
+</tr>
+</tbody>
+</table>
+<p>Story and Artwork settings are not mixed into reader facts: viewing Mira's dossier does not implicitly edit her appearance or generate a portrait. A clearly named “Edit visual guidance” action can deep-link to the appropriate editor.</p>
+<hr />
+<h2>2. The reader: make the story the loudest thing</h2>
+<h3>Keep visible</h3>
+<ul>
+<li>A restrained scene title/location <strong>only when established metadata exists</strong>. Otherwise use the host title or a neutral current-scene label.</li>
+<li>One readable dialogue surface with a clear speaker, selectable text and a stable Continue action.</li>
+<li>Previous passage, Conversation and Auto within the reading area.</li>
+<li>A bookmark/return-point action if that proposed feature is approved.</li>
+<li>A compact, actionable image-status chip only when something needs attention.</li>
+<li>A focus-reading action with an obvious way back.</li>
+</ul>
+<h3>Move out of the reading surface</h3>
+<p>Prompt budgets, model selection, template editing, raw diagnostics, cast source reconciliation and replacement parameter editing. They are important—but they do not belong beside every line of dialogue.</p>
+<h3>Your turn is an intentional state</h3>
+<p>When a reply is needed, keep the source passage visible and open a focused composer. Suggested actions fill an editable draft. They do not execute, declare success or silently submit.</p>
+<p>The prototype's composer is deliberately local-only. Production Send must be explicit, preserve the host's submission policy and prevent duplicate actions. Keep unsent text across navigation, source-safe transitions and recoverable failures.</p>
+<h3>Cast view remains a first-class mode</h3>
+<p>The observatory prototype illustrates an environment scene, not the removal of Cast view. In production, reserve a stage region for compatible portraits; clicking a portrait opens the same Story detail surface. Active-speaker styling should be quiet, but always identifiable without animation. A remote speaker does not automatically occupy a stage slot.</p>
+<p><strong>No new paid work</strong> occurs just because navigation, focus mode or a portrait detail is opened.</p>
+<hr />
+<h2>3. One workspace, not a stack of unrelated modals</h2>
+<h3>Desktop</h3>
+<p>A docked side workspace leaves the reader visible. Its anatomy is always:</p>
+<ol>
+<li>A title explaining the current destination.</li>
+<li>A single close action returning to the reader.</li>
+<li>A short set of destination-specific tabs.</li>
+<li>A scrollable body.</li>
+<li>Optional scope/status explanation.</li>
+</ol>
+<p>A character, document or image detail replaces the workspace body. It has a <strong>Back to People / Documents / This scene</strong> action. It does not open another floating window on top of the first one.</p>
+<h3>Mobile</h3>
+<p>The same workspace becomes a full-height content sheet between the title bar and bottom navigation. This is a navigation surface, not a small desktop modal crammed onto a phone. The underlying reader becomes inert while covered; navigation remains usable.</p>
+<p>On short screens, keep primary reading controls visible and allow the passage itself to scroll when necessary. Large-text/zoom acceptance still needs dedicated testing; a compact viewport is not permission to shrink text indefinitely.</p>
+<h3>Universal navigation contract</h3>
+<ul>
+<li><strong>Back:</strong> go one detail layer up, restoring that layer's scroll and focus.</li>
+<li><strong>Close:</strong> return to the reader without resetting the cursor.</li>
+<li><strong>Back to chat:</strong> leave the reader through the host-supported operation.</li>
+<li><strong>Escape:</strong> one layer at a time; never also advance the passage.</li>
+<li><strong>Switch destination:</strong> keep valid unsent drafts; do not silently save or discard edits.</li>
+<li><strong>Browser/Android Back:</strong> integrate only with a verified host navigation contract, not an extension-wide history hijack.</li>
+</ul>
+<p>Destructive confirmations may still use true modal dialogs. Those dialogs need proper focus management. “One workspace” does not mean removing necessary confirmations.</p>
+<p><img alt="Phone reader concept" src="./preview-mobile.png" /></p>
+<hr />
+<h2>4. Visual direction: a visual novel, not a control dashboard</h2>
+<h3>Suggested default: mineral dark, warm paper, restrained brass</h3>
+<ul>
+<li><strong>Background:</strong> deep charcoal/green-black, rather than pure black everywhere.</li>
+<li><strong>Panels:</strong> matte, quiet surfaces with one subtle border; blur is an enhancement, not required for text contrast.</li>
+<li><strong>Text:</strong> warm off-white; soft secondary text that still passes contrast checks.</li>
+<li><strong>Accent:</strong> muted brass for primary actions and selection; sage for neutral availability/status.</li>
+<li><strong>Typography:</strong> literary serif for story text, clean system sans for navigation and controls. Offer an accessible all-sans option in production.</li>
+<li><strong>Shape:</strong> a small consistent radius scale, not different pill/card styles for every tool.</li>
+<li><strong>Spacing:</strong> a shared 4/8/12/16/24/32 scale.</li>
+<li><strong>Icons:</strong> one line-icon family, supplemented by labels; not a puzzle of unfamiliar symbols.</li>
+<li><strong>Motion:</strong> short opacity/focus transitions, cancellable and subordinate to reduced-motion settings. No necessary information conveyed by movement alone.</li>
+</ul>
+<p><strong>The concept's palette is a starting direction, not a mandated permanent skin.</strong> Existing Lumiverse/theme integration should remain. Themes can change color and texture without moving controls, renaming actions or changing the navigation contract. Anime, sci-fi, contemporary and cozy stories should all fit the same shell.</p>
+<h3>Hierarchy rules</h3>
+<ol>
+<li>The passage is visually primary.</li>
+<li>Continue/Send is the one primary action in its context.</li>
+<li>Speaker and scene context are secondary.</li>
+<li>Tools are quieter than content.</li>
+<li>Technical metadata appears when requested.</li>
+</ol>
+<p>Primary labels and active controls must not depend on the small decorative typography in this concept. Production acceptance includes contrast, 200% text scaling, touch targets, localization and long labels. Final accessible font metrics need validation across actual host themes.</p>
+<hr />
+<h2>5. Artwork: understandable intent first, technical detail second</h2>
+<p>Instead of initially confronting the reader with a long prompt and several similar-looking recovery buttons:</p>
+<blockquote>
+<p><strong>The observatory</strong><br />
+Environment · evening · coastal interior<br />
+Ready for review<br />
+<strong>Approve</strong> · Inspect details</p>
+</blockquote>
+<p>Inside details:</p>
+<ul>
+<li>People / identity sources</li>
+<li>Action and composition</li>
+<li>Environment and lighting</li>
+<li>Template/style attribution</li>
+<li>Output/capability explanation</li>
+<li>Raw prompt and parameters, expandable</li>
+</ul>
+<p>Keep four operations visibly distinct:</p>
+<ul>
+<li><strong>Rewrite prompt:</strong> change preparation wording.</li>
+<li><strong>Retry generation:</strong> repeat an eligible failed attempt under the existing policy.</li>
+<li><strong>Generate replacement:</strong> request a new image, with spending/approval consequences.</li>
+<li><strong>Use existing art:</strong> change assignment without requesting a new image.</li>
+</ul>
+<p>Show the selected picture's actual saved metadata. An edited draft must not retroactively describe the image already on screen. Unsupported operations remain unavailable with a reason, not silently ignored.</p>
+<p>A failed image should not destroy the reading layout. Keep the last valid scene, a scoped notice and the correct recovery path.</p>
+<hr />
+<h2>6. Settings: everyday comfort versus specialist setup</h2>
+<p>The current routes (<code>src/frontend/settings/routes.ts</code>) span 22 pages. The problem is not simply the number of fields; it is requiring the user to understand the implementation before knowing where to look.</p>
+<p>Proposed front door:</p>
+<h3>Everyday preferences</h3>
+<ul>
+<li><strong>Reading:</strong> text size, speed, autoplay and controls.</li>
+<li><strong>Look &amp; sound:</strong> theme, dialogue layout, motion, speech, music and SFX.</li>
+<li><strong>Artwork preferences:</strong> review policy, compatible reuse and generation limits, with explicit scope/cost explanation.</li>
+</ul>
+<h3>Setup and specialist tools</h3>
+<ul>
+<li>Connections and verified capabilities.</li>
+<li>Generation/model configuration and advanced prompt tools.</li>
+<li>Context sources and source policy.</li>
+<li>Filtering, custom CSS, diagnostics, storage and reset.</li>
+</ul>
+<p>This is a navigation regrouping, <strong>not the removal or silent reset of existing configuration</strong>. Deep pages can survive under a calmer hierarchy. A reader-level quick preference should link to its full editor.</p>
+<p>Every consequential setting explains:</p>
+<ul>
+<li><strong>Scope:</strong> all chats / this chat / this picture.</li>
+<li><strong>Timing:</strong> immediate / next preparation / new images only.</li>
+<li><strong>Cost:</strong> no new work / may request generation / pricing unavailable.</li>
+</ul>
+<p>Menu/action search should deep-link to exact destinations. Start with local navigation and configuration labels, not unrestricted search over private or unrevealed story text.</p>
+<hr />
+<h2>7. Polish that makes the overhaul feel complete</h2>
+<ul>
+<li>Same close button, headers, spacing and focus treatment everywhere.</li>
+<li>Stable toolbar/image geometry when loading, errors and long speaker names appear.</li>
+<li>Never let a completed background operation steal focus or jump the scroll.</li>
+<li>Correct composite draft keys for replacements and deliberate draft ownership across revisions.</li>
+<li>Clear unavailable/legacy/source-deleted states instead of inferred replacements.</li>
+<li>Image decode failure keeps valid art and explains the display problem.</li>
+<li>Audio gain ramps that respect user volume, mute and cancellation.</li>
+<li>Auto pauses for overlays and user reply; opening a panel never burns through unseen paragraphs.</li>
+<li>A quiet “needs review” signal, not an always-visible diagnostics dashboard.</li>
+<li>First use begins with a useful reader. Configure a missing provider only when the user requests the relevant capability; do not trigger paid work through an onboarding preview.</li>
+<li>Plain-reading/focus modes are reversible and retain the same story position and drafts.</li>
+<li>Shared components must retain sandbox and source/reveal boundaries; consolidation is not permission to inject trusted HTML from arbitrary providers.</li>
+</ul>
+<hr />
+<h2>8. How to ship a complete overhaul without a dangerous rewrite</h2>
+<p>Keep the existing TypeScript/Shadow DOM stack and backend ownership. A framework migration adds risk without solving navigation.</p>
+<h3>Phase 1 — navigation and overlay foundation</h3>
+<p>Build a small shared workspace controller, route model, surface header, tabs, focus/scroll restoration and draft handoff contract. Add the new shell behind an opt-in UI flag. Use current dossiers, reviewer and settings as content adapters first; do not rewrite their business logic simultaneously.</p>
+<p><strong>Gate:</strong> one workspace visible; predictable Back/Close; no cursor resets; no paid calls from browsing; mobile/keyboard flows verified.</p>
+<h3>Phase 2 — reader and visual system</h3>
+<p>Apply shared tokens/components; reserve geometry; simplify reader controls; preserve Cast/full-scene modes; implement reversible focus reading. Keep existing theme compatibility and accessible fallback styles.</p>
+<p><strong>Gate:</strong> long text, narrow phones, large text, reduced motion, image errors and rapid source changes do not break reading.</p>
+<h3>Phase 3 — Artwork and settings journeys</h3>
+<p>Consolidate image operations under a shared scene/picture hierarchy. Give settings an everyday-versus-setup front door and exact search destinations. Retain every existing field's mapping and saved value.</p>
+<p><strong>Gate:</strong> unchanged backend approvals, provenance, spending policy, replacement-draft recovery and source-version ownership.</p>
+<h3>Phase 4 — Story and History cohesion</h3>
+<p>Bring dossiers/documents into the same surface. Connect History items to exact eligible sources and artwork. Add manual Moments only if approved; source-backed cross-turn features depend on reconciliation and compact projections from the audit.</p>
+<p><strong>Gate:</strong> zero future-paragraph/alternate-branch disclosures, honest missing-source states, bounded indexing and no guessed ancestry.</p>
+<h3>Phase 5 — host and device acceptance</h3>
+<p>Compare existing and new flows in real supported Lumiverse versions. Check physical Android/iOS keyboard, Back, rotation, zoom, safe areas, speech/audio and representative provider combinations. Do not call fixture success real-device certification.</p>
+<p><strong>The current audit's severe lifecycle, stale-write, prompt-protection and projection-size issues remain prerequisite engineering work</strong>, not problems a new shell will solve by itself.</p>
+<hr />
+<h2>9. Prototype verification and limits</h2>
+<p><strong>Verified in a headless Chromium environment:</strong> 28 checks covering desktop navigation, tabs/keyboard, one-layer Escape, opener-focus restoration, reveal-gated sample documents, exact saved-passage return, note escaping, local draft preservation, artwork status, setting previews, focus mode, search and 390px/320px phone layouts. Four screenshots were generated from the actual prototype.</p>
+<p>Run with a static server for the prototype directory, then:</p>
+<pre><code class="language-sh">node docs/./verify.mjs
+</code></pre>
+<p>The check runner expects <code>http://127.0.0.1:4174</code> by default. Override <code>CONCEPT_URL</code> for another test origin. A normal Playwright browser installation is required; <code>CONCEPT_CHROMIUM_PATH</code> optionally supplies another executable.</p>
+<p><strong>Not verified:</strong> physical devices, the installed host integration, all supported locales/themes, real large-text assistive-technology behavior, paid image providers, storage migrations or sound. None of the extension's production UI files were changed for this concept. The test runner's screenshots are design artifacts, not pixel baselines for the existing app.</p>
+<h2>The decision to make</h2>
+<p>Approve or adjust the <strong>structure</strong> before debating every color:</p>
+<ol>
+<li>A reader plus one shared workspace.</li>
+<li>Five clear desktop destinations, four mobile entries.</li>
+<li>Story knowledge separated from artwork operations and technical configuration.</li>
+<li>A consistent Back/Close/return contract.</li>
+<li>Calm defaults with specialist depth available on demand.</li>
+</ol>
+<p>If those five choices feel right, the rest can be refined without redesigning the navigation again. That is the real overhaul: <strong>not prettier menus individually, but a system in which every feature has an obvious place.</strong></p></main></body></html>

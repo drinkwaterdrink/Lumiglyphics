@@ -38,6 +38,7 @@ export class ImageLibrary{
   for(const mode of ['story','images'] as const){const button=document.createElement('button');button.type='button';button.dataset.historyView=mode;button.textContent=mode==='story'?'Story':'Images';button.onclick=()=>{this.mode=mode;this.pages=['0:0'];this.pageIndex=0;this.load();};tabs.append(button);}
   this.el<HTMLElement>('[data-browse]').prepend(tabs);
   const returnButton=document.createElement('button');returnButton.type='button';returnButton.dataset.historyReturn='';returnButton.textContent='Back to reader';returnButton.onclick=()=>this.close();this.el<HTMLElement>('section').append(returnButton);
+  const dockStyle=document.createElement("style");dockStyle.textContent=DOCKED_LIBRARY_CSS;this.root.append(dockStyle);
   mount.append(this.host);
   this.el<HTMLButtonElement>('[data-library-launch]').onclick=()=>this.open();
   this.el<HTMLButtonElement>('[data-library-close]').onclick=()=>this.close();
@@ -61,7 +62,7 @@ export class ImageLibrary{
   this.root.addEventListener('keydown',event=>{
    const e=event as KeyboardEvent;
    if(e.key==='Escape'){e.preventDefault();this.selected?this.back():this.close();}
-   if(e.key==='Tab'&&this.opened){
+   if(e.key==='Tab'&&this.opened&&!this.host.dataset.vnWorkspaceTool){
     const focusable=[...this.el<HTMLElement>('section').querySelectorAll<HTMLElement>('button:not(:disabled),select,input,summary,textarea')].filter(el=>el.getClientRects().length);
     const first=focusable[0],last=focusable.at(-1);
     if(e.shiftKey&&this.root.activeElement===first){e.preventDefault();last?.focus();}
@@ -69,7 +70,7 @@ export class ImageLibrary{
    }
   });
  }
- useHistoryEntry(){this.el<HTMLElement>('[data-library-launch]').hidden=true;this.el<HTMLElement>('h2').textContent='History';this.el<HTMLElement>('[data-browse] .note').textContent='Saved replies and pictures from this chat. Browsing never generates images.';this.el<HTMLElement>('[data-library-close]').setAttribute('aria-label','Close history');this.el<HTMLElement>('[data-library-close]').title='Close history';this.el<HTMLElement>('[data-refresh]').setAttribute('aria-label','Refresh history');this.el<HTMLElement>('[data-refresh]').title='Refresh history';this.el<HTMLElement>('[data-detail-back]').setAttribute('aria-label','Back to history');this.el<HTMLElement>('[data-detail-back]').title='Back to history';}
+ useHistoryEntry(){this.mode='story';this.el<HTMLElement>('[data-library-launch]').hidden=true;this.el<HTMLElement>('h2').textContent='History';this.el<HTMLElement>('[data-browse] .note').textContent='Saved replies and pictures from this chat. Browsing never generates images.';this.el<HTMLElement>('[data-library-close]').setAttribute('aria-label','Close history');this.el<HTMLElement>('[data-library-close]').title='Close history';this.el<HTMLElement>('[data-refresh]').setAttribute('aria-label','Refresh history');this.el<HTMLElement>('[data-refresh]').title='Refresh history';this.el<HTMLElement>('[data-detail-back]').setAttribute('aria-label','Back to history');this.el<HTMLElement>('[data-detail-back]').title='Back to history';}
  private el<T extends HTMLElement>(selector:string):T{return this.root.querySelector<T>(selector)!;}
  private status(text:string){this.el<HTMLElement>('[data-library-status]').textContent=text;}
  setContext(turn:TurnView|null,cursor:number){
@@ -79,6 +80,11 @@ export class ImageLibrary{
   if(!next){this.close();return;}
   if(changed){this.expanded.clear();this.cancel();this.page=null;this.pages=['0:0'];this.pageIndex=0;if(this.opened)this.load();}
  }
+ getElement():HTMLElement{return this.host;}
+ isOpen():boolean{return this.opened;}
+ openWorkspace():void{this.open(this.mode);}
+ backWithinWorkspace():boolean{if(!this.selected)return false;this.back();return true;}
+ setDocked():void{this.el('section').removeAttribute('aria-modal');}
  private cancel(cancelSearch=true){clearTimeout(this.timer);if(cancelSearch)clearTimeout(this.searchTimer);this.pending='';}
  open(mode: 'story'|'images' = 'images', opener?:HTMLElement){if(!this.context)return;this.mode=mode;this.opener=opener??null;this.opener?.setAttribute('aria-expanded','true');this.pages=['0:0'];this.pageIndex=0;if(!this.context)return;this.opened=true;this.host.dataset.open='true';this.el<HTMLElement>('section').hidden=false;this.el<HTMLElement>('[data-library-launch]').setAttribute('aria-expanded','true');this.onOpen(true);this.load();this.el<HTMLButtonElement>('[data-library-close]').focus();}
  close(){this.opener?.setAttribute('aria-expanded','false');delete this.host.dataset.open;this.cancel();this.selected=null;this.el<HTMLImageElement>('[data-full-image]').removeAttribute('src');this.el<HTMLElement>('section').hidden=true;this.el<HTMLElement>('[data-library-launch]').setAttribute('aria-expanded','false');if(this.opened){this.opened=false;this.onOpen(false);(this.opener??this.el<HTMLButtonElement>('[data-library-launch]')).focus();}}
@@ -143,6 +149,18 @@ export class ImageLibrary{
   this.status(entry.available?'':'This picture is no longer available. Saved details remain readable.');this.setZoom(1);this.el<HTMLButtonElement>('[data-detail-back]').focus();
  }
  private setZoom(value:number){this.zoom=value;const image=this.el<HTMLImageElement>('[data-full-image]');image.dataset.zoom=String(value);image.style.width=`${value*100}%`;image.style.maxHeight=value===1?'55dvh':'none';this.el<HTMLElement>('[data-zoom-label]').textContent=`${Math.round(value*100)}%`;if(value===1){const viewport=this.el<HTMLElement>('[data-image-viewport]');viewport.scrollTop=0;viewport.scrollLeft=0;}}
- private back(focus=true){this.selected=null;this.el<HTMLImageElement>('[data-full-image]').removeAttribute('src');this.el<HTMLElement>('[data-browse]').hidden=false;this.el<HTMLElement>('[data-detail]').hidden=true;this.el<HTMLElement>('[data-detail-back]').hidden=true;this.el<HTMLElement>('[data-library-footer]').hidden=false;if(focus)this.el<HTMLButtonElement>('[data-library-close]').focus();if(this.page)this.render();if(focus)this.el<HTMLElement>('.body').scrollTop=this.browseScroll;}
+ private back(focus=true){this.selected=null;this.el<HTMLImageElement>('[data-full-image]').removeAttribute('src');this.el<HTMLElement>('[data-browse]').hidden=false;this.el<HTMLElement>('[data-detail]').hidden=true;this.el<HTMLElement>('[data-detail-back]').hidden=true;this.el<HTMLElement>('[data-library-footer]').hidden=false;if(focus)this.el<HTMLButtonElement>(this.host.dataset.vnWorkspaceTool?'[data-history-views] button':'[data-library-close]').focus();if(this.page)this.render();if(focus)this.el<HTMLElement>('.body').scrollTop=this.browseScroll;}
  destroy(){this.close();this.host.remove();}
 }
+
+const DOCKED_LIBRARY_CSS=`
+:host([data-vn-workspace-tool]){position:relative;inset:auto;display:block;width:100%;height:100%;z-index:auto;pointer-events:auto;background:transparent}
+:host([data-vn-workspace-tool]) [data-library-launch],:host([data-vn-workspace-tool]) [data-library-close],:host([data-vn-workspace-tool]) [data-history-return]{display:none}
+:host([data-vn-workspace-tool]) section{position:relative;inset:auto;width:100%;max-width:none;height:100%;max-height:none;margin:0;border:0;border-radius:0;box-shadow:none}
+:host([data-vn-workspace-tool]) header{min-height:52px;padding:4px 16px}
+:host([data-vn-workspace-tool]) header h2{font-size:14px;color:var(--vn-shell-muted)}
+:host([data-vn-workspace-tool]) .body{padding:16px;flex:1}
+:host([data-vn-workspace-tool]) .filters{grid-template-columns:1fr}
+:host([data-vn-workspace-tool]) [data-grid]{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
+:host([data-vn-workspace-tool]) [data-detail-back]{font-size:24px}
+`;

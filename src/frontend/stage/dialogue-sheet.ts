@@ -76,19 +76,22 @@ export class DialogueSheet {
   }
   private usableHeight(): number {
     const rootHeight = this.root.clientHeight || this.root.getBoundingClientRect().height;
+    return Math.max(0, rootHeight - this.keyboardInset() - 112);
+  }
+  private keyboardInset(): number {
     const viewport = window.visualViewport;
-    const scale = this.coordinateScale();
-    return Math.max(0, Math.min(rootHeight, viewport ? viewport.height * scale : rootHeight) - 112);
+    if (!viewport) return 0;
+    // The reader may start below app chrome. Compare screen coordinates before
+    // converting to local (host-zoom compensated) CSS pixels.
+    return Math.max(0, this.root.getBoundingClientRect().bottom - (viewport.height + viewport.offsetTop)) * this.coordinateScale();
   }
   private cancelDrag(): void {
     if (this.drag && this.handle.hasPointerCapture(this.drag.id)) this.handle.releasePointerCapture(this.drag.id);
     this.drag = null;
   }
   private resize(): void {
-    const rootHeight = this.root.clientHeight || this.root.getBoundingClientRect().height;
-    const viewport = window.visualViewport;
-    const inset = viewport ? Math.max(0, rootHeight - viewport.height * this.coordinateScale()) : 0;
-    this.root.style.setProperty("--vn-sheet-keyboard-inset", `${inset}px`);
+    this.root.style.setProperty("--vn-reader-height", `${this.root.clientHeight || this.root.getBoundingClientRect().height}px`);
+    this.root.style.setProperty("--vn-sheet-keyboard-inset", `${this.keyboardInset()}px`);
     this.root.style.setProperty("--vn-sheet-height", `${sheetHeight(this.preferences.sheetSize, this.usableHeight(), this.preferences.heightRatio)}px`);
   }
   private changeHeight(height: number): void {

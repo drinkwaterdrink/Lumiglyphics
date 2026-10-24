@@ -4,6 +4,7 @@ import { DEFAULT_CONFIG, type VisualNovelConfig } from "../../config.js";
 import {
   applyVisualConfigToStage,
   computeAssetProgress,
+  computeReviewAttention,
   connectionCatalogStates,
   currentAssetError,
   currentAssetFailure,
@@ -335,9 +336,13 @@ describe("computeAssetProgress (granular image generation progress)", () => {
   test('local text operations override old review status only for their exact reply and request',()=>{
     const source=turn({assets:[asset({jobId:'j1',status:'generated'})],imageRequests:[{requestId:'r',jobId:'j1',paragraphIndex:0,state:'review',prompt:'scene',negativePrompt:'',model:'m',provider:'p',connectionId:'c',parameters:{},referenceSummary:'none',createdAt:'today'}]});
     const local={chatId:source.chatId,messageId:source.messageId,sourceFingerprint:source.sourceFingerprint,swipeId:source.swipeId,revision:source.revision,jobs:[{jobId:'j1',requestId:'r',kind:'rewrite' as const}]};
+    expect(computeReviewAttention(source)).toBe(1);
+    expect(computeReviewAttention(source,local)).toBe(0);
+    expect(computeReviewAttention(null)).toBe(0);
     expect(computeAssetProgress(source,null,local)).toMatchObject({label:'1 picture · 1 rewriting prompt',busy:true});
     expect(computeAssetProgress(source,null,{...local,jobs:[{...local.jobs[0]!,kind:'template'}]})).toMatchObject({label:'1 picture · 1 applying template',busy:true});
     for(const mismatch of [{chatId:'other'},{messageId:'other'},{sourceFingerprint:'other'},{swipeId:source.swipeId+1},{revision:source.revision+1}]){
+      expect(computeReviewAttention(source,{...local,...mismatch})).toBe(1);
       expect(computeAssetProgress(source,null,{...local,...mismatch})).toMatchObject({label:'1 picture · 1 needs review',busy:false});
     }
     expect(computeAssetProgress(source,null,{...local,jobs:[{...local.jobs[0]!,requestId:'old'}]})).toMatchObject({label:'1 picture · 1 needs review',busy:false});

@@ -38,7 +38,8 @@ try {
   assert.match(await card.innerText(),/silver hair/);assert.doesNotMatch(await card.innerText(),/uniform|black key/);
   await page.screenshot({path:`.cache/dossiers/${viewport.width}.png`});
   await page.keyboard.press('Shift+Tab');
-  assert.equal(await card.locator('summary').filter({hasText:'Local display note'}).evaluate(e=>(e.getRootNode() as ShadowRoot).activeElement===e),true);
+  assert.equal(await page.locator('[data-workspace-close]').evaluate(e=>(e.getRootNode() as ShadowRoot).activeElement===e),true,'non-modal details keep workspace navigation reachable');
+  await card.locator('summary').filter({hasText:'Local display note'}).focus();
   await page.keyboard.press('Enter');await page.keyboard.press('Tab');
   assert.equal(await card.locator('textarea').evaluate(e=>(e.getRootNode() as ShadowRoot).activeElement===e),true);
   await card.locator('textarea').fill('Remember the silver hair');
@@ -80,7 +81,7 @@ try {
   await referenceButton.click();const many=page.getByRole('dialog',{name:'Scene references',exact:true});
   await many.evaluate(el=>el.style.fontSize='22px');
   await many.locator('[data-reference-list]').evaluate(el=>el.scrollTop=el.scrollHeight);
-  assert.ok(await many.getByRole('button',{name:'Close information',exact:true}).isVisible(),'close stays visible while many references scroll');
+  assert.ok(await page.locator('[data-workspace-close]').isVisible(),'close stays visible while many references scroll');
   assert.equal(await many.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,'long names stay inside the sheet');
   await many.getByLabel('Search references').fill('Unique31');assert.equal(await many.locator('[data-reference-list] button').count(),1,'aliases are searchable');
   await page.evaluate(()=>(window as any).readingFixture.stage.loadTurn((window as any).readingFixture.dossierTurn));assert.equal(await page.getByRole('dialog',{name:'Scene references',exact:true}).count(),0,'source replacement invalidates open sheet');
@@ -112,7 +113,7 @@ try {
    await page.getByRole('dialog',{name:'Scene references',exact:true}).getByRole('button',{name:'Mira',exact:true}).click();
    const themed=await page.getByRole('dialog',{name:'About Mira',exact:true}).boundingBox();
    assert.ok(themed&&themed.x>=0&&themed.x+themed.width<=viewport.width&&themed.y+themed.height<=viewport.height,`card fits theme ${preset}`);
-   await page.keyboard.press('Escape');
+   await page.locator('[data-workspace-close]').click();
   }
   assert.equal(external,0,'dossiers never contact models/providers');
   await page.close();

@@ -61,301 +61,20 @@ describe("stage effects heuristics & schemas", () => {
   });
 });
 
-// Minimal Mock DOM for full VnStage integration tests
-class MockNode {
-  getRootNode(): Document { return document; }
-  contains(node: MockNode | null): boolean { return node === this || this.children.some(child => child.contains(node)); }
-  tagName: string;
-  dataset: Record<string, string> = {};
-  attributes = new Map<string, string>();
-  classList = {
-    _classes: new Set<string>(),
-    add: (...names: string[]) => names.forEach((n) => this.classList._classes.add(n)),
-    remove: (...names: string[]) => names.forEach((n) => this.classList._classes.delete(n)),
-    contains: (name: string) => this.classList._classes.has(name),
-  };
-  children: MockNode[] = [];
-  get childNodes(): MockNode[] { return this.children; }
-  parentNode: MockNode | null = null;
-  get parentElement(): MockNode | null { return this.parentNode; }
-  textContent = "";
-  _innerHTML = "";
-  hidden = false;
-  disabled = false;
-  offsetWidth = 100;
-  style: Record<string, string> = {};
-  get src(): string { return this.getAttribute("src") ?? ""; }
-  set src(val: string) { if (val) this.setAttribute("src", val); else this.removeAttribute("src"); }
-  get alt(): string { return this.getAttribute("alt") ?? ""; }
-  set alt(val: string) { this.setAttribute("alt", val); }
-  type = "";
-  value = "";
-
-  constructor(tagName: string) {
-    this.tagName = tagName.toUpperCase();
-  }
-
-  get innerHTML(): string {
-    return this._innerHTML;
-  }
-  set innerHTML(val: string) {
-    this._innerHTML = val;
-    this.children = [];
-    if (val.includes("data-vn-root")) {
-      buildStandardStageDOM(this);
-    }
-  }
-
-  setAttribute(name: string, value: string) {
-    this.attributes.set(name, value);
-    if (name.startsWith("data-vn-")) {
-      const camel = name.slice(8).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-      this.dataset["vn" + camel.charAt(0).toUpperCase() + camel.slice(1)] = value;
-    } else if (name.startsWith("data-")) {
-      const camel = name.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-      this.dataset[camel] = value;
-    }
-  }
-
-  getAttribute(name: string) {
-    return this.attributes.get(name) ?? null;
-  }
-
-  removeAttribute(name: string) {
-    this.attributes.delete(name);
-    if (name.startsWith("data-vn-")) {
-      const camel = name.slice(8).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-      delete this.dataset["vn" + camel.charAt(0).toUpperCase() + camel.slice(1)];
-    }
-  }
-
-  append(...nodes: (MockNode | string)[]) {
-    for (const node of nodes) {
-      if (typeof node === "string") {
-        const textNode = new MockNode("#text");
-        textNode.textContent = node;
-        this.appendChild(textNode);
-      } else {
-        this.appendChild(node);
-      }
-    }
-  }
-
-  appendChild(node: MockNode) {
-    node.remove();
-    node.parentNode = this;
-    this.children.push(node);
-    return node;
-  }
-
-  insertBefore(node: MockNode, reference: MockNode | null) {
-    if (!reference) return this.appendChild(node);
-    node.remove();
-    const index=this.children.indexOf(reference);
-    node.parentNode=this;
-    this.children.splice(index<0?this.children.length:index,0,node);
-    return node;
-  }
-
-  prepend(...nodes: MockNode[]) {
-    for (const node of [...nodes].reverse()) {
-      node.remove();
-      node.parentNode = this;
-      this.children.unshift(node);
-    }
-  }
-
-  remove() {
-    if (this.parentNode) {
-      const idx = this.parentNode.children.indexOf(this);
-      if (idx !== -1) this.parentNode.children.splice(idx, 1);
-      this.parentNode = null;
-    }
-  }
-
-  replaceChildren(...nodes: MockNode[]) {
-    this.children = [];
-    for (const n of nodes) this.appendChild(n);
-  }
-
-  addEventListener() {}
-  removeEventListener() {}
-  focus() {}
-
-  attachShadow() {
-    const s = new MockNode("#shadow-root");
-    this.appendChild(s);
-    return s as any;
-  }
-
-  querySelector(selector: string): any {
-    return this.querySelectorAll(selector)[0] ?? null;
-  }
-
-  querySelectorAll(selector: string): any[] {
-    const list: MockNode[] = [];
-    const walk = (node: MockNode) => {
-      if (matches(node, selector)) list.push(node);
-      for (const child of node.children) walk(child);
-    };
-    for (const child of this.children) walk(child);
-    return list;
-  }
-}
-
-function matches(node: MockNode, sel: string): boolean {
-  if (sel.includes("][")) {
-    const parts = sel.split("][");
-    return parts.every((p, i) => {
-      let sub = p;
-      if (i === 0) sub = p + "]";
-      else if (i === parts.length - 1) sub = "[" + p;
-      else sub = "[" + p + "]";
-      return matches(node, sub);
-    });
-  }
-  if (sel.startsWith(".")) {
-    return node.classList.contains(sel.slice(1));
-  }
-  if (sel.startsWith("[")) {
-    const attrExp = sel.slice(1, -1);
-    if (attrExp.includes("=")) {
-      const eq = attrExp.indexOf("=");
-      const key = attrExp.slice(0, eq).trim();
-      const val = attrExp.slice(eq + 1).replace(/^['"]|['"]$/g, "").trim();
-      return node.getAttribute(key) === val;
-    }
-    return node.attributes.has(attrExp.trim());
-  }
-  return node.tagName.toLowerCase() === sel.toLowerCase();
-}
-
-function buildStandardStageDOM(parent: MockNode) {
-  const root = new MockNode("main");
-  root.setAttribute("data-vn-root", "");
-
-  const scene = new MockNode("div");
-  scene.setAttribute("data-vn-scene", "");
-
-  const imgActive = new MockNode("img");
-  imgActive.setAttribute("data-vn-scene-image", "");
-  imgActive.setAttribute("data-vn-layer", "active");
-  imgActive.setAttribute("data-vn-empty", "true");
-
-  const imgIncoming = new MockNode("img");
-  imgIncoming.setAttribute("data-vn-scene-image", "");
-  imgIncoming.setAttribute("data-vn-layer", "incoming");
-  imgIncoming.setAttribute("data-vn-empty", "true");
-
-  const scrim = new MockNode("div");
-  scrim.setAttribute("data-vn-scrim", "");
-
-  const ambient = new MockNode("div");
-  ambient.setAttribute("data-vn-ambient", "");
-
-  scene.append(imgActive, imgIncoming, ambient, scrim);
-
-  const fx = new MockNode("div");
-  fx.setAttribute("data-vn-fx", "");
-
-  const flash = new MockNode("div");
-  flash.setAttribute("data-vn-flash", "");
-
-  const status = new MockNode("div");
-  status.setAttribute("data-vn-status-stack", "");
-
-  const empty = new MockNode("div");
-  empty.setAttribute("data-vn-empty-state", "");
-
-  const narrative = new MockNode("section");
-  narrative.setAttribute("data-vn-narrative", "");
-
-  const dialogue = new MockNode("div");
-  dialogue.setAttribute("data-vn-dialogue", "");
-
-  const controls = new MockNode("nav");
-  controls.setAttribute("data-vn-controls", "");
-  const logBtn = new MockNode("button");
-  logBtn.setAttribute("data-vn-control", "log");
-  const autoBtn = new MockNode("button");
-  autoBtn.setAttribute("data-vn-control", "auto");
-    const skipBtn = new MockNode("button");
-    skipBtn.setAttribute("data-vn-control", "skip");
-    const previousBtn = new MockNode("button");
-    previousBtn.setAttribute("data-vn-control", "previous");
-    controls.append(previousBtn, logBtn, autoBtn, skipBtn);
-
-  const speaker = new MockNode("span");
-  speaker.setAttribute("data-vn-speaker", "");
-
-  const text = new MockNode("p");
-  text.setAttribute("data-vn-dialogue-text", "");
-
-  const skipDescription = new MockNode("span");
-  skipDescription.setAttribute("data-vn-skip-description", "");
-  controls.append(skipDescription);
-
-  const footer = new MockNode("div");
-  footer.setAttribute("data-vn-dialogue-footer", "");
-  const progress = new MockNode("span");
-  progress.setAttribute("data-vn-progress", "");
-  const readingState = new MockNode("span");
-  readingState.setAttribute("data-vn-reading-state", "");
-  footer.append(progress, readingState);
-
-  const cont = new MockNode("button");
-  cont.setAttribute("data-vn-continue", "");
-
-  dialogue.append(controls, speaker, text, footer, cont);
-  narrative.append(dialogue);
-
-  const interaction = new MockNode("section");
-  interaction.setAttribute("data-vn-interaction", "");
-  const interactionHint = new MockNode("p");
-  interactionHint.setAttribute("data-vn-interaction-hint", "");
-  interaction.append(interactionHint);
-  const gameChoices = new MockNode("div");
-  gameChoices.setAttribute("data-vn-game-choices", "");
-  const choiceList = new MockNode("ol");
-  choiceList.setAttribute("data-vn-choice-list", "");
-  const inputForm = new MockNode("form");
-  inputForm.setAttribute("data-vn-input-form", "");
-  const input = new MockNode("textarea");
-  input.setAttribute("data-vn-input", "");
-  const submit = new MockNode("button");
-  submit.setAttribute("data-vn-submit", "");
-  inputForm.append(input, submit);
-  interaction.append(gameChoices, choiceList, inputForm);
-
-  const backlog = new MockNode("div");
-  backlog.setAttribute("data-vn-backlog", "");
-  const backlogClose = new MockNode("button");
-  backlogClose.setAttribute("data-vn-backlog-close", "");
-  const backlogReturn = new MockNode("button");
-  backlogReturn.setAttribute("data-vn-backlog-return", "");
-  const backlogContent = new MockNode("div");
-  backlogContent.setAttribute("data-vn-backlog-content", "");
-  backlog.append(backlogClose, backlogContent, backlogReturn);
-
-  root.append(scene, fx, flash, status, empty, narrative, interaction, backlog);
-  parent.append(root);
-}
+// Parse the real shell and theme markup, including reader workspace chrome.
+import { FakeNode as MockNode, installFakeDocument } from "./stage-test-dom.js";
 
 describe("VnStage visual effects & transitions", () => {
-  let originalDocument: any;
+  let restoreDocument: () => void;
   let mount: any;
 
   beforeEach(() => {
-    originalDocument = (globalThis as any).document;
-    (globalThis as any).document = {
-      createElement: (tag: string) => new MockNode(tag),
-      createElementNS: (_ns: string, tag: string) => new MockNode(tag),
-    };
+    restoreDocument = installFakeDocument();
     mount = new MockNode("div");
   });
 
   afterEach(() => {
-    (globalThis as any).document = originalDocument;
+    restoreDocument();
   });
 
   test("VnStage initializes with active and incoming image layers and flash overlay", () => {
@@ -533,20 +252,16 @@ describe("VnStage visual effects & transitions", () => {
 
 
 describe("extended stage effects & ambient overlays", () => {
-  let originalDocument: any;
+  let restoreDocument: () => void;
   let mount: any;
 
   beforeEach(() => {
-    originalDocument = (globalThis as any).document;
-    (globalThis as any).document = {
-      createElement: (tag: string) => new MockNode(tag),
-      createElementNS: (_ns: string, tag: string) => new MockNode(tag),
-    };
+    restoreDocument = installFakeDocument();
     mount = new MockNode("div");
   });
 
   afterEach(() => {
-    (globalThis as any).document = originalDocument;
+    restoreDocument();
   });
 
   test("isStageEffect accepts every extended effect id", () => {

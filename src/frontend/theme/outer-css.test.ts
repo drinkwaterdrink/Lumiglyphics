@@ -18,9 +18,12 @@ describe("outer safety root CSS", () => {
     expect(VN_OUTER_CSS).toMatch(/\[data-vn-exit\]:focus-visible \{[^}]*outline: 3px solid/);
   });
 
-  test("only the decorative chevron can be hidden", () => {
+  test("reader-first responsive rules never hide the Back to chat button", () => {
     const hidden = [...VN_OUTER_CSS.matchAll(/([^{}]+)\{[^}]*display:\s*none/g)].map((m) => m[1]!.trim());
-    for (const selector of hidden) expect(selector).toBe("[data-vn-exit]::before");
+    for (const selector of hidden) {
+      // New responsive navigation may hide secondary labels, never the safety exit.
+      if(selector.includes("[data-vn-exit]"))expect(selector).toMatch(/\[data-vn-exit\]::before$/);
+    }
   });
 
   test("stays local-only", () => {

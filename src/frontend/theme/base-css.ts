@@ -1,7 +1,8 @@
+import { READER_STAGE_CSS } from "./reader-shell-css.js";
 import { VN_EFFECTS_CSS } from "./effects-css.js";
 import { VN_TEXT_EFFECTS_CSS } from "./text-effects-css.js";
 
-export const VN_BASE_CSS = `
+const LEGACY_BASE_CSS = `
 :host {
   --vn-accent: #d8a8ff;
   --vn-text: #fff;
@@ -2055,3 +2056,5 @@ ${VN_TEXT_EFFECTS_CSS}
 [data-vn-move-draft] button { min-height:44px; margin:3px; padding:.5rem .75rem; font:inherit; color:inherit; background:var(--vn-button-bg); border:1px solid var(--vn-panel-border); border-radius:.5rem; cursor:pointer; }
 [data-vn-game-moves] summary:focus-visible,[data-vn-edit-game-move]:focus-visible,[data-vn-move-draft] :focus-visible { outline:2px solid var(--vn-accent); outline-offset:2px; }
 `;
+
+export const VN_BASE_CSS = LEGACY_BASE_CSS + READER_STAGE_CSS;
