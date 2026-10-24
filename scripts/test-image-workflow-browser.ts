@@ -32,6 +32,22 @@ try{
   assert.equal(await studio.locator('section').getAttribute('data-state'),'retry-queued');
   await page.evaluate(()=>{const f=(window as any).imageFixture;f.studio.setRetryQueue({...f.turn,activeJobId:'job',jobIds:[]});});
   assert.equal(await studio.locator('section').getAttribute('data-state'),'retry-running');
+  await page.evaluate(()=>{
+   const f=(window as any).imageFixture,t=structuredClone(f.turn);
+   t.assets=[{...t.assets[0],jobId:'ready',status:'generated'},{...t.assets[0],jobId:'held',status:'generating'},{...t.assets[0],jobId:'failed',status:'failed'}];
+   t.imageRequests=t.assets.map((asset:any,index:number)=>({...t.imageRequests[0],jobId:asset.jobId,requestId:`mixed-${index}`,state:index===0?'approved':index===1?'review':'cancelled'}));
+   f.studio.setTurn(t);f.mixed=t;
+  });
+  assert.equal(await studio.locator('[data-picture-overview]').innerText(),'3 pictures · 1 ready · 1 needs review · 1 failed');
+  assert.match(await studio.locator('[data-picture-strip]').innerText(),/Needs review/);
+  await page.evaluate(()=>{const f=(window as any).imageFixture;f.studio.setRetryQueue({...f.mixed,activeJobId:null,jobIds:['failed']});});
+  assert.match(await studio.locator('[data-picture-overview]').innerText(),/1 retry queued/);
+  assert.doesNotMatch(await studio.locator('[data-picture-overview]').innerText(),/1 failed/);
+  assert.match(await studio.locator('[data-picture] option[value=failed]').innerText(),/Retry queued/);
+  assert.match(await studio.locator('[data-picture-strip]').innerText(),/Retry queued/);
+  await studio.locator('[data-studio-body]').evaluate(el=>{el.scrollTop=0;});
+  assert.equal(await studio.locator('section').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+  await page.screenshot({path:`.cache/browser-fixtures/image-overview-${width}.png`});
   await page.close();
  }
  console.log('Image workflow: edited-preview primary action, no competing retry, recovery and queue states passed at 320/390/1280px.');

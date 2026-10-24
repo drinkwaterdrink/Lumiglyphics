@@ -1,6 +1,15 @@
 import type {AssetView} from '../../protocol.js';
 import type {ImageRequestRecord} from '../../shared/image-review.js';
 type Input={asset?:AssetView|undefined;requestState?:ImageRequestRecord['state']|undefined;planning?:boolean;preparing?:boolean;hasTurn?:boolean;zeroBudget?:boolean;operation?:'rewrite'|'template'|undefined;retryQueued?:boolean;retryRunning?:boolean};
+const labels:Record<string,string>={planning:'Planning',idle:'No reply',empty:'No pictures', 'zero-budget':'Disabled',preparing:'Preparing prompt',rewriting:'Rewriting prompt',rebuilding:'Applying template','retry-running':'Retry running','retry-queued':'Retry queued',reused:'Reused',held:'Needs review',failed:'Failed',cancelled:'Cancelled',generating:'Generating',historical:'Saved',completed:'Ready'};
+export function pictureStateLabel(state:ReturnType<typeof inspectorState>):string{return state.kind==='cancelled'&&state.title==='Picture skipped'?'Skipped':labels[state.kind]??state.title;}
+export function pictureStateSummary(states:ReturnType<typeof inspectorState>[]):string{
+  if(!states.length)return '';
+  const counts=new Map<string,number>();
+  for(const state of states){const group=['completed','historical','reused'].includes(state.kind)?'ready':['preparing','rewriting','rebuilding'].includes(state.kind)?'preparing':pictureStateLabel(state).toLocaleLowerCase();counts.set(group,(counts.get(group)??0)+1);}
+  const order=['ready','needs review','preparing','generating','retry queued','retry running','failed','cancelled','skipped'];
+  return [`${states.length} picture${states.length===1?'':'s'}`,...[...new Set([...order,...counts.keys()])].filter(key=>counts.has(key)).map(key=>`${counts.get(key)} ${key}`)].join(' · ');
+}
 export function inspectorState(input:Input):{kind:string;title:string;detail:string;action:'generate'|'retry'|'prepare'|null}{
   const {asset,requestState}=input;
   const state=(kind:string,title:string,detail:string,action:'generate'|'retry'|'prepare'|null=null)=>({kind,title,detail,action});

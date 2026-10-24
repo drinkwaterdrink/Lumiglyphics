@@ -1,6 +1,6 @@
 import {describe, expect, test} from 'bun:test';
 import type {AssetView} from '../../protocol.js';
-import {inspectorState} from './inspector-model.js';
+import {inspectorState,pictureStateLabel,pictureStateSummary} from './inspector-model.js';
 
 describe('image inspector state', () => {
   const asset:AssetView={jobId:'one',cueId:'cue',paragraphIndex:0,status:'generated'};
@@ -32,5 +32,19 @@ describe('image inspector state', () => {
     expect(inspectorState({asset:failed,operation:'rewrite',retryQueued:true})).toMatchObject({kind:'rewriting',action:null});
     expect(inspectorState({asset,operation:'template'})).toMatchObject({kind:'rebuilding',action:null});
     expect(inspectorState({asset,operation:'rewrite',planning:true}).kind).toBe('planning');
+  });
+  test('picture labels and reply totals share operation meaning without counting a retry as another picture',()=>{
+    const states=[
+      inspectorState({asset,requestState:'approved'}),
+      inspectorState({asset:{...asset,source:'cache'}}),
+      inspectorState({asset,requestState:'review'}),
+      inspectorState({asset:{...asset,status:'failed'},retryQueued:true}),
+      inspectorState({asset:{...asset,status:'failed'}}),
+    ];
+    expect(states.map(pictureStateLabel)).toEqual(['Ready','Reused','Needs review','Retry queued','Failed']);
+    expect(pictureStateSummary(states)).toBe('5 pictures · 2 ready · 1 needs review · 1 retry queued · 1 failed');
+    expect(pictureStateSummary([])).toBe('');
+    expect(pictureStateLabel(inspectorState({asset,operation:'rewrite'}))).toBe('Rewriting prompt');
+    expect(pictureStateLabel(inspectorState({asset:{...asset,status:'cancelled'},requestState:'skipped'}))).toBe('Skipped');
   });
 });

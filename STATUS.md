@@ -1,6 +1,6 @@
-# Lumiglyphics status — beta.58
+# Lumiglyphics status — beta.62
 
-This matrix describes beta.61 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
+This matrix describes beta.62 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
 
 | Area | Status | Current behavior / remaining scope |
 |---|---|---|
@@ -29,3 +29,5 @@ Beta.59: [cross-system polish audit](docs/extension-polish-audit.md), History fi
 Beta.60: prompt-review operation states, visible edited-preview actions and saved-draft reset; queued/running retries no longer masquerade as failures. See [verification](docs/review-evidence/2026-10-23-image-workflow.md).
 
 Beta.61: display-rule syntax feedback with line selection, invalid-draft save protection and duplicate settings heading cleanup. [Evidence and limits](docs/review-evidence/2026-10-23-display-rules.md).
+
+Beta.62 starts the approved [cohesive experience plan](docs/superpowers/plans/2026-10-23-cohesive-experience.md): consistent picture-selector/thumbnail operation labels and a reply summary. Main remains at the promoted beta.61 baseline.

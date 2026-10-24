@@ -1,7 +1,7 @@
 import type {ImageRetryQueueView} from '../../shared/image-retries.js';
 import {promptProfileSummary} from "../../shared/image-prompt-profile.js";
 import {assertCapabilityOutput} from '../../shared/model-output-capabilities.js';
-import {inspectorState} from './inspector-model.js';
+import {inspectorState,pictureStateLabel,pictureStateSummary} from './inspector-model.js';
 import {PresentationRulesPanel} from '../settings/presentation-rules.js';
 import type {PresentationRuleCatalog} from '../../shared/presentation-rules.js';
 import { modelOutputHelp } from '../../shared/image-model-output.js';
@@ -239,7 +239,8 @@ export class ImageStudio {
     const output=document.createElement('div');output.dataset.outputControls='';
     output.innerHTML='<p data-output-summary role="status"></p><div data-output-fields><label>Image size<select data-output-size aria-label="Image size"></select></label><label data-output-ratio-field>Aspect ratio<select data-output-ratio aria-label="Image aspect ratio"></select></label><small>Published values for this model. Changes apply to this picture only.</small></div>';
     const outputOptions=document.createElement('details');outputOptions.dataset.outputOptions='';outputOptions.innerHTML='<summary>Image size &amp; framing</summary>';outputOptions.append(output);tools.prepend(outputOptions);
-    body.replaceChildren(navigation,context,detail,meta,model,editor,tools,settings,notice);
+    const overview=document.createElement('p');overview.dataset.pictureOverview='';overview.setAttribute('role','status');overview.setAttribute('aria-atomic','true');overview.style.cssText='font-size:12px;margin:0 0 10px;overflow-wrap:anywhere';
+    body.replaceChildren(overview,navigation,context,detail,meta,model,editor,tools,settings,notice);
     const actionHelp=document.createElement('small');actionHelp.dataset.actionHelp='';this.el('[data-studio-footer]').append(actionHelp);
     const style=document.createElement('style');style.textContent=INSPECTOR_CSS;this.root.append(style);
   }
@@ -422,7 +423,7 @@ export class ImageStudio {
       const option = document.createElement("option"); option.value = asset.jobId;
       const latest = this.turn?.imageRequests?.filter((record) => record.jobId === asset.jobId).at(-1);
       const role=asset.stageAsset?.role;const label=role==='background'?'Background':role==='portrait'?`Portrait${asset.stageAsset?.character?` · ${asset.stageAsset.character}`:''}`:'Picture';
-      option.textContent = `${label} · Paragraph ${asset.paragraphIndex + 1} — ${this.retryQueueJobs.has(asset.jobId)?"queued for retry":this.retryActive===asset.jobId?"retry in progress":latest?.state === "review" ? "awaiting review" : asset.status === "generating" && !latest ? "preparing" : friendlyStatus(asset.status)}`;
+      option.textContent = `${label} · Paragraph ${asset.paragraphIndex + 1} — ${pictureStateLabel(this.stateForJob(asset.jobId,latest))}`;
       picker.append(option);
     }
     picker.value = this.selectedJob;
@@ -506,13 +507,13 @@ export class ImageStudio {
     this.renderInspector();
     this.setNotice(this.recovering ? (this.recovering==='stop'?'Stopping pending pictures…':'Preparing unfinished pictures for review…') : rolling ? "Rewriting prompt with the story-reader model… Uses text tokens; image generation still needs approval." : (asset?.error ?? '') || (record && this.rebuilding.has(record.requestId) ? "Rebuilding template… Wait for a new preview before generating." : ''));
   }
-  private currentInspectorState(){
-    const record=this.record();
-    return inspectorState({asset:this.turn?.assets.find(entry=>entry.jobId===this.selectedJob),requestState:record&&this.submitted.has(record.requestId)?'approved':record?.state,
-      planning:Boolean(this.planningChat)||this.turn?.status==='planning',preparing:this.preparing.has(this.selectedJob),hasTurn:!!this.turn,zeroBudget:this.maxImagesPerTurn===0,
+  private stateForJob(jobId:string,record?:ImageRequestRecord){
+    return inspectorState({asset:this.turn?.assets.find(entry=>entry.jobId===jobId),requestState:record&&this.submitted.has(record.requestId)?'approved':record?.state,
+      planning:Boolean(this.planningChat)||this.turn?.status==='planning',preparing:this.preparing.has(jobId),hasTurn:!!this.turn,zeroBudget:this.maxImagesPerTurn===0,
       operation:record&&this.rerolling.has(record.requestId)?'rewrite':record&&this.rebuilding.has(record.requestId)?'template':undefined,
-      retryQueued:this.retryQueueJobs.has(this.selectedJob),retryRunning:this.retryActive===this.selectedJob});
+      retryQueued:this.retryQueueJobs.has(jobId),retryRunning:this.retryActive===jobId});
   }
+  private currentInspectorState(){return this.stateForJob(this.selectedJob,this.record());}
   private renderInspector():void {
     const asset=this.turn?.assets.find(entry=>entry.jobId===this.selectedJob),record=this.record();
     const planning=Boolean(this.planningChat)||this.turn?.status==='planning';
@@ -537,9 +538,12 @@ export class ImageStudio {
     image.onerror=()=>{image.hidden=true;this.el('[data-placeholder]').hidden=false;};
     const strip=this.el('[data-picture-strip]');strip.replaceChildren();
     const assets=this.turn?.assets??[];strip.hidden=assets.length<2||assets.length>3;
+    const stateFor=(jobId:string)=>this.stateForJob(jobId,this.turn?.imageRequests?.filter(record=>record.jobId===jobId).at(-1));
+    const overview=this.el('[data-picture-overview]');overview.hidden=planning||assets.length<2;overview.textContent=overview.hidden?'':pictureStateSummary(assets.map(entry=>stateFor(entry.jobId)));
     if(!strip.hidden)for(const [index,entry] of assets.entries()){
-      const button=document.createElement('button');button.type='button';button.setAttribute('aria-pressed',String(entry.jobId===this.selectedJob));button.setAttribute('aria-label',`Picture ${index+1}, paragraph ${entry.paragraphIndex+1}`);
-      if(entry.imageUrl){const thumb=document.createElement('img');thumb.src=entry.imageUrl;thumb.alt='';button.append(thumb);}button.append(`Picture ${index+1}`);
+      const label=pictureStateLabel(stateFor(entry.jobId));
+      const button=document.createElement('button');button.type='button';button.setAttribute('aria-pressed',String(entry.jobId===this.selectedJob));button.setAttribute('aria-label',`Picture ${index+1}, paragraph ${entry.paragraphIndex+1}`);button.setAttribute('aria-description',label);
+      if(entry.imageUrl){const thumb=document.createElement('img');thumb.src=entry.imageUrl;thumb.alt='';button.append(thumb);}const caption=document.createElement('span');caption.textContent=`Picture ${index+1} · ${label}`;button.append(caption);
       button.onclick=()=>{this.selectedJob=entry.jobId;this.selectedRequest='';this.render();};strip.append(button);
     }
     this.el('[data-picture]').closest('label')!.hidden=assets.length>=2&&assets.length<=3;
