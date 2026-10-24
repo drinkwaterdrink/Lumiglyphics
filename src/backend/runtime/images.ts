@@ -798,7 +798,11 @@ export async function prepareAssetJobs(
     }
     // Allocation owns this newly accepted plan: promote free reuse and funded misses
     // before persisting/scheduling. Failed and retried jobs keep their admitted slots.
-    plan.visualCues=admitted;plan.cacheCues=[...remaining,...(castAllocation?.reuseOnly??[])].slice(0,MAX_CACHE_CUES_PER_TURN);
+    const occupied=new Set(admitted.map(cue=>cue.paragraphIndex));
+    plan.visualCues=admitted;
+    // An unfunded optional candidate cannot coexist with an admitted cue at its
+    // paragraph. Free cache/art hits were already admitted above, with their jobs.
+    plan.cacheCues=[...remaining,...(castAllocation?.reuseOnly??[])].filter(cue=>!occupied.has(cue.paragraphIndex)).slice(0,MAX_CACHE_CUES_PER_TURN);
     return selected;
   }
   const candidates = createAssetJobs(plan, config, characterAppearance);

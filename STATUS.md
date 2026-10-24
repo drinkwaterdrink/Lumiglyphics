@@ -1,6 +1,6 @@
-# Lumiglyphics status — beta.65
+# Lumiglyphics status — beta.66
 
-This matrix describes beta.65 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
+This matrix describes beta.66 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
 
 | Area | Status | Current behavior / remaining scope |
 |---|---|---|
@@ -37,3 +37,5 @@ Beta.63: reader progress now shares picture-state labels, reacts to review/queue
 Beta.64: prepared picture brief with explicit draft provenance, non-mutating editor links, frozen model-capability explanations and square-only output guidance. A separate shared-style snapshot is not inferred when absent.
 
 Beta.65: new request preparation snapshots expose appearance/outfit/direction sources and subject-placeholder usage in the prepared brief. Correction scope is explained before saving. Display-only provenance is excluded from cache identity.
+
+Beta.66 hotfix: prevent unfunded cache-cue overlaps during cast allocation and narrowly recover existing saved plans when the overlap has no saved job. Story/job validation remains strict.

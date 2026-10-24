@@ -127,6 +127,24 @@ function runtime(record: StoredTurnRecord): { spindle: SpindleAPI; writes: Map<s
 }
 
 describe("runtime asset readiness", () => {
+  test('an unfunded overlapping cache candidate cannot block an existing generated image acknowledgement',async()=>{
+    const affected={...structuredClone(plan),cacheCues:[{...plan.visualCues[0]!,cueId:'unfunded-cue',assetJobId:'unfunded-job'}]};
+    const record:StoredTurnRecord={schemaVersion:1,speaker:'Mira',status:'ready',plan:affected,jobs:[generatedJob()],updatedAt:now};
+    const f=runtime(record);
+    await markAssetReady(f.spindle,{type:'vn_asset_ready',chatId:'chat',messageId:'message',jobId:'job',sourceFingerprint:key.sourceFingerprint});
+    const saved=f.writes.get(turnPath('chat','message',0)) as StoredTurnRecord;
+    expect(saved.jobs[0]?.status).toBe('browser_ready');expect(saved.jobs[0]?.imageId).toBe(record.jobs[0]?.imageId);
+    expect(saved.plan.cacheCues).toEqual([]);expect(saved.plan.visualCues).toEqual(plan.visualCues);
+    expect(record.plan.cacheCues).toHaveLength(1);
+  });
+  test('cache recovery cannot hide a cue with a saved job or a different plan error',async()=>{
+    for(const protectedCase of ['saved-job','wrong-scene']){
+      const affected={...structuredClone(plan),cacheCues:[{...plan.visualCues[0]!,cueId:'extra-cue',assetJobId:'extra-job',...(protectedCase==='wrong-scene'?{sceneId:'not-the-scene'}:{})}]};
+      const f=runtime({schemaVersion:1,speaker:'Mira',status:'ready',plan:affected,jobs:protectedCase==='saved-job'?[generatedJob(),{...generatedJob(),jobId:'extra-job',provider:'cache'}]:[generatedJob()],updatedAt:now});
+      await expect(markAssetReady(f.spindle,{type:'vn_asset_ready',chatId:'chat',messageId:'message',jobId:'job',sourceFingerprint:key.sourceFingerprint})).rejects.toThrow();
+      expect(f.writes.size).toBe(0);
+    }
+  });
   for (const selection of [null, "turns/chat/new/0.json"]) {
     test(`readiness does not restore a selection changed to ${selection}`, async () => {
       const record: StoredTurnRecord = { schemaVersion: 1, speaker: "Mira", status: "ready", plan, jobs: [generatedJob()], updatedAt: now };

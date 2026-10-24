@@ -1,7 +1,7 @@
 import {test,expect} from 'bun:test';
 import {DEFAULT_CONFIG} from '../../config.js';
 import {templateSnapshot} from '../../shared/image-templates.js';
-import type {TurnPlan,VisualCue} from '../../shared/contracts.js';
+import {TurnPlanSchema,type TurnPlan,type VisualCue} from '../../shared/contracts.js';
 import {castAllocationCandidates} from './cast-allocation.js';
 import {prepareAssetJobs} from './images.js';
 import {SceneImageCache} from '../core/scene-image-cache.js';
@@ -31,6 +31,8 @@ test('cast allocation respects one shared allowance and creates no provider requ
   const plan=castPlan();const jobs=await prepareAssetJobs(api,plan,{...DEFAULT_CONFIG,castMode:true,maxImagesPerTurn:budget,referenceAnchoring:false},undefined,new SceneImageCache(),'u');
   expect(jobs.filter(j=>j.provider!=='cache')).toHaveLength(budget);
   expect(plan.visualCues[0]?.imageTemplate?.category).toBe('environment');
+  expect(TurnPlanSchema.safeParse(plan).success).toBe(true);
+  expect(plan.cacheCues?.some(c=>plan.visualCues.some(v=>v.paragraphIndex===c.paragraphIndex))).toBe(false);
  }
  expect(calls).toBe(0);
 });

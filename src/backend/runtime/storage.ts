@@ -705,6 +705,22 @@ export async function saveChatState(
   }) : Promise.resolve());
 }
 
+/** Recover only optional, unfunded overlap proposals written by older allocation.
+ * Never discard a job, relax primary validation, or mutate the stored input. */
+function storedTurnPlan(raw:unknown,jobs:unknown,onRecovery:()=>void):TurnPlan{
+  const original=TurnPlanSchema.safeParse(raw);
+  if(original.success)return original.data;
+  const overlap='Cache cues cannot share a paragraph with a budgeted visual cue.';
+  if(!original.error.issues.every(issue=>issue.path[0]==='cacheCues'&&issue.message===overlap))throw original.error;
+  const plan=raw as TurnPlan;
+  const occupied=new Set(plan.visualCues.map(cue=>cue.paragraphIndex));
+  const savedIds=new Set(Array.isArray(jobs)?jobs.flatMap(job=>job&&typeof job==='object'&&typeof job.jobId==='string'?[job.jobId]:[]):[]);
+  const cacheCues=(plan.cacheCues??[]).filter(cue=>!occupied.has(cue.paragraphIndex)||savedIds.has(cue.assetJobId));
+  const recovered=TurnPlanSchema.safeParse({...plan,cacheCues});
+  if(!recovered.success)throw original.error;
+  onRecovery();return recovered.data;
+}
+
 export async function loadTurnRecord(
   spindle: SpindleAPI,
   path: string | null,
@@ -730,7 +746,7 @@ export async function loadTurnRecord(
     ...(CardRoleSchema.safeParse(raw.cardRole).success ? {cardRole: CardRoleSchema.parse(raw.cardRole)} : {}),
     ...(typeof raw.cardId === "string" ? {cardId:raw.cardId} : {}),
     status,
-    plan: TurnPlanSchema.parse(raw.plan),
+    plan: storedTurnPlan(raw.plan,raw.jobs,()=>spindle.log?.warn?.('Ignored conflicting optional image-cache candidates without saved jobs; existing story and image jobs are preserved.')),
     jobs: Array.isArray(raw.jobs) ? raw.jobs.map((job) => AssetJobSchema.parse(job)) : [],
     ...(Array.isArray(raw.imageRequests) ? { imageRequests: safeImageHistory(raw.imageRequests) } : {}),
     ...(raw.previousImages && typeof raw.previousImages === "object" ? { previousImages: raw.previousImages } : {}),
