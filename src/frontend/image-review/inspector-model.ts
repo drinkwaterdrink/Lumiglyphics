@@ -1,13 +1,13 @@
 import type {AssetView} from '../../protocol.js';
 import type {ImageRequestRecord} from '../../shared/image-review.js';
 type Input={asset?:AssetView|undefined;requestState?:ImageRequestRecord['state']|undefined;planning?:boolean;preparing?:boolean;hasTurn?:boolean;zeroBudget?:boolean;operation?:'rewrite'|'template'|undefined;retryQueued?:boolean;retryRunning?:boolean};
-const labels:Record<string,string>={planning:'Planning',idle:'No reply',empty:'No pictures', 'zero-budget':'Disabled',preparing:'Preparing prompt',rewriting:'Rewriting prompt',rebuilding:'Applying template','retry-running':'Retry running','retry-queued':'Retry queued',reused:'Reused',held:'Needs review',failed:'Failed',cancelled:'Cancelled',generating:'Generating',historical:'Saved',completed:'Ready'};
+const labels:Record<string,string>={planning:'Planning',idle:'No reply',empty:'No pictures', 'zero-budget':'Disabled',preparing:'Preparing prompt',rewriting:'Rewriting prompt',rebuilding:'Applying template','retry-running':'Retry running','retry-queued':'Retry queued',reused:'Reused',held:'Needs review',failed:'Failed',cancelled:'Cancelled',waiting:'Waiting to generate',generating:'Generating',historical:'Saved',completed:'Ready'};
 export function pictureStateLabel(state:ReturnType<typeof inspectorState>):string{return state.kind==='cancelled'&&state.title==='Picture skipped'?'Skipped':labels[state.kind]??state.title;}
 export function pictureStateSummary(states:ReturnType<typeof inspectorState>[]):string{
   if(!states.length)return '';
   const counts=new Map<string,number>();
   for(const state of states){const group=['completed','historical','reused'].includes(state.kind)?'ready':['preparing','rewriting','rebuilding'].includes(state.kind)?'preparing':pictureStateLabel(state).toLocaleLowerCase();counts.set(group,(counts.get(group)??0)+1);}
-  const order=['ready','needs review','preparing','generating','retry queued','retry running','failed','cancelled','skipped'];
+  const order=['ready','needs review','preparing','waiting to generate','generating','retry queued','retry running','failed','cancelled','skipped'];
   return [`${states.length} picture${states.length===1?'':'s'}`,...[...new Set([...order,...counts.keys()])].filter(key=>counts.has(key)).map(key=>`${counts.get(key)} ${key}`)].join(' · ');
 }
 export function inspectorState(input:Input):{kind:string;title:string;detail:string;action:'generate'|'retry'|'prepare'|null}{
@@ -27,6 +27,7 @@ export function inspectorState(input:Input):{kind:string;title:string;detail:str
   if(requestState==='review')return state('held','Ready for your review','Review or edit the prompt, then generate this picture. No image request has been sent.', 'generate');
   if(asset.status==='failed')return state('failed','Picture failed','Quick retry starts another image attempt without review. Edit before retry opens a separate preview.','retry');
   if(asset.status==='cancelled')return state('cancelled',requestState==='skipped'?'Picture skipped':'Picture cancelled','Quick retry queues another attempt without review, or edit a preview first.','retry');
+  if(asset.status==='queued'&&requestState)return state('waiting','Waiting to generate','The prompt is prepared and waiting for an image slot. No provider generation is reported yet.');
   if(asset.status==='queued'||asset.status==='generating')return requestState ? state('generating','Generating picture…','The image request has been approved. You can keep reading.') : state('preparing','Preparing a prompt…','Waiting for prompt and reference preparation. Later pictures may depend on an earlier portrait.');
   if(!requestState)return state('historical','Saved picture','The original request is unavailable for this older picture. You can prepare a new preview.','prepare');
   return state('completed','Picture ready','Regenerate immediately without review, or edit a replacement preview first. Your current picture stays while its replacement runs.','prepare');

@@ -332,6 +332,17 @@ describe("decideTurnApplication (same-turn guard + load-turn path)", () => {
   });
 });
 describe("computeAssetProgress (granular image generation progress)", () => {
+  test('held reviews are awaiting action rather than provider generation',()=>{
+    const source=turn({assets:[asset({jobId:'j1',status:'generating'})],imageRequests:[{requestId:'r',jobId:'j1',paragraphIndex:0,state:'review',prompt:'scene',negativePrompt:'',model:'m',provider:'p',connectionId:'c',parameters:{},referenceSummary:'none',createdAt:'today'}]});
+    expect(computeAssetProgress(source)).toMatchObject({label:'1 picture · 1 needs review',busy:false});
+  });
+  test('retry progress is scoped to the exact source version and never counts another picture',()=>{
+    const source=turn({assets:[asset({jobId:'j1',status:'failed'})]});
+    const queue={chatId:source.chatId,messageId:source.messageId,sourceFingerprint:source.sourceFingerprint,swipeId:source.swipeId,revision:source.revision,activeJobId:null,jobIds:['j1']};
+    expect(computeAssetProgress(source,queue)).toMatchObject({total:1,label:'1 picture · 1 retry queued',busy:false});
+    expect(computeAssetProgress(source,{...queue,revision:source.revision+1})).toBeNull();
+    expect(computeAssetProgress(source,{...queue,activeJobId:'j1',jobIds:[]})).toMatchObject({label:'1 picture · 1 retry running',busy:true});
+  });
   test("returns null when there are no assets in the turn", () => {
     expect(computeAssetProgress(null)).toBeNull();
     expect(computeAssetProgress(turn({ assets: [] }))).toBeNull();
@@ -345,7 +356,7 @@ describe("computeAssetProgress (granular image generation progress)", () => {
         asset({ jobId: "j3", status: "queued" }),
       ],
     });
-    expect(computeAssetProgress(source)).toEqual({ current: 1, total: 3 });
+    expect(computeAssetProgress(source)).toEqual({ current: 1, total: 3, label:"3 pictures · 3 preparing",busy:true });
   });
 
   test("calculates 2/3 when the first asset completed and the second is generating", () => {
@@ -356,7 +367,7 @@ describe("computeAssetProgress (granular image generation progress)", () => {
         asset({ jobId: "j3", status: "queued" }),
       ],
     });
-    expect(computeAssetProgress(source)).toEqual({ current: 2, total: 3 });
+    expect(computeAssetProgress(source)).toEqual({ current: 2, total: 3, label:"3 pictures · 1 ready · 2 preparing",busy:true });
   });
 
   test("calculates 3/3 when the first two assets completed and the third is generating", () => {
@@ -367,7 +378,7 @@ describe("computeAssetProgress (granular image generation progress)", () => {
         asset({ jobId: "j3", status: "generating" }),
       ],
     });
-    expect(computeAssetProgress(source)).toEqual({ current: 3, total: 3 });
+    expect(computeAssetProgress(source)).toEqual({ current: 3, total: 3, label:"3 pictures · 2 ready · 1 preparing",busy:true });
   });
 
   test("returns null once all three assets have finished", () => {

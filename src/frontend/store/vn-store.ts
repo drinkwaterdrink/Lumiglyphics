@@ -78,6 +78,8 @@ export interface VnSceneImage {
 export interface VnAssetProgress {
   current: number;
   total: number;
+  label?: string;
+  busy?: boolean;
 }
 
 export interface VnActivity {

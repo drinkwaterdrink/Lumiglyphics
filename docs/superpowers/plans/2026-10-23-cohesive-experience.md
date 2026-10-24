@@ -35,7 +35,8 @@ Files: `src/frontend/image-review/inspector-model.ts`, its tests, `studio.ts`, a
 - [x] Add a compact reply summary without duplicating technical error payloads or performing new work.
 - [x] Verify selection, queued retry, prompt drafts, repair, no paid calls on browsing, and 320/390/1280px layouts.
 
-- [ ] Extend the same status contract to reader-level progress and recovery surfaces before calling the whole unified workflow complete.
+- [x] Extend shared statuses to reader-level progress, including review updates, scoped retry events and initial/reopened reply load. Delivered beta.63.
+- [ ] Unify remaining recovery controls and mirror local rewrite/template preparation into reader progress before calling the whole workflow complete.
 
 ## Phase 2 — visual brief and compatibility explanation
 

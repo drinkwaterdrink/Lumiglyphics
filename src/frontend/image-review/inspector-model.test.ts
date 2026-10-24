@@ -24,6 +24,7 @@ describe('image inspector state', () => {
   test('approved running requests and local preparation never offer generation',()=>{
     expect(inspectorState({asset:{...asset,status:'generating'},requestState:'approved'})).toMatchObject({kind:'generating',action:null});
     expect(inspectorState({asset,requestState:'review',preparing:true})).toMatchObject({kind:'preparing',action:null});
+    expect(inspectorState({asset:{...asset,status:'queued'},requestState:'prepared'})).toMatchObject({kind:'waiting',action:null});
   });
   test('local operations and retry queue explain the actual work before stale asset status',()=>{
     const failed={...asset,status:'failed' as const};

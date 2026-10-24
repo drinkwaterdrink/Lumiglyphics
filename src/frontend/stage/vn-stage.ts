@@ -2263,8 +2263,9 @@ export class VnStage {
     if (this.state.assetProgress && this.state.assetProgress.total > 0) {
       badges.push({
         kind: "image",
-        label: `Creating image ${this.state.assetProgress.current} of ${this.state.assetProgress.total}`,
-        icon: "spinner",
+        label: this.state.assetProgress.label??`Creating image ${this.state.assetProgress.current} of ${this.state.assetProgress.total}`,
+        icon: this.state.assetProgress.busy===false?"image":"spinner",
+        ...(this.callbacks.onReviewImages?{interactive:true,action:this.callbacks.onReviewImages}:{}),
       });
     } else if (this.state.pendingImage) {
       badges.push({ kind: "loading", label: "Loading the scene image\u2026", icon: "spinner" });

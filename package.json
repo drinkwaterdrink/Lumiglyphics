@@ -1,6 +1,6 @@
 {
   "name": "lumiglyphics",
-  "version": "0.2.0-beta.62",
+  "version": "0.2.0-beta.63",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.0",
@@ -26,6 +26,7 @@
     "test:image-recovery": "node --experimental-strip-types ./scripts/test-image-recovery-browser.ts",
     "test:image-review": "bun run ./scripts/test-image-review-browser.ts",
     "test:image-library": "node --experimental-strip-types ./scripts/test-image-library-browser.ts",
+    "test:reader-picture-status": "node --experimental-strip-types ./scripts/test-reader-picture-status-browser.ts",
     "test:display-rules": "node --experimental-strip-types ./scripts/test-display-rules-browser.ts",
     "test:image-workflow": "node --experimental-strip-types ./scripts/test-image-workflow-browser.ts",
     "test:history-races": "node --experimental-strip-types ./scripts/test-history-races-browser.ts",

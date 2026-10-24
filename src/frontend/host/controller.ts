@@ -1,3 +1,5 @@
+import {inspectorState,pictureStateSummary} from '../image-review/inspector-model.js';
+import type {ImageRetryQueueView} from '../../shared/image-retries.js';
 import {selectHeldBackground} from '../../shared/background-hold.js';
 import {createUiId} from '../request-id.js';
 import {NarrativePreviewSchema} from '../../shared/preparation-preview.js';
@@ -305,7 +307,7 @@ function replaceAsset(turn: TurnView, asset: AssetView): TurnView {
   return { ...turn, assets };
 }
 
-export function computeAssetProgress(turn: TurnView | null): { current: number; total: number } | null {
+export function computeAssetProgress(turn: TurnView | null, queue?:ImageRetryQueueView | null): { current: number; total: number; label?:string; busy?:boolean } | null {
   if (!turn || !turn.assets || turn.assets.length === 0) return null;
   // Cache-served extra swaps never generate; they must not inflate "n of m".
   const budgeted = turn.assets.filter((a) => a.source !== "cache");
@@ -318,10 +320,11 @@ export function computeAssetProgress(turn: TurnView | null): { current: number; 
       a.status === "failed" ||
       a.status === "cancelled",
   ).length;
-  const inFlight = budgeted.filter((a) => a.status === "generating" || a.status === "queued").length;
-  if (inFlight > 0) {
-    const current = Math.min(total, done + 1);
-    return { current, total };
+  const scoped=queue&&queue.chatId===turn.chatId&&queue.messageId===turn.messageId&&queue.sourceFingerprint===turn.sourceFingerprint&&queue.swipeId===turn.swipeId&&queue.revision===turn.revision?queue:null;
+  const states=budgeted.map(asset=>inspectorState({asset,requestState:turn.imageRequests?.filter(record=>record.jobId===asset.jobId).at(-1)?.state,retryQueued:Boolean(scoped?.jobIds.includes(asset.jobId)),retryRunning:scoped?.activeJobId===asset.jobId}));
+  const pending=states.some(state=>['held','preparing','generating','waiting','retry-queued','retry-running'].includes(state.kind));
+  if(pending){
+    return {current:Math.min(total,done+1),total,label:pictureStateSummary(states),busy:states.some(state=>['preparing','generating','retry-running'].includes(state.kind))};
   }
   return null;
 }
@@ -470,6 +473,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if (configRef.current?.debugLogging) console.info("[VN]", ...parts);
   };
   let turn: TurnView | null = null;
+  let retryQueue:ImageRetryQueueView|null=null;
   const loadedReadingCursor = new LoadedReadingCursor();
   let savedReadingPosition: ReadingPosition | null = null;
   let readingPositionTimer: ReturnType<typeof setTimeout> | null = null;
@@ -979,13 +983,14 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       if (panelCapture.chatId !== next.chatId || panelCapture.messageId !== next.messageId || (panelCapture.fingerprint !== null && panelCapture.fingerprint !== next.sourceFingerprint)) panelCapture = null;
       else panelCapture.fingerprint = next.sourceFingerprint;
     }
+    if(!turn||turn.chatId!==next.chatId||turn.messageId!==next.messageId||turn.sourceFingerprint!==next.sourceFingerprint||turn.swipeId!==next.swipeId||turn.revision!==next.revision)retryQueue=null;
     turn = next;
     imageStudio.setTurn(next);
     imageLibrary.setContext(next,stage.getState().currentParagraphIndex);
     settingsPanel?.setImagePreviewMetadata(next?.imageRequests?.at(-1)?.imagePromptMetadata);
     imageStudio.setCursor(stage.getState().currentParagraphIndex);
       imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
-    stage.setAssetProgress(computeAssetProgress(next));
+    stage.setAssetProgress(computeAssetProgress(next,retryQueue));
     const decision = decideTurnApplication(loadedReadingCursor.turn, next, stage.getState().currentParagraphIndex, active, stage.getState().paragraphs.length > 0);
     vnDebug("turn decision", decision.kind, {
       message: next.messageId,
@@ -1028,6 +1033,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     const cursor = previewCursor ?? restored ?? 0;
     if (restored !== null || previewCursor!==null) { stage.toggleAutoPlay(false); stage.toggleSkip(false); }
     stage.loadTurn({ ...stageTurnInput(next, mode, preserveImage, configRef.current?.effectIntensity ?? "full"), initialParagraphIndex: cursor });
+    // Loading a turn resets store progress. Restore it after the new stage exists.
+    stage.setAssetProgress(computeAssetProgress(next,retryQueue));
     if (revised) stage.restoreReplyDraft(draft);
     loadedReadingCursor.load(next);
     panels.setCursor(cursor);
@@ -1192,15 +1199,19 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       imageStudio.setTurn(turn);
       imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
       settingsPanel?.setImagePreviewMetadata(turn?.imageRequests?.at(-1)?.imagePromptMetadata);
-      stage.setAssetProgress(computeAssetProgress(turn));
+      stage.setAssetProgress(computeAssetProgress(turn,retryQueue));
       const cursor = stage.getState().currentParagraphIndex;
       if (message.asset.paragraphIndex <= cursor) void syncImageForParagraph(cursor);
       return;
     }
-    if(type==="vn_image_retry_queue"&&message.type==="vn_image_retry_queue"){imageStudio.setRetryQueue(message.queue);return;}
+    if(type==="vn_image_retry_queue"&&message.type==="vn_image_retry_queue"){
+      if(!turn||message.queue.chatId!==turn.chatId||message.queue.messageId!==turn.messageId||message.queue.sourceFingerprint!==turn.sourceFingerprint||message.queue.swipeId!==turn.swipeId||message.queue.revision!==turn.revision)return;
+      retryQueue=message.queue;imageStudio.setRetryQueue(message.queue);stage.setAssetProgress(computeAssetProgress(turn,retryQueue));return;
+    }
     if (type === "vn_image_requests" && message.type === "vn_image_requests") {
       if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId || turn.sourceFingerprint !== message.sourceFingerprint) return;
       turn = { ...turn, imageRequests: message.requests };
+      stage.setAssetProgress(computeAssetProgress(turn,retryQueue));
       imageStudio.setTurn(turn);
       imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
       settingsPanel?.setImagePreviewMetadata(turn?.imageRequests?.at(-1)?.imagePromptMetadata);
