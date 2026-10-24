@@ -1,6 +1,6 @@
 # Remaining Lumiglyphics roadmap
 
-Current scope: beta.59 on Testing. This page summarizes unfinished work; [STATUS.md](../STATUS.md) is the delivered-feature matrix. Earlier dated plans retain their original checklists and should not be read as the current completion count.
+Current scope: beta.60 on Testing. This page summarizes unfinished work; [STATUS.md](../STATUS.md) is the delivered-feature matrix. Earlier dated plans retain their original checklists and should not be read as the current completion count.
 
 beta.58 refines image prompting and recovery: protected identity anchors, shared adaptation for new/replacement templates, useful-detail targets separate from provider limits, and primary repair controls. The [pipeline audit](image-pipeline-audit.md) records verified behavior and remaining runtime/quality limits. This maintenance increment does not complete the physical-device/provider benchmark work below.
 
@@ -51,3 +51,5 @@ Image recovery polish in beta.55 adds a bounded session retry queue, one attempt
 beta.56 completes the first E2 allocation increment for opt-in Cast view: one compatible environment and up to two subjects already selected by the planner and marked present at their cue. Existing saved art and verified temporary-cache hits cost no new slot. Uncertain presence, manually selected pictures and mixed manga/action/ensemble compositions keep their prior flow. This does not finish E3 expression variants, broader supplied-art allocation or cross-reply cast presence reconciliation.
 
 Beta.59 maintenance audit fixes History filter races and archive sizing, avoids redundant refresh rendering, and stabilizes three browser test runners. See [cross-system polish audit](extension-polish-audit.md) for findings and prioritized follow-ups; roadmap feature completion is unchanged.
+
+Beta.60 refines selected-picture operation feedback and edited-preview recovery. Broader unified operation feedback, display-regex resilience, settings decomposition and device/provider acceptance remain follow-ups.

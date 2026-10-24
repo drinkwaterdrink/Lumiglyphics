@@ -273,14 +273,34 @@ export class ImageStudio {
     const destination=this.el<HTMLElement>(repairPrimary?'[data-studio-footer]':'[data-secondary-actions]');
     if(repair.parentElement!==destination)destination.prepend(repair);
     repair.toggleAttribute('data-primary-repair',repairPrimary);
+    const state=this.currentInspectorState();
+    const selectedRecord=this.record();
+    const hasEdits=Boolean(selectedRecord&&selectedRecord.state!=='review'&&this.drafts.has(this.draftKey(selectedRecord)));
+    this.el('[data-reset]').hidden=selectedRecord?.state!=='review'&&!hasEdits;
+    const editPrimary=hasEdits&&(state.kind==='failed'||state.kind==='cancelled'||state.kind==='completed');
+    const prepare=this.el<HTMLButtonElement>('[data-prepare]');
+    const previewDestination=this.el<HTMLElement>(editPrimary?'[data-studio-footer]':'[data-secondary-actions]');
+    if(prepare.parentElement!==previewDestination)previewDestination.prepend(prepare);
+    prepare.hidden=editPrimary?repairPrimary:state.action!=='prepare';
+    prepare.textContent=editPrimary?'Prepare edited preview':state.kind==='historical'?'Prepare new preview':'Prepare replacement';
     if(repairPrimary){
       this.el('[data-studio-footer]').hidden=false;
       this.el('[data-queue-retry]').hidden=true;
       this.el('[data-action-help]').textContent='Fits this draft using text tokens. Preserves character details; no image is generated.';
     }else if(this.el('[data-queue-retry]').dataset.eligible!==undefined){
-      this.el('[data-queue-retry]').hidden=this.el('[data-queue-retry]').dataset.eligible!=='true';
+      this.el('[data-queue-retry]').hidden=hasEdits||this.el('[data-queue-retry]').dataset.eligible!=='true';
+    }
+    if(!repairPrimary){
+      const quickVisible=!this.el('[data-queue-retry]').hidden;
+      this.el('[data-studio-footer]').hidden=!state.action&&!quickVisible&&!editPrimary;
+      this.el('[data-action-help]').textContent=editPrimary?'Prepares your edited wording for review. No image is generated.':quickVisible?'Quick retry starts an image request without review.':state.action==='generate'?'Starts an image request with this prompt.':'Prepares a preview. Generate only after approval.';
     }
     const validation=this.el<HTMLElement>('[data-validation]');validation.textContent=[error,error?this.record()?.promptAdaptationError:''].filter(Boolean).join('\n');validation.hidden=!error||!this.record();
+    const needsAttention=Boolean(error&&selectedRecord)&&['held','failed','cancelled','completed','historical'].includes(state.kind);
+    this.el('section').dataset.state=needsAttention?'needs-attention':state.kind;
+    this.el('[data-status]').textContent=needsAttention?'Prompt needs attention':editPrimary?'Edited prompt ready':state.title;
+    this.el('[data-state-detail]').textContent=needsAttention?(needsAdaptation?'Fit the wording to this model, or edit it below. Your current draft is kept until a valid replacement is ready.':'Correct the highlighted draft or parameter fields before preparing or generating this picture.'):editPrimary?'Your edits are local. Prepare an edited preview to review them before generating a replacement picture.':state.detail;
+    if(editPrimary)this.el('[data-edit-help]').textContent='Edit the wording below, then choose Prepare edited preview. Your saved request stays unchanged until approval.';
     for(const selector of ['[data-positive]','[data-negative]'])this.el(selector).setAttribute('aria-invalid',String(Boolean(error)));
     for(const selector of ['[data-generate]','[data-prepare]']){const button=this.el<HTMLButtonElement>(selector);if(button.dataset.available!==undefined)button.disabled=button.dataset.available!=='true'||Boolean(error);}
     const retry=this.el<HTMLButtonElement>('[data-retry-image]'),record=this.record();
@@ -486,12 +506,18 @@ export class ImageStudio {
     this.renderInspector();
     this.setNotice(this.recovering ? (this.recovering==='stop'?'Stopping pending pictures…':'Preparing unfinished pictures for review…') : rolling ? "Rewriting prompt with the story-reader model… Uses text tokens; image generation still needs approval." : (asset?.error ?? '') || (record && this.rebuilding.has(record.requestId) ? "Rebuilding template… Wait for a new preview before generating." : ''));
   }
+  private currentInspectorState(){
+    const record=this.record();
+    return inspectorState({asset:this.turn?.assets.find(entry=>entry.jobId===this.selectedJob),requestState:record&&this.submitted.has(record.requestId)?'approved':record?.state,
+      planning:Boolean(this.planningChat)||this.turn?.status==='planning',preparing:this.preparing.has(this.selectedJob),hasTurn:!!this.turn,zeroBudget:this.maxImagesPerTurn===0,
+      operation:record&&this.rerolling.has(record.requestId)?'rewrite':record&&this.rebuilding.has(record.requestId)?'template':undefined,
+      retryQueued:this.retryQueueJobs.has(this.selectedJob),retryRunning:this.retryActive===this.selectedJob});
+  }
   private renderInspector():void {
     const asset=this.turn?.assets.find(entry=>entry.jobId===this.selectedJob),record=this.record();
     const planning=Boolean(this.planningChat)||this.turn?.status==='planning';
     const pending=this.preparing.has(this.selectedJob)||Boolean(record&&(this.rebuilding.has(record.requestId)||this.rerolling.has(record.requestId)));
-    const requestState=record&&this.submitted.has(record.requestId)?'approved':record?.state;
-    const state=inspectorState({asset,requestState,planning,preparing:pending,hasTurn:!!this.turn,zeroBudget:this.maxImagesPerTurn===0});
+    const state=this.currentInspectorState();
     this.el('section').dataset.state=state.kind;
     this.el('[data-status]').textContent=state.title;this.el('[data-state-detail]').textContent=state.detail;
     this.el('[data-paragraph]').textContent=asset&&!planning?`Picture ${(this.turn?.assets.indexOf(asset)??0)+1} of ${this.turn?.assets.length} · ${asset.stageAsset?.role==='background'?'Background':asset.stageAsset?.role==='portrait'?'Portrait':'Scene'} · Paragraph ${asset.paragraphIndex+1}`:'';
@@ -527,10 +553,10 @@ export class ImageStudio {
     }
     this.el('[data-generate]').textContent='Generate picture';this.el('[data-retry-image]').textContent='Edit before retry';this.el('[data-prepare]').textContent=state.kind==='historical'?'Prepare new preview':'Prepare replacement';
     const queued=this.retryQueueJobs.has(this.selectedJob)||this.retryActive===this.selectedJob;
-    const quickEligible=!!asset&&asset.source!=='cache'&&['failed','cancelled','generated','browser_ready'].includes(asset.status);
+    const quickEligible=!!asset&&!pending&&asset.source!=='cache'&&['failed','cancelled','generated','browser_ready'].includes(asset.status);
     const quick=this.el<HTMLButtonElement>('[data-queue-retry]');quick.hidden=!quickEligible&&!queued;quick.disabled=queued||planning||this.replanning||!!this.recovering;
     quick.dataset.eligible=String(quickEligible||queued);
-    quick.textContent=queued?'Retry queued':asset&&['generated','browser_ready'].includes(asset.status)?'Regenerate picture':'Retry picture';
+    quick.textContent=this.retryActive===this.selectedJob?'Retry in progress…':queued?'Retry queued':asset&&['generated','browser_ready'].includes(asset.status)?'Regenerate picture':'Retry picture';
     quick.title='Starts one image attempt without prompt review, using the saved scene and current image settings. Local prompt edits are not applied.';
     this.el('[data-retry-queue]').hidden=!this.turn||planning;
     const unfinished=assets.filter(a=>a.source!=='cache'&&!['generated','browser_ready'].includes(a.status));

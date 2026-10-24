@@ -25,4 +25,12 @@ describe('image inspector state', () => {
     expect(inspectorState({asset:{...asset,status:'generating'},requestState:'approved'})).toMatchObject({kind:'generating',action:null});
     expect(inspectorState({asset,requestState:'review',preparing:true})).toMatchObject({kind:'preparing',action:null});
   });
+  test('local operations and retry queue explain the actual work before stale asset status',()=>{
+    const failed={...asset,status:'failed' as const};
+    expect(inspectorState({asset:failed,retryQueued:true})).toMatchObject({kind:'retry-queued',title:'Retry queued',action:null});
+    expect(inspectorState({asset:failed,retryRunning:true})).toMatchObject({kind:'retry-running',action:null});
+    expect(inspectorState({asset:failed,operation:'rewrite',retryQueued:true})).toMatchObject({kind:'rewriting',action:null});
+    expect(inspectorState({asset,operation:'template'})).toMatchObject({kind:'rebuilding',action:null});
+    expect(inspectorState({asset,operation:'rewrite',planning:true}).kind).toBe('planning');
+  });
 });

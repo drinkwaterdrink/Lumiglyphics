@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-10-23T08:01:23.094Z",
+  "checkedAt": "2026-10-24T00:48:34.423Z",
   "identifier": "lumiglyphics",
-  "version": "0.2.0-beta.59",
+  "version": "0.2.0-beta.60",
   "entries": [
     {
       "entry": "dist/backend.js",
@@ -10,8 +10,8 @@
     },
     {
       "entry": "dist/frontend.js",
-      "bytes": 1798602,
-      "sha256": "ad8aaad74320d1d7344322697d69a8148da66626f9a35919994bcc977f240956"
+      "bytes": 1802460,
+      "sha256": "418c9955670d6aa29202ab70afa88c6f274bff7c60c48700fdceb4cbb86f5e52"
     }
   ],
   "localStaticPatterns": {
