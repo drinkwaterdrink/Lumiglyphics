@@ -36,7 +36,26 @@ try{
   assert.equal((await page.evaluate(()=>(window as any).imageFixture.actions.at(-1))).type,'vn_regenerate_image_prompt');
   await page.evaluate(()=>{const f=(window as any).imageFixture;const t=structuredClone(f.multi);t.imageRequests.push({...t.imageRequests[1],requestId:'rewritten',prompt:'New wording'});f.studio.setTurn(t);});
   assert.equal(await positive.inputValue(),'New wording');
+  const revision=studio.locator('[data-rewrite-changed]');
+  assert.equal(await revision.isVisible(),true);
+  assert.match(await revision.locator('[data-revision-fields]').innerText(),/Positive: 17 → 11/);
+  const comparisonCount=await page.evaluate(()=>(window as any).imageFixture.actions.length);
+  await revision.locator('summary').click();
+  const previousPositive=studio.getByLabel('Previous positive prompt',{exact:true});
+  assert.equal(await previousPositive.inputValue(),'Picture two draft');
+  assert.equal(await previousPositive.getAttribute('readonly'),'');
+  await positive.fill('Local edit');
+  assert.match(await revision.locator('[data-revision-fields]').innerText(),/Positive: 17 → 10/);
+  assert.equal(await previousPositive.inputValue(),'Picture two draft','baseline stays fixed while editing');
+  for(const width of [320,390,1280]){
+    await page.setViewportSize({width,height:844});
+    assert.equal(await previousPositive.evaluate(el=>el.getBoundingClientRect().right<=innerWidth),true,'comparison stays within viewport');
+  }
+  assert.equal(await page.evaluate(()=>(window as any).imageFixture.actions.length),comparisonCount,'comparison and edits stay local');
+  await studio.locator('[data-parameters]').evaluate((element:HTMLTextAreaElement)=>{element.value='{"seed":99}';element.dispatchEvent(new Event('input'));});
   await studio.getByRole('button',{name:'Restore previous wording',exact:true}).click();assert.equal(await positive.inputValue(),'Picture two draft');
+  assert.equal(await studio.locator('[data-parameters]').inputValue(),'{"seed":99}','wording restore preserves current parameters');
+  assert.equal(await revision.isVisible(),false);
   const count=await page.evaluate(()=>(window as any).imageFixture.actions.length);
   for(const [status,expected,primary] of [['failed','failed','Retry picture'],['cancelled','cancelled','Retry picture'],['generated','completed','Regenerate picture'],['generating','generating',null]] as const){
     await page.evaluate(status=>{const f=(window as any).imageFixture;const t=structuredClone(f.turn);t.assets[0].status=status;t.imageRequests[0].state='approved';f.studio.setTurn(t);},status);

@@ -1,4 +1,5 @@
 import type {ImageRetryQueueView} from '../../shared/image-retries.js';
+import {promptRevisionSummary} from './prompt-revision.js';
 import {promptProfileSummary} from "../../shared/image-prompt-profile.js";
 import {assertCapabilityOutput} from '../../shared/model-output-capabilities.js';
 import {inspectorState,pictureStateLabel,pictureStateSummary} from './inspector-model.js';
@@ -228,7 +229,7 @@ export class ImageStudio {
     }
     const validation=document.createElement('small');validation.dataset.validation='';validation.role='alert';validation.hidden=true;editor.append(validation);
     const changed=document.createElement('div');changed.dataset.rewriteChanged='';changed.hidden=true;
-    changed.innerHTML='<p>Prompt wording changed. Review it before generating.</p><button type="button" data-restore-wording>Restore previous wording</button>';editor.append(changed);
+    changed.innerHTML='<p>Rewrite ready. Review the wording before generating.</p><p data-revision-count></p><small data-revision-fields></small><details><summary>Compare previous wording</summary><p>The draft captured when you requested this rewrite. Your current wording is in the editors above. Counts do not verify that every detail was preserved.</p><label>Previous positive prompt<textarea readonly data-previous-positive></textarea></label><label>Previous negative prompt<textarea readonly data-previous-negative></textarea></label></details><button type="button" data-restore-wording>Restore previous wording</button>';editor.append(changed);
     const actions=document.createElement('details');actions.dataset.promptActions='';actions.innerHTML='<summary>Prompt actions</summary><div class="row" data-secondary-actions></div><small>Rewrite prompt uses your story-reader model and text tokens. It replaces the preview wording. Image generation is a separate action after approval.</small>';
     for(const selector of ['[data-regenerate-prompt]','[data-reset]','[data-copy]','[data-skip]','[data-retry-image]','[data-prepare]'])actions.querySelector('[data-secondary-actions]')!.append(this.el(selector));
     const retry=document.createElement('button');retry.type='button';retry.dataset.retrySaved='';retry.textContent='Prepare from saved scene';actions.querySelector('[data-secondary-actions]')!.append(retry);editor.append(actions);
@@ -267,6 +268,15 @@ export class ImageStudio {
   }
   private draftKey(record:ImageRequestRecord): string {return record.state==='review' ? record.requestId : `replacement:${record.jobId}:${record.requestId}`;}
   private updateCounts(): void {
+    const previous=this.previousWording.get(this.selectedJob);
+    if(previous){
+      const result=promptRevisionSummary(previous,{prompt:this.el<HTMLTextAreaElement>('[data-positive]').value,negative:this.el<HTMLTextAreaElement>('[data-negative]').value});
+      const change=result.delta===0?'same length':`${Math.abs(result.delta).toLocaleString()} ${result.delta<0?'fewer':'more'}`;
+      this.el('[data-revision-count]').textContent=`Combined: ${result.before.toLocaleString()} → ${result.after.toLocaleString()} characters · ${change}`;
+      this.el('[data-revision-fields]').textContent=([['Positive',result.positive],['Negative',result.negative]] as const).map(([name,field])=>`${name}: ${field.before.toLocaleString()} → ${field.after.toLocaleString()}${field.changed?'':' (unchanged)'}`).join(' · ');
+      this.el<HTMLTextAreaElement>('[data-previous-positive]').value=previous.prompt;
+      this.el<HTMLTextAreaElement>('[data-previous-negative]').value=previous.negative;
+    }
     let total=0;
     for(const name of ['positive','negative'] as const) {
       const length=this.el<HTMLTextAreaElement>(`[data-${name}]`).value.length;
