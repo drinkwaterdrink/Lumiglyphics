@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {captureReferenceLineage,readReferenceHistory,referenceMessages,preserveReferenceLineage} from './reference-history.js';
+import {captureReferenceLineage,readReferenceHistory,referenceMessages,preserveReferenceLineage,clearReferenceMemos,referenceMemoStats} from './reference-history.js';
 import {TurnPlanSchema} from '../../shared/contracts.js';
 import {fingerprintForMessage} from './planner.js';
 import {turnPath,loadTurnRecord,type StoredTurnRecord} from './storage.js';
@@ -92,6 +92,20 @@ test('macro display targets require their original raw input and certificates pr
  const f=await fixture(),pending=captureReferenceLineage(f.messages,f.target.plan);f.messages[0]!.content='Edited while hashing';f.target.referenceLineage=await pending;
  expect(await readReferenceHistory(f.api,f.target,'user')).toBeUndefined();
 });
+test('F7: repeated ancestry walks reuse memoized frame and paragraph digests',async()=>{
+ clearReferenceMemos();
+ const f=await fixture();
+ await readReferenceHistory(f.api,f.target,'user');
+ const afterFirst=referenceMemoStats();
+ expect(afterFirst.prefixEntries).toBeGreaterThan(0);
+ expect(afterFirst.paragraphEntries).toBeGreaterThan(0);
+ // A second read over the identical chains must not allocate new paragraph work.
+ await readReferenceHistory(f.api,f.target,'user');
+ expect(referenceMemoStats().paragraphEntries).toBe(afterFirst.paragraphEntries);
+ clearReferenceMemos();
+ expect(referenceMemoStats()).toEqual({prefixEntries:0,paragraphEntries:0});
+});
+
 test('storage keeps future optional lineage data without weakening the saved turn',async()=>{
  const f=await fixture(),future={version:99,opaque:['preserve']};f.prior.referenceLineage=future;
  const loaded=await loadTurnRecord(f.api,turnPath('c','one',0),'user');expect(loaded?.referenceLineage).toEqual(future);expect(loaded?.plan.key).toEqual(f.prior.plan.key);

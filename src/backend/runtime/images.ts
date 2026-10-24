@@ -20,6 +20,7 @@ import {
   canonicalJson,
   sceneEpisodeOf,
   sceneImageCacheKey,
+  sceneIdentityDigest,
   sceneImageScope,
   shortSceneKey,
   type SceneImageAdmission,
@@ -583,6 +584,7 @@ export async function resolveCacheCues(
       continue;
     }
     let key: string;
+    let keyDigest: string | null = null;
     try {
       let reference: SceneImageReference | undefined;
       if (cardSource && cueUsesCharacterReference(cue)) {
@@ -617,7 +619,9 @@ export async function resolveCacheCues(
         const captured = compatiblePortrait(candidatePortraits[visual.characterKey], portraitIdentityFingerprint(visual.characterName, visual.baseIdentity, config, provider));
         reference = captured ? { source: "captured", imageId: captured.imageId } : { source: "none" };
       }
-      key = sceneImageCacheKey(sceneImageIdentityFor(config, scene, cue, characterAppearance, provider, reference, profile.cacheProfile));
+      const cacheIdentity = sceneImageIdentityFor(config, scene, cue, characterAppearance, provider, reference, profile.cacheProfile);
+      key = sceneImageCacheKey(cacheIdentity);
+      keyDigest = sceneIdentityDigest(cacheIdentity);
     } catch {
       continue;
     }
@@ -632,7 +636,7 @@ export async function resolveCacheCues(
       if(art){resolved.push(locationArtJob(plan,cue,art,castIdentity.requestFingerprint));continue;}
     }
     const episode = sceneEpisodeOf(scene, cache.generation(scope));
-    const found = cache.lookup(scope, key, episode);
+    const found = cache.lookup(scope, key, episode, keyDigest);
     if (found.status === "miss") {
       log(`scene-cache candidate p${cue.paragraphIndex} miss reason=${found.reason} key=${shortSceneKey(key)} (no job, no request)`);
       continue;
@@ -1169,6 +1173,7 @@ export async function generateAssets(
 
         /* ---- reuse-first: exact-compatible cached image, or own the generation ---- */
         let cacheKey: string | null = null;
+        let cacheDigest: string | null = null;
         let episode = "";
         let settle: ((outcome: SceneImageOutcome) => void) | null = null;
         if (cache && admission) {
@@ -1176,11 +1181,13 @@ export async function generateAssets(
             cache.recordMiss("identity_unresolved");
             cacheLog(`scene-cache p${cue.paragraphIndex} miss reason=identity_unresolved (planner did not persist a durable identity) -> generating`);
           } else {
-            cacheKey = sceneImageCacheKey(sceneImageIdentityFor(
+            const cacheIdentity = sceneImageIdentityFor(
               config, scene, cue, characterAppearance, provider,
               cardSource ? cardReferenceForCache(cardPortrait, portrait) : cue.imageTemplate ? portrait ? { source: "captured", imageId: portrait.imageId } : { source: "none" } : undefined,
               profile.cacheProfile
-            ));
+            );
+            cacheKey = sceneImageCacheKey(cacheIdentity);
+            cacheDigest = sceneIdentityDigest(cacheIdentity);
             episode = sceneEpisodeOf(scene, cache.generation(scope));
             if (bypass.has(scheduledJob.jobId)) {
               cache.recordMiss("bypass");
@@ -1197,7 +1204,7 @@ export async function generateAssets(
               for (;;) {
                 if (signal.aborted) throw abortError(signal);
                 if (jobSignal.aborted) throw abortError(jobSignal);
-                const found = cache.lookup(scope, cacheKey, episode);
+                const found = cache.lookup(scope, cacheKey, episode, cacheDigest);
                 if (found.status === "hit") {
                   const verdict = await verifyEntry(cache, scope, cacheKey, found.entry, verify);
                   if (verdict === "ok") {
@@ -1426,6 +1433,7 @@ export async function generateAssets(
               imageId: result.imageId,
               imageUrl,
               episode,
+              identityDigest: cacheDigest,
               provenance: provenanceFor(scheduledJob.jobId, scheduledJob.promptFingerprint)
             }, admission, signal);
             if (stored.stored) {

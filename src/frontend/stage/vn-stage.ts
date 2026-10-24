@@ -40,6 +40,9 @@ import { generateAmbientMarkup, generateCueEffectMarkup } from "./procedural-par
 export type { StageEffect };
 export type { AmbientEffect };
 
+/** Retained formatted history per reading session; oldest entries drop past it. */
+const MAX_BACKLOG_ENTRIES = 200;
+
 const STAGE_EFFECT_IDS: ReadonlySet<string> = new Set([
   "shake",
   "flash_white",
@@ -510,6 +513,8 @@ export class VnStage {
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
   private fadeTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly readParagraphIds = new Set<string>();
+  /** Reading-session history. Capped so long mobile sessions cannot retain
+   *  formatted HTML for every paragraph indefinitely (oldest entries drop). */
   private readonly backlogEntries: Array<{ speaker?: string | undefined; text: string; formatted: string }> = [];
   private activeTextNodes: TypewriterNode[] = [];
   private currentRenderedParagraphId = "";
@@ -2027,6 +2032,7 @@ export class VnStage {
     const last = this.backlogEntries[this.backlogEntries.length - 1];
     if (!last || last.text !== text || last.speaker !== speaker) {
       this.backlogEntries.push({ speaker, text, formatted });
+      if (this.backlogEntries.length > MAX_BACKLOG_ENTRIES) this.backlogEntries.shift();
     }
   }
 
@@ -2178,6 +2184,9 @@ export class VnStage {
         this.clearTypewriter();
         return;
       }
+      // Pause reveal while the tab is hidden: no invisible DOM writes or
+      // timer churn in the background; ticks resume and catch up on return.
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       // Reveal one character per tick. Node boundaries (many with split
       // effect letters) cost no extra tick, and surrogate pairs stay whole.
       while (nodeIdx < textNodes.length) {

@@ -17,6 +17,14 @@ button{-webkit-tap-highlight-color:transparent}summary::before{content:'▸';mar
 [data-history-views]{display:flex;gap:4px;margin:0 0 14px;border-bottom:1px solid var(--vn-shell-border,#53647c);padding-bottom:8px}[data-history-view]{flex:1;border-color:transparent;background:transparent}[data-history-view][aria-pressed=true]{background:var(--vn-shell-field,#182334);border-color:var(--vn-shell-accent,#b6d9ff)}[data-history-return]{flex:none;margin:0 14px 12px;align-self:center;min-width:160px}[data-grid][data-mode=story]{display:block}[data-reply]{padding:16px 0;border-bottom:1px solid var(--vn-shell-border,#53647c)}[data-reply] h3{margin:0;color:var(--vn-shell-accent,#b6d9ff);font-size:12px;letter-spacing:.08em;text-transform:uppercase}[data-reply-preview]{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin:8px 0;line-height:1.65}[data-reply] details{border:0;margin:0 0 8px}[data-reply] details p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7}[data-reply] details strong{font-size:12px;color:var(--vn-shell-accent,#b6d9ff)}[data-reply-pictures]{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}[data-reply-pictures] img{height:180px}
 `;
 
+export type LibraryContext=Pick<TurnView,'chatId'|'messageId'|'swipeId'|'sourceFingerprint'|'revision'>|null;
+export function sameLibraryContext(next:LibraryContext,previous:LibraryContext):boolean{
+ if(next===previous)return true;
+ if(!next||!previous)return false;
+ return next.chatId===previous.chatId&&next.messageId===previous.messageId&&next.swipeId===previous.swipeId
+  &&next.sourceFingerprint===previous.sourceFingerprint&&next.revision===previous.revision;
+}
+
 /** Read-only story image browser. Every response is tied to a fresh request and reading scope. */
 export class ImageLibrary{
  private host:HTMLElement;private root:ShadowRoot;
@@ -75,7 +83,9 @@ export class ImageLibrary{
  private status(text:string){this.el<HTMLElement>('[data-library-status]').textContent=text;}
  setContext(turn:TurnView|null,cursor:number){
   const next=turn?{chatId:turn.chatId,messageId:turn.messageId,swipeId:turn.swipeId,sourceFingerprint:turn.sourceFingerprint,revision:turn.revision}:null;
-  const changed=JSON.stringify(next)!==JSON.stringify(this.context)||cursor!==this.cursor;
+  // F13: five primitive field comparisons instead of two JSON.stringify walks
+  // on every turn/asset stream update.
+  const changed=!sameLibraryContext(next,this.context)||cursor!==this.cursor;
   this.context=next;this.cursor=cursor;this.el<HTMLButtonElement>('[data-library-launch]').disabled=!next;
   if(!next){this.close();return;}
   if(changed){this.expanded.clear();this.cancel();this.page=null;this.pages=['0:0'];this.pageIndex=0;if(this.opened)this.load();}
@@ -118,6 +128,14 @@ export class ImageLibrary{
   }
   if(this.mode==='story'&&this.page?.replies.length){
    const cards=[...grid.querySelectorAll<HTMLElement>('[data-image-card]')];grid.replaceChildren();
+   // F13: group cards by their reply key once (O(n+m)) instead of
+   // re-stringifying every reply key once per card (O(n*m)).
+   const cardsByReply=new Map<string,HTMLElement[]>();
+   for(const card of cards){
+    const key=card.dataset.replyKey!;
+    const group=cardsByReply.get(key);
+    if(group)group.push(card);else cardsByReply.set(key,[card]);
+   }
    for(const reply of this.page.replies){
     const row=document.createElement('article');row.dataset.reply='';
     const title=document.createElement('h3');title.textContent=`Reply ${reply.messageNumber}${reply.versionLabel==='alternate'?' · alternate version':''}`;row.append(title);
@@ -126,7 +144,7 @@ export class ImageLibrary{
     for(const paragraph of reply.paragraphs){const name=document.createElement('strong');name.textContent=paragraph.speaker;const text=document.createElement('p');text.textContent=paragraph.text;details.append(name,text);}
     if(reply.truncated){const note=document.createElement('p');note.className='note';note.textContent='Long reply preview shortened. Read the complete reply in chat.';details.append(note);}
     row.append(details);const pictures=document.createElement('div');pictures.dataset.replyPictures='';
-    for(const card of cards)if(card.dataset.replyKey===JSON.stringify(reply.key))pictures.append(card);
+    for(const card of cardsByReply.get(replyKey)??[])pictures.append(card);
     if(pictures.childElementCount)row.append(pictures);grid.append(row);
    }
    // Archived pictures without this exact reply snapshot retain their own excerpt.

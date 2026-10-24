@@ -3,6 +3,30 @@ import type {ImagePromptMetadata} from '../../shared/image-templates.js';
 type SubjectLock={name:string;facts:string[]};
 export type PromptProtection={exact:string;facts:string[];subjects:SubjectLock[];minimumCharacters:number};
 const canonical=(value:string):string=>value.normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ');
+/** Words/alnum runs in canonical order. All fact/name comparisons happen on
+ *  these token arrays so attached punctuation ("red dress,", "red dress:") can
+ *  never masquerade as a missing fact, while partial-token coincidences
+ *  ("cat ear" inside "cat earrings") can never masquerade as a match. */
+const tokenize=(value:string):string[]=>{
+ const text=canonical(value);
+ return text?text.split(' '):[];
+};
+/** True when `needle` occurs as one contiguous, ordered run inside `haystack`. */
+function containsTokenSequence(haystack:readonly string[],needle:readonly string[]):boolean{
+ if(!needle.length||needle.length>haystack.length)return false;
+ outer:for(let start=0;start<=haystack.length-needle.length;start+=1){
+  for(let offset=0;offset<needle.length;offset+=1){
+   if(haystack[start+offset]!==needle[offset])continue outer;
+  }
+  return true;
+ }
+ return false;
+}
+/** True when `haystack` begins with every token of `prefix`, in order. */
+function startsWithTokenSequence(haystack:readonly string[],prefix:readonly string[]):boolean{
+ if(!prefix.length||prefix.length>haystack.length)return false;
+ return prefix.every((token,index)=>haystack[index]===token);
+}
 /** Ensemble descriptions may be reordered; identity facts must stay with their owner.
  * Single-person fitting permits fact reordering; ordinary rerolls retain exact phrases. */
 export function promptProtection(prompt:string,metadata?:ImagePromptMetadata,compactSingle=false):PromptProtection{
@@ -13,8 +37,8 @@ export function promptProtection(prompt:string,metadata?:ImagePromptMetadata,com
   if(compactSingle){
    // Keep only facts still present in the editing source. Deduplicate the legacy
    // repeated "Wearing" clause, allowing order/punctuation to change, not facts.
-   const original=canonical(prompt);
-   const facts=[...new Map(source.split(/[,;\n]+/).map(value=>value.trim()).filter(value=>canonical(value)&&original.includes(canonical(value))).map(value=>{
+   const promptTokens=tokenize(prompt);
+   const facts=[...new Map(source.split(/[,;\n]+/).map(value=>value.trim()).filter(value=>containsTokenSequence(promptTokens,tokenize(value))).map(value=>{
     const bare=value.replace(/^wearing\s+/i,'');
     return [canonical(bare),bare] as const;
    })).values()];
@@ -22,7 +46,7 @@ export function promptProtection(prompt:string,metadata?:ImagePromptMetadata,com
   }
   const exact=prompt.includes(source)?source:'';return {...empty,exact,minimumCharacters:exact.length};
  }
- const original=canonical(prompt),subjects:SubjectLock[]=[];
+ const originalTokens=tokenize(prompt),subjects:SubjectLock[]=[];
  const rows=source.split(/\r?\n/).filter(row=>row.indexOf(':')>0);
  const declarations:Array<{name:string;index:number;end:number}>=[];
  for(const row of rows){
@@ -37,17 +61,17 @@ export function promptProtection(prompt:string,metadata?:ImagePromptMetadata,com
  declarations.sort((a,b)=>a.index-b.index);
  for(const row of rows){
   const colon=row.indexOf(':');if(colon<1)continue;
-  const name=row.slice(0,colon).trim();if(name.length>160||!canonical(name)||!(` ${original} `).includes(` ${canonical(name)} `))continue;
+  const name=row.slice(0,colon).trim();if(name.length>160||!canonical(name)||!containsTokenSequence(originalTokens,tokenize(name)))continue;
   const declared=declarations.find(d=>d.name===name);
   const next=declared?declarations.find(d=>d.index>declared.index):undefined;
   const newline=declared?prompt.indexOf('\n',declared.end):-1;
   const current=declared?prompt.slice(declared.end,Math.min(next?.index??prompt.length,newline<0?prompt.length:newline)).trim():'';
   // Explicit Name: rows are authoritative after edits. A fact appearing under
   // another person must never restore a removed trait from stale metadata.
-  const unchanged=declared&&(`${canonical(current)} `).startsWith(`${canonical(row.slice(colon+1))} `);
+  const unchanged=declared&&startsWithTokenSequence(tokenize(current),tokenize(row.slice(colon+1)));
   const values=declared&&!unchanged?current:row.slice(colon+1);
-  const scope=declared?canonical(current):original;
-  const facts=[...new Set(values.split(/[,;\n]+/).map(value=>value.trim()).filter(value=>Boolean(canonical(value))&&scope.includes(canonical(value))))];
+  const scopeTokens=declared?tokenize(current):originalTokens;
+  const facts=[...new Set(values.split(/[,;\n]+/).map(value=>value.trim()).filter(value=>Boolean(canonical(value))&&containsTokenSequence(scopeTokens,tokenize(value))))];
   subjects.push({name,facts});
  }
  // Unrecognized legacy formats retain strict protection, never silently weaken it.
@@ -56,12 +80,14 @@ export function promptProtection(prompt:string,metadata?:ImagePromptMetadata,com
 }
 export function assertPromptProtection(prompt:string,protection:PromptProtection):void{
  if(protection.exact&&!prompt.includes(protection.exact))throw new Error('The protected identity/outfit phrase was changed or omitted.');
- const text=` ${canonical(prompt)} `;
- if(!protection.facts.every(fact=>text.includes(` ${canonical(fact)} `)))throw new Error('Required subject appearance or outfit details were omitted or changed. Keep every supplied appearance fact.');
+ const promptTokens=tokenize(prompt);
+ if(!protection.facts.every(fact=>containsTokenSequence(promptTokens,tokenize(fact))))throw new Error('Required subject appearance or outfit details were omitted or changed. Keep every supplied appearance fact.');
  const mentions: Array<{index:number;subject:number}>=[];
  for(const [subject,lock] of protection.subjects.entries()){
-  const needle=` ${canonical(lock.name)} `;let start=0,index:number;
-  while((index=text.indexOf(needle,start))!==-1){mentions.push({index,subject});start=index+needle.length-1;}
+  const nameTokens=tokenize(lock.name);
+  for(let start=0;start+nameTokens.length<=promptTokens.length;start+=1){
+   if(nameTokens.every((token,offset)=>promptTokens[start+offset]===token))mentions.push({index:start,subject});
+  }
  }
  mentions.sort((a,b)=>a.index-b.index);
  for(const [index,lock] of protection.subjects.entries()){
@@ -69,8 +95,8 @@ export function assertPromptProtection(prompt:string,protection:PromptProtection
   if(!owned.length)throw new Error('A required cast member was omitted from the rewritten prompt.');
   const valid=owned.some(mention=>{
    const next=mentions.find(m=>m.index>mention.index&&m.subject!==index);
-   const section=text.slice(mention.index,next?.index??text.length);
-   return lock.facts.every(fact=>section.includes(canonical(fact)));
+   const section=promptTokens.slice(mention.index,next?.index??promptTokens.length);
+   return lock.facts.every(fact=>containsTokenSequence(section,tokenize(fact)));
   });
   if(!valid)throw new Error('Required cast appearance details were omitted, changed, or assigned to another person. Keep each supplied appearance fact with its named subject.');
  }

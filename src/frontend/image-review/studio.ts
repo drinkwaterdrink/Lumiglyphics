@@ -15,6 +15,7 @@ import type { VisualNovelConfig } from "../../config.js";
 import type { ImageTemplate } from "../../shared/image-templates.js";
 import type { FrontendRequest, TurnView } from "../../protocol.js";
 import type { ImageRequestRecord,ImageRequestEdits } from "../../shared/image-review.js";
+import {isMobileWidth,trapFocusWithin} from './focus-trap.js';
 
 type Draft = { prompt: string; negative: string; parameters: string };
 const CSS = `
@@ -137,7 +138,16 @@ export class ImageStudio {
       const target = event.target;
       if (target instanceof HTMLTextAreaElement && !target.readOnly && !target.disabled) target.focus({ preventScroll: true });
     });
-    this.root.addEventListener("keydown", event => { if ((event as KeyboardEvent).key === "Escape") this.el<HTMLButtonElement>("[data-close]").click(); });
+    this.root.addEventListener("keydown", event => {
+      const keyEvent = event as KeyboardEvent;
+      if (keyEvent.key === "Escape") this.el<HTMLButtonElement>("[data-close]").click();
+      // F15: the studio section becomes near-fullscreen under the 600px
+      // container query; trap keyboard/TalkBack focus inside it on mobile so
+      // it cannot escape to the stage behind the open surface.
+      if (keyEvent.key === "Tab" && this.mobileLayout() && !this.el<HTMLElement>("section").hidden) {
+        trapFocusWithin(this.el("section"), keyEvent, (this.root.activeElement ?? document.activeElement) as Element | null);
+      }
+    });
     this.el<HTMLButtonElement>("[data-generate]").onclick = () => this.decide("generate");
     this.el<HTMLButtonElement>("[data-skip]").onclick = () => this.decide("skip");
     this.el<HTMLButtonElement>("[data-reset]").onclick = () => { const record = this.record(); if (record) this.drafts.delete(this.draftKey(record)); this.render(); };
@@ -434,8 +444,17 @@ export class ImageStudio {
   setCursor(cursor: number): void { this.cursor = cursor; }
   private setOpen(open:boolean):void{
     const section=this.el<HTMLElement>('section'),changed=section.hidden===open;
-    section.hidden=!open;this.el<HTMLButtonElement>('[data-launch]').setAttribute('aria-expanded',String(open));
+    section.hidden=!open;
+    // F15: aria-modal only on the mobile fullscreen layout; desktop keeps the
+    // non-modal side panel semantics.
+    if(open&&this.mobileLayout())section.setAttribute('aria-modal','true');
+    else section.removeAttribute('aria-modal');
+    this.el<HTMLButtonElement>('[data-launch]').setAttribute('aria-expanded',String(open));
     if(changed)this.onVisibility?.(open);
+  }
+  /** Mirrors the @container (max-width:600px) breakpoint in CSS. */
+  private mobileLayout():boolean{
+    return isMobileWidth(this.host);
   }
   open():void{
     if(!this.el<HTMLElement>('section').hidden)return;
