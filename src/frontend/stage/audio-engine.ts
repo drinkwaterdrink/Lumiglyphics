@@ -108,6 +108,7 @@ export const MAX_ACTIVE_SFX = 32;
 export class AudioEngine {
   private bgmVolume: number;
   private bgmAttenuation=1;
+  private speechDucking=1;
   private readonly bgmTracks=new Set<ActiveBgm>();
   private sfxVolume: number;
   private readonly crossfadeDuration: number;
@@ -184,10 +185,17 @@ export class AudioEngine {
     }
   }
 
+  /** Duck BGM while speech/TTS playback is active, then restore cleanly. */
+  setSpeechDucking(active:boolean):void {
+    const next=active?0.38:1;
+    if(this.speechDucking===next)return;
+    this.speechDucking=next;
+    for(const item of this.bgmTracks)this.setTrackVolume(item,item.gain);
+  }
+
   private setTrackVolume(item:ActiveBgm,gain:number):void {
     item.gain=Math.max(0,Math.min(1,gain));
-    item.player.volume=item.gain*this.bgmVolume*item.attenLevel;
-  }
+    item.player.volume=item.gain*this.bgmVolume*this.speechDucking*item.attenLevel;  }
 
   getSfxVolume(): number {
     return this.sfxVolume;
@@ -273,6 +281,12 @@ export class AudioEngine {
     const cleanSrc = src ? src.trim() : "";
     if (!cleanSrc || this.sfxVolume <= 0) return;
 
+    // Enforce the cap before creating/wiring a new element. An evicted player
+    // no longer retains ended/error closures that can keep its listener graph alive.
+    if (this.activeSfx.size >= MAX_ACTIVE_SFX) {
+      const oldest = this.activeSfx.values().next().value;
+      if (oldest) { oldest.pause(); this.activeSfx.delete(oldest); }
+    }
     const player = this.audioFactory(cleanSrc);
     player.loop = false;
     const sfxVol = Math.max(0, Math.min(1, (options.volume ?? 1) * this.sfxVolume));
@@ -288,18 +302,7 @@ export class AudioEngine {
     player.addEventListener("error", onEnded);
     this.activeSfx.add(player);
 
-    // F14: a stalled network element can fire neither ended nor error
-    // (mobile background tabs, interrupted requests). Bound the set so such
-    // players can never accumulate for the whole reading session.
-    if (this.activeSfx.size > MAX_ACTIVE_SFX) {
-      const oldest = this.activeSfx.values().next().value;
-      if (oldest) {
-        // Its own ended/error closure self-removes if the paused element
-        // ever settles later; the set eviction is what bounds retention.
-        oldest.pause();
-        this.activeSfx.delete(oldest);
-      }
-    }
+
 
     player.play().catch(() => {
       this.activeSfx.delete(player);
@@ -346,7 +349,8 @@ export class AudioEngine {
     item.fadeTimer = this.setInterval(() => {
       const elapsed = this.now() - startTime;
       const progress = Math.min(1, elapsed / durationMs);
-      const newVolume = startVolume + (targetVolume - startVolume) * progress;
+      const eased = 0.5 - 0.5 * Math.cos(progress * Math.PI);
+      const newVolume = startVolume + (targetVolume - startVolume) * eased;
       this.setTrackVolume(item,newVolume);
 
       if (progress >= 1) {
@@ -375,7 +379,8 @@ export class AudioEngine {
     item.fadeTimer = this.setInterval(() => {
       const elapsed = this.now() - startTime;
       const progress = Math.min(1, elapsed / durationMs);
-      const newVolume = startVolume * (1 - progress);
+      const eased = 0.5 - 0.5 * Math.cos(progress * Math.PI);
+      const newVolume = startVolume * (1 - eased);
       this.setTrackVolume(item,newVolume);
 
       if (progress >= 1) {

@@ -80,9 +80,8 @@ async function frames(messages:readonly Message[],chatId:string,deadline=Number.
   const cached=memoGet(prefixMemo,memoKey) as string|undefined;
   if(cached!==undefined)prefix=cached;
   else{prefix=await hash(JSON.stringify([prefix,message]));memoSet(prefixMemo,memoKey,prefix,PREFIX_MEMO_LIMIT);}
-  if(!message.is_user&&message.role!=='system')replyNumber++;
-  result.push({message,prefixDigest:prefix,messageCount:index+1,replyNumber});
- }return result;
+  if(!message.is_user&&message.role!=='system')replyNumber++;  result.push({message,prefixDigest:prefix,messageCount:index+1,replyNumber});
+ }if(Date.now()>=deadline)return null;return result;
 }
 async function matches(record:StoredTurnRecord,frame:Frame):Promise<boolean>{
  const parsed=ReferenceLineageSchema.safeParse(record.referenceLineage);if(!parsed.success)return false;const certificate=parsed.data;
@@ -100,27 +99,30 @@ export async function captureReferenceLineage(messages:readonly unknown[],plan:T
 }
 async function collect(api:SpindleAPI,target:StoredTurnRecord,userId:string|undefined,deadline:number):Promise<ReferenceHistory|undefined>{
  if(!ReferenceLineageSchema.safeParse(target.referenceLineage).success)return undefined;
- const key=target.plan.key;
- const snapshot=referenceMessages(await api.chat.getMessages(key.chatId),key.assistantMessageId);if(!snapshot)return undefined;
- const lineage=await frames(snapshot,key.chatId,deadline);if(!lineage)return undefined;
- const last=lineage[lineage.length-1]!;if(!await matches(target,last))return undefined;
+ const key=target.plan.key,isCurrent=()=>Date.now()<deadline;
+ const snapshot=referenceMessages(await api.chat.getMessages(key.chatId),key.assistantMessageId);if(!snapshot||!isCurrent())return undefined;
+ const lineage=await frames(snapshot,key.chatId,deadline);if(!lineage)return undefined;const last=lineage.at(-1)!;if(Date.now()>=deadline||!await matches(target,last))return undefined;
  const eligible=lineage.slice(0,-1).filter(frame=>!frame.message.is_user&&frame.message.role!=='system');
  const selected=eligible.slice(-MAX_RECORDS),entries:HistoricalReference[]=[];let truncated=eligible.length>MAX_RECORDS;
- // Load AND verify concurrently; every branch re-tests the deadline so a slow
- // host cannot keep this working after the caller stopped waiting.
- const verified=await Promise.allSettled(selected.map(async frame=>{
-  if(Date.now()>=deadline)return undefined;
-  const record=await loadTurnRecord(api,turnPath(key.chatId,frame.message.id,frame.message.swipe_id),userId);
-  if(!record||Date.now()>=deadline)return undefined;
-  if(record.plan.key.chatId!==key.chatId||needsResolution(frame.message.content))return undefined;
-  return await matches(record,frame)?record:undefined;
+ if(Date.now()>=deadline)return undefined;
+ // Bound in-flight host reads. Host storage has no cancellation API, so an
+ // already-started read may finish remotely; its record is never parsed late.
+ const loaded=new Map<number,StoredTurnRecord>();let cursor=selected.length-1;
+ await Promise.all(Array.from({length:Math.min(2,selected.length)},async()=>{
+  while(isCurrent()){
+   const index=cursor--;if(index<0)return;
+   try{const record=await loadTurnRecord(api,turnPath(key.chatId,selected[index]!.message.id,selected[index]!.message.swipe_id),userId,isCurrent);if(record&&isCurrent())loaded.set(index,record);}catch{/* Optional reads fail independently. */}
+  }
  }));
+ if(!isCurrent())return undefined;
  // Newest compatible description per exact kind/name/field. No alias/casing inference.
  const seen=new Set<string>();
  for(let index=selected.length-1;index>=0;index--){
-  const outcome=verified[index]!,frame=selected[index]!;if(outcome.status!=='fulfilled'||!outcome.value)continue;const record=outcome.value;
-  for(const reference of normalizeStoryReferences(record.plan.storyReferences,record.plan.paragraphs.map(p=>({text:stripTextEffectTags(p.text)}))).reverse()){
-   if(!retainableReferenceField(reference.field)||!stripTextEffectTags(frame.message.content).includes(reference.evidence))continue;
+  if(!isCurrent())return undefined;
+  const record=loaded.get(index),frame=selected[index]!;if(!record)continue;
+  if(record.plan.key.chatId!==key.chatId||needsResolution(frame.message.content)||record.plan.key.sourceFingerprint!==fingerprintForMessage(frame.message)||!await matches(record,frame))continue;
+  const plainMessage=stripTextEffectTags(frame.message.content);  for(const reference of normalizeStoryReferences(record.plan.storyReferences,record.plan.paragraphs.map(p=>({text:stripTextEffectTags(p.text)}))).reverse()){
+   if(!retainableReferenceField(reference.field)||!plainMessage.includes(reference.evidence))continue;
    const identity=JSON.stringify([reference.kind,reference.name,reference.field]);if(seen.has(identity))continue;seen.add(identity);
    if(entries.length>=128){truncated=true;continue;}
    entries.push({sourceKey:record.plan.key,replyNumber:frame.replyNumber,reference});
@@ -130,9 +132,8 @@ async function collect(api:SpindleAPI,target:StoredTurnRecord,userId:string|unde
  // Equal chains mean equal normalised snapshots, and a chain can be stopped.
  const fresh=referenceMessages(await api.chat.getMessages(key.chatId),key.assistantMessageId);if(!fresh||Date.now()>=deadline)return undefined;
  const freshLineage=await frames(fresh,key.chatId,deadline);if(!freshLineage)return undefined;
- if(freshLineage[freshLineage.length-1]!.prefixDigest!==last.prefixDigest)return undefined;
- const parsed=ReferenceHistorySchema.safeParse({version:1,target:key,targetReplyNumber:last.replyNumber,entries,truncated});
- return parsed.success&&JSON.stringify(parsed.data).length<=256000?parsed.data:undefined;
+ if(freshLineage[freshLineage.length-1]!.prefixDigest!==last.prefixDigest)return undefined; const parsed=ReferenceHistorySchema.safeParse({version:1,target:key,targetReplyNumber:last.replyNumber,entries,truncated});
+ return isCurrent()&&parsed.success&&JSON.stringify(parsed.data).length<=256000?parsed.data:undefined;
 }
 /** Optional reads are bounded and fail closed without touching primary turn state. */
 export async function readReferenceHistory(api:SpindleAPI,target:StoredTurnRecord,userId?:string,deadlineMs=750):Promise<ReferenceHistory|undefined>{

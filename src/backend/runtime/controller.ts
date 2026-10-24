@@ -120,11 +120,20 @@ const pendingAssetStarts = new Map<string,symbol>();
  * before the bump.
  */
 const intakeEpochs = new Map<string, number>();
+function capEpochMap(map: Map<string, number>, max = 256): void {
+  while (map.size > max) {
+    const oldest = map.keys().next().value;
+    if (oldest === undefined) break;
+    map.delete(oldest);
+  }
+}
 function bumpIntakeEpoch(userId: string | undefined, chatId: string): void {
   const key = runtimeKey(userId, chatId);
   imageRetryEpochs.set(key,(imageRetryEpochs.get(key)??0)+1);
+  capEpochMap(imageRetryEpochs);
   imageRetryQueues.get(key)?.queue.cancel();imageRetryQueues.delete(key);
   intakeEpochs.set(key, (intakeEpochs.get(key) ?? 0) + 1);
+  capEpochMap(intakeEpochs);
 }
 const activeTurnKeys = new Map<string, StoredTurnRecord["plan"]["key"]>();
 
@@ -200,27 +209,27 @@ async function cancelIncompleteJobs(
   const unclaimed = (): boolean => !activeTurnKeys.has(key);
   const chatState = await loadChatState(spindle, chatId, userId);
   if (!chatState.activeTurnPath || !unclaimed()) return;
-  const record = await loadTurnRecord(spindle, chatState.activeTurnPath, userId);
-  if (!record || !unclaimed()) return;
-  if (abortedTurn && !turnKeyEquals(record.plan.key, abortedTurn)) return;
+  // Preflight outside the write queues: a slow optional cleanup read should
+  // not monopolize the queues before a reopened view can claim fresh work.
+  // This snapshot is never written; the atomic mutation reloads the record.
+  const candidate = await loadTurnRecord(spindle, chatState.activeTurnPath, userId);
+  if (!candidate || !unclaimed() || (abortedTurn && !turnKeyEquals(candidate.plan.key, abortedTurn))) return;
   const nowTime = new Date().toISOString();
-  let cancelled = 0;
-  const jobs = record.jobs.map((job) => {
-    if (job.status !== "queued" && job.status !== "generating") return job;
-    cancelled += 1;
-    return AssetJobSchema.parse({ ...job, status: "cancelled", error: null, finishedAt: nowTime });
-  });
-  if (cancelled === 0 || !unclaimed()) return;
-  const next = { ...record, jobs, imageRequests: record.imageRequests?.map((request) => request.state === "review" ? { ...request, state: "cancelled" as const } : request) ?? [], updatedAt: nowTime };
-  await saveTurnRecord(spindle, chatState.activeTurnPath, next, userId);
-  dbg(spindle, userId, `view-gate persisted cancelled over ${cancelled} incomplete job(s) chat=${chatId}`);
-  // A view that reopened before this landed already holds the pre-cancel
-  // jobs; tell it so no spinner outlives the batch.
-  if (views.isOpen(userId, chatId)) {
-    for (const job of jobs) {
-      if (job.status !== "cancelled" || job.finishedAt !== nowTime) continue;
-      spindle.sendToFrontend({ type: "vn_asset", chatId, messageId: record.plan.key.assistantMessageId, sourceFingerprint: next.plan.key.sourceFingerprint, swipeId: next.plan.key.swipeId, revision: next.plan.key.revision, asset: await assetViewWithCastArt(spindle,next,job,userId) }, userId);
-    }
+  const next = await mutateActiveTurnRecord(spindle, chatId, chatState.activeTurnPath, userId, record => {
+    if (abortedTurn && !turnKeyEquals(record.plan.key, abortedTurn)) return null;
+    if (!record.jobs.some(job => job.status === "queued" || job.status === "generating")) return null;
+    const jobs = record.jobs.map(job => job.status === "queued" || job.status === "generating"
+      ? AssetJobSchema.parse({ ...job, status: "cancelled", error: null, finishedAt: nowTime }) : job);
+    return { ...record, jobs, imageRequests: record.imageRequests?.map(request => request.state === "review" ? { ...request, state: "cancelled" as const } : request) ?? [], updatedAt: nowTime };
+  }, unclaimed);
+  if (!next || !unclaimed()) return;
+  dbg(spindle, userId, `view-gate persisted cancelled jobs chat=${chatId}`);
+  // A reopened view may hold old spinners. Never publish cleanup over new work.
+  for (const job of next.jobs) {
+    if (job.status !== "cancelled" || job.finishedAt !== nowTime) continue;
+    const asset = await assetViewWithCastArt(spindle, next, job, userId);
+    if (!unclaimed() || !views.isOpen(userId, chatId)) return;
+    spindle.sendToFrontend({ type: "vn_asset", chatId, messageId: next.plan.key.assistantMessageId, sourceFingerprint: next.plan.key.sourceFingerprint, swipeId: next.plan.key.swipeId, revision: next.plan.key.revision, asset }, userId);
   }
 }
 
@@ -986,6 +995,7 @@ async function processAssistantMessage(
   if (resolved !== content) dbg(spindle, userId, `message ${message.id} macro-resolved: ${content.length} -> ${resolved.length} chars`);
   const path = turnPath(chatId, message.id, message.swipe_id);
   const existing = await loadTurnRecord(spindle, path, userId);
+  if ((intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch) return;
   const relation = relateRecord(existing, message, intake);
   // The host could not resolve the message right now (no interceptor loaded,
   // transient error). A turn already planned from a successful resolution
@@ -1007,6 +1017,15 @@ async function processAssistantMessage(
   const fingerprint = selectionFingerprint(message, intake);
   const rawFingerprint = fingerprintForMessage({ id: message.id, swipe_id: message.swipe_id, content });
   if (!options?.retry && !options?.forceRegenerate && existing && relation === "current") {
+    // Repeated native edit/state notices must not replan an owned live batch.
+    const owner = assetControllers.get(intakeKey), start = pendingAssetStarts.get(intakeKey);
+    if (((owner && !owner.signal.aborted) || start) && compareTurnKeys(activeTurnKeys.get(intakeKey) ?? null, existing.plan.key).accepted) {
+      const view = await turnViewWithAudio(spindle, existing, userId);
+      const sameOwner = owner ? assetControllers.get(intakeKey) === owner && !owner.signal.aborted : pendingAssetStarts.get(intakeKey) === start;
+      if (sameOwner && compareTurnKeys(activeTurnKeys.get(intakeKey) ?? null, existing.plan.key).accepted && (intakeEpochs.get(intakeKey) ?? 0) === intakeEpoch)
+        spindle.sendToFrontend({type:"vn_turn",turn:view},userId);
+      return;
+    }
     const hasIncompleteJobs = existing.jobs.some(
       (job) => job.status === "failed" || job.status === "cancelled" || job.status === "queued" || job.status === "generating"
     );
@@ -1351,22 +1370,23 @@ async function retryTurn(
   userId?: string
 ): Promise<void> {
   const key = runtimeKey(userId, chatId);
-  assetControllers.get(key)?.abort("Retrying turn.");
-  // Providers may ignore abort for minutes; detach the dead controller so the
-  // retry's own batch (and replan/prepare actions landing meanwhile) can start
-  // instead of failing with "finish the waiting pictures" until the provider settles.
-  releaseAbortedImageBatch(key);
-  planningQueue.cancelChat(userId, chatId);
+  bumpIntakeEpoch(userId, chatId);
+  const retryEpoch = intakeEpochs.get(key) ?? 0;
+  pendingAssetStarts.delete(key);
+  abortAssetBatch(key, "Retrying turn.");  planningQueue.cancelChat(userId, chatId);
   releaseSceneCacheAdmission(spindle, userId, chatId, "retry");
+  const isCurrentRetry = () => (intakeEpochs.get(key) ?? 0) === retryEpoch && views.isOpen(userId, chatId);
 
   const path = turnPath(chatId, message.id, message.swipe_id);
   const existing = await loadTurnRecord(spindle, path, userId);
+  if (!isCurrentRetry()) return;
 
   // A scene picker may have changed since this turn was planned. Re-resolve
   // macro-bearing messages first; a resolution that no longer matches the
   // stored plan replans instead of regenerating the discarded scene's images.
   if (needsResolution(message.content)) {
     const intake = await resolveMessageIntake(spindle, chatId, message.content, userId);
+    if (!isCurrentRetry()) return;
     // A host that cannot resolve right now keeps the stored plan (images are
     // retried below); only a real, different resolution replans.
     if (intake.resolved && relateRecord(existing, message, intake) !== "current") {
@@ -1378,6 +1398,7 @@ async function retryTurn(
   const config = await loadConfig(spindle, userId);
   rememberDebugFlag(userId, config);
   const characterAppearance = await loadCharacterAppearance(spindle, userId, chatId);
+  if (!isCurrentRetry()) return;
 
   if (!existing || existing.status === "failed" || existing.jobs.length === 0
     || existing.plan.visualCues.some((cue) => cue.imageTemplate?.subjectMode !== 'none' && cue.resolvedIdentity !== undefined && !cue.resolvedIdentity.trim())) {
@@ -1431,6 +1452,7 @@ async function retryTurn(
       log: (line) => dbg(spindle, userId, line),
       ...sourceTextOption(existing)
     });
+    if (!isCurrentRetry()) return;
     for (const job of extra) updatedJobs.push(job);
   }
 
@@ -1450,10 +1472,13 @@ async function retryTurn(
     ]
   };
 
+  if (!isCurrentRetry()) return;
   activeTurnKeys.set(key, updatedRecord.plan.key);
-  await saveTurnRecord(spindle, path, updatedRecord, userId);
-  await persistActiveTurn(spindle, updatedRecord, path, userId);
-  spindle.sendToFrontend({ type: "vn_turn", turn: await turnViewWithAudio(spindle, updatedRecord,userId) }, userId);
+  await persistActiveTurn(spindle, updatedRecord, path, userId, isCurrentRetry);
+  if (!isCurrentRetry()) return;
+  const view = await turnViewWithAudio(spindle, updatedRecord, userId);
+  if (!isCurrentRetry()) return;
+  spindle.sendToFrontend({ type: "vn_turn", turn: view }, userId);
 
   if (!config.useNativeCardImages && config.generateImages) {
     void startAssets(spindle, updatedRecord, path, userId, { bypassJobIds }).catch((error) => {
@@ -1542,6 +1567,8 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
     const characterRegistry = await loadCharacterRegistry(spindle, action.chatId, userId);
     const recentMessages = config.includeRecentMessages > 0 ? await resolveContextMessages(spindle, action.chatId, messages.slice(-config.includeRecentMessages), new Map(), userId) : [];
     if (!isCurrent()) return;
+    imageRetryEpochs.set(key,(imageRetryEpochs.get(key)??0)+1);
+    imageRetryQueues.get(key)?.queue.cancel();imageRetryQueues.delete(key);
     const scheduled = planningQueue.enqueue(userId, action.chatId, action.messageId, async operation => {
       const current = () => !operation.controller.signal.aborted && isCurrent();
       if (!current()) return;
@@ -1590,9 +1617,9 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
         replanRequestIds:[...(old.replanRequestIds ?? []),action.requestId].slice(-32),
         ...(old.correctionRequestIds ? {correctionRequestIds:old.correctionRequestIds} : {}),resolvedSourceText:intake.text,...(old.source ? {source:old.source} : {}),referenceLineage:preserveReferenceLineage(old.referenceLineage,await captureReferenceLineage(referenceSnapshot??[],plan,rawReplanSource)),updatedAt:now,
         attempts:[...(old.attempts ?? []).slice(-15),{attemptNumber:(old.attempts?.at(-1)?.attemptNumber ?? 0)+1,timestamp:now,settings:{replan:true,forcedImageReview:true}}]};
-      await persistActiveTurn(spindle,record,state.activeTurnPath!,userId,current);
-      if (!current()) return;
       const view = await turnViewWithAudio(spindle,record,userId);
+      if (!current()) return;
+      await persistActiveTurn(spindle,record,state.activeTurnPath!,userId,current);
       if (!current()) return;
       activeTurnKeys.set(key,plan.key);
       spindle.sendToFrontend({type:'vn_turn',turn:view},userId);
@@ -1602,7 +1629,7 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
     },`replan:${action.requestId}`);
     try { await scheduled.promise; }
     catch (error) { if (!isAbortError(error,scheduled.operation.controller.signal)) throw error; }
-  } finally { if(preparingSingleImages.get(key)===preparation)preparingSingleImages.delete(key); }
+  } finally { if(preparingSingleImages.get(key)===preparation){preparingSingleImages.delete(key);imageRetryQueues.get(key)?.queue.wake();} }
 }
 
 async function queueImageRetries(spindle:SpindleAPI,raw:QueueImageRetriesRequest,userId:string):Promise<void>{
@@ -1932,7 +1959,7 @@ function eventMessage(payload: unknown): { chatId: string; message: NormalizedCh
   if (typeof candidate.chatId !== "string" || !candidate.message || typeof candidate.message !== "object") return null;
   const message = candidate.message as Partial<NormalizedChatMessage>;
   if (typeof message.id !== "string" || typeof message.content !== "string" || typeof message.is_user !== "boolean") return null;
-  return { chatId: candidate.chatId, message: message as NormalizedChatMessage };
+  return { chatId: candidate.chatId, message: { ...message } as NormalizedChatMessage };
 }
 
 async function clearDeletedTurn(spindle: SpindleAPI, payload: unknown, userId?: string): Promise<void> {
@@ -1965,21 +1992,41 @@ function reconcileMessageEvent(spindle: SpindleAPI, payload: unknown, userId?: s
   if (!event)return;
   spindle.sendToFrontend({type:'vn_reference_history_invalidated',chatId:event.chatId},userId);
   if(event.message.is_user)return;
+  const key = runtimeKey(userId, event.chatId);
+  const epoch = intakeEpochs.get(key) ?? 0;
+  const isCurrent = () => (intakeEpochs.get(key) ?? 0) === epoch && views.isOpen(userId, event.chatId);
+  const matchesEvent = (latest: NormalizedChatMessage | undefined): boolean => Boolean(latest
+    && latest.id === event.message.id && latest.content === event.message.content
+    && (latest.swipe_id ?? 0) === (event.message.swipe_id ?? 0)
+    && (event.message.branch_id === undefined || (latest.branch_id ?? null) === event.message.branch_id)
+    && (event.message.parent_message_id === undefined || (latest.parent_message_id ?? null) === event.message.parent_message_id));
   void (async () => {
-    if (!(await allowAutomaticWork(spindle, userId, event.chatId, "message reconcile"))) return;
-    // An ancestor edit invalidates remembered descriptions but must not move
-    // the reader backwards or start planning that older response.
-    const messages=await spindle.chat.getMessages(event.chatId) as NormalizedChatMessage[];
-    if([...messages].reverse().find(m=>!m.is_user&&m.content.trim())?.id!==event.message.id)return;
+    if (!(await allowAutomaticWork(spindle, userId, event.chatId, "message reconcile")) || !isCurrent()) return;
+    // Ancestor edits invalidate references without moving the reader backwards.
+    // A delayed same-ID event must not cancel a newer swipe/content revision.
+    const messages = await spindle.chat.getMessages(event.chatId) as NormalizedChatMessage[];
+    const latest = [...messages].reverse().find(m => !m.is_user && m.content.trim());
+    if (!matchesEvent(latest) || !isCurrent()) return;
+    const stored = await loadTurnRecord(spindle, turnPath(event.chatId, event.message.id, event.message.swipe_id), userId);
+    if (!isCurrent()) return;
+    const intake = await resolveMessageIntake(spindle, event.chatId, event.message.content, userId);
+    const fresh = await spindle.chat.getMessages(event.chatId) as NormalizedChatMessage[];
+    if (!isCurrent() || !matchesEvent([...fresh].reverse().find(m => !m.is_user && m.content.trim()))) return;
+    // Resolve before classifying: identical raw macro text can select a new
+    // scene, while volatile text alone must not retire a valid picture batch.
+    if (!intake.resolved || relateRecord(stored, event.message, intake) === "current") {
+      await processAssistantMessage(spindle, event.chatId, event.message, event.message.content, userId, {precomputedIntake:intake});
+      return;
+    }
+    planningQueue.cancelChat(userId, event.chatId, undefined, "The latest reply changed.");
+    imageRetryEpochs.set(key, (imageRetryEpochs.get(key) ?? 0) + 1);
+    imageRetryQueues.get(key)?.queue.cancel(); imageRetryQueues.delete(key);
+    activeTurnKeys.delete(key); pendingAssetStarts.delete(key);
+    abortAssetBatch(key, "The latest reply changed.");
     // A newer version of the message supersedes any intake still resolving.
-    const key = runtimeKey(userId, event.chatId);
     bumpIntakeEpoch(userId, event.chatId);
-    // The replaced reply's pictures are no longer this turn's pictures: stop
-    // paying for them now instead of when the next plan happens to start.
-    activeTurnKeys.delete(key);
-    abortAssetBatch(key, "The reply changed while its pictures were being generated.");
     releaseSceneCacheAdmission(spindle, userId, event.chatId, "message_changed");
-    await processAssistantMessage(spindle, event.chatId, event.message, event.message.content, userId);
+    await processAssistantMessage(spindle, event.chatId, event.message, event.message.content, userId, {precomputedIntake:intake});
   })().catch((error) => {
     spindle.log.error(`Visual novel message reconciliation failed: ${errorText(error)}`);
   });

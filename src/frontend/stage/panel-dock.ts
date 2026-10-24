@@ -29,7 +29,7 @@ button,input,textarea{font:inherit;color:inherit}button{cursor:pointer;backgroun
 .resize::after{content:"";position:absolute;inset:-10px}
 @media(pointer:coarse){.resize::after{inset:-12px}}.remote{font-size:11px;padding:0 8px;margin:3px 0}.waiting{padding:12px;color:var(--muted)}
 @media(max-width:560px){button{min-height:40px}.launcher{padding:8px 12px 8px 11px;gap:6px}.drawer{top:62px}.bar button{min-height:36px}}
-@media(pointer:coarse){button{min-height:44px}.bar button{min-width:44px}}
+@media(pointer:coarse){button{min-height:44px}.bar button{min-width:44px}.resize{width:44px;height:44px;min-height:44px}}
 @media(prefers-reduced-motion:reduce){button{transition:none}button:active{transform:none}}
 `;
 
@@ -260,7 +260,7 @@ export class PanelDock {
       const bar = document.createElement("div"); bar.className = "bar";
       const handle = this.button(pin.card.title, () => {}); handle.className = "handle";
       handle.title = "Drag to move. Arrow keys move; Shift + arrows resize.";
-      const collapse = this.button(pin.collapsed ? "+" : "−", () => { pin.collapsed = !pin.collapsed; this.rebuild(pin); this.save(); }); collapse.setAttribute("aria-label", "Collapse or expand panel");
+      const collapse = this.button(pin.collapsed ? "+" : "−", () => { pin.collapsed = !pin.collapsed; collapse.textContent = pin.collapsed ? "+" : "−"; body.hidden = pin.collapsed; resize.hidden = pin.collapsed; this.layout(); this.save(); }); collapse.setAttribute("aria-label", "Collapse or expand panel");
       const unpin = this.button(PIN_ICON, () => { this.pins = this.pins.filter((p) => p !== pin); this.renderPins(); this.save(); }); unpin.setAttribute("aria-label", "Unpin panel"); unpin.title = "Unpin panel";
       bar.append(handle, collapse, unpin); node.append(bar);
       const body = document.createElement("div"); body.className = "body"; body.hidden = pin.collapsed;
@@ -289,7 +289,7 @@ export class PanelDock {
   }
   private rebuild(pin: Pin): void { this.removePinNode(pin.key); this.renderPins(); }
   private layout(): void {
-    const box = this.host.getBoundingClientRect();
+    const rect = this.host.getBoundingClientRect(); const box = { width: this.host.clientWidth || rect.width, height: this.host.clientHeight || rect.height };
     for (const pin of this.pins) {
       const node = this.nodes.get(pin.key); if (!node) continue;
       const width = Math.min(Math.max(180, pin.width), Math.max(0, box.width - 24));
@@ -299,10 +299,10 @@ export class PanelDock {
   }
   private drag(handle: HTMLButtonElement, pin: Pin, resizing: boolean): void {
     const move = (dx: number, dy: number, resize: boolean) => {
-      const box = this.host.getBoundingClientRect();
-      if (resize) { pin.width = Math.max(180, Math.min(box.width - 24, pin.width + dx)); pin.height = Math.max(140, Math.min(box.height - 80, pin.height + dy)); }
-      else { pin.x = clampPanel(pin.x + dx / Math.max(1, box.width - Math.min(pin.width, box.width - 24) - 24), 1); pin.y = clampPanel(pin.y + dy / Math.max(1, box.height - (pin.collapsed ? 46 : Math.min(pin.height, box.height - 80)) - 80), 1); }
-      this.layout();
+      const rect = this.host.getBoundingClientRect(); const box = { width: this.host.clientWidth || rect.width, height: this.host.clientHeight || rect.height }; const scale = rect.width > 0 && this.host.clientWidth > 0 ? this.host.clientWidth / rect.width : 1; dx *= scale; dy *= scale; const bw = box.width, bh = box.height; if (resize) { pin.width = Math.max(180, Math.min(bw - 24, pin.width + dx)); pin.height = Math.max(140, Math.min(bh - 80, pin.height + dy)); } else { pin.x = clampPanel(pin.x + dx / Math.max(1, bw - Math.min(pin.width, bw - 24) - 24), 1); pin.y = clampPanel(pin.y + dy / Math.max(1, bh - (pin.collapsed ? 46 : Math.min(pin.height, bh - 80)) - 80), 1); } return this.layout();
+
+
+
     };
     handle.onkeydown = (event) => {
       const delta: Record<string, [number, number]> = { ArrowLeft: [-10, 0], ArrowRight: [10, 0], ArrowUp: [0, -10], ArrowDown: [0, 10] };

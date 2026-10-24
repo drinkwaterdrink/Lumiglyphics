@@ -72,6 +72,21 @@ describe("AudioEngine", () => {
     clock = new FakeClock();
   });
 
+  test('speech playback ducks BGM and restores it without changing SFX',()=>{
+    const engine=new AudioEngine({bgmVolume:.8,sfxVolume:.6,crossfadeDuration:0,audioFactory:playerFactory,now:clock.now,setInterval:clock.setInterval,clearInterval:clock.clearInterval});
+    engine.playBgm('theme.mp3');
+    const track=createdPlayers[0]!;
+    expect(track.volume).toBe(.8);
+    engine.playSfx('bell.mp3');
+    const sfx=createdPlayers[1]!;
+    engine.setSpeechDucking(true);
+    expect(track.volume).toBeCloseTo(.8*.38);
+    expect(sfx.volume).toBe(.6);
+    engine.setSpeechDucking(false);
+    expect(track.volume).toBe(.8);
+    engine.destroy();
+  });
+
   test('music attenuation survives fades, restores the same track and never changes sound effects',()=>{
     const engine=new AudioEngine({bgmVolume:.8,sfxVolume:.6,crossfadeDuration:50,attenuationRampMs:100,audioFactory:playerFactory,now:clock.now,setInterval:clock.setInterval,clearInterval:clock.clearInterval});
     engine.playBgm('theme.mp3');clock.tick(25);const track=createdPlayers[0]!;track.currentTime=123;

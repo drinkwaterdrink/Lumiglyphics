@@ -26,28 +26,31 @@ function containsTokenSequence(haystack:readonly string[],needle:readonly string
 function startsWithTokenSequence(haystack:readonly string[],prefix:readonly string[]):boolean{
  if(!prefix.length||prefix.length>haystack.length)return false;
  return prefix.every((token,index)=>haystack[index]===token);
-}
-/** Ensemble descriptions may be reordered; identity facts must stay with their owner.
+}/** Ensemble descriptions may be reordered; identity facts must stay with their owner.
  * Single-person fitting permits fact reordering; ordinary rerolls retain exact phrases. */
 export function promptProtection(prompt:string,metadata?:ImagePromptMetadata,compactSingle=false):PromptProtection{
  const source=metadata?.brief.subjects.trim()??'';
  const empty:PromptProtection={exact:'',facts:[],subjects:[],minimumCharacters:0};
  if(!source)return empty;
+ const original=canonical(prompt),paddedOriginal=` ${original} `;
  if(metadata?.brief.subjectMode!=='ensemble'){
-  if(compactSingle){
+  const tagSource=source.replace(/;\s*|\n+/g,', ').replace(/\s+/g,' ').trim();
+  const exact=prompt.includes(source)?source:(tagSource&&prompt.includes(tagSource)?tagSource:'');
+  if(!compactSingle&&exact){
+   return {...empty,exact,minimumCharacters:exact.length};
+  }
+  if(compactSingle||!exact){
    // Keep only facts still present in the editing source. Deduplicate the legacy
    // repeated "Wearing" clause, allowing order/punctuation to change, not facts.
    const promptTokens=tokenize(prompt);
    const facts=[...new Map(source.split(/[,;\n]+/).map(value=>value.trim()).filter(value=>containsTokenSequence(promptTokens,tokenize(value))).map(value=>{
-    const bare=value.replace(/^wearing\s+/i,'');
-    return [canonical(bare),bare] as const;
+    const bare=value.replace(/^wearing\s+/i,'');    return [canonical(bare),bare] as const;
    })).values()];
    return {...empty,facts,minimumCharacters:facts.reduce((sum,fact)=>sum+fact.length+2,0)};
   }
-  const exact=prompt.includes(source)?source:'';return {...empty,exact,minimumCharacters:exact.length};
+  return {...empty,exact,minimumCharacters:exact.length};
  }
- const originalTokens=tokenize(prompt),subjects:SubjectLock[]=[];
- const rows=source.split(/\r?\n/).filter(row=>row.indexOf(':')>0);
+ const originalTokens=tokenize(prompt),subjects:SubjectLock[]=[]; const rows=source.split(/\r?\n/).filter(row=>row.indexOf(':')>0);
  const declarations:Array<{name:string;index:number;end:number}>=[];
  for(const row of rows){
   const name=row.slice(0,row.indexOf(':')).trim();
@@ -61,8 +64,7 @@ export function promptProtection(prompt:string,metadata?:ImagePromptMetadata,com
  declarations.sort((a,b)=>a.index-b.index);
  for(const row of rows){
   const colon=row.indexOf(':');if(colon<1)continue;
-  const name=row.slice(0,colon).trim();if(name.length>160||!canonical(name)||!containsTokenSequence(originalTokens,tokenize(name)))continue;
-  const declared=declarations.find(d=>d.name===name);
+  const name=row.slice(0,colon).trim();if(name.length>160||!canonical(name)||!containsTokenSequence(originalTokens,tokenize(name)))continue;  const declared=declarations.find(d=>d.name===name);
   const next=declared?declarations.find(d=>d.index>declared.index):undefined;
   const newline=declared?prompt.indexOf('\n',declared.end):-1;
   const current=declared?prompt.slice(declared.end,Math.min(next?.index??prompt.length,newline<0?prompt.length:newline)).trim():'';
@@ -71,8 +73,7 @@ export function promptProtection(prompt:string,metadata?:ImagePromptMetadata,com
   const unchanged=declared&&startsWithTokenSequence(tokenize(current),tokenize(row.slice(colon+1)));
   const values=declared&&!unchanged?current:row.slice(colon+1);
   const scopeTokens=declared?tokenize(current):originalTokens;
-  const facts=[...new Set(values.split(/[,;\n]+/).map(value=>value.trim()).filter(value=>Boolean(canonical(value))&&containsTokenSequence(scopeTokens,tokenize(value))))];
-  subjects.push({name,facts});
+  const facts=[...new Set(values.split(/[,;\n]+/).map(value=>value.trim()).filter(value=>Boolean(canonical(value))&&containsTokenSequence(scopeTokens,tokenize(value))))];  subjects.push({name,facts});
  }
  // Unrecognized legacy formats retain strict protection, never silently weaken it.
  if(!subjects.length)return {...empty,exact:prompt.includes(source)?source:'',minimumCharacters:prompt.includes(source)?source.length:0};
@@ -96,8 +97,7 @@ export function assertPromptProtection(prompt:string,protection:PromptProtection
   const valid=owned.some(mention=>{
    const next=mentions.find(m=>m.index>mention.index&&m.subject!==index);
    const section=promptTokens.slice(mention.index,next?.index??promptTokens.length);
-   return lock.facts.every(fact=>containsTokenSequence(section,tokenize(fact)));
-  });
+   return lock.facts.every(fact=>containsTokenSequence(section,tokenize(fact)));  });
   if(!valid)throw new Error('Required cast appearance details were omitted, changed, or assigned to another person. Keep each supplied appearance fact with its named subject.');
  }
 }

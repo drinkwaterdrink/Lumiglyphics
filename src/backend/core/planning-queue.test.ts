@@ -91,3 +91,20 @@ describe("planning queue", () => {
     expect(queued.operation.stage).toBe("cancelled");
   });
 });
+
+  test("a just-cancelled operation is never returned as a dedupe hit", async () => {
+    const queue = new PlanningQueue();
+    const gate = deferred();
+    const first = queue.enqueue("user", "a", "m1", async () => gate.promise);
+    const rejection = first.promise.then(() => "resolved", error => error.name);
+    queue.cancelChat("user", "a");
+    // Same dedupe identity, enqueued in the same turn: it must run, not inherit
+    // the cancelled operation's rejection.
+    const retry = queue.enqueue("user", "a", "m1", async () => "retry ready");
+    expect(retry.reused).toBe(false);
+    expect(await retry.promise).toBe("retry ready");
+    gate.resolve();
+    expect(await rejection).toBe("AbortError");
+    await flush();
+    expect(queue.active()).toHaveLength(0);
+  });

@@ -197,6 +197,14 @@ export function cyrb53(source: string, seed = 0): string {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16).padStart(13, "0");
 }
 
+export function fnv1aReverse(source: string): string {
+  let value = 0x811c9dc5;
+  for (let index = source.length - 1; index >= 0; index -= 1) {
+    value = Math.imul(value ^ source.charCodeAt(index), 0x01000193) >>> 0;
+  }
+  return value.toString(16).padStart(8, "0");
+}
+
 /** Deterministic JSON: object keys sorted recursively, arrays kept in order. */
 export function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== "object") {
@@ -228,12 +236,6 @@ export function sceneIdentityDigest(identity: SceneImageIdentity): string {
   return cyrb53(canonicalJson(identity));
 }
 
-/** Extract the content digest from a cache key, or null for legacy keys. */
-export function identityDigestFromKey(key: string): string | null {
-  const digest = key.split(":")[3];
-  return digest ? digest : null;
-}
-
 /**
  * Hash the structured identity. Two FNV-1a hashes of the canonical JSON
  * (forward and reversed) give the short map key; the appended cyrb53 digest is
@@ -244,7 +246,7 @@ export function identityDigestFromKey(key: string): string | null {
  */
 export function sceneImageCacheKey(identity: SceneImageIdentity): string {
   const canonical = canonicalJson(identity);
-  const fnvPair = `${fnv1a(canonical)}${fnv1a(canonical.split("").reverse().join(""))}`;
+  const fnvPair = `${fnv1a(canonical)}${fnv1aReverse(canonical)}`;
   return `${SCENE_CACHE_KEY_VERSION}:${fnvPair}:${canonical.length.toString(16)}:${cyrb53(canonical)}`;
 }
 
@@ -340,7 +342,13 @@ export class SceneImageCache {
    */
   bumpEpoch(scope: SceneImageScope, _reason?: string): number {
     const next = this.epoch(scope) + 1;
+    this.epochs.delete(scope);
     this.epochs.set(scope, next);
+    while (this.epochs.size > Math.max(512, this.maxEntries * 2)) {
+      const oldest = this.epochs.keys().next().value;
+      if (oldest === undefined) break;
+      this.epochs.delete(oldest);
+    }
     return next;
   }
 
@@ -366,8 +374,7 @@ export class SceneImageCache {
    * avoided. An entry from another physical scene episode is retired on sight.
    * Pass the caller-computed `expectedDigest` (`sceneIdentityDigest`) so a
    * short-key collision between two different full identities is detected even
-   * though their map key is identical; absent callers fall back to the digest
-   * segment embedded in the key.
+   * though their map key is identical; callers must pass the digest explicitly; it is never recovered from the key.
    */
   lookup(scope: SceneImageScope, key: string, episode: string, expectedDigest?: string | null): SceneImageLookup {
     const composite = this.composite(scope, key);
@@ -386,7 +393,7 @@ export class SceneImageCache {
     // Content-level collision guard: the stored entry belongs to a different
     // identity that happened to share the short FNV key. Do not evict it (it
     // is legitimate for its own identity); report a miss for this caller.
-    const digest = expectedDigest ?? identityDigestFromKey(key);
+    const digest = expectedDigest ?? null;
     if (digest !== null && entry.identityDigest !== null && entry.identityDigest !== digest) {
       this.counters.misses.key_collision += 1;
       return { status: "miss", reason: "key_collision" };
@@ -430,7 +437,7 @@ export class SceneImageCache {
       imageUrl?: string | null;
       episode: string;
       provenance: SceneImageProvenance;
-      /** Caller-computed full-identity digest; falls back to the key segment. */
+      /** Caller-computed full-identity digest; never inferred from the key. */
       identityDigest?: string | null;
     },
     token: SceneImageAdmission,
@@ -445,7 +452,7 @@ export class SceneImageCache {
     const composite = this.composite(scope, key);
     const timestamp = this.now();
     const previous = this.entries.get(composite);
-    const digest = value.identityDigest ?? identityDigestFromKey(key);
+    const digest = value.identityDigest ?? null;
     // A same-key entry belonging to a different full identity must never be
     // overwritten; both identities would otherwise alias one pointer.
     if (previous && digest !== null && previous.identityDigest !== null && previous.identityDigest !== digest) {
@@ -551,7 +558,7 @@ export class SceneImageCache {
   /** Drop every entry that points at this image id (any scope). */
   invalidateImage(imageId: string, reason: SceneImageInvalidationReason = "image_deleted"): number {
     let count = 0;
-    for (const [composite, entry] of [...this.entries]) {
+    for (const [composite, entry] of this.entries) {
       if (entry.imageId !== imageId) continue;
       this.drop(composite, entry, "invalidated");
       this.counters.invalidations[reason] += 1;
@@ -567,7 +574,7 @@ export class SceneImageCache {
   retainEpisodes(scope: SceneImageScope, episodes: Iterable<string>): number {
     const keep = new Set(episodes);
     let count = 0;
-    for (const [composite, entry] of [...this.entries]) {
+    for (const [composite, entry] of this.entries) {
       if (entry.scope !== scope || keep.has(entry.episode)) continue;
       this.drop(composite, entry, "invalidated");
       this.counters.invalidations.scene_boundary += 1;
@@ -588,9 +595,16 @@ export class SceneImageCache {
 
   /** Drop every entry of one user+chat, advance its epoch (late results rejected) and its generation. */
   invalidateScope(scope: SceneImageScope, reason: SceneImageInvalidationReason = "scope_cleared"): number {
-    this.generations.set(scope, this.generation(scope) + 1);
+    const nextGen = this.generation(scope) + 1;
+    this.generations.delete(scope);
+    this.generations.set(scope, nextGen);
+    while (this.generations.size > Math.max(512, this.maxEntries * 2)) {
+      const oldest = this.generations.keys().next().value;
+      if (oldest === undefined) break;
+      this.generations.delete(oldest);
+    }
     let count = 0;
-    for (const [composite, entry] of [...this.entries]) {
+    for (const [composite, entry] of this.entries) {
       if (entry.scope !== scope) continue;
       this.drop(composite, entry, "invalidated");
       this.counters.invalidations[reason] += 1;

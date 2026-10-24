@@ -344,6 +344,20 @@ export function formatDialogueText(
 
   // 1. Strip inline card images / asset markers
   let text = rawText
+    .replace(/`[^`]+`|<([a-zA-Z][a-zA-Z0-9_-]*):([a-zA-Z][a-zA-Z0-9_-]*)\s*>([\s\S]*?)<\/\s*\1(?::\2)?\s*>/gi, (m, sp: string | undefined, eff: string | undefined, inner: string | undefined, offset: number, src: string) => {
+      if (!sp || !eff || inner === undefined) return m;
+      const id = eff.toLowerCase();
+      const wrapped = isTextEffectId(id) ? `<${id}>${inner}</${id}>` : inner;
+      const trimmed = inner.trim();
+      if (trimmed.length >= 2 && src.slice(0, offset).trimEnd().endsWith(trimmed)) {
+        return `\0DEDUP\0${trimmed}\0WITH\0${wrapped}\0END\0`;
+      }
+      return wrapped;
+    })
+    .replace(/([\s\S]*?)\0DEDUP\0([\s\S]*?)\0WITH\0([\s\S]*?)\0END\0/g, (_m, before: string, dup: string, rep: string) => {
+      const idx = before.lastIndexOf(dup);
+      return idx === -1 ? before + rep : before.slice(0, idx) + rep;
+    })
     .replace(/<img\s*=\s*["'][^"']+["']\s*\/?>/gi, "")
     .replace(/<img\b[^>]*?\bsrc\s*=\s*["'][^"']+["'][^>]*?\/?>/gi, "")
     .replace(/\{\{img::[^\}]+\}\}/gi, "");

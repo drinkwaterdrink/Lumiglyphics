@@ -15,6 +15,10 @@ export function evaluatePanelRule(source: string, rule: PanelRule): Array<{ html
     const html = rule.template.replace(/\$(\$|&|\d{1,2}|<[^>]+>|['`])/g, (_token, group: string) => {
       if (group === "$") return "$";
       if (group === "&") return escape(match[0]);
+      if (!group.startsWith("<")) {
+        const index = Number(group);
+        if (!Number.isInteger(index) || index < 1 || index > 36) throw new Error(`Missing or unsupported capture $${group}.`);
+      }
       const capture = group.startsWith("<") ? match.groups?.[group.slice(1, -1)] : match[Number(group)];
       if (capture === undefined) throw new Error(`Missing or unsupported capture $${group}.`);
       return escape(capture);

@@ -228,4 +228,5 @@ test("story classes and font attributes cannot select fetching rules or custom f
   assert.equal(formatDialogueText('<em class="remote vn-transmission other">radio</em>'), '<em class="vn-transmission">radio</em>');
   assert.equal(formatDialogueText('<font face="AuditRemote" color="red" size="7">x</font>'), '<font color="red" size="7">x</font>');
   assert.equal(formatDialogueText('<font face="monospace" color="urlx" size="900">x</font>'), '<font face="monospace">x</font>');
+  assert.equal(formatDialogueText('(Motti)The stocky recruit swallows. "Yessir."<sage:whisper>"Yessir."</sage>'), '(Motti)The stocky recruit swallows. <span data-vn-text-fx="whisper">"Yessir."</span>');
 });

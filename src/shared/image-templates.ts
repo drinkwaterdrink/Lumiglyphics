@@ -1,4 +1,5 @@
 import {PresentationRuleTraceSchema} from './presentation-rules.js';
+import {SharedStyleSnapshotSchema} from './shared-style-snapshot.js';
 import { z } from "zod";
 import type { VisualNovelConfig, VisualNovelPromptPreset } from "../config.js";
 
@@ -37,6 +38,7 @@ export const VisualBriefSchema = z.object({
 }).strict();
 export type VisualBrief = z.infer<typeof VisualBriefSchema>;
 export const ImagePromptMetadataSchema = z.object({ template: ImageTemplateSnapshotSchema, selectionReason: z.string().max(300), format: z.enum(["description", "tags"]), brief: VisualBriefSchema,
+  sharedStyle:SharedStyleSnapshotSchema.optional().catch(undefined),
   presentationRuleTrace: PresentationRuleTraceSchema.optional(),
   trackerStatus: z.enum(["detected", "not_found", "unsupported", "malformed", "disabled"]), trackerSourceMessageId: z.string().max(256).optional() }).strict();
 export type ImagePromptMetadata = z.infer<typeof ImagePromptMetadataSchema>;

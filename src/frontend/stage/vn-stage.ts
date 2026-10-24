@@ -192,6 +192,7 @@ const THEME_MARKUP = `
     <div data-vn-flash aria-hidden="true"></div>
 
     <div data-vn-status-stack aria-live="polite" aria-atomic="false"></div>
+    <button data-vn-clean-restore type="button" hidden aria-label="Show reader controls" title="Show reader controls (H)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg><span>Show UI</span></button>
     <div data-vn-empty-state>
       <div data-vn-empty-card>
         <span data-vn-empty-icon aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" focusable="false" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4.2C6.6 3.2 4.6 2.8 2.5 3v9.4c2.1-.2 4.1.2 5.5 1.2 1.4-1 3.4-1.4 5.5-1.2V3c-2.1-.2-4.1.2-5.5 1.2z" /><path d="M8 4.2v9.4" /></svg></span>
@@ -226,7 +227,9 @@ const THEME_MARKUP = `
         <p data-vn-dialogue-text aria-live="polite" aria-atomic="true"></p>
         <div data-vn-dialogue-footer>
           <span data-vn-progress></span>
+          <div data-vn-scrubber role="group" aria-label="Paragraph timeline" hidden></div>
           <span data-vn-reading-state aria-live="polite"></span>
+          <button data-vn-clean-toggle type="button" aria-label="Clean canvas view" aria-pressed="false" aria-keyshortcuts="H" title="Hide UI for clean view (H)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
         </div>
         <button
           data-vn-continue
@@ -257,7 +260,7 @@ const THEME_MARKUP = `
         <button data-vn-backlog-close type="button" aria-label="Close history"><svg viewBox="0 0 16 16" width="14" height="14" focusable="false" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l8 8" /><path d="M12 4l-8 8" /></svg></button>
       </div>
       <div data-vn-backlog-content tabindex="0"></div>
-      <footer data-vn-backlog-footer><button data-vn-backlog-return type="button">Back to reader</button></footer>
+      <footer data-vn-backlog-footer><button data-vn-backlog-return type="button">Back to reader</button></footer></div><div data-vn-scene-hud hidden role="region" aria-label="Scene overview">
     </div>
   </main>
 `;
@@ -464,6 +467,11 @@ export class VnStage {
   readonly workspace: ReaderWorkspace;
   private readonly progress: HTMLElement;
   private readonly readingState: HTMLElement;
+  private readonly sceneHud: HTMLElement | null;
+  private readonly scrubber: HTMLElement | null;
+  private readonly cleanToggle: HTMLButtonElement | null;
+  private readonly cleanRestore: HTMLButtonElement | null;
+  private isCleanView = false;
   private readonly interactionHint: HTMLElement;
   private readonly skipDescriptionEl: HTMLElement;
   private readonly continueButton: HTMLButtonElement;
@@ -612,9 +620,14 @@ export class VnStage {
     this.dialogueText = queryRequired(this.themeRoot, "[data-vn-dialogue-text]");
     this.progress = queryRequired(this.themeRoot, "[data-vn-progress]");
     this.readingState = queryRequired(this.themeRoot, "[data-vn-reading-state]");
+    this.sceneHud = this.themeRoot.querySelector<HTMLElement>("[data-vn-scene-hud]");
+    this.scrubber = this.themeRoot.querySelector<HTMLElement>("[data-vn-scrubber]");
+    this.cleanToggle = this.themeRoot.querySelector<HTMLButtonElement>("[data-vn-clean-toggle]");
+    this.cleanRestore = this.themeRoot.querySelector<HTMLButtonElement>("[data-vn-clean-restore]");
     this.interactionHint = queryRequired(this.themeRoot, "[data-vn-interaction-hint]");
     this.skipDescriptionEl = queryRequired(this.themeRoot, "[data-vn-skip-description]");
     this.continueButton = queryRequired(this.themeRoot, "[data-vn-continue]");
+    if (typeof this.dialogueText.after === "function") this.dialogueText.after(this.continueButton);
     this.previousButton = queryRequired(this.themeRoot, "[data-vn-control='previous']");
     this.interaction = queryRequired(this.themeRoot, "[data-vn-interaction]");
     this.choiceList = queryRequired(this.themeRoot, "[data-vn-choice-list]");
@@ -654,7 +667,7 @@ export class VnStage {
       focus:()=>{if(selectVnStageView(this.state).showStandardInput)this.input.focus();else{this.setActivity('Action saved for Your turn.','success');this.focus();}}
     },open=>{if(open)this.panelMount.dataset.vnDocumentOpen='true';else delete this.panelMount.dataset.vnDocumentOpen;});
     this.dossiers.connectWorkspace(this.workspace, shell);
-    this.bindEvents();
+    this.dossiers.connectWorkspace(this.workspace,shell);    this.bindEvents();
     this.updateControlButtons();
     this.render(null);
   }
@@ -827,10 +840,10 @@ export class VnStage {
     this.logButton.setAttribute("aria-expanded", "true");
     this.backlogContent.innerHTML = this.backlogEntries
       .map(
-        (entry) => `
-        <div data-vn-backlog-item>
-          ${entry.speaker ? `<span data-vn-backlog-speaker>${escapeHtml(entry.speaker)}</span>` : ""}
-          <p data-vn-backlog-text>${entry.formatted}</p>
+        (entry, index) => `
+        <div data-vn-backlog-item data-vn-step="${index + 1}">${entry.speaker ? `<span data-vn-backlog-speaker>${escapeHtml(entry.speaker)}</span>` : ""}<p data-vn-backlog-text>${entry.formatted}</p>
+
+
         </div>
       `,
       )
@@ -933,7 +946,7 @@ export class VnStage {
   }
 
   setCastMode(enabled:boolean):void {this.castStage.setEnabled(enabled);}
-  setCastTurn(turn:TurnView|null,index:number):AssetView|null {return this.castStage.set(turn,index);}
+  setCastTurn(turn:TurnView|null,index:number):AssetView|null {this.dossiers.setTurnMedia(turn);return this.castStage.set(turn,index);}
 
   reset(): void {
     this.workspace.suspend();
@@ -941,7 +954,7 @@ export class VnStage {
     this.moveDraftEpoch++;this.closeMoveDraft();
     if(this.isBacklogOpen)this.closeBacklog();
     this.castStage.set(null,0);
-    this.dossiers.setContext(undefined,[]);
+    this.dossiers.setTurnMedia(null);this.dossiers.setContext(undefined,[]);
     this.clearAllTimers();
     this.resetEffects();
     this.clearSceneImages();
@@ -949,13 +962,19 @@ export class VnStage {
     this.isSkipping = false;
     this.isTyping = false;
     this.currentRenderedParagraphId = "";
+
+
+    this.setCleanView(false);
     this.currentRenderedFormatted = "";
     this.errorDetails = null;
     this.hostImageError = null;
     this.lastSkipStop = null;
     this.updateControlButtons();
     this.updateContinueButton();
-    this.dispatch({ type: "reset" });
+
+
+    this.setCleanView(false);
+    this.backlogEntries.length = 0; this.readParagraphIds.clear(); this.dispatch({ type: "reset" });
   }
 
   loadTurn(turn: VnTurnInput): void {
@@ -963,8 +982,9 @@ export class VnStage {
     this.moveDraftEpoch++;this.closeMoveDraft();
     this.dismissedErrors.clear();
     this.castStage.set(null,0);
-    this.dossiers.setContext(turn.presentation,turn.paragraphs.map(p=>p.text),turn.referenceHistory);
+    this.dossiers.setTurnMedia(null);this.dossiers.setContext(turn.presentation,turn.paragraphs.map(p=>p.text),turn.referenceHistory);
     this.dialogueSheet?.setHidden(false);
+    this.setCleanView(false);
     this.resumeNotice?.remove();
     this.resumeNotice = null;
     if ((turn.initialParagraphIndex ?? 0) > 0) {
@@ -1005,7 +1025,7 @@ export class VnStage {
 
   presentUserParagraph(text: string, speaker: string = "You"): void {
     this.moveDraftEpoch++;this.closeMoveDraft();
-    this.dossiers.setContext(undefined,[]);
+    this.dossiers.setTurnMedia(null);this.dossiers.setContext(undefined,[]);
     this.dispatch({
       type: "present-user-paragraph",
       paragraph: {
@@ -1669,6 +1689,8 @@ export class VnStage {
       this.closeBacklog();
     });
     queryRequired<HTMLButtonElement>(this.themeRoot,'[data-vn-backlog-return]').addEventListener('click',event=>{event.preventDefault();event.stopPropagation();this.closeBacklog();});
+    this.cleanToggle?.addEventListener("click", (event) => { event.stopPropagation(); this.setCleanView(!this.isCleanView); });
+    this.cleanRestore?.addEventListener("click", (event) => { event.stopPropagation(); this.setCleanView(false); this.cleanToggle?.focus({ preventScroll: true }); });
 
     this.backlogModal.addEventListener("click", (event) => {
       if (event.target === this.backlogModal) {
@@ -1679,7 +1701,7 @@ export class VnStage {
     this.root.addEventListener("wheel", (event) => {
       if (this.root.dataset.vnPageFocus === "true" || this.dialogueSheet?.isHidden() || (this.root.dataset.vnAdjustableSheet === "true" && event.target instanceof Element && event.target.closest("[data-vn-dialogue]"))) return;
       if (this.workspace.isOpen() || this.isBacklogOpen || this.dossiers.isOpen()) return;
-      if (event.deltaY < -30) {
+      if (this.isCleanView) { this.setCleanView(false); return; }      if (event.deltaY < -30) {
         this.openBacklog();
       }
     }, { passive: true });
@@ -1699,7 +1721,7 @@ export class VnStage {
       sheetGesture = null;
       if (this.root.dataset.vnPageFocus === "true" || this.dialogueSheet?.isHidden()) return;
       if (this.workspace.isOpen() || this.isBacklogOpen || this.dossiers.isOpen()) return;
-      if (event.target instanceof Element && event.target.closest("[data-vn-dialogue]")) {
+      if (this.isCleanView) { this.setCleanView(false); return; }      if (event.target instanceof Element && event.target.closest("[data-vn-dialogue]")) {
         const selection = window.getSelection();
         if (dragged || (selection && !selection.isCollapsed)) return;
       }
@@ -1716,7 +1738,10 @@ export class VnStage {
         }
         return;
       }
+      if (this.isCleanView && (event.key === "Escape" || event.key === "h" || event.key === "H")) { event.preventDefault(); this.setCleanView(false); return; }
       if (isInteractiveTarget(event.target)) return;
+      if (event.key === "h" || event.key === "H") { event.preventDefault(); this.setCleanView(!this.isCleanView); return; }
+      if (event.key === "r" || event.key === "R") { if (this.dossiers.openTrayFromStage()) event.preventDefault(); return; }
       if (event.key === "ArrowLeft") {
         event.preventDefault();
         this.previous();
@@ -1781,6 +1806,13 @@ export class VnStage {
 
   private dispatch(action: VnStageAction): void {
     if (this.destroyed) return;
+    if (action.type === "set-draft") {
+      this.state = reduceVnStage(this.state, action);
+      if (this.input.value !== this.state.draft) this.input.value = this.state.draft;
+      const view = selectVnStageView(this.state);
+      this.submitButton.disabled = view.isBusy || this.state.draft.trim().length === 0;
+      return;
+    }
     const previousPhase = this.state.phase;
     const previousIndex = this.state.currentParagraphIndex;
     this.state = reduceVnStage(this.state, action);
@@ -1790,6 +1822,135 @@ export class VnStage {
       this.resumeNotice = null;
     }
     this.render(previousPhase);
+  }
+
+  setCleanView(active: boolean): void {
+    const view = selectVnStageView(this.state);
+    const next = Boolean(active && view.paragraph !== null);
+    if (next === this.isCleanView) return;
+    this.isCleanView = next;
+    if (this.isCleanView) {
+      this.toggleAutoPlay(false);
+      this.toggleSkip(false);
+      this.root.dataset.vnCleanView = "true";
+      this.panelMount.dataset.vnCleanView = "true";
+    } else {
+      delete this.root.dataset.vnCleanView;
+      delete this.panelMount.dataset.vnCleanView;
+    }
+    this.cleanToggle?.setAttribute("aria-pressed", String(this.isCleanView));
+    if (this.cleanRestore) this.cleanRestore.hidden = !this.isCleanView;
+  }
+
+  jumpToParagraph(targetIndex: number): void {
+    if (this.destroyed || this.isBacklogOpen || this.dossiers.isOpen()) return;
+    const total = this.state.paragraphs.length;
+    if (targetIndex < 0 || targetIndex >= total) return;
+    const current = this.state.currentParagraphIndex;
+    if (targetIndex === current) return;
+    const targetPara = this.state.paragraphs[targetIndex];
+    if (!targetPara) return;
+    if (targetIndex > current && !this.readParagraphIds.has(targetPara.id)) return;
+    this.isSkipping = false;
+    this.isAutoPlay = false;
+    this.lastSkipStop = null;
+    this.clearAllTimers();
+    this.isTyping = false;
+    this.activeTextNodes = [];
+    this.updateControlButtons();
+    const previousPhase = this.state.phase;
+    this.ambientOverride = this.state.ambient;
+    for (const paragraph of this.state.paragraphs.slice(0, targetIndex + 1)) {
+      const ambient = paragraph.ambient !== undefined ? paragraph.ambient : paragraph.cue?.ambient;
+      if (ambient === null || isAmbientEffect(ambient)) this.ambientOverride = ambient;
+    }
+    this.isRewinding = true;
+    try {
+      while (this.state.currentParagraphIndex > targetIndex && selectVnStageView(this.state).canGoBack) {
+        this.state = reduceVnStage(this.state, { type: "previous" });
+      }
+      while (this.state.currentParagraphIndex < targetIndex && selectVnStageView(this.state).canAdvance) {
+        this.state = reduceVnStage(this.state, { type: "advance" });
+      }
+      this.dialogueText.scrollTop = 0;
+      this.resumeNotice?.remove();
+      this.resumeNotice = null;
+      this.render(previousPhase);
+    } finally {
+      this.isRewinding = false;
+    }
+    if (targetIndex < current) {
+      this.callbacks.onPrevious?.(this.state.currentParagraphIndex);
+    } else {
+      this.callbacks.onAdvance?.(this.state.currentParagraphIndex, this.state.phase === "awaiting-input");
+    }
+  }
+
+  private renderScrubber(): void { if (!this.scrubber) return;
+    const view = selectVnStageView(this.state);
+    const total = view.paragraphCount;
+    if (!view.paragraph || total <= 1 || total > 24) {
+      this.scrubber.hidden = true;
+      if (this.scrubber.childElementCount > 0) this.scrubber.replaceChildren();
+      return;
+    }
+    this.scrubber.hidden = false;
+    const current = this.state.currentParagraphIndex;
+    const dots = this.state.paragraphs.map((p, idx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.setAttribute("data-vn-scrub-dot", "");
+      btn.tabIndex = -1;
+      const isRead = idx <= current || this.readParagraphIds.has(p.id);
+      const isActive = idx === current;
+      const hasCue = Boolean(p.cue || p.effect || p.ambient !== undefined);
+      btn.dataset.read = String(isRead);
+      btn.dataset.active = String(isActive);
+      if (hasCue) btn.dataset.hasCue = "true";
+      btn.disabled = !isRead;
+      const label = `Paragraph ${idx + 1} of ${total}${p.speaker ? ` (${p.speaker})` : ""}${hasCue ? " · scene beat" : ""}`;
+      btn.setAttribute("aria-label", label);
+      btn.title = label;
+      if (isActive) btn.setAttribute("aria-current", "step");
+      btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this.jumpToParagraph(idx);
+      });
+      return btn;
+    });
+    this.scrubber.replaceChildren(...dots);
+  }
+
+  private renderSceneHud(): void { if (!this.sceneHud) return;
+    const entries = this.dossiers.sceneHudEntries();
+    if (!entries.length || this.narrative.hidden) {
+      this.sceneHud.hidden = true;
+      if (this.sceneHud.childElementCount > 0) this.sceneHud.replaceChildren();
+      return;
+    }
+    this.sceneHud.hidden = false;
+    const pills = entries.map((entry) => {
+      const pill = document.createElement("button");
+      pill.type = "button";
+      pill.setAttribute("data-vn-hud-pill", "");
+      pill.dataset.kind = entry.kind;
+      if (entry.pinned) pill.dataset.pinned = "true";
+      const icon = document.createElement("span");
+      icon.setAttribute("data-vn-hud-icon", "");
+      icon.setAttribute("aria-hidden", "true");
+      icon.textContent = entry.kind === "place" ? "📍" : entry.kind === "npc" ? "👤" : "✦";
+      const label = document.createElement("span");
+      label.textContent = entry.name + (entry.pinned ? " 📌" : "");
+      pill.append(icon, label);
+      pill.title = `Inspect ${entry.name}`;
+      pill.setAttribute("aria-label", `Inspect ${entry.name}`);
+      pill.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this.dossiers.openEntityFromStage(entry.id, pill);
+      });
+      return pill;
+    });
+    this.sceneHud.replaceChildren(...pills);
   }
 
   previous(): void {
@@ -1927,6 +2088,8 @@ export class VnStage {
       ? `${view.paragraphNumber} / ${view.paragraphCount}`
       : "";
     if (this.progress.textContent !== progress) this.progress.textContent = progress;
+    this.renderScrubber();
+    this.renderSceneHud();
     this.updateContinueButton();
 
     this.renderStatus();
@@ -2055,6 +2218,8 @@ export class VnStage {
   private onTextRenderFinished(): void {
     if (this.destroyed) return;
     this.dossiers.refresh(this.state.currentParagraphIndex);
+    this.renderSceneHud();
+    this.renderScrubber();
     if (this.isSkipping) {
       this.scheduleSkipAdvance();
     } else if (this.isAutoPlay) {
@@ -2224,6 +2389,9 @@ export class VnStage {
       this.clearTypewriter();
       this.dialogueText.innerHTML = "";
       this.currentRenderedParagraphId = "";
+
+
+    this.setCleanView(false);
       this.currentRenderedFormatted = "";
       return;
     }

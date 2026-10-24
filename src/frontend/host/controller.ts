@@ -657,6 +657,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     transport: createSpeechTransport(),
     onStatus: (status) => {
       speechDock.setStatus(status);
+      audioEngine.setSpeechDucking(status.kind === "playing");
       if (status.kind === "loading" || status.kind === "playing" || status.kind === "paused") {
         stage.holdAutoPlay();
       } else if (active) {
@@ -678,8 +679,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   stage.historyOpener=opener=>imageLibrary.open('story',opener);
   const imageStudio = new ImageStudio(stage.panelMount, (request) => ctx.sendToBackend(request), (enabled) => {
     ctx.sendToBackend({ type: "vn_set_config", patch: { reviewImages: enabled }, chatId: chatId() ?? "" });
-  },open=>{imageStudioOpen=open;if(open){stage.workspace.open('artwork');stage.toggleSkip(false);stage.holdAutoPlay();}else{stage.workspace.toolClosed('artwork');if(active)stage.checkAutoPlay();}},operations=>{
-    localPictureOperations=operations;stage.setAssetProgress(computeAssetProgress(turn,retryQueue,operations));
+  },open=>{imageStudioOpen=open;if(open){stage.panelMount.dataset.vnStudioOpen='true';stage.workspace.open('artwork');stage.toggleSkip(false);stage.holdAutoPlay();}else{delete stage.panelMount.dataset.vnStudioOpen;stage.workspace.toolClosed('artwork');if(active)stage.checkAutoPlay();}},operations=>{    localPictureOperations=operations;stage.setAssetProgress(computeAssetProgress(turn,retryQueue,operations));
     stage.workspace.setAttention(computeReviewAttention(turn,operations));
   });
   stage.workspace.register('artwork',{element:imageStudio.getElement(),hideAtHome:true,enter:()=>imageStudio.open(),leave:()=>imageStudio.close()});

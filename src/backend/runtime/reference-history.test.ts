@@ -116,3 +116,14 @@ test('history bounds prior record reads and returned observations and labels tru
  let reads=0;const api={chat:{getMessages:async()=>messages},userStorage:{getJson:async(path:string)=>{reads++;return records.find(r=>turnPath('c',r.plan.key.assistantMessageId,0)===path);}}} as unknown as SpindleAPI;
  const history=await readReferenceHistory(api,records.at(-1)!,'user');expect(reads).toBe(16);expect(history?.entries).toHaveLength(128);expect(history?.truncated).toBe(true);expect(history?.entries.some(e=>e.sourceKey.assistantMessageId==='m0')).toBe(false);
 });
+
+test('optional history bounds concurrent reads and stops before parsing late records',async()=>{
+ const messages=Array.from({length:17},(_,i)=>msg(`bounded-${i}`,'Mira walks.'));
+ const targetPlan=plan(messages.at(-1)!);
+ const target={schemaVersion:1,status:'ready',speaker:'Narrator',jobs:[],plan:targetPlan,updatedAt:targetPlan.createdAt,referenceLineage:await captureReferenceLineage(messages,targetPlan)} as StoredTurnRecord;
+ let reads=0,parsed=0;const releases:Array<()=>void>=[];
+ const api={chat:{getMessages:async()=>messages},userStorage:{getJson:async()=>{reads++;await new Promise<void>(resolve=>releases.push(resolve));return {get plan(){parsed++;throw new Error('Late validation');},speaker:'Narrator'};}}} as unknown as SpindleAPI;
+ expect(await readReferenceHistory(api,target,'user',100)).toBeUndefined();
+ const started=reads;releases.forEach(release=>release());await new Promise(resolve=>setTimeout(resolve,15));
+ expect(started).toBeGreaterThan(0);expect(started).toBeLessThanOrEqual(2);expect(reads).toBe(started);expect(parsed).toBe(0);
+});

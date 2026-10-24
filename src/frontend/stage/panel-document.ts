@@ -17,6 +17,9 @@ export function panelDocument(html: string, remote = false): string {
       const name = attr.name.toLowerCase();
       if (!ATTRS.has(name) || name.startsWith("on")) element.removeAttribute(attr.name);
     }
+    if (tag === "style" && !remote && element.textContent) {
+      element.textContent = element.textContent.replace(/@import\b[^;{}]*(?:;|$)/gi, "");
+    }
     if (tag === "input" && !["checkbox", "radio"].includes(element.getAttribute("type") ?? "")) { element.remove(); continue; }
     if (tag === "img") {
       const src = element.getAttribute("src") ?? "";

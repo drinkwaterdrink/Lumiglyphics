@@ -3,12 +3,26 @@ import { normalizeStoryReferences } from "../../shared/story-references.js";
 import { stripTextEffectTags } from "../../shared/text-effects.js";
 import { applyContinuityDelta } from '../core/continuity.js';
 import type { TurnPlan } from '../../shared/contracts.js';
-import { ReaderPresentationSchema, samePresentationTurn, type ReaderPresentation, type PresentationEntity, type EntityStateDelta, type PresentationState } from '../../shared/presentation-entities.js';
+import { ReaderPresentationSchema, samePresentationTurn, type ReaderPresentation, type PresentationEntity, type EntityStateDelta, type PresentationState, type EvidenceSource } from '../../shared/presentation-entities.js';
 import { buildPresentationTimeline, type PresentationBeat } from './presentation-timeline.js';
+import type { ContextProposal } from '../../shared/context-sources.js';
+
+const COMPANION_CODEX_FIELDS = new Set([
+  'appearance', 'description', 'outfit', 'condition', 'role', 'affiliations',
+  'relationships', 'mannerisms', 'voice', 'history', 'layout', 'routes',
+  'surroundings', 'customs', 'services', 'publicHistory', 'risks',
+  'provenance', 'function', 'limits', 'access', 'owner', 'significance'
+]);
+
+export interface ProjectPresentationOptions {
+  companionProposals?: readonly (ContextProposal & { provider?: 'lumibooks' | 'lumiscript' })[];
+  maxFactsPerEntity?: number;
+  maxFactChars?: number;
+}
 
 /** Derive the first foundation from already validated planner output. No extra
  * LLM request, private tracker scraping, generated biography or changed image prompt. */
-export function projectTurnPresentation(plan:TurnPlan):ReaderPresentation|undefined {
+export function projectTurnPresentation(plan:TurnPlan, options?: ProjectPresentationOptions):ReaderPresentation|undefined {
   if(plan.paragraphs.length>256)return undefined;
   let continuity=structuredClone(plan.initialContinuity);
   const describe=(fields:Record<string,string>)=>Object.entries(fields).map(([k,v])=>`${k}: ${v}`).join(', ').slice(0,1200);
@@ -86,6 +100,47 @@ export function projectTurnPresentation(plan:TurnPlan):ReaderPresentation|undefi
       }
     }
     beats.push({paragraphIndex:at,locationId,drawableEntityId,speakerEntityId:speaking?.id??null});
+  }
+  if (options?.companionProposals?.length) {
+    const maxCompanionFacts = Math.max(1, Math.min(32, options.maxFactsPerEntity ?? 8));
+    const maxCompanionChars = Math.max(80, Math.min(1200, options.maxFactChars ?? 320));
+    const proposedEntities = options.companionProposals.flatMap(p => p.entities.map(entity => ({ entity, provider: p.provider ?? 'lumibooks', updatedAt: p.updatedAt })));
+    for (const target of entities) {
+      if (factCount >= 128) break;
+      const matchingEntities = proposedEntities.filter(({ entity: e }) =>
+        e.kind === target.kind &&
+        (e.name.trim().toLocaleLowerCase() === target.name.toLocaleLowerCase() ||
+          e.aliases.some(a => a.trim().toLocaleLowerCase() === target.name.toLocaleLowerCase()))
+      );
+      let added = 0;
+      for (const { entity: propEntity, provider, updatedAt } of matchingEntities) {
+        for (const prop of propEntity.facts) {
+          if (added >= maxCompanionFacts || factCount >= 128) break;
+          if (!COMPANION_CODEX_FIELDS.has(prop.field)) continue;
+          if (prop.visibility !== 'observed' && !(provider === 'lumibooks' && prop.visibility !== 'private')) continue;
+          const trimmedValue = prop.value.trim().slice(0, maxCompanionChars);
+          if (!trimmedValue || target.facts.some(f => f.field === prop.field && f.value === trimmedValue)) continue;
+          const companionSource: EvidenceSource = {
+            provider,
+            recordId: propEntity.id,
+            chatId: plan.key.chatId,
+            messageId: plan.key.assistantMessageId,
+            sourceFingerprint: plan.key.sourceFingerprint,
+            observedAt: plan.createdAt,
+          };
+          target.facts.push({
+            id: `f${++factCount}`,
+            entityId: target.id,
+            field: prop.field,
+            value: trimmedValue,
+            visibility: 'observed',
+            source: companionSource,
+            revealedAt: anchor(target.firstParagraph),
+          });
+          added++;
+        }
+      }
+    }
   }
   if(overflow)return undefined;
   const snapshots=buildPresentationTimeline({key:plan.key,paragraphCount:plan.paragraphs.length,entities,baseline,deltas,beats});
