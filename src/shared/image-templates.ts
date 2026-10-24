@@ -23,9 +23,17 @@ export const ImageTemplateSchema = z.object({
 export type ImageTemplate = z.infer<typeof ImageTemplateSchema>;
 export const ImageTemplateSnapshotSchema = ImageTemplateSchema.extend({ revision: z.string().regex(/^[a-f0-9]{8}$/) }).strict();
 export type ImageTemplateSnapshot = z.infer<typeof ImageTemplateSnapshotSchema>;
+export const SubjectPreparationSchema=z.object({
+  name:z.string().max(256),identity:z.string().max(4000),
+  identitySource:z.enum(['manual correction','saved appearance','resolved context','ensemble snapshot','unavailable']),
+  attire:z.string().max(2000).nullable(),attireSource:z.enum(['picture cue','scene','not supplied']),
+  direction:z.string().max(1000),shortened:z.boolean(),
+  subjectsInPositive:z.boolean(),subjectsInNegative:z.boolean(),
+}).strict();
 export const VisualBriefSchema = z.object({
   scene: z.string().max(4000), subjects: z.string().max(4000), action: z.string().max(4000), composition: z.string().max(1000), lighting: z.string().max(1000),
-  subjectMode: z.enum(["one", "none", "ensemble"]), framing: ImageTemplateFramingSchema, referencePolicy: z.enum(["character", "none"]), sources: z.array(z.string().max(300)).max(24), conflicts: z.array(z.string().max(1000)).max(16)
+  subjectMode: z.enum(["one", "none", "ensemble"]), framing: ImageTemplateFramingSchema, referencePolicy: z.enum(["character", "none"]), sources: z.array(z.string().max(300)).max(24), conflicts: z.array(z.string().max(1000)).max(16),
+  subjectPreparation:SubjectPreparationSchema.optional()
 }).strict();
 export type VisualBrief = z.infer<typeof VisualBriefSchema>;
 export const ImagePromptMetadataSchema = z.object({ template: ImageTemplateSnapshotSchema, selectionReason: z.string().max(300), format: z.enum(["description", "tags"]), brief: VisualBriefSchema,

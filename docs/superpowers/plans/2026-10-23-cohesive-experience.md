@@ -53,8 +53,9 @@ Files: new focused frontend brief projection and view modules next to `studio.ts
 
 Files: cast workspace, visual-brief/identity preparation modules, relevant tests.
 
-- [ ] Distinguish identity, current appearance and per-picture direction with source labels and actual injected-text inspection.
-- [ ] Add explicit this-picture/this-chat correction scope; retain established source precedence and expose conflicts without automatically resolving them.
+- [x] Record bounded identity/outfit/direction preparation ingredients with source labels; show the pre-format subject block, template placeholder usage and retained conflicts in the reader. Delivered beta.65.
+- [ ] Extend this distinction into cast-workspace field editing, per-person ensemble provenance and final-prompt occurrence mapping.
+- [x] Explain existing this-picture/this-chat correction scope before submission; retain source precedence and expose conflicts without automatically resolving them. Delivered beta.65.
 - [ ] Test persona/NPC ownership, aliases, absent companions, stale tracker data and manual edits.
 
 ## Phase 4 — prompt priorities and measured comparisons

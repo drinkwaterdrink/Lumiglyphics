@@ -406,7 +406,9 @@ export function sceneImageIdentityFor(
 ): SceneImageIdentity {
   if (cue.imageTemplate) {
     const compiled = compileTemplateCue(config, scene, cue, characterAppearance);
-    const brief = compiled.brief;
+    const brief = {...compiled.brief};
+    // Display provenance does not change the rendered image or invalidate saved art.
+    delete brief.subjectPreparation;
     const visual = resolveCueCharacterVisualState(scene, cue, characterAppearance);
     const { connectionId, workflowId } = splitConnectionSelection(config.imageConnectionId);
     return {

@@ -4,6 +4,7 @@ import { normalizeConfig } from "../../config";
 import { SceneStateSchema, VisualCueSchema } from "../../shared/contracts";
 import { resolveImageTemplate } from "../../shared/image-templates";
 import { buildVisualBrief } from "./visual-brief";
+import {sceneImageIdentityFor} from './images.js';
 
 const scene = SceneStateSchema.parse({ sceneId: "s", revision: 0, startParagraph: 0, environment: { location: "garden", description: "A fountain beneath tall trees", timeOfDay: "night", weather: null, lighting: "moonlight", persistentElements: ["fountain"] }, cast: ["Mira"], character: "Mira", identityPrompt: "silver hair, green eyes", attire: "raincoat", basePrompt: "garden", compositionLock: "wide", continuity: { revision: 0, characters: {}, facts: {} }, cameraLock: { framing: "wide", angle: "eye level", perspective: "straight-on", lens: null, subjectAnchor: "center", horizon: "stable", safeDialogueRegion: "lower quarter", aspectRatio: "16:9" } });
 const cue = VisualCueSchema.parse({ cueId: "c", paragraphIndex: 0, sceneId: "s", sceneRevision: 0, kind: "flattened_scene", assetJobId: "j", character: "Mira", resolvedIdentity: "old red hair", resolvedAttire: "raincoat", visualDescription: "Mira opens the garden gate" });
@@ -11,6 +12,38 @@ const cue = VisualCueSchema.parse({ cueId: "c", paragraphIndex: 0, sceneId: "s",
 test('single-subject brief includes the resolved outfit once',()=>{
  const brief=buildVisualBrief(normalizeConfig({}),scene,cue);
  assert.equal(brief.subjects.match(/raincoat/g)?.length,1);
+});
+
+test('appearance preparation records saved identity precedence separately from outfit and template usage',()=>{
+ const config=normalizeConfig({}),template=resolveImageTemplate(config).template;
+ const brief=buildVisualBrief(config,scene,{...cue,imageTemplate:template},{mira:'silver hair, green eyes'});
+ assert.equal(brief.subjectPreparation?.name,'Mira');
+ assert.equal(brief.subjectPreparation?.identitySource,'saved appearance');
+ assert.equal(brief.subjectPreparation?.identity,'silver hair, green eyes');
+ assert.equal(brief.subjectPreparation?.attire,'raincoat');
+ assert.equal(brief.subjectPreparation?.attireSource,'picture cue');
+ assert.equal(brief.subjectPreparation?.subjectsInPositive,true);
+ const manual=buildVisualBrief(config,scene,{...cue,imageTemplate:template,visualSources:['manual subject correction']},{mira:'silver hair, green eyes'});
+ assert.equal(manual.subjectPreparation?.identitySource,'manual correction');
+ assert.equal(manual.subjectPreparation?.identity,'old red hair');
+ const omitted=buildVisualBrief(config,scene,{...cue,imageTemplate:{...template,positive:'A landscape',negative:''}});
+ assert.equal(omitted.subjectPreparation?.subjectsInPositive,false);
+ assert.equal(omitted.subjectPreparation?.subjectsInNegative,false);
+});
+
+test('display-only appearance provenance does not become part of image cache identity',()=>{
+ const config=normalizeConfig({}),template=resolveImageTemplate(config).template;
+ const result=sceneImageIdentityFor(config,scene,{...cue,imageTemplate:template},undefined,'nanogpt');
+ assert.equal('subjectPreparation' in (result.visualBrief as object),false);
+});
+
+test('source labels follow null outfit fallback and bounded identity previews disclose shortening',()=>{
+ const config=normalizeConfig({}),fallback={...cue,attire:null};delete fallback.resolvedAttire;
+ const brief=buildVisualBrief(config,scene,fallback);
+ assert.equal(brief.subjectPreparation?.attireSource,'scene');
+ assert.equal(brief.subjectPreparation?.attire,'raincoat');
+ const long=buildVisualBrief(config,scene,{...cue,resolvedIdentity:'x'.repeat(4100)});
+ assert.equal(long.subjectPreparation?.identity.length,4000);assert.equal(long.subjectPreparation?.shortened,true);
 });
 
 test("durable_and_temporary_precedence_in_visual_brief", () => {

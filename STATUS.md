@@ -1,6 +1,6 @@
-# Lumiglyphics status — beta.64
+# Lumiglyphics status — beta.65
 
-This matrix describes beta.64 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
+This matrix describes beta.65 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
 
 | Area | Status | Current behavior / remaining scope |
 |---|---|---|
@@ -35,3 +35,5 @@ Beta.62 starts the approved [cohesive experience plan](docs/superpowers/plans/20
 Beta.63: reader progress now shares picture-state labels, reacts to review/queue updates, survives initial turn loading and opens the inspector. Held review has no generation spinner.
 
 Beta.64: prepared picture brief with explicit draft provenance, non-mutating editor links, frozen model-capability explanations and square-only output guidance. A separate shared-style snapshot is not inferred when absent.
+
+Beta.65: new request preparation snapshots expose appearance/outfit/direction sources and subject-placeholder usage in the prepared brief. Correction scope is explained before saving. Display-only provenance is excluded from cache identity.

@@ -24,7 +24,7 @@ export function buildVisualBrief(config: VisualNovelConfig, scene: SceneState, c
   const template = cue.imageTemplate ?? resolveImageTemplate(config).template;
   const noPeople = template.subjectMode === "none";
   const ensemble = template.subjectMode === "ensemble";
-  const { sameCharacter, saved, resolved, identity } = resolveTemplateIdentity(scene, cue, appearances);
+  const { name, sameCharacter, saved, resolved, identity } = resolveTemplateIdentity(scene, cue, appearances);
   const attire = cue.resolvedAttire !== undefined ? cue.resolvedAttire : cue.attire ?? (sameCharacter ? scene.attire : null);
   const manual = cue.visualSources?.includes("manual subject correction");
   const conflicts = !noPeople && !ensemble && saved && resolved && saved !== resolved ? [manual ? "Manual appearance replaces saved appearance for this picture." : "Saved appearance differs from scene evidence; the saved appearance is used."] : [];
@@ -46,6 +46,14 @@ export function buildVisualBrief(config: VisualNovelConfig, scene: SceneState, c
     return `${member.name}: ${bounded}`;
   }).join("\n");
   return {
+    ...(!noPeople?{subjectPreparation:{
+      name:ensemble?'Named ensemble':name.slice(0,256),identity:ensemble?'':identity.slice(0,4000),
+      identitySource:ensemble?'ensemble snapshot' as const:!identity?'unavailable' as const:manual?'manual correction' as const:saved?'saved appearance' as const:'resolved context' as const,
+      attire:ensemble?null:attire?.slice(0,2000)??null,
+      attireSource:ensemble?'not supplied' as const:cue.resolvedAttire!==undefined||cue.attire!=null?'picture cue' as const:sameCharacter&&scene.attire!==undefined&&scene.attire!==null?'scene' as const:'not supplied' as const,
+      direction:pose.slice(0,1000),shortened:!ensemble&&(identity.length>4000||(attire?.length??0)>2000||pose.length>1000),
+      subjectsInPositive:template.positive.includes('{{subjects}}'),subjectsInNegative:template.negative.includes('{{subjects}}'),
+    }}:{}),
     scene: text([environment.location, environment.description, ...environment.persistentElements, environment.timeOfDay, environment.weather]),
     subjects: noPeople ? "" : ensemble ? group : text([subjectLabel, appearance, template.category === "portrait" ? pose : ""]),
     action: noPeople ? template.category === "detail" || template.category === "custom" ? (cue.visualFocus ?? "").slice(0, 1000) : "" : text([cue.visualDescription, compileActionProp(cue.action), template.category === "portrait" ? "" : pose]),
