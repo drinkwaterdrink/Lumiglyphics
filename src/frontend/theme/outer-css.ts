@@ -163,7 +163,17 @@ ${ATELIER_SHELL_CSS}
 [data-vn-shell][data-vn-clean-view="true"] > [data-vn-exit],
 [data-vn-shell][data-vn-clean-view="true"] > [data-vn-panel-layer],
 [data-vn-shell][data-vn-clean-view="true"] > [data-image-studio],
-[data-vn-shell][data-vn-clean-view="true"] > [data-image-library] {
+[data-vn-shell][data-vn-clean-view="true"] > [data-image-library],
+[data-vn-shell][data-vn-clean-view="true"] > .vn-speech-dock,
+[data-vn-shell][data-vn-dossier-open="true"] > [data-image-studio],
+[data-vn-shell][data-vn-dossier-open="true"] > [data-vn-panel-layer],
+[data-vn-shell][data-vn-dossier-open="true"] > .vn-speech-dock,
+[data-vn-shell][data-vn-studio-open="true"] > [data-vn-panel-layer],
+[data-vn-shell][data-vn-studio-open="true"] > .vn-speech-dock,
+[data-vn-shell][data-vn-document-open="true"] > .vn-speech-dock,
+[data-vn-shell][data-vn-move-draft-open="true"] > [data-vn-panel-layer],
+[data-vn-shell][data-vn-move-draft-open="true"] > .vn-speech-dock,
+[data-vn-shell][data-vn-history-open="true"] > .vn-speech-dock {
   visibility: hidden;
 }
 
