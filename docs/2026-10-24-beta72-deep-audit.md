@@ -696,7 +696,14 @@ Verified behaviour (new test, `reference-history.test.ts`): with a storage backe
 
 ### 5.4 Cast View CSS — a speaker transition that reads as direction [proposal]
 
-See §3.4 for the full block. It is a drop-in replacement for lines 9–11 of the CSS template in `frontend/stage/cast-stage.ts`, keeps the existing attribute contract (`data-active`, `data-vn-cast-card`), and honours `prefers-reduced-motion` without removing information (the inactive card is only dimmed/desaturated, never hidden).
+**Before** (`frontend/stage/cast-stage.ts:10`–`11`) — the highlight is a hard swap with no transition and no reduced-motion branch:
+
+```css
+[data-vn-cast-card][data-active=true]{border-color:var(--vn-accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--vn-accent) 50%,transparent),0 .4rem 1.5rem #0004}
+[data-vn-cast-card] img{display:block;width:100%;height:min(clamp(80px,32vh,320px),var(--vn-cast-height,320px));object-fit:contain;background:var(--vn-panel)}
+```
+
+**After** — the block in §3.4. It is a drop-in replacement for those lines, keeps the existing attribute contract (`data-active`, `data-vn-cast-card`, `data-collapsed`), and honours `prefers-reduced-motion` without removing information (the inactive card is only dimmed/desaturated, never hidden). The `img` geometry rule is unchanged.
 
 Pinned-panel drag optimisation (also §3.3), drop-in for `panel-dock.ts:218` (`drag`):
 
