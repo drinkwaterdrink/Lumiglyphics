@@ -218,4 +218,34 @@ describe("probe: real controller lifecycle with the scene cache", () => {
     // Every persisted record still holds its image ids after all cache churn.
     for (const id of ["m1", "m2", "m3"]) expect(f.record("chat-A", id).jobs.every((j) => j.imageId)).toBe(true);
   });
+
+  test("a provider that ignores abort cannot leave the chat looking busy after the reader closes", async () => {
+    const f = fixture();
+    registerVisualNovelBackend(f.spindle);
+    const chatId = "stalled-chat";
+    f.openGate();
+    const turn = await f.say(chatId, "m1", { speaker: "Mira", location: "Attic", claimNew: true, reason: "initial", cues: [0] });
+    await waitFor(() => f.providerCalls.length === 1);
+    const record = f.record(chatId, "m1");
+    expect(record.jobs[0]!.status === "queued" || record.jobs[0]!.status === "generating").toBe(true);
+
+    // The provider never settles. Closing the reader aborts the batch; ownership
+    // must be released immediately, not when (or if) that call returns.
+    f.request({ type: "vn_view", chatId, open: false });
+    await settle();
+    f.request({ type: "vn_view", chatId, open: true });
+    await settle();
+
+    const before = f.sent.length;
+    f.request({ type: "vn_replan_turn", version: 1, chatId, messageId: "m1", swipeId: 0, sourceFingerprint: record.plan.key.sourceFingerprint, requestId: "replan-1" });
+    await waitFor(() => f.sent.slice(before).some((m) => m.type === "vn_turn" || (m.type === "vn_error" && m.operation === "vn_replan_turn")));
+    const outcome = f.sent.slice(before).find((m) => m.type === "vn_turn" || m.type === "vn_error");
+    expect(String(outcome?.error ?? "")).not.toContain("skip waiting pictures");
+    expect(outcome?.type).toBe("vn_turn");
+    expect(f.record(chatId, "m1").plan.key.revision).toBe(record.plan.key.revision + 1);
+
+    f.closeGate();
+    await turn;
+    await settle();
+  });
 });

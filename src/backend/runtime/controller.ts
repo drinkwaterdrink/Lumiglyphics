@@ -225,6 +225,24 @@ async function cancelIncompleteJobs(
 }
 
 /**
+ * Abort a chat's asset batch AND drop its ownership entry.
+ *
+ * Provider calls may ignore `abort` for minutes, so keeping the aborted
+ * controller in the map makes the chat look permanently busy: `replanCurrentTurn`,
+ * `queueImageRetries` and `vn_save_card_role` all test `assetControllers.has(key)`
+ * before starting, and the entry is only removed when the ignored provider call
+ * finally settles. Every late callback already re-checks `assetControllers.get(key)
+ * === controller`, so deleting it now cannot let a stale result through.
+ */
+function abortAssetBatch(key: string, reason: string): void {
+  const controller = assetControllers.get(key);
+  if (!controller) return;
+  controller.abort(reason);
+  assetControllers.delete(key);
+  imageReviewGates.delete(key);
+}
+
+/**
  * Abort a chat's in-flight work the same way GENERATION_STARTED does: drop
  * turn ownership so late results cannot persist or send, abort the asset
  * batch, cancel queued planning, and release the scene-cache admission.
@@ -237,7 +255,7 @@ function abortChatWork(spindle: SpindleAPI, userId: string | undefined, chatId: 
   const abortedTurn = activeTurnKeys.get(key) ?? null;
   activeTurnKeys.delete(key);
   pendingAssetStarts.delete(key);
-  assetControllers.get(key)?.abort(reason);
+  abortAssetBatch(key, reason);
   releaseSceneCacheAdmission(spindle, userId, chatId, "view_closed");
   void cancelIncompleteJobs(spindle, chatId, userId, abortedTurn).catch((error) => {
     spindle.log.warn(`Visual novel view-close cleanup failed: ${errorText(error)}`);
@@ -1967,7 +1985,7 @@ export function registerVisualNovelBackend(spindle: SpindleAPI): void {
     bumpIntakeEpoch(userId, payload.chatId);
     activeTurnKeys.delete(key);
     pendingAssetStarts.delete(key);
-    assetControllers.get(key)?.abort("A new generation started before this turn's assets settled.");
+    abortAssetBatch(key, "A new generation started before this turn's assets settled.");
     releaseSceneCacheAdmission(spindle, userId, payload.chatId, "generation_started");
     spindle.sendToFrontend({ type: "vn_generation", chatId: payload.chatId, active: true }, userId);
   });

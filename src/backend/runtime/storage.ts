@@ -1,5 +1,6 @@
 import { projectTurnPresentation } from "./entity-projection.js";
 import {PresentationRuleDocumentSchema,type PresentationRuleDocument} from '../../shared/presentation-rules.js';
+import {samePresentationTurn} from '../../shared/presentation-entities.js';
 import {mergeImageLibrary} from './image-library.js';
 import {loadCastArt} from './cast-art.js';
 import {setupAppearance,type CastArtRecord} from '../../shared/cast-art.js';
@@ -9,7 +10,7 @@ import { ReadingPositionSchema, type ReadingPosition } from "../../shared/readin
 import type { ImageRequestRecord } from "../../shared/image-review.js";
 import { safeImageHistory } from "./image-review.js";
 import { normalizeConfig, type VisualNovelConfig } from "../../config.js";
-import { AssetJobSchema, SceneStateSchema, TurnPlanSchema, type AssetJob, type SceneState, type TurnPlan } from "../../shared/contracts.js";
+import { AssetJobSchema, SceneStateSchema, TurnPlanSchema, type AssetJob, type SceneState, type TurnKey, type TurnPlan } from "../../shared/contracts.js";
 import {
   normalizeSingleCharacter
 } from "../core/visual-state.js";
@@ -1048,7 +1049,33 @@ async function recordWithImageLibrary(spindle:SpindleAPI,path:string,record:Stor
  return {...record,imageLibrary:mergeImageLibrary(previous??undefined,record)};
 }
 
+/**
+ * A saved version-1 projection is trusted only when it was derived from exactly
+ * this turn key. The full schema validation happens where it is read
+ * (`readerPresentationFor`), so this check stays cheap: it runs on EVERY turn
+ * write, including each per-job asset update.
+ */
+function presentationBelongsToPlan(presentation:unknown,plan:TurnPlan):boolean {
+  if(!presentation||typeof presentation!=='object')return false;
+  const candidate=presentation as {version?:unknown;snapshots?:unknown};
+  if(candidate.version!==1||!Array.isArray(candidate.snapshots))return false;
+  if(candidate.snapshots.length!==plan.paragraphs.length)return false;
+  const first=candidate.snapshots[0] as {at?:{key?:TurnKey;paragraphIndex?:unknown}}|undefined;
+  const last=candidate.snapshots[candidate.snapshots.length-1] as {at?:{key?:TurnKey;paragraphIndex?:unknown}}|undefined;
+  if(!first?.at?.key||first.at.paragraphIndex!==0)return false;
+  if(last?.at?.paragraphIndex!==plan.paragraphs.length-1)return false;
+  return samePresentationTurn(first.at.key,plan.key);
+}
+
+/**
+ * Rebuilding the projection costs several milliseconds and allocates up to a
+ * few hundred KB (32 entities × every paragraph). Asset status updates write the
+ * turn 3–4 times per picture, so reuse the projection produced when the plan was
+ * accepted instead of recomputing an identical one.
+ */
 function recordWithPresentation(record:StoredTurnRecord):StoredTurnRecord {
-  if(record.presentation!==undefined && (record.presentation as {version?:unknown})?.version!==1)return record;
+  const saved=record.presentation;
+  if(saved!==undefined && (saved as {version?:unknown})?.version!==1)return record;
+  if(saved!==undefined && presentationBelongsToPlan(saved,record.plan))return record;
   return {...record,presentation:projectTurnPresentation(record.plan)};
 }

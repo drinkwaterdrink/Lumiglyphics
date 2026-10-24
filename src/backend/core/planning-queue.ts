@@ -65,7 +65,11 @@ export class PlanningQueue {
   ): ScheduledPlanning<T> {
     const dedupeKey = compoundKey([userId, chatId, dedupeId]);
     const existing = this.operations.get(dedupeKey) as ScheduledPlanning<T> | undefined;
-    if (existing) return { ...existing, reused: true };
+    // A cancelled operation keeps its map entry until its tail settles, which is
+    // one or more microtasks later. Returning it would hand the caller a promise
+    // that is already rejected (an explicit retry silently dropped); only a live
+    // operation is a valid dedupe hit.
+    if (existing && !existing.operation.controller.signal.aborted) return { ...existing, reused: true };
 
     const operation: PlanningOperation = {
       id: operationId(),

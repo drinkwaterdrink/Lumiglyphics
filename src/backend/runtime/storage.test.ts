@@ -1,4 +1,5 @@
-import { loadCardRole, saveCardRole, saveCorrectedAppearance, loadCharacterRegistry } from "./storage.js";
+import { loadCardRole, saveCardRole, saveCorrectedAppearance, loadCharacterRegistry, saveTurnRecord, type StoredTurnRecord } from "./storage.js";
+import { projectTurnPresentation } from "./entity-projection.js";
 import { describe, expect, test } from "bun:test";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import {
@@ -496,4 +497,34 @@ describe('chat card roles and explicit appearance corrections',()=>{
   expect(data.get('chats/two/characters.json')).toEqual({Mira:'red hair, blue eyes'});
   expect(data.get(characterAppearancePath())).toEqual({Mira:'blonde hair, gray eyes'});
  });
+});
+
+test('an unchanged plan reuses its saved reader projection and a different turn rebuilds it',async()=>{
+  const {spindle,data}=storageRuntime();
+  const plan={
+    key:{chatId:'chat',assistantMessageId:'message',swipeId:0,sourceFingerprint:'12345678',revision:0},
+    createdAt:'2026-10-24T00:00:00.000Z',
+    paragraphs:[{index:0,sourceIndex:0,text:'Mira waits in the rain.'},{index:1,sourceIndex:1,text:'The lamp gutters.'}],
+    paragraphSpeakers:['Mira',null],
+    scenes:[{startParagraph:0,cast:['Mira'],environment:{location:'Pier',description:'Wet planks'}}],
+    visualCues:[{paragraphIndex:0,character:'Mira',resolvedIdentity:'silver hair'}],
+    initialContinuity:{revision:0,characters:{Mira:{present:true,appearance:{hair:'silver'},wardrobe:{coat:'wool'},pose:null,expression:null,props:[]}},facts:{}},
+    continuityDeltas:[]
+  } as unknown as import('../../shared/contracts.js').TurnPlan;
+  const saved=projectTurnPresentation(plan)!;
+  expect(saved.snapshots).toHaveLength(2);
+  const record={schemaVersion:1,speaker:'Narrator',status:'ready',plan,jobs:[],updatedAt:'2026-10-24T00:00:00.000Z',presentation:saved} as StoredTurnRecord;
+  await saveTurnRecord(spindle,'turns/one.json',record,'alice');
+  // Same reference: the projection was not rebuilt on an ordinary job write.
+  expect((data.get('turns/one.json') as StoredTurnRecord).presentation).toBe(saved);
+
+  const foreign={...saved,snapshots:saved.snapshots.map(snapshot=>({...snapshot,at:{...snapshot.at,key:{...plan.key,revision:9}}}))};
+  await saveTurnRecord(spindle,'turns/two.json',{...record,presentation:foreign},'alice');
+  const rebuilt=data.get('turns/two.json') as StoredTurnRecord;
+  expect(rebuilt.presentation).not.toBe(foreign);
+  expect((rebuilt.presentation as typeof saved).snapshots[0]!.at.key.revision).toBe(0);
+
+  const short={...saved,snapshots:saved.snapshots.slice(0,1)};
+  await saveTurnRecord(spindle,'turns/three.json',{...record,presentation:short},'alice');
+  expect((data.get('turns/three.json') as StoredTurnRecord).presentation).not.toBe(short);
 });
