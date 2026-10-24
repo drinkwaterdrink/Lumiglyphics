@@ -1,11 +1,11 @@
 import {chromium} from 'playwright';
 import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
-const build=await Bun.build({entrypoints:['scripts/cast-workspace-browser-fixture.ts'],target:'browser'});assert.ok(build.success);const bundle=await build.outputs[0]!.text();
-const server=Bun.serve({hostname:'127.0.0.1',port:0,fetch:r=>new URL(r.url).pathname==='/fixture.js'?new Response(bundle,{headers:{'Content-Type':'application/javascript'}}):new URL(r.url).pathname.startsWith('/api/')?new Response('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="160"><rect width="120" height="160" fill="#74638b"/></svg>',{headers:{'Content-Type':'image/svg+xml'}}):new Response('<!doctype html><html><head><title>Cast workspace</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><script type="module" src="/fixture.js"></script></body></html>',{headers:{'Content-Type':'text/html'}})});
+import {browserFixtureServer} from './browser-fixture-server.ts';
+const server=await browserFixtureServer('scripts/cast-workspace-browser-fixture.ts');
 const browser=await chromium.launch({headless:true});
 try{
- const page=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'});const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(`http://127.0.0.1:${server.port}`);
+ const page=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'});const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.route('**/api/**',route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="120" height="160"><rect width="120" height="160" fill="#74638b"/></svg>'}));await page.goto(`http://127.0.0.1:${server.port}`);
  const cast=page.locator('[data-cast-art]');
  await cast.getByLabel('Search characters').fill('Dana');
  assert.equal(await cast.locator('[data-cast-roster-row]').count(),1,'roster filters real records');
@@ -61,4 +61,4 @@ try{
  await page.setViewportSize({width:390,height:844});await mkdir('.cache/cast-workspace',{recursive:true});await page.screenshot({path:'.cache/cast-workspace/mobile.png',fullPage:true});
  assert.equal(errors.length,0,errors.join('\n'));assert.equal(await page.evaluate(()=>(window as any).castWorkspace.state.actions.some((r:any)=>!['list','setup','scan','setup_supply'].includes(r.action.action))),false,'browsing only uses explicit existing metadata actions');
  console.log('Cast workspace: roster, shared draft, source review, explicit save, scoped recovery, display art, voice handoff and places passed.');
-}finally{await browser.close();server.stop(true);}
+}finally{await browser.close();await server.stop();}

@@ -1,6 +1,6 @@
 # Remaining Lumiglyphics roadmap
 
-Current scope: beta.66 on Testing. This page summarizes unfinished work; [STATUS.md](../STATUS.md) is the delivered-feature matrix. Earlier dated plans retain their original checklists and should not be read as the current completion count.
+Current scope: beta.67 on Testing. This page summarizes unfinished work; [STATUS.md](../STATUS.md) is the delivered-feature matrix. Earlier dated plans retain their original checklists and should not be read as the current completion count.
 
 beta.58 refines image prompting and recovery: protected identity anchors, shared adaptation for new/replacement templates, useful-detail targets separate from provider limits, and primary repair controls. The [pipeline audit](image-pipeline-audit.md) records verified behavior and remaining runtime/quality limits. This maintenance increment does not complete the physical-device/provider benchmark work below.
 
@@ -67,3 +67,5 @@ Beta.64 delivers the metadata-backed prepared brief and model explanation slice 
 Beta.65 starts cast injection transparency in the reader: bounded preparation ingredient snapshots, source/conflict inspection and explicit correction-save scope. Per-person ensemble provenance and cast-workspace field-level reconciliation remain unfinished.
 
 Beta.66 fixes the reported `vn_asset_ready` cache-cue overlap error. This maintenance release does not advance the remaining cast-workspace reconciliation features.
+
+Beta.67 extends Phase 3 into cast-workspace source selection: saved/draft comparison and explicit field imports. Per-trait reconciliation inside free-text appearance, durable per-field origin tracking, ensemble provenance and final prompt mapping remain pending.

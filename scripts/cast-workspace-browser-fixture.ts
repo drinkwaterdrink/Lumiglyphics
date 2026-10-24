@@ -11,7 +11,7 @@ const mount=document.createElement('main');mount.style.cssText='padding:16px;max
 const cast=new CastArtPanel(()=>state.chatId,(chatId,requestId,action)=>{
  state.actions.push({chatId,action});
  const reply=()=>{
-  if(action.action==='scan'){cast.receiveScan(chatId,requestId,{notice:'Saved story and enabled sources only.',candidates:[{name:'Dana Kessler',source:'Saved story appearance',setup:{appearance:'Human woman with silver hair.',aliases:['DK'],outfits:[],defaultOutfitId:null}},{name:'Dana Kessler',source:'Revealed reference — name only',setup:{appearance:'',aliases:[],outfits:[],defaultOutfitId:null}}]});return;}
+  if(action.action==='scan'){cast.receiveScan(chatId,requestId,{notice:'Saved story and enabled sources only.',candidates:[{name:'Dana Kessler',source:'Saved story appearance',setup:{appearance:'Human woman with silver hair.',aliases:['DK','D'],outfits:[{id:'coat',name:'Everyday coat',description:'Red wool coat.'},{id:'source-new',name:'Uniform',description:'White shirt and navy trousers.'}],defaultOutfitId:'source-new'}},{name:'Dana Kessler',source:'Revealed reference — name only',setup:{appearance:'',aliases:[],outfits:[],defaultOutfitId:null}},{name:'Mira',source:'Story appearance',setup:{appearance:'Auburn hair.',aliases:[],outfits:[],defaultOutfitId:null}}]});return;}
   let record=state.library.characters.find(r=>r.entityId===action.characterId);
   if(action.action==='setup'){
    if(!record){record={entityId:action.name!.toLowerCase(),name:action.name!,artRevision:0,description:'',preferredVariantId:null,variants:[]};state.library.characters.push(record);}

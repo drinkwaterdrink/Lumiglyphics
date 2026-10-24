@@ -1,6 +1,6 @@
-# Lumiglyphics status — beta.66
+# Lumiglyphics status — beta.67
 
-This matrix describes beta.66 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
+This matrix describes beta.67 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
 
 | Area | Status | Current behavior / remaining scope |
 |---|---|---|
@@ -39,3 +39,5 @@ Beta.64: prepared picture brief with explicit draft provenance, non-mutating edi
 Beta.65: new request preparation snapshots expose appearance/outfit/direction sources and subject-placeholder usage in the prepared brief. Correction scope is explained before saving. Display-only provenance is excluded from cache identity.
 
 Beta.66 hotfix: prevent unfunded cache-cue overlaps during cast allocation and narrowly recover existing saved plans when the overlap has no saved job. Story/job validation remains strict.
+
+Beta.67: cast source review distinguishes saved guidance from the unsaved draft and offers isolated appearance, alias and outfit suggestion actions. Existing defaults/outfits are protected; Save changes stays explicit.
