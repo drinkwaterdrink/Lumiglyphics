@@ -2,12 +2,38 @@ import { describe, expect, test } from "bun:test";
 import { DEFAULT_CONFIG } from "../../config.js";
 import { TurnPlanSchema, type SceneState, type TurnPlan, type VisualCue } from "../../shared/contracts.js";
 import { POSE_EXPRESSION_CATALOGUE, poseById } from "../../shared/character.js";
-import { compileImagePrompt, compileNegativePrompt, createAssetJobs, generateAssets } from "./images.js";
+import { compileImagePrompt, compileNegativePrompt, createAssetJobs, generateAssets,sceneImageIdentityFor } from "./images.js";
 import { ImageReviewGate } from "./image-review.js";
 import { normalizeConfig } from '../../config.js';
 import { templateSnapshot } from '../../shared/image-templates.js';
 
 const now = new Date().toISOString();
+
+test('changing only the recorded preset association does not invalidate identical rendered art',()=>{
+ const config=normalizeConfig({selectedSharedStyleId:''});
+ const visual={...cue('idle'),imageTemplate:templateSnapshot(config.imageTemplates[0]!)};
+ const turn=plan([visual]);
+ expect(sceneImageIdentityFor(config,turn.scenes[0]!,visual,{},'nanogpt')).toEqual(sceneImageIdentityFor({...config,selectedSharedStyleId:'builtin-style:anime'},turn.scenes[0]!,visual,{},'nanogpt'));
+});
+
+test('actual image preparation records style inputs and ignored suffix without changing provider wording',async()=>{
+ const sent:any[]=[];
+ const spindle={userStorage:{getJson:async(_:string,options:any)=>options.fallback},imageGen:{generate:async(request:any)=>{sent.push(request);return {imageId:'fixture-image'};}}} as any;
+ const config=normalizeConfig({referenceAnchoring:false,promptPrefix:'A natural ink drawing.',promptSuffix:'Unused paper grain',negativePrompt:'logo',selectedSharedStyleId:''});
+ const template={...config.imageTemplates[0]!,positive:'{{style}} {{subjects}} {{scene}}',negative:'{{negative}}'};
+ const turn=plan([{...cue('idle'),imageTemplate:templateSnapshot(template)}]);
+ const jobs=await generateAssets(spindle,turn,createAssetJobs(turn,config),config,new AbortController().signal,()=>{},'fixture-user',{
+  beforeGenerate:async(_job,request,metadata)=>{
+   expect(metadata.imagePromptMetadata?.sharedStyle?.prefix.text).toBe('A natural ink drawing.');
+   expect(metadata.imagePromptMetadata?.sharedStyle?.suffix.positiveOccurrences).toBe(0);
+   expect(metadata.imagePromptMetadata?.sharedStyle?.presetId).toBe('');
+   return request;
+  }
+ });
+ expect(jobs[0]?.status).toBe('generated');expect(sent).toHaveLength(1);
+ expect(sent[0].prompt).toContain('A natural ink drawing.');
+ expect(sent[0].prompt).not.toContain('Unused paper grain');
+});
 
 test('default connection model controls supported shape before review and only one image is dispatched', async () => {
   for (const model of ['anima/text-to-image', 'blackforestlabs/flux-3/klein/base/text-to-image']) {

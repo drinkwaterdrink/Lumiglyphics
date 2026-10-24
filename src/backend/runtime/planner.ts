@@ -856,7 +856,9 @@ function stripReasoningBlocks(text: string): string {
   return cleaned.trim();
 }
 
-function repairJsonString(candidate: string): string {
+const whitespace = /\s/;
+
+export function repairJsonString(candidate: string): string {
   // Strip single-line comments //... outside URLs and block comments /*...*/
   let text = candidate
     .replace(/(?<!:)\/\/.*$/gm, "")
@@ -882,6 +884,17 @@ function repairJsonString(candidate: string): string {
   // Strip trailing commas before } or ]
   text = text.replace(/,\s*([\}\]])/g, "$1");
 
+  // F8: one O(n) pass giving, for every position, the next non-whitespace
+  // index at or after it. The previous implementation copied and re-scanned
+  // the whole remaining tail (`text.slice(i + 1).trimStart()`) at every quote,
+  // which is quadratic on long model responses with many quoted strings.
+  const nextNonSpace = new Int32Array(text.length + 1);
+  nextNonSpace[text.length] = text.length;
+  for (let i = text.length - 1; i >= 0; i--) {
+    nextNonSpace[i] = whitespace.test(text[i]!) ? nextNonSpace[i + 1]! : i;
+  }
+  const commaFollow = /(?:"[^"\\]*"\s*:|[\{\[\]\}]|"[^"\\]*"|-?\d|true|false|null)/y;
+
   // Character walk to fix unescaped raw newlines/tabs inside strings, unescaped inner quotes, and balance brackets
   const chars: string[] = [];
   let inString = false;
@@ -902,18 +915,26 @@ function repairJsonString(candidate: string): string {
     }
     if (ch === '"') {
       if (inString) {
-        // Lookahead: If inside string, check if this quote is followed by structural delimiter
-        const rest = text.slice(i + 1).trimStart();
+        // Lookahead without copying the tail: inspect the next non-whitespace
+        // character after this quote (the old trimStart made \n/\r unreachable
+        // as the first character, so only the structural tokens matter).
+        const after = nextNonSpace[i + 1]!;
         let isRealDelimiter = false;
-        if (/^[:\}\]\n\r]/.test(rest)) {
-          isRealDelimiter = true;
-        } else if (rest.startsWith(",")) {
-          const afterComma = rest.slice(1).trimStart();
-          if (/^(?:"[^"\\]*"\s*:|[\{\[\]\}]|"[^"\\]*"|-?\d|true|false|null)/.test(afterComma)) {
+        if (after < text.length) {
+          const next = text[after]!;
+          if (next === ":" || next === "}" || next === "]") {
             isRealDelimiter = true;
+          } else if (next === ",") {
+            const afterComma = nextNonSpace[after + 1]!;
+            if (afterComma < text.length) {
+              commaFollow.lastIndex = afterComma;
+              isRealDelimiter = commaFollow.test(text);
+            }
           }
         }
-        if (!isRealDelimiter && rest) {
+        // `after === text.length` mirrors the old empty-`rest` case: a quote
+        // with nothing after it closes the string rather than being escaped.
+        if (!isRealDelimiter && after < text.length) {
           // Unescaped inner quote inside string! Escape it.
           chars.push('\\"');
           continue;
@@ -2175,6 +2196,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
         ...(personaName ? { personaName } : {}),
         config: input.config,
         ...(input.userId ? { userId: input.userId } : {}),
+        ...(input.signal ? { signal: input.signal } : {}),
       }).catch((error: unknown) => {
         spindle.log.warn(`System One decision failed; using story reader: ${debugErrorSummary(error)}`);
         return null;

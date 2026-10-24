@@ -48,7 +48,7 @@ Files: new focused frontend brief projection and view modules next to `studio.ts
 - [x] Link brief fields to existing editors; preserve unrelated draft fields.
 - [x] Explain verified capabilities versus family guidance/manual settings; verify square-only and nearest supported portrait output, positive-only routes and unknown models.
 
-- [ ] Persist and expose a separate shared-style snapshot for future requests, if added to the compiler contract; existing requests must remain unavailable rather than borrowing current settings.
+- [x] Persist and expose separate bounded shared-style preparation snapshots, explicit preset association/customization, configured wording and direct placeholder usage. Delivered beta.73. Older or invalid optional snapshots remain unavailable rather than borrowing current settings; final wording remains authoritative.
 
 ## Phase 3 — cast injection transparency
 

@@ -30,7 +30,7 @@ export class PresentationRulesPanel{
   this.root.querySelectorAll<HTMLButtonElement>('[data-example]').forEach(button=>button.onclick=()=>this.propose(button.dataset.example==='dialogue'?'portrait':'environment',button.dataset.example as 'dialogue'|'location_changed'));
   this.el<HTMLFormElement>('form').oninput=()=>{this.dirty=true;this.previewed=false;this.el('[data-preference-preview]').hidden=true;this.el<HTMLButtonElement>('[data-preference-save]').disabled=true;this.syncConditionFields();};
   this.el('[data-preference-preview-button]').onclick=()=>this.preview();
-  this.el<HTMLFormElement>('form').onsubmit=e=>{e.preventDefault();if(!this.previewed)return;const draft=this.draft();if(draft)this.request({action:'save',scope:this.scope,rule:draft});};
+  this.el<HTMLFormElement>('form').onsubmit=e=>{e.preventDefault();if(!this.previewed)this.preview();if(!this.previewed)return;const draft=this.draft();if(draft)this.request({action:'save',scope:this.scope,rule:draft});};
   this.el('[data-preference-discard]').onclick=()=>{if(!this.pending){this.closeDraft();this.status('Draft discarded. Saved preferences are unchanged.');}};
  }
  private el<T extends HTMLElement=HTMLElement>(selector:string):T{return this.root.querySelector<T>(selector)!;}

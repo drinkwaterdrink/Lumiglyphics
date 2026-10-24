@@ -9,7 +9,21 @@ export function createPromptAnchors(prompt:string,protection:PromptProtection):P
  let namespace=0;while(prompt.includes(`[[LG_CAST_${namespace}_`))namespace++;
  const entries=blocks.map((text,index)=>({token:`[[LG_CAST_${namespace}_${index}]]`,text}));
  let maskedPrompt=prompt;
- for(const entry of [...entries].sort((a,b)=>b.text.length-a.text.length))if(maskedPrompt.includes(entry.text))maskedPrompt=maskedPrompt.split(entry.text).join(entry.token);
+ for(const entry of [...entries].sort((a,b)=>b.text.length-a.text.length)){
+  if(maskedPrompt.includes(entry.text)){
+   maskedPrompt=maskedPrompt.split(entry.text).join(entry.token);
+   continue;
+  }
+  const commaVariant=entry.text.replace(/;\s+/g,', ');
+  if(maskedPrompt.includes(commaVariant)){
+   maskedPrompt=maskedPrompt.split(commaVariant).join(entry.token);
+   continue;
+  }
+  const semiVariant=entry.text.replace(/,\s+/g,'; ');
+  if(maskedPrompt.includes(semiVariant)){
+   maskedPrompt=maskedPrompt.split(semiVariant).join(entry.token);
+  }
+ }
  return {entries,expandedCharacters:entries.reduce((sum,entry)=>sum+entry.text.length+1,0)-(entries.length?1:0),maskedPrompt};
 }
 export function expandPromptAnchors(prompt:string,anchors:PromptAnchors,negative=''):{prompt:string;usedAnchors:boolean}{

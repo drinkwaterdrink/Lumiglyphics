@@ -10,7 +10,7 @@ import { describe, expect, test, spyOn } from "bun:test";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { registerVisualNovelBackend, sceneImageCache, viewRegistry } from "./controller.js";
 import { sceneImageScope } from "../core/scene-image-cache.js";
-import { turnPath, type StoredTurnRecord } from "./storage.js";
+import { saveTurnRecord, turnPath, type StoredTurnRecord } from "./storage.js";
 
 async function waitFor(condition: () => boolean, timeoutMs = 3000): Promise<void> {
   const start = Date.now();
@@ -248,4 +248,98 @@ describe("probe: real controller lifecycle with the scene cache", () => {
     await turn;
     await settle();
   });
+});
+
+  test("a provider that ignores abort cannot leave the chat looking busy after the reader closes", async () => {
+    const f = fixture();
+    registerVisualNovelBackend(f.spindle);
+    const chatId = "stalled-chat";
+    f.openGate();
+    const turn = await f.say(chatId, "m1", { speaker: "Mira", location: "Attic", claimNew: true, reason: "initial", cues: [0] });
+    await waitFor(() => f.providerCalls.length === 1);
+    const record = f.record(chatId, "m1");
+    expect(record.jobs[0]!.status === "queued" || record.jobs[0]!.status === "generating").toBe(true);
+
+    // The provider never settles. Closing the reader aborts the batch; ownership
+    // must be released immediately, not when (or if) that call returns.
+    f.request({ type: "vn_view", chatId, open: false });
+    await settle();
+    f.request({ type: "vn_view", chatId, open: true });
+    await settle();
+
+    const before = f.sent.length;
+    f.request({ type: "vn_replan_turn", version: 1, chatId, messageId: "m1", swipeId: 0, sourceFingerprint: record.plan.key.sourceFingerprint, requestId: "replan-1" });
+    await waitFor(() => f.sent.slice(before).some((m) => m.type === "vn_turn" || (m.type === "vn_error" && m.operation === "vn_replan_turn")));
+    const outcome = f.sent.slice(before).find((m) => m.type === "vn_turn" || m.type === "vn_error");
+    expect(String(outcome?.error ?? "")).not.toContain("skip waiting pictures");
+    expect(outcome?.type).toBe("vn_turn");
+    expect(f.record(chatId, "m1").plan.key.revision).toBe(record.plan.key.revision + 1);
+
+    f.closeGate();
+    await turn;
+    await settle();
+  });
+test('stale same-ID edits and duplicate notices do not replace or abort the current picture batch',async()=>{
+ const f=fixture(),chatId='stale-edit-chat';registerVisualNovelBackend(f.spindle);f.openGate();
+ await f.say(chatId,'m1',{speaker:'Mira',location:'Attic',claimNew:true,reason:'initial',cues:[0]});
+ await waitFor(()=>f.providerCalls.length===1);
+ const first=f.record(chatId,'m1'),message=f.messages[0]!;
+ f.fire('MESSAGE_EDITED',{chatId,message:{...message,content:'An obsolete version.'}},'user-1');
+ await settle();expect(f.providerCalls).toHaveLength(1);expect(f.record(chatId,'m1').plan.key).toEqual(first.plan.key);
+ f.fire('MESSAGE_EDITED',{chatId,message:{...message}},'user-1');await settle();
+ expect(f.providerCalls).toHaveLength(1);expect(f.record(chatId,'m1').plan.key).toEqual(first.plan.key);
+ f.closeGate();await waitFor(()=>f.record(chatId,'m1').jobs.some(j=>j.status==='generated'));
+ f.request({type:'vn_view',chatId,open:false});
+});
+
+test('a real latest-message edit retires obsolete images while replacement planning waits',async()=>{
+ const f=fixture(),chatId='real-edit-chat';registerVisualNovelBackend(f.spindle);f.openGate();
+ await f.say(chatId,'m1',{speaker:'Mira',location:'Attic',claimNew:true,reason:'initial',cues:[0]});
+ await waitFor(()=>f.providerCalls.length===1);
+ const original=f.record(chatId,'m1');let planning=false;let release!:()=>void;
+ const normal=f.spindle.generate.raw.bind(f.spindle.generate);
+ f.spindle.generate.raw=async(...args:any[])=>{planning=true;await new Promise<void>(resolve=>release=resolve);return normal(...args as [any]);};
+ const message={...f.messages[0]!,content:'A changed scene.\n\nAnother paragraph.'};f.messages[0]=message;
+ const before=f.sent.length;f.fire('MESSAGE_EDITED',{chatId,message},'user-1');await waitFor(()=>planning);
+ f.closeGate();await settle();
+ expect(f.sent.slice(before).some(m=>m.type==='vn_asset'&&(m.asset as any)?.status==='generated'&&m.sourceFingerprint===original.plan.key.sourceFingerprint)).toBe(false);
+ expect(f.record(chatId,'m1').jobs.some(j=>j.status==='generated')).toBe(false);
+ release();await waitFor(()=>f.record(chatId,'m1').plan.key.sourceFingerprint!==original.plan.key.sourceFingerprint);
+ f.request({type:'vn_view',chatId,open:false});
+});
+
+test('close cleanup preserves a newer queued record write instead of replacing its snapshot',async()=>{
+ const f=fixture(),chatId='cleanup-write-race';registerVisualNovelBackend(f.spindle);f.openGate();
+ await f.say(chatId,'m1',{speaker:'Mira',location:'Attic',claimNew:true,reason:'initial',cues:[0]});
+ await waitFor(()=>f.providerCalls.length===1);
+ const record=f.record(chatId,'m1'),path=turnPath(chatId,'m1',0);
+ const set=f.spindle.userStorage.setJson.bind(f.spindle.userStorage);let waiting=false,release!:()=>void;
+ f.spindle.userStorage.setJson=async(...args:any[])=>{
+   if(args[0]===path&&!waiting){waiting=true;await new Promise<void>(resolve=>release=resolve);}
+   return set(...args as Parameters<typeof set>);
+ };
+ const write=saveTurnRecord(f.spindle,path,{...record,error:'Preserve the queued update',correctionRequestIds:['queued-correction']},'user-1');
+ await waitFor(()=>waiting);f.request({type:'vn_view',chatId,open:false});await settle();
+ release();await write;await waitFor(()=>f.record(chatId,'m1').jobs.every(j=>j.status==='cancelled'));
+ expect(f.record(chatId,'m1')).toMatchObject({error:'Preserve the queued update',correctionRequestIds:['queued-correction']});
+ f.closeGate();await settle();
+});
+
+test('a duplicate notice during pending asset startup does not spend another planning call',async()=>{
+ const f=fixture(),chatId='pending-start-duplicate';registerVisualNovelBackend(f.spindle);
+ const get=f.spindle.userStorage.getJson.bind(f.spindle.userStorage);let held=false,release!:()=>void,calls=0;
+ const raw=f.spindle.generate.raw.bind(f.spindle.generate);
+ f.spindle.generate.raw=async(...args:any[])=>{calls++;return raw(...args as [any]);};
+ f.spindle.userStorage.getJson=async<T>(path:string,options?:{fallback?:T;userId?:string}):Promise<T>=>{
+   if(path==='config.json'&&!held&&f.sent.some(m=>m.type==='vn_turn')){held=true;await new Promise<void>(resolve=>release=resolve);}
+   return get<T>(path,options);
+ };
+ await f.say(chatId,'m1',{speaker:'Mira',location:'Attic',claimNew:true,reason:'initial',cues:[0]});
+ await waitFor(()=>held);expect(calls).toBe(1);
+ try {
+   f.fire('MESSAGE_EDITED',{chatId,message:{...f.messages[0]!}},'user-1');await settle(100);
+   expect(calls).toBe(1);expect(f.providerCalls).toHaveLength(0);
+ } finally {release();}
+ await waitFor(()=>f.record(chatId,'m1').jobs.some(j=>j.status==='generated'));
+ expect(f.providerCalls).toHaveLength(1);f.request({type:'vn_view',chatId,open:false});
 });

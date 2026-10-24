@@ -24,9 +24,12 @@ button,input,textarea{font:inherit;color:inherit}button{cursor:pointer;backgroun
 .launcher:hover{background:var(--vn-shell-bg-hover,#252632)}.launcher[aria-expanded=true]{border-color:var(--accent)}
 .drawer{position:absolute;top:64px;left:12px;width:min(390px,calc(100% - 24px));max-height:calc(100% - 80px);overflow:auto;pointer-events:auto;background:var(--paper);color:var(--ink);border:1px solid var(--edge);border-radius:min(var(--radius),12px);padding:16px;box-shadow:0 14px 40px #0009;z-index:100}
 [hidden]{display:none!important}h2{font:600 18px/1.2 Georgia,serif;margin:0 0 10px;color:var(--ink)}p{margin:8px 0;color:var(--muted)}small{color:var(--muted)}.row{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.candidate{border-top:1px solid color-mix(in srgb,var(--edge) 60%,transparent);padding:10px 0}.candidate strong{display:block}.candidate button{margin:6px 5px 0 0}label{display:block;margin:8px 0}input:not([type=checkbox]),textarea{box-sizing:border-box;width:100%;background:var(--field);border:1px solid var(--edge);border-radius:4px;padding:8px}textarea{min-height:90px;font:12px/1.5 ui-monospace,monospace}summary{cursor:pointer;padding:8px 0}.notice{white-space:pre-wrap;color:var(--accent)}
-.pin{position:absolute;pointer-events:auto;display:flex;flex-direction:column;box-sizing:border-box;border:1px solid var(--edge);border-radius:min(var(--radius),10px);overflow:hidden;background:var(--paper);color:var(--ink);box-shadow:0 8px 26px #0006}.bar{display:flex;align-items:center;gap:4px;padding:4px;flex-shrink:0;border-bottom:1px solid color-mix(in srgb,var(--edge) 50%,transparent)}.handle{flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:grab;touch-action:none;border:0;background:transparent;font-weight:650}.bar button{padding:4px 8px}.body{flex:1;min-height:0;display:flex;flex-direction:column}.body iframe{border:0;width:100%;flex:1;min-height:0;background:transparent}.state{padding:3px 8px;font-size:11px;color:var(--muted)}.resize{position:absolute;bottom:0;right:0;width:24px;height:24px;min-height:24px;padding:0;border-radius:6px 0 0 0;cursor:nwse-resize;touch-action:none}.remote{font-size:11px;padding:0 8px;margin:3px 0}.waiting{padding:12px;color:var(--muted)}
+.pin{position:absolute;pointer-events:auto;display:flex;flex-direction:column;box-sizing:border-box;border:1px solid var(--edge);border-radius:min(var(--radius),10px);overflow:hidden;background:var(--paper);color:var(--ink);box-shadow:0 8px 26px #0006}.bar{display:flex;align-items:center;gap:4px;padding:4px;flex-shrink:0;border-bottom:1px solid color-mix(in srgb,var(--edge) 50%,transparent)}.handle{flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:grab;touch-action:none;border:0;background:transparent;font-weight:650}.bar button{padding:4px 8px}.body{flex:1;min-height:0;display:flex;flex-direction:column}.body iframe{border:0;width:100%;flex:1;min-height:0;background:transparent}.state{padding:3px 8px;font-size:11px;color:var(--muted)}.resize{position:absolute;bottom:0;right:0;width:24px;height:24px;min-height:24px;padding:0;border-radius:6px 0 0 0;cursor:nwse-resize;touch-action:none}
+/* F15: keep the 24px glyph but expose a 44px+ touch target via an invisible hit zone. */
+.resize::after{content:"";position:absolute;inset:-10px}
+@media(pointer:coarse){.resize::after{inset:-12px}}.remote{font-size:11px;padding:0 8px;margin:3px 0}.waiting{padding:12px;color:var(--muted)}
 @media(max-width:560px){button{min-height:40px}.launcher{padding:8px 12px 8px 11px;gap:6px}.drawer{top:62px}.bar button{min-height:36px}}
-@media(pointer:coarse){button{min-height:44px}.bar button{min-width:44px}}
+@media(pointer:coarse){button{min-height:44px}.bar button{min-width:44px}.resize{width:44px;height:44px;min-height:44px}}
 @media(prefers-reduced-motion:reduce){button{transition:none}button:active{transform:none}}
 `;
 
@@ -42,6 +45,13 @@ export class PanelDock {
   private rules: PanelRule[] = [];
   private candidates: PanelArtifact[] = [];
   private nodes = new Map<string, HTMLElement>();
+  /** F10: candidate/rule rows are built once per content revision; per-cursor
+   *  updates only toggle `hidden`, never rebuild the lists. */
+  private candidateRows = new Map<string, HTMLElement>();
+  private ruleRows = new Map<string, HTMLElement>();
+  /** Live iframe per pin, so follow updates can swap srcdoc in place only when
+   *  the card HTML actually changed instead of recreating the browsing context. */
+  private frames = new Map<string, { iframe: HTMLIFrameElement; htmlHash: string; remote: boolean }>();
   private turn: TurnView | null = null;
   private cursor = 0;
   private epoch = 0;
@@ -122,48 +132,114 @@ export class PanelDock {
     if (changedSource || changedChat) {
       this.epoch++; this.bridgeRevision.clear();
       this.candidates = [...(turn?.panels ?? [])];
-      // Source changes must not display stale live state from another swipe or turn.
-      for (const pin of this.pins) if (pin.follow) pin.fingerprint = "";
-      for (const node of this.nodes.values()) node.remove();
-      this.nodes.clear();
-      this.renderPins();
+      if (changedChat) {
+        // New chat: the loaded pin set is entirely different; drop every node.
+        for (const key of this.nodes.keys()) this.removePinNode(key);
+      } else {
+        // Same chat, new turn/swipe: keep rendered nodes and their iframe
+        // browsing contexts alive (no reload flicker). Follow pins are
+        // reconciled in place by syncFollowPins — hidden only if their source
+        // is absent, swapped in place when its HTML changed.
+        for (const pin of this.pins) if (pin.follow) pin.fingerprint = "";
+      }
+      this.renderLists();
     }
     this.refresh();
     if (turn && changedSource) this.requestBridge();
   }
   setCursor(cursor: number): void { this.cursor = cursor; this.refresh(); }
+  /** Drop a pin's rendered node and its iframe registration together. */
+  private removePinNode(key: string): void {
+    this.nodes.get(key)?.remove();
+    this.nodes.delete(key);
+    this.frames.delete(key);
+  }
+  /**
+   * F10: cheap per-paragraph path — follow pins update in place (srcdoc only
+   * when the HTML hash changed) and candidate rows merely hide/show. No row or
+   * iframe browsing contexts are created here.
+   */
   private refresh(): void {
+    this.syncFollowPins();
+    this.applyCursorVisibility();
+    this.renderPins();
+  }
+  private syncFollowPins(): void {
     const visible = this.candidates.filter((card) => card.paragraphIndex <= this.cursor);
     for (const pin of this.pins) {
       if (!pin.follow || !this.turn) continue;
       const latest = visible.filter((card) => card.followKey === pin.follow).at(-1);
       if (!latest && pin.fingerprint) {
         pin.fingerprint = "";
-        this.nodes.get(pin.key)?.remove(); this.nodes.delete(pin.key);
+        this.removePinNode(pin.key);
       }
-      if (latest && (pin.card.html !== latest.html || pin.fingerprint !== this.turn.sourceFingerprint)) {
-        pin.card = latest; pin.message = this.turn.messageId; pin.fingerprint = this.turn.sourceFingerprint;
-        this.nodes.get(pin.key)?.remove(); this.nodes.delete(pin.key);
+      if (!latest) continue;
+      const nextHash = panelHash(latest.html);
+      pin.card = latest; pin.message = this.turn.messageId; pin.fingerprint = this.turn.sourceFingerprint;
+      const frame = this.frames.get(pin.key);
+      if (!frame) {
+        // The pin was retired to a waiting placeholder (or never rendered):
+        // the fresh follow target makes it valid again, so force the trailing
+        // renderPins pass to build its iframe instead of leaving it waiting.
+        this.removePinNode(pin.key);
+        continue;
       }
+      if (frame.htmlHash === nextHash) continue;
+      // Same pin, new content: swap the document in place. The iframe element
+      // (and therefore its position, focus and browsing history) survives.
+      frame.iframe.srcdoc = panelDocument(latest.html, frame.remote);
+      frame.htmlHash = nextHash;
+      frame.iframe.title = latest.title;
+      this.nodes.get(pin.key)?.setAttribute("aria-label", latest.title);
     }
+  }
+  private applyCursorVisibility(): void {
+    let visibleCount = 0;
+    for (const card of this.candidates) {
+      const visible = card.paragraphIndex <= this.cursor;
+      if (visible) visibleCount += 1;
+      const row = this.candidateRows.get(card.id);
+      if (row) row.hidden = !visible;
+    }
+    this.launcher.textContent = `Panels${visibleCount ? ` · ${visibleCount}` : ""}`;
+  }
+  /**
+   * F10: rebuild the drawer lists only when their content actually changes
+   * (new turn, rule run, capture, bridge event or rule removal). Rows remember
+   * their card so the per-cursor refresh never touches this DOM.
+   */
+  private renderLists(): void {
     this.list.replaceChildren();
-    this.launcher.textContent = `Panels${visible.length ? ` · ${visible.length}` : ""}`;
-    if (!visible.length) { const p = document.createElement("p"); p.textContent = "No cards to pin yet. Keep reading: supported cards appear here when you reach them in a new reply. Not every reply contains a card, and older saved replies may not have any available."; this.list.append(p); }
-    for (const card of visible) {
+    this.candidateRows.clear();
+    if (!this.candidates.length) {
+      const p = document.createElement("p");
+      p.textContent = "No cards to pin yet. Keep reading: supported cards appear here when you reach them in a new reply. Not every reply contains a card, and older saved replies may not have any available.";
+      this.list.append(p);
+    }
+    for (const card of this.candidates) {
       const row = document.createElement("div"); row.className = "candidate";
+      row.hidden = card.paragraphIndex > this.cursor;
       const label = document.createElement("strong"); label.textContent = card.title;
       row.append(label, this.button("Pin this card", () => this.pin(card, false)));
       if (card.followKey) row.append(this.button("Keep it updated", () => this.pin(card, true)));
       this.list.append(row);
+      this.candidateRows.set(card.id, row);
     }
     this.ruleList.replaceChildren();
+    this.ruleRows.clear();
     for (const rule of this.rules) {
       const row = document.createElement("div"); row.className = "candidate";
       const label = document.createElement("span"); label.textContent = `Rule: ${rule.title} `;
-      row.append(label, this.button("Remove rule", () => { this.rules = this.rules.filter((r) => r.id !== rule.id); this.candidates = this.candidates.filter((c) => !c.id.startsWith(`rule:${rule.id}:`)); this.epoch++; for (const pin of this.pins) if (pin.follow === `rule:${rule.id}`) { pin.fingerprint = ""; this.nodes.get(pin.key)?.remove(); this.nodes.delete(pin.key); } this.save(); this.refresh(); }));
+      row.append(label, this.button("Remove rule", () => {
+        this.rules = this.rules.filter((r) => r.id !== rule.id);
+        this.candidates = this.candidates.filter((c) => !c.id.startsWith(`rule:${rule.id}:`));
+        this.epoch++;
+        for (const pin of this.pins) if (pin.follow === `rule:${rule.id}`) { pin.fingerprint = ""; this.removePinNode(pin.key); }
+        this.save(); this.renderLists(); this.refresh();
+      }));
       this.ruleList.append(row);
+      this.ruleRows.set(rule.id, row);
     }
-    this.renderPins();
   }
   private pin(card: PanelArtifact, follow: boolean): void {
     if (!this.turn) { this.error("Open an assistant turn before pinning a card."); return; }
@@ -176,7 +252,7 @@ export class PanelDock {
   }
 
   private renderPins(): void {
-    for (const [key, node] of this.nodes) if (!this.pins.some((p) => p.key === key)) { node.remove(); this.nodes.delete(key); }
+    for (const key of this.nodes.keys()) if (!this.pins.some((p) => p.key === key)) this.removePinNode(key);
     for (const pin of this.pins) {
       if (this.nodes.has(pin.key)) continue;
       const node = document.createElement("section"); node.className = "pin"; node.setAttribute("aria-label", pin.card.title);
@@ -184,7 +260,7 @@ export class PanelDock {
       const bar = document.createElement("div"); bar.className = "bar";
       const handle = this.button(pin.card.title, () => {}); handle.className = "handle";
       handle.title = "Drag to move. Arrow keys move; Shift + arrows resize.";
-      const collapse = this.button(pin.collapsed ? "+" : "−", () => { pin.collapsed = !pin.collapsed; this.rebuild(pin); this.save(); }); collapse.setAttribute("aria-label", "Collapse or expand panel");
+      const collapse = this.button(pin.collapsed ? "+" : "−", () => { pin.collapsed = !pin.collapsed; collapse.textContent = pin.collapsed ? "+" : "−"; body.hidden = pin.collapsed; resize.hidden = pin.collapsed; this.layout(); this.save(); }); collapse.setAttribute("aria-label", "Collapse or expand panel");
       const unpin = this.button(PIN_ICON, () => { this.pins = this.pins.filter((p) => p !== pin); this.renderPins(); this.save(); }); unpin.setAttribute("aria-label", "Unpin panel"); unpin.title = "Unpin panel";
       bar.append(handle, collapse, unpin); node.append(bar);
       const body = document.createElement("div"); body.className = "body"; body.hidden = pin.collapsed;
@@ -193,9 +269,15 @@ export class PanelDock {
       if (valid) {
         try {
           const frame = document.createElement("iframe"); frame.title = pin.card.title; frame.setAttribute("sandbox", ""); frame.referrerPolicy = "no-referrer"; frame.srcdoc = panelDocument(pin.card.html, pin.remote); body.append(frame);
+          this.frames.set(pin.key, { iframe: frame, htmlHash: panelHash(pin.card.html), remote: pin.remote });
           const remoteLabel = document.createElement("label"); remoteLabel.className = "remote";
           const remote = document.createElement("input"); remote.type = "checkbox"; remote.checked = pin.remote;
-          remote.onchange = () => { pin.remote = remote.checked; frame.srcdoc = panelDocument(pin.card.html, pin.remote); };
+          remote.onchange = () => {
+            pin.remote = remote.checked;
+            frame.srcdoc = panelDocument(pin.card.html, pin.remote);
+            const registered = this.frames.get(pin.key);
+            if (registered) registered.remote = pin.remote;
+          };
           remoteLabel.append(remote, " Allow remote images/fonts (contacts third-party sites)"); body.append(remoteLabel);
         } catch (error) { const p = document.createElement("p"); p.textContent = String(error); body.append(p); }
       } else { const p = document.createElement("p"); p.className = "waiting"; p.textContent = "Waiting for this source in the current turn. Previous-turn values are hidden."; body.append(p); }
@@ -205,9 +287,9 @@ export class PanelDock {
     }
     this.layout();
   }
-  private rebuild(pin: Pin): void { this.nodes.get(pin.key)?.remove(); this.nodes.delete(pin.key); this.renderPins(); }
+  private rebuild(pin: Pin): void { this.removePinNode(pin.key); this.renderPins(); }
   private layout(): void {
-    const box = this.host.getBoundingClientRect();
+    const rect = this.host.getBoundingClientRect(); const box = { width: this.host.clientWidth || rect.width, height: this.host.clientHeight || rect.height };
     for (const pin of this.pins) {
       const node = this.nodes.get(pin.key); if (!node) continue;
       const width = Math.min(Math.max(180, pin.width), Math.max(0, box.width - 24));
@@ -217,10 +299,10 @@ export class PanelDock {
   }
   private drag(handle: HTMLButtonElement, pin: Pin, resizing: boolean): void {
     const move = (dx: number, dy: number, resize: boolean) => {
-      const box = this.host.getBoundingClientRect();
-      if (resize) { pin.width = Math.max(180, Math.min(box.width - 24, pin.width + dx)); pin.height = Math.max(140, Math.min(box.height - 80, pin.height + dy)); }
-      else { pin.x = clampPanel(pin.x + dx / Math.max(1, box.width - Math.min(pin.width, box.width - 24) - 24), 1); pin.y = clampPanel(pin.y + dy / Math.max(1, box.height - (pin.collapsed ? 46 : Math.min(pin.height, box.height - 80)) - 80), 1); }
-      this.layout();
+      const rect = this.host.getBoundingClientRect(); const box = { width: this.host.clientWidth || rect.width, height: this.host.clientHeight || rect.height }; const scale = rect.width > 0 && this.host.clientWidth > 0 ? this.host.clientWidth / rect.width : 1; dx *= scale; dy *= scale; const bw = box.width, bh = box.height; if (resize) { pin.width = Math.max(180, Math.min(bw - 24, pin.width + dx)); pin.height = Math.max(140, Math.min(bh - 80, pin.height + dy)); } else { pin.x = clampPanel(pin.x + dx / Math.max(1, bw - Math.min(pin.width, bw - 24) - 24), 1); pin.y = clampPanel(pin.y + dy / Math.max(1, bh - (pin.collapsed ? 46 : Math.min(pin.height, bh - 80)) - 80), 1); } return this.layout();
+
+
+
     };
     handle.onkeydown = (event) => {
       const delta: Record<string, [number, number]> = { ArrowLeft: [-10, 0], ArrowRight: [10, 0], ArrowUp: [0, -10], ArrowDown: [0, 10] };
@@ -276,14 +358,14 @@ export class PanelDock {
         if (!cards.length) this.error(`No match for rule "${rule.title}" in this turn.`);
       } catch (error) { if (epoch === this.epoch && !this.dead) this.error(error); }
     }
-    if (epoch === this.epoch && !this.dead) this.refresh();
+    if (epoch === this.epoch && !this.dead) { this.renderLists(); this.refresh(); }
   }
   private capture(): void {
     const cards = this.onCapture?.() ?? [];
     if (!cards.length) { this.error("No mounted SimTracker card found. Capture before opening VN, use pasted HTML, or install a compatible live export bridge. Snapshot capture cannot follow updates."); return; }
     this.candidates = this.candidates.filter((c) => !c.id.startsWith("capture:"));
     for (const card of cards.slice(0, 12)) this.candidates.push({ id: `capture:${panelHash(card.html)}`, title: `${card.title} · snapshot`, html: card.html, paragraphIndex: this.cursor });
-    this.refresh();
+    this.renderLists(); this.refresh();
   }
   private requestBridge(): void {
     const turn = this.turn; if (!turn) return;
@@ -306,8 +388,8 @@ export class PanelDock {
     this.bridgeRevision.set(key, data.revision);
     this.candidates = this.candidates.filter((c) => c.followKey !== key);
     if (data.status === "ready" && parsed.success) this.candidates.push(parsed.data);
-    else for (const pin of this.pins) if (pin.follow === key) { pin.fingerprint = ""; this.nodes.get(pin.key)?.remove(); this.nodes.delete(pin.key); }
-    this.refresh();
+    else for (const pin of this.pins) if (pin.follow === key) { pin.fingerprint = ""; this.removePinNode(pin.key); }
+    this.renderLists(); this.refresh();
   };
   destroy(): void { this.dead = true; this.epoch++; this.observer.disconnect(); window.removeEventListener("vn-panel-export-v1", this.receiveBridge); this.host.remove(); }
 }

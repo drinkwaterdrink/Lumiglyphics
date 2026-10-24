@@ -232,7 +232,7 @@ function splitTextNode(textNode: Text, startIndex: number, spanLimit: number, bu
     budget.call -= 1;
   }
   flushPlain();
-  for (const node of fragment) parent.insertBefore(node, textNode);
+  if (typeof doc.createDocumentFragment === "function") { const frag = doc.createDocumentFragment(); for (const node of fragment) frag.appendChild(node); parent.insertBefore(frag, textNode); } else { for (const node of fragment) parent.insertBefore(node, textNode); }
   parent.removeChild(textNode);
   return index;
 }
