@@ -6,6 +6,15 @@ import type {SpindleAPI} from 'lumiverse-spindle-types';
 const request={prompt:'A silver-haired traveller waits at a rainy station.',negativePrompt:'blurry, text',parameters:{seed:9,negativePrompt:'old'},connection_id:'image',model:'flux'};
 function api(outputs:unknown[]){const calls:any[]=[];return {calls,spindle:{connections:{list:async()=>[{id:'writer',provider:'openrouter',model:'writer',is_default:true}]},generate:{raw:async(r:any)=>{calls.push(r);return outputs.shift();}}} as unknown as SpindleAPI};}
 
+test('writer receives only literal scene priorities retained in the current editable draft',async()=>{
+ const action='Mira hands Jon the sealed letter.';
+ const original={...request,prompt:action+' At the rainy station.'};
+ const {spindle,calls}=api([{content:JSON.stringify({prompt:'Mira gives Jon the sealed letter at the rainy station.',negativePrompt:''})}]);
+ await rewriteImagePrompt(spindle,original,{brief:{subjects:'',action,composition:'Old portrait framing'},template:{name:'Scene',category:'action'}} as any,normalizeConfig({}),'u',new AbortController().signal,'fit');
+ expect(JSON.parse(calls[0].messages[1].content).scenePriorities).toEqual([{field:'action',text:action}]);
+ expect(JSON.stringify(calls)).not.toContain('Old portrait framing');
+});
+
 test('writer receives an expanded-character priority budget that is recalculated after rejection',async()=>{
  const subjects='Mira: silver hair\nJon: black hair';
  const {spindle,calls}=api([]);

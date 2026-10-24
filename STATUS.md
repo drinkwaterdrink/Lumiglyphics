@@ -1,10 +1,10 @@
-# Lumiglyphics status — beta.70
+# Lumiglyphics status — beta.71
 
-This matrix describes beta.70 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
+This matrix describes beta.71 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
 
 | Area | Status | Current behavior / remaining scope |
 |---|---|---|
-| Reader identity and recovery | Delivered | Scenario/narrator cards, appearance correction, replan, saved cursor/drafts and guarded revisions. |
+| Reader identity and recovery | Delivered | Scenario/narrator cards, picture-local recovery for explicitly present described personas, appearance correction, replan, saved cursor/drafts and guarded revisions. Confirmed scenarios with no drawable person can use an enabled setting template after successful planning. |
 | Mobile reader | Delivered | Adjustable themed text sheet, icon controls, click-to-advance, history exits, close suspension and temporary prose preview while planning. Physical Android acceptance remains manual. |
 | Image prompts and recovery | Delivered | Explicit per-picture retry queue, retry unfinished and completed-image regeneration without review; edited previews keep approval. State-specific inspector, editable templates/shared styles, optional dynamic selection, model-aware combined character budgets with calculated writer priorities for cast/scene/negatives, optional manual ceiling, approval, prompt rewrite/restore with measured before/after counts and local wording comparison, individual retry and failure dismissal. Published size/ratio controls now validate model output locally. |
 | Full scene / ensemble | Delivered, opt-in | Named physically present cast plus persona, separate appearances, bounded descriptions, no single-face reference or portrait reuse. Up to 16 subjects; actual model accuracy varies. |

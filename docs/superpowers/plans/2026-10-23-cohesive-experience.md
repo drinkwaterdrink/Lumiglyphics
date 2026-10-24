@@ -66,6 +66,7 @@ Files: prompt compiler/detail/rewrite/protection modules and an opt-in compariso
 
 - [ ] Complete compiler-level priority enforcement for identity/action/spatial relationships before decorative detail. Beta.70 delivers calculated writer allocations after exact cast accounting, adaptive negative guidance, retry recalculation and scaled initial scene estimates. Scene/style semantic retention still needs representative evaluation; no claim of enforced semantic equivalence.
 - [x] Report exact before/after positive, negative and combined counts with a local previous-wording comparison and Restore. Counts do not claim semantic preservation. Delivered beta.69; semantic quality comparisons remain pending.
+- [x] Add bounded literal action/composition cues from the current editable draft to writer priorities and flag exact wording changes in the local comparison. Delivered beta.71. Paraphrases remain allowed; no semantic-preservation claim.
 - [ ] Establish representative same-scene evaluations for identity, composition, fidelity and unwanted additions. Paid runs require explicit selection; never start on install/open.
 - [ ] Test small budgets, ensembles, positive-only routes, unsupported dimensions and impossible fixed-fact budgets.
 

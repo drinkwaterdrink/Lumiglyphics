@@ -35,6 +35,7 @@ import { normalizeActionProp, ActionPropSchema } from "../../shared/action-prop.
 import { reduceContinuity } from "../core/continuity.js";
 import { resolveCueTimeline } from "../core/cue-state.js";
 import { repairScenarioSubjects } from "./scenario-subjects.js";
+import {scenarioPersonaSubject} from './scenario-persona.js';
 import { prepareNarrative } from "../core/paragraphs.js";
 import { decideSceneBoundary } from "../core/scene-boundary.js";
 import { validateTurnPlan } from "../core/turn-plan.js";
@@ -45,6 +46,7 @@ import {
   buildCanonicalIdentity,
   canonicalCharacterName,
   characterAppearanceKey,
+  characterIdFor,
   distillVisualTags,
   isUsableIdentity,
   mergeCharacterDeclarations,
@@ -53,6 +55,7 @@ import {
   normalizeSubjectCategory,
   resolveCharacterReference,
   splitTags,
+  subjectCategoryFromTags,
   toUsableTags,
   type CharacterAppearanceMap,
   type CharacterDeclaration,
@@ -61,7 +64,7 @@ import {
 } from "../../shared/identity.js";
 import { loadVisualContext, type VisualContextDiagnostics, type VisualContextSnapshot } from "./context.js";
 import type { SimTrackerEvidence } from "./simtracker.js";
-import { resolveImageTemplate } from "../../shared/image-templates.js";
+import { resolveImageTemplate,templateSnapshot } from "../../shared/image-templates.js";
 import { resolvePlannerConnection, type ResolvedPlannerConnection } from "./connections.js";
 import { normalizeStageEffect, normalizeAmbientEffect, deriveWeatherAmbient } from "./planner-effects.js";
 import { getAudioCatalog, getAudioCatalogPromptSummary } from "./audio-catalog.js";
@@ -2129,9 +2132,10 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
 
   const cardRole=input.cardRole??await loadCardRole(spindle,input.chatId,visualContext.cardId,input.userId);
   visualContext.cardRole=cardRole;
-  const scenarioReferenceName = cardRole === "scenario" ? characterAppearanceKey(visualContext.characterIdentity?.name ?? input.message.name ?? "") : "";
+  const attachedCardName=visualContext.characterIdentity?.name??input.message.name??'';
+  const scenarioReferenceName = cardRole === "scenario" ? characterAppearanceKey(attachedCardName) : "";
   if(cardRole==='scenario') {
-    const wrapper=characterAppearanceKey(visualContext.characterIdentity?.name??input.message.name??'');
+    const wrapper=characterAppearanceKey(attachedCardName);
     const isWrapper=(name:string|null|undefined)=>Boolean(wrapper)&&characterAppearanceKey(name??'')===wrapper;
     const frozen=input.singleCharacter;
     input={...input,message:{...input.message,name:''},
@@ -2267,7 +2271,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
 
   const cardIdentity = buildCardIdentity(visualContext);
   planner = repairScenarioSubjects(planner, {
-    name: visualContext.characterIdentity?.name ?? "",
+    name: attachedCardName,
     explicitScenario: cardRole === "scenario",
     hasCharacterIdentity: cardRole === "character" || Boolean(cardIdentity && isUsableIdentity(cardIdentity.name, cardIdentity.tags))
   });
@@ -2424,7 +2428,26 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
       const pose = cueIsUser
         ? selectPoseExpression(POSE_EXPRESSION_CATALOGUE, cue.paragraphIndex, "", "listen")
         : selectPoseExpression(POSE_EXPRESSION_CATALOGUE, cue.paragraphIndex, paragraph?.text ?? "", cue.expression);
-      const selection = resolveImageTemplate(input.config, input.config.dynamicImageTemplates ? cue.templateId : undefined);
+      let selection = resolveImageTemplate(input.config, input.config.dynamicImageTemplates ? cue.templateId : undefined);
+      const originalSnapshot=timeline.snapshots[cue.paragraphIndex]!;
+      const activeProposal=[...proposals].reverse().find(proposal=>proposal.startParagraph<=cue.paragraphIndex);
+      const personaSubject=selection.template.subjectMode==='one'?scenarioPersonaSubject({
+        role:cardRole,cardName:attachedCardName,
+        cardHasIdentity:Boolean(cardIdentity&&isUsableIdentity(cardIdentity.name,cardIdentity.tags)),
+        currentName:originalSnapshot.character,currentIdentity:originalSnapshot.identity,cueName:cue.character,
+        visible:cue.visibleCharacters??activeProposal?.cast??[],paragraph:paragraph?.text??'',persona:visualContext.personaIdentity??null,
+      }):null;
+      const pictureSnapshot=personaSubject?{character:personaSubject.name,characterId:characterIdFor(personaSubject.name),subjectCategory:subjectCategoryFromTags(personaSubject.identity),identity:personaSubject.identity,attire:null}:originalSnapshot;
+      // A scenario/card sprite is not a reference for the player's body.
+      if(personaSubject)selection={template:{...selection.template,referencePolicy:'none'},fallbackReason:'Selected the present player persona from this paragraph using their own description; no scenario-card portrait reference is used.'};
+      // A world card is not a portrait subject. When planning succeeded but
+      // supplied no usable person, illustrate its established setting instead
+      // of scheduling an impossible portrait. Do not guess scenery offline or
+      // override a disabled environment template / a genuine character card.
+      if(cardRole==='scenario'&&!usedFallback&&selection.template.subjectMode==='one'&&!pictureSnapshot.identity.trim()){
+        const environmentTemplate=input.config.imageTemplates.find(template=>template.enabled&&template.category==='environment'&&template.subjectMode==='none');
+        if(environmentTemplate)selection={template:templateSnapshot(environmentTemplate),fallbackReason:'No drawable character appearance was resolved for this scenario. Showing the established setting without people; correct the subject to draw a character.'};
+      }
       const visible = cue.visibleCharacters ?? [...scene.cast, ...(personaName ? [personaName] : [])];
       const ensembleSubjects: Array<{name:string;appearance:string;attire?:string;persona?:boolean}> = [];
       for (const name of visible) {
@@ -2451,20 +2474,20 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
         visualFocus: cue.visualFocus ?? "",
         ensembleSubjects: ensembleSubjects.length <= 16 ? ensembleSubjects : [...ensembleSubjects.filter(item => !item.persona).slice(0, ensembleSubjects.some(item => item.persona) ? 15 : 16), ...ensembleSubjects.filter(item => item.persona).slice(0, 1)].slice(0,16),
         ...(ensembleSubjects.length > 16 ? {ensembleOverflow:ensembleSubjects.length-16} : {}),
-        visualSources: input.simTrackerEvidence?.sourceMessageId ? [`SimTracker:${input.simTrackerEvidence.sourceMessageId}`] : [],
+        visualSources: [...(input.simTrackerEvidence?.sourceMessageId ? [`SimTracker:${input.simTrackerEvidence.sourceMessageId}`] : []),...(personaSubject?['current persona description']:[])],
         trackerStatus: input.config.includeSimTrackerContext ? input.simTrackerEvidence?.status ?? "not_found" : "disabled",
         ...(input.simTrackerEvidence?.sourceMessageId ? { trackerSourceMessageId: input.simTrackerEvidence.sourceMessageId } : {}),
-        action: cueIsUser ? null : normalizeActionProp(cue.action),
+        action: cueIsUser&&!personaSubject ? null : normalizeActionProp(cue.action),
         expression: null,
-        poseExpressionId: pose.id,
-        character: timeline.snapshots[cue.paragraphIndex]!.character,
-        ...(timeline.snapshots[cue.paragraphIndex]!.character ? {
-          characterId: timeline.snapshots[cue.paragraphIndex]!.characterId,
-          subjectCategory: timeline.snapshots[cue.paragraphIndex]!.subjectCategory
+        poseExpressionId: personaSubject?'idle':pose.id,
+        character: pictureSnapshot.character,
+        ...(pictureSnapshot.character ? {
+          characterId: pictureSnapshot.characterId,
+          subjectCategory: pictureSnapshot.subjectCategory
         } : {}),
-        attire: timeline.snapshots[cue.paragraphIndex]!.attire ?? undefined,
-        resolvedIdentity: timeline.snapshots[cue.paragraphIndex]!.identity,
-        resolvedAttire: timeline.snapshots[cue.paragraphIndex]!.attire,
+        attire: pictureSnapshot.attire ?? undefined,
+        resolvedIdentity: pictureSnapshot.identity,
+        resolvedAttire: pictureSnapshot.attire,
         ...(effectMap.has(cue.paragraphIndex) ? { effect: effectMap.get(cue.paragraphIndex)! } : {}),
         promptDelta: "",
         assetJobId: id("asset", `${sourceFingerprint}:${cue.paragraphIndex}:${index}`),

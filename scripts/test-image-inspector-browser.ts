@@ -32,21 +32,27 @@ try{
   assert.equal(await studio.getByLabel('Picture',{exact:true}).isVisible(),true,'four pictures use compact accessible selector');
   assert.equal(await studio.locator('[data-picture-strip]').isVisible(),false);
   await studio.locator('[data-prompt-actions] summary').click();
+  await page.evaluate(()=>{const f=(window as any).imageFixture;const t=structuredClone(f.multi);t.imageRequests[1].imagePromptMetadata={...f.metadata,brief:{...f.metadata.brief,action:'Picture two draft'}};f.studio.setTurn(t);});
   await studio.getByRole('button',{name:'Rewrite prompt',exact:true}).click();
   assert.equal((await page.evaluate(()=>(window as any).imageFixture.actions.at(-1))).type,'vn_regenerate_image_prompt');
   await page.evaluate(()=>{const f=(window as any).imageFixture;const t=structuredClone(f.multi);t.imageRequests.push({...t.imageRequests[1],requestId:'rewritten',prompt:'New wording'});f.studio.setTurn(t);});
   assert.equal(await positive.inputValue(),'New wording');
   const revision=studio.locator('[data-rewrite-changed]');
   assert.equal(await revision.isVisible(),true);
+  assert.match(await revision.locator('[data-revision-scene]').innerText(),/Review action.*may have been paraphrased/);
   assert.match(await revision.locator('[data-revision-fields]').innerText(),/Positive: 17 → 11/);
   const comparisonCount=await page.evaluate(()=>(window as any).imageFixture.actions.length);
   await revision.locator('summary').click();
   const previousPositive=studio.getByLabel('Previous positive prompt',{exact:true});
   assert.equal(await previousPositive.inputValue(),'Picture two draft');
+  assert.match(await revision.locator('[data-previous-scene]').innerText(),/Previous action: Picture two draft/);
   assert.equal(await previousPositive.getAttribute('readonly'),'');
   await positive.fill('Local edit');
   assert.match(await revision.locator('[data-revision-fields]').innerText(),/Positive: 17 → 10/);
   assert.equal(await previousPositive.inputValue(),'Picture two draft','baseline stays fixed while editing');
+  await positive.fill('Picture two draft with additional detail');
+  assert.equal(await revision.locator('[data-revision-scene]').isVisible(),false,'exact wording comparison updates during local edits');
+  await positive.fill('Local edit');
   for(const width of [320,390,1280]){
     await page.setViewportSize({width,height:844});
     assert.equal(await previousPositive.evaluate(el=>el.getBoundingClientRect().right<=innerWidth),true,'comparison stays within viewport');
@@ -99,6 +105,13 @@ try{
   const options=await studio.getByLabel('Picture',{exact:true}).locator('option').allTextContents();
   assert.match(options[0]!,/Background/);assert.match(options[1]!,/Portrait.*Mira/);
   await studio.getByLabel('Picture',{exact:true}).selectOption('cast-1');assert.match(await studio.locator('[data-paragraph]').innerText(),/Portrait.*Paragraph 1/);
+  await studio.locator('[data-close]').click();
+  await page.evaluate(()=>{const f=(window as any).imageFixture;const t=structuredClone(f.turn);t.assets[0].status='failed';t.assets[0].error='No usable appearance was resolved for "Made in Abyss RPG".';t.imageRequests=[];t.cardRoleAvailable=true;t.cardRole='auto';f.studio.setTurn(t);});
+  const beforeRecovery=await page.evaluate(()=>(window as any).imageFixture.actions.length);
+  await studio.locator('[data-launch]').click();
+  assert.equal(await studio.locator('[data-card-role]').getAttribute('open'),'');
+  assert.equal(await studio.getByLabel('Card role',{exact:true}).isVisible(),true);
+  assert.equal(await page.evaluate(()=>(window as any).imageFixture.actions.length),beforeRecovery,'opening subject recovery is local');
   assert.deepEqual(errors,[],'no runtime errors or framework overlays');
   console.log('Image inspector browser checks passed (planning, empty, budget, held, draft switching, rewrite restore, terminal states, mobile focus and responsive bounds).');
 }finally{await browser.close();server.close();}

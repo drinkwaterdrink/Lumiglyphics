@@ -74,6 +74,15 @@ describe("host stage errors", () => {
     expect(error.retryable).toBe(true);
     expect(error.retryScope).toBe("Try again keeps 1 finished image and makes 1 unfinished image again.");
   });
+  test('missing resolved appearance points to correction rather than retrying the same saved plan',()=>{
+    const detail='No usable appearance was resolved for "Made in Abyss RPG". Replan this turn with a character description; the previous character will not be substituted.';
+    const error=describeImageFailure(turn('ready',[asset('failed')]),detail);
+    expect(error.retryable).toBe(false);
+    expect(error.retryScope).toBeUndefined();
+    expect(error.message).toContain('correct the subject');
+    expect(error.message).toContain('Scenario');
+    expect(error.detail).toBe(detail);
+  });
 
   test("operation errors map to friendly messages and retryability depends on a loaded turn", () => {
     expect(describeOperationError("plan_turn", "boom", null)).toEqual({ message: "The scene could not be planned.", detail: "boom", source: "planner", retryable: false });

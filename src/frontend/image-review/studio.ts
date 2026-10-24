@@ -1,5 +1,6 @@
 import type {ImageRetryQueueView} from '../../shared/image-retries.js';
 import {promptRevisionSummary} from './prompt-revision.js';
+import {retainedSceneEvidence,changedSceneEvidence,type SceneEvidence} from '../../shared/prompt-scene-evidence.js';
 import {promptProfileSummary} from "../../shared/image-prompt-profile.js";
 import {assertCapabilityOutput} from '../../shared/model-output-capabilities.js';
 import {inspectorState,pictureStateLabel,pictureStateSummary} from './inspector-model.js';
@@ -26,7 +27,7 @@ const CSS = `
 @media(max-height:500px){section{inset:max(76px,calc(env(safe-area-inset-top) + 64px)) 8px max(12px,env(safe-area-inset-bottom));width:auto;max-height:none}[data-studio-header],[data-studio-footer]{padding:8px 12px}[data-studio-footer] .row{flex-wrap:nowrap;overflow-x:auto}[data-studio-footer] .row button{flex:none}[data-studio-footer] [data-notice]{max-height:12dvh}}
 `;
 const INSPECTOR_CSS=`
-:host{--paper:var(--vn-shell-panel,#171822)}section{width:min(510px,calc(100% - 24px));color:var(--vn-shell-text,#eee)}section small,section p{color:var(--vn-shell-muted,#bbc)}[data-studio-body]{padding-top:14px}details{border-top:1px solid var(--edge);margin:8px 0 0}summary{font-weight:600}[data-context]{display:flex;gap:12px;align-items:flex-start;margin:12px 0 8px}[data-context-text]{min-width:0;flex:1}[data-status]{font-size:16px;display:block}[data-paragraph]{display:block;margin-top:3px}[data-scene]{margin:6px 0 0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;font-size:13px}[data-thumbnail]{width:68px;height:84px;flex:none;border:1px solid var(--edge);border-radius:8px;background:var(--vn-shell-field,#101119);display:grid;place-items:center;overflow:hidden}[data-thumbnail] img{width:100%;height:100%;object-fit:cover}[data-placeholder]{font-size:30px;color:var(--accent)}[data-state-detail]{margin:8px 0}[data-meta]{font-size:12px;margin:8px 0}[data-prompt-editor]{margin:16px 0}[data-edit-help]{font-size:12px;margin:0 0 6px}label{font-weight:500;margin:10px 0}label small{float:right;font-weight:400;font-size:11px}textarea{margin-top:6px;font:16px/1.5 var(--vn-shell-family,system-ui)}[data-positive]{min-height:145px;resize:vertical}[data-negative]{min-height:72px;resize:vertical}[data-combined-count]{display:block;font-variant-numeric:tabular-nums;text-align:right}[data-validation]{display:block;color:var(--vn-shell-danger,#ffb4ab);margin:6px 0}[aria-invalid="true"]{border-color:var(--vn-shell-danger,#ffb4ab)}[data-picture-strip]{display:flex;gap:8px}[data-picture-strip] button{flex:1;min-width:0;padding:6px;font-size:12px;display:flex;align-items:center;gap:6px}[data-picture-strip] img{width:28px;height:32px;object-fit:cover;border-radius:3px}[data-picture-strip] [aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}[data-picture-navigation] label{margin:0}[data-studio-footer] .row{display:block}[data-studio-footer] button{width:100%;border-color:var(--accent);font-weight:650}[data-action-help]{display:block;font-size:12px;text-align:center;margin-top:6px}[data-notice-row]{border-top:1px solid var(--edge);margin-top:10px}[data-notice]{font-size:12px}[data-rewrite-changed]{padding:8px;border:1px solid var(--accent);border-radius:6px;margin:8px 0}[data-rewrite-changed] p{margin:0 0 8px}[data-reply-settings] details{margin-left:8px}[data-secondary-actions]{margin-bottom:8px}[data-secondary-actions] button{font-size:13px}[data-subject-name]{width:100%}
+:host{--paper:var(--vn-shell-panel,#171822)}section{width:min(510px,calc(100% - 24px));color:var(--vn-shell-text,#eee)}section small,section p{color:var(--vn-shell-muted,#bbc)}[data-studio-body]{padding-top:14px}details{border-top:1px solid var(--edge);margin:8px 0 0}summary{font-weight:600}[data-context]{display:flex;gap:12px;align-items:flex-start;margin:12px 0 8px}[data-context-text]{min-width:0;flex:1}[data-status]{font-size:16px;display:block}[data-paragraph]{display:block;margin-top:3px}[data-scene]{margin:6px 0 0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;font-size:13px}[data-thumbnail]{width:68px;height:84px;flex:none;border:1px solid var(--edge);border-radius:8px;background:var(--vn-shell-field,#101119);display:grid;place-items:center;overflow:hidden}[data-thumbnail] img{width:100%;height:100%;object-fit:cover}[data-placeholder]{font-size:30px;color:var(--accent)}[data-state-detail]{margin:8px 0}[data-meta]{font-size:12px;margin:8px 0}[data-prompt-editor]{margin:16px 0}[data-edit-help]{font-size:12px;margin:0 0 6px}label{font-weight:500;margin:10px 0}label small{float:right;font-weight:400;font-size:11px}textarea{margin-top:6px;font:16px/1.5 var(--vn-shell-family,system-ui)}[data-positive]{min-height:145px;resize:vertical}[data-negative]{min-height:72px;resize:vertical}[data-combined-count]{display:block;font-variant-numeric:tabular-nums;text-align:right}[data-validation]{display:block;color:var(--vn-shell-danger,#ffb4ab);margin:6px 0}[aria-invalid="true"]{border-color:var(--vn-shell-danger,#ffb4ab)}[data-picture-strip]{display:flex;gap:8px}[data-picture-strip] button{flex:1;min-width:0;padding:6px;font-size:12px;display:flex;align-items:center;gap:6px}[data-picture-strip] img{width:28px;height:32px;object-fit:cover;border-radius:3px}[data-picture-strip] [aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}[data-picture-navigation] label{margin:0}[data-studio-footer] .row{display:block}[data-studio-footer] button{width:100%;border-color:var(--accent);font-weight:650}[data-action-help]{display:block;font-size:12px;text-align:center;margin-top:6px}[data-notice-row]{border-top:1px solid var(--edge);margin-top:10px}[data-notice]{font-size:12px}[data-rewrite-changed]{padding:8px;border:1px solid var(--accent);border-radius:6px;margin:8px 0}[data-rewrite-changed] p{margin:0 0 8px}[data-previous-scene]{padding-left:20px;overflow-wrap:anywhere}[data-reply-settings] details{margin-left:8px}[data-secondary-actions]{margin-bottom:8px}[data-secondary-actions] button{font-size:13px}[data-subject-name]{width:100%}
 section[data-state="planning"],section[data-state="empty"],section[data-state="zero-budget"],section[data-state="idle"]{bottom:auto;max-height:calc(100% - 92px)}
 @container(max-width:600px){section{width:auto}[data-context]{gap:10px}[data-studio-body]{padding:12px}[data-thumbnail]{width:56px;height:72px}}
 `;
@@ -40,7 +41,7 @@ export class ImageStudio {
   private selectedJob = "";
   private planningChat = '';
   private maxImagesPerTurn: number | undefined;
-  private previousWording = new Map<string, Draft & {requestId:string}>();
+  private previousWording = new Map<string, Draft & {requestId:string;sceneEvidence:SceneEvidence[]}>();
   private selectedRequest = "";
   private drafts = new Map<string, Draft>();
   private submitted = new Set<string>();
@@ -229,7 +230,7 @@ export class ImageStudio {
     }
     const validation=document.createElement('small');validation.dataset.validation='';validation.role='alert';validation.hidden=true;editor.append(validation);
     const changed=document.createElement('div');changed.dataset.rewriteChanged='';changed.hidden=true;
-    changed.innerHTML='<p>Rewrite ready. Review the wording before generating.</p><p data-revision-count></p><small data-revision-fields></small><details><summary>Compare previous wording</summary><p>The draft captured when you requested this rewrite. Your current wording is in the editors above. Counts do not verify that every detail was preserved.</p><label>Previous positive prompt<textarea readonly data-previous-positive></textarea></label><label>Previous negative prompt<textarea readonly data-previous-negative></textarea></label></details><button type="button" data-restore-wording>Restore previous wording</button>';editor.append(changed);
+    changed.innerHTML='<p>Rewrite ready. Review the wording before generating.</p><p data-revision-count></p><small data-revision-fields></small><p data-revision-scene hidden></p><details><summary>Compare previous wording</summary><p>The draft captured when you requested this rewrite. Your current wording is in the editors above. Counts do not verify that every detail was preserved.</p><ul data-previous-scene hidden></ul><label>Previous positive prompt<textarea readonly data-previous-positive></textarea></label><label>Previous negative prompt<textarea readonly data-previous-negative></textarea></label></details><button type="button" data-restore-wording>Restore previous wording</button>';editor.append(changed);
     const actions=document.createElement('details');actions.dataset.promptActions='';actions.innerHTML='<summary>Prompt actions</summary><div class="row" data-secondary-actions></div><small>Rewrite prompt uses your story-reader model and text tokens. It replaces the preview wording. Image generation is a separate action after approval.</small>';
     for(const selector of ['[data-regenerate-prompt]','[data-reset]','[data-copy]','[data-skip]','[data-retry-image]','[data-prepare]'])actions.querySelector('[data-secondary-actions]')!.append(this.el(selector));
     const retry=document.createElement('button');retry.type='button';retry.dataset.retrySaved='';retry.textContent='Prepare from saved scene';actions.querySelector('[data-secondary-actions]')!.append(retry);editor.append(actions);
@@ -276,6 +277,11 @@ export class ImageStudio {
       this.el('[data-revision-fields]').textContent=([['Positive',result.positive],['Negative',result.negative]] as const).map(([name,field])=>`${name}: ${field.before.toLocaleString()} → ${field.after.toLocaleString()}${field.changed?'':' (unchanged)'}`).join(' · ');
       this.el<HTMLTextAreaElement>('[data-previous-positive]').value=previous.prompt;
       this.el<HTMLTextAreaElement>('[data-previous-negative]').value=previous.negative;
+      const changed=changedSceneEvidence(previous.sceneEvidence,this.el<HTMLTextAreaElement>('[data-positive]').value);
+      const note=this.el('[data-revision-scene]');note.hidden=!changed.length;
+      note.textContent=changed.length?`Review ${changed.map(entry=>entry.field).join(' and ')}: the exact previous wording changed. It may have been paraphrased; check who does what and where.`:'';
+      const list=this.el('[data-previous-scene]');list.hidden=!previous.sceneEvidence.length;list.replaceChildren();
+      for(const entry of previous.sceneEvidence){const item=document.createElement('li');item.textContent=`Previous ${entry.field}: ${entry.text}`;list.append(item);}
     }
     let total=0;
     for(const name of ['positive','negative'] as const) {
@@ -403,6 +409,13 @@ export class ImageStudio {
     if(!this.el<HTMLElement>('section').hidden)return;
     this.selectedJob=this.turn?.assets.filter(asset=>asset.paragraphIndex<=this.cursor).at(-1)?.jobId??this.selectedJob;this.selectedRequest='';
     this.render();this.setOpen(true);this.el<HTMLElement>('[data-studio-body]').scrollTop=0;this.el<HTMLButtonElement>('[data-close]').focus({preventScroll:true});
+    const asset=this.turn?.assets.find(entry=>entry.jobId===this.selectedJob);
+    if(asset?.error?.startsWith('No usable appearance was resolved for ')){
+      this.el<HTMLDetailsElement>('[data-reply-settings]').open=true;
+      this.el<HTMLDetailsElement>('[data-turn-recovery]').open=true;
+      const target=this.turn?.cardRoleAvailable?this.el<HTMLDetailsElement>('[data-card-role]'):this.el<HTMLDetailsElement>('[data-recovery]');
+      if(!target.hidden){target.open=true;target.scrollIntoView({block:'nearest'});}
+    }
   }
   private noticeKey(text:string):string {return JSON.stringify([this.turn?.chatId,this.turn?.messageId,this.turn?.swipeId,this.turn?.sourceFingerprint,this.turn?.revision,this.selectedJob,this.selectedRequest,this.records().at(-1)?.requestId,text]);}
   private setNotice(text:string):void {
@@ -424,7 +437,7 @@ export class ImageStudio {
     }catch(error){this.showError(error instanceof Error?error.message:String(error));return;}
     if(record){
       if(this.previousWording.size>=12)this.previousWording.delete(this.previousWording.keys().next().value!);
-      this.previousWording.set(this.selectedJob,{requestId:record.requestId,prompt:this.el<HTMLTextAreaElement>('[data-positive]').value,negative:this.el<HTMLTextAreaElement>('[data-negative]').value,parameters:this.el<HTMLTextAreaElement>('[data-parameters]').value});
+      this.previousWording.set(this.selectedJob,{requestId:record.requestId,sceneEvidence:retainedSceneEvidence(this.el<HTMLTextAreaElement>('[data-positive]').value,record.imagePromptMetadata?.brief),prompt:this.el<HTMLTextAreaElement>('[data-positive]').value,negative:this.el<HTMLTextAreaElement>('[data-negative]').value,parameters:this.el<HTMLTextAreaElement>('[data-parameters]').value});
     }
     if(record?.state==='review'){
       this.rerolling.add(record.requestId);this.render();

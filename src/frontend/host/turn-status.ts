@@ -98,6 +98,10 @@ export function describeImageFailure(
   turn: Pick<TurnView, "status" | "assets">,
   assetError: string | undefined,
 ): HostStageError {
+  if(assetError?.startsWith('No usable appearance was resolved for '))return {
+    message:'This picture needs a subject appearance. Open Image prompts to correct the subject, or set the card role to Scenario and replan this reply.',
+    detail:assetError,source:'image',retryable:false,
+  };
   return {
     message: "This scene image could not be made.",
     ...(assetError ? { detail: assetError } : {}),

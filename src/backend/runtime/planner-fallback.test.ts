@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ChatMessageDTO, SpindleAPI } from "lumiverse-spindle-types";
 import { DEFAULT_CONFIG } from "../../config.js";
 import { emptySingleCharacter } from "../core/visual-state.js";
-import { compileImagePrompt } from "./images.js";
+import { compileImagePrompt,createAssetJobs,generateAssets } from "./images.js";
 import { planTurn } from "./planner.js";
 
 const message: ChatMessageDTO & { role: "assistant" } = {
@@ -246,6 +246,44 @@ describe("fresh single-character fallback", () => {
 
 
 describe("explicit scenario card role", () => {
+ test('a present named persona can be pictured when a new scenario has no drawable NPC',async()=>{
+  for(const cardRole of ['auto','scenario'] as const){
+   const spindle=spindleFor('emptyCharacters',{systemMessage:''},{cardName:'Made in Abyss RPG',cardDescription:'A narrator for an academy scenario.',sceneCharacter:'Made in Abyss RPG',plannerCharacterName:'Aleister Crowley'});
+   (spindle.personas as any).getActive=async()=>({id:'persona',name:'Aleister Crowley',description:'black hair, brown eyes'});
+   const planningConfig={...DEFAULT_CONFIG,includeCharacterContext:cardRole!=='scenario'};
+   const result=await planTurn(spindle,{chatId:'chat-1',message:{...message,name:'Made in Abyss RPG'},content:'Aleister Crowley lands in the courtyard.',previousScene:null,previousContinuity:null,recentMessages:[],config:planningConfig,singleCharacter:emptySingleCharacter(),characterAppearance:{},cardRole});
+   const cue=result.plan.visualCues[0]!;
+   expect(cue.character).toBe('Aleister Crowley');
+   expect(cue.resolvedIdentity).toContain('black hair');
+   expect(cue.imageTemplate?.subjectMode).toBe('one');
+   expect(cue.imageTemplate?.referencePolicy).toBe('none');
+   expect(Object.values(result.characterRegistry).some(entry=>entry.name==='Aleister Crowley')).toBe(false);
+   const sent:any[]=[];
+   Object.assign(spindle,{userStorage:{getJson:async(_path:string,options:any)=>options.fallback},imageGen:{generate:async(request:any)=>{sent.push(request);return {imageId:'fixture-image'};}}});
+   const config={...DEFAULT_CONFIG,referenceAnchoring:false};
+   const jobs=await generateAssets(spindle,result.plan,createAssetJobs(result.plan,config),config,new AbortController().signal,()=>{},'fixture-user');
+   expect(jobs[0]?.status).toBe('generated');
+   expect(sent).toHaveLength(1);
+   expect(sent[0].prompt).toContain('black hair');
+   expect(sent[0].prompt).not.toContain('Made in Abyss RPG');
+  }
+ });
+ test('opening world-card fallback prepares the established setting instead of an impossible portrait',async()=>{
+  const result=await planTurn(spindleFor('emptyCharacters',{systemMessage:''},{cardName:'Made in Abyss RPG',cardDescription:'A narrator for an academy scenario.'}),{chatId:'chat-1',message:{...message,name:'Made in Abyss RPG'},content:'The old observatory contains a brass telescope.',previousScene:null,previousContinuity:null,recentMessages:[],config:DEFAULT_CONFIG,singleCharacter:emptySingleCharacter(),characterAppearance:{},cardRole:'scenario'});
+  const cue=result.plan.visualCues[0]!;
+  expect(cue.imageTemplate?.subjectMode).toBe('none');
+  expect(cue.imageTemplateReason).toContain('No drawable character');
+  expect(compileImagePrompt(DEFAULT_CONFIG,result.plan.scenes[0]!,cue)).not.toContain('Made in Abyss RPG');
+  expect(cue.resolvedIdentity).toBe('');
+  expect(compileImagePrompt(DEFAULT_CONFIG,result.plan.scenes[0]!,cue)).toContain('Observatory');
+ });
+ test('setting fallback respects disabled environment templates and does not invent scenery after planner failure',async()=>{
+  for(const behaviour of ['emptyCharacters','fail'] as const){
+   const config=behaviour==='fail'?DEFAULT_CONFIG:{...DEFAULT_CONFIG,imageTemplates:DEFAULT_CONFIG.imageTemplates.map(template=>template.category==='environment'?{...template,enabled:false}:template)};
+   const result=await planTurn(spindleFor(behaviour,{systemMessage:''},{cardName:'World narrator',cardDescription:'A narrator for a scenario.'}),{chatId:'chat-1',message:{...message,name:'World narrator'},content:'The courtyard is empty.',previousScene:null,previousContinuity:null,recentMessages:[],config,singleCharacter:emptySingleCharacter(),characterAppearance:{},cardRole:'scenario'});
+   expect(result.plan.visualCues[0]?.imageTemplate?.subjectMode).toBe('one');
+  }
+ });
  test("world-card fallback never draws the wrapper even when it has appearance-like fields", async () => {
   const captured={systemMessage:""};
   const spindle=spindleFor("fail",captured,{cardName:"Rookhaven Academy",cardDescription:"silver hair, green eyes",sceneCharacter:"Rookhaven Academy"});
@@ -257,6 +295,7 @@ describe("explicit scenario card role", () => {
   const captured={systemMessage:""};
   const result=await planTurn(spindleFor("success",captured,{cardName:"Rookhaven Academy",plannerCharacterName:"Aleister",plannerCharacterDescription:"black hair, brown eyes",sceneCharacter:"Rookhaven Academy"}),{chatId:"chat-1",message:{...message,name:"Rookhaven Academy"},content:"Aleister enters the courtyard.",previousScene:null,previousContinuity:null,recentMessages:[],config:DEFAULT_CONFIG,singleCharacter:emptySingleCharacter(),characterAppearance:{},cardRole:"scenario"});
   expect(result.singleCharacter.protagonist.name).toBe("Aleister");
+  expect(result.plan.visualCues[0]?.imageTemplate?.subjectMode).toBe('one');
   expect(result.plan.visualCues.some(c=>c.character==="Rookhaven Academy")).toBe(false);
  });
 });
