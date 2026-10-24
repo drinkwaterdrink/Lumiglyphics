@@ -33,6 +33,7 @@ import { POSE_EXPRESSION_CATALOGUE, poseById } from "../../shared/character.js";
 import { compileActionProp } from "../../shared/action-prop.js";
 import { renderImageTemplate, templateSnapshot, type ImagePromptMetadata } from "../../shared/image-templates.js";
 import {adaptImagePrompt} from './prompt-adaptation.js';
+import {sharedStyleSnapshot} from '../../shared/shared-style-snapshot.js';
 import { buildVisualBrief, resolveTemplateIdentity } from "./visual-brief.js";
 import {
   appearanceMapKeyFor,
@@ -1289,6 +1290,7 @@ export async function generateAssets(
             ...(selectedCue.presentationRuleTrace ? {presentationRuleTrace:selectedCue.presentationRuleTrace} : {}),
             template: selectedCue.imageTemplate, selectionReason: selectedCue.imageTemplateReason ?? "Default template", format: config.imagePromptFormat,
             brief: compileTemplateCue(config, scene, selectedCue, characterAppearance).brief,
+            sharedStyle:sharedStyleSnapshot(config,selectedCue.imageTemplate),
             trackerStatus: selectedCue.trackerStatus ?? (config.includeSimTrackerContext ? "not_found" : "disabled"),
             ...(selectedCue.trackerSourceMessageId ? { trackerSourceMessageId: selectedCue.trackerSourceMessageId } : {})
           } : undefined;

@@ -1,5 +1,6 @@
 import { templateSnapshot, type ImagePromptMetadata } from "../src/shared/image-templates.js";
 import { DEFAULT_CONFIG } from "../src/config.js";
+import {sharedStyleSnapshot} from '../src/shared/shared-style-snapshot.js';
 import { ImageStudio } from "../src/frontend/image-review/studio.js";
 import type { TurnView } from "../src/protocol.js";
 import { VnStage } from '../src/frontend/stage/vn-stage.js';
@@ -18,4 +19,4 @@ const turn: TurnView = {
 };
 const metadata: ImagePromptMetadata = { template: templateSnapshot(DEFAULT_CONFIG.imageTemplates[0]!), selectionReason: "A quiet character reaction", format: "description", trackerStatus: "detected", trackerSourceMessageId: "tracker-message", brief: { scene: "Library", subjects: "One character", action: "Looking through the window", composition: "portrait", lighting: "Window light", subjectMode: "one", framing: "portrait", referencePolicy: "character", sources: ["Saved appearance override", "Story scene"], conflicts: ["Saved identity retained"] } };
 studio.setTurn(turn);
-(window as any).imageFixture = { actions, visibility,stage, studio, turn, config: DEFAULT_CONFIG, metadata };
+(window as any).imageFixture = { actions, visibility,stage, studio, turn, config: DEFAULT_CONFIG, metadata,sharedStyleSnapshot };
