@@ -238,8 +238,7 @@ function abortAssetBatch(key: string, reason: string): void {
   const controller = assetControllers.get(key);
   if (!controller) return;
   controller.abort(reason);
-  assetControllers.delete(key);
-  imageReviewGates.delete(key);
+  releaseAbortedImageBatch(key);
 }
 
 /**
@@ -1957,7 +1956,12 @@ function reconcileMessageEvent(spindle: SpindleAPI, payload: unknown, userId?: s
     const messages=await spindle.chat.getMessages(event.chatId) as NormalizedChatMessage[];
     if([...messages].reverse().find(m=>!m.is_user&&m.content.trim())?.id!==event.message.id)return;
     // A newer version of the message supersedes any intake still resolving.
+    const key = runtimeKey(userId, event.chatId);
     bumpIntakeEpoch(userId, event.chatId);
+    // The replaced reply's pictures are no longer this turn's pictures: stop
+    // paying for them now instead of when the next plan happens to start.
+    activeTurnKeys.delete(key);
+    abortAssetBatch(key, "The reply changed while its pictures were being generated.");
     releaseSceneCacheAdmission(spindle, userId, event.chatId, "message_changed");
     await processAssistantMessage(spindle, event.chatId, event.message, event.message.content, userId);
   })().catch((error) => {

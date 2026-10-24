@@ -54,6 +54,13 @@ test('a history change during deferred optional storage reads rejects the result
  const result=readReferenceHistory(f.api,f.target,'user');while(!started)await new Promise(resolve=>setTimeout(resolve,1));
  f.messages[1]!.content='A different branch choice';release(f.prior);expect(await result).toBeUndefined();
 });
+test('the deadline stops the scan between records instead of only returning early',async()=>{
+ const f=await fixture();
+ // A slow storage read that would still succeed well inside the default 750ms.
+ f.api.userStorage.getJson=async(path:string,options:any)=>{await new Promise(resolve=>setTimeout(resolve,20));return f.data.get(path)??options.fallback;};
+ expect((await readReferenceHistory(f.api,f.target,'user',750))?.entries).toHaveLength(1);
+ expect(await readReferenceHistory(f.api,f.target,'user',5)).toBeUndefined();
+});
 test('an optional read deadline returns without invalidating the primary record',async()=>{
  const f=await fixture();f.api.chat.getMessages=async()=>new Promise(()=>{});
  expect(await readReferenceHistory(f.api,f.target,'user',5)).toBeUndefined();expect(f.target.status).toBe('ready');

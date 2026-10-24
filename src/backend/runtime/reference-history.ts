@@ -31,9 +31,12 @@ export function referenceMessages(messages:readonly unknown[],targetId:string):M
  }return undefined;
 }
 async function hash(text:string):Promise<string>{const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));return Array.from(new Uint8Array(bytes),byte=>byte.toString(16).padStart(2,'0')).join('');}
-async function frames(messages:readonly Message[],chatId:string):Promise<Frame[]> {
+/** The prefix chain is byte-identical to the old one; only the deadline is new.
+ *  `null` means the reader gave up and is treated like every other early return. */
+async function frames(messages:readonly Message[],chatId:string,deadline=Number.POSITIVE_INFINITY):Promise<Frame[]|null> {
  let prefix=await hash(JSON.stringify([1,chatId])),replyNumber=0;const result:Frame[]=[];
  for(const [index,message] of messages.entries()){
+  if(Date.now()>=deadline)return null;
   prefix=await hash(JSON.stringify([prefix,message]));if(!message.is_user&&message.role!=='system')replyNumber++;
   result.push({message,prefixDigest:prefix,messageCount:index+1,replyNumber});
  }return result;
@@ -44,7 +47,7 @@ async function matches(record:StoredTurnRecord,frame:Frame):Promise<boolean>{
  return samePresentationTurn(certificate.key,record.plan.key)&&record.plan.key.assistantMessageId===frame.message.id&&String(record.plan.key.swipeId??0)===String(frame.message.swipe_id)&&certificate.prefixDigest===frame.prefixDigest&&certificate.messageCount===frame.messageCount&&certificate.paragraphDigest===await hash(JSON.stringify(record.plan.paragraphs.map(p=>p.text)));
 }
 export async function captureReferenceLineage(messages:readonly unknown[],plan:TurnPlan,expectedRawContent?:string):Promise<ReferenceLineage|undefined>{
- try{const snapshot=referenceMessages(messages,plan.key.assistantMessageId);if(!snapshot)return undefined;const frame=(await frames(snapshot,plan.key.chatId)).at(-1)!;
+ try{const snapshot=referenceMessages(messages,plan.key.assistantMessageId);if(!snapshot)return undefined;const frame=(await frames(snapshot,plan.key.chatId))?.at(-1);if(!frame)return undefined;
   if(frame.message.is_user||frame.message.role==='system'||String(frame.message.swipe_id)!==String(plan.key.swipeId??0))return undefined;
   if(expectedRawContent!==undefined&&frame.message.content!==expectedRawContent)return undefined;
   if(needsResolution(frame.message.content)){if(expectedRawContent===undefined)return undefined;}
@@ -56,17 +59,23 @@ async function collect(api:SpindleAPI,target:StoredTurnRecord,userId:string|unde
  if(!ReferenceLineageSchema.safeParse(target.referenceLineage).success)return undefined;
  const key=target.plan.key;
  const snapshot=referenceMessages(await api.chat.getMessages(key.chatId),key.assistantMessageId);if(!snapshot)return undefined;
- const lineage=await frames(snapshot,key.chatId),last=lineage.at(-1)!;if(Date.now()>=deadline||!await matches(target,last))return undefined;
+ const lineage=await frames(snapshot,key.chatId,deadline);if(!lineage)return undefined;
+ const last=lineage[lineage.length-1]!;if(!await matches(target,last))return undefined;
  const eligible=lineage.slice(0,-1).filter(frame=>!frame.message.is_user&&frame.message.role!=='system');
  const selected=eligible.slice(-MAX_RECORDS),entries:HistoricalReference[]=[];let truncated=eligible.length>MAX_RECORDS;
- if(Date.now()>=deadline)return undefined;
- const loaded=await Promise.allSettled(selected.map(frame=>loadTurnRecord(api,turnPath(key.chatId,frame.message.id,frame.message.swipe_id),userId)));
- if(Date.now()>=deadline)return undefined;
+ // Load AND verify concurrently; every branch re-tests the deadline so a slow
+ // host cannot keep this working after the caller stopped waiting.
+ const verified=await Promise.allSettled(selected.map(async frame=>{
+  if(Date.now()>=deadline)return undefined;
+  const record=await loadTurnRecord(api,turnPath(key.chatId,frame.message.id,frame.message.swipe_id),userId);
+  if(!record||Date.now()>=deadline)return undefined;
+  if(record.plan.key.chatId!==key.chatId||needsResolution(frame.message.content))return undefined;
+  return await matches(record,frame)?record:undefined;
+ }));
  // Newest compatible description per exact kind/name/field. No alias/casing inference.
  const seen=new Set<string>();
  for(let index=selected.length-1;index>=0;index--){
-  const outcome=loaded[index]!,frame=selected[index]!;if(outcome.status!=='fulfilled'||!outcome.value)continue;const record=outcome.value;
-  if(record.plan.key.chatId!==key.chatId||needsResolution(frame.message.content)||record.plan.key.sourceFingerprint!==fingerprintForMessage(frame.message)||!await matches(record,frame))continue;
+  const outcome=verified[index]!,frame=selected[index]!;if(outcome.status!=='fulfilled'||!outcome.value)continue;const record=outcome.value;
   for(const reference of normalizeStoryReferences(record.plan.storyReferences,record.plan.paragraphs.map(p=>({text:stripTextEffectTags(p.text)}))).reverse()){
    if(!retainableReferenceField(reference.field)||!stripTextEffectTags(frame.message.content).includes(reference.evidence))continue;
    const identity=JSON.stringify([reference.kind,reference.name,reference.field]);if(seen.has(identity))continue;seen.add(identity);
@@ -74,7 +83,11 @@ async function collect(api:SpindleAPI,target:StoredTurnRecord,userId:string|unde
    entries.push({sourceKey:record.plan.key,replyNumber:frame.replyNumber,reference});
   }
  }
- const fresh=referenceMessages(await api.chat.getMessages(key.chatId),key.assistantMessageId);if(!fresh||JSON.stringify(fresh)!==JSON.stringify(snapshot))return undefined;
+ // Freshness: compare the SAME prefix chain instead of two multi-MB strings.
+ // Equal chains mean equal normalised snapshots, and a chain can be stopped.
+ const fresh=referenceMessages(await api.chat.getMessages(key.chatId),key.assistantMessageId);if(!fresh||Date.now()>=deadline)return undefined;
+ const freshLineage=await frames(fresh,key.chatId,deadline);if(!freshLineage)return undefined;
+ if(freshLineage[freshLineage.length-1]!.prefixDigest!==last.prefixDigest)return undefined;
  const parsed=ReferenceHistorySchema.safeParse({version:1,target:key,targetReplyNumber:last.replyNumber,entries,truncated});
  return parsed.success&&JSON.stringify(parsed.data).length<=256000?parsed.data:undefined;
 }
