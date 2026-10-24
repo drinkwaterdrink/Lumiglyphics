@@ -7,6 +7,7 @@ import {stripTextEffectTags} from '../../shared/text-effects.js';
 import {loadTurnRecord,turnPath,type StoredTurnRecord} from './storage.js';
 import {fingerprintForMessage} from './planner.js';
 import {needsResolution} from './message-text.js';
+import {cyrb53} from '../core/scene-image-cache.js';
 
 type Message={id:string;content:string;name:string;role:string;is_user:boolean;swipe_id:number;parent_message_id:string|null;branch_id:string|null};
 type Frame={message:Message;prefixDigest:string;messageCount:number;replyNumber:number};
@@ -31,20 +32,62 @@ export function referenceMessages(messages:readonly unknown[],targetId:string):M
  }return undefined;
 }
 async function hash(text:string):Promise<string>{const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));return Array.from(new Uint8Array(bytes),byte=>byte.toString(16).padStart(2,'0')).join('');}
+
+/**
+ * F7: prefix-chain memoization. A turn reads its ancestry up to three times
+ * (capture, collect, freshness), and each `frames()` walk otherwise issues one
+ * SHA-256 per message, up to MAX_PREFIX hashes per walk. A frame digest only
+ * depends on the previous frame digest plus this one message, so the memo key
+ * includes both: a hit under this key can only occur on a byte-identical chain.
+ * The sync cyrb53 content fingerprint costs a fraction of one subtle digest.
+ */
+const PREFIX_MEMO_LIMIT=4096,PARAGRAPH_MEMO_LIMIT=512;
+const prefixMemo=new Map<string,string>();
+const paragraphMemo=new Map<string,Promise<string>>();
+function memoGet(map:Map<string,unknown>,key:string):unknown{
+ const value=map.get(key);
+ if(value!==undefined){map.delete(key);map.set(key,value);} // LRU touch
+ return value;
+}
+function memoSet<V>(map:Map<string,V>,key:string,value:V,limit:number):void{
+ if(map.size>=limit)map.delete(map.keys().next().value!);
+ map.set(key,value);
+}
+/** Test/teardown helper; production correctness never depends on memo retention. */
+export function clearReferenceMemos():void{prefixMemo.clear();paragraphMemo.clear();}
+export function referenceMemoStats():{prefixEntries:number;paragraphEntries:number}{
+ return {prefixEntries:prefixMemo.size,paragraphEntries:paragraphMemo.size};
+}
+/** SHA-256 over the paragraph-text array, computed once per distinct content. */
+function paragraphDigest(paragraphs:ReadonlyArray<{text:string}>):Promise<string>{
+ const serialized=JSON.stringify(paragraphs.map(p=>p.text));
+ const key=`${serialized.length}:${cyrb53(serialized)}`;
+ const cached=memoGet(paragraphMemo,key) as Promise<string>|undefined;
+ if(cached)return cached;
+ const promise=hash(serialized).catch(error=>{paragraphMemo.delete(key);throw error;});
+ memoSet(paragraphMemo,key,promise,PARAGRAPH_MEMO_LIMIT);
+ return promise;
+}
 /** The prefix chain is byte-identical to the old one; only the deadline is new.
  *  `null` means the reader gave up and is treated like every other early return. */
 async function frames(messages:readonly Message[],chatId:string,deadline=Number.POSITIVE_INFINITY):Promise<Frame[]|null> {
  let prefix=await hash(JSON.stringify([1,chatId])),replyNumber=0;const result:Frame[]=[];
  for(const [index,message] of messages.entries()){
   if(Date.now()>=deadline)return null;
-  prefix=await hash(JSON.stringify([prefix,message]));if(!message.is_user&&message.role!=='system')replyNumber++;
+  // The previous prefix digest authenticates the whole ancestry: a memo hit on
+  // this key is impossible unless every earlier frame was byte-identical.
+  const memoKey=`${chatId}\u0000${index}\u0000${message.id}\u0000${message.swipe_id}\u0000${cyrb53(JSON.stringify(message))}\u0000${prefix}`;
+  const cached=memoGet(prefixMemo,memoKey) as string|undefined;
+  if(cached!==undefined)prefix=cached;
+  else{prefix=await hash(JSON.stringify([prefix,message]));memoSet(prefixMemo,memoKey,prefix,PREFIX_MEMO_LIMIT);}
+  if(!message.is_user&&message.role!=='system')replyNumber++;
   result.push({message,prefixDigest:prefix,messageCount:index+1,replyNumber});
  }return result;
 }
 async function matches(record:StoredTurnRecord,frame:Frame):Promise<boolean>{
  const parsed=ReferenceLineageSchema.safeParse(record.referenceLineage);if(!parsed.success)return false;const certificate=parsed.data;
  if(!needsResolution(frame.message.content)&&record.plan.key.sourceFingerprint!==fingerprintForMessage(frame.message))return false;
- return samePresentationTurn(certificate.key,record.plan.key)&&record.plan.key.assistantMessageId===frame.message.id&&String(record.plan.key.swipeId??0)===String(frame.message.swipe_id)&&certificate.prefixDigest===frame.prefixDigest&&certificate.messageCount===frame.messageCount&&certificate.paragraphDigest===await hash(JSON.stringify(record.plan.paragraphs.map(p=>p.text)));
+ return samePresentationTurn(certificate.key,record.plan.key)&&record.plan.key.assistantMessageId===frame.message.id&&String(record.plan.key.swipeId??0)===String(frame.message.swipe_id)&&certificate.prefixDigest===frame.prefixDigest&&certificate.messageCount===frame.messageCount&&certificate.paragraphDigest===await paragraphDigest(record.plan.paragraphs);
 }
 export async function captureReferenceLineage(messages:readonly unknown[],plan:TurnPlan,expectedRawContent?:string):Promise<ReferenceLineage|undefined>{
  try{const snapshot=referenceMessages(messages,plan.key.assistantMessageId);if(!snapshot)return undefined;const frame=(await frames(snapshot,plan.key.chatId))?.at(-1);if(!frame)return undefined;
@@ -52,7 +95,7 @@ export async function captureReferenceLineage(messages:readonly unknown[],plan:T
   if(expectedRawContent!==undefined&&frame.message.content!==expectedRawContent)return undefined;
   if(needsResolution(frame.message.content)){if(expectedRawContent===undefined)return undefined;}
   else if(plan.key.sourceFingerprint!==fingerprintForMessage(frame.message))return undefined;
-  return ReferenceLineageSchema.parse({version:1,key:plan.key,messageCount:frame.messageCount,prefixDigest:frame.prefixDigest,paragraphDigest:await hash(JSON.stringify(plan.paragraphs.map(p=>p.text)))});
+  return ReferenceLineageSchema.parse({version:1,key:plan.key,messageCount:frame.messageCount,prefixDigest:frame.prefixDigest,paragraphDigest:await paragraphDigest(plan.paragraphs)});
  }catch{return undefined;}
 }
 async function collect(api:SpindleAPI,target:StoredTurnRecord,userId:string|undefined,deadline:number):Promise<ReferenceHistory|undefined>{

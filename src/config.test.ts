@@ -7,6 +7,7 @@ import {
   TEXT_SCALE_MAX,
   TEXT_SCALE_MIN,
   normalizeConfig,
+  clearConfigMemo,
   SCENE_IMAGE_FITS,
   THEME_PRESET_IDS,
 } from "./config";
@@ -282,4 +283,30 @@ test('model prompt settings migrate safely and bound the manual budget',()=>{
  assert.equal(normalizeConfig({imagePromptBudget:1000000}).imagePromptBudget,50000);
  assert.equal(normalizeConfig({imagePromptBudget:10}).imagePromptBudget,256);
  assert.equal(normalizeConfig({imagePromptBudgetOverride:true,imagePromptBudget:8000}).imagePromptBudget,8000);
+});
+
+test('F9: identical raw content reuses one normalization build, distinct content does not', () => {
+  clearConfigMemo();
+  const a = normalizeConfig({ textSpeed: 42, customCss: 'body{}' });
+  const b = normalizeConfig({ customCss: 'body{}', textSpeed: 42 }); // different key order, same content
+  assert.deepEqual(b, a);
+  assert.notEqual(b, a); // hits return clones, never the cached instance itself
+  const c = normalizeConfig({ textSpeed: 43, customCss: 'body{}' });
+  assert.notDeepEqual(c, a);
+  assert.equal(c.textSpeed, 43);
+});
+
+test('F9: mutating a returned config cannot poison a later read of the same content', () => {
+  clearConfigMemo();
+  const first = normalizeConfig({ textSpeed: 7 });
+  (first as { textSpeed: number }).textSpeed = 999;
+  const second = normalizeConfig({ textSpeed: 7 });
+  assert.equal(second.textSpeed, 7);
+});
+
+test('F9: non-serializable input still normalizes without using the memo', () => {
+  clearConfigMemo();
+  const circular: Record<string, unknown> = { textSpeed: 11 };
+  circular.self = circular;
+  assert.equal(normalizeConfig(circular).textSpeed, 11);
 });

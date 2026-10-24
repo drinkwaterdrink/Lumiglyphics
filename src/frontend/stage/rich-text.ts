@@ -348,12 +348,17 @@ export function formatDialogueText(
     .replace(/<img\b[^>]*?\bsrc\s*=\s*["'][^"']+["'][^>]*?\/?>/gi, "")
     .replace(/\{\{img::[^\}]+\}\}/gi, "");
 
-  // 2. Apply custom regex rules
-  for (const { pattern, replacement } of regexRules) {
-    try {
-      text = text.replace(pattern, replacement);
-    } catch {
-      // Ignore rule execution failures
+  // 2. Apply custom regex rules. These run synchronously on the main thread;
+  // skip them past the safety bound rather than risking a long scan on a
+  // pathological paste (the compile-time ReDoS screen handles normal input).
+  const CUSTOM_RULE_TEXT_LIMIT = 100_000;
+  if (text.length <= CUSTOM_RULE_TEXT_LIMIT) {
+    for (const { pattern, replacement } of regexRules) {
+      try {
+        text = text.replace(pattern, replacement);
+      } catch {
+        // Ignore rule execution failures
+      }
     }
   }
 

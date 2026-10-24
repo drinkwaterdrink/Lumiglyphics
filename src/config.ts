@@ -320,8 +320,55 @@ function retiredLegacySuffix(value: string): string {
   return value.trim() === LEGACY_DEFAULT_PROMPT_SUFFIX ? "" : value;
 }
 
+/**
+ * F9: content-addressed normalization memo. A turn calls `loadConfig` from
+ * many sites, and each normalization rebuilds ~62 fields and re-runs the
+ * 32-template image upgrade. Normalization is a pure function of its raw
+ * input, so identical content can safely reuse one build. The key is a length
+ * + 53-bit content signature; hits return a shallow clone so a caller writing
+ * a top-level field can never poison the cached build. Non-serializable input
+ * (circular refs, BigInt) simply bypasses the memo.
+ */
+const CONFIG_MEMO_LIMIT = 16;
+const configMemo = new Map<string, VisualNovelConfig>();
+export function clearConfigMemo(): void { configMemo.clear(); }
+function hash53(source: string): string {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let index = 0; index < source.length; index += 1) {
+    const code = source.charCodeAt(index);
+    h1 = Math.imul(h1 ^ code, 2654435761);
+    h2 = Math.imul(h2 ^ code, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
+}
+
 export function normalizeConfig(value: unknown): VisualNovelConfig {
   const input = record(value);
+  let signature: string | null = null;
+  try {
+    const serialized = JSON.stringify(input);
+    signature = `${serialized.length}:${hash53(serialized)}`;
+  } catch {
+    // Non-serializable input cannot be content-keyed; normalize uncached.
+  }
+  if (signature !== null) {
+    const cached = configMemo.get(signature);
+    if (cached) {
+      configMemo.delete(signature);
+      configMemo.set(signature, cached); // LRU touch
+      return { ...cached };
+    }
+    const built = normalizeConfigUncached(input);
+    if (configMemo.size >= CONFIG_MEMO_LIMIT) configMemo.delete(configMemo.keys().next().value!);
+    configMemo.set(signature, built);
+    return { ...built };
+  }
+  return normalizeConfigUncached(input);
+}
+
+function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelConfig {
   const themePreset = (THEME_PRESET_IDS as readonly string[]).includes(input.themePreset as string)
     ? input.themePreset as VisualNovelThemePreset
     : "lumiverse";

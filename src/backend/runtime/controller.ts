@@ -248,8 +248,10 @@ function abortAssetBatch(key: string, reason: string): void {
  */
 function abortChatWork(spindle: SpindleAPI, userId: string | undefined, chatId: string, reason: string): void {
   const key = runtimeKey(userId, chatId);
-  imageRetryEpochs.set(key,(imageRetryEpochs.get(key)??0)+1);
-  imageRetryQueues.get(key)?.queue.cancel();imageRetryQueues.delete(key);
+  // Also advances the intake epoch: a macro resolution still awaiting the host
+  // when the view closed must not enqueue a paid plan afterwards (there is no
+  // queued operation for cancelChat to abort until that await resolves).
+  bumpIntakeEpoch(userId, chatId);
   planningQueue.cancelChat(userId, chatId, undefined, reason);
   const abortedTurn = activeTurnKeys.get(key) ?? null;
   activeTurnKeys.delete(key);
@@ -704,7 +706,10 @@ export async function sendState(
       spindle.log.warn(`Stored turn freshness check failed; sending the stored turn: ${errorText(error)}`);
     }
   }
-  if (record && !stale && !assetControllers.has(runtimeKey(userId, chatId)) && record.imageRequests?.some((request) => request.state === "review")) {
+  // Recovery write only for an explicitly opened view: background/older-client
+  // state reconciles are read-only and must not persist cancellation of a
+  // review batch that a live (controller-owned) flow could still be driving.
+  if (options.viewOpen === true && record && !stale && !assetControllers.has(runtimeKey(userId, chatId)) && record.imageRequests?.some((request) => request.state === "review")) {
     record = { ...record, imageRequests: record.imageRequests.map((request) => request.state === "review" ? { ...request, state: "cancelled" as const } : request), jobs: record.jobs.map((job) => job.status === "queued" || job.status === "generating" ? AssetJobSchema.parse({ ...job, status: "cancelled", finishedAt: new Date().toISOString() }) : job) };
     if (chatState.activeTurnPath) await saveTurnRecord(spindle, chatState.activeTurnPath, record, userId);
   }
@@ -1050,6 +1055,13 @@ async function processAssistantMessage(
     const recentMessages = config.includeRecentMessages > 0
       ? await resolveContextMessages(spindle, chatId, messages.slice(-config.includeRecentMessages), resolutionCache, userId)
       : [];
+    // The view can close during the config/context awaits above. Automatic
+    // planning is contractually limited to open chats, so abort instead of
+    // spending a planner call nobody is watching.
+    if (!views.isOpen(userId, chatId)) {
+      operation.controller.abort("The visual novel view closed before planning ran.");
+    }
+    if (operation.controller.signal.aborted) return;
     const result = await planTurn(spindle, {
       onNarrativePrepared: paragraphs=>{
         const sessionId=preparationSessions.get(intakeKey);
@@ -1340,6 +1352,10 @@ async function retryTurn(
 ): Promise<void> {
   const key = runtimeKey(userId, chatId);
   assetControllers.get(key)?.abort("Retrying turn.");
+  // Providers may ignore abort for minutes; detach the dead controller so the
+  // retry's own batch (and replan/prepare actions landing meanwhile) can start
+  // instead of failing with "finish the waiting pictures" until the provider settles.
+  releaseAbortedImageBatch(key);
   planningQueue.cancelChat(userId, chatId);
   releaseSceneCacheAdmission(spindle, userId, chatId, "retry");
 
