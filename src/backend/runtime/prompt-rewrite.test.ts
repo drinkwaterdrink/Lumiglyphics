@@ -6,6 +6,26 @@ import type {SpindleAPI} from 'lumiverse-spindle-types';
 const request={prompt:'A silver-haired traveller waits at a rainy station.',negativePrompt:'blurry, text',parameters:{seed:9,negativePrompt:'old'},connection_id:'image',model:'flux'};
 function api(outputs:unknown[]){const calls:any[]=[];return {calls,spindle:{connections:{list:async()=>[{id:'writer',provider:'openrouter',model:'writer',is_default:true}]},generate:{raw:async(r:any)=>{calls.push(r);return outputs.shift();}}} as unknown as SpindleAPI};}
 
+test('writer receives an expanded-character priority budget that is recalculated after rejection',async()=>{
+ const subjects='Mira: silver hair\nJon: black hair';
+ const {spindle,calls}=api([]);
+ (spindle.generate as any).raw=async(r:any)=>{
+  calls.push(r);const context=JSON.parse(r.messages[1].content);
+  return {content:JSON.stringify({prompt:context.brief.subjects+(calls.length===1?'x'.repeat(4000):' Both wait beside wet rails.'),negativePrompt:''})};
+ };
+ const original={...request,prompt:subjects+' Both wait beside wet rails.'};
+ const result=await rewriteImagePrompt(spindle,original,{brief:{subjects,subjectMode:'ensemble'},template:{name:'Full scene',category:'custom'}} as any,normalizeConfig({}),'u',new AbortController().signal,'fit');
+ const first=JSON.parse(calls[0].messages[1].content),second=JSON.parse(calls[1].messages[1].content);
+ expect(first.priorityBudget.identityCharacters).toBe(subjects.length);
+ expect(first.priorityBudget.scenePriorityCharacters).toBe(360);
+ expect(first.priorityBudget.positiveBeyondIdentityCharacters).toBe(first.targetCombinedCharacters-first.priorityBudget.negativeTargetCharacters-subjects.length);
+ expect(second.priorityBudget.targetCombinedCharacters).toBe(second.targetCombinedCharacters);
+ expect(second.priorityBudget.targetCombinedCharacters).toBeLessThan(first.priorityBudget.targetCombinedCharacters);
+ expect(calls[0].messages[0].content).toContain('scenePriorityCharacters');
+ expect(result.parameters?.seed).toBe(9);
+ expect(result.prompt).toContain(subjects);
+});
+
 test('common unambiguous writer field variants fit without repeated clicks',async()=>{
  for(const fields of [
   {positive_prompt:'A silver-haired traveller waits at the station.',negative_prompt:'blur',explanation:'Compressed repeated wording.'},

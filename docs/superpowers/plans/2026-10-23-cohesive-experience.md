@@ -64,7 +64,7 @@ Files: cast workspace, visual-brief/identity preparation modules, relevant tests
 
 Files: prompt compiler/detail/rewrite/protection modules and an opt-in comparison fixture/workflow.
 
-- [ ] Reserve space for identity/action/spatial relationships before decorative detail. Preserve exact protected facts and frozen approval parameters.
+- [ ] Complete compiler-level priority enforcement for identity/action/spatial relationships before decorative detail. Beta.70 delivers calculated writer allocations after exact cast accounting, adaptive negative guidance, retry recalculation and scaled initial scene estimates. Scene/style semantic retention still needs representative evaluation; no claim of enforced semantic equivalence.
 - [x] Report exact before/after positive, negative and combined counts with a local previous-wording comparison and Restore. Counts do not claim semantic preservation. Delivered beta.69; semantic quality comparisons remain pending.
 - [ ] Establish representative same-scene evaluations for identity, composition, fidelity and unwanted additions. Paid runs require explicit selection; never start on install/open.
 - [ ] Test small budgets, ensembles, positive-only routes, unsupported dimensions and impossible fixed-fact budgets.

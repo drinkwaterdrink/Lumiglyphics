@@ -1,12 +1,12 @@
-# Lumiglyphics status — beta.69
+# Lumiglyphics status — beta.70
 
-This matrix describes beta.69 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
+This matrix describes beta.70 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
 
 | Area | Status | Current behavior / remaining scope |
 |---|---|---|
 | Reader identity and recovery | Delivered | Scenario/narrator cards, appearance correction, replan, saved cursor/drafts and guarded revisions. |
 | Mobile reader | Delivered | Adjustable themed text sheet, icon controls, click-to-advance, history exits, close suspension and temporary prose preview while planning. Physical Android acceptance remains manual. |
-| Image prompts and recovery | Delivered | Explicit per-picture retry queue, retry unfinished and completed-image regeneration without review; edited previews keep approval. State-specific inspector, editable templates/shared styles, optional dynamic selection, model-aware combined character budgets, optional manual ceiling, approval, prompt rewrite/restore with measured before/after counts and local wording comparison, individual retry and failure dismissal. Published size/ratio controls now validate model output locally. |
+| Image prompts and recovery | Delivered | Explicit per-picture retry queue, retry unfinished and completed-image regeneration without review; edited previews keep approval. State-specific inspector, editable templates/shared styles, optional dynamic selection, model-aware combined character budgets with calculated writer priorities for cast/scene/negatives, optional manual ceiling, approval, prompt rewrite/restore with measured before/after counts and local wording comparison, individual retry and failure dismissal. Published size/ratio controls now validate model output locally. |
 | Full scene / ensemble | Delivered, opt-in | Named physically present cast plus persona, separate appearances, bounded descriptions, no single-face reference or portrait reuse. Up to 16 subjects; actual model accuracy varies. |
 | Cast and saved place art | Delivered foundation | Context scan, manual appearance/outfit guidance, gallery art and optional compatible reuse. Cast overlays now have local hide/restore controls. Cast view now allocates background and up to two already selected, present subjects within one shared budget; verified saved/cache hits cost no new slot. Expression/outfit variant allocation and richer placement remain pending. |
 | References and interactions | Delivered foundation | Grouped cards, category/field/detail toggles, inline highlights, quiet menu, reveal-scoped sources and interaction drafts. Optional earlier descriptions have verified ancestry and original source labels. Legacy/dynamic-macro history and broad identity reconciliation remain pending. |
