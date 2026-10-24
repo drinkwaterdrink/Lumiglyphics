@@ -8,6 +8,18 @@ function fixture(){
  return {api,data,ids};
 }
 const art={character:'Aleister',description:'Dark hair, blue coat',requestFingerprint:'scene-v2:123456789',appearanceFingerprint:'env:123456789',imageId:'image'};
+
+test('selected appearance source persists only with matching wording and survives unrelated edits',async()=>{
+ const {api}=fixture();
+ const setup={appearance:'Dark hair, green eyes',aliases:[],outfits:[],defaultOutfitId:null,appearanceOrigin:{source:'SimTracker snapshot · message-1',appearance:'Dark hair, green eyes'}};
+ const first=await manageCastArt(api,'c',{action:'setup',name:'Mira',setup} as any,'u');
+ const saved=first.characters[0]!;expect(saved.setup?.appearanceOrigin).toEqual(setup.appearanceOrigin);
+ const {appearanceOrigin:ignored,...withoutOrigin}=setup;
+ const second=await manageCastArt(api,'c',{action:'setup',characterId:saved.entityId,name:'Mira',setup:{...withoutOrigin,aliases:['M']}} as any,'u');
+ expect(second.characters[0]?.setup?.appearanceOrigin).toEqual(setup.appearanceOrigin);
+ const changed=await manageCastArt(api,'c',{action:'setup',characterId:saved.entityId,name:'Mira',setup:{...setup,appearance:'Silver hair, blue eyes'}} as any,'u');
+ expect(changed.characters[0]?.setup?.appearanceOrigin).toBeUndefined();
+});
 test('persistent art survives reload, uses fresh host pointers, and isolates users/chats',async()=>{
  const {api}=fixture();await saveCastArt(api,'c',art,'u');
  expect((await loadCastArt(api,'c','u')).characters).toHaveLength(1);

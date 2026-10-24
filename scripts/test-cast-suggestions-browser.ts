@@ -8,6 +8,7 @@ try{
   const page=await browser.newPage({viewport:{width,height:844}});page.setDefaultTimeout(5000);
   await page.goto(`http://127.0.0.1:${server.port}`);
   const cast=page.locator('[data-cast-art]');await cast.getByRole('button',{name:/Open Dana Kessler/}).click();
+  assert.match(await cast.locator('[data-cast-saved-origin]').innerText(),/not recorded/,'older setups have no invented source');
   await cast.getByRole('button',{name:'Find a description from context',exact:true}).click();await cast.getByRole('button',{name:'Find descriptions',exact:true}).click();
   assert.match(await cast.locator('[data-cast-saved-guidance]').innerText(),/dark angled bob/);
   assert.match(await cast.getByLabel('Scanned character preview').inputValue(),/silver hair/);
@@ -15,6 +16,7 @@ try{
   await cast.getByRole('button',{name:'Use appearance only',exact:true}).click();
   assert.equal(await cast.getByLabel('Cast base appearance').inputValue(),'Human woman with silver hair.');
   assert.equal(await cast.getByLabel('Cast aliases').inputValue(),'DK');
+  assert.match(await cast.locator('[data-cast-appearance-origin]').innerText(),/Selected source: Saved story appearance/);
   const sources=()=>page.evaluate(()=>(window as any).castWorkspace.cast.navigate('sources'));
   await sources();assert.match(await cast.locator('[data-cast-saved-guidance]').innerText(),/dark angled bob/,'saved guidance stays distinct from draft');
   await cast.getByRole('button',{name:'Add suggested aliases',exact:true}).click();
@@ -34,11 +36,17 @@ try{
   await page.waitForFunction(()=>(window as any).castWorkspace.state.library.characters[0].setup.appearance.includes('silver'));
   const saved=await page.evaluate(()=>(window as any).castWorkspace.state.library.characters[0].setup);
   assert.equal(saved.defaultOutfitId,'coat');assert.deepEqual(saved.aliases,['DK','D']);assert.equal(saved.outfits[0].description,'Blue wool coat.');
+  assert.equal(saved.appearanceOrigin.source,'Saved story appearance');
+  assert.equal(saved.appearanceOrigin.appearance,saved.appearance);
   await page.evaluate(()=>(window as any).castWorkspace.cast.navigate('roster'));
   await cast.getByRole('button',{name:'Find characters from context',exact:true}).click();
   await cast.getByRole('button',{name:'Use appearance only',exact:true}).click();
   assert.equal(await cast.getByLabel('Cast character name').getAttribute('readonly'),'','all-cast scanning reopens an existing canonical record rather than drafting a duplicate');
   assert.equal(await page.evaluate(()=>(window as any).castWorkspace.state.library.characters.length),2);
+  await cast.getByLabel('Cast base appearance').fill('Human woman with blue hair.');
+  assert.match(await cast.locator('[data-cast-appearance-origin]').innerText(),/Saving will clear/);
+  await cast.getByRole('button',{name:'Discard',exact:true}).click();
+  assert.match(await cast.locator('[data-cast-appearance-origin]').innerText(),/Selected source: Saved story appearance/,'discard restores the matching saved source');
   await page.close();
  }
  console.log('Cast field suggestions: saved/draft distinction, isolated imports, outfit conflict/default protection, identity guard and explicit save passed at 320/390/1280px.');

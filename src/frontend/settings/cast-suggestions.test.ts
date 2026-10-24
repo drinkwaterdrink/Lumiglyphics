@@ -1,5 +1,5 @@
 import {expect,test} from 'bun:test';
-import {applyCastSuggestion} from './cast-suggestions.js';
+import {applyCastSuggestion,appearanceOriginLabel} from './cast-suggestions.js';
 import type {CastSetupInput} from '../../shared/cast-art.js';
 const draft:CastSetupInput={appearance:'black hair',aliases:['M'],outfits:[{id:'coat',name:'Coat',description:'blue coat'}],defaultOutfitId:'coat'};
 const source:CastSetupInput={appearance:'silver hair',aliases:['m','Moon'],outfits:[{id:'coat',name:'Coat',description:'red coat'},{id:'new',name:'Uniform',description:'white uniform'}],defaultOutfitId:'new'};
@@ -22,4 +22,12 @@ test('limits and empty descriptions do not silently replace existing guidance',(
  expect(applyCastSuggestion(full,source,'aliases',()=> 'new-id').setup.aliases).toEqual(full.aliases);
  expect(applyCastSuggestion(full,source,'outfits',()=> 'new-id').setup.outfits).toEqual(full.outfits);
  expect(applyCastSuggestion(draft,{...source,appearance:''},'appearance',()=> 'new-id').setup.appearance).toBe(draft.appearance);
+});
+test('explicit appearance selection records its label while manual changes stop matching',()=>{
+ const next=applyCastSuggestion(draft,source,'appearance',()=> 'new-id','Story reference · message-1');
+ expect(next.setup.appearanceOrigin).toEqual({source:'Story reference · message-1',appearance:'silver hair'});
+ expect(appearanceOriginLabel(next.setup)).toContain('Selected source: Story reference');
+ expect(appearanceOriginLabel({...next.setup,appearance:'red hair'})).toContain('Saving will clear');
+ expect(appearanceOriginLabel(draft)).toContain('not recorded');
+ expect(applyCastSuggestion(next.setup,source,'aliases',()=> 'new-id','Other source').setup.appearanceOrigin).toEqual(next.setup.appearanceOrigin);
 });

@@ -2,10 +2,14 @@ import type {CastSetupInput} from '../../shared/cast-art.js';
 import {characterAppearanceKey} from '../../shared/identity.js';
 export type CastSuggestionField='appearance'|'aliases'|'outfits';
 /** Explicit field selection, never a save. Existing outfit choices remain authoritative. */
-export function applyCastSuggestion(draft:CastSetupInput,source:CastSetupInput,field:CastSuggestionField,createId:()=>string){
+export function applyCastSuggestion(draft:CastSetupInput,source:CastSetupInput,field:CastSuggestionField,createId:()=>string,sourceLabel?:string){
  const setup=structuredClone(draft),notices:string[]=[];
  if(field==='appearance'){
-  if(source.appearance.trim())setup.appearance=source.appearance;
+  if(source.appearance.trim()){
+   setup.appearance=source.appearance;
+   if(sourceLabel?.trim())setup.appearanceOrigin={source:sourceLabel,appearance:source.appearance};
+   else if(setup.appearanceOrigin?.appearance!==setup.appearance)delete setup.appearanceOrigin;
+  }
   else notices.push('This source has no appearance. Existing wording was kept.');
  }
  if(field==='aliases'){
@@ -26,4 +30,11 @@ export function applyCastSuggestion(draft:CastSetupInput,source:CastSetupInput,f
   if(full)notices.push('The seven-outfit limit is reached. Remaining suggestions stay in the source.');
  }
  return {setup,notices,changed:JSON.stringify(setup)!==JSON.stringify(draft)};
+}
+
+export function appearanceOriginLabel(setup:Pick<CastSetupInput,'appearance'|'appearanceOrigin'>|undefined):string{
+ const origin=setup?.appearanceOrigin;
+ if(!origin)return 'Source not recorded for this appearance.';
+ if(origin.appearance!==setup?.appearance)return `Appearance edited since selecting ${origin.source}. Saving will clear that previous source note.`;
+ return `Selected source: ${origin.source}. This records the saved wording’s source; it does not verify the current story state.`;
 }

@@ -1,7 +1,8 @@
 import {z} from 'zod';
 const id=z.string().trim().min(1).max(256);
+export const AppearanceOriginSchema=z.object({source:z.string().trim().min(1).max(256),appearance:z.string().min(1).max(2000)}).strict();
 const outfitShape={id,name:z.string().trim().min(1).max(100),description:z.string().trim().min(1).max(1000)};
-const setupShape={appearance:z.string().trim().min(1).max(2000),aliases:z.array(z.string().trim().min(1).max(160)).max(16).default([]),defaultOutfitId:id.nullable().default(null)};
+const setupShape={appearance:z.string().trim().min(1).max(2000),aliases:z.array(z.string().trim().min(1).max(160)).max(16).default([]),defaultOutfitId:id.nullable().default(null),appearanceOrigin:AppearanceOriginSchema.optional()};
 const validateSetup=(value:{outfits:Array<{id:string}>,defaultOutfitId:string|null},ctx:z.RefinementCtx)=>{
  if(new Set(value.outfits.map(o=>o.id)).size!==value.outfits.length)ctx.addIssue({code:'custom',path:['outfits'],message:'Outfit IDs must be distinct.'});
  if(value.defaultOutfitId&&!value.outfits.some(o=>o.id===value.defaultOutfitId))ctx.addIssue({code:'custom',path:['defaultOutfitId'],message:'Choose an existing outfit.'});

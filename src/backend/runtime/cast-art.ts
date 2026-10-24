@@ -79,7 +79,11 @@ export async function manageCastArt(api:SpindleAPI,chat:string,action:CastArtAct
    }
    if(!record){if(library.characters.length>=128)throw new Error('Cast limit reached (128 characters). Forget one to make room.');record={entityId:characterId(name),name,description:setup.appearance,artRevision:0,preferredVariantId:null,variants:[]};library.characters.push(record);}
    const previous=record.setup;
-   record.setup={...setup,aliases:[...new Set(setup.aliases.map(normalizeCharacterName).filter(a=>a&&characterAppearanceKey(a)!==characterAppearanceKey(name)))],outfits:setup.outfits.map(o=>{
+   // Source labels are user-selected annotations, never access/reveal authority.
+   // Keep one only while its exact appearance wording still matches.
+   const {appearanceOrigin:requestedOrigin,...fields}=setup;
+   const origin=requestedOrigin?.appearance===setup.appearance?requestedOrigin:previous?.appearanceOrigin?.appearance===setup.appearance?previous.appearanceOrigin:undefined;
+   record.setup={...fields,...(origin?{appearanceOrigin:origin}:{}),aliases:[...new Set(setup.aliases.map(normalizeCharacterName).filter(a=>a&&characterAppearanceKey(a)!==characterAppearanceKey(name)))],outfits:setup.outfits.map(o=>{
     const old=previous?.outfits.find(v=>v.id===o.id);return {...o,...(old?.imageId?{imageId:old.imageId,imageAppearance:old.imageAppearance??previous!.appearance,imageAttire:old.imageAttire??old.description}:{})};
    }),...(previous?.imageId?{imageId:previous.imageId,imageAppearance:previous.imageAppearance??previous.appearance}:{})};record.artRevision++;
   }else if(action.action==='reset')library.characters=[];
