@@ -200,27 +200,27 @@ async function cancelIncompleteJobs(
   const unclaimed = (): boolean => !activeTurnKeys.has(key);
   const chatState = await loadChatState(spindle, chatId, userId);
   if (!chatState.activeTurnPath || !unclaimed()) return;
-  const record = await loadTurnRecord(spindle, chatState.activeTurnPath, userId);
-  if (!record || !unclaimed()) return;
-  if (abortedTurn && !turnKeyEquals(record.plan.key, abortedTurn)) return;
+  // Preflight outside the write queues: a slow optional cleanup read should
+  // not monopolize the queues before a reopened view can claim fresh work.
+  // This snapshot is never written; the atomic mutation reloads the record.
+  const candidate = await loadTurnRecord(spindle, chatState.activeTurnPath, userId);
+  if (!candidate || !unclaimed() || (abortedTurn && !turnKeyEquals(candidate.plan.key, abortedTurn))) return;
   const nowTime = new Date().toISOString();
-  let cancelled = 0;
-  const jobs = record.jobs.map((job) => {
-    if (job.status !== "queued" && job.status !== "generating") return job;
-    cancelled += 1;
-    return AssetJobSchema.parse({ ...job, status: "cancelled", error: null, finishedAt: nowTime });
-  });
-  if (cancelled === 0 || !unclaimed()) return;
-  const next = { ...record, jobs, imageRequests: record.imageRequests?.map((request) => request.state === "review" ? { ...request, state: "cancelled" as const } : request) ?? [], updatedAt: nowTime };
-  await saveTurnRecord(spindle, chatState.activeTurnPath, next, userId);
-  dbg(spindle, userId, `view-gate persisted cancelled over ${cancelled} incomplete job(s) chat=${chatId}`);
-  // A view that reopened before this landed already holds the pre-cancel
-  // jobs; tell it so no spinner outlives the batch.
-  if (views.isOpen(userId, chatId)) {
-    for (const job of jobs) {
-      if (job.status !== "cancelled" || job.finishedAt !== nowTime) continue;
-      spindle.sendToFrontend({ type: "vn_asset", chatId, messageId: record.plan.key.assistantMessageId, sourceFingerprint: next.plan.key.sourceFingerprint, swipeId: next.plan.key.swipeId, revision: next.plan.key.revision, asset: await assetViewWithCastArt(spindle,next,job,userId) }, userId);
-    }
+  const next = await mutateActiveTurnRecord(spindle, chatId, chatState.activeTurnPath, userId, record => {
+    if (abortedTurn && !turnKeyEquals(record.plan.key, abortedTurn)) return null;
+    if (!record.jobs.some(job => job.status === "queued" || job.status === "generating")) return null;
+    const jobs = record.jobs.map(job => job.status === "queued" || job.status === "generating"
+      ? AssetJobSchema.parse({ ...job, status: "cancelled", error: null, finishedAt: nowTime }) : job);
+    return { ...record, jobs, imageRequests: record.imageRequests?.map(request => request.state === "review" ? { ...request, state: "cancelled" as const } : request) ?? [], updatedAt: nowTime };
+  }, unclaimed);
+  if (!next || !unclaimed()) return;
+  dbg(spindle, userId, `view-gate persisted cancelled jobs chat=${chatId}`);
+  // A reopened view may hold old spinners. Never publish cleanup over new work.
+  for (const job of next.jobs) {
+    if (job.status !== "cancelled" || job.finishedAt !== nowTime) continue;
+    const asset = await assetViewWithCastArt(spindle, next, job, userId);
+    if (!unclaimed() || !views.isOpen(userId, chatId)) return;
+    spindle.sendToFrontend({ type: "vn_asset", chatId, messageId: next.plan.key.assistantMessageId, sourceFingerprint: next.plan.key.sourceFingerprint, swipeId: next.plan.key.swipeId, revision: next.plan.key.revision, asset }, userId);
   }
 }
 
@@ -237,7 +237,7 @@ function abortChatWork(spindle: SpindleAPI, userId: string | undefined, chatId: 
   const abortedTurn = activeTurnKeys.get(key) ?? null;
   activeTurnKeys.delete(key);
   pendingAssetStarts.delete(key);
-  assetControllers.get(key)?.abort(reason);
+  abortAssetBatch(key, reason);
   releaseSceneCacheAdmission(spindle, userId, chatId, "view_closed");
   void cancelIncompleteJobs(spindle, chatId, userId, abortedTurn).catch((error) => {
     spindle.log.warn(`Visual novel view-close cleanup failed: ${errorText(error)}`);
@@ -871,6 +871,13 @@ function releaseAbortedImageBatch(key:string):void {
  assetControllers.delete(key);imageReviewGates.delete(key);preparingSingleImages.delete(key);
 }
 
+function abortAssetBatch(key:string,reason:string):void {
+ const controller=assetControllers.get(key);
+ if(!controller)return;
+ controller.abort(reason);
+ releaseAbortedImageBatch(key);
+}
+
 async function prepareSingleImage(spindle: SpindleAPI, request: Extract<FrontendRequest, { type: "vn_prepare_image" | "vn_correct_image_subject" }>, userId: string, quick?:QueuedRetryContext): Promise<void> {
   const key = runtimeKey(userId, request.chatId);
   releaseAbortedImageBatch(key);
@@ -964,6 +971,7 @@ async function processAssistantMessage(
   if (resolved !== content) dbg(spindle, userId, `message ${message.id} macro-resolved: ${content.length} -> ${resolved.length} chars`);
   const path = turnPath(chatId, message.id, message.swipe_id);
   const existing = await loadTurnRecord(spindle, path, userId);
+  if ((intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch) return;
   const relation = relateRecord(existing, message, intake);
   // The host could not resolve the message right now (no interceptor loaded,
   // transient error). A turn already planned from a successful resolution
@@ -985,6 +993,15 @@ async function processAssistantMessage(
   const fingerprint = selectionFingerprint(message, intake);
   const rawFingerprint = fingerprintForMessage({ id: message.id, swipe_id: message.swipe_id, content });
   if (!options?.retry && !options?.forceRegenerate && existing && relation === "current") {
+    // Repeated native edit/state notices must not replan an owned live batch.
+    const owner = assetControllers.get(intakeKey), start = pendingAssetStarts.get(intakeKey);
+    if (((owner && !owner.signal.aborted) || start) && compareTurnKeys(activeTurnKeys.get(intakeKey) ?? null, existing.plan.key).accepted) {
+      const view = await turnViewWithAudio(spindle, existing, userId);
+      const sameOwner = owner ? assetControllers.get(intakeKey) === owner && !owner.signal.aborted : pendingAssetStarts.get(intakeKey) === start;
+      if (sameOwner && compareTurnKeys(activeTurnKeys.get(intakeKey) ?? null, existing.plan.key).accepted && (intakeEpochs.get(intakeKey) ?? 0) === intakeEpoch)
+        spindle.sendToFrontend({type:"vn_turn",turn:view},userId);
+      return;
+    }
     const hasIncompleteJobs = existing.jobs.some(
       (job) => job.status === "failed" || job.status === "cancelled" || job.status === "queued" || job.status === "generating"
     );
@@ -1899,7 +1916,7 @@ function eventMessage(payload: unknown): { chatId: string; message: NormalizedCh
   if (typeof candidate.chatId !== "string" || !candidate.message || typeof candidate.message !== "object") return null;
   const message = candidate.message as Partial<NormalizedChatMessage>;
   if (typeof message.id !== "string" || typeof message.content !== "string" || typeof message.is_user !== "boolean") return null;
-  return { chatId: candidate.chatId, message: message as NormalizedChatMessage };
+  return { chatId: candidate.chatId, message: { ...message } as NormalizedChatMessage };
 }
 
 async function clearDeletedTurn(spindle: SpindleAPI, payload: unknown, userId?: string): Promise<void> {
@@ -1932,16 +1949,41 @@ function reconcileMessageEvent(spindle: SpindleAPI, payload: unknown, userId?: s
   if (!event)return;
   spindle.sendToFrontend({type:'vn_reference_history_invalidated',chatId:event.chatId},userId);
   if(event.message.is_user)return;
+  const key = runtimeKey(userId, event.chatId);
+  const epoch = intakeEpochs.get(key) ?? 0;
+  const isCurrent = () => (intakeEpochs.get(key) ?? 0) === epoch && views.isOpen(userId, event.chatId);
+  const matchesEvent = (latest: NormalizedChatMessage | undefined): boolean => Boolean(latest
+    && latest.id === event.message.id && latest.content === event.message.content
+    && (latest.swipe_id ?? 0) === (event.message.swipe_id ?? 0)
+    && (event.message.branch_id === undefined || (latest.branch_id ?? null) === event.message.branch_id)
+    && (event.message.parent_message_id === undefined || (latest.parent_message_id ?? null) === event.message.parent_message_id));
   void (async () => {
-    if (!(await allowAutomaticWork(spindle, userId, event.chatId, "message reconcile"))) return;
-    // An ancestor edit invalidates remembered descriptions but must not move
-    // the reader backwards or start planning that older response.
-    const messages=await spindle.chat.getMessages(event.chatId) as NormalizedChatMessage[];
-    if([...messages].reverse().find(m=>!m.is_user&&m.content.trim())?.id!==event.message.id)return;
+    if (!(await allowAutomaticWork(spindle, userId, event.chatId, "message reconcile")) || !isCurrent()) return;
+    // Ancestor edits invalidate references without moving the reader backwards.
+    // A delayed same-ID event must not cancel a newer swipe/content revision.
+    const messages = await spindle.chat.getMessages(event.chatId) as NormalizedChatMessage[];
+    const latest = [...messages].reverse().find(m => !m.is_user && m.content.trim());
+    if (!matchesEvent(latest) || !isCurrent()) return;
+    const stored = await loadTurnRecord(spindle, turnPath(event.chatId, event.message.id, event.message.swipe_id), userId);
+    if (!isCurrent()) return;
+    const intake = await resolveMessageIntake(spindle, event.chatId, event.message.content, userId);
+    const fresh = await spindle.chat.getMessages(event.chatId) as NormalizedChatMessage[];
+    if (!isCurrent() || !matchesEvent([...fresh].reverse().find(m => !m.is_user && m.content.trim()))) return;
+    // Resolve before classifying: identical raw macro text can select a new
+    // scene, while volatile text alone must not retire a valid picture batch.
+    if (!intake.resolved || relateRecord(stored, event.message, intake) === "current") {
+      await processAssistantMessage(spindle, event.chatId, event.message, event.message.content, userId, {precomputedIntake:intake});
+      return;
+    }
+    planningQueue.cancelChat(userId, event.chatId, undefined, "The latest reply changed.");
+    imageRetryEpochs.set(key, (imageRetryEpochs.get(key) ?? 0) + 1);
+    imageRetryQueues.get(key)?.queue.cancel(); imageRetryQueues.delete(key);
+    activeTurnKeys.delete(key); pendingAssetStarts.delete(key);
+    abortAssetBatch(key, "The latest reply changed.");
     // A newer version of the message supersedes any intake still resolving.
     bumpIntakeEpoch(userId, event.chatId);
     releaseSceneCacheAdmission(spindle, userId, event.chatId, "message_changed");
-    await processAssistantMessage(spindle, event.chatId, event.message, event.message.content, userId);
+    await processAssistantMessage(spindle, event.chatId, event.message, event.message.content, userId, {precomputedIntake:intake});
   })().catch((error) => {
     spindle.log.error(`Visual novel message reconciliation failed: ${errorText(error)}`);
   });
@@ -1967,7 +2009,7 @@ export function registerVisualNovelBackend(spindle: SpindleAPI): void {
     bumpIntakeEpoch(userId, payload.chatId);
     activeTurnKeys.delete(key);
     pendingAssetStarts.delete(key);
-    assetControllers.get(key)?.abort("A new generation started before this turn's assets settled.");
+    abortAssetBatch(key, "A new generation started before this turn's assets settled.");
     releaseSceneCacheAdmission(spindle, userId, payload.chatId, "generation_started");
     spindle.sendToFrontend({ type: "vn_generation", chatId: payload.chatId, active: true }, userId);
   });

@@ -724,14 +724,16 @@ function storedTurnPlan(raw:unknown,jobs:unknown,onRecovery:()=>void):TurnPlan{
 export async function loadTurnRecord(
   spindle: SpindleAPI,
   path: string | null,
-  userId?: string
+  userId?: string,
+  isCurrent: () => boolean = () => true
 ): Promise<StoredTurnRecord | null> {
-  if (!path) return null;
+  if (!path || !isCurrent()) return null;
   const raw = await spindle.userStorage.getJson<Partial<StoredTurnRecord> | null>(path, {
     fallback: null,
     ...(userOptions(userId) ?? {})
   });
-  if (!raw?.plan || typeof raw.speaker !== "string") return null;
+  // Optional history deadlines must be checked before expensive schema parsing.
+  if (!isCurrent() || !raw?.plan || typeof raw.speaker !== "string") return null;
   const status = raw.status === "planning" || raw.status === "failed" || raw.status === "cancelled" ? raw.status : "ready";
   return {
     schemaVersion: 1,
@@ -1050,5 +1052,30 @@ async function recordWithImageLibrary(spindle:SpindleAPI,path:string,record:Stor
 
 function recordWithPresentation(record:StoredTurnRecord):StoredTurnRecord {
   if(record.presentation!==undefined && (record.presentation as {version?:unknown})?.version!==1)return record;
-  return {...record,presentation:projectTurnPresentation(record.plan)};
+  return {...record,presentation:derivedPresentation(record.plan)};
+}
+
+// A tiny content-addressed cache avoids rebuilding full paragraph snapshots for
+// job/status writes. Never trust persisted projection identity or TurnKey alone:
+// manual subject corrections and other plan edits may retain the same key.
+const presentationCache = new Map<string, {value: ReturnType<typeof projectTurnPresentation>; size: number}>();
+let presentationCacheSize = 0;
+function derivedPresentation(plan: TurnPlan): ReturnType<typeof projectTurnPresentation> {
+  const input = JSON.stringify(plan);
+  const cached = presentationCache.get(input);
+  if (cached) {
+    presentationCache.delete(input); presentationCache.set(input, cached);
+    return cached.value;
+  }
+  const value = projectTurnPresentation(plan);
+  const size = input.length + (value ? JSON.stringify(value).length : 0);
+  if (size <= 2_000_000) {
+    while (presentationCache.size >= 4 || presentationCacheSize + size > 2_000_000) {
+      const oldest = presentationCache.keys().next().value!;
+      presentationCacheSize -= presentationCache.get(oldest)!.size;
+      presentationCache.delete(oldest);
+    }
+    presentationCache.set(input, {value, size}); presentationCacheSize += size;
+  }
+  return value;
 }

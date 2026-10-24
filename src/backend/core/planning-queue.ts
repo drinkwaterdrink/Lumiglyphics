@@ -65,7 +65,7 @@ export class PlanningQueue {
   ): ScheduledPlanning<T> {
     const dedupeKey = compoundKey([userId, chatId, dedupeId]);
     const existing = this.operations.get(dedupeKey) as ScheduledPlanning<T> | undefined;
-    if (existing) return { ...existing, reused: true };
+    if (existing && !existing.operation.controller.signal.aborted) return { ...existing, reused: true };
 
     const operation: PlanningOperation = {
       id: operationId(),

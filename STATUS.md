@@ -1,6 +1,6 @@
-# Lumiglyphics status — beta.73
+# Lumiglyphics status - beta.74
 
-This matrix describes beta.73 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
+This matrix describes beta.74 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
 
 | Area | Status | Current behavior / remaining scope |
 |---|---|---|
@@ -43,3 +43,5 @@ Beta.66 hotfix: prevent unfunded cache-cue overlaps during cast allocation and n
 Beta.67: cast source review distinguishes saved guidance from the unsaved draft and offers isolated appearance, alias and outfit suggestion actions. Existing defaults/outfits are protected; Save changes stays explicit.
 
 Beta.68: Fit/rewrite accepts bounded, unambiguous writer field variants and reports specific invalid-field failures while retaining budgets and identity checks. Cast appearance source notes now survive explicit saves only while their exact wording matches.
+
+Beta.74: verified audit reliability fixes release aborted batches immediately, allow explicit retries to replace cancelled queue entries, atomically cancel against the latest saved turn, and retire obsolete batches on genuine latest-reply edits. Repeated current notices preserve running images, including macro-selected scenes. Job-only writes reuse bounded locally derived projections by actual plan content; same-key/in-place edits invalidate the cache. Optional earlier-reference reads use cooperative deadlines and at most two concurrent storage reads. Long-reply projection compaction and persistence/typewriter profiling remain follow-ups. See [audit follow-up evidence](docs/review-evidence/2026-10-24-beta74-audit-reliability.md).

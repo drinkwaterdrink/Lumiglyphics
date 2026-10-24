@@ -31,12 +31,14 @@ export function referenceMessages(messages:readonly unknown[],targetId:string):M
  }return undefined;
 }
 async function hash(text:string):Promise<string>{const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));return Array.from(new Uint8Array(bytes),byte=>byte.toString(16).padStart(2,'0')).join('');}
-async function frames(messages:readonly Message[],chatId:string):Promise<Frame[]> {
+async function frames(messages:readonly Message[],chatId:string,isCurrent:()=>boolean=()=>true):Promise<Frame[]> {
+ if(!isCurrent())throw new Error("Reference scan deadline");
  let prefix=await hash(JSON.stringify([1,chatId])),replyNumber=0;const result:Frame[]=[];
  for(const [index,message] of messages.entries()){
+  if(!isCurrent())throw new Error("Reference scan deadline");
   prefix=await hash(JSON.stringify([prefix,message]));if(!message.is_user&&message.role!=='system')replyNumber++;
   result.push({message,prefixDigest:prefix,messageCount:index+1,replyNumber});
- }return result;
+ }if(!isCurrent())throw new Error("Reference scan deadline");return result;
 }
 async function matches(record:StoredTurnRecord,frame:Frame):Promise<boolean>{
  const parsed=ReferenceLineageSchema.safeParse(record.referenceLineage);if(!parsed.success)return false;const certificate=parsed.data;
@@ -54,18 +56,27 @@ export async function captureReferenceLineage(messages:readonly unknown[],plan:T
 }
 async function collect(api:SpindleAPI,target:StoredTurnRecord,userId:string|undefined,deadline:number):Promise<ReferenceHistory|undefined>{
  if(!ReferenceLineageSchema.safeParse(target.referenceLineage).success)return undefined;
- const key=target.plan.key;
- const snapshot=referenceMessages(await api.chat.getMessages(key.chatId),key.assistantMessageId);if(!snapshot)return undefined;
- const lineage=await frames(snapshot,key.chatId),last=lineage.at(-1)!;if(Date.now()>=deadline||!await matches(target,last))return undefined;
+ const key=target.plan.key,isCurrent=()=>Date.now()<deadline;
+ const snapshot=referenceMessages(await api.chat.getMessages(key.chatId),key.assistantMessageId);if(!snapshot||!isCurrent())return undefined;
+ const lineage=await frames(snapshot,key.chatId,isCurrent),last=lineage.at(-1)!;if(Date.now()>=deadline||!await matches(target,last))return undefined;
  const eligible=lineage.slice(0,-1).filter(frame=>!frame.message.is_user&&frame.message.role!=='system');
  const selected=eligible.slice(-MAX_RECORDS),entries:HistoricalReference[]=[];let truncated=eligible.length>MAX_RECORDS;
  if(Date.now()>=deadline)return undefined;
- const loaded=await Promise.allSettled(selected.map(frame=>loadTurnRecord(api,turnPath(key.chatId,frame.message.id,frame.message.swipe_id),userId)));
- if(Date.now()>=deadline)return undefined;
+ // Bound in-flight host reads. Host storage has no cancellation API, so an
+ // already-started read may finish remotely; its record is never parsed late.
+ const loaded=new Map<number,StoredTurnRecord>();let cursor=selected.length-1;
+ await Promise.all(Array.from({length:Math.min(2,selected.length)},async()=>{
+  while(isCurrent()){
+   const index=cursor--;if(index<0)return;
+   try{const record=await loadTurnRecord(api,turnPath(key.chatId,selected[index]!.message.id,selected[index]!.message.swipe_id),userId,isCurrent);if(record&&isCurrent())loaded.set(index,record);}catch{/* Optional reads fail independently. */}
+  }
+ }));
+ if(!isCurrent())return undefined;
  // Newest compatible description per exact kind/name/field. No alias/casing inference.
  const seen=new Set<string>();
  for(let index=selected.length-1;index>=0;index--){
-  const outcome=loaded[index]!,frame=selected[index]!;if(outcome.status!=='fulfilled'||!outcome.value)continue;const record=outcome.value;
+  if(!isCurrent())return undefined;
+  const record=loaded.get(index),frame=selected[index]!;if(!record)continue;
   if(record.plan.key.chatId!==key.chatId||needsResolution(frame.message.content)||record.plan.key.sourceFingerprint!==fingerprintForMessage(frame.message)||!await matches(record,frame))continue;
   for(const reference of normalizeStoryReferences(record.plan.storyReferences,record.plan.paragraphs.map(p=>({text:stripTextEffectTags(p.text)}))).reverse()){
    if(!retainableReferenceField(reference.field)||!stripTextEffectTags(frame.message.content).includes(reference.evidence))continue;
@@ -74,9 +85,11 @@ async function collect(api:SpindleAPI,target:StoredTurnRecord,userId:string|unde
    entries.push({sourceKey:record.plan.key,replyNumber:frame.replyNumber,reference});
   }
  }
- const fresh=referenceMessages(await api.chat.getMessages(key.chatId),key.assistantMessageId);if(!fresh||JSON.stringify(fresh)!==JSON.stringify(snapshot))return undefined;
+ if(!isCurrent())return undefined;
+ const fresh=referenceMessages(await api.chat.getMessages(key.chatId),key.assistantMessageId);if(!fresh||!isCurrent())return undefined;
+ const freshLast=(await frames(fresh,key.chatId,isCurrent)).at(-1);if(freshLast?.prefixDigest!==last.prefixDigest||freshLast.messageCount!==last.messageCount)return undefined;
  const parsed=ReferenceHistorySchema.safeParse({version:1,target:key,targetReplyNumber:last.replyNumber,entries,truncated});
- return parsed.success&&JSON.stringify(parsed.data).length<=256000?parsed.data:undefined;
+ return isCurrent()&&parsed.success&&JSON.stringify(parsed.data).length<=256000?parsed.data:undefined;
 }
 /** Optional reads are bounded and fail closed without touching primary turn state. */
 export async function readReferenceHistory(api:SpindleAPI,target:StoredTurnRecord,userId?:string,deadlineMs=750):Promise<ReferenceHistory|undefined>{

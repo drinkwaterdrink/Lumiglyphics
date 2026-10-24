@@ -1,3 +1,5 @@
+import { projectTurnPresentation } from "./entity-projection.js";
+import { saveTurnRecord, type StoredTurnRecord } from "./storage.js";
 import { loadCardRole, saveCardRole, saveCorrectedAppearance, loadCharacterRegistry } from "./storage.js";
 import { describe, expect, test } from "bun:test";
 import type { SpindleAPI } from "lumiverse-spindle-types";
@@ -496,4 +498,29 @@ describe('chat card roles and explicit appearance corrections',()=>{
   expect(data.get('chats/two/characters.json')).toEqual({Mira:'red hair, blue eyes'});
   expect(data.get(characterAppearancePath())).toEqual({Mira:'blonde hair, gray eyes'});
  });
+});
+
+test('same-key subject correction must refresh presentation',async()=>{
+ const {spindle,data}=storageRuntime();
+ const plan={key:{chatId:'chat',assistantMessageId:'message',swipeId:0,sourceFingerprint:'12345678',revision:0},createdAt:'2026-10-24T00:00:00Z',paragraphs:[{index:0,sourceIndex:0,text:'Mira waits.'},{index:1,sourceIndex:1,text:'Rain falls.'}],paragraphSpeakers:['Mira',null],scenes:[{startParagraph:0,cast:['Mira'],environment:{location:'Pier',description:'Wet planks'}}],visualCues:[{paragraphIndex:0,character:'Mira',resolvedIdentity:'silver hair'}],initialContinuity:{revision:0,characters:{},facts:{}},continuityDeltas:[]} as unknown as import('../../shared/contracts.js').TurnPlan;
+ const saved=projectTurnPresentation(plan)!;
+ const changed={...plan,visualCues:[{...plan.visualCues[0]!,character:'Jon',resolvedIdentity:'black hair'}]};
+ const expected=projectTurnPresentation(changed)!;
+ expect(expected.snapshots[0]!.drawableEntityId).not.toBe(saved.snapshots[0]!.drawableEntityId);
+ await saveTurnRecord(spindle,'turns/correction-probe.json',{schemaVersion:1,speaker:'Narrator',status:'ready',plan:changed,jobs:[],updatedAt:'now',presentation:saved} as StoredTurnRecord,'alice');
+ const actual=(data.get('turns/correction-probe.json') as StoredTurnRecord).presentation as typeof saved;
+ expect(actual.snapshots[0]!.drawableEntityId).toBe(expected.snapshots[0]!.drawableEntityId);
+});
+
+test('job-only writes reuse a derived projection while in-place plan edits invalidate it',async()=>{
+ const {spindle,data}=storageRuntime();
+ const plan={key:{chatId:'reuse',assistantMessageId:'message',swipeId:0,sourceFingerprint:'12345678',revision:0},createdAt:'2026-10-24T00:00:00Z',paragraphs:[{index:0,sourceIndex:0,text:'Mira waits.'}],paragraphSpeakers:['Mira'],scenes:[{startParagraph:0,cast:['Mira'],environment:{location:'Pier',description:'Wet planks'}}],visualCues:[{paragraphIndex:0,character:'Mira',resolvedIdentity:'silver hair'}],initialContinuity:{revision:0,characters:{},facts:{}},continuityDeltas:[]} as unknown as import('../../shared/contracts.js').TurnPlan;
+ const record={schemaVersion:1,speaker:'Narrator',status:'ready',plan,jobs:[],updatedAt:'now'} as StoredTurnRecord;
+ await saveTurnRecord(spindle,'turns/reuse.json',record,'alice');
+ const first=(data.get('turns/reuse.json') as StoredTurnRecord).presentation;
+ await saveTurnRecord(spindle,'turns/reuse.json',{...record,updatedAt:'later'},'alice');
+ expect((data.get('turns/reuse.json') as StoredTurnRecord).presentation).toBe(first);
+ plan.visualCues[0]!.character='Jon';
+ await saveTurnRecord(spindle,'turns/reuse.json',record,'alice');
+ expect((data.get('turns/reuse.json') as StoredTurnRecord).presentation).not.toBe(first);
 });
