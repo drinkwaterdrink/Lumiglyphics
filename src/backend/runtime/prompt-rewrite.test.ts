@@ -6,6 +6,31 @@ import type {SpindleAPI} from 'lumiverse-spindle-types';
 const request={prompt:'A silver-haired traveller waits at a rainy station.',negativePrompt:'blurry, text',parameters:{seed:9,negativePrompt:'old'},connection_id:'image',model:'flux'};
 function api(outputs:unknown[]){const calls:any[]=[];return {calls,spindle:{connections:{list:async()=>[{id:'writer',provider:'openrouter',model:'writer',is_default:true}]},generate:{raw:async(r:any)=>{calls.push(r);return outputs.shift();}}} as unknown as SpindleAPI};}
 
+test('common unambiguous writer field variants fit without repeated clicks',async()=>{
+ for(const fields of [
+  {positive_prompt:'A silver-haired traveller waits at the station.',negative_prompt:'blur',explanation:'Compressed repeated wording.'},
+  {positivePrompt:'A silver-haired traveller waits at the station.',negativePrompt:null},
+  {prompt:'A silver-haired traveller waits at the station.'},
+ ]){
+  const {spindle,calls}=api([{content:JSON.stringify(fields)}]);
+  const result=await rewriteImagePrompt(spindle,request,undefined,normalizeConfig({}),'u',new AbortController().signal,'fit');
+  expect(result.prompt).toContain('silver-haired');expect(calls).toHaveLength(1);
+  expect(result.negativePrompt).toBe('negative_prompt' in fields?'blur':request.negativePrompt);
+ }
+});
+test('ambiguous writer alternatives and invalid field types remain blocked with useful diagnostics',async()=>{
+ for(const fields of [{prompt:'First scene',positive_prompt:'Different scene',negativePrompt:''},{prompt:['not','a string'],negativePrompt:''},{prompt:'A traveller waits.',negativePrompt:['blur']}]){
+  const {spindle}=api(Array.from({length:2},()=>({content:JSON.stringify(fields)})));
+  await expect(rewriteImagePrompt(spindle,request,undefined,normalizeConfig({}),'u',new AbortController().signal,'fit')).rejects.toThrow(/(?:conflicting|must be text)/);
+ }
+});
+test('normalizing writer fields cannot bypass the frozen model budget',async()=>{
+ const {spindle,calls}=api(Array.from({length:2},()=>({content:JSON.stringify({positive_prompt:'x'.repeat(3500),negative_prompt:'no watermark',explanation:'Shortened.'})})));
+ await expect(rewriteImagePrompt(spindle,request,undefined,normalizeConfig({}),'u',new AbortController().signal,'fit')).rejects.toThrow('limit is 3,000');
+ expect(calls).toHaveLength(2);
+ expect(JSON.parse(calls[1].messages[1].content).previousCandidate.negativePrompt).toBe('no watermark');
+});
+
 test('fit materializes immutable cast blocks after rewriting and never sends markers as image text',async()=>{
  const subjects='Mira Vale: silver hair, blue coat, standing beside Jon Reed\nJon Reed: black hair, grey jacket';
  const {spindle,calls}=api([]);

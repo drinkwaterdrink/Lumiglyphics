@@ -1,6 +1,6 @@
-# Lumiglyphics status — beta.67
+# Lumiglyphics status — beta.68
 
-This matrix describes beta.67 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
+This matrix describes beta.68 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
 
 | Area | Status | Current behavior / remaining scope |
 |---|---|---|
@@ -41,3 +41,5 @@ Beta.65: new request preparation snapshots expose appearance/outfit/direction so
 Beta.66 hotfix: prevent unfunded cache-cue overlaps during cast allocation and narrowly recover existing saved plans when the overlap has no saved job. Story/job validation remains strict.
 
 Beta.67: cast source review distinguishes saved guidance from the unsaved draft and offers isolated appearance, alias and outfit suggestion actions. Existing defaults/outfits are protected; Save changes stays explicit.
+
+Beta.68: Fit/rewrite accepts bounded, unambiguous writer field variants and reports specific invalid-field failures while retaining budgets and identity checks. Cast appearance source notes now survive explicit saves only while their exact wording matches.

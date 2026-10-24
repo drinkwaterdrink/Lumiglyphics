@@ -1,6 +1,7 @@
 import {promptProtection,assertPromptProtection} from "./prompt-protection.js";
 import {resolveImagePromptProfile,promptBudgetTargets} from "../../shared/image-prompt-profile.js";
 import {createPromptAnchors,expandPromptAnchors} from './prompt-anchors.js';
+import {promptWriterFields} from './prompt-writer-fields.js';
 import type {SpindleAPI} from 'lumiverse-spindle-types';
 import {z} from 'zod';
 import type {VisualNovelConfig} from '../../config.js';
@@ -109,7 +110,7 @@ export async function rewriteImagePrompt(spindle:SpindleAPI,request:ImageGenerat
   if(signal.aborted)throw cancelled();
   try{
    const text=content(response);if(typeof text!=='string'||text.length>150000)throw new Error('No usable prompt text was returned.');
-   const parsed=output.parse(promptObject(text));
+   const parsed=output.parse(promptWriterFields(promptObject(text),profile.negativeMode==='positive-only'?'':request.negativePrompt??''));
    previousCandidate=parsed;
    parsed.negativePrompt=compactNegativePrompt(parsed.negativePrompt);
    const expanded=expandPromptAnchors(parsed.prompt,anchors,parsed.negativePrompt);
@@ -124,5 +125,6 @@ export async function rewriteImagePrompt(spindle:SpindleAPI,request:ImageGenerat
    feedback=`Previous output was rejected: ${lastReason} Return corrected JSON. Positive + negative must stay at or below ${maximum.toLocaleString()} characters combined AFTER identity anchor expansion. Aim near ${targetHigh.toLocaleString()} characters on this attempt; shorten repeated template/style wording and connective prose first. Use the supplied previous candidate as a compression draft. ${anchors.entries.length?'Use EVERY immutable identity anchor exactly once instead of rewriting any character appearance. The application supplies those facts; do not paraphrase them.':''} Do not omit cast members or swap their appearances. No commentary.`;
   }
  }
- throw new Error(`Prompt repair failed after two attempts: ${lastReason} Your previous draft is retained. Edit the draft or its shared style/appearance wording, then use Fit to budget again.`);
+ const formatFailure=/invalid prompt fields|prompt JSON|No usable prompt text/.test(lastReason);
+ throw new Error(`Prompt repair failed after two attempts: ${lastReason} Your previous draft is retained. ${formatFailure?'The story-reader text model returned an unusable response format. Check the story-reader connection or use a different text model before fitting again.':'Edit the draft or its shared style/appearance wording, then use Fit to budget again.'}`);
 }
