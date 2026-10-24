@@ -6,8 +6,8 @@ export function pictureStateLabel(state:ReturnType<typeof inspectorState>):strin
 export function pictureStateSummary(states:ReturnType<typeof inspectorState>[]):string{
   if(!states.length)return '';
   const counts=new Map<string,number>();
-  for(const state of states){const group=['completed','historical','reused'].includes(state.kind)?'ready':['preparing','rewriting','rebuilding'].includes(state.kind)?'preparing':pictureStateLabel(state).toLocaleLowerCase();counts.set(group,(counts.get(group)??0)+1);}
-  const order=['ready','needs review','preparing','waiting to generate','generating','retry queued','retry running','failed','cancelled','skipped'];
+  for(const state of states){const group=['completed','historical','reused'].includes(state.kind)?'ready':state.kind==='preparing'?'preparing':pictureStateLabel(state).toLocaleLowerCase();counts.set(group,(counts.get(group)??0)+1);}
+  const order=['ready','needs review','rewriting prompt','applying template','preparing','waiting to generate','generating','retry queued','retry running','failed','cancelled','skipped'];
   return [`${states.length} picture${states.length===1?'':'s'}`,...[...new Set([...order,...counts.keys()])].filter(key=>counts.has(key)).map(key=>`${counts.get(key)} ${key}`)].join(' · ');
 }
 export function inspectorState(input:Input):{kind:string;title:string;detail:string;action:'generate'|'retry'|'prepare'|null}{

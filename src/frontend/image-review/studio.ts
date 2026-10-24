@@ -1,4 +1,5 @@
 import type {ImageRetryQueueView} from '../../shared/image-retries.js';
+import type {LocalPictureOperations} from './local-operations.js';
 import {promptRevisionSummary} from './prompt-revision.js';
 import {retainedSceneEvidence,changedSceneEvidence,type SceneEvidence} from '../../shared/prompt-scene-evidence.js';
 import {promptProfileSummary} from "../../shared/image-prompt-profile.js";
@@ -39,6 +40,7 @@ export class ImageStudio {
   private preferences:PresentationRulesPanel;
   private turn: TurnView | null = null;
   private selectedJob = "";
+  private operationSignature='';
   private planningChat = '';
   private maxImagesPerTurn: number | undefined;
   private previousWording = new Map<string, Draft & {requestId:string;sceneEvidence:SceneEvidence[]}>();
@@ -46,6 +48,7 @@ export class ImageStudio {
   private drafts = new Map<string, Draft>();
   private submitted = new Set<string>();
   private preparing = new Set<string>();
+  private preparationStarts=new Map<string,{requestId:string|undefined;status:string|undefined;failureId:string|undefined}>();
   private review = true;
   private templates: ImageTemplate[] = [];
   private templateRequest = "";
@@ -58,7 +61,7 @@ export class ImageStudio {
   private recovering: "stop"|"retry"|null=null;
   private dismissedNotices = new Set<string>();
 
-  constructor(mount: HTMLElement, private readonly send: (request: FrontendRequest) => void, private readonly saveReview: (enabled: boolean) => void,private readonly onVisibility?:(open:boolean)=>void) {
+  constructor(mount: HTMLElement, private readonly send: (request: FrontendRequest) => void, private readonly saveReview: (enabled: boolean) => void,private readonly onVisibility?:(open:boolean)=>void,private readonly onOperations?:(operations:LocalPictureOperations|null)=>void) {
     this.host = document.createElement("div");
     this.host.dataset.imageStudio = "";
     this.root = this.host.attachShadow({ mode: "open" });
@@ -156,7 +159,7 @@ export class ImageStudio {
         const request:FrontendRequest={ type:'vn_prepare_image',chatId:this.turn.chatId,messageId:this.turn.messageId,sourceFingerprint:this.turn.sourceFingerprint,jobId:this.selectedJob,
           ...(this.el<HTMLSelectElement>('[data-template]').value ? {templateId:this.el<HTMLSelectElement>('[data-template]').value} : {}),
           ...(draft ? {edits:{prompt:draft.prompt,negativePrompt:draft.negative,parameters}} : {})};
-        this.preparing.add(this.selectedJob);this.render();this.send(request);
+        this.beginPreparation(this.selectedJob);this.render();this.send(request);
       } catch(error) {this.showError(error instanceof Error ? error.message : String(error));}
     };
     this.el<HTMLButtonElement>('[data-replan]').onclick = () => {
@@ -192,7 +195,7 @@ export class ImageStudio {
       const templateId=this.el<HTMLSelectElement>('[data-template]').value;
       this.send({type:'vn_correct_image_subject',version:1,...this.recoveryScope(),jobId:this.selectedJob,templateId,
         subject:environment?{kind:'environment',templateId}:{kind:'character',name,appearance:this.el<HTMLTextAreaElement>('[data-subject-appearance]').value,saveAppearance:this.el<HTMLInputElement>('[data-save-appearance]').checked}});
-      this.preparing.add(this.selectedJob);this.render();
+      this.beginPreparation(this.selectedJob);this.render();
     };
     this.el<HTMLButtonElement>("[data-copy]").onclick = () => { void this.copy(); };
     this.render();
@@ -210,9 +213,15 @@ export class ImageStudio {
     const request:FrontendRequest={type:"vn_queue_image_retries",version:1,...this.recoveryScope(),revision:this.turn.revision,action:"enqueue",jobIds:ids};
     this.render();try{this.send(request);}catch(error){this.retryQueueJobs.clear();this.showError(error instanceof Error?error.message:String(error));}
   }
+  private beginPreparation(jobId:string):void{
+    const asset=this.turn?.assets.find(asset=>asset.jobId===jobId);
+    const latest=this.turn?.imageRequests?.filter(record=>record.jobId===jobId).at(-1);
+    this.preparationStarts.set(jobId,{requestId:latest?.requestId,status:asset?.status,failureId:asset?.failureId});
+    this.preparing.add(jobId);
+  }
   private prepareSavedScene():void {
     if(!this.turn||this.preparing.has(this.selectedJob))return;
-    const jobId=this.selectedJob;this.preparing.add(jobId);this.render();
+    const jobId=this.selectedJob;this.beginPreparation(jobId);this.render();
     this.send({type:'vn_prepare_image',chatId:this.turn.chatId,messageId:this.turn.messageId,sourceFingerprint:this.turn.sourceFingerprint,jobId});
   }
   private layoutInspector():void {
@@ -378,16 +387,28 @@ export class ImageStudio {
     if(!turn||(this.planningChat&&turn.chatId!==this.planningChat))this.planningChat='';
     if(this.turn?.chatId!==turn?.chatId||!turn)this.setOpen(false);
     if(this.turn?.chatId!==turn?.chatId)this.preferences.clear();
-    if (this.turn?.chatId !== turn?.chatId || this.turn?.sourceFingerprint !== turn?.sourceFingerprint || this.turn?.messageId !== turn?.messageId || this.turn?.swipeId !== turn?.swipeId || this.turn?.revision !== turn?.revision) { this.drafts.clear(); this.previousWording.clear(); this.submitted.clear(); this.preparing.clear(); this.rebuilding.clear(); this.rerolling.clear(); this.selectedJob = ""; this.selectedRequest = ""; this.recoveryJob = "";this.retryQueueJobs.clear();this.retryActive=null; }
+    if (this.turn?.chatId !== turn?.chatId || this.turn?.sourceFingerprint !== turn?.sourceFingerprint || this.turn?.messageId !== turn?.messageId || this.turn?.swipeId !== turn?.swipeId || this.turn?.revision !== turn?.revision) { this.drafts.clear(); this.previousWording.clear(); this.submitted.clear(); this.preparing.clear();this.preparationStarts.clear(); this.rebuilding.clear(); this.rerolling.clear(); this.selectedJob = ""; this.selectedRequest = ""; this.recoveryJob = "";this.retryQueueJobs.clear();this.retryActive=null; }
     this.replanning = false;this.recovering=null;
     this.turn = turn;
-    for(const id of this.rerolling)if(!turn?.imageRequests?.some(r=>r.requestId===id&&r.state==='review'))this.rerolling.delete(id);
+    for(const pending of [this.rerolling,this.rebuilding])for(const id of pending){
+      const record=turn?.imageRequests?.find(record=>record.requestId===id);
+      const latest=turn?.imageRequests?.filter(candidate=>candidate.jobId===record?.jobId).at(-1);
+      if(!record||latest?.requestId!==id||record.state!=='review')pending.delete(id);
+    }
     for (const record of turn?.imageRequests ?? []) if (record.state !== "review") {
       const draft=this.drafts.get(record.requestId);
       if(record.state==='cancelled'&&draft&&!this.drafts.has(this.draftKey(record)))this.drafts.set(this.draftKey(record),draft);
       this.submitted.delete(record.requestId); this.drafts.delete(record.requestId);
     }
-    for (const asset of turn?.assets ?? []) if ((turn?.imageRequests ?? []).some((record) => record.jobId === asset.jobId && record.state === "review") || asset.status === "failed" || asset.status === "cancelled") this.preparing.delete(asset.jobId);
+    for(const jobId of this.preparing){
+      const baseline=this.preparationStarts.get(jobId);
+      const asset=turn?.assets.find(asset=>asset.jobId===jobId);
+      const latest=turn?.imageRequests?.filter(record=>record.jobId===jobId).at(-1);
+      const terminal=asset&&['failed','cancelled','generated','browser_ready'].includes(asset.status);
+      if(!asset||latest?.requestId!==baseline?.requestId||terminal&&(asset.status!==baseline?.status||asset.failureId!==baseline?.failureId)){
+        this.preparing.delete(jobId);this.preparationStarts.delete(jobId);
+      }
+    }
     this.render();
   }
   setPlanning(chatId:string,planning:boolean):void {this.planningChat=planning?chatId:this.planningChat===chatId?'':this.planningChat;this.render();}
@@ -423,7 +444,7 @@ export class ImageStudio {
     this.el<HTMLElement>('[data-notice]').textContent=visible?text:'';
     this.el<HTMLElement>('[data-notice-row]').hidden=!visible;
   }
-  showError(error: string): void { this.replanning = false;this.recovering=null; this.submitted.clear(); this.preparing.clear(); this.rerolling.clear();this.rebuilding.clear(); this.render(); this.setNotice(error); }
+  showError(error: string): void { this.replanning = false;this.recovering=null; this.submitted.clear(); this.preparing.clear();this.preparationStarts.clear(); this.rerolling.clear();this.rebuilding.clear(); this.render(); this.setNotice(error); }
 
   private regeneratePrompt():void {
     if(!this.turn||this.el<HTMLButtonElement>('[data-regenerate-prompt]').disabled)return;
@@ -443,7 +464,7 @@ export class ImageStudio {
       this.rerolling.add(record.requestId);this.render();
       this.send({type:'vn_regenerate_image_prompt',chatId:this.turn.chatId,messageId:this.turn.messageId,sourceFingerprint:this.turn.sourceFingerprint,requestId:record.requestId,...(edits?{edits}:{})});
     }else{
-      this.preparing.add(this.selectedJob);this.render();
+      this.beginPreparation(this.selectedJob);this.render();
       this.send({type:'vn_prepare_image',chatId:this.turn.chatId,messageId:this.turn.messageId,sourceFingerprint:this.turn.sourceFingerprint,jobId:this.selectedJob,regeneratePrompt:true,...(edits?{edits}:{}),
         ...(this.el<HTMLSelectElement>('[data-template]').value?{templateId:this.el<HTMLSelectElement>('[data-template]').value}:{})});
     }
@@ -460,7 +481,7 @@ export class ImageStudio {
 
   private render(): void {
     this.el<HTMLElement>("[data-template-confirm]").hidden = true;
-    const waiting = (this.turn?.imageRequests ?? []).filter((record) => record.state === "review").length;
+    const waiting=(this.turn?.assets??[]).filter(asset=>this.stateForJob(asset.jobId,this.turn?.imageRequests?.filter(record=>record.jobId===asset.jobId).at(-1)).kind==='held').length;
     const launcher=this.el<HTMLButtonElement>("[data-launch]");launcher.textContent="Image prompts";launcher.dataset.waiting=String(waiting);launcher.setAttribute("aria-label",`Image prompts${waiting?` (${waiting} waiting)`:""}`);
     if (!this.turn?.assets.some((asset) => asset.jobId === this.selectedJob)) { this.selectedJob = this.turn?.assets[0]?.jobId ?? ""; this.selectedRequest = ""; }
     const picker = this.el<HTMLSelectElement>("[data-picture]");
@@ -552,6 +573,19 @@ export class ImageStudio {
     this.el<HTMLButtonElement>("[data-copy]").disabled = !record;
     this.renderInspector();
     this.setNotice(this.recovering ? (this.recovering==='stop'?'Stopping pending pictures…':'Preparing unfinished pictures for review…') : rolling ? "Rewriting prompt with the story-reader model… Uses text tokens; image generation still needs approval." : (asset?.error ?? '') || (record && this.rebuilding.has(record.requestId) ? "Rebuilding template… Wait for a new preview before generating." : ''));
+    this.publishOperations();
+  }
+  private publishOperations():void{
+    const turn=this.turn;
+    const jobs:LocalPictureOperations['jobs']=[];
+    for(const asset of turn?.assets??[]){
+      const record=turn?.imageRequests?.filter(candidate=>candidate.jobId===asset.jobId).at(-1);
+      const kind=record&&this.rerolling.has(record.requestId)?'rewrite':record&&this.rebuilding.has(record.requestId)?'template':this.preparing.has(asset.jobId)?'prepare':null;
+      if(kind)jobs.push({jobId:asset.jobId,kind,...(record?{requestId:record.requestId}:{})});
+    }
+    const snapshot:LocalPictureOperations|null=turn&&jobs.length?{chatId:turn.chatId,messageId:turn.messageId,sourceFingerprint:turn.sourceFingerprint,swipeId:turn.swipeId,revision:turn.revision,jobs}:null;
+    const signature=JSON.stringify(snapshot);
+    if(signature!==this.operationSignature){this.operationSignature=signature;this.onOperations?.(snapshot);}
   }
   private stateForJob(jobId:string,record?:ImageRequestRecord){
     return inspectorState({asset:this.turn?.assets.find(entry=>entry.jobId===jobId),requestState:record&&this.submitted.has(record.requestId)?'approved':record?.state,

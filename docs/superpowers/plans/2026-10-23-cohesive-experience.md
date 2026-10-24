@@ -36,7 +36,8 @@ Files: `src/frontend/image-review/inspector-model.ts`, its tests, `studio.ts`, a
 - [x] Verify selection, queued retry, prompt drafts, repair, no paid calls on browsing, and 320/390/1280px layouts.
 
 - [x] Extend shared statuses to reader-level progress, including review updates, scoped retry events and initial/reopened reply load. Delivered beta.63.
-- [ ] Unify remaining recovery controls and mirror local rewrite/template preparation into reader progress before calling the whole workflow complete.
+- [x] Mirror scoped local rewrite/template/preparation into reader progress, retain activity across inspector close/reopen, and clear it on acknowledgement, failure or source change. Fix stale failed-asset rebroadcasts ending new preparation early; count actionable reviews only. Delivered beta.72.
+- [ ] Unify remaining recovery controls before calling the whole workflow complete.
 
 ## Phase 2 — visual brief and compatibility explanation
 

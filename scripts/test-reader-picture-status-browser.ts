@@ -5,6 +5,7 @@ const server=await browserFixtureServer('scripts/host-lifecycle-fixture.ts');
 const browser=await chromium.launch();
 try{
  const page=await browser.newPage({viewport:{width:390,height:844}});page.setDefaultTimeout(5000);
+ const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
  await page.goto(`http://127.0.0.1:${server.port}`);
  await page.evaluate(()=>{
   const f=(window as any).hostFixture,t=f.turn();
@@ -20,6 +21,38 @@ try{
  await badge.click();
  assert.ok(await page.locator('[data-image-studio] section').isVisible(),'badge opens inspector');
  assert.equal(await page.evaluate(()=>(window as any).hostFixture.sent.length),before,'opening inspector sends no paid request');
+ const studio=page.locator('[data-image-studio]');
+ await studio.getByLabel('Positive prompt',{exact:true}).fill('My edited portrait');
+ await studio.locator('[data-prompt-actions] summary').click();
+ await studio.getByRole('button',{name:'Rewrite prompt',exact:true}).click();
+ assert.match(await badge.innerText(),/1 rewriting prompt/);
+ assert.equal(await studio.locator('[data-launch]').getAttribute('data-waiting'),'0','busy text work is not advertised as an actionable review');
+ assert.equal(await page.evaluate(()=>(window as any).hostFixture.stage().getState().assetProgress.busy),true);
+ await studio.locator('[data-close]').click();
+ assert.match(await badge.innerText(),/1 rewriting prompt/,'closing review does not pretend background text work finished');
+ for(const width of [320,390,1280]){
+  await page.setViewportSize({width,height:844});
+  const bounds=await badge.boundingBox();assert.ok(bounds&&bounds.x>=0&&bounds.x+bounds.width<=width+1,'operation badge stays within the viewport');
+  const launcher=await studio.locator('[data-launch]').boundingBox();
+  assert.ok(bounds&&launcher&&(bounds.x+bounds.width<=launcher.x||bounds.y>=launcher.y+launcher.height||bounds.y+bounds.height<=launcher.y),'progress never covers the prompt launcher');
+  if(width===320)await page.screenshot({path:'.cache/browser-fixtures/reader-rewriting-narrow.png'});
+ }
+ await page.setViewportSize({width:390,height:844});
+ await page.screenshot({path:'.cache/browser-fixtures/reader-rewriting-progress.png'});
+ await badge.click();
+ assert.equal(await studio.getByLabel('Positive prompt',{exact:true}).inputValue(),'My edited portrait');
+ await page.evaluate(()=>(window as any).hostFixture.receive({type:'vn_error',operation:'vn_regenerate_image_prompt',chatId:'A',error:'Fixture writer failed'}));
+ assert.match(await badge.innerText(),/1 needs review/);
+ assert.equal(await page.evaluate(()=>(window as any).hostFixture.stage().getState().assetProgress.busy),false,'writer failure clears local activity');
+ assert.equal(await studio.getByLabel('Positive prompt',{exact:true}).inputValue(),'My edited portrait','failed rewrite keeps the local draft');
+ await studio.locator('[data-template-tools] > summary').click();
+ await studio.getByLabel('Picture template',{exact:true}).selectOption('environment');
+ await studio.getByRole('button',{name:'Use template',exact:true}).click();
+ if(await studio.locator('[data-template-confirm]').isVisible())await studio.getByRole('button',{name:'Replace with template',exact:true}).click();
+ assert.match(await badge.innerText(),/1 applying template/);
+ await page.evaluate(()=>{const f=(window as any).hostFixture;f.current.imageRequests=[{...f.current.imageRequests[0],state:'cancelled'},{...f.current.imageRequests[0],requestId:'new-preview',state:'review',prompt:'An empty library.'}];f.receive({type:'vn_image_requests',chatId:'A',messageId:'m',sourceFingerprint:f.current.sourceFingerprint,requests:f.current.imageRequests});});
+ assert.match(await badge.innerText(),/1 needs review/,'new preview clears the old template operation');
+ assert.equal(await page.evaluate(()=>(window as any).hostFixture.stage().getState().assetProgress.busy),false);
  await page.locator('[data-image-studio] [data-close]').click();
  await page.evaluate(()=>{const f=(window as any).hostFixture;f.receive({type:'vn_image_requests',chatId:'A',messageId:'m',sourceFingerprint:f.current.sourceFingerprint,requests:f.current.imageRequests.map((r:any)=>({...r,state:'approved'}))});});
  assert.match(await badge.innerText(),/1 generating/,'review updates refresh reader status');
@@ -28,5 +61,23 @@ try{
  await page.evaluate(()=>{const f=(window as any).hostFixture;f.receive({type:'vn_image_retry_queue',queue:{...f.current,revision:99,activeJobId:'job',jobIds:[]}});});
  assert.match(await badge.innerText(),/1 retry queued/,'stale queue cannot override current reader');
  await page.screenshot({path:'.cache/browser-fixtures/reader-picture-status.png'});
+ await page.evaluate(()=>{const f=(window as any).hostFixture;const t=f.turn('A',1);t.assets=[{jobId:'job',cueId:'cue',paragraphIndex:0,status:'failed'}];t.imageRequests=[{...f.current.imageRequests.at(-1),requestId:'failed-request',state:'approved'}];f.current=t;f.state(t);});
+ await page.locator('[data-image-studio] [data-launch]').click();
+ await studio.getByLabel('Positive prompt',{exact:true}).fill('An edited recovery portrait');
+ await studio.getByRole('button',{name:'Prepare edited preview',exact:true}).click();
+ assert.match(await badge.innerText(),/1 preparing/);
+ await page.evaluate(()=>{const f=(window as any).hostFixture;f.receive({type:'vn_asset',chatId:'A',messageId:'m',sourceFingerprint:f.current.sourceFingerprint,revision:1,asset:{...f.current.assets[0]}});});
+ assert.match(await badge.innerText(),/1 preparing/,'rebroadcast of the old failure cannot finish a new preparation');
+ await page.evaluate(()=>(window as any).hostFixture.receive({type:'vn_error',operation:'vn_prepare_image',chatId:'A',error:'Fixture preparation failed'}));
+ assert.equal(await page.evaluate(()=>(window as any).hostFixture.stage().getState().assetProgress),null,'preparation error clears activity');
+ await studio.getByRole('button',{name:'Prepare edited preview',exact:true}).click();
+ await page.evaluate(()=>{const f=(window as any).hostFixture;f.current.imageRequests=[{...f.current.imageRequests[0],state:'cancelled'},{...f.current.imageRequests[0],requestId:'prepared-preview',state:'review'}];f.receive({type:'vn_image_requests',chatId:'A',messageId:'m',sourceFingerprint:f.current.sourceFingerprint,requests:f.current.imageRequests});});
+ assert.match(await badge.innerText(),/1 needs review/,'new request acknowledges replacement preparation');
+ await studio.getByRole('button',{name:'Rewrite prompt',exact:true}).click();
+ assert.match(await badge.innerText(),/1 rewriting prompt/);
+ await page.evaluate(()=>{const f=(window as any).hostFixture;f.changeChat('B');const t=f.turn('B',1);t.assets=[{jobId:'job',cueId:'cue',paragraphIndex:0,status:'generating'}];t.imageRequests=[{...f.current.imageRequests.at(-1),requestId:'other-chat',state:'review',prompt:'Other chat draft'}];f.state(t,'B');});
+ assert.match(await badge.innerText(),/1 needs review/,'another chat cannot inherit a local rewrite for the same job ID');
+ assert.equal(await page.evaluate(()=>(window as any).hostFixture.stage().getState().assetProgress.busy),false);
+ assert.deepEqual(errors,[]);
  console.log('Reader picture status: held reviews, click-through, approval updates and scoped retry queues passed.');
 }finally{await browser.close();await server.stop();}
