@@ -10,24 +10,40 @@ export class StageDossiers {
  private prefs=normalizeTooltipPreferences({});private presentation:ReaderPresentation|undefined;private paragraphs:readonly string[]=[];private index=-1;
  private history:ReferenceHistory|undefined;
  private card:DossierCard;private tray=document.createElement('button');private ready=false;
- constructor(private root:HTMLElement,private text:HTMLElement,controls:HTMLElement,private hold:()=>void,private release:()=>void,private save:(prefs:TooltipPreferences)=>void,private draftTools?:{current:()=>string;apply:(text:string)=>boolean;focus:()=>void},documentOpen?:(open:boolean)=>void) {
+ constructor(private root:HTMLElement,private text:HTMLElement,controls:HTMLElement,private hold:()=>void,private release:()=>void,private save:(prefs:TooltipPreferences)=>void,private draftTools?:{current:()=>string;apply:(text:string)=>boolean;focus:()=>void},documentOpen?:(open:boolean)=>void,private dossierOpen?:(open:boolean)=>void) {
   const style=document.createElement('style');style.textContent=DOSSIER_CSS;root.append(style);
-  this.card=new DossierCard(root,()=>this.release(),(entity,patch)=>this.updateOverride(entity,patch),documentOpen);
-  this.tray.type='button';this.tray.dataset.vnReferences='';this.tray.dataset.vnControl='references';this.tray.innerHTML='<span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M12 5.5c-3-2-6.5-2-9-1v14c2.5-1 6-1 9 1 3-2 6.5-2 9-1v-14c-2.5-1-6-1-9 1Z"/><path d="M12 5.5v14M6 8h3M6 11h3M15 8h3M15 11h3"/></svg></span>';this.tray.title='Scene references';this.tray.setAttribute('aria-label','Scene references');this.tray.hidden=true;
-  this.tray.onclick=event=>{event.stopPropagation();const snapshot=this.snapshot();if(!snapshot)return;this.hold();this.card.openTray(referenceEntriesWithHistory(snapshot,this.prefs,this.history),this.tray,(id,trigger)=>this.open(id,trigger),this.prefs.rememberReferences&&this.history?.truncated?'Showing a limited recent selection of earlier descriptions.':undefined);};controls.append(this.tray);
+  this.card=new DossierCard(root,()=>{this.dossierOpen?.(false);this.release();},(entity,patch)=>this.updateOverride(entity,patch),documentOpen);
+  this.tray.type='button';this.tray.dataset.vnReferences='';this.tray.dataset.vnControl='references';this.tray.innerHTML='<span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M12 5.5c-3-2-6.5-2-9-1v14c2.5-1 6-1 9 1 3-2 6.5-2 9-1v-14c-2.5-1-6-1-9 1Z"/><path d="M12 5.5v14M6 8h3M6 11h3M15 8h3M15 11h3"/></svg></span>';this.tray.title='Scene references (R)';this.tray.setAttribute('aria-label','Scene references');this.tray.hidden=true;
+  this.tray.onclick=event=>{event.stopPropagation();this.openTrayFromStage();};controls.append(this.tray);
  }
  isOpen():boolean{return this.card.isOpen();}
+ openTrayFromStage():boolean{
+  const snapshot=this.snapshot();if(!snapshot||this.tray.hidden)return false;
+  const entries=referenceEntriesWithHistory(snapshot,this.prefs,this.history);if(!entries.length)return false;
+  this.hold();this.dossierOpen?.(true);
+  this.card.openTray(entries,this.tray,(id,trigger)=>this.open(id,trigger),this.prefs.rememberReferences&&this.history?.truncated?'Showing a limited recent selection of earlier descriptions.':undefined);
+  return true;
+ }
+ openEntityFromStage(id:string,trigger:HTMLElement):void{this.open(id,trigger);}
+ sceneHudEntries():Array<{id:string;name:string;kind:'npc'|'place'|'object';pinned:boolean}>{
+  if(!this.ready||!this.prefs.enabled)return [];
+  const snapshot=this.snapshot();if(!snapshot)return [];
+  const entries=referenceEntriesWithHistory(snapshot,this.prefs,this.history).filter(e=>e.current);
+  const places=entries.filter(e=>e.entity.kind==='place'&&snapshot.locationId&&e.entity.id===snapshot.locationId);
+  const others=entries.filter(e=>!(e.entity.kind==='place'&&snapshot.locationId&&e.entity.id===snapshot.locationId));
+  return [...places,...others].slice(0,6).map(e=>({id:e.entity.id,name:e.entity.name,kind:e.entity.kind,pinned:e.pinned}));
+ }
  setContext(value:ReaderPresentation|undefined,paragraphs:readonly string[],history?:ReferenceHistory):void {
-  this.card.close();this.index=-1;this.ready=false;this.paragraphs=paragraphs;
+  this.card.close();this.dossierOpen?.(false);this.index=-1;this.ready=false;this.paragraphs=paragraphs;
   const parsed=ReaderPresentationSchema.safeParse(value);
   this.presentation=parsed.success&&JSON.stringify(parsed.data).length<=512000&&parsed.data.snapshots.length===paragraphs.length&&parsed.data.snapshots.every((s,i)=>s.at.paragraphIndex===i&&samePresentationTurn(s.at.key,parsed.data.snapshots[0]!.at.key))?parsed.data:undefined;
   if(this.presentation?.documents)this.presentation.documents=validateStoryDocuments(this.presentation.documents,paragraphs.map(text=>({text:stripTextEffectTags(text)})));
   const key=this.presentation?.snapshots[0]?.at.key;this.history=key?referenceHistoryFor(history,key):undefined;
   clearEntityAnchors(this.text);this.tray.hidden=true;
  }
- setHistory(history:ReferenceHistory|undefined):void{const key=this.presentation?.snapshots[0]?.at.key,next=key?referenceHistoryFor(history,key):undefined;if(JSON.stringify(next)===JSON.stringify(this.history))return;this.history=next;this.card.close();if(this.ready)this.refresh(this.index);}
- setPreferences(value:TooltipPreferences):void{const next=normalizeTooltipPreferences(value);if(JSON.stringify(next)===JSON.stringify(this.prefs))return;this.prefs=next;this.card.close();if(this.ready)this.refresh(this.index);else{clearEntityAnchors(this.text);this.tray.hidden=true;}}
- cursor(index:number):void{if(index!==this.index){this.card.close();this.index=index;this.ready=false;this.tray.hidden=true;}}
+ setHistory(history:ReferenceHistory|undefined):void{const key=this.presentation?.snapshots[0]?.at.key,next=key?referenceHistoryFor(history,key):undefined;if(JSON.stringify(next)===JSON.stringify(this.history))return;this.history=next;this.card.close();this.dossierOpen?.(false);if(this.ready)this.refresh(this.index);}
+ setPreferences(value:TooltipPreferences):void{const next=normalizeTooltipPreferences(value);if(JSON.stringify(next)===JSON.stringify(this.prefs))return;this.prefs=next;this.card.close();this.dossierOpen?.(false);if(this.ready)this.refresh(this.index);else{clearEntityAnchors(this.text);this.tray.hidden=true;}}
+ cursor(index:number):void{if(index!==this.index){this.card.close();this.dossierOpen?.(false);this.index=index;this.ready=false;this.tray.hidden=true;}}
  private snapshot(){const snapshot=this.presentation?.snapshots[this.index];return snapshot?{...snapshot,entities:snapshot.entities.filter(e=>e.firstParagraph<=this.index)}:undefined;}
  refresh(index:number):void {
   this.cursor(index);this.ready=true;clearEntityAnchors(this.text);
@@ -45,8 +61,8 @@ export class StageDossiers {
  private open(id:string,trigger:HTMLElement):void {
   const snapshot=this.snapshot();if(!snapshot)return;
   const current=eligibleEntities(snapshot.entities,this.prefs,snapshot.at.key.chatId).some(e=>e.id===id);
-  const selected=current?selectReaderDossier(id,snapshot,this.prefs.detail,this.prefs.fieldGroups):selectEarlierDossier(id,snapshot,this.prefs,this.history);
-  if(!selected)return;const dossier=current?dossierWithHistory(selected,snapshot,this.prefs,this.history):selected;this.hold();
+  const selected=current?selectReaderDossier(id,snapshot,this.prefs.detail,this.prefs.fieldGroups,this.prefs.maxFactsPerEntity):selectEarlierDossier(id,snapshot,this.prefs,this.history);
+  if(!selected)return;const dossier=current?dossierWithHistory(selected,snapshot,this.prefs,this.history):selected;this.hold();this.dossierOpen?.(true);
   const actions=current&&this.prefs.actionsEnabled&&this.draftTools?{
    drafts:availableInteractionVerbs(dossier.entity,snapshot).flatMap(verb=>{const draft=buildInteractionDraft(dossier.entity,verb,snapshot);return draft?[draft]:[];}),
    current:this.draftTools.current,focus:this.draftTools.focus,

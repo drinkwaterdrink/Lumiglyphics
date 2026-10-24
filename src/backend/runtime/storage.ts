@@ -1058,16 +1058,20 @@ function recordWithPresentation(record:StoredTurnRecord):StoredTurnRecord {
 // A tiny content-addressed cache avoids rebuilding full paragraph snapshots for
 // job/status writes. Never trust persisted projection identity or TurnKey alone:
 // manual subject corrections and other plan edits may retain the same key.
+
 const presentationCache = new Map<string, {value: ReturnType<typeof projectTurnPresentation>; size: number}>();
 let presentationCacheSize = 0;
 function derivedPresentation(plan: TurnPlan): ReturnType<typeof projectTurnPresentation> {
+
   const input = JSON.stringify(plan);
   const cached = presentationCache.get(input);
   if (cached) {
     presentationCache.delete(input); presentationCache.set(input, cached);
+
     return cached.value;
   }
   const value = projectTurnPresentation(plan);
+
   const size = input.length + (value ? JSON.stringify(value).length : 0);
   if (size <= 2_000_000) {
     while (presentationCache.size >= 4 || presentationCacheSize + size > 2_000_000) {

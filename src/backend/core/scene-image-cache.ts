@@ -170,6 +170,14 @@ function fnv1a(source: string): string {
   return value.toString(16).padStart(8, "0");
 }
 
+export function fnv1aReverse(source: string): string {
+  let value = 0x811c9dc5;
+  for (let index = source.length - 1; index >= 0; index -= 1) {
+    value = Math.imul(value ^ source.charCodeAt(index), 0x01000193) >>> 0;
+  }
+  return value.toString(16).padStart(8, "0");
+}
+
 /** Deterministic JSON: object keys sorted recursively, arrays kept in order. */
 export function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== "object") {
@@ -203,7 +211,7 @@ export function sceneEpisodeOf(scene: { priorSceneId?: string | null | undefined
  */
 export function sceneImageCacheKey(identity: SceneImageIdentity): string {
   const canonical = canonicalJson(identity);
-  return `${SCENE_CACHE_KEY_VERSION}:${fnv1a(canonical)}${fnv1a(canonical.split("").reverse().join(""))}:${canonical.length.toString(16)}`;
+  return `${SCENE_CACHE_KEY_VERSION}:${fnv1a(canonical)}${fnv1aReverse(canonical)}:${canonical.length.toString(16)}`;
 }
 
 function entryBytes(scope: string, key: string, episode: string, imageId: string, imageUrl: string, provenance: SceneImageProvenance): number {
@@ -298,7 +306,13 @@ export class SceneImageCache {
    */
   bumpEpoch(scope: SceneImageScope, _reason?: string): number {
     const next = this.epoch(scope) + 1;
+    this.epochs.delete(scope);
     this.epochs.set(scope, next);
+    while (this.epochs.size > Math.max(512, this.maxEntries * 2)) {
+      const oldest = this.epochs.keys().next().value;
+      if (oldest === undefined) break;
+      this.epochs.delete(oldest);
+    }
     return next;
   }
 
@@ -450,7 +464,7 @@ export class SceneImageCache {
   /** Drop every entry that points at this image id (any scope). */
   invalidateImage(imageId: string, reason: SceneImageInvalidationReason = "image_deleted"): number {
     let count = 0;
-    for (const [composite, entry] of [...this.entries]) {
+    for (const [composite, entry] of this.entries) {
       if (entry.imageId !== imageId) continue;
       this.drop(composite, entry, "invalidated");
       this.counters.invalidations[reason] += 1;
@@ -466,7 +480,7 @@ export class SceneImageCache {
   retainEpisodes(scope: SceneImageScope, episodes: Iterable<string>): number {
     const keep = new Set(episodes);
     let count = 0;
-    for (const [composite, entry] of [...this.entries]) {
+    for (const [composite, entry] of this.entries) {
       if (entry.scope !== scope || keep.has(entry.episode)) continue;
       this.drop(composite, entry, "invalidated");
       this.counters.invalidations.scene_boundary += 1;
@@ -487,9 +501,16 @@ export class SceneImageCache {
 
   /** Drop every entry of one user+chat, advance its epoch (late results rejected) and its generation. */
   invalidateScope(scope: SceneImageScope, reason: SceneImageInvalidationReason = "scope_cleared"): number {
-    this.generations.set(scope, this.generation(scope) + 1);
+    const nextGen = this.generation(scope) + 1;
+    this.generations.delete(scope);
+    this.generations.set(scope, nextGen);
+    while (this.generations.size > Math.max(512, this.maxEntries * 2)) {
+      const oldest = this.generations.keys().next().value;
+      if (oldest === undefined) break;
+      this.generations.delete(oldest);
+    }
     let count = 0;
-    for (const [composite, entry] of [...this.entries]) {
+    for (const [composite, entry] of this.entries) {
       if (entry.scope !== scope) continue;
       this.drop(composite, entry, "invalidated");
       this.counters.invalidations[reason] += 1;

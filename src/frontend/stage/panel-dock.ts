@@ -26,7 +26,7 @@ button,input,textarea{font:inherit;color:inherit}button{cursor:pointer;backgroun
 [hidden]{display:none!important}h2{font:600 18px/1.2 Georgia,serif;margin:0 0 10px;color:var(--ink)}p{margin:8px 0;color:var(--muted)}small{color:var(--muted)}.row{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.candidate{border-top:1px solid color-mix(in srgb,var(--edge) 60%,transparent);padding:10px 0}.candidate strong{display:block}.candidate button{margin:6px 5px 0 0}label{display:block;margin:8px 0}input:not([type=checkbox]),textarea{box-sizing:border-box;width:100%;background:var(--field);border:1px solid var(--edge);border-radius:4px;padding:8px}textarea{min-height:90px;font:12px/1.5 ui-monospace,monospace}summary{cursor:pointer;padding:8px 0}.notice{white-space:pre-wrap;color:var(--accent)}
 .pin{position:absolute;pointer-events:auto;display:flex;flex-direction:column;box-sizing:border-box;border:1px solid var(--edge);border-radius:min(var(--radius),10px);overflow:hidden;background:var(--paper);color:var(--ink);box-shadow:0 8px 26px #0006}.bar{display:flex;align-items:center;gap:4px;padding:4px;flex-shrink:0;border-bottom:1px solid color-mix(in srgb,var(--edge) 50%,transparent)}.handle{flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:grab;touch-action:none;border:0;background:transparent;font-weight:650}.bar button{padding:4px 8px}.body{flex:1;min-height:0;display:flex;flex-direction:column}.body iframe{border:0;width:100%;flex:1;min-height:0;background:transparent}.state{padding:3px 8px;font-size:11px;color:var(--muted)}.resize{position:absolute;bottom:0;right:0;width:24px;height:24px;min-height:24px;padding:0;border-radius:6px 0 0 0;cursor:nwse-resize;touch-action:none}.remote{font-size:11px;padding:0 8px;margin:3px 0}.waiting{padding:12px;color:var(--muted)}
 @media(max-width:560px){button{min-height:40px}.launcher{padding:8px 12px 8px 11px;gap:6px}.drawer{top:62px}.bar button{min-height:36px}}
-@media(pointer:coarse){button{min-height:44px}.bar button{min-width:44px}}
+@media(pointer:coarse){button{min-height:44px}.bar button{min-width:44px}.resize{width:44px;height:44px;min-height:44px}}
 @media(prefers-reduced-motion:reduce){button{transition:none}button:active{transform:none}}
 `;
 
@@ -184,7 +184,7 @@ export class PanelDock {
       const bar = document.createElement("div"); bar.className = "bar";
       const handle = this.button(pin.card.title, () => {}); handle.className = "handle";
       handle.title = "Drag to move. Arrow keys move; Shift + arrows resize.";
-      const collapse = this.button(pin.collapsed ? "+" : "−", () => { pin.collapsed = !pin.collapsed; this.rebuild(pin); this.save(); }); collapse.setAttribute("aria-label", "Collapse or expand panel");
+      const collapse = this.button(pin.collapsed ? "+" : "−", () => { pin.collapsed = !pin.collapsed; collapse.textContent = pin.collapsed ? "+" : "−"; body.hidden = pin.collapsed; resize.hidden = pin.collapsed; this.layout(); this.save(); }); collapse.setAttribute("aria-label", "Collapse or expand panel");
       const unpin = this.button(PIN_ICON, () => { this.pins = this.pins.filter((p) => p !== pin); this.renderPins(); this.save(); }); unpin.setAttribute("aria-label", "Unpin panel"); unpin.title = "Unpin panel";
       bar.append(handle, collapse, unpin); node.append(bar);
       const body = document.createElement("div"); body.className = "body"; body.hidden = pin.collapsed;
@@ -207,7 +207,7 @@ export class PanelDock {
   }
   private rebuild(pin: Pin): void { this.nodes.get(pin.key)?.remove(); this.nodes.delete(pin.key); this.renderPins(); }
   private layout(): void {
-    const box = this.host.getBoundingClientRect();
+    const rect = this.host.getBoundingClientRect(); const box = { width: this.host.clientWidth || rect.width, height: this.host.clientHeight || rect.height };
     for (const pin of this.pins) {
       const node = this.nodes.get(pin.key); if (!node) continue;
       const width = Math.min(Math.max(180, pin.width), Math.max(0, box.width - 24));
@@ -217,10 +217,10 @@ export class PanelDock {
   }
   private drag(handle: HTMLButtonElement, pin: Pin, resizing: boolean): void {
     const move = (dx: number, dy: number, resize: boolean) => {
-      const box = this.host.getBoundingClientRect();
-      if (resize) { pin.width = Math.max(180, Math.min(box.width - 24, pin.width + dx)); pin.height = Math.max(140, Math.min(box.height - 80, pin.height + dy)); }
-      else { pin.x = clampPanel(pin.x + dx / Math.max(1, box.width - Math.min(pin.width, box.width - 24) - 24), 1); pin.y = clampPanel(pin.y + dy / Math.max(1, box.height - (pin.collapsed ? 46 : Math.min(pin.height, box.height - 80)) - 80), 1); }
-      this.layout();
+      const rect = this.host.getBoundingClientRect(); const box = { width: this.host.clientWidth || rect.width, height: this.host.clientHeight || rect.height }; const scale = rect.width > 0 && this.host.clientWidth > 0 ? this.host.clientWidth / rect.width : 1; dx *= scale; dy *= scale; const bw = box.width, bh = box.height; if (resize) { pin.width = Math.max(180, Math.min(bw - 24, pin.width + dx)); pin.height = Math.max(140, Math.min(bh - 80, pin.height + dy)); } else { pin.x = clampPanel(pin.x + dx / Math.max(1, bw - Math.min(pin.width, bw - 24) - 24), 1); pin.y = clampPanel(pin.y + dy / Math.max(1, bh - (pin.collapsed ? 46 : Math.min(pin.height, bh - 80)) - 80), 1); } return this.layout();
+
+
+
     };
     handle.onkeydown = (event) => {
       const delta: Record<string, [number, number]> = { ArrowLeft: [-10, 0], ArrowRight: [10, 0], ArrowUp: [0, -10], ArrowDown: [0, 10] };

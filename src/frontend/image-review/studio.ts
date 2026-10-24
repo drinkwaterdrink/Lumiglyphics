@@ -134,7 +134,14 @@ export class ImageStudio {
       const target = event.target;
       if (target instanceof HTMLTextAreaElement && !target.readOnly && !target.disabled) target.focus({ preventScroll: true });
     });
-    this.root.addEventListener("keydown", event => { if ((event as KeyboardEvent).key === "Escape") this.el<HTMLButtonElement>("[data-close]").click(); });
+    this.root.addEventListener("keydown", event => {
+      const e = event as KeyboardEvent;
+      if (e.key === "Escape") { this.el<HTMLButtonElement>("[data-close]").click(); return; }
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        const generate = this.el<HTMLButtonElement>("[data-generate]");
+        if (!generate.hidden && !generate.disabled) { e.preventDefault(); generate.click(); }
+      }
+    });
     this.el<HTMLButtonElement>("[data-generate]").onclick = () => this.decide("generate");
     this.el<HTMLButtonElement>("[data-skip]").onclick = () => this.decide("skip");
     this.el<HTMLButtonElement>("[data-reset]").onclick = () => { const record = this.record(); if (record) this.drafts.delete(this.draftKey(record)); this.render(); };

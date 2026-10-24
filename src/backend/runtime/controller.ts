@@ -120,11 +120,20 @@ const pendingAssetStarts = new Map<string,symbol>();
  * before the bump.
  */
 const intakeEpochs = new Map<string, number>();
+function capEpochMap(map: Map<string, number>, max = 256): void {
+  while (map.size > max) {
+    const oldest = map.keys().next().value;
+    if (oldest === undefined) break;
+    map.delete(oldest);
+  }
+}
 function bumpIntakeEpoch(userId: string | undefined, chatId: string): void {
   const key = runtimeKey(userId, chatId);
   imageRetryEpochs.set(key,(imageRetryEpochs.get(key)??0)+1);
+  capEpochMap(imageRetryEpochs);
   imageRetryQueues.get(key)?.queue.cancel();imageRetryQueues.delete(key);
   intakeEpochs.set(key, (intakeEpochs.get(key) ?? 0) + 1);
+  capEpochMap(intakeEpochs);
 }
 const activeTurnKeys = new Map<string, StoredTurnRecord["plan"]["key"]>();
 
@@ -231,8 +240,7 @@ async function cancelIncompleteJobs(
  */
 function abortChatWork(spindle: SpindleAPI, userId: string | undefined, chatId: string, reason: string): void {
   const key = runtimeKey(userId, chatId);
-  imageRetryEpochs.set(key,(imageRetryEpochs.get(key)??0)+1);
-  imageRetryQueues.get(key)?.queue.cancel();imageRetryQueues.delete(key);
+  bumpIntakeEpoch(userId, chatId);
   planningQueue.cancelChat(userId, chatId, undefined, reason);
   const abortedTurn = activeTurnKeys.get(key) ?? null;
   activeTurnKeys.delete(key);
@@ -1339,18 +1347,24 @@ async function retryTurn(
   userId?: string
 ): Promise<void> {
   const key = runtimeKey(userId, chatId);
-  assetControllers.get(key)?.abort("Retrying turn.");
+  bumpIntakeEpoch(userId, chatId);
+  const retryEpoch = intakeEpochs.get(key) ?? 0;
+  pendingAssetStarts.delete(key);
+  abortAssetBatch(key, "Retrying turn.");
   planningQueue.cancelChat(userId, chatId);
   releaseSceneCacheAdmission(spindle, userId, chatId, "retry");
+  const isCurrentRetry = () => (intakeEpochs.get(key) ?? 0) === retryEpoch && views.isOpen(userId, chatId);
 
   const path = turnPath(chatId, message.id, message.swipe_id);
   const existing = await loadTurnRecord(spindle, path, userId);
+  if (!isCurrentRetry()) return;
 
   // A scene picker may have changed since this turn was planned. Re-resolve
   // macro-bearing messages first; a resolution that no longer matches the
   // stored plan replans instead of regenerating the discarded scene's images.
   if (needsResolution(message.content)) {
     const intake = await resolveMessageIntake(spindle, chatId, message.content, userId);
+    if (!isCurrentRetry()) return;
     // A host that cannot resolve right now keeps the stored plan (images are
     // retried below); only a real, different resolution replans.
     if (intake.resolved && relateRecord(existing, message, intake) !== "current") {
@@ -1362,6 +1376,7 @@ async function retryTurn(
   const config = await loadConfig(spindle, userId);
   rememberDebugFlag(userId, config);
   const characterAppearance = await loadCharacterAppearance(spindle, userId, chatId);
+  if (!isCurrentRetry()) return;
 
   if (!existing || existing.status === "failed" || existing.jobs.length === 0
     || existing.plan.visualCues.some((cue) => cue.imageTemplate?.subjectMode !== 'none' && cue.resolvedIdentity !== undefined && !cue.resolvedIdentity.trim())) {
@@ -1415,6 +1430,7 @@ async function retryTurn(
       log: (line) => dbg(spindle, userId, line),
       ...sourceTextOption(existing)
     });
+    if (!isCurrentRetry()) return;
     for (const job of extra) updatedJobs.push(job);
   }
 
@@ -1434,10 +1450,13 @@ async function retryTurn(
     ]
   };
 
+  if (!isCurrentRetry()) return;
   activeTurnKeys.set(key, updatedRecord.plan.key);
-  await saveTurnRecord(spindle, path, updatedRecord, userId);
-  await persistActiveTurn(spindle, updatedRecord, path, userId);
-  spindle.sendToFrontend({ type: "vn_turn", turn: await turnViewWithAudio(spindle, updatedRecord,userId) }, userId);
+  await persistActiveTurn(spindle, updatedRecord, path, userId, isCurrentRetry);
+  if (!isCurrentRetry()) return;
+  const view = await turnViewWithAudio(spindle, updatedRecord, userId);
+  if (!isCurrentRetry()) return;
+  spindle.sendToFrontend({ type: "vn_turn", turn: view }, userId);
 
   if (!config.useNativeCardImages && config.generateImages) {
     void startAssets(spindle, updatedRecord, path, userId, { bypassJobIds }).catch((error) => {
@@ -1526,6 +1545,8 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
     const characterRegistry = await loadCharacterRegistry(spindle, action.chatId, userId);
     const recentMessages = config.includeRecentMessages > 0 ? await resolveContextMessages(spindle, action.chatId, messages.slice(-config.includeRecentMessages), new Map(), userId) : [];
     if (!isCurrent()) return;
+    imageRetryEpochs.set(key,(imageRetryEpochs.get(key)??0)+1);
+    imageRetryQueues.get(key)?.queue.cancel();imageRetryQueues.delete(key);
     const scheduled = planningQueue.enqueue(userId, action.chatId, action.messageId, async operation => {
       const current = () => !operation.controller.signal.aborted && isCurrent();
       if (!current()) return;
@@ -1574,9 +1595,9 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
         replanRequestIds:[...(old.replanRequestIds ?? []),action.requestId].slice(-32),
         ...(old.correctionRequestIds ? {correctionRequestIds:old.correctionRequestIds} : {}),resolvedSourceText:intake.text,...(old.source ? {source:old.source} : {}),referenceLineage:preserveReferenceLineage(old.referenceLineage,await captureReferenceLineage(referenceSnapshot??[],plan,rawReplanSource)),updatedAt:now,
         attempts:[...(old.attempts ?? []).slice(-15),{attemptNumber:(old.attempts?.at(-1)?.attemptNumber ?? 0)+1,timestamp:now,settings:{replan:true,forcedImageReview:true}}]};
-      await persistActiveTurn(spindle,record,state.activeTurnPath!,userId,current);
-      if (!current()) return;
       const view = await turnViewWithAudio(spindle,record,userId);
+      if (!current()) return;
+      await persistActiveTurn(spindle,record,state.activeTurnPath!,userId,current);
       if (!current()) return;
       activeTurnKeys.set(key,plan.key);
       spindle.sendToFrontend({type:'vn_turn',turn:view},userId);
@@ -1586,7 +1607,7 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
     },`replan:${action.requestId}`);
     try { await scheduled.promise; }
     catch (error) { if (!isAbortError(error,scheduled.operation.controller.signal)) throw error; }
-  } finally { if(preparingSingleImages.get(key)===preparation)preparingSingleImages.delete(key); }
+  } finally { if(preparingSingleImages.get(key)===preparation){preparingSingleImages.delete(key);imageRetryQueues.get(key)?.queue.wake();} }
 }
 
 async function queueImageRetries(spindle:SpindleAPI,raw:QueueImageRetriesRequest,userId:string):Promise<void>{

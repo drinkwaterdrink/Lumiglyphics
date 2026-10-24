@@ -30,7 +30,14 @@ export function referenceMessages(messages:readonly unknown[],targetId:string):M
   if(m.id===targetId)return output;
  }return undefined;
 }
-async function hash(text:string):Promise<string>{const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));return Array.from(new Uint8Array(bytes),byte=>byte.toString(16).padStart(2,'0')).join('');}
+const hashCache=new Map<string,string>();
+async function hash(text:string):Promise<string>{
+ if(text.length<=4096){const cached=hashCache.get(text);if(cached!==undefined){hashCache.delete(text);hashCache.set(text,cached);return cached;}}
+ const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));
+ const hex=Array.from(new Uint8Array(bytes),byte=>byte.toString(16).padStart(2,'0')).join('');
+ if(text.length<=4096){if(hashCache.size>=512)hashCache.delete(hashCache.keys().next().value!);hashCache.set(text,hex);}
+ return hex;
+}
 async function frames(messages:readonly Message[],chatId:string,isCurrent:()=>boolean=()=>true):Promise<Frame[]> {
  if(!isCurrent())throw new Error("Reference scan deadline");
  let prefix=await hash(JSON.stringify([1,chatId])),replyNumber=0;const result:Frame[]=[];
@@ -78,8 +85,9 @@ async function collect(api:SpindleAPI,target:StoredTurnRecord,userId:string|unde
   if(!isCurrent())return undefined;
   const record=loaded.get(index),frame=selected[index]!;if(!record)continue;
   if(record.plan.key.chatId!==key.chatId||needsResolution(frame.message.content)||record.plan.key.sourceFingerprint!==fingerprintForMessage(frame.message)||!await matches(record,frame))continue;
+  const plainMessage=stripTextEffectTags(frame.message.content);
   for(const reference of normalizeStoryReferences(record.plan.storyReferences,record.plan.paragraphs.map(p=>({text:stripTextEffectTags(p.text)}))).reverse()){
-   if(!retainableReferenceField(reference.field)||!stripTextEffectTags(frame.message.content).includes(reference.evidence))continue;
+   if(!retainableReferenceField(reference.field)||!plainMessage.includes(reference.evidence))continue;
    const identity=JSON.stringify([reference.kind,reference.name,reference.field]);if(seen.has(identity))continue;seen.add(identity);
    if(entries.length>=128){truncated=true;continue;}
    entries.push({sourceKey:record.plan.key,replyNumber:frame.replyNumber,reference});

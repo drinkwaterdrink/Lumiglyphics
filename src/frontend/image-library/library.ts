@@ -61,6 +61,11 @@ export class ImageLibrary{
   this.root.addEventListener('keydown',event=>{
    const e=event as KeyboardEvent;
    if(e.key==='Escape'){e.preventDefault();this.selected?this.back():this.close();}
+   if(this.selected&&(e.key==='ArrowLeft'||e.key==='ArrowRight')&&!(e.target instanceof HTMLTextAreaElement)){
+    const entries=this.page?.entries??[];const idx=entries.findIndex(item=>item.imageId===this.selected?.imageId&&item.paragraphIndex===this.selected?.paragraphIndex&&JSON.stringify(item.key)===JSON.stringify(this.selected?.key));
+    const next=idx>=0?entries[idx+(e.key==='ArrowRight'?1:-1)]:undefined;
+    if(next){e.preventDefault();this.view(next);}
+   }
    if(e.key==='Tab'&&this.opened){
     const focusable=[...this.el<HTMLElement>('section').querySelectorAll<HTMLElement>('button:not(:disabled),select,input,summary,textarea')].filter(el=>el.getClientRects().length);
     const first=focusable[0],last=focusable.at(-1);
@@ -102,16 +107,21 @@ export class ImageLibrary{
   const grid=this.el<HTMLElement>('[data-grid]');grid.replaceChildren();grid.dataset.mode=this.mode;
   this.el<HTMLOptionElement>('[data-range] option[value=all]').textContent=this.mode==='story'?'All saved replies':'All story images';
   for(const tab of this.root.querySelectorAll<HTMLElement>('[data-history-view]'))tab.setAttribute('aria-pressed',String(tab.dataset.historyView===this.mode));
-  let lastMessage='';
-  for(const [entryIndex,entry] of (this.page?.entries??[]).entries()){
-   if(entry.key.assistantMessageId!==lastMessage){lastMessage=entry.key.assistantMessageId;const heading=document.createElement('h3');heading.textContent=`Reply ${entry.messageNumber}`;heading.style.cssText='grid-column:1/-1;margin:8px 0 0;font-size:14px';grid.append(heading);}
+  const buildCard=(entryIndex:number,entry:LibraryImageView):HTMLButtonElement=>{
    const button=document.createElement('button');button.type='button';button.dataset.imageCard='';button.dataset.entryIndex=String(entryIndex);button.dataset.replyKey=JSON.stringify(entry.key);button.setAttribute('aria-label',`View ${entry.template??'picture'}, message ${entry.key.assistantMessageId}, paragraph ${entry.paragraphIndex+1}`);
    if(entry.thumbnailUrl){const image=document.createElement('img');image.src=entry.thumbnailUrl;image.alt='';image.loading='lazy';image.decoding='async';image.onerror=()=>{image.remove();const missing=document.createElement('span');missing.className='missing';missing.textContent='Image unavailable';button.prepend(missing);};button.append(image);}
    else{const missing=document.createElement('span');missing.className='missing';missing.textContent='Image unavailable';button.append(missing);}
-   const caption=document.createElement('span');caption.className='caption';const title=document.createElement('strong');title.textContent=entry.template??(entry.role==='portrait'?'Portrait':entry.role==='background'?'Place':'Story picture');const detail=document.createElement('small');detail.textContent=`Picture ${entry.paragraphIndex+1} · ${entry.versionLabel}`;caption.append(title,detail);button.append(caption);button.onclick=()=>this.view(entry);grid.append(button);
-  }
+   const caption=document.createElement('span');caption.className='caption';const title=document.createElement('strong');title.textContent=entry.template??(entry.role==='portrait'?'Portrait':entry.role==='background'?'Place':'Story picture');const detail=document.createElement('small');detail.textContent=`Picture ${entry.paragraphIndex+1} · ${entry.versionLabel}`;caption.append(title,detail);button.append(caption);button.onclick=()=>this.view(entry);
+   return button;
+  };
   if(this.mode==='story'&&this.page?.replies.length){
-   const cards=[...grid.querySelectorAll<HTMLElement>('[data-image-card]')];grid.replaceChildren();
+   const cardsByReplyKey=new Map<string,HTMLButtonElement[]>();
+   const allCards:HTMLButtonElement[]=[];
+   for(const [entryIndex,entry] of (this.page?.entries??[]).entries()){
+    const card=buildCard(entryIndex,entry);allCards.push(card);
+    const key=card.dataset.replyKey!;
+    const bucket=cardsByReplyKey.get(key);if(bucket)bucket.push(card);else cardsByReplyKey.set(key,[card]);
+   }
    for(const reply of this.page.replies){
     const row=document.createElement('article');row.dataset.reply='';
     const title=document.createElement('h3');title.textContent=`Reply ${reply.messageNumber}${reply.versionLabel==='alternate'?' · alternate version':''}`;row.append(title);
@@ -120,17 +130,22 @@ export class ImageLibrary{
     for(const paragraph of reply.paragraphs){const name=document.createElement('strong');name.textContent=paragraph.speaker;const text=document.createElement('p');text.textContent=paragraph.text;details.append(name,text);}
     if(reply.truncated){const note=document.createElement('p');note.className='note';note.textContent='Long reply preview shortened. Read the complete reply in chat.';details.append(note);}
     row.append(details);const pictures=document.createElement('div');pictures.dataset.replyPictures='';
-    for(const card of cards)if(card.dataset.replyKey===JSON.stringify(reply.key))pictures.append(card);
+    for(const card of cardsByReplyKey.get(replyKey)??[])pictures.append(card);
     if(pictures.childElementCount)row.append(pictures);grid.append(row);
    }
    // Archived pictures without this exact reply snapshot retain their own excerpt.
    // Never imply that a newer edit/replan generated an older picture.
    const versions=new Map<string,HTMLElement>();
-   for(const card of cards){if(card.parentElement)continue;const entry=this.page.entries[Number(card.dataset.entryIndex)];if(!entry)continue;
+   for(const card of allCards){if(card.parentElement)continue;const entry=this.page.entries[Number(card.dataset.entryIndex)];if(!entry)continue;
     let row=versions.get(card.dataset.replyKey!);if(!row){row=document.createElement('article');row.dataset.historyVersion='';const title=document.createElement('h3');title.textContent=`Reply ${entry.messageNumber} · saved image version`;const note=document.createElement('p');note.className='note';note.textContent='Only the original saved image excerpt is available for this version.';row.append(title,note);versions.set(card.dataset.replyKey!,row);grid.append(row);}
     const excerpt=document.createElement('p');excerpt.dataset.replyPreview='';excerpt.textContent=entry.excerpt||'Original excerpt not recorded.';row.append(excerpt,card);
    }
-
+  }else{
+   let lastMessage='';
+   for(const [entryIndex,entry] of (this.page?.entries??[]).entries()){
+    if(entry.key.assistantMessageId!==lastMessage){lastMessage=entry.key.assistantMessageId;const heading=document.createElement('h3');heading.textContent=`Reply ${entry.messageNumber}`;heading.style.cssText='grid-column:1/-1;margin:8px 0 0;font-size:14px';grid.append(heading);}
+    grid.append(buildCard(entryIndex,entry));
+   }
   }
   this.status(`${(this.page?.entries.length||this.page?.replies.length)?'':this.page?.nextCursor?'No matching pictures in this batch. Continue to the next page.':this.mode==='story'?'No saved replies match these filters.':'No saved pictures match these filters.'} ${this.page?.notice??''}`.trim());this.updatePaging();
  }

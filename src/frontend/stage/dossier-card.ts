@@ -36,7 +36,18 @@ export class DossierCard {
   const lasting=facts.filter(f=>!referenceFieldInfo(f.field).living);
   const overview=lasting.filter(f=>['overview','identity'].includes(referenceFieldInfo(f.field).section)).slice(0,2);
   if(!overview.length&&lasting.length)overview.push(lasting[0]!);
-  const appendFact=(list:HTMLElement,field:string,value:string)=>{const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=referenceFieldInfo(field).label;dd.textContent=value;list.append(dt,dd);};
+  const maxFactChars=Math.max(80,Math.min(1200,prefs.maxFactChars??320));
+  const appendFact=(list:HTMLElement,field:string,value:string)=>{
+   const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=referenceFieldInfo(field).label;
+   if(value.length>maxFactChars){
+    const span=document.createElement('span'),toggle=document.createElement('button');
+    let expanded=false;span.textContent=`${value.slice(0,maxFactChars).trimEnd()}… `;
+    toggle.type='button';toggle.dataset.factExpand='';toggle.textContent='Show full';
+    toggle.onclick=()=>{expanded=!expanded;span.textContent=expanded?`${value} `:`${value.slice(0,maxFactChars).trimEnd()}… `;toggle.textContent=expanded?'Show less':'Show full';};
+    dd.append(span,toggle);
+   }else dd.textContent=value;
+   list.append(dt,dd);
+  };
   if(overview.length){const section=document.createElement('section'),list=document.createElement('dl');section.dataset.referenceOverview='';for(const fact of overview)appendFact(list,fact.field,fact.value);section.append(list);panel.append(section);}
   const current=new Map<string,string>();
   for(const fact of facts)if(referenceFieldInfo(fact.field).living)current.set(fact.field,fact.value);
@@ -70,16 +81,20 @@ export class DossierCard {
   }
   if(actions?.drafts.length)panel.append(new InteractionTray(actions.drafts,actions.current,(draft,mode)=>{if(!actions.apply(draft,mode))return false;this.close();actions.focus();return true;}).host);
   const override=entityOverride(prefs,chatId,dossier.entity);
+  let currentPinned=override?.pinned===true;
   const status=document.createElement('p');status.setAttribute('role','status');status.hidden=true;panel.append(status);
-  const commit=(patch:{suppressed?:boolean;pinned?:boolean;note?:string})=>{if(this.update(dossier.entity,patch))this.close();else{status.textContent='Reference customization limit reached (64). Reset local reference customizations in Reading settings to make room.';status.hidden=false;}};
+  const commit=(patch:{suppressed?:boolean;pinned?:boolean;note?:string},closeOnSuccess=false):boolean=>{
+   if(this.update(dossier.entity,patch)){if(closeOnSuccess)this.close();return true;}
+   status.textContent='Reference customization limit reached (64). Reset local reference customizations in Reading settings to make room.';status.hidden=false;return false;
+  };
   const localActions=document.createElement('div'),pin=document.createElement('button'),suppress=document.createElement('button');localActions.dataset.referenceActions='';
-  pin.type=suppress.type='button';pin.textContent=override?.pinned?'Unpin':'Pin reference';pin.setAttribute('aria-pressed',String(override?.pinned===true));
-  pin.onclick=()=>{commit({pinned:!override?.pinned});};
-  suppress.textContent='Hide this reference';suppress.onclick=()=>{commit({suppressed:true});};localActions.append(pin,suppress);panel.append(localActions);
+  pin.type=suppress.type='button';pin.textContent=currentPinned?'Unpin':'Pin reference';pin.setAttribute('aria-pressed',String(currentPinned));
+  pin.onclick=()=>{const next=!currentPinned;if(commit({pinned:next})){currentPinned=next;pin.textContent=currentPinned?'Unpin':'Pin reference';pin.setAttribute('aria-pressed',String(currentPinned));status.textContent=currentPinned?'Reference pinned to top of scene references.':'Reference unpinned.';status.hidden=false;}};
+  suppress.textContent='Hide this reference';suppress.onclick=()=>{commit({suppressed:true},true);};localActions.append(pin,suppress);panel.append(localActions);
   const notes=document.createElement('details'),summary=document.createElement('summary');notes.dataset.referenceNotes='';summary.textContent='Local display note';
   const label=document.createElement('label');label.textContent='Your note (does not change the story)';const input=document.createElement('textarea');input.maxLength=600;input.value=override?.note??'';label.append(input);
-  const save=document.createElement('button');save.type='button';save.textContent='Save note';save.onclick=()=>{commit({note:input.value});};notes.append(summary,label,save);panel.append(notes);
-  if(override?.note){const p=document.createElement('p');p.textContent=`Your note: ${override.note}`;panel.append(p);}
+  const noteDisplay=document.createElement('p');noteDisplay.dataset.referenceSavedNote='';noteDisplay.hidden=!override?.note;if(override?.note)noteDisplay.textContent=`Your note: ${override.note}`;
+  const save=document.createElement('button');save.type='button';save.textContent='Save note';save.onclick=()=>{if(commit({note:input.value})){const trimmed=input.value.trim();noteDisplay.hidden=!trimmed;noteDisplay.textContent=trimmed?`Your note: ${input.value}`:'';status.textContent=trimmed?'Local note saved.':'Local note cleared.';status.hidden=false;}};notes.append(summary,label,save);panel.append(notes,noteDisplay);
   this.host.append(panel);this.host.hidden=false;close.focus();
  }
  openTray(entries:ReturnType<typeof referenceEntries>,trigger:HTMLElement,open:(id:string,trigger:HTMLElement)=>void,note?:string):void {
@@ -123,6 +138,7 @@ export const DOSSIER_CSS=`
 [data-vn-dossier-card] dt{font-size:.76em;opacity:.8;margin-top:12px;line-height:1.4;font-weight:600}
 [data-vn-dossier-card] dt:first-child{margin-top:0}
 [data-vn-dossier-card] dd{margin:3px 0 0;overflow-wrap:anywhere;white-space:pre-wrap;line-height:1.65}
+[data-vn-dossier-card] [data-fact-expand]{display:inline;min-width:0;min-height:0;padding:1px 6px;margin:0 0 0 4px;font-size:.75em;border-radius:6px;vertical-align:baseline}
 [data-reference-overview]{padding:14px 16px;background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 9%,transparent);border:1px solid color-mix(in srgb,var(--vn-accent,#9ec6f0) 26%,transparent);border-radius:12px;margin:12px 0 16px}
 section[data-reference-current],section[data-reference-observations]{margin:16px 0;padding:0 0 16px;border-bottom:1px solid var(--vn-panel-border,#666)}
 section[data-reference-current] h3,section[data-reference-observations] h3{font-size:.85em;letter-spacing:.02em;margin:0 0 12px}

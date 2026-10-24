@@ -157,7 +157,13 @@ ${ATELIER_SHELL_CSS}
 [data-vn-shell][data-vn-move-draft-open="true"] > [data-image-studio],
 [data-vn-shell][data-vn-history-open="true"] > [data-vn-panel-layer],
 [data-vn-shell][data-vn-history-open="true"] > [data-image-studio],
-[data-vn-shell][data-vn-history-open="true"] > [data-image-library]:not([data-open="true"]) {
+[data-vn-shell][data-vn-history-open="true"] > [data-image-library]:not([data-open="true"]),
+[data-vn-shell][data-vn-history-open="true"] > [data-vn-exit],
+[data-vn-shell][data-vn-document-open="true"] > [data-vn-exit],
+[data-vn-shell][data-vn-clean-view="true"] > [data-vn-exit],
+[data-vn-shell][data-vn-clean-view="true"] > [data-vn-panel-layer],
+[data-vn-shell][data-vn-clean-view="true"] > [data-image-studio],
+[data-vn-shell][data-vn-clean-view="true"] > [data-image-library] {
   visibility: hidden;
 }
 

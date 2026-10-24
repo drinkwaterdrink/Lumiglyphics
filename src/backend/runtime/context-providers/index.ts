@@ -29,14 +29,15 @@ export async function collectContextSources(read: RpcReader | undefined, config:
     if (!endpoint) return sourceStatus(provider,'disabled');
     if (!read || signal.aborted) return sourceStatus(provider,'unavailable');
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let timedOut = false;
     let abort: () => void = () => {};
     const unavailable = new Promise<ProviderEvidence>(resolve => {
-      timer = setTimeout(() => resolve(sourceStatus(provider,'timed_out')), Math.min(1500, Math.max(1, options.deadlineMs ?? 1500)));
+      timer = setTimeout(() => { timedOut = true; resolve(sourceStatus(provider,'timed_out')); }, Math.min(1500, Math.max(1, options.deadlineMs ?? 1500)));
       abort = () => resolve(sourceStatus(provider,'unavailable'));
       signal.addEventListener('abort',abort,{once:true});
     });
     const result = Promise.resolve().then(() => read(endpoint)).then(value => {
-      if (signal.aborted) return sourceStatus(provider,'unavailable');
+      if (timedOut || signal.aborted) return sourceStatus(provider,'unavailable');
       try {
         if (JSON.stringify(value)?.length > 256_000) return sourceStatus(provider,'invalid');
         return provider === 'lumibooks' ? normalizeLumiBooks(value,scope,now) : normalizedScript(value,scope,now);

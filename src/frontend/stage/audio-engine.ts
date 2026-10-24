@@ -98,6 +98,7 @@ const DEFAULT_CROSSFADE_DURATION_MS = 1500;
 export class AudioEngine {
   private bgmVolume: number;
   private bgmAttenuation=1;
+  private speechDucking=1;
   private readonly bgmTracks=new Set<ActiveBgm>();
   private sfxVolume: number;
   private readonly crossfadeDuration: number;
@@ -135,9 +136,17 @@ export class AudioEngine {
     for(const item of this.bgmTracks)this.setTrackVolume(item,item.gain);
   }
 
+  /** Duck BGM while speech/TTS playback is active, then restore cleanly. */
+  setSpeechDucking(active:boolean):void {
+    const next=active?0.38:1;
+    if(this.speechDucking===next)return;
+    this.speechDucking=next;
+    for(const item of this.bgmTracks)this.setTrackVolume(item,item.gain);
+  }
+
   private setTrackVolume(item:ActiveBgm,gain:number):void {
     item.gain=Math.max(0,Math.min(1,gain));
-    item.player.volume=item.gain*this.bgmVolume*this.bgmAttenuation;
+    item.player.volume=item.gain*this.bgmVolume*this.bgmAttenuation*this.speechDucking;
   }
 
   getSfxVolume(): number {
@@ -224,6 +233,13 @@ export class AudioEngine {
     const cleanSrc = src ? src.trim() : "";
     if (!cleanSrc || this.sfxVolume <= 0) return;
 
+    if (this.activeSfx.size >= 6) {
+      const oldest = this.activeSfx.values().next().value;
+      if (oldest) {
+        oldest.pause();
+        this.activeSfx.delete(oldest);
+      }
+    }
     const player = this.audioFactory(cleanSrc);
     player.loop = false;
     const sfxVol = Math.max(0, Math.min(1, (options.volume ?? 1) * this.sfxVolume));
@@ -285,7 +301,8 @@ export class AudioEngine {
     item.fadeTimer = this.setInterval(() => {
       const elapsed = this.now() - startTime;
       const progress = Math.min(1, elapsed / durationMs);
-      const newVolume = startVolume + (targetVolume - startVolume) * progress;
+      const eased = 0.5 - 0.5 * Math.cos(progress * Math.PI);
+      const newVolume = startVolume + (targetVolume - startVolume) * eased;
       this.setTrackVolume(item,newVolume);
 
       if (progress >= 1) {
@@ -313,7 +330,8 @@ export class AudioEngine {
     item.fadeTimer = this.setInterval(() => {
       const elapsed = this.now() - startTime;
       const progress = Math.min(1, elapsed / durationMs);
-      const newVolume = startVolume * (1 - progress);
+      const eased = 0.5 - 0.5 * Math.cos(progress * Math.PI);
+      const newVolume = startVolume * (1 - eased);
       this.setTrackVolume(item,newVolume);
 
       if (progress >= 1) {
