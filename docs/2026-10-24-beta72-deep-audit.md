@@ -42,7 +42,7 @@ The abort story is layered, and the layers do different jobs:
 
 | Layer | Where | Invalidates |
 |---|---|---|
-| Intake epoch | `controller.ts:885` `bumpIntakeEpoch` | A macro resolve that started before a cancel/new generation/deletion |
+| Intake epoch | `controller.ts:123` `bumpIntakeEpoch` | A macro resolve that started before a cancel/new generation/deletion |
 | Planning queue | `core/planning-queue.ts` `cancelChat` | Queued + running planner calls per chat |
 | Turn ownership | `activeTurnKeys` (`controller.ts:129`) + `compareTurnKeys` (`core/guards.ts:18`) | Late persist/send/asset results for a replaced turn |
 | Asset batch | `assetControllers` (`controller.ts:113`) | Provider calls, review gates |
@@ -332,12 +332,12 @@ Safe improvements without changing the reading feel:
 
 ### 3.1 Settings fatigue is structural, not cosmetic
 
-`frontend/settings/routes.ts` defines **22 pages** over the **7 home rows** in `SETTINGS_SECTIONS` (`settings/model.ts:395`, with `voice` reachable only through Audio), and `DEFAULT_CONFIG` has **66 top-level fields** (`config.ts:156` onward — the brief's "62" is stale) plus nested `imageParameters`, `readerPreferences`, `speech`, `trackerMappings`, `contextSources` and `imageTemplates` (32 slots). The home screen is good; the problem is depth: **Images → 5 children**, **Advanced → 5 children** (`parameters`, `filtering`, `css`, `storage`, `reset`), **Audio → 2** (`music`, `speech`), **Connections → 2** (`context`, `system-one`).
+`frontend/settings/routes.ts` defines **22 pages** over the **7 home rows** in `SETTINGS_SECTIONS` (`settings/model.ts:395`, with `voice` reachable only through Audio), and `DEFAULT_CONFIG` has **66 top-level fields** (`config.ts:156` onward — the brief's "62" is stale) plus nested `imageParameters`, `readerPreferences`, `speech`, `trackerMappings`, `contextSources` and `imageTemplates` (7 built-ins, schema cap 32). The home screen is good; the problem is depth: **Images → 5 children**, **Advanced → 5 children** (`parameters`, `filtering`, `css`, `storage`, `reset`), **Audio → 2** (`music`, `speech`), **Connections → 2** (`context`, `system-one`).
 
 Concrete, low-risk improvements:
 
 1. **Three-tier disclosure, one tier per audience.** *Read* (enabled, mode, theme, text speed, images on/off), *Direct* (templates, shared style, presentation rules, audio), *Engineer* (parameters JSON, custom CSS, logging, storage). Today the page tree mixes all three under the same visual weight; the only hint is the `summary()` line.
-2. **Show the consequence, not the field.** The home rows already carry a live summary (`panel.ts:2074`–`2084`). Extend that to *every* page header (`Appearance · Golden Hour · 1.0× text`) and to toggles that spend money: "Review before generating · 2 pictures held".
+2. **Show the consequence, not the field.** The home rows already carry live consequence text for Reading, Appearance, Images, Audio, Speech and Advanced (`updateSummaries`, `panel.ts:2069`–`2085`) — but **Characters and Connections have none**, and those are the two rows whose contents are least self-explanatory. Extend it to every row and page header (`Appearance · Golden Hour · 1.0× text`) and to toggles that spend money: "Review before generating · 2 pictures held".
 3. **Recently changed + search-first.** `SETTINGS_FIELD_PAGES` already maps every config key to a page — that is a ready-made command palette. Make the existing search the primary path: show "Images → Scene templates" with a one-line "what this changes", not just a field match.
 4. **Collapse the JSON editors behind an explicit "Edit raw" button.** `parserParameters`, `imageParameters`, `customCss` are large `textarea`s today; a syntax-highlighted drawer with validation is friendlier and prevents the most common support failure (invalid JSON with a generic save error).
 5. **Presets that are describable.** "Consistency & reuse" is a decision, not a setting: offer *Reuse saved pictures (recommended)* / *Always generate fresh* / *Custom* and write the underlying three toggles.
