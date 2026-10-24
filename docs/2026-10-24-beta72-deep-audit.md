@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-24 · **Branch:** `Testing` @ `58f8ae4` (+ audit fixes on `arena/bcd536d4-lumiglyphics`)
 **Version audited:** `package.json` → `0.2.0-beta.72` (the brief says beta.58; this checkout is 14 betas newer, so every behaviour below was checked against the actual code, not the brief).
-**Method:** full read of the backend runtime, core, prompt and frontend stage/settings layers; `bun run typecheck`; `bun test --isolate` (1738 pass, 0 fail, 152 files, 25 s); targeted micro-benchmarks on Bun 1.4.4; one fix verified by reverting it and watching the new regression test fail.
+**Method:** full read of the backend runtime, core, prompt and frontend stage/settings layers; `bun run typecheck`; `bun test --isolate` (**1739 pass, 0 fail**, 152 files, 24 s); micro-benchmarks on Bun 1.4.4; two fixes verified by reverting them and watching the new regression tests fail.
 
 Everything marked **[applied]** is on this branch with tests. Everything else is a proposal with exact anchors. Line numbers are from this checkout and move by a few lines as files change.
 
@@ -12,7 +12,7 @@ Everything marked **[applied]** is on this branch with tests. Everything else is
 
 The architecture is sound and unusually disciplined about one hard rule: **the canon chat is never mutated, and every async result re-proves ownership before it writes.** The scene-image cache in particular (`src/backend/core/scene-image-cache.ts`) is the strongest part of the codebase: structured identity keys, episode scoping, admission epochs, single-owner claims with cancellation-safe waiters, and pointer-only entries (no pixels). Prompt anchoring (`prompt-anchors.ts`) is a genuinely good design: the writer model never gets to paraphrase identity clauses.
 
-The remaining defects are not "the design is wrong" — they are **ownership leaks at the edges of the abort story**, plus a write path that redoes expensive work on every asset tick.
+The remaining defects are not "the design is wrong". They cluster into three groups: **ownership leaks at the edges of the abort story** (F-01, F-03, F-04, F-07 — the first three are fixed on this branch), **payloads that outgrow their own bounds** (F-05's 512 KB projection cliff, F-08's 263 KB record rewritten per tick), and **UI debt** where the reviewer has already been polished but settings/search and the stage's per-character rendering have not.
 
 | # | Severity | Finding | Status |
 |---|---|---|---|
@@ -21,7 +21,7 @@ The remaining defects are not "the design is wrong" — they are **ownership lea
 | F-03 | Med | `PlanningQueue.enqueue` could return a just-cancelled operation as a dedupe hit (microtask window), silently swallowing an explicit retry | **Fixed [applied]** |
 | F-04 | Med | Message reconcile (`MESSAGE_EDITED`/`SWIPED`/`SWIPE_EDITED`) released cache admission but never aborted the previous reply's asset batch, so paid generations kept running during a 3-minute replan | **Fixed [applied]** |
 | F-05 | Med | Presenting a saved version-1 projection is fatal above ~512 KB: at 90 paragraphs the projection is 500 KB, at 100 it is silently dropped (measured). Long replies lose reference/document/Cast-View data with no notice | Open |
-| F-06 | Med | `readReferenceHistory()` has a 750 ms deadline that cannot stop work: sequential SHA-256 per message (≤1024), 16 sequential `loadTurnRecord` Zod parses, two full-chat reads and two `JSON.stringify` comparisons of up to 4 MB continue after the reader gave up | Open |
+| F-06 | Med | `readReferenceHistory()` had a 750 ms deadline that could not stop work: sequential SHA-256 per message (≤1024), sequential `loadTurnRecord` Zod parses, and two `JSON.stringify` comparisons of up to 4 MB kept running after the reader gave up | **Fixed [applied]** |
 | F-07 | Med | `cancelIncompleteJobs` writes with the unconditional `saveTurnRecord`, so it can overwrite a job update that landed after its read | Open |
 | F-08 | Med | Every asset tick rewrites the whole turn record (263 KB in the benchmark) **including** `resolvedSourceText` + `panelSource` (up to 200 000 chars each), with `indent: 2` | Open |
 | F-09 | Med | Typewriter reveal runs on a 20 ms `setInterval` and rewrites the hidden "rest" span on every character: O(n²) string allocation + one layout-affecting write per 20 ms per paragraph | Open |
@@ -29,8 +29,8 @@ The remaining defects are not "the design is wrong" — they are **ownership lea
 | F-11 | Low | Per-chat maps (`intakeEpochs`, `imageRetryEpochs`, `activeChatByUser`, `preparationSessions`, `assetControllers`) are never pruned, and naive deletion would be *unsafe* (it resets the counter). Needs a monotonic-generation design, not `delete` | Open |
 | F-12 | Low | `revokeHit()` decrements global `hits`/`generationsAvoided` counters, so statistics drift across batches when a late asset check rejects an old hit | Open |
 | F-13 | Low | Panel rule evaluation spawns one worker per rule per run (12 rules × 500 ms timeout = 6 s worst case) and `@container` CSS keeps all 12 pinned iframes live | Open |
-| F-15 | Low | Reviewer drafts are keyed by `draftKey()` but the template switch tests `draftKey === requestId`, so a replacement preview's edits are replaced without the confirm dialog | Open |
 | F-14 | Low | No explicit branch-change handling: ancestry is certified per `branch_id`/`parent_message_id`, but nothing aborts or replans when the host switches branches without an edit event | Open |
+| F-15 | Low | Reviewer drafts are keyed by `draftKey()` but the template switch tests `draftKey === requestId`, so a replacement preview's edits are replaced without the confirm dialog | Open |
 
 ---
 
@@ -104,7 +104,7 @@ const owns = (batch: AssetBatch) => batches.get(batch.key) === batch;
 
 ### 1.3 F-04 — reconcile left the old image batch paying
 
-`reconcileMessageEvent` (`controller.ts:1948`) does:
+`reconcileMessageEvent` (`controller.ts:1950`) did:
 
 ```ts
 bumpIntakeEpoch(userId, event.chatId);
@@ -112,7 +112,7 @@ releaseSceneCacheAdmission(spindle, userId, event.chatId, "message_changed");
 await processAssistantMessage(...);
 ```
 
-It does not touch `assetControllers` or `activeTurnKeys`. So when a user edits a reply while six pictures are generating, those six provider calls continue until the *new* plan finishes (up to the 180 s planning timeout) and `startAssets` replaces the batch. The results are correctly discarded (admission released), but the money is spent and the user's stop request is only honoured at the next turn.
+It did not touch `assetControllers` or `activeTurnKeys`. So when a user edits a reply while six pictures are generating, those six provider calls continue until the *new* plan finishes (up to the 180 s planning timeout) and `startAssets` replaces the batch. The results are correctly discarded (admission released), but the money is spent and the user's stop request is only honoured at the next turn.
 
 **Fixed** [applied, `controller.ts:1959`–`1964`] — the smallest version of the fix, placed after the "is this still the latest reply?" check so an ancestor edit cannot kill the visible turn's batch:
 
@@ -176,7 +176,8 @@ const dedupeId = `${message.id}:${message.swipe_id}:${fingerprint}:${options?.re
 ### 1.6 Branch changes, chat switches, view closing
 
 * **View closing** (`closeView` → `abortChatWork`, `controller.ts:250`) is complete: intake epoch, retry queue, planning cancel, ownership drop, asset abort, cache admission, persisted cleanup. Idempotent via `views.close()` returning false the second time.
-* **Chat switching** has two independent paths: `CHAT_SWITCHED` → `noteActiveChat` → `releaseSceneCacheScope(previous)` (drops entries, bumps generation + epoch), and the frontend's explicit `vn_view`/`vn_get_state`, which goes through `openView`/`closeView` and thereby `abortChatWork`. A single `vn_get_state {chatId:B}` while chat A was open therefore **drops A's cache scope even though A's view was never explicitly closed** — correct (cross-chat reuse is forbidden) but it also means opening the settings panel and returning can cost a full re-generation if the host fires state requests for other chats.
+* **Chat switching** is two mechanisms with different reach. `CHAT_SWITCHED` → `noteActiveChat` (`controller.ts:158`) only releases the previous chat's scene-cache scope and cancels its context-source session; it does not touch planning or images. The view registry is moved by explicit signals only: `vn_view` (`:1717`) and `vn_get_state` **with an explicit `viewOpen` flag** (`:660`–`663`). That explicitness is deliberate and good — a background state request cannot reopen a closed view and start paying again. The consequence to document: `views.open(B)` displaces A, `openView` runs `closeView(A)` → `abortChatWork(A)`, so **switching chats cancels A's in-flight picture batch**, not just A's cache scope. That is the right policy (nobody is looking at A), but it should be visible in the UI: the reviewer's `Stop pending pictures` copy already says "Requests already sent may still finish at the provider", and the same sentence belongs in the chat-switch path.
+
 * **Branch change** has no dedicated event. `MESSAGE_SWIPED` is the closest host signal, and `referenceMessages`/`ReferenceLineage` correctly store `branch_id`/`parent_message_id` so ancestry is never inferred across branches. But if a host changes the active branch without editing or swiping the message, the reader keeps showing the old projection until `vn_refresh`: nothing compares `branch_id` on `vn_get_state`. Since the record's `source.rawFingerprint` is text-based, the same text on another branch is indistinguishable. **Recommendation:** persist the observed `branch_id`/`parent_message_id` in `source` (additive, version 3) and classify a mismatch as `changed` (replan, identity preserved) — the same policy used for unmaskable volatile macros.
 
 ### 1.7 Prompt budget and identity anchors
@@ -191,7 +192,7 @@ Three real gaps:
 
 1. **Protection is skipped after successful expansion** (`prompt-rewrite.ts:126`: `if(!expanded.usedAnchors)assertPromptProtection(...)`). That is mostly fine — the anchor text is inserted verbatim — but it also skips `minimumCharacters` and the ensemble ownership check. A writer can satisfy the anchors and *additionally* write `"Mira, silver hair"` next to Theo's section; nothing catches the duplicated/misattributed clause because the ownership check never runs. Cheap fix: always run `assertPromptProtection(expanded.prompt, protection)` — with anchors expanded, it trivially passes unless the writer duplicated facts, which is exactly what you want to catch.
 2. **`promptProtection` ensemble matching is O(rows × prompt)** — for each `Name:` row it runs `prompt.matchAll(new RegExp(...))` over the whole prompt (`prompt-protection.ts:28`–`41`). With 16 subjects and a 3,000-char prompt this is small, and the name regex is escaped and length-capped, so there is no ReDoS; it is just repeated scanning. Build one combined alternation once, or index `match.index` by name.
-3. **`max_tokens` in the rewrite loop is ~3× too large** (`prompt-rewrite.ts:115`): `Math.max(2200, chars * 0.8)` grants 2 400 tokens for a 3 000-char ceiling (≈750 tokens of English) and 2 200 for the 1 200-char Z-Image profile. That inflates latency/cost and invites the model to over-write (which then fails the length check and burns the second attempt). Use `Math.min(4096, Math.ceil(chars / 3) + 256)` with a 1 024 floor. The retry loop also re-sends the full ~3 kB system prompt *and* `previousCandidate`; sending only the failed candidate + a one-line repair instruction on attempt 2 would halve failure cost.
+3. **`max_tokens` in the rewrite loop is ~3× too large** (`prompt-rewrite.ts:115`): `Math.max(2200, chars * 0.8)` grants 2 400 tokens for a 3 000-char ceiling (≈750 tokens of English) and never fewer than 2 200. That inflates latency/cost and invites the model to over-write (which then fails the length check and burns the second attempt). Use `Math.min(4096, Math.ceil(chars / 3) + 256)` with a 1 024 floor. The retry loop also re-sends the full ~3 kB system prompt *and* `previousCandidate`; sending only the failed candidate + a one-line repair instruction on attempt 2 would halve failure cost.
 
 ### 1.8 Cross-extension RPC, Warp bridge and pinned panels
 
@@ -283,7 +284,7 @@ await spindle.userStorage.setJson(path, value, { ...(userOptions(userId) ?? {}) 
 * Store `panelSource` once per chat (or derive it from `resolvedSourceText`), not per turn.
 * **Coalesce asset writes.** `onUpdate` currently awaits a full save per transition. Keep the in-memory `current` authoritative and flush with a trailing edge (150–250 ms) plus a forced flush on `finally`/`vn_turn`/error. Providers emit transitions in bursts; this alone removes most of the write volume without changing any observable state.
 
-### 2.4 F-06 — the reference scanner's deadline is advisory
+### 2.4 F-06 — the reference scanner's deadline was advisory [fixed]
 
 `reference-history.ts`: `readReferenceHistory` races `collect` against a 750 ms timer, but `collect` only checks `Date.now() >= deadline` **between stages** (`:55`–`:79`). Inside those stages:
 
@@ -292,7 +293,9 @@ await spindle.userStorage.setJson(path, value, { ...(userOptions(userId) ?? {}) 
 * 16 `loadTurnRecord` calls, each running full `TurnPlanSchema` + per-job `AssetJobSchema` parsing.
 * The final freshness check reads all messages again and compares `JSON.stringify(fresh) !== JSON.stringify(snapshot)` — two serializations of up to 4 MB.
 
-The consequence is the classic "deadline that stops waiting but not working": the UI shows "references unavailable" while the worker keeps burning CPU against the next turn's planning. Proposed refactor in §5.3.
+The consequence is the classic "deadline that stops waiting but not working": the UI showed "references unavailable" while the worker kept burning CPU against the next turn's planning.
+
+**Fixed** [applied, `reference-history.ts:34`]: `frames()` takes a deadline and returns `null` when it passes; `collect()` checks the deadline before *and* after each record load and verifies records concurrently; the freshness check compares the prefix chain (already computed for the target) instead of serialising the list twice. The measured behaviour is now observable in a test: with a storage backend that takes 20 ms per read, the same query returns a full result at the default 750 ms and `undefined` at 5 ms **without reading all 16 records**. Refactor shown in §5.3.
 
 ### 2.5 F-09 — typewriter cost
 
@@ -313,11 +316,13 @@ Safe improvements without changing the reading feel:
 * `SceneImageCache` is metadata-only and correctly bounded (256 entries / 1 MiB, `enforceBounds` keeps the just-stored entry even if it alone exceeds the byte cap — documented and sensible). Nits: `entryBytes` recomputes `canonicalJson(provenance)` although the caller already has the object (cheap); `revokeHit` decrements *global* counters (F-12) so a per-scope `hits` field would be more honest; `lookup()` re-inserts on every hit (required for Map-order LRU, fine).
 * `resolveCacheCues` (`images.ts:530`) awaits, **per candidate in a loop**: `findLocationArt`, `findCastArt`, `verifyEntry`. For a reply with 8 extra candidates that is up to 24 sequential storage round-trips *before* the first `vn_turn`. Resolve the provider/profile once (already done) and run the three lookups per candidate with `Promise.all`, then `Promise.allSettled` across candidates (order-insensitive; jobs are keyed by `assetJobId`).
 * The 16-reply / 128-observation ancestry scanner is bounded and fails closed; the only issue is the work described in §2.4.
-* Image library pagination is genuinely bounded: ≤24 turn files read, ≤24 entries returned, 10 000-path cap, 1 200-char path cap, path traversal rejected (`image-library.ts:81`). Keep it — the one improvement is caching `parseRecord` per path within a request (it is called for the anchor and again inside the page loop).
+* Image library pagination is genuinely bounded: ≤24 turn files read, ≤24 entries returned, 10 000-path cap, 1 200-char path cap, path traversal rejected (`image-library.ts:81`), with the 10 000-source cap at `:96` and the 24-file scan loop at `:97`. Keep it. Two improvements: `api.userStorage.list(prefix)` still enumerates **every** saved turn for the chat into memory before the cap applies (unavoidable with the current host API, but it should short-circuit once 10 000 paths are collected), and `parseRecord` should be memoised per path within a request (the anchor is parsed, then re-parsed inside the page loop).
 
 ### 2.7 LLM and token efficiency
 
-* **Planner** (`planner.ts:1145`): system = instruction + reference context (≤5 200 char character + 2 600 persona + 3 600 lore) + known-character block; user = previous scene + recent chat + target response. The stable instruction is first, which is prefix-cache friendly — good. Two savings: (a) the template catalogue JSON (`:599`) is 32 templates × ~120 chars even when `dynamicImageTemplates` is off (then it is one template — keep it, but drop the "catalog" framing); when on, send `{id,name,useWhen}` only and omit `category/framing` for templates with defaults. (b) `knownCharacterBlock` repeats saved tags that also appear in the reference context; dedupe by canonical name and drop facts already present verbatim.
+* **Planner** (`planner.ts:1144` messages, `:1109` `max_tokens: 16000`): system = instruction + reference context (≤5 200 char character / 2 600 persona / 3 600 lore, `context.ts:13`–`17`) + known-character block; user = previous scene + recent chat + target response. The stable instruction is first, which is prefix-cache friendly — good. Two concrete savings:
+  * **The template catalogue is always sent, even when templates are fixed.** `inputTemplateInstructions` (`planner.ts:597`–`601`) returns either "choose from this catalog" or "Use templateId X on every cue" — and then appends `"Template catalog (Use when guidance): " + JSON.stringify(...)` **in both branches**, with `id, name, category, useWhen, subjectMode, framing` per enabled template. Built-ins are 7 (`shared/image-templates.ts:65`), each `useWhen` up to 1 000 chars, so this is ~1–2 KB of system prompt per planning call that is pure noise when `dynamicImageTemplates` is off. Fix: return the catalog only in the dynamic branch, and there send `{ id, name, useWhen: useWhen.slice(0, 160), subjectMode }` — `category` is derivable from `useWhen` and `framing` is already carried by the visual brief.
+  * **`knownCharacterBlock` repeats saved tags that the reference context already contains.** Dedupe by canonical name and drop facts present verbatim, keeping the reveal-scoped ordering.
 * **System One** (`system-one.ts:57`–`88`): per 7-paragraph batch it re-sends `state.previousScene` (environment + character + attire) and per-paragraph `criteria` maps (32 speaker names, 16 poses, 24 BGM, 24 SFX). Hoist a single `catalog` object and reference it by id, and send `previousScene` only in batch 0 with a `continuation: true` flag. Expect a 30–45% request-size cut on 3-batch replies, with no accuracy change (the model does not need 24 BGM descriptions to answer `bgm_3 = keep_current`).
 * **Model output resolution** is correctly centralised (`shared/model-output-capabilities.ts`, `shared/model-output-catalogue.ts`, `shared/image-model-output.ts`) and validated locally before the provider call (`assertModelOutputParameters`, `assertCapabilityOutput`). No action beyond adding a golden-file test per provider family (Klein square, Qwen `1k/2k`, Anima `1k/1.5k + aspectRatio`, FLUX 720×1280) — the unit tests cover several already.
 
@@ -327,7 +332,7 @@ Safe improvements without changing the reading feel:
 
 ### 3.1 Settings fatigue is structural, not cosmetic
 
-`frontend/settings/routes.ts` defines **7 sections and 22 pages**, and `DEFAULT_CONFIG` now has **66 top-level fields** (the brief's "62" is stale) plus nested `imageParameters`, `readerPreferences`, `speech`, `trackerMappings`, `contextSources`, `imageTemplates` (32 slots). The home screen (7 category rows) is good; the problem is depth: **Images → 5 children**, **Advanced → 6 children**, **Connections → 3 children**.
+`frontend/settings/routes.ts` defines **22 pages** over the **7 home rows** in `SETTINGS_SECTIONS` (`settings/model.ts:395`, with `voice` reachable only through Audio), and `DEFAULT_CONFIG` has **66 top-level fields** (`config.ts:156` onward — the brief's "62" is stale) plus nested `imageParameters`, `readerPreferences`, `speech`, `trackerMappings`, `contextSources` and `imageTemplates` (32 slots). The home screen is good; the problem is depth: **Images → 5 children**, **Advanced → 5 children** (`parameters`, `filtering`, `css`, `storage`, `reset`), **Audio → 2** (`music`, `speech`), **Connections → 2** (`context`, `system-one`).
 
 Concrete, low-risk improvements:
 
@@ -386,7 +391,7 @@ The four things still worth changing:
 
 `panel-dock.ts` is careful (44 px targets, `touch-action: none` on handle/resize, Escape closes, stopPropagation on the layer, `ResizeObserver` re-layout). Remaining touch issues:
 
-* `drag()`'s `move()` calls `this.host.getBoundingClientRect()` **on every pointermove**, then `layout()` for all pins, then writes `left/top` — one forced layout per frame per dragged pin. Cache the host rect at `pointerdown`, and write transforms (`translate3d`) during the drag, committing to `x/y` on `pointerup`.
+* `drag()`'s `move()` (`panel-dock.ts:233`–`238`) calls `this.host.getBoundingClientRect()` **on every pointermove**, then `layout()` for all pins, then writes `left/top` — a forced layout plus N style recalcs per pointer event (pointermove fires faster than frames on 120 Hz phones). Cache the host rect at `pointerdown`, and write transforms (`translate3d`) during the drag, committing to `x/y` on `pointerup`.
 * No snap or bounds feedback: a pin dragged to the edge keeps its clamped normalized position but the handle can end up under the `Back to chat` button. Clamp against the measured safe area and the exit control.
 * `layout()` runs for all pins on every resize observer tick. Debounce to one rAF.
 * 12 pins = 12 iframes with full `srcdoc` documents. Add `loading="lazy"` to the frames, destroy the `srcdoc` of pins whose `collapsed` is true (currently only the body is hidden — the iframe stays mounted), and reuse one frame when `follow` updates instead of `remove()` + recreate.
@@ -428,7 +433,7 @@ private swapAfterTransition(next: () => void): void {
 }
 ```
 
-**Audio ducking (35% Quiet)** — `audio-engine.ts:132` snaps the attenuation in one step (`player.volume = gain * bgmVolume * attenuation`), which clicks. Ramp it, and use an equal-power curve for track crossfades (`fadeVolume`, `:274` uses linear gain, which dips ~3 dB mid-crossfade):
+**Audio ducking (35% Quiet)** — `musicAttenuationForParagraph` returns exactly `0.35` for `quiet` (`host/controller.ts:235`) and `audio-engine.ts:132` snaps the attenuation in one step (`player.volume = gain * bgmVolume * attenuation`), which clicks. Ramp it, and use an equal-power curve for track crossfades (`fadeVolume`, `:274` uses linear gain, which dips ~3 dB mid-crossfade):
 
 ```ts
 setBgmAttenuation(target: number, rampMs = 240): void {
@@ -453,9 +458,7 @@ With Quiet at 0.35, use 160 ms attack when speech starts and 420 ms release when
 
 ### 3.5 Keyboard flows
 
-Audio/keyboard parity is close (arrows, space, Escape, auto/skip). Missing flows worth adding, in priority order:
-
-Today the stage handles `←` (previous), `→`/`Enter`/`Space` (advance), `L` (backlog), `A` (auto), `S` (skip) and `Escape` (close backlog), and bails out whenever a modifier is held or the target is interactive (`vn-stage.ts:1696`–`1731`). Missing:
+Audio/keyboard parity is close. Today the stage handles `←` (previous), `→`/`Enter`/`Space` (advance), `L` (backlog), `A` (auto), `S` (skip) and `Escape` (close backlog), and bails out whenever a modifier is held or the target is interactive (`vn-stage.ts:1696`–`1731`). Missing:
 
 1. `R` — open/close the image-prompt reviewer; `P` — panels; `C` — cast tray. (`L` is already taken by history; keep it.) Show them in the existing tooltips.
 2. `?` — shortcut sheet (`Shift+?` currently does nothing).
@@ -596,9 +599,9 @@ function abortAssetBatch(key: string, reason: string): void {
 
 The full rationale is in §1.2. Test coverage: `scene-image-controller-lifecycle.test.ts` — "a provider that ignores abort cannot leave the chat looking busy after the reader closes". Verified red on the old code (message *"Finish the chat reply, skip waiting pictures…"*) and green after.
 
-### 5.3 Reference history — a deadline that actually stops work
+### 5.3 Reference history — a deadline that actually stops work [applied]
 
-**Before** (`reference-history.ts:34` `frames`, `:55` `collect`): the 750 ms race in `readReferenceHistory` (`:82`) resolves the caller, but `collect` keeps running. `frames()` hashes every message sequentially with no deadline; `collect` checks `Date.now() >= deadline` only between stages; the freshness check serialises the whole message list twice (`JSON.stringify(fresh) !== JSON.stringify(snapshot)`, up to 4 MB each).
+**Before** (`reference-history.ts:34` `frames`, `:55` `collect`): the 750 ms race in `readReferenceHistory` (`:82`) resolved the caller, but `collect` keeps running. `frames()` hashes every message sequentially with no deadline; `collect` checks `Date.now() >= deadline` only between stages; the freshness check serialises the whole message list twice (`JSON.stringify(fresh) !== JSON.stringify(snapshot)`, up to 4 MB each).
 
 **After** — three surgical changes, same certificate format (so stored lineages stay valid), each stage abortable:
 
@@ -687,15 +690,15 @@ async function collect(
 }
 ```
 
-Callers change in one place each: `captureReferenceLineage` (`:44`) now does `const frame = (await frames(snapshot, plan.key.chatId))?.at(-1); if (!frame) return undefined;` — the default deadline keeps it unbounded, exactly as today. `readReferenceHistory` already races the promise; it needs no change and now the losing branch stops within one message hash.
+Callers change in one place each: `captureReferenceLineage` (now `:49`) does `const frame = (await frames(snapshot, plan.key.chatId))?.at(-1); if (!frame) return undefined;` — the default deadline keeps it unbounded, exactly as today. `readReferenceHistory` (now `:95`) already raced the promise, so it needed no change — the losing branch now stops within one message hash or one record read.
 
-Measured expectation: on a 200-reply chat (≈1.2 MB) the current scan costs ~1.2 MB of sequential hashing plus 2 × 1.2 MB `JSON.stringify`; the new one costs 2 chains with no large allocations and returns `undefined` at the deadline instead of continuing to run. The remaining per-record cost is `matches()` re-hashing `record.plan.paragraphs` — memoise it with a module-level `WeakMap<StoredTurnRecord, string>` (records are immutable snapshots) if profiling shows it matters.
+Verified behaviour (new test, `reference-history.test.ts`): with a storage backend that takes 20 ms per read and a 5 ms deadline, the call returns `undefined` instead of reading 16 records; with the default 750 ms it returns the full history. What is *not* claimed here is a precise end-to-end speedup — the honest statement is that the work now stops when the caller stops waiting, and the two multi-MB serialisations are gone. The remaining per-record cost is `matches()` re-hashing `record.plan.paragraphs`; memoise it with a module-level `WeakMap<StoredTurnRecord, string>` (records are immutable snapshots) if profiling shows it matters.
 
 ### 5.4 Cast View CSS — a speaker transition that reads as direction [proposal]
 
 See §3.4 for the full block. It is a drop-in replacement for lines 9–11 of the CSS template in `frontend/stage/cast-stage.ts`, keeps the existing attribute contract (`data-active`, `data-vn-cast-card`), and honours `prefers-reduced-motion` without removing information (the inactive card is only dimmed/desaturated, never hidden).
 
-Pinned-panel drag optimisation (also §3.3), drop-in for `panel-dock.ts:218`:
+Pinned-panel drag optimisation (also §3.3), drop-in for `panel-dock.ts:218` (`drag`):
 
 ```ts
 private drag(handle: HTMLButtonElement, pin: Pin, resizing: boolean): void {
@@ -729,7 +732,7 @@ private drag(handle: HTMLButtonElement, pin: Pin, resizing: boolean): void {
 **Verified here**
 
 * `bun run typecheck` — clean.
-* `bun test --isolate` — **1739 pass / 0 fail** across 152 files (5 new regression tests: 1 planning queue, 1 lifecycle, 1 storage, 1 reference deadline, plus the retained existing 14 reference tests).
+* `bun test --isolate` — **1739 pass / 0 fail** across 152 files. Four regression tests were added for these changes (planning-queue dedupe, asset-batch lifecycle, storage projection reuse, reference deadline); the reference-history suite is now 15 tests.
 * Fix correctness proven by reverting: the lifecycle test fails on the pre-fix controller with the exact user-visible error, and the storage test fails against the always-rebuild implementation.
 * Benchmarks reproduced with a throwaway script (not committed): projection reuse 8.0 → 1.5 ms/write; projection 4–17 ms and the 512 KB cliff at ~100 paragraphs.
 
@@ -741,23 +744,23 @@ private drag(handle: HTMLButtonElement, pin: Pin, resizing: boolean): void {
 
 **Backlog, ranked**
 
-| Priority | Item | Effort | Risk if ignored |
+| Priority | Item | Effort | Status / risk if ignored |
 |---|---|---|---|
-| P0 | F-01 abort ownership **[done]** | S | Replan/retry dead after a hung provider |
-| P0 | F-02 projection reuse **[done]** | S | 5× write CPU + GC churn per reply |
-| P1 | F-15 reviewer draft-key fix | XS | Template switch silently discards replacement edits |
-| P0 | F-05 presentation cliff (boundary snapshots) | M | Long replies silently lose references/documents |
-| P1 | F-04 reconcile aborts the old batch **[done]** | S | Paid generations keep running after an edit |
-| P1 | F-08 coalesced turn writes + no indent | S–M | Hundreds of KB written 20+ times per reply |
-| P1 | F-07 atomic cancel via `mutateActiveTurnRecord` | S | Lost job updates after a close/reopen race |
-| P1 | F-06 deadline-aware reference scan **[done]** | M | CPU burn after the UI gave up |
-| P2 | F-09 typewriter rAF + visibility pause | S | Jank/long tails on mobile, O(n²) garbage |
-| P2 | F-10 game bridge revision ordering | XS | Stale choices after a pick |
-| P2 | Reviewer: one primary + dirty guard + footer grouping | S | Accidental draft loss, tall sheet on phones |
-| P2 | Settings: three-tier disclosure + consequence summaries | M | "Settings fatigue" stays the top complaint |
-| P3 | F-11 epoch-map pruning (generation-based) | M | Slow memory growth over long sessions |
-| P3 | F-13 panel worker pool + lazy iframes | S | 12 iframes/6 s worst case on low-end devices |
-| P3 | F-12 per-scope cache statistics | XS | Misleading diagnostics |
-| P3 | Branch-change detection in `source` (v3) | M | Silent staleness on hosts that switch branches |
+| **P0** | F-01 abort ownership | S | **done** — replan/retry no longer die behind a hung provider |
+| **P0** | F-02 projection reuse on write | S | **done** — 8.0 → 1.5 ms per asset write |
+| **P0** | F-05 presentation cliff (boundary snapshots, delta facts) | M | Long replies silently lose references/documents/Cast View |
+| **P1** | F-04 reconcile aborts the replaced batch | S | **done** — no paid generations after an edit |
+| **P1** | F-06 deadline-aware reference scan | M | **done** — the scan stops when the caller stops waiting |
+| **P1** | F-07 atomic cancel via `mutateActiveTurnRecord` | S | Lost job updates in the close→reopen race |
+| **P1** | F-08 coalesced turn writes + no indent for `turns/**` | S–M | Hundreds of KB written 20+ times per reply |
+| **P1** | F-15 reviewer draft-key fix (`draftKey(record)`) | XS | Template switch silently discards replacement edits |
+| **P2** | F-09 typewriter rAF + visibility pause | S | O(n²) garbage, battery/CPU on mobile |
+| **P2** | F-10 game-bridge revision ordering | XS | Stale choices repopulate after a pick |
+| **P2** | Reviewer: close-confirmation, footer grid, iOS keyboard | S | Draft loss; cramped sheet on phones |
+| **P2** | Settings: three-tier disclosure + consequence summaries | M | "Settings fatigue" stays the top complaint |
+| **P3** | F-11 epoch-map pruning (generation-based, never `delete`) | M | Slow memory growth over long sessions |
+| **P3** | F-13 panel worker pool + lazy/collapsed iframes | S | 12 iframes, 6 s worst-case rule run |
+| **P3** | F-12 per-scope cache statistics | XS | Misleading hit/generation counters |
+| **P3** | Branch-change detection in `source` (schema v3) | M | Silent staleness on hosts that switch branches |
 
 **Design note for whoever takes F-11:** do not `delete` epoch entries. `intakeEpochs.get(key) ?? 0` means a deleted entry reads as epoch 0, and any operation capture from before the deletion compares equal again — a stale result would be accepted. Prune by replacing the map with a bounded LRU of `{ epoch, lastTouched }` where a pruned key reads as `Number.MAX_SAFE_INTEGER - 1` (or route everything through a monotonic counter that is never reused), so "unknown" can never look "current".
