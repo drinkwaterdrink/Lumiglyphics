@@ -42,6 +42,61 @@ export type SystemOneDecisions = {
   inputTokens: number;
 };
 
+/** The Spindle CORS DTO carries no abort signal, so the deadline races the proxy. */
+export const SYSTEM_ONE_TIMEOUT_MS = 15_000;
+
+function systemOneTimeout(ms: number): Error {
+  const error = new Error(`System One request timed out after ${ms} ms.`);
+  error.name = "TimeoutError";
+  return error;
+}
+
+/**
+ * Race the CORS proxy call against a wall-clock deadline and the caller's
+ * abort signal. The proxy request itself cannot be cancelled, so a late
+ * response is simply discarded; planning must never wait on a hung endpoint.
+ */
+async function boundedCors(
+  spindle: SpindleAPI,
+  endpoint: string,
+  init: { method: "POST"; headers: Record<string, string>; body: string },
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<{ status: number; body: string }> {
+  if (signal?.aborted) {
+    const error = new Error("System One request cancelled.");
+    error.name = "AbortError";
+    throw error;
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(systemOneTimeout(timeoutMs)), timeoutMs);
+  });
+  let abortReject: ((reason: unknown) => void) | undefined;
+  const onAbort = (): void => {
+    const error = new Error("System One request cancelled.");
+    error.name = "AbortError";
+    abortReject?.(error);
+  };
+  if (signal) signal.addEventListener("abort", onAbort, { once: true });
+  const abortPromise = new Promise<never>((_, reject) => { abortReject = reject; });
+  try {
+    return await Promise.race([
+      spindle.cors(endpoint, init) as Promise<{ status: number; body: string }>,
+      deadline,
+      ...(signal ? [abortPromise] : []),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (signal) signal.removeEventListener("abort", onAbort);
+  }
+}
+
+/** A missing answer means "no change detected" — never invent a scene cut. */
+function noulTripped(answer: AnswerValue | undefined, threshold: number): boolean {
+  return answer?.type === "noul" && answer.noul > threshold;
+}
+
 function chosen(answer: AnswerValue | undefined, allowed: Set<string>, threshold: number): string | null {
   if (answer?.type !== "choice" || answer.confidence < threshold || !allowed.has(answer.choice)) return null;
   return answer.choice;
@@ -49,7 +104,7 @@ function chosen(answer: AnswerValue | undefined, allowed: Set<string>, threshold
 
 export async function decidePresentation(
   spindle: SpindleAPI,
-  input: { paragraphs: Array<{ index: number; text: string }>; previousScene: SceneState | null; names: string[]; personaName?: string; config: VisualNovelConfig; userId?: string },
+  input: { paragraphs: Array<{ index: number; text: string }>; previousScene: SceneState | null; names: string[]; personaName?: string; config: VisualNovelConfig; userId?: string; signal?: AbortSignal; timeoutMs?: number },
 ): Promise<SystemOneDecisions | null> {
   if (input.config.systemOneMode === "off") return null;
   const key = await spindle.enclave.get(SYSTEM_ONE_KEY, input.userId);
@@ -73,7 +128,7 @@ export async function decidePresentation(
   }
   for (const paragraph of input.paragraphs.slice(0, 24)) {
     const index = paragraph.index;
-    questions[`speaker_${index}`] = { type: "choice", instructions: `Who speaks or owns paragraph ${index}? Choose Narrator for omniscient narration; choose unknown when the text does not identify a speaker.`, criteria: Object.fromEntries([...names, "unknown"].map((name) => [name, name === "unknown" ? "The speaker cannot be determined" : null])) };
+    questions[`speaker_${index}`] = { type: "choice", instructions: `Who speaks or owns paragraph ${index}? Choose Narrator for omniscient narration; choose unknown when the text does not identify a speaker.`, criteria: Object.fromEntries([...names, "unknown"].map((name) => name === "unknown" ? [name, "The speaker cannot be determined"] : [])) };
     questions[`expression_${index}`] = { type: "choice", instructions: `Which expression should the on-screen companion show as a reaction to paragraph ${index}?`, criteria: Object.fromEntries(poses.map((pose) => [pose.id, pose.suffix])) };
     if (music.length) questions[`bgm_${index}`] = { type: "choice", instructions: `Should background music change at paragraph ${index}?`, criteria: { keep_current: "No music change", ...Object.fromEntries(music.map((entry) => [entry.id, `${entry.name}; ${entry.tags.join(", ")}`])) } };
     if (sounds.length) questions[`sfx_${index}`] = { type: "choice", instructions: `Is a sound effect clearly called for at paragraph ${index}?`, criteria: { none: "No sound effect", ...Object.fromEntries(sounds.map((entry) => [entry.id, `${entry.name}; ${entry.tags.join(", ")}`])) } };
@@ -100,11 +155,11 @@ export async function decidePresentation(
       questions: batchQuestions,
     });
     if (new TextEncoder().encode(body).length > 65_536) throw new Error("System One request exceeds the API's 64 KiB limit");
-    const response = await spindle.cors(endpoint, {
+    const response = await boundedCors(spindle, endpoint, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body,
-    }) as { status: number; body: string };
+    }, input.timeoutMs ?? SYSTEM_ONE_TIMEOUT_MS, input.signal);
     if (response.status < 200 || response.status >= 300) throw new Error(`System One request failed (${response.status})`);
     return Response.parse(JSON.parse(response.body));
   }));
@@ -127,8 +182,10 @@ export async function decidePresentation(
   const description = answers.needs_description;
   return {
     speakers, expressions, bgm, sfx,
-    sceneChange: scene?.type !== "noul" || scene.noul > 0.2,
-    needsDescription: description?.type !== "noul" || description.noul > 0.2,
+    // Fail closed: a missing/malformed answer never invents a scene cut or
+    // forces a prose re-description; explicit high noul values still do.
+    sceneChange: noulTripped(scene, 0.2),
+    needsDescription: noulTripped(description, 0.2),
     durationMs: Date.now() - started,
     inputTokens: parsedBatches.reduce((total, batch) => total + (batch.usage?.input_tokens ?? 0), 0),
   };

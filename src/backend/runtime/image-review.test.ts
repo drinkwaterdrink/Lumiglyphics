@@ -2,9 +2,30 @@ import { compactImageRequest } from './image-review.js';
 import {resolveImagePromptProfile} from '../../shared/image-prompt-profile.js';
 import { describe, expect, test } from "bun:test";
 import { ImageReviewGate, applyImageEdits, safeImageParameters, safeImageHistory } from "./image-review.js";
+import {normalizeConfig} from '../../config.js';
+import {templateSnapshot} from '../../shared/image-templates.js';
+import {sharedStyleSnapshot} from '../../shared/shared-style-snapshot.js';
 
 const request = { connection_id: "nano", prompt: "original", negativePrompt: "blurry", model: "model-a", parameters: { seed: 12, width: 1024 }, owner_chat_id: "chat", userId: "alice" };
 const meta = { provider: "nanogpt", connectionRevision: 3 };
+
+test('saved style snapshots survive history; invalid optional snapshots do not discard the valid request or brief',async()=>{
+ const config=normalizeConfig({promptPrefix:'Saved ink style',promptSuffix:'Saved paper texture',negativePrompt:'logo'});
+ const template=templateSnapshot(config.imageTemplates[0]!);
+ const metadata={template,selectionReason:'Default template',format:'description' as const,trackerStatus:'disabled' as const,sharedStyle:sharedStyleSnapshot(config,template),brief:{scene:'Library',subjects:'Mira',action:'Reading',composition:'Portrait',lighting:'Daylight',subjectMode:'one' as const,framing:'portrait' as const,referencePolicy:'character' as const,sources:[],conflicts:[]}};
+ const records:any[]=[];const gate=new ImageReviewGate(async record=>{records.push(record);});
+ const pending=gate.prepare('style-job',0,request,{...meta,imagePromptMetadata:metadata,regeneratePrompt:async draft=>({...draft,prompt:'Rewritten saved style prompt'})},true,new AbortController().signal);
+ await Promise.resolve();config.promptPrefix='A different current style';
+ expect(await gate.regenerate(records[0].requestId)).toBe(true);
+ expect(safeImageHistory(records)[0]?.imagePromptMetadata?.sharedStyle?.prefix.text).toBe('Saved ink style');
+ expect(records.at(-1).imagePromptMetadata.sharedStyle.prefix.text).toBe('Saved ink style');
+ const damaged={...records.at(-1),imagePromptMetadata:{...metadata,sharedStyle:{version:99}}};
+ const recovered=safeImageHistory([damaged])[0]!;
+ expect(recovered.prompt).toBe('Rewritten saved style prompt');expect(recovered.imagePromptMetadata?.brief.scene).toBe('Library');
+ expect(recovered.imagePromptMetadata?.sharedStyle).toBeUndefined();
+ gate.decide(records.at(-1).requestId,'generate',{});
+ expect((await pending).prompt).toBe('Rewritten saved style prompt');
+});
 
 test('automatic adaptation failure survives history but clears after a successful fit',async()=>{
  const records:any[]=[];const gate=new ImageReviewGate(async record=>{records.push(record);});

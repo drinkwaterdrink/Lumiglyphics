@@ -11,6 +11,7 @@ try{
   await page.evaluate(()=>{
    const f=(window as any).imageFixture,t=structuredClone(f.turn);f.studio.setConfig(f.config);
    t.imageRequests[0].imagePromptMetadata={...f.metadata,brief:{...f.metadata.brief,subjects:'Mira <script>inert</script>',action:'Reading a letter'}};
+   t.imageRequests[0].imagePromptMetadata.sharedStyle=f.sharedStyleSnapshot({...f.config,selectedSharedStyleId:'builtin-style:anime',promptPrefix:'Saved ink <script>inert</script>',promptSuffix:'Saved paper texture',negativePrompt:'logo'},{positive:'{{style}} {{scene}}',negative:'{{negative}}'});
    t.imageRequests[0].parameters={size:'1024x1024'};
    t.imageRequests[0].promptProfile={version:1,family:'flux',maxCharacters:3000,source:'catalogue',format:'description',negativeMode:'positive-only',guidance:'Natural language.',output:{sizes:['768x768','1024x1024']},outputSource:'catalogue',outputManaged:true};
    t.imageRequests[0].negativePrompt='';f.prepared=t;f.studio.setTurn(t);f.studio.open();
@@ -20,6 +21,15 @@ try{
   assert.match(await brief.locator('[data-brief-rows]').innerText(),/Reading a letter/);
   assert.match(await brief.locator('[data-brief-rows]').innerText(),/<script>inert<\/script>/);
   assert.equal(await brief.locator('script').count(),0,'metadata is rendered as inert text');
+  const style=brief.locator('[data-style-preparation]');
+  await style.locator(':scope > summary').click();
+  assert.match(await style.innerText(),/Saved ink <script>inert<\/script>/);
+  assert.match(await style.innerText(),/customized/);
+  assert.match(await style.innerText(),/Not referenced by this template/);
+  assert.equal(await style.locator('script').count(),0);
+  await page.evaluate(()=>{const f=(window as any).imageFixture;f.studio.setConfig({...f.config,promptPrefix:'Changed current style',promptSuffix:'Changed current suffix',negativePrompt:'Changed negatives'});});
+  assert.doesNotMatch(await style.innerText(),/Changed current style/,'saved request does not borrow current settings');
+  assert.match(await style.innerText(),/Saved paper texture/);
   await brief.getByText('Why these model settings?',{exact:true}).click();
   assert.match(await brief.innerText(),/square outputs/);assert.match(await brief.innerText(),/positive-only/);
   await brief.getByRole('button',{name:'Edit wording',exact:true}).click();
@@ -39,11 +49,15 @@ try{
   await brief.getByRole('button',{name:'Output settings',exact:true}).click();
   assert.equal(await parameters.evaluate(el=>(el.getRootNode() as ShadowRoot).activeElement===el),true,'invalid JSON navigation focuses the field that needs repair');
   await parameters.fill('{"size":"1024x1024"}');
+  await page.evaluate(()=>{const f=(window as any).imageFixture,t=structuredClone(f.prepared);t.imageRequests[0].imagePromptMetadata.sharedStyle=f.sharedStyleSnapshot({...f.config,selectedSharedStyleId:'',promptPrefix:'x'.repeat(5000)},f.metadata.template);f.studio.setTurn(t);});
+  assert.match(await style.innerText(),/4,000 of 5,000/);
+  assert.equal(await style.getByLabel('Style prefix',{exact:true}).getAttribute('tabindex'),'0','long saved wording is keyboard scrollable');
   await brief.scrollIntoViewIfNeeded();
   assert.equal(await studio.locator('section').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
   await page.screenshot({path:`.cache/browser-fixtures/prepared-brief-${width}.png`});
   await page.evaluate(()=>{const f=(window as any).imageFixture;const t=structuredClone(f.prepared);delete t.imageRequests[0].imagePromptMetadata;delete t.imageRequests[0].promptProfile;f.studio.setTurn(t);});
   assert.match(await brief.locator('[data-brief-note]').innerText(),/not saved/);
+  assert.match(await style.innerText(),/unavailable/);
   assert.equal(await brief.locator('dt').count(),0,'older requests do not borrow current settings as evidence');
   await page.evaluate(()=>(window as any).imageFixture.studio.setPlanning('chat',true));
   assert.equal(await brief.isVisible(),false,'planning a reply cannot display stale brief notes');

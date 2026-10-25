@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach } from "bun:test";
-import { AudioEngine, createMockAudioPlayer, type AudioPlayerElement, formatAudioUrl } from "./audio-engine.js";
+import { AudioEngine, createMockAudioPlayer, MAX_ACTIVE_SFX, type AudioPlayerElement, formatAudioUrl } from "./audio-engine.js";
 
 class FakeClock {
   currentTime = 1000;
@@ -72,20 +72,35 @@ describe("AudioEngine", () => {
     clock = new FakeClock();
   });
 
+  test('speech playback ducks BGM and restores it without changing SFX',()=>{
+    const engine=new AudioEngine({bgmVolume:.8,sfxVolume:.6,crossfadeDuration:0,audioFactory:playerFactory,now:clock.now,setInterval:clock.setInterval,clearInterval:clock.clearInterval});
+    engine.playBgm('theme.mp3');
+    const track=createdPlayers[0]!;
+    expect(track.volume).toBe(.8);
+    engine.playSfx('bell.mp3');
+    const sfx=createdPlayers[1]!;
+    engine.setSpeechDucking(true);
+    expect(track.volume).toBeCloseTo(.8*.38);
+    expect(sfx.volume).toBe(.6);
+    engine.setSpeechDucking(false);
+    expect(track.volume).toBe(.8);
+    engine.destroy();
+  });
+
   test('music attenuation survives fades, restores the same track and never changes sound effects',()=>{
-    const engine=new AudioEngine({bgmVolume:.8,sfxVolume:.6,crossfadeDuration:50,audioFactory:playerFactory,now:clock.now,setInterval:clock.setInterval,clearInterval:clock.clearInterval});
+    const engine=new AudioEngine({bgmVolume:.8,sfxVolume:.6,crossfadeDuration:50,attenuationRampMs:100,audioFactory:playerFactory,now:clock.now,setInterval:clock.setInterval,clearInterval:clock.clearInterval});
     engine.playBgm('theme.mp3');clock.tick(25);const track=createdPlayers[0]!;track.currentTime=123;
-    (engine as any).setBgmAttenuation(0);expect(track.volume).toBe(0);clock.tick(100);expect(track.volume).toBe(0);
+    (engine as any).setBgmAttenuation(0);clock.tick(125);expect(track.volume).toBe(0);
     engine.playSfx('bell.mp3');expect(createdPlayers[1]!.volume).toBe(.6);
-    (engine as any).setBgmAttenuation(.35);expect(track.volume).toBeCloseTo(.28);
-    (engine as any).setBgmAttenuation(1);expect(track.volume).toBe(.8);expect(track.currentTime).toBe(123);expect(engine.getBgmVolume()).toBe(.8);expect(createdPlayers).toHaveLength(2);engine.destroy();
+    (engine as any).setBgmAttenuation(.35);clock.tick(125);expect(track.volume).toBeCloseTo(.28);
+    (engine as any).setBgmAttenuation(1);clock.tick(125);expect(track.volume).toBe(.8);expect(track.currentTime).toBe(123);expect(engine.getBgmVolume()).toBe(.8);expect(createdPlayers).toHaveLength(2);engine.destroy();
   });
 
   test('music caps cover all outgoing crossfades and cannot override global mute',()=>{
-    const engine=new AudioEngine({bgmVolume:.8,crossfadeDuration:100,audioFactory:playerFactory,now:clock.now,setInterval:clock.setInterval,clearInterval:clock.clearInterval});
+    const engine=new AudioEngine({bgmVolume:.8,crossfadeDuration:100,attenuationRampMs:100,audioFactory:playerFactory,now:clock.now,setInterval:clock.setInterval,clearInterval:clock.clearInterval});
     engine.playBgm('one');clock.tick(25);engine.playBgm('two');clock.tick(25);engine.playBgm('three');
-    (engine as any).setBgmAttenuation(0);expect(createdPlayers.every(p=>p.volume===0)).toBe(true);clock.tick(200);expect(createdPlayers.every(p=>p.volume===0)).toBe(true);
-    engine.setBgmVolume(0);(engine as any).setBgmAttenuation(1);expect(createdPlayers.every(p=>p.volume===0)).toBe(true);engine.stopAll();expect(createdPlayers.every(p=>p.paused)).toBe(true);
+    (engine as any).setBgmAttenuation(0);clock.tick(125);expect(createdPlayers.every(p=>p.volume===0)).toBe(true);
+    engine.setBgmVolume(0);(engine as any).setBgmAttenuation(1);clock.tick(125);expect(createdPlayers.every(p=>p.volume===0)).toBe(true);engine.stopAll();expect(createdPlayers.every(p=>p.paused)).toBe(true);
   });
 
   test('changing global volume during a fade cannot later escape its ceiling',()=>{
@@ -97,7 +112,38 @@ describe("AudioEngine", () => {
   test('raising global volume from zero during a fade restores the live configured volume',()=>{
     const engine=new AudioEngine({bgmVolume:0,crossfadeDuration:100,audioFactory:playerFactory,now:clock.now,setInterval:clock.setInterval,clearInterval:clock.clearInterval});
     engine.playBgm('theme');clock.tick(25);engine.setBgmVolume(.8);clock.tick(150);expect(createdPlayers[0]!.volume).toBe(.8);
-    engine.setBgmAttenuation(.35);expect(createdPlayers[0]!.volume).toBeCloseTo(.28);engine.destroy();
+    engine.setBgmAttenuation(.35,100);clock.tick(125);expect(createdPlayers[0]!.volume).toBeCloseTo(.28);engine.destroy();
+  });
+
+  test('F12 ducking eases over the ramp instead of stepping, with no change before the first tick',()=>{
+    const engine=new AudioEngine({bgmVolume:1,attenuationRampMs:200,crossfadeDuration:100,audioFactory:playerFactory,now:clock.now,setInterval:clock.setInterval,clearInterval:clock.clearInterval});
+    engine.playBgm('theme');clock.tick(200);
+    const track=createdPlayers[0]!;
+    expect(track.volume).toBe(1);
+    engine.setBgmAttenuation(0);
+    expect(track.volume).toBe(1); // the ramp starts on the timer, not synchronously
+    const sequence:number[]=[];
+    for(let i=0;i<4;i+=1){clock.tick(25);sequence.push(track.volume);}
+    // Monotonic, eased descent: every sample strictly between the endpoints...
+    for(const value of sequence){expect(value).toBeGreaterThan(0);expect(value).toBeLessThan(1);}
+    for(let i=1;i<sequence.length;i+=1)expect(sequence[i]!).toBeLessThan(sequence[i-1]!);
+    clock.tick(200);
+    expect(track.volume).toBe(0); // ...and the ramp settles exactly on the target
+    engine.destroy();
+  });
+
+  test('F12 retargeting mid-ramp settles at the new factor and rampMs 0 stays instant',()=>{
+    const engine=new AudioEngine({bgmVolume:1,attenuationRampMs:200,crossfadeDuration:100,audioFactory:playerFactory,now:clock.now,setInterval:clock.setInterval,clearInterval:clock.clearInterval});
+    engine.playBgm('theme');clock.tick(200);
+    const track=createdPlayers[0]!;
+    engine.setBgmAttenuation(0);clock.tick(50);
+    expect(track.volume).toBeGreaterThan(0);
+    expect(track.volume).toBeLessThan(1);
+    engine.setBgmAttenuation(1);clock.tick(300); // retarget from the heard level
+    expect(track.volume).toBe(1);
+    engine.setBgmAttenuation(0,0); // explicit instant step stays supported
+    expect(track.volume).toBe(0);
+    engine.destroy();
   });
 
   test("initializes with default or custom volumes and clamps values", () => {
@@ -260,6 +306,22 @@ describe("AudioEngine", () => {
     engine.playSfx("explosion.wav", { volume: 0.5 });
     const p2 = createdPlayers[1]!;
     expect(p2.volume).toBe(0.25);
+  });
+
+  test("F14 the active SFX set is hard-capped, evicting the oldest stalled player", () => {
+    const engine = new AudioEngine({
+      sfxVolume: 1,
+      audioFactory: playerFactory,
+      now: clock.now,
+      setInterval: clock.setInterval,
+      clearInterval: clock.clearInterval,
+    });
+    for (let i = 0; i < MAX_ACTIVE_SFX + 1; i += 1) engine.playSfx(`cue-${i}.wav`);
+    expect(createdPlayers).toHaveLength(MAX_ACTIVE_SFX + 1);
+    expect((engine as unknown as { activeSfx: Set<AudioPlayerElement> }).activeSfx.size).toBe(MAX_ACTIVE_SFX);
+    // The oldest player was paused to release it; the newest keeps playing.
+    expect(createdPlayers[0]!.paused).toBe(true);
+    expect(createdPlayers[MAX_ACTIVE_SFX]!.paused).toBe(false);
   });
 
   test("stopAll halts all BGM and SFX immediately", () => {

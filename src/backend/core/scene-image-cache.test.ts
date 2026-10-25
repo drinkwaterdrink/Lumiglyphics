@@ -4,6 +4,7 @@ import {
   canonicalJson,
   sceneEpisodeOf,
   sceneImageCacheKey,
+  sceneIdentityDigest,
   sceneImageScope,
   type SceneImageIdentity,
   type SceneImageProvenance
@@ -106,6 +107,15 @@ describe("scene image cache key", () => {
     const fox2 = identity({ subject: { characterId: "fox-girl-ren" } });
     expect(sceneImageCacheKey(fox1)).not.toBe(sceneImageCacheKey(fox2));
   });
+
+  test("carries a stable full-identity digest in a fourth key segment", () => {
+    const key = sceneImageCacheKey(identity());
+    const segments = key.split(":");
+    expect(segments[0]).toBe("scene-v2");
+    expect(segments).toHaveLength(4);
+    expect(segments[3]).toMatch(/^[0-9a-f]{13,14}$/);
+    expect(segments[3]).toBe(sceneImageCacheKey(identity()).split(":")[3]);
+  });
 });
 
 describe("scene episodes", () => {
@@ -184,17 +194,26 @@ describe("SceneImageCache lookup / store / bounds", () => {
     expect(cache.stats().evictions).toBe(1);
   });
 
-  test("bounds bytes and keeps the entry just stored even when it alone exceeds the limit", () => {
-    const small = new SceneImageCache({ maxBytes: 10 });
-    const key = sceneImageCacheKey(identity());
-    expect(fill(small, key, "img-1").stored).toBe(true);
-    expect(small.size).toBe(1);
-    expect(small.bytes).toBeGreaterThan(10);
-    const other = sceneImageCacheKey(identity({ pose: { id: "b" } }));
-    fill(small, other, "img-2");
-    expect(small.size).toBe(1);
-    expect(small.peek(scope, other)?.imageId).toBe("img-2");
-    expect(small.stats().evictions).toBe(1);
+  test("bounds bytes and keeps the entry just stored when the pool is over budget", () => {
+    // Every storable entry is <= maxBytes/4 by the per-entry cap, so byte
+    // pressure only arrives with several entries. Measure one entry, size the
+    // budget at just under five entries, and confirm LRU eviction protects the
+    // newest store while the byte accounting never goes over budget.
+    const probe = new SceneImageCache({ maxBytes: 4096 });
+    expect(fill(probe, sceneImageCacheKey(identity()), "img-1").stored).toBe(true);
+    const oneEntryBytes = probe.bytes;
+    const budget = oneEntryBytes * 5 - 1;
+    const small = new SceneImageCache({ maxBytes: budget });
+    const keys: string[] = [];
+    for (const id of ["a", "b", "c", "d", "e", "f"]) {
+      const key = sceneImageCacheKey(identity({ pose: { id } }));
+      keys.push(key);
+      expect(fill(small, key, `img-${id}`).stored).toBe(true);
+    }
+    expect(small.bytes).toBeLessThanOrEqual(budget);
+    expect(small.peek(scope, keys[keys.length - 1]!)?.imageId).toBe("img-f");
+    expect(small.peek(scope, keys[0]!)).toBeNull();
+    expect(small.stats().evictions).toBeGreaterThan(0);
   });
 
   test("rejects late results: stale admission, aborted signal, missing image id, wrong scope", () => {
@@ -210,7 +229,65 @@ describe("SceneImageCache lookup / store / bounds", () => {
     expect(cache.store(scope, key, { imageId: "  ", episode: "e", provenance }, fresh)).toEqual({ stored: false, reason: "no_image_id" });
     expect(cache.store("other:chat", key, { imageId: "img", episode: "e", provenance }, fresh)).toEqual({ stored: false, reason: "wrong_scope" });
     expect(cache.size).toBe(0);
-    expect(cache.stats().rejections).toEqual({ stale_admission: 1, aborted: 1, no_image_id: 1, wrong_scope: 1 });
+    expect(cache.stats().rejections).toEqual({
+      stale_admission: 1, aborted: 1, no_image_id: 1, wrong_scope: 1,
+      key_collision: 0, entry_too_large: 0
+    });
+  });
+
+  test("F4: an FNV key collision with a different content digest is refused and never overwrites the entry", () => {
+    const cache = new SceneImageCache();
+    // Two identities have produced the same short map key (simulated here by
+    // reusing one key string) but carry different full-identity digests.
+    const sharedKey = sceneImageCacheKey(identity());
+    const digestA = sceneIdentityDigest(identity());
+    const digestB = "0000000000000";
+    expect(digestA).not.toBe(digestB);
+    expect(cache.store(scope, sharedKey, {
+      imageId: "img-1", episode: "initial:0", provenance, identityDigest: digestA
+    }, cache.admission(scope)).stored).toBe(true);
+    // The legitimate identity still hits...
+    expect(cache.lookup(scope, sharedKey, "initial:0", digestA).status).toBe("hit");
+    // ...the colliding identity is refused on read and on write, and the
+    // original entry is untouched.
+    expect(cache.lookup(scope, sharedKey, "initial:0", digestB))
+      .toEqual({ status: "miss", reason: "key_collision" });
+    expect(cache.store(scope, sharedKey, {
+      imageId: "img-evil", episode: "initial:0", provenance, identityDigest: digestB
+    }, cache.admission(scope))).toEqual({ stored: false, reason: "key_collision" });
+    expect(cache.peek(scope, sharedKey)?.imageId).toBe("img-1");
+    expect(cache.stats().misses.key_collision).toBe(1);
+    expect(cache.stats().rejections.key_collision).toBe(1);
+  });
+
+  test("F4: legacy keys without a digest segment keep working without a guard", () => {
+    const cache = new SceneImageCache();
+    const legacyKey = "scene-v2:hand-built";
+    expect(fill(cache, legacyKey, "img-1").stored).toBe(true);
+    expect(cache.peek(scope, legacyKey)?.identityDigest).toBeNull();
+    expect(cache.lookup(scope, legacyKey, "initial:0").status).toBe("hit");
+  });
+
+  test("F11: an entry larger than a quarter of the byte budget is rejected", () => {
+    const tiny = new SceneImageCache({ maxBytes: 10 });
+    const key = sceneImageCacheKey(identity());
+    expect(fill(tiny, key, "img-1")).toEqual({ stored: false, reason: "entry_too_large" });
+    expect(tiny.size).toBe(0);
+    expect(tiny.stats().rejections.entry_too_large).toBe(1);
+  });
+
+  test("F11: one scope cannot hold more than half the pool; other scopes are protected", () => {
+    const cache = new SceneImageCache({ maxEntries: 6 });
+    const otherScope = sceneImageScope(undefined, "chat-2");
+    cache.store(otherScope, sceneImageCacheKey(identity({ pose: { id: "other" } })),
+      { imageId: "img-other", episode: "initial:0", provenance }, cache.admission(otherScope));
+    for (const id of ["a", "b", "c", "d"]) {
+      fill(cache, sceneImageCacheKey(identity({ pose: { id } })), `img-${id}`);
+    }
+    // The heavy scope is capped at the three-entry fair share...
+    expect(cache.snapshot(scope)).toHaveLength(3);
+    // ...and the other scope's entry was never evicted for it.
+    expect(cache.snapshot(otherScope)).toHaveLength(1);
   });
 
   test("bumping the epoch keeps existing entries (content keyed) but rejects tokens minted before", () => {

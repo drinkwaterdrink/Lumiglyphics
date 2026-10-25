@@ -6,7 +6,7 @@ import { ContinuityStateSchema, SceneStateSchema } from "../../shared/contracts.
 import { emptySingleCharacter } from "../core/visual-state.js";
 import { clearAudioCatalogCache, scanAudioCatalog } from "./audio-catalog.js";
 import { planTurn } from "./planner.js";
-import { systemOneEndpoint } from "./system-one.js";
+import { decidePresentation, systemOneEndpoint } from "./system-one.js";
 
 const continuity = ContinuityStateSchema.parse({ revision: 1, characters: {}, facts: {} });
 const scene = SceneStateSchema.parse({
@@ -127,6 +127,52 @@ test("classifier continuation covers expressions beyond the image cap and holds 
   const result = await planTurn(spindle(async () => { throw new Error("planner should not run"); }, [], response), args);
   assert.equal(result.plan.classifierVisuals, true);
   assert.deepEqual(result.plan.visualCues.map((cue) => [cue.paragraphIndex, cue.poseExpressionId]), [[0, "listen"], [2, "smile"], [4, "listen"]]);
+});
+
+test("a hung System One endpoint rejects at the deadline instead of stalling planning", async () => {
+  const hung = {
+    enclave: { get: async () => "test-secret" },
+    cors: () => new Promise(() => {}),
+    log: { warn: () => {}, info: () => {} },
+  } as unknown as SpindleAPI;
+  await assert.rejects(
+    decidePresentation(hung, {
+      paragraphs: [{ index: 0, text: "Mira waits quietly." }],
+      previousScene: null, names: ["Mira"], config: { ...DEFAULT_CONFIG, systemOneMode: "on" },
+      timeoutMs: 30,
+    }),
+    /timed out after 30 ms/,
+  );
+});
+
+test("an external abort cancels a System One request in flight", async () => {
+  const hung = {
+    enclave: { get: async () => "test-secret" },
+    cors: () => new Promise(() => {}),
+    log: { warn: () => {}, info: () => {} },
+  } as unknown as SpindleAPI;
+  const controller = new AbortController();
+  const pending = decidePresentation(hung, {
+    paragraphs: [{ index: 0, text: "Mira waits quietly." }],
+    previousScene: null, names: ["Mira"], config: { ...DEFAULT_CONFIG, systemOneMode: "on" },
+    signal: controller.signal, timeoutMs: 5_000,
+  });
+  controller.abort("cancelled by test");
+  await assert.rejects(pending, /cancelled/);
+});
+
+test("missing noul answers fail closed: no invented scene change or description need", async () => {
+  const api = {
+    enclave: { get: async () => "test-secret" },
+    cors: async () => ({ status: 200, body: JSON.stringify({ model: "jev-latest", answers: {} }) }),
+    log: { warn: () => {}, info: () => {} },
+  } as unknown as SpindleAPI;
+  const decisions = await decidePresentation(api, {
+    paragraphs: [{ index: 0, text: "Mira waits quietly." }],
+    previousScene: scene, names: ["Mira"], config: { ...DEFAULT_CONFIG, systemOneMode: "on" },
+  });
+  assert.equal(decisions?.sceneChange, false);
+  assert.equal(decisions?.needsDescription, false);
 });
 
 test("off, compare, missing key, invalid response, and native art preserve the original cue budget", async () => {

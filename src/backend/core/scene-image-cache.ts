@@ -94,6 +94,10 @@ export type SceneImageCacheEntry = {
   episode: string;
   imageId: string;
   imageUrl: string;
+  /** Full-identity content digest (cyrb53 over canonical JSON), verified on
+   *  every lookup so an FNV key collision can never serve another identity's
+   *  image. Null only for legacy/hand-built keys that carry no digest. */
+  identityDigest: string | null;
   provenance: SceneImageProvenance;
   /** Approximate metadata size in bytes (UTF-16 code units of the strings). */
   bytes: number;
@@ -104,8 +108,11 @@ export type SceneImageCacheEntry = {
 
 export type SceneImageMissReason =
   | "absent" | "evicted" | "invalidated" | "episode_retired" | "bypass"
-  | "asset_missing" | "asset_unverifiable" | "identity_unresolved" | "portrait_capture" | "disabled";
-export type SceneImageRejectReason = "stale_admission" | "aborted" | "no_image_id" | "wrong_scope";
+  | "asset_missing" | "asset_unverifiable" | "identity_unresolved" | "portrait_capture"
+  | "disabled" | "key_collision";
+export type SceneImageRejectReason =
+  | "stale_admission" | "aborted" | "no_image_id" | "wrong_scope"
+  | "key_collision" | "entry_too_large";
 export type SceneImageInvalidationReason =
   | "forced_regeneration" | "asset_missing" | "asset_unverifiable" | "image_deleted"
   | "scene_boundary" | "chat_switch" | "scope_cleared" | "manual";
@@ -170,6 +177,34 @@ function fnv1a(source: string): string {
   return value.toString(16).padStart(8, "0");
 }
 
+/**
+ * cyrb53 (53-bit, two independent 32-bit mixing rounds) — a deliberately
+ * different algorithm from FNV-1a. It is the content-level disambiguator for
+ * the cache key: two distinct identities would need to collide under both
+ * algorithms before the digest guard in lookup/store could be reached.
+ * Sync and dependency-free to match the module's unit-testability contract.
+ */
+export function cyrb53(source: string, seed = 0): string {
+  let h1 = 0xdeadbeef ^ seed;
+  let h2 = 0x41c6ce57 ^ seed;
+  for (let index = 0; index < source.length; index += 1) {
+    const code = source.charCodeAt(index);
+    h1 = Math.imul(h1 ^ code, 2654435761);
+    h2 = Math.imul(h2 ^ code, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16).padStart(13, "0");
+}
+
+export function fnv1aReverse(source: string): string {
+  let value = 0x811c9dc5;
+  for (let index = source.length - 1; index >= 0; index -= 1) {
+    value = Math.imul(value ^ source.charCodeAt(index), 0x01000193) >>> 0;
+  }
+  return value.toString(16).padStart(8, "0");
+}
+
 /** Deterministic JSON: object keys sorted recursively, arrays kept in order. */
 export function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== "object") {
@@ -196,14 +231,23 @@ export function sceneEpisodeOf(scene: { priorSceneId?: string | null | undefined
   return scene.priorSceneId?.trim() || `initial:${scopeGeneration}`;
 }
 
+/** Full-identity content digest over the canonical JSON. */
+export function sceneIdentityDigest(identity: SceneImageIdentity): string {
+  return cyrb53(canonicalJson(identity));
+}
+
 /**
- * Hash the structured identity. Two hashes of the canonical JSON (forward and
- * reversed) keep the key short while making accidental collisions unlikely;
- * the version tag lets a future key layout change invalidate old entries.
+ * Hash the structured identity. Two FNV-1a hashes of the canonical JSON
+ * (forward and reversed) give the short map key; the appended cyrb53 digest is
+ * an independent-algorithm content guard that is also stored on each entry and
+ * re-verified on every lookup, so a hash collision can never serve one
+ * identity's image for another. The version tag lets a future key layout
+ * change invalidate old entries.
  */
 export function sceneImageCacheKey(identity: SceneImageIdentity): string {
   const canonical = canonicalJson(identity);
-  return `${SCENE_CACHE_KEY_VERSION}:${fnv1a(canonical)}${fnv1a(canonical.split("").reverse().join(""))}:${canonical.length.toString(16)}`;
+  const fnvPair = `${fnv1a(canonical)}${fnv1aReverse(canonical)}`;
+  return `${SCENE_CACHE_KEY_VERSION}:${fnvPair}:${canonical.length.toString(16)}:${cyrb53(canonical)}`;
 }
 
 function entryBytes(scope: string, key: string, episode: string, imageId: string, imageUrl: string, provenance: SceneImageProvenance): number {
@@ -211,11 +255,11 @@ function entryBytes(scope: string, key: string, episode: string, imageId: string
 }
 
 function emptyMisses(): Record<SceneImageMissReason, number> {
-  return { absent: 0, evicted: 0, invalidated: 0, episode_retired: 0, bypass: 0, asset_missing: 0, asset_unverifiable: 0, identity_unresolved: 0, portrait_capture: 0, disabled: 0 };
+  return { absent: 0, evicted: 0, invalidated: 0, episode_retired: 0, bypass: 0, asset_missing: 0, asset_unverifiable: 0, identity_unresolved: 0, portrait_capture: 0, disabled: 0, key_collision: 0 };
 }
 
 function emptyRejections(): Record<SceneImageRejectReason, number> {
-  return { stale_admission: 0, aborted: 0, no_image_id: 0, wrong_scope: 0 };
+  return { stale_admission: 0, aborted: 0, no_image_id: 0, wrong_scope: 0, key_collision: 0, entry_too_large: 0 };
 }
 
 function emptyInvalidations(): Record<SceneImageInvalidationReason, number> {
@@ -298,7 +342,13 @@ export class SceneImageCache {
    */
   bumpEpoch(scope: SceneImageScope, _reason?: string): number {
     const next = this.epoch(scope) + 1;
+    this.epochs.delete(scope);
     this.epochs.set(scope, next);
+    while (this.epochs.size > Math.max(512, this.maxEntries * 2)) {
+      const oldest = this.epochs.keys().next().value;
+      if (oldest === undefined) break;
+      this.epochs.delete(oldest);
+    }
     return next;
   }
 
@@ -319,7 +369,14 @@ export class SceneImageCache {
    * Reuse-first read. A hit refreshes LRU order and counts as a generation
    * avoided. An entry from another physical scene episode is retired on sight.
    */
-  lookup(scope: SceneImageScope, key: string, episode: string): SceneImageLookup {
+  /**
+   * Reuse-first read. A hit refreshes LRU order and counts as a generation
+   * avoided. An entry from another physical scene episode is retired on sight.
+   * Pass the caller-computed `expectedDigest` (`sceneIdentityDigest`) so a
+   * short-key collision between two different full identities is detected even
+   * though their map key is identical; callers must pass the digest explicitly; it is never recovered from the key.
+   */
+  lookup(scope: SceneImageScope, key: string, episode: string, expectedDigest?: string | null): SceneImageLookup {
     const composite = this.composite(scope, key);
     const entry = this.entries.get(composite);
     if (!entry) {
@@ -332,6 +389,14 @@ export class SceneImageCache {
       this.counters.invalidations.scene_boundary += 1;
       this.counters.misses.episode_retired += 1;
       return { status: "miss", reason: "episode_retired" };
+    }
+    // Content-level collision guard: the stored entry belongs to a different
+    // identity that happened to share the short FNV key. Do not evict it (it
+    // is legitimate for its own identity); report a miss for this caller.
+    const digest = expectedDigest ?? null;
+    if (digest !== null && entry.identityDigest !== null && entry.identityDigest !== digest) {
+      this.counters.misses.key_collision += 1;
+      return { status: "miss", reason: "key_collision" };
     }
     entry.hits += 1;
     entry.lastUsedAt = this.now();
@@ -367,7 +432,14 @@ export class SceneImageCache {
   store(
     scope: SceneImageScope,
     key: string,
-    value: { imageId: string | null | undefined; imageUrl?: string | null; episode: string; provenance: SceneImageProvenance },
+    value: {
+      imageId: string | null | undefined;
+      imageUrl?: string | null;
+      episode: string;
+      provenance: SceneImageProvenance;
+      /** Caller-computed full-identity digest; never inferred from the key. */
+      identityDigest?: string | null;
+    },
     token: SceneImageAdmission,
     signal?: AbortSignal
   ): SceneImageStoreResult {
@@ -380,6 +452,15 @@ export class SceneImageCache {
     const composite = this.composite(scope, key);
     const timestamp = this.now();
     const previous = this.entries.get(composite);
+    const digest = value.identityDigest ?? null;
+    // A same-key entry belonging to a different full identity must never be
+    // overwritten; both identities would otherwise alias one pointer.
+    if (previous && digest !== null && previous.identityDigest !== null && previous.identityDigest !== digest) {
+      return this.reject("key_collision");
+    }
+    const candidateBytes = entryBytes(scope, key, value.episode, imageId, imageUrl, value.provenance);
+    // Per-entry cap: one fat pointer must not be able to monopolize the pool.
+    if (candidateBytes > this.maxBytes / 4) return this.reject("entry_too_large");
     if (previous) {
       this.entries.delete(composite);
       this.bytesUsed -= previous.bytes;
@@ -390,8 +471,9 @@ export class SceneImageCache {
       episode: value.episode,
       imageId,
       imageUrl,
+      identityDigest: digest,
       provenance: { ...value.provenance },
-      bytes: entryBytes(scope, key, value.episode, imageId, imageUrl, value.provenance),
+      bytes: candidateBytes,
       createdAt: timestamp,
       lastUsedAt: timestamp,
       hits: 0
@@ -401,7 +483,7 @@ export class SceneImageCache {
     this.tombstones.delete(composite);
     this.counters.stores += 1;
     if (previous) this.counters.replacements += 1;
-    this.enforceBounds(composite);
+    this.enforceBounds(composite, scope);
     return { stored: true, entry, replaced: Boolean(previous) };
   }
 
@@ -410,15 +492,41 @@ export class SceneImageCache {
     return { stored: false, reason };
   }
 
-  private enforceBounds(keep: string): void {
-    // Evict least recently used until within both bounds. The entry just
-    // stored is kept even if it alone exceeds maxBytes, so one oversized key
-    // never wedges the cache; it becomes the only entry instead.
+  /** Per-scope fair share of the entry budget (no-op for tiny test caches). */
+  private scopeEntryShare(): number {
+    return this.maxEntries >= 4 ? Math.floor(this.maxEntries / 2) : this.maxEntries;
+  }
+
+  private enforceBounds(keep: string, storedScope: SceneImageScope): void {
+    // Global pass: evict least recently used until within both bounds. The
+    // entry just stored is kept when the aggregate is still over budget, so a
+    // store on an already-full cache never immediately evicts itself; the
+    // per-entry byte cap (checked in `store`) guarantees it fits four-deep.
     for (const [composite, entry] of this.entries) {
       if (this.entries.size <= this.maxEntries && this.bytesUsed <= this.maxBytes) break;
       if (composite === keep) continue;
       this.drop(composite, entry, "evicted");
       this.counters.evictions += 1;
+    }
+    // Fair-share pass: no single user+chat may hold more than half the pool,
+    // so one heavy chat cannot evict every other scope on a multi-user host.
+    const shareEntries = this.scopeEntryShare();
+    const shareBytes = Math.floor(this.maxBytes / 2);
+    let scopeEntries = 0;
+    let scopeBytes = 0;
+    for (const entry of this.entries.values()) {
+      if (entry.scope !== storedScope) continue;
+      scopeEntries += 1;
+      scopeBytes += entry.bytes;
+    }
+    if (scopeEntries <= shareEntries && scopeBytes <= shareBytes) return;
+    for (const [composite, entry] of this.entries) {
+      if (scopeEntries <= shareEntries && scopeBytes <= shareBytes) break;
+      if (entry.scope !== storedScope || composite === keep) continue;
+      this.drop(composite, entry, "evicted");
+      this.counters.evictions += 1;
+      scopeEntries -= 1;
+      scopeBytes -= entry.bytes;
     }
   }
 
@@ -450,7 +558,7 @@ export class SceneImageCache {
   /** Drop every entry that points at this image id (any scope). */
   invalidateImage(imageId: string, reason: SceneImageInvalidationReason = "image_deleted"): number {
     let count = 0;
-    for (const [composite, entry] of [...this.entries]) {
+    for (const [composite, entry] of this.entries) {
       if (entry.imageId !== imageId) continue;
       this.drop(composite, entry, "invalidated");
       this.counters.invalidations[reason] += 1;
@@ -466,7 +574,7 @@ export class SceneImageCache {
   retainEpisodes(scope: SceneImageScope, episodes: Iterable<string>): number {
     const keep = new Set(episodes);
     let count = 0;
-    for (const [composite, entry] of [...this.entries]) {
+    for (const [composite, entry] of this.entries) {
       if (entry.scope !== scope || keep.has(entry.episode)) continue;
       this.drop(composite, entry, "invalidated");
       this.counters.invalidations.scene_boundary += 1;
@@ -487,9 +595,16 @@ export class SceneImageCache {
 
   /** Drop every entry of one user+chat, advance its epoch (late results rejected) and its generation. */
   invalidateScope(scope: SceneImageScope, reason: SceneImageInvalidationReason = "scope_cleared"): number {
-    this.generations.set(scope, this.generation(scope) + 1);
+    const nextGen = this.generation(scope) + 1;
+    this.generations.delete(scope);
+    this.generations.set(scope, nextGen);
+    while (this.generations.size > Math.max(512, this.maxEntries * 2)) {
+      const oldest = this.generations.keys().next().value;
+      if (oldest === undefined) break;
+      this.generations.delete(oldest);
+    }
     let count = 0;
-    for (const [composite, entry] of [...this.entries]) {
+    for (const [composite, entry] of this.entries) {
       if (entry.scope !== scope) continue;
       this.drop(composite, entry, "invalidated");
       this.counters.invalidations[reason] += 1;

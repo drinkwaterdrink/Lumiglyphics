@@ -79,6 +79,8 @@ export interface AudioEngineOptions {
   bgmVolume?: number;
   sfxVolume?: number;
   crossfadeDuration?: number;
+  /** F12: duration of the eased presentation-duck ramp. 0 restores instant steps. */
+  attenuationRampMs?: number;
   audioFactory?: AudioFactory;
   now?: () => number;
   setInterval?: (handler: () => void, timeout?: number) => TimerHandle;
@@ -91,16 +93,26 @@ interface ActiveBgm {
   player: AudioPlayerElement;
   src: string;
   fadeTimer?: TimerHandle | undefined;
+  /** F12: timer driving the eased attenuation ramp, independent of fadeTimer. */
+  attenTimer?: TimerHandle | undefined;
+  /** Effective attenuation while a ramp is in flight; equals bgmAttenuation when idle. */
+  attenLevel: number;
 }
 
 const DEFAULT_CROSSFADE_DURATION_MS = 1500;
+/** F12: ducking ("Quiet"/"Mute" boundaries) eases over this window by default. */
+const DEFAULT_ATTENUATION_RAMP_MS = 420;
+/** F14: stalled SFX elements that never fire ended/error must not accumulate forever. */
+export const MAX_ACTIVE_SFX = 32;
 
 export class AudioEngine {
   private bgmVolume: number;
   private bgmAttenuation=1;
+  private speechDucking=1;
   private readonly bgmTracks=new Set<ActiveBgm>();
   private sfxVolume: number;
   private readonly crossfadeDuration: number;
+  private readonly attenuationRampMs: number;
   private readonly audioFactory: AudioFactory;
   private readonly now: () => number;
   private readonly setInterval: (handler: () => void, timeout?: number) => TimerHandle;
@@ -114,6 +126,7 @@ export class AudioEngine {
     this.bgmVolume = Math.max(0, Math.min(1, options.bgmVolume ?? 0.7));
     this.sfxVolume = Math.max(0, Math.min(1, options.sfxVolume ?? 0.8));
     this.crossfadeDuration = options.crossfadeDuration ?? DEFAULT_CROSSFADE_DURATION_MS;
+    this.attenuationRampMs = options.attenuationRampMs ?? DEFAULT_ATTENUATION_RAMP_MS;
     this.audioFactory = options.audioFactory ?? defaultAudioFactory;
     this.now = options.now ?? (() => Date.now());
     this.setInterval = options.setInterval ?? ((handler, timeout) => setInterval(handler, timeout));
@@ -129,16 +142,60 @@ export class AudioEngine {
     for(const item of this.bgmTracks)this.setTrackVolume(item,item===this.activeBgm&&item.fadeTimer===undefined?1:item.gain);
   }
 
-  /** Presentation-only gain: keep the track and its playback position. */
-  setBgmAttenuation(factor:number):void {
-    this.bgmAttenuation=Number.isFinite(factor)?Math.max(0,Math.min(1,factor)):1;
+  /**
+   * Presentation-only gain: keep the track and its playback position. F12 —
+   * the factor eases in over `attenuationRampMs` instead of snapping, so a
+   * "Quiet"/"Mute" boundary reads as a deliberate music-bed change. The ramp
+   * timer is independent of the crossfade envelope (fadeTimer); retargeting
+   * mid-ramp starts again from the level currently heard.
+   */
+  setBgmAttenuation(factor:number,rampMs:number=this.attenuationRampMs):void {
+    const next=Number.isFinite(factor)?Math.max(0,Math.min(1,factor)):1;
+    const previous=this.bgmAttenuation;
+    this.bgmAttenuation=next;
+    for(const item of this.bgmTracks){
+      this.clearAtten(item);
+      if(rampMs<=0||previous===next){
+        item.attenLevel=next;
+        this.setTrackVolume(item,item.gain);
+        continue;
+      }
+      const startLevel=item.attenLevel;
+      const startedAt=this.now();
+      const intervalMs=25;
+      item.attenTimer=this.setInterval(()=>{
+        const progress=Math.min(1,(this.now()-startedAt)/rampMs);
+        // Ease-out: fast initial duck, gentle settle.
+        const eased=1-(1-progress)*(1-progress);
+        item.attenLevel=startLevel+(next-startLevel)*eased;
+        this.setTrackVolume(item,item.gain);
+        if(progress>=1){
+          this.clearAtten(item);
+          item.attenLevel=next;
+          this.setTrackVolume(item,item.gain);
+        }
+      },intervalMs);
+    }
+  }
+
+  private clearAtten(item:ActiveBgm):void {
+    if(item.attenTimer!==undefined){
+      this.clearInterval(item.attenTimer);
+      item.attenTimer=undefined;
+    }
+  }
+
+  /** Duck BGM while speech/TTS playback is active, then restore cleanly. */
+  setSpeechDucking(active:boolean):void {
+    const next=active?0.38:1;
+    if(this.speechDucking===next)return;
+    this.speechDucking=next;
     for(const item of this.bgmTracks)this.setTrackVolume(item,item.gain);
   }
 
   private setTrackVolume(item:ActiveBgm,gain:number):void {
     item.gain=Math.max(0,Math.min(1,gain));
-    item.player.volume=item.gain*this.bgmVolume*this.bgmAttenuation;
-  }
+    item.player.volume=item.gain*this.bgmVolume*this.speechDucking*item.attenLevel;  }
 
   getSfxVolume(): number {
     return this.sfxVolume;
@@ -190,7 +247,7 @@ export class AudioEngine {
     player.loop = true;
     player.volume = 0;
 
-    const bgm: ActiveBgm = { player, src: cleanSrc, gain:0 };
+    const bgm: ActiveBgm = { player, src: cleanSrc, gain:0, attenLevel:this.bgmAttenuation };
     this.bgmTracks.add(bgm);
     this.activeBgm = bgm;
 
@@ -224,12 +281,16 @@ export class AudioEngine {
     const cleanSrc = src ? src.trim() : "";
     if (!cleanSrc || this.sfxVolume <= 0) return;
 
+    // Enforce the cap before creating/wiring a new element. An evicted player
+    // no longer retains ended/error closures that can keep its listener graph alive.
+    if (this.activeSfx.size >= MAX_ACTIVE_SFX) {
+      const oldest = this.activeSfx.values().next().value;
+      if (oldest) { oldest.pause(); this.activeSfx.delete(oldest); }
+    }
     const player = this.audioFactory(cleanSrc);
     player.loop = false;
     const sfxVol = Math.max(0, Math.min(1, (options.volume ?? 1) * this.sfxVolume));
     player.volume = sfxVol;
-
-    this.activeSfx.add(player);
 
     const onEnded = () => {
       this.activeSfx.delete(player);
@@ -239,6 +300,9 @@ export class AudioEngine {
 
     player.addEventListener("ended", onEnded);
     player.addEventListener("error", onEnded);
+    this.activeSfx.add(player);
+
+
 
     player.play().catch(() => {
       this.activeSfx.delete(player);
@@ -249,7 +313,7 @@ export class AudioEngine {
    * Stop all audio immediately.
    */
   stopAll(): void {
-    for(const item of this.bgmTracks){this.clearFade(item);item.player.pause();}
+    for(const item of this.bgmTracks){this.clearFade(item);this.clearAtten(item);item.player.pause();}
     this.bgmTracks.clear();
     this.activeBgm = null;
     this.outgoingBgm = null;
@@ -285,7 +349,8 @@ export class AudioEngine {
     item.fadeTimer = this.setInterval(() => {
       const elapsed = this.now() - startTime;
       const progress = Math.min(1, elapsed / durationMs);
-      const newVolume = startVolume + (targetVolume - startVolume) * progress;
+      const eased = 0.5 - 0.5 * Math.cos(progress * Math.PI);
+      const newVolume = startVolume + (targetVolume - startVolume) * eased;
       this.setTrackVolume(item,newVolume);
 
       if (progress >= 1) {
@@ -301,6 +366,7 @@ export class AudioEngine {
 
     if (durationMs <= 0) {
       item.player.pause();
+      this.clearAtten(item);
       this.bgmTracks.delete(item);
       if (this.outgoingBgm === item) this.outgoingBgm = null;
       return;
@@ -313,11 +379,13 @@ export class AudioEngine {
     item.fadeTimer = this.setInterval(() => {
       const elapsed = this.now() - startTime;
       const progress = Math.min(1, elapsed / durationMs);
-      const newVolume = startVolume * (1 - progress);
+      const eased = 0.5 - 0.5 * Math.cos(progress * Math.PI);
+      const newVolume = startVolume * (1 - eased);
       this.setTrackVolume(item,newVolume);
 
       if (progress >= 1) {
         this.clearFade(item);
+        this.clearAtten(item);
         item.player.pause();
         this.bgmTracks.delete(item);
         if (this.outgoingBgm === item) this.outgoingBgm = null;

@@ -20,6 +20,7 @@ import {
   canonicalJson,
   sceneEpisodeOf,
   sceneImageCacheKey,
+  sceneIdentityDigest,
   sceneImageScope,
   shortSceneKey,
   type SceneImageAdmission,
@@ -33,6 +34,7 @@ import { POSE_EXPRESSION_CATALOGUE, poseById } from "../../shared/character.js";
 import { compileActionProp } from "../../shared/action-prop.js";
 import { renderImageTemplate, templateSnapshot, type ImagePromptMetadata } from "../../shared/image-templates.js";
 import {adaptImagePrompt} from './prompt-adaptation.js';
+import {sharedStyleSnapshot} from '../../shared/shared-style-snapshot.js';
 import { buildVisualBrief, resolveTemplateIdentity } from "./visual-brief.js";
 import {
   appearanceMapKeyFor,
@@ -66,6 +68,14 @@ export type AssetUpdateHandler = (jobs: AssetJob[], changed: AssetJob) => Promis
 function hash(source: string): string {
   let value = 0x811c9dc5;
   for (let index = 0; index < source.length; index += 1) {
+    value = Math.imul(value ^ source.charCodeAt(index), 0x01000193) >>> 0;
+  }
+  return value.toString(16).padStart(8, "0");
+}
+
+function hashReverse(source: string): string {
+  let value = 0x811c9dc5;
+  for (let index = source.length - 1; index >= 0; index -= 1) {
     value = Math.imul(value ^ source.charCodeAt(index), 0x01000193) >>> 0;
   }
   return value.toString(16).padStart(8, "0");
@@ -583,6 +593,7 @@ export async function resolveCacheCues(
       continue;
     }
     let key: string;
+    let keyDigest: string | null = null;
     try {
       let reference: SceneImageReference | undefined;
       if (cardSource && cueUsesCharacterReference(cue)) {
@@ -617,7 +628,9 @@ export async function resolveCacheCues(
         const captured = compatiblePortrait(candidatePortraits[visual.characterKey], portraitIdentityFingerprint(visual.characterName, visual.baseIdentity, config, provider));
         reference = captured ? { source: "captured", imageId: captured.imageId } : { source: "none" };
       }
-      key = sceneImageCacheKey(sceneImageIdentityFor(config, scene, cue, characterAppearance, provider, reference, profile.cacheProfile));
+      const cacheIdentity = sceneImageIdentityFor(config, scene, cue, characterAppearance, provider, reference, profile.cacheProfile);
+      key = sceneImageCacheKey(cacheIdentity);
+      keyDigest = sceneIdentityDigest(cacheIdentity);
     } catch {
       continue;
     }
@@ -632,7 +645,7 @@ export async function resolveCacheCues(
       if(art){resolved.push(locationArtJob(plan,cue,art,castIdentity.requestFingerprint));continue;}
     }
     const episode = sceneEpisodeOf(scene, cache.generation(scope));
-    const found = cache.lookup(scope, key, episode);
+    const found = cache.lookup(scope, key, episode, keyDigest);
     if (found.status === "miss") {
       log(`scene-cache candidate p${cue.paragraphIndex} miss reason=${found.reason} key=${shortSceneKey(key)} (no job, no request)`);
       continue;
@@ -694,7 +707,7 @@ export function locationArtIdentityFor(config:VisualNovelConfig,scene:SceneState
   if(!config.persistentLocationArt||provider===null||cue.imageTemplate?.category!=='environment'||cue.imageTemplate.subjectMode!=='none'||!scene.environment.location.trim())return null;
   const identity=sceneImageIdentityFor(config,scene,cue,appearance,provider,{source:'none'},profileRevision);
   const environment=canonicalJson(scene.environment);
-  return {location:scene.environment.location,description:scene.environment.description.slice(0,4000),requestFingerprint:sceneImageCacheKey(identity),environmentFingerprint:`env:${hash(environment)}${hash(environment.split('').reverse().join(''))}`};
+  return {location:scene.environment.location,description:scene.environment.description.slice(0,4000),requestFingerprint:sceneImageCacheKey(identity),environmentFingerprint:`env:${hash(environment)}${hashReverse(environment)}`};
 }
 /** Whole rectangular portrait reuse; never substitute it for an image reference.
  * Reference-capable providers retain their anchoring/capture pipeline. */
@@ -703,7 +716,7 @@ export function castAppearanceIdentity(scene:SceneState,cue:VisualCue,appearance
  const visual=resolveCueCharacterVisualState(scene,cue,appearance);
  if(!visual.characterName.trim()||!visual.baseIdentity.trim())return null;
  const text=canonicalJson([visual.characterId,visual.baseIdentity,visual.attire]);
- return {character:visual.characterName,fingerprint:`look:${hash(text)}${hash(text.split('').reverse().join(''))}`};
+ return {character:visual.characterName,fingerprint:`look:${hash(text)}${hashReverse(text)}`};
 }
 export function castArtIdentityFor(config:VisualNovelConfig,scene:SceneState,cue:VisualCue,appearance:CharacterAppearanceMap|undefined,provider:string|null,profileRevision:string):CastArtIdentity|null {
  if(!config.persistentCastArt||provider===null||cue.imageTemplate?.category!=='portrait'||cue.imageTemplate.subjectMode!=='one')return null;
@@ -713,7 +726,7 @@ export function castArtIdentityFor(config:VisualNovelConfig,scene:SceneState,cue
  if(!visual.characterName.trim()||!visual.baseIdentity.trim())return null;
  const identity=sceneImageIdentityFor(config,scene,cue,appearance,provider,{source:'none'},profileRevision);
  const description=canonicalJson([visual.characterId,visual.baseIdentity,visual.attire]);
- return {character:visual.characterName,description:visual.identity.slice(0,4000),requestFingerprint:sceneImageCacheKey(identity),appearanceFingerprint:`look:${hash(description)}${hash(description.split('').reverse().join(''))}`};
+ return {character:visual.characterName,description:visual.identity.slice(0,4000),requestFingerprint:sceneImageCacheKey(identity),appearanceFingerprint:`look:${hash(description)}${hashReverse(description)}`};
 }
 function locationArtJob(plan:TurnPlan,cue:VisualCue,art:{imageId:string,imageUrl:string},key:string):AssetJob {
  const timestamp=new Date().toISOString();
@@ -736,7 +749,7 @@ export function createAssetJobs(
       sceneId: cue.sceneId,
       sceneRevision: cue.sceneRevision,
       paragraphIndex: cue.paragraphIndex,
-      promptFingerprint: `${hash(promptIdentity)}${hash(promptIdentity.split("").reverse().join(""))}`,
+      promptFingerprint: `${hash(promptIdentity)}${hashReverse(promptIdentity)}`,
       provider: "pending",
       priority: index === 0 ? "visible" : index === 1 ? "next" : "background",
       status: "queued",
@@ -1169,6 +1182,7 @@ export async function generateAssets(
 
         /* ---- reuse-first: exact-compatible cached image, or own the generation ---- */
         let cacheKey: string | null = null;
+        let cacheDigest: string | null = null;
         let episode = "";
         let settle: ((outcome: SceneImageOutcome) => void) | null = null;
         if (cache && admission) {
@@ -1176,11 +1190,13 @@ export async function generateAssets(
             cache.recordMiss("identity_unresolved");
             cacheLog(`scene-cache p${cue.paragraphIndex} miss reason=identity_unresolved (planner did not persist a durable identity) -> generating`);
           } else {
-            cacheKey = sceneImageCacheKey(sceneImageIdentityFor(
+            const cacheIdentity = sceneImageIdentityFor(
               config, scene, cue, characterAppearance, provider,
               cardSource ? cardReferenceForCache(cardPortrait, portrait) : cue.imageTemplate ? portrait ? { source: "captured", imageId: portrait.imageId } : { source: "none" } : undefined,
               profile.cacheProfile
-            ));
+            );
+            cacheKey = sceneImageCacheKey(cacheIdentity);
+            cacheDigest = sceneIdentityDigest(cacheIdentity);
             episode = sceneEpisodeOf(scene, cache.generation(scope));
             if (bypass.has(scheduledJob.jobId)) {
               cache.recordMiss("bypass");
@@ -1197,7 +1213,7 @@ export async function generateAssets(
               for (;;) {
                 if (signal.aborted) throw abortError(signal);
                 if (jobSignal.aborted) throw abortError(jobSignal);
-                const found = cache.lookup(scope, cacheKey, episode);
+                const found = cache.lookup(scope, cacheKey, episode, cacheDigest);
                 if (found.status === "hit") {
                   const verdict = await verifyEntry(cache, scope, cacheKey, found.entry, verify);
                   if (verdict === "ok") {
@@ -1289,6 +1305,7 @@ export async function generateAssets(
             ...(selectedCue.presentationRuleTrace ? {presentationRuleTrace:selectedCue.presentationRuleTrace} : {}),
             template: selectedCue.imageTemplate, selectionReason: selectedCue.imageTemplateReason ?? "Default template", format: config.imagePromptFormat,
             brief: compileTemplateCue(config, scene, selectedCue, characterAppearance).brief,
+            sharedStyle:sharedStyleSnapshot(config,selectedCue.imageTemplate),
             trackerStatus: selectedCue.trackerStatus ?? (config.includeSimTrackerContext ? "not_found" : "disabled"),
             ...(selectedCue.trackerSourceMessageId ? { trackerSourceMessageId: selectedCue.trackerSourceMessageId } : {})
           } : undefined;
@@ -1426,6 +1443,7 @@ export async function generateAssets(
               imageId: result.imageId,
               imageUrl,
               episode,
+              identityDigest: cacheDigest,
               provenance: provenanceFor(scheduledJob.jobId, scheduledJob.promptFingerprint)
             }, admission, signal);
             if (stored.stored) {

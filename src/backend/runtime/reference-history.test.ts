@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {captureReferenceLineage,readReferenceHistory,referenceMessages,preserveReferenceLineage} from './reference-history.js';
+import {captureReferenceLineage,readReferenceHistory,referenceMessages,preserveReferenceLineage,clearReferenceMemos,referenceMemoStats} from './reference-history.js';
 import {TurnPlanSchema} from '../../shared/contracts.js';
 import {fingerprintForMessage} from './planner.js';
 import {turnPath,loadTurnRecord,type StoredTurnRecord} from './storage.js';
@@ -92,6 +92,20 @@ test('macro display targets require their original raw input and certificates pr
  const f=await fixture(),pending=captureReferenceLineage(f.messages,f.target.plan);f.messages[0]!.content='Edited while hashing';f.target.referenceLineage=await pending;
  expect(await readReferenceHistory(f.api,f.target,'user')).toBeUndefined();
 });
+test('F7: repeated ancestry walks reuse memoized frame and paragraph digests',async()=>{
+ clearReferenceMemos();
+ const f=await fixture();
+ await readReferenceHistory(f.api,f.target,'user');
+ const afterFirst=referenceMemoStats();
+ expect(afterFirst.prefixEntries).toBeGreaterThan(0);
+ expect(afterFirst.paragraphEntries).toBeGreaterThan(0);
+ // A second read over the identical chains must not allocate new paragraph work.
+ await readReferenceHistory(f.api,f.target,'user');
+ expect(referenceMemoStats().paragraphEntries).toBe(afterFirst.paragraphEntries);
+ clearReferenceMemos();
+ expect(referenceMemoStats()).toEqual({prefixEntries:0,paragraphEntries:0});
+});
+
 test('storage keeps future optional lineage data without weakening the saved turn',async()=>{
  const f=await fixture(),future={version:99,opaque:['preserve']};f.prior.referenceLineage=future;
  const loaded=await loadTurnRecord(f.api,turnPath('c','one',0),'user');expect(loaded?.referenceLineage).toEqual(future);expect(loaded?.plan.key).toEqual(f.prior.plan.key);
@@ -101,4 +115,15 @@ test('history bounds prior record reads and returned observations and labels tru
  const records=await Promise.all(messages.map(async message=>{const p=plan(message);if(message.id!=='target'){const i=Number(message.id.slice(1));p.storyReferences=Array.from({length:32},(_,j)=>({kind:'npc',name:`Person_${i}_${j}`,field:'appearance',value:`hair_${j}`,evidence:`Person_${i}_${j} has hair_${j}.`,paragraphIndex:0}));}return {schemaVersion:1 as const,status:'ready' as const,speaker:'Narrator',jobs:[],plan:p,updatedAt:p.createdAt,referenceLineage:await captureReferenceLineage(messages,p)};}));
  let reads=0;const api={chat:{getMessages:async()=>messages},userStorage:{getJson:async(path:string)=>{reads++;return records.find(r=>turnPath('c',r.plan.key.assistantMessageId,0)===path);}}} as unknown as SpindleAPI;
  const history=await readReferenceHistory(api,records.at(-1)!,'user');expect(reads).toBe(16);expect(history?.entries).toHaveLength(128);expect(history?.truncated).toBe(true);expect(history?.entries.some(e=>e.sourceKey.assistantMessageId==='m0')).toBe(false);
+});
+
+test('optional history bounds concurrent reads and stops before parsing late records',async()=>{
+ const messages=Array.from({length:17},(_,i)=>msg(`bounded-${i}`,'Mira walks.'));
+ const targetPlan=plan(messages.at(-1)!);
+ const target={schemaVersion:1,status:'ready',speaker:'Narrator',jobs:[],plan:targetPlan,updatedAt:targetPlan.createdAt,referenceLineage:await captureReferenceLineage(messages,targetPlan)} as StoredTurnRecord;
+ let reads=0,parsed=0;const releases:Array<()=>void>=[];
+ const api={chat:{getMessages:async()=>messages},userStorage:{getJson:async()=>{reads++;await new Promise<void>(resolve=>releases.push(resolve));return {get plan(){parsed++;throw new Error('Late validation');},speaker:'Narrator'};}}} as unknown as SpindleAPI;
+ expect(await readReferenceHistory(api,target,'user',100)).toBeUndefined();
+ const started=reads;releases.forEach(release=>release());await new Promise(resolve=>setTimeout(resolve,15));
+ expect(started).toBeGreaterThan(0);expect(started).toBeLessThanOrEqual(2);expect(reads).toBe(started);expect(parsed).toBe(0);
 });

@@ -14,8 +14,16 @@ header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:
 button{-webkit-tap-highlight-color:transparent}summary::before{content:'▸';margin-right:8px}details[open]>summary::before{content:'▾'}[data-template-query]{min-width:0;min-height:44px;width:100%;border:1px solid var(--vn-shell-border,#53647c);border-radius:8px;background:var(--vn-shell-field,#182334);padding:8px;color:inherit}
 
 :host([data-open=true]){pointer-events:auto;background:#0005}
-[data-history-views]{display:flex;gap:4px;margin:0 0 14px;border-bottom:1px solid var(--vn-shell-border,#53647c);padding-bottom:8px}[data-history-view]{flex:1;border-color:transparent;background:transparent}[data-history-view][aria-pressed=true]{background:var(--vn-shell-field,#182334);border-color:var(--vn-shell-accent,#b6d9ff)}[data-history-return]{flex:none;margin:0 14px 12px;align-self:center;min-width:160px}[data-grid][data-mode=story]{display:block}[data-reply]{padding:16px 0;border-bottom:1px solid var(--vn-shell-border,#53647c)}[data-reply] h3{margin:0;color:var(--vn-shell-accent,#b6d9ff);font-size:12px;letter-spacing:.08em;text-transform:uppercase}[data-reply-preview]{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin:8px 0;line-height:1.65}[data-reply] details{border:0;margin:0 0 8px}[data-reply] details p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7}[data-reply] details strong{font-size:12px;color:var(--vn-shell-accent,#b6d9ff)}[data-reply-pictures]{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}[data-reply-pictures] img{height:180px}
+[data-history-views]{display:flex;gap:6px;margin:0 0 14px;padding:4px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--vn-shell-border,#53647c)}[data-history-view]{flex:1;border-color:transparent;background:transparent;border-radius:9px;font-weight:600;transition:background-color .15s ease,border-color .15s ease}[data-history-view][aria-pressed=true]{background:var(--vn-shell-field,#182334);border-color:var(--vn-shell-accent,#b6d9ff);box-shadow:0 2px 8px rgba(0,0,0,.3)}[data-history-return]{flex:none;margin:0 14px 12px;align-self:center;min-width:160px;border-radius:999px;font-weight:600}[data-grid][data-mode=story]{display:flex;flex-direction:column;gap:12px}[data-reply]{padding:14px 16px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid color-mix(in srgb,var(--vn-shell-border,#53647c) 65%,transparent);border-left:3px solid var(--vn-shell-accent,#b6d9ff)}[data-reply] h3{display:inline-block;margin:0 0 4px;padding:2px 9px;border-radius:999px;background:color-mix(in srgb,var(--vn-shell-accent,#b6d9ff) 16%,transparent);color:var(--vn-shell-accent,#b6d9ff);font-size:11px;letter-spacing:.06em;text-transform:uppercase}[data-reply-preview]{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin:8px 0;line-height:1.65}[data-reply] details{border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:0 12px;background:rgba(0,0,0,.18);margin:8px 0}[data-reply] details p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7}[data-reply] details strong{display:inline-block;padding:1px 7px;border-radius:999px;background:rgba(255,255,255,.07);font-size:11px;color:var(--vn-shell-accent,#b6d9ff)}[data-reply-pictures]{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:8px}[data-reply-pictures] img{height:180px;border-radius:6px}[data-image-card]{border-radius:12px;transition:transform .15s ease,border-color .15s ease}[data-image-card]:hover{transform:translateY(-2px);border-color:var(--vn-shell-accent,#b6d9ff)}
 `;
+
+export type LibraryContext=Pick<TurnView,'chatId'|'messageId'|'swipeId'|'sourceFingerprint'|'revision'>|null;
+export function sameLibraryContext(next:LibraryContext,previous:LibraryContext):boolean{
+ if(next===previous)return true;
+ if(!next||!previous)return false;
+ return next.chatId===previous.chatId&&next.messageId===previous.messageId&&next.swipeId===previous.swipeId
+  &&next.sourceFingerprint===previous.sourceFingerprint&&next.revision===previous.revision;
+}
 
 /** Read-only story image browser. Every response is tied to a fresh request and reading scope. */
 export class ImageLibrary{
@@ -62,8 +70,12 @@ export class ImageLibrary{
   this.root.addEventListener('keydown',event=>{
    const e=event as KeyboardEvent;
    if(e.key==='Escape'){e.preventDefault();this.selected?this.back():this.close();}
-   if(e.key==='Tab'&&this.opened&&!this.host.dataset.vnWorkspaceTool){
-    const focusable=[...this.el<HTMLElement>('section').querySelectorAll<HTMLElement>('button:not(:disabled),select,input,summary,textarea')].filter(el=>el.getClientRects().length);
+   if(this.selected&&(e.key==='ArrowLeft'||e.key==='ArrowRight')&&!(e.target instanceof HTMLTextAreaElement)){
+    const entries=this.page?.entries??[];const idx=entries.findIndex(item=>item.imageId===this.selected?.imageId&&item.paragraphIndex===this.selected?.paragraphIndex&&JSON.stringify(item.key)===JSON.stringify(this.selected?.key));
+    const next=idx>=0?entries[idx+(e.key==='ArrowRight'?1:-1)]:undefined;
+    if(next){e.preventDefault();this.view(next);}
+   }
+   if(e.key==='Tab'&&this.opened){    const focusable=[...this.el<HTMLElement>('section').querySelectorAll<HTMLElement>('button:not(:disabled),select,input,summary,textarea')].filter(el=>el.getClientRects().length);
     const first=focusable[0],last=focusable.at(-1);
     if(e.shiftKey&&this.root.activeElement===first){e.preventDefault();last?.focus();}
     else if(!e.shiftKey&&this.root.activeElement===last){e.preventDefault();first?.focus();}
@@ -75,7 +87,9 @@ export class ImageLibrary{
  private status(text:string){this.el<HTMLElement>('[data-library-status]').textContent=text;}
  setContext(turn:TurnView|null,cursor:number){
   const next=turn?{chatId:turn.chatId,messageId:turn.messageId,swipeId:turn.swipeId,sourceFingerprint:turn.sourceFingerprint,revision:turn.revision}:null;
-  const changed=JSON.stringify(next)!==JSON.stringify(this.context)||cursor!==this.cursor;
+  // F13: five primitive field comparisons instead of two JSON.stringify walks
+  // on every turn/asset stream update.
+  const changed=!sameLibraryContext(next,this.context)||cursor!==this.cursor;
   this.context=next;this.cursor=cursor;this.el<HTMLButtonElement>('[data-library-launch]').disabled=!next;
   if(!next){this.close();return;}
   if(changed){this.expanded.clear();this.cancel();this.page=null;this.pages=['0:0'];this.pageIndex=0;if(this.opened)this.load();}
@@ -108,16 +122,20 @@ export class ImageLibrary{
   const grid=this.el<HTMLElement>('[data-grid]');grid.replaceChildren();grid.dataset.mode=this.mode;
   this.el<HTMLOptionElement>('[data-range] option[value=all]').textContent=this.mode==='story'?'All saved replies':'All story images';
   for(const tab of this.root.querySelectorAll<HTMLElement>('[data-history-view]'))tab.setAttribute('aria-pressed',String(tab.dataset.historyView===this.mode));
-  let lastMessage='';
-  for(const [entryIndex,entry] of (this.page?.entries??[]).entries()){
-   if(entry.key.assistantMessageId!==lastMessage){lastMessage=entry.key.assistantMessageId;const heading=document.createElement('h3');heading.textContent=`Reply ${entry.messageNumber}`;heading.style.cssText='grid-column:1/-1;margin:8px 0 0;font-size:14px';grid.append(heading);}
+  const buildCard=(entryIndex:number,entry:LibraryImageView):HTMLButtonElement=>{
    const button=document.createElement('button');button.type='button';button.dataset.imageCard='';button.dataset.entryIndex=String(entryIndex);button.dataset.replyKey=JSON.stringify(entry.key);button.setAttribute('aria-label',`View ${entry.template??'picture'}, message ${entry.key.assistantMessageId}, paragraph ${entry.paragraphIndex+1}`);
    if(entry.thumbnailUrl){const image=document.createElement('img');image.src=entry.thumbnailUrl;image.alt='';image.loading='lazy';image.decoding='async';image.onerror=()=>{image.remove();const missing=document.createElement('span');missing.className='missing';missing.textContent='Image unavailable';button.prepend(missing);};button.append(image);}
    else{const missing=document.createElement('span');missing.className='missing';missing.textContent='Image unavailable';button.append(missing);}
-   const caption=document.createElement('span');caption.className='caption';const title=document.createElement('strong');title.textContent=entry.template??(entry.role==='portrait'?'Portrait':entry.role==='background'?'Place':'Story picture');const detail=document.createElement('small');detail.textContent=`Picture ${entry.paragraphIndex+1} · ${entry.versionLabel}`;caption.append(title,detail);button.append(caption);button.onclick=()=>this.view(entry);grid.append(button);
-  }
+   const caption=document.createElement('span');caption.className='caption';const title=document.createElement('strong');title.textContent=entry.template??(entry.role==='portrait'?'Portrait':entry.role==='background'?'Place':'Story picture');const detail=document.createElement('small');detail.textContent=`Picture ${entry.paragraphIndex+1} · ${entry.versionLabel}`;caption.append(title,detail);button.append(caption);button.onclick=()=>this.view(entry);
+   return button;
+  };
   if(this.mode==='story'&&this.page?.replies.length){
-   const cards=[...grid.querySelectorAll<HTMLElement>('[data-image-card]')];grid.replaceChildren();
+   const cardsByReplyKey=new Map<string,HTMLButtonElement[]>();
+   const allCards:HTMLButtonElement[]=[];
+   for(const [entryIndex,entry] of (this.page?.entries??[]).entries()){
+    const card=buildCard(entryIndex,entry);allCards.push(card);
+    const key=card.dataset.replyKey!;
+    const bucket=cardsByReplyKey.get(key);if(bucket)bucket.push(card);else cardsByReplyKey.set(key,[card]);   }
    for(const reply of this.page.replies){
     const row=document.createElement('article');row.dataset.reply='';
     const title=document.createElement('h3');title.textContent=`Reply ${reply.messageNumber}${reply.versionLabel==='alternate'?' · alternate version':''}`;row.append(title);
@@ -126,17 +144,21 @@ export class ImageLibrary{
     for(const paragraph of reply.paragraphs){const name=document.createElement('strong');name.textContent=paragraph.speaker;const text=document.createElement('p');text.textContent=paragraph.text;details.append(name,text);}
     if(reply.truncated){const note=document.createElement('p');note.className='note';note.textContent='Long reply preview shortened. Read the complete reply in chat.';details.append(note);}
     row.append(details);const pictures=document.createElement('div');pictures.dataset.replyPictures='';
-    for(const card of cards)if(card.dataset.replyKey===JSON.stringify(reply.key))pictures.append(card);
-    if(pictures.childElementCount)row.append(pictures);grid.append(row);
+    for(const card of cardsByReplyKey.get(replyKey)??[])pictures.append(card);    if(pictures.childElementCount)row.append(pictures);grid.append(row);
    }
    // Archived pictures without this exact reply snapshot retain their own excerpt.
    // Never imply that a newer edit/replan generated an older picture.
    const versions=new Map<string,HTMLElement>();
-   for(const card of cards){if(card.parentElement)continue;const entry=this.page.entries[Number(card.dataset.entryIndex)];if(!entry)continue;
+   for(const card of allCards){if(card.parentElement)continue;const entry=this.page.entries[Number(card.dataset.entryIndex)];if(!entry)continue;
     let row=versions.get(card.dataset.replyKey!);if(!row){row=document.createElement('article');row.dataset.historyVersion='';const title=document.createElement('h3');title.textContent=`Reply ${entry.messageNumber} · saved image version`;const note=document.createElement('p');note.className='note';note.textContent='Only the original saved image excerpt is available for this version.';row.append(title,note);versions.set(card.dataset.replyKey!,row);grid.append(row);}
     const excerpt=document.createElement('p');excerpt.dataset.replyPreview='';excerpt.textContent=entry.excerpt||'Original excerpt not recorded.';row.append(excerpt,card);
    }
-
+  }else{
+   let lastMessage='';
+   for(const [entryIndex,entry] of (this.page?.entries??[]).entries()){
+    if(entry.key.assistantMessageId!==lastMessage){lastMessage=entry.key.assistantMessageId;const heading=document.createElement('h3');heading.textContent=`Reply ${entry.messageNumber}`;heading.style.cssText='grid-column:1/-1;margin:8px 0 0;font-size:14px';grid.append(heading);}
+    grid.append(buildCard(entryIndex,entry));
+   }
   }
   this.status(`${(this.page?.entries.length||this.page?.replies.length)?'':this.page?.nextCursor?'No matching pictures in this batch. Continue to the next page.':this.mode==='story'?'No saved replies match these filters.':'No saved pictures match these filters.'} ${this.page?.notice??''}`.trim());this.updatePaging();
  }
