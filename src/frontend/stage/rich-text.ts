@@ -344,16 +344,35 @@ export function formatDialogueText(
 
   // 1. Strip inline card images / asset markers
   let text = rawText
+    .replace(/`[^`]+`|<([a-zA-Z][a-zA-Z0-9_-]*):([a-zA-Z][a-zA-Z0-9_-]*)\s*>([\s\S]*?)<\/\s*\1(?::\2)?\s*>/gi, (m, sp: string | undefined, eff: string | undefined, inner: string | undefined, offset: number, src: string) => {
+      if (!sp || !eff || inner === undefined) return m;
+      const id = eff.toLowerCase();
+      const wrapped = isTextEffectId(id) ? `<${id}>${inner}</${id}>` : inner;
+      const trimmed = inner.trim();
+      if (trimmed.length >= 2 && src.slice(0, offset).trimEnd().endsWith(trimmed)) {
+        return `\0DEDUP\0${trimmed}\0WITH\0${wrapped}\0END\0`;
+      }
+      return wrapped;
+    })
+    .replace(/([\s\S]*?)\0DEDUP\0([\s\S]*?)\0WITH\0([\s\S]*?)\0END\0/g, (_m, before: string, dup: string, rep: string) => {
+      const idx = before.lastIndexOf(dup);
+      return idx === -1 ? before + rep : before.slice(0, idx) + rep;
+    })
     .replace(/<img\s*=\s*["'][^"']+["']\s*\/?>/gi, "")
     .replace(/<img\b[^>]*?\bsrc\s*=\s*["'][^"']+["'][^>]*?\/?>/gi, "")
     .replace(/\{\{img::[^\}]+\}\}/gi, "");
 
-  // 2. Apply custom regex rules
-  for (const { pattern, replacement } of regexRules) {
-    try {
-      text = text.replace(pattern, replacement);
-    } catch {
-      // Ignore rule execution failures
+  // 2. Apply custom regex rules. These run synchronously on the main thread;
+  // skip them past the safety bound rather than risking a long scan on a
+  // pathological paste (the compile-time ReDoS screen handles normal input).
+  const CUSTOM_RULE_TEXT_LIMIT = 100_000;
+  if (text.length <= CUSTOM_RULE_TEXT_LIMIT) {
+    for (const { pattern, replacement } of regexRules) {
+      try {
+        text = text.replace(pattern, replacement);
+      } catch {
+        // Ignore rule execution failures
+      }
     }
   }
 

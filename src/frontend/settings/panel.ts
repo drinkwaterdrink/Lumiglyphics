@@ -657,12 +657,16 @@ export class VisualNovelSettingsPanel {
 
           ${pane("look", `
             <details data-appearance-preview><summary>Preview appearance</summary><div data-sample-slot></div></details>
-            ${group("Theme", themeTiles(), { find: find("Theme", "preset style colours colors skin golden paper noir console yamaku literature") })}
+            ${group("Theme", `
+              <label data-check><input name="apertureMode" type="checkbox" /><span>Use APERTURE workspace<small>Full-bleed reader, compact dialogue, and unified tool navigation. Your selected reader theme remains saved.</small></span></label>
+              <label data-field><span>APERTURE palette</span><select name="apertureAppearance"><option value="light">Light · warm ivory</option><option value="dark">Dark · mineral</option></select><small>Applies to APERTURE navigation, panels, and tool surfaces.</small></label>
+              ${themeTiles()}
+            `, { find: find("Theme", "aperture light dark mode palette preset style colours colors skin golden paper noir console yamaku literature") })}
             ${group("Text", `
               <label data-check><input name="adjustableSheetEnabled" type="checkbox" /><span>Adjustable text panel<small>Resize or hide text to see the picture. Drag the handle or choose a panel size.</small></span></label>
               <label data-field><span>Reader layout</span><select name="readerLayout"><option value="overlay">Text over picture</option><option value="image-first">Image first</option></select></label>
               <label data-field><span>Text panel size</span><select name="readerSheetSize"><option value="custom" disabled>Custom (dragged)</option><option value="compact">Compact</option><option value="reading">Reading</option><option value="expanded">Expanded</option></select></label>
-              <label data-field><span>Text panel background opacity</span><input name="readerBackgroundOpacity" type="range" min="0.35" max="1" step="0.05" /></label>
+              <label data-field><span>Dialogue background opacity <output data-dialogue-opacity>90%</output></span><input name="readerBackgroundOpacity" type="range" min="0" max="1" step="0.01" /><small>Only the panel background changes; dialogue text and controls stay fully opaque.</small></label>
               <fieldset ${find("Text size", "font scale bigger smaller large")}>
                 <legend>Text size</legend>
                 ${segments("textScaleStep", TEXT_SCALE_STEPS, true)}
@@ -1265,6 +1269,7 @@ export class VisualNovelSettingsPanel {
       if (this.isAdvanced(target.name)) { this.markDraft(target.name); return; }
       // Sliders and number fields preview while dragging or typing; the save happens on change.
       if (target.name === "bgmVolume" || target.name === "sfxVolume") this.updateVolumeLabels();
+      if (target.name === "readerBackgroundOpacity") this.root.querySelector<HTMLOutputElement>("[data-dialogue-opacity]")!.value = `${Math.round(Number(target.value) * 100)}%`;
       if (target.name === "textSpeed") this.restartSample();
       if (target.name === "textScale") this.root.querySelector<HTMLElement>("[data-sample-stage]")!.style.setProperty("--sample-scale", String(clamp(Number(target.value), TEXT_SCALE_MIN, TEXT_SCALE_MAX, this.config.textScale)));
     });
@@ -1498,6 +1503,8 @@ export class VisualNovelSettingsPanel {
       case "defaultImageTemplateId": return { defaultImageTemplateId: target.value };
       case "imagePromptFormat": return { imagePromptFormat: target.value === "tags" ? "tags" : "description" };
       case "referenceSource": return { referenceSource: normalizeReferenceSource(target.value) };
+      case "apertureMode": return { apertureMode: checked };
+      case "apertureAppearance": return { apertureAppearance: target.value === "dark" ? "dark" : "light" };
       case "themePreset":
       case "setupThemePreset":
         return { themePreset: normalizeThemePreset(target.value) };
@@ -1993,6 +2000,8 @@ export class VisualNovelSettingsPanel {
   }
 
   private syncEveryday(config: VisualNovelConfig): void {
+    if (config.apertureMode) this.host.dataset.apertureTheme = config.apertureAppearance;
+    else delete this.host.dataset.apertureTheme;
     this.control<HTMLInputElement>("automaticImagePromptSettings").checked=config.automaticImagePromptSettings;
     this.control<HTMLInputElement>("imagePromptBudgetOverride").checked=config.imagePromptBudgetOverride;
     this.control<HTMLInputElement>("imagePromptBudget").value=String(config.imagePromptBudget);
@@ -2022,6 +2031,8 @@ export class VisualNovelSettingsPanel {
 
     this.setRadio("themePreset", config.themePreset);
     this.setRadio("setupThemePreset", config.themePreset);
+    this.control<HTMLInputElement>("apertureMode").checked = config.apertureMode;
+    this.control<HTMLSelectElement>("apertureAppearance").value = config.apertureAppearance;
     this.setRadio("sceneImageFit", config.sceneImageFit);
     this.control<HTMLInputElement>("castMode").checked = config.castMode;
     this.setRadio("effectIntensity", config.effectIntensity);
@@ -2034,6 +2045,7 @@ export class VisualNovelSettingsPanel {
     this.control<HTMLSelectElement>("readerLayout").value = config.readerPreferences.layout;
     this.control<HTMLSelectElement>("readerSheetSize").value = config.readerPreferences.heightRatio === undefined ? config.readerPreferences.sheetSize : "custom";
     this.control<HTMLInputElement>("readerBackgroundOpacity").value = String(config.readerPreferences.backgroundOpacity);
+    this.root.querySelector<HTMLOutputElement>("[data-dialogue-opacity]")!.value = `${Math.round(config.readerPreferences.backgroundOpacity * 100)}%`;
     this.showCustomQuiet("textScale", !scaleStep);
 
     const source = imageSourceFromConfig(config);

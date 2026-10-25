@@ -9,15 +9,15 @@
  *                 for every documented --vn-* custom property.
  *   2. `preset` — exactly one built-in preset (THEME_PRESET_CSS), scoped to
  *                 `[data-vn-root][data-vn-preset="<id>"]`.
- *   3. `user`   — the user's custom CSS, sanitized of remote fetches. This is
- *                 always the final layer, so a rule a user writes wins over a
- *                 preset rule of the same specificity.
+ *   3. `aperture` — optional APERTURE reader presentation, after built-in themes.
+ *   4. `user`     — the user's custom CSS, sanitized of remote fetches. This is
+ *                  always the final layer, so custom CSS stays authoritative.
  *
- * `VnStage` appends its three <style> elements in exactly this order, and the
- * order below is the single reference the stage and the tests share.
+ * `VnStage` appends its style elements in exactly this order, and the order
+ * below is the single reference the stage and the tests share.
  */
 
-export const THEME_STYLE_LAYER_ORDER = ["base", "preset", "user"] as const;
+export const THEME_STYLE_LAYER_ORDER = ["base", "preset", "aperture", "user"] as const;
 
 export type ThemeStyleLayer = (typeof THEME_STYLE_LAYER_ORDER)[number];
 
@@ -28,5 +28,6 @@ export type ThemeStyleLayer = (typeof THEME_STYLE_LAYER_ORDER)[number];
 export const THEME_STYLE_LAYER_ATTRIBUTE: Record<ThemeStyleLayer, string> = {
   base: "data-vn-base-css",
   preset: "data-vn-preset-css",
+  aperture: "data-vn-aperture-css",
   user: "data-vn-user-css",
 };

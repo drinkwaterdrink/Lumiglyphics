@@ -16,6 +16,7 @@ export const GAME_REQUEST_EVENT = "vn-game-request-v1";
 export const GAME_PICK_EVENT = "vn-game-pick-v1";
 
 const MAX_CHOICES = 12;
+const MAX_PROVIDERS = 16;
 
 export interface GameChoice {
   revision?: number;
@@ -80,6 +81,10 @@ export class GameBridge {
     if (this.dead) return;
     const state = parseGameState((event as CustomEvent).detail);
     if (!state) return;
+    if (!this.states.has(state.provider) && this.states.size >= MAX_PROVIDERS) {
+      const oldest = this.states.keys().next().value;
+      if (oldest !== undefined) this.states.delete(oldest);
+    }
     this.states.set(state.provider, {...state, choices:state.choices.map(choice=>({...choice,revision:++this.revision}))});
     this.onChange();
   };

@@ -349,6 +349,7 @@ export type VisualStageThemeTarget = Pick<
   VnStage,
   "setThemePreset" | "setSceneImageFit" | "setUserCss" | "setDisplayRegexRules"
 > & {
+  setApertureMode?: (enabled: boolean, appearance: "light" | "dark") => void;
   setTextSpeed?: (speed: number) => void;
   setAutoPlayDelay?: (delay: number) => void;
   setSkipMode?: (mode: "read" | "all") => void;
@@ -375,6 +376,7 @@ export function applyVisualConfigToStage(
   config: VisualNovelConfig,
 ): void {
   stage.setThemePreset(config.themePreset);
+  stage.setApertureMode?.(config.apertureMode, config.apertureAppearance);
   stage.setSceneImageFit(config.sceneImageFit);
   stage.setCastMode?.(config.castMode);
   stage.setUserCss(config.customCss);
@@ -563,6 +565,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const stage = new VnStage({
     mount: app.root,
     themePreset: configRef.current?.themePreset ?? "lumiverse",
+    apertureMode: configRef.current?.apertureMode ?? true,
+    apertureAppearance: configRef.current?.apertureAppearance ?? "light",
     isAutoAdvanceHeld: () => isSpeechHoldingAuto()||imageLibraryOpen||imageStudioOpen||externalReviewOpen,
     onExit: () => deactivate(),
     onTooltipPreferencesChange: tooltips => { ctx.sendToBackend({type:"vn_set_config",patch:{tooltips},chatId:chatId()}); },
@@ -657,6 +661,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     transport: createSpeechTransport(),
     onStatus: (status) => {
       speechDock.setStatus(status);
+      audioEngine.setSpeechDucking(status.kind === "playing");
       if (status.kind === "loading" || status.kind === "playing" || status.kind === "paused") {
         stage.holdAutoPlay();
       } else if (active) {
@@ -669,6 +674,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const imageBridge = connectImageBridge(window, chatId, (request) => ctx.sendToBackend(request), (chatId, requestId) => externalReview.result(chatId, requestId));
 
   const panels = new PanelDock(stage.panelMount);
+  panels.setApertureMode(configRef.current?.apertureMode ?? true);
   const imageLibrary=new ImageLibrary(stage.panelMount,request=>ctx.sendToBackend(request),open=>{
     imageLibraryOpen=open;
     if(open){stage.panelMount.dataset.vnHistoryOpen='true';stage.workspace.open('history');}else{delete stage.panelMount.dataset.vnHistoryOpen;stage.workspace.toolClosed('history');}
@@ -678,7 +684,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   stage.historyOpener=opener=>imageLibrary.open('story',opener);
   const imageStudio = new ImageStudio(stage.panelMount, (request) => ctx.sendToBackend(request), (enabled) => {
     ctx.sendToBackend({ type: "vn_set_config", patch: { reviewImages: enabled }, chatId: chatId() ?? "" });
-  },open=>{imageStudioOpen=open;if(open){stage.workspace.open('artwork');stage.toggleSkip(false);stage.holdAutoPlay();}else{stage.workspace.toolClosed('artwork');if(active)stage.checkAutoPlay();}},operations=>{
+  },open=>{imageStudioOpen=open;if(open){stage.panelMount.dataset.vnStudioOpen='true';stage.workspace.open('artwork');stage.toggleSkip(false);stage.holdAutoPlay();}else{delete stage.panelMount.dataset.vnStudioOpen;stage.workspace.toolClosed('artwork');if(active)stage.checkAutoPlay();}},operations=>{
     localPictureOperations=operations;stage.setAssetProgress(computeAssetProgress(turn,retryQueue,operations));
     stage.workspace.setAttention(computeReviewAttention(turn,operations));
   });
@@ -802,6 +808,17 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   stage.workspace.register('settings',{element:settingsPanel.getElement(),hideAtHome:!settingsHandle,enter:()=>{settingsPanel.getElement().dataset.vnWorkspaceTool='settings';},leave:()=>{settingsPanel.leaveWorkspace();delete settingsPanel.getElement().dataset.vnWorkspaceTool;},back:()=>settingsPanel.backWithinWorkspace()});
   delete settingsPanel.getElement().dataset.vnWorkspaceTool;
   stage.workspace.onSettingsPage=page=>settingsPanel.openPage(page,{focus:true});
+  stage.workspace.setActions({
+    lens: () => stage.openWorldLens(),
+    cast: () => stage.openCastFolios(),
+    panels: () => panels.toggleOpen(),
+    voice: () => {
+      if (speechDock.isAvailable()) speechDock.togglePlayback();
+      else { stage.workspace.open('settings'); settingsPanel.openPage('speech',{focus:true}); }
+    },
+    library: () => imageLibrary.open('images'),
+    backToChat: () => stage.panelMount.querySelector<HTMLButtonElement>('[data-vn-exit]')?.click(),
+  });
   const speechSettings = new SpeechSettingsSection({
     mount: settingsPanel.voiceMount(),
     onSave: (speechPatch) => {

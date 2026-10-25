@@ -25,7 +25,7 @@ const view: TurnView = f.turn('A',0,{
   assets:[{jobId:'sample-art',cueId:'sample-cue',paragraphIndex:0,status:'browser_ready',imageId:'reader-first-sample',imageUrl:'/sample-art.jpg'}],
   imageRequests:[{requestId:'sample-review',jobId:'sample-art',paragraphIndex:0,state:'review',prompt:'An observatory above the harbor, a brass telescope in the last light of evening.',negativePrompt:'text, watermark',model:'sample-model',provider:'nanogpt',connectionId:'sample-images',parameters:{seed:42},referenceSummary:'Sample UI data · no live provider',createdAt:'2026-10-24T00:00:00Z'}],
 });
-Object.assign(f.config,normalizeConfig({...f.config,themePreset:'paper-novel',tooltips:{enabled:true,linking:'all-known'},readerPreferences:{adjustableSheetEnabled:true,sheetSize:'reading',layout:'overlay',backgroundOpacity:.94}}));
+Object.assign(f.config,normalizeConfig({...f.config,apertureMode:false,themePreset:'paper-novel',tooltips:{enabled:true,linking:'all-known'},readerPreferences:{adjustableSheetEnabled:true,sheetSize:'reading',layout:'overlay',backgroundOpacity:.94}}));
 // Only service responses needed to exercise navigation/settings. Paid operations
 // remain recorded intents; the fixture never sends them to a provider.
 const push = f.sent.push.bind(f.sent);

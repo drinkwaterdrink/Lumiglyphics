@@ -270,7 +270,7 @@ describe("lumiverse preset maps real host tokens", () => {
 
 describe("theme style layer order", () => {
   test("lays base before preset and preset before user", () => {
-    expect(THEME_STYLE_LAYER_ORDER).toEqual(["base", "preset", "user"]);
+    expect(THEME_STYLE_LAYER_ORDER).toEqual(["base", "preset", "aperture", "user"]);
   });
 
   test("labels each layer with a distinct data-vn-* attribute", () => {

@@ -52,7 +52,12 @@ button:disabled { opacity: .45; cursor: default; }
   /* Phones: the buttons carry the state; an info line would collide with Panels. Errors still show. */
   [data-status][data-tone="info"] { display: none; }
 }
-@media (max-width: 640px) and (pointer: coarse) { button { min-width: 2.75rem; min-height: 2.75rem; } }`;
+@media (max-width: 640px) and (pointer: coarse) { button { min-width: 2.75rem; min-height: 2.75rem; } }
+:host-context([data-vn-aperture="true"]) { top:calc(58px + env(safe-area-inset-top));left:auto;right:max(94px,calc(env(safe-area-inset-right) + 88px));transform:none;max-width:min(300px,calc(100% - 190px)); }
+:host-context([data-vn-aperture="true"]) [data-dock] { padding:.18rem .35rem;border-radius:14px; }
+:host-context([data-vn-aperture="true"]) [data-status] { max-width:8rem; }
+@media(max-width:700px) { :host-context([data-vn-aperture="true"]) { right:max(90px,calc(env(safe-area-inset-right) + 84px));max-width:calc(100% - 176px); } }
+@media(max-width:390px) { :host-context([data-vn-aperture="true"]) [data-status] { display:none; } }`;
 
 export class SpeechDock {
   private readonly host: HTMLElement;
@@ -105,6 +110,9 @@ export class SpeechDock {
     this.overlayActive = active;
     this.sync();
   }
+
+  isAvailable(): boolean { return this.enabled && this.overlayActive; }
+  togglePlayback(): void { if (!this.isAvailable()) return; if (this.playing) this.options.onPause(); else this.options.onPlay(); }
 
   setStatus(status: SpeechStatus): void {
     this.playing = status.kind === "playing";

@@ -9,6 +9,10 @@ const browser=await chromium.launch({headless:true});
 await mkdir('.cache/reader-first',{recursive:true});
 const settled=(page:Page)=>page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
 const close=(page:Page)=>page.locator('[data-workspace-close]').click();
+async function enableAperture(page:Page){
+ await page.evaluate(()=>{const host=(window as any).hostFixture;host.config.apertureMode=true;host.receive({type:'vn_config',config:host.config});});
+ await page.waitForFunction(()=>(window as any).readerFirstFixture.stage().panelMount.dataset.vnAperture==='true');await settled(page);
+}
 async function go(page:Page,id:string,width:number){
  if(width<=760&&(id==='history'||id==='settings')){
   await page.locator('[data-vn-navigation] [data-reader-destination="more"]').click();
@@ -17,7 +21,7 @@ async function go(page:Page,id:string,width:number){
 }
 const paid=(requests:any[])=>requests.filter(r=>/^(vn_submit|vn_choice|vn_reroll|vn_prepare_image|vn_image_review|vn_regenerate_image_prompt|vn_reprepare_image_template|vn_replan_turn|vn_queue_image_retries)$/.test(r.type));
 try{
- for(const viewport of [{width:1440,height:900},{width:1024,height:768},{width:390,height:844},{width:320,height:720},{width:844,height:390}]){
+ for(const viewport of [{width:1440,height:900},{width:1024,height:768},{width:430,height:932},{width:390,height:844},{width:360,height:800},{width:320,height:720},{width:844,height:390}]){
   const page=await browser.newPage({viewport,reducedMotion:'reduce'});page.setDefaultTimeout(7000);
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   await page.route('**/sample-art.jpg',route=>route.fulfill({path:'docs/design-concepts/reader-first/assets/observatory.jpg'}));
@@ -65,6 +69,49 @@ try{
   await page.getByRole('button',{name:'Back to chat',exact:true}).click();assert.equal(await page.locator('[data-vn-stage-host]').isVisible(),false);await page.getByRole('button',{name:'Reopen reader',exact:true}).click();assert.equal((await stage()).draft,'Keep my unsent reply');
   await page.getByRole('button',{name:'Find menus and settings',exact:true}).click();await page.evaluate(()=>(window as any).hostFixture.cleanup());assert.equal(await page.locator('[data-reader-command]').count(),0,'host cleanup closes native menu search before removing its owner');
   assert.deepEqual(errors,[]);await page.close();
+ }
+ // APERTURE v4 uses the production workspace/tools and keeps art full-bleed
+ // across narrow portrait and landscape Android-sized viewports.
+ for(const viewport of [{width:320,height:720},{width:360,height:800},{width:390,height:844},{width:430,height:932},{width:844,height:390},{width:1440,height:900}]){
+  const page=await browser.newPage({viewport,reducedMotion:'reduce'});page.setDefaultTimeout(7000);
+  await page.route('**/sample-art.jpg',route=>route.fulfill({path:'docs/design-concepts/reader-first/assets/observatory.jpg'}));
+  await page.goto(`http://127.0.0.1:${server.port}/`);await page.waitForFunction(()=>Boolean((window as any).readerFirstFixture));
+  await enableAperture(page);
+  const scene=await page.locator('[data-vn-theme-host]').boundingBox(),dock=await page.locator('[data-aperture-dock]').boundingBox();
+  assert.ok(scene&&scene.x<=.5&&scene.y<=.5&&scene.width>=viewport.width-.5&&scene.height>=viewport.height-.5,`${viewport.width}x${viewport.height}: artwork remains edge-to-edge`);
+  assert.ok(dock&&dock.x>=0&&dock.y>=0&&dock.x+dock.width<=viewport.width+.5&&dock.y+dock.height<=viewport.height+.5,'bottom controls stay inside the viewport');
+  const controls=await page.locator('[data-aperture-dock] button').all();assert.equal(controls.length,6);
+  for(const control of controls){const b=await control.boundingBox();assert.ok(b&&b.width>=39&&b.height>=43&&b.x>=0&&b.x+b.width<=viewport.width+.5,'Aperture dock keeps reachable touch targets');}
+  const labels=await page.locator('[data-aperture-dock] button').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('data-aperture-action')));
+  assert.deepEqual(labels,['previous','history','lens','cast','settings','next'],'Cast sits immediately beside Lens');
+  assert.equal(await page.locator('[data-vn-navigation]').isVisible(),false,'legacy navigation is replaced only while APERTURE is enabled');
+  assert.deepEqual(paid(await page.evaluate(()=>(window as any).readerFirstFixture.sent)),[],'APERTURE layout performs no paid operation');
+  await page.close();
+ }
+ {
+  const page=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'});page.setDefaultTimeout(7000);
+  await page.route('**/sample-art.jpg',route=>route.fulfill({path:'docs/design-concepts/reader-first/assets/observatory.jpg'}));
+  await page.goto(`http://127.0.0.1:${server.port}/`);await page.waitForFunction(()=>Boolean((window as any).readerFirstFixture));
+  await enableAperture(page);
+  await page.locator('[data-aperture-iris]').click();assert.ok(await page.locator('[data-aperture-iris-dialog]').isVisible());
+  await page.locator('[data-iris-action="artwork"]').click();assert.equal(await page.locator('[data-vn-shell]').getAttribute('data-vn-workspace'),'artwork');
+  assert.ok(await page.locator('[data-image-studio]').isVisible(),'Iris opens the real Art Studio surface');await close(page);
+  await page.locator('[data-reader-panels]').click();assert.equal(await page.locator('[data-vn-panel-layer] .launcher').getAttribute('aria-expanded'),'true','header Panels opens the real pinned-card dock');
+  await page.locator('[data-vn-panel-layer] .drawer button').filter({hasText:'Close'}).click();
+  await page.locator('[data-reader-voice]').click();assert.ok(await page.locator('[data-vn-settings]').isVisible(),'Voice opens real speech settings when TTS is off');
+  await page.keyboard.press('Control+k');await page.getByRole('searchbox',{name:'Search menus and settings',exact:true}).fill('Appearance');await page.keyboard.press('Enter');
+  await page.locator('[data-vn-settings] select[name="apertureAppearance"]').selectOption('dark');
+  await page.waitForFunction(()=>(window as any).readerFirstFixture.stage().panelMount.dataset.vnApertureTheme==='dark');
+  const opacity=page.locator('[data-vn-settings] input[name="readerBackgroundOpacity"]');
+  await opacity.evaluate((el:HTMLInputElement)=>{el.value='0';el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));});
+  await page.waitForFunction(()=>{const stage=(window as any).readerFirstFixture.stage(),root=stage.panelMount.querySelector('[data-vn-theme-host]').shadowRoot;return (window as any).readerFirstFixture.config.readerPreferences.backgroundOpacity===0&&root.querySelector('[data-vn-root]').style.getPropertyValue('--vn-sheet-opacity')==='0';});
+  const alpha=await page.evaluate(()=>{const root=(window as any).readerFirstFixture.stage().panelMount.querySelector('[data-vn-theme-host]').shadowRoot;
+   const dialogue=root.querySelector('[data-vn-dialogue]'),text=root.querySelector('[data-vn-dialogue-text]');
+   return {background:getComputedStyle(dialogue,'::before').opacity,text:getComputedStyle(text).opacity};});
+  assert.equal(alpha.background,'0','zero opacity affects only the dialogue background layer');assert.equal(alpha.text,'1','dialogue text remains fully opaque');
+  assert.deepEqual(paid(await page.evaluate(()=>(window as any).readerFirstFixture.sent)),[],'palette and opacity saves do not trigger generation');
+  await page.getByRole('button',{name:'Back to chat',exact:true}).click();assert.equal(await page.locator('[data-vn-stage-host]').isVisible(),false,'Back to Chat uses host exit semantics');
+  await page.close();
  }
  // Every actual preset, not a hand-maintained subset. Compare the shell and
  // docked tool tokens and ensure the reader/control bounds survive reduced space.

@@ -6,6 +6,18 @@
  * are a dark theme.
  */
 export const SETTINGS_TOKENS_CSS = `
+:host([data-aperture-theme="light"]) {
+  color-scheme: light;
+  --set-accent: #587c70; --set-accent-text: #fbfaf5; --set-text: #273530; --set-muted: #64716b;
+  --set-border: rgba(62,91,79,.22); --set-surface: #f8f7f1; --set-field: #fffefa; --set-hover: #edf0e9;
+  --set-success: #2d7a55; --set-warning: #9a6800; --set-danger: #a53d3d;
+}
+:host([data-aperture-theme="dark"]) {
+  color-scheme: dark;
+  --set-accent: #9ac2ae; --set-accent-text: #14201c; --set-text: #edf2ed; --set-muted: #b5c2ba;
+  --set-border: rgba(159,194,174,.23); --set-surface: #19221f; --set-field: #121a17; --set-hover: #26332e;
+  --set-success: #8ce8b0; --set-warning: #ffd08a; --set-danger: #ff9b9b;
+}
 :host {
   --set-accent: var(--vn-shell-accent, var(--lumiverse-primary, #a986ff));
   --set-accent-text: var(--vn-shell-accent-contrast, var(--lumiverse-primary-contrast, #121018));

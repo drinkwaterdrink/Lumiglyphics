@@ -15,7 +15,7 @@ export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
     layout: input.layout === "image-first" ? "image-first" : "overlay",
     sheetSize: input.sheetSize === "compact" || input.sheetSize === "expanded" ? input.sheetSize : "reading",
     backgroundOpacity: typeof input.backgroundOpacity === "number" && Number.isFinite(input.backgroundOpacity)
-      ? Math.max(0.35, Math.min(1, input.backgroundOpacity)) : 0.9,
+      ? Math.max(0, Math.min(1, input.backgroundOpacity)) : 0.9,
     ...(typeof input.heightRatio === "number" && Number.isFinite(input.heightRatio) ? { heightRatio: Math.max(.12, Math.min(1, input.heightRatio)) } : {}),
   };
 }

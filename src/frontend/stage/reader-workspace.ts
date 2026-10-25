@@ -1,6 +1,8 @@
 import { SETTINGS_PAGES } from '../settings/routes.js';
 
 export type ReaderDestination = 'story' | 'artwork' | 'history' | 'settings';
+export type ReaderWorkspaceAction = 'previous' | 'next' | 'history' | 'lens' | 'cast' | 'settings' | 'panels' | 'voice' | 'artwork' | 'library' | 'backToChat';
+export type ReaderWorkspaceActions = Partial<Record<ReaderWorkspaceAction, () => void>>;
 export interface WorkspaceSurface {
   element: HTMLElement;
   /** Hide legacy launchers at home; native host Settings remains available. */
@@ -11,8 +13,8 @@ export interface WorkspaceSurface {
   back?: () => boolean;
 }
 const destinations: ReadonlyArray<{ id: ReaderDestination; label: string; icon: string; hint: string }> = [
-  { id: 'story', label: 'Story', icon: 'world', hint: 'People, places & revealed documents' },
-  { id: 'artwork', label: 'Artwork', icon: 'art', hint: 'Review, replace & inspect pictures' },
+  { id: 'story', label: 'World Lens', icon: 'world', hint: 'Source-aware people, places & revealed documents' },
+  { id: 'artwork', label: 'Art Studio', icon: 'art', hint: 'Review, replace & inspect real story pictures' },
   { id: 'history', label: 'History', icon: 'history', hint: 'Earlier passages & saved pictures' },
   { id: 'settings', label: 'Settings', icon: 'settings', hint: 'Every preference, in one place' },
 ];
@@ -27,6 +29,9 @@ const paths: Record<string, string> = {
   search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',
   focus: '<path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/>',
   more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  panels: '<rect x="3" y="4" width="8" height="7" rx="1"/><rect x="13" y="4" width="8" height="5" rx="1"/><rect x="13" y="11" width="8" height="9" rx="1"/><rect x="3" y="13" width="8" height="7" rx="1"/>',
+  voice: '<path d="M4 10v4M8 6v12M12 3v18M16 7v10M20 10v4"/>',
+  cast: '<circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 4v2"/>',
 };
 export const readerIcon = (name: string): string => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${paths[name] ?? paths.read}</svg>`;
 
@@ -41,6 +46,9 @@ export class ReaderWorkspace {
   private readonly subtitle: HTMLElement;
   private readonly closeButton: HTMLButtonElement;
   private readonly more: HTMLElement;
+  private readonly dock: HTMLElement;
+  private readonly iris: HTMLDialogElement;
+  private readonly irisButton: HTMLButtonElement;
   private readonly search: HTMLDialogElement;
   private readonly input: HTMLInputElement;
   private readonly results: HTMLElement;
@@ -52,6 +60,7 @@ export class ReaderWorkspace {
   private opener: HTMLElement | null = null;
   private readonly homes = new Map<HTMLElement, {parent: Node; next: Node | null}>();
   private readonly scroll = new Map<ReaderDestination, number>();
+  private actions: ReaderWorkspaceActions = {};
   private readonly media: MediaQueryList | undefined;
   private readonly onMedia = (): void => this.syncReader();
   private readonly onViewportResize = (): void => this.syncViewport();
@@ -68,17 +77,43 @@ export class ReaderWorkspace {
       <button type="button" data-reader-destination="more" aria-label="More" aria-expanded="false">${readerIcon('more')}<span>More</span></button>
     </nav>
     <header data-vn-reader-header><div><span data-vn-reader-wordmark>LUMIGLYPHICS</span><span data-reader-caption>Visual novel</span></div><div data-reader-header-actions>
+      <button type="button" data-reader-panels aria-label="Open Panels" title="Open pinned panels">${readerIcon('panels')}<span>Panels</span></button>
+      <button type="button" data-reader-voice aria-label="Voice and TTS" title="Voice and TTS">${readerIcon('voice')}<span>Voice</span></button>
+      <button type="button" data-reader-artwork aria-label="Open Art Studio" title="Open Art Studio">${readerIcon('art')}<span>Art Studio</span></button>
+      <button type="button" data-aperture-iris aria-label="Open APERTURE navigation" aria-expanded="false" title="Open navigation">${readerIcon('more')}<span>Navigate</span></button>
       <button type="button" data-reader-search aria-label="Find menus and settings" title="Find menus and settings (Ctrl/Command K)">${readerIcon('search')}<span>Find menus</span><kbd>⌘ K</kbd></button>
       <button type="button" data-reader-focus aria-label="Focus reading" aria-pressed="false" title="Focus reading">${readerIcon('focus')}<span>Focus</span></button></div></header>
     <aside data-vn-workspace hidden aria-label="Reader workspace" tabindex="-1">
       <header data-workspace-heading><div><p data-workspace-subtitle></p><h2 data-workspace-title></h2></div><button type="button" data-workspace-close aria-label="Close workspace and return to reader">${readerIcon('close')}</button></header>
       <div data-workspace-content></div>
     </aside>
+    <nav data-aperture-dock aria-label="Reader controls">
+      <button type="button" data-aperture-action="previous" aria-label="Previous passage" title="Previous passage">${readerIcon('back')}</button>
+      <button type="button" data-aperture-action="history" aria-label="History" title="History">${readerIcon('history')}<span>History</span></button>
+      <button type="button" data-aperture-action="lens" aria-label="World Lens" title="World Lens">${readerIcon('world')}<span>Lens</span></button>
+      <button type="button" data-aperture-action="cast" aria-label="Cast and Folios" title="Cast and Folios">${readerIcon('cast')}<span>Cast</span></button>
+      <button type="button" data-aperture-action="settings" aria-label="Settings" title="Settings">${readerIcon('settings')}</button>
+      <button type="button" data-aperture-action="next" aria-label="Next passage" title="Next passage">${readerIcon('back')}</button>
+    </nav>
+    <dialog data-aperture-iris-dialog aria-label="APERTURE navigation"><form method="dialog"><header><div><p>APERTURE</p><h2>Choose a space</h2></div><button type="submit" aria-label="Close navigation">${readerIcon('close')}</button></header></form>
+      <div data-iris-grid>
+        <button type="button" data-iris-action="lens">${readerIcon('world')}<span><b>World Lens</b><small>Revealed people, places, objects & documents</small></span></button>
+        <button type="button" data-iris-action="cast">${readerIcon('cast')}<span><b>Cast / Folios</b><small>Character facts grounded in the story</small></span></button>
+        <button type="button" data-iris-action="artwork">${readerIcon('art')}<span><b>Art Studio</b><small>Review, replace, queue & inspect artwork</small></span></button>
+        <button type="button" data-iris-action="library">${readerIcon('history')}<span><b>Image Library</b><small>Browse saved story pictures</small></span></button>
+        <button type="button" data-iris-action="history">${readerIcon('read')}<span><b>History</b><small>Read earlier passages</small></span></button>
+        <button type="button" data-iris-action="panels">${readerIcon('panels')}<span><b>Panels</b><small>Show or capture pinned cards</small></span></button>
+        <button type="button" data-iris-action="voice">${readerIcon('voice')}<span><b>Voice / TTS</b><small>Optional paragraph speech</small></span></button>
+        <button type="button" data-iris-action="settings">${readerIcon('settings')}<span><b>Settings</b><small>All existing routes and preferences</small></span></button>
+        <button type="button" data-iris-action="backToChat">${readerIcon('back')}<span><b>Back to Chat</b><small>Leave the reader using host navigation</small></span></button>
+      </div><p data-iris-note>Close returns to this passage. Back to Chat leaves the reader.</p>
+    </dialog>
     <dialog data-reader-command aria-label="Find menus and settings"><form method="dialog"><header><h2>Find your way</h2><button type="submit" aria-label="Close menu search">${readerIcon('close')}</button></header></form><label>${readerIcon('search')}<input type="search" maxlength="120" placeholder="Search menus and settings…" aria-label="Search menus and settings" autocomplete="off"></label><div data-reader-command-results></div><p>Navigation only. Searching never starts generation.</p></dialog>`;
     shell.append(...Array.from(wrapper.childNodes));
     const q = <T extends Element>(s: string) => shell.querySelector<T>(s)!;
     this.nav = q('[data-vn-navigation]'); this.header = q('[data-vn-reader-header]');
     this.panel = q('[data-vn-workspace]'); this.content = q('[data-workspace-content]');
+    this.dock = q('[data-aperture-dock]'); this.iris = q<HTMLDialogElement>('[data-aperture-iris-dialog]'); this.irisButton = q<HTMLButtonElement>('[data-aperture-iris]');
     this.title = q('[data-workspace-title]'); this.subtitle = q('[data-workspace-subtitle]');
     this.closeButton = q('[data-workspace-close]'); this.search = q('[data-reader-command]');
     this.input = q('[data-reader-command] input'); this.results = q('[data-reader-command-results]');
@@ -98,6 +133,22 @@ export class ReaderWorkspace {
       else if (destinations.some(d => d.id === id)) this.open(id as ReaderDestination, b);
     }, {signal});
     this.closeButton.addEventListener('click', () => this.close(), {signal});
+    this.irisButton.addEventListener('click', () => this.openIris(), {signal});
+    this.iris.addEventListener('cancel', () => this.irisButton.setAttribute('aria-expanded', 'false'), {signal});
+    this.iris.addEventListener('close', () => this.irisButton.setAttribute('aria-expanded', 'false'), {signal});
+    this.iris.addEventListener('click', event => {
+      const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-iris-action]') : null;
+      if (!button) return;
+      event.preventDefault(); this.iris.close(); this.irisButton.setAttribute('aria-expanded', 'false');
+      this.runAction(button.dataset.irisAction as ReaderWorkspaceAction);
+    }, {signal});
+    this.dock.addEventListener('click', event => {
+      const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-aperture-action]') : null;
+      if (button) this.runAction(button.dataset.apertureAction as ReaderWorkspaceAction);
+    }, {signal});
+    q('[data-reader-panels]').addEventListener('click', () => this.runAction('panels'), {signal});
+    q('[data-reader-voice]').addEventListener('click', () => this.runAction('voice'), {signal});
+    q('[data-reader-artwork]').addEventListener('click', () => this.runAction('artwork'), {signal});
     q('[data-reader-focus]').addEventListener('click', () => this.setFocus(this.shell.dataset.vnReadingFocus !== 'true'), {signal});
     q('[data-reader-search]').addEventListener('click', () => this.openSearch(), {signal});
     this.input.addEventListener('input', () => this.renderSearch(), {signal});
@@ -121,6 +172,50 @@ export class ReaderWorkspace {
     window.visualViewport?.addEventListener('scroll',this.onViewportResize,{signal});
     window.addEventListener('resize',this.onViewportResize,{signal});
     this.syncViewport();this.syncReader();
+  }
+
+  setActions(actions: ReaderWorkspaceActions): void { this.actions = { ...actions }; }
+
+  private openIris(): void {
+    if (this.destroyed || this.iris.open || typeof this.iris.showModal !== 'function') return;
+    this.pause(); this.irisButton.setAttribute('aria-expanded', 'true'); this.iris.showModal();
+    this.iris.querySelector<HTMLButtonElement>('[data-iris-action]')?.focus();
+  }
+
+  private runAction(action: ReaderWorkspaceAction): void {
+    if (action === 'previous') {
+      this.reader.shadowRoot?.querySelector<HTMLButtonElement>('[data-vn-control="previous"]')?.click(); return;
+    }
+    if (action === 'next') {
+      this.reader.shadowRoot?.querySelector<HTMLButtonElement>('[data-vn-continue]')?.click(); return;
+    }
+    if (action === 'history') {
+      this.reader.shadowRoot?.querySelector<HTMLButtonElement>('[data-vn-control="log"]')?.click(); return;
+    }
+    if (action === 'lens' || action === 'cast') {
+      if (this.actions[action]) this.actions[action]!(); else this.open('story'); return;
+      return;
+    }
+    if (action === 'settings') { this.open('settings'); return; }
+    if (action === 'artwork') { this.open('artwork'); return; }
+    if (action === 'library') {
+      if (this.actions.library) this.actions.library(); else this.open('history');
+      return;
+    }
+    if (action === 'backToChat') {
+      if (this.actions.backToChat) this.actions.backToChat();
+      else this.shell.querySelector<HTMLButtonElement>('[data-vn-exit]')?.click();
+      return;
+    }
+    if (action === 'panels') {
+      if (this.actions.panels) this.actions.panels();
+      else this.shell.querySelector<HTMLElement>('[data-vn-panel-layer]')?.shadowRoot?.querySelector<HTMLButtonElement>('.launcher')?.click();
+      return;
+    }
+    if (action === 'voice') {
+      if (this.actions.voice) this.actions.voice();
+      else { this.open('settings'); this.onSettingsPage?.('speech'); }
+    }
   }
 
   register(id: ReaderDestination, surface: WorkspaceSurface): void {
@@ -230,7 +325,8 @@ export class ReaderWorkspace {
       }
     };
     visit(this.shell);
-    if(event.shiftKey&&active===stops[0]){event.preventDefault();stops.at(-1)?.focus();}
+    if(event.shiftKey&&!stops.includes(active as HTMLElement)){event.preventDefault();this.closeButton.focus({preventScroll:true});}
+    else if(event.shiftKey&&active===stops[0]){event.preventDefault();stops.at(-1)?.focus();}
     else if(!event.shiftKey&&active===stops.at(-1)){event.preventDefault();stops[0]?.focus();}
   }
   openSearch(): void {
@@ -254,6 +350,6 @@ export class ReaderWorkspace {
     this.close(false); if (this.search.open) this.search.close(); this.destroyed = true;
     this.abort.abort(); this.media?.removeEventListener?.('change', this.onMedia); this.reader.inert = false; this.reader.removeAttribute('aria-hidden');
     for(const element of this.shell.querySelectorAll<HTMLElement>('[data-vn-panel-layer],[data-vn-speech-dock]'))element.inert=false;
-    this.nav.remove(); this.header.remove(); this.panel.remove(); this.search.remove(); this.tools.clear(); this.homes.clear();
+    this.nav.remove(); this.header.remove(); this.panel.remove(); this.dock.remove(); this.iris.remove(); this.search.remove(); this.tools.clear(); this.homes.clear();
   }
 }

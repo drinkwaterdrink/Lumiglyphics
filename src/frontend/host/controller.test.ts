@@ -74,6 +74,8 @@ const baseConfig: VisualNovelConfig = {
   novelAiQualityTags: true,
   novelAiUseDefaultNegative: true,
   speech: DEFAULT_CONFIG.speech,
+  apertureMode: DEFAULT_CONFIG.apertureMode,
+  apertureAppearance: DEFAULT_CONFIG.apertureAppearance,
   themePreset: "lumiverse",
   enabled: true,
   autoEnter: false,
