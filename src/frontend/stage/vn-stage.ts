@@ -775,7 +775,7 @@ export class VnStage {
   }
 
   setReaderPreferences(preferences: ReaderPreferences): void {
-    if (!this.dialogueSheet && preferences.adjustableSheetEnabled) {
+    if (!this.dialogueSheet) {
       this.dialogueSheet = new DialogueSheet(this.root, queryRequired(this.themeRoot, "[data-vn-dialogue]"), () => {
         this.toggleAutoPlay(false);
         this.toggleSkip(false);
@@ -1094,9 +1094,18 @@ export class VnStage {
     this.dispatch({ type: "set-phase", phase });
   }
 
-  showPreparationPreview(preview:NarrativePreview):void {this.toggleAutoPlay(false);this.toggleSkip(false);this.preparationPreview.show(preview);}
+  showPreparationPreview(preview:NarrativePreview):void {
+    this.toggleAutoPlay(false);
+    this.toggleSkip(false);
+    this.narrative.hidden = true;
+    this.preparationPreview.show(preview);
+  }
   preparationCursorFor(turn:TurnView):number|null{return this.preparationPreview.cursorFor(turn);}
-  clearPreparationPreview():void{this.preparationPreview.clear();}
+  clearPreparationPreview():void{
+    this.preparationPreview.clear();
+    const view = selectVnStageView(this.state);
+    this.narrative.hidden = !view.paragraph;
+  }
   stopPreparationPreview():void{this.preparationPreview.stopped();}
   setReferenceHistory(history:ReferenceHistory|undefined):void{this.dossiers.setHistory(history);}
 
@@ -1736,6 +1745,10 @@ export class VnStage {
     castBtn?.addEventListener("click", (event) => {
       event.stopPropagation();
       this.workspace.open("story", castBtn);
+    });
+
+    this.outerRoot.addEventListener("lumiglyphics:cast-toggle", () => {
+      this.castStage.toggle();
     });
 
     const settingsBtn = this.themeRoot.querySelector<HTMLButtonElement>("[data-vn-control='settings']");

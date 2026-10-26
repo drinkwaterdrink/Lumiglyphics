@@ -1051,10 +1051,8 @@ section[data-reference-current] h3,section[data-reference-observations] h3{font-
 export const DOCKED_DOSSIER_CSS = `
 [data-vn-dossier][data-vn-workspace-tool="story"]{position:relative;inset:auto;display:flex;align-items:stretch;padding:0;background:transparent;height:100%;z-index:auto}
 [data-vn-workspace-tool="story"] [data-vn-dossier-card]{width:100%;max-height:100%;height:100%;border:0;border-radius:0;box-shadow:none;padding:18px;font-size:14px;line-height:1.7}
-[data-vn-workspace-tool="story"] [data-vn-dossier-card]>header{position:static;top:auto;padding:0 0 14px;background:var(--vn-panel-solid)}
+[data-vn-workspace-tool="story"] [data-vn-dossier-card]>header{position:static;top:auto;padding:0 0 14px;background:var(--vn-panel-solid);display:flex;align-items:center;justify-content:space-between}
 [data-vn-workspace-tool="story"] [data-vn-dossier-card]>header button[aria-label^="Close"]{display:none}
-[data-vn-workspace-tool="story"] [data-vn-reference-sheet]>header,
-[data-vn-workspace-tool="story"] [data-vn-dossier-card][data-vn-reference-sheet]>header{display:none!important}
 [data-reference-categories]{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
 [data-reference-categories] button{flex:1;min-width:60px;margin:0;font-size:11px;padding:6px 8px}
 [data-reference-categories] [aria-pressed="true"]{border-color:var(--vn-accent);color:var(--vn-accent);background:color-mix(in srgb,var(--vn-accent) 10%,transparent)}

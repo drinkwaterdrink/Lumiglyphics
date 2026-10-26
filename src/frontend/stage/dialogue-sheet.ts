@@ -182,13 +182,12 @@ export class DialogueSheet {
     this.root.dataset.vnReaderLayout = this.preferences.layout;
     this.root.style.setProperty("--vn-sheet-opacity", String(this.preferences.backgroundOpacity));
     this.root.style.setProperty("--caption-opacity", String(this.preferences.backgroundOpacity));
-    this.tools.hidden = !this.preferences.adjustableSheetEnabled;
-    this.hide.hidden = !this.preferences.adjustableSheetEnabled;
-    if (!this.preferences.adjustableSheetEnabled) this.setHidden(false);
+    this.tools.hidden = false;
+    this.hide.hidden = false;
     this.resize();
   }
   setHidden(hidden: boolean): void {
-    this.hidden = hidden && this.preferences.adjustableSheetEnabled;
+    this.hidden = hidden;
     this.root.dataset.vnTextHidden = String(this.hidden);
     this.show.hidden = !this.hidden;
     if (this.hidden) { this.pause(); this.show.focus(); }

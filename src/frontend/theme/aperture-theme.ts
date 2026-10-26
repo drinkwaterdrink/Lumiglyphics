@@ -1050,7 +1050,7 @@ aside[data-vn-workspace] {
 }
 
 /* =========================================================================
-   READER BOTTOM CONTROLS GRID (6 columns)
+   APERTURE DEDICATED BOTTOM BAR (History, World Lens, Cast, Settings)
    ========================================================================= */
 
 .reader-actions,
@@ -1060,15 +1060,20 @@ aside[data-vn-workspace] {
   bottom: 0 !important;
   left: 0 !important;
   right: 0 !important;
-  height: calc(88px + env(safe-area-inset-bottom, 0px)) !important;
-  z-index: 30 !important;
+  height: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
+  z-index: 40 !important;
   display: flex !important;
-  flex-direction: column !important;
-  justify-content: flex-start !important;
-  padding: 6px 16px calc(10px + env(safe-area-inset-bottom, 0px)) !important;
-  gap: 6px !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 12px calc(env(safe-area-inset-bottom, 0px)) !important;
+  margin: 0 !important;
   pointer-events: auto !important;
-  background: linear-gradient(180deg, transparent, rgba(4, 12, 16, 0.72) 24%, rgba(5, 15, 18, 0.94)) !important;
+  background: rgba(7, 16, 13, 0.94) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  backdrop-filter: blur(16px) !important;
+  border-top: 1px solid rgba(160, 205, 185, 0.16) !important;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.45) !important;
   box-sizing: border-box !important;
 }
 
@@ -1080,148 +1085,63 @@ aside[data-vn-workspace] {
   display: none !important;
 }
 
-/* Progress bar container: centered horizontally on top row */
-.reader-progress {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 10px !important;
-  width: 100% !important;
-  max-width: calc(100% - 96px) !important;
-  height: 32px !important;
-  min-height: 32px !important;
-  margin: 0 auto !important;
-  box-sizing: border-box !important;
-}
-
-.reader-progress [data-vn-step-left],
-.reader-progress [data-vn-step-right] {
-  color: #edf3ea !important;
-  opacity: 0.8 !important;
-  font-size: 9.5px !important;
-  font-weight: 700 !important;
-  letter-spacing: 0.08em !important;
-  white-space: nowrap !important;
-  flex: none !important;
-}
-
-.reader-progress [data-vn-scrubber] {
-  flex: 1 1 auto !important;
-  max-width: 300px !important;
-}
-
-/* Action row: contains 4 centered tool buttons, with Previous and Continue pinned to top row */
+/* Symmetrical 4-button navigation inside bottom bar */
 .reader-action-row,
 [data-vn-controls] {
   position: static !important;
-  display: grid !important;
-  grid-template-columns: repeat(4, 1fr) !important;
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: center !important;
+  align-items: center !important;
   gap: 8px !important;
   width: 100% !important;
-  max-width: 280px !important;
-  margin: 0 auto !important;
+  max-width: none !important;
+  margin: 0 !important;
   padding: 0 !important;
+  height: 100% !important;
+  box-sizing: border-box !important;
 }
 
-.reader-action-row > .action {
-  height: 38px !important;
+.reader-action-row > .action:not(.nav-step-btn) {
+  height: 44px !important;
+  width: 68px !important;
+  min-width: 58px !important;
+  max-width: 76px !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
   justify-content: center !important;
-  gap: 2px !important;
-  border-radius: 10px !important;
+  gap: 3px !important;
+  border-radius: 8px !important;
   background: transparent !important;
   border: 0 !important;
-  color: #ecf6ed !important;
+  color: #9cb5a8 !important;
   cursor: pointer !important;
-  transition: background 0.16s ease !important;
-}
-
-.reader-action-row > .action:hover {
-  background: rgba(220, 242, 221, 0.12) !important;
-}
-
-/* Hide label text inside previous nav button so it stays icon-only */
-[data-vn-controls] > [data-vn-control="previous"] [data-vn-control-label] {
-  display: none !important;
-}
-
-/* Previous and Continue pinned to top row on either side of the progress bar */
-[data-vn-controls] > [data-vn-control="previous"].nav-step-btn {
-  position: absolute !important;
-  left: 16px !important;
-  top: 6px !important;
-  width: 32px !important;
-  height: 32px !important;
-  min-width: 32px !important;
-  min-height: 32px !important;
   padding: 0 !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  border-radius: 50% !important;
-  background: rgba(14, 30, 24, 0.8) !important;
-  border: 1px solid rgba(220, 238, 217, 0.22) !important;
-  color: #edf3ea !important;
-  cursor: pointer !important;
-  transition: background 0.16s ease, transform 0.16s ease, border-color 0.16s ease !important;
+  transition: all 0.15s ease !important;
 }
 
-[data-vn-controls] > [data-vn-continue].nav-step-btn {
-  position: absolute !important;
-  right: 16px !important;
-  top: 6px !important;
-  width: 32px !important;
-  height: 32px !important;
-  min-width: 32px !important;
-  min-height: 32px !important;
-  padding: 0 !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  border-radius: 50% !important;
-  background: var(--lime) !important;
-  border: 1px solid var(--lime) !important;
-  color: #1a2c1d !important;
-  box-shadow: 0 2px 10px rgba(220, 238, 173, 0.35) !important;
-  cursor: pointer !important;
-  transition: background 0.16s ease, transform 0.16s ease !important;
+.reader-action-row > .action:not(.nav-step-btn):hover {
+  background: rgba(220, 238, 177, 0.08) !important;
+  color: #dcebad !important;
+}
+
+.reader-action-row > .action:not(.nav-step-btn) [data-vn-control-label] {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em !important;
+  line-height: 1 !important;
+}
+
+.reader-action-row > .action:not(.nav-step-btn) [data-vn-control-icon] svg {
+  width: 18px !important;
+  height: 18px !important;
 }
 
 [data-vn-controls] > .nav-step-btn:disabled,
 [data-vn-controls] > .nav-step-btn[aria-disabled="true"] {
   opacity: 0.3 !important;
   pointer-events: none !important;
-}
-
-[data-vn-controls] > [data-vn-control="previous"].nav-step-btn:hover:not(:disabled) {
-  background: rgba(35, 75, 57, 0.92) !important;
-  border-color: #dcebad !important;
-  color: #fff !important;
-  transform: scale(1.08) !important;
-}
-
-[data-vn-controls] > [data-vn-continue].nav-step-btn:hover:not(:disabled) {
-  background: #e6f5b8 !important;
-  color: #0f1c14 !important;
-  transform: scale(1.08) !important;
-}
-  transition: background 0.16s ease !important;
-}
-
-.reader-action-row > .action:hover {
-  background: rgba(220, 242, 221, 0.12) !important;
-}
-  font-weight: 700;
-  padding: 0 10px;
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.55), 0 4px 16px rgba(224, 238, 177, 0.18);
-  cursor: pointer;
-}
-
-[data-vn-continue] svg {
-  width: 20px;
-  height: 20px;
 }
 
 /* =========================================================================
@@ -1747,146 +1667,450 @@ body.theme-light .folio-quote-callout {
 }
 
 /* =========================================================================
-   APERTURE REFINED READER ACTION ROW & SCRUBBER FIX
+   APERTURE UNIFIED READER DIALOGUE & INTEGRATED BOTTOM NAVIGATION
    ========================================================================= */
 
-.reader-actions {
+/* =========================================================================
+   APERTURE UNIFIED READER DIALOGUE & INTEGRATED CONTROLS
+   ========================================================================= */
+
+/* Symmetrical, perfectly centered dialogue card */
+[data-vn-dialogue],
+[data-vn-root] [data-vn-dialogue],
+[data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-dialogue],
+[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-dialogue] {
   position: absolute !important;
-  inset: auto 0 0 0 !important;
-  height: calc(88px + env(safe-area-inset-bottom, 0px)) !important;
   z-index: 30 !important;
+  left: 14px !important;
+  right: 14px !important;
+  width: auto !important;
+  max-width: none !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  top: auto !important;
+  bottom: calc(64px + env(safe-area-inset-bottom, 0px)) !important;
+  height: var(--caption-height, 146px);
+  min-height: 114px !important;
+  max-height: calc(100% - 140px) !important;
+  padding: 10px 14px 42px !important;
+  border: 1px solid rgba(160, 205, 185, 0.28) !important;
+  border-radius: 16px !important;
+  background: rgba(8, 18, 15, var(--caption-opacity, 0.82)) !important;
+  -webkit-backdrop-filter: blur(var(--caption-blur, 14px)) !important;
+  backdrop-filter: blur(var(--caption-blur, 14px)) !important;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
   display: flex !important;
   flex-direction: column !important;
-  justify-content: flex-start !important;
-  padding: 4px 14px calc(8px + env(safe-area-inset-bottom, 0px)) !important;
-  gap: 6px !important;
-  background: linear-gradient(180deg, transparent, rgba(4, 12, 16, 0.63) 32%, rgba(5, 15, 18, 0.92)) !important;
+  gap: 2px !important;
+  overflow: hidden !important;
+  pointer-events: auto !important;
+  touch-action: pan-y !important;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
 }
 
-.reader-progress {
+/* Draggable Top Resize Grip */
+.resize-grip,
+[data-vn-sheet-handle] {
+  position: absolute !important;
+  top: 3px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  width: 44px !important;
+  height: 8px !important;
+  cursor: ns-resize !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 35 !important;
+  touch-action: none !important;
+}
+
+.resize-grip span {
+  display: block !important;
+  width: 32px !important;
+  height: 3px !important;
+  border-radius: 2px !important;
+  background: rgba(220, 238, 177, 0.45) !important;
+}
+
+/* Dialogue Header (Speaker, Scene, Expand, Minimize) */
+.caption-head,
+[data-vn-sheet-header] {
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
-  gap: 8px !important;
-  min-height: 14px !important;
-  width: 100% !important;
+  min-height: 22px !important;
+  margin-top: 2px !important;
+  margin-bottom: 4px !important;
+  padding-bottom: 4px !important;
+  border-bottom: 1px solid rgba(160, 205, 185, 0.18) !important;
+  flex: none !important;
 }
 
+.caption-head .speaker {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+.caption-head [data-vn-speaker] {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: #dcebad !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+}
+
+.caption-head .caption-split {
+  color: #6d8678 !important;
+  font-size: 10px !important;
+}
+
+.caption-head [data-vn-caption-scene] {
+  font-size: 10px !important;
+  color: #9cb5a8 !important;
+  letter-spacing: 0.06em !important;
+}
+
+.caption-head-actions,
+[data-vn-sheet-tools] {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+.caption-tool {
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 6px !important;
+  border: 1px solid rgba(160, 205, 185, 0.22) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #edf3ea !important;
+  display: grid !important;
+  place-items: center !important;
+  padding: 0 !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.caption-tool:hover {
+  background: rgba(220, 238, 177, 0.2) !important;
+  border-color: #dcebad !important;
+}
+
+.caption-tool svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+/* Scrollable Copy */
+.scroll-copy,
+[data-vn-dialogue] .scroll-copy {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch !important;
+  touch-action: pan-y !important;
+  overscroll-behavior: contain !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(220, 238, 177, 0.45) transparent !important;
+  padding: 2px 2px 42px !important;
+  margin: 0 !important;
+}
+
+[data-vn-dialogue-text],
+[data-vn-root] [data-vn-dialogue-text],
+[data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-dialogue-text],
+[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-dialogue-text],
+[data-vn-root]:not([data-vn-adjustable-sheet="true"]) [data-vn-dialogue-text] {
+  overflow: visible !important;
+  overflow-y: visible !important;
+  overscroll-behavior: auto !important;
+  max-height: none !important;
+  height: auto !important;
+  flex: none !important;
+  touch-action: pan-y !important;
+  user-select: text !important;
+  font-size: var(--reader-font, 15px) !important;
+  line-height: 1.55 !important;
+  color: #f9faf6 !important;
+  font-family: Georgia, 'Times New Roman', serif !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;
+  margin: 0 !important;
+}
+
+/* Integrated Progress Scrubber docked inside Dialogue Card */
+.reader-progress {
+  position: absolute !important;
+  bottom: calc(70px + env(safe-area-inset-bottom, 0px)) !important;
+  left: 56px !important;
+  right: 56px !important;
+  width: auto !important;
+  max-width: calc(100% - 112px) !important;
+  height: 28px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  margin: 0 auto !important;
+  z-index: 45 !important;
+  pointer-events: auto !important;
+}
+
+.reader-progress [data-vn-step-left],
+.reader-progress [data-vn-step-right],
 .reader-progress small {
   color: #edf3ea !important;
-  opacity: 0.8 !important;
+  opacity: 0.85 !important;
   font-size: 9.5px !important;
+  font-weight: 700 !important;
   letter-spacing: 0.08em !important;
   white-space: nowrap !important;
+  flex: none !important;
 }
 
-.reader-progress .ticks {
-  display: flex !important;
-  flex: 1 !important;
-  gap: 4px !important;
-  align-items: center !important;
-  height: 18px !important;
+.reader-progress [data-vn-scrubber] {
+  flex: 1 1 auto !important;
+  min-width: 40px !important;
+  max-width: 175px !important;
 }
 
-[data-vn-controls].reader-action-row,
-.reader-action-row {
-  position: static !important;
-  top: auto !important;
-  bottom: auto !important;
-  left: auto !important;
-  right: auto !important;
-  transform: none !important;
-  margin: 0 !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  display: grid !important;
-  grid-template-columns: minmax(32px, 0.65fr) repeat(4, minmax(38px, 1fr)) minmax(52px, 0.98fr) !important;
-  gap: 3px !important;
-  align-items: center !important;
-  width: 100% !important;
-  padding: 0 !important;
-}
-
-[data-vn-controls] > [data-vn-control],
-.reader-action-row > .action {
-  position: static !important;
-  top: auto !important;
-  left: auto !important;
-  right: auto !important;
-  bottom: auto !important;
-  transform: none !important;
-  min-width: 0 !important;
-  width: 100% !important;
-  padding: 0 2px !important;
-  height: 42px !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 2px !important;
-  flex-direction: column !important;
-  border-radius: 12px !important;
-  background: transparent !important;
-  border: 0 !important;
-  color: #ecf6ed !important;
-  box-shadow: none !important;
-  cursor: pointer !important;
-}
-
-[data-vn-controls] [data-vn-control-label] {
-  display: block !important;
-  font-size: 9px !important;
-  line-height: 1 !important;
-  letter-spacing: 0.006em !important;
-  opacity: 0.85 !important;
-}
-
-[data-vn-controls] [data-vn-control-icon] svg,
-.reader-action-row > .action svg {
-  width: 17px !important;
-  height: 17px !important;
-  flex: 0 0 auto !important;
-}
-
-[data-vn-continue].action.advance,
-.reader-action-row > .action.advance {
+/* Previous & Continue buttons integrated inside dialogue card at bottom left & right */
+[data-vn-controls] > [data-vn-control="previous"].nav-step-btn {
   position: absolute !important;
-  right: 16px !important;
-  top: 6px !important;
-  height: 32px !important;
-  width: 32px !important;
-  min-width: 32px !important;
-  min-height: 32px !important;
-  display: flex !important;
-  justify-content: center !important;
-  align-items: center !important;
-  flex-direction: row !important;
-  border-radius: 50% !important;
-  background: var(--lime) !important;
-  border: 1px solid var(--lime) !important;
-  color: #1a2c1d !important;
-  font-weight: 700 !important;
+  left: 10px !important;
+  right: auto !important;
+  bottom: calc(70px + env(safe-area-inset-bottom, 0px)) !important;
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
   padding: 0 !important;
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.55), 0 2px 10px rgba(220, 238, 173, 0.35) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 50% !important;
+  background: rgba(14, 30, 24, 0.92) !important;
+  border: 1px solid rgba(160, 205, 185, 0.3) !important;
+  color: #edf3ea !important;
   cursor: pointer !important;
+  z-index: 45 !important;
+  transition: background 0.16s ease, transform 0.16s ease, border-color 0.16s ease !important;
+}
+
+[data-vn-controls] > [data-vn-control="previous"].nav-step-btn:hover:not(:disabled) {
+  background: rgba(35, 75, 57, 0.95) !important;
+  border-color: #dcebad !important;
+}
+
+[data-vn-continue].nav-step-btn,
+[data-vn-continue].action.advance {
+  position: absolute !important;
+  right: 10px !important;
+  left: auto !important;
+  bottom: calc(70px + env(safe-area-inset-bottom, 0px)) !important;
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 50% !important;
+  background: #dcebad !important;
+  border: 1px solid #dcebad !important;
+  color: #11241c !important;
+  cursor: pointer !important;
+  font-weight: 700 !important;
+  z-index: 45 !important;
+  box-shadow: 0 2px 10px rgba(220, 238, 173, 0.35) !important;
+  transition: background 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease !important;
+}
+
+[data-vn-continue].nav-step-btn:hover:not(:disabled),
+[data-vn-continue].action.advance:hover:not(:disabled) {
+  background: #ecf8cd !important;
+  transform: scale(1.06) !important;
 }
 
 [data-vn-continue]::before {
   display: none !important;
 }
 
-/* Reader Dialogue Box position */
-[data-vn-dialogue] {
+/* Dialogue Restore Button (when minimized) */
+[data-vn-show-text],
+.caption-restore {
   position: absolute !important;
-  z-index: 22 !important;
-  left: 15px !important;
-  right: 15px !important;
-  bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
-  height: var(--caption-height, 142px) !important;
-  padding: 18px 14px 8px !important;
+  bottom: calc(70px + env(safe-area-inset-bottom, 0px)) !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 50% !important;
+  background: rgba(8, 18, 15, 0.92) !important;
+  border: 1px solid rgba(160, 205, 185, 0.35) !important;
+  color: #dcebad !important;
+  display: grid !important;
+  place-items: center !important;
+  cursor: pointer !important;
+  z-index: 50 !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
+  transition: all 0.2s ease !important;
+}
+
+[data-vn-show-text]:hover,
+.caption-restore:hover {
+  background: rgba(18, 38, 30, 0.96) !important;
+  border-color: #dcebad !important;
+  transform: translateX(-50%) scale(1.08) !important;
+}
+
+/* Hide Reader Top Header when Workspace or Dossier is Open so they never overlap */
+[data-vn-shell][data-vn-workspace] [data-vn-reader-header],
+[data-vn-root][data-vn-workspace] [data-vn-reader-header],
+[data-vn-workspace-open="true"] [data-vn-reader-header],
+[data-vn-shell][data-vn-dossier-open="true"] [data-vn-reader-header],
+[data-vn-root][data-vn-dossier-open="true"] [data-vn-reader-header],
+[data-vn-dossier-open="true"] [data-vn-reader-header] {
+  display: none !important;
+}
+
+/* Hide stray reference icon and legacy auto/skip controls from bottom row */
+[data-vn-controls] > [data-vn-control="references"],
+[data-vn-controls] > [data-vn-references],
+[data-vn-controls] > [data-vn-control="auto"],
+[data-vn-controls] > [data-vn-control="skip"] {
+  display: none !important;
+}
+
+/* =========================================================================
+   INTERACTION SECTION ("What do you do?") - Cohesive Aperture Theme
+   ========================================================================= */
+
+[data-vn-interaction] {
+  position: absolute !important;
+  inset: auto 14px calc(var(--caption-height, 142px) + 82px + env(safe-area-inset-bottom, 0px)) 14px !important;
+  z-index: 24 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 10px !important;
+  max-width: 600px !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+  background: transparent !important;
+  pointer-events: none !important;
+}
+
+[data-vn-interaction] > * {
+  pointer-events: auto !important;
+}
+
+[data-vn-interaction-heading] {
+  text-align: center !important;
+  margin-bottom: 2px !important;
+}
+
+[data-vn-interaction-title] {
+  font-family: Georgia, serif !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  color: #dcebad !important;
+  margin: 0 0 2px !important;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7) !important;
+}
+
+[data-vn-interaction-hint] {
+  font-size: 11px !important;
+  color: #9cb5a8 !important;
+  margin: 0 !important;
+}
+
+[data-vn-input-form] {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  width: 100% !important;
+  background: rgba(11, 24, 18, 0.92) !important;
+  border: 1px solid rgba(160, 205, 185, 0.28) !important;
+  border-radius: 14px !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  padding: 10px 12px !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45) !important;
+  box-sizing: border-box !important;
+}
+
+[data-vn-input] {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  min-height: 48px !important;
+  max-height: 120px !important;
+  background: rgba(6, 14, 11, 0.8) !important;
+  border: 1px solid rgba(160, 205, 185, 0.22) !important;
+  border-radius: 10px !important;
+  color: #f5f9f2 !important;
+  font: 14px/1.5 system-ui, -apple-system, sans-serif !important;
+  padding: 8px 10px !important;
+  resize: vertical !important;
+}
+
+[data-vn-input]:focus {
+  outline: 2px solid #dcebad !important;
+  border-color: #dcebad !important;
+}
+
+[data-vn-input-form] button[type="submit"] {
+  align-self: flex-end !important;
+  padding: 6px 18px !important;
+  border-radius: 999px !important;
+  background: #dcebad !important;
+  color: #11241c !important;
+  font-weight: 700 !important;
+  font-size: 12px !important;
+  border: 0 !important;
+  cursor: pointer !important;
+  transition: transform 0.15s ease, background 0.15s ease !important;
+}
+
+[data-vn-input-form] button[type="submit"]:hover {
+  background: #ecf8cd !important;
+  transform: translateY(-1px) !important;
+}
+
+[data-vn-choice-list] {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  width: 100% !important;
+  list-style: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+[data-vn-choice-list] button {
+  width: 100% !important;
+  padding: 10px 14px !important;
+  background: rgba(11, 24, 18, 0.92) !important;
+  border: 1px solid rgba(160, 205, 185, 0.28) !important;
+  border-radius: 12px !important;
+  color: #f5f9f2 !important;
+  font-size: 13.5px !important;
+  text-align: left !important;
+  cursor: pointer !important;
+  backdrop-filter: blur(12px) !important;
+  transition: background 0.15s ease, border-color 0.15s ease !important;
+}
+
+[data-vn-choice-list] button:hover {
+  background: rgba(35, 75, 57, 0.95) !important;
+  border-color: #dcebad !important;
 }
 
 /* Resume notice suppressed in clean reader */
@@ -2040,12 +2264,14 @@ body.theme-light aside[data-vn-workspace],
   color: #172721 !important;
 }
 
-[data-workspace-heading] {
+[data-workspace-heading],
+aside[data-vn-workspace] > header {
   height: 56px !important;
   min-height: 56px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
+  gap: 10px !important;
   padding: 0 16px !important;
   background: rgba(17, 35, 28, 0.94) !important;
   border-bottom: 1px solid rgba(220, 238, 217, 0.14) !important;
@@ -2053,41 +2279,82 @@ body.theme-light aside[data-vn-workspace],
   -webkit-backdrop-filter: blur(16px) !important;
   color: #f4f8ee !important;
   z-index: 2 !important;
+  box-sizing: border-box !important;
 }
 
-:is(body.theme-light, [data-aperture-mode="light"], [data-vn-shell][data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-workspace-heading] {
+:is(body.theme-light, [data-aperture-mode="light"], [data-vn-shell][data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-workspace-heading], aside[data-vn-workspace] > header) {
   background: rgba(238, 243, 229, 0.96) !important;
   border-bottom: 1px solid rgba(35, 75, 57, 0.16) !important;
   color: #152c22 !important;
 }
 
+[data-workspace-heading] > div,
+aside[data-vn-workspace] > header > div {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+[data-workspace-title],
 [data-workspace-heading] h2 {
   font-family: Georgia, serif !important;
   font-size: 17px !important;
-  font-weight: 650 !important;
+  font-weight: 700 !important;
   margin: 0 !important;
   color: #f4f8ee !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 
-:is(body.theme-light, [data-aperture-mode="light"], [data-vn-shell][data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-workspace-heading] h2 {
+:is(body.theme-light, [data-aperture-mode="light"], [data-vn-shell][data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-workspace-title], [data-workspace-heading] h2) {
   color: #152c22 !important;
 }
 
-[data-workspace-heading] button {
-  color: #eaf1e3 !important;
+[data-workspace-subtitle] {
+  font-size: 10px !important;
+  color: #9cb5a8 !important;
+  margin: 2px 0 0 !important;
+  letter-spacing: 0.04em !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 
-:is(body.theme-light, [data-aperture-mode="light"], [data-vn-shell][data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-workspace-heading] button {
+:is(body.theme-light, [data-aperture-mode="light"], [data-vn-shell][data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-workspace-subtitle] {
+  color: #385b4b !important;
+}
+
+[data-workspace-back],
+.workspace-back-btn,
+[data-workspace-close] {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  min-height: 34px !important;
+  border-radius: 50% !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(220, 238, 217, 0.18) !important;
+  color: #edf3ea !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  transition: background 0.15s ease, border-color 0.15s ease !important;
+}
+
+[data-workspace-back]:hover,
+.workspace-back-btn:hover,
+[data-workspace-close]:hover {
+  background: rgba(220, 238, 177, 0.16) !important;
+  border-color: #dcebad !important;
+}
+
+:is(body.theme-light, [data-aperture-mode="light"], [data-vn-shell][data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-workspace-back], .workspace-back-btn, [data-workspace-close]) {
+  background: rgba(0, 0, 0, 0.05) !important;
+  border-color: rgba(35, 75, 57, 0.18) !important;
   color: #1a3327 !important;
-}
-  font-size: 16px !important;
-  font-weight: 600 !important;
-  margin: 0 !important;
-  color: inherit !important;
-}
-
-[data-workspace-heading] p {
-  display: none !important;
 }
 
 [data-workspace-content] {
@@ -2302,11 +2569,9 @@ body.theme-light [data-surface="settings"]:before,
   background: repeating-radial-gradient(ellipse at 105% 88%, transparent 0 44px, rgba(45, 78, 62, 0.08) 45px, transparent 46px) !important;
 }
 
-/* Hide reader header when workspace or dossier is open to prevent overlapping */
+/* Hide reader header when workspace is open */
 [data-vn-shell][data-vn-workspace] [data-vn-reader-header],
-[data-vn-shell][data-vn-dossier-open="true"] [data-vn-reader-header],
-[data-vn-workspace] [data-vn-reader-header],
-[data-vn-dossier-open="true"] [data-vn-reader-header] {
+[data-vn-workspace] [data-vn-reader-header] {
   display: none !important;
 }
 

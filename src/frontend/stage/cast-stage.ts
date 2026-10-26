@@ -40,6 +40,7 @@ export class CastStage {
   }else if(!enabled){this.observer?.disconnect();this.observer=null;}
   this.refresh();
  }
+ toggle():void{this.collapsed=!this.collapsed;this.refresh();}
  set(turn:TurnView|null,index:number):AssetView|null{this.turn=turn;this.index=index;return this.refresh();}
  private refresh():AssetView|null{
   const rootNode = typeof this.host.getRootNode === 'function' ? this.host.getRootNode() : this.host.ownerDocument;

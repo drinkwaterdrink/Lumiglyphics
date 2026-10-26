@@ -41,6 +41,7 @@ export class ReaderWorkspace {
   private readonly title: HTMLElement;
   private readonly subtitle: HTMLElement;
   private readonly closeButton: HTMLButtonElement;
+  private readonly backButton: HTMLButtonElement;
   private readonly more: HTMLElement;
   private readonly search: HTMLDialogElement;
   private readonly input: HTMLInputElement;
@@ -52,6 +53,7 @@ export class ReaderWorkspace {
   private readonly abort = new AbortController();
   private readonly tools = new Map<ReaderDestination, WorkspaceSurface>();
   private current: ReaderDestination | 'more' | null = null;
+  private historyStack: (ReaderDestination | 'more')[] = [];
   private changing = false;
   private destroyed = false;
   private opener: HTMLElement | null = null;
@@ -79,6 +81,7 @@ export class ReaderWorkspace {
         <small data-reader-caption-small data-reader-caption>Visual novel</small>
       </div>
       <div data-reader-header-actions class="topbar-actions" style="display:flex;align-items:center;gap:5px;margin-left:auto">
+        <button type="button" class="round-ghost" data-action="cast-toggle" title="Cast portraits" aria-label="Show cast portraits">${APERTURE_ICONS.cast}</button>
         <button type="button" class="round-ghost" data-action="panels-toggle" title="Panels" aria-label="Open Panels">${APERTURE_ICONS.panel}</button>
         <button type="button" class="round-ghost" data-action="voice-toggle" title="Voice controls" aria-label="Voice controls">${APERTURE_ICONS.speaker}</button>
         <button type="button" class="round-ghost" data-action="studio-toggle" title="Art Studio" aria-label="Open Art Studio">${APERTURE_ICONS.image}</button>
@@ -88,7 +91,7 @@ export class ReaderWorkspace {
       </div>
     </header>
     <aside data-vn-workspace hidden aria-label="Reader workspace" tabindex="-1">
-      <header data-workspace-heading><div><p data-workspace-subtitle></p><h2 data-workspace-title></h2></div><button type="button" data-workspace-close aria-label="Close workspace and return to reader">${readerIcon('close')}</button></header>
+      <header data-workspace-heading><button type="button" class="workspace-back-btn" data-workspace-back aria-label="Go back to previous screen" title="Back">${APERTURE_ICONS.back}</button><div><p data-workspace-subtitle></p><h2 data-workspace-title></h2></div><button type="button" data-workspace-close aria-label="Close workspace and return to reader">${readerIcon('close')}</button></header>
       <div data-workspace-content></div>
     </aside>
     <div class="route-bar" hidden aria-label="Quick navigation bar">
@@ -97,6 +100,7 @@ export class ReaderWorkspace {
         <div class="route-step">CHAPTER IV / YOUR WORLD</div>
       </div>
       <div class="route-actions">
+        <button type="button" data-route-bar-action="back" aria-label="Go back to previous screen" title="Back">${APERTURE_ICONS.back}</button>
         <button type="button" data-route-bar-action="read" aria-label="Return to reading">${APERTURE_ICONS.book}</button>
         <button type="button" data-route-bar-action="settings" class="dock-settings" aria-label="Open extension settings" title="Extension settings">${APERTURE_ICONS.settings}<span>Settings</span></button>
         <button type="button" data-route-bar-action="menu" class="menu-key">${APERTURE_ICONS.spark} Navigate</button>
@@ -129,7 +133,9 @@ export class ReaderWorkspace {
     this.nav = q('[data-vn-navigation]'); this.header = q('[data-vn-reader-header]');
     this.panel = q('[data-vn-workspace]'); this.content = q('[data-workspace-content]');
     this.title = q('[data-workspace-title]'); this.subtitle = q('[data-workspace-subtitle]');
-    this.closeButton = q('[data-workspace-close]'); this.search = q('[data-reader-command]');
+    this.closeButton = q('[data-workspace-close]');
+    this.backButton = q('[data-workspace-back]');
+    this.search = q('[data-reader-command]');
     this.input = q('[data-reader-command] input'); this.results = q('[data-reader-command-results]');
     this.apertureOverlay = q('.aperture-overlay');
     this.routeBar = q('.route-bar');
@@ -148,6 +154,7 @@ export class ReaderWorkspace {
       else if (destinations.some(d => d.id === id)) this.open(id as ReaderDestination, b);
     }, {signal});
     this.closeButton.addEventListener('click', () => this.close(), {signal});
+    this.backButton.addEventListener('click', () => this.goBack(), {signal});
     q('[data-reader-focus]').addEventListener('click', () => this.setFocus(this.shell.dataset.vnReadingFocus !== 'true'), {signal});
     q('[data-reader-search]').addEventListener('click', () => this.openSearch(), {signal});
     this.input.addEventListener('input', () => this.renderSearch(), {signal});
@@ -167,6 +174,9 @@ export class ReaderWorkspace {
     this.panel.addEventListener('wheel', event => event.stopPropagation(), {signal, passive: true});
 
     // Topbar Actions
+    q('[data-action="cast-toggle"]')?.addEventListener('click', () => {
+      this.shell.dispatchEvent(new CustomEvent("lumiglyphics:cast-toggle", { bubbles: true }));
+    }, {signal});
     q('[data-action="panels-toggle"]')?.addEventListener('click', () => {
       const panelLayer = this.shell.querySelector<HTMLElement>('[data-vn-panel-layer]');
       if (panelLayer) {
@@ -197,6 +207,7 @@ export class ReaderWorkspace {
       if (!target) return;
       const act = target.dataset.routeBarAction;
       if (act === 'read') this.close();
+      else if (act === 'back') this.goBack();
       else if (act === 'settings') this.open('settings');
       else if (act === 'menu') this.toggleAperture();
     }, {signal});
@@ -289,8 +300,22 @@ export class ReaderWorkspace {
     }
     this.content.replaceChildren();
   }
-  open(id: ReaderDestination, trigger?: HTMLElement): void {
+  goBack(): void {
+    const currentTool = this.current && this.current !== 'more' ? this.tools.get(this.current) : null;
+    if (currentTool?.back && currentTool.back()) return;
+    if (this.historyStack.length > 0) {
+      const prev = this.historyStack.pop()!;
+      if (prev === 'more') this.openMore(this.closeButton, false);
+      else this.open(prev, undefined, false);
+    } else {
+      this.close();
+    }
+  }
+  open(id: ReaderDestination, trigger?: HTMLElement, pushHistory = true): void {
     if (this.destroyed || this.changing || this.current === id) return;
+    if (pushHistory && this.current && this.current !== id) {
+      this.historyStack.push(this.current);
+    }
     if(this.shell.dataset.vnReadingFocus === 'true') this.setFocus(false);
     this.changing = true;
     try {
@@ -312,8 +337,11 @@ export class ReaderWorkspace {
   }
   /** A tool's own close button should close its workspace, not a different destination. */
   toolClosed(id: ReaderDestination): void { if (!this.changing && this.current === id) this.close(); }
-  private openMore(trigger: HTMLElement): void {
+  private openMore(trigger: HTMLElement, pushHistory = true): void {
     if (this.destroyed || this.changing) return;
+    if (pushHistory && this.current && this.current !== 'more') {
+      this.historyStack.push(this.current);
+    }
     this.changing = true;
     try {
       this.pause(); this.opener = trigger; this.release(); this.current = 'more';
@@ -332,6 +360,7 @@ export class ReaderWorkspace {
   }
   close(restoreFocus = true): void {
     if (this.changing || !this.current) return;
+    this.historyStack = [];
     this.changing = true;
     try {
       this.release(); this.current = null; this.panel.hidden = true; delete this.shell.dataset.vnWorkspace;
