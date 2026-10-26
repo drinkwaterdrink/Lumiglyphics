@@ -1,7 +1,7 @@
 import { SETTINGS_PAGES } from '../settings/routes.js';
 
 export type ReaderDestination = 'story' | 'artwork' | 'history' | 'settings';
-export type ReaderWorkspaceAction = 'previous' | 'next' | 'history' | 'passageLog' | 'lens' | 'cast' | 'settings' | 'panels' | 'voice' | 'artwork' | 'library' | 'workspace' | 'backToChat' | 'focus' | 'search';
+export type ReaderWorkspaceAction = 'previous' | 'next' | 'history' | 'lens' | 'cast' | 'settings' | 'panels' | 'voice' | 'artwork' | 'library' | 'workspace' | 'backToChat' | 'focus' | 'search';
 export type ReaderWorkspaceActions = Partial<Record<ReaderWorkspaceAction, (open?: boolean) => void>>;
 export interface WorkspaceSurface {
   element: HTMLElement;
@@ -13,7 +13,7 @@ export interface WorkspaceSurface {
   back?: () => boolean;
 }
 const destinations: ReadonlyArray<{ id: ReaderDestination; label: string; icon: string; hint: string }> = [
-  { id: 'story', label: 'World Lens', icon: 'world', hint: 'Source-aware people, places & revealed documents' },
+  { id: 'story', label: 'World Lens', icon: 'world', hint: 'Source-aware locations, items & revealed documents' },
   { id: 'artwork', label: 'Art Studio', icon: 'art', hint: 'Review, replace & inspect real story pictures' },
   { id: 'history', label: 'History', icon: 'history', hint: 'Earlier passages & saved pictures' },
   { id: 'settings', label: 'Settings', icon: 'settings', hint: 'Every preference, in one place' },
@@ -100,17 +100,16 @@ export class ReaderWorkspace {
       <button type="button" data-aperture-action="lens" aria-label="World Lens" title="Open World Lens">${readerIcon('world')}<span>World Lens</span></button>
       <button type="button" data-aperture-action="cast" aria-label="Character Folio" title="Open Character Folio">${readerIcon('cast')}<span>Cast</span></button>
       <button type="button" data-aperture-action="settings" aria-label="Settings" title="Open Settings">${readerIcon('settings')}<span>Settings</span></button>
-      <button type="button" data-aperture-action="next" aria-label="Continue reading" title="Continue reading">${readerIcon('back')}<span>Continue</span></button>
+      <button type="button" data-aperture-action="next" aria-label="Next passage" title="Continue to the next passage">${readerIcon('back')}<span>Next</span></button>
     </nav>
     <dialog data-aperture-iris-dialog aria-label="APERTURE navigation"><form method="dialog"><header><div><p>APERTURE</p><h2>Choose a space</h2></div><button type="submit" aria-label="Close navigation">${readerIcon('close')}</button></header></form>
       <div data-iris-grid>
         <button type="button" data-iris-action="workspace">${readerIcon('more')}<span><b>Workspace</b><small>Story spaces and connected tools</small></span></button>
-        <button type="button" data-iris-action="lens">${readerIcon('world')}<span><b>World Lens</b><small>Revealed people, places, objects & documents</small></span></button>
-        <button type="button" data-iris-action="cast">${readerIcon('cast')}<span><b>Cast / Folios</b><small>Character facts grounded in the story</small></span></button>
+        <button type="button" data-iris-action="lens">${readerIcon('world')}<span><b>World Lens</b><small>Revealed locations, items & documents</small></span></button>
+        <button type="button" data-iris-action="cast">${readerIcon('cast')}<span><b>Character Folio</b><small>Character facts grounded in the story</small></span></button>
         <button type="button" data-iris-action="artwork">${readerIcon('art')}<span><b>Art Studio</b><small>Review, replace, queue & inspect artwork</small></span></button>
         <button type="button" data-iris-action="library">${readerIcon('history')}<span><b>Image Library</b><small>Browse saved story pictures</small></span></button>
         <button type="button" data-iris-action="history">${readerIcon('read')}<span><b>History</b><small>Earlier passages and saved artwork</small></span></button>
-        <button type="button" data-iris-action="passageLog">${readerIcon('history')}<span><b>Passage log</b><small>Earlier paragraphs in this reply</small></span></button>
         <button type="button" data-iris-action="panels">${readerIcon('panels')}<span><b>Panels</b><small>Show or capture pinned cards</small></span></button>
         <button type="button" data-iris-action="voice">${readerIcon('voice')}<span><b>Voice / TTS</b><small>Optional paragraph speech</small></span></button>
         <button type="button" data-iris-action="settings">${readerIcon('settings')}<span><b>Settings</b><small>All existing routes and preferences</small></span></button>
@@ -135,12 +134,11 @@ export class ReaderWorkspace {
     this.more = document.createElement('div'); this.more.dataset.readerMore = '';
     this.more.innerHTML = `<header data-more-heading><p>APERTURE · YOUR STORY</p><h2>Workspace</h2><small>Open a story-grounded tool, then return to this exact passage.</small><div data-workspace-current><span>NOW READING</span><b data-workspace-current-caption>Visual novel</b></div></header><div data-more-grid></div>`;
     const menu: Array<{label:string;hint:string;icon:string;action:ReaderWorkspaceAction}> = [
-      {label:'World Lens',hint:'People, places, items and revealed documents',icon:'world',action:'lens'},
+      {label:'World Lens',hint:'Places, items and revealed documents',icon:'world',action:'lens'},
       {label:'Character Folio',hint:'Story-grounded character facts and history',icon:'cast',action:'cast'},
       {label:'Art Studio',hint:'Review, generate, replace and queue pictures',icon:'art',action:'artwork'},
       {label:'Image Library',hint:'Browse saved story illustrations',icon:'history',action:'library'},
       {label:'History',hint:'Return to earlier passages and versions',icon:'read',action:'history'},
-      {label:'Passage log',hint:'Read earlier paragraphs in this reply',icon:'history',action:'passageLog'},
       {label:'Panels',hint:'Open pinned cards and scene panels',icon:'panels',action:'panels'},
       {label:'Voice & TTS',hint:'Play available speech or open voice settings',icon:'voice',action:'voice'},
       {label:'Settings',hint:'All 22 settings pages and saved preferences',icon:'settings',action:'settings'},
@@ -157,13 +155,13 @@ export class ReaderWorkspace {
     const note = document.createElement('p'); note.textContent = 'Navigation never generates content. Close returns to the current passage.'; this.more.append(note);
     q('[data-workspace-world]').addEventListener('click', () => this.open('story'), {signal});
     q('[data-workspace-art]').addEventListener('click', () => this.open('artwork'), {signal});
-    q('[data-workspace-history]').addEventListener('click', () => this.open('history'), {signal});
+    q('[data-workspace-history]').addEventListener('click', () => this.runAction('history'), {signal});
     this.nav.addEventListener('click', event => {
       const b = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-reader-destination]') : null;
       if (!b) return;
       const id = b.dataset.readerDestination;
       if (id === 'read') this.close(); else if (id === 'more') this.openMore(b);
-      else if (destinations.some(d => d.id === id)) this.open(id as ReaderDestination, b);
+      else if (destinations.some(d => d.id === id)) { if (id === 'history') this.runAction('history'); else this.open(id as ReaderDestination, b); }
     }, {signal});
     this.closeButton.addEventListener('click', () => this.close(), {signal});
     q('[data-workspace-navigation]').addEventListener('click', () => this.openIris(), {signal});
@@ -220,6 +218,12 @@ export class ReaderWorkspace {
 
   setActions(actions: ReaderWorkspaceActions): void { this.actions = { ...actions }; }
 
+  setCurrentPresentation(title: string, subtitle: string): void {
+    if (!this.current || this.current === 'more') return;
+    this.title.textContent = title; this.subtitle.textContent = subtitle;
+    this.shell.querySelector<HTMLElement>('[data-workspace-footer-title]')!.textContent = title;
+  }
+
   attachSpeechDock(element:HTMLElement):void {
     element.dataset.vnSpeechEmbedded='true';
     this.voiceControls.replaceChildren(element);
@@ -251,18 +255,13 @@ export class ReaderWorkspace {
     if (action === 'next') {
       this.reader.shadowRoot?.querySelector<HTMLButtonElement>('[data-vn-continue]')?.click(); return;
     }
-    if (action === 'history') { this.open('history'); return; }
-    if (action === 'passageLog') {
-      if(this.current)this.close(false);
-      this.reader.shadowRoot?.querySelector<HTMLButtonElement>('[data-vn-control="log"]')?.click();
-      return;
-    }
+    if (action === 'history') { if (this.actions.history) this.actions.history(); else this.open('history'); return; }
     if (action === 'workspace') { this.openMore(this.irisButton); return; }
     if (action === 'lens' || action === 'cast') {
       this.open('story');
       const folio = action === 'cast';
       this.title.textContent = folio ? 'Character Folio' : 'World Lens';
-      this.subtitle.textContent = folio ? 'Known characters, grounded in the story' : 'Source-aware people, places & revealed documents';
+      this.subtitle.textContent = folio ? 'Known characters, grounded in the story' : 'Source-aware locations, items & revealed documents';
       this.shell.querySelector<HTMLElement>('[data-workspace-footer-title]')!.textContent = folio ? 'Character Folio' : 'World Lens';
       if (folio) this.actions.cast?.();
       else if (this.actions.lens) this.actions.lens();

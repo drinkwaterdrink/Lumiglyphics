@@ -7,6 +7,8 @@ const browser=await chromium.launch({headless:true});
 try{
  const page=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'});const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.route('**/api/**',route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="120" height="160"><rect width="120" height="160" fill="#74638b"/></svg>'}));await page.goto(`http://127.0.0.1:${server.port}`);
  const cast=page.locator('[data-cast-art]');
+ const readableColors=await cast.locator('[data-cast-workspace]').evaluate(el=>({text:getComputedStyle(el).color,muted:getComputedStyle(el.querySelector('small')!).color}));
+ assert.deepEqual(readableColors,{text:'rgb(39, 53, 48)',muted:'rgb(100, 113, 107)'},'Characters & places controls prefer the active settings palette over stale legacy light-theme tokens');
  await cast.getByLabel('Search characters').fill('Dana');
  assert.equal(await cast.locator('[data-cast-roster-row]').count(),1,'roster filters real records');
  await cast.getByRole('button',{name:/Open Dana Kessler/}).click();

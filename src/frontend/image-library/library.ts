@@ -32,7 +32,7 @@ export class ImageLibrary{
  private cursor=0;private pending='';private timer:ReturnType<typeof setTimeout>|undefined;
  private page:ImageLibraryPage|null=null;private pages:string[]=['0:0'];private pageIndex=0;
  private expanded=new Set<string>();private browseScroll=0;
- private mode:'story'|'images'='images';private opener:HTMLElement|null=null;
+ private mode:'story'|'images'='images';private entryKind:'history'|'library'='library';private opener:HTMLElement|null=null;
  private selected:LibraryImageView|null=null;private zoom=1;private opened=false;
  private searchTimer:ReturnType<typeof setTimeout>|undefined;
  constructor(mount:HTMLElement,private send:(request:FrontendRequest)=>void,private onOpen:(open:boolean)=>void){
@@ -82,7 +82,20 @@ export class ImageLibrary{
    }
   });
  }
- useHistoryEntry(){this.mode='story';this.el<HTMLElement>('[data-library-launch]').hidden=true;this.el<HTMLElement>('h2').textContent='History';this.el<HTMLElement>('[data-browse] .note').textContent='Saved replies and pictures from this chat. Browsing never generates images.';this.el<HTMLElement>('[data-library-close]').setAttribute('aria-label','Close history');this.el<HTMLElement>('[data-library-close]').title='Close history';this.el<HTMLElement>('[data-refresh]').setAttribute('aria-label','Refresh history');this.el<HTMLElement>('[data-refresh]').title='Refresh history';this.el<HTMLElement>('[data-detail-back]').setAttribute('aria-label','Back to history');this.el<HTMLElement>('[data-detail-back]').title='Back to history';}
+ useHistoryEntry(){this.mode='story';this.entryKind='history';this.el<HTMLElement>('[data-library-launch]').hidden=true;this.syncPresentation();}
+ private syncPresentation():void{
+  const history=this.entryKind==='history',title=history?'History':'Image Library';
+  this.el<HTMLElement>('h2').textContent=title;
+  this.el<HTMLElement>('[data-browse] .note').textContent=history?'Earlier replies and saved pictures from this chat. Browsing never generates images.':'Saved story illustrations from this chat. Browsing never generates images.';
+  this.el<HTMLElement>('[data-history-views]').hidden=!history;
+  if(history)this.el<HTMLElement>('[data-history-views]').setAttribute('aria-label','History views');else this.el<HTMLElement>('[data-history-views]').removeAttribute('aria-label');
+  this.el<HTMLElement>('[data-library-close]').setAttribute('aria-label',`Close ${history?'history':'image library'}`);
+  this.el<HTMLElement>('[data-library-close]').title=`Close ${history?'history':'image library'}`;
+  this.el<HTMLElement>('[data-refresh]').setAttribute('aria-label',`Refresh ${history?'history':'image library'}`);
+  this.el<HTMLElement>('[data-refresh]').title=`Refresh ${history?'history':'image library'}`;
+  this.el<HTMLElement>('[data-detail-back]').setAttribute('aria-label',`Back to ${history?'history':'image library'}`);
+  this.el<HTMLElement>('[data-detail-back]').title=`Back to ${history?'history':'image library'}`;
+ }
  private el<T extends HTMLElement>(selector:string):T{return this.root.querySelector<T>(selector)!;}
  private status(text:string){this.el<HTMLElement>('[data-library-status]').textContent=text;}
  setContext(turn:TurnView|null,cursor:number){
@@ -96,11 +109,13 @@ export class ImageLibrary{
  }
  getElement():HTMLElement{return this.host;}
  isOpen():boolean{return this.opened;}
- openWorkspace():void{this.open(this.mode);}
+ openWorkspace():void{this.open('story');}
+ openLibrary():void{this.open('images');}
+ isLibraryView():boolean{return this.entryKind==='library';}
  backWithinWorkspace():boolean{if(!this.selected)return false;this.back();return true;}
  setDocked():void{this.el('section').removeAttribute('aria-modal');}
  private cancel(cancelSearch=true){clearTimeout(this.timer);if(cancelSearch)clearTimeout(this.searchTimer);this.pending='';}
- open(mode: 'story'|'images' = 'images', opener?:HTMLElement){if(!this.context)return;this.mode=mode;this.opener=opener??null;this.opener?.setAttribute('aria-expanded','true');this.pages=['0:0'];this.pageIndex=0;if(!this.context)return;this.opened=true;this.host.dataset.open='true';this.el<HTMLElement>('section').hidden=false;this.el<HTMLElement>('[data-library-launch]').setAttribute('aria-expanded','true');this.onOpen(true);this.load();this.el<HTMLButtonElement>('[data-library-close]').focus();}
+ open(mode: 'story'|'images' = 'images', opener?:HTMLElement){this.mode=mode;this.entryKind=mode==='story'?'history':'library';this.syncPresentation();this.opener=opener??null;this.opener?.setAttribute('aria-expanded','true');this.pages=['0:0'];this.pageIndex=0;this.opened=true;this.host.dataset.open='true';this.el<HTMLElement>('section').hidden=false;this.el<HTMLButtonElement>('[data-library-launch]').setAttribute('aria-expanded','true');this.onOpen(true);if(this.context)this.load();else{this.status(mode==='story'?'Open a chat to browse its saved replies and pictures.':'Open a chat to browse its saved story illustrations.');this.el<HTMLElement>('[data-retry]').hidden=true;this.updatePaging();}if(!this.host.dataset.vnWorkspaceTool)this.el<HTMLButtonElement>('[data-library-close]').focus();}
  close(){this.opener?.setAttribute('aria-expanded','false');delete this.host.dataset.open;this.cancel();this.selected=null;this.el<HTMLImageElement>('[data-full-image]').removeAttribute('src');this.el<HTMLElement>('section').hidden=true;this.el<HTMLElement>('[data-library-launch]').setAttribute('aria-expanded','false');if(this.opened){this.opened=false;this.onOpen(false);(this.opener??this.el<HTMLButtonElement>('[data-library-launch]')).focus();}}
  private load(){
   if(!this.context||!this.opened)return;this.cancel();this.page=null;this.back(false);this.el<HTMLElement>('[data-grid]').replaceChildren();this.status(this.mode==='story'?'Loading story history…':'Loading saved pictures…');this.el<HTMLElement>('[data-retry]').hidden=true;

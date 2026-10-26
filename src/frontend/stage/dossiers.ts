@@ -4,7 +4,7 @@ import {stripTextEffectTags} from '../../shared/text-effects.js';
 import {availableInteractionVerbs,buildInteractionDraft,mergeInteractionDraft} from '../../shared/scene-interactions.js';
 import {referenceEntriesWithHistory,dossierWithHistory,selectEarlierDossier,normalizeTooltipPreferences,linkEntityMentions,eligibleEntities,selectReaderDossier,entityOverride,type TooltipPreferences} from '../../shared/dossiers.js';
 import {referenceHistoryFor,type ReferenceHistory} from '../../shared/reference-history.js';
-import {ReaderPresentationSchema,samePresentationTurn,type ReaderPresentation,type PresentationEntity} from '../../shared/presentation-entities.js';
+import {ReaderPresentationSchema,samePresentationTurn,type ReaderPresentation,type PresentationEntity,type PresentationSnapshot} from '../../shared/presentation-entities.js';
 import type {AssetView,TurnView} from '../../protocol.js';
 import {applyEntityAnchors,clearEntityAnchors,protectedEntityRanges} from './entity-anchors.js';
 import {DossierCard,DOSSIER_CSS,DOCKED_DOSSIER_CSS,type DossierVisualContext} from './dossier-card.js';
@@ -30,9 +30,17 @@ export class StageDossiers {
  private openReferences(kind:'all'|'cast'='all'):void {
   const snapshot=this.snapshot();this.hold();
   const all=snapshot?referenceEntriesWithHistory(snapshot,this.prefs,this.history):[];
-  const entries=kind==='cast'?all.filter(entry=>entry.entity.kind==='npc'):all;
-  const empty=kind==='cast'?'No established character folios are available at this reading position.':'No established references are available at this reading position.';
-  this.card.openTray(entries,this.tray,(id,trigger)=>this.open(id,trigger),!this.prefs.enabled?'Story references are disabled. You can enable them in Reading settings.':!snapshot?empty:!entries.length?empty:this.prefs.rememberReferences&&this.history?.truncated?'Showing a limited recent selection of earlier descriptions.':undefined,entity=>this.resolveVisualContext(entity)); }
+  const entries=kind==='cast'?all.filter(entry=>entry.entity.kind==='npc'):all.filter(entry=>entry.entity.kind!=='npc');
+  const empty=kind==='cast'?'No established character folios are available at this reading position.':'No established locations, items or revealed documents are available at this reading position.';
+  const note=!this.prefs.enabled?'Story references are disabled. You can enable them in Reading settings.':!snapshot?empty:!entries.length?empty:this.prefs.rememberReferences&&this.history?.truncated?'Showing a limited recent selection of earlier descriptions.':undefined;
+  const visual=(entity:PresentationEntity)=>this.resolveVisualContext(entity);
+  if(kind==='cast')this.card.openCastFolios(entries,this.tray,(id,trigger)=>this.open(id,trigger,true),note,visual,id=>snapshot?this.castSummary(id,snapshot):undefined);
+  else this.card.openTray(entries,this.tray,(id,trigger)=>this.open(id,trigger),note,visual,'World Lens');
+ }
+ private castSummary(id:string,snapshot:PresentationSnapshot):string|undefined {
+  const dossier=id.startsWith('earlier:')?selectEarlierDossier(id,snapshot,this.prefs,this.history):selectReaderDossier(id,snapshot,this.prefs.detail,this.prefs.fieldGroups,this.prefs.maxFactsPerEntity);
+  return dossier?.facts[0]?.value??dossier?.earlier?.[0]?.reference.value;
+ }
  openCastFolios():void{this.openReferences('cast');}
  openWorldLens():void{this.openReferences('all');}
  isOpen():boolean{return this.card.isOpen();}
@@ -121,11 +129,12 @@ export class StageDossiers {
    onSelectEntity:(targetId,trigger)=>this.open(targetId,trigger),
   };
  }
- private open(id:string,trigger:HTMLElement):void {
+ private open(id:string,trigger:HTMLElement,completeProfile=false):void {
   const snapshot=this.snapshot();if(!snapshot)return;
   const current=eligibleEntities(snapshot.entities,this.prefs,snapshot.at.key.chatId).some(e=>e.id===id);
-  const selected=current?selectReaderDossier(id,snapshot,this.prefs.detail,this.prefs.fieldGroups,this.prefs.maxFactsPerEntity):selectEarlierDossier(id,snapshot,this.prefs,this.history);
-  if(!selected)return;const dossier=current?dossierWithHistory(selected,snapshot,this.prefs,this.history):selected;this.hold();this.dossierOpen?.(true);
+  const dossierPrefs=completeProfile?{...this.prefs,detail:'expanded' as const}:this.prefs;
+  const selected=current?selectReaderDossier(id,snapshot,dossierPrefs.detail,dossierPrefs.fieldGroups,dossierPrefs.maxFactsPerEntity):selectEarlierDossier(id,snapshot,dossierPrefs,this.history);
+  if(!selected)return;const dossier=current?dossierWithHistory(selected,snapshot,dossierPrefs,this.history):selected;this.hold();this.dossierOpen?.(true);
   const actions=current&&this.prefs.actionsEnabled&&this.draftTools?{
    drafts:availableInteractionVerbs(dossier.entity,snapshot).flatMap(verb=>{const draft=buildInteractionDraft(dossier.entity,verb,snapshot);return draft?[draft]:[];}),
    current:this.draftTools.current,focus:this.draftTools.focus,

@@ -106,6 +106,20 @@ try {
     await page.screenshot({ path: `.cache/mobile-reader/${viewport.width}.png` });
     await page.close();
   }
+  const aperture = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, reducedMotion: "reduce" });
+  await aperture.goto(`http://127.0.0.1:${server.port}/`);
+  await aperture.evaluate(() => (window as any).readingFixture.stage.setApertureMode(true, "light"));
+  for (const selector of ["[data-reader-panels]", "[data-reader-voice]", "[data-reader-artwork]", "[data-aperture-iris]", "[data-vn-exit]"]) {
+    const button = aperture.locator(selector), box = await button.boundingBox();
+    assert.ok(box && box.width >= 42 && box.height >= 42, `${selector} remains visible and tappable in the APERTURE header`);
+  }
+  const next = aperture.locator('[data-aperture-action="next"]');
+  assert.equal(await next.getAttribute("aria-label"), "Next passage");
+  assert.ok((await next.boundingBox())!.width >= 62, "Next receives the prominent dock action treatment");
+  assert.equal(await aperture.locator('[data-aperture-dock] button').count(), 6, "reader rail retains previous, history, references, settings and next controls");
+  await aperture.screenshot({ path: ".cache/mobile-reader/aperture-controls.png" });
+  await aperture.close();
+
   const settings = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await settings.goto(`http://127.0.0.1:${server.port}/settings?setupDone&noSpeech`);
   await settings.evaluate(() => (window as any).settingsFixture.panel.openPage("appearance"));

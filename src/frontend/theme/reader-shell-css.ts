@@ -128,7 +128,9 @@ aside[data-vn-workspace] { position:absolute;right:var(--reader-gap);top:calc(va
 [data-vn-shell][data-vn-aperture="true"] [data-aperture-dock] button:hover { color:var(--vn-shell-accent);background:color-mix(in srgb,var(--vn-shell-accent) 12%,transparent); }
 [data-vn-shell][data-vn-aperture="true"] [data-aperture-dock] button[aria-current="page"] { color:var(--vn-shell-accent);background:color-mix(in srgb,var(--vn-shell-accent) 13%,transparent); }
 [data-vn-shell][data-vn-aperture="true"] [data-aperture-dock] svg { width:19px;height:19px;flex:none; }
+[data-vn-shell][data-vn-aperture="true"] [data-aperture-action="next"] { flex:1.25 1 0;min-width:62px;border-color:var(--vn-shell-accent);background:var(--vn-shell-accent);color:var(--vn-shell-accent-contrast);box-shadow:0 3px 12px rgba(15,27,22,.14); }
 [data-vn-shell][data-vn-aperture="true"] [data-aperture-action="next"] svg { transform:rotate(180deg); }
+[data-vn-shell][data-vn-aperture="true"] [data-aperture-action="next"]:hover { border-color:var(--vn-shell-accent);background:color-mix(in srgb,var(--vn-shell-accent) 88%,white);color:var(--vn-shell-accent-contrast); }
 [data-vn-shell][data-vn-aperture="true"] aside[data-vn-workspace] {
  left:0;right:0;top:calc(58px + env(safe-area-inset-top));bottom:0;width:auto;border:0;border-radius:0;
  background:radial-gradient(ellipse at 88% 5%,color-mix(in srgb,var(--vn-shell-accent) 9%,transparent),transparent 28rem),var(--vn-shell-panel);
@@ -294,8 +296,6 @@ aside[data-vn-workspace] { position:absolute;right:var(--reader-gap);top:calc(va
  [data-vn-shell][data-vn-aperture="true"] [data-reader-caption] { max-width:clamp(6rem,30vw,9rem);font-size:11px; }
  [data-vn-shell][data-vn-aperture="true"] [data-vn-reader-wordmark] { font-size:7px;letter-spacing:.14em; }
  [data-vn-shell][data-vn-aperture="true"] [data-reader-header-actions] { gap:3px!important; }
- [data-vn-shell][data-vn-aperture="true"] [data-reader-panels],
- [data-vn-shell][data-vn-aperture="true"] [data-reader-artwork] { display:none!important; }
  [data-vn-shell][data-vn-aperture="true"][data-vn-aperture-theme] [data-vn-reader-header] button { width:42px;height:42px;min-width:42px;min-height:42px; }
  [data-vn-shell][data-vn-aperture="true"][data-vn-aperture-theme] [data-vn-reader-header] [data-vn-exit] { width:42px;min-width:42px;height:42px;min-height:42px; }
  [data-vn-shell][data-vn-aperture="true"] [data-reader-voice-panel] { top:calc(58px + env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right)); }

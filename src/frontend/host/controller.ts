@@ -679,7 +679,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   panels.setApertureMode(configRef.current?.apertureMode ?? true);
   const imageLibrary=new ImageLibrary(stage.panelMount,request=>ctx.sendToBackend(request),open=>{
     imageLibraryOpen=open;
-    if(open){stage.panelMount.dataset.vnHistoryOpen='true';stage.workspace.open('history');}else{delete stage.panelMount.dataset.vnHistoryOpen;stage.workspace.toolClosed('history');}
+    if(open){stage.panelMount.dataset.vnHistoryOpen='true';stage.workspace.open('history');stage.workspace.setCurrentPresentation(imageLibrary.isLibraryView()?'Image Library':'History',imageLibrary.isLibraryView()?'Saved story illustrations from this chat':'Earlier passages and saved pictures from this chat');}else{delete stage.panelMount.dataset.vnHistoryOpen;stage.workspace.toolClosed('history');}
     if(open){stage.toggleSkip(false);stage.holdAutoPlay();}else if(active)stage.checkAutoPlay();
   });
   imageLibrary.useHistoryEntry();
@@ -693,7 +693,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   stage.workspace.register('artwork',{element:imageStudio.getElement(),hideAtHome:true,enter:()=>imageStudio.open(),leave:()=>imageStudio.close()});
   stage.workspace.register('history',{element:imageLibrary.getElement(),hideAtHome:true,enter:()=>{if(!imageLibrary.isOpen())imageLibrary.openWorkspace();},leave:()=>imageLibrary.close(),back:()=>imageLibrary.backWithinWorkspace()});
   imageLibrary.setDocked();
-  imageStudio.setLibraryOpener(()=>imageLibrary.open('images'));
+  imageStudio.setLibraryOpener(()=>imageLibrary.openLibrary());
   const panelRequests = new Map<string, { resolve: (template: string) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   panels.onResolveTemplate = (template) => new Promise((resolve, reject) => {
     const requestId = createUiId();
@@ -807,7 +807,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   // own save path). Profile/voice listing happens only on explicit button
   // presses inside it (metadata calls, no synthesis).
   const speechTransport = createSpeechTransport();
-  stage.workspace.register('settings',{element:settingsPanel.getElement(),hideAtHome:!settingsHandle,enter:()=>{settingsPanel.getElement().dataset.vnWorkspaceTool='settings';},leave:()=>{settingsPanel.leaveWorkspace();delete settingsPanel.getElement().dataset.vnWorkspaceTool;},back:()=>settingsPanel.backWithinWorkspace()});
+  stage.workspace.register('settings',{element:settingsPanel.getElement(),hideAtHome:!settingsHandle,enter:()=>{settingsPanel.getElement().dataset.vnWorkspaceTool='settings';settingsPanel.openSection('home');},leave:()=>{settingsPanel.leaveWorkspace();delete settingsPanel.getElement().dataset.vnWorkspaceTool;},back:()=>settingsPanel.backWithinWorkspace()});
   delete settingsPanel.getElement().dataset.vnWorkspaceTool;
   stage.workspace.onSettingsPage=page=>settingsPanel.openPage(page,{focus:true});
   stage.workspace.setActions({
@@ -815,7 +815,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     cast: () => stage.openCastFolios(),
     panels: () => panels.toggleOpen(),
     voice: open => { speechDock.setPopoverOpen(Boolean(open)); },
-    library: () => imageLibrary.open('images'),
+    history: () => imageLibrary.openWorkspace(),
+    library: () => imageLibrary.openLibrary(),
     backToChat: () => stage.panelMount.querySelector<HTMLButtonElement>('[data-vn-exit]')?.click(),
   });
   const speechSettings = new SpeechSettingsSection({

@@ -7,7 +7,7 @@ const state={chatId:'story-a',actions:[] as Array<{chatId:string,action:CastArtA
  library:{version:1,characters:[{entityId:'dana',name:'Dana Kessler',artRevision:0,description:'Learned description',preferredVariantId:null,variants:[],setup:{appearance:'Human woman, dark angled bob, green eyes.',aliases:['DK'],outfits:[{id:'coat',name:'Everyday coat',description:'Blue wool coat.'}],defaultOutfitId:'coat'}},{entityId:'mira',name:'Mira',artRevision:0,description:'Auburn hair.',preferredVariantId:null,variants:[]}]} as CastArtLibrary,
  places:{version:1,locations:[{entityId:'library',name:'Old library',artRevision:0,description:'Tall shelves and warm lamps.',preferredVariantId:'v',variants:[{id:'v',imageId:'place',requestFingerprint:'r',environmentFingerprint:'e',approved:true,createdAt:'2026-10-17'}]}]} as LocationArtLibrary};
 document.body.style.cssText='margin:0;background:#18191d;color:#ececf0;font:16px system-ui';
-const mount=document.createElement('main');mount.style.cssText='padding:16px;max-width:1000px;margin:auto;--lumiverse-primary:#b7a1ef;--lumiverse-text:#ececf0;--lumiverse-text-muted:#c1becb;--lumiverse-bg-elevated:#24252c;--lumiverse-border:#484953';document.body.append(mount);
+const mount=document.createElement('main');mount.style.cssText='padding:16px;max-width:1000px;margin:auto;--lumiverse-primary:#b7a1ef;--lumiverse-text:#fff;--lumiverse-text-muted:#fff;--lumiverse-bg-elevated:#fff;--lumiverse-border:#eee;--set-accent:#587c70;--set-text:#273530;--set-muted:#64716b;--set-surface:#f8f7f1;--set-field:#fffefa;--set-border:rgba(62,91,79,.22)';document.body.append(mount);
 const cast=new CastArtPanel(()=>state.chatId,(chatId,requestId,action)=>{
  state.actions.push({chatId,action});
  const reply=()=>{

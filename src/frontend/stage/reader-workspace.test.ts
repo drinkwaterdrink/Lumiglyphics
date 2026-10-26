@@ -23,10 +23,26 @@ describe('reader-first same-instance workspace',()=>{
   expect(shell.querySelectorAll('[data-workspace-world],[data-workspace-art],[data-workspace-history],[data-workspace-settings],[data-workspace-read],[data-workspace-navigate]').length).toBe(6);
   workspace.close(false);expect((reader as unknown as {inert:boolean}).inert).toBe(false);expect(reader.getAttribute('aria-hidden')).toBe(null);
   workspace.open('settings');shell.querySelector('[data-workspace-navigate]')!.click();expect(workspace.destination).toBe('more');
-  expect(shell.querySelectorAll('[data-more-action]').map(n=>n.getAttribute('data-more-action'))).toEqual(['lens','cast','artwork','library','history','passageLog','panels','voice','settings','search','focus','backToChat']);
-  expect(shell.querySelector('[data-iris-action="passageLog"]')?.textContent).toContain('Passage log');
+  expect(shell.querySelectorAll('[data-more-action]').map(n=>n.getAttribute('data-more-action'))).toEqual(['lens','cast','artwork','library','history','panels','voice','settings','search','focus','backToChat']);
+  expect(shell.querySelector('[data-iris-action="passageLog"]')).toBeNull();
   expect(shell.querySelector('[data-iris-action="workspace"]')?.textContent).toContain('Workspace');
   workspace.close(false);
+ });
+ test('Image Library and History keep separate presentation even while sharing saved-image data',()=>{
+  const surface=new FakeNode('div');shell.append(surface);workspace.register('history',{element:el(surface),enter:()=>calls.push('history-enter'),leave:()=>calls.push('history-leave')});
+  workspace.setActions({library:()=>{workspace.open('history');workspace.setCurrentPresentation('Image Library','Saved story illustrations from this chat');},history:()=>{workspace.open('history');workspace.setCurrentPresentation('History','Earlier passages and saved pictures from this chat');}});
+  shell.querySelector('[data-reader-destination="more"]')!.click();shell.querySelector('[data-more-action="library"]')!.click();
+  expect(workspace.destination).toBe('history');expect(shell.querySelector('[data-workspace-title]')?.textContent).toBe('Image Library');
+  shell.querySelector('[data-workspace-history]')!.click();
+  expect(workspace.destination).toBe('history');expect(shell.querySelector('[data-workspace-title]')?.textContent).toBe('History');
+  expect(shell.querySelector('[data-more-action="passageLog"]')).toBeNull();
+ });
+ test('Cast action opens its own named destination and Settings remains a separate route',()=>{
+  const surface=new FakeNode('div');shell.append(surface);workspace.register('story',{element:el(surface),enter:()=>calls.push('world-enter'),leave:()=>calls.push('world-leave')});
+  workspace.setActions({cast:()=>calls.push('cast')});shell.querySelector('[data-reader-destination="more"]')!.click();shell.querySelector('[data-more-action="cast"]')!.click();
+  expect(workspace.destination).toBe('story');expect(shell.querySelector('[data-workspace-title]')?.textContent).toBe('Character Folio');expect(calls.at(-1)).toBe('cast');
+  workspace.open('settings');expect(workspace.destination).toBe('settings');expect(shell.querySelector('[data-workspace-title]')?.textContent).toBe('Settings');
+  expect(shell.querySelector('[data-aperture-action="next"]')?.getAttribute('aria-label')).toBe('Next passage');
  });
  test('speech controls open only on demand inside the unified voice surface',()=>{
   const speech=new FakeNode('div');workspace.attachSpeechDock(el(speech));workspace.setSpeechAvailable(true);workspace.setActions({voice:open=>calls.push(`voice:${open}`)});
