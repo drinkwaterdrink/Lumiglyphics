@@ -1,8 +1,8 @@
 import { SETTINGS_PAGES } from '../settings/routes.js';
 
 export type ReaderDestination = 'story' | 'artwork' | 'history' | 'settings';
-export type ReaderWorkspaceAction = 'previous' | 'next' | 'history' | 'lens' | 'cast' | 'settings' | 'panels' | 'voice' | 'artwork' | 'library' | 'backToChat';
-export type ReaderWorkspaceActions = Partial<Record<ReaderWorkspaceAction, () => void>>;
+export type ReaderWorkspaceAction = 'previous' | 'next' | 'history' | 'lens' | 'cast' | 'settings' | 'panels' | 'voice' | 'artwork' | 'library' | 'workspace' | 'backToChat' | 'focus' | 'search';
+export type ReaderWorkspaceActions = Partial<Record<ReaderWorkspaceAction, (open?: boolean) => void>>;
 export interface WorkspaceSurface {
   element: HTMLElement;
   /** Hide legacy launchers at home; native host Settings remains available. */
@@ -49,6 +49,11 @@ export class ReaderWorkspace {
   private readonly dock: HTMLElement;
   private readonly iris: HTMLDialogElement;
   private readonly irisButton: HTMLButtonElement;
+  private exitButton?: HTMLButtonElement;
+  private readonly voiceButton: HTMLButtonElement;
+  private readonly voicePanel: HTMLElement;
+  private readonly voiceStatus: HTMLElement;
+  private readonly voiceControls: HTMLElement;
   private readonly search: HTMLDialogElement;
   private readonly input: HTMLInputElement;
   private readonly results: HTMLElement;
@@ -74,29 +79,32 @@ export class ReaderWorkspace {
       <span data-vn-navigation-brand aria-label="Lumiglyphics">✧</span>
       <button type="button" data-reader-destination="read" aria-label="Read" aria-current="page">${readerIcon('read')}<span>Read</span></button>
       ${destinations.map(d => `<button type="button" data-reader-destination="${d.id}" aria-label="${d.label}" aria-expanded="false">${readerIcon(d.icon)}<span>${d.label}</span>${d.id === 'artwork' ? '<span data-reader-attention hidden></span>' : ''}</button>`).join('')}
-      <button type="button" data-reader-destination="more" aria-label="More" aria-expanded="false">${readerIcon('more')}<span>More</span></button>
+      <button type="button" data-reader-destination="more" aria-label="Workspace" aria-expanded="false">${readerIcon('more')}<span>Workspace</span></button>
     </nav>
-    <header data-vn-reader-header><div><span data-vn-reader-wordmark>LUMIGLYPHICS</span><span data-reader-caption>Visual novel</span></div><div data-reader-header-actions>
+    <header data-vn-reader-header><div data-reader-brand><span data-vn-reader-wordmark>LUMIGLYPHICS · APERTURE</span><span data-reader-caption>Visual novel</span></div><div data-reader-header-actions>
       <button type="button" data-reader-panels aria-label="Open Panels" title="Open pinned panels">${readerIcon('panels')}<span>Panels</span></button>
-      <button type="button" data-reader-voice aria-label="Voice and TTS" title="Voice and TTS">${readerIcon('voice')}<span>Voice</span></button>
+      <button type="button" data-reader-voice aria-label="Voice and TTS controls" aria-expanded="false" title="Voice and TTS">${readerIcon('voice')}<span>Voice</span></button>
       <button type="button" data-reader-artwork aria-label="Open Art Studio" title="Open Art Studio">${readerIcon('art')}<span>Art Studio</span></button>
       <button type="button" data-aperture-iris aria-label="Open APERTURE navigation" aria-expanded="false" title="Open navigation">${readerIcon('more')}<span>Navigate</span></button>
       <button type="button" data-reader-search aria-label="Find menus and settings" title="Find menus and settings (Ctrl/Command K)">${readerIcon('search')}<span>Find menus</span><kbd>⌘ K</kbd></button>
       <button type="button" data-reader-focus aria-label="Focus reading" aria-pressed="false" title="Focus reading">${readerIcon('focus')}<span>Focus</span></button></div></header>
+    <section data-reader-voice-panel hidden aria-label="Paragraph speech controls"><div data-voice-panel-copy><b>Listen to this passage</b><small data-voice-panel-status>Speech settings determine which controls are available.</small></div><div data-voice-controls></div><button type="button" data-voice-settings>Speech settings</button></section>
     <aside data-vn-workspace hidden aria-label="Reader workspace" tabindex="-1">
-      <header data-workspace-heading><div><p data-workspace-subtitle></p><h2 data-workspace-title></h2></div><button type="button" data-workspace-close aria-label="Close workspace and return to reader">${readerIcon('close')}</button></header>
+      <header data-workspace-heading><button type="button" data-workspace-close aria-label="Close workspace and return to reader" title="Return to reading">${readerIcon('back')}</button><div><p data-workspace-subtitle></p><h2 data-workspace-title></h2></div><button type="button" data-workspace-navigation aria-label="Open APERTURE navigation" title="Open navigation">${readerIcon('more')}</button></header>
       <div data-workspace-content></div>
+      <footer data-workspace-footer><div><span data-workspace-footer-kicker>APERTURE · CURRENT STORY</span><b data-workspace-footer-title></b><small data-workspace-footer-context></small></div><nav aria-label="Main menu"><button type="button" data-workspace-read>${readerIcon('read')}<span>Read</span></button><button type="button" data-workspace-world>${readerIcon('world')}<span>World</span></button><button type="button" data-workspace-art>${readerIcon('art')}<span>Art</span></button><button type="button" data-workspace-history>${readerIcon('history')}<span>History</span></button><button type="button" data-workspace-settings>${readerIcon('settings')}<span>Settings</span></button><button type="button" data-workspace-navigate>${readerIcon('more')}<span>Workspace</span></button></nav></footer>
     </aside>
     <nav data-aperture-dock aria-label="Reader controls">
-      <button type="button" data-aperture-action="previous" aria-label="Previous passage" title="Previous passage">${readerIcon('back')}</button>
-      <button type="button" data-aperture-action="history" aria-label="History" title="History">${readerIcon('history')}<span>History</span></button>
-      <button type="button" data-aperture-action="lens" aria-label="World Lens" title="World Lens">${readerIcon('world')}<span>Lens</span></button>
-      <button type="button" data-aperture-action="cast" aria-label="Cast and Folios" title="Cast and Folios">${readerIcon('cast')}<span>Cast</span></button>
-      <button type="button" data-aperture-action="settings" aria-label="Settings" title="Settings">${readerIcon('settings')}</button>
-      <button type="button" data-aperture-action="next" aria-label="Next passage" title="Next passage">${readerIcon('back')}</button>
+      <button type="button" data-aperture-action="previous" aria-label="Previous passage" title="Previous passage">${readerIcon('back')}<span>Previous</span></button>
+      <button type="button" data-aperture-action="history" aria-label="History" title="Open History">${readerIcon('history')}<span>History</span></button>
+      <button type="button" data-aperture-action="lens" aria-label="World Lens" title="Open World Lens">${readerIcon('world')}<span>World Lens</span></button>
+      <button type="button" data-aperture-action="cast" aria-label="Character Folio" title="Open Character Folio">${readerIcon('cast')}<span>Cast</span></button>
+      <button type="button" data-aperture-action="settings" aria-label="Settings" title="Open Settings">${readerIcon('settings')}<span>Settings</span></button>
+      <button type="button" data-aperture-action="next" aria-label="Continue reading" title="Continue reading">${readerIcon('back')}<span>Continue</span></button>
     </nav>
     <dialog data-aperture-iris-dialog aria-label="APERTURE navigation"><form method="dialog"><header><div><p>APERTURE</p><h2>Choose a space</h2></div><button type="submit" aria-label="Close navigation">${readerIcon('close')}</button></header></form>
       <div data-iris-grid>
+        <button type="button" data-iris-action="workspace">${readerIcon('more')}<span><b>Workspace</b><small>Story spaces and connected tools</small></span></button>
         <button type="button" data-iris-action="lens">${readerIcon('world')}<span><b>World Lens</b><small>Revealed people, places, objects & documents</small></span></button>
         <button type="button" data-iris-action="cast">${readerIcon('cast')}<span><b>Cast / Folios</b><small>Character facts grounded in the story</small></span></button>
         <button type="button" data-iris-action="artwork">${readerIcon('art')}<span><b>Art Studio</b><small>Review, replace, queue & inspect artwork</small></span></button>
@@ -105,6 +113,8 @@ export class ReaderWorkspace {
         <button type="button" data-iris-action="panels">${readerIcon('panels')}<span><b>Panels</b><small>Show or capture pinned cards</small></span></button>
         <button type="button" data-iris-action="voice">${readerIcon('voice')}<span><b>Voice / TTS</b><small>Optional paragraph speech</small></span></button>
         <button type="button" data-iris-action="settings">${readerIcon('settings')}<span><b>Settings</b><small>All existing routes and preferences</small></span></button>
+        <button type="button" data-iris-action="search">${readerIcon('search')}<span><b>Find a setting</b><small>Search menus and preferences</small></span></button>
+        <button type="button" data-iris-action="focus">${readerIcon('focus')}<span><b>Focus reading</b><small>Quiet the reader chrome until you need it again</small></span></button>
         <button type="button" data-iris-action="backToChat">${readerIcon('back')}<span><b>Back to Chat</b><small>Leave the reader using host navigation</small></span></button>
       </div><p data-iris-note>Close returns to this passage. Back to Chat leaves the reader.</p>
     </dialog>
@@ -114,17 +124,38 @@ export class ReaderWorkspace {
     this.nav = q('[data-vn-navigation]'); this.header = q('[data-vn-reader-header]');
     this.panel = q('[data-vn-workspace]'); this.content = q('[data-workspace-content]');
     this.dock = q('[data-aperture-dock]'); this.iris = q<HTMLDialogElement>('[data-aperture-iris-dialog]'); this.irisButton = q<HTMLButtonElement>('[data-aperture-iris]');
+    this.voiceButton=q<HTMLButtonElement>('[data-reader-voice]');this.voicePanel=q('[data-reader-voice-panel]');this.voiceStatus=q('[data-voice-panel-status]');this.voiceControls=q('[data-voice-controls]');
+    const exit=shell.querySelector<HTMLButtonElement>('[data-vn-exit]');
+    if(exit){this.exitButton=exit;this.header.querySelector<HTMLElement>('[data-reader-header-actions]')?.append(exit);}
     this.title = q('[data-workspace-title]'); this.subtitle = q('[data-workspace-subtitle]');
     this.closeButton = q('[data-workspace-close]'); this.search = q('[data-reader-command]');
     this.input = q('[data-reader-command] input'); this.results = q('[data-reader-command-results]');
-    this.more = document.createElement('div'); this.more.dataset.readerMore = '';
-    for (const d of destinations) {
-      const b = document.createElement('button'); b.type = 'button';
-      b.innerHTML = `${readerIcon(d.icon)}<span>${d.label}<small>${d.hint}</small></span>`;
-      b.addEventListener('click', () => this.open(d.id, b)); this.more.append(b);
-    }
-    const note = document.createElement('p'); note.textContent = 'Close returns to this passage. Back to chat leaves the reader.'; this.more.append(note);
     const signal = this.abort.signal;
+    this.more = document.createElement('div'); this.more.dataset.readerMore = '';
+    this.more.innerHTML = `<header data-more-heading><p>APERTURE · YOUR STORY</p><h2>Workspace</h2><small>Open a story-grounded tool, then return to this exact passage.</small><div data-workspace-current><span>NOW READING</span><b data-workspace-current-caption>Visual novel</b></div></header><div data-more-grid></div>`;
+    const menu: Array<{label:string;hint:string;icon:string;action:ReaderWorkspaceAction}> = [
+      {label:'World Lens',hint:'People, places, items and revealed documents',icon:'world',action:'lens'},
+      {label:'Character Folio',hint:'Story-grounded character facts and history',icon:'cast',action:'cast'},
+      {label:'Art Studio',hint:'Review, generate, replace and queue pictures',icon:'art',action:'artwork'},
+      {label:'Image Library',hint:'Browse saved story illustrations',icon:'history',action:'library'},
+      {label:'History',hint:'Return to earlier passages and versions',icon:'read',action:'history'},
+      {label:'Panels',hint:'Open pinned cards and scene panels',icon:'panels',action:'panels'},
+      {label:'Voice & TTS',hint:'Play available speech or open voice settings',icon:'voice',action:'voice'},
+      {label:'Settings',hint:'All 22 settings pages and saved preferences',icon:'settings',action:'settings'},
+      {label:'Find a setting',hint:'Search menus and preferences',icon:'search',action:'search'},
+      {label:'Focus reading',hint:'Quiet the reader chrome until you need it',icon:'focus',action:'focus'},
+      {label:'Back to Chat',hint:'Leave the reader using Lumiverse navigation',icon:'back',action:'backToChat'},
+    ];
+    const grid=this.more.querySelector<HTMLElement>('[data-more-grid]')!;
+    for (const item of menu) {
+      const b = document.createElement('button'); b.type = 'button'; b.dataset.moreAction=item.action;
+      b.innerHTML = `${readerIcon(item.icon)}<span><b>${item.label}</b><small>${item.hint}</small></span><span aria-hidden="true">›</span>`;
+      b.addEventListener('click', () => this.runAction(item.action)); grid.append(b);
+    }
+    const note = document.createElement('p'); note.textContent = 'Navigation never generates content. Close returns to the current passage.'; this.more.append(note);
+    q('[data-workspace-world]').addEventListener('click', () => this.open('story'), {signal});
+    q('[data-workspace-art]').addEventListener('click', () => this.open('artwork'), {signal});
+    q('[data-workspace-history]').addEventListener('click', () => this.open('history'), {signal});
     this.nav.addEventListener('click', event => {
       const b = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-reader-destination]') : null;
       if (!b) return;
@@ -133,7 +164,11 @@ export class ReaderWorkspace {
       else if (destinations.some(d => d.id === id)) this.open(id as ReaderDestination, b);
     }, {signal});
     this.closeButton.addEventListener('click', () => this.close(), {signal});
-    this.irisButton.addEventListener('click', () => this.openIris(), {signal});
+    q('[data-workspace-navigation]').addEventListener('click', () => this.openIris(), {signal});
+    q('[data-workspace-navigate]').addEventListener('click', event => this.openMore(event.currentTarget as HTMLElement), {signal});
+    q('[data-workspace-read]').addEventListener('click', () => this.close(), {signal});
+    q('[data-workspace-settings]').addEventListener('click', () => this.open('settings'), {signal});
+    this.irisButton.addEventListener('click', () => this.shell.dataset.vnReadingFocus==='true' ? this.setFocus(false) : this.openIris(), {signal});
     this.iris.addEventListener('cancel', () => this.irisButton.setAttribute('aria-expanded', 'false'), {signal});
     this.iris.addEventListener('close', () => this.irisButton.setAttribute('aria-expanded', 'false'), {signal});
     this.iris.addEventListener('click', event => {
@@ -149,6 +184,13 @@ export class ReaderWorkspace {
     q('[data-reader-panels]').addEventListener('click', () => this.runAction('panels'), {signal});
     q('[data-reader-voice]').addEventListener('click', () => this.runAction('voice'), {signal});
     q('[data-reader-artwork]').addEventListener('click', () => this.runAction('artwork'), {signal});
+    q('[data-voice-settings]').addEventListener('click', () => { this.setVoiceOpen(false); this.open('settings'); this.onSettingsPage?.('speech'); }, {signal});
+    shell.addEventListener('pointerdown',event=>{
+      if(this.voicePanel.hidden)return;
+      const target=event.target;
+      if(target instanceof Node&&(this.voicePanel.contains(target)||this.voiceButton.contains(target)))return;
+      this.setVoiceOpen(false);
+    },{signal});
     q('[data-reader-focus]').addEventListener('click', () => this.setFocus(this.shell.dataset.vnReadingFocus !== 'true'), {signal});
     q('[data-reader-search]').addEventListener('click', () => this.openSearch(), {signal});
     this.input.addEventListener('input', () => this.renderSearch(), {signal});
@@ -176,8 +218,26 @@ export class ReaderWorkspace {
 
   setActions(actions: ReaderWorkspaceActions): void { this.actions = { ...actions }; }
 
+  attachSpeechDock(element:HTMLElement):void {
+    element.dataset.vnSpeechEmbedded='true';
+    this.voiceControls.replaceChildren(element);
+  }
+
+  setSpeechAvailable(available:boolean):void {
+    this.voiceStatus.textContent=available?'Use the real speech controls below. Playback follows the current passage.':'Speech is off. Enable and configure it in Speech settings.';
+    this.voicePanel.dataset.available=String(available);
+  }
+
+  private setVoiceOpen(open:boolean):void {
+    this.voicePanel.hidden=!open;
+    this.voiceButton.setAttribute('aria-expanded',String(open));
+    this.shell.dataset.vnVoiceOpen=String(open);
+    this.actions.voice?.(open);
+  }
+
   private openIris(): void {
     if (this.destroyed || this.iris.open || typeof this.iris.showModal !== 'function') return;
+    this.setVoiceOpen(false);
     this.pause(); this.irisButton.setAttribute('aria-expanded', 'true'); this.iris.showModal();
     this.iris.querySelector<HTMLButtonElement>('[data-iris-action]')?.focus();
   }
@@ -189,11 +249,16 @@ export class ReaderWorkspace {
     if (action === 'next') {
       this.reader.shadowRoot?.querySelector<HTMLButtonElement>('[data-vn-continue]')?.click(); return;
     }
-    if (action === 'history') {
-      this.reader.shadowRoot?.querySelector<HTMLButtonElement>('[data-vn-control="log"]')?.click(); return;
-    }
+    if (action === 'history') { this.open('history'); return; }
+    if (action === 'workspace') { this.openMore(this.irisButton); return; }
     if (action === 'lens' || action === 'cast') {
-      if (this.actions[action]) this.actions[action]!(); else this.open('story'); return;
+      this.open('story');
+      const folio = action === 'cast';
+      this.title.textContent = folio ? 'Character Folio' : 'World Lens';
+      this.subtitle.textContent = folio ? 'Known characters, grounded in the story' : 'Source-aware people, places & revealed documents';
+      this.shell.querySelector<HTMLElement>('[data-workspace-footer-title]')!.textContent = folio ? 'Character Folio' : 'World Lens';
+      if (folio) this.actions.cast?.();
+      else if (this.actions.lens) this.actions.lens();
       return;
     }
     if (action === 'settings') { this.open('settings'); return; }
@@ -212,10 +277,9 @@ export class ReaderWorkspace {
       else this.shell.querySelector<HTMLElement>('[data-vn-panel-layer]')?.shadowRoot?.querySelector<HTMLButtonElement>('.launcher')?.click();
       return;
     }
-    if (action === 'voice') {
-      if (this.actions.voice) this.actions.voice();
-      else { this.open('settings'); this.onSettingsPage?.('speech'); }
-    }
+    if (action === 'voice') { this.setVoiceOpen(Boolean(this.voicePanel.hidden)); return; }
+    if (action === 'focus') { this.setFocus(true); return; }
+    if (action === 'search') { this.openSearch(); }
   }
 
   register(id: ReaderDestination, surface: WorkspaceSurface): void {
@@ -225,6 +289,7 @@ export class ReaderWorkspace {
   }
   get destination(): ReaderDestination | 'more' | null { return this.current; }
   isOpen(): boolean { return this.current !== null; }
+  refreshCoverage(): void { this.syncReader(); }
   private rememberHome(element: HTMLElement): void {
     if (element.parentNode && !this.homes.has(element)) this.homes.set(element, {parent: element.parentNode, next: element.nextSibling});
   }
@@ -241,6 +306,7 @@ export class ReaderWorkspace {
   }
   open(id: ReaderDestination, trigger?: HTMLElement): void {
     if (this.destroyed || this.changing || this.current === id) return;
+    this.setVoiceOpen(false);
     if(this.shell.dataset.vnReadingFocus === 'true') this.setFocus(false);
     this.changing = true;
     try {
@@ -248,7 +314,10 @@ export class ReaderWorkspace {
       this.release(); this.current = id;
       const d = destinations.find(d => d.id === id)!;
       this.title.textContent = d.label; this.subtitle.textContent = d.hint;
-      this.panel.hidden = false; this.shell.dataset.vnWorkspace = id;
+      this.shell.querySelector<HTMLElement>('[data-workspace-footer-title]')!.textContent = d.label;
+      const passage = this.header.querySelector<HTMLElement>('[data-reader-caption]')?.textContent?.trim() || 'Current passage';
+      this.shell.querySelector<HTMLElement>('[data-workspace-footer-context]')!.textContent = `Current passage · ${passage}`;
+      this.panel.hidden = false; this.shell.dataset.vnWorkspace = id;this.syncExitPlacement();
       const tool = this.tools.get(id);
       if (tool) { this.rememberHome(tool.element); this.content.append(tool.element); tool.element.hidden=false;tool.enter(); }
       else { const empty = document.createElement('p'); empty.dataset.workspaceEmpty = ''; empty.textContent = id === 'settings' ? 'Settings are available in the host’s Lumiglyphics settings tab.' : 'There is nothing available here at this reading position yet.'; this.content.append(empty); }
@@ -260,26 +329,37 @@ export class ReaderWorkspace {
   toolClosed(id: ReaderDestination): void { if (!this.changing && this.current === id) this.close(); }
   private openMore(trigger: HTMLElement): void {
     if (this.destroyed || this.changing) return;
+    this.setVoiceOpen(false);
     this.changing = true;
-    try { this.pause(); this.opener = trigger; this.release(); this.current = 'more'; this.title.textContent = 'Your workspace'; this.subtitle.textContent = 'Everything has a place'; this.content.append(this.more); this.panel.hidden = false; this.shell.dataset.vnWorkspace = 'more'; this.syncReader(); this.closeButton.focus({preventScroll:true}); }
+    try { this.pause(); this.opener = trigger; this.release(); this.current = 'more'; this.title.textContent = 'Workspace'; this.subtitle.textContent = 'Your story, all in one place'; this.shell.querySelector<HTMLElement>('[data-workspace-footer-title]')!.textContent = 'Workspace'; this.shell.querySelector<HTMLElement>('[data-workspace-footer-context]')!.textContent = this.header.querySelector<HTMLElement>('[data-reader-caption]')?.textContent?.trim() || 'Current passage'; this.content.append(this.more); this.panel.hidden = false; this.shell.dataset.vnWorkspace = 'more';this.syncExitPlacement(); this.syncReader(); this.closeButton.focus({preventScroll:true}); }
     finally { this.changing = false; }
   }
   close(restoreFocus = true): void {
     if (this.changing || !this.current) return;
     this.changing = true;
-    try { this.release(); this.current = null; this.panel.hidden = true; delete this.shell.dataset.vnWorkspace; this.syncReader();
+    try { this.release(); this.current = null; this.panel.hidden = true; delete this.shell.dataset.vnWorkspace;this.syncExitPlacement(); this.syncReader();
       if (restoreFocus) { if (this.opener?.isConnected && this.opener.getClientRects().length && !this.opener.closest('[hidden]')) this.opener.focus({preventScroll:true}); else this.focusReader(); }
       this.opener = null;
     } finally { this.changing = false; }
   }
   setFocus(enabled: boolean): void {
-    this.close(false); this.shell.dataset.vnReadingFocus = String(enabled);
-    const b = this.header.querySelector<HTMLButtonElement>('[data-reader-focus]')!;
-    b.setAttribute('aria-pressed', String(enabled)); b.setAttribute('aria-label', enabled ? 'Show navigation' : 'Focus reading'); b.title = enabled ? 'Show navigation' : 'Focus reading';
-    b.querySelector('span')!.textContent = enabled ? 'Show navigation' : 'Focus';
+    this.setVoiceOpen(false);this.close(false); this.shell.dataset.vnReadingFocus = String(enabled);
+    const aperture=this.shell.dataset.vnAperture==='true';
+    const b=aperture?this.irisButton:this.header.querySelector<HTMLButtonElement>('[data-reader-focus]')!;
+    b.setAttribute('aria-pressed',String(enabled));b.setAttribute('aria-expanded',String(enabled));
+    b.setAttribute('aria-label',enabled?'Show navigation':aperture?'Open APERTURE navigation':'Focus reading');
+    b.title=enabled?'Show navigation':aperture?'Open navigation':'Focus reading';
+    const label=b.querySelector('span');if(label)label.textContent=enabled?'Show navigation':aperture?'Navigate':'Focus';
     this.focusReader();
   }
-  setCaption(text: string): void { this.header.querySelector<HTMLElement>('[data-reader-caption]')!.textContent = text || 'Visual novel'; }
+  setCaption(text: string): void {
+    const caption=text||'Visual novel';
+    this.header.querySelector<HTMLElement>('[data-reader-caption]')!.textContent=caption;
+    const current=this.more.querySelector<HTMLElement>('[data-workspace-current-caption]');
+    if(current)current.textContent=caption;
+    const footer=this.shell.querySelector<HTMLElement>('[data-workspace-footer-context]');
+    if(footer&&this.current==='more')footer.textContent=caption;
+  }
   setAttention(count: number): void {
     const badge = this.nav.querySelector<HTMLElement>('[data-reader-attention]')!;
     badge.hidden = count <= 0; badge.textContent = String(count); badge.setAttribute('aria-label', `${count} pictures need review`);
@@ -292,14 +372,23 @@ export class ReaderWorkspace {
     const rect=this.shell.getBoundingClientRect(),scale=rect.height>0?this.shell.clientHeight/rect.height:1;
     this.shell.style.setProperty('--reader-keyboard-inset',`${Math.max(0,rect.bottom-viewport.height-viewport.offsetTop)*scale}px`);
   }
-  suspend():void {if(this.search.open)this.search.close();this.close(false);}
+  suspend():void {this.setVoiceOpen(false);if(this.search.open)this.search.close();this.close(false);}
+  private syncExitPlacement():void {
+    if(!this.exitButton)return;
+    const target=this.shell.dataset.vnAperture==='true'&&this.current
+      ?this.panel.querySelector<HTMLElement>('[data-workspace-heading]')
+      :this.header.querySelector<HTMLElement>('[data-reader-header-actions]');
+    target?.append(this.exitButton);
+  }
   private syncReader(): void {
-    const covered = this.isOpen() && Boolean(this.media?.matches);
+    // APERTURE destinations are full-screen pages at every size. The legacy
+    // drawer still covers its reader only on compact viewports.
+    const covered = this.isOpen() && (this.shell.dataset.vnAperture === 'true' || Boolean(this.media?.matches));
     this.reader.inert = covered;
     for(const element of this.shell.querySelectorAll<HTMLElement>('[data-vn-panel-layer],[data-vn-speech-dock]'))element.inert=covered;
     if (covered) this.reader.setAttribute('aria-hidden', 'true'); else this.reader.removeAttribute('aria-hidden');
     for (const b of this.nav.querySelectorAll<HTMLElement>('[data-reader-destination]')) {
-      const active = b.dataset.readerDestination === (this.current ?? 'read') || b.dataset.readerDestination === 'more' && this.media?.matches && (this.current === 'settings' || this.current === 'history');
+      const active = b.dataset.readerDestination === (this.current ?? 'read') || b.dataset.readerDestination === 'more' && this.current === 'more';
       if (active) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
       if (b.dataset.readerDestination !== 'read') b.setAttribute('aria-expanded', String(active));
     }
@@ -312,6 +401,7 @@ export class ReaderWorkspace {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); event.stopPropagation(); this.openSearch(); return; }
     if(event.key==='Tab'&&this.current){this.wrapFocus(event,path[0]);return;}
     if (event.key !== 'Escape') return;
+    if(!this.current&&!this.voicePanel.hidden){event.preventDefault();event.stopPropagation();this.setVoiceOpen(false);this.voiceButton.focus({preventScroll:true});return;}
     if (this.current) { event.preventDefault(); event.stopPropagation(); const tool = this.current !== 'more' ? this.tools.get(this.current) : undefined; if (!tool?.back?.()) this.close(); }
     else if (this.shell.dataset.vnReadingFocus === 'true') { event.preventDefault(); event.stopPropagation(); this.setFocus(false); }
   }
@@ -331,7 +421,7 @@ export class ReaderWorkspace {
   }
   openSearch(): void {
     if (this.destroyed || typeof this.search.showModal !== 'function' || this.search.open) return;
-    this.pause(); this.input.value = ''; this.renderSearch(); this.search.showModal(); this.input.focus();
+    this.setVoiceOpen(false);this.pause(); this.input.value = ''; this.renderSearch(); this.search.showModal(); this.input.focus();
   }
   private renderSearch(): void {
     this.results.replaceChildren();

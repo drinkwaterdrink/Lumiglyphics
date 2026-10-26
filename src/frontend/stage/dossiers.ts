@@ -32,7 +32,7 @@ export class StageDossiers {
   const all=snapshot?referenceEntriesWithHistory(snapshot,this.prefs,this.history):[];
   const entries=kind==='cast'?all.filter(entry=>entry.entity.kind==='npc'):all;
   const empty=kind==='cast'?'No established character folios are available at this reading position.':'No established references are available at this reading position.';
-  this.card.openTray(entries,this.tray,(id,trigger)=>this.open(id,trigger),!this.prefs.enabled?'Story references are disabled. You can enable them in Reading settings.':!snapshot?empty:!entries.length?empty:this.prefs.rememberReferences&&this.history?.truncated?'Showing a limited recent selection of earlier descriptions.':undefined); }
+  this.card.openTray(entries,this.tray,(id,trigger)=>this.open(id,trigger),!this.prefs.enabled?'Story references are disabled. You can enable them in Reading settings.':!snapshot?empty:!entries.length?empty:this.prefs.rememberReferences&&this.history?.truncated?'Showing a limited recent selection of earlier descriptions.':undefined,entity=>this.resolveVisualContext(entity)); }
  openCastFolios():void{this.openReferences('cast');}
  openWorldLens():void{this.openReferences('all');}
  isOpen():boolean{return this.card.isOpen();}

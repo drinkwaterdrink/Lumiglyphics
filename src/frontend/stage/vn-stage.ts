@@ -935,6 +935,7 @@ export class VnStage {
     this.root.dataset.vnApertureAppearance = appearance === "dark" ? "dark" : "light";
     this.panelMount.dataset.vnAperture = enabled ? "true" : "false";
     this.panelMount.dataset.vnApertureTheme = appearance === "dark" ? "dark" : "light";
+    this.workspace?.refreshCoverage();
   }
 
   /**

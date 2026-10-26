@@ -1180,7 +1180,7 @@ button[data-vn-badge]:active {
 
   [data-vn-root] {
     /* Leave the dialogue box and its toolbar reachable below the reply area. */
-    --vn-interaction-clearance: calc(var(--vn-control-size) + 13rem + var(--vn-nameplate-lift, 0rem));
+    --vn-interaction-clearance: calc(var(--vn-control-size) + 14rem + var(--vn-nameplate-lift, 0rem));
     --vn-interaction-width: 100%;
     --vn-composer-width: 100%;
   }
@@ -1962,11 +1962,11 @@ ${VN_TEXT_EFFECTS_CSS}
 [data-vn-root][data-vn-preset] [data-vn-controls] [data-vn-control-icon] { display: inline-flex; }
 [data-vn-sheet-header] { display: contents; }
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-sheet-header] {
-  display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center;
+  display: grid; grid-template-columns: 88px minmax(0, 1fr) 44px; align-items: center;
   flex-shrink: 0; gap: .1rem; min-height: 44px; padding-bottom: .25rem;
   border-bottom: 1px solid color-mix(in srgb, var(--vn-accent) 35%, var(--vn-dialogue-border));
 }
-[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-sheet-tools] { width: 44px; grid-column: 1; grid-row: 1; }
+[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-sheet-tools] { width: 88px; grid-column: 1; grid-row: 1; }
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-speaker] {
   position: absolute; top: -1.58rem; left: .9rem; max-width: min(13rem, calc(100% - 1.8rem)); min-height: 1.52rem;
   padding: .18rem .68rem; box-sizing: border-box; border: 1px solid var(--vn-dialogue-border);

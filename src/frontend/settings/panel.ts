@@ -658,7 +658,7 @@ export class VisualNovelSettingsPanel {
           ${pane("look", `
             <details data-appearance-preview><summary>Preview appearance</summary><div data-sample-slot></div></details>
             ${group("Theme", `
-              <label data-check><input name="apertureMode" type="checkbox" /><span>Use APERTURE workspace<small>Full-bleed reader, compact dialogue, and unified tool navigation. Your selected reader theme remains saved.</small></span></label>
+              <div data-aperture-canonical><span aria-hidden="true">✧</span><span><strong>APERTURE workspace</strong><small>The full-bleed reader and connected story spaces are the active interface. Your saved theme preset and custom CSS remain in effect.</small></span><b>ACTIVE</b></div>
               <label data-field><span>APERTURE palette</span><select name="apertureAppearance"><option value="light">Light · warm ivory</option><option value="dark">Dark · mineral</option></select><small>Applies to APERTURE navigation, panels, and tool surfaces.</small></label>
               ${themeTiles()}
             `, { find: find("Theme", "aperture light dark mode palette preset style colours colors skin golden paper noir console yamaku literature") })}
@@ -1503,7 +1503,7 @@ export class VisualNovelSettingsPanel {
       case "defaultImageTemplateId": return { defaultImageTemplateId: target.value };
       case "imagePromptFormat": return { imagePromptFormat: target.value === "tags" ? "tags" : "description" };
       case "referenceSource": return { referenceSource: normalizeReferenceSource(target.value) };
-      case "apertureMode": return { apertureMode: checked };
+      case "apertureMode": return { apertureMode: true, apertureModeVersion: 2 };
       case "apertureAppearance": return { apertureAppearance: target.value === "dark" ? "dark" : "light" };
       case "themePreset":
       case "setupThemePreset":
@@ -2031,7 +2031,6 @@ export class VisualNovelSettingsPanel {
 
     this.setRadio("themePreset", config.themePreset);
     this.setRadio("setupThemePreset", config.themePreset);
-    this.control<HTMLInputElement>("apertureMode").checked = config.apertureMode;
     this.control<HTMLSelectElement>("apertureAppearance").value = config.apertureAppearance;
     this.setRadio("sceneImageFit", config.sceneImageFit);
     this.control<HTMLInputElement>("castMode").checked = config.castMode;
@@ -2353,11 +2352,36 @@ function clamp(value: number, minimum: number, maximum: number, fallback: number
 }
 
 const READER_SETTINGS_CSS=`
-:host([data-vn-workspace-tool]){--set-accent:var(--vn-shell-accent);--set-accent-text:var(--vn-shell-accent-contrast);--set-text:var(--vn-shell-text);--set-muted:var(--vn-shell-muted);--set-border:var(--vn-shell-border);--set-surface:var(--vn-shell-panel);--set-field:var(--vn-shell-field);--set-hover:var(--vn-shell-button);font-family:var(--vn-shell-family);}
-:host([data-vn-workspace-tool]) [data-shell]{padding:18px;max-width:none}
-:host([data-vn-workspace-tool]) [data-layout]{display:block}
+:host([data-vn-workspace-tool]){--set-accent:var(--vn-shell-accent);--set-accent-text:var(--vn-shell-accent-contrast);--set-text:var(--vn-shell-text);--set-muted:var(--vn-shell-muted);--set-border:var(--vn-shell-border);--set-surface:var(--vn-shell-panel);--set-field:var(--vn-shell-field);--set-hover:var(--vn-shell-button);font-family:var(--vn-shell-family);height:100%;min-height:0;color:var(--vn-shell-text)}
+:host([data-vn-workspace-tool]) [data-shell]{height:100%;min-height:0;padding:clamp(12px,2.4vw,30px);max-width:1120px;box-sizing:border-box;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:10px}
+:host([data-vn-workspace-tool]) [data-workspace-header]{position:sticky;top:0;z-index:5;padding:5px;border-radius:14px;background:color-mix(in srgb,var(--set-field) 94%,transparent);backdrop-filter:blur(16px)}
+:host([data-vn-workspace-tool]) [data-topbar]{min-height:0}
+:host([data-vn-workspace-tool]) [data-layout]{display:block;min-height:0;overflow:auto;overscroll-behavior:contain}
+:host([data-vn-workspace-tool]) [data-panes]{display:block;min-height:0}
 :host([data-vn-workspace-tool]) [data-nav]{display:none}
+:host([data-vn-workspace-tool]) [data-home]{max-width:900px;margin:0 auto;padding:clamp(6px,2vw,24px) 0 32px;gap:18px}
+:host([data-vn-workspace-tool]) [data-home]>header{padding:20px 4px 14px}
+:host([data-vn-workspace-tool]) [data-home] h1{font:600 clamp(30px,5vw,48px)/1.1 Georgia,"Iowan Old Style",serif;letter-spacing:-.02em;color:var(--set-text)}
+:host([data-vn-workspace-tool]) [data-home]>header p{font-size:14px;color:var(--set-muted)}
+:host([data-vn-workspace-tool]) [data-home-categories]{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;border:0}
+:host([data-vn-workspace-tool]) [data-home-categories] button{min-height:90px;padding:14px;border:1px solid var(--set-border);border-radius:14px;background:color-mix(in srgb,var(--set-field) 72%,transparent)}
+:host([data-vn-workspace-tool]) [data-home-categories] button:hover{border-color:var(--set-accent);background:color-mix(in srgb,var(--set-accent) 8%,var(--set-field))}
+:host([data-vn-workspace-tool]) [data-home-categories] b{font:600 16px/1.3 Georgia,"Iowan Old Style",serif}
+:host([data-vn-workspace-tool]) [data-home-categories] small{font-size:12px;color:var(--set-muted)}
 :host([data-vn-workspace-tool]) [data-options]{grid-template-columns:1fr}
 :host([data-vn-workspace-tool]) [data-row]{grid-template-columns:1fr}
-:host([data-vn-workspace-tool]) [data-home] h1{font-size:1.5rem}
+:host([data-vn-workspace-tool]) [data-pane-head]{padding:12px 4px 16px;border-bottom:1px solid var(--set-border)}
+:host([data-vn-workspace-tool]) [data-pane-head] h2{font:600 clamp(24px,3vw,34px)/1.15 Georgia,"Iowan Old Style",serif}
+:host([data-vn-workspace-tool]) [data-pane-head] p{font-size:13px;color:var(--set-muted)}
+:host([data-vn-workspace-tool]) [data-workspace-page]{max-width:900px;margin:0 auto}
+:host([data-vn-workspace-tool]) [data-group]{border:1px solid var(--set-border);border-radius:14px;background:color-mix(in srgb,var(--set-field) 52%,transparent);padding:16px}
+:host([data-vn-workspace-tool]) [data-draft-bar]{position:sticky;bottom:0;z-index:4;margin:12px auto 0;max-width:900px;background:color-mix(in srgb,var(--set-surface) 94%,transparent);backdrop-filter:blur(16px)}
+:host([data-vn-workspace-tool]) [data-options] label:has(input:checked){color:var(--set-text)}
+:host([data-vn-workspace-tool]) [data-category-dialog]{color:var(--set-text);background:var(--set-surface);border-color:var(--set-border)}
+@media(max-width:560px){
+ :host([data-vn-workspace-tool]) [data-shell]{padding:10px;gap:8px}
+ :host([data-vn-workspace-tool]) [data-home-categories]{grid-template-columns:1fr}
+ :host([data-vn-workspace-tool]) [data-home-categories] button{min-height:72px}
+ :host([data-vn-workspace-tool]) [data-group]{padding:12px}
+}
 `;

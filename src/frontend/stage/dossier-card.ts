@@ -204,6 +204,9 @@ export class DossierCard {
  openTray(entries:ReturnType<typeof referenceEntries>,trigger:HTMLElement,open:(id:string,trigger:HTMLElement)=>void,note?:string,visualResolver?:(entity:ReaderDossier['entity'])=>DossierVisualContext):void {
   this.documentState(false);if(!this.isOpen()){this.query='';this.category='all';this.scope='all';}
   this.returnFocus=trigger;this.trayReturn=()=>this.openTray(entries,trigger,open,note,visualResolver);this.host.replaceChildren();const panel=document.createElement('section');panel.dataset.vnDossierCard='';panel.dataset.vnReferenceSheet='';panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','Scene references');  const header=document.createElement('header'),title=document.createElement('h2'),close=document.createElement('button');title.textContent='Scene references';close.type='button';close.textContent='×';close.title='Close references';close.setAttribute('aria-label','Close information');close.onclick=()=>this.close();header.append(title,close);panel.append(header);
+  const map=document.createElement('section');map.dataset.referenceMap='';map.setAttribute('aria-label','Current scene references');
+  const mapHead=document.createElement('div');mapHead.dataset.referenceMapHead='';const mapTitle=document.createElement('h3');mapTitle.textContent='Known in this scene';const mapDescription=document.createElement('p');mapDescription.textContent='Presence and location are shown only when established at this passage.';mapHead.append(mapTitle,mapDescription);
+  const orbit=document.createElement('div');orbit.dataset.referenceOrbit='';const links=document.createElementNS('http://www.w3.org/2000/svg','svg');links.setAttribute('viewBox','0 0 100 100');links.setAttribute('aria-hidden','true');links.dataset.referenceOrbitLinks='';const nodes=document.createElement('div');nodes.dataset.referenceOrbitNodes='';const center=document.createElement('div');center.dataset.referenceOrbitCenter='';orbit.append(links,nodes,center);map.append(mapHead,orbit);panel.append(map);
   const filters=document.createElement('div');filters.dataset.referenceFilters='';
   const search=document.createElement('input');search.type='search';search.maxLength=160;search.placeholder='Find a name…';search.setAttribute('aria-label','Search references');search.value=this.query;
   const category=document.createElement('select');category.setAttribute('aria-label','Reference category');
@@ -216,6 +219,13 @@ export class DossierCard {
   panel.insertBefore(tabs,filters);
   const render=()=>{for(const button of tabs.querySelectorAll<HTMLElement>('button'))button.setAttribute('aria-pressed',String(button.dataset.referenceCategory===category.value));this.query=search.value;this.category=category.value as ReferenceKind;this.scope=scope.value;list.replaceChildren();
    const filtered=entries.filter(({entity})=>(this.scope==='all'||!entity.id.startsWith('earlier:'))&&(this.category==='all'||entity.kind===this.category)&&(!this.query.trim()||[entity.name,...entity.aliases].some(name=>name.toLocaleLowerCase().includes(this.query.trim().toLocaleLowerCase()))));
+   const currentLocation=filtered.find(entry=>entry.current&&entry.entity.kind==='place'&&entry.label==='Current location');
+   const present=filtered.filter(entry=>entry!==currentLocation&&entry.current&&!entry.entity.id.startsWith('earlier:')).slice(0,6);
+   map.hidden=!currentLocation&&!present.length;nodes.replaceChildren();links.replaceChildren();
+   center.textContent=currentLocation?.entity.name??'Current passage';
+   mapDescription.textContent=currentLocation?'Lines indicate scene co-presence only, not a social or causal relationship.':'Only established scene presence is shown; map positions are navigational, not geographic.';
+   if(currentLocation&&present.length){for(let i=0;i<present.length;i++){const angle=(Math.PI*2*i/present.length)-Math.PI/2,x=50+35*Math.cos(angle),y=50+35*Math.sin(angle),line=document.createElementNS('http://www.w3.org/2000/svg','line');line.setAttribute('x1','50');line.setAttribute('y1','50');line.setAttribute('x2',String(x));line.setAttribute('y2',String(y));links.append(line);}}
+   for(let i=0;i<present.length;i++){const entry=present[i]!,angle=(Math.PI*2*i/present.length)-Math.PI/2,x=50+35*Math.cos(angle),y=50+35*Math.sin(angle),node=document.createElement('button');node.type='button';node.dataset.referenceOrbitNode=entry.entity.kind;node.style.left=`${x}%`;node.style.top=`${y}%`;node.textContent=entry.entity.name;node.title=`${entry.entity.name} · present in this passage`;node.setAttribute('aria-label',`${entry.entity.name}, present in this passage`);node.onclick=()=>open(entry.entity.id,trigger);nodes.append(node);}
    count.textContent=filtered.length?`${filtered.length} reference${filtered.length===1?'':'s'}`:'No references match. Try another name or category.';
    for(const {entity,pinned,label,current} of filtered){
     const vis=visualResolver?.(entity);
@@ -329,7 +339,30 @@ export const DOCKED_DOSSIER_CSS=`
 [data-vn-workspace-active] [data-vn-dossier-card]>header{position:static;top:auto;padding:0 0 14px;background:var(--vn-panel-solid)}
 [data-vn-workspace-active] [data-vn-dossier-card]>header button[aria-label^="Close"]{display:none}
 [data-vn-workspace-active] [data-vn-reference-sheet]>header{display:none}
-[data-reference-categories]{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}
-[data-reference-categories] button{flex:1;min-width:60px;margin:0;font-size:12px;padding:8px}
-[data-reference-categories] [aria-pressed="true"]{border-color:var(--vn-accent);color:var(--vn-accent);background:color-mix(in srgb,var(--vn-accent) 10%,transparent)}
+[data-reference-categories]{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px;padding:5px;border:1px solid var(--vn-panel-border);border-radius:12px;background:color-mix(in srgb,var(--vn-panel-solid) 76%,transparent)}
+[data-reference-categories] button{flex:1;min-width:84px;margin:0;font-size:12px;padding:8px 12px;border-color:transparent;background:transparent}
+[data-reference-categories] [aria-pressed="true"]{border-color:color-mix(in srgb,var(--vn-accent) 40%,var(--vn-panel-border));color:var(--vn-accent);background:color-mix(in srgb,var(--vn-accent) 12%,var(--vn-panel-solid))}
+[data-vn-workspace-active] [data-reference-filters]{grid-template-columns:minmax(0,1fr) minmax(150px,.35fr);gap:10px;margin:12px 0 6px}
+[data-vn-workspace-active] [data-reference-filters] input,[data-vn-workspace-active] [data-reference-filters] select{min-height:46px;border-radius:11px;background:var(--vn-panel-solid)}
+[data-vn-workspace-active] [data-reference-count]{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--vn-muted-text)}
+[data-vn-workspace-active] [data-reference-list]{grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr));align-content:start;gap:12px;padding:4px 2px 24px}
+[data-vn-workspace-active] [data-reference-list] button{grid-template-columns:64px minmax(0,1fr);min-height:90px;gap:13px;padding:12px;border:1px solid var(--vn-panel-border);border-radius:14px;background:color-mix(in srgb,var(--vn-panel-solid) 72%,transparent);box-shadow:0 5px 18px rgba(10,20,15,.06);transition:border-color .16s ease,background-color .16s ease,transform .16s ease}
+[data-vn-workspace-active] [data-reference-list] button:hover{border-color:var(--vn-accent);background:color-mix(in srgb,var(--vn-accent) 7%,var(--vn-panel-solid));transform:translateY(-1px)}
+[data-vn-workspace-active] [data-reference-thumb]{width:64px;height:64px;border-radius:12px;font-size:15px}
+[data-vn-workspace-active] [data-reference-row-title]{font:600 16px/1.25 Georgia,"Iowan Old Style",serif}
+[data-vn-workspace-active] [data-reference-list] small{font-size:11px}
+[data-vn-workspace-active] [data-reference-snippet]{margin-top:3px}
+[data-vn-workspace-active] [data-reference-list] [data-reference-current=true]{border-left:1px solid var(--vn-panel-border);box-shadow:inset 3px 0 var(--vn-accent),0 5px 18px rgba(10,20,15,.06)}
+[data-vn-workspace-active] [data-vn-dossier-card]:not([data-vn-reference-sheet]){max-width:760px;margin:0 auto;overflow:auto;overscroll-behavior:contain}
+[data-vn-workspace-active] [data-reference-map]{margin:4px 0 18px;padding:15px;border:1px solid var(--vn-panel-border);border-radius:18px;background:radial-gradient(ellipse at 50% 42%,color-mix(in srgb,var(--vn-accent) 9%,transparent),transparent 60%),color-mix(in srgb,var(--vn-panel-solid) 74%,transparent)}
+[data-reference-map-head] h3{margin:0;font:600 17px/1.25 Georgia,"Iowan Old Style",serif;color:var(--vn-text)}
+[data-reference-map-head] p{margin:4px 0 0;color:var(--vn-muted-text);font-size:11px;line-height:1.45}
+[data-reference-orbit]{position:relative;width:min(100%,620px);height:clamp(218px,33vw,300px);margin:12px auto 0;overflow:hidden;border:1px solid color-mix(in srgb,var(--vn-accent) 18%,transparent);border-radius:16px;background:radial-gradient(circle at 50% 50%,transparent 0 17%,color-mix(in srgb,var(--vn-accent) 8%,transparent) 17.3% 17.7%,transparent 18% 33%,color-mix(in srgb,var(--vn-accent) 8%,transparent) 33.3% 33.7%,transparent 34% 50%)}
+[data-reference-orbit-links],[data-reference-orbit-nodes]{position:absolute;inset:0;width:100%;height:100%}
+[data-reference-orbit-links] line{stroke:var(--vn-accent);stroke-width:.55;stroke-dasharray:1.8 1.8;opacity:.62}
+[data-reference-orbit-center]{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:grid;place-items:center;box-sizing:border-box;width:min(32%,150px);min-height:54px;padding:8px;border:1px solid color-mix(in srgb,var(--vn-accent) 55%,var(--vn-panel-border));border-radius:999px;background:var(--vn-panel-solid);color:var(--vn-text);font:600 12px/1.2 Georgia,"Iowan Old Style",serif;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.12)}
+[data-reference-orbit-node]{position:absolute;transform:translate(-50%,-50%);max-width:min(27%,120px);min-width:44px;min-height:36px!important;margin:0!important;padding:5px 9px!important;border-radius:999px!important;background:var(--vn-panel-solid)!important;color:var(--vn-text)!important;border-color:color-mix(in srgb,var(--vn-accent) 42%,var(--vn-panel-border))!important;box-shadow:0 4px 14px rgba(0,0,0,.1);font-size:10px!important;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+[data-reference-orbit-node="npc"]{border-color:color-mix(in srgb,var(--vn-accent) 68%,var(--vn-panel-border))!important}
+@media(max-width:560px){[data-vn-workspace-active] [data-reference-filters]{grid-template-columns:1fr}[data-vn-workspace-active] [data-reference-categories] button{min-width:64px;padding:8px 6px;font-size:11px}[data-reference-orbit]{height:226px}[data-reference-orbit-node]{max-width:31%;font-size:9px!important}}
+@media(prefers-reduced-motion:reduce){[data-vn-workspace-active] [data-reference-list] button{transition:none!important;transform:none!important}}
 `;

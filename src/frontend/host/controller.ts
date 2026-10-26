@@ -657,6 +657,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     onPause: () => speech.pause(),
     onStop: () => speech.stop("user-stop"),
   });
+  stage.workspace.attachSpeechDock(speechDock.getElement());
+  stage.workspace.setSpeechAvailable(Boolean(configRef.current?.speech.enabled));
   speech = new SpeechController({
     transport: createSpeechTransport(),
     onStatus: (status) => {
@@ -812,10 +814,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     lens: () => stage.openWorldLens(),
     cast: () => stage.openCastFolios(),
     panels: () => panels.toggleOpen(),
-    voice: () => {
-      if (speechDock.isAvailable()) speechDock.togglePlayback();
-      else { stage.workspace.open('settings'); settingsPanel.openPage('speech',{focus:true}); }
-    },
+    voice: open => { speechDock.setPopoverOpen(Boolean(open)); },
     library: () => imageLibrary.open('images'),
     backToChat: () => stage.panelMount.querySelector<HTMLButtonElement>('[data-vn-exit]')?.click(),
   });
@@ -1170,6 +1169,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       audioEngine.setSfxVolume(configRef.current.sfxVolume);
       speech.setSettings(configRef.current.speech);
       speechDock.setEnabled(configRef.current.speech.enabled);
+      stage.workspace.setSpeechAvailable(configRef.current.speech.enabled);
       speechSettings?.setConfig(configRef.current.speech);
       settingsPanel?.setConfig(configRef.current);
       if (configRef.current?.autoEnter && !active) activate();
@@ -1214,6 +1214,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       audioEngine.setSfxVolume(configRef.current.sfxVolume);
       speech.setSettings(configRef.current.speech);
       speechDock.setEnabled(configRef.current.speech.enabled);
+      stage.workspace.setSpeechAvailable(configRef.current.speech.enabled);
       speechSettings?.setConfig(configRef.current.speech);
       settingsPanel?.setConfig(configRef.current, message.requestId);
       settingsPanel?.setSaveStatus?.({ kind: "saved" }, message.requestId);

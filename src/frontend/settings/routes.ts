@@ -33,7 +33,7 @@ export function settingsPage(value:unknown):typeof SETTINGS_PAGES[number]{
 }
 export const SETTINGS_FIELD_PAGES={
  autoEnter:'reading',mode:'reading',generateChoices:'reading',textSpeed:'reading',autoPlayDelay:'reading',skipMode:'reading',tooltips:'reading',collectEntityReferences:'reading',
- themePreset:'appearance',apertureMode:'appearance',apertureAppearance:'appearance',sceneImageFit:'appearance',castMode:'appearance',effectIntensity:'appearance',textEffects:'appearance',textScale:'appearance',readerPreferences:'appearance',
+ themePreset:'appearance',apertureMode:'appearance',apertureModeVersion:'appearance',apertureAppearance:'appearance',sceneImageFit:'appearance',castMode:'appearance',effectIntensity:'appearance',textEffects:'appearance',textScale:'appearance',readerPreferences:'appearance',
  automaticImagePromptSettings:'images',imagePromptBudgetOverride:'images',imagePromptBudget:'images',generateImages:'images',useNativeCardImages:'images',reviewImages:'images',imageConnectionId:'images',maxImagesPerTurn:'images',imageOutputAspectRatio:'images',
  dynamicImageTemplates:'templates',defaultImageTemplateId:'templates',imageTemplates:'templates',imagePromptFormat:'templates',promptPrefix:'style',promptSuffix:'style',negativePrompt:'style',promptPresets:'style',selectedSharedStyleId:'style',originalReference:'style',originalCreationName:'style',novelAiQualityTags:'style',novelAiUseDefaultNegative:'style',
  persistentLocationArt:'consistency',persistentCastArt:'consistency',referenceAnchoring:'consistency',referenceSource:'consistency',imageModel:'generation',imageParameters:'generation',imageConcurrency:'generation',

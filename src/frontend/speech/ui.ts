@@ -53,11 +53,14 @@ button:disabled { opacity: .45; cursor: default; }
   [data-status][data-tone="info"] { display: none; }
 }
 @media (max-width: 640px) and (pointer: coarse) { button { min-width: 2.75rem; min-height: 2.75rem; } }
-:host-context([data-vn-aperture="true"]) { top:calc(58px + env(safe-area-inset-top));left:auto;right:max(94px,calc(env(safe-area-inset-right) + 88px));transform:none;max-width:min(300px,calc(100% - 190px)); }
+:host-context([data-vn-aperture="true"]):not([data-vn-speech-embedded]) { top:calc(58px + env(safe-area-inset-top));left:auto;right:max(94px,calc(env(safe-area-inset-right) + 88px));transform:none;max-width:min(300px,calc(100% - 190px)); }
 :host-context([data-vn-aperture="true"]) [data-dock] { padding:.18rem .35rem;border-radius:14px; }
 :host-context([data-vn-aperture="true"]) [data-status] { max-width:8rem; }
-@media(max-width:700px) { :host-context([data-vn-aperture="true"]) { right:max(90px,calc(env(safe-area-inset-right) + 84px));max-width:calc(100% - 176px); } }
-@media(max-width:390px) { :host-context([data-vn-aperture="true"]) [data-status] { display:none; } }`;
+@media(max-width:700px) { :host-context([data-vn-aperture="true"]):not([data-vn-speech-embedded]) { right:max(90px,calc(env(safe-area-inset-right) + 84px));max-width:calc(100% - 176px); } }
+@media(max-width:390px) { :host-context([data-vn-aperture="true"]) [data-status] { display:none; } }
+:host([data-vn-speech-embedded]) { position:relative;inset:auto;left:auto;right:auto;top:auto;transform:none;z-index:auto;width:100%;max-width:none;font-size:12px; }
+:host([data-vn-speech-embedded]) [data-dock] { max-width:100%;justify-content:flex-start;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none; }
+:host([data-vn-speech-embedded]) [data-status] { max-width:min(15rem,48vw); }`;
 
 export class SpeechDock {
   private readonly host: HTMLElement;
@@ -66,11 +69,13 @@ export class SpeechDock {
   private readonly statusEl: HTMLElement;
   private enabled = false;
   private overlayActive = false;
+  private popoverOpen = false;
   private playing = false;
 
   constructor(private readonly options: SpeechDockOptions) {
     this.host = document.createElement("div");
     this.host.className = "vn-speech-dock";
+    this.host.dataset.vnSpeechDock="";
     const shadow = this.host.attachShadow({ mode: "open" });
     const style = document.createElement("style");
     style.textContent = DOCK_CSS;
@@ -103,15 +108,19 @@ export class SpeechDock {
   /** Enabled = the speech setting; the dock stays hidden while speech is off. */
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
+    if(!enabled)this.popoverOpen=false;
     this.sync();
   }
 
   setOverlayActive(active: boolean): void {
     this.overlayActive = active;
+    if(!active)this.popoverOpen=false;
     this.sync();
   }
 
   isAvailable(): boolean { return this.enabled && this.overlayActive; }
+  getElement():HTMLElement { return this.host; }
+  setPopoverOpen(open:boolean):void { this.popoverOpen=Boolean(open);this.sync(); }
   togglePlayback(): void { if (!this.isAvailable()) return; if (this.playing) this.options.onPause(); else this.options.onPlay(); }
 
   setStatus(status: SpeechStatus): void {
@@ -130,7 +139,9 @@ export class SpeechDock {
   }
 
   private sync(): void {
-    this.host.style.display = this.enabled && this.overlayActive ? "" : "none";
+    const visible=this.enabled&&this.overlayActive&&this.popoverOpen;
+    this.host.style.display=visible?"":"none";
+    this.host.dataset.open=String(this.popoverOpen);
   }
 }
 

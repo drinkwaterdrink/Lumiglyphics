@@ -6,7 +6,7 @@ export type ReaderPreferences = {
   heightRatio?: number;
 };
 export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
-  adjustableSheetEnabled: false, layout: "overlay", sheetSize: "reading", backgroundOpacity: 0.9,
+  adjustableSheetEnabled: false, layout: "overlay", sheetSize: "reading", backgroundOpacity: 0.12,
 };
 export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
   const input = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -15,14 +15,16 @@ export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
     layout: input.layout === "image-first" ? "image-first" : "overlay",
     sheetSize: input.sheetSize === "compact" || input.sheetSize === "expanded" ? input.sheetSize : "reading",
     backgroundOpacity: typeof input.backgroundOpacity === "number" && Number.isFinite(input.backgroundOpacity)
-      ? Math.max(0, Math.min(1, input.backgroundOpacity)) : 0.9,
+      ? Math.max(0, Math.min(1, input.backgroundOpacity)) : DEFAULT_READER_PREFERENCES.backgroundOpacity,
     ...(typeof input.heightRatio === "number" && Number.isFinite(input.heightRatio) ? { heightRatio: Math.max(.12, Math.min(1, input.heightRatio)) } : {}),
   };
 }
-const RATIOS = { compact: 0.22, reading: 0.34, expanded: 0.6 } as const;
+export const MIN_DIALOGUE_SHEET_HEIGHT = 176;
+const RATIOS = { compact: 0.2, reading: 0.34, expanded: 0.6 } as const;
 export function sheetHeight(size: ReaderPreferences["sheetSize"], usableHeight: number, heightRatio?: number): number {
-  const height = Number.isFinite(usableHeight) ? Math.max(0, usableHeight) : 224;
-  return Math.round(Math.min(height, Math.max(224, height * (heightRatio ?? RATIOS[size]))));
+  if(!Number.isFinite(usableHeight))return 224;
+  const height=Math.max(0,usableHeight);
+  return Math.round(Math.min(height,Math.max(MIN_DIALOGUE_SHEET_HEIGHT,height*(heightRatio??RATIOS[size]))));
 }
 export function nearestSheetSize(height: number, usableHeight: number): ReaderPreferences["sheetSize"] {
   return (Object.keys(RATIOS) as ReaderPreferences["sheetSize"][]).reduce((best, size) =>

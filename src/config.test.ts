@@ -40,18 +40,27 @@ test("image review defaults on and preserves an explicit automatic-mode choice",
   assert.equal(normalizeConfig({ reviewImages: "false" }).reviewImages, true);
 });
 
-test("APERTURE is the first-run presentation without replacing a saved reader theme", () => {
+test("APERTURE becomes the default for old configs without replacing saved themes or reader preferences", () => {
   const fresh = normalizeConfig({});
   assert.equal(fresh.apertureMode, true);
+  assert.equal(fresh.apertureModeVersion, 2);
   assert.equal(fresh.apertureAppearance, "light");
   assert.equal(fresh.readerPreferences.adjustableSheetEnabled, true);
   assert.equal(fresh.readerPreferences.sheetSize, "compact");
-  const legacy = normalizeConfig({ themePreset: "paper-novel" });
+  const legacy = normalizeConfig({ themePreset: "paper-novel", apertureMode: false });
   assert.equal(legacy.themePreset, "paper-novel");
-  assert.equal(legacy.apertureMode, false);
-  assert.equal(legacy.readerPreferences.adjustableSheetEnabled, false);
+  assert.equal(legacy.apertureMode, true);
+  assert.equal(legacy.readerPreferences.adjustableSheetEnabled, true);
+  assert.equal(normalizeConfig({ themePreset: "golden-hour", apertureMode: false, apertureModeVersion: 1 }).apertureMode, true);
+  assert.equal(normalizeConfig({ themePreset: "golden-hour", apertureMode: false, apertureModeVersion: 2 }).apertureMode, true);
   assert.equal(normalizeConfig({ themePreset: "golden-hour", apertureMode: true, apertureAppearance: "dark" }).apertureAppearance, "dark");
   assert.equal(normalizeConfig({ apertureAppearance: "ultraviolet" }).apertureAppearance, "light");
+});
+
+test("APERTURE migrates the translucent caption background while keeping saved opacity", () => {
+  assert.equal(normalizeConfig({}).readerPreferences.backgroundOpacity, 0.12);
+  assert.equal(normalizeConfig({ readerPreferences: { backgroundOpacity: 0.72 } }).readerPreferences.backgroundOpacity, 0.72);
+  assert.equal(normalizeConfig({ readerPreferences: { backgroundOpacity: 0 } }).readerPreferences.backgroundOpacity, 0);
 });
 
 test("scene image fit defaults to cover for absent or invalid values", () => {

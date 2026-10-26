@@ -78,8 +78,10 @@ export type VisualNovelPromptPreset = {
 
 export type VisualNovelConfig = {
   themePreset: VisualNovelThemePreset;
-  /** APERTURE navigation and reader surfaces; legacy saved themes remain unchanged until opted in. */
+  /** APERTURE navigation and reader surfaces. Existing users migrate into APERTURE once. */
   apertureMode: boolean;
+  /** Compatibility marker for migrating saved configs to the canonical APERTURE presentation. */
+  apertureModeVersion: number;
   /** Light or dark palette for APERTURE surfaces. */
   apertureAppearance: "light" | "dark";
   enabled: boolean;
@@ -160,6 +162,7 @@ export type VisualNovelConfig = {
 export const DEFAULT_CONFIG: VisualNovelConfig = {
   themePreset: "lumiverse",
   apertureMode: true,
+  apertureModeVersion: 2,
   apertureAppearance: "light",
   enabled: true,
   autoEnter: false,
@@ -380,8 +383,10 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     : "lumiverse";
   return {
     themePreset,
-    // New installs get APERTURE; existing persisted theme choices remain visually intact.
-    apertureMode: typeof input.apertureMode === "boolean" ? input.apertureMode : input.themePreset === undefined,
+    // APERTURE v4 is the canonical presentation. Keep the persisted field for
+    // backwards-compatible config shape, but migrate every older opt-out to it.
+    apertureMode: true,
+    apertureModeVersion: 2,
     apertureAppearance: input.apertureAppearance === "dark" ? "dark" : "light",
     enabled: bool(input.enabled, DEFAULT_CONFIG.enabled),
     autoEnter: bool(input.autoEnter, DEFAULT_CONFIG.autoEnter),
@@ -443,7 +448,7 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     effectIntensity: effectIntensity(input.effectIntensity),
     textEffects: textEffectMode(input.textEffects),
     textScale: textScale(input.textScale),
-    readerPreferences: normalizeReaderPreferences(input.readerPreferences ?? (input.themePreset === undefined ? DEFAULT_CONFIG.readerPreferences : DEFAULT_READER_PREFERENCES)),
+    readerPreferences: normalizeReaderPreferences(input.readerPreferences ?? DEFAULT_CONFIG.readerPreferences),
     audioDirectory: stringValue(input.audioDirectory, DEFAULT_CONFIG.audioDirectory).trim(),
     bgmVolume: floatBetween(input.bgmVolume, 0, 1, DEFAULT_CONFIG.bgmVolume),
     sfxVolume: floatBetween(input.sfxVolume, 0, 1, DEFAULT_CONFIG.sfxVolume),

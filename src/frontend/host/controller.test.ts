@@ -75,6 +75,7 @@ const baseConfig: VisualNovelConfig = {
   novelAiUseDefaultNegative: true,
   speech: DEFAULT_CONFIG.speech,
   apertureMode: DEFAULT_CONFIG.apertureMode,
+  apertureModeVersion: DEFAULT_CONFIG.apertureModeVersion,
   apertureAppearance: DEFAULT_CONFIG.apertureAppearance,
   themePreset: "lumiverse",
   enabled: true,
