@@ -595,8 +595,11 @@ body.theme-dark .route-bar .route-actions .menu-key,
 /* Route bar visibility: suppressed on reader, active on workspace */
 .route-bar[hidden],
 [hidden].route-bar,
+.route-bar[hidden],
 .route-bar:not([data-active="true"]),
 [data-vn-shell]:not([data-vn-workspace]) .route-bar,
+[data-vn-shell]:not([data-vn-workspace]) > .route-bar,
+:not([data-vn-workspace]) > .route-bar,
 [data-vn-root] .route-bar,
 [data-vn-reader-first="true"]:not([data-vn-workspace]) .route-bar {
   display: none !important;
@@ -940,38 +943,46 @@ aside[data-vn-workspace] {
 }
 
 /* Dialogue Footer */
-[data-vn-dialogue-footer] {
-  flex: 0 0 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: rgba(240, 249, 230, 0.65);
-  font-size: 8px;
-  letter-spacing: 0.14em;
-  font-weight: 700;
-  line-height: 1;
+[data-vn-dialogue-footer],
+.caption-foot {
+  display: none !important;
+}
 }
 
 /* Dialogue Restore Button (when minimized) */
-[data-vn-clean-restore], .caption-restore {
-  position: absolute;
-  z-index: 30;
-  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
-  left: 15px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 14px;
-  min-height: 38px;
-  background: rgba(12, 27, 25, 0.82);
-  border: 1px solid rgba(216, 236, 188, 0.46);
-  color: #e1efb1;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-  border-radius: 13px;
-  font-size: 11px;
-  cursor: pointer;
+[data-vn-clean-restore], .caption-restore, [data-vn-show-text] {
+  position: absolute !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  min-height: 44px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  background: rgba(11, 23, 19, 0.8) !important;
+  border: 1px solid rgba(220, 238, 217, 0.28) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  color: #f4f7ee !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45) !important;
+  display: grid !important;
+  place-items: center !important;
+  z-index: 35 !important;
+  cursor: pointer !important;
+  transition: background 160ms ease, transform 160ms ease !important;
+}
+
+[data-vn-clean-restore]:hover, .caption-restore:hover, [data-vn-show-text]:hover {
+  background: rgba(35, 75, 57, 0.92) !important;
+  transform: translateX(-50%) scale(1.08) !important;
+}
+
+[data-vn-dialogue].large-caption {
+  height: min(65vh, 420px) !important;
+  max-height: calc(100% - 90px) !important;
+  transition: height 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
 /* Reader Top Bar Controls */
@@ -1046,7 +1057,6 @@ aside[data-vn-workspace] {
 [data-vn-root] .reader-actions {
   position: absolute !important;
   inset: auto 0 0 !important;
-  top: auto !important;
   bottom: 0 !important;
   left: 0 !important;
   right: 0 !important;
@@ -1055,85 +1065,154 @@ aside[data-vn-workspace] {
   display: flex !important;
   flex-direction: column !important;
   justify-content: flex-start !important;
-  padding: 4px 14px calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+  padding: 6px 16px calc(10px + env(safe-area-inset-bottom, 0px)) !important;
   gap: 6px !important;
   pointer-events: auto !important;
-  background: linear-gradient(180deg, transparent, rgba(4, 12, 16, 0.63) 32%, rgba(5, 15, 18, 0.92)) !important;
+  background: linear-gradient(180deg, transparent, rgba(4, 12, 16, 0.72) 24%, rgba(5, 15, 18, 0.94)) !important;
+  box-sizing: border-box !important;
 }
 
-.reader-progress-timeline {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 14px;
+/* Hide legacy clean-restore unless active, and hide dialogue footer passage label */
+[data-vn-clean-restore],
+[data-vn-clean-restore][hidden],
+.caption-foot,
+[data-vn-dialogue-footer] {
+  display: none !important;
 }
 
-.reader-progress-timeline small {
-  color: #edf3ea;
-  opacity: 0.8;
-  font-size: 9.5px;
-  letter-spacing: 0.08em;
-  white-space: nowrap;
+/* Progress bar container: centered horizontally on top row */
+.reader-progress {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 10px !important;
+  width: 100% !important;
+  max-width: calc(100% - 96px) !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  margin: 0 auto !important;
+  box-sizing: border-box !important;
 }
 
-.reader-action-grid {
-  display: grid;
-  grid-template-columns: minmax(32px, 0.65fr) repeat(4, minmax(38px, 1fr)) minmax(52px, 0.98fr);
-  gap: 3px;
-  align-items: center;
-  width: 100%;
+.reader-progress [data-vn-step-left],
+.reader-progress [data-vn-step-right] {
+  color: #edf3ea !important;
+  opacity: 0.8 !important;
+  font-size: 9.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em !important;
+  white-space: nowrap !important;
+  flex: none !important;
 }
 
-.reader-action-grid > .action,
-[data-vn-controls] > button {
-  min-width: 0;
-  width: 100%;
-  padding: 0 2px;
-  height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  flex-direction: column;
-  border-radius: 12px;
-  background: transparent;
-  border: 0;
-  color: #ecf6ed;
-  cursor: pointer;
-  transition: background 0.16s ease, transform 0.16s ease;
+.reader-progress [data-vn-scrubber] {
+  flex: 1 1 auto !important;
+  max-width: 300px !important;
 }
 
-.reader-action-grid > .action .icon,
-[data-vn-controls] > button svg {
-  width: 17px;
-  height: 17px;
-  flex: 0 0 auto;
+/* Action row: contains 4 centered tool buttons, with Previous and Continue pinned to top row */
+.reader-action-row,
+[data-vn-controls] {
+  position: static !important;
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 8px !important;
+  width: 100% !important;
+  max-width: 280px !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
 }
 
-.reader-action-grid > .action span,
-[data-vn-controls] > button span {
-  font-size: 9px;
-  line-height: 1;
-  letter-spacing: 0.006em;
-  opacity: 0.85;
+.reader-action-row > .action {
+  height: 38px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 2px !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+  border: 0 !important;
+  color: #ecf6ed !important;
+  cursor: pointer !important;
+  transition: background 0.16s ease !important;
 }
 
-.reader-action-grid > .action:hover,
-[data-vn-controls] > button:hover {
-  background: rgba(220, 242, 221, 0.14);
+.reader-action-row > .action:hover {
+  background: rgba(220, 242, 221, 0.12) !important;
 }
 
-.reader-action-grid > .action.advance,
-[data-vn-continue] {
-  height: 46px;
-  min-width: 56px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex-direction: row;
-  border-radius: 14px;
-  background: var(--lime);
+/* Hide label text inside previous nav button so it stays icon-only */
+[data-vn-controls] > [data-vn-control="previous"] [data-vn-control-label] {
+  display: none !important;
+}
+
+/* Previous and Continue pinned to top row on either side of the progress bar */
+[data-vn-controls] > [data-vn-control="previous"].nav-step-btn {
+  position: absolute !important;
+  left: 16px !important;
+  top: 6px !important;
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 50% !important;
+  background: rgba(14, 30, 24, 0.8) !important;
+  border: 1px solid rgba(220, 238, 217, 0.22) !important;
+  color: #edf3ea !important;
+  cursor: pointer !important;
+  transition: background 0.16s ease, transform 0.16s ease, border-color 0.16s ease !important;
+}
+
+[data-vn-controls] > [data-vn-continue].nav-step-btn {
+  position: absolute !important;
+  right: 16px !important;
+  top: 6px !important;
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 50% !important;
+  background: var(--lime) !important;
+  border: 1px solid var(--lime) !important;
   color: #1a2c1d !important;
+  box-shadow: 0 2px 10px rgba(220, 238, 173, 0.35) !important;
+  cursor: pointer !important;
+  transition: background 0.16s ease, transform 0.16s ease !important;
+}
+
+[data-vn-controls] > .nav-step-btn:disabled,
+[data-vn-controls] > .nav-step-btn[aria-disabled="true"] {
+  opacity: 0.3 !important;
+  pointer-events: none !important;
+}
+
+[data-vn-controls] > [data-vn-control="previous"].nav-step-btn:hover:not(:disabled) {
+  background: rgba(35, 75, 57, 0.92) !important;
+  border-color: #dcebad !important;
+  color: #fff !important;
+  transform: scale(1.08) !important;
+}
+
+[data-vn-controls] > [data-vn-continue].nav-step-btn:hover:not(:disabled) {
+  background: #e6f5b8 !important;
+  color: #0f1c14 !important;
+  transform: scale(1.08) !important;
+}
+  transition: background 0.16s ease !important;
+}
+
+.reader-action-row > .action:hover {
+  background: rgba(220, 242, 221, 0.12) !important;
+}
   font-weight: 700;
   padding: 0 10px;
   box-shadow: inset 0 1px rgba(255, 255, 255, 0.55), 0 4px 16px rgba(224, 238, 177, 0.18);
@@ -1580,6 +1659,11 @@ body.theme-light .observation-cell {
 .observation-cell strong {
   font-size: 12px;
   font-weight: 600;
+  display: block;
+  white-space: normal !important;
+  word-break: break-word !important;
+  overflow: visible !important;
+  line-height: 1.45 !important;
 }
 
 .observation-cell em {
@@ -1769,26 +1853,24 @@ body.theme-light .folio-quote-callout {
 
 [data-vn-continue].action.advance,
 .reader-action-row > .action.advance {
-  position: static !important;
-  top: auto !important;
-  bottom: auto !important;
-  left: auto !important;
-  right: auto !important;
-  transform: none !important;
-  margin: 0 !important;
-  height: 46px !important;
-  min-width: 56px !important;
-  width: 100% !important;
+  position: absolute !important;
+  right: 16px !important;
+  top: 6px !important;
+  height: 32px !important;
+  width: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
   display: flex !important;
   justify-content: center !important;
   align-items: center !important;
   flex-direction: row !important;
-  border-radius: 14px !important;
-  background: #e0eeb1 !important;
+  border-radius: 50% !important;
+  background: var(--lime) !important;
+  border: 1px solid var(--lime) !important;
   color: #1a2c1d !important;
   font-weight: 700 !important;
   padding: 0 !important;
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.55), 0 4px 16px rgba(224, 238, 177, 0.18) !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.55), 0 2px 10px rgba(220, 238, 173, 0.35) !important;
   cursor: pointer !important;
 }
 
@@ -1965,19 +2047,39 @@ body.theme-light aside[data-vn-workspace],
   align-items: center !important;
   justify-content: space-between !important;
   padding: 0 16px !important;
-  background: rgba(17, 31, 31, 0.92) !important;
-  border-bottom: 1px solid rgba(220, 238, 217, 0.12) !important;
+  background: rgba(17, 35, 28, 0.94) !important;
+  border-bottom: 1px solid rgba(220, 238, 217, 0.14) !important;
   backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  color: #f4f8ee !important;
   z-index: 2 !important;
 }
 
-body.theme-light [data-workspace-heading] {
-  background: rgba(234, 241, 226, 0.92) !important;
-  border-bottom: 1px solid rgba(61, 86, 75, 0.12) !important;
+:is(body.theme-light, [data-aperture-mode="light"], [data-vn-shell][data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-workspace-heading] {
+  background: rgba(238, 243, 229, 0.96) !important;
+  border-bottom: 1px solid rgba(35, 75, 57, 0.16) !important;
+  color: #152c22 !important;
 }
 
 [data-workspace-heading] h2 {
   font-family: Georgia, serif !important;
+  font-size: 17px !important;
+  font-weight: 650 !important;
+  margin: 0 !important;
+  color: #f4f8ee !important;
+}
+
+:is(body.theme-light, [data-aperture-mode="light"], [data-vn-shell][data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-workspace-heading] h2 {
+  color: #152c22 !important;
+}
+
+[data-workspace-heading] button {
+  color: #eaf1e3 !important;
+}
+
+:is(body.theme-light, [data-aperture-mode="light"], [data-vn-shell][data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-workspace-heading] button {
+  color: #1a3327 !important;
+}
   font-size: 16px !important;
   font-weight: 600 !important;
   margin: 0 !important;
@@ -2225,16 +2327,9 @@ body.theme-light [data-surface="settings"]:before,
   flex-direction: column !important;
   justify-content: space-between !important;
 }
-.caption-foot {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  flex: 0 0 16px !important;
-  margin-top: 2px !important;
-  color: rgba(240, 249, 230, 0.7) !important;
-  font-size: 8px !important;
-  letter-spacing: 0.14em !important;
-  font-weight: 700 !important;
+.caption-foot,
+[data-vn-dialogue-footer] {
+  display: none !important;
 }
 
 /* World Lens active node, lens preview card, and CTA */
@@ -2284,6 +2379,44 @@ body.theme-light [data-surface="settings"]:before,
   font-weight: 700 !important;
   font-size: 11px !important;
   padding: 0 !important;
+}
+
+/* World Lens Sheet layout override */
+[data-vn-reference-sheet] {
+  display: block !important;
+  overflow-y: auto !important;
+  height: auto !important;
+  max-height: none !important;
+}
+[data-vn-reference-sheet] > header {
+  display: none !important;
+}
+.chip-row,
+[data-reference-filters] {
+  display: flex !important;
+  flex: none !important;
+  flex-wrap: nowrap !important;
+  gap: 8px !important;
+  margin: 12px 0 14px !important;
+  min-height: 38px !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+.chip {
+  flex: 0 0 auto !important;
+  height: 34px !important;
+  min-width: 68px !important;
+  padding: 0 16px !important;
+  border-radius: 999px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+}
+.observation-cell.observation-cell-wide {
+  grid-column: 1 / -1 !important;
+  padding-left: 0 !important;
 }
 
 /* Characters & Places Folio Text Contrast - Dark Mode */

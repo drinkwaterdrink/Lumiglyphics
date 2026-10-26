@@ -380,10 +380,11 @@ export class DossierCard {
       for (const item of allObservations.slice(0, 8)) {
         const cell = document.createElement('div');
         cell.className = 'observation-cell';
+        if (item.value.length > 55) cell.classList.add('observation-cell-wide');
         const label = document.createElement('span');
         label.textContent = referenceFieldInfo(item.field).label;
         const strong = document.createElement('strong');
-        strong.textContent = item.value.length > 40 ? `${item.value.slice(0, 38)}…` : item.value;
+        strong.textContent = `${item.value} `;
         const em = document.createElement('em');
         em.textContent = item.source?.provider === 'model' || ('revealedAt' in item && Boolean((item as any).revealedAt)) ? 'SEEN' : 'TOLD';
         strong.append(em);
@@ -1052,7 +1053,8 @@ export const DOCKED_DOSSIER_CSS = `
 [data-vn-workspace-tool="story"] [data-vn-dossier-card]{width:100%;max-height:100%;height:100%;border:0;border-radius:0;box-shadow:none;padding:18px;font-size:14px;line-height:1.7}
 [data-vn-workspace-tool="story"] [data-vn-dossier-card]>header{position:static;top:auto;padding:0 0 14px;background:var(--vn-panel-solid)}
 [data-vn-workspace-tool="story"] [data-vn-dossier-card]>header button[aria-label^="Close"]{display:none}
-[data-vn-workspace-tool="story"] [data-vn-reference-sheet]>header{display:none}
+[data-vn-workspace-tool="story"] [data-vn-reference-sheet]>header,
+[data-vn-workspace-tool="story"] [data-vn-dossier-card][data-vn-reference-sheet]>header{display:none!important}
 [data-reference-categories]{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
 [data-reference-categories] button{flex:1;min-width:60px;margin:0;font-size:11px;padding:6px 8px}
 [data-reference-categories] [aria-pressed="true"]{border-color:var(--vn-accent);color:var(--vn-accent);background:color-mix(in srgb,var(--vn-accent) 10%,transparent)}

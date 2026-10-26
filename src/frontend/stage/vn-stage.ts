@@ -222,8 +222,8 @@ const THEME_MARKUP = `
           <small data-vn-step-right>07</small>
         </div>
         <nav data-vn-controls class="reader-action-row" aria-label="Reading controls">
-          <button data-vn-control="previous" class="action icon-action" type="button" aria-label="Previous paragraph" aria-keyshortcuts="ArrowLeft" title="Previous paragraph (Left Arrow)">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5m6-6-6 6 6 6"/></svg></span><span data-vn-control-label>Previous</span>
+          <button data-vn-control="previous" class="action icon-action nav-step-btn" type="button" aria-label="Previous paragraph" aria-keyshortcuts="ArrowLeft" title="Previous paragraph (Left Arrow)">
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></span><span data-vn-control-label style="display:none">Previous</span>
           </button>
           <button data-vn-control="log" class="action icon-action" type="button" aria-label="Open history" aria-keyshortcuts="L" title="History (L)">
             <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 1 3 7M3 5v7h7M12 7v5l4 2"/></svg></span><span data-vn-control-label>History</span>
@@ -239,12 +239,12 @@ const THEME_MARKUP = `
           </button>
           <button
             data-vn-continue
-            class="action advance"
+            class="action advance nav-step-btn"
             type="button"
             aria-label="Continue"
             aria-keyshortcuts="Enter Space ArrowRight"
             title="Continue (Enter)"
-          ><span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></span></button>
+          ><span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span></button>
 
           <!-- Auto & Skip preserved for unit tests & keyboard shortcuts -->
           <button data-vn-control="auto" type="button" aria-label="Auto play" aria-pressed="false" aria-keyshortcuts="A" title="Auto play (A)" style="display:none">

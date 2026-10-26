@@ -297,11 +297,11 @@ export class ReaderWorkspace {
       this.pause(); this.opener = trigger ?? this.nav.querySelector<HTMLElement>(`[data-reader-destination="${id}"]`);
       this.release(); this.current = id;
       const d = destinations.find(d => d.id === id)!;
-      this.title.textContent = d.label; this.subtitle.textContent = d.hint;
+      this.title.textContent = id === 'story' ? 'World Lens' : d.label; this.subtitle.textContent = d.hint;
       this.panel.hidden = false; this.shell.dataset.vnWorkspace = id;
       this.panel.dataset.surface = id;
       this.routeBar.hidden = false;
-      this.routeName.textContent = d.label.toUpperCase();
+      this.routeName.textContent = (id === 'story' ? 'World Lens' : d.label).toUpperCase();
       this.routeStep.textContent = 'CHAPTER IV / YOUR WORLD';
       const tool = this.tools.get(id);
       if (tool) { this.rememberHome(tool.element); this.content.append(tool.element); tool.element.hidden=false;tool.enter(); }
