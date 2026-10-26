@@ -23,7 +23,8 @@ describe('reader-first same-instance workspace',()=>{
   expect(shell.querySelectorAll('[data-workspace-world],[data-workspace-art],[data-workspace-history],[data-workspace-settings],[data-workspace-read],[data-workspace-navigate]').length).toBe(6);
   workspace.close(false);expect((reader as unknown as {inert:boolean}).inert).toBe(false);expect(reader.getAttribute('aria-hidden')).toBe(null);
   workspace.open('settings');shell.querySelector('[data-workspace-navigate]')!.click();expect(workspace.destination).toBe('more');
-  expect(shell.querySelectorAll('[data-more-action]').map(n=>n.getAttribute('data-more-action'))).toEqual(['lens','cast','artwork','library','history','panels','voice','settings','search','focus','backToChat']);
+  expect(shell.querySelectorAll('[data-more-action]').map(n=>n.getAttribute('data-more-action'))).toEqual(['lens','cast','artwork','library','history','passageLog','panels','voice','settings','search','focus','backToChat']);
+  expect(shell.querySelector('[data-iris-action="passageLog"]')?.textContent).toContain('Passage log');
   expect(shell.querySelector('[data-iris-action="workspace"]')?.textContent).toContain('Workspace');
   workspace.close(false);
  });
@@ -61,11 +62,13 @@ describe('reader-first same-instance workspace',()=>{
   expect(iris.getAttribute('aria-label')).toBe('Show navigation');iris.click();
   expect(shell.dataset.vnReadingFocus).toBe('false');expect(iris.getAttribute('aria-label')).toBe('Open APERTURE navigation');
  });
- test('the real host exit moves into and back out of the full-screen workspace',()=>{
+ test('the protected host exit stays out of the workspace header while Back to Chat remains in navigation',()=>{
   const owner=new FakeNode('main'),content=new FakeNode('div'),exit=new FakeNode('button');exit.dataset.vnExit='';owner.append(content,exit);
   const screen=new ReaderWorkspace(el(owner),el(content),()=>{},()=>content.focus());owner.dataset.vnAperture='true';screen.open('history');
-  expect(exit.parentNode).toBe(owner.querySelector('[data-workspace-heading]'));screen.close(false);
-  expect(exit.parentNode).toBe(owner.querySelector('[data-reader-header-actions]'));screen.destroy();
+  expect(exit.parentNode).toBe(owner.querySelector('[data-reader-header-actions]'));
+  expect(owner.querySelector('[data-workspace-close]')?.getAttribute('aria-label')).toBe('Close workspace and return to reader');
+  expect(owner.querySelector('[data-iris-action="backToChat"]')?.textContent).toContain('Back to Chat');
+  screen.close(false);expect(exit.parentNode).toBe(owner.querySelector('[data-reader-header-actions]'));screen.destroy();
  });
  test('attention clears and destruction restores the owner before removing chrome',()=>{
   const tool=new FakeNode('div');shell.append(tool);workspace.register('history',{element:el(tool),enter:()=>{},leave:()=>calls.push('leave')});workspace.setAttention(2);expect(shell.querySelector('[data-reader-attention]')!.textContent).toBe('2');workspace.setAttention(0);expect(shell.querySelector('[data-reader-attention]')!.hidden).toBe(true);

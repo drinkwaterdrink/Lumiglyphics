@@ -716,10 +716,11 @@ function friendlyStatus(status: string): string { return ({ browser_ready: "Read
 const DOCKED_STUDIO_CSS=`
 :host([data-vn-workspace-tool]){position:relative;inset:auto;display:block;width:100%;height:100%;z-index:auto;pointer-events:auto}
 :host([data-vn-workspace-tool]) [data-launch]{display:none}
-:host([data-vn-workspace-tool]) section,:host([data-vn-workspace-tool]) section[data-state]{position:relative;inset:auto;width:100%;max-width:none;height:100%;max-height:none;border:0;border-radius:0;box-shadow:none}
+:host([data-vn-workspace-tool]) section,:host([data-vn-workspace-tool]) section[data-state]{position:relative;inset:auto;width:100%;max-width:none;height:100%;max-height:none;min-height:0;border:0;border-radius:0;box-shadow:none}
 :host([data-vn-workspace-tool]) [data-studio-header]{display:none}
-:host([data-vn-workspace-tool]) [data-studio-body]{padding:18px;flex:1}
-:host([data-vn-workspace-tool]) [data-studio-footer]{padding:12px 18px}
+:host([data-vn-workspace-tool]) [data-studio-body]{min-height:0;overflow-y:auto;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y;padding:18px;flex:1 1 auto}
+:host([data-vn-workspace-tool]) [data-studio-footer]{padding:8px 18px}
+:host([data-vn-workspace-tool]) [data-studio-footer] button{min-height:48px}
 [data-workspace-library]{display:none}
 :host([data-vn-workspace-tool]) [data-workspace-library]{display:block;width:100%;background:transparent;margin-bottom:16px}
 `;

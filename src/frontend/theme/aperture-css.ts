@@ -60,6 +60,13 @@ export const APERTURE_CSS = `
   background: color-mix(in srgb, var(--vn-panel-solid) 86%, transparent);
   backdrop-filter: blur(12px);
 }
+/* APERTURE's bottom rail owns previous/history/reference navigation. Keep the
+   dialogue toolbar focused on playback and text-sheet controls, and never float
+   scene chips over the prose; the complete, source-aware list lives in World Lens. */
+[data-vn-root][data-vn-aperture="true"] [data-vn-controls] [data-vn-control="previous"],
+[data-vn-root][data-vn-aperture="true"] [data-vn-controls] [data-vn-control="log"],
+[data-vn-root][data-vn-aperture="true"] [data-vn-references],
+[data-vn-root][data-vn-aperture="true"] [data-vn-scene-hud] { display:none !important; }
 [data-vn-root][data-vn-aperture="true"] [data-vn-controls] [data-vn-control] {
   color: var(--vn-text);
   border-radius: 999px;

@@ -1,7 +1,7 @@
 import { SETTINGS_PAGES } from '../settings/routes.js';
 
 export type ReaderDestination = 'story' | 'artwork' | 'history' | 'settings';
-export type ReaderWorkspaceAction = 'previous' | 'next' | 'history' | 'lens' | 'cast' | 'settings' | 'panels' | 'voice' | 'artwork' | 'library' | 'workspace' | 'backToChat' | 'focus' | 'search';
+export type ReaderWorkspaceAction = 'previous' | 'next' | 'history' | 'passageLog' | 'lens' | 'cast' | 'settings' | 'panels' | 'voice' | 'artwork' | 'library' | 'workspace' | 'backToChat' | 'focus' | 'search';
 export type ReaderWorkspaceActions = Partial<Record<ReaderWorkspaceAction, (open?: boolean) => void>>;
 export interface WorkspaceSurface {
   element: HTMLElement;
@@ -109,7 +109,8 @@ export class ReaderWorkspace {
         <button type="button" data-iris-action="cast">${readerIcon('cast')}<span><b>Cast / Folios</b><small>Character facts grounded in the story</small></span></button>
         <button type="button" data-iris-action="artwork">${readerIcon('art')}<span><b>Art Studio</b><small>Review, replace, queue & inspect artwork</small></span></button>
         <button type="button" data-iris-action="library">${readerIcon('history')}<span><b>Image Library</b><small>Browse saved story pictures</small></span></button>
-        <button type="button" data-iris-action="history">${readerIcon('read')}<span><b>History</b><small>Read earlier passages</small></span></button>
+        <button type="button" data-iris-action="history">${readerIcon('read')}<span><b>History</b><small>Earlier passages and saved artwork</small></span></button>
+        <button type="button" data-iris-action="passageLog">${readerIcon('history')}<span><b>Passage log</b><small>Earlier paragraphs in this reply</small></span></button>
         <button type="button" data-iris-action="panels">${readerIcon('panels')}<span><b>Panels</b><small>Show or capture pinned cards</small></span></button>
         <button type="button" data-iris-action="voice">${readerIcon('voice')}<span><b>Voice / TTS</b><small>Optional paragraph speech</small></span></button>
         <button type="button" data-iris-action="settings">${readerIcon('settings')}<span><b>Settings</b><small>All existing routes and preferences</small></span></button>
@@ -139,6 +140,7 @@ export class ReaderWorkspace {
       {label:'Art Studio',hint:'Review, generate, replace and queue pictures',icon:'art',action:'artwork'},
       {label:'Image Library',hint:'Browse saved story illustrations',icon:'history',action:'library'},
       {label:'History',hint:'Return to earlier passages and versions',icon:'read',action:'history'},
+      {label:'Passage log',hint:'Read earlier paragraphs in this reply',icon:'history',action:'passageLog'},
       {label:'Panels',hint:'Open pinned cards and scene panels',icon:'panels',action:'panels'},
       {label:'Voice & TTS',hint:'Play available speech or open voice settings',icon:'voice',action:'voice'},
       {label:'Settings',hint:'All 22 settings pages and saved preferences',icon:'settings',action:'settings'},
@@ -250,6 +252,11 @@ export class ReaderWorkspace {
       this.reader.shadowRoot?.querySelector<HTMLButtonElement>('[data-vn-continue]')?.click(); return;
     }
     if (action === 'history') { this.open('history'); return; }
+    if (action === 'passageLog') {
+      if(this.current)this.close(false);
+      this.reader.shadowRoot?.querySelector<HTMLButtonElement>('[data-vn-control="log"]')?.click();
+      return;
+    }
     if (action === 'workspace') { this.openMore(this.irisButton); return; }
     if (action === 'lens' || action === 'cast') {
       this.open('story');
@@ -375,10 +382,10 @@ export class ReaderWorkspace {
   suspend():void {this.setVoiceOpen(false);if(this.search.open)this.search.close();this.close(false);}
   private syncExitPlacement():void {
     if(!this.exitButton)return;
-    const target=this.shell.dataset.vnAperture==='true'&&this.current
-      ?this.panel.querySelector<HTMLElement>('[data-workspace-heading]')
-      :this.header.querySelector<HTMLElement>('[data-reader-header-actions]');
-    target?.append(this.exitButton);
+    // Keep the host's leave-reader action out of the workspace header. That
+    // header already has a real Back-to-reading control; Back to Chat remains
+    // available from APERTURE's navigation menu, avoiding two adjacent arrows.
+    this.header.querySelector<HTMLElement>('[data-reader-header-actions]')?.append(this.exitButton);
   }
   private syncReader(): void {
     // APERTURE destinations are full-screen pages at every size. The legacy
