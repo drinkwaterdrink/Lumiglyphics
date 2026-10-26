@@ -754,10 +754,10 @@ aside[data-vn-workspace] {
   right: 15px !important;
   top: auto !important;
   bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
-  height: var(--caption-height, 142px) !important;
+  height: var(--caption-height, 142px);
   min-height: 100px !important;
   max-height: calc(100% - 160px) !important;
-  padding: 18px 14px 8px !important;
+  padding: 16px 14px 8px !important;
   border: 1px solid rgba(224, 238, 217, 0.32) !important;
   border-radius: 16px !important;
   background: rgba(4, 13, 17, var(--caption-opacity, 0.72)) !important;
@@ -793,92 +793,150 @@ aside[data-vn-workspace] {
 
 /* Draggable Top Resize Grip */
 .resize-grip {
-  position: absolute;
-  inset: 0 42px auto 42px;
-  height: 22px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  cursor: ns-resize;
-  touch-action: none;
-  z-index: 25;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 24px !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  cursor: ns-resize !important;
+  touch-action: none !important;
+  z-index: 25 !important;
 }
 
 .resize-grip span {
-  width: 47px;
-  height: 3px;
-  border-radius: 10px;
-  background: rgba(234, 247, 224, 0.55);
-  box-shadow: 0 0 6px rgba(0, 0, 0, 0.4);
-  transition: background 0.2s ease, width 0.2s ease;
+  width: 48px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(220, 238, 177, 0.45);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  transition: background 0.2s ease, width 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
 }
 
 .resize-grip:hover span,
+.resize-grip:active span,
 .resize-grip:focus-visible span {
-  background: var(--lime);
-  width: 58px;
+  background: #dcebad;
+  width: 64px;
+  transform: scaleY(1.2);
 }
 
 /* Dialogue Head: Speaker + Actions */
 [data-vn-sheet-header] {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  justify-content: space-between;
-  flex: 0 0 24px;
-  min-height: 24px;
-  border-bottom: 1px solid rgba(228, 240, 218, 0.15);
-  padding-bottom: 3px;
+  display: flex !important;
+  gap: 6px !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  flex: 0 0 24px !important;
+  min-height: 24px !important;
+  border-bottom: 1px solid rgba(228, 240, 218, 0.15) !important;
+  padding-bottom: 3px !important;
+  margin-bottom: 2px !important;
+}
+
+.speaker {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
 }
 
 [data-vn-speaker] {
-  font-size: 9.5px;
-  line-height: 1.4;
-  letter-spacing: 0.105em;
-  font-weight: 750;
-  margin: 0;
+  font-size: 11px !important;
+  line-height: 1.4 !important;
+  letter-spacing: 0.11em !important;
+  font-weight: 800 !important;
+  margin: 0 !important;
   color: #dcebad !important;
-  white-space: nowrap;
-  max-width: 75%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+  text-transform: uppercase !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8) !important;
+}
+
+.caption-split {
+  font-size: 10px !important;
+  color: rgba(220, 238, 177, 0.4) !important;
+  font-weight: 400 !important;
+}
+
+[data-vn-caption-scene] {
+  font-size: 9.5px !important;
+  letter-spacing: 0.08em !important;
+  color: #a4b8ad !important;
+  text-transform: uppercase !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  opacity: 0.85 !important;
+}
+
+.caption-head-actions {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  flex: none !important;
 }
 
 .caption-tool {
-  width: 29px;
-  height: 25px;
-  display: grid;
-  place-items: center;
+  width: 26px !important;
+  height: 24px !important;
+  display: grid !important;
+  place-items: center !important;
   color: #f0f4e7 !important;
-  opacity: 0.8;
-  border-radius: 6px;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
+  opacity: 0.85 !important;
+  border-radius: 6px !important;
+  border: 1px solid rgba(220, 238, 177, 0.18) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+  padding: 0 !important;
 }
 
 .caption-tool:hover {
-  background: rgba(255, 255, 255, 0.16);
-  opacity: 1;
+  background: rgba(220, 238, 177, 0.22) !important;
+  border-color: #dcebad !important;
+  opacity: 1 !important;
+}
+
+.caption-tool svg {
+  width: 14px !important;
+  height: 14px !important;
 }
 
 /* Scrollable Copy */
+.scroll-copy {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch !important;
+  touch-action: pan-y !important;
+  overscroll-behavior: contain !important;
+  scrollbar-width: thin !important;
+  padding: 2px 0 6px !important;
+}
+
 [data-vn-dialogue-text] {
   flex: 1;
   min-height: 0;
   max-height: none;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  padding: 4px 0 6px;
   margin: 0;
   font-size: var(--reader-font, 15px);
-  line-height: 1.5;
+  line-height: 1.55;
   letter-spacing: 0;
   color: #f9faf6 !important;
   font-family: Georgia, 'Times New Roman', serif;
   text-shadow: 0 2px 7px rgba(0, 0, 0, 0.82), 0 1px 1px black;
+  user-select: text !important;
+  overflow-wrap: break-word !important;
 }
 
 /* Dialogue Footer */
@@ -2197,6 +2255,13 @@ body.theme-light [data-surface="settings"]:before,
   border-color: #19382f !important;
 }
 .world-lens {
+  position: relative !important;
+  inset: auto !important;
+  margin: 10px 0 8px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  border-radius: 12px !important;
+  padding: 12px 14px !important;
   background: rgba(17, 41, 35, 0.96) !important;
   color: #f4f7ee !important;
   border: 1px solid #5c8674 !important;
@@ -2221,9 +2286,59 @@ body.theme-light [data-surface="settings"]:before,
   padding: 0 !important;
 }
 
-/* Light mode specific rules for World Lens */
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-vn-shell], [data-vn-root], [data-vn-dossier], [data-vn-dossier-card], [data-vn-reference-sheet], aside[data-vn-workspace], [data-vn-settings], .settings-page) {
+/* Characters & Places Folio Text Contrast - Dark Mode */
+.observation-cell span {
+  color: #9cb5a8 !important;
+  opacity: 1 !important;
+  font-weight: 650 !important;
+}
+.observation-cell strong {
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+.observation-cell em {
+  color: #d6ecad !important;
+  background: rgba(220, 238, 177, 0.2) !important;
+}
+[data-vn-dossier-card] dt {
+  color: #a8c7b8 !important;
+  opacity: 1 !important;
+  font-weight: 700 !important;
+}
+[data-vn-dossier-card] dd {
+  color: #f2f7f0 !important;
+  opacity: 1 !important;
+}
+section[data-reference-current] h3,
+section[data-reference-observations] h3 {
+  color: #dcebad !important;
+  opacity: 1 !important;
+  font-weight: 700 !important;
+}
+[data-dossier-present-cast] h3 {
+  color: #dcebad !important;
+  opacity: 1 !important;
+}
+
+/* History Workspace Surface */
+[data-surface="history"],
+[data-vn-workspace-tool="history"] {
+  background: #11241c !important;
+  color: #f3f7ee !important;
+}
+
+/* Light mode specific rules for World Lens & Folio */
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-vn-shell], [data-vn-root], [data-vn-dossier], [data-vn-dossier-card], [data-vn-reference-sheet], aside[data-vn-workspace], [data-vn-settings], .settings-page, [data-surface="history"], [data-vn-workspace-tool="history"]) {
   background: linear-gradient(147deg, #eef3e5 0%, #e8eee0 58%, #dce7d3 100%) !important;
+  color: #172721 !important;
+}
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-image-studio], [data-image-studio] section, .settings-page, [data-vn-settings] section, [data-vn-workspace] section) {
+  background: #eef3e5 !important;
+  color: #172721 !important;
+}
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-image-studio] header, .settings-page header, [data-vn-settings] header) {
+  background: #e4ebe0 !important;
+  border-color: #bccdc0 !important;
   color: #172721 !important;
 }
 :is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .world-sheet-map {
@@ -2258,6 +2373,13 @@ body.theme-light [data-surface="settings"]:before,
   color: #d3e6d8 !important;
 }
 :is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .world-lens {
+  position: relative !important;
+  inset: auto !important;
+  margin: 10px 0 8px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  border-radius: 12px !important;
+  padding: 12px 14px !important;
   background: rgba(251, 252, 245, 0.97) !important;
   color: #19362a !important;
   border: 1px solid #c0cec2 !important;
@@ -2290,6 +2412,63 @@ body.theme-light [data-surface="settings"]:before,
   color: #f6f9eb !important;
   border-color: #244c38 !important;
   background: #244c38 !important;
+}
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .observation-cell span {
+  color: #2b5946 !important;
+  opacity: 1 !important;
+  font-weight: 700 !important;
+}
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .observation-cell strong {
+  color: #12241d !important;
+  font-weight: 700 !important;
+}
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .observation-cell em {
+  color: #1d4d38 !important;
+  background: rgba(56, 102, 79, 0.15) !important;
+}
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-vn-dossier-card] dt {
+  color: #2b5946 !important;
+  opacity: 1 !important;
+  font-weight: 700 !important;
+}
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-vn-dossier-card] dd {
+  color: #142820 !important;
+  opacity: 1 !important;
+}
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) section[data-reference-current] h3,
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) section[data-reference-observations] h3 {
+  color: #1e4533 !important;
+  opacity: 1 !important;
+  font-weight: 700 !important;
+}
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-reference-overview] {
+  background: rgba(225, 238, 222, 0.85) !important;
+  border: 1px solid rgba(86, 128, 107, 0.35) !important;
+}
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-dossier-present-cast] {
+  background: rgba(225, 238, 222, 0.85) !important;
+  border-color: rgba(86, 128, 107, 0.35) !important;
+}
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-dossier-present-cast] h3 {
+  color: #1e4533 !important;
+  opacity: 1 !important;
+}
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-dossier-cast-chip] {
+  color: #153226 !important;
+  background: #e5eee2 !important;
+  border-color: #8dafa0 !important;
+}
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-reference-list] button {
+  background: #fbfdf7 !important;
+  border-color: #9cb5a7 !important;
+  color: #142820 !important;
+}
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-reference-row-title] {
+  color: #142820 !important;
+}
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-reference-snippet] {
+  color: #3b5a4b !important;
+  opacity: 1 !important;
 }
 
 

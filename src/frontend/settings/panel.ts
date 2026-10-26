@@ -2075,11 +2075,15 @@ export class VisualNovelSettingsPanel {
     if (opacityOut) opacityOut.textContent = `${Math.round(config.readerPreferences.backgroundOpacity * 100)}%`;
     const mini = this.root.querySelector<HTMLElement>("[data-mini-caption-preview]");
     if (mini) mini.style.setProperty("--caption-opacity", String(config.readerPreferences.backgroundOpacity));
-    const darkModeBox = this.root.querySelector<HTMLInputElement>("input[name='apertureDarkMode']");
-    if (darkModeBox) darkModeBox.checked = config.readerPreferences.theme === "dark";
+    const isDark = config.readerPreferences.theme === "dark";
+    const darkModeBox = this.root.querySelector<HTMLInputElement>('input[name="apertureDarkMode"]');
+    if (darkModeBox) darkModeBox.checked = isDark;
     const themeStatus = this.root.querySelector<HTMLElement>("[data-aperture-theme-status]");
-    if (themeStatus) themeStatus.textContent = config.readerPreferences.theme === "dark" ? "DARK MODE / ACTIVE" : "LIGHT MODE / ACTIVE";
-    this.host.dataset.apertureMode = config.readerPreferences.theme === "dark" ? "dark" : "light";
+    if (themeStatus) themeStatus.textContent = isDark ? "DARK MODE / ACTIVE" : "LIGHT MODE / ACTIVE";
+    this.host.dataset.apertureMode = isDark ? "dark" : "light";
+    document.body.classList.toggle("theme-dark", isDark);
+    document.body.classList.toggle("theme-light", !isDark);
+    document.documentElement.dataset.apertureMode = isDark ? "dark" : "light";
     this.showCustomQuiet("textScale", !scaleStep);
 
     const source = imageSourceFromConfig(config);

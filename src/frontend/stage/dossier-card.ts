@@ -721,6 +721,11 @@ export class DossierCard {
     worldSheet.innerHTML = '<svg class="world-map-svg" viewBox="0 0 330 250" aria-hidden="true"><path d="M90 60C160 62 155 90 205 110M90 60C60 90 48 135 48 170M48 170C120 205 130 190 205 190M205 110C225 155 205 170 205 190"/></svg>';
     panel.append(worldSheet);
 
+    // World Lens Card slot right under the map canvas
+    const lensSlot = document.createElement('div');
+    lensSlot.className = 'world-lens-slot';
+    panel.append(lensSlot);
+
     // Section Head: Known in this scene
     const sectionHead = document.createElement('div');
     sectionHead.style.cssText = 'font-size:10.5px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;opacity:0.8;margin:14px 0 6px;display:flex;justify-content:space-between;align-items:center;';
@@ -815,7 +820,7 @@ export class DossierCard {
       } else {
         lensCard.innerHTML = '<h3>No matching references</h3><p>Try another category or clear the search.</p>';
       }
-      worldSheet.append(lensCard);
+      lensSlot.replaceChildren(lensCard);
 
       // Populate Horizontal Strip
       for (const { entity, pinned } of filtered) {
@@ -956,8 +961,8 @@ export const DOSSIER_CSS = `
 .observations-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid rgba(255,255,255,.15);margin-top:8px}
 .observation-cell{padding:8px 6px 8px 0;border-bottom:1px solid rgba(255,255,255,.12);min-height:48px}
 .observation-cell:nth-child(even){padding-left:10px}
-.observation-cell span{display:block;font-size:9.5px;margin-bottom:2px;opacity:.72;text-transform:uppercase;letter-spacing:.03em}
-.observation-cell strong{font-size:11.5px;font-weight:600}
+.observation-cell span{display:block;font-size:9.5px;margin-bottom:2px;opacity:.92;text-transform:uppercase;letter-spacing:.03em;color:#9cb5a8}
+.observation-cell strong{font-size:11.5px;font-weight:650;color:#f3f7f0}
 .observation-cell em{font-size:8.5px;font-style:normal;margin-left:4px;padding:1px 4px;border-radius:4px;background:rgba(220,238,177,.2);color:#d6ecad;font-weight:750}
 
 [data-dossier-media]{margin:0;position:relative;overflow:hidden;border-radius:12px;border:1px solid color-mix(in srgb,var(--vn-accent,#9ec6f0) 35%,transparent);background:rgba(0,0,0,.35);display:grid;place-items:center}
@@ -981,7 +986,7 @@ export const DOSSIER_CSS = `
 .map-node-pill small{display:block;font-size:9px;opacity:.75;margin-top:1px}
 .map-node-pill .index-dot{display:block;width:7px;height:7px;background:#90b5a7;border:1.5px solid white;border-radius:100%;position:absolute;top:-5px;left:9px}
 .map-node-pill.active .index-dot{background:#315f50;border-color:#deefac}
-.world-lens{position:absolute;bottom:8px;left:8px;right:8px;padding:10px 12px;border-radius:10px;background:rgba(14,25,21,.92);backdrop-filter:blur(8px);border:1px solid rgba(130,175,155,.35);box-shadow:0 6px 18px rgba(0,0,0,.35);z-index:3}
+.world-lens{position:relative;margin:10px 0 6px;width:100%;box-sizing:border-box;padding:12px 14px;border-radius:12px;background:rgba(14,25,21,.94);backdrop-filter:blur(8px);border:1px solid rgba(130,175,155,.35);box-shadow:0 6px 18px rgba(0,0,0,.35);z-index:3}
 .world-lens h3{font-size:13px;margin:0 0 2px;font-weight:700;color:#f2f7ed}
 .world-lens p{margin:0;font-size:10.5px;line-height:1.4;opacity:.85;color:#d1dfd5}
 .world-lens-cta{display:inline-block;margin-top:6px!important;min-height:0!important;min-width:0!important;padding:4px 10px!important;font-size:10.5px!important;font-weight:700!important;border-radius:6px!important;background:var(--vn-accent,#a8d3c8)!important;color:#0f1e1a!important;border:none!important;cursor:pointer}
@@ -1001,13 +1006,13 @@ export const DOSSIER_CSS = `
 [data-dossier-cast-chips]{display:flex;flex-wrap:wrap;gap:6px}
 [data-dossier-cast-chip]{margin:0!important;min-height:36px!important;padding:5px 11px!important;border-radius:999px!important;font-size:.8em!important;font-weight:600!important}
 [data-vn-dossier-card] dl{margin:0}
-[data-vn-dossier-card] dt{font-size:.75em;opacity:.78;margin-top:12px;line-height:1.4;font-weight:650;text-transform:uppercase;letter-spacing:.025em;color:color-mix(in srgb,var(--vn-accent,#9ec6f0) 80%,var(--vn-text,#eef1f7))}
+[data-vn-dossier-card] dt{font-size:.75em;opacity:.92;margin-top:12px;line-height:1.4;font-weight:700;text-transform:uppercase;letter-spacing:.025em;color:#a8c7b8}
 [data-vn-dossier-card] dt:first-child{margin-top:0}
-[data-vn-dossier-card] dd{margin:3px 0 0;overflow-wrap:anywhere;white-space:pre-wrap;line-height:1.62}
+[data-vn-dossier-card] dd{margin:3px 0 0;overflow-wrap:anywhere;white-space:pre-wrap;line-height:1.62;color:#f2f7f0}
 [data-vn-dossier-card] [data-fact-expand]{display:inline;min-width:0;min-height:0;padding:1px 6px;margin:0 0 0 4px;font-size:.75em;border-radius:6px;vertical-align:baseline}
-[data-reference-overview]{padding:12px 14px;background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 9%,transparent);border:1px solid color-mix(in srgb,var(--vn-accent,#9ec6f0) 26%,transparent);border-radius:12px;margin:10px 0 14px}
+[data-reference-overview]{padding:12px 14px;background:rgba(27,49,41,.6);border:1px solid rgba(130,185,165,.3);border-radius:12px;margin:10px 0 14px}
 section[data-reference-current],section[data-reference-observations]{margin:14px 0;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--vn-panel-border,#666)}
-section[data-reference-current] h3,section[data-reference-observations] h3{font-size:.82em;text-transform:uppercase;letter-spacing:.03em;margin:0 0 10px;opacity:.9}
+section[data-reference-current] h3,section[data-reference-observations] h3{font-size:.82em;text-transform:uppercase;letter-spacing:.03em;margin:0 0 10px;opacity:1;color:#dcebad;font-weight:700}
 [data-reference-section]{border-bottom:1px solid var(--vn-panel-border,#666)}
 [data-reference-section] dl{padding:0 4px 16px}
 [data-reference-sources]{font-size:.8em;margin:12px 0;opacity:.85}

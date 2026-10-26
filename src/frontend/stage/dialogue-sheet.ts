@@ -16,14 +16,20 @@ export class DialogueSheet {
 
   constructor(private readonly root: HTMLElement, private readonly dialogue: HTMLElement,
     private readonly pause: () => void, private readonly save: (preferences: ReaderPreferences) => void) {
+    this.handle = document.createElement("div");
+    this.handle.className = "resize-grip";
+    this.handle.dataset.vnSheetHandle = "";
+    this.handle.setAttribute("role", "separator");
+    this.handle.setAttribute("aria-label", "Drag to resize dialogue panel");
+    this.handle.setAttribute("aria-orientation", "horizontal");
+    this.handle.tabIndex = 0;
+    this.handle.innerHTML = "<span></span>";
+
     this.tools = document.createElement("div");
     this.tools.dataset.vnSheetTools = "";
-    this.tools.innerHTML = `<div class="resize-grip" data-vn-sheet-handle role="separator" aria-label="Drag to resize dialogue panel" aria-orientation="horizontal" tabindex="0"><span></span></div>
-      <div class="caption-head-actions">
-        <button type="button" class="caption-tool" data-action="caption-expand" aria-label="Expand dialogue panel"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 15 7-7 7 7"/></svg></button>
-        <button type="button" class="caption-tool" data-vn-hide-text aria-label="Minimize dialogue box" title="Hide text"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg></button>
-      </div>`;
-    this.handle = this.tools.querySelector("[data-vn-sheet-handle]")!;
+    this.tools.className = "caption-head-actions";
+    this.tools.innerHTML = `<button type="button" class="caption-tool" data-action="caption-expand" aria-label="Expand dialogue panel"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 15 7-7 7 7"/></svg></button>
+      <button type="button" class="caption-tool" data-vn-hide-text aria-label="Minimize dialogue box" title="Hide text"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg></button>`;
     this.expand = this.tools.querySelector("[data-action='caption-expand']")!;
     this.hide = this.tools.querySelector("[data-vn-hide-text]")!;
 
@@ -39,14 +45,11 @@ export class DialogueSheet {
     const edge = document.createElement("div");
     edge.className = "caption-edge";
     dialogue.prepend(edge);
+    dialogue.prepend(this.handle);
 
-    const header = this.header = document.createElement("div");
+    const header = this.header = dialogue.querySelector<HTMLElement>("[data-vn-sheet-header]") || document.createElement("div");
     header.dataset.vnSheetHeader = "";
-    const controls = dialogue.querySelector("[data-vn-controls]");
-    const speaker = dialogue.querySelector("[data-vn-speaker]");
-    dialogue.prepend(header);
-    if (speaker) header.append(speaker);
-    if (controls) header.append(controls);
+    if (!header.parentElement) dialogue.prepend(header);
     header.append(this.tools);
     root.append(this.show);
 
@@ -66,6 +69,22 @@ export class DialogueSheet {
       }
     }, { signal });
     this.show.addEventListener("click", event => { event.stopPropagation(); this.setHidden(false); this.handle.focus(); }, { signal });
+
+    const onMove = (clientY: number) => {
+      if (!this.drag) return;
+      const height = Math.min(this.usableHeight(), Math.max(120, this.drag.height + (this.drag.y - clientY) * this.coordinateScale()));
+      root.style.setProperty("--vn-sheet-height", `${height}px`);
+      root.style.setProperty("--caption-height", `${height}px`);
+      dialogue.style.setProperty("--caption-height", `${height}px`);
+      dialogue.style.height = `${height}px`;
+    };
+    const onUp = (clientY: number) => {
+      if (!this.drag) return;
+      const height = dialogue.getBoundingClientRect().height * this.coordinateScale();
+      this.cancelDrag();
+      this.changeHeight(height);
+    };
+
     this.handle.addEventListener("pointerdown", event => {
       if (event.button !== 0) return;
       event.preventDefault();
@@ -74,18 +93,41 @@ export class DialogueSheet {
       this.pause();
     }, { signal });
     this.handle.addEventListener("pointermove", event => {
-      if (!this.drag || this.drag.id !== event.pointerId) return;
-      const height = Math.min(this.usableHeight(), Math.max(142, this.drag.height + (this.drag.y - event.clientY) * this.coordinateScale()));
-      root.style.setProperty("--vn-sheet-height", `${height}px`);
-      root.style.setProperty("--caption-height", `${height}px`);
+      if (this.drag && this.drag.id === event.pointerId) onMove(event.clientY);
     }, { signal });
     this.handle.addEventListener("pointerup", event => {
-      if (!this.drag || this.drag.id !== event.pointerId) return;
-      const height = dialogue.getBoundingClientRect().height * this.coordinateScale();
-      this.cancelDrag();
-      this.changeHeight(height);
+      if (this.drag && this.drag.id === event.pointerId) onUp(event.clientY);
     }, { signal });
     this.handle.addEventListener("pointercancel", () => { this.cancelDrag(); this.resize(); }, { signal });
+
+    window.addEventListener("pointermove", event => {
+      if (this.drag && this.drag.id === event.pointerId) {
+        event.preventDefault();
+        onMove(event.clientY);
+      }
+    }, { signal, passive: false });
+    window.addEventListener("pointerup", event => {
+      if (this.drag && this.drag.id === event.pointerId) onUp(event.clientY);
+    }, { signal });
+
+    this.handle.addEventListener("touchstart", event => {
+      if (event.touches[0]) {
+        event.preventDefault();
+        this.drag = { id: event.touches[0].identifier, y: event.touches[0].clientY, height: dialogue.getBoundingClientRect().height * this.coordinateScale() };
+        this.pause();
+      }
+    }, { signal, passive: false });
+    window.addEventListener("touchmove", event => {
+      if (this.drag && event.touches[0]) {
+        event.preventDefault();
+        onMove(event.touches[0].clientY);
+      }
+    }, { signal, passive: false });
+    window.addEventListener("touchend", event => {
+      if (this.drag && event.changedTouches[0]) {
+        onUp(event.changedTouches[0].clientY);
+      }
+    }, { signal });
     this.handle.addEventListener("keydown", event => {
       if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
       event.preventDefault();

@@ -202,20 +202,16 @@ const THEME_MARKUP = `
 
     <section data-vn-narrative hidden aria-label="Dialogue">
       <div data-vn-dialogue class="reader-caption refined-caption">
-        <div class="resize-grip" role="separator" aria-label="Drag to resize dialogue panel"><span></span></div>
-        <div class="caption-head">
-          <div class="speaker"><span data-vn-speaker></span><span class="caption-split">/</span><span data-vn-caption-scene>KIT HALL</span></div>
-          <div class="caption-head-actions">
-            <button data-vn-clean-toggle class="caption-tool" type="button" aria-label="Minimize dialogue box" aria-pressed="false" aria-keyshortcuts="H" title="Minimize dialogue box (H)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
-          </div>
+        <div class="caption-head" data-vn-sheet-header>
+          <div class="speaker"><span data-vn-speaker></span><span class="caption-split">/</span><span data-vn-caption-scene>SCENE</span></div>
         </div>
         <div class="scroll-copy">
           <p data-vn-dialogue-text aria-live="polite" aria-atomic="true"></p>
         </div>
-        <div data-vn-dialogue-footer class="caption-foot">
-          <span data-vn-progress>PASSAGE 01</span>
+        <div data-vn-dialogue-footer class="caption-foot" style="display:none">
+          <span data-vn-progress></span>
           <span class="caption-foot-dot">✧</span>
-          <span data-vn-footer-speaker>PROSE</span>
+          <span data-vn-footer-speaker></span>
           <span data-vn-reading-state aria-live="polite" style="display:none"></span>
         </div>
       </div>
@@ -2164,6 +2160,16 @@ export class VnStage {
     this.workspace.setCaption(speaker ? `${speaker} · ${view.paragraphNumber} / ${view.paragraphCount}` : view.paragraph ? `Reading · ${view.paragraphNumber} / ${view.paragraphCount}` : "Visual novel");
     this.speaker.title = speaker;
     this.speaker.hidden = !view.paragraph?.speaker;
+    const sceneSpan = this.themeRoot.querySelector<HTMLElement>("[data-vn-caption-scene]");
+    const splitSpan = this.themeRoot.querySelector<HTMLElement>(".caption-split");
+    const activePlace = this.dossiers.sceneHudEntries().find(e => e.kind === "place")?.name;
+    const sceneLoc = (activePlace || "SCENE").trim();
+    if (sceneSpan) {
+      sceneSpan.textContent = sceneLoc.toUpperCase();
+    }
+    if (splitSpan) {
+      splitSpan.hidden = !speaker;
+    }
     const progress = view.paragraph
       ? `PASSAGE ${String(view.paragraphNumber).padStart(2, '0')}`
       : "";

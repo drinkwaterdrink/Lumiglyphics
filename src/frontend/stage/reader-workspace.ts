@@ -172,8 +172,6 @@ export class ReaderWorkspace {
       if (panelLayer) {
         panelLayer.dispatchEvent(new CustomEvent("lumiglyphics:panels-toggle", { bubbles: true }));
       }
-      const launcher = panelLayer?.shadowRoot?.querySelector<HTMLButtonElement>('.launcher');
-      if (launcher) launcher.click();
     }, {signal});
     q('[data-action="voice-toggle"]')?.addEventListener('click', () => {
       const speechHost = this.shell.querySelector<HTMLElement>('.vn-speech-dock') || this.shell.querySelector<HTMLElement>('lumiglyphics-speech-dock') || this.shell.querySelector<HTMLElement>('[data-dock]');
