@@ -1990,7 +1990,12 @@ body.theme-light .folio-quote-callout {
    INTERACTION SECTION ("What do you do?") - Cohesive Aperture Theme
    ========================================================================= */
 
-[data-vn-interaction] {
+[data-vn-interaction][hidden],
+[hidden] {
+  display: none !important;
+}
+
+[data-vn-interaction]:not([hidden]) {
   position: absolute !important;
   inset: auto 14px calc(var(--caption-height, 142px) + 82px + env(safe-area-inset-bottom, 0px)) 14px !important;
   z-index: 24 !important;
