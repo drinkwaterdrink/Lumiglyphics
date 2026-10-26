@@ -18,7 +18,7 @@ const DOCK_CSS = `
 /* Top pill: positioned to the left of the exit button on narrow screens, or centered when ample space exists.
    Never overlaps the bottom dialogue box, the reading controls (Next/Previous/Skip live on the dialogue),
    or the top-right exit button. Top offset respects the notch/safe-area inset. */
-:host {
+:host { display: none !important;
   position: absolute;
   top: max(0.75rem, env(safe-area-inset-top));
   left: 50%;
@@ -39,7 +39,7 @@ button:disabled { opacity: .45; cursor: default; }
 @media (pointer: coarse) { button { min-width: 2.75rem; min-height: 2.75rem; } }
 @media (prefers-reduced-motion: reduce) { button { transition: none; } button:active:not(:disabled) { transform: none; } }
 @media (max-width: 640px) {
-  :host {
+  :host { display: none !important;
     left: auto;
     right: calc(max(0.75rem, env(safe-area-inset-right)) + 7.75rem);
     transform: none;
@@ -92,7 +92,13 @@ export class SpeechDock {
     shadow.append(style, dock);
     this.setStatus({ kind: "off" });
     this.sync();
+    this.host.addEventListener("lumiglyphics:speech-toggle", () => this.togglePlay());
     options.mount.appendChild(this.host);
+  }
+
+  togglePlay(): void {
+    if (this.playing) this.options.onPause();
+    else this.options.onPlay();
   }
 
   /** Enabled = the speech setting; the dock stays hidden while speech is off. */

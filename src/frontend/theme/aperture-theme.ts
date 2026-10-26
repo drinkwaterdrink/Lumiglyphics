@@ -593,13 +593,34 @@ body.theme-dark .route-bar .route-actions .menu-key,
 }
 
 /* Route bar visibility: suppressed on reader, active on workspace */
+.route-bar[hidden],
+[hidden].route-bar,
+.route-bar:not([data-active="true"]),
 [data-vn-shell]:not([data-vn-workspace]) .route-bar,
 [data-vn-root] .route-bar,
 [data-vn-reader-first="true"]:not([data-vn-workspace]) .route-bar {
   display: none !important;
 }
-[data-vn-workspace] .route-bar {
+[data-vn-workspace] .route-bar:not([hidden]) {
   display: flex !important;
+}
+
+/* Hide legacy elements in APERTURE v4 */
+.vn-speech-dock,
+[data-vn-speech-dock],
+[data-dock],
+[data-vn-panel-layer] .launcher,
+.launcher {
+  display: none !important;
+}
+
+[data-vn-shell] > [data-vn-exit] {
+  position: absolute !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
 }
 
 /* Full bleed artwork on reader */
@@ -628,8 +649,43 @@ body.theme-dark .route-bar .route-actions .menu-key,
   border-bottom: 0 !important;
   z-index: 35 !important;
 }
-[data-vn-reader-header] [data-reader-header-actions] {
+[data-vn-reader-header] [data-reader-header-actions],
+.topbar-actions {
   margin-right: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  margin-left: auto !important;
+  flex-shrink: 0 !important;
+}
+
+.reading-heading {
+  display: flex !important;
+  flex-direction: column !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+  overflow: hidden !important;
+  padding-left: 6px !important;
+}
+
+.reading-heading strong {
+  display: block !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: #f7f9f3 !important;
+}
+
+.reading-heading small {
+  display: block !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  font-size: 9px !important;
+  color: #e3eee9 !important;
+  opacity: 0.84 !important;
 }
 
 /* Dialogue quote terracotta */
@@ -666,33 +722,54 @@ aside[data-vn-workspace] {
    APERTURE REFINED READER DIALOGUE & CONTROLS
    ========================================================================= */
 
-[data-vn-narrative] {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 20;
+/* Ensure narrative occupies the full viewport and never collapses or pins to top:0 */
+[data-vn-narrative],
+[data-vn-root] [data-vn-narrative],
+[data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-narrative],
+[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-narrative] {
+  position: absolute !important;
+  inset: 0 !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  max-height: 100% !important;
+  pointer-events: none !important;
+  z-index: 20 !important;
+  display: block !important;
+  box-sizing: border-box !important;
 }
 
-[data-vn-dialogue] {
-  position: absolute;
-  z-index: 22;
-  left: 15px;
-  right: 15px;
-  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
-  height: var(--caption-height, 142px);
-  padding: 18px 14px 8px;
-  border: 1px solid rgba(224, 238, 217, 0.32);
-  border-radius: 16px;
-  background: rgba(4, 13, 17, var(--caption-opacity, 0.72));
-  -webkit-backdrop-filter: blur(var(--caption-blur, 8px));
-  backdrop-filter: blur(var(--caption-blur, 8px));
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  overflow: hidden;
-  pointer-events: auto;
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+/* Dock dialogue firmly to bottom of viewport above bottom action bar */
+[data-vn-dialogue],
+[data-vn-root] [data-vn-dialogue],
+[data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-dialogue],
+[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-dialogue] {
+  position: absolute !important;
+  z-index: 22 !important;
+  left: 15px !important;
+  right: 15px !important;
+  top: auto !important;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
+  height: var(--caption-height, 142px) !important;
+  min-height: 100px !important;
+  max-height: calc(100% - 160px) !important;
+  padding: 18px 14px 8px !important;
+  border: 1px solid rgba(224, 238, 217, 0.32) !important;
+  border-radius: 16px !important;
+  background: rgba(4, 13, 17, var(--caption-opacity, 0.72)) !important;
+  -webkit-backdrop-filter: blur(var(--caption-blur, 8px)) !important;
+  backdrop-filter: blur(var(--caption-blur, 8px)) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  overflow: hidden !important;
+  pointer-events: auto !important;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
 }
 
 [data-vn-dialogue]::before {
@@ -907,17 +984,23 @@ aside[data-vn-workspace] {
    READER BOTTOM CONTROLS GRID (6 columns)
    ========================================================================= */
 
-.reader-actions {
-  position: absolute;
-  inset: auto 0 0;
-  height: calc(88px + env(safe-area-inset-bottom, 0px));
-  z-index: 30;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  padding: 4px 14px calc(8px + env(safe-area-inset-bottom, 0px));
-  gap: 6px;
-  background: linear-gradient(180deg, transparent, rgba(4, 12, 16, 0.63) 32%, rgba(5, 15, 18, 0.92));
+.reader-actions,
+[data-vn-root] .reader-actions {
+  position: absolute !important;
+  inset: auto 0 0 !important;
+  top: auto !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: calc(88px + env(safe-area-inset-bottom, 0px)) !important;
+  z-index: 30 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+  padding: 4px 14px calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+  gap: 6px !important;
+  pointer-events: auto !important;
+  background: linear-gradient(180deg, transparent, rgba(4, 12, 16, 0.63) 32%, rgba(5, 15, 18, 0.92)) !important;
 }
 
 .reader-progress-timeline {

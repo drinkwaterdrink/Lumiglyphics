@@ -168,12 +168,18 @@ export class ReaderWorkspace {
 
     // Topbar Actions
     q('[data-action="panels-toggle"]')?.addEventListener('click', () => {
-      const launcher = this.shell.querySelector<HTMLElement>('[data-vn-panel-layer]')?.shadowRoot?.querySelector<HTMLButtonElement>('.launcher');
+      const panelLayer = this.shell.querySelector<HTMLElement>('[data-vn-panel-layer]');
+      if (panelLayer) {
+        panelLayer.dispatchEvent(new CustomEvent("lumiglyphics:panels-toggle", { bubbles: true }));
+      }
+      const launcher = panelLayer?.shadowRoot?.querySelector<HTMLButtonElement>('.launcher');
       if (launcher) launcher.click();
     }, {signal});
     q('[data-action="voice-toggle"]')?.addEventListener('click', () => {
-      const speechHost = this.shell.querySelector<HTMLElement>('lumiglyphics-speech-dock') || this.shell.querySelector<HTMLElement>('[data-dock]');
-      if (speechHost) speechHost.hidden = !speechHost.hidden;
+      const speechHost = this.shell.querySelector<HTMLElement>('.vn-speech-dock') || this.shell.querySelector<HTMLElement>('lumiglyphics-speech-dock') || this.shell.querySelector<HTMLElement>('[data-dock]');
+      if (speechHost) {
+        speechHost.dispatchEvent(new CustomEvent("lumiglyphics:speech-toggle", { bubbles: true }));
+      }
     }, {signal});
     q('[data-action="studio-toggle"]')?.addEventListener('click', () => {
       this.open('artwork');

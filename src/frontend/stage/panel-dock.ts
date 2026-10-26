@@ -19,7 +19,7 @@ summary{cursor:pointer}summary:focus-visible{outline:2px solid var(--accent);out
 .drawer{box-sizing:border-box;overflow-wrap:anywhere}
 :host{position:absolute;inset:0;pointer-events:none;z-index:7;font:13px/1.45 var(--vn-shell-family,system-ui);color:var(--ink);--edge:var(--vn-shell-border,#535565);--ink:var(--vn-shell-text,#eeeef4);--muted:var(--vn-shell-muted,#b2b3c3);--paper:var(--vn-shell-panel,#171822);--accent:var(--vn-shell-accent,#c1b0eb);--field:var(--vn-shell-field,#101119);--btn:var(--vn-shell-button,#252632);--radius:var(--vn-shell-radius,999px)}
 button,input,textarea{font:inherit;color:inherit}button{cursor:pointer;background:var(--btn);border:1px solid var(--edge);border-radius:min(var(--radius),8px);padding:7px 12px;min-height:34px;transition:border-color .14s ease,background-color .14s ease,transform .12s ease}button:hover{border-color:var(--accent)}button:active{transform:scale(.97)}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.launcher{position:absolute;top:max(12px,env(safe-area-inset-top));left:max(12px,env(safe-area-inset-left));pointer-events:auto;display:inline-flex;align-items:center;gap:8px;border-radius:var(--radius);min-height:44px;padding:8px 15px 8px 13px;background:var(--vn-shell-bg,#171822ed);color:var(--ink);font-weight:650;box-shadow:var(--vn-shell-shadow,0 4px 14px #0006);backdrop-filter:blur(12px)}
+.launcher{display:none!important;position:absolute;top:max(12px,env(safe-area-inset-top));left:max(12px,env(safe-area-inset-left));pointer-events:auto;display:inline-flex;align-items:center;gap:8px;border-radius:var(--radius);min-height:44px;padding:8px 15px 8px 13px;background:var(--vn-shell-bg,#171822ed);color:var(--ink);font-weight:650;box-shadow:var(--vn-shell-shadow,0 4px 14px #0006);backdrop-filter:blur(12px)}
 .launcher::before{content:"";flex:none;width:5px;height:5px;margin:0 7px 7px 0;border-radius:1px;background:var(--accent);box-shadow:7px 0 0 var(--accent),0 7px 0 var(--accent),7px 7px 0 var(--accent)}
 .launcher:hover{background:var(--vn-shell-bg-hover,#252632)}.launcher[aria-expanded=true]{border-color:var(--accent)}
 .drawer{position:absolute;top:64px;left:12px;width:min(390px,calc(100% - 24px));max-height:calc(100% - 80px);overflow:auto;pointer-events:auto;background:var(--paper);color:var(--ink);border:1px solid var(--edge);border-radius:min(var(--radius),12px);padding:16px;box-shadow:0 14px 40px #0009;z-index:100}
@@ -91,6 +91,7 @@ export class PanelDock {
     this.drawer.append(heading, description, actions, this.notice, this.list, pinHelp, advanced);
     this.root.append(style, this.launcher, this.drawer); mount.append(this.host);
     this.launcher.onclick = () => this.toggle(Boolean(this.drawer.hidden));
+    this.host.addEventListener("lumiglyphics:panels-toggle", () => this.toggle());
     // This layer is outside the stage's narrative root. Also stop host-level shortcuts.
     for (const event of ["click", "pointerdown", "keydown", "wheel"]) this.host.addEventListener(event, (e) => e.stopPropagation());
     this.root.addEventListener("keydown", (event) => { if ((event as KeyboardEvent).key === "Escape") { this.toggle(false); this.launcher.focus(); } });
@@ -101,7 +102,11 @@ export class PanelDock {
   private button(text: string, action: () => void): HTMLButtonElement {
     const button = document.createElement("button"); button.type = "button"; button.textContent = text; button.onclick = action; return button;
   }
-  private toggle(open: boolean): void { this.drawer.hidden = !open; this.launcher.setAttribute("aria-expanded", String(open)); }
+  public toggle(open?: boolean): void {
+    const next = typeof open === "boolean" ? open : Boolean(this.drawer.hidden);
+    this.drawer.hidden = !next;
+    this.launcher.setAttribute("aria-expanded", String(next));
+  }
   private error(error: unknown): void { this.notice.textContent = error instanceof Error ? error.message : String(error); }
   private storageKey(): string { return `vn-panels-v1:${this.chat}`; }
   private save(): void {
