@@ -29,7 +29,7 @@ export class StageDossiers {
  }
  private openReferences():void {
   const snapshot=this.snapshot();this.hold();
-  this.card.openTray(snapshot?referenceEntriesWithHistory(snapshot,this.prefs,this.history):[],this.tray,(id,trigger)=>this.open(id,trigger),!this.prefs.enabled?'Story references are disabled. You can enable them in Reading settings.':!snapshot?'No established references are available at this reading position.':this.prefs.rememberReferences&&this.history?.truncated?'Showing a limited recent selection of earlier descriptions.':undefined); }
+  this.card.openTray(snapshot?referenceEntriesWithHistory(snapshot,this.prefs,this.history):[],this.tray,(id,trigger)=>this.open(id,trigger),!this.prefs.enabled?'Story references are disabled. You can enable them in Reading settings.':!snapshot?'No established references are available at this reading position.':this.prefs.rememberReferences&&this.history?.truncated?'Showing a limited recent selection of earlier descriptions.':undefined,entity=>this.resolveVisualContext(entity)); }
  isOpen():boolean{return this.card.isOpen();}
  setTurnMedia(turn:TurnView|null):void{this.turnMedia=turn;}
  openTrayFromStage():boolean{

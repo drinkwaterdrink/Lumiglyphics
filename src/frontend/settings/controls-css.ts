@@ -7,14 +7,14 @@
  */
 export const SETTINGS_TOKENS_CSS = `
 :host {
-  --set-accent: var(--vn-shell-accent, var(--lumiverse-primary, #a986ff));
-  --set-accent-text: var(--vn-shell-accent-contrast, var(--lumiverse-primary-contrast, #121018));
-  --set-text: var(--vn-shell-text, var(--lumiverse-text, #f5f5f7));
-  --set-muted: var(--vn-shell-muted, var(--lumiverse-text-muted, rgba(255,255,255,.7)));
-  --set-border: var(--vn-shell-border, var(--lumiverse-border, rgba(255,255,255,.16)));
+  --set-accent: var(--vn-shell-accent, var(--lumiverse-primary, #e0eeb1));
+  --set-accent-text: var(--vn-shell-accent-contrast, var(--lumiverse-primary-contrast, #1c3525));
+  --set-text: var(--vn-shell-text, var(--lumiverse-text, #eff4e9));
+  --set-muted: var(--vn-shell-muted, var(--lumiverse-text-muted, #a4bbb1));
+  --set-border: var(--vn-shell-border, var(--lumiverse-border, rgba(220, 238, 217, 0.16)));
   --set-surface: var(--vn-shell-panel, var(--lumiverse-card-bg, rgba(255,255,255,.035)));
-  --set-field: var(--vn-shell-field, var(--lumiverse-bg-elevated, #171822));
-  --set-hover: var(--vn-shell-button, var(--lumiverse-fill-medium, rgba(255,255,255,.07)));
+  --set-field: var(--vn-shell-field, var(--lumiverse-bg-elevated, #101a1e));
+  --set-hover: var(--vn-shell-button, var(--lumiverse-fill-medium, #23342e));
   --set-success: var(--lumiverse-success, #8ce8b0);
   --set-warning: var(--lumiverse-warning, #ffd08a);
   --set-danger: var(--lumiverse-danger, #ff8ca0);

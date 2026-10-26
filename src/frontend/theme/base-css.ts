@@ -1,13 +1,14 @@
 import { READER_STAGE_CSS } from "./reader-shell-css.js";
 import { VN_EFFECTS_CSS } from "./effects-css.js";
 import { VN_TEXT_EFFECTS_CSS } from "./text-effects-css.js";
+import { APERTURE_THEME_CSS } from "./aperture-theme.js";
 
 const LEGACY_BASE_CSS = `
 :host {
-  --vn-accent: #d8a8ff;
+  --vn-accent: #e0eeb1;
   --vn-text: #fff;
   --vn-muted-text: rgba(255, 255, 255, 0.76);
-  --vn-dialogue-bg: linear-gradient(180deg, rgba(21, 16, 33, 0.78), rgba(8, 9, 15, 0.94));
+  --vn-dialogue-bg: linear-gradient(180deg, rgba(16, 26, 30, 0.85), rgba(12, 18, 25, 0.95));
   --vn-dialogue-border: rgba(255, 255, 255, 0.3);
   --vn-dialogue-width: min(72rem, calc(100 * var(--vn-vw, 1vw) - 3rem));
   --vn-font-family: ui-rounded, "Segoe UI", system-ui, sans-serif;
@@ -2126,4 +2127,4 @@ ${VN_TEXT_EFFECTS_CSS}
 }
 `;
 
-export const VN_BASE_CSS = LEGACY_BASE_CSS + READER_STAGE_CSS;
+export const VN_BASE_CSS = LEGACY_BASE_CSS + READER_STAGE_CSS + APERTURE_THEME_CSS;

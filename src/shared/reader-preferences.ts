@@ -4,9 +4,14 @@ export type ReaderPreferences = {
   sheetSize: "compact" | "reading" | "expanded";
   backgroundOpacity: number;
   heightRatio?: number;
+  theme?: "light" | "dark";
 };
 export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
-  adjustableSheetEnabled: false, layout: "overlay", sheetSize: "reading", backgroundOpacity: 0.9,
+  adjustableSheetEnabled: false,
+  layout: "overlay",
+  sheetSize: "reading",
+  backgroundOpacity: 0.9,
+  theme: "light",
 };
 export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
   const input = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -15,7 +20,8 @@ export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
     layout: input.layout === "image-first" ? "image-first" : "overlay",
     sheetSize: input.sheetSize === "compact" || input.sheetSize === "expanded" ? input.sheetSize : "reading",
     backgroundOpacity: typeof input.backgroundOpacity === "number" && Number.isFinite(input.backgroundOpacity)
-      ? Math.max(0.35, Math.min(1, input.backgroundOpacity)) : 0.9,
+      ? Math.max(0, Math.min(1, input.backgroundOpacity)) : 0.9,
+    theme: input.theme === "dark" ? "dark" : "light",
     ...(typeof input.heightRatio === "number" && Number.isFinite(input.heightRatio) ? { heightRatio: Math.max(.12, Math.min(1, input.heightRatio)) } : {}),
   };
 }

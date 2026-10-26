@@ -3,6 +3,7 @@ import {compileDisplayRules} from '../../shared/display-rules.js';
 import { createUiId } from "../request-id.js";
 import {SETTINGS_PAGES,SETTINGS_FIELD_PAGES,settingsPage,type SettingsPageId} from "./routes.js";
 import {WORKSPACE_CSS} from "./workspace-css.js";
+import {APERTURE_THEME_CSS} from "../theme/aperture-theme.js";
 import {PresentationRulesPanel} from './presentation-rules.js';
 import type {PresentationRuleRequest,PresentationRuleCatalog} from '../../shared/presentation-rules.js';
 import {CastArtPanel} from './cast-art.js';
@@ -492,7 +493,7 @@ export class VisualNovelSettingsPanel {
     this.host.setAttribute("data-vn-settings", "");
     this.root = this.host.attachShadow({ mode: "open" });
     const style = document.createElement("style");
-    style.textContent = PANEL_CSS + WORKSPACE_CSS + READER_SETTINGS_CSS;
+    style.textContent = PANEL_CSS + WORKSPACE_CSS + READER_SETTINGS_CSS + APERTURE_THEME_CSS;
     const body = document.createElement("div");
     body.innerHTML = this.template();
     this.root.append(style, ...Array.from(body.childNodes));
@@ -631,7 +632,19 @@ export class VisualNovelSettingsPanel {
         </nav>
 
         <form novalidate data-panes>
-          <section data-home data-workspace-page="home"><header><h1>Lumiglyphics</h1><p>Make the reader your own.</p></header><label data-check><input type="checkbox" name="enabled"><span>Enable Lumiglyphics<small>All chats</small></span></label><div data-home-categories>${SETTINGS_SECTIONS.map(section=>`<button type="button" data-page-link="${section.id==='sound'?'audio':section.id}">${icon(ICONS[section.id])}<span><b>${esc(section.label)}</b><small>${esc(section.blurb)}</small></span><span aria-hidden="true">›</span></button>`).join('')}</div><button type="button" data-open-preview>Open reader</button><small>Opening the reader can prepare the current reply using your existing settings.</small></section>
+          <section data-home data-workspace-page="home">
+            <div class="settings-intro">
+              <span class="settings-kicker">APERTURE / PERSONALIZATION</span>
+              <svg class="settings-orbit" viewBox="0 0 180 124" aria-hidden="true"><circle cx="111" cy="76" r="67"/><circle cx="111" cy="76" r="47"/><circle cx="111" cy="76" r="26"/><path d="M30 75L177 75M110 0V121"/><circle class="settings-orbit-point" cx="159" cy="51" r="3"/></svg>
+              <h1 class="page-title">Make it yours.</h1>
+              <p class="page-sub">Personalize the reading experience while keeping the scene in focus.</p>
+              <div class="settings-intro-foot"><span data-aperture-theme-status>LIGHT MODE / ACTIVE</span><span>THE WORLD IS YOURS TO FRAME ✦</span></div>
+            </div>
+            <label data-check><input type="checkbox" name="enabled"><span>Enable Lumiglyphics<small>All chats</small></span></label>
+            <div class="section-head" style="margin: 20px 0 11px; font-weight:650; font-size:12px;">Adjust your experience <span class="micro" style="opacity:0.7;">6 CATEGORIES</span></div>
+            <div data-home-categories class="settings-menu">${SETTINGS_SECTIONS.map(section=>`<button type="button" data-page-link="${section.id==='sound'?'audio':section.id}">${icon(ICONS[section.id])}<span><b>${esc(section.label)}</b><small>${esc(section.blurb)}</small></span><span aria-hidden="true">›</span></button>`).join('')}</div>
+            <div style="margin-top:16px"><button type="button" data-open-preview>Open reader</button><small style="display:block;margin-top:6px;opacity:0.75">Opening the reader can prepare the current reply using your existing settings.</small></div>
+          </section>
           ${pane("reading", `
             ${group("Pace", `
               <fieldset ${find("Text speed", "typing typewriter letters milliseconds")}>
@@ -656,13 +669,19 @@ export class VisualNovelSettingsPanel {
           `)}
 
           ${pane("look", `
+            <div class="appearance-surface-preview" aria-label="Live dialogue surface preview">
+              <svg class="appearance-mini-rings" viewBox="0 0 310 130" aria-hidden="true"><circle cx="240" cy="85" r="83"/><circle cx="240" cy="85" r="56"/><circle cx="240" cy="85" r="27"/><path d="M24 108H286"/></svg>
+              <div class="preview-appearance-head">LIVE / SURFACE PREVIEW <span>✧</span></div>
+              <div class="preview-caption-mini" data-mini-caption-preview><span>TIBOLD / KIT HALL</span><p>“The dialogue surface adjusts from transparent to solid below.”</p></div>
+            </div>
             <details data-appearance-preview><summary>Preview appearance</summary><div data-sample-slot></div></details>
             ${group("Theme", themeTiles(), { find: find("Theme", "preset style colours colors skin golden paper noir console yamaku literature") })}
             ${group("Text", `
+              <label data-check><input name="apertureDarkMode" type="checkbox" /><span>Dark mode<small>Choose a light editorial shell or a deeper, low-glare night palette</small></span></label>
               <label data-check><input name="adjustableSheetEnabled" type="checkbox" /><span>Adjustable text panel<small>Resize or hide text to see the picture. Drag the handle or choose a panel size.</small></span></label>
               <label data-field><span>Reader layout</span><select name="readerLayout"><option value="overlay">Text over picture</option><option value="image-first">Image first</option></select></label>
               <label data-field><span>Text panel size</span><select name="readerSheetSize"><option value="custom" disabled>Custom (dragged)</option><option value="compact">Compact</option><option value="reading">Reading</option><option value="expanded">Expanded</option></select></label>
-              <label data-field><span>Text panel background opacity</span><input name="readerBackgroundOpacity" type="range" min="0.35" max="1" step="0.05" /></label>
+              <label data-field><span>Dialogue background opacity <output data-opacity-output style="font:11px ui-monospace,monospace;margin-left:6px;"></output></span><input name="readerBackgroundOpacity" type="range" min="0" max="1" step="0.01" /></label>
               <fieldset ${find("Text size", "font scale bigger smaller large")}>
                 <legend>Text size</legend>
                 ${segments("textScaleStep", TEXT_SCALE_STEPS, true)}
@@ -1513,7 +1532,25 @@ export class VisualNovelSettingsPanel {
       case "adjustableSheetEnabled": return { readerPreferences: { ...this.config.readerPreferences, adjustableSheetEnabled: checked } };
       case "readerLayout": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, layout: target.value }) };
       case "readerSheetSize": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, sheetSize: target.value, heightRatio: undefined }) };
-      case "readerBackgroundOpacity": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, backgroundOpacity: Number(target.value) }) };
+      case "readerBackgroundOpacity": {
+        const opacity = Number(target.value);
+        this.host.style.setProperty("--caption-opacity", String(opacity));
+        const out = this.root.querySelector<HTMLElement>("[data-opacity-output]");
+        if (out) out.textContent = `${Math.round(opacity * 100)}%`;
+        const mini = this.root.querySelector<HTMLElement>("[data-mini-caption-preview]");
+        if (mini) mini.style.setProperty("--caption-opacity", String(opacity));
+        return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, backgroundOpacity: opacity }) };
+      }
+      case "apertureDarkMode": {
+        const isDark = (target as HTMLInputElement).checked;
+        const theme = isDark ? "dark" : "light";
+        this.host.dataset.apertureMode = theme;
+        document.body.classList.toggle("theme-dark", isDark);
+        document.body.classList.toggle("theme-light", !isDark);
+        const status = this.root.querySelector<HTMLElement>("[data-aperture-theme-status]");
+        if (status) status.textContent = isDark ? "DARK MODE / ACTIVE" : "LIGHT MODE / ACTIVE";
+        return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, theme }) };
+      }
       case "bgmVolume": return { bgmVolume: clamp(Number(target.value), 0, 1, DEFAULT_CONFIG.bgmVolume) };
       case "sfxVolume": return { sfxVolume: clamp(Number(target.value), 0, 1, DEFAULT_CONFIG.sfxVolume) };
       case "imageSource":
@@ -2034,6 +2071,15 @@ export class VisualNovelSettingsPanel {
     this.control<HTMLSelectElement>("readerLayout").value = config.readerPreferences.layout;
     this.control<HTMLSelectElement>("readerSheetSize").value = config.readerPreferences.heightRatio === undefined ? config.readerPreferences.sheetSize : "custom";
     this.control<HTMLInputElement>("readerBackgroundOpacity").value = String(config.readerPreferences.backgroundOpacity);
+    const opacityOut = this.root.querySelector<HTMLElement>("[data-opacity-output]");
+    if (opacityOut) opacityOut.textContent = `${Math.round(config.readerPreferences.backgroundOpacity * 100)}%`;
+    const mini = this.root.querySelector<HTMLElement>("[data-mini-caption-preview]");
+    if (mini) mini.style.setProperty("--caption-opacity", String(config.readerPreferences.backgroundOpacity));
+    const darkModeBox = this.root.querySelector<HTMLInputElement>("input[name='apertureDarkMode']");
+    if (darkModeBox) darkModeBox.checked = config.readerPreferences.theme === "dark";
+    const themeStatus = this.root.querySelector<HTMLElement>("[data-aperture-theme-status]");
+    if (themeStatus) themeStatus.textContent = config.readerPreferences.theme === "dark" ? "DARK MODE / ACTIVE" : "LIGHT MODE / ACTIVE";
+    this.host.dataset.apertureMode = config.readerPreferences.theme === "dark" ? "dark" : "light";
     this.showCustomQuiet("textScale", !scaleStep);
 
     const source = imageSourceFromConfig(config);

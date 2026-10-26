@@ -8,22 +8,22 @@ export type ThemePresetCss = string;
 /* lumiverse — host-neutral and token-led */
 const LUMIVERSE_CSS = `
 [data-vn-root][data-vn-preset="lumiverse"] {
-  --vn-accent: var(--lumiverse-primary, #d8a8ff);
-  --vn-text: var(--lumiverse-text, #fff);
+  --vn-accent: var(--lumiverse-primary, #e0eeb1);
+  --vn-text: var(--lumiverse-text, #eff4e9);
   --vn-muted-text: var(--lumiverse-text-muted, rgba(255, 255, 255, 0.76));
-  --vn-dialogue-bg: var(--lumiverse-card-bg, linear-gradient(180deg, rgba(21, 16, 33, 0.8), rgba(8, 9, 15, 0.94)));
+  --vn-dialogue-bg: var(--lumiverse-card-bg, linear-gradient(180deg, rgba(16, 26, 30, 0.85), rgba(12, 18, 25, 0.95)));
   --vn-dialogue-border: var(--lumiverse-border, rgba(255, 255, 255, 0.28));
   --vn-dialogue-width: min(70rem, calc(100 * var(--vn-vw, 1vw) - 3rem));
   --vn-font-family: var(--lumiverse-font-family, ui-rounded, "Segoe UI", system-ui, sans-serif);
   --vn-dialogue-font-size: clamp(1rem, 1.1 * var(--vn-vw, 1vw) + 0.75rem, 1.35rem);
   --vn-transition-duration: 280ms;
   /* Chrome follows the host surface and key-control tokens. */
-  --vn-accent-contrast: var(--lumiverse-primary-contrast, #17101d);
-  --vn-chrome-bg: color-mix(in srgb, var(--lumiverse-bg-elevated, #14111f) 84%, transparent);
+  --vn-accent-contrast: var(--lumiverse-primary-contrast, #1c3525);
+  --vn-chrome-bg: color-mix(in srgb, var(--lumiverse-bg-elevated, #101a1e) 84%, transparent);
   --vn-chrome-border: var(--lumiverse-border, rgba(255, 255, 255, 0.18));
   --vn-chrome-hover: var(--lumiverse-fill-medium, rgba(255, 255, 255, 0.1));
-  --vn-panel-bg: color-mix(in srgb, var(--lumiverse-bg-elevated, #12101d) 88%, transparent);
-  --vn-panel-solid: var(--lumiverse-bg-elevated, #12101d);
+  --vn-panel-bg: color-mix(in srgb, var(--lumiverse-bg-elevated, #101a1e) 88%, transparent);
+  --vn-panel-solid: var(--lumiverse-bg-elevated, #101a1e);
   --vn-panel-border: var(--lumiverse-border, rgba(255, 255, 255, 0.16));
 }
 
@@ -36,27 +36,27 @@ const LUMIVERSE_CSS = `
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
     inset 0 2px 0 -1px color-mix(in srgb, var(--lumiverse-primary, #d8a8ff) 30%, transparent);
 }
-[data-vn-root][data-vn-preset="lumiverse"] [data-vn-speaker] { color: var(--lumiverse-primary, #d8a8ff); }
+[data-vn-root][data-vn-preset="lumiverse"] [data-vn-speaker] { color: var(--lumiverse-primary, #dcebad); }
 [data-vn-root][data-vn-preset="lumiverse"] [data-vn-continue] {
   border-color: var(--lumiverse-border, rgba(255, 255, 255, 0.3));
   background: var(--lumiverse-fill-medium, rgba(255, 255, 255, 0.1));
   color: var(--lumiverse-text, #fff);
 }
-[data-vn-root][data-vn-preset="lumiverse"] [data-vn-continue][data-vn-ready="true"]:hover { color: var(--lumiverse-primary, #d8a8ff); }
+[data-vn-root][data-vn-preset="lumiverse"] [data-vn-continue][data-vn-ready="true"]:hover { color: var(--lumiverse-primary, #e0eeb1); }
 [data-vn-root][data-vn-preset="lumiverse"] [data-vn-choice] {
   border-color: var(--lumiverse-border, rgba(255, 255, 255, 0.22));
   color: var(--lumiverse-text, #fff);
 }
 [data-vn-root][data-vn-preset="lumiverse"] [data-vn-choice]:hover:not(:disabled),
-[data-vn-root][data-vn-preset="lumiverse"] [data-vn-choice]:focus-visible { border-color: var(--lumiverse-primary, #d8a8ff); }
+[data-vn-root][data-vn-preset="lumiverse"] [data-vn-choice]:focus-visible { border-color: var(--lumiverse-primary, #e0eeb1); }
 [data-vn-root][data-vn-preset="lumiverse"] [data-vn-input] {
   border-color: var(--lumiverse-border, rgba(255, 255, 255, 0.22));
   color: var(--lumiverse-text, #fff);
 }
 [data-vn-root][data-vn-preset="lumiverse"] [data-vn-submit] {
-  border-color: var(--lumiverse-primary, #d8a8ff);
-  background-color: var(--lumiverse-primary, #d8a8ff);
-  color: var(--lumiverse-primary-contrast, #17101d);
+  border-color: var(--lumiverse-primary, #e0eeb1);
+  background-color: var(--lumiverse-primary, #e0eeb1);
+  color: var(--lumiverse-primary-contrast, #1c3525);
 }
 [data-vn-root][data-vn-preset="lumiverse"] [data-vn-control],
 [data-vn-root][data-vn-preset="lumiverse"] [data-vn-badge],

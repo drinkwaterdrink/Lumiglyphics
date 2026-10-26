@@ -201,15 +201,57 @@ const THEME_MARKUP = `
     </div>
 
     <section data-vn-narrative hidden aria-label="Dialogue">
-      <div data-vn-dialogue>
-        <nav data-vn-controls aria-label="Reading controls">
-          <button data-vn-control="previous" type="button" aria-label="Previous paragraph" aria-keyshortcuts="ArrowLeft" title="Previous paragraph (Left Arrow)">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" focusable="false" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.5 5.5 8l4.5 4.5" /></svg></span><span data-vn-control-label>Previous</span>
+      <div data-vn-dialogue class="reader-caption refined-caption">
+        <div class="resize-grip" role="separator" aria-label="Drag to resize dialogue panel"><span></span></div>
+        <div class="caption-head">
+          <div class="speaker"><span data-vn-speaker></span><span class="caption-split">/</span><span data-vn-caption-scene>KIT HALL</span></div>
+          <div class="caption-head-actions">
+            <button data-vn-clean-toggle class="caption-tool" type="button" aria-label="Minimize dialogue box" aria-pressed="false" aria-keyshortcuts="H" title="Minimize dialogue box (H)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+          </div>
+        </div>
+        <div class="scroll-copy">
+          <p data-vn-dialogue-text aria-live="polite" aria-atomic="true"></p>
+        </div>
+        <div data-vn-dialogue-footer class="caption-foot">
+          <span data-vn-progress>PASSAGE 01</span>
+          <span class="caption-foot-dot">✧</span>
+          <span data-vn-footer-speaker>PROSE</span>
+          <span data-vn-reading-state aria-live="polite" style="display:none"></span>
+        </div>
+      </div>
+      <footer class="reader-actions">
+        <div class="reader-progress">
+          <small data-vn-step-left>IV / 4</small>
+          <div data-vn-scrubber class="ticks" role="group" aria-label="Paragraph timeline"></div>
+          <small data-vn-step-right>07</small>
+        </div>
+        <nav data-vn-controls class="reader-action-row" aria-label="Reading controls">
+          <button data-vn-control="previous" class="action icon-action" type="button" aria-label="Previous paragraph" aria-keyshortcuts="ArrowLeft" title="Previous paragraph (Left Arrow)">
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5m6-6-6 6 6 6"/></svg></span><span data-vn-control-label>Previous</span>
           </button>
-          <button data-vn-control="log" type="button" aria-label="Open history" aria-keyshortcuts="L" title="History (L)">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" focusable="false" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h10" /><path d="M3 8h10" /><path d="M3 12h6" /></svg></span><span data-vn-control-label>History</span>
+          <button data-vn-control="log" class="action icon-action" type="button" aria-label="Open history" aria-keyshortcuts="L" title="History (L)">
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 1 3 7M3 5v7h7M12 7v5l4 2"/></svg></span><span data-vn-control-label>History</span>
           </button>
-          <button data-vn-control="auto" type="button" aria-label="Auto play" aria-pressed="false" aria-keyshortcuts="A" title="Auto play (A)">
+          <button data-vn-control="lens" class="action icon-action" type="button" aria-label="World Lens" title="World Lens">
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M11.5 3a17 17 0 0 0 0 18M12.5 3a17 17 0 0 1 0 18"/></svg></span><span data-vn-control-label>Lens</span>
+          </button>
+          <button data-vn-control="cast" class="action icon-action" type="button" aria-label="Open Cast and Character Folio" title="Cast & Characters">
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><circle cx="16.5" cy="10" r="2.5"/><path d="M3.5 19c0-3 3-5 5.5-5s5.5 2 5.5 5M15 14c2.2 0 4.5 1.4 4.5 4.5"/></svg></span><span data-vn-control-label>Cast</span>
+          </button>
+          <button data-vn-control="settings" class="action icon-action" type="button" aria-label="Extension settings" title="Settings">
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg></span><span data-vn-control-label>Settings</span>
+          </button>
+          <button
+            data-vn-continue
+            class="action advance"
+            type="button"
+            aria-label="Continue"
+            aria-keyshortcuts="Enter Space ArrowRight"
+            title="Continue (Enter)"
+          ><span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></span></button>
+
+          <!-- Auto & Skip preserved for unit tests & keyboard shortcuts -->
+          <button data-vn-control="auto" type="button" aria-label="Auto play" aria-pressed="false" aria-keyshortcuts="A" title="Auto play (A)" style="display:none">
             <span data-vn-auto-ring aria-hidden="true">
               <svg viewBox="0 0 16 16" width="14" height="14">
                 <circle class="vn-auto-track" cx="8" cy="8" r="6" fill="none" stroke-width="2" />
@@ -218,27 +260,12 @@ const THEME_MARKUP = `
             </span>
             <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" focusable="false" fill="currentColor" stroke="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3.2v9.6L12.6 8z" /></svg></span><span data-vn-control-label>Auto</span>
           </button>
-          <button data-vn-control="skip" type="button" aria-label="Skip" aria-pressed="false" aria-describedby="vn-skip-description" aria-keyshortcuts="S" title="Skip (S)">
+          <button data-vn-control="skip" type="button" aria-label="Skip" aria-pressed="false" aria-describedby="vn-skip-description" aria-keyshortcuts="S" title="Skip (S)" style="display:none">
             <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" focusable="false" fill="currentColor" stroke="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3.5v9L7.6 8z" /><path d="M8.2 3.5v9L13.8 8z" /></svg></span><span data-vn-control-label>Skip</span>
           </button>
           <span id="vn-skip-description" data-vn-skip-description hidden></span>
         </nav>
-        <span data-vn-speaker hidden></span>
-        <p data-vn-dialogue-text aria-live="polite" aria-atomic="true"></p>
-        <div data-vn-dialogue-footer>
-          <span data-vn-progress></span>
-          <div data-vn-scrubber role="group" aria-label="Paragraph timeline" hidden></div>
-          <span data-vn-reading-state aria-live="polite"></span>
-          <button data-vn-clean-toggle type="button" aria-label="Clean canvas view" aria-pressed="false" aria-keyshortcuts="H" title="Hide UI for clean view (H)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
-        </div>
-        <button
-          data-vn-continue
-          type="button"
-          aria-label="Continue"
-          aria-keyshortcuts="Enter Space ArrowRight"
-          title="Continue (Enter)"
-        ></button>
-      </div>
+      </footer>
     </section>
 
     <section data-vn-interaction hidden aria-labelledby="vn-interaction-title">
@@ -627,7 +654,6 @@ export class VnStage {
     this.interactionHint = queryRequired(this.themeRoot, "[data-vn-interaction-hint]");
     this.skipDescriptionEl = queryRequired(this.themeRoot, "[data-vn-skip-description]");
     this.continueButton = queryRequired(this.themeRoot, "[data-vn-continue]");
-    if (typeof this.dialogueText.after === "function") this.dialogueText.after(this.continueButton);
     this.previousButton = queryRequired(this.themeRoot, "[data-vn-control='previous']");
     this.interaction = queryRequired(this.themeRoot, "[data-vn-interaction]");
     this.choiceList = queryRequired(this.themeRoot, "[data-vn-choice-list]");
@@ -661,11 +687,19 @@ export class VnStage {
     if (options.skipMode) this.setSkipMode(options.skipMode);
     this.skipDescriptionEl.textContent = skipDescription(this.skipMode);
 
+    const onDocumentToggle = (open: boolean) => {
+      if (open) this.panelMount.dataset.vnDocumentOpen = "true";
+      else delete this.panelMount.dataset.vnDocumentOpen;
+    };
+    const onDossierToggle = (open: boolean) => {
+      if (open) shell.dataset.vnDossierOpen = "true";
+      else delete shell.dataset.vnDossierOpen;
+    };
     this.dossiers=new StageDossiers(this.root,this.dialogueText,queryRequired(this.themeRoot,"[data-vn-controls]"),()=>{this.toggleSkip(false);this.holdAutoPlay();},()=>this.checkAutoPlay(),prefs=>this.callbacks.onTooltipPreferencesChange?.(prefs),{
       current:()=>this.state.draft,
       apply:text=>this.storeReplyDraft(text),
       focus:()=>{if(selectVnStageView(this.state).showStandardInput)this.input.focus();else{this.setActivity('Action saved for Your turn.','success');this.focus();}}
-    },open=>{if(open)this.panelMount.dataset.vnDocumentOpen='true';else delete this.panelMount.dataset.vnDocumentOpen;});
+    },onDocumentToggle,onDossierToggle);
     this.dossiers.connectWorkspace(this.workspace, shell);
     this.bindEvents();
     this.updateControlButtons();
@@ -829,6 +863,26 @@ export class VnStage {
       this.clearSkipTimer();
       this.updateControlButtons();
     }
+  }
+
+  setApertureMode(mode: "light" | "dark"): void {
+    if (this.destroyed) return;
+    this.host.dataset.apertureMode = mode;
+    this.root.dataset.apertureMode = mode;
+    const shell = this.outerRoot.querySelector<HTMLElement>("[data-vn-shell]");
+    if (shell) shell.dataset.apertureMode = mode;
+    document.body.classList.toggle("theme-light", mode === "light");
+    document.body.classList.toggle("theme-dark", mode === "dark");
+    document.documentElement.dataset.apertureMode = mode;
+  }
+
+  openEntity(id: string, trigger?: HTMLElement): void {
+    if (this.destroyed) return;
+    if (this.isTyping) this.completeTypewriter();
+    this.dossiers.refresh(this.state.currentParagraphIndex);
+    const shell = this.outerRoot.querySelector<HTMLElement>("[data-vn-shell]");
+    if (shell) shell.dataset.vnDossierOpen = "true";
+    this.dossiers.openEntityFromStage(id, trigger ?? this.root);
   }
 
   openBacklog(): void {
@@ -1674,6 +1728,26 @@ export class VnStage {
       this.openBacklog();
     });
 
+    const lensBtn = this.themeRoot.querySelector<HTMLButtonElement>("[data-vn-control='lens']");
+    lensBtn?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (!this.dossiers.openTrayFromStage()) {
+        this.workspace.open("story", lensBtn);
+      }
+    });
+
+    const castBtn = this.themeRoot.querySelector<HTMLButtonElement>("[data-vn-control='cast']");
+    castBtn?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.workspace.open("story", castBtn);
+    });
+
+    const settingsBtn = this.themeRoot.querySelector<HTMLButtonElement>("[data-vn-control='settings']");
+    settingsBtn?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.workspace.open("settings", settingsBtn);
+    });
+
     this.autoButton.addEventListener("click", (event) => {
       event.stopPropagation();
       this.toggleAutoPlay();
@@ -1891,35 +1965,39 @@ export class VnStage {
   private renderScrubber(): void { if (!this.scrubber) return;
     const view = selectVnStageView(this.state);
     const total = view.paragraphCount;
-    if (!view.paragraph || total <= 1 || total > 24) {
-      this.scrubber.hidden = true;
-      if (this.scrubber.childElementCount > 0) this.scrubber.replaceChildren();
-      return;
-    }
-    this.scrubber.hidden = false;
     const current = this.state.currentParagraphIndex;
-    const dots = this.state.paragraphs.map((p, idx) => {
+    const stepLeft = this.themeRoot.querySelector<HTMLElement>("[data-vn-step-left]");
+    const stepRight = this.themeRoot.querySelector<HTMLElement>("[data-vn-step-right]");
+    if (stepLeft) stepLeft.textContent = total > 0 ? `IV / ${current + 1}` : "IV / 4";
+    if (stepRight) stepRight.textContent = String(total > 0 ? total : 7).padStart(2, "0");
+    this.scrubber.hidden = false;
+    const count = total > 0 ? total : 4;
+    const dots: HTMLElement[] = [];
+    for (let idx = 0; idx < count; idx++) {
+      const p = this.state.paragraphs[idx];
       const btn = document.createElement("button");
       btn.type = "button";
+      btn.className = "tick" + (idx === current ? " active" : "");
       btn.setAttribute("data-vn-scrub-dot", "");
       btn.tabIndex = -1;
-      const isRead = idx <= current || this.readParagraphIds.has(p.id);
+      const isRead = idx <= current || (p && this.readParagraphIds.has(p.id));
       const isActive = idx === current;
-      const hasCue = Boolean(p.cue || p.effect || p.ambient !== undefined);
       btn.dataset.read = String(isRead);
       btn.dataset.active = String(isActive);
-      if (hasCue) btn.dataset.hasCue = "true";
+      if (p && (p.cue || p.effect || p.ambient !== undefined)) btn.dataset.hasCue = "true";
       btn.disabled = !isRead;
-      const label = `Paragraph ${idx + 1} of ${total}${p.speaker ? ` (${p.speaker})` : ""}${hasCue ? " · scene beat" : ""}`;
+      const label = `Paragraph ${idx + 1} of ${count}${p?.speaker ? ` (${p.speaker})` : ""}`;
       btn.setAttribute("aria-label", label);
       btn.title = label;
       if (isActive) btn.setAttribute("aria-current", "step");
-      btn.addEventListener("click", (event) => {
-        event.stopPropagation();
-        this.jumpToParagraph(idx);
-      });
-      return btn;
-    });
+      if (p) {
+        btn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          this.jumpToParagraph(idx);
+        });
+      }
+      dots.push(btn);
+    }
     this.scrubber.replaceChildren(...dots);
   }
 
@@ -2087,9 +2165,11 @@ export class VnStage {
     this.speaker.title = speaker;
     this.speaker.hidden = !view.paragraph?.speaker;
     const progress = view.paragraph
-      ? `${view.paragraphNumber} / ${view.paragraphCount}`
+      ? `PASSAGE ${String(view.paragraphNumber).padStart(2, '0')}`
       : "";
     if (this.progress.textContent !== progress) this.progress.textContent = progress;
+    const footerSpeaker = this.themeRoot.querySelector<HTMLElement>("[data-vn-footer-speaker]");
+    if (footerSpeaker) footerSpeaker.textContent = speaker ? speaker.toUpperCase() : "PROSE";
     this.renderScrubber();
     this.renderSceneHud();
     this.updateContinueButton();

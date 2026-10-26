@@ -2,11 +2,11 @@ import { expect, test } from "bun:test";
 import { normalizeReaderPreferences, sheetHeight, nearestSheetSize } from "./reader-preferences.js";
 
 test("existing installations retain the original reader until enabled", () => {
-  expect(normalizeReaderPreferences(undefined)).toEqual({ adjustableSheetEnabled: false, layout: "overlay", sheetSize: "reading", backgroundOpacity: 0.9 });
+  expect(normalizeReaderPreferences(undefined)).toEqual({ adjustableSheetEnabled: false, layout: "overlay", sheetSize: "reading", backgroundOpacity: 0.9, theme: "light" });
 });
 test("invalid preferences cannot create invisible or oversized text surfaces", () => {
   expect(normalizeReaderPreferences({ adjustableSheetEnabled: "yes", sheetSize: "huge", layout: "bad", backgroundOpacity: NaN }).backgroundOpacity).toBe(0.9);
-  expect(normalizeReaderPreferences({ backgroundOpacity: 0 }).backgroundOpacity).toBe(0.35);
+  expect(normalizeReaderPreferences({ backgroundOpacity: 0 }).backgroundOpacity).toBe(0);
   expect(normalizeReaderPreferences({ backgroundOpacity: 5 }).backgroundOpacity).toBe(1);
 });
 

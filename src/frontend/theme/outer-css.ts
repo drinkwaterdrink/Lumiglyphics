@@ -1,5 +1,6 @@
 import { READER_SHELL_CSS } from "./reader-shell-css.js";
 import { ATELIER_SHELL_CSS } from "./atelier.js";
+import { APERTURE_THEME_CSS } from "./aperture-theme.js";
 /**
  * The exit control lives in this outer shadow root. User theme CSS is installed
  * in a nested shadow root and cannot select or hide the exit control.
@@ -178,6 +179,18 @@ ${ATELIER_SHELL_CSS}
   visibility: hidden;
 }
 
+[data-vn-shell][data-vn-reader-first="true"] > [data-vn-exit]:not(#_) {
+  pointer-events: none !important;
+  position: absolute !important;
+  top: -9999px !important;
+  left: -9999px !important;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
 [data-vn-exit] {
   position: absolute;
   z-index: 10;
@@ -257,4 +270,4 @@ ${ATELIER_SHELL_CSS}
 }
 `;
 
-export const VN_OUTER_CSS = LEGACY_OUTER_CSS + READER_SHELL_CSS;
+export const VN_OUTER_CSS = LEGACY_OUTER_CSS + READER_SHELL_CSS + APERTURE_THEME_CSS;

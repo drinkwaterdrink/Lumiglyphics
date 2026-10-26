@@ -1,89 +1,72 @@
 import { VnStage } from "./frontend/stage/index.js";
 import { isThemePresetId } from "./frontend/theme/presets.js";
+import { APERTURE_ASSETS } from "./frontend/theme/aperture-assets.js";
+import { buildPresentationTimeline } from "./backend/runtime/presentation-timeline.js";
+import { VisualNovelSettingsPanel } from "./frontend/settings/panel.js";
+import { DEFAULT_CONFIG } from "./config.js";
+import { applyVisualConfigToStage } from "./frontend/host/controller.js";
+import { normalizeTooltipPreferences } from "./shared/dossiers.js";
+import type { TurnKey } from "./shared/contracts.js";
+import type { PresentationEntity } from "./shared/presentation-entities.js";
 
-function sceneDataUrl(colors: [string, string], label: string): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
-    <defs>
-      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop stop-color="${colors[0]}"/><stop offset="1" stop-color="${colors[1]}"/></linearGradient>
-      <radialGradient id="glow"><stop stop-color="#ffe9a8" stop-opacity=".9"/><stop offset="1" stop-color="#ffe9a8" stop-opacity="0"/></radialGradient>
-    </defs>
-    <rect width="1600" height="900" fill="url(#sky)"/>
-    <circle cx="1240" cy="170" r="220" fill="url(#glow)"/>
-    <path d="M0 590 Q260 420 520 590 T1040 560 T1600 570 V900 H0Z" fill="#0b1724" opacity=".78"/>
-    <path d="M0 690 Q300 570 650 690 T1300 650 T1600 670 V900 H0Z" fill="#071019" opacity=".96"/>
-    <ellipse cx="800" cy="865" rx="220" ry="38" fill="#03060b" opacity=".55"/>
-    <path d="M735 710 Q710 555 750 400 Q800 310 850 400 Q890 555 865 710Z" fill="#14111f"/>
-    <circle cx="800" cy="330" r="86" fill="#e8c1ae"/>
-    <path d="M714 335 Q715 215 800 220 Q900 220 886 355 Q850 300 770 295Z" fill="#181226"/>
-    <path d="M755 405 Q800 445 845 405 L895 690 Q800 745 705 690Z" fill="#6c254d"/>
-    <text x="70" y="90" fill="#fff" opacity=".55" font-family="system-ui" font-size="32">${label}</text>
-  </svg>`;
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-}
+document.body.classList.add("theme-dark");
+document.documentElement.dataset.apertureMode = "dark";
 
 const mount = document.querySelector<HTMLElement>("#preview");
 if (!mount) throw new Error("Preview mount is missing.");
 
-const firstScene = sceneDataUrl(["#402b63", "#d77d72"], "Sunset overlook");
-const secondScene = sceneDataUrl(["#07152f", "#31527d"], "Night overlook");
-const rerollScene = sceneDataUrl(["#1e1b4b", "#4338ca"], "Starry ridge");
 const query = new URLSearchParams(location.search);
 const mode = query.get("mode") === "standard" ? "standard" : "cyoa";
 const requestedPreset = query.get("preset");
 const themePreset = isThemePresetId(requestedPreset) ? requestedPreset : "lumiverse";
 
-function simulateGenerationFlow(rerollCount = 1): void {
-  stage.setPhase("waiting-for-response");
+const key: TurnKey = { chatId: "A", assistantMessageId: "m", swipeId: 0, sourceFingerprint: "abcdef12345678", revision: 0 };
+const entities: PresentationEntity[] = [
+  {
+    id: "tibold",
+    kind: "npc",
+    name: "Tibold",
+    aliases: ["Master Scribe"],
+    firstParagraph: 0,
+    facts: [
+      { id: "f1", entityId: "tibold", field: "Height", value: "5'11\"", visibility: "observed", source: { provider: "story", recordId: "r1", chatId: "A", messageId: "m", sourceFingerprint: "abcdef12345678", observedAt: "2026-10-24T00:00:00Z" }, revealedAt: { key, paragraphIndex: 0 } },
+      { id: "f2", entityId: "tibold", field: "Build", value: "Broad", visibility: "observed", source: { provider: "story", recordId: "r2", chatId: "A", messageId: "m", sourceFingerprint: "abcdef12345678", observedAt: "2026-10-24T00:00:00Z" }, revealedAt: { key, paragraphIndex: 0 } },
+      { id: "f3", entityId: "tibold", field: "Hair", value: "Dark brown", visibility: "observed", source: { provider: "story", recordId: "r3", chatId: "A", messageId: "m", sourceFingerprint: "abcdef12345678", observedAt: "2026-10-24T00:00:00Z" }, revealedAt: { key, paragraphIndex: 0 } },
+      { id: "f4", entityId: "tibold", field: "Identifying mark", value: "Facial scar", visibility: "observed", source: { provider: "story", recordId: "r4", chatId: "A", messageId: "m", sourceFingerprint: "abcdef12345678", observedAt: "2026-10-24T00:00:00Z" }, revealedAt: { key, paragraphIndex: 0 } },
+      { id: "f5", entityId: "tibold", field: "Knowledge", value: "Upper tunnels", visibility: "observed", source: { provider: "story", recordId: "r5", chatId: "A", messageId: "m", sourceFingerprint: "abcdef12345678", observedAt: "2026-10-24T00:00:00Z" }, revealedAt: { key, paragraphIndex: 0 } },
+      { id: "f6", entityId: "tibold", field: "Behavior", value: "Avoids direct light", visibility: "observed", source: { provider: "story", recordId: "r6", chatId: "A", messageId: "m", sourceFingerprint: "abcdef12345678", observedAt: "2026-10-24T00:00:00Z" }, revealedAt: { key, paragraphIndex: 0 } },
+      { id: "f7", entityId: "tibold", field: "Role", value: "Master Scribe", visibility: "observed", source: { provider: "story", recordId: "r7", chatId: "A", messageId: "m", sourceFingerprint: "abcdef12345678", observedAt: "2026-10-24T00:00:00Z" }, revealedAt: { key, paragraphIndex: 0 } },
+      { id: "f8", entityId: "tibold", field: "Rank", value: "Senior Cave Raider", visibility: "observed", source: { provider: "story", recordId: "r8", chatId: "A", messageId: "m", sourceFingerprint: "abcdef12345678", observedAt: "2026-10-24T00:00:00Z" }, revealedAt: { key, paragraphIndex: 0 } }
+    ]
+  },
+  { id: "kithall", kind: "place", name: "Kit Hall", aliases: ["Main Training Hall"], firstParagraph: 0, facts: [] },
+  { id: "caveraiders", kind: "npc", name: "Cave Raiders", aliases: ["Guild"], firstParagraph: 0, facts: [] },
+  { id: "spear", kind: "object", name: "Spear", aliases: ["Weapon"], firstParagraph: 0, facts: [] }
+];
 
-  setTimeout(() => {
-    stage.setPhase("planning");
-
-    setTimeout(() => {
-      stage.setAssetProgress({ current: 1, total: 3 });
-
-      setTimeout(() => {
-        stage.setAssetProgress({ current: 2, total: 3 });
-
-        setTimeout(() => {
-          stage.setAssetProgress({ current: 3, total: 3 });
-
-          setTimeout(() => {
-            stage.setAssetProgress(null);
-            stage.loadTurn({
-              mode,
-              paragraphs: [
-                { id: `r${rerollCount}-0`, speaker: "Mira", text: `[Reroll ${rerollCount}] The wind picks up as the constellations emerge in the twilight sky.` },
-                { id: `r${rerollCount}-1`, speaker: "Mira", text: "She looks out over the valley, smiling faintly at the quiet horizon." },
-              ],
-              choices: [
-                { id: "continue-looking", label: "Gaze at the stars", value: "Keep watching the sky with her." },
-                { id: "head-home", label: "Suggest heading back", value: "Let's make our way down before dark." },
-              ],
-            });
-            void stage.setSceneImage({ url: rerollScene, requestId: `reroll-${rerollCount}`, alt: "Starry ridge" });
-          }, 800);
-        }, 800);
-      }, 800);
-    }, 900);
-  }, 1200);
-}
+const presentation = {
+  version: 1 as const,
+  snapshots: buildPresentationTimeline({
+    key,
+    paragraphCount: 4,
+    entities,
+    baseline: { tibold: { presence: "present" } },
+    deltas: [],
+    beats: [
+      { paragraphIndex: 0, speakerEntityId: "tibold", drawableEntityId: "tibold", locationId: "kithall" },
+      { paragraphIndex: 3, speakerEntityId: "tibold", drawableEntityId: "tibold", locationId: "kithall" }
+    ]
+  }),
+  documents: []
+};
 
 let rerollCounter = 0;
 
 const stage = new VnStage({
   mount,
   themePreset,
-  userCss: themePreset === "lumiverse" ? `
-    [data-vn-dialogue] { border-color: rgba(255, 218, 239, .48); }
-    [data-vn-speaker] { letter-spacing: .08em; text-transform: uppercase; }
-  ` : "",
-  onAdvance: (paragraphIndex) => {
-    if (paragraphIndex === 1) {
-      window.setTimeout(() => {
-        void stage.setSceneImage({ url: secondScene, requestId: "night-scene", alt: "The overlook after nightfall" });
-      }, 700);
-    }
-  },
+  userCss: "",
+  onAdvance: () => {},
   onChoice: async (choice) => {
     stage.setActivity(`Selected: ${choice.label}`, "success");
   },
@@ -92,32 +75,116 @@ const stage = new VnStage({
   },
   onReroll: () => {
     rerollCounter++;
-    simulateGenerationFlow(rerollCounter);
   },
   onSwipe: () => {
     rerollCounter++;
-    simulateGenerationFlow(rerollCounter);
   },
   onExit: () => stage.setActivity("Exit would restore Lumiverse chat.", "warning"),
 });
 
+stage.setTooltipPreferences(normalizeTooltipPreferences({
+  enabled: true,
+  detail: "expanded",
+  maxFactsPerEntity: 12,
+  linking: "all-known",
+  actionsEnabled: true,
+  categories: { npcs: true, locations: true, objects: true },
+  fieldGroups: { identity: true, status: true, traits: true, relationships: true, inventory: true, overview: true, state: true },
+  rememberReferences: true,
+  maxLinksPerParagraph: 12
+}));
+
 stage.loadTurn({
   mode,
+  initialParagraphIndex: 3,
+  presentation,
   paragraphs: [
-    { id: "p0", speaker: "Mira", text: "The last sunlight spills across the valley. For a moment, neither of us says anything." },
-    { id: "p1", speaker: "Mira", text: "By the time she turns toward you, the first stars have appeared over the ridge." },
-    { id: "p2", speaker: "Mira", text: "\"<rainbow><wave>Look, a shooting star!</wave></rainbow>\" She grabs your sleeve. <whisper>Make a wish.</whisper> <tremble>Quick!</tremble>" },
-    { id: "p3", speaker: "Mira", text: "So, she asks quietly, where do we go from here?" }
+    { id: "p0", speaker: "NARRATOR", text: "The recruits crossed an archway into a cold corridor. Their footsteps echoed against the high stone walls." },
+    { id: "p1", speaker: "NARRATOR", text: "Three coils of hemp rope hit the stone bench in succession—thud, thud, thud—each one measured and squared off against the others." },
+    { id: "p2", speaker: "TIBOLD", text: "The cave raider regarded the line of recruits with a measured, unwelcoming stare." },
+    { id: "p3", speaker: "TIBOLD", text: "“If the records are incomplete, we must say so plainly,” Tibold murmurs, not lifting his quill from the vellum. “History forgives ignorance far more easily than false certainty.”" }
   ],
   choices: [
-    { id: "stay", label: "Stay until sunrise", value: "Let's stay here until sunrise." },
-    { id: "return", label: "Head back together", value: "We should head back together." },
-    { id: "ask", label: "Ask what she wants", value: "What do you want to do?" }
+    { id: "inspect", label: "Inspect records", value: "Inspect the records on the desk." },
+    { id: "observe", label: "Observe recruits", value: "Step back and observe the new recruits." },
+    { id: "speak", label: "Address Tibold", value: "Address Master Scribe Tibold directly." }
   ]
 });
-void stage.setSceneImage({ url: firstScene, requestId: "sunset-scene", alt: "A sunset overlook" });
+
+void stage.setSceneImage({ url: APERTURE_ASSETS.tiboldScene, requestId: "kit-hall-scene", alt: "Kit Hall · Tibold at his desk" });
+
+stage.setCastTurn({
+  chatId: key.chatId,
+  messageId: key.assistantMessageId,
+  swipeId: typeof key.swipeId === "number" ? key.swipeId : 0,
+  sourceFingerprint: key.sourceFingerprint,
+  revision: key.revision,
+  speaker: "TIBOLD",
+  paragraphs: [],
+  choices: [],
+  status: "ready",
+  assets: [
+    {
+      jobId: "tibold-portrait",
+      cueId: "tibold-cue",
+      paragraphIndex: 0,
+      status: "browser_ready",
+      stageAsset: { sceneId: "scene-1", role: "portrait", character: "Tibold", attire: "Cave Raider Attire" },
+      imageUrl: APERTURE_ASSETS.tiboldPortrait
+    },
+    {
+      jobId: "kit-hall-bg",
+      cueId: "kit-hall-cue",
+      paragraphIndex: 0,
+      status: "browser_ready",
+      stageAsset: { sceneId: "scene-1", role: "background", character: "Kit Hall" },
+      imageUrl: APERTURE_ASSETS.hallScene
+    },
+    {
+      jobId: "cave-raiders-art",
+      cueId: "cave-raiders-cue",
+      paragraphIndex: 0,
+      status: "browser_ready",
+      stageAsset: { sceneId: "scene-1", role: "scene", character: "Cave Raiders" },
+      imageUrl: APERTURE_ASSETS.studyScene
+    },
+    {
+      jobId: "spear-art",
+      cueId: "spear-cue",
+      paragraphIndex: 0,
+      status: "browser_ready",
+      stageAsset: { sceneId: "scene-1", role: "scene", character: "Spear" },
+      imageUrl: APERTURE_ASSETS.tiboldScene
+    }
+  ]
+}, 3);
+
+// Wire Settings Panel into Stage Workspace
+const config = structuredClone(DEFAULT_CONFIG);
+config.readerPreferences.theme = "dark";
+const settingsMount = document.createElement("div");
+const settingsPanel = new VisualNovelSettingsPanel({
+  mount: settingsMount,
+  onSave: (patch) => {
+    Object.assign(config, patch);
+    applyVisualConfigToStage(stage, config);
+  },
+  onOpenPreview: () => {},
+  onRefreshConnections: () => {}
+});
+settingsPanel.setConfig(config);
+
+stage.workspace.register("settings", {
+  element: settingsPanel.getElement(),
+  hideAtHome: true,
+  enter: () => { settingsPanel.getElement().dataset.vnWorkspaceTool = "settings"; },
+  leave: () => { settingsPanel.leaveWorkspace(); delete settingsPanel.getElement().dataset.vnWorkspaceTool; },
+  back: () => settingsPanel.backWithinWorkspace()
+});
+stage.workspace.onSettingsPage = page => settingsPanel.openPage(page, { focus: true });
 
 Object.assign(globalThis, {
   __visualNovelPreview: stage,
-  simulateGenerationFlow,
+  __settingsPanel: settingsPanel,
+  stage
 });

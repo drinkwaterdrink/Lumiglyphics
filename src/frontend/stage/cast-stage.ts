@@ -40,7 +40,8 @@ export class CastStage {
  }
  set(turn:TurnView|null,index:number):AssetView|null{this.turn=turn;this.index=index;return this.refresh();}
  private refresh():AssetView|null{
-  const active=(this.host.getRootNode() as Document|ShadowRoot).activeElement;
+  const rootNode = typeof this.host.getRootNode === 'function' ? this.host.getRootNode() : this.host.ownerDocument;
+  const active = (rootNode as Document | ShadowRoot | null)?.activeElement ?? null;
   const keepFocus=Boolean(active&&this.host.contains(active)&&active.hasAttribute('data-vn-cast-toggle'));
   let composition=this.enabled&&this.turn?selectCastComposition(this.turn,this.index,this.selected):null;
   if(!composition){this.clearDisplay();return null;}
