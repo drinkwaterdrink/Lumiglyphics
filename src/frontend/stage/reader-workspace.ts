@@ -90,9 +90,9 @@ export class ReaderWorkspace {
       <button type="button" data-reader-focus aria-label="Focus reading" aria-pressed="false" title="Focus reading">${readerIcon('focus')}<span>Focus</span></button></div></header>
     <section data-reader-voice-panel hidden aria-label="Paragraph speech controls"><div data-voice-panel-copy><b>Listen to this passage</b><small data-voice-panel-status>Speech settings determine which controls are available.</small></div><div data-voice-controls></div><button type="button" data-voice-settings>Speech settings</button></section>
     <aside data-vn-workspace hidden aria-label="Reader workspace" tabindex="-1">
-      <header data-workspace-heading><button type="button" data-workspace-close aria-label="Close workspace and return to reader" title="Return to reading">${readerIcon('back')}</button><div><p data-workspace-subtitle></p><h2 data-workspace-title></h2></div><button type="button" data-workspace-navigation aria-label="Open APERTURE navigation" title="Open navigation">${readerIcon('more')}</button></header>
+      <header data-workspace-heading><button type="button" data-workspace-close aria-label="Close workspace and return to reader" title="Return to reading">${readerIcon('back')}</button><div><p data-workspace-subtitle></p><h2 data-workspace-title></h2></div></header>
       <div data-workspace-content></div>
-      <footer data-workspace-footer><div><span data-workspace-footer-kicker>APERTURE · CURRENT STORY</span><b data-workspace-footer-title></b><small data-workspace-footer-context></small></div><nav aria-label="Main menu"><button type="button" data-workspace-read>${readerIcon('read')}<span>Read</span></button><button type="button" data-workspace-world>${readerIcon('world')}<span>World</span></button><button type="button" data-workspace-art>${readerIcon('art')}<span>Art</span></button><button type="button" data-workspace-history>${readerIcon('history')}<span>History</span></button><button type="button" data-workspace-settings>${readerIcon('settings')}<span>Settings</span></button><button type="button" data-workspace-navigate>${readerIcon('more')}<span>Workspace</span></button></nav></footer>
+      <footer data-workspace-footer><div><span data-workspace-footer-kicker>READING POSITION</span><small data-workspace-footer-context></small></div><nav aria-label="Workspace navigation"><button type="button" data-workspace-read>${readerIcon('read')}<span>Read</span></button><button type="button" data-workspace-world title="World Lens">${readerIcon('world')}<span>World Lens</span></button><button type="button" data-workspace-art title="Art Studio">${readerIcon('art')}<span>Art Studio</span></button><button type="button" data-workspace-history>${readerIcon('history')}<span>History</span></button><button type="button" data-workspace-settings>${readerIcon('settings')}<span>Settings</span></button><button type="button" data-workspace-navigate aria-label="More story tools" title="More story tools">${readerIcon('more')}<span>More</span></button></nav></footer>
     </aside>
     <nav data-aperture-dock aria-label="Reader controls">
       <button type="button" data-aperture-action="previous" aria-label="Previous passage" title="Previous passage">${readerIcon('back')}<span>Previous</span></button>
@@ -153,7 +153,7 @@ export class ReaderWorkspace {
       b.addEventListener('click', () => this.runAction(item.action)); grid.append(b);
     }
     const note = document.createElement('p'); note.textContent = 'Navigation never generates content. Close returns to the current passage.'; this.more.append(note);
-    q('[data-workspace-world]').addEventListener('click', () => this.open('story'), {signal});
+    q('[data-workspace-world]').addEventListener('click', () => this.runAction('lens'), {signal});
     q('[data-workspace-art]').addEventListener('click', () => this.open('artwork'), {signal});
     q('[data-workspace-history]').addEventListener('click', () => this.runAction('history'), {signal});
     this.nav.addEventListener('click', event => {
@@ -164,7 +164,6 @@ export class ReaderWorkspace {
       else if (destinations.some(d => d.id === id)) { if (id === 'history') this.runAction('history'); else this.open(id as ReaderDestination, b); }
     }, {signal});
     this.closeButton.addEventListener('click', () => this.close(), {signal});
-    q('[data-workspace-navigation]').addEventListener('click', () => this.openIris(), {signal});
     q('[data-workspace-navigate]').addEventListener('click', event => this.openMore(event.currentTarget as HTMLElement), {signal});
     q('[data-workspace-read]').addEventListener('click', () => this.close(), {signal});
     q('[data-workspace-settings]').addEventListener('click', () => this.open('settings'), {signal});
@@ -221,7 +220,6 @@ export class ReaderWorkspace {
   setCurrentPresentation(title: string, subtitle: string): void {
     if (!this.current || this.current === 'more') return;
     this.title.textContent = title; this.subtitle.textContent = subtitle;
-    this.shell.querySelector<HTMLElement>('[data-workspace-footer-title]')!.textContent = title;
   }
 
   attachSpeechDock(element:HTMLElement):void {
@@ -262,7 +260,6 @@ export class ReaderWorkspace {
       const folio = action === 'cast';
       this.title.textContent = folio ? 'Character Folio' : 'World Lens';
       this.subtitle.textContent = folio ? 'Known characters, grounded in the story' : 'Source-aware locations, items & revealed documents';
-      this.shell.querySelector<HTMLElement>('[data-workspace-footer-title]')!.textContent = folio ? 'Character Folio' : 'World Lens';
       if (folio) this.actions.cast?.();
       else if (this.actions.lens) this.actions.lens();
       return;
@@ -320,9 +317,8 @@ export class ReaderWorkspace {
       this.release(); this.current = id;
       const d = destinations.find(d => d.id === id)!;
       this.title.textContent = d.label; this.subtitle.textContent = d.hint;
-      this.shell.querySelector<HTMLElement>('[data-workspace-footer-title]')!.textContent = d.label;
       const passage = this.header.querySelector<HTMLElement>('[data-reader-caption]')?.textContent?.trim() || 'Current passage';
-      this.shell.querySelector<HTMLElement>('[data-workspace-footer-context]')!.textContent = `Current passage · ${passage}`;
+      this.shell.querySelector<HTMLElement>('[data-workspace-footer-context]')!.textContent = passage;
       this.panel.hidden = false; this.shell.dataset.vnWorkspace = id;this.syncExitPlacement();
       const tool = this.tools.get(id);
       if (tool) { this.rememberHome(tool.element); this.content.append(tool.element); tool.element.hidden=false;tool.enter(); }
@@ -337,7 +333,7 @@ export class ReaderWorkspace {
     if (this.destroyed || this.changing) return;
     this.setVoiceOpen(false);
     this.changing = true;
-    try { this.pause(); this.opener = trigger; this.release(); this.current = 'more'; this.title.textContent = 'Workspace'; this.subtitle.textContent = 'Your story, all in one place'; this.shell.querySelector<HTMLElement>('[data-workspace-footer-title]')!.textContent = 'Workspace'; this.shell.querySelector<HTMLElement>('[data-workspace-footer-context]')!.textContent = this.header.querySelector<HTMLElement>('[data-reader-caption]')?.textContent?.trim() || 'Current passage'; this.content.append(this.more); this.panel.hidden = false; this.shell.dataset.vnWorkspace = 'more';this.syncExitPlacement(); this.syncReader(); this.closeButton.focus({preventScroll:true}); }
+    try { this.pause(); this.opener = trigger; this.release(); this.current = 'more'; this.title.textContent = 'Workspace'; this.subtitle.textContent = 'Your story, all in one place'; this.shell.querySelector<HTMLElement>('[data-workspace-footer-context]')!.textContent = this.header.querySelector<HTMLElement>('[data-reader-caption]')?.textContent?.trim() || 'Current passage'; this.content.append(this.more); this.panel.hidden = false; this.shell.dataset.vnWorkspace = 'more';this.syncExitPlacement(); this.syncReader(); this.closeButton.focus({preventScroll:true}); }
     finally { this.changing = false; }
   }
   close(restoreFocus = true): void {
@@ -364,7 +360,7 @@ export class ReaderWorkspace {
     const current=this.more.querySelector<HTMLElement>('[data-workspace-current-caption]');
     if(current)current.textContent=caption;
     const footer=this.shell.querySelector<HTMLElement>('[data-workspace-footer-context]');
-    if(footer&&this.current==='more')footer.textContent=caption;
+    if(footer&&this.current)footer.textContent=caption;
   }
   setAttention(count: number): void {
     const badge = this.nav.querySelector<HTMLElement>('[data-reader-attention]')!;

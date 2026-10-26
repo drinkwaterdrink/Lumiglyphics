@@ -16,10 +16,13 @@ describe('reader-first same-instance workspace',()=>{
   expect(shell.querySelector('[data-aperture-iris-dialog]')?.getAttribute('aria-label')).toBe('APERTURE navigation');
   expect(shell.querySelectorAll('[data-aperture-action]').map(n=>n.getAttribute('data-aperture-action'))).toEqual(['previous','history','lens','cast','settings','next']);
   expect(shell.querySelector('[data-workspace-close]')?.getAttribute('aria-label')).toBe('Close workspace and return to reader');
+  expect(shell.querySelector('[data-workspace-navigation]')).toBeNull();
+  expect(shell.querySelector('[data-workspace-footer-title]')).toBeNull();
+  expect(shell.querySelector('[data-workspace-navigate]')?.textContent).toContain('More');
  });
  test('full-screen routes cover the reader at every viewport and expose a complete menu surface',()=>{
   shell.dataset.vnAperture='true';workspace.open('settings');expect((reader as unknown as {inert:boolean}).inert).toBe(true);expect(reader.getAttribute('aria-hidden')).toBe('true');
-  expect(shell.querySelector('[data-workspace-footer]')?.getAttribute('aria-label')).toBe(null);
+  expect(shell.querySelector('[data-workspace-footer] nav')?.getAttribute('aria-label')).toBe('Workspace navigation');
   expect(shell.querySelectorAll('[data-workspace-world],[data-workspace-art],[data-workspace-history],[data-workspace-settings],[data-workspace-read],[data-workspace-navigate]').length).toBe(6);
   workspace.close(false);expect((reader as unknown as {inert:boolean}).inert).toBe(false);expect(reader.getAttribute('aria-hidden')).toBe(null);
   workspace.open('settings');shell.querySelector('[data-workspace-navigate]')!.click();expect(workspace.destination).toBe('more');
@@ -39,8 +42,9 @@ describe('reader-first same-instance workspace',()=>{
  });
  test('Cast action opens its own named destination and Settings remains a separate route',()=>{
   const surface=new FakeNode('div');shell.append(surface);workspace.register('story',{element:el(surface),enter:()=>calls.push('world-enter'),leave:()=>calls.push('world-leave')});
-  workspace.setActions({cast:()=>calls.push('cast')});shell.querySelector('[data-reader-destination="more"]')!.click();shell.querySelector('[data-more-action="cast"]')!.click();
+  workspace.setActions({cast:()=>calls.push('cast'),lens:()=>calls.push('lens')});shell.querySelector('[data-reader-destination="more"]')!.click();shell.querySelector('[data-more-action="cast"]')!.click();
   expect(workspace.destination).toBe('story');expect(shell.querySelector('[data-workspace-title]')?.textContent).toBe('Character Folio');expect(calls.at(-1)).toBe('cast');
+  shell.querySelector('[data-workspace-world]')!.click();expect(shell.querySelector('[data-workspace-title]')?.textContent).toBe('World Lens');expect(calls.at(-1)).toBe('lens');
   workspace.open('settings');expect(workspace.destination).toBe('settings');expect(shell.querySelector('[data-workspace-title]')?.textContent).toBe('Settings');
   expect(shell.querySelector('[data-aperture-action="next"]')?.getAttribute('aria-label')).toBe('Next passage');
  });
@@ -69,6 +73,11 @@ describe('reader-first same-instance workspace',()=>{
  test('route scroll and home ownership survive repeated navigation',()=>{
   const tool=new FakeNode('div');shell.append(tool);workspace.register('settings',{element:el(tool),enter:()=>{},leave:()=>{}});
   workspace.open('settings');shell.querySelector('[data-workspace-content]')!.scrollTop=287;workspace.close(false);workspace.open('settings');expect(shell.querySelector('[data-workspace-content]')!.scrollTop).toBe(287);workspace.close(false);expect(tool.parentNode).toBe(shell);
+ });
+ test('the workspace keeps one live story-position label without repeating its page title',()=>{
+  workspace.open('history');workspace.setCurrentPresentation('Image Library','Saved story pictures');workspace.setCaption('Mira · 2 / 5');
+  expect(shell.querySelector('[data-workspace-title]')?.textContent).toBe('Image Library');
+  expect(shell.querySelector('[data-workspace-footer-context]')?.textContent).toBe('Mira · 2 / 5');
  });
  test('focus reading has an explicit reversible state and opening a workspace restores navigation',()=>{
   workspace.setFocus(true);expect(shell.dataset.vnReadingFocus).toBe('true');expect(shell.querySelector('[data-reader-focus]')!.getAttribute('aria-label')).toBe('Show navigation');workspace.open('history');expect(shell.dataset.vnReadingFocus).toBe('false');expect(workspace.destination).toBe('history');

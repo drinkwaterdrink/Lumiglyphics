@@ -65,6 +65,12 @@ try{
   assert.equal(await folio.locator('[data-reference-section]').filter({hasText:'Rowan is her brother.'}).count(),1,'Character Folio profiles reveal every cursor-safe known detail despite brief tooltip previews');
   await folio.getByRole('button',{name:'Back to Character Folio',exact:true}).click();
   assert.equal(await roster.getByLabel('Search known cast').inputValue(),'','profile return restores the dedicated roster');
+  await page.locator('[data-workspace-world]').click();
+  assert.equal(await page.locator('[data-workspace-title]').innerText(),'World Lens','the in-workspace shortcut switches from Character Folio to World Lens');
+  assert.deepEqual(await world.locator('[data-reference-list] button').evaluateAll(elements=>elements.map(el=>el.getAttribute('aria-label')).sort()),['Brass key','Harbor']);
+  assert.equal(await page.locator('[data-workspace-navigation]').count(),0,'one menu surface avoids a duplicate header overflow');
+  assert.equal(await page.locator('[data-workspace-footer-title]').count(),0,'workspace title is not repeated in the footer');
+  assert.equal(await page.locator('[data-workspace-navigate]').getAttribute('aria-label'),'More story tools');
   await page.locator('[data-workspace-close]').click();
   await page.evaluate(()=>{const f=(window as any).readingFixture;f.stage.setApertureMode(false);});
   await page.evaluate(()=>{const f=(window as any).referenceSettings;f.settings.host.hidden=false;f.settings.setConfig({enabled:true});(document.querySelector('[data-app-root]') as HTMLElement).hidden=true;});
