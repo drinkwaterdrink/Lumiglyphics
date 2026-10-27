@@ -1029,6 +1029,10 @@ export class VisualNovelSettingsPanel {
     for(const button of this.root.querySelectorAll<HTMLButtonElement>('[data-entity-tab]'))button.onclick=()=>{
       const apply=()=>{const places=button.dataset.entityTab==='places';this.root.querySelector<HTMLElement>('[data-cast-mount]')!.hidden=places;this.root.querySelector<HTMLElement>('[data-places-mount]')!.hidden=!places;for(const tab of this.root.querySelectorAll('[data-entity-tab]'))tab.setAttribute('aria-pressed',String(tab===button));if(places)this.locationArtPanel.ensureLoaded();else this.castArtPanel.ensureLoaded();};
       this.castArtPanel.guardNavigation(apply);
+      this.host.addEventListener("lumiglyphics:navigate", (e: Event) => {
+        const d = (e as CustomEvent<{page?:string}>).detail;
+        if (d?.page) this.openPage(d.page, { focus: true });
+      });
     };
   }
 

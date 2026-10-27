@@ -2874,6 +2874,161 @@ section[data-reference-observations] h3 {
   opacity: 1 !important;
 }
 
+/* Aperture Dialogue History & Backlog Replay */
+[data-vn-backlog] {
+  background: linear-gradient(180deg, rgba(8, 14, 18, 0.96) 0%, rgba(13, 22, 28, 0.98) 100%) !important;
+  border: 1px solid rgba(134, 219, 178, 0.22) !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(16px) !important;
+  border-radius: 16px !important;
+}
+
+[data-vn-backlog-item] {
+  background: rgba(16, 26, 30, 0.75) !important;
+  border: 1px solid rgba(134, 219, 178, 0.12) !important;
+  border-radius: 12px !important;
+  padding: 12px 16px !important;
+  margin-bottom: 12px !important;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease !important;
+}
+
+[data-vn-backlog-item]:hover {
+  background: rgba(22, 38, 42, 0.85) !important;
+  border-color: rgba(134, 219, 178, 0.28) !important;
+}
+
+.backlog-item-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  margin-bottom: 6px !important;
+}
+
+[data-vn-backlog-speaker] {
+  font-family: var(--font-header, system-ui, sans-serif) !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: #86dbb2 !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
+}
+
+[data-vn-backlog-text] {
+  font-size: 14.5px !important;
+  line-height: 1.65 !important;
+  color: #dbebe2 !important;
+  margin: 0 !important;
+}
+
+.backlog-jump-btn {
+  appearance: none !important;
+  background: rgba(56, 102, 79, 0.35) !important;
+  border: 1px solid rgba(134, 219, 178, 0.35) !important;
+  border-radius: 6px !important;
+  color: #a9e8cb !important;
+  font-size: 11px !important;
+  font-weight: 650 !important;
+  padding: 3px 10px !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+  letter-spacing: 0.02em !important;
+}
+
+.backlog-jump-btn:hover {
+  background: rgba(134, 219, 178, 0.25) !important;
+  color: #ffffff !important;
+  border-color: #86dbb2 !important;
+  transform: translateY(-1px) !important;
+}
+
+.backlog-jump-btn:active {
+  transform: translateY(0) scale(0.97) !important;
+}
+
+/* Speaking Voice Button Pulse Animation */
+@keyframes aperture-voice-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(134, 219, 178, 0.6); }
+  70% { box-shadow: 0 0 0 8px rgba(134, 219, 178, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(134, 219, 178, 0); }
+}
+
+[data-action="voice-toggle"].speaking {
+  color: #86dbb2 !important;
+  background: rgba(134, 219, 178, 0.18) !important;
+  border-color: #86dbb2 !important;
+  animation: aperture-voice-pulse 1.8s infinite !important;
+}
+
+/* Light Mode Overrides for Backlog */
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-vn-backlog] {
+  background: rgba(246, 250, 244, 0.98) !important;
+  border-color: rgba(86, 128, 107, 0.35) !important;
+  box-shadow: 0 24px 64px rgba(18, 38, 29, 0.22) !important;
+}
+
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-vn-backlog-item] {
+  background: #ffffff !important;
+  border-color: rgba(86, 128, 107, 0.25) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04) !important;
+}
+
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-vn-backlog-item]:hover {
+  background: #f4f8f2 !important;
+  border-color: rgba(86, 128, 107, 0.45) !important;
+}
+
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-vn-backlog-speaker] {
+  color: #184e36 !important;
+  font-weight: 700 !important;
+}
+
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-vn-backlog-text] {
+  color: #142820 !important;
+}
+
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .backlog-jump-btn {
+  background: #e5eee2 !important;
+  border-color: #8dafa0 !important;
+  color: #153226 !important;
+}
+
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .backlog-jump-btn:hover {
+  background: #2b5946 !important;
+  border-color: #2b5946 !important;
+  color: #ffffff !important;
+}
+
+/* Extension-wide Light Mode Text & Contrast Guarantee for Settings, Folios, Places & Workspaces */
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-cast-workspace], [data-place-workspace], [data-image-studio], [data-vn-panel-layer], [data-reader-workspace], [data-folio-body]) {
+  color: #142820 !important;
+}
+
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-cast-workspace], [data-place-workspace], [data-image-studio], [data-vn-panel-layer]) :is(p, span, label, small, strong, em, dt, dd, h2, h3, h4) {
+  color: #142820 !important;
+}
+
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-cast-workspace], [data-place-workspace], [data-image-studio], [data-vn-panel-layer]) :is(small, .muted, [data-muted]) {
+  color: #4b6b5d !important;
+}
+
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-cast-workspace], [data-place-workspace], [data-image-studio], [data-vn-panel-layer]) :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  background-color: #ffffff !important;
+  color: #142820 !important;
+  border-color: rgba(86, 128, 107, 0.35) !important;
+}
+
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-cast-workspace], [data-place-workspace], [data-image-studio], [data-vn-panel-layer]) :is(button:not([data-action="voice-toggle"]):not(.launcher)) {
+  background-color: #e5eee2 !important;
+  color: #142820 !important;
+  border-color: rgba(86, 128, 107, 0.35) !important;
+}
+
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-cast-workspace], [data-place-workspace], [data-image-studio], [data-vn-panel-layer]) :is(button:not([data-action="voice-toggle"]):not(.launcher)):hover {
+  background-color: #d6e4d2 !important;
+  border-color: #56806b !important;
+}
+
+
 
 
 `;

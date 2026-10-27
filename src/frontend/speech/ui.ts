@@ -113,7 +113,15 @@ export class SpeechDock {
   }
 
   setStatus(status: SpeechStatus): void {
+    const wasPlaying = this.playing;
     this.playing = status.kind === "playing";
+    if (wasPlaying !== this.playing) {
+      this.host.dispatchEvent(new CustomEvent("lumiglyphics:speech-state", {
+        bubbles: true,
+        composed: true,
+        detail: { playing: this.playing }
+      }));
+    }
     this.playButton.textContent = this.playing ? "❚❚" : "▶";
     this.playButton.setAttribute("aria-label", this.playing ? "Pause speech" : "Play this paragraph");
     this.playButton.disabled = status.kind === "loading";

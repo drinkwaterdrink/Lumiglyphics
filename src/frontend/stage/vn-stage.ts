@@ -546,7 +546,7 @@ export class VnStage {
   private readonly readParagraphIds = new Set<string>();
   /** Reading-session history. Capped so long mobile sessions cannot retain
    *  formatted HTML for every paragraph indefinitely (oldest entries drop). */
-  private readonly backlogEntries: Array<{ speaker?: string | undefined; text: string; formatted: string }> = [];
+  private readonly backlogEntries: Array<{ speaker?: string | undefined; text: string; formatted: string; paragraphIndex?: number | undefined }> = [];
   private activeTextNodes: TypewriterNode[] = [];
   private currentRenderedParagraphId = "";
   private currentRenderedFormatted = "";
@@ -891,13 +891,26 @@ export class VnStage {
     this.backlogContent.innerHTML = this.backlogEntries
       .map(
         (entry, index) => `
-        <div data-vn-backlog-item data-vn-step="${index + 1}">${entry.speaker ? `<span data-vn-backlog-speaker>${escapeHtml(entry.speaker)}</span>` : ""}<p data-vn-backlog-text>${entry.formatted}</p>
-
-
+        <div data-vn-backlog-item data-vn-step="${index + 1}">
+          <div class="backlog-item-header">
+            ${entry.speaker ? `<span data-vn-backlog-speaker>${escapeHtml(entry.speaker)}</span>` : "<span></span>"}
+            ${typeof entry.paragraphIndex === "number" ? `<button type="button" data-vn-backlog-jump="${entry.paragraphIndex}" class="backlog-jump-btn" title="Jump to this passage" aria-label="Jump to passage">Replay</button>` : ""}
+          </div>
+          <p data-vn-backlog-text>${entry.formatted}</p>
         </div>
       `,
       )
       .join("");
+    for (const btn of this.backlogContent.querySelectorAll<HTMLButtonElement>("[data-vn-backlog-jump]")) {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const pIdx = parseInt(btn.dataset.vnBacklogJump ?? "", 10);
+        if (!isNaN(pIdx)) {
+          this.closeBacklog();
+          this.jumpToParagraph(pIdx);
+        }
+      };
+    }
     // History shows effects frozen (colours and sizes kept, no motion).
     this.syncBacklogTextEffects();
     applyTextEffects(this.backlogContent);
@@ -2290,12 +2303,13 @@ export class VnStage {
     speaker: string | undefined,
     text: string,
     formatted: string,
+    paragraphIndex?: number,
   ): void {
     if (this.readParagraphIds.has(id)) return;
     this.readParagraphIds.add(id);
     const last = this.backlogEntries[this.backlogEntries.length - 1];
     if (!last || last.text !== text || last.speaker !== speaker) {
-      this.backlogEntries.push({ speaker, text, formatted });
+      this.backlogEntries.push({ speaker, text, formatted, paragraphIndex });
       if (this.backlogEntries.length > MAX_BACKLOG_ENTRIES) this.backlogEntries.shift();
     }
   }
@@ -2511,7 +2525,7 @@ export class VnStage {
     }
     this.currentRenderedParagraphId = paragraph.id;
     this.currentRenderedFormatted = formatted;
-    this.recordBacklogAndRead(paragraph.id, paragraph.speaker, paragraph.text, formatted);
+    this.recordBacklogAndRead(paragraph.id, paragraph.speaker, paragraph.text, formatted, this.state.currentParagraphIndex);
     if (!this.isRewinding) this.triggerParagraphEffects(paragraph);
 
     if (this.textSpeed <= 0 || this.isSkipping || this.isRewinding) {

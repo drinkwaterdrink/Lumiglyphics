@@ -183,11 +183,20 @@ export class ReaderWorkspace {
         panelLayer.dispatchEvent(new CustomEvent("lumiglyphics:panels-toggle", { bubbles: true }));
       }
     }, {signal});
-    q('[data-action="voice-toggle"]')?.addEventListener('click', () => {
+    const voiceBtn = q('[data-action="voice-toggle"]');
+    voiceBtn?.addEventListener('click', () => {
       const speechHost = this.shell.querySelector<HTMLElement>('.vn-speech-dock') || this.shell.querySelector<HTMLElement>('lumiglyphics-speech-dock') || this.shell.querySelector<HTMLElement>('[data-dock]');
       if (speechHost) {
         speechHost.dispatchEvent(new CustomEvent("lumiglyphics:speech-toggle", { bubbles: true }));
+      } else {
+        this.open('settings');
+        const settingsHost = this.shell.querySelector<HTMLElement>('[data-vn-settings-panel]');
+        settingsHost?.dispatchEvent(new CustomEvent("lumiglyphics:navigate", { detail: { page: "speech" } }));
       }
+    }, {signal});
+    this.shell.addEventListener('lumiglyphics:speech-state', (event: Event) => {
+      const playing = Boolean((event as CustomEvent<{ playing?: boolean }>).detail?.playing);
+      voiceBtn?.classList.toggle('speaking', playing);
     }, {signal});
     q('[data-action="studio-toggle"]')?.addEventListener('click', () => {
       this.open('artwork');
