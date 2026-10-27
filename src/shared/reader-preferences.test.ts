@@ -26,3 +26,20 @@ test("snap targets include readable space and stay inside the usable viewport", 
   expect(sheetHeight("expanded", NaN)).toBe(224);
   expect(nearestSheetSize(450, 800)).toBe("expanded");
 });
+
+test("customization and accessibility preferences normalize cleanly", () => {
+  const prefs = normalizeReaderPreferences({
+    typography: "novelist",
+    smartPacing: true,
+    typewriterAudio: "blip",
+    typewriterVolume: 0.6,
+    chapterTitleCards: true,
+    atmosphericLighting: true,
+  });
+  expect(prefs.typography).toBe("novelist");
+  expect(prefs.smartPacing).toBe(true);
+  expect(prefs.typewriterAudio).toBe("blip");
+  expect(prefs.typewriterVolume).toBe(0.6);
+  expect(prefs.chapterTitleCards).toBe(true);
+  expect(prefs.atmosphericLighting).toBe(true);
+});

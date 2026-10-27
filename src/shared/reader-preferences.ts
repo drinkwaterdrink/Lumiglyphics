@@ -5,6 +5,12 @@ export type ReaderPreferences = {
   backgroundOpacity: number;
   heightRatio?: number;
   theme?: "light" | "dark";
+  typography?: "novelist" | "modern" | "retro" | "accessible";
+  smartPacing?: boolean;
+  typewriterAudio?: "off" | "blip" | "click" | "pip";
+  typewriterVolume?: number;
+  chapterTitleCards?: boolean;
+  atmosphericLighting?: boolean;
 };
 export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   adjustableSheetEnabled: false,
@@ -23,6 +29,12 @@ export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
       ? Math.max(0, Math.min(1, input.backgroundOpacity)) : 0.9,
     theme: input.theme === "dark" ? "dark" : "light",
     ...(typeof input.heightRatio === "number" && Number.isFinite(input.heightRatio) ? { heightRatio: Math.max(.12, Math.min(1, input.heightRatio)) } : {}),
+    ...(input.typography === "novelist" || input.typography === "modern" || input.typography === "retro" || input.typography === "accessible" ? { typography: input.typography } : {}),
+    ...(input.smartPacing !== undefined ? { smartPacing: input.smartPacing === true } : {}),
+    ...(input.typewriterAudio === "off" || input.typewriterAudio === "blip" || input.typewriterAudio === "click" || input.typewriterAudio === "pip" ? { typewriterAudio: input.typewriterAudio } : {}),
+    ...(typeof input.typewriterVolume === "number" && Number.isFinite(input.typewriterVolume) ? { typewriterVolume: Math.max(0, Math.min(1, input.typewriterVolume)) } : {}),
+    ...(input.chapterTitleCards !== undefined ? { chapterTitleCards: input.chapterTitleCards === true } : {}),
+    ...(input.atmosphericLighting !== undefined ? { atmosphericLighting: input.atmosphericLighting === true } : {}),
   };
 }
 const RATIOS = { compact: 0.22, reading: 0.34, expanded: 0.6 } as const;

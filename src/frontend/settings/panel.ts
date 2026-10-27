@@ -682,6 +682,12 @@ export class VisualNovelSettingsPanel {
               <label data-field><span>Reader layout</span><select name="readerLayout"><option value="overlay">Text over picture</option><option value="image-first">Image first</option></select></label>
               <label data-field><span>Text panel size</span><select name="readerSheetSize"><option value="custom" disabled>Custom (dragged)</option><option value="compact">Compact</option><option value="reading">Reading</option><option value="expanded">Expanded</option></select></label>
               <label data-field><span>Dialogue background opacity <output data-opacity-output style="font:11px ui-monospace,monospace;margin-left:6px;"></output></span><input name="readerBackgroundOpacity" type="range" min="0" max="1" step="0.01" /></label>
+              <label data-field><span>Reading typography</span><select name="readerTypography"><option value="modern">Modern Clean (Outfit / Inter)</option><option value="novelist">Classic Novelist (Georgia / Serif)</option><option value="retro">Arcade Monospace (Pixel / JetBrains)</option><option value="accessible">Accessible Sans (High Legibility)</option></select></label>
+              <label data-field><span>Typewriter sound</span><select name="typewriterAudio"><option value="blip">Soft Game Blip</option><option value="click">Tactile Key Click</option><option value="pip">Crystal Digital Pip</option><option value="off">Off (Silent)</option></select></label>
+              <label data-field><span>Typewriter sound volume <output data-typewriter-volume-output style="font:11px ui-monospace,monospace;margin-left:6px;"></output></span><input name="typewriterVolume" type="range" min="0" max="1" step="0.05" /></label>
+              <label data-check><input name="smartPacing" type="checkbox" /><span>Intelligent dramatic pacing<small>Pauses naturally on punctuation (commas, periods, ellipses) for living visual novel rhythm</small></span></label>
+              <label data-check><input name="chapterTitleCards" type="checkbox" /><span>Cinematic chapter cards<small>Display elegant letterbox scene & location title splashes on turn start</small></span></label>
+              <label data-check><input name="atmosphericLighting" type="checkbox" /><span>Dynamic atmospheric lighting<small>Subtly tone-grades scene lighting to match night, firelight, storm, or morning moods</small></span></label>
               <fieldset ${find("Text size", "font scale bigger smaller large")}>
                 <legend>Text size</legend>
                 ${segments("textScaleStep", TEXT_SCALE_STEPS, true)}
@@ -1545,6 +1551,17 @@ export class VisualNovelSettingsPanel {
         if (mini) mini.style.setProperty("--caption-opacity", String(opacity));
         return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, backgroundOpacity: opacity }) };
       }
+      case "readerTypography": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, typography: target.value }) };
+      case "typewriterAudio": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, typewriterAudio: target.value }) };
+      case "typewriterVolume": {
+        const vol = Math.max(0, Math.min(1, parseFloat(target.value) || 0));
+        const out = this.root.querySelector<HTMLElement>("[data-typewriter-volume-output]");
+        if (out) out.textContent = `${Math.round(vol * 100)}%`;
+        return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, typewriterVolume: vol }) };
+      }
+      case "smartPacing": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, smartPacing: checked }) };
+      case "chapterTitleCards": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, chapterTitleCards: checked }) };
+      case "atmosphericLighting": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, atmosphericLighting: checked }) };
       case "apertureDarkMode": {
         const isDark = (target as HTMLInputElement).checked;
         const theme = isDark ? "dark" : "light";
@@ -2079,6 +2096,14 @@ export class VisualNovelSettingsPanel {
     if (opacityOut) opacityOut.textContent = `${Math.round(config.readerPreferences.backgroundOpacity * 100)}%`;
     const mini = this.root.querySelector<HTMLElement>("[data-mini-caption-preview]");
     if (mini) mini.style.setProperty("--caption-opacity", String(config.readerPreferences.backgroundOpacity));
+    this.control<HTMLSelectElement>("readerTypography").value = config.readerPreferences.typography ?? "modern";
+    this.control<HTMLSelectElement>("typewriterAudio").value = config.readerPreferences.typewriterAudio ?? "blip";
+    this.control<HTMLInputElement>("typewriterVolume").value = String(config.readerPreferences.typewriterVolume ?? 0.35);
+    const twVolOut = this.root.querySelector<HTMLElement>("[data-typewriter-volume-output]");
+    if (twVolOut) twVolOut.textContent = `${Math.round((config.readerPreferences.typewriterVolume ?? 0.35) * 100)}%`;
+    this.control<HTMLInputElement>("smartPacing").checked = config.readerPreferences.smartPacing !== false;
+    this.control<HTMLInputElement>("chapterTitleCards").checked = config.readerPreferences.chapterTitleCards !== false;
+    this.control<HTMLInputElement>("atmosphericLighting").checked = config.readerPreferences.atmosphericLighting !== false;
     const isDark = config.readerPreferences.theme === "dark";
     const darkModeBox = this.root.querySelector<HTMLInputElement>('input[name="apertureDarkMode"]');
     if (darkModeBox) darkModeBox.checked = isDark;

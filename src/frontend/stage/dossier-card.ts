@@ -13,6 +13,7 @@ export interface DossierVisualContext {
   locationName?: string;
   presentCharacters?: Array<{ id: string; name: string }>;
   summarySnippet?: string;
+  anchors?: string[];
   onSelectEntity?: (id: string, trigger: HTMLElement) => void;
 }
 
@@ -258,6 +259,16 @@ export class DossierCard {
       pinTag.className = 'tag night';
       pinTag.textContent = '📌 PINNED';
       folioMeta.append(pinTag);
+    }
+
+    if (visual?.anchors && visual.anchors.length > 0) {
+      for (const anchor of visual.anchors) {
+        const anchorTag = document.createElement('span');
+        anchorTag.className = 'tag anchor-tag';
+        anchorTag.textContent = `⚓ ${anchor}`;
+        anchorTag.title = 'Visual consistency anchor trait';
+        folioMeta.append(anchorTag);
+      }
     }
 
     const legacyBadges = document.createElement('div');

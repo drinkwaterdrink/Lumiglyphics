@@ -18,6 +18,7 @@ import {
 } from "./rich-text.js";
 import { applyTextEffects, TEXT_EFFECT_LETTER_ATTRIBUTE } from "./text-effects.js";
 import { DialogueSheet } from "./dialogue-sheet.js";
+import { TypewriterAudioSynthesizer } from "./typewriter-audio.js";
 import type { ReaderPreferences } from "../../shared/reader-preferences.js";
 import {
   createInitialVnStageState,
@@ -183,6 +184,7 @@ const THEME_MARKUP = `
       <img data-vn-scene-image data-vn-layer="active" data-vn-empty="true" alt="" />
       <img data-vn-scene-image data-vn-layer="incoming" data-vn-empty="true" alt="" />
       <div data-vn-ambient aria-hidden="true"></div>
+      <div data-vn-atmosphere aria-hidden="true"></div>
       <div data-vn-scrim></div>
     </div>
 
@@ -190,6 +192,13 @@ const THEME_MARKUP = `
 
     <div data-vn-fx aria-hidden="true"></div>
     <div data-vn-flash aria-hidden="true"></div>
+    <div data-vn-chapter-card hidden aria-hidden="true">
+      <div class="chapter-card-inner">
+        <span class="chapter-eyebrow" data-vn-chapter-eyebrow>SCENE</span>
+        <h2 class="chapter-title" data-vn-chapter-title></h2>
+        <p class="chapter-subtitle" data-vn-chapter-subtitle></p>
+      </div>
+    </div>
 
     <div data-vn-status-stack aria-live="polite" aria-atomic="false"></div>
     <button data-vn-clean-restore type="button" hidden aria-label="Show reader controls" title="Show reader controls (H)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg><span>Show UI</span></button>
@@ -281,6 +290,10 @@ const THEME_MARKUP = `
       <div data-vn-backlog-header>
         <h3 data-vn-backlog-title>History</h3>
         <button data-vn-backlog-close type="button" aria-label="Close history"><svg viewBox="0 0 16 16" width="14" height="14" focusable="false" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l8 8" /><path d="M12 4l-8 8" /></svg></button>
+      </div>
+      <div data-vn-backlog-search-row class="backlog-search-row">
+        <input type="search" data-vn-backlog-search placeholder="Search dialogue history..." aria-label="Search dialogue history" />
+        <span data-vn-backlog-search-count class="backlog-search-count"></span>
       </div>
       <div data-vn-backlog-content tabindex="0"></div>
       <footer data-vn-backlog-footer><button data-vn-backlog-return type="button">Back to reader</button></footer></div><div data-vn-scene-hud hidden role="region" aria-label="Scene overview">
@@ -477,6 +490,10 @@ export class VnStage {
   private readonly flashOverlay: HTMLElement;
   private readonly fxOverlay: HTMLElement;
   private readonly ambientOverlay: HTMLElement;
+  private readonly chapterCard: HTMLElement;
+  private chapterCardTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly typewriterAudio = new TypewriterAudioSynthesizer();
+  private readerPreferences: ReaderPreferences | null = null;
   private currentAmbient: AmbientEffect | null = null;
   private ambientOverride: AmbientEffect | null | undefined = undefined;
   private sceneFxTimer: ReturnType<typeof setTimeout> | null = null;
@@ -635,6 +652,8 @@ export class VnStage {
     this.flashOverlay = queryRequired(this.themeRoot, "[data-vn-flash]");
     this.fxOverlay = queryRequired(this.themeRoot, "[data-vn-fx]");
     this.ambientOverlay = queryRequired(this.themeRoot, "[data-vn-ambient]");
+    this.chapterCard = queryRequired(this.themeRoot, "[data-vn-chapter-card]");
+    this.chapterCard.onclick = () => this.dismissChapterCard();
     this.setSceneImageFit(options.sceneImageFit ?? "cover");
     this.statusStack = queryRequired(this.themeRoot, "[data-vn-status-stack]");
     this.emptyState = queryRequired(this.themeRoot, "[data-vn-empty-state]");
@@ -730,6 +749,7 @@ export class VnStage {
     this.toggleAutoPlay(false);
     this.toggleSkip(false);
     this.clearAllTimers();
+    this.dismissChapterCard();
     this.resetEffects();
     this.isSuspended = true;
   }
@@ -775,6 +795,14 @@ export class VnStage {
   }
 
   setReaderPreferences(preferences: ReaderPreferences): void {
+    this.readerPreferences = preferences;
+    if (preferences.typography) this.root.dataset.vnTypography = preferences.typography;
+    if (preferences.typewriterAudio) this.typewriterAudio.setMode(preferences.typewriterAudio);
+    if (typeof preferences.typewriterVolume === "number") this.typewriterAudio.setVolume(preferences.typewriterVolume);
+    if (typeof preferences.backgroundOpacity === "number") {
+      this.root.style.setProperty("--vn-sheet-opacity", String(preferences.backgroundOpacity));
+      this.root.style.setProperty("--caption-opacity", String(preferences.backgroundOpacity));
+    }
     if (!this.dialogueSheet) {
       this.dialogueSheet = new DialogueSheet(this.root, queryRequired(this.themeRoot, "[data-vn-dialogue]"), () => {
         this.toggleAutoPlay(false);
@@ -782,6 +810,32 @@ export class VnStage {
       }, next => this.callbacks.onReaderPreferencesChange?.(next));
     }
     this.dialogueSheet?.setPreferences(preferences);
+  }
+
+  triggerChapterCard(title: string, subtitle = "", eyebrow = "SCENE"): void {
+    if (this.destroyed || this.readerPreferences?.chapterTitleCards === false) return;
+    if (!title.trim()) return;
+    const eyebrowEl = this.chapterCard.querySelector<HTMLElement>("[data-vn-chapter-eyebrow]");
+    const titleEl = this.chapterCard.querySelector<HTMLElement>("[data-vn-chapter-title]");
+    const subEl = this.chapterCard.querySelector<HTMLElement>("[data-vn-chapter-subtitle]");
+    if (eyebrowEl) eyebrowEl.textContent = eyebrow;
+    if (titleEl) titleEl.textContent = title;
+    if (subEl) subEl.textContent = subtitle;
+    this.chapterCard.hidden = false;
+    this.chapterCard.dataset.vnActive = "true";
+    if (this.chapterCardTimer !== null) clearTimeout(this.chapterCardTimer);
+    this.chapterCardTimer = setTimeout(() => {
+      this.dismissChapterCard();
+    }, 2800);
+  }
+
+  dismissChapterCard(): void {
+    if (this.chapterCardTimer !== null) {
+      clearTimeout(this.chapterCardTimer);
+      this.chapterCardTimer = null;
+    }
+    delete this.chapterCard.dataset.vnActive;
+    this.chapterCard.hidden = true;
   }
 
   showReaderText(): void { this.dialogueSheet?.setHidden(false); }
@@ -911,6 +965,24 @@ export class VnStage {
         }
       };
     }
+    const searchInput = this.themeRoot.querySelector<HTMLInputElement>("[data-vn-backlog-search]");
+    const countSpan = this.themeRoot.querySelector<HTMLElement>("[data-vn-backlog-search-count]");
+    if (searchInput) {
+      searchInput.value = "";
+      if (countSpan) countSpan.textContent = "";
+      searchInput.oninput = () => {
+        const query = searchInput.value.trim().toLocaleLowerCase();
+        const items = this.backlogContent.querySelectorAll<HTMLElement>("[data-vn-backlog-item]");
+        let matchCount = 0;
+        items.forEach((item) => {
+          const text = (item.textContent ?? "").toLocaleLowerCase();
+          const matches = !query || text.includes(query);
+          item.hidden = !matches;
+          if (matches) matchCount++;
+        });
+        if (countSpan) countSpan.textContent = query ? `${matchCount} found` : "";
+      };
+    }
     // History shows effects frozen (colours and sizes kept, no motion).
     this.syncBacklogTextEffects();
     applyTextEffects(this.backlogContent);
@@ -1019,6 +1091,7 @@ export class VnStage {
     this.castStage.set(null,0);
     this.dossiers.setTurnMedia(null);this.dossiers.setContext(undefined,[]);
     this.clearAllTimers();
+    this.dismissChapterCard();
     this.resetEffects();
     this.clearSceneImages();
     this.isAutoPlay = false;
@@ -1224,6 +1297,8 @@ export class VnStage {
     this.dossiers.destroy();
     this.dialogueSheet?.destroy();
     this.clearAllTimers();
+    this.dismissChapterCard();
+    this.typewriterAudio.destroy();
     this.resetEffects();
     if (this.crossfadeTimer !== null) {
       clearTimeout(this.crossfadeTimer);
@@ -1942,6 +2017,7 @@ export class VnStage {
 
   jumpToParagraph(targetIndex: number): void {
     if (this.destroyed || this.isBacklogOpen || this.dossiers.isOpen()) return;
+    this.dismissChapterCard();
     const total = this.state.paragraphs.length;
     if (targetIndex < 0 || targetIndex >= total) return;
     const current = this.state.currentParagraphIndex;
@@ -1953,6 +2029,7 @@ export class VnStage {
     this.isAutoPlay = false;
     this.lastSkipStop = null;
     this.clearAllTimers();
+    this.dismissChapterCard();
     this.isTyping = false;
     this.activeTextNodes = [];
     this.updateControlButtons();
@@ -2061,6 +2138,7 @@ export class VnStage {
     this.isAutoPlay = false;
     this.lastSkipStop = null;
     this.clearAllTimers();
+    this.dismissChapterCard();
     this.isTyping = false;
     this.activeTextNodes = [];
     this.updateControlButtons();
@@ -2077,6 +2155,7 @@ export class VnStage {
   }
 
   private advance(): void {
+    this.dismissChapterCard();
     if (this.isSuspended) return;
     if (this.workspace.isOpen() || this.isBacklogOpen || this.dossiers.isOpen()) return;
     if (this.lastSkipStop !== null) {
@@ -2459,6 +2538,7 @@ export class VnStage {
     this.updateContinueButton();
     let nodeIdx = 0;
     let charIdx = 0;
+    let pauseTicks = 0;
     this.typewriterTimer = setInterval(() => {
       if (this.destroyed) {
         this.clearTypewriter();
@@ -2467,6 +2547,10 @@ export class VnStage {
       // Pause reveal while the tab is hidden: no invisible DOM writes or
       // timer churn in the background; ticks resume and catch up on return.
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      if (pauseTicks > 0) {
+        pauseTicks--;
+        return;
+      }
       // Reveal one character per tick. Node boundaries (many with split
       // effect letters) cost no extra tick, and surrogate pairs stay whole.
       while (nodeIdx < textNodes.length) {
@@ -2475,10 +2559,13 @@ export class VnStage {
           if (current.letter) {
             current.letter.removeAttribute(TYPEWRITER_PENDING_ATTRIBUTE);
             charIdx = current.fullText.length;
+            if (!this.isSkipping && !this.isRewinding) this.typewriterAudio.play();
             return;
           }
+          const prevCharIdx = charIdx;
           const code = current.fullText.codePointAt(charIdx) ?? 0;
           charIdx += code > 0xffff ? 2 : 1;
+          const char = current.fullText.slice(prevCharIdx, charIdx);
           current.node.textContent = current.fullText.slice(0, charIdx);
           if (current.rest) {
             if (charIdx < current.fullText.length) {
@@ -2487,6 +2574,14 @@ export class VnStage {
               current.rest.remove();
               current.rest = null;
             }
+          }
+          if (this.readerPreferences?.smartPacing !== false) {
+            if (char === "," || char === ";") pauseTicks = 2;
+            else if (char === "." || char === "!" || char === "?") pauseTicks = 4;
+            else if (char === "—" || char === "…" || char === ":") pauseTicks = 5;
+          }
+          if (char.trim() && !this.isSkipping && !this.isRewinding) {
+            this.typewriterAudio.play();
           }
           return;
         }
@@ -2526,7 +2621,17 @@ export class VnStage {
     this.currentRenderedParagraphId = paragraph.id;
     this.currentRenderedFormatted = formatted;
     this.recordBacklogAndRead(paragraph.id, paragraph.speaker, paragraph.text, formatted, this.state.currentParagraphIndex);
-    if (!this.isRewinding) this.triggerParagraphEffects(paragraph);
+    if (!this.isRewinding) {
+      this.triggerParagraphEffects(paragraph);
+      if (this.state.currentParagraphIndex === 0 && !this.isSkipping) {
+        const title = paragraph.speaker || "Scene";
+        const excerpt = paragraph.text.replace(/[*_#`]/g, "").slice(0, 80).trim();
+        this.triggerChapterCard(title, excerpt, `SCENE ${this.state.paragraphs.length > 0 ? "START" : ""}`);
+      }
+      if (this.readerPreferences?.atmosphericLighting !== false) {
+        this.updateAtmosphericLighting(paragraph.text, paragraph.ambient ?? paragraph.cue?.ambient);
+      }
+    }
 
     if (this.textSpeed <= 0 || this.isSkipping || this.isRewinding) {
       this.clearTypewriter();
@@ -2537,6 +2642,25 @@ export class VnStage {
       this.onTextRenderFinished();
     } else {
       this.startTypewriter(formatted);
+    }
+  }
+
+  private updateAtmosphericLighting(text: string, ambient?: AmbientEffect | null): void {
+    const lower = text.toLocaleLowerCase();
+    let atmosphere = "";
+    if (ambient === "rain" || ambient === "heavy_rain" || ambient === "snow" || ambient === "fog" || /\b(rain|storm|fog|mist|snow|blizzard|downpour)\b/.test(lower)) {
+      atmosphere = "cold_mist";
+    } else if (ambient === "embers" || ambient === "fireflies" || /\b(sunset|dusk|torch|fire|candle|fireplace|amber|golden)\b/.test(lower)) {
+      atmosphere = "warm_amber";
+    } else if (/\b(night|midnight|moon|moonlight|stars|nocturne|darkness)\b/.test(lower)) {
+      atmosphere = "nocturne";
+    } else if (/\b(neon|cyber|hologram|violet|glow|arcade|synth)\b/.test(lower)) {
+      atmosphere = "neon_violet";
+    }
+    if (atmosphere) {
+      this.scene.dataset.vnAtmosphere = atmosphere;
+    } else {
+      delete this.scene.dataset.vnAtmosphere;
     }
   }
 

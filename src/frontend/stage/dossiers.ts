@@ -104,7 +104,7 @@ export class StageDossiers {
    if(prop&&urlOf(prop)){imageUrl=urlOf(prop);imageCaption=`Scene detail · ${entity.name}`;}
    else if(isPresent&&this.displayedImageUrl?.()){imageUrl=this.displayedImageUrl()!;imageCaption=`Current scene · ${entity.name}`;}
   }
-  const summaryFact=snapshot?selectReaderDossier(entity.id,snapshot,'brief',this.prefs.fieldGroups)?.facts[0]?.value:undefined;
+  const summaryFact=snapshot?selectReaderDossier(entity.id,snapshot,'brief',this.prefs.fieldGroups)?.facts[0]?.value:undefined;const anchorFact=entity.facts.find(f=>f.field==='anchors'||f.field==='anchor_traits'||f.field==='visual_anchors');const anchors=anchorFact?anchorFact.value.split(/[,;\n]/).map(a=>a.trim()).filter(Boolean):undefined;
   return {
    ...(imageUrl?{imageUrl}:{}),
    ...(imageCaption?{imageCaption}:{}),
@@ -113,6 +113,7 @@ export class StageDossiers {
    ...(locationName?{locationName}:{}),
    ...(presentCharacters.length?{presentCharacters}:{}),
    ...(summaryFact?{summarySnippet:summaryFact}:{}),
+   ...(anchors&&anchors.length?{anchors}:{}),
    onSelectEntity:(targetId,trigger)=>this.open(targetId,trigger),
   };
  }

@@ -3028,6 +3028,220 @@ section[data-reference-observations] h3 {
   border-color: #56806b !important;
 }
 
+/* Reading Typography Modes */
+[data-vn-root][data-vn-typography="novelist"] [data-vn-dialogue-text],
+[data-vn-root][data-vn-typography="novelist"] [data-vn-backlog-text] {
+  font-family: Georgia, "Times New Roman", Garamond, serif !important;
+  line-height: 1.7 !important;
+}
+[data-vn-root][data-vn-typography="modern"] [data-vn-dialogue-text],
+[data-vn-root][data-vn-typography="modern"] [data-vn-backlog-text] {
+  font-family: -apple-system, BlinkMacSystemFont, "Outfit", "Inter", "Segoe UI", Roboto, sans-serif !important;
+  line-height: 1.6 !important;
+}
+[data-vn-root][data-vn-typography="retro"] [data-vn-dialogue-text],
+[data-vn-root][data-vn-typography="retro"] [data-vn-backlog-text] {
+  font-family: "Courier New", "JetBrains Mono", Consolas, ui-monospace, monospace !important;
+  letter-spacing: 0.03em !important;
+  line-height: 1.65 !important;
+}
+[data-vn-root][data-vn-typography="accessible"] [data-vn-dialogue-text],
+[data-vn-root][data-vn-typography="accessible"] [data-vn-backlog-text] {
+  font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif !important;
+  letter-spacing: 0.04em !important;
+  line-height: 1.85 !important;
+}
+
+/* Cinematic Chapter Card Splash */
+[data-vn-chapter-card] {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 45;
+  pointer-events: auto;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+
+[data-vn-chapter-card][data-vn-active="true"] {
+  opacity: 1;
+}
+
+[data-vn-chapter-card]::before,
+[data-vn-chapter-card]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 52px;
+  background: #000000;
+  z-index: 1;
+  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+[data-vn-chapter-card]::before { top: 0; transform: translateY(-100%); }
+[data-vn-chapter-card]::after { bottom: 0; transform: translateY(100%); }
+[data-vn-chapter-card][data-vn-active="true"]::before,
+[data-vn-chapter-card][data-vn-active="true"]::after {
+  transform: translateY(0);
+}
+
+.chapter-card-inner {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  padding: 24px 32px;
+  max-width: min(90%, 540px);
+  background: linear-gradient(180deg, rgba(14, 24, 28, 0.94) 0%, rgba(8, 14, 18, 0.98) 100%);
+  border: 1px solid rgba(134, 219, 178, 0.32);
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  transform: scale(0.95);
+  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-vn-chapter-card][data-vn-active="true"] .chapter-card-inner {
+  transform: scale(1);
+}
+
+.chapter-eyebrow {
+  display: inline-block;
+  font-family: var(--font-header, system-ui, sans-serif);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+  color: #86dbb2;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.chapter-title {
+  font-family: Georgia, "Cinzel", serif;
+  font-size: clamp(20px, 4vw, 28px);
+  font-weight: 700;
+  color: #f4fbf7;
+  margin: 0 0 8px;
+  line-height: 1.25;
+}
+
+.chapter-subtitle {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #9ab3a6;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Dynamic Atmospheric Scene Tint */
+[data-vn-atmosphere] {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  opacity: 0;
+  transition: opacity 1.2s ease, background-color 1.2s ease;
+  mix-blend-mode: soft-light;
+}
+
+[data-vn-scene][data-vn-atmosphere="warm_amber"] [data-vn-atmosphere] {
+  opacity: 0.35;
+  background: radial-gradient(circle at 60% 40%, rgba(255, 160, 60, 0.55) 0%, rgba(220, 90, 20, 0.3) 70%, transparent 100%);
+}
+
+[data-vn-scene][data-vn-atmosphere="nocturne"] [data-vn-atmosphere] {
+  opacity: 0.4;
+  background: radial-gradient(circle at 50% 20%, rgba(80, 140, 255, 0.45) 0%, rgba(15, 30, 70, 0.55) 80%, rgba(5, 10, 25, 0.75) 100%);
+}
+
+[data-vn-scene][data-vn-atmosphere="cold_mist"] [data-vn-atmosphere] {
+  opacity: 0.36;
+  background: linear-gradient(180deg, rgba(160, 200, 220, 0.35) 0%, rgba(110, 150, 175, 0.28) 100%);
+}
+
+[data-vn-scene][data-vn-atmosphere="neon_violet"] [data-vn-atmosphere] {
+  opacity: 0.34;
+  background: linear-gradient(135deg, rgba(230, 60, 160, 0.35) 0%, rgba(90, 40, 220, 0.35) 60%, rgba(20, 200, 220, 0.28) 100%);
+}
+
+/* Backlog Search Bar */
+.backlog-search-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 8px 16px !important;
+  border-bottom: 1px solid rgba(134, 219, 178, 0.14) !important;
+}
+
+[data-vn-backlog-search] {
+  flex: 1 !important;
+  min-height: 34px !important;
+  padding: 6px 12px !important;
+  font-size: 13px !important;
+  background: rgba(16, 26, 30, 0.7) !important;
+  border: 1px solid rgba(134, 219, 178, 0.22) !important;
+  border-radius: 8px !important;
+  color: #dbebe2 !important;
+}
+
+[data-vn-backlog-search]::placeholder {
+  color: #7a9488 !important;
+}
+
+.backlog-search-count {
+  font-size: 11px !important;
+  color: #86dbb2 !important;
+  font-weight: 600 !important;
+  flex: none !important;
+}
+
+/* Light Mode Overrides for Search Bar & Chapter Card */
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-vn-backlog-search] {
+  background: #ffffff !important;
+  border-color: rgba(86, 128, 107, 0.35) !important;
+  color: #142820 !important;
+}
+
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .chapter-card-inner {
+  background: linear-gradient(180deg, rgba(246, 250, 244, 0.98) 0%, rgba(235, 244, 232, 0.98) 100%) !important;
+  border-color: rgba(86, 128, 107, 0.35) !important;
+  box-shadow: 0 24px 64px rgba(18, 38, 29, 0.25) !important;
+}
+
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .chapter-title {
+  color: #142820 !important;
+}
+
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .chapter-subtitle {
+  color: #4b6b5d !important;
+}
+
+/* Anchor Trait Badges */
+.tag.anchor-tag {
+  background: rgba(134, 219, 178, 0.18) !important;
+  color: #86dbb2 !important;
+  border: 1px solid rgba(134, 219, 178, 0.35) !important;
+  font-weight: 650 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 2px 8px !important;
+  border-radius: 999px !important;
+  font-size: 11px !important;
+}
+
+:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .tag.anchor-tag {
+  background: #e2ede5 !important;
+  color: #184e36 !important;
+  border-color: #8dafa0 !important;
+}
+
 
 
 

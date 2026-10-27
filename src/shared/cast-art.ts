@@ -2,7 +2,7 @@ import {z} from 'zod';
 const id=z.string().trim().min(1).max(256);
 export const AppearanceOriginSchema=z.object({source:z.string().trim().min(1).max(256),appearance:z.string().min(1).max(2000)}).strict();
 const outfitShape={id,name:z.string().trim().min(1).max(100),description:z.string().trim().min(1).max(1000)};
-const setupShape={appearance:z.string().trim().min(1).max(2000),aliases:z.array(z.string().trim().min(1).max(160)).max(16).default([]),defaultOutfitId:id.nullable().default(null),appearanceOrigin:AppearanceOriginSchema.optional()};
+const setupShape={appearance:z.string().trim().min(1).max(2000),aliases:z.array(z.string().trim().min(1).max(160)).max(16).default([]),defaultOutfitId:id.nullable().default(null),appearanceOrigin:AppearanceOriginSchema.optional(),anchors:z.array(z.string().trim().min(1).max(100)).max(12).default([])};
 const validateSetup=(value:{outfits:Array<{id:string}>,defaultOutfitId:string|null},ctx:z.RefinementCtx)=>{
  if(new Set(value.outfits.map(o=>o.id)).size!==value.outfits.length)ctx.addIssue({code:'custom',path:['outfits'],message:'Outfit IDs must be distinct.'});
  if(value.defaultOutfitId&&!value.outfits.some(o=>o.id===value.defaultOutfitId))ctx.addIssue({code:'custom',path:['defaultOutfitId'],message:'Choose an existing outfit.'});
@@ -11,7 +11,7 @@ export const CastSetupInputSchema=z.object({...setupShape,outfits:z.array(z.obje
 export const CastSetupSchema=z.object({...setupShape,outfits:z.array(z.object({...outfitShape,imageId:id.optional(),imageAppearance:z.string().max(2000).optional(),imageAttire:z.string().max(1000).optional()}).strict()).max(7).default([]),imageId:id.optional(),imageAppearance:z.string().max(2000).optional()}).strict().superRefine(validateSetup);
 export type CastSetup=z.infer<typeof CastSetupSchema>;
 export type CastSetupInput=z.infer<typeof CastSetupInputSchema>;
-export function setupAppearance(setup:CastSetup):string{return [setup.appearance,setup.outfits.find(o=>o.id===setup.defaultOutfitId)?.description].filter(Boolean).join(', ');}
+export function setupAppearance(setup:CastSetup):string{const parts:string[]=[];if(setup.anchors&&setup.anchors.length>0)parts.push(setup.anchors.map(a=>`(${a}:1.2)`).join(', '));parts.push(setup.appearance);const outfit=setup.outfits.find(o=>o.id===setup.defaultOutfitId)?.description;if(outfit)parts.push(outfit);return parts.filter(Boolean).join(', ');}
 export const CastArtVariantSchema=z.object({
  id,imageId:id,requestFingerprint:id,appearanceFingerprint:id,description:z.string().max(4000),
  displayImageId:id.optional(),approved:z.literal(true),createdAt:z.string().max(64)
