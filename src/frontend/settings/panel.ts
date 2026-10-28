@@ -980,7 +980,7 @@ export class VisualNovelSettingsPanel {
     if(next.id==='characters')this.castArtPanel.ensureLoaded();
     if(next.id==='rules')this.presentationRules.ensureLoaded();
     if(this.sampleTimer){clearTimeout(this.sampleTimer);this.sampleTimer=null;}
-    if(next.id==='appearance'&&this.root.querySelector<HTMLDetailsElement>('[data-appearance-preview]')!.open)this.restartSample();
+    if(next.id==='appearance')this.restartSample();
     if(options.remember!==false){try{this.storage?.setItem(SETTINGS_SECTION_KEY,next.id);}catch{}}
     this.refreshStatus();
     requestAnimationFrame(()=>{
@@ -1036,7 +1036,8 @@ export class VisualNovelSettingsPanel {
       else if(event.key==='Home')next=0;else if(event.key==='End')next=tabs.length-1;else return;
       event.preventDefault();const target=tabs[next];if(target){this.openPage(target.dataset.tab==='sound'?'audio':target.dataset.tab!);target.focus();}
     };
-    this.root.querySelector<HTMLDetailsElement>('[data-appearance-preview]')!.ontoggle=()=>this.restartSample();
+    const previewDetails = this.root.querySelector<HTMLDetailsElement>('[data-appearance-preview]');
+    if (previewDetails) previewDetails.ontoggle = () => this.restartSample();
     for(const button of this.root.querySelectorAll<HTMLButtonElement>('[data-entity-tab]'))button.onclick=()=>{
       const apply=()=>{const places=button.dataset.entityTab==='places';this.root.querySelector<HTMLElement>('[data-cast-mount]')!.hidden=places;this.root.querySelector<HTMLElement>('[data-places-mount]')!.hidden=!places;for(const tab of this.root.querySelectorAll('[data-entity-tab]'))tab.setAttribute('aria-pressed',String(tab===button));if(places)this.locationArtPanel.ensureLoaded();else this.castArtPanel.ensureLoaded();};
       this.castArtPanel.guardNavigation(apply);
@@ -1544,10 +1545,12 @@ export class VisualNovelSettingsPanel {
         const themeMode: "light" | "dark" = isLight ? "light" : "dark";
         this.host.dataset.apertureMode = themeMode;
         this.host.dataset.vnPreset = preset;
-        document.body.classList.toggle("theme-dark", !isLight);
-        document.body.classList.toggle("theme-light", isLight);
-        document.documentElement.dataset.apertureMode = themeMode;
-        document.documentElement.dataset.vnPreset = preset;
+        document.body?.classList.toggle("theme-dark", !isLight);
+        document.body?.classList.toggle("theme-light", isLight);
+        if (document.documentElement) {
+          document.documentElement.dataset.apertureMode = themeMode;
+          document.documentElement.dataset.vnPreset = preset;
+        }
         const status = this.root.querySelector<HTMLElement>("[data-aperture-theme-status]");
         if (status) status.textContent = `${THEME_PRESET_LABELS[preset].toUpperCase()} / ACTIVE`;
         return {
@@ -2130,10 +2133,12 @@ export class VisualNovelSettingsPanel {
     if (themeStatus) themeStatus.textContent = `${THEME_PRESET_LABELS[config.themePreset].toUpperCase()} / ACTIVE`;
     this.host.dataset.apertureMode = themeMode;
     this.host.dataset.vnPreset = config.themePreset;
-    document.body.classList.toggle("theme-dark", !isLight);
-    document.body.classList.toggle("theme-light", isLight);
-    document.documentElement.dataset.apertureMode = themeMode;
-    document.documentElement.dataset.vnPreset = config.themePreset;
+    document.body?.classList.toggle("theme-dark", !isLight);
+    document.body?.classList.toggle("theme-light", isLight);
+    if (document.documentElement) {
+      document.documentElement.dataset.apertureMode = themeMode;
+      document.documentElement.dataset.vnPreset = config.themePreset;
+    }
     this.showCustomQuiet("textScale", !scaleStep);
 
     const source = imageSourceFromConfig(config);

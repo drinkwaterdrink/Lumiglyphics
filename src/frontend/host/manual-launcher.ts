@@ -83,9 +83,15 @@ button:focus-visible {
 `;
 
 export function createVnHeaderLauncher(
-  mount: Element,
+  mount: Element | null | undefined,
   onToggle: () => void,
 ): VnHeaderLauncher {
+  if (!mount) {
+    return {
+      setActive() {},
+      destroy() {},
+    };
+  }
   const host = document.createElement("span");
   host.setAttribute("data-vn-header-launcher", "");
   const root = host.attachShadow({ mode: "open" });

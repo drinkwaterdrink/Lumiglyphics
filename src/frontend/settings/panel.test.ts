@@ -80,4 +80,8 @@ describe("settings panel markup", () => {
     expect(source).toContain('find("Reading typography"');
     expect(source).toContain('find("Dynamic atmospheric lighting"');
   });
+  test("appearance preview does not use unsafe non-null assertions on removed details element", () => {
+    expect(source).not.toContain("data-appearance-preview']!");
+    expect(source).not.toContain('data-appearance-preview"]!');
+  });
 });
