@@ -8,7 +8,7 @@ import { applyAttireOverride } from "./attire.js";
 export { applyAttireOverride, isClothingTag, cleanClothingFromPhrase } from "./attire.js";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { applyImageEdits, compactImageRequest, type ImageGenerationRequest, type ImagePreparationMetadata } from "./image-review.js";
-import { assertPromptLengths } from '../../shared/prompt-length.js';
+import { assertPromptLengths, fitPromptToBudget } from '../../shared/prompt-length.js';
 import {rewriteImagePrompt,assertEffectivePromptBudget} from './prompt-rewrite.js';
 import type { VisualNovelConfig } from "../../config.js";
 import { DEFAULT_CONFIG } from "../../config.js";
@@ -1323,6 +1323,13 @@ export async function generateAssets(
           frozen=adaptation.request;
           const promptWasRewritten=adaptation.rewritten;
           if(adaptation.error)baseMetadata.promptAdaptationError=adaptation.error;
+          if(!config.reviewImages && !cacheOptions.skipAutomaticPromptRepair && frozen.promptProfile) {
+            const maxAllowed = frozen.promptProfile.maxCharacters;
+            if (frozen.prompt.length + (frozen.negativePrompt?.length ?? 0) > maxAllowed || (frozen.promptProfile.negativeMode === 'positive-only' && Boolean(frozen.negativePrompt?.trim()))) {
+              const autoFitted = fitPromptToBudget(frozen.prompt, frozen.negativePrompt ?? '', maxAllowed, frozen.promptProfile.negativeMode);
+              frozen = applyImageEdits({ ...frozen, prompt: autoFitted.prompt, negativePrompt: autoFitted.negativePrompt }, {});
+            }
+          }
           if(promptWasRewritten){cacheKey=null;settle?.({kind:'released'});settle=null;}
           const approved = cacheOptions.beforeGenerate ? await cacheOptions.beforeGenerate(scheduledJob, frozen, {
             ...baseMetadata,

@@ -497,7 +497,8 @@ export class ImageStudio {
       this.el<HTMLTextAreaElement>('[data-positive]').value=fitted.prompt;
       this.el<HTMLTextAreaElement>('[data-negative]').value=fitted.negativePrompt;
       this.updateCounts();
-      this.setNotice('Prompt fitted to character budget.');
+      this.setNotice('Prompt fitted to character budget. Ready to generate.');
+      return;
     }
     if(record)try{
       const parameters:unknown=JSON.parse(this.el<HTMLTextAreaElement>('[data-parameters]').value);

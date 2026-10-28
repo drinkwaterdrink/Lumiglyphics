@@ -637,3 +637,31 @@ test('catalogue output shapes reach the real dispatch boundary for the requested
   if(model==='nano-banana-2')expect(JSON.parse(sent[0].parameters.rawRequestOverride)).toEqual({aspect_ratio:'9:16'});
  }
 });
+
+test('automatic unreviewed generation fits an over-budget prompt down to model ceiling without manual review', async () => {
+  const sent: any[] = [];
+  const connection = { id: 'qwen-conn', provider: 'nanogpt', model: 'qwen-image', updated_at: 1 };
+  const spindle = {
+    userStorage: { getJson: async (_: string, o: any) => o.fallback },
+    imageGen: {
+      getConnection: async () => connection,
+      generate: async (r: any) => { sent.push(r); return { imageId: 'qwen-art' }; }
+    }
+  } as any;
+  const config = normalizeConfig({
+    imageConnectionId: 'qwen-conn',
+    imageModel: 'qwen-image',
+    reviewImages: false,
+    referenceAnchoring: false,
+    promptPrefix: 'Masterpiece anime scene, '.repeat(20),
+    promptSuffix: 'intricate lighting, high quality, '.repeat(20),
+  });
+  const turn = plan([{
+    ...cue('idle'),
+    resolvedIdentity: 'Alice with cascading silver hair and vivid emerald eyes, wearing embroidered navy coat, '.repeat(25)
+  }]);
+  const jobs = await generateAssets(spindle, turn, createAssetJobs(turn, config), config, new AbortController().signal, () => {}, 'test-user');
+  expect(jobs[0]?.status).toBe('generated');
+  expect(sent).toHaveLength(1);
+  expect(sent[0].prompt.length + (sent[0].negativePrompt?.length ?? 0)).toBeLessThanOrEqual(3000);
+});

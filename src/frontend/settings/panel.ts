@@ -658,7 +658,11 @@ export class VisualNovelSettingsPanel {
                 <label data-field data-custom="autoPlayDelay" hidden><span>Milliseconds</span><input name="autoPlayDelay" type="number" min="500" max="10000" step="250" /></label>
               </fieldset>
               <label data-field ${find("Fast forward", "skip read unread")}><span>Fast forward</span><select name="skipMode"><option value="read">Skip only text you have read</option><option value="all">Skip everything</option></select></label>
-            `, { find: find("Pace", "speed") })}
+              <label data-check ${find("Intelligent dramatic pacing", "smart pacing pause punctuation rhythm typewriter drama timing")}><input name="smartPacing" type="checkbox" /><span>Intelligent dramatic pacing<small>Pauses naturally on punctuation (commas, periods, ellipses) for living visual novel rhythm</small></span></label>
+            `, { find: find("Pace", "speed pacing smart pause punctuation") })}
+            ${group("Cinematic presentation", `
+              <label data-check ${find("Cinematic chapter cards", "cinematic chapter title splash cards location letterbox turn intro splash screen")}><input name="chapterTitleCards" type="checkbox" /><span>Cinematic chapter cards<small>Display elegant letterbox scene & location title splashes on turn start</small></span></label>
+            `, { find: find("Cinematic presentation", "chapter cards title splash cinematic intro") })}
             ${group("Your turn", `
               <label data-field ${find("How you reply", "reply mode cyoa choose suggestions write standard")}><span>How you reply</span><select name="mode"><option value="standard">Write your own reply</option><option value="cyoa">Choose from suggestions</option></select></label>
               <label data-check ${find("Suggest choices", "choices options cyoa generate")}><input name="generateChoices" type="checkbox" /><span>Suggest choices when the reply has none</span></label>
@@ -678,15 +682,10 @@ export class VisualNovelSettingsPanel {
             ${group("Theme", themeTiles(), { find: find("Theme", "preset style colours colors skin golden paper noir console yamaku literature") })}
             ${group("Text", `
               <label data-check><input name="adjustableSheetEnabled" type="checkbox" /><span>Adjustable text panel<small>Resize or hide text to see the picture. Drag the handle or choose a panel size.</small></span></label>
-              <label data-field><span>Reader layout</span><select name="readerLayout"><option value="overlay">Text over picture</option><option value="image-first">Image first</option></select></label>
-              <label data-field><span>Text panel size</span><select name="readerSheetSize"><option value="custom" disabled>Custom (dragged)</option><option value="compact">Compact</option><option value="reading">Reading</option><option value="expanded">Expanded</option></select></label>
-              <label data-field><span>Dialogue background opacity <output data-opacity-output style="font:11px ui-monospace,monospace;margin-left:6px;"></output></span><input name="readerBackgroundOpacity" type="range" min="0" max="1" step="0.01" /></label>
-              <label data-field><span>Reading typography</span><select name="readerTypography"><option value="modern">Modern Clean (Outfit / Inter)</option><option value="novelist">Classic Novelist (Georgia / Serif)</option><option value="retro">Arcade Monospace (Pixel / JetBrains)</option><option value="accessible">Accessible Sans (High Legibility)</option></select></label>
-              <label data-field><span>Typewriter sound</span><select name="typewriterAudio"><option value="blip">Soft Game Blip</option><option value="click">Tactile Key Click</option><option value="pip">Crystal Digital Pip</option><option value="off">Off (Silent)</option></select></label>
-              <label data-field><span>Typewriter sound volume <output data-typewriter-volume-output style="font:11px ui-monospace,monospace;margin-left:6px;"></output></span><input name="typewriterVolume" type="range" min="0" max="1" step="0.05" /></label>
-              <label data-check><input name="smartPacing" type="checkbox" /><span>Intelligent dramatic pacing<small>Pauses naturally on punctuation (commas, periods, ellipses) for living visual novel rhythm</small></span></label>
-              <label data-check><input name="chapterTitleCards" type="checkbox" /><span>Cinematic chapter cards<small>Display elegant letterbox scene & location title splashes on turn start</small></span></label>
-              <label data-check><input name="atmosphericLighting" type="checkbox" /><span>Dynamic atmospheric lighting<small>Subtly tone-grades scene lighting to match night, firelight, storm, or morning moods</small></span></label>
+              <label data-field ${find("Reader layout", "layout overlay text over picture image first")}><span>Reader layout</span><select name="readerLayout"><option value="overlay">Text over picture</option><option value="image-first">Image first</option></select></label>
+              <label data-field ${find("Text panel size", "panel size compact reading expanded sheet")}><span>Text panel size</span><select name="readerSheetSize"><option value="custom" disabled>Custom (dragged)</option><option value="compact">Compact</option><option value="reading">Reading</option><option value="expanded">Expanded</option></select></label>
+              <label data-field ${find("Dialogue background opacity", "opacity transparent solid subtitle background")}><span>Dialogue background opacity <output data-opacity-output style="font:11px ui-monospace,monospace;margin-left:6px;"></output></span><input name="readerBackgroundOpacity" type="range" min="0" max="1" step="0.01" /></label>
+              <label data-field ${find("Reading typography", "font typography typeface serif sans dyslexic font size style novelist modern retro accessible")}><span>Reading typography</span><select name="readerTypography"><option value="modern">Modern Clean (Outfit / Inter)</option><option value="novelist">Classic Novelist (Georgia / Serif)</option><option value="retro">Arcade Monospace (Pixel / JetBrains)</option><option value="accessible">Accessible Sans (High Legibility)</option></select></label>
               <fieldset ${find("Text size", "font scale bigger smaller large")}>
                 <legend>Text size</legend>
                 ${segments("textScaleStep", TEXT_SCALE_STEPS, true)}
@@ -698,6 +697,7 @@ export class VisualNovelSettingsPanel {
               </fieldset>
             `)}
             ${group("Scene", `
+              <label data-check ${find("Dynamic atmospheric lighting", "lighting atmospheric mood firelight night storm color grade ambient scene tint tone")}><input name="atmosphericLighting" type="checkbox" /><span>Dynamic atmospheric lighting<small>Subtly tone-grades scene lighting to match night, firelight, storm, or morning moods</small></span></label>
               <label data-check><input name="castMode" type="checkbox" /><span>Cast view<small>New replies can allocate an Environment background and up to two selected, present characters within your existing picture budget. Compatible saved art uses no new slot. A budget of one permits one new picture, not one of each. Arranges rectangular portraits and highlights the speaker; action, ensemble and Manga pictures keep their normal view. Off by default.</small></span></label>
               <fieldset ${find("Scene effects", "rain sparkles shake flash intensity gentle motion")}>
                 <legend>Scene effects</legend>
@@ -798,6 +798,10 @@ export class VisualNovelSettingsPanel {
           ${pane("characters", `<div data-character-tabs><button type="button" data-entity-tab="cast" aria-pressed="true">Characters</button><button type="button" data-entity-tab="places" aria-pressed="false">Places</button></div><div data-cast-mount ${find('Characters & places','cast npc character appearance outfits portrait gallery scan context voice')}></div><div data-places-mount hidden></div>`)}
           ${pane("sound", `
             <section data-workspace-page="audio"><div data-page-links>${this.pageLink('speech')}${this.pageLink('music')}</div></section>
+            ${group("Typewriter sound effects", `
+              <label data-field ${find("Typewriter sound", "typewriter audio click blip pip typing sfx sound effect sound synthesizer")}><span>Typewriter sound</span><select name="typewriterAudio"><option value="blip">Soft Game Blip</option><option value="click">Tactile Key Click</option><option value="pip">Crystal Digital Pip</option><option value="off">Off (Silent)</option></select></label>
+              <label data-field ${find("Typewriter sound volume", "typewriter volume loudness audio typing sound effect")}><span>Typewriter sound volume <output data-typewriter-volume-output style="font:11px ui-monospace,monospace;margin-left:6px;"></output></span><input name="typewriterVolume" type="range" min="0" max="1" step="0.05" /></label>
+            `, { find: find("Typewriter sound effects", "typewriter sound typing audio click blip pip sfx volume") })}
             ${group("Music library", `
               <div data-sound-empty>
                 ${icon(ICONS.sound)}

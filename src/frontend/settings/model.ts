@@ -397,7 +397,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<{ id: SettingsSectionId; label: st
   { id: "look", label: "Appearance", blurb: "Theme, text and scene effects." },
   { id: "pictures", label: "Images", blurb: "Source, budget, styles and templates." },
   { id: "characters", label: "Characters & places", blurb: "Appearance, outfits and saved art for this story." },
-  { id: "sound", label: "Audio", blurb: "Speech, music and sound effects." },
+  { id: "sound", label: "Audio", blurb: "Speech, music, sound effects and typewriter audio." },
   { id: "connections", label: "Connections", blurb: "Story-reader services and context sources." },
   { id: "advanced", label: "Advanced", blurb: "Technical editors and recovery." },
 ];

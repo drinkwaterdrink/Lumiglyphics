@@ -1,3 +1,4 @@
+import { fitPromptToBudget } from "../../shared/prompt-length.js";
 import {ImageRetryQueue} from './image-retry-queue.js';
 import {QueueImageRetriesSchema,type QueueImageRetriesRequest} from '../../shared/image-retries.js';
 import {managePresentationRules} from './presentation-rules.js';
@@ -879,7 +880,17 @@ async function startAssets(
           draft.parameters = modelOutputParameters(metadata.provider, draft.model, draft.parameters ?? {});
           const approvals=imageRetryQueues.get(key);
           const approvedInBatch=!options.onlyJobId&&approvals?.scope===JSON.stringify(record.plan.key)&&approvals.approvedJobIds.delete(job.jobId);
-          return gate.prepare(job.jobId, job.paragraphIndex, draft, metadata, requiresReview&&!approvedInBatch, jobSignal);
+          const isReview = requiresReview && !approvedInBatch;
+          if (!isReview) {
+            const max = draft.promptProfile?.maxCharacters ?? 3000;
+            const curTotal = draft.prompt.length + (draft.negativePrompt?.length ?? 0);
+            const isPosOnly = draft.promptProfile?.negativeMode === 'positive-only' && Boolean(draft.negativePrompt?.trim());
+            if (curTotal > max || isPosOnly) {
+              const fitted = fitPromptToBudget(draft.prompt, draft.negativePrompt ?? '', max, draft.promptProfile?.negativeMode);
+              draft = applyImageEdits({ ...draft, prompt: fitted.prompt, negativePrompt: fitted.negativePrompt }, {});
+            }
+          }
+          return gate.prepare(job.jobId, job.paragraphIndex, draft, metadata, isReview, jobSignal);
         }
       }
     );
