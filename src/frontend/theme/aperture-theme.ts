@@ -3245,4 +3245,154 @@ section[data-reference-observations] h3 {
 
 
 
+/* =========================================================================
+   APERTURE FULLSCREEN STAGE SCENE & IMAGE OVERLAY
+   ========================================================================= */
+
+/* VN Scene & Fullscreen Stage Background:
+   The visual novel scene MUST always span 100% of the viewport (top: 0, bottom: 0, inset: 0).
+   The dialogue box floats over the bottom portion of the image as a semi-transparent glassmorphic sheet.
+   The user can hide the dialogue sheet at any time with the hide button to view the full uncluttered artwork. */
+[data-vn-root] [data-vn-scene],
+[data-vn-root][data-vn-adjustable-sheet] [data-vn-scene],
+[data-vn-root][data-vn-reader-layout] [data-vn-scene],
+[data-vn-root][data-vn-reader-layout="image-first"] [data-vn-scene],
+[data-vn-scene] {
+  position: absolute !important;
+  inset: 0 !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+  z-index: 1 !important;
+}
+
+[data-vn-root] [data-vn-scene-image],
+[data-vn-scene] [data-vn-scene-image] {
+  position: absolute !important;
+  inset: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 100% !important;
+  min-height: 100% !important;
+  object-fit: cover !important;
+  object-position: center center !important;
+}
+
+[data-vn-root] [data-vn-scene-image][data-vn-scene-image-fit="contain"],
+[data-vn-scene] [data-vn-scene-image][data-vn-scene-image-fit="contain"] {
+  object-fit: contain !important;
+}
+
+/* =========================================================================
+   APERTURE THEME SUITE PALETTES
+   ========================================================================= */
+
+/* 1. Aperture Obsidian (Host Default Dark) */
+[data-vn-root][data-vn-preset="lumiverse"] [data-vn-dialogue] {
+  border-color: rgba(224, 238, 217, 0.32) !important;
+  background: rgba(4, 13, 17, var(--caption-opacity, 0.76)) !important;
+}
+[data-vn-root][data-vn-preset="lumiverse"] [data-vn-speaker] {
+  color: #e0eeb1 !important;
+}
+
+/* 2. Aperture Sage Editorial (Modern Light) */
+[data-vn-root][data-vn-preset="paper-novel"] [data-vn-dialogue] {
+  border-color: rgba(46, 96, 71, 0.38) !important;
+  background: rgba(246, 248, 244, var(--caption-opacity, 0.92)) !important;
+  color: #172721 !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+}
+[data-vn-root][data-vn-preset="paper-novel"] [data-vn-dialogue-text] {
+  color: #172721 !important;
+}
+[data-vn-root][data-vn-preset="paper-novel"] [data-vn-speaker] {
+  color: #1a4f36 !important;
+  background: #e7efe4 !important;
+  border-color: rgba(46, 96, 71, 0.4) !important;
+}
+
+/* 3. Aperture Midnight OLED (Ultra Dark) */
+[data-vn-root][data-vn-preset="midnight-noir"] [data-vn-dialogue] {
+  border-color: rgba(110, 231, 183, 0.38) !important;
+  background: rgba(0, 0, 0, var(--caption-opacity, 0.94)) !important;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(110, 231, 183, 0.15) !important;
+}
+[data-vn-root][data-vn-preset="midnight-noir"] [data-vn-dialogue-text] {
+  color: #f8fafc !important;
+}
+[data-vn-root][data-vn-preset="midnight-noir"] [data-vn-speaker] {
+  color: #6ee7b7 !important;
+  background: #050508 !important;
+  border-color: rgba(110, 231, 183, 0.4) !important;
+}
+
+/* 4. Aperture Solar Dusk (Warm Amber) */
+[data-vn-root][data-vn-preset="golden-hour"] [data-vn-dialogue] {
+  border-color: rgba(245, 158, 11, 0.45) !important;
+  background: rgba(26, 17, 8, var(--caption-opacity, 0.86)) !important;
+  box-shadow: 0 16px 44px rgba(45, 22, 6, 0.4), inset 0 1px 0 rgba(254, 215, 170, 0.2) !important;
+}
+[data-vn-root][data-vn-preset="golden-hour"] [data-vn-dialogue-text] {
+  color: #fef3c7 !important;
+}
+[data-vn-root][data-vn-preset="golden-hour"] [data-vn-speaker] {
+  color: #fbbf24 !important;
+  background: #24160a !important;
+  border-color: rgba(245, 158, 11, 0.4) !important;
+}
+
+/* 5. Aperture Minimal Slate (Studio Slate) */
+[data-vn-root][data-vn-preset="boxed-console"] [data-vn-dialogue] {
+  border-color: rgba(148, 163, 184, 0.35) !important;
+  background: rgba(15, 23, 42, var(--caption-opacity, 0.88)) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+[data-vn-root][data-vn-preset="boxed-console"] [data-vn-dialogue-text] {
+  color: #f1f5f9 !important;
+}
+[data-vn-root][data-vn-preset="boxed-console"] [data-vn-speaker] {
+  color: #94a3b8 !important;
+  background: #1e293b !important;
+  border-color: rgba(148, 163, 184, 0.4) !important;
+}
+
+/* 6. Aperture Cyber Amethyst (Vibrant Neon) */
+[data-vn-root][data-vn-preset="yamaku-classic"] [data-vn-dialogue] {
+  border-color: rgba(192, 132, 252, 0.42) !important;
+  background: rgba(20, 10, 36, var(--caption-opacity, 0.88)) !important;
+  box-shadow: 0 16px 44px rgba(35, 10, 60, 0.4), inset 0 1px 0 rgba(233, 213, 255, 0.2) !important;
+}
+[data-vn-root][data-vn-preset="yamaku-classic"] [data-vn-dialogue-text] {
+  color: #faf5ff !important;
+}
+[data-vn-root][data-vn-preset="yamaku-classic"] [data-vn-speaker] {
+  color: #c084fc !important;
+  background: #1c0d32 !important;
+  border-color: rgba(192, 132, 252, 0.4) !important;
+}
+
+/* 7. Aperture Rose Blossom (Pastel Elegance) */
+[data-vn-root][data-vn-preset="literature-club"] [data-vn-dialogue] {
+  border-color: rgba(251, 113, 133, 0.42) !important;
+  background: rgba(35, 12, 24, var(--caption-opacity, 0.86)) !important;
+  box-shadow: 0 16px 40px rgba(60, 10, 30, 0.35), inset 0 1px 0 rgba(254, 205, 211, 0.2) !important;
+}
+[data-vn-root][data-vn-preset="literature-club"] [data-vn-dialogue-text] {
+  color: #fff1f2 !important;
+}
+[data-vn-root][data-vn-preset="literature-club"] [data-vn-speaker] {
+  color: #fb7185 !important;
+  background: #2a0e1c !important;
+  border-color: rgba(251, 113, 133, 0.4) !important;
+}
+
 `;

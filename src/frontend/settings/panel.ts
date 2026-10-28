@@ -677,7 +677,6 @@ export class VisualNovelSettingsPanel {
             <details data-appearance-preview><summary>Preview appearance</summary><div data-sample-slot></div></details>
             ${group("Theme", themeTiles(), { find: find("Theme", "preset style colours colors skin golden paper noir console yamaku literature") })}
             ${group("Text", `
-              <label data-check><input name="apertureDarkMode" type="checkbox" /><span>Dark mode<small>Choose a light editorial shell or a deeper, low-glare night palette</small></span></label>
               <label data-check><input name="adjustableSheetEnabled" type="checkbox" /><span>Adjustable text panel<small>Resize or hide text to see the picture. Drag the handle or choose a panel size.</small></span></label>
               <label data-field><span>Reader layout</span><select name="readerLayout"><option value="overlay">Text over picture</option><option value="image-first">Image first</option></select></label>
               <label data-field><span>Text panel size</span><select name="readerSheetSize"><option value="custom" disabled>Custom (dragged)</option><option value="compact">Compact</option><option value="reading">Reading</option><option value="expanded">Expanded</option></select></label>
@@ -1528,8 +1527,21 @@ export class VisualNovelSettingsPanel {
       case "imagePromptFormat": return { imagePromptFormat: target.value === "tags" ? "tags" : "description" };
       case "referenceSource": return { referenceSource: normalizeReferenceSource(target.value) };
       case "themePreset":
-      case "setupThemePreset":
-        return { themePreset: normalizeThemePreset(target.value) };
+      case "setupThemePreset": {
+        const preset = normalizeThemePreset(target.value);
+        const isLight = preset === "paper-novel";
+        const themeMode: "light" | "dark" = isLight ? "light" : "dark";
+        this.host.dataset.apertureMode = themeMode;
+        document.body.classList.toggle("theme-dark", !isLight);
+        document.body.classList.toggle("theme-light", isLight);
+        document.documentElement.dataset.apertureMode = themeMode;
+        const status = this.root.querySelector<HTMLElement>("[data-aperture-theme-status]");
+        if (status) status.textContent = `${THEME_PRESET_LABELS[preset].toUpperCase()} / ACTIVE`;
+        return {
+          themePreset: preset,
+          readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, theme: themeMode }),
+        };
+      }
       case "castMode": return {castMode:checked};
       case "sceneImageFit": return { sceneImageFit: normalizeSceneImageFit(target.value) };
       case "effectIntensity": return { effectIntensity: normalizeEffectIntensity(target.value) };
@@ -1562,16 +1574,7 @@ export class VisualNovelSettingsPanel {
       case "smartPacing": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, smartPacing: checked }) };
       case "chapterTitleCards": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, chapterTitleCards: checked }) };
       case "atmosphericLighting": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, atmosphericLighting: checked }) };
-      case "apertureDarkMode": {
-        const isDark = (target as HTMLInputElement).checked;
-        const theme = isDark ? "dark" : "light";
-        this.host.dataset.apertureMode = theme;
-        document.body.classList.toggle("theme-dark", isDark);
-        document.body.classList.toggle("theme-light", !isDark);
-        const status = this.root.querySelector<HTMLElement>("[data-aperture-theme-status]");
-        if (status) status.textContent = isDark ? "DARK MODE / ACTIVE" : "LIGHT MODE / ACTIVE";
-        return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, theme }) };
-      }
+      
       case "bgmVolume": return { bgmVolume: clamp(Number(target.value), 0, 1, DEFAULT_CONFIG.bgmVolume) };
       case "sfxVolume": return { sfxVolume: clamp(Number(target.value), 0, 1, DEFAULT_CONFIG.sfxVolume) };
       case "imageSource":
@@ -2104,15 +2107,14 @@ export class VisualNovelSettingsPanel {
     this.control<HTMLInputElement>("smartPacing").checked = config.readerPreferences.smartPacing !== false;
     this.control<HTMLInputElement>("chapterTitleCards").checked = config.readerPreferences.chapterTitleCards !== false;
     this.control<HTMLInputElement>("atmosphericLighting").checked = config.readerPreferences.atmosphericLighting !== false;
-    const isDark = config.readerPreferences.theme === "dark";
-    const darkModeBox = this.root.querySelector<HTMLInputElement>('input[name="apertureDarkMode"]');
-    if (darkModeBox) darkModeBox.checked = isDark;
+    const isLight = config.themePreset === "paper-novel" || config.readerPreferences.theme === "light";
+    const themeMode = isLight ? "light" : "dark";
     const themeStatus = this.root.querySelector<HTMLElement>("[data-aperture-theme-status]");
-    if (themeStatus) themeStatus.textContent = isDark ? "DARK MODE / ACTIVE" : "LIGHT MODE / ACTIVE";
-    this.host.dataset.apertureMode = isDark ? "dark" : "light";
-    document.body.classList.toggle("theme-dark", isDark);
-    document.body.classList.toggle("theme-light", !isDark);
-    document.documentElement.dataset.apertureMode = isDark ? "dark" : "light";
+    if (themeStatus) themeStatus.textContent = `${THEME_PRESET_LABELS[config.themePreset].toUpperCase()} / ACTIVE`;
+    this.host.dataset.apertureMode = themeMode;
+    document.body.classList.toggle("theme-dark", !isLight);
+    document.body.classList.toggle("theme-light", isLight);
+    document.documentElement.dataset.apertureMode = themeMode;
     this.showCustomQuiet("textScale", !scaleStep);
 
     const source = imageSourceFromConfig(config);

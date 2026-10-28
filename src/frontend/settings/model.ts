@@ -194,16 +194,16 @@ export function normalizeSceneImageFit(value: string): VisualNovelSceneImageFit 
  * and the preset CSS map can never drift apart.
  */
 export const THEME_PRESET_LABELS: Record<VisualNovelThemePreset, string> = {
-  lumiverse: "Lumiverse (host default)",
-  "golden-hour": "Golden hour",
-  "boxed-console": "Boxed console",
-  "paper-novel": "Paper novel",
-  "midnight-noir": "Midnight noir",
-  "yamaku-classic": "Yamaku classic (sentimental)",
-  "literature-club": "Literature club (pastel pop)",
-  "astral-glass": "Astral glass (celestial prism)",
-  "neon-rain": "Neon rain (night terminal)",
-  "obsidian-reliquary": "Obsidian reliquary (silver & amethyst)",
+  lumiverse: "Aperture Obsidian (Host Default Dark)",
+  "golden-hour": "Aperture Solar Dusk (Warm Amber)",
+  "boxed-console": "Aperture Minimal Slate (Studio Slate)",
+  "paper-novel": "Aperture Sage Editorial (Modern Light)",
+  "midnight-noir": "Aperture Midnight OLED (Ultra Dark)",
+  "yamaku-classic": "Aperture Cyber Amethyst (Vibrant Neon)",
+  "literature-club": "Aperture Rose Blossom (Pastel Elegance)",
+  "astral-glass": "Astral Glass (Celestial Prism)",
+  "neon-rain": "Neon Rain (Night Terminal)",
+  "obsidian-reliquary": "Obsidian Reliquary (Silver & Amethyst)",
 };
 
 export const THEME_PRESET_OPTIONS: ReadonlyArray<{

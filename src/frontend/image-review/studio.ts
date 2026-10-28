@@ -10,7 +10,7 @@ import {PresentationRulesPanel} from '../settings/presentation-rules.js';
 import type {PresentationRuleCatalog} from '../../shared/presentation-rules.js';
 import { modelOutputHelp } from '../../shared/image-model-output.js';
 import { LUMIGLYPHICS_VERSION } from '../../shared/build-info.js';
-import { IMAGE_PROMPT_MAX_CHARS, assertPromptLengths } from '../../shared/prompt-length.js';
+import { IMAGE_PROMPT_MAX_CHARS, assertPromptLengths, fitPromptToBudget } from '../../shared/prompt-length.js';
 import type { VisualNovelConfig } from "../../config.js";
 import type { ImageTemplate } from "../../shared/image-templates.js";
 import type { FrontendRequest, TurnView } from "../../protocol.js";
@@ -486,6 +486,19 @@ export class ImageStudio {
     if(!this.turn||this.el<HTMLButtonElement>('[data-regenerate-prompt]').disabled)return;
     const record=this.record();
     let edits:ImageRequestEdits|undefined;
+    const profile=record?.promptProfile;
+    const maxChars=profile?.maxCharacters??IMAGE_PROMPT_MAX_CHARS;
+    const posVal=this.el<HTMLTextAreaElement>('[data-positive]').value;
+    const negVal=this.el<HTMLTextAreaElement>('[data-negative]').value;
+    const total=posVal.length+negVal.length;
+    const needsFit=Boolean(record)&&(total>maxChars||profile?.negativeMode==='positive-only'&&Boolean(negVal.trim()));
+    if(needsFit){
+      const fitted=fitPromptToBudget(posVal,negVal,maxChars,profile?.negativeMode);
+      this.el<HTMLTextAreaElement>('[data-positive]').value=fitted.prompt;
+      this.el<HTMLTextAreaElement>('[data-negative]').value=fitted.negativePrompt;
+      this.updateCounts();
+      this.setNotice('Prompt fitted to character budget.');
+    }
     if(record)try{
       const parameters:unknown=JSON.parse(this.el<HTMLTextAreaElement>('[data-parameters]').value);
       if(!parameters||typeof parameters!=='object'||Array.isArray(parameters))throw new Error('Parameters must be a valid JSON object before repairing the prompt.');
