@@ -2151,6 +2151,20 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     ...(input.userId ? { userId: input.userId } : {})
   });
 
+  if (narrative.detectedSceneMetadata) {
+    const meta = narrative.detectedSceneMetadata;
+    const parts = [
+      meta.location ? `Location: ${meta.location}` : '',
+      meta.timeOfDay ? `Time: ${meta.timeOfDay}` : '',
+      meta.atmosphere ? `Atmosphere: ${meta.atmosphere}` : '',
+      meta.lighting ? `Lighting: ${meta.lighting}` : '',
+      meta.weather ? `Weather: ${meta.weather}` : ''
+    ].filter(Boolean);
+    if (parts.length > 0) {
+      visualContext.plannerContext += `\nDetected scene header: ${parts.join(' | ')}. Ensure your environment reflects these established details.`;
+    }
+  }
+
   const cardRole=input.cardRole??await loadCardRole(spindle,input.chatId,visualContext.cardId,input.userId);
   visualContext.cardRole=cardRole;
   const attachedCardName=visualContext.characterIdentity?.name??input.message.name??'';
@@ -2359,17 +2373,33 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
       : (activeChar ? [activeChar] : (protagonistName ? [protagonistName] : []));
     if (sceneCast.length === 0 && protagonistName) sceneCast.push(protagonistName);
 
+    const detected = narrative.detectedSceneMetadata;
     const baseEnv = previous !== null && !decision.startsNewScene ? previous.environment : null;
+    const resolvedProposalEnv = {
+      ...proposal.environment,
+      ...(detected?.location && (isGenericLocation(proposal.environment.location) || !proposal.environment.location)
+        ? { location: detected.location }
+        : {}),
+      ...(detected?.timeOfDay && !proposal.environment.timeOfDay ? { timeOfDay: detected.timeOfDay } : {}),
+      ...(detected?.weather && !proposal.environment.weather ? { weather: detected.weather } : {}),
+      ...(detected?.lighting && !proposal.environment.lighting ? { lighting: detected.lighting } : {}),
+      ...(detected?.atmosphere && !proposal.environment.description.includes(detected.atmosphere)
+        ? { description: `${proposal.environment.description} ${detected.atmosphere}` }
+        : {})
+    };
     const mergedEnv = baseEnv
-      ? mergeEnvironment(baseEnv, proposal.environment, proposal.environmentChanges)
+      ? mergeEnvironment(baseEnv, resolvedProposalEnv, proposal.environmentChanges)
       : SceneEnvironmentSchema.parse({
-          location: proposal.environment.location,
-          timeOfDay: proposal.environment.timeOfDay,
-          weather: proposal.environment.weather === "none" || proposal.environment.weather === "reset" ? null : proposal.environment.weather,
-          lighting: proposal.environment.lighting,
-          description: proposal.environment.description,
-          persistentElements: proposal.environment.persistentElements
+          location: resolvedProposalEnv.location,
+          timeOfDay: resolvedProposalEnv.timeOfDay,
+          weather: resolvedProposalEnv.weather === "none" || resolvedProposalEnv.weather === "reset" ? null : resolvedProposalEnv.weather,
+          lighting: resolvedProposalEnv.lighting,
+          description: resolvedProposalEnv.description,
+          persistentElements: resolvedProposalEnv.persistentElements
         });
+    if (detected?.location && baseEnv && detected.location.toLowerCase() !== baseEnv.location.toLowerCase()) {
+      mergedEnv.location = detected.location;
+    }
     const envChanged = reusedScene !== null && !environmentsEqual(reusedScene.environment, mergedEnv);
     const sceneRevision = reusedScene
       ? (envChanged ? reusedScene.revision + 1 : reusedScene.revision)

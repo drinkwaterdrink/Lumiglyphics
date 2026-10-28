@@ -726,10 +726,10 @@ aside[data-vn-workspace] {
    ========================================================================= */
 
 /* Ensure narrative occupies the full viewport and never collapses or pins to top:0 */
-[data-vn-narrative],
-[data-vn-root] [data-vn-narrative],
-[data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-narrative],
-[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-narrative] {
+[data-vn-narrative]:not([hidden]):not([data-hidden="true"]),
+[data-vn-root] [data-vn-narrative]:not([hidden]):not([data-hidden="true"]),
+[data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-narrative]:not([hidden]):not([data-hidden="true"]),
+[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-narrative]:not([hidden]):not([data-hidden="true"]) {
   position: absolute !important;
   inset: 0 !important;
   top: 0 !important;
@@ -746,11 +746,31 @@ aside[data-vn-workspace] {
   box-sizing: border-box !important;
 }
 
+[data-vn-narrative][hidden],
+[data-vn-narrative][data-hidden="true"],
+[data-vn-root] [data-vn-narrative][hidden],
+[data-vn-root] [data-vn-narrative][data-hidden="true"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+[data-vn-dialogue][hidden],
+[data-vn-root] [data-vn-dialogue][hidden],
+[data-vn-dialogue][data-hidden="true"],
+[data-vn-root] [data-vn-dialogue][data-hidden="true"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 /* Dock dialogue firmly to bottom of viewport above bottom action bar */
-[data-vn-dialogue],
-[data-vn-root] [data-vn-dialogue],
-[data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-dialogue],
-[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-dialogue] {
+[data-vn-dialogue]:not([hidden]):not([data-hidden="true"]),
+[data-vn-root] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]),
+[data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]),
+[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]) {
   position: absolute !important;
   z-index: 22 !important;
   left: 15px !important;

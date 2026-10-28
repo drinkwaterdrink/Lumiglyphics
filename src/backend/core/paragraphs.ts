@@ -5,10 +5,131 @@ export type PrepareNarrativeOptions = {
   ignoredTags?: readonly string[];
 };
 
+export type DetectedSceneMetadata = {
+  location?: string;
+  timeOfDay?: string;
+  atmosphere?: string;
+  lighting?: string;
+  weather?: string;
+};
+
+export const BUILTIN_HEURISTIC_TAGS: readonly string[] = [
+  "scene_header",
+  "scene-header",
+  "scene_info",
+  "scene-info",
+  "scene",
+  "setting",
+  "location_header",
+  "location-header",
+  "location",
+  "environment",
+  "atmosphere",
+  "think",
+  "thought",
+  "reasoning",
+  "reflection",
+  "metadata",
+  "narrative_notes",
+  "narrative-notes",
+  "system",
+  "system_prompt",
+  "system-prompt",
+  "context",
+  "ooc",
+  "author_note",
+  "author-note",
+];
+
+function cleanAttributeOrText(val: string | undefined): string | undefined {
+  if (!val) return undefined;
+  const cleaned = val.replace(/^["'“”]|["'“”]$/g, "").replace(/<[^>]+>/g, "").trim();
+  return cleaned.length > 0 ? cleaned.slice(0, 160) : undefined;
+}
+
+export function extractDetectedSceneMetadata(content: string): DetectedSceneMetadata | undefined {
+  let location: string | undefined;
+  let timeOfDay: string | undefined;
+  let atmosphere: string | undefined;
+  let lighting: string | undefined;
+  let weather: string | undefined;
+
+  // 1. XML attribute-style tags: <scene_header location="..." time="..." ...>
+  const tagAttrRegex = /<(?:scene[-_]?header|scene[-_]?info|scene|setting|location[-_]?header|environment|atmosphere)\b([^>]*)\/?>/gi;
+  for (const match of content.matchAll(tagAttrRegex)) {
+    const attrs = match[1] || "";
+    for (const attrMatch of attrs.matchAll(/([:\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g)) {
+      const key = attrMatch[1]!.toLowerCase().replace(/[-_]/g, "");
+      const val = cleanAttributeOrText(attrMatch[2] ?? attrMatch[3] ?? attrMatch[4]);
+      if (!val) continue;
+      if (["location", "place", "setting", "area"].includes(key) && !location) location = val;
+      else if (["time", "timeofday", "tod"].includes(key) && !timeOfDay) timeOfDay = val;
+      else if (["atmosphere", "mood", "ambience", "ambient"].includes(key) && !atmosphere) atmosphere = val;
+      else if (["lighting", "light"].includes(key) && !lighting) lighting = val;
+      else if (["weather"].includes(key) && !weather) weather = val;
+    }
+  }
+
+  // 2. Structured body inside scene tags or bracket lines:
+  // e.g. <scene_header>Location: Old Town | Time: Midnight</scene_header> or [Scene: Location: Old Town | Time: Midnight]
+  const structuredBlocks: string[] = [];
+  for (const match of content.matchAll(/<(?:scene[-_]?header|scene[-_]?info|scene|setting|location[-_]?header|environment|atmosphere)\b[^>]*>([\s\S]*?)<\/(?:scene[-_]?header|scene[-_]?info|scene|setting|location[-_]?header|environment|atmosphere)>/gi)) {
+    if (match[1]) structuredBlocks.push(match[1]);
+  }
+  for (const match of content.matchAll(/\[(?:Scene|Location|Setting|Environment|Atmosphere)\b[:\s]([^\]]+)\]/gi)) {
+    if (match[1]) structuredBlocks.push(match[1]);
+  }
+
+  for (const block of structuredBlocks) {
+    const locMatch = block.match(/(?:location|place|setting|area)\s*[:=]\s*([^|\n,;]+)/i);
+    if (locMatch && !location) location = cleanAttributeOrText(locMatch[1]);
+
+    const timeMatch = block.match(/(?:time(?:_of_day)?|tod)\s*[:=]\s*([^|\n,;]+)/i);
+    if (timeMatch && !timeOfDay) timeOfDay = cleanAttributeOrText(timeMatch[1]);
+
+    const atmoMatch = block.match(/(?:atmosphere|mood|ambience|ambient)\s*[:=]\s*([^|\n,;]+)/i);
+    if (atmoMatch && !atmosphere) atmosphere = cleanAttributeOrText(atmoMatch[1]);
+
+    const lightMatch = block.match(/(?:lighting|light)\s*[:=]\s*([^|\n,;]+)/i);
+    if (lightMatch && !lighting) lighting = cleanAttributeOrText(lightMatch[1]);
+
+    const weatherMatch = block.match(/(?:weather)\s*[:=]\s*([^|\n,;]+)/i);
+    if (weatherMatch && !weather) weather = cleanAttributeOrText(weatherMatch[1]);
+
+    if (!location && !locMatch) {
+      const parts = block.split(/[|,]/).map((p) => p.trim()).filter(Boolean);
+      if (parts[0] && !/^(?:time|lighting|weather|atmosphere)/i.test(parts[0])) {
+        location = cleanAttributeOrText(parts[0]);
+      }
+      if (parts[1] && !timeOfDay && !/^(?:lighting|weather|atmosphere)/i.test(parts[1])) {
+        timeOfDay = cleanAttributeOrText(parts[1]);
+      }
+    }
+  }
+
+  // 3. Single-line pseudo-tags like <scene header: Grand Library> or <location: Old Town>
+  const pseudoTagMatch = content.match(/<(?:scene[-_\s]+header|scene[-_]?info|location|setting)\s*:\s*([^>]+)>/i);
+  if (pseudoTagMatch && !location) {
+    const parts = pseudoTagMatch[1]!.split(/[|,]/).map((p) => p.trim()).filter(Boolean);
+    if (parts[0]) location = cleanAttributeOrText(parts[0]);
+    if (parts[1] && !timeOfDay) timeOfDay = cleanAttributeOrText(parts[1]);
+  }
+
+  if (!location && !timeOfDay && !atmosphere && !lighting && !weather) return undefined;
+  return {
+    ...(location ? { location } : {}),
+    ...(timeOfDay ? { timeOfDay } : {}),
+    ...(atmosphere ? { atmosphere } : {}),
+    ...(lighting ? { lighting } : {}),
+    ...(weather ? { weather } : {}),
+  };
+}
+
 export type PreparedNarrative = {
   paragraphs: Paragraph[];
   choices: Choice[];
   panels: PanelArtifact[];
+  detectedSceneMetadata?: DetectedSceneMetadata;
 };
 
 type RawChoice = { id?: string | undefined; label: string; submission: string };
@@ -80,8 +201,8 @@ function stripIgnoredTags(content: string, tags: readonly string[]): string {
     output = output
       .replace(new RegExp(`<${name}\\b[^>]*>[\\s\\S]*?<\\/${name}>`, "gi"), "")
       .replace(new RegExp(`<\\/?${name}\\b[^>]*>`, "gi"), "")
-      .replace(new RegExp(`\\[${name}\\b[^\\]]*\][\\s\\S]*?\\[\\/${name}\\]`, "gi"), "")
-      .replace(new RegExp(`\\[\\/?${name}\\b[^\\]]*\]`, "gi"), "");
+      .replace(new RegExp(`\\[${name}\\b[^\\]]*\\][\\s\\S]*?\\[\\/${name}\\]`, "gi"), "")
+      .replace(new RegExp(`\\[\\/?${name}\\b[^\\]]*\\]`, "gi"), "");
   }
   return output;
 }
@@ -190,8 +311,10 @@ function cleanNarrativeBlock(block: string): string {
       const trimmed = line.trim();
       if (!trimmed) return false;
       if (/^\s*\|\s*$/.test(trimmed)) return false;
-      return !/^\[(?:Date|FLOOR|RESERVEDFLOOR)\s*:/i.test(trimmed)
-        && !/^<\s*(?:suggestion|scene\s+seed=|check)\b/i.test(trimmed);
+      if (/^\[(?:Scene|Location|Setting|Time|Atmosphere|Environment|Lighting|Weather|System|Status|OOC|Date|FLOOR|RESERVEDFLOOR|Note)\b/i.test(trimmed)) return false;
+      if (/^<\s*(?:scene[-_]?header|scene[-_\s]+header|scene[-_]?info|location[-_]?header|setting|environment|atmosphere|suggestion|scene\s+seed=|check|think|thought|reasoning|reflection|metadata|ooc|narrative[-_]?notes|author[-_]?note)\b/i.test(trimmed)) return false;
+      if (/^<[A-Za-z_-]+(?:\s+[A-Za-z_-]+)*\s*:[^>]+>$/i.test(trimmed)) return false;
+      return true;
     })
     .join("\n")
     .trim();
@@ -211,7 +334,13 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
   content = content.replace(/\r\n?/g, "\n");
   const spans: PanelSpan[] = extractPanelSpans(content);
   const hidden: Array<{ start: number; end: number }> = [];
-  for (const raw of options.ignoredTags ?? []) {
+  const detectedSceneMetadata = extractDetectedSceneMetadata(content);
+  const effectiveIgnoredTags = Array.from(new Set([
+    ...BUILTIN_HEURISTIC_TAGS,
+    ...(options.ignoredTags ?? [])
+  ]));
+
+  for (const raw of effectiveIgnoredTags) {
     const tag = raw.trim().replace(/^[<\[]|[>\]]$/g, "").replace(/^\//, "");
     if (!tag) continue;
     const name = escapeRegExp(tag);
@@ -246,7 +375,7 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
     offset = start + block.text.length;
     const extracted = extractChoices(masked.slice(start, offset));
     rawChoices.push(...extracted.choices);
-    const text = cleanNarrativeBlock(stripIgnoredTags(extracted.text, options.ignoredTags ?? []));
+    const text = cleanNarrativeBlock(stripIgnoredTags(extracted.text, effectiveIgnoredTags));
     if (text) {
       paragraphs.push({ index: paragraphs.length, sourceIndex: block.sourceIndex, text });
       paragraphEnds.push(offset);
@@ -270,5 +399,5 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
     usedIds.add(id);
     return { id, label: choice.label, submission: choice.submission, source: "authored", unlocksAfterParagraph };
   });
-  return { paragraphs, choices, panels };
+  return { paragraphs, choices, panels, ...(detectedSceneMetadata ? { detectedSceneMetadata } : {}) };
 }

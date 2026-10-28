@@ -136,6 +136,7 @@ export type TurnView = {
   swipeId: number;
   sourceFingerprint: string;
   revision: number;
+  location?: string;
   speaker: string;
   userSpeaker?: string;
   paragraphs: string[];

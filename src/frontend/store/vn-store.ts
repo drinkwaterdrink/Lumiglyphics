@@ -126,6 +126,7 @@ export interface VnTurnInput {
   inputPlaceholder?: string;
   preserveImage?: boolean;
   ambient?: AmbientEffect | null;
+  location?: string;
 }
 
 export type VnStageAction =

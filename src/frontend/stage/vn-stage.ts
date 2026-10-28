@@ -495,6 +495,7 @@ export class VnStage {
   private readonly typewriterAudio = new TypewriterAudioSynthesizer();
   private readerPreferences: ReaderPreferences | null = null;
   private currentAmbient: AmbientEffect | null = null;
+  private turnLocation: string | null = null;
   private ambientOverride: AmbientEffect | null | undefined = undefined;
   private sceneFxTimer: ReturnType<typeof setTimeout> | null = null;
   private fxBurstTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1114,6 +1115,7 @@ export class VnStage {
   }
 
   loadTurn(turn: VnTurnInput): void {
+    this.turnLocation = turn.location ?? null;
     this.preparationPreview.clear();
     this.moveDraftEpoch++;this.closeMoveDraft();
     this.dismissedErrors.clear();
@@ -1184,6 +1186,7 @@ export class VnStage {
     this.toggleAutoPlay(false);
     this.toggleSkip(false);
     this.narrative.hidden = true;
+    this.narrative.dataset.hidden = "true";
     this.preparationPreview.show(preview);
   }
   preparationCursorFor(turn:TurnView):number|null{return this.preparationPreview.cursorFor(turn);}
@@ -1191,6 +1194,7 @@ export class VnStage {
     this.preparationPreview.clear();
     const view = selectVnStageView(this.state);
     this.narrative.hidden = !view.paragraph;
+    delete this.narrative.dataset.hidden;
   }
   stopPreparationPreview():void{this.preparationPreview.stopped();}
   setReferenceHistory(history:ReferenceHistory|undefined):void{this.dossiers.setHistory(history);}
@@ -2624,9 +2628,10 @@ export class VnStage {
     if (!this.isRewinding) {
       this.triggerParagraphEffects(paragraph);
       if (this.state.currentParagraphIndex === 0 && !this.isSkipping) {
-        const title = paragraph.speaker || "Scene";
+        const title = this.turnLocation || paragraph.speaker || "Scene";
         const excerpt = paragraph.text.replace(/[*_#`]/g, "").slice(0, 80).trim();
-        this.triggerChapterCard(title, excerpt, `SCENE ${this.state.paragraphs.length > 0 ? "START" : ""}`);
+        const eyebrow = this.turnLocation && paragraph.speaker ? paragraph.speaker.toUpperCase() : `SCENE ${this.state.paragraphs.length > 0 ? "START" : ""}`;
+        this.triggerChapterCard(title, excerpt, eyebrow);
       }
       if (this.readerPreferences?.atmosphericLighting !== false) {
         this.updateAtmosphericLighting(paragraph.text, paragraph.ambient ?? paragraph.cue?.ambient);

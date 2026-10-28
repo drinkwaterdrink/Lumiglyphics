@@ -276,7 +276,8 @@ export function stageTurnInput(
     preserveImage,
     ...(presentation ? {presentation} : {}),
     ...(referenceHistory?{referenceHistory}:{}),
-    ...(next.ambients !== undefined ? { ambient: firstAmbient(next, intensity) } : {})
+    ...(next.ambients !== undefined ? { ambient: firstAmbient(next, intensity) } : {}),
+    ...(next.location ? { location: next.location } : {})
   };
 }
 

@@ -573,6 +573,7 @@ export function turnView(record: StoredTurnRecord): TurnView {
     swipeId: typeof swipe === "number" ? swipe : Number(swipe ?? 0) || 0,
     sourceFingerprint: record.plan.key.sourceFingerprint,
     revision: record.plan.key.revision,
+    ...(record.plan.scenes[0]?.environment?.location ? { location: record.plan.scenes[0].environment.location } : {}),
     cardRole:record.cardRole??'auto',
     cardRoleAvailable:Boolean(record.cardId),
     subjectCandidates:[...new Map(record.plan.visualCues.filter(c=>c.character).map(c=>[c.character!,{name:c.character!,appearance:c.resolvedIdentity??''}])).values()].slice(0,32),

@@ -461,4 +461,38 @@ describe("reading UX", () => {
     s.triggerEffect("shake");
     expect(root(s).classList.contains("vn-shake")).toBe(true);
   });
+
+  test("showPreparationPreview hides narrative and dialogue sheet completely to prevent overlap", () => {
+    const s = create();
+    s.loadTurn({ mode: "standard", paragraphs: paragraphs(2) });
+    expect(q(s, "[data-vn-narrative]").hidden).toBe(false);
+    expect(q(s, "[data-vn-preparation-preview]").hidden).toBe(true);
+
+    s.showPreparationPreview({
+      chatId: "chat1",
+      messageId: "msg1",
+      swipeId: 0,
+      sourceFingerprint: "fp1",
+      paragraphs: ["Preview paragraph 1.", "Preview paragraph 2."]
+    });
+
+    expect(q(s, "[data-vn-narrative]").hidden).toBe(true);
+    expect(q(s, "[data-vn-narrative]").dataset.hidden).toBe("true");
+    expect(q(s, "[data-vn-preparation-preview]").hidden).toBe(false);
+
+    s.clearPreparationPreview();
+    expect(q(s, "[data-vn-preparation-preview]").hidden).toBe(true);
+    expect(q(s, "[data-vn-narrative]").hidden).toBe(false);
+    expect(q(s, "[data-vn-narrative]").dataset.hidden).toBeUndefined();
+  });
+
+  test("chapter title card incorporates turn location when provided", () => {
+    const s = create();
+    s.setReaderPreferences({ chapterTitleCards: true });
+    s.loadTurn({ mode: "standard", location: "Old Town - Library", paragraphs: [{ id: "p0", text: "Dust motes danced in the quiet room.", speaker: "Alice" }] });
+    const card = q(s, "[data-vn-chapter-card]");
+    expect(card.hidden).toBe(false);
+    expect(card.querySelector("[data-vn-chapter-title]")!.textContent).toBe("Old Town - Library");
+    expect(card.querySelector("[data-vn-chapter-eyebrow]")!.textContent).toBe("ALICE");
+  });
 });

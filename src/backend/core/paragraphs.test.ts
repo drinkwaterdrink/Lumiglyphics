@@ -133,4 +133,71 @@ describe("narrative preparation", () => {
       },
     ]);
   });
+
+  test("automatically filters heuristic tags without explicit ignoredTags", () => {
+    const raw = [
+      "<think>",
+      "Internal reasoning should never appear in reading mode.",
+      "</think>",
+      "",
+      "<scene_header location=\"City Archives\" time=\"Midnight\" atmosphere=\"Heavy rain\">",
+      "",
+      "The heavy rain hammered relentlessly against the stained glass.",
+      "",
+      "<ooc>Remember to stay in character</ooc>",
+      "",
+      "She turned toward the door with an uneasy expression."
+    ].join("\n");
+
+    const prepared = prepareNarrative(raw);
+    expect(prepared.paragraphs.map(p => p.text)).toEqual([
+      "The heavy rain hammered relentlessly against the stained glass.",
+      "She turned toward the door with an uneasy expression."
+    ]);
+    expect(prepared.detectedSceneMetadata).toEqual({
+      location: "City Archives",
+      timeOfDay: "Midnight",
+      atmosphere: "Heavy rain"
+    });
+  });
+
+  test("extracts scene metadata from bracket syntax and filters it from narrative text", () => {
+    const raw = [
+      "[Scene: Grand Ballroom | Lighting: Chandelier warm glow | Time: Dusk]",
+      "",
+      "The orchestra began playing a solemn waltz.",
+      "",
+      "[Status: Active Combat]",
+      "",
+      "Everyone turned their eyes toward the balcony."
+    ].join("\n");
+
+    const prepared = prepareNarrative(raw);
+    expect(prepared.paragraphs.map(p => p.text)).toEqual([
+      "The orchestra began playing a solemn waltz.",
+      "Everyone turned their eyes toward the balcony."
+    ]);
+    expect(prepared.detectedSceneMetadata).toEqual({
+      location: "Grand Ballroom",
+      lighting: "Chandelier warm glow",
+      timeOfDay: "Dusk"
+    });
+  });
+
+  test("extracts scene metadata from single-line pseudo-tags like <scene header: ...>", () => {
+    const raw = [
+      "<scene header: Tokyo Rooftop, Sunset>",
+      "A cool breeze stirred the hanging lanterns.",
+      "She leaned against the railing."
+    ].join("\n");
+
+    const prepared = prepareNarrative(raw);
+    expect(prepared.paragraphs.map(p => p.text)).toEqual([
+      "A cool breeze stirred the hanging lanterns.\nShe leaned against the railing."
+    ]);
+    expect(prepared.detectedSceneMetadata).toEqual({
+      location: "Tokyo Rooftop",
+      timeOfDay: "Sunset"
+    });
+  });
 });
