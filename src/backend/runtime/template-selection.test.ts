@@ -30,6 +30,12 @@ test("routing_respects_modes_and_enabled_catalog_in_one_pass", async () => {
   const invalid = await plan({ dynamicImageTemplates: true }, "invented");
   assert.equal(invalid.plan.visualCues[0]?.imageTemplate?.id, "portrait");
   assert.match(invalid.plan.visualCues[0]?.imageTemplateReason ?? "", /unavailable/);
+
+  const directorActive = await plan({ dynamicImageTemplates: true, readerPreferences: { directorAi: true } }, "environment");
+  assert.match(directorActive.instruction, /Director AI shot framing is active/);
+
+  const directorDisabled = await plan({ dynamicImageTemplates: true, readerPreferences: { directorAi: false } }, "environment");
+  assert.doesNotMatch(directorDisabled.instruction, /Director AI shot framing is active/);
 });
 
 test("nonportrait_selection_preserves_story_character_and_budget", async () => {

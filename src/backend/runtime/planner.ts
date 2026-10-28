@@ -596,9 +596,10 @@ function inputTemplateInstructions(config: VisualNovelConfig): string {
   const templates = config.dynamicImageTemplates ? config.imageTemplates.filter(template => template.enabled) : [selected];
   return [
     config.dynamicImageTemplates ? "Choose templateId from this enabled catalog for each meaningful visual cue. New locations favor environment, reactions favor portrait, motion favors action, focal props favor detail. A category change alone does not justify a new image." : `Use templateId ${selected.id} on every cue. Dynamic selection is off.`,
+    config.readerPreferences?.directorAi !== false ? "Director AI shot framing is active: actively vary shot framing between portrait (emotions/whispers/reactions), action (physical conflict/dynamic events), and environment (establishing views/scenery changes)." : "",
     "Template catalog (Use when guidance): " + JSON.stringify(templates.map(t => ({ id: t.id, name: t.name, category: t.category, useWhen: t.useWhen, subjectMode: t.subjectMode, framing: t.framing }))),
     "templateReason is a short decision label, not hidden reasoning. visualDescription is a grounded visible event, with only the selected subject for single-character templates. For ensemble templates, provide visibleCharacters: the names of EVERY physically present character at that exact paragraph, including the user/persona when present; exclude offscreen, departed, remembered or merely mentioned people. Describe their visible interaction and spatial arrangement. visualFocus names the actual object for detail. Do not include character actions in environment descriptions. Resolve appearance from reference evidence; retain saved identity and separate temporary wardrobe/action from lasting traits. Report no invented identity facts."
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 function normalizeCue(value: unknown): unknown {
@@ -2481,6 +2482,24 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
         ? selectPoseExpression(POSE_EXPRESSION_CATALOGUE, cue.paragraphIndex, "", "listen")
         : selectPoseExpression(POSE_EXPRESSION_CATALOGUE, cue.paragraphIndex, paragraph?.text ?? "", cue.expression);
       let selection = resolveImageTemplate(input.config, input.config.dynamicImageTemplates ? cue.templateId : undefined);
+      if (input.config.dynamicImageTemplates && input.config.readerPreferences?.directorAi !== false && !cue.templateId) {
+        const pLower = (paragraph?.text ?? "").toLowerCase();
+        const hasAction = /\b(strikes?|slashes?|dodges?|sprints?|grabs?|explodes?|shatters?|leaps?|clashes?|punches?|tackles?|shoots?|firing|defends?|parr(y|ies))\b/i.test(pLower);
+        const hasEmotion = /\b(whispers?|smil(es?|ing)|tears?|gaze[sd]?|blush(es|ed|ing)?|sigh(s|ed|ing)?|frown(s|ed|ing)?|gasps?|murmurs?|trembl(es?|ing))\b/i.test(pLower);
+        const hasScenery = /\b(arrives?|enters?|walked into|outside|corridor|chamber|courtyard|streets?|sky|forest|horizon|scenery|landscape)\b/i.test(pLower) || /<scene_header>|<scene\b/i.test(paragraph?.text ?? "");
+
+        let targetCategory: "action" | "portrait" | "environment" | null = null;
+        if (hasAction) targetCategory = "action";
+        else if (hasEmotion) targetCategory = "portrait";
+        else if (hasScenery) targetCategory = "environment";
+
+        if (targetCategory && selection.template.category !== targetCategory) {
+          const candidate = input.config.imageTemplates.find(t => t.enabled && t.category === targetCategory);
+          if (candidate) {
+            selection = { template: templateSnapshot(candidate), fallbackReason: `Director AI framing: biased to ${targetCategory} from context.` };
+          }
+        }
+      }
       const originalSnapshot=timeline.snapshots[cue.paragraphIndex]!;
       const activeProposal=[...proposals].reverse().find(proposal=>proposal.startParagraph<=cue.paragraphIndex);
       const personaSubject=selection.template.subjectMode==='one'?scenarioPersonaSubject({

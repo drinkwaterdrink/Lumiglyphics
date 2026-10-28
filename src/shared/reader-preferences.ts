@@ -11,6 +11,8 @@ export type ReaderPreferences = {
   typewriterVolume?: number;
   chapterTitleCards?: boolean;
   atmosphericLighting?: boolean;
+  directorAi?: boolean;
+  sentimentLighting?: boolean;
 };
 export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   adjustableSheetEnabled: false,
@@ -35,6 +37,8 @@ export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
     ...(typeof input.typewriterVolume === "number" && Number.isFinite(input.typewriterVolume) ? { typewriterVolume: Math.max(0, Math.min(1, input.typewriterVolume)) } : {}),
     ...(input.chapterTitleCards !== undefined ? { chapterTitleCards: input.chapterTitleCards === true } : {}),
     ...(input.atmosphericLighting !== undefined ? { atmosphericLighting: input.atmosphericLighting === true } : {}),
+    ...(input.directorAi !== undefined ? { directorAi: input.directorAi === true } : {}),
+    ...(input.sentimentLighting !== undefined ? { sentimentLighting: input.sentimentLighting === true } : {}),
   };
 }
 const RATIOS = { compact: 0.22, reading: 0.34, expanded: 0.6 } as const;

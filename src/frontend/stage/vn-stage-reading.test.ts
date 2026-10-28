@@ -439,12 +439,33 @@ describe("reading UX", () => {
     s.setTextScale(1.25);
     expect(s.getTextScale()).toBe(1.25);
     expect(root(s).style["--vn-text-scale"]).toBe("1.25");
+    expect(root(s).style["--reader-font"]).toBe("18.75px");
     s.setTextScale(9);
     expect(s.getTextScale()).toBe(1.6);
+    expect(root(s).style["--reader-font"]).toBe("24px");
     s.setTextScale(0.1);
     expect(s.getTextScale()).toBe(0.8);
+    expect(root(s).style["--reader-font"]).toBe("12px");
     s.setTextScale(Number.NaN);
     expect(s.getTextScale()).toBe(1);
+    expect(root(s).style["--reader-font"]).toBe("15px");
+  });
+
+  test("sentiment lighting grades scene atmosphere based on narrative tone", () => {
+    const s = create();
+    s.setReaderPreferences({ sentimentLighting: true });
+    s.loadTurn({ mode: "standard", paragraphs: [{ id: "p0", text: "The blade plunged forward with fatal danger." }] });
+    expect(root(s).querySelector("[data-vn-scene]")?.dataset.vnAtmosphere).toBe("danger_crimson");
+
+    s.loadTurn({ mode: "standard", paragraphs: [{ id: "p1", text: "She remembered that gentle childhood memory from years ago." }] });
+    expect(root(s).querySelector("[data-vn-scene]")?.dataset.vnAtmosphere).toBe("sepia_flashback");
+
+    s.loadTurn({ mode: "standard", paragraphs: [{ id: "p2", text: "A tender whisper and warm kiss filled the quiet room." }] });
+    expect(root(s).querySelector("[data-vn-scene]")?.dataset.vnAtmosphere).toBe("romance_rose");
+
+    s.setReaderPreferences({ sentimentLighting: false });
+    s.loadTurn({ mode: "standard", paragraphs: [{ id: "p3", text: "The blade plunged forward with fatal danger." }] });
+    expect(root(s).querySelector("[data-vn-scene]")?.dataset.vnAtmosphere).toBeUndefined();
   });
 
   test("setEffectIntensity('off') silences the text shake heuristic and one-shot effects", () => {

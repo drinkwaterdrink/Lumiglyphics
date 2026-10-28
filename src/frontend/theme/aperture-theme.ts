@@ -64,6 +64,27 @@ export const APERTURE_THEME_CSS = `
   --menu-ink: #192b25;
   --menu-muted: #53685f;
   --menu-hair: rgba(53, 80, 69, 0.16);
+
+  /* Aperture Dynamic Reskinning Tokens (defaults to Celestial Emerald) */
+  --aperture-accent: #dcebad;
+  --aperture-accent-hover: #ecf8cd;
+  --aperture-accent-contrast: #11241c;
+  --aperture-accent-glow: rgba(220, 238, 173, 0.35);
+  --aperture-text: #eff4e9;
+  --aperture-muted: #9cb5a8;
+  --aperture-dialogue-bg: rgba(4, 13, 17, var(--caption-opacity, 0.76));
+  --aperture-dialogue-border: rgba(224, 238, 217, 0.32);
+  --aperture-bottom-bar-bg: rgba(7, 16, 13, 0.94);
+  --aperture-bottom-bar-border: rgba(160, 205, 185, 0.16);
+  --aperture-button-bg: rgba(14, 30, 24, 0.92);
+  --aperture-button-border: rgba(160, 205, 185, 0.3);
+  --aperture-button-text: #edf3ea;
+  --aperture-button-hover-bg: rgba(35, 75, 57, 0.95);
+  --aperture-input-form-bg: rgba(11, 24, 18, 0.92);
+  --aperture-input-bg: rgba(6, 14, 11, 0.8);
+  --aperture-choice-bg: rgba(11, 24, 18, 0.92);
+  --aperture-choice-border: rgba(160, 205, 185, 0.28);
+  --aperture-choice-hover-bg: rgba(35, 75, 57, 0.95);
 }
 
 /* Light / Dark Mode Tokens */
@@ -952,10 +973,10 @@ aside[data-vn-workspace] {
   min-height: 0;
   max-height: none;
   margin: 0;
-  font-size: var(--reader-font, 15px);
-  line-height: 1.55;
+  font-size: calc(var(--reader-font, 15px) * var(--vn-text-scale, 1)) !important;
+  line-height: calc(1.55 * var(--vn-text-scale, 1)) !important;
   letter-spacing: 0;
-  color: #f9faf6 !important;
+  color: var(--aperture-text, #f9faf6) !important;
   font-family: Georgia, 'Times New Roman', serif;
   text-shadow: 0 2px 7px rgba(0, 0, 0, 0.82), 0 1px 1px black;
   user-select: text !important;
@@ -1089,10 +1110,10 @@ aside[data-vn-workspace] {
   padding: 0 12px calc(env(safe-area-inset-bottom, 0px)) !important;
   margin: 0 !important;
   pointer-events: auto !important;
-  background: rgba(7, 16, 13, 0.94) !important;
+  background: var(--aperture-bottom-bar-bg, rgba(7, 16, 13, 0.94)) !important;
   -webkit-backdrop-filter: blur(16px) !important;
   backdrop-filter: blur(16px) !important;
-  border-top: 1px solid rgba(160, 205, 185, 0.16) !important;
+  border-top: 1px solid var(--aperture-bottom-bar-border, rgba(160, 205, 185, 0.16)) !important;
   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.45) !important;
   box-sizing: border-box !important;
 }
@@ -1135,15 +1156,15 @@ aside[data-vn-workspace] {
   border-radius: 8px !important;
   background: transparent !important;
   border: 0 !important;
-  color: #9cb5a8 !important;
+  color: var(--aperture-muted, #9cb5a8) !important;
   cursor: pointer !important;
   padding: 0 !important;
   transition: all 0.15s ease !important;
 }
 
 .reader-action-row > .action:not(.nav-step-btn):hover {
-  background: rgba(220, 238, 177, 0.08) !important;
-  color: #dcebad !important;
+  background: var(--aperture-button-hover-bg, rgba(220, 238, 177, 0.08)) !important;
+  color: var(--aperture-accent, #dcebad) !important;
 }
 
 .reader-action-row > .action:not(.nav-step-btn) [data-vn-control-label] {
@@ -1853,9 +1874,9 @@ body.theme-light .folio-quote-callout {
   flex: none !important;
   touch-action: pan-y !important;
   user-select: text !important;
-  font-size: var(--reader-font, 15px) !important;
-  line-height: 1.55 !important;
-  color: #f9faf6 !important;
+  font-size: calc(var(--reader-font, 15px) * var(--vn-text-scale, 1)) !important;
+  line-height: calc(1.55 * var(--vn-text-scale, 1)) !important;
+  color: var(--aperture-text, #f9faf6) !important;
   font-family: Georgia, 'Times New Roman', serif !important;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;
   margin: 0 !important;
@@ -1912,17 +1933,17 @@ body.theme-light .folio-quote-callout {
   align-items: center !important;
   justify-content: center !important;
   border-radius: 50% !important;
-  background: rgba(14, 30, 24, 0.92) !important;
-  border: 1px solid rgba(160, 205, 185, 0.3) !important;
-  color: #edf3ea !important;
+  background: var(--aperture-button-bg, rgba(14, 30, 24, 0.92)) !important;
+  border: 1px solid var(--aperture-button-border, rgba(160, 205, 185, 0.3)) !important;
+  color: var(--aperture-button-text, #edf3ea) !important;
   cursor: pointer !important;
   z-index: 45 !important;
   transition: background 0.16s ease, transform 0.16s ease, border-color 0.16s ease !important;
 }
 
 [data-vn-controls] > [data-vn-control="previous"].nav-step-btn:hover:not(:disabled) {
-  background: rgba(35, 75, 57, 0.95) !important;
-  border-color: #dcebad !important;
+  background: var(--aperture-button-hover-bg, rgba(35, 75, 57, 0.95)) !important;
+  border-color: var(--aperture-accent, #dcebad) !important;
 }
 
 [data-vn-continue].nav-step-btn,
@@ -1940,19 +1961,19 @@ body.theme-light .folio-quote-callout {
   align-items: center !important;
   justify-content: center !important;
   border-radius: 50% !important;
-  background: #dcebad !important;
-  border: 1px solid #dcebad !important;
-  color: #11241c !important;
+  background: var(--aperture-accent, #dcebad) !important;
+  border: 1px solid var(--aperture-accent, #dcebad) !important;
+  color: var(--aperture-accent-contrast, #11241c) !important;
   cursor: pointer !important;
   font-weight: 700 !important;
   z-index: 45 !important;
-  box-shadow: 0 2px 10px rgba(220, 238, 173, 0.35) !important;
+  box-shadow: 0 2px 10px var(--aperture-accent-glow, rgba(220, 238, 173, 0.35)) !important;
   transition: background 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease !important;
 }
 
 [data-vn-continue].nav-step-btn:hover:not(:disabled),
 [data-vn-continue].action.advance:hover:not(:disabled) {
-  background: #ecf8cd !important;
+  background: var(--aperture-accent-hover, #ecf8cd) !important;
   transform: scale(1.06) !important;
 }
 
@@ -1970,9 +1991,9 @@ body.theme-light .folio-quote-callout {
   width: 40px !important;
   height: 40px !important;
   border-radius: 50% !important;
-  background: rgba(8, 18, 15, 0.92) !important;
-  border: 1px solid rgba(160, 205, 185, 0.35) !important;
-  color: #dcebad !important;
+  background: var(--aperture-button-bg, rgba(8, 18, 15, 0.92)) !important;
+  border: 1px solid var(--aperture-button-border, rgba(160, 205, 185, 0.35)) !important;
+  color: var(--aperture-accent, #dcebad) !important;
   display: grid !important;
   place-items: center !important;
   cursor: pointer !important;
@@ -2053,7 +2074,7 @@ body.theme-light .folio-quote-callout {
 
 [data-vn-interaction-hint] {
   font-size: 11px !important;
-  color: #9cb5a8 !important;
+  color: var(--aperture-muted, #9cb5a8) !important;
   margin: 0 !important;
 }
 
@@ -2062,8 +2083,8 @@ body.theme-light .folio-quote-callout {
   flex-direction: column !important;
   gap: 8px !important;
   width: 100% !important;
-  background: rgba(11, 24, 18, 0.92) !important;
-  border: 1px solid rgba(160, 205, 185, 0.28) !important;
+  background: var(--aperture-input-form-bg, rgba(11, 24, 18, 0.92)) !important;
+  border: 1px solid var(--aperture-choice-border, rgba(160, 205, 185, 0.28)) !important;
   border-radius: 14px !important;
   backdrop-filter: blur(16px) !important;
   -webkit-backdrop-filter: blur(16px) !important;
@@ -2077,26 +2098,26 @@ body.theme-light .folio-quote-callout {
   box-sizing: border-box !important;
   min-height: 48px !important;
   max-height: 120px !important;
-  background: rgba(6, 14, 11, 0.8) !important;
-  border: 1px solid rgba(160, 205, 185, 0.22) !important;
+  background: var(--aperture-input-bg, rgba(6, 14, 11, 0.8)) !important;
+  border: 1px solid var(--aperture-choice-border, rgba(160, 205, 185, 0.22)) !important;
   border-radius: 10px !important;
-  color: #f5f9f2 !important;
+  color: var(--aperture-text, #f5f9f2) !important;
   font: 14px/1.5 system-ui, -apple-system, sans-serif !important;
   padding: 8px 10px !important;
   resize: vertical !important;
 }
 
 [data-vn-input]:focus {
-  outline: 2px solid #dcebad !important;
-  border-color: #dcebad !important;
+  outline: 2px solid var(--aperture-accent, #dcebad) !important;
+  border-color: var(--aperture-accent, #dcebad) !important;
 }
 
 [data-vn-input-form] button[type="submit"] {
   align-self: flex-end !important;
   padding: 6px 18px !important;
   border-radius: 999px !important;
-  background: #dcebad !important;
-  color: #11241c !important;
+  background: var(--aperture-accent, #dcebad) !important;
+  color: var(--aperture-accent-contrast, #11241c) !important;
   font-weight: 700 !important;
   font-size: 12px !important;
   border: 0 !important;
@@ -2105,7 +2126,7 @@ body.theme-light .folio-quote-callout {
 }
 
 [data-vn-input-form] button[type="submit"]:hover {
-  background: #ecf8cd !important;
+  background: var(--aperture-accent-hover, #ecf8cd) !important;
   transform: translateY(-1px) !important;
 }
 
@@ -2122,10 +2143,10 @@ body.theme-light .folio-quote-callout {
 [data-vn-choice-list] button {
   width: 100% !important;
   padding: 10px 14px !important;
-  background: rgba(11, 24, 18, 0.92) !important;
-  border: 1px solid rgba(160, 205, 185, 0.28) !important;
+  background: var(--aperture-choice-bg, rgba(11, 24, 18, 0.92)) !important;
+  border: 1px solid var(--aperture-choice-border, rgba(160, 205, 185, 0.28)) !important;
   border-radius: 12px !important;
-  color: #f5f9f2 !important;
+  color: var(--aperture-text, #f5f9f2) !important;
   font-size: 13.5px !important;
   text-align: left !important;
   cursor: pointer !important;
@@ -2134,8 +2155,8 @@ body.theme-light .folio-quote-callout {
 }
 
 [data-vn-choice-list] button:hover {
-  background: rgba(35, 75, 57, 0.95) !important;
-  border-color: #dcebad !important;
+  background: var(--aperture-choice-hover-bg, rgba(35, 75, 57, 0.95)) !important;
+  border-color: var(--aperture-accent, #dcebad) !important;
 }
 
 /* Resume notice suppressed in clean reader */
@@ -3190,6 +3211,34 @@ section[data-reference-observations] h3 {
   background: linear-gradient(135deg, rgba(230, 60, 160, 0.35) 0%, rgba(90, 40, 220, 0.35) 60%, rgba(20, 200, 220, 0.28) 100%);
 }
 
+[data-vn-scene][data-vn-atmosphere="danger_crimson"] [data-vn-atmosphere] {
+  opacity: 0.42;
+  background: radial-gradient(circle at 50% 50%, rgba(220, 38, 38, 0.45) 0%, rgba(120, 10, 20, 0.6) 80%, rgba(20, 0, 5, 0.75) 100%);
+  animation: sentimentPulseCrimson 3.5s ease-in-out infinite alternate;
+}
+
+[data-vn-scene][data-vn-atmosphere="sepia_flashback"] [data-vn-atmosphere] {
+  opacity: 0.38;
+  background: radial-gradient(ellipse at center, rgba(217, 119, 6, 0.35) 0%, rgba(120, 70, 20, 0.45) 75%, rgba(45, 25, 10, 0.65) 100%);
+  filter: sepia(0.35) contrast(1.05);
+}
+
+[data-vn-scene][data-vn-atmosphere="romance_rose"] [data-vn-atmosphere] {
+  opacity: 0.35;
+  background: radial-gradient(circle at 50% 60%, rgba(244, 63, 94, 0.35) 0%, rgba(225, 29, 72, 0.22) 65%, transparent 100%);
+  animation: sentimentBreathRose 4s ease-in-out infinite alternate;
+}
+
+@keyframes sentimentPulseCrimson {
+  0% { opacity: 0.28; }
+  100% { opacity: 0.46; }
+}
+
+@keyframes sentimentBreathRose {
+  0% { opacity: 0.25; }
+  100% { opacity: 0.38; }
+}
+
 /* Backlog Search Bar */
 .backlog-search-row {
   display: flex !important;
@@ -3312,19 +3361,81 @@ section[data-reference-observations] h3 {
 }
 
 /* =========================================================================
-   APERTURE THEME SUITE PALETTES
+   APERTURE THEME SUITE PALETTES (Full UI Reskinning)
    ========================================================================= */
 
-/* 1. Aperture Obsidian (Host Default Dark) */
+/* 1. Aperture Obsidian / Emerald (Host Default) */
+:is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="lumiverse"],
+[data-vn-root][data-vn-preset="lumiverse"] {
+  --aperture-accent: #dcebad;
+  --aperture-accent-hover: #ecf8cd;
+  --aperture-accent-contrast: #11241c;
+  --aperture-accent-glow: rgba(220, 238, 173, 0.35);
+  --aperture-text: #eff4e9;
+  --aperture-muted: #9cb5a8;
+  --aperture-dialogue-bg: rgba(4, 13, 17, var(--caption-opacity, 0.76));
+  --aperture-dialogue-border: rgba(224, 238, 217, 0.32);
+  --aperture-bottom-bar-bg: rgba(7, 16, 13, 0.94);
+  --aperture-bottom-bar-border: rgba(160, 205, 185, 0.16);
+  --aperture-button-bg: rgba(14, 30, 24, 0.92);
+  --aperture-button-border: rgba(160, 205, 185, 0.3);
+  --aperture-button-text: #edf3ea;
+  --aperture-button-hover-bg: rgba(35, 75, 57, 0.95);
+  --aperture-input-form-bg: rgba(11, 24, 18, 0.92);
+  --aperture-input-bg: rgba(6, 14, 11, 0.8);
+  --aperture-choice-bg: rgba(11, 24, 18, 0.92);
+  --aperture-choice-border: rgba(160, 205, 185, 0.28);
+  --aperture-choice-hover-bg: rgba(35, 75, 57, 0.95);
+  --vn-shell-panel: #111a1e;
+  --vn-shell-field: #182429;
+  --vn-shell-button: #23342e;
+  --vn-shell-text: #eff4e9;
+  --vn-shell-muted: #a4bbb1;
+  --vn-shell-border: rgba(220, 238, 217, 0.14);
+  --vn-shell-accent: #dce9b5;
+  --vn-shell-accent-contrast: #1c3525;
+}
 [data-vn-root][data-vn-preset="lumiverse"] [data-vn-dialogue] {
   border-color: rgba(224, 238, 217, 0.32) !important;
   background: rgba(4, 13, 17, var(--caption-opacity, 0.76)) !important;
 }
 [data-vn-root][data-vn-preset="lumiverse"] [data-vn-speaker] {
   color: #e0eeb1 !important;
+  background: rgba(12, 24, 20, 0.9) !important;
+  border-color: rgba(224, 238, 217, 0.35) !important;
 }
 
 /* 2. Aperture Sage Editorial (Modern Light) */
+:is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="paper-novel"],
+[data-vn-root][data-vn-preset="paper-novel"] {
+  --aperture-accent: #24533e;
+  --aperture-accent-hover: #1a3e2e;
+  --aperture-accent-contrast: #f4f7eb;
+  --aperture-accent-glow: rgba(36, 83, 62, 0.25);
+  --aperture-text: #172721;
+  --aperture-muted: #53685f;
+  --aperture-dialogue-bg: rgba(246, 248, 244, var(--caption-opacity, 0.92));
+  --aperture-dialogue-border: rgba(46, 96, 71, 0.38);
+  --aperture-bottom-bar-bg: rgba(238, 243, 232, 0.96);
+  --aperture-bottom-bar-border: rgba(53, 80, 69, 0.2);
+  --aperture-button-bg: rgba(225, 234, 218, 0.95);
+  --aperture-button-border: rgba(46, 96, 71, 0.3);
+  --aperture-button-text: #172721;
+  --aperture-button-hover-bg: rgba(205, 220, 196, 0.98);
+  --aperture-input-form-bg: rgba(244, 247, 240, 0.95);
+  --aperture-input-bg: rgba(255, 255, 255, 0.9);
+  --aperture-choice-bg: rgba(240, 245, 235, 0.95);
+  --aperture-choice-border: rgba(46, 96, 71, 0.25);
+  --aperture-choice-hover-bg: rgba(220, 235, 212, 0.98);
+  --vn-shell-panel: #eef3e5;
+  --vn-shell-field: #ffffff;
+  --vn-shell-button: #d8e5d5;
+  --vn-shell-text: #172721;
+  --vn-shell-muted: #53685f;
+  --vn-shell-border: rgba(53, 80, 69, 0.18);
+  --vn-shell-accent: #24533e;
+  --vn-shell-accent-contrast: #f4f7eb;
+}
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-dialogue] {
   border-color: rgba(46, 96, 71, 0.38) !important;
   background: rgba(246, 248, 244, var(--caption-opacity, 0.92)) !important;
@@ -3333,6 +3444,7 @@ section[data-reference-observations] h3 {
 }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-dialogue-text] {
   color: #172721 !important;
+  text-shadow: none !important;
 }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-speaker] {
   color: #1a4f36 !important;
@@ -3340,7 +3452,37 @@ section[data-reference-observations] h3 {
   border-color: rgba(46, 96, 71, 0.4) !important;
 }
 
-/* 3. Aperture Midnight OLED (Ultra Dark) */
+/* 3. Aperture Midnight OLED (Ultra Dark Mint) */
+:is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="midnight-noir"],
+[data-vn-root][data-vn-preset="midnight-noir"] {
+  --aperture-accent: #6ee7b7;
+  --aperture-accent-hover: #a7f3d0;
+  --aperture-accent-contrast: #021a11;
+  --aperture-accent-glow: rgba(110, 231, 183, 0.35);
+  --aperture-text: #f8fafc;
+  --aperture-muted: #94a3b8;
+  --aperture-dialogue-bg: rgba(0, 0, 0, var(--caption-opacity, 0.94));
+  --aperture-dialogue-border: rgba(110, 231, 183, 0.38);
+  --aperture-bottom-bar-bg: rgba(2, 3, 5, 0.96);
+  --aperture-bottom-bar-border: rgba(110, 231, 183, 0.2);
+  --aperture-button-bg: rgba(10, 15, 13, 0.94);
+  --aperture-button-border: rgba(110, 231, 183, 0.3);
+  --aperture-button-text: #f8fafc;
+  --aperture-button-hover-bg: rgba(20, 40, 30, 0.95);
+  --aperture-input-form-bg: rgba(5, 8, 7, 0.95);
+  --aperture-input-bg: rgba(0, 0, 0, 0.9);
+  --aperture-choice-bg: rgba(8, 12, 10, 0.94);
+  --aperture-choice-border: rgba(110, 231, 183, 0.28);
+  --aperture-choice-hover-bg: rgba(18, 38, 28, 0.96);
+  --vn-shell-panel: #07090b;
+  --vn-shell-field: #0e1215;
+  --vn-shell-button: #13221b;
+  --vn-shell-text: #f8fafc;
+  --vn-shell-muted: #80998f;
+  --vn-shell-border: rgba(110, 231, 183, 0.18);
+  --vn-shell-accent: #6ee7b7;
+  --vn-shell-accent-contrast: #021a11;
+}
 [data-vn-root][data-vn-preset="midnight-noir"] [data-vn-dialogue] {
   border-color: rgba(110, 231, 183, 0.38) !important;
   background: rgba(0, 0, 0, var(--caption-opacity, 0.94)) !important;
@@ -3356,6 +3498,36 @@ section[data-reference-observations] h3 {
 }
 
 /* 4. Aperture Solar Dusk (Warm Amber) */
+:is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="golden-hour"],
+[data-vn-root][data-vn-preset="golden-hour"] {
+  --aperture-accent: #f59e0b;
+  --aperture-accent-hover: #fbbf24;
+  --aperture-accent-contrast: #241403;
+  --aperture-accent-glow: rgba(245, 158, 11, 0.35);
+  --aperture-text: #fef3c7;
+  --aperture-muted: #d97706;
+  --aperture-dialogue-bg: rgba(26, 17, 8, var(--caption-opacity, 0.88));
+  --aperture-dialogue-border: rgba(245, 158, 11, 0.45);
+  --aperture-bottom-bar-bg: rgba(18, 12, 6, 0.95);
+  --aperture-bottom-bar-border: rgba(245, 158, 11, 0.22);
+  --aperture-button-bg: rgba(32, 20, 10, 0.94);
+  --aperture-button-border: rgba(245, 158, 11, 0.32);
+  --aperture-button-text: #fef3c7;
+  --aperture-button-hover-bg: rgba(55, 34, 15, 0.95);
+  --aperture-input-form-bg: rgba(28, 18, 9, 0.95);
+  --aperture-input-bg: rgba(15, 9, 4, 0.88);
+  --aperture-choice-bg: rgba(28, 18, 9, 0.94);
+  --aperture-choice-border: rgba(245, 158, 11, 0.3);
+  --aperture-choice-hover-bg: rgba(55, 34, 15, 0.96);
+  --vn-shell-panel: #1a1208;
+  --vn-shell-field: #241a0e;
+  --vn-shell-button: #352210;
+  --vn-shell-text: #fef3c7;
+  --vn-shell-muted: #d4a359;
+  --vn-shell-border: rgba(245, 158, 11, 0.22);
+  --vn-shell-accent: #f59e0b;
+  --vn-shell-accent-contrast: #241403;
+}
 [data-vn-root][data-vn-preset="golden-hour"] [data-vn-dialogue] {
   border-color: rgba(245, 158, 11, 0.45) !important;
   background: rgba(26, 17, 8, var(--caption-opacity, 0.86)) !important;
@@ -3370,7 +3542,37 @@ section[data-reference-observations] h3 {
   border-color: rgba(245, 158, 11, 0.4) !important;
 }
 
-/* 5. Aperture Minimal Slate (Studio Slate) */
+/* 5. Aperture Minimal Slate (Studio Slate / Ice Blue) */
+:is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="boxed-console"],
+[data-vn-root][data-vn-preset="boxed-console"] {
+  --aperture-accent: #94a3b8;
+  --aperture-accent-hover: #cbd5e1;
+  --aperture-accent-contrast: #0f172a;
+  --aperture-accent-glow: rgba(148, 163, 184, 0.35);
+  --aperture-text: #f1f5f9;
+  --aperture-muted: #64748b;
+  --aperture-dialogue-bg: rgba(15, 23, 42, var(--caption-opacity, 0.88));
+  --aperture-dialogue-border: rgba(148, 163, 184, 0.35);
+  --aperture-bottom-bar-bg: rgba(10, 15, 28, 0.95);
+  --aperture-bottom-bar-border: rgba(148, 163, 184, 0.2);
+  --aperture-button-bg: rgba(22, 32, 54, 0.92);
+  --aperture-button-border: rgba(148, 163, 184, 0.3);
+  --aperture-button-text: #f1f5f9;
+  --aperture-button-hover-bg: rgba(35, 48, 78, 0.95);
+  --aperture-input-form-bg: rgba(18, 27, 48, 0.94);
+  --aperture-input-bg: rgba(9, 13, 24, 0.85);
+  --aperture-choice-bg: rgba(18, 27, 48, 0.92);
+  --aperture-choice-border: rgba(148, 163, 184, 0.25);
+  --aperture-choice-hover-bg: rgba(35, 48, 78, 0.95);
+  --vn-shell-panel: #0f172a;
+  --vn-shell-field: #1e293b;
+  --vn-shell-button: #334155;
+  --vn-shell-text: #f1f5f9;
+  --vn-shell-muted: #94a3b8;
+  --vn-shell-border: rgba(148, 163, 184, 0.22);
+  --vn-shell-accent: #94a3b8;
+  --vn-shell-accent-contrast: #0f172a;
+}
 [data-vn-root][data-vn-preset="boxed-console"] [data-vn-dialogue] {
   border-color: rgba(148, 163, 184, 0.35) !important;
   background: rgba(15, 23, 42, var(--caption-opacity, 0.88)) !important;
@@ -3385,7 +3587,37 @@ section[data-reference-observations] h3 {
   border-color: rgba(148, 163, 184, 0.4) !important;
 }
 
-/* 6. Aperture Cyber Amethyst (Vibrant Neon) */
+/* 6. Aperture Cyber Amethyst (Vibrant Violet Neon) */
+:is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="yamaku-classic"],
+[data-vn-root][data-vn-preset="yamaku-classic"] {
+  --aperture-accent: #c084fc;
+  --aperture-accent-hover: #e879f9;
+  --aperture-accent-contrast: #1e0836;
+  --aperture-accent-glow: rgba(192, 132, 252, 0.38);
+  --aperture-text: #faf5ff;
+  --aperture-muted: #a855f7;
+  --aperture-dialogue-bg: rgba(20, 10, 36, var(--caption-opacity, 0.88));
+  --aperture-dialogue-border: rgba(192, 132, 252, 0.42);
+  --aperture-bottom-bar-bg: rgba(14, 7, 26, 0.95);
+  --aperture-bottom-bar-border: rgba(192, 132, 252, 0.22);
+  --aperture-button-bg: rgba(28, 14, 48, 0.92);
+  --aperture-button-border: rgba(192, 132, 252, 0.32);
+  --aperture-button-text: #faf5ff;
+  --aperture-button-hover-bg: rgba(48, 22, 82, 0.95);
+  --aperture-input-form-bg: rgba(24, 12, 42, 0.94);
+  --aperture-input-bg: rgba(12, 5, 22, 0.85);
+  --aperture-choice-bg: rgba(24, 12, 42, 0.92);
+  --aperture-choice-border: rgba(192, 132, 252, 0.28);
+  --aperture-choice-hover-bg: rgba(48, 22, 82, 0.95);
+  --vn-shell-panel: #150a22;
+  --vn-shell-field: #200e35;
+  --vn-shell-button: #341755;
+  --vn-shell-text: #faf5ff;
+  --vn-shell-muted: #b97dec;
+  --vn-shell-border: rgba(192, 132, 252, 0.24);
+  --vn-shell-accent: #c084fc;
+  --vn-shell-accent-contrast: #1e0836;
+}
 [data-vn-root][data-vn-preset="yamaku-classic"] [data-vn-dialogue] {
   border-color: rgba(192, 132, 252, 0.42) !important;
   background: rgba(20, 10, 36, var(--caption-opacity, 0.88)) !important;
@@ -3401,6 +3633,36 @@ section[data-reference-observations] h3 {
 }
 
 /* 7. Aperture Rose Blossom (Pastel Elegance) */
+:is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="literature-club"],
+[data-vn-root][data-vn-preset="literature-club"] {
+  --aperture-accent: #fb7185;
+  --aperture-accent-hover: #fda4af;
+  --aperture-accent-contrast: #280710;
+  --aperture-accent-glow: rgba(251, 113, 133, 0.38);
+  --aperture-text: #fff1f2;
+  --aperture-muted: #f43f5e;
+  --aperture-dialogue-bg: rgba(35, 12, 24, var(--caption-opacity, 0.86));
+  --aperture-dialogue-border: rgba(251, 113, 133, 0.42);
+  --aperture-bottom-bar-bg: rgba(24, 8, 16, 0.95);
+  --aperture-bottom-bar-border: rgba(251, 113, 133, 0.22);
+  --aperture-button-bg: rgba(45, 14, 28, 0.92);
+  --aperture-button-border: rgba(251, 113, 133, 0.32);
+  --aperture-button-text: #fff1f2;
+  --aperture-button-hover-bg: rgba(70, 20, 42, 0.95);
+  --aperture-input-form-bg: rgba(40, 13, 26, 0.94);
+  --aperture-input-bg: rgba(18, 5, 12, 0.85);
+  --aperture-choice-bg: rgba(40, 13, 26, 0.92);
+  --aperture-choice-border: rgba(251, 113, 133, 0.28);
+  --aperture-choice-hover-bg: rgba(70, 20, 42, 0.95);
+  --vn-shell-panel: #200a15;
+  --vn-shell-field: #2e0f1f;
+  --vn-shell-button: #44142d;
+  --vn-shell-text: #fff1f2;
+  --vn-shell-muted: #e78297;
+  --vn-shell-border: rgba(251, 113, 133, 0.22);
+  --vn-shell-accent: #fb7185;
+  --vn-shell-accent-contrast: #280710;
+}
 [data-vn-root][data-vn-preset="literature-club"] [data-vn-dialogue] {
   border-color: rgba(251, 113, 133, 0.42) !important;
   background: rgba(35, 12, 24, var(--caption-opacity, 0.86)) !important;
@@ -3413,6 +3675,141 @@ section[data-reference-observations] h3 {
   color: #fb7185 !important;
   background: #2a0e1c !important;
   border-color: rgba(251, 113, 133, 0.4) !important;
+}
+
+/* 8. Aperture Astral Glass (Cosmic Cyan & Deep Blue) */
+:is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="astral-glass"],
+[data-vn-root][data-vn-preset="astral-glass"] {
+  --aperture-accent: #38bdf8;
+  --aperture-accent-hover: #7dd3fc;
+  --aperture-accent-contrast: #032030;
+  --aperture-accent-glow: rgba(56, 189, 248, 0.38);
+  --aperture-text: #f0f9ff;
+  --aperture-muted: #0284c7;
+  --aperture-dialogue-bg: rgba(8, 20, 36, var(--caption-opacity, 0.88));
+  --aperture-dialogue-border: rgba(56, 189, 248, 0.38);
+  --aperture-bottom-bar-bg: rgba(5, 14, 25, 0.95);
+  --aperture-bottom-bar-border: rgba(56, 189, 248, 0.2);
+  --aperture-button-bg: rgba(12, 28, 48, 0.92);
+  --aperture-button-border: rgba(56, 189, 248, 0.3);
+  --aperture-button-text: #f0f9ff;
+  --aperture-button-hover-bg: rgba(20, 48, 80, 0.95);
+  --aperture-input-form-bg: rgba(10, 24, 42, 0.94);
+  --aperture-input-bg: rgba(4, 11, 20, 0.85);
+  --aperture-choice-bg: rgba(10, 24, 42, 0.92);
+  --aperture-choice-border: rgba(56, 189, 248, 0.25);
+  --aperture-choice-hover-bg: rgba(20, 48, 80, 0.95);
+  --vn-shell-panel: #061528;
+  --vn-shell-field: #0a203c;
+  --vn-shell-button: #11335c;
+  --vn-shell-text: #f0f9ff;
+  --vn-shell-muted: #64b5f6;
+  --vn-shell-border: rgba(56, 189, 248, 0.22);
+  --vn-shell-accent: #38bdf8;
+  --vn-shell-accent-contrast: #032030;
+}
+[data-vn-root][data-vn-preset="astral-glass"] [data-vn-dialogue] {
+  border-color: rgba(56, 189, 248, 0.38) !important;
+  background: rgba(8, 20, 36, var(--caption-opacity, 0.88)) !important;
+  box-shadow: 0 16px 44px rgba(6, 25, 50, 0.4), inset 0 1px 0 rgba(186, 230, 253, 0.2) !important;
+}
+[data-vn-root][data-vn-preset="astral-glass"] [data-vn-dialogue-text] {
+  color: #f0f9ff !important;
+}
+[data-vn-root][data-vn-preset="astral-glass"] [data-vn-speaker] {
+  color: #38bdf8 !important;
+  background: #091a2e !important;
+  border-color: rgba(56, 189, 248, 0.4) !important;
+}
+
+/* 9. Aperture Neon Rain (Electric Mint & Cyberpunk Indigo) */
+:is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="neon-rain"],
+[data-vn-root][data-vn-preset="neon-rain"] {
+  --aperture-accent: #2dd4bf;
+  --aperture-accent-hover: #5eead4;
+  --aperture-accent-contrast: #022420;
+  --aperture-accent-glow: rgba(45, 212, 191, 0.38);
+  --aperture-text: #f0fdfa;
+  --aperture-muted: #0d9488;
+  --aperture-dialogue-bg: rgba(12, 20, 32, var(--caption-opacity, 0.9));
+  --aperture-dialogue-border: rgba(45, 212, 191, 0.4);
+  --aperture-bottom-bar-bg: rgba(8, 14, 22, 0.95);
+  --aperture-bottom-bar-border: rgba(45, 212, 191, 0.22);
+  --aperture-button-bg: rgba(14, 26, 38, 0.92);
+  --aperture-button-border: rgba(45, 212, 191, 0.32);
+  --aperture-button-text: #f0fdfa;
+  --aperture-button-hover-bg: rgba(22, 45, 60, 0.95);
+  --aperture-input-form-bg: rgba(13, 22, 34, 0.94);
+  --aperture-input-bg: rgba(6, 11, 18, 0.85);
+  --aperture-choice-bg: rgba(13, 22, 34, 0.92);
+  --aperture-choice-border: rgba(45, 212, 191, 0.28);
+  --aperture-choice-hover-bg: rgba(22, 45, 60, 0.95);
+  --vn-shell-panel: #0a131e;
+  --vn-shell-field: #101e2e;
+  --vn-shell-button: #193248;
+  --vn-shell-text: #f0fdfa;
+  --vn-shell-muted: #6ee7b7;
+  --vn-shell-border: rgba(45, 212, 191, 0.24);
+  --vn-shell-accent: #2dd4bf;
+  --vn-shell-accent-contrast: #022420;
+}
+[data-vn-root][data-vn-preset="neon-rain"] [data-vn-dialogue] {
+  border-color: rgba(45, 212, 191, 0.4) !important;
+  background: rgba(12, 20, 32, var(--caption-opacity, 0.9)) !important;
+  box-shadow: 0 16px 44px rgba(10, 25, 35, 0.4), inset 0 1px 0 rgba(204, 251, 241, 0.2) !important;
+}
+[data-vn-root][data-vn-preset="neon-rain"] [data-vn-dialogue-text] {
+  color: #f0fdfa !important;
+}
+[data-vn-root][data-vn-preset="neon-rain"] [data-vn-speaker] {
+  color: #2dd4bf !important;
+  background: #091722 !important;
+  border-color: rgba(45, 212, 191, 0.4) !important;
+}
+
+/* 10. Aperture Obsidian Reliquary (Crimson & Gold) */
+:is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="obsidian-reliquary"],
+[data-vn-root][data-vn-preset="obsidian-reliquary"] {
+  --aperture-accent: #f59e0b;
+  --aperture-accent-hover: #fbbf24;
+  --aperture-accent-contrast: #241202;
+  --aperture-accent-glow: rgba(245, 158, 11, 0.38);
+  --aperture-text: #fffbeb;
+  --aperture-muted: #dc2626;
+  --aperture-dialogue-bg: rgba(28, 8, 12, var(--caption-opacity, 0.9));
+  --aperture-dialogue-border: rgba(220, 38, 38, 0.45);
+  --aperture-bottom-bar-bg: rgba(18, 5, 8, 0.96);
+  --aperture-bottom-bar-border: rgba(220, 38, 38, 0.22);
+  --aperture-button-bg: rgba(32, 9, 14, 0.94);
+  --aperture-button-border: rgba(220, 38, 38, 0.35);
+  --aperture-button-text: #fffbeb;
+  --aperture-button-hover-bg: rgba(55, 15, 24, 0.95);
+  --aperture-input-form-bg: rgba(30, 8, 13, 0.95);
+  --aperture-input-bg: rgba(15, 4, 7, 0.88);
+  --aperture-choice-bg: rgba(30, 8, 13, 0.94);
+  --aperture-choice-border: rgba(220, 38, 38, 0.3);
+  --aperture-choice-hover-bg: rgba(55, 15, 24, 0.96);
+  --vn-shell-panel: #1a060a;
+  --vn-shell-field: #260a0f;
+  --vn-shell-button: #3d1018;
+  --vn-shell-text: #fffbeb;
+  --vn-shell-muted: #e57373;
+  --vn-shell-border: rgba(220, 38, 38, 0.24);
+  --vn-shell-accent: #f59e0b;
+  --vn-shell-accent-contrast: #241202;
+}
+[data-vn-root][data-vn-preset="obsidian-reliquary"] [data-vn-dialogue] {
+  border-color: rgba(220, 38, 38, 0.45) !important;
+  background: rgba(28, 8, 12, var(--caption-opacity, 0.9)) !important;
+  box-shadow: 0 16px 44px rgba(40, 5, 10, 0.45), inset 0 1px 0 rgba(254, 202, 202, 0.2) !important;
+}
+[data-vn-root][data-vn-preset="obsidian-reliquary"] [data-vn-dialogue-text] {
+  color: #fffbeb !important;
+}
+[data-vn-root][data-vn-preset="obsidian-reliquary"] [data-vn-speaker] {
+  color: #f59e0b !important;
+  background: #24080d !important;
+  border-color: rgba(220, 38, 38, 0.45) !important;
 }
 
 `;

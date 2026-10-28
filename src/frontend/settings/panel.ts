@@ -662,7 +662,9 @@ export class VisualNovelSettingsPanel {
             `, { find: find("Pace", "speed pacing smart pause punctuation") })}
             ${group("Cinematic presentation", `
               <label data-check ${find("Cinematic chapter cards", "cinematic chapter title splash cards location letterbox turn intro splash screen")}><input name="chapterTitleCards" type="checkbox" /><span>Cinematic chapter cards<small>Display elegant letterbox scene & location title splashes on turn start</small></span></label>
-            `, { find: find("Cinematic presentation", "chapter cards title splash cinematic intro") })}
+              <label data-check ${find("Director AI shot framing", "director ai shot selection framing portrait action scenery intelligent cues")}><input name="directorAi" type="checkbox" /><span>Director AI shot framing<small>Intelligently balances portrait emotion closeups, dynamic action framing, and scenery establishing shots</small></span></label>
+              <label data-check ${find("Contextual sentiment lighting", "sentiment lighting danger crimson memory sepia romance rose vignette tone")}><input name="sentimentLighting" type="checkbox" /><span>Contextual sentiment lighting<small>Subtly grades visual tone with crimson tension pulses, nostalgic memory sepia, or intimate rose warmth</small></span></label>
+            `, { find: find("Cinematic presentation", "chapter cards title splash cinematic intro director ai sentiment lighting") })}
             ${group("Your turn", `
               <label data-field ${find("How you reply", "reply mode cyoa choose suggestions write standard")}><span>How you reply</span><select name="mode"><option value="standard">Write your own reply</option><option value="cyoa">Choose from suggestions</option></select></label>
               <label data-check ${find("Suggest choices", "choices options cyoa generate")}><input name="generateChoices" type="checkbox" /><span>Suggest choices when the reply has none</span></label>
@@ -678,7 +680,7 @@ export class VisualNovelSettingsPanel {
               <div class="preview-appearance-head">LIVE / SURFACE PREVIEW <span>✧</span></div>
               <div class="preview-caption-mini" data-mini-caption-preview><span>TIBOLD / KIT HALL</span><p>“The dialogue surface adjusts from transparent to solid below.”</p></div>
             </div>
-            <details data-appearance-preview><summary>Preview appearance</summary><div data-sample-slot></div></details>
+            <div data-sample-slot style="margin: 14px 0 20px;"></div>
             ${group("Theme", themeTiles(), { find: find("Theme", "preset style colours colors skin golden paper noir console yamaku literature") })}
             ${group("Text", `
               <label data-check><input name="adjustableSheetEnabled" type="checkbox" /><span>Adjustable text panel<small>Resize or hide text to see the picture. Drag the handle or choose a panel size.</small></span></label>
@@ -1298,7 +1300,12 @@ export class VisualNovelSettingsPanel {
       // Sliders and number fields preview while dragging or typing; the save happens on change.
       if (target.name === "bgmVolume" || target.name === "sfxVolume") this.updateVolumeLabels();
       if (target.name === "textSpeed") this.restartSample();
-      if (target.name === "textScale") this.root.querySelector<HTMLElement>("[data-sample-stage]")!.style.setProperty("--sample-scale", String(clamp(Number(target.value), TEXT_SCALE_MIN, TEXT_SCALE_MAX, this.config.textScale)));
+      if (target.name === "textScale") {
+        const val = clamp(Number(target.value), TEXT_SCALE_MIN, TEXT_SCALE_MAX, this.config.textScale);
+        this.root.querySelector<HTMLElement>("[data-sample-stage]")?.style.setProperty("--sample-scale", String(val));
+        const miniP = this.root.querySelector<HTMLElement>("[data-mini-caption-preview] p");
+        if (miniP) miniP.style.fontSize = `calc(13px * ${val})`;
+      }
     });
     // "Random" clears the NovelAI seed and saves (an explicit null overrides a stored seed).
     this.root.querySelector<HTMLButtonElement>("[data-novelai-random-seed]")?.addEventListener("click", () => {
@@ -1536,9 +1543,11 @@ export class VisualNovelSettingsPanel {
         const isLight = preset === "paper-novel";
         const themeMode: "light" | "dark" = isLight ? "light" : "dark";
         this.host.dataset.apertureMode = themeMode;
+        this.host.dataset.vnPreset = preset;
         document.body.classList.toggle("theme-dark", !isLight);
         document.body.classList.toggle("theme-light", isLight);
         document.documentElement.dataset.apertureMode = themeMode;
+        document.documentElement.dataset.vnPreset = preset;
         const status = this.root.querySelector<HTMLElement>("[data-aperture-theme-status]");
         if (status) status.textContent = `${THEME_PRESET_LABELS[preset].toUpperCase()} / ACTIVE`;
         return {
@@ -1578,6 +1587,8 @@ export class VisualNovelSettingsPanel {
       case "smartPacing": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, smartPacing: checked }) };
       case "chapterTitleCards": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, chapterTitleCards: checked }) };
       case "atmosphericLighting": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, atmosphericLighting: checked }) };
+      case "directorAi": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, directorAi: checked }) };
+      case "sentimentLighting": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, sentimentLighting: checked }) };
       
       case "bgmVolume": return { bgmVolume: clamp(Number(target.value), 0, 1, DEFAULT_CONFIG.bgmVolume) };
       case "sfxVolume": return { sfxVolume: clamp(Number(target.value), 0, 1, DEFAULT_CONFIG.sfxVolume) };
@@ -2111,14 +2122,18 @@ export class VisualNovelSettingsPanel {
     this.control<HTMLInputElement>("smartPacing").checked = config.readerPreferences.smartPacing !== false;
     this.control<HTMLInputElement>("chapterTitleCards").checked = config.readerPreferences.chapterTitleCards !== false;
     this.control<HTMLInputElement>("atmosphericLighting").checked = config.readerPreferences.atmosphericLighting !== false;
+    this.control<HTMLInputElement>("directorAi").checked = config.readerPreferences.directorAi !== false;
+    this.control<HTMLInputElement>("sentimentLighting").checked = config.readerPreferences.sentimentLighting !== false;
     const isLight = config.themePreset === "paper-novel" || config.readerPreferences.theme === "light";
     const themeMode = isLight ? "light" : "dark";
     const themeStatus = this.root.querySelector<HTMLElement>("[data-aperture-theme-status]");
     if (themeStatus) themeStatus.textContent = `${THEME_PRESET_LABELS[config.themePreset].toUpperCase()} / ACTIVE`;
     this.host.dataset.apertureMode = themeMode;
+    this.host.dataset.vnPreset = config.themePreset;
     document.body.classList.toggle("theme-dark", !isLight);
     document.body.classList.toggle("theme-light", isLight);
     document.documentElement.dataset.apertureMode = themeMode;
+    document.documentElement.dataset.vnPreset = config.themePreset;
     this.showCustomQuiet("textScale", !scaleStep);
 
     const source = imageSourceFromConfig(config);
@@ -2197,6 +2212,22 @@ export class VisualNovelSettingsPanel {
     stage.dataset.preset = config.themePreset;
     const picture = this.root.querySelector<HTMLElement>("[data-sample-picture]")!;
     picture.hidden = imageSourceFromConfig(config) === "text";
+
+    const mini = this.root.querySelector<HTMLElement>("[data-mini-caption-preview]");
+    if (mini) {
+      mini.style.setProperty("--caption-opacity", String(config.readerPreferences.backgroundOpacity ?? 0.85));
+      mini.style.background = tokens.dialogueBg;
+      mini.style.borderColor = tokens.dialogueBorder;
+      mini.style.color = tokens.text;
+      const speakerSpan = mini.querySelector("span");
+      if (speakerSpan) speakerSpan.style.color = tokens.accent;
+      const p = mini.querySelector("p");
+      if (p) {
+        p.style.fontFamily = tokens.fontFamily;
+        p.style.color = tokens.text;
+        p.style.fontSize = `calc(13px * ${config.textScale})`;
+      }
+    }
     this.restartSample();
   }
 
@@ -2210,7 +2241,7 @@ export class VisualNovelSettingsPanel {
     speaker.textContent = line.speaker;
     next.textContent = "";
     // No typing loop while the sample sits in a hidden section.
-    const visible = this.page==='appearance' && !!this.root.querySelector<HTMLDetailsElement>('[data-appearance-preview]')?.open;
+    const visible = (this.page === 'appearance' || this.section === 'look' || this.page === 'home') && !this.host.hidden;
     const reduced = !visible || (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches);
     const perChar = reduced ? 0 : clamp(Number(this.control<HTMLInputElement>("textSpeed").value), 0, 100, this.config.textSpeed);
     const pause = clamp(Number(this.control<HTMLInputElement>("autoPlayDelay").value), 500, 10000, this.config.autoPlayDelay);

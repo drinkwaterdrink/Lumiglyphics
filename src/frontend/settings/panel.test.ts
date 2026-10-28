@@ -68,11 +68,13 @@ describe("settings panel markup", () => {
     expect(source).not.toMatch(/@import/i);
   });
   test("modern reading and audio toggles have dedicated controls with search find tags", () => {
-    for (const name of ["smartPacing", "chapterTitleCards", "typewriterAudio", "typewriterVolume", "readerTypography", "atmosphericLighting"]) {
+    for (const name of ["smartPacing", "chapterTitleCards", "typewriterAudio", "typewriterVolume", "readerTypography", "atmosphericLighting", "directorAi", "sentimentLighting"]) {
       expect(names.filter((candidate) => candidate === name)).toEqual([name]);
     }
     expect(source).toContain('find("Intelligent dramatic pacing"');
     expect(source).toContain('find("Cinematic chapter cards"');
+    expect(source).toContain('find("Director AI shot framing"');
+    expect(source).toContain('find("Contextual sentiment lighting"');
     expect(source).toContain('find("Typewriter sound"');
     expect(source).toContain('find("Typewriter sound volume"');
     expect(source).toContain('find("Reading typography"');

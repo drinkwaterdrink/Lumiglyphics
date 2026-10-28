@@ -792,6 +792,7 @@ export class VnStage {
     const next = Number.isFinite(scale) ? Math.min(TEXT_SCALE_MAX, Math.max(TEXT_SCALE_MIN, scale)) : 1;
     this.textScale = Math.round(next * 100) / 100;
     this.root.style.setProperty("--vn-text-scale", String(this.textScale));
+    this.root.style.setProperty("--reader-font", `${15 * this.textScale}px`);
     this.root.dataset.vnTextScale = String(this.textScale);
   }
 
@@ -2653,14 +2654,25 @@ export class VnStage {
   private updateAtmosphericLighting(text: string, ambient?: AmbientEffect | null): void {
     const lower = text.toLocaleLowerCase();
     let atmosphere = "";
-    if (ambient === "rain" || ambient === "heavy_rain" || ambient === "snow" || ambient === "fog" || /\b(rain|storm|fog|mist|snow|blizzard|downpour)\b/.test(lower)) {
-      atmosphere = "cold_mist";
-    } else if (ambient === "embers" || ambient === "fireflies" || /\b(sunset|dusk|torch|fire|candle|fireplace|amber|golden)\b/.test(lower)) {
-      atmosphere = "warm_amber";
-    } else if (/\b(night|midnight|moon|moonlight|stars|nocturne|darkness)\b/.test(lower)) {
-      atmosphere = "nocturne";
-    } else if (/\b(neon|cyber|hologram|violet|glow|arcade|synth)\b/.test(lower)) {
-      atmosphere = "neon_violet";
+    if (this.readerPreferences?.sentimentLighting !== false) {
+      if (/\b(blood|bleed|danger|threat|kill|strike|weapon|blade|sword|gun|attack|peril|scream|wound|fatal)\b/.test(lower)) {
+        atmosphere = "danger_crimson";
+      } else if (/\b(remember|memory|flashback|years ago|past|once upon|nostalgia|forgotten|reminisce|childhood)\b/.test(lower)) {
+        atmosphere = "sepia_flashback";
+      } else if (/\b(kiss|heart|love|blush|embrace|caress|whisper|tender|intimate|warmth|passion|breath against)\b/.test(lower)) {
+        atmosphere = "romance_rose";
+      }
+    }
+    if (!atmosphere) {
+      if (ambient === "rain" || ambient === "heavy_rain" || ambient === "snow" || ambient === "fog" || /\b(rain|storm|fog|mist|snow|blizzard|downpour)\b/.test(lower)) {
+        atmosphere = "cold_mist";
+      } else if (ambient === "embers" || ambient === "fireflies" || /\b(sunset|dusk|torch|fire|candle|fireplace|amber|golden)\b/.test(lower)) {
+        atmosphere = "warm_amber";
+      } else if (/\b(night|midnight|moon|moonlight|stars|nocturne|darkness)\b/.test(lower)) {
+        atmosphere = "nocturne";
+      } else if (/\b(neon|cyber|hologram|violet|glow|arcade|synth)\b/.test(lower)) {
+        atmosphere = "neon_violet";
+      }
     }
     if (atmosphere) {
       this.scene.dataset.vnAtmosphere = atmosphere;

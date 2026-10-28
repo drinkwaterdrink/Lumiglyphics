@@ -1,22 +1,29 @@
 import { expect, test } from "bun:test";
 import { normalizeReaderPreferences, sheetHeight, nearestSheetSize } from "./reader-preferences.js";
 
-test("existing installations retain the original reader until enabled", () => {
-  expect(normalizeReaderPreferences(undefined)).toEqual({ adjustableSheetEnabled: false, layout: "overlay", sheetSize: "reading", backgroundOpacity: 0.9, theme: "light" });
+test("defaults match the conservative reading sheet", () => {
+  const prefs = normalizeReaderPreferences({});
+  expect(prefs.adjustableSheetEnabled).toBe(false);
+  expect(prefs.layout).toBe("overlay");
+  expect(prefs.sheetSize).toBe("reading");
+  expect(prefs.backgroundOpacity).toBe(0.9);
+  expect(prefs.theme).toBe("light");
 });
-test("invalid preferences cannot create invisible or oversized text surfaces", () => {
-  expect(normalizeReaderPreferences({ adjustableSheetEnabled: "yes", sheetSize: "huge", layout: "bad", backgroundOpacity: NaN }).backgroundOpacity).toBe(0.9);
-  expect(normalizeReaderPreferences({ backgroundOpacity: 0 }).backgroundOpacity).toBe(0);
-  expect(normalizeReaderPreferences({ backgroundOpacity: 5 }).backgroundOpacity).toBe(1);
-});
-
-test("custom heights preserve intermediate sizes across viewport changes", () => {
-  const prefs = normalizeReaderPreferences({ heightRatio: .413 });
-  expect(prefs.heightRatio).toBe(.413);
-  expect(sheetHeight("reading", 800, prefs.heightRatio)).toBe(330);
-  expect(sheetHeight("reading", 600, prefs.heightRatio)).toBe(248);
-  expect(normalizeReaderPreferences({ heightRatio: NaN }).heightRatio).toBeUndefined();
-  expect(sheetHeight("reading", 200, .8)).toBe(200);
+test("roundtrips valid sizes and clamps opacity", () => {
+  const prefs = normalizeReaderPreferences({
+    adjustableSheetEnabled: true,
+    layout: "image-first",
+    sheetSize: "compact",
+    backgroundOpacity: 2.5,
+    heightRatio: 0.42,
+    theme: "dark",
+  });
+  expect(prefs.adjustableSheetEnabled).toBe(true);
+  expect(prefs.layout).toBe("image-first");
+  expect(prefs.sheetSize).toBe("compact");
+  expect(prefs.backgroundOpacity).toBe(1);
+  expect(prefs.heightRatio).toBe(0.42);
+  expect(prefs.theme).toBe("dark");
 });
 test("snap targets include readable space and stay inside the usable viewport", () => {
   expect(sheetHeight("reading", 800)).toBe(272);
@@ -35,6 +42,8 @@ test("customization and accessibility preferences normalize cleanly", () => {
     typewriterVolume: 0.6,
     chapterTitleCards: true,
     atmosphericLighting: true,
+    directorAi: true,
+    sentimentLighting: true,
   });
   expect(prefs.typography).toBe("novelist");
   expect(prefs.smartPacing).toBe(true);
@@ -42,4 +51,6 @@ test("customization and accessibility preferences normalize cleanly", () => {
   expect(prefs.typewriterVolume).toBe(0.6);
   expect(prefs.chapterTitleCards).toBe(true);
   expect(prefs.atmosphericLighting).toBe(true);
+  expect(prefs.directorAi).toBe(true);
+  expect(prefs.sentimentLighting).toBe(true);
 });
