@@ -327,4 +327,31 @@ describe("narrative preparation", () => {
       { paragraphIndex: 1, speaker: "Grimbald" }
     ]);
   });
+
+  test("filters <eidos_chapter> metadata block from story prose and extracts location and title", () => {
+    const raw = [
+      "<eidos_chapter>",
+      "Chapter: 1",
+      "Part: 1",
+      "Title: Sign First, Thank After",
+      "Location: Orth · Delver Guild HQ, Registry Hall",
+      "Focus: Tulver",
+      "</eidos_chapter>",
+      "",
+      "The words come out awkward and half-breathless — right, well, thanks — and Aleister Crowley is already looking toward the doorway.",
+      "",
+      "<eidos_dialogue speaker=\"Tulver\" color=\"#B87333\" effect=\"plain\">\"Name's not on the manifest. Until it is, you're a man holding a whistle with no slot.\"</eidos_dialogue>"
+    ].join("\n");
+
+    const prepared = prepareNarrative(raw);
+    expect(prepared.paragraphs.map(p => p.text)).toEqual([
+      "The words come out awkward and half-breathless — right, well, thanks — and Aleister Crowley is already looking toward the doorway.",
+      "\"Name's not on the manifest. Until it is, you're a man holding a whistle with no slot.\""
+    ]);
+    expect(prepared.detectedSceneMetadata?.location).toBe("Orth · Delver Guild HQ, Registry Hall");
+    expect(prepared.detectedSceneMetadata?.title).toBe("Sign First, Thank After");
+    expect(prepared.detectedSpeakers).toEqual([
+      { paragraphIndex: 1, speaker: "Tulver" }
+    ]);
+  });
 });

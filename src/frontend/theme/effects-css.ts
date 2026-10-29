@@ -784,7 +784,7 @@ export const VN_EFFECTS_CSS = `
 /* Mood Grade: Desaturate (bleak, cold, melancholic) */
 [data-vn-scene].vn-ambient-desaturate [data-vn-scene-image],
 [data-vn-scene][data-vn-scene-ambient="desaturate"] [data-vn-scene-image] {
-  filter: grayscale(0.88) contrast(1.08) brightness(0.92);
+  filter: saturate(0.88) contrast(1.02) brightness(0.98);
 }
 
 [data-vn-ambient].vn-ambient-desaturate {

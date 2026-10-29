@@ -9,6 +9,7 @@ export type PrepareNarrativeOptions = {
 
 export type DetectedSceneMetadata = {
   location?: string;
+  title?: string;
   timeOfDay?: string;
   atmosphere?: string;
   lighting?: string;
@@ -21,6 +22,15 @@ export type DetectedSpeakerInfo = {
 };
 
 export const BUILTIN_HEURISTIC_TAGS: readonly string[] = [
+  "chapter",
+  "chapter_header",
+  "chapter-header",
+  "chapter_info",
+  "chapter-info",
+  "chapter_heading",
+  "chapter-heading",
+  "scene_heading",
+  "scene-heading",
   "scene_header",
   "scene-header",
   "scene_info",
@@ -95,13 +105,14 @@ function cleanAttributeOrText(val: string | undefined): string | undefined {
 
 export function extractDetectedSceneMetadata(content: string): DetectedSceneMetadata | undefined {
   let location: string | undefined;
+  let title: string | undefined;
   let timeOfDay: string | undefined;
   let atmosphere: string | undefined;
   let lighting: string | undefined;
   let weather: string | undefined;
 
   // 1. XML attribute-style tags: <scene_header location="..." time="..." ...>
-  const tagAttrRegex = /<(?:scene[-_]?header|scene[-_]?info|scene|setting|location[-_]?header|environment|atmosphere)\b([^>]*)\/?>/gi;
+  const tagAttrRegex = /<(?:[a-zA-Z0-9_-]+_)?(?:scene[-_]?header|scene[-_]?info|scene|setting|location[-_]?header|environment|atmosphere|chapter[-_]?header|chapter)\b([^>]*)\/?>/gi;
   for (const match of content.matchAll(tagAttrRegex)) {
     const attrs = match[1] || "";
     for (const attrMatch of attrs.matchAll(/([:\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g)) {
@@ -109,6 +120,7 @@ export function extractDetectedSceneMetadata(content: string): DetectedSceneMeta
       const val = cleanAttributeOrText(attrMatch[2] ?? attrMatch[3] ?? attrMatch[4]);
       if (!val) continue;
       if (["location", "place", "setting", "area"].includes(key) && !location) location = val;
+      else if (["title", "chaptertitle"].includes(key) && !title) title = val;
       else if (["time", "timeofday", "tod"].includes(key) && !timeOfDay) timeOfDay = val;
       else if (["atmosphere", "mood", "ambience", "ambient"].includes(key) && !atmosphere) atmosphere = val;
       else if (["lighting", "light"].includes(key) && !lighting) lighting = val;
@@ -119,16 +131,19 @@ export function extractDetectedSceneMetadata(content: string): DetectedSceneMeta
   // 2. Structured body inside scene tags or bracket lines:
   // e.g. <scene_header>Location: Old Town | Time: Midnight</scene_header> or [Scene: Location: Old Town | Time: Midnight]
   const structuredBlocks: string[] = [];
-  for (const match of content.matchAll(/<(?:scene[-_]?header|scene[-_]?info|scene|setting|location[-_]?header|environment|atmosphere)\b[^>]*>([\s\S]*?)<\/(?:scene[-_]?header|scene[-_]?info|scene|setting|location[-_]?header|environment|atmosphere)>/gi)) {
+  for (const match of content.matchAll(/<(?:[a-zA-Z0-9_-]+_)?(?:scene[-_]?header|scene[-_]?info|scene|setting|location[-_]?header|environment|atmosphere|chapter[-_]?header|chapter)\b[^>]*>([\s\S]*?)<\/(?:[a-zA-Z0-9_-]+_)?(?:scene[-_]?header|scene[-_]?info|scene|setting|location[-_]?header|environment|atmosphere|chapter[-_]?header|chapter)>/gi)) {
     if (match[1]) structuredBlocks.push(match[1]);
   }
-  for (const match of content.matchAll(/\[(?:Scene|Location|Setting|Environment|Atmosphere)\b[:\s]([^\]]+)\]/gi)) {
+  for (const match of content.matchAll(/\[(?:Scene|Location|Setting|Environment|Atmosphere|Chapter)\b[:\s]([^\]]+)\]/gi)) {
     if (match[1]) structuredBlocks.push(match[1]);
   }
 
   for (const block of structuredBlocks) {
-    const locMatch = block.match(/(?:location|place|setting|area)\s*[:=]\s*([^|\n,;]+)/i);
+    const locMatch = block.match(/(?:location|place|setting|area)\s*[:=]\s*([^|\n;]+)/i);
     if (locMatch && !location) location = cleanAttributeOrText(locMatch[1]);
+
+    const titleMatch = block.match(/(?:title|chapter[-_]?title)\s*[:=]\s*([^|\n;]+)/i);
+    if (titleMatch && !title) title = cleanAttributeOrText(titleMatch[1]);
 
     const timeMatch = block.match(/(?:time(?:_of_day)?|tod)\s*[:=]\s*([^|\n,;]+)/i);
     if (timeMatch && !timeOfDay) timeOfDay = cleanAttributeOrText(timeMatch[1]);
@@ -154,7 +169,7 @@ export function extractDetectedSceneMetadata(content: string): DetectedSceneMeta
   }
 
   // 3. Single-line pseudo-tags like <scene header: Grand Library> or <location: Old Town>
-  const pseudoTagMatch = content.match(/<(?:scene[-_\s]+header|scene[-_]?info|location|setting)\s*:\s*([^>]+)>/i);
+  const pseudoTagMatch = content.match(/<(?:scene[-_\s]+header|scene[-_]?info|location|setting|chapter[-_]?header|chapter)\s*:\s*([^>]+)>/i);
   if (pseudoTagMatch && !location) {
     const parts = pseudoTagMatch[1]!.split(/[|,]/).map((p) => p.trim()).filter(Boolean);
     if (parts[0]) location = cleanAttributeOrText(parts[0]);
@@ -173,9 +188,10 @@ export function extractDetectedSceneMetadata(content: string): DetectedSceneMeta
     }
   }
 
-  if (!location && !timeOfDay && !atmosphere && !lighting && !weather) return undefined;
+  if (!location && !title && !timeOfDay && !atmosphere && !lighting && !weather) return undefined;
   return {
     ...(location ? { location } : {}),
+    ...(title ? { title } : {}),
     ...(timeOfDay ? { timeOfDay } : {}),
     ...(atmosphere ? { atmosphere } : {}),
     ...(lighting ? { lighting } : {}),
@@ -379,7 +395,7 @@ function cleanNarrativeBlock(block: string, smartProseFilter = true): string {
         if (/^\[(?:Affinity|Stats?|Status|Inventory|Roll|Dice|Check|Turn|Take|Dynamic|Clock|Track|HP|MP|EXP|Level)\b[^\]]*\]$/i.test(trimmed)) return false;
         if (/^\[[^\]]+:\s*[^\]]+\]$/.test(trimmed)) return false;
         if (/^<\/?(?:details|summary|div|span|p|section|header|footer|aside)\b[^>]*>$/i.test(trimmed)) return false;
-        if (/^<\/?(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|hud|matrix|protocol|state|quest|log)\b[^>]*>$/i.test(trimmed)) return false;
+        if (/^<\/?(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|hud|matrix|protocol|state|quest|log|chapter)\b[^>]*>$/i.test(trimmed)) return false;
       }
       return true;
     })
@@ -456,7 +472,7 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
       hidden.push({ start: match.index, end: match.index + match[0].length });
     }
     const DYNAMIC_METADATA_PATTERN =
-      /<(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|metadata|params|memory|context|audit|matrix|protocol|analysis|scratchpad|hud|state|system|ooc|notes|log|reflection|reasoning|pre_response|inner_monologue|world_info|quest)\b[^>]*>[\s\S]*?<\/(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|metadata|params|memory|context|audit|matrix|protocol|analysis|scratchpad|hud|state|system|ooc|notes|log|reflection|reasoning|pre_response|inner_monologue|world_info|quest)\s*>/gi;
+      /<(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|metadata|params|memory|context|audit|matrix|protocol|analysis|scratchpad|hud|state|system|ooc|notes|log|reflection|reasoning|pre_response|inner_monologue|world_info|quest|chapter)\b[^>]*>[\s\S]*?<\/(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|metadata|params|memory|context|audit|matrix|protocol|analysis|scratchpad|hud|state|system|ooc|notes|log|reflection|reasoning|pre_response|inner_monologue|world_info|quest|chapter)\s*>/gi;
     for (const match of content.matchAll(DYNAMIC_METADATA_PATTERN)) {
       hidden.push({ start: match.index, end: match.index + match[0].length });
     }

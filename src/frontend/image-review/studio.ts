@@ -496,7 +496,15 @@ export class ImageStudio {
       const fitted=fitPromptToBudget(posVal,negVal,maxChars,profile?.negativeMode);
       this.el<HTMLTextAreaElement>('[data-positive]').value=fitted.prompt;
       this.el<HTMLTextAreaElement>('[data-negative]').value=fitted.negativePrompt;
+      if (record) {
+        this.drafts.set(this.draftKey(record), {
+          prompt: fitted.prompt,
+          negative: fitted.negativePrompt,
+          parameters: this.el<HTMLTextAreaElement>('[data-parameters]').value
+        });
+      }
       this.updateCounts();
+      this.updateRewriteLabel();
       this.setNotice('Prompt fitted to character budget. Ready to generate.');
       return;
     }
