@@ -200,4 +200,75 @@ describe("narrative preparation", () => {
       timeOfDay: "Sunset"
     });
   });
+  test("filters preset AI reasoning, cognition traces, and neural docks from story text", () => {
+    const raw = [
+      "<cognition_trace>",
+      "0. Fork Protocol CHOICE DETECTION: None.",
+      "STATE RECALL: Manifest pending.",
+      "</cognition_trace>",
+      "",
+      "The clerk looked up from his ledger.",
+      "",
+      "<eidos_dialogue speaker=\"Tulver\" color=\"#B87333\">\"Sign the line.\"</eidos_dialogue>",
+      "",
+      "───",
+      "",
+      "<details><summary>Color Registry</summary>Aleister #8FA8C8</details>",
+      "",
+      "<neural_dock>",
+      "<parasite_feed>Waiting on signature</parasite_feed>",
+      "[Affinity: 0% | Δ(+0%) | Take: 1]",
+      "<subject_status>Subject: Aleister</subject_status>",
+      "</neural_dock>"
+    ].join("\n");
+
+    const prepared = prepareNarrative(raw);
+    expect(prepared.paragraphs.map(p => p.text)).toEqual([
+      "The clerk looked up from his ledger.",
+      "\"Sign the line.\""
+    ]);
+    expect(prepared.detectedSpeakers).toEqual([
+      { paragraphIndex: 1, speaker: "Tulver" }
+    ]);
+  });
+
+  test("unwraps custom dialogue and thought tags with speaker attribution", () => {
+    const raw = [
+      "The rain drummed against the windowpane.",
+      "",
+      "<eidos_dialogue speaker=\"Tulver\">\"East stair, second landing.\"</eidos_dialogue>",
+      "",
+      "<eidos_thought speaker=\"Tulver\">Third column filled before noon.</eidos_thought>",
+      "",
+      "He turned back to the register."
+    ].join("\n");
+
+    const prepared = prepareNarrative(raw);
+    expect(prepared.paragraphs.map(p => p.text)).toEqual([
+      "The rain drummed against the windowpane.",
+      "\"East stair, second landing.\"",
+      "Third column filled before noon.",
+      "He turned back to the register."
+    ]);
+    expect(prepared.detectedSpeakers).toEqual([
+      { paragraphIndex: 1, speaker: "Tulver" },
+      { paragraphIndex: 2, speaker: "Tulver" }
+    ]);
+  });
+
+  test("extracts spatial scene location from structured continuity blocks", () => {
+    const raw = [
+      "<cognition_trace>",
+      "<b>Spatial</b>: Registry Hall counter — Aleister at the counter edge; Tulver seated behind ledger.",
+      "</cognition_trace>",
+      "",
+      "Aleister stood before the wooden desk."
+    ].join("\n");
+
+    const prepared = prepareNarrative(raw);
+    expect(prepared.paragraphs.map(p => p.text)).toEqual([
+      "Aleister stood before the wooden desk."
+    ]);
+    expect(prepared.detectedSceneMetadata?.location).toBe("Registry Hall counter");
+  });
 });

@@ -28,6 +28,7 @@ export class PreparationPreview {
  }
  cursorFor(turn:Pick<NarrativePreview,'chatId'|'messageId'|'swipeId'|'sourceFingerprint'|'paragraphs'>):number|null{return this.preview?previewCursorForTurn(this.preview,this.index,turn):null;}
  stopped():void{if(this.preview)this.host.querySelector('small')!.textContent='Preparation stopped. You can still read this reply.';}
+  isActive(): boolean { return !this.host.hidden && this.preview !== null; }
  clear():void{this.host.hidden=true;if(!this.preview)return;this.preview=null;this.index=0;this.host.querySelector('[data-preview-text]')!.textContent='';}
  private move(delta:number):void{if(!this.preview)return;this.index=Math.max(0,Math.min(this.preview.paragraphs.length-1,this.index+delta));this.render();}
  private render():void{

@@ -3,6 +3,8 @@ import { escapePanelText, extractPanelSpans, maskPanelSpans, panelHash, MAX_PANE
 
 export type PrepareNarrativeOptions = {
   ignoredTags?: readonly string[];
+  smartProseFilter?: boolean;
+  smartDialogueExtraction?: boolean;
 };
 
 export type DetectedSceneMetadata = {
@@ -11,6 +13,11 @@ export type DetectedSceneMetadata = {
   atmosphere?: string;
   lighting?: string;
   weather?: string;
+};
+
+export type DetectedSpeakerInfo = {
+  paragraphIndex: number;
+  speaker: string;
 };
 
 export const BUILTIN_HEURISTIC_TAGS: readonly string[] = [
@@ -39,6 +46,45 @@ export const BUILTIN_HEURISTIC_TAGS: readonly string[] = [
   "ooc",
   "author_note",
   "author-note",
+  "cognition_trace",
+  "cognition-trace",
+  "cognition",
+  "neural_dock",
+  "neural-dock",
+  "parasite_feed",
+  "parasite-feed",
+  "subject_status",
+  "subject-status",
+  "deep_archive",
+  "deep-archive",
+  "memory_spine",
+  "memory-spine",
+  "peripheral_processes",
+  "peripheral-processes",
+  "subvocal_leakage",
+  "subvocal-leakage",
+  "affective_state",
+  "affective-state",
+  "relationship_mesh",
+  "relationship-mesh",
+  "latent_threads",
+  "latent-threads",
+  "network_organisms",
+  "network-organisms",
+  "world_body",
+  "world-body",
+  "field_ledger",
+  "field-ledger",
+  "details",
+  "summary",
+  "tracker",
+  "sim_tracker",
+  "sim-tracker",
+  "simulation",
+  "sim",
+  "status_block",
+  "status-block",
+  "hud",
 ];
 
 function cleanAttributeOrText(val: string | undefined): string | undefined {
@@ -115,6 +161,18 @@ export function extractDetectedSceneMetadata(content: string): DetectedSceneMeta
     if (parts[1] && !timeOfDay) timeOfDay = cleanAttributeOrText(parts[1]);
   }
 
+  // 4. Spatial / Location indicators in status or continuity blocks (e.g. <b>Spatial</b>: Registry Hall counter — ...)
+  if (!location) {
+    const spatialMatch = content.match(/(?:<b>\s*)?(?:spatial|location|setting)\s*(?:<\/b>)?\s*[:=]\s*([^|\n<;]+)/i);
+    if (spatialMatch && spatialMatch[1]) {
+      const rawLoc = spatialMatch[1].trim();
+      const cleanLoc = rawLoc.split(/[—–\-,;]/)[0]?.trim();
+      if (cleanLoc && cleanLoc.length > 2 && cleanLoc.length < 80) {
+        location = cleanAttributeOrText(cleanLoc);
+      }
+    }
+  }
+
   if (!location && !timeOfDay && !atmosphere && !lighting && !weather) return undefined;
   return {
     ...(location ? { location } : {}),
@@ -130,6 +188,7 @@ export type PreparedNarrative = {
   choices: Choice[];
   panels: PanelArtifact[];
   detectedSceneMetadata?: DetectedSceneMetadata;
+  detectedSpeakers?: DetectedSpeakerInfo[];
 };
 
 type RawChoice = { id?: string | undefined; label: string; submission: string };
@@ -297,7 +356,7 @@ export function extractInlineCardImagesWithParagraphs(
   return results;
 }
 
-function cleanNarrativeBlock(block: string): string {
+function cleanNarrativeBlock(block: string, smartProseFilter = true): string {
   // Strip caption pipes like | <"😏:caption"> or | <'caption'>
   let text = block.replace(/\|\s*<[^>]+>/g, "");
 
@@ -314,6 +373,13 @@ function cleanNarrativeBlock(block: string): string {
       if (/^\[(?:Scene|Location|Setting|Time|Atmosphere|Environment|Lighting|Weather|System|Status|OOC|Date|FLOOR|RESERVEDFLOOR|Note)\b/i.test(trimmed)) return false;
       if (/^<\s*(?:scene[-_]?header|scene[-_\s]+header|scene[-_]?info|location[-_]?header|setting|environment|atmosphere|suggestion|scene\s+seed=|check|think|thought|reasoning|reflection|metadata|ooc|narrative[-_]?notes|author[-_]?note)\b/i.test(trimmed)) return false;
       if (/^<[A-Za-z_-]+(?:\s+[A-Za-z_-]+)*\s*:[^>]+>$/i.test(trimmed)) return false;
+      if (smartProseFilter) {
+        if (/^[─—–*_=\-]{3,}$/.test(trimmed)) return false;
+        if (/^\[(?:Affinity|Stats?|Status|Inventory|Roll|Dice|Check|Turn|Take|Dynamic|Clock|Track|HP|MP|EXP|Level)\b[^\]]*\]$/i.test(trimmed)) return false;
+        if (/^\[[^\]]+:\s*[^\]]+\]$/.test(trimmed)) return false;
+        if (/^<\/?(?:details|summary|div|span|p|section|header|footer|aside)\b[^>]*>$/i.test(trimmed)) return false;
+        if (/^<\/?(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|spine|feed|ledger)\b[^>]*>$/i.test(trimmed)) return false;
+      }
       return true;
     })
     .join("\n")
@@ -332,6 +398,43 @@ function stableChoiceId(label: string, index: number): string {
 
 export function prepareNarrative(content: string, options: PrepareNarrativeOptions = {}): PreparedNarrative {
   content = content.replace(/\r\n?/g, "\n");
+  const smartProseFilter = options.smartProseFilter !== false;
+  const smartDialogueExtraction = options.smartDialogueExtraction !== false;
+
+  // 1. Strip HTML comments: <!-- ... -->
+  content = content.replace(/<!--[\s\S]*?-->/g, "");
+
+  // 2. Strip <details>...</details> blocks if smartProseFilter is active
+  if (smartProseFilter) {
+    content = content.replace(/<details\b[^>]*>[\s\S]*?<\/details>/gi, "");
+  }
+
+  // 3. Extract custom preset dialogue/thought tags before masking/tag-stripping
+  const extractedSpeakers = new Map<string, string>();
+  if (smartDialogueExtraction) {
+    content = content.replace(
+      /<([a-zA-Z0-9_-]+_)?(dialogue|dialog|speech|thought)\b([^>]*)>([\s\S]*?)<\/(?:[a-zA-Z0-9_-]+_)?(?:dialogue|dialog|speech|thought)>/gi,
+      (_match, prefix: string | undefined, tagKind: string, attrSource: string, body: string) => {
+        const speakerMatch = attrSource.match(/(?:speaker|name|character)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+        const speaker = (speakerMatch ? speakerMatch[1] ?? speakerMatch[2] ?? speakerMatch[3] ?? "" : "").trim();
+        const isCustomTag = Boolean(prefix) || tagKind.toLowerCase() !== "thought" || Boolean(speaker);
+        if (!isCustomTag) {
+          // Plain untagged <thought> without speaker attribute is LLM internal chain-of-thought; leave for heuristic stripping
+          return _match;
+        }
+        const cleanBody = body.trim();
+        if (cleanBody) {
+          for (const line of cleanBody.split(/\r?\n\s*\r?\n/)) {
+            const trimmedLine = line.trim();
+            if (trimmedLine && speaker) extractedSpeakers.set(trimmedLine, speaker);
+          }
+          return `\n\n${cleanBody}\n\n`;
+        }
+        return "\n\n";
+      }
+    );
+  }
+
   const spans: PanelSpan[] = extractPanelSpans(content);
   const hidden: Array<{ start: number; end: number }> = [];
   const detectedSceneMetadata = extractDetectedSceneMetadata(content);
@@ -375,13 +478,35 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
     offset = start + block.text.length;
     const extracted = extractChoices(masked.slice(start, offset));
     rawChoices.push(...extracted.choices);
-    const text = cleanNarrativeBlock(stripIgnoredTags(extracted.text, effectiveIgnoredTags));
+    const text = cleanNarrativeBlock(stripIgnoredTags(extracted.text, effectiveIgnoredTags), smartProseFilter);
     if (text) {
       paragraphs.push({ index: paragraphs.length, sourceIndex: block.sourceIndex, text });
       paragraphEnds.push(offset);
     }
   }
   if (!paragraphs.length && spans.length) paragraphs.push({ index: 0, sourceIndex: 0, text: "A new panel is available in Panels." });
+
+  const detectedSpeakers: DetectedSpeakerInfo[] = [];
+  if (extractedSpeakers.size > 0) {
+    for (const paragraph of paragraphs) {
+      let matchedSpeaker = extractedSpeakers.get(paragraph.text);
+      if (!matchedSpeaker) {
+        for (const [dialogueText, speaker] of extractedSpeakers.entries()) {
+          if (paragraph.text === dialogueText || paragraph.text.includes(dialogueText) || dialogueText.includes(paragraph.text)) {
+            matchedSpeaker = speaker;
+            break;
+          }
+        }
+      }
+      if (matchedSpeaker) {
+        detectedSpeakers.push({
+          paragraphIndex: paragraph.index,
+          speaker: matchedSpeaker,
+        });
+      }
+    }
+  }
+
   const panels = spans.sort((a, b) => a.start - b.start).slice(0, MAX_PANELS).map((span, index): PanelArtifact => ({
     id: `panel-${index}-${panelHash(span.html)}`,
     title: span.title,
@@ -399,5 +524,11 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
     usedIds.add(id);
     return { id, label: choice.label, submission: choice.submission, source: "authored", unlocksAfterParagraph };
   });
-  return { paragraphs, choices, panels, ...(detectedSceneMetadata ? { detectedSceneMetadata } : {}) };
+  return {
+    paragraphs,
+    choices,
+    panels,
+    ...(detectedSceneMetadata ? { detectedSceneMetadata } : {}),
+    ...(detectedSpeakers.length > 0 ? { detectedSpeakers } : {}),
+  };
 }

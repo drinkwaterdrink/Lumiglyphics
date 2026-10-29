@@ -8,6 +8,8 @@ test("defaults match the conservative reading sheet", () => {
   expect(prefs.sheetSize).toBe("reading");
   expect(prefs.backgroundOpacity).toBe(0.9);
   expect(prefs.theme).toBe("light");
+  expect(prefs.smartProseFilter).toBe(true);
+  expect(prefs.smartDialogueExtraction).toBe(true);
 });
 test("roundtrips valid sizes and clamps opacity", () => {
   const prefs = normalizeReaderPreferences({
@@ -44,6 +46,8 @@ test("customization and accessibility preferences normalize cleanly", () => {
     atmosphericLighting: true,
     directorAi: true,
     sentimentLighting: true,
+    smartProseFilter: false,
+    smartDialogueExtraction: false,
   });
   expect(prefs.typography).toBe("novelist");
   expect(prefs.smartPacing).toBe(true);
@@ -53,4 +57,6 @@ test("customization and accessibility preferences normalize cleanly", () => {
   expect(prefs.atmosphericLighting).toBe(true);
   expect(prefs.directorAi).toBe(true);
   expect(prefs.sentimentLighting).toBe(true);
+  expect(prefs.smartProseFilter).toBe(false);
+  expect(prefs.smartDialogueExtraction).toBe(false);
 });

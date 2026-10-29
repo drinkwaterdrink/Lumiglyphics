@@ -840,7 +840,12 @@ export class VnStage {
     this.chapterCard.hidden = true;
   }
 
-  showReaderText(): void { this.dialogueSheet?.setHidden(false); }
+  showReaderText(): void {
+    delete this.narrative.dataset.hidden;
+    const view = selectVnStageView(this.state);
+    this.narrative.hidden = view.paragraph === null;
+    this.dialogueSheet?.setHidden(false);
+  }
 
   getTextScale(): number {
     return this.textScale;

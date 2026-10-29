@@ -1058,6 +1058,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     const restored = decision.kind === "revised-turn" || decision.kind === "same-turn" ? Math.min(decision.paragraphIndex, Math.max(0, next.paragraphs.length - 1)) : restoreReadingPosition(savedReadingPosition, next);
     const cursor = previewCursor ?? restored ?? 0;
     if (restored !== null || previewCursor!==null) { stage.toggleAutoPlay(false); stage.toggleSkip(false); }
+    stage.clearPreparationPreview();
+    stage.showReaderText();
     stage.loadTurn({ ...stageTurnInput(next, mode, preserveImage, configRef.current?.effectIntensity ?? "full"), initialParagraphIndex: cursor });
     // Loading a turn resets store progress. Restore it after the new stage exists.
     stage.setAssetProgress(computeAssetProgress(next,retryQueue,localPictureOperations));

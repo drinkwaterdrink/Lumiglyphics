@@ -13,6 +13,8 @@ export type ReaderPreferences = {
   atmosphericLighting?: boolean;
   directorAi?: boolean;
   sentimentLighting?: boolean;
+  smartProseFilter?: boolean;
+  smartDialogueExtraction?: boolean;
 };
 export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   adjustableSheetEnabled: false,
@@ -20,6 +22,8 @@ export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   sheetSize: "reading",
   backgroundOpacity: 0.9,
   theme: "light",
+  smartProseFilter: true,
+  smartDialogueExtraction: true,
 };
 export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
   const input = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -39,6 +43,8 @@ export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
     ...(input.atmosphericLighting !== undefined ? { atmosphericLighting: input.atmosphericLighting === true } : {}),
     ...(input.directorAi !== undefined ? { directorAi: input.directorAi === true } : {}),
     ...(input.sentimentLighting !== undefined ? { sentimentLighting: input.sentimentLighting === true } : {}),
+    smartProseFilter: input.smartProseFilter !== undefined ? input.smartProseFilter === true : (DEFAULT_READER_PREFERENCES.smartProseFilter ?? true),
+    smartDialogueExtraction: input.smartDialogueExtraction !== undefined ? input.smartDialogueExtraction === true : (DEFAULT_READER_PREFERENCES.smartDialogueExtraction ?? true),
   };
 }
 const RATIOS = { compact: 0.22, reading: 0.34, expanded: 0.6 } as const;

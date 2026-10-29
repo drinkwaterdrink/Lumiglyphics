@@ -665,6 +665,10 @@ export class VisualNovelSettingsPanel {
               <label data-check ${find("Director AI shot framing", "director ai shot selection framing portrait action scenery intelligent cues")}><input name="directorAi" type="checkbox" /><span>Director AI shot framing<small>Intelligently balances portrait emotion closeups, dynamic action framing, and scenery establishing shots</small></span></label>
               <label data-check ${find("Contextual sentiment lighting", "sentiment lighting danger crimson memory sepia romance rose vignette tone")}><input name="sentimentLighting" type="checkbox" /><span>Contextual sentiment lighting<small>Subtly grades visual tone with crimson tension pulses, nostalgic memory sepia, or intimate rose warmth</small></span></label>
             `, { find: find("Cinematic presentation", "chapter cards title splash cinematic intro director ai sentiment lighting") })}
+            ${group("Smart AI reader & filtering", `
+              <label data-check ${find("Smart prose & metadata filter", "smart prose filter metadata cognition trace neural dock auto clean preset raw")}><input name="smartProseFilter" type="checkbox" /><span>Smart prose & metadata filter<small>Automatically detects and removes AI reasoning, cognition traces, simulation docks, and status headers from story text</small></span></label>
+              <label data-check ${find("Smart preset dialogue extraction", "smart dialogue extract tags eidos dialogue speech thought attribute speaker nameplate")}><input name="smartDialogueExtraction" type="checkbox" /><span>Smart preset dialogue extraction<small>Automatically extracts custom preset tags (&lt;dialogue&gt;, &lt;eidos_dialogue&gt;, &lt;thought&gt;) and assigns the correct speaker nameplate</small></span></label>
+            `, { find: find("Smart AI reader & filtering", "smart filter prose dialogue extraction cognition trace preset metadata") })}
             ${group("Your turn", `
               <label data-field ${find("How you reply", "reply mode cyoa choose suggestions write standard")}><span>How you reply</span><select name="mode"><option value="standard">Write your own reply</option><option value="cyoa">Choose from suggestions</option></select></label>
               <label data-check ${find("Suggest choices", "choices options cyoa generate")}><input name="generateChoices" type="checkbox" /><span>Suggest choices when the reply has none</span></label>
@@ -1592,6 +1596,8 @@ export class VisualNovelSettingsPanel {
       case "atmosphericLighting": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, atmosphericLighting: checked }) };
       case "directorAi": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, directorAi: checked }) };
       case "sentimentLighting": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, sentimentLighting: checked }) };
+      case "smartProseFilter": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, smartProseFilter: checked }) };
+      case "smartDialogueExtraction": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, smartDialogueExtraction: checked }) };
       
       case "bgmVolume": return { bgmVolume: clamp(Number(target.value), 0, 1, DEFAULT_CONFIG.bgmVolume) };
       case "sfxVolume": return { sfxVolume: clamp(Number(target.value), 0, 1, DEFAULT_CONFIG.sfxVolume) };
@@ -2127,6 +2133,8 @@ export class VisualNovelSettingsPanel {
     this.control<HTMLInputElement>("atmosphericLighting").checked = config.readerPreferences.atmosphericLighting !== false;
     this.control<HTMLInputElement>("directorAi").checked = config.readerPreferences.directorAi !== false;
     this.control<HTMLInputElement>("sentimentLighting").checked = config.readerPreferences.sentimentLighting !== false;
+    this.control<HTMLInputElement>("smartProseFilter").checked = config.readerPreferences.smartProseFilter !== false;
+    this.control<HTMLInputElement>("smartDialogueExtraction").checked = config.readerPreferences.smartDialogueExtraction !== false;
     const isLight = config.themePreset === "paper-novel" || config.readerPreferences.theme === "light";
     const themeMode = isLight ? "light" : "dark";
     const themeStatus = this.root.querySelector<HTMLElement>("[data-aperture-theme-status]");

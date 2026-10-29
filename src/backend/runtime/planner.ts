@@ -2139,7 +2139,11 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
 }> {
   const ignoredTags = parseIgnoredTags(input.config.ignoredTags);
   const resolvedContent = await resolveDisplayMacros(spindle, input, input.content);
-  const narrative = prepareNarrative(resolvedContent, { ignoredTags });
+  const narrative = prepareNarrative(resolvedContent, {
+    ignoredTags,
+    smartProseFilter: input.config.readerPreferences?.smartProseFilter !== false,
+    smartDialogueExtraction: input.config.readerPreferences?.smartDialogueExtraction !== false,
+  });
   if (narrative.paragraphs.length === 0) throw new Error("The assistant response does not contain a revealable paragraph.");
   // Preview delivery is optional enrichment; a disconnected frontend must not fail planning.
   try{input.onNarrativePrepared?.(narrative.paragraphs.map(paragraph=>paragraph.text));}catch{}
@@ -2302,6 +2306,20 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
       spindle.log.info(`[VN] System One ${useContinuation ? "continuation" : "augmentation"} durationMs=${systemOne.durationMs} inputTokens=${systemOne.inputTokens}`);
     }
   }
+
+  if (narrative.detectedSpeakers) {
+    for (const detected of narrative.detectedSpeakers) {
+      const existing = planner.speakers.find((entry) => entry.paragraphIndex === detected.paragraphIndex);
+      if (existing) {
+        if (!existing.name || existing.name.toLowerCase() === "narrator") {
+          existing.name = detected.speaker;
+        }
+      } else {
+        planner.speakers.push({ paragraphIndex: detected.paragraphIndex, name: detected.speaker });
+      }
+    }
+  }
+
   debug.line(usedFallback
     ? `outcome=fallback attempts=${failedAttempts}/${PLANNER_ATTEMPTS} deterministic plan: scenes=${planner.scenes.length} cues=${planner.cues.length}`
     : `outcome=planner accepted attempt=${failedAttempts + 1}/${PLANNER_ATTEMPTS} scenes=${planner.scenes.length} cues=${planner.cues.length} characters=${planner.characters.length} speakers=${planner.speakers.length} choices=${planner.choices.length}`);
@@ -2656,6 +2674,11 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   addCanonical(protagonistName);
   if (cardRole !== "scenario") addCanonical(cardDisplayName);
   addCanonical(input.message.name);
+  if (narrative.detectedSpeakers) {
+    for (const detected of narrative.detectedSpeakers) {
+      if (detected.speaker) addCanonical(detected.speaker);
+    }
+  }
   const paragraphSpeakerByIndex = new Map<number, string>();
   for (const entry of planner.speakers) {
     if (paragraphSpeakerByIndex.has(entry.paragraphIndex)) continue;
@@ -2671,6 +2694,14 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     }
     const canonical = canonicalNames.get(claimed.toLowerCase());
     if (canonical) paragraphSpeakerByIndex.set(entry.paragraphIndex, canonical);
+  }
+  if (narrative.detectedSpeakers) {
+    for (const detected of narrative.detectedSpeakers) {
+      if (!paragraphSpeakerByIndex.has(detected.paragraphIndex) && detected.speaker) {
+        const canonical = canonicalNames.get(detected.speaker.toLowerCase()) || detected.speaker;
+        paragraphSpeakerByIndex.set(detected.paragraphIndex, canonical);
+      }
+    }
   }
   const paragraphSpeakers = narrative.paragraphs.map(
     (paragraph) => paragraphSpeakerByIndex.get(paragraph.index) ?? null
