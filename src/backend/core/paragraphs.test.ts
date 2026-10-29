@@ -271,4 +271,60 @@ describe("narrative preparation", () => {
     ]);
     expect(prepared.detectedSceneMetadata?.location).toBe("Registry Hall counter");
   });
+  test("generalizes to arbitrary presets: filters cyberpunk matrix_state, json fences, and unwraps line speaker", () => {
+    const raw = [
+      "<matrix_state>",
+      "Status: Stealth",
+      "Alert Level: 2",
+      "</matrix_state>",
+      "",
+      "```json",
+      "{ \"active_cyberware\": [\"sandevistan\"] }",
+      "```",
+      "",
+      "Vance checked the charge on his neural port before stepping into the alley.",
+      "",
+      "<line speaker=\"Kage\">\"Camera drones on the north bridge. Stay low.\"</line>",
+      "",
+      "The neon signs hummed through the acid rain."
+    ].join("\n");
+
+    const prepared = prepareNarrative(raw);
+    expect(prepared.paragraphs.map(p => p.text)).toEqual([
+      "Vance checked the charge on his neural port before stepping into the alley.",
+      "\"Camera drones on the north bridge. Stay low.\"",
+      "The neon signs hummed through the acid rain."
+    ]);
+    expect(prepared.detectedSpeakers).toEqual([
+      { paragraphIndex: 1, speaker: "Kage" }
+    ]);
+  });
+
+  test("generalizes to fantasy RPG presets: filters quest_log, dice checks, and unwraps npc character tag", () => {
+    const raw = [
+      "<quest_log>",
+      "Current Objective: Locate the Silver Key",
+      "</quest_log>",
+      "",
+      "🎲 Roll: 1d20 + 4 = 19 (Perception check passed)",
+      "",
+      "The iron doors grind open, revealing a torchlit hall.",
+      "",
+      "<npc character=\"Grimbald\">\"Watch your step. The stones are rigged with darts.\"</npc>",
+      "",
+      "[Inventory: Torch (2) | Health: 85/100]",
+      "",
+      "Aleister stepped forward cautiously, raising his lantern."
+    ].join("\n");
+
+    const prepared = prepareNarrative(raw);
+    expect(prepared.paragraphs.map(p => p.text)).toEqual([
+      "The iron doors grind open, revealing a torchlit hall.",
+      "\"Watch your step. The stones are rigged with darts.\"",
+      "Aleister stepped forward cautiously, raising his lantern."
+    ]);
+    expect(prepared.detectedSpeakers).toEqual([
+      { paragraphIndex: 1, speaker: "Grimbald" }
+    ]);
+  });
 });

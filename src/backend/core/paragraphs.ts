@@ -375,10 +375,11 @@ function cleanNarrativeBlock(block: string, smartProseFilter = true): string {
       if (/^<[A-Za-z_-]+(?:\s+[A-Za-z_-]+)*\s*:[^>]+>$/i.test(trimmed)) return false;
       if (smartProseFilter) {
         if (/^[─—–*_=\-]{3,}$/.test(trimmed)) return false;
+        if (/^(?:🎲\s*|🎯\s*)?(?:Roll|Check|Dice|Difficulty|DC|Result)\s*[:=]/i.test(trimmed)) return false;
         if (/^\[(?:Affinity|Stats?|Status|Inventory|Roll|Dice|Check|Turn|Take|Dynamic|Clock|Track|HP|MP|EXP|Level)\b[^\]]*\]$/i.test(trimmed)) return false;
         if (/^\[[^\]]+:\s*[^\]]+\]$/.test(trimmed)) return false;
         if (/^<\/?(?:details|summary|div|span|p|section|header|footer|aside)\b[^>]*>$/i.test(trimmed)) return false;
-        if (/^<\/?(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|spine|feed|ledger)\b[^>]*>$/i.test(trimmed)) return false;
+        if (/^<\/?(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|hud|matrix|protocol|state|quest|log)\b[^>]*>$/i.test(trimmed)) return false;
       }
       return true;
     })
@@ -401,43 +402,66 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
   const smartProseFilter = options.smartProseFilter !== false;
   const smartDialogueExtraction = options.smartDialogueExtraction !== false;
 
-  // 1. Strip HTML comments: <!-- ... -->
-  content = content.replace(/<!--[\s\S]*?-->/g, "");
+  const detectedSceneMetadata = extractDetectedSceneMetadata(content);
 
-  // 2. Strip <details>...</details> blocks if smartProseFilter is active
-  if (smartProseFilter) {
-    content = content.replace(/<details\b[^>]*>[\s\S]*?<\/details>/gi, "");
-  }
-
-  // 3. Extract custom preset dialogue/thought tags before masking/tag-stripping
+  // 1. Extract custom preset dialogue/thought tags before masking/tag-stripping
   const extractedSpeakers = new Map<string, string>();
   if (smartDialogueExtraction) {
+    const unwrapTag = (_match: string, prefix: string | undefined, tagKind: string, attrSource: string, body: string) => {
+      const speakerMatch = attrSource.match(/(?:speaker|name|character)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+      const speaker = (speakerMatch ? speakerMatch[1] ?? speakerMatch[2] ?? speakerMatch[3] ?? "" : "").trim();
+      const isCustomTag = Boolean(prefix) || (tagKind.toLowerCase() !== "thought" && tagKind.toLowerCase() !== "think") || Boolean(speaker);
+      if (!isCustomTag) {
+        // Plain untagged <thought> without speaker attribute is LLM internal chain-of-thought; leave for heuristic stripping
+        return _match;
+      }
+      const cleanBody = body.trim();
+      if (cleanBody) {
+        for (const line of cleanBody.split(/\r?\n\s*\r?\n/)) {
+          const trimmedLine = line.trim();
+          if (trimmedLine && speaker) extractedSpeakers.set(trimmedLine, speaker);
+        }
+        return `\n\n${cleanBody}\n\n`;
+      }
+      return "\n\n";
+    };
+
+    // 1a. Known dialogue/speech tags with optional prefixes (e.g. <eidos_dialogue>, <custom_speech>, <say>, <line>, <voice>)
     content = content.replace(
-      /<([a-zA-Z0-9_-]+_)?(dialogue|dialog|speech|thought)\b([^>]*)>([\s\S]*?)<\/(?:[a-zA-Z0-9_-]+_)?(?:dialogue|dialog|speech|thought)>/gi,
-      (_match, prefix: string | undefined, tagKind: string, attrSource: string, body: string) => {
-        const speakerMatch = attrSource.match(/(?:speaker|name|character)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
-        const speaker = (speakerMatch ? speakerMatch[1] ?? speakerMatch[2] ?? speakerMatch[3] ?? "" : "").trim();
-        const isCustomTag = Boolean(prefix) || tagKind.toLowerCase() !== "thought" || Boolean(speaker);
-        if (!isCustomTag) {
-          // Plain untagged <thought> without speaker attribute is LLM internal chain-of-thought; leave for heuristic stripping
-          return _match;
-        }
-        const cleanBody = body.trim();
-        if (cleanBody) {
-          for (const line of cleanBody.split(/\r?\n\s*\r?\n/)) {
-            const trimmedLine = line.trim();
-            if (trimmedLine && speaker) extractedSpeakers.set(trimmedLine, speaker);
-          }
-          return `\n\n${cleanBody}\n\n`;
-        }
-        return "\n\n";
+      /<([a-zA-Z0-9_-]+_)?(dialogue|dialog|speech|thought|think|line|say|speak|voice|quote|talk|message)\b([^>]*)>([\s\S]*?)<\/(?:[a-zA-Z0-9_-]+_)?(?:dialogue|dialog|speech|thought|think|line|say|speak|voice|quote|talk|message)>/gi,
+      unwrapTag
+    );
+
+    // 1b. Any arbitrary XML tag with explicit speaker= or character= attribute (e.g. <npc character="Grimbald">"..."</npc>)
+    content = content.replace(
+      /<([a-zA-Z0-9_-]+)\b([^>]*\b(?:speaker|character)\s*=[^>]*)>([\s\S]*?)<\/\1\s*>/gi,
+      (_match, tagName: string, attrSource: string, body: string) => {
+        return unwrapTag(_match, undefined, tagName, attrSource, body);
       }
     );
   }
 
   const spans: PanelSpan[] = extractPanelSpans(content);
   const hidden: Array<{ start: number; end: number }> = [];
-  const detectedSceneMetadata = extractDetectedSceneMetadata(content);
+
+  // 2. Structural & pattern-based metadata masking if smartProseFilter is active
+  if (smartProseFilter) {
+    for (const match of content.matchAll(/<!--[\s\S]*?-->/g)) {
+      hidden.push({ start: match.index, end: match.index + match[0].length });
+    }
+    for (const match of content.matchAll(/<details\b[^>]*>[\s\S]*?<\/details>/gi)) {
+      hidden.push({ start: match.index, end: match.index + match[0].length });
+    }
+    for (const match of content.matchAll(/```(?:json|yaml|yml|state|meta|tracker|status)[\s\S]*?```/gi)) {
+      hidden.push({ start: match.index, end: match.index + match[0].length });
+    }
+    const DYNAMIC_METADATA_PATTERN =
+      /<(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|metadata|params|memory|context|audit|matrix|protocol|analysis|scratchpad|hud|state|system|ooc|notes|log|reflection|reasoning|pre_response|inner_monologue|world_info|quest)\b[^>]*>[\s\S]*?<\/(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|metadata|params|memory|context|audit|matrix|protocol|analysis|scratchpad|hud|state|system|ooc|notes|log|reflection|reasoning|pre_response|inner_monologue|world_info|quest)\s*>/gi;
+    for (const match of content.matchAll(DYNAMIC_METADATA_PATTERN)) {
+      hidden.push({ start: match.index, end: match.index + match[0].length });
+    }
+  }
+
   const effectiveIgnoredTags = Array.from(new Set([
     ...BUILTIN_HEURISTIC_TAGS,
     ...(options.ignoredTags ?? [])
