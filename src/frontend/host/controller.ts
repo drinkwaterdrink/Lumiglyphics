@@ -303,8 +303,9 @@ export function decideTurnApplication(
 }
 
 function replaceAsset(turn: TurnView, asset: AssetView): TurnView {
-  const assets = turn.assets.some((entry) => entry.cueId === asset.cueId)
-    ? turn.assets.map((entry) => entry.cueId === asset.cueId ? asset : entry)
+  const match = (entry: AssetView) => entry.jobId === asset.jobId || (Boolean(asset.cueId) && entry.cueId === asset.cueId);
+  const assets = turn.assets.some(match)
+    ? turn.assets.map((entry) => match(entry) ? asset : entry)
     : [...turn.assets, asset];
   return { ...turn, assets };
 }
@@ -906,6 +907,9 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     }
     speech.setActive(true);
     speechDock.setOverlayActive(true);
+    if (turn && activeChatId === turn.chatId) {
+      void syncImageForParagraph(stage.getState().currentParagraphIndex);
+    }
     requestState();
     stage.focus();
   }
@@ -961,7 +965,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     const assetFailure = currentAssetFailure(turn, paragraphIndex);
     if (assetFailure) reportStageError(assetFailure);
     let asset = stage.setCastTurn(turn,paragraphIndex) ?? selectCurrentImage(turn, paragraphIndex);
-    if (!asset?.imageUrl && !stage.getState().displayedImage) {
+    if (!asset?.imageUrl) {
       asset = turn.assets
         .filter((a) => (a.status === "generated" || a.status === "browser_ready" || a.previousImage) && Boolean(a.imageUrl))
         .sort((a, b) => a.paragraphIndex - b.paragraphIndex)[0] ?? null;

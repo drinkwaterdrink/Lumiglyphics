@@ -14,29 +14,38 @@ export interface VnLoadableImage {
 
 export type VnImageFactory = () => VnLoadableImage;
 
-const waitForImageLoad = (image: VnLoadableImage): Promise<void> => {
-  if (image.complete) {
-    return image.naturalWidth > 0
-      ? Promise.resolve()
-      : Promise.reject(new Error("The scene image could not be loaded."));
-  }
-
+const waitForImageLoad = (image: VnLoadableImage, url: string): Promise<void> => {
   return new Promise((resolve, reject) => {
-    const onLoad: EventListener = () => {
+    let settled = false;
+    const cleanup = () => {
+      image.removeEventListener("load", onLoad as EventListener);
+      image.removeEventListener("error", onError as EventListener);
+    };
+    const onLoad = () => {
+      if (settled) return;
+      settled = true;
       cleanup();
       resolve();
     };
-    const onError: EventListener = () => {
+    const onError = () => {
+      if (settled) return;
+      settled = true;
       cleanup();
       reject(new Error("The scene image could not be loaded."));
     };
-    const cleanup = () => {
-      image.removeEventListener("load", onLoad);
-      image.removeEventListener("error", onError);
-    };
 
-    image.addEventListener("load", onLoad, { once: true });
-    image.addEventListener("error", onError, { once: true });
+    image.addEventListener("load", onLoad as EventListener, { once: true });
+    image.addEventListener("error", onError as EventListener, { once: true });
+
+    image.src = url;
+
+    if (image.complete) {
+      if (image.naturalWidth > 0) {
+        onLoad();
+      } else {
+        onError();
+      }
+    }
   });
 };
 
@@ -49,8 +58,10 @@ export const preloadAndDecodeVnImage = async (
 
   const image = createImage();
   image.decoding = "async";
-  image.src = url;
-  await waitForImageLoad(image);
-  await image.decode?.();
+  await waitForImageLoad(image, url);
+  try {
+    await image.decode?.();
+  } catch {
+    // Decoding is an optional performance hint; do not fail an already-loaded image.
+  }
 };
-

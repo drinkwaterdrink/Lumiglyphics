@@ -1286,19 +1286,22 @@ export class VnStage {
 
     try {
       await preloadAndDecodeVnImage(image.url, this.createImage);
-      if (this.destroyed) return false;
-      const wasCurrent = this.state.pendingImage?.requestId === image.requestId;
-      this.dispatch({ type: "image-ready", requestId: image.requestId });
-      return wasCurrent;
     } catch (error) {
       if (this.destroyed) return false;
-      this.dispatch({
-        type: "image-failed",
-        requestId: image.requestId,
-        error: errorMessage(error),
-      });
-      return false;
+      if (!image.url.trim()) {
+        this.dispatch({
+          type: "image-failed",
+          requestId: image.requestId,
+          error: errorMessage(error),
+        });
+        return false;
+      }
     }
+
+    if (this.destroyed) return false;
+    const wasCurrent = !this.state.pendingImage || this.state.pendingImage.requestId === image.requestId;
+    this.dispatch({ type: "image-ready", requestId: image.requestId, image });
+    return wasCurrent;
   }
 
   destroy(): void {

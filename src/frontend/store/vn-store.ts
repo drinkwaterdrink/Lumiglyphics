@@ -145,7 +145,7 @@ export type VnStageAction =
   | { type: "submit-started" }
   | { type: "submit-failed"; error: string }
   | { type: "image-requested"; image: VnSceneImage }
-  | { type: "image-ready"; requestId: string }
+  | { type: "image-ready"; requestId: string; image?: VnSceneImage }
   | { type: "image-failed"; requestId: string; error: string }
   | { type: "present-user-paragraph"; paragraph: VnParagraph }
   | { type: "set-ambient"; ambient: AmbientEffect | null }
@@ -392,17 +392,20 @@ export const reduceVnStage = (
         imageError: null,
       };
 
-    case "image-ready":
-      if (state.pendingImage?.requestId !== action.requestId) return state;
+    case "image-ready": {
+      if (state.pendingImage && state.pendingImage.requestId !== action.requestId) return state;
+      const targetImage = action.image ?? (state.pendingImage?.requestId === action.requestId ? state.pendingImage : null);
+      if (!targetImage) return state;
       return {
         ...state,
-        displayedImage: state.pendingImage,
+        displayedImage: targetImage,
         pendingImage: null,
         imageError: null,
       };
-
+    }
     case "image-failed":
-      if (state.pendingImage?.requestId !== action.requestId) return state;
+      if (!state.pendingImage || state.pendingImage.requestId !== action.requestId) return state;
+
       return {
         ...state,
         pendingImage: null,

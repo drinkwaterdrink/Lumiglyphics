@@ -301,6 +301,18 @@ describe("selectCurrentImage (pure frontend image selection)", () => {
       .sort((a, b) => a.paragraphIndex - b.paragraphIndex)[0];
     expect(earliest?.imageUrl).toBe("/img/p2.png");
   });
+
+  test("portrait role at paragraph 0 resolves cleanly and is not dropped by background hold", () => {
+    const source = turn({
+      assets: [
+        asset({ jobId: "p1", cueId: "c1", paragraphIndex: 0, imageUrl: "/img/portrait.png", status: "generated", stageAsset: { role: "portrait", sceneId: "s1", character: "Nadine" } }),
+        asset({ jobId: "p2", cueId: "c2", paragraphIndex: 3, imageUrl: "/img/scene.png", status: "queued", stageAsset: { role: "scene", sceneId: "s1" } })
+      ]
+    });
+    const current = selectCurrentImage(source, 0);
+    expect(current?.imageUrl).toBe("/img/portrait.png");
+    expect(current?.stageAsset?.role).toBe("portrait");
+  });
 });
 
 describe("sameTurnIdentity (re-broadcast guard)", () => {
