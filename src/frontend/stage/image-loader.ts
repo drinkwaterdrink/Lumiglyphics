@@ -39,12 +39,8 @@ const waitForImageLoad = (image: VnLoadableImage, url: string): Promise<void> =>
 
     image.src = url;
 
-    if (image.complete) {
-      if (image.naturalWidth > 0) {
-        onLoad();
-      } else {
-        onError();
-      }
+    if (image.complete && image.naturalWidth > 0) {
+      onLoad();
     }
   });
 };

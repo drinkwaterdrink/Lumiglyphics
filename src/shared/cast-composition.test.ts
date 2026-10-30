@@ -51,3 +51,11 @@ test('cast mode shares held background selection while retaining independently s
  t.backgroundHoldStarts=[0,0,0];expect(selectCastComposition(t,2)?.background.jobId).toBe('place');
  expect(selectCastComposition(t,2)?.portraits.map(p=>p.name)).toEqual(['Mira','Rin']);
 });
+
+test('scene background assigned to a later paragraph within the same scene is used for earlier paragraph cast portraits',()=>{
+ const t=turn([asset('Mira',0),asset('kitchen',1,'background')]);
+ const comp=selectCastComposition(t,0);
+ expect(comp).not.toBeNull();
+ expect(comp?.background.jobId).toBe('kitchen');
+ expect(comp?.portraits[0]?.name).toBe('Mira');
+});

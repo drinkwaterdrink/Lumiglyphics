@@ -12,9 +12,20 @@ class FakeImage implements VnLoadableImage {
   complete = true;
   naturalWidth = 100;
   decodeCalls = 0;
+  private listeners: Record<string, EventListener[]> = {};
 
-  addEventListener(): void {}
-  removeEventListener(): void {}
+  addEventListener(type: "load" | "error", listener: EventListener): void {
+    if (!this.listeners[type]) this.listeners[type] = [];
+    this.listeners[type]!.push(listener);
+    if (type === "error" && this.naturalWidth === 0) {
+      queueMicrotask(() => listener(new Event("error")));
+    }
+  }
+
+  removeEventListener(type: "load" | "error", listener: EventListener): void {
+    if (!this.listeners[type]) return;
+    this.listeners[type] = this.listeners[type]!.filter((l) => l !== listener);
+  }
 
   async decode(): Promise<void> {
     this.decodeCalls += 1;
@@ -39,4 +50,3 @@ test("a failed cached image is rejected", async () => {
     /could not be loaded/,
   );
 });
-

@@ -1770,7 +1770,7 @@ export class VnStage {
   private updateSceneImage(displayedImage: VnSceneImage): void {
     this.setPagePresentation(displayedImage);
     if (this.currentDisplayedUrl === displayedImage.url) {
-      const activeShowing = this.activeImageEl.dataset.vnEmpty !== "true" && this.activeImageEl.getAttribute("src") === displayedImage.url;
+      const activeShowing = this.activeImageEl.dataset.vnEmpty !== "true" && this.activeImageEl.getAttribute("src") === displayedImage.url && (!this.activeImageEl.complete || this.activeImageEl.naturalWidth > 0);
       const incomingShowing = this.crossfadeTimer !== null && this.incomingImageEl.dataset.vnEmpty !== "true" && this.incomingImageEl.getAttribute("src") === displayedImage.url;
       if (activeShowing || incomingShowing) {
         this.activeImageEl.alt = displayedImage.alt;
