@@ -1,4 +1,4 @@
-# Lumiglyphics status - beta.91
+# Lumiglyphics status - beta.92
 
 This matrix describes beta.74 on Testing. Dated plans and evidence describe their own releases; they are historical context rather than competing current status pages.
 

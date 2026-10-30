@@ -960,7 +960,12 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     const sourceTurn = turn;
     const assetFailure = currentAssetFailure(turn, paragraphIndex);
     if (assetFailure) reportStageError(assetFailure);
-    const asset = stage.setCastTurn(turn,paragraphIndex) ?? selectCurrentImage(turn, paragraphIndex);
+    let asset = stage.setCastTurn(turn,paragraphIndex) ?? selectCurrentImage(turn, paragraphIndex);
+    if (!asset?.imageUrl && !stage.getState().displayedImage) {
+      asset = turn.assets
+        .filter((a) => (a.status === "generated" || a.status === "browser_ready" || a.previousImage) && Boolean(a.imageUrl))
+        .sort((a, b) => a.paragraphIndex - b.paragraphIndex)[0] ?? null;
+    }
     if (!asset?.imageUrl) {
       vnDebug("image sync", `p${paragraphIndex}`, "no decodable asset yet");
       return;
@@ -1231,7 +1236,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       stage.setAssetProgress(computeAssetProgress(turn,retryQueue,localPictureOperations));
       stage.workspace.setAttention(computeReviewAttention(turn,localPictureOperations));
       const cursor = stage.getState().currentParagraphIndex;
-      if (message.asset.paragraphIndex <= cursor) void syncImageForParagraph(cursor);
+      if (message.asset.paragraphIndex <= cursor || !stage.getState().displayedImage) void syncImageForParagraph(cursor);
       return;
     }
     if(type==="vn_image_retry_queue"&&message.type==="vn_image_retry_queue"){

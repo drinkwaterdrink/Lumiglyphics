@@ -288,6 +288,19 @@ describe("selectCurrentImage (pure frontend image selection)", () => {
     expect(selectCurrentImage(source, 0)).toBeNull();
     expect(selectCurrentImage(source, 1)?.imageUrl).toBe("/img/r.png");
   });
+
+  test("earliest available ready asset can be resolved when opening stage is empty", () => {
+    const source = turn({
+      assets: [
+        asset({ jobId: "job0", cueId: "c0", paragraphIndex: 0, status: "generating" }),
+        asset({ jobId: "job1", cueId: "c1", paragraphIndex: 2, imageUrl: "/img/p2.png", status: "generated" })
+      ]
+    });
+    const earliest = source.assets
+      .filter((a) => (a.status === "generated" || a.status === "browser_ready" || a.previousImage) && Boolean(a.imageUrl))
+      .sort((a, b) => a.paragraphIndex - b.paragraphIndex)[0];
+    expect(earliest?.imageUrl).toBe("/img/p2.png");
+  });
 });
 
 describe("sameTurnIdentity (re-broadcast guard)", () => {

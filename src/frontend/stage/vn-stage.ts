@@ -1767,12 +1767,16 @@ export class VnStage {
   private updateSceneImage(displayedImage: VnSceneImage): void {
     this.setPagePresentation(displayedImage);
     if (this.currentDisplayedUrl === displayedImage.url) {
-      this.activeImageEl.alt = displayedImage.alt;
-      return;
+      const activeShowing = this.activeImageEl.dataset.vnEmpty !== "true" && this.activeImageEl.getAttribute("src") === displayedImage.url;
+      const incomingShowing = this.crossfadeTimer !== null && this.incomingImageEl.dataset.vnEmpty !== "true" && this.incomingImageEl.getAttribute("src") === displayedImage.url;
+      if (activeShowing || incomingShowing) {
+        this.activeImageEl.alt = displayedImage.alt;
+        return;
+      }
     }
 
     // First image (empty stage): show directly on active layer
-    if (!this.currentDisplayedUrl || this.activeImageEl.dataset.vnEmpty === "true") {
+    if (!this.currentDisplayedUrl || this.activeImageEl.dataset.vnEmpty === "true" || !this.activeImageEl.getAttribute("src")) {
       this.currentDisplayedUrl = displayedImage.url;
       this.activeImageEl.src = displayedImage.url;
       this.activeImageEl.alt = displayedImage.alt;
