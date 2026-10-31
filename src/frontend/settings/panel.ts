@@ -1,4 +1,5 @@
 import { describeDataFlows } from "../../shared/data-flows.js";
+import { probeDisplayRules } from "../stage/display-rule-probe.js";
 import {resolveImagePromptProfile,promptProfileSummary} from "../../shared/image-prompt-profile.js";
 import {compileDisplayRules} from '../../shared/display-rules.js';
 import { createUiId } from "../request-id.js";
@@ -1870,6 +1871,11 @@ export class VisualNovelSettingsPanel {
     field.setAttribute('aria-invalid',String(result.issues.length>0));
     feedback.style.whiteSpace='pre-line';
     feedback.textContent=result.issues.length?`${result.rules.length} valid rule${result.rules.length===1?'':'s'}. Fix ${result.issues.length} row${result.issues.length===1?'':'s'} before applying.\n${result.issues.slice(0,5).map(issue=>`Line ${issue.line}: ${issue.message}`).join('\n')}${result.issues.length>5?'\nMore invalid rows follow.':''}`:result.rules.length?`${result.rules.length} rule${result.rules.length===1?'':'s'} ready to apply. Syntax checked; patterns have not been run.`:'No custom rules. Dialogue keeps its normal formatting.';
+    const probed=field.value;
+    void probeDisplayRules(probed).then(probe=>{
+      if(!probe.slowLines.length||field.value!==probed||!feedback)return;
+      feedback.textContent+=`\nNot applied (too slow on sample text): line${probe.slowLines.length===1?'':'s'} ${probe.slowLines.join(', ')}.`;
+    },()=>{/* Probe unavailable: the static screen still applies. */});
     return result;
   }
 

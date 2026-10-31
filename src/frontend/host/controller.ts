@@ -38,6 +38,7 @@ import { createSpeechTransport } from "../speech/transport.js";
 import { SpeechDock } from "../speech/ui.js";
 import { SpeechSettingsSection } from "../speech/settings-ui.js";
 import { formatReplyUsage } from "../../shared/reply-usage.js";
+import { createDisplayRuleGuard } from "../stage/display-rule-probe.js";
 
 const CLEANUP_KEY = Symbol.for("lumiglyphics.frontend-cleanup");
 
@@ -375,6 +376,17 @@ export type VisualStageThemeTarget = Pick<
  * user's custom CSS (which stays the final cascade layer), custom display regex rules,
  * and dialogue flow parameters (typewriter speed, auto-play delay, skip mode).
  */
+/** One guard per stage: custom display rules apply only after their worker probe passes. */
+const displayRuleGuards = new WeakMap<VisualStageThemeTarget, (rulesText: string) => void>();
+function applyDisplayRulesGuarded(stage: VisualStageThemeTarget, rulesText: string): void {
+  let guard = displayRuleGuards.get(stage);
+  if (!guard) {
+    guard = createDisplayRuleGuard((text) => stage.setDisplayRegexRules(text));
+    displayRuleGuards.set(stage, guard);
+  }
+  guard(rulesText);
+}
+
 export function applyVisualConfigToStage(
   stage: VisualStageThemeTarget,
   config: VisualNovelConfig,
@@ -383,7 +395,7 @@ export function applyVisualConfigToStage(
   stage.setSceneImageFit(config.sceneImageFit);
   stage.setCastMode?.(config.castMode);
   stage.setUserCss(config.customCss);
-  stage.setDisplayRegexRules(config.displayRegexRules);
+  applyDisplayRulesGuarded(stage, config.displayRegexRules);
   stage.setTextSpeed?.(config.textSpeed);
   stage.setAutoPlayDelay?.(config.autoPlayDelay);
   stage.setSkipMode?.(config.skipMode);

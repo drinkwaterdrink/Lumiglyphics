@@ -23,6 +23,9 @@ import type { AssetView, TurnView } from "../../protocol.js";
 import { REFERENCE_IMAGE_MAX_BYTES } from "../../protocol.js";
 import type { FrontendRequest } from "../../protocol.js";
 
+/** Lets the display-rule guard finish its (fallback) probe before asserting. */
+const flushProbe=()=>new Promise<void>(resolve=>setTimeout(resolve,20));
+
 test('music attenuation ignores missing/misaligned metadata and never amplifies saved volume',()=>{
  const view={paragraphs:['A','B','C'],musicLimits:['quiet','mute',null]} as TurnView;
  expect([0,1,2].map(i=>musicAttenuationForParagraph(view,i))).toEqual([.35,0,1]);
@@ -123,7 +126,7 @@ const baseConfig: VisualNovelConfig = {
 };
 
 describe("applyVisualConfigToStage (live controller config application)", () => {
-  test("applies the theme preset, scene-image fit, custom CSS, and display regex from the config", () => {
+  test("applies the theme preset, scene-image fit, custom CSS, and display regex from the config", async () => {
     const stage = spyStage();
     const config: VisualNovelConfig = {
       ...baseConfig,
@@ -135,15 +138,18 @@ describe("applyVisualConfigToStage (live controller config application)", () => 
 
     applyVisualConfigToStage(stage, config);
 
+    // Custom display rules stay off until their worker probe finishes (fail closed).
     expect(stage.calls).toEqual([
       "theme:golden-hour",
       "fit:contain",
       "css:[data-vn-dialogue] { border-color: red; }",
-      "regex:/§([^§]+)§/g => $1",
+      "regex:",
     ]);
+    await flushProbe();
+    expect(stage.calls.at(-1)).toBe("regex:/§([^§]+)§/g => $1");
   });
 
-  test("uses the merged config values rather than a stale prior value", () => {
+  test("uses the merged config values rather than a stale prior value", async () => {
     const stage = spyStage();
     const previous: VisualNovelConfig = { ...baseConfig, themePreset: "paper-novel" };
     // The controller merges a patch into the previous config before applying.
@@ -160,7 +166,9 @@ describe("applyVisualConfigToStage (live controller config application)", () => 
     expect(stage.calls[0]).toBe("theme:midnight-noir");
     expect(stage.calls[1]).toBe("fit:none");
     expect(stage.calls[2]).toBe("css:body {}");
-    expect(stage.calls[3]).toBe("regex:foo => bar");
+    expect(stage.calls[3]).toBe("regex:");
+    await flushProbe();
+    expect(stage.calls.at(-1)).toBe("regex:foo => bar");
   });
 
   test("always re-applies all four controls even when only one value changed", () => {
