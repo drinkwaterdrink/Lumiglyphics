@@ -45,6 +45,7 @@
     "test:text-effects": "bun run ./scripts/test-text-effects-browser.ts",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "typecheck:build": "tsc --project tsconfig.build.json --noEmit",
+    "status:generate": "bun run ./scripts/generate-status-table.ts",
     "verify:bundle": "bun run ./scripts/verify-extension-build.ts",
     "build": "bun run typecheck:build && bun build ./src/backend.ts --outfile ./dist/backend.js --target bun --format esm && bun build ./src/frontend.ts --outfile ./dist/frontend.js --target browser --format esm",
     "build:demo": "bun build ./src/demo.ts --outfile ./demo/demo.js --target browser --format esm",
