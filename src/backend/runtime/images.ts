@@ -783,7 +783,7 @@ export async function prepareAssetJobs(
   if(castAllocation||(config.persistentLocationArt||config.persistentCastArt)&&!(plan.classifierVisuals&&config.systemOneMode==='on')){
     const profile=await resolveImageProfile(spindle,config,userId);
     const effective=profile.provider==='novelai'?{...config,imageModel:config.imageModel||profile.model||'nai-diffusion-4-5-full'}:config;
-    const all=castAllocation?.candidates??[...plan.visualCues,...(plan.cacheCues??[])].sort((a,b)=>a.paragraphIndex-b.paragraphIndex);
+    const all=castAllocation?[...castAllocation.candidates,...castAllocation.reuseOnly]:[...plan.visualCues,...(plan.cacheCues??[])].sort((a,b)=>a.paragraphIndex-b.paragraphIndex);
     const queued=createAssetJobs({...plan,visualCues:all},effective,characterAppearance);
     let warm:AssetJob[]=[];
     if(castAllocation){
@@ -815,7 +815,7 @@ export async function prepareAssetJobs(
     plan.visualCues=admitted;
     // An unfunded optional candidate cannot coexist with an admitted cue at its
     // paragraph. Free cache/art hits were already admitted above, with their jobs.
-    plan.cacheCues=[...remaining,...(castAllocation?.reuseOnly??[])].filter(cue=>!occupied.has(cue.paragraphIndex)).slice(0,MAX_CACHE_CUES_PER_TURN);
+    plan.cacheCues=remaining.filter(cue=>!occupied.has(cue.paragraphIndex)).slice(0,MAX_CACHE_CUES_PER_TURN);
     return selected;
   }
   const candidates = createAssetJobs(plan, config, characterAppearance);

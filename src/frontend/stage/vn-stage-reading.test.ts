@@ -516,4 +516,12 @@ describe("reading UX", () => {
     expect(card.querySelector("[data-vn-chapter-title]")!.textContent).toBe("Old Town - Library");
     expect(card.querySelector("[data-vn-chapter-eyebrow]")!.textContent).toBe("ALICE");
   });
+  test('setSceneImage on an empty stage immediately displays the image on active layer', () => {
+    const s = create();
+    s.loadTurn({ mode: 'standard', paragraphs: paragraphs(1) });
+    expect(s.getActiveSceneImage().dataset.vnEmpty).toBe('true');
+    void s.setSceneImage({ url: '/immediate.png', requestId: 'r-now' });
+    expect(s.getActiveSceneImage().dataset.vnEmpty).toBe('false');
+    expect(s.getActiveSceneImage().src).toContain('immediate.png');
+  });
 });

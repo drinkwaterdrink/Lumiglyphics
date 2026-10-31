@@ -1283,6 +1283,9 @@ export class VnStage {
       requestId: request.requestId ?? `vn-image-${++this.imageRequestSequence}`,
     };
     this.dispatch({ type: "image-requested", image });
+    if (!this.state.displayedImage && image.url.trim()) {
+      this.dispatch({ type: "image-ready", requestId: image.requestId, image });
+    }
 
     try {
       await preloadAndDecodeVnImage(image.url, this.createImage);

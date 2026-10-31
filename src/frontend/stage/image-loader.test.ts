@@ -50,3 +50,10 @@ test("a failed cached image is rejected", async () => {
     /could not be loaded/,
   );
 });
+
+test('preloadAndDecodeVnImage resolves even if image.decode hangs', async () => {
+  const image = new FakeImage();
+  image.decode = () => new Promise(() => {}); // never resolves
+  await preloadAndDecodeVnImage('slow-decode.webp', () => image);
+  assert.equal(image.src, 'slow-decode.webp');
+});

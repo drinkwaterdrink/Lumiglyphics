@@ -17,7 +17,9 @@ export type VnImageFactory = () => VnLoadableImage;
 const waitForImageLoad = (image: VnLoadableImage, url: string): Promise<void> => {
   return new Promise((resolve, reject) => {
     let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const cleanup = () => {
+      if (timer) clearTimeout(timer);
       image.removeEventListener("load", onLoad as EventListener);
       image.removeEventListener("error", onError as EventListener);
     };
@@ -36,6 +38,10 @@ const waitForImageLoad = (image: VnLoadableImage, url: string): Promise<void> =>
 
     image.addEventListener("load", onLoad as EventListener, { once: true });
     image.addEventListener("error", onError as EventListener, { once: true });
+
+    timer = setTimeout(() => {
+      onLoad();
+    }, 2500);
 
     image.src = url;
 
@@ -56,7 +62,12 @@ export const preloadAndDecodeVnImage = async (
   image.decoding = "async";
   await waitForImageLoad(image, url);
   try {
-    await image.decode?.();
+    if (typeof image.decode === "function") {
+      await Promise.race([
+        image.decode(),
+        new Promise((resolve) => setTimeout(resolve, 300)),
+      ]);
+    }
   } catch {
     // Decoding is an optional performance hint; do not fail an already-loaded image.
   }

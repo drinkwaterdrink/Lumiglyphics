@@ -36,3 +36,10 @@ test('cast allocation respects one shared allowance and creates no provider requ
  }
  expect(calls).toBe(0);
 });
+
+test('cast allocation funds remaining cues when picture budget exceeds initial cast candidates',async()=>{
+ const api={userStorage:{getJson:async(_p:string,o:any)=>o.fallback},imageGen:{listConnections:async()=>[{id:'nano',provider:'nanogpt',model:'qwen-image',is_default:true}],getConnection:async()=>({id:'nano',provider:'nanogpt',model:'qwen-image'}),generate:async()=>({imageId:'unexpected'})}} as any;
+ const plan=castPlan();
+ const jobs=await prepareAssetJobs(api,plan,{...DEFAULT_CONFIG,castMode:true,maxImagesPerTurn:4,referenceAnchoring:false},undefined,new SceneImageCache(),'u');
+ expect(jobs.filter(j=>j.provider!=='cache')).toHaveLength(4);
+});
