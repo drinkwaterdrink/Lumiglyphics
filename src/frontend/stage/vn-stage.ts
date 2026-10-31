@@ -19,7 +19,7 @@ import {
 import { applyTextEffects, TEXT_EFFECT_LETTER_ATTRIBUTE } from "./text-effects.js";
 import { DialogueSheet } from "./dialogue-sheet.js";
 import { TypewriterAudioSynthesizer } from "./typewriter-audio.js";
-import type { ReaderPreferences } from "../../shared/reader-preferences.js";
+import { normalizeReaderPreferences, type ReaderPreferences } from "../../shared/reader-preferences.js";
 import {
   createInitialVnStageState,
   reduceVnStage,
@@ -181,6 +181,7 @@ export interface VnSceneImageRequest {
 const THEME_MARKUP = `
   <main data-vn-root data-vn-mode="standard" data-vn-phase="idle" tabindex="0" aria-label="Visual novel">
     <div data-vn-scene aria-hidden="true">
+      <img data-vn-scene-backdrop data-vn-empty="true" alt="" aria-hidden="true" />
       <img data-vn-scene-image data-vn-layer="active" data-vn-empty="true" alt="" />
       <img data-vn-scene-image data-vn-layer="incoming" data-vn-empty="true" alt="" />
       <div data-vn-ambient aria-hidden="true"></div>
@@ -226,9 +227,9 @@ const THEME_MARKUP = `
       </div>
       <footer class="reader-actions">
         <div class="reader-progress">
-          <small data-vn-step-left>IV / 4</small>
+          <small data-vn-step-left>1 / 1</small>
           <div data-vn-scrubber class="ticks" role="group" aria-label="Paragraph timeline"></div>
-          <small data-vn-step-right>07</small>
+          <small data-vn-step-right>100%</small>
         </div>
         <nav data-vn-controls class="reader-action-row" aria-label="Reading controls">
           <button data-vn-control="previous" class="action icon-action nav-step-btn" type="button" aria-label="Previous paragraph" aria-keyshortcuts="ArrowLeft" title="Previous paragraph (Left Arrow)">
@@ -561,6 +562,8 @@ export class VnStage {
   private shakeTimer: ReturnType<typeof setTimeout> | null = null;
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
   private fadeTimer: ReturnType<typeof setTimeout> | null = null;
+  private heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
+  private sceneBackdropEl: HTMLImageElement | null = null;
   private readonly readParagraphIds = new Set<string>();
   /** Reading-session history. Capped so long mobile sessions cannot retain
    *  formatted HTML for every paragraph indefinitely (oldest entries drop). */
@@ -647,6 +650,7 @@ export class VnStage {
     this.scene = queryRequired(this.themeRoot, "[data-vn-scene]");
     this.castStage = new CastStage(this.root,this.createImage);
     this.sceneImages = Array.from(this.themeRoot.querySelectorAll<HTMLImageElement>("[data-vn-scene-image]"));
+    this.sceneBackdropEl = this.themeRoot.querySelector<HTMLImageElement>("[data-vn-scene-backdrop]");
     this.activeImageEl = queryRequired(this.themeRoot, "[data-vn-scene-image][data-vn-layer='active']");
     this.incomingImageEl = queryRequired(this.themeRoot, "[data-vn-scene-image][data-vn-layer='incoming']");
     this.sceneImage = this.activeImageEl;
@@ -715,7 +719,7 @@ export class VnStage {
       current:()=>this.state.draft,
       apply:text=>this.storeReplyDraft(text),
       focus:()=>{if(selectVnStageView(this.state).showStandardInput)this.input.focus();else{this.setActivity('Action saved for Your turn.','success');this.focus();}}
-    },onDocumentToggle,onDossierToggle);
+    },onDocumentToggle,onDossierToggle,()=>this.state.displayedImage?.url??null);
     this.dossiers.connectWorkspace(this.workspace, shell);
     this.bindEvents();
     this.updateControlButtons();
@@ -796,7 +800,7 @@ export class VnStage {
     this.root.dataset.vnTextScale = String(this.textScale);
   }
 
-  setReaderPreferences(preferences: ReaderPreferences): void {
+  setReaderPreferences(rawPreferences: Partial<ReaderPreferences>): void { const preferences = normalizeReaderPreferences({ ...this.readerPreferences, ...rawPreferences });
     this.readerPreferences = preferences;
     if (preferences.typography) this.root.dataset.vnTypography = preferences.typography;
     if (preferences.typewriterAudio) this.typewriterAudio.setMode(preferences.typewriterAudio);
@@ -809,7 +813,8 @@ export class VnStage {
       this.dialogueSheet = new DialogueSheet(this.root, queryRequired(this.themeRoot, "[data-vn-dialogue]"), () => {
         this.toggleAutoPlay(false);
         this.toggleSkip(false);
-      }, next => this.callbacks.onReaderPreferencesChange?.(next));
+      }, next => this.callbacks.onReaderPreferencesChange?.(next), () => this.toggleAutoPlay());
+      this.dialogueSheet.setAutoPlayActive(this.isAutoPlay);
     }
     this.dialogueSheet?.setPreferences(preferences);
   }
@@ -928,9 +933,6 @@ export class VnStage {
     this.root.dataset.apertureMode = mode;
     const shell = this.outerRoot.querySelector<HTMLElement>("[data-vn-shell]");
     if (shell) shell.dataset.apertureMode = mode;
-    document.body.classList.toggle("theme-light", mode === "light");
-    document.body.classList.toggle("theme-dark", mode === "dark");
-    document.documentElement.dataset.apertureMode = mode;
   }
 
   openEntity(id: string, trigger?: HTMLElement): void {
@@ -940,6 +942,10 @@ export class VnStage {
     const shell = this.outerRoot.querySelector<HTMLElement>("[data-vn-shell]");
     if (shell) shell.dataset.vnDossierOpen = "true";
     this.dossiers.openEntityFromStage(id, trigger ?? this.root);
+  }
+
+  getBacklogEntries(): ReadonlyArray<{ speaker?: string | undefined; text: string; formatted: string; paragraphIndex?: number | undefined }> {
+    return this.backlogEntries;
   }
 
   openBacklog(): void {
@@ -1012,6 +1018,7 @@ export class VnStage {
   private updateControlButtons(): void {
     this.autoButton.dataset.vnActive = String(this.isAutoPlay);
     this.autoButton.setAttribute("aria-pressed", String(this.isAutoPlay));
+    this.dialogueSheet?.setAutoPlayActive(this.isAutoPlay);
     this.autoButton.title = this.isAutoPlay ? "Pause auto play (A)" : "Auto play (A)";
     const autoLabel = this.autoButton.querySelector<HTMLElement>("[data-vn-control-label]");
     const autoText = this.isAutoPlay ? "Pause" : "Auto";
@@ -1188,7 +1195,7 @@ export class VnStage {
     this.dispatch({ type: "set-phase", phase });
   }
 
-  showPreparationPreview(preview:NarrativePreview):void {
+  showPreparationPreview(rawPreview: Omit<NarrativePreview, "type" | "sessionId"> & Partial<Pick<NarrativePreview, "type" | "sessionId">>):void { const preview: NarrativePreview = { type: "vn_narrative_preview", sessionId: "", ...rawPreview };
     this.toggleAutoPlay(false);
     this.toggleSkip(false);
     this.narrative.hidden = true;
@@ -1481,7 +1488,9 @@ export class VnStage {
       void this.flashOverlay.offsetWidth;
     }
     this.flashOverlay.classList.add("vn-heartbeat-flash");
-    setTimeout(() => {
+    if (this.heartbeatTimer !== null) clearTimeout(this.heartbeatTimer);
+    this.heartbeatTimer = setTimeout(() => {
+      this.heartbeatTimer = null;
       if (this.destroyed) return;
       delete this.scene.dataset.vnHeartbeat;
       this.flashOverlay.classList.remove("vn-heartbeat-flash");
@@ -1509,6 +1518,10 @@ export class VnStage {
 
   /** One-shot procedural particle bursts rendered into the fx overlay. */
   private triggerFxBurst(effect: StageEffect, duration: number): void {
+    if (this.heartbeatTimer !== null) {
+      clearTimeout(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
     if (this.fxBurstTimer !== null) {
       clearTimeout(this.fxBurstTimer);
       this.fxBurstTimer = null;
@@ -1729,6 +1742,10 @@ export class VnStage {
     this.incomingImageEl.alt = "";
     this.incomingImageEl.dataset.vnEmpty = "true";
 
+    if (this.sceneBackdropEl) {
+      this.sceneBackdropEl.removeAttribute("src");
+      this.sceneBackdropEl.dataset.vnEmpty = "true";
+    }
     this.currentDisplayedUrl = null;
     this.setPagePresentation(null);
   }
@@ -1770,6 +1787,12 @@ export class VnStage {
 
   private updateSceneImage(displayedImage: VnSceneImage): void {
     this.setPagePresentation(displayedImage);
+    if (this.sceneBackdropEl) {
+      if (this.sceneBackdropEl.getAttribute("src") !== displayedImage.url) {
+        this.sceneBackdropEl.src = displayedImage.url;
+      }
+      this.sceneBackdropEl.dataset.vnEmpty = "false";
+    }
     if (this.currentDisplayedUrl === displayedImage.url) {
       const activeShowing = this.activeImageEl.dataset.vnEmpty !== "true" && this.activeImageEl.getAttribute("src") === displayedImage.url;
       const incomingShowing = this.crossfadeTimer !== null && this.incomingImageEl.dataset.vnEmpty !== "true" && this.incomingImageEl.getAttribute("src") === displayedImage.url;
@@ -1909,7 +1932,11 @@ export class VnStage {
     this.root.addEventListener("click", (event) => {
       const dragged = sheetGesture?.moved;
       sheetGesture = null;
-      if (this.root.dataset.vnPageFocus === "true" || this.dialogueSheet?.isHidden()) return;
+      if (this.root.dataset.vnPageFocus === "true") return;
+      if (this.dialogueSheet?.isHidden()) {
+        if (!isInteractiveTarget(event.target)) this.dialogueSheet.setHidden(false);
+        return;
+      }
       if (this.workspace.isOpen() || this.isBacklogOpen || this.dossiers.isOpen()) return;
       if (this.isCleanView) { this.setCleanView(false); return; }
       if (event.target instanceof Element && event.target.closest("[data-vn-dialogue]")) {
@@ -1920,7 +1947,14 @@ export class VnStage {
     });
 
     this.root.addEventListener("keydown", (event) => {
-      if (this.root.dataset.vnPageFocus === "true" || this.dialogueSheet?.isHidden()) return;
+      if (this.root.dataset.vnPageFocus === "true") return;
+      if (this.dialogueSheet?.isHidden()) {
+        if (event.key === "Escape" || event.key === "h" || event.key === "H") {
+          event.preventDefault();
+          this.dialogueSheet.setHidden(false);
+        }
+        return;
+      }
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || this.workspace.isOpen()) return;
       if (this.isBacklogOpen) {
         if (event.key === "Escape") {
@@ -2085,8 +2119,8 @@ export class VnStage {
     const current = this.state.currentParagraphIndex;
     const stepLeft = this.themeRoot.querySelector<HTMLElement>("[data-vn-step-left]");
     const stepRight = this.themeRoot.querySelector<HTMLElement>("[data-vn-step-right]");
-    if (stepLeft) stepLeft.textContent = total > 0 ? `IV / ${current + 1}` : "IV / 4";
-    if (stepRight) stepRight.textContent = String(total > 0 ? total : 7).padStart(2, "0");
+    if (stepLeft) stepLeft.textContent = total > 0 ? `${current + 1} / ${total}` : "1 / 1";
+    if (stepRight) stepRight.textContent = total > 0 ? `${Math.round(((current + 1) / total) * 100)}%` : "0%";
     this.scrubber.hidden = false;
     const count = total > 0 ? total : 4;
     const dots: HTMLElement[] = [];
@@ -2441,7 +2475,9 @@ export class VnStage {
           this.resetAutoRing();
           return;
         }
-        this.startAutoCountdown(this.autoPlayDelay);
+        const charCount = view.paragraph?.text.length ?? 0;
+        const adaptiveDelay = this.readerPreferences?.smartPacing !== false ? Math.max(this.autoPlayDelay, Math.min(9000, charCount * 38)) : this.autoPlayDelay;
+        this.startAutoCountdown(adaptiveDelay);
       } else {
         this.resetAutoRing();
       }
@@ -2461,7 +2497,9 @@ export class VnStage {
       this.clearAutoPlayTimer();
       return;
     }
-    this.startAutoCountdown(this.autoPlayDelay);
+    const charCount = view.paragraph?.text.length ?? 0;
+    const adaptiveDelay = this.readerPreferences?.smartPacing !== false ? Math.max(this.autoPlayDelay, Math.min(9000, charCount * 38)) : this.autoPlayDelay;
+    this.startAutoCountdown(adaptiveDelay);
   }
 
   /**

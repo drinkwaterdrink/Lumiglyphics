@@ -1,3 +1,4 @@
+import { sceneImageUrlFor } from "./image-loader.js";
 import type {AssetView,TurnView} from '../../protocol.js';
 import {selectCastComposition,type CastPortrait} from '../../shared/cast-composition.js';
 import {preloadAndDecodeVnImage,type VnImageFactory} from './image-loader.js';

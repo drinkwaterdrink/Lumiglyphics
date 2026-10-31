@@ -10,7 +10,7 @@ const validateSetup=(value:{outfits:Array<{id:string}>,defaultOutfitId:string|nu
 export const CastSetupInputSchema=z.object({...setupShape,outfits:z.array(z.object(outfitShape).strict()).max(7).default([])}).strict().superRefine(validateSetup);
 export const CastSetupSchema=z.object({...setupShape,outfits:z.array(z.object({...outfitShape,imageId:id.optional(),imageAppearance:z.string().max(2000).optional(),imageAttire:z.string().max(1000).optional()}).strict()).max(7).default([]),imageId:id.optional(),imageAppearance:z.string().max(2000).optional()}).strict().superRefine(validateSetup);
 export type CastSetup=z.infer<typeof CastSetupSchema>;
-export type CastSetupInput=z.infer<typeof CastSetupInputSchema>;
+export type CastSetupInput=Omit<z.infer<typeof CastSetupInputSchema>,'anchors'>&{anchors?:string[]};
 export function setupAppearance(setup:CastSetup):string{const parts:string[]=[];if(setup.anchors&&setup.anchors.length>0)parts.push(setup.anchors.map(a=>`(${a}:1.2)`).join(', '));parts.push(setup.appearance);const outfit=setup.outfits.find(o=>o.id===setup.defaultOutfitId)?.description;if(outfit)parts.push(outfit);return parts.filter(Boolean).join(', ');}
 export const CastArtVariantSchema=z.object({
  id,imageId:id,requestFingerprint:id,appearanceFingerprint:id,description:z.string().max(4000),
@@ -37,7 +37,7 @@ export const CastArtRequestSchema=z.object({
  if(value.action==='setup'&&(!value.name||!value.setup))ctx.addIssue({code:'custom',path:['setup'],message:'Enter a name and appearance.'});
  if(value.action==='setup_supply'&&!value.imageId)ctx.addIssue({code:'custom',path:['imageId'],message:'Choose artwork.'});
 });
-export type CastArtAction=Pick<z.infer<typeof CastArtRequestSchema>,'action'|'characterId'|'variantId'|'imageId'|'outfitId'|'name'|'setup'>;
+export type CastArtAction=Omit<Pick<z.infer<typeof CastArtRequestSchema>,'action'|'characterId'|'variantId'|'imageId'|'outfitId'|'name'|'setup'>,'setup'>&{setup?:CastSetupInput|undefined};
 
 export const CastGalleryRequestSchema=z.object({type:z.literal('vn_cast_gallery'),chatId:id,requestId:id,offset:z.number().int().min(0).max(10000)}).strict();
 export const CastGallerySchema=z.object({offset:z.number().int().nonnegative(),total:z.number().int().nonnegative(),images:z.array(z.object({id,name:z.string().max(256),url:z.string().max(1024).refine(v=>v.startsWith('/')&&!v.startsWith('//')&&!v.includes('\\'))}).strict()).max(12)}).strict();

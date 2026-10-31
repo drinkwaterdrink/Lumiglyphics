@@ -532,7 +532,7 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
       let matchedSpeaker = extractedSpeakers.get(paragraph.text);
       if (!matchedSpeaker) {
         for (const [dialogueText, speaker] of extractedSpeakers.entries()) {
-          if (paragraph.text === dialogueText || paragraph.text.includes(dialogueText) || dialogueText.includes(paragraph.text)) {
+          if (paragraph.text === dialogueText || (dialogueText.length >= 12 && paragraph.text.includes(dialogueText)) || (paragraph.text.length >= 12 && dialogueText.includes(paragraph.text))) {
             matchedSpeaker = speaker;
             break;
           }

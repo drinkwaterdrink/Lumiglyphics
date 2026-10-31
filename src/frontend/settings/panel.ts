@@ -679,11 +679,6 @@ export class VisualNovelSettingsPanel {
           `)}
 
           ${pane("look", `
-            <div class="appearance-surface-preview" aria-label="Live dialogue surface preview">
-              <svg class="appearance-mini-rings" viewBox="0 0 310 130" aria-hidden="true"><circle cx="240" cy="85" r="83"/><circle cx="240" cy="85" r="56"/><circle cx="240" cy="85" r="27"/><path d="M24 108H286"/></svg>
-              <div class="preview-appearance-head">LIVE / SURFACE PREVIEW <span>✧</span></div>
-              <div class="preview-caption-mini" data-mini-caption-preview><span>TIBOLD / KIT HALL</span><p>“The dialogue surface adjusts from transparent to solid below.”</p></div>
-            </div>
             <div data-sample-slot style="margin: 14px 0 20px;"></div>
             ${group("Theme", themeTiles(), { find: find("Theme", "preset style colours colors skin golden paper noir console yamaku literature") })}
             ${group("Text", `
@@ -973,7 +968,7 @@ export class VisualNovelSettingsPanel {
       pane.hidden=next.id==='home'||pane.dataset.pane!==next.section;
       for(const child of Array.from(pane.children) as HTMLElement[]){
         if(child.matches('[data-pane-head]'))continue;
-        child.toggleAttribute('data-route-hidden',child.dataset.workspacePage?child.dataset.workspacePage!==next.id:defaults[pane.dataset.pane!]!==next.id);
+        child.toggleAttribute('data-route-hidden',child.dataset.workspacePage?child.dataset.workspacePage!==next.id:(defaults[pane.dataset.pane!]!==next.id&&!(pane.dataset.pane==='sound'&&next.id==='audio')));
       }
       const title=pane.querySelector<HTMLElement>('[data-pane-head] h2'),description=pane.querySelector<HTMLElement>('[data-pane-head] p');
       if(!pane.hidden){if(title)title.textContent=next.title;if(description)description.textContent=next.description;}
@@ -1045,11 +1040,11 @@ export class VisualNovelSettingsPanel {
     for(const button of this.root.querySelectorAll<HTMLButtonElement>('[data-entity-tab]'))button.onclick=()=>{
       const apply=()=>{const places=button.dataset.entityTab==='places';this.root.querySelector<HTMLElement>('[data-cast-mount]')!.hidden=places;this.root.querySelector<HTMLElement>('[data-places-mount]')!.hidden=!places;for(const tab of this.root.querySelectorAll('[data-entity-tab]'))tab.setAttribute('aria-pressed',String(tab===button));if(places)this.locationArtPanel.ensureLoaded();else this.castArtPanel.ensureLoaded();};
       this.castArtPanel.guardNavigation(apply);
-      this.host.addEventListener("lumiglyphics:navigate", (e: Event) => {
-        const d = (e as CustomEvent<{page?:string}>).detail;
-        if (d?.page) this.openPage(d.page, { focus: true });
-      });
     };
+    this.host.addEventListener("lumiglyphics:navigate", (e: Event) => {
+      const d = (e as CustomEvent<{page?:string}>).detail;
+      if (d?.page) this.openPage(d.page, { focus: true });
+    });
   }
 
   /** Opens the section holding `element`, any closed disclosure around it, scrolls to it and focuses it. */
@@ -1549,12 +1544,6 @@ export class VisualNovelSettingsPanel {
         const themeMode: "light" | "dark" = isLight ? "light" : "dark";
         this.host.dataset.apertureMode = themeMode;
         this.host.dataset.vnPreset = preset;
-        document.body?.classList.toggle("theme-dark", !isLight);
-        document.body?.classList.toggle("theme-light", isLight);
-        if (document.documentElement) {
-          document.documentElement.dataset.apertureMode = themeMode;
-          document.documentElement.dataset.vnPreset = preset;
-        }
         const status = this.root.querySelector<HTMLElement>("[data-aperture-theme-status]");
         if (status) status.textContent = `${THEME_PRESET_LABELS[preset].toUpperCase()} / ACTIVE`;
         return {
@@ -2141,12 +2130,6 @@ export class VisualNovelSettingsPanel {
     if (themeStatus) themeStatus.textContent = `${THEME_PRESET_LABELS[config.themePreset].toUpperCase()} / ACTIVE`;
     this.host.dataset.apertureMode = themeMode;
     this.host.dataset.vnPreset = config.themePreset;
-    document.body?.classList.toggle("theme-dark", !isLight);
-    document.body?.classList.toggle("theme-light", isLight);
-    if (document.documentElement) {
-      document.documentElement.dataset.apertureMode = themeMode;
-      document.documentElement.dataset.vnPreset = config.themePreset;
-    }
     this.showCustomQuiet("textScale", !scaleStep);
 
     const source = imageSourceFromConfig(config);

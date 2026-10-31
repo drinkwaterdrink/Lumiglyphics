@@ -575,19 +575,22 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     onPrevious: (paragraphIndex) => {
       saveCursor(paragraphIndex);
       imageStudio.setCursor(paragraphIndex);
+      imageLibrary.setCurrentScenePassages(stage.getBacklogEntries(), (idx) => stage.jumpToParagraph(idx));
       imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
       panels.setCursor(paragraphIndex);
       syncSpeechCursor(turn, paragraphIndex);
-      audioEngine.stopAll();
       audioEngine.setBgmAttenuation(musicAttenuationForParagraph(turn,paragraphIndex));
       const earlierMusic = turn?.audioCues?.filter((cue) => cue.paragraphIndex <= paragraphIndex && (cue.bgmUrl || cue.bgm))
         .sort((a, b) => b.paragraphIndex - a.paragraphIndex)[0];
-      currentBgm = earlierMusic?.bgmUrl || earlierMusic?.bgm || turnOpeningBgm;
-      if (currentBgm) audioEngine.playBgm(currentBgm);
+      const nextBgm = earlierMusic?.bgmUrl || earlierMusic?.bgm || turnOpeningBgm;
+      currentBgm = nextBgm;
+      if (nextBgm) audioEngine.playBgm(nextBgm);
+      else audioEngine.stopBgm();
       void syncImageForParagraph(paragraphIndex);
     },
     onAdvance: (paragraphIndex) => {
       imageStudio.setCursor(paragraphIndex);
+      imageLibrary.setCurrentScenePassages(stage.getBacklogEntries(), (idx) => stage.jumpToParagraph(idx));
       imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
       panels.setCursor(paragraphIndex);
       if (pendingNextTurn) {
@@ -679,7 +682,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if(open){stage.toggleSkip(false);stage.holdAutoPlay();}else if(active)stage.checkAutoPlay();
   });
   imageLibrary.useHistoryEntry();
-  stage.historyOpener=opener=>imageLibrary.open('story',opener);
+  stage.historyOpener=opener=>{imageLibrary.setCurrentScenePassages(stage.getBacklogEntries(),(idx)=>stage.jumpToParagraph(idx));imageLibrary.open('story',opener);};
   const imageStudio = new ImageStudio(stage.panelMount, (request) => ctx.sendToBackend(request), (enabled) => {
     ctx.sendToBackend({ type: "vn_set_config", patch: { reviewImages: enabled }, chatId: chatId() ?? "" });
   },open=>{imageStudioOpen=open;if(open){stage.panelMount.dataset.vnStudioOpen='true';stage.workspace.open('artwork');stage.toggleSkip(false);stage.holdAutoPlay();}else{delete stage.panelMount.dataset.vnStudioOpen;stage.workspace.toolClosed('artwork');if(active)stage.checkAutoPlay();}},operations=>{
@@ -687,7 +690,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     stage.workspace.setAttention(computeReviewAttention(turn,operations));
   });
   stage.workspace.register('artwork',{element:imageStudio.getElement(),hideAtHome:true,enter:()=>imageStudio.open(),leave:()=>imageStudio.close()});
-  stage.workspace.register('history',{element:imageLibrary.getElement(),hideAtHome:true,enter:()=>{if(!imageLibrary.isOpen())imageLibrary.openWorkspace();},leave:()=>imageLibrary.close(),back:()=>imageLibrary.backWithinWorkspace()});
+  stage.workspace.register('history',{element:imageLibrary.getElement(),hideAtHome:true,enter:()=>{imageLibrary.setCurrentScenePassages(stage.getBacklogEntries(),(idx)=>stage.jumpToParagraph(idx));if(!imageLibrary.isOpen())imageLibrary.openWorkspace();},leave:()=>imageLibrary.close(),back:()=>imageLibrary.backWithinWorkspace()});
   imageLibrary.setDocked();
   imageStudio.setLibraryOpener(()=>imageLibrary.open('images'));
   const panelRequests = new Map<string, { resolve: (template: string) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();

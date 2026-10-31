@@ -290,360 +290,18 @@ body.theme-light aside[data-vn-workspace],
 [data-aperture-mode="light"] [data-vn-dossier-card],
 [data-aperture-mode="light"] [data-vn-cast-root],
 [data-aperture-mode="light"] aside[data-vn-workspace] {
-  background: linear-gradient(147deg, #eef3e5 0%, #e8eee0 58%, #dce7d3 100%) !important;
-  color: #172721 !important;
-}
-
-body.theme-dark [data-surface],
-body.theme-dark [data-vn-settings],
-body.theme-dark .settings-page,
-body.theme-dark [data-settings-route],
-body.theme-dark [data-vn-reference-sheet],
-body.theme-dark [data-vn-dossier-card],
-body.theme-dark [data-vn-cast-root],
-body.theme-dark aside[data-vn-workspace],
-[data-aperture-mode="dark"] [data-surface],
-[data-aperture-mode="dark"] [data-vn-settings],
-[data-aperture-mode="dark"] .settings-page,
-[data-aperture-mode="dark"] [data-settings-route],
-[data-aperture-mode="dark"] [data-vn-reference-sheet],
-[data-aperture-mode="dark"] [data-vn-dossier-card],
-[data-aperture-mode="dark"] [data-vn-cast-root],
-[data-aperture-mode="dark"] aside[data-vn-workspace] {
-  background: linear-gradient(155deg, #151f20 0%, #101a1e 58%, #0b1419 100%) !important;
-  color: #e7eee5 !important;
-}
-
-/* =========================================================================
-   APERTURE IRIS NAVIGATION (01 - 08)
-   ========================================================================= */
-
-.aperture-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 500;
-  background: #e2ecca;
-  color: #14201f;
-  clip-path: circle(0 at 90% 90%);
-  visibility: hidden;
-  transition: clip-path 0.47s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.47s;
-  overflow: auto;
-  overscroll-behavior: contain;
-}
-
-.aperture-overlay.open {
-  visibility: visible;
-  clip-path: circle(160% at 90% 90%);
-}
-
-.aperture-overlay:before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: repeating-radial-gradient(circle at 91% 88%, transparent 0px, transparent 42px, rgba(30, 56, 52, 0.06) 43px, transparent 44px);
-  opacity: 0.9;
-}
-
-body.theme-dark .aperture-overlay,
-[data-aperture-mode="dark"] .aperture-overlay {
-  background: #172724;
-  color: #edf3e8;
-}
-
-body.theme-dark .aperture-overlay:before,
-[data-aperture-mode="dark"] .aperture-overlay:before {
-  background: repeating-radial-gradient(circle at 91% 88%, transparent 0, transparent 42px, rgba(206, 229, 188, 0.07) 43px, transparent 44px);
-}
-
-.aperture-content {
-  position: relative;
-  padding: calc(45px + env(safe-area-inset-top, 0px)) 24px calc(40px + env(safe-area-inset-bottom, 0px));
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.aperture-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.aperture-word {
-  font-size: 11px;
-  letter-spacing: 0.16em;
-  font-weight: 750;
-}
-
-.aperture-title {
-  font-family: Georgia, serif;
-  font-size: 38px;
-  letter-spacing: -0.055em;
-  font-weight: 400;
-  line-height: 0.98;
-  margin-top: 36px;
-  max-width: 300px;
-}
-
-.aperture-title i {
-  font-style: italic;
-}
-
-.aperture-links {
-  margin-top: 28px;
-  border-top: 1px solid rgba(27, 49, 43, 0.25);
-}
-
-body.theme-dark .aperture-links,
-[data-aperture-mode="dark"] .aperture-links {
-  border-top-color: rgba(199, 224, 198, 0.25);
-}
-
-.aperture-link {
-  width: 100%;
-  border: 0;
-  border-bottom: 1px solid rgba(27, 49, 43, 0.18);
-  display: flex;
-  gap: 14px;
-  align-items: center;
-  text-align: left;
-  padding: 13px 4px 14px;
-  min-height: 56px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  touch-action: manipulation;
-  transition: background 0.16s ease, transform 0.16s ease;
-}
-
-body.theme-dark .aperture-link,
-[data-aperture-mode="dark"] .aperture-link {
-  border-bottom-color: rgba(199, 224, 198, 0.2);
-}
-
-.aperture-link .number {
-  font-size: 11px;
-  font-family: ui-monospace, Consolas, monospace;
-  color: #60716a;
-  width: 28px;
-}
-
-body.theme-dark .aperture-link .number,
-[data-aperture-mode="dark"] .aperture-link .number {
-  color: #b2c8b7;
-}
-
-.aperture-link span:not(.number) {
-  font-family: Georgia, serif;
-  font-size: 21px;
-  letter-spacing: -0.02em;
-  flex: 1;
-}
-
-.aperture-link .icon {
-  width: 20px;
-  height: 20px;
-  opacity: 0.8;
-}
-
-.aperture-link:active {
-  background: rgba(208, 220, 189, 0.6);
-  transform: scale(0.98);
-}
-
-body.theme-dark .aperture-link:active,
-[data-aperture-mode="dark"] .aperture-link:active {
-  background: rgba(41, 74, 58, 0.6);
-}
-
-.aperture-foot {
-  margin-top: auto;
-  display: flex;
-  justify-content: space-between;
-  padding-top: 26px;
-  font-size: 10px;
-  color: #5b6b65;
-}
-
-body.theme-dark .aperture-foot,
-[data-aperture-mode="dark"] .aperture-foot {
-  color: #b2c8b7;
-}
-
-.aperture-close {
-  border: 1px solid #7f9589;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-
-/* =========================================================================
-   PERSISTENT COMPACT BOTTOM ROUTE BAR (.route-bar)
-   ========================================================================= */
-
-.route-bar {
-  position: absolute;
-  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-  left: 11px;
-  right: 11px;
-  height: 54px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border-radius: 17px;
-  padding: 5px 7px 5px 14px;
-  z-index: 100;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 12px 32px rgba(18, 45, 31, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-}
-
-body.theme-light .route-bar,
-[data-aperture-mode="light"] .route-bar {
-  background: rgba(236, 244, 226, 0.96);
-  color: #243b2c;
-  border: 1px solid rgba(51, 78, 60, 0.22);
-}
-
-body.theme-dark .route-bar,
-[data-aperture-mode="dark"] .route-bar {
-  background: rgba(25, 43, 40, 0.95);
-  color: #eaf3e4;
-  border: 1px solid rgba(189, 215, 174, 0.24);
-}
-
-.route-bar .route-name {
-  font-size: 10px;
-  letter-spacing: 0.115em;
-  font-weight: 750;
-  max-width: 145px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.route-bar .route-step {
-  font-size: 9px;
-  white-space: nowrap;
-  opacity: 0.8;
-  margin-top: 2px;
-}
-
-.route-bar .route-actions {
-  display: flex;
-  gap: 3px;
-  align-items: center;
-}
-
-.route-bar .route-actions button {
-  width: 38px;
-  height: 40px;
-  border: 0;
-  border-radius: 11px;
-  display: grid;
-  place-items: center;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  transition: background 0.16s ease, transform 0.16s ease;
-}
-
-.route-bar .route-actions button:hover {
-  background: rgba(94, 139, 101, 0.14);
-}
-
-.route-bar .route-actions button:active {
-  transform: scale(0.94);
-}
-
-.route-bar .route-actions .dock-settings {
-  width: 52px;
-  display: flex;
-  gap: 2px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.route-bar .route-actions .dock-settings span {
-  font-size: 8px;
-  line-height: 1;
-  font-weight: 700;
-  letter-spacing: 0.025em;
-}
-
-.route-bar .route-actions .menu-key {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: auto;
-  min-width: 92px;
-  padding: 0 12px;
-  border-radius: 12px;
-  background: #223d2f;
-  color: #eff6e8 !important;
-  font-size: 11px;
-  font-weight: 740;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-}
-
-body.theme-dark .route-bar .route-actions .menu-key,
-[data-aperture-mode="dark"] .route-bar .route-actions .menu-key {
-  background: #dce9b5;
-  color: #1b3124 !important;
-}
-
-/* Reserve scrolling room above the persistent route bar */
-
-/* Legacy navigation suppressed offscreen */
-[data-vn-navigation] {
   position: absolute !important;
-  left: -9999px !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-  width: 1px !important;
-  height: 1px !important;
-}
-
-/* Route bar visibility: suppressed on reader, active on workspace */
-.route-bar[hidden],
-[hidden].route-bar,
-.route-bar[hidden],
-.route-bar:not([data-active="true"]),
-[data-vn-shell]:not([data-vn-workspace]) .route-bar,
-[data-vn-shell]:not([data-vn-workspace]) > .route-bar,
-:not([data-vn-workspace]) > .route-bar,
-[data-vn-root] .route-bar,
-[data-vn-reader-first="true"]:not([data-vn-workspace]) .route-bar {
-  display: none !important;
-}
-[data-vn-workspace] .route-bar:not([hidden]) {
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  z-index: 60 !important;
+  background: var(--vn-shell-panel, linear-gradient(155deg, #151f20 0%, #101a1e 58%, #0b1419 100%)) !important;
+  color: var(--vn-shell-text, #eff4e9) !important;
   display: flex !important;
-}
-
-/* Hide legacy elements in APERTURE v4 */
-.vn-speech-dock,
-[data-vn-speech-dock],
-[data-dock],
-[data-vn-panel-layer] .launcher,
-.launcher {
-  display: none !important;
-}
-
-[data-vn-shell] > [data-vn-exit] {
-  position: absolute !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-  width: 0 !important;
-  height: 0 !important;
+  flex-direction: column !important;
   overflow: hidden !important;
 }
 
@@ -787,207 +445,61 @@ aside[data-vn-workspace] {
   pointer-events: none !important;
 }
 
-/* Dock dialogue firmly to bottom of viewport above bottom action bar */
-[data-vn-dialogue]:not([hidden]):not([data-hidden="true"]),
-[data-vn-root] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]),
-[data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]),
-[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]) {
+/* Ambient Blurred Scene Backdrop (fills vertical mobile aspect-ratio voids) */
+[data-vn-root] [data-vn-scene-backdrop],
+[data-vn-scene] [data-vn-scene-backdrop] {
   position: absolute !important;
-  z-index: 22 !important;
-  left: 15px !important;
-  right: 15px !important;
-  top: auto !important;
-  bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
-  height: var(--caption-height, 142px);
-  min-height: 100px !important;
-  max-height: calc(100% - 160px) !important;
-  padding: 16px 14px 8px !important;
-  border: 1px solid rgba(224, 238, 217, 0.32) !important;
-  border-radius: 16px !important;
-  background: rgba(4, 13, 17, var(--caption-opacity, 0.72)) !important;
-  -webkit-backdrop-filter: blur(var(--caption-blur, 8px)) !important;
-  backdrop-filter: blur(var(--caption-blur, 8px)) !important;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 4px !important;
-  overflow: hidden !important;
-  pointer-events: auto !important;
-  transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
+  inset: -8% !important;
+  width: 116% !important;
+  height: 116% !important;
+  max-width: none !important;
+  max-height: none !important;
+  object-fit: cover !important;
+  object-position: center center !important;
+  filter: blur(34px) saturate(1.32) brightness(0.46) !important;
+  transform: scale(1.06) !important;
+  opacity: 0.94 !important;
+  pointer-events: none !important;
+  z-index: 0 !important;
+  transition: opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
 
-[data-vn-dialogue]::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background: linear-gradient(137deg, rgba(255, 255, 255, 0.052), transparent 40%, rgba(210, 237, 190, 0.028));
+[data-vn-root] [data-vn-scene-backdrop][data-vn-empty="true"],
+[data-vn-scene] [data-vn-scene-backdrop][data-vn-empty="true"] {
+  opacity: 0 !important;
+}
+
+[data-vn-root] [data-vn-scene-image],
+[data-vn-scene] [data-vn-scene-image] {
+  z-index: 1 !important;
+}
+
+/* Neutralize legacy dialogue pseudo-elements that caused cloudy header smudges */
+[data-vn-root] [data-vn-dialogue]::before,
+[data-vn-root] [data-vn-dialogue]::after,
+[data-vn-dialogue]::before,
+[data-vn-dialogue]::after {
+  display: none !important;
+  content: none !important;
+  background: none !important;
+  box-shadow: none !important;
 }
 
 .caption-edge {
   position: absolute;
   top: 0;
-  left: 20px;
-  right: 20px;
+  left: 22px;
+  right: 22px;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(224, 238, 177, 0.46), transparent);
+  background: linear-gradient(90deg, transparent, var(--aperture-accent, rgba(224, 238, 177, 0.5)), transparent);
   pointer-events: none;
+  z-index: 2;
 }
 
-/* Draggable Top Resize Grip */
-.resize-grip {
-  position: absolute !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  height: 24px !important;
-  display: flex !important;
-  justify-content: center !important;
-  align-items: center !important;
-  cursor: ns-resize !important;
-  touch-action: none !important;
-  z-index: 25 !important;
-}
-
-.resize-grip span {
-  width: 48px;
-  height: 4px;
-  border-radius: 999px;
-  background: rgba(220, 238, 177, 0.45);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
-  transition: background 0.2s ease, width 0.2s ease, transform 0.2s ease;
-  pointer-events: none;
-}
-
-.resize-grip:hover span,
-.resize-grip:active span,
-.resize-grip:focus-visible span {
-  background: #dcebad;
-  width: 64px;
-  transform: scaleY(1.2);
-}
-
-/* Dialogue Head: Speaker + Actions */
-[data-vn-sheet-header] {
-  display: flex !important;
-  gap: 6px !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  width: 100% !important;
-  flex: 0 0 24px !important;
-  min-height: 24px !important;
-  border-bottom: 1px solid rgba(228, 240, 218, 0.15) !important;
-  padding-bottom: 3px !important;
-  margin-bottom: 2px !important;
-}
-
-.speaker {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 6px !important;
-  min-width: 0 !important;
-  overflow: hidden !important;
-}
-
-[data-vn-speaker] {
-  font-size: 11px !important;
-  line-height: 1.4 !important;
-  letter-spacing: 0.11em !important;
-  font-weight: 800 !important;
-  margin: 0 !important;
-  color: #dcebad !important;
-  text-transform: uppercase !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8) !important;
-}
-
-.caption-split {
-  font-size: 10px !important;
-  color: rgba(220, 238, 177, 0.4) !important;
-  font-weight: 400 !important;
-}
-
-[data-vn-caption-scene] {
-  font-size: 9.5px !important;
-  letter-spacing: 0.08em !important;
-  color: #a4b8ad !important;
-  text-transform: uppercase !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  opacity: 0.85 !important;
-}
-
-.caption-head-actions {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 4px !important;
-  flex: none !important;
-}
-
-.caption-tool {
-  width: 26px !important;
-  height: 24px !important;
-  display: grid !important;
-  place-items: center !important;
-  color: #f0f4e7 !important;
-  opacity: 0.85 !important;
-  border-radius: 6px !important;
-  border: 1px solid rgba(220, 238, 177, 0.18) !important;
-  background: rgba(255, 255, 255, 0.05) !important;
-  cursor: pointer !important;
-  transition: all 0.15s ease !important;
-  padding: 0 !important;
-}
-
-.caption-tool:hover {
-  background: rgba(220, 238, 177, 0.22) !important;
-  border-color: #dcebad !important;
-  opacity: 1 !important;
-}
-
-.caption-tool svg {
-  width: 14px !important;
-  height: 14px !important;
-}
-
-/* Scrollable Copy */
-.scroll-copy {
-  flex: 1 1 auto !important;
-  min-height: 0 !important;
-  max-height: 100% !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-  -webkit-overflow-scrolling: touch !important;
-  touch-action: pan-y !important;
-  overscroll-behavior: contain !important;
-  scrollbar-width: thin !important;
-  padding: 2px 0 6px !important;
-}
-
-[data-vn-dialogue-text] {
-  flex: 1;
-  min-height: 0;
-  max-height: none;
-  margin: 0;
-  font-size: calc(var(--reader-font, 15px) * var(--vn-text-scale, 1)) !important;
-  line-height: calc(1.55 * var(--vn-text-scale, 1)) !important;
-  letter-spacing: 0;
-  color: var(--aperture-text, #f9faf6) !important;
-  font-family: Georgia, 'Times New Roman', serif;
-  text-shadow: 0 2px 7px rgba(0, 0, 0, 0.82), 0 1px 1px black;
-  user-select: text !important;
-  overflow-wrap: break-word !important;
-}
-
-/* Dialogue Footer */
+/* Dialogue Footer (legacy) */
 [data-vn-dialogue-footer],
 .caption-foot {
   display: none !important;
-}
 }
 
 /* Dialogue Restore Button (when minimized) */
@@ -1715,49 +1227,49 @@ body.theme-light .folio-quote-callout {
    APERTURE UNIFIED READER DIALOGUE & INTEGRATED CONTROLS
    ========================================================================= */
 
-/* Symmetrical, perfectly centered dialogue card */
-[data-vn-dialogue],
-[data-vn-root] [data-vn-dialogue],
-[data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-dialogue],
-[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-dialogue] {
+/* Symmetrical, perfectly centered dialogue card with integrated bottom scrubber */
+[data-vn-dialogue]:not([hidden]):not([data-hidden="true"]),
+[data-vn-root] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]),
+[data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]),
+[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]) {
   position: absolute !important;
   z-index: 30 !important;
-  left: 14px !important;
-  right: 14px !important;
+  left: 12px !important;
+  right: 12px !important;
   width: auto !important;
   max-width: none !important;
   margin: 0 !important;
   box-sizing: border-box !important;
   top: auto !important;
   bottom: calc(64px + env(safe-area-inset-bottom, 0px)) !important;
-  height: var(--caption-height, 146px);
-  min-height: 114px !important;
-  max-height: calc(100% - 140px) !important;
-  padding: 10px 14px 42px !important;
-  border: 1px solid rgba(160, 205, 185, 0.28) !important;
-  border-radius: 16px !important;
-  background: rgba(8, 18, 15, var(--caption-opacity, 0.82)) !important;
-  -webkit-backdrop-filter: blur(var(--caption-blur, 14px)) !important;
-  backdrop-filter: blur(var(--caption-blur, 14px)) !important;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  height: var(--caption-height, 168px);
+  min-height: 132px !important;
+  max-height: calc(100% - 134px) !important;
+  padding: 12px 16px 44px !important;
+  border: 1px solid var(--aperture-dialogue-border, rgba(160, 205, 185, 0.28)) !important;
+  border-radius: 18px !important;
+  background: var(--aperture-dialogue-bg, rgba(8, 18, 15, var(--caption-opacity, 0.84))) !important;
+  -webkit-backdrop-filter: blur(var(--caption-blur, 16px)) saturate(1.15) !important;
+  backdrop-filter: blur(var(--caption-blur, 16px)) saturate(1.15) !important;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 2px !important;
+  gap: 4px !important;
   overflow: hidden !important;
   pointer-events: auto !important;
   touch-action: pan-y !important;
-  transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
+  transition: box-shadow 0.24s ease, border-color 0.24s ease, background 0.24s ease, height 0.18s ease !important;
 }
 
 /* Draggable Top Resize Grip */
 .resize-grip,
 [data-vn-sheet-handle] {
   position: absolute !important;
-  top: 3px !important;
+  top: 0 !important;
   left: 50% !important;
   transform: translateX(-50%) !important;
-  width: 44px !important;
-  height: 8px !important;
+  width: 64px !important;
+  height: 16px !important;
   cursor: ns-resize !important;
   display: flex !important;
   align-items: center !important;
@@ -1768,83 +1280,111 @@ body.theme-light .folio-quote-callout {
 
 .resize-grip span {
   display: block !important;
-  width: 32px !important;
-  height: 3px !important;
-  border-radius: 2px !important;
-  background: rgba(220, 238, 177, 0.45) !important;
+  width: 36px !important;
+  height: 3.5px !important;
+  border-radius: 999px !important;
+  background: var(--aperture-accent, rgba(220, 238, 177, 0.45)) !important;
+  opacity: 0.55 !important;
+  transition: opacity 0.2s ease, width 0.2s ease, transform 0.2s ease !important;
 }
 
-/* Dialogue Header (Speaker, Scene, Expand, Minimize) */
+.resize-grip:hover span,
+.resize-grip:active span {
+  opacity: 0.95 !important;
+  width: 48px !important;
+  transform: scaleY(1.15) !important;
+}
+
+/* Dialogue Header (Speaker, Scene, Auto, Expand, Minimize) */
 .caption-head,
 [data-vn-sheet-header] {
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
-  min-height: 22px !important;
+  gap: 8px !important;
+  min-height: 24px !important;
   margin-top: 2px !important;
   margin-bottom: 4px !important;
-  padding-bottom: 4px !important;
-  border-bottom: 1px solid rgba(160, 205, 185, 0.18) !important;
+  padding-bottom: 5px !important;
+  border-bottom: 1px solid var(--aperture-dialogue-border, rgba(160, 205, 185, 0.18)) !important;
   flex: none !important;
+  background: transparent !important;
 }
 
 .caption-head .speaker {
-  display: flex !important;
+  display: inline-flex !important;
   align-items: center !important;
-  gap: 4px !important;
+  gap: 6px !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+  overflow: hidden !important;
 }
 
 .caption-head [data-vn-speaker] {
   font-size: 11px !important;
-  font-weight: 700 !important;
-  color: #dcebad !important;
-  letter-spacing: 0.08em !important;
+  font-weight: 800 !important;
+  color: var(--aperture-accent, #dcebad) !important;
+  letter-spacing: 0.09em !important;
   text-transform: uppercase !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 
 .caption-head .caption-split {
-  color: #6d8678 !important;
+  color: var(--aperture-muted, #6d8678) !important;
   font-size: 10px !important;
+  opacity: 0.55 !important;
+  flex: none !important;
 }
 
 .caption-head [data-vn-caption-scene] {
-  font-size: 10px !important;
-  color: #9cb5a8 !important;
-  letter-spacing: 0.06em !important;
+  font-size: 9.5px !important;
+  color: var(--aperture-muted, #9cb5a8) !important;
+  letter-spacing: 0.07em !important;
+  text-transform: uppercase !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  opacity: 0.9 !important;
 }
 
 .caption-head-actions,
 [data-vn-sheet-tools] {
-  display: flex !important;
+  display: inline-flex !important;
   align-items: center !important;
-  gap: 4px !important;
+  gap: 5px !important;
+  flex: none !important;
 }
 
 .caption-tool {
-  width: 22px !important;
-  height: 22px !important;
-  border-radius: 6px !important;
-  border: 1px solid rgba(160, 205, 185, 0.22) !important;
+  width: 24px !important;
+  height: 24px !important;
+  border-radius: 7px !important;
+  border: 1px solid var(--aperture-button-border, rgba(160, 205, 185, 0.22)) !important;
   background: rgba(255, 255, 255, 0.06) !important;
-  color: #edf3ea !important;
+  color: var(--aperture-text, #edf3ea) !important;
   display: grid !important;
   place-items: center !important;
   padding: 0 !important;
   cursor: pointer !important;
-  transition: all 0.15s ease !important;
+  transition: all 0.16s ease !important;
 }
 
-.caption-tool:hover {
-  background: rgba(220, 238, 177, 0.2) !important;
-  border-color: #dcebad !important;
+.caption-tool:hover,
+.caption-tool[aria-pressed="true"],
+.caption-tool[data-active="true"] {
+  background: var(--aperture-button-hover-bg, rgba(220, 238, 177, 0.22)) !important;
+  border-color: var(--aperture-accent, #dcebad) !important;
+  color: var(--aperture-accent, #dcebad) !important;
 }
 
 .caption-tool svg {
-  width: 14px !important;
-  height: 14px !important;
+  width: 13px !important;
+  height: 13px !important;
 }
 
-/* Scrollable Copy */
+/* Scrollable Copy (cleanly bounded above the 44px footer bar) */
 .scroll-copy,
 [data-vn-dialogue] .scroll-copy {
   flex: 1 1 auto !important;
@@ -1856,9 +1396,11 @@ body.theme-light .folio-quote-callout {
   touch-action: pan-y !important;
   overscroll-behavior: contain !important;
   scrollbar-width: thin !important;
-  scrollbar-color: rgba(220, 238, 177, 0.45) transparent !important;
-  padding: 2px 2px 42px !important;
+  scrollbar-color: var(--aperture-accent, rgba(220, 238, 177, 0.45)) transparent !important;
+  padding: 2px 2px 8px !important;
   margin: 0 !important;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 calc(100% - 8px), transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 calc(100% - 8px), transparent 100%);
 }
 
 [data-vn-dialogue-text],
@@ -1874,22 +1416,23 @@ body.theme-light .folio-quote-callout {
   flex: none !important;
   touch-action: pan-y !important;
   user-select: text !important;
-  font-size: calc(var(--reader-font, 15px) * var(--vn-text-scale, 1)) !important;
-  line-height: calc(1.55 * var(--vn-text-scale, 1)) !important;
+  font-size: calc(var(--reader-font, 15.5px) * var(--vn-text-scale, 1)) !important;
+  line-height: calc(1.58 * var(--vn-text-scale, 1)) !important;
   color: var(--aperture-text, #f9faf6) !important;
-  font-family: Georgia, 'Times New Roman', serif !important;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;
+  font-family: var(--vn-dialogue-font, Georgia, "Times New Roman", serif) !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.72) !important;
   margin: 0 !important;
+  overflow-wrap: break-word !important;
 }
 
-/* Integrated Progress Scrubber docked inside Dialogue Card */
+/* Integrated Progress Scrubber docked inside bottom of Dialogue Card */
 .reader-progress {
   position: absolute !important;
-  bottom: calc(70px + env(safe-area-inset-bottom, 0px)) !important;
-  left: 56px !important;
-  right: 56px !important;
+  bottom: calc(73px + env(safe-area-inset-bottom, 0px)) !important;
+  left: 54px !important;
+  right: 54px !important;
   width: auto !important;
-  max-width: calc(100% - 112px) !important;
+  max-width: calc(100% - 108px) !important;
   height: 28px !important;
   display: flex !important;
   align-items: center !important;
@@ -1898,16 +1441,18 @@ body.theme-light .folio-quote-callout {
   margin: 0 auto !important;
   z-index: 45 !important;
   pointer-events: auto !important;
+  transition: opacity 0.2s ease !important;
 }
 
 .reader-progress [data-vn-step-left],
 .reader-progress [data-vn-step-right],
 .reader-progress small {
-  color: #edf3ea !important;
-  opacity: 0.85 !important;
+  color: var(--aperture-text, #edf3ea) !important;
+  opacity: 0.82 !important;
   font-size: 9.5px !important;
   font-weight: 700 !important;
-  letter-spacing: 0.08em !important;
+  letter-spacing: 0.06em !important;
+  font-variant-numeric: tabular-nums !important;
   white-space: nowrap !important;
   flex: none !important;
 }
@@ -1915,15 +1460,15 @@ body.theme-light .folio-quote-callout {
 .reader-progress [data-vn-scrubber] {
   flex: 1 1 auto !important;
   min-width: 40px !important;
-  max-width: 175px !important;
+  max-width: 190px !important;
 }
 
 /* Previous & Continue buttons integrated inside dialogue card at bottom left & right */
 [data-vn-controls] > [data-vn-control="previous"].nav-step-btn {
   position: absolute !important;
-  left: 10px !important;
+  left: 22px !important;
   right: auto !important;
-  bottom: calc(70px + env(safe-area-inset-bottom, 0px)) !important;
+  bottom: calc(73px + env(safe-area-inset-bottom, 0px)) !important;
   width: 28px !important;
   height: 28px !important;
   min-width: 28px !important;
@@ -1938,7 +1483,7 @@ body.theme-light .folio-quote-callout {
   color: var(--aperture-button-text, #edf3ea) !important;
   cursor: pointer !important;
   z-index: 45 !important;
-  transition: background 0.16s ease, transform 0.16s ease, border-color 0.16s ease !important;
+  transition: background 0.16s ease, transform 0.16s ease, border-color 0.16s ease, opacity 0.2s ease !important;
 }
 
 [data-vn-controls] > [data-vn-control="previous"].nav-step-btn:hover:not(:disabled) {
@@ -1949,9 +1494,9 @@ body.theme-light .folio-quote-callout {
 [data-vn-continue].nav-step-btn,
 [data-vn-continue].action.advance {
   position: absolute !important;
-  right: 10px !important;
+  right: 22px !important;
   left: auto !important;
-  bottom: calc(70px + env(safe-area-inset-bottom, 0px)) !important;
+  bottom: calc(73px + env(safe-area-inset-bottom, 0px)) !important;
   width: 28px !important;
   height: 28px !important;
   min-width: 28px !important;
@@ -1968,7 +1513,7 @@ body.theme-light .folio-quote-callout {
   font-weight: 700 !important;
   z-index: 45 !important;
   box-shadow: 0 2px 10px var(--aperture-accent-glow, rgba(220, 238, 173, 0.35)) !important;
-  transition: background 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease !important;
+  transition: background 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease, opacity 0.2s ease !important;
 }
 
 [data-vn-continue].nav-step-btn:hover:not(:disabled),
@@ -1979,6 +1524,17 @@ body.theme-light .folio-quote-callout {
 
 [data-vn-continue]::before {
   display: none !important;
+}
+
+/* Hide integrated scrubber and step buttons when dialogue sheet is minimized or in clean view */
+[data-vn-root][data-vn-text-hidden="true"] .reader-progress,
+[data-vn-root][data-vn-text-hidden="true"] [data-vn-controls] > [data-vn-control="previous"].nav-step-btn,
+[data-vn-root][data-vn-text-hidden="true"] [data-vn-continue].nav-step-btn,
+[data-vn-root][data-vn-clean-view="true"] .reader-progress,
+[data-vn-root][data-vn-clean-view="true"] [data-vn-controls] > [data-vn-control="previous"].nav-step-btn,
+[data-vn-root][data-vn-clean-view="true"] [data-vn-continue].nav-step-btn {
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 /* Dialogue Restore Button (when minimized) */
@@ -2005,7 +1561,7 @@ body.theme-light .folio-quote-callout {
 [data-vn-show-text]:hover,
 .caption-restore:hover {
   background: rgba(18, 38, 30, 0.96) !important;
-  border-color: #dcebad !important;
+  border-color: var(--aperture-accent, #dcebad) !important;
   transform: translateX(-50%) scale(1.08) !important;
 }
 
@@ -2067,7 +1623,7 @@ body.theme-light .folio-quote-callout {
   font-weight: 700 !important;
   letter-spacing: 0.08em !important;
   text-transform: uppercase !important;
-  color: #dcebad !important;
+  color: var(--aperture-accent, #dcebad) !important;
   margin: 0 0 2px !important;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7) !important;
 }
@@ -2189,7 +1745,7 @@ body.theme-light .folio-quote-callout {
   line-height: 1.4 !important;
   letter-spacing: 0.105em !important;
   font-weight: 750 !important;
-  color: #dcebad !important;
+  color: var(--aperture-accent, #dcebad) !important;
   white-space: nowrap !important;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8) !important;
 }
@@ -2197,7 +1753,7 @@ body.theme-light .folio-quote-callout {
 .caption-split {
   opacity: 0.35 !important;
   padding: 0 4px !important;
-  color: #dcebad !important;
+  color: var(--aperture-accent, #dcebad) !important;
 }
 
 [data-vn-caption-scene] {
@@ -2255,7 +1811,7 @@ body.theme-light .folio-quote-callout {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   display: inline-block !important;
-  color: #dcebad !important;
+  color: var(--aperture-accent, #dcebad) !important;
   font-size: 9.5px !important;
   font-weight: 750 !important;
   letter-spacing: 0.105em !important;
@@ -2319,11 +1875,11 @@ aside[data-vn-workspace] > header {
   justify-content: space-between !important;
   gap: 10px !important;
   padding: 0 16px !important;
-  background: rgba(17, 35, 28, 0.94) !important;
-  border-bottom: 1px solid rgba(220, 238, 217, 0.14) !important;
+  background: var(--aperture-bottom-bar-bg, rgba(17, 35, 28, 0.94)) !important;
+  border-bottom: 1px solid var(--vn-shell-border, rgba(220, 238, 217, 0.14)) !important;
   backdrop-filter: blur(16px) !important;
   -webkit-backdrop-filter: blur(16px) !important;
-  color: #f4f8ee !important;
+  color: var(--vn-shell-text, #f4f8ee) !important;
   z-index: 2 !important;
   box-sizing: border-box !important;
 }
@@ -2394,7 +1950,7 @@ aside[data-vn-workspace] > header > div {
 .workspace-back-btn:hover,
 [data-workspace-close]:hover {
   background: rgba(220, 238, 177, 0.16) !important;
-  border-color: #dcebad !important;
+  border-color: var(--aperture-accent, #dcebad) !important;
 }
 
 :is(body.theme-light, [data-aperture-mode="light"], [data-vn-shell][data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-workspace-back], .workspace-back-btn, [data-workspace-close]) {
@@ -2427,8 +1983,8 @@ aside[data-vn-workspace] > header > div {
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden !important;
-  background: linear-gradient(155deg, #151f20 0%, #101a1e 58%, #0b1419 100%) !important;
-  color: #eff4e9 !important;
+  background: var(--vn-shell-panel, linear-gradient(155deg, #151f20 0%, #101a1e 58%, #0b1419 100%)) !important;
+  color: var(--vn-shell-text, #eff4e9) !important;
 }
 
 body.theme-light [data-vn-dossier],
@@ -2621,9 +2177,21 @@ body.theme-light [data-surface="settings"]:before,
   display: none !important;
 }
 
-/* Hide duplicate settings header when inside workspace */
+/* Compact settings category bar when inside workspace (hide only duplicate title/close) */
 [data-workspace-content] [data-workspace-header],
 [data-vn-settings] [data-workspace-header] {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  padding: 6px 10px !important;
+  margin-bottom: 10px !important;
+  border-radius: 12px !important;
+  background: var(--vn-shell-field, rgba(255, 255, 255, 0.04)) !important;
+  border: 1px solid var(--vn-shell-border, rgba(220, 238, 217, 0.14)) !important;
+}
+[data-workspace-content] [data-workspace-header] > div:first-child,
+[data-workspace-content] [data-workspace-header] [data-close] {
   display: none !important;
 }
 
@@ -2755,20 +2323,20 @@ body.theme-light [data-surface="settings"]:before,
 }
 section[data-reference-current] h3,
 section[data-reference-observations] h3 {
-  color: #dcebad !important;
+  color: var(--aperture-accent, #dcebad) !important;
   opacity: 1 !important;
   font-weight: 700 !important;
 }
 [data-dossier-present-cast] h3 {
-  color: #dcebad !important;
+  color: var(--aperture-accent, #dcebad) !important;
   opacity: 1 !important;
 }
 
 /* History Workspace Surface */
 [data-surface="history"],
 [data-vn-workspace-tool="history"] {
-  background: #11241c !important;
-  color: #f3f7ee !important;
+  background: var(--vn-shell-panel, #11241c) !important;
+  color: var(--vn-shell-text, #f3f7ee) !important;
 }
 
 /* Light mode specific rules for World Lens & Folio */
@@ -3403,8 +2971,8 @@ section[data-reference-observations] h3 {
 }
 [data-vn-root][data-vn-preset="lumiverse"] [data-vn-speaker] {
   color: #e0eeb1 !important;
-  background: rgba(12, 24, 20, 0.9) !important;
-  border-color: rgba(224, 238, 217, 0.35) !important;
+  background: transparent !important;
+  border-color: transparent !important;
 }
 
 /* 2. Aperture Sage Editorial (Modern Light) */
@@ -3450,8 +3018,8 @@ section[data-reference-observations] h3 {
 }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-speaker] {
   color: #1a4f36 !important;
-  background: #e7efe4 !important;
-  border-color: rgba(46, 96, 71, 0.4) !important;
+  background: transparent !important;
+  border-color: transparent !important;
 }
 
 /* 3. Aperture Midnight OLED (Ultra Dark Mint) */
@@ -3495,8 +3063,8 @@ section[data-reference-observations] h3 {
 }
 [data-vn-root][data-vn-preset="midnight-noir"] [data-vn-speaker] {
   color: #6ee7b7 !important;
-  background: #050508 !important;
-  border-color: rgba(110, 231, 183, 0.4) !important;
+  background: transparent !important;
+  border-color: transparent !important;
 }
 
 /* 4. Aperture Solar Dusk (Warm Amber) */
@@ -3540,8 +3108,8 @@ section[data-reference-observations] h3 {
 }
 [data-vn-root][data-vn-preset="golden-hour"] [data-vn-speaker] {
   color: #fbbf24 !important;
-  background: #24160a !important;
-  border-color: rgba(245, 158, 11, 0.4) !important;
+  background: transparent !important;
+  border-color: transparent !important;
 }
 
 /* 5. Aperture Minimal Slate (Studio Slate / Ice Blue) */
@@ -3585,8 +3153,8 @@ section[data-reference-observations] h3 {
 }
 [data-vn-root][data-vn-preset="boxed-console"] [data-vn-speaker] {
   color: #94a3b8 !important;
-  background: #1e293b !important;
-  border-color: rgba(148, 163, 184, 0.4) !important;
+  background: transparent !important;
+  border-color: transparent !important;
 }
 
 /* 6. Aperture Cyber Amethyst (Vibrant Violet Neon) */
@@ -3630,8 +3198,8 @@ section[data-reference-observations] h3 {
 }
 [data-vn-root][data-vn-preset="yamaku-classic"] [data-vn-speaker] {
   color: #c084fc !important;
-  background: #1c0d32 !important;
-  border-color: rgba(192, 132, 252, 0.4) !important;
+  background: transparent !important;
+  border-color: transparent !important;
 }
 
 /* 7. Aperture Rose Blossom (Pastel Elegance) */
@@ -3675,8 +3243,8 @@ section[data-reference-observations] h3 {
 }
 [data-vn-root][data-vn-preset="literature-club"] [data-vn-speaker] {
   color: #fb7185 !important;
-  background: #2a0e1c !important;
-  border-color: rgba(251, 113, 133, 0.4) !important;
+  background: transparent !important;
+  border-color: transparent !important;
 }
 
 /* 8. Aperture Astral Glass (Cosmic Cyan & Deep Blue) */
@@ -3720,8 +3288,8 @@ section[data-reference-observations] h3 {
 }
 [data-vn-root][data-vn-preset="astral-glass"] [data-vn-speaker] {
   color: #38bdf8 !important;
-  background: #091a2e !important;
-  border-color: rgba(56, 189, 248, 0.4) !important;
+  background: transparent !important;
+  border-color: transparent !important;
 }
 
 /* 9. Aperture Neon Rain (Electric Mint & Cyberpunk Indigo) */
@@ -3765,8 +3333,8 @@ section[data-reference-observations] h3 {
 }
 [data-vn-root][data-vn-preset="neon-rain"] [data-vn-speaker] {
   color: #2dd4bf !important;
-  background: #091722 !important;
-  border-color: rgba(45, 212, 191, 0.4) !important;
+  background: transparent !important;
+  border-color: transparent !important;
 }
 
 /* 10. Aperture Obsidian Reliquary (Crimson & Gold) */
@@ -3810,8 +3378,8 @@ section[data-reference-observations] h3 {
 }
 [data-vn-root][data-vn-preset="obsidian-reliquary"] [data-vn-speaker] {
   color: #f59e0b !important;
-  background: #24080d !important;
-  border-color: rgba(220, 38, 38, 0.45) !important;
+  background: transparent !important;
+  border-color: transparent !important;
 }
 
 `;

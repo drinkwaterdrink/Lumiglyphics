@@ -877,11 +877,9 @@ export function repairJsonString(candidate: string): string {
     return match;
   });
 
-  // Single-quoted keys: {'foo': 1} -> {"foo": 1}
-  text = text.replace(/'([a-zA-Z0-9_\-\s]+)'\s*:/g, '"$1":');
-
-  // Unquoted property keys: e.g. { scenes: [] } or , cues: [] -> { "scenes": [] }
-  text = text.replace(/([{\[,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
+  // Single-quoted keys and unquoted property keys outside double-quoted strings
+  text = text.replace(/("(?:\\.|[^"\\])*")|'([a-zA-Z0-9_\-\s]+)'\s*:/g, (m, str, key) => str ? str : `"${key}":`);
+  text = text.replace(/("(?:\\.|[^"\\])*")|([{\[,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, (m, str, prefix, key) => str ? str : `${prefix}"${key}":`);
 
   // Remove invalid JSON escape sequences like \' -> '
   text = text.replace(/\\'/g, "'");

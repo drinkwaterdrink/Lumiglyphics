@@ -1044,6 +1044,11 @@ async function processAssistantMessage(
     if (!hasIncompleteJobs) {
       dbg(spindle, userId, `turn reused from storage chat=${chatId} message=${message.id} fingerprint=${fingerprint}`);
       const key = runtimeKey(userId, chatId);
+      const prevController = assetControllers.get(key);
+      if (prevController) {
+        prevController.abort();
+        assetControllers.delete(key);
+      }
       activeTurnKeys.set(key, existing.plan.key);
       await persistActiveTurn(spindle, existing, path, userId);
       spindle.sendToFrontend({ type: "vn_turn", turn: await turnViewWithAudio(spindle, existing,userId) }, userId);
@@ -1453,7 +1458,11 @@ async function retryTurn(
     negativePrompt: config.negativePrompt,
     imageConnectionId: config.imageConnectionId,
     imageModel: config.imageModel,
-    imageConcurrency: config.imageConcurrency
+    imageConcurrency: config.imageConcurrency,
+    defaultImageTemplateId: config.defaultImageTemplateId,
+    dynamicImageTemplates: config.dynamicImageTemplates,
+    castMode: config.castMode,
+    imageOutputAspectRatio: config.imageOutputAspectRatio
   };
 
   // Reuse-only candidates that have no job yet may hit now (cache only, no requests).

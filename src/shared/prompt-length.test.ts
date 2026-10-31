@@ -40,5 +40,5 @@ test('fitPromptToBudget handles positive-only mode', () => {
  const result = fitPromptToBudget(prompt, negative, 1200, 'positive-only');
  expect(result.negativePrompt).toBe('');
  expect(result.prompt.length).toBeLessThanOrEqual(1200);
- expect(() => assertPromptLengths(result.prompt, result.negativePrompt, { version: 1, family: 'sdxl', format: 'tags', maxCharacters: 1200, negativeMode: 'positive-only', source: 'catalogue', guidance: '' })).not.toThrow();
+ expect(() => assertPromptLengths(result.prompt, result.negativePrompt, { version: 1, family: 'generic', format: 'tags', maxCharacters: 1200, negativeMode: 'positive-only', source: 'catalogue', guidance: '' })).not.toThrow();
 });

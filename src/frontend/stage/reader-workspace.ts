@@ -97,7 +97,7 @@ export class ReaderWorkspace {
     <div class="route-bar" hidden aria-label="Quick navigation bar">
       <div>
         <div class="route-name">WORKSPACE</div>
-        <div class="route-step">CHAPTER IV / YOUR WORLD</div>
+        <div class="route-step">ACTIVE SCENE / YOUR WORLD</div>
       </div>
       <div class="route-actions">
         <button type="button" data-route-bar-action="back" aria-label="Go back to previous screen" title="Back">${APERTURE_ICONS.back}</button>
@@ -336,7 +336,7 @@ export class ReaderWorkspace {
       this.panel.dataset.surface = id;
       this.routeBar.hidden = false;
       this.routeName.textContent = (id === 'story' ? 'World Lens' : d.label).toUpperCase();
-      this.routeStep.textContent = 'CHAPTER IV / YOUR WORLD';
+      this.routeStep.textContent = 'ACTIVE SCENE / YOUR WORLD';
       const tool = this.tools.get(id);
       if (tool) { this.rememberHome(tool.element); this.content.append(tool.element); tool.element.hidden=false;tool.enter(); }
       else { const empty = document.createElement('p'); empty.dataset.workspaceEmpty = ''; empty.textContent = id === 'settings' ? 'Settings are available in the host’s Lumiglyphics settings tab.' : 'There is nothing available here at this reading position yet.'; this.content.append(empty); }
@@ -361,7 +361,7 @@ export class ReaderWorkspace {
       this.panel.dataset.surface = 'workspace';
       this.routeBar.hidden = false;
       this.routeName.textContent = 'WORKSPACE';
-      this.routeStep.textContent = 'CHAPTER IV / YOUR WORLD';
+      this.routeStep.textContent = 'ACTIVE SCENE / YOUR WORLD';
       this.syncReader();
       this.closeButton.focus({preventScroll:true});
     }

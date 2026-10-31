@@ -1,3 +1,4 @@
+import { sceneImageUrlFor } from "./image-loader.js";
 import type { ReaderWorkspace } from "./reader-workspace.js";
 import {validateStoryDocuments,visibleStoryDocuments} from '../../shared/story-documents.js';
 import {stripTextEffectTags} from '../../shared/text-effects.js';

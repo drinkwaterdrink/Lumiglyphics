@@ -9,13 +9,15 @@ export class DialogueSheet {
   private readonly handle: HTMLElement;
   private readonly show: HTMLButtonElement;
   private readonly header: HTMLElement;
+  private readonly auto: HTMLButtonElement;
   private readonly hide: HTMLButtonElement;
   private readonly expand: HTMLButtonElement;
   private readonly observer: ResizeObserver;
   private readonly abort = new AbortController();
 
   constructor(private readonly root: HTMLElement, private readonly dialogue: HTMLElement,
-    private readonly pause: () => void, private readonly save: (preferences: ReaderPreferences) => void) {
+    private readonly pause: () => void, private readonly save: (preferences: ReaderPreferences) => void,
+    private readonly onToggleAutoPlay?: () => void) {
     this.handle = document.createElement("div");
     this.handle.className = "resize-grip";
     this.handle.dataset.vnSheetHandle = "";
@@ -28,8 +30,10 @@ export class DialogueSheet {
     this.tools = document.createElement("div");
     this.tools.dataset.vnSheetTools = "";
     this.tools.className = "caption-head-actions";
-    this.tools.innerHTML = `<button type="button" class="caption-tool" data-action="caption-expand" aria-label="Expand dialogue panel"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 15 7-7 7 7"/></svg></button>
+    this.tools.innerHTML = `<button type="button" class="caption-tool" data-action="caption-auto" aria-pressed="false" title="Toggle auto-play (A)" aria-label="Toggle auto-play"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg></button>
+      <button type="button" class="caption-tool" data-action="caption-expand" aria-label="Expand dialogue panel"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 15 7-7 7 7"/></svg></button>
       <button type="button" class="caption-tool" data-vn-hide-text aria-label="Minimize dialogue box" title="Hide text"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button>`;
+    this.auto = this.tools.querySelector("[data-action='caption-auto']")!;
     this.expand = this.tools.querySelector("[data-action='caption-expand']")!;
     this.hide = this.tools.querySelector("[data-vn-hide-text]")!;
 
@@ -55,6 +59,7 @@ export class DialogueSheet {
 
     const signal = this.abort.signal;
     this.tools.addEventListener("click", event => event.stopPropagation(), { signal });
+    this.auto.addEventListener("click", () => this.onToggleAutoPlay?.(), { signal });
     this.hide.addEventListener("click", () => this.setHidden(true), { signal });
     this.expand.addEventListener("click", () => {
       const isExpanded = dialogue.classList.contains("large-caption");
@@ -193,6 +198,11 @@ export class DialogueSheet {
     if (this.hidden) { this.pause(); this.show.focus(); }
   }
   isHidden(): boolean { return this.hidden; }
+  setAutoPlayActive(active: boolean): void {
+    this.auto.setAttribute("aria-pressed", String(active));
+    if (active) this.auto.dataset.active = "true";
+    else delete this.auto.dataset.active;
+  }
   destroy(): void {
     this.cancelDrag(); this.abort.abort(); this.observer.disconnect();
     const controls = this.header.querySelector("[data-vn-controls]");
