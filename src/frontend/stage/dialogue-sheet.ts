@@ -22,6 +22,9 @@ export class DialogueSheet {
     this.handle.setAttribute("role", "separator");
     this.handle.setAttribute("aria-label", "Drag to resize dialogue panel");
     this.handle.setAttribute("aria-orientation", "horizontal");
+    // A focusable separator must expose its value (WAI-ARIA); kept current in setPreferences.
+    this.handle.setAttribute("aria-valuemin", "12");
+    this.handle.setAttribute("aria-valuemax", "100");
     this.handle.tabIndex = 0;
     this.handle.innerHTML = "<span></span>";
 
@@ -178,6 +181,7 @@ export class DialogueSheet {
   }
   setPreferences(value: ReaderPreferences): void {
     this.preferences = normalizeReaderPreferences(value);
+    this.handle.setAttribute("aria-valuenow", String(Math.round((this.preferences.heightRatio ?? 0.5) * 100)));
     this.root.dataset.vnAdjustableSheet = String(this.preferences.adjustableSheetEnabled);
     this.root.dataset.vnReaderLayout = this.preferences.layout;
     this.root.style.setProperty("--vn-sheet-opacity", String(this.preferences.backgroundOpacity));

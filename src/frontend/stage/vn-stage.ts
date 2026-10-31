@@ -179,7 +179,7 @@ export interface VnSceneImageRequest {
 }
 
 const THEME_MARKUP = `
-  <main data-vn-root data-vn-mode="standard" data-vn-phase="idle" tabindex="0" aria-label="Visual novel">
+  <div data-vn-root role="region" data-vn-mode="standard" data-vn-phase="idle" tabindex="0" aria-label="Visual novel">
     <div data-vn-scene aria-hidden="true">
       <img data-vn-scene-image data-vn-layer="active" data-vn-empty="true" alt="" />
       <img data-vn-scene-image data-vn-layer="incoming" data-vn-empty="true" alt="" />
@@ -299,7 +299,7 @@ const THEME_MARKUP = `
       <div data-vn-backlog-content tabindex="0"></div>
       <footer data-vn-backlog-footer><button data-vn-backlog-return type="button">Back to reader</button></footer></div><div data-vn-scene-hud hidden role="region" aria-label="Scene overview">
     </div>
-  </main>
+  </div>
 `;
 
 const queryRequired = <T extends Element>(
