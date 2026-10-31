@@ -8,6 +8,7 @@ import type { ReaderPresentation } from "./shared/presentation-entities.js";
 import { z } from "zod";
 import type {NarrativePreview} from './shared/preparation-preview.js';
 import type {ReferenceHistory} from './shared/reference-history.js';
+import type {ReplyUsage} from './shared/reply-usage.js';
 import { CardRoleSchema, type CardRole } from "./shared/card-role.js";
 import { SubjectCorrectionSchema } from "./shared/subject-correction.js";
 import type { VisualNovelConfig } from "./config.js";
@@ -127,6 +128,8 @@ export type AudioCueView = {
 
 export type TurnView = {
   referenceHistory?:ReferenceHistory;
+  /** Present only when the reply-cost setting is on. */
+  replyCost?: { usage: ReplyUsage; imagesGenerated: number };
   presentation?: ReaderPresentation;
   cardRole?: CardRole;
   cardRoleAvailable?: boolean;

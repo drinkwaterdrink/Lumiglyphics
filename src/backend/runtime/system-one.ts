@@ -83,6 +83,8 @@ export type SystemOneDecisions = {
   needsDescription: boolean;
   durationMs: number;
   inputTokens: number;
+  /** Number of batched API requests made for this decision. */
+  requests: number;
   coverage: SystemOneCoverage;
 };
 
@@ -242,6 +244,7 @@ export async function decidePresentation(
     needsDescription: noulTripped(description, 0.2),
     durationMs: Date.now() - started,
     inputTokens: parsedBatches.reduce((total, batch) => total + (batch.usage?.input_tokens ?? 0), 0),
+    requests: parsedBatches.length,
     coverage: {
       paragraphs: { answered: paragraphs.length, total: input.paragraphs.length },
       expressions: { offered: offeredCounts.expressions, total: POSE_EXPRESSION_CATALOGUE.length },

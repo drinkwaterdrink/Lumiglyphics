@@ -55,6 +55,7 @@ function spyStage(): VisualStageThemeTarget & { calls: string[] } {
 
 const baseConfig: VisualNovelConfig = {
   castMode:false,
+  showReplyCost:false,
   tooltips: DEFAULT_CONFIG.tooltips,
   persistentLocationArt: false,
   persistentCastArt: false,

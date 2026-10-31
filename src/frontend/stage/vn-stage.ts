@@ -222,6 +222,7 @@ const THEME_MARKUP = `
           <span class="caption-foot-dot">✧</span>
           <span data-vn-footer-speaker></span>
           <span data-vn-reading-state aria-live="polite" style="display:none"></span>
+          <span data-vn-reply-cost hidden></span>
         </div>
       </div>
       <footer class="reader-actions">
@@ -507,6 +508,7 @@ export class VnStage {
   private dossiers!: StageDossiers;
   readonly workspace: ReaderWorkspace;
   private readonly progress: HTMLElement;
+  private readonly replyCost: HTMLElement;
   private readonly readingState: HTMLElement;
   private readonly sceneHud: HTMLElement | null;
   private readonly scrubber: HTMLElement | null;
@@ -662,6 +664,7 @@ export class VnStage {
     this.speaker = queryRequired(this.themeRoot, "[data-vn-speaker]");
     this.dialogueText = queryRequired(this.themeRoot, "[data-vn-dialogue-text]");
     this.progress = queryRequired(this.themeRoot, "[data-vn-progress]");
+    this.replyCost = queryRequired(this.themeRoot, "[data-vn-reply-cost]");
     this.readingState = queryRequired(this.themeRoot, "[data-vn-reading-state]");
     this.sceneHud = this.themeRoot.querySelector<HTMLElement>("[data-vn-scene-hud]");
     this.scrubber = this.themeRoot.querySelector<HTMLElement>("[data-vn-scrubber]");
@@ -1122,6 +1125,9 @@ export class VnStage {
 
   loadTurn(turn: VnTurnInput): void {
     this.turnLocation = turn.location ?? null;
+    // Shown only when the user enabled reply cost; the host sends the text.
+    this.replyCost.textContent = turn.replyCost ?? "";
+    this.replyCost.hidden = !turn.replyCost;
     this.preparationPreview.clear();
     this.moveDraftEpoch++;this.closeMoveDraft();
     this.dismissedErrors.clear();

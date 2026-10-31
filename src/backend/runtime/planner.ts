@@ -70,6 +70,7 @@ import { normalizeStageEffect, normalizeAmbientEffect, deriveWeatherAmbient } fr
 import { getAudioCatalog, getAudioCatalogPromptSummary } from "./audio-catalog.js";
 import { debugErrorSummary, debugJson, debugQuote, plannerDebugLogger, type PlannerDebugScope } from "./debug-trace.js";
 import { decidePresentation, formatSystemOneCoverage, type SystemOneDecisions } from "./system-one.js";
+import { addPlannerUsage, addSystemOneUsage, createReplyUsage, type ReplyUsage } from "../../shared/reply-usage.js";
 import { stripTextEffectTags } from "../../shared/text-effects.js";
 import { throwIfAborted } from "../core/planning-queue.js";
 
@@ -179,6 +180,8 @@ const PlannerOutputSchema = z.object({
 export type PlanTurnInput = {
   /** Escaped UI transport consumes the same parsed prose before model enrichment. */
   onNarrativePrepared?: (paragraphs: readonly string[]) => void;
+  /** Filled in by planTurn with the text-model calls made for this reply. */
+  usage?: ReplyUsage;
   cardRole?: CardRole;
   chatId: string;
   message: ChatMessageDTO & { role?: string };
@@ -1205,6 +1208,7 @@ async function requestPlannerOutput(
     reasoning: { source: "off" },
     ...(input.userId ? { userId: input.userId } : {})
   });
+  if (input.usage) addPlannerUsage(input.usage, (response as { usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } } | null | undefined)?.usage);
   const rawContent = extractResponseContent(response);
   const debug = plannerDebugLogger(spindle, input.config, plannerDebugScope(input));
   if (debug.enabled) {
@@ -2128,6 +2132,8 @@ async function resolveDisplayMacros(
 
 export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promise<{
   plan: TurnPlan;
+  /** Text-model calls made for this reply. */
+  usage: ReplyUsage;
   usedFallback: boolean;
   cardRole: CardRole;
   cardId?: string;
@@ -2142,6 +2148,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   rejectedSubjects: RegistryMergeReport["rejectedSubjects"];
 }> {
   const ignoredTags = parseIgnoredTags(input.config.ignoredTags);
+  input.usage ??= createReplyUsage();
   const resolvedContent = await resolveDisplayMacros(spindle, input, input.content);
   const narrative = prepareNarrative(resolvedContent, {
     ignoredTags,
@@ -2288,6 +2295,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     spindle.log.warn(`Visual planner fallback after ${PLANNER_ATTEMPTS} attempts: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
   }
   if (input.config.systemOneMode === "compare") systemOne = await systemOnePromise;
+  if (systemOne && input.usage) addSystemOneUsage(input.usage, systemOne.requests, systemOne.inputTokens);
   if (systemOne) {
     if (input.config.systemOneMode === "compare") {
       const speakerAgreement = planner.speakers.filter((entry) => systemOne.speakers.has(entry.paragraphIndex))
@@ -2775,7 +2783,8 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     extractedCharacters: planner.characters.map((character) => ({ name: character.name, description: character.description })),
     characterRegistry: registry,
     rejectedAliases: registryReport.rejectedAliases,
-    rejectedSubjects: registryReport.rejectedSubjects
+    rejectedSubjects: registryReport.rejectedSubjects,
+    usage: input.usage ?? createReplyUsage()
   };
 }
 

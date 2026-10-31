@@ -674,6 +674,9 @@ export class VisualNovelSettingsPanel {
               <label data-field ${find("How you reply", "reply mode cyoa choose suggestions write standard")}><span>How you reply</span><select name="mode"><option value="standard">Write your own reply</option><option value="cyoa">Choose from suggestions</option></select></label>
               <label data-check ${find("Suggest choices", "choices options cyoa generate")}><input name="generateChoices" type="checkbox" /><span>Suggest choices when the reply has none</span></label>
             `)}
+            ${group("Reply cost", `
+              <label data-check ${find("Show reply cost", "usage cost tokens calls images model spend count")}><input name="showReplyCost" type="checkbox" /><span>Show model usage for each reply<small>Planner and System One calls, tokens when the provider reports them, and images generated for that reply. Counts only; this adds no requests.</small></span></label>
+            `)}
             ${group("Starting", `
               <label data-check ${find("Open automatically", "auto enter open novel view chat start")}><input name="autoEnter" type="checkbox" /><span>Open the novel view automatically when a chat opens</span></label>
             `)}
@@ -1519,6 +1522,7 @@ export class VisualNovelSettingsPanel {
       case "mode": return { mode: target.value === "cyoa" ? "cyoa" : "standard" };
       case "skipMode": return { skipMode: target.value === "all" ? "all" : "read" };
       case "generateChoices": return { generateChoices: checked };
+      case "showReplyCost": return { showReplyCost: checked };
       case "autoEnter": return { autoEnter: checked };
       case "referenceAnchoring": return { referenceAnchoring: checked };
       case "reviewImages": return { reviewImages: checked };
@@ -2101,6 +2105,7 @@ export class VisualNovelSettingsPanel {
     this.control<HTMLSelectElement>("mode").value = config.mode;
     this.control<HTMLSelectElement>("skipMode").value = config.skipMode;
     this.control<HTMLInputElement>("generateChoices").checked = config.generateChoices;
+    this.control<HTMLInputElement>("showReplyCost").checked = config.showReplyCost;
     this.control<HTMLInputElement>("autoEnter").checked = config.autoEnter;
     this.control<HTMLInputElement>("referenceAnchoring").checked = config.referenceAnchoring;
     this.control<HTMLInputElement>("reviewImages").checked = config.reviewImages;

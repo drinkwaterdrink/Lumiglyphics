@@ -127,6 +127,8 @@ export interface VnTurnInput {
   preserveImage?: boolean;
   ambient?: AmbientEffect | null;
   location?: string;
+  /** Pre-formatted reply-cost line; present only when the user enabled it. */
+  replyCost?: string;
 }
 
 export type VnStageAction =

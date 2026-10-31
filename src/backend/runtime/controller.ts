@@ -520,6 +520,7 @@ export async function turnViewWithAudio(spindle: SpindleAPI, record: StoredTurnR
   }
   const view=turnView(record);
   const config=await decorateCastAssets(spindle,record,view.assets,userId);
+  if(config?.showReplyCost&&record.replyUsage)view.replyCost={usage:record.replyUsage,imagesGenerated:record.jobs.filter(job=>job.generatedAt!==null).length};
   try{if(config?.tooltips.enabled&&config.tooltips.rememberReferences){const history=await readReferenceHistory(spindle,record,userId);if(history)view.referenceHistory=history;}}catch{/* Optional references never block primary reading. */}
   return view;
 }
@@ -1203,6 +1204,7 @@ async function processAssistantMessage(
       schemaVersion: 1,
       cardRole:result.cardRole,
       plannerMode: result.usedFallback ? 'fallback' : 'model',
+      replyUsage: result.usage,
       ...(relation === 'current' && existing?.forceImageReview ? {forceImageReview:true} : {}),
       ...(relation === 'current' && existing?.replanRequestIds ? {replanRequestIds:existing.replanRequestIds} : {}),
       ...(result.cardId ? {cardId:result.cardId} : {}),
@@ -1625,7 +1627,7 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
       const now = new Date().toISOString();
       const record: StoredTurnRecord = {schemaVersion:1,speaker:result.cardRole === 'scenario' ? 'Narrator' : latest.name || 'Narrator',...(old.userSpeaker ? {userSpeaker:old.userSpeaker} : {}),status:'ready',plan,jobs,previousImages,forceImageReview:true,
         imageRequests:safeImageHistory((old.imageRequests ?? []).filter(r => r.state === 'approved' && jobs.some(job => job.jobId === r.jobId))),
-        cardRole:result.cardRole,plannerMode:result.usedFallback ? 'fallback' : 'model',...(result.cardId ? {cardId:result.cardId} : {}),
+        cardRole:result.cardRole,plannerMode:result.usedFallback ? 'fallback' : 'model',replyUsage:result.usage,...(result.cardId ? {cardId:result.cardId} : {}),
         replanRequestIds:[...(old.replanRequestIds ?? []),action.requestId].slice(-32),
         ...(old.correctionRequestIds ? {correctionRequestIds:old.correctionRequestIds} : {}),resolvedSourceText:intake.text,...(old.source ? {source:old.source} : {}),referenceLineage:preserveReferenceLineage(old.referenceLineage,await captureReferenceLineage(referenceSnapshot??[],plan,rawReplanSource)),updatedAt:now,
         attempts:[...(old.attempts ?? []).slice(-15),{attemptNumber:(old.attempts?.at(-1)?.attemptNumber ?? 0)+1,timestamp:now,settings:{replan:true,forcedImageReview:true}}]};

@@ -37,6 +37,7 @@ import { SpeechController, type SpeechCursor } from "../speech/controller.js";
 import { createSpeechTransport } from "../speech/transport.js";
 import { SpeechDock } from "../speech/ui.js";
 import { SpeechSettingsSection } from "../speech/settings-ui.js";
+import { formatReplyUsage } from "../../shared/reply-usage.js";
 
 const CLEANUP_KEY = Symbol.for("lumiglyphics.frontend-cleanup");
 
@@ -264,6 +265,7 @@ export function stageTurnInput(
   const presentation=next.presentation?.snapshots.length===next.paragraphs.length&&next.presentation.snapshots.every((s,i)=>s.at.paragraphIndex===i&&samePresentationTurn(s.at.key,key))?next.presentation:undefined;
   const referenceHistory=referenceHistoryFor(next.referenceHistory,key);
   return {
+    ...(next.replyCost ? {replyCost: formatReplyUsage(next.replyCost.usage, next.replyCost.imagesGenerated)} : {}),
     mode,
     paragraphs: next.paragraphs.map((text, index) => ({
       id: `${next.sourceFingerprint}:${index}`,
