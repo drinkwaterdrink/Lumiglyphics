@@ -188,3 +188,23 @@ test("off, compare, missing key, invalid response, and native art preserve the o
     assert.equal(result.plan.visualCues.length, 1, scenario);
   }
 });
+
+test("candidate ranking puts paragraph-relevant audio first and keeps catalog order on ties", async () => {
+  const { rankByRelevance, formatSystemOneCoverage } = await import("./system-one.js");
+  const items = [
+    { id: "a-calm", name: "Calm meadow", tags: ["calm", "nature"] },
+    { id: "b-storm", name: "Thunder storm", tags: ["storm", "rain", "dramatic"] },
+    { id: "c-battle", name: "Drums of war", tags: ["battle", "drums"] },
+  ];
+  assert.deepEqual(rankByRelevance(items, "Lightning split the sky as the storm broke over the hills.", 2).map((i) => i.id), ["b-storm", "a-calm"]);
+  // No overlap at all: the first N in catalog order, the previous behaviour.
+  assert.deepEqual(rankByRelevance(items, "Zxq plonk.", 2).map((i) => i.id), ["a-calm", "b-storm"]);
+  // Pinned ids are offered first even when they do not match the text.
+  assert.deepEqual(rankByRelevance(items, "storm", 2, ["c-battle"]).map((i) => i.id), ["c-battle", "b-storm"]);
+  assert.match(formatSystemOneCoverage({
+    paragraphs: { answered: 24, total: 30 },
+    expressions: { offered: 16, total: 92 },
+    bgm: { offered: 24, total: 120 },
+    sfx: { offered: 24, total: 60 },
+  }), /paragraphs 24\/30, expressions 16\/92, bgm 24\/120, sfx 24\/60/);
+});

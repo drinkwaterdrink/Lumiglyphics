@@ -69,7 +69,7 @@ import { resolvePlannerConnection, type ResolvedPlannerConnection } from "./conn
 import { normalizeStageEffect, normalizeAmbientEffect, deriveWeatherAmbient } from "./planner-effects.js";
 import { getAudioCatalog, getAudioCatalogPromptSummary } from "./audio-catalog.js";
 import { debugErrorSummary, debugJson, debugQuote, plannerDebugLogger, type PlannerDebugScope } from "./debug-trace.js";
-import { decidePresentation, type SystemOneDecisions } from "./system-one.js";
+import { decidePresentation, formatSystemOneCoverage, type SystemOneDecisions } from "./system-one.js";
 import { stripTextEffectTags } from "../../shared/text-effects.js";
 import { throwIfAborted } from "../core/planning-queue.js";
 
@@ -2294,7 +2294,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
         .filter((entry) => systemOne.speakers.get(entry.paragraphIndex)?.toLowerCase() === entry.name.toLowerCase()).length;
       const expressionAgreement = planner.cues.filter((cue) => cue.expression && systemOne.expressions.has(cue.paragraphIndex))
         .filter((cue) => systemOne.expressions.get(cue.paragraphIndex) === cue.expression).length;
-      spindle.log.info(`[VN] System One compare durationMs=${systemOne.durationMs} inputTokens=${systemOne.inputTokens} speakers=${speakerAgreement}/${systemOne.speakers.size} expressions=${expressionAgreement}/${systemOne.expressions.size} sceneChange=${systemOne.sceneChange} description=${systemOne.needsDescription}`);
+      spindle.log.info(`[VN] System One compare durationMs=${systemOne.durationMs} inputTokens=${systemOne.inputTokens} speakers=${speakerAgreement}/${systemOne.speakers.size} expressions=${expressionAgreement}/${systemOne.expressions.size} sceneChange=${systemOne.sceneChange} description=${systemOne.needsDescription} offered=[${formatSystemOneCoverage(systemOne.coverage)}]`);
     } else if (input.config.systemOneMode === "on") {
       for (const [paragraphIndex, name] of systemOne.speakers) {
         const existing = planner.speakers.find((entry) => entry.paragraphIndex === paragraphIndex);
@@ -2308,7 +2308,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
           planner.cues.push({ paragraphIndex, expression, action: null, promptDelta: "" });
         }
       }
-      spindle.log.info(`[VN] System One ${useContinuation ? "continuation" : "augmentation"} durationMs=${systemOne.durationMs} inputTokens=${systemOne.inputTokens}`);
+      spindle.log.info(`[VN] System One ${useContinuation ? "continuation" : "augmentation"} durationMs=${systemOne.durationMs} inputTokens=${systemOne.inputTokens} offered=[${formatSystemOneCoverage(systemOne.coverage)}]`);
     }
   }
 

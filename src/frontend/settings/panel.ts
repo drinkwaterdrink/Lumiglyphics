@@ -1,3 +1,4 @@
+import { describeDataFlows } from "../../shared/data-flows.js";
 import {resolveImagePromptProfile,promptProfileSummary} from "../../shared/image-prompt-profile.js";
 import {compileDisplayRules} from '../../shared/display-rules.js';
 import { createUiId } from "../request-id.js";
@@ -836,6 +837,7 @@ export class VisualNovelSettingsPanel {
 
           ${pane("connections", `
             <div data-page-links>${this.pageLink('context')}${this.pageLink('system-one')}</div>
+            <div data-data-flows aria-label="Where story text goes" role="region"></div>
             <div data-actions><button type="button" data-refresh-connections>Refresh connection list</button><small>Refreshing is free. Connections are listed, not tested.</small></div>
             ${group("Story reader", `
               <div data-field>
@@ -851,7 +853,7 @@ export class VisualNovelSettingsPanel {
             <section data-workspace-page="system-one">${group("System One", `
               <label data-field ${find("System One decisions", "jev typesafe mode compare")}><span>System One decisions</span><select name="systemOneMode"><option value="off">Off</option><option value="compare">Compare with story reader</option><option value="on">Use for presentation and familiar scenes</option></select>${more("Jev makes bounded speaker, expression, audio, and scene decisions. Compare logs agreement without changing the turn.")}</label>
               <div data-row>
-                <label data-field ${find("System One API URL", "jev endpoint url")}><span>API URL</span><input name="systemOneApiUrl" type="url" placeholder="https://api.typesafe.ai" /><small>Requests go through Lumiverse's HTTP proxy.</small></label>
+                <label data-field ${find("System One API URL", "jev endpoint url")}><span>API URL</span><input name="systemOneApiUrl" type="url" placeholder="https://api.typesafe.ai" /><small><strong>Paragraph text is sent to this third-party service</strong>, not to a Lumiverse connection. Requests use Lumiverse's HTTP proxy. Off by default.</small></label>
                 <label data-field ${find("System One model", "jev model")}><span>Model</span><input name="systemOneModel" type="text" placeholder="jev-latest" /></label>
               </div>
               <div data-field ${find("System One API key", "jev key secret password")}><span>API key</span><input name="systemOneApiKey" type="password" autocomplete="new-password" placeholder="Enter key" /><div data-actions><button type="button" data-save-system-one-key>Save key</button><button type="button" data-clear-system-one-key>Remove key</button><small data-system-one-key-status>Checking saved key…</small></div><small>The key saves at once, encrypted for this extension. It is never part of Lumiglyphics settings.</small></div>
@@ -2026,8 +2028,20 @@ export class VisualNovelSettingsPanel {
       }
     }
     this.syncFromConfig(this.config);
+    this.renderDataFlows(this.config);
     this.refreshStatus();
     if(this.afterSaveNavigation&&!this.pendingAdvanced.size&&!this.currentDraftKeys().length){const next=this.afterSaveNavigation;this.afterSaveNavigation=null;next();}
+  }
+
+  /** Lists the destinations of text for each enabled feature, from the saved settings. */
+  private renderDataFlows(config: VisualNovelConfig): void {
+    const mount = this.root.querySelector<HTMLElement>("[data-data-flows]");
+    if (!mount) return;
+    const flows = describeDataFlows(config);
+    const items = flows.map((flow) => `<li data-data-flow="${flow.id}" data-third-party="${flow.thirdParty}"><strong>${flow.label}</strong> <span class="pill">${flow.thirdParty ? "Third party" : "Your connection"}</span><br><small>Sends: ${flow.sends}. To: ${flow.destination}.</small></li>`).join("");
+    mount.innerHTML = flows.length
+      ? `<h4>Where story text goes</h4><ul>${items}</ul>`
+      : `<h4>Where story text goes</h4><p class="muted">No feature is currently sending story text.</p>`;
   }
 
   private syncFromConfig(config: VisualNovelConfig): void {
