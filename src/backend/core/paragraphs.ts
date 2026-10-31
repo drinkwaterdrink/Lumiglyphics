@@ -1,4 +1,5 @@
 import type { Choice, Paragraph } from "../../shared/contracts.js";
+import { isTextEffectId } from "../../shared/text-effects.js";
 import { escapePanelText, extractPanelSpans, maskPanelSpans, panelHash, MAX_PANELS, MAX_PANEL_HTML, MAX_PANEL_TOTAL, type PanelArtifact, type PanelSpan } from "../../shared/panels.js";
 
 export type PrepareNarrativeOptions = {
@@ -372,13 +373,28 @@ export function extractInlineCardImagesWithParagraphs(
   return results;
 }
 
+/** Tags the reader renders on purpose: basic formatting, image references and
+ *  the closed text-effect catalogue (<shake>, <wave>, ...). Anything else that
+ *  looks like a preset tag is removed from prose, keeping the text inside. */
+const PROSE_FORMATTING_TAGS = new Set(["b", "i", "em", "strong", "u", "s", "br", "small", "sub", "sup", "mark", "img", "pimg"]);
+
+export function stripUnknownInlineTags(text: string): string {
+  return text.replace(/<\/?([A-Za-z][\w-]*)(?:\s+[\w:-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))*\s*\/?>/g, (match, name: string) => {
+    const lower = name.toLowerCase();
+    return PROSE_FORMATTING_TAGS.has(lower) || isTextEffectId(lower) ? match : "";
+  });
+}
+
 function cleanNarrativeBlock(block: string, smartProseFilter = true): string {
   // Strip caption pipes like | <"😏:caption"> or | <'caption'>
   let text = block.replace(/\|\s*<[^>]+>/g, "");
 
   // Strip inline card expression tags so they don't count as narrative lines
   const { text: withoutInlineImages } = extractInlineCardImages(text);
-  return withoutInlineImages
+  // Preset tags wrapped around a sentence (for example a note-bearing action tag) carry no
+  // story text of their own, so the smart filter drops the tag and keeps the words.
+  const withoutInlineTags = smartProseFilter ? stripUnknownInlineTags(withoutInlineImages) : withoutInlineImages;
+  return withoutInlineTags
     .replace(/CARDDATA:.*$/gim, "")
     .replace(/<Update Log\b[\s\S]*?<\/Update Log>/gi, "")
     .split(/\r?\n/)
@@ -411,6 +427,61 @@ function stableChoiceId(label: string, index: number): string {
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
   return `choice-${hash.toString(16).padStart(8, "0")}`;
+}
+
+/** Tags whose blocks are never treated as structured sidecars: panels and
+ *  status cards (handled elsewhere), choices, images and speech tags. */
+const SIDECAR_EXEMPT_TAGS = new Set([
+  "choice", "img", "pimg", "panel", "card", "details", "summary", "think", "thought",
+  "status", "stats", "inventory", "hero", "world_voice", "tracker", "dialogue", "speech",
+  "say", "line", "voice", "quote", "talk", "message",
+]);
+
+const STRUCTURED_LINE_PATTERNS: readonly RegExp[] = [
+  /^\s*[-*+]?\s*\[[ xX~-]\]\s/,                       // checklist item: - [x] Check: PASS
+  /^\s*\[[^\]\n]{1,120}\](\s*\([^)\n]*\))?\s*$/,        // bracketed heading: [I. Staging & Continuity]
+  /^\s*[A-Za-z][A-Za-z0-9 &/'().-]{0,40}:\s*\S/,         // short "Key: value" line
+  /^\s*"[^"\n]{1,60}"\s*:/,                             // JSON-style key
+  /^\s*[{}\[\],]+\s*$/,                                // JSON structure
+];
+
+const TAG_ONLY_LINE = /^\s*<\/?[A-Za-z][\w-]*(?:\s[^<>]*)?\/?>\s*$/;
+
+function isStructuredLine(line: string): boolean {
+  return STRUCTURED_LINE_PATTERNS.some((pattern) => pattern.test(line));
+}
+
+/** True when a block body is mostly metadata: at least two real lines, and at
+ *  least 60% of them structured. Lines that are only tags are ignored, so a
+ *  sidecar that nests other tags is judged on its content. */
+export function isStructuredSidecarBody(body: string): boolean {
+  const lines = body.split("\n").map((line) => line.trim()).filter((line) => line && !/^<\/?[A-Za-z][\w-]*(?:\s[^<>]*)?\/?>$/.test(line));
+  if (lines.length < 2) return false;
+  const structured = lines.filter(isStructuredLine).length;
+  return structured / lines.length >= 0.6;
+}
+
+/** Finds non-prose sidecar blocks (wardrobe, scene_cast, sola_hud, ...) that
+ *  the tag list does not name, plus lines that are only a tag. Returns ranges
+ *  in the original content. Prose wrapped in a tag is never returned. */
+export function findStructuredSidecarRanges(content: string): Array<{ start: number; end: number }> {
+  const ranges: Array<{ start: number; end: number }> = [];
+  for (const match of content.matchAll(/<([A-Za-z][\w-]*)(\s[^<>]*)?>([\s\S]*?)<\/\1\s*>/g)) {
+    const name = match[1]!.toLowerCase();
+    if (SIDECAR_EXEMPT_TAGS.has(name) || BUILTIN_HEURISTIC_TAGS.includes(name)) continue;
+    if (!isStructuredSidecarBody(match[3] ?? "")) continue;
+    ranges.push({ start: match.index, end: match.index + match[0].length });
+  }
+  let offset = 0;
+  for (const line of content.split("\n")) {
+    const match = TAG_ONLY_LINE.exec(line);
+    const tag = /^\s*<\/?([A-Za-z][\w-]*)/.exec(line)?.[1]?.toLowerCase();
+    if (match && tag && !SIDECAR_EXEMPT_TAGS.has(tag) && tag !== "choice" && tag !== "img") {
+      ranges.push({ start: offset, end: offset + line.length });
+    }
+    offset += line.length + 1;
+  }
+  return ranges;
 }
 
 export function prepareNarrative(content: string, options: PrepareNarrativeOptions = {}): PreparedNarrative {
@@ -476,6 +547,10 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
     for (const match of content.matchAll(DYNAMIC_METADATA_PATTERN)) {
       hidden.push({ start: match.index, end: match.index + match[0].length });
     }
+  }
+
+  if (smartProseFilter) {
+    for (const range of findStructuredSidecarRanges(content)) hidden.push(range);
   }
 
   const effectiveIgnoredTags = Array.from(new Set([
