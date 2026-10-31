@@ -9,8 +9,8 @@ Test counts here are file counts. The live test count appears in the `bun test` 
 | Theme presets | 10 |
 | Image prompt families | 12 |
 | Source files (non-test, src/) | 204 |
-| Source lines (non-test, src/) | 51,842 |
-| Unit test files (src/) | 167 |
+| Source lines (non-test, src/) | 51,918 |
+| Unit test files (src/) | 169 |
 | Browser suite scripts (test:*) | 43 |
 | Declared Spindle permissions | 10 |
 
