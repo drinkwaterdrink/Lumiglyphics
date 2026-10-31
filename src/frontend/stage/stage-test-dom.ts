@@ -310,14 +310,27 @@ export const FakeDocument = {
 };
 
 /** Install the fake document for one test; returns a restore function. */
+export class FakeImage {
+  src = "";
+  complete = true;
+  naturalWidth = 100;
+  decoding = "auto";
+  async decode() {}
+  addEventListener(event: string, cb: any) {
+    if (event === "load") setTimeout(cb, 0);
+  }
+  removeEventListener() {}
+}
+
 export function installFakeDocument(): () => void {
   const g = globalThis as Record<string, unknown>;
-  const previous = { document: g.document, requestAnimationFrame: g.requestAnimationFrame, Element: g.Element, window: g.window, ResizeObserver: g.ResizeObserver };
+  const previous = { document: g.document, requestAnimationFrame: g.requestAnimationFrame, Element: g.Element, window: g.window, ResizeObserver: g.ResizeObserver, Image: g.Image };
   FakeDocument.activeElement = null;
   g.document = FakeDocument;
   g.Element = FakeNode;
   g.window = { innerHeight: 800, addEventListener() {}, removeEventListener() {} };
   g.ResizeObserver = class { observe() {} disconnect() {} };
   g.requestAnimationFrame = (cb: () => void) => setTimeout(cb, 0);
-  return () => { g.document = previous.document; g.requestAnimationFrame = previous.requestAnimationFrame; g.Element = previous.Element; g.window = previous.window; g.ResizeObserver = previous.ResizeObserver; };
+  g.Image = FakeImage;
+  return () => { g.document = previous.document; g.requestAnimationFrame = previous.requestAnimationFrame; g.Element = previous.Element; g.window = previous.window; g.ResizeObserver = previous.ResizeObserver; g.Image = previous.Image; };
 }

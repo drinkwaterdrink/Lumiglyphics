@@ -15,13 +15,19 @@ export interface VnLoadableImage {
 export type VnImageFactory = () => VnLoadableImage;
 
 const waitForImageLoad = (image: VnLoadableImage, url: string): Promise<void> => {
+  if (image.complete) {
+    return image.naturalWidth > 0
+      ? Promise.resolve()
+      : Promise.reject(new Error("The scene image could not be loaded."));
+  }
+
   return new Promise((resolve, reject) => {
     let settled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const cleanup = () => {
       if (timer) clearTimeout(timer);
-      image.removeEventListener("load", onLoad as EventListener);
-      image.removeEventListener("error", onError as EventListener);
+      image.removeEventListener?.("load", onLoad as EventListener);
+      image.removeEventListener?.("error", onError as EventListener);
     };
     const onLoad = () => {
       if (settled) return;
@@ -36,8 +42,8 @@ const waitForImageLoad = (image: VnLoadableImage, url: string): Promise<void> =>
       reject(new Error("The scene image could not be loaded."));
     };
 
-    image.addEventListener("load", onLoad as EventListener, { once: true });
-    image.addEventListener("error", onError as EventListener, { once: true });
+    image.addEventListener?.("load", onLoad as EventListener, { once: true });
+    image.addEventListener?.("error", onError as EventListener, { once: true });
 
     timer = setTimeout(() => {
       onLoad();
@@ -54,12 +60,13 @@ const waitForImageLoad = (image: VnLoadableImage, url: string): Promise<void> =>
 /** Loads and decodes an image before the visible scene points at its URL. */
 export const preloadAndDecodeVnImage = async (
   url: string,
-  createImage: VnImageFactory = () => new Image(),
+  createImage: VnImageFactory = () => (typeof Image === "function" ? new Image() : ({ complete: true, naturalWidth: 100, src: "", decode: async () => {}, addEventListener: (_e: string, cb: any) => setTimeout(cb, 0), removeEventListener() {} } as unknown as VnLoadableImage)),
 ): Promise<void> => {
   if (!url.trim()) throw new Error("A scene image URL is required.");
 
   const image = createImage();
   image.decoding = "async";
+  image.src = url;
   await waitForImageLoad(image, url);
   try {
     if (typeof image.decode === "function") {

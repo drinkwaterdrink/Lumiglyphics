@@ -1283,28 +1283,22 @@ export class VnStage {
       requestId: request.requestId ?? `vn-image-${++this.imageRequestSequence}`,
     };
     this.dispatch({ type: "image-requested", image });
-    if (!this.state.displayedImage && image.url.trim()) {
-      this.dispatch({ type: "image-ready", requestId: image.requestId, image });
-    }
 
     try {
       await preloadAndDecodeVnImage(image.url, this.createImage);
+      if (this.destroyed) return false;
+      const wasCurrent = !this.state.pendingImage || this.state.pendingImage.requestId === image.requestId;
+      this.dispatch({ type: "image-ready", requestId: image.requestId, image });
+      return wasCurrent;
     } catch (error) {
       if (this.destroyed) return false;
-      if (!image.url.trim()) {
-        this.dispatch({
-          type: "image-failed",
-          requestId: image.requestId,
-          error: errorMessage(error),
-        });
-        return false;
-      }
+      this.dispatch({
+        type: "image-failed",
+        requestId: image.requestId,
+        error: errorMessage(error),
+      });
+      return false;
     }
-
-    if (this.destroyed) return false;
-    const wasCurrent = !this.state.pendingImage || this.state.pendingImage.requestId === image.requestId;
-    this.dispatch({ type: "image-ready", requestId: image.requestId, image });
-    return wasCurrent;
   }
 
   destroy(): void {
@@ -1772,19 +1766,16 @@ export class VnStage {
 
   private updateSceneImage(displayedImage: VnSceneImage): void {
     this.setPagePresentation(displayedImage);
-    if (this.currentDisplayedUrl === displayedImage.url) {
-      const activeShowing = this.activeImageEl.dataset.vnEmpty !== "true" && this.activeImageEl.getAttribute("src") === displayedImage.url && (!this.activeImageEl.complete || this.activeImageEl.naturalWidth > 0);
-      const incomingShowing = this.crossfadeTimer !== null && this.incomingImageEl.dataset.vnEmpty !== "true" && this.incomingImageEl.getAttribute("src") === displayedImage.url;
-      if (activeShowing || incomingShowing) {
-        this.activeImageEl.alt = displayedImage.alt;
-        return;
-      }
+    if (this.currentDisplayedUrl === displayedImage.url && this.activeImageEl.dataset.vnEmpty !== "true") {
+      this.activeImageEl.alt = displayedImage.alt;
+      return;
     }
 
     // First image (empty stage): show directly on active layer
-    if (!this.currentDisplayedUrl || this.activeImageEl.dataset.vnEmpty === "true" || !this.activeImageEl.getAttribute("src")) {
+    if (!this.currentDisplayedUrl || this.activeImageEl.dataset.vnEmpty === "true" || !this.activeImageEl.src) {
       this.currentDisplayedUrl = displayedImage.url;
       this.activeImageEl.src = displayedImage.url;
+      this.activeImageEl.setAttribute("src", displayedImage.url);
       this.activeImageEl.alt = displayedImage.alt;
       this.activeImageEl.dataset.vnEmpty = "false";
       this.incomingImageEl.removeAttribute("src");
@@ -1806,6 +1797,7 @@ export class VnStage {
 
     this.currentDisplayedUrl = displayedImage.url;
     this.incomingImageEl.src = displayedImage.url;
+    this.incomingImageEl.setAttribute("src", displayedImage.url);
     this.incomingImageEl.alt = displayedImage.alt;
     this.incomingImageEl.dataset.vnEmpty = "false";
 

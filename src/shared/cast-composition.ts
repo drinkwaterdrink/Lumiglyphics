@@ -15,8 +15,7 @@ export function selectCastComposition(turn:TurnView,index:number,selectedName?:s
  const sceneRevision=latest?.stageAsset?.sceneRevision??0;
  const local=visible.filter(a=>a.stageAsset?.sceneId===sceneId&&(a.stageAsset.sceneRevision??0)===sceneRevision);
  const usable=(a:AssetView)=>(a.status==='generated'||a.status==='browser_ready')&&Boolean(a.imageUrl)&&!a.previousImage;
- const latestBackground=local.filter(a=>a.stageAsset?.role==='background').at(-1)
-  ?? turn.assets.find(a => a.stageAsset?.sceneId === sceneId && (a.stageAsset?.sceneRevision ?? 0) === sceneRevision && a.stageAsset?.role === 'background' && usable(a));
+ const latestBackground=local.filter(a=>a.stageAsset?.role==='background').at(-1);
  const background=latestBackground?selectHeldBackground(turn,index,latestBackground):undefined;
  if(!background||!usable(background))return null;
  const byName=new Map<string,CastPortrait>();
