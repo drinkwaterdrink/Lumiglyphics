@@ -206,7 +206,7 @@ test("native-card mode uses the selected card image and refuses a different char
 
 test('removing cast setup while external planning waits cannot bake manual guidance into registry', async()=>{
  const f=fixture();
- await manageCastArt(f.host,'c',{action:'setup',name:'Mira',setup:{appearance:'blue hair, amber eyes',aliases:['Mir'],outfits:[],defaultOutfitId:null}},'user');
+ await manageCastArt(f.host,'c',{action:'setup',name:'Mira',setup:{appearance:'blue hair, amber eyes',aliases:['Mir'],outfits:[],defaultOutfitId:null,anchors:[]}},'user');
  let release!:()=>void;f.planGate=new Promise<void>(resolve=>{release=resolve;});
  const pending=f.service.request(request,'user');
  while(f.planner.length===0)await new Promise(resolve=>setTimeout(resolve,1));

@@ -43,7 +43,7 @@ test('registered scan handler returns scoped candidates without image or model c
 });
 
 test('new tracker characters remain importable when saved cast fills the suggestion limit',async()=>{
- const f=fixture();f.data.set('u:chats/chat/cast-art.json',{version:1,characters:Array.from({length:32},(_,i)=>({entityId:'old'+i,name:'Saved '+i,description:'black hair, green eyes',artRevision:0,preferredVariantId:null,variants:[],setup:{appearance:'black hair, green eyes',aliases:[],outfits:[],defaultOutfitId:null}}))});
+ const f=fixture();f.data.set('u:chats/chat/cast-art.json',{version:1,characters:Array.from({length:32},(_,i)=>({entityId:'old'+i,name:'Saved '+i,description:'black hair, green eyes',artRevision:0,preferredVariantId:null,variants:[],setup:{appearance:'black hair, green eyes',aliases:[],outfits:[],defaultOutfitId:null,anchors:[]}}))});
  const scan=await scanCastContext(f.api,'chat','u');expect(scan.candidates[0]!.name).toBe('Rena');expect(scan.candidates).toHaveLength(32);expect(scan.notice).toMatch(/limit|omitted/i);
 });
 
@@ -65,7 +65,7 @@ test('tracker history window is bounded and name-only newer records do not erase
 
 const date='2026-10-14T12:00:00.000Z';
 test('a selected-character scan filters before the limit and recognizes saved aliases',async()=>{
- const f=fixture();await manageCastArt(f.api,'chat',{action:'setup',name:'Rena',setup:{appearance:'silver fur, blue eyes',aliases:['Ren'],outfits:[],defaultOutfitId:null}},'u');
+ const f=fixture();await manageCastArt(f.api,'chat',{action:'setup',name:'Rena',setup:{appearance:'silver fur, blue eyes',aliases:['Ren'],outfits:[],defaultOutfitId:null,anchors:[]}},'u');
  f.messages[0].content='<tracker>'+JSON.stringify({characters:[{name:'Ren',appearance:'white fur, blue eyes'}]})+'</tracker>';
  for(let batch=0;batch<2;batch++)f.messages.push({id:'new'+batch,is_user:false,content:'<tracker>'+JSON.stringify({characters:Array.from({length:20},(_,i)=>({name:'Other '+batch+' '+i,appearance:'brown hair, green eyes'}))})+'</tracker>'});
  const before=JSON.stringify([...f.data]);
