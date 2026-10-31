@@ -70,7 +70,7 @@ import { normalizeStageEffect, normalizeAmbientEffect, deriveWeatherAmbient } fr
 import { getAudioCatalog, getAudioCatalogPromptSummary } from "./audio-catalog.js";
 import { debugErrorSummary, debugJson, debugQuote, plannerDebugLogger, type PlannerDebugScope } from "./debug-trace.js";
 import { decidePresentation, formatSystemOneCoverage, type SystemOneDecisions } from "./system-one.js";
-import { addPlannerUsage, addSystemOneUsage, createReplyUsage, type ReplyUsage } from "../../shared/reply-usage.js";
+import { addPlannerTokens, addSystemOneUsage, createReplyUsage, recordPlannerAttempt, type ReplyUsage } from "../../shared/reply-usage.js";
 import { stripTextEffectTags } from "../../shared/text-effects.js";
 import { throwIfAborted } from "../core/planning-queue.js";
 
@@ -1169,6 +1169,7 @@ async function requestPlannerOutput(
     ...input.config.parserParameters
   };
 
+  if (input.usage) recordPlannerAttempt(input.usage);
   const response = await spindle.generate.raw({
     type: "raw",
     messages: [
@@ -1208,7 +1209,7 @@ async function requestPlannerOutput(
     reasoning: { source: "off" },
     ...(input.userId ? { userId: input.userId } : {})
   });
-  if (input.usage) addPlannerUsage(input.usage, (response as { usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } } | null | undefined)?.usage);
+  if (input.usage) addPlannerTokens(input.usage, (response as { usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } } | null | undefined)?.usage);
   const rawContent = extractResponseContent(response);
   const debug = plannerDebugLogger(spindle, input.config, plannerDebugScope(input));
   if (debug.enabled) {

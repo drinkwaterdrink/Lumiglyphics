@@ -1,16 +1,19 @@
 import { expect, test } from "bun:test";
-import { addPlannerUsage, addSystemOneUsage, createReplyUsage, formatReplyUsage, ReplyUsageSchema } from "./reply-usage.js";
+import { addPlannerTokens, addSystemOneUsage, createReplyUsage, formatReplyUsage, recordPlannerAttempt, ReplyUsageSchema } from "./reply-usage.js";
 
 test("planner calls add up exact counts and only the tokens providers reported", () => {
   const usage = createReplyUsage();
-  addPlannerUsage(usage, { prompt_tokens: 1200, completion_tokens: 300 });
-  addPlannerUsage(usage, undefined);
+  recordPlannerAttempt(usage);
+  addPlannerTokens(usage, { prompt_tokens: 1200, completion_tokens: 300 });
+  recordPlannerAttempt(usage);
+  addPlannerTokens(usage, undefined);
   expect(usage).toEqual({ plannerCalls: 2, systemOneCalls: 0, promptTokens: 1200, completionTokens: 300 });
 });
 
 test("a provider that reports no usage leaves token totals unknown, not zero", () => {
   const usage = createReplyUsage();
-  addPlannerUsage(usage, {});
+  recordPlannerAttempt(usage);
+  addPlannerTokens(usage, {});
   expect(usage.promptTokens).toBeNull();
   expect(formatReplyUsage(usage, 0)).toContain("token counts not reported");
 });

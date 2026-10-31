@@ -17,9 +17,13 @@ export function createReplyUsage(): ReplyUsage {
   return { plannerCalls: 0, systemOneCalls: 0, promptTokens: null, completionTokens: null };
 }
 
-/** Adds one provider response's usage. Missing numbers are ignored, not counted as zero. */
-export function addPlannerUsage(usage: ReplyUsage, reported: { prompt_tokens?: unknown; completion_tokens?: unknown } | null | undefined): void {
+/** Counts a planner request when it is sent, whether or not it succeeds. */
+export function recordPlannerAttempt(usage: ReplyUsage): void {
   usage.plannerCalls += 1;
+}
+
+/** Adds the tokens a provider reported for a response. Missing numbers stay unknown, not zero. */
+export function addPlannerTokens(usage: ReplyUsage, reported: { prompt_tokens?: unknown; completion_tokens?: unknown } | null | undefined): void {
   if (typeof reported?.prompt_tokens === "number" && Number.isFinite(reported.prompt_tokens)) {
     usage.promptTokens = (usage.promptTokens ?? 0) + Math.max(0, Math.round(reported.prompt_tokens));
   }
