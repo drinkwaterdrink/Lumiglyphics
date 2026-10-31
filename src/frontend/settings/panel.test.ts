@@ -87,3 +87,12 @@ describe("settings panel markup", () => {
     expect(source).not.toContain('data-appearance-preview"]!');
   });
 });
+
+test("the data-flow list escapes a crafted System One host name", async () => {
+  const { describeDataFlows } = await import("../../shared/data-flows.js");
+  const { html } = await import("../dom/html.js");
+  const flows = describeDataFlows({ enabled: true, generateImages: false, useNativeCardImages: false, systemOneMode: "on", systemOneApiUrl: "<img src=x onerror=alert(1)>", speech: { enabled: false } });
+  const markup = html`<ul>${flows.map((flow) => html`<li>${flow.destination}</li>`)}</ul>`.value;
+  expect(markup).not.toContain("<img");
+  expect(markup).toContain("&lt;img");
+});

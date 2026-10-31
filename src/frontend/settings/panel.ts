@@ -1,5 +1,6 @@
 import { describeDataFlows } from "../../shared/data-flows.js";
 import { probeDisplayRules } from "../stage/display-rule-probe.js";
+import { html } from "../dom/html.js";
 import {resolveImagePromptProfile,promptProfileSummary} from "../../shared/image-prompt-profile.js";
 import {compileDisplayRules} from '../../shared/display-rules.js';
 import { createUiId } from "../request-id.js";
@@ -2048,10 +2049,12 @@ export class VisualNovelSettingsPanel {
     const mount = this.root.querySelector<HTMLElement>("[data-data-flows]");
     if (!mount) return;
     const flows = describeDataFlows(config);
-    const items = flows.map((flow) => `<li data-data-flow="${flow.id}" data-third-party="${flow.thirdParty}"><strong>${flow.label}</strong> <span class="pill">${flow.thirdParty ? "Third party" : "Your connection"}</span><br><small>Sends: ${flow.sends}. To: ${flow.destination}.</small></li>`).join("");
-    mount.innerHTML = flows.length
-      ? `<h4>Where story text goes</h4><ul>${items}</ul>`
-      : `<h4>Where story text goes</h4><p class="muted">No feature is currently sending story text.</p>`;
+    // Every value is escaped by html; a crafted API URL cannot inject markup.
+    const items = flows.map((flow) => html`<li data-data-flow="${flow.id}" data-third-party="${flow.thirdParty}"><strong>${flow.label}</strong> <span class="pill">${flow.thirdParty ? "Third party" : "Your connection"}</span><br><small>Sends: ${flow.sends}. To: ${flow.destination}.</small></li>`);
+    const markup = flows.length
+      ? html`<h4>Where story text goes</h4><ul>${items}</ul>`
+      : html`<h4>Where story text goes</h4><p class="muted">No feature is currently sending story text.</p>`;
+    mount.innerHTML = markup.value;
   }
 
   private syncFromConfig(config: VisualNovelConfig): void {
