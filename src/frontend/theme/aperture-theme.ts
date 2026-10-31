@@ -3180,8 +3180,10 @@ section[data-reference-observations] h3 {
   overflow: hidden;
 }
 
-/* Dynamic Atmospheric Scene Tint */
-[data-vn-atmosphere] {
+/* Dynamic Atmospheric Scene Tint. Scoped to the tint overlay only: the scene
+   container also carries data-vn-atmosphere (for the descendant rules below),
+   and the generic opacity:0 here would otherwise hide the whole picture layer. */
+[data-vn-atmosphere]:not([data-vn-scene]) {
   position: absolute;
   inset: 0;
   pointer-events: none;

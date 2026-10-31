@@ -92,3 +92,11 @@ test("every interactive chrome control has a visible focus ring", () => {
     assert.match(VN_BASE_CSS, new RegExp(`${escaped}:focus-visible[^{]*\\{[^}]*outline:\\s*(?:2|3)px solid`), `${selector} has an outline focus ring`);
   }
 });
+
+test("the atmosphere tint's opacity:0 rule cannot hide the scene container", () => {
+  // The scene container carries data-vn-atmosphere too. An unguarded
+  // `[data-vn-atmosphere] { opacity: 0 }` rule made the whole picture layer
+  // invisible (black stage) while the image itself loaded correctly.
+  assert.doesNotMatch(VN_BASE_CSS, /(^|\n)\[data-vn-atmosphere\]\s*\{/);
+  assert.match(VN_BASE_CSS, /\[data-vn-atmosphere\]:not\(\[data-vn-scene\]\)\s*\{/);
+});
