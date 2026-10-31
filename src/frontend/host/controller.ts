@@ -24,6 +24,7 @@ import { captureSimTrackerCards } from "./panel-capture.js";
 import { GameBridge } from "./game-bridge.js";
 import { connectImageBridge } from "./image-bridge.js";
 import { PanelDock } from "../stage/panel-dock.js";
+import { sceneImageUrlFor } from "../stage/image-loader.js";
 import { stagingContext, supportsVisualNovelOverlay, type ComponentOverrideHandle } from "./staging-context.js";
 import { presentAmbient, presentEffect } from "./effect-presentation.js";
 import {
@@ -965,18 +966,19 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     const assetFailure = currentAssetFailure(turn, paragraphIndex);
     if (assetFailure) reportStageError(assetFailure);
     let asset = stage.setCastTurn(turn,paragraphIndex) ?? selectCurrentImage(turn, paragraphIndex);
-    if (!asset?.imageUrl) {
+    if (!asset || !sceneImageUrlFor(asset)) {
       asset = turn.assets
-        .filter((a) => (a.status === "generated" || a.status === "browser_ready" || a.previousImage) && Boolean(a.imageUrl))
+        .filter((a) => (a.status === "generated" || a.status === "browser_ready" || a.previousImage) && Boolean(sceneImageUrlFor(a)))
         .sort((a, b) => a.paragraphIndex - b.paragraphIndex)[0] ?? null;
     }
-    if (!asset?.imageUrl) {
+    const sceneUrl = asset ? sceneImageUrlFor(asset) : null;
+    if (!asset || !sceneUrl) {
       vnDebug("image sync", `p${paragraphIndex}`, "no decodable asset yet");
       return;
     }
-    vnDebug("image sync", `p${paragraphIndex}`, `using cue p${asset.paragraphIndex}`, asset.status, asset.imageUrl);
+    vnDebug("image sync", `p${paragraphIndex}`, `using cue p${asset.paragraphIndex}`, asset.status, sceneUrl, asset.imageUrl ?? "(no host url)");
     const loaded = await stage.setSceneImage({
-      url: asset.imageUrl,
+      url: sceneUrl,
       ...(asset.presentation ? { presentation: asset.presentation } : {}),
       alt: `Generated scene for paragraph ${asset.paragraphIndex + 1}`,
       requestId: `${sourceTurn.chatId}:${sourceTurn.messageId}:${sourceTurn.swipeId}:${sourceTurn.sourceFingerprint}:${sourceTurn.revision}:${asset.jobId}:${asset.imageId ?? asset.imageUrl}`

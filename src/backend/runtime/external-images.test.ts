@@ -148,7 +148,7 @@ test("window bridge routes the real pipeline without Cue's view being open", asy
   await Promise.all(work);
   expect(results[0].status).toBe("accepted");
   expect(results.at(-1).status).toBe("ready");
-  expect(results.at(-1).imageUrl).toBe("/api/v1/image-gen/results/generated");
+  expect(results.at(-1).imageUrl).toBe("/api/v1/images/generated");
   expect(f.images).toHaveLength(1);
   bridge.destroy();
 });

@@ -65,3 +65,15 @@ export const preloadAndDecodeVnImage = async (
     // Decoding is an optional performance hint; do not fail an already-loaded image.
   }
 };
+
+/**
+ * URL the reader loads for a generated picture. The persisted-image route is
+ * same-origin and authenticated, matching the artwork library and cast art.
+ * Host-supplied `imageUrl` values are not verified from the browser (they can
+ * be cross-origin or unreachable), so they are only a fallback when no
+ * `imageId` exists.
+ */
+export const sceneImageUrlFor = (asset: { imageId?: string | null; imageUrl?: string | null }): string | null => {
+  if (asset.imageId) return `/api/v1/images/${encodeURIComponent(asset.imageId)}`;
+  return asset.imageUrl || null;
+};

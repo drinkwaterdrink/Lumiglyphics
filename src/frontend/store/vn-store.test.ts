@@ -335,3 +335,15 @@ test("a new turn or phase from the host clears the error reread state", () => {
   assert.equal(selectVnStageView(planning).canAdvance, false);
   assert.equal(selectVnStageView(planning).canGoBack, false);
 });
+
+test("a picture that fails to load keeps the last good picture and reports the error", () => {
+  const previous = { url: "/api/v1/images/one", alt: "one", requestId: "one" };
+  let state = reduceVnStage(createInitialVnStageState(), { type: "image-requested", image: previous });
+  state = reduceVnStage(state, { type: "image-ready", requestId: "one", image: previous });
+  const broken = { url: "/api/v1/images/two", alt: "two", requestId: "two" };
+  state = reduceVnStage(state, { type: "image-requested", image: broken });
+  state = reduceVnStage(state, { type: "image-failed", requestId: "two", error: "The scene image could not be loaded." });
+  assert.equal(state.displayedImage?.url, "/api/v1/images/one");
+  assert.equal(state.pendingImage, null);
+  assert.equal(state.imageError, "The scene image could not be loaded.");
+});

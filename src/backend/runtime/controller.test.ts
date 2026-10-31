@@ -712,7 +712,8 @@ describe("image review controller lifecycle", () => {
     f.gates[1]!.reject(new Error("provider failed"));
     await waitFor(() => (f.data.get(turnPath("chat", "assistant-1", 0)) as StoredTurnRecord).jobs[0]?.status === "failed");
     const view = turnView(f.data.get(turnPath("chat", "assistant-1", 0)) as StoredTurnRecord);
-    expect(view.assets[0]?.imageUrl).toBe("/original");
+    // New pictures store the canonical persisted-image route, not the host URL.
+    expect(view.assets[0]?.imageUrl).toBe("/api/v1/images/original");
     expect(view.assets[0]?.previousImage).toBe(true);
     expect(view.assets[0]?.error).toContain("provider failed");
     expect(f.gates).toHaveLength(2);

@@ -1425,7 +1425,10 @@ export async function generateAssets(
               }
             }
           }
-          const imageUrl = result.imageUrl ?? `/api/v1/images/${encodeURIComponent(result.imageId)}`;
+          // Always store the same-origin persisted-image route, the form the artwork
+          // library, cast art and the reader all use. The host's `imageUrl` is not
+          // verified from the browser and was not reliably loadable in the reader.
+          const imageUrl = `/api/v1/images/${encodeURIComponent(result.imageId)}`;
           // Store only completed requests matching the compiler preparation. Edited
           // requests remain independent; they cannot poison automatic compatibility.
           const placeIdentity=!promptWasRewritten&&profileCacheIdentity(selected)===profile.cacheProfile&&JSON.stringify(approved)===JSON.stringify(frozen)?locationArtIdentityFor(config,scene,cue,characterAppearance,provider,profile.cacheProfile):null;

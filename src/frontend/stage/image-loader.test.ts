@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   preloadAndDecodeVnImage,
+  sceneImageUrlFor,
   type VnLoadableImage,
 } from "./image-loader";
 
@@ -40,3 +41,15 @@ test("a failed cached image is rejected", async () => {
   );
 });
 
+
+test("reader pictures load the same-origin persisted-image route when an imageId exists", () => {
+  assert.equal(
+    sceneImageUrlFor({ imageId: "abc 123", imageUrl: "https://provider.example/cdn/x.png" }),
+    "/api/v1/images/abc%20123",
+  );
+});
+
+test("host imageUrl is only a fallback when no imageId exists", () => {
+  assert.equal(sceneImageUrlFor({ imageUrl: "/legacy.png" }), "/legacy.png");
+  assert.equal(sceneImageUrlFor({ imageId: null, imageUrl: "" }), null);
+});

@@ -1288,14 +1288,15 @@ export class VnStage {
       await preloadAndDecodeVnImage(image.url, this.createImage);
     } catch (error) {
       if (this.destroyed) return false;
-      if (!image.url.trim()) {
-        this.dispatch({
-          type: "image-failed",
-          requestId: image.requestId,
-          error: errorMessage(error),
-        });
-        return false;
-      }
+      // A picture that never loaded must not become the displayed image: that
+      // produced a blank scene layer with no message. The previous picture
+      // stays on screen while the error is reported.
+      this.dispatch({
+        type: "image-failed",
+        requestId: image.requestId,
+        error: errorMessage(error),
+      });
+      return false;
     }
 
     if (this.destroyed) return false;

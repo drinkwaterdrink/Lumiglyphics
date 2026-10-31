@@ -145,7 +145,7 @@ describe("VnStage visual effects & transitions", () => {
   });
 
   test("crossfading between scene images smoothly transitions active and incoming layers", async () => {
-    const stage = new VnStage({ mount, createImage: () => ({ complete: true, naturalWidth: 100, decode: async () => {}, src: "" } as any) });
+    const stage = new VnStage({ mount, createImage: () => ({ complete: true, naturalWidth: 100, decode: async () => {}, src: "", addEventListener() {}, removeEventListener() {} } as any) });
 
     // Initial image load sets active layer directly
     await stage.setSceneImage({ url: "https://example.com/scene1.png", requestId: "r1" });
