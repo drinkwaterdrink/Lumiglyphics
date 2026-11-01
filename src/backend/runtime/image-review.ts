@@ -1,5 +1,7 @@
 import {ImagePromptProfileSchema,PROMPT_STORAGE_MAX} from "../../shared/image-prompt-profile.js";
 import type {ImagePromptProfile} from "../../shared/image-prompt-profile.js";
+import type {ImagePromptProfileV2} from "../../shared/image-prompt-profile-v2.js";
+import type {ImageOutputPlan} from "../../shared/image-output-plan.js";
 import {assertCapabilityOutput} from '../../shared/model-output-capabilities.js';
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { syncGeneratedModelOutput } from './template-output.js';
@@ -7,7 +9,11 @@ import type { ImageRequestEdits, ImageRequestRecord } from "../../shared/image-r
 import { ImagePromptMetadataSchema, type ImagePromptMetadata } from "../../shared/image-templates.js";
 import { compactPromptText, compactNegativePrompt, assertPromptLengths, IMAGE_PROMPT_MAX_CHARS } from '../../shared/prompt-length.js';
 
-export type ImageGenerationRequest = Parameters<SpindleAPI["imageGen"]["generate"]>[0] & {promptProfile?:ImagePromptProfile};
+export type ImageGenerationRequest = Parameters<SpindleAPI["imageGen"]["generate"]>[0] & {
+  promptProfile?: ImagePromptProfile;
+  promptProfileV2?: ImagePromptProfileV2;
+  outputPlan?: ImageOutputPlan;
+};
 const blocked = /(?:api.?key|authorization|password|credential|token|secret|reference|(?:source|input|resolved|init)images?|(?:^|_)images?$|image(?:Data|Url|_data|_url|_bytes|_base64)|^_lumiglyphics|^v4_|^uc$|^negativePrompt$|^rawRequestOverride$|^__proto__$|^constructor$|^prototype$)/i;
 
 /** History/editor values contain no credential fields or reference-image bytes. */

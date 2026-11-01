@@ -2,6 +2,7 @@ import type {SpindleAPI} from 'lumiverse-spindle-types';
 import type {VisualNovelConfig} from '../../config.js';
 import {parsePromptCapabilities,resolveImagePromptProfile,type ImagePromptProfile} from '../../shared/image-prompt-profile.js';
 import {parseModelOutputCatalog,chooseModelOutput,type ModelOutputCapabilities} from '../../shared/model-output-capabilities.js';
+import {resolveImagePromptProfileV2,type ImagePromptProfileV2} from '../../shared/image-prompt-profile-v2.js';
 import type {ImageGenerationRequest} from './image-review.js';
 
 // Public, unauthenticated metadata only. Never forward user prompts or connection credentials.
@@ -29,12 +30,26 @@ export async function loadImagePromptProfile(spindle:SpindleAPI,config:VisualNov
  const live=config.automaticImagePromptSettings&&provider?.toLowerCase()==='nanogpt'&&typeof spindle.cors==='function'?await capabilities(spindle):undefined;
  return resolveImagePromptProfile(provider,model,config,live?.prompts,live?.outputs);
 }
+
+export async function loadImagePromptProfileV2(spindle:SpindleAPI,config:VisualNovelConfig,provider:string|null|undefined,model:string|null|undefined,parameters?:Record<string,unknown>):Promise<ImagePromptProfileV2>{
+ const live=config.automaticImagePromptSettings&&provider?.toLowerCase()==='nanogpt'&&typeof spindle.cors==='function'?await capabilities(spindle):undefined;
+ return resolveImagePromptProfileV2(provider,model,config,live?.prompts,live?.outputs,parameters);
+}
+
 export async function plannerImagePromptProfile(spindle:SpindleAPI,config:VisualNovelConfig,userId?:string):Promise<ImagePromptProfile>{
  try{
   const id=config.imageConnectionId?.split('::')[0];
   const selected=id&&typeof spindle.imageGen?.getConnection==='function'?await spindle.imageGen.getConnection(id,userId):typeof spindle.imageGen?.listConnections==='function'?(await spindle.imageGen.listConnections(userId)).find(c=>c.is_default):undefined;
   return await loadImagePromptProfile(spindle,config,selected?.provider,config.imageModel||selected?.model);
  }catch{return resolveImagePromptProfile(undefined,config.imageModel,config);}
+}
+
+export async function plannerImagePromptProfileV2(spindle:SpindleAPI,config:VisualNovelConfig,userId?:string,parameters?:Record<string,unknown>):Promise<ImagePromptProfileV2>{
+ try{
+  const id=config.imageConnectionId?.split('::')[0];
+  const selected=id&&typeof spindle.imageGen?.getConnection==='function'?await spindle.imageGen.getConnection(id,userId):typeof spindle.imageGen?.listConnections==='function'?(await spindle.imageGen.listConnections(userId)).find(c=>c.is_default):undefined;
+  return await loadImagePromptProfileV2(spindle,config,selected?.provider,config.imageModel||selected?.model,parameters);
+ }catch{return resolveImagePromptProfileV2(undefined,config.imageModel,config,undefined,undefined,parameters);}
 }
 
 /** Resolve size before review; never revisit the live catalogue for an approved request. */

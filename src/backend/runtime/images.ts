@@ -1,5 +1,6 @@
 import {castAllocationCandidates} from './cast-allocation.js';
-import {loadImagePromptProfile,prepareCapabilityOutput} from "./image-prompt-profile.js";
+import {loadImagePromptProfile,loadImagePromptProfileV2,prepareCapabilityOutput} from "./image-prompt-profile.js";
+import {resolveImageOutputPlan} from './image-output-plan.js';
 import {assertCapabilityOutput} from '../../shared/model-output-capabilities.js';
 import {findCastArt,saveCastArt,castArtToken,type CastArtIdentity} from './cast-art.js';
 import {findLocationArt,saveLocationArt,locationArtToken,type LocationArtIdentity} from './location-art.js';
@@ -1319,6 +1320,25 @@ export async function generateAssets(
           frozen.parameters = modelOutputParameters(selected?.provider ?? provider, frozen.model, globalOutputParameters(config.imageOutputAspectRatio, selected?.provider ?? provider, frozen.model, frozen.parameters ?? {}));
           frozen.promptProfile=await loadImagePromptProfile(spindle,config,selected?.provider??provider,frozen.model);
           frozen=prepareCapabilityOutput(frozen,config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined);
+          if (config.imagePromptEngineVersion === 2) {
+            const profileV2 = await loadImagePromptProfileV2(spindle, config, selected?.provider ?? provider, frozen.model, frozen.parameters);
+            const outputPlan = resolveImageOutputPlan({
+              capabilities: profileV2.outputCapabilities,
+              parameters: frozen.parameters ?? {},
+              requestedRatio: config.imageOutputAspectRatio !== 'default' ? config.imageOutputAspectRatio : cue.imageTemplate?.outputAspectRatio === '9:16' ? '9:16' : undefined,
+              source: profileV2.capabilitySource,
+              modelId: frozen.model
+            });
+            frozen.promptProfileV2 = profileV2;
+            frozen.outputPlan = outputPlan;
+            frozen.parameters = outputPlan.parameters;
+            if (initialMetadata) {
+              initialMetadata.promptEngineVersion = 2;
+              initialMetadata.promptDialect = profileV2.dialect;
+              initialMetadata.serializerRevision = profileV2.serializerRevision;
+              initialMetadata.outputPlan = outputPlan;
+            }
+          }
           const adaptation=await adaptImagePrompt(spindle,frozen,initialMetadata,config,userId,jobSignal,cacheOptions.skipAutomaticPromptRepair);
           frozen=adaptation.request;
           const promptWasRewritten=adaptation.rewritten;
@@ -1370,6 +1390,23 @@ export async function generateAssets(
               request.parameters = modelOutputParameters(selected?.provider ?? provider, request.model, globalOutputParameters(config.imageOutputAspectRatio, selected?.provider ?? provider, request.model, request.parameters ?? {}));
               const preparedRequest=prepareCapabilityOutput(request,config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:nextCue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined);
               const nextMetadata=metadataFor(nextCue)!;
+              if (latestConfig.imagePromptEngineVersion === 2) {
+                const profileV2 = await loadImagePromptProfileV2(spindle, latestConfig, selected?.provider ?? provider, request.model, request.parameters);
+                const outputPlan = resolveImageOutputPlan({
+                  capabilities: profileV2.outputCapabilities,
+                  parameters: request.parameters ?? {},
+                  requestedRatio: latestConfig.imageOutputAspectRatio !== 'default' ? latestConfig.imageOutputAspectRatio : nextCue.imageTemplate?.outputAspectRatio === '9:16' ? '9:16' : undefined,
+                  source: profileV2.capabilitySource,
+                  modelId: request.model
+                });
+                preparedRequest.promptProfileV2 = profileV2;
+                preparedRequest.outputPlan = outputPlan;
+                preparedRequest.parameters = outputPlan.parameters;
+                nextMetadata.promptEngineVersion = 2;
+                nextMetadata.promptDialect = profileV2.dialect;
+                nextMetadata.serializerRevision = profileV2.serializerRevision;
+                nextMetadata.outputPlan = outputPlan;
+              }
               const adapted=await adaptImagePrompt(spindle,preparedRequest,nextMetadata,config,userId,jobSignal);
               const {promptAdaptationError:_previousAdaptationError,...cleanMetadata}=baseMetadata;
               return { request:adapted.request, metadata: { ...cleanMetadata,...(adapted.error?{promptAdaptationError:adapted.error}:{}), regeneratePrompt:regenerateFor(nextCue), imagePromptMetadata: nextMetadata, referenceSummary: nextPortrait ? `${nextPortrait.source ?? "captured"} portrait: ${nextPortrait.name} (${nextPortrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" } };

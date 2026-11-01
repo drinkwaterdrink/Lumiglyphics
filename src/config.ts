@@ -91,6 +91,7 @@ export type VisualNovelConfig = {
   dynamicImageTemplates: boolean;
   defaultImageTemplateId: string;
   imageTemplates: ImageTemplate[];
+  imagePromptEngineVersion?: 1 | 2;
   imagePromptFormat: "description" | "tags";
   automaticImagePromptSettings: boolean;
   imagePromptBudgetOverride: boolean;
@@ -169,6 +170,7 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   dynamicImageTemplates: false,
   defaultImageTemplateId: "portrait",
   imageTemplates: BUILTIN_IMAGE_TEMPLATES.map(template => ({ ...template })),
+  imagePromptEngineVersion: 1,
   imagePromptFormat: "description",
   automaticImagePromptSettings: true,
   imagePromptBudgetOverride: false,
@@ -389,6 +391,7 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     dynamicImageTemplates: bool(input.dynamicImageTemplates, false),
     defaultImageTemplateId: nullableString(input.defaultImageTemplateId) ?? "portrait",
     imageTemplates: input.imageTemplates === undefined ? migrateImageTemplates(promptPresetList(input.promptPresets)) : upgradeImageTemplates(input.imageTemplates),
+    imagePromptEngineVersion: input.imagePromptEngineVersion === 2 ? 2 : 1,
     imagePromptFormat: input.imagePromptFormat === "tags" ? "tags" : "description",
     automaticImagePromptSettings: bool(input.automaticImagePromptSettings, true),
     imagePromptBudgetOverride: input.imagePromptBudgetOverride === true,

@@ -1,5 +1,8 @@
 import {PresentationRuleTraceSchema} from './presentation-rules.js';
 import {SharedStyleSnapshotSchema} from './shared-style-snapshot.js';
+import {ImageShotSpecSchema} from './image-shot-spec.js';
+import {StyleDNASchema} from './style-dna.js';
+import {ImageOutputPlanSchema} from './image-output-plan.js';
 import { z } from "zod";
 import type { VisualNovelConfig, VisualNovelPromptPreset } from "../config.js";
 
@@ -37,10 +40,28 @@ export const VisualBriefSchema = z.object({
   subjectPreparation:SubjectPreparationSchema.optional()
 }).strict();
 export type VisualBrief = z.infer<typeof VisualBriefSchema>;
-export const ImagePromptMetadataSchema = z.object({ template: ImageTemplateSnapshotSchema, selectionReason: z.string().max(300), format: z.enum(["description", "tags"]), brief: VisualBriefSchema,
-  sharedStyle:SharedStyleSnapshotSchema.optional().catch(undefined),
+export const ImagePromptMetadataSchema = z.object({
+  template: ImageTemplateSnapshotSchema,
+  selectionReason: z.string().max(300),
+  format: z.enum(["description", "tags"]),
+  brief: VisualBriefSchema,
+  sharedStyle: SharedStyleSnapshotSchema.optional().catch(undefined),
   presentationRuleTrace: PresentationRuleTraceSchema.optional(),
-  trackerStatus: z.enum(["detected", "not_found", "unsupported", "malformed", "disabled"]), trackerSourceMessageId: z.string().max(256).optional() }).strict();
+  trackerStatus: z.enum(["detected", "not_found", "unsupported", "malformed", "disabled"]),
+  trackerSourceMessageId: z.string().max(256).optional(),
+  promptEngineVersion: z.literal(2).optional(),
+  promptDialect: z.string().max(64).optional(),
+  shotSpec: ImageShotSpecSchema.optional(),
+  styleSnapshot: StyleDNASchema.optional(),
+  outputPlan: ImageOutputPlanSchema.optional(),
+  budgetSummary: z.object({
+    complexity: z.string().max(32),
+    softRange: z.tuple([z.number(), z.number()]),
+    hardLimit: z.number(),
+    finalCharacters: z.number()
+  }).strict().optional(),
+  serializerRevision: z.string().max(64).optional()
+}).strict();
 export type ImagePromptMetadata = z.infer<typeof ImagePromptMetadataSchema>;
 export const ImageTemplateListSchema = z.array(ImageTemplateSchema).max(32).refine(templates => new Set(templates.map(t => t.id)).size === templates.length, "Template IDs must be unique.");
 
