@@ -5,6 +5,7 @@ import { z } from "zod";
 import { ActionPropFieldSchema, ActionPropSchema, type ActionProp } from "./action-prop.js";
 import { PanelArtifactSchema } from "./panels.js";
 import { ImageTemplateSnapshotSchema } from "./image-templates.js";
+import { ShotIntentSchema, ShotSizeSchema, CameraAngleSchema } from "./image-shot-spec.js";
 
 export { ActionPropFieldSchema, ActionPropSchema, type ActionProp };
 
@@ -195,6 +196,15 @@ export const StageEffectSchema = z.enum([
 ]);
 export type StageEffect = z.infer<typeof StageEffectSchema>;
 
+export const PlannerShotHintSchema = z.object({
+  intent: ShotIntentSchema.optional(),
+  focalSubject: z.string().max(256).optional(),
+  preferredShotSize: ShotSizeSchema.optional(),
+  preferredAngle: CameraAngleSchema.optional(),
+  spatialRelationships: z.array(z.string().max(256)).max(8).optional()
+}).strict();
+export type PlannerShotHint = z.infer<typeof PlannerShotHintSchema>;
+
 export const VisualCueKindSchema = z.enum(["flattened_scene", "background", "sprite"]);
 export const VisualCueSchema = z.object({
   cueId: IdentifierSchema,
@@ -222,6 +232,7 @@ export const VisualCueSchema = z.object({
   resolvedIdentity: z.string().optional(),
   resolvedAttire: z.string().nullable().optional(),
   effect: StageEffectSchema.optional(),
+  shotHint: PlannerShotHintSchema.optional(),
   promptDelta: z.string().trim().default(""),
   assetJobId: IdentifierSchema,
   bgm: z.string().trim().nullable().optional(),

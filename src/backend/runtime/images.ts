@@ -1,6 +1,8 @@
 import {castAllocationCandidates} from './cast-allocation.js';
 import {loadImagePromptProfile,loadImagePromptProfileV2,prepareCapabilityOutput} from "./image-prompt-profile.js";
 import {resolveImageOutputPlan} from './image-output-plan.js';
+import {resolveShotSpec} from './shot-director.js';
+import {resolveStyleDNA} from '../../shared/style-dna.js';
 import {assertCapabilityOutput} from '../../shared/model-output-capabilities.js';
 import {findCastArt,saveCastArt,castArtToken,type CastArtIdentity} from './cast-art.js';
 import {findLocationArt,saveLocationArt,locationArtToken,type LocationArtIdentity} from './location-art.js';
@@ -1329,14 +1331,28 @@ export async function generateAssets(
               source: profileV2.capabilitySource,
               modelId: frozen.model
             });
+            const styleSnapshot = resolveStyleDNA(config, cue.imageTemplate?.id);
+            const shotSpec = resolveShotSpec({
+              brief: initialMetadata?.brief ?? compileTemplateCue(config, scene, cue, characterAppearance).brief,
+              outputPlan,
+              template: cue.imageTemplate,
+              cue,
+              styleDNA: styleSnapshot.styleDNA,
+              dialogueSafeAreaSetting: config.dialogueSafeArea,
+              isDialogueOverlayTarget: !cue.visualSources?.includes('location art') && !cue.visualSources?.includes('cast art')
+            });
             frozen.promptProfileV2 = profileV2;
             frozen.outputPlan = outputPlan;
+            frozen.shotSpec = shotSpec;
+            frozen.styleSnapshot = styleSnapshot.styleDNA;
             frozen.parameters = outputPlan.parameters;
             if (initialMetadata) {
               initialMetadata.promptEngineVersion = 2;
               initialMetadata.promptDialect = profileV2.dialect;
               initialMetadata.serializerRevision = profileV2.serializerRevision;
               initialMetadata.outputPlan = outputPlan;
+              initialMetadata.shotSpec = shotSpec;
+              initialMetadata.styleSnapshot = styleSnapshot.styleDNA;
             }
           }
           const adaptation=await adaptImagePrompt(spindle,frozen,initialMetadata,config,userId,jobSignal,cacheOptions.skipAutomaticPromptRepair);
@@ -1399,13 +1415,27 @@ export async function generateAssets(
                   source: profileV2.capabilitySource,
                   modelId: request.model
                 });
+                const styleSnapshot = resolveStyleDNA(latestConfig, nextCue.imageTemplate?.id);
+                const shotSpec = resolveShotSpec({
+                  brief: nextMetadata.brief,
+                  outputPlan,
+                  template: nextCue.imageTemplate,
+                  cue: nextCue,
+                  styleDNA: styleSnapshot.styleDNA,
+                  dialogueSafeAreaSetting: latestConfig.dialogueSafeArea,
+                  isDialogueOverlayTarget: !nextCue.visualSources?.includes('location art') && !nextCue.visualSources?.includes('cast art')
+                });
                 preparedRequest.promptProfileV2 = profileV2;
                 preparedRequest.outputPlan = outputPlan;
+                preparedRequest.shotSpec = shotSpec;
+                preparedRequest.styleSnapshot = styleSnapshot.styleDNA;
                 preparedRequest.parameters = outputPlan.parameters;
                 nextMetadata.promptEngineVersion = 2;
                 nextMetadata.promptDialect = profileV2.dialect;
                 nextMetadata.serializerRevision = profileV2.serializerRevision;
                 nextMetadata.outputPlan = outputPlan;
+                nextMetadata.shotSpec = shotSpec;
+                nextMetadata.styleSnapshot = styleSnapshot.styleDNA;
               }
               const adapted=await adaptImagePrompt(spindle,preparedRequest,nextMetadata,config,userId,jobSignal);
               const {promptAdaptationError:_previousAdaptationError,...cleanMetadata}=baseMetadata;

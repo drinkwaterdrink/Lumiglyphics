@@ -1,5 +1,6 @@
 import type { VisualNovelPromptPreset } from "../config.js";
 import type { ImageTemplate } from "./image-templates.js";
+export { BUILTIN_STYLE_DNA, resolveStyleDNA, type StyleDNA, type ResolvedStyleDNASnapshot } from "./style-dna.js";
 
 export type SharedImageStyle = VisualNovelPromptPreset & { suffix: string; description: string };
 // Scene-independent starting points. These never select a model or add people,

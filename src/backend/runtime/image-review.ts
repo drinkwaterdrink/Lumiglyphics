@@ -2,6 +2,8 @@ import {ImagePromptProfileSchema,PROMPT_STORAGE_MAX} from "../../shared/image-pr
 import type {ImagePromptProfile} from "../../shared/image-prompt-profile.js";
 import type {ImagePromptProfileV2} from "../../shared/image-prompt-profile-v2.js";
 import type {ImageOutputPlan} from "../../shared/image-output-plan.js";
+import type {ImageShotSpec} from "../../shared/image-shot-spec.js";
+import type {StyleDNA} from "../../shared/style-dna.js";
 import {assertCapabilityOutput} from '../../shared/model-output-capabilities.js';
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { syncGeneratedModelOutput } from './template-output.js';
@@ -13,6 +15,8 @@ export type ImageGenerationRequest = Parameters<SpindleAPI["imageGen"]["generate
   promptProfile?: ImagePromptProfile;
   promptProfileV2?: ImagePromptProfileV2;
   outputPlan?: ImageOutputPlan;
+  shotSpec?: ImageShotSpec;
+  styleSnapshot?: StyleDNA;
 };
 const blocked = /(?:api.?key|authorization|password|credential|token|secret|reference|(?:source|input|resolved|init)images?|(?:^|_)images?$|image(?:Data|Url|_data|_url|_bytes|_base64)|^_lumiglyphics|^v4_|^uc$|^negativePrompt$|^rawRequestOverride$|^__proto__$|^constructor$|^prototype$)/i;
 

@@ -1,6 +1,6 @@
 import {PresentationRuleTraceSchema} from './presentation-rules.js';
 import {SharedStyleSnapshotSchema} from './shared-style-snapshot.js';
-import {ImageShotSpecSchema} from './image-shot-spec.js';
+import {ImageShotSpecSchema, ShotIntentSchema} from './image-shot-spec.js';
 import {StyleDNASchema} from './style-dna.js';
 import {ImageOutputPlanSchema} from './image-output-plan.js';
 import { z } from "zod";
@@ -22,7 +22,10 @@ export const ImageTemplateSchema = z.object({
   subjectMode: z.enum(["one", "none", "ensemble"]),
   framing: ImageTemplateFramingSchema,
   referencePolicy: z.enum(["character", "none"]),
-  outputAspectRatio: z.enum(["connection", "9:16"]).optional()
+  outputAspectRatio: z.enum(["connection", "9:16"]).optional(),
+  cameraPolicy: z.enum(["directed", "fixed"]).optional(),
+  intent: ShotIntentSchema.optional(),
+  safeAreaPolicy: z.enum(["auto", "dialogue", "none"]).optional()
 }).strict();
 export type ImageTemplate = z.infer<typeof ImageTemplateSchema>;
 export const ImageTemplateSnapshotSchema = ImageTemplateSchema.extend({ revision: z.string().regex(/^[a-f0-9]{8}$/) }).strict();
@@ -86,12 +89,12 @@ const LEGACY_MANGA_NEGATIVE = "identity drift, different face between panels, ch
 
 const body = "{{style}}\n{{subjects}}\n{{action}}\n{{scene}}\n{{composition}}\n{{lighting}}\n{{suffix}}";
 export const BUILTIN_IMAGE_TEMPLATES: readonly ImageTemplate[] = [
-  { id: "portrait", name: "Character portrait", category: "portrait", enabled: true, useWhen: "A named character's expression or reaction is the main visual beat.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "portrait", referencePolicy: "character" },
-  { id: "environment", name: "Environment", category: "environment", enabled: true, useWhen: "Entering a new place, revealing scenery, or a meaningful change in atmosphere.", positive: "{{style}}\n{{scene}}\n{{composition}}\n{{lighting}}\nAn environment view without people.\n{{suffix}}", negative: "{{negative}}", subjectMode: "none", framing: "wide", referencePolicy: "none" },
-  { id: "action", name: "Story action", category: "action", enabled: true, useWhen: "A significant movement or event matters more than a facial reaction. Focus on one visible character.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "full body", referencePolicy: "character" },
-  { id: "detail", name: "Detail / object", category: "detail", enabled: true, useWhen: "An important object, clue, or other close-up is the visual focus.", positive: "{{style}}\n{{action}}\n{{scene}}\n{{composition}}\n{{lighting}}\nAn object detail without people.\n{{suffix}}", negative: "{{negative}}", subjectMode: "none", framing: "close-up", referencePolicy: "none" },
-  { id: "custom", name: "Custom", category: "custom", enabled: false, useWhen: "Use this when its custom instructions suit the scene.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "upper body", referencePolicy: "character" },
-  { outputAspectRatio: "9:16", id: "manga-page", name: "Manga page", category: "action", enabled: false, useWhen: "A visual story beat benefits from several connected panels focusing on the same visible character. Use only events already in the brief; do not invent future story developments.", subjectMode: "one", framing: "full body", referencePolicy: "character",
+  { id: "portrait", name: "Character portrait", category: "portrait", enabled: true, useWhen: "A named character's expression or reaction is the main visual beat.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "portrait", referencePolicy: "character", cameraPolicy: "directed", intent: "portrait", safeAreaPolicy: "auto" },
+  { id: "environment", name: "Environment", category: "environment", enabled: true, useWhen: "Entering a new place, revealing scenery, or a meaningful change in atmosphere.", positive: "{{style}}\n{{scene}}\n{{composition}}\n{{lighting}}\nAn environment view without people.\n{{suffix}}", negative: "{{negative}}", subjectMode: "none", framing: "wide", referencePolicy: "none", cameraPolicy: "directed", intent: "environment", safeAreaPolicy: "none" },
+  { id: "action", name: "Story action", category: "action", enabled: true, useWhen: "A significant movement or event matters more than a facial reaction. Focus on one visible character.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "full body", referencePolicy: "character", cameraPolicy: "directed", intent: "action", safeAreaPolicy: "auto" },
+  { id: "detail", name: "Detail / object", category: "detail", enabled: true, useWhen: "An important object, clue, or other close-up is the visual focus.", positive: "{{style}}\n{{action}}\n{{scene}}\n{{composition}}\n{{lighting}}\nAn object detail without people.\n{{suffix}}", negative: "{{negative}}", subjectMode: "none", framing: "close-up", referencePolicy: "none", cameraPolicy: "directed", intent: "detail", safeAreaPolicy: "none" },
+  { id: "custom", name: "Custom", category: "custom", enabled: false, useWhen: "Use this when its custom instructions suit the scene.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "upper body", referencePolicy: "character", cameraPolicy: "fixed", intent: "custom", safeAreaPolicy: "auto" },
+  { outputAspectRatio: "9:16", id: "manga-page", name: "Manga page", category: "action", enabled: false, useWhen: "A visual story beat benefits from several connected panels focusing on the same visible character. Use only events already in the brief; do not invent future story developments.", subjectMode: "one", framing: "full body", referencePolicy: "character", cameraPolicy: "directed", intent: "manga-page", safeAreaPolicy: "none",
     positive: `{{style}}
 SUBJECT: {{subjects}}
 Keep face, hair, proportions, skin, accessories and clothing consistent across panels. Use a supplied character reference as identity authority; no unrelated named cast.
@@ -106,7 +109,7 @@ Strong ink contours, manga shading, halftones, expressive contrast, coherent col
     negative: "identity drift, wardrobe drift, repeated panels, broken reading order, extra limbs, malformed hands, illegible or unrequested text, obscured faces, stiff poses, muddy contrast, photo, CGI, watermark, logo" },
   { id: "ensemble", name: "Full scene / ensemble", category: "action", enabled: false,
     useWhen: "A shared scene or interaction should show everyone physically present, including the user's persona. List visibleCharacters for this exact moment; omit offscreen, departed, remembered and merely mentioned characters.",
-    subjectMode: "ensemble", framing: "wide", referencePolicy: "none",
+    subjectMode: "ensemble", framing: "wide", referencePolicy: "none", cameraPolicy: "directed", intent: "ensemble", safeAreaPolicy: "auto",
     positive: "{{style}}\nDepict one coherent scene with the complete visible cast below, including the user's persona when listed. Each named appearance belongs only to that individual; keep faces, hair, build and clothing distinct.\nCAST:\n{{subjects}}\nSETTING: {{scene}}\nMOMENT: {{action}}\n{{composition}}\n{{lighting}}\nUse an external camera view so the listed persona is visible too. Compose readable interactions and spatial relationships, with natural poses and clear silhouettes. Show only the supplied moment, no extra people, duplicated individuals, merged bodies, split panels or invented events.\n{{suffix}}",
     negative: "{{negative}}, duplicate person, merged identities, swapped hair or clothing, fused bodies, extra limbs, cropped-out cast, split screen" }
 ];
@@ -143,7 +146,7 @@ export function migrateImageTemplates(presets: readonly VisualNovelPromptPreset[
   // original records and make unsupported macro notation literal in the import.
   const importText = (value: string, limit: number) => value.replace(/\{\{([^{}]*)\}\}/g, (token, key: string) => (IMAGE_TEMPLATE_TOKENS as readonly string[]).includes(key) ? token : `{${key}}`).slice(0, limit).replace(/\{\{[^{}]*$/, "");
   for (const [index, preset] of presets.slice(0, 24 - templates.length).entries()) {
-    templates.push({ ...templates[0]!, id: `preset-${index}-${preset.id.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 60) || "import"}`, name: preset.name.slice(0, 80), positive: `${importText(preset.positive, 7900)}\n{{subjects}}\n{{action}}\n{{scene}}\n{{composition}}\n{{lighting}}\n{{suffix}}`, negative: importText(preset.negative, 8000) });
+    templates.push({ ...templates[0]!, id: `preset-${index}-${preset.id.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 60) || "import"}`, name: preset.name.slice(0, 80), positive: `${importText(preset.positive, 7900)}\n{{subjects}}\n{{action}}\n{{scene}}\n{{composition}}\n{{lighting}}\n{{suffix}}`, negative: importText(preset.negative, 8000), cameraPolicy: "fixed" });
   }
   return templates;
 }
