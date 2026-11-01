@@ -284,20 +284,19 @@ body.theme-dark aside[data-vn-workspace],
   z-index: 500;
   background: #e2ecca;
   color: #14201f;
-  clip-path: circle(0% at 32px 32px);
-  visibility: hidden;
+  display: none !important;
   opacity: 0;
   pointer-events: none;
-  transition: clip-path 0.44s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease, visibility 0.44s;
+  transition: opacity 0.28s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: auto;
   overscroll-behavior: contain;
 }
 
 .aperture-overlay.open {
-  visibility: visible;
-  opacity: 1;
-  pointer-events: auto;
-  clip-path: circle(160% at 32px 32px);
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
 }
 
 .aperture-overlay:before {

@@ -241,6 +241,7 @@ export class SpeechDock {
     this.setStatus({ kind: "off" });
     this.sync();
     this.host.addEventListener("lumiglyphics:speech-toggle", () => {
+      this.overlayActive = true;
       this.popoverOpen = !this.popoverOpen;
       this.sync();
     });
@@ -248,6 +249,7 @@ export class SpeechDock {
   }
 
   togglePlay(): void {
+    this.overlayActive = true;
     this.popoverOpen = !this.popoverOpen;
     this.sync();
   }

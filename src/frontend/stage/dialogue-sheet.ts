@@ -31,10 +31,9 @@ export class DialogueSheet {
     this.tools.dataset.vnSheetTools = "";
     this.tools.className = "caption-head-actions";
     this.tools.innerHTML = `<button type="button" class="caption-tool" data-action="caption-auto" aria-pressed="false" title="Toggle auto-play (A)" aria-label="Toggle auto-play"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg></button>
-      <button type="button" class="caption-tool" data-action="caption-expand" hidden style="display:none" aria-label="Expand dialogue panel"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 15 7-7 7 7"/></svg></button>
       <button type="button" class="caption-tool" data-vn-hide-text aria-pressed="false" aria-label="Hide text reader to view full artwork" title="Hide text reader"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>`;
     this.auto = this.tools.querySelector("[data-action='caption-auto']")!;
-    this.expand = this.tools.querySelector("[data-action='caption-expand']")!;
+    this.expand = this.tools.querySelector("[data-action='caption-expand']") ?? document.createElement("button");
     this.hide = this.tools.querySelector("[data-vn-hide-text]")!;
 
     this.show = document.createElement("button");

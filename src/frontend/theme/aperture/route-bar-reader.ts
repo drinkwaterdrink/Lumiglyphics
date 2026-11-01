@@ -194,7 +194,7 @@ body.theme-dark .route-bar .route-actions .menu-key,
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
-  padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 10px !important;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 8px !important;
   background: linear-gradient(180deg, rgba(3, 10, 15, 0.72), transparent) !important;
   border: 0 !important;
   border-bottom: 0 !important;
@@ -205,7 +205,7 @@ body.theme-dark .route-bar .route-actions .menu-key,
   margin-right: 0 !important;
   display: flex !important;
   align-items: center !important;
-  gap: 5px !important;
+  gap: 4px !important;
   margin-left: auto !important;
   flex-shrink: 0 !important;
 }
@@ -584,20 +584,28 @@ aside[data-vn-workspace] {
 }
 
 .round-ghost {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 1px solid rgba(245, 249, 240, 0.34);
-  background: rgba(5, 15, 19, 0.45);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.08), 0 4px 12px rgba(0, 0, 0, 0.15);
-  display: grid;
-  place-items: center;
-  color: #f7f9f3;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: transform 0.16s ease, background 0.16s ease;
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
+  border-radius: 50% !important;
+  border: 1px solid rgba(245, 249, 240, 0.34) !important;
+  background: rgba(5, 15, 19, 0.5) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.08), 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  display: grid !important;
+  place-items: center !important;
+  color: #f7f9f3 !important;
+  cursor: pointer !important;
+  flex-shrink: 0 !important;
+  padding: 0 !important;
+  transition: transform 0.16s ease, background 0.16s ease !important;
+}
+
+.round-ghost svg {
+  width: 17px !important;
+  height: 17px !important;
 }
 
 .round-ghost:hover {

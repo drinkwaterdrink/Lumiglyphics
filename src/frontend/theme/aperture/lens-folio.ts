@@ -266,11 +266,11 @@ body.theme-light .folio-quote-callout {
     scroll-behavior: auto !important;
   }
   .aperture-overlay {
-    clip-path: none !important;
+    display: none !important;
     opacity: 0;
-    visibility: hidden;
   }
   .aperture-overlay.open {
+    display: block !important;
     opacity: 1;
     visibility: visible;
   }
@@ -298,11 +298,11 @@ body.theme-light .folio-quote-callout {
   margin: 0 !important;
   box-sizing: border-box !important;
   top: auto !important;
-  bottom: calc(64px + env(safe-area-inset-bottom, 0px)) !important;
+  bottom: calc(88px + env(safe-area-inset-bottom, 0px)) !important;
   height: var(--caption-height, 146px);
   min-height: 114px !important;
   max-height: calc(100% - 140px) !important;
-  padding: 10px 14px 42px !important;
+  padding: 10px 14px 10px !important;
   border: 1px solid rgba(160, 205, 185, 0.28) !important;
   border-radius: 16px !important;
   background: rgba(8, 18, 15, var(--caption-opacity, 0.82)) !important;
@@ -444,7 +444,7 @@ body.theme-light .folio-quote-callout {
   overscroll-behavior: contain !important;
   scrollbar-width: thin !important;
   scrollbar-color: rgba(220, 238, 177, 0.45) transparent !important;
-  padding: 2px 2px 42px !important;
+  padding: 2px 2px 8px !important;
   margin: 0 !important;
 }
 
@@ -472,7 +472,7 @@ body.theme-light .folio-quote-callout {
 /* Integrated Progress Scrubber docked inside Dialogue Card */
 .reader-progress {
   position: absolute !important;
-  bottom: calc(70px + env(safe-area-inset-bottom, 0px)) !important;
+  bottom: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
   left: 56px !important;
   right: 56px !important;
   width: auto !important;
@@ -544,7 +544,7 @@ body.theme-light .folio-quote-callout {
   position: absolute !important;
   left: 10px !important;
   right: auto !important;
-  bottom: calc(70px + env(safe-area-inset-bottom, 0px)) !important;
+  bottom: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
   width: 28px !important;
   height: 28px !important;
   min-width: 28px !important;
@@ -572,7 +572,7 @@ body.theme-light .folio-quote-callout {
   position: absolute !important;
   right: 10px !important;
   left: auto !important;
-  bottom: calc(70px + env(safe-area-inset-bottom, 0px)) !important;
+  bottom: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
   width: 28px !important;
   height: 28px !important;
   min-width: 28px !important;

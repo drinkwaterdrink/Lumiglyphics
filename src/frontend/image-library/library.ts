@@ -5,6 +5,7 @@ import {stripUnknownPresetTags} from '../stage/rich-text.js';
 
 const css=`
 :host{position:absolute;inset:0;pointer-events:none;z-index:58;color:var(--vn-shell-text,#f4f1e9);font:14px/1.5 system-ui}
+:host([hidden]),:host(:not([data-open="true"])),:host([data-vn-workspace-tool]:not([data-open="true"])),:host([data-vn-workspace-tool][hidden]){display:none!important}
 *{box-sizing:border-box}[hidden]{display:none!important}button,input,select,textarea{font:inherit;color:inherit}button,select{min-height:44px;border:1px solid var(--vn-shell-border,rgba(134,219,178,.22));border-radius:8px;background:var(--vn-shell-field,#101a1e);padding:8px 12px}button{cursor:pointer}button:disabled{opacity:.45;cursor:default}button:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--vn-shell-accent,#86dbb2);outline-offset:2px}
 [data-library-launch]{position:absolute;right:16px;top:140px;pointer-events:auto;width:44px;padding:9px;background:var(--vn-shell-bg,#0d161a)}svg{width:24px;height:24px;display:block;margin:auto}
 section{position:absolute;inset:max(76px,calc(env(safe-area-inset-top) + 64px)) 12px max(12px,env(safe-area-inset-bottom));max-width:940px;margin:auto;pointer-events:auto;border:1px solid var(--vn-shell-border,rgba(134,219,178,.22));border-radius:14px;background:var(--vn-shell-bg,#0d161a);box-shadow:0 12px 48px #0009;display:flex;flex-direction:column;overflow:hidden}
@@ -40,7 +41,7 @@ export class ImageLibrary{
  private currentSceneEntries:ReadonlyArray<{speaker?:string|undefined;text:string;paragraphIndex?:number|undefined}>=[];
  private onJumpToParagraph:((index:number)=>void)|null=null;
  constructor(mount:HTMLElement,private send:(request:FrontendRequest)=>void,private onOpen:(open:boolean)=>void){
-  this.host=document.createElement('div');this.host.dataset.imageLibrary='';this.root=this.host.attachShadow({mode:'open'});
+  this.host=document.createElement('div');this.host.dataset.imageLibrary='';this.host.hidden=true;this.root=this.host.attachShadow({mode:'open'});
   this.root.innerHTML=`<style>${css}</style><button type="button" data-library-launch title="Image library" aria-label="Open image library" aria-expanded="false" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1.5"/><path d="m4 18 5-5 4 3 3-5 5 7"/></svg></button><section hidden role="dialog" aria-modal="true" aria-labelledby="library-title"><header><button type="button" data-detail-back hidden aria-label="Back to library" title="Back to library">‹</button><h2 id="library-title">Image library</h2><button type="button" data-library-close aria-label="Close image library" title="Close image library">×</button></header><div class="body"><div data-browse><div class="filters"><label>Story range<select data-range aria-label="Story range"><option value="read">Read so far</option><option value="all">All story images</option></select></label><label>Message versions<select data-versions aria-label="Message versions"><option value="active">Active story</option><option value="all">Include alternate versions</option></select></label><label>Sort<select data-order aria-label="Sort images"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label></div><label class="check"><input type="checkbox" data-replaced>Include replaced pictures</label><p class="note">Saved pictures from this chat. Viewing never generates an image. Older missing references cannot always be recovered.</p><div data-grid></div></div><div data-detail hidden><div class="viewer-tools"><button type="button" data-zoom-out aria-label="Zoom out" title="Zoom out">−</button><button type="button" data-fit>Fit</button><button type="button" data-zoom-in aria-label="Zoom in" title="Zoom in">+</button><span data-zoom-label>100%</span></div><div data-image-viewport><img data-full-image alt="Selected story image" data-zoom="1"></div><p data-description></p><p data-excerpt></p><details data-prompts><summary>Prompt details</summary><p class="note">Read-only saved wording. Older pictures may have no recorded request.</p><label class="prompt-label">Saved positive prompt<textarea data-positive aria-label="Saved positive prompt" readonly></textarea></label><label class="prompt-label">Saved negative prompt<textarea data-negative aria-label="Saved negative prompt" readonly></textarea></label><button type="button" data-copy>Copy prompt</button></details></div><p data-library-status role="status"></p><button type="button" data-retry hidden>Retry loading</button></div><footer data-library-footer><button type="button" data-page-prev>Previous page</button><span data-page-label>Page 1</span><button type="button" data-page-next>Next page</button></footer></section>`;
   const refresh=document.createElement('button');refresh.type='button';refresh.dataset.refresh='';refresh.textContent='↻';refresh.title='Refresh image library';refresh.setAttribute('aria-label','Refresh image library');this.el<HTMLElement>('header').insertBefore(refresh,this.el<HTMLElement>('[data-library-close]'));
   const filters=document.createElement('details');filters.innerHTML='<summary>Filters</summary><label>Picture type<select data-role aria-label="Picture type"><option value="all">All types</option><option value="scene">Scenes / pages</option><option value="background">Places</option><option value="portrait">Portraits</option></select></label><label class="check">Template name<input data-template-query aria-label="Template name contains" maxlength="64" type="search"></label>';
@@ -200,13 +201,88 @@ export class ImageLibrary{
 }
 
 const DOCKED_LIBRARY_CSS=`
-:host([data-vn-workspace-tool]){position:relative;inset:auto;display:flex!important;flex-direction:column!important;flex:1 1 auto!important;min-height:0!important;width:100%;height:100%;z-index:auto;pointer-events:auto;background:transparent}
-:host([data-vn-workspace-tool]) [data-library-launch],:host([data-vn-workspace-tool]) [data-library-close],:host([data-vn-workspace-tool]) [data-history-return]{display:none}
-:host([data-vn-workspace-tool]) section{position:relative;inset:auto;display:flex!important;flex-direction:column!important;flex:1 1 auto!important;min-height:0!important;width:100%;max-width:none;height:100%;max-height:none;margin:0;border:0;border-radius:0;box-shadow:none;background:transparent}
-:host([data-vn-workspace-tool]) header{display:none!important}
-:host([data-vn-workspace-tool]) footer[data-library-footer]{margin-bottom:0!important;flex:none!important;background:rgba(9,19,15,.72)!important;backdrop-filter:blur(12px)!important;-webkit-backdrop-filter:blur(12px)!important;border-top:1px solid rgba(160,205,185,.2)!important;padding:10px 14px calc(12px + env(safe-area-inset-bottom, 0px))!important}
-:host([data-vn-workspace-tool]) footer[data-library-footer] button{min-height:38px;border-radius:999px;padding:6px 16px;background:rgba(22,46,36,.8);border:1px solid rgba(160,205,185,.25);color:#f4f7ee;font-weight:650;font-size:12px}
-:host([data-vn-workspace-tool]) footer[data-library-footer] button:hover:not(:disabled){background:rgba(35,75,57,.9);border-color:#dcebad}
+:host([data-vn-workspace-tool]:not([data-open="true"])),
+:host([data-vn-workspace-tool][hidden]),
+:host([data-vn-workspace-tool]) section[hidden] {
+  display: none !important;
+}
+:host([data-vn-workspace-tool][data-open="true"]:not([hidden])) {
+  position: relative !important;
+  inset: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: auto !important;
+  pointer-events: auto !important;
+  background: transparent !important;
+}
+:host([data-vn-workspace-tool]) [data-library-launch],
+:host([data-vn-workspace-tool]) [data-library-close],
+:host([data-vn-workspace-tool]) [data-history-return] {
+  display: none !important;
+}
+:host([data-vn-workspace-tool][data-open="true"]:not([hidden])) section:not([hidden]) {
+  position: relative !important;
+  inset: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  max-width: none !important;
+  height: 100% !important;
+  max-height: none !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+:host([data-vn-workspace-tool]) header { display: none !important; }
+:host([data-vn-workspace-tool]) [data-history-views] {
+  margin: 6px 14px 10px !important;
+  flex-shrink: 0 !important;
+}
+:host([data-vn-workspace-tool]) details {
+  margin: 0 14px 10px !important;
+}
+:host([data-vn-workspace-tool]) .body {
+  padding: 4px 14px 20px !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+:host([data-vn-workspace-tool]) footer[data-library-footer] {
+  margin-top: auto !important;
+  margin-bottom: 0 !important;
+  flex: none !important;
+  background: rgba(9, 19, 15, 0.92) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  border-top: 1px solid rgba(160, 205, 185, 0.2) !important;
+  padding: 8px 14px calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+}
+:host([data-vn-workspace-tool]) footer[data-library-footer] button {
+  min-height: 36px !important;
+  border-radius: 999px !important;
+  padding: 4px 14px !important;
+  background: rgba(22, 46, 36, 0.8) !important;
+  border: 1px solid rgba(160, 205, 185, 0.25) !important;
+  color: #f4f7ee !important;
+  font-weight: 650 !important;
+  font-size: 12px !important;
+}
+:host([data-vn-workspace-tool]) footer[data-library-footer] button:hover:not(:disabled) {
+  background: rgba(35, 75, 57, 0.9) !important;
+  border-color: #dcebad !important;
+}
+:host([data-vn-workspace-tool]) .filters { grid-template-columns: 1fr !important; }
+:host([data-vn-workspace-tool]) [data-grid] { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)) !important; }
+:host([data-vn-workspace-tool]) [data-detail-back] { font-size: 24px !important; }
 :is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-history-views]{background:rgba(35,65,50,.1);border:1px solid rgba(35,65,50,.18)}
 :is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-history-view]{color:#244636!important}
 :is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-history-view][aria-pressed=true]{background:#234b39!important;color:#fbfdf7!important;box-shadow:0 2px 8px rgba(35,65,50,.2)}
@@ -217,9 +293,4 @@ const DOCKED_LIBRARY_CSS=`
 :is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-reply] details strong{background:rgba(35,75,57,.12)!important;color:#234b39!important}
 :is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) footer[data-library-footer] button{background:#e4ebe0!important;border-color:#b3c5b8!important;color:#1a3327!important}
 :is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-page-label]{color:#3b5d4c!important;font-weight:650!important}
-:host([data-vn-workspace-tool]) header h2{font-size:13px;letter-spacing:.04em;text-transform:uppercase;font-weight:700;color:#dcebad}
-:host([data-vn-workspace-tool]) .body{padding:12px 14px 20px!important;flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important}
-:host([data-vn-workspace-tool]) .filters{grid-template-columns:1fr}
-:host([data-vn-workspace-tool]) [data-grid]{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
-:host([data-vn-workspace-tool]) [data-detail-back]{font-size:24px}
 `;
