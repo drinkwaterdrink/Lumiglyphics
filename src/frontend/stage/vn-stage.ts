@@ -646,7 +646,7 @@ export class VnStage {
 
     this.root = queryRequired(this.themeRoot, "[data-vn-root]");
     this.root.dataset.vnReaderFirst = "true";
-    this.workspace = new ReaderWorkspace(shell, themeHost, () => { this.toggleSkip(false); this.toggleAutoPlay(false); }, () => this.focus());
+    this.workspace = new ReaderWorkspace(shell, themeHost, () => { this.toggleSkip(false); this.toggleAutoPlay(false); }, () => this.focus(), () => this.callbacks.onExit?.());
     this.preparationPreview=new PreparationPreview(this.root);
     this.applyThemePreset(options.themePreset ?? "lumiverse");
     this.scene = queryRequired(this.themeRoot, "[data-vn-scene]");
@@ -1936,6 +1936,48 @@ export class VnStage {
 
     // A tap advances; dragging/scrolling the sheet must not become a tap on release.
     let sheetGesture: { id: number; x: number; y: number; moved: boolean } | null = null;
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchStartTime = 0;
+    let isTouchSwiping = false;
+    let lastTapTime = 0;
+    let lastTapX = 0;
+    let lastTapY = 0;
+
+    this.root.addEventListener("touchstart", (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (event.touches.length === 1 && touch) {
+        touchStartX = touch.clientX;
+        touchStartY = touch.clientY;
+        touchStartTime = performance.now();
+        isTouchSwiping = false;
+      }
+    }, { passive: true });
+
+    this.root.addEventListener("touchend", (event: TouchEvent) => {
+      const touch = event.changedTouches[0];
+      if (event.changedTouches.length === 1 && touch && !this.workspace.isOpen() && !this.isBacklogOpen && !this.dossiers.isOpen()) {
+        const dx = touch.clientX - touchStartX;
+        const dy = touch.clientY - touchStartY;
+        const dt = performance.now() - touchStartTime;
+
+        // Check if user is scrolling inside dialogue text or scrollable card
+        const target = event.target as HTMLElement | null;
+        const scrollable = target?.closest("[data-vn-dialogue-text], [data-workspace-content], [data-vn-backlog-dialog]");
+        const isScrollingText = scrollable && scrollable.scrollHeight > scrollable.clientHeight && Math.abs(dy) > 15;
+
+        if (!isScrollingText && dt < 450 && Math.abs(dx) > 45 && Math.abs(dx) > 1.6 * Math.abs(dy)) {
+          isTouchSwiping = true;
+          if (sheetGesture) sheetGesture.moved = true; // suppress tap advance
+          if (dx < -45) {
+            this.advance();
+          } else if (dx > 45) {
+            this.previous();
+          }
+        }
+      }
+    }, { passive: true });
+
     this.root.addEventListener("pointerdown", event => {
       sheetGesture = event.target instanceof Element && event.target.closest("[data-vn-dialogue]")
         ? { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false } : null;
@@ -1945,11 +1987,28 @@ export class VnStage {
     }, { passive: true });
     this.root.addEventListener("pointercancel", () => { if (sheetGesture) sheetGesture.moved = true; }, { passive: true });
     this.root.addEventListener("click", (event) => {
+      if (isTouchSwiping) {
+        isTouchSwiping = false;
+        return;
+      }
       const dragged = sheetGesture?.moved;
       sheetGesture = null;
       if (this.root.dataset.vnPageFocus === "true") return;
-      if (this.dialogueSheet?.isHidden()) {
-        if (!isInteractiveTarget(event.target)) this.dialogueSheet.setHidden(false);
+
+      const now = performance.now();
+      const isDoubleTap = (now - lastTapTime < 320) && (Math.hypot(event.clientX - lastTapX, event.clientY - lastTapY) < 32);
+      lastTapTime = now;
+      lastTapX = event.clientX;
+      lastTapY = event.clientY;
+
+      if (isDoubleTap && !isInteractiveTarget(event.target)) {
+        event.preventDefault();
+        this.toggleHud();
+        return;
+      }
+
+      if (this.dialogueSheet?.isHidden() || this.root.dataset.vnHudHidden === "true") {
+        if (!isInteractiveTarget(event.target)) this.toggleHud(false);
         return;
       }
       if (this.workspace.isOpen() || this.isBacklogOpen || this.dossiers.isOpen()) return;
@@ -2080,6 +2139,25 @@ export class VnStage {
     }
     this.cleanToggle?.setAttribute("aria-pressed", String(this.isCleanView));
     if (this.cleanRestore) this.cleanRestore.hidden = !this.isCleanView;
+  }
+
+  toggleHud(hidden?: boolean): void {
+    if (this.destroyed) return;
+    const isCurrentlyHidden = this.root.dataset.vnHudHidden === "true" || this.isCleanView || Boolean(this.dialogueSheet?.isHidden());
+    const nextHidden = hidden !== undefined ? hidden : !isCurrentlyHidden;
+    const shell = this.outerRoot.querySelector<HTMLElement>("[data-vn-shell]");
+    if (nextHidden) {
+      this.toggleAutoPlay(false);
+      this.toggleSkip(false);
+      this.root.dataset.vnHudHidden = "true";
+      if (shell) shell.dataset.vnHudHidden = "true";
+      this.dialogueSheet?.setHidden(true);
+    } else {
+      delete this.root.dataset.vnHudHidden;
+      if (shell) delete shell.dataset.vnHudHidden;
+      this.dialogueSheet?.setHidden(false);
+      this.setCleanView(false);
+    }
   }
 
   jumpToParagraph(targetIndex: number): void {
@@ -2745,8 +2823,45 @@ export class VnStage {
     }
     if (atmosphere) {
       this.scene.dataset.vnAtmosphere = atmosphere;
+      this.root.dataset.vnAtmosphere = atmosphere;
+      const glowMap: Record<string, { glow: string; tint: string }> = {
+        danger_crimson: { glow: "rgba(244, 63, 94, 0.45)", tint: "rgba(225, 29, 72, 0.12)" },
+        sepia_flashback: { glow: "rgba(217, 119, 6, 0.40)", tint: "rgba(180, 83, 9, 0.12)" },
+        romance_rose: { glow: "rgba(244, 114, 182, 0.45)", tint: "rgba(236, 72, 153, 0.12)" },
+        cold_mist: { glow: "rgba(56, 189, 248, 0.40)", tint: "rgba(14, 165, 233, 0.12)" },
+        warm_amber: { glow: "rgba(245, 158, 11, 0.45)", tint: "rgba(217, 119, 6, 0.12)" },
+        nocturne: { glow: "rgba(99, 102, 241, 0.40)", tint: "rgba(79, 70, 229, 0.12)" },
+        neon_violet: { glow: "rgba(217, 70, 239, 0.45)", tint: "rgba(168, 85, 247, 0.14)" },
+      };
+      const shell = this.outerRoot.querySelector<HTMLElement>("[data-vn-shell]");
+      const conf = glowMap[atmosphere];
+      if (conf) {
+        if (typeof this.root.style?.setProperty === "function") {
+          this.root.style.setProperty("--vn-atmosphere-glow", conf.glow);
+          this.root.style.setProperty("--vn-atmosphere-tint", conf.tint);
+        }
+        if (shell && typeof shell.style?.setProperty === "function") {
+          shell.style.setProperty("--vn-atmosphere-glow", conf.glow);
+        }
+      }
     } else {
       delete this.scene.dataset.vnAtmosphere;
+      delete this.root.dataset.vnAtmosphere;
+      const shell = this.outerRoot.querySelector<HTMLElement>("[data-vn-shell]");
+      if (typeof this.root.style?.removeProperty === "function") {
+        this.root.style.removeProperty("--vn-atmosphere-glow");
+        this.root.style.removeProperty("--vn-atmosphere-tint");
+      } else if (typeof this.root.style?.setProperty === "function") {
+        this.root.style.setProperty("--vn-atmosphere-glow", "");
+        this.root.style.setProperty("--vn-atmosphere-tint", "");
+      }
+      if (shell) {
+        if (typeof shell.style?.removeProperty === "function") {
+          shell.style.removeProperty("--vn-atmosphere-glow");
+        } else if (typeof shell.style?.setProperty === "function") {
+          shell.style.setProperty("--vn-atmosphere-glow", "");
+        }
+      }
     }
   }
 

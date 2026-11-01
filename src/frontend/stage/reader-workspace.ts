@@ -65,7 +65,8 @@ export class ReaderWorkspace {
   onSettingsPage: ((page: string) => void) | undefined;
 
   constructor(private readonly shell: HTMLElement, private readonly reader: HTMLElement,
-    private readonly pause: () => void, private readonly focusReader: () => void) {
+    private readonly pause: () => void, private readonly focusReader: () => void,
+    private readonly onExit?: () => void) {
     shell.dataset.vnReaderFirst = 'true';
     const wrapper = document.createElement('div');
     wrapper.innerHTML = `<nav data-vn-navigation aria-label="Reader navigation">
@@ -80,14 +81,14 @@ export class ReaderWorkspace {
         <strong data-reader-caption-strong>Chapter IV</strong>
         <small data-reader-caption-small data-reader-caption>Visual novel</small>
       </div>
-      <div data-reader-header-actions class="topbar-actions" style="display:flex;align-items:center;gap:5px;margin-left:auto">
+      <div data-reader-header-actions class="topbar-actions" style="display:flex;align-items:center;gap:6px;margin-left:auto">
         <button type="button" class="round-ghost" data-action="cast-toggle" title="Cast portraits" aria-label="Show cast portraits">${APERTURE_ICONS.cast}</button>
         <button type="button" class="round-ghost" data-action="panels-toggle" title="Panels" aria-label="Open Panels">${APERTURE_ICONS.panel}</button>
         <button type="button" class="round-ghost" data-action="voice-toggle" title="Voice controls" aria-label="Voice controls">${APERTURE_ICONS.speaker}</button>
         <button type="button" class="round-ghost" data-action="studio-toggle" title="Art Studio" aria-label="Open Art Studio">${APERTURE_ICONS.image}</button>
+        <button type="button" data-reader-search aria-label="Search menus and settings (/)" style="display:none">${readerIcon('search')}<span>Find</span><kbd>/</kbd></button>
+        <button type="button" data-reader-focus aria-label="Hide navigation ([)" aria-keyshortcuts="[" style="display:none">${readerIcon('focus')}<span>Hide chrome</span><kbd>[</kbd></button>
         <button type="button" class="round-ghost" data-action="chat-exit" title="Back to chat" aria-label="Back to Lumiverse chat">${APERTURE_ICONS.chat}</button>
-        <button type="button" class="round-ghost" data-reader-search aria-label="Find menus and settings" title="Find menus and settings (Ctrl/Command K)" style="display:none">${readerIcon('search')}<span style="display:none">Find menus</span><kbd style="display:none">⌘ K</kbd></button>
-        <button type="button" class="round-ghost" data-reader-focus aria-label="Focus reading" aria-pressed="false" title="Focus reading" style="display:none">${readerIcon('focus')}<span style="display:none">Focus</span></button>
       </div>
     </header>
     <aside data-vn-workspace hidden aria-label="Reader workspace" tabindex="-1">
@@ -206,9 +207,18 @@ export class ReaderWorkspace {
     q('[data-action="studio-toggle"]')?.addEventListener('click', () => {
       this.open('artwork');
     }, {signal});
-    q('[data-action="chat-exit"]')?.addEventListener('click', () => {
-      this.shell.querySelector<HTMLButtonElement>('[data-vn-exit]')?.click();
-    }, {signal});
+    const chatExitBtn = q('[data-action="chat-exit"]');
+    const handleChatExit = (event?: Event) => {
+      event?.preventDefault();
+      event?.stopPropagation();
+      if (this.onExit) {
+        this.onExit();
+      } else {
+        const exit = this.shell.querySelector<HTMLButtonElement>('[data-vn-exit]');
+        if (exit) exit.click(); else this.close();
+      }
+    };
+    chatExitBtn?.addEventListener('click', handleChatExit, {signal});
 
     // APERTURE Navigation triggers
     const openMenuBtn = q('[data-aperture-open]');
@@ -238,8 +248,12 @@ export class ReaderWorkspace {
       else if (route === 'settings') this.open('settings');
       else if (route === 'workspace') this.openMore(link);
       else if (route === 'chat') {
-        const exit = shell.querySelector<HTMLButtonElement>('[data-vn-exit]');
-        if (exit) exit.click(); else this.close();
+        if (this.onExit) {
+          this.onExit();
+        } else {
+          const exit = shell.querySelector<HTMLButtonElement>('[data-vn-exit]');
+          if (exit) exit.click(); else this.close();
+        }
       }
     }, {signal});
 

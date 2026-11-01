@@ -206,7 +206,7 @@ const DOCKED_LIBRARY_CSS=`
 :host([data-vn-workspace-tool]) section[hidden] {
   display: none !important;
 }
-:host([data-vn-workspace-tool][data-open="true"]:not([hidden])) {
+:host([data-vn-workspace-tool]) {
   position: relative !important;
   inset: auto !important;
   display: flex !important;
@@ -224,7 +224,7 @@ const DOCKED_LIBRARY_CSS=`
 :host([data-vn-workspace-tool]) [data-history-return] {
   display: none !important;
 }
-:host([data-vn-workspace-tool][data-open="true"]:not([hidden])) section:not([hidden]) {
+:host([data-vn-workspace-tool]) section:not([hidden]) {
   position: relative !important;
   inset: auto !important;
   display: flex !important;
@@ -245,40 +245,83 @@ const DOCKED_LIBRARY_CSS=`
 :host([data-vn-workspace-tool]) [data-history-views] {
   margin: 6px 14px 10px !important;
   flex-shrink: 0 !important;
+  border-color: var(--aperture-button-border, rgba(160, 205, 185, 0.25)) !important;
+}
+:host([data-vn-workspace-tool]) [data-history-view] {
+  color: var(--aperture-muted, #a6bfae) !important;
+}
+:host([data-vn-workspace-tool]) [data-history-view][aria-pressed=true] {
+  background: var(--aperture-accent, #dcebad) !important;
+  color: var(--aperture-accent-contrast, #0e1e18) !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3) !important;
 }
 :host([data-vn-workspace-tool]) details {
   margin: 0 14px 10px !important;
 }
 :host([data-vn-workspace-tool]) .body {
-  padding: 4px 14px 20px !important;
+  padding: 8px 14px 16px !important;
+  display: flex !important;
+  flex-direction: column !important;
   flex: 1 1 auto !important;
   min-height: 0 !important;
+  height: 100% !important;
   overflow-y: auto !important;
   -webkit-overflow-scrolling: touch !important;
+}
+:host([data-vn-workspace-tool]) [data-browse] {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+}
+:host([data-vn-workspace-tool]) [data-reply] {
+  background: var(--aperture-ghost-bg, rgba(18, 38, 30, 0.55)) !important;
+  border: 1px solid var(--aperture-button-border, rgba(160, 205, 185, 0.22)) !important;
+  border-left: 3px solid var(--aperture-accent, #dcebad) !important;
+  color: var(--aperture-text, #f3f7ee) !important;
+}
+:host([data-vn-workspace-tool]) [data-reply] h3 {
+  background: var(--aperture-accent-surface, rgba(220, 238, 173, 0.18)) !important;
+  color: var(--aperture-accent, #dcebad) !important;
+}
+:host([data-vn-workspace-tool]) [data-reply] details strong {
+  background: var(--aperture-accent-surface, rgba(220, 238, 173, 0.15)) !important;
+  color: var(--aperture-accent, #dcebad) !important;
+}
+:host([data-vn-workspace-tool]) [data-vn-backlog-jump] {
+  background: var(--aperture-accent-surface, rgba(220, 238, 173, 0.14)) !important;
+  border: 1px solid var(--aperture-button-border, rgba(220, 238, 173, 0.35)) !important;
+  color: var(--aperture-accent, #dcebad) !important;
 }
 :host([data-vn-workspace-tool]) footer[data-library-footer] {
   margin-top: auto !important;
   margin-bottom: 0 !important;
-  flex: none !important;
-  background: rgba(9, 19, 15, 0.92) !important;
+  flex: 0 0 auto !important;
+  min-height: 50px !important;
+  max-height: 52px !important;
+  height: 52px !important;
+  background: var(--aperture-ghost-bg, rgba(9, 19, 15, 0.94)) !important;
   backdrop-filter: blur(14px) !important;
   -webkit-backdrop-filter: blur(14px) !important;
-  border-top: 1px solid rgba(160, 205, 185, 0.2) !important;
-  padding: 8px 14px calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+  border-top: 1px solid var(--aperture-button-border, rgba(160, 205, 185, 0.2)) !important;
+  padding: 6px 14px calc(6px + env(safe-area-inset-bottom, 0px)) !important;
+  box-sizing: border-box !important;
+  z-index: 10 !important;
 }
 :host([data-vn-workspace-tool]) footer[data-library-footer] button {
-  min-height: 36px !important;
+  min-height: 34px !important;
   border-radius: 999px !important;
   padding: 4px 14px !important;
-  background: rgba(22, 46, 36, 0.8) !important;
-  border: 1px solid rgba(160, 205, 185, 0.25) !important;
-  color: #f4f7ee !important;
+  background: var(--aperture-ghost-bg, rgba(22, 46, 36, 0.8)) !important;
+  border: 1px solid var(--aperture-button-border, rgba(160, 205, 185, 0.25)) !important;
+  color: var(--aperture-text, #f4f7ee) !important;
   font-weight: 650 !important;
   font-size: 12px !important;
 }
 :host([data-vn-workspace-tool]) footer[data-library-footer] button:hover:not(:disabled) {
-  background: rgba(35, 75, 57, 0.9) !important;
-  border-color: #dcebad !important;
+  background: var(--aperture-accent-surface, rgba(35, 75, 57, 0.9)) !important;
+  border-color: var(--aperture-accent, #dcebad) !important;
+  color: var(--aperture-accent, #dcebad) !important;
 }
 :host([data-vn-workspace-tool]) .filters { grid-template-columns: 1fr !important; }
 :host([data-vn-workspace-tool]) [data-grid] { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)) !important; }

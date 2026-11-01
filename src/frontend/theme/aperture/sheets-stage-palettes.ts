@@ -13,8 +13,8 @@ aside[data-vn-workspace] {
   border: 0 !important;
   border-radius: 0 !important;
   z-index: 60 !important;
-  background: linear-gradient(155deg, #151f20 0%, #101a1e 58%, #0b1419 100%) !important;
-  color: #eff4e9 !important;
+  background: var(--aperture-workspace-bg, linear-gradient(155deg, #151f20 0%, #101a1e 58%, #0b1419 100%)) !important;
+  color: var(--aperture-text, #eff4e9) !important;
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden !important;
@@ -132,9 +132,16 @@ aside[data-vn-workspace] > header > div {
   z-index: 1 !important;
 }
 
-[data-workspace-content]:has(> [data-vn-workspace-tool="history"]) {
+[data-workspace-content]:has(> [data-vn-workspace-tool="history"]),
+[data-surface="history"] [data-workspace-content],
+[data-vn-workspace="history"] [data-workspace-content] {
   padding: 0 !important;
   overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
 }
 
 /* Character Folio & World Lens full-bleed modal overhaul */
@@ -151,8 +158,8 @@ aside[data-vn-workspace] > header > div {
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden !important;
-  background: linear-gradient(155deg, #151f20 0%, #101a1e 58%, #0b1419 100%) !important;
-  color: #eff4e9 !important;
+  background: var(--aperture-workspace-bg, linear-gradient(155deg, #151f20 0%, #101a1e 58%, #0b1419 100%)) !important;
+  color: var(--aperture-text, #eff4e9) !important;
 }
 
 body.theme-light [data-vn-dossier],
@@ -289,22 +296,22 @@ aside[data-vn-workspace]:before,
 /* Dark Mode Radial Lines (Default) */
 aside[data-vn-workspace]:before,
 [data-workspace-content]:before {
-  background: repeating-radial-gradient(ellipse at 102% 96%, transparent 0 59px, rgba(140, 195, 160, 0.12) 60px, transparent 61px) !important;
+  background: repeating-radial-gradient(ellipse at 102% 96%, transparent 0 59px, var(--aperture-ring-color, rgba(140, 195, 160, 0.12)) 60px, transparent 61px) !important;
 }
 [data-vn-reference-sheet]:before,
 [data-surface="world"]:before {
-  background: repeating-radial-gradient(circle at -12% 35%, transparent 0 52px, rgba(140, 195, 160, 0.12) 53px, transparent 54px) !important;
+  background: repeating-radial-gradient(circle at -12% 35%, transparent 0 52px, var(--aperture-ring-color, rgba(140, 195, 160, 0.12)) 53px, transparent 54px) !important;
 }
 [data-vn-dossier]:before,
 [data-vn-dossier-card]:before,
 [data-surface="character"]:before {
-  background: repeating-radial-gradient(ellipse at 108% 18%, transparent 0 49px, rgba(140, 195, 160, 0.12) 50px, transparent 51px) !important;
+  background: repeating-radial-gradient(ellipse at 108% 18%, transparent 0 49px, var(--aperture-ring-color, rgba(140, 195, 160, 0.12)) 50px, transparent 51px) !important;
 }
 [data-vn-settings]:before,
 .settings-page:before,
 [data-settings-route]:before,
 [data-surface="settings"]:before {
-  background: repeating-radial-gradient(ellipse at 105% 88%, transparent 0 44px, rgba(140, 195, 160, 0.12) 45px, transparent 46px) !important;
+  background: repeating-radial-gradient(ellipse at 105% 88%, transparent 0 44px, var(--aperture-ring-color, rgba(140, 195, 160, 0.12)) 45px, transparent 46px) !important;
 }
 
 /* Light Mode Radial Lines */
@@ -312,13 +319,13 @@ body.theme-light aside[data-vn-workspace]:before,
 body.theme-light [data-workspace-content]:before,
 [data-aperture-mode="light"] aside[data-vn-workspace]:before,
 [data-aperture-mode="light"] [data-workspace-content]:before {
-  background: repeating-radial-gradient(ellipse at 102% 96%, transparent 0 59px, rgba(45, 78, 62, 0.08) 60px, transparent 61px) !important;
+  background: repeating-radial-gradient(ellipse at 102% 96%, transparent 0 59px, var(--aperture-ring-color, rgba(45, 78, 62, 0.08)) 60px, transparent 61px) !important;
 }
 body.theme-light [data-vn-reference-sheet]:before,
 body.theme-light [data-surface="world"]:before,
 [data-aperture-mode="light"] [data-vn-reference-sheet]:before,
 [data-aperture-mode="light"] [data-surface="world"]:before {
-  background: repeating-radial-gradient(circle at -12% 35%, transparent 0 52px, rgba(45, 78, 62, 0.08) 53px, transparent 54px) !important;
+  background: repeating-radial-gradient(circle at -12% 35%, transparent 0 52px, var(--aperture-ring-color, rgba(45, 78, 62, 0.08)) 53px, transparent 54px) !important;
 }
 body.theme-light [data-vn-dossier]:before,
 body.theme-light [data-vn-dossier-card]:before,
@@ -368,21 +375,33 @@ body.theme-light [data-surface="settings"]:before,
 }
 
 /* World Lens active node, lens preview card, and CTA */
+.map-node-pill {
+  background: var(--aperture-accent-surface, rgba(20, 32, 28, 0.95)) !important;
+  color: var(--aperture-text, #eff4e9) !important;
+  border: 1px solid var(--aperture-button-border, rgba(160, 205, 185, 0.3)) !important;
+}
+.map-node-pill b {
+  color: var(--aperture-text, #eff4e9) !important;
+}
+.map-node-pill small {
+  color: var(--aperture-muted, #9cb5a8) !important;
+}
 .map-node-pill.active {
-  background: #dce9b5 !important;
-  color: #1b342b !important;
-  border-color: #ecf4cc !important;
-  box-shadow: 0 10px 25px rgba(7, 18, 15, 0.42), 0 0 0 2px rgba(215, 235, 172, 0.23) !important;
+  background: var(--aperture-accent, #dce9b5) !important;
+  color: var(--aperture-accent-contrast, #1b342b) !important;
+  border-color: var(--aperture-accent, #ecf4cc) !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.42), 0 0 0 2px var(--aperture-accent-glow, rgba(220, 238, 173, 0.35)) !important;
 }
 .map-node-pill.active b {
-  color: #1b342b !important;
+  color: var(--aperture-accent-contrast, #1b342b) !important;
 }
 .map-node-pill.active small {
-  color: #385b4b !important;
+  color: var(--aperture-accent-contrast, #385b4b) !important;
+  opacity: 0.82 !important;
 }
 .map-node-pill.active .index-dot {
-  background: #dce9b5 !important;
-  border-color: #19382f !important;
+  background: var(--aperture-accent, #dce9b5) !important;
+  border-color: var(--aperture-accent-contrast, #19382f) !important;
 }
 .world-lens {
   position: relative !important;
@@ -392,20 +411,20 @@ body.theme-light [data-surface="settings"]:before,
   box-sizing: border-box !important;
   border-radius: 12px !important;
   padding: 12px 14px !important;
-  background: rgba(17, 41, 35, 0.96) !important;
-  color: #f4f7ee !important;
-  border: 1px solid #5c8674 !important;
+  background: var(--aperture-workspace-bg, rgba(17, 41, 35, 0.96)) !important;
+  color: var(--aperture-text, #f4f7ee) !important;
+  border: 1px solid var(--aperture-button-border, #5c8674) !important;
   box-shadow: 0 13px 25px rgba(0, 0, 0, 0.33) !important;
   backdrop-filter: blur(13px) !important;
 }
 .world-lens h3 {
-  color: #f7faf0 !important;
+  color: var(--aperture-text, #f7faf0) !important;
 }
 .world-lens p {
-  color: #c3d7c8 !important;
+  color: var(--aperture-muted, #c3d7c8) !important;
 }
 .world-lens-cta {
-  color: #dfedb1 !important;
+  color: var(--aperture-accent, #dfedb1) !important;
   background: transparent !important;
   border: 0 !important;
   text-decoration: underline !important;
@@ -491,8 +510,14 @@ section[data-reference-observations] h3 {
 /* History Workspace Surface */
 [data-surface="history"],
 [data-vn-workspace-tool="history"] {
-  background: #11241c !important;
-  color: #f3f7ee !important;
+  background: var(--aperture-workspace-bg, #11241c) !important;
+  color: var(--aperture-text, #f3f7ee) !important;
+  height: 100% !important;
+  width: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
 }
 
 /* Light mode specific rules for World Lens & Folio */
@@ -1093,6 +1118,11 @@ section[data-reference-observations] h3 {
 /* 1. Aperture Obsidian / Emerald (Host Default) */
 :is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="lumiverse"],
 [data-vn-root][data-vn-preset="lumiverse"] {
+  --aperture-overlay-bg: linear-gradient(170deg, #16241f, #0d1714, #070d0b);
+  --aperture-ring-color: rgba(160, 205, 185, 0.08);
+  --aperture-workspace-bg: linear-gradient(160deg, #131e1a, #0c1411, #060b09);
+  --aperture-accent-surface: #183628;
+  --aperture-ghost-bg: rgba(14, 30, 24, 0.65);
   --aperture-accent: #dcebad;
   --aperture-accent-hover: #ecf8cd;
   --aperture-accent-contrast: #11241c;
@@ -1134,6 +1164,11 @@ section[data-reference-observations] h3 {
 /* 2. Aperture Sage Editorial (Modern Light) */
 :is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="paper-novel"],
 [data-vn-root][data-vn-preset="paper-novel"] {
+  --aperture-overlay-bg: linear-gradient(170deg, #f4efe6, #eae5db, #ded9ce);
+  --aperture-ring-color: rgba(35, 75, 57, 0.08);
+  --aperture-workspace-bg: linear-gradient(160deg, #f5f2e9, #ebe7dc, #dfdad0);
+  --aperture-accent-surface: #e4ebe0;
+  --aperture-ghost-bg: rgba(238, 243, 229, 0.85);
   --aperture-accent: #24533e;
   --aperture-accent-hover: #1a3e2e;
   --aperture-accent-contrast: #f4f7eb;
@@ -1181,6 +1216,11 @@ section[data-reference-observations] h3 {
 /* 3. Aperture Midnight OLED (Ultra Dark Mint) */
 :is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="midnight-noir"],
 [data-vn-root][data-vn-preset="midnight-noir"] {
+  --aperture-overlay-bg: linear-gradient(170deg, #0d0d10, #060608, #000000);
+  --aperture-ring-color: rgba(255, 255, 255, 0.07);
+  --aperture-workspace-bg: linear-gradient(160deg, #0a0a0d, #040406, #000000);
+  --aperture-accent-surface: #121815;
+  --aperture-ghost-bg: rgba(8, 12, 10, 0.7);
   --aperture-accent: #6ee7b7;
   --aperture-accent-hover: #a7f3d0;
   --aperture-accent-contrast: #021a11;
@@ -1226,6 +1266,11 @@ section[data-reference-observations] h3 {
 /* 4. Aperture Solar Dusk (Warm Amber) */
 :is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="golden-hour"],
 [data-vn-root][data-vn-preset="golden-hour"] {
+  --aperture-overlay-bg: linear-gradient(170deg, #26160b, #180c05, #0d0602);
+  --aperture-ring-color: rgba(245, 158, 11, 0.1);
+  --aperture-workspace-bg: linear-gradient(160deg, #201209, #150a04, #0c0502);
+  --aperture-accent-surface: #381e0e;
+  --aperture-ghost-bg: rgba(32, 20, 10, 0.65);
   --aperture-accent: #f59e0b;
   --aperture-accent-hover: #fbbf24;
   --aperture-accent-contrast: #241403;
@@ -1271,6 +1316,11 @@ section[data-reference-observations] h3 {
 /* 5. Aperture Minimal Slate (Studio Slate / Ice Blue) */
 :is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="boxed-console"],
 [data-vn-root][data-vn-preset="boxed-console"] {
+  --aperture-overlay-bg: linear-gradient(170deg, #182026, #10161a, #0a0d10);
+  --aperture-ring-color: rgba(56, 189, 248, 0.09);
+  --aperture-workspace-bg: linear-gradient(160deg, #141a20, #0e1217, #080b0e);
+  --aperture-accent-surface: #1a2733;
+  --aperture-ghost-bg: rgba(18, 26, 34, 0.65);
   --aperture-accent: #94a3b8;
   --aperture-accent-hover: #cbd5e1;
   --aperture-accent-contrast: #0f172a;
@@ -1316,6 +1366,11 @@ section[data-reference-observations] h3 {
 /* 6. Aperture Cyber Amethyst (Vibrant Violet Neon) */
 :is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="yamaku-classic"],
 [data-vn-root][data-vn-preset="yamaku-classic"] {
+  --aperture-overlay-bg: linear-gradient(170deg, #260c2d, #17061c, #0c020f);
+  --aperture-ring-color: rgba(217, 70, 239, 0.1);
+  --aperture-workspace-bg: linear-gradient(160deg, #200a26, #140519, #0a020d);
+  --aperture-accent-surface: #381042;
+  --aperture-ghost-bg: rgba(36, 12, 42, 0.65);
   --aperture-accent: #c084fc;
   --aperture-accent-hover: #e879f9;
   --aperture-accent-contrast: #1e0836;
@@ -1361,6 +1416,11 @@ section[data-reference-observations] h3 {
 /* 7. Aperture Rose Blossom (Pastel Elegance) */
 :is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="literature-club"],
 [data-vn-root][data-vn-preset="literature-club"] {
+  --aperture-overlay-bg: linear-gradient(170deg, #2b0b1a, #1c0611, #12030a);
+  --aperture-ring-color: rgba(251, 113, 133, 0.1);
+  --aperture-workspace-bg: linear-gradient(160deg, #220a16, #18060f, #0f0309);
+  --aperture-accent-surface: #3d1226;
+  --aperture-ghost-bg: rgba(45, 14, 28, 0.65);
   --aperture-accent: #fb7185;
   --aperture-accent-hover: #fda4af;
   --aperture-accent-contrast: #280710;
@@ -1406,6 +1466,11 @@ section[data-reference-observations] h3 {
 /* 8. Aperture Astral Glass (Cosmic Cyan & Deep Blue) */
 :is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="astral-glass"],
 [data-vn-root][data-vn-preset="astral-glass"] {
+  --aperture-overlay-bg: linear-gradient(170deg, #091a2e, #05101e, #02070e);
+  --aperture-ring-color: rgba(56, 189, 248, 0.1);
+  --aperture-workspace-bg: linear-gradient(160deg, #071526, #040d18, #02060c);
+  --aperture-accent-surface: #0e2744;
+  --aperture-ghost-bg: rgba(12, 28, 48, 0.65);
   --aperture-accent: #38bdf8;
   --aperture-accent-hover: #7dd3fc;
   --aperture-accent-contrast: #032030;
@@ -1451,6 +1516,11 @@ section[data-reference-observations] h3 {
 /* 9. Aperture Neon Rain (Electric Mint & Cyberpunk Indigo) */
 :is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="neon-rain"],
 [data-vn-root][data-vn-preset="neon-rain"] {
+  --aperture-overlay-bg: linear-gradient(170deg, #081a1e, #041014, #01080a);
+  --aperture-ring-color: rgba(45, 212, 191, 0.1);
+  --aperture-workspace-bg: linear-gradient(160deg, #071518, #030d10, #010608);
+  --aperture-accent-surface: #0e2d33;
+  --aperture-ghost-bg: rgba(14, 26, 38, 0.65);
   --aperture-accent: #2dd4bf;
   --aperture-accent-hover: #5eead4;
   --aperture-accent-contrast: #022420;
@@ -1496,6 +1566,11 @@ section[data-reference-observations] h3 {
 /* 10. Aperture Obsidian Reliquary (Crimson & Gold) */
 :is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="obsidian-reliquary"],
 [data-vn-root][data-vn-preset="obsidian-reliquary"] {
+  --aperture-overlay-bg: linear-gradient(170deg, #220b12, #14050a, #0a0205);
+  --aperture-ring-color: rgba(245, 158, 11, 0.1);
+  --aperture-workspace-bg: linear-gradient(160deg, #1d0910, #120408, #090204);
+  --aperture-accent-surface: #38101a;
+  --aperture-ghost-bg: rgba(32, 9, 14, 0.65);
   --aperture-accent: #f59e0b;
   --aperture-accent-hover: #fbbf24;
   --aperture-accent-contrast: #241202;

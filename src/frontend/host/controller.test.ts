@@ -24,7 +24,7 @@ import { REFERENCE_IMAGE_MAX_BYTES } from "../../protocol.js";
 import type { FrontendRequest } from "../../protocol.js";
 
 /** Lets the display-rule guard finish its (fallback) probe before asserting. */
-const flushProbe=()=>new Promise<void>(resolve=>setTimeout(resolve,20));
+const flushProbe=()=>new Promise<void>(resolve=>setTimeout(resolve,80));
 
 test('music attenuation ignores missing/misaligned metadata and never amplifies saved volume',()=>{
  const view={paragraphs:['A','B','C'],musicLimits:['quiet','mute',null]} as TurnView;

@@ -584,23 +584,23 @@ aside[data-vn-workspace] {
 }
 
 .round-ghost {
-  width: 32px !important;
-  height: 32px !important;
-  min-width: 32px !important;
-  min-height: 32px !important;
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  min-height: 34px !important;
   border-radius: 50% !important;
-  border: 1px solid rgba(245, 249, 240, 0.34) !important;
-  background: rgba(5, 15, 19, 0.5) !important;
+  border: 1px solid var(--aperture-button-border, rgba(245, 249, 240, 0.34)) !important;
+  background: var(--aperture-ghost-bg, rgba(5, 15, 19, 0.5)) !important;
   backdrop-filter: blur(8px) !important;
   -webkit-backdrop-filter: blur(8px) !important;
   box-shadow: inset 0 1px rgba(255, 255, 255, 0.08), 0 4px 12px rgba(0, 0, 0, 0.15) !important;
   display: grid !important;
   place-items: center !important;
-  color: #f7f9f3 !important;
+  color: var(--aperture-text, #f7f9f3) !important;
   cursor: pointer !important;
   flex-shrink: 0 !important;
   padding: 0 !important;
-  transition: transform 0.16s ease, background 0.16s ease !important;
+  transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease, color 0.16s ease !important;
 }
 
 .round-ghost svg {
@@ -609,22 +609,35 @@ aside[data-vn-workspace] {
 }
 
 .round-ghost:hover {
-  background: rgba(21, 36, 42, 0.75);
+  background: var(--aperture-button-hover-bg, rgba(21, 36, 42, 0.75)) !important;
+  border-color: var(--aperture-accent, #dcebad) !important;
+  color: var(--aperture-accent, #dcebad) !important;
 }
 
 .round-ghost:active {
-  transform: scale(0.93);
+  transform: scale(0.92) !important;
+  border-color: var(--aperture-accent, #dcebad) !important;
 }
 
-.round-ghost.chat-exit {
-  width: auto;
-  min-width: 58px;
-  padding: 0 9px;
-  border-radius: 18px;
-  display: flex;
-  gap: 5px;
-  font-size: 10px;
-  font-weight: 600;
+.round-ghost[data-action="chat-exit"] {
+  border-color: var(--aperture-accent, rgba(245, 249, 240, 0.5)) !important;
+  color: var(--aperture-accent, #dcebad) !important;
+}
+
+.round-ghost[data-action="chat-exit"]:hover {
+  background: var(--aperture-accent, #dcebad) !important;
+  color: var(--aperture-accent-contrast, #11241c) !important;
+}
+
+/* Hide desktop-only search and focus shortcuts from mobile header */
+[data-reader-search],
+[data-reader-focus] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
 }
 
 /* =========================================================================
