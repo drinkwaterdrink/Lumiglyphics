@@ -333,7 +333,17 @@ export function resolveRouteDialect(
     };
   }
 
-  // 9. Generic prose fallback
+  // 9. Recraft (v3, v4, v4.1, flash/pro)
+  if (/recraft/.test(normModel)) {
+    return {
+      dialect: 'generic-prose',
+      family: 'recraft',
+      negativePolicy: 'positive-only',
+      features: { references: true, exactText: true }
+    };
+  }
+
+  // 10. Generic prose fallback
   return {
     dialect: 'generic-prose',
     family: 'generic',
