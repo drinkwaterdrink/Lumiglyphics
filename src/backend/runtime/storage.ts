@@ -61,6 +61,7 @@ export type StoredTurnRecord = {
   jobs: AssetJob[];
   imageRequests?: ImageRequestRecord[];
   previousImages?: Record<string, { imageId: string; imageUrl: string }>;
+  previousVersions?: Record<string, Array<{ versionId: string; imageId: string; imageUrl: string; prompt?: string; timestamp: string }>>;
   error?: string;
   updatedAt: string;
   /**
@@ -757,6 +758,7 @@ export async function loadTurnRecord(
     jobs: Array.isArray(raw.jobs) ? raw.jobs.map((job) => AssetJobSchema.parse(job)) : [],
     ...(Array.isArray(raw.imageRequests) ? { imageRequests: safeImageHistory(raw.imageRequests) } : {}),
     ...(raw.previousImages && typeof raw.previousImages === "object" ? { previousImages: raw.previousImages } : {}),
+    ...(raw.previousVersions && typeof raw.previousVersions === "object" ? { previousVersions: raw.previousVersions } : {}),
     ...(typeof raw.error === "string" ? { error: raw.error } : {}),
     ...(typeof raw.resolvedSourceText === "string" ? { resolvedSourceText: raw.resolvedSourceText } : {}),
     ...(raw.source && typeof raw.source === "object" && raw.source.version === 2 && typeof raw.source.rawFingerprint === "string"

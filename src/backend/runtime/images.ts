@@ -15,7 +15,7 @@ export { applyAttireOverride, isClothingTag, cleanClothingFromPhrase } from "./a
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { applyImageEdits, compactImageRequest, type ImageGenerationRequest, type ImagePreparationMetadata, type RebuildOptions } from "./image-review.js";
 import { assertPromptLengths, fitPromptToBudget } from '../../shared/prompt-length.js';
-import {rewriteImagePrompt,assertEffectivePromptBudget} from './prompt-rewrite.js';
+import {rewriteImagePrompt,enrichImagePrompt,assertEffectivePromptBudget} from './prompt-rewrite.js';
 import type { VisualNovelConfig } from "../../config.js";
 import { DEFAULT_CONFIG } from "../../config.js";
 import { novelAiCapabilities, novelAiQualityTags, NOVELAI_NEGATIVE_DEFAULT, renderNovelAiEmphasis } from "./novelai-prompt.js";
@@ -1357,7 +1357,8 @@ export async function generateAssets(
             referenceSummary: portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference"
           };
           const initialMetadata = metadataFor(cue);
-          const regenerateFor=(selectedCue:VisualCue)=>(request:ImageGenerationRequest)=>rewriteImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,request.prompt.length+(request.negativePrompt?.length??0)>(request.promptProfile?.maxCharacters??3000)||request.promptProfile?.negativeMode==='positive-only'&&Boolean(request.negativePrompt?.trim())?'fit':'reroll');
+          const regenerateFor=(selectedCue:VisualCue)=>(request:ImageGenerationRequest,guidance?:string)=>guidance?enrichImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,guidance):rewriteImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,request.prompt.length+(request.negativePrompt?.length??0)>(request.promptProfile?.maxCharacters??3000)||request.promptProfile?.negativeMode==='positive-only'&&Boolean(request.negativePrompt?.trim())?'fit':'reroll');
+          const enrichFor=(selectedCue:VisualCue)=>(request:ImageGenerationRequest,guidance?:string)=>enrichImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,guidance);
           frozen.parameters = modelOutputParameters(selected?.provider ?? provider, frozen.model, globalOutputParameters(config.imageOutputAspectRatio, selected?.provider ?? provider, frozen.model, frozen.parameters ?? {}));
           frozen.promptProfile=await loadImagePromptProfile(spindle,config,selected?.provider??provider,frozen.model);
           frozen=prepareCapabilityOutput(frozen,config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined,config.imageResolutionPreference);
@@ -1455,6 +1456,7 @@ export async function generateAssets(
           const approved = cacheOptions.beforeGenerate ? await cacheOptions.beforeGenerate(scheduledJob, frozen, {
             ...baseMetadata,
             regeneratePrompt:regenerateFor(cue),
+            enrichPrompt:enrichFor(cue),
             ...(initialMetadata ? { imagePromptMetadata: initialMetadata } : {}),
             rebuildTemplate: async (templateId, options?: RebuildOptions) => {
               if (signal.aborted || jobSignal.aborted) throw abortError(jobSignal);
@@ -1593,7 +1595,7 @@ export async function generateAssets(
               }
               const adapted=await adaptImagePrompt(spindle,preparedRequest,nextMetadata,config,userId,jobSignal);
               const {promptAdaptationError:_previousAdaptationError,...cleanMetadata}=baseMetadata;
-              return { request:adapted.request, metadata: { ...cleanMetadata,...(adapted.error?{promptAdaptationError:adapted.error}:{}), regeneratePrompt:regenerateFor(nextCue), imagePromptMetadata: nextMetadata, referenceSummary: nextPortrait ? `${nextPortrait.source ?? "captured"} portrait: ${nextPortrait.name} (${nextPortrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" } };
+              return { request:adapted.request, metadata: { ...cleanMetadata,...(adapted.error?{promptAdaptationError:adapted.error}:{}), regeneratePrompt:regenerateFor(nextCue), enrichPrompt:enrichFor(nextCue), imagePromptMetadata: nextMetadata, referenceSummary: nextPortrait ? `${nextPortrait.source ?? "captured"} portrait: ${nextPortrait.name} (${nextPortrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" } };
             }
           }, jobSignal) : frozen;
           if (signal.aborted) throw abortError(signal);

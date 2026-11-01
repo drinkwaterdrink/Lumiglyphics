@@ -70,6 +70,7 @@ export class ImageStudio {
   private replanning = false;
   private recovering: "stop"|"retry"|null=null;
   private dismissedNotices = new Set<string>();
+  private renderHeavyTimeout: any = null;
 
   constructor(mount: HTMLElement, private readonly send: (request: FrontendRequest) => void, private readonly saveReview: (enabled: boolean) => void,private readonly onVisibility?:(open:boolean)=>void,private readonly onOperations?:(operations:LocalPictureOperations|null)=>void) {
     this.host = document.createElement("div");
@@ -397,6 +398,18 @@ export class ImageStudio {
     const context=document.createElement('div');context.dataset.context='';
     context.innerHTML='<div data-thumbnail><img data-preview hidden alt="Selected picture"><span data-placeholder aria-hidden="true">◇</span></div><div data-context-text><strong data-status role="status"></strong><small data-paragraph></small></div>';
     context.querySelector('[data-context-text]')!.append(this.el('[data-scene]'));
+    const versionsContainer = document.createElement('div');
+    versionsContainer.dataset.previousVersionsContainer = '';
+    versionsContainer.hidden = true;
+    versionsContainer.style.cssText = 'margin:8px 0;padding:10px;border-radius:12px;background:rgba(255,255,255,0.03);border:1px solid var(--edge);display:flex;flex-direction:column;gap:8px;';
+    versionsContainer.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <strong style="font-size:12px;color:var(--accent)">Previous Versions</strong>
+        <small data-versions-count style="opacity:0.75;font-size:10px"></small>
+      </div>
+      <div data-versions-strip style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin"></div>
+    `;
+    context.after(versionsContainer);
     const detail=document.createElement('p');detail.dataset.stateDetail='';
     const navigation=document.createElement('div');navigation.dataset.pictureNavigation='';
     navigation.innerHTML='<div data-picture-strip role="group" aria-label="Pictures in this reply"></div>';
@@ -406,6 +419,24 @@ export class ImageStudio {
       if(selector==='[data-combined-count]'){const budgetMeter=document.createElement('div');budgetMeter.dataset.budgetMeter='';budgetMeter.setAttribute('aria-hidden','true');budgetMeter.innerHTML='<div data-budget-fill></div>';editor.append(budgetMeter);}
       const element=this.el(selector);editor.append(element.tagName?.toUpperCase()==='TEXTAREA'?element.closest('label')!:element);
     }
+    const enrichSection = document.createElement('div');
+    enrichSection.dataset.enrichSection = '';
+    enrichSection.style.cssText = 'margin:12px 0 8px;padding:12px;border-radius:12px;background:rgba(255,255,255,0.03);border:1px solid var(--edge);display:flex;flex-direction:column;gap:8px;';
+    enrichSection.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <strong style="font-size:12px;color:var(--accent);display:inline-flex;align-items:center;gap:5px">✨ Guided Prompt Enricher</strong>
+        <small style="opacity:0.75;font-size:10px">Cinematic detail &amp; lighting</small>
+      </div>
+      <div style="display:flex;gap:6px">
+        <input type="text" data-enrich-guidance placeholder="Optional direction (e.g. 'longer hair, golden hour rim lighting, bokeh')..." maxlength="400" style="flex:1;min-height:38px;padding:6px 10px;border-radius:8px;border:1px solid var(--edge);background:var(--vn-shell-field,#101119);color:inherit;font-size:12px" />
+        <button type="button" data-enrich-submit style="flex:none;min-height:38px;padding:6px 14px;border-radius:8px;background:color-mix(in srgb,var(--accent) 22%,var(--vn-shell-button,#252632));border:1px solid var(--accent);color:#fff;font-weight:650;font-size:12px;cursor:pointer;white-space:nowrap">✨ Enrich</button>
+      </div>
+    `;
+    enrichSection.querySelector<HTMLButtonElement>('[data-enrich-submit]')!.onclick = () => {
+      const guidance = enrichSection.querySelector<HTMLInputElement>('[data-enrich-guidance]')?.value.trim();
+      this.enrichPrompt(guidance);
+    };
+    editor.append(enrichSection);
     const validation=document.createElement('small');validation.dataset.validation='';validation.role='alert';validation.hidden=true;editor.append(validation);
     const changed=document.createElement('div');changed.dataset.rewriteChanged='';changed.hidden=true;
     changed.innerHTML='<p>Rewrite ready. Review the wording before generating.</p><p data-revision-count></p><small data-revision-fields></small><p data-revision-scene hidden></p><details><summary>Compare previous wording</summary><p>The draft captured when you requested this rewrite. Your current wording is in the editors above. Counts do not verify that every detail was preserved.</p><ul data-previous-scene hidden></ul><label>Previous positive prompt<textarea readonly data-previous-positive></textarea></label><label>Previous negative prompt<textarea readonly data-previous-negative></textarea></label></details><button type="button" data-restore-wording>Restore previous wording</button>';editor.append(changed);
@@ -416,7 +447,10 @@ export class ImageStudio {
     const retry=document.createElement('button');retry.type='button';retry.dataset.retrySaved='';retry.textContent='Prepare from saved scene';
     const enrichBtn=document.createElement('button');enrichBtn.type='button';enrichBtn.dataset.enrichPrompt='';enrichBtn.textContent='✨ Enrich Prompt (High Detail)';
     enrichBtn.title='Expands prompt with vivid photographic textures, lighting and materials taking full advantage of high-capacity models like Recraft 4.1.';
-    enrichBtn.onclick=()=>this.regeneratePrompt();
+    enrichBtn.onclick=()=>{
+      const guidance = enrichSection.querySelector<HTMLInputElement>('[data-enrich-guidance]')?.value.trim();
+      this.enrichPrompt(guidance);
+    };
     actions.querySelector('[data-secondary-actions]')!.append(reframe,fitModel,retry,enrichBtn);editor.append(actions);
     const tools=document.createElement('div');tools.dataset.pictureTools='';
     const template=document.createElement('details');template.dataset.templateTools='';template.innerHTML='<summary>Template and framing</summary>';
@@ -656,13 +690,22 @@ export class ImageStudio {
     let parameters:Record<string,unknown>|undefined;
     try{const value:unknown=JSON.parse(this.el<HTMLTextAreaElement>('[data-parameters]').value);if(!value||typeof value!=='object'||Array.isArray(value))throw new Error();parameters=value as Record<string,unknown>;}catch{if(!error)error='Parameters must be a valid JSON object.';}
     if(!error&&profile?.output&&profile.outputManaged&&parameters)try{assertCapabilityOutput(profile.output,parameters);}catch(cause){error=cause instanceof Error?cause.message:String(cause);}
-    this.renderOutputControls(parameters);
-    this.brief.render(this.planningChat||this.turn?.status==='planning'?undefined:this.record(),{prompt:this.el<HTMLTextAreaElement>('[data-positive]').value,negativePrompt:this.el<HTMLTextAreaElement>('[data-negative]').value,...(parameters?{parameters}:{})},{
-      prompt:!this.el<HTMLTextAreaElement>('[data-positive]').readOnly,
-      subject:!this.el('[data-recovery]').hidden,
-      template:!this.el<HTMLSelectElement>('[data-template]').disabled,
-      output:Boolean(this.record()),
-    });
+    const renderHeavy = () => {
+      if (typeof document === 'undefined' || !this.host.isConnected) return;
+      this.renderOutputControls(parameters);
+      this.brief.render(this.planningChat||this.turn?.status==='planning'?undefined:this.record(),{prompt:this.el<HTMLTextAreaElement>('[data-positive]').value,negativePrompt:this.el<HTMLTextAreaElement>('[data-negative]').value,...(parameters?{parameters}:{})},{
+        prompt:!this.el<HTMLTextAreaElement>('[data-positive]').readOnly,
+        subject:!this.el('[data-recovery]').hidden,
+        template:!this.el<HTMLSelectElement>('[data-template]').disabled,
+        output:Boolean(this.record()),
+      });
+    };
+    if (this.renderHeavyTimeout) clearTimeout(this.renderHeavyTimeout);
+    if (!this.host.isConnected || typeof window === 'undefined' || (globalThis as any).IS_TEST) {
+      renderHeavy();
+    } else {
+      this.renderHeavyTimeout = setTimeout(renderHeavy, 180);
+    }
     this.updateRewriteLabel();
     const repair=this.el<HTMLButtonElement>('[data-regenerate-prompt]');
     const needsAdaptation=Boolean(this.record())&&(total>maximum||profile?.negativeMode==='positive-only'&&Boolean(this.el<HTMLTextAreaElement>('[data-negative]').value.trim()));
@@ -822,6 +865,60 @@ export class ImageStudio {
     this.el<HTMLElement>('[data-notice-row]').hidden=!visible;
   }
   showError(error: string): void { this.replanning = false;this.recovering=null; this.submitted.clear(); this.preparing.clear();this.preparationStarts.clear(); this.rerolling.clear();this.rebuilding.clear(); this.render(); this.setNotice(error); }
+
+  private enrichPrompt(guidance?: string): void {
+    if (!this.turn) return;
+    const record = this.record();
+    if (!record) return;
+    let edits: ImageRequestEdits | undefined;
+    try {
+      const parameters: unknown = JSON.parse(this.el<HTMLTextAreaElement>('[data-parameters]').value);
+      edits = {
+        prompt: this.el<HTMLTextAreaElement>('[data-positive]').value,
+        negativePrompt: this.el<HTMLTextAreaElement>('[data-negative]').value,
+        parameters: (parameters && typeof parameters === 'object' && !Array.isArray(parameters)) ? parameters as Record<string, unknown> : {}
+      };
+      if (!edits.prompt?.trim()) throw new Error('Enter a positive prompt before enriching it.');
+    } catch (error) {
+      this.showError(error instanceof Error ? error.message : String(error));
+      return;
+    }
+    if (this.previousWording.size >= 12) this.previousWording.delete(this.previousWording.keys().next().value!);
+    this.previousWording.set(this.selectedJob, {
+      requestId: record.requestId,
+      sceneEvidence: retainedSceneEvidence(this.el<HTMLTextAreaElement>('[data-positive]').value, record.imagePromptMetadata?.brief),
+      prompt: this.el<HTMLTextAreaElement>('[data-positive]').value,
+      negative: this.el<HTMLTextAreaElement>('[data-negative]').value,
+      parameters: this.el<HTMLTextAreaElement>('[data-parameters]').value
+    });
+    if (record.state === 'review') {
+      this.rerolling.add(record.requestId);
+      this.render();
+      this.send({
+        type: 'vn_enrich_image_prompt',
+        chatId: this.turn.chatId,
+        messageId: this.turn.messageId,
+        sourceFingerprint: this.turn.sourceFingerprint,
+        requestId: record.requestId,
+        ...(guidance ? { guidance } : {}),
+        ...(edits ? { edits } : {})
+      });
+    } else {
+      this.beginPreparation(this.selectedJob);
+      this.render();
+      this.send({
+        type: 'vn_prepare_image',
+        chatId: this.turn.chatId,
+        messageId: this.turn.messageId,
+        sourceFingerprint: this.turn.sourceFingerprint,
+        jobId: this.selectedJob,
+        regeneratePrompt: true,
+        edits,
+        ...(this.el<HTMLSelectElement>('[data-template]').value ? { templateId: this.el<HTMLSelectElement>('[data-template]').value } : {})
+      });
+    }
+    this.setNotice(guidance ? `Enriching prompt with direction: "${guidance}"...` : 'Enriching prompt with cinematic detail & lighting...');
+  }
 
   private regeneratePrompt():void {
     if(!this.turn||this.el<HTMLButtonElement>('[data-regenerate-prompt]').disabled)return;
@@ -1075,6 +1172,44 @@ export class ImageStudio {
     image.hidden=!url;this.el('[data-placeholder]').hidden=!!url;
     if(url){if(image.getAttribute('src')!==url)image.src=url;image.alt=asset?.previousImage?'Previous picture while replacement is pending':'Selected picture';}else image.removeAttribute('src');
     image.onerror=()=>{image.hidden=true;this.el('[data-placeholder]').hidden=false;};
+    const versions = asset?.previousVersions ?? [];
+    const container = this.root.querySelector<HTMLElement>('[data-previous-versions-container]');
+    const vStrip = this.root.querySelector<HTMLElement>('[data-versions-strip]');
+    const countLabel = this.root.querySelector<HTMLElement>('[data-versions-count]');
+    if (container && vStrip) {
+      if (versions.length > 0 && !planning) {
+        container.hidden = false;
+        if (countLabel) countLabel.textContent = `${versions.length} version${versions.length > 1 ? 's' : ''}`;
+        vStrip.replaceChildren();
+        versions.forEach((ver, idx) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px;border-radius:8px;background:var(--vn-shell-field,rgba(0,0,0,0.3));border:1px solid var(--edge);cursor:pointer;flex-shrink:0;width:76px;text-align:center;color:inherit;font-size:10px;';
+          btn.title = `Version ${idx + 1}. Click to restore as active picture.`;
+          btn.innerHTML = `
+            <img src="${ver.imageUrl}" style="width:64px;height:74px;object-fit:cover;border-radius:6px;display:block" alt="v${idx + 1}" />
+            <span style="font-weight:700">v${idx + 1}</span>
+            <span style="color:var(--accent);font-size:9px">Restore ↺</span>
+          `;
+          btn.onclick = () => {
+            if (!this.turn) return;
+            this.send({
+              type: 'vn_restore_previous_image',
+              chatId: this.turn.chatId,
+              messageId: this.turn.messageId,
+              sourceFingerprint: this.turn.sourceFingerprint,
+              jobId: this.selectedJob,
+              imageId: ver.imageId,
+              imageUrl: ver.imageUrl
+            });
+            this.setNotice(`Restoring Version ${idx + 1}...`);
+          };
+          vStrip.append(btn);
+        });
+      } else {
+        container.hidden = true;
+      }
+    }
     const strip=this.el('[data-picture-strip]');strip.replaceChildren();
     const assets=this.turn?.assets??[];strip.hidden=assets.length<2||assets.length>3;
     const stateFor=(jobId:string)=>this.stateForJob(jobId,this.turn?.imageRequests?.filter(record=>record.jobId===jobId).at(-1));

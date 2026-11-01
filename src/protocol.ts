@@ -40,7 +40,9 @@ export type FrontendRequest =
   | { type: "vn_reading_position"; position: ReadingPosition }
   | { type: "vn_image_review"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; action: "generate" | "skip"; edits?: ImageRequestEdits }
   | { type: "vn_prepare_image"; chatId: string; messageId: string; sourceFingerprint: string; jobId: string; templateId?: string; edits?: ImageRequestEdits; regeneratePrompt?: boolean }
-  | { type: "vn_regenerate_image_prompt"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; edits?:ImageRequestEdits }
+  | { type: "vn_regenerate_image_prompt"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; edits?: ImageRequestEdits | undefined; guidance?: string | undefined }
+  | { type: "vn_enrich_image_prompt"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; guidance?: string | undefined; edits?: ImageRequestEdits | undefined }
+  | { type: "vn_restore_previous_image"; chatId: string; messageId: string; sourceFingerprint: string; jobId: string; imageId: string; imageUrl: string }
   | {
       type: "vn_reprepare_image_template";
       chatId: string;
@@ -127,6 +129,14 @@ export type FrontendRequest =
 export const REFERENCE_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
 export const REFERENCE_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/avif"]);
 
+export type ImageVersionView = {
+  versionId: string;
+  imageId: string;
+  imageUrl: string;
+  prompt?: string;
+  timestamp: string;
+};
+
 export type AssetView = {
   failureId?: string;
   stageAsset?: import("./shared/cast-composition.js").StageAssetMetadata;
@@ -146,6 +156,7 @@ export type AssetView = {
    */
   source?: "cache";
   previousImage?: boolean;
+  previousVersions?: ImageVersionView[];
 };
 
 export type AudioCueView = {

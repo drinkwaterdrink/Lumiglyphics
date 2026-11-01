@@ -134,3 +134,93 @@ export async function rewriteImagePrompt(spindle:SpindleAPI,request:ImageGenerat
  const formatFailure=/invalid prompt fields|prompt JSON|No usable prompt text/.test(lastReason);
  throw new Error(`Prompt repair failed after two attempts: ${lastReason} Your previous draft is retained. ${formatFailure?'The story-reader text model returned an unusable response format. Check the story-reader connection or use a different text model before fitting again.':'Edit the draft or its shared style/appearance wording, then use Fit to budget again.'}`);
 }
+
+/**
+ * Enrich and elevate an image prompt using state-of-the-art visual diffusion prompting techniques,
+ * incorporating optional user guidance (e.g. "make her hair longer, cinematic rim light").
+ */
+export async function enrichImagePrompt(
+  spindle: SpindleAPI,
+  request: ImageGenerationRequest,
+  metadata: ImagePromptMetadata | undefined,
+  config: VisualNovelConfig,
+  userId: string | undefined,
+  signal: AbortSignal,
+  guidance?: string
+): Promise<ImageGenerationRequest> {
+  if (signal.aborted) throw cancelled();
+  assertRawPromptOverride(request);
+  const connection = await resolvePlannerConnection(spindle, config, userId);
+  if (signal.aborted) throw cancelled();
+  if (!connection) throw new Error('Configure a story-reader text connection to enrich image prompts.');
+  const profile = request.promptProfile ?? resolveImagePromptProfile(undefined, request.model, config);
+  request = { ...request, promptProfile: profile };
+  const maximum = profile.maxCharacters;
+
+  const protection = promptProtection(request.prompt, metadata, false);
+  const anchors = createPromptAnchors(request.prompt, protection);
+
+  const system = [
+    'You are an expert AI visual director and diffusion image prompt engineer.',
+    'Your mission is to ENRICH, EXPAND, and ELEVATE the current image prompt into a visually breathtaking, cinematic description.',
+    'Output must be valid JSON with exactly "prompt" and "negativePrompt" string keys.',
+    '',
+    'Core enrichment principles:',
+    '1. User Guidance: If guidance is provided, prioritize it and integrate it naturally (e.g. adjust hair, pose, mood, lighting, wardrobe as directed).',
+    '2. Visual & Sensory Detail: Add vivid specifics regarding lighting (volumetric god rays, golden hour, rim light, ambient bounce), textures (fabric weave, glistening skin, hair strands, surface grit), atmosphere (dust motes, mist, warmth/coolness), and camera optics (shallow depth of field, 35mm lens perspective, bokeh, sharp subject focus).',
+    '3. Subject Integrity: Keep existing characters, genders, facial traits, and hair/eye colors fully intact unless user guidance requested a modification.',
+    '4. Style Matching: Follow the visual style (anime, cinematic photo, oil painting, digital art) already established.',
+    '5. Model Format: ' + (profile.format === 'tags' ? 'Use detailed weighted Danbooru-style tags and visual descriptions.' : profile.format === 'hybrid' ? 'Use a combination of precise tags and descriptive natural language clauses.' : 'Use flowing, highly descriptive natural visual prose with principal subject and camera setup first.'),
+    profile.negativeMode === 'positive-only'
+      ? 'This model uses no negative prompt. Leave negativePrompt as an empty string.'
+      : 'Maintain a refined negative prompt targeting anatomical deformities, blur, bad hands, artifacts, and unwanted text.',
+    `Budget: Aim for an enriched prompt between 500 and ${Math.min(maximum - 150, 3500)} characters. Do NOT make it short or sparse; enrich it with artistic substance.`,
+    anchors.entries.length
+      ? 'IMMUTABLE IDENTITY ANCHORS: Include each token below exactly once in the positive prompt at the character location: ' + JSON.stringify(anchors.entries)
+      : ''
+  ].filter(Boolean).join('\n');
+
+  const context = {
+    currentPrompt: anchors.maskedPrompt,
+    currentNegativePrompt: request.negativePrompt ?? '',
+    userGuidance: guidance?.trim() || 'Enhance detail, lighting, depth, and cinematic quality naturally.',
+    sceneContext: retainedSceneEvidence(request.prompt, metadata?.brief),
+    template: metadata?.template?.name
+  };
+
+  let lastReason = 'The writer returned no usable wording.';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (signal.aborted) throw cancelled();
+    const response = await bounded(spindle.generate.raw({
+      type: 'raw',
+      ...{ connection_id: connection.id, provider: connection.provider, model: connection.model },
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: JSON.stringify(context) }
+      ],
+      parameters: { max_tokens: 3000 },
+      reasoning: { source: 'off' },
+      ...(userId ? { userId } : {})
+    }), signal);
+    if (signal.aborted) throw cancelled();
+
+    try {
+      const text = content(response);
+      if (!text) throw new Error('No prompt text returned');
+      const parsed = output.parse(promptWriterFields(promptObject(text), profile.negativeMode === 'positive-only' ? '' : request.negativePrompt ?? ''));
+      parsed.negativePrompt = compactNegativePrompt(parsed.negativePrompt);
+      const expanded = expandPromptAnchors(parsed.prompt, anchors, parsed.negativePrompt);
+      parsed.prompt = expanded.prompt;
+      const total = parsed.prompt.length + parsed.negativePrompt.length;
+      if (total > maximum) {
+        throw new Error(`Enriched prompt exceeds maximum length (${total}/${maximum}).`);
+      }
+      const result = applyImageEdits(request, parsed);
+      assertEffectivePromptBudget(result);
+      return result;
+    } catch (err) {
+      lastReason = err instanceof Error ? err.message : String(err);
+    }
+  }
+  throw new Error(`Prompt enrichment failed: ${lastReason}. Your current draft is preserved.`);
+}

@@ -156,8 +156,13 @@ aside[data-vn-workspace] > header > div {
 }
 
 [data-workspace-content]:has(> [data-vn-workspace-tool="history"]),
+[data-workspace-content]:has(> [data-vn-workspace-tool="character"]),
+[data-workspace-content]:has(> [data-character-folio]),
+[data-workspace-content]:has(> .character-folio-surface),
 [data-surface="history"] [data-workspace-content],
-[data-vn-workspace="history"] [data-workspace-content] {
+[data-surface="character"] [data-workspace-content],
+[data-vn-workspace="history"] [data-workspace-content],
+[data-vn-workspace="character"] [data-workspace-content] {
   padding: 0 !important;
   overflow: hidden !important;
   display: flex !important;

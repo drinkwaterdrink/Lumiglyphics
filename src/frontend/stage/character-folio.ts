@@ -45,14 +45,17 @@ export class CharacterFolio implements WorkspaceSurface {
     this.element.innerHTML = `
       <style>
         .character-folio-surface {
-          display: flex;
-          flex-direction: column;
-          height: 100%;
-          width: 100%;
-          overflow: hidden;
+          display: flex !important;
+          flex-direction: column !important;
+          height: 100% !important;
+          width: 100% !important;
+          min-height: 0 !important;
+          flex: 1 1 auto !important;
+          overflow: hidden !important;
           background: var(--vn-shell-bg, #0b1114);
           color: var(--vn-shell-text, #e2e8f0);
           font-family: inherit;
+          box-sizing: border-box !important;
         }
         /* Top Horizontal Swipeable Cast Roster Carousel */
         .folio-roster-carousel {
@@ -158,15 +161,18 @@ export class CharacterFolio implements WorkspaceSurface {
 
         /* Natural Full-Height Single Scroll Container */
         .folio-scroll-body {
-          flex: 1 1 auto;
-          min-height: 0;
-          overflow-y: auto;
-          -webkit-overflow-scrolling: touch;
-          touch-action: pan-y;
-          padding: 14px;
-          display: flex;
-          flex-direction: column;
-          gap: 14px;
+          flex: 1 1 0% !important;
+          min-height: 0 !important;
+          overflow-y: auto !important;
+          overflow-x: hidden !important;
+          -webkit-overflow-scrolling: touch !important;
+          touch-action: pan-y !important;
+          overscroll-behavior: contain !important;
+          padding: 14px 14px calc(28px + env(safe-area-inset-bottom, 0px)) !important;
+          display: flex !important;
+          flex-direction: column !important;
+          gap: 14px !important;
+          box-sizing: border-box !important;
         }
         .folio-scroll-body::-webkit-scrollbar {
           width: 6px;

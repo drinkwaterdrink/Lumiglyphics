@@ -129,7 +129,16 @@ export type RebuildOptions = {
   } | undefined;
 };
 
-export type ImagePreparationMetadata = { provider: string; connectionRevision?: number; referenceSummary?: string; promptAdaptationError?:string; imagePromptMetadata?: ImagePromptMetadata; regeneratePrompt?: (request:ImageGenerationRequest) => Promise<ImageGenerationRequest>; rebuildTemplate?: (templateId: string, options?: RebuildOptions) => Promise<{ request: ImageGenerationRequest; metadata: ImagePreparationMetadata }> };
+export type ImagePreparationMetadata = {
+  provider: string;
+  connectionRevision?: number;
+  referenceSummary?: string;
+  promptAdaptationError?: string;
+  imagePromptMetadata?: ImagePromptMetadata;
+  regeneratePrompt?: (request: ImageGenerationRequest, guidance?: string) => Promise<ImageGenerationRequest>;
+  enrichPrompt?: (request: ImageGenerationRequest, guidance?: string) => Promise<ImageGenerationRequest>;
+  rebuildTemplate?: (templateId: string, options?: RebuildOptions) => Promise<{ request: ImageGenerationRequest; metadata: ImagePreparationMetadata }>;
+};
 /** Also synchronize NovelAI/host-managed prompt copies after compaction. */
 export function compactImageRequest(request: ImageGenerationRequest): ImageGenerationRequest {
   const over = request.prompt.length + (request.negativePrompt?.length ?? 0) > (request.promptProfile?.maxCharacters??IMAGE_PROMPT_MAX_CHARS);
@@ -223,15 +232,16 @@ export class ImageReviewGate {
     }
   }
 
-  async regenerate(requestId:string,edits?:ImageRequestEdits):Promise<boolean> {
+  async regenerate(requestId:string,edits?:ImageRequestEdits,guidance?:string):Promise<boolean> {
     const item=this.pending.get(requestId);
-    if(!item?.metadata.regeneratePrompt||item.signal.aborted)return false;
+    if((!item?.metadata.regeneratePrompt && !item?.metadata.enrichPrompt)||item.signal.aborted)return false;
     const draft=applyImageRewriteDraft(item.request,edits);
     // An in-flight reroll exclusively owns this approval. Failed rewrites
     // restore the original preview instead of losing a usable request.
     this.pending.delete(requestId);
     try {
-      const request=await item.metadata.regeneratePrompt(structuredClone(draft));
+      const runner = (guidance && item.metadata.enrichPrompt) ? item.metadata.enrichPrompt : item.metadata.regeneratePrompt ?? item.metadata.enrichPrompt!;
+      const request=await runner(structuredClone(draft), guidance);
       if(item.signal.aborted)throw aborted('Prompt regeneration cancelled.');
       assertPromptLengths(request.prompt,request.negativePrompt,request.promptProfile);
       const {promptAdaptationError: _previousAdaptationError,...metadata}=item.metadata;
@@ -245,6 +255,31 @@ export class ImageReviewGate {
       return true;
     }catch(error){
       if(!item.signal.aborted)this.pending.set(item.record.requestId,item);
+      throw error;
+    }
+  }
+
+  async enrich(requestId: string, guidance?: string, edits?: ImageRequestEdits): Promise<boolean> {
+    const item = this.pending.get(requestId);
+    if ((!item?.metadata.enrichPrompt && !item?.metadata.regeneratePrompt) || item.signal.aborted) return false;
+    const draft = applyImageRewriteDraft(item.request, edits);
+    this.pending.delete(requestId);
+    try {
+      const runner = item.metadata.enrichPrompt ?? item.metadata.regeneratePrompt!;
+      const request = await runner(structuredClone(draft), guidance);
+      if (item.signal.aborted) throw aborted('Prompt enrichment cancelled.');
+      assertPromptLengths(request.prompt, request.negativePrompt, request.promptProfile);
+      const { promptAdaptationError: _previousAdaptationError, ...metadata } = item.metadata;
+      const record = reviewRecord(item.record.jobId, item.record.paragraphIndex, request, metadata, true);
+      await this.onRecord({ ...item.record, state: 'cancelled' });
+      if (item.signal.aborted) throw aborted('Prompt enrichment cancelled.');
+      item.request = request; item.record = record; item.metadata = metadata;
+      this.pending.set(record.requestId, item);
+      await this.onRecord(record);
+      if (item.signal.aborted) throw aborted('Prompt enrichment cancelled.');
+      return true;
+    } catch (error) {
+      if (!item.signal.aborted) this.pending.set(item.record.requestId, item);
       throw error;
     }
   }

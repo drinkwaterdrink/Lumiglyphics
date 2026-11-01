@@ -486,6 +486,7 @@ function effectViews(record: StoredTurnRecord): Pick<TurnView, "effects" | "ambi
 
 function assetView(record: StoredTurnRecord, job: StoredTurnRecord["jobs"][number]): AssetView {
   const previous = job.status !== "generated" && job.status !== "browser_ready" ? record.previousImages?.[job.jobId] : undefined;
+  const versions = record.previousVersions?.[job.jobId];
   const cue = record.plan.visualCues.find((candidate) => candidate.assetJobId === job.jobId)
     ?? record.plan.cacheCues?.find((candidate) => candidate.assetJobId === job.jobId);
   const template = record.imageRequests?.filter(r => r.jobId === job.jobId && r.state === "approved").at(-1)?.imagePromptMetadata?.template ?? cue?.imageTemplate;
@@ -503,6 +504,7 @@ function assetView(record: StoredTurnRecord, job: StoredTurnRecord["jobs"][numbe
     ...(job.imageId || previous?.imageId ? { imageId: job.imageId || previous!.imageId } : {}),
     ...(job.imageUrl || previous?.imageUrl ? { imageUrl: job.imageUrl || previous!.imageUrl } : {}),
     ...(previous ? { previousImage: true } : {}),
+    ...(versions && versions.length > 0 ? { previousVersions: versions } : {}),
     ...(job.error ? { error: job.error } : {})
   };
 }
@@ -700,6 +702,14 @@ export async function sendState(
       const messages = await spindle.chat.getMessages(chatId) as NormalizedChatMessage[];
       const latest = [...messages].reverse().find((message) => !message.is_user && message.content.trim());
       if (latest) {
+        if (latest.id === record.plan.key.assistantMessageId && (record.plan.key.swipeId ?? 0) !== (latest.swipe_id ?? 0)) {
+          const swipePath = turnPath(chatId, latest.id, latest.swipe_id ?? 0);
+          const swipeRecord = await loadTurnRecord(spindle, swipePath, userId).catch(() => null);
+          if (swipeRecord && relateRecord(swipeRecord, latest, { selectionText: latest.content, stableSelection: true }) === "current") {
+            record = swipeRecord;
+            chatState.activeTurnPath = swipePath;
+          }
+        }
         const isSame = latest.id === record.plan.key.assistantMessageId;
         if (!isSame) {
           stale = { message: latest, intake: null, relation: "changed" };
@@ -957,7 +967,20 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
   if (!job || ![...record.plan.visualCues, ...(record.plan.cacheCues ?? [])].some((cue) => cue.assetJobId === job.jobId)) throw new Error("This picture cannot be prepared from this turn.");
   if(job.provider===CACHE_JOB_PROVIDER) throw new Error("This is a reuse-only picture outside the image budget. Choose one of this reply’s generated pictures instead.");
   const previousImages = { ...record.previousImages };
-  if (job.imageId && job.imageUrl) previousImages[job.jobId] = { imageId: job.imageId, imageUrl: job.imageUrl };
+  const previousVersions = { ...(record.previousVersions ?? {}) };
+  if (job.imageId && job.imageUrl) {
+    previousImages[job.jobId] = { imageId: job.imageId, imageUrl: job.imageUrl };
+    const list = previousVersions[job.jobId] ? [...previousVersions[job.jobId]!] : [];
+    if (!list.some(v => v.imageId === job.imageId || v.imageUrl === job.imageUrl)) {
+      list.push({
+        versionId: `v_${Date.now()}_${list.length + 1}`,
+        imageId: job.imageId,
+        imageUrl: job.imageUrl,
+        timestamp: new Date().toISOString()
+      });
+    }
+    previousVersions[job.jobId] = list;
+  }
   const queued = AssetJobSchema.parse({ ...job, status: "queued", imageId: null, imageUrl: null, error: null, queuedAt: new Date().toISOString(), startedAt: null, generatedAt: null, readyAt: null, finishedAt: null });
   const registry=correction ? await loadCharacterRegistry(spindle,request.chatId,userId) : {};
   let corrected: StoredTurnRecord['plan']['visualCues'][number] | undefined;
@@ -969,7 +992,7 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
     corrected={...correctVisualSubject(selected,correction.subject,registry,config.imageTemplates),visualSources:['manual subject correction'],imageTemplateReason:'Manual subject correction',presentationRuleTrace:undefined};
     return corrected;
   };
-  const next = { ...record, ...(correction ? {correctionRequestIds:[...(record.correctionRequestIds??[]),correction.requestId].slice(-32)} : {}), plan: { ...record.plan, visualCues: record.plan.visualCues.map(updateCue), ...(record.plan.cacheCues ? { cacheCues: record.plan.cacheCues.map(updateCue) } : {}) }, previousImages, jobs: record.jobs.map((entry) => entry.jobId === job.jobId ? queued : entry) };
+  const next = { ...record, ...(correction ? {correctionRequestIds:[...(record.correctionRequestIds??[]),correction.requestId].slice(-32)} : {}), plan: { ...record.plan, visualCues: record.plan.visualCues.map(updateCue), ...(record.plan.cacheCues ? { cacheCues: record.plan.cacheCues.map(updateCue) } : {}) }, previousImages, previousVersions, jobs: record.jobs.map((entry) => entry.jobId === job.jobId ? queued : entry) };
   const path = state.activeTurnPath!;
   const isCurrent=()=>views.isOpen(userId,request.chatId) && (!quick||imageRetryQueues.get(key)?.queue===quick.queueOwner) && !assetControllers.has(key) && (intakeEpochs.get(key)??0)===epoch && compareTurnKeys(activeTurnKeys.get(key)??null,record.plan.key).accepted;
   if(!isCurrent()) throw new Error('This picture changed while preparing the correction.');
@@ -1040,10 +1063,14 @@ async function processAssistantMessage(
         spindle.sendToFrontend({type:"vn_turn",turn:view},userId);
       return;
     }
+    const hasGeneratedAssets = existing.jobs.some(
+      (job) => job.status === "generated" || job.status === "browser_ready"
+    );
     const hasIncompleteJobs = existing.jobs.some(
       (job) => job.status === "failed" || job.status === "cancelled" || job.status === "queued" || job.status === "generating"
     );
-    if (!hasIncompleteJobs) {
+    const canReuseTurn = !hasIncompleteJobs || hasGeneratedAssets || existing.status === "ready" || (existing.plan && existing.plan.paragraphs.length > 0);
+    if (canReuseTurn) {
       dbg(spindle, userId, `turn reused from storage chat=${chatId} message=${message.id} fingerprint=${fingerprint}`);
       const key = runtimeKey(userId, chatId);
       const prevController = assetControllers.get(key);
@@ -1382,6 +1409,65 @@ export async function markAssetReady(
   }, userId);
 }
 
+export async function restorePreviousImage(
+  spindle: SpindleAPI,
+  request: Extract<FrontendRequest, { type: "vn_restore_previous_image" }>,
+  userId?: string
+): Promise<void> {
+  const scope = runtimeKey(userId, request.chatId);
+  const epoch = intakeEpochs.get(scope) ?? 0;
+  const isCurrent = () => (intakeEpochs.get(scope) ?? 0) === epoch;
+  const chatState = await loadChatState(spindle, request.chatId, userId);
+  if (!chatState.activeTurnPath || !isCurrent()) return;
+  const next = await mutateActiveTurnRecord(spindle, request.chatId, chatState.activeTurnPath, userId, record => {
+    if (record.plan.key.assistantMessageId !== request.messageId
+      || record.plan.key.sourceFingerprint !== request.sourceFingerprint) return null;
+    const index = record.jobs.findIndex((job) => job.jobId === request.jobId);
+    if (index < 0) return null;
+    const job = record.jobs[index]!;
+    const previousVersions = { ...(record.previousVersions ?? {}) };
+    const list = previousVersions[job.jobId] ? [...previousVersions[job.jobId]!] : [];
+    if (job.imageId && job.imageUrl && !list.some(v => v.imageId === job.imageId || v.imageUrl === job.imageUrl)) {
+      list.push({
+        versionId: `v_${Date.now()}_${list.length + 1}`,
+        imageId: job.imageId,
+        imageUrl: job.imageUrl,
+        timestamp: new Date().toISOString()
+      });
+    }
+    previousVersions[job.jobId] = list;
+
+    const restoredAt = new Date().toISOString();
+    const restoredJob = AssetJobSchema.parse({
+      ...job,
+      status: "browser_ready",
+      imageId: request.imageId,
+      imageUrl: request.imageUrl,
+      generatedAt: restoredAt,
+      readyAt: restoredAt,
+      finishedAt: restoredAt,
+      error: null
+    });
+    const jobs = record.jobs.map((c, i) => i === index ? restoredJob : c);
+    return { ...record, jobs, previousVersions, updatedAt: restoredAt };
+  }, isCurrent);
+  if (!next || !isCurrent()) return;
+  const restoredJob = next.jobs.find(job => job.jobId === request.jobId)!;
+  spindle.sendToFrontend({
+    type: "vn_asset",
+    chatId: request.chatId,
+    messageId: request.messageId,
+    sourceFingerprint: next.plan.key.sourceFingerprint,
+    swipeId: next.plan.key.swipeId,
+    revision: next.plan.key.revision,
+    asset: await assetViewWithCastArt(spindle, next, restoredJob, userId)
+  }, userId);
+  spindle.sendToFrontend({
+    type: "vn_turn",
+    turn: await turnViewWithAudio(spindle, next, userId)
+  }, userId);
+}
+
 async function retryTurn(
   spindle: SpindleAPI,
   chatId: string,
@@ -1717,7 +1803,18 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       if(typeof request.requestId!=='string'||!request.requestId||request.requestId.length>100)throw new Error('Invalid prompt selection.');
       const key=runtimeKey(userId,request.chatId),turn=activeTurnKeys.get(key);
       if(!views.isOpen(userId,request.chatId)||!turn||turn.assistantMessageId!==request.messageId||turn.sourceFingerprint!==request.sourceFingerprint)throw new Error('This prompt belongs to an older or closed turn.');
-      if(!await imageReviewGates.get(key)?.regenerate(request.requestId,request.edits))throw new Error('This prompt is already being handled or cancelled.');
+      if(!await imageReviewGates.get(key)?.regenerate(request.requestId,request.edits,request.guidance))throw new Error('This prompt is already being handled or cancelled.');
+      return;
+    }
+    case "vn_enrich_image_prompt": {
+      if(typeof request.requestId!=='string'||!request.requestId||request.requestId.length>100)throw new Error('Invalid prompt selection.');
+      const key=runtimeKey(userId,request.chatId),turn=activeTurnKeys.get(key);
+      if(!views.isOpen(userId,request.chatId)||!turn||turn.assistantMessageId!==request.messageId||turn.sourceFingerprint!==request.sourceFingerprint)throw new Error('This prompt belongs to an older or closed turn.');
+      if(!await imageReviewGates.get(key)?.enrich(request.requestId,request.guidance,request.edits))throw new Error('This prompt is already being handled or cancelled.');
+      return;
+    }
+    case "vn_restore_previous_image": {
+      await restorePreviousImage(spindle, request, userId);
       return;
     }
     case "vn_reprepare_image_template": {

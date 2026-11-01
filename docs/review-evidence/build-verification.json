@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-11-01T19:52:56.870Z",
+  "checkedAt": "2026-11-01T20:33:29.037Z",
   "identifier": "lumiglyphics",
-  "version": "0.2.0-beta.108",
+  "version": "0.2.0-beta.109",
   "entries": [
     {
       "entry": "dist/backend.js",

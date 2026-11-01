@@ -47,16 +47,17 @@ export class CgGalleryModal {
         }
         .cg-gallery-modal {
           width: 100%;
-          max-width: 1100px;
-          height: 85vh;
-          max-height: 800px;
-          background: rgba(15, 23, 42, 0.95);
-          border: 1px solid rgba(255, 255, 255, 0.12);
-          border-radius: 14px;
+          max-width: 1000px;
+          height: 88vh;
+          max-height: 850px;
+          background: var(--vn-shell-panel, rgba(15, 23, 42, 0.95));
+          border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.12));
+          border-radius: 16px;
           display: flex;
           flex-direction: column;
           overflow: hidden;
-          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75);
+          box-shadow: 0 25px 60px -12px rgba(0, 0, 0, 0.85);
+          position: relative;
         }
         .cg-gallery-header {
           display: flex;
@@ -134,27 +135,47 @@ export class CgGalleryModal {
           border-color: rgba(255, 255, 255, 0.18);
         }
         .cg-gallery-grid {
-          flex: 1;
+          flex: 1 1 auto;
+          min-height: 0;
           overflow-y: auto;
-          padding: 20px;
+          -webkit-overflow-scrolling: touch;
+          touch-action: pan-y;
+          overscroll-behavior: contain;
+          padding: 16px;
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-          gap: 16px;
+          grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+          gap: 14px;
+          align-content: start;
+        }
+        @media (max-width: 600px) {
+          .cg-gallery-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            padding: 12px;
+          }
         }
         .cg-card {
           position: relative;
+          width: 100%;
           aspect-ratio: 16 / 10;
-          border-radius: 10px;
+          min-height: 110px;
+          border-radius: 12px;
           overflow: hidden;
-          background: rgba(0, 0, 0, 0.4);
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: var(--vn-shell-field, rgba(0, 0, 0, 0.4));
+          border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.1));
           cursor: pointer;
-          transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+          transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1), border-color 0.2s ease, box-shadow 0.2s ease;
+          display: flex;
+          flex-direction: column;
         }
         .cg-card:hover {
           transform: translateY(-3px) scale(1.02);
           border-color: var(--vn-shell-accent, #6ee7b7);
-          box-shadow: 0 12px 24px -6px rgba(0, 0, 0, 0.6);
+          box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.65);
+        }
+        .cg-card:active {
+          transform: scale(0.97);
         }
         .cg-card img {
           width: 100%;
@@ -162,30 +183,47 @@ export class CgGalleryModal {
           object-fit: cover;
           display: block;
         }
+        .cg-card-badge {
+          position: absolute;
+          top: 8px;
+          left: 8px;
+          font-size: 10px;
+          font-weight: 700;
+          padding: 2px 7px;
+          border-radius: 9999px;
+          background: rgba(0, 0, 0, 0.65);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          color: #f1f5f9;
+          z-index: 2;
+        }
         .cg-card-overlay {
           position: absolute;
           inset: 0;
-          background: linear-gradient(to top, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.2) 60%, transparent 100%);
+          background: linear-gradient(to top, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.4) 40%, transparent 80%);
           display: flex;
           flex-direction: column;
           justify-content: flex-end;
-          padding: 10px 12px;
-          opacity: 0;
-          transition: opacity 0.2s ease;
-        }
-        .cg-card:hover .cg-card-overlay {
+          padding: 8px 10px;
           opacity: 1;
+          pointer-events: none;
         }
         .cg-card-title {
           font-size: 12px;
-          font-weight: 600;
+          font-weight: 650;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          color: #fff;
+          text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
         }
         .cg-card-meta {
           font-size: 10px;
-          color: rgba(255, 255, 255, 0.7);
+          color: rgba(255, 255, 255, 0.75);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .cg-lightbox {
           position: fixed;
@@ -295,8 +333,10 @@ export class CgGalleryModal {
         <div class="cg-lightbox-top-bar">
           <button type="button" class="cg-lightbox-btn" data-cg-lightbox-back>${APERTURE_ICONS.back} <span>Back to Gallery</span></button>
           <div class="cg-lightbox-actions">
-            <button type="button" class="cg-lightbox-btn" data-cg-download>📥 <span>Export Native</span></button>
-            <button type="button" class="cg-lightbox-btn cg-lightbox-close-pill" data-cg-lightbox-close aria-label="Close Lightbox">✕ <span>Close (Esc)</span></button>
+            <button type="button" class="cg-lightbox-btn" data-cg-prev aria-label="Previous CG">◀ <span>Prev</span></button>
+            <button type="button" class="cg-lightbox-btn" data-cg-next aria-label="Next CG"><span>Next</span> ▶</button>
+            <button type="button" class="cg-lightbox-btn" data-cg-download>📥 <span>Export</span></button>
+            <button type="button" class="cg-lightbox-btn cg-lightbox-close-pill" data-cg-lightbox-close aria-label="Close Lightbox">✕</button>
           </div>
         </div>
         <img data-cg-lightbox-img src="" alt="Story CG" />
@@ -345,6 +385,22 @@ export class CgGalleryModal {
       }
     });
 
+    this.lightbox.querySelector('[data-cg-prev]')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const list = this.filteredItems();
+      if (list.length === 0) return;
+      const nextIndex = (this.activeLightboxIndex - 1 + list.length) % list.length;
+      this.openLightbox(nextIndex);
+    });
+
+    this.lightbox.querySelector('[data-cg-next]')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const list = this.filteredItems();
+      if (list.length === 0) return;
+      const nextIndex = (this.activeLightboxIndex + 1) % list.length;
+      this.openLightbox(nextIndex);
+    });
+
     this.lightbox.querySelector('[data-cg-download]')?.addEventListener('click', (e) => {
       e.stopPropagation();
       const item = this.items[this.activeLightboxIndex];
@@ -364,6 +420,14 @@ export class CgGalleryModal {
         } else {
           this.close();
         }
+      }
+      if (e.key === 'ArrowLeft' && !this.lightbox.hidden) {
+        const list = this.filteredItems();
+        if (list.length > 0) this.openLightbox((this.activeLightboxIndex - 1 + list.length) % list.length);
+      }
+      if (e.key === 'ArrowRight' && !this.lightbox.hidden) {
+        const list = this.filteredItems();
+        if (list.length > 0) this.openLightbox((this.activeLightboxIndex + 1) % list.length);
       }
     });
   }
@@ -478,6 +542,10 @@ export class CgGalleryModal {
       img.alt = item.title;
       img.loading = 'lazy';
 
+      const badge = document.createElement('div');
+      badge.className = 'cg-card-badge';
+      badge.textContent = item.isMilestone ? '✨ Milestone' : item.characterName ? `👤 ${item.characterName}` : '🖼️ Scene';
+
       const overlay = document.createElement('div');
       overlay.className = 'cg-card-overlay';
 
@@ -487,10 +555,10 @@ export class CgGalleryModal {
 
       const meta = document.createElement('div');
       meta.className = 'cg-card-meta';
-      meta.textContent = item.characterName ? `Cast: ${item.characterName}` : 'Story Scene';
+      meta.textContent = item.characterName ? `Cast: ${item.characterName}` : item.storyExcerpt ? item.storyExcerpt.slice(0, 45) + '...' : 'Story Moment';
 
       overlay.append(title, meta);
-      card.append(img, overlay);
+      card.append(img, badge, overlay);
       this.grid.append(card);
     });
   }
