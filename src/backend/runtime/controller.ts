@@ -1727,6 +1727,7 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
         reframe: request.reframe,
         styleId: request.styleId,
         fitToModel: request.fitToModel,
+        model: request.model,
         manualCamera: request.manualCamera
       }))) throw new Error("This request has already been handled or cancelled.");
       return;

@@ -53,9 +53,9 @@ export async function plannerImagePromptProfileV2(spindle:SpindleAPI,config:Visu
 }
 
 /** Resolve size before review; never revisit the live catalogue for an approved request. */
-export function prepareCapabilityOutput(request:ImageGenerationRequest,requestedRatio?:string):ImageGenerationRequest{
+export function prepareCapabilityOutput(request:ImageGenerationRequest,requestedRatio?:string,resolutionPreference?:'standard'|'high'|'ultra'):ImageGenerationRequest{
  const profile=request.promptProfile;if(!profile?.output)return request;
- const prepared=chooseModelOutput(profile.output,request.parameters??{},requestedRatio);
+ const prepared=chooseModelOutput(profile.output,request.parameters??{},requestedRatio,resolutionPreference);
  const parameters=prepared.parameters;
  const managed=parameters.rawRequestOverride===undefined||parameters._lumiglyphicsCatalogOutput===true||parameters._lumiglyphicsAnimaAspect===true||parameters._lumiglyphicsQwenOutput===true;
  return {...request,parameters,promptProfile:{...profile,outputManaged:managed,outputSummary:`${profile.outputSource==='live'?'Live catalogue':'Catalogue snapshot'}: ${prepared.summary}`}};

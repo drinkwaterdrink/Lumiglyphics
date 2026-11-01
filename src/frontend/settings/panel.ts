@@ -737,6 +737,15 @@ export class VisualNovelSettingsPanel {
 
             </div>
             <label data-field ${find("Generated image shape","dimensions resolution aspect ratio mobile 9:16 size")}><span>Generated image shape</span><select name="imageOutputAspectRatio">${IMAGE_OUTPUT_RATIOS.map(r=>`<option value="${r}">${r==='default'?'Template / connection default':r}</option>`).join('')}</select><small>Preferred output shape. Verified model constraints can limit it. Held pictures keep their prepared size; display fit is separate.</small></label>
+            <label data-field ${find("Default image resolution","image resolution quality tier standard 1k high 2k ultra 4k size dimensions")}>
+              <span>Default image resolution</span>
+              <select name="imageResolutionPreference">
+                <option value="high">High (2K / HD — Crisp detail, ~2048px)</option>
+                <option value="standard">Standard (1K — Fast &amp; economical, ~1024px)</option>
+                <option value="ultra">Maximum / Ultra (4K / Highest published size)</option>
+              </select>
+              <small>Preferred quality tier. When a model offers both 1K and 2K sizes, High selects 2K. If a model only supports 1K, it gracefully uses the model's highest size.</small>
+            </label>
             <fieldset data-prompt-model-settings ${find('Automatic image prompting','prompt budget characters limit model profile auto detect prompt engine compiler v1 v2')}><legend>Image prompting</legend>
               <label data-field ${find('Prompt engine','prompt engine compiler v1 v2 model aware shot director')}>
                 <span>Prompt engine</span>
@@ -745,6 +754,25 @@ export class VisualNovelSettingsPanel {
                   <option value="1">Version 1 (Legacy Static Templates)</option>
                 </select>
                 <small>V2 compiles prompts specifically for FLUX, Grok, GPT, Qwen, Anima, etc. with dynamic camera angles. V1 uses legacy static string templates.</small>
+              </label>
+              <label data-field ${find('Dialogue safe area','safe area text overlay dialogue speech framing clearance')}>
+                <span>Dialogue safe area</span>
+                <select name="dialogueSafeArea">
+                  <option value="auto">Auto (clears bottom area for narrative dialogue)</option>
+                  <option value="always">Always reserve bottom dialogue space</option>
+                  <option value="off">Off (full-frame composition)</option>
+                </select>
+                <small>Composes scene subjects and camera headroom so the lower reading sheet doesn't obscure character faces or props.</small>
+              </label>
+              <label data-field ${find('Prompt detail level','prompt detail compact standard detailed auto')}>
+                <span>Prompt detail level</span>
+                <select name="imagePromptDetail">
+                  <option value="auto">Auto (adapts to scene complexity)</option>
+                  <option value="compact">Compact (concise, focused essentials)</option>
+                  <option value="standard">Standard (balanced description)</option>
+                  <option value="detailed">Detailed (rich lighting, materials, and textures)</option>
+                </select>
+                <small>Controls how descriptive the V2 compiler is when writing atmosphere, secondary lighting, and textures.</small>
               </label>
               <label data-check><input name="automaticImagePromptSettings" type="checkbox"><span>Automatic model settings<small>Uses model-specific wording guidance and published prompt limits. Existing size controls still apply.</small></span></label>
               <label data-check><input name="imagePromptBudgetOverride" type="checkbox"><span>Set a manual prompt budget<small>Combined positive + negative characters. Verified provider ceilings still apply.</small></span></label>
@@ -1539,6 +1567,9 @@ export class VisualNovelSettingsPanel {
         target.removeAttribute('aria-invalid');return {imagePromptBudget:value};
       }
       case "imageOutputAspectRatio": return { imageOutputAspectRatio: normalizeImageOutputRatio(target.value) };
+      case "imageResolutionPreference": return { imageResolutionPreference: target.value === "standard" || target.value === "ultra" ? target.value : "high" };
+      case "dialogueSafeArea": return { dialogueSafeArea: target.value === "always" ? "always" : target.value === "off" ? "off" : "auto" };
+      case "imagePromptDetail": return { imagePromptDetail: target.value === "compact" || target.value === "standard" || target.value === "detailed" ? target.value : "auto" };
       case "persistentCastArt": return {persistentCastArt:checked};
       case "persistentLocationArt": return {persistentLocationArt:checked};
       case "collectEntityReferences": return { collectEntityReferences: checked };
@@ -2077,6 +2108,9 @@ export class VisualNovelSettingsPanel {
 
   private syncEveryday(config: VisualNovelConfig): void {
     this.control<HTMLSelectElement>("imagePromptEngineVersion").value = String(config.imagePromptEngineVersion ?? 2);
+    this.control<HTMLSelectElement>("imageResolutionPreference").value = config.imageResolutionPreference ?? "high";
+    this.control<HTMLSelectElement>("dialogueSafeArea").value = config.dialogueSafeArea ?? "auto";
+    this.control<HTMLSelectElement>("imagePromptDetail").value = config.imagePromptDetail ?? "auto";
     this.control<HTMLInputElement>("automaticImagePromptSettings").checked=config.automaticImagePromptSettings;
     this.control<HTMLInputElement>("imagePromptBudgetOverride").checked=config.imagePromptBudgetOverride;
     this.control<HTMLInputElement>("imagePromptBudget").value=String(config.imagePromptBudget);

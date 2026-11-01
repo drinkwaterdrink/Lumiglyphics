@@ -19,6 +19,12 @@ test('ratio-valued size fields and resolution tiers retain the actual API format
  const chosen=chooseModelOutput({sizes:['1k','2k','4k'],ratios:['auto','1:1','9:16']},{size:'864x1536'},'9:16');
  expect(chosen.parameters).toMatchObject({size:'1k',aspectRatio:'9:16',rawRequestOverride:{aspect_ratio:'9:16'}});
  expect(chooseModelOutput({sizes:['1k','2k'],ratios:['1:1','9:16']},{size:'2k'},'9:16').parameters.size).toBe('2k');
+ const highChosen=chooseModelOutput({sizes:['1k','2k','4k'],ratios:['auto','1:1','9:16']},{size:'864x1536'},'9:16','high');
+ expect(highChosen.parameters.size).toBe('2k');
+ const ultraChosen=chooseModelOutput({sizes:['1k','2k','4k'],ratios:['auto','1:1','9:16']},{size:'864x1536'},'9:16','ultra');
+ expect(ultraChosen.parameters.size).toBe('4k');
+ const highPixels=chooseModelOutput({sizes:['1024x1024','2048x2048']},{size:'1024x1024'},'1:1','high');
+ expect(highPixels.parameters.size).toBe('2048x2048');
 });
 test('custom raw overrides are preserved and unsupported outgoing values block locally',()=>{
  const capabilities={sizes:['1k','2k'],ratios:['1:1','9:16']};

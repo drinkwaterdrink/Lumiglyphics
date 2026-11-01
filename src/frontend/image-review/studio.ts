@@ -186,6 +186,44 @@ export class ImageStudio {
       });
     };
 
+    this.el<HTMLButtonElement>('[data-regenerate-model-single]').onclick = () => {
+      const record = this.record();
+      if (!record || record.state !== 'review' || this.rebuilding.has(record.requestId) || !this.turn) return;
+      const model = this.el<HTMLInputElement>('[data-artwork-model]').value.trim();
+      const templateId = record.imagePromptMetadata?.template.id ?? this.el<HTMLSelectElement>('[data-template]').value ?? this.defaultTemplate;
+      this.rebuilding.add(record.requestId);
+      this.render();
+      this.send({
+        type: 'vn_reprepare_image_template',
+        chatId: this.turn.chatId,
+        messageId: this.turn.messageId,
+        sourceFingerprint: this.turn.sourceFingerprint,
+        requestId: record.requestId,
+        templateId,
+        model: model || undefined
+      });
+    };
+
+    this.el<HTMLButtonElement>('[data-regenerate-model-all]').onclick = () => {
+      if (!this.turn) return;
+      const model = this.el<HTMLInputElement>('[data-artwork-model]').value.trim();
+      const reviewable = (this.turn.imageRequests ?? []).filter(r => r.state === 'review');
+      if (reviewable.length === 0) return;
+      for (const r of reviewable) {
+        this.rebuilding.add(r.requestId);
+        this.send({
+          type: 'vn_reprepare_image_template',
+          chatId: this.turn.chatId,
+          messageId: this.turn.messageId,
+          sourceFingerprint: this.turn.sourceFingerprint,
+          requestId: r.requestId,
+          templateId: r.imagePromptMetadata?.template.id ?? this.defaultTemplate,
+          model: model || undefined
+        });
+      }
+      this.render();
+    };
+
     this.el<HTMLInputElement>('[data-auto-director]').onchange = () => {
       const auto = this.el<HTMLInputElement>('[data-auto-director]').checked;
       for (const sel of ['[data-camera-shot-size]','[data-camera-angle]','[data-camera-lens]','[data-camera-composition]','[data-camera-depth]','[data-camera-safe-area]']) {
@@ -436,6 +474,29 @@ export class ImageStudio {
         </div>
       </div>`;
     tools.append(cameraTools);
+
+    const modelTools = document.createElement('details'); modelTools.dataset.modelTools = '';
+    modelTools.innerHTML = `<summary>Image Model &amp; Regeneration</summary>
+      <div style="margin:8px 0">
+        <label>Model override
+          <input type="text" data-artwork-model list="vn-artwork-model-suggestions" placeholder="Connection default (or model ID)" style="width:100%;box-sizing:border-box;margin-top:4px" />
+          <datalist id="vn-artwork-model-suggestions">
+            <option value="recraft-v4.1-flash">Recraft v4.1 Flash</option>
+            <option value="blackforestlabs/flux-3/klein/text-to-image">FLUX.3 Klein</option>
+            <option value="xai/grok-imagine-image/v2.0/text-to-image">Grok Imagine 2.0</option>
+            <option value="openai/gpt-image-2.5/flare/text-to-image">GPT Image 2.5</option>
+            <option value="qwen-image-3">Qwen Image 3</option>
+            <option value="anima/text-to-image">Anima</option>
+            <option value="bytedance/seedream-v5.0-pro">Seedream 5.0 Pro</option>
+          </datalist>
+        </label>
+        <small style="display:block;margin-top:4px;opacity:0.8">Recompiles prompt dialect specifically for the chosen model.</small>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <button type="button" data-regenerate-model-single style="font-size:12px;padding:5px 10px">Regenerate this picture</button>
+          <button type="button" data-regenerate-model-all style="font-size:12px;padding:5px 10px">Regenerate all in scene</button>
+        </div>
+      </div>`;
+    tools.append(modelTools);
     for(const selector of ['[data-recovery]','[data-diagnostics]','[data-provenance]','[data-parameters]']){const element=this.el(selector);tools.append(element.closest('details')!);}
     const history=document.createElement('details');history.dataset.requestHistory='';history.innerHTML='<summary>Request history</summary>';history.append(this.el('[data-history]'));tools.append(history);
     const settings=document.createElement('details');settings.dataset.replySettings='';settings.innerHTML='<summary>Reply and review settings</summary>';
@@ -805,6 +866,17 @@ export class ImageStudio {
     }
     const changeStyleBtn = this.el<HTMLButtonElement>('[data-change-style-btn]');
     changeStyleBtn.disabled = !editable || !asset || asset.source === 'cache' || this.preparing.has(this.selectedJob) || Boolean(record && this.rebuilding.has(record.requestId));
+
+    const modelInput = this.el<HTMLInputElement>('[data-artwork-model]');
+    if (this.root.activeElement !== modelInput) {
+      modelInput.value = record?.model ?? '';
+    }
+    const regenSingle = this.el<HTMLButtonElement>('[data-regenerate-model-single]');
+    regenSingle.disabled = !editable || !asset || asset.source === 'cache' || this.preparing.has(this.selectedJob) || Boolean(record && this.rebuilding.has(record.requestId));
+
+    const regenAll = this.el<HTMLButtonElement>('[data-regenerate-model-all]');
+    const reviewableCount = (this.turn?.imageRequests ?? []).filter(r => r.state === 'review').length;
+    regenAll.disabled = !editable || reviewableCount === 0 || this.preparing.size > 0;
 
     const applyCameraBtn = this.el<HTMLButtonElement>('[data-apply-camera]');
     applyCameraBtn.disabled = !editable || !asset || asset.source === 'cache' || this.preparing.has(this.selectedJob) || Boolean(record && this.rebuilding.has(record.requestId));

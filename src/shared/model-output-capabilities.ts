@@ -38,18 +38,26 @@ function closest(values:readonly string[],target:number,preferredArea=1024*1024)
  })[0];
 }
 /** Adapt before review only. Native raw payloads remain authoritative and are validated later. */
-export function chooseModelOutput(capabilities:ModelOutputCapabilities,parameters:Record<string,unknown>,requestedRatio?:string):{parameters:Record<string,unknown>;summary:string}{
+export function chooseModelOutput(capabilities:ModelOutputCapabilities,parameters:Record<string,unknown>,requestedRatio?:string,resolutionPreference?:'standard'|'high'|'ultra'):{parameters:Record<string,unknown>;summary:string}{
  if(parameters.rawRequestOverride!==undefined)return {parameters:{...parameters},summary:'Custom or model-specific raw output fields retained. Published values are checked before generation.'};
  const result={...parameters},sizes=capabilities.sizes;
  const requested=ratio(requestedRatio)??ratio(parameters.aspect_ratio??parameters.aspectRatio)??ratio(parameters.size);
  const current=typeof parameters.size==='string'?parameters.size:'';
  let size:string|undefined;
- const requestedArea=area(current)??1024*1024;
+ const pref=resolutionPreference??'standard';
+ const targetArea=pref==='ultra'?4096*4096:pref==='high'?2048*2048:1024*1024;
+ const requestedArea=area(current)??targetArea;
  // Prefer framing, then the nearest existing pixel area. Tier-only routes keep a valid tier.
- if(requested&&!capabilities.ratios)size=closest(sizes,requested.value,requestedArea);
+ if(requested&&!capabilities.ratios)size=closest(sizes,requested.value,targetArea);
  size??=sizes.includes(current)?current:undefined;
- size??=sizes.find(value=>value.toLowerCase()==='1k')??sizes.find(value=>/^\d+(?:\.\d+)?k$/i.test(value));
- size??=closest(sizes,requested?.value??1,requestedArea)??sizes[0]!;
+ if(pref==='ultra'){
+  size??=sizes.find(value=>value.toLowerCase()==='4k')??sizes.find(value=>value.toLowerCase()==='2k')??sizes.find(value=>/^\d+(?:\.\d+)?k$/i.test(value));
+ }else if(pref==='high'){
+  size??=sizes.find(value=>value.toLowerCase()==='2k')??sizes.find(value=>value.toLowerCase()==='1k')??sizes.find(value=>/^\d+(?:\.\d+)?k$/i.test(value));
+ }else{
+  size??=sizes.find(value=>value.toLowerCase()==='1k')??sizes.find(value=>/^\d+(?:\.\d+)?k$/i.test(value));
+ }
+ size??=closest(sizes,requested?.value??1,targetArea)??sizes[0]!;
  result.size=size;
  delete result.width;delete result.height;delete result.resolution;
  let actual=ratio(size);

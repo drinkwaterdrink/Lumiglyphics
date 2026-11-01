@@ -100,6 +100,7 @@ export type VisualNovelConfig = {
   imagePromptBudgetOverride: boolean;
   imagePromptBudget: number;
   imageOutputAspectRatio: ImageOutputRatio;
+  imageResolutionPreference?: "standard" | "high" | "ultra";
   collectEntityReferences: boolean;
   persistentLocationArt: boolean;
   persistentCastArt: boolean;
@@ -182,6 +183,7 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   imagePromptBudgetOverride: false,
   imagePromptBudget: 3000,
   imageOutputAspectRatio: "default",
+  imageResolutionPreference: "high",
   collectEntityReferences: false,
   persistentLocationArt: false,
   persistentCastArt: false,
@@ -406,6 +408,7 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     imagePromptBudgetOverride: input.imagePromptBudgetOverride === true,
     imagePromptBudget: typeof input.imagePromptBudget === "number" && Number.isFinite(input.imagePromptBudget) ? Math.min(50000, Math.max(256, Math.trunc(input.imagePromptBudget))) : 3000,
     imageOutputAspectRatio: normalizeImageOutputRatio(input.imageOutputAspectRatio),
+    imageResolutionPreference: input.imageResolutionPreference === "standard" || input.imageResolutionPreference === "ultra" ? input.imageResolutionPreference : "high",
     collectEntityReferences: input.collectEntityReferences === true,
     tooltips: normalizeTooltipPreferences(input.tooltips),
     persistentLocationArt: input.persistentLocationArt === true,

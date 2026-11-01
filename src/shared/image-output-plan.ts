@@ -21,6 +21,7 @@ export interface ResolveImageOutputPlanOptions {
   parameters?: Record<string, unknown> | undefined;
   requestedRatio?: string | undefined;
   requestedSize?: string | undefined;
+  resolutionPreference?: 'standard' | 'high' | 'ultra' | undefined;
   source?: 'live' | 'catalogue' | 'fallback' | undefined;
   modelId?: string | undefined;
 }
@@ -80,6 +81,8 @@ export function resolveImageOutputPlan(options: ResolveImageOutputPlanOptions): 
     capabilities,
     parameters = {},
     requestedRatio: rawRequestedRatio,
+    requestedSize,
+    resolutionPreference,
     source = 'fallback',
     modelId = 'unknown'
   } = options;
@@ -129,7 +132,7 @@ export function resolveImageOutputPlan(options: ResolveImageOutputPlanOptions): 
 
   // 2. If capabilities are available, run chooseModelOutput
   if (capabilities) {
-    const prepared = chooseModelOutput(capabilities, parameters, requestedRatio);
+    const prepared = chooseModelOutput(capabilities, parameters, requestedRatio, resolutionPreference);
     const preparedParams = prepared.parameters;
     const size = typeof preparedParams.size === 'string' ? preparedParams.size : undefined;
 

@@ -1352,7 +1352,7 @@ export async function generateAssets(
           const regenerateFor=(selectedCue:VisualCue)=>(request:ImageGenerationRequest)=>rewriteImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,request.prompt.length+(request.negativePrompt?.length??0)>(request.promptProfile?.maxCharacters??3000)||request.promptProfile?.negativeMode==='positive-only'&&Boolean(request.negativePrompt?.trim())?'fit':'reroll');
           frozen.parameters = modelOutputParameters(selected?.provider ?? provider, frozen.model, globalOutputParameters(config.imageOutputAspectRatio, selected?.provider ?? provider, frozen.model, frozen.parameters ?? {}));
           frozen.promptProfile=await loadImagePromptProfile(spindle,config,selected?.provider??provider,frozen.model);
-          frozen=prepareCapabilityOutput(frozen,config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined);
+          frozen=prepareCapabilityOutput(frozen,config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined,config.imageResolutionPreference);
           if (config.imagePromptEngineVersion === 2) {
             const v1OriginalPrompt = frozen.prompt;
             const v1OriginalNegative = frozen.negativePrompt;
@@ -1361,6 +1361,7 @@ export async function generateAssets(
               capabilities: profileV2.outputCapabilities,
               parameters: frozen.parameters ?? {},
               requestedRatio: config.imageOutputAspectRatio !== 'default' ? config.imageOutputAspectRatio : cue.imageTemplate?.outputAspectRatio === '9:16' ? '9:16' : undefined,
+              resolutionPreference: config.imageResolutionPreference,
               source: profileV2.capabilitySource,
               modelId: frozen.model
             });
@@ -1474,13 +1475,20 @@ export async function generateAssets(
               wantsCapture = usesReference && Boolean(characterKey) && Boolean(identityFingerprint) && !nextPortrait;
               const nextNai = provider === "novelai" ? compileNovelAiRequest(config, scene, nextCue, characterAppearance) : null;
               const updated = applyImageEdits({...frozen,prompt:nextCompiled.prompt,negativePrompt:nextCompiled.negativePrompt}, {});
-              const request: ImageGenerationRequest = { ...updated, includeDataUrl: wantsCapture, parameters: {
-                ...withoutImageReferences({ ...templateOutputParameters(nextCue.imageTemplate, selected?.provider ?? provider, config.imageParameters, selected?.default_parameters ?? {}, config.imageModel || selected?.model), ...effectiveParameters }),
-                ...(nextPortrait && provider ? referenceParametersFor(provider, nextPortrait, config) : {}),
-                ...(nextNai?.parameters ?? {})
-              } };
-              request.parameters = modelOutputParameters(selected?.provider ?? provider, request.model, globalOutputParameters(config.imageOutputAspectRatio, selected?.provider ?? provider, request.model, request.parameters ?? {}));
-              const preparedRequest=prepareCapabilityOutput(request,config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:nextCue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined);
+              const effectiveModel = options?.model !== undefined ? (options.model.trim() || undefined) : (updated.model || config.imageModel || selected?.model);
+              const request: ImageGenerationRequest = {
+                ...updated,
+                includeDataUrl: wantsCapture,
+                ...(effectiveModel ? { model: effectiveModel } : {}),
+                parameters: {
+                  ...withoutImageReferences({ ...templateOutputParameters(nextCue.imageTemplate, selected?.provider ?? provider, latestConfig.imageParameters, selected?.default_parameters ?? {}, effectiveModel), ...effectiveParameters }),
+                  ...(nextPortrait && provider ? referenceParametersFor(provider, nextPortrait, latestConfig) : {}),
+                  ...(nextNai?.parameters ?? {})
+                }
+              };
+              if (!effectiveModel) delete request.model;
+              request.parameters = modelOutputParameters(selected?.provider ?? provider, request.model, globalOutputParameters(latestConfig.imageOutputAspectRatio, selected?.provider ?? provider, request.model, request.parameters ?? {}));
+              const preparedRequest=prepareCapabilityOutput(request,latestConfig.imageOutputAspectRatio!=='default'?latestConfig.imageOutputAspectRatio:nextCue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined,latestConfig.imageResolutionPreference);
               const nextMetadata=metadataFor(nextCue)!;
               if (latestConfig.imagePromptEngineVersion === 2) {
                 const profileV2 = await loadImagePromptProfileV2(spindle, latestConfig, selected?.provider ?? provider, request.model, request.parameters);
@@ -1488,6 +1496,7 @@ export async function generateAssets(
                   capabilities: profileV2.outputCapabilities,
                   parameters: request.parameters ?? {},
                   requestedRatio: latestConfig.imageOutputAspectRatio !== 'default' ? latestConfig.imageOutputAspectRatio : nextCue.imageTemplate?.outputAspectRatio === '9:16' ? '9:16' : undefined,
+                  resolutionPreference: latestConfig.imageResolutionPreference,
                   source: profileV2.capabilitySource,
                   modelId: request.model
                 });
@@ -1513,6 +1522,8 @@ export async function generateAssets(
                   revision: nextRevision,
                   ...(manualOverrides && Object.keys(manualOverrides).length > 0 ? { manualOverrides } : {})
                 });
+                if (request.model) preparedRequest.model = request.model;
+                else delete preparedRequest.model;
                 preparedRequest.promptProfileV2 = profileV2;
                 preparedRequest.outputPlan = outputPlan;
                 preparedRequest.shotSpec = shotSpec;

@@ -117,6 +117,7 @@ export type RebuildOptions = {
   reframe?: boolean | undefined;
   styleId?: string | undefined;
   fitToModel?: boolean | undefined;
+  model?: string | undefined;
   manualCamera?: {
     shotSize?: string | undefined;
     angle?: string | undefined;
