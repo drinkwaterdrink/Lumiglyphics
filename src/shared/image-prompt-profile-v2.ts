@@ -280,7 +280,8 @@ export function resolveRouteDialect(
     normModel === 'nano-banana-2.1' ||
     normModel === 'gemini-nano-banana-2.1' ||
     normModel === 'google/nano-banana-2.1' ||
-    /^(?:google\/)?(?:gemini-)?nano-banana-2\.1$/.test(normModel)
+    normModel.includes('nano-banana-2.1') ||
+    /^(?:google\/)?(?:gemini-)?nano-banana-2\.1(?:\/.*)?$/.test(normModel)
   ) {
     return {
       dialect: 'nano-banana-2.1',

@@ -125,7 +125,7 @@ export function serializeNanoBanana21(input: SerializerInput): SerializerResult 
     priority: 1,
     required: false,
     compressible: true,
-    text: `Midground:\n${mg ? `${mg} interacting in the midground space.` : (brief.action ? brief.action : 'Primary scene interaction.')}`
+    text: `Midground:\n${mg ? `${mg} in the midground.` : 'Main focal area.'}`
   });
 
   sections.push({
@@ -135,6 +135,17 @@ export function serializeNanoBanana21(input: SerializerInput): SerializerResult 
     compressible: true,
     text: `Background:\n${bg ? `${bg} positioned in the background.` : ''} ${brief.scene || 'atmospheric background depth'}`.trim()
   });
+
+  // Action / Moment
+  if (brief.action) {
+    sections.push({
+      id: 'action-moment',
+      priority: 0,
+      required: true,
+      compressible: false,
+      text: `Action:\n${brief.action.trim()}`
+    });
+  }
 
   // Characters
   let charactersText = 'Characters:\n';
