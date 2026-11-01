@@ -12,7 +12,7 @@ import { globalOutputParameters, templateOutputParameters, modelOutputParameters
 import { applyAttireOverride } from "./attire.js";
 export { applyAttireOverride, isClothingTag, cleanClothingFromPhrase } from "./attire.js";
 import type { SpindleAPI } from "lumiverse-spindle-types";
-import { applyImageEdits, compactImageRequest, type ImageGenerationRequest, type ImagePreparationMetadata } from "./image-review.js";
+import { applyImageEdits, compactImageRequest, type ImageGenerationRequest, type ImagePreparationMetadata, type RebuildOptions } from "./image-review.js";
 import { assertPromptLengths, fitPromptToBudget } from '../../shared/prompt-length.js';
 import {rewriteImagePrompt,assertEffectivePromptBudget} from './prompt-rewrite.js';
 import type { VisualNovelConfig } from "../../config.js";
@@ -23,6 +23,7 @@ import { AssetScheduler } from "../core/asset-scheduler.js";
 import {
   SceneImageCache,
   canonicalJson,
+  cyrb53,
   sceneEpisodeOf,
   sceneImageCacheKey,
   sceneIdentityDigest,
@@ -35,6 +36,7 @@ import {
   type SceneImageOutcome,
   type SceneImageProvenance
 } from "../core/scene-image-cache.js";
+import { V2_SERIALIZER_REVISION } from "../../shared/image-prompt-profile-v2.js";
 import { POSE_EXPRESSION_CATALOGUE, poseById } from "../../shared/character.js";
 import { compileActionProp } from "../../shared/action-prop.js";
 import { renderImageTemplate, templateSnapshot, type ImagePromptMetadata } from "../../shared/image-templates.js";
@@ -426,7 +428,29 @@ export function sceneImageIdentityFor(
     delete brief.subjectPreparation;
     const visual = resolveCueCharacterVisualState(scene, cue, characterAppearance);
     const { connectionId, workflowId } = splitConnectionSelection(config.imageConnectionId);
+    const v2Fields = config.imagePromptEngineVersion === 2 ? {
+      promptEngineVersion: 2 as const,
+      serializerRevision: V2_SERIALIZER_REVISION,
+      shotSpecDigest: cyrb53(canonicalJson(resolveShotSpec({
+        brief,
+        outputPlan: resolveImageOutputPlan({
+          requestedRatio: config.imageOutputAspectRatio !== 'default' ? config.imageOutputAspectRatio : cue.imageTemplate?.outputAspectRatio === '9:16' ? '9:16' : undefined,
+          modelId: config.imageModel
+        }),
+        template: cue.imageTemplate,
+        cue,
+        styleDNA: resolveStyleDNA(config, cue.imageTemplate?.id).styleDNA,
+        dialogueSafeAreaSetting: config.dialogueSafeArea,
+        isDialogueOverlayTarget: !cue.visualSources?.includes('location art') && !cue.visualSources?.includes('cast art')
+      }))),
+      styleDnaDigest: cyrb53(canonicalJson(resolveStyleDNA(config, cue.imageTemplate?.id).styleDNA)),
+      outputPlanDigest: cyrb53(canonicalJson(resolveImageOutputPlan({
+        requestedRatio: config.imageOutputAspectRatio !== 'default' ? config.imageOutputAspectRatio : cue.imageTemplate?.outputAspectRatio === '9:16' ? '9:16' : undefined,
+        modelId: config.imageModel
+      })))
+    } : {};
     return {
+      ...v2Fields,
       imageTemplate: cue.imageTemplate,
       visualBrief: brief,
       subject: brief.subjectMode === "none" ? { characterId: "none", subjectCategory: "none" } : { characterId: visual.characterId, subjectCategory: visual.subjectCategory },
@@ -443,7 +467,12 @@ export function sceneImageIdentityFor(
   const description = describeCue(config, scene, cue, characterAppearance, provider);
   const nai = provider === "novelai" ? compileNovelAiRequest(config, scene, cue, characterAppearance) : null;
   const { connectionId, workflowId } = splitConnectionSelection(config.imageConnectionId);
+  const v2Fields = config.imagePromptEngineVersion === 2 ? {
+    promptEngineVersion: 2 as const,
+    serializerRevision: V2_SERIALIZER_REVISION
+  } : {};
   return {
+    ...v2Fields,
     subject: {
       characterId: description.visualState.characterId,
       subjectCategory: description.visualState.subjectCategory
@@ -1381,6 +1410,14 @@ export async function generateAssets(
                   hardLimit: compiledV2.budgetPlan.hardLimit,
                   finalCharacters: compiledV2.prompt.length + (compiledV2.negativePrompt?.length ?? 0)
                 };
+                initialMetadata.promptLintWarnings = compiledV2.warnings;
+                initialMetadata.referenceSummary = portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference";
+                initialMetadata.shadowPrompt = {
+                  v1Prompt: frozen.prompt,
+                  ...(frozen.negativePrompt !== undefined ? { v1NegativePrompt: frozen.negativePrompt } : {}),
+                  v2Prompt: compiledV2.prompt,
+                  ...(compiledV2.negativePrompt !== undefined ? { v2NegativePrompt: compiledV2.negativePrompt } : {})
+                };
               }
             }
             if (initialMetadata) {
@@ -1408,7 +1445,7 @@ export async function generateAssets(
             ...baseMetadata,
             regeneratePrompt:regenerateFor(cue),
             ...(initialMetadata ? { imagePromptMetadata: initialMetadata } : {}),
-            rebuildTemplate: async templateId => {
+            rebuildTemplate: async (templateId, options?: RebuildOptions) => {
               if (signal.aborted || jobSignal.aborted) throw abortError(jobSignal);
               const latestConfig = await loadConfig(spindle, userId);
               const template = latestConfig.imageTemplates.find(item => item.id === templateId);
@@ -1452,15 +1489,27 @@ export async function generateAssets(
                   source: profileV2.capabilitySource,
                   modelId: request.model
                 });
-                const styleSnapshot = resolveStyleDNA(latestConfig, nextCue.imageTemplate?.id);
+                const styleSnapshot = resolveStyleDNA(latestConfig, options?.styleId ?? nextCue.imageTemplate?.id);
+                const baseRevision = frozen.shotSpec?.revision ?? 0;
+                const nextRevision = options?.reframe ? baseRevision + 1 : baseRevision;
+                const manualOverrides = options?.manualCamera ? {
+                  ...(options.manualCamera.shotSize ? { shotSize: options.manualCamera.shotSize as any } : {}),
+                  ...(options.manualCamera.angle ? { angle: options.manualCamera.angle as any } : {}),
+                  ...(options.manualCamera.lensFeel ? { lens: options.manualCamera.lensFeel as any } : {}),
+                  ...(options.manualCamera.composition ? { mode: options.manualCamera.composition as any } : {}),
+                  ...(options.manualCamera.depth ? { depthOfField: options.manualCamera.depth as any } : {}),
+                  ...(options.manualCamera.dialogueSafeArea === 'always' ? { safeArea: { edge: 'bottom' as const, fraction: 0.25, reason: 'dialogue-overlay' as const } } : {})
+                } : undefined;
                 const shotSpec = resolveShotSpec({
                   brief: nextMetadata.brief,
                   outputPlan,
                   template: nextCue.imageTemplate,
                   cue: nextCue,
                   styleDNA: styleSnapshot.styleDNA,
-                  dialogueSafeAreaSetting: latestConfig.dialogueSafeArea,
-                  isDialogueOverlayTarget: !nextCue.visualSources?.includes('location art') && !nextCue.visualSources?.includes('cast art')
+                  dialogueSafeAreaSetting: options?.manualCamera?.dialogueSafeArea ?? latestConfig.dialogueSafeArea,
+                  isDialogueOverlayTarget: !nextCue.visualSources?.includes('location art') && !nextCue.visualSources?.includes('cast art'),
+                  revision: nextRevision,
+                  ...(manualOverrides && Object.keys(manualOverrides).length > 0 ? { manualOverrides } : {})
                 });
                 preparedRequest.promptProfileV2 = profileV2;
                 preparedRequest.outputPlan = outputPlan;
@@ -1481,9 +1530,9 @@ export async function generateAssets(
                     profile: profileV2,
                     outputPlan,
                     referencePlan,
-                    detailLevel: latestConfig.imagePromptDetail,
+                    detailLevel: options?.fitToModel ? 'compact' : latestConfig.imagePromptDetail,
                     promptExpansionEnabled: profileV2.promptExpansion?.enabled,
-                    userBudgetOverride: latestConfig.imagePromptBudgetOverride ? latestConfig.imagePromptBudget : null,
+                    userBudgetOverride: options?.fitToModel ? Math.min(profileV2.softBudgets.standard[0], profileV2.hardMaxCharacters) : (latestConfig.imagePromptBudgetOverride ? latestConfig.imagePromptBudget : null),
                     cue: nextCue
                   });
                   preparedRequest.prompt = compiledV2.prompt;
@@ -1498,6 +1547,14 @@ export async function generateAssets(
                     softRange: compiledV2.budgetPlan.softRange,
                     hardLimit: compiledV2.budgetPlan.hardLimit,
                     finalCharacters: compiledV2.prompt.length + (compiledV2.negativePrompt?.length ?? 0)
+                  };
+                  nextMetadata.promptLintWarnings = compiledV2.warnings;
+                  nextMetadata.referenceSummary = portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference";
+                  nextMetadata.shadowPrompt = {
+                    v1Prompt: nextCompiled.prompt,
+                    ...(nextCompiled.negativePrompt !== undefined ? { v1NegativePrompt: nextCompiled.negativePrompt } : {}),
+                    v2Prompt: compiledV2.prompt,
+                    ...(compiledV2.negativePrompt !== undefined ? { v2NegativePrompt: compiledV2.negativePrompt } : {})
                   };
                 }
                 nextMetadata.promptEngineVersion = 2;

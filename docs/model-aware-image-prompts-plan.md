@@ -1,5 +1,8 @@
 # Model-aware image prompts
 
+> [!IMPORTANT]
+> **IMPLEMENTATION COMPLETE**: The entire Lumiglyphics Image Prompt Engine V2 plan (Phases 1–4) has been fully implemented, verified, and shipped. See [image-prompt-engine-v2.md](./image-prompt-engine-v2.md) for current technical documentation.
+
 Implement the approved model-aware image pipeline on Testing. Preserve existing templates,
 styles, references, appearance evidence, held requests and manual parameter controls.
 

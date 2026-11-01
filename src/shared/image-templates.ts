@@ -63,7 +63,15 @@ export const ImagePromptMetadataSchema = z.object({
     hardLimit: z.number(),
     finalCharacters: z.number()
   }).strict().optional(),
-  serializerRevision: z.string().max(64).optional()
+  serializerRevision: z.string().max(64).optional(),
+  referenceSummary: z.string().max(2000).optional(),
+  promptLintWarnings: z.array(z.string().max(500)).max(32).optional(),
+  shadowPrompt: z.object({
+    v1Prompt: z.string().max(65000),
+    v1NegativePrompt: z.string().max(65000).optional(),
+    v2Prompt: z.string().max(65000).optional(),
+    v2NegativePrompt: z.string().max(65000).optional()
+  }).strict().optional()
 }).strict();
 export type ImagePromptMetadata = z.infer<typeof ImagePromptMetadataSchema>;
 export const ImageTemplateListSchema = z.array(ImageTemplateSchema).max(32).refine(templates => new Set(templates.map(t => t.id)).size === templates.length, "Template IDs must be unique.");

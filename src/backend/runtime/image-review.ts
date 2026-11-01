@@ -113,7 +113,21 @@ export function applyImageRewriteDraft(request:ImageGenerationRequest,edits:Imag
   return applyImageEdits({...request,prompt:edits.prompt??request.prompt,...(edits.negativePrompt!==undefined?{negativePrompt:edits.negativePrompt}:{})},edits.parameters!==undefined?{parameters:edits.parameters}:{});
 }
 
-export type ImagePreparationMetadata = { provider: string; connectionRevision?: number; referenceSummary?: string; promptAdaptationError?:string; imagePromptMetadata?: ImagePromptMetadata; regeneratePrompt?: (request:ImageGenerationRequest) => Promise<ImageGenerationRequest>; rebuildTemplate?: (templateId: string) => Promise<{ request: ImageGenerationRequest; metadata: ImagePreparationMetadata }> };
+export type RebuildOptions = {
+  reframe?: boolean | undefined;
+  styleId?: string | undefined;
+  fitToModel?: boolean | undefined;
+  manualCamera?: {
+    shotSize?: string | undefined;
+    angle?: string | undefined;
+    lensFeel?: string | undefined;
+    composition?: string | undefined;
+    depth?: string | undefined;
+    dialogueSafeArea?: "auto" | "always" | "off" | undefined;
+  } | undefined;
+};
+
+export type ImagePreparationMetadata = { provider: string; connectionRevision?: number; referenceSummary?: string; promptAdaptationError?:string; imagePromptMetadata?: ImagePromptMetadata; regeneratePrompt?: (request:ImageGenerationRequest) => Promise<ImageGenerationRequest>; rebuildTemplate?: (templateId: string, options?: RebuildOptions) => Promise<{ request: ImageGenerationRequest; metadata: ImagePreparationMetadata }> };
 /** Also synchronize NovelAI/host-managed prompt copies after compaction. */
 export function compactImageRequest(request: ImageGenerationRequest): ImageGenerationRequest {
   const over = request.prompt.length + (request.negativePrompt?.length ?? 0) > (request.promptProfile?.maxCharacters??IMAGE_PROMPT_MAX_CHARS);
@@ -175,7 +189,7 @@ export class ImageReviewGate {
     } finally { this.pending.delete(item.record.requestId); signal.removeEventListener("abort", abort); }
   }
 
-  async reprepare(requestId: string, templateId: string): Promise<boolean> {
+  async reprepare(requestId: string, templateId: string, options?: RebuildOptions): Promise<boolean> {
     const item = this.pending.get(requestId);
     if (!item?.rebuild || item.signal.aborted) return false;
     if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$/.test(templateId)) throw new Error("Invalid image template selection.");
@@ -184,7 +198,7 @@ export class ImageReviewGate {
     const original={request:item.request,record:item.record,metadata:item.metadata};
     let retired=false;
     try {
-      const rebuilt = await item.rebuild(templateId);
+      const rebuilt = await item.rebuild(templateId, options);
       if (item.signal.aborted) throw aborted("Image request cancelled during template preparation.");
       const request = compactImageRequest(structuredClone(rebuilt.request));
       const record = reviewRecord(item.record.jobId, item.record.paragraphIndex, request, rebuilt.metadata, true);

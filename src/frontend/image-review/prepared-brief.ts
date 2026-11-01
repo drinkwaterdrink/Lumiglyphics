@@ -1,5 +1,97 @@
 import type {ImageRequestRecord} from '../../shared/image-review.js';
 export type BriefDraft={prompt:string;negativePrompt:string;parameters?:Record<string,unknown>};
+
+export type PromptEngineSummary = {
+  version: 1 | 2;
+  model: string;
+  dialect: string;
+  output: string;
+  shot: {
+    size: string;
+    angle: string;
+    lens: string;
+    composition: string;
+    depth: string;
+    source: string;
+    dialogueSafeArea: string;
+  };
+  style: string;
+  prompt: {
+    characters: number;
+    softRange: string;
+    hardLimit: number;
+  };
+  negativePolicy: string;
+  promptExpansion?: string | undefined;
+  references: string;
+  warnings: string[];
+  shadowPrompt?: {
+    v1Prompt: string;
+    v1NegativePrompt?: string | undefined;
+    v2Prompt?: string | undefined;
+    v2NegativePrompt?: string | undefined;
+  } | undefined;
+};
+
+export function promptEngineSummary(record: ImageRequestRecord | undefined, draft?: BriefDraft): PromptEngineSummary | undefined {
+  if (!record) return undefined;
+  const metadata = record.imagePromptMetadata;
+  const profileV2 = record.promptProfileV2;
+  const profile = record.promptProfile;
+  const isV2 = metadata?.promptEngineVersion === 2 || Boolean(profileV2);
+  const modelName = typeof record.parameters?.model === 'string' ? record.parameters.model : (record.model || 'Selected model');
+  const providerName = record.provider ?? 'connection default';
+  const totalChars = (draft ? draft.prompt.length + (draft.negativePrompt?.length ?? 0) : record.prompt.length + (record.negativePrompt?.length ?? 0));
+
+  const shotSpec = metadata?.shotSpec ?? record.shotSpec;
+  const outputPlan = metadata?.outputPlan ?? record.outputPlan;
+  const budgetSummary = metadata?.budgetSummary;
+
+  const shot = shotSpec ? {
+    size: shotSpec.camera.shotSize,
+    angle: shotSpec.camera.angle,
+    lens: shotSpec.camera.lens,
+    composition: shotSpec.composition.mode,
+    depth: shotSpec.camera.depthOfField,
+    source: shotSpec.source,
+    dialogueSafeArea: shotSpec.safeArea?.edge === 'bottom' ? 'Active (bottom quiet)' : 'Off'
+  } : {
+    size: metadata?.brief.framing ?? 'medium',
+    angle: 'eye-level',
+    lens: 'normal',
+    composition: metadata?.brief.composition ?? 'centered',
+    depth: 'moderate',
+    source: 'legacy-template',
+    dialogueSafeArea: 'Off'
+  };
+
+  const outputRatio = outputPlan ? `${outputPlan.requestedRatio ?? 'default'} → ${outputPlan.actualRatio ?? 'default'} (${outputPlan.size ?? outputPlan.orientation})` : (typeof record.parameters?.size === 'string' ? String(record.parameters.size) : 'Default');
+
+  const warnings = [
+    ...(metadata?.promptLintWarnings ?? []),
+    ...(outputPlan?.warnings ?? [])
+  ];
+
+  return {
+    version: isV2 ? 2 : 1,
+    model: `${modelName} (${providerName})`,
+    dialect: metadata?.promptDialect ?? profileV2?.dialect ?? (profile?.family ? `${profile.family} (${profile.format})` : 'Legacy prose'),
+    output: outputRatio,
+    shot,
+    style: metadata?.styleSnapshot?.medium ?? metadata?.sharedStyle?.presetName ?? 'Neutral / scene-defined',
+    prompt: {
+      characters: totalChars,
+      softRange: budgetSummary ? `${budgetSummary.softRange[0].toLocaleString()}–${budgetSummary.softRange[1].toLocaleString()} chars` : (profileV2?.softBudgets ? `${profileV2.softBudgets.standard[0].toLocaleString()}–${profileV2.softBudgets.standard[1].toLocaleString()} chars` : 'Dynamic'),
+      hardLimit: budgetSummary ? budgetSummary.hardLimit : (profileV2?.hardMaxCharacters ?? profile?.maxCharacters ?? 3000)
+    },
+    negativePolicy: profileV2?.negativePolicy ?? (profile?.negativeMode === 'positive-only' ? 'positive-only' : 'native'),
+    promptExpansion: profileV2?.promptExpansion ? (profileV2.promptExpansion.enabled ? 'Enabled' : 'Disabled') : undefined,
+    references: metadata?.referenceSummary ?? record.referenceSummary ?? 'None attached',
+    warnings,
+    shadowPrompt: metadata?.shadowPrompt
+  };
+}
+
 export function preparedBrief(record:ImageRequestRecord|undefined,draft?:BriefDraft){
  const rows:Array<{label:string;value:string}>=[],metadata=record?.imagePromptMetadata,profile=record?.promptProfile;
  if(metadata)for(const [label,value] of [['Subjects',metadata.brief.subjects],['Moment',metadata.brief.action],['Scene',metadata.brief.scene],['Composition',metadata.brief.composition],['Framing',metadata.brief.framing],['Lighting',metadata.brief.lighting],['Template',metadata.template.name]] as const){if(value.trim())rows.push({label,value});}

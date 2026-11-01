@@ -1,5 +1,8 @@
 # Shared styles and image prompting
 
+> [!NOTE]
+> Lumiglyphics includes **Image Prompt Engine V2**, a model-aware compilation system that translates visual briefs into model-tailored dialects (FLUX.3 Klein, GPT Image 2.5, Grok Imagine 2.0, Qwen Image 3 Pro, Nano Banana 2.1, Seedream 5.0 Pro, Anima). For full technical specifications, architecture diagrams, and serializer policies, see [image-prompt-engine-v2.md](./image-prompt-engine-v2.md).
+
 Scene templates decide **what to show** (portrait, environment, action, detail, Manga page). Shared styles decide **how it is rendered**. Choose them in Pictures → Image prompts → Shared style and exclusions.
 
 ## Where the placeholders come from

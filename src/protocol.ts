@@ -40,7 +40,25 @@ export type FrontendRequest =
   | { type: "vn_image_review"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; action: "generate" | "skip"; edits?: ImageRequestEdits }
   | { type: "vn_prepare_image"; chatId: string; messageId: string; sourceFingerprint: string; jobId: string; templateId?: string; edits?: ImageRequestEdits; regeneratePrompt?: boolean }
   | { type: "vn_regenerate_image_prompt"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; edits?:ImageRequestEdits }
-  | { type: "vn_reprepare_image_template"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; templateId: string }
+  | {
+      type: "vn_reprepare_image_template";
+      chatId: string;
+      messageId: string;
+      sourceFingerprint: string;
+      requestId: string;
+      templateId: string;
+      reframe?: boolean | undefined;
+      styleId?: string | undefined;
+      fitToModel?: boolean | undefined;
+      manualCamera?: {
+        shotSize?: string | undefined;
+        angle?: string | undefined;
+        lensFeel?: string | undefined;
+        composition?: string | undefined;
+        depth?: string | undefined;
+        dialogueSafeArea?: "auto" | "always" | "off" | undefined;
+      } | undefined;
+    }
   | { type: "vn_external_image"; request: CueImageRequest }
   | { type: "vn_external_image_cancel"; request: Pick<CueImageRequest, "version" | "provider" | "chatId" | "requestId"> }
   | ({ type: "vn_external_image_review" } & import("./backend/runtime/external-images.js").ExternalImageReviewAction)

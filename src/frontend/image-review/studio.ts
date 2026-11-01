@@ -13,6 +13,7 @@ import { LUMIGLYPHICS_VERSION } from '../../shared/build-info.js';
 import { IMAGE_PROMPT_MAX_CHARS, assertPromptLengths, fitPromptToBudget } from '../../shared/prompt-length.js';
 import type { VisualNovelConfig } from "../../config.js";
 import type { ImageTemplate } from "../../shared/image-templates.js";
+import { BUILTIN_SHARED_STYLES } from "../../shared/image-styles.js";
 import type { FrontendRequest, TurnView } from "../../protocol.js";
 import type { ImageRequestRecord,ImageRequestEdits } from "../../shared/image-review.js";
 import {isMobileWidth,trapFocusWithin} from './focus-trap.js';
@@ -132,6 +133,101 @@ export class ImageStudio {
     };
     this.el<HTMLButtonElement>("[data-keep]").onclick = () => { this.el<HTMLElement>("[data-template-confirm]").hidden = true; this.el<HTMLSelectElement>("[data-template]").value = this.record()?.imagePromptMetadata?.template.id ?? this.defaultTemplate; };
     this.el<HTMLButtonElement>("[data-replace]").onclick = () => this.rebuildTemplate();
+
+    this.el<HTMLButtonElement>('[data-reframe]').onclick = () => {
+      const record = this.record();
+      if (!record || record.state !== 'review' || this.rebuilding.has(record.requestId) || !this.turn) return;
+      this.rebuilding.add(record.requestId);
+      this.render();
+      const templateId = record.imagePromptMetadata?.template.id ?? this.el<HTMLSelectElement>('[data-template]').value ?? this.defaultTemplate;
+      this.send({
+        type: 'vn_reprepare_image_template',
+        chatId: this.turn.chatId,
+        messageId: this.turn.messageId,
+        sourceFingerprint: this.turn.sourceFingerprint,
+        requestId: record.requestId,
+        templateId,
+        reframe: true
+      });
+    };
+
+    this.el<HTMLButtonElement>('[data-fit-model]').onclick = () => {
+      const record = this.record();
+      if (!record || record.state !== 'review' || this.rebuilding.has(record.requestId) || !this.turn) return;
+      this.rebuilding.add(record.requestId);
+      this.render();
+      const templateId = record.imagePromptMetadata?.template.id ?? this.el<HTMLSelectElement>('[data-template]').value ?? this.defaultTemplate;
+      this.send({
+        type: 'vn_reprepare_image_template',
+        chatId: this.turn.chatId,
+        messageId: this.turn.messageId,
+        sourceFingerprint: this.turn.sourceFingerprint,
+        requestId: record.requestId,
+        templateId,
+        fitToModel: true
+      });
+    };
+
+    this.el<HTMLButtonElement>('[data-change-style-btn]').onclick = () => {
+      const record = this.record();
+      if (!record || record.state !== 'review' || this.rebuilding.has(record.requestId) || !this.turn) return;
+      const styleId = this.el<HTMLSelectElement>('[data-style-select]').value;
+      this.rebuilding.add(record.requestId);
+      this.render();
+      const templateId = record.imagePromptMetadata?.template.id ?? this.el<HTMLSelectElement>('[data-template]').value ?? this.defaultTemplate;
+      this.send({
+        type: 'vn_reprepare_image_template',
+        chatId: this.turn.chatId,
+        messageId: this.turn.messageId,
+        sourceFingerprint: this.turn.sourceFingerprint,
+        requestId: record.requestId,
+        templateId,
+        styleId
+      });
+    };
+
+    this.el<HTMLInputElement>('[data-auto-director]').onchange = () => {
+      const auto = this.el<HTMLInputElement>('[data-auto-director]').checked;
+      for (const sel of ['[data-camera-shot-size]','[data-camera-angle]','[data-camera-lens]','[data-camera-composition]','[data-camera-depth]','[data-camera-safe-area]']) {
+        this.el<HTMLSelectElement>(sel).disabled = auto;
+      }
+    };
+
+    this.el<HTMLButtonElement>('[data-apply-camera]').onclick = () => {
+      const record = this.record();
+      if (!record || record.state !== 'review' || this.rebuilding.has(record.requestId) || !this.turn) return;
+      const auto = this.el<HTMLInputElement>('[data-auto-director]').checked;
+      const templateId = record.imagePromptMetadata?.template.id ?? this.el<HTMLSelectElement>('[data-template]').value ?? this.defaultTemplate;
+      this.rebuilding.add(record.requestId);
+      this.render();
+      if (auto) {
+        this.send({
+          type: 'vn_reprepare_image_template',
+          chatId: this.turn.chatId,
+          messageId: this.turn.messageId,
+          sourceFingerprint: this.turn.sourceFingerprint,
+          requestId: record.requestId,
+          templateId
+        });
+      } else {
+        this.send({
+          type: 'vn_reprepare_image_template',
+          chatId: this.turn.chatId,
+          messageId: this.turn.messageId,
+          sourceFingerprint: this.turn.sourceFingerprint,
+          requestId: record.requestId,
+          templateId,
+          manualCamera: {
+            shotSize: this.el<HTMLSelectElement>('[data-camera-shot-size]').value || undefined,
+            angle: this.el<HTMLSelectElement>('[data-camera-angle]').value || undefined,
+            lensFeel: this.el<HTMLSelectElement>('[data-camera-lens]').value || undefined,
+            composition: this.el<HTMLSelectElement>('[data-camera-composition]').value || undefined,
+            depth: this.el<HTMLSelectElement>('[data-camera-depth]').value || undefined,
+            dialogueSafeArea: (this.el<HTMLSelectElement>('[data-camera-safe-area]').value || 'auto') as any
+          }
+        });
+      }
+    };
     // Events retarget to this shadow host outside the studio; keep native
     // input focus/defaults while preventing reader advance and hotkeys.
     for(const type of ['click','keydown','wheel','pointerdown','pointerup','touchstart','touchend']) this.root.addEventListener(type,event=>event.stopPropagation());
@@ -258,12 +354,88 @@ export class ImageStudio {
     const validation=document.createElement('small');validation.dataset.validation='';validation.role='alert';validation.hidden=true;editor.append(validation);
     const changed=document.createElement('div');changed.dataset.rewriteChanged='';changed.hidden=true;
     changed.innerHTML='<p>Rewrite ready. Review the wording before generating.</p><p data-revision-count></p><small data-revision-fields></small><p data-revision-scene hidden></p><details><summary>Compare previous wording</summary><p>The draft captured when you requested this rewrite. Your current wording is in the editors above. Counts do not verify that every detail was preserved.</p><ul data-previous-scene hidden></ul><label>Previous positive prompt<textarea readonly data-previous-positive></textarea></label><label>Previous negative prompt<textarea readonly data-previous-negative></textarea></label></details><button type="button" data-restore-wording>Restore previous wording</button>';editor.append(changed);
-    const actions=document.createElement('details');actions.dataset.promptActions='';actions.innerHTML='<summary>Prompt actions</summary><div class="row" data-secondary-actions></div><small>Rewrite prompt uses your story-reader model and text tokens. It replaces the preview wording. Image generation is a separate action after approval.</small>';
+    const actions=document.createElement('details');actions.dataset.promptActions='';actions.innerHTML='<summary>Prompt actions</summary><div class="row" data-secondary-actions></div><small>Rewrite prompt uses your story-reader model and text tokens. Reframe changes camera composition while preserving scene facts. Fit to model trims lower-priority adjectives to fit tight model limits.</small>';
     for(const selector of ['[data-regenerate-prompt]','[data-reset]','[data-copy]','[data-skip]','[data-retry-image]','[data-prepare]'])actions.querySelector('[data-secondary-actions]')!.append(this.el(selector));
-    const retry=document.createElement('button');retry.type='button';retry.dataset.retrySaved='';retry.textContent='Prepare from saved scene';actions.querySelector('[data-secondary-actions]')!.append(retry);editor.append(actions);
+    const reframe=document.createElement('button');reframe.type='button';reframe.dataset.reframe='';reframe.textContent='Reframe shot';
+    const fitModel=document.createElement('button');fitModel.type='button';fitModel.dataset.fitModel='';fitModel.textContent='Fit to model';
+    const retry=document.createElement('button');retry.type='button';retry.dataset.retrySaved='';retry.textContent='Prepare from saved scene';
+    actions.querySelector('[data-secondary-actions]')!.append(reframe,fitModel,retry);editor.append(actions);
     const tools=document.createElement('div');tools.dataset.pictureTools='';
     const template=document.createElement('details');template.dataset.templateTools='';template.innerHTML='<summary>Template and framing</summary>';
     for(const selector of ['[data-template]','[data-use-template]','[data-template-confirm]']){const element=this.el(selector);template.append(element instanceof HTMLSelectElement?element.closest('label')!:element);}tools.append(template);
+
+    const styleTools=document.createElement('details');styleTools.dataset.styleTools='';
+    styleTools.innerHTML=`<summary>Change Style</summary>
+      <div style="margin:8px 0">
+        <label>Semantic Style<select data-style-select aria-label="Select visual style"></select></label>
+        <button type="button" data-change-style-btn style="margin-top:6px">Apply style</button>
+        <small style="display:block;margin-top:6px">Preserves scene facts, character identities and camera framing, recompiling with the target style's StyleDNA.</small>
+      </div>`;
+    tools.append(styleTools);
+
+    const cameraTools=document.createElement('details');cameraTools.dataset.cameraTools='';
+    cameraTools.innerHTML=`<summary>Camera &amp; Director overrides</summary>
+      <div style="margin:8px 0">
+        <label class="toggle"><input type="checkbox" data-auto-director checked>Auto Director (smart shot choices)</label>
+        <div data-manual-camera-controls style="margin-top:8px">
+          <label>Shot size<select data-camera-shot-size disabled>
+            <option value="">Auto</option>
+            <option value="extreme-close-up">Extreme close-up</option>
+            <option value="close-up">Close-up</option>
+            <option value="medium-close-up">Medium close-up</option>
+            <option value="medium">Medium</option>
+            <option value="medium-wide">Medium-wide</option>
+            <option value="full-body">Full-body</option>
+            <option value="wide">Wide</option>
+            <option value="establishing">Establishing</option>
+            <option value="macro">Macro</option>
+          </select></label>
+          <label>Angle<select data-camera-angle disabled>
+            <option value="">Auto</option>
+            <option value="eye-level">Eye-level</option>
+            <option value="low-angle">Low-angle</option>
+            <option value="high-angle">High-angle</option>
+            <option value="overhead">Overhead</option>
+            <option value="ground-level">Ground-level</option>
+            <option value="three-quarter">Three-quarter</option>
+            <option value="profile">Profile</option>
+            <option value="over-the-shoulder">Over-the-shoulder</option>
+          </select></label>
+          <label>Lens feel<select data-camera-lens disabled>
+            <option value="">Auto</option>
+            <option value="ultrawide">Ultrawide</option>
+            <option value="wide">Wide</option>
+            <option value="normal">Normal (50mm)</option>
+            <option value="portrait">Portrait (85mm)</option>
+            <option value="telephoto">Telephoto</option>
+            <option value="macro">Macro</option>
+          </select></label>
+          <label>Composition<select data-camera-composition disabled>
+            <option value="">Auto</option>
+            <option value="centered">Centered</option>
+            <option value="rule-of-thirds">Rule of thirds</option>
+            <option value="symmetrical">Symmetrical</option>
+            <option value="layered-depth">Layered depth</option>
+            <option value="leading-lines">Leading lines</option>
+            <option value="negative-space">Negative space</option>
+            <option value="lateral-ensemble">Lateral ensemble</option>
+          </select></label>
+          <label>Depth of field<select data-camera-depth disabled>
+            <option value="">Auto</option>
+            <option value="deep">Deep focus</option>
+            <option value="moderate">Moderate</option>
+            <option value="shallow">Shallow / bokeh</option>
+            <option value="selective">Selective</option>
+          </select></label>
+          <label>Dialogue safe area<select data-camera-safe-area disabled>
+            <option value="auto">Auto</option>
+            <option value="always">Always reserve bottom</option>
+            <option value="off">Off (full bleed)</option>
+          </select></label>
+          <button type="button" data-apply-camera style="margin-top:6px">Apply camera</button>
+        </div>
+      </div>`;
+    tools.append(cameraTools);
     for(const selector of ['[data-recovery]','[data-diagnostics]','[data-provenance]','[data-parameters]']){const element=this.el(selector);tools.append(element.closest('details')!);}
     const history=document.createElement('details');history.dataset.requestHistory='';history.innerHTML='<summary>Request history</summary>';history.append(this.el('[data-history]'));tools.append(history);
     const settings=document.createElement('details');settings.dataset.replySettings='';settings.innerHTML='<summary>Reply and review settings</summary>';
@@ -607,7 +779,54 @@ export class ImageStudio {
     const reroll=this.el<HTMLButtonElement>('[data-regenerate-prompt]');
     const rolling=Boolean(record&&this.rerolling.has(record.requestId));
     this.updateRewriteLabel();
-    reroll.disabled=!asset||asset.source==='cache'||this.replanning||this.preparing.has(this.selectedJob)||!!this.recovering||rolling||Boolean(record&&(this.submitted.has(record.requestId)||this.rebuilding.has(record.requestId)))||(record?.state==='review'?record.canRegeneratePrompt===false:Boolean(busy));
+    reroll.disabled=!asset||asset.source!=='cache'&&record?.canRegeneratePrompt===false||this.replanning||this.preparing.has(this.selectedJob)||!!this.recovering||rolling||Boolean(record&&(this.submitted.has(record.requestId)||this.rebuilding.has(record.requestId)))||(record?.state==='review'?record.canRegeneratePrompt===false:Boolean(busy));
+
+    const reframe = this.el<HTMLButtonElement>('[data-reframe]');
+    reframe.hidden = record?.state !== "review";
+    reframe.disabled = !editable || !asset || asset.source === 'cache' || this.preparing.has(this.selectedJob) || Boolean(record && this.rebuilding.has(record.requestId));
+
+    const fitModel = this.el<HTMLButtonElement>('[data-fit-model]');
+    fitModel.hidden = record?.state !== "review";
+    fitModel.disabled = !editable || !asset || asset.source === 'cache' || this.preparing.has(this.selectedJob) || Boolean(record && this.rebuilding.has(record.requestId));
+
+    const styleSelect = this.el<HTMLSelectElement>('[data-style-select]');
+    if (styleSelect.children.length === 0) {
+      for (const s of BUILTIN_SHARED_STYLES) {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.name;
+        styleSelect.append(opt);
+      }
+    }
+    const currentStyle = record?.imagePromptMetadata?.styleSnapshot?.medium;
+    if (currentStyle) {
+      const match = BUILTIN_SHARED_STYLES.find(s => s.description.includes(currentStyle) || s.name.toLowerCase().includes(currentStyle.toLowerCase()));
+      if (match) styleSelect.value = match.id;
+    }
+    const changeStyleBtn = this.el<HTMLButtonElement>('[data-change-style-btn]');
+    changeStyleBtn.disabled = !editable || !asset || asset.source === 'cache' || this.preparing.has(this.selectedJob) || Boolean(record && this.rebuilding.has(record.requestId));
+
+    const applyCameraBtn = this.el<HTMLButtonElement>('[data-apply-camera]');
+    applyCameraBtn.disabled = !editable || !asset || asset.source === 'cache' || this.preparing.has(this.selectedJob) || Boolean(record && this.rebuilding.has(record.requestId));
+
+    const autoDirector = this.el<HTMLInputElement>('[data-auto-director]');
+    const shotSpec = record?.imagePromptMetadata?.shotSpec ?? record?.shotSpec;
+    if (shotSpec && shotSpec.source === 'manual') {
+      autoDirector.checked = false;
+      this.el<HTMLSelectElement>('[data-camera-shot-size]').value = shotSpec.camera.shotSize;
+      this.el<HTMLSelectElement>('[data-camera-angle]').value = shotSpec.camera.angle;
+      this.el<HTMLSelectElement>('[data-camera-lens]').value = shotSpec.camera.lens;
+      this.el<HTMLSelectElement>('[data-camera-composition]').value = shotSpec.composition.mode;
+      this.el<HTMLSelectElement>('[data-camera-depth]').value = shotSpec.camera.depthOfField;
+      for (const sel of ['[data-camera-shot-size]','[data-camera-angle]','[data-camera-lens]','[data-camera-composition]','[data-camera-depth]','[data-camera-safe-area]']) {
+        this.el<HTMLSelectElement>(sel).disabled = false;
+      }
+    } else {
+      autoDirector.checked = true;
+      for (const sel of ['[data-camera-shot-size]','[data-camera-angle]','[data-camera-lens]','[data-camera-composition]','[data-camera-depth]','[data-camera-safe-area]']) {
+        this.el<HTMLSelectElement>(sel).disabled = true;
+      }
+    }
     this.el<HTMLButtonElement>('[data-prepare]').textContent = record ? 'Prepare edited preview' : 'Prepare editable preview';
     this.el<HTMLButtonElement>("[data-prepare]").hidden = record?.state === "review";
     this.el<HTMLButtonElement>("[data-prepare]").disabled = !asset || Boolean(busy) || this.replanning || !!this.recovering || this.preparing.has(this.selectedJob) || !this.templates.some(t => t.id === templateSelect.value);

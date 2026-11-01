@@ -1723,7 +1723,12 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       const key = runtimeKey(userId, request.chatId);
       const turn = activeTurnKeys.get(key);
       if (!views.isOpen(userId, request.chatId) || !turn || turn.assistantMessageId !== request.messageId || turn.sourceFingerprint !== request.sourceFingerprint) throw new Error("This review belongs to an older or closed turn.");
-      if (!(await imageReviewGates.get(key)?.reprepare(request.requestId, request.templateId))) throw new Error("This request has already been handled or cancelled.");
+      if (!(await imageReviewGates.get(key)?.reprepare(request.requestId, request.templateId, {
+        reframe: request.reframe,
+        styleId: request.styleId,
+        fitToModel: request.fitToModel,
+        manualCamera: request.manualCamera
+      }))) throw new Error("This request has already been handled or cancelled.");
       return;
     }
     case "vn_image_review": {
