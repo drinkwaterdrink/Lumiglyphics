@@ -942,6 +942,10 @@ section[data-reference-observations] h3 {
   mix-blend-mode: soft-light;
 }
 
+[data-vn-root] {
+  opacity: 1 !important;
+}
+
 [data-vn-scene][data-vn-atmosphere="warm_amber"] [data-vn-atmosphere] {
   opacity: 0.35;
   background: radial-gradient(circle at 60% 40%, rgba(255, 160, 60, 0.55) 0%, rgba(220, 90, 20, 0.3) 70%, transparent 100%);

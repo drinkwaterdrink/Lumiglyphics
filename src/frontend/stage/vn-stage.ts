@@ -2823,7 +2823,6 @@ export class VnStage {
     }
     if (atmosphere) {
       this.scene.dataset.vnAtmosphere = atmosphere;
-      this.root.dataset.vnAtmosphere = atmosphere;
       const glowMap: Record<string, { glow: string; tint: string }> = {
         danger_crimson: { glow: "rgba(244, 63, 94, 0.45)", tint: "rgba(225, 29, 72, 0.12)" },
         sepia_flashback: { glow: "rgba(217, 119, 6, 0.40)", tint: "rgba(180, 83, 9, 0.12)" },
@@ -2846,7 +2845,6 @@ export class VnStage {
       }
     } else {
       delete this.scene.dataset.vnAtmosphere;
-      delete this.root.dataset.vnAtmosphere;
       const shell = this.outerRoot.querySelector<HTMLElement>("[data-vn-shell]");
       if (typeof this.root.style?.removeProperty === "function") {
         this.root.style.removeProperty("--vn-atmosphere-glow");
