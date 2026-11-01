@@ -737,7 +737,15 @@ export class VisualNovelSettingsPanel {
 
             </div>
             <label data-field ${find("Generated image shape","dimensions resolution aspect ratio mobile 9:16 size")}><span>Generated image shape</span><select name="imageOutputAspectRatio">${IMAGE_OUTPUT_RATIOS.map(r=>`<option value="${r}">${r==='default'?'Template / connection default':r}</option>`).join('')}</select><small>Preferred output shape. Verified model constraints can limit it. Held pictures keep their prepared size; display fit is separate.</small></label>
-            <fieldset data-prompt-model-settings ${find('Automatic image prompting','prompt budget characters limit model profile auto detect')}><legend>Image prompting</legend>
+            <fieldset data-prompt-model-settings ${find('Automatic image prompting','prompt budget characters limit model profile auto detect prompt engine compiler v1 v2')}><legend>Image prompting</legend>
+              <label data-field ${find('Prompt engine','prompt engine compiler v1 v2 model aware shot director')}>
+                <span>Prompt engine</span>
+                <select name="imagePromptEngineVersion">
+                  <option value="2">Version 2 (Model-Aware Compiler &amp; Shot Director)</option>
+                  <option value="1">Version 1 (Legacy Static Templates)</option>
+                </select>
+                <small>V2 compiles prompts specifically for FLUX, Grok, GPT, Qwen, Anima, etc. with dynamic camera angles. V1 uses legacy static string templates.</small>
+              </label>
               <label data-check><input name="automaticImagePromptSettings" type="checkbox"><span>Automatic model settings<small>Uses model-specific wording guidance and published prompt limits. Existing size controls still apply.</small></span></label>
               <label data-check><input name="imagePromptBudgetOverride" type="checkbox"><span>Set a manual prompt budget<small>Combined positive + negative characters. Verified provider ceilings still apply.</small></span></label>
               <label data-field data-prompt-budget-field><span>Character budget</span><input name="imagePromptBudget" type="number" min="256" max="50000" step="1" inputmode="numeric"><small>256–50,000. A ceiling, not a minimum; useful detail matters more than filling it.</small></label>
@@ -1522,6 +1530,7 @@ export class VisualNovelSettingsPanel {
           return null;
         }
         return { dynamicImageTemplates: checked };
+      case "imagePromptEngineVersion": return { imagePromptEngineVersion: target.value === "1" ? 1 : 2 };
       case "automaticImagePromptSettings": return {automaticImagePromptSettings:checked};
       case "imagePromptBudgetOverride": return {imagePromptBudgetOverride:checked};
       case "imagePromptBudget": {
@@ -2067,6 +2076,7 @@ export class VisualNovelSettingsPanel {
   }
 
   private syncEveryday(config: VisualNovelConfig): void {
+    this.control<HTMLSelectElement>("imagePromptEngineVersion").value = String(config.imagePromptEngineVersion ?? 2);
     this.control<HTMLInputElement>("automaticImagePromptSettings").checked=config.automaticImagePromptSettings;
     this.control<HTMLInputElement>("imagePromptBudgetOverride").checked=config.imagePromptBudgetOverride;
     this.control<HTMLInputElement>("imagePromptBudget").value=String(config.imagePromptBudget);
