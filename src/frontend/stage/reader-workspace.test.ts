@@ -12,7 +12,7 @@ describe('reader-first same-instance workspace',()=>{
  afterEach(()=>{workspace.destroy();restore();});
  test('navigation labels separate reading destinations from the protected exit',()=>{
   expect(shell.querySelector('[data-vn-navigation]')?.getAttribute('aria-label')).toBe('Reader navigation');
-  expect(shell.querySelectorAll('[data-reader-destination]').map(n=>n.getAttribute('aria-label'))).toEqual(['Read','Story','Artwork','History','Settings','More']);
+  expect(shell.querySelectorAll('[data-reader-destination]').map(n=>n.getAttribute('aria-label'))).toEqual(['Read','Story','Cast','Artwork','History','Settings','More']);
   expect(shell.querySelector('[data-workspace-close]')?.getAttribute('aria-label')).toBe('Close workspace and return to reader');
  });
  test('moves the original tool and restores its exact home, siblings and local draft',()=>{

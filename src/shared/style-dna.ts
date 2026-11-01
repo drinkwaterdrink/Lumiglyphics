@@ -185,6 +185,7 @@ export function resolveStyleDNA(
   // 3. User custom preset or custom prefix: preserve as legacy-literal
   if (normalizedPrefix.length > 0 || (config.promptSuffix && config.promptSuffix.trim().length > 0)) {
     const legacyDNA: StyleDNA = {
+      ...(normalizedPrefix.length > 0 ? { medium: normalizedPrefix } : {}),
       preserve: ['scene-defined lighting', 'custom literal prefix/suffix wording']
     };
     return {

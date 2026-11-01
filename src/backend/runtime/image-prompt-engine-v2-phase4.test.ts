@@ -41,16 +41,16 @@ describe('Phase 4: Cache Migration, Review UX, Iteration Actions & Finalization'
     activeCharacters: ['Marseline'],
     activeInteractions: [],
     turnCount: 1
-  };
+  } as any;
 
   const mockCue: VisualCue = {
     paragraphIndex: 0,
     character: 'Marseline',
-    subjectCategory: 'named-character',
-    shotHint: 'medium',
+    subjectCategory: 'female',
+    shotHint: { intent: 'dialogue' },
     imageTemplate: templateSnapshot(BUILTIN_IMAGE_TEMPLATES[0]!),
     imageTemplateReason: 'Narrative focus'
-  };
+  } as any;
 
   it('1. Cache identity migration: differentiates V1 and V2 keys without collision', () => {
     const v1Config: VisualNovelConfig = {
@@ -139,7 +139,7 @@ describe('Phase 4: Cache Migration, Review UX, Iteration Actions & Finalization'
       composition: 'medium; eye-level',
       lighting: 'soft morning sunlight',
       subjectMode: 'one',
-      framing: 'medium',
+      framing: 'portrait',
       referencePolicy: 'character',
       sources: ['library scene'],
       conflicts: []
@@ -177,7 +177,7 @@ describe('Phase 4: Cache Migration, Review UX, Iteration Actions & Finalization'
       composition: 'medium; eye-level',
       lighting: 'soft morning sunlight',
       subjectMode: 'one',
-      framing: 'medium',
+      framing: 'portrait',
       referencePolicy: 'character',
       sources: ['library scene'],
       conflicts: []
@@ -218,7 +218,7 @@ describe('Phase 4: Cache Migration, Review UX, Iteration Actions & Finalization'
       composition: 'medium; eye-level',
       lighting: 'soft morning sunlight',
       subjectMode: 'one',
-      framing: 'medium',
+      framing: 'portrait',
       referencePolicy: 'character',
       sources: ['library scene'],
       conflicts: []
@@ -284,7 +284,7 @@ describe('Phase 4: Cache Migration, Review UX, Iteration Actions & Finalization'
           composition: 'medium',
           lighting: 'morning light',
           subjectMode: 'one',
-          framing: 'medium',
+          framing: 'portrait',
           referencePolicy: 'character',
           sources: [],
           conflicts: []
@@ -300,7 +300,7 @@ describe('Phase 4: Cache Migration, Review UX, Iteration Actions & Finalization'
             composition: 'medium',
             lighting: 'morning light',
             subjectMode: 'one',
-            framing: 'medium',
+            framing: 'portrait',
             referencePolicy: 'character',
             sources: [],
             conflicts: []

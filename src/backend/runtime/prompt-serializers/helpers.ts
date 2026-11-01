@@ -31,7 +31,7 @@ export function parseSubjectsFromBrief(brief: VisualBrief, cue?: VisualCue): Sub
   const name = brief.subjectPreparation?.name || cue?.character || 'Subject';
   const appearance = brief.subjectPreparation?.identity || brief.subjects;
   const attire = brief.subjectPreparation?.attire ?? undefined;
-  const action = brief.action;
+  const action = [brief.action, brief.subjectPreparation?.direction].filter(Boolean).join(', ') || undefined;
 
   return [{
     name,

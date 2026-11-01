@@ -125,6 +125,13 @@ export class FakeNode {
   getAttribute(name: string): string | null { return this.attributes.get(name) ?? null; }
   hasAttribute(name: string): boolean { return this.attributes.has(name); }
   removeAttribute(name: string): void { this.attributes.delete(name); }
+  toggleAttribute(name: string, force?: boolean): boolean {
+    const has = this.attributes.has(name);
+    const set = force !== undefined ? force : !has;
+    if (set) this.attributes.set(name, "");
+    else this.attributes.delete(name);
+    return set;
+  }
 
   append(...nodes: Array<FakeNode | string>): void {
     for (const n of nodes) this.appendChild(typeof n === "string" ? new FakeNode("#text", n) : n);
@@ -132,6 +139,18 @@ export class FakeNode {
   appendChild(node: FakeNode): FakeNode { node.remove(); node.parentNode = this; this.children.push(node); return node; }
   prepend(...nodes: FakeNode[]): void {
     for (const node of [...nodes].reverse()) { node.remove(); node.parentNode = this; this.children.unshift(node); }
+  }
+  after(...nodes: Array<FakeNode | string>): void {
+    if (!this.parentNode) return;
+    const idx = this.parentNode.children.indexOf(this);
+    if (idx === -1) return;
+    let currentIdx = idx + 1;
+    for (const n of nodes) {
+      const node = typeof n === "string" ? new FakeNode("#text", n) : n;
+      node.remove();
+      node.parentNode = this.parentNode;
+      this.parentNode.children.splice(currentIdx++, 0, node);
+    }
   }
   remove(): void {
     if (!this.parentNode) return;
@@ -164,6 +183,8 @@ export class FakeNode {
     event.target ??= this;
     let node: FakeNode | null = this;
     while (node && !event.propagationStopped) {
+      const onevent = (node as unknown as Record<string, unknown>)["on" + event.type];
+      if (typeof onevent === "function") (onevent as Listener).call(node, event);
       for (const l of node.listeners.get(event.type) ?? []) l(event);
       node = node.parentNode;
     }

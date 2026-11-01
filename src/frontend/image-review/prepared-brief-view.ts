@@ -19,6 +19,7 @@ export const PREPARED_BRIEF_CSS=`
 /** Read-only projection. Navigation never submits or changes a draft. */
 export class PreparedBriefView{
  readonly element=document.createElement('details');
+ private briefSummary=document.createElement('summary');
  private note=document.createElement('p');private rows=document.createElement('dl');private output=document.createElement('p');private compatibility=document.createElement('div');
  private rowsKey='';private compatibilityKey='';
  private castContent=document.createElement('div');private castKey='';
@@ -26,7 +27,7 @@ export class PreparedBriefView{
  private engineDetails=document.createElement('details');private engineContent=document.createElement('div');private engineKey='';
  constructor(private navigate:(destination:BriefDestination)=>void){
   this.element.dataset.preparedBrief='';
-  const summary=document.createElement('summary');summary.textContent='Prepared picture brief';
+  this.briefSummary.textContent='Prepared picture brief';
   this.note.dataset.briefNote='';this.note.setAttribute('role','status');this.rows.dataset.briefRows='';this.output.dataset.briefOutput='';
   const links=document.createElement('div');links.className='row';links.dataset.briefLinks='';
   for(const [destination,label] of [['prompt','Edit wording'],['subject','Correct subject'],['template','Template'],['output','Output settings']] as const){const button=document.createElement('button');button.type='button';button.textContent=label;button.dataset.briefLink=destination;button.onclick=()=>this.navigate(destination);links.append(button);}
@@ -38,7 +39,7 @@ export class PreparedBriefView{
   const capabilities=document.createElement('details');const title=document.createElement('summary');title.textContent='Why these model settings?';capabilities.append(title,this.compatibility);
   const cast=document.createElement('details'),castTitle=document.createElement('summary');cast.dataset.castPreparation='';castTitle.textContent='Appearance & prompt sources';cast.append(castTitle,this.castContent);
   const style=document.createElement('details'),styleTitle=document.createElement('summary');style.dataset.stylePreparation='';styleTitle.textContent='Shared style at preparation';style.append(styleTitle,this.styleContent);
-  this.element.append(summary,this.note,this.rows,this.engineDetails,cast,style,this.output,links,capabilities);
+  this.element.append(this.briefSummary,this.note,this.rows,this.engineDetails,cast,style,this.output,links,capabilities);
  }
  render(record:ImageRequestRecord|undefined,draft:BriefDraft,available:Record<BriefDestination,boolean>){
   this.element.hidden=!record;if(!record)return;
@@ -65,6 +66,7 @@ export class PreparedBriefView{
 
   // Prompt Engine v2 Summary Card
   const summary=promptEngineSummary(record,draft);
+  this.briefSummary.textContent = summary ? `Prepared picture brief [Engine: ${summary.version===2?'V2':'V1'} · ${summary.dialect}]` : 'Prepared picture brief';
   const engineKey=JSON.stringify(summary);
   if(engineKey!==this.engineKey){
     this.engineKey=engineKey;

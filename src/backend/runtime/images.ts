@@ -9,6 +9,7 @@ import {assertCapabilityOutput} from '../../shared/model-output-capabilities.js'
 import {findCastArt,saveCastArt,castArtToken,type CastArtIdentity} from './cast-art.js';
 import {findLocationArt,saveLocationArt,locationArtToken,type LocationArtIdentity} from './location-art.js';
 import { globalOutputParameters, templateOutputParameters, modelOutputParameters, assertModelOutputParameters, providerOutputParameters } from "./template-output.js";
+import { sanitizeImagePayloadParameters } from "../../shared/image-payload-sanitizer.js";
 import { applyAttireOverride } from "./attire.js";
 export { applyAttireOverride, isClothingTag, cleanClothingFromPhrase } from "./attire.js";
 import type { SpindleAPI } from "lumiverse-spindle-types";
@@ -43,6 +44,7 @@ import { renderImageTemplate, templateSnapshot, type ImagePromptMetadata } from 
 import {adaptImagePrompt} from './prompt-adaptation.js';
 import {sharedStyleSnapshot} from '../../shared/shared-style-snapshot.js';
 import { buildVisualBrief, resolveTemplateIdentity } from "./visual-brief.js";
+import type { CharacterDNA, CharacterDNALibrary } from "../../shared/character-dna.js";
 import {
   appearanceMapKeyFor,
   characterAppearanceKey,
@@ -312,10 +314,16 @@ function withoutImageReferences(parameters: Record<string, unknown>): Record<str
   return { ...cleared, resolvedReferenceImages: [] };
 }
 
-export function compileTemplateCue(config: VisualNovelConfig, scene: SceneState, cue: VisualCue, appearances?: CharacterAppearanceMap) {
+export function compileTemplateCue(
+  config: VisualNovelConfig,
+  scene: SceneState,
+  cue: VisualCue,
+  appearances?: CharacterAppearanceMap,
+  characterDNALibrary?: CharacterDNALibrary | Record<string, CharacterDNA>
+) {
   if (!cue.imageTemplate) throw new Error("This cue has no image template snapshot.");
   if (cue.imageTemplate.subjectMode === "ensemble" && cue.ensembleOverflow) throw new Error("This scene exceeds the 16-person ensemble limit. Choose a smaller group or another picture template; no cast members were silently omitted from a generated image.");
-  const brief = buildVisualBrief(config, scene, cue, appearances);
+  const brief = buildVisualBrief(config, scene, cue, appearances, characterDNALibrary);
   const format = (value: string) => config.imagePromptFormat === "tags" ? value.replace(/;\s*|\n+/g, ", ") : value;
   const compiled = renderImageTemplate(cue.imageTemplate, { style: config.promptPrefix, scene: format(brief.scene), subjects: format(brief.subjects), action: format(brief.action), composition: format(brief.composition), lighting: brief.lighting, suffix: config.promptSuffix, negative: config.negativePrompt });
   if (!compiled.prompt.trim()) throw new Error("The image template produced an empty prompt.");
@@ -1353,7 +1361,7 @@ export async function generateAssets(
           frozen.parameters = modelOutputParameters(selected?.provider ?? provider, frozen.model, globalOutputParameters(config.imageOutputAspectRatio, selected?.provider ?? provider, frozen.model, frozen.parameters ?? {}));
           frozen.promptProfile=await loadImagePromptProfile(spindle,config,selected?.provider??provider,frozen.model);
           frozen=prepareCapabilityOutput(frozen,config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined,config.imageResolutionPreference);
-          if (config.imagePromptEngineVersion === 2) {
+          if (config.imagePromptEngineVersion === 2 && cue.imageTemplate) {
             const v1OriginalPrompt = frozen.prompt;
             const v1OriginalNegative = frozen.negativePrompt;
             const profileV2 = await loadImagePromptProfileV2(spindle, config, selected?.provider ?? provider, frozen.model, frozen.parameters);
@@ -1365,7 +1373,7 @@ export async function generateAssets(
               source: profileV2.capabilitySource,
               modelId: frozen.model
             });
-            const styleSnapshot = resolveStyleDNA(config, cue.imageTemplate?.id);
+            const styleSnapshot = resolveStyleDNA(config, config.selectedSharedStyleId);
             const shotSpec = resolveShotSpec({
               brief: initialMetadata?.brief ?? compileTemplateCue(config, scene, cue, characterAppearance).brief,
               outputPlan,
@@ -1379,7 +1387,7 @@ export async function generateAssets(
             frozen.outputPlan = outputPlan;
             frozen.shotSpec = shotSpec;
             frozen.styleSnapshot = styleSnapshot.styleDNA;
-            frozen.parameters = outputPlan.parameters;
+            frozen.parameters = { ...(frozen.parameters ?? {}), ...outputPlan.parameters };
             const isDirectedTemplate = cue.imageTemplate?.cameraPolicy !== 'fixed';
             if (isDirectedTemplate) {
               const referencePlan = resolveReferencePlan({
@@ -1475,23 +1483,29 @@ export async function generateAssets(
               wantsCapture = usesReference && Boolean(characterKey) && Boolean(identityFingerprint) && !nextPortrait;
               const nextNai = provider === "novelai" ? compileNovelAiRequest(config, scene, nextCue, characterAppearance) : null;
               const updated = applyImageEdits({...frozen,prompt:nextCompiled.prompt,negativePrompt:nextCompiled.negativePrompt}, {});
-              const effectiveModel = options?.model !== undefined ? (options.model.trim() || undefined) : (updated.model || config.imageModel || selected?.model);
+              const effectiveConnectionId = options?.connectionId !== undefined ? (options.connectionId.trim() || undefined) : selected?.id;
+              const effectiveSelected = effectiveConnectionId && typeof spindle.imageGen?.getConnection === 'function'
+                ? await spindle.imageGen.getConnection(effectiveConnectionId, userId)
+                : selected;
+              const effectiveProvider = effectiveSelected?.provider?.trim().toLowerCase() ?? selected?.provider ?? provider;
+              const effectiveModel = options?.model !== undefined ? (options.model.trim() || undefined) : (updated.model || config.imageModel || effectiveSelected?.model);
               const request: ImageGenerationRequest = {
                 ...updated,
+                ...(effectiveConnectionId ? { connection_id: effectiveConnectionId } : {}),
                 includeDataUrl: wantsCapture,
                 ...(effectiveModel ? { model: effectiveModel } : {}),
                 parameters: {
-                  ...withoutImageReferences({ ...templateOutputParameters(nextCue.imageTemplate, selected?.provider ?? provider, latestConfig.imageParameters, selected?.default_parameters ?? {}, effectiveModel), ...effectiveParameters }),
-                  ...(nextPortrait && provider ? referenceParametersFor(provider, nextPortrait, latestConfig) : {}),
+                  ...withoutImageReferences({ ...templateOutputParameters(nextCue.imageTemplate, effectiveProvider, latestConfig.imageParameters, effectiveSelected?.default_parameters ?? {}, effectiveModel), ...effectiveParameters }),
+                  ...(nextPortrait && effectiveProvider ? referenceParametersFor(effectiveProvider, nextPortrait, latestConfig) : {}),
                   ...(nextNai?.parameters ?? {})
                 }
               };
               if (!effectiveModel) delete request.model;
-              request.parameters = modelOutputParameters(selected?.provider ?? provider, request.model, globalOutputParameters(latestConfig.imageOutputAspectRatio, selected?.provider ?? provider, request.model, request.parameters ?? {}));
+              request.parameters = modelOutputParameters(effectiveProvider, request.model, globalOutputParameters(latestConfig.imageOutputAspectRatio, effectiveProvider, request.model, request.parameters ?? {}));
               const preparedRequest=prepareCapabilityOutput(request,latestConfig.imageOutputAspectRatio!=='default'?latestConfig.imageOutputAspectRatio:nextCue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined,latestConfig.imageResolutionPreference);
               const nextMetadata=metadataFor(nextCue)!;
               if (latestConfig.imagePromptEngineVersion === 2) {
-                const profileV2 = await loadImagePromptProfileV2(spindle, latestConfig, selected?.provider ?? provider, request.model, request.parameters);
+                const profileV2 = await loadImagePromptProfileV2(spindle, latestConfig, effectiveProvider, request.model, request.parameters);
                 const outputPlan = resolveImageOutputPlan({
                   capabilities: profileV2.outputCapabilities,
                   parameters: request.parameters ?? {},
@@ -1528,7 +1542,7 @@ export async function generateAssets(
                 preparedRequest.outputPlan = outputPlan;
                 preparedRequest.shotSpec = shotSpec;
                 preparedRequest.styleSnapshot = styleSnapshot.styleDNA;
-                preparedRequest.parameters = outputPlan.parameters;
+                preparedRequest.parameters = { ...(preparedRequest.parameters ?? {}), ...outputPlan.parameters };
                 const isNextDirected = nextCue.imageTemplate?.cameraPolicy !== 'fixed';
                 if (isNextDirected) {
                   const referencePlan = resolveReferencePlan({
@@ -1599,7 +1613,9 @@ export async function generateAssets(
           assertModelOutputParameters(selected?.provider ?? provider, approved.model, approved.parameters ?? {});
           if(approved.promptProfile?.output)assertCapabilityOutput(approved.promptProfile.output,approved.parameters??{});
           const {promptProfile:_promptProfile,...providerRequest}=approved;
-          const result = await spindle.imageGen.generate({ ...providerRequest, parameters: providerOutputParameters(approved.parameters ?? {}) });
+          const rawParams = providerOutputParameters(approved.parameters ?? {});
+          const safeParams = sanitizeImagePayloadParameters(rawParams, selected?.provider ?? provider, approved.model);
+          const result = await spindle.imageGen.generate({ ...providerRequest, parameters: safeParams });
           observedGenerationMs.push(Date.now() - generationStarted);
 
           if (signal.aborted) throw abortError(signal);

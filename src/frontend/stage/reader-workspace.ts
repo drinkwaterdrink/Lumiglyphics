@@ -1,7 +1,7 @@
 import { SETTINGS_PAGES } from '../settings/routes.js';
 import { APERTURE_ICONS } from '../theme/aperture-theme.js';
 
-export type ReaderDestination = 'story' | 'artwork' | 'history' | 'settings';
+export type ReaderDestination = 'story' | 'character' | 'artwork' | 'history' | 'settings';
 export interface WorkspaceSurface {
   element: HTMLElement;
   /** Hide legacy launchers at home; native host Settings remains available. */
@@ -13,6 +13,7 @@ export interface WorkspaceSurface {
 }
 const destinations: ReadonlyArray<{ id: ReaderDestination; label: string; icon: string; hint: string }> = [
   { id: 'story', label: 'Story', icon: 'world', hint: 'People, places & revealed documents' },
+  { id: 'character', label: 'Cast', icon: 'cast', hint: 'Character Folio & appearance DNA' },
   { id: 'artwork', label: 'Artwork', icon: 'art', hint: 'Review, replace & inspect pictures' },
   { id: 'history', label: 'History', icon: 'history', hint: 'Earlier passages & saved pictures' },
   { id: 'settings', label: 'Settings', icon: 'settings', hint: 'Every preference, in one place' },
@@ -20,6 +21,7 @@ const destinations: ReadonlyArray<{ id: ReaderDestination; label: string; icon: 
 const paths: Record<string, string> = {
   read: '<path d="M12 5c-3-2-7-2-10-1v15c3-1 7-1 10 1 3-2 7-2 10-1V4c-3-1-7-1-10 1Zm0 0v15"/>',
   world: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z"/>',
+  cast: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
   art: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 7"/>',
   history: '<path d="M3 10a9 9 0 1 1 2 8M3 4v6h6M12 7v5l3 2"/>',
   settings: '<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/>',
@@ -82,6 +84,7 @@ export class ReaderWorkspace {
         <small data-reader-caption-small data-reader-caption>Visual novel</small>
       </div>
       <div data-reader-header-actions class="topbar-actions" style="display:flex;align-items:center;gap:6px;margin-left:auto">
+        <button type="button" class="round-ghost" data-action="gallery-toggle" title="Story CG Gallery" aria-label="Open CG Gallery">${APERTURE_ICONS.grid}</button>
         <button type="button" class="round-ghost" data-action="cast-toggle" title="Cast portraits" aria-label="Show cast portraits">${APERTURE_ICONS.cast}</button>
         <button type="button" class="round-ghost" data-action="panels-toggle" title="Panels" aria-label="Open Panels">${APERTURE_ICONS.panel}</button>
         <button type="button" class="round-ghost" data-action="voice-toggle" title="Voice controls" aria-label="Voice controls">${APERTURE_ICONS.speaker}</button>
@@ -175,6 +178,9 @@ export class ReaderWorkspace {
     this.panel.addEventListener('wheel', event => event.stopPropagation(), {signal, passive: true});
 
     // Topbar Actions
+    q('[data-action="gallery-toggle"]')?.addEventListener('click', () => {
+      this.shell.dispatchEvent(new CustomEvent("lumiglyphics:gallery-toggle", { bubbles: true }));
+    }, {signal});
     q('[data-action="cast-toggle"]')?.addEventListener('click', () => {
       this.shell.dispatchEvent(new CustomEvent("lumiglyphics:cast-toggle", { bubbles: true }));
     }, {signal});
@@ -242,8 +248,12 @@ export class ReaderWorkspace {
       const route = link.dataset.apertureRoute;
       this.toggleAperture(false);
       if (route === 'read') this.close();
-      else if (route === 'world' || route === 'character') this.open('story');
-      else if (route === 'studio' || route === 'library') this.open('artwork');
+      else if (route === 'world') this.open('story');
+      else if (route === 'character') this.open('character');
+      else if (route === 'studio') this.open('artwork');
+      else if (route === 'library') {
+        this.shell.dispatchEvent(new CustomEvent("lumiglyphics:gallery-toggle", { bubbles: true }));
+      }
       else if (route === 'history') this.open('history');
       else if (route === 'settings') this.open('settings');
       else if (route === 'workspace') this.openMore(link);

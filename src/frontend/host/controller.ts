@@ -17,7 +17,8 @@ import type { AmbientEffect, StageEffect } from "../store/index.js";
 import { VisualNovelSettingsPanel } from "../settings/panel.js";
 import { ImageStudio } from "../image-review/studio.js";
 import { ExternalImageReview } from "../image-review/external-review.js";
-import {ImageLibrary} from '../image-library/library.js';
+import { ImageLibrary } from '../image-library/library.js';
+import { CharacterFolio } from '../stage/character-folio.js';
 import type { VnChoice, VnTurnInput } from "../store/index.js";
 import { createVnHeaderLauncher } from "./manual-launcher.js";
 import { captureSimTrackerCards } from "./panel-capture.js";
@@ -717,6 +718,39 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   stage.workspace.register('history',{element:imageLibrary.getElement(),hideAtHome:true,enter:()=>{imageLibrary.setCurrentScenePassages(stage.getBacklogEntries(),(idx)=>stage.jumpToParagraph(idx));if(!imageLibrary.isOpen())imageLibrary.openWorkspace();},leave:()=>imageLibrary.close(),back:()=>imageLibrary.backWithinWorkspace()});
   imageLibrary.setDocked();
   imageStudio.setLibraryOpener(()=>imageLibrary.open('images'));
+  const characterFolio = new CharacterFolio({
+    onSaveDNA: (dna) => {
+      ctx.sendToBackend({
+        type: 'vn_character_dna',
+        action: 'save',
+        chatId: chatId() ?? '',
+        requestId: createUiId(),
+        dna
+      });
+    },
+    onHarvestDNA: (characterName) => {
+      ctx.sendToBackend({
+        type: 'vn_character_dna',
+        action: 'harvest',
+        chatId: chatId() ?? '',
+        requestId: createUiId(),
+        characterName
+      });
+    },
+    onAutoFillDNA: (characterName) => {
+      ctx.sendToBackend({
+        type: 'vn_character_dna',
+        action: 'autofill',
+        chatId: chatId() ?? '',
+        requestId: createUiId(),
+        characterName
+      });
+    },
+    onClose: () => {
+      stage.workspace.close();
+    }
+  });
+  stage.workspace.register('character', characterFolio);
   const panelRequests = new Map<string, { resolve: (template: string) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   panels.onResolveTemplate = (template) => new Promise((resolve, reject) => {
     const requestId = createUiId();
@@ -873,6 +907,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     // Listing is free (no model call). Keep the previous options visible while loading.
     settingsPanel?.setConnectionCatalog("planner", { status: "loading", options: connectionOptions.planner });
     settingsPanel?.setConnectionCatalog("image", { status: "loading", options: connectionOptions.image });
+    imageStudio.setConnectionCatalog({ status: "loading", options: connectionOptions.image });
     ctx.sendToBackend({ type: "vn_get_connection_catalog" });
   }
 
@@ -1160,11 +1195,19 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       connectionOptions.image = states.image.options;
       settingsPanel?.setConnectionCatalog("planner", states.planner);
       settingsPanel?.setConnectionCatalog("image", states.image);
+      imageStudio.setConnectionCatalog(states.image);
       return;
     }
     if(type==='vn_presentation_rules'&&message.type==='vn_presentation_rules'){settingsPanel?.setPresentationRules(message.chatId,message.requestId,message.catalog);imageStudio.setPresentationRules(message.chatId,message.requestId,message.catalog);return;}
     if(type==='vn_error'&&message.type==='vn_error'&&message.operation==='vn_presentation_rules'){settingsPanel?.presentationRulesError(message.error,message.requestId);imageStudio.presentationRulesError(message.error,message.requestId);return;}
     if(type==='vn_cast_context'&&message.type==='vn_cast_context'){settingsPanel?.setCastContext(message.chatId,message.requestId,message.scan);return;}
+    if(type==='vn_character_dna'&&message.type==='vn_character_dna'){
+      characterFolio.setLibrary(message.library);
+      if(message.activeDna){
+        characterFolio.setActiveCharacter(message.activeDna.name);
+      }
+      return;
+    }
     if(type==='vn_cast_art'&&message.type==='vn_cast_art'){const accepted=settingsPanel?.setCastArt(message.chatId,message.requestId,message.library);if(accepted&&active&&turn&&message.chatId===chatId())ctx.sendToBackend({type:'vn_get_state',chatId:message.chatId,viewOpen:true,prepare:false});return;}
     if(type==='vn_cast_gallery'&&message.type==='vn_cast_gallery'){settingsPanel?.setCastGallery(message.chatId,message.requestId,message.gallery);return;}
     if(type==='vn_error'&&message.type==='vn_error'&&message.operation==='vn_cast_gallery'){if(message.chatId===chatId())settingsPanel?.castArtError(message.error,message.requestId);return;}
@@ -1367,6 +1410,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       if (message.operation === "vn_get_connection_catalog") {
         settingsPanel?.setConnectionCatalog("planner", { status: "error", options: [], error: message.error });
         settingsPanel?.setConnectionCatalog("image", { status: "error", options: [], error: message.error });
+        imageStudio.setConnectionCatalog({ status: "error", options: [], error: message.error });
         return;
       }
       if (!message.chatId || message.chatId === chatId()) {

@@ -3,6 +3,7 @@ import {PresentationRuleRequestSchema,type PresentationRuleRequest,type Presenta
 import {CastGalleryRequestSchema,type CastGallery,CastArtRequestSchema,type CastArtLibrary,type CastContextScan} from './shared/cast-art.js';
 import {ImageLibraryRequestSchema,type ImageLibraryPage} from './shared/image-library.js';
 import {LocationArtRequestSchema,type LocationArtLibrary} from './shared/stage-assets.js';
+import type { CharacterDNA, CharacterDNALibrary } from './shared/character-dna.js';
 import type { ContextSourceReport } from './shared/context-sources.js';
 import type { ReaderPresentation } from "./shared/presentation-entities.js";
 import { z } from "zod";
@@ -51,6 +52,7 @@ export type FrontendRequest =
       styleId?: string | undefined;
       fitToModel?: boolean | undefined;
       model?: string | undefined;
+      connectionId?: string | undefined;
       manualCamera?: {
         shotSize?: string | undefined;
         angle?: string | undefined;
@@ -110,6 +112,15 @@ export type FrontendRequest =
       requestId: string;
       dataUrl?: string;
       error?: string;
+    }
+  | {
+      type: "vn_character_dna";
+      action: "list" | "harvest" | "save" | "autofill";
+      chatId: string;
+      requestId: string;
+      characterName?: string;
+      dna?: CharacterDNA;
+      contextText?: string;
     };
 
 /** Upper bound for a relayed reference image (decoded bytes, checked on both sides). */
@@ -244,6 +255,7 @@ export type BackendResponse =
       imageId: string;
       characterKey: string;
     }
+  | { type: "vn_character_dna"; chatId: string; requestId: string; library: CharacterDNALibrary; activeDna?: CharacterDNA; error?: string }
   | { type: "vn_error"; chatId?: string; requestId?:string; operation: string; error: string };
 
 export function isFrontendRequest(value: unknown): value is FrontendRequest {

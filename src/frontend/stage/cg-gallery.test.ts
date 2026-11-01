@@ -1,0 +1,63 @@
+import { describe, expect, it } from 'bun:test';
+import { CgGalleryModal } from './cg-gallery.js';
+import { installFakeDocument, FakeNode } from './stage-test-dom.js';
+import type { TurnView } from '../../protocol.js';
+
+describe('Story Event CG Gallery & Lightbox (Phase 5)', () => {
+  it('mounts gallery modal, syncs turn assets, and supports lightbox', () => {
+    const restore = installFakeDocument();
+    try {
+      const mount = new FakeNode('div');
+      const gallery = new CgGalleryModal(mount as unknown as HTMLElement);
+
+      const mockTurn: TurnView = {
+        chatId: 'test-chat',
+        messageId: 'msg-1',
+        speaker: 'Narrator',
+        choices: [],
+        sourceFingerprint: 'fp-1',
+        swipeId: 0,
+        revision: 1,
+        status: 'ready',
+        paragraphs: ['Nadine stands in the rain.'],
+        assets: [
+          {
+            jobId: 'job-1',
+            cueId: 'cue-1',
+            paragraphIndex: 0,
+            status: 'generated',
+            imageUrl: '/image/nadine-rain.png',
+            stageAsset: {
+              sceneId: 'scene-1',
+              role: 'background',
+              character: 'Nadine'
+            }
+          }
+        ]
+      };
+
+      gallery.syncFromTurn(mockTurn);
+      gallery.open();
+
+      const counter = mount.querySelector('[data-cg-counter]');
+      expect(counter?.textContent).toContain('1 Unlocked');
+
+      const cards = mount.querySelectorAll('.cg-card');
+      expect(cards.length).toBe(1);
+
+      // Click card to open lightbox
+      cards[0]?.click();
+
+      const lightbox = mount.querySelector('[data-cg-lightbox]');
+      expect(lightbox?.hidden).toBe(false);
+      const quote = mount.querySelector('[data-cg-lightbox-quote]');
+      expect(quote?.textContent).toContain('Nadine stands in the rain');
+
+      gallery.close();
+      const backdrop = mount.querySelector('.cg-gallery-backdrop');
+      expect(backdrop?.hidden).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+});

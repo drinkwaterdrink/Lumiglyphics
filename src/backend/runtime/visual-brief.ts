@@ -9,25 +9,58 @@ import { resolveImageTemplate, type ImageTemplate } from "../../shared/image-tem
 import type { VisualBrief } from "../../shared/image-templates.js";
 export type { VisualBrief } from "../../shared/image-templates.js";
 import { POSE_EXPRESSION_CATALOGUE, poseById } from "../../shared/character.js";
+import { formatCharacterDNAToPromptClause, type CharacterDNA, type CharacterDNALibrary } from "../../shared/character-dna.js";
 
 const text = (values: (string | null | undefined)[], max = 4000) => [...new Set(values.map(value => value?.trim()).filter(Boolean))].join("; ").slice(0, max);
 
-export function resolveTemplateIdentity(scene: SceneState, cue: VisualCue, appearances?: CharacterAppearanceMap) {
+export function resolveTemplateIdentity(
+  scene: SceneState,
+  cue: VisualCue,
+  appearances?: CharacterAppearanceMap,
+  characterDNALibrary?: CharacterDNALibrary | Record<string, CharacterDNA>
+) {
   const name = normalizeCharacterName(cue.character || scene.character || scene.cast[0] || "");
   const sameCharacter = characterAppearanceKey(name) === characterAppearanceKey(scene.character || scene.cast[0] || "");
-  const saved = Object.entries(appearances ?? {}).find(([key]) => characterAppearanceKey(key) === characterAppearanceKey(name))?.[1]?.trim();
+
+  let lockedDNA: CharacterDNA | undefined;
+  if (characterDNALibrary) {
+    const chars = ('characters' in characterDNALibrary ? characterDNALibrary.characters : characterDNALibrary) as Record<string, CharacterDNA>;
+    const key = name.trim().toLowerCase();
+    lockedDNA = chars[key] ?? Object.values(chars).find((r: CharacterDNA) => r.aliases.some((a: string) => a.trim().toLowerCase() === key));
+  }
+
+  const dnaAppearance = lockedDNA ? formatCharacterDNAToPromptClause(lockedDNA) : undefined;
+  const saved = (lockedDNA?.locked && dnaAppearance)
+    || Object.entries(appearances ?? {}).find(([key]) => characterAppearanceKey(key) === characterAppearanceKey(name))?.[1]?.trim()
+    || dnaAppearance;
   const resolved = cue.resolvedIdentity?.trim() || (sameCharacter ? scene.identityPrompt?.trim() : "") || "";
-  return { name, sameCharacter, saved, resolved, identity: cue.visualSources?.includes("manual subject correction") ? resolved : saved || resolved };
+  return {
+    name,
+    sameCharacter,
+    saved,
+    resolved,
+    identity: cue.visualSources?.includes("manual subject correction") ? resolved : saved || resolved,
+    lockedDNA
+  };
 }
 
-export function buildVisualBrief(config: VisualNovelConfig, scene: SceneState, cue: VisualCue, appearances?: CharacterAppearanceMap): VisualBrief {
+export function buildVisualBrief(
+  config: VisualNovelConfig,
+  scene: SceneState,
+  cue: VisualCue,
+  appearances?: CharacterAppearanceMap,
+  characterDNALibrary?: CharacterDNALibrary | Record<string, CharacterDNA>
+): VisualBrief {
   const template = cue.imageTemplate ?? resolveImageTemplate(config).template;
   const noPeople = template.subjectMode === "none";
   const ensemble = template.subjectMode === "ensemble";
-  const { name, sameCharacter, saved, resolved, identity } = resolveTemplateIdentity(scene, cue, appearances);
-  const attire = cue.resolvedAttire !== undefined ? cue.resolvedAttire : cue.attire ?? (sameCharacter ? scene.attire : null);
+  const { name, sameCharacter, saved, resolved, identity, lockedDNA } = resolveTemplateIdentity(scene, cue, appearances, characterDNALibrary);
+  const dnaAttire = lockedDNA ? (lockedDNA.activeOutfit || lockedDNA.signatureOutfit || null) : null;
+  const attire = cue.resolvedAttire !== undefined ? cue.resolvedAttire : cue.attire ?? (sameCharacter ? scene.attire : null) ?? dnaAttire;
   const manual = cue.visualSources?.includes("manual subject correction");
-  const conflicts = !noPeople && !ensemble && saved && resolved && saved !== resolved ? [manual ? "Manual appearance replaces saved appearance for this picture." : "Saved appearance differs from scene evidence; the saved appearance is used."] : [];
+  const conflicts = !noPeople && !ensemble && saved && resolved && saved !== resolved
+    ? [manual ? "Manual appearance replaces saved appearance for this picture." : lockedDNA?.locked ? "Locked Character DNA takes precedence over story text drift." : "Saved appearance differs from scene evidence; the saved appearance is used."]
+    : [];
   const appearance = attire ? applyAttireOverride(identity, attire) : identity;
   const subject = cue.subjectCategory ?? scene.subjectCategory;
   const subjectLabel = subject === "female" ? "One visible woman" : subject === "male" ? "One visible man" : "One visible character";
@@ -48,9 +81,9 @@ export function buildVisualBrief(config: VisualNovelConfig, scene: SceneState, c
   return {
     ...(!noPeople?{subjectPreparation:{
       name:ensemble?'Named ensemble':name.slice(0,256),identity:ensemble?'':identity.slice(0,4000),
-      identitySource:ensemble?'ensemble snapshot' as const:!identity?'unavailable' as const:manual?'manual correction' as const:saved?'saved appearance' as const:'resolved context' as const,
+      identitySource:ensemble?'ensemble snapshot' as const:!identity?'unavailable' as const:manual?'manual correction' as const:lockedDNA?.locked?'locked DNA' as any:saved?'saved appearance' as const:'resolved context' as const,
       attire:ensemble?null:attire?.slice(0,2000)??null,
-      attireSource:ensemble?'not supplied' as const:cue.resolvedAttire!==undefined||cue.attire!=null?'picture cue' as const:sameCharacter&&scene.attire!==undefined&&scene.attire!==null?'scene' as const:'not supplied' as const,
+      attireSource:ensemble?'not supplied' as const:cue.resolvedAttire!==undefined||cue.attire!=null?'picture cue' as const:sameCharacter&&scene.attire!==undefined&&scene.attire!==null?'scene' as const:dnaAttire?'locked DNA' as any:'not supplied' as const,
       direction:pose.slice(0,1000),shortened:!ensemble&&(identity.length>4000||(attire?.length??0)>2000||pose.length>1000),
       subjectsInPositive:template.positive.includes('{{subjects}}'),subjectsInNegative:template.negative.includes('{{subjects}}'),
     }}:{}),
@@ -62,7 +95,7 @@ export function buildVisualBrief(config: VisualNovelConfig, scene: SceneState, c
     subjectMode: template.subjectMode,
     framing: template.framing,
     referencePolicy: noPeople || ensemble ? "none" : template.referencePolicy,
-    sources: [...(cue.visualSources ?? []), "scene context", ...(ensemble ? ["named cast and persona appearance snapshot"] : !noPeople && saved && !manual ? ["saved appearance"] : [])].slice(0, 24),
+    sources: [...(cue.visualSources ?? []), "scene context", ...(lockedDNA?.locked ? ["character DNA matrix"] : []), ...(ensemble ? ["named cast and persona appearance snapshot"] : !noPeople && saved && !manual ? ["saved appearance"] : [])].slice(0, 24),
     conflicts: [...conflicts, ...(ensemble && members.some(member => member.appearance.length > descriptionBudget) ? ["Ensemble appearance descriptions are condensed to share the prompt budget; all listed names are retained."] : []), ...sharedStyleWarnings(template, config.promptPrefix, config.promptSuffix, config.negativePrompt)].slice(0, 16)
   };
 }

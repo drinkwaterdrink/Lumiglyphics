@@ -45,11 +45,12 @@ export function chooseModelOutput(capabilities:ModelOutputCapabilities,parameter
  const current=typeof parameters.size==='string'?parameters.size:'';
  let size:string|undefined;
  const pref=resolutionPreference??'standard';
- const targetArea=pref==='ultra'?4096*4096:pref==='high'?2048*2048:1024*1024;
- const requestedArea=area(current)??targetArea;
+ const isKleinSquare=sizes.includes('768x768')&&sizes.includes('1024x1024')&&sizes.includes('4096x4096');
+ const targetArea=isKleinSquare?(pref==='standard'?1024*1024:1536*1536):(pref==='ultra'?4096*4096:pref==='high'?2048*2048:1024*1024);
+ const requestedArea=(pref==='standard'&&current?area(current):undefined)??targetArea;
  // Prefer framing, then the nearest existing pixel area. Tier-only routes keep a valid tier.
- if(requested&&!capabilities.ratios)size=closest(sizes,requested.value,targetArea);
- size??=sizes.includes(current)?current:undefined;
+ if(requested&&!capabilities.ratios)size=closest(sizes,requested.value,requestedArea);
+ if(pref==='standard')size??=sizes.includes(current)?current:undefined;
  if(pref==='ultra'){
   size??=sizes.find(value=>value.toLowerCase()==='4k')??sizes.find(value=>value.toLowerCase()==='2k')??sizes.find(value=>/^\d+(?:\.\d+)?k$/i.test(value));
  }else if(pref==='high'){
@@ -57,7 +58,7 @@ export function chooseModelOutput(capabilities:ModelOutputCapabilities,parameter
  }else{
   size??=sizes.find(value=>value.toLowerCase()==='1k')??sizes.find(value=>/^\d+(?:\.\d+)?k$/i.test(value));
  }
- size??=closest(sizes,requested?.value??1,targetArea)??sizes[0]!;
+ size??=closest(sizes,requested?.value??1,requestedArea)??sizes[0]!;
  result.size=size;
  delete result.width;delete result.height;delete result.resolution;
  let actual=ratio(size);

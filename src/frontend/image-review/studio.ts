@@ -14,7 +14,7 @@ import { IMAGE_PROMPT_MAX_CHARS, assertPromptLengths, fitPromptToBudget } from '
 import type { VisualNovelConfig } from "../../config.js";
 import type { ImageTemplate } from "../../shared/image-templates.js";
 import { BUILTIN_SHARED_STYLES } from "../../shared/image-styles.js";
-import type { FrontendRequest, TurnView } from "../../protocol.js";
+import type { ConnectionCatalogOption, FrontendRequest, TurnView } from "../../protocol.js";
 import type { ImageRequestRecord,ImageRequestEdits } from "../../shared/image-review.js";
 import {isMobileWidth,trapFocusWithin} from './focus-trap.js';
 
@@ -33,6 +33,10 @@ const CSS = `
 const INSPECTOR_CSS=`
 :host{--paper:var(--vn-shell-panel,#171822)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])){--paper:#f8faf6;color:#172721;--vn-shell-text:#172721;--vn-shell-muted:#4b6b5d;--vn-shell-field:#ffffff;--vn-shell-button:#e5eee2;--accent:#1e5a40;--edge:rgba(86,128,107,.35)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) section{color:#172721!important;background:#f8faf6!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) details{background:#ffffff!important;border-color:rgba(86,128,107,.3)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-context]{background:#eef5ee!important;border-color:rgba(86,128,107,.3)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-scene]{color:#142820!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) textarea{background:#ffffff!important;color:#142820!important;border-color:rgba(86,128,107,.35)!important}section{width:min(510px,calc(100% - 24px));color:var(--vn-shell-text,#eee);backdrop-filter:blur(16px)}section small,section p{color:var(--vn-shell-muted,#bbc)}[data-studio-body]{padding-top:14px}details{border:1px solid color-mix(in srgb,var(--edge) 65%,transparent);border-radius:10px;background:rgba(255,255,255,.025);padding:0 12px;margin:8px 0}details[open]{padding-bottom:12px;background:rgba(255,255,255,.04);border-color:color-mix(in srgb,var(--accent) 42%,var(--edge))}summary{font-weight:600}[data-context]{display:flex;gap:12px;align-items:flex-start;margin:10px 0;padding:12px;border-radius:12px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 12%,rgba(255,255,255,.03)),rgba(0,0,0,.24));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--edge))}[data-context-text]{min-width:0;flex:1}[data-status]{font-size:16px;display:block}[data-paragraph]{display:inline-block;margin-top:4px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.07);font-size:11px;font-weight:600}[data-scene]{margin:6px 0 0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;font-size:13px}[data-thumbnail]{width:74px;height:92px;flex:none;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--edge));border-radius:10px;background:var(--vn-shell-field,#101119);display:grid;place-items:center;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.35)}[data-thumbnail] img{width:100%;height:100%;object-fit:cover}[data-placeholder]{font-size:30px;color:var(--accent)}[data-state-detail]{margin:8px 0;font-size:13px}[data-meta]{font-size:12px;margin:6px 0;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.05);display:inline-block}[data-prompt-editor]{margin:14px 0;padding:12px;border-radius:12px;background:rgba(255,255,255,.025);border:1px solid color-mix(in srgb,var(--edge) 70%,transparent)}[data-edit-help]{font-size:12px;margin:0 0 8px}label{font-weight:500;margin:10px 0}label small{float:right;font-weight:400;font-size:11px}textarea{margin-top:6px;font:16px/1.5 var(--vn-shell-family,system-ui);border-radius:8px}[data-positive]{min-height:135px;resize:vertical}[data-negative]{min-height:68px;resize:vertical}[data-budget-meter]{height:6px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin:8px 0 4px}[data-budget-fill]{height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width .2s ease,background-color .2s ease}[data-budget-fill][data-tone="warn"]{background:#f5c462}[data-budget-fill][data-tone="over"]{background:var(--vn-shell-danger,#ffb4ab)}[data-combined-count]{display:block;font-variant-numeric:tabular-nums;text-align:right;font-size:12px}[data-validation]{display:block;color:var(--vn-shell-danger,#ffb4ab);margin:6px 0}[aria-invalid="true"]{border-color:var(--vn-shell-danger,#ffb4ab)}[data-picture-strip]{display:flex;gap:8px;margin-bottom:8px}[data-picture-strip] button{flex:1;min-width:0;padding:6px 8px;font-size:12px;display:flex;align-items:center;gap:6px;border-radius:10px}[data-picture-strip] img{width:30px;height:34px;object-fit:cover;border-radius:5px}[data-picture-strip] [aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,var(--vn-shell-button,#252632));box-shadow:inset 0 0 0 1px var(--accent)}[data-picture-navigation] label{margin:0}[data-retry-queue]{margin:8px 0;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid color-mix(in srgb,var(--edge) 55%,transparent)}[data-retry-queue] [data-queue-status]{display:block;margin-top:6px;font-size:12px}[data-studio-footer] .row{display:block}[data-studio-footer] button{width:100%;border-color:var(--accent);font-weight:650}[data-action-help]{display:block;font-size:12px;text-align:center;margin-top:6px}[data-notice-row]{border-top:1px solid var(--edge);margin-top:10px}[data-notice]{font-size:12px}[data-rewrite-changed]{padding:10px;border:1px solid var(--accent);border-radius:8px;margin:8px 0;background:color-mix(in srgb,var(--accent) 8%,transparent)}[data-rewrite-changed] p{margin:0 0 8px}[data-previous-scene]{padding-left:20px;overflow-wrap:anywhere}[data-reply-settings] details{margin-left:4px}[data-secondary-actions]{margin-bottom:8px}[data-secondary-actions] button{font-size:13px}[data-subject-name]{width:100%}
 section[data-state="planning"],section[data-state="empty"],section[data-state="zero-budget"],section[data-state="idle"]{bottom:auto;max-height:calc(100% - 92px)}
+.studio-tab-bar{display:flex;gap:6px;overflow-x:auto;padding:4px 0 10px;margin-bottom:12px;border-bottom:1px solid var(--edge);scrollbar-width:none}.studio-tab-bar::-webkit-scrollbar{display:none}
+.studio-tab-btn{background:var(--vn-shell-field,rgba(255,255,255,.05));border:1px solid var(--edge);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;color:var(--vn-shell-muted,#aaa);cursor:pointer;white-space:nowrap;flex:none;min-height:34px;transition:all .15s ease}.studio-tab-btn:hover{background:rgba(255,255,255,.08);color:var(--vn-shell-text,#eee)}.studio-tab-btn[aria-selected="true"]{background:color-mix(in srgb,var(--accent) 22%,var(--vn-shell-button,#252632));border-color:var(--accent);color:var(--accent);font-weight:700}
+:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) .studio-tab-btn{background:#eef3e5;color:#4b6b5d;border-color:rgba(35,65,50,.18)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) .studio-tab-btn[aria-selected="true"]{background:#dcebad;color:#172721;border-color:#234b39}
+.studio-tab-panel{display:flex;flex-direction:column;gap:10px}.studio-tab-panel[hidden]{display:none!important}
 @container(max-width:600px){section{width:auto}[data-context]{gap:10px}[data-studio-body]{padding:12px}[data-thumbnail]{width:56px;height:72px}}
 `;
 
@@ -72,14 +76,23 @@ export class ImageStudio {
     this.host.dataset.imageStudio = "";
     this.host.hidden = true;
     this.root = this.host.attachShadow({ mode: "open" });
-    this.root.innerHTML = `<style>${CSS}</style><button type="button" data-launch aria-expanded="false">Image prompts</button><section hidden aria-label="Image prompts"><div class="row" data-studio-header><div><h2>Image prompts</h2><small data-build>${LUMIGLYPHICS_VERSION}</small></div><button type="button" data-close aria-label="Close image prompts" title="Close image prompts">×</button></div><div data-studio-body><label class="toggle"><input type="checkbox" data-review checked>Review before generating</label><small>Applies to the next image batch. Held pictures stay held. You can keep reading.</small><details data-card-role><summary>Card role for this chat</summary><label>Card role<select data-role aria-label="Card role"><option value="auto">Auto</option><option value="character">Character</option><option value="scenario">Scenario / world / narrator</option></select></label><button type="button" data-save-role>Save card role</button><small data-role-help>Applies to future replies. Existing pictures and held prompts stay unchanged. Auto uses available visual evidence.</small></details><details data-turn-recovery><summary>Reply recovery</summary><small>Retry unfinished pictures prepares only unfinished slots again and stops their current work. Completed pictures stay. New previews always need approval. Replan asks the story-reader model to reconsider the whole reply and may use text tokens.</small><button type="button" data-retry-unfinished>Prepare unfinished previews</button><button type="button" data-replan>Replan this reply</button></details><label>Picture<select data-picture aria-label="Picture"></select></label><label data-history hidden>Recorded request<select data-request aria-label="Recorded request"></select></label><div data-batch-recovery hidden><p data-batch-status role="status"></p><button type="button" data-stop-images>Stop pending pictures</button><small>Stops this reply’s waiting image work. Requests already sent may still finish at the provider. Completed pictures stay.</small></div><p data-scene></p><p data-meta></p><p data-model-help role="status" hidden></p><label>Picture template<select data-template aria-label="Picture template"></select></label><button type="button" data-use-template>Use template</button><div data-template-confirm hidden><p>Replacing rebuilds this prompt and parameters from the selected template. Your current edits will be replaced.</p><div class="row"><button type="button" data-keep>Keep edits</button><button type="button" data-replace>Replace with template</button></div></div><details data-recovery hidden><summary>Correct this picture’s subject</summary><small>Prepare a new preview for this picture only. No image is generated until you approve it.</small><label>Picture subject<select data-subject-mode aria-label="Picture subject"><option value="character">Character</option><option value="environment">Environment / no people</option></select></label><div data-person-fields><label>Character name<input data-subject-name aria-label="Character name" list="vn-subject-candidates" maxlength="160"></label><datalist id="vn-subject-candidates" data-candidates></datalist><label>Appearance<textarea data-subject-appearance aria-label="Appearance" maxlength="2000" placeholder="Concrete visual details, separated by commas: hair, eyes, skin, clothes, species…"></textarea></label><small>Use known appearance by leaving this blank, or supply details for this picture.</small><label class="toggle"><input type="checkbox" data-save-appearance>Save appearance for this character in this chat</label></div><small data-environment-help hidden>Choose a no-people template above. Character appearance and references are omitted.</small><button type="button" data-correct>Prepare corrected preview</button></details><details data-diagnostics><summary>Picture diagnostics</summary><p data-diagnostic></p><button type="button" data-copy-diagnostic>Copy diagnostics</button><small>Copies subject and template names and status only. No appearance descriptions, chat text, prompts or provider error payloads are included.</small></details><details><summary>Prompt sources</summary><p data-provenance></p></details><p data-edit-help role="status"></p><label>Positive prompt <small data-positive-count></small><textarea data-positive maxlength="65000" aria-label="Positive prompt" spellcheck="false" inputmode="text"></textarea></label><label>Negative prompt <small data-negative-count></small><textarea data-negative maxlength="65000" aria-label="Negative prompt" spellcheck="false" inputmode="text"></textarea></label><small data-prompt-profile></small><small data-combined-count role="status"></small><small>Regenerate prompt uses your story-reader model to prepare fresh wording. It uses text tokens; an image is generated only after approval.</small><small>Negative prompts and individual settings are model dependent.</small><details><summary>Parameters and references</summary><p data-reference></p><label>Parameters (JSON)<textarea data-parameters aria-label="Parameters (JSON)" spellcheck="false" inputmode="text"></textarea></label><small>Advanced overrides for this picture only. Reference bytes and host-managed fields are omitted. Your provider may ignore unsupported parameters.</small></details><small>Shows the extension request prepared for Lumiverse; the host converts it for the provider.</small></div><footer data-studio-footer><div class="row"><button type="button" data-generate>Generate this</button><button type="button" data-skip>Skip</button><button type="button" data-reset>Reset edits</button><button type="button" data-retry-image>Retry this picture</button><button type="button" data-prepare>Edit and regenerate</button><button type="button" data-regenerate-prompt>Regenerate prompt</button><button type="button" data-copy>Copy prompt</button></div><div data-notice-row hidden><p data-notice role="status"></p><button type="button" data-dismiss-notice aria-label="Dismiss image prompt notice" title="Dismiss image prompt notice">&#215;</button></div></footer></section>`;
+    this.root.innerHTML = `<style>${CSS}</style><button type="button" data-launch aria-expanded="false">Image prompts</button><section hidden aria-label="Image prompts"><div class="row" data-studio-header><div><h2>Image prompts</h2><small data-build>${LUMIGLYPHICS_VERSION}</small></div><button type="button" data-close aria-label="Close image prompts" title="Close image prompts">×</button></div><div data-studio-body><label class="toggle"><input type="checkbox" data-review checked>Review before generating</label><small data-review-help>Applies to the next image batch. Held pictures stay held. You can keep reading.</small><details data-card-role><summary>Card role for this chat</summary><label>Card role<select data-role aria-label="Card role"><option value="auto">Auto</option><option value="character">Character</option><option value="scenario">Scenario / world / narrator</option></select></label><button type="button" data-save-role>Save card role</button><small data-role-help>Applies to future replies. Existing pictures and held prompts stay unchanged. Auto uses available visual evidence.</small></details><details data-turn-recovery><summary>Reply recovery</summary><small>Retry unfinished pictures prepares only unfinished slots again and stops their current work. Completed pictures stay. New previews always need approval. Replan asks the story-reader model to reconsider the whole reply and may use text tokens.</small><button type="button" data-retry-unfinished>Prepare unfinished previews</button><button type="button" data-replan>Replan this reply</button></details><label>Picture<select data-picture aria-label="Picture"></select></label><label data-history hidden>Recorded request<select data-request aria-label="Recorded request"></select></label><div data-batch-recovery hidden><p data-batch-status role="status"></p><button type="button" data-stop-images>Stop pending pictures</button><small>Stops this reply’s waiting image work. Requests already sent may still finish at the provider. Completed pictures stay.</small></div><p data-scene></p><p data-meta></p><p data-model-help role="status" hidden></p><label>Picture template<select data-template aria-label="Picture template"></select></label><button type="button" data-use-template>Use template</button><div data-template-confirm hidden><p>Replacing rebuilds this prompt and parameters from the selected template. Your current edits will be replaced.</p><div class="row"><button type="button" data-keep>Keep edits</button><button type="button" data-replace>Replace with template</button></div></div><details data-recovery hidden><summary>Correct this picture’s subject</summary><small>Prepare a new preview for this picture only. No image is generated until you approve it.</small><label>Picture subject<select data-subject-mode aria-label="Picture subject"><option value="character">Character</option><option value="environment">Environment / no people</option></select></label><div data-person-fields><label>Character name<input data-subject-name aria-label="Character name" list="vn-subject-candidates" maxlength="160"></label><datalist id="vn-subject-candidates" data-candidates></datalist><label>Appearance<textarea data-subject-appearance aria-label="Appearance" maxlength="2000" placeholder="Concrete visual details, separated by commas: hair, eyes, skin, clothes, species…"></textarea></label><small>Use known appearance by leaving this blank, or supply details for this picture.</small><label class="toggle"><input type="checkbox" data-save-appearance>Save appearance for this character in this chat</label></div><small data-environment-help hidden>Choose a no-people template above. Character appearance and references are omitted.</small><button type="button" data-correct>Prepare corrected preview</button></details><details data-diagnostics><summary>Picture diagnostics</summary><p data-diagnostic></p><button type="button" data-copy-diagnostic>Copy diagnostics</button><small>Copies subject and template names and status only. No appearance descriptions, chat text, prompts or provider error payloads are included.</small></details><details><summary>Prompt sources</summary><p data-provenance></p></details><p data-edit-help role="status"></p><label>Positive prompt <small data-positive-count></small><textarea data-positive maxlength="65000" aria-label="Positive prompt" spellcheck="false" inputmode="text"></textarea></label><label>Negative prompt <small data-negative-count></small><textarea data-negative maxlength="65000" aria-label="Negative prompt" spellcheck="false" inputmode="text"></textarea></label><small data-prompt-profile></small><small data-combined-count role="status"></small><small>Regenerate prompt uses your story-reader model to prepare fresh wording. It uses text tokens; an image is generated only after approval.</small><small>Negative prompts and individual settings are model dependent.</small><details><summary>Parameters and references</summary><p data-reference></p><label>Parameters (JSON)<textarea data-parameters aria-label="Parameters (JSON)" spellcheck="false" inputmode="text"></textarea></label><small>Advanced overrides for this picture only. Reference bytes and host-managed fields are omitted. Your provider may ignore unsupported parameters.</small></details><small>Shows the extension request prepared for Lumiverse; the host converts it for the provider.</small></div><footer data-studio-footer><div class="row"><button type="button" data-generate>Generate this</button><button type="button" data-skip>Skip</button><button type="button" data-reset>Reset edits</button><button type="button" data-retry-image>Retry this picture</button><button type="button" data-prepare>Edit and regenerate</button><button type="button" data-regenerate-prompt>Regenerate prompt</button><button type="button" data-copy>Copy prompt</button></div><div data-notice-row hidden><p data-notice role="status"></p><button type="button" data-dismiss-notice aria-label="Dismiss image prompt notice" title="Dismiss image prompt notice">&#215;</button></div></footer></section>`;
     this.layoutInspector();
     const scope=document.createElement('small');scope.dataset.correctionScope='';scope.setAttribute('role','status');
     this.el('[data-save-appearance]').closest('label')!.after(scope);
     this.el<HTMLInputElement>('[data-save-appearance]').onchange=()=>this.updateCorrectionScope();
     const quick=document.createElement('button');quick.type='button';quick.dataset.queueRetry='';quick.textContent='Retry picture';
-    this.el('[data-studio-footer] .row').append(quick);
+    const batchApprove=document.createElement('button');batchApprove.type='button';batchApprove.dataset.batchApprove='';batchApprove.textContent='Approve all held';batchApprove.hidden=true;
+    this.el('[data-studio-footer] .row').append(quick,batchApprove);
     quick.onclick=()=>{if(!quick.disabled)this.queuePictures([this.selectedJob]);};
+    batchApprove.onclick=()=>this.decideAll('generate');
+    this.el<HTMLSelectElement>('[data-artwork-connection]').onchange=()=>{
+      const connId=this.el<HTMLSelectElement>('[data-artwork-connection]').value;
+      const conn=this.imageConnections.find(c=>c.id===connId);
+      if(conn)this.el<HTMLInputElement>('[data-artwork-model]').placeholder=conn.model||'Connection default';
+      this.updateCostEstimate();
+    };
+    this.el<HTMLInputElement>('[data-artwork-model]').oninput=()=>this.updateCostEstimate();
     const queue=document.createElement('div');queue.dataset.retryQueue='';queue.innerHTML='<div class="row"><button type="button" data-queue-unfinished>Retry unfinished</button><button type="button" data-clear-retries>Clear queued retries</button></div><small data-queue-status role="status" aria-live="polite"></small>';
     this.el('[data-state-detail]').after(queue);
     this.el<HTMLButtonElement>('[data-queue-unfinished]').onclick=()=>this.queuePictures((this.turn?.assets??[]).filter(a=>a.source!=='cache'&&!['generated','browser_ready'].includes(a.status)).map(a=>a.jobId).filter(id=>!this.retryQueueJobs.has(id)&&id!==this.retryActive));
@@ -190,6 +203,7 @@ export class ImageStudio {
       const record = this.record();
       if (!record || record.state !== 'review' || this.rebuilding.has(record.requestId) || !this.turn) return;
       const model = this.el<HTMLInputElement>('[data-artwork-model]').value.trim();
+      const connectionId = this.el<HTMLSelectElement>('[data-artwork-connection]')?.value || undefined;
       const templateId = record.imagePromptMetadata?.template.id ?? this.el<HTMLSelectElement>('[data-template]').value ?? this.defaultTemplate;
       this.rebuilding.add(record.requestId);
       this.render();
@@ -200,13 +214,15 @@ export class ImageStudio {
         sourceFingerprint: this.turn.sourceFingerprint,
         requestId: record.requestId,
         templateId,
-        model: model || undefined
+        model: model || undefined,
+        connectionId
       });
     };
 
     this.el<HTMLButtonElement>('[data-regenerate-model-all]').onclick = () => {
       if (!this.turn) return;
       const model = this.el<HTMLInputElement>('[data-artwork-model]').value.trim();
+      const connectionId = this.el<HTMLSelectElement>('[data-artwork-connection]')?.value || undefined;
       const reviewable = (this.turn.imageRequests ?? []).filter(r => r.state === 'review');
       if (reviewable.length === 0) return;
       for (const r of reviewable) {
@@ -218,7 +234,8 @@ export class ImageStudio {
           sourceFingerprint: this.turn.sourceFingerprint,
           requestId: r.requestId,
           templateId: r.imagePromptMetadata?.template.id ?? this.defaultTemplate,
-          model: model || undefined
+          model: model || undefined,
+          connectionId
         });
       }
       this.render();
@@ -272,7 +289,7 @@ export class ImageStudio {
     // Focus synchronously inside the user's tap without cancelling native caret placement.
     this.root.addEventListener('click', event => {
       const target = event.target;
-      if (target instanceof HTMLTextAreaElement && !target.readOnly && !target.disabled) target.focus({ preventScroll: true });
+      if ((target as any)?.tagName?.toUpperCase?.() === 'TEXTAREA' && !(target as any).readOnly && !(target as any).disabled) (target as any).focus({ preventScroll: true });
     });
     this.root.addEventListener("keydown", event => {
       const keyEvent = event as KeyboardEvent;
@@ -387,7 +404,7 @@ export class ImageStudio {
     const editor=document.createElement('div');editor.dataset.promptEditor='';
     for(const selector of ['[data-edit-help]','[data-positive]','[data-negative]','[data-prompt-profile]','[data-combined-count]']){
       if(selector==='[data-combined-count]'){const budgetMeter=document.createElement('div');budgetMeter.dataset.budgetMeter='';budgetMeter.setAttribute('aria-hidden','true');budgetMeter.innerHTML='<div data-budget-fill></div>';editor.append(budgetMeter);}
-      const element=this.el(selector);editor.append(element instanceof HTMLTextAreaElement?element.closest('label')!:element);
+      const element=this.el(selector);editor.append(element.tagName?.toUpperCase()==='TEXTAREA'?element.closest('label')!:element);
     }
     const validation=document.createElement('small');validation.dataset.validation='';validation.role='alert';validation.hidden=true;editor.append(validation);
     const changed=document.createElement('div');changed.dataset.rewriteChanged='';changed.hidden=true;
@@ -397,10 +414,13 @@ export class ImageStudio {
     const reframe=document.createElement('button');reframe.type='button';reframe.dataset.reframe='';reframe.textContent='Reframe shot';
     const fitModel=document.createElement('button');fitModel.type='button';fitModel.dataset.fitModel='';fitModel.textContent='Fit to model';
     const retry=document.createElement('button');retry.type='button';retry.dataset.retrySaved='';retry.textContent='Prepare from saved scene';
-    actions.querySelector('[data-secondary-actions]')!.append(reframe,fitModel,retry);editor.append(actions);
+    const enrichBtn=document.createElement('button');enrichBtn.type='button';enrichBtn.dataset.enrichPrompt='';enrichBtn.textContent='✨ Enrich Prompt (High Detail)';
+    enrichBtn.title='Expands prompt with vivid photographic textures, lighting and materials taking full advantage of high-capacity models like Recraft 4.1.';
+    enrichBtn.onclick=()=>this.regeneratePrompt();
+    actions.querySelector('[data-secondary-actions]')!.append(reframe,fitModel,retry,enrichBtn);editor.append(actions);
     const tools=document.createElement('div');tools.dataset.pictureTools='';
     const template=document.createElement('details');template.dataset.templateTools='';template.innerHTML='<summary>Template and framing</summary>';
-    for(const selector of ['[data-template]','[data-use-template]','[data-template-confirm]']){const element=this.el(selector);template.append(element instanceof HTMLSelectElement?element.closest('label')!:element);}tools.append(template);
+    for(const selector of ['[data-template]','[data-use-template]','[data-template-confirm]']){const element=this.el(selector);template.append(element.tagName?.toUpperCase()==='SELECT'?element.closest('label')!:element);}tools.append(template);
 
     const styleTools=document.createElement('details');styleTools.dataset.styleTools='';
     styleTools.innerHTML=`<summary>Change Style</summary>
@@ -476,13 +496,18 @@ export class ImageStudio {
     tools.append(cameraTools);
 
     const modelTools = document.createElement('details'); modelTools.dataset.modelTools = '';
+    modelTools.open = true;
     modelTools.innerHTML = `<summary>Image Model &amp; Regeneration</summary>
       <div style="margin:8px 0">
-        <label>Model override
+        <label>Active connection
+          <select data-artwork-connection aria-label="Select image connection" style="width:100%;box-sizing:border-box;margin-top:4px"></select>
+        </label>
+        <label style="margin-top:10px">Model override
           <input type="text" data-artwork-model list="vn-artwork-model-suggestions" placeholder="Connection default (or model ID)" style="width:100%;box-sizing:border-box;margin-top:4px" />
           <datalist id="vn-artwork-model-suggestions">
-            <option value="recraft-v4.1-flash">Recraft v4.1 Flash</option>
-            <option value="blackforestlabs/flux-3/klein/text-to-image">FLUX.3 Klein</option>
+            <option value="recraft-v4.1-flash">Recraft v4.1 Flash (10k chars)</option>
+            <option value="recraft-20b">Recraft 20B (10k chars)</option>
+            <option value="blackforestlabs/flux-3/klein/text-to-image">FLUX.3 Klein (Square safe)</option>
             <option value="xai/grok-imagine-image/v2.0/text-to-image">Grok Imagine 2.0</option>
             <option value="openai/gpt-image-2.5/flare/text-to-image">GPT Image 2.5</option>
             <option value="qwen-image-3">Qwen Image 3</option>
@@ -491,23 +516,93 @@ export class ImageStudio {
           </datalist>
         </label>
         <small style="display:block;margin-top:4px;opacity:0.8">Recompiles prompt dialect specifically for the chosen model.</small>
-        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-          <button type="button" data-regenerate-model-single style="font-size:12px;padding:5px 10px">Regenerate this picture</button>
-          <button type="button" data-regenerate-model-all style="font-size:12px;padding:5px 10px">Regenerate all in scene</button>
+        <div data-cost-estimate style="margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.03);border:1px solid var(--edge);font-size:12px"></div>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <button type="button" data-regenerate-model-single style="font-size:12px;padding:6px 12px">Regenerate this picture</button>
+          <button type="button" data-regenerate-model-all style="font-size:12px;padding:6px 12px">Regenerate all in scene</button>
         </div>
       </div>`;
-    tools.append(modelTools);
-    for(const selector of ['[data-recovery]','[data-diagnostics]','[data-provenance]','[data-parameters]']){const element=this.el(selector);tools.append(element.closest('details')!);}
-    const history=document.createElement('details');history.dataset.requestHistory='';history.innerHTML='<summary>Request history</summary>';history.append(this.el('[data-history]'));tools.append(history);
+
+    const history=document.createElement('details');history.dataset.requestHistory='';history.innerHTML='<summary>Request history</summary>';history.append(this.el('[data-history]'));
     const settings=document.createElement('details');settings.dataset.replySettings='';settings.innerHTML='<summary>Reply and review settings</summary>';
-    const toggle=this.el('[data-review]').closest('label')!,help=toggle.nextElementSibling!;settings.append(toggle,help);
+    const toggle=this.el('[data-review]').closest('label')!,help=this.root.querySelector<HTMLElement>('[data-review-help]')??toggle.nextElementSibling;if(help)settings.append(toggle,help);else settings.append(toggle);
     for(const selector of ['[data-card-role]','[data-turn-recovery]','[data-batch-recovery]'])settings.append(this.el(selector));
     const meta=this.el('[data-meta]'),model=this.el('[data-model-help]'),notice=this.el('[data-notice-row]');
     const output=document.createElement('div');output.dataset.outputControls='';
     output.innerHTML='<p data-output-summary role="status"></p><div data-output-fields><label>Image size<select data-output-size aria-label="Image size"></select></label><label data-output-ratio-field>Aspect ratio<select data-output-ratio aria-label="Image aspect ratio"></select></label><small>Published values for this model. Changes apply to this picture only.</small></div>';
-    const outputOptions=document.createElement('details');outputOptions.dataset.outputOptions='';outputOptions.innerHTML='<summary>Image size &amp; framing</summary>';outputOptions.append(output);tools.prepend(outputOptions);
+    const outputOptions=document.createElement('details');outputOptions.dataset.outputOptions='';outputOptions.innerHTML='<summary>Image size &amp; framing</summary>';outputOptions.append(output);
+
+    const tabs = document.createElement('nav');
+    tabs.dataset.studioTabs = '';
+    tabs.className = 'studio-tab-bar';
+    tabs.setAttribute('role', 'tablist');
+    tabs.setAttribute('aria-label', 'Artwork studio sections');
+
+    const tabDefs = [
+      { id: 'picture', label: 'Picture' },
+      { id: 'prompt', label: 'Prompt' },
+      { id: 'camera', label: 'Camera' },
+      { id: 'style', label: 'Style' },
+      { id: 'model', label: 'Model' },
+      { id: 'history', label: 'History' }
+    ] as const;
+
+    for (const tab of tabDefs) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'studio-tab-btn';
+      btn.dataset.tab = tab.id;
+      btn.setAttribute('role', 'tab');
+      btn.setAttribute('aria-selected', tab.id === 'picture' ? 'true' : 'false');
+      btn.textContent = tab.label;
+      btn.onclick = () => this.switchTab(tab.id);
+      tabs.append(btn);
+    }
+
+    const panelPicture = document.createElement('div');
+    panelPicture.className = 'studio-tab-panel';
+    panelPicture.dataset.tabPanel = 'picture';
+    panelPicture.append(context, detail, this.brief.element, this.el('[data-recovery]').closest('details')!);
+
+    const panelPrompt = document.createElement('div');
+    panelPrompt.className = 'studio-tab-panel';
+    panelPrompt.dataset.tabPanel = 'prompt';
+    panelPrompt.hidden = true;
+    panelPrompt.append(meta, model, editor);
+
+    const panelCamera = document.createElement('div');
+    panelCamera.className = 'studio-tab-panel';
+    panelCamera.dataset.tabPanel = 'camera';
+    panelCamera.hidden = true;
+    panelCamera.append(template, cameraTools, outputOptions);
+
+    const panelStyle = document.createElement('div');
+    panelStyle.className = 'studio-tab-panel';
+    panelStyle.dataset.tabPanel = 'style';
+    panelStyle.hidden = true;
+    panelStyle.append(styleTools);
+
+    const panelModel = document.createElement('div');
+    panelModel.className = 'studio-tab-panel';
+    panelModel.dataset.tabPanel = 'model';
+    panelModel.hidden = true;
+    panelModel.append(modelTools);
+
+    const panelHistory = document.createElement('div');
+    panelHistory.className = 'studio-tab-panel';
+    panelHistory.dataset.tabPanel = 'history';
+    panelHistory.hidden = true;
+    panelHistory.append(
+      this.el('[data-diagnostics]').closest('details')!,
+      this.el('[data-provenance]').closest('details')!,
+      this.el('[data-parameters]').closest('details')!,
+      history,
+      settings
+    );
+
     const overview=document.createElement('p');overview.dataset.pictureOverview='';overview.setAttribute('role','status');overview.setAttribute('aria-atomic','true');overview.style.cssText='font-size:12px;margin:0 0 10px;overflow-wrap:anywhere';
-    body.replaceChildren(overview,navigation,context,detail,meta,model,this.brief.element,editor,tools,settings,notice);
+    tools.replaceChildren(tabs,panelPicture,panelPrompt,panelCamera,panelStyle,panelModel,panelHistory);
+    body.replaceChildren(overview,navigation,tools,notice);
     const actionHelp=document.createElement('small');actionHelp.dataset.actionHelp='';this.el('[data-studio-footer]').append(actionHelp);
     const style=document.createElement('style');style.textContent=INSPECTOR_CSS+PREPARED_BRIEF_CSS+DOCKED_STUDIO_CSS;this.root.append(style);
   }
@@ -521,10 +616,12 @@ export class ImageStudio {
     this.el('[data-correction-scope]').textContent=save?'Preparing this preview also saves the appearance for this named character in this chat. Existing held prompts and pictures keep their snapshots.':'This picture only. Preparing the preview does not save a chat-wide appearance override.';
   }
   private navigateBrief(destination:BriefDestination):void{
+    const tab = destination === 'prompt' ? 'prompt' : destination === 'output' ? 'camera' : destination === 'template' ? 'camera' : 'picture';
+    this.switchTab(tab);
     const selector=destination==='prompt'?'[data-positive]':destination==='subject'?'[data-subject-mode]':destination==='template'?'[data-template]':this.el('[data-output-options]').hidden||this.el('[data-output-fields]').hidden?'[data-parameters]':'[data-output-size]';
     let target=this.el<HTMLElement>(selector);
     if(destination==='output')try{JSON.parse(this.el<HTMLTextAreaElement>('[data-parameters]').value);}catch{target=this.el('[data-parameters]');}
-    for(let parent=target.parentElement;parent;parent=parent.parentElement)if(parent instanceof HTMLDetailsElement)parent.open=true;
+    for(let parent=target.parentElement;parent;parent=parent.parentElement)if(parent.tagName?.toUpperCase()==='DETAILS')(parent as any).open=true;
     target.scrollIntoView({block:'nearest'});target.focus({preventScroll:true});
   }
   private draftKey(record:ImageRequestRecord): string {return record.state==='review' ? record.requestId : `replacement:${record.jobId}:${record.requestId}`;}
@@ -605,6 +702,14 @@ export class ImageStudio {
     for(const selector of ['[data-generate]','[data-prepare]']){const button=this.el<HTMLButtonElement>(selector);if(button.dataset.available!==undefined)button.disabled=button.dataset.available!=='true'||Boolean(error);}
     const retry=this.el<HTMLButtonElement>('[data-retry-image]'),record=this.record();
     if(retry.dataset.available!==undefined)retry.disabled=retry.dataset.available!=='true'||Boolean(error&&record&&this.drafts.has(this.draftKey(record)));
+    const reviewable = (this.turn?.imageRequests ?? []).filter(r => r.state === 'review');
+    const batchBtn = this.root.querySelector<HTMLButtonElement>('[data-batch-approve]');
+    if (batchBtn) {
+      batchBtn.hidden = reviewable.length <= 1;
+      batchBtn.textContent = `Approve all held (${reviewable.length})`;
+      if (batchBtn.dataset.available !== undefined) batchBtn.disabled = Boolean(error);
+    }
+    this.updateCostEstimate();
   }
 
   private renderOutputControls(parameters?:Record<string,unknown>):void{
@@ -924,6 +1029,8 @@ export class ImageStudio {
     this.renderRecoveryMode();
     this.el<HTMLButtonElement>("[data-copy]").disabled = !record;
     this.renderInspector();
+    this.renderConnectionDropdown();
+    this.updateCostEstimate();
     this.setNotice(this.recovering ? (this.recovering==='stop'?'Stopping pending pictures…':'Preparing unfinished pictures for review…') : rolling ? "Rewriting prompt with the story-reader model… Uses text tokens; image generation still needs approval." : (asset?.error ?? '') || (record && this.rebuilding.has(record.requestId) ? "Rebuilding template… Wait for a new preview before generating." : ''));
     this.publishOperations();
   }
@@ -1023,6 +1130,112 @@ export class ImageStudio {
     try { await navigator.clipboard.writeText(text); this.setNotice("Prompt copied."); }
     catch { const field = this.el<HTMLTextAreaElement>("[data-positive]"); field.focus(); field.select(); this.setNotice("Copy unavailable here. The prompt is selected; use Ctrl+C."); }
   }
+  private imageConnections: ConnectionCatalogOption[] = [];
+  private activeTab = 'picture';
+
+  setConnectionCatalog(state: { options?: readonly ConnectionCatalogOption[]; status?: string; error?: string }): void {
+    this.imageConnections = state.options ? [...state.options] : [];
+    this.renderConnectionDropdown();
+    this.updateCostEstimate();
+  }
+
+  private switchTab(tabId: string): void {
+    this.activeTab = tabId;
+    const tabBtns = this.root.querySelectorAll<HTMLButtonElement>('.studio-tab-btn');
+    for (const btn of tabBtns) {
+      btn.setAttribute('aria-selected', String(btn.dataset.tab === tabId));
+    }
+    const panels = this.root.querySelectorAll<HTMLElement>('.studio-tab-panel');
+    for (const panel of panels) {
+      panel.hidden = panel.dataset.tabPanel !== tabId;
+    }
+  }
+
+  private renderConnectionDropdown(): void {
+    const select = this.root.querySelector<HTMLSelectElement>('[data-artwork-connection]');
+    if (!select) return;
+    const currentVal = select.value;
+    select.replaceChildren();
+
+    const defaultOpt = document.createElement('option');
+    defaultOpt.value = '';
+    defaultOpt.textContent = 'Active Connection Default';
+    select.append(defaultOpt);
+
+    for (const conn of this.imageConnections) {
+      const opt = document.createElement('option');
+      opt.value = conn.id;
+      opt.textContent = `${conn.name} (${conn.provider} · ${conn.model})${conn.isDefault ? ' [Default]' : ''}`;
+      select.append(opt);
+    }
+
+    if (currentVal && this.imageConnections.some(c => c.id === currentVal)) {
+      select.value = currentVal;
+    }
+  }
+
+  private updateCostEstimate(): void {
+    const costEl = this.root.querySelector<HTMLElement>('[data-cost-estimate]');
+    if (!costEl) return;
+    const connSelect = this.root.querySelector<HTMLSelectElement>('[data-artwork-connection]');
+    const modelInput = this.root.querySelector<HTMLInputElement>('[data-artwork-model]');
+    const selectedConn = this.imageConnections.find(c => c.id === connSelect?.value) ?? this.imageConnections.find(c => c.isDefault);
+    const effectiveModel = modelInput?.value.trim() || selectedConn?.model || 'default';
+    const effectiveProvider = selectedConn?.provider || 'nanogpt';
+
+    let estimate = '~$0.02 / image';
+    let detail = 'Standard capacity';
+
+    const lowerModel = effectiveModel.toLowerCase();
+    if (lowerModel.includes('recraft')) {
+      estimate = '~$0.012 - $0.025 / image';
+      detail = '10,000 char capacity · SVG/vector/raster';
+    } else if (lowerModel.includes('flux') || lowerModel.includes('klein')) {
+      estimate = '~$0.015 - $0.03 / image';
+      detail = 'Up to 1536px safe resolution';
+    } else if (lowerModel.includes('grok')) {
+      estimate = '~$0.02 / image';
+      detail = 'High coherence';
+    } else if (lowerModel.includes('gpt-image') || lowerModel.includes('flare')) {
+      estimate = '~$0.04 / image';
+      detail = 'Complex spatial fidelity';
+    }
+
+    costEl.textContent = `Estimated cost: ${estimate} · ${detail} (via ${effectiveProvider})`;
+  }
+
+  private decideAll(action: 'generate' | 'skip'): void {
+    if (!this.turn) return;
+    const reviewable = (this.turn.imageRequests ?? []).filter(r => r.state === 'review' && !this.submitted.has(r.requestId) && !this.rebuilding.has(r.requestId) && !this.rerolling.has(r.requestId));
+    if (reviewable.length === 0) return;
+    for (const record of reviewable) {
+      try {
+        const draft = this.drafts.get(this.draftKey(record));
+        const parameters: unknown = action === 'generate' && draft ? JSON.parse(draft.parameters) : {};
+        const prompt = draft?.prompt ?? record.prompt;
+        const negativePrompt = draft?.negative ?? record.negativePrompt;
+        if (action === 'generate') {
+          assertPromptLengths(prompt, negativePrompt, record.promptProfile);
+          if (!prompt.trim()) continue;
+        }
+        const request: FrontendRequest = {
+          type: 'vn_image_review',
+          chatId: this.turn.chatId,
+          messageId: this.turn.messageId,
+          sourceFingerprint: this.turn.sourceFingerprint,
+          requestId: record.requestId,
+          action,
+          ...(action === 'generate' ? { edits: { prompt, negativePrompt, parameters: (parameters ?? {}) as Record<string, unknown> } } : {})
+        };
+        this.submitted.add(record.requestId);
+        this.send(request);
+      } catch (error) {
+        this.showError(error instanceof Error ? error.message : String(error));
+      }
+    }
+    this.render();
+  }
+
   setPresentationRules(chat:string,id:string,catalog:PresentationRuleCatalog){return this.preferences.receive(chat,id,catalog);}
   presentationRulesError(error:string,id?:string){this.preferences.error(error,id);}
   destroy(): void { this.setOpen(false);this.preferences.destroy(); this.drafts.clear(); this.host.remove(); }

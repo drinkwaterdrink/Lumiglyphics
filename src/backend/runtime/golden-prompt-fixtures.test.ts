@@ -37,7 +37,7 @@ function baseBrief(overrides: Partial<VisualBrief> = {}): VisualBrief {
     composition: 'medium close-up; eye-level view; one visible character',
     lighting: 'warm morning sunlight casting long angled shadows',
     subjectMode: 'one',
-    framing: 'medium-close-up',
+    framing: 'portrait',
     referencePolicy: 'character',
     sources: ['scene context'],
     conflicts: [],

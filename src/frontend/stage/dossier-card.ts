@@ -1,4 +1,5 @@
 import { createDocumentReader, DOCUMENT_READER_CSS } from './document-reader.js';
+import { APERTURE_ICONS } from '../theme/aperture-theme.js';
 import { html } from '../dom/html.js';
 import type { StoryDocument } from '../../shared/story-documents.js';
 import { InteractionTray } from './interaction-tray.js';
@@ -635,9 +636,20 @@ export class DossierCard {
     panel.setAttribute('aria-modal', 'true');
     panel.setAttribute('aria-label', 'World Lens');
 
-    // Header with APERTURE Title and Subtitle
+    // Header with APERTURE Back button, Title and Close
     const header = document.createElement('header');
+    header.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    const backBtn = document.createElement('button');
+    backBtn.type = 'button';
+    backBtn.className = 'workspace-back-btn';
+    backBtn.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;border-radius:8px;border:1px solid var(--vn-shell-border,rgba(255,255,255,0.15));background:transparent;color:inherit;';
+    backBtn.innerHTML = APERTURE_ICONS.back + '<span>Back</span>';
+    backBtn.title = 'Back to reading';
+    backBtn.setAttribute('aria-label', 'Back to reading');
+    backBtn.onclick = () => this.close();
+
     const title = document.createElement('h2');
+    title.style.cssText = 'flex:1;margin:0;';
     title.textContent = 'World Lens';
     const close = document.createElement('button');
     close.type = 'button';
@@ -645,7 +657,7 @@ export class DossierCard {
     close.title = 'Close references';
     close.setAttribute('aria-label', 'Close information');
     close.onclick = () => this.close();
-    header.append(title, close);
+    header.append(backBtn, title, close);
     panel.append(header);
 
     const titleBlock = document.createElement('div');

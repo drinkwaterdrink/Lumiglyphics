@@ -20,7 +20,7 @@ function createMockBrief(overrides: Partial<VisualBrief> = {}): VisualBrief {
     composition: 'medium shot; eye-level view; one visible character; keep the lower quarter clear for dialogue',
     lighting: 'warm amber afternoon sunlight streaming through stained glass',
     subjectMode: 'one',
-    framing: 'medium shot',
+    framing: 'portrait',
     referencePolicy: 'character',
     sources: ['scene context'],
     conflicts: [],

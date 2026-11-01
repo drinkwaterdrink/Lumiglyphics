@@ -1,6 +1,7 @@
 import { ReaderWorkspace } from "./reader-workspace.js";
 import {presentEffect} from '../host/effect-presentation.js';
 import {CastStage} from "./cast-stage.js";
+import { CgGalleryModal } from "./cg-gallery.js";
 import {PreparationPreview} from './preparation-preview.js';
 import type {NarrativePreview} from '../../shared/preparation-preview.js';
 import type {ReferenceHistory} from '../../shared/reference-history.js';
@@ -509,6 +510,7 @@ export class VnStage {
   private readonly dialogueText: HTMLElement;
   private dossiers!: StageDossiers;
   readonly workspace: ReaderWorkspace;
+  readonly cgGallery: CgGalleryModal;
   private readonly progress: HTMLElement;
   private readonly readingState: HTMLElement;
   private readonly sceneHud: HTMLElement | null;
@@ -651,6 +653,7 @@ export class VnStage {
     this.applyThemePreset(options.themePreset ?? "lumiverse");
     this.scene = queryRequired(this.themeRoot, "[data-vn-scene]");
     this.castStage = new CastStage(this.root,this.createImage);
+    this.cgGallery = new CgGalleryModal(this.root);
     this.sceneImages = Array.from(this.themeRoot.querySelectorAll<HTMLImageElement>("[data-vn-scene-image]"));
     this.sceneBackdropEl = this.themeRoot.querySelector<HTMLImageElement>("[data-vn-scene-backdrop]");
     this.activeImageEl = queryRequired(this.themeRoot, "[data-vn-scene-image][data-vn-layer='active']");
@@ -1097,7 +1100,11 @@ export class VnStage {
   }
 
   setCastMode(enabled:boolean):void {this.castStage.setEnabled(enabled);}
-  setCastTurn(turn:TurnView|null,index:number):AssetView|null {this.dossiers.setTurnMedia(turn);return this.castStage.set(turn,index);}
+  setCastTurn(turn:TurnView|null,index:number):AssetView|null {
+    this.dossiers.setTurnMedia(turn);
+    this.cgGallery.syncFromTurn(turn);
+    return this.castStage.set(turn,index);
+  }
 
   reset(): void {
     this.workspace.suspend();
@@ -1888,11 +1895,15 @@ export class VnStage {
     const castBtn = this.themeRoot.querySelector<HTMLButtonElement>("[data-vn-control='cast']");
     castBtn?.addEventListener("click", (event) => {
       event.stopPropagation();
-      this.workspace.open("story", castBtn);
+      this.workspace.open("character", castBtn);
     });
 
     this.outerRoot.addEventListener("lumiglyphics:cast-toggle", () => {
       this.castStage.toggle();
+    });
+
+    this.outerRoot.addEventListener("lumiglyphics:gallery-toggle", () => {
+      this.cgGallery.open();
     });
 
     const settingsBtn = this.themeRoot.querySelector<HTMLButtonElement>("[data-vn-control='settings']");

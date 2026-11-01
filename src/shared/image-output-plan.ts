@@ -154,6 +154,11 @@ export function resolveImageOutputPlan(options: ResolveImageOutputPlanOptions): 
       }
     }
 
+    const isKlein = modelId && (/flux[-_.]?3.*klein/i.test(modelId) || modelId.includes('klein'));
+    if (isKlein && size && (size === '2048x2048' || size === '4096x4096')) {
+      warnings.push(`FLUX.3 Klein at ${size} frequently exceeds provider worker memory or execution limits. 1024×1024 or 1536×1536 recommended.`);
+    }
+
     const orientation = computeOrientation(actualRatio ?? size);
     const planSource = source === 'live' ? 'live' : source === 'catalogue' ? 'catalogue' : 'connection';
 

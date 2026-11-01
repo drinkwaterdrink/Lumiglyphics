@@ -9,6 +9,8 @@ import {CastGalleryRequestSchema,CastArtRequestSchema} from '../../shared/cast-a
 import {castArtToken,findCastDisplayArt,findSetupDisplayArt,listCastGallery,manageCastArt} from './cast-art.js';
 import {LocationArtRequestSchema} from '../../shared/stage-assets.js';
 import {manageLocationArt} from './location-art.js';
+import { loadCharacterDNALibrary, saveCharacterDNA, harvestCharacterDNA, parseCharacterDNALlmOutput } from './character-dna-harvester.js';
+import { mergeCharacterDNA } from '../../shared/character-dna.js';
 import { ContextSourceSession } from './context-providers/session.js';
 import type { VisualNovelConfig } from '../../config.js';
 import { ContextSourcesRequestSchema } from '../../protocol.js';
@@ -1728,6 +1730,7 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
         styleId: request.styleId,
         fitToModel: request.fitToModel,
         model: request.model,
+        connectionId: request.connectionId,
         manualCamera: request.manualCamera
       }))) throw new Error("This request has already been handled or cancelled.");
       return;
@@ -1855,6 +1858,45 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       const library=await manageLocationArt(spindle,action.chatId,action,userId);
       if(action.action!=="list")releaseSceneCacheScope(spindle,userId,action.chatId,"scope_cleared");
       spindle.sendToFrontend({type:'vn_location_art',chatId:action.chatId,requestId:action.requestId,library},userId);
+      return;
+    }
+    case "vn_character_dna": {
+      const action = request;
+      if (action.action === "list") {
+        const library = await loadCharacterDNALibrary(spindle, action.chatId, userId);
+        spindle.sendToFrontend({ type: "vn_character_dna", chatId: action.chatId, requestId: action.requestId, library }, userId);
+        return;
+      }
+      if (action.action === "harvest" && action.characterName) {
+        const dna = await harvestCharacterDNA(spindle, action.chatId, action.characterName, { userId });
+        await saveCharacterDNA(spindle, action.chatId, dna, userId);
+        const library = await loadCharacterDNALibrary(spindle, action.chatId, userId);
+        spindle.sendToFrontend({ type: "vn_character_dna", chatId: action.chatId, requestId: action.requestId, library, activeDna: dna }, userId);
+        return;
+      }
+      if (action.action === "save" && action.dna) {
+        await saveCharacterDNA(spindle, action.chatId, action.dna, userId);
+        const library = await loadCharacterDNALibrary(spindle, action.chatId, userId);
+        spindle.sendToFrontend({ type: "vn_character_dna", chatId: action.chatId, requestId: action.requestId, library, activeDna: action.dna }, userId);
+        return;
+      }
+      if (action.action === "autofill" && action.characterName) {
+        const dna = await harvestCharacterDNA(spindle, action.chatId, action.characterName, { userId });
+        if (action.contextText) {
+          const parsed = parseCharacterDNALlmOutput(action.contextText);
+          if (parsed) {
+            const merged = mergeCharacterDNA(dna, parsed, true);
+            await saveCharacterDNA(spindle, action.chatId, merged, userId);
+            const library = await loadCharacterDNALibrary(spindle, action.chatId, userId);
+            spindle.sendToFrontend({ type: "vn_character_dna", chatId: action.chatId, requestId: action.requestId, library, activeDna: merged }, userId);
+            return;
+          }
+        }
+        await saveCharacterDNA(spindle, action.chatId, dna, userId);
+        const library = await loadCharacterDNALibrary(spindle, action.chatId, userId);
+        spindle.sendToFrontend({ type: "vn_character_dna", chatId: action.chatId, requestId: action.requestId, library, activeDna: dna }, userId);
+        return;
+      }
       return;
     }
     case "vn_set_config": {
