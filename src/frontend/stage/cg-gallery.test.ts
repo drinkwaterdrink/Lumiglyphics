@@ -38,6 +38,7 @@ describe('Story Event CG Gallery & Lightbox (Phase 5)', () => {
 
       gallery.syncFromTurn(mockTurn);
       gallery.open();
+      expect(mount.dataset.vnGalleryOpen).toBe('true');
 
       const counter = mount.querySelector('[data-cg-counter]');
       expect(counter?.textContent).toContain('1 Unlocked');
@@ -53,7 +54,14 @@ describe('Story Event CG Gallery & Lightbox (Phase 5)', () => {
       const quote = mount.querySelector('[data-cg-lightbox-quote]');
       expect(quote?.textContent).toContain('Nadine stands in the rain');
 
+      // Verify lightbox back and close controls exist and are accessible
+      const backBtn = mount.querySelector('[data-cg-lightbox-back]');
+      expect(backBtn).not.toBeNull();
+      const closeBtn = mount.querySelector('[data-cg-lightbox-close]');
+      expect(closeBtn).not.toBeNull();
+
       gallery.close();
+      expect(mount.dataset.vnGalleryOpen).toBeUndefined();
       const backdrop = mount.querySelector('.cg-gallery-backdrop');
       expect(backdrop?.hidden).toBe(true);
     } finally {

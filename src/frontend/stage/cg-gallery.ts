@@ -34,14 +34,14 @@ export class CgGalleryModal {
         .cg-gallery-backdrop {
           position: fixed;
           inset: 0;
-          z-index: 9999;
-          background: rgba(4, 8, 12, 0.88);
+          z-index: 100005;
+          background: rgba(4, 8, 12, 0.92);
           backdrop-filter: blur(16px);
           -webkit-backdrop-filter: blur(16px);
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: 24px;
+          padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px));
           color: #f1f5f9;
           font-family: inherit;
         }
@@ -62,9 +62,9 @@ export class CgGalleryModal {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 16px 24px;
+          padding: 14px 20px;
           border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-          background: rgba(0, 0, 0, 0.2);
+          background: rgba(0, 0, 0, 0.25);
         }
         .cg-gallery-title h2 {
           margin: 0;
@@ -85,27 +85,32 @@ export class CgGalleryModal {
           border: 1px solid rgba(110, 231, 183, 0.2);
         }
         .cg-gallery-close {
-          width: 36px;
-          height: 36px;
+          min-width: 44px;
+          min-height: 44px;
+          width: 44px;
+          height: 44px;
           border-radius: 50%;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          background: rgba(255, 255, 255, 0.08);
           color: inherit;
           cursor: pointer;
           display: grid;
           place-items: center;
-          transition: background 0.15s ease;
+          font-size: 16px;
+          transition: background 0.15s ease, border-color 0.15s ease;
         }
         .cg-gallery-close:hover {
-          background: rgba(255, 255, 255, 0.15);
+          background: rgba(255, 255, 255, 0.2);
+          border-color: rgba(255, 255, 255, 0.3);
         }
         .cg-gallery-nav {
           display: flex;
           align-items: center;
           gap: 8px;
-          padding: 10px 24px;
+          padding: 10px 20px;
           border-bottom: 1px solid rgba(255, 255, 255, 0.05);
           background: rgba(0, 0, 0, 0.1);
+          overflow-x: auto;
         }
         .cg-tab-btn {
           padding: 6px 14px;
@@ -117,6 +122,7 @@ export class CgGalleryModal {
           font-weight: 600;
           cursor: pointer;
           transition: all 0.15s ease;
+          white-space: nowrap;
         }
         .cg-tab-btn:hover {
           color: #fff;
@@ -124,16 +130,16 @@ export class CgGalleryModal {
         }
         .cg-tab-btn.active {
           color: #fff;
-          background: rgba(255, 255, 255, 0.1);
-          border-color: rgba(255, 255, 255, 0.15);
+          background: rgba(255, 255, 255, 0.12);
+          border-color: rgba(255, 255, 255, 0.18);
         }
         .cg-gallery-grid {
           flex: 1;
           overflow-y: auto;
-          padding: 24px;
+          padding: 20px;
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-          gap: 18px;
+          gap: 16px;
         }
         .cg-card {
           position: relative;
@@ -184,20 +190,24 @@ export class CgGalleryModal {
         .cg-lightbox {
           position: fixed;
           inset: 0;
-          z-index: 10000;
-          background: rgba(0, 0, 0, 0.95);
+          z-index: 100010;
+          background: rgba(0, 0, 0, 0.96);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          padding: 20px;
+          padding: calc(64px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px));
+          box-sizing: border-box;
         }
         .cg-lightbox img {
-          max-width: 90vw;
-          max-height: 75vh;
+          max-width: 92vw;
+          max-height: 72vh;
           object-fit: contain;
           border-radius: 8px;
-          box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8);
+          box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85);
+          pointer-events: auto;
         }
         .cg-lightbox-quote {
           margin-top: 16px;
@@ -207,26 +217,53 @@ export class CgGalleryModal {
           text-align: center;
           color: #e2e8f0;
           line-height: 1.6;
+          pointer-events: auto;
         }
-        .cg-lightbox-controls {
+        .cg-lightbox-top-bar {
           position: absolute;
-          top: 20px;
-          right: 20px;
+          top: calc(16px + env(safe-area-inset-top, 0px));
+          left: 16px;
+          right: 16px;
           display: flex;
-          gap: 12px;
+          align-items: center;
+          justify-content: space-between;
+          z-index: 100020;
+          pointer-events: auto;
+        }
+        .cg-lightbox-actions {
+          display: flex;
+          align-items: center;
+          gap: 10px;
         }
         .cg-lightbox-btn {
-          padding: 8px 14px;
-          border-radius: 6px;
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          background: rgba(255, 255, 255, 0.1);
+          min-height: 40px;
+          padding: 8px 16px;
+          border-radius: 8px;
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          background: rgba(255, 255, 255, 0.12);
           color: #fff;
           font-size: 13px;
           font-weight: 600;
           cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          backdrop-filter: blur(8px);
+          transition: background 0.15s ease, border-color 0.15s ease;
         }
         .cg-lightbox-btn:hover {
-          background: rgba(255, 255, 255, 0.2);
+          background: rgba(255, 255, 255, 0.22);
+          border-color: rgba(255, 255, 255, 0.35);
+        }
+        .cg-lightbox-close-pill {
+          background: rgba(239, 68, 68, 0.2);
+          border-color: rgba(239, 68, 68, 0.4);
+          color: #fca5a5;
+        }
+        .cg-lightbox-close-pill:hover {
+          background: rgba(239, 68, 68, 0.35);
+          border-color: rgba(239, 68, 68, 0.6);
+          color: #fff;
         }
         .cg-empty-state {
           grid-column: 1 / -1;
@@ -255,9 +292,12 @@ export class CgGalleryModal {
         <div class="cg-gallery-grid" data-cg-grid></div>
       </div>
       <div class="cg-lightbox" data-cg-lightbox hidden>
-        <div class="cg-lightbox-controls">
-          <button type="button" class="cg-lightbox-btn" data-cg-download>Export Native</button>
-          <button type="button" class="cg-lightbox-btn" data-cg-lightbox-close>Close (Esc)</button>
+        <div class="cg-lightbox-top-bar">
+          <button type="button" class="cg-lightbox-btn" data-cg-lightbox-back>${APERTURE_ICONS.back} <span>Back to Gallery</span></button>
+          <div class="cg-lightbox-actions">
+            <button type="button" class="cg-lightbox-btn" data-cg-download>📥 <span>Export Native</span></button>
+            <button type="button" class="cg-lightbox-btn cg-lightbox-close-pill" data-cg-lightbox-close aria-label="Close Lightbox">✕ <span>Close (Esc)</span></button>
+          </div>
         </div>
         <img data-cg-lightbox-img src="" alt="Story CG" />
         <div class="cg-lightbox-quote" data-cg-lightbox-quote></div>
@@ -289,11 +329,24 @@ export class CgGalleryModal {
       this.render();
     });
 
-    this.lightbox.querySelector('[data-cg-lightbox-close]')?.addEventListener('click', () => {
+    this.lightbox.querySelector('[data-cg-lightbox-back]')?.addEventListener('click', (e) => {
+      e.stopPropagation();
       this.closeLightbox();
     });
 
-    this.lightbox.querySelector('[data-cg-download]')?.addEventListener('click', () => {
+    this.lightbox.querySelector('[data-cg-lightbox-close]')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.closeLightbox();
+    });
+
+    this.lightbox.addEventListener('click', (e) => {
+      if (e.target === this.lightbox) {
+        this.closeLightbox();
+      }
+    });
+
+    this.lightbox.querySelector('[data-cg-download]')?.addEventListener('click', (e) => {
+      e.stopPropagation();
       const item = this.items[this.activeLightboxIndex];
       if (item?.imageUrl) {
         const a = document.createElement('a');
@@ -357,12 +410,20 @@ export class CgGalleryModal {
   open(): void {
     this.isOpen = true;
     this.backdrop.hidden = false;
+    this.mount.dataset.vnGalleryOpen = 'true';
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.dataset.vnGalleryOpen = 'true';
+    }
     this.render();
   }
 
   close(): void {
     this.isOpen = false;
     this.backdrop.hidden = true;
+    delete this.mount.dataset.vnGalleryOpen;
+    if (typeof document !== 'undefined' && document.body) {
+      delete document.body.dataset.vnGalleryOpen;
+    }
     this.closeLightbox();
   }
 

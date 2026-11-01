@@ -653,7 +653,7 @@ export class VnStage {
     this.applyThemePreset(options.themePreset ?? "lumiverse");
     this.scene = queryRequired(this.themeRoot, "[data-vn-scene]");
     this.castStage = new CastStage(this.root,this.createImage);
-    this.cgGallery = new CgGalleryModal(this.root);
+    this.cgGallery = new CgGalleryModal(shell);
     this.sceneImages = Array.from(this.themeRoot.querySelectorAll<HTMLImageElement>("[data-vn-scene-image]"));
     this.sceneBackdropEl = this.themeRoot.querySelector<HTMLImageElement>("[data-vn-scene-backdrop]");
     this.activeImageEl = queryRequired(this.themeRoot, "[data-vn-scene-image][data-vn-layer='active']");
@@ -729,6 +729,10 @@ export class VnStage {
     this.bindEvents();
     this.updateControlButtons();
     this.render(null);
+  }
+
+  setFolioOpener(fn: (charName: string) => void): void {
+    this.dossiers.setFolioOpener(fn);
   }
 
   setTooltipPreferences(prefs:TooltipPreferences):void {this.actionDraftsEnabled=prefs.enabled&&prefs.actionsEnabled;this.dossiers.setPreferences(prefs);if(!this.actionDraftsEnabled)this.closeMoveDraft();const view=selectVnStageView(this.state);this.renderInteraction(view.showChoices,view.showStandardInput,view.isBusy);}

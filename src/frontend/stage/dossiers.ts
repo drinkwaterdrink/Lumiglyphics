@@ -26,7 +26,16 @@ export class StageDossiers {
   this.workspace=workspace;this.workspaceMounted=true;
   const style=document.createElement('style');style.textContent=DOSSIER_CSS+DOCKED_DOSSIER_CSS;mount.append(style);
   this.card.setDocked();
+  this.card.setFolioOpener((charName) => {
+    this.workspace?.open('character');
+    this.folioOpener?.(charName);
+  });
   workspace.register('story',{element:this.card.host,hideAtHome:true,enter:()=>this.openReferences(),leave:()=>this.card.close(),back:()=>this.card.back()});
+ }
+ private folioOpener?: (charName: string) => void;
+ setFolioOpener(fn: (charName: string) => void): void {
+  this.folioOpener = fn;
+  this.card.setFolioOpener(fn);
  }
  private openReferences():void {
   const snapshot=this.snapshot();this.hold();

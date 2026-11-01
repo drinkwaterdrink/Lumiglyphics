@@ -64,4 +64,58 @@ describe('CharacterFolio & Character DNA', () => {
       restore();
     }
   });
+
+  it('auto-populates cast roster from scene turn entities and subject candidates without prior saved DNA', () => {
+    const restore = installFakeDocument();
+    try {
+      const folio = new CharacterFolio();
+      const el = folio.element;
+
+      const mockTurn: any = {
+        chatId: 'scene-chat',
+        messageId: 'msg-pruitt',
+        speaker: 'Narrator',
+        paragraphs: ['Darby Pruitt speaks to Nadine Pruitt in the kitchen.'],
+        subjectCandidates: ['Darby Pruitt', 'Nadine Pruitt'],
+        presentation: {
+          snapshots: [
+            {
+              at: { key: 'msg-pruitt', paragraphIndex: 0 },
+              entities: [
+                { id: 'darby', name: 'Darby Pruitt', kind: 'npc', pinned: false },
+                { id: 'nadine', name: 'Nadine Pruitt', kind: 'npc', pinned: true },
+                { id: 'kitchen', name: 'Pruitt Farmhouse Kitchen', kind: 'place', pinned: false }
+              ]
+            }
+          ]
+        },
+        assets: [
+          {
+            jobId: 'asset-nadine',
+            cueId: 'cue-1',
+            paragraphIndex: 0,
+            status: 'generated',
+            imageUrl: '/img/nadine.png',
+            stageAsset: { character: 'Nadine Pruitt' }
+          }
+        ]
+      };
+
+      folio.syncFromTurn(mockTurn);
+      folio.enter();
+
+      const rosterItems = el.querySelectorAll('.folio-roster-item');
+      expect(rosterItems.length).toBe(2);
+
+      const rosterNames = Array.from(el.querySelectorAll('.folio-roster-name')).map(n => n.textContent);
+      expect(rosterNames).toContain('Darby Pruitt');
+      expect(rosterNames).toContain('Nadine Pruitt');
+
+      // First character should be active by default
+      const heroName = el.querySelector('.folio-hero-title h2')?.textContent;
+      expect(['Darby Pruitt', 'Nadine Pruitt']).toContain(heroName ?? '');
+    } finally {
+      restore();
+    }
+  });
 });

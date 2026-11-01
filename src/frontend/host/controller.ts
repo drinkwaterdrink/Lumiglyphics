@@ -751,6 +751,9 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     }
   });
   stage.workspace.register('character', characterFolio);
+  stage.setFolioOpener((charName) => {
+    characterFolio.setActiveCharacter(charName);
+  });
   const panelRequests = new Map<string, { resolve: (template: string) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   panels.onResolveTemplate = (template) => new Promise((resolve, reject) => {
     const requestId = createUiId();
@@ -1086,6 +1089,15 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if(!turn||turn.chatId!==next.chatId||turn.messageId!==next.messageId||turn.sourceFingerprint!==next.sourceFingerprint||turn.swipeId!==next.swipeId||turn.revision!==next.revision)retryQueue=null;
     turn = next;
     imageStudio.setTurn(next);
+    characterFolio.syncFromTurn(next);
+    if (next?.chatId) {
+      ctx.sendToBackend({
+        type: 'vn_character_dna',
+        action: 'list',
+        chatId: next.chatId,
+        requestId: createUiId()
+      });
+    }
     imageLibrary.setContext(next,stage.getState().currentParagraphIndex);
     settingsPanel?.setImagePreviewMetadata(next?.imageRequests?.at(-1)?.imagePromptMetadata);
     imageStudio.setCursor(stage.getState().currentParagraphIndex);

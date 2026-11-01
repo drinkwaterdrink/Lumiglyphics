@@ -664,13 +664,17 @@ body.theme-light .folio-quote-callout {
   transform: translateX(-50%) scale(1.08) !important;
 }
 
-/* Hide Reader Top Header when Workspace or Dossier is Open so they never overlap */
+/* Hide Reader Top Header when Workspace, Dossier or CG Gallery is Open so they never overlap */
 [data-vn-shell][data-vn-workspace] [data-vn-reader-header],
 [data-vn-root][data-vn-workspace] [data-vn-reader-header],
 [data-vn-workspace-open="true"] [data-vn-reader-header],
 [data-vn-shell][data-vn-dossier-open="true"] [data-vn-reader-header],
 [data-vn-root][data-vn-dossier-open="true"] [data-vn-reader-header],
-[data-vn-dossier-open="true"] [data-vn-reader-header] {
+[data-vn-dossier-open="true"] [data-vn-reader-header],
+[data-vn-shell][data-vn-gallery-open="true"] [data-vn-reader-header],
+[data-vn-root][data-vn-gallery-open="true"] [data-vn-reader-header],
+[data-vn-gallery-open="true"] [data-vn-reader-header],
+body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   display: none !important;
 }
 

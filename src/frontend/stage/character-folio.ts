@@ -7,6 +7,7 @@ import {
 } from '../../shared/character-dna.js';
 import { APERTURE_ICONS } from '../theme/aperture-theme.js';
 import type { WorkspaceSurface } from './reader-workspace.js';
+import type { TurnView } from '../../protocol.js';
 
 export interface CharacterFolioHandlers {
   onSaveDNA?: (dna: CharacterDNA) => void;
@@ -303,7 +304,7 @@ export class CharacterFolio implements WorkspaceSurface {
           }
           .folio-sidebar {
             width: 100%;
-            height: 160px;
+            height: 180px;
             border-right: none;
             border-bottom: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.08));
           }
@@ -335,8 +336,86 @@ export class CharacterFolio implements WorkspaceSurface {
     });
   }
 
+  enter(): void {
+    if (!this.activeCharacterId && Object.keys(this.library).length > 0) {
+      this.activeCharacterId = Object.keys(this.library)[0]!;
+    }
+    this.renderRoster();
+    this.renderDetail();
+  }
+
+  leave(): void {
+    this.isEditing = false;
+  }
+
+  syncFromTurn(turn: TurnView | null): void {
+    if (!turn) return;
+    const detectedNames = new Set<string>();
+
+    // 1. From presentation snapshots (NPC entities)
+    for (const snap of turn.presentation?.snapshots ?? []) {
+      for (const ent of snap.entities ?? []) {
+        if (ent.kind === 'npc' && ent.name?.trim()) {
+          detectedNames.add(ent.name.trim());
+        }
+      }
+    }
+
+    // 2. From subject candidates
+    for (const cand of (turn.subjectCandidates ?? []) as any[]) {
+      if (typeof cand === 'string') {
+        const s = cand.trim();
+        if (s) detectedNames.add(s);
+      } else if (cand && typeof cand === 'object' && typeof cand.name === 'string' && cand.name.trim()) {
+        detectedNames.add(cand.name.trim());
+      }
+    }
+
+    // 3. From assets stageAsset character
+    for (const asset of turn.assets ?? []) {
+      const charName = asset.stageAsset?.character?.trim();
+      if (charName) {
+        detectedNames.add(charName);
+      }
+    }
+
+    // 4. From cast if present
+    const anyCast = (turn as any).cast;
+    if (Array.isArray(anyCast)) {
+      for (const c of anyCast) {
+        if (c && typeof c === 'object' && typeof c.name === 'string' && c.name.trim()) {
+          detectedNames.add(c.name.trim());
+        }
+      }
+    }
+
+    let changed = false;
+    for (const name of detectedNames) {
+      const key = name.trim().toLowerCase();
+      const existing = Object.values(this.library).find(c => c.name.toLowerCase() === key || c.aliases.some(a => a.toLowerCase() === key));
+      if (!existing) {
+        const dna = createEmptyCharacterDNA(name);
+        const assetWithImage = turn.assets?.find(a => (a.stageAsset?.character?.toLowerCase() === key || a.stageAsset?.character?.toLowerCase().includes(key)) && (a.stageAsset?.displayImageUrl ?? a.imageUrl));
+        if (assetWithImage) {
+          dna.avatarUrl = assetWithImage.stageAsset?.displayImageUrl ?? assetWithImage.imageUrl;
+        }
+        this.library[dna.id.toLowerCase()] = dna;
+        changed = true;
+      }
+    }
+
+    if (changed || !this.activeCharacterId) {
+      if (!this.activeCharacterId && Object.keys(this.library).length > 0) {
+        this.activeCharacterId = Object.keys(this.library)[0]!;
+      }
+      this.renderRoster();
+      this.renderDetail();
+    }
+  }
+
   setLibrary(library: CharacterDNALibrary | Record<string, CharacterDNA>): void {
-    this.library = ('characters' in library ? library.characters : library) as Record<string, CharacterDNA>;
+    const incoming = ('characters' in library ? library.characters : library) as Record<string, CharacterDNA>;
+    this.library = { ...this.library, ...incoming };
     if (!this.activeCharacterId || !this.library[this.activeCharacterId]) {
       const first = Object.keys(this.library)[0];
       this.activeCharacterId = first || null;
@@ -353,6 +432,10 @@ export class CharacterFolio implements WorkspaceSurface {
       const match = Object.values(this.library).find(c => c.name.toLowerCase() === key || c.aliases.some(a => a.toLowerCase() === key));
       if (match) {
         this.activeCharacterId = match.id.toLowerCase();
+      } else {
+        const created = createEmptyCharacterDNA(idOrName.trim());
+        this.library[created.id.toLowerCase()] = created;
+        this.activeCharacterId = created.id.toLowerCase();
       }
     }
     this.renderRoster();
@@ -372,53 +455,73 @@ export class CharacterFolio implements WorkspaceSurface {
       empty.style.padding = '20px 8px';
       empty.textContent = this.activeFilter ? 'No matching characters.' : 'No cast registered.';
       this.rosterList.append(empty);
-      return;
+    } else {
+      for (const char of characters) {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = `folio-roster-item${this.activeCharacterId === char.id.toLowerCase() ? ' active' : ''}`;
+        item.onclick = () => {
+          this.activeCharacterId = char.id.toLowerCase();
+          this.isEditing = false;
+          this.renderRoster();
+          this.renderDetail();
+          if (!char.locked && !char.hair.color && !char.eyes.color && !char.signatureOutfit) {
+            this.handlers.onHarvestDNA?.(char.name);
+          }
+        };
+
+        const avatar = document.createElement('div');
+        avatar.className = 'folio-avatar';
+        if (char.avatarUrl) {
+          const img = document.createElement('img');
+          img.src = char.avatarUrl;
+          img.alt = char.name;
+          avatar.append(img);
+        } else {
+          avatar.textContent = (char.name[0] || '?').toUpperCase();
+        }
+
+        const meta = document.createElement('div');
+        meta.className = 'folio-roster-meta';
+        const name = document.createElement('div');
+        name.className = 'folio-roster-name';
+        name.textContent = char.name;
+        const sub = document.createElement('div');
+        sub.className = 'folio-roster-sub';
+        sub.textContent = [char.build.species, char.hair.color ? `${char.hair.color} hair` : ''].filter(Boolean).join(' · ') || 'Unconfigured';
+        meta.append(name, sub);
+
+        item.append(avatar, meta);
+
+        if (char.locked) {
+          const lock = document.createElement('span');
+          lock.className = 'folio-lock-badge';
+          lock.title = 'Locked DNA';
+          lock.textContent = '🔒';
+          item.append(lock);
+        }
+
+        this.rosterList.append(item);
+      }
     }
 
-    for (const char of characters) {
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.className = `folio-roster-item${this.activeCharacterId === char.id.toLowerCase() ? ' active' : ''}`;
-      item.onclick = () => {
-        this.activeCharacterId = char.id.toLowerCase();
-        this.isEditing = false;
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'folio-btn';
+    addBtn.style.cssText = 'margin-top:8px;width:100%;justify-content:center;padding:8px 12px;font-size:12px;border:1px dashed var(--vn-shell-border,rgba(255,255,255,0.2));background:rgba(255,255,255,0.03);';
+    addBtn.innerHTML = `<span>+ Add Custom Character</span>`;
+    addBtn.onclick = () => {
+      const name = prompt('Enter character name:');
+      if (name && name.trim()) {
+        const created = createEmptyCharacterDNA(name.trim());
+        this.library[created.id.toLowerCase()] = created;
+        this.activeCharacterId = created.id.toLowerCase();
+        this.handlers.onSaveDNA?.(created);
         this.renderRoster();
         this.renderDetail();
-      };
-
-      const avatar = document.createElement('div');
-      avatar.className = 'folio-avatar';
-      if (char.avatarUrl) {
-        const img = document.createElement('img');
-        img.src = char.avatarUrl;
-        img.alt = char.name;
-        avatar.append(img);
-      } else {
-        avatar.textContent = (char.name[0] || '?').toUpperCase();
       }
-
-      const meta = document.createElement('div');
-      meta.className = 'folio-roster-meta';
-      const name = document.createElement('div');
-      name.className = 'folio-roster-name';
-      name.textContent = char.name;
-      const sub = document.createElement('div');
-      sub.className = 'folio-roster-sub';
-      sub.textContent = [char.build.species, char.hair.color ? `${char.hair.color} hair` : ''].filter(Boolean).join(' · ') || 'Unconfigured';
-      meta.append(name, sub);
-
-      item.append(avatar, meta);
-
-      if (char.locked) {
-        const lock = document.createElement('span');
-        lock.className = 'folio-lock-badge';
-        lock.title = 'Locked DNA';
-        lock.textContent = '🔒';
-        item.append(lock);
-      }
-
-      this.rosterList.append(item);
-    }
+    };
+    this.rosterList.append(addBtn);
   }
 
   private renderDetail(): void {
@@ -612,14 +715,6 @@ export class CharacterFolio implements WorkspaceSurface {
   private saveCurrentEdits(char: CharacterDNA): void {
     // Collect all input values from detail view
     char.lastUpdated = Date.now();
-  }
-
-  enter(): void {
-    this.handlers.onHarvestDNA?.(this.activeCharacterId || '');
-  }
-
-  leave(): void {
-    this.isEditing = false;
   }
 
   back(): boolean {

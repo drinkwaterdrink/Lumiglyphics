@@ -442,8 +442,23 @@ body.theme-light [data-surface="settings"]:before,
   height: auto !important;
   max-height: none !important;
 }
-[data-vn-reference-sheet] > header {
-  display: none !important;
+[data-vn-reference-sheet] > header,
+[data-vn-dossier-card] > header {
+  position: sticky !important;
+  top: 0 !important;
+  height: 56px !important;
+  min-height: 56px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 0 16px !important;
+  margin: 0 -18px 12px -18px !important;
+  background: rgba(17, 31, 31, 0.94) !important;
+  border-bottom: 1px solid rgba(220, 238, 217, 0.14) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  z-index: 10 !important;
+  box-sizing: border-box !important;
 }
 .chip-row,
 [data-reference-filters] {
