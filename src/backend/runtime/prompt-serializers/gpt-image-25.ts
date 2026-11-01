@@ -28,7 +28,15 @@ export function serializeGptImage25(input: SerializerInput): SerializerResult {
       if (main) {
         const parts = [main.appearance];
         if (main.attire) parts.push(`dressed in ${main.attire}`);
-        subjectProse = `${main.name} (${parts.join(', ')}) is ${main.action || brief.action || 'shown in the scene'}.`;
+        const act = (main.action || brief.action || 'shown in the scene').trim();
+        const firstName = main.name.split(' ')[0] || main.name;
+        const nameRegex = new RegExp(`^(?:${main.name}|${firstName})\\s+`, 'i');
+        const cleanAct = nameRegex.test(act) ? act.replace(nameRegex, '') : act;
+        if (/^(?:is|stands|standing|sits|sitting|walking|running|looking|holding|clutching|reaching|wearing|facing|turned)\b/i.test(cleanAct)) {
+          subjectProse = `${main.name} (${parts.join(', ')}) ${cleanAct}.`.replace(/\.\.+$/, '.');
+        } else {
+          subjectProse = `${main.name} (${parts.join(', ')}) is ${cleanAct}.`.replace(/\.\.+$/, '.');
+        }
       }
     }
 

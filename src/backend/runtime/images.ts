@@ -1354,6 +1354,8 @@ export async function generateAssets(
           frozen.promptProfile=await loadImagePromptProfile(spindle,config,selected?.provider??provider,frozen.model);
           frozen=prepareCapabilityOutput(frozen,config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined);
           if (config.imagePromptEngineVersion === 2) {
+            const v1OriginalPrompt = frozen.prompt;
+            const v1OriginalNegative = frozen.negativePrompt;
             const profileV2 = await loadImagePromptProfileV2(spindle, config, selected?.provider ?? provider, frozen.model, frozen.parameters);
             const outputPlan = resolveImageOutputPlan({
               capabilities: profileV2.outputCapabilities,
@@ -1413,8 +1415,8 @@ export async function generateAssets(
                 initialMetadata.promptLintWarnings = compiledV2.warnings;
                 initialMetadata.referenceSummary = portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference";
                 initialMetadata.shadowPrompt = {
-                  v1Prompt: frozen.prompt,
-                  ...(frozen.negativePrompt !== undefined ? { v1NegativePrompt: frozen.negativePrompt } : {}),
+                  v1Prompt: v1OriginalPrompt,
+                  ...(v1OriginalNegative !== undefined ? { v1NegativePrompt: v1OriginalNegative } : {}),
                   v2Prompt: compiledV2.prompt,
                   ...(compiledV2.negativePrompt !== undefined ? { v2NegativePrompt: compiledV2.negativePrompt } : {})
                 };

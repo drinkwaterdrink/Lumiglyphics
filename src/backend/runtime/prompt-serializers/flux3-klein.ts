@@ -30,8 +30,20 @@ export function serializeFlux3Klein(input: SerializerInput): SerializerResult {
   } else {
     const main = subjects[0];
     if (main) {
-      const act = main.action || actionText;
-      subjectActionText = `${main.name} is ${act || 'present in the scene'}.`.trim();
+      const act = (main.action || actionText || '').trim();
+      if (act) {
+        const firstName = main.name.split(' ')[0] || main.name;
+        const nameRegex = new RegExp(`^(?:${main.name}|${firstName})\\s+`, 'i');
+        if (nameRegex.test(act)) {
+          subjectActionText = `${act}.`.replace(/\.\.+$/, '.');
+        } else if (/^(?:is|stands|standing|sits|sitting|walking|running|looking|holding|clutching|reaching|wearing|facing|turned)\b/i.test(act)) {
+          subjectActionText = `${main.name} ${act}.`.replace(/\.\.+$/, '.');
+        } else {
+          subjectActionText = `${main.name} is ${act}.`.replace(/\.\.+$/, '.');
+        }
+      } else {
+        subjectActionText = `${main.name} is present in the scene.`;
+      }
     }
   }
 

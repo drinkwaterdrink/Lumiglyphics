@@ -25,7 +25,11 @@ export function serializeGenericProse(input: SerializerInput): SerializerResult 
   } else {
     const main = subjects[0];
     const attire = main?.attire ? `, wearing ${main.attire}` : '';
-    subjectText = `${main?.name || 'Character'} with ${main?.appearance || 'distinct traits'}${attire}, currently ${main?.action || brief.action || 'in scene'}.`;
+    const rawAct = (main?.action || brief.action || 'in scene').trim();
+    const firstName = main?.name ? (main.name.split(' ')[0] || main.name) : '';
+    const nameRegex = firstName ? new RegExp(`^(?:${main?.name}|${firstName})\\s+`, 'i') : null;
+    const cleanAct = nameRegex && nameRegex.test(rawAct) ? rawAct.replace(nameRegex, '') : rawAct;
+    subjectText = `${main?.name || 'Character'} with ${main?.appearance || 'distinct traits'}${attire}, currently ${cleanAct}.`.replace(/\.\.+$/, '.');
   }
 
   sections.push({
