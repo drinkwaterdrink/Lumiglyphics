@@ -753,6 +753,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   stage.workspace.register('character', characterFolio);
   stage.setFolioOpener((charName) => {
     characterFolio.setActiveCharacter(charName);
+    stage.workspace.open('character');
   });
   const panelRequests = new Map<string, { resolve: (template: string) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   panels.onResolveTemplate = (template) => new Promise((resolve, reject) => {

@@ -230,11 +230,16 @@ JSON format required:
   },
   "build": {
     "height": "height impression (e.g. petite, tall, medium)",
-    "bodyType": "body type (e.g. slender, athletic, curvy, stocky)",
+    "bodyType": "body type (e.g. slender, athletic, curvy hourglass, stocky)",
+    "bust": "chest or bust proportions (e.g. full bust with natural cleavage, or broad muscular chest)",
+    "hipsGlutes": "waist and hip proportions (e.g. narrow waist and curvy hips, or toned athletic waist)",
     "skinTone": "complexion (e.g. fair with freckles, sun-kissed olive, deep bronze)",
     "gender": "apparent gender",
-    "species": "species (e.g. human, elf, kitsune)"
+    "species": "species (e.g. human, elf, kitsune)",
+    "age": "apparent age (e.g. late 20s, early 30s, distinguished 50s)"
   },
+  "faceFeatures": "facial structure (e.g. heart-shaped face, high cheekbones, soft full lips)",
+  "demeanor": "typical posture, vibe and expression (e.g. guarded posture, shy glance, wry smirk)",
   "signatureOutfit": "characteristic or default garment description",
   "distinguishingFeatures": ["specific scars, freckles, tattoos, accessories, markings"],
   "colorPalette": ["3 to 5 complementary color names or hex codes for their design"]
@@ -278,10 +283,19 @@ export function parseCharacterDNALlmOutput(llmResponse: string): Partial<Charact
     if (data.build && typeof data.build === 'object') {
       if (typeof data.build.height === 'string') partial.build!.height = data.build.height.trim();
       if (typeof data.build.bodyType === 'string') partial.build!.bodyType = data.build.bodyType.trim();
+      if (typeof data.build.bust === 'string') partial.build!.bust = data.build.bust.trim();
+      if (typeof data.build.hipsGlutes === 'string') partial.build!.hipsGlutes = data.build.hipsGlutes.trim();
       if (typeof data.build.skinTone === 'string') partial.build!.skinTone = data.build.skinTone.trim();
       if (typeof data.build.gender === 'string') partial.build!.gender = data.build.gender.trim();
       if (typeof data.build.species === 'string') partial.build!.species = data.build.species.trim();
       if (typeof data.build.age === 'string') partial.build!.age = data.build.age.trim();
+    }
+
+    if (typeof data.faceFeatures === 'string') {
+      partial.faceFeatures = data.faceFeatures.trim();
+    }
+    if (typeof data.demeanor === 'string') {
+      partial.demeanor = data.demeanor.trim();
     }
 
     if (typeof data.signatureOutfit === 'string') {

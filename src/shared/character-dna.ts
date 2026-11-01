@@ -16,6 +16,8 @@ export type CharacterEyesDNA = z.infer<typeof CharacterEyesDNASchema>;
 export const CharacterBuildDNASchema = z.object({
   height: z.string().trim().max(100).optional(),
   bodyType: z.string().trim().max(100).optional(),
+  bust: z.string().trim().max(100).optional(),
+  hipsGlutes: z.string().trim().max(100).optional(),
   skinTone: z.string().trim().max(100).optional(),
   gender: z.string().trim().max(100).optional(),
   species: z.string().trim().max(100).optional(),
@@ -30,6 +32,8 @@ export const CharacterDNASchema = z.object({
   hair: CharacterHairDNASchema.default({}),
   eyes: CharacterEyesDNASchema.default({}),
   build: CharacterBuildDNASchema.default({}),
+  faceFeatures: z.string().trim().max(200).optional(),
+  demeanor: z.string().trim().max(200).optional(),
   signatureOutfit: z.string().trim().max(1000).default(''),
   activeOutfit: z.string().trim().max(1000).optional(),
   distinguishingFeatures: z.array(z.string().trim().max(200)).max(24).default([]),
@@ -70,8 +74,10 @@ export function createEmptyCharacterDNA(name: string, id?: string): CharacterDNA
  */
 export function formatCharacterDNAToTags(dna: CharacterDNA): string[] {
   const tags: string[] = [];
+  const isMale = dna.build.gender?.toLowerCase() === 'man' || dna.build.gender?.toLowerCase() === 'male';
 
-  // Build / Species / Gender
+  // Age / Gender / Species
+  if (dna.build.age) tags.push(dna.build.age);
   if (dna.build.gender || dna.build.species) {
     tags.push([dna.build.gender, dna.build.species].filter(Boolean).join(' '));
   }
@@ -79,6 +85,17 @@ export function formatCharacterDNAToTags(dna: CharacterDNA): string[] {
   if (dna.build.height || dna.build.bodyType) {
     tags.push([dna.build.height, dna.build.bodyType].filter(Boolean).join(' '));
   }
+
+  // Anatomy (Skip bust for male unless it specifies chest/shoulders)
+  if (dna.build.bust && (!isMale || /chest|shoulder|pec/i.test(dna.build.bust))) {
+    tags.push(dna.build.bust);
+  }
+  if (dna.build.hipsGlutes && !isMale) {
+    tags.push(dna.build.hipsGlutes);
+  }
+
+  // Face
+  if (dna.faceFeatures) tags.push(dna.faceFeatures);
 
   // Hair
   const hairParts = [dna.hair.length, dna.hair.style, dna.hair.color ? `${dna.hair.color} hair` : 'hair'].filter(Boolean);
@@ -92,16 +109,19 @@ export function formatCharacterDNAToTags(dna: CharacterDNA): string[] {
     tags.push(eyeParts.join(' '));
   }
 
-  // Distinguishing features
+  // Distinguishing features / anchors
   if (dna.distinguishingFeatures && dna.distinguishingFeatures.length > 0) {
     tags.push(...dna.distinguishingFeatures);
   }
 
-  // Outfits
+  // Outfits (Only single active outfit sent: current active or signature default)
   const currentOutfit = dna.activeOutfit || dna.signatureOutfit;
   if (currentOutfit) {
     tags.push(currentOutfit.startsWith('wearing ') ? currentOutfit : `wearing ${currentOutfit}`);
   }
+
+  // Demeanor / Expression
+  if (dna.demeanor) tags.push(dna.demeanor);
 
   return tags.filter(Boolean);
 }
@@ -111,19 +131,30 @@ export function formatCharacterDNAToTags(dna: CharacterDNA): string[] {
  */
 export function formatCharacterDNAToPromptClause(dna: CharacterDNA): string {
   const parts: string[] = [];
+  const isMale = dna.build.gender?.toLowerCase() === 'man' || dna.build.gender?.toLowerCase() === 'male';
 
-  // Physical foundation
+  // Physical foundation: Age, Height, Body Type, Gender, Species
   const identityBits: string[] = [];
+  if (dna.build.age) identityBits.push(dna.build.age);
   if (dna.build.height || dna.build.bodyType) identityBits.push([dna.build.height, dna.build.bodyType].filter(Boolean).join(' '));
   if (dna.build.gender || dna.build.species) identityBits.push([dna.build.gender, dna.build.species].filter(Boolean).join(' '));
+  
+  // Proportions (skip bust for male unless chest/shoulders)
+  if (dna.build.bust && (!isMale || /chest|shoulder|pec/i.test(dna.build.bust))) {
+    identityBits.push(`with ${dna.build.bust}`);
+  }
+  if (dna.build.hipsGlutes && !isMale) {
+    identityBits.push(dna.build.hipsGlutes);
+  }
   if (dna.build.skinTone) identityBits.push(`with ${dna.build.skinTone} skin`);
 
   if (identityBits.length > 0) {
     parts.push(identityBits.join(' '));
   }
 
-  // Hair & Eyes
+  // Face, Hair & Eyes
   const facialBits: string[] = [];
+  if (dna.faceFeatures) facialBits.push(dna.faceFeatures);
   if (dna.hair.color || dna.hair.length || dna.hair.style) {
     facialBits.push([dna.hair.length, dna.hair.style, dna.hair.color ? `${dna.hair.color} hair` : 'hair'].filter(Boolean).join(' '));
   }
@@ -134,15 +165,20 @@ export function formatCharacterDNAToPromptClause(dna: CharacterDNA): string {
     parts.push(facialBits.join(', '));
   }
 
-  // Distinguishing marks
+  // Distinguishing marks & anchors
   if (dna.distinguishingFeatures && dna.distinguishingFeatures.length > 0) {
     parts.push(dna.distinguishingFeatures.join(', '));
   }
 
-  // Outfit
+  // Outfit (Single active outfit)
   const currentOutfit = dna.activeOutfit || dna.signatureOutfit;
   if (currentOutfit) {
     parts.push(currentOutfit.startsWith('wearing ') ? currentOutfit : `wearing ${currentOutfit}`);
+  }
+
+  // Demeanor / Expression
+  if (dna.demeanor) {
+    parts.push(dna.demeanor);
   }
 
   return parts.filter(Boolean).join(', ');
@@ -194,6 +230,26 @@ export function extractDNAPartsFromText(text: string): Partial<CharacterDNA> {
 
   const skinMatch = lower.match(/\b(fair|pale|porcelain|tan|tanned|sun-kissed|olive|bronze|dark|brown|ebony)\s+skin\b/i);
   if (skinMatch?.[1]) partial.build!.skinTone = skinMatch[1];
+
+  // Age extraction
+  const ageMatch = text.match(/\b(?:in (?:her|his|their)\s+)?(late \d0s|early \d0s|mid \d0s|twenties|thirties|forties|fifties|\d{1,2}[- ]years?[- ]old)\b/i);
+  if (ageMatch?.[1]) partial.build!.age = ageMatch[1];
+
+  // Bust / Chest extraction
+  const bustMatch = text.match(/\b(full bust|modest chest|ample cleavage|broad chest|defined pecs|petite bust|flat chest|heavy bust)\b/i);
+  if (bustMatch?.[1]) partial.build!.bust = bustMatch[1];
+
+  // Hips / Glutes / Waist extraction
+  const hipsMatch = text.match(/\b(curvy hips|wide hips|shapely glutes|narrow waist|hourglass figure|slender hips|toned waist)\b/i);
+  if (hipsMatch?.[1]) partial.build!.hipsGlutes = hipsMatch[1];
+
+  // Face features
+  const faceMatch = text.match(/\b(high cheekbones|sharp jawline|heart-shaped face|round face|dimples|soft full lips|delicate jaw)\b/i);
+  if (faceMatch?.[1]) partial.faceFeatures = faceMatch[1];
+
+  // Demeanor / Expression
+  const demeanorMatch = text.match(/\b(guarded posture|shy gaze|wry smirk|stoic expression|confident stance|warm smile|piercing stare)\b/i);
+  if (demeanorMatch?.[1]) partial.demeanor = demeanorMatch[1];
 
   // Distinguishing marks
   const features: string[] = [];

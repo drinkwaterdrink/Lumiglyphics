@@ -35,7 +35,10 @@ export class StageDossiers {
  private folioOpener?: (charName: string) => void;
  setFolioOpener(fn: (charName: string) => void): void {
   this.folioOpener = fn;
-  this.card.setFolioOpener(fn);
+  this.card.setFolioOpener((charName) => {
+    fn(charName);
+    this.workspace?.open('character');
+  });
  }
  private openReferences():void {
   const snapshot=this.snapshot();this.hold();

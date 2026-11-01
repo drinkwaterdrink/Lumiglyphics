@@ -35,11 +35,11 @@ aside[data-vn-workspace] > header {
   justify-content: space-between !important;
   gap: 10px !important;
   padding: 0 16px !important;
-  background: rgba(17, 35, 28, 0.94) !important;
-  border-bottom: 1px solid rgba(220, 238, 217, 0.14) !important;
+  background: var(--vn-shell-panel, rgba(15, 23, 42, 0.96)) !important;
+  border-bottom: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.14)) !important;
   backdrop-filter: blur(16px) !important;
   -webkit-backdrop-filter: blur(16px) !important;
-  color: #f4f8ee !important;
+  color: var(--vn-shell-text, #f4f8ee) !important;
   z-index: 2 !important;
   box-sizing: border-box !important;
 }
@@ -88,16 +88,16 @@ aside[data-vn-workspace] > header > div {
 }
 
 [data-workspace-back],
-.workspace-back-btn,
+.workspace-back-btn:not(.has-label),
 [data-workspace-close] {
   width: 34px !important;
   height: 34px !important;
   min-width: 34px !important;
   min-height: 34px !important;
   border-radius: 50% !important;
-  background: rgba(255, 255, 255, 0.06) !important;
-  border: 1px solid rgba(220, 238, 217, 0.18) !important;
-  color: #edf3ea !important;
+  background: var(--vn-shell-button, rgba(255, 255, 255, 0.08)) !important;
+  border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.18)) !important;
+  color: var(--vn-shell-text, #edf3ea) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -107,10 +107,33 @@ aside[data-vn-workspace] > header > div {
 }
 
 [data-workspace-back]:hover,
-.workspace-back-btn:hover,
+.workspace-back-btn:not(.has-label):hover,
 [data-workspace-close]:hover {
-  background: rgba(220, 238, 177, 0.16) !important;
-  border-color: #dcebad !important;
+  background: color-mix(in srgb, var(--vn-shell-accent, #38bdf8) 18%, transparent) !important;
+  border-color: var(--vn-shell-accent, #38bdf8) !important;
+}
+
+.workspace-back-btn.has-label {
+  height: 34px !important;
+  border-radius: 8px !important;
+  padding: 0 12px !important;
+  width: auto !important;
+  min-width: auto !important;
+  background: var(--vn-shell-button, rgba(255, 255, 255, 0.08)) !important;
+  border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.18)) !important;
+  color: var(--vn-shell-text, #edf3ea) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  white-space: nowrap !important;
+  flex: none !important;
+  cursor: pointer !important;
+}
+.workspace-back-btn.has-label:hover {
+  background: color-mix(in srgb, var(--vn-shell-accent, #38bdf8) 18%, transparent) !important;
+  border-color: var(--vn-shell-accent, #38bdf8) !important;
 }
 
 :is(body.theme-light, [data-aperture-mode="light"], [data-vn-shell][data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-workspace-back], .workspace-back-btn, [data-workspace-close]) {
@@ -453,12 +476,13 @@ body.theme-light [data-surface="settings"]:before,
   justify-content: space-between !important;
   padding: 0 16px !important;
   margin: 0 -18px 12px -18px !important;
-  background: rgba(17, 31, 31, 0.94) !important;
-  border-bottom: 1px solid rgba(220, 238, 217, 0.14) !important;
+  background: var(--vn-shell-panel, rgba(15, 23, 42, 0.96)) !important;
+  border-bottom: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.14)) !important;
   backdrop-filter: blur(16px) !important;
   -webkit-backdrop-filter: blur(16px) !important;
   z-index: 10 !important;
   box-sizing: border-box !important;
+  color: var(--vn-shell-text, #f0fdfa) !important;
 }
 .chip-row,
 [data-reference-filters] {

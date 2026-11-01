@@ -8,23 +8,73 @@ describe('CharacterFolio & Character DNA', () => {
     const dna = createEmptyCharacterDNA('Nadine Pruitt', 'nadine');
     dna.hair = { color: 'chestnut brown', length: 'shoulder-length', style: 'messy bun' };
     dna.eyes = { color: 'hazel', shape: 'sharp' };
-    dna.build = { height: 'petite', bodyType: 'slender', skinTone: 'fair with freckles', gender: 'woman', species: 'human' };
+    dna.build = {
+      age: 'late 20s',
+      height: 'petite',
+      bodyType: 'slender',
+      bust: 'full bust with natural cleavage',
+      hipsGlutes: 'curvy hourglass hips',
+      skinTone: 'fair with freckles',
+      gender: 'woman',
+      species: 'human'
+    };
+    dna.faceFeatures = 'heart-shaped face, soft full lips';
+    dna.demeanor = 'guarded posture, shy gaze';
     dna.signatureOutfit = 'stiff canvas work apron over faded sleeveless midi dress';
     dna.distinguishingFeatures = ['clay packed gray under nails', 'ears and neck pink'];
 
     const clause = formatCharacterDNAToPromptClause(dna);
-    expect(clause).toContain('petite slender woman human');
-    expect(clause).toContain('fair with freckles');
+    expect(clause).toContain('late 20s petite slender woman human');
+    expect(clause).toContain('with full bust with natural cleavage');
+    expect(clause).toContain('curvy hourglass hips');
+    expect(clause).toContain('fair with freckles skin');
+    expect(clause).toContain('heart-shaped face, soft full lips');
     expect(clause).toContain('shoulder-length messy bun chestnut brown hair');
     expect(clause).toContain('sharp hazel eyes');
     expect(clause).toContain('stiff canvas work apron');
+    expect(clause).toContain('guarded posture, shy gaze');
 
     const tags = formatCharacterDNAToTags(dna);
+    expect(tags).toContain('late 20s');
     expect(tags).toContain('woman human');
-    expect(tags).toContain('fair with freckles skin');
+    expect(tags).toContain('full bust with natural cleavage');
+    expect(tags).toContain('curvy hourglass hips');
+    expect(tags).toContain('heart-shaped face, soft full lips');
     expect(tags).toContain('shoulder-length messy bun chestnut brown hair');
     expect(tags).toContain('sharp hazel eyes');
     expect(tags).toContain('clay packed gray under nails');
+    expect(tags).toContain('guarded posture, shy gaze');
+  });
+
+  it('skips bust and glutes for male characters unless muscular chest/shoulders specified', () => {
+    const maleDna = createEmptyCharacterDNA('Darby Pruitt', 'darby');
+    maleDna.build = {
+      age: 'early 30s',
+      height: 'tall',
+      bodyType: 'athletic',
+      bust: 'full bust', // invalid for male, should be skipped
+      hipsGlutes: 'curvy hips', // invalid for male, should be skipped
+      gender: 'man',
+      species: 'human'
+    };
+    const maleClause = formatCharacterDNAToPromptClause(maleDna);
+    expect(maleClause).not.toContain('bust');
+    expect(maleClause).not.toContain('curvy hips');
+
+    // If male has broad chest specified, it is preserved
+    maleDna.build.bust = 'broad muscular chest';
+    const chestClause = formatCharacterDNAToPromptClause(maleDna);
+    expect(chestClause).toContain('broad muscular chest');
+  });
+
+  it('active scene outfit overrides signature default outfit so two outfits are never sent', () => {
+    const dna = createEmptyCharacterDNA('Cassidy Pruitt', 'cass');
+    dna.signatureOutfit = 'worn denim overalls over flannel shirt';
+    dna.activeOutfit = 'black evening gown with silver trim';
+
+    const clause = formatCharacterDNAToPromptClause(dna);
+    expect(clause).toContain('black evening gown with silver trim');
+    expect(clause).not.toContain('worn denim overalls');
   });
 
   it('merges DNA patches while respecting locked state', () => {

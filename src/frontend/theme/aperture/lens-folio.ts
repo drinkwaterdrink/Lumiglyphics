@@ -21,8 +21,8 @@ body.theme-light .world-sheet-map,
 
 body.theme-dark .world-sheet-map,
 [data-aperture-mode="dark"] .world-sheet-map {
-  background: linear-gradient(145deg, #21362f, #142824);
-  border-color: #466c5f;
+  background: var(--vn-shell-field, #0f1e2e);
+  border-color: var(--vn-shell-border, rgba(255, 255, 255, 0.14));
 }
 
 .world-map-svg {
@@ -43,8 +43,8 @@ body.theme-dark .world-sheet-map,
 
 body.theme-dark .world-map-svg path,
 [data-aperture-mode="dark"] .world-map-svg path {
-  stroke: #a5c7b3;
-  opacity: 0.65;
+  stroke: var(--vn-shell-accent, #2dd4bf);
+  opacity: 0.35;
 }
 
 .map-node-pill {
@@ -74,17 +74,17 @@ body.theme-light .map-node-pill.active {
 }
 
 body.theme-dark .map-node-pill {
-  background: rgba(28, 54, 47, 0.97);
-  color: #f3f7e9;
-  border-color: #81a395;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.29);
+  background: var(--vn-shell-panel, rgba(15, 23, 42, 0.95));
+  color: var(--vn-shell-text, #f0fdfa);
+  border-color: var(--vn-shell-border, rgba(255, 255, 255, 0.18));
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
 }
 
 body.theme-dark .map-node-pill.active {
-  background: #dce9b5;
-  color: #1b342b;
-  border-color: #ecf4cc;
-  box-shadow: 0 10px 25px rgba(7, 18, 15, 0.42), 0 0 0 2px rgba(215, 235, 172, 0.23);
+  background: color-mix(in srgb, var(--vn-shell-accent, #2dd4bf) 25%, var(--vn-shell-panel, #0f172a));
+  color: var(--vn-shell-text, #f0fdfa);
+  border-color: var(--vn-shell-accent, #2dd4bf);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4), 0 0 0 2px color-mix(in srgb, var(--vn-shell-accent, #2dd4bf) 35%, transparent);
   transform: translateY(-3px);
 }
 

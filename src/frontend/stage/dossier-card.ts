@@ -162,12 +162,12 @@ export class DossierCard {
 
     const header = document.createElement('header');
     header.className = 'dossier-topbar-header';
-    header.style.cssText = 'position:sticky;top:0;z-index:15;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 14px;background:rgba(15,23,42,0.96);border-bottom:1px solid rgba(255,255,255,0.12);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);';
+    header.style.cssText = 'position:sticky;top:0;z-index:15;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;background:var(--vn-shell-panel, rgba(15,23,42,0.96));border-bottom:1px solid var(--vn-shell-border, rgba(255,255,255,0.12));backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);';
 
     const back = document.createElement('button');
     back.type = 'button';
-    back.className = 'workspace-back-btn';
-    back.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;border-radius:8px;border:1px solid rgba(255,255,255,0.22);background:rgba(255,255,255,0.08);color:#f1f5f9;';
+    back.className = 'workspace-back-btn dossier-back-btn has-label';
+    back.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;border-radius:8px;border:1px solid var(--vn-shell-border, rgba(255,255,255,0.22));background:var(--vn-shell-button, rgba(255,255,255,0.08));color:var(--vn-shell-text, #f1f5f9);flex:none;white-space:nowrap;width:auto !important;min-width:auto !important;height:34px;';
     back.innerHTML = APERTURE_ICONS.back + (this.trayReturn ? '<span>Back to Lens</span>' : '<span>Back to Reading</span>');
     back.title = this.trayReturn ? 'Back to references' : 'Back to reading';
     back.setAttribute('aria-label', this.trayReturn ? 'Back to references' : 'Back to reading');
@@ -180,13 +180,13 @@ export class DossierCard {
     };
 
     const title = document.createElement('h2');
-    title.style.cssText = 'flex:1;margin:0;font-size:15px;font-weight:700;color:#f1f5f9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    title.style.cssText = 'flex:1;margin:0 8px;font-size:15px;font-weight:700;color:var(--vn-shell-text, #f1f5f9);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;';
     title.textContent = kind === 'npc' ? `Character folio · ${dossier.entity.name}` : dossier.entity.name;
 
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'dossier-close-btn';
-    close.style.cssText = 'min-width:36px;min-height:36px;width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.08);color:#f1f5f9;cursor:pointer;display:grid;place-items:center;font-size:16px;line-height:1;';
+    close.style.cssText = 'min-width:34px;min-height:34px;width:34px;height:34px;border-radius:50%;border:1px solid var(--vn-shell-border, rgba(255,255,255,0.18));background:var(--vn-shell-button, rgba(255,255,255,0.08));color:var(--vn-shell-text, #f1f5f9);cursor:pointer;display:grid;place-items:center;font-size:16px;line-height:1;flex:none;';
     close.textContent = '×';
     close.setAttribute('aria-label', 'Close information');
     close.onclick = () => this.close();
@@ -656,23 +656,23 @@ export class DossierCard {
     // Header with APERTURE Back button, Title and Close
     const header = document.createElement('header');
     header.className = 'dossier-topbar-header';
-    header.style.cssText = 'position:sticky;top:0;z-index:15;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 14px;background:rgba(15,23,42,0.96);border-bottom:1px solid rgba(255,255,255,0.12);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);';
+    header.style.cssText = 'position:sticky;top:0;z-index:15;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;background:var(--vn-shell-panel, rgba(15,23,42,0.96));border-bottom:1px solid var(--vn-shell-border, rgba(255,255,255,0.12));backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);';
     const backBtn = document.createElement('button');
     backBtn.type = 'button';
-    backBtn.className = 'workspace-back-btn';
-    backBtn.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;border-radius:8px;border:1px solid rgba(255,255,255,0.22);background:rgba(255,255,255,0.08);color:#f1f5f9;';
+    backBtn.className = 'workspace-back-btn dossier-back-btn has-label';
+    backBtn.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;border-radius:8px;border:1px solid var(--vn-shell-border, rgba(255,255,255,0.22));background:var(--vn-shell-button, rgba(255,255,255,0.08));color:var(--vn-shell-text, #f1f5f9);flex:none;white-space:nowrap;width:auto !important;min-width:auto !important;height:34px;';
     backBtn.innerHTML = APERTURE_ICONS.back + '<span>Back to Reading</span>';
     backBtn.title = 'Back to reading';
     backBtn.setAttribute('aria-label', 'Back to reading');
     backBtn.onclick = () => this.close();
 
     const title = document.createElement('h2');
-    title.style.cssText = 'flex:1;margin:0;font-size:15px;font-weight:700;color:#f1f5f9;letter-spacing:-0.01em;';
+    title.style.cssText = 'flex:1;margin:0 8px;font-size:15px;font-weight:700;color:var(--vn-shell-text, #f1f5f9);letter-spacing:-0.01em;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
     title.textContent = 'World Lens';
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'dossier-close-btn';
-    close.style.cssText = 'min-width:36px;min-height:36px;width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.08);color:#f1f5f9;cursor:pointer;display:grid;place-items:center;font-size:16px;line-height:1;';
+    close.style.cssText = 'min-width:34px;min-height:34px;width:34px;height:34px;border-radius:50%;border:1px solid var(--vn-shell-border, rgba(255,255,255,0.18));background:var(--vn-shell-button, rgba(255,255,255,0.08));color:var(--vn-shell-text, #f1f5f9);cursor:pointer;display:grid;place-items:center;font-size:16px;line-height:1;flex:none;';
     close.textContent = '×';
     close.title = 'Close references';
     close.setAttribute('aria-label', 'Close information');
@@ -861,7 +861,6 @@ export class DossierCard {
         ctaBtn.textContent = activeEntry.entity.kind === 'npc' ? 'Open character folio →' : activeEntry.entity.kind === 'object' ? 'See known documents →' : 'Inspect reference →';
         ctaBtn.onclick = () => {
           if (activeEntry.entity.kind === 'npc' && this.folioOpener) {
-            this.close();
             this.folioOpener(activeEntry.entity.name);
           } else {
             open(activeEntry.entity.id, trigger);
