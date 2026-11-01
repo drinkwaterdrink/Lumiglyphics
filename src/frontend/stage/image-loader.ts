@@ -14,10 +14,23 @@ export interface VnLoadableImage {
 
 export type VnImageFactory = () => VnLoadableImage;
 
+const IMAGE_LOAD_TIMEOUT_MS = 15_000;
+const IMAGE_DECODE_TIMEOUT_MS = 4_000;
+
 const waitForImageLoad = (image: VnLoadableImage, url: string): Promise<void> => {
   return new Promise((resolve, reject) => {
     let settled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error("The scene image timed out while loading."));
+    }, IMAGE_LOAD_TIMEOUT_MS);
     const cleanup = () => {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
       image.removeEventListener("load", onLoad as EventListener);
       image.removeEventListener("error", onError as EventListener);
     };
@@ -60,10 +73,30 @@ export const preloadAndDecodeVnImage = async (
   image.decoding = "async";
   await waitForImageLoad(image, url);
   try {
-    await image.decode?.();
+    const decodePromise = image.decode?.();
+    if (decodePromise) {
+      await Promise.race([
+        decodePromise,
+        new Promise<void>((resolve) => setTimeout(resolve, IMAGE_DECODE_TIMEOUT_MS)),
+      ]);
+    }
   } catch {
     // Decoding is an optional performance hint; do not fail an already-loaded image.
   }
+};
+
+export const sceneImageCandidatesFor = (asset: { imageId?: string | null; imageUrl?: string | null }): string[] => {
+  const candidates: string[] = [];
+  if (asset.imageId) {
+    candidates.push(`/api/v1/images/${encodeURIComponent(asset.imageId)}`);
+  }
+  if (asset.imageUrl && asset.imageUrl.trim()) {
+    const trimmed = asset.imageUrl.trim();
+    if (!candidates.includes(trimmed)) {
+      candidates.push(trimmed);
+    }
+  }
+  return candidates;
 };
 
 /**
@@ -74,6 +107,5 @@ export const preloadAndDecodeVnImage = async (
  * `imageId` exists.
  */
 export const sceneImageUrlFor = (asset: { imageId?: string | null; imageUrl?: string | null }): string | null => {
-  if (asset.imageId) return `/api/v1/images/${encodeURIComponent(asset.imageId)}`;
-  return asset.imageUrl || null;
+  return sceneImageCandidatesFor(asset)[0] ?? null;
 };

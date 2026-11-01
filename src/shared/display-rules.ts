@@ -1,4 +1,4 @@
-export type CustomRegexRule={pattern:RegExp;replacement:string};
+export type CustomRegexRule={pattern:RegExp;replacement:string;/** 1-based settings line that defined the rule. */line?:number};
 export type DisplayRuleIssue={line:number;message:string};
 
 /** Display rules run synchronously on the main thread during paragraph
@@ -104,7 +104,7 @@ export function compileDisplayRules(input:string|undefined):{rules:CustomRegexRu
   if(source.length>MAX_DISPLAY_RULE_PATTERN){issue(`Display rule patterns are limited to ${MAX_DISPLAY_RULE_PATTERN} characters.`);continue;}
   const hazard=findReDoSHazard(source);
   if(hazard){issue(hazard);continue;}
-  try{rules.push({pattern:new RegExp(source,flags),replacement});}
+  try{rules.push({pattern:new RegExp(source,flags),replacement,line:index+1});}
   catch{issue('Invalid pattern or flags. Check brackets, escapes and repeated flags.');}
  }
  return {rules,issues};

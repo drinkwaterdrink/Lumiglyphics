@@ -1,6 +1,7 @@
 import {createUiId} from '../request-id.js';
 import type {TurnView,FrontendRequest} from '../../protocol.js';
 import {ImageLibraryPageSchema,type ImageLibraryPage,type ImageLibraryRequest,type LibraryImageView} from '../../shared/image-library.js';
+import {stripUnknownPresetTags} from '../stage/rich-text.js';
 
 const css=`
 :host{position:absolute;inset:0;pointer-events:none;z-index:58;color:var(--vn-shell-text,#f4f1e9);font:14px/1.5 system-ui}
@@ -147,7 +148,7 @@ export class ImageLibrary{
      jump.onclick=()=>{this.onJumpToParagraph?.(idx);this.close();};
      head.append(jump);
     }
-    const copy=document.createElement('p');copy.dataset.replyPreview='';copy.style.webkitLineClamp='unset';copy.textContent=item.text;
+    const copy=document.createElement('p');copy.dataset.replyPreview='';copy.style.webkitLineClamp='unset';copy.textContent=stripUnknownPresetTags(item.text);
     row.append(head,copy);list.append(row);
    }
    currentCard.append(list);grid.append(currentCard);
@@ -162,9 +163,9 @@ export class ImageLibrary{
    for(const reply of this.page.replies){
     const row=document.createElement('article');row.dataset.reply='';
     const title=document.createElement('h3');title.textContent=`Reply ${reply.messageNumber}${reply.versionLabel==='alternate'?' · alternate version':''}`;row.append(title);
-    const summary=document.createElement('p');summary.dataset.replyPreview='';summary.textContent=reply.paragraphs[0]?.text??'No text at this reading position.';row.append(summary);
+    const summary=document.createElement('p');summary.dataset.replyPreview='';summary.textContent=stripUnknownPresetTags(reply.paragraphs[0]?.text??'No text at this reading position.');row.append(summary);
     const details=document.createElement('details');const toggle=document.createElement('summary');toggle.textContent='Read reply';details.append(toggle);const replyKey=JSON.stringify(reply.key);details.open=this.expanded.has(replyKey);details.ontoggle=()=>{if(details.open)this.expanded.add(replyKey);else this.expanded.delete(replyKey);};
-    for(const paragraph of reply.paragraphs){const name=document.createElement('strong');name.textContent=paragraph.speaker;const text=document.createElement('p');text.textContent=paragraph.text;details.append(name,text);}
+    for(const paragraph of reply.paragraphs){const name=document.createElement('strong');name.textContent=paragraph.speaker;const text=document.createElement('p');text.textContent=stripUnknownPresetTags(paragraph.text);details.append(name,text);}
     if(reply.truncated){const note=document.createElement('p');note.className='note';note.textContent='Long reply preview shortened. Read the complete reply in chat.';details.append(note);}
     row.append(details);const pictures=document.createElement('div');pictures.dataset.replyPictures='';
     for(const card of cardsByReplyKey.get(replyKey)??[])pictures.append(card);    if(pictures.childElementCount)row.append(pictures);grid.append(row);
@@ -174,7 +175,7 @@ export class ImageLibrary{
    const versions=new Map<string,HTMLElement>();
    for(const card of allCards){if(card.parentElement)continue;const entry=this.page.entries[Number(card.dataset.entryIndex)];if(!entry)continue;
     let row=versions.get(card.dataset.replyKey!);if(!row){row=document.createElement('article');row.dataset.historyVersion='';const title=document.createElement('h3');title.textContent=`Reply ${entry.messageNumber} · saved image version`;const note=document.createElement('p');note.className='note';note.textContent='Only the original saved image excerpt is available for this version.';row.append(title,note);versions.set(card.dataset.replyKey!,row);grid.append(row);}
-    const excerpt=document.createElement('p');excerpt.dataset.replyPreview='';excerpt.textContent=entry.excerpt||'Original excerpt not recorded.';row.append(excerpt,card);
+    const excerpt=document.createElement('p');excerpt.dataset.replyPreview='';excerpt.textContent=stripUnknownPresetTags(entry.excerpt||'Original excerpt not recorded.');row.append(excerpt,card);
    }
   }else{
    let lastMessage='';
@@ -189,7 +190,7 @@ export class ImageLibrary{
   this.browseScroll=this.el<HTMLElement>('.body').scrollTop;this.selected=entry;this.el<HTMLElement>('[data-browse]').hidden=true;this.el<HTMLElement>('[data-detail]').hidden=false;this.el<HTMLElement>('[data-detail-back]').hidden=false;this.el<HTMLElement>('[data-library-footer]').hidden=true;
   const image=this.el<HTMLImageElement>('[data-full-image]');image.removeAttribute('src');image.hidden=!entry.imageUrl;if(entry.imageUrl)image.src=entry.imageUrl;
   this.el<HTMLElement>('[data-description]').textContent=`Reply ${entry.messageNumber} · Picture ${entry.paragraphIndex+1} · ${entry.template??'Story picture'} · ${entry.versionLabel} · ${entry.model??'Model not recorded'}${entry.provider?' · '+entry.provider:''}`;
-  this.el<HTMLElement>('[data-excerpt]').textContent=entry.excerpt||'Source excerpt not recorded.';
+  this.el<HTMLElement>('[data-excerpt]').textContent=stripUnknownPresetTags(entry.excerpt||'Source excerpt not recorded.');
   this.el<HTMLTextAreaElement>('[data-positive]').value=entry.prompt??'Prompt not recorded for this picture.';this.el<HTMLTextAreaElement>('[data-negative]').value=entry.negativePrompt??'Negative prompt not recorded.';this.el<HTMLButtonElement>('[data-copy]').disabled=!entry.prompt;this.el<HTMLDetailsElement>('[data-prompts]').open=false;
   this.status(entry.available?'':'This picture is no longer available. Saved details remain readable.');this.setZoom(1);this.el<HTMLButtonElement>('[data-detail-back]').focus();
  }
@@ -199,11 +200,11 @@ export class ImageLibrary{
 }
 
 const DOCKED_LIBRARY_CSS=`
-:host([data-vn-workspace-tool]){position:relative;inset:auto;display:block;width:100%;height:100%;z-index:auto;pointer-events:auto;background:transparent}
+:host([data-vn-workspace-tool]){position:relative;inset:auto;display:flex!important;flex-direction:column!important;flex:1 1 auto!important;min-height:0!important;width:100%;height:100%;z-index:auto;pointer-events:auto;background:transparent}
 :host([data-vn-workspace-tool]) [data-library-launch],:host([data-vn-workspace-tool]) [data-library-close],:host([data-vn-workspace-tool]) [data-history-return]{display:none}
-:host([data-vn-workspace-tool]) section{position:relative;inset:auto;width:100%;max-width:none;height:100%;max-height:none;margin:0;border:0;border-radius:0;box-shadow:none;background:transparent}
+:host([data-vn-workspace-tool]) section{position:relative;inset:auto;display:flex!important;flex-direction:column!important;flex:1 1 auto!important;min-height:0!important;width:100%;max-width:none;height:100%;max-height:none;margin:0;border:0;border-radius:0;box-shadow:none;background:transparent}
 :host([data-vn-workspace-tool]) header{display:none!important}
-:host([data-vn-workspace-tool]) footer[data-library-footer]{margin-bottom:calc(76px + env(safe-area-inset-bottom, 0px))!important;background:transparent!important;border-top:1px solid rgba(160,205,185,.2)!important;padding:12px 16px!important}
+:host([data-vn-workspace-tool]) footer[data-library-footer]{margin-bottom:0!important;flex:none!important;background:rgba(9,19,15,.72)!important;backdrop-filter:blur(12px)!important;-webkit-backdrop-filter:blur(12px)!important;border-top:1px solid rgba(160,205,185,.2)!important;padding:10px 14px calc(12px + env(safe-area-inset-bottom, 0px))!important}
 :host([data-vn-workspace-tool]) footer[data-library-footer] button{min-height:38px;border-radius:999px;padding:6px 16px;background:rgba(22,46,36,.8);border:1px solid rgba(160,205,185,.25);color:#f4f7ee;font-weight:650;font-size:12px}
 :host([data-vn-workspace-tool]) footer[data-library-footer] button:hover:not(:disabled){background:rgba(35,75,57,.9);border-color:#dcebad}
 :is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-history-views]{background:rgba(35,65,50,.1);border:1px solid rgba(35,65,50,.18)}
@@ -217,7 +218,7 @@ const DOCKED_LIBRARY_CSS=`
 :is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) footer[data-library-footer] button{background:#e4ebe0!important;border-color:#b3c5b8!important;color:#1a3327!important}
 :is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-page-label]{color:#3b5d4c!important;font-weight:650!important}
 :host([data-vn-workspace-tool]) header h2{font-size:13px;letter-spacing:.04em;text-transform:uppercase;font-weight:700;color:#dcebad}
-:host([data-vn-workspace-tool]) .body{padding:16px;flex:1}
+:host([data-vn-workspace-tool]) .body{padding:12px 14px 20px!important;flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important}
 :host([data-vn-workspace-tool]) .filters{grid-template-columns:1fr}
 :host([data-vn-workspace-tool]) [data-grid]{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
 :host([data-vn-workspace-tool]) [data-detail-back]{font-size:24px}

@@ -14,6 +14,7 @@ import {
   escapeHtml,
   formatDialogueText,
   parseCustomRegexRules,
+  stripUnknownPresetTags,
   type CustomRegexRule,
 } from "./rich-text.js";
 import { applyTextEffects, TEXT_EFFECT_LETTER_ATTRIBUTE } from "./text-effects.js";
@@ -174,6 +175,7 @@ export interface VnStageOptions extends VnStageCallbacks {
 export interface VnSceneImageRequest {
   presentation?: "page";
   url: string;
+  fallbackUrls?: readonly string[];
   alt?: string;
   requestId?: string;
 }
@@ -1291,9 +1293,21 @@ export class VnStage {
     };
     this.dispatch({ type: "image-requested", image });
 
-    try {
-      await preloadAndDecodeVnImage(image.url, this.createImage);
-    } catch (error) {
+    const candidates = [request.url, ...(request.fallbackUrls ?? [])].filter((u, idx, arr) => Boolean(u?.trim()) && arr.indexOf(u) === idx);
+    let loadedUrl: string | null = null;
+    let lastError: unknown = null;
+    for (const candidateUrl of (candidates.length > 0 ? candidates : [request.url])) {
+      try {
+        await preloadAndDecodeVnImage(candidateUrl, this.createImage);
+        loadedUrl = candidateUrl;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (this.destroyed) return false;
+      }
+    }
+
+    if (loadedUrl === null) {
       if (this.destroyed) return false;
       // A picture that never loaded must not become the displayed image: that
       // produced a blank scene layer with no message. The previous picture
@@ -1301,14 +1315,15 @@ export class VnStage {
       this.dispatch({
         type: "image-failed",
         requestId: image.requestId,
-        error: errorMessage(error),
+        error: errorMessage(lastError),
       });
       return false;
     }
 
     if (this.destroyed) return false;
+    const readyImage: VnSceneImage = loadedUrl === image.url ? image : { ...image, url: loadedUrl };
     const wasCurrent = !this.state.pendingImage || this.state.pendingImage.requestId === image.requestId;
-    this.dispatch({ type: "image-ready", requestId: image.requestId, image });
+    this.dispatch({ type: "image-ready", requestId: image.requestId, image: readyImage });
     return wasCurrent;
   }
 
@@ -2663,10 +2678,13 @@ export class VnStage {
     }
     const currentPreset = this.root.dataset.vnPreset;
     const shouldStripMarkdown = currentPreset === "literature-club" || currentPreset === "yamaku-classic";
-    const formatted = formatDialogueText(paragraph.text, this.customRegexRules, {
+    const stripUnknown = this.readerPreferences?.smartProseFilter !== false;
+    const cleanText = stripUnknown ? stripUnknownPresetTags(paragraph.text) : paragraph.text;
+    const formatted = formatDialogueText(cleanText, this.customRegexRules, {
       stripMarkdown: shouldStripMarkdown,
       forceQuotes: shouldStripMarkdown,
-      hasSpeaker: Boolean(paragraph.speaker && paragraph.speaker.trim())
+      hasSpeaker: Boolean(paragraph.speaker && paragraph.speaker.trim()),
+      stripUnknownTags: stripUnknown,
     });
     if (
       this.currentRenderedParagraphId === paragraph.id &&
@@ -2676,7 +2694,7 @@ export class VnStage {
     }
     this.currentRenderedParagraphId = paragraph.id;
     this.currentRenderedFormatted = formatted;
-    this.recordBacklogAndRead(paragraph.id, paragraph.speaker, paragraph.text, formatted, this.state.currentParagraphIndex);
+    this.recordBacklogAndRead(paragraph.id, paragraph.speaker, cleanText, formatted, this.state.currentParagraphIndex);
     if (!this.isRewinding) {
       this.triggerParagraphEffects(paragraph);
       if (this.state.currentParagraphIndex === 0 && !this.isSkipping) {

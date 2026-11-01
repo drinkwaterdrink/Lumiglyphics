@@ -198,6 +198,11 @@ export class ReaderWorkspace {
       const playing = Boolean((event as CustomEvent<{ playing?: boolean }>).detail?.playing);
       voiceBtn?.classList.toggle('speaking', playing);
     }, {signal});
+    this.shell.addEventListener('lumiglyphics:open-voice-settings', () => {
+      this.open('settings');
+      const settingsHost = this.shell.querySelector<HTMLElement>('[data-vn-settings-panel]');
+      settingsHost?.dispatchEvent(new CustomEvent("lumiglyphics:navigate", { detail: { page: "speech" } }));
+    }, {signal});
     q('[data-action="studio-toggle"]')?.addEventListener('click', () => {
       this.open('artwork');
     }, {signal});

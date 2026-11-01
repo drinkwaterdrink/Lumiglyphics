@@ -14,7 +14,7 @@ export function selectCastComposition(turn:TurnView,index:number,selectedName?:s
  if(!sceneId||latest?.presentation==='page'||latest?.stageAsset?.role==='scene')return null;
  const sceneRevision=latest?.stageAsset?.sceneRevision??0;
  const local=visible.filter(a=>a.stageAsset?.sceneId===sceneId&&(a.stageAsset.sceneRevision??0)===sceneRevision);
- const usable=(a:AssetView)=>(a.status==='generated'||a.status==='browser_ready')&&Boolean(a.imageUrl)&&!a.previousImage;
+ const usable=(a:AssetView)=>(a.status==='generated'||a.status==='browser_ready')&&Boolean(a.imageUrl||a.imageId)&&!a.previousImage;
  const latestBackground=local.filter(a=>a.stageAsset?.role==='background').at(-1);
  const background=latestBackground?selectHeldBackground(turn,index,latestBackground):undefined;
  if(!background||!usable(background))return null;

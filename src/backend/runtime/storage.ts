@@ -1,3 +1,4 @@
+import { ReplyUsageSchema, type ReplyUsage } from "../../shared/reply-usage.js";
 import { projectTurnPresentation } from "./entity-projection.js";
 import {PresentationRuleDocumentSchema,type PresentationRuleDocument} from '../../shared/presentation-rules.js';
 import {samePresentationTurn} from '../../shared/presentation-entities.js';
@@ -49,6 +50,8 @@ export type StoredTurnRecord = {
   replanRequestIds?: string[];
   forceImageReview?: boolean;
   plannerMode?: 'model' | 'fallback';
+  /** Text-model usage spent on this reply (see shared/reply-usage.ts). */
+  replyUsage?: ReplyUsage;
   cardRole?: CardRole;
   cardId?: string;
   speaker: string;
@@ -746,6 +749,7 @@ export async function loadTurnRecord(
     ...(Array.isArray(raw.replanRequestIds) ? {replanRequestIds:raw.replanRequestIds.filter(id=>typeof id === "string" && id.length <= 100).slice(-32)} : {}),
     ...(raw.forceImageReview === true ? {forceImageReview:true} : {}),
     ...(raw.plannerMode === 'model' || raw.plannerMode === 'fallback' ? {plannerMode:raw.plannerMode} : {}),
+    ...(raw.replyUsage && ReplyUsageSchema.safeParse(raw.replyUsage).success ? {replyUsage:ReplyUsageSchema.parse(raw.replyUsage)} : {}),
     ...(CardRoleSchema.safeParse(raw.cardRole).success ? {cardRole: CardRoleSchema.parse(raw.cardRole)} : {}),
     ...(typeof raw.cardId === "string" ? {cardId:raw.cardId} : {}),
     status,

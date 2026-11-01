@@ -39,5 +39,5 @@ export const SETTINGS_FIELD_PAGES={
  persistentLocationArt:'consistency',persistentCastArt:'consistency',referenceAnchoring:'consistency',referenceSource:'consistency',imageModel:'generation',imageParameters:'generation',imageConcurrency:'generation',
  bgmVolume:'music',sfxVolume:'music',speech:'speech',parserConnectionId:'connections',parserParameters:'parameters',systemOneMode:'system-one',systemOneApiUrl:'system-one',systemOneModel:'system-one',
  includeSimTrackerContext:'context',simTrackerMappings:'context',contextSources:'context',includeRecentMessages:'context',includeCharacterContext:'context',includePersonaContext:'context',includeLorebookContext:'context',customPlannerInstructions:'context',
- enabled:'home',debugLogging:'storage',customCss:'css',ignoredTags:'filtering',displayRegexRules:'filtering',audioDirectory:'storage'
+ enabled:'home',debugLogging:'storage',showReplyCost:'reading',customCss:'css',ignoredTags:'filtering',displayRegexRules:'filtering',audioDirectory:'storage'
 } as const satisfies Record<keyof VisualNovelConfig,SettingsPageId>;

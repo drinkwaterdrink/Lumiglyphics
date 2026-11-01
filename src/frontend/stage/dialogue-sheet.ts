@@ -31,8 +31,8 @@ export class DialogueSheet {
     this.tools.dataset.vnSheetTools = "";
     this.tools.className = "caption-head-actions";
     this.tools.innerHTML = `<button type="button" class="caption-tool" data-action="caption-auto" aria-pressed="false" title="Toggle auto-play (A)" aria-label="Toggle auto-play"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg></button>
-      <button type="button" class="caption-tool" data-action="caption-expand" aria-label="Expand dialogue panel"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 15 7-7 7 7"/></svg></button>
-      <button type="button" class="caption-tool" data-vn-hide-text aria-label="Minimize dialogue box" title="Hide text"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button>`;
+      <button type="button" class="caption-tool" data-action="caption-expand" hidden style="display:none" aria-label="Expand dialogue panel"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 15 7-7 7 7"/></svg></button>
+      <button type="button" class="caption-tool" data-vn-hide-text aria-pressed="false" aria-label="Hide text reader to view full artwork" title="Hide text reader"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>`;
     this.auto = this.tools.querySelector("[data-action='caption-auto']")!;
     this.expand = this.tools.querySelector("[data-action='caption-expand']")!;
     this.hide = this.tools.querySelector("[data-vn-hide-text]")!;
@@ -41,9 +41,9 @@ export class DialogueSheet {
     this.show.type = "button";
     this.show.dataset.vnShowText = "";
     this.show.className = "caption-restore";
-    this.show.setAttribute("aria-label", "Show text");
-    this.show.title = "Show text";
-    this.show.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+    this.show.setAttribute("aria-label", "Show text reader");
+    this.show.title = "Show text reader";
+    this.show.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
     this.show.hidden = true;
 
     const edge = document.createElement("div");
@@ -60,7 +60,7 @@ export class DialogueSheet {
     const signal = this.abort.signal;
     this.tools.addEventListener("click", event => event.stopPropagation(), { signal });
     this.auto.addEventListener("click", () => this.onToggleAutoPlay?.(), { signal });
-    this.hide.addEventListener("click", () => this.setHidden(true), { signal });
+    this.hide.addEventListener("click", () => this.setHidden(!this.hidden), { signal });
     this.expand.addEventListener("click", () => {
       const isExpanded = dialogue.classList.contains("large-caption");
       if (isExpanded) {
@@ -188,12 +188,14 @@ export class DialogueSheet {
     this.root.style.setProperty("--vn-sheet-opacity", String(this.preferences.backgroundOpacity));
     this.root.style.setProperty("--caption-opacity", String(this.preferences.backgroundOpacity));
     this.tools.hidden = false;
+    this.expand.hidden = true;
     this.hide.hidden = false;
     this.resize();
   }
   setHidden(hidden: boolean): void {
     this.hidden = hidden;
     this.root.dataset.vnTextHidden = String(this.hidden);
+    this.hide.setAttribute("aria-pressed", String(this.hidden));
     this.show.hidden = !this.hidden;
     if (this.hidden) { this.pause(); this.show.focus(); }
   }

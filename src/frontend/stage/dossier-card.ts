@@ -1,4 +1,5 @@
 import { createDocumentReader, DOCUMENT_READER_CSS } from './document-reader.js';
+import { html } from '../dom/html.js';
 import type { StoryDocument } from '../../shared/story-documents.js';
 import { InteractionTray } from './interaction-tray.js';
 import type { InteractionDraft, DraftMergeMode } from '../../shared/scene-interactions.js';
@@ -804,7 +805,7 @@ export class DossierCard {
         nodeBtn.className = `map-node-pill ${this.selectedEntityId === entity.id ? 'active' : ''}`;
         nodeBtn.style.left = `${pos[0]}%`;
         nodeBtn.style.top = `${pos[1]}%`;
-        nodeBtn.innerHTML = `<span class="index-dot"></span><b>${entity.name}</b><small>${entity.kind === 'npc' ? 'Character' : entity.kind === 'place' ? 'Location' : 'Item'}</small>`;
+        nodeBtn.innerHTML = html`<span class="index-dot"></span><b>${entity.name}</b><small>${entity.kind === 'npc' ? 'Character' : entity.kind === 'place' ? 'Location' : 'Item'}</small>`.value;
         nodeBtn.onclick = () => {
           this.selectedEntityId = entity.id;
           render();
@@ -854,7 +855,7 @@ export class DossierCard {
         }
 
         const info = document.createElement('span');
-        info.innerHTML = `<b>${entity.name}</b><small>${pinned ? '📌 ' : ''}${entity.kind === 'npc' ? 'Character' : entity.kind === 'place' ? 'Location' : 'Item'}</small>`;
+        info.innerHTML = html`<b>${entity.name}</b><small>${pinned ? '📌 ' : ''}${entity.kind === 'npc' ? 'Character' : entity.kind === 'place' ? 'Location' : 'Item'}</small>`.value;
         stripBtn.append(info);
 
         stripBtn.onclick = () => {

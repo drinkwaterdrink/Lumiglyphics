@@ -1,8 +1,8 @@
 import {expect,test} from 'bun:test';
 import {applyCastSuggestion,appearanceOriginLabel} from './cast-suggestions.js';
 import type {CastSetupInput} from '../../shared/cast-art.js';
-const draft:CastSetupInput={appearance:'black hair',aliases:['M'],outfits:[{id:'coat',name:'Coat',description:'blue coat'}],defaultOutfitId:'coat'};
-const source:CastSetupInput={appearance:'silver hair',aliases:['m','Moon'],outfits:[{id:'coat',name:'Coat',description:'red coat'},{id:'new',name:'Uniform',description:'white uniform'}],defaultOutfitId:'new'};
+const draft:CastSetupInput={appearance:'black hair',aliases:['M'],anchors:[],outfits:[{id:'coat',name:'Coat',description:'blue coat'}],defaultOutfitId:'coat'};
+const source:CastSetupInput={appearance:'silver hair',aliases:['m','Moon'],anchors:[],outfits:[{id:'coat',name:'Coat',description:'red coat'},{id:'new',name:'Uniform',description:'white uniform'}],defaultOutfitId:'new'};
 test('appearance-only selection cannot replace aliases outfits or chosen default',()=>{
  const before=JSON.stringify(draft),next=applyCastSuggestion(draft,source,'appearance',()=> 'new-id');
  expect(next.setup).toEqual({...draft,appearance:'silver hair'});expect(JSON.stringify(draft)).toBe(before);

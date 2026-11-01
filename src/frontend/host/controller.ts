@@ -24,7 +24,7 @@ import { captureSimTrackerCards } from "./panel-capture.js";
 import { GameBridge } from "./game-bridge.js";
 import { connectImageBridge } from "./image-bridge.js";
 import { PanelDock } from "../stage/panel-dock.js";
-import { sceneImageUrlFor } from "../stage/image-loader.js";
+import { sceneImageCandidatesFor, sceneImageUrlFor } from "../stage/image-loader.js";
 import { stagingContext, supportsVisualNovelOverlay, type ComponentOverrideHandle } from "./staging-context.js";
 import { presentAmbient, presentEffect } from "./effect-presentation.js";
 import {
@@ -37,6 +37,8 @@ import { SpeechController, type SpeechCursor } from "../speech/controller.js";
 import { createSpeechTransport } from "../speech/transport.js";
 import { SpeechDock } from "../speech/ui.js";
 import { SpeechSettingsSection } from "../speech/settings-ui.js";
+import { formatReplyUsage } from "../../shared/reply-usage.js";
+import { createDisplayRuleGuard } from "../stage/display-rule-probe.js";
 
 const CLEANUP_KEY = Symbol.for("lumiglyphics.frontend-cleanup");
 
@@ -95,7 +97,7 @@ export function selectCurrentImage(turn: TurnView, paragraphIndex: number): Asse
   let match: AssetView | null = null;
   for (const asset of turn.assets) {
     if (asset.status !== "generated" && asset.status !== "browser_ready" && !asset.previousImage) continue;
-    if (!asset.imageUrl || asset.paragraphIndex > paragraphIndex) continue;
+    if (!sceneImageUrlFor(asset) || asset.paragraphIndex > paragraphIndex) continue;
     if (!match || asset.paragraphIndex > match.paragraphIndex) match = asset;
   }
   return match?selectHeldBackground(turn,paragraphIndex,match):null;
@@ -264,6 +266,7 @@ export function stageTurnInput(
   const presentation=next.presentation?.snapshots.length===next.paragraphs.length&&next.presentation.snapshots.every((s,i)=>s.at.paragraphIndex===i&&samePresentationTurn(s.at.key,key))?next.presentation:undefined;
   const referenceHistory=referenceHistoryFor(next.referenceHistory,key);
   return {
+    ...(next.replyCost ? {replyCost: formatReplyUsage(next.replyCost.usage, next.replyCost.imagesGenerated)} : {}),
     mode,
     paragraphs: next.paragraphs.map((text, index) => ({
       id: `${next.sourceFingerprint}:${index}`,
@@ -373,6 +376,17 @@ export type VisualStageThemeTarget = Pick<
  * user's custom CSS (which stays the final cascade layer), custom display regex rules,
  * and dialogue flow parameters (typewriter speed, auto-play delay, skip mode).
  */
+/** One guard per stage: custom display rules apply only after their worker probe passes. */
+const displayRuleGuards = new WeakMap<VisualStageThemeTarget, (rulesText: string) => void>();
+function applyDisplayRulesGuarded(stage: VisualStageThemeTarget, rulesText: string): void {
+  let guard = displayRuleGuards.get(stage);
+  if (!guard) {
+    guard = createDisplayRuleGuard((text) => stage.setDisplayRegexRules(text));
+    displayRuleGuards.set(stage, guard);
+  }
+  guard(rulesText);
+}
+
 export function applyVisualConfigToStage(
   stage: VisualStageThemeTarget,
   config: VisualNovelConfig,
@@ -381,7 +395,7 @@ export function applyVisualConfigToStage(
   stage.setSceneImageFit(config.sceneImageFit);
   stage.setCastMode?.(config.castMode);
   stage.setUserCss(config.customCss);
-  stage.setDisplayRegexRules(config.displayRegexRules);
+  applyDisplayRulesGuarded(stage, config.displayRegexRules);
   stage.setTextSpeed?.(config.textSpeed);
   stage.setAutoPlayDelay?.(config.autoPlayDelay);
   stage.setSkipMode?.(config.skipMode);
@@ -658,6 +672,16 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     onPlay: () => { void speech.playCurrent(); },
     onPause: () => speech.pause(),
     onStop: () => speech.stop("user-stop"),
+    onEnableAndPlay: () => {
+      if (configRef.current && !configRef.current.speech.enabled) {
+        const nextSpeech = { ...configRef.current.speech, enabled: true };
+        configRef.current = { ...configRef.current, speech: nextSpeech };
+        speech.setSettings(nextSpeech);
+        speechDock.setEnabled(true);
+        ctx.sendToBackend({ type: "vn_set_config", patch: { speech: nextSpeech }, chatId: chatId() ?? "" });
+      }
+      void speech.playCurrent();
+    },
   });
   speech = new SpeechController({
     transport: createSpeechTransport(),
@@ -974,7 +998,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
         .filter((a) => (a.status === "generated" || a.status === "browser_ready" || a.previousImage) && Boolean(sceneImageUrlFor(a)))
         .sort((a, b) => a.paragraphIndex - b.paragraphIndex)[0] ?? null;
     }
-    const sceneUrl = asset ? sceneImageUrlFor(asset) : null;
+    const candidates = asset ? sceneImageCandidatesFor(asset) : [];
+    const sceneUrl = candidates[0] ?? null;
     if (!asset || !sceneUrl) {
       vnDebug("image sync", `p${paragraphIndex}`, "no decodable asset yet");
       return;
@@ -982,6 +1007,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     vnDebug("image sync", `p${paragraphIndex}`, `using cue p${asset.paragraphIndex}`, asset.status, sceneUrl, asset.imageUrl ?? "(no host url)");
     const loaded = await stage.setSceneImage({
       url: sceneUrl,
+      ...(candidates.length > 1 ? { fallbackUrls: candidates.slice(1) } : {}),
       ...(asset.presentation ? { presentation: asset.presentation } : {}),
       alt: `Generated scene for paragraph ${asset.paragraphIndex + 1}`,
       requestId: `${sourceTurn.chatId}:${sourceTurn.messageId}:${sourceTurn.swipeId}:${sourceTurn.sourceFingerprint}:${sourceTurn.revision}:${asset.jobId}:${asset.imageId ?? asset.imageUrl}`

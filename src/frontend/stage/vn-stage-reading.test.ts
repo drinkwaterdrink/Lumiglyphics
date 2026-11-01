@@ -2,6 +2,10 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { FakeDocument, FakeEvent, FakeNode, installFakeDocument } from "./stage-test-dom";
 import { VnStage, type VnStageOptions } from "./vn-stage";
 import type { VnTurnInput } from "../store";
+import type { ReaderPreferences } from "../../shared/reader-preferences.js";
+
+// Tests set only the preference under test; the stage merges nothing, so cast the partial object.
+const partialPrefs = (value: Partial<ReaderPreferences>) => value as ReaderPreferences;
 
 /**
  * Reading UX regression tests: labels, playback state, stable controls,
@@ -453,7 +457,7 @@ describe("reading UX", () => {
 
   test("sentiment lighting grades scene atmosphere based on narrative tone", () => {
     const s = create();
-    s.setReaderPreferences({ sentimentLighting: true });
+    s.setReaderPreferences(partialPrefs({ sentimentLighting: true }));
     s.loadTurn({ mode: "standard", paragraphs: [{ id: "p0", text: "The blade plunged forward with fatal danger." }] });
     expect(root(s).querySelector("[data-vn-scene]")?.dataset.vnAtmosphere).toBe("danger_crimson");
 
@@ -463,7 +467,7 @@ describe("reading UX", () => {
     s.loadTurn({ mode: "standard", paragraphs: [{ id: "p2", text: "A tender whisper and warm kiss filled the quiet room." }] });
     expect(root(s).querySelector("[data-vn-scene]")?.dataset.vnAtmosphere).toBe("romance_rose");
 
-    s.setReaderPreferences({ sentimentLighting: false });
+    s.setReaderPreferences(partialPrefs({ sentimentLighting: false }));
     s.loadTurn({ mode: "standard", paragraphs: [{ id: "p3", text: "The blade plunged forward with fatal danger." }] });
     expect(root(s).querySelector("[data-vn-scene]")?.dataset.vnAtmosphere).toBeUndefined();
   });
@@ -490,6 +494,8 @@ describe("reading UX", () => {
     expect(q(s, "[data-vn-preparation-preview]").hidden).toBe(true);
 
     s.showPreparationPreview({
+      type: "vn_narrative_preview",
+      sessionId: "session1",
       chatId: "chat1",
       messageId: "msg1",
       swipeId: 0,
@@ -509,7 +515,7 @@ describe("reading UX", () => {
 
   test("chapter title card incorporates turn location when provided", () => {
     const s = create();
-    s.setReaderPreferences({ chapterTitleCards: true });
+    s.setReaderPreferences(partialPrefs({ chapterTitleCards: true }));
     s.loadTurn({ mode: "standard", location: "Old Town - Library", paragraphs: [{ id: "p0", text: "Dust motes danced in the quiet room.", speaker: "Alice" }] });
     const card = q(s, "[data-vn-chapter-card]");
     expect(card.hidden).toBe(false);

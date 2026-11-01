@@ -30,7 +30,8 @@ button {
   padding: 0.45rem 0.75rem;
   border: 1px solid var(--lumiverse-border, rgba(255, 255, 255, 0.22));
   border-radius: 999px;
-  background: var(--lumiverse-fill-medium, rgba(255, 255, 255, 0.08));
+  /* Fallback fill is dark so the light fallback text keeps contrast on light host pages. */
+  background: var(--lumiverse-fill-medium, rgba(20, 20, 24, 0.72));
   color: var(--lumiverse-text, #f5f5f7);
   font: inherit;
   font-weight: 650;

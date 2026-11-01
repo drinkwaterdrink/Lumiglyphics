@@ -84,6 +84,8 @@ export type VisualNovelConfig = {
   sceneImageFit: VisualNovelSceneImageFit;
   castMode: boolean;
   debugLogging: boolean;
+  /** Show a per-reply line of model calls, tokens and images in the reader. Off by default. */
+  showReplyCost: boolean;
   generateImages: boolean;
   reviewImages: boolean;
   dynamicImageTemplates: boolean;
@@ -161,6 +163,7 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   sceneImageFit: "cover",
   castMode: false,
   debugLogging: false,
+  showReplyCost: false,
   generateImages: true,
   reviewImages: true,
   dynamicImageTemplates: false,
@@ -380,6 +383,7 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     sceneImageFit: sceneImageFit(input.sceneImageFit),
     castMode: bool(input.castMode, false),
     debugLogging: bool(input.debugLogging, DEFAULT_CONFIG.debugLogging),
+    showReplyCost: bool(input.showReplyCost, DEFAULT_CONFIG.showReplyCost),
     generateImages: bool(input.generateImages, DEFAULT_CONFIG.generateImages),
     reviewImages: bool(input.reviewImages, DEFAULT_CONFIG.reviewImages),
     dynamicImageTemplates: bool(input.dynamicImageTemplates, false),

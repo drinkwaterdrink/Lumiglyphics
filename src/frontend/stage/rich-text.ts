@@ -293,7 +293,22 @@ export type DialogueFormatOptions = {
   stripMarkdown?: boolean;
   forceQuotes?: boolean;
   hasSpeaker?: boolean;
+  stripUnknownTags?: boolean;
 };
+
+const DANGEROUS_HTML_TAGS = new Set([
+  "script", "style", "iframe", "object", "embed", "svg", "math", "link", "meta", "base", "form", "input", "button", "textarea", "select",
+]);
+
+export function stripUnknownPresetTags(text: string): string {
+  return text.replace(/<\/?([A-Za-z][\w-]*)(?:\s+[\w:-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))*\s*\/?>/g, (match, name: string) => {
+    const lower = name.toLowerCase();
+    if (ALLOWED_TAGS.has(lower) || isTextEffectId(lower) || lower === "img" || lower === "pimg" || DANGEROUS_HTML_TAGS.has(lower)) {
+      return match;
+    }
+    return "";
+  });
+}
 
 function stripMarkdown(text: string): string {
   // Strip metadata tags like **Time**: ..., **Location**: ...
@@ -361,6 +376,10 @@ export function formatDialogueText(
     .replace(/<img\s*=\s*["'][^"']+["']\s*\/?>/gi, "")
     .replace(/<img\b[^>]*?\bsrc\s*=\s*["'][^"']+["'][^>]*?\/?>/gi, "")
     .replace(/\{\{img::[^\}]+\}\}/gi, "");
+
+  if (options.stripUnknownTags) {
+    text = stripUnknownPresetTags(text);
+  }
 
   // 2. Apply custom regex rules. These run synchronously on the main thread;
   // skip them past the safety bound rather than risking a long scan on a

@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Unit tests, typecheck, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Unit tests
+        run: bun run test
+      - name: Typecheck
+        run: bun run typecheck
+      - name: Build
+        run: bun run build
+      - name: Bundle verification
+        run: bun run verify:bundle
+      - name: Status table is up to date
+        run: |
+          bun run status:generate
+          git diff --exit-code docs/STATUS-TABLE.md
+
+  browser:
+    name: Browser suites (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Install Chromium for Playwright
+        run: bunx playwright install --with-deps chromium
+      - name: Run browser suites for this shard
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARDS: 3
+        run: bun run ./scripts/run-browser-suites.ts

@@ -69,7 +69,8 @@ import { resolvePlannerConnection, type ResolvedPlannerConnection } from "./conn
 import { normalizeStageEffect, normalizeAmbientEffect, deriveWeatherAmbient } from "./planner-effects.js";
 import { getAudioCatalog, getAudioCatalogPromptSummary } from "./audio-catalog.js";
 import { debugErrorSummary, debugJson, debugQuote, plannerDebugLogger, type PlannerDebugScope } from "./debug-trace.js";
-import { decidePresentation, type SystemOneDecisions } from "./system-one.js";
+import { decidePresentation, formatSystemOneCoverage, type SystemOneDecisions } from "./system-one.js";
+import { addPlannerTokens, addSystemOneUsage, createReplyUsage, recordPlannerAttempt, type ReplyUsage } from "../../shared/reply-usage.js";
 import { stripTextEffectTags } from "../../shared/text-effects.js";
 import { throwIfAborted } from "../core/planning-queue.js";
 
@@ -179,6 +180,8 @@ const PlannerOutputSchema = z.object({
 export type PlanTurnInput = {
   /** Escaped UI transport consumes the same parsed prose before model enrichment. */
   onNarrativePrepared?: (paragraphs: readonly string[]) => void;
+  /** Filled in by planTurn with the text-model calls made for this reply. */
+  usage?: ReplyUsage;
   cardRole?: CardRole;
   chatId: string;
   message: ChatMessageDTO & { role?: string };
@@ -877,9 +880,16 @@ export function repairJsonString(candidate: string): string {
     return match;
   });
 
-  // Single-quoted keys and unquoted property keys outside double-quoted strings
-  text = text.replace(/("(?:\\.|[^"\\])*")|'([a-zA-Z0-9_\-\s]+)'\s*:/g, (m, str, key) => str ? str : `"${key}":`);
-  text = text.replace(/("(?:\\.|[^"\\])*")|([{\[,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, (m, str, prefix, key) => str ? str : `${prefix}"${key}":`);
+  // Single-quoted keys and unquoted property keys outside double-quoted strings:
+  text = text.replace(/("(?:\\.|[^"\\])*")|'([a-zA-Z0-9_\-\s]+)'\s*:/g, (match, strVal, key) => {
+    if (strVal) return strVal;
+    return `"${key}":`;
+  });
+
+  text = text.replace(/("(?:\\.|[^"\\])*")|([{\[,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, (match, strVal, prefix, key) => {
+    if (strVal) return strVal;
+    return `${prefix}"${key}":`;
+  });
 
   // Remove invalid JSON escape sequences like \' -> '
   text = text.replace(/\\'/g, "'");
@@ -1164,6 +1174,7 @@ async function requestPlannerOutput(
     ...input.config.parserParameters
   };
 
+  if (input.usage) recordPlannerAttempt(input.usage);
   const response = await spindle.generate.raw({
     type: "raw",
     messages: [
@@ -1203,6 +1214,7 @@ async function requestPlannerOutput(
     reasoning: { source: "off" },
     ...(input.userId ? { userId: input.userId } : {})
   });
+  if (input.usage) addPlannerTokens(input.usage, (response as { usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } } | null | undefined)?.usage);
   const rawContent = extractResponseContent(response);
   const debug = plannerDebugLogger(spindle, input.config, plannerDebugScope(input));
   if (debug.enabled) {
@@ -2126,6 +2138,8 @@ async function resolveDisplayMacros(
 
 export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promise<{
   plan: TurnPlan;
+  /** Text-model calls made for this reply. */
+  usage: ReplyUsage;
   usedFallback: boolean;
   cardRole: CardRole;
   cardId?: string;
@@ -2140,6 +2154,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   rejectedSubjects: RegistryMergeReport["rejectedSubjects"];
 }> {
   const ignoredTags = parseIgnoredTags(input.config.ignoredTags);
+  input.usage ??= createReplyUsage();
   const resolvedContent = await resolveDisplayMacros(spindle, input, input.content);
   const narrative = prepareNarrative(resolvedContent, {
     ignoredTags,
@@ -2286,13 +2301,14 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     spindle.log.warn(`Visual planner fallback after ${PLANNER_ATTEMPTS} attempts: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
   }
   if (input.config.systemOneMode === "compare") systemOne = await systemOnePromise;
+  if (systemOne && input.usage) addSystemOneUsage(input.usage, systemOne.requests, systemOne.inputTokens);
   if (systemOne) {
     if (input.config.systemOneMode === "compare") {
       const speakerAgreement = planner.speakers.filter((entry) => systemOne.speakers.has(entry.paragraphIndex))
         .filter((entry) => systemOne.speakers.get(entry.paragraphIndex)?.toLowerCase() === entry.name.toLowerCase()).length;
       const expressionAgreement = planner.cues.filter((cue) => cue.expression && systemOne.expressions.has(cue.paragraphIndex))
         .filter((cue) => systemOne.expressions.get(cue.paragraphIndex) === cue.expression).length;
-      spindle.log.info(`[VN] System One compare durationMs=${systemOne.durationMs} inputTokens=${systemOne.inputTokens} speakers=${speakerAgreement}/${systemOne.speakers.size} expressions=${expressionAgreement}/${systemOne.expressions.size} sceneChange=${systemOne.sceneChange} description=${systemOne.needsDescription}`);
+      spindle.log.info(`[VN] System One compare durationMs=${systemOne.durationMs} inputTokens=${systemOne.inputTokens} speakers=${speakerAgreement}/${systemOne.speakers.size} expressions=${expressionAgreement}/${systemOne.expressions.size} sceneChange=${systemOne.sceneChange} description=${systemOne.needsDescription} offered=[${formatSystemOneCoverage(systemOne.coverage)}]`);
     } else if (input.config.systemOneMode === "on") {
       for (const [paragraphIndex, name] of systemOne.speakers) {
         const existing = planner.speakers.find((entry) => entry.paragraphIndex === paragraphIndex);
@@ -2306,7 +2322,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
           planner.cues.push({ paragraphIndex, expression, action: null, promptDelta: "" });
         }
       }
-      spindle.log.info(`[VN] System One ${useContinuation ? "continuation" : "augmentation"} durationMs=${systemOne.durationMs} inputTokens=${systemOne.inputTokens}`);
+      spindle.log.info(`[VN] System One ${useContinuation ? "continuation" : "augmentation"} durationMs=${systemOne.durationMs} inputTokens=${systemOne.inputTokens} offered=[${formatSystemOneCoverage(systemOne.coverage)}]`);
     }
   }
 
@@ -2773,7 +2789,8 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     extractedCharacters: planner.characters.map((character) => ({ name: character.name, description: character.description })),
     characterRegistry: registry,
     rejectedAliases: registryReport.rejectedAliases,
-    rejectedSubjects: registryReport.rejectedSubjects
+    rejectedSubjects: registryReport.rejectedSubjects,
+    usage: input.usage ?? createReplyUsage()
   };
 }
 
