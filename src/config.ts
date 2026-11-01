@@ -94,6 +94,7 @@ export type VisualNovelConfig = {
   imagePromptEngineVersion?: 1 | 2;
   dialogueSafeArea: "auto" | "always" | "off";
   imageFramingDirector?: boolean;
+  imagePromptDetail?: "auto" | "compact" | "standard" | "detailed";
   imagePromptFormat: "description" | "tags";
   automaticImagePromptSettings: boolean;
   imagePromptBudgetOverride: boolean;
@@ -175,6 +176,7 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   imagePromptEngineVersion: 1,
   dialogueSafeArea: "auto",
   imageFramingDirector: true,
+  imagePromptDetail: "auto",
   imagePromptFormat: "description",
   automaticImagePromptSettings: true,
   imagePromptBudgetOverride: false,
@@ -398,6 +400,7 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     imagePromptEngineVersion: input.imagePromptEngineVersion === 2 ? 2 : 1,
     dialogueSafeArea: input.dialogueSafeArea === "always" ? "always" : input.dialogueSafeArea === "off" ? "off" : "auto",
     imageFramingDirector: bool(input.imageFramingDirector, true),
+    imagePromptDetail: input.imagePromptDetail === "compact" || input.imagePromptDetail === "standard" || input.imagePromptDetail === "detailed" ? input.imagePromptDetail : "auto",
     imagePromptFormat: input.imagePromptFormat === "tags" ? "tags" : "description",
     automaticImagePromptSettings: bool(input.automaticImagePromptSettings, true),
     imagePromptBudgetOverride: input.imagePromptBudgetOverride === true,

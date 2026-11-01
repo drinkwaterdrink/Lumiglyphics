@@ -2,6 +2,8 @@ import {castAllocationCandidates} from './cast-allocation.js';
 import {loadImagePromptProfile,loadImagePromptProfileV2,prepareCapabilityOutput} from "./image-prompt-profile.js";
 import {resolveImageOutputPlan} from './image-output-plan.js';
 import {resolveShotSpec} from './shot-director.js';
+import {compileModelPrompt} from './model-prompt-compiler.js';
+import {resolveReferencePlan} from './reference-plan.js';
 import {resolveStyleDNA} from '../../shared/style-dna.js';
 import {assertCapabilityOutput} from '../../shared/model-output-capabilities.js';
 import {findCastArt,saveCastArt,castArtToken,type CastArtIdentity} from './cast-art.js';
@@ -1346,6 +1348,41 @@ export async function generateAssets(
             frozen.shotSpec = shotSpec;
             frozen.styleSnapshot = styleSnapshot.styleDNA;
             frozen.parameters = outputPlan.parameters;
+            const isDirectedTemplate = cue.imageTemplate?.cameraPolicy !== 'fixed';
+            if (isDirectedTemplate) {
+              const referencePlan = resolveReferencePlan({
+                brief: initialMetadata?.brief,
+                cue,
+                portraits
+              });
+              const compiledV2 = compileModelPrompt({
+                brief: initialMetadata?.brief ?? compileTemplateCue(config, scene, cue, characterAppearance).brief,
+                shotSpec,
+                styleDNA: styleSnapshot.styleDNA,
+                profile: profileV2,
+                outputPlan,
+                referencePlan,
+                detailLevel: config.imagePromptDetail,
+                promptExpansionEnabled: profileV2.promptExpansion?.enabled,
+                userBudgetOverride: config.imagePromptBudgetOverride ? config.imagePromptBudget : null,
+                cue
+              });
+              frozen.prompt = compiledV2.prompt;
+              if (compiledV2.negativePrompt !== undefined) {
+                frozen.negativePrompt = compiledV2.negativePrompt;
+              }
+              if (compiledV2.parameterHints) {
+                frozen.parameters = { ...(frozen.parameters ?? {}), ...compiledV2.parameterHints };
+              }
+              if (initialMetadata) {
+                initialMetadata.budgetSummary = {
+                  complexity: compiledV2.budgetPlan.complexity,
+                  softRange: compiledV2.budgetPlan.softRange,
+                  hardLimit: compiledV2.budgetPlan.hardLimit,
+                  finalCharacters: compiledV2.prompt.length + (compiledV2.negativePrompt?.length ?? 0)
+                };
+              }
+            }
             if (initialMetadata) {
               initialMetadata.promptEngineVersion = 2;
               initialMetadata.promptDialect = profileV2.dialect;
@@ -1430,6 +1467,39 @@ export async function generateAssets(
                 preparedRequest.shotSpec = shotSpec;
                 preparedRequest.styleSnapshot = styleSnapshot.styleDNA;
                 preparedRequest.parameters = outputPlan.parameters;
+                const isNextDirected = nextCue.imageTemplate?.cameraPolicy !== 'fixed';
+                if (isNextDirected) {
+                  const referencePlan = resolveReferencePlan({
+                    brief: nextMetadata.brief,
+                    cue: nextCue,
+                    portraits
+                  });
+                  const compiledV2 = compileModelPrompt({
+                    brief: nextMetadata.brief,
+                    shotSpec,
+                    styleDNA: styleSnapshot.styleDNA,
+                    profile: profileV2,
+                    outputPlan,
+                    referencePlan,
+                    detailLevel: latestConfig.imagePromptDetail,
+                    promptExpansionEnabled: profileV2.promptExpansion?.enabled,
+                    userBudgetOverride: latestConfig.imagePromptBudgetOverride ? latestConfig.imagePromptBudget : null,
+                    cue: nextCue
+                  });
+                  preparedRequest.prompt = compiledV2.prompt;
+                  if (compiledV2.negativePrompt !== undefined) {
+                    preparedRequest.negativePrompt = compiledV2.negativePrompt;
+                  }
+                  if (compiledV2.parameterHints) {
+                    preparedRequest.parameters = { ...(preparedRequest.parameters ?? {}), ...compiledV2.parameterHints };
+                  }
+                  nextMetadata.budgetSummary = {
+                    complexity: compiledV2.budgetPlan.complexity,
+                    softRange: compiledV2.budgetPlan.softRange,
+                    hardLimit: compiledV2.budgetPlan.hardLimit,
+                    finalCharacters: compiledV2.prompt.length + (compiledV2.negativePrompt?.length ?? 0)
+                  };
+                }
                 nextMetadata.promptEngineVersion = 2;
                 nextMetadata.promptDialect = profileV2.dialect;
                 nextMetadata.serializerRevision = profileV2.serializerRevision;
