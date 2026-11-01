@@ -310,6 +310,15 @@ test('StyleDNA schema validates attributes and empty defaults', () => {
   expect(animeDNA?.medium).toBe('2D anime illustration');
   expect(animeDNA?.linework?.[0]).toBe('precise tapered ink contours');
 
+  // Long user custom style prefix (>200 chars) is supported without too_big validation error
+  const longPrefix = 'masterpiece, best quality, ultra-detailed, 8k resolution, highly detailed digital painting, vibrant color palette, intricate clothing details, sharp focus, beautiful volumetric cinematic lighting, octane render, trending on artstation, masterpiece anime illustration with rich painterly textures and subtle ambient gradients'.repeat(3);
+  expect(longPrefix.length).toBeGreaterThan(200);
+  const longCustomDNA = parseStyleDNA({
+    medium: longPrefix,
+    preserve: ['scene-defined lighting']
+  });
+  expect(longCustomDNA?.medium).toBe(longPrefix);
+
   // Invalid extra fields or types rejected
   expect(parseStyleDNA({ unexpectedKey: 123 })).toBeUndefined();
 });
