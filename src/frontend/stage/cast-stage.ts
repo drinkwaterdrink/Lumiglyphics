@@ -1,7 +1,7 @@
-import { sceneImageUrlFor } from "./image-loader.js";
+import {sceneImageCandidatesFor,loadVnImageCandidates} from "./image-loader.js";
 import type {AssetView,TurnView} from '../../protocol.js';
 import {selectCastComposition,type CastPortrait} from '../../shared/cast-composition.js';
-import {preloadAndDecodeVnImage,type VnImageFactory} from './image-loader.js';
+import {type VnImageFactory} from './image-loader.js';
 const CSS=`
 [data-vn-cast]{position:absolute;z-index:28;inset:var(--vn-cast-top,5rem) 1rem auto;pointer-events:none;display:grid;gap:.6rem;justify-items:center}
 [data-vn-cast][hidden]{display:none}
@@ -30,7 +30,7 @@ const CSS=`
 /** Reuses ready art only. No transparent-cutout assumption, storage or provider calls. */
 export class CastStage {
  private host=document.createElement('section');private style=document.createElement('style');private enabled=false;private collapsed=false;
- private turn:TurnView|null=null;private index=0;private selected='';private scope='';private epoch=0;private signature='';private structureSignature='';private fitFrame=0;private disposed=false;private observer:ResizeObserver|null=null;
+ private turn:TurnView|null=null;private index=0;private selected='';private scope='';private epoch=0;private signature='';private structureSignature='';private fitFrame=0;private disposed=false;private observer:ResizeObserver|null=null;private loadAbort=new AbortController();
  constructor(private root:HTMLElement,private createImage?:VnImageFactory){this.style.textContent=CSS;this.host.dataset.vnCast='';this.host.hidden=true;this.host.setAttribute('aria-label','Scene cast');root.append(this.style,this.host);}
  setEnabled(enabled:boolean):void{
   if(enabled&&!this.enabled)this.collapsed=false;
@@ -52,13 +52,13 @@ export class CastStage {
   if(composition.scope!==this.scope){this.selected='';this.host.replaceChildren();this.scope=composition.scope;this.structureSignature='';composition=selectCastComposition(this.turn!,this.index)!;}
   const signature=JSON.stringify([composition.scope,composition.portraits,composition.otherCast,this.collapsed]);
   if(signature===this.signature)return composition.background;
-  const structureSignature=JSON.stringify([composition.scope,composition.portraits.map(p=>[p.name,p.asset?.imageId??null,p.asset?.imageUrl??null,p.asset?.stageAsset?.attire??null]),composition.otherCast.map(p=>p.name),this.collapsed]);
+  const structureSignature=JSON.stringify([composition.scope,composition.portraits.map(p=>[p.name,p.asset?.imageId??null,p.asset?.imageUrl??null,p.asset?.stageAsset?.attire??null,p.asset?.stageAsset?.displayImageUrl??null]),composition.otherCast.map(p=>p.name),this.collapsed]);
   this.signature=signature;
   if(structureSignature===this.structureSignature&&!this.collapsed){
    this.syncActiveSpeaker(composition.portraits);
    return composition.background;
   }
-  this.structureSignature=structureSignature;const epoch=++this.epoch;this.host.hidden=false;
+  this.structureSignature=structureSignature;this.loadAbort.abort();this.loadAbort=new AbortController();const epoch=++this.epoch;this.host.hidden=false;
   this.host.dataset.collapsed=String(this.collapsed);
   if(this.collapsed){this.host.replaceChildren(this.toggleButton('show'));this.fit();if(keepFocus)this.host.querySelector<HTMLButtonElement>('[data-vn-cast-toggle]')?.focus({preventScroll:true});return composition.background;}
   const portraits=document.createElement('div');portraits.dataset.vnCastPortraits='';
@@ -75,9 +75,9 @@ export class CastStage {
    card.dataset.active=String(portrait.active);
    const label=card.querySelector('figcaption');
    if(label){
-    const toggle=label.querySelector('[data-vn-cast-toggle]');
+    const toggle=label.querySelector('[data-vn-cast-toggle]'),error=label.querySelector('[data-vn-cast-error]');
     label.textContent=portrait.name+(portrait.active?' · speaking':'');
-    if(toggle)label.append(toggle);
+    if(error)label.append(error);if(toggle)label.append(toggle);
    }
   }
  }
@@ -100,11 +100,13 @@ export class CastStage {
   const card=document.createElement('figure');card.dataset.vnCastCard='';card.dataset.vnCastCharacter=portrait.name;card.dataset.vnCastIdentity=JSON.stringify([portrait.name,portrait.asset?.stageAsset?.attire??null]);card.dataset.active=String(portrait.active);
   const placeholder=document.createElement('div');placeholder.dataset.vnCastPlaceholder='';placeholder.textContent=portrait.asset?'Loading portrait…':'Portrait unavailable';
   const label=document.createElement('figcaption');label.textContent=portrait.name+(portrait.active?' · speaking':'');card.append(prior&&portrait.asset?prior.cloneNode(true):placeholder,label);parent.append(card);
-  const url=portrait.asset?.imageUrl;if(!url)return;
-  void preloadAndDecodeVnImage(url,this.createImage).then(()=>{
+  const candidates=portrait.asset?sceneImageCandidatesFor(portrait.asset):[];
+  if(!candidates.length){placeholder.textContent='Portrait unavailable';card.firstElementChild?.replaceWith(placeholder);return;}
+  const signal=this.loadAbort.signal;
+  void loadVnImageCandidates(candidates,this.createImage,signal).then(url=>{
    if(this.disposed||epoch!==this.epoch||!card.isConnected)return;
    const image=document.createElement('img');image.alt=`Portrait of ${portrait.name}`;image.src=url;const content=card.firstElementChild;content?.replaceWith(image);
-  }).catch(()=>{if(!this.disposed&&epoch===this.epoch){placeholder.textContent='Portrait unavailable';card.firstElementChild?.replaceWith(placeholder);}});
+  }).catch(()=>{if(!signal.aborted&&!this.disposed&&epoch===this.epoch){if(prior){const error=document.createElement('small');error.dataset.vnCastError='';error.setAttribute('role','status');error.textContent=' · Previous portrait; replacement unavailable';label.append(error);}else{placeholder.textContent='Portrait unavailable';card.firstElementChild?.replaceWith(placeholder);}}});
  }
  private fit():void{
   if(!this.signature||this.disposed)return;
@@ -119,6 +121,6 @@ export class CastStage {
   this.host.hidden=room<32;
   this.host.style.setProperty('--vn-cast-height',`${Math.max(32,room)}px`);
  }
- private clearDisplay():void{this.epoch++;this.signature='';this.structureSignature='';this.scope='';this.selected='';this.host.hidden=true;this.host.replaceChildren();}
+ private clearDisplay():void{this.loadAbort.abort();this.epoch++;this.signature='';this.structureSignature='';this.scope='';this.selected='';this.host.hidden=true;this.host.replaceChildren();}
  destroy():void{this.disposed=true;if(this.fitFrame&&typeof cancelAnimationFrame==='function')cancelAnimationFrame(this.fitFrame);this.observer?.disconnect();this.clearDisplay();this.host.remove();this.style.remove();}
 }

@@ -2232,6 +2232,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
         names: [...Object.values(seedRegistry).map((entry) => entry.name), ...Object.values(seedRegistry).flatMap((entry) => entry.aliases), ...(input.previousScene?.cast ?? []), input.message.name, input.singleCharacter.protagonist.name].filter((name): name is string => Boolean(name)),
         ...(personaName ? { personaName } : {}),
         config: input.config,
+        ...(input.usage?{onDispatch:()=>addSystemOneUsage(input.usage!,1),onResponse:(tokens:{input_tokens?:number|null|undefined;output_tokens?:number|null|undefined})=>addPlannerTokens(input.usage!,{prompt_tokens:tokens.input_tokens,completion_tokens:tokens.output_tokens})}:{}),
         ...(input.userId ? { userId: input.userId } : {}),
         ...(input.signal ? { signal: input.signal } : {}),
       }).catch((error: unknown) => {
@@ -2247,7 +2248,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   let lastError: unknown = null;
   planner = fallbackPlanner(input, narrative.paragraphs.length);
   usedFallback = true;
-  const useContinuation = !input.config.dynamicImageTemplates && resolveImageTemplate(input.config).template.category === "portrait" && input.config.systemOneMode === "on" && systemOne !== null && input.previousScene !== null
+  const useContinuation = !input.config.dynamicImageTemplates && resolveImageTemplate(input.config).template.category === "portrait" && input.config.systemOneMode === "on" && systemOne !== null && systemOne.coverage.sceneAnswered===true && systemOne.coverage.paragraphs.answered===narrative.paragraphs.length && input.previousScene !== null
     && !systemOne.sceneChange && !systemOne.needsDescription
     && narrative.paragraphs.length <= 7
     && (Boolean(input.previousScene.identityPrompt) || isUsableIdentity(input.singleCharacter.protagonist.name, input.singleCharacter.protagonist.tags))
@@ -2301,7 +2302,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     spindle.log.warn(`Visual planner fallback after ${PLANNER_ATTEMPTS} attempts: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
   }
   if (input.config.systemOneMode === "compare") systemOne = await systemOnePromise;
-  if (systemOne && input.usage) addSystemOneUsage(input.usage, systemOne.requests, systemOne.inputTokens);
+
   if (systemOne) {
     if (input.config.systemOneMode === "compare") {
       const speakerAgreement = planner.speakers.filter((entry) => systemOne.speakers.has(entry.paragraphIndex))

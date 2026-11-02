@@ -37,7 +37,9 @@ export function rankByRelevance<T extends { id: string; name: string; tags: stri
 }
 
 export type SystemOneCoverage = {
-  paragraphs: { answered: number; total: number };
+  paragraphs: { answered: number; total: number; submitted?:number; skipped?:number; truncated?:number; failed?:number };
+  sceneAnswered?:boolean;
+  reasons?:string[];
   expressions: { offered: number; total: number };
   bgm: { offered: number; total: number };
   sfx: { offered: number; total: number };
@@ -45,7 +47,7 @@ export type SystemOneCoverage = {
 
 /** Diagnostics line, for example "paragraphs 24/30, bgm 24/120". */
 export function formatSystemOneCoverage(coverage: SystemOneCoverage): string {
-  return `paragraphs ${coverage.paragraphs.answered}/${coverage.paragraphs.total}, expressions ${coverage.expressions.offered}/${coverage.expressions.total}, bgm ${coverage.bgm.offered}/${coverage.bgm.total}, sfx ${coverage.sfx.offered}/${coverage.sfx.total}`;
+  return `paragraphs ${coverage.paragraphs.answered}/${coverage.paragraphs.total}, expressions ${coverage.expressions.offered}/${coverage.expressions.total}, bgm ${coverage.bgm.offered}/${coverage.bgm.total}, sfx ${coverage.sfx.offered}/${coverage.sfx.total}${coverage.paragraphs.submitted===undefined?'':`, submitted ${coverage.paragraphs.submitted}, skipped ${coverage.paragraphs.skipped}, truncated ${coverage.paragraphs.truncated}, failed ${coverage.paragraphs.failed}`}`;
 }
 
 export const SYSTEM_ONE_KEY = "system_one_api_key";
@@ -102,40 +104,16 @@ function systemOneTimeout(ms: number): Error {
  * abort signal. The proxy request itself cannot be cancelled, so a late
  * response is simply discarded; planning must never wait on a hung endpoint.
  */
-async function boundedCors(
-  spindle: SpindleAPI,
-  endpoint: string,
-  init: { method: "POST"; headers: Record<string, string>; body: string },
-  timeoutMs: number,
-  signal?: AbortSignal,
-): Promise<{ status: number; body: string }> {
-  if (signal?.aborted) {
-    const error = new Error("System One request cancelled.");
-    error.name = "AbortError";
-    throw error;
-  }
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(systemOneTimeout(timeoutMs)), timeoutMs);
-  });
-  let abortReject: ((reason: unknown) => void) | undefined;
-  const onAbort = (): void => {
-    const error = new Error("System One request cancelled.");
-    error.name = "AbortError";
-    abortReject?.(error);
-  };
-  if (signal) signal.addEventListener("abort", onAbort, { once: true });
-  const abortPromise = new Promise<never>((_, reject) => { abortReject = reject; });
-  try {
-    return await Promise.race([
-      spindle.cors(endpoint, init) as Promise<{ status: number; body: string }>,
-      deadline,
-      ...(signal ? [abortPromise] : []),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-    if (signal) signal.removeEventListener("abort", onAbort);
-  }
+async function boundedSystemOne<T>(operation:()=>Promise<T>,timeoutMs:number,signal?:AbortSignal,onDispatch?:()=>void):Promise<T>{
+  const cancelled=()=>{const error=new Error('System One request cancelled.');error.name='AbortError';return error;};
+  if(signal?.aborted)throw cancelled();
+  let timer:ReturnType<typeof setTimeout>|undefined;let abort=()=>{};
+  const stop=new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(systemOneTimeout(timeoutMs)),timeoutMs);abort=()=>reject(cancelled());signal?.addEventListener('abort',abort,{once:true});});
+  try{if(signal?.aborted)throw cancelled();onDispatch?.();return await Promise.race([operation(),stop]);}
+  finally{if(timer!==undefined)clearTimeout(timer);signal?.removeEventListener('abort',abort);}
+}
+async function boundedCors(spindle:SpindleAPI,endpoint:string,init:{method:'POST';headers:Record<string,string>;body:string},timeoutMs:number,signal?:AbortSignal,onDispatch?:()=>void):Promise<{status:number;body:string}>{
+  return boundedSystemOne(()=>spindle.cors(endpoint,init) as Promise<{status:number;body:string}>,timeoutMs,signal,onDispatch);
 }
 
 /** A missing answer means "no change detected" — never invent a scene cut. */
@@ -150,10 +128,11 @@ function chosen(answer: AnswerValue | undefined, allowed: Set<string>, threshold
 
 export async function decidePresentation(
   spindle: SpindleAPI,
-  input: { paragraphs: Array<{ index: number; text: string }>; previousScene: SceneState | null; names: string[]; personaName?: string; config: VisualNovelConfig; userId?: string; signal?: AbortSignal; timeoutMs?: number },
+  input: { paragraphs: Array<{ index: number; text: string }>; previousScene: SceneState | null; names: string[]; personaName?: string; config: VisualNovelConfig; userId?: string; signal?: AbortSignal; timeoutMs?: number; onDispatch?:()=>void; onResponse?:(usage:{input_tokens?:number|null|undefined;output_tokens?:number|null|undefined})=>void },
 ): Promise<SystemOneDecisions | null> {
   if (input.config.systemOneMode === "off") return null;
-  const key = await spindle.enclave.get(SYSTEM_ONE_KEY, input.userId);
+  const started=Date.now(),deadline=started+Math.max(1,input.timeoutMs??SYSTEM_ONE_TIMEOUT_MS);
+  const key = await boundedSystemOne(()=>spindle.enclave.get(SYSTEM_ONE_KEY,input.userId),Math.max(1,deadline-Date.now()),input.signal).catch(error=>{if(error instanceof Error&&error.name==='TimeoutError')throw systemOneTimeout(input.timeoutMs??SYSTEM_ONE_TIMEOUT_MS);throw error;});
   if (!key) return null;
   const model = input.config.systemOneModel.trim();
   if (!model) throw new Error("System One model is missing");
@@ -187,36 +166,40 @@ export async function decidePresentation(
     if (music.length) questions[`bgm_${index}`] = { type: "choice", instructions: `Should background music change at paragraph ${index}?`, criteria: { keep_current: "No music change", ...Object.fromEntries(music.map((entry) => [entry.id, `${entry.name}; ${entry.tags.join(", ")}`])) } };
     if (sounds.length) questions[`sfx_${index}`] = { type: "choice", instructions: `Is a sound effect clearly called for at paragraph ${index}?`, criteria: { none: "No sound effect", ...Object.fromEntries(sounds.map((entry) => [entry.id, `${entry.name}; ${entry.tags.join(", ")}`])) } };
   }
-  const started = Date.now();
   const paragraphs = input.paragraphs.slice(0, SYSTEM_ONE_LIMITS.paragraphs);
-  const batches = Array.from({ length: Math.ceil(paragraphs.length / 7) }, (_, i) => paragraphs.slice(i * 7, (i + 1) * 7));
-  const parsedBatches = await Promise.all(batches.map(async (batch, batchIndex) => {
-    const batchQuestions: Record<string, unknown> = batchIndex === 0 && questions.scene_change
-      ? { scene_change: questions.scene_change, needs_description: questions.needs_description }
-      : {};
-    for (const paragraph of batch) {
-      for (const prefix of ["speaker", "expression", "bgm", "sfx"]) {
-        const name = `${prefix}_${paragraph.index}`;
-        if (questions[name]) batchQuestions[name] = questions[name];
-      }
-    }
-    const body = JSON.stringify({
-      model,
-      state: {
-        previousScene: input.previousScene ? { environment: input.previousScene.environment, character: input.previousScene.character, attire: input.previousScene.attire } : null,
-        paragraphs: batch.map((paragraph) => ({ index: paragraph.index, text: paragraph.text.slice(0, 3000) })),
-      },
-      questions: batchQuestions,
-    });
-    if (new TextEncoder().encode(body).length > 65_536) throw new Error("System One request exceeds the API's 64 KiB limit");
-    const response = await boundedCors(spindle, endpoint, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body,
-    }, input.timeoutMs ?? SYSTEM_ONE_TIMEOUT_MS, input.signal);
-    if (response.status < 200 || response.status >= 300) throw new Error(`System One request failed (${response.status})`);
-    return Response.parse(JSON.parse(response.body));
-  }));
+  const serialize=(batch:typeof paragraphs,sceneQuestions:boolean)=>{
+    const batchQuestions:Record<string,unknown>=sceneQuestions&&questions.scene_change?{scene_change:questions.scene_change,needs_description:questions.needs_description}:{};
+    for(const paragraph of batch)for(const prefix of ['speaker','expression','bgm','sfx']){const name=`${prefix}_${paragraph.index}`;if(questions[name])batchQuestions[name]=questions[name];}
+    return JSON.stringify({model,state:{previousScene:input.previousScene?{environment:input.previousScene.environment,character:input.previousScene.character,attire:input.previousScene.attire}:null,paragraphs:batch.map(p=>({index:p.index,text:p.text.slice(0,3000)}))},questions:batchQuestions});
+  };
+  const fits=(body:string)=>new TextEncoder().encode(body).length<=65536;
+  const sceneQuestions=completeSceneView&&fits(serialize(paragraphs,true));
+  const batches:Array<{paragraphs:typeof paragraphs;body:string}>=[];
+  const reasons=new Set<string>();const skipped=new Set<number>(),submitted=new Set<number>(),failed=new Set<number>();
+  let pending:typeof paragraphs=[];
+  const flush=()=>{if(pending.length){batches.push({paragraphs:pending,body:serialize(pending,sceneQuestions)});pending=[];}};
+  // Preflight every body before ANY request. A large earlier candidate never starts paid siblings then rejects locally.
+  for(const paragraph of paragraphs){const next=[...pending,paragraph];if(next.length>7||!fits(serialize(next,sceneQuestions)))flush();if(!fits(serialize([paragraph],sceneQuestions))){skipped.add(paragraph.index);reasons.add('byte-budget');continue;}pending.push(paragraph);}
+  flush();if(input.paragraphs.length>paragraphs.length)reasons.add('paragraph-budget');
+  const truncated=paragraphs.filter(p=>p.text.length>3000);if(truncated.length)reasons.add('paragraph-text-budget');
+  const parsedBatches:Array<z.infer<typeof Response>>=[];let nextBatch=0,requests=0,lastError:unknown=null;
+  const run=async()=>{while(nextBatch<batches.length){
+    if(input.signal?.aborted){const e=new Error('System One request cancelled.');e.name='AbortError';throw e;}
+    const batch=batches[nextBatch++]!;const remaining=deadline-Date.now();
+    if(remaining<=0){batch.paragraphs.forEach(p=>skipped.add(p.index));reasons.add('deadline');lastError=systemOneTimeout(input.timeoutMs??SYSTEM_ONE_TIMEOUT_MS);continue;}
+    try{
+      const response=await boundedCors(spindle,endpoint,{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:batch.body},remaining,input.signal,()=>{requests++;batch.paragraphs.forEach(p=>submitted.add(p.index));input.onDispatch?.();});
+      if(response.status<200||response.status>=300)throw new Error(`System One request failed (${response.status})`);
+      const raw=JSON.parse(response.body);const reported=z.object({input_tokens:z.number().finite().nonnegative().nullable().optional(),output_tokens:z.number().finite().nonnegative().nullable().optional()}).safeParse(raw?.usage);if(reported.success)input.onResponse?.(reported.data);
+      const parsed=Response.parse(raw);
+      // A sibling cannot answer questions it was never sent.
+      const expected=JSON.parse(batch.body).questions as Record<string,unknown>;
+      parsed.answers=Object.fromEntries(Object.entries(parsed.answers).filter(([name])=>Object.hasOwn(expected,name)));
+      parsedBatches.push(parsed);
+    }catch(error){if(input.signal?.aborted)throw error;lastError=error instanceof Error&&error.name==='TimeoutError'?systemOneTimeout(input.timeoutMs??SYSTEM_ONE_TIMEOUT_MS):error;batch.paragraphs.forEach(p=>failed.add(p.index));reasons.add(error instanceof Error&&error.name==='TimeoutError'?'deadline':'batch-failed');}
+  }};
+  await Promise.all(Array.from({length:Math.min(2,batches.length)},()=>run()));
+  if(requests&&!parsedBatches.length)throw lastError??new Error('System One returned no valid response.');
   const answers = Object.assign({}, ...parsedBatches.map((batch) => batch.answers)) as Record<string, AnswerValue>;
   const speakers = new Map<number, string>();
   const expressions = new Map<number, string>();
@@ -244,9 +227,10 @@ export async function decidePresentation(
     needsDescription: noulTripped(description, 0.2),
     durationMs: Date.now() - started,
     inputTokens: parsedBatches.reduce((total, batch) => total + (batch.usage?.input_tokens ?? 0), 0),
-    requests: parsedBatches.length,
+    requests,
     coverage: {
-      paragraphs: { answered: paragraphs.length, total: input.paragraphs.length },
+      paragraphs: { answered:paragraphs.filter(p=>['speaker','expression','bgm','sfx'].filter(prefix=>questions[`${prefix}_${p.index}`]).every(prefix=>{const key=`${prefix}_${p.index}`,answer=answers[key],question=questions[key] as {criteria?:Record<string,string>};return answer?.type==='choice'&&Object.hasOwn(question.criteria??{},answer.choice)&&answer.confidence>=(prefix==='speaker'?.65:prefix==='expression'?.6:.7);})).length,total:input.paragraphs.length,submitted:submitted.size,skipped:input.paragraphs.length-submitted.size,truncated:truncated.filter(p=>submitted.has(p.index)).length,failed:failed.size },
+      sceneAnswered:sceneQuestions&&answers.scene_change?.type==='noul'&&answers.needs_description?.type==='noul',reasons:[...reasons],
       expressions: { offered: offeredCounts.expressions, total: POSE_EXPRESSION_CATALOGUE.length },
       bgm: { offered: offeredCounts.bgm, total: audio.bgm.length },
       sfx: { offered: offeredCounts.sfx, total: audio.sfx.length },

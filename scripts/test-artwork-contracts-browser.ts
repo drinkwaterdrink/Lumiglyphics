@@ -29,6 +29,7 @@ try {
     await studio.getByRole('tab',{name:'Prompt',exact:true}).click();
     await studio.locator('[data-enrich-guidance]').fill('longer hair, warmer lighting');
     await studio.locator('[data-enrich-submit]').click();
+    assert.equal(await studio.locator('[data-enrich-submit]').isDisabled(),true,'one in-flight enrichment disables duplicate submission');
     const action=await page.evaluate(()=>(window as any).imageFixture.actions.at(-1));
     assert.equal(action.type,state==='review'?'vn_enrich_image_prompt':'vn_prepare_image');
     assert.equal(action.guidance,'longer hair, warmer lighting');

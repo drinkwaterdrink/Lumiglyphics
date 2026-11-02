@@ -27,6 +27,15 @@ describe("reading UX", () => {
     stage = new VnStage({ mount: mount as unknown as HTMLElement, textSpeed: 0, ...options });
     return stage;
   };
+
+  test('reset and supersession stop old image fallback attempts and never report readiness',async()=>{
+    const created:any[]=[];
+    const s=create({createImage:()=>{const listeners=new Map<string,EventListener>();const image={src:'',complete:false,naturalWidth:0,addEventListener:(type:string,fn:EventListener)=>listeners.set(type,fn),removeEventListener:(type:string)=>listeners.delete(type)};created.push({image,listeners});return image;}});
+    const first=s.setSceneImage({url:'/old',fallbackUrls:['/old-fallback'],requestId:'old'});
+    const next=s.setSceneImage({url:'/new',requestId:'new'});
+    expect(await first).toBe(false);expect(created).toHaveLength(2);expect(created[0].listeners.size).toBe(0);
+    s.reset();expect(await next).toBe(false);expect(created[1].listeners.size).toBe(0);expect(created).toHaveLength(2);
+  });
   const root = (s: VnStage): FakeNode => (s as unknown as { root: FakeNode }).root;
   const shell = (s: VnStage): FakeNode => s.panelMount as unknown as FakeNode;
   const q = (s: VnStage, selector: string): FakeNode => {

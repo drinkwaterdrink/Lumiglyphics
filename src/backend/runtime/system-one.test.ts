@@ -227,3 +227,25 @@ test("candidate ranking puts paragraph-relevant audio first and keeps catalog or
     sfx: { offered: 24, total: 60 },
   }), /paragraphs 24\/30, expressions 16\/92, bgm 24\/120, sfx 24\/60/);
 });
+
+test('multilingual classification is packed by serialized bytes before dispatch and bounded to two concurrent calls',async()=>{
+ let active=0,peak=0;const bodies:string[]=[];
+ const api:any={enclave:{get:async()=> 'key'},cors:async(_url:string,request:any)=>{active++;peak=Math.max(peak,active);bodies.push(request.body);await new Promise(r=>setTimeout(r,2));active--;const state=JSON.parse(request.body).state;return{status:200,body:JSON.stringify({model:'m',answers:Object.fromEntries(state.paragraphs.map((p:any)=>[`speaker_${p.index}`,{type:'choice',choice:'Mira',confidence:.9,probabilities:{Mira:1}}]))})};}};
+ const result=await decidePresentation(api,{paragraphs:Array.from({length:24},(_,index)=>({index,text:'漢'.repeat(3000)})),previousScene:null,names:['Mira'],config:{...DEFAULT_CONFIG,systemOneMode:'on'}});
+ assert.ok(bodies.length>0);assert.ok(bodies.every(body=>new TextEncoder().encode(body).length<=65536));assert.ok(peak<=2);assert.equal(result?.speakers.size,24);
+});
+
+test('a failed sibling batch retains successful answers and counts every dispatched request',async()=>{
+ let calls=0,attempts=0;const api:any={enclave:{get:async()=> 'key'},cors:async(_url:string,r:any)=>{calls++;const p=JSON.parse(r.body).state.paragraphs;if(p[0].index===0)return{status:503,body:'offline'};return{status:200,body:JSON.stringify({model:'m',answers:{speaker_7:{type:'choice',choice:'Mira',confidence:.9,probabilities:{Mira:1}}}})};}};
+ const result=await decidePresentation(api,{paragraphs:Array.from({length:8},(_,index)=>({index,text:'Mira waits.'})),previousScene:scene,names:['Mira'],config:{...DEFAULT_CONFIG,systemOneMode:'on'},onDispatch:()=>{attempts++;}});
+ assert.equal(result?.speakers.get(7),'Mira');assert.equal(attempts,2);assert.equal(result?.requests,2);assert.equal(result?.coverage.paragraphs.failed,7);assert.equal(result?.coverage.sceneAnswered,false);assert.equal(calls,2);
+});
+test('missing paragraph answers retain story-reader fallback and failed dispatches remain in usage',async()=>{
+ const {createReplyUsage}=await import('../../shared/reply-usage.js');const usage=createReplyUsage();let plannerCalls=0;const partial=structuredClone(decisions) as any;delete partial.answers.expression_0;
+ const args={...input('on'),usage};await planTurn(spindle(async()=>{plannerCalls++;throw new Error('Use deterministic fallback');},[],partial),args);assert.ok(plannerCalls>0);assert.equal(usage.systemOneCalls,1);
+ const failedUsage=createReplyUsage(),api=spindle(async()=>{throw new Error('offline');},[],{},true);api.cors=async()=>{throw new Error('classifier offline');};await planTurn(api,{...input('on'),usage:failedUsage});assert.equal(failedUsage.systemOneCalls,1);
+});
+test('the overall deadline also bounds a hung key lookup before any API dispatch',async()=>{
+ let calls=0;const api:any={enclave:{get:()=>new Promise(()=>{})},cors:()=>{calls++;return{};}};
+ const result=await Promise.race([decidePresentation(api,{paragraphs:[{index:0,text:'Mira waits.'}],previousScene:null,names:['Mira'],config:{...DEFAULT_CONFIG,systemOneMode:'on'},timeoutMs:5}).then(()=> 'unexpected success',e=>e.message),new Promise<string>(r=>setTimeout(()=>r('stalled'),50))]);assert.match(result,/timed out after 5 ms/);assert.equal(calls,0);
+});

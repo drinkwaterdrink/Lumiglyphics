@@ -1,3 +1,4 @@
+import {sceneImageCandidatesFor,loadVnImageCandidates} from '../stage/image-loader.js';
 import type {ImageRetryQueueView} from '../../shared/image-retries.js';
 import type {LocalPictureOperations} from './local-operations.js';
 import {promptRevisionSummary} from './prompt-revision.js';
@@ -49,6 +50,8 @@ export class ImageStudio {
   private readonly root: ShadowRoot;
   private preferences:PresentationRulesPanel;
   private turn: TurnView | null = null;
+  private previewLoad:AbortController|null=null;
+  private previewKey='';
   private selectedJob = "";
   private operationSignature='';
   private planningChat = '';
@@ -84,7 +87,7 @@ export class ImageStudio {
     this.el<HTMLInputElement>('[data-save-appearance]').onchange=()=>this.updateCorrectionScope();
     const quick=document.createElement('button');quick.type='button';quick.dataset.queueRetry='';quick.textContent='Retry picture';
     const batchApprove=document.createElement('button');batchApprove.type='button';batchApprove.dataset.batchApprove='';batchApprove.textContent='Approve all held';batchApprove.hidden=true;
-    this.el('[data-studio-footer] .row').append(quick,batchApprove);
+    this.el('[data-secondary-actions]').append(quick,batchApprove);
     quick.onclick=()=>{if(!quick.disabled)this.queuePictures([this.selectedJob]);};
     batchApprove.onclick=()=>this.decideAll('generate');
     this.el<HTMLSelectElement>('[data-artwork-connection]').onchange=()=>{
@@ -120,7 +123,6 @@ export class ImageStudio {
       this.drafts.set(this.draftKey(record),{prompt:previous.prompt,negative:previous.negative,parameters:this.el<HTMLTextAreaElement>('[data-parameters]').value});
       this.previousWording.delete(this.selectedJob);this.render();
     };
-    this.el<HTMLButtonElement>('[data-retry-saved]').onclick=()=>this.prepareSavedScene();
     mount.append(this.host);
     this.el<HTMLButtonElement>("[data-launch]").onclick = () => {
       if(this.el<HTMLElement>('section').hidden)this.open();else this.setOpen(false);
@@ -439,18 +441,11 @@ export class ImageStudio {
     const validation=document.createElement('small');validation.dataset.validation='';validation.role='alert';validation.hidden=true;editor.append(validation);
     const changed=document.createElement('div');changed.dataset.rewriteChanged='';changed.hidden=true;
     changed.innerHTML='<p>Rewrite ready. Review the wording before generating.</p><p data-revision-count></p><small data-revision-fields></small><p data-revision-scene hidden></p><details><summary>Compare previous wording</summary><p>The draft captured when you requested this rewrite. Your current wording is in the editors above. Counts do not verify that every detail was preserved.</p><ul data-previous-scene hidden></ul><label>Previous positive prompt<textarea readonly data-previous-positive></textarea></label><label>Previous negative prompt<textarea readonly data-previous-negative></textarea></label></details><button type="button" data-restore-wording>Restore previous wording</button>';editor.append(changed);
-    const actions=document.createElement('details');actions.dataset.promptActions='';actions.innerHTML='<summary>Prompt actions</summary><div class="row" data-secondary-actions></div><small>Rewrite prompt uses your story-reader model and text tokens. Reframe changes camera composition while preserving scene facts. Fit to model trims lower-priority adjectives to fit tight model limits.</small>';
-    for(const selector of ['[data-regenerate-prompt]','[data-reset]','[data-copy]','[data-skip]','[data-retry-image]','[data-prepare]'])actions.querySelector('[data-secondary-actions]')!.append(this.el(selector));
+    const actions=document.createElement('details');actions.dataset.promptActions='';actions.innerHTML='<summary>Customize</summary><div class="row" data-secondary-actions></div><small>Rewrite and enrich wording use your story-reader model and text tokens. Retry picture starts an image request immediately using the saved scene. Reframe changes camera composition while preserving scene facts. Fit to model trims lower-priority adjectives to fit tight model limits.</small>';
+    for(const selector of ['[data-regenerate-prompt]','[data-reset]','[data-copy]','[data-skip]'])actions.querySelector('[data-secondary-actions]')!.append(this.el(selector));
     const reframe=document.createElement('button');reframe.type='button';reframe.dataset.reframe='';reframe.textContent='Reframe shot';
     const fitModel=document.createElement('button');fitModel.type='button';fitModel.dataset.fitModel='';fitModel.textContent='Fit to model';
-    const retry=document.createElement('button');retry.type='button';retry.dataset.retrySaved='';retry.textContent='Prepare from saved scene';
-    const enrichBtn=document.createElement('button');enrichBtn.type='button';enrichBtn.dataset.enrichPrompt='';enrichBtn.textContent='✨ Enrich Prompt (High Detail)';
-    enrichBtn.title='Expands prompt with vivid photographic textures, lighting and materials taking full advantage of high-capacity models like Recraft 4.1.';
-    enrichBtn.onclick=()=>{
-      const guidance = enrichSection.querySelector<HTMLInputElement>('[data-enrich-guidance]')?.value.trim();
-      this.enrichPrompt(guidance);
-    };
-    actions.querySelector('[data-secondary-actions]')!.append(reframe,fitModel,retry,enrichBtn);editor.append(actions);
+    actions.querySelector('[data-secondary-actions]')!.append(reframe,fitModel);editor.append(actions);
     const tools=document.createElement('div');tools.dataset.pictureTools='';
     const template=document.createElement('details');template.dataset.templateTools='';template.innerHTML='<summary>Template and framing</summary>';
     for(const selector of ['[data-template]','[data-use-template]','[data-template-confirm]']){const element=this.el(selector);template.append(element.tagName?.toUpperCase()==='SELECT'?element.closest('label')!:element);}tools.append(template);
@@ -718,9 +713,11 @@ export class ImageStudio {
     this.el('[data-reset]').hidden=selectedRecord?.state!=='review'&&!hasEdits;
     const editPrimary=hasEdits&&(state.kind==='failed'||state.kind==='cancelled'||state.kind==='completed');
     const prepare=this.el<HTMLButtonElement>('[data-prepare]');
-    const previewDestination=this.el<HTMLElement>(editPrimary?'[data-studio-footer]':'[data-secondary-actions]');
+    const previewDestination=this.el<HTMLElement>(editPrimary||state.action==='prepare'?'[data-studio-footer]':'[data-secondary-actions]');
     if(prepare.parentElement!==previewDestination)previewDestination.prepend(prepare);
     prepare.hidden=editPrimary?repairPrimary:state.action!=='prepare';
+    this.el('[data-retry-image]').hidden=repairPrimary||editPrimary||state.action!=='retry';
+    this.el('[data-generate]').hidden=repairPrimary||state.action!=='generate';
     prepare.textContent=editPrimary?'Prepare edited preview':state.kind==='historical'?'Prepare new preview':'Prepare replacement';
     if(repairPrimary){
       this.el('[data-studio-footer]').hidden=false;
@@ -732,7 +729,7 @@ export class ImageStudio {
     if(!repairPrimary){
       const quickVisible=!this.el('[data-queue-retry]').hidden;
       this.el('[data-studio-footer]').hidden=!state.action&&!quickVisible&&!editPrimary;
-      this.el('[data-action-help]').textContent=editPrimary?'Prepares your edited wording for review. No image is generated.':quickVisible?'Quick retry starts an image request without review.':state.action==='generate'?'Starts an image request with this prompt.':'Prepares a preview. Generate only after approval.';
+      this.el('[data-action-help]').textContent=editPrimary?'Prepares your edited wording for review. No image is generated.':state.action==='generate'?'Starts an image request with this prompt.':'Prepares a preview. Generate only after approval.';
     }
     const validation=this.el<HTMLElement>('[data-validation]');validation.textContent=[error,error?this.record()?.promptAdaptationError:''].filter(Boolean).join('\n');validation.hidden=!error||!this.record();
     const needsAttention=Boolean(error&&selectedRecord)&&['held','failed','cancelled','completed','historical'].includes(state.kind);
@@ -868,7 +865,7 @@ export class ImageStudio {
   private enrichPrompt(guidance?: string): void {
     if (!this.turn) return;
     const record = this.record();
-    if (!record) return;
+    if (!record||record.canRegeneratePrompt===false||this.rerolling.has(record.requestId)||this.rebuilding.has(record.requestId)||this.submitted.has(record.requestId)||this.preparing.has(this.selectedJob)) return;
     let edits: ImageRequestEdits | undefined;
     try {
       const parameters: unknown = JSON.parse(this.el<HTMLTextAreaElement>('[data-parameters]').value);
@@ -1027,6 +1024,8 @@ export class ImageStudio {
     modelHelp.textContent = [modelOutputHelp(record?.provider, record?.model, record?.parameters ?? {}),record?.promptProfile?.outputSummary].filter(Boolean).join(' ');
     modelHelp.hidden = !modelHelp.textContent;
     for (const selector of ["[data-generate]", "[data-skip]", "[data-reset]"]) { this.el<HTMLButtonElement>(selector).disabled = !editable; this.el<HTMLButtonElement>(selector).hidden = record?.state !== "review"; }
+    const enrich=this.el<HTMLButtonElement>('[data-enrich-submit]');enrich.disabled=!editable||record?.canRegeneratePrompt===false||!!record&&this.rerolling.has(record.requestId)||this.preparing.has(this.selectedJob);
+    enrich.textContent=!!record&&(this.rerolling.has(record.requestId)||this.preparing.has(this.selectedJob))?'Enriching…':'Enrich wording';
     const busy = this.turn?.assets.some((entry) => entry.status === "queued" || entry.status === "generating");
     const unfinished=(this.turn?.assets??[]).filter(entry=>entry.source!=='cache'&&!['browser_ready','generated'].includes(entry.status));
     const retryable=!!asset&&asset.source!=='cache'&&['failed','cancelled','generated','browser_ready'].includes(asset.status)&&record?.state!=='review';
@@ -1169,10 +1168,16 @@ export class ImageStudio {
     this.el('[data-turn-recovery]').hidden=planning||!this.turn;
     if(planning)this.el('[data-card-role]').hidden=true;
     const image=this.el<HTMLImageElement>('[data-preview]');
-    const url=asset?.imageUrl;
-    image.hidden=!url;this.el('[data-placeholder]').hidden=!!url;
-    if(url){if(image.getAttribute('src')!==url)image.src=url;image.alt=asset?.previousImage?'Previous picture while replacement is pending':'Selected picture';}else image.removeAttribute('src');
-    image.onerror=()=>{image.hidden=true;this.el('[data-placeholder]').hidden=false;};
+    const candidates=asset?sceneImageCandidatesFor(asset):[];
+    const key=JSON.stringify([this.turn?.chatId,this.turn?.messageId,this.turn?.sourceFingerprint,this.turn?.swipeId,this.turn?.revision,asset?.jobId,candidates]);
+    if(key!==this.previewKey){
+      this.previewLoad?.abort();this.previewKey=key;const controller=new AbortController();this.previewLoad=controller;
+      image.hidden=true;image.removeAttribute('src');this.el('[data-placeholder]').hidden=false;
+      if(candidates.length)void loadVnImageCandidates(candidates,undefined,controller.signal).then(url=>{
+        if(controller.signal.aborted||this.previewLoad!==controller)return;
+        image.src=url;image.alt=asset?.previousImage?'Previous picture while replacement is pending':'Selected picture';image.hidden=false;this.el('[data-placeholder]').hidden=true;
+      }).catch(()=>{if(!controller.signal.aborted){image.hidden=true;this.el('[data-placeholder]').hidden=false;}});
+    }
     const versions = asset?.previousVersions ?? [];
     const container = this.root.querySelector<HTMLElement>('[data-previous-versions-container]');
     const vStrip = this.root.querySelector<HTMLElement>('[data-versions-strip]');
@@ -1249,7 +1254,6 @@ export class ImageStudio {
     this.el('[data-queue-status]').textContent=this.retryQueueJobs.size||this.retryActive?`${this.retryQueueJobs.size} queued${this.retryActive?' · 1 retry running':''}. ${this.retryActive?'':'Waiting for current image work or held previews. '}Quick retries skip review. Each picture gets one attempt.`:'Quick retry skips review. Uses the saved scene and current image settings; editable previews are available below.';
     this.el('[data-studio-footer]').hidden=!state.action&&quick.hidden;
     this.el('[data-action-help]').textContent=!quick.hidden?'Quick retry starts an image request without review.':state.action==='generate'?'Starts an image request with this prompt.':'Prepares a preview. Generate only after approval.';
-    const saved=this.el<HTMLButtonElement>('[data-retry-saved]');saved.hidden=state.kind!=='completed';saved.disabled=this.el<HTMLButtonElement>('[data-retry-image]').disabled;
     this.updateCounts();
     if(!record)this.el<HTMLButtonElement>('[data-prepare]').disabled=this.el<HTMLButtonElement>('[data-prepare]').dataset.available!=='true';
   }
@@ -1378,7 +1382,7 @@ export class ImageStudio {
 
   setPresentationRules(chat:string,id:string,catalog:PresentationRuleCatalog){return this.preferences.receive(chat,id,catalog);}
   presentationRulesError(error:string,id?:string){this.preferences.error(error,id);}
-  destroy(): void { this.setOpen(false);this.preferences.destroy(); this.drafts.clear(); this.host.remove(); }
+  destroy(): void { this.previewLoad?.abort();this.previewLoad=null;this.setOpen(false);this.preferences.destroy(); this.drafts.clear(); this.host.remove(); }
 }
 
 function friendlyStatus(status: string): string { return ({ browser_ready: "Ready", generated: "Ready", queued: "Waiting", generating: "Generating", review: "Awaiting review", approved: "Approved", cancelled: "Cancelled", skipped: "Skipped", failed: "Failed" } as Record<string, string>)[status] ?? status; }

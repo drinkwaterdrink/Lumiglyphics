@@ -106,3 +106,25 @@ Final host browser acceptance also checks invalid manual fields: malformed value
 ## Beta.112 release checkpoint
 
 User authorized publishing the completed Cast/DNA repair. All three version files are synchronized to beta.112. Fresh release checks passed against this exact checkpoint: 2,014 tests, zero failures, 10,700 assertions; installed-compiler typecheck, production build, bundle verification/status generation, diff check, five-width Cast/DNA browser flow and actual host lifecycle browser flow. Publishing to `origin/codex/audited-improvements`. Main-3-GPT and primary Testing remain unchanged. Live model/host/physical-device acceptance remains UNVERIFIED.
+
+
+## Task3 locally completed
+
+Shared candidate loading now supports aborts, ordered canonical/fallback references and explicit selected display art. Decode timers/listeners clean up on success, error and cancellation. Reader rejects stale completions and retains prior art on failure. Cast supports ID-only portraits, cancels superseded chains, retains prior in-scope art with an explicit replacement-failed caption, and shows an unavailable placeholder when no earlier image exists. Artwork preview uses the same loader.
+
+Studio has one contextual footer image action; saved-scene retry and enrichment duplicates were removed, with quick/bulk and wording actions under Customize. In-flight enrichment cannot be submitted twice. Original review browser script now uses the visible APERTURE launcher and public tabs, retaining its behavioral assertions. Its complete suite passes; the earlier baseline hidden-nav exception is resolved for that suite.
+
+Verification: 2020 tests pass, zero fail,10707assertions/191files; typecheck, production build, bundle verification/status generation and diff check pass. New390/1440 Reader/Cast/Artwork handoff plus original studio and Artwork contract browser flows pass. No paid/live calls or physical-device acceptance. Work is local and uncommitted, version112; Task4 has begun. Original Tasks4-11 remain pending.
+
+
+## Tasks3-4 beta.113 checkpoint (2026-11-02)
+
+Task4: System One now preflights every serialized UTF-8 body before dispatch, packs by the 65,536-byte and seven-paragraph limits, bounds concurrency to two, and uses one overall deadline including secret lookup. Valid sibling decisions survive failed batches. Dispatch attempts remain counted on failure; reported input/output tokens are tracked independently of answer validation. Coverage distinguishes submitted, skipped, truncated, failed and fully answered paragraphs; scene reuse requires complete usable coverage. A missing or malformed decision cannot silently disable story-reader fallback.
+
+Custom display rules now execute on actual paragraph text in disposable workers, with a 1,000ms startup limit and 50ms execution limit. Input/output cap is100,000 characters; source cap20,000 characters/128rules. Replacement expansion is bounded while preserving native capture/named/prefix/suffix substitution. Stage cache is8entries/1MB. Superseded/disposed work is terminated; blocked workers retain original text with a nonblocking visible reason. Original story text remains unchanged. Runtime worker cancellation preempts obsolete paragraphs instead of queuing them (ruling: less stale work and still at most one owned worker).
+
+Independent review found that pending evaluation could be marked typing-complete and skipped by two Continue presses. Browser RED reproduced index1 before any paragraph0 text displayed; pending evaluation now blocks that transition, and the GREEN test retains index0 until completion/fallback. Cache-hit, oversize and empty-cursor transitions also cancel irrelevant work.
+
+Verification: **2,027 tests pass, zero fail, 10,715 assertions/192files**; full TypeScript checking passed. Offline runtime-browser checks at390/1440 validate a slow accepted regex is killed, expanding replacements stay bounded, native replacement semantics, stale work, delayed worker navigation and unavailable-worker fallback. Existing display-rule settings browser passes320/390/1280. Original full image-review browser, new Reader/Cast/Artwork handoff and Artwork contract browser checks pass. No live or paid calls. Actual Spindle CSP and physical-device acceptance remain UNVERIFIED; runtime fallback is explicit.
+
+All three version files are synchronized to beta.113. Production bundles/static/manifest verification and status generation are rerun before the authorized push. Task3 and Task4 are complete for this checkpoint; Tasks5-11 remain queued. Main-3-GPT and primary Testing source remain unchanged.

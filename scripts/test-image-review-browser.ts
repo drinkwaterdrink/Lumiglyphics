@@ -9,11 +9,12 @@ try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   await page.goto(`http://127.0.0.1:${server.port}`);
   const studio = page.locator("[data-image-studio]");
+  const tab=async(name:string)=>{await studio.getByRole('tab',{name,exact:true}).click();};
   await page.evaluate(()=>{const f=(window as any).imageFixture;f.stage.setError({source:'image',message:'Scene image could not be made',detail:'Qwen Image 2.1 Turbo supports only 1K and 2K resolution.',retryable:true,retryScope:'Try again makes 4 images again.'});});
   for(const width of [320,390]){
     await page.setViewportSize({width,height:844});
-    const card=await page.locator('[data-vn-badge-kind="error"]').boundingBox(),launch=await page.locator('[data-reader-destination="artwork"]').boundingBox();
-    assert.ok(card&&launch&&(launch.y>=card.y+card.height||launch.x+launch.width<=card.x),'pending-count launcher must not cover the error card');
+    const card=await page.locator('[data-vn-badge-kind="error"]').boundingBox(),launch=await page.getByRole('button',{name:'Open Art Studio',exact:true}).boundingBox();
+    assert.ok(card&&launch&&(launch.y>=card.y+card.height||launch.y+launch.height<=card.y||launch.x+launch.width<=card.x||launch.x>=card.x+card.width),'pending-count launcher must not cover the error card');
   }
   await page.screenshot({path:'.cache/beta41-qwen-recovery.png',animations:'disabled'});
   await page.getByRole('button',{name:'Review picture',exact:true}).tap();
@@ -24,12 +25,13 @@ try {
   await page.locator('[data-workspace-close]').tap();
   assert.deepEqual(await page.evaluate(()=>(window as any).imageFixture.visibility),[true,false]);
   await page.evaluate(()=>(window as any).imageFixture.stage.setError(null));
-  await page.locator('[data-vn-navigation] [data-reader-destination="artwork"]').click();
+  await page.getByRole('button',{name:'Open Art Studio',exact:true}).click();
   const exitBox = await page.getByRole('button', { name: 'Back to chat', exact: true }).boundingBox();
   const closeBox = await page.locator('[data-workspace-close]').boundingBox();
   assert.ok(exitBox && closeBox && closeBox.y >= exitBox.y + exitBox.height, 'review close sits below outer navigation');
   assert.equal(await studio.getByLabel("Review before generating").isChecked(), true);
   await page.evaluate(() => { const f=(window as any).imageFixture; const turn=structuredClone(f.turn); Object.assign(turn.imageRequests[0], {provider:'nanogpt',model:'blackforestlabs/flux-3/klein/base/text-to-image',parameters:{size:'1024x1024'}}); f.studio.setTurn(turn); });
+  await tab('Prompt');
   assert.equal(await studio.locator('[data-model-help]').isVisible(),true,'model output limits are visible before opening advanced parameters');
   assert.match(await studio.locator('[data-model-help]').innerText(),/square images only.*9:16 is unavailable.*1024x1024/);
   await studio.locator('[data-model-help]').scrollIntoViewIfNeeded();
@@ -39,6 +41,7 @@ try {
   await page.screenshot({path:'.cache/beta38-anima-mobile.png'});
   await page.evaluate(() => { const f=(window as any).imageFixture; f.studio.setTurn(f.turn); });
   assert.equal(await studio.locator('[data-model-help]').isVisible(),false,'unrelated model clears the previous compatibility notice');
+  await tab('History');
   await studio.locator('[data-reply-settings] > summary').click();
   await studio.getByLabel("Review before generating").uncheck();
   assert.deepEqual(await page.evaluate(() => (window as any).imageFixture.actions.at(-1)), { reviewImages: false });
@@ -54,14 +57,17 @@ try {
   assert.equal(await studio.locator('[data-notice]').innerText(),'Provider resolution error','a new request can show an identical provider failure');
   await page.evaluate(() => {const f=(window as any).imageFixture;f.studio.setTurn(f.turn);});
   const prompt = studio.getByLabel("Positive prompt", { exact: true });
+  await tab('Prompt');
   await prompt.tap();
   assert.ok(await prompt.evaluate(el => el.getRootNode() instanceof ShadowRoot && (el.getRootNode() as ShadowRoot).activeElement === el), 'touch focuses native editable textarea inside real stage');
+  await tab('Prompt');
   await prompt.fill("edited portrait");
   await page.evaluate(() => { const f = (window as any).imageFixture; f.studio.setTurn(structuredClone(f.turn)); });
   assert.equal(await prompt.inputValue(), "edited portrait", "host refresh preserves unsaved draft");
   await page.evaluate(() => { const f = (window as any).imageFixture; f.studio.setConfig(f.config); });
   assert.equal(await studio.locator('[data-template] option[value="manga-page"]').count(), 1, "manual review lists unchecked templates");
 
+  await tab('Camera');
   await studio.locator('[data-template-tools]').evaluate(el=>(el as HTMLDetailsElement).open=true);
   await studio.getByLabel("Picture template", { exact: true }).selectOption("environment");
   await studio.getByRole("button", { name: "Use template", exact: true }).click();
@@ -75,9 +81,12 @@ try {
   assert.equal(await studio.locator("[data-generate]").isDisabled(), true, "obsolete request cannot be dispatched while rebuilding");
   await page.evaluate(() => { const f = (window as any).imageFixture; f.studio.showError("Test failed rebuild"); f.turn.imageRequests[0].requestId = "rebuilt-request"; f.studio.setTurn(f.turn); });
   assert.equal(await prompt.inputValue(), "original <script>hello</script>", "new prepared request does not inherit obsolete edits");
+  await tab('Prompt');
   await prompt.fill("edited portrait");
+  await tab('History');
   await studio.getByText("Parameters and references", { exact: true }).click();
   for (const label of ['Negative prompt', 'Parameters (JSON)']) {
+    await tab(label==='Negative prompt'?'Prompt':'History');
     const field = studio.getByLabel(label, { exact: true });
     await field.tap();
     assert.ok(await field.evaluate(el => (el.getRootNode() as ShadowRoot).activeElement === el), `${label} opens native editing focus on touch`);
@@ -92,6 +101,7 @@ try {
   await page.evaluate(() => { const f = (window as any).imageFixture; f.turn.imageRequests[0].requestId = "completed-environment"; f.turn.imageRequests[0].state = "approved"; f.turn.imageRequests[0].imagePromptMetadata = { ...f.metadata, template: { ...f.config.imageTemplates.find((t: any) => t.id === "environment"), revision: "12345678" } }; f.turn.assets[0].status = "generated"; f.studio.setTurn(f.turn); });
   assert.equal(await prompt.isEditable(), true, 'completed requests have a local editable replacement draft');
   await page.evaluate(()=>{(window as any).studioEscapedEvents=0;for(const type of ['click','keydown'])document.addEventListener(type,()=>{(window as any).studioEscapedEvents++;});});
+  await tab('Prompt');
   await prompt.fill('');await prompt.click();await prompt.pressSequentially('a silver-haired character at a desk');
   assert.equal(await prompt.inputValue(),'a silver-haired character at a desk');
   assert.equal(await page.evaluate(()=>(window as any).studioEscapedEvents),0,'editing cannot advance the reader or activate its hotkeys');
@@ -119,15 +129,20 @@ try {
   await studio.getByLabel('Negative prompt',{exact:true}).fill('');
   await prompt.fill('short replacement');
   await page.evaluate(() => { const f = (window as any).imageFixture; f.turn.imageRequests[0].requestId = "removed-template"; f.turn.imageRequests[0].state = "review"; f.turn.imageRequests[0].imagePromptMetadata.template = { ...f.metadata.template, id: "removed" }; f.studio.setTurn(f.turn); });
+  await tab('Camera');
   assert.equal(await studio.getByRole("button", { name: "Use template", exact: true }).isDisabled(), true);
+  await tab('Camera');
   await studio.getByLabel("Picture template", { exact: true }).selectOption("portrait");
   assert.equal(await studio.getByRole("button", { name: "Use template", exact: true }).isDisabled(), false, "enabled selection restores template action");
   await page.evaluate(() => { const f = (window as any).imageFixture; f.turn.imageRequests[0].requestId = "skip-request"; f.turn.imageRequests[0].state = "review"; f.turn.assets[0].status = "generating"; f.studio.setTurn(f.turn); });
+  await tab('History');
   await studio.getByLabel("Parameters (JSON)").fill('{ unfinished');
+  await tab('Prompt');
   await studio.locator('[data-prompt-actions] > summary').click();
   await studio.getByRole("button", { name: "Skip", exact: true }).click();
   assert.equal((await page.evaluate(() => (window as any).imageFixture.actions.at(-1))).action, "skip", "Skip ignores unfinished edits");
   await page.evaluate(() => { const f = (window as any).imageFixture; f.turn.imageRequests = []; f.turn.assets[0].status = "generated"; f.studio.setTurn(f.turn); });
+  await tab('Picture');
   assert.match(await studio.locator("section").innerText(), /original request is unavailable/i);
   assert.equal(await page.locator("script").count(), 1, "prompt text never creates executable elements");
   await page.evaluate(() => {
@@ -138,9 +153,10 @@ try {
     f.studio.setTurn(f.turn); f.studio.setCursor(1);
   });
   await page.locator('[data-workspace-close]').click();
-  await page.locator('[data-vn-navigation] [data-reader-destination="artwork"]').click();
+  await page.getByRole('button',{name:'Open Art Studio',exact:true}).click();
   assert.equal(await studio.getByLabel("Picture", { exact: true }).inputValue(), "job-2", "opening inspector follows reading cursor");
   await page.evaluate(() => { const f = (window as any).imageFixture; f.turn.imageRequests[0].imagePromptMetadata = f.metadata; f.studio.setTurn(f.turn); });
+  await tab('History');
   await studio.getByText("Prompt sources", { exact: true }).click();
   assert.match(await studio.locator("[data-provenance]").innerText(), /Character portrait.*portrait.*Description/);
   assert.match(await studio.locator("[data-provenance]").innerText(), /SimTracker: detected.*tracker-message/);
@@ -153,10 +169,12 @@ try {
   await studio.getByRole('button',{name:'Save card role',exact:true}).click();
   let recoveryAction=await page.evaluate(()=>(window as any).imageFixture.actions.at(-1));
   assert.equal(recoveryAction.type,'vn_set_card_role');assert.equal(recoveryAction.role,'scenario');assert.equal(recoveryAction.swipeId,0);assert.match(recoveryAction.requestId,/^vn-recovery-/);
+  await tab('Picture');
   await studio.getByText('Correct this picture’s subject',{exact:true}).click();
   assert.equal(await studio.getByLabel('Save appearance for this character in this chat').isChecked(),false);
   await studio.getByLabel('Character name',{exact:true}).fill('Aleister');
   await studio.getByLabel('Appearance',{exact:true}).fill('black hair, brown eyes');
+  await tab('Picture');
   await studio.getByRole('button',{name:'Prepare corrected preview',exact:true}).click();
   recoveryAction=await page.evaluate(()=>(window as any).imageFixture.actions.at(-1));
   assert.equal(recoveryAction.type,'vn_correct_image_subject');assert.equal(recoveryAction.subject.name,'Aleister');assert.equal(recoveryAction.subject.saveAppearance,false);
@@ -164,12 +182,15 @@ try {
   await page.evaluate(()=>(window as any).imageFixture.studio.showError('Test correction failed'));
   await studio.getByLabel('Picture subject',{exact:true}).selectOption('environment');
   assert.equal(await studio.getByLabel('Character name',{exact:true}).isVisible(),false);
+  await tab('Camera');
   await studio.getByLabel('Picture template',{exact:true}).selectOption('environment');
+  await tab('Picture');
   await studio.getByRole('button',{name:'Prepare corrected preview',exact:true}).click();
   recoveryAction=await page.evaluate(()=>(window as any).imageFixture.actions.at(-1));
   assert.deepEqual(recoveryAction.subject,{kind:'environment',templateId:'environment'});
   await page.evaluate(()=>(window as any).imageFixture.studio.showError('Provider refused the request.'));
   await page.evaluate(()=>{const f=(window as any).imageFixture;f.turn.assets[1].diagnostic={status:'needs_appearance',subject:'Aleister',template:'Portrait',tracker:'detected',explanation:'Supply appearance for this character.'};f.studio.setTurn(f.turn);});
+  await tab('History');
   await studio.getByText('Picture diagnostics',{exact:true}).click();
   assert.match(await studio.locator('[data-diagnostic]').innerText(),/Aleister/);
   assert.match(await studio.locator('[data-diagnostic]').innerText(),/needs appearance/);
@@ -186,6 +207,8 @@ try {
   assert.equal(await studio.getByRole('button',{name:'Replan this reply',exact:true}).isDisabled(),false);
   await page.evaluate(()=>{const f=(window as any).imageFixture;f.turn.assets=[{jobId:'job',cueId:'cue',paragraphIndex:0,status:'generated'}];f.turn.imageRequests=[{requestId:'reroll-source',jobId:'job',paragraphIndex:0,state:'review',canRegeneratePrompt:true,prompt:'Original station',negativePrompt:'blur',model:'model-a',provider:'nanogpt',connectionId:'nano',parameters:{seed:1},referenceSummary:'No reference',createdAt:'now'}];f.studio.setTurn(f.turn);});
   await studio.getByLabel('Picture',{exact:true}).selectOption('job',{force:true});
+  await tab('Prompt');
+  await studio.locator('[data-prompt-actions]').evaluate(el=>(el as HTMLDetailsElement).open=true);
   await studio.getByRole('button',{name:'Rewrite prompt',exact:true}).click();
   const rerollAction=await page.evaluate(()=>(window as any).imageFixture.actions.at(-1));
   assert.deepEqual(rerollAction,{type:'vn_regenerate_image_prompt',chatId:'chat',messageId:'message',sourceFingerprint:'fingerprint',requestId:'reroll-source',edits:{prompt:'Original station',negativePrompt:'blur',parameters:{seed:1}}});
@@ -197,6 +220,8 @@ try {
   assert.equal(await prompt.inputValue(),'A fresh view of the quiet library.');
   assert.equal(await studio.locator('[data-generate]').isDisabled(),false);
   await page.evaluate(()=>{const f=(window as any).imageFixture;f.turn.imageRequests[0].state='approved';f.studio.setTurn(f.turn);});
+  await tab('Prompt');
+  await studio.locator('[data-prompt-actions]').evaluate(el=>(el as HTMLDetailsElement).open=true);
   await studio.getByRole('button',{name:'Rewrite prompt',exact:true}).click();
   const completedReroll=await page.evaluate(()=>(window as any).imageFixture.actions.at(-1));
   assert.equal(completedReroll.type,'vn_prepare_image');assert.equal(completedReroll.regeneratePrompt,true);assert.equal(completedReroll.jobId,'job');
@@ -206,6 +231,7 @@ try {
   await page.evaluate(()=>{const f=(window as any).imageFixture;f.turn.imageRequests[0].imagePromptMetadata={...f.metadata,presentationRuleTrace:{matchedRuleIds:['arrival'],summary:'Applied Portrait from Dialogue (this chat).'}};f.studio.setTurn(f.turn);});
   assert.match(await studio.locator('[data-provenance]').textContent()??'',/Template preferences:.*Applied Portrait/s,'review displays frozen preference provenance');
   const frozenBefore=await page.evaluate(()=>JSON.stringify((window as any).imageFixture.turn.imageRequests));
+  await tab('Camera');
   await studio.getByLabel('Picture template',{exact:true}).selectOption('environment');
   await studio.getByText('Remember a template preference',{exact:true}).click();
   await page.waitForFunction(()=>(window as any).imageFixture.actions.at(-1).type==='vn_presentation_rules');

@@ -1,3 +1,5 @@
+import {DisplayRuleExecutor,type DisplayEvaluation} from './display-rule-executor.js';
+import {prepareDialogueSource} from './rich-text.js';
 import { ReaderWorkspace } from "./reader-workspace.js";
 import {presentEffect} from '../host/effect-presentation.js';
 import {CastStage} from "./cast-stage.js";
@@ -14,9 +16,7 @@ import { ReplyDraftEditor } from './interaction-tray.js';
 import {
   escapeHtml,
   formatDialogueText,
-  parseCustomRegexRules,
   stripUnknownPresetTags,
-  type CustomRegexRule,
 } from "./rich-text.js";
 import { applyTextEffects, TEXT_EFFECT_LETTER_ATTRIBUTE } from "./text-effects.js";
 import { DialogueSheet } from "./dialogue-sheet.js";
@@ -129,7 +129,7 @@ import {
   type ThemeStyleLayer,
 } from "../theme";
 import {
-  preloadAndDecodeVnImage,
+  loadVnImageCandidates,
   type VnImageFactory,
 } from "./image-loader";
 
@@ -547,9 +547,17 @@ export class VnStage {
   private readonly backlogContent: HTMLElement;
   private readonly createImage: VnImageFactory | undefined;
   private imageRequestSequence = 0;
+  private sceneLoad:AbortController|null=null;
   private destroyed = false;
   private readonly castStage: CastStage;
-  private customRegexRules: CustomRegexRule[] = [];
+  private displayRulesText='';
+  private readonly displayExecutor=new DisplayRuleExecutor();
+  private displayEpoch=0;
+  private displayPending:{key:string;source:string;controller:AbortController}|null=null;
+  private displayRequestSequence=0;
+  private displayCache=new Map<string,{result:DisplayEvaluation;source:string;bytes:number}>();
+  private displayCacheBytes=0;
+  private readonly displayNotice=document.createElement('div');
   private textSpeed = 20;
   private autoPlayDelay = 2000;
   private skipMode: "read" | "all" = "read";
@@ -780,8 +788,17 @@ export class VnStage {
     applyVnUserCss(this.userStyle, css);
   }
 
+  private resetDisplayEvaluation():void{
+    this.displayEpoch++;this.displayPending?.controller.abort();this.displayPending=null;this.displayCache.clear();this.displayCacheBytes=0;this.displayNotice.hidden=true;
+  }
+  private showDisplayIssues(messages:string[]):void{
+    if(!this.displayNotice.parentElement){this.displayNotice.dataset.vnDisplayRuleNotice='';this.displayNotice.setAttribute('role','status');this.displayNotice.style.cssText='font-size:12px;line-height:1.4;margin-top:6px;opacity:.8';this.dialogueText.after(this.displayNotice);}
+    this.displayNotice.hidden=!messages.length;this.displayNotice.textContent=messages.slice(0,3).join(' ');
+  }
+
   setDisplayRegexRules(rulesText: string): void {
-    this.customRegexRules = parseCustomRegexRules(rulesText);
+    if(this.displayRulesText===rulesText)return;
+    this.displayRulesText=rulesText;this.resetDisplayEvaluation();
     this.renderDialogueContent();
     if(!this.isTyping)this.dossiers.refresh(this.state.currentParagraphIndex);
   }
@@ -1111,6 +1128,8 @@ export class VnStage {
   }
 
   reset(): void {
+    this.resetDisplayEvaluation();
+    this.sceneLoad?.abort();this.sceneLoad=null;
     this.workspace.suspend();
     this.preparationPreview.clear();
     this.moveDraftEpoch++;this.closeMoveDraft();
@@ -1141,6 +1160,8 @@ export class VnStage {
   }
 
   loadTurn(turn: VnTurnInput): void {
+    this.resetDisplayEvaluation();
+    this.sceneLoad?.abort();this.sceneLoad=null;
     this.turnLocation = turn.location ?? null;
     this.preparationPreview.clear();
     this.moveDraftEpoch++;this.closeMoveDraft();
@@ -1295,6 +1316,7 @@ export class VnStage {
 
   async setSceneImage(request: VnSceneImageRequest): Promise<boolean> {
     if (this.destroyed) return false;
+    this.sceneLoad?.abort();const controller=new AbortController();this.sceneLoad=controller;
 
     const image: VnSceneImage = {
       url: request.url,
@@ -1304,19 +1326,11 @@ export class VnStage {
     };
     this.dispatch({ type: "image-requested", image });
 
-    const candidates = [request.url, ...(request.fallbackUrls ?? [])].filter((u, idx, arr) => Boolean(u?.trim()) && arr.indexOf(u) === idx);
-    let loadedUrl: string | null = null;
-    let lastError: unknown = null;
-    for (const candidateUrl of (candidates.length > 0 ? candidates : [request.url])) {
-      try {
-        await preloadAndDecodeVnImage(candidateUrl, this.createImage);
-        loadedUrl = candidateUrl;
-        break;
-      } catch (error) {
-        lastError = error;
-        if (this.destroyed) return false;
-      }
-    }
+    let loadedUrl:string|null=null;let lastError:unknown=null;
+    try{loadedUrl=await loadVnImageCandidates([request.url,...(request.fallbackUrls??[])],this.createImage,controller.signal);}
+    catch(error){lastError=error;}
+    if(controller.signal.aborted||this.sceneLoad!==controller||this.destroyed)return false;
+    this.sceneLoad=null;
 
     if (loadedUrl === null) {
       if (this.destroyed) return false;
@@ -1339,6 +1353,8 @@ export class VnStage {
   }
 
   destroy(): void {
+    this.resetDisplayEvaluation();this.displayExecutor.dispose();
+    this.sceneLoad?.abort();this.sceneLoad=null;
     this.workspace.destroy();
     this.castStage.destroy();
     this.dossiers.destroy();
@@ -2316,7 +2332,7 @@ export class VnStage {
 
   private advance(): void {
     this.dismissChapterCard();
-    if (this.isSuspended) return;
+    if (this.isSuspended||this.displayPending) return;
     if (this.workspace.isOpen() || this.isBacklogOpen || this.dossiers.isOpen()) return;
     if (this.lastSkipStop !== null) {
       this.lastSkipStop = null;
@@ -2554,6 +2570,7 @@ export class VnStage {
   }
 
   private completeTypewriter(): void {
+    if(this.displayPending)return;
     this.clearTypewriter();
     if (this.activeTextNodes.length > 0) {
       for (const item of this.activeTextNodes) {
@@ -2760,6 +2777,7 @@ export class VnStage {
     const view = selectVnStageView(this.state);
     const paragraph = view.paragraph;
     if (!paragraph) {
+      this.displayPending?.controller.abort();this.displayPending=null;
       this.clearTypewriter();
       this.dialogueText.innerHTML = "";
       this.currentRenderedParagraphId = "";
@@ -2773,7 +2791,34 @@ export class VnStage {
     const shouldStripMarkdown = currentPreset === "literature-club" || currentPreset === "yamaku-classic";
     const stripUnknown = this.readerPreferences?.smartProseFilter !== false;
     const cleanText = stripUnknown ? stripUnknownPresetTags(paragraph.text) : paragraph.text;
-    const formatted = formatDialogueText(cleanText, this.customRegexRules, {
+    const prepared=prepareDialogueSource(cleanText,stripUnknown);
+    let displayText=prepared;
+    const displayKey=JSON.stringify([this.displayEpoch,paragraph.id]);
+    if(this.displayPending&&(this.displayPending.key!==displayKey||this.displayPending.source!==prepared)){this.displayPending.controller.abort();this.displayPending=null;}
+    if(this.displayRulesText.trim()&&(prepared.length>100000||this.displayRulesText.length>20000))this.showDisplayIssues(['Display rule input exceeded its size limit; original text is shown.']);
+    if(this.displayRulesText.trim()&&prepared.length<=100000&&this.displayRulesText.length<=20000){
+      const key=displayKey;
+      const cached=this.displayCache.get(key);
+      if(cached&&cached.source===prepared){displayText=cached.result.text;this.showDisplayIssues(cached.result.issues.map(i=>i.message));}
+      else{
+        if(this.displayPending?.key===key&&this.displayPending.source===prepared)return;
+        this.displayPending?.controller.abort();const controller=new AbortController();this.displayPending={key,source:prepared,controller};
+        const refreshOnly=this.currentRenderedParagraphId===paragraph.id;
+        this.clearTypewriter();this.isTyping=true;this.dialogueText.textContent='';this.currentRenderedParagraphId='';this.currentRenderedFormatted='';
+        this.showDisplayIssues(['Applying display rules…']);
+        void this.displayExecutor.evaluate({text:prepared,rulesSource:this.displayRulesText,generation:`${key}:${++this.displayRequestSequence}`},controller.signal).then(result=>{
+          if(controller.signal.aborted||this.destroyed||this.displayPending?.key!==key)return;
+          this.displayPending=null;const bytes=(key.length+prepared.length+result.text.length)*2;
+          const previous=this.displayCache.get(key);if(previous){this.displayCacheBytes-=previous.bytes;this.displayCache.delete(key);}
+          while(this.displayCache.size>=8||this.displayCacheBytes+bytes>1000000){const first=this.displayCache.keys().next().value;if(first===undefined)break;this.displayCacheBytes-=this.displayCache.get(first)!.bytes;this.displayCache.delete(first);}
+          this.displayCache.set(key,{result,source:prepared,bytes});this.displayCacheBytes+=bytes;
+          const rewinding=this.isRewinding;this.isRewinding=refreshOnly||rewinding;try{this.renderDialogueContent();}finally{this.isRewinding=rewinding;}
+        }).catch(()=>{if(!controller.signal.aborted&&this.displayPending?.key===key){this.displayPending=null;this.displayRulesText='';this.showDisplayIssues(['Display rule execution failed; original text is shown.']);this.renderDialogueContent();}});
+        return;
+      }
+    }
+    const formatted = formatDialogueText(displayText, [], {
+      prepared:true,
       stripMarkdown: shouldStripMarkdown,
       forceQuotes: shouldStripMarkdown,
       hasSpeaker: Boolean(paragraph.speaker && paragraph.speaker.trim()),

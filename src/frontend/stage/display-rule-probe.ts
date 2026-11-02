@@ -1,11 +1,11 @@
 import { compileDisplayRules } from "../../shared/display-rules.js";
 
 /**
- * Dialogue display rules run on the main thread while a paragraph renders, so a
- * catastrophic pattern would freeze the reader. Before the reader applies a rule
+ * This optional preflight rejects known slow rules before the runtime executor.
+ * Accepted rules still need a killable worker on actual paragraph text. Before applying a rule
  * set, each rule runs alone in a disposable worker against adversarial samples.
  * A rule that does not finish in time is left out. Until a probe finishes, the
- * reader applies no custom rules (fail closed).
+ * reader receives no custom rules (fail closed).
  *
  * This guards against patterns that are slow on ordinary-looking text, but it
  * cannot prove a rule safe for every paragraph; the static screen still applies.

@@ -1,9 +1,9 @@
 export type CustomRegexRule={pattern:RegExp;replacement:string;/** 1-based settings line that defined the rule. */line?:number};
 export type DisplayRuleIssue={line:number;message:string};
 
-/** Display rules run synchronously on the main thread during paragraph
- *  rendering, so a pattern longer than this is rejected rather than risking
- *  long scans on low-end devices. */
+/** Pattern length is bounded before compilation. The reader executes accepted
+ *  rules in a disposable worker with a runtime deadline; this static bound
+ *  also limits parsing and configuration cost on low-end devices. */
 export const MAX_DISPLAY_RULE_PATTERN = 1000;
 
 type GroupState = { hasQuantifier: boolean; hasAlternation: boolean };
@@ -86,7 +86,9 @@ export function findReDoSHazard(source: string): string | null {
  *  RegExp alone cannot establish that it is safe to run on story text. */
 export function compileDisplayRules(input:string|undefined):{rules:CustomRegexRule[];issues:DisplayRuleIssue[]}{
  const rules:CustomRegexRule[]=[],issues:DisplayRuleIssue[]=[];
+ if((input?.length??0)>20000)return {rules,issues:[{line:0,message:'Display rule source is limited to 20,000 characters.'}]};
  for(const [index,line] of (input??'').split(/\r?\n/).entries()){
+  if(rules.length>=128){issues.push({line:index+1,message:'Display rules are limited to 128 rows.'});break;}
   const text=line.trim();
   if(!text||text.startsWith('#')||text.startsWith('//'))continue;
   const issue=(message:string)=>issues.push({line:index+1,message});

@@ -290,6 +290,7 @@ function restoreTextEffectTags(escapedText: string): string {
  *    Display regex rules run first, so a rule may emit these tags too.
  */
 export type DialogueFormatOptions = {
+  prepared?:boolean;
   stripMarkdown?: boolean;
   forceQuotes?: boolean;
   hasSpeaker?: boolean;
@@ -350,13 +351,8 @@ function applyDialogueQuotes(text: string, hasSpeaker: boolean): string {
   return `"${trimmed}"`;
 }
 
-export function formatDialogueText(
-  rawText: string,
-  regexRules: CustomRegexRule[] = [],
-  options: DialogueFormatOptions = {},
-): string {
-  if (!rawText) return "";
-
+/** Prepare the exact pre-regex source; asynchronous workers and legacy formatting share the same ordering. */
+export function prepareDialogueSource(rawText:string,stripUnknownTags=false):string{
   // 1. Strip inline card images / asset markers
   let text = rawText
     .replace(/`[^`]+`|<([a-zA-Z][a-zA-Z0-9_-]*):([a-zA-Z][a-zA-Z0-9_-]*)\s*>([\s\S]*?)<\/\s*\1(?::\2)?\s*>/gi, (m, sp: string | undefined, eff: string | undefined, inner: string | undefined, offset: number, src: string) => {
@@ -377,9 +373,21 @@ export function formatDialogueText(
     .replace(/<img\b[^>]*?\bsrc\s*=\s*["'][^"']+["'][^>]*?\/?>/gi, "")
     .replace(/\{\{img::[^\}]+\}\}/gi, "");
 
-  if (options.stripUnknownTags) {
+  if (stripUnknownTags) {
     text = stripUnknownPresetTags(text);
   }
+
+  return text;
+}
+
+export function formatDialogueText(
+  rawText: string,
+  regexRules: CustomRegexRule[] = [],
+  options: DialogueFormatOptions = {},
+): string {
+  if (!rawText) return "";
+
+  let text=options.prepared?rawText:prepareDialogueSource(rawText,options.stripUnknownTags);
 
   // 2. Apply custom regex rules. These run synchronously on the main thread;
   // skip them past the safety bound rather than risking a long scan on a

@@ -33,9 +33,9 @@ export function addPlannerTokens(usage: ReplyUsage, reported: { prompt_tokens?: 
 }
 
 /** System One reports input tokens per batch; the call count is the number of batches. */
-export function addSystemOneUsage(usage: ReplyUsage, batches: number, inputTokens: number): void {
+export function addSystemOneUsage(usage: ReplyUsage, batches: number, inputTokens?: number): void {
   usage.systemOneCalls += Math.max(0, Math.round(batches));
-  if (inputTokens > 0) usage.promptTokens = (usage.promptTokens ?? 0) + Math.round(inputTokens);
+  if (typeof inputTokens==='number'&&Number.isFinite(inputTokens)&&inputTokens>=0) usage.promptTokens = (usage.promptTokens ?? 0) + Math.round(inputTokens);
 }
 
 const count = (value: number) => value.toLocaleString("en-US");

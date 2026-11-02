@@ -10,7 +10,7 @@
 
 **Spec:** `docs/audits/2026-11-01-main-3-gpt-audit.md` (findings A01-A10 and selected-suggestion design decisions).
 
-**Execution status:** Tasks 0 and 1 published as beta.110 (`8981bd3`) on `codex/audited-improvements`. Task 2 is published as beta.111 (`6240bba`). Task 2A is included in the beta.112 release checkpoint as the Cast/DNA repair in `2026-11-01-cast-dna-repair.md`; original Tasks 3-11 remain pending. See `docs/implementation/2026-11-01-audit-progress.md` for evidence, additional bugs and known baseline browser failures.
+**Execution status:** Tasks 0 and 1 published as beta.110 (`8981bd3`) on `codex/audited-improvements`. Task 2 is published as beta.111 (`6240bba`). Task 2A is included in the beta.112 release checkpoint as the Cast/DNA repair in `2026-11-01-cast-dna-repair.md`; Tasks 3-4 are included in the beta.113 checkpoint; original Tasks 5-11 remain pending. See `docs/implementation/2026-11-01-audit-progress.md` for evidence, additional bugs and known baseline browser failures.
 
 ## Global constraints
 
@@ -106,10 +106,10 @@ Task 2A is included in the beta.112 release checkpoint; prior beta.111 does not 
 
 **Interfaces:** reusable async candidate loader returns loaded URL or a terminal error; consumes `sceneImageCandidatesFor` while respecting explicit `stageAsset.displayImageUrl` selections. Caller owns a full-identity/epoch token and discards stale results.
 
-- [ ] Reproduce ID-only portrait, stale URL with valid ID, missing background, action/manga in cast mode, approval while Artwork is open, failed first/fallback URL, hung/rejected decode, hidden sheet, swipe, restore and disposal. Record which reported black-screen hypotheses reproduce before changing stage selection.
-- [ ] Route portrait loading through compatible ordered candidates; terminal unavailable state on every branch. Clear decode timers on every settle; preserve previous image on failure. Add cancellation to avoid stale candidates continuing after supersession.
-- [ ] Define one contextual primary image action and one secondary Customize area. Preserve distinct Prepare preview, Approve/generate, Regenerate picture, Rewrite wording, Enrich wording and Restore meanings. Remove duplicate retry/enrich controls; keep pending-operation/error state per selected request.
-- [ ] Verify mobile textarea caret, IME and soft keyboard across debounced updates, focus return, no surprise generation when closing a drawer, reduced motion and plain status labels. Run reader-artwork handoff and existing studio/image browser checks.
+- [x] Reproduce ID-only portrait, stale URL with valid ID, missing background, action/manga in cast mode, approval while Artwork is open, failed first/fallback URL, hung/rejected decode, hidden sheet, swipe, restore and disposal. Record which reported black-screen hypotheses reproduce before changing stage selection.
+- [x] Route portrait loading through compatible ordered candidates; terminal unavailable state on every branch. Clear decode timers on every settle; preserve previous image on failure. Add cancellation to avoid stale candidates continuing after supersession.
+- [x] Define one contextual primary image action and one secondary Customize area. Preserve distinct Prepare preview, Approve/generate, Regenerate picture, Rewrite wording, Enrich wording and Restore meanings. Remove duplicate retry/enrich controls; keep pending-operation/error state per selected request.
+- [x] Verify mobile textarea caret, IME and soft keyboard across debounced updates, focus return, no surprise generation when closing a drawer, reduced motion and plain status labels. Run reader-artwork handoff and existing studio/image browser checks.
 
 **Done:** the same usable image reference loads consistently in Reader/Cast/Artwork; failures are visible and actionable; one control per operation.
 
@@ -120,11 +120,11 @@ Task 2A is included in the beta.112 release checkpoint; prior beta.111 does not 
 
 **Interfaces:** `SystemOneCoverage` adds submitted/answered/skipped/truncated paragraph data and failure reasons; usage counts requests when dispatched, including failed/partial batches. `evaluateDisplayRules(input:{text:string; rulesSource:string; generation:string}, signal:AbortSignal):Promise<{text:string; issues:DisplayRuleIssue[]; generation:string}>`. Proposed worker deadline 50 ms per evaluation, text input/output caps 100,000 characters and one active request plus latest queued generation; verify mobile behavior before freezing these defaults.
 
-- [ ] Add mocked System One tests for long CJK/emoji input, huge candidate descriptions, missing answers, one failed sibling batch, cancellation and deadline; assert byte cap before any dispatch, accurate attempts and safe story-reader fallback. Retain relevance ranking and explicit paragraph cap until a separate budget decision expands it.
-- [ ] Pack requests by actual serialized UTF-8 bytes, not seven paragraphs alone. Preflight all batches, bound concurrency (proposed max 2) and one overall planning deadline. Report omitted input; never silently switch off fallback protections.
-- [ ] Validate Worker creation and termination under Spindle CSP/scanner. If unsupported, retain known fast rules and disable runtime-unbounded custom-rule execution with a visible issue; do not claim a Promise.race interrupts synchronous regex.
-- [ ] Add worker termination regression with an accepted slow regex, output-expanding replacements, stale settings/turn result, unavailable worker and disposal. Use a killable worker so tests cannot hang the process.
-- [ ] Evaluate transformed display text once per turn/settings generation, cache bounded results, preserve original escaped rendering on failure and keep source text unchanged for planning/provenance. Run System One/planner/usage/display suites and `test:display-rules`.
+- [x] Add mocked System One tests for long CJK/emoji input, huge candidate descriptions, missing answers, one failed sibling batch, cancellation and deadline; assert byte cap before any dispatch, accurate attempts and safe story-reader fallback. Retain relevance ranking and explicit paragraph cap until a separate budget decision expands it.
+- [x] Pack requests by actual serialized UTF-8 bytes, not seven paragraphs alone. Preflight all batches, bound concurrency (proposed max 2) and one overall planning deadline. Report omitted input; never silently switch off fallback protections.
+- [x] Validate Worker creation and termination under Spindle CSP/scanner. If unsupported, retain known fast rules and disable runtime-unbounded custom-rule execution with a visible issue; do not claim a Promise.race interrupts synchronous regex.
+- [x] Add worker termination regression with an accepted slow regex, output-expanding replacements, stale settings/turn result, unavailable worker and disposal. Use a killable worker so tests cannot hang the process.
+- [x] Evaluate transformed display text once per turn/settings generation, cache bounded results, preserve original escaped rendering on failure and keep source text unchanged for planning/provenance. Run System One/planner/usage/display suites and `test:display-rules`.
 
 **Done:** bounded work, honest partial coverage and useful fallback; no main-thread freeze or hidden additional calls.
 
