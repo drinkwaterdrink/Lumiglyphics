@@ -35,7 +35,7 @@ try{
  await settings.getByRole('searchbox',{name:'Search Lumiglyphics',exact:true}).fill('CSS');
  await settings.locator('[data-search-result]').first().click();
  assert.equal(await settings.locator('[name="customCss"]').isVisible(),true);
- assert.equal(await settings.locator('[name="customCss"]').evaluate(el=>el===el.getRootNode().activeElement),true);
+ await settings.locator('[name="customCss"]').evaluate(el=>new Promise<void>((resolve,reject)=>{const end=performance.now()+1500;const check=()=>{if(el===el.getRootNode().activeElement)resolve();else if(performance.now()>end)reject(Error('CSS search must focus exact field'));else requestAnimationFrame(check);};check();}));
  await settings.getByRole('searchbox',{name:'Search Lumiglyphics',exact:true}).fill('gracefully');
  await settings.getByRole('searchbox',{name:'Search Lumiglyphics',exact:true}).press('ArrowDown');
  await settings.locator('[data-search-result]').first().press('Enter');
@@ -55,6 +55,12 @@ try{
  await page.evaluate(()=>{const f=(window as any).settingsFixture,r=f.saveRequests.at(-1);f.config={...f.config,...r.patch};f.panel.setConfig(f.config,r.requestId);f.panel.setSaveStatus({kind:'saved'},r.requestId);});
  assert.equal(await page.evaluate(()=>(window as any).settingsFixture.panel.getPage()),'css','Stay cancels any earlier navigation intention');
  await page.evaluate(()=>(window as any).settingsFixture.ackMode='sync');
+ await page.evaluate(()=>(window as any).settingsFixture.panel.openPage('music'));
+ await settings.locator('[name="musicTransitionPolicy"]').selectOption('location');
+ assert.equal(await page.evaluate(()=>(window as any).settingsFixture.config.musicTransitionPolicy),'location');
+ await page.evaluate(()=>(window as any).settingsFixture.panel.openPage('appearance'));
+ await settings.locator('[name="castAbsenceDisplay"]').selectOption('dim');
+ assert.equal(await page.evaluate(()=>(window as any).settingsFixture.config.castAbsenceDisplay),'dim');
  for(const width of [360,390,412,1000]){
   await page.setViewportSize({width,height:900});
   await page.evaluate(()=>(window as any).settingsFixture.panel.openPage('images'));

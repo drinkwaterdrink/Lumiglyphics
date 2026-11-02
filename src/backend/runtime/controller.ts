@@ -1,3 +1,4 @@
+import {resolveSceneAmbient} from '../../shared/scene-atmosphere.js';
 import {handleCharacterDnaRequest} from './character-dna-workflow.js';
 import { fitPromptToBudget } from "../../shared/prompt-length.js";
 import {normalizeImageVersionHistory,archiveImageVersion} from '../../shared/image-version-history.js';
@@ -477,11 +478,13 @@ function effectViews(record: StoredTurnRecord): Pick<TurnView, "effects" | "ambi
     while (sceneIndex + 1 < scenes.length && scenes[sceneIndex + 1]!.startParagraph <= index) {
       sceneIndex += 1;
     }
-    ambients[index] = scenes[sceneIndex]?.ambient ?? null;
+    const scene=scenes[sceneIndex];
+    ambients[index]=scene?resolveSceneAmbient({weather:scene.environment.weather,location:scene.environment.location,description:scene.environment.description,explicit:scene.ambientSource==='weather'?undefined:scene.ambient}).ambient:null;
   }
   const hasEffect = effects.some((value) => value !== null);
   // Explicit null is a clear instruction, not missing data.
-  const hasAmbient = scenes.some((scene) => scene.ambient !== undefined);
+  // Recorded environments can provide a weather fallback or an explicit clear, even for legacy plans.
+  const hasAmbient = scenes.length>0;
   return {
     ...(hasEffect ? { effects } : {}),
     ...(record.plan.effectLimits?.length===paragraphCount?{effectLimits:record.plan.effectLimits}:{}),
@@ -581,6 +584,7 @@ export function turnView(record: StoredTurnRecord): TurnView {
   const presentation=readerPresentationFor(record.plan,record.presentation);
   return {
     ...(presentation ? {presentation} : {}),
+    sceneLocations: record.plan.scenes.filter(scene=>scene.startParagraph>=0&&scene.startParagraph<record.plan.paragraphs.length).map(scene=>({paragraphIndex:scene.startParagraph,location:scene.environment.location.slice(0,1000)})),
     chatId: record.plan.key.chatId,
     messageId: record.plan.key.assistantMessageId,
     swipeId: typeof swipe === "number" ? swipe : Number(swipe ?? 0) || 0,

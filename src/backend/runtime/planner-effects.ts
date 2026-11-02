@@ -164,14 +164,5 @@ export function normalizeAmbientEffect(value: unknown): AmbientEffect | null {
 }
 
 /** Weather fallback only: never infer mood overlays or one-shot accents. */
-export function deriveWeatherAmbient(weather: unknown): AmbientEffect | null {
-  if (typeof weather !== "string") return null;
-  const text = weather.trim().toLowerCase().replace(/[_-]+/g, " ");
-  // Negated, hypothetical, and ended weather must not start an overlay.
-  if (/\b(no|not|without|chance|possible|forecast|stopped|ended|cleared)\b/.test(text)) return null;
-  if (/\b(heavy rain(?:fall)?|downpour|rainstorm|thunderstorm|storm|stormy)\b/.test(text)) return "heavy_rain";
-  if (/\b(snow|snowfall|snowing|snowy|blizzard|flurries)\b/.test(text)) return "snow";
-  if (/\b(rain|rainfall|raining|rainy|drizzle|drizzling|showers)\b/.test(text)) return "rain";
-  if (/\b(fog|foggy|mist|misty)\b/.test(text)) return "fog";
-  return null;
-}
+/** Weather fallback remains shared with deterministic scene atmosphere policy. */
+export {deriveWeatherAmbient} from '../../shared/scene-atmosphere.js';

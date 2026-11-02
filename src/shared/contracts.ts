@@ -150,6 +150,7 @@ export const SceneStateSchema = z.object({
   characterId: z.string().trim().min(1).optional(),
   subjectCategory: SubjectCategorySchema.optional(),
   attire: TextSchema.nullable().optional(),
+  ambientSource: z.enum(["explicit","weather"]).optional(),
   ambient: AmbientEffectSchema.nullable().optional()
 }).strict();
 export type SceneState = z.infer<typeof SceneStateSchema>;

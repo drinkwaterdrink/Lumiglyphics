@@ -922,9 +922,9 @@ describe("paragraph effects and scene ambients", () => {
     ] }).ambients).toEqual(["rain", "fog", null, null]);
   });
 
-  test("all-null ambients are clear instructions; legacy missing ambients remain omitted", () => {
+  test("all-null ambients and clear recorded legacy environments clear the overlay", () => {
     expect(view({ scenes: [{ ...plan.scenes[0], ambient: null }] }).ambients).toEqual([null, null, null, null]);
-    expect(view().ambients).toBeUndefined();
+    expect(view().ambients).toEqual([null,null,null,null]);
   });
 
   test("effect cue schema rejects unknown effects and indexes outside the turn", () => {
@@ -1300,3 +1300,5 @@ test('turn assets carry bounded recorded picture explanations',()=>{
  expect(asset.explanation?.cue?.paragraphIndex).toBe(0);
  expect(JSON.stringify(asset.explanation)).not.toContain('quiet library at night');
 });
+
+test('recorded legacy scene weather clears inside and projects cursor-specific locations',()=>{const record:StoredTurnRecord={schemaVersion:1,speaker:'Mira',status:'ready',plan:{...plan,paragraphs:[...plan.paragraphs,{...plan.paragraphs[0]!,index:1,sourceIndex:1}],scenes:[{...plan.scenes[0]!,ambient:undefined,environment:{...plan.scenes[0]!.environment,location:'Garden',weather:'rain'}},{...plan.scenes[0]!,sceneId:'inside',startParagraph:1,ambient:undefined,environment:{...plan.scenes[0]!.environment,location:'Library',weather:'rain'}}]},jobs:[],updatedAt:now} as StoredTurnRecord;const view=turnView(record);expect(view.ambients).toEqual(['rain',null]);expect(view.sceneLocations).toEqual([{paragraphIndex:0,location:'Garden'},{paragraphIndex:1,location:'Library'}]);});

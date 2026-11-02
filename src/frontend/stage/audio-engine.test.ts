@@ -72,6 +72,16 @@ describe("AudioEngine", () => {
     clock = new FakeClock();
   });
 
+  test('speech ducking eases independently, retargets without snapping and cleans up',()=>{
+    const engine=new AudioEngine({bgmVolume:.8,crossfadeDuration:0,attenuationRampMs:100,audioFactory:playerFactory,now:clock.now,setInterval:clock.setInterval,clearInterval:clock.clearInterval});
+    engine.playBgm('theme');const track=createdPlayers[0]!;track.currentTime=42;
+    engine.setSpeechDucking(true);expect(track.volume).toBe(.8);clock.tick(50);expect(track.volume).toBeGreaterThan(.8*.38);expect(track.volume).toBeLessThan(.8);
+    const heard=track.volume;engine.setSpeechDucking(false);expect(track.volume).toBe(heard);clock.tick(125);expect(track.volume).toBe(.8);
+    engine.setSpeechDucking(true);engine.setBgmAttenuation(.35);clock.tick(125);expect(track.volume).toBeCloseTo(.8*.38*.35);
+    engine.setSpeechDucking(false);clock.tick(125);expect(track.volume).toBeCloseTo(.8*.35);expect(track.currentTime).toBe(42);engine.destroy();expect((clock as any).intervals.size).toBe(0);
+  });
+
+  test('repeated identical presentation gain preserves an in-flight eased ramp',()=>{const engine=new AudioEngine({crossfadeDuration:0,attenuationRampMs:100,audioFactory:playerFactory,now:clock.now,setInterval:clock.setInterval,clearInterval:clock.clearInterval});engine.playBgm('theme');engine.setBgmAttenuation(.35);clock.tick(25);const heard=createdPlayers[0]!.volume;engine.setBgmAttenuation(.35);expect(createdPlayers[0]!.volume).toBe(heard);clock.tick(100);expect(createdPlayers[0]!.volume).toBeCloseTo(.7*.35);engine.destroy();});
   test('speech playback ducks BGM and restores it without changing SFX',()=>{
     const engine=new AudioEngine({bgmVolume:.8,sfxVolume:.6,crossfadeDuration:0,audioFactory:playerFactory,now:clock.now,setInterval:clock.setInterval,clearInterval:clock.clearInterval});
     engine.playBgm('theme.mp3');
@@ -79,10 +89,10 @@ describe("AudioEngine", () => {
     expect(track.volume).toBe(.8);
     engine.playSfx('bell.mp3');
     const sfx=createdPlayers[1]!;
-    engine.setSpeechDucking(true);
+    engine.setSpeechDucking(true);clock.tick(450);
     expect(track.volume).toBeCloseTo(.8*.38);
     expect(sfx.volume).toBe(.6);
-    engine.setSpeechDucking(false);
+    engine.setSpeechDucking(false);clock.tick(450);
     expect(track.volume).toBe(.8);
     engine.destroy();
   });

@@ -1,3 +1,4 @@
+import {resolveSceneAmbient} from '../../shared/scene-atmosphere.js';
 import {plannerImagePromptProfile} from "./image-prompt-profile.js";
 import type {ImagePromptProfile} from "../../shared/image-prompt-profile.js";
 import {freshPlanPreferences} from './presentation-rules.js';
@@ -66,7 +67,7 @@ import { loadVisualContext, type VisualContextDiagnostics, type VisualContextSna
 import type { SimTrackerEvidence } from "./simtracker.js";
 import { resolveImageTemplate,templateSnapshot } from "../../shared/image-templates.js";
 import { resolvePlannerConnection, type ResolvedPlannerConnection } from "./connections.js";
-import { normalizeStageEffect, normalizeAmbientEffect, deriveWeatherAmbient } from "./planner-effects.js";
+import { normalizeStageEffect, normalizeAmbientEffect } from "./planner-effects.js";
 import { getAudioCatalog, getAudioCatalogPromptSummary } from "./audio-catalog.js";
 import { debugErrorSummary, debugJson, debugQuote, plannerDebugLogger, type PlannerDebugScope } from "./debug-trace.js";
 import { decidePresentation, formatSystemOneCoverage, type SystemOneDecisions } from "./system-one.js";
@@ -2459,11 +2460,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
         subjectCategory: timeline.snapshots[proposal.startParagraph]!.subjectCategory
       } : {}),
       attire: timeline.snapshots[proposal.startParagraph]!.attire,
-      ambient: proposal.ambient !== undefined
-        ? normalizeAmbientEffect(proposal.ambient)
-        : reusedScene && reusedScene.environment.weather === mergedEnv.weather && reusedScene.ambient !== undefined
-          ? reusedScene.ambient
-          : deriveWeatherAmbient(mergedEnv.weather),
+      ...resolveSceneAmbient({weather:mergedEnv.weather,location:mergedEnv.location,description:mergedEnv.description,explicit:proposal.ambient!==undefined?normalizeAmbientEffect(proposal.ambient):undefined,...(reusedScene?{previous:{sameScene:true,ambient:reusedScene.ambient,ambientSource:reusedScene.ambientSource}}:{})}),
       continuity,
       basePrompt,
       identityPrompt: timeline.snapshots[proposal.startParagraph]!.identity || null,

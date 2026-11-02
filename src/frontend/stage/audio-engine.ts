@@ -97,6 +97,8 @@ interface ActiveBgm {
   attenTimer?: TimerHandle | undefined;
   /** Effective attenuation while a ramp is in flight; equals bgmAttenuation when idle. */
   attenLevel: number;
+  speechLevel:number;
+  speechTimer?:TimerHandle|undefined;
 }
 
 const DEFAULT_CROSSFADE_DURATION_MS = 1500;
@@ -152,6 +154,7 @@ export class AudioEngine {
   setBgmAttenuation(factor:number,rampMs:number=this.attenuationRampMs):void {
     const next=Number.isFinite(factor)?Math.max(0,Math.min(1,factor)):1;
     const previous=this.bgmAttenuation;
+    if(previous===next)return;
     this.bgmAttenuation=next;
     for(const item of this.bgmTracks){
       this.clearAtten(item);
@@ -187,15 +190,19 @@ export class AudioEngine {
 
   /** Duck BGM while speech/TTS playback is active, then restore cleanly. */
   setSpeechDucking(active:boolean):void {
-    const next=active?0.38:1;
-    if(this.speechDucking===next)return;
-    this.speechDucking=next;
-    for(const item of this.bgmTracks)this.setTrackVolume(item,item.gain);
+    if(this.destroyed)return;
+    const next=active?0.38:1;if(this.speechDucking===next)return;this.speechDucking=next;
+    for(const item of this.bgmTracks){
+      this.clearSpeech(item);const start=item.speechLevel,startedAt=this.now(),duration=this.attenuationRampMs;
+      if(duration<=0){item.speechLevel=next;this.setTrackVolume(item,item.gain);continue;}
+      item.speechTimer=this.setInterval(()=>{const progress=Math.min(1,(this.now()-startedAt)/duration),eased=1-(1-progress)*(1-progress);item.speechLevel=start+(next-start)*eased;this.setTrackVolume(item,item.gain);if(progress>=1){this.clearSpeech(item);item.speechLevel=next;this.setTrackVolume(item,item.gain);}},25);
+    }
   }
+  private clearSpeech(item:ActiveBgm):void{if(item.speechTimer!==undefined){this.clearInterval(item.speechTimer);item.speechTimer=undefined;}}
 
   private setTrackVolume(item:ActiveBgm,gain:number):void {
     item.gain=Math.max(0,Math.min(1,gain));
-    item.player.volume=item.gain*this.bgmVolume*this.speechDucking*item.attenLevel;  }
+    item.player.volume=item.gain*this.bgmVolume*item.speechLevel*item.attenLevel;  }
 
   getSfxVolume(): number {
     return this.sfxVolume;
@@ -247,7 +254,7 @@ export class AudioEngine {
     player.loop = true;
     player.volume = 0;
 
-    const bgm: ActiveBgm = { player, src: cleanSrc, gain:0, attenLevel:this.bgmAttenuation };
+    const bgm: ActiveBgm = { player, src: cleanSrc, gain:0, attenLevel:this.bgmAttenuation,speechLevel:this.speechDucking };
     this.bgmTracks.add(bgm);
     this.activeBgm = bgm;
 
@@ -313,7 +320,7 @@ export class AudioEngine {
    * Stop all audio immediately.
    */
   stopAll(): void {
-    for(const item of this.bgmTracks){this.clearFade(item);this.clearAtten(item);item.player.pause();}
+    for(const item of this.bgmTracks){this.clearFade(item);this.clearAtten(item);this.clearSpeech(item);item.player.pause();}
     this.bgmTracks.clear();
     this.activeBgm = null;
     this.outgoingBgm = null;
@@ -366,7 +373,7 @@ export class AudioEngine {
 
     if (durationMs <= 0) {
       item.player.pause();
-      this.clearAtten(item);
+      this.clearAtten(item);this.clearSpeech(item);
       this.bgmTracks.delete(item);
       if (this.outgoingBgm === item) this.outgoingBgm = null;
       return;
@@ -385,7 +392,7 @@ export class AudioEngine {
 
       if (progress >= 1) {
         this.clearFade(item);
-        this.clearAtten(item);
+        this.clearAtten(item);this.clearSpeech(item);
         item.player.pause();
         this.bgmTracks.delete(item);
         if (this.outgoingBgm === item) this.outgoingBgm = null;

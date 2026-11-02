@@ -310,3 +310,5 @@ test('F9: non-serializable input still normalizes without using the memo', () =>
   circular.self = circular;
   assert.equal(normalizeConfig(circular).textSpeed, 11);
 });
+
+test('atmosphere preferences default safely and preserve explicit opt-in policies',()=>{for(const [input,cast,music]of [[{},'hide','cue'],[{castAbsenceDisplay:'dim',musicTransitionPolicy:'location'},'dim','location'],[{castAbsenceDisplay:'invalid',musicTransitionPolicy:'invalid'},'hide','cue']] as const){assert.equal(normalizeConfig(input).castAbsenceDisplay,cast);assert.equal(normalizeConfig(input).musicTransitionPolicy,music);}});

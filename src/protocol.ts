@@ -162,6 +162,7 @@ export type AudioCueView = {
 };
 
 export type TurnView = {
+  sceneLocations?: import("./shared/scene-atmosphere.js").SceneLocation[];
   referenceHistory?:ReferenceHistory;
   /** Present only when the reply-cost setting is on. */
   replyCost?: { usage: ReplyUsage; imagesGenerated: number };

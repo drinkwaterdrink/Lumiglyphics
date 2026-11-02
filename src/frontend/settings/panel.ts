@@ -700,6 +700,7 @@ export class VisualNovelSettingsPanel {
             ${group("Scene", `
               <label data-check ${find("Dynamic atmospheric lighting", "lighting atmospheric mood firelight night storm color grade ambient scene tint tone")}><input name="atmosphericLighting" type="checkbox" /><span>Dynamic atmospheric lighting<small>Subtly tone-grades scene lighting to match night, firelight, storm, or morning moods</small></span></label>
               <label data-check><input name="castMode" type="checkbox" /><span>Cast view<small>New replies can allocate an Environment background and up to two selected, present characters within your existing picture budget. Compatible saved art uses no new slot. A budget of one permits one new picture, not one of each. Arranges rectangular portraits and highlights the speaker; action, ensemble and Manga pictures keep their normal view. Off by default.</small></span></label>
+              <label data-field ${find('Remember off-scene portraits','absent cast dim hide presence')}><span>Off-scene portraits</span><select name="castAbsenceDisplay"><option value="hide">Hide (default)</option><option value="dim">Dim in a labeled Off scene tray</option></select><small>Cast view only. Shows previously revealed, compatible art from this scene; never adds absent people to new pictures.</small></label>
               <fieldset ${find("Scene effects", "rain sparkles shake flash intensity gentle motion")}>
                 <legend>Scene effects</legend>
                 ${optionList("effectIntensity", EFFECT_INTENSITY_OPTIONS)}
@@ -852,6 +853,7 @@ export class VisualNovelSettingsPanel {
               </div>
               <small data-audio-status role="status" aria-live="polite"></small>
             `, { find: find("Music library", "import audio folder bgm sfx scan check") })}
+            <label data-field ${find('Music transitions','soundtrack location cue track')}><span>Music transitions</span><select name="musicTransitionPolicy"><option value="cue">Follow story cues (default)</option><option value="location">Keep music within a location</option></select><small>Location mode accepts the first recorded track for each location. Unknown locations follow cues. Choose a recorded track manually in the reader workspace.</small></label>
             ${group("Volume", `
               <div data-row>
                 <label data-field ${find("Music volume", "bgm loudness audio")}><span>Music volume <span data-bgm-val>70%</span></span><input name="bgmVolume" type="range" min="0" max="1" step="0.05" /></label>
@@ -1610,6 +1612,8 @@ export class VisualNovelSettingsPanel {
         };
       }
       case "castMode": return {castMode:checked};
+      case "castAbsenceDisplay":return {castAbsenceDisplay:target.value==="dim"?"dim":"hide"};
+      case "musicTransitionPolicy":return {musicTransitionPolicy:target.value==="location"?"location":"cue"};
       case "sceneImageFit": return { sceneImageFit: normalizeSceneImageFit(target.value) };
       case "effectIntensity": return { effectIntensity: normalizeEffectIntensity(target.value) };
       case "textEffects": return { textEffects: normalizeTextEffects(target.value) };
@@ -2100,6 +2104,8 @@ export class VisualNovelSettingsPanel {
     set("systemOneApiUrl", () => { this.control<HTMLInputElement>("systemOneApiUrl").value = config.systemOneApiUrl; });
     set("systemOneModel", () => { this.control<HTMLInputElement>("systemOneModel").value = config.systemOneModel; });
     set("imageParameters", () => { this.control<HTMLTextAreaElement>("imageParameters").value = JSON.stringify(config.imageParameters, null, 2); });
+    this.control<HTMLSelectElement>("castAbsenceDisplay").value=config.castAbsenceDisplay;
+    this.control<HTMLSelectElement>("musicTransitionPolicy").value=config.musicTransitionPolicy;
     set("audioDirectory", () => { this.control<HTMLInputElement>("audioDirectory").value = config.audioDirectory; });
     set("includeRecentMessages", () => { this.control<HTMLInputElement>("includeRecentMessages").value = String(config.includeRecentMessages); });
     set("includeCharacterContext", () => { this.control<HTMLInputElement>("includeCharacterContext").checked = config.includeCharacterContext; });

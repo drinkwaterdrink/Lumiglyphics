@@ -66,6 +66,9 @@ export class ReaderWorkspace {
   private readonly media: MediaQueryList | undefined;
   private readonly onMedia = (): void => this.syncReader();
   private readonly onViewportResize = (): void => this.syncViewport();
+  private readonly musicPicker=document.createElement("select");
+  private musicTracks:Array<{url:string;label:string}>=[];
+  onMusicSelection:((track:string|null)=>void)|undefined;
   onSettingsPage: ((page: string) => void) | undefined;
 
   constructor(private readonly shell: HTMLElement, private readonly reader: HTMLElement,
@@ -151,8 +154,10 @@ export class ReaderWorkspace {
 
     this.more = document.createElement('div'); this.more.dataset.readerMore = '';
     this.renderWorkspaceDestinations();
+    const soundtrack=document.createElement('label');soundtrack.style.cssText='display:grid;gap:8px;margin-top:20px';const title=document.createElement('span');title.textContent='Soundtrack';this.musicPicker.setAttribute('aria-label','Soundtrack');this.musicPicker.style.cssText='min-height:44px;max-width:100%;font:inherit';const help=document.createElement('small');help.textContent='Choose from tracks already recorded for this reply. This never generates music.';soundtrack.append(title,this.musicPicker,help);this.more.append(soundtrack);this.setMusicTracks([],null);
 
     const signal = this.abort.signal;
+    this.musicPicker.addEventListener("change",()=>this.onMusicSelection?.(this.musicPicker.value?this.musicTracks[Number(this.musicPicker.value)-1]?.url??null:null),{signal});
     this.nav.addEventListener('click', event => {
       const b = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-reader-destination]') : null;
       if (!b) return;
@@ -419,6 +424,7 @@ export class ReaderWorkspace {
     b.querySelector('span')!.textContent = enabled ? 'Show navigation' : 'Focus';
     this.focusReader();
   }
+  setMusicTracks(tracks:Array<{url:string;label:string}>,manual:string|null):void{this.musicTracks=tracks.slice(0,32);const automatic=document.createElement('option');automatic.value='';automatic.textContent='Follow story automatically';this.musicPicker.replaceChildren(automatic,...this.musicTracks.map((track,index)=>{const option=document.createElement('option');option.value=String(index+1);option.textContent=track.label.slice(0,160);return option;}));const selected=this.musicTracks.findIndex(track=>track.url===manual);this.musicPicker.value=selected<0?'':String(selected+1);this.musicPicker.disabled=!this.musicTracks.length;}
   setResume(model:ResumeCardModel|null):void {this.resumeCard.show(model);}
   setCaption(text: string): void {
     const el = this.header.querySelector<HTMLElement>('[data-reader-caption]');

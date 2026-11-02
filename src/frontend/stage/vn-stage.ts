@@ -1120,6 +1120,7 @@ export class VnStage {
     this.renderInteraction(view.showChoices, view.showStandardInput, view.isBusy);
   }
 
+  setCastAbsenceDisplay(value:'hide'|'dim'):void{this.castStage.setAbsenceDisplay(value);}
   setCastMode(enabled:boolean):void {this.castStage.setEnabled(enabled);}
   setCastTurn(turn:TurnView|null,index:number):AssetView|null {
     this.dossiers.setTurnMedia(turn);

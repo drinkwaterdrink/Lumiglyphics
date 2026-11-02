@@ -14,6 +14,10 @@ const CSS=`
 [data-vn-cast-card] img{display:block;width:100%;height:min(clamp(80px,36vh,360px),var(--vn-cast-height,360px));object-fit:contain;background:transparent;filter:drop-shadow(0 14px 28px rgba(0,0,0,0.65))}
 [data-vn-cast-placeholder]{height:min(clamp(80px,32vh,320px),var(--vn-cast-height,320px));display:grid;place-content:center;text-align:center;padding:.5rem;box-sizing:border-box;color:#dcebad;background:rgba(11,23,19,0.7);border-radius:12px;font-size:.8rem}
 [data-vn-cast-card] figcaption{color:#f4f7ee;font-size:.78rem;font-weight:700;letter-spacing:0.02em;text-align:center;padding:4px 12px;margin:8px auto 0;box-sizing:border-box;height:auto;min-height:28px;width:fit-content;max-width:90%;display:flex;align-items:center;justify-content:center;border-radius:999px;background:rgba(11,23,19,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(220,238,217,0.22);box-shadow:0 4px 12px rgba(0,0,0,0.35);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+[data-vn-cast-off-scene]{display:flex;align-items:center;justify-content:flex-start;gap:12px;box-sizing:border-box;width:max-content;max-width:100%;overflow-x:auto;scrollbar-width:thin;pointer-events:auto;padding:6px 10px;border:1px solid rgba(220,238,217,.15);border-radius:12px;background:rgba(5,15,20,.58)}
+[data-vn-cast-off-scene][hidden]{display:none}
+[data-vn-cast-off-scene]>figure{flex:none}
+[data-vn-cast-off-scene]>strong{flex:none;font:600 11px/1.3 system-ui;color:#dce5dd;letter-spacing:.05em;text-transform:uppercase}
 [data-vn-cast-toggle]{pointer-events:auto;min-width:44px;min-height:44px;box-sizing:border-box;font:inherit;cursor:pointer}
 [data-vn-cast-toggle=hide]{position:absolute;top:4px;right:4px;inset:4px 4px auto auto;width:44px;height:44px;min-width:44px;min-height:44px;border:none;background:transparent;color:#f4f7ee;cursor:pointer;display:grid;place-items:center;padding:0;z-index:10}
 [data-vn-cast-toggle=hide]::before{content:"";position:absolute;width:24px;height:24px;border-radius:50%;background:rgba(11,23,19,0.78);border:1px solid rgba(220,238,217,0.25);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 2px 8px rgba(0,0,0,0.4);transition:background 160ms ease,transform 160ms ease}
@@ -30,6 +34,7 @@ const CSS=`
 /** Reuses ready art only. No transparent-cutout assumption, storage or provider calls. */
 export class CastStage {
  private host=document.createElement('section');private style=document.createElement('style');private enabled=false;private collapsed=false;
+ private absenceDisplay:'hide'|'dim'='hide';
  private turn:TurnView|null=null;private index=0;private selected='';private scope='';private epoch=0;private signature='';private structureSignature='';private fitFrame=0;private disposed=false;private observer:ResizeObserver|null=null;private loadAbort=new AbortController();
  constructor(private root:HTMLElement,private createImage?:VnImageFactory){this.style.textContent=CSS;this.host.dataset.vnCast='';this.host.hidden=true;this.host.setAttribute('aria-label','Scene cast');root.append(this.style,this.host);}
  setEnabled(enabled:boolean):void{
@@ -41,18 +46,19 @@ export class CastStage {
   }else if(!enabled){this.observer?.disconnect();this.observer=null;}
   this.refresh();
  }
+ setAbsenceDisplay(value:'hide'|'dim'):void{this.absenceDisplay=value;this.refresh();}
  toggle():void{this.collapsed=!this.collapsed;this.refresh();}
  set(turn:TurnView|null,index:number):AssetView|null{this.turn=turn;this.index=index;return this.refresh();}
  private refresh():AssetView|null{
   const rootNode = typeof this.host.getRootNode === 'function' ? this.host.getRootNode() : this.host.ownerDocument;
   const active = (rootNode as Document | ShadowRoot | null)?.activeElement ?? null;
   const keepFocus=Boolean(active&&this.host.contains(active)&&active.hasAttribute('data-vn-cast-toggle'));
-  let composition=this.enabled&&this.turn?selectCastComposition(this.turn,this.index,this.selected):null;
+  let composition=this.enabled&&this.turn?selectCastComposition(this.turn,this.index,this.selected,this.absenceDisplay):null;
   if(!composition){this.clearDisplay();return null;}
-  if(composition.scope!==this.scope){this.selected='';this.host.replaceChildren();this.scope=composition.scope;this.structureSignature='';composition=selectCastComposition(this.turn!,this.index)!;}
-  const signature=JSON.stringify([composition.scope,composition.portraits,composition.otherCast,this.collapsed]);
+  if(composition.scope!==this.scope){this.selected='';this.host.replaceChildren();this.scope=composition.scope;this.structureSignature='';composition=selectCastComposition(this.turn!,this.index,undefined,this.absenceDisplay)!;}
+  const signature=JSON.stringify([composition.scope,composition.portraits,composition.otherCast,composition.offScene,this.collapsed]);
   if(signature===this.signature)return composition.background;
-  const structureSignature=JSON.stringify([composition.scope,composition.portraits.map(p=>[p.name,p.asset?.imageId??null,p.asset?.imageUrl??null,p.asset?.stageAsset?.attire??null,p.asset?.stageAsset?.displayImageUrl??null]),composition.otherCast.map(p=>p.name),this.collapsed]);
+  const structureSignature=JSON.stringify([composition.scope,composition.portraits.map(p=>[p.name,p.asset?.imageId??null,p.asset?.imageUrl??null,p.asset?.stageAsset?.attire??null,p.asset?.stageAsset?.displayImageUrl??null]),composition.otherCast.map(p=>p.name),composition.offScene.map(p=>[p.name,p.asset?.imageId,p.asset?.imageUrl]),this.collapsed]);
   this.signature=signature;
   if(structureSignature===this.structureSignature&&!this.collapsed){
    this.syncActiveSpeaker(composition.portraits);
@@ -66,7 +72,10 @@ export class CastStage {
   portraits.lastElementChild?.append(this.toggleButton('hide'));
   const tray=document.createElement('nav');tray.dataset.vnCastTray='';tray.setAttribute('aria-label','Other scene portraits');
   for(const portrait of composition.otherCast){const button=document.createElement('button');button.type='button';button.textContent=portrait.name;button.title=`Show ${portrait.name}`;button.setAttribute("aria-label",button.title);button.onclick=e=>{e.stopPropagation();this.selected=portrait.name;this.refresh();};tray.append(button);}
-  this.host.replaceChildren(portraits,tray);this.fit();if(keepFocus)this.host.querySelector<HTMLButtonElement>('[data-vn-cast-toggle]')?.focus({preventScroll:true});return composition.background;
+  const offScene=document.createElement('div');offScene.dataset.vnCastOffScene='';offScene.hidden=!composition.offScene.length;offScene.setAttribute('aria-label','Off scene');offScene.setAttribute('role','region');offScene.tabIndex=0;for(const type of ['click','keydown','pointerdown','pointerup','touchstart','touchend','wheel'])offScene.addEventListener(type,event=>event.stopPropagation(),{passive:true});
+  if(composition.offScene.length){const label=document.createElement('strong');label.textContent='Off scene';offScene.append(label);if(!composition.portraits.length)offScene.append(this.toggleButton('hide'));}
+  for(const portrait of composition.offScene){const item=document.createElement('figure');item.style.cssText='margin:0;display:inline-grid;gap:4px;justify-items:center;max-width:72px;opacity:.65;filter:saturate(.5)';const label=document.createElement('figcaption');label.textContent=portrait.name;label.style.cssText='font-size:11px;white-space:normal;text-align:center';item.append(label);offScene.append(item);const signal=this.loadAbort.signal;void loadVnImageCandidates(sceneImageCandidatesFor(portrait.asset!),this.createImage,signal).then(url=>{if(signal.aborted||epoch!==this.epoch||this.disposed)return;const image=document.createElement('img');image.src=url;image.alt=`${portrait.name} · Off scene`;image.style.cssText='width:52px;height:60px;object-fit:contain';item.prepend(image);this.fit();}).catch(()=>{if(!signal.aborted){label.textContent=`${portrait.name} · Portrait unavailable`;this.fit();}});}
+  this.host.replaceChildren(portraits,tray,offScene);this.fit();if(keepFocus)this.host.querySelector<HTMLButtonElement>('[data-vn-cast-toggle]')?.focus({preventScroll:true});return composition.background;
  }
  private syncActiveSpeaker(portraits:readonly CastPortrait[]):void{
   const cards=[...this.host.querySelectorAll<HTMLElement>('[data-vn-cast-card]')];
@@ -117,7 +126,8 @@ export class CastStage {
   const bottom=dialogue&&dialogue.getClientRects().length?dialogue.getBoundingClientRect().top:root.bottom;
   if(this.collapsed){this.host.style.removeProperty('--vn-cast-top');this.host.hidden=false;return;}
   const tray=this.host.querySelector<HTMLElement>('[data-vn-cast-tray]');
-  const room=(bottom-host.top)/scale-64-(tray?.getBoundingClientRect().height??0)/scale;
+  const remembered=this.host.querySelector<HTMLElement>('[data-vn-cast-off-scene]');
+  const room=(bottom-host.top)/scale-64-(tray?.getBoundingClientRect().height??0)/scale-(remembered?.getBoundingClientRect().height??0)/scale;
   this.host.hidden=room<32;
   this.host.style.setProperty('--vn-cast-height',`${Math.max(32,room)}px`);
  }

@@ -83,6 +83,8 @@ export type VisualNovelConfig = {
   mode: VisualNovelMode;
   sceneImageFit: VisualNovelSceneImageFit;
   castMode: boolean;
+  castAbsenceDisplay: "hide"|"dim";
+  musicTransitionPolicy: "cue"|"location";
   debugLogging: boolean;
   /** Show a per-reply line of model calls, tokens and images in the reader. Off by default. */
   showReplyCost: boolean;
@@ -167,6 +169,8 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   mode: "standard",
   sceneImageFit: "cover",
   castMode: false,
+  castAbsenceDisplay:"hide",
+  musicTransitionPolicy:"cue",
   debugLogging: false,
   showReplyCost: false,
   generateImages: true,
@@ -392,6 +396,8 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     mode: input.mode === "cyoa" ? "cyoa" : "standard",
     sceneImageFit: sceneImageFit(input.sceneImageFit),
     castMode: bool(input.castMode, false),
+    castAbsenceDisplay:input.castAbsenceDisplay==="dim"?"dim":"hide",
+    musicTransitionPolicy:input.musicTransitionPolicy==="location"?"location":"cue",
     debugLogging: bool(input.debugLogging, DEFAULT_CONFIG.debugLogging),
     showReplyCost: bool(input.showReplyCost, DEFAULT_CONFIG.showReplyCost),
     generateImages: bool(input.generateImages, DEFAULT_CONFIG.generateImages),

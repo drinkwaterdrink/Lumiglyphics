@@ -1310,6 +1310,16 @@ export const VN_EFFECTS_CSS = `
    transient elements (splashes, runs, flicker, bolt) are hidden.
    ========================================================================== */
 
+/* Global Off retains established atmosphere while freezing its motion, matching
+   the existing separate ambient/one-shot contract. OS reduced motion stays authoritative. */
+[data-vn-effect-intensity="off"] [data-vn-ambient],
+[data-vn-effect-intensity="off"] [data-vn-ambient]::before,
+[data-vn-effect-intensity="off"] [data-vn-ambient]::after,
+[data-vn-effect-intensity="off"] [data-vn-ambient] * {
+  animation: none !important;
+  transition: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   /* Suppress camera motion, shakes, punches, tilts, and rapid particle motion */
   .vn-shake-hard,

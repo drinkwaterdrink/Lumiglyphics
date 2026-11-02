@@ -10,7 +10,7 @@
 
 **Spec:** `docs/audits/2026-11-01-main-3-gpt-audit.md` (findings A01-A10 and selected-suggestion design decisions).
 
-**Execution status:** Tasks 0 and 1 published as beta.110 (`8981bd3`) on `codex/audited-improvements`. Task 2 is published as beta.111 (`6240bba`). Task 2A is included in the beta.112 release checkpoint as the Cast/DNA repair in `2026-11-01-cast-dna-repair.md`; Tasks 3-4 are included in the beta.113 checkpoint; Task 5 is included in the beta.114 checkpoint; Task 6 is included in the beta.115 checkpoint; original Tasks 7-11 remain pending. See `docs/implementation/2026-11-01-audit-progress.md` for evidence, additional bugs and known baseline browser failures.
+**Execution status:** Tasks 0 and 1 published as beta.110 (`8981bd3`) on `codex/audited-improvements`. Task 2 is published as beta.111 (`6240bba`). Task 2A is included in the beta.112 release checkpoint as the Cast/DNA repair in `2026-11-01-cast-dna-repair.md`; Tasks 3-4 are included in the beta.113 checkpoint; Task 5 is included in the beta.114 checkpoint; Task 6 is included in the beta.115 checkpoint; Task 7 is included in the beta.116 checkpoint; original Tasks 8-11 remain pending. See `docs/implementation/2026-11-01-audit-progress.md` for evidence, additional bugs and known baseline browser failures.
 
 ## Global constraints
 
@@ -160,11 +160,11 @@ Task 2A is included in the beta.112 release checkpoint; prior beta.111 does not 
 
 **Interfaces:** proposed `musicTransitionPolicy:'cue'|'location'` default cue; `castAbsenceDisplay:'hide'|'dim'` default hide. Presence model explicitly separates present speakers/drawable subjects from remembered off-scene portraits. Weather reads established scene environment and explicit effects, not fabricated place tags.
 
-- [ ] Location policy keeps current track within a location, crossfades on validated location change and permits explicit user track selection. Same-track transitions never restart playback; unknown location and backward seeks are deterministic. No new inference calls.
-- [ ] Smooth speech ducking as its own factor using the existing eased gain infrastructure, independent of presentation attenuation and track crossfade. Test rapid play/pause/end and avoid double attenuation or timer leaks.
-- [ ] Complete weather precedence/clearing: explicit ambient/manual rules win; no weather inferred from negated/hypothetical text. Location/interior transition clears stale particles; respects effect intensity and reduced motion. Test rain -> clear, outside -> inside, backward seek and explicit none.
-- [ ] Dim mode can show only previously revealed compatible portraits in a clearly labeled Off scene tray; two active portrait slots still prioritize present cast. Off-scene people never enter generation selection, current location membership or speaker attribution. Never borrow future/cross-scene art as though present.
-- [ ] Run audio/effect/cast/config tests and mobile stage fixture; verify transitions with screenshots/audio state mocks. Human listening/device results remain separate evidence.
+- [x] Location policy keeps current track within a location, crossfades on validated location change and permits explicit user track selection. Same-track transitions never restart playback; unknown location and backward seeks are deterministic. No new inference calls.
+- [x] Smooth speech ducking as its own factor using the existing eased gain infrastructure, independent of presentation attenuation and track crossfade. Test rapid play/pause/end and avoid double attenuation or timer leaks.
+- [x] Complete weather precedence/clearing: explicit ambient/manual rules win; no weather inferred from negated/hypothetical text. Location/interior transition clears stale particles; respects effect intensity and reduced motion. Test rain -> clear, outside -> inside, backward seek and explicit none.
+- [x] Dim mode can show only previously revealed compatible portraits in a clearly labeled Off scene tray; two active portrait slots still prioritize present cast. Off-scene people never enter generation selection, current location membership or speaker attribution. Never borrow future/cross-scene art as though present.
+- [x] Run audio/effect/cast/config tests and mobile stage fixture; verify transitions with screenshots/audio state mocks. Human listening/device results remain separate evidence.
 
 ## Task 8 — Truthful speech read-along (3) and optional timed effects refinement
 

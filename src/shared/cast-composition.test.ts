@@ -51,3 +51,13 @@ test('cast mode shares held background selection while retaining independently s
  t.backgroundHoldStarts=[0,0,0];expect(selectCastComposition(t,2)?.background.jobId).toBe('place');
  expect(selectCastComposition(t,2)?.portraits.map(p=>p.name)).toEqual(['Mira','Rin']);
 });
+
+test('dim absence keeps only previously present revealed art in a separate off-scene list',()=>{
+ const t=turn([asset('place',0,'background'),asset('Mira',0),asset('Rin',1)]);
+ const key={chatId:'c',assistantMessageId:'m',swipeId:0,sourceFingerprint:'fingerprint',revision:0};
+ const entities=[{id:'m',name:'Mira',kind:'npc' as const,aliases:[],firstParagraph:0,facts:[]},{id:'r',name:'Rin',kind:'npc' as const,aliases:[],firstParagraph:0,facts:[]}];
+ t.presentation={version:1,snapshots:[0,1,2].map(i=>({at:{key,paragraphIndex:i},entities,locationId:null,presentEntityIds:i===0?['m']:['r'],speakerEntityId:null,drawableEntityId:null,stateByEntity:{m:{presence:i===0?'present' as const:'absent' as const},r:{presence:'present' as const}}}))};
+ const composition=selectCastComposition(t,1,undefined,'dim')!;expect(composition.portraits.map(p=>p.name)).toEqual(['Rin']);expect(composition.offScene.map(p=>p.name)).toEqual(['Mira']);expect(composition.offScene[0]!.active).toBe(false);expect(selectCastComposition(t,0,undefined,'dim')!.offScene).toEqual([]);
+ const hidden=selectCastComposition(t,1)!;expect(hidden.offScene).toEqual([]);
+ t.assets[1]!.stageAsset!.attire='coat';t.presentation.snapshots[1]!.stateByEntity.m!.outfit='uniform';expect(selectCastComposition(t,1,undefined,'dim')!.offScene).toEqual([]);
+});

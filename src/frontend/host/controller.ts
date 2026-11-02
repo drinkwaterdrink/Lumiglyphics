@@ -1,3 +1,4 @@
+import {musicTrackForPosition,locationForPosition} from '../../shared/scene-atmosphere.js';
 import {resumeCardModel} from '../stage/resume-card.js';
 import {DnaRequestSchema,DNA_FIELD_LABELS,type DnaRequest,type DnaField} from '../../shared/character-dna-workflow.js';
 import {inspectorState,pictureStateSummary} from '../image-review/inspector-model.js';
@@ -364,6 +365,7 @@ export type VisualStageThemeTarget = Pick<
   /** Dialogue text size multiplier (stage sets `--vn-text-scale`). */
   setTextScale?: (scale: number) => void;
   setCastMode?: (enabled:boolean) => void;
+  setCastAbsenceDisplay?: (value:"hide"|"dim") => void;
   setTooltipPreferences?: (prefs: VisualNovelConfig["tooltips"]) => void;
   setReaderPreferences?: (preferences: VisualNovelConfig["readerPreferences"]) => void;
   /** Lets the stage also gate its own heuristic effects (text-triggered shake). */
@@ -397,6 +399,7 @@ export function applyVisualConfigToStage(
   stage.setThemePreset(config.themePreset);
   stage.setSceneImageFit(config.sceneImageFit);
   stage.setCastMode?.(config.castMode);
+  stage.setCastAbsenceDisplay?.(config.castAbsenceDisplay);
   stage.setUserCss(config.customCss);
   applyDisplayRulesGuarded(stage, config.displayRegexRules);
   stage.setTextSpeed?.(config.textSpeed);
@@ -548,17 +551,16 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
 
   let currentBgm: string | null = null;
   let turnOpeningBgm: string | null = null;
-  function syncAudioForParagraph(activeTurn: TurnView, paragraphIndex: number): void {
+  let turnOpeningLocation:string|null=null,manualMusicTrack:string|null=null,musicScope='';
+  const musicScopeFor=(view:TurnView)=>JSON.stringify([view.chatId,view.messageId,view.swipeId,view.sourceFingerprint]);
+  function syncMusicChoices(view:TurnView,index:number):boolean{const changed=musicScope!==musicScopeFor(view);if(changed){musicScope=musicScopeFor(view);manualMusicTrack=null;}const tracks:Array<{url:string;label:string}>=[];for(const cue of view.audioCues??[]){if(cue.paragraphIndex>index)continue;const url=cue.bgmUrl||cue.bgm;if(url&&!tracks.some(track=>track.url===url)&&tracks.length<32)tracks.push({url,label:cue.bgm?.split(/[\\/]/).at(-1)?.slice(0,160)||`Track ${tracks.length+1}`});}if(manualMusicTrack&&!tracks.some(track=>track.url===manualMusicTrack))manualMusicTrack=null;stage.workspace.setMusicTracks(tracks,manualMusicTrack);return changed;}
+
+  function syncAudioForParagraph(activeTurn: TurnView, paragraphIndex: number,playSfx=true): void {
     audioEngine.setBgmAttenuation(musicAttenuationForParagraph(activeTurn,paragraphIndex));
-    if (!activeTurn.audioCues || activeTurn.audioCues.length === 0) return;
-    const cue = activeTurn.audioCues.find((c) => c.paragraphIndex === paragraphIndex);
-    if (!cue) return;
-    const bgmSrc = cue.bgmUrl || cue.bgm;
-    if (bgmSrc) {
-      currentBgm = bgmSrc;
-      vnDebug("audio", `p${paragraphIndex}`, "bgm ->", bgmSrc);
-      audioEngine.playBgm(bgmSrc);
-    }
+    const bgmSrc=musicTrackForPosition({turn:activeTurn,index:paragraphIndex,policy:configRef.current?.musicTransitionPolicy??'cue',openingTrack:turnOpeningBgm,openingLocation:turnOpeningLocation,manualTrack:manualMusicTrack});
+    if(bgmSrc!==currentBgm){currentBgm=bgmSrc;if(bgmSrc)audioEngine.playBgm(bgmSrc);else audioEngine.stopBgm();}
+    const cue=activeTurn.audioCues?.find(c=>c.paragraphIndex===paragraphIndex);
+    if(!playSfx||!cue)return;
     const sfxSrc = cue.sfxUrl || cue.sfx;
     if (sfxSrc) {
       vnDebug("audio", `p${paragraphIndex}`, "sfx ->", sfxSrc);
@@ -597,12 +599,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       panels.setCursor(paragraphIndex);
       syncSpeechCursor(turn, paragraphIndex);
       audioEngine.setBgmAttenuation(musicAttenuationForParagraph(turn,paragraphIndex));
-      const earlierMusic = turn?.audioCues?.filter((cue) => cue.paragraphIndex <= paragraphIndex && (cue.bgmUrl || cue.bgm))
-        .sort((a, b) => b.paragraphIndex - a.paragraphIndex)[0];
-      const nextBgm = earlierMusic?.bgmUrl || earlierMusic?.bgm || turnOpeningBgm;
-      currentBgm = nextBgm;
-      if (nextBgm) audioEngine.playBgm(nextBgm);
-      else audioEngine.stopBgm();
+      if(turn){syncMusicChoices(turn,paragraphIndex);syncAudioForParagraph(turn,paragraphIndex,false);}
       void syncImageForParagraph(paragraphIndex);
     },
     onAdvance: (paragraphIndex) => {
@@ -619,7 +616,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       }
       saveCursor(paragraphIndex);
       syncSpeechCursor(turn, paragraphIndex);
-      if (turn) syncAudioForParagraph(turn, paragraphIndex);
+      if (turn){syncMusicChoices(turn,paragraphIndex);syncAudioForParagraph(turn, paragraphIndex);}
       void syncImageForParagraph(paragraphIndex);
     },
     onChoice: async (choice: VnChoice) => {
@@ -710,6 +707,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if(open){stage.toggleSkip(false);stage.holdAutoPlay();}else if(active)stage.checkAutoPlay();
   });
   imageLibrary.useHistoryEntry();
+  stage.workspace.onMusicSelection=track=>{manualMusicTrack=track;if(turn&&active)syncAudioForParagraph(turn,stage.getState().currentParagraphIndex,false);};
   stage.historyOpener=opener=>{imageLibrary.setCurrentScenePassages(stage.getBacklogEntries(),(idx)=>stage.jumpToParagraph(idx));imageLibrary.open('story',opener);};
   const imageStudio = new ImageStudio(stage.panelMount, (request) => ctx.sendToBackend(request), (enabled) => {
     ctx.sendToBackend({ type: "vn_set_config", patch: { reviewImages: enabled }, chatId: chatId() ?? "" });
@@ -992,7 +990,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     stage.toggleAutoPlay(false);
     speech.setActive(false);
     speechDock.setOverlayActive(false);
-    audioEngine.stopAll();
+    audioEngine.stopAll();currentBgm=null;turnOpeningBgm=null;turnOpeningLocation=null;manualMusicTrack=null;musicScope="";stage.workspace.setMusicTracks([],null);
     destroyOverrides();
     app.setVisible(false);
     stage.setCastTurn(null,0);
@@ -1119,6 +1117,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if (decision.kind === "same-turn" && !recovering) {
       stage.setReferenceHistory(next.referenceHistory);
       audioEngine.setBgmAttenuation(musicAttenuationForParagraph(next,decision.paragraphIndex));
+      syncMusicChoices(next,decision.paragraphIndex);syncAudioForParagraph(next,decision.paragraphIndex,false);
       loadedReadingCursor.load(next);
       // Identical cursor identity: SpeechController treats this as a no-op, so
       // a same-turn rebroadcast (e.g. an image/asset update) never replays speech.
@@ -1131,7 +1130,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     panels.setTurn(next, 0);
     const mode = requestedMode === "cyoa" && next.choices.length > 0 ? "cyoa" : "standard";
     const preserveImage = shouldPreserveImage(previous, next);
-    turnOpeningBgm = preserveImage ? currentBgm : null;
+    if(syncMusicChoices(next,0)){turnOpeningBgm=preserveImage?currentBgm:null;turnOpeningLocation=preserveImage&&loadedReadingCursor.turn?locationForPosition(loadedReadingCursor.turn,stage.getState().currentParagraphIndex):null;}
     const revised = decision.kind === "revised-turn" || recovering;
     const draft = revised ? stage.getState().draft : "";
     const restored = decision.kind === "revised-turn" || decision.kind === "same-turn" ? Math.min(decision.paragraphIndex, Math.max(0, next.paragraphs.length - 1)) : restoreReadingPosition(savedReadingPosition, next);
@@ -1147,13 +1146,14 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if (revised) stage.restoreReplyDraft(draft);
     loadedReadingCursor.load(next);
     stage.workspace.setResume(resume);
+    syncMusicChoices(next,cursor);
     panels.setCursor(cursor);
     imageStudio.setCursor(cursor);
       imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
     if (restored !== null || previewCursor!==null) speech.setCursor(speechCursorFor(next, cursor), { autoplay: false }); else syncSpeechCursor(next, 0);
     void syncImageForParagraph(cursor);
     audioEngine.setBgmAttenuation(musicAttenuationForParagraph(next,cursor));
-    if (restored === null && previewCursor===null) syncAudioForParagraph(next, 0);
+    syncAudioForParagraph(next,cursor,restored===null&&previewCursor===null);
   }
 
   function routeBackend(payload: unknown): void {
@@ -1249,6 +1249,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
 
       audioEngine.setBgmVolume(configRef.current.bgmVolume);
       audioEngine.setSfxVolume(configRef.current.sfxVolume);
+      if(turn&&active)syncAudioForParagraph(turn,stage.getState().currentParagraphIndex,false);
       speech.setSettings(configRef.current.speech);
       speechDock.setEnabled(configRef.current.speech.enabled);
       speechSettings?.setConfig(configRef.current.speech);
@@ -1293,6 +1294,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       if(turn && active)void syncImageForParagraph(stage.getState().currentParagraphIndex);
       audioEngine.setBgmVolume(configRef.current.bgmVolume);
       audioEngine.setSfxVolume(configRef.current.sfxVolume);
+      if(turn&&active)syncAudioForParagraph(turn,stage.getState().currentParagraphIndex,false);
       speech.setSettings(configRef.current.speech);
       speechDock.setEnabled(configRef.current.speech.enabled);
       speechSettings?.setConfig(configRef.current.speech);
