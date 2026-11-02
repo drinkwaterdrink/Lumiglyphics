@@ -30,3 +30,5 @@ test("inactive delivery cannot relabel the loaded prose or its saved cursor", ()
   expect(loaded.position(0)?.key.assistantMessageId).toBe(b.messageId);
   expect(loaded.position(10)).toBeNull();
 });
+
+test("a future plan revision cannot restore into an older projection",()=>{expect(restoreReadingPosition({...saved,key:{...saved.key,revision:4}},turn)).toBeNull();});

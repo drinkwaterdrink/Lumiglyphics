@@ -10,7 +10,7 @@
 
 **Spec:** `docs/audits/2026-11-01-main-3-gpt-audit.md` (findings A01-A10 and selected-suggestion design decisions).
 
-**Execution status:** Tasks 0 and 1 published as beta.110 (`8981bd3`) on `codex/audited-improvements`. Task 2 is published as beta.111 (`6240bba`). Task 2A is included in the beta.112 release checkpoint as the Cast/DNA repair in `2026-11-01-cast-dna-repair.md`; Tasks 3-4 are included in the beta.113 checkpoint; original Tasks 5-11 remain pending. See `docs/implementation/2026-11-01-audit-progress.md` for evidence, additional bugs and known baseline browser failures.
+**Execution status:** Tasks 0 and 1 published as beta.110 (`8981bd3`) on `codex/audited-improvements`. Task 2 is published as beta.111 (`6240bba`). Task 2A is included in the beta.112 release checkpoint as the Cast/DNA repair in `2026-11-01-cast-dna-repair.md`; Tasks 3-4 are included in the beta.113 checkpoint; Task 5 is included in the beta.114 checkpoint; original Tasks 6-11 remain pending. See `docs/implementation/2026-11-01-audit-progress.md` for evidence, additional bugs and known baseline browser failures.
 
 ## Global constraints
 
@@ -135,10 +135,10 @@ Task 2A is included in the beta.112 release checkpoint; prior beta.111 does not 
 
 **Interfaces:** search indexes human labels/descriptions/keywords plus SETTINGS_FIELD_PAGES, not just internal field names. Resume model includes exact turn identity, index, revealed excerpt and location/speaker. Picture explanation uses a bounded structured diagnostic DTO (cue/source/template/framing/cache/review reasons), never raw chain-of-thought/debug dumps.
 
-- [ ] Keep existing routes/aliases and field ownership; group settings home into Reading, Look & sound, Artwork, Setup & advanced. Preserve draft edits, Apply/reset, deep links and Cast management's Story ownership. Search opens the exact field with focus.
-- [ ] Resume card shows Continue, a previous revealed excerpt and optional Back to latest. No LLM recap. Suppress on routine same-turn asset updates. Stale source/swipe/revision and corrupt/out-of-range position never restore blindly; disable autoplay on resume.
-- [ ] Why this picture shows recorded structured reasons and human wording; missing reason says Not recorded. No inference from hidden story data, provider keys, raw external context or verbose logs.
-- [ ] Test saved position after edit/swipe, switching users/chats, empty/unavailable presentation, keyboard search/clear and mobile focus. Run settings resilience/workspace, reading-position and image inspector checks.
+- [x] Keep existing routes/aliases and field ownership; group settings home into Reading, Look & sound, Artwork, Setup & advanced. Preserve draft edits, Apply/reset, deep links and Cast management's Story ownership. Search opens the exact field with focus.
+- [x] Resume card shows Continue, a previous revealed excerpt and optional Back to latest. No LLM recap. Suppress on routine same-turn asset updates. Stale source/swipe/revision and corrupt/out-of-range position never restore blindly; disable autoplay on resume.
+- [x] Why this picture shows recorded structured reasons and human wording; missing reason says Not recorded. No inference from hidden story data, provider keys, raw external context or verbose logs.
+- [x] Test saved position after edit/swipe, switching users/chats, empty/unavailable presentation, keyboard search/clear and mobile focus. Run settings resilience/workspace, reading-position and image inspector checks.
 
 ## Task 6 — Prompt editing and version comparison (10, 12, 13; recommended 14)
 

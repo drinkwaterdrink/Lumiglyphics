@@ -1,3 +1,4 @@
+import {ResumeCard,type ResumeCardModel} from './resume-card.js';
 import { SETTINGS_PAGES } from '../settings/routes.js';
 import { APERTURE_ICONS } from '../theme/aperture-theme.js';
 
@@ -36,6 +37,7 @@ export const readerIcon = (name: string): string => `<svg viewBox="0 0 24 24" ar
 /** One navigation owner; tool owners still own their data and operations.
  * No story text, model requests or configuration copies are kept here. */
 export class ReaderWorkspace {
+  private readonly resumeCard: ResumeCard;
   private readonly nav: HTMLElement;
   private readonly header: HTMLElement;
   private readonly panel: HTMLElement;
@@ -69,6 +71,7 @@ export class ReaderWorkspace {
   constructor(private readonly shell: HTMLElement, private readonly reader: HTMLElement,
     private readonly pause: () => void, private readonly focusReader: () => void,
     private readonly onExit?: () => void) {
+    this.resumeCard=new ResumeCard(focusReader);shell.append(this.resumeCard.element);
     shell.dataset.vnReaderFirst = 'true';
     const wrapper = document.createElement('div');
     wrapper.innerHTML = `<nav data-vn-navigation aria-label="Reader navigation">
@@ -416,6 +419,7 @@ export class ReaderWorkspace {
     b.querySelector('span')!.textContent = enabled ? 'Show navigation' : 'Focus';
     this.focusReader();
   }
+  setResume(model:ResumeCardModel|null):void {this.resumeCard.show(model);}
   setCaption(text: string): void {
     const el = this.header.querySelector<HTMLElement>('[data-reader-caption]');
     const strong = this.header.querySelector<HTMLElement>('[data-reader-caption-strong]');
@@ -440,7 +444,7 @@ export class ReaderWorkspace {
     const rect=this.shell.getBoundingClientRect(),scale=rect.height>0?this.shell.clientHeight/rect.height:1;
     this.shell.style.setProperty('--reader-keyboard-inset',`${Math.max(0,rect.bottom-viewport.height-viewport.offsetTop)*scale}px`);
   }
-  suspend():void {if(this.search.open)this.search.close();this.close(false);}
+  suspend():void {this.resumeCard.clear();if(this.search.open)this.search.close();this.close(false);}
   private syncReader(): void {
     const covered = this.isOpen() && Boolean(this.media?.matches);
     this.reader.inert = covered;
@@ -499,6 +503,7 @@ export class ReaderWorkspace {
   destroy(): void {
     if(this.destroyed)return;
     this.close(false); if (this.search.open) this.search.close(); this.destroyed = true;
+    this.resumeCard.destroy();
     this.abort.abort(); this.media?.removeEventListener?.('change', this.onMedia); this.reader.inert = false; this.reader.removeAttribute('aria-hidden');
     for(const element of this.shell.querySelectorAll<HTMLElement>('[data-vn-panel-layer],[data-vn-speech-dock]'))element.inert=false;
     this.nav.remove(); this.header.remove(); this.panel.remove(); this.search.remove(); this.apertureOverlay.remove(); this.routeBar.remove(); this.tools.clear(); this.homes.clear();

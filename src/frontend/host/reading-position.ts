@@ -10,11 +10,12 @@ export class LoadedReadingCursor {
     return { version: 1, key: { chatId: turn.chatId, assistantMessageId: turn.messageId, swipeId: turn.swipeId, sourceFingerprint: turn.sourceFingerprint, revision: turn.revision }, paragraphIndex };
   }
 }
-export function restoreReadingPosition(saved: unknown, current: Pick<TurnView, "chatId" | "messageId" | "swipeId" | "sourceFingerprint" | "paragraphs">): number | null {
+export function restoreReadingPosition(saved: unknown, current: Pick<TurnView, "chatId" | "messageId" | "swipeId" | "sourceFingerprint" | "paragraphs"> & { revision?: number }): number | null {
   const parsed = ReadingPositionSchema.safeParse(saved);
   if (!parsed.success) return null;
   const { key, paragraphIndex } = parsed.data;
   return key.chatId === current.chatId && key.assistantMessageId === current.messageId
     && String(key.swipeId ?? 0) === String(current.swipeId ?? 0) && key.sourceFingerprint === current.sourceFingerprint
+    && (current.revision === undefined || key.revision <= current.revision)
     && paragraphIndex < current.paragraphs.length ? paragraphIndex : null;
 }

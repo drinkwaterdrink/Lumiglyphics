@@ -26,3 +26,14 @@ export function imageDiagnostic(cue: VisualCue | undefined, failed: boolean): Im
   if (failed) return { ...common, status: 'generation_failed', explanation: 'Subject checks did not identify a missing appearance. Inspect the request and technical error; changing the subject may not fix a provider or preparation failure.' };
   return { ...common, status: cue.imageTemplate?.subjectMode === 'none' ? 'no_people' : 'resolved', explanation: cue.imageTemplate?.subjectMode === 'none' ? 'This template does not need character appearance or character references.' : 'A visual subject is available. This does not guarantee provider support or image quality.' };
 }
+
+/** Versioned display projection. It deliberately cannot carry prompts, secrets or raw reasoning. */
+export type PictureExplanation={version:1;cue?:{kind:'flattened_scene'|'background'|'sprite';paragraphIndex:number};template?:string;framing?:import('./image-templates.js').ImageTemplate['framing'];selection?:'manual';identity?:NonNullable<import('./image-templates.js').VisualBrief['subjectPreparation']>['identitySource'];sources:string[];cache?:'reused'|'provider';review?:import('./image-review.js').ImageRequestRecord['state']};
+export function pictureExplanation(input:{cue?:VisualCue|undefined;metadata?:import('./image-templates.js').ImagePromptMetadata|undefined;reviewState?:import('./image-review.js').ImageRequestRecord['state']|undefined;cached?:boolean}):PictureExplanation {
+ const {cue,metadata,reviewState,cached}=input;
+ const sourceLabels:Record<string,string>={'scene context':'Scene context','saved appearance':'Saved appearance','character DNA matrix':'Character DNA','named cast and persona appearance snapshot':'Visible cast snapshot','manual subject correction':'Manual subject correction','manual artwork replacement':'Manual artwork replacement'};
+ const template=metadata?.template??cue?.imageTemplate;
+ const sources=[...new Set((metadata?.brief.sources??cue?.visualSources??[]).slice(0,24).map(source=>sourceLabels[source]).filter((value):value is string=>Boolean(value)))];
+ const identity=metadata?.brief.subjectPreparation?.identitySource;
+ return {version:1,sources,...(cue?{cue:{kind:cue.kind,paragraphIndex:cue.paragraphIndex}}:{}),...(template?{template:template.name.slice(0,80),framing:template.framing}:{}),...(metadata?.selectionReason==='Manual template selection'||cue?.imageTemplateReason==='Manual template selection'?{selection:'manual' as const}:{}),...(identity?{identity}:{}),...(cached===undefined?{}:{cache:cached?'reused' as const:'provider' as const}),...(reviewState?{review:reviewState}:{})};
+}

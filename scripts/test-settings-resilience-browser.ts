@@ -70,7 +70,11 @@ try{
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true,`settings fit ${width}px`);
   if(width===390){const contrast=await settings.locator('[data-status]').evaluate((element,light)=>{
     const luminance=(rgb:number[])=>rgb.map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i]!,0);
-    const bg=luminance((light?[246,247,250]:[8,9,13]).map(v=>v/255)),previous=(element as HTMLElement).dataset.kind;
+    // APERTURE owns this panel's backdrop, independently of the native host theme.
+    const backing=getComputedStyle((element.getRootNode() as ShadowRoot).host).backgroundColor;
+    const backingNumbers=(backing.match(/[\d.]+/g)??[]).map(Number);
+    if(backingNumbers.length<3||(backingNumbers[3]!==undefined&&backingNumbers[3]!==1))throw new Error('Expected an opaque settings backing surface');
+    const bg=luminance(backingNumbers.slice(0,3).map(v=>v/255)),previous=(element as HTMLElement).dataset.kind;
     const result=['saved','dirty','saving','error'].map(kind=>{(element as HTMLElement).dataset.kind=kind;const color=getComputedStyle(element).color,numbers=(color.match(/[\d.]+/g)??[]).slice(0,3).map(Number),fg=luminance(color.startsWith('color(')?numbers:numbers.map(v=>v/255));return {kind,ratio:(Math.max(fg,bg)+.05)/(Math.min(fg,bg)+.05)};});
     if(previous)(element as HTMLElement).dataset.kind=previous;return result;
    },light);for(const state of contrast)assert.ok(state.ratio>=4.5,`${state.kind} status contrast on ${light?'light':'dark'} host: ${state.ratio}`);}

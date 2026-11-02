@@ -29,7 +29,7 @@ try{
   await page.waitForFunction(()=>(window as any).hostFixture.sent.some((m:any)=>m.type==='vn_asset_ready'&&m.imageId==='new'));
   assert.equal(await page.evaluate(()=>(window as any).hostFixture.sent.filter((m:any)=>m.type==='vn_asset_ready').length),2,'each decoded replacement gets its own acknowledgement');
   await page.evaluate(()=>{const f=(window as any).hostFixture;f.stage().toggleSkip(true);});
-  await page.getByRole('button',{name:'Back to chat',exact:true}).click();
+  await page.getByRole('button',{name:'Back to Lumiverse chat',exact:true}).click();
   const closed=await page.evaluate(()=>(window as any).hostFixture.stage().getState().currentParagraphIndex);await page.waitForTimeout(300);
   assert.equal(await page.evaluate(()=>(window as any).hostFixture.stage().getState().currentParagraphIndex),closed,'closing stops Skip');
   // The external review uses the actual controller/window bridge with the reader closed.

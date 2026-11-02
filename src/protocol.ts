@@ -131,6 +131,7 @@ export const REFERENCE_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/
 export type ImageVersionView = import('./shared/image-version-history.js').ImageVersion;
 
 export type AssetView = {
+  explanation?: import("./shared/image-diagnostics.js").PictureExplanation;
   failureId?: string;
   stageAsset?: import("./shared/cast-composition.js").StageAssetMetadata;
   diagnostic?: ImageDiagnostic;

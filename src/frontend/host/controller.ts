@@ -1,3 +1,4 @@
+import {resumeCardModel} from '../stage/resume-card.js';
 import {DnaRequestSchema,DNA_FIELD_LABELS,type DnaRequest,type DnaField} from '../../shared/character-dna-workflow.js';
 import {inspectorState,pictureStateSummary} from '../image-review/inspector-model.js';
 import {scopedPictureOperations,type LocalPictureOperations} from '../image-review/local-operations.js';
@@ -605,6 +606,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       void syncImageForParagraph(paragraphIndex);
     },
     onAdvance: (paragraphIndex) => {
+      stage.workspace.setResume(null);
       imageStudio.setCursor(paragraphIndex);
       imageLibrary.setCurrentScenePassages(stage.getBacklogEntries(), (idx) => stage.jumpToParagraph(idx));
       imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
@@ -1101,11 +1103,13 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     });
     if (decision.kind === "none") return;
     if (decision.kind === "planning") {
+      stage.workspace.setResume(null);
       speech.setCursor(null);
       stage.setPhase("planning");
       return;
     }
     if (decision.kind === "error") {
+      stage.workspace.setResume(null);
       stage.stopPreparationPreview();
       speech.setCursor(null);
       reportStageError(describePlanningFailure(next));
@@ -1132,6 +1136,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     const draft = revised ? stage.getState().draft : "";
     const restored = decision.kind === "revised-turn" || decision.kind === "same-turn" ? Math.min(decision.paragraphIndex, Math.max(0, next.paragraphs.length - 1)) : restoreReadingPosition(savedReadingPosition, next);
     const cursor = previewCursor ?? restored ?? 0;
+    const resume = !loadedReadingCursor.turn && previewCursor===null && restored!==null ? resumeCardModel(savedReadingPosition,next) : null;
     if (restored !== null || previewCursor!==null) { stage.toggleAutoPlay(false); stage.toggleSkip(false); }
     stage.clearPreparationPreview();
     stage.showReaderText();
@@ -1141,6 +1146,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     stage.workspace.setAttention(computeReviewAttention(next,localPictureOperations));
     if (revised) stage.restoreReplyDraft(draft);
     loadedReadingCursor.load(next);
+    stage.workspace.setResume(resume);
     panels.setCursor(cursor);
     imageStudio.setCursor(cursor);
       imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
@@ -1235,7 +1241,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if (type === "vn_state" && message.type === "vn_state") {
       if (message.chatId !== chatId() || (message.requestId !== undefined && message.requestId !== stateRequestId)) return;
       configRef.current = message.config;
-      savedReadingPosition = message.readingPosition ?? savedReadingPosition;
+      savedReadingPosition = message.readingPosition ?? null;
       imageStudio.setReview(message.config.reviewImages);
       imageStudio.setConfig(message.config);
       imageBridge.fit(message.config.sceneImageFit);

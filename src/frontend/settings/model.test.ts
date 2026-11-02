@@ -420,3 +420,9 @@ describe("settings search", () => {
     expect(searchSettings(entries, "s", 2)).toHaveLength(2);
   });
 });
+
+ test("settings search includes the visible description without exposing config values", () => {
+  expect(searchSettings([{id:'resolution', label:'Default image resolution', section:'pictures', description:'Gracefully uses the highest available size.'}], 'gracefully').map(e=>e.id)).toEqual(['resolution']);
+ });
+
+test("explicit setting keywords rank above broad page descriptions",()=>{expect(searchSettings([{id:'portraits',label:'Cast portraits',section:'look',description:'Appearance'},{id:'characters',label:'Character appearance',section:'characters',keywords:'cast'}],'cast appearance')[0]?.id).toBe('characters');});

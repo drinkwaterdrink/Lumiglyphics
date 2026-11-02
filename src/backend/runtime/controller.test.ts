@@ -1292,3 +1292,11 @@ test('cast-mode planning uses shared background and portrait slots and keeps rev
  expect(view.assets[1]?.stageAsset?.character).toBe('Mira');expect(textCalls).toBe(1);
  f.request({type:'vn_view',chatId:'chat',open:false},user);
 });
+
+test('turn assets carry bounded recorded picture explanations',()=>{
+ const record:StoredTurnRecord={schemaVersion:1,speaker:'Mira',status:'ready',plan,jobs:[generatedJob()],updatedAt:now};
+ const asset=turnView(record).assets[0]!;
+ expect(asset.explanation).toMatchObject({version:1,cache:'provider'});
+ expect(asset.explanation?.cue?.paragraphIndex).toBe(0);
+ expect(JSON.stringify(asset.explanation)).not.toContain('quiet library at night');
+});

@@ -24,3 +24,13 @@ test('replan protocol rejects unsupported versions, extra fields and unbounded r
  expect(isFrontendRequest({...request,prompt:'injected'})).toBe(false);
  expect(isFrontendRequest({...request,requestId:'x'.repeat(101)})).toBe(false);
 });
+
+import {pictureExplanation} from './image-diagnostics.js';
+import type {ImagePromptMetadata} from './image-templates.js';
+test('picture explanation projects recorded decisions without arbitrary context or reasoning',()=>{
+ const metadata={template:{name:'Portrait',framing:'upper body',subjectMode:'one'},selectionReason:'private raw reasoning',brief:{sources:['scene context','saved appearance','private lore secret'],subjectPreparation:{identitySource:'saved appearance'}}} as ImagePromptMetadata;
+ const result=pictureExplanation({cue,metadata,reviewState:'review',cached:true});
+ expect(result).toMatchObject({template:'Portrait',framing:'upper body',cache:'reused',review:'review',identity:'saved appearance',sources:['Scene context','Saved appearance']});
+ expect(JSON.stringify(result)).not.toContain('private');expect(JSON.stringify(result)).not.toContain('black hair');expect(result.selection).toBeUndefined();
+});
+test('older pictures report unrecorded reasons instead of inventing them',()=>{expect(pictureExplanation({})).toEqual({version:1,sources:[]});});

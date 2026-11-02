@@ -1,7 +1,7 @@
 import {resolveImagePromptProfile,promptProfileSummary} from "../../shared/image-prompt-profile.js";
 import {compileDisplayRules} from '../../shared/display-rules.js';
 import { createUiId } from "../request-id.js";
-import {SETTINGS_PAGES,SETTINGS_FIELD_PAGES,settingsPage,type SettingsPageId} from "./routes.js";
+import {SETTINGS_PAGES,SETTINGS_HOME_GROUPS,SETTINGS_FIELD_PAGES,settingsPage,type SettingsPageId} from "./routes.js";
 import {WORKSPACE_CSS} from "./workspace-css.js";
 import {APERTURE_THEME_CSS} from "../theme/aperture-theme.js";
 import {PresentationRulesPanel} from './presentation-rules.js';
@@ -641,8 +641,8 @@ export class VisualNovelSettingsPanel {
               <div class="settings-intro-foot"><span data-aperture-theme-status>LIGHT MODE / ACTIVE</span><span>THE WORLD IS YOURS TO FRAME ✦</span></div>
             </div>
             <label data-check><input type="checkbox" name="enabled"><span>Enable Lumiglyphics<small>All chats</small></span></label>
-            <div class="section-head" style="margin: 20px 0 11px; font-weight:650; font-size:12px;">Adjust your experience <span class="micro" style="opacity:0.7;">6 CATEGORIES</span></div>
-            <div data-home-categories class="settings-menu">${SETTINGS_SECTIONS.map(section=>`<button type="button" data-page-link="${section.id==='sound'?'audio':section.id}">${icon(ICONS[section.id])}<span><b>${esc(section.label)}</b><small>${esc(section.blurb)}</small></span><span aria-hidden="true">›</span></button>`).join('')}</div>
+            <div class="section-head" style="margin: 20px 0 11px; font-weight:650; font-size:12px;">Adjust your experience <span class="micro" style="opacity:0.7;">4 GROUPS</span></div>
+            <div data-home-categories>${SETTINGS_HOME_GROUPS.map(group=>`<section data-settings-home-group><h2 style="font-size:1rem;margin:1.2rem 0 .5rem">${esc(group.title)}</h2><div class="settings-menu">${group.sections.map(id=>{const section=SETTINGS_SECTIONS.find(s=>s.id===id)!;return `<button type="button" data-page-link="${id==='sound'?'audio':id}">${icon(ICONS[id])}<span><b>${esc(section.label)}</b><small>${esc(section.blurb)}</small></span><span aria-hidden="true">›</span></button>`;}).join('')}</div></section>`).join('')}</div>
             <div style="margin-top:16px"><button type="button" data-open-preview>Open reader</button><small style="display:block;margin-top:6px;opacity:0.75">Opening the reader can prepare the current reply using your existing settings.</small></div>
           </section>
           ${pane("reading", `
@@ -1130,7 +1130,25 @@ export class VisualNovelSettingsPanel {
       const section = element.closest<HTMLElement>("[data-pane]")!.dataset.pane as SettingsSectionId;
       const id = `s${index++}`;
       this.searchTargets.set(id, element);
-      entries.push({ id, label: element.dataset.findLabel!, section, keywords: element.dataset.find ?? "" });
+      const name=element.matches('[name]')?element.getAttribute('name'):element.querySelector('[name]')?.getAttribute('name');
+      const page=settingsPage(element.closest<HTMLElement>('[data-workspace-page]')?.dataset.workspacePage ?? (name && SETTINGS_FIELD_PAGES[name as keyof VisualNovelConfig]) ?? section);
+      // Index visible copy, never control values (which may contain credentials or private context).
+      const description=Array.from(element.querySelectorAll('small, [data-help]')).filter(node=>node.closest('[data-find-label]')===element).map(node=>node.textContent??'').join(' ').slice(0,2000);
+      entries.push({ id, label: element.dataset.findLabel!, section, description: `${description} ${page.title} ${page.description}`, keywords: element.dataset.find ?? "" });
+    }
+    for (const control of this.root.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input[name], select[name], textarea[name]')) {
+      const pageId=SETTINGS_FIELD_PAGES[control.name as keyof VisualNovelConfig];
+      if (!pageId) continue;
+      const field=control.closest<HTMLElement>('[data-find-label]');
+      if (field && new Set(Array.from(field.querySelectorAll('[name]')).map(node=>node.getAttribute('name'))).size===1) continue;
+      const label=control.labels?.[0];
+      const labelCopy=(label?.querySelector('span,legend')??label)?.cloneNode(true) as HTMLElement|undefined;
+      labelCopy?.querySelectorAll('small,input,select,textarea,button').forEach(node=>node.remove());
+      const humanLabel=control.getAttribute('aria-label') ?? labelCopy?.textContent;
+      if (!humanLabel?.trim()) continue;
+      const page=settingsPage(pageId),id=`s${index++}`;
+      this.searchTargets.set(id,control);
+      entries.push({id,label:humanLabel.trim().slice(0,160),section:page.section,description:`${label?.querySelector('small')?.textContent??''} ${page.title} ${page.description}`});
     }
     const voice = this.root.querySelector<HTMLElement>("[data-pane=\"voice\"]")!;
     if (this.voiceMounted) {

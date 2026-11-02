@@ -41,3 +41,11 @@ export const SETTINGS_FIELD_PAGES={
  includeSimTrackerContext:'context',simTrackerMappings:'context',contextSources:'context',includeRecentMessages:'context',includeCharacterContext:'context',includePersonaContext:'context',includeLorebookContext:'context',customPlannerInstructions:'context',
  enabled:'home',debugLogging:'storage',showReplyCost:'reading',customCss:'css',ignoredTags:'filtering',displayRegexRules:'filtering',audioDirectory:'storage'
 } as const satisfies Record<keyof VisualNovelConfig,SettingsPageId>;
+
+/** Home organization only: existing page aliases and ownership remain stable. */
+export const SETTINGS_HOME_GROUPS = [
+ {title:'Reading', sections:['reading']},
+ {title:'Look & sound', sections:['look','sound']},
+ {title:'Artwork', sections:['pictures','characters']},
+ {title:'Setup & advanced', sections:['connections','advanced']},
+] as const;

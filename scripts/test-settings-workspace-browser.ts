@@ -15,6 +15,7 @@ try{
  assert.equal(await settings.locator('[data-home]').isVisible(),true);
  assert.equal(await settings.locator('[data-section-select]').count(),0);
  assert.equal(await settings.locator('[data-home-categories] button').count(),7);
+ assert.deepEqual(await settings.locator('[data-settings-home-group] h2').allTextContents(),['Reading','Look & sound','Artwork','Setup & advanced']);
  await mkdir('.cache/settings-workspace',{recursive:true});
  await page.screenshot({path:'.cache/settings-workspace/home-mobile.png',fullPage:true});
  await settings.locator('[data-home-categories] [data-page-link="pictures"]').click();
@@ -35,6 +36,15 @@ try{
  await settings.locator('[data-search-result]').first().click();
  assert.equal(await settings.locator('[name="customCss"]').isVisible(),true);
  assert.equal(await settings.locator('[name="customCss"]').evaluate(el=>el===el.getRootNode().activeElement),true);
+ await settings.getByRole('searchbox',{name:'Search Lumiglyphics',exact:true}).fill('gracefully');
+ await settings.getByRole('searchbox',{name:'Search Lumiglyphics',exact:true}).press('ArrowDown');
+ await settings.locator('[data-search-result]').first().press('Enter');
+ await settings.locator('[name="imageResolutionPreference"]').evaluate(el=>new Promise<void>((resolve,reject)=>{const end=performance.now()+1500;const check=()=>{if(el===el.getRootNode().activeElement)resolve();else if(performance.now()>end)reject(Error('description search must focus exact mapped field'));else requestAnimationFrame(check);};check();}));
+ await settings.getByRole('searchbox',{name:'Search Lumiglyphics',exact:true}).fill('CSS');
+ await settings.getByRole('searchbox',{name:'Search Lumiglyphics',exact:true}).press('Escape');
+ assert.equal(await settings.locator('[data-search-results]').isVisible(),false);
+ await settings.getByRole('searchbox',{name:'Search Lumiglyphics',exact:true}).fill('CSS');
+ await settings.locator('[data-search-result]').first().click();
  // A later Stay cancels the old Save-and-leave intention without cancelling its save.
  await page.evaluate(()=>(window as any).settingsFixture.ackMode='hold');
  await settings.locator('[name="customCss"]').fill('/* pending navigation */');

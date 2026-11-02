@@ -1,3 +1,4 @@
+import {describePictureExplanation} from './picture-explanation.js';
 import {sceneImageCandidatesFor,loadVnImageCandidates} from '../stage/image-loader.js';
 import type {ImageRetryQueueView} from '../../shared/image-retries.js';
 import type {LocalPictureOperations} from './local-operations.js';
@@ -590,7 +591,8 @@ export class ImageStudio {
     const panelPicture = document.createElement('div');
     panelPicture.className = 'studio-tab-panel';
     panelPicture.dataset.tabPanel = 'picture';
-    panelPicture.append(context, versionsContainer, detail, this.brief.element, this.el('[data-recovery]').closest('details')!);
+    const explanation=document.createElement('details');explanation.dataset.pictureExplanation='';explanation.innerHTML='<summary>Why this picture?</summary><p data-picture-explanation-text style="white-space:pre-wrap;overflow-wrap:anywhere"></p>';
+    panelPicture.append(explanation,context, versionsContainer, detail, this.brief.element, this.el('[data-recovery]').closest('details')!);
 
     const panelPrompt = document.createElement('div');
     panelPrompt.className = 'studio-tab-panel';
@@ -1013,6 +1015,7 @@ export class ImageStudio {
     templateSelect.disabled = !asset || Boolean(record && (this.rebuilding.has(record.requestId) || this.submitted.has(record.requestId)));
     this.el<HTMLButtonElement>("[data-use-template]").hidden = record?.state !== "review";
     this.el<HTMLButtonElement>("[data-use-template]").disabled = record?.state !== 'review' || !editable || !this.templates.some(t => t.id === templateSelect.value);
+    this.el<HTMLElement>('[data-picture-explanation-text]').textContent=describePictureExplanation(asset?.explanation)+(asset?.previousImage?'\nThe previous picture remains visible while its replacement is prepared.':'');
     const metadata = record?.imagePromptMetadata;
     this.el<HTMLElement>("[data-provenance]").textContent = metadata ? `${metadata.template.name} · ${metadata.template.category} · ${metadata.format === "tags" ? "Tags" : "Description"}\n${metadata.selectionReason}\nFraming: ${metadata.brief.framing}; subjects: ${metadata.brief.subjectMode === "none" ? "no people" : metadata.brief.subjectMode === "ensemble" ? "full scene cast, including persona when present" : "one character"}; references: ${metadata.brief.referencePolicy}\nSimTracker: ${metadata.trackerStatus}${metadata.trackerSourceMessageId ? ` (message ${metadata.trackerSourceMessageId})` : ""}\nSources: ${metadata.brief.sources.join(", ") || "Story scene"}${metadata.brief.conflicts.length ? `\nConflicts: ${metadata.brief.conflicts.join("; ")}` : ""}` : "Template and source metadata are unavailable for this older request.";
     if(metadata?.presentationRuleTrace)this.el<HTMLElement>("[data-provenance]").textContent+=`\nTemplate preferences:\n${metadata.presentationRuleTrace.summary}`;

@@ -20,7 +20,7 @@ import { readerPresentationFor } from "./entity-projection.js";
 import { modelOutputParameters } from './template-output.js';
 import { correctVisualSubject } from "./subject-resolution.js";
 import { CorrectImageSubjectRequestSchema, SetCardRoleRequestSchema, ReplanTurnRequestSchema, RecoverImagesRequestSchema } from "../../protocol.js";
-import { imageDiagnostic } from '../../shared/image-diagnostics.js';
+import { imageDiagnostic, pictureExplanation } from '../../shared/image-diagnostics.js';
 import type {
   ChatMessageDTO,
   GenerationEndedPayloadDTO,
@@ -496,11 +496,13 @@ function assetView(record: StoredTurnRecord, job: StoredTurnRecord["jobs"][numbe
   const versions = normalizeImageVersionHistory(record.previousVersions)[job.jobId];
   const cue = record.plan.visualCues.find((candidate) => candidate.assetJobId === job.jobId)
     ?? record.plan.cacheCues?.find((candidate) => candidate.assetJobId === job.jobId);
+  const explanationRequest=record.imageRequests?.filter(request=>request.jobId===job.jobId).at(-1);
   const template = record.imageRequests?.filter(r => r.jobId === job.jobId && r.state === "approved").at(-1)?.imagePromptMetadata?.template ?? cue?.imageTemplate;
   const role = template?.id === 'manga-page' ? 'scene' : template?.category === 'portrait' ? 'portrait' : template?.category === 'environment' && template.subjectMode === 'none' ? 'background' : 'scene';
   return {
     ...(cue ? {stageAsset:{role,...(cue.imageTemplateReason==='Manual template selection'||(cue.visualSources?.includes('manual subject correction')||cue.visualSources?.includes('manual artwork replacement'))?{manual:true}:{}),sceneId:cue.sceneId,sceneRevision:cue.sceneRevision,...(role==='portrait'&&cue.character?{character:cue.character,attire:cue.resolvedAttire??cue.attire??null}:{})}} : {}),
     jobId: job.jobId,
+    explanation: pictureExplanation({cue,metadata:explanationRequest?.imagePromptMetadata,reviewState:explanationRequest?.state,cached:job.provider===CACHE_JOB_PROVIDER}),
     diagnostic: {...imageDiagnostic(cue, job.status === 'failed'),...(record.plannerMode ? {planner:record.plannerMode} : {})},
     cueId: cue?.cueId ?? job.jobId,
     ...((record.imageRequests?.filter(r => r.jobId === job.jobId && r.state === "approved").at(-1)?.imagePromptMetadata?.template ?? cue?.imageTemplate)?.id === "manga-page" ? { presentation: "page" as const } : {}),

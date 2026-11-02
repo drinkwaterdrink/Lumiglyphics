@@ -1128,6 +1128,7 @@ export class VnStage {
   }
 
   reset(): void {
+    this.workspace.setResume(null);
     this.resetDisplayEvaluation();
     this.sceneLoad?.abort();this.sceneLoad=null;
     this.workspace.suspend();

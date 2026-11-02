@@ -418,6 +418,8 @@ export type SettingsSearchEntry = {
   section: SettingsSectionId;
   /** Extra words that should also find this setting. */
   keywords?: string;
+  /** Visible explanatory copy only; never stored settings or secrets. */
+  description?: string;
 };
 
 function searchWords(value: string): string[] {
@@ -436,11 +438,12 @@ export function searchSettings(entries: readonly SettingsSearchEntry[], query: s
   entries.forEach((entry, order) => {
     const labelWords = searchWords(entry.label);
     const sectionLabel = SETTINGS_SECTIONS.find((section) => section.id === entry.section)?.label ?? entry.section;
-    const otherWords = [...searchWords(entry.keywords ?? ""), ...searchWords(sectionLabel)];
+    const keywordWords=searchWords(entry.keywords??""),otherWords=[...searchWords(entry.description??""),...searchWords(sectionLabel)];
     let score = 0;
     for (const term of terms) {
       if (labelWords.some((word) => word.startsWith(term))) score += 3;
-      else if (otherWords.some((word) => word.startsWith(term))) score += 1;
+      else if (keywordWords.some(word=>word.startsWith(term))) score += 2;
+      else if (otherWords.some((word) => word.startsWith(term))) score += 0.5;
       else return;
     }
     if (labelWords.join(" ").startsWith(phrase)) score += 5;
