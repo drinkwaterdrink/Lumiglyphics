@@ -38,6 +38,20 @@ async function flush(): Promise<void> {
 }
 
 describe("asset scheduler", () => {
+  test('cancelling a generating shared dependent settles it without stopping its parent',async()=>{
+    const scheduler=new AssetScheduler({provider:{concurrency:1}});
+    const blocked=deferred<{imageId:string}>(),render=deferred<{imageId:string}>();
+    const first=scheduler.schedule(job('blocker','provider'),()=>blocked.promise);
+    const parent=scheduler.schedule(job('parent','provider'),()=>render.promise);
+    const dependent=scheduler.schedule({...job('dependent','provider'),promptFingerprint:'prompt-parent'},async()=>{throw new Error('A shared dependent must not execute separately');});
+    blocked.resolve({imageId:'blocker'});await first.promise;await flush();
+    expect(scheduler.get('dependent')?.status).toBe('generating');
+    expect(scheduler.cancelUnshared('dependent','Selected a saved image')).toBe(true);
+    render.resolve({imageId:'shared-image'});
+    expect((await parent.promise).imageId).toBe('shared-image');
+    const result=await Promise.race([dependent.promise,Bun.sleep(100).then(()=>null)]);
+    expect(result?.status).toBe('cancelled');
+  });
   test("applies concurrency per provider and lets another provider progress", async () => {
     const scheduler = new AssetScheduler({ slow: { concurrency: 1 }, fast: { concurrency: 1 } });
     const gate = deferred();

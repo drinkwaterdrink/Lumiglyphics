@@ -25,6 +25,12 @@ export const SetCardRoleRequestSchema=z.object({type:z.literal('vn_set_card_role
 export const ReplanTurnRequestSchema=z.object({type:z.literal('vn_replan_turn'),...recoveryScope}).strict();
 export const ContextSourcesRequestSchema = z.object({type:z.literal("vn_get_context_sources"),chatId:z.string().min(1).max(256),requestId:z.string().min(1).max(100)}).strict();
 export const RecoverImagesRequestSchema=z.object({type:z.literal('vn_recover_images'),...recoveryScope,revision:z.number().int().nonnegative(),action:z.enum(['stop','retry'])}).strict();
+const imageOperationScope = {chatId:z.string().min(1).max(128),messageId:z.string().min(1).max(128),sourceFingerprint:z.string().min(1).max(256)};
+const imageOperationEdits = z.object({prompt:z.string().trim().min(1).max(65000).optional(),negativePrompt:z.string().max(65000).optional(),parameters:z.record(z.string(),z.unknown()).optional()}).strict();
+const imagePromptOperation = {guidance:z.string().max(400).optional(),edits:imageOperationEdits.optional()};
+export const RewriteImagePromptRequestSchema = z.object({type:z.enum(['vn_regenerate_image_prompt','vn_enrich_image_prompt']),...imageOperationScope,requestId:z.string().min(1).max(100),...imagePromptOperation}).strict();
+export const PrepareImageRequestSchema = z.object({type:z.literal('vn_prepare_image'),...imageOperationScope,jobId:z.string().min(1).max(200),templateId:z.string().min(1).max(100).optional(),...imagePromptOperation,regeneratePrompt:z.boolean().optional(),promptOperation:z.enum(['rewrite','enrich']).optional()}).strict();
+export const RestorePreviousImageRequestSchema=z.object({type:z.literal('vn_restore_previous_image'),...imageOperationScope,swipeId:z.number().int().nonnegative().nullable(),revision:z.number().int().nonnegative(),jobId:z.string().min(1).max(200),versionId:z.string().min(1).max(256)}).strict();
 export type FrontendRequest =
   | QueueImageRetriesRequest
   | PresentationRuleRequest
@@ -39,10 +45,10 @@ export type FrontendRequest =
   | z.infer<typeof SetCardRoleRequestSchema>
   | { type: "vn_reading_position"; position: ReadingPosition }
   | { type: "vn_image_review"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; action: "generate" | "skip"; edits?: ImageRequestEdits }
-  | { type: "vn_prepare_image"; chatId: string; messageId: string; sourceFingerprint: string; jobId: string; templateId?: string; edits?: ImageRequestEdits; regeneratePrompt?: boolean }
+  | { type:'vn_prepare_image';chatId:string;messageId:string;sourceFingerprint:string;jobId:string;templateId?:string;edits?:ImageRequestEdits;regeneratePrompt?:boolean;promptOperation?:'rewrite'|'enrich';guidance?:string }
   | { type: "vn_regenerate_image_prompt"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; edits?: ImageRequestEdits | undefined; guidance?: string | undefined }
   | { type: "vn_enrich_image_prompt"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; guidance?: string | undefined; edits?: ImageRequestEdits | undefined }
-  | { type: "vn_restore_previous_image"; chatId: string; messageId: string; sourceFingerprint: string; jobId: string; imageId: string; imageUrl: string }
+  | z.infer<typeof RestorePreviousImageRequestSchema>
   | {
       type: "vn_reprepare_image_template";
       chatId: string;
@@ -129,13 +135,7 @@ export type FrontendRequest =
 export const REFERENCE_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
 export const REFERENCE_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/avif"]);
 
-export type ImageVersionView = {
-  versionId: string;
-  imageId: string;
-  imageUrl: string;
-  prompt?: string;
-  timestamp: string;
-};
+export type ImageVersionView = import('./shared/image-version-history.js').ImageVersion;
 
 export type AssetView = {
   failureId?: string;
@@ -273,7 +273,9 @@ export function isFrontendRequest(value: unknown): value is FrontendRequest {
   if ((value as {type?:unknown}|null)?.type === "vn_queue_image_retries") return QueueImageRetriesSchema.safeParse(value).success;
   if ((value as {type?:unknown}|null)?.type === "vn_presentation_rules") return PresentationRuleRequestSchema.safeParse(value).success;
   if (value === null || typeof value !== "object") return false;
-  if((value as {type?:unknown}).type==='vn_regenerate_image_prompt')return z.object({type:z.literal('vn_regenerate_image_prompt'),chatId:z.string().min(1).max(128),messageId:z.string().min(1).max(128),sourceFingerprint:z.string().min(1).max(256),requestId:z.string().min(1).max(100),edits:z.object({prompt:z.string().trim().min(1).max(65000).optional(),negativePrompt:z.string().max(65000).optional(),parameters:z.record(z.string(),z.unknown()).optional()}).strict().optional()}).strict().safeParse(value).success;
+  if(['vn_regenerate_image_prompt','vn_enrich_image_prompt'].includes(String((value as {type?:unknown}).type)))return RewriteImagePromptRequestSchema.safeParse(value).success;
+  if((value as {type?:unknown}).type==='vn_prepare_image')return PrepareImageRequestSchema.safeParse(value).success;
+  if((value as {type?:unknown}).type==='vn_restore_previous_image')return RestorePreviousImageRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_external_image_review") return z.object({type:z.literal("vn_external_image_review"),chatId:z.string().min(1).max(128),requestId:z.string().min(1).max(128),reviewRequestId:z.string().min(1).max(100),action:z.enum(["generate","skip"]),edits:z.object({prompt:z.string().min(1).max(65000).optional(),negativePrompt:z.string().max(65000).optional(),parameters:z.record(z.string(),z.unknown()).optional()}).strict().optional()}).strict().safeParse(value).success;
   if((value as {type?:unknown}).type==='vn_image_library')return ImageLibraryRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_cast_gallery") return CastGalleryRequestSchema.safeParse(value).success;

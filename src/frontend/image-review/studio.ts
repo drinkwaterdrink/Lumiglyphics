@@ -404,12 +404,11 @@ export class ImageStudio {
     versionsContainer.style.cssText = 'margin:8px 0;padding:10px;border-radius:12px;background:rgba(255,255,255,0.03);border:1px solid var(--edge);display:flex;flex-direction:column;gap:8px;';
     versionsContainer.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between">
-        <strong style="font-size:12px;color:var(--accent)">Previous Versions</strong>
+        <strong style="font-size:12px;color:var(--accent)" title="The latest 50 versions per picture are retained.">Previous Versions</strong>
         <small data-versions-count style="opacity:0.75;font-size:10px"></small>
       </div>
       <div data-versions-strip style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin"></div>
     `;
-    context.after(versionsContainer);
     const detail=document.createElement('p');detail.dataset.stateDetail='';
     const navigation=document.createElement('div');navigation.dataset.pictureNavigation='';
     navigation.innerHTML='<div data-picture-strip role="group" aria-label="Pictures in this reply"></div>';
@@ -596,7 +595,7 @@ export class ImageStudio {
     const panelPicture = document.createElement('div');
     panelPicture.className = 'studio-tab-panel';
     panelPicture.dataset.tabPanel = 'picture';
-    panelPicture.append(context, detail, this.brief.element, this.el('[data-recovery]').closest('details')!);
+    panelPicture.append(context, versionsContainer, detail, this.brief.element, this.el('[data-recovery]').closest('details')!);
 
     const panelPrompt = document.createElement('div');
     panelPrompt.className = 'studio-tab-panel';
@@ -913,6 +912,8 @@ export class ImageStudio {
         sourceFingerprint: this.turn.sourceFingerprint,
         jobId: this.selectedJob,
         regeneratePrompt: true,
+        promptOperation: 'enrich',
+        ...(guidance ? { guidance } : {}),
         edits,
         ...(this.el<HTMLSelectElement>('[data-template]').value ? { templateId: this.el<HTMLSelectElement>('[data-template]').value } : {})
       });
@@ -1186,21 +1187,25 @@ export class ImageStudio {
           btn.type = 'button';
           btn.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px;border-radius:8px;background:var(--vn-shell-field,rgba(0,0,0,0.3));border:1px solid var(--edge);cursor:pointer;flex-shrink:0;width:76px;text-align:center;color:inherit;font-size:10px;';
           btn.title = `Version ${idx + 1}. Click to restore as active picture.`;
-          btn.innerHTML = `
-            <img src="${ver.imageUrl}" style="width:64px;height:74px;object-fit:cover;border-radius:6px;display:block" alt="v${idx + 1}" />
-            <span style="font-weight:700">v${idx + 1}</span>
-            <span style="color:var(--accent);font-size:9px">Restore ↺</span>
-          `;
+          const thumbnail=document.createElement('img');
+          thumbnail.src=`/api/v1/images/${encodeURIComponent(ver.imageId)}`;
+          thumbnail.style.cssText='width:64px;height:74px;object-fit:cover;border-radius:6px;display:block';
+          thumbnail.alt=`v${idx+1}`;
+          const number=document.createElement('span');number.style.fontWeight='700';number.textContent=`v${idx+1}`;
+          const restoreLabel=document.createElement('span');restoreLabel.style.cssText='color:var(--accent);font-size:9px';restoreLabel.textContent='Restore ↺';
+          btn.append(thumbnail,number,restoreLabel);
+          const selectedTurn=this.turn,selectedJob=this.selectedJob;
           btn.onclick = () => {
-            if (!this.turn) return;
+            if (!selectedTurn||this.turn!==selectedTurn||this.selectedJob!==selectedJob) return;
             this.send({
               type: 'vn_restore_previous_image',
               chatId: this.turn.chatId,
               messageId: this.turn.messageId,
               sourceFingerprint: this.turn.sourceFingerprint,
               jobId: this.selectedJob,
-              imageId: ver.imageId,
-              imageUrl: ver.imageUrl
+              versionId: ver.versionId,
+              swipeId: selectedTurn.swipeId,
+              revision: selectedTurn.revision
             });
             this.setNotice(`Restoring Version ${idx + 1}...`);
           };

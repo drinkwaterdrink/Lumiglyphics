@@ -56,6 +56,25 @@ function input(mode: "off" | "compare" | "on") {
   };
 }
 
+test("outbound speaker choices include named characters and the narrator", async () => {
+  let criteria: Record<string, string> = {};
+  const api = {
+    enclave: { get: async () => "test-secret" },
+    cors: async (_url: string, request: { body: string }) => {
+      criteria = JSON.parse(request.body).questions.speaker_0.criteria;
+      return { status: 200, body: JSON.stringify(decisions) };
+    },
+  } as unknown as SpindleAPI;
+  const result = await decidePresentation(api, {
+    paragraphs: [{ index: 0, text: "Mira speaks." }], names: ["Mira"],
+    previousScene: null, config: { ...DEFAULT_CONFIG, systemOneMode: "on" },
+  });
+  assert.deepEqual(Object.keys(criteria), ["Narrator", "Mira", "unknown"]);
+  assert.ok(criteria.Mira);
+  assert.ok(criteria.Narrator);
+  assert.equal(result?.speakers.get(0), "Mira");
+});
+
 test("confident System One continuation reuses a known scene without a prose planner call", async () => {
   let plannerCalls = 0;
   const logs: string[] = [];

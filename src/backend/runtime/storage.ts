@@ -8,6 +8,7 @@ import {setupAppearance,type CastArtRecord} from '../../shared/cast-art.js';
 import { CardRoleSchema, StoredCardRoleSchema, type CardRole } from "../../shared/card-role.js";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { ReadingPositionSchema, type ReadingPosition } from "../../shared/reading-position.js";
+import {normalizeImageVersionHistory,type ImageVersionHistory} from '../../shared/image-version-history.js';
 import type { ImageRequestRecord } from "../../shared/image-review.js";
 import { safeImageHistory } from "./image-review.js";
 import { normalizeConfig, type VisualNovelConfig } from "../../config.js";
@@ -61,7 +62,7 @@ export type StoredTurnRecord = {
   jobs: AssetJob[];
   imageRequests?: ImageRequestRecord[];
   previousImages?: Record<string, { imageId: string; imageUrl: string }>;
-  previousVersions?: Record<string, Array<{ versionId: string; imageId: string; imageUrl: string; prompt?: string; timestamp: string }>>;
+  previousVersions?: ImageVersionHistory;
   error?: string;
   updatedAt: string;
   /**
@@ -758,7 +759,7 @@ export async function loadTurnRecord(
     jobs: Array.isArray(raw.jobs) ? raw.jobs.map((job) => AssetJobSchema.parse(job)) : [],
     ...(Array.isArray(raw.imageRequests) ? { imageRequests: safeImageHistory(raw.imageRequests) } : {}),
     ...(raw.previousImages && typeof raw.previousImages === "object" ? { previousImages: raw.previousImages } : {}),
-    ...(raw.previousVersions && typeof raw.previousVersions === "object" ? { previousVersions: raw.previousVersions } : {}),
+    ...(raw.previousVersions !== undefined ? { previousVersions: normalizeImageVersionHistory(raw.previousVersions) } : {}),
     ...(typeof raw.error === "string" ? { error: raw.error } : {}),
     ...(typeof raw.resolvedSourceText === "string" ? { resolvedSourceText: raw.resolvedSourceText } : {}),
     ...(raw.source && typeof raw.source === "object" && raw.source.version === 2 && typeof raw.source.rawFingerprint === "string"
@@ -1034,13 +1035,13 @@ export async function saveCorrectedAppearance(spindle:SpindleAPI,chatId:string,n
 
 
 /** Conditional writes run inside the existing queue so an obsolete operation cannot write after a newer turn. */
-export async function saveTurnRecordIfCurrent(spindle: SpindleAPI, path: string, record: StoredTurnRecord, userId: string, isCurrent: () => boolean): Promise<boolean> {
+export async function saveTurnRecordIfCurrent(spindle: SpindleAPI, path: string, record: StoredTurnRecord, userId: string | undefined, isCurrent: () => boolean): Promise<boolean> {
   let saved = false;
   await serializedWrite(scopedKey(userId, path), async () => {
     if (!isCurrent()) return;
     const next=await recordWithImageLibrary(spindle,path,record,userId);
     if(!isCurrent())return;
-    await spindle.userStorage.setJson(path, recordWithPresentation(next), { indent: 2, userId });
+    await spindle.userStorage.setJson(path, recordWithPresentation(next), { indent: 2, ...(userOptions(userId)??{}) });
     saved = isCurrent();
   });
   return saved;

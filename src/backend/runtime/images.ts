@@ -532,6 +532,8 @@ export function defaultSceneImageVerifier(spindle: SpindleAPI, userId?: string):
 }
 
 export type SceneCacheOptions = {
+  /** Controller can supersede one picture without aborting unrelated jobs. */
+  onJobCancellationReady?:(cancelJob:(jobId:string)=>void)=>void;
   /** Reviewed pictures remain independent and never populate the automatic compiler cache. */
   independentRequests?: boolean;
   disableCacheStore?: boolean;
@@ -1015,6 +1017,7 @@ export async function generateAssets(
   const castToken=castArtToken(spindle,plan.key.chatId,userId);
   const providerKey = `image:${config.imageConnectionId ?? "default"}`;
   const scheduler = new AssetScheduler({ [providerKey]: { concurrency: config.imageConcurrency } });
+  cacheOptions.onJobCancellationReady?.(jobId=>{scheduler.cancelUnshared(jobId,'A saved version replaced this picture.');});
   const cache = cacheOptions.sceneCache ?? null;
   // Provider detection also selects creation-reference formatting, even when
   // caching and image-reference anchoring are both disabled.

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { restorePreviousImage, turnView } from "./controller.js";
+import { restorePreviousImage, turnView, viewRegistry, registerVisualNovelBackend,markAssetReady } from "./controller.js";
+import {fingerprintForMessage} from './planner.js';
 import { enrichImagePrompt } from "./prompt-rewrite.js";
 import { TurnPlanSchema, type AssetJob } from "../../shared/contracts.js";
 import type { StoredChatState, StoredTurnRecord } from "./storage.js";
@@ -159,25 +160,121 @@ describe("Previous Image Versions Restoration & Guided Prompt Enricher", () => {
       log: { warn: () => {}, error: () => {} }
     };
 
+    viewRegistry().open(undefined, 'chat');
     await restorePreviousImage(spindle, {
       type: "vn_restore_previous_image",
       chatId: "chat",
       messageId: "msg-1",
       sourceFingerprint: "fp123456",
       jobId: "job-1",
-      imageId: "img-v1",
-      imageUrl: "/api/v1/images/img-v1"
+      versionId: "v_1",
+      swipeId: 0,
+      revision: 0
     });
 
     const updated = data.get(tPath) as StoredTurnRecord;
     expect(updated.jobs[0]?.imageId).toBe("img-v1");
     expect(updated.jobs[0]?.imageUrl).toBe("/api/v1/images/img-v1");
+    expect(updated.jobs[0]?.status).toBe('generated');
+    expect(updated.jobs[0]?.readyAt).toBeNull();
     // img-v2 should now be recorded in history
     expect(updated.previousVersions?.["job-1"]?.some(v => v.imageId === "img-v2")).toBe(true);
 
     // Frontend notification sent
     expect(sent.some(m => m.type === "vn_asset" && m.asset?.imageId === "img-v1")).toBe(true);
     expect(sent.some(m => m.type === "vn_turn")).toBe(true);
+  });
+
+  test('restore rejects unknown versions, old revisions and closed readers without writes', async () => {
+    const path=turnPath('chat','msg-1',0);
+    const data=new Map<string,unknown>([
+      [path,{schemaVersion:1,speaker:'Nadine',status:'ready',plan,jobs:[job('job-1','img-v2','/api/v1/images/img-v2')],previousVersions:{'job-1':[{versionId:'v_1',imageId:'img-v1',imageUrl:'/api/v1/images/img-v1',timestamp:now}]},updatedAt:now}],
+      [chatStatePath('chat'),{schemaVersion:1,activeTurnPath:path,latestScene:null,terminalContinuity:null,updatedAt:now}],
+    ]);
+    let writes=0;
+    const api:any={userStorage:{getJson:async (p:string)=>data.get(p)??null,setJson:async()=>{writes++;}},sendToFrontend:()=>{},log:{warn:()=>{}}};
+    const request={type:'vn_restore_previous_image' as const,chatId:'chat',messageId:'msg-1',sourceFingerprint:'fp123456',swipeId:0,revision:0,jobId:'job-1',versionId:'v_1'};
+    viewRegistry().open(undefined,'chat');
+    for(const patch of [{versionId:'missing'},{revision:1},{swipeId:1},{jobId:'other'},{sourceFingerprint:'stale'}]) {
+      await restorePreviousImage(api,{...request,...patch});
+    }
+    viewRegistry().close(undefined,'chat');
+    await restorePreviousImage(api,request);
+    expect(writes).toBe(0);
+  });
+
+  for(const timing of ['independent','shared','startup','pre-provider','failed-write','delayed-failed-write'])test(`restoration ownership: ${timing}`,async()=>{
+    const shared=timing==='shared'||timing==='pre-provider';
+    const chatId=`restore-race-${timing}`,userId=`restore-user-${timing}`,messageId='restore-message';
+    const text='Nadine watches the porch.\n\nNadine turns toward the door.';
+    const raceKey={...key,chatId,assistantMessageId:messageId,sourceFingerprint:fingerprintForMessage({id:messageId,content:text,swipe_id:0})};
+    const racePlan=TurnPlanSchema.parse({...structuredClone(plan),key:raceKey,
+      paragraphs:[{index:0,sourceIndex:0,text:'Nadine watches the porch.'},{index:1,sourceIndex:1,text:'Nadine turns toward the door.'}],
+      scenes:plan.scenes.map(s=>({...s,character:'Nadine',identityPrompt:'silver hair, green eyes'})),
+      visualCues:[0,1].map(i=>({...plan.visualCues[0]!,cueId:`cue-${i}`,assetJobId:`job-${i}`,paragraphIndex:i,character:'Nadine',resolvedIdentity:'silver hair, green eyes',promptDelta:!shared&&i?'looks toward the door':'watches the rain',poseExpressionId:!shared&&i?'smile':'idle'})),
+    });
+    const jobs=[0,1].map(i=>({...job(`job-${i}`,'old','/api/v1/images/old'),ownerTurnKey:raceKey,promptFingerprint:`fingerprint-${shared?0:i}`,paragraphIndex:i,status:'failed' as const,imageId:null,imageUrl:null,generatedAt:null,finishedAt:now,error:'retry'}));
+    const path=turnPath(chatId,messageId,0);
+    const data=new Map<string,any>([[path,{schemaVersion:1,speaker:'Nadine',status:'ready',plan:racePlan,jobs,previousVersions:{'job-0':[{versionId:'saved',imageId:'saved-art',imageUrl:'/api/v1/images/saved-art',timestamp:now}]},updatedAt:now}],
+      [chatStatePath(chatId),{schemaVersion:1,activeTurnPath:path,latestScene:null,terminalContinuity:null,updatedAt:now}],
+      ['config.json',{generateImages:true,reviewImages:false,imageConcurrency:2,referenceAnchoring:false,maxImagesPerTurn:2}]]);
+    const releases:Array<(value:any)=>void>=[];
+    let configPaused=false,providerPaused=false,failRestore=false,restoreWritePaused=false;
+    let releaseFailedWrite!:()=>void;
+    const failedWriteGate=new Promise<void>(resolve=>{releaseFailedWrite=resolve;});
+    let releaseConfig!:()=>void,releaseProvider!:()=>void;
+    const configGate=new Promise<void>(resolve=>{releaseConfig=resolve;});
+    const providerGate=new Promise<void>(resolve=>{releaseProvider=resolve;});
+    let handler!:(payload:unknown,userId:string)=>Promise<void>;
+    const api:any={on:()=>{},onFrontendMessage:(fn:any)=>{handler=fn;},
+      userStorage:{getJson:async(p:string,options:any)=>{
+        if(timing==='startup'&&p==='config.json'&&data.get(path).jobs[0].status==='queued'&&!configPaused){configPaused=true;await configGate;}
+        return data.get(p)??options?.fallback??null;
+      },setJson:async(p:string,v:any)=>{if(failRestore&&p===path&&v.jobs[0].imageId==='saved-art'){failRestore=false;if(timing==='delayed-failed-write'){restoreWritePaused=true;await failedWriteGate;}throw new Error('Restore write failed');}data.set(p,v);}},
+      chat:{getMessages:async()=>[{id:messageId,chat_id:chatId,content:text,is_user:false,name:'Nadine',swipe_id:0}]},
+      imageGen:{getConnection:async()=>({provider:'comfyui'}),listConnections:async()=>[{provider:'comfyui',is_default:true}],generate:()=>new Promise(resolve=>releases.push(resolve))},
+      generate:{raw:async()=>{throw new Error('Unexpected planning');}},sendToFrontend:()=>{},log:{info:()=>{},warn:()=>{},error:()=>{}}};
+    registerVisualNovelBackend(api);
+    if(timing==='pre-provider')api.imageGen.listConnections=async()=>{if(data.get(path).jobs[0].status==='queued'&&!providerPaused){providerPaused=true;await providerGate;}return [{provider:'comfyui',is_default:true}];};
+    await handler({type:'vn_retry_turn',chatId,messageId},userId);
+    try {
+      const expectedCalls=shared?1:2;
+      const early=timing==='startup'||timing==='pre-provider';
+      for(let i=0;i<100&&(early?!(configPaused||providerPaused):releases.length<expectedCalls);i++)await Bun.sleep(10);
+      if(!early)expect(releases).toHaveLength(expectedCalls);
+      else expect(configPaused||providerPaused).toBe(true);
+      const restore=()=>restorePreviousImage(api,{type:'vn_restore_previous_image',chatId,messageId,sourceFingerprint:raceKey.sourceFingerprint,swipeId:0,revision:raceKey.revision,jobId:'job-0',versionId:'saved'},userId);
+      if(timing==='failed-write'||timing==='delayed-failed-write'){
+        failRestore=true;const pendingRestore=restore();
+        // Attach rejection handling before deliberately holding a failing write.
+        const failed=pendingRestore.then(()=>null,error=>error as Error);
+        if(timing==='failed-write')expect((await failed)?.message).toBe('Restore write failed');
+        else {for(let i=0;i<100&&!restoreWritePaused;i++)await Bun.sleep(10);expect(restoreWritePaused).toBe(true);}
+        releases[0]!({imageId:'late-art',imageUrl:'/api/v1/images/late-art'});releases[1]!({imageId:'other-art',imageUrl:'/api/v1/images/other-art'});
+        if(timing==='delayed-failed-write'){await Bun.sleep(30);releaseFailedWrite();expect((await failed)?.message).toBe('Restore write failed');}
+        for(let i=0;i<100&&data.get(path).jobs[1]?.imageId!=='other-art';i++)await Bun.sleep(10);
+        expect(data.get(path).jobs[0].imageId).toBe('late-art');
+        expect(data.get(path).jobs[1].imageId).toBe('other-art');
+        return;
+      }
+      await restore();
+      expect(data.get(path).jobs[0].imageId).toBe('saved-art');
+      await markAssetReady(api,{type:'vn_asset_ready',chatId,messageId,jobId:'job-0',sourceFingerprint:raceKey.sourceFingerprint,imageId:'saved-art'},userId);
+      if(early){releaseConfig();releaseProvider();for(let i=0;i<100&&releases.length<1;i++)await Bun.sleep(10);expect(releases.length).toBeGreaterThan(0);}
+      releases[0]!({imageId:timing==='startup'?'other-art':'late-art',imageUrl:timing==='startup'?'/api/v1/images/other-art':'/api/v1/images/late-art'});
+      releases[1]?.({imageId:'other-art',imageUrl:'/api/v1/images/other-art'});
+      const otherImage=shared?'late-art':'other-art';
+      for(let i=0;i<100&&data.get(path).jobs[1]?.imageId!==otherImage;i++)await Bun.sleep(10);
+      expect(data.get(path).jobs[0].imageId).toBe('saved-art');
+      expect(data.get(path).jobs[1].imageId).toBe(otherImage);
+      expect(data.get(path).jobs[0].status).toBe('browser_ready');
+      expect(data.get(path).previousVersions['job-0'].some((v:any)=>v.imageId==='saved-art')).toBe(true);
+    } finally {
+      releaseConfig();releaseProvider();
+      releaseFailedWrite();
+      for(const release of releases)release({imageId:'cleanup',imageUrl:'/api/v1/images/cleanup'});
+      viewRegistry().close(userId,chatId);
+    }
   });
 
   test("enrichImagePrompt elevates prompt with user guidance and rich photographic details", async () => {

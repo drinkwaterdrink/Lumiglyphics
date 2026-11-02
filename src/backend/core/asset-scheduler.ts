@@ -179,7 +179,7 @@ export class AssetScheduler {
         parent.dependents = parent.dependents.filter((d) => d.job.jobId !== jobId);
       }
     }
-    if (item.job.status === "queued") {
+    if (item.job.status === "queued" || item.parentJobId) {
       item.job = AssetJobSchema.parse({
         ...item.job,
         status: "cancelled",
@@ -198,6 +198,13 @@ export class AssetScheduler {
       this.cancel(dep.job.jobId, reason);
     }
     return true;
+  }
+
+  /** A display replacement must not cancel another picture sharing this request. */
+  cancelUnshared(jobId:string,reason?:string):boolean {
+    const item=this.scheduled.get(jobId);
+    if(!item||item.dependents.length)return false;
+    return this.cancel(jobId,reason);
   }
 
   cancelTurn(predicate: (job: Readonly<AssetJob>) => boolean, reason?: string): string[] {

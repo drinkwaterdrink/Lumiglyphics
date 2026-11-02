@@ -1,4 +1,5 @@
 import { fitPromptToBudget } from "../../shared/prompt-length.js";
+import {normalizeImageVersionHistory,archiveImageVersion} from '../../shared/image-version-history.js';
 import {ImageRetryQueue} from './image-retry-queue.js';
 import {QueueImageRetriesSchema,type QueueImageRetriesRequest} from '../../shared/image-retries.js';
 import {managePresentationRules} from './presentation-rules.js';
@@ -34,6 +35,13 @@ import { extractSimTracker } from "./simtracker.js";
 import { templateSnapshot } from "../../shared/image-templates.js";
 const imageReviewGates = new Map<string, ImageReviewGate>();
 const preparingSingleImages = new Map<string,symbol>();
+/** A restored job supersedes only its own work; other jobs keep their batch. */
+const assetBatchOperations=new Map<string,{
+  owner:AbortController;revision:number;pendingRestores:number;key:StoredTurnRecord['plan']['key'];restoreWaiters:Set<()=>void>;
+  overrides:Map<string,StoredTurnRecord['jobs'][number]>;
+  cancelJob?: (jobId:string)=>void;
+  applyRestore:(record:StoredTurnRecord,job:StoredTurnRecord['jobs'][number])=>void;
+}>();
 const recoveringImageBatches = new Map<string,string>();
 const generatingChats = new Set<string>();
 import { createExternalImages } from "./external-images.js";
@@ -486,7 +494,7 @@ function effectViews(record: StoredTurnRecord): Pick<TurnView, "effects" | "ambi
 
 function assetView(record: StoredTurnRecord, job: StoredTurnRecord["jobs"][number]): AssetView {
   const previous = job.status !== "generated" && job.status !== "browser_ready" ? record.previousImages?.[job.jobId] : undefined;
-  const versions = record.previousVersions?.[job.jobId];
+  const versions = normalizeImageVersionHistory(record.previousVersions)[job.jobId];
   const cue = record.plan.visualCues.find((candidate) => candidate.assetJobId === job.jobId)
     ?? record.plan.cacheCues?.find((candidate) => candidate.assetJobId === job.jobId);
   const template = record.imageRequests?.filter(r => r.jobId === job.jobId && r.state === "approved").at(-1)?.imagePromptMetadata?.template ?? cue?.imageTemplate;
@@ -801,38 +809,61 @@ async function startAssets(
   record: StoredTurnRecord,
   path: string,
   userId?: string,
-  options: { bypassJobIds?: Iterable<string>; onlyJobId?: string; forceReview?: boolean; initialEdits?: ImageRequestEdits; regeneratePrompt?:boolean; quickGenerate?:boolean } = {}
+  options: { bypassJobIds?: Iterable<string>; onlyJobId?: string; forceReview?: boolean; initialEdits?: ImageRequestEdits; regeneratePrompt?:boolean; promptOperation?:'rewrite'|'enrich'; guidance?:string; quickGenerate?:boolean } = {}
 ): Promise<void> {
   const key=runtimeKey(userId,record.plan.key.chatId),start=Symbol();pendingAssetStarts.set(key,start);
+  abortAssetBatch(key,'A newer image batch is starting.');
+  const controller=new AbortController();
+  assetControllers.set(key,controller);
+  let current=record;
+  // Register ownership before configuration/provider awaits so a restore can
+  // supersede a queued job even while this batch is still starting.
+  const operations={owner:controller,key:record.plan.key,revision:0,pendingRestores:0,restoreWaiters:new Set<()=>void>(),overrides:new Map<string,StoredTurnRecord['jobs'][number]>(),applyRestore:(restored:StoredTurnRecord,job:StoredTurnRecord['jobs'][number])=>{
+    operations.revision++;
+    operations.overrides.set(job.jobId,job);
+    current={...current,jobs:current.jobs.map(item=>operations.overrides.get(item.jobId)??item),previousVersions:restored.previousVersions??{},imageRequests:[...(current.imageRequests??[]).filter(item=>item.jobId!==job.jobId),...(restored.imageRequests??[]).filter(item=>item.jobId===job.jobId)]};
+  }};
+  assetBatchOperations.set(key,operations);
+  const abandon=()=>{if(assetBatchOperations.get(key)?.owner===controller)assetBatchOperations.delete(key);if(assetControllers.get(key)===controller)assetControllers.delete(key);};
   let config:VisualNovelConfig;
-  try{config=await loadConfig(spindle,userId);}catch(error){if(pendingAssetStarts.get(key)===start)pendingAssetStarts.delete(key);throw error;}
-  if(pendingAssetStarts.get(key)!==start)return;
+  try{
+    const revision=operations.revision;
+    const latest=await loadTurnRecord(spindle,path,userId);
+    if(latest&&operations.revision===revision&&turnKeyEquals(latest.plan.key,record.plan.key))current=latest;
+    config=await loadConfig(spindle,userId);
+  }catch(error){if(pendingAssetStarts.get(key)===start)pendingAssetStarts.delete(key);abandon();throw error;}
+  if(pendingAssetStarts.get(key)!==start){abandon();return;}
   pendingAssetStarts.delete(key);
   rememberDebugFlag(userId, config);
-  if (!config.generateImages || record.jobs.length === 0) return;
+  if (!config.generateImages || current.jobs.length === 0) {abandon();return;}
   const requiresReview = !options.quickGenerate && (config.reviewImages || Boolean(options.onlyJobId) || Boolean(options.forceReview) || record.forceImageReview === true);
   // The view may have closed between planning and this batch start; a closed
   // view means nobody sees (or pays for) these images.
   if (!views.isOpen(userId, record.plan.key.chatId)) {
     dbg(spindle, userId, `skipped asset batch: view closed chat=${record.plan.key.chatId}`);
     await cancelIncompleteJobs(spindle, record.plan.key.chatId, userId, record.plan.key);
+    abandon();
     return;
   }
   const cacheServed = record.jobs.filter((job) => job.provider === CACHE_JOB_PROVIDER).length;
   dbg(spindle, userId, `assets starting: ${record.jobs.length - cacheServed} generated job(s)${cacheServed ? ` + ${cacheServed} cache-served swap(s) (not generated)` : ""} for chat=${record.plan.key.chatId} message=${record.plan.key.assistantMessageId} concurrency=${config.imageConcurrency}`);
-  if (!compareTurnKeys(activeTurnKeys.get(key) ?? null, record.plan.key).accepted) return;
-  assetControllers.get(key)?.abort("A newer turn replaced this asset batch.");
-  const controller = new AbortController();
-  assetControllers.set(key, controller);
+  if (!compareTurnKeys(activeTurnKeys.get(key) ?? null, record.plan.key).accepted) {abandon();return;}
   // Every batch start supersedes the previous batch's cache admission, so a
   // late result from the replaced batch can never populate the active cache.
   releaseSceneCacheAdmission(spindle, userId, record.plan.key.chatId, "batch_start");
   const scope = sceneImageScope(userId, record.plan.key.chatId);
   const admission = sceneCache.admission(scope);
-  let current = record;
   const ownsBatch=()=>assetControllers.get(key)===controller&&compareTurnKeys(activeTurnKeys.get(key)??null,record.plan.key).accepted;
-  const saveBatch=async()=>{if(userId)await saveTurnRecordIfCurrent(spindle,path,current,userId,ownsBatch);else if(ownsBatch())await saveTurnRecord(spindle,path,current,userId);};
+  if(JSON.stringify(current.jobs)!==JSON.stringify(record.jobs)){
+    const revision=operations.revision,view=await turnViewWithAudio(spindle,current,userId);
+    if(ownsBatch()&&operations.revision===revision)spindle.sendToFrontend({type:'vn_turn',turn:view},userId);
+  }
+  const saveBatch=async()=>{
+    const revision=operations.revision;
+    return saveTurnRecordIfCurrent(spindle,path,current,userId,()=>ownsBatch()&&operations.revision===revision&&operations.pendingRestores===0);
+  };
   const gate = new ImageReviewGate(async (request) => {
+    if(operations.overrides.has(request.jobId))return;
     if (assetControllers.get(key) !== controller) return;
     if (controller.signal.aborted && request.state !== "cancelled" && request.state !== "skipped") return;
     if (!compareTurnKeys(activeTurnKeys.get(key) ?? null, record.plan.key).accepted) return;
@@ -841,12 +872,12 @@ async function startAssets(
     await saveBatch();
     if (!ownsBatch())return;
     if (!compareTurnKeys(activeTurnKeys.get(key) ?? null, record.plan.key).accepted) return;
-    spindle.sendToFrontend({ type: "vn_image_requests", chatId: record.plan.key.chatId, messageId: record.plan.key.assistantMessageId, sourceFingerprint: record.plan.key.sourceFingerprint, requests }, userId);
+    spindle.sendToFrontend({ type: "vn_image_requests", chatId: record.plan.key.chatId, messageId: record.plan.key.assistantMessageId, sourceFingerprint: record.plan.key.sourceFingerprint, requests:current.imageRequests??[] }, userId);
   });
   imageReviewGates.set(key, gate);
-  const mergeJobs = (jobs: StoredTurnRecord["jobs"]): StoredTurnRecord["jobs"] => options.onlyJobId ? current.jobs.map((job) => jobs.find((entry) => entry.jobId === job.jobId) ?? job) : jobs;
+  const mergeJobs = (jobs: StoredTurnRecord["jobs"]): StoredTurnRecord["jobs"] => (options.onlyJobId ? current.jobs.map((job) => jobs.find((entry) => entry.jobId === job.jobId) ?? job) : jobs).map(job=>operations.overrides.get(job.jobId)??job);
   const batchPlan = options.onlyJobId ? { ...record.plan, visualCues: [...record.plan.visualCues, ...(record.plan.cacheCues ?? [])].filter((cue) => cue.assetJobId === options.onlyJobId), cacheCues: [] } : record.plan;
-  const batchJobs = options.onlyJobId ? record.jobs.filter((job) => job.jobId === options.onlyJobId) : record.jobs;
+  const batchJobs = options.onlyJobId ? current.jobs.filter((job) => job.jobId === options.onlyJobId) : current.jobs;
 
   try {
     const finalJobs = await generateAssets(
@@ -856,6 +887,7 @@ async function startAssets(
       config,
       controller.signal,
       async (jobs, changed) => {
+        if(operations.overrides.has(changed.jobId))return;
         dbg(spindle, userId, `asset ${changed.jobId} p${changed.paragraphIndex} [${changed.priority}] -> ${changed.status}${changed.imageId ? ` image=${changed.imageId}` : ""}${changed.error ? ` error="${changed.error}"` : ""}`);
         const active = activeTurnKeys.get(key) ?? null;
         if (assetControllers.get(key) !== controller) return;
@@ -879,16 +911,24 @@ async function startAssets(
       userId,
       {
         sceneCache, admission,
+        onJobCancellationReady:cancelJob=>{const active=assetBatchOperations.get(key);if(active?.owner===controller)active.cancelJob=cancelJob;},
         independentRequests: requiresReview,
         disableCacheStore: requiresReview,
         ...(options.regeneratePrompt?{skipAutomaticPromptRepair:true}:{}),
         ...(config.reviewImages ? { bypassJobIds: batchJobs.map((job) => job.jobId) } : options.bypassJobIds ? { bypassJobIds: options.bypassJobIds } : {}),
         ...sourceTextOption(record),
         beforeGenerate: async (job, request, metadata, jobSignal) => {
+          if(operations.overrides.has(job.jobId)){
+            assetBatchOperations.get(key)?.cancelJob?.(job.jobId);
+            // Shared execution may still be needed by another picture. Its
+            // result is discarded for the restored job by the write overlay.
+            if(jobSignal.aborted){const error=new Error('A restored version superseded this picture.');error.name='AbortError';throw error;}
+          }
           let draft = options.onlyJobId === job.jobId && options.initialEdits ? options.regeneratePrompt ? applyImageRewriteDraft(request,options.initialEdits) : applyImageEdits(request,options.initialEdits) : request;
           if(options.onlyJobId===job.jobId && options.regeneratePrompt){
-            if(!metadata.regeneratePrompt)throw new Error('Prompt regeneration is unavailable for this picture.');
-            draft=await metadata.regeneratePrompt(draft);
+            const writer=options.promptOperation==='enrich'?metadata.enrichPrompt:metadata.regeneratePrompt;
+            if(!writer)throw new Error('The selected prompt operation is unavailable for this picture.');
+            draft=await writer(draft,options.guidance);
           }
           draft.parameters = modelOutputParameters(metadata.provider, draft.model, draft.parameters ?? {});
           const approvals=imageRetryQueues.get(key);
@@ -907,12 +947,22 @@ async function startAssets(
         }
       }
     );
-    const active = activeTurnKeys.get(key) ?? null;
-    if (assetControllers.get(key)===controller && compareTurnKeys(active, record.plan.key).accepted) {
+    while(ownsBatch()) {
+      if(operations.pendingRestores){
+        await new Promise<void>(resolve=>{
+          const wake=()=>{operations.restoreWaiters.delete(wake);controller.signal.removeEventListener('abort',wake);resolve();};
+          operations.restoreWaiters.add(wake);controller.signal.addEventListener('abort',wake,{once:true});
+          if(controller.signal.aborted)wake();
+        });
+        continue;
+      }
       current = { ...current, jobs: mergeJobs(finalJobs), updatedAt: new Date().toISOString() };
-      await saveBatch();
+      // If a selection changes while this write is queued, retry the final
+      // snapshot after that transaction settles rather than losing results.
+      if(await saveBatch())break;
     }
   } finally {
+    if(assetBatchOperations.get(key)?.owner===controller)assetBatchOperations.delete(key);
     if (assetControllers.get(key) === controller) assetControllers.delete(key);
     if (imageReviewGates.get(key) === gate) imageReviewGates.delete(key);
     imageRetryQueues.get(key)?.queue.wake();
@@ -923,6 +973,7 @@ async function startAssets(
  * callbacks are rejected by controller identity and serialized write guards. */
 function releaseAbortedImageBatch(key:string):void {
  if(!assetControllers.get(key)?.signal.aborted)return;
+ assetBatchOperations.delete(key);
  assetControllers.delete(key);imageReviewGates.delete(key);preparingSingleImages.delete(key);
 }
 
@@ -942,7 +993,7 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
   const config = await loadConfig(spindle, userId);
   if (!config.generateImages) throw new Error("Enable generated pictures in settings before preparing a replacement.");
   if(request.type === 'vn_prepare_image' && request.edits !== undefined) {
-    if(request.regeneratePrompt)applyImageRewriteDraft({prompt:''},request.edits);else applyImageEdits({prompt:''},request.edits);
+    if(request.regeneratePrompt||request.promptOperation)applyImageRewriteDraft({prompt:''},request.edits);else applyImageEdits({prompt:''},request.edits);
   }
   const template = request.templateId === undefined ? undefined : config.imageTemplates.find(item => item.id === request.templateId);
   if (request.templateId !== undefined && !template) throw new Error("This template is unavailable.");
@@ -967,19 +1018,15 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
   if (!job || ![...record.plan.visualCues, ...(record.plan.cacheCues ?? [])].some((cue) => cue.assetJobId === job.jobId)) throw new Error("This picture cannot be prepared from this turn.");
   if(job.provider===CACHE_JOB_PROVIDER) throw new Error("This is a reuse-only picture outside the image budget. Choose one of this reply’s generated pictures instead.");
   const previousImages = { ...record.previousImages };
-  const previousVersions = { ...(record.previousVersions ?? {}) };
+  let previousVersions = normalizeImageVersionHistory(record.previousVersions);
   if (job.imageId && job.imageUrl) {
     previousImages[job.jobId] = { imageId: job.imageId, imageUrl: job.imageUrl };
-    const list = previousVersions[job.jobId] ? [...previousVersions[job.jobId]!] : [];
-    if (!list.some(v => v.imageId === job.imageId || v.imageUrl === job.imageUrl)) {
-      list.push({
-        versionId: `v_${Date.now()}_${list.length + 1}`,
+    previousVersions=archiveImageVersion(previousVersions,job.jobId,{
+        versionId: crypto.randomUUID(),
         imageId: job.imageId,
         imageUrl: job.imageUrl,
         timestamp: new Date().toISOString()
       });
-    }
-    previousVersions[job.jobId] = list;
   }
   const queued = AssetJobSchema.parse({ ...job, status: "queued", imageId: null, imageUrl: null, error: null, queuedAt: new Date().toISOString(), startedAt: null, generatedAt: null, readyAt: null, finishedAt: null });
   const registry=correction ? await loadCharacterRegistry(spindle,request.chatId,userId) : {};
@@ -1002,7 +1049,7 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
   const view=await turnViewWithAudio(spindle,next,userId);
   if(!isCurrent())return;
   spindle.sendToFrontend({ type: "vn_turn", turn:view }, userId);
-  await startAssets(spindle, next, path, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId],...(quick?{quickGenerate:true}:{}),...(request.type === 'vn_prepare_image' && request.edits ? {initialEdits:request.edits} : {}),...(request.type==='vn_prepare_image' && request.regeneratePrompt===true ? {regeneratePrompt:true} : {}) });
+  await startAssets(spindle, next, path, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId],...(quick?{quickGenerate:true}:{}),...(request.type === 'vn_prepare_image' && request.edits ? {initialEdits:request.edits} : {}),...(request.type==='vn_prepare_image' && (request.regeneratePrompt===true||request.promptOperation) ? {regeneratePrompt:true,...(request.promptOperation?{promptOperation:request.promptOperation}:{}),...(request.guidance?{guidance:request.guidance}:{})} : {}) });
 }
 
 async function processAssistantMessage(
@@ -1394,7 +1441,10 @@ export async function markAssetReady(
   });
   dbg(spindle, userId, `asset ${readyJob.jobId} p${readyJob.paragraphIndex} -> browser_ready (decoded in browser)`);
   const jobs = record.jobs.map((candidate, candidateIndex) => candidateIndex === index ? readyJob : candidate);
-  return { ...record, jobs, updatedAt: readyAt };
+  const readyRecord={ ...record, jobs, updatedAt: readyAt };
+  const batch=assetBatchOperations.get(scope);
+  if(batch?.overrides.has(readyJob.jobId)&&assetControllers.get(scope)===batch.owner)batch.applyRestore(readyRecord,readyJob);
+  return readyRecord;
   }, isCurrent);
   if (!next || !isCurrent()) return;
   const readyJob = next.jobs.find(job => job.jobId === request.jobId)!;
@@ -1416,41 +1466,63 @@ export async function restorePreviousImage(
 ): Promise<void> {
   const scope = runtimeKey(userId, request.chatId);
   const epoch = intakeEpochs.get(scope) ?? 0;
-  const isCurrent = () => (intakeEpochs.get(scope) ?? 0) === epoch;
+  const isCurrent = () => (intakeEpochs.get(scope) ?? 0) === epoch && views.isOpen(userId,request.chatId);
   const chatState = await loadChatState(spindle, request.chatId, userId);
   if (!chatState.activeTurnPath || !isCurrent()) return;
-  const next = await mutateActiveTurnRecord(spindle, request.chatId, chatState.activeTurnPath, userId, record => {
+  let releaseFence:()=>void=()=>{};
+  let next:StoredTurnRecord|null=null;
+  try {
+  next = await mutateActiveTurnRecord(spindle, request.chatId, chatState.activeTurnPath, userId, record => {
     if (record.plan.key.assistantMessageId !== request.messageId
-      || record.plan.key.sourceFingerprint !== request.sourceFingerprint) return null;
+      || record.plan.key.sourceFingerprint !== request.sourceFingerprint
+      || record.plan.key.swipeId !== request.swipeId
+      || record.plan.key.revision !== request.revision) return null;
     const index = record.jobs.findIndex((job) => job.jobId === request.jobId);
     if (index < 0) return null;
     const job = record.jobs[index]!;
-    const previousVersions = { ...(record.previousVersions ?? {}) };
-    const list = previousVersions[job.jobId] ? [...previousVersions[job.jobId]!] : [];
-    if (job.imageId && job.imageUrl && !list.some(v => v.imageId === job.imageId || v.imageUrl === job.imageUrl)) {
-      list.push({
-        versionId: `v_${Date.now()}_${list.length + 1}`,
+    let previousVersions=normalizeImageVersionHistory(record.previousVersions);
+    const selected=previousVersions[job.jobId]?.find(v=>v.versionId===request.versionId);
+    if(!selected)return null;
+    if (job.imageId && job.imageUrl) {
+      previousVersions=archiveImageVersion(previousVersions,job.jobId,{
+        versionId: crypto.randomUUID(),
         imageId: job.imageId,
         imageUrl: job.imageUrl,
         timestamp: new Date().toISOString()
       });
     }
-    previousVersions[job.jobId] = list;
 
     const restoredAt = new Date().toISOString();
     const restoredJob = AssetJobSchema.parse({
       ...job,
-      status: "browser_ready",
-      imageId: request.imageId,
-      imageUrl: request.imageUrl,
-      generatedAt: restoredAt,
-      readyAt: restoredAt,
-      finishedAt: restoredAt,
+      status: "generated",
+      imageId: selected.imageId,
+      imageUrl: selected.imageUrl,
+      startedAt: job.startedAt??selected.timestamp,
+      generatedAt: selected.timestamp,
+      readyAt: null,
+      finishedAt: null,
       error: null
     });
     const jobs = record.jobs.map((c, i) => i === index ? restoredJob : c);
-    return { ...record, jobs, previousVersions, updatedAt: restoredAt };
+    const restored={ ...record, jobs, previousVersions,imageRequests:(record.imageRequests??[]).map(entry=>entry.jobId===job.jobId&&entry.state==='review'?{...entry,state:'cancelled' as const}:entry), updatedAt: restoredAt };
+    const batch=assetBatchOperations.get(scope);
+    if(batch&&turnKeyEquals(batch.key,record.plan.key)){
+      // Invalidate pending snapshots, but do not change selection or cancel
+      // provider execution until the storage mutation has actually committed.
+      batch.revision++;batch.pendingRestores++;
+      releaseFence=()=>{batch.pendingRestores--;batch.revision++;if(!batch.pendingRestores)for(const wake of [...batch.restoreWaiters])wake();};
+    }
+    return restored;
   }, isCurrent);
+  if(next&&isCurrent()){
+    const batch=assetBatchOperations.get(scope),restored=next.jobs.find(job=>job.jobId===request.jobId)!;
+    if(batch&&turnKeyEquals(batch.key,next.plan.key)){
+      batch.applyRestore(next,restored);
+      batch.cancelJob?.(restored.jobId);
+    }
+  }
+  } finally {releaseFence();}
   if (!next || !isCurrent()) return;
   const restoredJob = next.jobs.find(job => job.jobId === request.jobId)!;
   spindle.sendToFrontend({
