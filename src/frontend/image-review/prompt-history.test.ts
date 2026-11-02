@@ -1,0 +1,8 @@
+import {expect,test} from 'bun:test';
+import {PromptHistory} from './prompt-history.js';
+const snap=(prompt:string,negativePrompt='',parametersText='{}')=>({prompt,negativePrompt,parametersText});
+test('typing bursts group, fields separate and invalid parameter text survives undo redo',()=>{const h=new PromptHistory(snap('base'));h.edit(snap('a'),'prompt',0);h.edit(snap('ab'),'prompt',100);h.edit(snap('ab','negative'),'negative',200);h.edit(snap('ab','negative','{bad'),'parameters',300);expect(h.undo()).toEqual(snap('ab','negative'));expect(h.undo()).toEqual(snap('ab'));expect(h.undo()).toEqual(snap('base'));expect(h.redo()).toEqual(snap('ab'));h.edit(snap('new'),'prompt',900);expect(h.canRedo).toBe(false);});
+test('history bounds and replacement checkpoints preserve independently undoable server wording',()=>{const h=new PromptHistory(snap('base'));for(let i=0;i<80;i++)h.edit(snap(String(i)),'prompt',i*600);let count=0;while(h.canUndo){h.undo();count++;}expect(count).toBeLessThanOrEqual(49);const current=h.current;h.checkpoint(snap('server'));expect(h.undo()).toEqual(current);});
+test('composition is one edit even when it exceeds the normal typing burst',()=>{const h=new PromptHistory(snap('base'));h.beginComposition();h.edit(snap('a'),'prompt',0);h.edit(snap('abc'),'prompt',2000);h.endComposition();expect(h.undo()).toEqual(snap('base'));expect(h.redo()).toEqual(snap('abc'));});
+
+test('oversized current drafts remain verbatim while retained undo states are discarded',()=>{const h=new PromptHistory(snap('base'));const oversized=snap('a'.repeat(600000));h.edit(oversized,'prompt',0);expect(h.current).toEqual(oversized);expect(h.canUndo).toBe(false);});

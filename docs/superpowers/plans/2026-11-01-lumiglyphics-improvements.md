@@ -10,7 +10,7 @@
 
 **Spec:** `docs/audits/2026-11-01-main-3-gpt-audit.md` (findings A01-A10 and selected-suggestion design decisions).
 
-**Execution status:** Tasks 0 and 1 published as beta.110 (`8981bd3`) on `codex/audited-improvements`. Task 2 is published as beta.111 (`6240bba`). Task 2A is included in the beta.112 release checkpoint as the Cast/DNA repair in `2026-11-01-cast-dna-repair.md`; Tasks 3-4 are included in the beta.113 checkpoint; Task 5 is included in the beta.114 checkpoint; original Tasks 6-11 remain pending. See `docs/implementation/2026-11-01-audit-progress.md` for evidence, additional bugs and known baseline browser failures.
+**Execution status:** Tasks 0 and 1 published as beta.110 (`8981bd3`) on `codex/audited-improvements`. Task 2 is published as beta.111 (`6240bba`). Task 2A is included in the beta.112 release checkpoint as the Cast/DNA repair in `2026-11-01-cast-dna-repair.md`; Tasks 3-4 are included in the beta.113 checkpoint; Task 5 is included in the beta.114 checkpoint; Task 6 is included in the beta.115 checkpoint; original Tasks 7-11 remain pending. See `docs/implementation/2026-11-01-audit-progress.md` for evidence, additional bugs and known baseline browser failures.
 
 ## Global constraints
 
@@ -147,11 +147,11 @@ Task 2A is included in the beta.112 release checkpoint; prior beta.111 does not 
 
 **Interfaces:** `PromptEditSnapshot = {prompt:string;negativePrompt:string;parametersText:string}`. Per full turn/job/request identity, proposed maximum 50 edit states, grouped by 500 ms typing/IME burst; undo/redo does not send backend messages. Lint consumes a pure serialized profile/cue/reference summary and returns field-addressable warnings. Comparison consumes two validated history entries and has no generate/restore side effects.
 
-- [ ] Add undo/redo tests for prompt/negative/invalid parameter text, IME composition, redo invalidation, server-prepared wording, rapid selection changes and stale rerender. Exclude live typed fields from heavy DOM rebuilds; expose keyboard and touch controls with focus-safe buttons.
-- [ ] Debounce inline lint (proposed 200 ms); show advisory warnings beside relevant fields. Do not silently change text, block themes or call a writer. Client/backend lint results agree; no backend imports in browser bundle.
-- [ ] Compare current and saved images with a labeled keyboard-operable range slider and side-by-side alternative. Unavailable versions show errors; selecting/dragging never restores. Restore is a separate action using Task 1's contract.
-- [ ] Recommended #14: enumerate the serializer registry's 11 dialect keys/10 functions; approved fixture snapshots cover solo, ensemble, environment, long prompts, negatives, references, framing and identity anchors. NovelAI alias behavior is intentional. Combine snapshots with semantic invariants; updating a golden file requires reviewing the actual wording diff, not blanket regeneration.
-- [ ] Run prompt history/comparison/lint/golden unit tests and image review mobile browser checks. No provider calls.
+- [x] Add undo/redo tests for prompt/negative/invalid parameter text, IME composition, redo invalidation, server-prepared wording, rapid selection changes and stale rerender. Exclude live typed fields from heavy DOM rebuilds; expose keyboard and touch controls with focus-safe buttons.
+- [x] Debounce inline lint (proposed 200 ms); show advisory warnings beside relevant fields. Do not silently change text, block themes or call a writer. Client/backend lint results agree; no backend imports in browser bundle.
+- [x] Compare current and saved images with a labeled keyboard-operable range slider and side-by-side alternative. Unavailable versions show errors; selecting/dragging never restores. Restore is a separate action using Task 1's contract.
+- [x] Recommended #14: enumerate the serializer registry's 11 dialect keys/10 functions; approved fixture snapshots cover solo, ensemble, environment, long prompts, negatives, references, framing and identity anchors. NovelAI alias behavior is intentional. Combine snapshots with semantic invariants; updating a golden file requires reviewing the actual wording diff, not blanket regeneration.
+- [x] Run prompt history/comparison/lint/golden unit tests and image review mobile browser checks. No provider calls.
 
 ## Task 7 — Audio, weather and remembered cast (5, 6, 7)
 

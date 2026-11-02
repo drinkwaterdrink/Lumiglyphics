@@ -1,0 +1,260 @@
+{
+  "flux3-klein/solo": {
+    "prompt": "Mira is reading an open book beside the window, reading. Mira: silver hair, violet eyes, wearing green coat. Photographed as a medium shot, eye-level angle, natural 50mm lens perspective, moderate depth of field. Setting: Rainy library with brass lamps and red curtains. Lighting: warm lamplight against cool rain. Rendered in watercolor illustration, palette of muted green and brass. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay. Use reference image 1 specifically for Mira's facial identity and hair; follow the scene prompt for current pose, outfit, and setting.",
+    "negativePrompt": "",
+    "warnings": []
+  },
+  "flux3-klein/ensemble": {
+    "prompt": "An ensemble scene featuring 2 visible characters: Mira, Jo. reading an open book beside the window Mira: silver hair, violet eyes, green coat. Jo: black curls, amber eyes, blue jacket. Photographed as a medium-wide shot, eye-level angle, wide-angle lens, moderate depth of field. Setting: Rainy library with brass lamps and red curtains. Lighting: warm lamplight against cool rain. Rendered in watercolor illustration, palette of muted green and brass. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.",
+    "negativePrompt": "",
+    "warnings": []
+  },
+  "flux3-klein/environment": {
+    "prompt": "A detailed view with no visible people. an open book resting on an empty desk. Photographed as a macro detail close-up, eye-level angle, telephoto lens compression, selective crisp focus on the main subject. Setting: Rainy library with brass lamps and red curtains. Lighting: warm lamplight against cool rain. Rendered in watercolor illustration, palette of muted green and brass.",
+    "negativePrompt": "",
+    "warnings": []
+  },
+  "flux3-klein/long": {
+    "prompt": "Mira is reading an open book beside the window, reading. Mira: silver hair, violet eyes, wearing green coat.",
+    "negativePrompt": "",
+    "warnings": [
+      "Prompt fitted by condensing camera and environment details (108/1600 chars).",
+      "FLUX.3 Klein prompt is short (108 chars); BFL guidelines recommend full scene captions."
+    ]
+  },
+  "flux3/solo": {
+    "prompt": "Mira, reading an open book beside the window, reading. Mira has silver hair, violet eyes, attired in green coat. Set in Rainy library with brass lamps and red curtains. Shot composition: medium shot, eye-level angle, natural 50mm lens perspective, moderate depth of field. Lighting is warm lamplight against cool rain. Art style: watercolor illustration, palette of muted green and brass. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay. Use reference image 1 specifically for Mira's facial identity and hair; follow the scene prompt for current pose, outfit, and setting.",
+    "negativePrompt": "",
+    "warnings": []
+  },
+  "flux3/ensemble": {
+    "prompt": "An ensemble scene with 2 characters: Mira, Jo. reading an open book beside the window Mira has silver hair, violet eyes, green coat. Jo has black curls, amber eyes, blue jacket. Set in Rainy library with brass lamps and red curtains. Shot composition: medium-wide shot, eye-level angle, wide-angle lens, moderate depth of field. Lighting is warm lamplight against cool rain. Art style: watercolor illustration, palette of muted green and brass. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.",
+    "negativePrompt": "",
+    "warnings": []
+  },
+  "flux3/environment": {
+    "prompt": "A detailed view featuring an open book resting on an empty desk. Set in Rainy library with brass lamps and red curtains. Shot composition: macro detail close-up, eye-level angle, telephoto lens compression, selective crisp focus on the main subject. Lighting is warm lamplight against cool rain. Art style: watercolor illustration, palette of muted green and brass.",
+    "negativePrompt": "",
+    "warnings": []
+  },
+  "flux3/long": {
+    "prompt": "Mira, reading an open book beside the window, reading. Mira has silver hair, violet eyes, attired in green coat.",
+    "negativePrompt": "",
+    "warnings": [
+      "Prompt fitted by condensing camera and environment details (112/1600 chars)."
+    ]
+  },
+  "gpt-image-2.5/solo": {
+    "prompt": "Mira (silver hair, violet eyes, dressed in green coat) is reading an open book beside the window, reading. Captured with a medium shot, eye-level angle, natural 50mm lens perspective, moderate depth of field in Rainy library with brass lamps and red curtains lit by warm lamplight against cool rain. Illustrated in watercolor illustration, palette of muted green and brass. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay. Use reference image 1 specifically for Mira's facial identity and hair; follow the scene prompt for current pose, outfit, and setting.",
+    "negativePrompt": "",
+    "warnings": []
+  },
+  "gpt-image-2.5/ensemble": {
+    "prompt": "IMAGE\nA complete 9:16 visual scene illustrating reading an open book beside the window.\n\nSUBJECTS\n• Mira: silver hair, violet eyes, green coat\n• Jo: black curls, amber eyes, blue jacket\n\nMOMENT\nreading an open book beside the window\n\nCOMPOSITION\nFraming: medium-wide shot, eye-level angle, wide-angle lens, moderate depth of field.\n\nLIGHTING & ENVIRONMENT\nSetting: Rainy library with brass lamps and red curtains\nLighting: warm lamplight against cool rain\n\nVISUAL TREATMENT\nwatercolor illustration, palette of muted green and brass\n\nCONSTRAINTS\n• Dialogue overlay: Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.\n• Maintain crisp anatomy, cohesive spatial coherence, and clean focus without extraneous clutter.",
+    "negativePrompt": "",
+    "warnings": []
+  },
+  "gpt-image-2.5/environment": {
+    "prompt": "A high quality visual of an open book resting on an empty desk. Captured with a macro detail close-up, eye-level angle, telephoto lens compression, selective crisp focus on the main subject in Rainy library with brass lamps and red curtains lit by warm lamplight against cool rain. Illustrated in watercolor illustration, palette of muted green and brass.",
+    "negativePrompt": "",
+    "warnings": []
+  },
+  "gpt-image-2.5/long": {
+    "prompt": "Mira (silver hair, violet eyes, dressed in green coat) is reading an open book beside the window, reading.",
+    "negativePrompt": "",
+    "warnings": [
+      "Prompt fitted by condensing camera and environment details (106/1600 chars)."
+    ]
+  },
+  "grok-imagine-2/solo": {
+    "prompt": "One visible person, named Mira, with silver hair, violet eyes, wearing green coat. Action: reading an open book beside the window. Surroundings and physical textures: Rainy library with brass lamps and red curtains. Art direction: watercolor illustration. Lighting: warm lamplight against cool rain. Color palette: muted green and brass. Camera framing: medium shot, eye-level angle, natural 50mm lens perspective, moderate depth of field. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay. Use reference image 1 specifically for Mira's facial identity and hair; follow the scene prompt for current pose, outfit, and setting.",
+    "negativePrompt": "",
+    "warnings": []
+  },
+  "grok-imagine-2/ensemble": {
+    "prompt": "2 visible characters: Mira (silver hair, violet eyes, green coat) and Jo (black curls, amber eyes, blue jacket). Action: reading an open book beside the window. Surroundings and physical textures: Rainy library with brass lamps and red curtains. Art direction: watercolor illustration. Lighting: warm lamplight against cool rain. Color palette: muted green and brass. Camera framing: medium-wide shot, eye-level angle, wide-angle lens, moderate depth of field. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.",
+    "negativePrompt": "",
+    "warnings": []
+  },
+  "grok-imagine-2/environment": {
+    "prompt": "A focused scene with no people. Action: an open book resting on an empty desk. Surroundings and physical textures: Rainy library with brass lamps and red curtains. Art direction: watercolor illustration. Lighting: warm lamplight against cool rain. Color palette: muted green and brass. Camera framing: macro detail close-up, eye-level angle, telephoto lens compression, selective crisp focus on the main subject.",
+    "negativePrompt": "",
+    "warnings": []
+  },
+  "grok-imagine-2/long": {
+    "prompt": "One visible person, named Mira, with silver hair, violet eyes, wearing green coat. Action: reading an open book beside the window.",
+    "negativePrompt": "",
+    "warnings": [
+      "Prompt fitted by condensing camera and environment details (130/1600 chars)."
+    ]
+  },
+  "qwen-image-3/solo": {
+    "prompt": "Mira (silver hair, violet eyes, wearing green coat), reading an open book beside the window, reading medium shot, eye-level angle, natural 50mm lens perspective, moderate depth of field Rainy library with brass lamps and red curtains watercolor illustration Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay. Use reference image 1 specifically for Mira's facial identity and hair; follow the scene prompt for current pose, outfit, and setting.",
+    "negativePrompt": "blurry, low quality, distorted anatomy, extra limbs, malformed hands, oversaturated, bad proportions",
+    "warnings": []
+  },
+  "qwen-image-3/ensemble": {
+    "prompt": "2 characters (Mira: silver hair, violet eyes, green coat, Jo: black curls, amber eyes, blue jacket), reading an open book beside the window medium-wide shot, eye-level angle, wide-angle lens, moderate depth of field Rainy library with brass lamps and red curtains watercolor illustration Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.",
+    "negativePrompt": "blurry, low quality, distorted anatomy, extra limbs, malformed hands, oversaturated, bad proportions",
+    "warnings": []
+  },
+  "qwen-image-3/environment": {
+    "prompt": "an open book resting on an empty desk, no people macro detail close-up, eye-level angle, telephoto lens compression, selective crisp focus on the main subject Rainy library with brass lamps and red curtains watercolor illustration",
+    "negativePrompt": "blurry, low quality, distorted anatomy, extra limbs, malformed hands, oversaturated, bad proportions",
+    "warnings": []
+  },
+  "qwen-image-3/long": {
+    "prompt": "Mira (silver hair, violet eyes, wearing green coat), reading an open book beside the window, reading",
+    "negativePrompt": "blurry, low quality, distorted anatomy, extra limbs, malformed hands, oversaturated, bad proportions",
+    "warnings": [
+      "Prompt fitted by condensing camera and environment details (100/1600 chars)."
+    ]
+  },
+  "nano-banana-2.1/solo": {
+    "prompt": "Mira, distinguished by silver hair, violet eyes and wearing green coat, is reading an open book beside the window, reading. Camera perspective: medium shot, eye-level angle, natural 50mm lens perspective, moderate depth of field. Environment and background: Rainy library with brass lamps and red curtains. Lighting atmosphere: warm lamplight against cool rain. Render style: watercolor illustration, palette of muted green and brass. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay. Use reference image 1 specifically for Mira's facial identity and hair; follow the scene prompt for current pose, outfit, and setting.",
+    "negativePrompt": "",
+    "warnings": []
+  },
+  "nano-banana-2.1/ensemble": {
+    "prompt": "Create one coherent 9:16 scene.\n\nForeground:\nClean foreground leading into the scene.\n\nMidground:\nMain focal area.\n\nBackground:\n Rainy library with brass lamps and red curtains\n\nAction:\nreading an open book beside the window\n\nCharacters:\n• Mira: silver hair, violet eyes, green coat\n• Jo: black curls, amber eyes, blue jacket\n\nCamera:\nmedium-wide shot, eye-level angle, wide-angle lens, moderate depth of field.\n\nLighting:\nwarm lamplight against cool rain.\n\nPreserve:\nVisual medium: watercolor illustration, palette of muted green and brass.\nKeep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.\nSemantic negative: an uncluttered scene free of stray artifacts, deformed limbs, or extra unlisted characters.",
+    "negativePrompt": "",
+    "warnings": []
+  },
+  "nano-banana-2.1/environment": {
+    "prompt": "A detailed view featuring an open book resting on an empty desk, free of any bystanders or extra people. Camera perspective: macro detail close-up, eye-level angle, telephoto lens compression, selective crisp focus on the main subject. Environment and background: Rainy library with brass lamps and red curtains. Lighting atmosphere: warm lamplight against cool rain. Render style: watercolor illustration, palette of muted green and brass.",
+    "negativePrompt": "",
+    "warnings": []
+  },
+  "nano-banana-2.1/long": {
+    "prompt": "Mira, distinguished by silver hair, violet eyes and wearing green coat, is reading an open book beside the window, reading.",
+    "negativePrompt": "",
+    "warnings": [
+      "Prompt fitted by condensing camera and environment details (123/1600 chars)."
+    ]
+  },
+  "seedream-5/solo": {
+    "prompt": "Mira, having silver hair, violet eyes, wearing green coat, is reading an open book beside the window, reading. Setting: Rainy library with brass lamps and red curtains. Framing: medium shot, eye-level angle, natural 50mm lens perspective, moderate depth of field. Lighting: warm lamplight against cool rain. Style: watercolor illustration, palette of muted green and brass. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay. Use reference image 1 specifically for Mira's facial identity and hair; follow the scene prompt for current pose, outfit, and setting.",
+    "negativePrompt": "",
+    "warnings": []
+  },
+  "seedream-5/ensemble": {
+    "prompt": "An ensemble featuring Mira (silver hair, violet eyes, green coat); Jo (black curls, amber eyes, blue jacket). Current action: reading an open book beside the window. Setting: Rainy library with brass lamps and red curtains. Framing: medium-wide shot, eye-level angle, wide-angle lens, moderate depth of field. Lighting: warm lamplight against cool rain. Style: watercolor illustration, palette of muted green and brass. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.",
+    "negativePrompt": "",
+    "warnings": []
+  },
+  "seedream-5/environment": {
+    "prompt": "A clear view of an open book resting on an empty desk, without people. Setting: Rainy library with brass lamps and red curtains. Framing: macro detail close-up, eye-level angle, telephoto lens compression, selective crisp focus on the main subject. Lighting: warm lamplight against cool rain. Style: watercolor illustration, palette of muted green and brass.",
+    "negativePrompt": "",
+    "warnings": []
+  },
+  "seedream-5/long": {
+    "prompt": "Mira, having silver hair, violet eyes, wearing green coat, is reading an open book beside the window, reading.",
+    "negativePrompt": "",
+    "warnings": [
+      "Seedream 5 Pro prompt word count (1152) exceeds the recommended 600-word limit; attention may be scattered.",
+      "Prompt fitted by condensing camera and environment details (110/1600 chars)."
+    ]
+  },
+  "anima/solo": {
+    "prompt": "watercolor illustration, 1person, solo, silver hair, violet eyes, green coat, reading an open book beside the window, cowboy shot, Rainy library with brass lamps and red curtains, warm lamplight against cool rain, [Layout: Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.; Use reference image 1 specifically for Mira's facial identity and hair; follow the scene prompt for current pose, outfit, and setting.]",
+    "negativePrompt": "worst quality, low quality, deformed anatomy, bad hands, missing limbs",
+    "warnings": []
+  },
+  "anima/ensemble": {
+    "prompt": "watercolor illustration, 2characters, multiple people, [Mira: silver hair, violet eyes, green coat], [Jo: black curls, amber eyes, blue jacket], reading an open book beside the window, medium shot, Rainy library with brass lamps and red curtains, warm lamplight against cool rain, [Layout: Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.]",
+    "negativePrompt": "worst quality, low quality, deformed anatomy, bad hands, missing limbs",
+    "warnings": []
+  },
+  "anima/environment": {
+    "prompt": "watercolor illustration, no humans, scenery, an open book resting on an empty desk, macro focus, Rainy library with brass lamps and red curtains, warm lamplight against cool rain",
+    "negativePrompt": "worst quality, low quality, deformed anatomy, bad hands, missing limbs",
+    "warnings": []
+  },
+  "anima/long": {
+    "prompt": "1person, solo, silver hair, violet eyes, green coat, reading an open book beside the window",
+    "negativePrompt": "worst quality, low quality, deformed anatomy, bad hands, missing limbs",
+    "warnings": [
+      "Prompt fitted by condensing camera and environment details (91/1600 chars)."
+    ]
+  },
+  "novelai/solo": {
+    "prompt": "watercolor illustration, 1person, solo, silver hair, violet eyes, green coat, reading an open book beside the window, cowboy shot, Rainy library with brass lamps and red curtains, warm lamplight against cool rain, [Layout: Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.; Use reference image 1 specifically for Mira's facial identity and hair; follow the scene prompt for current pose, outfit, and setting.]",
+    "negativePrompt": "worst quality, low quality, deformed anatomy, bad hands, missing limbs",
+    "warnings": []
+  },
+  "novelai/ensemble": {
+    "prompt": "watercolor illustration, 2characters, multiple people, [Mira: silver hair, violet eyes, green coat], [Jo: black curls, amber eyes, blue jacket], reading an open book beside the window, medium shot, Rainy library with brass lamps and red curtains, warm lamplight against cool rain, [Layout: Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.]",
+    "negativePrompt": "worst quality, low quality, deformed anatomy, bad hands, missing limbs",
+    "warnings": []
+  },
+  "novelai/environment": {
+    "prompt": "watercolor illustration, no humans, scenery, an open book resting on an empty desk, macro focus, Rainy library with brass lamps and red curtains, warm lamplight against cool rain",
+    "negativePrompt": "worst quality, low quality, deformed anatomy, bad hands, missing limbs",
+    "warnings": []
+  },
+  "novelai/long": {
+    "prompt": "1person, solo, silver hair, violet eyes, green coat, reading an open book beside the window",
+    "negativePrompt": "worst quality, low quality, deformed anatomy, bad hands, missing limbs",
+    "warnings": [
+      "Prompt fitted by condensing camera and environment details (91/1600 chars)."
+    ]
+  },
+  "generic-prose/solo": {
+    "prompt": "Mira with silver hair, violet eyes, wearing green coat, currently reading an open book beside the window, reading. Framing: medium shot, eye-level angle, natural 50mm lens perspective, moderate depth of field. Setting: Rainy library with brass lamps and red curtains. Lighting: warm lamplight against cool rain. Art style: watercolor illustration, palette of muted green and brass. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay. Use reference image 1 specifically for Mira's facial identity and hair; follow the scene prompt for current pose, outfit, and setting.",
+    "negativePrompt": "",
+    "warnings": [
+      "Model-specific prompting profile unavailable; using conservative generic prompting."
+    ]
+  },
+  "generic-prose/ensemble": {
+    "prompt": "A group of 2 people: Mira (silver hair, violet eyes, green coat), Jo (black curls, amber eyes, blue jacket). Action: reading an open book beside the window. Framing: medium-wide shot, eye-level angle, wide-angle lens, moderate depth of field. Setting: Rainy library with brass lamps and red curtains. Lighting: warm lamplight against cool rain. Art style: watercolor illustration, palette of muted green and brass. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.",
+    "negativePrompt": "",
+    "warnings": [
+      "Model-specific prompting profile unavailable; using conservative generic prompting."
+    ]
+  },
+  "generic-prose/environment": {
+    "prompt": "A view of an open book resting on an empty desk, no people visible. Framing: macro detail close-up, eye-level angle, telephoto lens compression, selective crisp focus on the main subject. Setting: Rainy library with brass lamps and red curtains. Lighting: warm lamplight against cool rain. Art style: watercolor illustration, palette of muted green and brass.",
+    "negativePrompt": "",
+    "warnings": [
+      "Model-specific prompting profile unavailable; using conservative generic prompting."
+    ]
+  },
+  "generic-prose/long": {
+    "prompt": "Mira with silver hair, violet eyes, wearing green coat, currently reading an open book beside the window, reading.",
+    "negativePrompt": "",
+    "warnings": [
+      "Model-specific prompting profile unavailable; using conservative generic prompting.",
+      "Prompt fitted by condensing camera and environment details (114/1600 chars)."
+    ]
+  },
+  "generic-tags/solo": {
+    "prompt": "1person, silver hair, violet eyes, green coat, reading an open book beside the window, medium, eye-level, Rainy library with brass lamps and red curtains, watercolor illustration",
+    "negativePrompt": "worst quality, low quality, deformed, extra limbs",
+    "warnings": [
+      "Model-specific prompting profile unavailable; using conservative generic prompting."
+    ]
+  },
+  "generic-tags/ensemble": {
+    "prompt": "2characters, multiple people, Mira, silver hair, violet eyes, green coat, Jo, black curls, amber eyes, blue jacket, reading an open book beside the window, medium-wide, eye-level, Rainy library with brass lamps and red curtains, watercolor illustration",
+    "negativePrompt": "worst quality, low quality, deformed, extra limbs",
+    "warnings": [
+      "Model-specific prompting profile unavailable; using conservative generic prompting."
+    ]
+  },
+  "generic-tags/environment": {
+    "prompt": "no humans, scenery, an open book resting on an empty desk, macro, eye-level, Rainy library with brass lamps and red curtains, watercolor illustration",
+    "negativePrompt": "worst quality, low quality, deformed, extra limbs",
+    "warnings": [
+      "Model-specific prompting profile unavailable; using conservative generic prompting."
+    ]
+  },
+  "generic-tags/long": {
+    "prompt": "1person, silver hair, violet eyes, green coat, reading an open book beside the window",
+    "negativePrompt": "worst quality, low quality, deformed, extra limbs",
+    "warnings": [
+      "Model-specific prompting profile unavailable; using conservative generic prompting.",
+      "Prompt fitted by condensing camera and environment details (85/1600 chars)."
+    ]
+  }
+}

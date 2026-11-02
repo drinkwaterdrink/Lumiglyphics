@@ -1,3 +1,7 @@
+import {VersionComparison} from './version-comparison.js';
+import {PromptHistory,type PromptEditSnapshot} from './prompt-history.js';
+import {lintCompiledPrompt} from '../../shared/prompt-lint.js';
+import {resolveImagePromptProfileV2} from '../../shared/image-prompt-profile-v2.js';
 import {describePictureExplanation} from './picture-explanation.js';
 import {sceneImageCandidatesFor,loadVnImageCandidates} from '../stage/image-loader.js';
 import type {ImageRetryQueueView} from '../../shared/image-retries.js';
@@ -43,6 +47,7 @@ section[data-state="planning"],section[data-state="empty"],section[data-state="z
 `;
 
 export class ImageStudio {
+  private readonly comparison=new VersionComparison();
   private lastOpenCursor:number|null=null;
   private workspaceScroll=0;
   private browseLibrary:(()=>void)|undefined;
@@ -60,6 +65,9 @@ export class ImageStudio {
   private previousWording = new Map<string, Draft & {requestId:string;sceneEvidence:SceneEvidence[]}>();
   private selectedRequest = "";
   private drafts = new Map<string, Draft>();
+  private editHistories=new Map<string,PromptHistory>();
+  private lintTimer:ReturnType<typeof setTimeout>|null=null;
+  private composing=false;
   private submitted = new Set<string>();
   private preparing = new Set<string>();
   private preparationStarts=new Map<string,{requestId:string|undefined;status:string|undefined;failureId:string|undefined}>();
@@ -141,6 +149,8 @@ export class ImageStudio {
     for (const selector of ["[data-positive]", "[data-negative]", "[data-parameters]"]) this.el<HTMLTextAreaElement>(selector).oninput = () => {
       const record = this.record();
       if (record) this.drafts.set(this.draftKey(record), { prompt: this.el<HTMLTextAreaElement>("[data-positive]").value, negative: this.el<HTMLTextAreaElement>("[data-negative]").value, parameters: this.el<HTMLTextAreaElement>("[data-parameters]").value });
+      this.historyFor()?.edit(this.editSnapshot(),selector,Date.now());
+      this.updateHistoryButtons();this.scheduleLint();
       this.updateCounts();
     };
     this.el<HTMLButtonElement>("[data-use-template]").onclick = () => {
@@ -369,6 +379,14 @@ export class ImageStudio {
         subject:environment?{kind:'environment',templateId}:{kind:'character',name,appearance:this.el<HTMLTextAreaElement>('[data-subject-appearance]').value,saveAppearance:this.el<HTMLInputElement>('[data-save-appearance]').checked}});
       this.beginPreparation(this.selectedJob);this.render();
     };
+    for(const selector of ['[data-positive]','[data-negative]','[data-parameters]']){
+      const input=this.el<HTMLTextAreaElement>(selector);
+      input.addEventListener('compositionstart',()=>{this.composing=true;this.historyFor()?.beginComposition();});
+      input.addEventListener('compositionend',()=>{this.historyFor()?.edit(this.editSnapshot(),selector,Date.now());this.historyFor()?.endComposition();this.composing=false;this.updateHistoryButtons();this.scheduleLint();});
+    }
+    this.el<HTMLButtonElement>('[data-prompt-undo]').onclick=()=>this.movePromptHistory(false);
+    this.el<HTMLButtonElement>('[data-prompt-redo]').onclick=()=>this.movePromptHistory(true);
+    this.root.addEventListener('keydown',rawEvent=>{const event=rawEvent as KeyboardEvent;if(event.isComposing||this.composing||!(event.ctrlKey||event.metaKey))return;const key=event.key.toLowerCase();if(key==='z'||key==='y'){if(!(event.target instanceof HTMLTextAreaElement)||!event.target.matches('[data-positive],[data-negative],[data-parameters]'))return;event.preventDefault();this.movePromptHistory(key==='y'||event.shiftKey);}});
     this.el<HTMLButtonElement>("[data-copy]").onclick = () => { void this.copy(); };
     this.render();
   }
@@ -412,6 +430,7 @@ export class ImageStudio {
       </div>
       <div data-versions-strip style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin"></div>
     `;
+    versionsContainer.append(this.comparison.element);
     const detail=document.createElement('p');detail.dataset.stateDetail='';
     const navigation=document.createElement('div');navigation.dataset.pictureNavigation='';
     navigation.innerHTML='<div data-picture-strip role="group" aria-label="Pictures in this reply"></div>';
@@ -598,7 +617,9 @@ export class ImageStudio {
     panelPrompt.className = 'studio-tab-panel';
     panelPrompt.dataset.tabPanel = 'prompt';
     panelPrompt.hidden = true;
-    panelPrompt.append(meta, model, editor);
+    const editTools=document.createElement('div');editTools.className='row';editTools.dataset.promptEditTools='';editTools.hidden=true;editTools.innerHTML='<button type="button" data-prompt-undo aria-label="Undo prompt edit">Undo</button><button type="button" data-prompt-redo aria-label="Redo prompt edit">Redo</button>';
+    panelPrompt.append(meta, model,editor);
+
 
     const panelCamera = document.createElement('div');
     panelCamera.className = 'studio-tab-panel';
@@ -631,8 +652,9 @@ export class ImageStudio {
     );
 
     const overview=document.createElement('p');overview.dataset.pictureOverview='';overview.setAttribute('role','status');overview.setAttribute('aria-atomic','true');overview.style.cssText='font-size:12px;margin:0 0 10px;overflow-wrap:anywhere';
-    tools.replaceChildren(tabs,panelPicture,panelPrompt,panelCamera,panelStyle,panelModel,panelHistory);
+    tools.replaceChildren(tabs,editTools,panelPicture,panelPrompt,panelCamera,panelStyle,panelModel,panelHistory);
     body.replaceChildren(overview,navigation,tools,notice);
+    for(const field of ['positive','negative','parameters']){const note=document.createElement('small');note.dataset.promptLint=field;note.setAttribute('role','status');this.el(`[data-${field}]`).after(note);}
     const actionHelp=document.createElement('small');actionHelp.dataset.actionHelp='';this.el('[data-studio-footer]').append(actionHelp);
     const style=document.createElement('style');style.textContent=INSPECTOR_CSS+PREPARED_BRIEF_CSS+DOCKED_STUDIO_CSS;this.root.append(style);
   }
@@ -654,6 +676,12 @@ export class ImageStudio {
     for(let parent=target.parentElement;parent;parent=parent.parentElement)if(parent.tagName?.toUpperCase()==='DETAILS')(parent as any).open=true;
     target.scrollIntoView({block:'nearest'});target.focus({preventScroll:true});
   }
+  private editSnapshot():PromptEditSnapshot{return {prompt:this.el<HTMLTextAreaElement>('[data-positive]').value,negativePrompt:this.el<HTMLTextAreaElement>('[data-negative]').value,parametersText:this.el<HTMLTextAreaElement>('[data-parameters]').value};}
+  private historyFor():PromptHistory|undefined {const r=this.record();if(!r||!this.turn)return;const key=JSON.stringify([this.turn.chatId,this.turn.messageId,this.turn.swipeId,this.turn.sourceFingerprint,this.turn.revision,r.jobId,r.requestId,r.state==='review'?'review':'replacement']);let history=this.editHistories.get(key);if(!history){history=new PromptHistory(this.editSnapshot());this.editHistories.set(key,history);while(this.editHistories.size>8)this.editHistories.delete(this.editHistories.keys().next().value!);}return history;}
+  private updateHistoryButtons():void{const h=this.historyFor();this.el<HTMLButtonElement>('[data-prompt-undo]').disabled=!h?.canUndo||this.el<HTMLTextAreaElement>('[data-positive]').disabled;this.el<HTMLButtonElement>('[data-prompt-redo]').disabled=!h?.canRedo||this.el<HTMLTextAreaElement>('[data-positive]').disabled;}
+  private movePromptHistory(redo:boolean):void{if(this.composing||this.el<HTMLTextAreaElement>('[data-positive]').disabled)return;const r=this.record(),h=this.historyFor();if(!r||!h)return;const next=redo?h.redo():h.undo();this.el<HTMLTextAreaElement>('[data-positive]').value=next.prompt;this.el<HTMLTextAreaElement>('[data-negative]').value=next.negativePrompt;this.el<HTMLTextAreaElement>('[data-parameters]').value=next.parametersText;this.drafts.set(this.draftKey(r),{prompt:next.prompt,negative:next.negativePrompt,parameters:next.parametersText});this.updateCounts();this.updateHistoryButtons();this.scheduleLint();}
+  private scheduleLint():void{if(this.lintTimer)clearTimeout(this.lintTimer);this.lintTimer=setTimeout(()=>{this.lintTimer=null;this.updateInlineLint();},200);}
+  private updateInlineLint():void{const record=this.record();for(const field of ['positive','negative','parameters'])this.el(`[data-prompt-lint="${field}"]`).textContent='';if(!record)return;const snapshot=this.editSnapshot();const profile=record.promptProfileV2??{...resolveImagePromptProfileV2(record.provider,record.model),...(record.promptProfile?{hardMaxCharacters:record.promptProfile.maxCharacters}:{})};const result=lintCompiledPrompt({prompt:snapshot.prompt,negativePrompt:snapshot.negativePrompt,profile,brief:record.imagePromptMetadata?.brief,referenceAttachmentKnown:false});for(const field of ['positive','negative'] as const){const messages=[...result.errors,...result.warnings].filter(message=>field==='negative'?message.includes('positive-only'):!message.includes('positive-only'));this.el(`[data-prompt-lint="${field}"]`).textContent=messages.length?`Advisory: ${messages.join(' ')}`:'';}try{const value=JSON.parse(snapshot.parametersText);if(!value||typeof value!=='object'||Array.isArray(value))throw Error();}catch{this.el('[data-prompt-lint="parameters"]').textContent='Parameters must be a JSON object. Your text is kept for editing.';}}
   private draftKey(record:ImageRequestRecord): string {return record.state==='review' ? record.requestId : `replacement:${record.jobId}:${record.requestId}`;}
   private updateCounts(): void {
     const previous=this.previousWording.get(this.selectedJob);
@@ -785,7 +813,7 @@ export class ImageStudio {
     if(!turn||(this.planningChat&&turn.chatId!==this.planningChat))this.planningChat='';
     if(this.turn?.chatId!==turn?.chatId||!turn)this.setOpen(false);
     if(this.turn?.chatId!==turn?.chatId)this.preferences.clear();
-    if (this.turn?.chatId !== turn?.chatId || this.turn?.sourceFingerprint !== turn?.sourceFingerprint || this.turn?.messageId !== turn?.messageId || this.turn?.swipeId !== turn?.swipeId || this.turn?.revision !== turn?.revision) { this.workspaceScroll=0;this.lastOpenCursor=null;this.drafts.clear(); this.previousWording.clear(); this.submitted.clear(); this.preparing.clear();this.preparationStarts.clear(); this.rebuilding.clear(); this.rerolling.clear(); this.selectedJob = ""; this.selectedRequest = ""; this.recoveryJob = "";this.retryQueueJobs.clear();this.retryActive=null; }
+    if (this.turn?.chatId !== turn?.chatId || this.turn?.sourceFingerprint !== turn?.sourceFingerprint || this.turn?.messageId !== turn?.messageId || this.turn?.swipeId !== turn?.swipeId || this.turn?.revision !== turn?.revision) { this.workspaceScroll=0;this.lastOpenCursor=null;this.editHistories.clear();this.drafts.clear(); this.previousWording.clear(); this.submitted.clear(); this.preparing.clear();this.preparationStarts.clear(); this.rebuilding.clear(); this.rerolling.clear(); this.selectedJob = ""; this.selectedRequest = ""; this.recoveryJob = "";this.retryQueueJobs.clear();this.retryActive=null; }
     this.replanning = false;this.recovering=null;
     this.turn = turn;
     for(const pending of [this.rerolling,this.rebuilding])for(const id of pending){
@@ -1128,6 +1156,7 @@ export class ImageStudio {
     }
     this.renderRecoveryMode();
     this.el<HTMLButtonElement>("[data-copy]").disabled = !record;
+    this.historyFor()?.checkpoint(this.editSnapshot());this.updateHistoryButtons();this.scheduleLint();
     this.renderInspector();
     this.renderConnectionDropdown();
     this.updateCostEstimate();
@@ -1181,6 +1210,7 @@ export class ImageStudio {
         image.src=url;image.alt=asset?.previousImage?'Previous picture while replacement is pending':'Selected picture';image.hidden=false;this.el('[data-placeholder]').hidden=true;
       }).catch(()=>{if(!controller.signal.aborted){image.hidden=true;this.el('[data-placeholder]').hidden=false;}});
     }
+    this.comparison.setContext(JSON.stringify([this.turn?.chatId,this.turn?.messageId,this.turn?.swipeId,this.turn?.sourceFingerprint,this.turn?.revision,this.selectedJob]),asset);
     const versions = asset?.previousVersions ?? [];
     const container = this.root.querySelector<HTMLElement>('[data-previous-versions-container]');
     const vStrip = this.root.querySelector<HTMLElement>('[data-versions-strip]');
@@ -1288,6 +1318,7 @@ export class ImageStudio {
 
   private switchTab(tabId: string): void {
     this.activeTab = tabId;
+    this.el<HTMLElement>('[data-prompt-edit-tools]').hidden=tabId!=='prompt'&&tabId!=='history';
     const tabBtns = this.root.querySelectorAll<HTMLButtonElement>('.studio-tab-btn');
     for (const btn of tabBtns) {
       btn.setAttribute('aria-selected', String(btn.dataset.tab === tabId));
@@ -1385,7 +1416,7 @@ export class ImageStudio {
 
   setPresentationRules(chat:string,id:string,catalog:PresentationRuleCatalog){return this.preferences.receive(chat,id,catalog);}
   presentationRulesError(error:string,id?:string){this.preferences.error(error,id);}
-  destroy(): void { this.previewLoad?.abort();this.previewLoad=null;this.setOpen(false);this.preferences.destroy(); this.drafts.clear(); this.host.remove(); }
+  destroy(): void { this.comparison.destroy();if(this.lintTimer)clearTimeout(this.lintTimer);this.editHistories.clear();this.previewLoad?.abort();this.previewLoad=null;this.setOpen(false);this.preferences.destroy(); this.drafts.clear(); this.host.remove(); }
 }
 
 function friendlyStatus(status: string): string { return ({ browser_ready: "Ready", generated: "Ready", queued: "Waiting", generating: "Generating", review: "Awaiting review", approved: "Approved", cancelled: "Cancelled", skipped: "Skipped", failed: "Failed" } as Record<string, string>)[status] ?? status; }
