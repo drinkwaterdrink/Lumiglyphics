@@ -573,7 +573,8 @@ export class CharacterFolio implements WorkspaceSurface {
     this.latestTurnText = (turn.paragraphs ?? []).join('\n\n');
 
     // 1. From presentation snapshots (NPC entities + observations/quotes/facts)
-    for (const snap of turn.presentation?.snapshots ?? []) {
+    const lastPresentation=turn.presentation?.version===2?selectPresentationSnapshot(turn.presentation,turn.presentation.availableThrough):undefined;
+    for (const snap of turn.presentation?.version===1?turn.presentation.snapshots:lastPresentation?[lastPresentation]:[]) {
       for (const ent of snap.entities ?? []) {
         if (ent.kind === 'npc' && ent.name?.trim()) {
           const name = ent.name.trim();
@@ -1247,3 +1248,4 @@ export class CharacterFolio implements WorkspaceSurface {
     return false;
   }
 }
+import {selectPresentationSnapshot} from '../../shared/presentation-selectors.js';

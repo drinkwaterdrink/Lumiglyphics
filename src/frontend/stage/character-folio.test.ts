@@ -128,6 +128,7 @@ describe('CharacterFolio & Character DNA', () => {
         paragraphs: ['Darby Pruitt speaks to Nadine Pruitt in the kitchen.'],
         subjectCandidates: ['Darby Pruitt', 'Nadine Pruitt'],
         presentation: {
+          version: 1,
           snapshots: [
             {
               at: { key: 'msg-pruitt', paragraphIndex: 0 },

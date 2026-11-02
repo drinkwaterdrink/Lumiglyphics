@@ -1,3 +1,4 @@
+import {selectPresentationSnapshot} from '../../shared/presentation-selectors.js';
 import { normalizeConfig } from "../../config.js";
 import { templateSnapshot } from "../../shared/image-templates.js";
 import { describe, expect, test } from "bun:test";
@@ -1123,9 +1124,9 @@ test('local replacement edits become a held preview and oversize edits leave com
 test('turn views expose bounded immutable presentation and keep old/future records compatible',()=>{
  const record:StoredTurnRecord={schemaVersion:1,speaker:'Narrator',status:'ready',plan:structuredClone(plan),jobs:[],updatedAt:now};
  const view=turnView(record);
- expect(view.presentation?.version).toBe(1);
- expect(view.presentation?.snapshots[0]?.entities.some(e=>e.kind==='place'&&e.name==='Library')).toBe(true);
- expect(view.presentation?.snapshots[0]?.presentEntityIds).toHaveLength(1);
+ expect(view.presentation?.version).toBe(2);
+ expect((view.presentation?selectPresentationSnapshot(view.presentation,0):undefined)?.entities.some(e=>e.kind==='place'&&e.name==='Library')).toBe(true);
+ expect((view.presentation?selectPresentationSnapshot(view.presentation,0):undefined)?.presentEntityIds).toHaveLength(1);
  record.presentation={version:99,opaque:'preserve'};
  expect(turnView(record).presentation).toBeUndefined();
  expect(record.presentation).toEqual({version:99,opaque:'preserve'});

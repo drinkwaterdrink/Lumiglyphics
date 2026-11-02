@@ -1,3 +1,4 @@
+import {selectPresentationSnapshot} from '../../shared/presentation-selectors.js';
 import { expect,test } from 'bun:test';
 import type { TurnPlan } from '../../shared/contracts.js';
 import { projectTurnPresentation,readerPresentationFor } from './entity-projection.js';
@@ -7,47 +8,47 @@ function fixture():TurnPlan {
 }
 test('projection uses reveal order, preserves partial wardrobe updates and separates radio speaker',()=>{
  const result=projectTurnPresentation(fixture())!;
- const person=result.snapshots[0]!.entities.find(e=>e.name==='Mira')!;
- expect(result.snapshots[7]?.stateByEntity[person.id]?.outfit).toBe('coat: wool, boots: black');
- expect(result.snapshots[8]?.stateByEntity[person.id]?.outfit).toBe('boots: black, coat: uniform');
- expect(result.snapshots[0]?.entities.some(e=>e.name==='Radio')).toBe(false);
- const radio=result.snapshots[1]!.entities.find(e=>e.name==='Radio')!;
- expect(result.snapshots[1]?.speakerEntityId).toBe(radio.id);
- expect(result.snapshots[1]?.drawableEntityId).toBe(person.id);
- expect(result.snapshots[1]?.presentEntityIds).not.toContain(radio.id);
- expect(result.snapshots[9]?.presentEntityIds).not.toContain(person.id);
- expect(result.snapshots[9]?.drawableEntityId).toBeNull();
+ const person=selectPresentationSnapshot(result,0)!.entities.find(e=>e.name==='Mira')!;
+ expect(selectPresentationSnapshot(result,7)?.stateByEntity[person.id]?.outfit).toBe('coat: wool, boots: black');
+ expect(selectPresentationSnapshot(result,8)?.stateByEntity[person.id]?.outfit).toBe('boots: black, coat: uniform');
+ expect(selectPresentationSnapshot(result,0)?.entities.some(e=>e.name==='Radio')).toBe(false);
+ const radio=selectPresentationSnapshot(result,1)!.entities.find(e=>e.name==='Radio')!;
+ expect(selectPresentationSnapshot(result,1)?.speakerEntityId).toBe(radio.id);
+ expect(selectPresentationSnapshot(result,1)?.drawableEntityId).toBe(person.id);
+ expect(selectPresentationSnapshot(result,1)?.presentEntityIds).not.toContain(radio.id);
+ expect(selectPresentationSnapshot(result,9)?.presentEntityIds).not.toContain(person.id);
+ expect(selectPresentationSnapshot(result,9)?.drawableEntityId).toBeNull();
  expect(JSON.stringify(result)).not.toContain('Do not export');
 });
 test('old turns derive without migration resets, unknown versions and stale snapshots are unavailable',()=>{
  const plan=fixture();const saved=projectTurnPresentation(plan)!;
- expect(readerPresentationFor(plan)?.version).toBe(1);
+ expect(readerPresentationFor(plan)?.version).toBe(2);
  expect(readerPresentationFor(plan,{version:2})).toBeUndefined();
  expect(readerPresentationFor({...plan,key:{...plan.key,swipeId:1}},saved)).toBeUndefined();
  expect(readerPresentationFor(plan,{version:1,snapshots:[]})).toBeUndefined();
  plan.paragraphs=Array.from({length:257},()=>plan.paragraphs[0]!);
- expect(projectTurnPresentation(plan)).toBeUndefined();
+ expect(projectTurnPresentation(plan)?.availableThrough).toBe(256);
 });
-test('oversize delta projection is unavailable rather than freezing later state',()=>{
+test('65 wardrobe changes remain available and preserve the latest state',()=>{
  const plan=fixture();plan.paragraphs=Array.from({length:67},(_,index)=>({index,sourceIndex:index,text:'Story'}));
  plan.scenes=[plan.scenes[0]!,{...plan.scenes[1]!,startParagraph:66}];
  plan.continuityDeltas=Array.from({length:65},(_,paragraphIndex)=>({paragraphIndex,delta:{characterUpdates:{Mira:{wardrobe:{coat:`outfit ${paragraphIndex}`}}},forgetCharacters:[],factUpdates:{}}}));
- expect(projectTurnPresentation(plan)).toBeUndefined();
+ const result=projectTurnPresentation(plan)!;const last=selectPresentationSnapshot(result,65)!;const mira=last.entities.find(e=>e.name==='Mira')!;expect(last.stateByEntity[mira.id]?.outfit).toContain('outfit 64');
 });
 test('saved public facts cannot bypass source or reveal-time validation',()=>{
  const plan=fixture();const foreign=projectTurnPresentation(plan)!;
- foreign.snapshots[0]!.entities[0]!.facts[0]!.source.chatId='other';
+ foreign.entities[0]!.facts[0]!.source.chatId='other';
  expect(readerPresentationFor(plan,foreign)).toBeUndefined();
  const future=projectTurnPresentation(plan)!;
- future.snapshots[0]!.entities[0]!.facts[0]!.revealedAt!.paragraphIndex=99;
+ future.entities[0]!.facts[0]!.revealedAt!.paragraphIndex=99;
  expect(readerPresentationFor(plan,future)).toBeUndefined();
 });
 test('a character entering through a continuity change leaves when the scene changes',()=>{
  const plan=fixture();plan.continuityDeltas[0]!.delta.characterUpdates.Visitor={present:true};
  const result=projectTurnPresentation(plan)!;
- const visitor=result.snapshots[8]!.entities.find(e=>e.name==='Visitor')!;
- expect(result.snapshots[8]?.presentEntityIds).toContain(visitor.id);
- expect(result.snapshots[9]?.presentEntityIds).not.toContain(visitor.id);
+ const visitor=selectPresentationSnapshot(result,8)!.entities.find(e=>e.name==='Visitor')!;
+ expect(selectPresentationSnapshot(result,8)?.presentEntityIds).toContain(visitor.id);
+ expect(selectPresentationSnapshot(result,9)?.presentEntityIds).not.toContain(visitor.id);
 });
 
 test('rich profile observations reveal in order and preserve their exact source identity',()=>{
@@ -64,13 +65,13 @@ test('rich profile observations reveal in order and preserve their exact source 
   {kind:'object',name:'Black Key',paragraphIndex:5,field:'provenance',value:'old ferry',evidence:'Black Key came from the old ferry.'},
  ];
  const result=projectTurnPresentation(plan)!;
- expect(result.snapshots[0]!.entities.find(e=>e.name==='Mira')!.facts.some(f=>f.field==='role')).toBe(false);
- const role=result.snapshots[1]!.entities.find(e=>e.name==='Mira')!.facts.find(f=>f.field==='role')!;
+ expect(selectPresentationSnapshot(result,0)!.entities.find(e=>e.name==='Mira')!.facts.some(f=>f.field==='role')).toBe(false);
+ const role=selectPresentationSnapshot(result,1)!.entities.find(e=>e.name==='Mira')!.facts.find(f=>f.field==='role')!;
  expect(role.value).toBe('harbor pilot');
  expect(role.source).toEqual({provider:'story',recordId:'message',chatId:'chat',messageId:'message',sourceFingerprint:'12345678',observedAt:'2026-10-11T00:00:00Z'});
  expect(role.revealedAt).toEqual({key:plan.key,paragraphIndex:1});
- expect(result.snapshots[4]!.entities.some(e=>e.name==='Black Key')).toBe(false);
- expect(result.snapshots[5]!.entities.find(e=>e.name==='Black Key')!.facts.map(f=>f.field)).toEqual(['function','provenance']);
+ expect(selectPresentationSnapshot(result,4)!.entities.some(e=>e.name==='Black Key')).toBe(false);
+ expect(selectPresentationSnapshot(result,5)!.entities.find(e=>e.name==='Black Key')!.facts.map(f=>f.field)).toEqual(['function','provenance']);
  expect(readerPresentationFor(plan,result)).toEqual(result);
 });
 
@@ -85,10 +86,10 @@ test('explicit item ownership and condition change only from their observed para
   {kind:'object',name:'Black Key',paragraphIndex:4,field:'condition',value:'cracked',evidence:'Black Key is cracked.'},
  ];
  const result=projectTurnPresentation(plan)!;
- const key=result.snapshots[1]!.entities.find(e=>e.name==='Black Key')!;
- expect(result.snapshots[3]!.stateByEntity[key.id]).toEqual({owner:'Mira',condition:'intact'});
- expect(result.snapshots[4]!.stateByEntity[key.id]).toEqual({owner:'Theo',condition:'cracked'});
- expect(result.snapshots[4]!.entities.find(e=>e.id===key.id)!.facts.filter(f=>f.field==='owner').map(f=>f.value)).toEqual(['Mira','Theo']);
+ const key=selectPresentationSnapshot(result,1)!.entities.find(e=>e.name==='Black Key')!;
+ expect(selectPresentationSnapshot(result,3)!.stateByEntity[key.id]).toEqual({owner:'Mira',condition:'intact'});
+ expect(selectPresentationSnapshot(result,4)!.stateByEntity[key.id]).toEqual({owner:'Theo',condition:'cracked'});
+ expect(selectPresentationSnapshot(result,4)!.entities.find(e=>e.id===key.id)!.facts.filter(f=>f.field==='owner').map(f=>f.value)).toEqual(['Mira','Theo']);
 });
 
 test('optional item state enrichment preserves a valid full continuity budget',()=>{
@@ -104,10 +105,10 @@ test('optional item state enrichment preserves a valid full continuity budget',(
   {kind:'object',name:'Black Key',paragraphIndex:65,field:'owner',value:'Theo',evidence:'Black Key is owned by Theo.'},
  ];
  const result=projectTurnPresentation(plan)!;
- const key=result.snapshots[64]!.entities.find(e=>e.name==='Black Key')!;
- expect(result.snapshots[64]!.stateByEntity[key.id]!.owner).toBe('Mira');
- expect(result.snapshots[65]!.stateByEntity[key.id]!.owner).toBe('Theo');
- expect(result.snapshots[66]!.stateByEntity[key.id]!.owner).toBe('Theo');
+ const key=selectPresentationSnapshot(result,64)!.entities.find(e=>e.name==='Black Key')!;
+ expect(selectPresentationSnapshot(result,64)!.stateByEntity[key.id]!.owner).toBe('Mira');
+ expect(selectPresentationSnapshot(result,65)!.stateByEntity[key.id]!.owner).toBe('Theo');
+ expect(selectPresentationSnapshot(result,66)!.stateByEntity[key.id]!.owner).toBe('Theo');
 });
 
 test('a long quoted ownership description stays a fact without invalidating state projection',()=>{
@@ -115,7 +116,7 @@ test('a long quoted ownership description stays a fact without invalidating stat
  plan.paragraphs[1]!.text=`Black Key is owned by ${owner}.`;
  plan.storyReferences=[{kind:'object',name:'Black Key',paragraphIndex:1,field:'owner',value:owner,evidence:plan.paragraphs[1]!.text}];
  const result=projectTurnPresentation(plan)!;
- const key=result.snapshots[1]!.entities.find(e=>e.name==='Black Key')!;
+ const key=selectPresentationSnapshot(result,1)!.entities.find(e=>e.name==='Black Key')!;
  expect(key.facts[0]!.value).toBe(owner);
- expect(result.snapshots[1]!.stateByEntity[key.id]!.owner).toBeUndefined();
+ expect(selectPresentationSnapshot(result,1)!.stateByEntity[key.id]!.owner).toBeUndefined();
 });

@@ -1,3 +1,4 @@
+import {selectPresentationSnapshot} from '../../shared/presentation-selectors.js';
 import { loadCardRole, saveCardRole, saveCorrectedAppearance, loadCharacterRegistry, saveTurnRecord, type StoredTurnRecord } from "./storage.js";
 import { projectTurnPresentation } from "./entity-projection.js";
 import { describe, expect, test } from "bun:test";
@@ -512,19 +513,19 @@ test('an unchanged plan reuses its saved reader projection and a different turn 
     continuityDeltas:[]
   } as unknown as import('../../shared/contracts.js').TurnPlan;
   const saved=projectTurnPresentation(plan)!;
-  expect(saved.snapshots).toHaveLength(2);
+  expect(saved.beats).toHaveLength(2);
   const record={schemaVersion:1,speaker:'Narrator',status:'ready',plan,jobs:[],updatedAt:'2026-10-24T00:00:00.000Z',presentation:saved} as StoredTurnRecord;
   await saveTurnRecord(spindle,'turns/one.json',record,'alice');
   // Same reference: the projection was not rebuilt on an ordinary job write.
   expect((data.get('turns/one.json') as StoredTurnRecord).presentation).toBe(saved);
 
-  const foreign={...saved,snapshots:saved.snapshots.map(snapshot=>({...snapshot,at:{...snapshot.at,key:{...plan.key,revision:9}}}))};
+  const foreign={...saved,key:{...plan.key,revision:9}};
   await saveTurnRecord(spindle,'turns/two.json',{...record,presentation:foreign},'alice');
   const rebuilt=data.get('turns/two.json') as StoredTurnRecord;
   expect(rebuilt.presentation).not.toBe(foreign);
-  expect((rebuilt.presentation as typeof saved).snapshots[0]!.at.key.revision).toBe(0);
+  expect((rebuilt.presentation as typeof saved).key.revision).toBe(0);
 
-  const short={...saved,snapshots:saved.snapshots.slice(0,1)};
+  const short={...saved,paragraphCount:1,availableThrough:0,beats:saved.beats.slice(0,1)};
   await saveTurnRecord(spindle,'turns/three.json',{...record,presentation:short},'alice');
   expect((data.get('turns/three.json') as StoredTurnRecord).presentation).not.toBe(short);
 });
@@ -535,10 +536,10 @@ test('same-key subject correction must refresh presentation',async()=>{
  const saved=projectTurnPresentation(plan)!;
  const changed={...plan,visualCues:[{...plan.visualCues[0]!,character:'Jon',resolvedIdentity:'black hair'}]};
  const expected=projectTurnPresentation(changed)!;
- expect(expected.snapshots[0]!.drawableEntityId).not.toBe(saved.snapshots[0]!.drawableEntityId);
+ expect(selectPresentationSnapshot(expected,0)!.drawableEntityId).not.toBe(selectPresentationSnapshot(saved,0)!.drawableEntityId);
  await saveTurnRecord(spindle,'turns/correction-probe.json',{schemaVersion:1,speaker:'Narrator',status:'ready',plan:changed,jobs:[],updatedAt:'now',presentation:saved} as StoredTurnRecord,'alice');
  const actual=(data.get('turns/correction-probe.json') as StoredTurnRecord).presentation as typeof saved;
- expect(actual.snapshots[0]!.drawableEntityId).toBe(expected.snapshots[0]!.drawableEntityId);
+ expect(selectPresentationSnapshot(actual,0)!.drawableEntityId).toBe(selectPresentationSnapshot(expected,0)!.drawableEntityId);
 });
 
 test('job-only writes reuse a derived projection while in-place plan edits invalidate it',async()=>{

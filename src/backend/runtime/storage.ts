@@ -1066,6 +1066,10 @@ async function recordWithImageLibrary(spindle:SpindleAPI,path:string,record:Stor
  */
 function presentationBelongsToPlan(presentation:unknown,plan:TurnPlan):boolean {
   if(!presentation||typeof presentation!=='object')return false;
+  if((presentation as {version?:unknown}).version===2){
+    const compact=presentation as {key?:TurnKey;paragraphCount?:unknown};
+    return compact.paragraphCount===plan.paragraphs.length&&!!compact.key&&samePresentationTurn(compact.key,plan.key);
+  }
   const candidate=presentation as {version?:unknown;snapshots?:unknown};
   if(candidate.version!==1||!Array.isArray(candidate.snapshots))return false;
   if(candidate.snapshots.length!==plan.paragraphs.length)return false;
@@ -1084,7 +1088,7 @@ function presentationBelongsToPlan(presentation:unknown,plan:TurnPlan):boolean {
  */
 function recordWithPresentation(record:StoredTurnRecord):StoredTurnRecord {
   const saved=record.presentation;
-  if(saved!==undefined && (saved as {version?:unknown})?.version!==1)return record;
+  if(saved!==undefined && ![1,2].includes((saved as {version:number})?.version))return record;
   const derived=derivedPresentation(record.plan);
   if(saved!==undefined && presentationBelongsToPlan(saved,record.plan) && JSON.stringify(saved)===JSON.stringify(derived))return record;
   return {...record,presentation:derived};

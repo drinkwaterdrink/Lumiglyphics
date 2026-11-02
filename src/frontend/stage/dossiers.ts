@@ -3,15 +3,19 @@ import type { ReaderWorkspace } from "./reader-workspace.js";
 import {validateStoryDocuments,visibleStoryDocuments} from '../../shared/story-documents.js';
 import {stripTextEffectTags} from '../../shared/text-effects.js';
 import {availableInteractionVerbs,buildInteractionDraft,mergeInteractionDraft} from '../../shared/scene-interactions.js';
-import {referenceEntriesWithHistory,dossierWithHistory,selectEarlierDossier,normalizeTooltipPreferences,linkEntityMentions,eligibleEntities,selectReaderDossier,entityOverride,type TooltipPreferences} from '../../shared/dossiers.js';
+import {referenceEntriesWithHistory,dossierWithHistory,selectEarlierDossier,normalizeTooltipPreferences,linkEntityMentions,createReferenceLinkBudget,eligibleEntities,selectReaderDossier,entityOverride,type TooltipPreferences} from '../../shared/dossiers.js';
 import {referenceHistoryFor,type ReferenceHistory} from '../../shared/reference-history.js';
-import {ReaderPresentationSchema,samePresentationTurn,type ReaderPresentation,type PresentationEntity} from '../../shared/presentation-entities.js';
+import {samePresentationTurn,type ReaderPresentation,type PresentationEntity,type PresentationSnapshot} from '../../shared/presentation-entities.js';
+import {parseReaderPresentation,presentationTurnKey,createPresentationCursor} from '../../shared/presentation-selectors.js';
 import type {AssetView,TurnView} from '../../protocol.js';
 import {applyEntityAnchors,clearEntityAnchors,protectedEntityRanges} from './entity-anchors.js';
 import {DossierCard,DOSSIER_CSS,DOCKED_DOSSIER_CSS,type DossierVisualContext} from './dossier-card.js';
 export class StageDossiers {
  private prefs=normalizeTooltipPreferences({});private presentation:ReaderPresentation|undefined;private paragraphs:readonly string[]=[];private index=-1;
  private history:ReferenceHistory|undefined;
+ private snapshotAt:(index:number)=>PresentationSnapshot|undefined=()=>undefined;
+ private priorLinks:(index:number)=>{used:number;priorIds:Set<string>}=()=>({used:0,priorIds:new Set()});
+ private resetLinkBudget():void{this.priorLinks=this.presentation?createReferenceLinkBudget(this.presentation,this.paragraphs,this.prefs):()=>({used:0,priorIds:new Set()});}
  private workspace:ReaderWorkspace|undefined;
  private workspaceMounted=false;
  private turnMedia:TurnView|null=null; private card:DossierCard;private tray=document.createElement('button');private ready=false;
@@ -42,7 +46,11 @@ export class StageDossiers {
  }
  private openReferences():void {
   const snapshot=this.snapshot();this.hold();
-  this.card.openTray(snapshot?referenceEntriesWithHistory(snapshot,this.prefs,this.history):[],this.tray,(id,trigger)=>this.open(id,trigger),!this.prefs.enabled?'Story references are disabled. You can enable them in Reading settings.':!snapshot?'No established references are available at this reading position.':this.prefs.rememberReferences&&this.history?.truncated?'Showing a limited recent selection of earlier descriptions.':undefined,entity=>this.resolveVisualContext(entity)); }
+  this.card.openTray(snapshot?referenceEntriesWithHistory(snapshot,this.prefs,this.history):[],this.tray,(id,trigger)=>this.open(id,trigger),!this.prefs.enabled?'Story references are disabled. You can enable them in Reading settings.':this.limitationNote()??(!snapshot?'No established references are available at this reading position.':this.prefs.rememberReferences&&this.history?.truncated?'Showing a limited recent selection of earlier descriptions.':undefined),entity=>this.resolveVisualContext(entity)); }
+ private limitationNote():string|undefined {
+  if(this.presentation?.version!==2||!this.presentation.warnings?.length)return undefined;
+  return this.presentation.availableThrough<this.presentation.paragraphCount-1?`Story references are available through paragraph ${this.presentation.availableThrough+1} of ${this.presentation.paragraphCount} for this long reply.`:'Some additional story references were omitted in this long reply.';
+ }
  isOpen():boolean{return this.card.isOpen();}
  setTurnMedia(turn:TurnView|null):void{this.turnMedia=turn;}
  openTrayFromStage():boolean{
@@ -62,26 +70,24 @@ export class StageDossiers {
   return [...places,...others].slice(0,6).map(e=>({id:e.entity.id,name:e.entity.name,kind:e.entity.kind,pinned:e.pinned}));
  }
  setContext(value:ReaderPresentation|undefined,paragraphs:readonly string[],history?:ReferenceHistory):void {
-  this.card.close();this.card.resetForContext();this.index=-1;this.ready=false;this.paragraphs=paragraphs;  const parsed=ReaderPresentationSchema.safeParse(value);
-  this.presentation=parsed.success&&JSON.stringify(parsed.data).length<=512000&&parsed.data.snapshots.length===paragraphs.length&&parsed.data.snapshots.every((s,i)=>s.at.paragraphIndex===i&&samePresentationTurn(s.at.key,parsed.data.snapshots[0]!.at.key))?parsed.data:undefined;
+  this.card.close();this.card.resetForContext();this.index=-1;this.ready=false;this.paragraphs=paragraphs;
+  this.presentation=parseReaderPresentation(value,undefined,paragraphs.length);
+  this.snapshotAt=this.presentation?createPresentationCursor(this.presentation):()=>undefined;
+  this.resetLinkBudget();
   if(this.presentation?.documents)this.presentation.documents=validateStoryDocuments(this.presentation.documents,paragraphs.map(text=>({text:stripTextEffectTags(text)})));
-  const key=this.presentation?.snapshots[0]?.at.key;this.history=key?referenceHistoryFor(history,key):undefined;
+  const key=this.presentation?presentationTurnKey(this.presentation):undefined;this.history=key?referenceHistoryFor(history,key):undefined;
   clearEntityAnchors(this.text);this.tray.hidden=true;
  }
- setHistory(history:ReferenceHistory|undefined):void{const key=this.presentation?.snapshots[0]?.at.key,next=key?referenceHistoryFor(history,key):undefined;if(JSON.stringify(next)===JSON.stringify(this.history))return;this.history=next;this.card.close();this.dossierOpen?.(false);if(this.ready)this.refresh(this.index);}
- setPreferences(value:TooltipPreferences):void{const next=normalizeTooltipPreferences(value);if(JSON.stringify(next)===JSON.stringify(this.prefs))return;this.prefs=next;this.card.close();this.dossierOpen?.(false);if(this.ready)this.refresh(this.index);else{clearEntityAnchors(this.text);this.tray.hidden=true;}}
+ setHistory(history:ReferenceHistory|undefined):void{const key=this.presentation?presentationTurnKey(this.presentation):undefined,next=key?referenceHistoryFor(history,key):undefined;if(JSON.stringify(next)===JSON.stringify(this.history))return;this.history=next;this.card.close();this.dossierOpen?.(false);if(this.ready)this.refresh(this.index);}
+ setPreferences(value:TooltipPreferences):void{const next=normalizeTooltipPreferences(value);if(JSON.stringify(next)===JSON.stringify(this.prefs))return;this.prefs=next;this.resetLinkBudget();this.card.close();this.dossierOpen?.(false);if(this.ready)this.refresh(this.index);else{clearEntityAnchors(this.text);this.tray.hidden=true;}}
  cursor(index:number):void{if(index!==this.index){this.card.close();this.dossierOpen?.(false);this.index=index;this.ready=false;this.tray.hidden=true;}}
- private snapshot(){const snapshot=this.presentation?.snapshots[this.index];return snapshot?{...snapshot,entities:snapshot.entities.filter(e=>e.firstParagraph<=this.index)}:undefined;}
+ private snapshot(){return this.snapshotAt(this.index);}
  refresh(index:number):void {
   this.cursor(index);this.ready=true;clearEntityAnchors(this.text);
   const snapshot=this.snapshot();const eligible=snapshot?eligibleEntities(snapshot.entities,this.prefs,snapshot.at.key.chatId):[];
   this.tray.hidden=!snapshot||!referenceEntriesWithHistory(snapshot,this.prefs,this.history).length;if(!snapshot||!eligible.length||this.prefs.linking==='menu-only')return;
   // Global deterministic 24-link reply cap, evaluated only through this cursor.
-  let used=0;const priorIds=new Set<string>();
-  for(let i=0;i<index;i++) {
-   const s=this.presentation!.snapshots[i]!;
-   const anchors=linkEntityMentions(this.paragraphs[i]??'',s.entities,this.prefs,s.at.key.chatId,Math.min(this.prefs.maxLinksPerParagraph,24-used),[],this.prefs.linking==='important'?priorIds:new Set());used+=anchors.length;for(const a of anchors)priorIds.add(a.entityId);
-  }
+  const {used,priorIds}=this.priorLinks(index);
   const anchors=linkEntityMentions(this.text.textContent??'',snapshot.entities,this.prefs,snapshot.at.key.chatId,Math.min(this.prefs.maxLinksPerParagraph,24-used),protectedEntityRanges(this.text),this.prefs.linking==='important'?priorIds:new Set());
   applyEntityAnchors(this.text,anchors,(id,trigger)=>this.open(id,trigger),id=>selectReaderDossier(id,snapshot,'brief',this.prefs.fieldGroups)?.facts[0]?.value??'View established story information');
  }
@@ -98,22 +104,21 @@ export class StageDossiers {
   const names=new Set([entity.name,...entity.aliases].map(n=>n.trim().toLocaleLowerCase()).filter(Boolean));
   const urlOf=(a:AssetView)=>a.stageAsset?.displayImageUrl??a.imageUrl;
   const readyAssets=(this.turnMedia?.assets??[]).filter(a=>(a.status==='generated'||a.status==='browser_ready')&&Boolean(urlOf(a))&&a.paragraphIndex<=Math.max(0,this.index));
-  const allReadyAssets=(this.turnMedia?.assets??[]).filter(a=>(a.status==='generated'||a.status==='browser_ready')&&Boolean(urlOf(a)));
-  const pool=readyAssets.length?readyAssets:allReadyAssets;
+  const pool=readyAssets;
   if(entity.kind==='npc'){
    const portrait=[...pool].reverse().find(a=>a.stageAsset?.role==='portrait'&&a.stageAsset.character&&names.has(a.stageAsset.character.trim().toLocaleLowerCase()));
    if(portrait&&urlOf(portrait)){imageUrl=urlOf(portrait);imageCaption=`${entity.name}${portrait.stageAsset?.attire?` · ${portrait.stageAsset.attire}`:''}`;}
    else{
-    const beat=[...pool].reverse().find(a=>{const snap=this.presentation?.snapshots[a.paragraphIndex];return snap&&(snap.drawableEntityId===entity.id||snap.presentEntityIds.includes(entity.id));});
+    const beat=[...pool].reverse().find(a=>{const snap=this.snapshotAt(a.paragraphIndex);return snap&&(snap.drawableEntityId===entity.id||snap.presentEntityIds.includes(entity.id));});
     if(beat&&urlOf(beat)){imageUrl=urlOf(beat);imageCaption=`Scene view · ${entity.name}`;}
     else if(isPresent&&this.displayedImageUrl?.()){imageUrl=this.displayedImageUrl()!;imageCaption=`Current scene · ${entity.name}`;}
    }
   }else if(entity.kind==='place'){
-   const bg=[...pool].reverse().find(a=>{const snap=this.presentation?.snapshots[a.paragraphIndex];return (a.stageAsset?.role==='background'||a.stageAsset?.role==='scene'||!a.stageAsset)&&(snap?.locationId===entity.id||isActiveLocation);});
+   const bg=[...pool].reverse().find(a=>{const snap=this.snapshotAt(a.paragraphIndex);return (a.stageAsset?.role==='background'||a.stageAsset?.role==='scene'||!a.stageAsset)&&snap?.locationId===entity.id;});
    if(bg&&urlOf(bg)){imageUrl=urlOf(bg);imageCaption=`Location view · ${entity.name}`;}
    else if(isActiveLocation&&this.displayedImageUrl?.()){imageUrl=this.displayedImageUrl()!;imageCaption=`Current location · ${entity.name}`;}
   }else{
-   const prop=[...pool].reverse().find(a=>a.paragraphIndex===entity.firstParagraph||this.presentation?.snapshots[a.paragraphIndex]?.drawableEntityId===entity.id);
+   const prop=[...pool].reverse().find(a=>a.paragraphIndex===entity.firstParagraph||this.snapshotAt(a.paragraphIndex)?.drawableEntityId===entity.id);
    if(prop&&urlOf(prop)){imageUrl=urlOf(prop);imageCaption=`Scene detail · ${entity.name}`;}
    else if(isPresent&&this.displayedImageUrl?.()){imageUrl=this.displayedImageUrl()!;imageCaption=`Current scene · ${entity.name}`;}
   }
@@ -155,6 +160,7 @@ export class StageDossiers {
   if(!existing&&this.prefs.overrides.length>=64)return false;
   const override={chatId,kind:entity.kind,name:entity.name,suppressed:false,pinned:false,note:'',...existing,...patch};
   this.prefs={...this.prefs,overrides:[override,...this.prefs.overrides.filter(o=>!(o.chatId===chatId&&o.kind===entity.kind&&o.name===entity.name))].slice(0,64)};
+  this.resetLinkBudget();
   this.save(this.prefs);this.refresh(this.index);return true;
  }
  destroy():void{this.card.destroy();this.tray.remove();}

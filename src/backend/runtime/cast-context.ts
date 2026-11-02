@@ -40,7 +40,7 @@ export async function scanCastContext(api:SpindleAPI,chatId:string,userId:string
    referenceScope={path,key:JSON.stringify(saved.plan.key),position:JSON.stringify(position)};
    const index=position&&samePresentationTurn(position.key,saved.plan.key)?position.paragraphIndex:0;
    let presentation;try{presentation=readerPresentationFor(saved.plan,saved.presentation);}catch{referenceNotice='Saved story references could not be read; tracker suggestions remain available.';}
-   const snapshot=presentation?.snapshots.find(s=>s.at.paragraphIndex===index&&samePresentationTurn(s.at.key,saved.plan.key));
+   const snapshot=presentation?selectPresentationSnapshot(presentation,index):undefined;
    if(snapshot)for(const entity of snapshot.entities){
     if(entity.kind!=='npc'||entity.firstParagraph>index)continue;
     const dossier=selectReaderDossier(entity.id,snapshot,'expanded');if(!dossier)continue;
@@ -56,3 +56,4 @@ export async function scanCastContext(api:SpindleAPI,chatId:string,userId:string
  if(token!==castArtToken(api,chatId,userId)||before!==signature(await api.chat.getMessages(chatId)))throw new Error('Context changed while scanning. Scan again.');
  return CastContextScanSchema.parse({candidates,notice:`Review a source before filling your draft. Named references with no appearance need a description before saving. Nothing has been saved or generated. ${config.includeSimTrackerContext?'Scanned recent SimTracker snapshots; older outfit details may need updating.':'SimTracker context is disabled in Pictures settings.'} Other extension data is not read through private storage. ${referenceNotice} ${omitted?'Suggestion limit reached (32); additional saved suggestions were omitted. New context is prioritized.':''}`});
 }
+import {selectPresentationSnapshot} from '../../shared/presentation-selectors.js';

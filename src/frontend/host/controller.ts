@@ -184,7 +184,7 @@ export function shouldPreserveImage(previous: TurnView | null, next: TurnView): 
  *   which is exactly the pre-attribution behavior.
  */
 export function nameplateForParagraph(view: TurnView, index: number): string {
-  const snapshot=view.presentation?.snapshots[index];
+  const snapshot=view.presentation?selectPresentationSnapshot(view.presentation,index):undefined;
   const key={chatId:view.chatId,assistantMessageId:view.messageId,swipeId:view.swipeId,sourceFingerprint:view.sourceFingerprint,revision:view.revision};
   if(snapshot && snapshot.at.paragraphIndex===index && samePresentationTurn(snapshot.at.key,key) && snapshot.speakerEntityId) {
     const speaker=snapshot.entities.find(e=>e.id===snapshot.speakerEntityId&&e.kind==='npc');
@@ -264,7 +264,7 @@ export function stageTurnInput(
   intensity: VisualNovelEffectIntensity = "full",
 ): VnTurnInput {
   const key={chatId:next.chatId,assistantMessageId:next.messageId,swipeId:next.swipeId,sourceFingerprint:next.sourceFingerprint,revision:next.revision};
-  const presentation=next.presentation?.snapshots.length===next.paragraphs.length&&next.presentation.snapshots.every((s,i)=>s.at.paragraphIndex===i&&samePresentationTurn(s.at.key,key))?next.presentation:undefined;
+  const presentation=parseReaderPresentation(next.presentation,key,next.paragraphs.length);
   const referenceHistory=referenceHistoryFor(next.referenceHistory,key);
   return {
     ...(next.replyCost ? {replyCost: formatReplyUsage(next.replyCost.usage, next.replyCost.imagesGenerated)} : {}),
@@ -1520,3 +1520,4 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   (globalThis as Record<PropertyKey, unknown>)[CLEANUP_KEY] = cleanup;
   return cleanup;
 }
+import {parseReaderPresentation,selectPresentationSnapshot} from '../../shared/presentation-selectors.js';

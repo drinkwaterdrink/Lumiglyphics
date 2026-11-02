@@ -10,12 +10,12 @@
 
 **Spec:** `docs/audits/2026-11-01-main-3-gpt-audit.md` (findings A01-A10 and selected-suggestion design decisions).
 
-**Execution status:** Tasks 0 and 1 implemented and verified in the isolated Main-3-GPT checkout on `codex/audited-improvements`; Tasks 2-11 remain pending. See `docs/implementation/2026-11-01-audit-progress.md` for evidence, additional bugs and known baseline browser failure. No commit or push.
+**Execution status:** Tasks 0 and 1 published as beta.110 (`8981bd3`) on `codex/audited-improvements`. Task 2 is implemented and locally verified, not yet committed/pushed; Tasks 3-11 remain pending. See `docs/implementation/2026-11-01-audit-progress.md` for evidence, additional bugs and known baseline browser failures.
 
 ## Global constraints
 
 - Implement against Main-3-GPT commit `b0f5f5a594f4f6310a491b3452b388b91afdabfe` or an explicitly verified descendant; the current primary checkout is Testing beta.74. Do not apply this plan blindly to Testing.
-- Every push increments the beta suffix in package.json, spindle.json and src/shared/build-info.ts. Next push from the verified beta.109 base is **0.2.0-beta.110**. Re-read remote versions immediately before pushing; never downgrade a newer release. There is no push in this planning task.
+- Every push increments the beta suffix in package.json, spindle.json and src/shared/build-info.ts. The first correctness packet was pushed as **0.2.0-beta.110**; the next authorized push requires **0.2.0-beta.111**, subject to rechecking the remote. Never downgrade a newer release.
 - Preserve source comments/docstrings, primary story/job validation, userId targeting/storage isolation, swipe/revision identity, intake epochs and view gating. A closed reader never starts automatic generation.
 - No live/paid image calls in automated tests. New text/image calls need explicit workflow intent and accurate usage reporting. No filtering/softening creative themes or descriptions; lint only advises.
 - Persisted optional caches/history may be ignored or rederived without blocking a valid story. Unknown future formats remain preserved and unavailable rather than overwritten.

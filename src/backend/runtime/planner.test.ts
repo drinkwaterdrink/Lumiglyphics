@@ -1,3 +1,4 @@
+import {selectPresentationSnapshot} from '../../shared/presentation-selectors.js';
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ChatMessageDTO, PersonaDTO, SpindleAPI } from "lumiverse-spindle-types";
@@ -1288,8 +1289,8 @@ test('optional story references are grounded, opt-in and do not cause repair cal
   assert.equal(instruction.includes('Optional storyReferences'),enabled);
   assert.deepEqual(result.plan.storyReferences,enabled?(Array.isArray(proposed)?[reference]:[]):undefined);
   const presentation=projectTurnPresentation(result.plan);
-  assert.equal(presentation?.snapshots[0]?.entities.some(e=>e.kind==='object'),false);
-  assert.equal(presentation?.snapshots[1]?.entities.some(e=>e.kind==='object'),enabled&&Array.isArray(proposed));
+  assert.equal((presentation?selectPresentationSnapshot(presentation,0):undefined)?.entities.some(e=>e.kind==='object'),false);
+  assert.equal((presentation?selectPresentationSnapshot(presentation,1):undefined)?.entities.some(e=>e.kind==='object'),enabled&&Array.isArray(proposed));
   assert.equal(JSON.stringify(presentation).includes('secret curse'),false);
  }
 });
@@ -1324,10 +1325,10 @@ test('optional documents are literal, source-scoped and never trigger a repair c
   assert.equal(presentation?.documents?.[0]?.sections.length,enabled&&!malformed?1:undefined);
   assert.equal(JSON.stringify(presentation).includes('Invented secret'),false);
   if(enabled&&!malformed){
-   assert.equal(presentation?.snapshots[0]?.entities.some(e=>e.kind==='object'&&e.name==='letter'),true);
+   assert.equal((presentation?selectPresentationSnapshot(presentation,0):undefined)?.entities.some(e=>e.kind==='object'&&e.name==='letter'),true);
    const altered=structuredClone(result.plan);altered.paragraphs[1]!.text='The letter is blank.';
    assert.equal(readerPresentationFor(altered,presentation)?.documents?.[0]?.sections.length,0);
-   const oldSwipe=structuredClone(presentation!);oldSwipe.snapshots.forEach(s=>s.at.key.swipeId='other');
+   const oldSwipe=structuredClone(presentation!);oldSwipe.key.swipeId='other';
    assert.equal(readerPresentationFor(result.plan,oldSwipe),undefined);
   }
  }

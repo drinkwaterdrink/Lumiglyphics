@@ -1,5 +1,6 @@
 import {selectHeldBackground} from './background-hold.js';
 import {samePresentationTurn} from './presentation-entities.js';
+import {selectPresentationSnapshot} from './presentation-selectors.js';
 import type {AssetView,TurnView} from '../protocol.js';
 import type {StageAssetRole} from './stage-assets.js';
 export type StageAssetMetadata={role:StageAssetRole;manual?:boolean;sceneId:string;sceneRevision?:number;character?:string;attire?:string|null;displayImageUrl?:string};
@@ -26,7 +27,7 @@ export function selectCastComposition(turn:TurnView,index:number,selectedName?:s
   if(!byName.has(nameKey(name))&&byName.size>=32){if(nameKey(name)!==nameKey(speaker))continue;byName.delete(byName.keys().next().value!);}
   byName.set(nameKey(name),{name,asset:asset.stageAsset.displayImageUrl?{...asset,imageUrl:asset.stageAsset.displayImageUrl,previousImage:false,status:"generated"}:usable(asset)?asset:null,active:nameKey(name)===nameKey(speaker)});
  }
- const candidate=turn.presentation?.snapshots[index];
+ const candidate=turn.presentation?selectPresentationSnapshot(turn.presentation,index):undefined;
  const snapshot=candidate&&samePresentationTurn(candidate.at.key,{chatId:turn.chatId,assistantMessageId:turn.messageId,swipeId:turn.swipeId,sourceFingerprint:turn.sourceFingerprint,revision:turn.revision})?candidate:undefined;
  if(snapshot)for(const [key,p] of byName){const entity=snapshot.entities.find(e=>e.kind==='npc'&&nameKey(e.name)===key);if(entity){const state=snapshot.stateByEntity[entity.id];if(state?.presence==='absent')byName.delete(key);else if(state?.outfit && p.asset?.stageAsset?.attire && state.outfit!==p.asset.stageAsset.attire)p.asset=null;}}
  const all=[...byName.values()];

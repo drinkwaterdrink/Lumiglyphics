@@ -45,6 +45,34 @@ Final full isolated suite after all review fixes: **1,984 pass, zero fail, 10,57
 
 Version synchronized to `0.2.0-beta.110` in all three version files. Fresh release checks: 1,984 tests pass, zero fail; installed compiler typecheck, production bundles, bundle verifier/status generation, diff whitespace check and focused offline Artwork browser flow pass. Publishing to `codex/audited-improvements`, based on the unchanged Main-3-GPT beta.109 remote head; no force push or Testing changes.
 
+The checkpoint was committed and pushed successfully as `8981bd3ef6ae225f51cdca096c47595c78f44539` to `origin/codex/audited-improvements`. Remote SHA was verified after push. Main-3-GPT and Testing were not changed.
+
+## Task 2: compact presentation implemented and locally verified
+
+New version-2 presentation stores entity/fact dictionaries, baseline state, sparse coalesced changes and a dense beat index. The format stays compact through persistence and IPC; frontend/backend consumers select detached cursor snapshots. Version-1 records remain readable; known derived caches are rebuilt on writes and unknown future formats remain preserved. Full turn identity and reveal/source metadata are validated. A maximum 2,000,000 UTF-8 bytes / 10,000 covered paragraphs retains a valid prefix with explicit diagnostic reasons instead of rejecting the entire projection. Entity/fact enrichment caps also report warnings. Primary narrative/jobs remain separate.
+
+Removed the 64-change and 256-paragraph wholesale drop. Repeated no-op changes are coalesced, item owner/condition updates remain reveal-scoped, and documents retain literal-text revalidation. Updated cast allocation/context, DNA harvesting, nameplates, folio, dossiers and storage cache invalidation. Dossier art no longer falls back to a later paragraph's ready image.
+
+Independent review caught a performance regression in the first migration: recounting earlier mention links replayed every preceding state snapshot. Replaced that pass with an incremental prefix budget over reveal names, invalidated on context/preferences/overrides, capped at 24 links. Backward seeks preserve earlier counts and first-mentioned identities.
+
+Verification after the review fix: **1,992 tests pass, zero fail, 10,631 assertions, 188 files**; installed-compiler typecheck, production bundles, bundle verifier/status generation and diff checks pass. New offline browser fixture passes at 390x844 and 1440x960: current state changes, fact reveal, backward reading, no future-art fetch and no page/console errors. No model/provider calls. The old projection tests now assert the same reader-visible facts via selectors; tests that deliberately expected the old 65-change/257-paragraph failure were replaced with successful-retention expectations. A folio test's synthetic legacy payload was given its missing version discriminator.
+
+Measured synthetic ASCII fixture, six NPCs with six 40-character facts each:
+
+| Paragraphs | Legacy full snapshots | Compact storage / wire representation |
+|---|---:|---:|
+| 60 | 969,137 bytes | 21,319 bytes |
+| 100 | 1,615,217 bytes | 24,800 bytes |
+| 300 | 4,845,817 bytes | 42,401 bytes |
+
+Local timing example for 2,500 paragraphs / six NPCs / one outfit update per NPC per paragraph (1,348,888 compact bytes): the old prefix scan took 2,072.52 ms; current snapshot plus incremental prefix accounting took 22.17 ms; 100 cached prefix reads took 3.24 ms. These are local Bun observations, not device-performance guarantees. In three fresh processes for the 300-paragraph fixture, runtime-reported process peak RSS was 79,100-83,072 KiB for legacy and 65,548-66,312 KiB for compact. Process peaks include the runtime and loaded modules; they are not an isolated JavaScript heap measurement.
+
+New regression files: `presentation-size.test.ts`, `presentation-selectors.test.ts`, `reference-link-budget.test.ts`; browser flow: `scripts/test-compact-presentation-browser.ts`. Scratch measurement sources/results are in ignored `.cache/implementation/`.
+
+Additional existing baseline issue: `scripts/test-reader-reference-workspace-browser.ts:33` fails its 44px header-button assertion on both untouched beta.109 and the new source. Carry into the targeted accessibility/visual packet. Investigation of the older Artwork suite's line16 failure shows its selector targets hidden Reader-First navigation, while the current APERTURE shell exposes `Open Art Studio`; this needs a test-flow update, not a weakened overlap assertion.
+
+Beta.111 release checkpoint: all three version files synchronized. Fresh verification: 1,992 tests pass / zero fail; installed-compiler typecheck, production build, bundle verifier/status generation, diff check, and offline mobile/desktop compact-presentation browser regression pass. Publishing the completed Task 2 to origin/codex/audited-improvements as requested; Main-3-GPT and Testing remain unchanged.
+
 ## Remaining roadmap
 
-Tasks 2-11 have not been implemented. Next: compact presentation across storage/IPC/cursor consumers, fixing both size and state-change limits and future-art fallback. Selected suggestion features, including toggles 16 and 20, remain planned rather than shipped.
+Tasks 3-11 have not been implemented. Next: shared image loading/cancellation and Artwork action consolidation. Selected suggestion features, including toggles 16 and 20, remain planned rather than shipped.

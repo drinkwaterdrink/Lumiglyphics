@@ -4,6 +4,7 @@ import {templateSnapshot} from '../../shared/image-templates.js';
 import {isUsableIdentity,splitTags,type CharacterAppearanceMap} from '../../shared/identity.js';
 import {resolveTemplateIdentity} from './visual-brief.js';
 import {projectTurnPresentation} from './entity-projection.js';
+import {selectPresentationSnapshot} from '../../shared/presentation-selectors.js';
 const manual=(cue:VisualCue)=>cue.imageTemplateReason==='Manual template selection'||cue.visualSources?.some(s=>s==='manual subject correction'||s==='manual artwork replacement');
 /** Fresh-plan candidates only. Presence comes from the existing cursor projection;
  * no cast expansion, extra model call, or changes to prose/continuity. */
@@ -22,7 +23,7 @@ export function castAllocationCandidates(plan:TurnPlan,config:VisualNovelConfig,
   const portraits=local.filter(c=>c.imageTemplate?.category==='portrait'&&c.imageTemplate.subjectMode==='one');
   const present=(cue:VisualCue)=>{
    if(!cue.character)return false;
-   const snapshot=presentation!.snapshots[cue.paragraphIndex];
+   const snapshot=selectPresentationSnapshot(presentation!,cue.paragraphIndex);
    const entity=snapshot?.entities.find(e=>e.kind==='npc'&&e.name===cue.character);
    const identity=resolveTemplateIdentity(scene,cue,appearances);
    return Boolean(entity&&snapshot?.presentEntityIds.includes(entity.id)&&snapshot.stateByEntity[entity.id]?.presence==='present'&&isUsableIdentity(identity.name,splitTags(identity.identity)));

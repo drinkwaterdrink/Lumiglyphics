@@ -146,7 +146,7 @@ export async function harvestCharacterDNA(
       if (saved) {
         const index = position && samePresentationTurn(position.key, saved.plan.key) ? position.paragraphIndex : 0;
         const presentation = readerPresentationFor(saved.plan, saved.presentation);
-        const snapshot = presentation?.snapshots.find(s => s.at.paragraphIndex === index && samePresentationTurn(s.at.key, saved.plan.key));
+        const snapshot = presentation ? selectPresentationSnapshot(presentation,index) : undefined;
         if (snapshot) {
           const entity = snapshot.entities.find(e => e.kind === 'npc' && e.name.trim().toLowerCase() === normalizedName.toLowerCase());
           if (entity) {
@@ -315,3 +315,4 @@ export function parseCharacterDNALlmOutput(llmResponse: string): Partial<Charact
     return null;
   }
 }
+import {selectPresentationSnapshot} from '../../shared/presentation-selectors.js';
