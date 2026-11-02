@@ -75,4 +75,34 @@ Beta.111 release checkpoint: all three version files synchronized. Fresh verific
 
 ## Remaining roadmap
 
-Tasks 3-11 have not been implemented. Next: shared image loading/cancellation and Artwork action consolidation. Selected suggestion features, including toggles 16 and 20, remain planned rather than shipped.
+Tasks 3-11 have not been implemented. Task 2A Cast/DNA repair is now complete locally. Next: shared image loading/cancellation and Artwork action consolidation. Selected suggestion features, including toggles 16 and 20, remain planned rather than shipped.
+
+
+## Beta.111 published and urgent Cast/DNA findings
+
+Published commit `6240bba01d97f4c5b9ca773365f29d954add0d24` to `origin/codex/audited-improvements`; remote head verified after push. Main-3-GPT remains `b0f5f5a`; primary Testing source untouched. Next authorized push requires beta.112 or next verified newer suffix.
+
+The user subsequently requested a Cast/DNA audit and urgent roadmap addition. Completed independent tracing of frontend/host, IPC, backend harvesting/storage, source adapters and image-prompt compilation. Local repros confirm global character contamination (`boy` from Darby selected for Nadine), absent LLM calls/card/lore reads, duplicate ID/name keys, concurrent lost saves, and APERTURE action clipping/overlay. At 366x760 the synthetic hero shrinks to 30px and actions fail hit testing; 1440x960 actions are also covered. These are findings, not repaired behavior.
+
+Audit: `docs/audits/2026-11-01-cast-dna-audit.md` (C01-C16, coverage, evidence, limitations). New priority plan: `docs/superpowers/plans/2026-11-01-cast-dna-repair.md` (A1-A6) inserted as Task 2A before original Task 3. User explicitly selected evidence plus generated suggestions, labeled and reviewed before saving. This includes source-specific availability, stable identity, lock/manual preservation, delete/undo/discovery suppression, and real provider-payload verification. Detailed repair remains planned; no Cast source changes or live provider calls in this audit.
+
+
+## Task 2A: Cast/DNA repair implemented and verified locally
+
+User approved the hybrid proposal design and explicitly required injection into pictured-character image prompts. Implemented stable-ID V2 storage, per-user/chat serialized revision checks, legacy/raw recovery backups, strict requests, explicit manual drafts/save, character-scoped LLM proposals, field review/provenance, mobile action repairs, delete/undo/merge and actual provider appearance integration. Full details and operating steps: `docs/implementation/2026-11-01-cast-dna-repair.md`.
+
+Independent review found and prompted fixes for stale saves, duplicate Add replacement, proposal cancellation/swipe ownership, active-attire scope, combined hair/eye contradictions, focused-input stale closures, same-name merge tombstones, and save acknowledgements crossing swipes. Each substantive regression has local behavioral coverage. A final dispatch-boundary test additionally reproduced a text request starting after cancellation; an explicit signal check immediately before dispatch fixes it. No live model/image calls were made.
+
+Final fresh isolated suite: **2,014 pass, zero fail, 10,701 assertions, 191 files**. Installed-compiler typecheck, production frontend/backend build, bundle static/manifest verification, status generation and whitespace check passed. Logs: `.cache/implementation/dna-release-final-tests.log`, with focused RED/GREEN logs beside it. Bun 1.4.0 remains isolated in `.cache/toolchain`.
+
+Offline browser checks pass: new Cast/DNA flow at 360/366/390/412/1440 widths; actual host cancel/swipe/chat rejection and a save acknowledgement crossing a swipe; prior focused compact-presentation and Artwork contract regressions. No page/console errors in the focused DNA UI flow. The known original baseline browser exceptions remain explicitly recorded above and are not counted as passing suites.
+
+Rulings: deleted records implement both suppression and undo instead of a second suppressed-ID list. The existing effective appearance map carries saved DNA into every existing compilation/cache path rather than relying on the unconnected optional DNA argument. Context respects the existing **activated lorebook** setting; installed Spindle types expose broader book enumeration, but this packet does not silently expand that source setting to inactive or unattached books. Unresolved ambiguity can be omitted from a proposal rather than turned into an invented field. Source settings/availability are disclosed and generated/inferred suggestions require user review.
+
+The completed implementation was initially local at beta.111; the user subsequently authorized the beta.112 release checkpoint below. Commit `6240bba` contains prior Tasks 1-2. Primary Testing source is untouched. Actual Lumiverse installation, live model quality and physical Android acceptance remain **UNVERIFIED**. Original Tasks 3-11 remain queued.
+
+Final host browser acceptance also checks invalid manual fields: malformed values are not sent, the validation error names the field, and the draft remains editable. Final fresh unit log records 2,014 pass / zero fail / 10,701 assertions.
+
+## Beta.112 release checkpoint
+
+User authorized publishing the completed Cast/DNA repair. All three version files are synchronized to beta.112. Fresh release checks passed against this exact checkpoint: 2,014 tests, zero failures, 10,700 assertions; installed-compiler typecheck, production build, bundle verification/status generation, diff check, five-width Cast/DNA browser flow and actual host lifecycle browser flow. Publishing to `origin/codex/audited-improvements`. Main-3-GPT and primary Testing remain unchanged. Live model/host/physical-device acceptance remains UNVERIFIED.

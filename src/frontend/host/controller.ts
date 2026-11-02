@@ -1,3 +1,4 @@
+import {DnaRequestSchema,DNA_FIELD_LABELS,type DnaRequest,type DnaField} from '../../shared/character-dna-workflow.js';
 import {inspectorState,pictureStateSummary} from '../image-review/inspector-model.js';
 import {scopedPictureOperations,type LocalPictureOperations} from '../image-review/local-operations.js';
 import type {ImageRetryQueueView} from '../../shared/image-retries.js';
@@ -718,37 +719,25 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   stage.workspace.register('history',{element:imageLibrary.getElement(),hideAtHome:true,enter:()=>{imageLibrary.setCurrentScenePassages(stage.getBacklogEntries(),(idx)=>stage.jumpToParagraph(idx));if(!imageLibrary.isOpen())imageLibrary.openWorkspace();},leave:()=>imageLibrary.close(),back:()=>imageLibrary.backWithinWorkspace()});
   imageLibrary.setDocked();
   imageStudio.setLibraryOpener(()=>imageLibrary.open('images'));
+  const dnaRequests=new Map<string,{chatId:string;action:DnaRequest['action'];turnToken:string;saved?:{id:string;updatedAt:number}}>();
+  let dnaTurnToken='';
+  const dnaTurnScoped=(action:DnaRequest['action'])=>['list','propose','autofill','harvest'].includes(action);
+  type DnaBody<T=DnaRequest>=T extends DnaRequest?Omit<T,'type'|'chatId'|'requestId'>:never;
+  const sendDna=(body:DnaBody)=>{
+    const owner=characterFolio.getContext();if(!owner)return;
+    const requestId=createUiId();const outgoing={type:'vn_character_dna',chatId:owner,requestId,...body};const checked=DnaRequestSchema.safeParse(outgoing);if(!checked.success){const issue=checked.error.issues[0],path=issue?.path.slice(1).join('.') as DnaField;characterFolio.showError(`${DNA_FIELD_LABELS[path]??'Character profile'}: ${issue?.message??'Check the field values'}. Your draft is retained.`);return;}if(dnaRequests.size>100)dnaRequests.delete(dnaRequests.keys().next().value!);
+    dnaRequests.set(requestId,{chatId:owner,action:body.action,turnToken:dnaTurnToken,...(body.action==='save'?{saved:{id:body.dna.id,updatedAt:body.dna.lastUpdated}}:{})});
+    ctx.sendToBackend(checked.data);
+  };
   const characterFolio = new CharacterFolio({
-    onSaveDNA: (dna) => {
-      ctx.sendToBackend({
-        type: 'vn_character_dna',
-        action: 'save',
-        chatId: chatId() ?? '',
-        requestId: createUiId(),
-        dna
-      });
-    },
-    onHarvestDNA: (characterName) => {
-      ctx.sendToBackend({
-        type: 'vn_character_dna',
-        action: 'harvest',
-        chatId: chatId() ?? '',
-        requestId: createUiId(),
-        characterName
-      });
-    },
-    onAutoFillDNA: (characterName) => {
-      ctx.sendToBackend({
-        type: 'vn_character_dna',
-        action: 'autofill',
-        chatId: chatId() ?? '',
-        requestId: createUiId(),
-        characterName
-      });
-    },
-    onClose: () => {
-      stage.workspace.close();
-    }
+    onSaveDNA:(dna,revision)=>sendDna({action:'save',dna,revision}),
+    onAutoFillDNA:(characterName,characterId,fields)=>sendDna({action:'propose',characterName,characterId,...(fields?{fields}:{})}),
+    onApplyDNA:(proposalId,fields)=>sendDna({action:'apply',proposalId,fields}),
+    onCancelDNA:()=>{const owner=characterFolio.getContext();for(const[id,r]of dnaRequests)if(r.chatId===owner&&['propose','autofill','harvest'].includes(r.action))dnaRequests.delete(id);if(owner)ctx.sendToBackend({type:'vn_character_dna',action:'cancel',chatId:owner,requestId:createUiId()});},
+    onDeleteDNA:(dna,revision)=>sendDna({action:'delete',characterId:dna.id,dna,revision}),
+    onRestoreDNA:(characterId,revision)=>sendDna({action:'restore',characterId,revision}),
+    onMergeDNA:(characterId,otherId,revision)=>sendDna({action:'merge',characterId,otherId,revision}),
+    onClose:()=>stage.workspace.close()
   });
   stage.workspace.register('character', characterFolio);
   stage.setFolioOpener((charName) => {
@@ -983,6 +972,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
 
   function deactivate(): void {
     if(turn){invalidatedReferenceTurn=referenceTurnToken(turn);turn=withoutReferenceHistory(turn);}stage.setReferenceHistory(undefined);
+    characterFolio.setContext(null);dnaRequests.clear();
     preparationActive=false;stage.clearPreparationPreview();imageStudio.setPlanning(chatId(),false);
     imageLibrary.close();
     if (destroyed) return;
@@ -1090,14 +1080,11 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if(!turn||turn.chatId!==next.chatId||turn.messageId!==next.messageId||turn.sourceFingerprint!==next.sourceFingerprint||turn.swipeId!==next.swipeId||turn.revision!==next.revision)retryQueue=null;
     turn = next;
     imageStudio.setTurn(next);
+    const nextDnaToken=JSON.stringify([next.chatId,next.messageId,next.sourceFingerprint,next.swipeId,next.revision]);if(nextDnaToken!==dnaTurnToken){characterFolio.invalidateContext();for(const[id,r]of dnaRequests)if(dnaTurnScoped(r.action))dnaRequests.delete(id);dnaTurnToken=nextDnaToken;}
+    characterFolio.setContext(next.chatId);
     characterFolio.syncFromTurn(next);
     if (next?.chatId) {
-      ctx.sendToBackend({
-        type: 'vn_character_dna',
-        action: 'list',
-        chatId: next.chatId,
-        requestId: createUiId()
-      });
+      sendDna({action:'list'});
     }
     imageLibrary.setContext(next,stage.getState().currentParagraphIndex);
     settingsPanel?.setImagePreviewMetadata(next?.imageRequests?.at(-1)?.imagePromptMetadata);
@@ -1215,10 +1202,15 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if(type==='vn_error'&&message.type==='vn_error'&&message.operation==='vn_presentation_rules'){settingsPanel?.presentationRulesError(message.error,message.requestId);imageStudio.presentationRulesError(message.error,message.requestId);return;}
     if(type==='vn_cast_context'&&message.type==='vn_cast_context'){settingsPanel?.setCastContext(message.chatId,message.requestId,message.scan);return;}
     if(type==='vn_character_dna'&&message.type==='vn_character_dna'){
-      characterFolio.setLibrary(message.library);
-      if(message.activeDna){
-        characterFolio.setActiveCharacter(message.activeDna.name);
-      }
+      const owner=dnaRequests.get(message.requestId);dnaRequests.delete(message.requestId);
+      if(!owner||(dnaTurnScoped(owner.action)&&owner.turnToken!==dnaTurnToken)||owner.chatId!==message.chatId||message.chatId!==chatId()||message.chatId!==characterFolio.getContext())return;
+      characterFolio.setLibrary(message.library,owner.action!=='list',owner.saved);
+      if(message.proposal)characterFolio.setProposal(message.proposal);
+      return;
+    }
+    if(type==='vn_error'&&message.type==='vn_error'&&message.operation==='vn_character_dna'){
+      const owner=message.requestId?dnaRequests.get(message.requestId):undefined;if(message.requestId)dnaRequests.delete(message.requestId);
+      if(owner&&(!dnaTurnScoped(owner.action)||owner.turnToken===dnaTurnToken)&&owner.chatId===chatId()&&owner.chatId===characterFolio.getContext()){characterFolio.showError(message.error);if(message.error.includes('DNA changed'))sendDna({action:'list'});}
       return;
     }
     if(type==='vn_cast_art'&&message.type==='vn_cast_art'){const accepted=settingsPanel?.setCastArt(message.chatId,message.requestId,message.library);if(accepted&&active&&turn&&message.chatId===chatId())ctx.sendToBackend({type:'vn_get_state',chatId:message.chatId,viewOpen:true,prepare:false});return;}
@@ -1435,6 +1427,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const unsubBackend = ctx.onBackendMessage(routeBackend);
   const unsubAction = action.onClick(toggleVisualNovel);
   const unsubChat = ctx.events.on("CHAT_SWITCHED", () => {
+    characterFolio.setContext(null);dnaRequests.clear();
     preparationActive=false;
     externalReview.cancel(); imageBridge.cancelAll();
     settingsPanel?.clearCastArt();
@@ -1485,6 +1478,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
 
   const cleanup = (): void => {
     if (destroyed) return;
+    characterFolio.setContext(null);dnaRequests.clear();
     deactivate();
     stage.workspace.destroy();
     destroyed = true;

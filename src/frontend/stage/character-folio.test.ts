@@ -4,6 +4,14 @@ import { createEmptyCharacterDNA, formatCharacterDNAToPromptClause, formatCharac
 import { installFakeDocument } from './stage-test-dom.js';
 
 describe('CharacterFolio & Character DNA', () => {
+  it('retains a draft for the active ID after merging a same-name duplicate',()=>{const restore=installFakeDocument();try{const f=new CharacterFolio();const a=createEmptyCharacterDNA('Nadine','a'),b=createEmptyCharacterDNA('Nadine','b');const l={version:2 as const,revision:1,characters:{a},deleted:{b}};f.setLibrary(structuredClone(l));(f as any).library.a.hair.color='draft';(f as any).dirty.add('a');f.setLibrary(structuredClone(l),false);expect((f as any).library.a.hair.color).toBe('draft');}finally{restore();}});
+  it('refreshes unedited server fields while retaining a local draft',()=>{const restore=installFakeDocument();try{const f=new CharacterFolio();const base=createEmptyCharacterDNA('Nadine','nadine');base.hair.color='brown';base.eyes.color='blue';f.setLibrary({version:2,revision:1,characters:{nadine:base}});(f as any).library.nadine.hair.color='silver';(f as any).dirty.add('nadine');const incoming=structuredClone(base);incoming.eyes.color='hazel';f.setLibrary({version:2,revision:2,characters:{nadine:incoming}},false);expect((f as any).library.nadine.hair.color).toBe('silver');expect((f as any).library.nadine.eyes.color).toBe('hazel');}finally{restore();}});
+  it('keeps newer local edits when an earlier save acknowledgement arrives',()=>{
+    const restore=installFakeDocument();try{const f=new CharacterFolio();f.setLibrary({version:2,revision:0,characters:{nadine:createEmptyCharacterDNA('Nadine','nadine')}});const local=(f as any).library.nadine;local.hair.color='new draft';local.lastUpdated=10;(f as any).dirty.add('nadine');const older=createEmptyCharacterDNA('Nadine','nadine');older.hair.color='old server';older.lastUpdated=9;f.setLibrary({version:2,revision:1,characters:{nadine:older}},true,{id:'nadine',updatedAt:9});expect((f as any).library.nadine.hair.color).toBe('new draft');}finally{restore();}
+  });
+  it('keeps a discovered and subsequently saved character as one roster entry',()=>{
+    const restore=installFakeDocument();try{const folio=new CharacterFolio();folio.syncFromTurn({paragraphs:[],subjectCandidates:['Nadine Pruitt'],assets:[]} as any);folio.setLibrary({version:1,characters:{'nadine pruitt':createEmptyCharacterDNA('Nadine Pruitt')}});expect(folio.element.querySelectorAll('.folio-roster-item')).toHaveLength(1);}finally{restore();}
+  });
   it('formats character DNA to prompt clauses and tags correctly', () => {
     const dna = createEmptyCharacterDNA('Nadine Pruitt', 'nadine');
     dna.hair = { color: 'chestnut brown', length: 'shoulder-length', style: 'messy bun' };

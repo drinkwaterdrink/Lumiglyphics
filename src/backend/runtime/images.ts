@@ -187,7 +187,9 @@ export function resolveCueCharacterVisualState(
     baseIdentity = scene.identityPrompt?.trim() ?? "";
   }
 
-  if (cue.resolvedIdentity !== undefined) baseIdentity = cue.resolvedIdentity;
+  const savedKey=appearanceMapKeyFor(characterAppearance,characterName);
+  if(savedKey&&characterAppearance?.[savedKey])baseIdentity=characterAppearance[savedKey];
+  if (cue.resolvedIdentity !== undefined && (!savedKey||cue.visualSources?.includes('manual subject correction'))) baseIdentity = cue.resolvedIdentity;
   if (cue.imageTemplate) baseIdentity = resolveTemplateIdentity(scene, cue, characterAppearance).identity;
   const attire = cue.resolvedAttire !== undefined ? cue.resolvedAttire ?? "" : cue.attire || (characterKey === sceneCharacterKey ? scene.attire : null) || "";
   let identity = baseIdentity;

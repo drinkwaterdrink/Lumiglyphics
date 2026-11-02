@@ -14,67 +14,8 @@ import { readerPresentationFor } from './entity-projection.js';
 import { selectReaderDossier } from '../../shared/dossiers.js';
 import { samePresentationTurn } from '../../shared/presentation-entities.js';
 
-function safeSegment(value: string): string {
-  return encodeURIComponent(value).replace(/%/g, '_');
-}
-
-function characterDnaPath(chatId: string): string {
-  return `chats/${safeSegment(chatId)}/character-dna.json`;
-}
-
-export async function loadCharacterDNALibrary(
-  spindle: SpindleAPI,
-  chatId: string,
-  userId?: string
-): Promise<CharacterDNALibrary> {
-  if (!spindle.userStorage) {
-    return { version: 1, characters: {} };
-  }
-  const path = characterDnaPath(chatId);
-  const raw = await spindle.userStorage.getJson<unknown>(path, {
-    fallback: null,
-    ...(userId ? { userId } : {})
-  });
-  const parsed = CharacterDNALibrarySchema.safeParse(raw);
-  return parsed.success ? parsed.data : { version: 1, characters: {} };
-}
-
-export async function saveCharacterDNA(
-  spindle: SpindleAPI,
-  chatId: string,
-  dna: CharacterDNA,
-  userId?: string
-): Promise<void> {
-  if (!spindle.userStorage) return;
-  const library = await loadCharacterDNALibrary(spindle, chatId, userId);
-  const normalizedKey = dna.name.trim().toLowerCase();
-  library.characters[normalizedKey] = CharacterDNASchema.parse(dna);
-  const path = characterDnaPath(chatId);
-  await spindle.userStorage.setJson(path, library, {
-    indent: 2,
-    ...(userId ? { userId } : {})
-  });
-}
-
-export async function getEffectiveCharacterDNA(
-  spindle: SpindleAPI,
-  chatId: string,
-  characterName: string,
-  userId?: string
-): Promise<CharacterDNA | null> {
-  const library = await loadCharacterDNALibrary(spindle, chatId, userId);
-  const key = characterName.trim().toLowerCase();
-  if (library.characters[key]) {
-    return library.characters[key];
-  }
-  // Check aliases
-  for (const record of Object.values(library.characters)) {
-    if (record.aliases.some(a => a.trim().toLowerCase() === key)) {
-      return record;
-    }
-  }
-  return null;
-}
+export {loadCharacterDNALibrary,saveCharacterDNA,getEffectiveCharacterDNA} from './character-dna-store.js';
+import {getEffectiveCharacterDNA} from './character-dna-store.js';
 
 export interface HarvestOptions {
   userId?: string;

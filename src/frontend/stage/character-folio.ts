@@ -1,19 +1,24 @@
+import {DNA_FIELDS,DNA_FIELD_LABELS,dnaFieldValue,type DnaField,type DnaProposal} from '../../shared/character-dna-workflow.js';
 import type { CharacterDNA, CharacterDNALibrary } from '../../shared/character-dna.js';
 import {
   createEmptyCharacterDNA,
+  findCharacterDNA,
   formatCharacterDNAToPromptClause,
   formatCharacterDNAToTags,
-  mergeCharacterDNA,
-  extractDNAPartsFromText
 } from '../../shared/character-dna.js';
 import { APERTURE_ICONS } from '../theme/aperture-theme.js';
 import type { WorkspaceSurface } from './reader-workspace.js';
 import type { TurnView, AssetView } from '../../protocol.js';
 
 export interface CharacterFolioHandlers {
-  onSaveDNA?: (dna: CharacterDNA) => void;
+  onSaveDNA?: (dna: CharacterDNA,revision:number) => void;
   onHarvestDNA?: (characterName: string) => void;
-  onAutoFillDNA?: (characterName: string) => void;
+  onAutoFillDNA?: (characterName:string,characterId:string,fields?:DnaField[])=>void;
+  onApplyDNA?:(proposalId:string,fields:DnaField[])=>void;
+  onCancelDNA?:()=>void;
+  onDeleteDNA?:(dna:CharacterDNA,revision:number)=>void;
+  onRestoreDNA?:(id:string,revision:number)=>void;
+  onMergeDNA?:(id:string,otherId:string,revision:number)=>void;
   onClose?: () => void;
 }
 
@@ -31,11 +36,33 @@ export class CharacterFolio implements WorkspaceSurface {
   readonly element: HTMLElement;
   private readonly rosterCarousel: HTMLElement;
   private readonly detailContainer: HTMLElement;
-  private library: Record<string, CharacterDNA> = {};
-  private loreMap: Record<string, CharacterLoreContext> = {};
+  private library: Record<string, CharacterDNA> = Object.create(null);
+  private loreMap: Record<string, CharacterLoreContext> = Object.create(null);
   private activeCharacterId: string | null = null;
   private activeSubTab: 'dna' | 'lore' | 'cgs' = 'dna';
   private latestTurnText = '';
+  private chatId:string|null=null;
+  private revision=0;
+  private dirty=new Set<string>();
+  private saving=new Set<string>();
+  private savedLibrary:Record<string,CharacterDNA>=Object.create(null);
+  private deleted:Record<string,CharacterDNA>={};
+  private proposal:DnaProposal|null=null;
+  private pending=false;
+  private notice='';
+  private deleteConfirm=false;
+  private mergeOther='';
+
+  setContext(chatId:string|null):void{
+    if(this.chatId===chatId)return;
+    this.handlers.onCancelDNA?.();this.chatId=chatId;this.library=Object.create(null);this.dirty.clear();this.saving.clear();this.savedLibrary=Object.create(null);this.loreMap=Object.create(null);this.deleted={};this.revision=0;this.activeCharacterId=null;this.proposal=null;this.pending=false;this.notice='';this.latestTurnText='';this.deleteConfirm=false;this.mergeOther='';this.renderRoster();this.renderDetail();
+  }
+  getContext():string|null{return this.chatId;}
+  invalidateContext():void{this.cancelProposal();this.renderDetail();}
+  setProposal(proposal:DnaProposal):void{if(proposal.characterId!==this.activeCharacterId)return;this.pending=false;this.proposal=proposal;this.notice='';this.renderDetail();}
+  showError(error:string):void{this.saving.clear();this.pending=false;this.notice=error;this.renderDetail();}
+  private cancelProposal():void{if(this.pending||this.proposal)this.handlers.onCancelDNA?.();this.proposal=null;this.pending=false;this.notice='';}
+
 
   constructor(private readonly handlers: CharacterFolioHandlers = {}) {
     this.element = document.createElement('div');
@@ -44,6 +71,24 @@ export class CharacterFolio implements WorkspaceSurface {
 
     this.element.innerHTML = `
       <style>
+        .folio-workflow { border:1px solid var(--vn-shell-border,#34505b);border-radius:12px;padding:14px;background:var(--vn-shell-panel,#10212b);font-size:13px;line-height:1.5;overflow-wrap:anywhere; }
+        .folio-workflow h3 {margin:0 0 8px;font-size:17px;}
+        .folio-workflow p {margin:8px 0;}
+        .folio-workflow > button {margin:6px 6px 0 0;}
+        .folio-suggestion {display:grid;grid-template-columns:24px minmax(0,1fr);gap:8px;padding:12px 0;border-bottom:1px solid var(--vn-shell-border,#34505b);}
+        .folio-suggestion input {width:20px;height:20px;}
+        .folio-suggestion small {grid-column:2;color:var(--vn-shell-accent,#8ae9b3);font-weight:700;}
+        .folio-workflow summary {min-height:44px;display:flex;align-items:center;cursor:pointer;}
+        .folio-workflow select {width:100%;min-height:44px;}
+        .folio-action-btn:disabled,.btn-field-autofill:disabled {opacity:.5;cursor:default;}
+        .folio-action-btn:focus-visible,.btn-field-autofill:focus-visible {outline:2px solid var(--vn-shell-accent,#8ae9b3);outline-offset:2px;}
+        .character-folio-surface .folio-prompt-header {display:block;}
+        .character-folio-surface .folio-prompt-header span {display:block;margin-bottom:4px;}
+        .folio-source-status {font-size:11px;opacity:.8;}
+        .character-folio-surface .btn-field-autofill {min-width:44px;min-height:44px;}
+        .character-folio-surface .folio-field input {min-height:44px;box-sizing:border-box;}
+        .character-folio-surface .folio-hero-avatar {width:60px;height:60px;}
+
         .character-folio-surface {
           display: flex !important;
           flex-direction: column !important;
@@ -54,7 +99,7 @@ export class CharacterFolio implements WorkspaceSurface {
           overflow: hidden !important;
           background: var(--vn-shell-bg, #0b1114);
           color: var(--vn-shell-text, #e2e8f0);
-          font-family: inherit;
+          font-family: var(--vn-shell-family, ui-sans-serif, system-ui, sans-serif);
           box-sizing: border-box !important;
         }
         /* Top Horizontal Swipeable Cast Roster Carousel */
@@ -172,6 +217,9 @@ export class CharacterFolio implements WorkspaceSurface {
           display: flex !important;
           flex-direction: column !important;
           gap: 14px !important;
+        }
+        .folio-scroll-body > * {
+          flex-shrink:0;
           box-sizing: border-box !important;
         }
         .folio-scroll-body::-webkit-scrollbar {
@@ -183,7 +231,8 @@ export class CharacterFolio implements WorkspaceSurface {
         }
 
         /* Hero Section */
-        .folio-hero-card {
+        .folio-profile-card {
+          flex-shrink:0;
           background: var(--vn-shell-panel, rgba(15, 23, 42, 0.7));
           border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.1));
           border-radius: 14px;
@@ -264,7 +313,7 @@ export class CharacterFolio implements WorkspaceSurface {
         /* Hero Action Buttons */
         .folio-hero-actions {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
           gap: 8px;
           padding-top: 6px;
           border-top: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.08));
@@ -274,6 +323,7 @@ export class CharacterFolio implements WorkspaceSurface {
           align-items: center;
           justify-content: center;
           gap: 6px;
+          min-height:44px;
           padding: 8px 10px;
           border-radius: 8px;
           font-size: 12px;
@@ -634,13 +684,13 @@ export class CharacterFolio implements WorkspaceSurface {
     for (const name of detectedNames) {
       const key = name.trim().toLowerCase();
       const existing = Object.values(this.library).find(c => c.name.toLowerCase() === key || c.aliases.some(a => a.toLowerCase() === key));
-      if (!existing) {
+      if (!existing && !findCharacterDNA(this.deleted,name)) {
         const dna = createEmptyCharacterDNA(name);
         const assetWithImage = turn.assets?.find(a => (a.stageAsset?.character?.toLowerCase() === key || a.stageAsset?.character?.toLowerCase().includes(key)) && (a.stageAsset?.displayImageUrl ?? a.imageUrl));
         if (assetWithImage) {
           dna.avatarUrl = assetWithImage.stageAsset?.displayImageUrl ?? assetWithImage.imageUrl;
         }
-        this.library[dna.id.toLowerCase()] = dna;
+        this.library[dna.id] = dna;
         changed = true;
       }
     }
@@ -654,29 +704,56 @@ export class CharacterFolio implements WorkspaceSurface {
     }
   }
 
-  setLibrary(library: CharacterDNALibrary | Record<string, CharacterDNA>): void {
-    const incoming = ('characters' in library ? library.characters : library) as Record<string, CharacterDNA>;
-    this.library = { ...this.library, ...incoming };
+  setLibrary(library: CharacterDNALibrary | Record<string, CharacterDNA>, completed=true,acceptedSave?:{id:string;updatedAt:number}): void {
+    const authoritative='characters'in library;
+    if(authoritative){const saved=library as CharacterDNALibrary;if((saved.revision??0)<this.revision)return;this.revision=saved.revision??0;this.deleted=saved.deleted??{};if(saved.warnings?.length)this.notice=saved.warnings.join(' ');}
+    const incoming = (authoritative ? library.characters : library) as Record<string, CharacterDNA>;
+    if(acceptedSave)this.saving.delete(acceptedSave.id);
+    if(acceptedSave&&this.library[acceptedSave.id]?.lastUpdated===acceptedSave.updatedAt)this.dirty.delete(acceptedSave.id);
+    const next:Record<string,CharacterDNA>=Object.create(null);
+    for(const dna of Object.values(this.library))if(!this.deleted[dna.id]&&(Object.values(incoming).some(c=>c.id===dna.id)||!findCharacterDNA(this.deleted,dna.name)))next[dna.id]=dna;
+    for(const dna of Object.values(incoming)){
+      if(this.dirty.has(dna.id)&&next[dna.id]){
+        const local=next[dna.id]!,base=this.savedLibrary[dna.id];
+        if(base){for(const path of DNA_FIELDS){if(JSON.stringify(dnaFieldValue(local,path))!==JSON.stringify(dnaFieldValue(base,path)))continue;const[a,b]=path.split('.'),value=structuredClone(dnaFieldValue(dna,path));if(b){if(value===undefined)delete(local as any)[a!][b];else(local as any)[a!][b]=value;}else{if(value===undefined)delete(local as any)[a!];else(local as any)[a!]=value;}}
+          for(const key of ['locked','avatarUrl','notes'] as const)if(local[key]===base[key]){if(dna[key]===undefined)delete(local as any)[key];else(local as any)[key]=dna[key];}
+        }
+        this.savedLibrary[dna.id]=structuredClone(dna);continue;
+      }
+      this.savedLibrary[dna.id]=structuredClone(dna);
+      const previous=findCharacterDNA(next,dna.id)||findCharacterDNA(next,dna.name);
+      if(previous)delete next[previous.id];
+      // Focused controls close over this object. Refresh it in place rather than leaving stale save handlers behind.
+      if(previous&&previous.id===dna.id){for(const key of Object.keys(previous))delete(previous as any)[key];Object.assign(previous,structuredClone(dna));next[dna.id]=previous;}
+      else next[dna.id]=structuredClone(dna);
+    }
+    this.library=next;
+    for(const id of this.dirty)if(!next[id])this.dirty.delete(id);
+    if(authoritative&&completed){this.pending=false;this.proposal=null;}
     if (!this.activeCharacterId || !this.library[this.activeCharacterId]) {
       const first = Object.keys(this.library)[0];
       this.activeCharacterId = first || null;
     }
     this.renderRoster();
-    this.renderDetail();
+    const save=this.element.querySelector<HTMLButtonElement>('[data-dna-save]');if(save)save.disabled=!this.activeCharacterId||!this.dirty.has(this.activeCharacterId)||this.saving.has(this.activeCharacterId);
+    const saveState=this.element.querySelector('[data-dna-save-state]');if(saveState)saveState.textContent=this.activeCharacterId&&this.dirty.has(this.activeCharacterId)?'Unsaved changes — Save changes to use in pictures':'Saved DNA is used for matching pictured characters';
+    const focused=document.activeElement;if(!focused||!this.element.contains(focused)||!focused.matches('input,textarea'))this.renderDetail();
   }
 
   setActiveCharacter(idOrName: string): void {
+    this.cancelProposal();
     const key = idOrName.trim().toLowerCase();
+    const byIdentity=findCharacterDNA(this.library,idOrName);if(byIdentity){this.activeCharacterId=byIdentity.id;this.renderRoster();this.renderDetail();return;}
     if (this.library[key]) {
       this.activeCharacterId = key;
     } else {
       const match = Object.values(this.library).find(c => c.name.toLowerCase() === key || c.aliases.some(a => a.toLowerCase() === key));
       if (match) {
-        this.activeCharacterId = match.id.toLowerCase();
+        this.activeCharacterId = match.id;
       } else {
         const created = createEmptyCharacterDNA(idOrName.trim());
-        this.library[created.id.toLowerCase()] = created;
-        this.activeCharacterId = created.id.toLowerCase();
+        this.library[created.id] = created;
+        this.activeCharacterId = created.id;
       }
     }
     this.renderRoster();
@@ -689,14 +766,15 @@ export class CharacterFolio implements WorkspaceSurface {
 
     for (const char of characters) {
       const charKey = char.name.toLowerCase();
-      const lore = this.loreMap[charKey] || this.loreMap[char.id.toLowerCase()] || {};
-      const isActive = this.activeCharacterId === char.id.toLowerCase();
+      const lore = this.loreMap[charKey] || this.loreMap[char.id] || {};
+      const isActive = this.activeCharacterId === char.id;
 
       const chip = document.createElement('button');
       chip.type = 'button';
       chip.className = `folio-roster-item${isActive ? ' active' : ''}`;
       chip.onclick = () => {
-        this.activeCharacterId = char.id.toLowerCase();
+        this.cancelProposal();this.deleteConfirm=false;this.mergeOther='';
+        this.activeCharacterId = char.id;
         this.renderRoster();
         this.renderDetail();
       };
@@ -746,15 +824,19 @@ export class CharacterFolio implements WorkspaceSurface {
     addChip.onclick = () => {
       const name = prompt('Enter character name:');
       if (name && name.trim()) {
+        if(name.trim().length>160){this.showError('Character names must be 160 characters or fewer.');return;}
+        const existing=findCharacterDNA(this.library,name);if(existing){this.setActiveCharacter(existing.id);return;}
+        if(findCharacterDNA(this.deleted,name)){this.notice='This character was deleted. Use Undo delete to restore it.';this.renderDetail();return;}
         const created = createEmptyCharacterDNA(name.trim());
-        this.library[created.id.toLowerCase()] = created;
-        this.activeCharacterId = created.id.toLowerCase();
-        this.handlers.onSaveDNA?.(created);
+        this.library[created.id] = created;
+        this.activeCharacterId = created.id;
+        this.handlers.onSaveDNA?.(created,this.revision);
         this.renderRoster();
         this.renderDetail();
       }
     };
     this.rosterCarousel.append(addChip);
+    const last=Object.values(this.deleted).at(-1);if(last){const undo=document.createElement('button');undo.type='button';undo.className='folio-action-btn';undo.textContent='Undo delete';undo.onclick=()=>this.handlers.onRestoreDNA?.(last.id,this.revision);this.rosterCarousel.append(undo);}
   }
 
   private renderDetail(): void {
@@ -769,12 +851,12 @@ export class CharacterFolio implements WorkspaceSurface {
 
     const char = this.library[this.activeCharacterId]!;
     const charKey = char.name.toLowerCase();
-    const lore = this.loreMap[charKey] || this.loreMap[char.id.toLowerCase()] || {};
+    const lore = this.loreMap[charKey] || this.loreMap[char.id] || {};
     const isMale = char.build.gender?.toLowerCase() === 'man' || char.build.gender?.toLowerCase() === 'male';
 
     // 1. HERO SECTION
     const heroCard = document.createElement('section');
-    heroCard.className = 'folio-hero-card';
+    heroCard.className = 'folio-profile-card';
 
     const heroTop = document.createElement('div');
     heroTop.className = 'folio-hero-top';
@@ -834,40 +916,41 @@ export class CharacterFolio implements WorkspaceSurface {
     heroActions.className = 'folio-hero-actions';
 
     const autoFillAllBtn = document.createElement('button');
-    autoFillAllBtn.type = 'button';
+    autoFillAllBtn.type = 'button';autoFillAllBtn.setAttribute('aria-label','Auto-Fill All');
     autoFillAllBtn.className = 'folio-action-btn btn-accent';
     autoFillAllBtn.innerHTML = `✨ <span>Auto-Fill All</span>`;
+    autoFillAllBtn.disabled=char.locked||this.pending;
     autoFillAllBtn.onclick = () => {
       this.autoFillAllFields(char);
     };
 
     const lockToggleBtn = document.createElement('button');
-    lockToggleBtn.type = 'button';
+    lockToggleBtn.type = 'button';lockToggleBtn.setAttribute('aria-label',char.locked?'Unlock DNA':'Lock DNA');
     lockToggleBtn.className = 'folio-action-btn';
     lockToggleBtn.innerHTML = char.locked ? `🔓 <span>Unlock DNA</span>` : `🔒 <span>Lock DNA</span>`;
     lockToggleBtn.onclick = () => {
-      char.locked = !char.locked;
-      this.handlers.onSaveDNA?.(char);
+      this.cancelProposal();
+      char.locked = !char.locked;char.lastUpdated=Math.max(Date.now(),char.lastUpdated+1);this.dirty.add(char.id);
+      this.handlers.onSaveDNA?.(structuredClone(char),this.revision);
       this.renderRoster();
       this.renderDetail();
     };
 
     const copyPromptBtn = document.createElement('button');
-    copyPromptBtn.type = 'button';
+    copyPromptBtn.type = 'button';copyPromptBtn.setAttribute('aria-label','Copy Prompt');
     copyPromptBtn.className = 'folio-action-btn';
-    copyPromptBtn.innerHTML = `📋 <span>Copy Clause</span>`;
-    copyPromptBtn.onclick = () => {
-      const clause = formatCharacterDNAToPromptClause(char);
-      navigator.clipboard?.writeText(clause);
-      copyPromptBtn.innerHTML = `✅ <span>Copied!</span>`;
-      setTimeout(() => {
-        copyPromptBtn.innerHTML = `📋 <span>Copy Clause</span>`;
-      }, 1500);
+    copyPromptBtn.innerHTML = `📋 <span>Copy Prompt</span>`;
+    copyPromptBtn.onclick = async () => {
+      try{if(!navigator.clipboard)throw new Error('Clipboard unavailable');await navigator.clipboard.writeText(formatCharacterDNAToPromptClause(char));copyPromptBtn.textContent='Copied!';}
+      catch{copyPromptBtn.textContent='Copy failed — try again';}
     };
+    const deleteButton=document.createElement('button');deleteButton.type='button';deleteButton.className='folio-action-btn';deleteButton.textContent='Delete character';deleteButton.onclick=()=>{this.cancelProposal();this.deleteConfirm=true;this.renderDetail();};
 
-    heroActions.append(autoFillAllBtn, lockToggleBtn, copyPromptBtn);
+    const saveButton=document.createElement('button');saveButton.type='button';saveButton.className='folio-action-btn btn-accent';saveButton.textContent='Save changes';saveButton.setAttribute('data-dna-save','');saveButton.disabled=!this.dirty.has(char.id)||this.saving.has(char.id);saveButton.onclick=()=>{this.cancelProposal();this.saving.add(char.id);saveButton.disabled=true;this.handlers.onSaveDNA?.(structuredClone(char),this.revision);};
+    heroActions.append(autoFillAllBtn, lockToggleBtn, copyPromptBtn,deleteButton,saveButton);
     heroCard.append(heroTop, heroActions);
     this.detailContainer.append(heroCard);
+    this.renderWorkflow(char);
 
     // 2. STICKY SUB-TABS SELECTOR
     const subtabs = document.createElement('div');
@@ -921,12 +1004,13 @@ export class CharacterFolio implements WorkspaceSurface {
 
     const previewHeader = document.createElement('div');
     previewHeader.className = 'folio-prompt-header';
-    previewHeader.innerHTML = `<span>⚡ Live Injected Diffusion Prompt Clause:</span><span style="opacity:0.75;font-size:10px">Active in Flux & Recraft</span>`;
+    previewHeader.innerHTML = `<span>⚡ Appearance Prompt Preview:</span><span data-dna-save-state style="opacity:0.75;font-size:11px"></span>`;
 
     const previewCode = document.createElement('p');
     previewCode.className = 'folio-prompt-text';
     const updatePreview = () => {
       const clause = formatCharacterDNAToPromptClause(char);
+      const state=previewHeader.querySelector('[data-dna-save-state]');if(state)state.textContent=this.dirty.has(char.id)?'Unsaved changes — Save changes to use in pictures':'Saved DNA is used for matching pictured characters';
       previewCode.textContent = clause ? `${char.name}: ${clause}.` : `${char.name} has no traits defined yet.`;
     };
     updatePreview();
@@ -935,39 +1019,16 @@ export class CharacterFolio implements WorkspaceSurface {
 
     // Helper to persist edits
     const onFieldChange = () => {
-      char.lastUpdated = Date.now();
-      this.handlers.onSaveDNA?.(char);
+      this.cancelProposal();
+      char.lastUpdated=Math.max(Date.now(),char.lastUpdated+1);this.dirty.add(char.id);
+      const save=this.element.querySelector<HTMLButtonElement>('[data-dna-save]');if(save)save.disabled=this.saving.has(char.id);
       updatePreview();
     };
 
     // Helper to auto-fill single field with story text or LLM fallback
-    const onSingleAutoFill = (fieldKey: string, inputEl: HTMLInputElement) => {
-      const extracted = extractDNAPartsFromText(this.latestTurnText);
-      let val = '';
-      if (fieldKey === 'age') val = extracted.build?.age || '';
-      else if (fieldKey === 'gender') val = extracted.build?.gender || '';
-      else if (fieldKey === 'species') val = extracted.build?.species || '';
-      else if (fieldKey === 'height') val = extracted.build?.height || '';
-      else if (fieldKey === 'bodyType') val = extracted.build?.bodyType || '';
-      else if (fieldKey === 'bust') val = extracted.build?.bust || '';
-      else if (fieldKey === 'hipsGlutes') val = extracted.build?.hipsGlutes || '';
-      else if (fieldKey === 'skinTone') val = extracted.build?.skinTone || '';
-      else if (fieldKey === 'faceFeatures') val = extracted.faceFeatures || '';
-      else if (fieldKey === 'demeanor') val = extracted.demeanor || '';
-      else if (fieldKey === 'hairColor') val = extracted.hair?.color || '';
-      else if (fieldKey === 'hairLength') val = extracted.hair?.length || '';
-      else if (fieldKey === 'hairStyle') val = extracted.hair?.style || '';
-      else if (fieldKey === 'eyeColor') val = extracted.eyes?.color || '';
-      else if (fieldKey === 'eyeShape') val = extracted.eyes?.shape || '';
-      else if (fieldKey === 'signatureOutfit') val = extracted.signatureOutfit || '';
-      else if (fieldKey === 'distinguishingFeatures') val = (extracted.distinguishingFeatures || []).join(', ');
-
-      if (val) {
-        inputEl.value = val;
-        inputEl.dispatchEvent(new Event('change'));
-      } else {
-        this.handlers.onAutoFillDNA?.(char.name);
-      }
+    const onSingleAutoFill = (fieldKey:string,_inputEl:HTMLInputElement) => {
+      const paths:Record<string,DnaField[]>={age:['build.age'],gender:['build.gender'],species:['build.species'],height:['build.height'],bodyType:['build.bodyType'],bust:['build.bust'],hipsGlutes:['build.hipsGlutes'],skinTone:['build.skinTone'],faceFeatures:['faceFeatures'],demeanor:['demeanor'],hairColor:['hair.color'],hairLength:['hair.length'],hairStyle:['hair.style'],eyeColor:['eyes.color'],eyeShape:['eyes.shape'],signatureOutfit:['signatureOutfit'],activeOutfit:['activeOutfit'],distinguishingFeatures:['distinguishingFeatures']};
+      this.requestAutoFill(char,paths[fieldKey]);
     };
 
     // 1. Identity & Demeanor Card
@@ -979,7 +1040,7 @@ export class CharacterFolio implements WorkspaceSurface {
 
     idGrid.append(
       this.createFormField('Age', char.build.age ?? '', 'e.g. late 20s, early 30s', v => { char.build.age = v; onFieldChange(); }, el => onSingleAutoFill('age', el)),
-      this.createFormField('Gender', char.build.gender ?? '', 'e.g. woman, man', v => { char.build.gender = v; onFieldChange(); this.renderDetail(); }, el => onSingleAutoFill('gender', el)),
+      this.createFormField('Gender', char.build.gender ?? '', 'e.g. woman, man', v => { char.build.gender = v; onFieldChange(); }, el => onSingleAutoFill('gender', el)),
       this.createFormField('Species', char.build.species ?? '', 'e.g. human, elf, kitsune', v => { char.build.species = v; onFieldChange(); }, el => onSingleAutoFill('species', el)),
       this.createFormField('Demeanor & Posture', char.demeanor ?? '', 'e.g. guarded posture, shy gaze', v => { char.demeanor = v; onFieldChange(); }, el => onSingleAutoFill('demeanor', el)),
       this.createFormField('Height', char.build.height ?? '', 'e.g. petite, tall, medium', v => { char.build.height = v; onFieldChange(); }, el => onSingleAutoFill('height', el)),
@@ -1021,14 +1082,10 @@ export class CharacterFolio implements WorkspaceSurface {
     faceGrid.append(
       this.createFormField('Facial Structure', char.faceFeatures ?? '', 'e.g. heart-shaped face, soft full lips', v => { char.faceFeatures = v; onFieldChange(); }, el => onSingleAutoFill('faceFeatures', el)),
       this.createFormField('Hair Color', char.hair.color ?? '', 'e.g. chestnut brown, platinum silver', v => { char.hair.color = v; onFieldChange(); }, el => onSingleAutoFill('hairColor', el)),
-      this.createFormField('Hair Length & Style', [char.hair.length, char.hair.style].filter(Boolean).join(' '), 'e.g. shoulder-length messy loose bun', v => {
-        char.hair.style = v;
-        onFieldChange();
-      }, el => onSingleAutoFill('hairStyle', el)),
-      this.createFormField('Eyes (Color & Gaze)', [char.eyes.shape, char.eyes.color ? `${char.eyes.color} eyes` : ''].filter(Boolean).join(' '), 'e.g. sharp hazel eyes', v => {
-        char.eyes.color = v.replace(/eyes?/i, '').trim();
-        onFieldChange();
-      }, el => onSingleAutoFill('eyeColor', el))
+      this.createFormField('Hair Length', char.hair.length??'', 'e.g. shoulder-length', v=>{char.hair.length=v;onFieldChange();},el=>onSingleAutoFill('hairLength',el)),
+      this.createFormField('Hair Style', char.hair.style??'', 'e.g. loose waves', v=>{char.hair.style=v;onFieldChange();},el=>onSingleAutoFill('hairStyle',el)),
+      this.createFormField('Eye Color', char.eyes.color??'', 'e.g. hazel', v=>{char.eyes.color=v;onFieldChange();},el=>onSingleAutoFill('eyeColor',el)),
+      this.createFormField('Eye Shape', char.eyes.shape??'', 'e.g. almond-shaped', v=>{char.eyes.shape=v;onFieldChange();},el=>onSingleAutoFill('eyeShape',el))
     );
     faceCard.append(faceGrid);
 
@@ -1172,8 +1229,8 @@ export class CharacterFolio implements WorkspaceSurface {
         setBtn.className = 'btn-set-avatar';
         setBtn.textContent = 'Set Avatar';
         setBtn.onclick = () => {
-          char.avatarUrl = cg.imageUrl;
-          this.handlers.onSaveDNA?.(char);
+          this.cancelProposal();char.avatarUrl = cg.imageUrl;char.lastUpdated=Math.max(Date.now(),char.lastUpdated+1);this.dirty.add(char.id);
+          this.handlers.onSaveDNA?.(structuredClone(char),this.revision);
           this.renderRoster();
           this.renderDetail();
         };
@@ -1206,9 +1263,15 @@ export class CharacterFolio implements WorkspaceSurface {
 
     const input = document.createElement('input');
     input.type = 'text';
+    input.setAttribute('aria-label',label);
+    const fieldId=`dna-${this.activeCharacterId??'field'}-${label.replace(/[^a-z0-9]/gi,'-')}`;input.setAttribute('id',fieldId);lbl.setAttribute('for',fieldId);
     input.value = initialValue;
     input.placeholder = placeholder;
-    input.addEventListener('change', () => onChange(input.value.trim()));
+    let composing=false,lastValue=initialValue;
+    const changed=()=>{const value=input.value.trim();if(composing||value===lastValue)return;lastValue=value;onChange(value);};
+    input.addEventListener('compositionstart',()=>{composing=true;});input.addEventListener('compositionend',()=>{composing=false;changed();});
+    input.addEventListener('input',changed);input.addEventListener('change',changed);
+    if(label==='Gender')input.addEventListener('blur',()=>{if(!this.pending)this.renderDetail();});
 
     wrap.append(input);
 
@@ -1217,25 +1280,51 @@ export class CharacterFolio implements WorkspaceSurface {
       btn.type = 'button';
       btn.className = 'btn-field-autofill';
       btn.innerHTML = '✨';
-      btn.title = `Auto-fill ${label} from narrative`;
+      btn.title = `Suggest ${label} from context`;
+      btn.setAttribute('aria-label',`Suggest ${label}`);
+      btn.disabled=this.pending||Boolean(this.activeCharacterId&&this.library[this.activeCharacterId]?.locked);
       btn.onclick = () => onAutoFill(input);
       wrap.append(btn);
     }
 
     field.append(lbl, wrap);
+    const labels:Record<string,DnaField>={'Age':'build.age','Gender':'build.gender','Species':'build.species','Height':'build.height','Body Type':'build.bodyType','Skin Tone & Complexion':'build.skinTone','Hair Color':'hair.color','Hair Length':'hair.length','Hair Style':'hair.style','Eye Color':'eyes.color','Eye Shape':'eyes.shape','Facial Structure':'faceFeatures','Demeanor & Posture':'demeanor','Signature Outfit':'signatureOutfit','Active Scene Attire':'activeOutfit'};
+    const path=labels[label],source=this.activeCharacterId&&path?this.library[this.activeCharacterId]?.fieldSources?.[path]:undefined;
+    if(source){const badge=document.createElement('small');badge.className='folio-field-source';badge.textContent=source.classification==='manual'?'Manual':source.classification==='generated'?'Generated':source.classification==='inferred'?'Inferred':'Evidence';badge.title=source.sources.join('\n')||'User-approved appearance detail';field.append(badge);}
     return field;
   }
 
-  private autoFillAllFields(char: CharacterDNA): void {
-    if (this.latestTurnText) {
-      const extracted = extractDNAPartsFromText(this.latestTurnText);
-      const merged = mergeCharacterDNA(char, extracted, false);
-      Object.assign(char, merged);
-      char.lastUpdated = Date.now();
-      this.handlers.onSaveDNA?.(char);
-      this.renderDetail();
+  private requestAutoFill(char:CharacterDNA,fields?:DnaField[]):void{
+    if(char.locked||this.pending)return;
+    if(this.dirty.has(char.id)){this.notice='Save your manual changes before requesting suggestions.';this.renderDetail();return;}
+    this.cancelProposal();this.pending=true;this.notice='Reading context and preparing suggestions…';this.renderDetail();
+    this.handlers.onAutoFillDNA?.(char.name,char.id,fields);
+  }
+  private autoFillAllFields(char:CharacterDNA):void{this.requestAutoFill(char);}
+
+  private renderWorkflow(char:CharacterDNA):void{
+    const box=document.createElement('section');box.className='folio-workflow';box.setAttribute('aria-live','polite');
+    const button=(name:string,action:()=>void)=>{const b=document.createElement('button');b.type='button';b.className='folio-action-btn';b.textContent=name;b.onclick=action;return b;};
+    if(this.notice){const p=document.createElement('p');p.textContent=this.notice;box.append(p);}
+    if(this.pending)box.append(button('Cancel auto-fill',()=>{this.cancelProposal();this.renderDetail();}));
+    if(this.deleteConfirm){const p=document.createElement('p');p.textContent=`Delete ${char.name} from this chat’s Cast? Story, lore and gallery images remain. You can undo this.`;box.append(p,button('Delete from this chat',()=>{this.deleteConfirm=false;this.handlers.onDeleteDNA?.(char,this.revision);}),button('Keep character',()=>{this.deleteConfirm=false;this.renderDetail();}));}
+    const p=this.proposal;
+    if(p&&p.characterId===char.id){
+      box.setAttribute('data-dna-review','');const title=document.createElement('h3');title.textContent='Review DNA suggestions';box.append(title);
+      const help=document.createElement('p');help.textContent='Review each change. Existing values are kept unless you select their replacement.';box.append(help);const selected=new Set<DnaField>();
+      for(const change of p.changes){const row=document.createElement('label');row.className='folio-suggestion';const check=document.createElement('input');check.type='checkbox';const current=dnaFieldValue(char,change.path);check.checked=!current||(Array.isArray(current)&&!current.length);if(check.checked)selected.add(change.path);check.onchange=()=>{if(check.checked)selected.add(change.path);else selected.delete(change.path);};check.setAttribute('aria-label',`Apply ${DNA_FIELD_LABELS[change.path]}`);
+        const text=document.createElement('span');text.textContent=`${DNA_FIELD_LABELS[change.path]}: ${Array.isArray(current)?current.join(', '):current||'Not set'} → ${Array.isArray(change.value)?change.value.join(', '):change.value}`;
+        const badge=document.createElement('small');badge.textContent=change.classification==='evidence'?'Evidence':change.classification==='inferred'?'Inferred':'Generated';row.append(check,text,badge);box.append(row);
+        if(change.sourceRefs.length){const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='View evidence';details.append(summary);for(const id of change.sourceRefs){const e=p.evidence.find(e=>e.id===id);if(e){const excerpt=document.createElement('p');excerpt.textContent=`${e.source}: ${e.text}`;details.append(excerpt);}}box.append(details);}
+      }
+      const status=document.createElement('p');status.className='folio-source-status';status.textContent=p.statuses.map(s=>`${s.source}: ${s.status}`).join(' · ');box.append(status);
+      if(!p.changes.length){const empty=document.createElement('p');empty.textContent='No unambiguous changes were proposed. Your profile is unchanged.';box.append(empty);}
+      box.append(button('Apply selected fields',()=>{if(!selected.size){this.notice='Select at least one field to apply.';this.renderDetail();return;}this.pending=true;this.handlers.onApplyDNA?.(p.id,[...selected]);}),button('Discard suggestions',()=>{this.cancelProposal();this.renderDetail();}));
     }
-    this.handlers.onAutoFillDNA?.(char.name);
+    const saved=Object.values(this.library).filter(c=>c.id!==char.id);
+    if(saved.length){const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Merge a duplicate';details.append(summary);const select=document.createElement('select');select.setAttribute('aria-label','Duplicate character');for(const c of saved){const option=document.createElement('option');option.value=c.id;option.textContent=c.name;select.append(option);}const explanation=document.createElement('p');explanation.textContent=`Keep ${char.name} and its existing values. Fill only blank fields from the selected duplicate and retain its name as an alias. Conflicting values stay with ${char.name}.`;
+      details.append(explanation,select,button('Preview merge',()=>{this.mergeOther=select.value;this.renderDetail();}));if(this.mergeOther){const other=this.library[this.mergeOther];if(other){const preview=document.createElement('p');preview.textContent=DNA_FIELDS.map(path=>{const a=dnaFieldValue(char,path),b=dnaFieldValue(other,path);return b?`${DNA_FIELD_LABELS[path]}: ${a?`${JSON.stringify(a)} kept; duplicate ${JSON.stringify(b)}`:`fill ${JSON.stringify(b)}`}`:'';}).filter(Boolean).join(' · ');details.append(preview,button('Merge into this character',()=>{this.handlers.onMergeDNA?.(char.id,other.id,this.revision);this.mergeOther='';}));details.open=true;}}box.append(details);}
+    if(box.children.length)this.detailContainer.append(box);
   }
 
   back(): boolean {

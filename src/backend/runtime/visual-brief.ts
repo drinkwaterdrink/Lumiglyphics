@@ -26,7 +26,7 @@ export function resolveTemplateIdentity(
   if (characterDNALibrary) {
     const chars = ('characters' in characterDNALibrary ? characterDNALibrary.characters : characterDNALibrary) as Record<string, CharacterDNA>;
     const key = name.trim().toLowerCase();
-    lockedDNA = chars[key] ?? Object.values(chars).find((r: CharacterDNA) => r.aliases.some((a: string) => a.trim().toLowerCase() === key));
+    lockedDNA = chars[key] ?? Object.values(chars).find((r: CharacterDNA) => r.name.trim().toLowerCase()===key||r.aliases.some((a: string) => a.trim().toLowerCase() === key));
   }
 
   const dnaAppearance = lockedDNA ? formatCharacterDNAToPromptClause(lockedDNA) : undefined;
@@ -66,7 +66,11 @@ export function buildVisualBrief(
   const subjectLabel = subject === "female" ? "One visible woman" : subject === "male" ? "One visible man" : "One visible character";
   const pose = noPeople || ensemble ? "" : poseById(POSE_EXPRESSION_CATALOGUE, cue.poseExpressionId).suffix;
   const environment = scene.environment;
-  const members = cue.ensembleSubjects ?? scene.cast.map(name => ({name,appearance:Object.entries(appearances ?? {}).find(([key]) => characterAppearanceKey(key) === characterAppearanceKey(name))?.[1] ?? ""}));
+  const members = (cue.ensembleSubjects ?? scene.cast.map(name => ({name,appearance:""}))).map(member=>{
+    const saved=Object.entries(appearances??{}).find(([key])=>characterAppearanceKey(key)===characterAppearanceKey(member.name))?.[1];
+    const appearance=manual?member.appearance:saved||member.appearance;
+    return {...member,appearance:'attire'in member&&member.attire?applyAttireOverride(appearance,String(member.attire)):appearance};
+  });
   // Reserve room for every name before sharing the remaining appearance budget.
   // A long first description must never erase the persona or the last cast member.
   const nameBudget = members.reduce((total, member) => total + member.name.length + 4, 0);
@@ -80,7 +84,7 @@ export function buildVisualBrief(
   }).join("\n");
   return {
     ...(!noPeople?{subjectPreparation:{
-      name:ensemble?'Named ensemble':name.slice(0,256),identity:ensemble?'':identity.slice(0,4000),
+      name:ensemble?'Named ensemble':name.slice(0,256),identity:ensemble?'':(attire?applyAttireOverride(identity,''):identity).slice(0,4000),
       identitySource:ensemble?'ensemble snapshot' as const:!identity?'unavailable' as const:manual?'manual correction' as const:lockedDNA?.locked?'locked DNA' as any:saved?'saved appearance' as const:'resolved context' as const,
       attire:ensemble?null:attire?.slice(0,2000)??null,
       attireSource:ensemble?'not supplied' as const:cue.resolvedAttire!==undefined||cue.attire!=null?'picture cue' as const:sameCharacter&&scene.attire!==undefined&&scene.attire!==null?'scene' as const:dnaAttire?'locked DNA' as any:'not supplied' as const,

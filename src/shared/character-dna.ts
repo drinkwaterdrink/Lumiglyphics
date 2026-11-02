@@ -42,15 +42,26 @@ export const CharacterDNASchema = z.object({
   sourceSummary: z.string().trim().max(500).optional(),
   notes: z.string().trim().max(1000).optional(),
   avatarUrl: z.string().trim().max(2000).optional(),
-  lastUpdated: z.number().int().nonnegative().default(() => Date.now())
+  lastUpdated: z.number().int().nonnegative().default(() => Date.now()),
+  fieldSources:z.record(z.string(),z.object({classification:z.enum(['evidence','inferred','generated','manual']),sources:z.array(z.string().max(1000)).max(8)}).strict()).optional()
 }).strict();
 export type CharacterDNA = z.infer<typeof CharacterDNASchema>;
 
 export const CharacterDNALibrarySchema = z.object({
-  version: z.literal(1),
+  version: z.union([z.literal(1),z.literal(2)]),
+  revision: z.number().int().nonnegative().optional(),
+  deleted: z.record(z.string(),CharacterDNASchema).optional(),
+  warnings:z.array(z.string().max(500)).max(8).optional(),
   characters: z.record(z.string(), CharacterDNASchema).default({})
 }).strict();
 export type CharacterDNALibrary = z.infer<typeof CharacterDNALibrarySchema>;
+
+/** Identity matching is exact after Unicode/case/whitespace normalization, never fuzzy by surname. */
+export const dnaNameKey=(value:string)=>value.normalize('NFKC').trim().toLocaleLowerCase().replace(/\s+/g,' ');
+export function findCharacterDNA(records:Record<string,CharacterDNA>,identity:string):CharacterDNA|undefined{
+  const key=dnaNameKey(identity);
+  const all=Object.values(records);const direct=all.find(c=>dnaNameKey(c.id)===key)||all.find(c=>dnaNameKey(c.name)===key);if(direct)return direct;const aliases=all.filter(c=>c.aliases.some(a=>dnaNameKey(a)===key));return aliases.length===1?aliases[0]:undefined;
+}
 
 export function createEmptyCharacterDNA(name: string, id?: string): CharacterDNA {
   const normalizedId = (id || name).trim().toLowerCase().replace(/\s+/g, '-');

@@ -6,6 +6,24 @@ import { compileImagePrompt, compileNegativePrompt, createAssetJobs, generateAss
 import { ImageReviewGate } from "./image-review.js";
 import { normalizeConfig } from '../../config.js';
 import { templateSnapshot } from '../../shared/image-templates.js';
+import {saveCharacterDNA} from './character-dna-store.js';
+import {createEmptyCharacterDNA} from '../../shared/character-dna.js';
+
+test('saved DNA reaches the actual image payload only for pictured characters and changes cache identity',async()=>{
+ const data=new Map<string,unknown>(),sent:any[]=[];
+ const spindle:any={userStorage:{getJson:async(p:string,o:any)=>structuredClone(data.get(p)??o?.fallback),setJson:async(p:string,v:any)=>{data.set(p,structuredClone(v));}},imageGen:{generate:async(r:any)=>{sent.push(r);return{imageId:`image-${sent.length}`};}}};
+ const mira=createEmptyCharacterDNA('Mira');mira.build={gender:'woman',age:'mid forties'};mira.hair.color='auburn';mira.signatureOutfit='canvas apron';await saveCharacterDNA(spindle,'chat',mira,'u');
+ const darby=createEmptyCharacterDNA('Darby');darby.hair.color='neon purple';await saveCharacterDNA(spindle,'chat',darby,'u');
+ const config=normalizeConfig({referenceAnchoring:false,promptPrefix:'',promptSuffix:'',negativePrompt:'',selectedSharedStyleId:''});
+ const visual={...cue('idle'),character:'Mira',attire:'blue uniform',imageTemplate:templateSnapshot({...config.imageTemplates[0]!,positive:'{{subjects}} {{scene}}',negative:''})};
+ const turn=plan([visual]);turn.key.chatId='chat';
+ const run=()=>generateAssets(spindle,turn,createAssetJobs(turn,config),config,new AbortController().signal,()=>{},'u');
+ expect((await run())[0]?.status).toBe('generated');expect(sent[0].prompt).toContain('auburn');expect(sent[0].prompt).toContain('mid forties');expect(sent[0].prompt).toContain('blue uniform');expect(sent[0].prompt).not.toContain('canvas apron');expect(sent[0].prompt).not.toContain('neon purple');
+ mira.hair.color='silver';await saveCharacterDNA(spindle,'chat',mira,'u');await run();expect(sent[1].prompt).toContain('silver');expect(sent[1].prompt).not.toContain('auburn');
+ const ensemble={...visual,cueId:'group',assetJobId:'group',imageTemplate:templateSnapshot({...config.imageTemplates[0]!,subjectMode:'ensemble',positive:'{{subjects}}',negative:''}),ensembleSubjects:[{name:'Mira',appearance:'obsolete red hair'},{name:'Darby',appearance:'obsolete brown hair'}]};
+ const groupPlan=plan([ensemble]);groupPlan.key.chatId='chat';await generateAssets(spindle,groupPlan,createAssetJobs(groupPlan,config),config,new AbortController().signal,()=>{},'u');expect(sent[2].prompt).toContain('silver');expect(sent[2].prompt).toContain('neon purple');expect(sent[2].prompt).not.toContain('obsolete');
+ const landscape={...visual,cueId:'place',assetJobId:'place',imageTemplate:templateSnapshot({...config.imageTemplates[0]!,subjectMode:'none',positive:'{{scene}}',negative:''})};const emptyPlan=plan([landscape]);emptyPlan.key.chatId='chat';await generateAssets(spindle,emptyPlan,createAssetJobs(emptyPlan,config),config,new AbortController().signal,()=>{},'u');expect(sent[3].prompt).not.toContain('silver');expect(sent[3].prompt).not.toContain('neon purple');
+});
 
 const now = new Date().toISOString();
 

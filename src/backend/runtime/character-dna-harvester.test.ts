@@ -80,9 +80,9 @@ describe('Character DNA Harvester & Persistence', () => {
     await saveCharacterDNA(fakeSpindle, 'test-chat', nadine);
 
     const loaded = await loadCharacterDNALibrary(fakeSpindle, 'test-chat');
-    expect(loaded.characters['nadine pruitt']).toBeDefined();
-    expect(loaded.characters['nadine pruitt']?.hair.color).toBe('chestnut');
-    expect(loaded.characters['nadine pruitt']?.locked).toBe(true);
+    expect(loaded.characters['nadine']).toBeDefined();
+    expect(loaded.characters['nadine']?.hair.color).toBe('chestnut');
+    expect(loaded.characters['nadine']?.locked).toBe(true);
 
     const effective = await getEffectiveCharacterDNA(fakeSpindle, 'test-chat', 'Nadine Pruitt');
     expect(effective?.name).toBe('Nadine Pruitt');

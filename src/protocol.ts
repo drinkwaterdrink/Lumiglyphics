@@ -1,3 +1,4 @@
+import {DnaRequestSchema,type DnaRequest,type DnaProposal} from './shared/character-dna-workflow.js';
 import {QueueImageRetriesSchema,type QueueImageRetriesRequest,type ImageRetryQueueView} from './shared/image-retries.js';
 import {PresentationRuleRequestSchema,type PresentationRuleRequest,type PresentationRuleCatalog} from './shared/presentation-rules.js';
 import {CastGalleryRequestSchema,type CastGallery,CastArtRequestSchema,type CastArtLibrary,type CastContextScan} from './shared/cast-art.js';
@@ -121,15 +122,7 @@ export type FrontendRequest =
       dataUrl?: string;
       error?: string;
     }
-  | {
-      type: "vn_character_dna";
-      action: "list" | "harvest" | "save" | "autofill";
-      chatId: string;
-      requestId: string;
-      characterName?: string;
-      dna?: CharacterDNA;
-      contextText?: string;
-    };
+  | DnaRequest;
 
 /** Upper bound for a relayed reference image (decoded bytes, checked on both sides). */
 export const REFERENCE_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
@@ -266,10 +259,11 @@ export type BackendResponse =
       imageId: string;
       characterKey: string;
     }
-  | { type: "vn_character_dna"; chatId: string; requestId: string; library: CharacterDNALibrary; activeDna?: CharacterDNA; error?: string }
+  | { type: "vn_character_dna"; chatId: string; requestId: string; library: CharacterDNALibrary; activeDna?: CharacterDNA; proposal?: DnaProposal; error?: string }
   | { type: "vn_error"; chatId?: string; requestId?:string; operation: string; error: string };
 
 export function isFrontendRequest(value: unknown): value is FrontendRequest {
+  if((value as {type?:unknown}|null)?.type==='vn_character_dna')return DnaRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}|null)?.type === "vn_queue_image_retries") return QueueImageRetriesSchema.safeParse(value).success;
   if ((value as {type?:unknown}|null)?.type === "vn_presentation_rules") return PresentationRuleRequestSchema.safeParse(value).success;
   if (value === null || typeof value !== "object") return false;

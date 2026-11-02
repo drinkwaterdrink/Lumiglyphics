@@ -10,12 +10,12 @@
 
 **Spec:** `docs/audits/2026-11-01-main-3-gpt-audit.md` (findings A01-A10 and selected-suggestion design decisions).
 
-**Execution status:** Tasks 0 and 1 published as beta.110 (`8981bd3`) on `codex/audited-improvements`. Task 2 is implemented and locally verified, not yet committed/pushed; Tasks 3-11 remain pending. See `docs/implementation/2026-11-01-audit-progress.md` for evidence, additional bugs and known baseline browser failures.
+**Execution status:** Tasks 0 and 1 published as beta.110 (`8981bd3`) on `codex/audited-improvements`. Task 2 is published as beta.111 (`6240bba`). Task 2A is included in the beta.112 release checkpoint as the Cast/DNA repair in `2026-11-01-cast-dna-repair.md`; original Tasks 3-11 remain pending. See `docs/implementation/2026-11-01-audit-progress.md` for evidence, additional bugs and known baseline browser failures.
 
 ## Global constraints
 
 - Implement against Main-3-GPT commit `b0f5f5a594f4f6310a491b3452b388b91afdabfe` or an explicitly verified descendant; the current primary checkout is Testing beta.74. Do not apply this plan blindly to Testing.
-- Every push increments the beta suffix in package.json, spindle.json and src/shared/build-info.ts. The first correctness packet was pushed as **0.2.0-beta.110**; the next authorized push requires **0.2.0-beta.111**, subject to rechecking the remote. Never downgrade a newer release.
+- Every push increments the beta suffix in package.json, spindle.json and src/shared/build-info.ts. The first correctness packet was pushed as **0.2.0-beta.110**; Task 2 was pushed as **0.2.0-beta.111**; the next authorized push requires **0.2.0-beta.112**, subject to rechecking the remote. Never downgrade a newer release.
 - Preserve source comments/docstrings, primary story/job validation, userId targeting/storage isolation, swipe/revision identity, intake epochs and view gating. A closed reader never starts automatic generation.
 - No live/paid image calls in automated tests. New text/image calls need explicit workflow intent and accurate usage reporting. No filtering/softening creative themes or descriptions; lint only advises.
 - Persisted optional caches/history may be ignored or rederived without blocking a valid story. Unknown future formats remain preserved and unavailable rather than overwritten.
@@ -34,7 +34,7 @@
 
 Work packets are release boundaries, not promised dates or arbitrary one-file-per-push mandates. Each task below follows: add the named failing behavioral regression; run it to establish failure; implement the described boundary; rerun the regression and relevant existing suites/browser fixtures; review explicit changed paths. Commit only when separately requested/authorized. Run the release gate before any authorized push.
 
-Recommended sequence: 0 -> 1 -> 2 -> 3 -> 4/5/6 -> 7 -> 8 -> 9 -> 10 -> 11. Tasks sharing `protocol.ts`, `config.ts`, studio or host state should be implemented sequentially to avoid contract drift. Each packet must remain installable with unsupported optional data safely unavailable.
+Recommended sequence: 0 -> 1 -> 2 -> 2A (urgent Cast/DNA repair) -> 3 -> 4/5/6 -> 7 -> 8 -> 9 -> 10 -> 11. Tasks sharing `protocol.ts`, `config.ts`, studio or host state should be implemented sequentially to avoid contract drift. Each packet must remain installable with unsupported optional data safely unavailable.
 
 ## Task 0 — Establish the branch and reproducible verification
 
@@ -81,6 +81,23 @@ Recommended sequence: 0 -> 1 -> 2 -> 3 -> 4/5/6 -> 7 -> 8 -> 9 -> 10 -> 11. Task
 - [ ] Verify persisted bytes, IPC bytes, projection/seek latency and peak allocations for bounded stress fixtures; record measured results without invented thresholds. Run presentation/storage/controller/cast/dossier suites and reference browser tests.
 
 **Done:** compact persisted and transported presentation remains available for stress fixtures; no future facts/art leak and no primary-state reset. This task is a coordinated contract migration, not just a storage rewrite.
+
+## Task 2A — Priority Cast and Appearance DNA repair
+
+User reported wrong auto-fill gender, missing controls and duplicate characters on mobile. Independent local reproductions confirmed character contamination, disconnected LLM/source collection, key mismatch duplicates, clipped/covered controls and concurrent lost saves. Host lifecycle and image-prompt integration also need repair.
+
+**Audit/design:** `docs/audits/2026-11-01-cast-dna-audit.md`.
+**Detailed repair plan:** `docs/superpowers/plans/2026-11-01-cast-dna-repair.md`.
+**Selected direction:** evidence plus context-consistent generated suggestions, labeled and reviewed before saving. Preserve explicit source facts, age, manual edits and locks; scope every operation to its character/chat and revision.
+
+- [x] A1: stable IDs, legacy migration, serialized storage and chat/request lifecycle.
+- [x] A2: visible mobile actions, correct artwork scope and truthful editing UI.
+- [x] A3: scenario/card, tracker, relevant lorebooks and supported codex evidence with source statuses and identity attribution.
+- [x] A4: actual bounded text-model proposal, validated fields/provenance and stale-result protection.
+- [x] A5: review/apply, delete/undo with rediscovery suppression, explicit duplicate merge.
+- [x] A6: prove saved effective DNA in actual mocked provider payloads and cache identity; full release verification.
+
+Task 2A is included in the beta.112 release checkpoint; prior beta.111 does not contain it. See `docs/implementation/2026-11-01-cast-dna-repair.md`. This packet precedes original Task 3; original selected suggestions remain in scope.
 
 ## Task 3 — Unify image loading and simplify Artwork actions
 
