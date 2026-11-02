@@ -1,3 +1,4 @@
+import type {SpeechPlaybackProgress} from './read-along.js';
 import { describe, expect, test } from "bun:test";
 
 import { SpeechController, type SpeechAudioElement, type SpeechCursor, type SpeechStatus } from "./controller.js";
@@ -56,6 +57,7 @@ class FakeAudio implements SpeechAudioElement {
   src = "";
   volume = 1;
   currentTime = 0;
+  duration=10;
   playCalls = 0;
   pauseCalls = 0;
   rejectNextPlay: Error | null = null;
@@ -108,12 +110,14 @@ function rig(options: { settings?: SpeechSettings; maxCacheItems?: number; maxCa
   const transport = new FakeTransport();
   const audio = new FakeAudio();
   const statuses: SpeechStatus[] = [];
+  const progresses:Array<SpeechPlaybackProgress|null>=[];
   const created: string[] = [];
   const revoked: string[] = [];
   let counter = 0;
   const controller = new SpeechController({
     transport,
     onStatus: (status) => statuses.push(status),
+    onProgress: progress=>progresses.push(progress),
     createAudio: () => audio,
     createObjectUrl: () => { const url = `blob:fake-${counter += 1}`; created.push(url); return url; },
     revokeObjectUrl: (url) => revoked.push(url),
@@ -122,7 +126,7 @@ function rig(options: { settings?: SpeechSettings; maxCacheItems?: number; maxCa
   });
   controller.setSettings(options.settings ?? enabledSettings());
   controller.setActive(true);
-  return { transport, audio, statuses, created, revoked, controller };
+  return { transport, audio, statuses, progresses, created, revoked, controller };
 }
 
 /** Dispatch a play and settle up to the pending synthesize request. */
@@ -710,3 +714,11 @@ describe("audit remediation (must-fix 11-13, findings 5/14)", () => {
     expect(audio.src).toBe("");
   });
 });
+
+test('read-along reports media time and clears on pause, end, swipe and disposal',async()=>{const r=rig();r.controller.setCursor(cursor({swipeId:1,revision:1}));const {done}=await dispatchPlay(r.controller);r.transport.requests[0]!.resolve(audioBlob());await done;r.audio.currentTime=4;r.audio.emit('timeupdate');expect(r.progresses.at(-1)).toMatchObject({elapsedSeconds:4,durationSeconds:10,timing:'none',cursor:{swipeId:1,revision:1}});r.controller.pause();expect(r.progresses.at(-1)).toBeNull();await r.controller.playCurrent();expect(r.progresses.at(-1)?.elapsedSeconds).toBe(4);r.controller.setCursor(cursor({swipeId:1,revision:2}));expect(r.progresses.at(-1)?.cursor.revision).toBe(2);expect(r.audio.playCalls).toBe(2);r.audio.emit('ended');expect(r.progresses.at(-1)).toBeNull();r.controller.setCursor(cursor({swipeId:2,revision:2}));expect(r.controller.getStatus().kind).toBe('idle');r.controller.dispose();expect([...((r.audio as any).listeners as Map<string,unknown[]>).values()].every(list=>list.length===0)).toBe(true);});
+test('old media listeners cannot end or highlight a replacement paragraph',async()=>{const r=rig();r.controller.setCursor(cursor());const first=await dispatchPlay(r.controller);r.transport.requests[0]!.resolve(audioBlob());await first.done;const oldTime=(r.audio as any).listeners.get('timeupdate')[0],oldEnded=(r.audio as any).listeners.get('ended')[0];r.controller.setCursor(cursor({paragraphIndex:1,text:'Second.'}));const second=await dispatchPlay(r.controller);r.transport.requests.at(-1)!.resolve(audioBlob());await second.done;oldTime();oldEnded();expect(r.controller.getStatus().kind).toBe('playing');expect(r.progresses.at(-1)?.cursor.paragraphIndex).toBe(1);r.controller.dispose();});
+
+test('a fresh replay stops the old audio before profile refresh and clears read-along',async()=>{const r=rig();r.controller.setCursor(cursor());const first=await dispatchPlay(r.controller);r.transport.requests[0]!.resolve(audioBlob());await first.done;const paused=r.audio.pauseCalls;const replay=r.controller.playCurrent();expect(r.audio.pauseCalls).toBeGreaterThan(paused);expect(r.progresses.at(-1)).toBeNull();await replay;r.controller.dispose();});
+
+test('hiding during synthesis cannot strand Play as loading after visibility returns',async()=>{const r=rig();r.controller.setCursor(cursor());const first=await dispatchPlay(r.controller);r.controller.setVisible(false);expect(r.progresses.at(-1)).toBeNull();r.controller.setVisible(true);expect(r.controller.getStatus().kind).toBe('idle');r.transport.requests[0]!.resolve(audioBlob());await first.done;expect(r.audio.playCalls).toBe(0);expect(r.transport.requests).toHaveLength(1);r.controller.dispose();});
+test('a late old play promise cannot pause or change a newer playing owner',async()=>{const r=rig();let release!:()=>void;const nativePlay=r.audio.play.bind(r.audio);let firstPlay=true;r.audio.play=()=>{if(firstPlay){firstPlay=false;return new Promise<void>(resolve=>{release=resolve;});}return nativePlay();};r.controller.setCursor(cursor());const first=await dispatchPlay(r.controller);r.transport.requests[0]!.resolve(audioBlob());await tick();r.controller.setCursor(cursor({paragraphIndex:1,text:'New paragraph'}));const second=await dispatchPlay(r.controller);r.transport.requests.at(-1)!.resolve(audioBlob());await second.done;const pauses=r.audio.pauseCalls;release();await first.done;expect(r.audio.pauseCalls).toBe(pauses);expect(r.controller.getStatus().kind).toBe('playing');expect(r.progresses.at(-1)?.cursor.paragraphIndex).toBe(1);r.controller.dispose();});

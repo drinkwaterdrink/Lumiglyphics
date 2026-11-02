@@ -70,11 +70,13 @@ try {
   await fallbackSelect.selectOption("oai-1");
   assert.equal(await fallbackSelect.inputValue(), "oai-1");
 
-  // 3) Enable via the checkbox: patch saved, dock appears (overlay is active).
+  // 3) Enable saves the patch; open the current popover through its visible launcher.
   await card.locator('input[type="checkbox"]').first().check();
   s = await snap(page);
   assert.equal(s.patches.at(-1)!.enabled, true, "enable saved as a speech patch");
-  assert.equal(await dock.isVisible(), true, "dock appears once enabled and active");
+  assert.equal(await dock.isVisible(), false, "enable does not force the popover open");
+  await page.getByRole("button",{name:"Voice controls",exact:true}).click();
+  assert.equal(await dock.isVisible(), true, "explicit launcher opens the enabled dock");
 
   // 4) Manual Play: profile revision read + one synthesis; Pause/resume/Stop behave.
   await fx(page, `f.setCursor(0, "The wind picks up.", "");`);

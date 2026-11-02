@@ -110,3 +110,18 @@ profile's configured model is always used.
   building or testing this feature; all tests are offline with mocked
   transport/fetch, and profile/voice listing in settings happens only on
   explicit button presses (metadata only, never synthesis or profile tests).
+
+
+## Paragraph read-along (beta.117)
+
+While the current assistant paragraph is playing, the reader marks that paragraph without wrapping or replacing its text, selections, entity links or document anchors. The voice player shows elapsed media time and a percentage only when the audio element reports a finite positive duration. Unknown duration shows elapsed time with “duration unavailable”, with no percentage bar. Pause, seeking, stop, end, media failure, visibility/cursor/chat/settings changes and disposal clear the speaking highlight. Resume and completed seeks use the actual media clock. Progress is not a live region, so screen readers do not receive every clock tick. Highlighting is static and works with reduced motion.
+
+Progress ownership includes chat, message, swipe, source fingerprint, revision and paragraph. Asset-only revisions refresh this identity without restarting identical speech; different swipes still stop it even if their text matches. Per-play ownership also rejects old media callbacks and late `play()` settlements, so an old promise cannot pause newer speech. No progress polling timer, extra synthesis, prefetch or alignment service is introduced.
+
+### Offline timing capability check
+
+Checked the installed `lumiverse-spindle-types` **0.6.23** `dist/spindle-api.d.ts`: its provider-side `SpindleTtsEngine.synthesize` returns `audio` and optional `contentType`; it has no time-to-text alignment fields. The checked-in extension transport consumes `POST /api/v1/tts/synthesize` as audio bytes/Blob and rejects non-audio responses. This is evidence for the installed contract, not a claim about every live host build or provider. The adapter explicitly advertises timing capability `none`; paragraph-only read-along is therefore the supported delivery.
+
+Exact sentence/word tracking requires a verified host response with timed spans tied to the exact outbound text, declared offset units, and a reliable mapping through delivery tags/display markup to the shown source paragraph. It also needs request/branch identity and monotonic validated audio times. None is available in this adapter contract. We do not estimate words from text length, claim karaoke timing, or silently call a forced-alignment service. Sentence-level effects/SFX remain on their existing paragraph schedule until such a contract is available and separately evaluated. Mixed narration and dialogue continue to use one voice for the whole paragraph.
+
+All release tests use fake audio and intercepted/local responses. Live audio quality, device playback and current live-host timing remain UNVERIFIED.

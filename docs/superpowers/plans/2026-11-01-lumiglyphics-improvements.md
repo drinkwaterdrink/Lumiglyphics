@@ -10,7 +10,7 @@
 
 **Spec:** `docs/audits/2026-11-01-main-3-gpt-audit.md` (findings A01-A10 and selected-suggestion design decisions).
 
-**Execution status:** Tasks 0 and 1 published as beta.110 (`8981bd3`) on `codex/audited-improvements`. Task 2 is published as beta.111 (`6240bba`). Task 2A is included in the beta.112 release checkpoint as the Cast/DNA repair in `2026-11-01-cast-dna-repair.md`; Tasks 3-4 are included in the beta.113 checkpoint; Task 5 is included in the beta.114 checkpoint; Task 6 is included in the beta.115 checkpoint; Task 7 is included in the beta.116 checkpoint; original Tasks 8-11 remain pending. See `docs/implementation/2026-11-01-audit-progress.md` for evidence, additional bugs and known baseline browser failures.
+**Execution status:** Tasks 0 and 1 published as beta.110 (`8981bd3`) on `codex/audited-improvements`. Task 2 is published as beta.111 (`6240bba`). Task 2A is included in the beta.112 release checkpoint as the Cast/DNA repair in `2026-11-01-cast-dna-repair.md`; Tasks 3-4 are included in the beta.113 checkpoint; Task 5 is included in the beta.114 checkpoint; Task 6 is included in the beta.115 checkpoint; Task 7 is included in the beta.116 checkpoint; Task 8 is included in the beta.117 checkpoint with paragraph-only timing; original Tasks 9-11 remain pending. See `docs/implementation/2026-11-01-audit-progress.md` for evidence, additional bugs and known baseline browser failures.
 
 ## Global constraints
 
@@ -173,11 +173,11 @@ Task 2A is included in the beta.112 release checkpoint; prior beta.111 does not 
 
 **Interfaces:** progress events bind full speech cursor identity and audio playback time; timing capability is `none | sentence | word`. Existing buffered-Blob transports expose none. New `alignment` data is validated only if the host actually returns it. No synthesized fake provider capability.
 
-- [ ] First expose speaking-paragraph highlighting and playback progress with pause/resume/end clearing. Show sentence or word tracking only when reliable alignment exists; label approximate sentence mode if separately provided. Selection 3 stays planned even though exact word support has a platform dependency.
-- [ ] Capability spike: inspect actual host TTS response/tool contract offline or using already-authorized non-synthesis metadata. If no alignment exists, document paragraph-only delivery and the exact missing host capability; do not add forced-alignment services/model calls without separate approval.
-- [ ] Test paragraph/cursor/chat change, hidden tab, seek/pause/restart, stale response, reduced motion, mixed narration, punctuation, CJK/RTL and combining characters. Preserve text selection, tooltips and document anchors; screen readers should not announce every highlight tick.
-- [ ] Sentence-level SFX/one-shot effects are a later optional refinement from the audits: share reveal/playback clock, do not replay on seeks, discard stale cues, and keep legacy paragraph scheduling if timing absent. No new cue-schema output/cost until its benefit and supported timing are verified.
-- [ ] Run speech controller/transport/host-stage browser fixtures with fake audio only.
+- [x] First expose speaking-paragraph highlighting and playback progress with pause/resume/end clearing. Show sentence or word tracking only when reliable alignment exists; label approximate sentence mode if separately provided. Selection 3 stays planned even though exact word support has a platform dependency.
+- [x] Capability spike: inspect actual host TTS response/tool contract offline or using already-authorized non-synthesis metadata. If no alignment exists, document paragraph-only delivery and the exact missing host capability; do not add forced-alignment services/model calls without separate approval.
+- [x] Test paragraph/cursor/chat change, hidden tab, seek/pause/restart, stale response, reduced motion, mixed narration, punctuation, CJK/RTL and combining characters. Preserve text selection, tooltips and document anchors; screen readers should not announce every highlight tick.
+- [x] Sentence-level SFX/one-shot effects are a later optional refinement from the audits: share reveal/playback clock, do not replay on seeks, discard stale cues, and keep legacy paragraph scheduling if timing absent. No new cue-schema output/cost until its benefit and supported timing are verified.
+- [x] Run speech controller/transport/host-stage browser fixtures with fake audio only.
 
 ## Task 9 — Scene scrubber and optional relationship/presence history (15, 16)
 

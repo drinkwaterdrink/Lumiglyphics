@@ -75,9 +75,9 @@ class RecordingAudio implements SpeechAudioElement {
 const audio = new RecordingAudio();
 const transport = createSpeechTransport({ fetchImpl });
 
-// A small fixed strip like the overlay corner: never covers the settings below.
+// Match the current corner popover; its launcher is an explicit user action.
 const dockMount = document.createElement("div");
-Object.assign(dockMount.style, { position: "fixed", left: "0", bottom: "0", width: "420px", height: "90px" });
+Object.assign(dockMount.style, { position: "fixed", right: "0", top: "0", width: "360px", height: "300px", pointerEvents:"none", zIndex:"1000" });
 document.body.append(dockMount);
 Object.assign(document.body.style, { margin: "0", background: "#0a0a12", minHeight: "100vh" });
 
@@ -87,6 +87,7 @@ const dock = new SpeechDock({
   onPause: () => controller.pause(),
   onStop: () => controller.stop("user-stop"),
 });
+const launcher=document.createElement('button');launcher.type='button';launcher.textContent='Voice controls';launcher.style.cssText='position:absolute;right:12px;top:12px;pointer-events:auto';launcher.onclick=()=>dock.togglePlay();dockMount.append(launcher);
 const controller = new SpeechController({
   transport,
   onStatus: (status) => { fixture.statuses.push(status); dock.setStatus(status); },

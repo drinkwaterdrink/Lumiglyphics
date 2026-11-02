@@ -1,3 +1,4 @@
+import {progressForCursor} from '../speech/read-along.js';
 import {musicTrackForPosition,locationForPosition} from '../../shared/scene-atmosphere.js';
 import {resumeCardModel} from '../stage/resume-card.js';
 import {DnaRequestSchema,DNA_FIELD_LABELS,type DnaRequest,type DnaField} from '../../shared/character-dna-workflow.js';
@@ -210,6 +211,7 @@ export function speechCursorFor(view: TurnView, index: number): SpeechCursor | n
     chatId: view.chatId,
     messageId: view.messageId,
     sourceFingerprint: view.sourceFingerprint,
+    swipeId:view.swipeId,revision:view.revision,
     paragraphIndex: index,
     text,
     paragraphSpeaker: view.paragraphSpeakers?.[index],
@@ -686,6 +688,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   });
   speech = new SpeechController({
     transport: createSpeechTransport(),
+    onProgress:progress=>{const loaded=loadedReadingCursor.turn;const current=loaded&&!stage.isReadingUserParagraph()?speechCursorFor(loaded,stage.getState().currentParagraphIndex):null;const valid=progressForCursor(progress,current);stage.setSpeechProgress(valid);speechDock.setProgress(valid);},
     onStatus: (status) => {
       speechDock.setStatus(status);
       audioEngine.setSpeechDucking(status.kind === "playing");

@@ -79,6 +79,8 @@ const stage = new VnStage({
   },
 });
 
+// This fixture tests a fixed 200ms speech/reader handoff, not adaptive pacing.
+stage.setReaderPreferences({smartPacing:false,chapterTitleCards:false});
 const panels = new PanelDock(stage.panelMount);
 
 speechDock = new SpeechDock({

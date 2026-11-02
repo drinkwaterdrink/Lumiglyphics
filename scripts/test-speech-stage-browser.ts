@@ -43,14 +43,8 @@ try {
 
   // Click the Play button in the dock via mouse
   // First get the button bounding box
-  const playButtonBox = await page.evaluate(() => {
-    const stageHost = document.querySelector("[data-vn-stage-host]");
-    const dockHost = stageHost?.shadowRoot?.querySelector(".vn-speech-dock");
-    const playBtn = dockHost?.shadowRoot?.querySelector("button");
-    if (!playBtn) return null;
-    const r = playBtn.getBoundingClientRect();
-    return { x: r.x + r.width / 2, y: r.y + r.height / 2, width: r.width, height: r.height };
-  });
+  await page.getByRole('button',{name:'Voice controls',exact:true}).click();
+  const playButtonBox=await page.getByRole('button',{name:'Play this paragraph',exact:true}).evaluate(el=>{const r=el.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,width:r.width,height:r.height};});
   assert.ok(playButtonBox, "Play button must be rendered in DOM");
   console.log("Play button box:", playButtonBox);
 
@@ -70,15 +64,16 @@ try {
   const mobilePage = await browser.newPage({ viewport: { width: 375, height: 667 } });
   await mobilePage.goto(`http://127.0.0.1:${server.port}/`);
   await mobilePage.locator("[data-integration-ready]").waitFor();
+  await mobilePage.getByRole("button",{name:"Voice controls",exact:true}).click();
 
   const mobileBoxes = await mobilePage.evaluate(() => {
     const stageHost = document.querySelector("[data-vn-stage-host]");
     const dockHost = stageHost?.shadowRoot?.querySelector(".vn-speech-dock");
     const dockPill = dockHost?.shadowRoot?.querySelector("[data-dock]");
     const dialogueBox = stageHost?.shadowRoot?.querySelector("[data-vn-theme-host]")?.shadowRoot?.querySelector("[data-vn-dialogue]");
-    const exitBtn = stageHost?.shadowRoot?.querySelector("[data-vn-exit]");
+    const exitBtn = stageHost?.shadowRoot?.querySelector('[data-action="chat-exit"]');
     const panelDockHost = stageHost?.shadowRoot?.querySelector("[data-vn-panel-layer]");
-    const panelLauncher = panelDockHost?.shadowRoot?.querySelector(".launcher");
+    const panelLauncher = stageHost?.shadowRoot?.querySelector('[data-action="panels-toggle"]');
     return {
       dock: dockPill?.getBoundingClientRect(),
       dialogue: dialogueBox?.getBoundingClientRect(),
@@ -102,13 +97,14 @@ try {
   const narrowPage = await browser.newPage({ viewport: { width: 360, height: 640 } });
   await narrowPage.goto(`http://127.0.0.1:${server.port}/`);
   await narrowPage.locator("[data-integration-ready]").waitFor();
+  await narrowPage.getByRole("button",{name:"Voice controls",exact:true}).click();
   const narrowBoxes = await narrowPage.evaluate(() => {
     const stageHost = document.querySelector("[data-vn-stage-host]");
     const dockHost = stageHost?.shadowRoot?.querySelector(".vn-speech-dock");
     const dockPill = dockHost?.shadowRoot?.querySelector("[data-dock]");
-    const exitBtn = stageHost?.shadowRoot?.querySelector("[data-vn-exit]");
+    const exitBtn = stageHost?.shadowRoot?.querySelector('[data-action="chat-exit"]');
     const panelDockHost = stageHost?.shadowRoot?.querySelector("[data-vn-panel-layer]");
-    const panelLauncher = panelDockHost?.shadowRoot?.querySelector(".launcher");
+    const panelLauncher = stageHost?.shadowRoot?.querySelector('[data-action="panels-toggle"]');
     return {
       dock: dockPill?.getBoundingClientRect(),
       exit: exitBtn?.getBoundingClientRect(),

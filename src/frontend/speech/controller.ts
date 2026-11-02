@@ -1,3 +1,4 @@
+import {speechPlaybackProgress,type SpeechPlaybackProgress} from './read-along.js';
 import type { SpeechSettings } from "../../speech-config.js";
 import { DEFAULT_SPEECH_SETTINGS } from "../../speech-config.js";
 import { DELIVERY_ADAPTER_VERSION, deliveryTagAllowedForModel, formatOutboundText } from "./delivery.js";
@@ -24,6 +25,9 @@ import { SpeechTransportError, type TtsTransport } from "./transport.js";
  */
 
 export type SpeechCursor = {
+  /** Source branch and delivery revision; omitted legacy callers are revision/swipe zero. */
+  swipeId?:number;
+  revision?:number;
   chatId: string;
   messageId: string;
   sourceFingerprint: string;
@@ -49,6 +53,9 @@ export type SpeechAudioElement = {
   src: string;
   volume: number;
   currentTime: number;
+  duration?:number;
+  paused?:boolean;
+  ended?:boolean;
   play(): Promise<void>;
   pause(): void;
   addEventListener(type: string, listener: () => void): void;
@@ -58,6 +65,7 @@ export type SpeechAudioElement = {
 export type SpeechControllerOptions = {
   transport: TtsTransport;
   onStatus?: (status: SpeechStatus) => void;
+  onProgress?: (progress:SpeechPlaybackProgress|null) => void;
   createAudio?: () => SpeechAudioElement;
   createObjectUrl?: (blob: Blob) => string;
   revokeObjectUrl?: (url: string) => void;
@@ -71,6 +79,7 @@ const DEFAULT_MAX_CACHE_BYTES = 32 * 1024 * 1024;
 function sameCursorIdentity(left: SpeechCursor, right: SpeechCursor): boolean {
   return left.chatId === right.chatId
     && left.messageId === right.messageId
+    && (left.swipeId??0)===(right.swipeId??0)
     && left.sourceFingerprint === right.sourceFingerprint
     && left.paragraphIndex === right.paragraphIndex
     && left.text === right.text
@@ -80,6 +89,9 @@ function sameCursorIdentity(left: SpeechCursor, right: SpeechCursor): boolean {
 
 export class SpeechController {
   private readonly transport: TtsTransport;
+  private readonly onProgress:(progress:SpeechPlaybackProgress|null)=>void;
+  private audioListeners:Array<{type:string;listener:()=>void}>=[];
+  private loadedUrl:string|null=null;
   private readonly onStatus: (status: SpeechStatus) => void;
   private readonly createAudio: () => SpeechAudioElement;
   private readonly createObjectUrl: (blob: Blob) => string;
@@ -104,6 +116,8 @@ export class SpeechController {
   private playState: "stopped" | "playing" | "paused" = "stopped";
   /** True while an audio.play() promise is unsettled; pause() during this window is remembered. */
   private starting = false;
+  /** Shared audio may have a newer play owner while an older promise is unresolved. */
+  private playAttempt=0;
   private pauseRequested = false;
   /** Autoplay may only start after one successful user-gesture play. */
   private gestureUnlocked = false;
@@ -112,6 +126,7 @@ export class SpeechController {
   constructor(options: SpeechControllerOptions) {
     this.transport = options.transport;
     this.onStatus = options.onStatus ?? (() => undefined);
+    this.onProgress=options.onProgress??(()=>undefined);
     this.createAudio = options.createAudio ?? (() => new Audio());
     this.createObjectUrl = options.createObjectUrl ?? ((blob) => URL.createObjectURL(blob));
     this.revokeObjectUrl = options.revokeObjectUrl ?? ((url) => URL.revokeObjectURL(url));
@@ -153,8 +168,11 @@ export class SpeechController {
     this.visible = visible;
     if (!visible) {
       this.abortInflight("hidden");
-      if (this.playState === "playing") this.pause();
-    }
+      if (this.playState === "playing"||this.starting) this.pause();
+      else if(this.playState!=="paused")this.publishBaseline();
+      this.detachAudioListeners();this.onProgress(null);
+    }else if(this.playState==='paused'&&this.loadedKey)this.publish({kind:'paused',...this.speakerLabel()});
+    else this.publishBaseline();
   }
 
   /** Chat switch/fork: hard boundary — cursor, playback, and cache all reset. */
@@ -173,7 +191,7 @@ export class SpeechController {
    */
   setCursor(cursor: SpeechCursor | null, options: { autoplay?: boolean } = {}): void {
     if (this.disposed) return;
-    if (cursor && this.cursor && sameCursorIdentity(this.cursor, cursor)) return;
+    if (cursor && this.cursor && sameCursorIdentity(this.cursor, cursor)){this.cursor=cursor;this.publishProgress();return;}
     this.cursor = cursor;
     this.stop("cursor-changed");
     this.publishBaseline();
@@ -205,6 +223,7 @@ export class SpeechController {
     this.pauseRequested = false;
     this.starting = false;
     this.abortInflight(reason);
+    this.detachAudioListeners();this.loadedUrl=null;
     if (this.audio && this.playState !== "stopped") {
       this.audio.pause();
       try { this.audio.currentTime = 0; } catch { /* not seekable yet */ }
@@ -248,7 +267,8 @@ export class SpeechController {
       return;
     }
 
-    this.abortInflight("superseded");
+    // A fresh restart must not keep old audio audible during metadata/synthesis waits.
+    this.stop("superseded");
     const myEpoch = ++this.epoch;
     const abort = new AbortController();
     this.inflight = abort;
@@ -350,9 +370,10 @@ export class SpeechController {
     this.pauseRequested = false;
     this.starting = false;
     this.abortInflight("disposed");
+    this.detachAudioListeners();this.loadedUrl=null;this.onProgress(null);
     if (this.audio) {
       this.audio.pause();
-      this.audio.removeEventListener("ended", this.handleEnded);
+
       this.audio.src = "";
     }
     this.playState = "stopped";
@@ -383,6 +404,7 @@ export class SpeechController {
   private publish(status: SpeechStatus): void {
     this.status = status;
     this.onStatus(status);
+    this.publishProgress();
   }
 
   private publishBaseline(): void {
@@ -402,17 +424,24 @@ export class SpeechController {
   private ensureAudio(): SpeechAudioElement {
     if (!this.audio) {
       this.audio = this.createAudio();
-      this.audio.addEventListener("ended", this.handleEnded);
+
     }
     this.audio.volume = this.settings.volume;
     return this.audio;
   }
 
-  private readonly handleEnded = (): void => {
-    if (this.disposed) return;
-    this.playState = "stopped";
-    this.publishBaseline();
-  };
+  private publishProgress():void{this.onProgress(this.playState==='playing'&&!this.starting&&this.eligible()&&this.loadedKey&&this.audio&&this.loadedUrl===this.audio.src?speechPlaybackProgress(this.cursor!,this.audio.currentTime,this.audio.duration):null);}
+  private detachAudioListeners():void{if(this.audio)for(const {type,listener}of this.audioListeners)this.audio.removeEventListener(type,listener);this.audioListeners=[];}
+  private bindAudioListeners(audio:SpeechAudioElement,key:string,epoch:number):void{
+    this.detachAudioListeners();
+    const owns=()=>!this.disposed&&epoch===this.epoch&&this.audio===audio&&this.loadedKey===key&&this.loadedUrl===audio.src;
+    const bind=(type:string,listener:()=>void)=>{audio.addEventListener(type,listener);this.audioListeners.push({type,listener});};
+    for(const type of ['timeupdate','durationchange','loadedmetadata','seeked'])bind(type,()=>{if(owns())this.publishProgress();});
+    bind('seeking',()=>{if(owns())this.onProgress(null);});
+    bind('pause',()=>{if(owns()&&audio.paused===true&&this.playState==='playing'){this.playState='paused';this.publish({kind:'paused',...this.speakerLabel()});}});
+    bind('ended',()=>{if(!owns()||audio.ended===false)return;this.playState='stopped';this.publishBaseline();});
+    bind('error',()=>{if(!owns())return;this.stop('media-error');this.publish({kind:'error',message:'Paragraph audio could not be played. Press Play to try again.'});});
+  }
 
   private async playUrl(url: string, key: string, myEpoch: number, auto: boolean): Promise<void> {
     // A boundary that lands before the element is touched must leave it alone:
@@ -420,6 +449,7 @@ export class SpeechController {
     if (myEpoch !== this.epoch || this.disposed) return;
     const audio = this.ensureAudio();
     audio.src = url;
+    this.loadedUrl=url;
     try { audio.currentTime = 0; } catch { /* not seekable yet */ }
     if (myEpoch !== this.epoch || this.disposed) return;
     this.loadedKey = key;
@@ -427,11 +457,14 @@ export class SpeechController {
   }
 
   private async tryPlay(audio: SpeechAudioElement, key: string, auto: boolean, myEpoch: number): Promise<void> {
+    const attempt=++this.playAttempt;
     audio.volume = this.settings.volume;
     this.starting = true;
+    this.bindAudioListeners(audio,key,myEpoch);
     try {
       await audio.play();
     } catch (error) {
+      if(attempt!==this.playAttempt)return;
       this.starting = false;
       // A stop/dispose that lands while play() is pending already published
       // its own state; a late rejection must not overwrite it or resurrect.
@@ -449,6 +482,7 @@ export class SpeechController {
       });
       return;
     }
+    if(attempt!==this.playAttempt)return;
     this.starting = false;
     // Late success after stop/dispose: pause the element again and stay quiet.
     if (this.disposed || myEpoch !== this.epoch) {

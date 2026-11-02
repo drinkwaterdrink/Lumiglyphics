@@ -1,3 +1,4 @@
+import {audioProgressFraction,type SpeechPlaybackProgress} from './read-along.js';
 import type { SpeechStatus } from "./controller.js";
 
 /**
@@ -153,6 +154,9 @@ export class SpeechDock {
   private readonly settingsButton: HTMLButtonElement;
   private readonly closeButton: HTMLButtonElement;
   private readonly statusEl: HTMLElement;
+  private readonly progressWrap:HTMLElement;
+  private readonly progressBar:HTMLProgressElement;
+  private readonly progressLabel:HTMLElement;
   private enabled = false;
   private overlayActive = false;
   private playing = false;
@@ -236,7 +240,12 @@ export class SpeechDock {
     this.statusEl.setAttribute("role", "status");
     this.statusEl.setAttribute("aria-live", "polite");
 
-    dock.append(head, controls, this.statusEl);
+    this.progressWrap=document.createElement('div');this.progressWrap.dataset.speechProgress='';this.progressWrap.setAttribute('aria-live','off');this.progressWrap.hidden=true;
+    this.progressBar=document.createElement('progress');this.progressBar.max=1;this.progressBar.setAttribute('aria-label','Paragraph audio playback');this.progressBar.style.cssText='width:100%;height:6px;margin:8px 0;accent-color:var(--vn-shell-accent,#dcebad)';
+    this.progressLabel=document.createElement('span');this.progressLabel.dataset.speechElapsed='';this.progressLabel.style.cssText='font-variant-numeric:tabular-nums;font-size:12px';
+    const timing=document.createElement('small');timing.textContent='Paragraph tracking · word timing unavailable';timing.style.cssText='display:block;margin-top:4px;opacity:.8';
+    this.progressWrap.append(this.progressLabel,this.progressBar,timing);
+    dock.append(head, controls, this.statusEl,this.progressWrap);
     shadow.append(style, dock);
     this.setStatus({ kind: "off" });
     this.sync();
@@ -267,8 +276,16 @@ export class SpeechDock {
     this.sync();
   }
 
+  setProgress(progress:SpeechPlaybackProgress|null):void{
+    this.progressWrap.hidden=!progress;if(!progress){this.progressLabel.textContent='';this.progressBar.value=0;return;}
+    const format=(time:number)=>{const seconds=Math.floor(time);return `${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;};
+    const fraction=audioProgressFraction(progress);this.progressBar.hidden=fraction===null;this.progressBar.value=fraction??0;
+    this.progressLabel.textContent=progress.durationSeconds===null?`${format(progress.elapsedSeconds)} elapsed · duration unavailable`:`${format(progress.elapsedSeconds)} / ${format(progress.durationSeconds)} · paragraph audio`;
+  }
+
   setStatus(status: SpeechStatus): void {
     this.lastStatus = status;
+    if(status.kind!=="playing")this.setProgress(null);
     const wasPlaying = this.playing;
     this.playing = status.kind === "playing";
     this.host.dataset.playing = String(this.playing);

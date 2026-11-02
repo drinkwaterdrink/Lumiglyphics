@@ -1,3 +1,4 @@
+import {ParagraphReadAlong,type SpeechPlaybackProgress} from '../speech/read-along.js';
 import {DisplayRuleExecutor,type DisplayEvaluation} from './display-rule-executor.js';
 import {prepareDialogueSource} from './rich-text.js';
 import { ReaderWorkspace } from "./reader-workspace.js";
@@ -494,6 +495,7 @@ export class VnStage {
   private readonly flashOverlay: HTMLElement;
   private readonly fxOverlay: HTMLElement;
   private readonly ambientOverlay: HTMLElement;
+  private readonly speechReadAlong:ParagraphReadAlong;
   private readonly chapterCard: HTMLElement;
   private chapterCardTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly typewriterAudio = new TypewriterAudioSynthesizer();
@@ -678,6 +680,7 @@ export class VnStage {
     this.narrative = queryRequired(this.themeRoot, "[data-vn-narrative]");
     this.speaker = queryRequired(this.themeRoot, "[data-vn-speaker]");
     this.dialogueText = queryRequired(this.themeRoot, "[data-vn-dialogue-text]");
+    this.speechReadAlong=new ParagraphReadAlong(this.dialogueText);
     this.progress = queryRequired(this.themeRoot, "[data-vn-progress]");
     this.readingState = queryRequired(this.themeRoot, "[data-vn-reading-state]");
     this.sceneHud = this.themeRoot.querySelector<HTMLElement>("[data-vn-scene-hud]");
@@ -748,6 +751,8 @@ export class VnStage {
   private storeReplyDraft(text:string):boolean {if(this.destroyed||selectVnStageView(this.state).isBusy||this.state.isUserTurn)return false;this.toggleAutoPlay(false);this.toggleSkip(false);this.dispatch({type:'set-draft',draft:text});return true;}
   private closeMoveDraft():void {this.moveDraftSelection=null;this.moveDraftEditor.close();delete this.panelMount.dataset.vnMoveDraftOpen;}
 
+  setSpeechProgress(progress:SpeechPlaybackProgress|null):void{if(this.speechReadAlong.update(progress))this.dismissChapterCard();}
+
   getState(): Readonly<VnStageState> {
     return this.state;
   }
@@ -767,6 +772,7 @@ export class VnStage {
 
   /** Freeze the reader before hiding it; reopening loads the saved cursor. */
   suspend(): void {
+    this.speechReadAlong.clear();
     this.workspace.suspend();
     this.toggleAutoPlay(false);
     this.toggleSkip(false);
@@ -1129,6 +1135,7 @@ export class VnStage {
   }
 
   reset(): void {
+    this.speechReadAlong.setParagraph('',-1);
     this.workspace.setResume(null);
     this.resetDisplayEvaluation();
     this.sceneLoad?.abort();this.sceneLoad=null;
@@ -1162,6 +1169,7 @@ export class VnStage {
   }
 
   loadTurn(turn: VnTurnInput): void {
+    this.speechReadAlong.setParagraph('',-1);
     this.resetDisplayEvaluation();
     this.sceneLoad?.abort();this.sceneLoad=null;
     this.turnLocation = turn.location ?? null;
@@ -1355,6 +1363,7 @@ export class VnStage {
   }
 
   destroy(): void {
+    this.speechReadAlong.clear();
     this.resetDisplayEvaluation();this.displayExecutor.dispose();
     this.sceneLoad?.abort();this.sceneLoad=null;
     this.workspace.destroy();
@@ -2435,6 +2444,7 @@ export class VnStage {
     this.dossiers.cursor(this.state.currentParagraphIndex);
     this.renderDialogueContent();
     this.dialogueText.dataset.vnParagraphId = view.paragraph?.id ?? "";
+    this.speechReadAlong.setParagraph(view.paragraph?.id??"",view.paragraph?this.state.currentParagraphIndex:-1);
     this.dialogueText.dataset.vnParagraphIndex = String(
       view.paragraph ? this.state.currentParagraphIndex : -1,
     );

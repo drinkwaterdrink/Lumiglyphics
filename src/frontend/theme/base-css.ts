@@ -563,6 +563,13 @@ button[data-vn-badge]:active {
   display: none !important;
 }
 
+/* Speaking paragraph only: no word wrappers, text mutation or animated tracking. */
+[data-vn-dialogue-text][data-vn-speech-speaking="true"] {
+  outline:2px solid var(--vn-accent,#dcebad);
+  outline-offset:-1px;
+  border-radius:6px;
+  background:color-mix(in srgb,var(--vn-accent,#dcebad) 8%,transparent);
+}
 [data-vn-dialogue-text] {
   margin: 0;
   color: var(--vn-text);

@@ -15,6 +15,9 @@ import type { SpeechVoiceRef } from "../../speech-config.js";
  *   this adapter can break if the host routes change and says so in SPEECH.md.
  */
 
+/** Verified local adapter capability: the endpoint is consumed as audio bytes, not alignment JSON. */
+export const BUFFERED_TTS_TIMING='none' as const;
+
 export type SafeTtsProfile = {
   id: string;
   name: string;
