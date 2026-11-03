@@ -102,6 +102,7 @@ try{
  }
  const cramped=await browser.newPage({viewport:{width:844,height:390}});await cramped.goto(`http://127.0.0.1:${port}`);
  await cramped.evaluate(()=>{const f=(window as any).readingFixture;f.stage.setCastMode(true);f.stage.setCastTurn({chatId:'cramped',messageId:'m',swipeId:0,sourceFingerprint:'cramped',revision:0,speaker:'Mira',paragraphs:['a'],choices:[],status:'ready',assets:[{jobId:'background',cueId:'background',paragraphIndex:0,status:'generated',imageUrl:'/background',stageAsset:{role:'background',sceneId:'s'}},{jobId:'mira',cueId:'mira',paragraphIndex:0,status:'generated',imageUrl:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="60"/>'),stageAsset:{role:'portrait',sceneId:'s',character:'Mira'}}]},0);});
+ await cramped.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
  assert.equal(await cramped.locator('[data-vn-cast]').isVisible(),false,'cramped landscape keeps dialogue clear when no portrait space remains');await cramped.close();
  const settings=await browser.newPage({viewport:{width:390,height:844}});await settings.goto(`http://127.0.0.1:${port}/settings?setupDone&noSpeech`);
  await settings.evaluate(()=>(window as any).settingsFixture.panel.openPage('appearance'));

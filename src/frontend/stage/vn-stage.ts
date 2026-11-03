@@ -897,6 +897,7 @@ export class VnStage {
   setEffectIntensity(level: VnEffectIntensity): void {
     this.effectIntensity = level === "off" || level === "gentle" ? level : "full";
     this.root.dataset.vnEffectIntensity = this.effectIntensity;
+    this.castStage.setMotionEnabled(this.effectIntensity !== "off");
   }
 
   getEffectIntensity(): VnEffectIntensity {

@@ -1,3 +1,4 @@
+import {swapCastPortrait} from './cast-portrait-renderer.js';
 import {sceneImageCandidatesFor,loadVnImageCandidates} from "./image-loader.js";
 import type {AssetView,TurnView} from '../../protocol.js';
 import {selectCastComposition,type CastPortrait} from '../../shared/cast-composition.js';
@@ -11,6 +12,9 @@ const CSS=`
 [data-vn-cast-card][data-active=true]{transform:translateY(-6px);filter:drop-shadow(0 0 16px rgba(220,238,173,0.35))}
 [data-vn-cast-portraits]:has([data-vn-cast-card][data-active=true]) [data-vn-cast-card][data-active=false]{opacity:.86;filter:brightness(.88) saturate(.92)}
 @media(prefers-reduced-motion:reduce){[data-vn-cast-card]{transition:none}[data-vn-cast-card][data-active=true]{transform:none}}
+[data-vn-effect-intensity=off] [data-vn-cast-card]{transition:none;transform:none}
+[data-vn-cast-media]{display:grid;align-items:start}
+[data-vn-cast-media]>*{grid-area:1/1;min-width:0}
 [data-vn-cast-card] img{display:block;width:100%;height:min(clamp(80px,36vh,360px),var(--vn-cast-height,360px));object-fit:contain;background:transparent;filter:drop-shadow(0 14px 28px rgba(0,0,0,0.65))}
 [data-vn-cast-placeholder]{height:min(clamp(80px,32vh,320px),var(--vn-cast-height,320px));display:grid;place-content:center;text-align:center;padding:.5rem;box-sizing:border-box;color:#dcebad;background:rgba(11,23,19,0.7);border-radius:12px;font-size:.8rem}
 [data-vn-cast-card] figcaption{color:#f4f7ee;font-size:.78rem;font-weight:700;letter-spacing:0.02em;text-align:center;padding:4px 12px;margin:8px auto 0;box-sizing:border-box;height:auto;min-height:28px;width:fit-content;max-width:90%;display:flex;align-items:center;justify-content:center;border-radius:999px;background:rgba(11,23,19,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(220,238,217,0.22);box-shadow:0 4px 12px rgba(0,0,0,0.35);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -34,7 +38,7 @@ const CSS=`
 /** Reuses ready art only. No transparent-cutout assumption, storage or provider calls. */
 export class CastStage {
  private host=document.createElement('section');private style=document.createElement('style');private enabled=false;private collapsed=false;
- private absenceDisplay:'hide'|'dim'='hide';
+ private absenceDisplay:'hide'|'dim'='hide';private motionEnabled=true;
  private turn:TurnView|null=null;private index=0;private selected='';private scope='';private epoch=0;private signature='';private structureSignature='';private fitFrame=0;private disposed=false;private observer:ResizeObserver|null=null;private loadAbort=new AbortController();
  constructor(private root:HTMLElement,private createImage?:VnImageFactory){this.style.textContent=CSS;this.host.dataset.vnCast='';this.host.hidden=true;this.host.setAttribute('aria-label','Scene cast');root.append(this.style,this.host);}
  setEnabled(enabled:boolean):void{
@@ -46,6 +50,7 @@ export class CastStage {
   }else if(!enabled){this.observer?.disconnect();this.observer=null;}
   this.refresh();
  }
+ setMotionEnabled(enabled:boolean):void{this.motionEnabled=enabled;if(!enabled)for(const animation of this.host.getAnimations?.({subtree:true})??[])animation.cancel();}
  setAbsenceDisplay(value:'hide'|'dim'):void{this.absenceDisplay=value;this.refresh();}
  toggle():void{this.collapsed=!this.collapsed;this.refresh();}
  set(turn:TurnView|null,index:number):AssetView|null{this.turn=turn;this.index=index;return this.refresh();}
@@ -105,19 +110,20 @@ export class CastStage {
   const existingCards=[...this.host.querySelectorAll<HTMLElement>('[data-vn-cast-card]')];
   const exactOld=existingCards.find(c=>c.dataset.vnCastIdentity===JSON.stringify([portrait.name,portrait.asset?.stageAsset?.attire??null])&&Number(c.dataset.vnCastParagraph)<=(portrait.asset?.paragraphIndex??-1));
   // Scope is cleared before rendering; only matching attire from an earlier or equal passage can bridge a replacement.
-  const prior=exactOld?.querySelector('img');
+  const prior=exactOld?.querySelector<HTMLImageElement>('[data-vn-cast-current]')??exactOld?.querySelector('img');
   const card=document.createElement('figure');card.dataset.vnCastCard='';card.dataset.vnCastParagraph=String(portrait.asset?.paragraphIndex??-1);card.dataset.vnCastCharacter=portrait.name;card.dataset.vnCastIdentity=JSON.stringify([portrait.name,portrait.asset?.stageAsset?.attire??null]);card.dataset.active=String(portrait.active);
   const placeholder=document.createElement('div');placeholder.dataset.vnCastPlaceholder='';placeholder.textContent=portrait.asset?'Loading portrait…':'Portrait unavailable';
-  const label=document.createElement('figcaption');label.textContent=portrait.name+(portrait.active?' · speaking':'');card.append(prior&&portrait.asset?prior.cloneNode(true):placeholder,label);parent.append(card);
+  const media=document.createElement('div');media.dataset.vnCastMedia='';media.append(prior&&portrait.asset?prior.cloneNode(true):placeholder);
+  const label=document.createElement('figcaption');label.textContent=portrait.name+(portrait.active?' · speaking':'');card.append(media,label);parent.append(card);
   const candidates=portrait.asset?sceneImageCandidatesFor(portrait.asset):[];
-  if(!candidates.length){placeholder.textContent='Portrait unavailable';card.firstElementChild?.replaceWith(placeholder);return;}
+  if(!candidates.length){placeholder.textContent='Portrait unavailable';media.replaceChildren(placeholder);return;}
   // Reuse an already-ready reference when another cast member changes, without another decode/load.
   if(prior&&candidates[0]===prior.getAttribute('src'))return;
   const signal=this.loadAbort.signal;
   void loadVnImageCandidates(candidates,this.createImage,signal).then(url=>{
    if(this.disposed||epoch!==this.epoch||!card.isConnected)return;
-   const image=document.createElement('img');image.alt=`Portrait of ${portrait.name}`;image.src=url;const content=card.firstElementChild;content?.replaceWith(image);
-  }).catch(()=>{if(!signal.aborted&&!this.disposed&&epoch===this.epoch){if(prior){const error=document.createElement('small');error.dataset.vnCastError='';error.setAttribute('role','status');error.textContent=' · Previous portrait; replacement unavailable';label.append(error);}else{placeholder.textContent='Portrait unavailable';card.firstElementChild?.replaceWith(placeholder);}}});
+   const image=document.createElement('img');image.alt=`Portrait of ${portrait.name}`;image.src=url;swapCastPortrait(media,image,signal,this.motionEnabled);
+  }).catch(()=>{if(!signal.aborted&&!this.disposed&&epoch===this.epoch){if(prior){const error=document.createElement('small');error.dataset.vnCastError='';error.setAttribute('role','status');error.textContent=' · Previous portrait; replacement unavailable';label.append(error);}else{placeholder.textContent='Portrait unavailable';media.replaceChildren(placeholder);}}});
  }
  private fit():void{
   if(!this.signature||this.disposed)return;
