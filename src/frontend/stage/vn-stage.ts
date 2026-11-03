@@ -19,7 +19,8 @@ import {
   formatDialogueText,
   stripUnknownPresetTags,
 } from "./rich-text.js";
-import { applyTextEffects, TEXT_EFFECT_LETTER_ATTRIBUTE } from "./text-effects.js";
+import { applyTextEffects } from "./text-effects.js";
+import { TypewriterController } from "./typewriter-controller.js";
 import { DialogueSheet } from "./dialogue-sheet.js";
 import { TypewriterAudioSynthesizer } from "./typewriter-audio.js";
 import { normalizeReaderPreferences, type ReaderPreferences } from "../../shared/reader-preferences.js";
@@ -92,23 +93,7 @@ export function isAmbientEffect(value: unknown): value is AmbientEffect {
   return typeof value === "string" && AMBIENT_EFFECT_IDS.has(value);
 }
 
-/**
- * Typewriter bookkeeping. Untyped text sits in a `[data-vn-typing-rest]`
- * sibling span (visibility hidden, still in the layout) and untyped effect
- * letters carry `[data-vn-typing-pending]`, so line breaks never move while
- * a paragraph types out.
- */
-export const TYPEWRITER_REST_ATTRIBUTE = "data-vn-typing-rest";
-export const TYPEWRITER_PENDING_ATTRIBUTE = "data-vn-typing-pending";
-
-type TypewriterNode = {
-  node: Text;
-  fullText: string;
-  /** The effect-letter span that owns this text node, if any. */
-  letter: Element | null;
-  /** Hidden span holding this node's untyped remainder, while typing. */
-  rest: HTMLElement | null;
-};
+export {TYPEWRITER_REST_ATTRIBUTE,TYPEWRITER_PENDING_ATTRIBUTE} from './typewriter-controller.js';
 
 export const TEXT_SHAKE_HEURISTIC_REGEX = /\*\s*(?:thud|slam|crash|smack|shake)[!?.,]*\s*\*/i;
 import {
@@ -582,7 +567,7 @@ export class VnStage {
   /** Reading-session history. Capped so long mobile sessions cannot retain
    *  formatted HTML for every paragraph indefinitely (oldest entries drop). */
   private readonly backlogEntries: Array<{ speaker?: string | undefined; text: string; formatted: string; paragraphIndex?: number | undefined }> = [];
-  private activeTextNodes: TypewriterNode[] = [];
+  private readonly typewriter = new TypewriterController();
   private currentRenderedParagraphId = "";
   private currentRenderedFormatted = "";
   private effectIntensity: VnEffectIntensity = "full";
@@ -2223,7 +2208,7 @@ export class VnStage {
     this.clearAllTimers();
     this.dismissChapterCard();
     this.isTyping = false;
-    this.activeTextNodes = [];
+    this.typewriter.reset();
     this.updateControlButtons();
     const previousPhase = this.state.phase;
     this.ambientOverride = this.state.ambient;
@@ -2330,7 +2315,7 @@ export class VnStage {
     this.clearAllTimers();
     this.dismissChapterCard();
     this.isTyping = false;
-    this.activeTextNodes = [];
+    this.typewriter.reset();
     this.updateControlButtons();
     // Restore persistent atmosphere without replaying a future one-shot effect.
     this.ambientOverride = this.state.ambient;
@@ -2587,15 +2572,7 @@ export class VnStage {
   private completeTypewriter(): void {
     if(this.displayPending)return;
     this.clearTypewriter();
-    if (this.activeTextNodes.length > 0) {
-      for (const item of this.activeTextNodes) {
-        item.node.textContent = item.fullText;
-        item.rest?.remove();
-        item.rest = null;
-        item.letter?.removeAttribute(TYPEWRITER_PENDING_ATTRIBUTE);
-      }
-      this.activeTextNodes = [];
-    }
+    this.typewriter.complete();
     this.isTyping = false;
     this.updateContinueButton();
     this.onTextRenderFinished();
@@ -2682,59 +2659,14 @@ export class VnStage {
     this.dialogueText.innerHTML = formatted;
     // Split effect letters first so the typewriter reveals them one by one.
     applyTextEffects(this.dialogueText);
-
-    if (typeof document.createTreeWalker !== "function") {
+    if (!this.typewriter.prepare(this.dialogueText)) {
       this.isTyping = false;
       this.updateContinueButton();
       this.onTextRenderFinished();
       return;
     }
-
-    const filter = typeof NodeFilter !== "undefined" ? NodeFilter.SHOW_TEXT : 4;
-    const walker = document.createTreeWalker(this.dialogueText, filter);
-    const textNodes: TypewriterNode[] = [];
-    let node: Node | null;
-    while ((node = walker.nextNode())) {
-      const parent = node.parentNode as Element | null;
-      const fullText = node.textContent ?? "";
-      // A text-effect letter is one grapheme: reveal it in one step.
-      const letter = parent && typeof parent.hasAttribute === "function" && parent.hasAttribute(TEXT_EFFECT_LETTER_ATTRIBUTE) ? parent : null;
-      textNodes.push({ node: node as Text, fullText, letter, rest: null });
-    }
-
-    if (textNodes.length === 0 || textNodes.every((t) => !t.fullText)) {
-      this.isTyping = false;
-      this.updateContinueButton();
-      this.onTextRenderFinished();
-      return;
-    }
-
-    // Lay the whole paragraph out first and hide what is not typed yet, so
-    // line breaks are final from the first letter: a word that will not fit
-    // starts on the next line instead of jumping there half-typed. Untyped
-    // text stays in the layout as a visibility-hidden sibling span; effect
-    // letters keep their text and carry a pending attribute.
-    this.activeTextNodes = textNodes;
-    for (const item of textNodes) {
-      if (!item.fullText) continue;
-      if (item.letter) {
-        item.letter.setAttribute(TYPEWRITER_PENDING_ATTRIBUTE, "");
-        continue;
-      }
-      const rest = document.createElement("span");
-      rest.setAttribute(TYPEWRITER_REST_ATTRIBUTE, "");
-      rest.setAttribute("aria-hidden", "true");
-      rest.textContent = item.fullText;
-      item.node.textContent = "";
-      item.node.parentNode?.insertBefore(rest, item.node.nextSibling);
-      item.rest = rest;
-    }
-
     this.isTyping = true;
     this.updateContinueButton();
-    let nodeIdx = 0;
-    let charIdx = 0;
-    let pauseTicks = 0;
     this.typewriterTimer = setInterval(() => {
       if (this.destroyed) {
         this.clearTypewriter();
@@ -2743,48 +2675,10 @@ export class VnStage {
       // Pause reveal while the tab is hidden: no invisible DOM writes or
       // timer churn in the background; ticks resume and catch up on return.
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-      if (pauseTicks > 0) {
-        pauseTicks--;
-        return;
-      }
-      // Reveal one character per tick. Node boundaries (many with split
-      // effect letters) cost no extra tick, and surrogate pairs stay whole.
-      while (nodeIdx < textNodes.length) {
-        const current = textNodes[nodeIdx]!;
-        if (charIdx < current.fullText.length) {
-          if (current.letter) {
-            current.letter.removeAttribute(TYPEWRITER_PENDING_ATTRIBUTE);
-            charIdx = current.fullText.length;
-            if (!this.isSkipping && !this.isRewinding) this.typewriterAudio.play();
-            return;
-          }
-          const prevCharIdx = charIdx;
-          const code = current.fullText.codePointAt(charIdx) ?? 0;
-          charIdx += code > 0xffff ? 2 : 1;
-          const char = current.fullText.slice(prevCharIdx, charIdx);
-          current.node.textContent = current.fullText.slice(0, charIdx);
-          if (current.rest) {
-            if (charIdx < current.fullText.length) {
-              current.rest.textContent = current.fullText.slice(charIdx);
-            } else {
-              current.rest.remove();
-              current.rest = null;
-            }
-          }
-          if (this.readerPreferences?.smartPacing !== false) {
-            if (char === "," || char === ";") pauseTicks = 2;
-            else if (char === "." || char === "!" || char === "?") pauseTicks = 4;
-            else if (char === "—" || char === "…" || char === ":") pauseTicks = 5;
-          }
-          if (char.trim() && !this.isSkipping && !this.isRewinding) {
-            this.typewriterAudio.play();
-          }
-          return;
-        }
-        nodeIdx++;
-        charIdx = 0;
-      }
-      this.completeTypewriter();
+      const complete = this.typewriter.step(this.readerPreferences?.smartPacing !== false, (char, effectLetter) => {
+        if ((effectLetter || char.trim()) && !this.isSkipping && !this.isRewinding) this.typewriterAudio.play();
+      });
+      if (complete) this.completeTypewriter();
     }, this.textSpeed);
   }
 

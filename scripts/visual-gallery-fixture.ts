@@ -70,6 +70,9 @@ if (view === "settings") {
       { id: "ask", label: "Ask what she wants", value: "ask" },
     ],
   } as never);
+  // Capture the actual reader/theme state; dedicated tests cover the transient title card.
+  stage.dismissChapterCard();
+  stage.focus();
   void stage.setSceneImage({ url: sceneDataUrl(["#402b63", "#d77d72"], "Sunset overlook"), requestId: "s1", alt: "" });
   const amb = q.get("ambient"); if (amb) stage.applyAmbient(amb as never);
   Object.assign(window, { gallery: { stage } });

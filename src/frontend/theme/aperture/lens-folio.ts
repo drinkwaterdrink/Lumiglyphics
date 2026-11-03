@@ -260,8 +260,12 @@ body.theme-light .folio-quote-callout {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  /* Letter effects already pause through their own motion gate. Keep their
+     original duration so per-letter delays retain the frozen rainbow hues. */
+  *:not([data-vn-text-fx-ch]), *::before, *::after {
     animation-duration: 0.001ms !important;
+  }
+  *, *::before, *::after {
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }

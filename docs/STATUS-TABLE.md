@@ -5,12 +5,12 @@ Test counts here are file counts. The live test count appears in the `bun test` 
 
 | Measure | Value |
 |---|---|
-| Extension version | 0.2.0-beta.123 |
+| Extension version | 0.2.0-beta.124 |
 | Theme presets | 10 |
 | Image prompt families | 12 |
-| Source files (non-test, src/) | 264 |
-| Source lines (non-test, src/) | 62,580 |
-| Unit test files (src/) | 207 |
+| Source files (non-test, src/) | 265 |
+| Source lines (non-test, src/) | 62,561 |
+| Unit test files (src/) | 208 |
 | Browser suite scripts (test:*) | 44 |
 | Declared Spindle permissions | 10 |
 

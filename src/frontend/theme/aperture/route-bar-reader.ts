@@ -327,7 +327,7 @@ aside[data-vn-workspace] {
   padding: 16px 14px 8px !important;
   border: 1px solid rgba(224, 238, 217, 0.32) !important;
   border-radius: 16px !important;
-  background: rgba(4, 13, 17, var(--caption-opacity, 0.72)) !important;
+  background: var(--aperture-dialogue-bg, rgba(4, 13, 17, var(--caption-opacity, 0.72))) !important;
   -webkit-backdrop-filter: blur(var(--caption-blur, 8px)) !important;
   backdrop-filter: blur(var(--caption-blur, 8px)) !important;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
