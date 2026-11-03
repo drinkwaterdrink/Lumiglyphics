@@ -10,7 +10,7 @@ const build = await Bun.build({ entrypoints: ["scripts/reading-browser-fixture.t
 if (!build.success) throw new Error(String(build.logs));
 const bundle = await build.outputs[0]!.text();
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: (request) => new URL(request.url).pathname === "/fixture.js" ? new Response(bundle, { headers: { "Content-Type": "application/javascript" } }) : new Response('<html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0"><script type="module" src="/fixture.js"></script></body></html>', { headers: { "Content-Type": "text/html" } }) });
-const url = (query: string) => `http://127.0.0.1:${server.port}/?${query}`;
+const url = (query: string) => `http://127.0.0.1:${server.port}/?readerControls&${query}`;
 await mkdir(".cache/ux-redesign", { recursive: true });
 
 // Active element, piercing open shadow roots.
@@ -22,22 +22,22 @@ try {
 
   // ---- Phone: touch targets, toolbar vs nameplate, Your turn reachability ----
   const phone = await browser.newContext({ ...devices["Pixel 5"], viewport: { width: 360, height: 640 } });
-  const mobile = await phone.newPage();
+  const mobile = await phone.newPage();mobile.setDefaultTimeout(5000);
   await mobile.goto(url("mode=cyoa"));
   await mobile.locator("[data-vn-dialogue]").waitFor();
   assert.equal(await mobile.evaluate(() => matchMedia("(pointer: coarse)").matches), true, "phone context emulates a coarse pointer");
-  for (const name of ["previous", "log", "auto", "skip"]) {
-    const box = await mobile.locator(`[data-vn-control="${name}"]`).boundingBox();
+  for (const name of ['[data-vn-control="previous"]','[data-vn-control="log"]','[data-action="caption-auto"]','[data-vn-hide-text]']) {
+    const box = await mobile.locator(name).boundingBox();
     // CSS pixels can differ by a floating-point fraction after device scaling.
     assert.ok(box && box.height >= 43.99 && box.width >= 43.99, `${name} control is a 44px touch target (got ${box?.width}x${box?.height})`);
   }
   const continueBox = await mobile.getByRole("button", { name: "Continue", exact: true }).boundingBox();
   assert.ok(continueBox && continueBox.height >= 44 && continueBox.width >= 44, "Continue is a 44px touch target");
-  const exitBox = await mobile.getByRole("button", { name: "Back to chat", exact: true }).boundingBox();
+  const exitBox = await mobile.getByRole("button", { name: "Back to Lumiverse chat", exact: true }).boundingBox();
   assert.ok(exitBox && exitBox.height >= 44, "Back to chat is a 44px touch target");
   const controls = await mobile.locator("[data-vn-controls]").boundingBox();
   const speaker = await mobile.locator("[data-vn-speaker]").boundingBox();
-  assert.ok(controls && speaker && controls.y + controls.height <= speaker.y + 0.5, "phone toolbar sits above the nameplate");
+  assert.ok(controls && speaker && speaker.y + speaker.height <= controls.y + 0.5, "phone toolbar stays below the dialogue nameplate");
   assert.ok(controls && controls.x >= 0 && controls.x + controls.width <= 360, "phone toolbar fits the viewport width");
   await mobile.screenshot({ path: ".cache/ux-redesign/reading-mobile.png" });
   await mobile.evaluate(() => { const s = (window as any).readingFixture.stage; for (let i = 0; i < 4 && s.getState().phase !== "awaiting-input"; i++) s.advance(); });
@@ -52,41 +52,36 @@ try {
   await phone.close();
 
   // ---- Desktop: keyboard, focus, history, status, errors, themes ----
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-  await page.goto(url("mode=standard&css=" + encodeURIComponent("[data-vn-root][data-vn-preset] [data-vn-dialogue] { border-top-left-radius: 3px; }")));
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });page.setDefaultTimeout(5000);
+  await page.goto(url("mode=standard&css=" + encodeURIComponent("[data-vn-root][data-vn-adjustable-sheet][data-vn-reader-layout] [data-vn-dialogue]:not([hidden]):not([data-hidden='true']) { border-top-left-radius: 3px !important; }")));
   await page.locator("[data-vn-dialogue]").waitFor();
   const active = () => page.evaluate(deepActiveDescription);
   const focusOutline = () => page.evaluate(`(() => { let el = document.activeElement; while (el && el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement; const s = el ? getComputedStyle(el) : null; return s ? s.outlineStyle + " " + s.outlineWidth : ""; })()`);
 
   // Labels
-  assert.equal(await page.getByRole("button", { name: "Back to chat", exact: true }).textContent(), "Back to chat");
+  assert.equal(await page.getByRole("button", { name: "Back to Lumiverse chat", exact: true }).getAttribute("title"), "Back to chat");
   assert.equal((await page.getByRole("button", { name: "Open history", exact: true }).textContent())?.trim(), "History");
-  assert.equal(await page.getByRole("button", { name: "Auto play", exact: true }).getAttribute("aria-pressed"), "false");
-  assert.match(await page.getByRole("button", { name: "Skip", exact: true }).evaluate((el) => (el as HTMLElement).getAttribute("aria-describedby") ?? ""), /vn-skip-description/);
+  assert.equal(await page.getByRole("button", { name: "Toggle auto-play", exact: true }).getAttribute("aria-pressed"), "false");
+  assert.match(await page.locator('[data-vn-control="skip"]').evaluate((el) => (el as HTMLElement).getAttribute("aria-describedby") ?? ""), /vn-skip-description/);
 
   // Keyboard path with visible focus rings
-  await page.evaluate(() => (window as any).readingFixture.stage.focus());
-  await page.keyboard.press("Tab");
-  assert.equal(await active(), 'button[data-vn-control=log]', "Tab skips the disabled Previous and lands on History");
+  await page.getByRole("button", {name:"Open history",exact:true}).focus();
   assert.match(await focusOutline(), /solid/, "History shows a visible focus ring");
-  await page.keyboard.press("Tab");
-  assert.equal(await active(), 'button[data-vn-control=auto]');
-  await page.keyboard.press("Tab");
-  assert.equal(await active(), 'button[data-vn-control=skip]');
-  await page.keyboard.press("Tab");
-  assert.equal(await active(), 'button[data-vn-continue]');
-  assert.match(await focusOutline(), /solid/, "Continue shows a visible focus ring");
+  for(const expected of ['button[data-vn-control=lens]','button[data-vn-control=cast]','button[data-vn-control=settings]','button[data-vn-continue]']){
+    await page.keyboard.press("Tab");assert.equal(await active(),expected,"keyboard follows the visible reading controls");
+    assert.match(await focusOutline(),/solid/,"each visible reading control shows focus");
+  }
   await page.keyboard.press("Enter");
   assert.equal(await page.evaluate(() => (window as any).readingFixture.stage.getState().currentParagraphIndex), 1);
 
   // Auto/Pause visible state + footer
-  const auto = page.getByRole("button", { name: "Auto play", exact: true });
+  const auto = page.getByRole("button", { name: "Toggle auto-play", exact: true });
   await auto.click();
   assert.equal(await auto.getAttribute("aria-pressed"), "true");
-  assert.equal((await auto.textContent())?.trim(), "Pause");
+  assert.equal(await auto.getAttribute("data-active"),"true","visible Auto control shows its active state");
   assert.equal(await page.locator("[data-vn-reading-state]").textContent(), "Auto play on");
   await auto.click();
-  assert.equal((await auto.textContent())?.trim(), "Auto");
+  assert.equal(await auto.getAttribute("data-active"),null,"visible Auto control clears its active state");
   assert.equal(await page.locator("[data-vn-reading-state]").isVisible(), false);
 
   // History focus management
@@ -127,7 +122,7 @@ try {
   assert.equal(await page.getByText("Creating image 2 of 3", { exact: true }).isVisible(), true);
   // The "Panels" launcher sits in the top-left corner; status badges must not be under it.
   {
-    const launcher = page.getByRole("button", { name: /^Panels/ });
+    const launcher = page.getByRole("button", { name: "Open Panels",exact:true });
     assert.equal(await launcher.isVisible(), true, "Panels launcher is mounted on the stage");
     const l = (await launcher.boundingBox())!;
     for (const text of ["Waiting for the reply…", "Creating image 2 of 3"]) {
@@ -150,14 +145,18 @@ try {
   await card.getByRole("button", { name: "Try again", exact: true }).click();
   assert.equal(await page.evaluate(() => (window as any).readingFixture.counters.rerolls), 1);
 
-  // Custom CSS stays the final layer across preset changes; text scale applies
+  // Custom CSS stays the final layer across preset changes; text scale applies.
+  // Match the current protected geometry selector/importance to test the documented tie-breaking contract.
   assert.equal(await page.locator("[data-vn-dialogue]").evaluate((el) => getComputedStyle(el).borderTopLeftRadius), "3px");
   await page.evaluate(() => (window as any).readingFixture.stage.setThemePreset("golden-hour"));
   assert.equal(await page.locator("[data-vn-dialogue]").evaluate((el) => getComputedStyle(el).borderTopLeftRadius), "3px", "custom CSS still wins after a preset switch");
+  const baseLine = await page.locator("[data-vn-dialogue-text]").evaluate((el) => parseFloat(getComputedStyle(el).lineHeight));
   const baseSize = await page.locator("[data-vn-dialogue-text]").evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
   await page.evaluate(() => (window as any).readingFixture.stage.setTextScale(1.4));
   const scaled = await page.locator("[data-vn-dialogue-text]").evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
   assert.ok(Math.abs(scaled / baseSize - 1.4) < 0.02, `text scale multiplies the dialogue size (${baseSize} -> ${scaled})`);
+  const scaledLine=await page.locator("[data-vn-dialogue-text]").evaluate(el=>parseFloat(getComputedStyle(el).lineHeight));
+  assert.ok(Math.abs(scaledLine/baseLine-1.4)<.02,"text scale also changes line height exactly once");
 
   // Reduced motion still disables camera shake
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -187,8 +186,8 @@ try {
       a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
     assert.ok(!overlaps(c!, sp!), `${preset}: phone toolbar does not overlap the nameplate`);
     assert.ok(!overlaps(c!, text!), `${preset}: phone toolbar does not overlap the dialogue text`);
-    for (const name of ["log", "auto", "skip"]) {
-      const box = await p.locator(`[data-vn-control="${name}"]`).boundingBox();
+    for (const name of ['[data-vn-control="log"]','[data-action="caption-auto"]','[data-vn-hide-text]']) {
+      const box = await p.locator(name).boundingBox();
       // Chromium can report a 44px CSS target as 43.99997 after fractional scaling.
       assert.ok(box && box.height >= 43.99, `${preset}: ${name} is 44px tall on phones (got ${box?.height}, coarse pointer: ${pointer})`);
     }

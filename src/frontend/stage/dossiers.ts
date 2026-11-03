@@ -57,6 +57,7 @@ export class StageDossiers {
   const snapshot=this.snapshot();if(!snapshot||this.tray.hidden)return false;
   const entries=referenceEntriesWithHistory(snapshot,this.prefs,this.history);if(!entries.length)return false;
   this.hold();this.dossierOpen?.(true);
+  if(this.workspace){this.workspace.open('story',this.root.querySelector<HTMLElement>('[data-vn-control="lens"]')??this.tray);return true;}
   this.card.openTray(entries,this.tray,(id,trigger)=>this.open(id,trigger),this.prefs.rememberReferences&&this.history?.truncated?'Showing a limited recent selection of earlier descriptions.':undefined,entity=>this.resolveVisualContext(entity));
   return true;
  }
@@ -152,6 +153,8 @@ export class StageDossiers {
   }:undefined;
   const storyDocument=current&&dossier.entity.kind==='object'?visibleStoryDocuments(this.presentation?.documents??[],this.index).find(d=>d.name===dossier.entity.name):undefined;
 
+  // Inline story links must enter the workspace before exposing its docked card.
+  if(this.workspace&&this.workspace.destination!=='story'){this.workspace.open('story',trigger);this.card.clearBack();}
   this.card.open(dossier,this.prefs,snapshot.at.key.chatId,trigger,actions,storyDocument,this.resolveVisualContext(dossier.entity));
  }
  private updateOverride(entity:PresentationEntity,patch:{suppressed?:boolean;pinned?:boolean;note?:string}):boolean {

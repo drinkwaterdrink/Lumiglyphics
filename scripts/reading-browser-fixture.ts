@@ -43,6 +43,8 @@ const turn: VnTurnInput = {
   ] : [],
 };
 stage.loadTurn(turn);
+// Match host preference initialization when exercising current reader controls.
+if(params.has('readerControls')){stage.setReaderPreferences({});stage.dismissChapterCard();}
 // The host mounts the pinned-panel dock (with its "Panels" launcher) on the stage, as in src/frontend/host/controller.ts.
 const panels = new PanelDock(stage.panelMount);
 Object.assign(window, { readingFixture: { stage, turn, counters, panels } });

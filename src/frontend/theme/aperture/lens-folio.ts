@@ -406,10 +406,10 @@ body.theme-light .folio-quote-callout {
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-sheet-tools] button,
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-hide-text] {
   position: static !important;
-  width: 28px !important;
-  height: 26px !important;
-  min-width: 28px !important;
-  min-height: 26px !important;
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  min-height: 44px !important;
   border-radius: 8px !important;
   border: 1px solid rgba(160, 205, 185, 0.24) !important;
   background: rgba(255, 255, 255, 0.07) !important;
@@ -465,8 +465,8 @@ body.theme-light .folio-quote-callout {
   flex: none !important;
   touch-action: pan-y !important;
   user-select: text !important;
-  font-size: calc(var(--reader-font, 15px) * var(--vn-text-scale, 1)) !important;
-  line-height: calc(1.55 * var(--vn-text-scale, 1)) !important;
+  font-size: var(--reader-font, 15px) !important;
+  line-height: 1.55 !important;
   color: var(--aperture-text, #f9faf6) !important;
   font-family: Georgia, 'Times New Roman', serif !important;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;

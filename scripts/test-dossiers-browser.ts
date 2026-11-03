@@ -9,8 +9,10 @@ await mkdir(".cache/dossiers",{recursive:true});
 const browser=await chromium.launch({headless:true});
 try {
  for(const viewport of [{width:360,height:800},{width:390,height:844},{width:844,height:390},{width:1200,height:800}]) {
-  const page=await browser.newPage({viewport,reducedMotion:"reduce"});let external=0;
-  page.on('request',r=>{if(!r.url().startsWith(`http://127.0.0.1:${server.port}`))external++;});
+  const page=await browser.newPage({viewport,reducedMotion:"reduce"});page.setDefaultTimeout(5000);const external:string[]=[];
+  page.on('request',r=>{if(/^https?:/i.test(r.url())&&!r.url().startsWith(`http://127.0.0.1:${server.port}`))external.push(r.url());});
+  // Local blob media is not a network request; reject actual external HTTP traffic.
+  await page.route('**/*',route=>/^https?:/i.test(route.request().url())&&!route.request().url().startsWith(`http://127.0.0.1:${server.port}`)?route.abort():route.continue());
   await page.goto(`http://127.0.0.1:${server.port}`);
   await page.evaluate(()=>{
    const f=(window as any).readingFixture;
@@ -20,12 +22,12 @@ try {
    const snap=(i:number)=>({at:{key,paragraphIndex:i},entities:i===0?[mira,place]:[mira,place,object],stateByEntity:{m:{outfit:i===0?'coat':'uniform'}},presentEntityIds:['m'],locationId:'p',speakerEntityId:'m',drawableEntityId:'m'});
    f.prefs={enabled:true,categories:{npcs:true,locations:true,objects:true},detail:'expanded',linking:'all-known',maxLinksPerParagraph:3,overrides:[]};
    f.dossierTurn={mode:'standard',paragraphs:[{id:'a',speaker:'Mira',text:'Mira enters Lantern House.'},{id:'b',speaker:'Mira',text:'Mira carries the black key.'}],presentation:{version:1,snapshots:[snap(0),snap(1)]}};
-   f.stage.setReaderPreferences({adjustableSheetEnabled:true,layout:'overlay',sheetSize:'reading',backgroundOpacity:.8});f.stage.setTooltipPreferences(f.prefs);f.stage.loadTurn(f.dossierTurn);
+   f.stage.dismissChapterCard();f.stage.setReaderPreferences({adjustableSheetEnabled:true,layout:'overlay',sheetSize:'reading',backgroundOpacity:.8});f.stage.setTooltipPreferences(f.prefs);f.stage.loadTurn(f.dossierTurn);
   });
   const text=page.locator('[data-vn-dialogue-text]');
   assert.equal(await text.innerText(),'Mira enters Lantern House.');
   assert.equal(await text.locator('[data-entity-anchor]').count(),2);
-  const referenceButton=page.getByRole('button',{name:'Scene references',exact:true});
+  const referenceButton=page.getByRole('button',{name:'World Lens',exact:true});
   const refBox=await referenceButton.boundingBox();assert.ok(refBox&&refBox.width>=44&&refBox.height>=44,'reference menu has a usable touch target');
   assert.equal(await referenceButton.locator('svg').count(),1,'reference menu has a recognizable icon');
   const iconBox=await referenceButton.locator('svg').boundingBox();assert.ok(iconBox&&iconBox.width>=18&&iconBox.height>=18);
@@ -38,6 +40,8 @@ try {
   assert.match(await card.innerText(),/silver hair/);assert.doesNotMatch(await card.innerText(),/uniform|black key/);
   await page.screenshot({path:`.cache/dossiers/${viewport.width}.png`});
   await page.keyboard.press('Shift+Tab');
+  assert.equal(await card.getByRole('button',{name:'Back to reading',exact:true}).evaluate(e=>(e.getRootNode() as ShadowRoot).activeElement===e),true,'reference heading keeps its Back action reachable');
+  await page.keyboard.press('Shift+Tab');
   assert.equal(await page.locator('[data-workspace-close]').evaluate(e=>(e.getRootNode() as ShadowRoot).activeElement===e),true,'non-modal details keep workspace navigation reachable');
   await card.locator('summary').filter({hasText:'Local display note'}).focus();
   await page.keyboard.press('Enter');await page.keyboard.press('Tab');
@@ -45,6 +49,8 @@ try {
   await card.locator('textarea').fill('Remember the silver hair');
   await page.keyboard.press('Tab');await page.keyboard.press('Enter');
   assert.equal(await page.evaluate(()=>(window as any).readingFixture.counters.tooltipPreferences.overrides[0].note),'Remember the silver hair');
+  assert.match(await card.locator('[data-reference-saved-note]').innerText(),/Remember the silver hair/);
+  await card.getByRole('button',{name:'Back to reading',exact:true}).click();
   await text.getByRole('button',{name:'About Mira',exact:true}).click();
   const progress=await page.locator('[data-vn-progress]').innerText();
   await page.keyboard.press('ArrowRight');assert.equal(await page.locator('[data-vn-progress]').innerText(),progress);
@@ -67,27 +73,28 @@ try {
   await page.keyboard.press('Escape');
   await page.evaluate(()=>{const f=(window as any).readingFixture;f.stage.setTooltipPreferences({...f.prefs,linking:'menu-only'});});
   assert.equal(await text.locator('[data-entity-anchor]').count(),0,'menu-only leaves prose plain');
-  await referenceButton.click();const sheet=page.getByRole('dialog',{name:'Scene references',exact:true});
+  await referenceButton.click();const sheet=page.getByRole('dialog',{name:'World Lens',exact:true});
   assert.ok(await sheet.getByLabel('Search references').isVisible());await sheet.getByLabel('Search references').fill('lantern');
-  assert.equal(await sheet.locator('[data-reference-list] button').count(),1);await sheet.getByRole('button',{name:'Lantern House',exact:true}).click();
+  assert.equal(await sheet.locator('[data-reference-list] button').count(),1);await sheet.getByRole('button',{name:'Lantern House',exact:true}).click();await sheet.getByRole('button',{name:'Read story reference',exact:true}).click();
   await page.getByRole('button',{name:'Back to references',exact:true}).click();assert.equal(await sheet.getByLabel('Search references').inputValue(),'lantern','return preserves search');
   await sheet.getByLabel('Search references').fill('missing');assert.match(await sheet.locator('[role=status]').innerText(),/No references match/);
-  await sheet.getByLabel('Search references').fill('');await sheet.getByLabel('Reference category').selectOption('npc');assert.equal(await sheet.locator('[data-reference-list] button').count(),1);
-  await sheet.getByLabel('Reference category').focus();await page.keyboard.press('Tab');await page.keyboard.press('Shift+Tab');assert.equal(await sheet.getByLabel('Reference category').evaluate(e=>(e.getRootNode() as ShadowRoot).activeElement===e),true,'keyboard focus includes filter controls');
+  await sheet.getByLabel('Search references').fill('');await sheet.getByRole('button',{name:'People',exact:true}).click();assert.equal(await sheet.locator('[data-reference-list] button').count(),1);
+  await sheet.getByRole('button',{name:'People',exact:true}).focus();await page.keyboard.press('Tab');await page.keyboard.press('Shift+Tab');assert.equal(await sheet.getByRole('button',{name:'People',exact:true}).evaluate(e=>(e.getRootNode() as ShadowRoot).activeElement===e),true,'keyboard focus includes filter controls');
   const current=await page.locator('[data-vn-progress]').innerText();await page.keyboard.press('ArrowRight');assert.equal(await page.locator('[data-vn-progress]').innerText(),current);
   await page.screenshot({path:`.cache/dossiers/quiet-${viewport.width}.png`});
   await page.keyboard.press('Escape');assert.equal(await referenceButton.evaluate(e=>(e.getRootNode() as ShadowRoot).activeElement===e),true);
-  await page.evaluate(()=>{const f=(window as any).readingFixture;const snapshots=f.dossierTurn.presentation.snapshots.map((s:any)=>({...s,entities:Array.from({length:32},(_,i)=>({...s.entities[0],id:'long'+i,name:'A very long established character name '.repeat(4)+i,aliases:['Unique'+i],facts:[]}))}));f.stage.loadTurn({...f.dossierTurn,presentation:{version:1,snapshots}});});
-  await referenceButton.click();const many=page.getByRole('dialog',{name:'Scene references',exact:true});
+  await page.evaluate(()=>{const f=(window as any).readingFixture;const snapshots=f.dossierTurn.presentation.snapshots.map((s:any)=>({...s,stateByEntity:{},presentEntityIds:['long0'],locationId:null,speakerEntityId:'long0',drawableEntityId:'long0',entities:Array.from({length:32},(_,i)=>({...s.entities[0],id:'long'+i,name:'A very long established character name '.repeat(4)+i,aliases:['Unique'+i],facts:[]}))}));f.stage.loadTurn({...f.dossierTurn,presentation:{version:1,snapshots}});});
+  await referenceButton.click();const many=page.getByRole('dialog',{name:'World Lens',exact:true});
+  assert.equal(await many.locator('[data-reference-list] button').count(),32,'long-name fixture has valid source/state identities');
   await many.evaluate(el=>el.style.fontSize='22px');
   await many.locator('[data-reference-list]').evaluate(el=>el.scrollTop=el.scrollHeight);
   assert.ok(await page.locator('[data-workspace-close]').isVisible(),'close stays visible while many references scroll');
   assert.equal(await many.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,'long names stay inside the sheet');
   await many.getByLabel('Search references').fill('Unique31');assert.equal(await many.locator('[data-reference-list] button').count(),1,'aliases are searchable');
-  await page.evaluate(()=>(window as any).readingFixture.stage.loadTurn((window as any).readingFixture.dossierTurn));assert.equal(await page.getByRole('dialog',{name:'Scene references',exact:true}).count(),0,'source replacement invalidates open sheet');
+  await page.evaluate(()=>(window as any).readingFixture.stage.loadTurn((window as any).readingFixture.dossierTurn));assert.equal(await page.getByRole('dialog',{name:'World Lens',exact:true}).count(),0,'source replacement invalidates open sheet');
   await page.evaluate(()=>{const f=(window as any).readingFixture;f.stage.setTooltipPreferences({...f.prefs,enabled:false});});
   assert.equal(await text.locator('[data-entity-anchor]').count(),0);assert.equal(await text.innerText(),'Mira enters Lantern House.');
-  assert.equal(await page.getByRole('button',{name:'Scene references',exact:true}).isVisible(),false);
+  await referenceButton.click();assert.match(await page.getByRole('dialog',{name:'World Lens',exact:true}).innerText(),/disabled/i);await page.locator('[data-workspace-close]').click();
   await page.evaluate(()=>{const f=(window as any).readingFixture;f.stage.setTooltipPreferences(f.prefs);f.stage.setTextSpeed(5);f.stage.loadTurn({...f.dossierTurn,paragraphs:[{...f.dossierTurn.paragraphs[0],text:'`Mira` and **Mira** enter Lantern House.'},f.dossierTurn.paragraphs[1]]});});
   assert.equal(await text.locator('[data-entity-anchor]').count(),0,'typing text is not linked early');
   await page.waitForFunction(()=>!(window as any).readingFixture.stage.isTyping);
@@ -103,19 +110,22 @@ try {
 
    const panelBox=await page.locator('[data-vn-dialogue]').boundingBox();
    const speaker=await page.locator('[data-vn-speaker]').boundingBox();
-   assert.ok(speaker&&speaker.width>=40&&panelBox&&speaker.x>=panelBox.x&&speaker.x+speaker.width<=panelBox.x+panelBox.width,`speaker name remains visible in ${preset}`);
+   assert.ok(speaker&&speaker.width>0&&speaker.height>0&&panelBox&&speaker.x>=panelBox.x&&speaker.x+speaker.width<=panelBox.x+panelBox.width,`speaker name remains visible in ${preset}/${viewport.width}x${viewport.height}: ${JSON.stringify({speaker,panelBox})}`);
+   assert.equal(await page.locator('[data-vn-speaker]').textContent(),'Mira','speaker label keeps its complete name');
+   assert.equal(await page.locator('[data-vn-speaker]').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,`speaker name is not clipped in ${preset}`);
    for(const control of await page.locator('[data-vn-sheet-header] button').all()){
     if(!await control.isVisible())continue;const b=await control.boundingBox();
     if(await control.locator("[data-vn-control-icon]").count())assert.equal(await control.locator("[data-vn-control-icon]").isVisible(),true,`icon visible in ${preset}`);
     assert.ok(b&&b.width>=44&&b.height>=44&&panelBox&&b.x>=panelBox.x&&b.x+b.width<=panelBox.x+panelBox.width+.5,`touch target fits ${preset}: ${await control.getAttribute("data-vn-control")} ${JSON.stringify(b)} panel=${JSON.stringify(panelBox)}`);
    }
-   await page.getByRole('button',{name:'Scene references',exact:true}).click();
-   await page.getByRole('dialog',{name:'Scene references',exact:true}).getByRole('button',{name:'Mira',exact:true}).click();
+   await page.getByRole('button',{name:'World Lens',exact:true}).click();
+   await page.getByRole('dialog',{name:'World Lens',exact:true}).getByRole('button',{name:'Mira',exact:true}).click();
+   await page.getByRole('button',{name:'Read story reference',exact:true}).click();
    const themed=await page.getByRole('dialog',{name:'About Mira',exact:true}).boundingBox();
    assert.ok(themed&&themed.x>=0&&themed.x+themed.width<=viewport.width&&themed.y+themed.height<=viewport.height,`card fits theme ${preset}`);
    await page.locator('[data-workspace-close]').click();
   }
-  assert.equal(external,0,'dossiers never contact models/providers');
+  assert.deepEqual(external,[],'dossiers never contact models/providers');
   await page.close();
  }
  console.log('dossier browser checks passed');

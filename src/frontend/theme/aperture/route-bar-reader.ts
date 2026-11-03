@@ -496,8 +496,8 @@ aside[data-vn-workspace] {
   min-height: 0;
   max-height: none;
   margin: 0;
-  font-size: calc(var(--reader-font, 15px) * var(--vn-text-scale, 1)) !important;
-  line-height: calc(1.55 * var(--vn-text-scale, 1)) !important;
+  font-size: var(--reader-font, 15px) !important;
+  line-height: 1.55 !important;
   letter-spacing: 0;
   color: var(--aperture-text, #f9faf6) !important;
   font-family: Georgia, 'Times New Roman', serif;
