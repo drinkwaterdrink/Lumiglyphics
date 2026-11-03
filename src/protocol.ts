@@ -1,3 +1,4 @@
+import type {ImageActivity} from './shared/image-usage.js';
 import {DnaRequestSchema,type DnaRequest,type DnaProposal} from './shared/character-dna-workflow.js';
 import {QueueImageRetriesSchema,type QueueImageRetriesRequest,type ImageRetryQueueView} from './shared/image-retries.js';
 import {PresentationRuleRequestSchema,type PresentationRuleRequest,type PresentationRuleCatalog} from './shared/presentation-rules.js';
@@ -212,6 +213,7 @@ export type ConnectionCatalogErrors = {
 };
 
 export type BackendResponse =
+  | {type:'vn_image_activity';chatId:string;activity:ImageActivity}
   | {type:"vn_image_retry_queue";queue:ImageRetryQueueView}
   | {type:"vn_presentation_rules";chatId:string;requestId:string;catalog:PresentationRuleCatalog}
   | {type:'vn_image_library';chatId:string;requestId:string;page:ImageLibraryPage}
@@ -226,7 +228,7 @@ export type BackendResponse =
   | { type: "vn_external_image"; result: CueImageResult }
   | { type: "vn_external_image_review"; chatId: string; requestId: string; characterName: string; record: ImageRequestRecord }
   | { type: "vn_panel_template"; requestId: string; chatId: string; template?: string; error?: string }
-  | { type: "vn_state"; chatId: string; config: VisualNovelConfig; turn: TurnView | null; readingPosition?: ReadingPosition | null; requestId?: string }
+  | { type: "vn_state"; chatId: string; config: VisualNovelConfig; turn: TurnView | null; readingPosition?: ReadingPosition | null; imageActivity?:ImageActivity; requestId?: string }
   | { type: "vn_config"; config: VisualNovelConfig; requestId?: string }
   | { type: "vn_system_one_key_status"; saved: boolean }
   | {

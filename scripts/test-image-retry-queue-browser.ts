@@ -14,8 +14,10 @@ try{
  for(const width of [320,390,1280]){
   const page=await browser.newPage({viewport:{width,height:844},isMobile:width<500,hasTouch:true});page.setDefaultTimeout(5000);const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(`http://127.0.0.1:${port}`);
-  await page.evaluate(()=>{const f=(window as any).imageFixture;f.studio.setConfig(f.config);const t=structuredClone(f.turn);t.assets=Array.from({length:6},(_,i)=>({jobId:`job-${i}`,cueId:`cue-${i}`,paragraphIndex:0,status:i<2?'generated':'cancelled',...(i<2?{imageUrl:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/> '}: {})}));t.imageRequests=t.assets.map((a:any,i:number)=>({...t.imageRequests[0],jobId:a.jobId,requestId:`request-${i}`,state:i<2?'approved':'cancelled'}));f.multi=t;f.studio.setTurn(t);f.studio.open();});
+  await page.evaluate(()=>{const f=(window as any).imageFixture;f.studio.setConfig(f.config);const t=structuredClone(f.turn);t.assets=Array.from({length:6},(_,i)=>({jobId:`job-${i}`,cueId:`cue-${i}`,paragraphIndex:0,status:i<2?'generated':'cancelled',...(i<2?{imageUrl:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/> '}: {})}));t.imageRequests=t.assets.map((a:any,i:number)=>({...t.imageRequests[0],jobId:a.jobId,requestId:`request-${i}`,state:i<2?'approved':'cancelled'}));f.multi=t;f.studio.setTurn(t);});
+  await page.getByRole('button',{name:'Open APERTURE navigation',exact:true}).click();await page.locator('[data-aperture-route="studio"]').click();
   const studio=page.locator('[data-image-studio]');
+  await studio.getByRole('tab',{name:'Prompt',exact:true}).click();await studio.locator('[data-prompt-actions] > summary').click();
   const picker=studio.getByLabel('Picture',{exact:true});
   await picker.selectOption('job-2');
   await studio.getByRole('button',{name:'Retry picture',exact:true}).click();
@@ -28,15 +30,18 @@ try{
   assert.match(await studio.locator('[data-queue-status]').innerText(),/1 queued.*1 retry running/);
   await page.evaluate(()=>(window as any).imageFixture.studio.showError('A prompt rewrite failed; queued pictures stay queued.'));
   assert.match(await studio.locator('[data-queue-status]').innerText(),/1 queued.*1 retry running/,'prompt failures preserve the queue view');
+  await studio.getByRole('tab',{name:'Picture',exact:true}).click();
   await studio.getByRole('button',{name:'Retry unfinished',exact:true}).click();actions=await page.evaluate(()=>(window as any).imageFixture.actions);assert.deepEqual(actions.at(-1).jobIds,['job-4','job-5']);
-  await picker.selectOption('job-0');await studio.getByRole('button',{name:'Regenerate picture',exact:true}).click();actions=await page.evaluate(()=>(window as any).imageFixture.actions);assert.deepEqual(actions.at(-1).jobIds,['job-0']);
+  await picker.selectOption('job-0');await studio.getByRole('tab',{name:'Prompt',exact:true}).click();await studio.getByRole('button',{name:'Regenerate picture',exact:true}).click();actions=await page.evaluate(()=>(window as any).imageFixture.actions);assert.deepEqual(actions.at(-1).jobIds,['job-0']);
   assert.equal(actions.some((a:any)=>a.type==='vn_prepare_image'||a.type==='vn_image_review'),false,'quick actions never open a review');
+  await studio.getByRole('tab',{name:'Picture',exact:true}).click();
   await studio.getByRole('button',{name:'Clear queued retries',exact:true}).click();actions=await page.evaluate(()=>(window as any).imageFixture.actions);assert.equal(actions.at(-1).action,'clear');
   await page.evaluate(()=>{const f=(window as any).imageFixture;f.studio.setRetryQueue({...f.multi,activeJobId:'job-2',jobIds:[]});});
   await picker.selectOption('job-1');
   await page.screenshot({path:`.cache/image-retry-queue/${width}.png`});
   assert.equal(await studio.locator('section').evaluate(el=>el.getBoundingClientRect().right<=innerWidth),true);
   await page.evaluate(()=>{const f=(window as any).imageFixture;f.studio.setTurn({...f.multi,messageId:'another-reply',sourceFingerprint:'another-fingerprint'});f.studio.setRetryQueue({...f.multi,activeJobId:'job-2',jobIds:['job-1']});});
+  await studio.getByRole('tab',{name:'Prompt',exact:true}).click();
   assert.equal(await studio.getByRole('button',{name:'Regenerate picture',exact:true}).isEnabled(),true,'old queue cannot lock another reply');
   assert.deepEqual(errors,[]);await page.close();
  }

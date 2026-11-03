@@ -83,6 +83,7 @@ export type VisualNovelConfig = {
   mode: VisualNovelMode;
   sceneImageFit: VisualNovelSceneImageFit;
   castMode: boolean;
+  dataSaverMode:boolean;
   relationshipTrackerEnabled:boolean;
   castAbsenceDisplay: "hide"|"dim";
   musicTransitionPolicy: "cue"|"location";
@@ -170,6 +171,7 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   mode: "standard",
   sceneImageFit: "cover",
   castMode: false,
+  dataSaverMode:false,
   relationshipTrackerEnabled:false,
   castAbsenceDisplay:"hide",
   musicTransitionPolicy:"cue",
@@ -398,6 +400,7 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     mode: input.mode === "cyoa" ? "cyoa" : "standard",
     sceneImageFit: sceneImageFit(input.sceneImageFit),
     castMode: bool(input.castMode, false),
+    dataSaverMode:bool(input.dataSaverMode,false),
     relationshipTrackerEnabled:bool(input.relationshipTrackerEnabled,false),
     castAbsenceDisplay:input.castAbsenceDisplay==="dim"?"dim":"hide",
     musicTransitionPolicy:input.musicTransitionPolicy==="location"?"location":"cue",

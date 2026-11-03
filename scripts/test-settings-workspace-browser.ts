@@ -24,6 +24,8 @@ try{
  await page.screenshot({path:'.cache/settings-workspace/home-mobile.png',fullPage:true});
  await settings.locator('[data-home-categories] [data-page-link="pictures"]').click();
  assert.equal(await settings.locator('[name="maxImagesPerTurn"]').count(),1);
+ const saver=settings.locator('[name="dataSaverMode"]');assert.equal(await saver.isChecked(),false);await saver.check();assert.equal(await page.evaluate(()=>(window as any).settingsFixture.patches.at(-1).dataSaverMode),true);await saver.uncheck();assert.equal(await page.evaluate(()=>(window as any).settingsFixture.patches.at(-1).dataSaverMode),false);
+
  assert.equal(await settings.locator('[name="imageOutputAspectRatio"]').isVisible(),true);
  await page.screenshot({path:'.cache/settings-workspace/images-mobile.png',fullPage:true});
  await settings.locator('[data-page-links] [data-page-link="generation"]').click();

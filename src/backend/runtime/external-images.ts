@@ -1,3 +1,5 @@
+import {ImageDispatchPolicy} from './image-dispatch-policy.js';
+import type {ImageActivityInput} from '../../shared/image-usage.js';
 // External scene requests use Cue's planner and asset pipeline without creating
 // a chat message or replacing the VN reader's active turn.
 import type { ChatMessageDTO, SpindleAPI } from "lumiverse-spindle-types";
@@ -17,7 +19,8 @@ import { loadConfig, loadChatState, loadCharacterAppearance, loadCharacterRegist
 
 const pipeline = { plan: planTurn, prepare: prepareAssetJobs, generate: generateAssets };
 export type ExternalImageReviewAction = { chatId: string; requestId: string; reviewRequestId: string; action: "generate" | "skip"; edits?: ImageRequestEdits };
-export function createExternalImages(spindle: SpindleAPI, deps = pipeline, timeoutMs = 300_000) {
+export function createExternalImages(spindle: SpindleAPI, deps = pipeline, timeoutMs = 300_000,activityOptions:{policy?:ImageDispatchPolicy;onActivity?:(event:ImageActivityInput,userId?:string)=>void}={}) {
+  const dispatch=activityOptions.policy??new ImageDispatchPolicy();
   const cache = new SceneImageCache();
   const active = new Map<string, { request: CueImageRequest; controller: AbortController; gate?: ImageReviewGate }>();
   const historyWrites = new Map<string, Promise<void>>();
@@ -73,6 +76,7 @@ export function createExternalImages(spindle: SpindleAPI, deps = pipeline, timeo
       // The host scopes this read to the initiating user; no private Warp settings are read.
       if (!await spindle.chats.get(r.chatId, userId)) throw new Error("The date's chat is no longer available.");
       const config = await loadConfig(spindle, userId);
+      dispatch.observe(userId,config);
       if (!current()) return;
       if (!config.enabled || (!config.generateImages && !config.useNativeCardImages)) throw new Error("Enable Cue and image generation in Cue's settings to illustrate dates.");
       const setupToken = castArtToken(spindle, r.chatId, userId);
@@ -140,6 +144,7 @@ export function createExternalImages(spindle: SpindleAPI, deps = pipeline, timeo
       if (!current()) return;
       // Use the same frozen request, validation and approval boundary as reader images.
       // External work has its own history and never replaces the reader's active turn.
+      const manualJobs=new Set<string>(),requestIds=new Map<string,string>();
       op.gate = new ImageReviewGate(async record => {
         const previous = historyWrites.get(scope) ?? Promise.resolve();
         const write = previous.catch(() => {}).then(async () => {
@@ -154,11 +159,20 @@ export function createExternalImages(spindle: SpindleAPI, deps = pipeline, timeo
         });
         historyWrites.set(scope, write);
         try { await write; } finally { if (historyWrites.get(scope) === write) historyWrites.delete(scope); }
+        requestIds.set(record.jobId,record.requestId);if(record.state==='approved')manualJobs.add(record.jobId);
+        if(record.state==='review'||record.state==='skipped')activityOptions.onActivity?.({key:plan.key,jobId:record.jobId,requestId:record.requestId,kind:record.state==='review'?'held':'skipped'},userId);
         if (current()) spindle.sendToFrontend({ type: "vn_external_image_review", chatId: r.chatId, requestId: r.requestId, characterName, record }, userId);
       });
       const assets = await deps.generate(spindle, plan, jobs, config, controller.signal, () => {}, userId,
         { sceneCache: cache, resolvedSourceText: content,
-          beforeGenerate: (job, prepared, metadata, signal) => op.gate!.prepare(job.jobId, job.paragraphIndex, prepared, metadata, config.reviewImages, signal) });
+          onActivity:event=>activityOptions.onActivity?.(event,userId),requestIdForJob:jobId=>requestIds.get(jobId),
+          // External scenes are owned by their bridge, not by the VN reader view.
+          // If saver is enabled after an unreviewed preview, retire it rather
+          // than silently retaining paid external work beyond its source lifecycle.
+          canDispatch:job=>dispatch.allowed(userId,manualJobs.has(job.jobId),current()),
+          waitForDispatch:async(job,signal)=>{if(signal.aborted||!dispatch.allowed(userId,manualJobs.has(job.jobId),current()))throw new Error('Data saver or image settings stopped this external picture. Request a new preview and explicitly approve it.');},
+
+          beforeGenerate: (job, prepared, metadata, signal) => op.gate!.prepare(job.jobId, job.paragraphIndex, prepared, metadata, config.reviewImages||!dispatch.allowed(userId,false,current()), signal) });
       if (!current()) return;
       const image = assets.find((a) => (a.status === "generated" || a.status === "browser_ready") && a.imageUrl);
       if (!image?.imageUrl) throw new Error(assets.find((a) => a.error)?.error ?? "Cue did not produce a date image. Check its image settings, then retry.");

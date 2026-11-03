@@ -722,6 +722,7 @@ export class VisualNovelSettingsPanel {
             ${group("Where pictures come from", imageSourceOptions("imageSource"), { find: find("Picture source", "image source card generated illustrations text only") })}
             <p data-generation-inactive hidden>Generation settings are kept. Choose Generate illustrations to use them.</p>
             <div data-generated-only>
+              <label data-check ${find('Data saver','pause automatic images metered network calls activity')}><input name="dataSaverMode" type="checkbox"><span>Data saver<small>Off by default. Pause unsent automatic image calls. Saved artwork and prompt previews remain available. Approve individual pictures to generate them. Calls already sent may finish and bill.</small></span></label>
               ${group("Prompt review", `<label data-check><input name="reviewImages" type="checkbox" /><span>Review before generating<small>Applies to the next image batch. Hold pictures to inspect and edit their prompts in the Image prompts panel. The inspector stays available in automatic mode.</small></span></label>`, { find: find("Prompt review", "inspect approve preview prompts automatic") })}
               ${group("Pictures per reply", `
                 <fieldset aria-label="Pictures per reply">
@@ -1613,6 +1614,7 @@ export class VisualNovelSettingsPanel {
         };
       }
       case "castMode": return {castMode:checked};
+      case "dataSaverMode":return {dataSaverMode:(target as HTMLInputElement).checked};
       case "relationshipTrackerEnabled":return {relationshipTrackerEnabled:checked};
       case "castAbsenceDisplay":return {castAbsenceDisplay:target.value==="dim"?"dim":"hide"};
       case "musicTransitionPolicy":return {musicTransitionPolicy:target.value==="location"?"location":"cue"};
@@ -2168,6 +2170,7 @@ export class VisualNovelSettingsPanel {
     this.setRadio("setupThemePreset", config.themePreset);
     this.setRadio("sceneImageFit", config.sceneImageFit);
     this.control<HTMLInputElement>("castMode").checked = config.castMode;
+    this.control<HTMLInputElement>("dataSaverMode").checked=config.dataSaverMode;
     this.control<HTMLInputElement>("relationshipTrackerEnabled").checked=config.relationshipTrackerEnabled;
     this.setRadio("effectIntensity", config.effectIntensity);
     this.setRadio("textEffects", config.textEffects);

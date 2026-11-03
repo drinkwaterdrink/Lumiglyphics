@@ -683,3 +683,27 @@ test('automatic unreviewed generation fits an over-budget prompt down to model c
   expect(sent).toHaveLength(1);
   expect(sent[0].prompt.length + (sent[0].negativePrompt?.length ?? 0)).toBeLessThanOrEqual(3000);
 });
+
+
+test('final dispatch gate pauses an unsent provider call and activity counts actual results',async()=>{
+ let calls=0,entered=false,release!:()=>void;const events:any[]=[];const spindle={userStorage:{getJson:async(_:string,options:any)=>options.fallback},imageGen:{generate:async()=>{calls++;return {imageId:'dispatch-fixture'};}}} as any;
+ const config=normalizeConfig({referenceAnchoring:false,reviewImages:false}),turn=plan([cue('idle')]);
+ const task=generateAssets(spindle,turn,createAssetJobs(turn,config),config,new AbortController().signal,()=>{},'dispatch-user',{waitForDispatch:async()=>{entered=true;await new Promise<void>(resolve=>release=resolve);},onActivity:event=>{events.push(event);}});
+ for(let i=0;i<100&&!entered&&calls===0;i++)await new Promise(r=>setTimeout(r,2));
+ expect(calls).toBe(0);expect(entered).toBe(true);release();await task;expect(calls).toBe(1);expect(events.map(e=>e.kind)).toEqual(['provider-start','provider-success']);expect(events[0].attemptId).toBe(events[1].attemptId);expect(events[0].key).toEqual(turn.key);
+});
+
+
+test('a provider ignoring abort records unknown cancellation then its actual late completion without applying it',async()=>{
+ const events:any[]=[];let release!:(value:any)=>void,called=false;const controller=new AbortController();
+ const spindle={userStorage:{getJson:async(_:string,options:any)=>options.fallback},imageGen:{generate:async()=>{called=true;return new Promise(resolve=>release=resolve);}}} as any;
+ const config=normalizeConfig({referenceAnchoring:false}),turn=plan([cue('idle')]);const task=generateAssets(spindle,turn,createAssetJobs(turn,config),config,controller.signal,()=>{},'late-user',{onActivity:event=>{events.push(event);}});
+ for(let i=0;i<100&&!called;i++)await new Promise(r=>setTimeout(r,2));expect(called).toBe(true);controller.abort();expect(events.map(e=>e.kind)).toEqual(['provider-start','cancel-unknown']);release({imageId:'late-image'});const result=await task;expect(result[0]?.status).toBe('cancelled');expect(events.map(e=>e.kind)).toEqual(['provider-start','cancel-unknown','provider-success']);
+});
+
+
+test('a policy change in the dispatch microtask is rechecked before sending',async()=>{
+ let calls=0,checks=0,allowed=true;const spindle={userStorage:{getJson:async(_:string,o:any)=>o.fallback},imageGen:{generate:async()=>{calls++;return {imageId:'forbidden'};}}} as any;const config=normalizeConfig({referenceAnchoring:false}),turn=plan([cue('idle')]);
+ const result=await generateAssets(spindle,turn,createAssetJobs(turn,config),config,new AbortController().signal,()=>{},'microtask',{waitForDispatch:async()=>{checks++;if(checks===1){queueMicrotask(()=>allowed=false);return;}throw Object.assign(new Error('paused during final await'),{name:'AbortError'});},canDispatch:()=>allowed});
+ expect(checks).toBe(2);expect(calls).toBe(0);expect(result[0]?.status).toBe('cancelled');
+});

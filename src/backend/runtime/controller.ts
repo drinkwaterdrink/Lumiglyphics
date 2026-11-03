@@ -1,3 +1,6 @@
+import {ImageUsageLedger} from './image-usage.js';
+import {ImageDispatchPolicy} from './image-dispatch-policy.js';
+import type {ImageActivityInput} from '../../shared/image-usage.js';
 import {resolveSceneAmbient} from '../../shared/scene-atmosphere.js';
 import {handleCharacterDnaRequest} from './character-dna-workflow.js';
 import { fitPromptToBudget } from "../../shared/prompt-length.js";
@@ -40,6 +43,7 @@ const assetBatchOperations=new Map<string,{
   owner:AbortController;revision:number;pendingRestores:number;key:StoredTurnRecord['plan']['key'];restoreWaiters:Set<()=>void>;
   overrides:Map<string,StoredTurnRecord['jobs'][number]>;
   cancelJob?: (jobId:string)=>void;
+  approveHeld?:((requestId:string)=>Promise<boolean>)|undefined;
   applyRestore:(record:StoredTurnRecord,job:StoredTurnRecord['jobs'][number])=>void;
 }>();
 const recoveringImageBatches = new Map<string,string>();
@@ -115,7 +119,7 @@ const planningQueue = new PlanningQueue();
 const externalImageServices = new WeakMap<SpindleAPI, ReturnType<typeof createExternalImages>>();
 function externalImages(spindle: SpindleAPI) {
   let service = externalImageServices.get(spindle);
-  if (!service) { service = createExternalImages(spindle); externalImageServices.set(spindle, service); }
+  if (!service) { service = createExternalImages(spindle,undefined,undefined,{policy:imageRuntime(spindle).policy,onActivity:(event,userId)=>publishImageActivity(spindle,userId,event.key.chatId,event)}); externalImageServices.set(spindle, service); }
   return service;
 }
 type QueuedRetryContext=QueueImageRetriesRequest & {queueOwner:ImageRetryQueue};
@@ -195,6 +199,10 @@ function runtimeKey(userId: string | undefined, chatId: string): string {
  * Exposed for tests; production code reaches it only through this accessor.
  */
 const views = new ViewRegistry();
+const imageRuntimes=new WeakMap<SpindleAPI,{ledger:ImageUsageLedger;policy:ImageDispatchPolicy}>();
+function imageRuntime(spindle:SpindleAPI){let runtime=imageRuntimes.get(spindle);if(!runtime){runtime={ledger:new ImageUsageLedger(),policy:new ImageDispatchPolicy()};imageRuntimes.set(spindle,runtime);}return runtime;}
+function publishImageActivity(spindle:SpindleAPI,userId:string|undefined,chatId:string,event?:ImageActivityInput):void{const ledger=imageRuntime(spindle).ledger;const activity=event?ledger.record(userId,event):ledger.snapshot(userId,chatId);spindle.sendToFrontend({type:'vn_image_activity',chatId,activity},userId);}
+
 export function viewRegistry(): ViewRegistry {
   return views;
 }
@@ -680,6 +688,7 @@ export async function sendState(
   if(chatId&&options.requestId&&options.viewOpen!==false)preparationSessions.set(runtimeKey(userId,chatId),options.requestId);
   const config = await loadConfig(spindle, userId);
   rememberDebugFlag(userId, config);
+  imageRuntime(spindle).policy.observe(userId,config);
   if (!chatId) {
     spindle.sendToFrontend({ type: "vn_state", chatId: "", config, turn: null, requestId: options.requestId }, userId);
     return;
@@ -761,6 +770,7 @@ export async function sendState(
     chatId,
     config,
     turn: record && !stale ? await turnViewWithAudio(spindle, record,userId) : null,
+    imageActivity:imageRuntime(spindle).ledger.snapshot(userId,chatId),
     readingPosition: await loadReadingPosition(spindle, chatId, userId)
   }, userId);
   const canPlan = !options.readOnly&&config.enabled && views.isOpen(userId, chatId);
@@ -823,7 +833,7 @@ async function startAssets(
   let current=record;
   // Register ownership before configuration/provider awaits so a restore can
   // supersede a queued job even while this batch is still starting.
-  const operations={owner:controller,key:record.plan.key,revision:0,pendingRestores:0,restoreWaiters:new Set<()=>void>(),overrides:new Map<string,StoredTurnRecord['jobs'][number]>(),applyRestore:(restored:StoredTurnRecord,job:StoredTurnRecord['jobs'][number])=>{
+  const operations={owner:controller,key:record.plan.key,revision:0,pendingRestores:0,restoreWaiters:new Set<()=>void>(),approveHeld:undefined as undefined|((requestId:string)=>Promise<boolean>),overrides:new Map<string,StoredTurnRecord['jobs'][number]>(),applyRestore:(restored:StoredTurnRecord,job:StoredTurnRecord['jobs'][number])=>{
     operations.revision++;
     operations.overrides.set(job.jobId,job);
     current={...current,jobs:current.jobs.map(item=>operations.overrides.get(item.jobId)??item),previousVersions:restored.previousVersions??{},imageRequests:[...(current.imageRequests??[]).filter(item=>item.jobId!==job.jobId),...(restored.imageRequests??[]).filter(item=>item.jobId===job.jobId)]};
@@ -867,18 +877,25 @@ async function startAssets(
     const revision=operations.revision;
     return saveTurnRecordIfCurrent(spindle,path,current,userId,()=>ownsBatch()&&operations.revision===revision&&operations.pendingRestores===0);
   };
-  const gate = new ImageReviewGate(async (request) => {
+  const dispatch=imageRuntime(spindle).policy;dispatch.observe(userId,config);
+  const manualJobs=new Set<string>(options.quickGenerate&&options.onlyJobId?[options.onlyJobId]:[]),requestIds=new Map<string,string>(),heldJobs=new Set<string>();
+  const recordRequest=async (request:import('../../shared/image-review.js').ImageRequestRecord):Promise<void> => {
     if(operations.overrides.has(request.jobId))return;
     if (assetControllers.get(key) !== controller) return;
     if (controller.signal.aborted && request.state !== "cancelled" && request.state !== "skipped") return;
     if (!compareTurnKeys(activeTurnKeys.get(key) ?? null, record.plan.key).accepted) return;
+    requestIds.set(request.jobId,request.requestId);
+    if(request.state==='review'||request.state==='skipped')publishImageActivity(spindle,userId,record.plan.key.chatId,{key:record.plan.key,jobId:request.jobId,requestId:request.requestId,kind:request.state==='review'?'held':'skipped'});
     const requests = safeImageHistory([...(current.imageRequests ?? []).filter((entry) => entry.requestId !== request.requestId), request]);
     current = { ...current, imageRequests: requests, updatedAt: new Date().toISOString() };
     await saveBatch();
     if (!ownsBatch())return;
     if (!compareTurnKeys(activeTurnKeys.get(key) ?? null, record.plan.key).accepted) return;
+    if(request.state==='approved'){manualJobs.add(request.jobId);dispatch.notify(userId);}
     spindle.sendToFrontend({ type: "vn_image_requests", chatId: record.plan.key.chatId, messageId: record.plan.key.assistantMessageId, sourceFingerprint: record.plan.key.sourceFingerprint, requests:current.imageRequests??[] }, userId);
-  });
+  };
+  const gate=new ImageReviewGate(recordRequest);
+  operations.approveHeld=async requestId=>{const request=current.imageRequests?.find(item=>item.requestId===requestId);if(!request||request.state!=='prepared'||requestIds.get(request.jobId)!==requestId||!heldJobs.has(request.jobId)||!ownsBatch()||!views.isOpen(userId,record.plan.key.chatId)||operations.overrides.has(request.jobId))return false;heldJobs.delete(request.jobId);await recordRequest({...request,state:'approved'});return ownsBatch();};
   imageReviewGates.set(key, gate);
   const mergeJobs = (jobs: StoredTurnRecord["jobs"]): StoredTurnRecord["jobs"] => (options.onlyJobId ? current.jobs.map((job) => jobs.find((entry) => entry.jobId === job.jobId) ?? job) : jobs).map(job=>operations.overrides.get(job.jobId)??job);
   const batchPlan = options.onlyJobId ? { ...record.plan, visualCues: [...record.plan.visualCues, ...(record.plan.cacheCues ?? [])].filter((cue) => cue.assetJobId === options.onlyJobId), cacheCues: [] } : record.plan;
@@ -916,6 +933,10 @@ async function startAssets(
       userId,
       {
         sceneCache, admission,
+        onActivity:event=>{if(event.kind==='provider-start')heldJobs.delete(event.jobId);publishImageActivity(spindle,userId,record.plan.key.chatId,event);},
+        requestIdForJob:jobId=>requestIds.get(jobId),
+        canDispatch:job=>dispatch.allowed(userId,manualJobs.has(job.jobId),ownsBatch()&&views.isOpen(userId,record.plan.key.chatId)),
+        waitForDispatch:(job,jobSignal)=>dispatch.wait(userId,()=>manualJobs.has(job.jobId),jobSignal,()=>ownsBatch()&&views.isOpen(userId,record.plan.key.chatId),()=>{heldJobs.add(job.jobId);publishImageActivity(spindle,userId,record.plan.key.chatId,{key:record.plan.key,jobId:job.jobId,requestId:requestIds.get(job.jobId),kind:'held'});}),
         onJobCancellationReady:cancelJob=>{const active=assetBatchOperations.get(key);if(active?.owner===controller)active.cancelJob=cancelJob;},
         independentRequests: requiresReview,
         disableCacheStore: requiresReview,
@@ -938,6 +959,7 @@ async function startAssets(
           draft.parameters = modelOutputParameters(metadata.provider, draft.model, draft.parameters ?? {});
           const approvals=imageRetryQueues.get(key);
           const approvedInBatch=!options.onlyJobId&&approvals?.scope===JSON.stringify(record.plan.key)&&approvals.approvedJobIds.delete(job.jobId);
+          if(approvedInBatch)manualJobs.add(job.jobId);
           const isReview = requiresReview && !approvedInBatch;
           if (!isReview) {
             const max = draft.promptProfile?.maxCharacters ?? 3000;
@@ -1530,6 +1552,7 @@ export async function restorePreviousImage(
   } finally {releaseFence();}
   if (!next || !isCurrent()) return;
   const restoredJob = next.jobs.find(job => job.jobId === request.jobId)!;
+  publishImageActivity(spindle,userId,request.chatId,{key:next.plan.key,jobId:request.jobId,requestId:request.versionId,kind:'restore'});
   spindle.sendToFrontend({
     type: "vn_asset",
     chatId: request.chatId,
@@ -1843,20 +1866,24 @@ async function queueImageRetries(spindle:SpindleAPI,raw:QueueImageRetriesRequest
   entry={scope,queue,approvedJobIds:new Set<string>()};imageRetryQueues.set(key,entry);
  }
  if(entry.queue.hasRequest(action.requestId))return;
+ const currentQueue=()=>views.isOpen(userId,action.chatId)&&(intakeEpochs.get(key)??0)===epoch&&(imageRetryEpochs.get(key)??0)===retryEpoch&&imageRetryQueues.get(key)===entry;
  const ids:string[]=[];
  for(const id of action.jobIds!){
+  if(!currentQueue())return;
   const job=record.jobs.find(j=>j.jobId===id)!;
   const held=record.imageRequests?.filter(r=>r.jobId===id&&r.state==='review').at(-1);
   // An existing held preview is already a prepared request. Explicit quick retry
   // approves that exact prompt; it must not enqueue a second paid generation.
   if(held){try{if(imageReviewGates.get(key)?.decide(held.requestId,'generate',{}))continue;}catch(error){spindle.sendToFrontend({type:'vn_error',chatId:action.chatId,operation:'queue_image_retry',error:errorText(error)},userId);continue;}}
+  const paused=record.imageRequests?.filter(r=>r.jobId===id&&r.state==='prepared').at(-1);
+  if(paused&&await assetBatchOperations.get(key)?.approveHeld?.(paused.requestId))continue;
   if(assetControllers.has(key)&&['queued','generating'].includes(job.status)){
    if(!record.imageRequests?.some(r=>r.jobId===id&&r.state==='approved'))entry.approvedJobIds.add(id);
    continue;
   }
   ids.push(id);
  }
- entry.queue.enqueue(action.requestId,ids);
+ if(currentQueue())entry.queue.enqueue(action.requestId,ids);
 }
 
 async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendRequest, userId: string): Promise<void> {
@@ -1914,7 +1941,7 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       const key = runtimeKey(userId, request.chatId);
       const turn = activeTurnKeys.get(key);
       if (!views.isOpen(userId, request.chatId) || !turn || turn.assistantMessageId !== request.messageId || turn.sourceFingerprint !== request.sourceFingerprint) throw new Error("This review belongs to an older or closed turn.");
-      if (!imageReviewGates.get(key)?.decide(request.requestId, request.action, request.edits ?? {})) throw new Error("This request has already been handled or cancelled. Prepare it again if needed.");
+      if (!imageReviewGates.get(key)?.decide(request.requestId, request.action, request.edits ?? {}) && !(request.action==='generate'&&!request.edits&&await assetBatchOperations.get(key)?.approveHeld?.(request.requestId))) throw new Error("This request has already been handled or cancelled. Prepare it again if needed.");
       return;
     }
     case "vn_set_card_role": {
@@ -2040,10 +2067,13 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
     }
     case "vn_set_config": {
       if(request.patch.contextSources!==undefined) contextSourceSession.cancel(userId);
+      const dispatch=imageRuntime(spindle).policy;
+      if(request.patch.dataSaverMode===true||request.patch.generateImages===false)dispatch.restrict(userId,request.patch);
       const saving = updateConfig(spindle, request.patch, userId);
       if(request.patch.contextSources!==undefined) contextConfigSaves.set(userId,saving);
       let config:VisualNovelConfig;
-      try { config=await saving; }
+      try { config=await saving;dispatch.update(userId,config); }
+      catch(error){dispatch.update(userId,await loadConfig(spindle,userId));throw error;}
       finally { if(contextConfigSaves.get(userId)===saving)contextConfigSaves.delete(userId); }
       rememberDebugFlag(userId, config);
       dbg(spindle, userId, `config saved (${Object.keys(request.patch).length} field(s) in patch)`);

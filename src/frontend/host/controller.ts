@@ -1184,6 +1184,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       speech.setCursor(null);stage.showPreparationPreview(preview);return;
     }
     const message = payload as BackendResponse;
+    if(message.type==='vn_image_activity'){if(message.chatId===chatId())imageStudio.setImageActivity(message.chatId,message.activity);return;}
     if(message.type==='vn_reference_history_invalidated'){
       if(message.chatId!==chatId())return;
       if(turn){invalidatedReferenceTurn=referenceTurnToken(turn);turn=withoutReferenceHistory(turn);}
@@ -1281,6 +1282,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
         const bootChatId = chatId();
         if (!active && bootChatId) ctx.sendToBackend({ type: "vn_view", chatId: bootChatId, open: false });
       }
+      if(message.imageActivity)imageStudio.setImageActivity(message.chatId,message.imageActivity);
       if (message.turn && message.turn.chatId === chatId()) {
         const next=invalidatedReferenceTurn===referenceTurnToken(message.turn)&&message.requestId!==stateRequestId?withoutReferenceHistory(message.turn):message.turn;
         applyTurn(next, turn);

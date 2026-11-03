@@ -10,12 +10,12 @@
 
 **Spec:** `docs/audits/2026-11-01-main-3-gpt-audit.md` (findings A01-A10 and selected-suggestion design decisions).
 
-**Execution status:** Tasks 0 and 1 published as beta.110 (`8981bd3`) on `codex/audited-improvements`. Task 2 is published as beta.111 (`6240bba`). Task 2A is included in the beta.112 release checkpoint as the Cast/DNA repair in `2026-11-01-cast-dna-repair.md`; Tasks 3-4 are included in the beta.113 checkpoint; Task 5 is included in the beta.114 checkpoint; Task 6 is included in the beta.115 checkpoint; Task 7 is included in the beta.116 checkpoint; Task 8 is included in the beta.117 checkpoint with paragraph-only timing; Task 9 is included in the beta.118 checkpoint; original Tasks 10-11 remain pending. See `docs/implementation/2026-11-01-audit-progress.md` for evidence, additional bugs and known baseline browser failures.
+**Execution status:** Tasks 0 and 1 published as beta.110 (`8981bd3`) on `codex/audited-improvements`. Task 2 is published as beta.111 (`6240bba`). Task 2A is included in the beta.112 release checkpoint as the Cast/DNA repair in `2026-11-01-cast-dna-repair.md`; Tasks 3-4 are included in the beta.113 checkpoint; Task 5 is included in the beta.114 checkpoint; Task 6 is included in the beta.115 checkpoint; Task 7 is included in the beta.116 checkpoint; Task 8 is included in the beta.117 checkpoint with paragraph-only timing; Task 9 is included in the beta.118 checkpoint; Task 10 is included in the beta.119 checkpoint; Task 11 remains pending. See `docs/implementation/2026-11-01-audit-progress.md` for evidence, additional bugs and known baseline browser failures.
 
 ## Global constraints
 
 - Implement against Main-3-GPT commit `b0f5f5a594f4f6310a491b3452b388b91afdabfe` or an explicitly verified descendant; the current primary checkout is Testing beta.74. Do not apply this plan blindly to Testing.
-- Every push increments the beta suffix in package.json, spindle.json and src/shared/build-info.ts. The first correctness packet was pushed as **0.2.0-beta.110**; Task 2 was pushed as **0.2.0-beta.111**; the next authorized push requires **0.2.0-beta.112**, subject to rechecking the remote. Never downgrade a newer release.
+- Every push increments the beta suffix in package.json, spindle.json and src/shared/build-info.ts. The first correctness packet was pushed as **0.2.0-beta.110**. Task 10 is the **0.2.0-beta.119** checkpoint; the following authorized push requires **0.2.0-beta.120**, subject to rechecking the remote. Never downgrade a newer release.
 - Preserve source comments/docstrings, primary story/job validation, userId targeting/storage isolation, swipe/revision identity, intake epochs and view gating. A closed reader never starts automatic generation.
 - No live/paid image calls in automated tests. New text/image calls need explicit workflow intent and accurate usage reporting. No filtering/softening creative themes or descriptions; lint only advises.
 - Persisted optional caches/history may be ignored or rederived without blocking a valid story. Unknown future formats remain preserved and unavailable rather than overwritten.
@@ -198,11 +198,11 @@ Task 2A is included in the beta.112 release checkpoint; prior beta.111 does not 
 
 **Interfaces:** `dataSaverMode:boolean` default false, per-user config consistent with existing preferences. `automaticGenerationAllowed({viewOpen,generateImages,dataSaverMode}):boolean`. Activity events use full turn/job/request/attempt IDs and classify provider-start/success/failure/cancel-unknown, held/skip, cache reuse and restore; deduplicate on stable IDs. Session means current loaded extension session unless a separately labeled persisted per-chat total is added.
 
-- [ ] Count provider attempts at dispatch, not UI clicks. Retries add attempts, held requests do not imply billed images, cache hits/restores are zero new generation, unknown completion/billing remains unknown. Do not infer dollars from counts; show money only with verified provider usage/pricing, otherwise Price unavailable.
-- [ ] Place the data-saver gate immediately before automatic provider dispatch, not just intake. Cover reopen, retry queues, cache misses, bootstrap and transitions from held to approved. Preserve stored artwork, prompt previews and budgets; cache reuse remains available.
-- [ ] Enabling pauses unsent automatic image starts and speculative asset prefetch. Already-sent calls may finish/bill; report that truthfully. Explicit manual generation remains allowed via existing approval flow, with visible data-saver status. Turning off resumes only still-current eligible work through the scheduler, never discarded/stale jobs.
-- [ ] Test toggle mid-queue/in-flight, closed reader, chat/user switch, explicit approval, retry, failed/late completion and unavailable navigator.connection API. No reliance on metered-network detection; no service worker/offline promises.
-- [ ] Run scheduler/controller/review/usage/config suites and mocked image retry browser harness.
+- [x] Count provider attempts at dispatch, not UI clicks. Retries add attempts, held requests do not imply billed images, cache hits/restores are zero new generation, unknown completion/billing remains unknown. Do not infer dollars from counts; show money only with verified provider usage/pricing, otherwise Price unavailable.
+- [x] Place the data-saver gate immediately before automatic provider dispatch, not just intake. Cover reopen, retry queues, cache misses, bootstrap and transitions from held to approved. Preserve stored artwork, prompt previews and budgets; cache reuse remains available.
+- [x] Enabling pauses unsent automatic image starts and speculative asset prefetch. Already-sent calls may finish/bill; report that truthfully. Explicit manual generation remains allowed via existing approval flow, with visible data-saver status. Turning off resumes only still-current eligible work through the scheduler, never discarded/stale jobs.
+- [x] Test toggle mid-queue/in-flight, closed reader, chat/user switch, explicit approval, retry, failed/late completion and unavailable navigator.connection API. No reliance on metered-network detection; no service worker/offline promises.
+- [x] Run scheduler/controller/review/usage/config suites and mocked image retry browser harness.
 
 ## Task 11 — Targeted decomposition and visual consistency
 

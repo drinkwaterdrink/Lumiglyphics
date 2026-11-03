@@ -105,7 +105,7 @@ describe("ImageStudio Engine V3 Features (Phase 2)", () => {
     studio.destroy();
   });
 
-  test("populates connection dropdown from catalog and updates cost estimate", () => {
+  test("populates connection dropdown without inventing provider prices", () => {
     const sent: FrontendRequest[] = [];
     const mount = new FakeNode("div") as unknown as HTMLElement;
     const studio = new ImageStudio(mount, (req) => sent.push(req), () => {});
@@ -137,8 +137,8 @@ describe("ImageStudio Engine V3 Features (Phase 2)", () => {
     expect(select.children[1].textContent).toContain("Recraft");
 
     const costEl = root.querySelector("[data-cost-estimate]");
-    expect(costEl.textContent).toContain("10,000 char capacity");
-    expect(costEl.textContent).toContain("~$0.012 - $0.025");
+    expect(costEl.textContent).toContain("Price unavailable");
+    expect(costEl.textContent).not.toContain("$");
 
     studio.destroy();
   });

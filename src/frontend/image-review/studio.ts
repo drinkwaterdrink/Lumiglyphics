@@ -1,3 +1,4 @@
+import {ImageActivityPanel} from './image-activity.js';
 import {VersionComparison} from './version-comparison.js';
 import {PromptHistory,type PromptEditSnapshot} from './prompt-history.js';
 import {lintCompiledPrompt} from '../../shared/prompt-lint.js';
@@ -78,6 +79,7 @@ export class ImageStudio {
   private rebuilding = new Set<string>();
   private rerolling = new Set<string>();
   private cursor = 0;
+  private readonly activity=new ImageActivityPanel(record=>{if(!this.turn)return;this.send({type:'vn_image_review',chatId:this.turn.chatId,messageId:this.turn.messageId,sourceFingerprint:this.turn.sourceFingerprint,requestId:record.requestId,action:'generate'});});
   private recoveryJob = "";
   private replanning = false;
   private recovering: "stop"|"retry"|null=null;
@@ -91,6 +93,7 @@ export class ImageStudio {
     this.root = this.host.attachShadow({ mode: "open" });
     this.root.innerHTML = `<style>${CSS}</style><button type="button" data-launch aria-expanded="false">Image prompts</button><section hidden aria-label="Image prompts"><div class="row" data-studio-header><div><h2>Image prompts</h2><small data-build>${LUMIGLYPHICS_VERSION}</small></div><button type="button" data-close aria-label="Close image prompts" title="Close image prompts">×</button></div><div data-studio-body><label class="toggle"><input type="checkbox" data-review checked>Review before generating</label><small data-review-help>Applies to the next image batch. Held pictures stay held. You can keep reading.</small><details data-card-role><summary>Card role for this chat</summary><label>Card role<select data-role aria-label="Card role"><option value="auto">Auto</option><option value="character">Character</option><option value="scenario">Scenario / world / narrator</option></select></label><button type="button" data-save-role>Save card role</button><small data-role-help>Applies to future replies. Existing pictures and held prompts stay unchanged. Auto uses available visual evidence.</small></details><details data-turn-recovery><summary>Reply recovery</summary><small>Retry unfinished pictures prepares only unfinished slots again and stops their current work. Completed pictures stay. New previews always need approval. Replan asks the story-reader model to reconsider the whole reply and may use text tokens.</small><button type="button" data-retry-unfinished>Prepare unfinished previews</button><button type="button" data-replan>Replan this reply</button></details><label>Picture<select data-picture aria-label="Picture"></select></label><label data-history hidden>Recorded request<select data-request aria-label="Recorded request"></select></label><div data-batch-recovery hidden><p data-batch-status role="status"></p><button type="button" data-stop-images>Stop pending pictures</button><small>Stops this reply’s waiting image work. Requests already sent may still finish at the provider. Completed pictures stay.</small></div><p data-scene></p><p data-meta></p><p data-model-help role="status" hidden></p><label>Picture template<select data-template aria-label="Picture template"></select></label><button type="button" data-use-template>Use template</button><div data-template-confirm hidden><p>Replacing rebuilds this prompt and parameters from the selected template. Your current edits will be replaced.</p><div class="row"><button type="button" data-keep>Keep edits</button><button type="button" data-replace>Replace with template</button></div></div><details data-recovery hidden><summary>Correct this picture’s subject</summary><small>Prepare a new preview for this picture only. No image is generated until you approve it.</small><label>Picture subject<select data-subject-mode aria-label="Picture subject"><option value="character">Character</option><option value="environment">Environment / no people</option></select></label><div data-person-fields><label>Character name<input data-subject-name aria-label="Character name" list="vn-subject-candidates" maxlength="160"></label><datalist id="vn-subject-candidates" data-candidates></datalist><label>Appearance<textarea data-subject-appearance aria-label="Appearance" maxlength="2000" placeholder="Concrete visual details, separated by commas: hair, eyes, skin, clothes, species…"></textarea></label><small>Use known appearance by leaving this blank, or supply details for this picture.</small><label class="toggle"><input type="checkbox" data-save-appearance>Save appearance for this character in this chat</label></div><small data-environment-help hidden>Choose a no-people template above. Character appearance and references are omitted.</small><button type="button" data-correct>Prepare corrected preview</button></details><details data-diagnostics><summary>Picture diagnostics</summary><p data-diagnostic></p><button type="button" data-copy-diagnostic>Copy diagnostics</button><small>Copies subject and template names and status only. No appearance descriptions, chat text, prompts or provider error payloads are included.</small></details><details><summary>Prompt sources</summary><p data-provenance></p></details><p data-edit-help role="status"></p><label>Positive prompt <small data-positive-count></small><textarea data-positive maxlength="65000" aria-label="Positive prompt" spellcheck="false" inputmode="text"></textarea></label><label>Negative prompt <small data-negative-count></small><textarea data-negative maxlength="65000" aria-label="Negative prompt" spellcheck="false" inputmode="text"></textarea></label><small data-prompt-profile></small><small data-combined-count role="status"></small><small>Regenerate prompt uses your story-reader model to prepare fresh wording. It uses text tokens; an image is generated only after approval.</small><small>Negative prompts and individual settings are model dependent.</small><details><summary>Parameters and references</summary><p data-reference></p><label>Parameters (JSON)<textarea data-parameters aria-label="Parameters (JSON)" spellcheck="false" inputmode="text"></textarea></label><small>Advanced overrides for this picture only. Reference bytes and host-managed fields are omitted. Your provider may ignore unsupported parameters.</small></details><small>Shows the extension request prepared for Lumiverse; the host converts it for the provider.</small></div><footer data-studio-footer><div class="row"><button type="button" data-generate>Generate this</button><button type="button" data-skip>Skip</button><button type="button" data-reset>Reset edits</button><button type="button" data-retry-image>Retry this picture</button><button type="button" data-prepare>Edit and regenerate</button><button type="button" data-regenerate-prompt>Regenerate prompt</button><button type="button" data-copy>Copy prompt</button></div><div data-notice-row hidden><p data-notice role="status"></p><button type="button" data-dismiss-notice aria-label="Dismiss image prompt notice" title="Dismiss image prompt notice">&#215;</button></div></footer></section>`;
     this.layoutInspector();
+    this.el('[data-context]').after(this.activity.element);
     const scope=document.createElement('small');scope.dataset.correctionScope='';scope.setAttribute('role','status');
     this.el('[data-save-appearance]').closest('label')!.after(scope);
     this.el<HTMLInputElement>('[data-save-appearance]').onchange=()=>this.updateCorrectionScope();
@@ -838,7 +841,7 @@ export class ImageStudio {
     this.render();
   }
   setPlanning(chatId:string,planning:boolean):void {this.planningChat=planning?chatId:this.planningChat===chatId?'':this.planningChat;this.render();}
-  setConfig(config: VisualNovelConfig): void { this.maxImagesPerTurn=config.maxImagesPerTurn;this.preferences.setConfig(config); this.templates = config.imageTemplates.map(t => ({ ...t })); this.defaultTemplate = config.defaultImageTemplateId; this.render(); }
+  setConfig(config: VisualNovelConfig): void { this.activity.setSaver(config.dataSaverMode);this.maxImagesPerTurn=config.maxImagesPerTurn;this.preferences.setConfig(config); this.templates = config.imageTemplates.map(t => ({ ...t })); this.defaultTemplate = config.defaultImageTemplateId; this.render(); }
   private rebuildTemplate(): void {
     const record = this.record(); const templateId = this.el<HTMLSelectElement>("[data-template]").value;
     if (!this.turn || record?.state !== "review" || !templateId || this.rebuilding.has(record.requestId) || this.submitted.has(record.requestId) || this.rebuilding.has(record.requestId)) return;
@@ -1003,6 +1006,9 @@ export class ImageStudio {
     button.title=needsFit?'Compresses the current edited draft while preserving named subjects and their appearance facts. Uses story-reader text tokens; generation still requires approval.':'Uses the current edited wording to describe the same scene again. Uses story-reader text tokens; generation still requires approval.';
   }
 
+  setImageActivity(chatId:string,activity:unknown):void{const wasWaiting=this.activity.waiting;this.activity.setActivity(chatId,activity);if(this.activity.waiting)this.syncActivityStatus();else if(wasWaiting)this.render();}
+  private syncActivityStatus():void{if(this.activity.waiting){this.el('[data-status]').textContent='Waiting · data saver';this.el('[data-state-detail]').textContent='This picture has not been sent. Approve this prepared picture to send one image request.';}}
+
   private render(): void {
     this.el<HTMLElement>("[data-template-confirm]").hidden = true;
     const waiting=(this.turn?.assets??[]).filter(asset=>this.stateForJob(asset.jobId,this.turn?.imageRequests?.filter(record=>record.jobId===asset.jobId).at(-1)).kind==='held').length;
@@ -1025,6 +1031,7 @@ export class ImageStudio {
     history.value = this.selectedRequest;
     this.el<HTMLElement>("[data-history]").hidden = records.length < 2;
     const record = this.record();
+    this.activity.setContext(this.turn,record);
     const asset = this.turn?.assets.find((entry) => entry.jobId === this.selectedJob);
     const draft = record ? this.drafts.get(this.draftKey(record)) : undefined;
     this.el<HTMLElement>("[data-scene]").textContent = asset ? this.turn?.paragraphs[asset.paragraphIndex] ?? "" : '';
@@ -1158,6 +1165,7 @@ export class ImageStudio {
     this.el<HTMLButtonElement>("[data-copy]").disabled = !record;
     this.historyFor()?.checkpoint(this.editSnapshot());this.updateHistoryButtons();this.scheduleLint();
     this.renderInspector();
+    this.syncActivityStatus();
     this.renderConnectionDropdown();
     this.updateCostEstimate();
     this.setNotice(this.recovering ? (this.recovering==='stop'?'Stopping pending pictures…':'Preparing unfinished pictures for review…') : rolling ? "Rewriting prompt with the story-reader model… Uses text tokens; image generation still needs approval." : (asset?.error ?? '') || (record && this.rebuilding.has(record.requestId) ? "Rebuilding template… Wait for a new preview before generating." : ''));
@@ -1353,33 +1361,8 @@ export class ImageStudio {
   }
 
   private updateCostEstimate(): void {
-    const costEl = this.root.querySelector<HTMLElement>('[data-cost-estimate]');
-    if (!costEl) return;
-    const connSelect = this.root.querySelector<HTMLSelectElement>('[data-artwork-connection]');
-    const modelInput = this.root.querySelector<HTMLInputElement>('[data-artwork-model]');
-    const selectedConn = this.imageConnections.find(c => c.id === connSelect?.value) ?? this.imageConnections.find(c => c.isDefault);
-    const effectiveModel = modelInput?.value.trim() || selectedConn?.model || 'default';
-    const effectiveProvider = selectedConn?.provider || 'nanogpt';
-
-    let estimate = '~$0.02 / image';
-    let detail = 'Standard capacity';
-
-    const lowerModel = effectiveModel.toLowerCase();
-    if (lowerModel.includes('recraft')) {
-      estimate = '~$0.012 - $0.025 / image';
-      detail = '10,000 char capacity · SVG/vector/raster';
-    } else if (lowerModel.includes('flux') || lowerModel.includes('klein')) {
-      estimate = '~$0.015 - $0.03 / image';
-      detail = 'Up to 1536px safe resolution';
-    } else if (lowerModel.includes('grok')) {
-      estimate = '~$0.02 / image';
-      detail = 'High coherence';
-    } else if (lowerModel.includes('gpt-image') || lowerModel.includes('flare')) {
-      estimate = '~$0.04 / image';
-      detail = 'Complex spatial fidelity';
-    }
-
-    costEl.textContent = `Estimated cost: ${estimate} · ${detail} (via ${effectiveProvider})`;
+    const costEl=this.root.querySelector<HTMLElement>('[data-cost-estimate]');
+    if(costEl)costEl.textContent='Price unavailable · The provider has not reported verified pricing. Check your provider before generating.';
   }
 
   private decideAll(action: 'generate' | 'skip'): void {

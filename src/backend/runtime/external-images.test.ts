@@ -1,3 +1,4 @@
+import {ImageDispatchPolicy} from './image-dispatch-policy.js';
 import {manageCastArt} from "./cast-art.js";
 import {loadCharacterRegistry} from "./storage.js";
 import { expect, test } from "bun:test";
@@ -214,4 +215,19 @@ test('removing cast setup while external planning waits cannot bake manual guida
  const registry=await loadCharacterRegistry(f.host,'c','user');
  expect(Object.values(registry).some(entry=>entry.aliases.includes('Mir')||entry.tags.includes('blue hair'))).toBe(false);
  expect(f.writes).not.toContain('chats/c/character-registry.json');
+});
+
+
+test('external scene requests under data saver require explicit review and then allow exactly one manual call',async()=>{
+ const f=fixture({dataSaverMode:true,reviewImages:false}),running=f.service.request(request,'user');
+ for(let i=0;i<200&&!f.sent.some((m:any)=>m.type==='vn_external_image_review');i++)await new Promise(r=>setTimeout(r,1));
+ const preview=f.sent.find((m:any)=>m.type==='vn_external_image_review');expect(preview?.record.state).toBe('review');expect(f.images).toHaveLength(0);
+ expect(await f.service.review({chatId:'c',requestId:'r',reviewRequestId:preview.record.requestId,action:'generate'},'user')).toBe(true);await running;expect(f.images).toHaveLength(1);
+});
+
+
+test('external automatic previews cannot cross a saver toggle at their final boundary',async()=>{
+ const f=fixture({dataSaverMode:false,reviewImages:false}),policy=new ImageDispatchPolicy(),events:any[]=[];f.service=createExternalImages(f.host,undefined,undefined,{policy,onActivity:event=>{events.push(event);}});const send=f.host.sendToFrontend.bind(f.host);
+ f.host.sendToFrontend=(message:any,userId?:string)=>{send(message,userId);if(message.type==='vn_external_image_review'&&message.record.state==='prepared')policy.restrict('user',{dataSaverMode:true});};
+ await f.service.request(request,'user');expect(f.images).toHaveLength(0);expect(f.sent.at(-1).result.status).toBe('error');expect(f.sent.at(-1).result.error).toContain('Data saver');expect(events.some(e=>e.kind==='provider-start')).toBe(false);
 });

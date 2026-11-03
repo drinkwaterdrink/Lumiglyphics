@@ -1,3 +1,4 @@
+import type {ImageActivityInput} from '../../shared/image-usage.js';
 import {castAllocationCandidates} from './cast-allocation.js';
 import {loadImagePromptProfile,loadImagePromptProfileV2,prepareCapabilityOutput} from "./image-prompt-profile.js";
 import {resolveImageOutputPlan} from './image-output-plan.js';
@@ -534,6 +535,11 @@ export function defaultSceneImageVerifier(spindle: SpindleAPI, userId?: string):
 }
 
 export type SceneCacheOptions = {
+  waitForDispatch?:(job:Readonly<AssetJob>,signal:AbortSignal)=>Promise<void>;
+  canDispatch?:(job:Readonly<AssetJob>)=>boolean;
+  requestIdForJob?:(jobId:string)=>string|undefined;
+  onActivity?:(event:ImageActivityInput)=>void;
+
   /** Controller can supersede one picture without aborting unrelated jobs. */
   onJobCancellationReady?:(cancelJob:(jobId:string)=>void)=>void;
   /** Reviewed pictures remain independent and never populate the automatic compiler cache. */
@@ -1015,6 +1021,9 @@ export async function generateAssets(
   cacheOptions: SceneCacheOptions = {}
 ): Promise<AssetJob[]> {
   let jobs = [...initialJobs];
+  const dispatchedJobs=new Set<string>();
+  const activity=(job:Readonly<AssetJob>,kind:ImageActivityInput['kind'])=>cacheOptions.onActivity?.({key:job.ownerTurnKey,jobId:job.jobId,requestId:cacheOptions.requestIdForJob?.(job.jobId),kind});
+  for(const job of jobs)if(job.provider==='cache'&&job.imageId)activity(job,'cache-reuse');
   const placeToken=locationArtToken(spindle,plan.key.chatId,userId);
   const castToken=castArtToken(spindle,plan.key.chatId,userId);
   const providerKey = `image:${config.imageConnectionId ?? "default"}`;
@@ -1147,6 +1156,7 @@ export async function generateAssets(
       for (const job of extra) {
         if (jobs.some((existing) => existing.jobId === job.jobId)) continue;
         jobs = [...jobs, job];
+        activity(job,'cache-reuse');
         await onUpdate(jobs, job);
       }
     }).catch(() => undefined);
@@ -1158,6 +1168,7 @@ export async function generateAssets(
   const unsubscribe = scheduler.subscribe((changed) => {
     if (!ownedJobIds.has(changed.jobId)) return;
     jobs = replaceJob(jobs, changed);
+    if(changed.status==='cancelled'&&!dispatchedJobs.has(changed.jobId))activity(changed,'skipped');
     void onUpdate(jobs, changed);
   });
   const abort = (): void => {
@@ -1177,7 +1188,7 @@ export async function generateAssets(
       // re-scheduled (the scheduler only accepts queued jobs).
       if (existing.status === "generated" || existing.status === "browser_ready") return Promise.resolve(existing);
       const job = AssetJobSchema.parse({ ...existing, provider: providerKey });
-      return scheduler.schedule(job, async (scheduledJob, jobSignal) => {
+      const scheduled=scheduler.schedule(job, async (scheduledJob, jobSignal) => {
         if (signal.aborted) throw abortError(signal);
         const scene = sceneForCue(plan, cue);
         const visualState = resolveCueCharacterVisualState(scene, cue, characterAppearance);
@@ -1265,6 +1276,7 @@ export async function generateAssets(
                   const verdict = await verifyEntry(cache, scope, cacheKey, found.entry, verify);
                   if (verdict === "ok") {
                     cacheLog(`scene-cache p${cue.paragraphIndex} hit key=${shortSceneKey(cacheKey)} image=${found.entry.imageId} from message=${found.entry.provenance.assistantMessageId} job=${found.entry.provenance.jobId} -> generation avoided (saved: ${estimateSavedMs()})`);
+                    activity(scheduledJob,'cache-reuse');
                     return { imageId: found.entry.imageId, imageUrl: found.entry.imageUrl };
                   }
                   cacheLog(`scene-cache p${cue.paragraphIndex} miss reason=${verdict} image=${found.entry.imageId} -> generating`);
@@ -1284,6 +1296,7 @@ export async function generateAssets(
                 if (outcome.kind === "entry") {
                   cacheLog(`scene-cache p${cue.paragraphIndex} shared in-flight result image=${outcome.entry.imageId} after ${waitedMs}ms wait -> generation avoided`);
                   cache.recordHitShared();
+                  activity(scheduledJob,'cache-reuse');
                   return { imageId: outcome.entry.imageId, imageUrl: outcome.entry.imageUrl };
                 }
                 if (outcome.kind === "failed") {
@@ -1322,7 +1335,6 @@ export async function generateAssets(
           // Never start paid work after either the batch or job was cancelled.
           if (signal.aborted) throw abortError(signal);
           if (jobSignal.aborted) throw abortError(jobSignal);
-          const generationStarted = Date.now();
           const selected = connectionId && typeof spindle.imageGen.getConnection === "function"
             ? await spindle.imageGen.getConnection(connectionId, userId)
             : typeof spindle.imageGen.listConnections === "function" ? (await spindle.imageGen.listConnections(userId)).find((entry) => entry.is_default) ?? null : null;
@@ -1622,7 +1634,21 @@ export async function generateAssets(
           const {promptProfile:_promptProfile,...providerRequest}=approved;
           const rawParams = providerOutputParameters(approved.parameters ?? {});
           const safeParams = sanitizeImagePayloadParameters(rawParams, selected?.provider ?? provider, approved.model);
-          const result = await spindle.imageGen.generate({ ...providerRequest, parameters: safeParams });
+          // The last asynchronous boundary: toggles during review/connection refresh
+          // are checked again synchronously before the actual provider invocation.
+          if(cacheOptions.waitForDispatch){do{await cacheOptions.waitForDispatch(scheduledJob,jobSignal);}while(cacheOptions.canDispatch&&!cacheOptions.canDispatch(scheduledJob));}
+          else if(config.dataSaverMode)throw Object.assign(new Error('Automatic pictures are paused by data saver.'),{name:'AbortError'});
+          if(signal.aborted)throw abortError(signal);if(jobSignal.aborted)throw abortError(jobSignal);
+          const requestId=cacheOptions.requestIdForJob?.(scheduledJob.jobId)??crypto.randomUUID(),attemptId=crypto.randomUUID();
+          const recordActivity=(kind:ImageActivityInput['kind'])=>cacheOptions.onActivity?.({key:scheduledJob.ownerTurnKey,jobId:scheduledJob.jobId,requestId,attemptId,kind});
+          const generationStarted=Date.now();
+          let providerSettled=false;const onProviderAbort=()=>{if(!providerSettled)recordActivity('cancel-unknown');};
+          jobSignal.addEventListener('abort',onProviderAbort,{once:true});dispatchedJobs.add(scheduledJob.jobId);recordActivity('provider-start');
+          let result:Awaited<ReturnType<SpindleAPI['imageGen']['generate']>>;
+          try{result=await spindle.imageGen.generate({ ...providerRequest, parameters: safeParams });providerSettled=true;recordActivity(result.imageId?'provider-success':'provider-failure');}
+          catch(error){providerSettled=true;recordActivity(jobSignal.aborted?'cancel-unknown':'provider-failure');throw error;}
+          finally{jobSignal.removeEventListener('abort',onProviderAbort);}
+
           observedGenerationMs.push(Date.now() - generationStarted);
 
           if (signal.aborted) throw abortError(signal);
@@ -1717,7 +1743,8 @@ export async function generateAssets(
             capturePromises.delete(characterKey);
           }
         }
-      }, { independent: Boolean(cacheOptions.independentRequests) }).promise;
+      }, { independent: Boolean(cacheOptions.independentRequests) });
+      return scheduled.promise.then(result=>{if(scheduled.reused&&result.imageId)activity(job,'cache-reuse');return result;});
     });
     await Promise.allSettled(promises);
     await resolvingCandidates;

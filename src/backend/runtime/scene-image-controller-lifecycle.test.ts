@@ -343,3 +343,56 @@ test('a duplicate notice during pending asset startup does not spend another pla
  await waitFor(()=>f.record(chatId,'m1').jobs.some(j=>j.status==='generated'));
  expect(f.providerCalls).toHaveLength(1);f.request({type:'vn_view',chatId,open:false});
 });
+
+
+test('data saver pauses automatic dispatch after cache misses, resumes current work, and keeps provider totals scoped',async()=>{
+ const f=fixture(),chatId='saver-initial';f.data.set('config.json',{...(f.data.get('config.json') as any),dataSaverMode:true,imageConcurrency:1});registerVisualNovelBackend(f.spindle);
+ await f.say(chatId,'saver-message',{speaker:'Mira',location:'Observatory',claimNew:true,reason:'initial',cues:[[0,'smile'],[1,'angry']]});
+ await waitFor(()=>f.sent.some((m:any)=>m.type==='vn_image_activity'&&m.chatId===chatId&&m.activity.totals.held>0));expect(f.providerCalls).toHaveLength(0);
+ const current=f.record(chatId,'saver-message'),held=current.imageRequests!.find(r=>r.state==='prepared')!;f.request({type:'vn_image_review',chatId,messageId:current.plan.key.assistantMessageId,sourceFingerprint:current.plan.key.sourceFingerprint,requestId:held.requestId,action:'generate'});await waitFor(()=>f.providerCalls.length===1);await settle();expect(f.providerCalls).toHaveLength(1);
+ f.request({type:'vn_set_config',patch:{dataSaverMode:false},requestId:'saver-off'});await waitFor(()=>f.providerCalls.length===2);await settle();
+ const activity=f.sent.filter((m:any)=>m.type==='vn_image_activity'&&m.chatId===chatId).at(-1) as any;expect(activity.activity.totals.attempts).toBe(2);expect(activity.activity.totals.succeeded).toBe(2);expect(activity.activity.price).toBe('unavailable');
+ f.request({type:'vn_view',chatId,open:false});
+});
+
+test('enabling data saver leaves an already sent call running and pauses the next queued call',async()=>{
+ const f=fixture(),chatId='saver-inflight';f.data.set('config.json',{...(f.data.get('config.json') as any),imageConcurrency:1});registerVisualNovelBackend(f.spindle);f.openGate();
+ await f.say(chatId,'saver-inflight-message',{speaker:'Mira',location:'Garden',claimNew:true,reason:'initial',cues:[[0,'smile'],[1,'angry']]});await waitFor(()=>f.providerCalls.length===1);
+ f.request({type:'vn_set_config',patch:{dataSaverMode:true},requestId:'saver-on'});await waitFor(()=>f.sent.some((m:any)=>m.type==='vn_config'&&m.requestId==='saver-on'));f.closeGate();
+ await waitFor(()=>f.sent.some((m:any)=>m.type==='vn_image_activity'&&m.chatId===chatId&&m.activity.totals.held>0));expect(f.providerCalls).toHaveLength(1);
+ f.request({type:'vn_view',chatId,open:false});f.request({type:'vn_set_config',patch:{dataSaverMode:false},requestId:'closed-off'});await waitFor(()=>f.sent.some((m:any)=>m.type==='vn_config'&&m.requestId==='closed-off'));await settle();expect(f.providerCalls).toHaveLength(1);
+});
+
+test('a user-approved reviewed picture may dispatch with data saver enabled',async()=>{
+ const f=fixture(),chatId='saver-manual';f.data.set('config.json',{...(f.data.get('config.json') as any),dataSaverMode:true,reviewImages:true,imageConcurrency:1});registerVisualNovelBackend(f.spindle);
+ await f.say(chatId,'saver-manual-message',{speaker:'Mira',location:'Garden',claimNew:true,reason:'initial',cues:[0]});await waitFor(()=>f.sent.some((m:any)=>m.type==='vn_image_requests'&&m.requests.some((r:any)=>r.state==='review')));
+ const record=f.record(chatId,'saver-manual-message'),request=record.imageRequests!.find(r=>r.state==='review')!;expect(f.providerCalls).toHaveLength(0);
+ f.request({type:'vn_image_review',chatId,messageId:record.plan.key.assistantMessageId,sourceFingerprint:record.plan.key.sourceFingerprint,requestId:request.requestId,action:'generate'});await waitFor(()=>f.providerCalls.length===1);await settle();expect(f.providerCalls).toHaveLength(1);f.request({type:'vn_view',chatId,open:false});
+});
+
+
+test('turn replacement while paused cannot revive the old reply when data saver turns off',async()=>{
+ const f=fixture(),chatId='saver-replacement';f.data.set('config.json',{...(f.data.get('config.json') as any),dataSaverMode:true});registerVisualNovelBackend(f.spindle);
+ await f.say(chatId,'old-paused',{speaker:'Mira',location:'Garden',claimNew:true,reason:'initial',cues:[0]});await waitFor(()=>f.sent.some((m:any)=>m.type==='vn_image_activity'&&m.chatId===chatId&&m.activity.totals.held>0));
+ await f.say(chatId,'new-current',{speaker:'Alex',location:'Observatory',claimNew:true,reason:'changed',cues:[0]});f.request({type:'vn_set_config',patch:{dataSaverMode:false},requestId:'replacement-off'});await waitFor(()=>f.providerCalls.length===1);await settle();const events=(f.sent.filter((m:any)=>m.type==='vn_image_activity'&&m.chatId===chatId).at(-1) as any).activity.events;expect(events.filter((e:any)=>e.kind==='provider-start').map((e:any)=>e.key.assistantMessageId)).toEqual(['new-current']);f.request({type:'vn_view',chatId,open:false});
+});
+
+test('compatible cache artwork remains reusable while data saver pauses new calls',async()=>{
+ const f=fixture(),chatId='saver-cache';registerVisualNovelBackend(f.spindle);await f.say(chatId,'cache-owner',{speaker:'Mira',location:'Observatory',claimNew:true,reason:'initial',cues:[0]});await waitFor(()=>f.providerCalls.length===1);await settle();f.request({type:'vn_set_config',patch:{dataSaverMode:true},requestId:'cache-saver-on'});await waitFor(()=>f.sent.some((m:any)=>m.type==='vn_config'&&m.requestId==='cache-saver-on'));
+ await f.say(chatId,'cache-reuse',{speaker:'Mira',location:'Observatory',claimNew:false,reason:'same room',cues:[0]});await waitFor(()=>f.record(chatId,'cache-reuse').jobs.some(j=>j.imageId));expect(f.providerCalls).toHaveLength(1);const activity=f.sent.filter((m:any)=>m.type==='vn_image_activity'&&m.chatId===chatId).at(-1) as any;expect(activity.activity.totals.cacheReuses).toBeGreaterThan(0);f.request({type:'vn_view',chatId,open:false});
+});
+
+
+test('explicit bulk retry approves already-prepared paused jobs without creating duplicate calls',async()=>{
+ const f=fixture(),chatId='saver-bulk';f.data.set('config.json',{...(f.data.get('config.json') as any),dataSaverMode:true,imageConcurrency:2});registerVisualNovelBackend(f.spindle);
+ await f.say(chatId,'bulk-current',{speaker:'Mira',location:'Garden',claimNew:true,reason:'initial',cues:[[0,'smile'],[1,'angry']]});await waitFor(()=>f.record(chatId,'bulk-current').imageRequests?.filter(r=>r.state==='prepared').length===2);const record=f.record(chatId,'bulk-current');
+ f.request({type:'vn_queue_image_retries',version:1,chatId,sourceFingerprint:record.plan.key.sourceFingerprint,revision:record.plan.key.revision,messageId:record.plan.key.assistantMessageId,swipeId:Number(record.plan.key.swipeId),action:'enqueue',requestId:'bulk-approval',jobIds:record.jobs.map(j=>j.jobId)});await waitFor(()=>f.providerCalls.length===2);await settle();expect(f.providerCalls).toHaveLength(2);f.request({type:'vn_view',chatId,open:false});
+});
+
+
+test('an archived prepared request cannot approve a newer paused request for the same job',async()=>{
+ const f=fixture(),chatId='saver-old-request',messageId='same-job';f.data.set('config.json',{...(f.data.get('config.json') as any),dataSaverMode:true});
+ const write=f.spindle.userStorage.setJson.bind(f.spindle.userStorage);f.spindle.userStorage.setJson=(async(path:string,value:any,options:any)=>{if(path===turnPath(chatId,messageId,0)&&value.jobs?.[0]?.status==='queued'&&!value.imageRequests)value={...value,imageRequests:[{requestId:'archived-prepared',jobId:value.jobs[0].jobId,paragraphIndex:0,state:'prepared',prompt:'Earlier wording.',negativePrompt:'',model:'old',provider:'comfyui',connectionId:'old',parameters:{},referenceSummary:'none',createdAt:new Date(0).toISOString()}]};return write(path,value,options);}) as any;
+ registerVisualNovelBackend(f.spindle);await f.say(chatId,messageId,{speaker:'Mira',location:'Garden',claimNew:true,reason:'initial',cues:[0]});await waitFor(()=>f.record(chatId,messageId).imageRequests?.filter(r=>r.state==='prepared').length===2);const record=f.record(chatId,messageId);
+ f.request({type:'vn_image_review',chatId,messageId,sourceFingerprint:record.plan.key.sourceFingerprint,requestId:'archived-prepared',action:'generate'});await settle();expect(f.providerCalls).toHaveLength(0);expect(f.sent.some((m:any)=>m.type==='vn_error')).toBe(true);f.request({type:'vn_view',chatId,open:false});
+});
