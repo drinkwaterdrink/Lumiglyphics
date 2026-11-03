@@ -1,0 +1,8 @@
+import {test,expect} from 'bun:test';
+import {jsonObject,repairJsonString,type JsonParseTrace} from './json-repair.js';
+import {repairJsonString as legacyRepair} from '../planner.js';
+test('planner JSON extraction retains reasoning/fence precedence and literal creative wording',()=>{const trace:JsonParseTrace={};expect(jsonObject('<think>ignore this diagnostic</think>```json\n{"scene":"True blue hair, None logo, False ceiling","url":"https://example.test/art"}\n```',trace)).toEqual({scene:'True blue hair, None logo, False ceiling',url:'https://example.test/art'});expect(trace).toEqual({extract:'json-fence',strategy:'direct'});});
+test('bounded repair keeps compatibility export and repairs structured syntax without changing quoted literals',()=>{expect(legacyRepair).toBe(repairJsonString);expect(JSON.parse(repairJsonString('{scene:"True blue", ready:True, absent:None, items:[1,2,],}'))).toEqual({scene:'True blue',ready:true,absent:null,items:[1,2]});});
+test('object input stays detached from repair and parse failure diagnostics stay bounded',()=>{const input={scene:'A still room.'};expect(jsonObject(input)).toBe(input);try{jsonObject('x'.repeat(20000));throw Error('expected failure');}catch(error){expect((error as Error).message.length).toBeLessThan(300);}expect(()=>jsonObject(undefined)).toThrow('did not return a JSON object');});
+
+test('repair preserves comment-like creative wording inside quoted values',()=>{expect(JSON.parse(repairJsonString('{scene:"A plaque reads /* KEEP THIS */ beside the door.",note:"Follow // home",ready:True,// actual comment\n}'))).toEqual({scene:'A plaque reads /* KEEP THIS */ beside the door.',note:'Follow // home',ready:true});});

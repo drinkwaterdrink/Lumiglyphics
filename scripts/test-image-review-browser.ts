@@ -13,7 +13,7 @@ try {
   await page.evaluate(()=>{const f=(window as any).imageFixture;f.stage.setError({source:'image',message:'Scene image could not be made',detail:'Qwen Image 2.1 Turbo supports only 1K and 2K resolution.',retryable:true,retryScope:'Try again makes 4 images again.'});});
   for(const width of [320,390]){
     await page.setViewportSize({width,height:844});
-    const card=await page.locator('[data-vn-badge-kind="error"]').boundingBox(),launch=await page.getByRole('button',{name:'Open Art Studio',exact:true}).boundingBox();
+    const card=await page.locator('[data-vn-badge-kind="error"]').boundingBox(),launch=await page.getByRole('button',{name:'Open APERTURE navigation',exact:true}).boundingBox();
     assert.ok(card&&launch&&(launch.y>=card.y+card.height||launch.y+launch.height<=card.y||launch.x+launch.width<=card.x||launch.x>=card.x+card.width),'pending-count launcher must not cover the error card');
   }
   await page.screenshot({path:'.cache/beta41-qwen-recovery.png',animations:'disabled'});
@@ -25,7 +25,7 @@ try {
   await page.locator('[data-workspace-close]').tap();
   assert.deepEqual(await page.evaluate(()=>(window as any).imageFixture.visibility),[true,false]);
   await page.evaluate(()=>(window as any).imageFixture.stage.setError(null));
-  await page.getByRole('button',{name:'Open Art Studio',exact:true}).click();
+  await page.getByRole('button',{name:'Open APERTURE navigation',exact:true}).click();await page.locator('[data-aperture-route="studio"]').click();
   const exitBox = await page.getByRole('button', { name: 'Back to chat', exact: true }).boundingBox();
   const closeBox = await page.locator('[data-workspace-close]').boundingBox();
   assert.ok(exitBox && closeBox && closeBox.y >= exitBox.y + exitBox.height, 'review close sits below outer navigation');
@@ -153,7 +153,7 @@ try {
     f.studio.setTurn(f.turn); f.studio.setCursor(1);
   });
   await page.locator('[data-workspace-close]').click();
-  await page.getByRole('button',{name:'Open Art Studio',exact:true}).click();
+  await page.getByRole('button',{name:'Open APERTURE navigation',exact:true}).click();await page.locator('[data-aperture-route="studio"]').click();
   assert.equal(await studio.getByLabel("Picture", { exact: true }).inputValue(), "job-2", "opening inspector follows reading cursor");
   await page.evaluate(() => { const f = (window as any).imageFixture; f.turn.imageRequests[0].imagePromptMetadata = f.metadata; f.studio.setTurn(f.turn); });
   await tab('History');

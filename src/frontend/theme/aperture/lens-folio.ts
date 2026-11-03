@@ -473,11 +473,11 @@ body.theme-light .folio-quote-callout {
 .reader-progress {
   position: absolute !important;
   bottom: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
-  left: 56px !important;
-  right: 56px !important;
+  left: 72px !important;
+  right: 72px !important;
   width: auto !important;
-  max-width: calc(100% - 112px) !important;
-  height: 28px !important;
+  max-width: calc(100% - 144px) !important;
+  height: 44px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -545,10 +545,10 @@ body.theme-light .folio-quote-callout {
   left: 10px !important;
   right: auto !important;
   bottom: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
-  width: 28px !important;
-  height: 28px !important;
-  min-width: 28px !important;
-  min-height: 28px !important;
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  min-height: 44px !important;
   padding: 0 !important;
   display: flex !important;
   align-items: center !important;
@@ -573,10 +573,10 @@ body.theme-light .folio-quote-callout {
   right: 10px !important;
   left: auto !important;
   bottom: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
-  width: 28px !important;
-  height: 28px !important;
-  min-width: 28px !important;
-  min-height: 28px !important;
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  min-height: 44px !important;
   padding: 0 !important;
   display: flex !important;
   align-items: center !important;
@@ -598,7 +598,8 @@ body.theme-light .folio-quote-callout {
   transform: scale(1.06) !important;
 }
 
-[data-vn-continue]::before {
+[data-vn-continue]::before,
+[data-vn-continue]::after {
   display: none !important;
 }
 
@@ -942,4 +943,12 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   display: inline !important;
 }
 
+/* Keep current reader controls tappable without crowding narrow headers.
+   Gallery and studio remain reachable from APERTURE navigation. */
+[data-vn-reader-header] .round-ghost { width:44px!important;height:44px!important;min-width:44px!important;min-height:44px!important;flex-shrink:0!important; }
+@media(max-width:600px){
+ [data-vn-reader-header] [data-action="gallery-toggle"],
+ [data-vn-reader-header] [data-action="studio-toggle"] { display:none!important; }
+ [data-vn-reader-header] .reading-heading { min-width:0;overflow:hidden; }
+}
 `;

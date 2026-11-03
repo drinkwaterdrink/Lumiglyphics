@@ -680,6 +680,7 @@ aside[data-vn-workspace] {
 .reader-action-row,
 [data-vn-controls] {
   position: static !important;
+  transform: none !important;
   display: flex !important;
   flex-direction: row !important;
   justify-content: center !important;

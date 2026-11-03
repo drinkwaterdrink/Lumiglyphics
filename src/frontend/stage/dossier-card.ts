@@ -167,7 +167,7 @@ export class DossierCard {
     const back = document.createElement('button');
     back.type = 'button';
     back.className = 'workspace-back-btn dossier-back-btn has-label';
-    back.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;border-radius:8px;border:1px solid var(--vn-shell-border, rgba(255,255,255,0.22));background:var(--vn-shell-button, rgba(255,255,255,0.08));color:var(--vn-shell-text, #f1f5f9);flex:none;white-space:nowrap;width:auto !important;min-width:auto !important;height:34px;';
+    back.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;border-radius:8px;border:1px solid var(--vn-shell-border, rgba(255,255,255,0.22));background:var(--vn-shell-button, rgba(255,255,255,0.08));color:var(--vn-shell-text, #f1f5f9);flex:none;white-space:nowrap;width:auto !important;min-width:auto !important;height:44px;';
     back.innerHTML = APERTURE_ICONS.back + (this.trayReturn ? '<span>Back to Lens</span>' : '<span>Back to Reading</span>');
     back.title = this.trayReturn ? 'Back to references' : 'Back to reading';
     back.setAttribute('aria-label', this.trayReturn ? 'Back to references' : 'Back to reading');
@@ -186,7 +186,7 @@ export class DossierCard {
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'dossier-close-btn';
-    close.style.cssText = 'min-width:34px;min-height:34px;width:34px;height:34px;border-radius:50%;border:1px solid var(--vn-shell-border, rgba(255,255,255,0.18));background:var(--vn-shell-button, rgba(255,255,255,0.08));color:var(--vn-shell-text, #f1f5f9);cursor:pointer;display:grid;place-items:center;font-size:16px;line-height:1;flex:none;';
+    close.style.cssText = 'min-width:44px;min-height:44px;width:44px;height:44px;border-radius:50%;border:1px solid var(--vn-shell-border, rgba(255,255,255,0.18));background:var(--vn-shell-button, rgba(255,255,255,0.08));color:var(--vn-shell-text, #f1f5f9);cursor:pointer;display:grid;place-items:center;font-size:16px;line-height:1;flex:none;';
     close.textContent = '×';
     close.setAttribute('aria-label', 'Close information');
     close.onclick = () => this.close();
@@ -660,7 +660,7 @@ export class DossierCard {
     const backBtn = document.createElement('button');
     backBtn.type = 'button';
     backBtn.className = 'workspace-back-btn dossier-back-btn has-label';
-    backBtn.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;border-radius:8px;border:1px solid var(--vn-shell-border, rgba(255,255,255,0.22));background:var(--vn-shell-button, rgba(255,255,255,0.08));color:var(--vn-shell-text, #f1f5f9);flex:none;white-space:nowrap;width:auto !important;min-width:auto !important;height:34px;';
+    backBtn.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;border-radius:8px;border:1px solid var(--vn-shell-border, rgba(255,255,255,0.22));background:var(--vn-shell-button, rgba(255,255,255,0.08));color:var(--vn-shell-text, #f1f5f9);flex:none;white-space:nowrap;width:auto !important;min-width:auto !important;height:44px;';
     backBtn.innerHTML = APERTURE_ICONS.back + '<span>Back to Reading</span>';
     backBtn.title = 'Back to reading';
     backBtn.setAttribute('aria-label', 'Back to reading');
@@ -672,7 +672,7 @@ export class DossierCard {
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'dossier-close-btn';
-    close.style.cssText = 'min-width:34px;min-height:34px;width:34px;height:34px;border-radius:50%;border:1px solid var(--vn-shell-border, rgba(255,255,255,0.18));background:var(--vn-shell-button, rgba(255,255,255,0.08));color:var(--vn-shell-text, #f1f5f9);cursor:pointer;display:grid;place-items:center;font-size:16px;line-height:1;flex:none;';
+    close.style.cssText = 'min-width:44px;min-height:44px;width:44px;height:44px;border-radius:50%;border:1px solid var(--vn-shell-border, rgba(255,255,255,0.18));background:var(--vn-shell-button, rgba(255,255,255,0.08));color:var(--vn-shell-text, #f1f5f9);cursor:pointer;display:grid;place-items:center;font-size:16px;line-height:1;flex:none;';
     close.textContent = '×';
     close.title = 'Close references';
     close.setAttribute('aria-label', 'Close information');
@@ -689,7 +689,7 @@ export class DossierCard {
     const pageSub = document.createElement('div');
     pageSub.className = 'page-sub';
     pageSub.style.cssText = 'font-size:11px;opacity:0.75;margin-top:2px;';
-    pageSub.textContent = 'The relationships in this scene, based only on what you know.';
+    pageSub.textContent = 'People, places and items established in the story.';
     titleBlock.append(pageTitle, pageSub);
     panel.append(titleBlock);
 
@@ -867,7 +867,8 @@ export class DossierCard {
           }
         };
 
-        lensCard.append(lensTitle, lensDesc, ctaBtn);
+        const evidence=document.createElement('button');evidence.type='button';evidence.textContent='Read story reference';evidence.onclick=()=>open(activeEntry.entity.id,trigger);
+        lensCard.append(lensTitle, lensDesc, ctaBtn,evidence);
       } else {
         lensCard.innerHTML = '<h3>No matching references</h3><p>Try another category or clear the search.</p>';
       }
@@ -878,6 +879,7 @@ export class DossierCard {
         const vis = visualResolver?.(entity);
         const stripBtn = document.createElement('button');
         stripBtn.type = 'button';
+        stripBtn.setAttribute('aria-label',entity.name);stripBtn.setAttribute('aria-pressed',String(this.selectedEntityId===entity.id));
         stripBtn.className = this.selectedEntityId === entity.id ? 'active' : '';
 
         if (vis?.imageUrl) {

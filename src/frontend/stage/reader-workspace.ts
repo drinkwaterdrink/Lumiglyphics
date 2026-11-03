@@ -235,7 +235,7 @@ export class ReaderWorkspace {
     chatExitBtn?.addEventListener('click', handleChatExit, {signal});
 
     // APERTURE Navigation triggers
-    const openMenuBtn = q('[data-aperture-open]');
+    const openMenuBtn = q<HTMLButtonElement>('[data-aperture-open]');
     openMenuBtn.addEventListener('click', () => this.toggleAperture(true), {signal});
     const closeMenuBtn = q('[data-action="aperture-close"]');
     closeMenuBtn.addEventListener('click', () => this.toggleAperture(false), {signal});
@@ -256,15 +256,15 @@ export class ReaderWorkspace {
       const route = link.dataset.apertureRoute;
       this.toggleAperture(false);
       if (route === 'read') this.close();
-      else if (route === 'world') this.open('story');
-      else if (route === 'character') this.open('character');
-      else if (route === 'studio') this.open('artwork');
+      else if (route === 'world') this.open('story',openMenuBtn);
+      else if (route === 'character') this.open('character',openMenuBtn);
+      else if (route === 'studio') this.open('artwork',openMenuBtn);
       else if (route === 'library') {
         this.shell.dispatchEvent(new CustomEvent("lumiglyphics:gallery-toggle", { bubbles: true }));
       }
-      else if (route === 'history') this.open('history');
-      else if (route === 'settings') this.open('settings');
-      else if (route === 'workspace') this.openMore(link);
+      else if (route === 'history') this.open('history',openMenuBtn);
+      else if (route === 'settings') this.open('settings',openMenuBtn);
+      else if (route === 'workspace') this.openMore(openMenuBtn);
       else if (route === 'chat') {
         if (this.onExit) {
           this.onExit();

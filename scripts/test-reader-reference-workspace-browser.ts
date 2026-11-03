@@ -41,9 +41,9 @@ try{
   await page.keyboard.press('Escape');
   await page.evaluate(()=>{const f=(window as any).readingFixture;f.stage.setTooltipPreferences({...f.prefs,fieldGroups:{relationships:false}});});
   await page.getByRole('button',{name:'About Mira',exact:true}).click();assert.doesNotMatch(await card.innerText(),/Rowan is her brother/,'disabled field groups remove their information locally');await page.keyboard.press('Escape');
-  await page.getByRole('button',{name:'Scene references',exact:true}).click();const sheet=page.getByRole('dialog',{name:'Scene references',exact:true});
-  await sheet.getByLabel('Search references').fill('Lamplighter');await sheet.getByRole('button',{name:'Mira',exact:true}).click();
-  await card.getByRole('button',{name:'Back to references',exact:true}).click();assert.equal(await sheet.getByLabel('Search references').inputValue(),'Lamplighter');assert.match(await sheet.innerText(),/In this scene/);
+  await page.getByRole('button',{name:'Open APERTURE navigation',exact:true}).click();await page.locator('[data-aperture-route="world"]').click();const sheet=page.getByRole('dialog',{name:'World Lens',exact:true});
+  await sheet.getByLabel('Search references').fill('Lamplighter');await sheet.getByRole('button',{name:'Mira',exact:true}).click();await sheet.getByRole('button',{name:'Read story reference',exact:true}).click();
+  await card.getByRole('button',{name:'Back to references',exact:true}).click();assert.equal(await sheet.getByLabel('Search references').inputValue(),'Lamplighter');assert.match(await sheet.innerText(),/known in this scene/i);
   await page.keyboard.press('Escape');
   await page.evaluate(()=>{const f=(window as any).referenceSettings;f.settings.host.hidden=false;f.settings.setConfig({enabled:true});(document.querySelector('[data-app-root]') as HTMLElement).hidden=true;});
   await page.getByText('Information shown in reference cards',{exact:true}).click();
