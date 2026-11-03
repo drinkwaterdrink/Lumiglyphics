@@ -418,3 +418,5 @@ test('Lighting overlay precedence: direct flash provides intentional lighting ov
   const animeResolved = resolveStyleDNA(DEFAULT_CONFIG, 'builtin-style:anime');
   expect(animeResolved.lightingOverlay).toBeUndefined();
 });
+
+test('a two-person ensemble remains a two-shot when a character description contains another colon',()=>{expect(resolveShotIntent(createMockBrief({subjectMode:'ensemble',subjects:'Mira: silver hair, tattoo: compass\nJo: black curls',action:'standing by a window'}))).toBe('two-shot');});

@@ -42,7 +42,7 @@ try{
  assert.equal(await settings.locator('[name="imagePromptBudget"]').isVisible(),false);
  await page.goto(`http://127.0.0.1:${port}/review`);
  assert.equal(await page.title(),'Model prompt QA');
- const studio=page.locator('[data-image-studio]');await page.locator('[data-vn-navigation] [data-reader-destination="artwork"]').click();
+ const studio=page.locator('[data-image-studio]');await page.getByRole('button',{name:'Open Art Studio',exact:true}).click();await studio.getByRole('tab',{name:'Prompt',exact:true}).click();
  const profile={version:1,family:'generic',maxCharacters:6000,source:'manual',manualBudget:6000,format:'description',negativeMode:'supported-or-unknown',guidance:'Preserve evidence.'};
  await page.evaluate(profile=>{const f=(window as any).imageFixture;f.turn.imageRequests[0].promptProfile=profile;f.studio.setTurn(f.turn);},profile);
  await studio.getByLabel('Positive prompt',{exact:true}).fill('x'.repeat(5000));
@@ -62,7 +62,7 @@ try{
  await page.evaluate(profile=>{const f=(window as any).imageFixture;f.turn.imageRequests[0]={...f.turn.imageRequests[0],prompt:'A quiet library.',negativePrompt:'blur',parameters:{size:'1k',aspectRatio:'9:16'},promptProfile:{...profile,output:{sizes:['1k','2k'],ratios:['1:1','9:16']},outputSource:'catalogue',outputManaged:true,outputSummary:'Requested 9:16; prepared 1k (9:16).'}};f.studio.setTurn(f.turn);},profile);
  await studio.locator('[data-prompt-actions] > summary').click();
  await studio.locator('[data-reset]').click();
- await studio.locator('[data-output-options] > summary').click();
+ await studio.getByRole('tab',{name:'Camera',exact:true}).click();await studio.locator('[data-output-options] > summary').click();
  await studio.getByLabel('Image size',{exact:true}).selectOption('2k');
  await studio.getByLabel('Image aspect ratio',{exact:true}).selectOption('1:1');
  let params=await studio.locator('[data-parameters]').inputValue();assert.equal(JSON.parse(params).size,'2k');assert.equal(JSON.parse(params).aspectRatio,'1:1');
@@ -83,27 +83,34 @@ try{
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:`.cache/model-prompt-research/output-${theme}.png`,fullPage:true});
  }
 
+ await studio.getByRole('tab',{name:'Prompt',exact:true}).click();
  // Reproduce the reported 5,825 + 192 character draft and repair the edited wording.
  await page.evaluate(profile=>{const f=(window as any).imageFixture;f.turn.imageRequests[0]={...f.turn.imageRequests[0],requestId:'oversized',prompt:'x'.repeat(5825),negativePrompt:'y'.repeat(192),promptProfile:{...profile,maxCharacters:3000},parameters:{seed:12}};f.studio.setTurn(f.turn);},profile);
  await studio.getByLabel('Positive prompt',{exact:true}).fill('Edited cast appearance. '+'x'.repeat(5801));
  if(!await studio.locator('[data-prompt-actions]').evaluate((el:HTMLDetailsElement)=>el.open))await studio.locator('[data-prompt-actions]>summary').click();
  assert.equal(await studio.locator('[data-regenerate-prompt]').innerText(),'Fit to budget');
+ const beforeFit=await page.evaluate(()=>(window as any).imageFixture.actions.length);
  await studio.getByRole('button',{name:'Fit to budget',exact:true}).click();
+ const fittedPrompt=await studio.getByLabel('Positive prompt',{exact:true}).inputValue(),fittedNegative=await studio.getByLabel('Negative prompt',{exact:true}).inputValue();
+ assert.ok(fittedPrompt.length+fittedNegative.length<=3000,'local fit meets the combined budget');assert.ok(fittedPrompt.startsWith('Edited cast appearance.'));
+ assert.equal(await page.evaluate(()=>(window as any).imageFixture.actions.length),beforeFit,'local Fit does not spend text or image calls');
+ // A separate explicit rewrite carries the selected fitted draft and settings.
+ await studio.locator('[data-regenerate-prompt]').click();
  const repair=await page.evaluate(()=>(window as any).imageFixture.actions.at(-1));
- assert.equal(repair.type,'vn_regenerate_image_prompt');assert.ok(repair.edits.prompt.startsWith('Edited cast appearance.'));assert.equal(repair.edits.negativePrompt.length,192);assert.equal(repair.edits.parameters.seed,12);
+ assert.equal(repair.type,'vn_regenerate_image_prompt');assert.equal(repair.edits.prompt,fittedPrompt);assert.equal(repair.edits.negativePrompt,fittedNegative);assert.equal(repair.edits.parameters.seed,12);
  await page.evaluate(()=>(window as any).imageFixture.studio.showError('Prompt repair failed after two attempts: The writer returned 3,511 combined characters; the limit is 3,000. Your previous draft is retained.'));
- assert.equal(await studio.getByRole('button',{name:'Fit to budget',exact:true}).isEnabled(),true);
+ assert.equal(await studio.locator('[data-regenerate-prompt]').isEnabled(),true);
  assert.ok((await studio.getByLabel('Positive prompt',{exact:true}).inputValue()).startsWith('Edited cast appearance.'));
  await studio.locator('[data-notice]').scrollIntoViewIfNeeded();await page.screenshot({path:'.cache/model-prompt-research/prompt-repair-mobile.png',fullPage:true});
  await studio.getByRole('button',{name:'Dismiss image prompt notice',exact:true}).click();
  const before=await page.evaluate(()=>(window as any).imageFixture.actions.length);
  await studio.locator('[data-parameters]').evaluate((el:HTMLTextAreaElement)=>{el.value='{invalid';el.dispatchEvent(new Event('input',{bubbles:true}));});
- await studio.getByRole('button',{name:'Fit to budget',exact:true}).click();
+ await studio.locator('[data-regenerate-prompt]').click();
  assert.equal(await page.evaluate(()=>(window as any).imageFixture.actions.length),before,'invalid JSON never starts repair or leaves it busy');
- assert.equal(await studio.getByRole('button',{name:'Fit to budget',exact:true}).isEnabled(),true);
+ assert.equal(await studio.locator('[data-regenerate-prompt]').isEnabled(),true);
  await studio.locator('[data-parameters]').evaluate((el:HTMLTextAreaElement)=>{el.value='{"seed":12}';el.dispatchEvent(new Event('input',{bubbles:true}));});
  await page.evaluate(()=>{const f=(window as any).imageFixture;f.turn.imageRequests[0].state='cancelled';f.turn.assets[0].status='failed';f.studio.setTurn(f.turn);});
- await studio.getByRole('button',{name:'Fit to budget',exact:true}).click();
+ await studio.locator('[data-regenerate-prompt]').click();
  const replacement=await page.evaluate(()=>(window as any).imageFixture.actions.at(-1));assert.equal(replacement.type,'vn_prepare_image');assert.equal(replacement.regeneratePrompt,true);assert.ok(replacement.edits.prompt.startsWith('Edited cast appearance.'));
  assert.equal(await page.evaluate(()=>(window as any).imageFixture.actions.some((a:any)=>a.type==='vn_image_review')),false,'repair stays separate from image approval');
  // A failed automatic Z-Image fit explains why the original draft was retained.
@@ -121,6 +128,7 @@ try{
  assert.equal(await studio.locator('[data-studio-footer] [data-regenerate-prompt]').count(),0,'ordinary rewrite returns to prompt tools after repair');
  await page.screenshot({path:'.cache/model-prompt-research/z-image-fitted-mobile.png',fullPage:true});
  await page.evaluate(()=>{const f=(window as any).imageFixture;f.studio.setConfig(f.config);});
+ await studio.getByRole('tab',{name:'Camera',exact:true}).click();
  await studio.locator('[data-template]').evaluate((el:HTMLSelectElement)=>{el.closest('details')!.open=true;});
  await studio.locator('[data-template]').selectOption('environment');
  await studio.locator('[data-use-template]').click();

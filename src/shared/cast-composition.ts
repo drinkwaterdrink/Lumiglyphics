@@ -1,3 +1,4 @@
+import {visualSubjectPolicy} from './visual-subject-policy.js';
 import {selectHeldBackground} from './background-hold.js';
 import {samePresentationTurn} from './presentation-entities.js';
 import {selectPresentationSnapshot} from './presentation-selectors.js';
@@ -12,7 +13,7 @@ const nameKey=(s:string)=>s.trim().toLocaleLowerCase();
 export function selectCastComposition(turn:TurnView,index:number,selectedName?:string,absenceDisplay:'hide'|'dim'='hide'):CastComposition|null {
  const visible=turn.assets.filter(a=>a.paragraphIndex<=index).sort((a,b)=>a.paragraphIndex-b.paragraphIndex);
  const latest=visible.at(-1);const sceneId=latest?.stageAsset?.sceneId;
- if(!sceneId||latest?.presentation==='page'||latest?.stageAsset?.role==='scene')return null;
+ if(!sceneId||visualSubjectPolicy({presentation:latest?.presentation}).page||latest?.stageAsset?.role==='scene')return null;
  const sceneRevision=latest?.stageAsset?.sceneRevision??0;
  const local=visible.filter(a=>a.stageAsset?.sceneId===sceneId&&(a.stageAsset.sceneRevision??0)===sceneRevision);
  const usable=(a:AssetView)=>(a.status==='generated'||a.status==='browser_ready')&&Boolean(a.imageUrl||a.imageId)&&!a.previousImage;

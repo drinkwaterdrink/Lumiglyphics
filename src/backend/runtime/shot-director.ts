@@ -1,3 +1,4 @@
+import {visualSubjectPolicy} from '../../shared/visual-subject-policy.js';
 import {
   type ImageShotSpec,
   type ShotIntent,
@@ -74,7 +75,7 @@ export function resolveShotIntent(
 
   // Ensemble mode
   if (brief.subjectMode === 'ensemble') {
-    const castCount = cue?.ensembleSubjects?.length ?? (brief.subjects.match(/:/g)?.length || 3);
+    const castCount = visualSubjectPolicy({mode:brief.subjectMode,members:cue?.ensembleSubjects,subjectText:brief.subjects}).count;
     if (castCount === 2) {
       if (CONFRONTATION_WORDS_REGEX.test(brief.action)) return 'confrontation';
       if (DIALOGUE_WORDS_REGEX.test(brief.action)) return 'dialogue';

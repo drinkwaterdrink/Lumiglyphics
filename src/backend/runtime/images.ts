@@ -1,10 +1,9 @@
+import {buildV2ImageRequest} from './v2-request-builder.js';
 import type {ImageActivityInput} from '../../shared/image-usage.js';
 import {castAllocationCandidates} from './cast-allocation.js';
 import {loadImagePromptProfile,loadImagePromptProfileV2,prepareCapabilityOutput} from "./image-prompt-profile.js";
 import {resolveImageOutputPlan} from './image-output-plan.js';
 import {resolveShotSpec} from './shot-director.js';
-import {compileModelPrompt} from './model-prompt-compiler.js';
-import {resolveReferencePlan} from './reference-plan.js';
 import {resolveStyleDNA} from '../../shared/style-dna.js';
 import {assertCapabilityOutput} from '../../shared/model-output-capabilities.js';
 import {findCastArt,saveCastArt,castArtToken,type CastArtIdentity} from './cast-art.js';
@@ -439,6 +438,7 @@ export function sceneImageIdentityFor(
     delete brief.subjectPreparation;
     const visual = resolveCueCharacterVisualState(scene, cue, characterAppearance);
     const { connectionId, workflowId } = splitConnectionSelection(config.imageConnectionId);
+    const generationStyle=resolveStyleDNA(config,cue.imageTemplate.cameraPolicy==='fixed'?cue.imageTemplate.id:config.selectedSharedStyleId).styleDNA;
     const v2Fields = config.imagePromptEngineVersion === 2 ? {
       promptEngineVersion: 2 as const,
       serializerRevision: V2_SERIALIZER_REVISION,
@@ -450,11 +450,11 @@ export function sceneImageIdentityFor(
         }),
         template: cue.imageTemplate,
         cue,
-        styleDNA: resolveStyleDNA(config, cue.imageTemplate?.id).styleDNA,
+        styleDNA: generationStyle,
         dialogueSafeAreaSetting: config.dialogueSafeArea,
         isDialogueOverlayTarget: !cue.visualSources?.includes('location art') && !cue.visualSources?.includes('cast art')
       }))),
-      styleDnaDigest: cyrb53(canonicalJson(resolveStyleDNA(config, cue.imageTemplate?.id).styleDNA)),
+      styleDnaDigest: cyrb53(canonicalJson(generationStyle)),
       outputPlanDigest: cyrb53(canonicalJson(resolveImageOutputPlan({
         requestedRatio: config.imageOutputAspectRatio !== 'default' ? config.imageOutputAspectRatio : cue.imageTemplate?.outputAspectRatio === '9:16' ? '9:16' : undefined,
         modelId: config.imageModel
@@ -1380,83 +1380,9 @@ export async function generateAssets(
           frozen.promptProfile=await loadImagePromptProfile(spindle,config,selected?.provider??provider,frozen.model);
           frozen=prepareCapabilityOutput(frozen,config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined,config.imageResolutionPreference);
           if (config.imagePromptEngineVersion === 2 && cue.imageTemplate) {
-            const v1OriginalPrompt = frozen.prompt;
-            const v1OriginalNegative = frozen.negativePrompt;
-            const profileV2 = await loadImagePromptProfileV2(spindle, config, selected?.provider ?? provider, frozen.model, frozen.parameters);
-            const outputPlan = resolveImageOutputPlan({
-              capabilities: profileV2.outputCapabilities,
-              parameters: frozen.parameters ?? {},
-              requestedRatio: config.imageOutputAspectRatio !== 'default' ? config.imageOutputAspectRatio : cue.imageTemplate?.outputAspectRatio === '9:16' ? '9:16' : undefined,
-              resolutionPreference: config.imageResolutionPreference,
-              source: profileV2.capabilitySource,
-              modelId: frozen.model
-            });
-            const styleSnapshot = resolveStyleDNA(config, config.selectedSharedStyleId);
-            const shotSpec = resolveShotSpec({
-              brief: initialMetadata?.brief ?? compileTemplateCue(config, scene, cue, characterAppearance).brief,
-              outputPlan,
-              template: cue.imageTemplate,
-              cue,
-              styleDNA: styleSnapshot.styleDNA,
-              dialogueSafeAreaSetting: config.dialogueSafeArea,
-              isDialogueOverlayTarget: !cue.visualSources?.includes('location art') && !cue.visualSources?.includes('cast art')
-            });
-            frozen.promptProfileV2 = profileV2;
-            frozen.outputPlan = outputPlan;
-            frozen.shotSpec = shotSpec;
-            frozen.styleSnapshot = styleSnapshot.styleDNA;
-            frozen.parameters = { ...(frozen.parameters ?? {}), ...outputPlan.parameters };
-            const isDirectedTemplate = cue.imageTemplate?.cameraPolicy !== 'fixed';
-            if (isDirectedTemplate) {
-              const referencePlan = resolveReferencePlan({
-                brief: initialMetadata?.brief,
-                cue,
-                portraits
-              });
-              const compiledV2 = compileModelPrompt({
-                brief: initialMetadata?.brief ?? compileTemplateCue(config, scene, cue, characterAppearance).brief,
-                shotSpec,
-                styleDNA: styleSnapshot.styleDNA,
-                profile: profileV2,
-                outputPlan,
-                referencePlan,
-                detailLevel: config.imagePromptDetail,
-                promptExpansionEnabled: profileV2.promptExpansion?.enabled,
-                userBudgetOverride: config.imagePromptBudgetOverride ? config.imagePromptBudget : null,
-                cue
-              });
-              frozen.prompt = compiledV2.prompt;
-              if (compiledV2.negativePrompt !== undefined) {
-                frozen.negativePrompt = compiledV2.negativePrompt;
-              }
-              if (compiledV2.parameterHints) {
-                frozen.parameters = { ...(frozen.parameters ?? {}), ...compiledV2.parameterHints };
-              }
-              if (initialMetadata) {
-                initialMetadata.budgetSummary = {
-                  complexity: compiledV2.budgetPlan.complexity,
-                  softRange: compiledV2.budgetPlan.softRange,
-                  hardLimit: compiledV2.budgetPlan.hardLimit,
-                  finalCharacters: compiledV2.prompt.length + (compiledV2.negativePrompt?.length ?? 0)
-                };
-                initialMetadata.promptLintWarnings = compiledV2.warnings;
-                initialMetadata.referenceSummary = portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference";
-                initialMetadata.shadowPrompt = {
-                  v1Prompt: v1OriginalPrompt,
-                  ...(v1OriginalNegative !== undefined ? { v1NegativePrompt: v1OriginalNegative } : {}),
-                  v2Prompt: compiledV2.prompt,
-                  ...(compiledV2.negativePrompt !== undefined ? { v2NegativePrompt: compiledV2.negativePrompt } : {})
-                };
-              }
-            }
-            if (initialMetadata) {
-              initialMetadata.promptEngineVersion = 2;
-              initialMetadata.promptDialect = profileV2.dialect;
-              initialMetadata.serializerRevision = profileV2.serializerRevision;
-              initialMetadata.outputPlan = outputPlan;
-              initialMetadata.shotSpec = shotSpec;
-              initialMetadata.styleSnapshot = styleSnapshot.styleDNA;
-            }
+            const profileV2=await loadImagePromptProfileV2(spindle,config,selected?.provider??provider,frozen.model,frozen.parameters);
+            const built=buildV2ImageRequest({config,cue,request:frozen,profile:profileV2,brief:initialMetadata?.brief??compileTemplateCue(config,scene,cue,characterAppearance).brief,metadata:initialMetadata,styleId:config.selectedSharedStyleId,portraits,shadow:{prompt:frozen.prompt,...(frozen.negativePrompt!==undefined?{negativePrompt:frozen.negativePrompt}:{})},referenceSummary:portrait?`${portrait.source??'captured'} portrait: ${portrait.name} (${portrait.imageId})`:wantsCapture?'No reference yet; this picture will establish the portrait':'No extension reference'});
+            frozen=built.request;if(initialMetadata&&built.metadata)Object.assign(initialMetadata,built.metadata);
           }
           const adaptation=await adaptImagePrompt(spindle,frozen,initialMetadata,config,userId,jobSignal,cacheOptions.skipAutomaticPromptRepair);
           frozen=adaptation.request;
@@ -1524,91 +1450,10 @@ export async function generateAssets(
               const preparedRequest=prepareCapabilityOutput(request,latestConfig.imageOutputAspectRatio!=='default'?latestConfig.imageOutputAspectRatio:nextCue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined,latestConfig.imageResolutionPreference);
               const nextMetadata=metadataFor(nextCue)!;
               if (latestConfig.imagePromptEngineVersion === 2) {
-                const profileV2 = await loadImagePromptProfileV2(spindle, latestConfig, effectiveProvider, request.model, request.parameters);
-                const outputPlan = resolveImageOutputPlan({
-                  capabilities: profileV2.outputCapabilities,
-                  parameters: request.parameters ?? {},
-                  requestedRatio: latestConfig.imageOutputAspectRatio !== 'default' ? latestConfig.imageOutputAspectRatio : nextCue.imageTemplate?.outputAspectRatio === '9:16' ? '9:16' : undefined,
-                  resolutionPreference: latestConfig.imageResolutionPreference,
-                  source: profileV2.capabilitySource,
-                  modelId: request.model
-                });
-                const styleSnapshot = resolveStyleDNA(latestConfig, options?.styleId ?? nextCue.imageTemplate?.id);
-                const baseRevision = frozen.shotSpec?.revision ?? 0;
-                const nextRevision = options?.reframe ? baseRevision + 1 : baseRevision;
-                const manualOverrides = options?.manualCamera ? {
-                  ...(options.manualCamera.shotSize ? { shotSize: options.manualCamera.shotSize as any } : {}),
-                  ...(options.manualCamera.angle ? { angle: options.manualCamera.angle as any } : {}),
-                  ...(options.manualCamera.lensFeel ? { lens: options.manualCamera.lensFeel as any } : {}),
-                  ...(options.manualCamera.composition ? { mode: options.manualCamera.composition as any } : {}),
-                  ...(options.manualCamera.depth ? { depthOfField: options.manualCamera.depth as any } : {}),
-                  ...(options.manualCamera.dialogueSafeArea === 'always' ? { safeArea: { edge: 'bottom' as const, fraction: 0.25, reason: 'dialogue-overlay' as const } } : {})
-                } : undefined;
-                const shotSpec = resolveShotSpec({
-                  brief: nextMetadata.brief,
-                  outputPlan,
-                  template: nextCue.imageTemplate,
-                  cue: nextCue,
-                  styleDNA: styleSnapshot.styleDNA,
-                  dialogueSafeAreaSetting: options?.manualCamera?.dialogueSafeArea ?? latestConfig.dialogueSafeArea,
-                  isDialogueOverlayTarget: !nextCue.visualSources?.includes('location art') && !nextCue.visualSources?.includes('cast art'),
-                  revision: nextRevision,
-                  ...(manualOverrides && Object.keys(manualOverrides).length > 0 ? { manualOverrides } : {})
-                });
-                if (request.model) preparedRequest.model = request.model;
-                else delete preparedRequest.model;
-                preparedRequest.promptProfileV2 = profileV2;
-                preparedRequest.outputPlan = outputPlan;
-                preparedRequest.shotSpec = shotSpec;
-                preparedRequest.styleSnapshot = styleSnapshot.styleDNA;
-                preparedRequest.parameters = { ...(preparedRequest.parameters ?? {}), ...outputPlan.parameters };
-                const isNextDirected = nextCue.imageTemplate?.cameraPolicy !== 'fixed';
-                if (isNextDirected) {
-                  const referencePlan = resolveReferencePlan({
-                    brief: nextMetadata.brief,
-                    cue: nextCue,
-                    portraits
-                  });
-                  const compiledV2 = compileModelPrompt({
-                    brief: nextMetadata.brief,
-                    shotSpec,
-                    styleDNA: styleSnapshot.styleDNA,
-                    profile: profileV2,
-                    outputPlan,
-                    referencePlan,
-                    detailLevel: options?.fitToModel ? 'compact' : latestConfig.imagePromptDetail,
-                    promptExpansionEnabled: profileV2.promptExpansion?.enabled,
-                    userBudgetOverride: options?.fitToModel ? Math.min(profileV2.softBudgets.standard[0], profileV2.hardMaxCharacters) : (latestConfig.imagePromptBudgetOverride ? latestConfig.imagePromptBudget : null),
-                    cue: nextCue
-                  });
-                  preparedRequest.prompt = compiledV2.prompt;
-                  if (compiledV2.negativePrompt !== undefined) {
-                    preparedRequest.negativePrompt = compiledV2.negativePrompt;
-                  }
-                  if (compiledV2.parameterHints) {
-                    preparedRequest.parameters = { ...(preparedRequest.parameters ?? {}), ...compiledV2.parameterHints };
-                  }
-                  nextMetadata.budgetSummary = {
-                    complexity: compiledV2.budgetPlan.complexity,
-                    softRange: compiledV2.budgetPlan.softRange,
-                    hardLimit: compiledV2.budgetPlan.hardLimit,
-                    finalCharacters: compiledV2.prompt.length + (compiledV2.negativePrompt?.length ?? 0)
-                  };
-                  nextMetadata.promptLintWarnings = compiledV2.warnings;
-                  nextMetadata.referenceSummary = portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference";
-                  nextMetadata.shadowPrompt = {
-                    v1Prompt: nextCompiled.prompt,
-                    ...(nextCompiled.negativePrompt !== undefined ? { v1NegativePrompt: nextCompiled.negativePrompt } : {}),
-                    v2Prompt: compiledV2.prompt,
-                    ...(compiledV2.negativePrompt !== undefined ? { v2NegativePrompt: compiledV2.negativePrompt } : {})
-                  };
-                }
-                nextMetadata.promptEngineVersion = 2;
-                nextMetadata.promptDialect = profileV2.dialect;
-                nextMetadata.serializerRevision = profileV2.serializerRevision;
-                nextMetadata.outputPlan = outputPlan;
-                nextMetadata.shotSpec = shotSpec;
-                nextMetadata.styleSnapshot = styleSnapshot.styleDNA;
+                const profileV2=await loadImagePromptProfileV2(spindle,latestConfig,effectiveProvider,request.model,request.parameters);
+                if(request.model)preparedRequest.model=request.model;else delete preparedRequest.model;
+                const built=buildV2ImageRequest({config:latestConfig,cue:nextCue,request:preparedRequest,profile:profileV2,brief:nextMetadata.brief,metadata:nextMetadata,styleId:options?.styleId??nextCue.imageTemplate?.id,portraits,planParameters:request.parameters,previousShotRevision:frozen.shotSpec?.revision??0,rebuild:options,shadow:{prompt:nextCompiled.prompt,...(nextCompiled.negativePrompt!==undefined?{negativePrompt:nextCompiled.negativePrompt}:{})},referenceSummary:portrait?`${portrait.source??'captured'} portrait: ${portrait.name} (${portrait.imageId})`:wantsCapture?'No reference yet; this picture will establish the portrait':'No extension reference'});
+                Object.assign(preparedRequest,built.request);if(built.metadata)Object.assign(nextMetadata,built.metadata);
               }
               const adapted=await adaptImagePrompt(spindle,preparedRequest,nextMetadata,config,userId,jobSignal);
               const {promptAdaptationError:_previousAdaptationError,...cleanMetadata}=baseMetadata;

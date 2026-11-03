@@ -218,8 +218,8 @@ export class ReaderWorkspace {
       const settingsHost = this.shell.querySelector<HTMLElement>('[data-vn-settings-panel]');
       settingsHost?.dispatchEvent(new CustomEvent("lumiglyphics:navigate", { detail: { page: "speech" } }));
     }, {signal});
-    q('[data-action="studio-toggle"]')?.addEventListener('click', () => {
-      this.open('artwork');
+    q('[data-action="studio-toggle"]')?.addEventListener('click', (event) => {
+      this.open('artwork',event.currentTarget as HTMLElement);
     }, {signal});
     const chatExitBtn = q('[data-action="chat-exit"]');
     const handleChatExit = (event?: Event) => {

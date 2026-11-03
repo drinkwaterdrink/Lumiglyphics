@@ -36,3 +36,7 @@ test('cast allocation respects one shared allowance and creates no provider requ
  }
  expect(calls).toBe(0);
 });
+
+test('an explicit manga-page intent stays flat even when the custom template category is portrait',()=>{const plan=castPlan();for(const cue of plan.visualCues){const {revision:_,...selected}=cue.imageTemplate!;cue.imageTemplate=templateSnapshot({...selected,intent:'manga-page'});}expect(castAllocationCandidates(plan,{...DEFAULT_CONFIG,castMode:true})).toBeNull();});
+
+test('a manga-page shot hint also stays flat without allocating extra cast jobs',()=>{const plan=castPlan();for(const cue of plan.visualCues)cue.shotHint={intent:'manga-page'};expect(castAllocationCandidates(plan,{...DEFAULT_CONFIG,castMode:true})).toBeNull();});

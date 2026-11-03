@@ -1,3 +1,4 @@
+import {visualSubjectPolicy} from '../../shared/visual-subject-policy.js';
 import type {VisualNovelConfig} from '../../config.js';
 import {VisualCueSchema,type TurnPlan,type VisualCue} from '../../shared/contracts.js';
 import {templateSnapshot} from '../../shared/image-templates.js';
@@ -20,7 +21,7 @@ export function castAllocationCandidates(plan:TurnPlan,config:VisualNovelConfig,
  const usedIds=new Set(all.flatMap(c=>[c.cueId,c.assetJobId]));let paired=false;
  for(const [sceneIndex,scene] of plan.scenes.entries()){
   const local=all.filter(c=>c.sceneId===scene.sceneId&&c.sceneRevision===scene.revision);
-  const portraits=local.filter(c=>c.imageTemplate?.category==='portrait'&&c.imageTemplate.subjectMode==='one');
+  const portraits=local.filter(c=>visualSubjectPolicy({template:c.imageTemplate,intent:c.shotHint?.intent}).layeredPortrait);
   const present=(cue:VisualCue)=>{
    if(!cue.character)return false;
    const snapshot=selectPresentationSnapshot(presentation!,cue.paragraphIndex);
@@ -29,7 +30,7 @@ export function castAllocationCandidates(plan:TurnPlan,config:VisualNovelConfig,
    return Boolean(entity&&snapshot?.presentEntityIds.includes(entity.id)&&snapshot.stateByEntity[entity.id]?.presence==='present'&&isUsableIdentity(identity.name,splitTags(identity.identity)));
   };
   // Mixed compositions and uncertain presence keep their established flat flow.
-  if(!portraits.length||local.some(c=>manual(c)||!c.imageTemplate||!['portrait','environment'].includes(c.imageTemplate.category)||c.imageTemplate.subjectMode==='ensemble')||portraits.some(c=>!present(c))){candidates.push(...local);continue;}
+  if(!portraits.length||local.some(c=>manual(c)||!c.imageTemplate||!['portrait','environment'].includes(c.imageTemplate.category)||visualSubjectPolicy({template:c.imageTemplate,intent:c.shotHint?.intent}).mode==='ensemble'||visualSubjectPolicy({template:c.imageTemplate,intent:c.shotHint?.intent}).page)||portraits.some(c=>!present(c))){candidates.push(...local);continue;}
   paired=true;
   const names=new Set<string>();
   const chosen=[...portraits].sort((a,b)=>Number(plan.paragraphSpeakers[b.paragraphIndex]===b.character)-Number(plan.paragraphSpeakers[a.paragraphIndex]===a.character)||a.paragraphIndex-b.paragraphIndex).filter(c=>{if(names.has(c.character!)||names.size>=2)return false;names.add(c.character!);return true;}).sort((a,b)=>a.paragraphIndex-b.paragraphIndex);
