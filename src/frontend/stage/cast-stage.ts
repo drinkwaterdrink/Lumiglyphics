@@ -5,7 +5,7 @@ import {type VnImageFactory} from './image-loader.js';
 const CSS=`
 [data-vn-cast]{position:absolute;z-index:28;inset:var(--vn-cast-top,5rem) 1rem auto;pointer-events:none;display:grid;gap:.6rem;justify-items:center}
 [data-vn-cast][hidden]{display:none}
-[data-vn-cast][data-collapsed=true]{position:absolute;top:calc(14px + env(safe-area-inset-top, 0px));right:calc(192px + env(safe-area-inset-right, 0px));inset:calc(14px + env(safe-area-inset-top, 0px)) calc(192px + env(safe-area-inset-right, 0px)) auto auto;z-index:36;pointer-events:auto;display:block}
+[data-vn-cast][data-collapsed=true]{position:absolute;inset:var(--vn-cast-top,5rem) calc(16px + env(safe-area-inset-right, 0px)) auto auto;z-index:36;pointer-events:auto;display:block}
 [data-vn-cast-portraits]{position:relative;display:flex;gap:.75rem;justify-content:center;max-width:100%;width:min(100%,700px)}
 [data-vn-cast-card]{position:relative;margin:0;flex:1 1 0;min-width:0;max-width:320px;overflow:visible;border:none;background:transparent;box-shadow:none;transition:transform 220ms cubic-bezier(.2,.8,.2,1),opacity 220ms ease,filter 220ms ease}
 [data-vn-cast-card][data-active=true]{transform:translateY(-6px);filter:drop-shadow(0 0 16px rgba(220,238,173,0.35))}
@@ -23,12 +23,12 @@ const CSS=`
 [data-vn-cast-toggle=hide]::before{content:"";position:absolute;width:24px;height:24px;border-radius:50%;background:rgba(11,23,19,0.78);border:1px solid rgba(220,238,217,0.25);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 2px 8px rgba(0,0,0,0.4);transition:background 160ms ease,transform 160ms ease}
 [data-vn-cast-toggle=hide]:hover::before{background:rgba(35,75,57,0.92);transform:scale(1.1)}
 [data-vn-cast-toggle=hide] svg{position:relative;z-index:1;width:13px;height:13px}
-[data-vn-cast-toggle=show]{width:36px;height:36px;min-width:36px;min-height:36px;padding:0;border-radius:50%;border:1px solid rgba(245,249,240,0.34);background:rgba(5,15,19,0.45);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:inset 0 1px rgba(255,255,255,0.08),0 4px 12px rgba(0,0,0,0.15);display:grid;place-items:center;color:#f7f9f3;cursor:pointer;transition:transform 0.16s ease,background 0.16s ease}
+[data-vn-cast-toggle=show]{width:44px;height:44px;min-width:44px;min-height:44px;padding:0;border-radius:50%;border:1px solid rgba(245,249,240,0.34);background:rgba(5,15,19,0.45);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:inset 0 1px rgba(255,255,255,0.08),0 4px 12px rgba(0,0,0,0.15);display:grid;place-items:center;color:#f7f9f3;cursor:pointer;transition:transform 0.16s ease,background 0.16s ease}
 [data-vn-cast-toggle=show]:hover{background:rgba(21,36,42,0.75);transform:translateY(-1px)}
 [data-vn-cast-toggle]:focus-visible{outline:2px solid var(--vn-accent,#dcebad);outline-offset:2px}
 [data-vn-cast-toggle=hide]:focus-visible{outline-offset:-3px}
 [data-vn-cast-tray]{display:flex;flex-wrap:wrap;justify-content:center;gap:.35rem;max-height:5.5rem;overflow:auto;pointer-events:auto}
-[data-vn-cast-tray] button{min-height:38px;padding:.35rem .7rem;border:1px solid rgba(220,238,217,0.25);border-radius:999px;background:rgba(11,23,19,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#f4f7ee;font:inherit;font-size:.8rem;font-weight:600;cursor:pointer}
+[data-vn-cast-tray] button{min-height:44px;padding:.35rem .7rem;border:1px solid rgba(220,238,217,0.25);border-radius:999px;background:rgba(11,23,19,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#f4f7ee;font:inherit;font-size:.8rem;font-weight:600;cursor:pointer}
 @media(max-height:500px){[data-vn-cast]{inset:var(--vn-cast-top,4rem) 1rem auto}[data-vn-cast-card] img,[data-vn-cast-placeholder]{height:min(clamp(60px,23vh,120px),var(--vn-cast-height,120px))}}
 `;
 /** Reuses ready art only. No transparent-cutout assumption, storage or provider calls. */
@@ -58,7 +58,7 @@ export class CastStage {
   if(composition.scope!==this.scope){this.selected='';this.host.replaceChildren();this.scope=composition.scope;this.structureSignature='';composition=selectCastComposition(this.turn!,this.index,undefined,this.absenceDisplay)!;}
   const signature=JSON.stringify([composition.scope,composition.portraits,composition.otherCast,composition.offScene,this.collapsed]);
   if(signature===this.signature)return composition.background;
-  const structureSignature=JSON.stringify([composition.scope,composition.portraits.map(p=>[p.name,p.asset?.imageId??null,p.asset?.imageUrl??null,p.asset?.stageAsset?.attire??null,p.asset?.stageAsset?.displayImageUrl??null]),composition.otherCast.map(p=>p.name),composition.offScene.map(p=>[p.name,p.asset?.imageId,p.asset?.imageUrl]),this.collapsed]);
+  const structureSignature=JSON.stringify([composition.scope,composition.portraits.map(p=>[p.name,p.asset?.paragraphIndex??null,p.asset?.imageId??null,p.asset?.imageUrl??null,p.asset?.stageAsset?.attire??null,p.asset?.stageAsset?.displayImageUrl??null]),composition.otherCast.map(p=>p.name),composition.offScene.map(p=>[p.name,p.asset?.imageId,p.asset?.imageUrl]),this.collapsed]);
   this.signature=signature;
   if(structureSignature===this.structureSignature&&!this.collapsed){
    this.syncActiveSpeaker(composition.portraits);
@@ -103,14 +103,16 @@ export class CastStage {
  }
  private renderPortrait(parent:HTMLElement,portrait:CastPortrait,epoch:number):void{
   const existingCards=[...this.host.querySelectorAll<HTMLElement>('[data-vn-cast-card]')];
-  const exactOld=existingCards.find(c=>c.dataset.vnCastIdentity===JSON.stringify([portrait.name,portrait.asset?.stageAsset?.attire??null]));
-  const sameCharOld=existingCards.find(c=>c.dataset.vnCastCharacter===portrait.name);
-  const prior=(exactOld??sameCharOld)?.querySelector('img');
-  const card=document.createElement('figure');card.dataset.vnCastCard='';card.dataset.vnCastCharacter=portrait.name;card.dataset.vnCastIdentity=JSON.stringify([portrait.name,portrait.asset?.stageAsset?.attire??null]);card.dataset.active=String(portrait.active);
+  const exactOld=existingCards.find(c=>c.dataset.vnCastIdentity===JSON.stringify([portrait.name,portrait.asset?.stageAsset?.attire??null])&&Number(c.dataset.vnCastParagraph)<=(portrait.asset?.paragraphIndex??-1));
+  // Scope is cleared before rendering; only matching attire from an earlier or equal passage can bridge a replacement.
+  const prior=exactOld?.querySelector('img');
+  const card=document.createElement('figure');card.dataset.vnCastCard='';card.dataset.vnCastParagraph=String(portrait.asset?.paragraphIndex??-1);card.dataset.vnCastCharacter=portrait.name;card.dataset.vnCastIdentity=JSON.stringify([portrait.name,portrait.asset?.stageAsset?.attire??null]);card.dataset.active=String(portrait.active);
   const placeholder=document.createElement('div');placeholder.dataset.vnCastPlaceholder='';placeholder.textContent=portrait.asset?'Loading portrait…':'Portrait unavailable';
   const label=document.createElement('figcaption');label.textContent=portrait.name+(portrait.active?' · speaking':'');card.append(prior&&portrait.asset?prior.cloneNode(true):placeholder,label);parent.append(card);
   const candidates=portrait.asset?sceneImageCandidatesFor(portrait.asset):[];
   if(!candidates.length){placeholder.textContent='Portrait unavailable';card.firstElementChild?.replaceWith(placeholder);return;}
+  // Reuse an already-ready reference when another cast member changes, without another decode/load.
+  if(prior&&candidates[0]===prior.getAttribute('src'))return;
   const signal=this.loadAbort.signal;
   void loadVnImageCandidates(candidates,this.createImage,signal).then(url=>{
    if(this.disposed||epoch!==this.epoch||!card.isConnected)return;
@@ -124,7 +126,11 @@ export class CastStage {
   const dialogue=this.root.querySelector<HTMLElement>('[data-vn-dialogue]');
   const scale=root.width/this.root.clientWidth||1;
   const bottom=dialogue&&dialogue.getClientRects().length?dialogue.getBoundingClientRect().top:root.bottom;
-  if(this.collapsed){this.host.style.removeProperty('--vn-cast-top');this.host.hidden=false;return;}
+  if(this.collapsed){
+   const header=this.root.querySelector<HTMLElement>('[data-vn-reader-header]');
+   if(header&&header.getClientRects().length)this.host.style.setProperty('--vn-cast-top',`${Math.max(14,(header.getBoundingClientRect().bottom-root.top)/scale+8)}px`);
+   this.host.hidden=false;return;
+  }
   const tray=this.host.querySelector<HTMLElement>('[data-vn-cast-tray]');
   const remembered=this.host.querySelector<HTMLElement>('[data-vn-cast-off-scene]');
   const room=(bottom-host.top)/scale-64-(tray?.getBoundingClientRect().height??0)/scale-(remembered?.getBoundingClientRect().height??0)/scale;
