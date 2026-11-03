@@ -38,6 +38,8 @@ export class ImageLibrary{
  private mode:'story'|'images'='images';private opener:HTMLElement|null=null;
  private selected:LibraryImageView|null=null;private zoom=1;private opened=false;
  private searchTimer:ReturnType<typeof setTimeout>|undefined;
+ onReadingHistoryRefresh:(()=>void)|undefined;
+ private readonly readingHistorySlot=document.createElement("div");
  private currentSceneEntries:ReadonlyArray<{speaker?:string|undefined;text:string;paragraphIndex?:number|undefined}>=[];
  private onJumpToParagraph:((index:number)=>void)|null=null;
  constructor(mount:HTMLElement,private send:(request:FrontendRequest)=>void,private onOpen:(open:boolean)=>void){
@@ -50,6 +52,7 @@ export class ImageLibrary{
   const tabs=document.createElement('nav');tabs.dataset.historyViews='';tabs.setAttribute('aria-label','History views');
   for(const mode of ['story','images'] as const){const button=document.createElement('button');button.type='button';button.dataset.historyView=mode;button.textContent=mode==='story'?'Story':'Images';button.onclick=()=>{this.mode=mode;this.pages=['0:0'];this.pageIndex=0;this.load();};tabs.append(button);}
   this.el<HTMLElement>('[data-browse]').prepend(tabs);
+  this.readingHistorySlot.dataset.readingHistory='';this.readingHistorySlot.hidden=true;tabs.after(this.readingHistorySlot);
   const returnButton=document.createElement('button');returnButton.type='button';returnButton.dataset.historyReturn='';returnButton.textContent='Back to reader';returnButton.onclick=()=>this.close();this.el<HTMLElement>('section').append(returnButton);
   const dockStyle=document.createElement("style");dockStyle.textContent=DOCKED_LIBRARY_CSS;this.root.append(dockStyle);
   mount.append(this.host);
@@ -99,6 +102,7 @@ export class ImageLibrary{
   if(!next){this.close();return;}
   if(changed){this.expanded.clear();this.cancel();this.page=null;this.pages=['0:0'];this.pageIndex=0;if(this.opened)this.load();}
  }
+ setReadingHistorySurface(element:HTMLElement):void{this.readingHistorySlot.replaceChildren(element);}
  setCurrentScenePassages(entries:ReadonlyArray<{speaker?:string|undefined;text:string;paragraphIndex?:number|undefined}>,onJump?:(index:number)=>void):void{this.currentSceneEntries=entries;if(onJump)this.onJumpToParagraph=onJump;if(this.opened&&this.page)this.render();}
  getElement():HTMLElement{return this.host;}
  isOpen():boolean{return this.opened;}
@@ -109,6 +113,8 @@ export class ImageLibrary{
  open(mode: 'story'|'images' = 'images', opener?:HTMLElement){if(!this.context)return;this.mode=mode;this.opener=opener??null;this.opener?.setAttribute('aria-expanded','true');this.pages=['0:0'];this.pageIndex=0;if(!this.context)return;this.opened=true;this.host.dataset.open='true';this.el<HTMLElement>('section').hidden=false;this.el<HTMLElement>('[data-library-launch]').setAttribute('aria-expanded','true');this.onOpen(true);this.load();this.el<HTMLButtonElement>('[data-library-close]').focus();}
  close(){this.opener?.setAttribute('aria-expanded','false');delete this.host.dataset.open;this.cancel();this.selected=null;this.el<HTMLImageElement>('[data-full-image]').removeAttribute('src');this.el<HTMLElement>('section').hidden=true;this.el<HTMLElement>('[data-library-launch]').setAttribute('aria-expanded','false');if(this.opened){this.opened=false;this.onOpen(false);(this.opener??this.el<HTMLButtonElement>('[data-library-launch]')).focus();}}
  private load(){
+  this.readingHistorySlot.hidden=this.mode!=='story'||this.pageIndex!==0;
+  if(!this.readingHistorySlot.hidden)this.onReadingHistoryRefresh?.();
   if(!this.context||!this.opened)return;this.cancel();this.page=null;this.back(false);this.el<HTMLElement>('[data-grid]').replaceChildren();this.status(this.mode==='story'?'Loading story history…':'Loading saved pictures…');this.el<HTMLElement>('[data-retry]').hidden=true;
   const requestId=createUiId();this.pending=requestId;
   const request:ImageLibraryRequest={type:'vn_image_library',mode:this.mode,chatId:this.context.chatId,requestId,anchor:{messageId:this.context.messageId,swipeId:this.context.swipeId,sourceFingerprint:this.context.sourceFingerprint,paragraphIndex:this.cursor},range:this.el<HTMLSelectElement>('[data-range]').value as 'read'|'all',versions:this.el<HTMLSelectElement>('[data-versions]').value as 'active'|'all',includeReplaced:this.el<HTMLInputElement>('[data-replaced]').checked,order:this.el<HTMLSelectElement>('[data-order]').value as 'newest'|'oldest',role:'all',templateQuery:'',...(this.pages[this.pageIndex]!=='0:0'?{cursor:this.pages[this.pageIndex]}:{})};
@@ -271,9 +277,10 @@ const DOCKED_LIBRARY_CSS=`
 :host([data-vn-workspace-tool]) [data-browse] {
   display: flex !important;
   flex-direction: column !important;
-  flex: 1 1 auto !important;
-  min-height: 0 !important;
+  flex: 0 0 auto !important;
+  min-height: auto !important;
 }
+:host([data-vn-workspace-tool]) [data-reading-history] { flex: 0 0 auto; }
 :host([data-vn-workspace-tool]) [data-reply] {
   background: var(--aperture-ghost-bg, rgba(18, 38, 30, 0.55)) !important;
   border: 1px solid var(--aperture-button-border, rgba(160, 205, 185, 0.22)) !important;

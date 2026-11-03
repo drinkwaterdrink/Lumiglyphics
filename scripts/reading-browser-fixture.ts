@@ -50,5 +50,5 @@ Object.assign(window, { readingFixture: { stage, turn, counters, panels } });
 if(params.has('unified')){
  const key={chatId:'chat',assistantMessageId:'m1',swipeId:0,sourceFingerprint:'12345678',revision:0};
  const library=new ImageLibrary(stage.panelMount,request=>{if(request.type==='vn_image_library')library.receive('chat',request.requestId,{entries:[],replies:[{key,messageNumber:1,speaker:'Narrator',paragraphs:[{index:0,text:turn.paragraphs[0]!.text,speaker:'Speaker 0'}],truncated:false}],nextCursor:null,notice:''});},open=>{if(open){stage.panelMount.dataset.vnHistoryOpen='true';stage.holdAutoPlay();}else delete stage.panelMount.dataset.vnHistoryOpen;});
- library.setContext({chatId:'chat',messageId:'m1',swipeId:0,sourceFingerprint:'12345678',revision:0} as any,0);library.useHistoryEntry();stage.historyOpener=opener=>library.open('story',opener);
+ library.setContext({chatId:'chat',messageId:'m1',swipeId:0,sourceFingerprint:'12345678',revision:0} as any,0);library.useHistoryEntry();library.setDocked();stage.workspace.register('history',{element:library.getElement(),hideAtHome:true,enter:()=>library.openWorkspace(),leave:()=>library.close(),back:()=>library.backWithinWorkspace()});stage.historyOpener=opener=>library.open('story',opener);
 }

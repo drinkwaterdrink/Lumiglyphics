@@ -976,6 +976,8 @@ export class VnStage {
     this.dossiers.openEntityFromStage(id, trigger ?? this.root);
   }
 
+  getRevealedThrough():number{return this.state.paragraphs.length?Math.min(this.state.highestRevealedIndex,this.state.paragraphs.length-1):-1;}
+
   getBacklogEntries(): ReadonlyArray<{ speaker?: string | undefined; text: string; formatted: string; paragraphIndex?: number | undefined }> {
     return this.backlogEntries;
   }
@@ -1169,6 +1171,8 @@ export class VnStage {
   }
 
   loadTurn(turn: VnTurnInput): void {
+    // A new reply/branch must not inherit another turn's read flags or backlog.
+    this.readParagraphIds.clear();this.backlogEntries.length=0;this.currentRenderedParagraphId="";this.currentRenderedFormatted="";
     this.speechReadAlong.setParagraph('',-1);
     this.resetDisplayEvaluation();
     this.sceneLoad?.abort();this.sceneLoad=null;
@@ -2211,7 +2215,7 @@ export class VnStage {
     if (targetIndex === current) return;
     const targetPara = this.state.paragraphs[targetIndex];
     if (!targetPara) return;
-    if (targetIndex > current && !this.readParagraphIds.has(targetPara.id)) return;
+    if (targetIndex > this.state.highestRevealedIndex) return;
     this.isSkipping = false;
     this.isAutoPlay = false;
     this.lastSkipStop = null;
@@ -2241,11 +2245,8 @@ export class VnStage {
     } finally {
       this.isRewinding = false;
     }
-    if (targetIndex < current) {
-      this.callbacks.onPrevious?.(this.state.currentParagraphIndex);
-    } else {
-      this.callbacks.onAdvance?.(this.state.currentParagraphIndex, this.state.phase === "awaiting-input");
-    }
+    // Replaying an already revealed passage is a seek, even when moving forward.
+    this.callbacks.onPrevious?.(this.state.currentParagraphIndex);
   }
 
   private renderScrubber(): void { if (!this.scrubber) return;
@@ -2259,20 +2260,21 @@ export class VnStage {
     this.scrubber.hidden = false;
     const count = total > 0 ? total : 4;
     const dots: HTMLElement[] = [];
-    for (let idx = 0; idx < count; idx++) {
+    const start=Math.max(0,Math.min(current-20,count-40));
+    for (let idx = start; idx < Math.min(count,start+40); idx++) {
       const p = this.state.paragraphs[idx];
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "tick" + (idx === current ? " active" : "");
       btn.setAttribute("data-vn-scrub-dot", "");
       btn.tabIndex = -1;
-      const isRead = idx <= current || (p && this.readParagraphIds.has(p.id));
+      const isRead = idx <= this.state.highestRevealedIndex;
       const isActive = idx === current;
       btn.dataset.read = String(isRead);
       btn.dataset.active = String(isActive);
-      if (p && (p.cue || p.effect || p.ambient !== undefined)) btn.dataset.hasCue = "true";
+      if (isRead && p && (p.cue || p.effect || p.ambient !== undefined)) btn.dataset.hasCue = "true";
       btn.disabled = !isRead;
-      const label = `Paragraph ${idx + 1} of ${count}${p?.speaker ? ` (${p.speaker})` : ""}`;
+      const label = `Paragraph ${idx + 1} of ${count}${isRead&&p?.speaker ? ` (${p.speaker})` : ""}`;
       btn.setAttribute("aria-label", label);
       btn.title = label;
       if (isActive) btn.setAttribute("aria-current", "step");

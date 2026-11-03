@@ -646,6 +646,7 @@ export class VisualNovelSettingsPanel {
             <div style="margin-top:16px"><button type="button" data-open-preview>Open reader</button><small style="display:block;margin-top:6px;opacity:0.75">Opening the reader can prepare the current reply using your existing settings.</small></div>
           </section>
           ${pane("reading", `
+            <label data-check ${find('Relationship & presence history','relationships connections presence history evidence tracker')}><input name="relationshipTrackerEnabled" type="checkbox"><span>Relationship &amp; presence history<small>Off by default. Adds recorded relationship quotes and separate presence/location history to History. No scores, canon changes or extra generation.</small></span></label>
             ${group("Pace", `
               <fieldset ${find("Text speed", "typing typewriter letters milliseconds")}>
                 <legend>Text speed</legend>
@@ -1612,6 +1613,7 @@ export class VisualNovelSettingsPanel {
         };
       }
       case "castMode": return {castMode:checked};
+      case "relationshipTrackerEnabled":return {relationshipTrackerEnabled:checked};
       case "castAbsenceDisplay":return {castAbsenceDisplay:target.value==="dim"?"dim":"hide"};
       case "musicTransitionPolicy":return {musicTransitionPolicy:target.value==="location"?"location":"cue"};
       case "sceneImageFit": return { sceneImageFit: normalizeSceneImageFit(target.value) };
@@ -2166,6 +2168,7 @@ export class VisualNovelSettingsPanel {
     this.setRadio("setupThemePreset", config.themePreset);
     this.setRadio("sceneImageFit", config.sceneImageFit);
     this.control<HTMLInputElement>("castMode").checked = config.castMode;
+    this.control<HTMLInputElement>("relationshipTrackerEnabled").checked=config.relationshipTrackerEnabled;
     this.setRadio("effectIntensity", config.effectIntensity);
     this.setRadio("textEffects", config.textEffects);
     this.syncTextEffectMode(config);

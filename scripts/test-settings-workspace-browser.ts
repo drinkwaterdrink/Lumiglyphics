@@ -16,6 +16,10 @@ try{
  assert.equal(await settings.locator('[data-section-select]').count(),0);
  assert.equal(await settings.locator('[data-home-categories] button').count(),7);
  assert.deepEqual(await settings.locator('[data-settings-home-group] h2').allTextContents(),['Reading','Look & sound','Artwork','Setup & advanced']);
+ await page.evaluate(()=>(window as any).settingsFixture.panel.openPage('reading'));
+ const relationship=settings.locator('[name="relationshipTrackerEnabled"]');assert.equal(await relationship.isChecked(),false);await relationship.check();assert.equal(await page.evaluate(()=>(window as any).settingsFixture.patches.at(-1).relationshipTrackerEnabled),true);
+ await page.evaluate(()=>(window as any).settingsFixture.panel.openPage('appearance'));await page.evaluate(()=>(window as any).settingsFixture.panel.openPage('reading'));assert.equal(await relationship.isChecked(),true);await relationship.uncheck();assert.equal(await page.evaluate(()=>(window as any).settingsFixture.patches.at(-1).relationshipTrackerEnabled),false);
+ await page.evaluate(()=>(window as any).settingsFixture.panel.openPage('home'));
  await mkdir('.cache/settings-workspace',{recursive:true});
  await page.screenshot({path:'.cache/settings-workspace/home-mobile.png',fullPage:true});
  await settings.locator('[data-home-categories] [data-page-link="pictures"]').click();

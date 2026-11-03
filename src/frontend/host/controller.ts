@@ -1,3 +1,6 @@
+import {SceneScrubber} from '../stage/scene-scrubber.js';
+import {RelationshipTracker} from '../stage/relationship-tracker.js';
+import {sceneHistoryFor,turnHistoryKey} from '../../shared/scene-history.js';
 import {progressForCursor} from '../speech/read-along.js';
 import {musicTrackForPosition,locationForPosition} from '../../shared/scene-atmosphere.js';
 import {resumeCardModel} from '../stage/resume-card.js';
@@ -596,7 +599,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     onPrevious: (paragraphIndex) => {
       saveCursor(paragraphIndex);
       imageStudio.setCursor(paragraphIndex);
-      imageLibrary.setCurrentScenePassages(stage.getBacklogEntries(), (idx) => stage.jumpToParagraph(idx));
+      imageLibrary.setCurrentScenePassages(stage.getBacklogEntries(), (idx) => seekLoadedHistory(idx));
       imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
       panels.setCursor(paragraphIndex);
       syncSpeechCursor(turn, paragraphIndex);
@@ -607,7 +610,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     onAdvance: (paragraphIndex) => {
       stage.workspace.setResume(null);
       imageStudio.setCursor(paragraphIndex);
-      imageLibrary.setCurrentScenePassages(stage.getBacklogEntries(), (idx) => stage.jumpToParagraph(idx));
+      imageLibrary.setCurrentScenePassages(stage.getBacklogEntries(), (idx) => seekLoadedHistory(idx));
       imageLibrary.setContext(turn,stage.getState().currentParagraphIndex);
       panels.setCursor(paragraphIndex);
       if (pendingNextTurn) {
@@ -710,8 +713,16 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if(open){stage.toggleSkip(false);stage.holdAutoPlay();}else if(active)stage.checkAutoPlay();
   });
   imageLibrary.useHistoryEntry();
+  const readingHistory=document.createElement('div');readingHistory.dataset.currentReadingHistory='';readingHistory.style.cssText='padding:12px;border:1px solid var(--vn-shell-border,#456);border-radius:12px;overflow-wrap:anywhere';
+  const sceneScrubber=new SceneScrubber(seekHistory),relationshipTracker=new RelationshipTracker(seekHistory);
+  const readingStyle=document.createElement('style');readingStyle.textContent='[data-current-reading-history] button{min-height:44px;font:inherit;max-width:100%;white-space:normal;overflow-wrap:anywhere}[data-current-reading-history]{min-width:0;overflow-wrap:anywhere}[data-current-reading-history] h3{font-size:1rem;margin:12px 0}[data-current-reading-history] article{border-top:1px solid var(--vn-shell-border,#456);padding:10px 0}[data-current-reading-history] small{display:block}[data-relationship-tracker][hidden]{display:none}';readingHistory.append(readingStyle,sceneScrubber.element,relationshipTracker.element);imageLibrary.setReadingHistorySurface(readingHistory);
+  function syncReadingHistory():void{const source=loadedReadingCursor.turn;if(!source||source.chatId!==chatId()||stage.getState().isUserTurn){sceneScrubber.clear();relationshipTracker.disable();return;}const index=stage.getState().currentParagraphIndex,model=sceneHistoryFor(source,stage.getRevealedThrough());sceneScrubber.setModel(model,index);relationshipTracker.setContext(source,index,configRef.current?.relationshipTrackerEnabled??false,model?.events??[]);}
+  function seekHistory(key:import('../../shared/contracts.js').TurnKey,index:number):boolean{const source=loadedReadingCursor.turn,current=source?turnHistoryKey(source):null;if(!current||!samePresentationTurn(current,key)||!Number.isInteger(index)||index<0||index>stage.getRevealedThrough()||stage.getState().isUserTurn)return false;stage.toggleAutoPlay(false);stage.toggleSkip(false);speech.stop("history-seek");speech.setCursor(speechCursorFor(source!,index),{autoplay:false});imageLibrary.close();stage.jumpToParagraph(index);stage.focus();return stage.getState().currentParagraphIndex===index;}
+  function seekLoadedHistory(index:number):void{const source=loadedReadingCursor.turn,key=source?turnHistoryKey(source):null;if(key)seekHistory(key,index);}
+  imageLibrary.onReadingHistoryRefresh=syncReadingHistory;
+
   stage.workspace.onMusicSelection=track=>{manualMusicTrack=track;if(turn&&active)syncAudioForParagraph(turn,stage.getState().currentParagraphIndex,false);};
-  stage.historyOpener=opener=>{imageLibrary.setCurrentScenePassages(stage.getBacklogEntries(),(idx)=>stage.jumpToParagraph(idx));imageLibrary.open('story',opener);};
+  stage.historyOpener=opener=>{imageLibrary.setCurrentScenePassages(stage.getBacklogEntries(),(idx)=>seekLoadedHistory(idx));imageLibrary.open('story',opener);};
   const imageStudio = new ImageStudio(stage.panelMount, (request) => ctx.sendToBackend(request), (enabled) => {
     ctx.sendToBackend({ type: "vn_set_config", patch: { reviewImages: enabled }, chatId: chatId() ?? "" });
   },open=>{imageStudioOpen=open;if(open){stage.panelMount.dataset.vnStudioOpen='true';stage.workspace.open('artwork');stage.toggleSkip(false);stage.holdAutoPlay();}else{delete stage.panelMount.dataset.vnStudioOpen;stage.workspace.toolClosed('artwork');if(active)stage.checkAutoPlay();}},operations=>{
@@ -719,7 +730,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     stage.workspace.setAttention(computeReviewAttention(turn,operations));
   });
   stage.workspace.register('artwork',{element:imageStudio.getElement(),hideAtHome:true,enter:()=>imageStudio.open(),leave:()=>imageStudio.close()});
-  stage.workspace.register('history',{element:imageLibrary.getElement(),hideAtHome:true,enter:()=>{imageLibrary.setCurrentScenePassages(stage.getBacklogEntries(),(idx)=>stage.jumpToParagraph(idx));if(!imageLibrary.isOpen())imageLibrary.openWorkspace();},leave:()=>imageLibrary.close(),back:()=>imageLibrary.backWithinWorkspace()});
+  stage.workspace.register('history',{element:imageLibrary.getElement(),hideAtHome:true,enter:()=>{imageLibrary.setCurrentScenePassages(stage.getBacklogEntries(),(idx)=>seekLoadedHistory(idx));if(!imageLibrary.isOpen())imageLibrary.openWorkspace();},leave:()=>imageLibrary.close(),back:()=>imageLibrary.backWithinWorkspace()});
   imageLibrary.setDocked();
   imageStudio.setLibraryOpener(()=>imageLibrary.open('images'));
   const dnaRequests=new Map<string,{chatId:string;action:DnaRequest['action'];turnToken:string;saved?:{id:string;updatedAt:number}}>();
@@ -977,7 +988,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if(turn){invalidatedReferenceTurn=referenceTurnToken(turn);turn=withoutReferenceHistory(turn);}stage.setReferenceHistory(undefined);
     characterFolio.setContext(null);dnaRequests.clear();
     preparationActive=false;stage.clearPreparationPreview();imageStudio.setPlanning(chatId(),false);
-    imageLibrary.close();
+    imageLibrary.close();sceneScrubber.clear();relationshipTracker.disable();if(loadedReadingCursor.turn)loadedReadingCursor.load(withoutReferenceHistory(loadedReadingCursor.turn));
     if (destroyed) return;
     const wasActive = active;
     stage.suspend();
@@ -1122,6 +1133,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       audioEngine.setBgmAttenuation(musicAttenuationForParagraph(next,decision.paragraphIndex));
       syncMusicChoices(next,decision.paragraphIndex);syncAudioForParagraph(next,decision.paragraphIndex,false);
       loadedReadingCursor.load(next);
+      if(imageLibrary.isOpen())syncReadingHistory();
       // Identical cursor identity: SpeechController treats this as a no-op, so
       // a same-turn rebroadcast (e.g. an image/asset update) never replays speech.
       syncSpeechCursor(next, decision.paragraphIndex);
@@ -1148,6 +1160,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     stage.workspace.setAttention(computeReviewAttention(next,localPictureOperations));
     if (revised) stage.restoreReplyDraft(draft);
     loadedReadingCursor.load(next);
+    if(imageLibrary.isOpen())syncReadingHistory();
     stage.workspace.setResume(resume);
     syncMusicChoices(next,cursor);
     panels.setCursor(cursor);
@@ -1174,7 +1187,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if(message.type==='vn_reference_history_invalidated'){
       if(message.chatId!==chatId())return;
       if(turn){invalidatedReferenceTurn=referenceTurnToken(turn);turn=withoutReferenceHistory(turn);}
-      stage.setReferenceHistory(undefined);if(active)requestState({prepare:false});return;
+      stage.setReferenceHistory(undefined);if(loadedReadingCursor.turn)loadedReadingCursor.load(withoutReferenceHistory(loadedReadingCursor.turn));if(imageLibrary.isOpen())syncReadingHistory();if(active)requestState({prepare:false});return;
     }
     if(message.type==='vn_image_library'){imageLibrary.receive(message.chatId,message.requestId,message.page);return;}
     if(message.type==='vn_error'&&message.operation==='vn_image_library'){imageLibrary.error(message.chatId??'',message.requestId,message.error);return;}
@@ -1249,6 +1262,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       imageStudio.setConfig(message.config);
       imageBridge.fit(message.config.sceneImageFit);
       applyVisualConfigToStage(stage, configRef.current);
+      if(!configRef.current.relationshipTrackerEnabled)relationshipTracker.disable();
+      if(imageLibrary.isOpen())syncReadingHistory();
 
       audioEngine.setBgmVolume(configRef.current.bgmVolume);
       audioEngine.setSfxVolume(configRef.current.sfxVolume);
@@ -1294,6 +1309,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       imageStudio.setReview(message.config.reviewImages);
       imageStudio.setConfig(message.config);
       applyVisualConfigToStage(stage, configRef.current);
+      if(!configRef.current.relationshipTrackerEnabled)relationshipTracker.disable();
+      if(imageLibrary.isOpen())syncReadingHistory();
       if(turn && active)void syncImageForParagraph(stage.getState().currentParagraphIndex);
       audioEngine.setBgmVolume(configRef.current.bgmVolume);
       audioEngine.setSfxVolume(configRef.current.sfxVolume);
@@ -1506,6 +1523,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     speechSettings?.destroy();
     settingsPanel?.destroy();
     imageStudio.destroy();
+    sceneScrubber.destroy();relationshipTracker.destroy();
     imageLibrary.destroy();
     settingsHandle?.destroy();
     audioEngine.destroy();

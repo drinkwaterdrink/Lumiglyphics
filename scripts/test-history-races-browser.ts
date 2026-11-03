@@ -8,7 +8,7 @@ try{
  await page.goto(`http://127.0.0.1:${server.port}`);
  await page.clock.install();
  const library=page.locator('[data-image-library]');
- await library.getByRole('button',{name:'Open image library',exact:true}).click();
+ await page.getByRole('button',{name:'History',exact:true}).click();
  await library.getByText('Filters',{exact:true}).click();
  const query=library.getByLabel('Template name contains');
  await query.fill('Manga');
@@ -22,7 +22,7 @@ try{
  assert.equal(await page.evaluate(()=>(window as any).imageLibraryFixture.actions.at(-1).templateQuery),'Portrait','a failed response must not swallow the pending search');
  await query.fill('Cancelled');
  const count=await page.evaluate(()=>(window as any).imageLibraryFixture.actions.length);
- await library.getByRole('button',{name:'Close image library',exact:true}).click();
+ await query.press('Escape');
  await page.clock.runFor(310);
  assert.equal(await page.evaluate(()=>(window as any).imageLibraryFixture.actions.length),count,'closing must cancel pending searches');
  console.log('History debounce response/error races and close cancellation passed.');

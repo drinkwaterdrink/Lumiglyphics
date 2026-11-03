@@ -10,7 +10,7 @@
 
 **Spec:** `docs/audits/2026-11-01-main-3-gpt-audit.md` (findings A01-A10 and selected-suggestion design decisions).
 
-**Execution status:** Tasks 0 and 1 published as beta.110 (`8981bd3`) on `codex/audited-improvements`. Task 2 is published as beta.111 (`6240bba`). Task 2A is included in the beta.112 release checkpoint as the Cast/DNA repair in `2026-11-01-cast-dna-repair.md`; Tasks 3-4 are included in the beta.113 checkpoint; Task 5 is included in the beta.114 checkpoint; Task 6 is included in the beta.115 checkpoint; Task 7 is included in the beta.116 checkpoint; Task 8 is included in the beta.117 checkpoint with paragraph-only timing; original Tasks 9-11 remain pending. See `docs/implementation/2026-11-01-audit-progress.md` for evidence, additional bugs and known baseline browser failures.
+**Execution status:** Tasks 0 and 1 published as beta.110 (`8981bd3`) on `codex/audited-improvements`. Task 2 is published as beta.111 (`6240bba`). Task 2A is included in the beta.112 release checkpoint as the Cast/DNA repair in `2026-11-01-cast-dna-repair.md`; Tasks 3-4 are included in the beta.113 checkpoint; Task 5 is included in the beta.114 checkpoint; Task 6 is included in the beta.115 checkpoint; Task 7 is included in the beta.116 checkpoint; Task 8 is included in the beta.117 checkpoint with paragraph-only timing; Task 9 is included in the beta.118 checkpoint; original Tasks 10-11 remain pending. See `docs/implementation/2026-11-01-audit-progress.md` for evidence, additional bugs and known baseline browser failures.
 
 ## Global constraints
 
@@ -186,10 +186,10 @@ Task 2A is included in the beta.112 release checkpoint; prior beta.111 does not 
 
 **Interfaces:** scene events contain source TurnKey, paragraph index, revealed location/cast-change labels and event kind. Relationship observations contain subject, explicitly stated relationship text, evidence source/reveal anchor and provenance; no inferred numerical affection/trust scores. Proposed `relationshipTrackerEnabled:boolean` default false.
 
-- [ ] Derive scene/cast markers from compact changes and full source identity. Jump through existing history loading/cursor paths, not arbitrary asset/state mutation. Virtualize/paginate long history; keep old/alternate branches visibly distinct and restore history position without auto-generation.
-- [ ] Toggle relationship tracking on/off through normalized config. Off stops relationship-index building, shows no tracker UI and initiates no extra model calls; normal story reference/presence infrastructure continues. Re-enabling rebuilds bounded indexes from validated revealed evidence.
-- [ ] Display presence/location history separately from explicit relationship statements. Outfit/expression frequency is never represented as relationship strength. Missing evidence reads Unknown/Not established; no canon writes. Persist only an optional versioned derived cache with known invalidation keys.
-- [ ] Test branch edit, no location, rapid cast changes, offscreen speaker, unavailable projection, disabled tracker, future/private facts, bounded old-record reads and backward seeks. Run history/dossier/browser tests.
+- [x] Derive scene/cast markers from compact changes and full source identity. Jump through existing history loading/cursor paths, not arbitrary asset/state mutation. Virtualize/paginate long history; keep old/alternate branches visibly distinct and restore history position without auto-generation.
+- [x] Toggle relationship tracking on/off through normalized config. Off stops relationship-index building, shows no tracker UI and initiates no extra model calls; normal story reference/presence infrastructure continues. Re-enabling rebuilds bounded indexes from validated revealed evidence.
+- [x] Display presence/location history separately from explicit relationship statements. Outfit/expression frequency is never represented as relationship strength. Missing evidence reads Unknown/Not established; no canon writes. Persist only an optional versioned derived cache with known invalidation keys.
+- [x] Test branch edit, no location, rapid cast changes, offscreen speaker, unavailable projection, disabled tracker, future/private facts, bounded old-record reads and backward seeks. Run history/dossier/browser tests.
 
 ## Task 10 — Image activity ledger and toggleable data saver (11, 20)
 

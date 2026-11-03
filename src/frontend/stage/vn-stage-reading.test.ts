@@ -432,6 +432,9 @@ describe("reading UX", () => {
     expect(badgeTexts(s2)).toContain("This reply had no story text to show.");
   });
 
+  test('compact scrubber is bounded and unread people never appear in accessible labels',()=>{const s=create();s.loadTurn({mode:'standard',paragraphs:Array.from({length:500},(_,index)=>({id:`long-${index}`,text:'A passage.',speaker:index===0?'Mira':'Future secret person'}))});const dots=root(s).querySelectorAll('[data-vn-scrub-dot]');expect(dots.length).toBeLessThanOrEqual(40);expect(dots.filter(dot=>dot.disabled).every(dot=>!dot.getAttribute('aria-label')?.includes('Future secret'))).toBe(true);});
+  test('a new turn cannot reuse old future read flags and forward rereads use the seek callback',()=>{let advances=0,seeks=0;const s=create({onAdvance:()=>advances++,onPrevious:()=>seeks++});s.loadTurn({mode:'standard',paragraphs:paragraphs(3)});advance(s);advance(s);s.jumpToParagraph(0);const before=advances;s.jumpToParagraph(1);expect(advances).toBe(before);expect(seeks).toBeGreaterThan(1);s.loadTurn({mode:'standard',paragraphs:paragraphs(3)});s.jumpToParagraph(2);expect(s.getState().currentParagraphIndex).toBe(0);expect(s.getBacklogEntries()).toHaveLength(1);});
+
   test("History opens on its Close control and returns focus to the History button", () => {
     const s = create();
     s.loadTurn({ mode: "standard", paragraphs: paragraphs(2) });
