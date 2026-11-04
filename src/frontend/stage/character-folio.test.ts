@@ -178,3 +178,5 @@ describe('CharacterFolio & Character DNA', () => {
     }
   });
 });
+
+it('never borrows Joanne artwork for Ann and supports canonical ID-only avatars',()=>{const restore=installFakeDocument();try{const f:any=new CharacterFolio();f.syncFromTurn({paragraphs:['Ann speaks'],subjectCandidates:['Ann'],assets:[{jobId:'wrong',paragraphIndex:0,status:'generated',imageUrl:'/joanne',stageAsset:{character:'Joanne'}},{jobId:'right',paragraphIndex:0,status:'generated',imageId:'ann-id',stageAsset:{character:'Ann'}}]} as any);const ann:any=Object.values(f.library).find((c:any)=>c.name==='Ann');expect(ann.avatarUrl).toBe('/api/v1/images/ann-id');}finally{restore();}});

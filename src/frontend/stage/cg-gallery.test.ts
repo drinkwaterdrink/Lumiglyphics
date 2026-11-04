@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, test } from 'bun:test';
 import { CgGalleryModal } from './cg-gallery.js';
 import { installFakeDocument, FakeNode } from './stage-test-dom.js';
 import type { TurnView } from '../../protocol.js';
@@ -36,7 +36,7 @@ describe('Story Event CG Gallery & Lightbox (Phase 5)', () => {
         ]
       };
 
-      gallery.syncFromTurn(mockTurn);
+      gallery.syncFromTurn(mockTurn,0);
       gallery.open();
       expect(mount.dataset.vnGalleryOpen).toBe('true');
 
@@ -69,3 +69,8 @@ describe('Story Event CG Gallery & Lightbox (Phase 5)', () => {
     }
   });
 });
+
+const turn=(chatId='A',url='/old',messageId='m',swipeId=0)=>({chatId,messageId,swipeId,sourceFingerprint:'fingerprint',revision:0,paragraphs:['read','secret'],assets:[{jobId:'job',paragraphIndex:1,status:'generated',imageUrl:url}]} as any);
+function gallery(){const g:any=Object.create(CgGalleryModal.prototype);g.items=[];g.render=()=>{};g.closeLightbox=()=>{};return g;}
+test('gallery admits only revealed items and upserts replacements',()=>{const g=gallery();g.syncFromTurn(turn(),0);expect(g.items).toHaveLength(0);g.syncFromTurn(turn(),1);expect(g.items[0].storyExcerpt).toBe('secret');g.syncFromTurn(turn('A','/new'),1);expect(g.items).toHaveLength(1);expect(g.items[0].imageUrl).toBe('/new');g.syncFromTurn(turn(),0);expect(g.items).toHaveLength(0);});
+test('gallery scopes job IDs by reply, replaces alternate branches and clears chats/null',()=>{const g=gallery();g.syncFromTurn(turn(),1);g.syncFromTurn(turn('A','/second','m2'),1);expect(g.items).toHaveLength(2);g.syncFromTurn(turn('A','/swipe','m2',1),1);expect(g.items).toHaveLength(2);expect(g.items.at(-1).imageUrl).toBe('/swipe');g.syncFromTurn(turn('B','/B'),1);expect(g.items).toHaveLength(1);expect(g.items[0].imageUrl).toBe('/B');g.syncFromTurn(null,0);expect(g.items).toHaveLength(0);});

@@ -1,8 +1,10 @@
+import {sceneImageCandidatesFor} from './image-loader.js';
 import { APERTURE_ICONS } from '../theme/aperture-theme.js';
 import type { AssetView, TurnView } from '../../protocol.js';
 
 export interface CGItem {
   id: string;
+  sourceMessageId?: string | undefined;
   imageUrl: string;
   title: string;
   characterName?: string | undefined;
@@ -20,6 +22,7 @@ export class CgGalleryModal {
   private readonly filterContainer: HTMLElement;
   private readonly lightbox: HTMLElement;
   private items: CGItem[] = [];
+  private ownerChat: string | null = null;
   private currentFilter: 'all' | 'milestones' | 'portraits' = 'all';
   private activeLightboxIndex = -1;
   private isOpen = false;
@@ -432,38 +435,26 @@ export class CgGalleryModal {
     });
   }
 
-  syncFromTurn(turn: TurnView | null): void {
-    if (!turn) return;
+  /** Session collection: other read replies survive, alternate versions replace their reply. */
+  syncFromTurn(turn: TurnView | null, paragraphIndex = -1): void {
+    const old = this.items;
+    const retained = turn && this.ownerChat === turn.chatId ? old : [];
+    const scope = turn ? JSON.stringify([turn.chatId,turn.messageId,turn.swipeId,turn.sourceFingerprint,turn.revision]) : '';
     const newItems: CGItem[] = [];
-    const urlOf = (a: AssetView) => a.stageAsset?.displayImageUrl ?? a.imageUrl;
-
-    for (const asset of turn.assets ?? []) {
-      if ((asset.status === 'generated' || asset.status === 'browser_ready') && urlOf(asset)) {
-        const excerpt = turn.paragraphs[asset.paragraphIndex] || '';
-        const role = asset.stageAsset?.role;
-        const isMilestone = role === 'background' || asset.paragraphIndex === 0;
-
-        newItems.push({
-          id: asset.jobId,
-          imageUrl: urlOf(asset)!,
-          title: asset.stageAsset?.character || `Moment at ¶${asset.paragraphIndex + 1}`,
-          characterName: asset.stageAsset?.character,
-          storyExcerpt: excerpt,
-          unlockedAt: new Date().toLocaleTimeString(),
-          isMilestone
-        });
-      }
+    if (turn) for (const asset of turn.assets ?? []) {
+      if (asset.paragraphIndex > paragraphIndex || !['generated','browser_ready'].includes(asset.status)) continue;
+      const imageUrl = sceneImageCandidatesFor(asset)[0];
+      if (!imageUrl) continue;
+      const id = JSON.stringify([scope,asset.jobId]);
+      newItems.push({id,sourceMessageId:turn.messageId,imageUrl,
+        title:asset.stageAsset?.character || `Moment at ¶${asset.paragraphIndex+1}`,
+        characterName:asset.stageAsset?.character,storyExcerpt:turn.paragraphs[asset.paragraphIndex] || '',
+        unlockedAt:old.find(item=>item.id===id)?.unlockedAt ?? new Date().toLocaleTimeString(),
+        isMilestone:asset.stageAsset?.role==='background'||asset.paragraphIndex===0});
     }
-
-    if (newItems.length > 0) {
-      const existingIds = new Set(this.items.map(i => i.id));
-      for (const item of newItems) {
-        if (!existingIds.has(item.id)) {
-          this.items.push(item);
-        }
-      }
-      this.render();
-    }
+    this.ownerChat = turn?.chatId ?? null;
+    this.items = [...retained.filter(item=>item.sourceMessageId!==turn?.messageId),...newItems].slice(-256);
+    if (JSON.stringify(old)!==JSON.stringify(this.items)) { this.closeLightbox();this.render(); }
   }
 
   setItems(items: CGItem[]): void {

@@ -1118,7 +1118,7 @@ export class VnStage {
   setCastMode(enabled:boolean):void {this.castStage.setEnabled(enabled);}
   setCastTurn(turn:TurnView|null,index:number):AssetView|null {
     this.dossiers.setTurnMedia(turn);
-    this.cgGallery.syncFromTurn(turn);
+    this.cgGallery.syncFromTurn(turn,index);
     return this.castStage.set(turn,index);
   }
 
@@ -1132,6 +1132,7 @@ export class VnStage {
     this.moveDraftEpoch++;this.closeMoveDraft();
     if(this.isBacklogOpen)this.closeBacklog();
     this.castStage.set(null,0);
+    this.cgGallery.syncFromTurn(null,0);
     this.dossiers.setTurnMedia(null);this.dossiers.setContext(undefined,[]);
     this.clearAllTimers();
     this.dismissChapterCard();

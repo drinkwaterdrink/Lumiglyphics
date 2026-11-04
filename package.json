@@ -1,6 +1,6 @@
 {
   "name": "lumiglyphics",
-  "version": "0.2.0-beta.127",
+  "version": "0.2.0-beta.128",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.0",
@@ -14,6 +14,7 @@
     "test:settings-workspace": "bun run ./scripts/test-settings-workspace-browser.ts",
     "test:cast-workspace": "node --experimental-strip-types ./scripts/test-cast-workspace-browser.ts",
     "test:settings-resilience": "node --experimental-strip-types ./scripts/test-settings-resilience-browser.ts",
+    "test:cg-gallery": "node --experimental-strip-types ./scripts/test-cg-gallery-browser.ts",
     "test:artwork-reveal": "node --experimental-strip-types ./scripts/test-artwork-reveal-browser.ts",
     "test:host-lifecycle": "node --experimental-strip-types ./scripts/test-host-lifecycle-browser.ts",
     "test:preparation-preview": "bun run ./scripts/test-preparation-preview-browser.ts",

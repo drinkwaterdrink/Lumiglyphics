@@ -1,3 +1,4 @@
+import {sceneImageCandidatesFor} from './image-loader.js';
 import {DNA_FIELDS,DNA_FIELD_LABELS,dnaFieldValue,type DnaField,type DnaProposal} from '../../shared/character-dna-workflow.js';
 import type { CharacterDNA, CharacterDNALibrary } from '../../shared/character-dna.js';
 import {
@@ -654,7 +655,7 @@ export class CharacterFolio implements WorkspaceSurface {
     // 3. From assets stageAsset character & CG collection
     for (const asset of turn.assets ?? []) {
       const charName = asset.stageAsset?.character?.trim();
-      const imageUrl = asset.stageAsset?.displayImageUrl ?? asset.imageUrl;
+      const imageUrl = ['generated','browser_ready'].includes(asset.status) ? sceneImageCandidatesFor(asset)[0] : undefined;
       if (charName && imageUrl) {
         detectedNames.add(charName);
         const key = charName.toLowerCase();
@@ -686,9 +687,9 @@ export class CharacterFolio implements WorkspaceSurface {
       const existing = Object.values(this.library).find(c => c.name.toLowerCase() === key || c.aliases.some(a => a.toLowerCase() === key));
       if (!existing && !findCharacterDNA(this.deleted,name)) {
         const dna = createEmptyCharacterDNA(name);
-        const assetWithImage = turn.assets?.find(a => (a.stageAsset?.character?.toLowerCase() === key || a.stageAsset?.character?.toLowerCase().includes(key)) && (a.stageAsset?.displayImageUrl ?? a.imageUrl));
+        const assetWithImage = turn.assets?.find(a => a.stageAsset?.character?.trim().toLowerCase() === key && ['generated','browser_ready'].includes(a.status) && sceneImageCandidatesFor(a).length > 0);
         if (assetWithImage) {
-          dna.avatarUrl = assetWithImage.stageAsset?.displayImageUrl ?? assetWithImage.imageUrl;
+          dna.avatarUrl = sceneImageCandidatesFor(assetWithImage)[0];
         }
         this.library[dna.id] = dna;
         changed = true;
