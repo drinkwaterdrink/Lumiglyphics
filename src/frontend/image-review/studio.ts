@@ -614,7 +614,18 @@ export class ImageStudio {
     panelPicture.className = 'studio-tab-panel';
     panelPicture.dataset.tabPanel = 'picture';
     const explanation=document.createElement('details');explanation.dataset.pictureExplanation='';explanation.innerHTML='<summary>Why this picture?</summary><p data-picture-explanation-text style="white-space:pre-wrap;overflow-wrap:anywhere"></p>';
-    panelPicture.append(explanation,context, versionsContainer, detail, this.brief.element, this.el('[data-recovery]').closest('details')!);
+    const corrections=document.createElement('div');corrections.dataset.pictureCorrections='';
+    corrections.setAttribute('role','group');corrections.setAttribute('aria-label','Correct this picture');
+    const correctionTitle=document.createElement('strong');correctionTitle.textContent='What needs changing?';corrections.append(correctionTitle);
+    const correctionButtons=document.createElement('div');correctionButtons.style.cssText='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0';
+    for(const [goal,label] of [['subject','Person or outfit'],['camera','Camera or framing'],['prompt','Edit wording'],['replacement','Another image']] as const){
+      const button=document.createElement('button');button.type='button';button.dataset.correctionGoal=goal;button.textContent=label;
+      button.style.cssText='min-height:44px;white-space:normal;overflow-wrap:anywhere';button.onclick=()=>this.openCorrection(goal);correctionButtons.append(button);
+    }
+    const correctionHelp=document.createElement('small');correctionHelp.dataset.correctionHelp='';correctionHelp.setAttribute('role','status');
+    correctionHelp.textContent='Open the controls you need, review your changes, then choose the explicit preview or generation action.';
+    corrections.append(correctionButtons);
+    panelPicture.append(explanation,context,corrections, versionsContainer, detail, this.brief.element, this.el('[data-recovery]').closest('details')!);
 
     const panelPrompt = document.createElement('div');
     panelPrompt.className = 'studio-tab-panel';
@@ -656,10 +667,42 @@ export class ImageStudio {
 
     const overview=document.createElement('p');overview.dataset.pictureOverview='';overview.setAttribute('role','status');overview.setAttribute('aria-atomic','true');overview.style.cssText='font-size:12px;margin:0 0 10px;overflow-wrap:anywhere';
     tools.replaceChildren(tabs,editTools,panelPicture,panelPrompt,panelCamera,panelStyle,panelModel,panelHistory);
-    body.replaceChildren(overview,navigation,tools,notice);
+    body.replaceChildren(overview,navigation,correctionHelp,tools,notice);
     for(const field of ['positive','negative','parameters']){const note=document.createElement('small');note.dataset.promptLint=field;note.setAttribute('role','status');this.el(`[data-${field}]`).after(note);}
     const actionHelp=document.createElement('small');actionHelp.dataset.actionHelp='';this.el('[data-studio-footer]').append(actionHelp);
     const style=document.createElement('style');style.textContent=INSPECTOR_CSS+PREPARED_BRIEF_CSS+DOCKED_STUDIO_CSS;this.root.append(style);
+  }
+  /** Navigation only: the selected request's existing actions retain approval and dispatch. */
+  private openCorrection(goal:'subject'|'camera'|'prompt'|'replacement'):void {
+    const help=this.el('[data-correction-help]');
+    if(goal==='replacement'){
+      const action=this.replacementAction();if(!action)return;
+      help.textContent='Review the selected picture and prompt. The action below states whether it prepares a preview or starts an image request.';
+      action.scrollIntoView({block:'nearest'});action.focus({preventScroll:true});return;
+    }
+    if(goal==='subject'&&!this.el('[data-recovery]').hidden){
+      help.textContent='Correct this picture’s person or outfit below. Preparing a preview does not generate an image.';
+      this.navigateBrief('subject');return;
+    }
+    if(goal==='camera'){
+      help.textContent='Adjust the existing camera controls. Preparing a new preview still requires its explicit action.';
+      this.navigateBrief('template');return;
+    }
+    help.textContent=goal==='subject'?'Edit the current wording to correct the person or outfit. Review it before generating.':'Edit the positive and negative wording. Your changes remain a local draft until you use an action.';
+    this.navigateBrief('prompt');
+  }
+  private replacementAction():HTMLButtonElement|undefined {
+    return Array.from(this.el('[data-studio-footer]').querySelectorAll<HTMLButtonElement>('button')).find(button=>
+      button.matches('[data-primary-repair],[data-generate],[data-prepare],[data-retry-image]')&&!button.hidden&&!button.disabled);
+  }
+  private updateCorrectionNavigation():void {
+    const selected=Boolean(this.turn?.assets.some(asset=>asset.jobId===this.selectedJob));
+    this.el('[data-picture-corrections]').hidden=!selected||Boolean(this.planningChat)||this.turn?.status==='planning';
+    for(const button of this.root.querySelectorAll<HTMLButtonElement>('[data-correction-goal]')){
+      const goal=button.dataset.correctionGoal;
+      const needsWording=goal==='prompt'||(goal==='subject'&&this.el('[data-recovery]').hidden);
+      button.disabled=!selected||(goal==='replacement'?!this.replacementAction():goal==='camera'?this.el<HTMLSelectElement>('[data-template]').disabled:needsWording?this.el<HTMLTextAreaElement>('[data-positive]').readOnly:false);
+    }
   }
   private diagnosticText(): string {
     const asset = this.turn?.assets.find(entry => entry.jobId === this.selectedJob);
@@ -774,6 +817,7 @@ export class ImageStudio {
     for(const selector of ['[data-generate]','[data-prepare]']){const button=this.el<HTMLButtonElement>(selector);if(button.dataset.available!==undefined)button.disabled=button.dataset.available!=='true'||Boolean(error);}
     const retry=this.el<HTMLButtonElement>('[data-retry-image]'),record=this.record();
     if(retry.dataset.available!==undefined)retry.disabled=retry.dataset.available!=='true'||Boolean(error&&record&&this.drafts.has(this.draftKey(record)));
+    this.updateCorrectionNavigation();
     const reviewable = (this.turn?.imageRequests ?? []).filter(r => r.state === 'review');
     const batchBtn = this.root.querySelector<HTMLButtonElement>('[data-batch-approve]');
     if (batchBtn) {
@@ -1169,6 +1213,7 @@ export class ImageStudio {
     this.renderConnectionDropdown();
     this.updateCostEstimate();
     this.setNotice(this.recovering ? (this.recovering==='stop'?'Stopping pending pictures…':'Preparing unfinished pictures for review…') : rolling ? "Rewriting prompt with the story-reader model… Uses text tokens; image generation still needs approval." : (asset?.error ?? '') || (record && this.rebuilding.has(record.requestId) ? "Rebuilding template… Wait for a new preview before generating." : ''));
+    this.updateCorrectionNavigation();
     this.publishOperations();
   }
   private publishOperations():void{

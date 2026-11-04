@@ -35,3 +35,16 @@ Tests cover future character/text/facts/CG exclusion, forward appearance and rew
 The Folio reveal-policy checkpoint is implemented. Next council packet: outcome-oriented Artwork corrections and validated return-to-reading behavior, followed by previous-shot continuity. Saved DNA is intentionally accessible independently of story reveal; it is user-owned authoring guidance. Broader P1/P2/P3 items remain pending.
 
 Beta.129 release gate: **2,155 tests pass, zero fail,11,293 assertions/210 files**; full TypeScript, production bundles, manifest/version/static verifier, status generation, blocked-pattern scanner and diff checks pass. Folio reveal, DNA UI, DNA host lifecycle and general host lifecycle browsers pass. Next authorized push after129 requires130.
+
+
+## Checkpoint 3 — Artwork correction navigation and reading return, beta.130
+
+Base beta.129, 7c90ca1ac88cf2d1b28f04d1bfeae9c548f4b174. Implemented the council's four outcome entry points in the existing Picture tab: Person or outfit, Camera or framing, Edit wording, Another image. They navigate to existing subject/template/prompt controls or focus the available contextual footer action. They do not dispatch text/image requests, apply edits, save settings or bypass approval. Subject correction opens its existing form when eligible; held prompts route to editable wording with visible guidance instead of focusing a hidden form. Another image respects the final enabled primary action, including unavailable configuration and pending work. Specialist tabs and Customize remain intact. Buttons use a wrapping two-column layout with44px minimum height. Guidance remains visible after switching tabs.
+
+Reused ReaderWorkspace.close and existing source/cursor ownership. No duplicate return cursor, automatic seek, protocol schema or storage fields were added. Browser evidence proves same-passage/draft return, preservation of local prompt edits across close/reopen, and no stale return when a swipe/source/chat changes while Artwork is open. This preserves the current source instead of restoring obsolete context.
+
+RED/GREEN browser regression covers the missing entry points, held versus completed correction paths, no transport dispatch from navigation, preserved drafts and responsive hit geometry at320/390/1280. Completed-image verification explicitly loads the fixture's existing template configuration; missing templates correctly leave replacement unavailable. Screenshots were reviewed at320px. Existing image-review, Reader/Cast/Artwork handoff, model-prompt, host lifecycle and reader-polish suites pass, including mobile Artwork visibility/focus and150% landscape host scale. New real-host return checks pass at390/1280. Browser plugin unavailable; repository Playwright localhost fixtures used. No live/paid calls, physical-device acceptance or new paid workflow claimed.
+
+Next council packet: compatible previous-shot continuity in the production V2 builder, preserving manual camera overrides and cache identity. Larger P2/P3 upgrades and final council-wide review remain pending. Next authorized push after beta.130 requires beta.131.
+
+Beta.130 release gate: **2,155 tests pass, zero fail,11,294 assertions/210 files**; full TypeScript, backend/frontend production builds, manifest/version/static verifier, generated status table, blocked-pattern scan and diff check pass.
