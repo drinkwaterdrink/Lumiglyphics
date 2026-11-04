@@ -38,3 +38,11 @@ it('can keep editing the retained character after merging a same-name legacy dup
 it('rejects stale writes and leaves data untouched on failed persistence',async()=>{
  const{spindle}=fixture();const dna=createEmptyCharacterDNA('Nadine');await saveCharacterDNA(spindle,'c',dna,'u');await expect(saveCharacterDNA(spindle,'c',dna,'u',0)).rejects.toThrow('changed');const set=spindle.userStorage.setJson;spindle.userStorage.setJson=async()=>{throw new Error('disk unavailable');};await expect(saveCharacterDNA(spindle,'c',createEmptyCharacterDNA('Darby'),'u')).rejects.toThrow('disk');spindle.userStorage.setJson=set;expect(Object.keys((await loadCharacterDNALibrary(spindle,'c','u')).characters)).toEqual(['nadine']);
 });
+
+it('refuses a pending DNA proposal after the cursor moves within the same reply',async()=>{
+ const{spindle,messages}=fixture();const{saveReadingPosition}=await import('./storage.js');const key={chatId:'c',assistantMessageId:'m',sourceFingerprint:'12345678',swipeId:0,revision:0};
+ spindle.chat={getMessages:async()=>[{id:'m',swipe_id:0,is_user:false,content:'Nadine enters. Nadine turns away.'}]};spindle.connections={list:async()=>[{id:'writer',provider:'openai',model:'m',is_default:true}]};spindle.generate={raw:async()=>({content:JSON.stringify({changes:[{path:'hair.color',value:'auburn',classification:'generated',sourceRefs:[]}]})})};
+ await saveReadingPosition(spindle,{version:1,key,paragraphIndex:1},'u');await handleCharacterDnaRequest(spindle,{type:'vn_character_dna',action:'propose',chatId:'c',requestId:'p',characterName:'Nadine'},'u');const proposal=messages.at(-1)?.message.proposal;expect(proposal).toBeDefined();
+ await saveReadingPosition(spindle,{version:1,key,paragraphIndex:0},'u');await handleCharacterDnaRequest(spindle,{type:'vn_character_dna',action:'apply',chatId:'c',requestId:'apply',proposalId:proposal.id,fields:['hair.color']},'u');
+ expect(messages.at(-1)?.message.error).toContain('story context changed');expect(Object.keys((await loadCharacterDNALibrary(spindle,'c','u')).characters)).toHaveLength(0);
+});

@@ -15,3 +15,9 @@ test('history retains the latest 50 unique images in stable chronological order'
   expect(archiveImageVersion(history,'job',version(50)).job).toHaveLength(50);
   expect(archiveImageVersion(history,'job',version(51)).job?.at(-1)?.versionId).toBe('v51');
 });
+
+test('malformed provenance keeps the image available without claiming verified restoration',()=>{
+ const history=normalizeImageVersionHistory({job:[{...version(1),provenance:{version:1,job:{},cue:{},requestId:'bad'}}]});
+ expect(history.job).toHaveLength(1);
+ expect(history.job?.[0]?.provenance).toBeUndefined();
+});

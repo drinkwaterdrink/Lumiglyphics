@@ -171,7 +171,9 @@ export class DialogueSheet {
   private resize(): void {
     const usable = this.usableHeight();
     const h = sheetHeight(this.preferences.sheetSize, usable, this.preferences.heightRatio);
-    this.root.style.setProperty("--vn-reader-height", `${this.root.clientHeight || this.root.getBoundingClientRect().height}px`);
+    const readerHeight=this.root.clientHeight || this.root.getBoundingClientRect().height;
+    this.root.dataset.vnReplyCompact=String(readerHeight<340);
+    this.root.style.setProperty("--vn-reader-height", `${readerHeight}px`);
     this.root.style.setProperty("--vn-sheet-keyboard-inset", `${this.keyboardInset()}px`);
     this.root.style.setProperty("--vn-sheet-height", `${h}px`);
     this.root.style.setProperty("--caption-height", `${h}px`);

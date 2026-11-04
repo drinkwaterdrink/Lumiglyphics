@@ -27,7 +27,7 @@ export async function handleCharacterDnaRequest(spindle:SpindleAPI,request:DnaRe
   }
   if(request.action==='apply'){
    const state=previous,p=state?.proposal;if(!p||p.id!==request.proposalId||!state?.target||Date.now()-(state.created??0)>300000)throw new Error('This proposal expired. Auto-fill again to review fresh suggestions.');
-   const position=await loadReadingPosition(spindle,request.chatId,userId);if(state.contextKey!==JSON.stringify(position?{key:position.key}:null))throw new Error('The story context changed. Request fresh DNA suggestions.');
+   const position=await loadReadingPosition(spindle,request.chatId,userId);if(state.contextKey!==JSON.stringify(position?{key:position.key,paragraphIndex:position.paragraphIndex}:null))throw new Error('The story context changed. Request fresh DNA suggestions.');
    const selected=p.changes.filter(c=>request.fields.includes(c.path));if(selected.length!==new Set(request.fields).size)throw new Error('Choose fields from this proposal only.');
    await mutateCharacterDnaLibrary(spindle,request.chatId,userId,p.baseRevision,l=>{
     if(l.deleted?.[p.characterId])throw new Error('This character was deleted.');

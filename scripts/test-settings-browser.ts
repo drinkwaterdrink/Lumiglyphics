@@ -101,10 +101,10 @@ try {
   assert.deepEqual(await lastPatch(page), { textSpeed: 0 });
   assert.equal(await settings.locator("[data-status]").innerText(), "Saved");
   await openTab("Look");
-  await settings.locator("[data-appearance-preview] > summary").click();
-  assert.equal(await settings.locator('[data-pane="look"] [data-sample]').isVisible(), true, "Appearance provides the optional local preview");
+  assert.equal(await settings.locator('[data-pane="look"] [data-sample]').isVisible(), true, "Appearance provides the local preview");
+  const readerPreferencesBeforeTheme=(await fixture(page)).config.readerPreferences as Record<string,unknown>;
   await settings.locator('input[name="themePreset"][value="paper-novel"]').check();
-  assert.deepEqual(await lastPatch(page), { themePreset: "paper-novel" });
+  assert.deepEqual(await lastPatch(page), { themePreset: "paper-novel",readerPreferences:{...readerPreferencesBeforeTheme,theme:'light'} },'theme changes keep the reader palette synchronized and preserve its other preferences');
   const accent = await settings.locator("[data-sample-stage]").evaluate((element) => getComputedStyle(element).getPropertyValue("--sample-accent").trim());
   assert.equal(accent, "#8a2f23", "sample follows the chosen theme");
   await settings.locator('input[name="sceneImageFit"][value="contain"]').check();
@@ -349,8 +349,9 @@ try {
   await setup.waitFor();
   assert.equal(await setup.locator('input[name="setupImageSource"][value="card"]').isChecked(), true, "guide reflects saved card choice");
   assert.equal(await setup.locator('input[name="setupThemePreset"][value="midnight-noir"]').isChecked(), true, "guide reflects saved theme");
+  const readerPreferencesBeforeSetupTheme=(await fixture(page)).config.readerPreferences as Record<string,unknown>;
   await setup.locator('input[name="setupThemePreset"][value="golden-hour"]').check();
-  assert.deepEqual(await lastPatch(page), { themePreset: "golden-hour" });
+  assert.deepEqual(await lastPatch(page), { themePreset: "golden-hour",readerPreferences:{...readerPreferencesBeforeSetupTheme,theme:'dark'} });
   assert.equal(await settings.locator('input[name="themePreset"][value="golden-hour"]').isChecked(), true, "Look mirrors the guide");
   await page.goto(`http://127.0.0.1:${server.port}/?setupDone`);
   await settings.waitFor();
@@ -385,7 +386,6 @@ try {
   // Reduced motion: sample shows the whole line at once.
   await page.emulateMedia({ reducedMotion: "reduce" });
   await openTab("Look");
-  await settings.locator('[data-appearance-preview]').evaluate((node:HTMLDetailsElement)=>node.open=true);
   await settings.locator("[data-sample-replay]").click();
   assert.equal(await settings.locator("[data-sample-stage]").getAttribute("data-typing"), null);
 

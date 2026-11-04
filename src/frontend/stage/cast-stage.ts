@@ -47,6 +47,7 @@ export class CastStage {
   if(enabled&&!this.observer&&typeof ResizeObserver!=='undefined'){
    this.observer=new ResizeObserver(()=>{if(this.fitFrame)return;if(typeof requestAnimationFrame==='function')this.fitFrame=requestAnimationFrame(()=>{this.fitFrame=0;this.fit();});else this.fit();});this.observer.observe(this.root);
    const dialogue=this.root.querySelector('[data-vn-dialogue]');if(dialogue)this.observer.observe(dialogue);
+   const reply=this.root.querySelector('[data-vn-interaction]');if(reply)this.observer.observe(reply);
   }else if(!enabled){this.observer?.disconnect();this.observer=null;}
   this.refresh();
  }
@@ -130,6 +131,8 @@ export class CastStage {
   this.host.style.removeProperty('--vn-cast-top');this.host.hidden=false;
   const root=this.root.getBoundingClientRect(),host=this.host.getBoundingClientRect();
   const dialogue=this.root.querySelector<HTMLElement>('[data-vn-dialogue]');
+  const reply=this.root.querySelector<HTMLElement>('[data-vn-interaction]');
+  if(reply&&!reply.hidden&&reply.getClientRects().length){this.host.hidden=true;return;}
   const scale=root.width/this.root.clientWidth||1;
   const bottom=dialogue&&dialogue.getClientRects().length?dialogue.getBoundingClientRect().top:root.bottom;
   if(this.collapsed){

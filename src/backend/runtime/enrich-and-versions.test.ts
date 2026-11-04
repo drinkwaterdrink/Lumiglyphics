@@ -90,6 +90,9 @@ function job(jobId: string, imageId: string, imageUrl: string): AssetJob {
   };
 }
 
+function archivedRequest(requestId:string,jobId:string){return {requestId,jobId,paragraphIndex:0,state:'approved' as const,prompt:'Archived prompt',negativePrompt:'',model:'model',provider:'image',connectionId:'connection',parameters:{},referenceSummary:'none',createdAt:now};}
+function knownVersion(savedPlan:StoredTurnRecord['plan'],savedJob:AssetJob,versionId:string){return {versionId,imageId:savedJob.imageId!,imageUrl:savedJob.imageUrl!,timestamp:now,prompt:'Archived prompt',negativePrompt:'',provenance:{version:1 as const,job:savedJob,cue:savedPlan.visualCues.find(cue=>cue.assetJobId===savedJob.jobId)!,requestId:'old-request'}};}
+
 describe("Previous Image Versions Restoration & Guided Prompt Enricher", () => {
   test("turnView exposes previousVersions when present on stored record", () => {
     const record: StoredTurnRecord = {
@@ -129,14 +132,10 @@ describe("Previous Image Versions Restoration & Guided Prompt Enricher", () => {
       status: "ready",
       plan,
       jobs: [job("job-1", "img-v2", "/api/v1/images/img-v2")],
+      imageRequests:[archivedRequest('old-request','job-1')],
       previousVersions: {
         "job-1": [
-          {
-            versionId: "v_1",
-            imageId: "img-v1",
-            imageUrl: "/api/v1/images/img-v1",
-            timestamp: now
-          }
+          knownVersion(plan,job('job-1','img-v1','/api/v1/images/img-v1'),'v_1')
         ]
       },
       updatedAt: now
@@ -215,7 +214,7 @@ describe("Previous Image Versions Restoration & Guided Prompt Enricher", () => {
     });
     const jobs=[0,1].map(i=>({...job(`job-${i}`,'old','/api/v1/images/old'),ownerTurnKey:raceKey,promptFingerprint:`fingerprint-${shared?0:i}`,paragraphIndex:i,status:'failed' as const,imageId:null,imageUrl:null,generatedAt:null,finishedAt:now,error:'retry'}));
     const path=turnPath(chatId,messageId,0);
-    const data=new Map<string,any>([[path,{schemaVersion:1,speaker:'Nadine',status:'ready',plan:racePlan,jobs,previousVersions:{'job-0':[{versionId:'saved',imageId:'saved-art',imageUrl:'/api/v1/images/saved-art',timestamp:now}]},updatedAt:now}],
+    const data=new Map<string,any>([[path,{schemaVersion:1,speaker:'Nadine',status:'ready',plan:racePlan,jobs,imageRequests:[archivedRequest('old-request','job-0')],previousVersions:{'job-0':[knownVersion(racePlan,{...jobs[0]!,status:'generated',imageId:'saved-art',imageUrl:'/api/v1/images/saved-art',generatedAt:now,readyAt:null,finishedAt:null,error:null},'saved')]},updatedAt:now}],
       [chatStatePath(chatId),{schemaVersion:1,activeTurnPath:path,latestScene:null,terminalContinuity:null,updatedAt:now}],
       ['config.json',{generateImages:true,reviewImages:false,imageConcurrency:2,referenceAnchoring:false,maxImagesPerTurn:2}]]);
     const releases:Array<(value:any)=>void>=[];
@@ -328,4 +327,35 @@ describe("Previous Image Versions Restoration & Guided Prompt Enricher", () => {
     expect(enriched.prompt).toContain("cinematic rim lighting");
     expect(calledPrompt).toContain("make her hair longer, cinematic rim lighting");
   });
+});
+
+test('restoring artwork keeps its own subject, template, prompt and generation fingerprint',async()=>{
+ const {archiveCurrentImageVersion}=await import('./image-version-provenance.js');const {BUILTIN_IMAGE_TEMPLATES,templateSnapshot}=await import('../../shared/image-templates.js');
+ const request=(id:string,prompt:string)=>({requestId:id,jobId:'job-1',paragraphIndex:0,state:'approved' as const,prompt,negativePrompt:'negative '+id,model:'model',provider:'image',connectionId:'connection',parameters:{seed:1},referenceSummary:'none',createdAt:now});
+ const planA=TurnPlanSchema.parse({...plan,visualCues:[{...plan.visualCues[0],character:'Nadine',imageTemplate:templateSnapshot(BUILTIN_IMAGE_TEMPLATES.find(t=>t.id==='portrait')!)}]});
+ const initial:StoredTurnRecord={schemaVersion:1,speaker:'Nadine',status:'ready',plan:planA,jobs:[job('job-1','image-a','/api/v1/images/image-a')],imageRequests:[request('request-a','Nadine in her coat')],updatedAt:now};
+ const previousVersions=archiveCurrentImageVersion(initial,initial.jobs[0]!,undefined);const selected=previousVersions['job-1']![0]!;expect(selected.prompt).toBe('Nadine in her coat');
+ const replacement:StoredTurnRecord={...initial,plan:TurnPlanSchema.parse({...planA,visualCues:[{...planA.visualCues[0],character:'Darby',imageTemplate:templateSnapshot(BUILTIN_IMAGE_TEMPLATES.find(t=>t.category==='environment')!)}]}),jobs:[{...job('job-1','image-b','/api/v1/images/image-b'),promptFingerprint:'new-fingerprint'}],imageRequests:[...initial.imageRequests!,request('request-b','Darby in the new scene')],previousVersions};
+ const path=turnPath('chat','msg-1',0),data=new Map<string,any>([[path,replacement],[chatStatePath('chat'),{schemaVersion:1,activeTurnPath:path,latestScene:null,terminalContinuity:null,updatedAt:now}]]);const api:any={userStorage:{getJson:async(path:string,options:any)=>data.get(path)??options?.fallback??null,setJson:async(path:string,value:any)=>data.set(path,value)},sendToFrontend(){},log:{warn(){}}};
+ viewRegistry().open(undefined,'chat');try{
+  await restorePreviousImage(api,{type:'vn_restore_previous_image',chatId:'chat',messageId:'msg-1',sourceFingerprint:key.sourceFingerprint,swipeId:0,revision:0,jobId:'job-1',versionId:selected.versionId});
+  const restored=data.get(path) as StoredTurnRecord;expect(restored.jobs[0]?.imageId).toBe('image-a');expect(restored.jobs[0]?.promptFingerprint).toBe('fp123456');expect(restored.plan.visualCues[0]?.character).toBe('Nadine');expect(restored.plan.visualCues[0]?.imageTemplate?.category).toBe('portrait');expect(restored.imageRequests?.at(-1)?.prompt).toBe('Nadine in her coat');expect(restored.imageRequests?.at(-1)?.negativePrompt).toBe('negative request-a');
+  const view=turnView(restored);expect(view.assets[0]?.stageAsset?.character).toBe('Nadine');expect(view.assets[0]?.stageAsset?.role).toBe('portrait');expect((view.assets[0]?.previousVersions?.[0] as any)?.provenance).toBeUndefined();
+  const other=restored.previousVersions?.['job-1']?.find(version=>version.imageId==='image-b')!;await restorePreviousImage(api,{type:'vn_restore_previous_image',chatId:'chat',messageId:'msg-1',sourceFingerprint:key.sourceFingerprint,swipeId:0,revision:0,jobId:'job-1',versionId:other.versionId});
+  expect(data.get(path).jobs[0].imageId).toBe('image-b');expect(data.get(path).plan.visualCues[0].character).toBe('Darby');expect(data.get(path).imageRequests.at(-1).prompt).toBe('Darby in the new scene');
+ }finally{viewRegistry().close(undefined,'chat');}
+});
+
+test('legacy or changed version provenance never relabels old pixels with current metadata',async()=>{
+ const {resolveImageVersion,archiveCurrentImageVersion}=await import('./image-version-provenance.js');
+ const j=job('job-1','image-a','/api/v1/images/image-a'),record:StoredTurnRecord={schemaVersion:1,speaker:'Nadine',status:'ready',plan,jobs:[j],imageRequests:[archivedRequest('old-request','job-1')],updatedAt:now};
+ const legacy={versionId:'legacy',imageId:'legacy-art',imageUrl:'/api/v1/images/legacy-art',timestamp:now};
+ expect(resolveImageVersion(record,j,legacy).notice).toContain('Legacy');
+ const version=archiveCurrentImageVersion(record,j,undefined)['job-1']![0]!;
+ expect(resolveImageVersion({...record,imageRequests:[]},j,version).notice).toContain('no longer available');
+ expect(resolveImageVersion({...record,imageRequests:[{...record.imageRequests![0]!,prompt:'Changed prompt'}]},j,version).notice).toContain('no longer available');
+ expect(resolveImageVersion({...record,plan:{...plan,key:{...key,revision:1}}},j,version).notice).toContain('different source');
+ const publicView=turnView({...record,previousVersions:{'job-1':[legacy]}}).assets[0]!.previousVersions![0]!;expect(publicView.restorable).toBe(false);expect(publicView.restoreNotice).toContain('Legacy');expect((publicView as any).provenance).toBeUndefined();
+ const path=turnPath('chat','msg-1',0),data=new Map<string,any>([[path,{...record,previousVersions:{'job-1':[legacy]}}],[chatStatePath('chat'),{schemaVersion:1,activeTurnPath:path,latestScene:null,terminalContinuity:null,updatedAt:now}]]);let writes=0;const api:any={userStorage:{getJson:async(path:string,options:any)=>data.get(path)??options?.fallback??null,setJson:async()=>{writes++;}},sendToFrontend(){},log:{warn(){}}};
+ viewRegistry().open(undefined,'chat');try{await expect(restorePreviousImage(api,{type:'vn_restore_previous_image',chatId:'chat',messageId:'msg-1',sourceFingerprint:key.sourceFingerprint,swipeId:0,revision:0,jobId:'job-1',versionId:'legacy'})).rejects.toThrow('Legacy');expect(writes).toBe(0);expect(data.get(path).jobs[0].imageId).toBe('image-a');}finally{viewRegistry().close(undefined,'chat');}
 });

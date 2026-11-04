@@ -5,13 +5,13 @@ Test counts here are file counts. The live test count appears in the `bun test` 
 
 | Measure | Value |
 |---|---|
-| Extension version | 0.2.0-beta.125 |
+| Extension version | 0.2.0-beta.126 |
 | Theme presets | 10 |
 | Image prompt families | 12 |
-| Source files (non-test, src/) | 265 |
-| Source lines (non-test, src/) | 62,564 |
-| Unit test files (src/) | 208 |
-| Browser suite scripts (test:*) | 44 |
+| Source files (non-test, src/) | 268 |
+| Source lines (non-test, src/) | 62,685 |
+| Unit test files (src/) | 210 |
+| Browser suite scripts (test:*) | 45 |
 | Declared Spindle permissions | 10 |
 
 Theme presets: `lumiverse`, `golden-hour`, `boxed-console`, `paper-novel`, `midnight-noir`, `yamaku-classic`, `literature-club`, `astral-glass`, `neon-rain`, `obsidian-reliquary`.

@@ -1,3 +1,4 @@
+import {fingerprintForMessage} from './planner.js';
 import type {SpindleAPI} from 'lumiverse-spindle-types';
 import type {VisualNovelConfig} from '../../config.js';
 import {z} from 'zod';
@@ -39,7 +40,23 @@ export async function collectCharacterDnaEvidence(spindle:SpindleAPI,input:Input
  // Use the saved cursor when present; never include later messages or paragraphs.
  const position=await bounded(loadReadingPosition(spindle,chatId,userId).catch(()=>null),signal);
  let visible=messages;
- if(position){const at=messages.findIndex(m=>m.id===position.key.assistantMessageId&&Number(m.swipe_id??0)===Number(position.key.swipeId??0));if(at<0)visible=[];else{visible=messages.slice(0,at+1).map((m,i)=>i===at?{...m,content:m.content.split(/\n\s*\n/).slice(0,position.paragraphIndex+1).join('\n\n')}:m);}}
+ let trustedRecord:Awaited<ReturnType<typeof loadTurnRecord>>=null;
+ if(position){
+  const at=position.key.chatId===chatId?messages.findIndex(m=>m.id===position.key.assistantMessageId&&Number(m.swipe_id??0)===Number(position.key.swipeId??0)):-1;
+  visible=at<0?[]:messages.slice(0,at);
+  if(at>=0){
+   try{
+    const saved=await bounded(loadTurnRecord(spindle,turnPath(chatId,position.key.assistantMessageId,position.key.swipeId),userId),signal);
+    const message=messages[at]!,rawFingerprint=fingerprintForMessage(message);
+    if(saved&&samePresentationTurn(saved.plan.key,position.key)&&(saved.source?.rawFingerprint??saved.plan.key.sourceFingerprint)===rawFingerprint&&position.paragraphIndex<saved.plan.paragraphs.length){
+     trustedRecord=saved;
+     // Reader indices address canonical planned paragraphs, never raw blank lines.
+     visible.push({...message,content:saved.plan.paragraphs.slice(0,position.paragraphIndex+1).map(paragraph=>paragraph.text).join('\n\n')});
+    }
+   }catch{aborted(signal);}
+   if(!trustedRecord)statuses.push({source:'Story cursor',status:'unavailable or stale; refresh the reader'});
+  }
+ }
  const names=[target.name,...target.aliases].map(dnaNameKey);
  for(const m of visible.slice(-12))for(const passage of targetDnaPassages(m.content,[target.name,...target.aliases]))add(`Story ${m.id}`,passage);
  if(config.includeSimTrackerContext){const latest=visible.at(-1);if(latest){const tracker=scanTrackerCastHistory(visible,latest.id,config.simTrackerMappings);const match=tracker.find(t=>names.includes(dnaNameKey(t.character.name)));if(match)add('SimTracker',JSON.stringify(match.character));statuses.push({source:'SimTracker',status:match?'available':'no match'});}else statuses.push({source:'SimTracker',status:'no match'});}else statuses.push({source:'SimTracker',status:'disabled'});
@@ -49,11 +66,11 @@ export async function collectCharacterDnaEvidence(spindle:SpindleAPI,input:Input
   statuses.push({source:'Card / scenario',status:!config.includeCharacterContext?'disabled':context.diagnostics.characterLoaded?'available':'unavailable'},
    {source:'Activated lorebooks',status:!config.includeLorebookContext?'disabled':context.diagnostics.errors.some(e=>e.startsWith('lore'))?'unavailable':context.diagnostics.loreIncluded?'available':'no match'});
  }catch{aborted(signal);statuses.push({source:'Card / scenario / lore',status:'unavailable'});}
- if(position){try{const saved=await bounded(loadTurnRecord(spindle,turnPath(chatId,position.key.assistantMessageId,position.key.swipeId),userId),signal);const p=saved&&samePresentationTurn(saved.plan.key,position.key)?readerPresentationFor(saved.plan,saved.presentation):undefined;const snap=p?selectPresentationSnapshot(p,position.paragraphIndex):undefined;const entity=snap?.entities.find(e=>e.kind==='npc'&&[e.name,...e.aliases].some(n=>names.includes(dnaNameKey(n))));if(entity)add('Story reference codex',JSON.stringify(entity));statuses.push({source:'Story reference codex',status:entity?'available':'no match'});}catch{aborted(signal);statuses.push({source:'Story reference codex',status:'unavailable'});}}
+ if(position){try{const saved=trustedRecord;const p=saved?readerPresentationFor(saved.plan,saved.presentation):undefined;const snap=p?selectPresentationSnapshot(p,position.paragraphIndex):undefined;const entity=snap?.entities.find(e=>e.kind==='npc'&&[e.name,...e.aliases].some(n=>names.includes(dnaNameKey(n))));if(entity)add('Story reference codex',JSON.stringify(entity));statuses.push({source:'Story reference codex',status:entity?'available':'no match'});}catch{aborted(signal);statuses.push({source:'Story reference codex',status:'unavailable'});}}
  else statuses.push({source:'Story reference codex',status:'no reading cursor'});
  const sources=await collectContextSources(optionalRpcReader(spindle),config.contextSources??{lumibooks:false,lumiscriptEndpoint:''},{chatId,userId},signal);
  for(const source of sources){statuses.push({source:source.status.provider,status:source.status.status});for(const entity of source.proposal?.entities??[]){if(entity.kind!=='npc'||![entity.name,...entity.aliases].some(n=>names.includes(dnaNameKey(n))))continue;const facts=entity.facts.filter(f=>f.visibility!=='private');if(facts.length)add(`${source.status.provider} Codex (reference)`,JSON.stringify({name:entity.name,facts}),'reference');}}
- aborted(signal);return{evidence,statuses,contextKey:JSON.stringify(position?{key:position.key}:null)};
+ aborted(signal);return{evidence,statuses,contextKey:JSON.stringify(position?{key:position.key,paragraphIndex:position.paragraphIndex}:null)};
 }
 function responseText(value:unknown):string{if(typeof value==='string')return value;const r=value as any;const c=r?.content??r?.text??r?.choices?.[0]?.message?.content??'';return typeof c==='string'?c:Array.isArray(c)?c.filter(p=>p.type==='text').map(p=>p.text).join('\n'):'';}
 export async function proposeCharacterDna(spindle:SpindleAPI,input:Input&{revision:number;evidence:DnaContext;fields?:DnaField[]}):Promise<DnaProposal>{

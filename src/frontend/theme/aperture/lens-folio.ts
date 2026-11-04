@@ -700,29 +700,47 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   display: none !important;
 }
 
+/* Reserve reply space without changing the saved reading-panel size. */
+[data-vn-root][data-vn-phase="awaiting-input"]{
+ --caption-height:max(114px,min(var(--vn-sheet-height,142px),calc((var(--vn-reader-height,100dvh) - 180px) * .45)))!important;
+}
+[data-vn-root][data-vn-phase="awaiting-input"][data-vn-reply-compact="true"] .reader-caption[data-vn-dialogue]:not([hidden]):not([data-hidden="true"]){display:none!important}
+[data-vn-root][data-vn-phase="awaiting-input"][data-vn-reply-compact="true"] [data-vn-interaction]:not([hidden]){bottom:104px!important}
 [data-vn-interaction]:not([hidden]) {
   position: absolute !important;
-  inset: auto 14px calc(var(--caption-height, 142px) + 82px + env(safe-area-inset-bottom, 0px)) 14px !important;
+  inset: calc(70px + env(safe-area-inset-top, 0px)) 14px calc(var(--caption-height, 142px) + 104px + env(safe-area-inset-bottom, 0px)) 14px !important;
   z-index: 24 !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
-  justify-content: flex-end !important;
+  justify-content: flex-start !important;
+  justify-content: safe flex-end !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+  scrollbar-width: thin;
   gap: 10px !important;
   max-width: 600px !important;
   margin: 0 auto !important;
   padding: 0 !important;
   background: transparent !important;
-  pointer-events: none !important;
+  pointer-events: auto !important;
 }
 
 [data-vn-interaction] > * {
+  flex-shrink: 0 !important;
   pointer-events: auto !important;
 }
 
 [data-vn-interaction-heading] {
   text-align: center !important;
   margin-bottom: 2px !important;
+  padding: 4px 10px !important;
+  max-width: 100%;
+  box-sizing: border-box;
+  border-radius: 10px;
+  background: var(--vn-shell-panel, #111a1e) !important;
+  border: 1px solid var(--vn-shell-border, #9cb5a8);
 }
 
 [data-vn-interaction-title] {
@@ -731,16 +749,19 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   font-weight: 700 !important;
   letter-spacing: 0.08em !important;
   text-transform: uppercase !important;
-  color: #dcebad !important;
+  color: var(--vn-shell-text, #eff4e9) !important;
   margin: 0 0 2px !important;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7) !important;
+  text-shadow: none !important;
 }
 
 [data-vn-interaction-hint] {
   font-size: 11px !important;
-  color: var(--aperture-muted, #9cb5a8) !important;
+  color: var(--vn-shell-muted, #9cb5a8) !important;
+  text-shadow: none !important;
   margin: 0 !important;
 }
+
+[data-vn-interaction]:focus-visible{outline:2px solid var(--vn-shell-accent,#dcebad);outline-offset:2px}
 
 [data-vn-input-form] {
   display: flex !important;
@@ -794,6 +815,9 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   transform: translateY(-1px) !important;
 }
 
+/* The reply area owns scrolling; a second list viewport can clip a full choice. */
+[data-vn-interaction] [data-vn-choice-list]{max-height:none!important;overflow:visible!important}
+
 [data-vn-choice-list] {
   display: flex !important;
   flex-direction: column !important;
@@ -817,6 +841,9 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   backdrop-filter: blur(12px) !important;
   transition: background 0.15s ease, border-color 0.15s ease !important;
 }
+
+/* Keep the existing terminal, paper and deco markers clear of the label. */
+:is([data-vn-preset="boxed-console"],[data-vn-preset="paper-novel"],[data-vn-preset="midnight-noir"]) [data-vn-choice]{padding-inline:40px!important}
 
 [data-vn-choice-list] button:hover {
   background: var(--aperture-choice-hover-bg, rgba(35, 75, 57, 0.95)) !important;

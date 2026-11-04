@@ -263,7 +263,7 @@ const THEME_MARKUP = `
       </footer>
     </section>
 
-    <section data-vn-interaction hidden aria-labelledby="vn-interaction-title">
+    <section data-vn-interaction hidden tabindex="0" aria-labelledby="vn-interaction-title">
       <div data-vn-interaction-heading>
         <h2 id="vn-interaction-title" data-vn-interaction-title>Your turn</h2>
         <p data-vn-interaction-hint></p>
@@ -302,7 +302,7 @@ const queryRequired = <T extends Element>(
 
 const isInteractiveTarget = (target: EventTarget | null): boolean =>
   target instanceof Element &&
-  Boolean(target.closest("button, textarea, input, select, option, a, [role='button']"));
+  Boolean(target.closest("button, textarea, input, select, option, a, [role='button'], [data-vn-interaction]"));
 
 const phaseLoadingLabel = (phase: VnPhase): string | null => {
   switch (phase) {
@@ -1958,6 +1958,7 @@ export class VnStage {
     });
 
     this.root.addEventListener("wheel", (event) => {
+      if(event.target instanceof Element&&event.target.closest("[data-vn-interaction]"))return;
       if (this.root.dataset.vnPageFocus === "true" || this.dialogueSheet?.isHidden() || (this.root.dataset.vnAdjustableSheet === "true" && event.target instanceof Element && event.target.closest("[data-vn-dialogue]"))) return;
       if (this.workspace.isOpen() || this.isBacklogOpen || this.dossiers.isOpen()) return;
       if (this.isCleanView) { this.setCleanView(false); return; }
@@ -1995,6 +1996,7 @@ export class VnStage {
 
         // Check if user is scrolling inside dialogue text or scrollable card
         const target = event.target as HTMLElement | null;
+        if(target?.closest("[data-vn-interaction]"))return;
         const scrollable = target?.closest("[data-vn-dialogue-text], [data-workspace-content], [data-vn-backlog-dialog]");
         const isScrollingText = scrollable && scrollable.scrollHeight > scrollable.clientHeight && Math.abs(dy) > 15;
 

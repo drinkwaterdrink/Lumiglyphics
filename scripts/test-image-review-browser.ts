@@ -249,5 +249,10 @@ try {
   await page.screenshot({ path: ".cache/image-review-mobile.png" });
   await page.setViewportSize({ width: 1440, height: 960 });
   await page.screenshot({ path: ".cache/image-review-desktop.png" });
+  await page.evaluate(()=>{const f=(window as any).imageFixture,t=structuredClone(f.turn);t.assets[0].previousVersions=[{versionId:'legacy',imageId:'old-art',imageUrl:'/api/v1/images/old-art',timestamp:'2026-11-01T00:00:00Z',restorable:false,restoreNotice:'Legacy version: subject, template and prompt provenance are unavailable. Restore is disabled.'}];f.studio.setTurn(t);});
+  await tab('Picture');
+  const unknownVersion=studio.getByRole('button',{name:/v1 Metadata unavailable/});
+  assert.equal(await unknownVersion.isDisabled(),true,'legacy history never presents an actionable restore with invented metadata');
+  assert.match(await unknownVersion.getAttribute('title')??'',/provenance are unavailable/);
   console.log("image review browser checks passed");
 } finally { await browser.close(); server.stop(true); }

@@ -32,7 +32,7 @@ describe("theme preset settings options", () => {
 });
 
 describe("settings panel markup", () => {
-  const source = readFileSync(new URL("./panel.ts", import.meta.url), "utf8");
+  const source = readFileSync(new URL("./panel.ts", import.meta.url), "utf8") + readFileSync(new URL("./advanced-routes.ts", import.meta.url), "utf8");
   const names = [...source.matchAll(/name="([A-Za-z]+)"/g)].map((match) => match[1]!);
   const advancedBlock = /const ADVANCED_KEYS = \[([\s\S]*?)\] as const;/.exec(source)![1]!;
   const advancedKeys = [...advancedBlock.matchAll(/"([A-Za-z]+)"/g)].map((match) => match[1]!);

@@ -1232,17 +1232,18 @@ export class ImageStudio {
           const btn = document.createElement('button');
           btn.type = 'button';
           btn.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px;border-radius:8px;background:var(--vn-shell-field,rgba(0,0,0,0.3));border:1px solid var(--edge);cursor:pointer;flex-shrink:0;width:76px;text-align:center;color:inherit;font-size:10px;';
-          btn.title = `Version ${idx + 1}. Click to restore as active picture.`;
+          btn.disabled=ver.restorable===false;
+          btn.title = ver.restoreNotice??`Version ${idx + 1}. Click to restore as active picture.`;
           const thumbnail=document.createElement('img');
           thumbnail.src=`/api/v1/images/${encodeURIComponent(ver.imageId)}`;
           thumbnail.style.cssText='width:64px;height:74px;object-fit:cover;border-radius:6px;display:block';
           thumbnail.alt=`v${idx+1}`;
           const number=document.createElement('span');number.style.fontWeight='700';number.textContent=`v${idx+1}`;
-          const restoreLabel=document.createElement('span');restoreLabel.style.cssText='color:var(--accent);font-size:9px';restoreLabel.textContent='Restore ↺';
+          const restoreLabel=document.createElement('span');restoreLabel.style.cssText='color:var(--accent);font-size:9px';restoreLabel.textContent=ver.restorable===false?'Metadata unavailable':'Restore ↺';
           btn.append(thumbnail,number,restoreLabel);
           const selectedTurn=this.turn,selectedJob=this.selectedJob;
           btn.onclick = () => {
-            if (!selectedTurn||this.turn!==selectedTurn||this.selectedJob!==selectedJob) return;
+            if (ver.restorable===false||!selectedTurn||this.turn!==selectedTurn||this.selectedJob!==selectedJob) return;
             this.send({
               type: 'vn_restore_previous_image',
               chatId: this.turn.chatId,
