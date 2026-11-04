@@ -1032,6 +1032,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
 
   async function syncImageForParagraph(paragraphIndex: number): Promise<void> {
     if (!turn) return;
+    characterFolio.syncFromTurn(turn,paragraphIndex);
     const sourceTurn = turn;
     const assetFailure = currentAssetFailure(turn, paragraphIndex);
     if (assetFailure) reportStageError(assetFailure);
@@ -1092,7 +1093,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     imageStudio.setTurn(next);
     const nextDnaToken=JSON.stringify([next.chatId,next.messageId,next.sourceFingerprint,next.swipeId,next.revision]);if(nextDnaToken!==dnaTurnToken){characterFolio.invalidateContext();for(const[id,r]of dnaRequests)if(dnaTurnScoped(r.action))dnaRequests.delete(id);dnaTurnToken=nextDnaToken;}
     characterFolio.setContext(next.chatId);
-    characterFolio.syncFromTurn(next);
+
     if (next?.chatId) {
       sendDna({action:'list'});
     }

@@ -1,3 +1,4 @@
+import {samePresentationTurn} from '../../shared/presentation-entities.js';
 import {sceneImageCandidatesFor} from './image-loader.js';
 import {DNA_FIELDS,DNA_FIELD_LABELS,dnaFieldValue,type DnaField,type DnaProposal} from '../../shared/character-dna-workflow.js';
 import type { CharacterDNA, CharacterDNALibrary } from '../../shared/character-dna.js';
@@ -42,6 +43,8 @@ export class CharacterFolio implements WorkspaceSurface {
   private activeCharacterId: string | null = null;
   private activeSubTab: 'dna' | 'lore' | 'cgs' = 'dna';
   private latestTurnText = '';
+  private discoveredIds = new Set<string>();
+  private storyCursor = "";
   private chatId:string|null=null;
   private revision=0;
   private dirty=new Set<string>();
@@ -56,7 +59,7 @@ export class CharacterFolio implements WorkspaceSurface {
 
   setContext(chatId:string|null):void{
     if(this.chatId===chatId)return;
-    this.handlers.onCancelDNA?.();this.chatId=chatId;this.library=Object.create(null);this.dirty.clear();this.saving.clear();this.savedLibrary=Object.create(null);this.loreMap=Object.create(null);this.deleted={};this.revision=0;this.activeCharacterId=null;this.proposal=null;this.pending=false;this.notice='';this.latestTurnText='';this.deleteConfirm=false;this.mergeOther='';this.renderRoster();this.renderDetail();
+    this.handlers.onCancelDNA?.();this.chatId=chatId;this.discoveredIds.clear();this.library=Object.create(null);this.dirty.clear();this.saving.clear();this.savedLibrary=Object.create(null);this.loreMap=Object.create(null);this.deleted={};this.revision=0;this.activeCharacterId=null;this.proposal=null;this.pending=false;this.notice='';this.latestTurnText='';this.deleteConfirm=false;this.mergeOther='';this.renderRoster();this.renderDetail();
   }
   getContext():string|null{return this.chatId;}
   invalidateContext():void{this.cancelProposal();this.renderDetail();}
@@ -616,16 +619,28 @@ export class CharacterFolio implements WorkspaceSurface {
     // Keep character selection state
   }
 
-  syncFromTurn(turn: TurnView | null): void {
-    if (!turn) return;
+  syncFromTurn(turn: TurnView | null, paragraphIndex = 0): void {
+    const cursorKey=JSON.stringify([turn?.chatId,turn?.messageId,turn?.swipeId,turn?.sourceFingerprint,turn?.revision,paragraphIndex]);
+    const cancelledProposal=this.storyCursor!==cursorKey&&(this.pending||Boolean(this.proposal));
+    if(this.storyCursor!==cursorKey){if(cancelledProposal)this.cancelProposal();this.storyCursor=cursorKey;}
+    const before = JSON.stringify([this.loreMap,Object.keys(this.library)]);
+    this.loreMap = Object.create(null);
+    const cursor = turn && Number.isInteger(paragraphIndex) ? Math.min(paragraphIndex,turn.paragraphs.length-1) : -1;
+    const visibleAssets = (turn?.assets ?? []).filter(asset=>asset.paragraphIndex<=cursor);
+    const visibleText = (turn?.paragraphs ?? []).slice(0,Math.max(0,cursor+1)).join('\n\n');
+    const mentioned = (name:string) => {
+      const escaped=name.trim().replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+      return Boolean(escaped)&&new RegExp(`(?:^|[^\\p{L}\\p{N}_])${escaped}(?=$|[^\\p{L}\\p{N}_])`,'iu').test(visibleText);
+    };
     const detectedNames = new Set<string>();
 
     // Collect latest story text for fast local regex auto-fill
-    this.latestTurnText = (turn.paragraphs ?? []).join('\n\n');
+    this.latestTurnText = visibleText;
 
     // 1. From presentation snapshots (NPC entities + observations/quotes/facts)
-    const lastPresentation=turn.presentation?.version===2?selectPresentationSnapshot(turn.presentation,turn.presentation.availableThrough):undefined;
-    for (const snap of turn.presentation?.version===1?turn.presentation.snapshots:lastPresentation?[lastPresentation]:[]) {
+    const candidate=turn?.presentation&&cursor>=0?selectPresentationSnapshot(turn.presentation,cursor):undefined;
+    const snapshot=candidate&&turn&&samePresentationTurn(candidate.at.key,{chatId:turn.chatId,assistantMessageId:turn.messageId,swipeId:turn.swipeId,sourceFingerprint:turn.sourceFingerprint,revision:turn.revision})?candidate:undefined;
+    for (const snap of snapshot?[snapshot]:[]) {
       for (const ent of snap.entities ?? []) {
         if (ent.kind === 'npc' && ent.name?.trim()) {
           const name = ent.name.trim();
@@ -644,16 +659,16 @@ export class CharacterFolio implements WorkspaceSurface {
     }
 
     // 2. From subject candidates
-    for (const cand of (turn.subjectCandidates ?? []) as any[]) {
-      if (typeof cand === 'string' && cand.trim()) {
+    for (const cand of (turn?.subjectCandidates ?? []) as any[]) {
+      if (typeof cand === 'string' && cand.trim() && mentioned(cand)) {
         detectedNames.add(cand.trim());
-      } else if (cand && typeof cand === 'object' && typeof cand.name === 'string' && cand.name.trim()) {
+      } else if (cand && typeof cand === 'object' && typeof cand.name === 'string' && cand.name.trim() && mentioned(cand.name)) {
         detectedNames.add(cand.name.trim());
       }
     }
 
     // 3. From assets stageAsset character & CG collection
-    for (const asset of turn.assets ?? []) {
+    for (const asset of visibleAssets) {
       const charName = asset.stageAsset?.character?.trim();
       const imageUrl = ['generated','browser_ready'].includes(asset.status) ? sceneImageCandidatesFor(asset)[0] : undefined;
       if (charName && imageUrl) {
@@ -672,36 +687,44 @@ export class CharacterFolio implements WorkspaceSurface {
     }
 
     // 4. From cast if present
-    const anyCast = (turn as any).cast;
+    const anyCast = (turn as any)?.cast;
     if (Array.isArray(anyCast)) {
       for (const c of anyCast) {
-        if (c && typeof c === 'object' && typeof c.name === 'string' && c.name.trim()) {
+        if (c && typeof c === 'object' && typeof c.name === 'string' && c.name.trim() && mentioned(c.name)) {
           detectedNames.add(c.name.trim());
         }
       }
     }
 
     let changed = false;
+    const names = new Set([...detectedNames].map(name=>name.toLowerCase()));
+    for(const id of this.discoveredIds){const dna=this.library[id];if(!dna){this.discoveredIds.delete(id);continue;}
+      if(!names.has(dna.name.toLowerCase())&&!this.savedLibrary[id]&&!this.dirty.has(id)&&!this.saving.has(id)){delete this.library[id];this.discoveredIds.delete(id);changed=true;}}
+    if(this.activeCharacterId&&!this.library[this.activeCharacterId])this.activeCharacterId=null;
     for (const name of detectedNames) {
       const key = name.trim().toLowerCase();
       const existing = Object.values(this.library).find(c => c.name.toLowerCase() === key || c.aliases.some(a => a.toLowerCase() === key));
       if (!existing && !findCharacterDNA(this.deleted,name)) {
         const dna = createEmptyCharacterDNA(name);
-        const assetWithImage = turn.assets?.find(a => a.stageAsset?.character?.trim().toLowerCase() === key && ['generated','browser_ready'].includes(a.status) && sceneImageCandidatesFor(a).length > 0);
+        const assetWithImage = visibleAssets.find(a => a.stageAsset?.character?.trim().toLowerCase() === key && ['generated','browser_ready'].includes(a.status) && sceneImageCandidatesFor(a).length > 0);
         if (assetWithImage) {
           dna.avatarUrl = sceneImageCandidatesFor(assetWithImage)[0];
         }
         this.library[dna.id] = dna;
+        this.discoveredIds.add(dna.id);
         changed = true;
       }
     }
 
-    if (changed || !this.activeCharacterId) {
+    if (cancelledProposal || changed || !this.activeCharacterId || before!==JSON.stringify([this.loreMap,Object.keys(this.library)])) {
       if (!this.activeCharacterId && Object.keys(this.library).length > 0) {
         this.activeCharacterId = Object.keys(this.library)[0]!;
       }
       this.renderRoster();
-      this.renderDetail();
+      // Asset/cursor notifications must not replace the textarea under active typing.
+      const owner=this.element.getRootNode?.() as Document|ShadowRoot|undefined;
+      const editing=owner?.activeElement;
+      if(!editing||!this.element.contains(editing)||!editing.matches('input,textarea,select'))this.renderDetail();
     }
   }
 
