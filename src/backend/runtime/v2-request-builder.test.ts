@@ -17,3 +17,22 @@ test('V2 builder is detached and preserves transport fields, negative ownership 
 test('fixed and manga templates retain their original page prompt and negatives',()=>{const input=fixture('one',true);const {revision:_,...template}=input.cue.imageTemplate!;input.cue.imageTemplate=templateSnapshot({...template,intent:'manga-page'});const result=buildV2ImageRequest(input);expect(result.request.prompt).toBe(input.request.prompt);expect(result.request.negativePrompt).toBe(input.request.negativePrompt);expect(result.metadata?.shadowPrompt).toBeUndefined();expect(result.metadata?.promptEngineVersion).toBe(2);});
 test('none, solo and ensemble requests preserve the depicted subject boundary',()=>{const none=buildV2ImageRequest(fixture('none')).request.prompt;expect(none).not.toContain('Mira');expect(none).not.toContain('Jo');const solo=buildV2ImageRequest(fixture()).request.prompt;expect(solo).toContain('Mira');expect(solo).not.toContain('Jo');const ensemble=buildV2ImageRequest(fixture('ensemble')).request.prompt;expect(ensemble).toContain('Mira');expect(ensemble).toContain('Jo');});
 test('manual rebuild revision, camera and fit-to-model budgets stay explicit',()=>{const input=fixture(),result=buildV2ImageRequest({...input,previousShotRevision:3,rebuild:{reframe:true,fitToModel:true,manualCamera:{shotSize:'close-up',angle:'low-angle',dialogueSafeArea:'always'}}});expect(result.request.shotSpec?.revision).toBe(4);expect(result.request.shotSpec?.camera.shotSize).toBe('close-up');expect(result.request.shotSpec?.camera.angle).toBe('low-angle');expect(result.request.shotSpec?.safeArea?.reason).toBe('dialogue-overlay');expect(result.metadata?.budgetSummary?.hardLimit).toBeLessThanOrEqual(input.profile.hardMaxCharacters);});
+
+test('compatible picture rebuild retains prior lens/depth without changing manual camera priority',()=>{
+ const input=fixture(),first=buildV2ImageRequest(input).request;
+ const shotSpec={...first.shotSpec!,camera:{...first.shotSpec!.camera,lens:'telephoto' as const,depthOfField:'selective' as const}};
+ const previousShot={cue:input.cue,shotSpec,styleDNA:first.styleSnapshot!};
+ const result=buildV2ImageRequest({...input,previousShot} as any);
+ expect(result.request.shotSpec?.camera.lens).toBe('telephoto');expect(result.request.shotSpec?.camera.depthOfField).toBe('selective');
+ const manual=buildV2ImageRequest({...input,previousShot,rebuild:{manualCamera:{lensFeel:'wide',depth:'deep'}}} as any);
+ expect(manual.request.shotSpec?.camera.lens).toBe('wide');expect(manual.request.shotSpec?.camera.depthOfField).toBe('deep');
+});
+test('reframe and incompatible shot context keep deterministic current framing',()=>{
+ const input=fixture(),baseline=buildV2ImageRequest(input),shotSpec={...baseline.request.shotSpec!,camera:{...baseline.request.shotSpec!.camera,lens:'telephoto' as const,depthOfField:'selective' as const}};
+ const previousShot={cue:input.cue,shotSpec,styleDNA:baseline.request.styleSnapshot!};
+ for(const patch of [{cue:{...input.cue,sceneId:'other'}},{cue:{...input.cue,character:'Jo'}},{cue:{...input.cue,sceneRevision:99}},{cue:{...input.cue,assetJobId:'other'}},{cue:{...input.cue,paragraphIndex:9}},{styleDNA:{...previousShot.styleDNA,cameraHints:['wide']}},{shotSpec:{...shotSpec,revision:99}},{shotSpec:{...shotSpec,output:{...shotSpec.output,orientation:'landscape'}}},{shotSpec:{...shotSpec,version:99}},{cue:{...input.cue,imageTemplate:{...input.cue.imageTemplate!,revision:99}}}]){
+  expect(buildV2ImageRequest({...input,previousShot:{...previousShot,...patch}} as any).request.shotSpec).toEqual(baseline.request.shotSpec);
+ }
+ expect(buildV2ImageRequest({...input,previousShot,rebuild:{reframe:true}} as any).request.shotSpec).toEqual(buildV2ImageRequest({...input,rebuild:{reframe:true}}).request.shotSpec);
+ expect(input.request).not.toHaveProperty('shotSpec');
+});

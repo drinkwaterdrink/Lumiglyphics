@@ -712,3 +712,21 @@ test('a policy change in the dispatch microtask is rechecked before sending',asy
 test('V2 cache identity follows the actual globally selected style used at generation',async()=>{const {resolveStyleDNA}=await import('../../shared/style-dna.js');const config=normalizeConfig({imagePromptEngineVersion:2,promptPrefix:'line drawing',selectedSharedStyleId:'builtin-style:neutral'}),changed={...config,selectedSharedStyleId:'builtin-style:phone-flash'};const visual={...cue('idle'),imageTemplate:templateSnapshot(config.imageTemplates[0]!)},turn=plan([visual]);expect(resolveStyleDNA(config,config.selectedSharedStyleId).styleDNA).not.toEqual(resolveStyleDNA(changed,changed.selectedSharedStyleId).styleDNA);expect(sceneImageIdentityFor(config,turn.scenes[0]!,visual,undefined,'nanogpt')).not.toEqual(sceneImageIdentityFor(changed,turn.scenes[0]!,visual,undefined,'nanogpt'));});
 
 test('fixed-camera page cache stays tied to its literal request when only a style association changes',()=>{const config=normalizeConfig({imagePromptEngineVersion:2,promptPrefix:'line drawing',selectedSharedStyleId:'builtin-style:neutral'}),visual={...cue('idle'),imageTemplate:templateSnapshot({...config.imageTemplates[0]!,cameraPolicy:'fixed'})},turn=plan([visual]);expect(sceneImageIdentityFor(config,turn.scenes[0]!,visual,{},'nanogpt')).toEqual(sceneImageIdentityFor({...config,selectedSharedStyleId:'builtin-style:phone-flash'},turn.scenes[0]!,visual,{},'nanogpt'));});
+
+test('V2 same-picture rebuild receives the frozen camera snapshot and preserves manual overrides',async()=>{
+ const config=normalizeConfig({imagePromptEngineVersion:2,referenceAnchoring:false,promptPrefix:'',promptSuffix:'',negativePrompt:'',selectedSharedStyleId:''});
+ const sent:any[]=[];const spindle:any={userStorage:{getJson:async(p:string,o:any)=>p==='config.json'?config:o?.fallback},imageGen:{generate:async(r:any)=>{sent.push(r);return{imageId:'camera-result'};}}};
+ const visual={...cue('idle'),character:'Mira',imageTemplate:templateSnapshot({...config.imageTemplates[0]!,cameraPolicy:'directed'})};
+ const turn=plan([visual]);
+ const jobs=await generateAssets(spindle,turn,createAssetJobs(turn,config),config,new AbortController().signal,()=>{},'u',{
+  beforeGenerate:async(_job,request,metadata)=>{
+   // Supply a distinguishable, schema-valid prepared camera at the review boundary.
+   request.shotSpec!.camera.lens='telephoto';request.shotSpec!.camera.depthOfField='selective';
+   const rebuilt=await metadata.rebuildTemplate!(visual.imageTemplate.id);
+   expect(rebuilt.request.shotSpec?.camera.lens).toBe('telephoto');expect(rebuilt.request.shotSpec?.camera.depthOfField).toBe('selective');
+   const manual=await metadata.rebuildTemplate!(visual.imageTemplate.id,{manualCamera:{lensFeel:'wide',depth:'deep'}});
+   expect(manual.request.shotSpec?.camera.lens).toBe('wide');expect(manual.request.shotSpec?.camera.depthOfField).toBe('deep');
+   return rebuilt.request;
+  }
+ });expect(jobs[0]?.status).toBe('generated');expect(sent).toHaveLength(1);
+});
