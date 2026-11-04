@@ -2204,6 +2204,8 @@ export class VnStage {
     const targetPara = this.state.paragraphs[targetIndex];
     if (!targetPara) return;
     if (targetIndex > this.state.highestRevealedIndex) return;
+    // A decoded image from the old cursor must not reappear after this seek.
+    this.sceneLoad?.abort();this.sceneLoad=null;
     this.isSkipping = false;
     this.isAutoPlay = false;
     this.lastSkipStop = null;
@@ -2311,6 +2313,8 @@ export class VnStage {
 
   previous(): void {
     if (this.destroyed || this.workspace.isOpen() || this.isBacklogOpen || this.dossiers.isOpen() || !selectVnStageView(this.state).canGoBack) return;
+    // Cancel before clearing the pending image in the previous-paragraph state.
+    this.sceneLoad?.abort();this.sceneLoad=null;
     this.isSkipping = false;
     this.isAutoPlay = false;
     this.lastSkipStop = null;

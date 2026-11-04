@@ -15,7 +15,7 @@
 ## Global constraints
 
 - Implement against Main-3-GPT commit `b0f5f5a594f4f6310a491b3452b388b91afdabfe` or an explicitly verified descendant; the current primary checkout is Testing beta.74. Do not apply this plan blindly to Testing.
-- Every push increments the beta suffix in package.json, spindle.json and src/shared/build-info.ts. The first correctness packet was pushed as **0.2.0-beta.110**. Task 11G is the **0.2.0-beta.126** checkpoint; the following authorized push requires **0.2.0-beta.127**, subject to rechecking the remote. Never downgrade a newer release.
+- Every push increments the beta suffix in package.json, spindle.json and src/shared/build-info.ts. The first correctness packet was pushed as **0.2.0-beta.110**. Task 11G is the **0.2.0-beta.126** checkpoint; the post-plan reader-reveal fix is **0.2.0-beta.127** and the following authorized push requires **0.2.0-beta.128**, subject to rechecking the remote. Never downgrade a newer release.
 - Preserve source comments/docstrings, primary story/job validation, userId targeting/storage isolation, swipe/revision identity, intake epochs and view gating. A closed reader never starts automatic generation.
 - No live/paid image calls in automated tests. New text/image calls need explicit workflow intent and accurate usage reporting. No filtering/softening creative themes or descriptions; lint only advises.
 - Persisted optional caches/history may be ignored or rederived without blocking a valid story. Unknown future formats remain preserved and unavailable rather than overwritten.
@@ -241,3 +241,7 @@ Final Task 11 assessment (beta.126): extracted typed `review-rpc-handlers.ts` di
 ## Planning validation
 
 Selected scope mapped: 2/9 -> Task 5; 3 -> Task 8; 5/6/7 -> Task 7; 10/12/13 -> Task 6; 11/20 -> Task 10; 15/16 -> Task 9. 14/18 explanations supplied. A01/A03/A04/A06 -> Task 1; A02/A05 -> Task 2; A07/A10 loading/UX -> Task 3; A08/A09 -> Task 4; structural/visual refinements -> Task 11. Both requested toggles have defaults, persistence and disabled-mode behavior. Execution has begun; consult the execution-status paragraph and progress document before resuming work.
+
+## Post-plan completion follow-up — beta.127
+
+The baseline host fallback mentioned in final review is now fixed: only cursor-bounded reader assets are selected, and Previous/History seeks abort pending decodes before they can restore later artwork. Phone/desktop real-host regressions preserve prior-reply holding. See `docs/implementation/2026-11-03-phase-delivery-inventory.md` for the complete delivered phase and suggestion inventory, including remaining external acceptance limits.

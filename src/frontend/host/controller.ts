@@ -1035,12 +1035,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     const sourceTurn = turn;
     const assetFailure = currentAssetFailure(turn, paragraphIndex);
     if (assetFailure) reportStageError(assetFailure);
-    let asset = stage.setCastTurn(turn,paragraphIndex) ?? selectCurrentImage(turn, paragraphIndex);
-    if (!asset || !sceneImageUrlFor(asset)) {
-      asset = turn.assets
-        .filter((a) => (a.status === "generated" || a.status === "browser_ready" || a.previousImage) && Boolean(sceneImageUrlFor(a)))
-        .sort((a, b) => a.paragraphIndex - b.paragraphIndex)[0] ?? null;
-    }
+    // Both selectors are reveal-bounded; never substitute an unread ready image.
+    const asset = stage.setCastTurn(turn,paragraphIndex) ?? selectCurrentImage(turn, paragraphIndex);
     const candidates = asset ? sceneImageCandidatesFor(asset) : [];
     const sceneUrl = candidates[0] ?? null;
     if (!asset || !sceneUrl) {
