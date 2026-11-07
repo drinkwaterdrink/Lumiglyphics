@@ -393,7 +393,7 @@ export function resetPatch(current: Pick<VisualNovelConfig, "promptPresets" | "a
 export type SettingsSectionId = "reading" | "look" | "pictures" | "characters" | "sound" | "voice" | "connections" | "advanced";
 
 export const SETTINGS_SECTIONS: ReadonlyArray<{ id: SettingsSectionId; label: string; blurb: string }> = [
-  { id: "reading", label: "Reading", blurb: "How the story plays and how you answer." },
+  { id: "reading", label: "Reading", blurb: "Pace, choices, replies, and Adventure Time RPG mode." },
   { id: "look", label: "Appearance", blurb: "Theme, text and scene effects." },
   { id: "pictures", label: "Images", blurb: "Source, budget, styles and templates." },
   { id: "characters", label: "Characters & places", blurb: "Appearance, outfits and saved art for this story." },

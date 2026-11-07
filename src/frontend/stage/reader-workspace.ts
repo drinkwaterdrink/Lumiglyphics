@@ -453,6 +453,8 @@ export class ReaderWorkspace {
   suspend():void {this.resumeCard.clear();if(this.search.open)this.search.close();this.close(false);}
   private syncReader(): void {
     const covered = this.isOpen() && Boolean(this.media?.matches);
+    const vnRoot = this.reader.shadowRoot?.querySelector<HTMLElement>('[data-vn-root]');
+    if (vnRoot) { if (this.isOpen()) vnRoot.dataset.vnWorkspaceOpen = 'true'; else delete vnRoot.dataset.vnWorkspaceOpen; }
     this.reader.inert = covered;
     for(const element of this.shell.querySelectorAll<HTMLElement>('[data-vn-panel-layer],[data-vn-speech-dock]'))element.inert=covered;
     if (covered) this.reader.setAttribute('aria-hidden', 'true'); else this.reader.removeAttribute('aria-hidden');

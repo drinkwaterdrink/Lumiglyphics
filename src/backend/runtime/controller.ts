@@ -613,7 +613,8 @@ export function turnView(record: StoredTurnRecord): TurnView {
       ? { paragraphSpeakers: record.plan.paragraphSpeakers }
       : {}),
     ...effectViews(record),
-    choices: record.plan.choices.map((choice) => ({ id: choice.id, label: choice.label, value: choice.submission })),
+    choices: record.plan.choices.map((choice) => ({ id: choice.id, label: choice.label, value: choice.submission, ...(choice.check ? { check: choice.check } : {}) })),
+    ...(record.plan.rpgState ? { rpgState: record.plan.rpgState } : {}),
     assets: record.jobs.map((job) => assetView(record, job)),
     ...(record.imageRequests ? { imageRequests: record.imageRequests } : {}),
     ...(audioCues.length > 0 ? { audioCues } : {}),
@@ -826,7 +827,7 @@ async function startAssets(
   record: StoredTurnRecord,
   path: string,
   userId?: string,
-  options: { bypassJobIds?: Iterable<string>; onlyJobId?: string; forceReview?: boolean; initialEdits?: ImageRequestEdits; regeneratePrompt?:boolean; promptOperation?:'rewrite'|'enrich'; guidance?:string; quickGenerate?:boolean } = {}
+  options: { bypassJobIds?: Iterable<string>; onlyJobId?: string; forceReview?: boolean; initialEdits?: ImageRequestEdits; regeneratePrompt?:boolean; promptOperation?:'rewrite'|'enrich'; guidance?:string; quickGenerate?:boolean; rebuild?:import('./image-review.js').RebuildOptions } = {}
 ): Promise<void> {
   const key=runtimeKey(userId,record.plan.key.chatId),start=Symbol();pendingAssetStarts.set(key,start);
   abortAssetBatch(key,'A newer image batch is starting.');
@@ -953,6 +954,7 @@ async function startAssets(
             // result is discarded for the restored job by the write overlay.
             if(jobSignal.aborted){const error=new Error('A restored version superseded this picture.');error.name='AbortError';throw error;}
           }
+          if (options.onlyJobId === job.jobId && options.rebuild && metadata.rebuildTemplate) { const rebuilt = await metadata.rebuildTemplate(metadata.imagePromptMetadata?.template.id ?? config.defaultImageTemplateId, options.rebuild); request = rebuilt.request; metadata = { ...metadata, ...rebuilt.metadata }; }
           let draft = options.onlyJobId === job.jobId && options.initialEdits ? options.regeneratePrompt ? applyImageRewriteDraft(request,options.initialEdits) : applyImageEdits(request,options.initialEdits) : request;
           if(options.onlyJobId===job.jobId && options.regeneratePrompt){
             const writer=options.promptOperation==='enrich'?metadata.enrichPrompt:metadata.regeneratePrompt;
@@ -1074,7 +1076,8 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
   const view=await turnViewWithAudio(spindle,next,userId);
   if(!isCurrent())return;
   spindle.sendToFrontend({ type: "vn_turn", turn:view }, userId);
-  await startAssets(spindle, next, path, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId],...(quick?{quickGenerate:true}:{}),...(request.type === 'vn_prepare_image' && request.edits ? {initialEdits:request.edits} : {}),...(request.type==='vn_prepare_image' && (request.regeneratePrompt===true||request.promptOperation) ? {regeneratePrompt:true,...(request.promptOperation?{promptOperation:request.promptOperation}:{}),...(request.guidance?{guidance:request.guidance}:{})} : {}) });
+  const rebuildOpts = request.type === 'vn_prepare_image' && (request.reframe || request.styleId || request.fitToModel || request.model || request.connectionId || request.manualCamera) ? { ...(request.reframe !== undefined ? { reframe: request.reframe } : {}), ...(request.styleId !== undefined ? { styleId: request.styleId } : {}), ...(request.fitToModel !== undefined ? { fitToModel: request.fitToModel } : {}), ...(request.model !== undefined ? { model: request.model } : {}), ...(request.connectionId !== undefined ? { connectionId: request.connectionId } : {}), ...(request.manualCamera !== undefined ? { manualCamera: request.manualCamera } : {}) } : undefined;
+  await startAssets(spindle, next, path, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId],...(quick?{quickGenerate:true}:{}),...(request.type === 'vn_prepare_image' && request.edits ? {initialEdits:request.edits} : {}),...(request.type==='vn_prepare_image' && (request.regeneratePrompt===true||request.promptOperation) ? {regeneratePrompt:true,...(request.promptOperation?{promptOperation:request.promptOperation}:{}),...(request.guidance?{guidance:request.guidance}:{})} : {}),...(rebuildOpts?{rebuild:rebuildOpts}:{}) });
 }
 
 async function processAssistantMessage(
@@ -1184,6 +1187,9 @@ async function processAssistantMessage(
       releaseSceneCacheScope(spindle, userId, chatId, "scope_cleared");
     }
     const chatState = await loadChatState(spindle, chatId, userId);
+    const previousTurnRecord = !replacesGreeting && config.rpgMode === "full" && chatState.activeTurnPath
+      ? await loadTurnRecord(spindle, chatState.activeTurnPath, userId).catch(() => null)
+      : null;
     const setupToken = castArtToken(spindle, chatId, userId);
     const identityCurrent = () => !operation.controller.signal.aborted && setupToken === castArtToken(spindle, chatId, userId);
     const singleCharacter = await loadSingleCharacterState(spindle, chatId, userId);
@@ -1213,6 +1219,7 @@ async function processAssistantMessage(
       sourceFingerprint: fingerprint,
       previousScene: replacesGreeting ? null : options?.retry && existing ? existing.plan.scenes[0] ?? null : chatState.latestScene,
       previousContinuity: replacesGreeting ? null : options?.retry && existing ? existing.plan.initialContinuity : chatState.terminalContinuity,
+      previousRpgState: previousTurnRecord?.plan.rpgState ?? null,
       recentMessages,
       config,
       singleCharacter,

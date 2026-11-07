@@ -141,9 +141,10 @@ export type ImagePreparationMetadata = {
 };
 /** Also synchronize NovelAI/host-managed prompt copies after compaction. */
 export function compactImageRequest(request: ImageGenerationRequest): ImageGenerationRequest {
-  const over = request.prompt.length + (request.negativePrompt?.length ?? 0) > (request.promptProfile?.maxCharacters??IMAGE_PROMPT_MAX_CHARS);
+  const maxAllowed = request.promptProfileV2?.hardMaxCharacters ?? request.promptProfile?.maxCharacters ?? IMAGE_PROMPT_MAX_CHARS;
+  const over = request.prompt.length + (request.negativePrompt?.length ?? 0) > maxAllowed;
   const negative=request.negativePrompt !== undefined && over ? compactNegativePrompt(request.negativePrompt) : request.negativePrompt;
-  const stillOver=request.prompt.length+(negative?.length??0)>(request.promptProfile?.maxCharacters??IMAGE_PROMPT_MAX_CHARS);
+  const stillOver=request.prompt.length+(negative?.length??0)>maxAllowed;
   return applyImageEdits({...request,prompt:stillOver?compactPromptText(request.prompt, true):request.prompt,
     ...(negative !== undefined ? {negativePrompt:negative} : {})},{});
 }

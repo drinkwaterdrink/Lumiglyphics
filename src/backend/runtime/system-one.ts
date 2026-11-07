@@ -9,8 +9,20 @@ import { getAudioCatalog, tokenizeText } from "./audio-catalog.js";
 export const SYSTEM_ONE_LIMITS = { paragraphs: 24, expressions: 16, music: 24, sounds: 24 } as const;
 const RELEVANCE_STOPWORDS = new Set(["the", "and", "for", "with", "that", "this", "from", "into", "was", "were", "you", "are", "but", "not", "its", "their", "they", "them", "had", "has", "have", "she", "her", "his", "him"]);
 
+const SEMANTIC_SYNONYMS: ReadonlyArray< readonly [RegExp, readonly string[]] > = [
+  [/\b(?:furious|rage|raging|shouted|shouts|glared|glares|snarled|hostile|wrath)\b/i, ["angry", "frown", "scowl", "tense", "battle", "dramatic"]],
+  [/\b(?:chuckled|chuckles|giggled|giggles|grinned|grins|warmly|cheerful|delighted|beamed)\b/i, ["smile", "happy", "laugh", "joy", "calm", "warm"]],
+  [/\b(?:trembled|trembles|pale|shivered|shivers|dread|terrified|horrified|panicked|gasped)\b/i, ["afraid", "fear", "scared", "nervous", "shock", "suspense", "eerie"]],
+  [/\b(?:blushed|blushes|flustered|cheeks|stammered|bashful)\b/i, ["embarrassed", "shy", "blush", "sweet", "romantic"]],
+  [/\b(?:wept|weeps|sobbed|sobs|grief|mournful|heartbroken|tears)\b/i, ["sad", "cry", "tears", "sorrow", "melancholy"]],
+  [/\b(?:blade|clash|combat|strike|slash|parry|ambush|duel|explosion)\b/i, ["battle", "action", "fight", "sword", "drums", "impact"]]
+];
 function relevanceWords(text: string): Set<string> {
-  return new Set(tokenizeText(text).filter((word) => word.length >= 3 && !RELEVANCE_STOPWORDS.has(word)));
+  const base = new Set(tokenizeText(text).filter((word) => word.length >= 3 && !RELEVANCE_STOPWORDS.has(word)));
+  for (const [pattern, extras] of SEMANTIC_SYNONYMS) {
+    if (pattern.test(text)) for (const extra of extras) base.add(extra);
+  }
+  return base;
 }
 
 /**

@@ -165,6 +165,13 @@ export class ImageStudio {
     this.el<HTMLButtonElement>("[data-replace]").onclick = () => this.rebuildTemplate();
 
     this.el<HTMLButtonElement>('[data-reframe]').onclick = () => {
+      if (this.record()?.state !== 'review') {
+        if (!this.turn || !this.selectedJob || this.preparing.has(this.selectedJob)) return;
+        const templateId = this.record()?.imagePromptMetadata?.template.id ?? this.el<HTMLSelectElement>('[data-template]').value ?? this.defaultTemplate;
+        this.beginPreparation(this.selectedJob); this.render();
+        this.send({ type: 'vn_prepare_image', chatId: this.turn.chatId, messageId: this.turn.messageId, sourceFingerprint: this.turn.sourceFingerprint, jobId: this.selectedJob, ...(templateId ? { templateId } : {}), reframe: true });
+        return;
+      }
       const record = this.record();
       if (!record || record.state !== 'review' || this.rebuilding.has(record.requestId) || !this.turn) return;
       this.rebuilding.add(record.requestId);
@@ -182,6 +189,13 @@ export class ImageStudio {
     };
 
     this.el<HTMLButtonElement>('[data-fit-model]').onclick = () => {
+      if (this.record()?.state !== 'review') {
+        if (!this.turn || !this.selectedJob || this.preparing.has(this.selectedJob)) return;
+        const templateId = this.record()?.imagePromptMetadata?.template.id ?? this.el<HTMLSelectElement>('[data-template]').value ?? this.defaultTemplate;
+        this.beginPreparation(this.selectedJob); this.render();
+        this.send({ type: 'vn_prepare_image', chatId: this.turn.chatId, messageId: this.turn.messageId, sourceFingerprint: this.turn.sourceFingerprint, jobId: this.selectedJob, ...(templateId ? { templateId } : {}), fitToModel: true });
+        return;
+      }
       const record = this.record();
       if (!record || record.state !== 'review' || this.rebuilding.has(record.requestId) || !this.turn) return;
       this.rebuilding.add(record.requestId);
@@ -199,6 +213,14 @@ export class ImageStudio {
     };
 
     this.el<HTMLButtonElement>('[data-change-style-btn]').onclick = () => {
+      if (this.record()?.state !== 'review') {
+        if (!this.turn || !this.selectedJob || this.preparing.has(this.selectedJob)) return;
+        const styleId = this.el<HTMLSelectElement>('[data-style-select]').value;
+        const templateId = this.record()?.imagePromptMetadata?.template.id ?? this.el<HTMLSelectElement>('[data-template]').value ?? this.defaultTemplate;
+        this.beginPreparation(this.selectedJob); this.render();
+        this.send({ type: 'vn_prepare_image', chatId: this.turn.chatId, messageId: this.turn.messageId, sourceFingerprint: this.turn.sourceFingerprint, jobId: this.selectedJob, ...(templateId ? { templateId } : {}), styleId });
+        return;
+      }
       const record = this.record();
       if (!record || record.state !== 'review' || this.rebuilding.has(record.requestId) || !this.turn) return;
       const styleId = this.el<HTMLSelectElement>('[data-style-select]').value;
@@ -217,6 +239,15 @@ export class ImageStudio {
     };
 
     this.el<HTMLButtonElement>('[data-regenerate-model-single]').onclick = () => {
+      if (this.record()?.state !== 'review') {
+        if (!this.turn || !this.selectedJob || this.preparing.has(this.selectedJob)) return;
+        const model = this.el<HTMLInputElement>('[data-artwork-model]').value.trim();
+        const connectionId = this.el<HTMLSelectElement>('[data-artwork-connection]')?.value || undefined;
+        const templateId = this.record()?.imagePromptMetadata?.template.id ?? this.el<HTMLSelectElement>('[data-template]').value ?? this.defaultTemplate;
+        this.beginPreparation(this.selectedJob); this.render();
+        this.send({ type: 'vn_prepare_image', chatId: this.turn.chatId, messageId: this.turn.messageId, sourceFingerprint: this.turn.sourceFingerprint, jobId: this.selectedJob, ...(templateId ? { templateId } : {}), model: model || undefined, connectionId });
+        return;
+      }
       const record = this.record();
       if (!record || record.state !== 'review' || this.rebuilding.has(record.requestId) || !this.turn) return;
       const model = this.el<HTMLInputElement>('[data-artwork-model]').value.trim();
@@ -266,6 +297,31 @@ export class ImageStudio {
     };
 
     this.el<HTMLButtonElement>('[data-apply-camera]').onclick = () => {
+      if (this.record()?.state !== 'review') {
+        if (!this.turn || !this.selectedJob || this.preparing.has(this.selectedJob)) return;
+        const auto = this.el<HTMLInputElement>('[data-auto-director]').checked;
+        const templateId = this.record()?.imagePromptMetadata?.template.id ?? this.el<HTMLSelectElement>('[data-template]').value ?? this.defaultTemplate;
+        this.beginPreparation(this.selectedJob); this.render();
+        this.send({
+          type: 'vn_prepare_image',
+          chatId: this.turn.chatId,
+          messageId: this.turn.messageId,
+          sourceFingerprint: this.turn.sourceFingerprint,
+          jobId: this.selectedJob,
+          ...(templateId ? { templateId } : {}),
+          ...(auto ? {} : {
+            manualCamera: {
+              shotSize: this.el<HTMLSelectElement>('[data-camera-shot-size]').value || undefined,
+              angle: this.el<HTMLSelectElement>('[data-camera-angle]').value || undefined,
+              lensFeel: this.el<HTMLSelectElement>('[data-camera-lens]').value || undefined,
+              composition: this.el<HTMLSelectElement>('[data-camera-composition]').value || undefined,
+              depth: this.el<HTMLSelectElement>('[data-camera-depth]').value || undefined,
+              dialogueSafeArea: (this.el<HTMLSelectElement>('[data-camera-safe-area]').value || 'auto') as any
+            }
+          })
+        });
+        return;
+      }
       const record = this.record();
       if (!record || record.state !== 'review' || this.rebuilding.has(record.requestId) || !this.turn) return;
       const auto = this.el<HTMLInputElement>('[data-auto-director]').checked;
@@ -1127,11 +1183,11 @@ export class ImageStudio {
     reroll.disabled=!asset||asset.source!=='cache'&&record?.canRegeneratePrompt===false||this.replanning||this.preparing.has(this.selectedJob)||!!this.recovering||rolling||Boolean(record&&(this.submitted.has(record.requestId)||this.rebuilding.has(record.requestId)))||(record?.state==='review'?record.canRegeneratePrompt===false:Boolean(busy));
 
     const reframe = this.el<HTMLButtonElement>('[data-reframe]');
-    reframe.hidden = record?.state !== "review";
+    reframe.hidden = !asset || asset.source === "cache";
     reframe.disabled = !editable || !asset || asset.source === 'cache' || this.preparing.has(this.selectedJob) || Boolean(record && this.rebuilding.has(record.requestId));
 
     const fitModel = this.el<HTMLButtonElement>('[data-fit-model]');
-    fitModel.hidden = record?.state !== "review";
+    fitModel.hidden = !asset || asset.source === "cache";
     fitModel.disabled = !editable || !asset || asset.source === 'cache' || this.preparing.has(this.selectedJob) || Boolean(record && this.rebuilding.has(record.requestId));
 
     const styleSelect = this.el<HTMLSelectElement>('[data-style-select]');

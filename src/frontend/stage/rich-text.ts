@@ -30,7 +30,11 @@ export function escapeHtml(text: string): string {
  */
 function parseMarkdown(text: string): string {
   // 1. Triple formatting (bold + italic)
-  let md = text
+  const codeSpans: string[] = [];
+  let md = text.replace(/`([^`]+)`/g, (_, content: string) => {
+    const idx = codeSpans.push(`<code>${content}</code>`) - 1;
+    return `\u0000CODE${idx}\u0000`;
+  })
     .replace(/\*\*\*([^\s*](?:[\s\S]*?[^\s*])?)\*\*\*/g, "<strong><em>$1</em></strong>")
     .replace(/(^|[^\w])___([^\s_](?:[\s\S]*?[^\s_])?)___(?=[^\w]|$)/g, "$1<strong><em>$2</em></strong>")
     .replace(/\*\*_(.+?)_\*\*/g, "<strong><em>$1</em></strong>")
@@ -50,7 +54,7 @@ function parseMarkdown(text: string): string {
   md = md.replace(/~~([^\s~](?:[\s\S]*?[^\s~])?)~~/g, "<del>$1</del>");
 
   // 5. Inline code (`text`)
-  md = md.replace(/`([^`]+)`/g, "<code>$1</code>");
+  md = md.replace(/\u0000CODE(\d+)\u0000/g, (_, idx: string) => codeSpans[Number(idx)] ?? "");
 
   return md;
 }
@@ -313,7 +317,11 @@ export function stripUnknownPresetTags(text: string): string {
 
 function stripMarkdown(text: string): string {
   // Strip metadata tags like **Time**: ..., **Location**: ...
-  let md = text
+  const codeSpans: string[] = [];
+  let md = text.replace(/`([^`]+)`/g, (_, content: string) => {
+    const idx = codeSpans.push(`<code>${content}</code>`) - 1;
+    return `\u0000CODE${idx}\u0000`;
+  })
     .replace(/(?:\*\*|__)?(?:Time|Location|Costume|Scene|Date|Setting)(?:\*\*)?\s*:[^\n]*(?:\r?\n|$)/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -339,7 +347,7 @@ function stripMarkdown(text: string): string {
   md = md.replace(/~~([^\s~](?:[\s\S]*?[^\s~])?)~~/g, "$1");
 
   // 5. Inline code (`text`)
-  md = md.replace(/`([^`]+)`/g, "$1");
+  md = md.replace(/\u0000CODE(\d+)\u0000/g, (_, idx: string) => (codeSpans[Number(idx)] ?? "").replace(/^<code>|<\/code>$/g, ""));
 
   return md;
 }

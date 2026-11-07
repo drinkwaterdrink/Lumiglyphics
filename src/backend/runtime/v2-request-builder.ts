@@ -61,7 +61,7 @@ export function buildV2ImageRequest(input:V2ImageRequestInput):{request:ImageGen
  const shotSpec=resolveShotSpec({brief:input.brief,outputPlan,template:cue.imageTemplate,cue,styleDNA:styleSnapshot.styleDNA,dialogueSafeAreaSetting:rebuild?.manualCamera?.dialogueSafeArea??config.dialogueSafeArea,...(continuity?{previousShot:continuity}:{}),isDialogueOverlayTarget:!cue.visualSources?.includes('location art')&&!cue.visualSources?.includes('cast art'),revision:(input.previousShotRevision??0)+(rebuild?.reframe?1:0),...(overrides&&Object.keys(overrides).length?{manualOverrides:overrides}:{})});
  request.promptProfileV2=profile;request.outputPlan=outputPlan;request.shotSpec=shotSpec;request.styleSnapshot=styleSnapshot.styleDNA;
  request.parameters={...request.parameters,...outputPlan.parameters};
- if(cue.imageTemplate?.cameraPolicy!=='fixed'){
+ if(cue.imageTemplate?.cameraPolicy!=='fixed'||Boolean(rebuild?.manualCamera||rebuild?.fitToModel||input.styleId)){
   const referencePlan=resolveReferencePlan({brief:input.metadata?.brief,cue,portraits:input.portraits});
   const compiled=compileModelPrompt({brief:input.brief,shotSpec,styleDNA:styleSnapshot.styleDNA,profile,outputPlan,referencePlan,detailLevel:rebuild?.fitToModel?'compact':config.imagePromptDetail,promptExpansionEnabled:profile.promptExpansion?.enabled,userBudgetOverride:rebuild?.fitToModel?Math.min(profile.softBudgets.standard[0],profile.hardMaxCharacters):config.imagePromptBudgetOverride?config.imagePromptBudget:null,cue});
   request.prompt=compiled.prompt;

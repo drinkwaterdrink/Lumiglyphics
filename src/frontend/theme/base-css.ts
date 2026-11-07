@@ -111,6 +111,23 @@ textarea {
   transition: opacity var(--vn-transition-duration, 280ms) ease, transform 2s ease;
 }
 
+[data-vn-scene-backdrop] {
+  position: absolute;
+  inset: -32px;
+  width: calc(100% + 64px);
+  height: calc(100% + 64px);
+  object-fit: cover;
+  filter: blur(28px) saturate(1.15) brightness(0.35);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
+  transition: opacity var(--vn-transition-duration, 280ms) ease;
+}
+
+[data-vn-scene-backdrop][data-vn-empty="false"] {
+  opacity: 1;
+}
+
 [data-vn-scene-image][data-vn-layer="active"] {
   z-index: 1;
 }
@@ -202,6 +219,7 @@ textarea {
 }
 
 /* Only the active preset's ornament group is shown (see presets.ts). */
+[data-vn-root][data-vn-workspace-open="true"] [data-vn-ambient] *, [data-vn-root][data-vn-workspace-open="true"] [data-vn-fx] * { animation-play-state: paused !important; }
 [data-vn-ornament-group] {
   display: none;
 }

@@ -19,7 +19,7 @@ export function musicTrackForPosition(input:{turn:TurnView;index:number;policy:M
 export function deriveWeatherAmbient(weather:unknown):AmbientEffect|null {
  if(typeof weather!=='string')return null;const text=weather.slice(0,2000).trim().toLowerCase().replace(/[_-]+/g,' ');
  // Negated, hypothetical, and ended weather must not start an overlay.
- if(/\b(no|not|without|chance|possible|possibly|forecast|stopped|ended|cleared|clear|clearing|dry|sunny|after|previously|earlier|might|may|could|would|if|unlikely)\b/.test(text))return null;
+ if(/\b(no|not|without|chance|possible|possibly|forecast|stopped|ended|cleared|clearing|dry|sunny|previously|earlier|might|may|could|would|if|unlikely)\b/.test(text)||/^clear\b|\bclear\s+(?:sky|skies|weather|night|day|morning|evening)\b|\bafter\s+(?:the\s+)?(?:rain|storm|snow|fog|downpour|blizzard)\b/.test(text))return null;
  if(/\b(heavy rain(?:fall)?|downpour|rainstorm|thunderstorm|storm|stormy)\b/.test(text))return 'heavy_rain';
  if(/\b(snow|snowfall|snowing|snowy|blizzard|flurries)\b/.test(text))return 'snow';
  if(/\b(rain|rainfall|raining|rainy|drizzle|drizzling|showers)\b/.test(text))return 'rain';

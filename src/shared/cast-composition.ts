@@ -19,7 +19,8 @@ export function selectCastComposition(turn:TurnView,index:number,selectedName?:s
  const usable=(a:AssetView)=>(a.status==='generated'||a.status==='browser_ready')&&Boolean(a.imageUrl||a.imageId)&&!a.previousImage;
  const latestBackground=local.filter(a=>a.stageAsset?.role==='background').at(-1);
  const background=latestBackground?selectHeldBackground(turn,index,latestBackground):undefined;
- if(!background||!usable(background))return null;
+ const usableBg=(a:AssetView)=>usable(a)||Boolean(a.previousImage&&(a.status==='queued'||a.status==='generating')&&Boolean(a.imageUrl||a.imageId));
+ if(!background||!usableBg(background))return null;
  const byName=new Map<string,CastPortrait>();
  const speaker=turn.paragraphSpeakers?.[index]??turn.speaker;
  for(const asset of local){

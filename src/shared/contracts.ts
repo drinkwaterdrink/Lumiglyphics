@@ -6,6 +6,7 @@ import { ActionPropFieldSchema, ActionPropSchema, type ActionProp } from "./acti
 import { PanelArtifactSchema } from "./panels.js";
 import { ImageTemplateSnapshotSchema } from "./image-templates.js";
 import { ShotIntentSchema, ShotSizeSchema, CameraAngleSchema } from "./image-shot-spec.js";
+import { SkillCheckSchema, RpgStateSchema } from "./rpg-state.js";
 
 export { ActionPropFieldSchema, ActionPropSchema, type ActionProp };
 
@@ -36,7 +37,8 @@ export const ChoiceSchema = z.object({
   label: TextSchema,
   submission: TextSchema,
   source: ChoiceSourceSchema,
-  unlocksAfterParagraph: NonNegativeIntegerSchema
+  unlocksAfterParagraph: NonNegativeIntegerSchema,
+  check: SkillCheckSchema.optional()
 }).strict();
 export type Choice = z.infer<typeof ChoiceSchema>;
 
@@ -362,6 +364,7 @@ export const TurnPlanSchema = z.object({
     attire: z.string().nullable()
   }).optional(),
   planningStatus: PlanningStatusSchema,
+  rpgState: RpgStateSchema.optional(),
   createdAt: TimestampSchema
 }).strict().superRefine((plan, context) => {
   for (const [index, paragraph] of plan.paragraphs.entries()) {

@@ -1,5 +1,6 @@
 import type { ReaderPresentation } from "../../shared/presentation-entities.js";
 import type {ReferenceHistory} from '../../shared/reference-history.js';
+import type { SkillCheck, RpgState, RpgMode } from "../../shared/rpg-state.js";
 export type VnMode = "cyoa" | "standard";
 
 export type VnPhase =
@@ -65,6 +66,7 @@ export interface VnChoice {
   label: string;
   value: string;
   disabled?: boolean;
+  check?: SkillCheck;
 }
 
 export interface VnSceneImage {
@@ -96,6 +98,7 @@ export interface VnStageState {
   draft: string;
   customReplyOpen: boolean;
   displayedImage: VnSceneImage | null;
+  preservedImage?: VnSceneImage | null;
   pendingImage: VnSceneImage | null;
   imageError: string | null;
   activity: VnActivity | null;
@@ -127,6 +130,8 @@ export interface VnTurnInput {
   preserveImage?: boolean;
   ambient?: AmbientEffect | null;
   location?: string;
+  rpgMode?: RpgMode;
+  rpgState?: RpgState | null;
 }
 
 export type VnStageAction =
@@ -174,6 +179,7 @@ export const createInitialVnStageState = (
   draft: "",
   customReplyOpen: false,
   displayedImage: null,
+  preservedImage: null,
   pendingImage: null,
   imageError: null,
   activity: null,
@@ -242,6 +248,7 @@ export const reduceVnStage = (
         draft: "",
         customReplyOpen: false,
         displayedImage: action.turn.preserveImage ? state.displayedImage : null,
+        preservedImage: action.turn.preserveImage ? state.displayedImage : null,
         pendingImage: null,
         imageError: null,
         activity: null,
@@ -296,7 +303,7 @@ export const reduceVnStage = (
       // Rereading during an error keeps the error card (and phase) visible.
       const phase = state.phase === "error" ? "error" : "revealing";
       return { ...state, currentParagraphIndex: state.currentParagraphIndex - 1, phase,
-        turnFinished: false, showRerollPrompt: false, displayedImage: null, pendingImage: null, imageError: null };
+        turnFinished: false, showRerollPrompt: false, displayedImage: state.preservedImage ?? null, pendingImage: null, imageError: null };
     }
 
     case "present-user-paragraph": {
@@ -393,7 +400,7 @@ export const reduceVnStage = (
       };
 
     case "image-ready": {
-      if (state.pendingImage && state.pendingImage.requestId !== action.requestId) return state;
+      if (!state.pendingImage || state.pendingImage.requestId !== action.requestId) return state;
       const targetImage = action.image ?? (state.pendingImage?.requestId === action.requestId ? state.pendingImage : null);
       if (!targetImage) return state;
       return {

@@ -5,6 +5,7 @@ import { normalizeContextSources, type ContextSourcesConfig } from './shared/con
 import { DEFAULT_SPEECH_SETTINGS, normalizeSpeechSettings, type SpeechSettings } from "./speech-config.js";
 import { DEFAULT_READER_PREFERENCES, normalizeReaderPreferences, type ReaderPreferences } from "./shared/reader-preferences.js";
 import { BUILTIN_IMAGE_TEMPLATES, migrateImageTemplates, upgradeImageTemplates, type ImageTemplate } from "./shared/image-templates.js";
+import { normalizeRpgMode, type RpgMode } from "./shared/rpg-state.js";
 
 export type VisualNovelMode = "standard" | "cyoa";
 
@@ -81,6 +82,7 @@ export type VisualNovelConfig = {
   enabled: boolean;
   autoEnter: boolean;
   mode: VisualNovelMode;
+  rpgMode: RpgMode;
   sceneImageFit: VisualNovelSceneImageFit;
   castMode: boolean;
   dataSaverMode:boolean;
@@ -169,6 +171,7 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   enabled: true,
   autoEnter: false,
   mode: "standard",
+  rpgMode: "off",
   sceneImageFit: "cover",
   castMode: false,
   dataSaverMode:false,
@@ -398,6 +401,7 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     enabled: bool(input.enabled, DEFAULT_CONFIG.enabled),
     autoEnter: bool(input.autoEnter, DEFAULT_CONFIG.autoEnter),
     mode: input.mode === "cyoa" ? "cyoa" : "standard",
+    rpgMode: normalizeRpgMode(input.rpgMode),
     sceneImageFit: sceneImageFit(input.sceneImageFit),
     castMode: bool(input.castMode, false),
     dataSaverMode:bool(input.dataSaverMode,false),

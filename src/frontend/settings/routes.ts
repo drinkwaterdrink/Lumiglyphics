@@ -3,7 +3,7 @@ import type {SettingsSectionId} from './model.js';
 
 export const SETTINGS_PAGES = [
  {id:'home',section:'reading',title:'All settings',description:'Make the reader your own.',parent:null},
- {id:'reading',section:'reading',title:'Reading',description:'Pace, replies and story references.',parent:'home'},
+ {id:'reading',section:'reading',title:'Reading',description:'Pace, choices, replies, and Adventure Time RPG mode.',parent:'home'},
  {id:'appearance',section:'look',title:'Appearance',description:'Theme, dialogue sheet and scene display.',parent:'home'},
  {id:'images',section:'pictures',title:'Images',description:'Choose how new illustrations are prepared.',parent:'home'},
  {id:'templates',section:'pictures',title:'Scene templates',description:'Choose what each kind of picture shows.',parent:'images'},
@@ -32,7 +32,7 @@ export function settingsPage(value:unknown):typeof SETTINGS_PAGES[number]{
  return SETTINGS_PAGES.find(page=>page.id===id)??SETTINGS_PAGES[0];
 }
 export const SETTINGS_FIELD_PAGES={
- dataSaverMode:'images',relationshipTrackerEnabled:'reading',autoEnter:'reading',mode:'reading',generateChoices:'reading',textSpeed:'reading',autoPlayDelay:'reading',skipMode:'reading',tooltips:'reading',collectEntityReferences:'reading',
+ dataSaverMode:'images',relationshipTrackerEnabled:'reading',autoEnter:'reading',mode:'reading',rpgMode:'reading',generateChoices:'reading',textSpeed:'reading',autoPlayDelay:'reading',skipMode:'reading',tooltips:'reading',collectEntityReferences:'reading',
  themePreset:'appearance',sceneImageFit:'appearance',castMode:'appearance',castAbsenceDisplay:'appearance',musicTransitionPolicy:'music',effectIntensity:'appearance',textEffects:'appearance',textScale:'appearance',readerPreferences:'appearance',
  automaticImagePromptSettings:'images',imagePromptBudgetOverride:'images',imagePromptBudget:'images',generateImages:'images',useNativeCardImages:'images',reviewImages:'images',imageConnectionId:'images',maxImagesPerTurn:'images',imageOutputAspectRatio:'images',imageResolutionPreference:'images',dialogueSafeArea:'images',imageFramingDirector:'images',imagePromptDetail:'images',imagePromptEngineVersion:'images',
  dynamicImageTemplates:'templates',defaultImageTemplateId:'templates',imageTemplates:'templates',imagePromptFormat:'templates',promptPrefix:'style',promptSuffix:'style',negativePrompt:'style',promptPresets:'style',selectedSharedStyleId:'style',originalReference:'style',originalCreationName:'style',novelAiQualityTags:'style',novelAiUseDefaultNegative:'style',

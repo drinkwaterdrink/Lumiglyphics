@@ -103,7 +103,7 @@ export class StageDossiers {
   let imageUrl:string|undefined;
   let imageCaption:string|undefined;
   const names=new Set([entity.name,...entity.aliases].map(n=>n.trim().toLocaleLowerCase()).filter(Boolean));
-  const urlOf=(a:AssetView)=>a.stageAsset?.displayImageUrl??a.imageUrl;
+  const urlOf=(a:AssetView)=>a.stageAsset?.displayImageUrl??sceneImageUrlFor(a)??undefined;
   const readyAssets=(this.turnMedia?.assets??[]).filter(a=>(a.status==='generated'||a.status==='browser_ready')&&Boolean(urlOf(a))&&a.paragraphIndex<=Math.max(0,this.index));
   const pool=readyAssets;
   if(entity.kind==='npc'){

@@ -1389,7 +1389,7 @@ export async function generateAssets(
           const promptWasRewritten=adaptation.rewritten;
           if(adaptation.error)baseMetadata.promptAdaptationError=adaptation.error;
           if(!config.reviewImages && !cacheOptions.skipAutomaticPromptRepair && frozen.promptProfile) {
-            const maxAllowed = frozen.promptProfile.maxCharacters;
+            const maxAllowed = frozen.promptProfileV2?.hardMaxCharacters ?? frozen.promptProfile.maxCharacters;
             if (frozen.prompt.length + (frozen.negativePrompt?.length ?? 0) > maxAllowed || (frozen.promptProfile.negativeMode === 'positive-only' && Boolean(frozen.negativePrompt?.trim()))) {
               const autoFitted = fitPromptToBudget(frozen.prompt, frozen.negativePrompt ?? '', maxAllowed, frozen.promptProfile.negativeMode);
               frozen = applyImageEdits({ ...frozen, prompt: autoFitted.prompt, negativePrompt: autoFitted.negativePrompt }, {});

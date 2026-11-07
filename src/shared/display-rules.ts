@@ -45,6 +45,7 @@ export function findReDoSHazard(source: string): string | null {
     }
     if (char === ")") {
       closed = stack.pop() ?? null;
+      if (closed?.hasQuantifier && stack.at(-1)) stack.at(-1)!.hasQuantifier = true;
       afterOpenParen = false;
       previousWasQuantifier = false;
       continue;

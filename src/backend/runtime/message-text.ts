@@ -493,13 +493,14 @@ function topLevelBlocks(text: string): MatchedBlock[] {
  * narrative. The placeholder's wording is never matched, so the rule works
  * for any card and language.
  */
+const INSTRUCTION_BANNER = /^(?:please\s+)?(?:choose|select|pick)\s+(?:a|an|your|one)\s+(?:scenario|greeting|opening|route|scene)\b/i;
 export function isUnselectedGreeting(raw: string, cleaned: string): boolean {
   if (!hasMacroBlocks(raw) && !hasPlaceholderLine(raw)) return false;
   if (!cleaned.trim()) return true;
-  if (!hasPlaceholderLine(raw)) return false;
   const blocks = topLevelBlocks(raw);
   if (blocks.length < 2) return false;
   const firstBody = cleanResolvedText(raw.slice(blocks[0]!.bodyStart, blocks[0]!.bodyEnd));
   if (!firstBody || cleaned.trim() !== firstBody) return false;
+  if (!hasPlaceholderLine(raw) && !INSTRUCTION_BANNER.test(firstBody)) return false;
   return !firstBody.includes("\n") && !INLINE_IMAGE_TAG.test(firstBody);
 }

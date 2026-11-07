@@ -19,6 +19,7 @@ import type { ContextSourceReport } from '../../shared/context-sources.js';
 import { BUILTIN_SHARED_STYLES, applySharedStyle, restoredSharedStyleId } from "../../shared/image-styles.js";
 import { ImageTemplateEditor } from "./image-templates.js";
 import { normalizeReaderPreferences } from "../../shared/reader-preferences.js";
+import { normalizeRpgMode } from "../../shared/rpg-state.js";
 import type { ImagePromptMetadata } from "../../shared/image-templates.js";
 import {
   DEFAULT_CONFIG,
@@ -642,6 +643,13 @@ export class VisualNovelSettingsPanel {
               <div class="settings-intro-foot"><span data-aperture-theme-status>LIGHT MODE / ACTIVE</span><span>THE WORLD IS YOURS TO FRAME ✦</span></div>
             </div>
             <label data-check><input type="checkbox" name="enabled"><span>Enable Lumiglyphics<small>All chats</small></span></label>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;margin:12px 0 16px;background:var(--set-surface-2,rgba(255,255,255,0.05));border:1px solid var(--set-border,rgba(255,255,255,0.12));border-radius:10px;">
+              <div>
+                <div style="font-weight:650;font-size:0.95rem;display:flex;align-items:center;gap:6px;"><span>🎲</span> <b>Adventure Time RPG Mode</b></div>
+                <small style="opacity:0.8;display:block;margin-top:2px;">d20 skill checks, party vitals, quest deadlines &amp; node atlas.</small>
+              </div>
+              <button type="button" data-goto="reading" data-goto-target="rpgMode" style="font-size:0.82rem;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:600;">Configure &rarr;</button>
+            </div>
             <div class="section-head" style="margin: 20px 0 11px; font-weight:650; font-size:12px;">Adjust your experience <span class="micro" style="opacity:0.7;">4 GROUPS</span></div>
             <div data-home-categories>${SETTINGS_HOME_GROUPS.map(group=>`<section data-settings-home-group><h2 style="font-size:1rem;margin:1.2rem 0 .5rem">${esc(group.title)}</h2><div class="settings-menu">${group.sections.map(id=>{const section=SETTINGS_SECTIONS.find(s=>s.id===id)!;return `<button type="button" data-page-link="${id==='sound'?'audio':id}">${icon(ICONS[id])}<span><b>${esc(section.label)}</b><small>${esc(section.blurb)}</small></span><span aria-hidden="true">›</span></button>`;}).join('')}</div></section>`).join('')}</div>
             <div style="margin-top:16px"><button type="button" data-open-preview>Open reader</button><small style="display:block;margin-top:6px;opacity:0.75">Opening the reader can prepare the current reply using your existing settings.</small></div>
@@ -675,8 +683,12 @@ export class VisualNovelSettingsPanel {
               <label data-field ${find("How you reply", "reply mode cyoa choose suggestions write standard")}><span>How you reply</span><select name="mode"><option value="standard">Write your own reply</option><option value="cyoa">Choose from suggestions</option></select></label>
               <label data-check ${find("Suggest choices", "choices options cyoa generate")}><input name="generateChoices" type="checkbox" /><span>Suggest choices when the reply has none</span></label>
             `)}
+            ${group("Adventure Time RPG & Campaign", `
+              <label data-field ${find("Adventure Time RPG & Campaign mode", "adventure time adventuretime rpg campaign d20 dice rolls skill checks quests deadlines vitals party atlas simtracker")}><span>Adventure Time RPG &amp; Campaign mode</span><select name="rpgMode"><option value="off">Off (Standard Visual Novel)</option><option value="lite">Lite — Skill Checks &amp; Dice Roll Theatre (d20 choices)</option><option value="full">Full — Standalone RPG (Party Vitals, Quests, Deadlines &amp; Node Atlas)</option></select><small>Off by default. Inspired by tabletop RPGs: Lite adds d20 skill checks &amp; dice roll theatre to choices; Full adds native party vitals, quest deadlines, pacing pressure, and a world node atlas without requiring SimTracker.</small></label>
+            `, { id: "settings-group-adventure-time", find: find("Adventure Time RPG & Campaign", "adventure time adventuretime rpg campaign quests dice vitals") })}
             ${group("Starting", `
               <label data-check ${find("Open automatically", "auto enter open novel view chat start")}><input name="autoEnter" type="checkbox" /><span>Open the novel view automatically when a chat opens</span></label>
+              <label data-check ${find("Show reply cost", "cost tokens price billing reply usage estimated")}><input name="showReplyCost" type="checkbox" /><span>Show reply cost<small>Display estimated token usage and model cost for each generated reply</small></span></label>
             `)}
           `)}
 
@@ -1543,8 +1555,10 @@ export class VisualNovelSettingsPanel {
     switch (name) {
       case "enabled": return {enabled:checked};
       case "mode": return { mode: target.value === "cyoa" ? "cyoa" : "standard" };
+      case "rpgMode": return { rpgMode: normalizeRpgMode(target.value) };
       case "skipMode": return { skipMode: target.value === "all" ? "all" : "read" };
       case "generateChoices": return { generateChoices: checked };
+      case "showReplyCost": return { showReplyCost: checked };
       case "autoEnter": return { autoEnter: checked };
       case "referenceAnchoring": return { referenceAnchoring: checked };
       case "reviewImages": return { reviewImages: checked };
@@ -2121,9 +2135,11 @@ export class VisualNovelSettingsPanel {
     this.root.querySelector<HTMLElement>('[data-prompt-budget-field]')!.hidden=!config.imagePromptBudgetOverride;
 
     this.control<HTMLSelectElement>("mode").value = config.mode;
+    this.control<HTMLSelectElement>("rpgMode").value = config.rpgMode;
     this.control<HTMLSelectElement>("skipMode").value = config.skipMode;
     this.control<HTMLInputElement>("generateChoices").checked = config.generateChoices;
     this.control<HTMLInputElement>("autoEnter").checked = config.autoEnter;
+    this.control<HTMLInputElement>("showReplyCost").checked = config.showReplyCost;
     this.control<HTMLInputElement>("referenceAnchoring").checked = config.referenceAnchoring;
     this.control<HTMLInputElement>("reviewImages").checked = config.reviewImages;
     this.control<HTMLInputElement>("dynamicImageTemplates").checked = config.dynamicImageTemplates;

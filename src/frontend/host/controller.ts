@@ -285,7 +285,8 @@ export function stageTurnInput(
       ...effectForParagraph(next, index, intensity),
       ...ambientForParagraph(next, index, intensity)
     })),
-    choices: next.choices.map((choice) => ({ id: choice.id, label: choice.label, value: choice.value })),
+    choices: next.choices.map((choice) => ({ id: choice.id, label: choice.label, value: choice.value, ...(choice.check ? { check: choice.check } : {}) })),
+    ...(next.rpgState ? { rpgState: next.rpgState } : {}),
     preserveImage,
     ...(presentation ? {presentation} : {}),
     ...(referenceHistory?{referenceHistory}:{}),
@@ -370,6 +371,7 @@ export type VisualStageThemeTarget = Pick<
   /** Dialogue text size multiplier (stage sets `--vn-text-scale`). */
   setTextScale?: (scale: number) => void;
   setCastMode?: (enabled:boolean) => void;
+  setRpgMode?: (mode: VisualNovelConfig["rpgMode"]) => void;
   setCastAbsenceDisplay?: (value:"hide"|"dim") => void;
   setTooltipPreferences?: (prefs: VisualNovelConfig["tooltips"]) => void;
   setReaderPreferences?: (preferences: VisualNovelConfig["readerPreferences"]) => void;
@@ -404,6 +406,7 @@ export function applyVisualConfigToStage(
   stage.setThemePreset(config.themePreset);
   stage.setSceneImageFit(config.sceneImageFit);
   stage.setCastMode?.(config.castMode);
+  stage.setRpgMode?.(config.rpgMode);
   stage.setCastAbsenceDisplay?.(config.castAbsenceDisplay);
   stage.setUserCss(config.customCss);
   applyDisplayRulesGuarded(stage, config.displayRegexRules);
@@ -1037,7 +1040,10 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     const assetFailure = currentAssetFailure(turn, paragraphIndex);
     if (assetFailure) reportStageError(assetFailure);
     // Both selectors are reveal-bounded; never substitute an unread ready image.
-    const asset = stage.setCastTurn(turn,paragraphIndex) ?? selectCurrentImage(turn, paragraphIndex);
+    const castAsset = stage.setCastTurn(turn,paragraphIndex);
+    const fallbackAsset = selectCurrentImage(turn, paragraphIndex);
+    const hasPendingCastBackground = Boolean(configRef.current?.castMode && turn.assets.some(a => a.paragraphIndex <= paragraphIndex && a.stageAsset?.role === "background" && (a.status === "queued" || a.status === "generating")));
+    const asset = castAsset ?? (hasPendingCastBackground && fallbackAsset?.stageAsset?.role === "portrait" ? null : fallbackAsset);
     const candidates = asset ? sceneImageCandidatesFor(asset) : [];
     const sceneUrl = candidates[0] ?? null;
     if (!asset || !sceneUrl) {

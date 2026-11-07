@@ -58,7 +58,7 @@ export function formatAudioUrl(src: string): string {
   if (/^[a-zA-Z]:[\\/]/.test(trimmed)) {
     return `file:///${trimmed.replace(/\\/g, "/")}`;
   }
-  if (trimmed.startsWith("/") && !trimmed.startsWith("//") && !trimmed.startsWith("/api/")) {
+  if (trimmed.startsWith("/") && !trimmed.startsWith("//") && !/^\/(?:api|assets|static|audio|music|sfx|extensions|public|media|files)\//i.test(trimmed)) {
     return `file://${trimmed}`;
   }
   return trimmed;

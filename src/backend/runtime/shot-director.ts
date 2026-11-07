@@ -272,6 +272,10 @@ export function resolveShotSpec(input: ShotDirectorInput): ImageShotSpec {
     // Planner hint overrides
     if (cue?.shotHint?.preferredShotSize) shotSize = cue.shotHint.preferredShotSize;
     if (cue?.shotHint?.preferredAngle) angle = cue.shotHint.preferredAngle;
+    if (/\b(?:screams?|shatters?|weeps?|sobbing|terrified|horrified|catastrophic|devastating|executes?|unleashes?|betrayal)\b/i.test(`${brief.action} ${cue?.expression ?? ''}`)) {
+      if (intent === 'reaction') { shotSize = 'close-up'; depthOfField = 'shallow'; }
+      else if (intent === 'action' || intent === 'confrontation') { angle = 'low-angle'; }
+    }
 
     // Shot Continuity: Weak continuity evidence from previousShot
     if (
@@ -283,6 +287,9 @@ export function resolveShotSpec(input: ShotDirectorInput): ImageShotSpec {
       // Maintain consistent lens and depth across matching beats
       lens = previousShot.camera.lens;
       depthOfField = previousShot.camera.depthOfField;
+      if (previousShot.camera.shotSize === shotSize && previousShot.camera.angle === angle) {
+        angle = angle === 'eye-level' ? 'three-quarter' : 'eye-level';
+      }
     }
   }
 

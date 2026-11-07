@@ -10,12 +10,25 @@ export function isClothingTag(tag: string): boolean {
   return CLOTHING_TAG_REGEX.test(normalized);
 }
 
+const PHYSICAL_TRAIT_REGEX = /\b(?:hair|twin-?tails?|ponytail|braids?|bangs|eyes?|skin|tall|short|slender|petite|muscular|curvy|build|face|ears?|horns?|wings?|tail|freckles|scars?|glasses)\b/i;
+
 export function cleanClothingFromPhrase(phrase: string): string {
-  const match = phrase.match(/^(.*?)\s+\b(?:wearing|dressed in|clad in|sporting)\s+(.+)$/i);
+  const match = phrase.match(/^(.*?)\s+\b(?:wearing|dressed in|clad in|sporting|tied with|in a|in an|with a|with an)\s+(.+)$/i);
   if (match && match[1] && match[2]) {
     const clothingPart = match[2];
     if (isClothingTag(clothingPart)) {
       return match[1].trim();
+    }
+  }
+  if (PHYSICAL_TRAIT_REGEX.test(phrase) && isClothingTag(phrase)) {
+    const stripped = phrase
+      .replace(/\s+\b(?:in|with|tied with|wearing|dressed in|clad in|sporting)\s+[^,]+$/i, "")
+      .replace(CLOTHING_TAG_REGEX, "")
+      .replace(/\s{2,}/g, " ")
+      .replace(/\s+\b(?:in|with|and|of|a|an|the)\s*$/i, "")
+      .trim();
+    if (stripped && PHYSICAL_TRAIT_REGEX.test(stripped) && !isClothingTag(stripped)) {
+      return stripped;
     }
   }
   return phrase;
