@@ -14,14 +14,23 @@ const LIGHTBOX_CSS = `
 .vn-lightbox-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 10000;
-  display: flex;
+  z-index: 999999;
+  display: none;
   flex-direction: column;
   background: rgba(4, 8, 12, 0.94);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   user-select: none;
+  touch-action: pan-y;
+}
+.vn-lightbox-backdrop.open {
+  display: flex !important;
   animation: vn-lightbox-fade-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.vn-lightbox-backdrop[hidden] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 @keyframes vn-lightbox-fade-in {
   from { opacity: 0; transform: scale(0.98); }
@@ -32,12 +41,12 @@ const LIGHTBOX_CSS = `
   top: 0;
   left: 0;
   right: 0;
-  z-index: 10;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: max(12px, env(safe-area-inset-top)) 16px 12px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.8) 0%, transparent 100%);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.4) 70%, transparent 100%);
   pointer-events: auto;
 }
 .vn-lightbox-title-group {
@@ -63,7 +72,7 @@ const LIGHTBOX_CSS = `
 .vn-lightbox-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   margin-left: 12px;
   flex-shrink: 0;
 }
@@ -71,21 +80,23 @@ const LIGHTBOX_CSS = `
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 36px;
-  height: 36px;
-  padding: 0 10px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.12);
   color: #fff;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 120ms ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 .vn-lightbox-btn:hover {
   background: rgba(255, 255, 255, 0.25);
-  border-color: rgba(255, 255, 255, 0.4);
+  border-color: rgba(255, 255, 255, 0.45);
 }
 .vn-lightbox-btn.active {
   background: #7c9cff;
@@ -93,11 +104,20 @@ const LIGHTBOX_CSS = `
   color: #0d121f;
 }
 .vn-lightbox-close {
-  width: 36px;
-  height: 36px;
+  min-width: 44px;
+  min-height: 44px;
+  width: 44px;
+  height: 44px;
   padding: 0;
-  font-size: 18px;
+  font-size: 20px;
   line-height: 1;
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+.vn-lightbox-close:hover,
+.vn-lightbox-close:active {
+  background: rgba(255, 80, 80, 0.75);
+  border-color: rgba(255, 80, 80, 0.9);
 }
 .vn-lightbox-viewport {
   flex: 1 1 auto;
@@ -107,7 +127,7 @@ const LIGHTBOX_CSS = `
   justify-content: center;
   overflow: auto;
   overscroll-behavior: contain;
-  padding: 60px 16px 24px;
+  padding: 68px 16px 24px;
   cursor: zoom-in;
 }
 .vn-lightbox-viewport.zoomed {
@@ -136,7 +156,7 @@ const LIGHTBOX_CSS = `
   font-size: 13px;
   line-height: 1.5;
   backdrop-filter: blur(20px);
-  z-index: 15;
+  z-index: 25;
   animation: vn-lightbox-slide-up 180ms ease;
 }
 @keyframes vn-lightbox-slide-up {
@@ -163,17 +183,21 @@ export class FullscreenLightbox {
   private zoomLevel = 1;
   private infoOpen = false;
   private currentOptions: LightboxOptions | null = null;
+  private touchStartY = 0;
+  private touchStartX = 0;
 
   constructor() {
     this.backdrop = document.createElement("div");
     this.backdrop.className = "vn-lightbox-backdrop";
     this.backdrop.hidden = true;
+    this.backdrop.style.display = "none";
 
     const style = document.createElement("style");
     style.textContent = LIGHTBOX_CSS;
-    this.backdrop.appendChild(style);
 
-    this.backdrop.innerHTML += `
+    const content = document.createElement("div");
+    content.style.display = "contents";
+    content.innerHTML = `
       <div class="vn-lightbox-header">
         <div class="vn-lightbox-title-group">
           <h3 class="vn-lightbox-title"></h3>
@@ -191,13 +215,14 @@ export class FullscreenLightbox {
       <div class="vn-lightbox-info-drawer" hidden data-drawer></div>
     `;
 
+    this.backdrop.append(style, content);
+
     this.titleEl = this.backdrop.querySelector(".vn-lightbox-title")!;
     this.subtitleEl = this.backdrop.querySelector(".vn-lightbox-subtitle")!;
     this.img = this.backdrop.querySelector(".vn-lightbox-img")!;
     this.infoDrawer = this.backdrop.querySelector("[data-drawer]")!;
 
     this.wireEvents();
-    document.body.appendChild(this.backdrop);
   }
 
   public static open(options: LightboxOptions): FullscreenLightbox {
@@ -208,46 +233,71 @@ export class FullscreenLightbox {
     return FullscreenLightbox.instance;
   }
 
+  private handleKeyDown = (e: KeyboardEvent): void => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      this.close();
+    } else if (e.key === "+" || e.key === "=") {
+      this.setZoom(Math.min(3, this.zoomLevel + 0.5));
+    } else if (e.key === "-") {
+      this.setZoom(Math.max(1, this.zoomLevel - 0.5));
+    }
+  };
+
   private wireEvents(): void {
     const viewport = this.backdrop.querySelector("[data-viewport]") as HTMLElement;
     const zoomBtn = this.backdrop.querySelector('[data-action="zoom-toggle"]') as HTMLButtonElement;
     const infoBtn = this.backdrop.querySelector('[data-action="info-toggle"]') as HTMLButtonElement;
     const closeBtn = this.backdrop.querySelector('[data-action="close"]') as HTMLButtonElement;
 
-    closeBtn.onclick = (e) => {
+    closeBtn.addEventListener("click", (e) => {
+      e.preventDefault();
       e.stopPropagation();
       this.close();
-    };
+    });
 
-    viewport.onclick = (e) => {
+    viewport.addEventListener("click", (e) => {
       if (e.target === viewport) {
         this.close();
       } else if (e.target === this.img) {
         this.toggleZoom();
       }
-    };
+    });
 
-    zoomBtn.onclick = (e) => {
-      e.stopPropagation();
-      this.toggleZoom();
-    };
-
-    infoBtn.onclick = (e) => {
-      e.stopPropagation();
-      this.toggleInfo();
-    };
-
-    this.backdrop.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
+    this.backdrop.addEventListener("click", (e) => {
+      if (e.target === this.backdrop) {
         this.close();
-      } else if (e.key === "+" || e.key === "=") {
-        this.setZoom(Math.min(3, this.zoomLevel + 0.5));
-      } else if (e.key === "-") {
-        this.setZoom(Math.max(1, this.zoomLevel - 0.5));
       }
     });
+
+    zoomBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.toggleZoom();
+    });
+
+    infoBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.toggleInfo();
+    });
+
+    // Touch gesture: swipe down to dismiss
+    this.backdrop.addEventListener("touchstart", (e) => {
+      if (e.touches.length === 1) {
+        this.touchStartY = e.touches[0]!.clientY;
+        this.touchStartX = e.touches[0]!.clientX;
+      }
+    }, { passive: true });
+
+    this.backdrop.addEventListener("touchend", (e) => {
+      if (e.changedTouches.length === 1 && this.zoomLevel === 1) {
+        const deltaY = e.changedTouches[0]!.clientY - this.touchStartY;
+        const deltaX = Math.abs(e.changedTouches[0]!.clientX - this.touchStartX);
+        if (deltaY > 70 && deltaX < 120) {
+          this.close();
+        }
+      }
+    }, { passive: true });
   }
 
   private setZoom(level: number): void {
@@ -308,15 +358,34 @@ export class FullscreenLightbox {
     const infoBtn = this.backdrop.querySelector('[data-action="info-toggle"]') as HTMLButtonElement;
     infoBtn.hidden = !options.prompt && !options.negativePrompt;
 
+    if (!this.backdrop.parentNode) {
+      document.body.appendChild(this.backdrop);
+    }
+
     this.backdrop.hidden = false;
+    this.backdrop.classList.add("open");
+    this.backdrop.style.display = "flex";
+    this.backdrop.style.pointerEvents = "auto";
     this.backdrop.tabIndex = -1;
     this.backdrop.focus();
+
+    window.removeEventListener("keydown", this.handleKeyDown);
+    window.addEventListener("keydown", this.handleKeyDown);
   }
 
   public close(): void {
+    window.removeEventListener("keydown", this.handleKeyDown);
+
+    this.backdrop.classList.remove("open");
     this.backdrop.hidden = true;
+    this.backdrop.style.display = "none";
+    this.backdrop.style.pointerEvents = "none";
     this.img.removeAttribute("src");
     this.currentOptions = null;
+
+    if (this.backdrop.parentNode) {
+      this.backdrop.parentNode.removeChild(this.backdrop);
+    }
   }
 
   private escapeHtml(str: string): string {

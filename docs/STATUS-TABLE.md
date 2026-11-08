@@ -5,7 +5,7 @@ Test counts here are file counts. The live test count appears in the `bun test` 
 
 | Measure | Value |
 |---|---|
-| Extension version | 0.2.0-beta.131 |
+| Extension version | 0.2.1-beta.132 |
 | Theme presets | 10 |
 | Image prompt families | 12 |
 | Source files (non-test, src/) | 268 |
