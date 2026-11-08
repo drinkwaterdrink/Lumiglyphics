@@ -542,7 +542,7 @@ button[data-vn-badge]:active {
   padding: 1.6rem 4rem 1.45rem 1.8rem;
   border: 1px solid var(--vn-dialogue-border);
   border-radius: 1rem;
-  background: var(--vn-dialogue-bg);
+  background: color-mix(in srgb, var(--vn-dialogue-bg) calc(var(--caption-opacity, var(--vn-sheet-opacity, 0.9)) * 100%), transparent);
   box-shadow:
     0 1.2rem 3rem rgba(0, 0, 0, 0.45),
     0 0.2rem 0.6rem rgba(0, 0, 0, 0.25),
@@ -563,7 +563,7 @@ button[data-vn-badge]:active {
   padding: 0.34rem 1.15rem;
   border: 1px solid color-mix(in srgb, var(--vn-accent) 40%, var(--vn-dialogue-border));
   border-radius: 0.55rem;
-  background: var(--vn-dialogue-bg);
+  background: color-mix(in srgb, var(--vn-dialogue-bg) calc(var(--caption-opacity, var(--vn-sheet-opacity, 0.9)) * 100%), transparent);
   color: var(--vn-accent);
   font-size: 0.88rem;
   font-weight: 750;
@@ -595,6 +595,7 @@ button[data-vn-badge]:active {
   line-height: 1.6;
   letter-spacing: 0.005em;
   text-wrap: pretty;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85), 0 2px 8px rgba(0, 0, 0, 0.6);
   white-space: pre-wrap;
 }
 
@@ -1168,6 +1169,7 @@ button[data-vn-badge]:active {
   font-size: 0.95rem;
   line-height: 1.55;
   text-wrap: pretty;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85), 0 2px 8px rgba(0, 0, 0, 0.6);
 }
 
 @keyframes vn-spin {
@@ -1951,7 +1953,7 @@ ${VN_TEXT_EFFECTS_CSS}
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-dialogue]::before {
   content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
   display: block; width: 100%; height: 100%; margin: 0; border: 0; transform: none; animation: none; box-shadow: none;
-  background: var(--vn-dialogue-bg); opacity: var(--vn-sheet-opacity); pointer-events: none;
+  background: color-mix(in srgb, var(--vn-dialogue-bg) calc(var(--caption-opacity, var(--vn-sheet-opacity, 0.9)) * 100%), transparent); opacity: var(--vn-sheet-opacity); pointer-events: none;
 }
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-dialogue]::after { display: none; }
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-controls] {

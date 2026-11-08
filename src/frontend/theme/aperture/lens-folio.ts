@@ -978,7 +978,7 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
    Gallery remains reachable from APERTURE navigation; Artwork stays in the header. */
 [data-vn-reader-header] .round-ghost { width:44px!important;height:44px!important;min-width:44px!important;min-height:44px!important;flex-shrink:0!important; }
 @media(max-width:600px){
- [data-vn-reader-header] [data-action="gallery-toggle"] { display:none!important; }
+ [data-vn-reader-header] [data-action="gallery-toggle"] { display:inline-flex!important; }
  [data-vn-reader-header] .reading-heading { min-width:0;overflow:hidden; }
 }
 `;

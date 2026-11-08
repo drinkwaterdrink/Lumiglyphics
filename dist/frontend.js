@@ -14,7 +14,7 @@ var __export = (target, all) => {
 };
 
 // src/frontend/stage/scene-scrubber.ts
-var historySourceLabel = (key) => `Reply ${key.assistantMessageId.slice(0, 24)} · Swipe ${typeof key.swipeId === "number" ? key.swipeId + 1 : key.swipeId ?? "default"} · Revision ${key.revision}`;
+var historySourceLabel = (key) => `Turn · Swipe ${typeof key.swipeId === "number" ? key.swipeId + 1 : key.swipeId ?? "1"} · Rev ${key.revision}`;
 
 class SceneScrubber {
   seek;
@@ -36,7 +36,30 @@ class SceneScrubber {
     this.render(current);
   }
   render(current) {
-    this.element.innerHTML = '<h3>Revealed scene history</h3><p data-scene-source></p><label>Select a revealed passage<input data-scene-range aria-label="Revealed passage" type="range" min="0" value="0" style="width:100%;min-height:44px;margin:0"></label><output data-scene-selected></output><button type="button" data-scene-seek>Read selected passage</button><p data-scene-history-note role="status"></p><div data-scene-events></div><div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><button type="button" data-scene-prev>Previous markers</button><small data-scene-page></small><button type="button" data-scene-next>Next markers</button></div>';
+    this.element.innerHTML = `<details data-scene-history-details style="margin-bottom:12px;border:1px solid rgba(134,219,178,.18);border-radius:10px;padding:8px 12px;background:rgba(0,0,0,.15)">
+    <summary style="font-weight:700;font-size:13px;cursor:pointer;color:var(--vn-shell-accent,#86dbb2);display:flex;align-items:center;justify-content:space-between">
+      <span>Scene Navigation &amp; Markers</span>
+      <small data-scene-summary-tag style="opacity:0.75;font-weight:500;font-size:11px"></small>
+    </summary>
+    <div style="margin-top:10px">
+      <p data-scene-source style="font-size:12px;opacity:0.8;margin:4px 0 8px"></p>
+      <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">
+        Select revealed passage
+        <input data-scene-range aria-label="Revealed passage" type="range" min="0" value="0" style="width:100%;min-height:36px;margin:4px 0">
+      </label>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <output data-scene-selected style="font-size:12px;font-weight:600"></output>
+        <button type="button" data-scene-seek style="min-height:32px;padding:4px 12px;font-size:12px;border-radius:6px">Read passage</button>
+      </div>
+      <p data-scene-history-note role="status" style="font-size:11px;opacity:0.7;margin:4px 0"></p>
+      <div data-scene-events></div>
+      <div data-scene-paging style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px">
+        <button type="button" data-scene-prev style="min-height:30px;padding:2px 8px;font-size:11px">Previous markers</button>
+        <small data-scene-page style="font-size:11px"></small>
+        <button type="button" data-scene-next style="min-height:30px;padding:2px 8px;font-size:11px">Next markers</button>
+      </div>
+    </div>
+  </details>`;
     const q = (selector) => this.element.querySelector(selector);
     const model = this.model, range = q("[data-scene-range]"), jump = q("[data-scene-seek]"), note = q("[data-scene-history-note]");
     q("[data-scene-source]").textContent = model ? `Current reader · ${historySourceLabel(model.key)}` : "Current reader unavailable";
@@ -45,7 +68,9 @@ class SceneScrubber {
     range.disabled = !model || model.through < 0;
     jump.disabled = range.disabled;
     const selected = () => {
-      q("[data-scene-selected]").textContent = range.disabled ? "No revealed passages" : `Passage ${Number(range.value) + 1} of ${(model?.through ?? 0) + 1} revealed`;
+      const text = range.disabled ? "No revealed passages" : `Passage ${Number(range.value) + 1} of ${(model?.through ?? 0) + 1} revealed`;
+      q("[data-scene-selected]").textContent = text;
+      q("[data-scene-summary-tag]").textContent = text;
     };
     selected();
     range.oninput = selected;
@@ -65,33 +90,39 @@ class SceneScrubber {
       button.type = "button";
       button.dataset.sceneEvent = event.kind;
       button.textContent = `${event.paragraphIndex + 1} · ${event.label}`;
-      button.style.cssText = "display:block;text-align:left;min-height:44px;width:100%;margin:4px 0;white-space:normal;overflow-wrap:anywhere";
+      button.style.cssText = "display:block;text-align:left;min-height:36px;width:100%;margin:4px 0;padding:6px 10px;font-size:12px;border-radius:6px;white-space:normal;overflow-wrap:anywhere";
       button.onclick = () => read(event.key, event.paragraphIndex);
       q("[data-scene-events]").append(button);
     }
     if (!events.length) {
       const empty = document.createElement("p");
-      empty.textContent = "No scene changes are recorded at these passages.";
+      empty.style.cssText = "font-size:12px;opacity:0.75;margin:4px 0";
+      empty.textContent = "No scene markers recorded at this passage.";
       q("[data-scene-events]").append(empty);
     }
-    const previous = q("[data-scene-prev]"), next = q("[data-scene-next]");
-    previous.disabled = this.page === 0;
-    next.disabled = (this.page + 1) * 25 >= events.length;
-    const focusPage = (preferred) => {
-      const control = this.element.querySelector(preferred);
-      (control.disabled ? this.element.querySelector(preferred === "[data-scene-next]" ? "[data-scene-prev]" : "[data-scene-next]") : control)?.focus();
-    };
-    previous.onclick = () => {
-      this.page--;
-      this.render(current);
-      focusPage("[data-scene-prev]");
-    };
-    next.onclick = () => {
-      this.page++;
-      this.render(current);
-      focusPage("[data-scene-next]");
-    };
-    q("[data-scene-page]").textContent = `Page ${this.page + 1} of ${Math.max(1, Math.ceil(events.length / 25))}`;
+    const previous = q("[data-scene-prev]"), next = q("[data-scene-next]"), paging = q("[data-scene-paging]");
+    if (events.length <= 25) {
+      paging.hidden = true;
+    } else {
+      paging.hidden = false;
+      previous.disabled = this.page === 0;
+      next.disabled = (this.page + 1) * 25 >= events.length;
+      const focusPage = (preferred) => {
+        const control = this.element.querySelector(preferred);
+        (control.disabled ? this.element.querySelector(preferred === "[data-scene-next]" ? "[data-scene-prev]" : "[data-scene-next]") : control)?.focus();
+      };
+      previous.onclick = () => {
+        this.page--;
+        this.render(current);
+        focusPage("[data-scene-prev]");
+      };
+      next.onclick = () => {
+        this.page++;
+        this.render(current);
+        focusPage("[data-scene-next]");
+      };
+      q("[data-scene-page]").textContent = `Page ${this.page + 1} of ${Math.max(1, Math.ceil(events.length / 25))}`;
+    }
   }
   clear() {
     this.setModel(null, 0);
@@ -20950,55 +20981,80 @@ class RelationshipTracker {
     this.render();
   }
   render() {
-    this.element.innerHTML = '<h3>Relationship statements</h3><p>Exact observed story quotes. These are not affection or trust scores, and do not change story canon.</p><div data-relationship-statements></div><nav data-rel-pages aria-label="Relationship statement pages"></nav><details data-presence-history><summary>Presence &amp; location history</summary><p>Presence is separate from relationship strength. Unrecorded whereabouts remain unknown.</p><div data-presence-events></div><nav data-presence-pages aria-label="Presence history pages"></nav></details>';
+    this.element.innerHTML = `<details data-relationship-details style="margin-bottom:12px;border:1px solid rgba(134,219,178,.18);border-radius:10px;padding:8px 12px;background:rgba(0,0,0,.15)">
+    <summary style="font-weight:700;font-size:13px;cursor:pointer;color:var(--vn-shell-accent,#86dbb2);display:flex;align-items:center;justify-content:space-between">
+      <span>Observed Relationships &amp; Notes</span>
+      <small style="opacity:0.75;font-weight:500;font-size:11px">${this.observations.length} observed</small>
+    </summary>
+    <div style="margin-top:10px">
+      <p style="font-size:11px;opacity:0.75;margin:2px 0 8px">Exact observed story quotes from visible passages.</p>
+      <div data-relationship-statements></div>
+      <nav data-rel-pages aria-label="Relationship statement pages"></nav>
+      <details data-presence-history style="margin-top:8px;border-top:1px solid rgba(255,255,255,0.08);padding-top:6px">
+        <summary style="font-size:12px;cursor:pointer;opacity:0.85">Presence &amp; location log (${this.presence.length})</summary>
+        <div data-presence-events style="margin-top:6px"></div>
+        <nav data-presence-pages aria-label="Presence history pages"></nav>
+      </details>
+    </div>
+  </details>`;
     const quotes = this.element.querySelector("[data-relationship-statements]");
     for (const observation of this.observations.slice(this.page * 10, (this.page + 1) * 10)) {
       const row = document.createElement("article");
       row.dataset.relationshipScope = observation.provenance;
+      row.style.cssText = "padding:8px 10px;margin:6px 0;background:rgba(0,0,0,0.2);border-radius:8px;border-left:3px solid var(--vn-shell-accent,#86dbb2)";
       const title = document.createElement("strong");
       title.textContent = observation.subject;
+      title.style.cssText = "font-size:12px;color:var(--vn-shell-accent,#86dbb2)";
       const quote = document.createElement("blockquote");
       quote.textContent = observation.statement;
-      quote.style.cssText = "margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere";
+      quote.style.cssText = "margin:4px 0;font-size:13px;font-style:italic;white-space:pre-wrap;overflow-wrap:anywhere";
       const source = document.createElement("small");
-      source.textContent = `${observation.provenance === "story" ? "Current story passage" : `Earlier saved reply ${observation.replyNumber}`} · ${historySourceLabel(observation.key)} · Passage ${observation.paragraphIndex + 1}`;
+      source.style.cssText = "display:block;opacity:0.7;font-size:11px";
+      source.textContent = `${observation.provenance === "story" ? "Current turn" : `Earlier reply ${observation.replyNumber}`} · ${historySourceLabel(observation.key)} · Passage ${observation.paragraphIndex + 1}`;
       row.append(title, quote, source);
       if (observation.provenance === "story") {
         const read = document.createElement("button");
         read.type = "button";
-        read.textContent = "Read evidence";
+        read.textContent = "Read passage";
+        read.style.cssText = "margin-top:4px;min-height:28px;padding:2px 8px;font-size:11px;border-radius:4px";
         read.onclick = () => this.seek(observation.key, observation.paragraphIndex);
         row.append(read);
-      } else {
-        const note = document.createElement("p");
-        note.textContent = "Earlier evidence stays separate. Browse its saved reply in History below.";
-        row.append(note);
       }
       quotes.append(row);
     }
     if (!this.observations.length) {
       const empty = document.createElement("p");
       empty.dataset.relationshipUnknown = "";
-      empty.textContent = "Not established — no explicit relationship statement is recorded at this passage.";
+      empty.style.cssText = "font-size:12px;opacity:0.7;margin:4px 0";
+      empty.textContent = "No explicit relationship statements observed at this passage.";
       quotes.append(empty);
     }
     const list = this.element.querySelector("[data-presence-events]");
     for (const event of this.presence.slice(this.presencePage * 20, (this.presencePage + 1) * 20)) {
       const p = document.createElement("p");
+      p.style.cssText = "font-size:11px;margin:3px 0;opacity:0.8";
       p.textContent = `Passage ${event.paragraphIndex + 1} · ${event.label}`;
       list.append(p);
     }
-    if (!this.presence.length)
-      list.textContent = "Presence and location are not established.";
+    if (!this.presence.length) {
+      list.textContent = "No presence events recorded.";
+    }
     const pages = (selector, total, size, index, change) => {
       const host = this.element.querySelector(selector);
+      if (total <= size) {
+        host.hidden = true;
+        return;
+      }
+      host.hidden = false;
       const prev = document.createElement("button"), next = document.createElement("button"), label = document.createElement("small");
       prev.type = next.type = "button";
       prev.textContent = "Previous";
       next.textContent = "Next";
+      prev.style.cssText = next.style.cssText = "min-height:28px;padding:2px 8px;font-size:11px;border-radius:4px";
       prev.disabled = index === 0;
       next.disabled = (index + 1) * size >= total;
       label.textContent = `Page ${index + 1} of ${Math.max(1, Math.ceil(total / size))}`;
+      label.style.fontSize = "11px";
       const move = (page, forward) => {
         change(page);
         const buttons = this.element.querySelectorAll(`${selector} button`), preferred = buttons[forward ? 1 : 0];
@@ -21007,7 +21063,7 @@ class RelationshipTracker {
       prev.onclick = () => move(index - 1, false);
       next.onclick = () => move(index + 1, true);
       host.append(prev, label, next);
-      host.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;align-items:center";
+      host.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:6px";
     };
     pages("[data-rel-pages]", this.observations.length, 10, this.page, (page) => {
       this.page = page;
@@ -25073,7 +25129,7 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
    Gallery remains reachable from APERTURE navigation; Artwork stays in the header. */
 [data-vn-reader-header] .round-ghost { width:44px!important;height:44px!important;min-width:44px!important;min-height:44px!important;flex-shrink:0!important; }
 @media(max-width:600px){
- [data-vn-reader-header] [data-action="gallery-toggle"] { display:none!important; }
+ [data-vn-reader-header] [data-action="gallery-toggle"] { display:inline-flex!important; }
  [data-vn-reader-header] .reading-heading { min-width:0;overflow:hidden; }
 }
 `;
@@ -25964,6 +26020,31 @@ section[data-reference-observations] h3 {
   font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif !important;
   letter-spacing: 0.04em !important;
   line-height: 1.85 !important;
+}
+[data-vn-root][data-vn-typography="cinematic"] [data-vn-dialogue-text],
+[data-vn-root][data-vn-typography="cinematic"] [data-vn-backlog-text] {
+  font-family: "Cinzel", "Baskerville", "Palatino Linotype", "Palatino", serif !important;
+  letter-spacing: 0.02em !important;
+  line-height: 1.75 !important;
+}
+[data-vn-root][data-vn-typography="terminal"] [data-vn-dialogue-text],
+[data-vn-root][data-vn-typography="terminal"] [data-vn-backlog-text] {
+  font-family: "Share Tech Mono", "Fira Code", "Source Code Pro", Consolas, monospace !important;
+  letter-spacing: 0.04em !important;
+  line-height: 1.65 !important;
+}
+[data-vn-root][data-vn-typography="manga"] [data-vn-dialogue-text],
+[data-vn-root][data-vn-typography="manga"] [data-vn-backlog-text] {
+  font-family: "Comic Neue", "Chalkboard SE", "Chalkboard", "Comic Sans MS", -apple-system, sans-serif !important;
+  line-height: 1.6 !important;
+}
+[data-vn-root][data-vn-typography="fantasy"] [data-vn-dialogue-text],
+[data-vn-root][data-vn-typography="fantasy"] [data-vn-backlog-text] {
+  font-family: "Merriweather", "Crimson Text", "Book Antiqua", Georgia, serif !important;
+  line-height: 1.78 !important;
+}
+[data-vn-root] [data-vn-dialogue-text] {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8), 0 0 1px rgba(0, 0, 0, 0.9);
 }
 
 /* Cinematic Chapter Card Splash */
@@ -30722,7 +30803,7 @@ function normalizeReaderPreferences(value) {
     backgroundOpacity: typeof input2.backgroundOpacity === "number" && Number.isFinite(input2.backgroundOpacity) ? Math.max(0, Math.min(1, input2.backgroundOpacity)) : 0.9,
     theme: input2.theme === "dark" ? "dark" : "light",
     ...typeof input2.heightRatio === "number" && Number.isFinite(input2.heightRatio) ? { heightRatio: Math.max(0.12, Math.min(1, input2.heightRatio)) } : {},
-    ...input2.typography === "novelist" || input2.typography === "modern" || input2.typography === "retro" || input2.typography === "accessible" ? { typography: input2.typography } : {},
+    ...typeof input2.typography === "string" && ["novelist", "modern", "cinematic", "retro", "terminal", "manga", "fantasy", "accessible"].includes(input2.typography) ? { typography: input2.typography } : {},
     ...input2.smartPacing !== undefined ? { smartPacing: input2.smartPacing === true } : {},
     ...input2.typewriterAudio === "off" || input2.typewriterAudio === "blip" || input2.typewriterAudio === "click" || input2.typewriterAudio === "pip" ? { typewriterAudio: input2.typewriterAudio } : {},
     ...typeof input2.typewriterVolume === "number" && Number.isFinite(input2.typewriterVolume) ? { typewriterVolume: Math.max(0, Math.min(1, input2.typewriterVolume)) } : {},
@@ -34360,7 +34441,7 @@ button[data-vn-badge]:active {
   padding: 1.6rem 4rem 1.45rem 1.8rem;
   border: 1px solid var(--vn-dialogue-border);
   border-radius: 1rem;
-  background: var(--vn-dialogue-bg);
+  background: color-mix(in srgb, var(--vn-dialogue-bg) calc(var(--caption-opacity, var(--vn-sheet-opacity, 0.9)) * 100%), transparent);
   box-shadow:
     0 1.2rem 3rem rgba(0, 0, 0, 0.45),
     0 0.2rem 0.6rem rgba(0, 0, 0, 0.25),
@@ -34381,7 +34462,7 @@ button[data-vn-badge]:active {
   padding: 0.34rem 1.15rem;
   border: 1px solid color-mix(in srgb, var(--vn-accent) 40%, var(--vn-dialogue-border));
   border-radius: 0.55rem;
-  background: var(--vn-dialogue-bg);
+  background: color-mix(in srgb, var(--vn-dialogue-bg) calc(var(--caption-opacity, var(--vn-sheet-opacity, 0.9)) * 100%), transparent);
   color: var(--vn-accent);
   font-size: 0.88rem;
   font-weight: 750;
@@ -34413,6 +34494,7 @@ button[data-vn-badge]:active {
   line-height: 1.6;
   letter-spacing: 0.005em;
   text-wrap: pretty;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85), 0 2px 8px rgba(0, 0, 0, 0.6);
   white-space: pre-wrap;
 }
 
@@ -34986,6 +35068,7 @@ button[data-vn-badge]:active {
   font-size: 0.95rem;
   line-height: 1.55;
   text-wrap: pretty;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85), 0 2px 8px rgba(0, 0, 0, 0.6);
 }
 
 @keyframes vn-spin {
@@ -35769,7 +35852,7 @@ ${VN_TEXT_EFFECTS_CSS}
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-dialogue]::before {
   content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
   display: block; width: 100%; height: 100%; margin: 0; border: 0; transform: none; animation: none; box-shadow: none;
-  background: var(--vn-dialogue-bg); opacity: var(--vn-sheet-opacity); pointer-events: none;
+  background: color-mix(in srgb, var(--vn-dialogue-bg) calc(var(--caption-opacity, var(--vn-sheet-opacity, 0.9)) * 100%), transparent); opacity: var(--vn-sheet-opacity); pointer-events: none;
 }
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-dialogue]::after { display: none; }
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-controls] {
@@ -45410,7 +45493,7 @@ class VisualNovelSettingsPanel {
               <label data-field ${find("Reader layout", "layout overlay text over picture image first")}><span>Reader layout</span><select name="readerLayout"><option value="overlay">Text over picture</option><option value="image-first">Image first</option></select></label>
               <label data-field ${find("Text panel size", "panel size compact reading expanded sheet")}><span>Text panel size</span><select name="readerSheetSize"><option value="custom" disabled>Custom (dragged)</option><option value="compact">Compact</option><option value="reading">Reading</option><option value="expanded">Expanded</option></select></label>
               <label data-field ${find("Dialogue background opacity", "opacity transparent solid subtitle background")}><span>Dialogue background opacity <output data-opacity-output style="font:11px ui-monospace,monospace;margin-left:6px;"></output></span><input name="readerBackgroundOpacity" type="range" min="0" max="1" step="0.01" /></label>
-              <label data-field ${find("Reading typography", "font typography typeface serif sans dyslexic font size style novelist modern retro accessible")}><span>Reading typography</span><select name="readerTypography"><option value="modern">Modern Clean (Outfit / Inter)</option><option value="novelist">Classic Novelist (Georgia / Serif)</option><option value="retro">Arcade Monospace (Pixel / JetBrains)</option><option value="accessible">Accessible Sans (High Legibility)</option></select></label>
+              <label data-field ${find("Reading typography", "font typography typeface serif sans dyslexic font size style novelist modern retro accessible cinematic terminal manga fantasy")}><span>Reading typography</span><select name="readerTypography"><option value="modern">Modern Clean (Outfit / Inter)</option><option value="novelist">Classic Novelist (Georgia / Serif)</option><option value="cinematic">Cinematic Drama (Cinzel / Baskerville)</option><option value="retro">Arcade Monospace (Pixel / JetBrains)</option><option value="terminal">Cyberpunk Terminal (Share Tech / Fira)</option><option value="manga">Anime &amp; Manga (Comic Neue / Casual)</option><option value="fantasy">Dark Fantasy Gothic (Merriweather / Antiqua)</option><option value="accessible">Accessible Sans (High Legibility)</option></select></label>
               <fieldset ${find("Text size", "font scale bigger smaller large")}>
                 <legend>Text size</legend>
                 ${segments("textScaleStep", TEXT_SCALE_STEPS, true)}
@@ -48741,6 +48824,298 @@ function trapFocusWithin(container, event, active) {
   }
 }
 
+// src/frontend/stage/fullscreen-lightbox.ts
+var LIGHTBOX_CSS = `
+.vn-lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  background: rgba(4, 8, 12, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  user-select: none;
+  animation: vn-lightbox-fade-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes vn-lightbox-fade-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+.vn-lightbox-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: max(12px, env(safe-area-inset-top)) 16px 12px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.8) 0%, transparent 100%);
+  pointer-events: auto;
+}
+.vn-lightbox-title-group {
+  min-width: 0;
+  color: #f4f6fb;
+}
+.vn-lightbox-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vn-lightbox-subtitle {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vn-lightbox-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 12px;
+  flex-shrink: 0;
+}
+.vn-lightbox-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+.vn-lightbox-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+.vn-lightbox-btn.active {
+  background: #7c9cff;
+  border-color: #7c9cff;
+  color: #0d121f;
+}
+.vn-lightbox-close {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+}
+.vn-lightbox-viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 60px 16px 24px;
+  cursor: zoom-in;
+}
+.vn-lightbox-viewport.zoomed {
+  cursor: grab;
+}
+.vn-lightbox-img {
+  max-width: 95vw;
+  max-height: 85vh;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: center center;
+}
+.vn-lightbox-info-drawer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 16px 20px max(16px, env(safe-area-inset-bottom));
+  background: rgba(10, 16, 24, 0.95);
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  color: #e0e5ed;
+  font-size: 13px;
+  line-height: 1.5;
+  backdrop-filter: blur(20px);
+  z-index: 15;
+  animation: vn-lightbox-slide-up 180ms ease;
+}
+@keyframes vn-lightbox-slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.vn-lightbox-info-drawer pre {
+  margin: 6px 0 0;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #a8b8d0;
+}
+`;
+
+class FullscreenLightbox {
+  static instance = null;
+  backdrop;
+  img;
+  titleEl;
+  subtitleEl;
+  infoDrawer;
+  zoomLevel = 1;
+  infoOpen = false;
+  currentOptions = null;
+  constructor() {
+    this.backdrop = document.createElement("div");
+    this.backdrop.className = "vn-lightbox-backdrop";
+    this.backdrop.hidden = true;
+    const style = document.createElement("style");
+    style.textContent = LIGHTBOX_CSS;
+    this.backdrop.appendChild(style);
+    this.backdrop.innerHTML += `
+      <div class="vn-lightbox-header">
+        <div class="vn-lightbox-title-group">
+          <h3 class="vn-lightbox-title"></h3>
+          <div class="vn-lightbox-subtitle"></div>
+        </div>
+        <div class="vn-lightbox-actions">
+          <button type="button" class="vn-lightbox-btn" data-action="zoom-toggle" title="Toggle zoom">100%</button>
+          <button type="button" class="vn-lightbox-btn" data-action="info-toggle" title="Prompt details">Info</button>
+          <button type="button" class="vn-lightbox-btn vn-lightbox-close" data-action="close" aria-label="Close" title="Close (Esc)">✕</button>
+        </div>
+      </div>
+      <div class="vn-lightbox-viewport" data-viewport>
+        <img class="vn-lightbox-img" alt="Fullscreen image" />
+      </div>
+      <div class="vn-lightbox-info-drawer" hidden data-drawer></div>
+    `;
+    this.titleEl = this.backdrop.querySelector(".vn-lightbox-title");
+    this.subtitleEl = this.backdrop.querySelector(".vn-lightbox-subtitle");
+    this.img = this.backdrop.querySelector(".vn-lightbox-img");
+    this.infoDrawer = this.backdrop.querySelector("[data-drawer]");
+    this.wireEvents();
+    document.body.appendChild(this.backdrop);
+  }
+  static open(options) {
+    if (!FullscreenLightbox.instance) {
+      FullscreenLightbox.instance = new FullscreenLightbox;
+    }
+    FullscreenLightbox.instance.show(options);
+    return FullscreenLightbox.instance;
+  }
+  wireEvents() {
+    const viewport = this.backdrop.querySelector("[data-viewport]");
+    const zoomBtn = this.backdrop.querySelector('[data-action="zoom-toggle"]');
+    const infoBtn = this.backdrop.querySelector('[data-action="info-toggle"]');
+    const closeBtn = this.backdrop.querySelector('[data-action="close"]');
+    closeBtn.onclick = (e) => {
+      e.stopPropagation();
+      this.close();
+    };
+    viewport.onclick = (e) => {
+      if (e.target === viewport) {
+        this.close();
+      } else if (e.target === this.img) {
+        this.toggleZoom();
+      }
+    };
+    zoomBtn.onclick = (e) => {
+      e.stopPropagation();
+      this.toggleZoom();
+    };
+    infoBtn.onclick = (e) => {
+      e.stopPropagation();
+      this.toggleInfo();
+    };
+    this.backdrop.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        this.close();
+      } else if (e.key === "+" || e.key === "=") {
+        this.setZoom(Math.min(3, this.zoomLevel + 0.5));
+      } else if (e.key === "-") {
+        this.setZoom(Math.max(1, this.zoomLevel - 0.5));
+      }
+    });
+  }
+  setZoom(level) {
+    this.zoomLevel = level;
+    const viewport = this.backdrop.querySelector("[data-viewport]");
+    const zoomBtn = this.backdrop.querySelector('[data-action="zoom-toggle"]');
+    if (level > 1) {
+      this.img.style.transform = `scale(${level})`;
+      this.img.style.maxWidth = "none";
+      this.img.style.maxHeight = "none";
+      viewport.classList.add("zoomed");
+      zoomBtn.textContent = `${Math.round(level * 100)}%`;
+    } else {
+      this.img.style.transform = "none";
+      this.img.style.maxWidth = "95vw";
+      this.img.style.maxHeight = "85vh";
+      viewport.classList.remove("zoomed");
+      zoomBtn.textContent = "Fit";
+    }
+  }
+  toggleZoom() {
+    if (this.zoomLevel === 1) {
+      this.setZoom(2);
+    } else {
+      this.setZoom(1);
+    }
+  }
+  toggleInfo() {
+    this.infoOpen = !this.infoOpen;
+    const infoBtn = this.backdrop.querySelector('[data-action="info-toggle"]');
+    infoBtn.classList.toggle("active", this.infoOpen);
+    this.infoDrawer.hidden = !this.infoOpen;
+  }
+  show(options) {
+    this.currentOptions = options;
+    this.titleEl.textContent = options.title ?? "Story Artwork";
+    this.subtitleEl.textContent = options.subtitle ?? "";
+    this.subtitleEl.hidden = !options.subtitle;
+    this.img.src = options.src;
+    this.setZoom(1);
+    this.infoOpen = false;
+    this.infoDrawer.hidden = true;
+    let infoHtml = "";
+    if (options.prompt) {
+      infoHtml += `<strong>Positive Prompt:</strong><pre>${this.escapeHtml(options.prompt)}</pre>`;
+    }
+    if (options.negativePrompt) {
+      infoHtml += `<div style="margin-top:10px"><strong>Negative Prompt:</strong><pre>${this.escapeHtml(options.negativePrompt)}</pre></div>`;
+    }
+    this.infoDrawer.innerHTML = infoHtml || "<p style='margin:0;opacity:0.7'>No recorded prompt metadata.</p>";
+    const infoBtn = this.backdrop.querySelector('[data-action="info-toggle"]');
+    infoBtn.hidden = !options.prompt && !options.negativePrompt;
+    this.backdrop.hidden = false;
+    this.backdrop.tabIndex = -1;
+    this.backdrop.focus();
+  }
+  close() {
+    this.backdrop.hidden = true;
+    this.img.removeAttribute("src");
+    this.currentOptions = null;
+  }
+  escapeHtml(str) {
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+}
+
 // src/frontend/image-review/studio.ts
 var CSS3 = `
 :host{position:absolute;inset:0;pointer-events:none;z-index:9;font:14px/1.45 var(--vn-shell-family,system-ui);color:var(--vn-shell-text,#f4f7ee);--paper:#11241c;--edge:rgba(160,205,185,.22);--accent:#dcebad;--vn-shell-field:rgba(14,28,22,.85);--vn-shell-button:rgba(22,46,36,.8)}
@@ -48777,6 +49152,7 @@ class ImageStudio {
   root;
   preferences;
   turn = null;
+  config = null;
   previewLoad = null;
   previewKey = "";
   selectedJob = "";
@@ -48841,14 +49217,27 @@ class ImageStudio {
         this.queuePictures([this.selectedJob]);
     };
     batchApprove.onclick = () => this.decideAll("generate");
+    const modelSelect = this.el("[data-artwork-model-select]");
+    const customModelContainer = this.el("[data-custom-model-container]");
+    const modelInput = this.el("[data-artwork-model]");
+    modelSelect.onchange = () => {
+      if (modelSelect.value === "__custom__") {
+        customModelContainer.hidden = false;
+        modelInput.focus();
+      } else {
+        customModelContainer.hidden = true;
+        modelInput.value = modelSelect.value;
+      }
+      this.updateCostEstimate();
+    };
+    modelInput.oninput = () => this.updateCostEstimate();
     this.el("[data-artwork-connection]").onchange = () => {
       const connId = this.el("[data-artwork-connection]").value;
       const conn = this.imageConnections.find((c) => c.id === connId);
       if (conn)
-        this.el("[data-artwork-model]").placeholder = conn.model || "Connection default";
+        modelInput.placeholder = conn.model || "Connection default";
       this.updateCostEstimate();
     };
-    this.el("[data-artwork-model]").oninput = () => this.updateCostEstimate();
     const queue = document.createElement("div");
     queue.dataset.retryQueue = "";
     queue.innerHTML = '<div class="row"><button type="button" data-queue-unfinished>Retry unfinished</button><button type="button" data-clear-retries>Clear queued retries</button></div><small data-queue-status role="status" aria-live="polite"></small>';
@@ -49360,7 +49749,23 @@ class ImageStudio {
     const body2 = this.el("[data-studio-body]");
     const context = document.createElement("div");
     context.dataset.context = "";
-    context.innerHTML = '<div data-thumbnail><img data-preview hidden alt="Selected picture"><span data-placeholder aria-hidden="true">◇</span></div><div data-context-text><strong data-status role="status"></strong><small data-paragraph></small></div>';
+    context.innerHTML = '<div data-thumbnail style="position:relative;cursor:pointer" title="Click to view fullscreen"><img data-preview hidden alt="Selected picture"><span data-placeholder aria-hidden="true">◇</span><button type="button" data-preview-fullscreen aria-label="View fullscreen" style="position:absolute;bottom:3px;right:3px;width:24px;height:24px;border-radius:4px;border:none;background:rgba(0,0,0,0.7);color:#fff;font-size:13px;display:grid;place-items:center;cursor:pointer;padding:0;line-height:1">⛶</button></div><div data-context-text><strong data-status role="status"></strong><small data-paragraph></small></div>';
+    context.querySelector("[data-thumbnail]").addEventListener("click", () => {
+      const img = this.el("[data-preview]");
+      if (!img.src || img.hidden)
+        return;
+      const record2 = this.record();
+      const asset = this.turn?.assets.find((entry) => entry.jobId === this.selectedJob);
+      const title = asset?.stageAsset?.role === "background" ? "Scene Background" : asset?.stageAsset?.role === "portrait" ? "Character Portrait" : "Scene Artwork";
+      const subtitle = this.turn ? `Reply · Revision ${this.turn.revision}` : undefined;
+      FullscreenLightbox.open({
+        src: img.src,
+        title,
+        subtitle,
+        prompt: record2?.prompt,
+        negativePrompt: record2?.negativePrompt
+      });
+    });
     context.querySelector("[data-context-text]").append(this.el("[data-scene]"));
     const versionsContainer = document.createElement("div");
     versionsContainer.dataset.previousVersionsContainer = "";
@@ -49450,8 +49855,11 @@ class ImageStudio {
     styleTools.dataset.styleTools = "";
     styleTools.innerHTML = `<summary>Change Style</summary>
       <div style="margin:8px 0">
-        <label>Semantic Style<select data-style-select aria-label="Select visual style"></select></label>
-        <button type="button" data-change-style-btn style="margin-top:6px">Apply style</button>
+        <div data-active-style-badge style="font-size:11px;font-weight:600;margin-bottom:6px;color:var(--accent,#7c9cff)">
+          Style used: <span data-active-style-name style="color:inherit">Neutral / follow the scene</span>
+        </div>
+        <label>Visual Style<select data-style-select aria-label="Select visual style" style="width:100%;box-sizing:border-box;margin-top:4px"></select></label>
+        <button type="button" data-change-style-btn style="margin-top:8px">Apply selected style</button>
         <small style="display:block;margin-top:6px">Preserves scene facts, character identities and camera framing, recompiling with the target style's StyleDNA.</small>
       </div>`;
     tools.append(styleTools);
@@ -49524,26 +49932,35 @@ class ImageStudio {
     modelTools.open = true;
     modelTools.innerHTML = `<summary>Image Model &amp; Regeneration</summary>
       <div style="margin:8px 0">
+        <div data-active-model-badge style="font-size:11px;font-weight:600;margin-bottom:8px;color:var(--accent,#7c9cff)">
+          Generated with: <span data-active-model-name style="font-family:var(--lumiverse-font-mono,monospace);font-weight:700;color:inherit">Connection default</span>
+        </div>
         <label>Active connection
           <select data-artwork-connection aria-label="Select image connection" style="width:100%;box-sizing:border-box;margin-top:4px"></select>
         </label>
-        <label style="margin-top:10px">Model override
-          <input type="text" data-artwork-model list="vn-artwork-model-suggestions" placeholder="Connection default (or model ID)" style="width:100%;box-sizing:border-box;margin-top:4px" />
-          <datalist id="vn-artwork-model-suggestions">
+        <label style="margin-top:10px">Select Image Model
+          <select data-artwork-model-select aria-label="Select image model" style="width:100%;box-sizing:border-box;margin-top:4px">
+            <option value="">Connection default</option>
+            <option value="blackforestlabs/flux-3/klein/text-to-image">FLUX.3 Klein (Square safe / Fast)</option>
+            <option value="anima/text-to-image">Anima (Anime &amp; Illustration)</option>
             <option value="recraft-v4.1-flash">Recraft v4.1 Flash (10k chars)</option>
-            <option value="recraft-20b">Recraft 20B (10k chars)</option>
-            <option value="blackforestlabs/flux-3/klein/text-to-image">FLUX.3 Klein (Square safe)</option>
+            <option value="recraft-20b">Recraft 20B (High Quality)</option>
             <option value="xai/grok-imagine-image/v2.0/text-to-image">Grok Imagine 2.0</option>
             <option value="openai/gpt-image-2.5/flare/text-to-image">GPT Image 2.5</option>
             <option value="qwen-image-3">Qwen Image 3</option>
-            <option value="anima/text-to-image">Anima</option>
             <option value="bytedance/seedream-v5.0-pro">Seedream 5.0 Pro</option>
-          </datalist>
+            <option value="__custom__">Custom model ID...</option>
+          </select>
         </label>
-        <small style="display:block;margin-top:4px;opacity:0.8">Recompiles prompt dialect specifically for the chosen model.</small>
+        <div data-custom-model-container hidden style="margin-top:8px">
+          <label>Custom Model ID
+            <input type="text" data-artwork-model placeholder="e.g. stabilityai/sdxl-turbo" style="width:100%;box-sizing:border-box;margin-top:4px" />
+          </label>
+        </div>
+        <small style="display:block;margin-top:6px;opacity:0.8">Recompiles prompt dialect specifically for the chosen model.</small>
         <div data-cost-estimate style="margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.03);border:1px solid var(--edge);font-size:12px"></div>
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-          <button type="button" data-regenerate-model-single style="font-size:12px;padding:6px 12px">Regenerate this picture</button>
+          <button type="button" data-regenerate-model-single style="font-size:12px;padding:6px 12px">Regenerate with selected model</button>
           <button type="button" data-regenerate-model-all style="font-size:12px;padding:6px 12px">Regenerate all in scene</button>
         </div>
       </div>`;
@@ -50050,6 +50467,7 @@ class ImageStudio {
     this.render();
   }
   setConfig(config2) {
+    this.config = config2;
     this.activity.setSaver(config2.dataSaverMode);
     this.maxImagesPerTurn = config2.maxImagesPerTurn;
     this.preferences.setConfig(config2);
@@ -50416,25 +50834,97 @@ ${metadata.presentationRuleTrace.summary}`;
     fitModel.hidden = !asset || asset.source === "cache";
     fitModel.disabled = !editable || !asset || asset.source === "cache" || this.preparing.has(this.selectedJob) || Boolean(record2 && this.rebuilding.has(record2.requestId));
     const styleSelect = this.el("[data-style-select]");
-    if (styleSelect.children.length === 0) {
+    const customPresets = this.config?.promptPresets ?? [];
+    const expectedCount = customPresets.length + BUILTIN_SHARED_STYLES.length;
+    let actualCount = 0;
+    for (let i = 0;i < styleSelect.children.length; i++) {
+      const child = styleSelect.children[i];
+      if (child && child.tagName === "OPTGROUP")
+        actualCount += child.children.length;
+      else
+        actualCount++;
+    }
+    if (actualCount !== expectedCount) {
+      styleSelect.innerHTML = "";
+      if (customPresets.length > 0) {
+        const groupCustom = document.createElement("optgroup");
+        groupCustom.label = "Custom Saved Styles";
+        for (const p of customPresets) {
+          const opt = document.createElement("option");
+          opt.value = p.id;
+          opt.textContent = p.name;
+          groupCustom.append(opt);
+        }
+        styleSelect.append(groupCustom);
+      }
+      const groupBuiltin = document.createElement("optgroup");
+      groupBuiltin.label = "Built-in Styles";
       for (const s of BUILTIN_SHARED_STYLES) {
         const opt = document.createElement("option");
         opt.value = s.id;
         opt.textContent = s.name;
-        styleSelect.append(opt);
+        groupBuiltin.append(opt);
+      }
+      styleSelect.append(groupBuiltin);
+    }
+    const styleMeta = record2?.imagePromptMetadata;
+    const allStyles = [...customPresets, ...BUILTIN_SHARED_STYLES];
+    let matchedStyleId = "builtin-style:neutral";
+    let matchedStyleName = "Neutral / follow the scene";
+    const activePresetId = styleMeta?.sharedStyle?.presetId;
+    const activePresetName = styleMeta?.sharedStyle?.presetName;
+    if (activePresetId && allStyles.some((s) => s.id === activePresetId)) {
+      matchedStyleId = activePresetId;
+      const found = allStyles.find((s) => s.id === matchedStyleId);
+      if (found)
+        matchedStyleName = found.name;
+    } else if (activePresetName) {
+      const found = allStyles.find((s) => s.name.toLowerCase() === activePresetName.toLowerCase());
+      if (found) {
+        matchedStyleId = found.id;
+        matchedStyleName = found.name;
+      }
+    } else if (styleMeta?.styleSnapshot?.medium) {
+      const med = styleMeta.styleSnapshot.medium.toLowerCase();
+      const match = BUILTIN_SHARED_STYLES.find((s) => s.description.toLowerCase().includes(med) || s.name.toLowerCase().includes(med) || s.positive.toLowerCase().includes(med));
+      if (match) {
+        matchedStyleId = match.id;
+        matchedStyleName = match.name;
       }
     }
-    const currentStyle = record2?.imagePromptMetadata?.styleSnapshot?.medium;
-    if (currentStyle) {
-      const match = BUILTIN_SHARED_STYLES.find((s) => s.description.includes(currentStyle) || s.name.toLowerCase().includes(currentStyle.toLowerCase()));
-      if (match)
-        styleSelect.value = match.id;
+    styleSelect.value = matchedStyleId;
+    const styleBadge = this.root.querySelector("[data-active-style-name]");
+    if (styleBadge) {
+      styleBadge.textContent = matchedStyleName;
     }
     const changeStyleBtn = this.el("[data-change-style-btn]");
     changeStyleBtn.disabled = !editable || !asset || asset.source === "cache" || this.preparing.has(this.selectedJob) || Boolean(record2 && this.rebuilding.has(record2.requestId));
+    const modelBadge = this.root.querySelector("[data-active-model-name]");
+    const activeModel = record2?.model?.trim();
+    if (modelBadge) {
+      modelBadge.textContent = activeModel || "Connection default";
+    }
+    const mSelect = this.root.querySelector("[data-artwork-model-select]");
+    const cContainer = this.root.querySelector("[data-custom-model-container]");
     const modelInput = this.el("[data-artwork-model]");
-    if (this.root.activeElement !== modelInput) {
-      modelInput.value = record2?.model ?? "";
+    if (mSelect && this.root.activeElement !== modelInput && this.root.activeElement !== mSelect) {
+      const knownValues = Array.from(mSelect.options).map((o) => o.value).filter((v) => v && v !== "__custom__");
+      if (!activeModel) {
+        mSelect.value = "";
+        if (cContainer)
+          cContainer.hidden = true;
+        modelInput.value = "";
+      } else if (knownValues.includes(activeModel)) {
+        mSelect.value = activeModel;
+        if (cContainer)
+          cContainer.hidden = true;
+        modelInput.value = activeModel;
+      } else {
+        mSelect.value = "__custom__";
+        if (cContainer)
+          cContainer.hidden = false;
+        modelInput.value = activeModel;
+      }
     }
     const regenSingle = this.el("[data-regenerate-model-single]");
     regenSingle.disabled = !editable || !asset || asset.source === "cache" || this.preparing.has(this.selectedJob) || Boolean(record2 && this.rebuilding.has(record2.requestId));
@@ -51013,12 +51503,12 @@ var css = `
 section{position:absolute;inset:max(76px,calc(env(safe-area-inset-top) + 64px)) 12px max(12px,env(safe-area-inset-bottom));max-width:940px;margin:auto;pointer-events:auto;border:1px solid var(--vn-shell-border,rgba(134,219,178,.22));border-radius:14px;background:var(--vn-shell-bg,#0d161a);box-shadow:0 12px 48px #0009;display:flex;flex-direction:column;overflow:hidden}
 header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--vn-shell-border,rgba(134,219,178,.22));flex:none}h2{font-size:18px;margin:0;flex:1}header button{width:44px;padding:0;font-size:24px}.body{overflow:auto;overscroll-behavior:contain;padding:12px 14px;min-height:0;flex:1}[data-library-close]{flex:none}
 .filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px}label{display:block;color:var(--vn-shell-muted,#9ab3a6);font-size:12px}select{width:100%;font-size:14px}.check{display:flex;align-items:center;gap:8px;min-height:44px;font-size:14px}.check input{width:20px;height:20px}
-[data-library-status]{color:var(--vn-shell-muted,#9ab3a6);margin:8px 0;overflow-wrap:anywhere}[data-grid]{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:10px}[data-image-card]{display:flex;flex-direction:column;padding:0;text-align:left;overflow:hidden;min-width:0}[data-image-card] img{width:100%;height:160px;object-fit:contain;background:#0003}[data-image-card] .missing{display:grid;place-items:center;width:100%;height:160px;color:var(--vn-shell-muted,#9ab3a6)}.caption{padding:8px;overflow-wrap:anywhere}.caption strong{display:block}.caption small{display:block;font-size:11px;color:var(--vn-shell-muted,#9ab3a6)}footer{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--vn-shell-border,rgba(134,219,178,.22))}[data-page-label]{color:var(--vn-shell-muted,#9ab3a6);font-size:12px}
-[data-detail]{min-width:0}.viewer-tools{display:flex;gap:8px;justify-content:center;align-items:center;margin-bottom:8px}.viewer-tools button{min-width:44px}[data-image-viewport]{overflow:auto;overscroll-behavior:contain;max-height:55dvh;background:#0003;border-radius:8px}[data-full-image]{display:block;width:100%;max-height:55dvh;object-fit:contain;margin:auto}[data-excerpt]{overflow-wrap:anywhere;white-space:pre-wrap;margin:12px 0}[data-description]{color:var(--vn-shell-muted,#9ab3a6);overflow-wrap:anywhere}details{border-top:1px solid var(--vn-shell-border,rgba(134,219,178,.22));margin-top:10px}summary{min-height:44px;display:flex;align-items:center;cursor:pointer}textarea{width:100%;min-height:120px;background:var(--vn-shell-field,#101a1e);border:1px solid var(--vn-shell-border,rgba(134,219,178,.22));border-radius:8px;padding:8px;font:16px/1.5 ui-monospace,monospace;resize:vertical}.prompt-label{margin:10px 0}.note{color:var(--vn-shell-muted,#9ab3a6);font-size:12px} @media(max-width:480px){section{left:8px;right:8px}.body{padding:10px}.filters{grid-template-columns:1fr 1fr}.filters label:last-child{grid-column:1/-1}[data-library-launch]{right:12px}[data-grid]{grid-template-columns:repeat(2,minmax(0,1fr))}}
+[data-library-status]{color:var(--vn-shell-muted,#9ab3a6);margin:8px 0;overflow-wrap:anywhere}[data-grid]{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:10px}[data-image-card]{display:flex;flex-direction:column;padding:0;text-align:left;overflow:hidden;min-width:0;position:relative}[data-image-card] img{width:100%;height:160px;object-fit:contain;background:#0003}[data-image-card] .missing{display:grid;place-items:center;width:100%;height:160px;color:var(--vn-shell-muted,#9ab3a6)}.caption{padding:8px;overflow-wrap:anywhere}.caption strong{display:block}.caption small{display:block;font-size:11px;color:var(--vn-shell-muted,#9ab3a6)}footer{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--vn-shell-border,rgba(134,219,178,.22))}[data-page-label]{color:var(--vn-shell-muted,#9ab3a6);font-size:12px}
+[data-detail]{min-width:0}.viewer-tools{display:flex;gap:8px;justify-content:center;align-items:center;margin-bottom:8px;flex-wrap:wrap}.viewer-tools button{min-width:44px}[data-image-viewport]{overflow:auto;overscroll-behavior:contain;max-height:55dvh;background:#0003;border-radius:8px;cursor:pointer}[data-full-image]{display:block;width:100%;max-height:55dvh;object-fit:contain;margin:auto}[data-excerpt]{overflow-wrap:anywhere;white-space:pre-wrap;margin:12px 0}[data-description]{color:var(--vn-shell-muted,#9ab3a6);overflow-wrap:anywhere}details{border-top:1px solid var(--vn-shell-border,rgba(134,219,178,.22));margin-top:10px}summary{min-height:44px;display:flex;align-items:center;cursor:pointer}textarea{width:100%;min-height:120px;background:var(--vn-shell-field,#101a1e);border:1px solid var(--vn-shell-border,rgba(134,219,178,.22));border-radius:8px;padding:8px;font:16px/1.5 ui-monospace,monospace;resize:vertical}.prompt-label{margin:10px 0}.note{color:var(--vn-shell-muted,#9ab3a6);font-size:12px} @media(max-width:480px){section{left:8px;right:8px}.body{padding:10px}.filters{grid-template-columns:1fr 1fr}.filters label:last-child{grid-column:1/-1}[data-library-launch]{right:12px}[data-grid]{grid-template-columns:repeat(2,minmax(0,1fr))}}
 button{-webkit-tap-highlight-color:transparent}summary::before{content:'▸';margin-right:8px}details[open]>summary::before{content:'▾'}[data-template-query]{min-width:0;min-height:44px;width:100%;border:1px solid var(--vn-shell-border,rgba(134,219,178,.22));border-radius:8px;background:var(--vn-shell-field,#101a1e);padding:8px;color:inherit}
 
 :host([data-open=true]){pointer-events:auto;background:#0005}
-[data-history-views]{display:flex;gap:6px;margin:0 0 14px;padding:4px;border-radius:999px;background:rgba(0,0,0,.22);border:1px solid rgba(160,205,185,.25)}[data-history-view]{flex:1;border:0;background:transparent;border-radius:999px;padding:8px 16px;font-weight:650;font-size:12px;color:#a6bfae;cursor:pointer;transition:all .15s ease}[data-history-view][aria-pressed=true]{background:#dcebad;color:#0e1e18;box-shadow:0 2px 10px rgba(0,0,0,.3);font-weight:800}[data-history-return]{flex:none;margin:0 14px 12px;align-self:center;min-width:160px;border-radius:999px;font-weight:600}[data-grid][data-mode=story]{display:flex;flex-direction:column;gap:12px}[data-reply]{padding:16px 18px;border-radius:14px;background:rgba(18,38,30,.55);border:1px solid rgba(160,205,185,.22);border-left:3px solid #dcebad;box-shadow:0 4px 16px rgba(0,0,0,.25)}[data-reply] h3{display:inline-block;margin:0 0 6px;padding:2px 10px;border-radius:999px;background:rgba(220,238,173,.18);color:#dcebad;font-size:11px;font-weight:750;letter-spacing:.06em;text-transform:uppercase}[data-reply-preview]{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin:8px 0;line-height:1.68;font-family:Georgia,serif;font-size:14.5px;color:#f3f7ee}[data-reply] details{border:1px solid rgba(160,205,185,.18);border-radius:10px;padding:4px 12px;background:rgba(0,0,0,.22);margin:8px 0}[data-reply] details p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.72;font-family:Georgia,serif;font-size:14.5px;color:#f3f7ee}[data-reply] details strong{display:inline-block;padding:1px 8px;border-radius:999px;background:rgba(220,238,173,.15);font-size:11px;font-weight:700;color:#dcebad}[data-reply-pictures]{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:8px}[data-reply-pictures] img{height:180px;border-radius:6px}[data-image-card]{border-radius:12px;border:1px solid rgba(160,205,185,.2);background:rgba(18,38,30,.4);transition:transform .15s ease,border-color .15s ease}[data-image-card]:hover{transform:translateY(-2px);border-color:#dcebad}[data-current-scene-backlog]{border-left-color:var(--vn-shell-accent,#dcebad)}[data-current-scene-item]{padding:8px 10px;border-radius:10px;background:rgba(0,0,0,.18);border:1px solid rgba(160,205,185,.16);margin:6px 0;display:flex;flex-direction:column;gap:4px}[data-current-scene-head]{display:flex;align-items:center;justify-content:space-between;gap:8px}[data-vn-backlog-jump]{min-height:28px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;background:rgba(220,238,173,.14);border:1px solid rgba(220,238,173,.35);color:var(--vn-shell-accent,#dcebad)}
+[data-history-views]{display:flex;gap:6px;margin:0 0 14px;padding:4px;border-radius:999px;background:rgba(0,0,0,.22);border:1px solid rgba(160,205,185,.25)}[data-history-view]{flex:1;border:0;background:transparent;border-radius:999px;padding:8px 16px;font-weight:650;font-size:12px;color:#a6bfae;cursor:pointer;transition:all .15s ease}[data-history-view][aria-pressed=true]{background:#dcebad;color:#0e1e18;box-shadow:0 2px 10px rgba(0,0,0,.3);font-weight:800}[data-history-return]{flex:none;margin:0 14px 12px;align-self:center;min-width:160px;border-radius:999px;font-weight:600}[data-grid][data-mode=story]{display:flex;flex-direction:column;gap:12px}[data-reply]{padding:16px 18px;border-radius:14px;background:rgba(18,38,30,.55);border:1px solid rgba(160,205,185,.22);border-left:3px solid #dcebad;box-shadow:0 4px 16px rgba(0,0,0,.25)}[data-reply] h3{display:inline-block;margin:0 0 6px;padding:2px 10px;border-radius:999px;background:rgba(220,238,173,.18);color:#dcebad;font-size:11px;font-weight:750;letter-spacing:.06em;text-transform:uppercase}[data-reply-preview]{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin:8px 0;line-height:1.68;font-family:Georgia,serif;font-size:14.5px;color:#f3f7ee}[data-reply] details{border:1px solid rgba(160,205,185,.18);border-radius:10px;padding:4px 12px;background:rgba(0,0,0,.22);margin:8px 0}[data-reply] details p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.72;font-family:Georgia,serif;font-size:14.5px;color:#f3f7ee}[data-reply] details strong{display:inline-block;padding:1px 8px;border-radius:999px;background:rgba(220,238,173,.15);font-size:11px;font-weight:700;color:#dcebad}[data-reply-pictures]{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:8px}[data-reply-pictures] img{height:180px;border-radius:6px}[data-image-card]{border-radius:12px;border:1px solid rgba(160,205,185,.2);background:rgba(18,38,30,.4);transition:transform .15s ease,border-color .15s ease}[data-image-card]:hover{transform:translateY(-2px);border-color:#dcebad}[data-current-scene-backlog]{border-left-color:var(--vn-shell-accent,#dcebad)}[data-current-scene-item]{padding:12px 14px;border-radius:12px;background:rgba(18,28,38,0.45);border:1px solid rgba(134,219,178,0.18);margin:8px 0;display:flex;flex-direction:column;gap:6px;transition:all 140ms ease}[data-current-scene-item][data-current-passage="true"]{border-color:var(--vn-shell-accent,#86dbb2);background:rgba(134,219,178,0.08);box-shadow:0 0 12px rgba(134,219,178,0.12)}[data-current-scene-head]{display:flex;align-items:center;justify-content:space-between;gap:8px}.vn-speaker-badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:750;letter-spacing:0.04em;text-transform:uppercase;background:rgba(134,219,178,0.16);border:1px solid rgba(134,219,178,0.35);color:var(--vn-shell-accent,#86dbb2)}[data-vn-backlog-jump]{min-height:28px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;background:rgba(220,238,173,.14);border:1px solid rgba(220,238,173,.35);color:var(--vn-shell-accent,#dcebad)}
 :is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])){color:#142820!important;--vn-shell-text:#142820;--vn-shell-muted:#4b6b5d;--vn-shell-border:rgba(86,128,107,.35);--vn-shell-bg:#f8faf6;--vn-shell-field:#ffffff;--vn-shell-accent:#1e5a40}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) section{background:#f8faf6!important;border-color:rgba(86,128,107,.35)!important;color:#142820!important;box-shadow:0 12px 48px rgba(18,38,29,.2)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) button,:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) select,:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) textarea,:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-template-query]{background:#ffffff!important;border-color:rgba(86,128,107,.35)!important;color:#142820!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-image-card]{background:#ffffff!important;border-color:rgba(86,128,107,.3)!important;color:#142820!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-reply]{background:#ffffff!important;border-color:rgba(86,128,107,.3)!important;color:#142820!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-reply-preview],:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-reply] details p{color:#142820!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-history-views]{background:#eef3eb!important;border-color:rgba(86,128,107,.3)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-history-view]{color:#4b6b5d!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-history-view][aria-pressed=true]{background:#25523d!important;color:#ffffff!important}
 `;
 function sameLibraryContext(next, previous) {
@@ -51060,7 +51550,7 @@ class ImageLibrary {
     this.host.dataset.imageLibrary = "";
     this.host.hidden = true;
     this.root = this.host.attachShadow({ mode: "open" });
-    this.root.innerHTML = `<style>${css}</style><button type="button" data-library-launch title="Image library" aria-label="Open image library" aria-expanded="false" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1.5"/><path d="m4 18 5-5 4 3 3-5 5 7"/></svg></button><section hidden role="dialog" aria-modal="true" aria-labelledby="library-title"><header><button type="button" data-detail-back hidden aria-label="Back to library" title="Back to library">‹</button><h2 id="library-title">Image library</h2><button type="button" data-library-close aria-label="Close image library" title="Close image library">×</button></header><div class="body"><div data-browse><div class="filters"><label>Story range<select data-range aria-label="Story range"><option value="read">Read so far</option><option value="all">All story images</option></select></label><label>Message versions<select data-versions aria-label="Message versions"><option value="active">Active story</option><option value="all">Include alternate versions</option></select></label><label>Sort<select data-order aria-label="Sort images"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label></div><label class="check"><input type="checkbox" data-replaced>Include replaced pictures</label><p class="note">Saved pictures from this chat. Viewing never generates an image. Older missing references cannot always be recovered.</p><div data-grid></div></div><div data-detail hidden><div class="viewer-tools"><button type="button" data-zoom-out aria-label="Zoom out" title="Zoom out">−</button><button type="button" data-fit>Fit</button><button type="button" data-zoom-in aria-label="Zoom in" title="Zoom in">+</button><span data-zoom-label>100%</span></div><div data-image-viewport><img data-full-image alt="Selected story image" data-zoom="1"></div><p data-description></p><p data-excerpt></p><details data-prompts><summary>Prompt details</summary><p class="note">Read-only saved wording. Older pictures may have no recorded request.</p><label class="prompt-label">Saved positive prompt<textarea data-positive aria-label="Saved positive prompt" readonly></textarea></label><label class="prompt-label">Saved negative prompt<textarea data-negative aria-label="Saved negative prompt" readonly></textarea></label><button type="button" data-copy>Copy prompt</button></details></div><p data-library-status role="status"></p><button type="button" data-retry hidden>Retry loading</button></div><footer data-library-footer><button type="button" data-page-prev>Previous page</button><span data-page-label>Page 1</span><button type="button" data-page-next>Next page</button></footer></section>`;
+    this.root.innerHTML = `<style>${css}</style><button type="button" data-library-launch title="Image library" aria-label="Open image library" aria-expanded="false" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1.5"/><path d="m4 18 5-5 4 3 3-5 5 7"/></svg></button><section hidden role="dialog" aria-modal="true" aria-labelledby="library-title"><header><button type="button" data-detail-back hidden aria-label="Back to library" title="Back to library">‹</button><h2 id="library-title">Image library</h2><button type="button" data-library-close aria-label="Close image library" title="Close image library">×</button></header><div class="body"><div data-browse><div class="filters"><label>Story range<select data-range aria-label="Story range"><option value="read">Read so far</option><option value="all">All story images</option></select></label><label>Message versions<select data-versions aria-label="Message versions"><option value="active">Active story</option><option value="all">Include alternate versions</option></select></label><label>Sort<select data-order aria-label="Sort images"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label></div><label class="check"><input type="checkbox" data-replaced>Include replaced pictures</label><p class="note">Saved pictures from this chat. Viewing never generates an image. Older missing references cannot always be recovered.</p><div data-grid></div></div><div data-detail hidden><div class="viewer-tools"><button type="button" data-zoom-out aria-label="Zoom out" title="Zoom out">−</button><button type="button" data-fit>Fit</button><button type="button" data-zoom-in aria-label="Zoom in" title="Zoom in">+</button><span data-zoom-label>100%</span><button type="button" data-fullscreen style="margin-left:8px;font-weight:700">⛶ Fullscreen</button></div><div data-image-viewport><img data-full-image alt="Selected story image" data-zoom="1" style="cursor:pointer" title="Click to view fullscreen"></div><p data-description></p><p data-excerpt></p><details data-prompts><summary>Prompt details</summary><p class="note">Read-only saved wording. Older pictures may have no recorded request.</p><label class="prompt-label">Saved positive prompt<textarea data-positive aria-label="Saved positive prompt" readonly></textarea></label><label class="prompt-label">Saved negative prompt<textarea data-negative aria-label="Saved negative prompt" readonly></textarea></label><button type="button" data-copy>Copy prompt</button></details></div><p data-library-status role="status"></p><button type="button" data-retry hidden>Retry loading</button></div><footer data-library-footer><button type="button" data-page-prev>Previous page</button><span data-page-label>Page 1</span><button type="button" data-page-next>Next page</button></footer></section>`;
     const refresh = document.createElement("button");
     refresh.type = "button";
     refresh.dataset.refresh = "";
@@ -51143,6 +51633,8 @@ class ImageLibrary {
     this.el("[data-zoom-in]").onclick = () => this.setZoom(Math.min(4, this.zoom + 0.25));
     this.el("[data-zoom-out]").onclick = () => this.setZoom(Math.max(1, this.zoom - 0.25));
     this.el("[data-fit]").onclick = () => this.setZoom(1);
+    this.el("[data-fullscreen]").onclick = () => this.openFullscreen();
+    this.el("[data-full-image]").onclick = () => this.openFullscreen();
     this.el("[data-copy]").onclick = async () => {
       if (!this.selected?.prompt)
         return;
@@ -51188,6 +51680,17 @@ Negative prompt:
           first?.focus();
         }
       }
+    });
+  }
+  openFullscreen() {
+    if (!this.selected?.imageUrl)
+      return;
+    FullscreenLightbox.open({
+      src: this.selected.imageUrl,
+      title: this.selected.template ?? (this.selected.role === "portrait" ? "Character Portrait" : "Story Picture"),
+      subtitle: `Reply ${this.selected.messageNumber} · Picture ${this.selected.paragraphIndex + 1} · ${this.selected.versionLabel}${this.selected.model ? " · " + this.selected.model : ""}`,
+      prompt: this.selected.prompt,
+      negativePrompt: this.selected.negativePrompt
     });
   }
   useHistoryEntry() {
@@ -51361,6 +51864,7 @@ Negative prompt:
       button.dataset.imageCard = "";
       button.dataset.entryIndex = String(entryIndex);
       button.dataset.replyKey = JSON.stringify(entry.key);
+      button.style.position = "relative";
       button.setAttribute("aria-label", `View ${entry.template ?? "picture"}, message ${entry.key.assistantMessageId}, paragraph ${entry.paragraphIndex + 1}`);
       if (entry.thumbnailUrl) {
         const image = document.createElement("img");
@@ -51376,6 +51880,23 @@ Negative prompt:
           button.prepend(missing);
         };
         button.append(image);
+        const fsBtn = document.createElement("button");
+        fsBtn.type = "button";
+        fsBtn.title = "Open fullscreen";
+        fsBtn.setAttribute("aria-label", "Open fullscreen");
+        fsBtn.textContent = "⛶";
+        fsBtn.style.cssText = "position:absolute;top:6px;right:6px;width:30px;height:30px;min-height:30px;padding:0;border-radius:999px;background:rgba(4,8,14,0.78);border:1px solid rgba(255,255,255,0.35);color:#fff;font-size:13px;z-index:3;cursor:pointer;display:inline-flex;align-items:center;justify-content:center";
+        fsBtn.onclick = (e) => {
+          e.stopPropagation();
+          FullscreenLightbox.open({
+            src: entry.imageUrl || entry.thumbnailUrl || "",
+            title: entry.template ?? (entry.role === "portrait" ? "Character Portrait" : "Story Picture"),
+            subtitle: `Reply ${entry.messageNumber} · Picture ${entry.paragraphIndex + 1} · ${entry.versionLabel}${entry.model ? " · " + entry.model : ""}`,
+            prompt: entry.prompt,
+            negativePrompt: entry.negativePrompt
+          });
+        };
+        button.append(fsBtn);
       } else {
         const missing = document.createElement("span");
         missing.className = "missing";
@@ -51404,9 +51925,13 @@ Negative prompt:
       for (const item of this.currentSceneEntries) {
         const row = document.createElement("div");
         row.dataset.currentSceneItem = "";
+        const isCurrent = typeof item.paragraphIndex === "number" && item.paragraphIndex === this.cursor;
+        if (isCurrent)
+          row.dataset.currentPassage = "true";
         const head = document.createElement("div");
         head.dataset.currentSceneHead = "";
-        const speaker = document.createElement("strong");
+        const speaker = document.createElement("span");
+        speaker.className = "vn-speaker-badge";
         speaker.textContent = item.speaker || "Narrator";
         head.append(speaker);
         if (typeof item.paragraphIndex === "number" && this.onJumpToParagraph) {
@@ -51414,8 +51939,8 @@ Negative prompt:
           const jump = document.createElement("button");
           jump.type = "button";
           jump.dataset.vnBacklogJump = "";
-          jump.textContent = idx === this.cursor ? "Current passage" : "Replay from here";
-          jump.disabled = idx === this.cursor;
+          jump.textContent = isCurrent ? "Current passage" : "Replay from here";
+          jump.disabled = isCurrent;
           jump.onclick = () => {
             this.onJumpToParagraph?.(idx);
             this.close();

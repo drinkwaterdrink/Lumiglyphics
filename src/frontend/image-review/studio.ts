@@ -24,6 +24,7 @@ import { BUILTIN_SHARED_STYLES } from "../../shared/image-styles.js";
 import type { ConnectionCatalogOption, FrontendRequest, TurnView } from "../../protocol.js";
 import type { ImageRequestRecord,ImageRequestEdits } from "../../shared/image-review.js";
 import {isMobileWidth,trapFocusWithin} from './focus-trap.js';
+import { FullscreenLightbox } from "../stage/fullscreen-lightbox.js";
 
 type Draft = { prompt: string; negative: string; parameters: string };
 const CSS = `
@@ -57,6 +58,7 @@ export class ImageStudio {
   private readonly root: ShadowRoot;
   private preferences:PresentationRulesPanel;
   private turn: TurnView | null = null;
+  private config: VisualNovelConfig | null = null;
   private previewLoad:AbortController|null=null;
   private previewKey='';
   private selectedJob = "";
@@ -102,13 +104,26 @@ export class ImageStudio {
     this.el('[data-secondary-actions]').append(quick,batchApprove);
     quick.onclick=()=>{if(!quick.disabled)this.queuePictures([this.selectedJob]);};
     batchApprove.onclick=()=>this.decideAll('generate');
-    this.el<HTMLSelectElement>('[data-artwork-connection]').onchange=()=>{
-      const connId=this.el<HTMLSelectElement>('[data-artwork-connection]').value;
-      const conn=this.imageConnections.find(c=>c.id===connId);
-      if(conn)this.el<HTMLInputElement>('[data-artwork-model]').placeholder=conn.model||'Connection default';
+    const modelSelect = this.el<HTMLSelectElement>('[data-artwork-model-select]');
+    const customModelContainer = this.el<HTMLElement>('[data-custom-model-container]');
+    const modelInput = this.el<HTMLInputElement>('[data-artwork-model]');
+    modelSelect.onchange = () => {
+      if (modelSelect.value === '__custom__') {
+        customModelContainer.hidden = false;
+        modelInput.focus();
+      } else {
+        customModelContainer.hidden = true;
+        modelInput.value = modelSelect.value;
+      }
       this.updateCostEstimate();
     };
-    this.el<HTMLInputElement>('[data-artwork-model]').oninput=()=>this.updateCostEstimate();
+    modelInput.oninput = () => this.updateCostEstimate();
+    this.el<HTMLSelectElement>('[data-artwork-connection]').onchange = () => {
+      const connId = this.el<HTMLSelectElement>('[data-artwork-connection]').value;
+      const conn = this.imageConnections.find(c => c.id === connId);
+      if (conn) modelInput.placeholder = conn.model || 'Connection default';
+      this.updateCostEstimate();
+    };
     const queue=document.createElement('div');queue.dataset.retryQueue='';queue.innerHTML='<div class="row"><button type="button" data-queue-unfinished>Retry unfinished</button><button type="button" data-clear-retries>Clear queued retries</button></div><small data-queue-status role="status" aria-live="polite"></small>';
     this.el('[data-state-detail]').after(queue);
     this.el<HTMLButtonElement>('[data-queue-unfinished]').onclick=()=>this.queuePictures((this.turn?.assets??[]).filter(a=>a.source!=='cache'&&!['generated','browser_ready'].includes(a.status)).map(a=>a.jobId).filter(id=>!this.retryQueueJobs.has(id)&&id!==this.retryActive));
@@ -476,7 +491,22 @@ export class ImageStudio {
   private layoutInspector():void {
     const body=this.el<HTMLElement>('[data-studio-body]');
     const context=document.createElement('div');context.dataset.context='';
-    context.innerHTML='<div data-thumbnail><img data-preview hidden alt="Selected picture"><span data-placeholder aria-hidden="true">◇</span></div><div data-context-text><strong data-status role="status"></strong><small data-paragraph></small></div>';
+    context.innerHTML='<div data-thumbnail style="position:relative;cursor:pointer" title="Click to view fullscreen"><img data-preview hidden alt="Selected picture"><span data-placeholder aria-hidden="true">◇</span><button type="button" data-preview-fullscreen aria-label="View fullscreen" style="position:absolute;bottom:3px;right:3px;width:24px;height:24px;border-radius:4px;border:none;background:rgba(0,0,0,0.7);color:#fff;font-size:13px;display:grid;place-items:center;cursor:pointer;padding:0;line-height:1">⛶</button></div><div data-context-text><strong data-status role="status"></strong><small data-paragraph></small></div>';
+    context.querySelector('[data-thumbnail]')!.addEventListener('click', () => {
+      const img = this.el<HTMLImageElement>('[data-preview]');
+      if (!img.src || img.hidden) return;
+      const record = this.record();
+      const asset = this.turn?.assets.find(entry => entry.jobId === this.selectedJob);
+      const title = asset?.stageAsset?.role === 'background' ? 'Scene Background' : asset?.stageAsset?.role === 'portrait' ? 'Character Portrait' : 'Scene Artwork';
+      const subtitle = this.turn ? `Reply · Revision ${this.turn.revision}` : undefined;
+      FullscreenLightbox.open({
+        src: img.src,
+        title,
+        subtitle,
+        prompt: record?.prompt,
+        negativePrompt: record?.negativePrompt
+      });
+    });
     context.querySelector('[data-context-text]')!.append(this.el('[data-scene]'));
     const versionsContainer = document.createElement('div');
     versionsContainer.dataset.previousVersionsContainer = '';
@@ -532,8 +562,11 @@ export class ImageStudio {
     const styleTools=document.createElement('details');styleTools.dataset.styleTools='';
     styleTools.innerHTML=`<summary>Change Style</summary>
       <div style="margin:8px 0">
-        <label>Semantic Style<select data-style-select aria-label="Select visual style"></select></label>
-        <button type="button" data-change-style-btn style="margin-top:6px">Apply style</button>
+        <div data-active-style-badge style="font-size:11px;font-weight:600;margin-bottom:6px;color:var(--accent,#7c9cff)">
+          Style used: <span data-active-style-name style="color:inherit">Neutral / follow the scene</span>
+        </div>
+        <label>Visual Style<select data-style-select aria-label="Select visual style" style="width:100%;box-sizing:border-box;margin-top:4px"></select></label>
+        <button type="button" data-change-style-btn style="margin-top:8px">Apply selected style</button>
         <small style="display:block;margin-top:6px">Preserves scene facts, character identities and camera framing, recompiling with the target style's StyleDNA.</small>
       </div>`;
     tools.append(styleTools);
@@ -606,26 +639,35 @@ export class ImageStudio {
     modelTools.open = true;
     modelTools.innerHTML = `<summary>Image Model &amp; Regeneration</summary>
       <div style="margin:8px 0">
+        <div data-active-model-badge style="font-size:11px;font-weight:600;margin-bottom:8px;color:var(--accent,#7c9cff)">
+          Generated with: <span data-active-model-name style="font-family:var(--lumiverse-font-mono,monospace);font-weight:700;color:inherit">Connection default</span>
+        </div>
         <label>Active connection
           <select data-artwork-connection aria-label="Select image connection" style="width:100%;box-sizing:border-box;margin-top:4px"></select>
         </label>
-        <label style="margin-top:10px">Model override
-          <input type="text" data-artwork-model list="vn-artwork-model-suggestions" placeholder="Connection default (or model ID)" style="width:100%;box-sizing:border-box;margin-top:4px" />
-          <datalist id="vn-artwork-model-suggestions">
+        <label style="margin-top:10px">Select Image Model
+          <select data-artwork-model-select aria-label="Select image model" style="width:100%;box-sizing:border-box;margin-top:4px">
+            <option value="">Connection default</option>
+            <option value="blackforestlabs/flux-3/klein/text-to-image">FLUX.3 Klein (Square safe / Fast)</option>
+            <option value="anima/text-to-image">Anima (Anime &amp; Illustration)</option>
             <option value="recraft-v4.1-flash">Recraft v4.1 Flash (10k chars)</option>
-            <option value="recraft-20b">Recraft 20B (10k chars)</option>
-            <option value="blackforestlabs/flux-3/klein/text-to-image">FLUX.3 Klein (Square safe)</option>
+            <option value="recraft-20b">Recraft 20B (High Quality)</option>
             <option value="xai/grok-imagine-image/v2.0/text-to-image">Grok Imagine 2.0</option>
             <option value="openai/gpt-image-2.5/flare/text-to-image">GPT Image 2.5</option>
             <option value="qwen-image-3">Qwen Image 3</option>
-            <option value="anima/text-to-image">Anima</option>
             <option value="bytedance/seedream-v5.0-pro">Seedream 5.0 Pro</option>
-          </datalist>
+            <option value="__custom__">Custom model ID...</option>
+          </select>
         </label>
-        <small style="display:block;margin-top:4px;opacity:0.8">Recompiles prompt dialect specifically for the chosen model.</small>
+        <div data-custom-model-container hidden style="margin-top:8px">
+          <label>Custom Model ID
+            <input type="text" data-artwork-model placeholder="e.g. stabilityai/sdxl-turbo" style="width:100%;box-sizing:border-box;margin-top:4px" />
+          </label>
+        </div>
+        <small style="display:block;margin-top:6px;opacity:0.8">Recompiles prompt dialect specifically for the chosen model.</small>
         <div data-cost-estimate style="margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.03);border:1px solid var(--edge);font-size:12px"></div>
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-          <button type="button" data-regenerate-model-single style="font-size:12px;padding:6px 12px">Regenerate this picture</button>
+          <button type="button" data-regenerate-model-single style="font-size:12px;padding:6px 12px">Regenerate with selected model</button>
           <button type="button" data-regenerate-model-all style="font-size:12px;padding:6px 12px">Regenerate all in scene</button>
         </div>
       </div>`;
@@ -941,7 +983,7 @@ export class ImageStudio {
     this.render();
   }
   setPlanning(chatId:string,planning:boolean):void {this.planningChat=planning?chatId:this.planningChat===chatId?'':this.planningChat;this.render();}
-  setConfig(config: VisualNovelConfig): void { this.activity.setSaver(config.dataSaverMode);this.maxImagesPerTurn=config.maxImagesPerTurn;this.preferences.setConfig(config); this.templates = config.imageTemplates.map(t => ({ ...t })); this.defaultTemplate = config.defaultImageTemplateId; this.render(); }
+  setConfig(config: VisualNovelConfig): void { this.config = config; this.activity.setSaver(config.dataSaverMode);this.maxImagesPerTurn=config.maxImagesPerTurn;this.preferences.setConfig(config); this.templates = config.imageTemplates.map(t => ({ ...t })); this.defaultTemplate = config.defaultImageTemplateId; this.render(); }
   private rebuildTemplate(): void {
     const record = this.record(); const templateId = this.el<HTMLSelectElement>("[data-template]").value;
     if (!this.turn || record?.state !== "review" || !templateId || this.rebuilding.has(record.requestId) || this.submitted.has(record.requestId) || this.rebuilding.has(record.requestId)) return;
@@ -1191,25 +1233,103 @@ export class ImageStudio {
     fitModel.disabled = !editable || !asset || asset.source === 'cache' || this.preparing.has(this.selectedJob) || Boolean(record && this.rebuilding.has(record.requestId));
 
     const styleSelect = this.el<HTMLSelectElement>('[data-style-select]');
-    if (styleSelect.children.length === 0) {
+    const customPresets = this.config?.promptPresets ?? [];
+    const expectedCount = customPresets.length + BUILTIN_SHARED_STYLES.length;
+    let actualCount = 0;
+    for (let i = 0; i < styleSelect.children.length; i++) {
+      const child = styleSelect.children[i];
+      if (child && child.tagName === 'OPTGROUP') actualCount += child.children.length;
+      else actualCount++;
+    }
+    if (actualCount !== expectedCount) {
+      styleSelect.innerHTML = '';
+      if (customPresets.length > 0) {
+        const groupCustom = document.createElement('optgroup');
+        groupCustom.label = 'Custom Saved Styles';
+        for (const p of customPresets) {
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          opt.textContent = p.name;
+          groupCustom.append(opt);
+        }
+        styleSelect.append(groupCustom);
+      }
+      const groupBuiltin = document.createElement('optgroup');
+      groupBuiltin.label = 'Built-in Styles';
       for (const s of BUILTIN_SHARED_STYLES) {
         const opt = document.createElement('option');
         opt.value = s.id;
         opt.textContent = s.name;
-        styleSelect.append(opt);
+        groupBuiltin.append(opt);
+      }
+      styleSelect.append(groupBuiltin);
+    }
+
+    const styleMeta = record?.imagePromptMetadata;
+    const allStyles = [...customPresets, ...BUILTIN_SHARED_STYLES];
+    let matchedStyleId = 'builtin-style:neutral';
+    let matchedStyleName = 'Neutral / follow the scene';
+
+    const activePresetId = styleMeta?.sharedStyle?.presetId;
+    const activePresetName = styleMeta?.sharedStyle?.presetName;
+    if (activePresetId && allStyles.some(s => s.id === activePresetId)) {
+      matchedStyleId = activePresetId;
+      const found = allStyles.find(s => s.id === matchedStyleId);
+      if (found) matchedStyleName = found.name;
+    } else if (activePresetName) {
+      const found = allStyles.find(s => s.name.toLowerCase() === activePresetName.toLowerCase());
+      if (found) {
+        matchedStyleId = found.id;
+        matchedStyleName = found.name;
+      }
+    } else if (styleMeta?.styleSnapshot?.medium) {
+      const med = styleMeta.styleSnapshot.medium.toLowerCase();
+      const match = BUILTIN_SHARED_STYLES.find(s =>
+        s.description.toLowerCase().includes(med) ||
+        s.name.toLowerCase().includes(med) ||
+        s.positive.toLowerCase().includes(med)
+      );
+      if (match) {
+        matchedStyleId = match.id;
+        matchedStyleName = match.name;
       }
     }
-    const currentStyle = record?.imagePromptMetadata?.styleSnapshot?.medium;
-    if (currentStyle) {
-      const match = BUILTIN_SHARED_STYLES.find(s => s.description.includes(currentStyle) || s.name.toLowerCase().includes(currentStyle.toLowerCase()));
-      if (match) styleSelect.value = match.id;
+
+    styleSelect.value = matchedStyleId;
+    const styleBadge = this.root.querySelector<HTMLElement>('[data-active-style-name]');
+    if (styleBadge) {
+      styleBadge.textContent = matchedStyleName;
     }
+
     const changeStyleBtn = this.el<HTMLButtonElement>('[data-change-style-btn]');
     changeStyleBtn.disabled = !editable || !asset || asset.source === 'cache' || this.preparing.has(this.selectedJob) || Boolean(record && this.rebuilding.has(record.requestId));
 
+    // Active model badge & dropdown sync
+    const modelBadge = this.root.querySelector<HTMLElement>('[data-active-model-name]');
+    const activeModel = record?.model?.trim();
+    if (modelBadge) {
+      modelBadge.textContent = activeModel || 'Connection default';
+    }
+
+    const mSelect = this.root.querySelector<HTMLSelectElement>('[data-artwork-model-select]');
+    const cContainer = this.root.querySelector<HTMLElement>('[data-custom-model-container]');
     const modelInput = this.el<HTMLInputElement>('[data-artwork-model]');
-    if (this.root.activeElement !== modelInput) {
-      modelInput.value = record?.model ?? '';
+
+    if (mSelect && this.root.activeElement !== modelInput && this.root.activeElement !== mSelect) {
+      const knownValues = Array.from(mSelect.options).map(o => o.value).filter(v => v && v !== '__custom__');
+      if (!activeModel) {
+        mSelect.value = '';
+        if (cContainer) cContainer.hidden = true;
+        modelInput.value = '';
+      } else if (knownValues.includes(activeModel)) {
+        mSelect.value = activeModel;
+        if (cContainer) cContainer.hidden = true;
+        modelInput.value = activeModel;
+      } else {
+        mSelect.value = '__custom__';
+        if (cContainer) cContainer.hidden = false;
+        modelInput.value = activeModel;
+      }
     }
     const regenSingle = this.el<HTMLButtonElement>('[data-regenerate-model-single]');
     regenSingle.disabled = !editable || !asset || asset.source === 'cache' || this.preparing.has(this.selectedJob) || Boolean(record && this.rebuilding.has(record.requestId));

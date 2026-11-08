@@ -20082,6 +20082,20 @@ function resolveStyleDNA(config2, selectedStyleId) {
       ...dna.lightingOverlay ? { lightingOverlay: dna.lightingOverlay } : {}
     };
   }
+  if (targetId && config2.promptPresets) {
+    const customPreset = config2.promptPresets.find((p) => p.id === targetId);
+    if (customPreset) {
+      const legacyDNA = {
+        ...customPreset.positive?.trim() ? { medium: customPreset.positive.trim() } : {},
+        preserve: ["scene-defined lighting", "custom literal preset wording"]
+      };
+      return {
+        styleDNA: legacyDNA,
+        source: "custom",
+        isLegacyLiteral: true
+      };
+    }
+  }
   const normalizedPrefix = config2.promptPrefix?.trim() ?? "";
   if (normalizedPrefix === HISTORICAL_UNTOUCHED_ANIME_PREFIX && (!config2.promptSuffix || config2.promptSuffix.trim() === "")) {
     const animeDNA = BUILTIN_STYLE_DNA["builtin-style:anime"];
@@ -25992,7 +26006,7 @@ function normalizeReaderPreferences(value) {
     backgroundOpacity: typeof input2.backgroundOpacity === "number" && Number.isFinite(input2.backgroundOpacity) ? Math.max(0, Math.min(1, input2.backgroundOpacity)) : 0.9,
     theme: input2.theme === "dark" ? "dark" : "light",
     ...typeof input2.heightRatio === "number" && Number.isFinite(input2.heightRatio) ? { heightRatio: Math.max(0.12, Math.min(1, input2.heightRatio)) } : {},
-    ...input2.typography === "novelist" || input2.typography === "modern" || input2.typography === "retro" || input2.typography === "accessible" ? { typography: input2.typography } : {},
+    ...typeof input2.typography === "string" && ["novelist", "modern", "cinematic", "retro", "terminal", "manga", "fantasy", "accessible"].includes(input2.typography) ? { typography: input2.typography } : {},
     ...input2.smartPacing !== undefined ? { smartPacing: input2.smartPacing === true } : {},
     ...input2.typewriterAudio === "off" || input2.typewriterAudio === "blip" || input2.typewriterAudio === "click" || input2.typewriterAudio === "pip" ? { typewriterAudio: input2.typewriterAudio } : {},
     ...typeof input2.typewriterVolume === "number" && Number.isFinite(input2.typewriterVolume) ? { typewriterVolume: Math.max(0, Math.min(1, input2.typewriterVolume)) } : {},

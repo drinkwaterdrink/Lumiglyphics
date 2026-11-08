@@ -168,6 +168,22 @@ export function resolveStyleDNA(
     };
   }
 
+  // 1b. User custom preset from config.promptPresets
+  if (targetId && config.promptPresets) {
+    const customPreset = config.promptPresets.find(p => p.id === targetId);
+    if (customPreset) {
+      const legacyDNA: StyleDNA = {
+        ...(customPreset.positive?.trim() ? { medium: customPreset.positive.trim() } : {}),
+        preserve: ['scene-defined lighting', 'custom literal preset wording']
+      };
+      return {
+        styleDNA: legacyDNA,
+        source: 'custom',
+        isLegacyLiteral: true
+      };
+    }
+  }
+
   // 2. Untouched historical default prefix migration
   const normalizedPrefix = config.promptPrefix?.trim() ?? '';
   if (

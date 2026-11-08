@@ -50,6 +50,10 @@ test("customization and accessibility preferences normalize cleanly", () => {
     smartDialogueExtraction: false,
   });
   expect(prefs.typography).toBe("novelist");
+  expect(normalizeReaderPreferences({ typography: "cinematic" }).typography).toBe("cinematic");
+  expect(normalizeReaderPreferences({ typography: "terminal" }).typography).toBe("terminal");
+  expect(normalizeReaderPreferences({ typography: "manga" }).typography).toBe("manga");
+  expect(normalizeReaderPreferences({ typography: "fantasy" }).typography).toBe("fantasy");
   expect(prefs.smartPacing).toBe(true);
   expect(prefs.typewriterAudio).toBe("blip");
   expect(prefs.typewriterVolume).toBe(0.6);

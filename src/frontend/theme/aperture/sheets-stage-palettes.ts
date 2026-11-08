@@ -885,6 +885,31 @@ section[data-reference-observations] h3 {
   letter-spacing: 0.04em !important;
   line-height: 1.85 !important;
 }
+[data-vn-root][data-vn-typography="cinematic"] [data-vn-dialogue-text],
+[data-vn-root][data-vn-typography="cinematic"] [data-vn-backlog-text] {
+  font-family: "Cinzel", "Baskerville", "Palatino Linotype", "Palatino", serif !important;
+  letter-spacing: 0.02em !important;
+  line-height: 1.75 !important;
+}
+[data-vn-root][data-vn-typography="terminal"] [data-vn-dialogue-text],
+[data-vn-root][data-vn-typography="terminal"] [data-vn-backlog-text] {
+  font-family: "Share Tech Mono", "Fira Code", "Source Code Pro", Consolas, monospace !important;
+  letter-spacing: 0.04em !important;
+  line-height: 1.65 !important;
+}
+[data-vn-root][data-vn-typography="manga"] [data-vn-dialogue-text],
+[data-vn-root][data-vn-typography="manga"] [data-vn-backlog-text] {
+  font-family: "Comic Neue", "Chalkboard SE", "Chalkboard", "Comic Sans MS", -apple-system, sans-serif !important;
+  line-height: 1.6 !important;
+}
+[data-vn-root][data-vn-typography="fantasy"] [data-vn-dialogue-text],
+[data-vn-root][data-vn-typography="fantasy"] [data-vn-backlog-text] {
+  font-family: "Merriweather", "Crimson Text", "Book Antiqua", Georgia, serif !important;
+  line-height: 1.78 !important;
+}
+[data-vn-root] [data-vn-dialogue-text] {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8), 0 0 1px rgba(0, 0, 0, 0.9);
+}
 
 /* Cinematic Chapter Card Splash */
 [data-vn-chapter-card] {
