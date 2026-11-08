@@ -31,16 +31,24 @@ export type StageEffect =
   | "blur_pulse"
   | "sparkle_burst"
   | "hearts_burst"
-  | "confetti";
+  | "confetti"
+  | "glitch"
+  | "cinema_bars";
 
 export type AmbientEffect =
   | "rain"
   | "heavy_rain"
   | "snow"
+  | "snowstorm"
   | "sakura"
+  | "autumn_leaves"
   | "fog"
+  | "sunbeams"
   | "fireflies"
   | "embers"
+  | "floating_runes"
+  | "underwater_bubbles"
+  | "shooting_stars"
   | "vignette_dark"
   | "sepia_flashback"
   | "desaturate"

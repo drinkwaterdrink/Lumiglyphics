@@ -154,6 +154,8 @@ export type VisualNovelConfig = {
   skipMode: "read" | "all";
   /** Presentation strength of one-shot stage effects. Default "full" keeps existing playback. */
   effectIntensity: VisualNovelEffectIntensity;
+  filmGrain: boolean;
+  disabledSceneEffects: string[];
   /** Inline dialogue text effects (<shake>, <rainbow>, ...). Default "animated". */
   textEffects: VisualNovelTextEffectMode;
   /** Dialogue text size multiplier, 1 = the theme's own size. */
@@ -237,6 +239,8 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   autoPlayDelay: 2000,
   skipMode: "read",
   effectIntensity: "full",
+  filmGrain: false,
+  disabledSceneEffects: [],
   textEffects: "animated",
   textScale: 1,
   readerPreferences: DEFAULT_READER_PREFERENCES,
@@ -467,6 +471,10 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     autoPlayDelay: integer(input.autoPlayDelay, 500, 10000, DEFAULT_CONFIG.autoPlayDelay),
     skipMode: input.skipMode === "all" ? "all" : "read",
     effectIntensity: effectIntensity(input.effectIntensity),
+    filmGrain: bool(input.filmGrain, DEFAULT_CONFIG.filmGrain),
+    disabledSceneEffects: Array.isArray(input.disabledSceneEffects)
+      ? input.disabledSceneEffects.filter((x): x is string => typeof x === "string" && x.length > 0).slice(0, 100)
+      : DEFAULT_CONFIG.disabledSceneEffects,
     textEffects: textEffectMode(input.textEffects),
     textScale: textScale(input.textScale),
     readerPreferences: normalizeReaderPreferences(input.readerPreferences),

@@ -30,6 +30,8 @@ import {
   AUTO_PLAY_STEPS,
   BUDGET_PRESETS,
   EFFECT_INTENSITY_OPTIONS,
+  SCENE_EFFECT_CATEGORIES,
+  ALL_SCENE_EFFECT_IDS,
   IMAGE_SOURCE_OPTIONS,
   SETTINGS_SECTIONS,
   SETTINGS_SECTION_KEY,
@@ -720,6 +722,33 @@ export class VisualNovelSettingsPanel {
                 <legend>Scene effects</legend>
                 ${optionList("effectIntensity", EFFECT_INTENSITY_OPTIONS)}
               </fieldset>
+              <label data-check ${find("Film grain filters", "film grain filters analog texture noise clean pure")}><input name="filmGrain" type="checkbox" /><span>Film grain filters<small>Analog film grain texture overlay on mood grades (vignette, sepia flashback, noir, danger pulse). Uncheck for 100% clean, grain-free scene effects.</small></span></label>
+              <details class="scene-effects-details" style="margin-top: 10px; border: 1px solid var(--border-color, rgba(255,255,255,0.15)); border-radius: 8px; padding: 10px 14px; background: rgba(0,0,0,0.12);">
+                <summary style="cursor: pointer; font-weight: 500; font-size: 13px; user-select: none; display: flex; align-items: center; justify-content: space-between;">
+                  <span>Individual scene effect toggles</span>
+                  <small style="opacity: 0.7; font-size: 11px;">Configure per effect</small>
+                </summary>
+                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; margin-bottom: 12px;">
+                  <button type="button" data-enable-all-effects class="settings-sub-btn" style="font-size: 11px; padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: inherit; cursor: pointer;">Enable all</button>
+                  <button type="button" data-disable-all-effects class="settings-sub-btn" style="font-size: 11px; padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: inherit; cursor: pointer;">Disable all</button>
+                </div>
+                ${SCENE_EFFECT_CATEGORIES.map(category => `
+                  <div style="margin-bottom: 14px;">
+                    <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.8; margin-bottom: 6px; padding-bottom: 2px; border-bottom: 1px solid rgba(255,255,255,0.08);">${category.title}</div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px;">
+                      ${category.effects.map(effect => `
+                        <label data-check style="display: flex; align-items: flex-start; gap: 6px; font-size: 12px; margin: 0; padding: 4px; cursor: pointer;">
+                          <input type="checkbox" name="sceneEffectToggle" data-scene-effect-id="${effect.id}" checked style="margin-top: 2px;" />
+                          <span>
+                            <span style="font-weight: 500;">${effect.label}</span>
+                            <small style="display: block; opacity: 0.7; font-size: 10.5px; line-height: 1.25;">${effect.desc}</small>
+                          </span>
+                        </label>
+                      `).join("")}
+                    </div>
+                  </div>
+                `).join("")}
+              </details>
               <fieldset ${find("Picture fit", "image fit cover contain stretch crop scale")}>
                 <legend>Picture fit</legend>
                 ${optionList("sceneImageFit", SCENE_IMAGE_FIT_OPTIONS)}
@@ -1530,6 +1559,20 @@ export class VisualNovelSettingsPanel {
 
     // Discard puts every Advanced control back to the last value the host gave us.
     this.root.querySelector("[data-discard]")?.addEventListener("click", () => this.discardAdvanced());
+    this.root.querySelector("[data-enable-all-effects]")?.addEventListener("click", () => {
+      for (const input of this.root.querySelectorAll<HTMLInputElement>("input[data-scene-effect-id]")) {
+        input.checked = true;
+      }
+      this.save({ disabledSceneEffects: [] });
+    });
+    this.root.querySelector("[data-disable-all-effects]")?.addEventListener("click", () => {
+      const allIds: string[] = [];
+      for (const input of this.root.querySelectorAll<HTMLInputElement>("input[data-scene-effect-id]")) {
+        input.checked = false;
+        if (input.dataset.sceneEffectId) allIds.push(input.dataset.sceneEffectId);
+      }
+      this.save({ disabledSceneEffects: allIds });
+    });
 
     // A failed validation inside a hidden section must open that section.
     this.form.addEventListener("invalid", (event) => {
@@ -1610,6 +1653,20 @@ export class VisualNovelSettingsPanel {
       case "musicTransitionPolicy":return {musicTransitionPolicy:target.value==="location"?"location":"cue"};
       case "sceneImageFit": return { sceneImageFit: normalizeSceneImageFit(target.value) };
       case "effectIntensity": return { effectIntensity: normalizeEffectIntensity(target.value) };
+      case "filmGrain": return { filmGrain: checked };
+      case "sceneEffectToggle": {
+        const effectId = target.getAttribute("data-scene-effect-id");
+        if (effectId) {
+          const currentDisabled = new Set(this.config.disabledSceneEffects ?? []);
+          if (checked) {
+            currentDisabled.delete(effectId);
+          } else {
+            currentDisabled.add(effectId);
+          }
+          return { disabledSceneEffects: [...currentDisabled] };
+        }
+        return null;
+      }
       case "textEffects": return { textEffects: normalizeTextEffects(target.value) };
       case "textScaleStep": {
         if (target.value === "custom") { this.showCustom("textScale", true); return null; }
@@ -2166,6 +2223,13 @@ export class VisualNovelSettingsPanel {
     this.control<HTMLInputElement>("dataSaverMode").checked=config.dataSaverMode;
     this.control<HTMLInputElement>("relationshipTrackerEnabled").checked=config.relationshipTrackerEnabled;
     this.setRadio("effectIntensity", config.effectIntensity);
+    const grainInput = this.root.querySelector<HTMLInputElement>('input[name="filmGrain"]');
+    if (grainInput) grainInput.checked = config.filmGrain !== false;
+    const disabledSet = new Set(config.disabledSceneEffects ?? []);
+    for (const input of this.root.querySelectorAll<HTMLInputElement>("input[data-scene-effect-id]")) {
+      const id = input.dataset.sceneEffectId;
+      if (id) input.checked = !disabledSet.has(id);
+    }
     this.setRadio("textEffects", config.textEffects);
     this.syncTextEffectMode(config);
     const scaleStep = namedStepFor(TEXT_SCALE_STEPS, config.textScale);

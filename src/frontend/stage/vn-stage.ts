@@ -255,6 +255,8 @@ export class VnStage {
   private effectIntensity: VnEffectIntensity = "full";
   private textEffectMode: VisualNovelTextEffectMode = "animated";
   private textScale = 1;
+  private filmGrain = false;
+  private disabledSceneEffects = new Set<string>();
   /** Structured details for the error currently stored in state (message only). */
   private errorDetails: VnStageErrorDetails | null = null;
   /** Host-reported image failure that must not stop reading. */
@@ -340,6 +342,8 @@ export class VnStage {
     this.flashOverlay = queryRequired(this.themeRoot, "[data-vn-flash]");
     this.fxOverlay = queryRequired(this.themeRoot, "[data-vn-fx]");
     this.ambientOverlay = queryRequired(this.themeRoot, "[data-vn-ambient]");
+    this.root.dataset.vnFilmGrain = "false";
+    this.ambientOverlay.dataset.vnFilmGrain = "false";
     this.chapterCard = queryRequired(this.themeRoot, "[data-vn-chapter-card]");
     this.chapterCard.onclick = () => this.dismissChapterCard();
     this.setSceneImageFit(options.sceneImageFit ?? "cover");
@@ -584,6 +588,27 @@ export class VnStage {
 
   getEffectIntensity(): VnEffectIntensity {
     return this.effectIntensity;
+  }
+
+  setFilmGrain(enabled: boolean): void {
+    this.filmGrain = enabled;
+    this.root.dataset.vnFilmGrain = enabled ? "true" : "false";
+    this.ambientOverlay.dataset.vnFilmGrain = enabled ? "true" : "false";
+  }
+
+  getFilmGrain(): boolean {
+    return this.filmGrain;
+  }
+
+  setDisabledSceneEffects(disabled: string[]): void {
+    this.disabledSceneEffects = new Set(disabled);
+    if (this.currentAmbient && this.disabledSceneEffects.has(this.currentAmbient)) {
+      this.applyAmbient(null);
+    }
+  }
+
+  getDisabledSceneEffects(): string[] {
+    return [...this.disabledSceneEffects];
   }
 
   /**
@@ -1115,6 +1140,7 @@ export class VnStage {
 
   triggerEffect(effect: StageEffect): void {
     if (this.destroyed) return;
+    if (this.disabledSceneEffects.has(effect)) return;
     const limit=this.state.paragraphs[this.state.currentParagraphIndex]?.effectLimit;
     const intensity=this.effectIntensity==='off'||limit==='off'?'off':this.effectIntensity==='gentle'||limit==='gentle'?'gentle':'full';
     const presented=presentEffect(effect,intensity);if(!presented)return;effect=presented;
@@ -1178,6 +1204,13 @@ export class VnStage {
       case "confetti":
         this.triggerFxBurst("confetti", 1200);
         break;
+      case "glitch":
+        this.triggerSceneAnimation("vnGlitch", "true", "vn-glitch", 350);
+        this.triggerFxBurst("glitch", 350);
+        break;
+      case "cinema_bars":
+        this.triggerFxBurst("cinema_bars", 1200);
+        break;
     }
   }
 
@@ -1220,12 +1253,13 @@ export class VnStage {
   }
 
   /** Short scene-level dataset animation (zoom punch, tilt, blur pulse). */
-  private triggerSceneAnimation(datasetKey: "vnZoom" | "vnTilt" | "vnBlur", datasetValue: string, className: string, duration: number): void {
+  private triggerSceneAnimation(datasetKey: "vnZoom" | "vnTilt" | "vnBlur" | "vnGlitch", datasetValue: string, className: string, duration: number): void {
     if (this.sceneFxTimer !== null) {
       clearTimeout(this.sceneFxTimer);
       this.sceneFxTimer = null;
     }
-    this.scene.classList.remove("vn-zoom-punch", "vn-tilt", "vn-blur-pulse");
+    this.scene.classList.remove("vn-zoom-punch", "vn-tilt", "vn-blur-pulse", "vn-glitch");
+    delete this.scene.dataset.vnGlitch;
     delete this.scene.dataset.vnTilt;
     delete this.scene.dataset.vnBlur;
     if (this.scene.dataset.vnZoom === "punch") delete this.scene.dataset.vnZoom;
@@ -1311,6 +1345,7 @@ export class VnStage {
   /** Apply (or clear) the persistent scene-level ambient overlay. */
   applyAmbient(effect: AmbientEffect | null): void {
     if (this.destroyed) return;
+    if (effect && this.disabledSceneEffects.has(effect)) effect = null;
 
     if (effect === this.currentAmbient) return;
     this.currentAmbient = effect;
@@ -1484,6 +1519,7 @@ export class VnStage {
 
     if (
       this.effectIntensity !== "off" &&
+      !this.disabledSceneEffects.has("shake") &&
       triggeredEffect !== "shake" &&
       TEXT_SHAKE_HEURISTIC_REGEX.test(paragraph.text)
     ) {

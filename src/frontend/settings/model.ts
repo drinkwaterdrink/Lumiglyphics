@@ -642,3 +642,83 @@ export function readNovelAiParameters(params: Record<string, unknown> | undefine
     height: dims.height,
   };
 }
+
+export interface SceneEffectItem {
+  id: string;
+  label: string;
+  desc: string;
+}
+
+export interface SceneEffectCategory {
+  title: string;
+  effects: SceneEffectItem[];
+}
+
+export const SCENE_EFFECT_CATEGORIES: ReadonlyArray<SceneEffectCategory> = [
+  {
+    title: "Atmosphere & Weather",
+    effects: [
+      { id: "rain", label: "Gentle Rain", desc: "Soft ambient rainfall with window splashes" },
+      { id: "heavy_rain", label: "Downpour", desc: "Intense torrential rain and heavy ripples" },
+      { id: "snow", label: "Snowfall", desc: "Gently drifting crystalline snowflakes" },
+      { id: "snowstorm", label: "Snowstorm", desc: "Swirling windswept snow gusts and frost borders" },
+      { id: "sakura", label: "Sakura Petals", desc: "Tumbling spring cherry blossom petals" },
+      { id: "autumn_leaves", label: "Autumn Leaves", desc: "Falling golden maple and ginkgo leaves" },
+      { id: "fog", label: "Fog & Mist", desc: "Dense atmospheric mist rolling across the scene" },
+      { id: "sunbeams", label: "Sunbeams & Dust Motes", desc: "Volumetric light rays with glowing sun motes" },
+      { id: "fireflies", label: "Fireflies", desc: "Luminous glowing fireflies softly hovering" },
+      { id: "embers", label: "Floating Embers", desc: "Rising fiery sparks and glowing warm cinders" },
+      { id: "floating_runes", label: "Floating Runes", desc: "Ethereal mystic sigils and arcane glyphs" },
+      { id: "underwater_bubbles", label: "Underwater Bubbles", desc: "Aquatic rising bubbles and water caustics" },
+      { id: "shooting_stars", label: "Shooting Stars", desc: "Meteors streaking across starry night skies" },
+    ]
+  },
+  {
+    title: "Mood Grades & Tone",
+    effects: [
+      { id: "vignette_dark", label: "Dark Vignette", desc: "Deep cinematic perimeter shadow falloff" },
+      { id: "sepia_flashback", label: "Sepia Flashback", desc: "Warm nostalgic sepia tone and projector glow" },
+      { id: "desaturate", label: "Desaturate (Noir)", desc: "Moody black-and-white noir monochrome" },
+      { id: "dream_haze", label: "Dream Haze", desc: "Soft ethereal bloom and surreal light glow" },
+      { id: "danger_pulse", label: "Danger Pulse", desc: "Crimson edge pulse for tension, threats, and alarm" },
+    ]
+  },
+  {
+    title: "Camera & Screen Motion",
+    effects: [
+      { id: "shake", label: "Screen Shake", desc: "Impact shake on thuds, slams, and collisions" },
+      { id: "shake_hard", label: "Heavy Impact", desc: "Violent screen shake on explosions and crashes" },
+      { id: "rumble", label: "Earthquake Rumble", desc: "Deep continuous vibration and screen tremor" },
+      { id: "zoom_in", label: "Camera Push-In", desc: "Smooth cinematic zoom into the scene" },
+      { id: "zoom_out", label: "Camera Pull-Back", desc: "Camera pulls back to reveal the wider scene" },
+      { id: "zoom_punch", label: "Zoom Punch", desc: "Dramatic snap punch-in on sudden reveals" },
+      { id: "tilt", label: "Camera Tilt", desc: "Dutch-angle tilt for disorientation and tension" },
+      { id: "blur_pulse", label: "Blur Pulse", desc: "Shock defocus pulse and exposure lift" },
+      { id: "speed_lines", label: "Speed Lines", desc: "High-action anime focus speed lines" },
+      { id: "cinema_bars", label: "Cinematic Letterbox", desc: "2.39:1 anamorphic widescreen bars slide in" },
+      { id: "glitch", label: "Cyber Glitch", desc: "Chromatic aberration split and digital scanline glitch" },
+    ]
+  },
+  {
+    title: "Flashes & Transitions",
+    effects: [
+      { id: "flash_white", label: "White Screen Flash", desc: "Instant white flash for lightning, shocks, or gunshots" },
+      { id: "flash_red", label: "Red Screen Flash", desc: "Crimson flash on damage, pain, or danger" },
+      { id: "lightning", label: "Lightning Strike", desc: "Double flash with drawn lightning bolts" },
+      { id: "heartbeat", label: "Heartbeat Pulse", desc: "Screen thud with red pulse on fear and dread" },
+      { id: "fade_to_black", label: "Fade to Black", desc: "Scene blackout cut transition" },
+      { id: "fade_from_black", label: "Fade from Black", desc: "Fade in from black" },
+      { id: "fade_to_white", label: "Fade to White", desc: "Blinding whiteout transition" },
+    ]
+  },
+  {
+    title: "One-Shot Bursts",
+    effects: [
+      { id: "sparkle_burst", label: "Sparkle Burst", desc: "Twinkling starburst on magic, epiphanies, or joy" },
+      { id: "hearts_burst", label: "Hearts Burst", desc: "Floating heart blossoms on romance, kisses, and love" },
+      { id: "confetti", label: "Confetti", desc: "Celebration confetti blast on victories and parties" },
+    ]
+  }
+];
+
+export const ALL_SCENE_EFFECT_IDS: ReadonlyArray<string> = SCENE_EFFECT_CATEGORIES.flatMap(cat => cat.effects.map(e => e.id));

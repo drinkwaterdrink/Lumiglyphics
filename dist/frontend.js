@@ -20399,10 +20399,16 @@ var AmbientEffectSchema = exports_external.enum([
   "rain",
   "heavy_rain",
   "snow",
+  "snowstorm",
   "sakura",
+  "autumn_leaves",
   "fog",
+  "sunbeams",
   "fireflies",
   "embers",
+  "floating_runes",
+  "underwater_bubbles",
+  "shooting_stars",
   "vignette_dark",
   "sepia_flashback",
   "desaturate",
@@ -20465,7 +20471,9 @@ var StageEffectSchema = exports_external.enum([
   "blur_pulse",
   "sparkle_burst",
   "hearts_burst",
-  "confetti"
+  "confetti",
+  "glitch",
+  "cinema_bars"
 ]);
 var PlannerShotHintSchema = exports_external.object({
   intent: ShotIntentSchema.optional(),
@@ -22912,6 +22920,8 @@ var SETTINGS_FIELD_PAGES = {
   castAbsenceDisplay: "appearance",
   musicTransitionPolicy: "music",
   effectIntensity: "appearance",
+  filmGrain: "appearance",
+  disabledSceneEffects: "appearance",
   textEffects: "appearance",
   textScale: "appearance",
   readerPreferences: "appearance",
@@ -31816,6 +31826,17 @@ var TEX_FOG_FAR = mistNoise(1024, 384, "0.0039 0.0104", 7, 1.9, -0.62, [[0, 0], 
 var TEX_FOG_MID = mistNoise(896, 384, "0.0045 0.013", 13, 2.1, -0.7, [[0, 0], [0.35, 1], [1, 1]]);
 var TEX_FOG_NEAR = mistNoise(1280, 448, "0.0031 0.0089", 21, 2.4, -0.78, [[0, 0], [0.55, 1], [1, 1]]);
 var TEX_FOG_BANK = mistNoise(896, 384, "0.0045 0.013", 13, 2.1, -0.7, [[0, 0], [0.75, 1], [1, 1]]);
+var SHAPE_LEAF_MAPLE_RED = svgDataUri(`<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff733b"/><stop offset=".6" stop-color="#d62e1b"/><stop offset="1" stop-color="#801008"/></linearGradient></defs>` + `<path d="M20 38 L17 32 L7 32 L13 26 L5 20 L14 18 L9 8 L18 14 L20 2 L22 14 L31 8 L26 18 L35 20 L27 26 L33 32 L23 32 Z" fill="url(#g)"/>` + `<path d="M20 38 L20 12 M20 26 L12 20 M20 24 L28 18" stroke="#ffa366" stroke-width=".8" fill="none" opacity=".5"/>`, 40, 42);
+var SHAPE_LEAF_MAPLE_GOLD = svgDataUri(`<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe066"/><stop offset=".55" stop-color="#e69500"/><stop offset="1" stop-color="#bf5b00"/></linearGradient></defs>` + `<path d="M20 38 L17 32 L7 32 L13 26 L5 20 L14 18 L9 8 L18 14 L20 2 L22 14 L31 8 L26 18 L35 20 L27 26 L33 32 L23 32 Z" fill="url(#g)"/>`, 40, 42);
+var SHAPE_LEAF_GINKGO = svgDataUri(`<defs><radialGradient id="g" cx="50%" cy="100%" r="90%"><stop offset="0" stop-color="#ff9900"/><stop offset=".6" stop-color="#ffcc00"/><stop offset="1" stop-color="#ffe680"/></radialGradient></defs>` + `<path d="M20 36 C18 28 8 26 2 16 C-2 8 8 2 16 4 C18 4 19 6 20 8 C21 6 22 4 24 4 C32 2 42 8 38 16 C32 26 22 28 20 36 Z" fill="url(#g)"/>`, 40, 38);
+var SHAPE_BUBBLE_A = svgDataUri(`<defs><radialGradient id="g" cx="35%" cy="32%" r="65%"><stop offset="0" stop-color="#ffffff" stop-opacity=".75"/><stop offset=".45" stop-color="#b8e8ff" stop-opacity=".35"/><stop offset=".85" stop-color="#5cb8ff" stop-opacity=".2"/><stop offset="1" stop-color="#99d6ff" stop-opacity=".65"/></radialGradient></defs>` + `<circle cx="20" cy="20" r="18" fill="url(#g)"/>` + `<ellipse cx="14" cy="13" rx="4.5" ry="2.6" transform="rotate(-35 14 13)" fill="#ffffff" opacity=".85"/>`, 40, 40);
+var SHAPE_BUBBLE_B = svgDataUri(`<defs><radialGradient id="g" cx="35%" cy="32%" r="65%"><stop offset="0" stop-color="#ffffff" stop-opacity=".6"/><stop offset=".5" stop-color="#c2f0eb" stop-opacity=".25"/><stop offset="1" stop-color="#6ee0d4" stop-opacity=".55"/></radialGradient></defs>` + `<circle cx="20" cy="20" r="18" fill="url(#g)"/>` + `<circle cx="13" cy="12" r="2.8" fill="#ffffff" opacity=".9"/>`, 40, 40);
+var SHAPE_RUNE_A = svgDataUri(`<g stroke="#70d6ff" stroke-width="2.5" stroke-linecap="round" fill="none"><circle cx="20" cy="20" r="15" stroke-dasharray="4 3"/><path d="M20 5 L20 35 M8 12 L32 28 M8 28 L32 12"/></g>`, 40, 40);
+var SHAPE_RUNE_B = svgDataUri(`<g stroke="#d68cff" stroke-width="2.5" stroke-linecap="round" fill="none"><polygon points="20,5 34,30 6,30"/><circle cx="20" cy="21" r="5"/><line x1="20" y1="12" x2="20" y2="29"/></g>`, 40, 40);
+var SHAPE_RUNE_C = svgDataUri(`<g stroke="#ffd166" stroke-width="2.5" stroke-linecap="round" fill="none"><rect x="9" y="9" width="22" height="22" rx="3" transform="rotate(45 20 20)"/><circle cx="20" cy="20" r="4" fill="#ffd166"/></g>`, 40, 40);
+var SHAPE_RUNE_D = svgDataUri(`<g stroke="#ff70a6" stroke-width="2.5" stroke-linecap="round" fill="none"><path d="M10 20 Q20 5 30 20 Q20 35 10 20 Z"/><circle cx="20" cy="20" r="3" fill="#ff70a6"/></g>`, 40, 40);
+var SHAPE_MOTE = svgDataUri(`<defs><radialGradient id="g"><stop offset="0" stop-color="#ffffff"/><stop offset=".4" stop-color="#ffe8a3" stop-opacity=".9"/><stop offset="1" stop-color="#ffb833" stop-opacity="0"/></radialGradient></defs>` + `<circle cx="16" cy="16" r="15" fill="url(#g)"/>`, 32, 32);
+var SHAPE_SHOOTING_STAR = svgDataUri(`<defs><linearGradient id="g" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".2" stop-color="#a8ecff" stop-opacity=".8"/><stop offset="1" stop-color="#00aaff" stop-opacity="0"/></linearGradient></defs>` + `<line x1="56" y1="4" x2="4" y2="40" stroke="url(#g)" stroke-width="3.2" stroke-linecap="round"/>` + `<circle cx="56" cy="4" r="3.6" fill="#ffffff"/>`, 60, 44);
 var TEX_GRAIN = svgDataUri(`<filter id="n" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".82" numOctaves="2" seed="5" stitchTiles="stitch"/>` + `<feColorMatrix values="1.6 0 0 0 -.3 1.6 0 0 0 -.3 1.6 0 0 0 -.3 0 0 0 0 1"/></filter><rect width="160" height="160" filter="url(#n)"/>`, 160, 160);
 var VN_EFFECTS_CSS = `
 /* ==========================================================================
@@ -32404,6 +32425,17 @@ var VN_EFFECTS_CSS = `
   mix-blend-mode: overlay;
   opacity: 0.16;
   pointer-events: none;
+}
+
+/* Film grain suppression when turned off */
+[data-vn-root][data-vn-film-grain="false"] [data-vn-ambient]::after,
+[data-vn-ambient][data-vn-film-grain="false"]::after,
+[data-vn-scene][data-vn-film-grain="false"] [data-vn-ambient]::after,
+.vn-no-film-grain::after {
+  display: none !important;
+  background: none !important;
+  animation: none !important;
+  opacity: 0 !important;
 }
 
 @keyframes vn-grain {
@@ -33093,6 +33125,270 @@ var VN_EFFECTS_CSS = `
   75% { opacity: 1; }
   100% { opacity: 0; }
 }
+
+
+/* ==========================================================================
+   NEW AMBIENT OVERLAYS & GRADES
+   ========================================================================== */
+
+/* Sunbeams & Dust Motes */
+[data-vn-ambient].vn-ambient-sunbeams {
+  background: radial-gradient(ellipse 95% 75% at 85% 8%, rgba(255, 232, 160, 0.24) 0%, rgba(255, 200, 100, 0.08) 45%, rgba(0, 0, 0, 0) 80%);
+}
+.vn-sunbeams-light {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(125deg, rgba(255, 240, 180, 0.18) 0%, rgba(255, 220, 140, 0.08) 32%, rgba(255, 220, 140, 0) 65%);
+  pointer-events: none;
+}
+.vn-pt.vn-mote {
+  position: absolute;
+  width: var(--sz);
+  height: var(--sz);
+  border-radius: 50%;
+  background-image: ${SHAPE_MOTE};
+  background-size: contain;
+  background-repeat: no-repeat;
+  animation:
+    vn-mote-drift var(--fd) linear var(--dl) infinite,
+    vn-mote-pulse var(--sd) ease-in-out var(--dl) infinite;
+}
+@keyframes vn-mote-drift {
+  0% { translate: 0 0; opacity: 0; }
+  20% { opacity: var(--o); }
+  80% { opacity: var(--o); }
+  100% { translate: var(--dx) var(--dy); opacity: 0; }
+}
+@keyframes vn-mote-pulse {
+  0%, 100% { transform: scale(0.8); }
+  50% { transform: scale(1.25); }
+}
+
+/* Shooting Stars */
+[data-vn-ambient].vn-ambient-shooting_stars {
+  background: radial-gradient(ellipse 80% 50% at 50% 20%, rgba(30, 60, 120, 0.2) 0%, rgba(0, 0, 0, 0) 70%);
+}
+.vn-stars-sky {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.vn-pt.vn-shooting-star {
+  position: absolute;
+  width: var(--sz);
+  height: 24px;
+  background-image: ${SHAPE_SHOOTING_STAR};
+  background-size: contain;
+  background-repeat: no-repeat;
+  animation: vn-star-shoot var(--fd) ease-out var(--dl) infinite;
+}
+@keyframes vn-star-shoot {
+  0% { translate: 0 0; opacity: 0; transform: rotate(var(--rot)) scale(0.3); }
+  12% { opacity: 1; transform: rotate(var(--rot)) scale(1); }
+  70% { opacity: 0.9; }
+  100% { translate: var(--tx) var(--ty); opacity: 0; transform: rotate(var(--rot)) scale(0.5); }
+}
+
+/* Autumn Leaves */
+[data-vn-ambient].vn-ambient-autumn_leaves {
+  background: radial-gradient(ellipse 90% 70% at 50% 40%, rgba(220, 110, 30, 0.08) 0%, rgba(0, 0, 0, 0) 75%);
+}
+.vn-autumn-light {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 180, 80, 0.06) 0%, rgba(200, 80, 20, 0.04) 100%);
+  pointer-events: none;
+}
+.vn-pt.vn-leaf {
+  position: absolute;
+  width: var(--sz);
+  height: var(--sz);
+  background-size: contain;
+  background-repeat: no-repeat;
+  animation:
+    vn-leaf-fall var(--fd) linear var(--dl) infinite,
+    vn-leaf-sway var(--sd) ease-in-out var(--sdl) infinite,
+    vn-leaf-tumble var(--rd) linear var(--dl) infinite;
+}
+.vn-leaf--a { background-image: ${SHAPE_LEAF_MAPLE_RED}; }
+.vn-leaf--b { background-image: ${SHAPE_LEAF_MAPLE_GOLD}; }
+.vn-leaf--c { background-image: ${SHAPE_LEAF_GINKGO}; }
+@keyframes vn-leaf-fall {
+  0% { translate: 0 -4cqh; opacity: 0; }
+  15% { opacity: var(--o); }
+  85% { opacity: var(--o); }
+  100% { translate: var(--dx) 106cqh; opacity: 0; }
+}
+@keyframes vn-leaf-sway {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(var(--sw)); }
+}
+@keyframes vn-leaf-tumble {
+  0% { rotate: var(--ax) var(--r0); }
+  100% { rotate: var(--ax) calc(var(--r0) + 360deg); }
+}
+
+/* Underwater Bubbles */
+[data-vn-ambient].vn-ambient-underwater_bubbles {
+  background: radial-gradient(circle at 50% 15%, rgba(60, 210, 230, 0.22) 0%, rgba(10, 50, 90, 0.35) 75%, rgba(4, 20, 45, 0.6) 100%);
+}
+.vn-underwater-caustic {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(140, 240, 255, 0.12) 0%, rgba(50, 160, 200, 0.04) 50%, rgba(0, 80, 140, 0.15) 100%);
+  pointer-events: none;
+}
+.vn-pt.vn-bubble {
+  position: absolute;
+  width: var(--sz);
+  height: var(--sz);
+  background-size: contain;
+  background-repeat: no-repeat;
+  animation:
+    vn-bubble-rise var(--fd) linear var(--dl) infinite,
+    vn-bubble-wobble var(--sd) ease-in-out var(--sdl) infinite;
+}
+.vn-bubble--a { background-image: ${SHAPE_BUBBLE_A}; }
+.vn-bubble--b { background-image: ${SHAPE_BUBBLE_B}; }
+@keyframes vn-bubble-rise {
+  0% { translate: 0 105cqh; opacity: 0; }
+  10% { opacity: var(--o); }
+  90% { opacity: var(--o); }
+  100% { translate: var(--dx) -6cqh; opacity: 0; }
+}
+@keyframes vn-bubble-wobble {
+  0%, 100% { transform: translateX(0) scale(1, 1); }
+  33% { transform: translateX(var(--sw)) scale(0.92, 1.08); }
+  66% { transform: translateX(calc(var(--sw) * -1)) scale(1.08, 0.92); }
+}
+
+/* Floating Runes */
+[data-vn-ambient].vn-ambient-floating_runes {
+  background: radial-gradient(ellipse 80% 65% at 50% 50%, rgba(120, 50, 180, 0.16) 0%, rgba(20, 10, 40, 0.25) 70%, rgba(0, 0, 0, 0.5) 100%);
+}
+.vn-runes-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.vn-pt.vn-rune {
+  position: absolute;
+  width: var(--sz);
+  height: var(--sz);
+  background-size: contain;
+  background-repeat: no-repeat;
+  animation:
+    vn-rune-ascend var(--fd) linear var(--dl) infinite,
+    vn-rune-spin 8s linear var(--dl) infinite;
+}
+.vn-rune--a { background-image: ${SHAPE_RUNE_A}; }
+.vn-rune--b { background-image: ${SHAPE_RUNE_B}; }
+.vn-rune--c { background-image: ${SHAPE_RUNE_C}; }
+.vn-rune--d { background-image: ${SHAPE_RUNE_D}; }
+@keyframes vn-rune-ascend {
+  0% { translate: 0 102cqh; opacity: 0; transform: scale(0.7); }
+  20% { opacity: var(--o); transform: scale(1); }
+  80% { opacity: var(--o); }
+  100% { translate: var(--dx) -5cqh; opacity: 0; transform: scale(1.1); }
+}
+@keyframes vn-rune-spin {
+  0% { rotate: 0deg; }
+  100% { rotate: var(--spin); }
+}
+
+/* Snowstorm */
+[data-vn-ambient].vn-ambient-snowstorm {
+  background: radial-gradient(ellipse 90% 70% at 50% 40%, rgba(200, 230, 255, 0.15) 0%, rgba(120, 180, 240, 0.2) 65%, rgba(40, 80, 140, 0.35) 100%);
+}
+.vn-snowstorm-frost {
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 60px rgba(220, 240, 255, 0.45);
+  pointer-events: none;
+}
+.vn-pt.vn-snowstorm-shard {
+  position: absolute;
+  width: var(--sz);
+  height: 2.5px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, #ffffff 50%, rgba(200, 230, 255, 0.8) 100%);
+  border-radius: 2px;
+  rotate: -35deg;
+  animation: vn-blizzard-gust var(--fd) linear var(--dl) infinite;
+}
+@keyframes vn-blizzard-gust {
+  0% { translate: 105cqw -15cqh; opacity: 0; }
+  15% { opacity: var(--o); }
+  85% { opacity: var(--o); }
+  100% { translate: -15cqw 105cqh; opacity: 0; }
+}
+
+/* ==========================================================================
+   NEW STAGE EFFECTS
+   ========================================================================== */
+
+/* Glitch */
+@keyframes vn-glitch-jitter {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  20% { transform: translate3d(-6px, 2px, 0); }
+  40% { transform: translate3d(5px, -3px, 0); }
+  60% { transform: translate3d(-3px, -1px, 0); }
+  80% { transform: translate3d(4px, 2px, 0); }
+}
+[data-vn-scene].vn-glitch,
+[data-vn-scene][data-vn-glitch="true"] {
+  animation: vn-glitch-jitter 350ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.vn-fx-glitch {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.vn-glitch-scanlines {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(0, 255, 255, 0.08) 0px, rgba(0, 255, 255, 0.08) 2px, transparent 2px, transparent 4px);
+  mix-blend-mode: overlay;
+}
+.vn-glitch-slice {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 35%;
+  height: 18%;
+  background: rgba(255, 0, 80, 0.12);
+  mix-blend-mode: screen;
+}
+
+/* Cinema Bars (Letterbox) */
+@keyframes vn-cinema-bar-top {
+  0% { transform: scaleY(0); }
+  100% { transform: scaleY(1); }
+}
+@keyframes vn-cinema-bar-bottom {
+  0% { transform: scaleY(0); }
+  100% { transform: scaleY(1); }
+}
+.vn-cinema-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 9%;
+  background: #000000;
+  z-index: 3;
+  pointer-events: none;
+  transform-origin: center;
+}
+.vn-cinema-bar--top {
+  top: 0;
+  transform-origin: top;
+  animation: vn-cinema-bar-top 450ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.vn-cinema-bar--bottom {
+  bottom: 0;
+  transform-origin: bottom;
+  animation: vn-cinema-bar-bottom 450ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 `;
 
 // src/frontend/stage/procedural-particles.ts
@@ -33132,6 +33428,18 @@ function generateAmbientMarkup(effect) {
       return generateFirefliesMarkup();
     case "embers":
       return generateEmbersMarkup();
+    case "sunbeams":
+      return generateSunbeamsMarkup();
+    case "shooting_stars":
+      return generateShootingStarsMarkup();
+    case "autumn_leaves":
+      return generateAutumnLeavesMarkup();
+    case "underwater_bubbles":
+      return generateUnderwaterBubblesMarkup();
+    case "floating_runes":
+      return generateFloatingRunesMarkup();
+    case "snowstorm":
+      return generateSnowstormMarkup();
     case "vignette_dark":
     case "sepia_flashback":
     case "desaturate":
@@ -33152,6 +33460,10 @@ function generateCueEffectMarkup(effect) {
       return generateConfettiMarkup();
     case "lightning":
       return generateLightningMarkup();
+    case "glitch":
+      return generateGlitchMarkup();
+    case "cinema_bars":
+      return generateCinemaBarsMarkup();
     default:
       return "";
   }
@@ -33469,6 +33781,123 @@ function generateLightningMarkup() {
     <g class="vn-bolt-glow">${path(main, "vn-bolt-main")}${forks.map((f) => path(f, "vn-bolt-fork")).join("")}</g>
     <g class="vn-bolt-core">${path(main, "vn-bolt-main")}${forks.map((f) => path(f, "vn-bolt-fork")).join("")}</g>
   </svg></div>`.replace(/\n\s*/g, "");
+}
+function generateSunbeamsMarkup() {
+  const count = 28;
+  const motes = [];
+  for (let i = 0;i < count; i++) {
+    const sz = pseudo(81, i, 2.5, 6);
+    const dur = pseudo(82, i, 6.5, 12);
+    const sway = pseudo(83, i, 4, 8);
+    motes.push(`<i class="vn-pt vn-mote" style="${vars({
+      left: `${n(strat(80, i, count, 2, 98))}%`,
+      top: `${n(pseudo(84, i, 4, 94))}%`,
+      "--sz": `${n(sz)}px`,
+      "--o": n(pseudo(85, i, 0.45, 0.95), 2),
+      "--fd": `${n(dur, 2)}s`,
+      "--sd": `${n(sway, 2)}s`,
+      "--dl": `${n(-pseudo(86, i, 0, dur), 2)}s`,
+      "--dx": `${n(pseudo(87, i, -12, 12))}cqw`,
+      "--dy": `${n(pseudo(88, i, -20, -5))}cqh`
+    })}"></i>`);
+  }
+  return `<div class="vn-sunbeams-light"></div><div class="vn-fx-layer vn-sunbeams-motes">${motes.join("")}</div>`;
+}
+function generateShootingStarsMarkup() {
+  const count = 12;
+  const stars = [];
+  for (let i = 0;i < count; i++) {
+    const dur = pseudo(91, i, 1.8, 3.2);
+    const len = pseudo(92, i, 60, 110);
+    stars.push(`<i class="vn-pt vn-shooting-star" style="${vars({
+      left: `${n(strat(90, i, count, 5, 85))}%`,
+      top: `${n(pseudo(93, i, 2, 50))}%`,
+      "--sz": `${n(len)}px`,
+      "--fd": `${n(dur, 2)}s`,
+      "--dl": `${n(pseudo(94, i, 0.2, 5.5), 2)}s`,
+      "--tx": `${n(pseudo(95, i, 18, 32))}cqw`,
+      "--ty": `${n(pseudo(96, i, 16, 28))}cqh`,
+      "--rot": `${Math.round(pseudo(97, i, 32, 48))}deg`
+    })}"></i>`);
+  }
+  return `<div class="vn-stars-sky"></div><div class="vn-fx-layer vn-shooting-stars">${stars.join("")}</div>`;
+}
+function generateAutumnLeavesMarkup() {
+  const count = 28;
+  const leaves = [];
+  for (let i = 0;i < count; i++) {
+    const fall = pseudo(101, i, 6.5, 11);
+    const sway = pseudo(102, i, 2.8, 5);
+    const ax = n(pseudo(103, i, 0.3, 0.9), 2);
+    const ay = n(pseudo(104, i, -0.7, 0.8), 2);
+    leaves.push(fallingParticle(`vn-leaf vn-leaf--${"abc"[i % 3]}`, { cls: "", seed: 100, count, size: [16, 28], fall: [6.5, 11], opacity: [0.8, 0.98] }, i, {
+      "--rd": `${n(pseudo(105, i, 2.5, 4.8), 2)}s`,
+      "--ax": `${ax} ${ay} 0.8`,
+      "--r0": `${Math.round(pseudo(106, i, -70, 70))}deg`,
+      "--dx": `${n(pseudo(107, i, -22, -6))}cqw`,
+      "--sw": `${n(pseudo(108, i, 14, 32))}px`
+    }));
+  }
+  return `<div class="vn-autumn-light"></div><div class="vn-fx-layer vn-autumn-leaves">${leaves.join("")}</div>`;
+}
+function generateUnderwaterBubblesMarkup() {
+  const count = 26;
+  const bubbles = [];
+  for (let i = 0;i < count; i++) {
+    const rise = pseudo(111, i, 4.5, 9);
+    const wobble = pseudo(112, i, 1.8, 3.4);
+    bubbles.push(`<i class="vn-pt vn-bubble vn-bubble--${"ab"[i % 2]}" style="${vars({
+      left: `${n(strat(110, i, count, 2, 98))}%`,
+      "--sz": `${n(pseudo(113, i, 8, 26))}px`,
+      "--o": n(pseudo(114, i, 0.5, 0.92), 2),
+      "--fd": `${n(rise, 2)}s`,
+      "--sd": `${n(wobble, 2)}s`,
+      "--dl": `${n(-pseudo(115, i, 0, rise), 2)}s`,
+      "--sdl": `${n(-pseudo(116, i, 0, wobble), 2)}s`,
+      "--dx": `${n(pseudo(117, i, -8, 8))}cqw`,
+      "--sw": `${n(pseudo(118, i, 6, 16))}px`
+    })}"></i>`);
+  }
+  return `<div class="vn-underwater-caustic"></div><div class="vn-fx-layer vn-bubbles">${bubbles.join("")}</div>`;
+}
+function generateFloatingRunesMarkup() {
+  const count = 20;
+  const runes = [];
+  for (let i = 0;i < count; i++) {
+    const rise = pseudo(121, i, 6, 12);
+    runes.push(`<i class="vn-pt vn-rune vn-rune--${"abcd"[i % 4]}" style="${vars({
+      left: `${n(strat(120, i, count, 4, 96))}%`,
+      "--sz": `${n(pseudo(122, i, 18, 32))}px`,
+      "--o": n(pseudo(123, i, 0.45, 0.9), 2),
+      "--fd": `${n(rise, 2)}s`,
+      "--dl": `${n(-pseudo(124, i, 0, rise), 2)}s`,
+      "--dx": `${n(pseudo(125, i, -10, 10))}cqw`,
+      "--spin": `${Math.round(pseudo(126, i, -180, 180))}deg`
+    })}"></i>`);
+  }
+  return `<div class="vn-runes-glow"></div><div class="vn-fx-layer vn-floating-runes">${runes.join("")}</div>`;
+}
+function generateSnowstormMarkup() {
+  const count = 48;
+  const shards = [];
+  for (let i = 0;i < count; i++) {
+    const gust = pseudo(131, i, 1.2, 2.6);
+    shards.push(`<i class="vn-pt vn-snowstorm-shard" style="${vars({
+      left: `${n(strat(130, i, count, -10, 110))}%`,
+      top: `${n(pseudo(132, i, -10, 100))}%`,
+      "--sz": `${n(pseudo(133, i, 14, 38))}px`,
+      "--o": n(pseudo(134, i, 0.6, 0.95), 2),
+      "--fd": `${n(gust, 2)}s`,
+      "--dl": `${n(-pseudo(135, i, 0, gust), 2)}s`
+    })}"></i>`);
+  }
+  return `<div class="vn-snowstorm-frost"></div><div class="vn-fx-layer vn-snowstorm-gusts">${shards.join("")}</div>`;
+}
+function generateGlitchMarkup() {
+  return `<div class="vn-fx-glitch"><div class="vn-glitch-scanlines"></div><div class="vn-glitch-slice"></div></div>`;
+}
+function generateCinemaBarsMarkup() {
+  return `<div class="vn-cinema-bar vn-cinema-bar--top"></div><div class="vn-cinema-bar vn-cinema-bar--bottom"></div>`;
 }
 
 // src/frontend/stage/rpg-hud.ts
@@ -37050,6 +37479,8 @@ var DEFAULT_CONFIG = {
   autoPlayDelay: 2000,
   skipMode: "read",
   effectIntensity: "full",
+  filmGrain: false,
+  disabledSceneEffects: [],
   textEffects: "animated",
   textScale: 1,
   readerPreferences: DEFAULT_READER_PREFERENCES,
@@ -38665,16 +39096,24 @@ var STAGE_EFFECT_IDS = new Set([
   "blur_pulse",
   "sparkle_burst",
   "hearts_burst",
-  "confetti"
+  "confetti",
+  "glitch",
+  "cinema_bars"
 ]);
 var AMBIENT_EFFECT_IDS = new Set([
   "rain",
   "heavy_rain",
   "snow",
+  "snowstorm",
   "sakura",
+  "autumn_leaves",
   "fog",
+  "sunbeams",
   "fireflies",
   "embers",
+  "floating_runes",
+  "underwater_bubbles",
+  "shooting_stars",
   "vignette_dark",
   "sepia_flashback",
   "desaturate",
@@ -39043,6 +39482,8 @@ class VnStage {
   effectIntensity = "full";
   textEffectMode = "animated";
   textScale = 1;
+  filmGrain = false;
+  disabledSceneEffects = new Set;
   errorDetails = null;
   hostImageError = null;
   dismissedErrors = new Set;
@@ -39109,6 +39550,8 @@ class VnStage {
     this.flashOverlay = queryRequired(this.themeRoot, "[data-vn-flash]");
     this.fxOverlay = queryRequired(this.themeRoot, "[data-vn-fx]");
     this.ambientOverlay = queryRequired(this.themeRoot, "[data-vn-ambient]");
+    this.root.dataset.vnFilmGrain = "false";
+    this.ambientOverlay.dataset.vnFilmGrain = "false";
     this.chapterCard = queryRequired(this.themeRoot, "[data-vn-chapter-card]");
     this.chapterCard.onclick = () => this.dismissChapterCard();
     this.setSceneImageFit(options.sceneImageFit ?? "cover");
@@ -39397,6 +39840,23 @@ class VnStage {
   }
   getEffectIntensity() {
     return this.effectIntensity;
+  }
+  setFilmGrain(enabled) {
+    this.filmGrain = enabled;
+    this.root.dataset.vnFilmGrain = enabled ? "true" : "false";
+    this.ambientOverlay.dataset.vnFilmGrain = enabled ? "true" : "false";
+  }
+  getFilmGrain() {
+    return this.filmGrain;
+  }
+  setDisabledSceneEffects(disabled) {
+    this.disabledSceneEffects = new Set(disabled);
+    if (this.currentAmbient && this.disabledSceneEffects.has(this.currentAmbient)) {
+      this.applyAmbient(null);
+    }
+  }
+  getDisabledSceneEffects() {
+    return [...this.disabledSceneEffects];
   }
   setTextEffects(mode) {
     this.textEffectMode = mode === "static" || mode === "off" ? mode : "animated";
@@ -39913,6 +40373,8 @@ class VnStage {
   triggerEffect(effect) {
     if (this.destroyed)
       return;
+    if (this.disabledSceneEffects.has(effect))
+      return;
     const limit = this.state.paragraphs[this.state.currentParagraphIndex]?.effectLimit;
     const intensity = this.effectIntensity === "off" || limit === "off" ? "off" : this.effectIntensity === "gentle" || limit === "gentle" ? "gentle" : "full";
     const presented = presentEffect(effect, intensity);
@@ -39978,6 +40440,13 @@ class VnStage {
       case "confetti":
         this.triggerFxBurst("confetti", 1200);
         break;
+      case "glitch":
+        this.triggerSceneAnimation("vnGlitch", "true", "vn-glitch", 350);
+        this.triggerFxBurst("glitch", 350);
+        break;
+      case "cinema_bars":
+        this.triggerFxBurst("cinema_bars", 1200);
+        break;
     }
   }
   triggerTimedShake(className, datasetValue, duration3) {
@@ -40021,7 +40490,8 @@ class VnStage {
       clearTimeout(this.sceneFxTimer);
       this.sceneFxTimer = null;
     }
-    this.scene.classList.remove("vn-zoom-punch", "vn-tilt", "vn-blur-pulse");
+    this.scene.classList.remove("vn-zoom-punch", "vn-tilt", "vn-blur-pulse", "vn-glitch");
+    delete this.scene.dataset.vnGlitch;
     delete this.scene.dataset.vnTilt;
     delete this.scene.dataset.vnBlur;
     if (this.scene.dataset.vnZoom === "punch")
@@ -40108,6 +40578,8 @@ class VnStage {
   applyAmbient(effect) {
     if (this.destroyed)
       return;
+    if (effect && this.disabledSceneEffects.has(effect))
+      effect = null;
     if (effect === this.currentAmbient)
       return;
     this.currentAmbient = effect;
@@ -40262,7 +40734,7 @@ class VnStage {
       this.triggerEffect(explicitEffect);
       triggeredEffect = explicitEffect;
     }
-    if (this.effectIntensity !== "off" && triggeredEffect !== "shake" && TEXT_SHAKE_HEURISTIC_REGEX.test(paragraph.text)) {
+    if (this.effectIntensity !== "off" && !this.disabledSceneEffects.has("shake") && triggeredEffect !== "shake" && TEXT_SHAKE_HEURISTIC_REGEX.test(paragraph.text)) {
       this.triggerEffect("shake");
     }
     const paragraphAmbient = paragraph.ambient !== undefined ? paragraph.ambient : paragraph.cue?.ambient;
@@ -45244,6 +45716,73 @@ function readNovelAiParameters(params) {
     height: dims.height
   };
 }
+var SCENE_EFFECT_CATEGORIES = [
+  {
+    title: "Atmosphere & Weather",
+    effects: [
+      { id: "rain", label: "Gentle Rain", desc: "Soft ambient rainfall with window splashes" },
+      { id: "heavy_rain", label: "Downpour", desc: "Intense torrential rain and heavy ripples" },
+      { id: "snow", label: "Snowfall", desc: "Gently drifting crystalline snowflakes" },
+      { id: "snowstorm", label: "Snowstorm", desc: "Swirling windswept snow gusts and frost borders" },
+      { id: "sakura", label: "Sakura Petals", desc: "Tumbling spring cherry blossom petals" },
+      { id: "autumn_leaves", label: "Autumn Leaves", desc: "Falling golden maple and ginkgo leaves" },
+      { id: "fog", label: "Fog & Mist", desc: "Dense atmospheric mist rolling across the scene" },
+      { id: "sunbeams", label: "Sunbeams & Dust Motes", desc: "Volumetric light rays with glowing sun motes" },
+      { id: "fireflies", label: "Fireflies", desc: "Luminous glowing fireflies softly hovering" },
+      { id: "embers", label: "Floating Embers", desc: "Rising fiery sparks and glowing warm cinders" },
+      { id: "floating_runes", label: "Floating Runes", desc: "Ethereal mystic sigils and arcane glyphs" },
+      { id: "underwater_bubbles", label: "Underwater Bubbles", desc: "Aquatic rising bubbles and water caustics" },
+      { id: "shooting_stars", label: "Shooting Stars", desc: "Meteors streaking across starry night skies" }
+    ]
+  },
+  {
+    title: "Mood Grades & Tone",
+    effects: [
+      { id: "vignette_dark", label: "Dark Vignette", desc: "Deep cinematic perimeter shadow falloff" },
+      { id: "sepia_flashback", label: "Sepia Flashback", desc: "Warm nostalgic sepia tone and projector glow" },
+      { id: "desaturate", label: "Desaturate (Noir)", desc: "Moody black-and-white noir monochrome" },
+      { id: "dream_haze", label: "Dream Haze", desc: "Soft ethereal bloom and surreal light glow" },
+      { id: "danger_pulse", label: "Danger Pulse", desc: "Crimson edge pulse for tension, threats, and alarm" }
+    ]
+  },
+  {
+    title: "Camera & Screen Motion",
+    effects: [
+      { id: "shake", label: "Screen Shake", desc: "Impact shake on thuds, slams, and collisions" },
+      { id: "shake_hard", label: "Heavy Impact", desc: "Violent screen shake on explosions and crashes" },
+      { id: "rumble", label: "Earthquake Rumble", desc: "Deep continuous vibration and screen tremor" },
+      { id: "zoom_in", label: "Camera Push-In", desc: "Smooth cinematic zoom into the scene" },
+      { id: "zoom_out", label: "Camera Pull-Back", desc: "Camera pulls back to reveal the wider scene" },
+      { id: "zoom_punch", label: "Zoom Punch", desc: "Dramatic snap punch-in on sudden reveals" },
+      { id: "tilt", label: "Camera Tilt", desc: "Dutch-angle tilt for disorientation and tension" },
+      { id: "blur_pulse", label: "Blur Pulse", desc: "Shock defocus pulse and exposure lift" },
+      { id: "speed_lines", label: "Speed Lines", desc: "High-action anime focus speed lines" },
+      { id: "cinema_bars", label: "Cinematic Letterbox", desc: "2.39:1 anamorphic widescreen bars slide in" },
+      { id: "glitch", label: "Cyber Glitch", desc: "Chromatic aberration split and digital scanline glitch" }
+    ]
+  },
+  {
+    title: "Flashes & Transitions",
+    effects: [
+      { id: "flash_white", label: "White Screen Flash", desc: "Instant white flash for lightning, shocks, or gunshots" },
+      { id: "flash_red", label: "Red Screen Flash", desc: "Crimson flash on damage, pain, or danger" },
+      { id: "lightning", label: "Lightning Strike", desc: "Double flash with drawn lightning bolts" },
+      { id: "heartbeat", label: "Heartbeat Pulse", desc: "Screen thud with red pulse on fear and dread" },
+      { id: "fade_to_black", label: "Fade to Black", desc: "Scene blackout cut transition" },
+      { id: "fade_from_black", label: "Fade from Black", desc: "Fade in from black" },
+      { id: "fade_to_white", label: "Fade to White", desc: "Blinding whiteout transition" }
+    ]
+  },
+  {
+    title: "One-Shot Bursts",
+    effects: [
+      { id: "sparkle_burst", label: "Sparkle Burst", desc: "Twinkling starburst on magic, epiphanies, or joy" },
+      { id: "hearts_burst", label: "Hearts Burst", desc: "Floating heart blossoms on romance, kisses, and love" },
+      { id: "confetti", label: "Confetti", desc: "Celebration confetti blast on victories and parties" }
+    ]
+  }
+];
+var ALL_SCENE_EFFECT_IDS = SCENE_EFFECT_CATEGORIES.flatMap((cat) => cat.effects.map((e) => e.id));
 
 // src/frontend/settings/controls-css.ts
 var SETTINGS_TOKENS_CSS = `
@@ -45888,6 +46427,33 @@ class VisualNovelSettingsPanel {
                 <legend>Scene effects</legend>
                 ${optionList("effectIntensity", EFFECT_INTENSITY_OPTIONS)}
               </fieldset>
+              <label data-check ${find("Film grain filters", "film grain filters analog texture noise clean pure")}><input name="filmGrain" type="checkbox" /><span>Film grain filters<small>Analog film grain texture overlay on mood grades (vignette, sepia flashback, noir, danger pulse). Uncheck for 100% clean, grain-free scene effects.</small></span></label>
+              <details class="scene-effects-details" style="margin-top: 10px; border: 1px solid var(--border-color, rgba(255,255,255,0.15)); border-radius: 8px; padding: 10px 14px; background: rgba(0,0,0,0.12);">
+                <summary style="cursor: pointer; font-weight: 500; font-size: 13px; user-select: none; display: flex; align-items: center; justify-content: space-between;">
+                  <span>Individual scene effect toggles</span>
+                  <small style="opacity: 0.7; font-size: 11px;">Configure per effect</small>
+                </summary>
+                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; margin-bottom: 12px;">
+                  <button type="button" data-enable-all-effects class="settings-sub-btn" style="font-size: 11px; padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: inherit; cursor: pointer;">Enable all</button>
+                  <button type="button" data-disable-all-effects class="settings-sub-btn" style="font-size: 11px; padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: inherit; cursor: pointer;">Disable all</button>
+                </div>
+                ${SCENE_EFFECT_CATEGORIES.map((category) => `
+                  <div style="margin-bottom: 14px;">
+                    <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.8; margin-bottom: 6px; padding-bottom: 2px; border-bottom: 1px solid rgba(255,255,255,0.08);">${category.title}</div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px;">
+                      ${category.effects.map((effect) => `
+                        <label data-check style="display: flex; align-items: flex-start; gap: 6px; font-size: 12px; margin: 0; padding: 4px; cursor: pointer;">
+                          <input type="checkbox" name="sceneEffectToggle" data-scene-effect-id="${effect.id}" checked style="margin-top: 2px;" />
+                          <span>
+                            <span style="font-weight: 500;">${effect.label}</span>
+                            <small style="display: block; opacity: 0.7; font-size: 10.5px; line-height: 1.25;">${effect.desc}</small>
+                          </span>
+                        </label>
+                      `).join("")}
+                    </div>
+                  </div>
+                `).join("")}
+              </details>
               <fieldset ${find("Picture fit", "image fit cover contain stretch crop scale")}>
                 <legend>Picture fit</legend>
                 ${optionList("sceneImageFit", SCENE_IMAGE_FIT_OPTIONS)}
@@ -46816,6 +47382,21 @@ class VisualNovelSettingsPanel {
       this.save({ promptPresets: this.promptPresets.map((preset) => ({ ...preset })) }, `Preset “${selected.name}” deleted.`);
     });
     this.root.querySelector("[data-discard]")?.addEventListener("click", () => this.discardAdvanced());
+    this.root.querySelector("[data-enable-all-effects]")?.addEventListener("click", () => {
+      for (const input2 of this.root.querySelectorAll("input[data-scene-effect-id]")) {
+        input2.checked = true;
+      }
+      this.save({ disabledSceneEffects: [] });
+    });
+    this.root.querySelector("[data-disable-all-effects]")?.addEventListener("click", () => {
+      const allIds = [];
+      for (const input2 of this.root.querySelectorAll("input[data-scene-effect-id]")) {
+        input2.checked = false;
+        if (input2.dataset.sceneEffectId)
+          allIds.push(input2.dataset.sceneEffectId);
+      }
+      this.save({ disabledSceneEffects: allIds });
+    });
     this.form.addEventListener("invalid", (event) => {
       if (event.target instanceof HTMLElement)
         this.reveal(event.target, { flash: false, focus: false });
@@ -46926,6 +47507,21 @@ class VisualNovelSettingsPanel {
         return { sceneImageFit: normalizeSceneImageFit(target2.value) };
       case "effectIntensity":
         return { effectIntensity: normalizeEffectIntensity(target2.value) };
+      case "filmGrain":
+        return { filmGrain: checked };
+      case "sceneEffectToggle": {
+        const effectId = target2.getAttribute("data-scene-effect-id");
+        if (effectId) {
+          const currentDisabled = new Set(this.config.disabledSceneEffects ?? []);
+          if (checked) {
+            currentDisabled.delete(effectId);
+          } else {
+            currentDisabled.add(effectId);
+          }
+          return { disabledSceneEffects: [...currentDisabled] };
+        }
+        return null;
+      }
       case "textEffects":
         return { textEffects: normalizeTextEffects(target2.value) };
       case "textScaleStep": {
@@ -47576,6 +48172,15 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
     this.control("dataSaverMode").checked = config2.dataSaverMode;
     this.control("relationshipTrackerEnabled").checked = config2.relationshipTrackerEnabled;
     this.setRadio("effectIntensity", config2.effectIntensity);
+    const grainInput = this.root.querySelector('input[name="filmGrain"]');
+    if (grainInput)
+      grainInput.checked = config2.filmGrain !== false;
+    const disabledSet = new Set(config2.disabledSceneEffects ?? []);
+    for (const input2 of this.root.querySelectorAll("input[data-scene-effect-id]")) {
+      const id7 = input2.dataset.sceneEffectId;
+      if (id7)
+        input2.checked = !disabledSet.has(id7);
+    }
     this.setRadio("textEffects", config2.textEffects);
     this.syncTextEffectMode(config2);
     const scaleStep = namedStepFor(TEXT_SCALE_STEPS, config2.textScale);
@@ -49078,7 +49683,7 @@ function modelOutputHelp(provider, model, parameters) {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.7-beta.138";
+var LUMIGLYPHICS_VERSION = "0.2.8-beta.139";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -57491,6 +58096,8 @@ function applyVisualConfigToStage(stage, config2) {
   stage.setTooltipPreferences?.(config2.tooltips);
   stage.setEffectIntensity?.(config2.effectIntensity);
   stage.setTextEffects?.(config2.textEffects);
+  stage.setFilmGrain?.(config2.filmGrain !== false);
+  stage.setDisabledSceneEffects?.(config2.disabledSceneEffects ?? []);
 }
 function connectionCatalogStates(message) {
   const forKind = (kind) => {

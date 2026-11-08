@@ -379,6 +379,8 @@ export type VisualStageThemeTarget = Pick<
   setEffectIntensity?: (level: VisualNovelEffectIntensity) => void;
   /** Inline dialogue text effects mode (stage sets `data-vn-text-effects`). */
   setTextEffects?: (mode: VisualNovelTextEffectMode) => void;
+  setFilmGrain?: (enabled: boolean) => void;
+  setDisabledSceneEffects?: (disabled: string[]) => void;
 };
 
 /**
@@ -418,6 +420,8 @@ export function applyVisualConfigToStage(
   stage.setTooltipPreferences?.(config.tooltips);
   stage.setEffectIntensity?.(config.effectIntensity);
   stage.setTextEffects?.(config.textEffects);
+  stage.setFilmGrain?.(config.filmGrain !== false);
+  stage.setDisabledSceneEffects?.(config.disabledSceneEffects ?? []);
 }
 
 /**

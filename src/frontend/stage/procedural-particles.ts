@@ -73,6 +73,18 @@ export function generateAmbientMarkup(effect: AmbientEffect): string {
       return generateFirefliesMarkup();
     case "embers":
       return generateEmbersMarkup();
+    case "sunbeams":
+      return generateSunbeamsMarkup();
+    case "shooting_stars":
+      return generateShootingStarsMarkup();
+    case "autumn_leaves":
+      return generateAutumnLeavesMarkup();
+    case "underwater_bubbles":
+      return generateUnderwaterBubblesMarkup();
+    case "floating_runes":
+      return generateFloatingRunesMarkup();
+    case "snowstorm":
+      return generateSnowstormMarkup();
     case "vignette_dark":
     case "sepia_flashback":
     case "desaturate":
@@ -96,6 +108,11 @@ export function generateCueEffectMarkup(effect: StageEffect): string {
       return generateConfettiMarkup();
     case "lightning":
       return generateLightningMarkup();
+    case "glitch":
+      return generateGlitchMarkup();
+    case "cinema_bars":
+      return generateCinemaBarsMarkup();
+
     default:
       return "";
   }
@@ -502,4 +519,158 @@ function generateLightningMarkup(): string {
     <g class="vn-bolt-glow">${path(main, "vn-bolt-main")}${forks.map((f) => path(f, "vn-bolt-fork")).join("")}</g>
     <g class="vn-bolt-core">${path(main, "vn-bolt-main")}${forks.map((f) => path(f, "vn-bolt-fork")).join("")}</g>
   </svg></div>`.replace(/\n\s*/g, "");
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Sunbeams & Dust Motes                                                      */
+/* -------------------------------------------------------------------------- */
+
+function generateSunbeamsMarkup(): string {
+  const count = 28;
+  const motes: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const sz = pseudo(81, i, 2.5, 6);
+    const dur = pseudo(82, i, 6.5, 12);
+    const sway = pseudo(83, i, 4, 8);
+    motes.push(`<i class="vn-pt vn-mote" style="${vars({
+      left: `${n(strat(80, i, count, 2, 98))}%`,
+      top: `${n(pseudo(84, i, 4, 94))}%`,
+      "--sz": `${n(sz)}px`,
+      "--o": n(pseudo(85, i, 0.45, 0.95), 2),
+      "--fd": `${n(dur, 2)}s`,
+      "--sd": `${n(sway, 2)}s`,
+      "--dl": `${n(-pseudo(86, i, 0, dur), 2)}s`,
+      "--dx": `${n(pseudo(87, i, -12, 12))}cqw`,
+      "--dy": `${n(pseudo(88, i, -20, -5))}cqh`,
+    })}"></i>`);
+  }
+  return `<div class="vn-sunbeams-light"></div><div class="vn-fx-layer vn-sunbeams-motes">${motes.join("")}</div>`;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Shooting Stars                                                             */
+/* -------------------------------------------------------------------------- */
+
+function generateShootingStarsMarkup(): string {
+  const count = 12;
+  const stars: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const dur = pseudo(91, i, 1.8, 3.2);
+    const len = pseudo(92, i, 60, 110);
+    stars.push(`<i class="vn-pt vn-shooting-star" style="${vars({
+      left: `${n(strat(90, i, count, 5, 85))}%`,
+      top: `${n(pseudo(93, i, 2, 50))}%`,
+      "--sz": `${n(len)}px`,
+      "--fd": `${n(dur, 2)}s`,
+      "--dl": `${n(pseudo(94, i, 0.2, 5.5), 2)}s`,
+      "--tx": `${n(pseudo(95, i, 18, 32))}cqw`,
+      "--ty": `${n(pseudo(96, i, 16, 28))}cqh`,
+      "--rot": `${Math.round(pseudo(97, i, 32, 48))}deg`,
+    })}"></i>`);
+  }
+  return `<div class="vn-stars-sky"></div><div class="vn-fx-layer vn-shooting-stars">${stars.join("")}</div>`;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Autumn Leaves                                                              */
+/* -------------------------------------------------------------------------- */
+
+function generateAutumnLeavesMarkup(): string {
+  const count = 28;
+  const leaves: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const fall = pseudo(101, i, 6.5, 11);
+    const sway = pseudo(102, i, 2.8, 5);
+    const ax = n(pseudo(103, i, 0.3, 0.9), 2);
+    const ay = n(pseudo(104, i, -0.7, 0.8), 2);
+    leaves.push(fallingParticle(`vn-leaf vn-leaf--${"abc"[i % 3]}`, { cls: "", seed: 100, count, size: [16, 28], fall: [6.5, 11], opacity: [0.8, 0.98] }, i, {
+      "--rd": `${n(pseudo(105, i, 2.5, 4.8), 2)}s`,
+      "--ax": `${ax} ${ay} 0.8`,
+      "--r0": `${Math.round(pseudo(106, i, -70, 70))}deg`,
+      "--dx": `${n(pseudo(107, i, -22, -6))}cqw`,
+      "--sw": `${n(pseudo(108, i, 14, 32))}px`,
+    }));
+  }
+  return `<div class="vn-autumn-light"></div><div class="vn-fx-layer vn-autumn-leaves">${leaves.join("")}</div>`;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Underwater Bubbles                                                         */
+/* -------------------------------------------------------------------------- */
+
+function generateUnderwaterBubblesMarkup(): string {
+  const count = 26;
+  const bubbles: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const rise = pseudo(111, i, 4.5, 9);
+    const wobble = pseudo(112, i, 1.8, 3.4);
+    bubbles.push(`<i class="vn-pt vn-bubble vn-bubble--${"ab"[i % 2]}" style="${vars({
+      left: `${n(strat(110, i, count, 2, 98))}%`,
+      "--sz": `${n(pseudo(113, i, 8, 26))}px`,
+      "--o": n(pseudo(114, i, 0.5, 0.92), 2),
+      "--fd": `${n(rise, 2)}s`,
+      "--sd": `${n(wobble, 2)}s`,
+      "--dl": `${n(-pseudo(115, i, 0, rise), 2)}s`,
+      "--sdl": `${n(-pseudo(116, i, 0, wobble), 2)}s`,
+      "--dx": `${n(pseudo(117, i, -8, 8))}cqw`,
+      "--sw": `${n(pseudo(118, i, 6, 16))}px`,
+    })}"></i>`);
+  }
+  return `<div class="vn-underwater-caustic"></div><div class="vn-fx-layer vn-bubbles">${bubbles.join("")}</div>`;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Floating Runes                                                             */
+/* -------------------------------------------------------------------------- */
+
+function generateFloatingRunesMarkup(): string {
+  const count = 20;
+  const runes: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const rise = pseudo(121, i, 6, 12);
+    runes.push(`<i class="vn-pt vn-rune vn-rune--${"abcd"[i % 4]}" style="${vars({
+      left: `${n(strat(120, i, count, 4, 96))}%`,
+      "--sz": `${n(pseudo(122, i, 18, 32))}px`,
+      "--o": n(pseudo(123, i, 0.45, 0.9), 2),
+      "--fd": `${n(rise, 2)}s`,
+      "--dl": `${n(-pseudo(124, i, 0, rise), 2)}s`,
+      "--dx": `${n(pseudo(125, i, -10, 10))}cqw`,
+      "--spin": `${Math.round(pseudo(126, i, -180, 180))}deg`,
+    })}"></i>`);
+  }
+  return `<div class="vn-runes-glow"></div><div class="vn-fx-layer vn-floating-runes">${runes.join("")}</div>`;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Snowstorm                                                                  */
+/* -------------------------------------------------------------------------- */
+
+function generateSnowstormMarkup(): string {
+  const count = 48;
+  const shards: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const gust = pseudo(131, i, 1.2, 2.6);
+    shards.push(`<i class="vn-pt vn-snowstorm-shard" style="${vars({
+      left: `${n(strat(130, i, count, -10, 110))}%`,
+      top: `${n(pseudo(132, i, -10, 100))}%`,
+      "--sz": `${n(pseudo(133, i, 14, 38))}px`,
+      "--o": n(pseudo(134, i, 0.6, 0.95), 2),
+      "--fd": `${n(gust, 2)}s`,
+      "--dl": `${n(-pseudo(135, i, 0, gust), 2)}s`,
+    })}"></i>`);
+  }
+  return `<div class="vn-snowstorm-frost"></div><div class="vn-fx-layer vn-snowstorm-gusts">${shards.join("")}</div>`;
+}
+
+/* -------------------------------------------------------------------------- */
+/* New Stage Effects                                                          */
+/* -------------------------------------------------------------------------- */
+
+function generateGlitchMarkup(): string {
+  return `<div class="vn-fx-glitch"><div class="vn-glitch-scanlines"></div><div class="vn-glitch-slice"></div></div>`;
+}
+
+function generateCinemaBarsMarkup(): string {
+  return `<div class="vn-cinema-bar vn-cinema-bar--top"></div><div class="vn-cinema-bar vn-cinema-bar--bottom"></div>`;
 }

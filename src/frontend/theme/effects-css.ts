@@ -127,6 +127,83 @@ const TEX_FOG_NEAR = mistNoise(1280, 448, "0.0031 0.0089", 21, 2.4, -0.78, [[0, 
 const TEX_FOG_BANK = mistNoise(896, 384, "0.0045 0.013", 13, 2.1, -0.7, [[0, 0], [0.75, 1], [1, 1]]);
 
 /** Seamless monochrome film grain (used with an overlay blend). */
+const SHAPE_LEAF_MAPLE_RED = svgDataUri(
+  `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff733b"/><stop offset=".6" stop-color="#d62e1b"/><stop offset="1" stop-color="#801008"/></linearGradient></defs>` +
+    `<path d="M20 38 L17 32 L7 32 L13 26 L5 20 L14 18 L9 8 L18 14 L20 2 L22 14 L31 8 L26 18 L35 20 L27 26 L33 32 L23 32 Z" fill="url(#g)"/>` +
+    `<path d="M20 38 L20 12 M20 26 L12 20 M20 24 L28 18" stroke="#ffa366" stroke-width=".8" fill="none" opacity=".5"/>`,
+  40,
+  42,
+);
+
+const SHAPE_LEAF_MAPLE_GOLD = svgDataUri(
+  `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe066"/><stop offset=".55" stop-color="#e69500"/><stop offset="1" stop-color="#bf5b00"/></linearGradient></defs>` +
+    `<path d="M20 38 L17 32 L7 32 L13 26 L5 20 L14 18 L9 8 L18 14 L20 2 L22 14 L31 8 L26 18 L35 20 L27 26 L33 32 L23 32 Z" fill="url(#g)"/>`,
+  40,
+  42,
+);
+
+const SHAPE_LEAF_GINKGO = svgDataUri(
+  `<defs><radialGradient id="g" cx="50%" cy="100%" r="90%"><stop offset="0" stop-color="#ff9900"/><stop offset=".6" stop-color="#ffcc00"/><stop offset="1" stop-color="#ffe680"/></radialGradient></defs>` +
+    `<path d="M20 36 C18 28 8 26 2 16 C-2 8 8 2 16 4 C18 4 19 6 20 8 C21 6 22 4 24 4 C32 2 42 8 38 16 C32 26 22 28 20 36 Z" fill="url(#g)"/>`,
+  40,
+  38,
+);
+
+const SHAPE_BUBBLE_A = svgDataUri(
+  `<defs><radialGradient id="g" cx="35%" cy="32%" r="65%"><stop offset="0" stop-color="#ffffff" stop-opacity=".75"/><stop offset=".45" stop-color="#b8e8ff" stop-opacity=".35"/><stop offset=".85" stop-color="#5cb8ff" stop-opacity=".2"/><stop offset="1" stop-color="#99d6ff" stop-opacity=".65"/></radialGradient></defs>` +
+    `<circle cx="20" cy="20" r="18" fill="url(#g)"/>` +
+    `<ellipse cx="14" cy="13" rx="4.5" ry="2.6" transform="rotate(-35 14 13)" fill="#ffffff" opacity=".85"/>`,
+  40,
+  40,
+);
+
+const SHAPE_BUBBLE_B = svgDataUri(
+  `<defs><radialGradient id="g" cx="35%" cy="32%" r="65%"><stop offset="0" stop-color="#ffffff" stop-opacity=".6"/><stop offset=".5" stop-color="#c2f0eb" stop-opacity=".25"/><stop offset="1" stop-color="#6ee0d4" stop-opacity=".55"/></radialGradient></defs>` +
+    `<circle cx="20" cy="20" r="18" fill="url(#g)"/>` +
+    `<circle cx="13" cy="12" r="2.8" fill="#ffffff" opacity=".9"/>`,
+  40,
+  40,
+);
+
+const SHAPE_RUNE_A = svgDataUri(
+  `<g stroke="#70d6ff" stroke-width="2.5" stroke-linecap="round" fill="none"><circle cx="20" cy="20" r="15" stroke-dasharray="4 3"/><path d="M20 5 L20 35 M8 12 L32 28 M8 28 L32 12"/></g>`,
+  40,
+  40,
+);
+
+const SHAPE_RUNE_B = svgDataUri(
+  `<g stroke="#d68cff" stroke-width="2.5" stroke-linecap="round" fill="none"><polygon points="20,5 34,30 6,30"/><circle cx="20" cy="21" r="5"/><line x1="20" y1="12" x2="20" y2="29"/></g>`,
+  40,
+  40,
+);
+
+const SHAPE_RUNE_C = svgDataUri(
+  `<g stroke="#ffd166" stroke-width="2.5" stroke-linecap="round" fill="none"><rect x="9" y="9" width="22" height="22" rx="3" transform="rotate(45 20 20)"/><circle cx="20" cy="20" r="4" fill="#ffd166"/></g>`,
+  40,
+  40,
+);
+
+const SHAPE_RUNE_D = svgDataUri(
+  `<g stroke="#ff70a6" stroke-width="2.5" stroke-linecap="round" fill="none"><path d="M10 20 Q20 5 30 20 Q20 35 10 20 Z"/><circle cx="20" cy="20" r="3" fill="#ff70a6"/></g>`,
+  40,
+  40,
+);
+
+const SHAPE_MOTE = svgDataUri(
+  `<defs><radialGradient id="g"><stop offset="0" stop-color="#ffffff"/><stop offset=".4" stop-color="#ffe8a3" stop-opacity=".9"/><stop offset="1" stop-color="#ffb833" stop-opacity="0"/></radialGradient></defs>` +
+    `<circle cx="16" cy="16" r="15" fill="url(#g)"/>`,
+  32,
+  32,
+);
+
+const SHAPE_SHOOTING_STAR = svgDataUri(
+  `<defs><linearGradient id="g" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".2" stop-color="#a8ecff" stop-opacity=".8"/><stop offset="1" stop-color="#00aaff" stop-opacity="0"/></linearGradient></defs>` +
+    `<line x1="56" y1="4" x2="4" y2="40" stroke="url(#g)" stroke-width="3.2" stroke-linecap="round"/>` +
+    `<circle cx="56" cy="4" r="3.6" fill="#ffffff"/>`,
+  60,
+  44,
+);
+
 const TEX_GRAIN = svgDataUri(
   `<filter id="n" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".82" numOctaves="2" seed="5" stitchTiles="stitch"/>` +
     `<feColorMatrix values="1.6 0 0 0 -.3 1.6 0 0 0 -.3 1.6 0 0 0 -.3 0 0 0 0 1"/></filter><rect width="160" height="160" filter="url(#n)"/>`,
@@ -721,6 +798,17 @@ export const VN_EFFECTS_CSS = `
   mix-blend-mode: overlay;
   opacity: 0.16;
   pointer-events: none;
+}
+
+/* Film grain suppression when turned off */
+[data-vn-root][data-vn-film-grain="false"] [data-vn-ambient]::after,
+[data-vn-ambient][data-vn-film-grain="false"]::after,
+[data-vn-scene][data-vn-film-grain="false"] [data-vn-ambient]::after,
+.vn-no-film-grain::after {
+  display: none !important;
+  background: none !important;
+  animation: none !important;
+  opacity: 0 !important;
 }
 
 @keyframes vn-grain {
@@ -1410,4 +1498,268 @@ export const VN_EFFECTS_CSS = `
   75% { opacity: 1; }
   100% { opacity: 0; }
 }
+
+
+/* ==========================================================================
+   NEW AMBIENT OVERLAYS & GRADES
+   ========================================================================== */
+
+/* Sunbeams & Dust Motes */
+[data-vn-ambient].vn-ambient-sunbeams {
+  background: radial-gradient(ellipse 95% 75% at 85% 8%, rgba(255, 232, 160, 0.24) 0%, rgba(255, 200, 100, 0.08) 45%, rgba(0, 0, 0, 0) 80%);
+}
+.vn-sunbeams-light {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(125deg, rgba(255, 240, 180, 0.18) 0%, rgba(255, 220, 140, 0.08) 32%, rgba(255, 220, 140, 0) 65%);
+  pointer-events: none;
+}
+.vn-pt.vn-mote {
+  position: absolute;
+  width: var(--sz);
+  height: var(--sz);
+  border-radius: 50%;
+  background-image: ${SHAPE_MOTE};
+  background-size: contain;
+  background-repeat: no-repeat;
+  animation:
+    vn-mote-drift var(--fd) linear var(--dl) infinite,
+    vn-mote-pulse var(--sd) ease-in-out var(--dl) infinite;
+}
+@keyframes vn-mote-drift {
+  0% { translate: 0 0; opacity: 0; }
+  20% { opacity: var(--o); }
+  80% { opacity: var(--o); }
+  100% { translate: var(--dx) var(--dy); opacity: 0; }
+}
+@keyframes vn-mote-pulse {
+  0%, 100% { transform: scale(0.8); }
+  50% { transform: scale(1.25); }
+}
+
+/* Shooting Stars */
+[data-vn-ambient].vn-ambient-shooting_stars {
+  background: radial-gradient(ellipse 80% 50% at 50% 20%, rgba(30, 60, 120, 0.2) 0%, rgba(0, 0, 0, 0) 70%);
+}
+.vn-stars-sky {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.vn-pt.vn-shooting-star {
+  position: absolute;
+  width: var(--sz);
+  height: 24px;
+  background-image: ${SHAPE_SHOOTING_STAR};
+  background-size: contain;
+  background-repeat: no-repeat;
+  animation: vn-star-shoot var(--fd) ease-out var(--dl) infinite;
+}
+@keyframes vn-star-shoot {
+  0% { translate: 0 0; opacity: 0; transform: rotate(var(--rot)) scale(0.3); }
+  12% { opacity: 1; transform: rotate(var(--rot)) scale(1); }
+  70% { opacity: 0.9; }
+  100% { translate: var(--tx) var(--ty); opacity: 0; transform: rotate(var(--rot)) scale(0.5); }
+}
+
+/* Autumn Leaves */
+[data-vn-ambient].vn-ambient-autumn_leaves {
+  background: radial-gradient(ellipse 90% 70% at 50% 40%, rgba(220, 110, 30, 0.08) 0%, rgba(0, 0, 0, 0) 75%);
+}
+.vn-autumn-light {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 180, 80, 0.06) 0%, rgba(200, 80, 20, 0.04) 100%);
+  pointer-events: none;
+}
+.vn-pt.vn-leaf {
+  position: absolute;
+  width: var(--sz);
+  height: var(--sz);
+  background-size: contain;
+  background-repeat: no-repeat;
+  animation:
+    vn-leaf-fall var(--fd) linear var(--dl) infinite,
+    vn-leaf-sway var(--sd) ease-in-out var(--sdl) infinite,
+    vn-leaf-tumble var(--rd) linear var(--dl) infinite;
+}
+.vn-leaf--a { background-image: ${SHAPE_LEAF_MAPLE_RED}; }
+.vn-leaf--b { background-image: ${SHAPE_LEAF_MAPLE_GOLD}; }
+.vn-leaf--c { background-image: ${SHAPE_LEAF_GINKGO}; }
+@keyframes vn-leaf-fall {
+  0% { translate: 0 -4cqh; opacity: 0; }
+  15% { opacity: var(--o); }
+  85% { opacity: var(--o); }
+  100% { translate: var(--dx) 106cqh; opacity: 0; }
+}
+@keyframes vn-leaf-sway {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(var(--sw)); }
+}
+@keyframes vn-leaf-tumble {
+  0% { rotate: var(--ax) var(--r0); }
+  100% { rotate: var(--ax) calc(var(--r0) + 360deg); }
+}
+
+/* Underwater Bubbles */
+[data-vn-ambient].vn-ambient-underwater_bubbles {
+  background: radial-gradient(circle at 50% 15%, rgba(60, 210, 230, 0.22) 0%, rgba(10, 50, 90, 0.35) 75%, rgba(4, 20, 45, 0.6) 100%);
+}
+.vn-underwater-caustic {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(140, 240, 255, 0.12) 0%, rgba(50, 160, 200, 0.04) 50%, rgba(0, 80, 140, 0.15) 100%);
+  pointer-events: none;
+}
+.vn-pt.vn-bubble {
+  position: absolute;
+  width: var(--sz);
+  height: var(--sz);
+  background-size: contain;
+  background-repeat: no-repeat;
+  animation:
+    vn-bubble-rise var(--fd) linear var(--dl) infinite,
+    vn-bubble-wobble var(--sd) ease-in-out var(--sdl) infinite;
+}
+.vn-bubble--a { background-image: ${SHAPE_BUBBLE_A}; }
+.vn-bubble--b { background-image: ${SHAPE_BUBBLE_B}; }
+@keyframes vn-bubble-rise {
+  0% { translate: 0 105cqh; opacity: 0; }
+  10% { opacity: var(--o); }
+  90% { opacity: var(--o); }
+  100% { translate: var(--dx) -6cqh; opacity: 0; }
+}
+@keyframes vn-bubble-wobble {
+  0%, 100% { transform: translateX(0) scale(1, 1); }
+  33% { transform: translateX(var(--sw)) scale(0.92, 1.08); }
+  66% { transform: translateX(calc(var(--sw) * -1)) scale(1.08, 0.92); }
+}
+
+/* Floating Runes */
+[data-vn-ambient].vn-ambient-floating_runes {
+  background: radial-gradient(ellipse 80% 65% at 50% 50%, rgba(120, 50, 180, 0.16) 0%, rgba(20, 10, 40, 0.25) 70%, rgba(0, 0, 0, 0.5) 100%);
+}
+.vn-runes-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.vn-pt.vn-rune {
+  position: absolute;
+  width: var(--sz);
+  height: var(--sz);
+  background-size: contain;
+  background-repeat: no-repeat;
+  animation:
+    vn-rune-ascend var(--fd) linear var(--dl) infinite,
+    vn-rune-spin 8s linear var(--dl) infinite;
+}
+.vn-rune--a { background-image: ${SHAPE_RUNE_A}; }
+.vn-rune--b { background-image: ${SHAPE_RUNE_B}; }
+.vn-rune--c { background-image: ${SHAPE_RUNE_C}; }
+.vn-rune--d { background-image: ${SHAPE_RUNE_D}; }
+@keyframes vn-rune-ascend {
+  0% { translate: 0 102cqh; opacity: 0; transform: scale(0.7); }
+  20% { opacity: var(--o); transform: scale(1); }
+  80% { opacity: var(--o); }
+  100% { translate: var(--dx) -5cqh; opacity: 0; transform: scale(1.1); }
+}
+@keyframes vn-rune-spin {
+  0% { rotate: 0deg; }
+  100% { rotate: var(--spin); }
+}
+
+/* Snowstorm */
+[data-vn-ambient].vn-ambient-snowstorm {
+  background: radial-gradient(ellipse 90% 70% at 50% 40%, rgba(200, 230, 255, 0.15) 0%, rgba(120, 180, 240, 0.2) 65%, rgba(40, 80, 140, 0.35) 100%);
+}
+.vn-snowstorm-frost {
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 60px rgba(220, 240, 255, 0.45);
+  pointer-events: none;
+}
+.vn-pt.vn-snowstorm-shard {
+  position: absolute;
+  width: var(--sz);
+  height: 2.5px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, #ffffff 50%, rgba(200, 230, 255, 0.8) 100%);
+  border-radius: 2px;
+  rotate: -35deg;
+  animation: vn-blizzard-gust var(--fd) linear var(--dl) infinite;
+}
+@keyframes vn-blizzard-gust {
+  0% { translate: 105cqw -15cqh; opacity: 0; }
+  15% { opacity: var(--o); }
+  85% { opacity: var(--o); }
+  100% { translate: -15cqw 105cqh; opacity: 0; }
+}
+
+/* ==========================================================================
+   NEW STAGE EFFECTS
+   ========================================================================== */
+
+/* Glitch */
+@keyframes vn-glitch-jitter {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  20% { transform: translate3d(-6px, 2px, 0); }
+  40% { transform: translate3d(5px, -3px, 0); }
+  60% { transform: translate3d(-3px, -1px, 0); }
+  80% { transform: translate3d(4px, 2px, 0); }
+}
+[data-vn-scene].vn-glitch,
+[data-vn-scene][data-vn-glitch="true"] {
+  animation: vn-glitch-jitter 350ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.vn-fx-glitch {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.vn-glitch-scanlines {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(0, 255, 255, 0.08) 0px, rgba(0, 255, 255, 0.08) 2px, transparent 2px, transparent 4px);
+  mix-blend-mode: overlay;
+}
+.vn-glitch-slice {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 35%;
+  height: 18%;
+  background: rgba(255, 0, 80, 0.12);
+  mix-blend-mode: screen;
+}
+
+/* Cinema Bars (Letterbox) */
+@keyframes vn-cinema-bar-top {
+  0% { transform: scaleY(0); }
+  100% { transform: scaleY(1); }
+}
+@keyframes vn-cinema-bar-bottom {
+  0% { transform: scaleY(0); }
+  100% { transform: scaleY(1); }
+}
+.vn-cinema-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 9%;
+  background: #000000;
+  z-index: 3;
+  pointer-events: none;
+  transform-origin: center;
+}
+.vn-cinema-bar--top {
+  top: 0;
+  transform-origin: top;
+  animation: vn-cinema-bar-top 450ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.vn-cinema-bar--bottom {
+  bottom: 0;
+  transform-origin: bottom;
+  animation: vn-cinema-bar-bottom 450ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 `;
