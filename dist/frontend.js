@@ -48697,7 +48697,7 @@ function modelOutputHelp(provider, model, parameters) {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.1-beta.132";
+var LUMIGLYPHICS_VERSION = "0.2.2-beta.133";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -49277,25 +49277,7 @@ class ImageStudio {
         this.queuePictures([this.selectedJob]);
     };
     batchApprove.onclick = () => this.decideAll("generate");
-    const modelSelect = this.el("[data-artwork-model-select]");
-    const customModelContainer = this.el("[data-custom-model-container]");
-    const modelInput = this.el("[data-artwork-model]");
-    modelSelect.onchange = () => {
-      if (modelSelect.value === "__custom__") {
-        customModelContainer.hidden = false;
-        modelInput.focus();
-      } else {
-        customModelContainer.hidden = true;
-        modelInput.value = modelSelect.value;
-      }
-      this.updateCostEstimate();
-    };
-    modelInput.oninput = () => this.updateCostEstimate();
     this.el("[data-artwork-connection]").onchange = () => {
-      const connId = this.el("[data-artwork-connection]").value;
-      const conn = this.imageConnections.find((c) => c.id === connId);
-      if (conn)
-        modelInput.placeholder = conn.model || "Connection default";
       this.updateCostEstimate();
     };
     const queue = document.createElement("div");
@@ -49479,22 +49461,21 @@ class ImageStudio {
       });
     };
     this.el("[data-regenerate-model-single]").onclick = () => {
+      const connectionId = this.el("[data-artwork-connection]")?.value || undefined;
+      const conn = this.imageConnections.find((c) => c.id === connectionId);
+      const model = conn?.model || undefined;
       if (this.record()?.state !== "review") {
         if (!this.turn || !this.selectedJob || this.preparing.has(this.selectedJob))
           return;
-        const model2 = this.el("[data-artwork-model]").value.trim();
-        const connectionId2 = this.el("[data-artwork-connection]")?.value || undefined;
         const templateId2 = this.record()?.imagePromptMetadata?.template.id ?? this.el("[data-template]").value ?? this.defaultTemplate;
         this.beginPreparation(this.selectedJob);
         this.render();
-        this.send({ type: "vn_prepare_image", chatId: this.turn.chatId, messageId: this.turn.messageId, sourceFingerprint: this.turn.sourceFingerprint, jobId: this.selectedJob, ...templateId2 ? { templateId: templateId2 } : {}, model: model2 || undefined, connectionId: connectionId2 });
+        this.send({ type: "vn_prepare_image", chatId: this.turn.chatId, messageId: this.turn.messageId, sourceFingerprint: this.turn.sourceFingerprint, jobId: this.selectedJob, ...templateId2 ? { templateId: templateId2 } : {}, model, connectionId });
         return;
       }
       const record2 = this.record();
       if (!record2 || record2.state !== "review" || this.rebuilding.has(record2.requestId) || !this.turn)
         return;
-      const model = this.el("[data-artwork-model]").value.trim();
-      const connectionId = this.el("[data-artwork-connection]")?.value || undefined;
       const templateId = record2.imagePromptMetadata?.template.id ?? this.el("[data-template]").value ?? this.defaultTemplate;
       this.rebuilding.add(record2.requestId);
       this.render();
@@ -49505,15 +49486,16 @@ class ImageStudio {
         sourceFingerprint: this.turn.sourceFingerprint,
         requestId: record2.requestId,
         templateId,
-        model: model || undefined,
+        model,
         connectionId
       });
     };
     this.el("[data-regenerate-model-all]").onclick = () => {
       if (!this.turn)
         return;
-      const model = this.el("[data-artwork-model]").value.trim();
       const connectionId = this.el("[data-artwork-connection]")?.value || undefined;
+      const conn = this.imageConnections.find((c) => c.id === connectionId);
+      const model = conn?.model || undefined;
       const reviewable = (this.turn.imageRequests ?? []).filter((r) => r.state === "review");
       if (reviewable.length === 0)
         return;
@@ -49526,7 +49508,7 @@ class ImageStudio {
           sourceFingerprint: this.turn.sourceFingerprint,
           requestId: r.requestId,
           templateId: r.imagePromptMetadata?.template.id ?? this.defaultTemplate,
-          model: model || undefined,
+          model,
           connectionId
         });
       }
@@ -49993,34 +49975,15 @@ class ImageStudio {
     modelTools.innerHTML = `<summary>Image Model &amp; Regeneration</summary>
       <div style="margin:8px 0">
         <div data-active-model-badge style="font-size:11px;font-weight:600;margin-bottom:8px;color:var(--accent,#7c9cff)">
-          Generated with: <span data-active-model-name style="font-family:var(--lumiverse-font-mono,monospace);font-weight:700;color:inherit">Connection default</span>
+          Generated with: <span data-active-model-name style="font-weight:700;color:inherit">Active Connection Default</span>
         </div>
-        <label>Active connection
-          <select data-artwork-connection aria-label="Select image connection" style="width:100%;box-sizing:border-box;margin-top:4px"></select>
+        <label>Connection Profile
+          <select data-artwork-connection aria-label="Select image connection profile" style="width:100%;box-sizing:border-box;margin-top:4px"></select>
         </label>
-        <label style="margin-top:10px">Select Image Model
-          <select data-artwork-model-select aria-label="Select image model" style="width:100%;box-sizing:border-box;margin-top:4px">
-            <option value="">Connection default</option>
-            <option value="blackforestlabs/flux-3/klein/text-to-image">FLUX.3 Klein (Square safe / Fast)</option>
-            <option value="anima/text-to-image">Anima (Anime &amp; Illustration)</option>
-            <option value="recraft-v4.1-flash">Recraft v4.1 Flash (10k chars)</option>
-            <option value="recraft-20b">Recraft 20B (High Quality)</option>
-            <option value="xai/grok-imagine-image/v2.0/text-to-image">Grok Imagine 2.0</option>
-            <option value="openai/gpt-image-2.5/flare/text-to-image">GPT Image 2.5</option>
-            <option value="qwen-image-3">Qwen Image 3</option>
-            <option value="bytedance/seedream-v5.0-pro">Seedream 5.0 Pro</option>
-            <option value="__custom__">Custom model ID...</option>
-          </select>
-        </label>
-        <div data-custom-model-container hidden style="margin-top:8px">
-          <label>Custom Model ID
-            <input type="text" data-artwork-model placeholder="e.g. stabilityai/sdxl-turbo" style="width:100%;box-sizing:border-box;margin-top:4px" />
-          </label>
-        </div>
-        <small style="display:block;margin-top:6px;opacity:0.8">Recompiles prompt dialect specifically for the chosen model.</small>
+        <small style="display:block;margin-top:6px;opacity:0.8">Select a connection profile to recompile and regenerate with that provider and model.</small>
         <div data-cost-estimate style="margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.03);border:1px solid var(--edge);font-size:12px"></div>
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-          <button type="button" data-regenerate-model-single style="font-size:12px;padding:6px 12px">Regenerate with selected model</button>
+          <button type="button" data-regenerate-model-single style="font-size:12px;padding:6px 12px">Regenerate with selected profile</button>
           <button type="button" data-regenerate-model-all style="font-size:12px;padding:6px 12px">Regenerate all in scene</button>
         </div>
       </div>`;
@@ -50961,30 +50924,19 @@ ${metadata.presentationRuleTrace.summary}`;
     changeStyleBtn.disabled = !editable || !asset || asset.source === "cache" || this.preparing.has(this.selectedJob) || Boolean(record2 && this.rebuilding.has(record2.requestId));
     const modelBadge = this.root.querySelector("[data-active-model-name]");
     const activeModel = record2?.model?.trim();
+    const connSelect = this.root.querySelector("[data-artwork-connection]");
+    const matchedConn = this.imageConnections.find((c) => activeModel && c.model === activeModel || record2?.parameters?.connectionId && c.id === record2.parameters.connectionId);
     if (modelBadge) {
-      modelBadge.textContent = activeModel || "Connection default";
-    }
-    const mSelect = this.root.querySelector("[data-artwork-model-select]");
-    const cContainer = this.root.querySelector("[data-custom-model-container]");
-    const modelInput = this.el("[data-artwork-model]");
-    if (mSelect && this.root.activeElement !== modelInput && this.root.activeElement !== mSelect) {
-      const knownValues = Array.from(mSelect.options).map((o) => o.value).filter((v) => v && v !== "__custom__");
-      if (!activeModel) {
-        mSelect.value = "";
-        if (cContainer)
-          cContainer.hidden = true;
-        modelInput.value = "";
-      } else if (knownValues.includes(activeModel)) {
-        mSelect.value = activeModel;
-        if (cContainer)
-          cContainer.hidden = true;
-        modelInput.value = activeModel;
+      if (matchedConn) {
+        modelBadge.textContent = `${matchedConn.name} (${matchedConn.model || activeModel})`;
+      } else if (activeModel) {
+        modelBadge.textContent = activeModel;
       } else {
-        mSelect.value = "__custom__";
-        if (cContainer)
-          cContainer.hidden = false;
-        modelInput.value = activeModel;
+        modelBadge.textContent = "Active Connection Default";
       }
+    }
+    if (connSelect && matchedConn && !connSelect.value) {
+      connSelect.value = matchedConn.id;
     }
     const regenSingle = this.el("[data-regenerate-model-single]");
     regenSingle.disabled = !editable || !asset || asset.source === "cache" || this.preparing.has(this.selectedJob) || Boolean(record2 && this.rebuilding.has(record2.requestId));
