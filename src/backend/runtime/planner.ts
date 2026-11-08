@@ -2142,13 +2142,13 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
       for (const name of visible) {
         const person = resolveCharacterReference(registry, { name });
         const persona = isPersona(name);
-        const canonical = persona ? personaName : person?.name;
+        const canonical = persona ? personaName : (person?.name ?? normalizeCharacterName(name));
         if (!canonical || ensembleSubjects.some(item => characterAppearanceKey(item.name) === characterAppearanceKey(canonical))) continue;
         const savedKey = appearanceMapKeyFor(input.characterAppearance, canonical);
         const saved = savedKey ? input.characterAppearance[savedKey] : "";
         const description = saved || (persona ? distillVisualTags(visualContext.personaIdentity?.description ?? "").join(", ") : person?.tags ?? "");
         const current = timeline.snapshots[cue.paragraphIndex]!;
-        const outfit = characterAppearanceKey(canonical) === characterAppearanceKey(current.character ?? "") ? current.attire : null;
+        const outfit = characterAppearanceKey(canonical) === characterAppearanceKey(current.character ?? "") ? current.attire : (timeline.snapshots.find(s => characterAppearanceKey(canonical) === characterAppearanceKey(s.character ?? ""))?.attire ?? null);
         ensembleSubjects.push({ name: canonical, appearance: description.slice(0,1200), ...(outfit ? {attire:outfit.slice(0,600)} : {}), ...(persona ? {persona:true} : {}) });
       }
       return VisualCueSchema.parse({

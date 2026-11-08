@@ -195,3 +195,29 @@ test('character with locked DNA generates locked DNA identitySource and passes I
   const parsed = ImagePromptMetadataSchema.safeParse(metadata);
   assert.equal(parsed.success, true);
 });
+
+test("protects attire clause from being truncated in ensemble and scales with high-capacity model", () => {
+  const highCapConfig = normalizeConfig({
+    defaultImageTemplateId: "ensemble",
+    imageModel: "ideogram/v4/instant"
+  });
+  const longAppearance = "striking features, piercing eyes, ".repeat(30);
+  const brief = buildVisualBrief(
+    highCapConfig,
+    scene,
+    {
+      ...cue,
+      imageTemplate: resolveImageTemplate(highCapConfig).template,
+      ensembleSubjects: [
+        { name: "CharacterA", appearance: longAppearance, attire: "distinguished velvet evening gown" },
+        { name: "CharacterB", appearance: longAppearance, attire: "black tailored tuxedo" }
+      ]
+    }
+  );
+
+  // Both characters must retain their full attire clause
+  assert.ok(brief.subjects.includes("wearing distinguished velvet evening gown"));
+  assert.ok(brief.subjects.includes("wearing black tailored tuxedo"));
+  assert.ok(brief.subjects.includes("CharacterA"));
+  assert.ok(brief.subjects.includes("CharacterB"));
+});

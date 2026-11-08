@@ -801,6 +801,16 @@ export class VisualNovelSettingsPanel {
                 </select>
                 <small>V2 compiles prompts specifically for FLUX, Grok, GPT, Qwen, Anima, etc. with dynamic camera angles. V1 uses legacy static string templates.</small>
               </label>
+              <label data-field ${find('Ideogram prompt mode','ideogram prompt mode json bbox bounding box structured prose auto')}>
+                <span>Ideogram prompting style</span>
+                <select name="ideogramPromptMode">
+                  <option value="auto">Auto (Direct JSON for Ideogram, standard for others)</option>
+                  <option value="json">Direct JSON (Native Ideogram 4 bounding boxes &amp; palettes)</option>
+                  <option value="structured-prose">Structured Plain-Text (Ideogram 6-part formula)</option>
+                  <option value="off">Off (Standard prose)</option>
+                </select>
+                <small>Direct JSON uses Ideogram 4's native schema with bounding boxes and color palettes to lock composition and bypass safety refusals. You can also force it for other models to experiment.</small>
+              </label>
               <label data-field ${find('Dialogue safe area','safe area text overlay dialogue speech framing clearance')}>
                 <span>Dialogue safe area</span>
                 <select name="dialogueSafeArea">
@@ -1614,6 +1624,7 @@ export class VisualNovelSettingsPanel {
         }
         return { dynamicImageTemplates: checked };
       case "imagePromptEngineVersion": return { imagePromptEngineVersion: target.value === "1" ? 1 : 2 };
+      case "ideogramPromptMode": return { ideogramPromptMode: target.value as any };
       case "automaticImagePromptSettings": return {automaticImagePromptSettings:checked};
       case "imagePromptBudgetOverride": return {imagePromptBudgetOverride:checked};
       case "imagePromptBudget": {
@@ -2184,6 +2195,7 @@ export class VisualNovelSettingsPanel {
 
   private syncEveryday(config: VisualNovelConfig): void {
     this.control<HTMLSelectElement>("imagePromptEngineVersion").value = String(config.imagePromptEngineVersion ?? 2);
+    this.control<HTMLSelectElement>("ideogramPromptMode").value = config.ideogramPromptMode ?? "auto";
     this.control<HTMLSelectElement>("imageResolutionPreference").value = config.imageResolutionPreference ?? "high";
     this.control<HTMLSelectElement>("dialogueSafeArea").value = config.dialogueSafeArea ?? "auto";
     this.control<HTMLSelectElement>("imagePromptDetail").value = config.imagePromptDetail ?? "auto";

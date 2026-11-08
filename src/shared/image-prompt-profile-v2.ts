@@ -15,7 +15,8 @@ export const PromptDialectIdSchema = z.enum([
   'anima',
   'novelai',
   'generic-prose',
-  'generic-tags'
+  'generic-tags',
+  'ideogram-v4'
 ]);
 export type PromptDialectId = z.infer<typeof PromptDialectIdSchema>;
 
@@ -57,6 +58,7 @@ export const ImagePromptProfileV2Schema = z.object({
     enabled: z.boolean().optional()
   }).strict().optional(),
   features: ProfileFeaturesSchema,
+  ideogramMode: z.enum(['json', 'structured-prose']).optional(),
   outputCapabilities: ModelOutputCapabilitiesSchema.optional(),
   guidance: z.string().max(2400).optional()
 }).strict();
@@ -130,6 +132,12 @@ const DIALECT_BUDGETS: Record<PromptDialectId, SoftBudgets> = {
     standard: [400, 750],
     complex: [500, 900],
     dense: [600, 1000]
+  },
+  'ideogram-v4': {
+    simple: [800, 2500],
+    standard: [1500, 4500],
+    complex: [2500, 7000],
+    dense: [3500, 9500]
   }
 };
 
@@ -156,10 +164,41 @@ interface RouteDialectResolution {
 export function resolveRouteDialect(
   provider: string,
   modelId: string,
-  parameters?: Record<string, unknown>
+  parameters?: Record<string, unknown>,
+  settings?: PromptProfileSettings
 ): RouteDialectResolution {
   const normModel = modelId.trim().toLowerCase();
   const normProvider = provider.trim().toLowerCase();
+  const ideogramMode = settings?.ideogramPromptMode ?? 'auto';
+
+  // Manual override takes precedence:
+  if (ideogramMode === 'json' || ideogramMode === 'structured-prose') {
+    return {
+      dialect: 'ideogram-v4',
+      family: 'ideogram',
+      negativePolicy: 'positive-only',
+      features: { references: true, exactText: true, layoutBoxes: true }
+    };
+  }
+
+  if (ideogramMode === 'off' && normModel.includes('ideogram')) {
+    return {
+      dialect: 'generic-prose',
+      family: 'ideogram',
+      negativePolicy: 'positive-only',
+      features: { references: true }
+    };
+  }
+
+  // Ideogram routes (NanoGPT & hosted endpoints)
+  if (normModel.includes('ideogram')) {
+    return {
+      dialect: 'ideogram-v4',
+      family: 'ideogram',
+      negativePolicy: 'positive-only',
+      features: { references: true, exactText: true, layoutBoxes: true }
+    };
+  }
 
   // NovelAI native provider
   if (normProvider === 'novelai') {
@@ -364,7 +403,7 @@ export function resolveImagePromptProfileV2(
   const rawModel = model?.trim() ?? 'unknown';
   const id = rawModel;
 
-  const resolution = resolveRouteDialect(p, id, parameters);
+  const resolution = resolveRouteDialect(p, id, parameters, settings);
   const dialect = resolution.dialect;
   const family = resolution.family;
 
@@ -397,7 +436,8 @@ export function resolveImagePromptProfileV2(
     anima: 3000,
     novelai: 3000,
     'generic-prose': 3000,
-    'generic-tags': 3000
+    'generic-tags': 3000,
+    'ideogram-v4': 10000
   };
 
   const defaultCeiling = providerLimit ?? dialectFallbackCeiling[dialect] ?? 3000;
@@ -435,6 +475,7 @@ export function resolveImagePromptProfileV2(
     softBudgets,
     ...(resolution.promptExpansion ? { promptExpansion: resolution.promptExpansion } : {}),
     features: resolution.features,
+    ...(dialect === 'ideogram-v4' ? { ideogramMode: settings.ideogramPromptMode === 'structured-prose' ? 'structured-prose' : 'json' } : {}),
     ...(outputCapabilities ? { outputCapabilities } : {}),
     guidance: `Dialect: ${dialect}. Model-aware Prompt Engine v2.`
   });

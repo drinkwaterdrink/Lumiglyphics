@@ -186,12 +186,16 @@ export function buildVisualBrief(
   // A long first description must never erase the persona or the last cast member.
   const nameBudget = members.reduce((total, member) => total + member.name.length + 4, 0);
   if (ensemble && nameBudget > 4000) throw new Error("The ensemble names exceed the prompt preview limit. Shorten cast display names before preparing this picture.");
-  const descriptionBudget = Math.max(0, Math.floor((Math.max(1800, nameBudget) - nameBudget) / Math.max(1, members.length)));
+  const isHighCap = Boolean(config.imageModel && /ideogram|recraft|grok|flux.*pro|midjourney|gpt-image/i.test(config.imageModel)) || Boolean(config.imagePromptBudgetOverride);
+  const baseBudget = isHighCap ? (config.imagePromptBudgetOverride ? config.imagePromptBudget : 4000) : 1800;
+  const descriptionBudget = Math.max(0, Math.floor((Math.max(baseBudget, nameBudget) - nameBudget) / Math.max(1, members.length)));
   const group = members.map(member => {
     const look = member.appearance.trim();
-    const description = `${look || "appearance not established"}${"attire" in member && member.attire ? `; wearing ${member.attire}` : ""}`;
-    const bounded = description.length > descriptionBudget ? description.slice(0, descriptionBudget).replace(/\s+\S*$/, "") : description;
-    return `${member.name}: ${bounded}`;
+    const attireText = ("attire" in member && member.attire) ? `; wearing ${member.attire}` : "";
+    const remainingForLook = Math.max(0, descriptionBudget - attireText.length);
+    const boundedLook = look.length > remainingForLook ? look.slice(0, remainingForLook).replace(/\s+\S*$/, "") : look;
+    const description = `${boundedLook || "appearance not established"}${attireText}`;
+    return `${member.name}: ${description}`;
   }).join("\n");
   return {
     ...(!noPeople?{subjectPreparation:{

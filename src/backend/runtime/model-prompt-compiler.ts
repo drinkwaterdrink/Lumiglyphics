@@ -68,7 +68,7 @@ export function compileModelPrompt(input: ModelPromptCompilerInput): ModelPrompt
   const {
     brief,
     shotSpec,
-    styleDNA,
+    styleDNA = {} as StyleDNA,
     profile,
     outputPlan,
     referencePlan,
@@ -114,7 +114,8 @@ export function compileModelPrompt(input: ModelPromptCompilerInput): ModelPrompt
 
   // 3b. Inject custom Style Prefix at P0 (front-loaded opening authority) and Style Suffix at P0/P1
   const cleanPrefix = styleDNA.prefix?.trim() ?? '';
-  if (cleanPrefix) {
+  const isIdeogramJson = profile.dialect === 'ideogram-v4' && profile.ideogramMode !== 'structured-prose';
+  if (cleanPrefix && !isIdeogramJson) {
     const prefixText = isTagDialect ? cleanPrefix.replace(/[,;:\s]+$/, '') : formatProseSentence(cleanPrefix, true);
     if (prefixText) {
       sections = [
@@ -131,7 +132,7 @@ export function compileModelPrompt(input: ModelPromptCompilerInput): ModelPrompt
   }
 
   const cleanSuffix = styleDNA.suffix?.trim() ?? '';
-  if (cleanSuffix) {
+  if (cleanSuffix && !isIdeogramJson) {
     const suffixText = isTagDialect ? cleanSuffix.replace(/^[,;:\s]+/, '').replace(/[,;:\s]+$/, '') : formatProseSentence(cleanSuffix, true);
     if (suffixText) {
       const constraintsIdx = sections.findIndex(s => s.id === 'constraints' || s.id === 'sec-constraints' || s.id === 'references');

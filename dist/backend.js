@@ -22448,11 +22448,13 @@ var init_image_prompt_capabilities = __esm(() => {
     "openai/gpt-image-2.5/sunburst/edit": 32000,
     "ideogram/v4.5": 1e4,
     "ideogram/v4.5/edit": 1e4,
+    "ideogram/v4/instant": 1e4,
+    "ideogram/v4/fast": 1e4,
+    "ideogram:4@0": 1e4,
     "nano-banana-2.1": 50000,
     "qwen-image-2.1-pro": 3000,
     "riverflow-2-fast": 3000,
     "riverflow-2-max": 3000,
-    "ideogram:4@0": 3000,
     "prunaai:1@1": 3000,
     "midjourney/text-to-image": 1024,
     "z-image-turbo": 1200,
@@ -22862,9 +22864,34 @@ var init_image_prompt_profile = __esm(() => {
 });
 
 // src/shared/image-prompt-profile-v2.ts
-function resolveRouteDialect(provider, modelId, parameters) {
+function resolveRouteDialect(provider, modelId, parameters, settings) {
   const normModel = modelId.trim().toLowerCase();
   const normProvider = provider.trim().toLowerCase();
+  const ideogramMode = settings?.ideogramPromptMode ?? "auto";
+  if (ideogramMode === "json" || ideogramMode === "structured-prose") {
+    return {
+      dialect: "ideogram-v4",
+      family: "ideogram",
+      negativePolicy: "positive-only",
+      features: { references: true, exactText: true, layoutBoxes: true }
+    };
+  }
+  if (ideogramMode === "off" && normModel.includes("ideogram")) {
+    return {
+      dialect: "generic-prose",
+      family: "ideogram",
+      negativePolicy: "positive-only",
+      features: { references: true }
+    };
+  }
+  if (normModel.includes("ideogram")) {
+    return {
+      dialect: "ideogram-v4",
+      family: "ideogram",
+      negativePolicy: "positive-only",
+      features: { references: true, exactText: true, layoutBoxes: true }
+    };
+  }
   if (normProvider === "novelai") {
     return {
       dialect: "novelai",
@@ -22985,7 +23012,7 @@ function resolveImagePromptProfileV2(provider, model, settings = {}, liveLimits,
   const p = provider?.trim().toLowerCase() ?? "";
   const rawModel = model?.trim() ?? "unknown";
   const id3 = rawModel;
-  const resolution = resolveRouteDialect(p, id3, parameters);
+  const resolution = resolveRouteDialect(p, id3, parameters, settings);
   const dialect = resolution.dialect;
   const family2 = resolution.family;
   const liveLimit = p === "nanogpt" ? liveLimits?.get(id3) : undefined;
@@ -23008,7 +23035,8 @@ function resolveImagePromptProfileV2(provider, model, settings = {}, liveLimits,
     anima: 3000,
     novelai: 3000,
     "generic-prose": 3000,
-    "generic-tags": 3000
+    "generic-tags": 3000,
+    "ideogram-v4": 1e4
   };
   const defaultCeiling = providerLimit ?? dialectFallbackCeiling[dialect] ?? 3000;
   let hardMaxCharacters = defaultCeiling;
@@ -23035,6 +23063,7 @@ function resolveImagePromptProfileV2(provider, model, settings = {}, liveLimits,
     softBudgets,
     ...resolution.promptExpansion ? { promptExpansion: resolution.promptExpansion } : {},
     features: resolution.features,
+    ...dialect === "ideogram-v4" ? { ideogramMode: settings.ideogramPromptMode === "structured-prose" ? "structured-prose" : "json" } : {},
     ...outputCapabilities ? { outputCapabilities } : {},
     guidance: `Dialect: ${dialect}. Model-aware Prompt Engine v2.`
   });
@@ -23056,7 +23085,8 @@ var init_image_prompt_profile_v2 = __esm(() => {
     "anima",
     "novelai",
     "generic-prose",
-    "generic-tags"
+    "generic-tags",
+    "ideogram-v4"
   ]);
   NegativePolicySchema = exports_external.enum([
     "native",
@@ -23090,6 +23120,7 @@ var init_image_prompt_profile_v2 = __esm(() => {
       enabled: exports_external.boolean().optional()
     }).strict().optional(),
     features: ProfileFeaturesSchema,
+    ideogramMode: exports_external.enum(["json", "structured-prose"]).optional(),
     outputCapabilities: ModelOutputCapabilitiesSchema.optional(),
     guidance: exports_external.string().max(2400).optional()
   }).strict();
@@ -23159,6 +23190,12 @@ var init_image_prompt_profile_v2 = __esm(() => {
       standard: [400, 750],
       complex: [500, 900],
       dense: [600, 1000]
+    },
+    "ideogram-v4": {
+      simple: [800, 2500],
+      standard: [1500, 4500],
+      complex: [2500, 7000],
+      dense: [3500, 9500]
     }
   };
   QWEN3_NO_EXPANSION_BUDGETS = {
@@ -26462,6 +26499,7 @@ function normalizeConfigUncached(input2) {
     defaultImageTemplateId: nullableString(input2.defaultImageTemplateId) ?? "portrait",
     imageTemplates: input2.imageTemplates === undefined ? migrateImageTemplates(promptPresetList(input2.promptPresets)) : upgradeImageTemplates(input2.imageTemplates),
     imagePromptEngineVersion: input2.imagePromptEngineVersion === 1 ? 1 : 2,
+    ideogramPromptMode: input2.ideogramPromptMode === "json" || input2.ideogramPromptMode === "structured-prose" || input2.ideogramPromptMode === "off" ? input2.ideogramPromptMode : "auto",
     dialogueSafeArea: input2.dialogueSafeArea === "always" ? "always" : input2.dialogueSafeArea === "off" ? "off" : "auto",
     imageFramingDirector: bool(input2.imageFramingDirector, true),
     imagePromptDetail: input2.imagePromptDetail === "compact" || input2.imagePromptDetail === "standard" || input2.imagePromptDetail === "detailed" ? input2.imagePromptDetail : "auto",
@@ -26570,6 +26608,7 @@ var init_config = __esm(() => {
     defaultImageTemplateId: "portrait",
     imageTemplates: BUILTIN_IMAGE_TEMPLATES.map((template) => ({ ...template })),
     imagePromptEngineVersion: 2,
+    ideogramPromptMode: "auto",
     dialogueSafeArea: "auto",
     imageFramingDirector: true,
     imagePromptDetail: "auto",
@@ -29918,12 +29957,16 @@ function buildVisualBrief(config2, scene, cue, appearances, characterDNALibrary)
   const nameBudget = members2.reduce((total, member) => total + member.name.length + 4, 0);
   if (ensemble && nameBudget > 4000)
     throw new Error("The ensemble names exceed the prompt preview limit. Shorten cast display names before preparing this picture.");
-  const descriptionBudget = Math.max(0, Math.floor((Math.max(1800, nameBudget) - nameBudget) / Math.max(1, members2.length)));
+  const isHighCap = Boolean(config2.imageModel && /ideogram|recraft|grok|flux.*pro|midjourney|gpt-image/i.test(config2.imageModel)) || Boolean(config2.imagePromptBudgetOverride);
+  const baseBudget = isHighCap ? config2.imagePromptBudgetOverride ? config2.imagePromptBudget : 4000 : 1800;
+  const descriptionBudget = Math.max(0, Math.floor((Math.max(baseBudget, nameBudget) - nameBudget) / Math.max(1, members2.length)));
   const group = members2.map((member) => {
     const look = member.appearance.trim();
-    const description = `${look || "appearance not established"}${"attire" in member && member.attire ? `; wearing ${member.attire}` : ""}`;
-    const bounded = description.length > descriptionBudget ? description.slice(0, descriptionBudget).replace(/\s+\S*$/, "") : description;
-    return `${member.name}: ${bounded}`;
+    const attireText = "attire" in member && member.attire ? `; wearing ${member.attire}` : "";
+    const remainingForLook = Math.max(0, descriptionBudget - attireText.length);
+    const boundedLook = look.length > remainingForLook ? look.slice(0, remainingForLook).replace(/\s+\S*$/, "") : look;
+    const description = `${boundedLook || "appearance not established"}${attireText}`;
+    return `${member.name}: ${description}`;
   }).join(`
 `);
   return {
@@ -41328,14 +41371,14 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
     for (const name of visible) {
       const person = resolveCharacterReference(registry2, { name });
       const persona = isPersona(name);
-      const canonical = persona ? personaName : person?.name;
+      const canonical = persona ? personaName : person?.name ?? normalizeCharacterName(name);
       if (!canonical || ensembleSubjects.some((item) => characterAppearanceKey(item.name) === characterAppearanceKey(canonical)))
         continue;
       const savedKey = appearanceMapKeyFor(input2.characterAppearance, canonical);
       const saved = savedKey ? input2.characterAppearance[savedKey] : "";
       const description = saved || (persona ? distillVisualTags(visualContext.personaIdentity?.description ?? "").join(", ") : person?.tags ?? "");
       const current = timeline.snapshots[cue.paragraphIndex];
-      const outfit = characterAppearanceKey(canonical) === characterAppearanceKey(current.character ?? "") ? current.attire : null;
+      const outfit = characterAppearanceKey(canonical) === characterAppearanceKey(current.character ?? "") ? current.attire : timeline.snapshots.find((s) => characterAppearanceKey(canonical) === characterAppearanceKey(s.character ?? ""))?.attire ?? null;
       ensembleSubjects.push({ name: canonical, appearance: description.slice(0, 1200), ...outfit ? { attire: outfit.slice(0, 600) } : {}, ...persona ? { persona: true } : {} });
     }
     return VisualCueSchema.parse({
@@ -44251,6 +44294,217 @@ var init_generic_tags = __esm(() => {
   init_prompt_document();
   init_helpers();
 });
+
+// src/backend/runtime/prompt-serializers/ideogram-v4.ts
+function extractIdeogramPalette(brief, styleDNA) {
+  if (styleDNA?.palette && Array.isArray(styleDNA.palette)) {
+    const validHex = styleDNA.palette.map((c) => c.trim().toUpperCase()).filter((c) => /^#[0-9A-F]{6}$/i.test(c));
+    if (validHex.length >= 3) {
+      return validHex.slice(0, 8);
+    }
+  }
+  const text4 = `${brief.lighting || ""} ${brief.scene || ""}`.toLowerCase();
+  if (/\b(?:night|midnight|moon|dark|shadow|rain|storm)\b/.test(text4)) {
+    return ["#0B1021", "#1C2541", "#3A86FF", "#60A5FA", "#E2E8F0"];
+  }
+  if (/\b(?:sunset|dusk|twilight|golden hour|evening)\b/.test(text4)) {
+    return ["#1C1917", "#7C2D12", "#D97706", "#F59E0B", "#FEF3C7"];
+  }
+  if (/\b(?:neon|cyber|cyberpunk|scifi|sci-fi)\b/.test(text4)) {
+    return ["#0D0221", "#0F084B", "#FF2A85", "#00F0FF", "#F4F4F9"];
+  }
+  if (/\b(?:forest|nature|wood|tree|garden|autumn)\b/.test(text4)) {
+    return ["#052E16", "#14532D", "#16A34A", "#CA8A04", "#FEF08A"];
+  }
+  if (/\b(?:indoor|candle|lamp|warm|interior|library|parlor)\b/.test(text4)) {
+    return ["#18181B", "#3F3F46", "#B45309", "#F59E0B", "#FEF08A"];
+  }
+  if (/\b(?:dawn|morning|sun|sunny|bright|day)\b/.test(text4)) {
+    return ["#0F172A", "#1E3A8A", "#38BDF8", "#FDE047", "#F8FAFC"];
+  }
+  return ["#0F172A", "#334155", "#64748B", "#94A3B8", "#F8FAFC"];
+}
+function isPhotographicMedium(styleDNA, brief) {
+  const medium = (styleDNA?.medium || "").toLowerCase();
+  const prefix = (styleDNA?.prefix || "").toLowerCase();
+  const combined = `${medium} ${prefix}`;
+  if (/\b(?:photo|photograph|35mm|film|dslr|candid|cinematic realism|raw photo)\b/.test(combined)) {
+    return true;
+  }
+  if (/\b(?:anime|illustration|drawing|manga|digital art|painting|comic|vector)\b/.test(combined)) {
+    return false;
+  }
+  return false;
+}
+function extractQuotedText(text4) {
+  const match = text4.match(/['"]([^'"]{1,40})['"]/);
+  return match && match[1] ? match[1].trim() : null;
+}
+function serializeIdeogramV4(input2) {
+  const { brief, shotSpec, styleDNA, profile, cue } = input2;
+  const warnings = [];
+  const sections = [];
+  const subjects = parseSubjectsFromBrief(brief, cue);
+  const palette = extractIdeogramPalette(brief, styleDNA);
+  const isPhoto = isPhotographicMedium(styleDNA, brief);
+  const isDirectJson = profile.ideogramMode !== "structured-prose";
+  const cameraText = formatCameraFraming(shotSpec, styleDNA) || "medium shot";
+  const prefix = styleDNA?.prefix?.trim() ? `${styleDNA.prefix.trim()}. ` : "";
+  if (isDirectJson) {
+    let subjectSummary = "";
+    if (brief.subjectMode === "none") {
+      subjectSummary = `a cinematic view of ${cue?.visualFocus || brief.action || "the scene"}, with no visible people`;
+    } else if (brief.subjectMode === "ensemble" || subjects.length > 1) {
+      subjectSummary = `an ensemble scene with ${subjects.length} visible characters: ${subjects.map((s) => s.name).join(" and ")}`;
+    } else {
+      const main = subjects[0];
+      const attire = main?.attire ? ` wearing ${main.attire}` : "";
+      subjectSummary = `${main?.name || "a character"} (${main?.appearance || "distinct features"}${attire})`;
+    }
+    const actionText = brief.action ? ` ${brief.action.trim().replace(/\.+$/, "")}.` : "";
+    const highLevel = `${prefix}${isPhoto ? "A candid" : "A detailed"} ${cameraText} ${isPhoto ? "photograph" : "illustration"} of ${subjectSummary} in ${brief.scene.trim()}.${actionText}`.replace(/\s+/g, " ").trim();
+    const styleDescription = {};
+    if (isPhoto) {
+      styleDescription.aesthetics = `${prefix}Atmospheric cinematic realism with balanced dynamic range, authentic surface textures, and fine tonal gradation.`.trim();
+      styleDescription.lighting = brief.lighting ? `${brief.lighting.trim()}, providing natural directional fill and soft ambient falloff.` : "Natural ambient lighting with soft directional fill and atmospheric bounce.";
+      styleDescription.photo = `Shot on a full-frame sensor with a ${shotSpec?.camera?.lens || "35mm"} prime lens, f/1.8 aperture, tack-sharp focal plane, and natural depth of field.`;
+      styleDescription.medium = "photograph";
+      styleDescription.color_palette = palette;
+    } else {
+      styleDescription.aesthetics = `${prefix}Intricate visual novel illustration with expressive character artistry, clean silhouette definition, and rich environmental depth.`.trim();
+      styleDescription.lighting = brief.lighting ? `${brief.lighting.trim()}, creating gentle rim lighting and volumetric atmospheric mood.` : "Cinematic atmospheric lighting with gentle rim accents and balanced contrast.";
+      styleDescription.medium = "digital_illustration";
+      styleDescription.art_style = "Crisp refined line art combined with layered volumetric shading, clean material textures, and painterly environmental depth.";
+      styleDescription.color_palette = palette;
+    }
+    const elements = [];
+    if (brief.subjectMode === "ensemble" && subjects.length >= 2) {
+      const charWidth = Math.floor(800 / Math.min(subjects.length, 3));
+      subjects.slice(0, 3).forEach((sub, i) => {
+        const xMin = 80 + i * charWidth;
+        const xMax = Math.min(960, xMin + charWidth - 40);
+        const attireStr = sub.attire ? `, wearing ${sub.attire}` : "";
+        elements.push({
+          type: "obj",
+          bbox: [160, xMin, 880, xMax],
+          desc: `${sub.name}: ${sub.appearance}${attireStr}. Positioned ${i === 0 ? "on the left" : i === 1 ? "towards the center" : "on the right"} of the scene.`,
+          color_palette: [palette[i % palette.length], palette[(i + 1) % palette.length]]
+        });
+      });
+    } else if (subjects.length === 1 && brief.subjectMode !== "none") {
+      const main = subjects[0];
+      const attireStr = main.attire ? `, wearing ${main.attire}` : "";
+      elements.push({
+        type: "obj",
+        bbox: [120, 200, 880, 800],
+        desc: `${main.name}: ${main.appearance}${attireStr}, ${main.action || brief.action || "featured in the scene"}.`,
+        color_palette: [palette[0], palette[1]]
+      });
+      elements.push({
+        type: "obj",
+        bbox: [480, 320, 800, 680],
+        desc: cue?.visualFocus ? `Featured focal element: ${cue.visualFocus}.` : "Featured interaction prop and immediate environmental details.",
+        color_palette: [palette[2], palette[3]]
+      });
+    } else {
+      elements.push({
+        type: "obj",
+        bbox: [180, 150, 820, 850],
+        desc: cue?.visualFocus ? `Central focus: ${cue.visualFocus}.` : "Central focal scenery and primary architectural features.",
+        color_palette: [palette[0], palette[1]]
+      });
+    }
+    elements.push({
+      type: "obj",
+      bbox: [760, 40, 960, 960],
+      desc: "Immediate foreground floor plane with detailed material textures, reflections, and spatial perspective.",
+      color_palette: [palette[0], palette[1]]
+    });
+    elements.push({
+      type: "obj",
+      bbox: [180, 40, 740, 960],
+      desc: `Midground environmental backdrop: ${brief.scene.slice(0, 200).replace(/\s+\S*$/, "")}.`,
+      color_palette: [palette[2], palette[3]]
+    });
+    elements.push({
+      type: "obj",
+      bbox: [20, 40, 360, 960],
+      desc: "Upper ceiling structure, sky gradient, and atmospheric volumetric light spill overhead.",
+      color_palette: [palette[3], palette[4] || palette[0]]
+    });
+    const quoteInAction = extractQuotedText(`${brief.action} ${cue?.visualFocus || ""}`);
+    if (quoteInAction && elements.length < 6) {
+      elements.unshift({
+        type: "text",
+        bbox: [80, 150, 200, 850],
+        text: quoteInAction.slice(0, 35),
+        desc: "Sharp, elegant typography displayed cleanly on an environmental sign or surface.",
+        color_palette: [palette[1], palette[4] || palette[0]]
+      });
+    }
+    const payload = {
+      high_level_description: highLevel,
+      style_description: styleDescription,
+      compositional_deconstruction: {
+        background: brief.scene ? `${brief.scene.trim()}. Atmospheric depth with detailed environmental surfaces.` : "An evocative, detailed scene environment with natural architectural depth and rich surfaces.",
+        elements: elements.slice(0, 6)
+      }
+    };
+    const minifiedJson = JSON.stringify(payload);
+    sections.push({
+      id: "ideogram-json",
+      priority: 0,
+      required: true,
+      compressible: false,
+      text: minifiedJson
+    });
+    return {
+      document: createPromptDocument("ideogram-v4", sections, [], undefined, warnings),
+      prompt: minifiedJson,
+      negativePrompt: undefined,
+      warnings
+    };
+  }
+  const shotMediumText = `A ${cameraText} ${isPhoto ? "photograph" : "digital illustration"} of`;
+  let subjectsText = "";
+  if (brief.subjectMode === "none") {
+    subjectsText = `the environment featuring ${cue?.visualFocus || brief.action || "the scenery"}, with no people present`;
+  } else if (brief.subjectMode === "ensemble" || subjects.length > 1) {
+    const list = subjects.map((s, idx) => {
+      const pos = idx === 0 ? "positioned on the left" : idx === 1 ? "positioned on the right" : "in the center";
+      const attire = s.attire ? `, wearing ${s.attire}` : "";
+      return `${s.name} (${s.appearance}${attire}) ${pos}`;
+    }).join("; ");
+    subjectsText = `an ensemble of ${subjects.length} characters: ${list}. Action: ${brief.action || "interacting together"}`;
+  } else {
+    const main = subjects[0];
+    const attire = main?.attire ? `, wearing ${main.attire}` : "";
+    subjectsText = `${main?.name || "Character"} (${main?.appearance || "distinct traits"}${attire}), ${main?.action || brief.action || "in the scene"}`;
+  }
+  const quoted = extractQuotedText(`${brief.action} ${cue?.visualFocus || ""}`);
+  const textClause = quoted ? ` featuring clean typography reading '${quoted}'` : "";
+  const backgroundText = `Behind, ${brief.scene}.`;
+  const lightingSpecs = `${brief.lighting ? `${brief.lighting}, ` : ""}${isPhoto ? "shot on 35mm film, f/1.8 aperture, natural depth of field and tack-sharp focus" : "clean linework, rich volumetric shading, and painterly depth"}.`;
+  const paletteText = `color palette ${palette.join(", ")}`;
+  const structuredPrompt = `${shotMediumText} ${subjectsText}${textClause}. ${backgroundText} ${lightingSpecs} ${paletteText}`;
+  sections.push({
+    id: "ideogram-structured-prose",
+    priority: 0,
+    required: true,
+    compressible: false,
+    text: structuredPrompt
+  });
+  return {
+    document: createPromptDocument("ideogram-v4", sections, [], undefined, warnings),
+    prompt: structuredPrompt,
+    negativePrompt: undefined,
+    warnings
+  };
+}
+var init_ideogram_v4 = __esm(() => {
+  init_prompt_document();
+  init_helpers();
+});
 // src/backend/runtime/prompt-serializers/index.ts
 function getPromptSerializer(dialect) {
   return SERIALIZER_MAP[dialect] ?? serializeGenericProse;
@@ -44267,6 +44521,7 @@ var init_prompt_serializers = __esm(() => {
   init_anima();
   init_generic_prose();
   init_generic_tags();
+  init_ideogram_v4();
   init_flux3_klein();
   init_flux3();
   init_gpt_image_25();
@@ -44277,6 +44532,7 @@ var init_prompt_serializers = __esm(() => {
   init_anima();
   init_generic_prose();
   init_generic_tags();
+  init_ideogram_v4();
   init_helpers();
   SERIALIZER_MAP = {
     "flux3-klein": serializeFlux3Klein,
@@ -44289,7 +44545,8 @@ var init_prompt_serializers = __esm(() => {
     anima: serializeAnima,
     novelai: serializeAnima,
     "generic-prose": serializeGenericProse,
-    "generic-tags": serializeGenericTags
+    "generic-tags": serializeGenericTags,
+    "ideogram-v4": serializeIdeogramV4
   };
 });
 
@@ -44494,7 +44751,7 @@ function compileModelPrompt(input2) {
   const {
     brief,
     shotSpec,
-    styleDNA,
+    styleDNA = {},
     profile,
     outputPlan,
     referencePlan,
@@ -44525,7 +44782,8 @@ function compileModelPrompt(input2) {
     return sec;
   });
   const cleanPrefix = styleDNA.prefix?.trim() ?? "";
-  if (cleanPrefix) {
+  const isIdeogramJson = profile.dialect === "ideogram-v4" && profile.ideogramMode !== "structured-prose";
+  if (cleanPrefix && !isIdeogramJson) {
     const prefixText = isTagDialect ? cleanPrefix.replace(/[,;:\s]+$/, "") : formatProseSentence(cleanPrefix, true);
     if (prefixText) {
       sections = [
@@ -44541,7 +44799,7 @@ function compileModelPrompt(input2) {
     }
   }
   const cleanSuffix = styleDNA.suffix?.trim() ?? "";
-  if (cleanSuffix) {
+  if (cleanSuffix && !isIdeogramJson) {
     const suffixText = isTagDialect ? cleanSuffix.replace(/^[,;:\s]+/, "").replace(/[,;:\s]+$/, "") : formatProseSentence(cleanSuffix, true);
     if (suffixText) {
       const constraintsIdx = sections.findIndex((s) => s.id === "constraints" || s.id === "sec-constraints" || s.id === "references");

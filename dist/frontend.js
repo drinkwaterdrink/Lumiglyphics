@@ -22939,6 +22939,7 @@ var SETTINGS_FIELD_PAGES = {
   imageFramingDirector: "images",
   imagePromptDetail: "images",
   imagePromptEngineVersion: "images",
+  ideogramPromptMode: "images",
   dynamicImageTemplates: "templates",
   defaultImageTemplateId: "templates",
   imageTemplates: "templates",
@@ -37428,6 +37429,7 @@ var DEFAULT_CONFIG = {
   defaultImageTemplateId: "portrait",
   imageTemplates: BUILTIN_IMAGE_TEMPLATES.map((template) => ({ ...template })),
   imagePromptEngineVersion: 2,
+  ideogramPromptMode: "auto",
   dialogueSafeArea: "auto",
   imageFramingDirector: true,
   imagePromptDetail: "auto",
@@ -42552,11 +42554,13 @@ var NANOGPT_PROMPT_CAPABILITIES = {
   "openai/gpt-image-2.5/sunburst/edit": 32000,
   "ideogram/v4.5": 1e4,
   "ideogram/v4.5/edit": 1e4,
+  "ideogram/v4/instant": 1e4,
+  "ideogram/v4/fast": 1e4,
+  "ideogram:4@0": 1e4,
   "nano-banana-2.1": 50000,
   "qwen-image-2.1-pro": 3000,
   "riverflow-2-fast": 3000,
   "riverflow-2-max": 3000,
-  "ideogram:4@0": 3000,
   "prunaai:1@1": 3000,
   "midjourney/text-to-image": 1024,
   "z-image-turbo": 1200,
@@ -46506,6 +46510,16 @@ class VisualNovelSettingsPanel {
                 </select>
                 <small>V2 compiles prompts specifically for FLUX, Grok, GPT, Qwen, Anima, etc. with dynamic camera angles. V1 uses legacy static string templates.</small>
               </label>
+              <label data-field ${find("Ideogram prompt mode", "ideogram prompt mode json bbox bounding box structured prose auto")}>
+                <span>Ideogram prompting style</span>
+                <select name="ideogramPromptMode">
+                  <option value="auto">Auto (Direct JSON for Ideogram, standard for others)</option>
+                  <option value="json">Direct JSON (Native Ideogram 4 bounding boxes &amp; palettes)</option>
+                  <option value="structured-prose">Structured Plain-Text (Ideogram 6-part formula)</option>
+                  <option value="off">Off (Standard prose)</option>
+                </select>
+                <small>Direct JSON uses Ideogram 4's native schema with bounding boxes and color palettes to lock composition and bypass safety refusals. You can also force it for other models to experiment.</small>
+              </label>
               <label data-field ${find("Dialogue safe area", "safe area text overlay dialogue speech framing clearance")}>
                 <span>Dialogue safe area</span>
                 <select name="dialogueSafeArea">
@@ -47442,6 +47456,8 @@ class VisualNovelSettingsPanel {
         return { dynamicImageTemplates: checked };
       case "imagePromptEngineVersion":
         return { imagePromptEngineVersion: target2.value === "1" ? 1 : 2 };
+      case "ideogramPromptMode":
+        return { ideogramPromptMode: target2.value };
       case "automaticImagePromptSettings":
         return { automaticImagePromptSettings: checked };
       case "imagePromptBudgetOverride":
@@ -48137,6 +48153,7 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
   }
   syncEveryday(config2) {
     this.control("imagePromptEngineVersion").value = String(config2.imagePromptEngineVersion ?? 2);
+    this.control("ideogramPromptMode").value = config2.ideogramPromptMode ?? "auto";
     this.control("imageResolutionPreference").value = config2.imageResolutionPreference ?? "high";
     this.control("dialogueSafeArea").value = config2.dialogueSafeArea ?? "auto";
     this.control("imagePromptDetail").value = config2.imagePromptDetail ?? "auto";
@@ -48953,7 +48970,8 @@ var PromptDialectIdSchema = exports_external.enum([
   "anima",
   "novelai",
   "generic-prose",
-  "generic-tags"
+  "generic-tags",
+  "ideogram-v4"
 ]);
 var NegativePolicySchema = exports_external.enum([
   "native",
@@ -48987,6 +49005,7 @@ var ImagePromptProfileV2Schema = exports_external.object({
     enabled: exports_external.boolean().optional()
   }).strict().optional(),
   features: ProfileFeaturesSchema,
+  ideogramMode: exports_external.enum(["json", "structured-prose"]).optional(),
   outputCapabilities: ModelOutputCapabilitiesSchema.optional(),
   guidance: exports_external.string().max(2400).optional()
 }).strict();
@@ -49057,6 +49076,12 @@ var DIALECT_BUDGETS = {
     standard: [400, 750],
     complex: [500, 900],
     dense: [600, 1000]
+  },
+  "ideogram-v4": {
+    simple: [800, 2500],
+    standard: [1500, 4500],
+    complex: [2500, 7000],
+    dense: [3500, 9500]
   }
 };
 var QWEN3_NO_EXPANSION_BUDGETS = {
@@ -49065,9 +49090,34 @@ var QWEN3_NO_EXPANSION_BUDGETS = {
   complex: [800, 1400],
   dense: [900, 1500]
 };
-function resolveRouteDialect(provider, modelId, parameters) {
+function resolveRouteDialect(provider, modelId, parameters, settings) {
   const normModel = modelId.trim().toLowerCase();
   const normProvider = provider.trim().toLowerCase();
+  const ideogramMode = settings?.ideogramPromptMode ?? "auto";
+  if (ideogramMode === "json" || ideogramMode === "structured-prose") {
+    return {
+      dialect: "ideogram-v4",
+      family: "ideogram",
+      negativePolicy: "positive-only",
+      features: { references: true, exactText: true, layoutBoxes: true }
+    };
+  }
+  if (ideogramMode === "off" && normModel.includes("ideogram")) {
+    return {
+      dialect: "generic-prose",
+      family: "ideogram",
+      negativePolicy: "positive-only",
+      features: { references: true }
+    };
+  }
+  if (normModel.includes("ideogram")) {
+    return {
+      dialect: "ideogram-v4",
+      family: "ideogram",
+      negativePolicy: "positive-only",
+      features: { references: true, exactText: true, layoutBoxes: true }
+    };
+  }
   if (normProvider === "novelai") {
     return {
       dialect: "novelai",
@@ -49188,7 +49238,7 @@ function resolveImagePromptProfileV2(provider, model, settings = {}, liveLimits,
   const p = provider?.trim().toLowerCase() ?? "";
   const rawModel = model?.trim() ?? "unknown";
   const id8 = rawModel;
-  const resolution = resolveRouteDialect(p, id8, parameters);
+  const resolution = resolveRouteDialect(p, id8, parameters, settings);
   const dialect = resolution.dialect;
   const family2 = resolution.family;
   const liveLimit = p === "nanogpt" ? liveLimits?.get(id8) : undefined;
@@ -49211,7 +49261,8 @@ function resolveImagePromptProfileV2(provider, model, settings = {}, liveLimits,
     anima: 3000,
     novelai: 3000,
     "generic-prose": 3000,
-    "generic-tags": 3000
+    "generic-tags": 3000,
+    "ideogram-v4": 1e4
   };
   const defaultCeiling = providerLimit ?? dialectFallbackCeiling[dialect] ?? 3000;
   let hardMaxCharacters = defaultCeiling;
@@ -49238,6 +49289,7 @@ function resolveImagePromptProfileV2(provider, model, settings = {}, liveLimits,
     softBudgets,
     ...resolution.promptExpansion ? { promptExpansion: resolution.promptExpansion } : {},
     features: resolution.features,
+    ...dialect === "ideogram-v4" ? { ideogramMode: settings.ideogramPromptMode === "structured-prose" ? "structured-prose" : "json" } : {},
     ...outputCapabilities ? { outputCapabilities } : {},
     guidance: `Dialect: ${dialect}. Model-aware Prompt Engine v2.`
   });
@@ -49683,7 +49735,7 @@ function modelOutputHelp(provider, model, parameters) {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.8-beta.139";
+var LUMIGLYPHICS_VERSION = "0.2.9-beta.140";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;

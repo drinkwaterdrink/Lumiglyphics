@@ -30,6 +30,8 @@ export type VisualNovelEffectIntensity = (typeof EFFECT_INTENSITIES)[number];
  */
 export const TEXT_EFFECT_MODES = ["animated", "static", "off"] as const;
 export type VisualNovelTextEffectMode = (typeof TEXT_EFFECT_MODES)[number];
+export const IDEOGRAM_PROMPT_MODES = ["auto", "json", "structured-prose", "off"] as const;
+export type IdeogramPromptMode = (typeof IDEOGRAM_PROMPT_MODES)[number];
 
 /**
  * Where a character's reference anchor image comes from.
@@ -98,6 +100,7 @@ export type VisualNovelConfig = {
   defaultImageTemplateId: string;
   imageTemplates: ImageTemplate[];
   imagePromptEngineVersion?: 1 | 2;
+  ideogramPromptMode?: IdeogramPromptMode;
   dialogueSafeArea: "auto" | "always" | "off";
   imageFramingDirector?: boolean;
   imagePromptDetail?: "auto" | "compact" | "standard" | "detailed";
@@ -188,6 +191,7 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   defaultImageTemplateId: "portrait",
   imageTemplates: BUILTIN_IMAGE_TEMPLATES.map(template => ({ ...template })),
   imagePromptEngineVersion: 2,
+  ideogramPromptMode: "auto",
   dialogueSafeArea: "auto",
   imageFramingDirector: true,
   imagePromptDetail: "auto",
@@ -420,6 +424,7 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     defaultImageTemplateId: nullableString(input.defaultImageTemplateId) ?? "portrait",
     imageTemplates: input.imageTemplates === undefined ? migrateImageTemplates(promptPresetList(input.promptPresets)) : upgradeImageTemplates(input.imageTemplates),
     imagePromptEngineVersion: input.imagePromptEngineVersion === 1 ? 1 : 2,
+    ideogramPromptMode: input.ideogramPromptMode === "json" || input.ideogramPromptMode === "structured-prose" || input.ideogramPromptMode === "off" ? input.ideogramPromptMode : "auto",
     dialogueSafeArea: input.dialogueSafeArea === "always" ? "always" : input.dialogueSafeArea === "off" ? "off" : "auto",
     imageFramingDirector: bool(input.imageFramingDirector, true),
     imagePromptDetail: input.imagePromptDetail === "compact" || input.imagePromptDetail === "standard" || input.imagePromptDetail === "detailed" ? input.imagePromptDetail : "auto",

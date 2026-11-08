@@ -10,6 +10,7 @@ import { serializeSeedream5 } from './seedream-5.js';
 import { serializeAnima } from './anima.js';
 import { serializeGenericProse } from './generic-prose.js';
 import { serializeGenericTags } from './generic-tags.js';
+import { serializeIdeogramV4 } from './ideogram-v4.js';
 
 export * from './types.js';
 export * from './helpers.js';
@@ -23,6 +24,7 @@ export { serializeSeedream5 } from './seedream-5.js';
 export { serializeAnima } from './anima.js';
 export { serializeGenericProse } from './generic-prose.js';
 export { serializeGenericTags } from './generic-tags.js';
+export { serializeIdeogramV4 } from './ideogram-v4.js';
 
 const SERIALIZER_MAP: Record<PromptDialectId, PromptSerializer> = {
   'flux3-klein': serializeFlux3Klein,
@@ -35,7 +37,8 @@ const SERIALIZER_MAP: Record<PromptDialectId, PromptSerializer> = {
   'anima': serializeAnima,
   'novelai': serializeAnima,
   'generic-prose': serializeGenericProse,
-  'generic-tags': serializeGenericTags
+  'generic-tags': serializeGenericTags,
+  'ideogram-v4': serializeIdeogramV4
 };
 
 export function getPromptSerializer(dialect: PromptDialectId): PromptSerializer {
