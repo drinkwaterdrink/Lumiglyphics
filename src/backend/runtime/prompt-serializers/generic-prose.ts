@@ -29,7 +29,12 @@ export function serializeGenericProse(input: SerializerInput): SerializerResult 
     const firstName = main?.name ? (main.name.split(' ')[0] || main.name) : '';
     const nameRegex = firstName ? new RegExp(`^(?:${main?.name}|${firstName})\\s+`, 'i') : null;
     const cleanAct = nameRegex && nameRegex.test(rawAct) ? rawAct.replace(nameRegex, '') : rawAct;
-    subjectText = `${main?.name || 'Character'} with ${main?.appearance || 'distinct traits'}${attire}, currently ${cleanAct}.`.replace(/\.\.+$/, '.');
+    const isNarrativeBlock = cleanAct.includes('. ') || cleanAct.length > 120 || /^[A-Z]/.test(cleanAct);
+    if (isNarrativeBlock) {
+      subjectText = `Subject: ${main?.name || 'Character'} (${main?.appearance || 'distinct traits'}${attire}). Scene action: ${cleanAct}.`.replace(/\.\.+$/, '.');
+    } else {
+      subjectText = `${main?.name || 'Character'} with ${main?.appearance || 'distinct traits'}${attire}, currently ${cleanAct}.`.replace(/\.\.+$/, '.');
+    }
   }
 
   sections.push({
@@ -41,7 +46,7 @@ export function serializeGenericProse(input: SerializerInput): SerializerResult 
   });
 
   // Camera & Framing (P1)
-  const cameraText = formatCameraFraming(shotSpec);
+  const cameraText = formatCameraFraming(shotSpec, styleDNA);
   if (cameraText) {
     sections.push({
       id: 'camera',

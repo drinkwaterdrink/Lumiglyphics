@@ -420,3 +420,141 @@ test('Lighting overlay precedence: direct flash provides intentional lighting ov
 });
 
 test('a two-person ensemble remains a two-shot when a character description contains another colon',()=>{expect(resolveShotIntent(createMockBrief({subjectMode:'ensemble',subjects:'Mira: silver hair, tattoo: compass\nJo: black curls',action:'standing by a window'}))).toBe('two-shot');});
+
+test('Smart photo prompt generator deduplicates Character DNA, strips NovelAI brackets, separates multi-subject action, and preserves custom style prefix + suffix', async () => {
+  const { formatCharacterDNAToPromptClause, CharacterDNASchema } = await import('../../shared/character-dna.js');
+  const { buildVisualBrief } = await import('./visual-brief.js');
+  const { compileModelPrompt } = await import('./model-prompt-compiler.js');
+  const { resolveImagePromptProfileV2 } = await import('../../shared/image-prompt-profile-v2.js');
+  const { SceneStateSchema, VisualCueSchema } = await import('../../shared/contracts.js');
+
+  const dna = CharacterDNASchema.parse({
+    id: 'marseline-vane',
+    name: 'Marseline Vane',
+    locked: true,
+    build: {
+      age: '19',
+      bodyType: 'razor-lean, angular',
+      gender: 'woman',
+      species: 'human',
+      bust: 'for her lean frame',
+      skinTone: 'hollow-cheeked, pale complexion with violet fatigue circles'
+    },
+    faceFeatures: 'wide crooked mouth; violet fatigue circles, pretty',
+    hair: {
+      length: 'bob length',
+      style: 'hacked bob with lead sinker rattails',
+      color: 'oil-slick navy'
+    },
+    eyes: {
+      shape: 'heavy-lidded',
+      color: 'slate gray'
+    },
+    distinguishingFeatures: [
+      'scarred knuckles',
+      'tall razor-lean angular frame',
+      'violet fatigue circles under slate eyes'
+    ],
+    signatureOutfit: 'pinstripe wool waistcoat over tight medical linen, olive canvas slacks, mismatched boots',
+    demeanor: 'sparse deadpan, cold pragmatic precision, dry wit; watchful and coiled'
+  });
+
+  const clause = formatCharacterDNAToPromptClause(dna);
+  expect(clause).toContain('19-year-old');
+  expect(clause).not.toContain('with for her lean frame');
+  expect(clause).not.toContain('circles skin');
+  expect(clause).not.toContain('bob length hacked bob');
+  expect(clause).not.toContain('dry wit');
+  expect(clause).not.toContain('cold pragmatic precision');
+  expect((clause.match(/violet fatigue circles/gi) ?? []).length).toBe(1);
+
+  const customPrefix = 'An unedited, candid iPhone 11 camera roll snapshot, taken handheld from a casual eye-level perspective with a 26mm wide-angle smartphone lens. This captures a natural, non-professional moment with a spontaneous snap aesthetic,';
+  const customSuffix = ', taken with a slightly tilted horizon and casual, off-center framing. The small smartphone sensor captures a deep depth of field where the background remains in focus, showing messy everyday clutter and realistic, lived-in ambient details without cinematic lens blur. Natural lighting, possibly with overexposed white window highlights or a direct handheld flash that casts flat shadows and creates subtle oily skin shine. Unretouched skin with visible pores, natural facial asymmetry, and stray flyaway hairs. Captured on the iPhone\'s auto-exposure, leading to faint digital chroma and luminance noise in the shadows, unpolished color science, and mild mobile image processing. Slightly soft focus and minor motion blur from handheld movement, with unedited JPEG compression and no professional grading.';
+  const customNegative = '8k, masterpiece, cinematic lighting, studio lighting, bokeh, blurred background, professional grading, fashion editorial retouching, plastic skin, poreless, smooth skin, symmetrical framing, exaggerated lens flare, watermark, logo, digital art, rendering, 3D';
+
+  const config: VisualNovelConfig = {
+    ...DEFAULT_CONFIG,
+    selectedSharedStyleId: 'custom-candid',
+    promptPresets: [
+      {
+        id: 'custom-candid',
+        name: 'Realistic candid cellphone shot',
+        positive: customPrefix,
+        suffix: customSuffix,
+        negative: customNegative
+      }
+    ],
+    promptPrefix: customPrefix,
+    promptSuffix: customSuffix,
+    negativePrompt: customNegative
+  };
+
+  const scene = SceneStateSchema.parse({
+    sceneId: 'loft-1',
+    revision: 1,
+    startParagraph: 0,
+    environment: {
+      location: 'Larkward',
+      description: 'Open-plan corner loft of cedar and starch gone arctic: the sheared hardwood crate lid fallen against the hallway wall, sheet-lead and horsehair felt cradle exposed, soot-blackened ceramic urn with a tarnished filigree and carved-ivory cocoon chalice standing in it, draft inverted, frost-white breath pluming from three mouths',
+      timeOfDay: 'late morning, near noon',
+      weather: 'thin harbor mist outside',
+      lighting: 'gray street light dulled by sudden cold, breath fogging in the air, seams of dark amber sap catching a wet gleam',
+      persistentElements: [
+        'gray-black hardwood crate with brass strapping',
+        'sheared lid of kiln-cured wood and gray lead sheeting on the floor runner',
+        'soapstone cocoon-urn in horsehair and black pitch bed',
+        'three bolted brass collars with wax-sealed apertures',
+        'drift-timber dining table',
+        'east berth velvet tool mat and disassembled brass pistol',
+        'galley corner with teacups',
+        'suitcase near south berth'
+      ]
+    },
+    cast: ['Marseline Vane'],
+    character: 'Marseline Vane',
+    identityPrompt: 'Marseline Vane',
+    attire: null,
+    basePrompt: 'loft',
+    compositionLock: 'close-up',
+    continuity: { revision: 1, characters: {}, facts: {} },
+    cameraLock: { framing: 'close-up', angle: 'eye level', perspective: 'straight-on', lens: null, subjectAnchor: 'center', horizon: 'stable', safeDialogueRegion: 'lower quarter', aspectRatio: '16:9' }
+  });
+
+  const cue = VisualCueSchema.parse({
+    cueId: 'cue-1',
+    paragraphIndex: 0,
+    sceneId: 'loft-1',
+    sceneRevision: 1,
+    kind: 'flattened_scene',
+    assetJobId: 'job-1',
+    character: 'Marseline Vane',
+    poseExpressionId: 'shocked',
+    visualDescription: "At the open crate, a tall broad-shouldered young man in water-dark work jeans and heavy boots has lunged forward off balance, both work-hardened hands and one flat right palm slammed against the calcified rim of a soot-blackened ceramic urn as it shifts in its rotting felt cradle. His shoulders crowd the frame, head down, the cold already whitening his breath. Beside and behind him Marseline Vane has staggered back from the crate, bandaged ribs hitting her work table edge, one arm thrown out, the brass tray of screws skidding off the pine boards. At the far right, near the hearth grate, only Kallirrhoe Tskhin's small pale scrambling shape is caught low in the boards, bells shrieking. The loft's gray light has gone flat and frigid; through the cracked seam no visible aura, only the collapsing temperature and the swelling dark of the urn's flared mouth between the man's hand and his face."
+  });
+
+  const brief = buildVisualBrief(config, scene, cue, undefined, { 'marseline-vane': dna });
+  const styleSnapshot = resolveStyleDNA(config);
+  const outputPlan = resolveImageOutputPlan({ requestedRatio: '16:9' });
+  const shotSpec = resolveShotSpec({ brief, outputPlan, cue, styleDNA: styleSnapshot.styleDNA, dialogueSafeAreaSetting: 'off' });
+  const profile = resolveImagePromptProfileV2('fixture', 'unknown-generic-model');
+  const compiled = compileModelPrompt({ brief, shotSpec, styleDNA: styleSnapshot.styleDNA, profile, outputPlan, cue });
+
+  // 1. Prefix is front-loaded at the very start of the prompt
+  expect(compiled.prompt.startsWith('An unedited, candid iPhone 11 camera roll snapshot')).toBe(true);
+  // 2. Suffix is preserved in the compiled prompt
+  expect(compiled.prompt).toContain('The small smartphone sensor captures a deep depth of field where the background remains in focus');
+  expect(compiled.prompt).toContain('Unretouched skin with visible pores');
+  // 3. No NovelAI brackets or anime emoticons or doubled pose
+  expect(compiled.prompt).not.toContain('{{');
+  expect(compiled.prompt).not.toContain('^^^');
+  expect(compiled.prompt).not.toContain('rectangular mouth');
+  expect((compiled.prompt.match(/wide-eyed, confused/g) ?? []).length).toBe(1);
+  // 4. No conflicting portrait lens or moderate depth of field in Framing
+  expect(compiled.prompt).not.toContain('portrait focal length');
+  expect(compiled.prompt).not.toContain('moderate depth of field');
+  // 5. No literary "no visible aura" negation or unmentioned room-wide prop clutter
+  expect(compiled.prompt).not.toContain('no visible aura');
+  expect(compiled.prompt).not.toContain('galley corner with teacups');
+  // 6. Negative prompt is preserved
+  expect(compiled.negativePrompt).toContain('plastic skin, poreless');
+});

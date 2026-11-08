@@ -583,3 +583,51 @@ export type SingleCharacterState = {
 export function tagBlockFor(identity: SingleCharacterIdentity): string {
   return identity.tags.join(", ");
 }
+
+const ANIME_EMOTICON_TAG_RE = /^(?:\^+(?:\s*\^+)*|!+\?+|\?+!+|!+|\?+|>+\s*<+|>+:\(|>+:\)|:<|;\)|:\)|:\(|~+|\*+|@_@|o_o|x_x)$/i;
+const ANIME_TROPES_FOR_PROSE_RE = /^(?:rectangular mouth|wavy mouth|dot mouth|triangle mouth|cat mouth|chestnut mouth|split mouth|sideways mouth|shaded face|anger vein|veins|flying sweatdrops|sweatdrop|sweat|tareme|jitome|tsurime|sanpaku|eyeball|constricted pupils|sparkling eyes|star-shaped pupils|heart-shaped pupils|symbol-shaped pupils|blank eyes|empty eyes|white pupils|horizontal pupils|slit pupils|ringed eyes|full-face blush|nosebleed|chibi)$/i;
+
+/**
+ * Cleans a raw pose/expression suffix from POSE_EXPRESSION_CATALOGUE so that:
+ * 1. NovelAI weight brackets (`{{...}}`, `[[...]]`) are stripped unless `keepWeightBrackets` is true.
+ * 2. ASCII/anime emoticon symbols (`^^^`, `!?`, `> <`, `>:(`, etc.) and duplicate tags (like `constricted pupils` twice) are removed.
+ * 3. Cartoon/manga-only mouth & face tags (`rectangular mouth`, `wavy mouth`, `shaded face`, `anger vein`, `flying sweatdrops`) are removed when `stripAnimeTropes` is true (default true for natural-language prose and photorealistic styles).
+ * 4. `looking at viewer` is omitted when `hasActiveSceneAction` is true so candid/narrative action shots aren't forced to stare into the lens.
+ */
+export function sanitizePoseExpression(
+  rawSuffix: string,
+  options: {
+    keepWeightBrackets?: boolean;
+    stripAnimeTropes?: boolean;
+    hasActiveSceneAction?: boolean;
+  } = {}
+): string {
+  if (!rawSuffix || !rawSuffix.trim()) return "";
+  const {
+    keepWeightBrackets = false,
+    stripAnimeTropes = true,
+    hasActiveSceneAction = false
+  } = options;
+
+  const unwrapped = keepWeightBrackets
+    ? rawSuffix
+    : rawSuffix.replace(/[\{\}\[\]]+/g, "");
+
+  const seen = new Set<string>();
+  const cleaned: string[] = [];
+
+  for (const part of unwrapped.split(",")) {
+    const token = part.replace(/[\{\}\[\]]+/g, "").trim();
+    if (!token) continue;
+    if (ANIME_EMOTICON_TAG_RE.test(token)) continue;
+    if (stripAnimeTropes && ANIME_TROPES_FOR_PROSE_RE.test(token)) continue;
+    if (hasActiveSceneAction && /^looking at viewer$/i.test(token)) continue;
+
+    const norm = token.toLowerCase().replace(/\s+/g, " ");
+    if (seen.has(norm)) continue;
+    seen.add(norm);
+    cleaned.push(keepWeightBrackets ? part.trim() : token);
+  }
+
+  return cleaned.join(", ");
+}

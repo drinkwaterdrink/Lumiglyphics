@@ -20071,6 +20071,30 @@ var init_panels = __esm(() => {
 });
 
 // src/shared/style-dna.ts
+function cleanStyleAffix(raw) {
+  if (!raw)
+    return "";
+  return raw.trim().replace(/^[,;:\s]+/, "").replace(/[,;:\s]+$/, "").trim();
+}
+function inferPhotographicStyleTraits(prefix, suffix) {
+  const combined = `${prefix} ${suffix}`.trim();
+  if (!combined)
+    return {};
+  const cameraHints = [];
+  if (/\b(?:24mm|26mm|28mm|wide-angle|wide angle|smartphone lens|phone-wide|iphone|cellphone|camera roll)\b/i.test(combined)) {
+    cameraHints.push("phone-wide perspective");
+  }
+  if (/\b(?:deep depth of field|deep focus|background remains in focus|everything in focus|without cinematic lens blur|no bokeh)\b/i.test(combined)) {
+    cameraHints.push("deep focus");
+  }
+  if (/\b(?:eye-level|eye level)\b/i.test(combined)) {
+    cameraHints.push("eye-level");
+  }
+  if (/\b(?:tilted horizon|off-center|candid|handheld|unposed|snapshot)\b/i.test(combined)) {
+    cameraHints.push("candid handheld framing");
+  }
+  return cameraHints.length > 0 ? { cameraHints } : {};
+}
 function resolveStyleDNA(config2, selectedStyleId) {
   const targetId = selectedStyleId ?? config2.selectedSharedStyleId;
   if (targetId && Object.hasOwn(BUILTIN_STYLE_DNA, targetId)) {
@@ -20085,8 +20109,15 @@ function resolveStyleDNA(config2, selectedStyleId) {
   if (targetId && config2.promptPresets) {
     const customPreset = config2.promptPresets.find((p) => p.id === targetId);
     if (customPreset) {
+      const cleanedPrefix2 = cleanStyleAffix(customPreset.positive);
+      const cleanedSuffix2 = cleanStyleAffix(customPreset.suffix);
+      const cleanedNegative = customPreset.negative?.trim() || "";
+      const inferred = inferPhotographicStyleTraits(cleanedPrefix2, cleanedSuffix2);
       const legacyDNA = {
-        ...customPreset.positive?.trim() ? { medium: customPreset.positive.trim() } : {},
+        ...cleanedPrefix2 ? { medium: cleanedPrefix2, prefix: cleanedPrefix2 } : {},
+        ...cleanedSuffix2 ? { suffix: cleanedSuffix2 } : {},
+        ...cleanedNegative ? { negative: cleanedNegative } : {},
+        ...inferred,
         preserve: ["scene-defined lighting", "custom literal preset wording"]
       };
       return {
@@ -20105,9 +20136,15 @@ function resolveStyleDNA(config2, selectedStyleId) {
       isLegacyLiteral: false
     };
   }
-  if (normalizedPrefix.length > 0 || config2.promptSuffix && config2.promptSuffix.trim().length > 0) {
+  const cleanedPrefix = cleanStyleAffix(config2.promptPrefix);
+  const cleanedSuffix = cleanStyleAffix(config2.promptSuffix);
+  if (cleanedPrefix.length > 0 || cleanedSuffix.length > 0) {
+    const inferred = inferPhotographicStyleTraits(cleanedPrefix, cleanedSuffix);
+    const hasCustomCameraOrSuffix = cleanedSuffix.length > 0 || Boolean(inferred.cameraHints?.length);
     const legacyDNA = {
-      ...normalizedPrefix.length > 0 ? { medium: normalizedPrefix } : {},
+      ...cleanedPrefix ? { medium: cleanedPrefix, ...hasCustomCameraOrSuffix ? { prefix: cleanedPrefix } : {} } : {},
+      ...cleanedSuffix ? { suffix: cleanedSuffix } : {},
+      ...inferred,
       preserve: ["scene-defined lighting", "custom literal prefix/suffix wording"]
     };
     return {
@@ -20132,6 +20169,9 @@ var init_style_dna = __esm(() => {
   }).strict();
   StyleDNASchema = exports_external.object({
     medium: exports_external.string().max(1e4).optional(),
+    prefix: exports_external.string().max(1e4).optional(),
+    suffix: exports_external.string().max(1e4).optional(),
+    negative: exports_external.string().max(1e4).optional(),
     rendering: exports_external.array(exports_external.string().max(2000)).max(32).optional(),
     linework: exports_external.array(exports_external.string().max(2000)).max(32).optional(),
     shading: exports_external.array(exports_external.string().max(2000)).max(32).optional(),
@@ -20194,7 +20234,7 @@ var init_style_dna = __esm(() => {
     },
     "builtin-style:phone-candid": {
       medium: "casual cellphone snapshot",
-      cameraHints: ["phone-wide perspective", "slightly imperfect handheld framing"],
+      cameraHints: ["phone-wide perspective", "slightly imperfect handheld framing", "deep focus"],
       texture: ["mild shadow sensor noise", "subtle JPEG compression"],
       realism: ["natural skin and material texture", "modest dynamic range"],
       preserve: ["available ambient scene lighting", "natural unposed moments"],
@@ -20202,7 +20242,7 @@ var init_style_dna = __esm(() => {
     },
     "builtin-style:phone-flash": {
       medium: "casual cellphone photograph with direct on-camera flash",
-      cameraHints: ["phone-wide perspective", "candid handheld framing"],
+      cameraHints: ["phone-wide perspective", "candid handheld framing", "deep focus"],
       lightingOverlay: {
         type: "harsh direct camera flash with close falloff and specular highlights",
         intentional: true
@@ -21638,52 +21678,163 @@ function createEmptyCharacterDNA(name, id3) {
     lastUpdated: Date.now()
   });
 }
+function formatAgeClause(rawAge) {
+  const age = rawAge?.trim() ?? "";
+  if (!age)
+    return "";
+  if (/^\d{1,3}$/.test(age))
+    return `${age}-year-old`;
+  return age;
+}
+function formatGenderSpecies(gender, species) {
+  const g = gender?.trim() ?? "";
+  const s = species?.trim() ?? "";
+  return [g, s].filter(Boolean).join(" ");
+}
+function formatBustClause(rawBust, asWithClause = false) {
+  const bust = rawBust?.trim() ?? "";
+  if (!bust)
+    return "";
+  if (DANGLING_PREPOSITION_RE.test(bust))
+    return "";
+  const clean = bust.replace(/^with\s+/i, "").trim();
+  if (!clean)
+    return "";
+  return asWithClause ? `with ${clean}` : clean;
+}
+function formatSkinClause(rawSkin, asWithClause = false) {
+  const skin = rawSkin?.trim() ?? "";
+  if (!skin)
+    return "";
+  const clean = skin.replace(/^with\s+/i, "").trim();
+  if (!clean)
+    return "";
+  const suffixed = SKIN_WORD_RE.test(clean) ? clean : `${clean} skin`;
+  return asWithClause ? `with ${suffixed}` : suffixed;
+}
+function formatHairClause(hair) {
+  const lengthRaw = hair.length?.trim() ?? "";
+  const styleRaw = hair.style?.trim() ?? "";
+  const colorRaw = hair.color?.trim() ?? "";
+  if (!lengthRaw && !styleRaw && !colorRaw)
+    return "";
+  const lengthCore = lengthRaw.replace(/\s+length$/i, "").trim();
+  const styleLower = styleRaw.toLowerCase();
+  const effectiveLength = lengthCore && (!styleLower || !styleLower.includes(lengthCore.toLowerCase())) ? lengthRaw : "";
+  const hasHairWord = /\bhair\b/i.test(styleRaw) || /\bhair\b/i.test(colorRaw) || /\bhair\b/i.test(effectiveLength);
+  const baseParts = [effectiveLength, styleRaw, colorRaw ? hasHairWord ? colorRaw : `${colorRaw} hair` : hasHairWord ? "" : "hair"].filter(Boolean);
+  return baseParts.join(" ").replace(/\s+/g, " ").trim();
+}
+function filterVisualDemeanor(rawDemeanor) {
+  const demeanor = rawDemeanor?.trim() ?? "";
+  if (!demeanor)
+    return "";
+  const subClauses = demeanor.split(/[;,]/).map((s) => s.trim()).filter(Boolean).filter((clause) => {
+    if (!NON_VISUAL_DEMEANOR_RE.test(clause))
+      return true;
+    return VISUAL_POSTURE_CUE_RE.test(clause);
+  });
+  return subClauses.join(", ");
+}
+function contentTokens(phrase) {
+  return phrase.toLowerCase().replace(/[^a-z0-9-\s]/g, " ").split(/\s+/).map((w) => w.trim()).filter((w) => w.length > 1 && !STOP_WORDS.has(w));
+}
+function deduplicateDescriptiveClauses(rawClauses, isFirstIdentityClause = false) {
+  const result = [];
+  const seenPhrases = new Set;
+  const seenTokens = new Set;
+  rawClauses.forEach((raw, idx) => {
+    if (idx === 0 && isFirstIdentityClause) {
+      const trimmed = raw.trim();
+      if (trimmed) {
+        seenPhrases.add(trimmed.toLowerCase().replace(/\s+/g, " "));
+        contentTokens(trimmed).forEach((t) => seenTokens.add(t));
+        result.push(trimmed);
+      }
+      return;
+    }
+    const subParts = raw.split(/\s*;\s*|\s*,\s*/).map((s) => s.trim()).filter(Boolean);
+    for (const part of subParts) {
+      const norm = part.toLowerCase().replace(/\s+/g, " ");
+      if (seenPhrases.has(norm))
+        continue;
+      const tokens = contentTokens(part);
+      if (tokens.length === 0)
+        continue;
+      if (!/^wearing\b/i.test(part) && seenTokens.size > 0) {
+        const overlapCount = tokens.filter((t) => seenTokens.has(t)).length;
+        if (overlapCount === tokens.length || tokens.length >= 3 && overlapCount / tokens.length >= 0.75) {
+          continue;
+        }
+      }
+      seenPhrases.add(norm);
+      tokens.forEach((t) => seenTokens.add(t));
+      result.push(part);
+    }
+  });
+  return result;
+}
 function formatCharacterDNAToPromptClause(dna) {
-  const parts = [];
+  const rawClauses = [];
   const isMale = dna.build.gender?.toLowerCase() === "man" || dna.build.gender?.toLowerCase() === "male";
   const identityBits = [];
-  if (dna.build.age)
-    identityBits.push(dna.build.age);
-  if (dna.build.height || dna.build.bodyType)
-    identityBits.push([dna.build.height, dna.build.bodyType].filter(Boolean).join(" "));
-  if (dna.build.gender || dna.build.species)
-    identityBits.push([dna.build.gender, dna.build.species].filter(Boolean).join(" "));
+  const age = formatAgeClause(dna.build.age);
+  if (age)
+    identityBits.push(age);
+  let inferredHeight = dna.build.height?.trim() ?? "";
+  if (!inferredHeight && dna.distinguishingFeatures?.length) {
+    for (const feat of dna.distinguishingFeatures) {
+      const m = feat.match(/^\b(tall|petite|short|statuesque|towering)\b/i);
+      if (m?.[1]) {
+        inferredHeight = m[1].toLowerCase();
+        break;
+      }
+    }
+  }
+  if (inferredHeight || dna.build.bodyType) {
+    identityBits.push([inferredHeight, dna.build.bodyType].filter(Boolean).join(" "));
+  }
+  const genderSpecies = formatGenderSpecies(dna.build.gender, dna.build.species);
+  if (genderSpecies)
+    identityBits.push(genderSpecies);
   if (dna.build.bust && (!isMale || /chest|shoulder|pec/i.test(dna.build.bust))) {
-    identityBits.push(`with ${dna.build.bust}`);
+    const bust = formatBustClause(dna.build.bust, true);
+    if (bust)
+      identityBits.push(bust);
   }
   if (dna.build.hipsGlutes && !isMale) {
     identityBits.push(dna.build.hipsGlutes);
   }
-  if (dna.build.skinTone)
-    identityBits.push(`with ${dna.build.skinTone} skin`);
-  if (identityBits.length > 0) {
-    parts.push(identityBits.join(" "));
+  const skin = formatSkinClause(dna.build.skinTone, true);
+  if (skin)
+    identityBits.push(skin);
+  const hasIdentityLead = identityBits.length > 0;
+  if (hasIdentityLead) {
+    rawClauses.push(identityBits.join(" ").replace(/\s+/g, " ").trim());
   }
-  const facialBits = [];
   if (dna.faceFeatures)
-    facialBits.push(dna.faceFeatures);
-  if (dna.hair.color || dna.hair.length || dna.hair.style) {
-    facialBits.push([dna.hair.length, dna.hair.style, dna.hair.color ? `${dna.hair.color} hair` : "hair"].filter(Boolean).join(" "));
-  }
+    rawClauses.push(dna.faceFeatures);
+  const hairText = formatHairClause(dna.hair);
+  if (hairText)
+    rawClauses.push(hairText);
   if (dna.eyes.color || dna.eyes.shape) {
-    facialBits.push([dna.eyes.shape, dna.eyes.color ? `${dna.eyes.color} eyes` : "eyes"].filter(Boolean).join(" "));
-  }
-  if (facialBits.length > 0) {
-    parts.push(facialBits.join(", "));
+    rawClauses.push([dna.eyes.shape, dna.eyes.color ? `${dna.eyes.color} eyes` : "eyes"].filter(Boolean).join(" "));
   }
   if (dna.distinguishingFeatures && dna.distinguishingFeatures.length > 0) {
-    parts.push(dna.distinguishingFeatures.join(", "));
+    rawClauses.push(...dna.distinguishingFeatures);
   }
+  const deduped = deduplicateDescriptiveClauses(rawClauses, hasIdentityLead);
   const currentOutfit = dna.activeOutfit || dna.signatureOutfit;
   if (currentOutfit) {
-    parts.push(currentOutfit.startsWith("wearing ") ? currentOutfit : `wearing ${currentOutfit}`);
+    deduped.push(currentOutfit.startsWith("wearing ") ? currentOutfit : `wearing ${currentOutfit}`);
   }
-  if (dna.demeanor) {
-    parts.push(dna.demeanor);
+  const visualDemeanor = filterVisualDemeanor(dna.demeanor);
+  if (visualDemeanor) {
+    deduped.push(visualDemeanor);
   }
-  return parts.filter(Boolean).join(", ");
+  return deduped.filter(Boolean).join(", ");
 }
-var CharacterHairDNASchema, CharacterEyesDNASchema, CharacterBuildDNASchema, CharacterDNASchema, CharacterDNALibrarySchema, dnaNameKey = (value) => value.normalize("NFKC").trim().toLocaleLowerCase().replace(/\s+/g, " ");
+var CharacterHairDNASchema, CharacterEyesDNASchema, CharacterBuildDNASchema, CharacterDNASchema, CharacterDNALibrarySchema, dnaNameKey = (value) => value.normalize("NFKC").trim().toLocaleLowerCase().replace(/\s+/g, " "), SKIN_WORD_RE, DANGLING_PREPOSITION_RE, NON_VISUAL_DEMEANOR_RE, VISUAL_POSTURE_CUE_RE, STOP_WORDS;
 var init_character_dna = __esm(() => {
   init_zod();
   CharacterHairDNASchema = exports_external.object({
@@ -21732,6 +21883,32 @@ var init_character_dna = __esm(() => {
     warnings: exports_external.array(exports_external.string().max(500)).max(8).optional(),
     characters: exports_external.record(exports_external.string(), CharacterDNASchema).default({})
   }).strict();
+  SKIN_WORD_RE = /\b(skin|complexion)\b/i;
+  DANGLING_PREPOSITION_RE = /^(?:for|on|to|in|of|at|by|from)\b/i;
+  NON_VISUAL_DEMEANOR_RE = /\b(?:wit|humou?r|sarcas\w*|pragmati\w*|precision|intellect\w*|cynic\w*|deadpan|monotone|voice|speech|accent|vocab\w*|philosoph\w*|ideolog\w*|morality|ambition|loyalty|temperament|mindset|logic\w*|calculat\w*)\b/i;
+  VISUAL_POSTURE_CUE_RE = /\b(?:eyes|gaze|stare|posture|stance|shoulders|smile|smirk|frown|brow|expression|coiled|tense|slouched|upright|watchful|guarded|poised|relaxed|rigid|alert|scowl|glare)\b/i;
+  STOP_WORDS = new Set([
+    "with",
+    "under",
+    "over",
+    "her",
+    "his",
+    "their",
+    "the",
+    "a",
+    "an",
+    "and",
+    "of",
+    "in",
+    "on",
+    "for",
+    "to",
+    "frame",
+    "body",
+    "build",
+    "very",
+    "slightly"
+  ]);
 });
 
 // src/shared/character-dna-workflow.ts
@@ -26389,7 +26566,36 @@ function poseById(catalogue, id6) {
 function tagBlockFor(identity) {
   return identity.tags.join(", ");
 }
-var POSE_EXPRESSION_CATALOGUE, FALLBACK_POSE, EXPRESSION_ALIASES, KEYWORD_PATTERNS, SINGLE_CHARACTER_SCHEMA_VERSION = 2;
+function sanitizePoseExpression(rawSuffix, options2 = {}) {
+  if (!rawSuffix || !rawSuffix.trim())
+    return "";
+  const {
+    keepWeightBrackets = false,
+    stripAnimeTropes = true,
+    hasActiveSceneAction = false
+  } = options2;
+  const unwrapped = keepWeightBrackets ? rawSuffix : rawSuffix.replace(/[\{\}\[\]]+/g, "");
+  const seen = new Set;
+  const cleaned = [];
+  for (const part of unwrapped.split(",")) {
+    const token = part.replace(/[\{\}\[\]]+/g, "").trim();
+    if (!token)
+      continue;
+    if (ANIME_EMOTICON_TAG_RE.test(token))
+      continue;
+    if (stripAnimeTropes && ANIME_TROPES_FOR_PROSE_RE.test(token))
+      continue;
+    if (hasActiveSceneAction && /^looking at viewer$/i.test(token))
+      continue;
+    const norm = token.toLowerCase().replace(/\s+/g, " ");
+    if (seen.has(norm))
+      continue;
+    seen.add(norm);
+    cleaned.push(keepWeightBrackets ? part.trim() : token);
+  }
+  return cleaned.join(", ");
+}
+var POSE_EXPRESSION_CATALOGUE, FALLBACK_POSE, EXPRESSION_ALIASES, KEYWORD_PATTERNS, SINGLE_CHARACTER_SCHEMA_VERSION = 2, ANIME_EMOTICON_TAG_RE, ANIME_TROPES_FOR_PROSE_RE;
 var init_character = __esm(() => {
   POSE_EXPRESSION_CATALOGUE = [
     {
@@ -26823,6 +27029,8 @@ var init_character = __esm(() => {
     [/\b(?:lustful)\b/i, "lustful"],
     [/\b(?:aroused)\b/i, "aroused"]
   ];
+  ANIME_EMOTICON_TAG_RE = /^(?:\^+(?:\s*\^+)*|!+\?+|\?+!+|!+|\?+|>+\s*<+|>+:\(|>+:\)|:<|;\)|:\)|:\(|~+|\*+|@_@|o_o|x_x)$/i;
+  ANIME_TROPES_FOR_PROSE_RE = /^(?:rectangular mouth|wavy mouth|dot mouth|triangle mouth|cat mouth|chestnut mouth|split mouth|sideways mouth|shaded face|anger vein|veins|flying sweatdrops|sweatdrop|sweat|tareme|jitome|tsurime|sanpaku|eyeball|constricted pupils|sparkling eyes|star-shaped pupils|heart-shaped pupils|symbol-shaped pupils|blank eyes|empty eyes|white pupils|horizontal pupils|slit pupils|ringed eyes|full-face blush|nosebleed|chibi)$/i;
 });
 
 // src/backend/core/visual-state.ts
@@ -29365,6 +29573,48 @@ var init_attire = __esm(() => {
 });
 
 // src/backend/runtime/visual-brief.ts
+function sanitizeVisualNarrativeDescription(raw) {
+  if (!raw || !raw.trim())
+    return "";
+  return raw.replace(/\b(?:with\s+)?no\s+(?:visible|magical|magic|supernatural|glowing)\s+(?:aura|glow|halo|mana|light)\s*,?\s*(?:only\s+)?/gi, "").replace(/\bwithout\s+any\s+(?:visible\s+)?(?:aura|glow|halo)\s*,?\s*/gi, "").replace(/\s{2,}/g, " ").trim();
+}
+function propKeywords(phrase) {
+  return phrase.toLowerCase().replace(/[^a-z0-9\s-]/g, " ").split(/[\s-]+/).map((w) => w.trim()).filter((w) => w.length >= 4 && !PROP_STOP_WORDS.has(w));
+}
+function selectRelevantPersistentElements(envDescription, activeAction, persistentElements) {
+  if (!persistentElements || persistentElements.length === 0)
+    return [];
+  const desc = (envDescription ?? "").trim();
+  const act = (activeAction ?? "").trim();
+  if (desc.length < 80) {
+    return [...persistentElements];
+  }
+  const descKeywords = new Set(propKeywords(desc));
+  const actKeywords = new Set(propKeywords(act));
+  const isDetailedActionBeat = act.length >= 80;
+  const selected = [];
+  for (const elem of persistentElements) {
+    const trimmed = elem?.trim();
+    if (!trimmed)
+      continue;
+    const keys = propKeywords(trimmed);
+    if (keys.length === 0)
+      continue;
+    const overlapWithDesc = keys.filter((k) => descKeywords.has(k)).length;
+    if (overlapWithDesc >= 1 && (overlapWithDesc / keys.length >= 0.34 || overlapWithDesc >= 2)) {
+      continue;
+    }
+    if (isDetailedActionBeat) {
+      const mentionedInAction = keys.some((k) => actKeywords.has(k));
+      if (!mentionedInAction) {
+        continue;
+      }
+    }
+    keys.forEach((k) => descKeywords.add(k));
+    selected.push(trimmed);
+  }
+  return selected;
+}
 function resolveTemplateIdentity(scene, cue, appearances, characterDNALibrary) {
   const name = normalizeCharacterName(cue.character || scene.character || scene.cast[0] || "");
   const sameCharacter = characterAppearanceKey(name) === characterAppearanceKey(scene.character || scene.cast[0] || "");
@@ -29398,8 +29648,15 @@ function buildVisualBrief(config2, scene, cue, appearances, characterDNALibrary)
   const appearance = attire ? applyAttireOverride(identity, attire) : identity;
   const subject = cue.subjectCategory ?? scene.subjectCategory;
   const subjectLabel = subject === "female" ? "One visible woman" : subject === "male" ? "One visible man" : "One visible character";
-  const pose = noPeople || ensemble ? "" : poseById(POSE_EXPRESSION_CATALOGUE, cue.poseExpressionId).suffix;
+  const cleanedVisualDescription = sanitizeVisualNarrativeDescription(cue.visualDescription);
+  const rawPose = noPeople || ensemble ? "" : poseById(POSE_EXPRESSION_CATALOGUE, cue.poseExpressionId).suffix;
+  const pose = sanitizePoseExpression(rawPose, {
+    keepWeightBrackets: false,
+    stripAnimeTropes: true,
+    hasActiveSceneAction: cleanedVisualDescription.length > 40
+  });
   const environment = scene.environment;
+  const relevantPersistentElements = selectRelevantPersistentElements(environment.description, cleanedVisualDescription, environment.persistentElements);
   const members2 = (cue.ensembleSubjects ?? scene.cast.map((name2) => ({ name: name2, appearance: "" }))).map((member) => {
     const saved2 = Object.entries(appearances ?? {}).find(([key]) => characterAppearanceKey(key) === characterAppearanceKey(member.name))?.[1];
     const appearance2 = manual ? member.appearance : saved2 || member.appearance;
@@ -29428,9 +29685,9 @@ function buildVisualBrief(config2, scene, cue, appearances, characterDNALibrary)
       subjectsInPositive: template.positive.includes("{{subjects}}"),
       subjectsInNegative: template.negative.includes("{{subjects}}")
     } } : {},
-    scene: text([environment.location, environment.description, ...environment.persistentElements, environment.timeOfDay, environment.weather]),
+    scene: text([environment.location, environment.description, ...relevantPersistentElements, environment.timeOfDay, environment.weather]),
     subjects: noPeople ? "" : ensemble ? group : text([subjectLabel, appearance, template.category === "portrait" ? pose : ""]),
-    action: noPeople ? template.category === "detail" || template.category === "custom" ? (cue.visualFocus ?? "").slice(0, 1000) : "" : text([cue.visualDescription, compileActionProp(cue.action), template.category === "portrait" ? "" : pose]),
+    action: noPeople ? template.category === "detail" || template.category === "custom" ? (cue.visualFocus ?? "").slice(0, 1000) : "" : text([cleanedVisualDescription, compileActionProp(cue.action), template.category === "portrait" ? "" : pose]),
     composition: `${template.framing}; eye-level view; ${noPeople ? "no people" : ensemble ? `${members2.length} visible characters, including every listed subject; distinct faces and silhouettes` : "one visible character"}; keep the lower quarter clear for dialogue`,
     lighting: (environment.lighting ?? "").slice(0, 1000),
     subjectMode: template.subjectMode,
@@ -29440,7 +29697,7 @@ function buildVisualBrief(config2, scene, cue, appearances, characterDNALibrary)
     conflicts: [...conflicts, ...ensemble && members2.some((member) => member.appearance.length > descriptionBudget) ? ["Ensemble appearance descriptions are condensed to share the prompt budget; all listed names are retained."] : [], ...sharedStyleWarnings(template, config2.promptPrefix, config2.promptSuffix, config2.negativePrompt)].slice(0, 16)
   };
 }
-var text = (values, max = 4000) => [...new Set(values.map((value) => value?.trim()).filter(Boolean))].join("; ").slice(0, max);
+var text = (values, max = 4000) => [...new Set(values.map((value) => value?.trim()).filter(Boolean))].join("; ").slice(0, max), PROP_STOP_WORDS;
 var init_visual_brief = __esm(() => {
   init_image_styles();
   init_attire();
@@ -29449,6 +29706,38 @@ var init_visual_brief = __esm(() => {
   init_image_templates();
   init_character();
   init_character_dna();
+  PROP_STOP_WORDS = new Set([
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "of",
+    "in",
+    "on",
+    "at",
+    "to",
+    "by",
+    "with",
+    "from",
+    "near",
+    "under",
+    "over",
+    "into",
+    "north",
+    "south",
+    "east",
+    "west",
+    "corner",
+    "side",
+    "wall",
+    "floor",
+    "room",
+    "area",
+    "three",
+    "two",
+    "one"
+  ]);
 });
 
 // src/backend/runtime/presentation-rules.ts
@@ -37675,7 +37964,7 @@ function visualIdentity(character2, persona) {
   return compact(`visual identity reference, apply only to identities visible in the scene: ${rows.join(" | ")}`, MAX_IDENTITY_PROMPT);
 }
 function normalizedTerms(value) {
-  return [...new Set((value.toLocaleLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}_-]{2,}/gu) ?? []).map((term) => term.replace(/[_-]+/g, " ")).filter((term) => !STOP_WORDS.has(term)))];
+  return [...new Set((value.toLocaleLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}_-]{2,}/gu) ?? []).map((term) => term.replace(/[_-]+/g, " ")).filter((term) => !STOP_WORDS2.has(term)))];
 }
 function normalizeSearch(value) {
   return value.toLocaleLowerCase().replace(/[_-]+/g, " ").replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/g, " ").trim();
@@ -37812,10 +38101,10 @@ async function loadVisualContext(spindle2, input2) {
     diagnostics
   };
 }
-var MAX_ACTIVATED_ENTRIES = 16, MAX_LORE_LENGTH = 3600, MAX_LORE_ENTRY_LENGTH = 900, MAX_CHARACTER_CONTEXT = 5200, MAX_PERSONA_CONTEXT = 2600, MAX_IDENTITY_PROMPT = 2600, STOP_WORDS, VISUAL_TERMS;
+var MAX_ACTIVATED_ENTRIES = 16, MAX_LORE_LENGTH = 3600, MAX_LORE_ENTRY_LENGTH = 900, MAX_CHARACTER_CONTEXT = 5200, MAX_PERSONA_CONTEXT = 2600, MAX_IDENTITY_PROMPT = 2600, STOP_WORDS2, VISUAL_TERMS;
 var init_context = __esm(() => {
   init_simtracker();
-  STOP_WORDS = new Set([
+  STOP_WORDS2 = new Set([
     "about",
     "after",
     "again",
@@ -39784,7 +40073,7 @@ function extractContentTokens(text3) {
     return new Set;
   const set2 = new Set;
   for (const match of matches) {
-    if (match.length > 2 && !STOP_WORDS2.has(match)) {
+    if (match.length > 2 && !STOP_WORDS3.has(match)) {
       set2.add(match);
     }
   }
@@ -39796,7 +40085,7 @@ function extractPhysicalNouns(text3) {
     return new Set;
   const set2 = new Set;
   for (const match of matches) {
-    if (match.length >= 3 && !STOP_WORDS2.has(match) && !FLUFF_WORDS.has(match)) {
+    if (match.length >= 3 && !STOP_WORDS3.has(match) && !FLUFF_WORDS.has(match)) {
       set2.add(match);
     }
   }
@@ -41009,7 +41298,7 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
 function fingerprintForMessage(message) {
   return stableHash(`${message.id}\x00${message.swipe_id}\x00${message.content}`);
 }
-var FALLBACK_LOCATIONS, EXPLICIT_CLEAR_VALUES, EFFECT_KEYS, AMBIENT_KEYS, FALLBACK_DESCRIPTIONS, GENERIC_BASE_PROMPTS, STOP_WORDS2, FLUFF_WORDS, STATE_CHANGE_MARKERS, STATE_MODIFIERS;
+var FALLBACK_LOCATIONS, EXPLICIT_CLEAR_VALUES, EFFECT_KEYS, AMBIENT_KEYS, FALLBACK_DESCRIPTIONS, GENERIC_BASE_PROMPTS, STOP_WORDS3, FLUFF_WORDS, STATE_CHANGE_MARKERS, STATE_MODIFIERS;
 var init_planner = __esm(() => {
   init_json_repair();
   init_json_repair();
@@ -41083,7 +41372,7 @@ var init_planner = __esm(() => {
     "same as before",
     "same"
   ]);
-  STOP_WORDS2 = new Set([
+  STOP_WORDS3 = new Set([
     "a",
     "an",
     "the",
@@ -41661,6 +41950,18 @@ function resolveShotSpec(input2) {
         mode = "centered";
         break;
     }
+    if (cue?.shotHint?.preferredShotSize)
+      shotSize = cue.shotHint.preferredShotSize;
+    if (cue?.shotHint?.preferredAngle)
+      angle = cue.shotHint.preferredAngle;
+    if (/\b(?:screams?|shatters?|weeps?|sobbing|terrified|horrified|catastrophic|devastating|executes?|unleashes?|betrayal)\b/i.test(`${brief.action} ${cue?.expression ?? ""}`)) {
+      if (intent === "reaction") {
+        shotSize = "close-up";
+        depthOfField = "shallow";
+      } else if (intent === "action" || intent === "confrontation") {
+        angle = "low-angle";
+      }
+    }
     if (styleDNA?.cameraHints && styleDNA.cameraHints.length > 0) {
       const hint = styleDNA.cameraHints.join(" ").toLowerCase();
       if (hint.includes("phone-wide") || hint.includes("wide")) {
@@ -41675,17 +41976,8 @@ function resolveShotSpec(input2) {
       if (hint.includes("moderate depth")) {
         depthOfField = "moderate";
       }
-    }
-    if (cue?.shotHint?.preferredShotSize)
-      shotSize = cue.shotHint.preferredShotSize;
-    if (cue?.shotHint?.preferredAngle)
-      angle = cue.shotHint.preferredAngle;
-    if (/\b(?:screams?|shatters?|weeps?|sobbing|terrified|horrified|catastrophic|devastating|executes?|unleashes?|betrayal)\b/i.test(`${brief.action} ${cue?.expression ?? ""}`)) {
-      if (intent === "reaction") {
-        shotSize = "close-up";
-        depthOfField = "shallow";
-      } else if (intent === "action" || intent === "confrontation") {
-        angle = "low-angle";
+      if (hint.includes("eye-level")) {
+        angle = "eye-level";
       }
     }
     if (previousShot && revision === previousShot.revision && cue?.character && previousShot.intent === intent) {
@@ -41722,7 +42014,6 @@ function resolveShotSpec(input2) {
   }
   const subjectPlacements = [];
   if (brief.subjectMode === "ensemble" && cue?.ensembleSubjects && cue.ensembleSubjects.length > 0) {
-    const count2 = cue.ensembleSubjects.length;
     const horizontalOptions = orientation === "portrait" ? ["center", "left", "right", "center"] : ["far-left", "left", "center", "right", "far-right"];
     cue.ensembleSubjects.forEach((sub, i) => {
       subjectPlacements.push({
@@ -42016,6 +42307,47 @@ var init_prompt_document = __esm(() => {
 });
 
 // src/backend/runtime/prompt-serializers/helpers.ts
+function cleanActionAndDirection(rawAction, rawDirection) {
+  let act = (rawAction ?? "").trim();
+  const dir = (rawDirection ?? "").trim();
+  if (/\{\{|\[\[|\^\^|!\?|rectangular mouth|wavy mouth/i.test(act)) {
+    const segments = act.split(/\s*;\s*/).filter(Boolean);
+    const cleanedSegments = [];
+    const seenSegs = new Set;
+    for (const seg of segments) {
+      const cleanedSeg = /\{\{|\[\[|\^\^|!\?|rectangular mouth|wavy mouth/i.test(seg) ? sanitizePoseExpression(seg, {
+        keepWeightBrackets: false,
+        stripAnimeTropes: true,
+        hasActiveSceneAction: segments.length > 1 && segments[0].length > 40
+      }) : seg.trim();
+      if (!cleanedSeg)
+        continue;
+      const norm = cleanedSeg.toLowerCase();
+      if (seenSegs.has(norm))
+        continue;
+      seenSegs.add(norm);
+      cleanedSegments.push(cleanedSeg);
+    }
+    act = cleanedSegments.join("; ");
+  }
+  const cleanDir = /\{\{|\[\[|\^\^|!\?|rectangular mouth|wavy mouth/i.test(dir) ? sanitizePoseExpression(dir, {
+    keepWeightBrackets: false,
+    stripAnimeTropes: true,
+    hasActiveSceneAction: act.length > 40
+  }) : dir;
+  if (!act && !cleanDir)
+    return;
+  if (!cleanDir)
+    return act;
+  if (!act)
+    return cleanDir;
+  const actLower = act.toLowerCase();
+  const dirLower = cleanDir.toLowerCase();
+  if (actLower === dirLower || actLower.endsWith(`; ${dirLower}`) || actLower.endsWith(`, ${dirLower}`)) {
+    return act;
+  }
+  return `${act}, ${cleanDir}`;
+}
 function parseSubjectsFromBrief(brief, cue) {
   if (brief.subjectMode === "none")
     return [];
@@ -42035,7 +42367,7 @@ function parseSubjectsFromBrief(brief, cue) {
   const name = brief.subjectPreparation?.name || cue?.character || "Subject";
   const appearance = brief.subjectPreparation?.identity || brief.subjects;
   const attire = brief.subjectPreparation?.attire ?? undefined;
-  const action = [brief.action, brief.subjectPreparation?.direction].filter(Boolean).join(", ") || undefined;
+  const action = cleanActionAndDirection(brief.action, brief.subjectPreparation?.direction);
   return [{
     name,
     appearance,
@@ -42043,8 +42375,12 @@ function parseSubjectsFromBrief(brief, cue) {
     action
   }];
 }
-function formatCameraFraming(shotSpec) {
+function formatCameraFraming(shotSpec, styleDNA) {
   const parts = [];
+  const customStyleText = [styleDNA?.prefix, styleDNA?.suffix].filter(Boolean).join(" ").toLowerCase();
+  const hasCustomLens = Boolean(customStyleText && /\b(?:\d+mm|wide-angle|wide angle|smartphone lens|telephoto|fisheye)\b/i.test(customStyleText));
+  const hasCustomDof = Boolean(customStyleText && /\b(?:depth of field|deep focus|shallow focus|background remains in focus|without cinematic lens blur|no bokeh)\b/i.test(customStyleText));
+  const hasCustomAngle = Boolean(customStyleText && /\b(?:eye-level|eye level|tilted horizon|off-center framing|low-angle|high-angle|overhead)\b/i.test(customStyleText));
   const sizeMap = {
     "extreme-close-up": "extreme close-up shot",
     "close-up": "close-up shot",
@@ -42057,18 +42393,20 @@ function formatCameraFraming(shotSpec) {
     macro: "macro detail close-up"
   };
   parts.push(sizeMap[shotSpec.camera.shotSize] || `${shotSpec.camera.shotSize} shot`);
-  const angleMap = {
-    "eye-level": "eye-level angle",
-    "low-angle": "low-angle viewpoint",
-    "high-angle": "high-angle viewpoint",
-    overhead: "overhead bird's-eye view",
-    "ground-level": "ground-level low perspective",
-    "three-quarter": "three-quarter view",
-    profile: "side profile view",
-    "over-the-shoulder": "over-the-shoulder perspective"
-  };
-  parts.push(angleMap[shotSpec.camera.angle] || shotSpec.camera.angle);
-  if (shotSpec.camera.lens && shotSpec.camera.lens !== "unspecified") {
+  if (!hasCustomAngle) {
+    const angleMap = {
+      "eye-level": "eye-level angle",
+      "low-angle": "low-angle viewpoint",
+      "high-angle": "high-angle viewpoint",
+      overhead: "overhead bird's-eye view",
+      "ground-level": "ground-level low perspective",
+      "three-quarter": "three-quarter view",
+      profile: "side profile view",
+      "over-the-shoulder": "over-the-shoulder perspective"
+    };
+    parts.push(angleMap[shotSpec.camera.angle] || shotSpec.camera.angle);
+  }
+  if (!hasCustomLens && shotSpec.camera.lens && shotSpec.camera.lens !== "unspecified") {
     const lensMap = {
       ultrawide: "ultrawide lens feel",
       wide: "wide-angle lens",
@@ -42079,7 +42417,7 @@ function formatCameraFraming(shotSpec) {
     };
     parts.push(lensMap[shotSpec.camera.lens] || `${shotSpec.camera.lens} lens`);
   }
-  if (shotSpec.camera.depthOfField) {
+  if (!hasCustomDof && shotSpec.camera.depthOfField) {
     const dofMap = {
       shallow: "shallow depth of field with gentle background blur",
       moderate: "moderate depth of field",
@@ -42113,14 +42451,25 @@ function formatDialogueSafeArea(shotSpec) {
 }
 function formatStyleDNAProse(styleDNA) {
   const parts = [];
-  if (styleDNA.medium)
-    parts.push(styleDNA.medium);
+  const cleanMedium = styleDNA.medium?.replace(/[,;:\s]+$/, "").trim();
+  const cleanPrefix = styleDNA.prefix?.replace(/[,;:\s]+$/, "").trim();
+  if (cleanMedium && cleanMedium !== cleanPrefix) {
+    parts.push(cleanMedium);
+  }
   if (styleDNA.rendering && styleDNA.rendering.length > 0)
     parts.push(...styleDNA.rendering);
   if (styleDNA.linework && styleDNA.linework.length > 0)
     parts.push(...styleDNA.linework);
   if (styleDNA.shading && styleDNA.shading.length > 0)
     parts.push(...styleDNA.shading);
+  if (styleDNA.realism && styleDNA.realism.length > 0)
+    parts.push(...styleDNA.realism);
+  if (styleDNA.surface && styleDNA.surface.length > 0)
+    parts.push(...styleDNA.surface);
+  if (styleDNA.atmosphere && styleDNA.atmosphere.length > 0)
+    parts.push(...styleDNA.atmosphere);
+  if (styleDNA.lightingOverlay?.type)
+    parts.push(styleDNA.lightingOverlay.type);
   if (styleDNA.palette && styleDNA.palette.length > 0)
     parts.push(`palette of ${styleDNA.palette.join(", ")}`);
   if (styleDNA.texture && styleDNA.texture.length > 0)
@@ -42145,6 +42494,9 @@ function formatReferenceDirectives(referencePlan) {
     return `Use reference image ${num} as a visual reference.`;
   });
 }
+var init_helpers = __esm(() => {
+  init_character();
+});
 
 // src/backend/runtime/prompt-serializers/flux3-klein.ts
 function serializeFlux3Klein(input2) {
@@ -42291,6 +42643,7 @@ function serializeFlux3Klein(input2) {
 }
 var init_flux3_klein = __esm(() => {
   init_prompt_document();
+  init_helpers();
 });
 
 // src/backend/runtime/prompt-serializers/flux3.ts
@@ -42405,6 +42758,7 @@ function serializeFlux3(input2) {
 }
 var init_flux3 = __esm(() => {
   init_prompt_document();
+  init_helpers();
 });
 
 // src/backend/runtime/prompt-serializers/gpt-image-25.ts
@@ -42590,6 +42944,7 @@ ${constraintsList.join(`
 }
 var init_gpt_image_25 = __esm(() => {
   init_prompt_document();
+  init_helpers();
 });
 
 // src/backend/runtime/prompt-serializers/grok-imagine-2.ts
@@ -42712,6 +43067,7 @@ function serializeGrokImagine2(input2) {
 }
 var init_grok_imagine_2 = __esm(() => {
   init_prompt_document();
+  init_helpers();
 });
 
 // src/backend/runtime/prompt-serializers/qwen-image-3.ts
@@ -42892,6 +43248,7 @@ function serializeQwenImage3(input2) {
 }
 var init_qwen_image_3 = __esm(() => {
   init_prompt_document();
+  init_helpers();
 });
 
 // src/backend/runtime/prompt-serializers/nano-banana-21.ts
@@ -43088,6 +43445,7 @@ ${preserveLines.join(`
 }
 var init_nano_banana_21 = __esm(() => {
   init_prompt_document();
+  init_helpers();
 });
 
 // src/backend/runtime/prompt-serializers/seedream-5.ts
@@ -43190,6 +43548,7 @@ function serializeSeedream5(input2) {
 }
 var init_seedream_5 = __esm(() => {
   init_prompt_document();
+  init_helpers();
 });
 
 // src/backend/runtime/prompt-serializers/anima.ts
@@ -43350,6 +43709,7 @@ function serializeAnima(input2) {
 }
 var init_anima = __esm(() => {
   init_prompt_document();
+  init_helpers();
 });
 
 // src/backend/runtime/prompt-serializers/generic-prose.ts
@@ -43371,7 +43731,12 @@ function serializeGenericProse(input2) {
     const firstName = main?.name ? main.name.split(" ")[0] || main.name : "";
     const nameRegex = firstName ? new RegExp(`^(?:${main?.name}|${firstName})\\s+`, "i") : null;
     const cleanAct = nameRegex && nameRegex.test(rawAct) ? rawAct.replace(nameRegex, "") : rawAct;
-    subjectText = `${main?.name || "Character"} with ${main?.appearance || "distinct traits"}${attire}, currently ${cleanAct}.`.replace(/\.\.+$/, ".");
+    const isNarrativeBlock = cleanAct.includes(". ") || cleanAct.length > 120 || /^[A-Z]/.test(cleanAct);
+    if (isNarrativeBlock) {
+      subjectText = `Subject: ${main?.name || "Character"} (${main?.appearance || "distinct traits"}${attire}). Scene action: ${cleanAct}.`.replace(/\.\.+$/, ".");
+    } else {
+      subjectText = `${main?.name || "Character"} with ${main?.appearance || "distinct traits"}${attire}, currently ${cleanAct}.`.replace(/\.\.+$/, ".");
+    }
   }
   sections.push({
     id: "subject-action",
@@ -43380,7 +43745,7 @@ function serializeGenericProse(input2) {
     compressible: false,
     text: subjectText
   });
-  const cameraText = formatCameraFraming(shotSpec);
+  const cameraText = formatCameraFraming(shotSpec, styleDNA);
   if (cameraText) {
     sections.push({
       id: "camera",
@@ -43441,6 +43806,7 @@ function serializeGenericProse(input2) {
 }
 var init_generic_prose = __esm(() => {
   init_prompt_document();
+  init_helpers();
 });
 
 // src/backend/runtime/prompt-serializers/generic-tags.ts
@@ -43526,6 +43892,7 @@ function serializeGenericTags(input2) {
 }
 var init_generic_tags = __esm(() => {
   init_prompt_document();
+  init_helpers();
 });
 // src/backend/runtime/prompt-serializers/index.ts
 function getPromptSerializer(dialect) {
@@ -43553,6 +43920,7 @@ var init_prompt_serializers = __esm(() => {
   init_anima();
   init_generic_prose();
   init_generic_tags();
+  init_helpers();
   SERIALIZER_MAP = {
     "flux3-klein": serializeFlux3Klein,
     flux3: serializeFlux3,
@@ -43753,6 +44121,18 @@ function lintCompiledPrompt(options3) {
 var init_prompt_lint = () => {};
 
 // src/backend/runtime/model-prompt-compiler.ts
+function formatProseSentence(raw, capitalizeStart = false) {
+  let cleaned = raw.trim().replace(/^[,;:\s]+/, "").replace(/[,;:\s]+$/, "").trim();
+  if (!cleaned)
+    return "";
+  if (capitalizeStart && /^[a-z]/.test(cleaned)) {
+    cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  }
+  if (!/[.!?]$/.test(cleaned)) {
+    cleaned += ".";
+  }
+  return cleaned;
+}
 function compileModelPrompt(input2) {
   const {
     brief,
@@ -43780,12 +44160,69 @@ function compileModelPrompt(input2) {
     detailLevel,
     cue
   });
-  const negativeLen = serialized.negativePrompt ? serialized.negativePrompt.length : 0;
+  const isTagDialect = profile.dialect === "anima" || profile.dialect === "generic-tags" || profile.dialect === "novelai";
+  let sections = serialized.document.sections.map((sec) => {
+    if (styleDNA.preserve && STYLE_SECTION_IDS.has(sec.id)) {
+      return { ...sec, priority: 1, compressible: false };
+    }
+    return sec;
+  });
+  const cleanPrefix = styleDNA.prefix?.trim() ?? "";
+  if (cleanPrefix) {
+    const prefixText = isTagDialect ? cleanPrefix.replace(/[,;:\s]+$/, "") : formatProseSentence(cleanPrefix, true);
+    if (prefixText) {
+      sections = [
+        {
+          id: "style-prefix",
+          priority: 0,
+          required: true,
+          compressible: false,
+          text: prefixText
+        },
+        ...sections
+      ];
+    }
+  }
+  const cleanSuffix = styleDNA.suffix?.trim() ?? "";
+  if (cleanSuffix) {
+    const suffixText = isTagDialect ? cleanSuffix.replace(/^[,;:\s]+/, "").replace(/[,;:\s]+$/, "") : formatProseSentence(cleanSuffix, true);
+    if (suffixText) {
+      const constraintsIdx = sections.findIndex((s) => s.id === "constraints" || s.id === "sec-constraints" || s.id === "references");
+      const suffixSection = {
+        id: "style-suffix",
+        priority: 0,
+        required: true,
+        compressible: false,
+        text: suffixText
+      };
+      if (constraintsIdx >= 0) {
+        sections = [
+          ...sections.slice(0, constraintsIdx),
+          suffixSection,
+          ...sections.slice(constraintsIdx)
+        ];
+      } else {
+        sections = [...sections, suffixSection];
+      }
+    }
+  }
+  const enrichedDocument = {
+    ...serialized.document,
+    sections
+  };
+  let effectiveNegativePrompt = serialized.negativePrompt;
+  if (profile.negativePolicy !== "positive-only") {
+    const customNeg = styleDNA.negative?.trim();
+    if (customNeg) {
+      effectiveNegativePrompt = effectiveNegativePrompt ? `${customNeg}, ${effectiveNegativePrompt}` : customNeg;
+    }
+  }
+  const negativeLen = effectiveNegativePrompt ? effectiveNegativePrompt.length : 0;
   const positiveTarget = Math.max(100, Math.min(budgetPlan.maxTarget, profile.hardMaxCharacters - negativeLen));
-  const fitted = fitPromptDocumentToBudget(serialized.document, positiveTarget);
+  const fitted = fitPromptDocumentToBudget(enrichedDocument, positiveTarget);
   const lint = lintCompiledPrompt({
     prompt: fitted.prompt,
-    negativePrompt: serialized.negativePrompt,
+    negativePrompt: effectiveNegativePrompt,
     document: fitted.document,
     profile,
     brief,
@@ -43801,18 +44238,27 @@ function compileModelPrompt(input2) {
   return {
     document: fitted.document,
     prompt: fitted.prompt,
-    negativePrompt: serialized.negativePrompt,
+    negativePrompt: effectiveNegativePrompt,
     parameterHints: serialized.parameterHints,
     warnings,
     budgetPlan,
     lint
   };
 }
+var STYLE_SECTION_IDS;
 var init_model_prompt_compiler = __esm(() => {
   init_prompt_budget();
   init_prompt_serializers();
   init_prompt_fit_v2();
   init_prompt_lint();
+  STYLE_SECTION_IDS = new Set([
+    "style",
+    "visual-style",
+    "visual-treatment",
+    "art-direction",
+    "sec-visual-treatment",
+    "style-tags"
+  ]);
 });
 
 // src/backend/runtime/v2-request-builder.ts
@@ -43834,12 +44280,16 @@ function buildV2ImageRequest(input2) {
   const metadata = input2.metadata ? structuredClone(input2.metadata) : undefined;
   const outputPlan = resolveImageOutputPlan({ capabilities: profile.outputCapabilities, parameters: input2.planParameters ?? request.parameters, requestedRatio: config2.imageOutputAspectRatio !== "default" ? config2.imageOutputAspectRatio : cue.imageTemplate?.outputAspectRatio === "9:16" ? "9:16" : undefined, resolutionPreference: config2.imageResolutionPreference, source: profile.capabilitySource, modelId: request.model });
   const styleSnapshot = resolveStyleDNA(config2, input2.styleId);
+  const effectiveStyleDNA = { ...styleSnapshot.styleDNA };
+  if (cue.imageTemplate && !input2.styleId && !cue.imageTemplate.positive.includes("{{suffix}}")) {
+    delete effectiveStyleDNA.suffix;
+  }
   const overrides = manualCameraOverrides(rebuild?.manualCamera);
   const previous = input2.previousShot;
   const parsedPrevious = previous ? ImageShotSpecSchema.safeParse(previous.shotSpec) : undefined;
   const samePicture = previous && previous.cue.assetJobId === cue.assetJobId && previous.cue.sceneId === cue.sceneId && previous.cue.sceneRevision === cue.sceneRevision && previous.cue.paragraphIndex === cue.paragraphIndex && previous.cue.character === cue.character && JSON.stringify(previous.cue.ensembleSubjects) === JSON.stringify(cue.ensembleSubjects) && JSON.stringify(previous.cue.imageTemplate) === JSON.stringify(cue.imageTemplate);
   const continuity = parsedPrevious?.success && samePicture && !rebuild?.reframe && cue.imageTemplate?.cameraPolicy !== "fixed" && JSON.stringify(previous.styleDNA) === JSON.stringify(styleSnapshot.styleDNA) && parsedPrevious.data.output.orientation === outputPlan.orientation && parsedPrevious.data.output.actualRatio === outputPlan.actualRatio ? parsedPrevious.data : undefined;
-  const shotSpec = resolveShotSpec({ brief: input2.brief, outputPlan, template: cue.imageTemplate, cue, styleDNA: styleSnapshot.styleDNA, dialogueSafeAreaSetting: rebuild?.manualCamera?.dialogueSafeArea ?? config2.dialogueSafeArea, ...continuity ? { previousShot: continuity } : {}, isDialogueOverlayTarget: !cue.visualSources?.includes("location art") && !cue.visualSources?.includes("cast art"), revision: (input2.previousShotRevision ?? 0) + (rebuild?.reframe ? 1 : 0), ...overrides && Object.keys(overrides).length ? { manualOverrides: overrides } : {} });
+  const shotSpec = resolveShotSpec({ brief: input2.brief, outputPlan, template: cue.imageTemplate, cue, styleDNA: effectiveStyleDNA, dialogueSafeAreaSetting: rebuild?.manualCamera?.dialogueSafeArea ?? config2.dialogueSafeArea, ...continuity ? { previousShot: continuity } : {}, isDialogueOverlayTarget: !cue.visualSources?.includes("location art") && !cue.visualSources?.includes("cast art"), revision: (input2.previousShotRevision ?? 0) + (rebuild?.reframe ? 1 : 0), ...overrides && Object.keys(overrides).length ? { manualOverrides: overrides } : {} });
   request.promptProfileV2 = profile;
   request.outputPlan = outputPlan;
   request.shotSpec = shotSpec;
@@ -43847,7 +44297,7 @@ function buildV2ImageRequest(input2) {
   request.parameters = { ...request.parameters, ...outputPlan.parameters };
   if (cue.imageTemplate?.cameraPolicy !== "fixed" || Boolean(rebuild?.manualCamera || rebuild?.fitToModel || input2.styleId)) {
     const referencePlan = resolveReferencePlan({ brief: input2.metadata?.brief, cue, portraits: input2.portraits });
-    const compiled = compileModelPrompt({ brief: input2.brief, shotSpec, styleDNA: styleSnapshot.styleDNA, profile, outputPlan, referencePlan, detailLevel: rebuild?.fitToModel ? "compact" : config2.imagePromptDetail, promptExpansionEnabled: profile.promptExpansion?.enabled, userBudgetOverride: rebuild?.fitToModel ? Math.min(profile.softBudgets.standard[0], profile.hardMaxCharacters) : config2.imagePromptBudgetOverride ? config2.imagePromptBudget : null, cue });
+    const compiled = compileModelPrompt({ brief: input2.brief, shotSpec, styleDNA: effectiveStyleDNA, profile, outputPlan, referencePlan, detailLevel: rebuild?.fitToModel ? "compact" : config2.imagePromptDetail, promptExpansionEnabled: profile.promptExpansion?.enabled, userBudgetOverride: rebuild?.fitToModel ? Math.min(profile.softBudgets.standard[0], profile.hardMaxCharacters) : config2.imagePromptBudgetOverride ? config2.imagePromptBudget : null, cue });
     request.prompt = compiled.prompt;
     if (compiled.negativePrompt !== undefined)
       request.negativePrompt = compiled.negativePrompt;

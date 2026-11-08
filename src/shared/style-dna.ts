@@ -9,6 +9,9 @@ export type StyleLightingOverlay = z.infer<typeof StyleLightingOverlaySchema>;
 
 export const StyleDNASchema = z.object({
   medium: z.string().max(10000).optional(),
+  prefix: z.string().max(10000).optional(),
+  suffix: z.string().max(10000).optional(),
+  negative: z.string().max(10000).optional(),
   rendering: z.array(z.string().max(2000)).max(32).optional(),
   linework: z.array(z.string().max(2000)).max(32).optional(),
   shading: z.array(z.string().max(2000)).max(32).optional(),
@@ -23,6 +26,43 @@ export const StyleDNASchema = z.object({
   avoidIntent: z.array(z.string().max(2000)).max(32).optional()
 }).strict();
 export type StyleDNA = z.infer<typeof StyleDNASchema>;
+
+export function cleanStyleAffix(raw?: string | null): string {
+  if (!raw) return '';
+  return raw
+    .trim()
+    .replace(/^[,;:\s]+/, '')
+    .replace(/[,;:\s]+$/, '')
+    .trim();
+}
+
+export function inferPhotographicStyleTraits(prefix: string, suffix: string): Partial<StyleDNA> {
+  const combined = `${prefix} ${suffix}`.trim();
+  if (!combined) return {};
+
+  const cameraHints: string[] = [];
+  if (/\b(?:24mm|26mm|28mm|wide-angle|wide angle|smartphone lens|phone-wide|iphone|cellphone|camera roll)\b/i.test(combined)) {
+    cameraHints.push('phone-wide perspective');
+  }
+  if (/\b(?:deep depth of field|deep focus|background remains in focus|everything in focus|without cinematic lens blur|no bokeh)\b/i.test(combined)) {
+    cameraHints.push('deep focus');
+  }
+  if (/\b(?:eye-level|eye level)\b/i.test(combined)) {
+    cameraHints.push('eye-level');
+  }
+  if (/\b(?:tilted horizon|off-center|candid|handheld|unposed|snapshot)\b/i.test(combined)) {
+    cameraHints.push('candid handheld framing');
+  }
+
+  return cameraHints.length > 0 ? { cameraHints } : {};
+}
+
+export function isPhotorealOrCandidStyle(styleDNA?: StyleDNA): boolean {
+  if (!styleDNA) return false;
+  if (styleDNA.realism && styleDNA.realism.length > 0) return true;
+  const text = [styleDNA.medium, styleDNA.prefix, styleDNA.suffix].filter(Boolean).join(' ');
+  return /\b(?:photo|photograph|photoreal\w*|iphone|smartphone|cellphone|camera roll|snapshot|candid|35mm|dslr|documentary|unretouched)\b/i.test(text);
+}
 
 export function createEmptyStyleDNA(partial?: Partial<StyleDNA>): StyleDNA {
   return StyleDNASchema.parse({
@@ -84,7 +124,7 @@ export const BUILTIN_STYLE_DNA: Readonly<Record<string, StyleDNA>> = Object.free
   },
   'builtin-style:phone-candid': {
     medium: 'casual cellphone snapshot',
-    cameraHints: ['phone-wide perspective', 'slightly imperfect handheld framing'],
+    cameraHints: ['phone-wide perspective', 'slightly imperfect handheld framing', 'deep focus'],
     texture: ['mild shadow sensor noise', 'subtle JPEG compression'],
     realism: ['natural skin and material texture', 'modest dynamic range'],
     preserve: ['available ambient scene lighting', 'natural unposed moments'],
@@ -92,7 +132,7 @@ export const BUILTIN_STYLE_DNA: Readonly<Record<string, StyleDNA>> = Object.free
   },
   'builtin-style:phone-flash': {
     medium: 'casual cellphone photograph with direct on-camera flash',
-    cameraHints: ['phone-wide perspective', 'candid handheld framing'],
+    cameraHints: ['phone-wide perspective', 'candid handheld framing', 'deep focus'],
     lightingOverlay: {
       type: 'harsh direct camera flash with close falloff and specular highlights',
       intentional: true
@@ -148,8 +188,9 @@ export interface ResolvedStyleDNASnapshot {
  * - Built-in styles receive full semantic StyleDNA.
  * - Untouched historical default prefix ("masterpiece, best quality, anime visual novel scene")
  *   is cleanly migrated to the semantic built-in anime style.
- * - Custom user styles/presets are never altered or silently reinterpreted; they run in legacy-literal mode.
- * - Intentional lighting overlays (e.g. direct camera flash) are marked as intentional.
+ * - Custom user styles/presets retain both their positive prefix, suffix, and negative prompt,
+ *   while also inferring optical camera hints (such as 26mm smartphone wide lens or deep DOF)
+ *   so the Shot Director never injects contradictory lens or bokeh instructions.
  */
 export function resolveStyleDNA(
   config: VisualNovelConfig,
@@ -172,8 +213,15 @@ export function resolveStyleDNA(
   if (targetId && config.promptPresets) {
     const customPreset = config.promptPresets.find(p => p.id === targetId);
     if (customPreset) {
+      const cleanedPrefix = cleanStyleAffix(customPreset.positive);
+      const cleanedSuffix = cleanStyleAffix(customPreset.suffix);
+      const cleanedNegative = customPreset.negative?.trim() || '';
+      const inferred = inferPhotographicStyleTraits(cleanedPrefix, cleanedSuffix);
       const legacyDNA: StyleDNA = {
-        ...(customPreset.positive?.trim() ? { medium: customPreset.positive.trim() } : {}),
+        ...(cleanedPrefix ? { medium: cleanedPrefix, prefix: cleanedPrefix } : {}),
+        ...(cleanedSuffix ? { suffix: cleanedSuffix } : {}),
+        ...(cleanedNegative ? { negative: cleanedNegative } : {}),
+        ...inferred,
         preserve: ['scene-defined lighting', 'custom literal preset wording']
       };
       return {
@@ -198,10 +246,16 @@ export function resolveStyleDNA(
     };
   }
 
-  // 3. User custom preset or custom prefix: preserve as legacy-literal
-  if (normalizedPrefix.length > 0 || (config.promptSuffix && config.promptSuffix.trim().length > 0)) {
+  // 3. User custom preset or custom prefix/suffix: preserve as legacy-literal
+  const cleanedPrefix = cleanStyleAffix(config.promptPrefix);
+  const cleanedSuffix = cleanStyleAffix(config.promptSuffix);
+  if (cleanedPrefix.length > 0 || cleanedSuffix.length > 0) {
+    const inferred = inferPhotographicStyleTraits(cleanedPrefix, cleanedSuffix);
+    const hasCustomCameraOrSuffix = cleanedSuffix.length > 0 || Boolean(inferred.cameraHints?.length);
     const legacyDNA: StyleDNA = {
-      ...(normalizedPrefix.length > 0 ? { medium: normalizedPrefix } : {}),
+      ...(cleanedPrefix ? { medium: cleanedPrefix, ...(hasCustomCameraOrSuffix ? { prefix: cleanedPrefix } : {}) } : {}),
+      ...(cleanedSuffix ? { suffix: cleanedSuffix } : {}),
+      ...inferred,
       preserve: ['scene-defined lighting', 'custom literal prefix/suffix wording']
     };
     return {

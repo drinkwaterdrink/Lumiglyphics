@@ -8,10 +8,87 @@ import { compileActionProp } from "../../shared/action-prop.js";
 import { resolveImageTemplate, type ImageTemplate } from "../../shared/image-templates.js";
 import type { VisualBrief } from "../../shared/image-templates.js";
 export type { VisualBrief } from "../../shared/image-templates.js";
-import { POSE_EXPRESSION_CATALOGUE, poseById } from "../../shared/character.js";
+import { POSE_EXPRESSION_CATALOGUE, poseById, sanitizePoseExpression } from "../../shared/character.js";
 import { formatCharacterDNAToPromptClause, type CharacterDNA, type CharacterDNALibrary } from "../../shared/character-dna.js";
 
 const text = (values: (string | null | undefined)[], max = 4000) => [...new Set(values.map(value => value?.trim()).filter(Boolean))].join("; ").slice(0, max);
+
+const PROP_STOP_WORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'by', 'with', 'from', 'near', 'under', 'over', 'into',
+  'north', 'south', 'east', 'west', 'corner', 'side', 'wall', 'floor', 'room', 'area', 'three', 'two', 'one'
+]);
+
+/**
+ * Strips literary non-visual negations (such as "no visible aura, only...") from positive visual descriptions
+ * because diffusion models attend to the noun ("aura") and render the negated effect.
+ */
+export function sanitizeVisualNarrativeDescription(raw?: string | null): string {
+  if (!raw || !raw.trim()) return "";
+  return raw
+    .replace(/\b(?:with\s+)?no\s+(?:visible|magical|magic|supernatural|glowing)\s+(?:aura|glow|halo|mana|light)\s*,?\s*(?:only\s+)?/gi, "")
+    .replace(/\bwithout\s+any\s+(?:visible\s+)?(?:aura|glow|halo)\s*,?\s*/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function propKeywords(phrase: string): string[] {
+  return phrase
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .split(/[\s-]+/)
+    .map(w => w.trim())
+    .filter(w => w.length >= 4 && !PROP_STOP_WORDS.has(w));
+}
+
+/**
+ * Deduplicates persistent room elements against an already-detailed environment description and active scene action,
+ * and omits unmentioned background room inventory when the scene description + active action are already rich.
+ */
+export function selectRelevantPersistentElements(
+  envDescription: string | null | undefined,
+  activeAction: string | null | undefined,
+  persistentElements: readonly string[]
+): string[] {
+  if (!persistentElements || persistentElements.length === 0) return [];
+  const desc = (envDescription ?? "").trim();
+  const act = (activeAction ?? "").trim();
+
+  // For short/minimal environment descriptions (< 80 chars), preserve all persistent elements
+  if (desc.length < 80) {
+    return [...persistentElements];
+  }
+
+  const descKeywords = new Set(propKeywords(desc));
+  const actKeywords = new Set(propKeywords(act));
+  const isDetailedActionBeat = act.length >= 80;
+
+  const selected: string[] = [];
+  for (const elem of persistentElements) {
+    const trimmed = elem?.trim();
+    if (!trimmed) continue;
+    const keys = propKeywords(trimmed);
+    if (keys.length === 0) continue;
+
+    // 1. If the prop's primary nouns are already described in environment.description, skip duplicate prop entry
+    const overlapWithDesc = keys.filter(k => descKeywords.has(k)).length;
+    if (overlapWithDesc >= 1 && (overlapWithDesc / keys.length >= 0.34 || overlapWithDesc >= 2)) {
+      continue;
+    }
+
+    // 2. When a detailed action paragraph is active, only include persistent room inventory if referenced in the action
+    if (isDetailedActionBeat) {
+      const mentionedInAction = keys.some(k => actKeywords.has(k));
+      if (!mentionedInAction) {
+        continue;
+      }
+    }
+
+    keys.forEach(k => descKeywords.add(k));
+    selected.push(trimmed);
+  }
+
+  return selected;
+}
 
 export function resolveTemplateIdentity(
   scene: SceneState,
@@ -64,8 +141,19 @@ export function buildVisualBrief(
   const appearance = attire ? applyAttireOverride(identity, attire) : identity;
   const subject = cue.subjectCategory ?? scene.subjectCategory;
   const subjectLabel = subject === "female" ? "One visible woman" : subject === "male" ? "One visible man" : "One visible character";
-  const pose = noPeople || ensemble ? "" : poseById(POSE_EXPRESSION_CATALOGUE, cue.poseExpressionId).suffix;
+  const cleanedVisualDescription = sanitizeVisualNarrativeDescription(cue.visualDescription);
+  const rawPose = noPeople || ensemble ? "" : poseById(POSE_EXPRESSION_CATALOGUE, cue.poseExpressionId).suffix;
+  const pose = sanitizePoseExpression(rawPose, {
+    keepWeightBrackets: false,
+    stripAnimeTropes: true,
+    hasActiveSceneAction: cleanedVisualDescription.length > 40
+  });
   const environment = scene.environment;
+  const relevantPersistentElements = selectRelevantPersistentElements(
+    environment.description,
+    cleanedVisualDescription,
+    environment.persistentElements
+  );
   const members = (cue.ensembleSubjects ?? scene.cast.map(name => ({name,appearance:""}))).map(member=>{
     const saved=Object.entries(appearances??{}).find(([key])=>characterAppearanceKey(key)===characterAppearanceKey(member.name))?.[1];
     const appearance=manual?member.appearance:saved||member.appearance;
@@ -91,9 +179,9 @@ export function buildVisualBrief(
       direction:pose.slice(0,1000),shortened:!ensemble&&(identity.length>4000||(attire?.length??0)>2000||pose.length>1000),
       subjectsInPositive:template.positive.includes('{{subjects}}'),subjectsInNegative:template.negative.includes('{{subjects}}'),
     }}:{}),
-    scene: text([environment.location, environment.description, ...environment.persistentElements, environment.timeOfDay, environment.weather]),
+    scene: text([environment.location, environment.description, ...relevantPersistentElements, environment.timeOfDay, environment.weather]),
     subjects: noPeople ? "" : ensemble ? group : text([subjectLabel, appearance, template.category === "portrait" ? pose : ""]),
-    action: noPeople ? template.category === "detail" || template.category === "custom" ? (cue.visualFocus ?? "").slice(0, 1000) : "" : text([cue.visualDescription, compileActionProp(cue.action), template.category === "portrait" ? "" : pose]),
+    action: noPeople ? template.category === "detail" || template.category === "custom" ? (cue.visualFocus ?? "").slice(0, 1000) : "" : text([cleanedVisualDescription, compileActionProp(cue.action), template.category === "portrait" ? "" : pose]),
     composition: `${template.framing}; eye-level view; ${noPeople ? "no people" : ensemble ? `${members.length} visible characters, including every listed subject; distinct faces and silhouettes` : "one visible character"}; keep the lower quarter clear for dialogue`,
     lighting: (environment.lighting ?? "").slice(0, 1000),
     subjectMode: template.subjectMode,

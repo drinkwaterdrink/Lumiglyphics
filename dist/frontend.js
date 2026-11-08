@@ -19534,6 +19534,9 @@ var StyleLightingOverlaySchema = exports_external.object({
 }).strict();
 var StyleDNASchema = exports_external.object({
   medium: exports_external.string().max(1e4).optional(),
+  prefix: exports_external.string().max(1e4).optional(),
+  suffix: exports_external.string().max(1e4).optional(),
+  negative: exports_external.string().max(1e4).optional(),
   rendering: exports_external.array(exports_external.string().max(2000)).max(32).optional(),
   linework: exports_external.array(exports_external.string().max(2000)).max(32).optional(),
   shading: exports_external.array(exports_external.string().max(2000)).max(32).optional(),
@@ -19596,7 +19599,7 @@ var BUILTIN_STYLE_DNA = Object.freeze({
   },
   "builtin-style:phone-candid": {
     medium: "casual cellphone snapshot",
-    cameraHints: ["phone-wide perspective", "slightly imperfect handheld framing"],
+    cameraHints: ["phone-wide perspective", "slightly imperfect handheld framing", "deep focus"],
     texture: ["mild shadow sensor noise", "subtle JPEG compression"],
     realism: ["natural skin and material texture", "modest dynamic range"],
     preserve: ["available ambient scene lighting", "natural unposed moments"],
@@ -19604,7 +19607,7 @@ var BUILTIN_STYLE_DNA = Object.freeze({
   },
   "builtin-style:phone-flash": {
     medium: "casual cellphone photograph with direct on-camera flash",
-    cameraHints: ["phone-wide perspective", "candid handheld framing"],
+    cameraHints: ["phone-wide perspective", "candid handheld framing", "deep focus"],
     lightingOverlay: {
       type: "harsh direct camera flash with close falloff and specular highlights",
       intentional: true
@@ -21516,50 +21519,187 @@ function createEmptyCharacterDNA(name, id3) {
     lastUpdated: Date.now()
   });
 }
+var SKIN_WORD_RE = /\b(skin|complexion)\b/i;
+var DANGLING_PREPOSITION_RE = /^(?:for|on|to|in|of|at|by|from)\b/i;
+var NON_VISUAL_DEMEANOR_RE = /\b(?:wit|humou?r|sarcas\w*|pragmati\w*|precision|intellect\w*|cynic\w*|deadpan|monotone|voice|speech|accent|vocab\w*|philosoph\w*|ideolog\w*|morality|ambition|loyalty|temperament|mindset|logic\w*|calculat\w*)\b/i;
+var VISUAL_POSTURE_CUE_RE = /\b(?:eyes|gaze|stare|posture|stance|shoulders|smile|smirk|frown|brow|expression|coiled|tense|slouched|upright|watchful|guarded|poised|relaxed|rigid|alert|scowl|glare)\b/i;
+var STOP_WORDS = new Set([
+  "with",
+  "under",
+  "over",
+  "her",
+  "his",
+  "their",
+  "the",
+  "a",
+  "an",
+  "and",
+  "of",
+  "in",
+  "on",
+  "for",
+  "to",
+  "frame",
+  "body",
+  "build",
+  "very",
+  "slightly"
+]);
+function formatAgeClause(rawAge) {
+  const age = rawAge?.trim() ?? "";
+  if (!age)
+    return "";
+  if (/^\d{1,3}$/.test(age))
+    return `${age}-year-old`;
+  return age;
+}
+function formatGenderSpecies(gender, species) {
+  const g = gender?.trim() ?? "";
+  const s = species?.trim() ?? "";
+  return [g, s].filter(Boolean).join(" ");
+}
+function formatBustClause(rawBust, asWithClause = false) {
+  const bust = rawBust?.trim() ?? "";
+  if (!bust)
+    return "";
+  if (DANGLING_PREPOSITION_RE.test(bust))
+    return "";
+  const clean = bust.replace(/^with\s+/i, "").trim();
+  if (!clean)
+    return "";
+  return asWithClause ? `with ${clean}` : clean;
+}
+function formatSkinClause(rawSkin, asWithClause = false) {
+  const skin = rawSkin?.trim() ?? "";
+  if (!skin)
+    return "";
+  const clean = skin.replace(/^with\s+/i, "").trim();
+  if (!clean)
+    return "";
+  const suffixed = SKIN_WORD_RE.test(clean) ? clean : `${clean} skin`;
+  return asWithClause ? `with ${suffixed}` : suffixed;
+}
+function formatHairClause(hair) {
+  const lengthRaw = hair.length?.trim() ?? "";
+  const styleRaw = hair.style?.trim() ?? "";
+  const colorRaw = hair.color?.trim() ?? "";
+  if (!lengthRaw && !styleRaw && !colorRaw)
+    return "";
+  const lengthCore = lengthRaw.replace(/\s+length$/i, "").trim();
+  const styleLower = styleRaw.toLowerCase();
+  const effectiveLength = lengthCore && (!styleLower || !styleLower.includes(lengthCore.toLowerCase())) ? lengthRaw : "";
+  const hasHairWord = /\bhair\b/i.test(styleRaw) || /\bhair\b/i.test(colorRaw) || /\bhair\b/i.test(effectiveLength);
+  const baseParts = [effectiveLength, styleRaw, colorRaw ? hasHairWord ? colorRaw : `${colorRaw} hair` : hasHairWord ? "" : "hair"].filter(Boolean);
+  return baseParts.join(" ").replace(/\s+/g, " ").trim();
+}
+function filterVisualDemeanor(rawDemeanor) {
+  const demeanor = rawDemeanor?.trim() ?? "";
+  if (!demeanor)
+    return "";
+  const subClauses = demeanor.split(/[;,]/).map((s) => s.trim()).filter(Boolean).filter((clause) => {
+    if (!NON_VISUAL_DEMEANOR_RE.test(clause))
+      return true;
+    return VISUAL_POSTURE_CUE_RE.test(clause);
+  });
+  return subClauses.join(", ");
+}
+function contentTokens(phrase) {
+  return phrase.toLowerCase().replace(/[^a-z0-9-\s]/g, " ").split(/\s+/).map((w) => w.trim()).filter((w) => w.length > 1 && !STOP_WORDS.has(w));
+}
+function deduplicateDescriptiveClauses(rawClauses, isFirstIdentityClause = false) {
+  const result = [];
+  const seenPhrases = new Set;
+  const seenTokens = new Set;
+  rawClauses.forEach((raw, idx) => {
+    if (idx === 0 && isFirstIdentityClause) {
+      const trimmed = raw.trim();
+      if (trimmed) {
+        seenPhrases.add(trimmed.toLowerCase().replace(/\s+/g, " "));
+        contentTokens(trimmed).forEach((t) => seenTokens.add(t));
+        result.push(trimmed);
+      }
+      return;
+    }
+    const subParts = raw.split(/\s*;\s*|\s*,\s*/).map((s) => s.trim()).filter(Boolean);
+    for (const part of subParts) {
+      const norm = part.toLowerCase().replace(/\s+/g, " ");
+      if (seenPhrases.has(norm))
+        continue;
+      const tokens = contentTokens(part);
+      if (tokens.length === 0)
+        continue;
+      if (!/^wearing\b/i.test(part) && seenTokens.size > 0) {
+        const overlapCount = tokens.filter((t) => seenTokens.has(t)).length;
+        if (overlapCount === tokens.length || tokens.length >= 3 && overlapCount / tokens.length >= 0.75) {
+          continue;
+        }
+      }
+      seenPhrases.add(norm);
+      tokens.forEach((t) => seenTokens.add(t));
+      result.push(part);
+    }
+  });
+  return result;
+}
 function formatCharacterDNAToPromptClause(dna) {
-  const parts = [];
+  const rawClauses = [];
   const isMale = dna.build.gender?.toLowerCase() === "man" || dna.build.gender?.toLowerCase() === "male";
   const identityBits = [];
-  if (dna.build.age)
-    identityBits.push(dna.build.age);
-  if (dna.build.height || dna.build.bodyType)
-    identityBits.push([dna.build.height, dna.build.bodyType].filter(Boolean).join(" "));
-  if (dna.build.gender || dna.build.species)
-    identityBits.push([dna.build.gender, dna.build.species].filter(Boolean).join(" "));
+  const age = formatAgeClause(dna.build.age);
+  if (age)
+    identityBits.push(age);
+  let inferredHeight = dna.build.height?.trim() ?? "";
+  if (!inferredHeight && dna.distinguishingFeatures?.length) {
+    for (const feat of dna.distinguishingFeatures) {
+      const m = feat.match(/^\b(tall|petite|short|statuesque|towering)\b/i);
+      if (m?.[1]) {
+        inferredHeight = m[1].toLowerCase();
+        break;
+      }
+    }
+  }
+  if (inferredHeight || dna.build.bodyType) {
+    identityBits.push([inferredHeight, dna.build.bodyType].filter(Boolean).join(" "));
+  }
+  const genderSpecies = formatGenderSpecies(dna.build.gender, dna.build.species);
+  if (genderSpecies)
+    identityBits.push(genderSpecies);
   if (dna.build.bust && (!isMale || /chest|shoulder|pec/i.test(dna.build.bust))) {
-    identityBits.push(`with ${dna.build.bust}`);
+    const bust = formatBustClause(dna.build.bust, true);
+    if (bust)
+      identityBits.push(bust);
   }
   if (dna.build.hipsGlutes && !isMale) {
     identityBits.push(dna.build.hipsGlutes);
   }
-  if (dna.build.skinTone)
-    identityBits.push(`with ${dna.build.skinTone} skin`);
-  if (identityBits.length > 0) {
-    parts.push(identityBits.join(" "));
+  const skin = formatSkinClause(dna.build.skinTone, true);
+  if (skin)
+    identityBits.push(skin);
+  const hasIdentityLead = identityBits.length > 0;
+  if (hasIdentityLead) {
+    rawClauses.push(identityBits.join(" ").replace(/\s+/g, " ").trim());
   }
-  const facialBits = [];
   if (dna.faceFeatures)
-    facialBits.push(dna.faceFeatures);
-  if (dna.hair.color || dna.hair.length || dna.hair.style) {
-    facialBits.push([dna.hair.length, dna.hair.style, dna.hair.color ? `${dna.hair.color} hair` : "hair"].filter(Boolean).join(" "));
-  }
+    rawClauses.push(dna.faceFeatures);
+  const hairText = formatHairClause(dna.hair);
+  if (hairText)
+    rawClauses.push(hairText);
   if (dna.eyes.color || dna.eyes.shape) {
-    facialBits.push([dna.eyes.shape, dna.eyes.color ? `${dna.eyes.color} eyes` : "eyes"].filter(Boolean).join(" "));
-  }
-  if (facialBits.length > 0) {
-    parts.push(facialBits.join(", "));
+    rawClauses.push([dna.eyes.shape, dna.eyes.color ? `${dna.eyes.color} eyes` : "eyes"].filter(Boolean).join(" "));
   }
   if (dna.distinguishingFeatures && dna.distinguishingFeatures.length > 0) {
-    parts.push(dna.distinguishingFeatures.join(", "));
+    rawClauses.push(...dna.distinguishingFeatures);
   }
+  const deduped = deduplicateDescriptiveClauses(rawClauses, hasIdentityLead);
   const currentOutfit = dna.activeOutfit || dna.signatureOutfit;
   if (currentOutfit) {
-    parts.push(currentOutfit.startsWith("wearing ") ? currentOutfit : `wearing ${currentOutfit}`);
+    deduped.push(currentOutfit.startsWith("wearing ") ? currentOutfit : `wearing ${currentOutfit}`);
   }
-  if (dna.demeanor) {
-    parts.push(dna.demeanor);
+  const visualDemeanor = filterVisualDemeanor(dna.demeanor);
+  if (visualDemeanor) {
+    deduped.push(visualDemeanor);
   }
-  return parts.filter(Boolean).join(", ");
+  return deduped.filter(Boolean).join(", ");
 }
 
 // src/shared/character-dna-workflow.ts
@@ -48697,7 +48837,7 @@ function modelOutputHelp(provider, model, parameters) {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.3-beta.134";
+var LUMIGLYPHICS_VERSION = "0.2.4-beta.135";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;

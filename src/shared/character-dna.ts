@@ -80,6 +80,126 @@ export function createEmptyCharacterDNA(name: string, id?: string): CharacterDNA
   });
 }
 
+const SKIN_WORD_RE = /\b(skin|complexion)\b/i;
+const DANGLING_PREPOSITION_RE = /^(?:for|on|to|in|of|at|by|from)\b/i;
+const NON_VISUAL_DEMEANOR_RE = /\b(?:wit|humou?r|sarcas\w*|pragmati\w*|precision|intellect\w*|cynic\w*|deadpan|monotone|voice|speech|accent|vocab\w*|philosoph\w*|ideolog\w*|morality|ambition|loyalty|temperament|mindset|logic\w*|calculat\w*)\b/i;
+const VISUAL_POSTURE_CUE_RE = /\b(?:eyes|gaze|stare|posture|stance|shoulders|smile|smirk|frown|brow|expression|coiled|tense|slouched|upright|watchful|guarded|poised|relaxed|rigid|alert|scowl|glare)\b/i;
+const STOP_WORDS = new Set([
+  'with', 'under', 'over', 'her', 'his', 'their', 'the', 'a', 'an', 'and', 'of', 'in', 'on', 'for', 'to', 'frame', 'body', 'build', 'very', 'slightly'
+]);
+
+function formatAgeClause(rawAge?: string): string {
+  const age = rawAge?.trim() ?? '';
+  if (!age) return '';
+  if (/^\d{1,3}$/.test(age)) return `${age}-year-old`;
+  return age;
+}
+
+function formatGenderSpecies(gender?: string, species?: string): string {
+  const g = gender?.trim() ?? '';
+  const s = species?.trim() ?? '';
+  return [g, s].filter(Boolean).join(' ');
+}
+
+function formatBustClause(rawBust?: string, asWithClause = false): string {
+  const bust = rawBust?.trim() ?? '';
+  if (!bust) return '';
+  if (DANGLING_PREPOSITION_RE.test(bust)) return '';
+  const clean = bust.replace(/^with\s+/i, '').trim();
+  if (!clean) return '';
+  return asWithClause ? `with ${clean}` : clean;
+}
+
+function formatSkinClause(rawSkin?: string, asWithClause = false): string {
+  const skin = rawSkin?.trim() ?? '';
+  if (!skin) return '';
+  const clean = skin.replace(/^with\s+/i, '').trim();
+  if (!clean) return '';
+  const suffixed = SKIN_WORD_RE.test(clean) ? clean : `${clean} skin`;
+  return asWithClause ? `with ${suffixed}` : suffixed;
+}
+
+function formatHairClause(hair: CharacterHairDNA): string {
+  const lengthRaw = hair.length?.trim() ?? '';
+  const styleRaw = hair.style?.trim() ?? '';
+  const colorRaw = hair.color?.trim() ?? '';
+  if (!lengthRaw && !styleRaw && !colorRaw) return '';
+
+  const lengthCore = lengthRaw.replace(/\s+length$/i, '').trim();
+  const styleLower = styleRaw.toLowerCase();
+  const effectiveLength = lengthCore && (!styleLower || !styleLower.includes(lengthCore.toLowerCase()))
+    ? lengthRaw
+    : '';
+
+  const hasHairWord = /\bhair\b/i.test(styleRaw) || /\bhair\b/i.test(colorRaw) || /\bhair\b/i.test(effectiveLength);
+  const baseParts = [effectiveLength, styleRaw, colorRaw ? (hasHairWord ? colorRaw : `${colorRaw} hair`) : (hasHairWord ? '' : 'hair')].filter(Boolean);
+  return baseParts.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+function filterVisualDemeanor(rawDemeanor?: string): string {
+  const demeanor = rawDemeanor?.trim() ?? '';
+  if (!demeanor) return '';
+  const subClauses = demeanor
+    .split(/[;,]/)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .filter(clause => {
+      if (!NON_VISUAL_DEMEANOR_RE.test(clause)) return true;
+      return VISUAL_POSTURE_CUE_RE.test(clause);
+    });
+  return subClauses.join(', ');
+}
+
+function contentTokens(phrase: string): string[] {
+  return phrase
+    .toLowerCase()
+    .replace(/[^a-z0-9-\s]/g, ' ')
+    .split(/\s+/)
+    .map(w => w.trim())
+    .filter(w => w.length > 1 && !STOP_WORDS.has(w));
+}
+
+function deduplicateDescriptiveClauses(rawClauses: string[], isFirstIdentityClause = false): string[] {
+  const result: string[] = [];
+  const seenPhrases = new Set<string>();
+  const seenTokens = new Set<string>();
+
+  rawClauses.forEach((raw, idx) => {
+    // Keep the opening identity clause intact while recording all its tokens
+    if (idx === 0 && isFirstIdentityClause) {
+      const trimmed = raw.trim();
+      if (trimmed) {
+        seenPhrases.add(trimmed.toLowerCase().replace(/\s+/g, ' '));
+        contentTokens(trimmed).forEach(t => seenTokens.add(t));
+        result.push(trimmed);
+      }
+      return;
+    }
+
+    const subParts = raw.split(/\s*;\s*|\s*,\s*/).map(s => s.trim()).filter(Boolean);
+    for (const part of subParts) {
+      const norm = part.toLowerCase().replace(/\s+/g, ' ');
+      if (seenPhrases.has(norm)) continue;
+
+      const tokens = contentTokens(part);
+      if (tokens.length === 0) continue;
+
+      if (!/^wearing\b/i.test(part) && seenTokens.size > 0) {
+        const overlapCount = tokens.filter(t => seenTokens.has(t)).length;
+        if (overlapCount === tokens.length || (tokens.length >= 3 && overlapCount / tokens.length >= 0.75)) {
+          continue;
+        }
+      }
+
+      seenPhrases.add(norm);
+      tokens.forEach(t => seenTokens.add(t));
+      result.push(part);
+    }
+  });
+
+  return result;
+}
+
 /**
  * Formats a CharacterDNA record into comma-separated tags suitable for image prompt generation.
  */
@@ -87,112 +207,121 @@ export function formatCharacterDNAToTags(dna: CharacterDNA): string[] {
   const tags: string[] = [];
   const isMale = dna.build.gender?.toLowerCase() === 'man' || dna.build.gender?.toLowerCase() === 'male';
 
-  // Age / Gender / Species
-  if (dna.build.age) tags.push(dna.build.age);
-  if (dna.build.gender || dna.build.species) {
-    tags.push([dna.build.gender, dna.build.species].filter(Boolean).join(' '));
-  }
-  if (dna.build.skinTone) tags.push(`${dna.build.skinTone} skin`);
+  const age = formatAgeClause(dna.build.age);
+  if (age) tags.push(age);
+  const genderSpecies = formatGenderSpecies(dna.build.gender, dna.build.species);
+  if (genderSpecies) tags.push(genderSpecies);
+
+  const skin = formatSkinClause(dna.build.skinTone, false);
+  if (skin) tags.push(skin);
+
   if (dna.build.height || dna.build.bodyType) {
     tags.push([dna.build.height, dna.build.bodyType].filter(Boolean).join(' '));
   }
 
-  // Anatomy (Skip bust for male unless it specifies chest/shoulders)
   if (dna.build.bust && (!isMale || /chest|shoulder|pec/i.test(dna.build.bust))) {
-    tags.push(dna.build.bust);
+    const bust = formatBustClause(dna.build.bust, false);
+    if (bust) tags.push(bust);
   }
   if (dna.build.hipsGlutes && !isMale) {
     tags.push(dna.build.hipsGlutes);
   }
 
-  // Face
   if (dna.faceFeatures) tags.push(dna.faceFeatures);
 
-  // Hair
-  const hairParts = [dna.hair.length, dna.hair.style, dna.hair.color ? `${dna.hair.color} hair` : 'hair'].filter(Boolean);
-  if (dna.hair.color || dna.hair.length || dna.hair.style) {
-    tags.push(hairParts.join(' '));
-  }
+  const hairText = formatHairClause(dna.hair);
+  if (hairText) tags.push(hairText);
 
-  // Eyes
   const eyeParts = [dna.eyes.shape, dna.eyes.color ? `${dna.eyes.color} eyes` : 'eyes'].filter(Boolean);
   if (dna.eyes.color || dna.eyes.shape) {
     tags.push(eyeParts.join(' '));
   }
 
-  // Distinguishing features / anchors
   if (dna.distinguishingFeatures && dna.distinguishingFeatures.length > 0) {
     tags.push(...dna.distinguishingFeatures);
   }
 
-  // Outfits (Only single active outfit sent: current active or signature default)
+  const dedupedTags = Array.from(new Set(tags.filter(Boolean)));
+
   const currentOutfit = dna.activeOutfit || dna.signatureOutfit;
   if (currentOutfit) {
-    tags.push(currentOutfit.startsWith('wearing ') ? currentOutfit : `wearing ${currentOutfit}`);
+    dedupedTags.push(currentOutfit.startsWith('wearing ') ? currentOutfit : `wearing ${currentOutfit}`);
   }
 
-  // Demeanor / Expression
-  if (dna.demeanor) tags.push(dna.demeanor);
+  const visualDemeanor = filterVisualDemeanor(dna.demeanor);
+  if (visualDemeanor) dedupedTags.push(visualDemeanor);
 
-  return tags.filter(Boolean);
+  return dedupedTags.filter(Boolean);
 }
 
 /**
  * Formats a CharacterDNA record into a cohesive descriptive clause for natural-language prompt models (like FLUX, Grok, Recraft).
  */
 export function formatCharacterDNAToPromptClause(dna: CharacterDNA): string {
-  const parts: string[] = [];
+  const rawClauses: string[] = [];
   const isMale = dna.build.gender?.toLowerCase() === 'man' || dna.build.gender?.toLowerCase() === 'male';
 
-  // Physical foundation: Age, Height, Body Type, Gender, Species
   const identityBits: string[] = [];
-  if (dna.build.age) identityBits.push(dna.build.age);
-  if (dna.build.height || dna.build.bodyType) identityBits.push([dna.build.height, dna.build.bodyType].filter(Boolean).join(' '));
-  if (dna.build.gender || dna.build.species) identityBits.push([dna.build.gender, dna.build.species].filter(Boolean).join(' '));
-  
-  // Proportions (skip bust for male unless chest/shoulders)
+  const age = formatAgeClause(dna.build.age);
+  if (age) identityBits.push(age);
+
+  let inferredHeight = dna.build.height?.trim() ?? '';
+  if (!inferredHeight && dna.distinguishingFeatures?.length) {
+    for (const feat of dna.distinguishingFeatures) {
+      const m = feat.match(/^\b(tall|petite|short|statuesque|towering)\b/i);
+      if (m?.[1]) {
+        inferredHeight = m[1].toLowerCase();
+        break;
+      }
+    }
+  }
+
+  if (inferredHeight || dna.build.bodyType) {
+    identityBits.push([inferredHeight, dna.build.bodyType].filter(Boolean).join(' '));
+  }
+  const genderSpecies = formatGenderSpecies(dna.build.gender, dna.build.species);
+  if (genderSpecies) identityBits.push(genderSpecies);
+
   if (dna.build.bust && (!isMale || /chest|shoulder|pec/i.test(dna.build.bust))) {
-    identityBits.push(`with ${dna.build.bust}`);
+    const bust = formatBustClause(dna.build.bust, true);
+    if (bust) identityBits.push(bust);
   }
   if (dna.build.hipsGlutes && !isMale) {
     identityBits.push(dna.build.hipsGlutes);
   }
-  if (dna.build.skinTone) identityBits.push(`with ${dna.build.skinTone} skin`);
+  const skin = formatSkinClause(dna.build.skinTone, true);
+  if (skin) identityBits.push(skin);
 
-  if (identityBits.length > 0) {
-    parts.push(identityBits.join(' '));
+  const hasIdentityLead = identityBits.length > 0;
+  if (hasIdentityLead) {
+    rawClauses.push(identityBits.join(' ').replace(/\s+/g, ' ').trim());
   }
 
-  // Face, Hair & Eyes
-  const facialBits: string[] = [];
-  if (dna.faceFeatures) facialBits.push(dna.faceFeatures);
-  if (dna.hair.color || dna.hair.length || dna.hair.style) {
-    facialBits.push([dna.hair.length, dna.hair.style, dna.hair.color ? `${dna.hair.color} hair` : 'hair'].filter(Boolean).join(' '));
-  }
+  if (dna.faceFeatures) rawClauses.push(dna.faceFeatures);
+  const hairText = formatHairClause(dna.hair);
+  if (hairText) rawClauses.push(hairText);
+
   if (dna.eyes.color || dna.eyes.shape) {
-    facialBits.push([dna.eyes.shape, dna.eyes.color ? `${dna.eyes.color} eyes` : 'eyes'].filter(Boolean).join(' '));
-  }
-  if (facialBits.length > 0) {
-    parts.push(facialBits.join(', '));
+    rawClauses.push([dna.eyes.shape, dna.eyes.color ? `${dna.eyes.color} eyes` : 'eyes'].filter(Boolean).join(' '));
   }
 
-  // Distinguishing marks & anchors
   if (dna.distinguishingFeatures && dna.distinguishingFeatures.length > 0) {
-    parts.push(dna.distinguishingFeatures.join(', '));
+    rawClauses.push(...dna.distinguishingFeatures);
   }
 
-  // Outfit (Single active outfit)
+  const deduped = deduplicateDescriptiveClauses(rawClauses, hasIdentityLead);
+
   const currentOutfit = dna.activeOutfit || dna.signatureOutfit;
   if (currentOutfit) {
-    parts.push(currentOutfit.startsWith('wearing ') ? currentOutfit : `wearing ${currentOutfit}`);
+    deduped.push(currentOutfit.startsWith('wearing ') ? currentOutfit : `wearing ${currentOutfit}`);
   }
 
-  // Demeanor / Expression
-  if (dna.demeanor) {
-    parts.push(dna.demeanor);
+  const visualDemeanor = filterVisualDemeanor(dna.demeanor);
+  if (visualDemeanor) {
+    deduped.push(visualDemeanor);
   }
 
-  return parts.filter(Boolean).join(', ');
+  return deduped.filter(Boolean).join(', ');
 }
 
 /**

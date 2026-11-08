@@ -252,7 +252,15 @@ export function resolveShotSpec(input: ShotDirectorInput): ImageShotSpec {
         break;
     }
 
-    // Precedence 3: Intentionally selected style camera hints
+    // Planner hint overrides
+    if (cue?.shotHint?.preferredShotSize) shotSize = cue.shotHint.preferredShotSize;
+    if (cue?.shotHint?.preferredAngle) angle = cue.shotHint.preferredAngle;
+    if (/\b(?:screams?|shatters?|weeps?|sobbing|terrified|horrified|catastrophic|devastating|executes?|unleashes?|betrayal)\b/i.test(`${brief.action} ${cue?.expression ?? ''}`)) {
+      if (intent === 'reaction') { shotSize = 'close-up'; depthOfField = 'shallow'; }
+      else if (intent === 'action' || intent === 'confrontation') { angle = 'low-angle'; }
+    }
+
+    // Precedence 3: Intentionally selected style camera hints (override generic narrative defaults so smartphone/deep-focus styles never get portrait/bokeh overrides)
     if (styleDNA?.cameraHints && styleDNA.cameraHints.length > 0) {
       const hint = styleDNA.cameraHints.join(' ').toLowerCase();
       if (hint.includes('phone-wide') || hint.includes('wide')) {
@@ -267,14 +275,9 @@ export function resolveShotSpec(input: ShotDirectorInput): ImageShotSpec {
       if (hint.includes('moderate depth')) {
         depthOfField = 'moderate';
       }
-    }
-
-    // Planner hint overrides
-    if (cue?.shotHint?.preferredShotSize) shotSize = cue.shotHint.preferredShotSize;
-    if (cue?.shotHint?.preferredAngle) angle = cue.shotHint.preferredAngle;
-    if (/\b(?:screams?|shatters?|weeps?|sobbing|terrified|horrified|catastrophic|devastating|executes?|unleashes?|betrayal)\b/i.test(`${brief.action} ${cue?.expression ?? ''}`)) {
-      if (intent === 'reaction') { shotSize = 'close-up'; depthOfField = 'shallow'; }
-      else if (intent === 'action' || intent === 'confrontation') { angle = 'low-angle'; }
+      if (hint.includes('eye-level')) {
+        angle = 'eye-level';
+      }
     }
 
     // Shot Continuity: Weak continuity evidence from previousShot
@@ -319,7 +322,6 @@ export function resolveShotSpec(input: ShotDirectorInput): ImageShotSpec {
   // Subject Placements
   const subjectPlacements: SubjectPlacement[] = [];
   if (brief.subjectMode === 'ensemble' && cue?.ensembleSubjects && cue.ensembleSubjects.length > 0) {
-    const count = cue.ensembleSubjects.length;
     const horizontalOptions: Array<SubjectPlacement['horizontal']> =
       orientation === 'portrait'
         ? ['center', 'left', 'right', 'center']

@@ -50,6 +50,10 @@ export function buildV2ImageRequest(input:V2ImageRequestInput):{request:ImageGen
  const metadata=input.metadata?structuredClone(input.metadata):undefined;
  const outputPlan=resolveImageOutputPlan({capabilities:profile.outputCapabilities,parameters:input.planParameters??request.parameters,requestedRatio:config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined,resolutionPreference:config.imageResolutionPreference,source:profile.capabilitySource,modelId:request.model});
  const styleSnapshot=resolveStyleDNA(config,input.styleId);
+ const effectiveStyleDNA:StyleDNA={...styleSnapshot.styleDNA};
+ if(cue.imageTemplate&&!input.styleId&&!cue.imageTemplate.positive.includes('{{suffix}}')){
+  delete effectiveStyleDNA.suffix;
+ }
  const overrides=manualCameraOverrides(rebuild?.manualCamera);
  const previous=input.previousShot;
  const parsedPrevious=previous?ImageShotSpecSchema.safeParse(previous.shotSpec):undefined;
@@ -58,12 +62,12 @@ export function buildV2ImageRequest(input:V2ImageRequestInput):{request:ImageGen
  const continuity=parsedPrevious?.success&&samePicture&&!rebuild?.reframe&&cue.imageTemplate?.cameraPolicy!=='fixed'&&
   JSON.stringify(previous.styleDNA)===JSON.stringify(styleSnapshot.styleDNA)&&parsedPrevious.data.output.orientation===outputPlan.orientation&&parsedPrevious.data.output.actualRatio===outputPlan.actualRatio
   ?parsedPrevious.data:undefined;
- const shotSpec=resolveShotSpec({brief:input.brief,outputPlan,template:cue.imageTemplate,cue,styleDNA:styleSnapshot.styleDNA,dialogueSafeAreaSetting:rebuild?.manualCamera?.dialogueSafeArea??config.dialogueSafeArea,...(continuity?{previousShot:continuity}:{}),isDialogueOverlayTarget:!cue.visualSources?.includes('location art')&&!cue.visualSources?.includes('cast art'),revision:(input.previousShotRevision??0)+(rebuild?.reframe?1:0),...(overrides&&Object.keys(overrides).length?{manualOverrides:overrides}:{})});
+ const shotSpec=resolveShotSpec({brief:input.brief,outputPlan,template:cue.imageTemplate,cue,styleDNA:effectiveStyleDNA,dialogueSafeAreaSetting:rebuild?.manualCamera?.dialogueSafeArea??config.dialogueSafeArea,...(continuity?{previousShot:continuity}:{}),isDialogueOverlayTarget:!cue.visualSources?.includes('location art')&&!cue.visualSources?.includes('cast art'),revision:(input.previousShotRevision??0)+(rebuild?.reframe?1:0),...(overrides&&Object.keys(overrides).length?{manualOverrides:overrides}:{})});
  request.promptProfileV2=profile;request.outputPlan=outputPlan;request.shotSpec=shotSpec;request.styleSnapshot=styleSnapshot.styleDNA;
  request.parameters={...request.parameters,...outputPlan.parameters};
  if(cue.imageTemplate?.cameraPolicy!=='fixed'||Boolean(rebuild?.manualCamera||rebuild?.fitToModel||input.styleId)){
   const referencePlan=resolveReferencePlan({brief:input.metadata?.brief,cue,portraits:input.portraits});
-  const compiled=compileModelPrompt({brief:input.brief,shotSpec,styleDNA:styleSnapshot.styleDNA,profile,outputPlan,referencePlan,detailLevel:rebuild?.fitToModel?'compact':config.imagePromptDetail,promptExpansionEnabled:profile.promptExpansion?.enabled,userBudgetOverride:rebuild?.fitToModel?Math.min(profile.softBudgets.standard[0],profile.hardMaxCharacters):config.imagePromptBudgetOverride?config.imagePromptBudget:null,cue});
+  const compiled=compileModelPrompt({brief:input.brief,shotSpec,styleDNA:effectiveStyleDNA,profile,outputPlan,referencePlan,detailLevel:rebuild?.fitToModel?'compact':config.imagePromptDetail,promptExpansionEnabled:profile.promptExpansion?.enabled,userBudgetOverride:rebuild?.fitToModel?Math.min(profile.softBudgets.standard[0],profile.hardMaxCharacters):config.imagePromptBudgetOverride?config.imagePromptBudget:null,cue});
   request.prompt=compiled.prompt;
   if(compiled.negativePrompt!==undefined)request.negativePrompt=compiled.negativePrompt;
   if(compiled.parameterHints)request.parameters={...request.parameters,...compiled.parameterHints};
