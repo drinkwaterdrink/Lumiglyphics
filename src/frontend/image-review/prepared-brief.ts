@@ -86,7 +86,13 @@ export function promptEngineSummary(record: ImageRequestRecord | undefined, draf
     },
     negativePolicy: profileV2?.negativePolicy ?? (profile?.negativeMode === 'positive-only' ? 'positive-only' : 'native'),
     promptExpansion: profileV2?.promptExpansion ? (profileV2.promptExpansion.enabled ? 'Enabled' : 'Disabled') : undefined,
-    references: metadata?.referenceSummary ?? record.referenceSummary ?? 'None attached',
+    references: (metadata?.referenceSummary && metadata.referenceSummary !== 'No extension reference')
+      ? metadata.referenceSummary
+      : (record.referenceSummary && record.referenceSummary !== 'No extension reference')
+      ? record.referenceSummary
+      : (metadata?.brief?.subjectPreparation?.name && metadata.brief.subjectPreparation.identity)
+      ? `Character DNA: ${metadata.brief.subjectPreparation.name} traits anchored into prompt`
+      : 'None attached',
     warnings,
     shadowPrompt: metadata?.shadowPrompt
   };

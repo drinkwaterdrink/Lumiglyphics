@@ -119,7 +119,32 @@ Strong ink contours, manga shading, halftones, expressive contrast, coherent col
     useWhen: "A shared scene or interaction should show everyone physically present, including the user's persona. List visibleCharacters for this exact moment; omit offscreen, departed, remembered and merely mentioned characters.",
     subjectMode: "ensemble", framing: "wide", referencePolicy: "none", cameraPolicy: "directed", intent: "ensemble", safeAreaPolicy: "auto",
     positive: "{{style}}\nDepict one coherent scene with the complete visible cast below, including the user's persona when listed. Each named appearance belongs only to that individual; keep faces, hair, build and clothing distinct.\nCAST:\n{{subjects}}\nSETTING: {{scene}}\nMOMENT: {{action}}\n{{composition}}\n{{lighting}}\nUse an external camera view so the listed persona is visible too. Compose readable interactions and spatial relationships, with natural poses and clear silhouettes. Show only the supplied moment, no extra people, duplicated individuals, merged bodies, split panels or invented events.\n{{suffix}}",
-    negative: "{{negative}}, duplicate person, merged identities, swapped hair or clothing, fused bodies, extra limbs, cropped-out cast, split screen" }
+    negative: "{{negative}}, duplicate person, merged identities, swapped hair or clothing, fused bodies, extra limbs, cropped-out cast, split screen" },
+  { id: "two-shot", name: "Two-shot dialogue", category: "action", enabled: false,
+    useWhen: "Two characters conversing, interacting, or in direct tension. Focus on mid-range framing and relational chemistry.",
+    subjectMode: "ensemble", framing: "upper body", referencePolicy: "character", cameraPolicy: "directed", intent: "two-shot", safeAreaPolicy: "auto",
+    positive: "{{style}}\nA medium two-shot composition depicting two characters interacting.\nCAST:\n{{subjects}}\nSETTING: {{scene}}\nINTERACTION: {{action}}\n{{composition}}\n{{lighting}}\nCompose both subjects naturally in the frame with distinct body language and eye line. Clear dialogue safe area in the lower third.\n{{suffix}}",
+    negative: "{{negative}}, single character, crowded group, fused bodies, mismatched eye-contact, obscured expressions" },
+  { id: "cinematic-wide", name: "Cinematic wide establishing", category: "environment", enabled: false,
+    useWhen: "Sweeping cinematic view of a setting or landscape with deep horizon, rich atmospheric depth, and sense of scale.",
+    subjectMode: "none", framing: "wide", referencePolicy: "none", cameraPolicy: "directed", intent: "establishing", safeAreaPolicy: "none",
+    positive: "{{style}}\nAn expansive cinematic wide-angle establishing shot.\nENVIRONMENT: {{scene}}\nATMOSPHERE: {{lighting}}\n{{composition}}\nFocus on grand architectural or natural scale, atmospheric depth, deep perspective, and immersive environmental storytelling. Clean vista without focal character obstructions.\n{{suffix}}",
+    negative: "{{negative}}, close-up, cropped horizon, portrait orientation, cramped framing, blurry backdrop" },
+  { id: "dramatic-closeup", name: "Dramatic close-up", category: "portrait", enabled: false,
+    useWhen: "High-stakes emotional intensity, sudden revelation, or dramatic eye/facial expression peak.",
+    subjectMode: "one", framing: "close-up", referencePolicy: "character", cameraPolicy: "directed", intent: "reaction", safeAreaPolicy: "auto",
+    positive: "{{style}}\nA tight cinematic dramatic close-up focused on intense emotional expression.\nSUBJECT: {{subjects}}\nEMOTION & MOMENT: {{action}}\nSETTING CONTEXT: {{scene}}\n{{composition}}\n{{lighting}}\nShallow depth of field, sharp focus on eyes and facial nuance, cinematic key lighting with soft background bokeh.\n{{suffix}}",
+    negative: "{{negative}}, wide shot, full body, blank expression, stiff pose, cropped forehead, flat lighting" },
+  { id: "key-visual", name: "Key visual / Climax", category: "action", enabled: false,
+    useWhen: "A definitive story milestone, heroic pose, promotional climax shot, or defining narrative moment.",
+    subjectMode: "one", framing: "full body", referencePolicy: "character", cameraPolicy: "directed", intent: "action", safeAreaPolicy: "auto",
+    positive: "{{style}}\nA striking visual novel key visual illustration with dynamic heroic composition.\nSUBJECT: {{subjects}}\nHEROIC MOMENT: {{action}}\nENVIRONMENT: {{scene}}\n{{composition}}\n{{lighting}}\nFull-figure presence, iconic silhouette, dynamic camera perspective, dramatic environmental rim lighting, and memorable narrative impact.\n{{suffix}}",
+    negative: "{{negative}}, mundane snapshot, dull pose, awkward limbs, cropped feet, off-center clutter" },
+  { id: "candid-moment", name: "Candid moment", category: "portrait", enabled: false,
+    useWhen: "An unposed, authentic slice-of-life interaction, contemplative pause, or natural mid-gesture beat.",
+    subjectMode: "one", framing: "portrait", referencePolicy: "character", cameraPolicy: "directed", intent: "dialogue", safeAreaPolicy: "auto",
+    positive: "{{style}}\nA natural candid portrait capturing an unposed, authentic narrative slice-of-life moment.\nSUBJECT: {{subjects}}\nGESTURE & MOMENT: {{action}}\nENVIRONMENT: {{scene}}\n{{composition}}\n{{lighting}}\nSpontaneous posture, relaxed candid framing, soft environmental illumination, expressive natural mood.\n{{suffix}}",
+    negative: "{{negative}}, stiff mannequin pose, artificial looking straight at camera, extreme fisheye, harsh flash" }
 ];
 
 export function validateImageTemplates(value: unknown): ImageTemplate[] {
@@ -128,10 +153,12 @@ export function validateImageTemplates(value: unknown): ImageTemplate[] {
 
 export function upgradeImageTemplates(value: unknown): ImageTemplate[] {
   const templates = validateImageTemplates(value);
-  if (!templates.some(t => t.id === "manga-page") && templates.length < 32) {
-    templates.push({ ...BUILTIN_IMAGE_TEMPLATES.find(t => t.id === "manga-page")! });
+  for (const templateId of ["manga-page", "ensemble", "two-shot", "cinematic-wide", "dramatic-closeup", "key-visual", "candid-moment"]) {
+    if (!templates.some(t => t.id === templateId) && templates.length < 32) {
+      const builtin = BUILTIN_IMAGE_TEMPLATES.find(t => t.id === templateId);
+      if (builtin) templates.push({ ...builtin });
+    }
   }
-  if (!templates.some(t => t.id === "ensemble") && templates.length < 32) templates.push({ ...BUILTIN_IMAGE_TEMPLATES.find(t => t.id === "ensemble")! });
   return templates.map(t => {
     if (t.id !== 'manga-page') return t;
     const builtin = BUILTIN_IMAGE_TEMPLATES.find(template => template.id === 'manga-page')!;

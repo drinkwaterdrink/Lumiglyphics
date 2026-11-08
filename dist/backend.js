@@ -20733,11 +20733,13 @@ function validateImageTemplates(value) {
 }
 function upgradeImageTemplates(value) {
   const templates = validateImageTemplates(value);
-  if (!templates.some((t) => t.id === "manga-page") && templates.length < 32) {
-    templates.push({ ...BUILTIN_IMAGE_TEMPLATES.find((t) => t.id === "manga-page") });
+  for (const templateId of ["manga-page", "ensemble", "two-shot", "cinematic-wide", "dramatic-closeup", "key-visual", "candid-moment"]) {
+    if (!templates.some((t) => t.id === templateId) && templates.length < 32) {
+      const builtin = BUILTIN_IMAGE_TEMPLATES.find((t) => t.id === templateId);
+      if (builtin)
+        templates.push({ ...builtin });
+    }
   }
-  if (!templates.some((t) => t.id === "ensemble") && templates.length < 32)
-    templates.push({ ...BUILTIN_IMAGE_TEMPLATES.find((t) => t.id === "ensemble") });
   return templates.map((t) => {
     if (t.id !== "manga-page")
       return t;
@@ -20962,6 +20964,120 @@ MOMENT: {{action}}
 Use an external camera view so the listed persona is visible too. Compose readable interactions and spatial relationships, with natural poses and clear silhouettes. Show only the supplied moment, no extra people, duplicated individuals, merged bodies, split panels or invented events.
 {{suffix}}`,
       negative: "{{negative}}, duplicate person, merged identities, swapped hair or clothing, fused bodies, extra limbs, cropped-out cast, split screen"
+    },
+    {
+      id: "two-shot",
+      name: "Two-shot dialogue",
+      category: "action",
+      enabled: false,
+      useWhen: "Two characters conversing, interacting, or in direct tension. Focus on mid-range framing and relational chemistry.",
+      subjectMode: "ensemble",
+      framing: "upper body",
+      referencePolicy: "character",
+      cameraPolicy: "directed",
+      intent: "two-shot",
+      safeAreaPolicy: "auto",
+      positive: `{{style}}
+A medium two-shot composition depicting two characters interacting.
+CAST:
+{{subjects}}
+SETTING: {{scene}}
+INTERACTION: {{action}}
+{{composition}}
+{{lighting}}
+Compose both subjects naturally in the frame with distinct body language and eye line. Clear dialogue safe area in the lower third.
+{{suffix}}`,
+      negative: "{{negative}}, single character, crowded group, fused bodies, mismatched eye-contact, obscured expressions"
+    },
+    {
+      id: "cinematic-wide",
+      name: "Cinematic wide establishing",
+      category: "environment",
+      enabled: false,
+      useWhen: "Sweeping cinematic view of a setting or landscape with deep horizon, rich atmospheric depth, and sense of scale.",
+      subjectMode: "none",
+      framing: "wide",
+      referencePolicy: "none",
+      cameraPolicy: "directed",
+      intent: "establishing",
+      safeAreaPolicy: "none",
+      positive: `{{style}}
+An expansive cinematic wide-angle establishing shot.
+ENVIRONMENT: {{scene}}
+ATMOSPHERE: {{lighting}}
+{{composition}}
+Focus on grand architectural or natural scale, atmospheric depth, deep perspective, and immersive environmental storytelling. Clean vista without focal character obstructions.
+{{suffix}}`,
+      negative: "{{negative}}, close-up, cropped horizon, portrait orientation, cramped framing, blurry backdrop"
+    },
+    {
+      id: "dramatic-closeup",
+      name: "Dramatic close-up",
+      category: "portrait",
+      enabled: false,
+      useWhen: "High-stakes emotional intensity, sudden revelation, or dramatic eye/facial expression peak.",
+      subjectMode: "one",
+      framing: "close-up",
+      referencePolicy: "character",
+      cameraPolicy: "directed",
+      intent: "reaction",
+      safeAreaPolicy: "auto",
+      positive: `{{style}}
+A tight cinematic dramatic close-up focused on intense emotional expression.
+SUBJECT: {{subjects}}
+EMOTION & MOMENT: {{action}}
+SETTING CONTEXT: {{scene}}
+{{composition}}
+{{lighting}}
+Shallow depth of field, sharp focus on eyes and facial nuance, cinematic key lighting with soft background bokeh.
+{{suffix}}`,
+      negative: "{{negative}}, wide shot, full body, blank expression, stiff pose, cropped forehead, flat lighting"
+    },
+    {
+      id: "key-visual",
+      name: "Key visual / Climax",
+      category: "action",
+      enabled: false,
+      useWhen: "A definitive story milestone, heroic pose, promotional climax shot, or defining narrative moment.",
+      subjectMode: "one",
+      framing: "full body",
+      referencePolicy: "character",
+      cameraPolicy: "directed",
+      intent: "action",
+      safeAreaPolicy: "auto",
+      positive: `{{style}}
+A striking visual novel key visual illustration with dynamic heroic composition.
+SUBJECT: {{subjects}}
+HEROIC MOMENT: {{action}}
+ENVIRONMENT: {{scene}}
+{{composition}}
+{{lighting}}
+Full-figure presence, iconic silhouette, dynamic camera perspective, dramatic environmental rim lighting, and memorable narrative impact.
+{{suffix}}`,
+      negative: "{{negative}}, mundane snapshot, dull pose, awkward limbs, cropped feet, off-center clutter"
+    },
+    {
+      id: "candid-moment",
+      name: "Candid moment",
+      category: "portrait",
+      enabled: false,
+      useWhen: "An unposed, authentic slice-of-life interaction, contemplative pause, or natural mid-gesture beat.",
+      subjectMode: "one",
+      framing: "portrait",
+      referencePolicy: "character",
+      cameraPolicy: "directed",
+      intent: "dialogue",
+      safeAreaPolicy: "auto",
+      positive: `{{style}}
+A natural candid portrait capturing an unposed, authentic narrative slice-of-life moment.
+SUBJECT: {{subjects}}
+GESTURE & MOMENT: {{action}}
+ENVIRONMENT: {{scene}}
+{{composition}}
+{{lighting}}
+Spontaneous posture, relaxed candid framing, soft environmental illumination, expressive natural mood.
+{{suffix}}`,
+      negative: "{{negative}}, stiff mannequin pose, artificial looking straight at camera, extreme fisheye, harsh flash"
     }
   ];
 });
@@ -21873,6 +21989,10 @@ var init_character_dna = __esm(() => {
     sourceSummary: exports_external.string().trim().max(500).optional(),
     notes: exports_external.string().trim().max(1000).optional(),
     avatarUrl: exports_external.string().trim().max(2000).optional(),
+    referenceImageUrl: exports_external.string().trim().max(2000).optional(),
+    secondaryReferenceImageUrl: exports_external.string().trim().max(2000).optional(),
+    referenceImageId: exports_external.string().trim().max(256).optional(),
+    secondaryReferenceImageId: exports_external.string().trim().max(256).optional(),
     lastUpdated: exports_external.number().int().nonnegative().default(() => Date.now()),
     fieldSources: exports_external.record(exports_external.string(), exports_external.object({ classification: exports_external.enum(["evidence", "inferred", "generated", "manual"]), sources: exports_external.array(exports_external.string().max(1000)).max(8) }).strict()).optional()
   }).strict();
@@ -29574,6 +29694,108 @@ var init_attire = __esm(() => {
   PHYSICAL_TRAIT_REGEX = /\b(?:hair|twin-?tails?|ponytail|braids?|bangs|eyes?|skin|tall|short|slender|petite|muscular|curvy|build|face|ears?|horns?|wings?|tail|freckles|scars?|glasses)\b/i;
 });
 
+// src/shared/nicknames.ts
+function normalizeNameToken(rawName) {
+  return rawName.trim().toLowerCase().replace(/^(?:mr\.|mrs\.|ms\.|miss|dr\.|doctor|sir|lord|lady|captain|detective|sergeant|officer|prof\.|professor)\s+/i, "").replace(/[^\p{L}\p{N}\s]/gu, "").replace(/\s+/g, " ").trim();
+}
+function areNamesEquivalent(nameA, nameB) {
+  const normA = normalizeNameToken(nameA);
+  const normB = normalizeNameToken(nameB);
+  if (!normA || !normB)
+    return false;
+  if (normA === normB)
+    return true;
+  const tokensA = normA.split(" ");
+  const tokensB = normB.split(" ");
+  const firstA = tokensA[0];
+  const firstB = tokensB[0];
+  const clusterA = LOOKUP_MAP.get(firstA);
+  const clusterB = LOOKUP_MAP.get(firstB);
+  const firstNamesMatch = firstA === firstB || clusterA !== undefined && clusterA.has(firstB) || clusterB !== undefined && clusterB.has(firstA);
+  if (firstNamesMatch) {
+    if (tokensA.length === 1 || tokensB.length === 1)
+      return true;
+    const lastA = tokensA[tokensA.length - 1];
+    const lastB = tokensB[tokensB.length - 1];
+    if (lastA === lastB)
+      return true;
+  }
+  if (tokensA.length === 1 && tokensB.length > 1 && tokensB[tokensB.length - 1] === tokensA[0]) {
+    return true;
+  }
+  if (tokensB.length === 1 && tokensA.length > 1 && tokensA[tokensA.length - 1] === tokensB[0]) {
+    return true;
+  }
+  return false;
+}
+function findMatchingCharacterId(library, candidateName) {
+  const candidateNorm = normalizeNameToken(candidateName);
+  if (!candidateNorm)
+    return null;
+  for (const char of Object.values(library)) {
+    if (areNamesEquivalent(char.name, candidateName)) {
+      return char.id;
+    }
+    for (const alias of char.aliases ?? []) {
+      if (areNamesEquivalent(alias, candidateName)) {
+        return char.id;
+      }
+    }
+  }
+  return null;
+}
+var NICKNAME_CLUSTERS, LOOKUP_MAP;
+var init_nicknames = __esm(() => {
+  NICKNAME_CLUSTERS = [
+    new Set(["robert", "bob", "bobby", "rob", "robby", "robbie"]),
+    new Set(["william", "bill", "billy", "will", "willy", "willie", "liam"]),
+    new Set(["richard", "rick", "ricky", "rich", "richie", "dick", "dickie"]),
+    new Set(["james", "jim", "jimmy", "jamie", "jem"]),
+    new Set(["john", "johnny", "jon", "jonny", "jack", "jackie"]),
+    new Set(["jonathan", "jon", "john", "jonny"]),
+    new Set(["joseph", "joe", "joey"]),
+    new Set(["thomas", "tom", "tommy"]),
+    new Set(["charles", "charlie", "charley", "chuck", "chas"]),
+    new Set(["edward", "ed", "eddie", "eddy", "ned", "ted", "teddy"]),
+    new Set(["michael", "mike", "mikey", "mick"]),
+    new Set(["david", "dave", "davey", "davy"]),
+    new Set(["daniel", "dan", "danny"]),
+    new Set(["benjamin", "ben", "benny", "benji"]),
+    new Set(["alexander", "alex", "alec", "lex", "xander", "sasha"]),
+    new Set(["alexandra", "alex", "alexa", "lexi", "lexie", "sasha", "sandra"]),
+    new Set(["anthony", "tony"]),
+    new Set(["christopher", "chris"]),
+    new Set(["matthew", "matt", "matty"]),
+    new Set(["samuel", "sam", "sammy"]),
+    new Set(["nicholas", "nick", "nicky", "nico"]),
+    new Set(["elizabeth", "liz", "lizzie", "lizzy", "beth", "betty", "betsy", "eliza", "ellie"]),
+    new Set(["margaret", "maggie", "meg", "peggy", "marge", "margie", "daisy"]),
+    new Set(["katherine", "catherine", "kate", "katie", "kathy", "cat", "cathy", "kay"]),
+    new Set(["patricia", "pat", "patty", "patsy", "tricia", "trish"]),
+    new Set(["jennifer", "jen", "jenny", "jenn"]),
+    new Set(["rebecca", "becca", "becky"]),
+    new Set(["victoria", "vicky", "vicki", "tori"]),
+    new Set(["abigail", "abby", "abbie", "gail"]),
+    new Set(["eleanor", "ellie", "ella", "nora"]),
+    new Set(["theodore", "theo", "ted", "teddy"]),
+    new Set(["arthur", "art", "artie"]),
+    new Set(["henry", "hank", "harry", "hal"]),
+    new Set(["andrew", "andy", "drew"]),
+    new Set(["francis", "frank", "frankie"]),
+    new Set(["gerald", "jerry", "gerry"]),
+    new Set(["lawrence", "larry"]),
+    new Set(["stephen", "steven", "steve", "stevie"]),
+    new Set(["walter", "walt", "wally"]),
+    new Set(["marche", "marseline", "marseline vane"])
+  ];
+  LOOKUP_MAP = new Map;
+  for (const cluster of NICKNAME_CLUSTERS) {
+    for (const name of cluster) {
+      LOOKUP_MAP.set(name, cluster);
+    }
+  }
+});
+
 // src/backend/runtime/visual-brief.ts
 function sanitizeVisualNarrativeDescription(raw) {
   if (!raw || !raw.trim())
@@ -29623,11 +29845,16 @@ function resolveTemplateIdentity(scene, cue, appearances, characterDNALibrary) {
   let lockedDNA;
   if (characterDNALibrary) {
     const chars = "characters" in characterDNALibrary ? characterDNALibrary.characters : characterDNALibrary;
-    const key = name.trim().toLowerCase();
-    lockedDNA = chars[key] ?? Object.values(chars).find((r) => r.name.trim().toLowerCase() === key || r.aliases.some((a) => a.trim().toLowerCase() === key));
+    const matchId = findMatchingCharacterId(chars, name);
+    if (matchId && chars[matchId]) {
+      lockedDNA = chars[matchId];
+    } else {
+      const key = name.trim().toLowerCase();
+      lockedDNA = chars[key] ?? Object.values(chars).find((r) => r.name.trim().toLowerCase() === key || r.aliases.some((a) => a.trim().toLowerCase() === key));
+    }
   }
   const dnaAppearance = lockedDNA ? formatCharacterDNAToPromptClause(lockedDNA) : undefined;
-  const saved = lockedDNA?.locked && dnaAppearance || Object.entries(appearances ?? {}).find(([key]) => characterAppearanceKey(key) === characterAppearanceKey(name))?.[1]?.trim() || dnaAppearance;
+  const saved = lockedDNA?.locked && dnaAppearance || Object.entries(appearances ?? {}).find(([key]) => areNamesEquivalent(key, name))?.[1]?.trim() || dnaAppearance;
   const resolved = cue.resolvedIdentity?.trim() || (sameCharacter ? scene.identityPrompt?.trim() : "") || "";
   return {
     name,
@@ -29659,10 +29886,22 @@ function buildVisualBrief(config2, scene, cue, appearances, characterDNALibrary)
   });
   const environment = scene.environment;
   const relevantPersistentElements = selectRelevantPersistentElements(environment.description, cleanedVisualDescription, environment.persistentElements);
+  const chars = characterDNALibrary ? "characters" in characterDNALibrary ? characterDNALibrary.characters : characterDNALibrary : undefined;
   const members2 = (cue.ensembleSubjects ?? scene.cast.map((name2) => ({ name: name2, appearance: "" }))).map((member) => {
-    const saved2 = Object.entries(appearances ?? {}).find(([key]) => characterAppearanceKey(key) === characterAppearanceKey(member.name))?.[1];
-    const appearance2 = manual ? member.appearance : saved2 || member.appearance;
-    return { ...member, appearance: "attire" in member && member.attire ? applyAttireOverride(appearance2, String(member.attire)) : appearance2 };
+    let dnaAppearance;
+    let memberDna;
+    if (chars) {
+      const matchId = findMatchingCharacterId(chars, member.name);
+      if (matchId && chars[matchId]) {
+        memberDna = chars[matchId];
+        dnaAppearance = formatCharacterDNAToPromptClause(memberDna);
+      }
+    }
+    const saved2 = Object.entries(appearances ?? {}).find(([key]) => areNamesEquivalent(key, member.name))?.[1];
+    const memberAttire = "attire" in member && member.attire ? String(member.attire) : memberDna?.activeOutfit || memberDna?.signatureOutfit || undefined;
+    const appearanceBase = manual ? member.appearance : dnaAppearance || saved2 || member.appearance;
+    const appearance2 = memberAttire ? applyAttireOverride(appearanceBase, memberAttire) : appearanceBase;
+    return { ...member, appearance: appearance2, attire: memberAttire };
   });
   const nameBudget = members2.reduce((total, member) => total + member.name.length + 4, 0);
   if (ensemble && nameBudget > 4000)
@@ -29708,6 +29947,7 @@ var init_visual_brief = __esm(() => {
   init_image_templates();
   init_character();
   init_character_dna();
+  init_nicknames();
   PROP_STOP_WORDS = new Set([
     "the",
     "a",
@@ -42129,24 +42369,91 @@ function resolveReferencePlan(options3) {
     }
     return createReferencePlan(references);
   }
-  if (options3.cue && options3.portraits) {
+  const chars = options3.characterDNALibrary ? "characters" in options3.characterDNALibrary ? options3.characterDNALibrary.characters : options3.characterDNALibrary : undefined;
+  const findPortraitFor = (name) => {
+    if (!options3.portraits || !name)
+      return;
+    const normalized = normalizeCharacterName(name);
+    return Object.entries(options3.portraits).find(([key, p]) => {
+      if (!p)
+        return false;
+      const strippedKey = key.replace(/^card:/, "");
+      const normalizedKey = normalizeCharacterName(strippedKey);
+      return normalizedKey === normalized || areNamesEquivalent(strippedKey, name);
+    })?.[1];
+  };
+  if (options3.cue) {
     const characterName = options3.cue.character || options3.brief?.subjectPreparation?.name;
     if (characterName) {
       const normalized = normalizeCharacterName(characterName);
-      const portrait = Object.entries(options3.portraits).find(([key, p]) => {
-        if (!p)
-          return false;
-        const normalizedKey = normalizeCharacterName(key.replace(/^card:/, ""));
-        return normalizedKey === normalized;
-      })?.[1];
-      if (portrait && portrait.data) {
-        references.push({
-          imageId: `portrait-${normalized || "main"}`,
-          role: "identity",
-          subject: characterName,
-          label: `${characterName} character portrait`,
-          mimeType: portrait.mimeType ?? "image/png"
-        });
+      if (chars) {
+        const matchId = findMatchingCharacterId(chars, characterName);
+        const dna = matchId ? chars[matchId] : undefined;
+        if (dna?.referenceImageUrl) {
+          references.push({
+            imageId: dna.referenceImageId || `ref-${dna.id}-identity`,
+            role: "identity",
+            subject: dna.name,
+            label: `${dna.name} primary face reference`,
+            dataUrl: dna.referenceImageUrl,
+            mimeType: "image/png"
+          });
+        }
+        if (dna?.secondaryReferenceImageUrl) {
+          references.push({
+            imageId: dna.secondaryReferenceImageId || `ref-${dna.id}-attire`,
+            role: "clothing",
+            subject: dna.name,
+            label: `${dna.name} outfit reference`,
+            dataUrl: dna.secondaryReferenceImageUrl,
+            mimeType: "image/png"
+          });
+        }
+      }
+      if (!references.some((r) => r.subject && areNamesEquivalent(r.subject, characterName) && r.role === "identity")) {
+        const portrait = findPortraitFor(characterName);
+        if (portrait && portrait.data) {
+          references.push({
+            imageId: `portrait-${normalized || "main"}`,
+            role: "identity",
+            subject: characterName,
+            label: `${characterName} character portrait`,
+            mimeType: portrait.mimeType ?? "image/png"
+          });
+        }
+      }
+    }
+    if (options3.cue.ensembleSubjects && options3.cue.ensembleSubjects.length > 0) {
+      for (const member of options3.cue.ensembleSubjects) {
+        if (!member.name || references.some((r) => r.subject && areNamesEquivalent(r.subject, member.name)))
+          continue;
+        if (references.length >= 8)
+          break;
+        if (chars) {
+          const matchId = findMatchingCharacterId(chars, member.name);
+          const dna = matchId ? chars[matchId] : undefined;
+          if (dna?.referenceImageUrl) {
+            references.push({
+              imageId: dna.referenceImageId || `ref-${dna.id}-identity`,
+              role: "identity",
+              subject: dna.name,
+              label: `${dna.name} character reference`,
+              dataUrl: dna.referenceImageUrl,
+              mimeType: "image/png"
+            });
+            continue;
+          }
+        }
+        const memberPortrait = findPortraitFor(member.name);
+        if (memberPortrait && memberPortrait.data) {
+          references.push({
+            imageId: `portrait-${normalizeCharacterName(member.name) || "member"}`,
+            role: "identity",
+            subject: member.name,
+            label: `${member.name} character portrait`,
+            mimeType: memberPortrait.mimeType ?? "image/png"
+          });
+        }
       }
     }
   }
@@ -42155,6 +42462,7 @@ function resolveReferencePlan(options3) {
 var init_reference_plan2 = __esm(() => {
   init_reference_plan();
   init_identity();
+  init_nicknames();
   init_reference_plan();
 });
 
@@ -44298,7 +44606,7 @@ function buildV2ImageRequest(input2) {
   request.styleSnapshot = styleSnapshot.styleDNA;
   request.parameters = { ...request.parameters, ...outputPlan.parameters };
   if (cue.imageTemplate?.cameraPolicy !== "fixed" || Boolean(rebuild?.manualCamera || rebuild?.fitToModel || input2.styleId)) {
-    const referencePlan = resolveReferencePlan({ brief: input2.metadata?.brief, cue, portraits: input2.portraits });
+    const referencePlan = resolveReferencePlan({ brief: input2.metadata?.brief, cue, portraits: input2.portraits, characterDNALibrary: input2.characterDNALibrary });
     const compiled = compileModelPrompt({ brief: input2.brief, shotSpec, styleDNA: effectiveStyleDNA, profile, outputPlan, referencePlan, detailLevel: rebuild?.fitToModel ? "compact" : config2.imagePromptDetail, promptExpansionEnabled: profile.promptExpansion?.enabled, userBudgetOverride: rebuild?.fitToModel ? Math.min(profile.softBudgets.standard[0], profile.hardMaxCharacters) : config2.imagePromptBudgetOverride ? config2.imagePromptBudget : null, cue });
     request.prompt = compiled.prompt;
     if (compiled.negativePrompt !== undefined)
@@ -46690,9 +46998,10 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
     config2 = { ...config2, imageModel: config2.imageModel || profile.model || "nai-diffusion-4-5-full" };
   const anchorable = plan.visualCues.some(cueUsesCharacterReference) && referenceAnchoringEnabled(config2) && provider !== null && REFERENCE_PROVIDERS.has(provider);
   const cardSource = anchorable && config2.referenceSource === "card";
-  const [initialPortraits, characterAppearance] = await Promise.all([
+  const [initialPortraits, characterAppearance, characterDNALibrary] = await Promise.all([
     anchorable ? loadPortraits(spindle2, plan.key.chatId, userId).catch(() => ({})) : Promise.resolve({}),
-    loadCharacterAppearance(spindle2, userId, plan.key.chatId).catch(() => ({}))
+    loadCharacterAppearance(spindle2, userId, plan.key.chatId).catch(() => ({})),
+    loadCharacterDNALibrary(spindle2, plan.key.chatId, userId).catch(() => ({ version: 1, characters: {} }))
   ]);
   const portraits = { ...initialPortraits };
   if (config2.debugLogging) {
@@ -46990,7 +47299,7 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
             template: selectedCue.imageTemplate,
             selectionReason: selectedCue.imageTemplateReason ?? "Default template",
             format: config2.imagePromptFormat,
-            brief: compileTemplateCue(config2, scene, selectedCue, characterAppearance).brief,
+            brief: compileTemplateCue(config2, scene, selectedCue, characterAppearance, characterDNALibrary).brief,
             sharedStyle: sharedStyleSnapshot(config2, selectedCue.imageTemplate),
             trackerStatus: selectedCue.trackerStatus ?? (config2.includeSimTrackerContext ? "not_found" : "disabled"),
             ...selectedCue.trackerSourceMessageId ? { trackerSourceMessageId: selectedCue.trackerSourceMessageId } : {}
@@ -47008,7 +47317,7 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
           frozen = prepareCapabilityOutput(frozen, config2.imageOutputAspectRatio !== "default" ? config2.imageOutputAspectRatio : cue.imageTemplate?.outputAspectRatio === "9:16" ? "9:16" : undefined, config2.imageResolutionPreference);
           if (config2.imagePromptEngineVersion === 2 && cue.imageTemplate) {
             const profileV2 = await loadImagePromptProfileV2(spindle2, config2, selected?.provider ?? provider, frozen.model, frozen.parameters);
-            const built = buildV2ImageRequest({ config: config2, cue, request: frozen, profile: profileV2, brief: initialMetadata?.brief ?? compileTemplateCue(config2, scene, cue, characterAppearance).brief, metadata: initialMetadata, styleId: config2.selectedSharedStyleId, portraits, shadow: { prompt: frozen.prompt, ...frozen.negativePrompt !== undefined ? { negativePrompt: frozen.negativePrompt } : {} }, referenceSummary: portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" });
+            const built = buildV2ImageRequest({ config: config2, cue, request: frozen, profile: profileV2, brief: initialMetadata?.brief ?? compileTemplateCue(config2, scene, cue, characterAppearance).brief, metadata: initialMetadata, styleId: config2.selectedSharedStyleId, portraits, characterDNALibrary, shadow: { prompt: frozen.prompt, ...frozen.negativePrompt !== undefined ? { negativePrompt: frozen.negativePrompt } : {} }, referenceSummary: portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" });
             frozen = built.request;
             if (initialMetadata && built.metadata)
               Object.assign(initialMetadata, built.metadata);
@@ -47092,7 +47401,7 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
                   preparedRequest.model = request.model;
                 else
                   delete preparedRequest.model;
-                const built = buildV2ImageRequest({ config: latestConfig, cue: nextCue, request: preparedRequest, profile: profileV2, brief: nextMetadata.brief, metadata: nextMetadata, styleId: options3?.styleId ?? nextCue.imageTemplate?.id, portraits, planParameters: request.parameters, ...frozen.shotSpec && frozen.styleSnapshot ? { previousShot: { cue, shotSpec: frozen.shotSpec, styleDNA: frozen.styleSnapshot } } : {}, previousShotRevision: frozen.shotSpec?.revision ?? 0, rebuild: options3, shadow: { prompt: nextCompiled.prompt, ...nextCompiled.negativePrompt !== undefined ? { negativePrompt: nextCompiled.negativePrompt } : {} }, referenceSummary: portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" });
+                const built = buildV2ImageRequest({ config: latestConfig, cue: nextCue, request: preparedRequest, profile: profileV2, brief: nextMetadata.brief, metadata: nextMetadata, styleId: options3?.styleId ?? nextCue.imageTemplate?.id, portraits, characterDNALibrary, planParameters: request.parameters, ...frozen.shotSpec && frozen.styleSnapshot ? { previousShot: { cue, shotSpec: frozen.shotSpec, styleDNA: frozen.styleSnapshot } } : {}, previousShotRevision: frozen.shotSpec?.revision ?? 0, rebuild: options3, shadow: { prompt: nextCompiled.prompt, ...nextCompiled.negativePrompt !== undefined ? { negativePrompt: nextCompiled.negativePrompt } : {} }, referenceSummary: portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" });
                 Object.assign(preparedRequest, built.request);
                 if (built.metadata)
                   Object.assign(nextMetadata, built.metadata);
@@ -47347,6 +47656,7 @@ var init_images = __esm(() => {
   init_prompt_adaptation();
   init_shared_style_snapshot();
   init_visual_brief();
+  init_character_dna_store();
   init_identity();
   init_inlay_prompt();
   init_storage();

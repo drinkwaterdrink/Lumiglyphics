@@ -193,3 +193,128 @@ it('projects only reached Folio names, lore and images and removes them on rewin
 it('rewinding preserves saved DNA and unsaved manual changes while clearing story lore',()=>{const restore=installFakeDocument();try{const f:any=new CharacterFolio();const dna=createEmptyCharacterDNA('Joanne','jo');dna.hair.color='silver';f.setLibrary({version:2,revision:1,characters:{jo:dna}});f.library.jo.hair.color='violet draft';f.dirty.add('jo');f.syncFromTurn({paragraphs:['Ann speaks'],subjectCandidates:['Joanne'],assets:[]},0);expect(f.library.jo.hair.color).toBe('violet draft');expect(f.loreMap.joanne).toBeUndefined();f.syncFromTurn(null,0);expect(f.library.jo.hair.color).toBe('violet draft');expect(f.latestTurnText).toBe('');}finally{restore();}});
 
 it('does not discover Ann inside Joanne and cancels a proposal after cursor movement',()=>{const restore=installFakeDocument();try{let cancelled=0;const f:any=new CharacterFolio({onCancelDNA:()=>cancelled++});const t:any={chatId:'c',messageId:'m',swipeId:0,sourceFingerprint:'fingerprint',revision:0,paragraphs:['Joanne speaks.','Ann enters.'],subjectCandidates:['Ann'],assets:[]};f.syncFromTurn(t,0);expect(Object.values(f.library)).toHaveLength(0);f.syncFromTurn(t,1);expect(Object.values(f.library).map((c:any)=>c.name)).toEqual(['Ann']);f.pending=true;f.syncFromTurn(t,0);expect(cancelled).toBe(1);expect(f.pending).toBe(false);}finally{restore();}});
+
+it('resolves nicknames like Bob to Robert without creating duplicate entries', () => {
+  const restore = installFakeDocument();
+  try {
+    const f: any = new CharacterFolio({});
+    // Start with Robert
+    f.setLibrary({
+      characters: {
+        'robert': {
+          id: 'robert',
+          name: 'Robert Vance',
+          aliases: [],
+          hair: {},
+          eyes: {},
+          build: {},
+          signatureOutfit: '',
+          distinguishingFeatures: [],
+          colorPalette: [],
+          locked: false,
+          lastUpdated: 1000
+        }
+      }
+    } as any);
+
+    // Turn mentions "Bob"
+    const turn: any = {
+      chatId: 'c',
+      messageId: 'm',
+      swipeId: 0,
+      sourceFingerprint: 'f',
+      revision: 0,
+      paragraphs: ['Bob sits down at the counter.'],
+      subjectCandidates: ['Bob'],
+      assets: []
+    };
+
+    f.syncFromTurn(turn, 0);
+
+    // Should NOT create a second character for Bob!
+    const characters = Object.values(f.library) as any[];
+    expect(characters).toHaveLength(1);
+    expect(characters[0].name).toBe('Robert Vance');
+    expect(characters[0].aliases).toContain('Bob');
+  } finally {
+    restore();
+  }
+});
+
+it('allows setting primary face reference and secondary outfit reference in the gallery', () => {
+  const restore = installFakeDocument();
+  try {
+    let savedDna: any = null;
+    const f: any = new CharacterFolio({
+      onSaveDNA: (dna: any) => { savedDna = dna; }
+    });
+
+    f.setLibrary({
+      characters: {
+        'mira': {
+          id: 'mira',
+          name: 'Mira',
+          aliases: [],
+          hair: {},
+          eyes: {},
+          build: {},
+          signatureOutfit: '',
+          distinguishingFeatures: [],
+          colorPalette: [],
+          locked: false,
+          lastUpdated: 1000
+        }
+      }
+    } as any);
+
+    const turn: any = {
+      chatId: 'c',
+      messageId: 'm',
+      swipeId: 0,
+      sourceFingerprint: 'f',
+      revision: 0,
+      paragraphs: ['Mira smiles.'],
+      subjectCandidates: ['Mira'],
+      assets: [
+        {
+          stageAsset: { character: 'Mira', role: 'Scene' },
+          status: 'generated',
+          imageUrl: 'https://example.com/face.png',
+          paragraphIndex: 0
+        },
+        {
+          stageAsset: { character: 'Mira', role: 'Full portrait', attire: 'Winter cloak' },
+          status: 'generated',
+          imageUrl: 'https://example.com/cloak.png',
+          paragraphIndex: 0
+        }
+      ]
+    };
+
+    f.syncFromTurn(turn, 0);
+    f.activeSubTab = 'cgs';
+    f.renderDetail();
+
+    const char = f.library['mira'];
+    expect(char).toBeDefined();
+
+    // Verify buttons in gallery
+    const cards = f.detailContainer.querySelectorAll('.folio-cg-card');
+    expect(cards.length).toBeGreaterThanOrEqual(2);
+
+    // Click primary reference on first card (most recent image: cloak)
+    const firstPrimaryBtn = cards[0].querySelectorAll('button')[0];
+    firstPrimaryBtn.click();
+    expect(char.referenceImageUrl).toBe('https://example.com/cloak.png');
+    expect(char.avatarUrl).toBe('https://example.com/cloak.png');
+    expect(savedDna?.referenceImageUrl).toBe('https://example.com/cloak.png');
+
+    // Click secondary reference on second card (earlier image: face)
+    const secondOutfitBtn = cards[1].querySelectorAll('button')[1];
+    secondOutfitBtn.click();
+    expect(char.secondaryReferenceImageUrl).toBe('https://example.com/face.png');
+    expect(savedDna?.secondaryReferenceImageUrl).toBe('https://example.com/face.png');
+  } finally {
+    restore();
+  }
+});

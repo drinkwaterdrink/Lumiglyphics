@@ -1,6 +1,7 @@
 import {samePresentationTurn} from '../../shared/presentation-entities.js';
 import {sceneImageCandidatesFor} from './image-loader.js';
-import {DNA_FIELDS,DNA_FIELD_LABELS,dnaFieldValue,type DnaField,type DnaProposal} from '../../shared/character-dna-workflow.js';
+import {DNA_FIELDS,DNA_FIELD_LABELS,dnaFieldValue,applyDnaChanges,type DnaField,type DnaProposal} from '../../shared/character-dna-workflow.js';
+import {areNamesEquivalent,findMatchingCharacterId} from '../../shared/nicknames.js';
 import type { CharacterDNA, CharacterDNALibrary } from '../../shared/character-dna.js';
 import {
   createEmptyCharacterDNA,
@@ -673,7 +674,8 @@ export class CharacterFolio implements WorkspaceSurface {
       const imageUrl = ['generated','browser_ready'].includes(asset.status) ? sceneImageCandidatesFor(asset)[0] : undefined;
       if (charName && imageUrl) {
         detectedNames.add(charName);
-        const key = charName.toLowerCase();
+        const matchingId = findMatchingCharacterId(this.library, charName);
+        const key = (matchingId && this.library[matchingId]) ? this.library[matchingId].name.toLowerCase() : charName.toLowerCase();
         const existingLore = this.loreMap[key] || {};
         existingLore.cgs = existingLore.cgs || [];
         if (!existingLore.cgs.some(c => c.imageUrl === imageUrl)) {
@@ -703,10 +705,24 @@ export class CharacterFolio implements WorkspaceSurface {
     if(this.activeCharacterId&&!this.library[this.activeCharacterId])this.activeCharacterId=null;
     for (const name of detectedNames) {
       const key = name.trim().toLowerCase();
-      const existing = Object.values(this.library).find(c => c.name.toLowerCase() === key || c.aliases.some(a => a.toLowerCase() === key));
-      if (!existing && !findCharacterDNA(this.deleted,name)) {
+      let match = Object.values(this.library).find(c => c.name.toLowerCase() === key || c.aliases.some(a => a.toLowerCase() === key));
+      if (!match) {
+        const matchId = findMatchingCharacterId(this.library, name);
+        if (matchId && this.library[matchId]) {
+          match = this.library[matchId];
+          if (!match.aliases.some(a => a.toLowerCase() === key) && match.name.toLowerCase() !== key) {
+            match.aliases.push(name.trim());
+            changed = true;
+          }
+        }
+      }
+      const isDeleted = Boolean(findCharacterDNA(this.deleted, name) || findMatchingCharacterId(this.deleted, name));
+      if (!match && !isDeleted) {
         const dna = createEmptyCharacterDNA(name);
-        const assetWithImage = visibleAssets.find(a => a.stageAsset?.character?.trim().toLowerCase() === key && ['generated','browser_ready'].includes(a.status) && sceneImageCandidatesFor(a).length > 0);
+        const assetWithImage = visibleAssets.find(a => {
+          const aName = a.stageAsset?.character?.trim();
+          return aName && areNamesEquivalent(aName, name) && ['generated','browser_ready'].includes(a.status) && sceneImageCandidatesFor(a).length > 0;
+        });
         if (assetWithImage) {
           dna.avatarUrl = sceneImageCandidatesFor(assetWithImage)[0];
         }
@@ -767,7 +783,20 @@ export class CharacterFolio implements WorkspaceSurface {
   setActiveCharacter(idOrName: string): void {
     this.cancelProposal();
     const key = idOrName.trim().toLowerCase();
-    const byIdentity=findCharacterDNA(this.library,idOrName);if(byIdentity){this.activeCharacterId=byIdentity.id;this.renderRoster();this.renderDetail();return;}
+    const byIdentity = findCharacterDNA(this.library, idOrName);
+    if (byIdentity) {
+      this.activeCharacterId = byIdentity.id;
+      this.renderRoster();
+      this.renderDetail();
+      return;
+    }
+    const matchingId = findMatchingCharacterId(this.library, idOrName);
+    if (matchingId && this.library[matchingId]) {
+      this.activeCharacterId = matchingId;
+      this.renderRoster();
+      this.renderDetail();
+      return;
+    }
     if (this.library[key]) {
       this.activeCharacterId = key;
     } else {
@@ -1002,7 +1031,7 @@ export class CharacterFolio implements WorkspaceSurface {
     const cgsTabBtn = document.createElement('button');
     cgsTabBtn.type = 'button';
     cgsTabBtn.className = `subtab-btn${this.activeSubTab === 'cgs' ? ' active' : ''}`;
-    cgsTabBtn.textContent = `🖼️ CGs (${cgsCount})`;
+    cgsTabBtn.textContent = `🖼️ Gallery & References (${cgsCount})`;
     cgsTabBtn.onclick = () => {
       this.activeSubTab = 'cgs';
       this.renderDetail();
@@ -1212,55 +1241,159 @@ export class CharacterFolio implements WorkspaceSurface {
     const cgsWrap = document.createElement('div');
     cgsWrap.style.display = 'flex';
     cgsWrap.style.flexDirection = 'column';
-    cgsWrap.style.gap = '12px';
+    cgsWrap.style.gap = '14px';
 
-    const cgs = lore.cgs || [];
-    if (cgs.length === 0 && char.avatarUrl) {
-      cgs.push({ imageUrl: char.avatarUrl, caption: 'Avatar portrait' });
+    // Collect all pictures for this character across lore, aliases, nickname matches, avatar, and references
+    const collected: Array<{ imageUrl: string; caption?: string }> = [];
+    const seenUrls = new Set<string>();
+
+    const addImage = (url?: string, caption?: string) => {
+      if (!url || seenUrls.has(url)) return;
+      seenUrls.add(url);
+      collected.push({ imageUrl: url, caption });
+    };
+
+    if (char.referenceImageUrl) addImage(char.referenceImageUrl, 'Primary Face Reference');
+    if (char.secondaryReferenceImageUrl) addImage(char.secondaryReferenceImageUrl, 'Outfit Reference');
+    if (char.avatarUrl) addImage(char.avatarUrl, 'Active Avatar');
+
+    for (const [key, ctx] of Object.entries(this.loreMap)) {
+      if (areNamesEquivalent(key, char.name) || char.aliases.some(a => areNamesEquivalent(key, a))) {
+        for (const cg of ctx.cgs ?? []) {
+          addImage(cg.imageUrl, cg.caption);
+        }
+      }
     }
 
-    if (cgs.length === 0) {
+    // Top instruction note
+    const guide = document.createElement('p');
+    guide.className = 'folio-gallery-guide';
+    guide.style.cssText = 'font-size:12px;opacity:0.85;margin:0 0 6px;line-height:1.4;';
+    guide.textContent = 'Select which picture serves as the authority reference for consistency in future image generations. Set a Primary Reference for facial identity, and an optional Secondary Reference for active attire/outfit.';
+    cgsWrap.append(guide);
+
+    if (collected.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'folio-empty';
-      empty.innerHTML = `<span>No CGs or portraits generated for this character yet.</span>`;
+      const emptySpan = document.createElement('span'); emptySpan.textContent = `No pictures or scene portraits generated for ${char.name} yet. Pictures created during reading will appear in this gallery.`; empty.append(emptySpan);
       cgsWrap.append(empty);
     } else {
       const grid = document.createElement('div');
       grid.className = 'folio-cgs-grid';
 
-      for (const cg of cgs) {
+      for (const cg of collected) {
+        const isPrimary = char.referenceImageUrl === cg.imageUrl;
+        const isSecondary = char.secondaryReferenceImageUrl === cg.imageUrl;
+        const isAvatar = char.avatarUrl === cg.imageUrl;
+
         const card = document.createElement('div');
-        card.className = 'folio-cg-card';
+        card.className = `folio-cg-card${isPrimary ? ' active-primary-ref' : ''}${isSecondary ? ' active-secondary-ref' : ''}`;
 
         const img = document.createElement('img');
         img.className = 'folio-cg-thumb';
         img.src = cg.imageUrl;
         img.alt = cg.caption || char.name;
         img.title = 'Click to inspect full image';
-        img.onclick = () => {
-          window.open(cg.imageUrl, '_blank');
-        };
+        img.onclick = () => window.open(cg.imageUrl, '_blank');
+
+        // Status badges container
+        const badges = document.createElement('div');
+        badges.className = 'folio-cg-badges';
+        badges.style.cssText = 'position:absolute;top:6px;left:6px;display:flex;flex-direction:column;gap:4px;pointer-events:none;z-index:2;';
+
+        if (isPrimary) {
+          const b = document.createElement('span');
+          b.className = 'folio-tag tag-primary-ref';
+          b.style.cssText = 'background:#1a4d2e;color:#85e3a0;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;border:1px solid #2d6a4f;';
+          b.textContent = '⭐ Primary Reference';
+          badges.append(b);
+        }
+        if (isSecondary) {
+          const b = document.createElement('span');
+          b.className = 'folio-tag tag-secondary-ref';
+          b.style.cssText = 'background:#2b2d42;color:#a8dadc;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;border:1px solid #457b9d;';
+          b.textContent = '👔 Outfit Reference';
+          badges.append(b);
+        }
+        if (isAvatar && !isPrimary) {
+          const b = document.createElement('span');
+          b.className = 'folio-tag';
+          b.style.cssText = 'background:#3d2645;color:#e2afff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;border:1px solid #8338ec;';
+          b.textContent = '👤 Avatar';
+          badges.append(b);
+        }
 
         const footer = document.createElement('div');
         footer.className = 'folio-cg-footer';
 
         const cap = document.createElement('span');
         cap.className = 'folio-cg-caption';
-        cap.textContent = cg.caption || 'Scene view';
+        cap.textContent = cg.caption || 'Scene portrait';
 
-        const setBtn = document.createElement('button');
-        setBtn.type = 'button';
-        setBtn.className = 'btn-set-avatar';
-        setBtn.textContent = 'Set Avatar';
-        setBtn.onclick = () => {
-          this.cancelProposal();char.avatarUrl = cg.imageUrl;char.lastUpdated=Math.max(Date.now(),char.lastUpdated+1);this.dirty.add(char.id);
-          this.handlers.onSaveDNA?.(structuredClone(char),this.revision);
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;';
+
+        // Primary Reference Button
+        const primaryBtn = document.createElement('button');
+        primaryBtn.type = 'button';
+        primaryBtn.className = 'folio-action-btn' + (isPrimary ? ' btn-active' : '');
+        primaryBtn.style.cssText = 'font-size:11px;padding:4px 8px;';
+        primaryBtn.textContent = isPrimary ? '★ Primary Active' : '⭐ Set as Face Reference';
+        primaryBtn.onclick = () => {
+          this.cancelProposal();
+          if (isPrimary) {
+            delete char.referenceImageUrl;
+          } else {
+            char.referenceImageUrl = cg.imageUrl;
+            char.avatarUrl = cg.imageUrl;
+          }
+          char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+          this.dirty.add(char.id);
+          this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
           this.renderRoster();
           this.renderDetail();
         };
 
-        footer.append(cap, setBtn);
-        card.append(img, footer);
+        // Secondary Reference Button
+        const secondaryBtn = document.createElement('button');
+        secondaryBtn.type = 'button';
+        secondaryBtn.className = 'folio-action-btn' + (isSecondary ? ' btn-active' : '');
+        secondaryBtn.style.cssText = 'font-size:11px;padding:4px 8px;';
+        secondaryBtn.textContent = isSecondary ? '👔 Outfit Active' : '👔 Set as Outfit Reference';
+        secondaryBtn.onclick = () => {
+          this.cancelProposal();
+          if (isSecondary) {
+            delete char.secondaryReferenceImageUrl;
+          } else {
+            char.secondaryReferenceImageUrl = cg.imageUrl;
+          }
+          char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+          this.dirty.add(char.id);
+          this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+          this.renderRoster();
+          this.renderDetail();
+        };
+
+        // Set as Avatar button
+        const avatarBtn = document.createElement('button');
+        avatarBtn.type = 'button';
+        avatarBtn.className = 'btn-set-avatar';
+        avatarBtn.style.cssText = 'font-size:11px;padding:4px 8px;';
+        avatarBtn.textContent = isAvatar ? '✓ Avatar' : 'Set Avatar';
+        avatarBtn.disabled = isAvatar;
+        avatarBtn.onclick = () => {
+          this.cancelProposal();
+          char.avatarUrl = cg.imageUrl;
+          char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+          this.dirty.add(char.id);
+          this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+          this.renderRoster();
+          this.renderDetail();
+        };
+
+        btnRow.append(primaryBtn, secondaryBtn, avatarBtn);
+        footer.append(cap, btnRow);
+        card.append(badges, img, footer);
         grid.append(card);
       }
       cgsWrap.append(grid);
@@ -1347,7 +1480,31 @@ export class CharacterFolio implements WorkspaceSurface {
     }
     const saved=Object.values(this.library).filter(c=>c.id!==char.id);
     if(saved.length){const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Merge a duplicate';details.append(summary);const select=document.createElement('select');select.setAttribute('aria-label','Duplicate character');for(const c of saved){const option=document.createElement('option');option.value=c.id;option.textContent=c.name;select.append(option);}const explanation=document.createElement('p');explanation.textContent=`Keep ${char.name} and its existing values. Fill only blank fields from the selected duplicate and retain its name as an alias. Conflicting values stay with ${char.name}.`;
-      details.append(explanation,select,button('Preview merge',()=>{this.mergeOther=select.value;this.renderDetail();}));if(this.mergeOther){const other=this.library[this.mergeOther];if(other){const preview=document.createElement('p');preview.textContent=DNA_FIELDS.map(path=>{const a=dnaFieldValue(char,path),b=dnaFieldValue(other,path);return b?`${DNA_FIELD_LABELS[path]}: ${a?`${JSON.stringify(a)} kept; duplicate ${JSON.stringify(b)}`:`fill ${JSON.stringify(b)}`}`:'';}).filter(Boolean).join(' · ');details.append(preview,button('Merge into this character',()=>{this.handlers.onMergeDNA?.(char.id,other.id,this.revision);this.mergeOther='';}));details.open=true;}}box.append(details);}
+      details.append(explanation,select,button('Preview merge',()=>{this.mergeOther=select.value;this.renderDetail();}));if(this.mergeOther){const other=this.library[this.mergeOther];if(other){const preview=document.createElement('p');preview.textContent=DNA_FIELDS.map(path=>{const a=dnaFieldValue(char,path),b=dnaFieldValue(other,path);return b?`${DNA_FIELD_LABELS[path]}: ${a?`${JSON.stringify(a)} kept; duplicate ${JSON.stringify(b)}`:`fill ${JSON.stringify(b)}`}`:'';}).filter(Boolean).join(' · ');details.append(preview,button('Merge into this character',()=>{
+        if (this.savedLibrary[char.id] && this.savedLibrary[other.id]) {
+          this.handlers.onMergeDNA?.(char.id, other.id, this.revision);
+        } else {
+          for (const path of DNA_FIELDS) {
+            const current = dnaFieldValue(char, path);
+            const value = dnaFieldValue(other, path);
+            if ((!current || (Array.isArray(current) && !current.length)) && value) {
+              applyDnaChanges(char, [{ path, value, classification: 'generated', sourceRefs: [] }]);
+            }
+          }
+          char.aliases = [...new Set([...char.aliases, other.name, ...other.aliases])].filter(n => n !== char.name).slice(0, 16);
+          if (!char.avatarUrl && other.avatarUrl) char.avatarUrl = other.avatarUrl;
+          if (!char.referenceImageUrl && other.referenceImageUrl) char.referenceImageUrl = other.referenceImageUrl;
+          if (!char.secondaryReferenceImageUrl && other.secondaryReferenceImageUrl) char.secondaryReferenceImageUrl = other.secondaryReferenceImageUrl;
+          delete this.library[other.id];
+          this.discoveredIds.delete(other.id);
+          char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+          this.dirty.add(char.id);
+          this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+          this.renderRoster();
+          this.renderDetail();
+        }
+        this.mergeOther = '';
+      }));details.open=true;}}box.append(details);}
     if(box.children.length)this.detailContainer.append(box);
   }
 

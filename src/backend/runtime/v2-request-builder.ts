@@ -10,6 +10,7 @@ import {resolveReferencePlan} from './reference-plan.js';
 import {compileModelPrompt} from './model-prompt-compiler.js';
 import type {ImageGenerationRequest,RebuildOptions} from './image-review.js';
 import type {StoredPortrait} from './storage.js';
+import type {CharacterDNA, CharacterDNALibrary} from '../../shared/character-dna.js';
 
 export interface V2ImageRequestInput {
  config:VisualNovelConfig;
@@ -21,6 +22,7 @@ export interface V2ImageRequestInput {
  /** Intentionally explicit: initial selection and template/style rebuild have different precedence. */
  styleId:string|null|undefined;
  portraits?:Record<string,StoredPortrait|undefined>|undefined;
+ characterDNALibrary?:CharacterDNALibrary|Record<string,CharacterDNA>|undefined;
  planParameters?:Record<string,unknown>|undefined;
  previousShotRevision?:number|undefined;
  /** Caller-owned snapshot for this exact picture, never selected by completion order. */
@@ -66,7 +68,7 @@ export function buildV2ImageRequest(input:V2ImageRequestInput):{request:ImageGen
  request.promptProfileV2=profile;request.outputPlan=outputPlan;request.shotSpec=shotSpec;request.styleSnapshot=styleSnapshot.styleDNA;
  request.parameters={...request.parameters,...outputPlan.parameters};
  if(cue.imageTemplate?.cameraPolicy!=='fixed'||Boolean(rebuild?.manualCamera||rebuild?.fitToModel||input.styleId)){
-  const referencePlan=resolveReferencePlan({brief:input.metadata?.brief,cue,portraits:input.portraits});
+  const referencePlan=resolveReferencePlan({brief:input.metadata?.brief,cue,portraits:input.portraits,characterDNALibrary:input.characterDNALibrary});
   const compiled=compileModelPrompt({brief:input.brief,shotSpec,styleDNA:effectiveStyleDNA,profile,outputPlan,referencePlan,detailLevel:rebuild?.fitToModel?'compact':config.imagePromptDetail,promptExpansionEnabled:profile.promptExpansion?.enabled,userBudgetOverride:rebuild?.fitToModel?Math.min(profile.softBudgets.standard[0],profile.hardMaxCharacters):config.imagePromptBudgetOverride?config.imagePromptBudget:null,cue});
   request.prompt=compiled.prompt;
   if(compiled.negativePrompt!==undefined)request.negativePrompt=compiled.negativePrompt;

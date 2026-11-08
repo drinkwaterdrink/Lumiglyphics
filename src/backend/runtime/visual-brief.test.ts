@@ -99,3 +99,56 @@ test("long ensemble appearances retain every named subject and disclose condensa
   assert.ok(brief.subjects.length<=1800);
   assert.ok(brief.conflicts.some(note=>note.includes('condensed')));
 });
+
+test("pulls Character DNA for non-primary characters and resolves diminutives like Bob for Robert", () => {
+  const config = normalizeConfig({ defaultImageTemplateId: "ensemble" });
+  const robertDna = {
+    id: "robert-vance",
+    name: "Robert Vance",
+    aliases: ["Vance"],
+    hair: { color: "auburn", length: "short", style: "slicked back" },
+    eyes: { color: "steel grey" },
+    build: { gender: "man", height: "tall" },
+    signatureOutfit: "tailored grey suit",
+    locked: false,
+    lastUpdated: 1000
+  };
+  const marselineDna = {
+    id: "marseline",
+    name: "Marseline",
+    aliases: ["Vane"],
+    hair: { color: "raven black", length: "long", style: "wavy" },
+    eyes: { color: "emerald green" },
+    build: { gender: "woman" },
+    signatureOutfit: "crimson trenchcoat",
+    locked: false,
+    lastUpdated: 1000
+  };
+  const dnaLibrary = {
+    version: 1 as const,
+    characters: {
+      "robert-vance": robertDna as any,
+      "marseline": marselineDna as any
+    }
+  };
+
+  // Cue addresses Robert as "Bob" and Marseline as "Detective Vane"
+  const brief = buildVisualBrief(
+    config,
+    scene,
+    {
+      ...cue,
+      imageTemplate: resolveImageTemplate(config).template,
+      ensembleSubjects: [
+        { name: "Bob", appearance: "" },
+        { name: "Detective Vane", appearance: "" }
+      ]
+    },
+    undefined,
+    dnaLibrary
+  );
+
+  // Both should have their visual traits pulled from Character DNA instead of empty or bare names!
+  assert.match(brief.subjects, /Bob:.*auburn.*grey/);
+  assert.match(brief.subjects, /Detective Vane:.*raven black.*emerald/);
+});

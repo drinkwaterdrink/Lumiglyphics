@@ -10,6 +10,7 @@ import type { VisualBrief } from "../../shared/image-templates.js";
 export type { VisualBrief } from "../../shared/image-templates.js";
 import { POSE_EXPRESSION_CATALOGUE, poseById, sanitizePoseExpression } from "../../shared/character.js";
 import { formatCharacterDNAToPromptClause, type CharacterDNA, type CharacterDNALibrary } from "../../shared/character-dna.js";
+import { areNamesEquivalent, findMatchingCharacterId } from "../../shared/nicknames.js";
 
 const text = (values: (string | null | undefined)[], max = 4000) => [...new Set(values.map(value => value?.trim()).filter(Boolean))].join("; ").slice(0, max);
 
@@ -102,13 +103,18 @@ export function resolveTemplateIdentity(
   let lockedDNA: CharacterDNA | undefined;
   if (characterDNALibrary) {
     const chars = ('characters' in characterDNALibrary ? characterDNALibrary.characters : characterDNALibrary) as Record<string, CharacterDNA>;
-    const key = name.trim().toLowerCase();
-    lockedDNA = chars[key] ?? Object.values(chars).find((r: CharacterDNA) => r.name.trim().toLowerCase()===key||r.aliases.some((a: string) => a.trim().toLowerCase() === key));
+    const matchId = findMatchingCharacterId(chars, name);
+    if (matchId && chars[matchId]) {
+      lockedDNA = chars[matchId];
+    } else {
+      const key = name.trim().toLowerCase();
+      lockedDNA = chars[key] ?? Object.values(chars).find((r: CharacterDNA) => r.name.trim().toLowerCase()===key||r.aliases.some((a: string) => a.trim().toLowerCase() === key));
+    }
   }
 
   const dnaAppearance = lockedDNA ? formatCharacterDNAToPromptClause(lockedDNA) : undefined;
   const saved = (lockedDNA?.locked && dnaAppearance)
-    || Object.entries(appearances ?? {}).find(([key]) => characterAppearanceKey(key) === characterAppearanceKey(name))?.[1]?.trim()
+    || Object.entries(appearances ?? {}).find(([key]) => areNamesEquivalent(key, name))?.[1]?.trim()
     || dnaAppearance;
   const resolved = cue.resolvedIdentity?.trim() || (sameCharacter ? scene.identityPrompt?.trim() : "") || "";
   return {
@@ -154,10 +160,27 @@ export function buildVisualBrief(
     cleanedVisualDescription,
     environment.persistentElements
   );
+  const chars = characterDNALibrary
+    ? (('characters' in characterDNALibrary ? characterDNALibrary.characters : characterDNALibrary) as Record<string, CharacterDNA>)
+    : undefined;
+
   const members = (cue.ensembleSubjects ?? scene.cast.map(name => ({name,appearance:""}))).map(member=>{
-    const saved=Object.entries(appearances??{}).find(([key])=>characterAppearanceKey(key)===characterAppearanceKey(member.name))?.[1];
-    const appearance=manual?member.appearance:saved||member.appearance;
-    return {...member,appearance:'attire'in member&&member.attire?applyAttireOverride(appearance,String(member.attire)):appearance};
+    let dnaAppearance: string | undefined;
+    let memberDna: CharacterDNA | undefined;
+    if (chars) {
+      const matchId = findMatchingCharacterId(chars, member.name);
+      if (matchId && chars[matchId]) {
+        memberDna = chars[matchId];
+        dnaAppearance = formatCharacterDNAToPromptClause(memberDna);
+      }
+    }
+    const saved = Object.entries(appearances ?? {}).find(([key]) => areNamesEquivalent(key, member.name))?.[1];
+    const memberAttire = ('attire' in member && member.attire)
+      ? String(member.attire)
+      : (memberDna?.activeOutfit || memberDna?.signatureOutfit || undefined);
+    const appearanceBase = manual ? member.appearance : (dnaAppearance || saved || member.appearance);
+    const appearance = memberAttire ? applyAttireOverride(appearanceBase, memberAttire) : appearanceBase;
+    return {...member, appearance, attire: memberAttire};
   });
   // Reserve room for every name before sharing the remaining appearance budget.
   // A long first description must never erase the persona or the last cast member.

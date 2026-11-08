@@ -20020,6 +20020,120 @@ MOMENT: {{action}}
 Use an external camera view so the listed persona is visible too. Compose readable interactions and spatial relationships, with natural poses and clear silhouettes. Show only the supplied moment, no extra people, duplicated individuals, merged bodies, split panels or invented events.
 {{suffix}}`,
     negative: "{{negative}}, duplicate person, merged identities, swapped hair or clothing, fused bodies, extra limbs, cropped-out cast, split screen"
+  },
+  {
+    id: "two-shot",
+    name: "Two-shot dialogue",
+    category: "action",
+    enabled: false,
+    useWhen: "Two characters conversing, interacting, or in direct tension. Focus on mid-range framing and relational chemistry.",
+    subjectMode: "ensemble",
+    framing: "upper body",
+    referencePolicy: "character",
+    cameraPolicy: "directed",
+    intent: "two-shot",
+    safeAreaPolicy: "auto",
+    positive: `{{style}}
+A medium two-shot composition depicting two characters interacting.
+CAST:
+{{subjects}}
+SETTING: {{scene}}
+INTERACTION: {{action}}
+{{composition}}
+{{lighting}}
+Compose both subjects naturally in the frame with distinct body language and eye line. Clear dialogue safe area in the lower third.
+{{suffix}}`,
+    negative: "{{negative}}, single character, crowded group, fused bodies, mismatched eye-contact, obscured expressions"
+  },
+  {
+    id: "cinematic-wide",
+    name: "Cinematic wide establishing",
+    category: "environment",
+    enabled: false,
+    useWhen: "Sweeping cinematic view of a setting or landscape with deep horizon, rich atmospheric depth, and sense of scale.",
+    subjectMode: "none",
+    framing: "wide",
+    referencePolicy: "none",
+    cameraPolicy: "directed",
+    intent: "establishing",
+    safeAreaPolicy: "none",
+    positive: `{{style}}
+An expansive cinematic wide-angle establishing shot.
+ENVIRONMENT: {{scene}}
+ATMOSPHERE: {{lighting}}
+{{composition}}
+Focus on grand architectural or natural scale, atmospheric depth, deep perspective, and immersive environmental storytelling. Clean vista without focal character obstructions.
+{{suffix}}`,
+    negative: "{{negative}}, close-up, cropped horizon, portrait orientation, cramped framing, blurry backdrop"
+  },
+  {
+    id: "dramatic-closeup",
+    name: "Dramatic close-up",
+    category: "portrait",
+    enabled: false,
+    useWhen: "High-stakes emotional intensity, sudden revelation, or dramatic eye/facial expression peak.",
+    subjectMode: "one",
+    framing: "close-up",
+    referencePolicy: "character",
+    cameraPolicy: "directed",
+    intent: "reaction",
+    safeAreaPolicy: "auto",
+    positive: `{{style}}
+A tight cinematic dramatic close-up focused on intense emotional expression.
+SUBJECT: {{subjects}}
+EMOTION & MOMENT: {{action}}
+SETTING CONTEXT: {{scene}}
+{{composition}}
+{{lighting}}
+Shallow depth of field, sharp focus on eyes and facial nuance, cinematic key lighting with soft background bokeh.
+{{suffix}}`,
+    negative: "{{negative}}, wide shot, full body, blank expression, stiff pose, cropped forehead, flat lighting"
+  },
+  {
+    id: "key-visual",
+    name: "Key visual / Climax",
+    category: "action",
+    enabled: false,
+    useWhen: "A definitive story milestone, heroic pose, promotional climax shot, or defining narrative moment.",
+    subjectMode: "one",
+    framing: "full body",
+    referencePolicy: "character",
+    cameraPolicy: "directed",
+    intent: "action",
+    safeAreaPolicy: "auto",
+    positive: `{{style}}
+A striking visual novel key visual illustration with dynamic heroic composition.
+SUBJECT: {{subjects}}
+HEROIC MOMENT: {{action}}
+ENVIRONMENT: {{scene}}
+{{composition}}
+{{lighting}}
+Full-figure presence, iconic silhouette, dynamic camera perspective, dramatic environmental rim lighting, and memorable narrative impact.
+{{suffix}}`,
+    negative: "{{negative}}, mundane snapshot, dull pose, awkward limbs, cropped feet, off-center clutter"
+  },
+  {
+    id: "candid-moment",
+    name: "Candid moment",
+    category: "portrait",
+    enabled: false,
+    useWhen: "An unposed, authentic slice-of-life interaction, contemplative pause, or natural mid-gesture beat.",
+    subjectMode: "one",
+    framing: "portrait",
+    referencePolicy: "character",
+    cameraPolicy: "directed",
+    intent: "dialogue",
+    safeAreaPolicy: "auto",
+    positive: `{{style}}
+A natural candid portrait capturing an unposed, authentic narrative slice-of-life moment.
+SUBJECT: {{subjects}}
+GESTURE & MOMENT: {{action}}
+ENVIRONMENT: {{scene}}
+{{composition}}
+{{lighting}}
+Spontaneous posture, relaxed candid framing, soft environmental illumination, expressive natural mood.
+{{suffix}}`,
+    negative: "{{negative}}, stiff mannequin pose, artificial looking straight at camera, extreme fisheye, harsh flash"
   }
 ];
 function validateImageTemplates(value) {
@@ -20027,11 +20141,13 @@ function validateImageTemplates(value) {
 }
 function upgradeImageTemplates(value) {
   const templates = validateImageTemplates(value);
-  if (!templates.some((t) => t.id === "manga-page") && templates.length < 32) {
-    templates.push({ ...BUILTIN_IMAGE_TEMPLATES.find((t) => t.id === "manga-page") });
+  for (const templateId of ["manga-page", "ensemble", "two-shot", "cinematic-wide", "dramatic-closeup", "key-visual", "candid-moment"]) {
+    if (!templates.some((t) => t.id === templateId) && templates.length < 32) {
+      const builtin = BUILTIN_IMAGE_TEMPLATES.find((t) => t.id === templateId);
+      if (builtin)
+        templates.push({ ...builtin });
+    }
   }
-  if (!templates.some((t) => t.id === "ensemble") && templates.length < 32)
-    templates.push({ ...BUILTIN_IMAGE_TEMPLATES.find((t) => t.id === "ensemble") });
   return templates.map((t) => {
     if (t.id !== "manga-page")
       return t;
@@ -21483,6 +21599,10 @@ var CharacterDNASchema = exports_external.object({
   sourceSummary: exports_external.string().trim().max(500).optional(),
   notes: exports_external.string().trim().max(1000).optional(),
   avatarUrl: exports_external.string().trim().max(2000).optional(),
+  referenceImageUrl: exports_external.string().trim().max(2000).optional(),
+  secondaryReferenceImageUrl: exports_external.string().trim().max(2000).optional(),
+  referenceImageId: exports_external.string().trim().max(256).optional(),
+  secondaryReferenceImageId: exports_external.string().trim().max(256).optional(),
   lastUpdated: exports_external.number().int().nonnegative().default(() => Date.now()),
   fieldSources: exports_external.record(exports_external.string(), exports_external.object({ classification: exports_external.enum(["evidence", "inferred", "generated", "manual"]), sources: exports_external.array(exports_external.string().max(1000)).max(8) }).strict()).optional()
 }).strict();
@@ -21741,6 +21861,17 @@ var DnaRequestSchema = exports_external.discriminatedUnion("action", [
 function dnaFieldValue(dna, path) {
   const [a, b] = path.split(".");
   return b ? dna[a]?.[b] : dna[a];
+}
+function applyDnaChanges(base, changes) {
+  const next = structuredClone(base);
+  for (const change of changes) {
+    const [a, b] = change.path.split(".");
+    if (b)
+      next[a][b] = change.value;
+    else
+      next[a] = change.value;
+  }
+  return CharacterDNASchema.parse(next);
 }
 
 // src/frontend/image-review/inspector-model.ts
@@ -48533,7 +48664,7 @@ function promptEngineSummary(record2, draft) {
     },
     negativePolicy: profileV2?.negativePolicy ?? (profile?.negativeMode === "positive-only" ? "positive-only" : "native"),
     promptExpansion: profileV2?.promptExpansion ? profileV2.promptExpansion.enabled ? "Enabled" : "Disabled" : undefined,
-    references: metadata?.referenceSummary ?? record2.referenceSummary ?? "None attached",
+    references: metadata?.referenceSummary && metadata.referenceSummary !== "No extension reference" ? metadata.referenceSummary : record2.referenceSummary && record2.referenceSummary !== "No extension reference" ? record2.referenceSummary : metadata?.brief?.subjectPreparation?.name && metadata.brief.subjectPreparation.identity ? `Character DNA: ${metadata.brief.subjectPreparation.name} traits anchored into prompt` : "None attached",
     warnings,
     shadowPrompt: metadata?.shadowPrompt
   };
@@ -48879,7 +49010,7 @@ function modelOutputHelp(provider, model, parameters) {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.5-beta.136";
+var LUMIGLYPHICS_VERSION = "0.2.6-beta.137";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -52534,6 +52665,105 @@ var DOCKED_LIBRARY_CSS = `
 :is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-page-label]{color:#3b5d4c!important;font-weight:650!important}
 `;
 
+// src/shared/nicknames.ts
+var NICKNAME_CLUSTERS = [
+  new Set(["robert", "bob", "bobby", "rob", "robby", "robbie"]),
+  new Set(["william", "bill", "billy", "will", "willy", "willie", "liam"]),
+  new Set(["richard", "rick", "ricky", "rich", "richie", "dick", "dickie"]),
+  new Set(["james", "jim", "jimmy", "jamie", "jem"]),
+  new Set(["john", "johnny", "jon", "jonny", "jack", "jackie"]),
+  new Set(["jonathan", "jon", "john", "jonny"]),
+  new Set(["joseph", "joe", "joey"]),
+  new Set(["thomas", "tom", "tommy"]),
+  new Set(["charles", "charlie", "charley", "chuck", "chas"]),
+  new Set(["edward", "ed", "eddie", "eddy", "ned", "ted", "teddy"]),
+  new Set(["michael", "mike", "mikey", "mick"]),
+  new Set(["david", "dave", "davey", "davy"]),
+  new Set(["daniel", "dan", "danny"]),
+  new Set(["benjamin", "ben", "benny", "benji"]),
+  new Set(["alexander", "alex", "alec", "lex", "xander", "sasha"]),
+  new Set(["alexandra", "alex", "alexa", "lexi", "lexie", "sasha", "sandra"]),
+  new Set(["anthony", "tony"]),
+  new Set(["christopher", "chris"]),
+  new Set(["matthew", "matt", "matty"]),
+  new Set(["samuel", "sam", "sammy"]),
+  new Set(["nicholas", "nick", "nicky", "nico"]),
+  new Set(["elizabeth", "liz", "lizzie", "lizzy", "beth", "betty", "betsy", "eliza", "ellie"]),
+  new Set(["margaret", "maggie", "meg", "peggy", "marge", "margie", "daisy"]),
+  new Set(["katherine", "catherine", "kate", "katie", "kathy", "cat", "cathy", "kay"]),
+  new Set(["patricia", "pat", "patty", "patsy", "tricia", "trish"]),
+  new Set(["jennifer", "jen", "jenny", "jenn"]),
+  new Set(["rebecca", "becca", "becky"]),
+  new Set(["victoria", "vicky", "vicki", "tori"]),
+  new Set(["abigail", "abby", "abbie", "gail"]),
+  new Set(["eleanor", "ellie", "ella", "nora"]),
+  new Set(["theodore", "theo", "ted", "teddy"]),
+  new Set(["arthur", "art", "artie"]),
+  new Set(["henry", "hank", "harry", "hal"]),
+  new Set(["andrew", "andy", "drew"]),
+  new Set(["francis", "frank", "frankie"]),
+  new Set(["gerald", "jerry", "gerry"]),
+  new Set(["lawrence", "larry"]),
+  new Set(["stephen", "steven", "steve", "stevie"]),
+  new Set(["walter", "walt", "wally"]),
+  new Set(["marche", "marseline", "marseline vane"])
+];
+var LOOKUP_MAP = new Map;
+for (const cluster of NICKNAME_CLUSTERS) {
+  for (const name of cluster) {
+    LOOKUP_MAP.set(name, cluster);
+  }
+}
+function normalizeNameToken(rawName) {
+  return rawName.trim().toLowerCase().replace(/^(?:mr\.|mrs\.|ms\.|miss|dr\.|doctor|sir|lord|lady|captain|detective|sergeant|officer|prof\.|professor)\s+/i, "").replace(/[^\p{L}\p{N}\s]/gu, "").replace(/\s+/g, " ").trim();
+}
+function areNamesEquivalent(nameA, nameB) {
+  const normA = normalizeNameToken(nameA);
+  const normB = normalizeNameToken(nameB);
+  if (!normA || !normB)
+    return false;
+  if (normA === normB)
+    return true;
+  const tokensA = normA.split(" ");
+  const tokensB = normB.split(" ");
+  const firstA = tokensA[0];
+  const firstB = tokensB[0];
+  const clusterA = LOOKUP_MAP.get(firstA);
+  const clusterB = LOOKUP_MAP.get(firstB);
+  const firstNamesMatch = firstA === firstB || clusterA !== undefined && clusterA.has(firstB) || clusterB !== undefined && clusterB.has(firstA);
+  if (firstNamesMatch) {
+    if (tokensA.length === 1 || tokensB.length === 1)
+      return true;
+    const lastA = tokensA[tokensA.length - 1];
+    const lastB = tokensB[tokensB.length - 1];
+    if (lastA === lastB)
+      return true;
+  }
+  if (tokensA.length === 1 && tokensB.length > 1 && tokensB[tokensB.length - 1] === tokensA[0]) {
+    return true;
+  }
+  if (tokensB.length === 1 && tokensA.length > 1 && tokensA[tokensA.length - 1] === tokensB[0]) {
+    return true;
+  }
+  return false;
+}
+function findMatchingCharacterId(library, candidateName) {
+  const candidateNorm = normalizeNameToken(candidateName);
+  if (!candidateNorm)
+    return null;
+  for (const char of Object.values(library)) {
+    if (areNamesEquivalent(char.name, candidateName)) {
+      return char.id;
+    }
+    for (const alias of char.aliases ?? []) {
+      if (areNamesEquivalent(alias, candidateName)) {
+        return char.id;
+      }
+    }
+  }
+  return null;
+}
+
 // src/frontend/stage/character-folio.ts
 class CharacterFolio {
   handlers;
@@ -53210,7 +53440,8 @@ class CharacterFolio {
       const imageUrl = ["generated", "browser_ready"].includes(asset.status) ? sceneImageCandidatesFor(asset)[0] : undefined;
       if (charName && imageUrl) {
         detectedNames.add(charName);
-        const key = charName.toLowerCase();
+        const matchingId = findMatchingCharacterId(this.library, charName);
+        const key = matchingId && this.library[matchingId] ? this.library[matchingId].name.toLowerCase() : charName.toLowerCase();
         const existingLore = this.loreMap[key] || {};
         existingLore.cgs = existingLore.cgs || [];
         if (!existingLore.cgs.some((c) => c.imageUrl === imageUrl)) {
@@ -53248,10 +53479,24 @@ class CharacterFolio {
       this.activeCharacterId = null;
     for (const name of detectedNames) {
       const key = name.trim().toLowerCase();
-      const existing = Object.values(this.library).find((c) => c.name.toLowerCase() === key || c.aliases.some((a) => a.toLowerCase() === key));
-      if (!existing && !findCharacterDNA(this.deleted, name)) {
+      let match = Object.values(this.library).find((c) => c.name.toLowerCase() === key || c.aliases.some((a) => a.toLowerCase() === key));
+      if (!match) {
+        const matchId = findMatchingCharacterId(this.library, name);
+        if (matchId && this.library[matchId]) {
+          match = this.library[matchId];
+          if (!match.aliases.some((a) => a.toLowerCase() === key) && match.name.toLowerCase() !== key) {
+            match.aliases.push(name.trim());
+            changed = true;
+          }
+        }
+      }
+      const isDeleted = Boolean(findCharacterDNA(this.deleted, name) || findMatchingCharacterId(this.deleted, name));
+      if (!match && !isDeleted) {
         const dna = createEmptyCharacterDNA(name);
-        const assetWithImage = visibleAssets.find((a) => a.stageAsset?.character?.trim().toLowerCase() === key && ["generated", "browser_ready"].includes(a.status) && sceneImageCandidatesFor(a).length > 0);
+        const assetWithImage = visibleAssets.find((a) => {
+          const aName = a.stageAsset?.character?.trim();
+          return aName && areNamesEquivalent(aName, name) && ["generated", "browser_ready"].includes(a.status) && sceneImageCandidatesFor(a).length > 0;
+        });
         if (assetWithImage) {
           dna.avatarUrl = sceneImageCandidatesFor(assetWithImage)[0];
         }
@@ -53363,6 +53608,13 @@ class CharacterFolio {
     const byIdentity = findCharacterDNA(this.library, idOrName);
     if (byIdentity) {
       this.activeCharacterId = byIdentity.id;
+      this.renderRoster();
+      this.renderDetail();
+      return;
+    }
+    const matchingId = findMatchingCharacterId(this.library, idOrName);
+    if (matchingId && this.library[matchingId]) {
+      this.activeCharacterId = matchingId;
       this.renderRoster();
       this.renderDetail();
       return;
@@ -53618,7 +53870,7 @@ class CharacterFolio {
     const cgsTabBtn = document.createElement("button");
     cgsTabBtn.type = "button";
     cgsTabBtn.className = `subtab-btn${this.activeSubTab === "cgs" ? " active" : ""}`;
-    cgsTabBtn.textContent = `\uD83D\uDDBC️ CGs (${cgsCount})`;
+    cgsTabBtn.textContent = `\uD83D\uDDBC️ Gallery & References (${cgsCount})`;
     cgsTabBtn.onclick = () => {
       this.activeSubTab = "cgs";
       this.renderDetail();
@@ -53820,40 +54072,130 @@ class CharacterFolio {
     const cgsWrap = document.createElement("div");
     cgsWrap.style.display = "flex";
     cgsWrap.style.flexDirection = "column";
-    cgsWrap.style.gap = "12px";
-    const cgs = lore.cgs || [];
-    if (cgs.length === 0 && char.avatarUrl) {
-      cgs.push({ imageUrl: char.avatarUrl, caption: "Avatar portrait" });
+    cgsWrap.style.gap = "14px";
+    const collected = [];
+    const seenUrls = new Set;
+    const addImage = (url3, caption) => {
+      if (!url3 || seenUrls.has(url3))
+        return;
+      seenUrls.add(url3);
+      collected.push({ imageUrl: url3, caption });
+    };
+    if (char.referenceImageUrl)
+      addImage(char.referenceImageUrl, "Primary Face Reference");
+    if (char.secondaryReferenceImageUrl)
+      addImage(char.secondaryReferenceImageUrl, "Outfit Reference");
+    if (char.avatarUrl)
+      addImage(char.avatarUrl, "Active Avatar");
+    for (const [key, ctx] of Object.entries(this.loreMap)) {
+      if (areNamesEquivalent(key, char.name) || char.aliases.some((a) => areNamesEquivalent(key, a))) {
+        for (const cg of ctx.cgs ?? []) {
+          addImage(cg.imageUrl, cg.caption);
+        }
+      }
     }
-    if (cgs.length === 0) {
+    const guide = document.createElement("p");
+    guide.className = "folio-gallery-guide";
+    guide.style.cssText = "font-size:12px;opacity:0.85;margin:0 0 6px;line-height:1.4;";
+    guide.textContent = "Select which picture serves as the authority reference for consistency in future image generations. Set a Primary Reference for facial identity, and an optional Secondary Reference for active attire/outfit.";
+    cgsWrap.append(guide);
+    if (collected.length === 0) {
       const empty = document.createElement("div");
       empty.className = "folio-empty";
-      empty.innerHTML = `<span>No CGs or portraits generated for this character yet.</span>`;
+      const emptySpan = document.createElement("span");
+      emptySpan.textContent = `No pictures or scene portraits generated for ${char.name} yet. Pictures created during reading will appear in this gallery.`;
+      empty.append(emptySpan);
       cgsWrap.append(empty);
     } else {
       const grid = document.createElement("div");
       grid.className = "folio-cgs-grid";
-      for (const cg of cgs) {
+      for (const cg of collected) {
+        const isPrimary = char.referenceImageUrl === cg.imageUrl;
+        const isSecondary = char.secondaryReferenceImageUrl === cg.imageUrl;
+        const isAvatar = char.avatarUrl === cg.imageUrl;
         const card = document.createElement("div");
-        card.className = "folio-cg-card";
+        card.className = `folio-cg-card${isPrimary ? " active-primary-ref" : ""}${isSecondary ? " active-secondary-ref" : ""}`;
         const img = document.createElement("img");
         img.className = "folio-cg-thumb";
         img.src = cg.imageUrl;
         img.alt = cg.caption || char.name;
         img.title = "Click to inspect full image";
-        img.onclick = () => {
-          window.open(cg.imageUrl, "_blank");
-        };
+        img.onclick = () => window.open(cg.imageUrl, "_blank");
+        const badges = document.createElement("div");
+        badges.className = "folio-cg-badges";
+        badges.style.cssText = "position:absolute;top:6px;left:6px;display:flex;flex-direction:column;gap:4px;pointer-events:none;z-index:2;";
+        if (isPrimary) {
+          const b = document.createElement("span");
+          b.className = "folio-tag tag-primary-ref";
+          b.style.cssText = "background:#1a4d2e;color:#85e3a0;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;border:1px solid #2d6a4f;";
+          b.textContent = "⭐ Primary Reference";
+          badges.append(b);
+        }
+        if (isSecondary) {
+          const b = document.createElement("span");
+          b.className = "folio-tag tag-secondary-ref";
+          b.style.cssText = "background:#2b2d42;color:#a8dadc;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;border:1px solid #457b9d;";
+          b.textContent = "\uD83D\uDC54 Outfit Reference";
+          badges.append(b);
+        }
+        if (isAvatar && !isPrimary) {
+          const b = document.createElement("span");
+          b.className = "folio-tag";
+          b.style.cssText = "background:#3d2645;color:#e2afff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;border:1px solid #8338ec;";
+          b.textContent = "\uD83D\uDC64 Avatar";
+          badges.append(b);
+        }
         const footer = document.createElement("div");
         footer.className = "folio-cg-footer";
         const cap = document.createElement("span");
         cap.className = "folio-cg-caption";
-        cap.textContent = cg.caption || "Scene view";
-        const setBtn = document.createElement("button");
-        setBtn.type = "button";
-        setBtn.className = "btn-set-avatar";
-        setBtn.textContent = "Set Avatar";
-        setBtn.onclick = () => {
+        cap.textContent = cg.caption || "Scene portrait";
+        const btnRow = document.createElement("div");
+        btnRow.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;";
+        const primaryBtn = document.createElement("button");
+        primaryBtn.type = "button";
+        primaryBtn.className = "folio-action-btn" + (isPrimary ? " btn-active" : "");
+        primaryBtn.style.cssText = "font-size:11px;padding:4px 8px;";
+        primaryBtn.textContent = isPrimary ? "★ Primary Active" : "⭐ Set as Face Reference";
+        primaryBtn.onclick = () => {
+          this.cancelProposal();
+          if (isPrimary) {
+            delete char.referenceImageUrl;
+          } else {
+            char.referenceImageUrl = cg.imageUrl;
+            char.avatarUrl = cg.imageUrl;
+          }
+          char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+          this.dirty.add(char.id);
+          this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+          this.renderRoster();
+          this.renderDetail();
+        };
+        const secondaryBtn = document.createElement("button");
+        secondaryBtn.type = "button";
+        secondaryBtn.className = "folio-action-btn" + (isSecondary ? " btn-active" : "");
+        secondaryBtn.style.cssText = "font-size:11px;padding:4px 8px;";
+        secondaryBtn.textContent = isSecondary ? "\uD83D\uDC54 Outfit Active" : "\uD83D\uDC54 Set as Outfit Reference";
+        secondaryBtn.onclick = () => {
+          this.cancelProposal();
+          if (isSecondary) {
+            delete char.secondaryReferenceImageUrl;
+          } else {
+            char.secondaryReferenceImageUrl = cg.imageUrl;
+          }
+          char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+          this.dirty.add(char.id);
+          this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+          this.renderRoster();
+          this.renderDetail();
+        };
+        const avatarBtn = document.createElement("button");
+        avatarBtn.type = "button";
+        avatarBtn.className = "btn-set-avatar";
+        avatarBtn.style.cssText = "font-size:11px;padding:4px 8px;";
+        avatarBtn.textContent = isAvatar ? "✓ Avatar" : "Set Avatar";
+        avatarBtn.disabled = isAvatar;
+        avatarBtn.onclick = () => {
           this.cancelProposal();
           char.avatarUrl = cg.imageUrl;
           char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
@@ -53862,8 +54204,9 @@ class CharacterFolio {
           this.renderRoster();
           this.renderDetail();
         };
-        footer.append(cap, setBtn);
-        card.append(img, footer);
+        btnRow.append(primaryBtn, secondaryBtn, avatarBtn);
+        footer.append(cap, btnRow);
+        card.append(badges, img, footer);
         grid.append(card);
       }
       cgsWrap.append(grid);
@@ -54079,7 +54422,31 @@ class CharacterFolio {
             return b ? `${DNA_FIELD_LABELS[path]}: ${a ? `${JSON.stringify(a)} kept; duplicate ${JSON.stringify(b)}` : `fill ${JSON.stringify(b)}`}` : "";
           }).filter(Boolean).join(" · ");
           details.append(preview, button("Merge into this character", () => {
-            this.handlers.onMergeDNA?.(char.id, other.id, this.revision);
+            if (this.savedLibrary[char.id] && this.savedLibrary[other.id]) {
+              this.handlers.onMergeDNA?.(char.id, other.id, this.revision);
+            } else {
+              for (const path of DNA_FIELDS) {
+                const current = dnaFieldValue(char, path);
+                const value = dnaFieldValue(other, path);
+                if ((!current || Array.isArray(current) && !current.length) && value) {
+                  applyDnaChanges(char, [{ path, value, classification: "generated", sourceRefs: [] }]);
+                }
+              }
+              char.aliases = [...new Set([...char.aliases, other.name, ...other.aliases])].filter((n2) => n2 !== char.name).slice(0, 16);
+              if (!char.avatarUrl && other.avatarUrl)
+                char.avatarUrl = other.avatarUrl;
+              if (!char.referenceImageUrl && other.referenceImageUrl)
+                char.referenceImageUrl = other.referenceImageUrl;
+              if (!char.secondaryReferenceImageUrl && other.secondaryReferenceImageUrl)
+                char.secondaryReferenceImageUrl = other.secondaryReferenceImageUrl;
+              delete this.library[other.id];
+              this.discoveredIds.delete(other.id);
+              char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+              this.dirty.add(char.id);
+              this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+              this.renderRoster();
+              this.renderDetail();
+            }
             this.mergeOther = "";
           }));
           details.open = true;

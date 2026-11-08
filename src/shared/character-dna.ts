@@ -42,6 +42,10 @@ export const CharacterDNASchema = z.object({
   sourceSummary: z.string().trim().max(500).optional(),
   notes: z.string().trim().max(1000).optional(),
   avatarUrl: z.string().trim().max(2000).optional(),
+  referenceImageUrl: z.string().trim().max(2000).optional(),
+  secondaryReferenceImageUrl: z.string().trim().max(2000).optional(),
+  referenceImageId: z.string().trim().max(256).optional(),
+  secondaryReferenceImageId: z.string().trim().max(256).optional(),
   lastUpdated: z.number().int().nonnegative().default(() => Date.now()),
   fieldSources:z.record(z.string(),z.object({classification:z.enum(['evidence','inferred','generated','manual']),sources:z.array(z.string().max(1000)).max(8)}).strict()).optional()
 }).strict();

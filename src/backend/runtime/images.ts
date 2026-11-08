@@ -45,6 +45,7 @@ import {adaptImagePrompt} from './prompt-adaptation.js';
 import {sharedStyleSnapshot} from '../../shared/shared-style-snapshot.js';
 import { buildVisualBrief, resolveTemplateIdentity } from "./visual-brief.js";
 import type { CharacterDNA, CharacterDNALibrary } from "../../shared/character-dna.js";
+import { loadCharacterDNALibrary } from "./character-dna-store.js";
 import {
   appearanceMapKeyFor,
   characterAppearanceKey,
@@ -1038,9 +1039,10 @@ export async function generateAssets(
   const anchorable = plan.visualCues.some(cueUsesCharacterReference) && referenceAnchoringEnabled(config) && provider !== null && REFERENCE_PROVIDERS.has(provider);
   const cardSource = anchorable && config.referenceSource === "card";
 
-  const [initialPortraits, characterAppearance] = await Promise.all([
+  const [initialPortraits, characterAppearance, characterDNALibrary] = await Promise.all([
     anchorable ? loadPortraits(spindle, plan.key.chatId, userId).catch(() => ({} as Record<string, StoredPortrait>)) : Promise.resolve({} as Record<string, StoredPortrait>),
-    loadCharacterAppearance(spindle, userId, plan.key.chatId).catch(() => ({} as CharacterAppearanceMap))
+    loadCharacterAppearance(spindle, userId, plan.key.chatId).catch(() => ({} as CharacterAppearanceMap)),
+    loadCharacterDNALibrary(spindle, plan.key.chatId, userId).catch(() => ({ version: 1 as const, characters: {} }))
   ]);
   const portraits: Record<string, StoredPortrait> = { ...initialPortraits };
 
@@ -1363,7 +1365,7 @@ export async function generateAssets(
           const metadataFor = (selectedCue: VisualCue): ImagePromptMetadata | undefined => selectedCue.imageTemplate ? {
             ...(selectedCue.presentationRuleTrace ? {presentationRuleTrace:selectedCue.presentationRuleTrace} : {}),
             template: selectedCue.imageTemplate, selectionReason: selectedCue.imageTemplateReason ?? "Default template", format: config.imagePromptFormat,
-            brief: compileTemplateCue(config, scene, selectedCue, characterAppearance).brief,
+            brief: compileTemplateCue(config, scene, selectedCue, characterAppearance, characterDNALibrary).brief,
             sharedStyle:sharedStyleSnapshot(config,selectedCue.imageTemplate),
             trackerStatus: selectedCue.trackerStatus ?? (config.includeSimTrackerContext ? "not_found" : "disabled"),
             ...(selectedCue.trackerSourceMessageId ? { trackerSourceMessageId: selectedCue.trackerSourceMessageId } : {})
@@ -1381,7 +1383,7 @@ export async function generateAssets(
           frozen=prepareCapabilityOutput(frozen,config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined,config.imageResolutionPreference);
           if (config.imagePromptEngineVersion === 2 && cue.imageTemplate) {
             const profileV2=await loadImagePromptProfileV2(spindle,config,selected?.provider??provider,frozen.model,frozen.parameters);
-            const built=buildV2ImageRequest({config,cue,request:frozen,profile:profileV2,brief:initialMetadata?.brief??compileTemplateCue(config,scene,cue,characterAppearance).brief,metadata:initialMetadata,styleId:config.selectedSharedStyleId,portraits,shadow:{prompt:frozen.prompt,...(frozen.negativePrompt!==undefined?{negativePrompt:frozen.negativePrompt}:{})},referenceSummary:portrait?`${portrait.source??'captured'} portrait: ${portrait.name} (${portrait.imageId})`:wantsCapture?'No reference yet; this picture will establish the portrait':'No extension reference'});
+            const built=buildV2ImageRequest({config,cue,request:frozen,profile:profileV2,brief:initialMetadata?.brief??compileTemplateCue(config,scene,cue,characterAppearance).brief,metadata:initialMetadata,styleId:config.selectedSharedStyleId,portraits,characterDNALibrary,shadow:{prompt:frozen.prompt,...(frozen.negativePrompt!==undefined?{negativePrompt:frozen.negativePrompt}:{})},referenceSummary:portrait?`${portrait.source??'captured'} portrait: ${portrait.name} (${portrait.imageId})`:wantsCapture?'No reference yet; this picture will establish the portrait':'No extension reference'});
             frozen=built.request;if(initialMetadata&&built.metadata)Object.assign(initialMetadata,built.metadata);
           }
           const adaptation=await adaptImagePrompt(spindle,frozen,initialMetadata,config,userId,jobSignal,cacheOptions.skipAutomaticPromptRepair);
@@ -1452,7 +1454,7 @@ export async function generateAssets(
               if (latestConfig.imagePromptEngineVersion === 2) {
                 const profileV2=await loadImagePromptProfileV2(spindle,latestConfig,effectiveProvider,request.model,request.parameters);
                 if(request.model)preparedRequest.model=request.model;else delete preparedRequest.model;
-                const built=buildV2ImageRequest({config:latestConfig,cue:nextCue,request:preparedRequest,profile:profileV2,brief:nextMetadata.brief,metadata:nextMetadata,styleId:options?.styleId??nextCue.imageTemplate?.id,portraits,planParameters:request.parameters,...(frozen.shotSpec&&frozen.styleSnapshot?{previousShot:{cue,shotSpec:frozen.shotSpec,styleDNA:frozen.styleSnapshot}}:{}),previousShotRevision:frozen.shotSpec?.revision??0,rebuild:options,shadow:{prompt:nextCompiled.prompt,...(nextCompiled.negativePrompt!==undefined?{negativePrompt:nextCompiled.negativePrompt}:{})},referenceSummary:portrait?`${portrait.source??'captured'} portrait: ${portrait.name} (${portrait.imageId})`:wantsCapture?'No reference yet; this picture will establish the portrait':'No extension reference'});
+                const built=buildV2ImageRequest({config:latestConfig,cue:nextCue,request:preparedRequest,profile:profileV2,brief:nextMetadata.brief,metadata:nextMetadata,styleId:options?.styleId??nextCue.imageTemplate?.id,portraits,characterDNALibrary,planParameters:request.parameters,...(frozen.shotSpec&&frozen.styleSnapshot?{previousShot:{cue,shotSpec:frozen.shotSpec,styleDNA:frozen.styleSnapshot}}:{}),previousShotRevision:frozen.shotSpec?.revision??0,rebuild:options,shadow:{prompt:nextCompiled.prompt,...(nextCompiled.negativePrompt!==undefined?{negativePrompt:nextCompiled.negativePrompt}:{})},referenceSummary:portrait?`${portrait.source??'captured'} portrait: ${portrait.name} (${portrait.imageId})`:wantsCapture?'No reference yet; this picture will establish the portrait':'No extension reference'});
                 Object.assign(preparedRequest,built.request);if(built.metadata)Object.assign(nextMetadata,built.metadata);
               }
               const adapted=await adaptImagePrompt(spindle,preparedRequest,nextMetadata,config,userId,jobSignal);
