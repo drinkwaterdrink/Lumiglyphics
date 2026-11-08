@@ -501,6 +501,17 @@ export class VnStage {
   }
 
   setReaderPreferences(rawPreferences: Partial<ReaderPreferences>): void { const preferences = normalizeReaderPreferences({ ...this.readerPreferences, ...rawPreferences });
+    if (preferences.readabilityScrim === false) {
+      this.root.dataset.vnScrimEnabled = "false";
+    } else {
+      delete this.root.dataset.vnScrimEnabled;
+    }
+    if (preferences.atmosphericLighting === false) {
+      this.root.dataset.vnAtmosphericLighting = "false";
+      delete this.scene.dataset.vnAtmosphere;
+    } else {
+      delete this.root.dataset.vnAtmosphericLighting;
+    }
     this.readerPreferences = preferences;
     if (preferences.typography) this.root.dataset.vnTypography = preferences.typography;
     if (preferences.typewriterAudio) this.typewriterAudio.setMode(preferences.typewriterAudio);
@@ -566,6 +577,9 @@ export class VnStage {
     this.effectIntensity = level === "off" || level === "gentle" ? level : "full";
     this.root.dataset.vnEffectIntensity = this.effectIntensity;
     this.castStage.setMotionEnabled(this.effectIntensity !== "off");
+    if (this.effectIntensity === "off") {
+      delete this.scene.dataset.vnAtmosphere;
+    }
   }
 
   getEffectIntensity(): VnEffectIntensity {
@@ -1297,6 +1311,7 @@ export class VnStage {
   /** Apply (or clear) the persistent scene-level ambient overlay. */
   applyAmbient(effect: AmbientEffect | null): void {
     if (this.destroyed) return;
+
     if (effect === this.currentAmbient) return;
     this.currentAmbient = effect;
     if (this.currentAmbient === null) {
@@ -2508,6 +2523,10 @@ export class VnStage {
   }
 
   private updateAtmosphericLighting(text: string, ambient?: AmbientEffect | null): void {
+    if (this.readerPreferences?.atmosphericLighting === false || this.effectIntensity === "off") {
+      delete this.scene.dataset.vnAtmosphere;
+      return;
+    }
     const lower = text.toLocaleLowerCase();
     let atmosphere = "";
     if (this.readerPreferences?.sentimentLighting !== false) {

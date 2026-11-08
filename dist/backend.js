@@ -26192,7 +26192,8 @@ function normalizeReaderPreferences(value) {
     ...input2.directorAi !== undefined ? { directorAi: input2.directorAi === true } : {},
     ...input2.sentimentLighting !== undefined ? { sentimentLighting: input2.sentimentLighting === true } : {},
     smartProseFilter: input2.smartProseFilter !== undefined ? input2.smartProseFilter === true : DEFAULT_READER_PREFERENCES.smartProseFilter ?? true,
-    smartDialogueExtraction: input2.smartDialogueExtraction !== undefined ? input2.smartDialogueExtraction === true : DEFAULT_READER_PREFERENCES.smartDialogueExtraction ?? true
+    smartDialogueExtraction: input2.smartDialogueExtraction !== undefined ? input2.smartDialogueExtraction === true : DEFAULT_READER_PREFERENCES.smartDialogueExtraction ?? true,
+    readabilityScrim: input2.readabilityScrim !== undefined ? input2.readabilityScrim === true : DEFAULT_READER_PREFERENCES.readabilityScrim ?? true
   };
 }
 var DEFAULT_READER_PREFERENCES;
@@ -26204,7 +26205,8 @@ var init_reader_preferences = __esm(() => {
     backgroundOpacity: 0.9,
     theme: "light",
     smartProseFilter: true,
-    smartDialogueExtraction: true
+    smartDialogueExtraction: true,
+    readabilityScrim: true
   };
 });
 

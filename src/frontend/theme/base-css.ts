@@ -185,6 +185,10 @@ textarea {
     linear-gradient(0deg, rgba(0, 0, 0, 0.72), transparent 45%);
 }
 
+[data-vn-root][data-vn-scrim-enabled="false"] [data-vn-scrim] {
+  display: none !important;
+}
+
 /*
  * Screen flashes: Fullscreen overlay <div data-vn-flash> supporting white flash,
  * red flash, and fade to black.

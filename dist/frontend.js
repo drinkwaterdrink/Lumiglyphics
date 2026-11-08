@@ -26287,6 +26287,12 @@ section[data-reference-observations] h3 {
   mix-blend-mode: soft-light;
 }
 
+[data-vn-root][data-vn-effect-intensity="off"] [data-vn-atmosphere],
+[data-vn-root][data-vn-atmospheric-lighting="false"] [data-vn-atmosphere] {
+  display: none !important;
+  opacity: 0 !important;
+}
+
 [data-vn-root] {
   opacity: 1 !important;
 }
@@ -30932,7 +30938,8 @@ var DEFAULT_READER_PREFERENCES = {
   backgroundOpacity: 0.9,
   theme: "light",
   smartProseFilter: true,
-  smartDialogueExtraction: true
+  smartDialogueExtraction: true,
+  readabilityScrim: true
 };
 function normalizeReaderPreferences(value) {
   const input2 = value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -30952,7 +30959,8 @@ function normalizeReaderPreferences(value) {
     ...input2.directorAi !== undefined ? { directorAi: input2.directorAi === true } : {},
     ...input2.sentimentLighting !== undefined ? { sentimentLighting: input2.sentimentLighting === true } : {},
     smartProseFilter: input2.smartProseFilter !== undefined ? input2.smartProseFilter === true : DEFAULT_READER_PREFERENCES.smartProseFilter ?? true,
-    smartDialogueExtraction: input2.smartDialogueExtraction !== undefined ? input2.smartDialogueExtraction === true : DEFAULT_READER_PREFERENCES.smartDialogueExtraction ?? true
+    smartDialogueExtraction: input2.smartDialogueExtraction !== undefined ? input2.smartDialogueExtraction === true : DEFAULT_READER_PREFERENCES.smartDialogueExtraction ?? true,
+    readabilityScrim: input2.readabilityScrim !== undefined ? input2.readabilityScrim === true : DEFAULT_READER_PREFERENCES.readabilityScrim ?? true
   };
 }
 var RATIOS = { compact: 0.22, reading: 0.34, expanded: 0.6 };
@@ -32791,8 +32799,14 @@ var VN_EFFECTS_CSS = `
 [data-vn-effect-intensity="off"] [data-vn-ambient]::before,
 [data-vn-effect-intensity="off"] [data-vn-ambient]::after,
 [data-vn-effect-intensity="off"] [data-vn-ambient] * {
+  display: none !important;
   animation: none !important;
   transition: none !important;
+}
+
+[data-vn-effect-intensity="off"] [data-vn-scene-image],
+[data-vn-root][data-vn-effect-intensity="off"] [data-vn-scene-image] {
+  filter: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -34222,6 +34236,10 @@ textarea {
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.2), transparent 30%),
     linear-gradient(0deg, rgba(0, 0, 0, 0.72), transparent 45%);
+}
+
+[data-vn-root][data-vn-scrim-enabled="false"] [data-vn-scrim] {
+  display: none !important;
 }
 
 /*
@@ -39099,6 +39117,17 @@ class VnStage {
   }
   setReaderPreferences(rawPreferences) {
     const preferences = normalizeReaderPreferences({ ...this.readerPreferences, ...rawPreferences });
+    if (preferences.readabilityScrim === false) {
+      this.root.dataset.vnScrimEnabled = "false";
+    } else {
+      delete this.root.dataset.vnScrimEnabled;
+    }
+    if (preferences.atmosphericLighting === false) {
+      this.root.dataset.vnAtmosphericLighting = "false";
+      delete this.scene.dataset.vnAtmosphere;
+    } else {
+      delete this.root.dataset.vnAtmosphericLighting;
+    }
     this.readerPreferences = preferences;
     if (preferences.typography)
       this.root.dataset.vnTypography = preferences.typography;
@@ -39162,6 +39191,9 @@ class VnStage {
     this.effectIntensity = level === "off" || level === "gentle" ? level : "full";
     this.root.dataset.vnEffectIntensity = this.effectIntensity;
     this.castStage.setMotionEnabled(this.effectIntensity !== "off");
+    if (this.effectIntensity === "off") {
+      delete this.scene.dataset.vnAtmosphere;
+    }
   }
   getEffectIntensity() {
     return this.effectIntensity;
@@ -41104,6 +41136,10 @@ class VnStage {
     }
   }
   updateAtmosphericLighting(text, ambient) {
+    if (this.readerPreferences?.atmosphericLighting === false || this.effectIntensity === "off") {
+      delete this.scene.dataset.vnAtmosphere;
+      return;
+    }
     const lower = text.toLocaleLowerCase();
     let atmosphere = "";
     if (this.readerPreferences?.sentimentLighting !== false) {
@@ -44698,7 +44734,7 @@ function describeTextScale(value) {
 var EFFECT_INTENSITY_OPTIONS = [
   { value: "full", label: "Full", help: "Rain, sparkles, shakes and flashes as the story calls for them." },
   { value: "gentle", label: "Gentle", help: "Softer, slower effects. No flashes or shakes." },
-  { value: "off", label: "Off", help: "Still scenes only." }
+  { value: "off", label: "Off", help: "Pure clean scenes. Disables all weather overlays, mist noise, film grain, shakes and flashes." }
 ];
 function normalizeEffectIntensity(value) {
   return EFFECT_INTENSITIES.includes(value) ? value : DEFAULT_CONFIG.effectIntensity;
@@ -45606,8 +45642,7 @@ class VisualNovelSettingsPanel {
             ${group("Cinematic presentation", `
               <label data-check ${find("Cinematic chapter cards", "cinematic chapter title splash cards location letterbox turn intro splash screen")}><input name="chapterTitleCards" type="checkbox" /><span>Cinematic chapter cards<small>Display elegant letterbox scene & location title splashes on turn start</small></span></label>
               <label data-check ${find("Director AI shot framing", "director ai shot selection framing portrait action scenery intelligent cues")}><input name="directorAi" type="checkbox" /><span>Director AI shot framing<small>Intelligently balances portrait emotion closeups, dynamic action framing, and scenery establishing shots</small></span></label>
-              <label data-check ${find("Contextual sentiment lighting", "sentiment lighting danger crimson memory sepia romance rose vignette tone")}><input name="sentimentLighting" type="checkbox" /><span>Contextual sentiment lighting<small>Subtly grades visual tone with crimson tension pulses, nostalgic memory sepia, or intimate rose warmth</small></span></label>
-            `, { find: find("Cinematic presentation", "chapter cards title splash cinematic intro director ai sentiment lighting") })}
+            `, { find: find("Cinematic presentation", "chapter cards title splash cinematic intro director ai") })}
             ${group("Smart AI reader & filtering", `
               <label data-check ${find("Smart prose & metadata filter", "smart prose filter metadata cognition trace neural dock auto clean preset raw")}><input name="smartProseFilter" type="checkbox" /><span>Smart prose & metadata filter<small>Automatically detects and removes AI reasoning, cognition traces, simulation docks, and status headers from story text</small></span></label>
               <label data-check ${find("Smart preset dialogue extraction", "smart dialogue extract tags eidos dialogue speech thought attribute speaker nameplate")}><input name="smartDialogueExtraction" type="checkbox" /><span>Smart preset dialogue extraction<small>Automatically extracts custom preset tags (&lt;dialogue&gt;, &lt;eidos_dialogue&gt;, &lt;thought&gt;) and assigns the correct speaker nameplate</small></span></label>
@@ -45646,6 +45681,8 @@ class VisualNovelSettingsPanel {
             `)}
             ${group("Scene", `
               <label data-check ${find("Dynamic atmospheric lighting", "lighting atmospheric mood firelight night storm color grade ambient scene tint tone")}><input name="atmosphericLighting" type="checkbox" /><span>Dynamic atmospheric lighting<small>Subtly tone-grades scene lighting to match night, firelight, storm, or morning moods</small></span></label>
+              <label data-check ${find("Contextual sentiment lighting", "sentiment lighting danger crimson memory sepia romance rose vignette tone")}><input name="sentimentLighting" type="checkbox" /><span>Contextual sentiment lighting<small>Subtly grades visual tone with crimson tension pulses, nostalgic memory sepia, or intimate rose warmth</small></span></label>
+              <label data-check ${find("Readability scrim gradient", "scrim gradient dark fade top bottom dialogue readability pure artwork clean")}><input name="readabilityScrim" type="checkbox" /><span>Readability scrim gradient<small>Top and bottom dark gradient overlay for text legibility. Turn off for 100% pure, unfiltered artwork.</small></span></label>
               <label data-check><input name="castMode" type="checkbox" /><span>Cast view<small>New replies can allocate an Environment background and up to two selected, present characters within your existing picture budget. Compatible saved art uses no new slot. A budget of one permits one new picture, not one of each. Arranges rectangular portraits and highlights the speaker; action, ensemble and Manga pictures keep their normal view. Off by default.</small></span></label>
               <label data-field ${find("Remember off-scene portraits", "absent cast dim hide presence")}><span>Off-scene portraits</span><select name="castAbsenceDisplay"><option value="hide">Hide (default)</option><option value="dim">Dim in a labeled Off scene tray</option></select><small>Cast view only. Shows previously revealed, compatible art from this scene; never adds absent people to new pictures.</small></label>
               <fieldset ${find("Scene effects", "rain sparkles shake flash intensity gentle motion")}>
@@ -46735,6 +46772,8 @@ class VisualNovelSettingsPanel {
         return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, chapterTitleCards: checked }) };
       case "atmosphericLighting":
         return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, atmosphericLighting: checked }) };
+      case "readabilityScrim":
+        return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, readabilityScrim: checked }) };
       case "directorAi":
         return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, directorAi: checked }) };
       case "sentimentLighting":
@@ -47362,6 +47401,9 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
     this.control("smartPacing").checked = config2.readerPreferences.smartPacing !== false;
     this.control("chapterTitleCards").checked = config2.readerPreferences.chapterTitleCards !== false;
     this.control("atmosphericLighting").checked = config2.readerPreferences.atmosphericLighting !== false;
+    const scrimCtrl = this.host.querySelector('input[name="readabilityScrim"]');
+    if (scrimCtrl)
+      scrimCtrl.checked = config2.readerPreferences.readabilityScrim !== false;
     this.control("directorAi").checked = config2.readerPreferences.directorAi !== false;
     this.control("sentimentLighting").checked = config2.readerPreferences.sentimentLighting !== false;
     this.control("smartProseFilter").checked = config2.readerPreferences.smartProseFilter !== false;
@@ -48837,7 +48879,7 @@ function modelOutputHelp(provider, model, parameters) {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.4-beta.135";
+var LUMIGLYPHICS_VERSION = "0.2.5-beta.136";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;

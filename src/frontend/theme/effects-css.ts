@@ -1316,8 +1316,14 @@ export const VN_EFFECTS_CSS = `
 [data-vn-effect-intensity="off"] [data-vn-ambient]::before,
 [data-vn-effect-intensity="off"] [data-vn-ambient]::after,
 [data-vn-effect-intensity="off"] [data-vn-ambient] * {
+  display: none !important;
   animation: none !important;
   transition: none !important;
+}
+
+[data-vn-effect-intensity="off"] [data-vn-scene-image],
+[data-vn-root][data-vn-effect-intensity="off"] [data-vn-scene-image] {
+  filter: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

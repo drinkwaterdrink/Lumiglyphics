@@ -1011,6 +1011,12 @@ section[data-reference-observations] h3 {
   mix-blend-mode: soft-light;
 }
 
+[data-vn-root][data-vn-effect-intensity="off"] [data-vn-atmosphere],
+[data-vn-root][data-vn-atmospheric-lighting="false"] [data-vn-atmosphere] {
+  display: none !important;
+  opacity: 0 !important;
+}
+
 [data-vn-root] {
   opacity: 1 !important;
 }

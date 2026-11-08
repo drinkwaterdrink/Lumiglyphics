@@ -139,7 +139,7 @@ export function describeTextScale(value: number): string {
 export const EFFECT_INTENSITY_OPTIONS: ReadonlyArray<{ value: VisualNovelEffectIntensity; label: string; help: string }> = [
   { value: "full", label: "Full", help: "Rain, sparkles, shakes and flashes as the story calls for them." },
   { value: "gentle", label: "Gentle", help: "Softer, slower effects. No flashes or shakes." },
-  { value: "off", label: "Off", help: "Still scenes only." },
+  { value: "off", label: "Off", help: "Pure clean scenes. Disables all weather overlays, mist noise, film grain, shakes and flashes." },
 ];
 
 export function normalizeEffectIntensity(value: string): VisualNovelEffectIntensity {

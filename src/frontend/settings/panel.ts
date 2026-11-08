@@ -673,8 +673,7 @@ export class VisualNovelSettingsPanel {
             ${group("Cinematic presentation", `
               <label data-check ${find("Cinematic chapter cards", "cinematic chapter title splash cards location letterbox turn intro splash screen")}><input name="chapterTitleCards" type="checkbox" /><span>Cinematic chapter cards<small>Display elegant letterbox scene & location title splashes on turn start</small></span></label>
               <label data-check ${find("Director AI shot framing", "director ai shot selection framing portrait action scenery intelligent cues")}><input name="directorAi" type="checkbox" /><span>Director AI shot framing<small>Intelligently balances portrait emotion closeups, dynamic action framing, and scenery establishing shots</small></span></label>
-              <label data-check ${find("Contextual sentiment lighting", "sentiment lighting danger crimson memory sepia romance rose vignette tone")}><input name="sentimentLighting" type="checkbox" /><span>Contextual sentiment lighting<small>Subtly grades visual tone with crimson tension pulses, nostalgic memory sepia, or intimate rose warmth</small></span></label>
-            `, { find: find("Cinematic presentation", "chapter cards title splash cinematic intro director ai sentiment lighting") })}
+            `, { find: find("Cinematic presentation", "chapter cards title splash cinematic intro director ai") })}
             ${group("Smart AI reader & filtering", `
               <label data-check ${find("Smart prose & metadata filter", "smart prose filter metadata cognition trace neural dock auto clean preset raw")}><input name="smartProseFilter" type="checkbox" /><span>Smart prose & metadata filter<small>Automatically detects and removes AI reasoning, cognition traces, simulation docks, and status headers from story text</small></span></label>
               <label data-check ${find("Smart preset dialogue extraction", "smart dialogue extract tags eidos dialogue speech thought attribute speaker nameplate")}><input name="smartDialogueExtraction" type="checkbox" /><span>Smart preset dialogue extraction<small>Automatically extracts custom preset tags (&lt;dialogue&gt;, &lt;eidos_dialogue&gt;, &lt;thought&gt;) and assigns the correct speaker nameplate</small></span></label>
@@ -713,6 +712,8 @@ export class VisualNovelSettingsPanel {
             `)}
             ${group("Scene", `
               <label data-check ${find("Dynamic atmospheric lighting", "lighting atmospheric mood firelight night storm color grade ambient scene tint tone")}><input name="atmosphericLighting" type="checkbox" /><span>Dynamic atmospheric lighting<small>Subtly tone-grades scene lighting to match night, firelight, storm, or morning moods</small></span></label>
+              <label data-check ${find("Contextual sentiment lighting", "sentiment lighting danger crimson memory sepia romance rose vignette tone")}><input name="sentimentLighting" type="checkbox" /><span>Contextual sentiment lighting<small>Subtly grades visual tone with crimson tension pulses, nostalgic memory sepia, or intimate rose warmth</small></span></label>
+              <label data-check ${find("Readability scrim gradient", "scrim gradient dark fade top bottom dialogue readability pure artwork clean")}><input name="readabilityScrim" type="checkbox" /><span>Readability scrim gradient<small>Top and bottom dark gradient overlay for text legibility. Turn off for 100% pure, unfiltered artwork.</small></span></label>
               <label data-check><input name="castMode" type="checkbox" /><span>Cast view<small>New replies can allocate an Environment background and up to two selected, present characters within your existing picture budget. Compatible saved art uses no new slot. A budget of one permits one new picture, not one of each. Arranges rectangular portraits and highlights the speaker; action, ensemble and Manga pictures keep their normal view. Off by default.</small></span></label>
               <label data-field ${find('Remember off-scene portraits','absent cast dim hide presence')}><span>Off-scene portraits</span><select name="castAbsenceDisplay"><option value="hide">Hide (default)</option><option value="dim">Dim in a labeled Off scene tray</option></select><small>Cast view only. Shows previously revealed, compatible art from this scene; never adds absent people to new pictures.</small></label>
               <fieldset ${find("Scene effects", "rain sparkles shake flash intensity gentle motion")}>
@@ -1638,6 +1639,7 @@ export class VisualNovelSettingsPanel {
       case "smartPacing": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, smartPacing: checked }) };
       case "chapterTitleCards": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, chapterTitleCards: checked }) };
       case "atmosphericLighting": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, atmosphericLighting: checked }) };
+      case "readabilityScrim": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, readabilityScrim: checked }) };
       case "directorAi": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, directorAi: checked }) };
       case "sentimentLighting": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, sentimentLighting: checked }) };
       case "smartProseFilter": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, smartProseFilter: checked }) };
@@ -2185,6 +2187,8 @@ export class VisualNovelSettingsPanel {
     this.control<HTMLInputElement>("smartPacing").checked = config.readerPreferences.smartPacing !== false;
     this.control<HTMLInputElement>("chapterTitleCards").checked = config.readerPreferences.chapterTitleCards !== false;
     this.control<HTMLInputElement>("atmosphericLighting").checked = config.readerPreferences.atmosphericLighting !== false;
+    const scrimCtrl = this.host.querySelector<HTMLInputElement>('input[name="readabilityScrim"]');
+    if (scrimCtrl) scrimCtrl.checked = config.readerPreferences.readabilityScrim !== false;
     this.control<HTMLInputElement>("directorAi").checked = config.readerPreferences.directorAi !== false;
     this.control<HTMLInputElement>("sentimentLighting").checked = config.readerPreferences.sentimentLighting !== false;
     this.control<HTMLInputElement>("smartProseFilter").checked = config.readerPreferences.smartProseFilter !== false;

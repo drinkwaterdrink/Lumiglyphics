@@ -15,6 +15,7 @@ export type ReaderPreferences = {
   sentimentLighting?: boolean | undefined;
   smartProseFilter?: boolean | undefined;
   smartDialogueExtraction?: boolean | undefined;
+  readabilityScrim?: boolean | undefined;
 };
 export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   adjustableSheetEnabled: false,
@@ -24,6 +25,7 @@ export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   theme: "light",
   smartProseFilter: true,
   smartDialogueExtraction: true,
+  readabilityScrim: true,
 };
 export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
   const input = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -45,6 +47,7 @@ export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
     ...(input.sentimentLighting !== undefined ? { sentimentLighting: input.sentimentLighting === true } : {}),
     smartProseFilter: input.smartProseFilter !== undefined ? input.smartProseFilter === true : (DEFAULT_READER_PREFERENCES.smartProseFilter ?? true),
     smartDialogueExtraction: input.smartDialogueExtraction !== undefined ? input.smartDialogueExtraction === true : (DEFAULT_READER_PREFERENCES.smartDialogueExtraction ?? true),
+    readabilityScrim: input.readabilityScrim !== undefined ? input.readabilityScrim === true : (DEFAULT_READER_PREFERENCES.readabilityScrim ?? true),
   };
 }
 const RATIOS = { compact: 0.22, reading: 0.34, expanded: 0.6 } as const;
