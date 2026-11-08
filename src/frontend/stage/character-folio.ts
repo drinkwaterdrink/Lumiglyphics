@@ -22,6 +22,7 @@ export interface CharacterFolioHandlers {
   onDeleteDNA?:(dna:CharacterDNA,revision:number)=>void;
   onRestoreDNA?:(id:string,revision:number)=>void;
   onMergeDNA?:(id:string,otherId:string,revision:number)=>void;
+  onDeleteImage?: (imageUrl: string) => void;
   onClose?: () => void;
 }
 
@@ -57,12 +58,59 @@ export class CharacterFolio implements WorkspaceSurface {
   private notice='';
   private deleteConfirm=false;
   private mergeOther='';
+  private accumulatedCgs = new Map<string, Array<{ imageUrl: string; caption?: string }>>();
 
   setContext(chatId:string|null):void{
     if(this.chatId===chatId)return;
-    this.handlers.onCancelDNA?.();this.chatId=chatId;this.discoveredIds.clear();this.library=Object.create(null);this.dirty.clear();this.saving.clear();this.savedLibrary=Object.create(null);this.loreMap=Object.create(null);this.deleted={};this.revision=0;this.activeCharacterId=null;this.proposal=null;this.pending=false;this.notice='';this.latestTurnText='';this.deleteConfirm=false;this.mergeOther='';this.renderRoster();this.renderDetail();
+    this.handlers.onCancelDNA?.();this.chatId=chatId;this.discoveredIds.clear();this.library=Object.create(null);this.dirty.clear();this.saving.clear();this.savedLibrary=Object.create(null);this.loreMap=Object.create(null);this.deleted={};this.revision=0;this.activeCharacterId=null;this.proposal=null;this.pending=false;this.notice='';this.latestTurnText='';this.deleteConfirm=false;this.mergeOther='';this.accumulatedCgs.clear();this.renderRoster();this.renderDetail();
   }
   getContext():string|null{return this.chatId;}
+  ingestCgs(items: Array<{ characterName?: string; imageUrl: string; caption?: string }>): void {
+    let changed = false;
+    for (const item of items) {
+      if (!item.imageUrl || !item.characterName?.trim()) continue;
+      const charName = item.characterName.trim();
+      const matchId = findMatchingCharacterId(this.library, charName);
+      const key = (matchId && this.library[matchId]) ? this.library[matchId].name.toLowerCase() : charName.toLowerCase();
+      const list = this.accumulatedCgs.get(key) || [];
+      if (!list.some(c => c.imageUrl === item.imageUrl)) {
+        list.push({ imageUrl: item.imageUrl, caption: item.caption || 'Scene picture' });
+        this.accumulatedCgs.set(key, list);
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.renderRoster();
+      this.renderDetail();
+    }
+  }
+
+  removeCg(imageUrl: string): void {
+    let changed = false;
+    for (const [k, list] of this.accumulatedCgs.entries()) {
+      const filtered = list.filter(item => item.imageUrl !== imageUrl);
+      if (filtered.length !== list.length) {
+        this.accumulatedCgs.set(k, filtered);
+        changed = true;
+      }
+    }
+    for (const char of Object.values(this.library)) {
+      let charModified = false;
+      if (char.referenceImageUrl === imageUrl) { delete char.referenceImageUrl; delete char.referenceImageId; charModified = true; }
+      if (char.secondaryReferenceImageUrl === imageUrl) { delete char.secondaryReferenceImageUrl; delete char.secondaryReferenceImageId; charModified = true; }
+      if (char.avatarUrl === imageUrl) { delete char.avatarUrl; charModified = true; }
+      if (charModified) {
+        char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+        this.dirty.add(char.id);
+        this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.renderRoster();
+      this.renderDetail();
+    }
+  }
   invalidateContext():void{this.cancelProposal();this.renderDetail();}
   setProposal(proposal:DnaProposal):void{if(proposal.characterId!==this.activeCharacterId)return;this.pending=false;this.proposal=proposal;this.notice='';this.renderDetail();}
   showError(error:string):void{this.saving.clear();this.pending=false;this.notice=error;this.renderDetail();}
@@ -685,6 +733,14 @@ export class CharacterFolio implements WorkspaceSurface {
           });
         }
         this.loreMap[key] = existingLore;
+        const accList = this.accumulatedCgs.get(key) || [];
+        if (!accList.some(c => c.imageUrl === imageUrl)) {
+          accList.unshift({
+            imageUrl,
+            caption: asset.stageAsset?.attire || asset.stageAsset?.role || 'Scene portrait'
+          });
+          this.accumulatedCgs.set(key, accList);
+        }
       }
     }
 
@@ -1244,7 +1300,7 @@ export class CharacterFolio implements WorkspaceSurface {
     cgsWrap.style.gap = '14px';
 
     // Collect all pictures for this character across lore, aliases, nickname matches, avatar, and references
-    const collected: Array<{ imageUrl: string; caption?: string }> = [];
+    const collected: Array<{ imageUrl: string; caption?: string | undefined }> = [];
     const seenUrls = new Set<string>();
 
     const addImage = (url?: string, caption?: string) => {
@@ -1256,6 +1312,14 @@ export class CharacterFolio implements WorkspaceSurface {
     if (char.referenceImageUrl) addImage(char.referenceImageUrl, 'Primary Face Reference');
     if (char.secondaryReferenceImageUrl) addImage(char.secondaryReferenceImageUrl, 'Outfit Reference');
     if (char.avatarUrl) addImage(char.avatarUrl, 'Active Avatar');
+
+    for (const [key, list] of this.accumulatedCgs.entries()) {
+      if (areNamesEquivalent(key, char.name) || char.aliases.some(a => areNamesEquivalent(key, a))) {
+        for (const cg of list) {
+          addImage(cg.imageUrl, cg.caption);
+        }
+      }
+    }
 
     for (const [key, ctx] of Object.entries(this.loreMap)) {
       if (areNamesEquivalent(key, char.name) || char.aliases.some(a => areNamesEquivalent(key, a))) {
@@ -1342,9 +1406,9 @@ export class CharacterFolio implements WorkspaceSurface {
         primaryBtn.onclick = () => {
           this.cancelProposal();
           if (isPrimary) {
-            delete char.referenceImageUrl;
+            delete char.referenceImageUrl; delete char.referenceImageId;
           } else {
-            char.referenceImageUrl = cg.imageUrl;
+            char.referenceImageUrl = cg.imageUrl; const m1 = /\/api\/v1\/images\/([^/?#]+)/.exec(cg.imageUrl); if (m1 && m1[1]) char.referenceImageId = decodeURIComponent(m1[1]);
             char.avatarUrl = cg.imageUrl;
           }
           char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
@@ -1363,9 +1427,9 @@ export class CharacterFolio implements WorkspaceSurface {
         secondaryBtn.onclick = () => {
           this.cancelProposal();
           if (isSecondary) {
-            delete char.secondaryReferenceImageUrl;
+            delete char.secondaryReferenceImageUrl; delete char.secondaryReferenceImageId;
           } else {
-            char.secondaryReferenceImageUrl = cg.imageUrl;
+            char.secondaryReferenceImageUrl = cg.imageUrl; const m2 = /\/api\/v1\/images\/([^/?#]+)/.exec(cg.imageUrl); if (m2 && m2[1]) char.secondaryReferenceImageId = decodeURIComponent(m2[1]);
           }
           char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
           this.dirty.add(char.id);
@@ -1391,7 +1455,19 @@ export class CharacterFolio implements WorkspaceSurface {
           this.renderDetail();
         };
 
-        btnRow.append(primaryBtn, secondaryBtn, avatarBtn);
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'folio-action-btn';
+        deleteBtn.style.cssText = 'font-size:11px;padding:4px 8px;background:rgba(239,68,68,0.18);color:#fca5a5;border:1px solid rgba(239,68,68,0.35);';
+        deleteBtn.textContent = '🗑️ Delete';
+        deleteBtn.title = 'Delete this picture';
+        deleteBtn.onclick = () => {
+          if (typeof window !== 'undefined' && window.confirm && !window.confirm(`Delete this picture for ${char.name}?`)) return;
+          this.removeCg(cg.imageUrl);
+          this.handlers.onDeleteImage?.(cg.imageUrl);
+        };
+
+        btnRow.append(primaryBtn, secondaryBtn, avatarBtn, deleteBtn);
         footer.append(cap, btnRow);
         card.append(badges, img, footer);
         grid.append(card);

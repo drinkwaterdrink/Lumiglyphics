@@ -846,7 +846,7 @@ export class VnStage {
     this.castStage.set(null,0);
     this.rpgState = null;
     this.rpgHud.update(this.rpgMode, null);
-    this.cgGallery.syncFromTurn(null,0);
+    // Note: Do not wipe cgGallery on transient reset() - preserved across story turns in the chat
     this.dossiers.setTurnMedia(null);this.dossiers.setContext(undefined,[]);
     this.clearAllTimers();
     this.dismissChapterCard();

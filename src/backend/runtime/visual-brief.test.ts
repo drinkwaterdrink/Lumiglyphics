@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizeConfig } from "../../config";
 import { SceneStateSchema, VisualCueSchema } from "../../shared/contracts";
-import { resolveImageTemplate } from "../../shared/image-templates";
+import { resolveImageTemplate, ImagePromptMetadataSchema, templateSnapshot } from "../../shared/image-templates";
+import { DEFAULT_CONFIG } from "../../config";
 import { buildVisualBrief } from "./visual-brief";
 import {sceneImageIdentityFor} from './images.js';
+import { createEmptyCharacterDNA } from "../../shared/character-dna";
 
 const scene = SceneStateSchema.parse({ sceneId: "s", revision: 0, startParagraph: 0, environment: { location: "garden", description: "A fountain beneath tall trees", timeOfDay: "night", weather: null, lighting: "moonlight", persistentElements: ["fountain"] }, cast: ["Mira"], character: "Mira", identityPrompt: "silver hair, green eyes", attire: "raincoat", basePrompt: "garden", compositionLock: "wide", continuity: { revision: 0, characters: {}, facts: {} }, cameraLock: { framing: "wide", angle: "eye level", perspective: "straight-on", lens: null, subjectAnchor: "center", horizon: "stable", safeDialogueRegion: "lower quarter", aspectRatio: "16:9" } });
 const cue = VisualCueSchema.parse({ cueId: "c", paragraphIndex: 0, sceneId: "s", sceneRevision: 0, kind: "flattened_scene", assetJobId: "j", character: "Mira", resolvedIdentity: "old red hair", resolvedAttire: "raincoat", visualDescription: "Mira opens the garden gate" });
@@ -151,4 +153,45 @@ test("pulls Character DNA for non-primary characters and resolves diminutives li
   // Both should have their visual traits pulled from Character DNA instead of empty or bare names!
   assert.match(brief.subjects, /Bob:.*auburn.*grey/);
   assert.match(brief.subjects, /Detective Vane:.*raven black.*emerald/);
+});
+
+test('character with locked DNA generates locked DNA identitySource and passes ImagePromptMetadataSchema', () => {
+  const marselineDna = createEmptyCharacterDNA("Marseline Vane");
+  marselineDna.locked = true;
+  marselineDna.hairStyle = "raven curls";
+  marselineDna.eyeColor = "hazel";
+  marselineDna.signatureOutfit = "black velvet coat";
+
+  const dnaLibrary = {
+    version: 2,
+    characters: {
+      "marseline": marselineDna
+    }
+  };
+
+  const brief = buildVisualBrief(
+    DEFAULT_CONFIG,
+    scene,
+    {
+      ...cue,
+      character: "Marseline Vane",
+      resolvedAttire: undefined,
+      attire: undefined,
+      imageTemplate: resolveImageTemplate(DEFAULT_CONFIG).template
+    },
+    undefined,
+    dnaLibrary as any
+  );
+
+  assert.equal(brief.subjectPreparation?.identitySource, 'locked DNA');
+  assert.equal(brief.subjectPreparation?.attireSource, 'locked DNA');
+  const metadata = {
+    template: templateSnapshot(DEFAULT_CONFIG.imageTemplates[0]!),
+    selectionReason: 'scene',
+    format: 'description',
+    trackerStatus: 'not_found',
+    brief
+  };
+  const parsed = ImagePromptMetadataSchema.safeParse(metadata);
+  assert.equal(parsed.success, true);
 });

@@ -32,8 +32,8 @@ export const ImageTemplateSnapshotSchema = ImageTemplateSchema.extend({ revision
 export type ImageTemplateSnapshot = z.infer<typeof ImageTemplateSnapshotSchema>;
 export const SubjectPreparationSchema=z.object({
   name:z.string().max(256),identity:z.string().max(4000),
-  identitySource:z.enum(['manual correction','saved appearance','resolved context','ensemble snapshot','unavailable']),
-  attire:z.string().max(2000).nullable(),attireSource:z.enum(['picture cue','scene','not supplied']),
+  identitySource:z.enum(['manual correction','saved appearance','resolved context','ensemble snapshot','unavailable','locked DNA']),
+  attire:z.string().max(2000).nullable(),attireSource:z.enum(['picture cue','scene','not supplied','locked DNA']),
   direction:z.string().max(1000),shortened:z.boolean(),
   subjectsInPositive:z.boolean(),subjectsInNegative:z.boolean(),
 }).strict();

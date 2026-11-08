@@ -20846,9 +20846,9 @@ var init_image_templates = __esm(() => {
   SubjectPreparationSchema = exports_external.object({
     name: exports_external.string().max(256),
     identity: exports_external.string().max(4000),
-    identitySource: exports_external.enum(["manual correction", "saved appearance", "resolved context", "ensemble snapshot", "unavailable"]),
+    identitySource: exports_external.enum(["manual correction", "saved appearance", "resolved context", "ensemble snapshot", "unavailable", "locked DNA"]),
     attire: exports_external.string().max(2000).nullable(),
-    attireSource: exports_external.enum(["picture cue", "scene", "not supplied"]),
+    attireSource: exports_external.enum(["picture cue", "scene", "not supplied", "locked DNA"]),
     direction: exports_external.string().max(1000),
     shortened: exports_external.boolean(),
     subjectsInPositive: exports_external.boolean(),
@@ -41955,11 +41955,13 @@ function isFrontendRequest(value) {
     return CorrectImageSubjectRequestSchema.safeParse(value).success;
   if (value.type === "vn_set_card_role")
     return SetCardRoleRequestSchema.safeParse(value).success;
+  if (value.type === "vn_delete_image")
+    return DeleteImageRequestSchema.safeParse(value).success;
   if (value.type === "vn_reading_position")
     return ReadingPositionSchema.safeParse(value.position).success;
   return typeof value.type === "string" && String(value.type).startsWith("vn_");
 }
-var recoveryScope, CorrectImageSubjectRequestSchema, SetCardRoleRequestSchema, ReplanTurnRequestSchema, ContextSourcesRequestSchema, RecoverImagesRequestSchema, imageOperationScope, imageOperationEdits, imagePromptOperation, RewriteImagePromptRequestSchema, PrepareImageRequestSchema, RestorePreviousImageRequestSchema, REFERENCE_IMAGE_MAX_BYTES, REFERENCE_IMAGE_MIMES;
+var recoveryScope, CorrectImageSubjectRequestSchema, SetCardRoleRequestSchema, ReplanTurnRequestSchema, ContextSourcesRequestSchema, RecoverImagesRequestSchema, imageOperationScope, imageOperationEdits, imagePromptOperation, RewriteImagePromptRequestSchema, PrepareImageRequestSchema, RestorePreviousImageRequestSchema, DeleteImageRequestSchema, REFERENCE_IMAGE_MAX_BYTES, REFERENCE_IMAGE_MIMES;
 var init_protocol = __esm(() => {
   init_character_dna_workflow();
   init_image_retries();
@@ -41982,6 +41984,7 @@ var init_protocol = __esm(() => {
   RewriteImagePromptRequestSchema = exports_external.object({ type: exports_external.enum(["vn_regenerate_image_prompt", "vn_enrich_image_prompt"]), ...imageOperationScope, requestId: exports_external.string().min(1).max(100), ...imagePromptOperation }).strict();
   PrepareImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_prepare_image"), ...imageOperationScope, jobId: exports_external.string().min(1).max(200), templateId: exports_external.string().min(1).max(100).optional(), ...imagePromptOperation, regeneratePrompt: exports_external.boolean().optional(), promptOperation: exports_external.enum(["rewrite", "enrich"]).optional(), reframe: exports_external.boolean().optional(), styleId: exports_external.string().max(100).optional(), fitToModel: exports_external.boolean().optional(), model: exports_external.string().max(200).optional(), connectionId: exports_external.string().max(200).optional(), quickGenerate: exports_external.boolean().optional(), manualCamera: exports_external.object({ shotSize: exports_external.string().optional(), angle: exports_external.string().optional(), lensFeel: exports_external.string().optional(), composition: exports_external.string().optional(), depth: exports_external.string().optional(), dialogueSafeArea: exports_external.enum(["auto", "always", "off"]).optional() }).strict().optional() }).strict();
   RestorePreviousImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_restore_previous_image"), ...imageOperationScope, swipeId: exports_external.number().int().nonnegative().nullable(), revision: exports_external.number().int().nonnegative(), jobId: exports_external.string().min(1).max(200), versionId: exports_external.string().min(1).max(256) }).strict();
+  DeleteImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_delete_image"), chatId: exports_external.string().min(1).max(256), imageId: exports_external.string().min(1).max(256).optional(), imageUrl: exports_external.string().min(1).max(2048).optional(), jobId: exports_external.string().min(1).max(256).optional() }).strict();
   REFERENCE_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
   REFERENCE_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/avif"]);
 });
@@ -50903,6 +50906,47 @@ async function restorePreviousImage(spindle2, request, userId) {
     turn: await turnViewWithAudio(spindle2, next, userId)
   }, userId);
 }
+async function handleDeleteImage(spindle2, rawRequest, userId) {
+  const request = DeleteImageRequestSchema.parse(rawRequest);
+  const match = request.imageUrl ? /\/api\/v1\/images\/([^/?#]+)/.exec(request.imageUrl) : null;
+  const matchId = match && match[1] ? match[1] : undefined;
+  const imageId = request.imageId || (matchId ? decodeURIComponent(matchId) : undefined);
+  if (!imageId)
+    return;
+  try {
+    if (typeof spindle2.images?.delete === "function") {
+      await spindle2.images.delete(imageId, userId);
+    }
+  } catch {}
+  sceneCache.invalidateImage(imageId, "image_deleted");
+  const chatState = await loadChatState(spindle2, request.chatId, userId);
+  if (chatState.activeTurnPath) {
+    const next = await mutateActiveTurnRecord(spindle2, request.chatId, chatState.activeTurnPath, userId, (record5) => {
+      let changed = false;
+      const jobs = record5.jobs.map((j) => {
+        if (j.imageId === imageId || request.jobId && j.jobId === request.jobId) {
+          changed = true;
+          return AssetJobSchema.parse({ ...j, status: "cancelled", imageId: null, imageUrl: null, finishedAt: new Date().toISOString() });
+        }
+        return j;
+      });
+      const previousImages = { ...record5.previousImages ?? {} };
+      for (const [id9, prev] of Object.entries(previousImages)) {
+        if (prev?.imageId === imageId) {
+          delete previousImages[id9];
+          changed = true;
+        }
+      }
+      if (!changed)
+        return null;
+      return { ...record5, jobs, previousImages, updatedAt: new Date().toISOString() };
+    });
+    if (next) {
+      const view = await turnViewWithAudio(spindle2, next, userId);
+      spindle2.sendToFrontend({ type: "vn_turn", turn: view }, userId);
+    }
+  }
+}
 async function retryTurn(spindle2, chatId, message, userId) {
   const key = runtimeKey(userId, chatId);
   bumpIntakeEpoch(userId, chatId);
@@ -51324,6 +51368,10 @@ async function handleFrontendMessage(spindle2, request, userId) {
   }
   dbg(spindle2, userId, `frontend request ${request.type}`);
   switch (request.type) {
+    case "vn_delete_image": {
+      await handleDeleteImage(spindle2, request, userId);
+      return;
+    }
     case "vn_image_library": {
       const page = await readImageLibraryPage(spindle2, request, userId);
       spindle2.sendToFrontend({ type: "vn_image_library", chatId: request.chatId, requestId: request.requestId, page }, userId);

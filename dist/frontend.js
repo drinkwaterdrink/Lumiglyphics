@@ -19877,9 +19877,9 @@ var ImageTemplateSnapshotSchema = ImageTemplateSchema.extend({ revision: exports
 var SubjectPreparationSchema = exports_external.object({
   name: exports_external.string().max(256),
   identity: exports_external.string().max(4000),
-  identitySource: exports_external.enum(["manual correction", "saved appearance", "resolved context", "ensemble snapshot", "unavailable"]),
+  identitySource: exports_external.enum(["manual correction", "saved appearance", "resolved context", "ensemble snapshot", "unavailable", "locked DNA"]),
   attire: exports_external.string().max(2000).nullable(),
-  attireSource: exports_external.enum(["picture cue", "scene", "not supplied"]),
+  attireSource: exports_external.enum(["picture cue", "scene", "not supplied", "locked DNA"]),
   direction: exports_external.string().max(1000),
   shortened: exports_external.boolean(),
   subjectsInPositive: exports_external.boolean(),
@@ -22129,6 +22129,7 @@ var imagePromptOperation = { guidance: exports_external.string().max(400).option
 var RewriteImagePromptRequestSchema = exports_external.object({ type: exports_external.enum(["vn_regenerate_image_prompt", "vn_enrich_image_prompt"]), ...imageOperationScope, requestId: exports_external.string().min(1).max(100), ...imagePromptOperation }).strict();
 var PrepareImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_prepare_image"), ...imageOperationScope, jobId: exports_external.string().min(1).max(200), templateId: exports_external.string().min(1).max(100).optional(), ...imagePromptOperation, regeneratePrompt: exports_external.boolean().optional(), promptOperation: exports_external.enum(["rewrite", "enrich"]).optional(), reframe: exports_external.boolean().optional(), styleId: exports_external.string().max(100).optional(), fitToModel: exports_external.boolean().optional(), model: exports_external.string().max(200).optional(), connectionId: exports_external.string().max(200).optional(), quickGenerate: exports_external.boolean().optional(), manualCamera: exports_external.object({ shotSize: exports_external.string().optional(), angle: exports_external.string().optional(), lensFeel: exports_external.string().optional(), composition: exports_external.string().optional(), depth: exports_external.string().optional(), dialogueSafeArea: exports_external.enum(["auto", "always", "off"]).optional() }).strict().optional() }).strict();
 var RestorePreviousImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_restore_previous_image"), ...imageOperationScope, swipeId: exports_external.number().int().nonnegative().nullable(), revision: exports_external.number().int().nonnegative(), jobId: exports_external.string().min(1).max(200), versionId: exports_external.string().min(1).max(256) }).strict();
+var DeleteImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_delete_image"), chatId: exports_external.string().min(1).max(256), imageId: exports_external.string().min(1).max(256).optional(), imageUrl: exports_external.string().min(1).max(2048).optional(), jobId: exports_external.string().min(1).max(256).optional() }).strict();
 var REFERENCE_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
 var REFERENCE_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/avif"]);
 
@@ -28369,6 +28370,7 @@ class CgGalleryModal {
   currentFilter = "all";
   activeLightboxIndex = -1;
   isOpen = false;
+  onDeleteImage;
   constructor(mount) {
     this.mount = mount;
     this.backdrop = document.createElement("div");
@@ -28570,6 +28572,31 @@ class CgGalleryModal {
           overflow: hidden;
           text-overflow: ellipsis;
         }
+        .cg-card-delete {
+          position: absolute;
+          top: 6px;
+          right: 6px;
+          width: 26px;
+          height: 26px;
+          border-radius: 50%;
+          background: rgba(0, 0, 0, 0.7);
+          border: 1px solid rgba(255, 255, 255, 0.25);
+          color: #fca5a5;
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          display: grid;
+          place-items: center;
+          z-index: 3;
+          opacity: 0.85;
+          transition: opacity 0.2s, background 0.2s, transform 0.2s;
+        }
+        .cg-card-delete:hover {
+          opacity: 1;
+          background: rgba(220, 38, 38, 0.85);
+          color: #fff;
+          transform: scale(1.1);
+        }
         .cg-lightbox {
           position: fixed;
           inset: 0;
@@ -28681,6 +28708,7 @@ class CgGalleryModal {
             <button type="button" class="cg-lightbox-btn" data-cg-prev aria-label="Previous CG">◀ <span>Prev</span></button>
             <button type="button" class="cg-lightbox-btn" data-cg-next aria-label="Next CG"><span>Next</span> ▶</button>
             <button type="button" class="cg-lightbox-btn" data-cg-download>\uD83D\uDCE5 <span>Export</span></button>
+            <button type="button" class="cg-lightbox-btn" data-cg-delete style="background:rgba(239,68,68,0.25);border-color:rgba(239,68,68,0.4);color:#fca5a5;">\uD83D\uDDD1️ <span>Delete</span></button>
             <button type="button" class="cg-lightbox-btn cg-lightbox-close-pill" data-cg-lightbox-close aria-label="Close Lightbox">✕</button>
           </div>
         </div>
@@ -28750,6 +28778,18 @@ class CgGalleryModal {
         a.click();
       }
     });
+    this.lightbox.querySelector("[data-cg-delete]")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const item = this.items[this.activeLightboxIndex];
+      if (!item)
+        return;
+      if (typeof window !== "undefined" && window.confirm && !window.confirm(`Delete this picture from the story gallery?`))
+        return;
+      this.items = this.items.filter((i) => i.id !== item.id);
+      this.closeLightbox();
+      this.render();
+      this.onDeleteImage?.(item);
+    });
     window.addEventListener("keydown", (e) => {
       if (!this.isOpen)
         return;
@@ -28773,8 +28813,15 @@ class CgGalleryModal {
     });
   }
   syncFromTurn(turn, paragraphIndex = -1) {
+    if (!turn) {
+      this.items = [];
+      this.ownerChat = null;
+      this.closeLightbox();
+      this.render();
+      return;
+    }
     const old = this.items;
-    const retained = turn && this.ownerChat === turn.chatId ? old : [];
+    const retained = this.ownerChat === turn.chatId ? old : [];
     const scope = turn ? JSON.stringify([turn.chatId, turn.messageId, turn.swipeId, turn.sourceFingerprint, turn.revision]) : "";
     const newItems = [];
     if (turn)
@@ -28796,7 +28843,7 @@ class CgGalleryModal {
           isMilestone: asset.stageAsset?.role === "background" || asset.paragraphIndex === 0
         });
       }
-    this.ownerChat = turn?.chatId ?? null;
+    this.ownerChat = turn.chatId;
     this.items = [...retained.filter((item) => item.sourceMessageId !== turn?.messageId), ...newItems].slice(-256);
     if (JSON.stringify(old) !== JSON.stringify(this.items)) {
       this.closeLightbox();
@@ -28805,6 +28852,14 @@ class CgGalleryModal {
   }
   setItems(items) {
     this.items = items;
+  }
+  removeImage(imageUrl) {
+    const oldLen = this.items.length;
+    this.items = this.items.filter((item) => item.imageUrl !== imageUrl);
+    if (this.items.length !== oldLen) {
+      this.closeLightbox();
+      this.render();
+    }
     this.render();
   }
   open() {
@@ -28880,7 +28935,21 @@ class CgGalleryModal {
       meta3.className = "cg-card-meta";
       meta3.textContent = item.characterName ? `Cast: ${item.characterName}` : item.storyExcerpt ? item.storyExcerpt.slice(0, 45) + "..." : "Story Moment";
       overlay.append(title, meta3);
-      card.append(img, badge, overlay);
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "cg-card-delete";
+      delBtn.title = "Delete picture";
+      delBtn.setAttribute("aria-label", `Delete picture ${item.title}`);
+      delBtn.textContent = "✕";
+      delBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (typeof window !== "undefined" && window.confirm && !window.confirm(`Delete "${item.title}" from story gallery?`))
+          return;
+        this.items = this.items.filter((i) => i.id !== item.id);
+        this.render();
+        this.onDeleteImage?.(item);
+      };
+      card.append(img, badge, delBtn, overlay);
       this.grid.append(card);
     });
   }
@@ -39577,7 +39646,6 @@ class VnStage {
     this.castStage.set(null, 0);
     this.rpgState = null;
     this.rpgHud.update(this.rpgMode, null);
-    this.cgGallery.syncFromTurn(null, 0);
     this.dossiers.setTurnMedia(null);
     this.dossiers.setContext(undefined, []);
     this.clearAllTimers();
@@ -49010,7 +49078,7 @@ function modelOutputHelp(provider, model, parameters) {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.6-beta.137";
+var LUMIGLYPHICS_VERSION = "0.2.7-beta.138";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -49672,8 +49740,8 @@ class ImageStudio {
     for (const selector of ["[data-positive]", "[data-negative]", "[data-parameters]"])
       this.el(selector).oninput = () => {
         const record2 = this.record();
-        if (record2)
-          this.drafts.set(this.draftKey(record2), { prompt: this.el("[data-positive]").value, negative: this.el("[data-negative]").value, parameters: this.el("[data-parameters]").value });
+        const key = record2 ? this.draftKey(record2) : `job:${this.selectedJob}`;
+        this.drafts.set(key, { prompt: this.el("[data-positive]").value, negative: this.el("[data-negative]").value, parameters: this.el("[data-parameters]").value });
         this.historyFor()?.edit(this.editSnapshot(), selector, Date.now());
         this.updateHistoryButtons();
         this.scheduleLint();
@@ -49974,7 +50042,8 @@ class ImageStudio {
       if (!this.turn || this.el("[data-retry-image]").disabled)
         return;
       const record2 = this.record();
-      if (record2 && this.drafts.has(this.draftKey(record2)))
+      const hasDraft = record2 ? this.drafts.has(this.draftKey(record2)) : this.drafts.has(`job:${this.selectedJob}`);
+      if (hasDraft)
         this.el("[data-prepare]").click();
       else
         this.prepareSavedScene();
@@ -49992,7 +50061,7 @@ class ImageStudio {
         return;
       try {
         const record2 = this.record();
-        const draft = record2 ? this.drafts.get(this.draftKey(record2)) : undefined;
+        const draft = record2 ? this.drafts.get(this.draftKey(record2)) : this.drafts.get(`job:${this.selectedJob}`);
         const parameters = draft ? JSON.parse(draft.parameters) : undefined;
         if (draft) {
           assertPromptLengths(draft.prompt, draft.negative, record2?.promptProfile);
@@ -51168,10 +51237,10 @@ class ImageStudio {
     const record2 = this.record();
     this.activity.setContext(this.turn, record2);
     const asset = this.turn?.assets.find((entry) => entry.jobId === this.selectedJob);
-    const draft = record2 ? this.drafts.get(this.draftKey(record2)) : undefined;
+    const draft = record2 ? this.drafts.get(this.draftKey(record2)) : this.selectedJob ? this.drafts.get(`job:${this.selectedJob}`) : undefined;
     this.el("[data-scene]").textContent = asset ? this.turn?.paragraphs[asset.paragraphIndex] ?? "" : "";
     this.el("[data-meta]").textContent = record2 ? `${record2.provider} · ${record2.model}` : "";
-    const localEditable = Boolean(record2 && asset && asset.source !== "cache" && ["failed", "cancelled", "generated", "browser_ready"].includes(asset.status) && record2.state !== "review" && !this.preparing.has(this.selectedJob) && !this.replanning);
+    const localEditable = Boolean(asset && asset.source !== "cache" && ["failed", "cancelled", "generated", "browser_ready"].includes(asset.status) && (!record2 || record2.state !== "review") && !this.preparing.has(this.selectedJob) && !this.replanning);
     const editable = localEditable || record2?.state === "review" && !this.submitted.has(record2.requestId) && !this.rebuilding.has(record2.requestId) && !this.rerolling.has(record2.requestId);
     const templateSelect = this.el("[data-template]");
     const previousTemplate = this.templateRequest === (record2?.requestId ?? `job:${this.selectedJob}`) ? templateSelect.value : "";
@@ -51204,7 +51273,11 @@ Conflicts: ${metadata.brief.conflicts.join("; ")}` : ""}` : "Template and source
       this.el("[data-provenance]").textContent += `
 Template preferences:
 ${metadata.presentationRuleTrace.summary}`;
-    for (const [selector, value] of [["[data-positive]", draft?.prompt ?? record2?.prompt ?? ""], ["[data-negative]", draft?.negative ?? record2?.negativePrompt ?? ""], ["[data-parameters]", draft?.parameters ?? JSON.stringify(record2?.parameters ?? {}, null, 2)]]) {
+    let initialPos = draft?.prompt ?? record2?.prompt ?? "";
+    if ((!initialPos || initialPos.startsWith('[{"code"') || initialPos.startsWith('{"code"')) && asset) {
+      initialPos = this.turn?.paragraphs[asset.paragraphIndex] ?? "";
+    }
+    for (const [selector, value] of [["[data-positive]", initialPos], ["[data-negative]", draft?.negative ?? record2?.negativePrompt ?? ""], ["[data-parameters]", draft?.parameters ?? JSON.stringify(record2?.parameters ?? {}, null, 2)]]) {
       const field = this.el(selector);
       if (field.value !== value)
         field.value = value;
@@ -51452,7 +51525,7 @@ ${metadata.presentationRuleTrace.summary}`;
     this.el("[data-picture-navigation]").hidden = !asset || planning || (this.turn?.assets.length ?? 0) < 2;
     this.el("[data-scene]").hidden = planning;
     this.el("[data-meta]").hidden = !record2 || planning;
-    this.el("[data-prompt-editor]").hidden = !record2 || planning;
+    this.el("[data-prompt-editor]").hidden = !record2 && !asset || planning;
     this.el("[data-picture-tools]").hidden = !asset || planning;
     this.el("[data-thumbnail]").hidden = !asset || planning;
     this.el("[data-model-help]").hidden = !record2 || planning || !this.el("[data-model-help]").textContent;
@@ -51967,7 +52040,7 @@ class ImageLibrary {
     this.host.dataset.imageLibrary = "";
     this.host.hidden = true;
     this.root = this.host.attachShadow({ mode: "open" });
-    this.root.innerHTML = `<style>${css}</style><button type="button" data-library-launch title="Image library" aria-label="Open image library" aria-expanded="false" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1.5"/><path d="m4 18 5-5 4 3 3-5 5 7"/></svg></button><section hidden role="dialog" aria-modal="true" aria-labelledby="library-title"><header><button type="button" data-detail-back hidden aria-label="Back to library" title="Back to library">‹</button><h2 id="library-title">Image library</h2><button type="button" data-library-close aria-label="Close image library" title="Close image library">×</button></header><div class="body"><div data-browse><div class="filters"><label>Story range<select data-range aria-label="Story range"><option value="read">Read so far</option><option value="all">All story images</option></select></label><label>Message versions<select data-versions aria-label="Message versions"><option value="active">Active story</option><option value="all">Include alternate versions</option></select></label><label>Sort<select data-order aria-label="Sort images"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label></div><label class="check"><input type="checkbox" data-replaced>Include replaced pictures</label><p class="note">Saved pictures from this chat. Viewing never generates an image. Older missing references cannot always be recovered.</p><div data-grid></div></div><div data-detail hidden><div class="viewer-tools"><button type="button" data-zoom-out aria-label="Zoom out" title="Zoom out">−</button><button type="button" data-fit>Fit</button><button type="button" data-zoom-in aria-label="Zoom in" title="Zoom in">+</button><span data-zoom-label>100%</span><button type="button" data-fullscreen style="margin-left:8px;font-weight:700">⛶ Fullscreen</button></div><div data-image-viewport><img data-full-image alt="Selected story image" data-zoom="1" style="cursor:pointer" title="Click to view fullscreen"></div><p data-description></p><p data-excerpt></p><details data-prompts><summary>Prompt details</summary><p class="note">Read-only saved wording. Older pictures may have no recorded request.</p><label class="prompt-label">Saved positive prompt<textarea data-positive aria-label="Saved positive prompt" readonly></textarea></label><label class="prompt-label">Saved negative prompt<textarea data-negative aria-label="Saved negative prompt" readonly></textarea></label><button type="button" data-copy>Copy prompt</button></details></div><p data-library-status role="status"></p><button type="button" data-retry hidden>Retry loading</button></div><footer data-library-footer><button type="button" data-page-prev>Previous page</button><span data-page-label>Page 1</span><button type="button" data-page-next>Next page</button></footer></section>`;
+    this.root.innerHTML = `<style>${css}</style><button type="button" data-library-launch title="Image library" aria-label="Open image library" aria-expanded="false" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1.5"/><path d="m4 18 5-5 4 3 3-5 5 7"/></svg></button><section hidden role="dialog" aria-modal="true" aria-labelledby="library-title"><header><button type="button" data-detail-back hidden aria-label="Back to library" title="Back to library">‹</button><h2 id="library-title">Image library</h2><button type="button" data-library-close aria-label="Close image library" title="Close image library">×</button></header><div class="body"><div data-browse><div class="filters"><label>Story range<select data-range aria-label="Story range"><option value="read">Read so far</option><option value="all">All story images</option></select></label><label>Message versions<select data-versions aria-label="Message versions"><option value="active">Active story</option><option value="all">Include alternate versions</option></select></label><label>Sort<select data-order aria-label="Sort images"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label></div><label class="check"><input type="checkbox" data-replaced>Include replaced pictures</label><p class="note">Saved pictures from this chat. Viewing never generates an image. Older missing references cannot always be recovered.</p><div data-grid></div></div><div data-detail hidden><div class="viewer-tools"><button type="button" data-zoom-out aria-label="Zoom out" title="Zoom out">−</button><button type="button" data-fit>Fit</button><button type="button" data-zoom-in aria-label="Zoom in" title="Zoom in">+</button><span data-zoom-label>100%</span><button type="button" data-fullscreen style="margin-left:8px;font-weight:700">⛶ Fullscreen</button><button type="button" data-delete-picture style="margin-left:8px;background:rgba(239,68,68,0.2);color:#fca5a5;border:1px solid rgba(239,68,68,0.35);padding:4px 8px;border-radius:6px;font-size:12px;cursor:pointer;">\uD83D\uDDD1️ Delete</button></div><div data-image-viewport><img data-full-image alt="Selected story image" data-zoom="1" style="cursor:pointer" title="Click to view fullscreen"></div><p data-description></p><p data-excerpt></p><details data-prompts><summary>Prompt details</summary><p class="note">Read-only saved wording. Older pictures may have no recorded request.</p><label class="prompt-label">Saved positive prompt<textarea data-positive aria-label="Saved positive prompt" readonly></textarea></label><label class="prompt-label">Saved negative prompt<textarea data-negative aria-label="Saved negative prompt" readonly></textarea></label><button type="button" data-copy>Copy prompt</button></details></div><p data-library-status role="status"></p><button type="button" data-retry hidden>Retry loading</button></div><footer data-library-footer><button type="button" data-page-prev>Previous page</button><span data-page-label>Page 1</span><button type="button" data-page-next>Next page</button></footer></section>`;
     const refresh = document.createElement("button");
     refresh.type = "button";
     refresh.dataset.refresh = "";
@@ -52051,6 +52124,17 @@ class ImageLibrary {
     this.el("[data-zoom-out]").onclick = () => this.setZoom(Math.max(1, this.zoom - 0.25));
     this.el("[data-fit]").onclick = () => this.setZoom(1);
     this.el("[data-fullscreen]").onclick = () => this.openFullscreen();
+    this.el("[data-delete-picture]").onclick = () => {
+      if (!this.selected || !this.context)
+        return;
+      if (typeof window !== "undefined" && window.confirm && !window.confirm(`Delete this saved picture from story history?`))
+        return;
+      const deleted = this.selected;
+      this.send({ type: "vn_delete_image", chatId: this.context.chatId, imageId: deleted.imageId, imageUrl: deleted.imageUrl, jobId: deleted.jobId });
+      this.status("Picture deleted.");
+      this.back();
+      this.load();
+    };
     this.el("[data-full-image]").onclick = () => this.openFullscreen();
     this.el("[data-copy]").onclick = async () => {
       if (!this.selected?.prompt)
@@ -52788,6 +52872,7 @@ class CharacterFolio {
   notice = "";
   deleteConfirm = false;
   mergeOther = "";
+  accumulatedCgs = new Map;
   setContext(chatId) {
     if (this.chatId === chatId)
       return;
@@ -52808,11 +52893,69 @@ class CharacterFolio {
     this.latestTurnText = "";
     this.deleteConfirm = false;
     this.mergeOther = "";
+    this.accumulatedCgs.clear();
     this.renderRoster();
     this.renderDetail();
   }
   getContext() {
     return this.chatId;
+  }
+  ingestCgs(items) {
+    let changed = false;
+    for (const item of items) {
+      if (!item.imageUrl || !item.characterName?.trim())
+        continue;
+      const charName = item.characterName.trim();
+      const matchId = findMatchingCharacterId(this.library, charName);
+      const key = matchId && this.library[matchId] ? this.library[matchId].name.toLowerCase() : charName.toLowerCase();
+      const list = this.accumulatedCgs.get(key) || [];
+      if (!list.some((c) => c.imageUrl === item.imageUrl)) {
+        list.push({ imageUrl: item.imageUrl, caption: item.caption || "Scene picture" });
+        this.accumulatedCgs.set(key, list);
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.renderRoster();
+      this.renderDetail();
+    }
+  }
+  removeCg(imageUrl) {
+    let changed = false;
+    for (const [k, list] of this.accumulatedCgs.entries()) {
+      const filtered = list.filter((item) => item.imageUrl !== imageUrl);
+      if (filtered.length !== list.length) {
+        this.accumulatedCgs.set(k, filtered);
+        changed = true;
+      }
+    }
+    for (const char of Object.values(this.library)) {
+      let charModified = false;
+      if (char.referenceImageUrl === imageUrl) {
+        delete char.referenceImageUrl;
+        delete char.referenceImageId;
+        charModified = true;
+      }
+      if (char.secondaryReferenceImageUrl === imageUrl) {
+        delete char.secondaryReferenceImageUrl;
+        delete char.secondaryReferenceImageId;
+        charModified = true;
+      }
+      if (char.avatarUrl === imageUrl) {
+        delete char.avatarUrl;
+        charModified = true;
+      }
+      if (charModified) {
+        char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+        this.dirty.add(char.id);
+        this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.renderRoster();
+      this.renderDetail();
+    }
   }
   invalidateContext() {
     this.cancelProposal();
@@ -53451,6 +53594,14 @@ class CharacterFolio {
           });
         }
         this.loreMap[key] = existingLore;
+        const accList = this.accumulatedCgs.get(key) || [];
+        if (!accList.some((c) => c.imageUrl === imageUrl)) {
+          accList.unshift({
+            imageUrl,
+            caption: asset.stageAsset?.attire || asset.stageAsset?.role || "Scene portrait"
+          });
+          this.accumulatedCgs.set(key, accList);
+        }
       }
     }
     const anyCast = turn?.cast;
@@ -54087,6 +54238,13 @@ class CharacterFolio {
       addImage(char.secondaryReferenceImageUrl, "Outfit Reference");
     if (char.avatarUrl)
       addImage(char.avatarUrl, "Active Avatar");
+    for (const [key, list] of this.accumulatedCgs.entries()) {
+      if (areNamesEquivalent(key, char.name) || char.aliases.some((a) => areNamesEquivalent(key, a))) {
+        for (const cg of list) {
+          addImage(cg.imageUrl, cg.caption);
+        }
+      }
+    }
     for (const [key, ctx] of Object.entries(this.loreMap)) {
       if (areNamesEquivalent(key, char.name) || char.aliases.some((a) => areNamesEquivalent(key, a))) {
         for (const cg of ctx.cgs ?? []) {
@@ -54161,8 +54319,12 @@ class CharacterFolio {
           this.cancelProposal();
           if (isPrimary) {
             delete char.referenceImageUrl;
+            delete char.referenceImageId;
           } else {
             char.referenceImageUrl = cg.imageUrl;
+            const m1 = /\/api\/v1\/images\/([^/?#]+)/.exec(cg.imageUrl);
+            if (m1 && m1[1])
+              char.referenceImageId = decodeURIComponent(m1[1]);
             char.avatarUrl = cg.imageUrl;
           }
           char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
@@ -54180,8 +54342,12 @@ class CharacterFolio {
           this.cancelProposal();
           if (isSecondary) {
             delete char.secondaryReferenceImageUrl;
+            delete char.secondaryReferenceImageId;
           } else {
             char.secondaryReferenceImageUrl = cg.imageUrl;
+            const m2 = /\/api\/v1\/images\/([^/?#]+)/.exec(cg.imageUrl);
+            if (m2 && m2[1])
+              char.secondaryReferenceImageId = decodeURIComponent(m2[1]);
           }
           char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
           this.dirty.add(char.id);
@@ -54204,7 +54370,19 @@ class CharacterFolio {
           this.renderRoster();
           this.renderDetail();
         };
-        btnRow.append(primaryBtn, secondaryBtn, avatarBtn);
+        const deleteBtn = document.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.className = "folio-action-btn";
+        deleteBtn.style.cssText = "font-size:11px;padding:4px 8px;background:rgba(239,68,68,0.18);color:#fca5a5;border:1px solid rgba(239,68,68,0.35);";
+        deleteBtn.textContent = "\uD83D\uDDD1️ Delete";
+        deleteBtn.title = "Delete this picture";
+        deleteBtn.onclick = () => {
+          if (typeof window !== "undefined" && window.confirm && !window.confirm(`Delete this picture for ${char.name}?`))
+            return;
+          this.removeCg(cg.imageUrl);
+          this.handlers.onDeleteImage?.(cg.imageUrl);
+        };
+        btnRow.append(primaryBtn, secondaryBtn, avatarBtn, deleteBtn);
         footer.append(cap, btnRow);
         card.append(badges, img, footer);
         grid.append(card);
@@ -57737,9 +57915,23 @@ function setupVisualNovelFrontend(baseContext) {
     onDeleteDNA: (dna, revision) => sendDna({ action: "delete", characterId: dna.id, dna, revision }),
     onRestoreDNA: (characterId, revision) => sendDna({ action: "restore", characterId, revision }),
     onMergeDNA: (characterId, otherId, revision) => sendDna({ action: "merge", characterId, otherId, revision }),
+    onDeleteImage: (imageUrl) => {
+      const owner = chatId();
+      if (owner) {
+        ctx.sendToBackend({ type: "vn_delete_image", chatId: owner, imageUrl });
+        stage.cgGallery.removeImage(imageUrl);
+      }
+    },
     onClose: () => stage.workspace.close()
   });
   stage.workspace.register("character", characterFolio);
+  stage.cgGallery.onDeleteImage = (item) => {
+    const owner = chatId();
+    if (owner) {
+      ctx.sendToBackend({ type: "vn_delete_image", chatId: owner, imageUrl: item.imageUrl });
+      characterFolio.removeCg(item.imageUrl);
+    }
+  };
   stage.setFolioOpener((charName) => {
     characterFolio.setActiveCharacter(charName);
     stage.workspace.open("character");
@@ -58026,6 +58218,9 @@ function setupVisualNovelFrontend(baseContext) {
     if (!turn)
       return;
     characterFolio.syncFromTurn(turn, paragraphIndex);
+    const galleryItems = stage.cgGallery?.items ?? [];
+    if (galleryItems.length > 0)
+      characterFolio.ingestCgs(galleryItems);
     const sourceTurn = turn;
     const assetFailure = currentAssetFailure(turn, paragraphIndex);
     if (assetFailure)

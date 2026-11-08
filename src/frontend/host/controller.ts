@@ -754,9 +754,23 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     onDeleteDNA:(dna,revision)=>sendDna({action:'delete',characterId:dna.id,dna,revision}),
     onRestoreDNA:(characterId,revision)=>sendDna({action:'restore',characterId,revision}),
     onMergeDNA:(characterId,otherId,revision)=>sendDna({action:'merge',characterId,otherId,revision}),
+    onDeleteImage:(imageUrl)=>{
+      const owner=chatId();
+      if(owner){
+        ctx.sendToBackend({type:'vn_delete_image',chatId:owner,imageUrl});
+        stage.cgGallery.removeImage(imageUrl);
+      }
+    },
     onClose:()=>stage.workspace.close()
   });
   stage.workspace.register('character', characterFolio);
+  stage.cgGallery.onDeleteImage = (item) => {
+    const owner=chatId();
+    if(owner){
+      ctx.sendToBackend({type:'vn_delete_image',chatId:owner,imageUrl:item.imageUrl});
+      characterFolio.removeCg(item.imageUrl);
+    }
+  };
   stage.setFolioOpener((charName) => {
     characterFolio.setActiveCharacter(charName);
     stage.workspace.open('character');
@@ -1036,6 +1050,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   async function syncImageForParagraph(paragraphIndex: number): Promise<void> {
     if (!turn) return;
     characterFolio.syncFromTurn(turn,paragraphIndex);
+    const galleryItems = (stage.cgGallery as any)?.items ?? [];
+    if (galleryItems.length > 0) characterFolio.ingestCgs(galleryItems);
     const sourceTurn = turn;
     const assetFailure = currentAssetFailure(turn, paragraphIndex);
     if (assetFailure) reportStageError(assetFailure);

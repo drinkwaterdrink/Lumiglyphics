@@ -25,7 +25,7 @@ const contextConfigSaves = new Map<string, Promise<VisualNovelConfig>>();
 import { readerPresentationFor } from "./entity-projection.js";
 import { modelOutputParameters } from './template-output.js';
 import { correctVisualSubject } from "./subject-resolution.js";
-import { CorrectImageSubjectRequestSchema, SetCardRoleRequestSchema, ReplanTurnRequestSchema, RecoverImagesRequestSchema } from "../../protocol.js";
+import { CorrectImageSubjectRequestSchema, SetCardRoleRequestSchema, ReplanTurnRequestSchema, RecoverImagesRequestSchema, DeleteImageRequestSchema } from "../../protocol.js";
 import { imageDiagnostic, pictureExplanation } from '../../shared/image-diagnostics.js';
 import type {
   ChatMessageDTO,
@@ -1572,6 +1572,50 @@ export async function restorePreviousImage(
   }, userId);
 }
 
+async function handleDeleteImage(
+  spindle: SpindleAPI,
+  rawRequest: unknown,
+  userId?: string
+): Promise<void> {
+  const request = DeleteImageRequestSchema.parse(rawRequest);
+  const match = request.imageUrl ? /\/api\/v1\/images\/([^/?#]+)/.exec(request.imageUrl) : null;
+  const matchId = match && match[1] ? match[1] : undefined;
+  const imageId = request.imageId || (matchId ? decodeURIComponent(matchId) : undefined);
+  if (!imageId) return;
+  try {
+    if (typeof (spindle as any).images?.delete === 'function') {
+      await (spindle as any).images.delete(imageId, userId);
+    }
+  } catch {}
+  sceneCache.invalidateImage(imageId, "image_deleted");
+  const chatState = await loadChatState(spindle, request.chatId, userId);
+  if (chatState.activeTurnPath) {
+    const next = await mutateActiveTurnRecord(spindle, request.chatId, chatState.activeTurnPath, userId, (record) => {
+      let changed = false;
+      const jobs = record.jobs.map(j => {
+        if (j.imageId === imageId || (request.jobId && j.jobId === request.jobId)) {
+          changed = true;
+          return AssetJobSchema.parse({ ...j, status: 'cancelled', imageId: null, imageUrl: null, finishedAt: new Date().toISOString() });
+        }
+        return j;
+      });
+      const previousImages = { ...(record.previousImages ?? {}) };
+      for (const [id, prev] of Object.entries(previousImages)) {
+        if ((prev as { imageId?: string })?.imageId === imageId) {
+          delete previousImages[id];
+          changed = true;
+        }
+      }
+      if (!changed) return null;
+      return { ...record, jobs, previousImages, updatedAt: new Date().toISOString() };
+    });
+    if (next) {
+      const view = await turnViewWithAudio(spindle, next, userId);
+      spindle.sendToFrontend({ type: 'vn_turn', turn: view }, userId);
+    }
+  }
+}
+
 async function retryTurn(
   spindle: SpindleAPI,
   chatId: string,
@@ -1899,6 +1943,10 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
   }
   dbg(spindle, userId, `frontend request ${request.type}`);
   switch (request.type) {
+    case 'vn_delete_image': {
+      await handleDeleteImage(spindle, request, userId);
+      return;
+    }
     case 'vn_image_library': {
       const page=await readImageLibraryPage(spindle,request,userId);
       spindle.sendToFrontend({type:'vn_image_library',chatId:request.chatId,requestId:request.requestId,page},userId);

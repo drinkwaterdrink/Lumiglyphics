@@ -149,7 +149,8 @@ export class ImageStudio {
     this.el<HTMLSelectElement>("[data-request]").onchange = () => { this.selectedRequest = this.el<HTMLSelectElement>("[data-request]").value; this.render(); };
     for (const selector of ["[data-positive]", "[data-negative]", "[data-parameters]"]) this.el<HTMLTextAreaElement>(selector).oninput = () => {
       const record = this.record();
-      if (record) this.drafts.set(this.draftKey(record), { prompt: this.el<HTMLTextAreaElement>("[data-positive]").value, negative: this.el<HTMLTextAreaElement>("[data-negative]").value, parameters: this.el<HTMLTextAreaElement>("[data-parameters]").value });
+      const key = record ? this.draftKey(record) : `job:${this.selectedJob}`;
+      this.drafts.set(key, { prompt: this.el<HTMLTextAreaElement>("[data-positive]").value, negative: this.el<HTMLTextAreaElement>("[data-negative]").value, parameters: this.el<HTMLTextAreaElement>("[data-parameters]").value });
       this.historyFor()?.edit(this.editSnapshot(),selector,Date.now());
       this.updateHistoryButtons();this.scheduleLint();
       this.updateCounts();
@@ -429,7 +430,8 @@ export class ImageStudio {
     this.el<HTMLButtonElement>('[data-retry-image]').onclick=()=>{
       if(!this.turn||this.el<HTMLButtonElement>('[data-retry-image]').disabled)return;
       const record=this.record();
-      if(record&&this.drafts.has(this.draftKey(record)))this.el<HTMLButtonElement>('[data-prepare]').click();
+      const hasDraft = record ? this.drafts.has(this.draftKey(record)) : this.drafts.has(`job:${this.selectedJob}`);
+      if(hasDraft)this.el<HTMLButtonElement>('[data-prepare]').click();
       else this.prepareSavedScene();
     };
     for(const [selector,action] of [['[data-stop-images]','stop'],['[data-retry-unfinished]','retry']] as const)this.el<HTMLButtonElement>(selector).onclick=()=>{
@@ -440,7 +442,7 @@ export class ImageStudio {
     this.el<HTMLButtonElement>("[data-prepare]").onclick = () => {
       if (!this.turn || this.preparing.has(this.selectedJob)) return;
       try {
-        const record=this.record();const draft=record ? this.drafts.get(this.draftKey(record)) : undefined;
+        const record=this.record();const draft=record ? this.drafts.get(this.draftKey(record)) : this.drafts.get(`job:${this.selectedJob}`);
         const parameters=draft ? JSON.parse(draft.parameters) : undefined;
         if(draft) {assertPromptLengths(draft.prompt,draft.negative,record?.promptProfile);if(!parameters || typeof parameters!=='object' || Array.isArray(parameters)) throw new Error('Parameters must be a JSON object.');}
         const request:FrontendRequest={ type:'vn_prepare_image',chatId:this.turn.chatId,messageId:this.turn.messageId,sourceFingerprint:this.turn.sourceFingerprint,jobId:this.selectedJob,
@@ -1229,10 +1231,10 @@ export class ImageStudio {
     const record = this.record();
     this.activity.setContext(this.turn,record);
     const asset = this.turn?.assets.find((entry) => entry.jobId === this.selectedJob);
-    const draft = record ? this.drafts.get(this.draftKey(record)) : undefined;
+    const draft = record ? this.drafts.get(this.draftKey(record)) : (this.selectedJob ? this.drafts.get(`job:${this.selectedJob}`) : undefined);
     this.el<HTMLElement>("[data-scene]").textContent = asset ? this.turn?.paragraphs[asset.paragraphIndex] ?? "" : '';
     this.el<HTMLElement>("[data-meta]").textContent = record ? `${record.provider} · ${record.model}` : '';
-    const localEditable=Boolean(record && asset && asset.source!=='cache' && ['failed','cancelled','generated','browser_ready'].includes(asset.status) && record.state!=='review' && !this.preparing.has(this.selectedJob) && !this.replanning);
+    const localEditable=Boolean(asset && asset.source!=='cache' && ['failed','cancelled','generated','browser_ready'].includes(asset.status) && (!record || record.state!=='review') && !this.preparing.has(this.selectedJob) && !this.replanning);
     const editable = localEditable || record?.state === "review" && !this.submitted.has(record.requestId) && !this.rebuilding.has(record.requestId) && !this.rerolling.has(record.requestId);
     const templateSelect = this.el<HTMLSelectElement>("[data-template]");
     const previousTemplate = this.templateRequest === (record?.requestId ?? `job:${this.selectedJob}`) ? templateSelect.value : "";
@@ -1250,7 +1252,11 @@ export class ImageStudio {
     const metadata = record?.imagePromptMetadata;
     this.el<HTMLElement>("[data-provenance]").textContent = metadata ? `${metadata.template.name} · ${metadata.template.category} · ${metadata.format === "tags" ? "Tags" : "Description"}\n${metadata.selectionReason}\nFraming: ${metadata.brief.framing}; subjects: ${metadata.brief.subjectMode === "none" ? "no people" : metadata.brief.subjectMode === "ensemble" ? "full scene cast, including persona when present" : "one character"}; references: ${metadata.brief.referencePolicy}\nSimTracker: ${metadata.trackerStatus}${metadata.trackerSourceMessageId ? ` (message ${metadata.trackerSourceMessageId})` : ""}\nSources: ${metadata.brief.sources.join(", ") || "Story scene"}${metadata.brief.conflicts.length ? `\nConflicts: ${metadata.brief.conflicts.join("; ")}` : ""}` : "Template and source metadata are unavailable for this older request.";
     if(metadata?.presentationRuleTrace)this.el<HTMLElement>("[data-provenance]").textContent+=`\nTemplate preferences:\n${metadata.presentationRuleTrace.summary}`;
-    for (const [selector, value] of [["[data-positive]", draft?.prompt ?? record?.prompt ?? ""], ["[data-negative]", draft?.negative ?? record?.negativePrompt ?? ""], ["[data-parameters]", draft?.parameters ?? JSON.stringify(record?.parameters ?? {}, null, 2)]] as const) { const field = this.el<HTMLTextAreaElement>(selector); if(field.value!==value) field.value = value; field.readOnly = !editable; }
+    let initialPos = draft?.prompt ?? record?.prompt ?? "";
+    if ((!initialPos || initialPos.startsWith('[{"code"') || initialPos.startsWith('{"code"')) && asset) {
+      initialPos = this.turn?.paragraphs[asset.paragraphIndex] ?? "";
+    }
+    for (const [selector, value] of [["[data-positive]", initialPos], ["[data-negative]", draft?.negative ?? record?.negativePrompt ?? ""], ["[data-parameters]", draft?.parameters ?? JSON.stringify(record?.parameters ?? {}, null, 2)]] as const) { const field = this.el<HTMLTextAreaElement>(selector); if(field.value!==value) field.value = value; field.readOnly = !editable; }
     this.updateCounts();
     this.el<HTMLElement>('[data-edit-help]').textContent=localEditable ? 'Edit a local replacement draft below, then Prepare replacement. The recorded request stays unchanged; generation still needs approval.' : record?.state==='review' ? 'Editable preview. Positive and negative share the prepared budget shown below.' : !record ? 'No editable request is saved for this picture. Choose Prepare new preview first; generation still needs approval.' : 'Recorded request — read-only while this picture is running. Finish or skip waiting pictures to prepare a replacement.';
     this.el<HTMLElement>("[data-reference]").textContent = record?.referenceSummary ?? "";
@@ -1484,7 +1490,7 @@ export class ImageStudio {
     this.el('[data-picture-navigation]').hidden=!asset||planning||(this.turn?.assets.length??0)<2;
     this.el('[data-scene]').hidden=planning;
     this.el('[data-meta]').hidden=!record||planning;
-    this.el('[data-prompt-editor]').hidden=!record||planning;
+    this.el('[data-prompt-editor]').hidden=(!record && !asset)||planning;
     this.el('[data-picture-tools]').hidden=!asset||planning;
     this.el('[data-thumbnail]').hidden=!asset||planning;
     this.el('[data-model-help]').hidden=!record||planning||!this.el('[data-model-help]').textContent;

@@ -33,10 +33,12 @@ const imagePromptOperation = {guidance:z.string().max(400).optional(),edits:imag
 export const RewriteImagePromptRequestSchema = z.object({type:z.enum(['vn_regenerate_image_prompt','vn_enrich_image_prompt']),...imageOperationScope,requestId:z.string().min(1).max(100),...imagePromptOperation}).strict();
 export const PrepareImageRequestSchema = z.object({type:z.literal('vn_prepare_image'),...imageOperationScope,jobId:z.string().min(1).max(200),templateId:z.string().min(1).max(100).optional(),...imagePromptOperation,regeneratePrompt:z.boolean().optional(),promptOperation:z.enum(['rewrite','enrich']).optional(),reframe:z.boolean().optional(),styleId:z.string().max(100).optional(),fitToModel:z.boolean().optional(),model:z.string().max(200).optional(),connectionId:z.string().max(200).optional(),quickGenerate:z.boolean().optional(),manualCamera:z.object({shotSize:z.string().optional(),angle:z.string().optional(),lensFeel:z.string().optional(),composition:z.string().optional(),depth:z.string().optional(),dialogueSafeArea:z.enum(['auto','always','off']).optional()}).strict().optional()}).strict();
 export const RestorePreviousImageRequestSchema=z.object({type:z.literal('vn_restore_previous_image'),...imageOperationScope,swipeId:z.number().int().nonnegative().nullable(),revision:z.number().int().nonnegative(),jobId:z.string().min(1).max(200),versionId:z.string().min(1).max(256)}).strict();
+export const DeleteImageRequestSchema=z.object({type:z.literal('vn_delete_image'),chatId:z.string().min(1).max(256),imageId:z.string().min(1).max(256).optional(),imageUrl:z.string().min(1).max(2048).optional(),jobId:z.string().min(1).max(256).optional()}).strict();
 export type FrontendRequest =
   | QueueImageRetriesRequest
   | PresentationRuleRequest
   | z.infer<typeof ImageLibraryRequestSchema>
+  | z.infer<typeof DeleteImageRequestSchema>
   | z.infer<typeof CastGalleryRequestSchema>
   | z.infer<typeof CastArtRequestSchema>
   | z.infer<typeof LocationArtRequestSchema>
@@ -284,6 +286,7 @@ export function isFrontendRequest(value: unknown): value is FrontendRequest {
   if ((value as {type?:unknown}).type === 'vn_replan_turn') return ReplanTurnRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_correct_image_subject") return CorrectImageSubjectRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_set_card_role") return SetCardRoleRequestSchema.safeParse(value).success;
+  if ((value as {type?:unknown}).type === "vn_delete_image") return DeleteImageRequestSchema.safeParse(value).success;
   if ((value as { type?: unknown }).type === "vn_reading_position") return ReadingPositionSchema.safeParse((value as { position?: unknown }).position).success;
   return typeof (value as { type?: unknown }).type === "string"
     && String((value as { type: string }).type).startsWith("vn_");

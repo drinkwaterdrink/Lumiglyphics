@@ -196,9 +196,9 @@ export function buildVisualBrief(
   return {
     ...(!noPeople?{subjectPreparation:{
       name:ensemble?'Named ensemble':name.slice(0,256),identity:ensemble?'':(attire?applyAttireOverride(identity,''):identity).slice(0,4000),
-      identitySource:ensemble?'ensemble snapshot' as const:!identity?'unavailable' as const:manual?'manual correction' as const:lockedDNA?.locked?'locked DNA' as any:saved?'saved appearance' as const:'resolved context' as const,
+      identitySource:ensemble?'ensemble snapshot' as const:!identity?'unavailable' as const:manual?'manual correction' as const:lockedDNA?.locked?'locked DNA' as const:saved?'saved appearance' as const:'resolved context' as const,
       attire:ensemble?null:attire?.slice(0,2000)??null,
-      attireSource:ensemble?'not supplied' as const:cue.resolvedAttire!==undefined||cue.attire!=null?'picture cue' as const:sameCharacter&&scene.attire!==undefined&&scene.attire!==null?'scene' as const:dnaAttire?'locked DNA' as any:'not supplied' as const,
+      attireSource:ensemble?'not supplied' as const:cue.resolvedAttire!==undefined||cue.attire!=null?'picture cue' as const:sameCharacter&&scene.attire!==undefined&&scene.attire!==null?'scene' as const:dnaAttire?'locked DNA' as const:'not supplied' as const,
       direction:pose.slice(0,1000),shortened:!ensemble&&(identity.length>4000||(attire?.length??0)>2000||pose.length>1000),
       subjectsInPositive:template.positive.includes('{{subjects}}'),subjectsInNegative:template.negative.includes('{{subjects}}'),
     }}:{}),

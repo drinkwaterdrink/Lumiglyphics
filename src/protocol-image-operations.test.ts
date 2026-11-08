@@ -22,3 +22,10 @@ test('restore uses full identity and saved version selection instead of supplied
   expect(isFrontendRequest({...request,versionId:undefined})).toBe(false);
   expect(isFrontendRequest({...request,swipeId:undefined})).toBe(false);
 });
+
+test('vn_delete_image validates chat and image references', () => {
+  expect(isFrontendRequest({ type: 'vn_delete_image', chatId: 'chat-1', imageId: 'img-1' })).toBe(true);
+  expect(isFrontendRequest({ type: 'vn_delete_image', chatId: 'chat-1', imageUrl: 'blob:http://localhost/123', jobId: 'job-1' })).toBe(true);
+  expect(isFrontendRequest({ type: 'vn_delete_image', chatId: '' })).toBe(false);
+  expect(isFrontendRequest({ type: 'vn_delete_image' })).toBe(false);
+});

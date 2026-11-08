@@ -26,6 +26,7 @@ export class CgGalleryModal {
   private currentFilter: 'all' | 'milestones' | 'portraits' = 'all';
   private activeLightboxIndex = -1;
   private isOpen = false;
+  public onDeleteImage?: (item: CGItem) => void;
 
   constructor(private readonly mount: HTMLElement) {
     this.backdrop = document.createElement('div');
@@ -228,6 +229,31 @@ export class CgGalleryModal {
           overflow: hidden;
           text-overflow: ellipsis;
         }
+        .cg-card-delete {
+          position: absolute;
+          top: 6px;
+          right: 6px;
+          width: 26px;
+          height: 26px;
+          border-radius: 50%;
+          background: rgba(0, 0, 0, 0.7);
+          border: 1px solid rgba(255, 255, 255, 0.25);
+          color: #fca5a5;
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          display: grid;
+          place-items: center;
+          z-index: 3;
+          opacity: 0.85;
+          transition: opacity 0.2s, background 0.2s, transform 0.2s;
+        }
+        .cg-card-delete:hover {
+          opacity: 1;
+          background: rgba(220, 38, 38, 0.85);
+          color: #fff;
+          transform: scale(1.1);
+        }
         .cg-lightbox {
           position: fixed;
           inset: 0;
@@ -339,6 +365,7 @@ export class CgGalleryModal {
             <button type="button" class="cg-lightbox-btn" data-cg-prev aria-label="Previous CG">◀ <span>Prev</span></button>
             <button type="button" class="cg-lightbox-btn" data-cg-next aria-label="Next CG"><span>Next</span> ▶</button>
             <button type="button" class="cg-lightbox-btn" data-cg-download>📥 <span>Export</span></button>
+            <button type="button" class="cg-lightbox-btn" data-cg-delete style="background:rgba(239,68,68,0.25);border-color:rgba(239,68,68,0.4);color:#fca5a5;">🗑️ <span>Delete</span></button>
             <button type="button" class="cg-lightbox-btn cg-lightbox-close-pill" data-cg-lightbox-close aria-label="Close Lightbox">✕</button>
           </div>
         </div>
@@ -415,6 +442,17 @@ export class CgGalleryModal {
       }
     });
 
+    this.lightbox.querySelector('[data-cg-delete]')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const item = this.items[this.activeLightboxIndex];
+      if (!item) return;
+      if (typeof window !== 'undefined' && window.confirm && !window.confirm(`Delete this picture from the story gallery?`)) return;
+      this.items = this.items.filter(i => i.id !== item.id);
+      this.closeLightbox();
+      this.render();
+      this.onDeleteImage?.(item);
+    });
+
     window.addEventListener('keydown', (e) => {
       if (!this.isOpen) return;
       if (e.key === 'Escape') {
@@ -437,8 +475,18 @@ export class CgGalleryModal {
 
   /** Session collection: other read replies survive, alternate versions replace their reply. */
   syncFromTurn(turn: TurnView | null, paragraphIndex = -1): void {
+    if (!turn) {
+      this.items = [];
+      this.ownerChat = null;
+      this.closeLightbox();
+      this.render();
+      return;
+    }
+
     const old = this.items;
-    const retained = turn && this.ownerChat === turn.chatId ? old : [];
+    const retained = this.ownerChat === turn.chatId ? old : [];
+
+
     const scope = turn ? JSON.stringify([turn.chatId,turn.messageId,turn.swipeId,turn.sourceFingerprint,turn.revision]) : '';
     const newItems: CGItem[] = [];
     if (turn) for (const asset of turn.assets ?? []) {
@@ -452,13 +500,22 @@ export class CgGalleryModal {
         unlockedAt:old.find(item=>item.id===id)?.unlockedAt ?? new Date().toLocaleTimeString(),
         isMilestone:asset.stageAsset?.role==='background'||asset.paragraphIndex===0});
     }
-    this.ownerChat = turn?.chatId ?? null;
+    this.ownerChat = turn.chatId;
     this.items = [...retained.filter(item=>item.sourceMessageId!==turn?.messageId),...newItems].slice(-256);
     if (JSON.stringify(old)!==JSON.stringify(this.items)) { this.closeLightbox();this.render(); }
   }
 
   setItems(items: CGItem[]): void {
     this.items = items;
+  }
+
+  removeImage(imageUrl: string): void {
+    const oldLen = this.items.length;
+    this.items = this.items.filter(item => item.imageUrl !== imageUrl);
+    if (this.items.length !== oldLen) {
+      this.closeLightbox();
+      this.render();
+    }
     this.render();
   }
 
@@ -549,7 +606,21 @@ export class CgGalleryModal {
       meta.textContent = item.characterName ? `Cast: ${item.characterName}` : item.storyExcerpt ? item.storyExcerpt.slice(0, 45) + '...' : 'Story Moment';
 
       overlay.append(title, meta);
-      card.append(img, badge, overlay);
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'cg-card-delete';
+      delBtn.title = 'Delete picture';
+      delBtn.setAttribute('aria-label', `Delete picture ${item.title}`);
+      delBtn.textContent = '✕';
+      delBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (typeof window !== 'undefined' && window.confirm && !window.confirm(`Delete "${item.title}" from story gallery?`)) return;
+        this.items = this.items.filter(i => i.id !== item.id);
+        this.render();
+        this.onDeleteImage?.(item);
+      };
+
+      card.append(img, badge, delBtn, overlay);
       this.grid.append(card);
     });
   }
