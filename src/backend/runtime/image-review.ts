@@ -119,6 +119,7 @@ export type RebuildOptions = {
   fitToModel?: boolean | undefined;
   model?: string | undefined;
   connectionId?: string | undefined;
+  generate?: boolean | undefined;
   manualCamera?: {
     shotSize?: string | undefined;
     angle?: string | undefined;

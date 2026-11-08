@@ -35,7 +35,8 @@ export async function handleImageReviewRpc(request:ImageReviewRpcRequest,context
         fitToModel: request.fitToModel,
         model: request.model,
         connectionId: request.connectionId,
-        manualCamera: request.manualCamera
+        manualCamera: request.manualCamera,
+        generate: request.generate
       }))) throw new Error("This request has already been handled or cancelled.");
       return;
     }

@@ -1457,7 +1457,7 @@ export async function generateAssets(
               }
               const adapted=await adaptImagePrompt(spindle,preparedRequest,nextMetadata,config,userId,jobSignal);
               const {promptAdaptationError:_previousAdaptationError,...cleanMetadata}=baseMetadata;
-              return { request:adapted.request, metadata: { ...cleanMetadata,...(adapted.error?{promptAdaptationError:adapted.error}:{}), regeneratePrompt:regenerateFor(nextCue), enrichPrompt:enrichFor(nextCue), imagePromptMetadata: nextMetadata, referenceSummary: nextPortrait ? `${nextPortrait.source ?? "captured"} portrait: ${nextPortrait.name} (${nextPortrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" } };
+              return { request:adapted.request, metadata: { ...cleanMetadata, provider: effectiveProvider ?? baseMetadata.provider, ...(adapted.error?{promptAdaptationError:adapted.error}:{}), regeneratePrompt:regenerateFor(nextCue), enrichPrompt:enrichFor(nextCue), imagePromptMetadata: nextMetadata, referenceSummary: nextPortrait ? `${nextPortrait.source ?? "captured"} portrait: ${nextPortrait.name} (${nextPortrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" } };
             }
           }, jobSignal) : frozen;
           if (signal.aborted) throw abortError(signal);
@@ -1474,11 +1474,16 @@ export async function generateAssets(
           if(frozen.promptProfile)approved.promptProfile=frozen.promptProfile;else delete approved.promptProfile;
           assertPromptLengths(approved.prompt,approved.negativePrompt,approved.promptProfile);
           assertEffectivePromptBudget(approved);
-          assertModelOutputParameters(selected?.provider ?? provider, approved.model, approved.parameters ?? {});
+          const activeConnectionId = approved.connection_id || selected?.id;
+          const activeSelected = (activeConnectionId && activeConnectionId !== selected?.id && typeof spindle.imageGen?.getConnection === 'function')
+            ? await spindle.imageGen.getConnection(activeConnectionId, userId)
+            : selected;
+          const activeProvider = activeSelected?.provider?.trim().toLowerCase() ?? selected?.provider ?? provider;
+          assertModelOutputParameters(activeProvider, approved.model, approved.parameters ?? {});
           if(approved.promptProfile?.output)assertCapabilityOutput(approved.promptProfile.output,approved.parameters??{});
           const {promptProfile:_promptProfile,...providerRequest}=approved;
           const rawParams = providerOutputParameters(approved.parameters ?? {});
-          const safeParams = sanitizeImagePayloadParameters(rawParams, selected?.provider ?? provider, approved.model);
+          const safeParams = sanitizeImagePayloadParameters(rawParams, activeProvider, approved.model);
           // The last asynchronous boundary: toggles during review/connection refresh
           // are checked again synchronously before the actual provider invocation.
           if(cacheOptions.waitForDispatch){do{await cacheOptions.waitForDispatch(scheduledJob,jobSignal);}while(cacheOptions.canDispatch&&!cacheOptions.canDispatch(scheduledJob));}

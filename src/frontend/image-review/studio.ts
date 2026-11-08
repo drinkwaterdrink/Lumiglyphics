@@ -237,53 +237,101 @@ export class ImageStudio {
     };
 
     this.el<HTMLButtonElement>('[data-regenerate-model-single]').onclick = () => {
+      this.studioError = '';
       const connectionId = this.el<HTMLSelectElement>('[data-artwork-connection]')?.value || undefined;
       const conn = this.imageConnections.find(c => c.id === connectionId);
       const model = conn?.model || undefined;
-      if (this.record()?.state !== 'review') {
-        if (!this.turn || !this.selectedJob || this.preparing.has(this.selectedJob)) return;
-        const templateId = this.record()?.imagePromptMetadata?.template.id ?? this.el<HTMLSelectElement>('[data-template]').value ?? this.defaultTemplate;
-        this.beginPreparation(this.selectedJob); this.render();
-        this.send({ type: 'vn_prepare_image', chatId: this.turn.chatId, messageId: this.turn.messageId, sourceFingerprint: this.turn.sourceFingerprint, jobId: this.selectedJob, ...(templateId ? { templateId } : {}), model, connectionId });
+      const profileName = conn?.name || connectionId || 'selected profile';
+
+      const singleBtn = this.el<HTMLButtonElement>('[data-regenerate-model-single]');
+      singleBtn.disabled = true;
+      singleBtn.textContent = 'Regenerating...';
+      this.showModelStatus(`Starting generation with ${profileName}...`, 'working');
+
+      const record = this.record();
+      if (record?.state === 'review') {
+        const templateId = record.imagePromptMetadata?.template.id ?? this.el<HTMLSelectElement>('[data-template]').value ?? this.defaultTemplate;
+        this.rebuilding.add(record.requestId);
+        this.render();
+        this.send({
+          type: 'vn_reprepare_image_template',
+          chatId: this.turn!.chatId,
+          messageId: this.turn!.messageId,
+          sourceFingerprint: this.turn!.sourceFingerprint,
+          requestId: record.requestId,
+          templateId,
+          model,
+          connectionId,
+          generate: true
+        });
         return;
       }
-      const record = this.record();
-      if (!record || record.state !== 'review' || this.rebuilding.has(record.requestId) || !this.turn) return;
-      const templateId = record.imagePromptMetadata?.template.id ?? this.el<HTMLSelectElement>('[data-template]').value ?? this.defaultTemplate;
-      this.rebuilding.add(record.requestId);
+
+      if (!this.turn || !this.selectedJob || this.preparing.has(this.selectedJob)) return;
+      const templateId = record?.imagePromptMetadata?.template.id ?? this.el<HTMLSelectElement>('[data-template]').value ?? this.defaultTemplate;
+      this.beginPreparation(this.selectedJob);
       this.render();
       this.send({
-        type: 'vn_reprepare_image_template',
+        type: 'vn_prepare_image',
         chatId: this.turn.chatId,
         messageId: this.turn.messageId,
         sourceFingerprint: this.turn.sourceFingerprint,
-        requestId: record.requestId,
-        templateId,
+        jobId: this.selectedJob,
+        ...(templateId ? { templateId } : {}),
         model,
-        connectionId
+        connectionId,
+        quickGenerate: true
       });
     };
 
     this.el<HTMLButtonElement>('[data-regenerate-model-all]').onclick = () => {
       if (!this.turn) return;
+      this.studioError = '';
       const connectionId = this.el<HTMLSelectElement>('[data-artwork-connection]')?.value || undefined;
       const conn = this.imageConnections.find(c => c.id === connectionId);
       const model = conn?.model || undefined;
+      const profileName = conn?.name || connectionId || 'selected profile';
+
       const reviewable = (this.turn.imageRequests ?? []).filter(r => r.state === 'review');
-      if (reviewable.length === 0) return;
-      for (const r of reviewable) {
-        this.rebuilding.add(r.requestId);
+      if (reviewable.length > 0) {
+        for (const r of reviewable) {
+          this.rebuilding.add(r.requestId);
+          this.send({
+            type: 'vn_reprepare_image_template',
+            chatId: this.turn.chatId,
+            messageId: this.turn.messageId,
+            sourceFingerprint: this.turn.sourceFingerprint,
+            requestId: r.requestId,
+            templateId: r.imagePromptMetadata?.template.id ?? this.defaultTemplate,
+            model,
+            connectionId,
+            generate: true
+          });
+        }
+        this.showModelStatus(`Regenerating all ${reviewable.length} review pictures with ${profileName}...`, 'working');
+        this.render();
+        return;
+      }
+
+      const assets = this.turn.assets.filter(a => a.source !== 'cache');
+      if (assets.length === 0) return;
+      for (const asset of assets) {
+        const rec = this.turn.imageRequests?.filter(r => r.jobId === asset.jobId).at(-1);
+        const templateId = rec?.imagePromptMetadata?.template.id ?? this.defaultTemplate;
+        this.beginPreparation(asset.jobId);
         this.send({
-          type: 'vn_reprepare_image_template',
+          type: 'vn_prepare_image',
           chatId: this.turn.chatId,
           messageId: this.turn.messageId,
           sourceFingerprint: this.turn.sourceFingerprint,
-          requestId: r.requestId,
-          templateId: r.imagePromptMetadata?.template.id ?? this.defaultTemplate,
+          jobId: asset.jobId,
+          ...(templateId ? { templateId } : {}),
           model,
-          connectionId
+          connectionId,
+          quickGenerate: true
         });
       }
+      this.showModelStatus(`Regenerating all ${assets.length} pictures with ${profileName}...`, 'working');
       this.render();
     };
 
@@ -630,6 +678,7 @@ export class ImageStudio {
         </label>
         <small style="display:block;margin-top:6px;opacity:0.8">Select a connection profile to recompile and regenerate with that provider and model.</small>
         <div data-cost-estimate style="margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.03);border:1px solid var(--edge);font-size:12px"></div>
+        <div data-model-status style="display:none;margin-top:8px;padding:8px 10px;border-radius:8px;font-size:12px;line-height:1.4"></div>
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
           <button type="button" data-regenerate-model-single style="font-size:12px;padding:6px 12px">Regenerate with selected profile</button>
           <button type="button" data-regenerate-model-all style="font-size:12px;padding:6px 12px">Regenerate all in scene</button>
@@ -999,7 +1048,48 @@ export class ImageStudio {
     this.el<HTMLElement>('[data-notice]').textContent=visible?text:'';
     this.el<HTMLElement>('[data-notice-row]').hidden=!visible;
   }
-  showError(error: string): void { this.replanning = false;this.recovering=null; this.submitted.clear(); this.preparing.clear();this.preparationStarts.clear(); this.rerolling.clear();this.rebuilding.clear(); this.render(); this.setNotice(error); }
+  private studioError: string = '';
+  private showModelStatus(text: string, tone: 'normal' | 'working' | 'error' | 'success' = 'normal'): void {
+    const el = this.root.querySelector<HTMLElement>('[data-model-status]');
+    if (!el) return;
+    if (!text) { el.style.display = 'none'; el.textContent = ''; return; }
+    el.style.display = 'block';
+    if (tone === 'error') {
+      el.style.background = 'rgba(255, 75, 75, 0.15)';
+      el.style.border = '1px solid var(--vn-shell-danger, #ffb4ab)';
+      el.style.color = 'var(--vn-shell-danger, #ffb4ab)';
+      el.textContent = `⚠️ ${text}`;
+    } else if (tone === 'working') {
+      el.style.background = 'rgba(124, 156, 255, 0.15)';
+      el.style.border = '1px solid var(--accent, #7c9cff)';
+      el.style.color = 'var(--accent, #7c9cff)';
+      el.textContent = `🔄 ${text}`;
+    } else if (tone === 'success') {
+      el.style.background = 'rgba(75, 200, 120, 0.15)';
+      el.style.border = '1px solid #4bc878';
+      el.style.color = '#4bc878';
+      el.textContent = `✓ ${text}`;
+    } else {
+      el.style.background = 'rgba(255, 255, 255, 0.05)';
+      el.style.border = '1px solid var(--edge)';
+      el.style.color = 'var(--vn-shell-muted, #bbc)';
+      el.textContent = text;
+    }
+  }
+
+  showError(error: string): void {
+    this.replanning = false;
+    this.recovering = null;
+    this.submitted.clear();
+    this.preparing.clear();
+    this.preparationStarts.clear();
+    this.rerolling.clear();
+    this.rebuilding.clear();
+    this.studioError = error;
+    this.render();
+    this.setNotice(error);
+    this.showModelStatus(error, 'error');
+  }
 
   private enrichPrompt(guidance?: string): void {
     if (!this.turn) return;
@@ -1288,11 +1378,14 @@ export class ImageStudio {
       connSelect.value = matchedConn.id;
     }
     const regenSingle = this.el<HTMLButtonElement>('[data-regenerate-model-single]');
-    regenSingle.disabled = !editable || !asset || asset.source === 'cache' || this.preparing.has(this.selectedJob) || Boolean(record && this.rebuilding.has(record.requestId));
+    const isSingleWorking = this.preparing.has(this.selectedJob) || Boolean(record && this.rebuilding.has(record.requestId));
+    regenSingle.disabled = !editable || !asset || asset.source === 'cache' || isSingleWorking;
+    regenSingle.textContent = isSingleWorking ? 'Regenerating...' : 'Regenerate with selected profile';
 
     const regenAll = this.el<HTMLButtonElement>('[data-regenerate-model-all]');
     const reviewableCount = (this.turn?.imageRequests ?? []).filter(r => r.state === 'review').length;
-    regenAll.disabled = !editable || reviewableCount === 0 || this.preparing.size > 0;
+    const canRegenAll = reviewableCount > 0 || ((this.turn?.assets ?? []).some(a => a.source !== 'cache') && this.preparing.size === 0);
+    regenAll.disabled = !editable || !canRegenAll || this.preparing.size > 0;
 
     const applyCameraBtn = this.el<HTMLButtonElement>('[data-apply-camera]');
     applyCameraBtn.disabled = !editable || !asset || asset.source === 'cache' || this.preparing.has(this.selectedJob) || Boolean(record && this.rebuilding.has(record.requestId));
@@ -1344,7 +1437,20 @@ export class ImageStudio {
     this.syncActivityStatus();
     this.renderConnectionDropdown();
     this.updateCostEstimate();
-    this.setNotice(this.recovering ? (this.recovering==='stop'?'Stopping pending pictures…':'Preparing unfinished pictures for review…') : rolling ? "Rewriting prompt with the story-reader model… Uses text tokens; image generation still needs approval." : (asset?.error ?? '') || (record && this.rebuilding.has(record.requestId) ? "Rebuilding template… Wait for a new preview before generating." : ''));
+    const activeNotice = this.studioError || (this.recovering ? (this.recovering==='stop'?'Stopping pending pictures…':'Preparing unfinished pictures for review…') : rolling ? "Rewriting prompt with the story-reader model… Uses text tokens; image generation still needs approval." : (asset?.error ?? '') || (record && this.rebuilding.has(record.requestId) ? "Rebuilding template… Wait for a new preview before generating." : ''));
+    this.setNotice(activeNotice);
+    if (this.studioError) {
+      this.showModelStatus(this.studioError, 'error');
+    } else if (asset?.error) {
+      this.showModelStatus(asset.error, 'error');
+    } else if (asset?.status === 'generated' && !isSingleWorking) {
+      // Clear working status if completed
+      const modelStatusEl = this.root.querySelector<HTMLElement>('[data-model-status]');
+      if (modelStatusEl && modelStatusEl.textContent?.startsWith('🔄')) {
+        this.showModelStatus('Picture regenerated successfully!', 'success');
+        setTimeout(() => this.showModelStatus(''), 4000);
+      }
+    }
     this.updateCorrectionNavigation();
     this.publishOperations();
   }

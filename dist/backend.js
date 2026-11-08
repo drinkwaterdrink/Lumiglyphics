@@ -41449,7 +41449,7 @@ var init_protocol = __esm(() => {
   imageOperationEdits = exports_external.object({ prompt: exports_external.string().trim().min(1).max(65000).optional(), negativePrompt: exports_external.string().max(65000).optional(), parameters: exports_external.record(exports_external.string(), exports_external.unknown()).optional() }).strict();
   imagePromptOperation = { guidance: exports_external.string().max(400).optional(), edits: imageOperationEdits.optional() };
   RewriteImagePromptRequestSchema = exports_external.object({ type: exports_external.enum(["vn_regenerate_image_prompt", "vn_enrich_image_prompt"]), ...imageOperationScope, requestId: exports_external.string().min(1).max(100), ...imagePromptOperation }).strict();
-  PrepareImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_prepare_image"), ...imageOperationScope, jobId: exports_external.string().min(1).max(200), templateId: exports_external.string().min(1).max(100).optional(), ...imagePromptOperation, regeneratePrompt: exports_external.boolean().optional(), promptOperation: exports_external.enum(["rewrite", "enrich"]).optional(), reframe: exports_external.boolean().optional(), styleId: exports_external.string().max(100).optional(), fitToModel: exports_external.boolean().optional(), model: exports_external.string().max(200).optional(), connectionId: exports_external.string().max(200).optional(), manualCamera: exports_external.object({ shotSize: exports_external.string().optional(), angle: exports_external.string().optional(), lensFeel: exports_external.string().optional(), composition: exports_external.string().optional(), depth: exports_external.string().optional(), dialogueSafeArea: exports_external.enum(["auto", "always", "off"]).optional() }).strict().optional() }).strict();
+  PrepareImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_prepare_image"), ...imageOperationScope, jobId: exports_external.string().min(1).max(200), templateId: exports_external.string().min(1).max(100).optional(), ...imagePromptOperation, regeneratePrompt: exports_external.boolean().optional(), promptOperation: exports_external.enum(["rewrite", "enrich"]).optional(), reframe: exports_external.boolean().optional(), styleId: exports_external.string().max(100).optional(), fitToModel: exports_external.boolean().optional(), model: exports_external.string().max(200).optional(), connectionId: exports_external.string().max(200).optional(), quickGenerate: exports_external.boolean().optional(), manualCamera: exports_external.object({ shotSize: exports_external.string().optional(), angle: exports_external.string().optional(), lensFeel: exports_external.string().optional(), composition: exports_external.string().optional(), depth: exports_external.string().optional(), dialogueSafeArea: exports_external.enum(["auto", "always", "off"]).optional() }).strict().optional() }).strict();
   RestorePreviousImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_restore_previous_image"), ...imageOperationScope, swipeId: exports_external.number().int().nonnegative().nullable(), revision: exports_external.number().int().nonnegative(), jobId: exports_external.string().min(1).max(200), versionId: exports_external.string().min(1).max(256) }).strict();
   REFERENCE_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
   REFERENCE_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/avif"]);
@@ -46647,7 +46647,7 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
               }
               const adapted = await adaptImagePrompt(spindle2, preparedRequest, nextMetadata, config2, userId, jobSignal);
               const { promptAdaptationError: _previousAdaptationError, ...cleanMetadata } = baseMetadata;
-              return { request: adapted.request, metadata: { ...cleanMetadata, ...adapted.error ? { promptAdaptationError: adapted.error } : {}, regeneratePrompt: regenerateFor(nextCue), enrichPrompt: enrichFor(nextCue), imagePromptMetadata: nextMetadata, referenceSummary: nextPortrait ? `${nextPortrait.source ?? "captured"} portrait: ${nextPortrait.name} (${nextPortrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" } };
+              return { request: adapted.request, metadata: { ...cleanMetadata, provider: effectiveProvider ?? baseMetadata.provider, ...adapted.error ? { promptAdaptationError: adapted.error } : {}, regeneratePrompt: regenerateFor(nextCue), enrichPrompt: enrichFor(nextCue), imagePromptMetadata: nextMetadata, referenceSummary: nextPortrait ? `${nextPortrait.source ?? "captured"} portrait: ${nextPortrait.name} (${nextPortrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" } };
             }
           }, jobSignal) : frozen;
           if (signal.aborted)
@@ -46674,12 +46674,15 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
             delete approved.promptProfile;
           assertPromptLengths(approved.prompt, approved.negativePrompt, approved.promptProfile);
           assertEffectivePromptBudget(approved);
-          assertModelOutputParameters(selected?.provider ?? provider, approved.model, approved.parameters ?? {});
+          const activeConnectionId = approved.connection_id || selected?.id;
+          const activeSelected = activeConnectionId && activeConnectionId !== selected?.id && typeof spindle2.imageGen?.getConnection === "function" ? await spindle2.imageGen.getConnection(activeConnectionId, userId) : selected;
+          const activeProvider = activeSelected?.provider?.trim().toLowerCase() ?? selected?.provider ?? provider;
+          assertModelOutputParameters(activeProvider, approved.model, approved.parameters ?? {});
           if (approved.promptProfile?.output)
             assertCapabilityOutput(approved.promptProfile.output, approved.parameters ?? {});
           const { promptProfile: _promptProfile, ...providerRequest } = approved;
           const rawParams = providerOutputParameters(approved.parameters ?? {});
-          const safeParams = sanitizeImagePayloadParameters(rawParams, selected?.provider ?? provider, approved.model);
+          const safeParams = sanitizeImagePayloadParameters(rawParams, activeProvider, approved.model);
           if (cacheOptions.waitForDispatch) {
             do {
               await cacheOptions.waitForDispatch(scheduledJob, jobSignal);
@@ -46993,7 +46996,8 @@ async function handleImageReviewRpc(request, context) {
         fitToModel: request.fitToModel,
         model: request.model,
         connectionId: request.connectionId,
-        manualCamera: request.manualCamera
+        manualCamera: request.manualCamera,
+        generate: request.generate
       }))
         throw new Error("This request has already been handled or cancelled.");
       return;
@@ -49684,7 +49688,7 @@ async function prepareSingleImageUnlocked(spindle2, request, userId, quick) {
     return;
   spindle2.sendToFrontend({ type: "vn_turn", turn: view }, userId);
   const rebuildOpts = request.type === "vn_prepare_image" && (request.reframe || request.styleId || request.fitToModel || request.model || request.connectionId || request.manualCamera) ? { ...request.reframe !== undefined ? { reframe: request.reframe } : {}, ...request.styleId !== undefined ? { styleId: request.styleId } : {}, ...request.fitToModel !== undefined ? { fitToModel: request.fitToModel } : {}, ...request.model !== undefined ? { model: request.model } : {}, ...request.connectionId !== undefined ? { connectionId: request.connectionId } : {}, ...request.manualCamera !== undefined ? { manualCamera: request.manualCamera } : {} } : undefined;
-  await startAssets(spindle2, next, path3, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId], ...quick ? { quickGenerate: true } : {}, ...request.type === "vn_prepare_image" && request.edits ? { initialEdits: request.edits } : {}, ...request.type === "vn_prepare_image" && (request.regeneratePrompt === true || request.promptOperation) ? { regeneratePrompt: true, ...request.promptOperation ? { promptOperation: request.promptOperation } : {}, ...request.guidance ? { guidance: request.guidance } : {} } : {}, ...rebuildOpts ? { rebuild: rebuildOpts } : {} });
+  await startAssets(spindle2, next, path3, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId], ...quick || request.type === "vn_prepare_image" && request.quickGenerate ? { quickGenerate: true } : {}, ...request.type === "vn_prepare_image" && request.edits ? { initialEdits: request.edits } : {}, ...request.type === "vn_prepare_image" && (request.regeneratePrompt === true || request.promptOperation) ? { regeneratePrompt: true, ...request.promptOperation ? { promptOperation: request.promptOperation } : {}, ...request.guidance ? { guidance: request.guidance } : {} } : {}, ...rebuildOpts ? { rebuild: rebuildOpts } : {} });
 }
 async function processAssistantMessage(spindle2, chatId, message, content2, userId, options3) {
   if (!content2.trim() || message.is_user)

@@ -168,9 +168,6 @@ describe("ImageStudio Engine V3 Features (Phase 2)", () => {
     const select = root.querySelector("[data-artwork-connection]");
     select.value = "conn-flux";
 
-    const modelInput = root.querySelector("[data-artwork-model]");
-    modelInput.value = "blackforestlabs/flux-3/klein/text-to-image";
-
     const regenBtn = root.querySelector("[data-regenerate-model-single]");
     regenBtn.click();
 
@@ -179,6 +176,7 @@ describe("ImageStudio Engine V3 Features (Phase 2)", () => {
     const reprepare = sent[0] as any;
     expect(reprepare.connectionId).toBe("conn-flux");
     expect(reprepare.model).toBe("blackforestlabs/flux-3/klein/text-to-image");
+    expect(reprepare.generate).toBe(true);
 
     studio.destroy();
   });
