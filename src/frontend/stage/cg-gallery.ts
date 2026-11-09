@@ -1,5 +1,6 @@
 import {sceneImageCandidatesFor} from './image-loader.js';
 import { APERTURE_ICONS } from '../theme/aperture-theme.js';
+import { ImageLightbox } from './image-lightbox.js';
 import type { AssetView, TurnView } from '../../protocol.js';
 
 export interface CGItem {
@@ -21,7 +22,7 @@ export class CgGalleryModal {
   private readonly grid: HTMLElement;
   private readonly counter: HTMLElement;
   private readonly filterContainer: HTMLElement;
-  private readonly lightbox: HTMLElement;
+  private readonly lightbox: ImageLightbox;
   private items: CGItem[] = [];
   private ownerChat: string | null = null;
   private currentFilter: 'all' | 'milestones' | 'portraits' = 'all';
@@ -359,27 +360,22 @@ export class CgGalleryModal {
         </nav>
         <div class="cg-gallery-grid" data-cg-grid></div>
       </div>
-      <div class="cg-lightbox" data-cg-lightbox hidden>
-        <div class="cg-lightbox-top-bar">
-          <button type="button" class="cg-lightbox-btn" data-cg-lightbox-back>${APERTURE_ICONS.back} <span>Back to Gallery</span></button>
-          <div class="cg-lightbox-actions">
-            <button type="button" class="cg-lightbox-btn" data-cg-prev aria-label="Previous CG">◀ <span>Prev</span></button>
-            <button type="button" class="cg-lightbox-btn" data-cg-next aria-label="Next CG"><span>Next</span> ▶</button>
-            <button type="button" class="cg-lightbox-btn" data-cg-download>📥 <span>Export</span></button>
-            <button type="button" class="cg-lightbox-btn" data-cg-delete style="background:rgba(239,68,68,0.25);border-color:rgba(239,68,68,0.4);color:#fca5a5;">🗑️ <span>Delete</span></button>
-            <button type="button" class="cg-lightbox-btn cg-lightbox-close-pill" data-cg-lightbox-close aria-label="Close Lightbox">✕</button>
-          </div>
-        </div>
-        <img data-cg-lightbox-img src="" alt="Story CG" />
-        <div class="cg-lightbox-quote" data-cg-lightbox-quote></div>
-      </div>
-    `;
+      `;
 
     this.modal = this.backdrop.querySelector('.cg-gallery-modal')!;
     this.grid = this.backdrop.querySelector('[data-cg-grid]')!;
     this.counter = this.backdrop.querySelector('[data-cg-counter]')!;
     this.filterContainer = this.backdrop.querySelector('[data-cg-tabs]')!;
-    this.lightbox = this.backdrop.querySelector('[data-cg-lightbox]')!;
+    this.lightbox = new ImageLightbox(this.backdrop);
+    this.lightbox.onDelete = (item, index) => {
+      const list = this.filteredItems();
+      const cgItem = list[index];
+      if (cgItem) {
+        this.items = this.items.filter(i => i.id !== cgItem.id);
+        this.render();
+        this.onDeleteImage?.(cgItem);
+      }
+    };
 
     this.mount.append(this.backdrop);
     this.attachEvents();
@@ -400,59 +396,7 @@ export class CgGalleryModal {
       this.render();
     });
 
-    this.lightbox.querySelector('[data-cg-lightbox-back]')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.closeLightbox();
-    });
-
-    this.lightbox.querySelector('[data-cg-lightbox-close]')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.closeLightbox();
-    });
-
-    this.lightbox.addEventListener('click', (e) => {
-      if (e.target === this.lightbox) {
-        this.closeLightbox();
-      }
-    });
-
-    this.lightbox.querySelector('[data-cg-prev]')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const list = this.filteredItems();
-      if (list.length === 0) return;
-      const nextIndex = (this.activeLightboxIndex - 1 + list.length) % list.length;
-      this.openLightbox(nextIndex);
-    });
-
-    this.lightbox.querySelector('[data-cg-next]')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const list = this.filteredItems();
-      if (list.length === 0) return;
-      const nextIndex = (this.activeLightboxIndex + 1) % list.length;
-      this.openLightbox(nextIndex);
-    });
-
-    this.lightbox.querySelector('[data-cg-download]')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const item = this.items[this.activeLightboxIndex];
-      if (item?.imageUrl) {
-        const a = document.createElement('a');
-        a.href = item.imageUrl;
-        a.download = `lumiglyphics-cg-${item.id}.png`;
-        a.click();
-      }
-    });
-
-    this.lightbox.querySelector('[data-cg-delete]')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const item = this.items[this.activeLightboxIndex];
-      if (!item) return;
-      if (typeof window !== 'undefined' && window.confirm && !window.confirm(`Delete this picture from the story gallery?`)) return;
-      this.items = this.items.filter(i => i.id !== item.id);
-      this.closeLightbox();
-      this.render();
-      this.onDeleteImage?.(item);
-    });
+    // Interactive ImageLightbox handles touch pinch, mousewheel zoom, drag pan, and navigation buttons internally
 
     window.addEventListener('keydown', (e) => {
       if (!this.isOpen) return;
@@ -552,20 +496,22 @@ export class CgGalleryModal {
 
   private openLightbox(index: number): void {
     this.activeLightboxIndex = index;
-    const item = this.filteredItems()[index];
+    const list = this.filteredItems();
+    const item = list[index];
     if (!item) return;
 
-    const img = this.lightbox.querySelector<HTMLImageElement>('[data-cg-lightbox-img]')!;
-    const quote = this.lightbox.querySelector<HTMLElement>('[data-cg-lightbox-quote]')!;
-
-    img.src = item.imageUrl;
-    quote.textContent = item.storyExcerpt ? `“${item.storyExcerpt}”` : '';
-    this.lightbox.hidden = false;
+    const lightboxItems = list.map(i => ({
+      imageUrl: i.imageUrl,
+      title: i.title,
+      caption: i.title,
+      storyExcerpt: i.storyExcerpt
+    }));
+    this.lightbox.open(lightboxItems, index);
   }
 
   private closeLightbox(): void {
     this.activeLightboxIndex = -1;
-    this.lightbox.hidden = true;
+    this.lightbox.close();
   }
 
   private filteredItems(): CGItem[] {

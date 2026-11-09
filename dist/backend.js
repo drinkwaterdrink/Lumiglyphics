@@ -22825,11 +22825,14 @@ function family(model, provider) {
 }
 function resolveImagePromptProfile(provider, model, settings = {}, live, liveOutputs) {
   const p = provider?.trim().toLowerCase() ?? "", id3 = model?.trim() ?? "", f = family(id3.toLowerCase(), p), auto = settings.automaticImagePromptSettings !== false;
+  const isIdeogram = /ideogram/i.test(id3) || /ideogram/i.test(model ?? "");
   const liveLimit = p === "nanogpt" ? live?.get(id3) : undefined;
-  const providerLimit = liveLimit ?? (p === "nanogpt" ? Object.hasOwn(NANOGPT_PROMPT_CAPABILITIES, id3) ? NANOGPT_PROMPT_CAPABILITIES[id3] : undefined : undefined);
+  const catalogueLimit = p === "nanogpt" ? Object.hasOwn(NANOGPT_PROMPT_CAPABILITIES, id3) ? NANOGPT_PROMPT_CAPABILITIES[id3] : isIdeogram ? 1e4 : undefined : undefined;
+  const providerLimit = liveLimit ?? catalogueLimit;
   const budget = typeof settings.imagePromptBudget === "number" && Number.isFinite(settings.imagePromptBudget) ? settings.imagePromptBudget : 3000;
   const manual = settings.imagePromptBudgetOverride ? Math.min(50000, Math.max(256, Math.trunc(budget))) : undefined;
-  const maximum = Math.min(manual ?? (auto ? providerLimit ?? 3000 : 3000), providerLimit ?? 50000);
+  const fallbackTarget = isIdeogram ? 1e4 : 3000;
+  const maximum = Math.min(manual ?? (auto ? providerLimit ?? fallbackTarget : fallbackTarget), providerLimit ?? 50000);
   const liveOutput = p === "nanogpt" ? liveOutputs?.get(id3) : undefined;
   const output2 = auto && p === "nanogpt" ? liveOutput ?? (Object.hasOwn(NANOGPT_OUTPUT_CAPABILITIES, id3) ? NANOGPT_OUTPUT_CAPABILITIES[id3] : undefined) : undefined;
   return {
@@ -22841,7 +22844,7 @@ function resolveImagePromptProfile(provider, model, settings = {}, live, liveOut
     ...manual !== undefined ? { manualBudget: manual } : {},
     format: !auto ? settings.imagePromptFormat ?? "description" : f === "novelai" ? "tags" : f === "anima" ? "hybrid" : "description",
     ...output2 ? { output: output2, outputSource: liveOutput ? "live" : "catalogue" } : {},
-    negativeMode: auto && p === "nanogpt" && (/^z-image-turbo(?:-lora|-image-to-image)?$/.test(id3) || Boolean(output2) && /^flux-2-/.test(id3) || /^blackforestlabs\/flux-3\/(?:klein|pro|dev)(?:\/|$)/.test(id3) || /^black-forest-labs\/flux-3\/(?:text-to-image|edit)$/.test(id3)) ? "positive-only" : "supported-or-unknown",
+    negativeMode: auto && (isIdeogram || p === "nanogpt" && (/^z-image-turbo(?:-lora|-image-to-image)?$/.test(id3) || Boolean(output2) && /^flux-2-/.test(id3) || /^blackforestlabs\/flux-3\/(?:klein|pro|dev)(?:\/|$)/.test(id3) || /^black-forest-labs\/flux-3\/(?:text-to-image|edit)$/.test(id3))) ? "positive-only" : "supported-or-unknown",
     guidance: auto ? guidance[f] : `Keep the user's ${settings.imagePromptFormat ?? "description"} prompt format and weighting syntax.`
   };
 }
@@ -24221,10 +24224,11 @@ function compactNegativePrompt(text) {
 }
 function assertPromptLengths(prompt, negative = "", profile) {
   const total = prompt.length + negative.length;
-  const maximum = profile?.maxCharacters ?? IMAGE_PROMPT_MAX_CHARS;
+  const isPosOnly = profile?.negativeMode === "positive-only" || profile?.negativePolicy === "positive-only";
+  const maximum = profile?.hardMaxCharacters ?? profile?.maxCharacters ?? IMAGE_PROMPT_MAX_CHARS;
   if (total > maximum)
     throw new Error(`Combined positive and negative prompts are ${total.toLocaleString()} characters (${prompt.length.toLocaleString()} positive + ${negative.length.toLocaleString()} negative). Shorten them to ${maximum.toLocaleString()} characters total or fewer; unique details were not silently removed.`);
-  if (profile?.negativeMode === "positive-only" && negative.trim())
+  if (isPosOnly && negative.trim())
     throw new Error("This endpoint requires positive-only wording. Regenerate the prompt to incorporate essential constraints into the positive description, or clear the negative field after reviewing it.");
 }
 function fitPromptToBudget(prompt, negative = "", maxCharacters = IMAGE_PROMPT_MAX_CHARS, negativeMode) {
@@ -26582,6 +26586,9 @@ function normalizeConfigUncached(input2) {
     customPlannerInstructions: stringValue(input2.customPlannerInstructions, DEFAULT_CONFIG.customPlannerInstructions),
     referencePromptOverride: stringValue(input2.referencePromptOverride, DEFAULT_CONFIG.referencePromptOverride ?? ""),
     characterDnaPromptOverride: stringValue(input2.characterDnaPromptOverride, DEFAULT_CONFIG.characterDnaPromptOverride ?? ""),
+    promptEngineerOverride: stringValue(input2.promptEngineerOverride, DEFAULT_CONFIG.promptEngineerOverride ?? ""),
+    systemPromptProfiles: input2.systemPromptProfiles && typeof input2.systemPromptProfiles === "object" && !Array.isArray(input2.systemPromptProfiles) ? input2.systemPromptProfiles : {},
+    activeSystemPromptProfileId: stringValue(input2.activeSystemPromptProfileId, DEFAULT_CONFIG.activeSystemPromptProfileId ?? "default"),
     customCss: stringValue(input2.customCss, DEFAULT_CONFIG.customCss),
     ignoredTags: stringValue(input2.ignoredTags, DEFAULT_CONFIG.ignoredTags),
     displayRegexRules: stringValue(input2.displayRegexRules, DEFAULT_CONFIG.displayRegexRules),
@@ -26694,6 +26701,9 @@ var init_config = __esm(() => {
     customPlannerInstructions: "",
     referencePromptOverride: "",
     characterDnaPromptOverride: "",
+    promptEngineerOverride: "",
+    systemPromptProfiles: {},
+    activeSystemPromptProfileId: "default",
     customCss: "",
     ignoredTags: "",
     displayRegexRules: "",
@@ -30119,8 +30129,12 @@ function buildVisualBrief(config2, scene, cue, appearances, characterDNALibrary,
       }
     }
     const saved2 = Object.entries(appearances ?? {}).find(([key]) => areNamesEquivalent(key, member.name))?.[1];
-    const memberAttire = "attire" in member && member.attire ? String(member.attire) : memberDna?.activeOutfit || memberDna?.signatureOutfit || undefined;
-    const appearanceBase = manual ? member.appearance : dnaAppearance || saved2 || member.appearance;
+    const cont = scene.continuity?.characters ? Object.entries(scene.continuity.characters).find(([k]) => areNamesEquivalent(k, member.name))?.[1] : undefined;
+    const contAppearance = cont?.appearance ? Object.values(cont.appearance).filter(Boolean).join(", ") : undefined;
+    const contWardrobe = cont?.wardrobe ? Object.values(cont.wardrobe).filter(Boolean).join(", ") : undefined;
+    const fallbackAppearance = dnaAppearance || saved2 || (member.appearance?.trim() ? member.appearance : contAppearance);
+    const memberAttire = "attire" in member && member.attire ? String(member.attire) : memberDna?.activeOutfit || memberDna?.signatureOutfit || contWardrobe || undefined;
+    const appearanceBase = manual ? member.appearance : fallbackAppearance || member.appearance;
     const appearance2 = memberAttire ? applyAttireOverride(appearanceBase, memberAttire) : appearanceBase;
     return { ...member, appearance: appearance2, attire: memberAttire };
   });
@@ -45932,7 +45946,8 @@ async function enrichImagePrompt(spindle2, request, metadata, config2, userId, s
     "2. Visual & Sensory Detail: Add vivid specifics regarding lighting (volumetric god rays, golden hour, rim light, ambient bounce), textures (fabric weave, glistening skin, hair strands, surface grit), atmosphere (dust motes, mist, warmth/coolness), and camera optics (shallow depth of field, 35mm lens perspective, bokeh, sharp subject focus).",
     "3. Subject Integrity: Keep existing characters, genders, facial traits, and hair/eye colors fully intact unless user guidance requested a modification.",
     "4. Style Matching: Follow the visual style (anime, cinematic photo, oil painting, digital art) already established.",
-    "5. Model Format: " + (profile.format === "tags" ? "Use detailed weighted Danbooru-style tags and visual descriptions." : profile.format === "hybrid" ? "Use a combination of precise tags and descriptive natural language clauses." : "Use flowing, highly descriptive natural visual prose with principal subject and camera setup first."),
+    config2.promptEngineerOverride?.trim() || "",
+    /ideogram/i.test(request.model ?? "") || profile.family === "ideogram" || config2.ideogramPromptMode && config2.ideogramPromptMode !== "off" ? '5. Model Format: IDEOGRAM V4 DIRECT JSON: Format "prompt" as valid Ideogram Direct JSON with keys high_level_description, style_description (aesthetics, lighting, photo, medium, color_palette), and compositional_deconstruction (background, elements with bboxes). Return negativePrompt as an empty string.' : "5. Model Format: " + (profile.format === "tags" ? "Use detailed weighted Danbooru-style tags and visual descriptions." : profile.format === "hybrid" ? "Use a combination of precise tags and descriptive natural language clauses." : "Use flowing, highly descriptive natural visual prose with principal subject and camera setup first."),
     profile.negativeMode === "positive-only" ? "This model uses no negative prompt. Leave negativePrompt as an empty string." : "Maintain a refined negative prompt targeting anatomical deformities, blur, bad hands, artifacts, and unwanted text.",
     `Budget: Aim for an enriched prompt between 500 and ${Math.min(maximum - 150, 3500)} characters. Do NOT make it short or sparse; enrich it with artistic substance.`,
     anchors.entries.length ? "IMMUTABLE IDENTITY ANCHORS: Include each token below exactly once in the positive prompt at the character location: " + JSON.stringify(anchors.entries) : ""

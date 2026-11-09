@@ -10,6 +10,7 @@ import {
   formatCharacterDNAToTags,
 } from '../../shared/character-dna.js';
 import { APERTURE_ICONS } from '../theme/aperture-theme.js';
+import { ImageLightbox } from './image-lightbox.js';
 import type { WorkspaceSurface } from './reader-workspace.js';
 import type { TurnView, AssetView } from '../../protocol.js';
 
@@ -59,6 +60,7 @@ export class CharacterFolio implements WorkspaceSurface {
   private deleteConfirm=false;
   private mergeOther='';
   private accumulatedCgs = new Map<string, Array<{ imageUrl: string; caption?: string }>>();
+  private readonly lightbox: ImageLightbox;
 
   setContext(chatId:string|null):void{
     if(this.chatId===chatId)return;
@@ -661,6 +663,11 @@ export class CharacterFolio implements WorkspaceSurface {
 
     this.rosterCarousel = this.element.querySelector('[data-folio-roster]')!;
     this.detailContainer = this.element.querySelector('[data-folio-body]')!;
+    this.lightbox = new ImageLightbox(this.element);
+    this.lightbox.onDelete = (item) => {
+      this.removeCg(item.imageUrl);
+      this.handlers.onDeleteImage?.(item.imageUrl);
+    };
   }
 
   enter(): void {
@@ -849,6 +856,15 @@ export class CharacterFolio implements WorkspaceSurface {
 
   setActiveCharacter(idOrName: string): void {
     this.cancelProposal();
+    if (!idOrName || !idOrName.trim()) {
+      if (!this.activeCharacterId || !this.library[this.activeCharacterId]) {
+        const first = Object.keys(this.library)[0];
+        this.activeCharacterId = first || null;
+      }
+      this.renderRoster();
+      this.renderDetail();
+      return;
+    }
     const key = idOrName.trim().toLowerCase();
     const byIdentity = findCharacterDNA(this.library, idOrName);
     if (byIdentity) {
@@ -1271,20 +1287,30 @@ export class CharacterFolio implements WorkspaceSurface {
     obsCard.append(obsGrid);
     loreWrap.append(obsCard);
 
-    // Facts list if present
+    // Facts list if present (deduplicated)
     if (lore.facts && lore.facts.length > 0) {
-      const factsCard = document.createElement('div');
-      factsCard.className = 'folio-group-card';
-      factsCard.innerHTML = `<div class="folio-group-header"><h4>📝 Narrative Facts</h4></div>`;
-      const ul = document.createElement('ul');
-      ul.style.cssText = 'margin:0;padding-left:18px;font-size:12px;line-height:1.6;color:var(--vn-shell-text);';
-      for (const fact of lore.facts) {
-        const li = document.createElement('li');
-        li.textContent = `${fact.field ? `${fact.field}: ` : ''}${fact.value}`;
-        ul.append(li);
+      const seenFacts = new Set<string>();
+      const dedupedFacts = lore.facts.filter(fact => {
+        const key = `${fact.field || ''}::${(fact.value || '').trim().toLowerCase()}`;
+        if (seenFacts.has(key)) return false;
+        seenFacts.add(key);
+        return true;
+      });
+
+      if (dedupedFacts.length > 0) {
+        const factsCard = document.createElement('div');
+        factsCard.className = 'folio-group-card';
+        factsCard.innerHTML = `<div class="folio-group-header"><h4>📝 Narrative Facts</h4></div>`;
+        const ul = document.createElement('ul');
+        ul.style.cssText = 'margin:0;padding-left:18px;font-size:12px;line-height:1.6;color:var(--vn-shell-text);';
+        for (const fact of dedupedFacts) {
+          const li = document.createElement('li');
+          li.textContent = `${fact.field ? `${fact.field}: ` : ''}${fact.value}`;
+          ul.append(li);
+        }
+        factsCard.append(ul);
+        loreWrap.append(factsCard);
       }
-      factsCard.append(ul);
-      loreWrap.append(factsCard);
     }
 
     // Player Notes
@@ -1369,7 +1395,14 @@ export class CharacterFolio implements WorkspaceSurface {
         img.src = cg.imageUrl;
         img.alt = cg.caption || char.name;
         img.title = 'Click to inspect full image';
-        img.onclick = () => window.open(cg.imageUrl, '_blank');
+        const lightboxItems = collected.map(item => ({
+          imageUrl: item.imageUrl,
+          caption: item.caption || char.name,
+          storyExcerpt: item.caption
+        }));
+        img.onclick = () => {
+          this.lightbox.open(lightboxItems, collected.indexOf(cg));
+        };
 
         // Status badges container
         const badges = document.createElement('div');

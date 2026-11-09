@@ -178,10 +178,17 @@ export function buildVisualBrief(
       }
     }
     const saved = Object.entries(appearances ?? {}).find(([key]) => areNamesEquivalent(key, member.name))?.[1];
+    
+    // Continuity fallback if Character DNA or saved appearance is not yet recorded
+    const cont = scene.continuity?.characters ? Object.entries(scene.continuity.characters).find(([k]) => areNamesEquivalent(k, member.name))?.[1] : undefined;
+    const contAppearance = cont?.appearance ? Object.values(cont.appearance).filter(Boolean).join(', ') : undefined;
+    const contWardrobe = cont?.wardrobe ? Object.values(cont.wardrobe).filter(Boolean).join(', ') : undefined;
+
+    const fallbackAppearance = dnaAppearance || saved || (member.appearance?.trim() ? member.appearance : contAppearance);
     const memberAttire = ('attire' in member && member.attire)
       ? String(member.attire)
-      : (memberDna?.activeOutfit || memberDna?.signatureOutfit || undefined);
-    const appearanceBase = manual ? member.appearance : (dnaAppearance || saved || member.appearance);
+      : (memberDna?.activeOutfit || memberDna?.signatureOutfit || contWardrobe || undefined);
+    const appearanceBase = manual ? member.appearance : (fallbackAppearance || member.appearance);
     const appearance = memberAttire ? applyAttireOverride(appearanceBase, memberAttire) : appearanceBase;
     return {...member, appearance, attire: memberAttire};
   });

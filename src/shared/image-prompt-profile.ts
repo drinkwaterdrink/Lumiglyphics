@@ -57,18 +57,21 @@ const guidance:Record<ImagePromptProfile['family'],string>={
 };
 export function resolveImagePromptProfile(provider:string|null|undefined,model:string|null|undefined,settings:PromptProfileSettings={},live?:ReadonlyMap<string,number>,liveOutputs?:ReadonlyMap<string,ModelOutputCapabilities>):ImagePromptProfile{
  const p=provider?.trim().toLowerCase()??'',id=model?.trim()??'',f=family(id.toLowerCase(),p),auto=settings.automaticImagePromptSettings!==false;
+ const isIdeogram=/ideogram/i.test(id)||/ideogram/i.test(model??'');
  const liveLimit=p==='nanogpt'?live?.get(id):undefined;
- const providerLimit=liveLimit??(p==='nanogpt'?Object.hasOwn(NANOGPT_PROMPT_CAPABILITIES,id)?NANOGPT_PROMPT_CAPABILITIES[id]:undefined:undefined);
+ const catalogueLimit=p==='nanogpt'?(Object.hasOwn(NANOGPT_PROMPT_CAPABILITIES,id)?NANOGPT_PROMPT_CAPABILITIES[id]:(isIdeogram?10000:undefined)):undefined;
+ const providerLimit=liveLimit??catalogueLimit;
  const budget=typeof settings.imagePromptBudget==='number'&&Number.isFinite(settings.imagePromptBudget)?settings.imagePromptBudget:3000;
  const manual=settings.imagePromptBudgetOverride?Math.min(50000,Math.max(256,Math.trunc(budget))):undefined;
- const maximum=Math.min(manual??(auto?providerLimit??3000:3000),providerLimit??50000);
+ const fallbackTarget=isIdeogram?10000:3000;
+ const maximum=Math.min(manual??(auto?providerLimit??fallbackTarget:fallbackTarget),providerLimit??50000);
  const liveOutput=p==='nanogpt'?liveOutputs?.get(id):undefined;
  const output=auto&&p==='nanogpt'?(liveOutput??(Object.hasOwn(NANOGPT_OUTPUT_CAPABILITIES,id)?NANOGPT_OUTPUT_CAPABILITIES[id]:undefined)):undefined;
  return {version:1,family:f,maxCharacters:maximum,source:manual!==undefined?'manual':auto&&providerLimit!==undefined?liveLimit!==undefined?'live':'catalogue':'fallback',
   ...(providerLimit!==undefined?{providerLimit}:{}),...(manual!==undefined?{manualBudget:manual}:{}),
   format:!auto?settings.imagePromptFormat??'description':f==='novelai'?'tags':f==='anima'?'hybrid':'description',
   ...(output?{output,outputSource:liveOutput?'live' as const:'catalogue' as const}:{}),
-  negativeMode:auto&&p==='nanogpt'&&(/^z-image-turbo(?:-lora|-image-to-image)?$/.test(id)||(Boolean(output)&&/^flux-2-/.test(id))||/^blackforestlabs\/flux-3\/(?:klein|pro|dev)(?:\/|$)/.test(id)||/^black-forest-labs\/flux-3\/(?:text-to-image|edit)$/.test(id))?'positive-only':'supported-or-unknown',
+  negativeMode:(auto&&(isIdeogram||(p==='nanogpt'&&(/^z-image-turbo(?:-lora|-image-to-image)?$/.test(id)||(Boolean(output)&&/^flux-2-/.test(id))||/^blackforestlabs\/flux-3\/(?:klein|pro|dev)(?:\/|$)/.test(id)||/^black-forest-labs\/flux-3\/(?:text-to-image|edit)$/.test(id)))))?'positive-only':'supported-or-unknown',
   guidance:auto?guidance[f]:`Keep the user's ${settings.imagePromptFormat??'description'} prompt format and weighting syntax.`,};
 }
 export function promptProfileSummary(profile:ImagePromptProfile):string{

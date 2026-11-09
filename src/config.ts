@@ -153,6 +153,9 @@ export type VisualNovelConfig = {
   customPlannerInstructions: string;
   referencePromptOverride?: string;
   characterDnaPromptOverride?: string;
+  promptEngineerOverride?: string;
+  systemPromptProfiles?: Record<string, { id: string; name: string; plannerPrompt?: string; referencePrompt?: string; characterDnaPrompt?: string; promptEngineerPrompt?: string }>;
+  activeSystemPromptProfileId?: string;
   customCss: string;
   ignoredTags: string;
   displayRegexRules: string;
@@ -243,6 +246,9 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   customPlannerInstructions: "",
   referencePromptOverride: "",
   characterDnaPromptOverride: "",
+  promptEngineerOverride: "",
+  systemPromptProfiles: {},
+  activeSystemPromptProfileId: "default",
   customCss: "",
   ignoredTags: "",
   displayRegexRules: "",
@@ -479,6 +485,9 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     customPlannerInstructions: stringValue(input.customPlannerInstructions, DEFAULT_CONFIG.customPlannerInstructions),
     referencePromptOverride: stringValue(input.referencePromptOverride, DEFAULT_CONFIG.referencePromptOverride ?? ""),
     characterDnaPromptOverride: stringValue(input.characterDnaPromptOverride, DEFAULT_CONFIG.characterDnaPromptOverride ?? ""),
+    promptEngineerOverride: stringValue(input.promptEngineerOverride, DEFAULT_CONFIG.promptEngineerOverride ?? ""),
+    systemPromptProfiles: input.systemPromptProfiles && typeof input.systemPromptProfiles === "object" && !Array.isArray(input.systemPromptProfiles) ? input.systemPromptProfiles as Record<string, any> : {},
+    activeSystemPromptProfileId: stringValue(input.activeSystemPromptProfileId, DEFAULT_CONFIG.activeSystemPromptProfileId ?? "default"),
     customCss: stringValue(input.customCss, DEFAULT_CONFIG.customCss),
     ignoredTags: stringValue(input.ignoredTags, DEFAULT_CONFIG.ignoredTags),
     displayRegexRules: stringValue(input.displayRegexRules, DEFAULT_CONFIG.displayRegexRules),

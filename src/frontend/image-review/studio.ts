@@ -863,7 +863,7 @@ export class ImageStudio {
       total+=length;
       this.el<HTMLElement>(`[data-${name}-count]`).textContent=`${length.toLocaleString()} characters`;
     }
-    const profile=this.record()?.promptProfile,maximum=profile?.maxCharacters??IMAGE_PROMPT_MAX_CHARS;
+    const record=this.record(),profile=record?.promptProfile,profileV2=record?.promptProfileV2,isIdeogram=Boolean(record?.model&&/ideogram/i.test(record.model)),maximum=profileV2?.hardMaxCharacters??profile?.maxCharacters??(isIdeogram?10000:IMAGE_PROMPT_MAX_CHARS);
     let error='';
     try{assertPromptLengths(this.el<HTMLTextAreaElement>('[data-positive]').value,this.el<HTMLTextAreaElement>('[data-negative]').value,profile);}catch(cause){error=cause instanceof Error?cause.message:String(cause);}
     this.el<HTMLElement>('[data-combined-count]').textContent=`${total.toLocaleString()} / ${maximum.toLocaleString()} combined characters${error?' — blocked draft; repair required':''}`;
@@ -928,7 +928,7 @@ export class ImageStudio {
     if(editPrimary)this.el('[data-edit-help]').textContent='Edit the wording below, then choose Prepare edited preview. Your saved request stays unchanged until approval.';
     for(const selector of ['[data-positive]','[data-negative]'])this.el(selector).setAttribute('aria-invalid',String(Boolean(error)));
     for(const selector of ['[data-generate]','[data-prepare]']){const button=this.el<HTMLButtonElement>(selector);if(button.dataset.available!==undefined)button.disabled=button.dataset.available!=='true'||Boolean(error);}
-    const retry=this.el<HTMLButtonElement>('[data-retry-image]'),record=this.record();
+    const retry=this.el<HTMLButtonElement>('[data-retry-image]');
     if(retry.dataset.available!==undefined)retry.disabled=retry.dataset.available!=='true'||Boolean(error&&record&&this.drafts.has(this.draftKey(record)));
     this.updateCorrectionNavigation();
     const reviewable = (this.turn?.imageRequests ?? []).filter(r => r.state === 'review');
@@ -1153,14 +1153,15 @@ export class ImageStudio {
     if(!this.turn||this.el<HTMLButtonElement>('[data-regenerate-prompt]').disabled)return;
     const record=this.record();
     let edits:ImageRequestEdits|undefined;
-    const profile=record?.promptProfile;
-    const maxChars=profile?.maxCharacters??IMAGE_PROMPT_MAX_CHARS;
+    const profile=record?.promptProfile,profileV2=record?.promptProfileV2,isIdeogram=Boolean(record?.model&&/ideogram/i.test(record.model));
+    const maxChars=profileV2?.hardMaxCharacters??profile?.maxCharacters??(isIdeogram?10000:IMAGE_PROMPT_MAX_CHARS);
+    const isPosOnly=profile?.negativeMode==='positive-only'||profileV2?.negativePolicy==='positive-only'||isIdeogram;
     const posVal=this.el<HTMLTextAreaElement>('[data-positive]').value;
     const negVal=this.el<HTMLTextAreaElement>('[data-negative]').value;
     const total=posVal.length+negVal.length;
-    const needsFit=Boolean(record)&&(total>maxChars||profile?.negativeMode==='positive-only'&&Boolean(negVal.trim()));
+    const needsFit=Boolean(record)&&(total>maxChars||isPosOnly&&Boolean(negVal.trim()));
     if(needsFit){
-      const fitted=fitPromptToBudget(posVal,negVal,maxChars,profile?.negativeMode);
+      const fitted=fitPromptToBudget(posVal,negVal,maxChars,isPosOnly?'positive-only':profile?.negativeMode);
       this.el<HTMLTextAreaElement>('[data-positive]').value=fitted.prompt;
       this.el<HTMLTextAreaElement>('[data-negative]').value=fitted.negativePrompt;
       if (record) {
@@ -1198,7 +1199,10 @@ export class ImageStudio {
   private updateRewriteLabel():void{
     const record=this.record(),button=this.el<HTMLButtonElement>('[data-regenerate-prompt]');
     const total=this.el<HTMLTextAreaElement>('[data-positive]').value.length+this.el<HTMLTextAreaElement>('[data-negative]').value.length;
-    const needsFit=Boolean(record)&&(total>(record?.promptProfile?.maxCharacters??3000)||record?.promptProfile?.negativeMode==='positive-only'&&Boolean(this.el<HTMLTextAreaElement>('[data-negative]').value.trim()));
+    const isIdeo=Boolean(record?.model&&/ideogram/i.test(record.model));
+    const maxBudget=record?.promptProfileV2?.hardMaxCharacters??record?.promptProfile?.maxCharacters??(isIdeo?10000:3000);
+    const posOnly=record?.promptProfile?.negativeMode==='positive-only'||record?.promptProfileV2?.negativePolicy==='positive-only'||isIdeo;
+    const needsFit=Boolean(record)&&(total>maxBudget||posOnly&&Boolean(this.el<HTMLTextAreaElement>('[data-negative]').value.trim()));
     const busy=this.preparing.has(this.selectedJob)||Boolean(record&&this.rerolling.has(record.requestId));
     button.textContent=busy?needsFit?'Fitting prompt…':'Rewriting prompt…':needsFit?'Fit to budget':'Rewrite prompt';
     button.title=needsFit?'Compresses the current edited draft while preserving named subjects and their appearance facts. Uses story-reader text tokens; generation still requires approval.':'Uses the current edited wording to describe the same scene again. Uses story-reader text tokens; generation still requires approval.';

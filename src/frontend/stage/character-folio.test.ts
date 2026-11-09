@@ -318,3 +318,68 @@ it('allows setting primary face reference and secondary outfit reference in the 
     restore();
   }
 });
+
+it('setActiveCharacter with empty string does not create blank character, facts are deduplicated, and thumbnails open lightbox', () => {
+  const restore = installFakeDocument();
+  try {
+    const f: any = new CharacterFolio({});
+    f.setLibrary({
+      characters: {
+        'nadine': {
+          id: 'nadine',
+          name: 'Nadine',
+          aliases: [],
+          hair: {},
+          eyes: {},
+          build: {},
+          signatureOutfit: '',
+          distinguishingFeatures: [],
+          colorPalette: [],
+          locked: false,
+          lastUpdated: 1000
+        }
+      }
+    } as any);
+
+    // 1. Calling setActiveCharacter with empty string
+    f.setActiveCharacter('');
+    expect(Object.keys(f.library)).toEqual(['nadine']);
+    expect(f.activeCharacterId).toBe('nadine');
+
+    f.setActiveCharacter('   ');
+    expect(Object.keys(f.library)).toEqual(['nadine']);
+
+    // 2. Facts deduplication
+    f.loreMap['nadine'] = {
+      facts: [
+        { field: 'appearance', value: 'Tall woman in linen coat' },
+        { field: 'appearance', value: 'Tall woman in linen coat' },
+        { field: 'appearance', value: 'Tall woman in linen coat' },
+        { field: 'outfit', value: 'Linen coat' }
+      ]
+    };
+    f.activeSubTab = 'lore';
+    f.renderDetail();
+
+    const factLis = f.detailContainer.querySelectorAll('.folio-group-card ul li');
+    // Expect exactly 2 unique facts: appearance and outfit
+    expect(factLis.length).toBe(2);
+    expect(factLis[0].textContent).toContain('Tall woman in linen coat');
+    expect(factLis[1].textContent).toContain('Linen coat');
+
+    // 3. Lightbox on image thumbnail click
+    f.loreMap['nadine'].cgs = [
+      { id: '1', imageUrl: 'https://example.com/pic1.png', caption: 'Pic 1' }
+    ];
+    f.activeSubTab = 'cgs';
+    f.renderDetail();
+
+    expect(f.lightbox.host.hidden).toBe(true);
+    const thumb = f.detailContainer.querySelector('.folio-cg-thumb');
+    expect(thumb).not.toBeNull();
+    thumb.click();
+    expect(f.lightbox.host.hidden).toBe(false);
+  } finally {
+    restore();
+  }
+});

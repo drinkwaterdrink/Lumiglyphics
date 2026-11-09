@@ -24,11 +24,12 @@ export function compactNegativePrompt(text: string): string {
   }).join(', ');
 }
 
-export function assertPromptLengths(prompt: string, negative = '', profile?:ImagePromptProfile): void {
+export function assertPromptLengths(prompt: string, negative = '', profile?: ImagePromptProfile | any): void {
   const total = prompt.length + negative.length;
-  const maximum=profile?.maxCharacters??IMAGE_PROMPT_MAX_CHARS;
+  const isPosOnly = profile?.negativeMode === 'positive-only' || profile?.negativePolicy === 'positive-only';
+  const maximum = profile?.hardMaxCharacters ?? profile?.maxCharacters ?? IMAGE_PROMPT_MAX_CHARS;
   if (total > maximum) throw new Error(`Combined positive and negative prompts are ${total.toLocaleString()} characters (${prompt.length.toLocaleString()} positive + ${negative.length.toLocaleString()} negative). Shorten them to ${maximum.toLocaleString()} characters total or fewer; unique details were not silently removed.`);
-  if(profile?.negativeMode==='positive-only'&&negative.trim())throw new Error('This endpoint requires positive-only wording. Regenerate the prompt to incorporate essential constraints into the positive description, or clear the negative field after reviewing it.');
+  if (isPosOnly && negative.trim()) throw new Error('This endpoint requires positive-only wording. Regenerate the prompt to incorporate essential constraints into the positive description, or clear the negative field after reviewing it.');
 }
 
 /**

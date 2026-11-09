@@ -170,7 +170,10 @@ export async function enrichImagePrompt(
     '2. Visual & Sensory Detail: Add vivid specifics regarding lighting (volumetric god rays, golden hour, rim light, ambient bounce), textures (fabric weave, glistening skin, hair strands, surface grit), atmosphere (dust motes, mist, warmth/coolness), and camera optics (shallow depth of field, 35mm lens perspective, bokeh, sharp subject focus).',
     '3. Subject Integrity: Keep existing characters, genders, facial traits, and hair/eye colors fully intact unless user guidance requested a modification.',
     '4. Style Matching: Follow the visual style (anime, cinematic photo, oil painting, digital art) already established.',
-    '5. Model Format: ' + (profile.format === 'tags' ? 'Use detailed weighted Danbooru-style tags and visual descriptions.' : profile.format === 'hybrid' ? 'Use a combination of precise tags and descriptive natural language clauses.' : 'Use flowing, highly descriptive natural visual prose with principal subject and camera setup first.'),
+    config.promptEngineerOverride?.trim() || '',
+    (/ideogram/i.test(request.model ?? '') || ((profile.family as string) === 'ideogram') || (config.ideogramPromptMode && config.ideogramPromptMode !== 'off'))
+      ? '5. Model Format: IDEOGRAM V4 DIRECT JSON: Format "prompt" as valid Ideogram Direct JSON with keys high_level_description, style_description (aesthetics, lighting, photo, medium, color_palette), and compositional_deconstruction (background, elements with bboxes). Return negativePrompt as an empty string.'
+      : ('5. Model Format: ' + (profile.format === 'tags' ? 'Use detailed weighted Danbooru-style tags and visual descriptions.' : profile.format === 'hybrid' ? 'Use a combination of precise tags and descriptive natural language clauses.' : 'Use flowing, highly descriptive natural visual prose with principal subject and camera setup first.')),
     profile.negativeMode === 'positive-only'
       ? 'This model uses no negative prompt. Leave negativePrompt as an empty string.'
       : 'Maintain a refined negative prompt targeting anatomical deformities, blur, bad hands, artifacts, and unwanted text.',
