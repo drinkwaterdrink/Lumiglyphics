@@ -327,6 +327,129 @@ describe("Previous Image Versions Restoration & Guided Prompt Enricher", () => {
     expect(enriched.prompt).toContain("cinematic rim lighting");
     expect(calledPrompt).toContain("make her hair longer, cinematic rim lighting");
   });
+
+  test("enrichImagePrompt formats Ideogram V4 Direct JSON with empty negativePrompt", async () => {
+    let calledPrompt = "";
+    const spindle: any = {
+      connections: {
+        get: async () => ({ id: "conn-1", provider: "openai", model: "gpt-4o" }),
+        list: async () => [{ id: "conn-1", provider: "openai", model: "gpt-4o" }]
+      },
+      generate: {
+        raw: async (req: any) => {
+          calledPrompt = req.messages[1].content;
+          return {
+            content: JSON.stringify({
+              high_level_description: "A wide cinematic photograph of Nadine in a cedar loft",
+              style_description: {
+                aesthetics: "cinematic realism",
+                lighting: "morning light",
+                photo: "35mm prime",
+                medium: "photograph",
+                color_palette: ["#0B1021", "#3A86FF", "#E2E8F0", "#1C2541"]
+              },
+              compositional_deconstruction: {
+                background: "cedar loft with morning sun",
+                elements: [
+                  { type: "obj", bbox: [120, 200, 880, 800], desc: "Nadine in apron", color_palette: ["#0B1021", "#3A86FF"] }
+                ]
+              }
+            })
+          };
+        }
+      }
+    };
+
+    const cfg: any = {
+      ...DEFAULT_CONFIG,
+      plannerConnectionId: "conn-1",
+      plannerModel: "gpt-4o"
+    };
+
+    const initialRequest: any = {
+      model: "ideogram/v4/instant",
+      prompt: "Nadine in apron standing in kitchen",
+      negativePrompt: "blur",
+      promptProfile: {
+        maxCharacters: 10000,
+        format: "description",
+        guidance: "Direct JSON",
+        negativeMode: "positive-only"
+      }
+    };
+
+    const enriched = await enrichImagePrompt(
+      spindle,
+      initialRequest,
+      undefined,
+      cfg,
+      "user-1",
+      new AbortController().signal,
+      "add morning atmosphere"
+    );
+
+    expect(enriched.prompt.startsWith("{")).toBe(true);
+    const parsed = JSON.parse(enriched.prompt);
+    expect(parsed.high_level_description).toBeDefined();
+    expect(parsed.style_description).toBeDefined();
+    expect(parsed.compositional_deconstruction).toBeDefined();
+    expect(enriched.negativePrompt).toBe("");
+  });
+
+  test("enrichImagePrompt formats FLUX.3 Klein with character tags", async () => {
+    const spindle: any = {
+      connections: {
+        get: async () => ({ id: "conn-1", provider: "openai", model: "gpt-4o" }),
+        list: async () => [{ id: "conn-1", provider: "openai", model: "gpt-4o" }]
+      },
+      generate: {
+        raw: async () => ({
+          content: JSON.stringify({
+            prompt: "A medium shot photograph. In the foreground, Nadine with wavy hair stands near the table.",
+            negativePrompt: ""
+          })
+        })
+      }
+    };
+
+    const cfg: any = {
+      ...DEFAULT_CONFIG,
+      plannerConnectionId: "conn-1",
+      plannerModel: "gpt-4o"
+    };
+
+    const initialRequest: any = {
+      model: "blackforestlabs/flux-3/klein",
+      prompt: "Nadine near table",
+      negativePrompt: "",
+      promptProfile: {
+        maxCharacters: 3000,
+        format: "description",
+        guidance: "FLUX Klein",
+        negativeMode: "positive-only"
+      }
+    };
+
+    const metadata: any = {
+      brief: {
+        subjects: "Nadine: wavy chestnut hair, hazel eyes",
+        scene: "kitchen"
+      }
+    };
+
+    const enriched = await enrichImagePrompt(
+      spindle,
+      initialRequest,
+      metadata,
+      cfg,
+      "user-1",
+      new AbortController().signal,
+      "make it vivid"
+    );
+
+    expect(enriched.prompt).toContain("<subject_nadine> Nadine");
+    expect(enriched.negativePrompt).toBe("");
+  });
 });
 
 test('restoring artwork keeps its own subject, template, prompt and generation fingerprint',async()=>{

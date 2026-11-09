@@ -10,3 +10,10 @@ test('unknown visual fields and competing alternatives cannot be silently flatte
  expect(()=>promptWriterFields([{prompt:'A scene'}],'')).toThrow('one JSON object');
  expect(()=>promptWriterFields({prompt:{scene:'A scene'}},'')).toThrow('must be text');
 });
+test('supports Ideogram Direct JSON objects directly and nested in prompt',()=>{
+ const direct = { high_level_description: 'A scene description', style_description: { aesthetics: 'photo' } };
+ expect(promptWriterFields(direct, 'no blur')).toEqual({ prompt: JSON.stringify(direct), negativePrompt: '' });
+
+ const nested = { prompt: direct, negativePrompt: 'should be cleared' };
+ expect(promptWriterFields(nested, 'no blur')).toEqual({ prompt: JSON.stringify(direct), negativePrompt: '' });
+});
