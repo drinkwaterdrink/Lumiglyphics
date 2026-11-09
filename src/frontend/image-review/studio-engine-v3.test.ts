@@ -205,4 +205,35 @@ describe("ImageStudio Engine V3 Features (Phase 2)", () => {
 
     studio.destroy();
   });
+
+  test("supports unified all-in-one artwork studio layout with quick navigation", () => {
+    const sent: FrontendRequest[] = [];
+    const mount = new FakeNode("div") as unknown as HTMLElement;
+    const studio = new ImageStudio(mount, (req) => sent.push(req), () => {});
+
+    studio.setTurn(createMockTurn());
+    studio.open();
+
+    const root = (studio as any).root;
+    const toggleBtn = root.querySelector("[data-layout-mode-toggle]");
+    expect(toggleBtn).not.toBeNull();
+
+    // Toggle to unified mode
+    toggleBtn.click();
+    expect(toggleBtn.textContent).toContain("All in One");
+
+    // In unified mode, all panels are accessible and visible simultaneously
+    const panels = root.querySelectorAll(".studio-tab-panel");
+    expect(panels.length).toBe(6);
+    for (const panel of panels) {
+      expect(panel.hidden).toBe(false);
+    }
+
+    // Quick-jump pill navigation updates active tab state
+    const promptBtn = Array.from(root.querySelectorAll(".studio-tab-btn")).find((t: any) => t.dataset.tab === "prompt") as any;
+    promptBtn.click();
+    expect(promptBtn.getAttribute("aria-selected")).toBe("true");
+
+    studio.destroy();
+  });
 });

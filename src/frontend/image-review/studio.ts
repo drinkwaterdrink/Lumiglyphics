@@ -41,10 +41,14 @@ const CSS = `
 const INSPECTOR_CSS=`
 :host{--paper:var(--vn-shell-panel,#171822)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])){--paper:#f8faf6;color:#172721;--vn-shell-text:#172721;--vn-shell-muted:#4b6b5d;--vn-shell-field:#ffffff;--vn-shell-button:#e5eee2;--accent:#1e5a40;--edge:rgba(86,128,107,.35)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) section{color:#172721!important;background:#f8faf6!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) details{background:#ffffff!important;border-color:rgba(86,128,107,.3)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-context]{background:#eef5ee!important;border-color:rgba(86,128,107,.3)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-scene]{color:#142820!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) textarea{background:#ffffff!important;color:#142820!important;border-color:rgba(86,128,107,.35)!important}section{width:min(510px,calc(100% - 24px));color:var(--vn-shell-text,#eee);backdrop-filter:blur(16px)}section small,section p{color:var(--vn-shell-muted,#bbc)}[data-studio-body]{padding-top:14px}details{border:1px solid color-mix(in srgb,var(--edge) 65%,transparent);border-radius:10px;background:rgba(255,255,255,.025);padding:0 12px;margin:8px 0}details[open]{padding-bottom:12px;background:rgba(255,255,255,.04);border-color:color-mix(in srgb,var(--accent) 42%,var(--edge))}summary{font-weight:600}[data-context]{display:flex;gap:12px;align-items:flex-start;margin:10px 0;padding:12px;border-radius:12px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 12%,rgba(255,255,255,.03)),rgba(0,0,0,.24));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--edge))}[data-context-text]{min-width:0;flex:1}[data-status]{font-size:16px;display:block}[data-paragraph]{display:inline-block;margin-top:4px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.07);font-size:11px;font-weight:600}[data-scene]{margin:6px 0 0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;font-size:13px}[data-thumbnail]{width:74px;height:92px;flex:none;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--edge));border-radius:10px;background:var(--vn-shell-field,#101119);display:grid;place-items:center;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.35)}[data-thumbnail] img{width:100%;height:100%;object-fit:cover}[data-placeholder]{font-size:30px;color:var(--accent)}[data-state-detail]{margin:8px 0;font-size:13px}[data-meta]{font-size:12px;margin:6px 0;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.05);display:inline-block}[data-prompt-editor]{margin:14px 0;padding:12px;border-radius:12px;background:rgba(255,255,255,.025);border:1px solid color-mix(in srgb,var(--edge) 70%,transparent)}[data-edit-help]{font-size:12px;margin:0 0 8px}label{font-weight:500;margin:10px 0}label small{float:right;font-weight:400;font-size:11px}textarea{margin-top:6px;font:16px/1.5 var(--vn-shell-family,system-ui);border-radius:8px}[data-positive]{min-height:135px;resize:vertical}[data-negative]{min-height:68px;resize:vertical}[data-budget-meter]{height:6px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin:8px 0 4px}[data-budget-fill]{height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width .2s ease,background-color .2s ease}[data-budget-fill][data-tone="warn"]{background:#f5c462}[data-budget-fill][data-tone="over"]{background:var(--vn-shell-danger,#ffb4ab)}[data-combined-count]{display:block;font-variant-numeric:tabular-nums;text-align:right;font-size:12px}[data-validation]{display:block;color:var(--vn-shell-danger,#ffb4ab);margin:6px 0}[aria-invalid="true"]{border-color:var(--vn-shell-danger,#ffb4ab)}[data-picture-strip]{display:flex;gap:8px;margin-bottom:8px}[data-picture-strip] button{flex:1;min-width:0;padding:6px 8px;font-size:12px;display:flex;align-items:center;gap:6px;border-radius:10px}[data-picture-strip] img{width:30px;height:34px;object-fit:cover;border-radius:5px}[data-picture-strip] [aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,var(--vn-shell-button,#252632));box-shadow:inset 0 0 0 1px var(--accent)}[data-picture-navigation] label{margin:0}[data-retry-queue]{margin:8px 0;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid color-mix(in srgb,var(--edge) 55%,transparent)}[data-retry-queue] [data-queue-status]{display:block;margin-top:6px;font-size:12px}[data-studio-footer] .row{display:block}[data-studio-footer] button{width:100%;border-color:var(--accent);font-weight:650}[data-action-help]{display:block;font-size:12px;text-align:center;margin-top:6px}[data-notice-row]{border-top:1px solid var(--edge);margin-top:10px}[data-notice]{font-size:12px}[data-rewrite-changed]{padding:10px;border:1px solid var(--accent);border-radius:8px;margin:8px 0;background:color-mix(in srgb,var(--accent) 8%,transparent)}[data-rewrite-changed] p{margin:0 0 8px}[data-previous-scene]{padding-left:20px;overflow-wrap:anywhere}[data-reply-settings] details{margin-left:4px}[data-secondary-actions]{margin-bottom:8px}[data-secondary-actions] button{font-size:13px}[data-subject-name]{width:100%}
 section[data-state="planning"],section[data-state="empty"],section[data-state="zero-budget"],section[data-state="idle"]{bottom:auto;max-height:calc(100% - 92px)}
-.studio-tab-bar{display:flex;gap:6px;overflow-x:auto;padding:4px 0 10px;margin-bottom:12px;border-bottom:1px solid var(--edge);scrollbar-width:none}.studio-tab-bar::-webkit-scrollbar{display:none}
-.studio-tab-btn{background:var(--vn-shell-field,rgba(255,255,255,.05));border:1px solid var(--edge);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;color:var(--vn-shell-muted,#aaa);cursor:pointer;white-space:nowrap;flex:none;min-height:34px;transition:all .15s ease}.studio-tab-btn:hover{background:rgba(255,255,255,.08);color:var(--vn-shell-text,#eee)}.studio-tab-btn[aria-selected="true"]{background:color-mix(in srgb,var(--accent) 22%,var(--vn-shell-button,#252632));border-color:var(--accent);color:var(--accent);font-weight:700}
+.studio-tab-bar{position:sticky;top:0;z-index:20;background:var(--paper);display:flex;align-items:center;gap:6px;overflow-x:auto;padding:6px 0 10px;margin-bottom:12px;border-bottom:1px solid var(--edge);scrollbar-width:none;-webkit-overflow-scrolling:touch}.studio-tab-bar::-webkit-scrollbar{display:none}
+.studio-tab-btn{background:var(--vn-shell-field,rgba(255,255,255,.05));border:1px solid var(--edge);border-radius:20px;padding:5px 12px;font-size:11.5px;font-weight:600;color:var(--vn-shell-muted,#aaa);cursor:pointer;white-space:nowrap;flex:none;min-height:32px;transition:all .15s cubic-bezier(0.2,0,0,1)}.studio-tab-btn:hover{background:rgba(255,255,255,.08);color:var(--vn-shell-text,#eee);transform:translateY(-1px)}.studio-tab-btn[aria-selected="true"]{background:color-mix(in srgb,var(--accent) 24%,var(--vn-shell-button,#252632));border-color:var(--accent);color:var(--accent);font-weight:700;box-shadow:0 0 10px color-mix(in srgb,var(--accent) 25%,transparent)}
 :is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) .studio-tab-btn{background:#eef3e5;color:#4b6b5d;border-color:rgba(35,65,50,.18)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) .studio-tab-btn[aria-selected="true"]{background:#dcebad;color:#172721;border-color:#234b39}
-.studio-tab-panel{display:flex;flex-direction:column;gap:10px}.studio-tab-panel[hidden]{display:none!important}
+.studio-layout-toggle{margin-left:auto;background:var(--vn-shell-field,rgba(255,255,255,.08));border:1px solid var(--accent);border-radius:20px;padding:4px 10px;font-size:11px;font-weight:700;color:var(--accent);cursor:pointer;white-space:nowrap;flex:none;min-height:30px;transition:all .15s ease}
+.studio-layout-toggle:hover{background:color-mix(in srgb,var(--accent) 20%,transparent)}
+.studio-tab-panel{display:flex;flex-direction:column;gap:12px;background:var(--vn-shell-field,rgba(255,255,255,.03));border:1px solid var(--edge);border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 4px 16px rgba(0,0,0,.15);transition:border-color .2s ease}.studio-tab-panel[hidden]{display:none!important}
+.studio-card-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:4px}
+.studio-card-title{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;color:var(--vn-shell-text,#f4f7ee)}
 @container(max-width:600px){section{width:auto}[data-context]{gap:10px}[data-studio-body]{padding:12px}[data-thumbnail]{width:56px;height:72px}}
 `;
 
@@ -78,6 +82,7 @@ export class ImageStudio {
   private templates: ImageTemplate[] = [];
   private templateRequest = "";
   private defaultTemplate = "portrait";
+  private studioLayoutMode: 'unified' | 'tabs' = (typeof window !== 'undefined' && typeof window.matchMedia === 'function') ? 'unified' : 'tabs';
   private rebuilding = new Set<string>();
   private rerolling = new Set<string>();
   private cursor = 0;
@@ -703,12 +708,12 @@ export class ImageStudio {
     tabs.setAttribute('aria-label', 'Artwork studio sections');
 
     const tabDefs = [
-      { id: 'picture', label: 'Picture' },
-      { id: 'prompt', label: 'Prompt' },
-      { id: 'camera', label: 'Camera' },
-      { id: 'style', label: 'Style' },
-      { id: 'model', label: 'Model' },
-      { id: 'history', label: 'History' }
+      { id: 'picture', label: '🖼️ Picture' },
+      { id: 'prompt', label: '📝 Prompt' },
+      { id: 'camera', label: '📐 Camera' },
+      { id: 'style', label: '🎨 Style' },
+      { id: 'model', label: '⚡ Model' },
+      { id: 'history', label: '📜 History' }
     ] as const;
 
     for (const tab of tabDefs) {
@@ -722,6 +727,39 @@ export class ImageStudio {
       btn.onclick = () => this.switchTab(tab.id);
       tabs.append(btn);
     }
+
+    const layoutToggle = document.createElement('button');
+    layoutToggle.type = 'button';
+    layoutToggle.className = 'studio-layout-toggle';
+    layoutToggle.dataset.layoutModeToggle = '';
+    layoutToggle.textContent = this.studioLayoutMode === 'unified' ? '🌟 All in One' : '📑 Tab Focus';
+    layoutToggle.title = 'Toggle between all-in-one unified view and single tab focus';
+    layoutToggle.onclick = () => {
+      this.studioLayoutMode = this.studioLayoutMode === 'unified' ? 'tabs' : 'unified';
+      layoutToggle.textContent = this.studioLayoutMode === 'unified' ? '🌟 All in One' : '📑 Tab Focus';
+      this.switchTab(this.activeTab);
+    };
+    tabs.append(layoutToggle);
+
+    const cardHeader = (iconText: string, titleText: string, subtitleText?: string) => {
+      const h = document.createElement('div');
+      h.className = 'studio-card-header';
+      const titleSpan = document.createElement('span');
+      titleSpan.className = 'studio-card-title';
+      const iconSpan = document.createElement('span');
+      iconSpan.textContent = iconText;
+      const textSpan = document.createElement('span');
+      textSpan.textContent = titleText;
+      titleSpan.append(iconSpan, textSpan);
+      h.append(titleSpan);
+      if (subtitleText) {
+        const sub = document.createElement('small');
+        sub.style.cssText = 'font-size:11px;opacity:0.75';
+        sub.textContent = subtitleText;
+        h.append(sub);
+      }
+      return h;
+    };
 
     const panelPicture = document.createElement('div');
     panelPicture.className = 'studio-tab-panel';
@@ -738,39 +776,39 @@ export class ImageStudio {
     const correctionHelp=document.createElement('small');correctionHelp.dataset.correctionHelp='';correctionHelp.setAttribute('role','status');
     correctionHelp.textContent='Open the controls you need, review your changes, then choose the explicit preview or generation action.';
     corrections.append(correctionButtons);
-    panelPicture.append(explanation,context,corrections, versionsContainer, detail, this.brief.element, this.el('[data-recovery]').closest('details')!);
-
-    const panelPrompt = document.createElement('div');
-    panelPrompt.className = 'studio-tab-panel';
-    panelPrompt.dataset.tabPanel = 'prompt';
-    panelPrompt.hidden = true;
-    const editTools=document.createElement('div');editTools.className='row';editTools.dataset.promptEditTools='';editTools.hidden=true;editTools.innerHTML='<button type="button" data-prompt-undo aria-label="Undo prompt edit">Undo</button><button type="button" data-prompt-redo aria-label="Redo prompt edit">Redo</button>';
-    panelPrompt.append(meta, model,editor);
-
-
-    const panelCamera = document.createElement('div');
-    panelCamera.className = 'studio-tab-panel';
-    panelCamera.dataset.tabPanel = 'camera';
-    panelCamera.hidden = true;
-    panelCamera.append(template, cameraTools, outputOptions);
-
-    const panelStyle = document.createElement('div');
-    panelStyle.className = 'studio-tab-panel';
-    panelStyle.dataset.tabPanel = 'style';
-    panelStyle.hidden = true;
-    panelStyle.append(styleTools);
+    panelPicture.append(cardHeader('🖼️', 'Picture & Scene Moment', 'Review or inspect'), explanation, context, corrections, versionsContainer, detail, this.brief.element, this.el('[data-recovery]').closest('details')!);
 
     const panelModel = document.createElement('div');
     panelModel.className = 'studio-tab-panel';
     panelModel.dataset.tabPanel = 'model';
-    panelModel.hidden = true;
-    panelModel.append(modelTools);
+    panelModel.hidden = this.studioLayoutMode === 'tabs';
+    panelModel.append(cardHeader('⚡', 'Image Model & Generation', 'Switch model or rerun'), modelTools);
+
+    const panelStyle = document.createElement('div');
+    panelStyle.className = 'studio-tab-panel';
+    panelStyle.dataset.tabPanel = 'style';
+    panelStyle.hidden = this.studioLayoutMode === 'tabs';
+    panelStyle.append(cardHeader('🎨', 'Visual Style', 'Select or change style'), styleTools);
+
+    const panelCamera = document.createElement('div');
+    panelCamera.className = 'studio-tab-panel';
+    panelCamera.dataset.tabPanel = 'camera';
+    panelCamera.hidden = this.studioLayoutMode === 'tabs';
+    panelCamera.append(cardHeader('📐', 'Camera & Framing', 'Composition & ratios'), template, cameraTools, outputOptions);
+
+    const panelPrompt = document.createElement('div');
+    panelPrompt.className = 'studio-tab-panel';
+    panelPrompt.dataset.tabPanel = 'prompt';
+    panelPrompt.hidden = this.studioLayoutMode === 'tabs';
+    const editTools=document.createElement('div');editTools.className='row';editTools.dataset.promptEditTools='';editTools.hidden=true;editTools.innerHTML='<button type="button" data-prompt-undo aria-label="Undo prompt edit">Undo</button><button type="button" data-prompt-redo aria-label="Redo prompt edit">Redo</button>';
+    panelPrompt.append(cardHeader('📝', 'Prompt Studio & AI Enhancements', 'Wording & token budget'), meta, model, editor);
 
     const panelHistory = document.createElement('div');
     panelHistory.className = 'studio-tab-panel';
     panelHistory.dataset.tabPanel = 'history';
-    panelHistory.hidden = true;
+    panelHistory.hidden = this.studioLayoutMode === 'tabs';
     panelHistory.append(
+      cardHeader('📜', 'History & Diagnostics', 'Versions, parameters & debug logs'),
       this.el('[data-diagnostics]').closest('details')!,
       this.el('[data-provenance]').closest('details')!,
       this.el('[data-parameters]').closest('details')!,
@@ -779,7 +817,7 @@ export class ImageStudio {
     );
 
     const overview=document.createElement('p');overview.dataset.pictureOverview='';overview.setAttribute('role','status');overview.setAttribute('aria-atomic','true');overview.style.cssText='font-size:12px;margin:0 0 10px;overflow-wrap:anywhere';
-    tools.replaceChildren(tabs,editTools,panelPicture,panelPrompt,panelCamera,panelStyle,panelModel,panelHistory);
+    tools.replaceChildren(tabs, editTools, panelPicture, panelModel, panelStyle, panelCamera, panelPrompt, panelHistory);
     body.replaceChildren(overview,navigation,correctionHelp,tools,notice);
     for(const field of ['positive','negative','parameters']){const note=document.createElement('small');note.dataset.promptLint=field;note.setAttribute('role','status');this.el(`[data-${field}]`).after(note);}
     const actionHelp=document.createElement('small');actionHelp.dataset.actionHelp='';this.el('[data-studio-footer]').append(actionHelp);
@@ -1620,14 +1658,24 @@ export class ImageStudio {
 
   private switchTab(tabId: string): void {
     this.activeTab = tabId;
-    this.el<HTMLElement>('[data-prompt-edit-tools]').hidden=tabId!=='prompt'&&tabId!=='history';
+    this.el<HTMLElement>('[data-prompt-edit-tools]').hidden = tabId !== 'prompt' && tabId !== 'history' && this.studioLayoutMode === 'tabs';
     const tabBtns = this.root.querySelectorAll<HTMLButtonElement>('.studio-tab-btn');
     for (const btn of tabBtns) {
       btn.setAttribute('aria-selected', String(btn.dataset.tab === tabId));
     }
     const panels = this.root.querySelectorAll<HTMLElement>('.studio-tab-panel');
-    for (const panel of panels) {
-      panel.hidden = panel.dataset.tabPanel !== tabId;
+    if (this.studioLayoutMode === 'tabs') {
+      for (const panel of panels) {
+        panel.hidden = panel.dataset.tabPanel !== tabId;
+      }
+    } else {
+      for (const panel of panels) {
+        panel.hidden = false;
+      }
+      const targetPanel = this.root.querySelector<HTMLElement>(`[data-tab-panel="${tabId}"]`);
+      if (targetPanel && typeof targetPanel.scrollIntoView === 'function') {
+        targetPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
     }
   }
 
