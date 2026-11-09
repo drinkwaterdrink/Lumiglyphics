@@ -32,6 +32,8 @@ export const TEXT_EFFECT_MODES = ["animated", "static", "off"] as const;
 export type VisualNovelTextEffectMode = (typeof TEXT_EFFECT_MODES)[number];
 export const IDEOGRAM_PROMPT_MODES = ["auto", "json", "structured-prose", "off"] as const;
 export type IdeogramPromptMode = (typeof IDEOGRAM_PROMPT_MODES)[number];
+export const FLUX3_KLEIN_PROMPT_MODES = ["auto", "pup-caption", "off"] as const;
+export type Flux3KleinPromptMode = (typeof FLUX3_KLEIN_PROMPT_MODES)[number];
 
 /**
  * Where a character's reference anchor image comes from.
@@ -101,6 +103,7 @@ export type VisualNovelConfig = {
   imageTemplates: ImageTemplate[];
   imagePromptEngineVersion?: 1 | 2;
   ideogramPromptMode?: IdeogramPromptMode;
+  flux3KleinPromptMode?: Flux3KleinPromptMode;
   dialogueSafeArea: "auto" | "always" | "off";
   imageFramingDirector?: boolean;
   imagePromptDetail?: "auto" | "compact" | "standard" | "detailed";
@@ -192,6 +195,7 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   imageTemplates: BUILTIN_IMAGE_TEMPLATES.map(template => ({ ...template })),
   imagePromptEngineVersion: 2,
   ideogramPromptMode: "auto",
+  flux3KleinPromptMode: "auto",
   dialogueSafeArea: "auto",
   imageFramingDirector: true,
   imagePromptDetail: "auto",
@@ -425,6 +429,7 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     imageTemplates: input.imageTemplates === undefined ? migrateImageTemplates(promptPresetList(input.promptPresets)) : upgradeImageTemplates(input.imageTemplates),
     imagePromptEngineVersion: input.imagePromptEngineVersion === 1 ? 1 : 2,
     ideogramPromptMode: input.ideogramPromptMode === "json" || input.ideogramPromptMode === "structured-prose" || input.ideogramPromptMode === "off" ? input.ideogramPromptMode : "auto",
+    flux3KleinPromptMode: input.flux3KleinPromptMode === "pup-caption" || input.flux3KleinPromptMode === "off" ? input.flux3KleinPromptMode : "auto",
     dialogueSafeArea: input.dialogueSafeArea === "always" ? "always" : input.dialogueSafeArea === "off" ? "off" : "auto",
     imageFramingDirector: bool(input.imageFramingDirector, true),
     imagePromptDetail: input.imagePromptDetail === "compact" || input.imagePromptDetail === "standard" || input.imagePromptDetail === "detailed" ? input.imagePromptDetail : "auto",

@@ -20,7 +20,7 @@ export function promptBudgetTargets(profile:ImagePromptProfile):{low:number;high
  const target=profile.manualBudget!==undefined?profile.maxCharacters:Math.min(3000,profile.maxCharacters);
  return {low:target-Math.min(250,Math.floor(target*.15)),high:target-Math.min(100,Math.floor(target*.05))};
 }
-export type PromptProfileSettings={automaticImagePromptSettings?:boolean;imagePromptBudgetOverride?:boolean;imagePromptBudget?:number;imagePromptFormat?:'description'|'tags';ideogramPromptMode?:'auto'|'json'|'structured-prose'|'off'};
+export type PromptProfileSettings={automaticImagePromptSettings?:boolean;imagePromptBudgetOverride?:boolean;imagePromptBudget?:number;imagePromptFormat?:'description'|'tags';ideogramPromptMode?:'auto'|'json'|'structured-prose'|'off';flux3KleinPromptMode?:'auto'|'pup-caption'|'off'};
 export function parsePromptCapabilities(value:unknown):Map<string,number>{
  const result=new Map<string,number>();
  const data=(value as {data?:unknown})?.data;

@@ -71,7 +71,16 @@ export function buildV2ImageRequest(input:V2ImageRequestInput):{request:ImageGen
   const referencePlan=resolveReferencePlan({brief:input.metadata?.brief,cue,portraits:input.portraits,characterDNALibrary:input.characterDNALibrary});
   const compiled=compileModelPrompt({brief:input.brief,shotSpec,styleDNA:effectiveStyleDNA,profile,outputPlan,referencePlan,detailLevel:rebuild?.fitToModel?'compact':config.imagePromptDetail,promptExpansionEnabled:profile.promptExpansion?.enabled,userBudgetOverride:rebuild?.fitToModel?Math.min(profile.softBudgets.standard[0],profile.hardMaxCharacters):config.imagePromptBudgetOverride?config.imagePromptBudget:null,cue});
   request.prompt=compiled.prompt;
-  if(compiled.negativePrompt!==undefined)request.negativePrompt=compiled.negativePrompt;
+  if(compiled.negativePrompt!==undefined){
+    request.negativePrompt=compiled.negativePrompt;
+  }else if(profile.negativePolicy==='positive-only'||profile.dialect==='ideogram-v4'||profile.dialect==='flux3-klein'){
+    delete request.negativePrompt;
+    if(request.parameters){
+      delete request.parameters.negativePrompt;
+      delete request.parameters.negative_prompt;
+      delete request.parameters.negative;
+    }
+  }
   if(compiled.parameterHints)request.parameters={...request.parameters,...compiled.parameterHints};
   if(metadata){
    metadata.budgetSummary={complexity:compiled.budgetPlan.complexity,softRange:compiled.budgetPlan.softRange,hardLimit:compiled.budgetPlan.hardLimit,finalCharacters:request.prompt.length+(request.negativePrompt?.length??0)};

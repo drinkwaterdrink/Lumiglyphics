@@ -19877,9 +19877,9 @@ var ImageTemplateSnapshotSchema = ImageTemplateSchema.extend({ revision: exports
 var SubjectPreparationSchema = exports_external.object({
   name: exports_external.string().max(256),
   identity: exports_external.string().max(4000),
-  identitySource: exports_external.enum(["manual correction", "saved appearance", "resolved context", "ensemble snapshot", "unavailable", "locked DNA"]),
+  identitySource: exports_external.enum(["manual correction", "saved appearance", "resolved context", "ensemble snapshot", "unavailable", "locked DNA"]).or(exports_external.string().max(64)),
   attire: exports_external.string().max(2000).nullable(),
-  attireSource: exports_external.enum(["picture cue", "scene", "not supplied", "locked DNA"]),
+  attireSource: exports_external.enum(["picture cue", "scene", "not supplied", "locked DNA"]).or(exports_external.string().max(64)),
   direction: exports_external.string().max(1000),
   shortened: exports_external.boolean(),
   subjectsInPositive: exports_external.boolean(),
@@ -22940,6 +22940,7 @@ var SETTINGS_FIELD_PAGES = {
   imagePromptDetail: "images",
   imagePromptEngineVersion: "images",
   ideogramPromptMode: "images",
+  flux3KleinPromptMode: "images",
   dynamicImageTemplates: "templates",
   defaultImageTemplateId: "templates",
   imageTemplates: "templates",
@@ -37430,6 +37431,7 @@ var DEFAULT_CONFIG = {
   imageTemplates: BUILTIN_IMAGE_TEMPLATES.map((template) => ({ ...template })),
   imagePromptEngineVersion: 2,
   ideogramPromptMode: "auto",
+  flux3KleinPromptMode: "auto",
   dialogueSafeArea: "auto",
   imageFramingDirector: true,
   imagePromptDetail: "auto",
@@ -42557,6 +42559,12 @@ var NANOGPT_PROMPT_CAPABILITIES = {
   "ideogram/v4/instant": 1e4,
   "ideogram/v4/fast": 1e4,
   "ideogram:4@0": 1e4,
+  "blackforestlabs/flux-3/klein/text-to-image": 1e4,
+  "blackforestlabs/flux-3/klein-base/text-to-image": 1e4,
+  "blackforestlabs/flux-3/klein/edit-image": 1e4,
+  "blackforestlabs/flux-3/klein-base/edit-image": 1e4,
+  "flux-3/klein": 1e4,
+  "flux-3-klein": 1e4,
   "nano-banana-2.1": 50000,
   "qwen-image-2.1-pro": 3000,
   "riverflow-2-fast": 3000,
@@ -46520,6 +46528,15 @@ class VisualNovelSettingsPanel {
                 </select>
                 <small>Direct JSON uses Ideogram 4's native schema with bounding boxes and color palettes to lock composition and bypass safety refusals. You can also force it for other models to experiment.</small>
               </label>
+              <label data-field ${find("FLUX.3 Klein prompt mode", "flux klein prompt mode pup caption upsampler bfl 1/6 background bounding box auto")}>
+                <span>FLUX.3 Klein prompting style</span>
+                <select name="flux3KleinPromptMode">
+                  <option value="auto">Auto (Official BFL PUP File-Level format for FLUX.3 Klein)</option>
+                  <option value="pup-caption">BFL PUP Caption (Force 7 Golden Rules &amp; Layout Boxes)</option>
+                  <option value="off">Off (Standard generic prose)</option>
+                </select>
+                <small>Uses Black Forest Labs' official 9B Prompt Upsampler format with frame-relative spatial anchors, 1/6th background rule, typography locks, and NanoGPT layout boxes. Force on to test with other models.</small>
+              </label>
               <label data-field ${find("Dialogue safe area", "safe area text overlay dialogue speech framing clearance")}>
                 <span>Dialogue safe area</span>
                 <select name="dialogueSafeArea">
@@ -47458,6 +47475,8 @@ class VisualNovelSettingsPanel {
         return { imagePromptEngineVersion: target2.value === "1" ? 1 : 2 };
       case "ideogramPromptMode":
         return { ideogramPromptMode: target2.value };
+      case "flux3KleinPromptMode":
+        return { flux3KleinPromptMode: target2.value };
       case "automaticImagePromptSettings":
         return { automaticImagePromptSettings: checked };
       case "imagePromptBudgetOverride":
@@ -48154,6 +48173,7 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
   syncEveryday(config2) {
     this.control("imagePromptEngineVersion").value = String(config2.imagePromptEngineVersion ?? 2);
     this.control("ideogramPromptMode").value = config2.ideogramPromptMode ?? "auto";
+    this.control("flux3KleinPromptMode").value = config2.flux3KleinPromptMode ?? "auto";
     this.control("imageResolutionPreference").value = config2.imageResolutionPreference ?? "high";
     this.control("dialogueSafeArea").value = config2.dialogueSafeArea ?? "auto";
     this.control("imagePromptDetail").value = config2.imagePromptDetail ?? "auto";
@@ -49094,6 +49114,15 @@ function resolveRouteDialect(provider, modelId, parameters, settings) {
   const normModel = modelId.trim().toLowerCase();
   const normProvider = provider.trim().toLowerCase();
   const ideogramMode = settings?.ideogramPromptMode ?? "auto";
+  const flux3KleinMode = settings?.flux3KleinPromptMode ?? "auto";
+  if (flux3KleinMode === "pup-caption") {
+    return {
+      dialect: "flux3-klein",
+      family: "flux",
+      negativePolicy: "positive-only",
+      features: { references: true, layoutBoxes: true, exactText: true }
+    };
+  }
   if (ideogramMode === "json" || ideogramMode === "structured-prose") {
     return {
       dialect: "ideogram-v4",
@@ -49106,6 +49135,14 @@ function resolveRouteDialect(provider, modelId, parameters, settings) {
     return {
       dialect: "generic-prose",
       family: "ideogram",
+      negativePolicy: "positive-only",
+      features: { references: true }
+    };
+  }
+  if (flux3KleinMode === "off" && (normModel === "blackforestlabs/flux-3/klein/text-to-image" || normModel === "blackforestlabs/flux-3/klein/edit-image" || normModel === "blackforestlabs/flux-3/klein/base/text-to-image" || normModel === "blackforestlabs/flux-3/klein/base/edit-image" || /(?:^|[\/._-])flux[-_.]?3.*klein/.test(normModel))) {
+    return {
+      dialect: "generic-prose",
+      family: "flux",
       negativePolicy: "positive-only",
       features: { references: true }
     };
@@ -49735,7 +49772,7 @@ function modelOutputHelp(provider, model, parameters) {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.9-beta.140";
+var LUMIGLYPHICS_VERSION = "0.2.10-beta.141";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;

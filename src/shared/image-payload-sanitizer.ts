@@ -54,10 +54,21 @@ export function stripDanglingImageReferences<T extends Record<string, unknown>>(
   return result as T;
 }
 
+export function isPositiveOnlyModel(model?: string | null): boolean {
+  if (!model) return false;
+  const lower = model.toLowerCase();
+  return lower.includes('ideogram') ||
+    lower.includes('flux-3/klein') ||
+    lower.includes('flux-3-klein') ||
+    lower.includes('nano-banana') ||
+    lower.includes('recraft');
+}
+
 /**
  * Sanitize outgoing parameters before network dispatch.
  * 1. For strict text-to-image endpoints, strips lingering reference images so providers don't 413.
- * 2. For image-capable endpoints, validates that total reference payload does not exceed the provider limit.
+ * 2. For single-branch / positive-only models, purges negative prompt parameters so providers don't reject or misguide.
+ * 3. For image-capable endpoints, validates that total reference payload does not exceed the provider limit.
  */
 export function sanitizeImagePayloadParameters<T extends Record<string, unknown>>(
   parameters: T,
@@ -66,14 +77,24 @@ export function sanitizeImagePayloadParameters<T extends Record<string, unknown>
 ): T {
   if (!parameters || typeof parameters !== 'object') return parameters;
 
-  // 1. If provider is NanoGPT (or similar gateway) and model is strictly text-to-image, purge image fields.
-  if (provider?.toLowerCase() === 'nanogpt' && isStrictTextToImageModel(provider, model)) {
-    return stripDanglingImageReferences(parameters);
+  let result = { ...parameters } as T;
+
+  // 1. Purge negative prompt fields on positive-only models (Ideogram, FLUX.3 Klein, etc.)
+  if (isPositiveOnlyModel(model)) {
+    delete (result as any).negativePrompt;
+    delete (result as any).negative_prompt;
+    delete (result as any).negative;
+    delete (result as any).uc;
   }
 
-  // 2. Otherwise, check reference image sizes
+  // 2. If provider is NanoGPT (or similar gateway) and model is strictly text-to-image, purge image fields.
+  if (provider?.toLowerCase() === 'nanogpt' && isStrictTextToImageModel(provider, model)) {
+    result = stripDanglingImageReferences(result);
+  }
+
+  // 3. Otherwise, check reference image sizes
   let totalBytes = 0;
-  const references = (parameters.resolvedReferenceImages ?? parameters.resolvedSourceImages ?? parameters.referenceImages) as unknown;
+  const references = (result.resolvedReferenceImages ?? result.resolvedSourceImages ?? result.referenceImages) as unknown;
 
   if (Array.isArray(references)) {
     for (const ref of references) {
@@ -87,8 +108,8 @@ export function sanitizeImagePayloadParameters<T extends Record<string, unknown>
 
   // If payload exceeds the hard 10MB NanoGPT ceiling, strip and warn to prevent billing on 413
   if (provider?.toLowerCase() === 'nanogpt' && totalBytes >= NANO_GPT_PAYLOAD_LIMIT_BYTES) {
-    return stripDanglingImageReferences(parameters);
+    return stripDanglingImageReferences(result);
   }
 
-  return parameters;
+  return result;
 }

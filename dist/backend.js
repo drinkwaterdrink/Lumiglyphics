@@ -20846,9 +20846,9 @@ var init_image_templates = __esm(() => {
   SubjectPreparationSchema = exports_external.object({
     name: exports_external.string().max(256),
     identity: exports_external.string().max(4000),
-    identitySource: exports_external.enum(["manual correction", "saved appearance", "resolved context", "ensemble snapshot", "unavailable", "locked DNA"]),
+    identitySource: exports_external.enum(["manual correction", "saved appearance", "resolved context", "ensemble snapshot", "unavailable", "locked DNA"]).or(exports_external.string().max(64)),
     attire: exports_external.string().max(2000).nullable(),
-    attireSource: exports_external.enum(["picture cue", "scene", "not supplied", "locked DNA"]),
+    attireSource: exports_external.enum(["picture cue", "scene", "not supplied", "locked DNA"]).or(exports_external.string().max(64)),
     direction: exports_external.string().max(1000),
     shortened: exports_external.boolean(),
     subjectsInPositive: exports_external.boolean(),
@@ -22451,6 +22451,12 @@ var init_image_prompt_capabilities = __esm(() => {
     "ideogram/v4/instant": 1e4,
     "ideogram/v4/fast": 1e4,
     "ideogram:4@0": 1e4,
+    "blackforestlabs/flux-3/klein/text-to-image": 1e4,
+    "blackforestlabs/flux-3/klein-base/text-to-image": 1e4,
+    "blackforestlabs/flux-3/klein/edit-image": 1e4,
+    "blackforestlabs/flux-3/klein-base/edit-image": 1e4,
+    "flux-3/klein": 1e4,
+    "flux-3-klein": 1e4,
     "nano-banana-2.1": 50000,
     "qwen-image-2.1-pro": 3000,
     "riverflow-2-fast": 3000,
@@ -22868,6 +22874,15 @@ function resolveRouteDialect(provider, modelId, parameters, settings) {
   const normModel = modelId.trim().toLowerCase();
   const normProvider = provider.trim().toLowerCase();
   const ideogramMode = settings?.ideogramPromptMode ?? "auto";
+  const flux3KleinMode = settings?.flux3KleinPromptMode ?? "auto";
+  if (flux3KleinMode === "pup-caption") {
+    return {
+      dialect: "flux3-klein",
+      family: "flux",
+      negativePolicy: "positive-only",
+      features: { references: true, layoutBoxes: true, exactText: true }
+    };
+  }
   if (ideogramMode === "json" || ideogramMode === "structured-prose") {
     return {
       dialect: "ideogram-v4",
@@ -22880,6 +22895,14 @@ function resolveRouteDialect(provider, modelId, parameters, settings) {
     return {
       dialect: "generic-prose",
       family: "ideogram",
+      negativePolicy: "positive-only",
+      features: { references: true }
+    };
+  }
+  if (flux3KleinMode === "off" && (normModel === "blackforestlabs/flux-3/klein/text-to-image" || normModel === "blackforestlabs/flux-3/klein/edit-image" || normModel === "blackforestlabs/flux-3/klein/base/text-to-image" || normModel === "blackforestlabs/flux-3/klein/base/edit-image" || /(?:^|[\/._-])flux[-_.]?3.*klein/.test(normModel))) {
+    return {
+      dialect: "generic-prose",
+      family: "flux",
       negativePolicy: "positive-only",
       features: { references: true }
     };
@@ -26500,6 +26523,7 @@ function normalizeConfigUncached(input2) {
     imageTemplates: input2.imageTemplates === undefined ? migrateImageTemplates(promptPresetList(input2.promptPresets)) : upgradeImageTemplates(input2.imageTemplates),
     imagePromptEngineVersion: input2.imagePromptEngineVersion === 1 ? 1 : 2,
     ideogramPromptMode: input2.ideogramPromptMode === "json" || input2.ideogramPromptMode === "structured-prose" || input2.ideogramPromptMode === "off" ? input2.ideogramPromptMode : "auto",
+    flux3KleinPromptMode: input2.flux3KleinPromptMode === "pup-caption" || input2.flux3KleinPromptMode === "off" ? input2.flux3KleinPromptMode : "auto",
     dialogueSafeArea: input2.dialogueSafeArea === "always" ? "always" : input2.dialogueSafeArea === "off" ? "off" : "auto",
     imageFramingDirector: bool(input2.imageFramingDirector, true),
     imagePromptDetail: input2.imagePromptDetail === "compact" || input2.imagePromptDetail === "standard" || input2.imagePromptDetail === "detailed" ? input2.imagePromptDetail : "auto",
@@ -26609,6 +26633,7 @@ var init_config = __esm(() => {
     imageTemplates: BUILTIN_IMAGE_TEMPLATES.map((template) => ({ ...template })),
     imagePromptEngineVersion: 2,
     ideogramPromptMode: "auto",
+    flux3KleinPromptMode: "auto",
     dialogueSafeArea: "auto",
     imageFramingDirector: true,
     imagePromptDetail: "auto",
@@ -42748,31 +42773,63 @@ function cleanActionAndDirection(rawAction, rawDirection) {
   }
   return `${act}, ${cleanDir}`;
 }
+function sanitizeQuoteAndUnitNotation(text4) {
+  if (!text4)
+    return "";
+  return text4.replace(/\b(\d+)'\s*(\d+)(?:"|''|\u2019\u2019)?\b/g, "$1 ft $2 in").replace(/\b(\d+)'\b/g, "$1 ft").replace(/\b(\d+)"\b/g, "$1 inches").replace(/"/g, "'").replace(/,\s*\./g, ".").replace(/;\s*\./g, ".").replace(/,\s*,/g, ",").replace(/;\s*;/g, ";").trim();
+}
+function formatSceneProse(sceneText) {
+  if (!sceneText)
+    return "";
+  return sanitizeQuoteAndUnitNotation(sceneText).split(/\s*;\s*/).map((part) => part.trim().replace(/\.+$/, "")).filter(Boolean).join(", ").replace(/,\s*\./g, ".").replace(/\s+/g, " ").trim();
+}
 function parseSubjectsFromBrief(brief, cue) {
   if (brief.subjectMode === "none")
     return [];
+  const isNarrativeUndressed = /\b(?:naked|nude|undressed|bare skin|unclothed|topless|stripping|in the bath|in the shower)\b/i.test(`${brief.action} ${brief.scene}`);
   if (brief.subjectMode === "ensemble") {
     const lines = brief.subjects.split(`
 `).filter((line2) => line2.includes(":"));
     return lines.map((line2) => {
       const colon = line2.indexOf(":");
       const name2 = line2.slice(0, colon).trim();
-      const rest = line2.slice(colon + 1).trim();
+      const rawRest = line2.slice(colon + 1).trim();
+      const sanitizedRest = sanitizeQuoteAndUnitNotation(rawRest);
+      const wearingMatch = sanitizedRest.match(/;\s*(?:wearing|dressed in)\s+(.*)$/i);
+      let appearance = sanitizedRest;
+      let attire2 = undefined;
+      if (wearingMatch) {
+        appearance = sanitizedRest.slice(0, wearingMatch.index).trim();
+        attire2 = wearingMatch[1].trim();
+      } else {
+        const hasClothing = /\b(?:wearing|dressed in|outfit|coat|jacket|shirt|pants|trousers|dress|robe|suit|hoodie|sweater|uniform|vest|skirt)\b/i.test(sanitizedRest);
+        if (!hasClothing && !isNarrativeUndressed) {
+          attire2 = "scene-appropriate casual clothing";
+        }
+      }
       return {
         name: name2,
-        appearance: rest
+        appearance,
+        attire: attire2
       };
     });
   }
   const name = brief.subjectPreparation?.name || cue?.character || "Subject";
-  const appearance = brief.subjectPreparation?.identity || brief.subjects;
-  const attire = brief.subjectPreparation?.attire ?? undefined;
+  const rawAppearance = brief.subjectPreparation?.identity || brief.subjects;
+  const sanitizedAppearance = sanitizeQuoteAndUnitNotation(rawAppearance);
+  let attire = brief.subjectPreparation?.attire ? sanitizeQuoteAndUnitNotation(brief.subjectPreparation.attire) : undefined;
+  if (!attire) {
+    const hasClothing = /\b(?:wearing|dressed in|outfit|coat|jacket|shirt|pants|trousers|dress|robe|suit|hoodie|sweater|uniform|vest|skirt)\b/i.test(sanitizedAppearance);
+    if (!hasClothing && !isNarrativeUndressed) {
+      attire = "everyday clothing suitable for the scene";
+    }
+  }
   const action = cleanActionAndDirection(brief.action, brief.subjectPreparation?.direction);
   return [{
     name,
-    appearance,
+    appearance: sanitizedAppearance,
     attire,
-    action
+    action: action ? sanitizeQuoteAndUnitNotation(action) : undefined
   }];
 }
 function formatCameraFraming(shotSpec, styleDNA) {
@@ -42899,115 +42956,156 @@ var init_helpers = __esm(() => {
 });
 
 // src/backend/runtime/prompt-serializers/flux3-klein.ts
+function isPhotographicMedium(styleDNA, brief) {
+  const text4 = `${styleDNA?.medium || ""} ${styleDNA?.prefix || ""} ${brief?.scene || ""}`.toLowerCase();
+  if (/\b(?:photo|photograph|candid|35mm|film|dslr|smartphone|camera roll|snapshot|raw photo)\b/.test(text4)) {
+    return true;
+  }
+  if (/\b(?:illustration|anime|manga|cel[- ]shaded|drawing|digital art|painting|watercolor|gouache|comic)\b/.test(text4)) {
+    return false;
+  }
+  return false;
+}
+function extractQuotedText(text4) {
+  const match = text4.match(/['"]([^'"]{1,50})['"]/);
+  return match && match[1] ? match[1].trim() : null;
+}
+function resolveKleinMediumPrefix(isPhoto, styleDNA, brief, shotSize) {
+  if (isPhoto) {
+    const text4 = `${styleDNA?.prefix || ""} ${brief?.scene || ""}`.toLowerCase();
+    if (shotSize === "close-up" || shotSize === "macro" || shotSize === "extreme-close-up") {
+      return "Close-up photograph";
+    }
+    if (/\b(?:smartphone|candid|phone|snapshot|casual|camera roll)\b/.test(text4)) {
+      return "Candid handheld smartphone photograph";
+    }
+    if (/\b(?:studio|portrait session|backdrop)\b/.test(text4)) {
+      return "Studio photograph";
+    }
+    if (/\b(?:outside|outdoor|nature|street|garden|forest|park|beach|sky|harbor|alley|road)\b/.test(text4)) {
+      return "Full-color outdoor photograph";
+    }
+    if (/\b(?:room|loft|library|indoor|interior|kitchen|bedroom|parlor|cafe|laundromat|hall)\b/.test(text4)) {
+      return "Full-color indoor photograph";
+    }
+    return "Full-color photograph";
+  }
+  const medium = styleDNA?.medium?.trim();
+  const prefix = styleDNA?.prefix?.trim();
+  if (prefix) {
+    return sanitizeQuoteAndUnitNotation(prefix);
+  }
+  if (medium) {
+    if (/\bwatercolor\b/i.test(medium))
+      return `${medium} on rough cold-press watercolor paper`;
+    if (/\bgouache\b/i.test(medium))
+      return `${medium} on textured cardstock with crisp ink linework`;
+    if (/\boil\b/i.test(medium))
+      return `${medium} on coarse linen canvas`;
+    return `${medium} on fine archival paper`;
+  }
+  return "Editorial visual novel digital illustration with clean cel-shaded linework";
+}
 function serializeFlux3Klein(input2) {
   const { brief, shotSpec, styleDNA, profile, referencePlan, cue } = input2;
   const warnings = [];
   const sections = [];
-  const negativeSections = [];
   const parameterHints = {};
   const subjects = parseSubjectsFromBrief(brief, cue);
-  const actionText = brief.action ? brief.action.trim() : "";
-  let subjectActionText = "";
-  if (brief.subjectMode === "none") {
-    const focus = cue?.visualFocus || (brief.action ? brief.action : "Detailed visual scene");
-    subjectActionText = `A detailed view with no visible people. ${focus}.`.trim();
-  } else if (brief.subjectMode === "ensemble") {
-    subjectActionText = `An ensemble scene featuring ${subjects.length} visible characters: ${subjects.map((s) => s.name).join(", ")}. ${actionText}`.trim();
-  } else {
-    const main = subjects[0];
-    if (main) {
-      const act = (main.action || actionText || "").trim();
-      if (act) {
-        const firstName = main.name.split(" ")[0] || main.name;
-        const nameRegex = new RegExp(`^(?:${main.name}|${firstName})\\s+`, "i");
-        if (nameRegex.test(act)) {
-          subjectActionText = `${act}.`.replace(/\.\.+$/, ".");
-        } else if (/^(?:is|stands|standing|sits|sitting|walking|running|looking|holding|clutching|reaching|wearing|facing|turned)\b/i.test(act)) {
-          subjectActionText = `${main.name} ${act}.`.replace(/\.\.+$/, ".");
-        } else {
-          subjectActionText = `${main.name} is ${act}.`.replace(/\.\.+$/, ".");
-        }
-      } else {
-        subjectActionText = `${main.name} is present in the scene.`;
-      }
-    }
-  }
+  const isPhoto = isPhotographicMedium(styleDNA, brief);
+  const cleanScene = formatSceneProse(brief.scene);
+  const shotSize = shotSpec?.camera?.shotSize || "medium";
+  const mediumPrefix = resolveKleinMediumPrefix(isPhoto, styleDNA, brief, shotSize);
+  const sceneAtmosphere = brief.lighting ? sanitizeQuoteAndUnitNotation(brief.lighting).replace(/\.+$/, "") : "natural ambient lighting";
+  const isShallow = shotSpec?.camera?.depthOfField === "shallow" || /\b(?:shallow|bokeh|f\/1\.4|portrait lens)\b/i.test(`${styleDNA?.prefix || ""} ${brief.composition || ""}`);
+  const opticsText = isShallow ? "shallow depth of field, shot at f/1.4, background rendered as soft circular bokeh shapes and color silhouettes" : "deep edge-to-edge focus across all depth planes from foreground to background";
+  const realismGrounding = isPhoto ? "Subtle fabric creases, natural skin texture, and fine surface reflections." : "Rich volumetric shading and authentic textural contrast.";
+  const openingClause = `${mediumPrefix}, set in ${cleanScene || "the scene"}. Illuminated by ${sceneAtmosphere}. ${opticsText}. ${realismGrounding}`.replace(/\s+/g, " ").replace(/,\s*\./g, ".").trim();
   sections.push({
-    id: "subject-action",
-    priority: 0,
+    id: "medium-optics-opening",
+    priority: 1,
     required: true,
-    compressible: false,
-    text: subjectActionText
+    compressible: true,
+    text: openingClause
   });
-  if (subjects.length > 0) {
-    const appearanceLines = subjects.map((s) => {
-      const parts = [];
-      if (s.appearance)
-        parts.push(s.appearance);
-      if (s.attire)
-        parts.push(`wearing ${s.attire}`);
-      return `${s.name}: ${parts.join(", ")}`;
-    });
+  const layoutBoxes = [];
+  if (brief.subjectMode === "none" || subjects.length === 0) {
+    const focus = cue?.visualFocus || (brief.action ? sanitizeQuoteAndUnitNotation(brief.action) : "an open architectural setting");
     sections.push({
-      id: "appearance-wardrobe",
+      id: "subject-action",
       priority: 0,
       required: true,
       compressible: false,
-      text: appearanceLines.join(". ") + "."
+      text: `An empty scene with clean unbranded surfaces and no people present, centering on ${focus}.`
     });
-  }
-  const spatialText = formatSpatialPlacements(shotSpec);
-  if (spatialText) {
+  } else if (subjects.length === 1) {
+    const s = subjects[0];
+    const label = `subject_${s.name.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
+    const attireStr = s.attire ? `, wearing ${s.attire}` : "";
+    const actionStr = s.action || (brief.action ? sanitizeQuoteAndUnitNotation(brief.action) : "standing poised in the scene");
+    layoutBoxes.push({
+      label,
+      description: `${s.name}: ${s.appearance}${attireStr}`,
+      box: { x_min: 0.25, y_min: 0.15, x_max: 0.75, y_max: 0.9 }
+    });
+    const subjectClause = `In the center foreground, <${label}> ${s.name} (${s.appearance}${attireStr}) is ${actionStr.replace(/\.+$/, "")}.`.replace(/\s+/g, " ").replace(/,\s*\./g, ".");
     sections.push({
-      id: "spatial-relationships",
+      id: "subject-action",
       priority: 0,
       required: true,
       compressible: false,
-      text: spatialText + "."
+      text: subjectClause
+    });
+  } else {
+    const charWidth = Number((0.85 / Math.min(subjects.length, 3)).toFixed(2));
+    const ensembleClauses = [];
+    subjects.slice(0, 4).forEach((s, i) => {
+      const label = `character_${s.name.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
+      const xMin = Number((0.08 + i * charWidth).toFixed(2));
+      const xMax = Number(Math.min(0.95, xMin + charWidth - 0.04).toFixed(2));
+      const attireStr = s.attire ? `, wearing ${s.attire}` : "";
+      const anchor2 = i === 0 ? "Frame-left in the foreground" : i === 1 ? "Frame-right in the foreground" : "In the center midground";
+      layoutBoxes.push({
+        label,
+        description: `${s.name}: ${s.appearance}${attireStr}`,
+        box: { x_min: xMin, y_min: 0.18, x_max: xMax, y_max: 0.9 }
+      });
+      ensembleClauses.push(`${anchor2}, <${label}> ${s.name} (${s.appearance}${attireStr})`);
+    });
+    const actionText = brief.action ? ` ${sanitizeQuoteAndUnitNotation(brief.action.trim().replace(/\.+$/, ""))}.` : ".";
+    const ensembleText = `${ensembleClauses.join("; ")}${actionText}`.replace(/\s+/g, " ").replace(/,\s*\./g, ".");
+    sections.push({
+      id: "ensemble-subjects",
+      priority: 0,
+      required: true,
+      compressible: false,
+      text: ensembleText
     });
   }
-  if (profile.features.layoutBoxes && shotSpec.composition.subjectPlacements) {
-    const boxes = shotSpec.composition.subjectPlacements.filter((p) => Boolean(p.box && p.box.length === 4)).map((p) => ({ label: p.subject, box: p.box }));
-    if (boxes.length > 0) {
-      parameterHints["layout_boxes"] = boxes;
-    }
-  }
-  const cameraText = formatCameraFraming(shotSpec);
-  if (cameraText) {
+  const quoted = extractQuotedText(`${brief.action} ${cue?.visualFocus || ""}`);
+  if (quoted) {
+    const typographyLabel = "scene_typography";
+    layoutBoxes.push({
+      label: typographyLabel,
+      description: `Typography reading "${quoted}"`,
+      box: { x_min: 0.2, y_min: 0.08, x_max: 0.8, y_max: 0.25 }
+    });
     sections.push({
-      id: "camera-framing",
+      id: "typography-lock",
       priority: 1,
       required: false,
       compressible: true,
-      text: `Photographed as a ${cameraText}.`
+      text: `Above, <${typographyLabel}> displays clean legible lettering that reads exactly "${quoted}", the only text in the scene.`
     });
   }
-  if (brief.scene) {
+  if (cleanScene) {
+    const backgroundDesc = `In the background, ${cleanScene} forms silhouettes and environmental shapes against ambient atmospheric light gradients.`.replace(/\s+/g, " ").replace(/,\s*\./g, ".");
     sections.push({
-      id: "environment-setting",
+      id: "background-sixth",
       priority: 1,
       required: false,
       compressible: true,
-      text: `Setting: ${brief.scene.trim()}.`
-    });
-  }
-  if (brief.lighting) {
-    sections.push({
-      id: "scene-lighting",
-      priority: 1,
-      required: false,
-      compressible: true,
-      text: `Lighting: ${brief.lighting.trim()}.`
-    });
-  }
-  const styleText = formatStyleDNAProse(styleDNA);
-  if (styleText) {
-    sections.push({
-      id: "visual-style",
-      priority: 2,
-      required: false,
-      compressible: true,
-      text: `Rendered in ${styleText}.`
+      text: backgroundDesc
     });
   }
   const constraints = [];
@@ -43028,11 +43126,14 @@ function serializeFlux3Klein(input2) {
       text: constraints.join(" ")
     });
   }
+  if (layoutBoxes.length > 0) {
+    parameterHints["layout_boxes"] = layoutBoxes;
+  }
   const prompt = sections.map((s) => s.text.trim()).filter(Boolean).join(" ");
   if (prompt.length < 250 && input2.complexity !== "simple") {
-    warnings.push("FLUX.3 Klein prompt is short for the scene complexity; Klein produces best results with complete descriptive captions.");
+    warnings.push("FLUX.3 Klein prompt is short for the scene complexity; Klein produces best results with 140\u2013250 word File-Level captions.");
   }
-  const document = createPromptDocument(profile.dialect, sections, negativeSections, Object.keys(parameterHints).length > 0 ? parameterHints : undefined, warnings);
+  const document = createPromptDocument(profile.dialect, sections, [], Object.keys(parameterHints).length > 0 ? parameterHints : undefined, warnings);
   return {
     document,
     prompt,
@@ -44338,7 +44439,7 @@ function extractIdeogramPalette(brief, styleDNA) {
   }
   return ["#0F172A", "#334155", "#64748B", "#94A3B8", "#F8FAFC"];
 }
-function isPhotographicMedium(styleDNA, brief) {
+function isPhotographicMedium2(styleDNA, brief) {
   const medium = (styleDNA?.medium || "").toLowerCase();
   const prefix = (styleDNA?.prefix || "").toLowerCase();
   const combined = `${medium} ${prefix}`;
@@ -44350,7 +44451,7 @@ function isPhotographicMedium(styleDNA, brief) {
   }
   return false;
 }
-function extractQuotedText(text4) {
+function extractQuotedText2(text4) {
   const match = text4.match(/['"]([^'"]{1,40})['"]/);
   return match && match[1] ? match[1].trim() : null;
 }
@@ -44360,25 +44461,27 @@ function serializeIdeogramV4(input2) {
   const sections = [];
   const subjects = parseSubjectsFromBrief(brief, cue);
   const palette = extractIdeogramPalette(brief, styleDNA);
-  const isPhoto = isPhotographicMedium(styleDNA, brief);
+  const isPhoto = isPhotographicMedium2(styleDNA, brief);
   const isDirectJson = profile.ideogramMode !== "structured-prose";
   const cameraText = formatCameraFraming(shotSpec, styleDNA) || "medium shot";
   const prefix = styleDNA?.prefix?.trim() ? `${styleDNA.prefix.trim()}. ` : "";
   const suffix = styleDNA?.suffix?.trim() || "";
   const medium = styleDNA?.medium?.trim() || "";
+  const cleanScene = formatSceneProse(brief.scene);
   if (isDirectJson) {
     let subjectSummary = "";
     if (brief.subjectMode === "none") {
       subjectSummary = `a cinematic view of ${cue?.visualFocus || brief.action || "the scene"}, with no visible people`;
     } else if (brief.subjectMode === "ensemble" || subjects.length > 1) {
-      subjectSummary = `an ensemble scene with ${subjects.length} visible characters: ${subjects.map((s) => s.name).join(" and ")}`;
+      const charCountPhrase = subjects.length === 1 ? "1 visible character" : `${subjects.length} visible characters`;
+      subjectSummary = `an ensemble scene with ${charCountPhrase}: ${subjects.map((s) => s.name).join(" and ")}`;
     } else {
       const main = subjects[0];
       const attire = main?.attire ? ` wearing ${main.attire}` : "";
       subjectSummary = `${main?.name || "a character"} (${main?.appearance || "distinct features"}${attire})`;
     }
-    const actionText = brief.action ? ` ${brief.action.trim().replace(/\.+$/, "")}.` : "";
-    const highLevel = `${prefix}${isPhoto ? "A candid" : "A detailed"} ${cameraText} ${medium || (isPhoto ? "photograph" : "illustration")} of ${subjectSummary} in ${brief.scene.trim()}.${actionText}`.replace(/\s+/g, " ").trim();
+    const actionText = brief.action ? ` ${sanitizeQuoteAndUnitNotation(brief.action.trim().replace(/\.+$/, ""))}.` : "";
+    const highLevel = `${prefix}${isPhoto ? "A candid" : "A detailed"} ${cameraText} ${medium || (isPhoto ? "photograph" : "illustration")} of ${subjectSummary} in ${cleanScene}.${actionText}`.replace(/\s+/g, " ").replace(/,\s*\./g, ".").trim();
     const styleDescription = {};
     if (isPhoto) {
       styleDescription.aesthetics = [prefix, "Atmospheric cinematic realism with balanced dynamic range, authentic surface textures, and fine tonal gradation.", suffix].filter(Boolean).join(" ").trim();
@@ -44436,10 +44539,11 @@ function serializeIdeogramV4(input2) {
       desc: "Immediate foreground floor plane with detailed material textures, reflections, and spatial perspective.",
       color_palette: [palette[0], palette[1]]
     });
+    const midgroundBackdrop = cleanScene.slice(0, 200).replace(/[,\s]+$/, "").trim();
     elements.push({
       type: "obj",
       bbox: [180, 40, 740, 960],
-      desc: `Midground environmental backdrop: ${brief.scene.slice(0, 200).replace(/\s+\S*$/, "")}.`,
+      desc: `Midground environmental backdrop: ${midgroundBackdrop}.`,
       color_palette: [palette[2], palette[3]]
     });
     elements.push({
@@ -44448,7 +44552,7 @@ function serializeIdeogramV4(input2) {
       desc: "Upper ceiling structure, sky gradient, and atmospheric volumetric light spill overhead.",
       color_palette: [palette[3], palette[4] || palette[0]]
     });
-    const quoteInAction = extractQuotedText(`${brief.action} ${cue?.visualFocus || ""}`);
+    const quoteInAction = extractQuotedText2(`${brief.action} ${cue?.visualFocus || ""}`);
     if (quoteInAction && elements.length < 6) {
       elements.unshift({
         type: "text",
@@ -44462,7 +44566,7 @@ function serializeIdeogramV4(input2) {
       high_level_description: highLevel,
       style_description: styleDescription,
       compositional_deconstruction: {
-        background: brief.scene ? `${brief.scene.trim()}. Atmospheric depth with detailed environmental surfaces.` : "An evocative, detailed scene environment with natural architectural depth and rich surfaces.",
+        background: cleanScene ? `${cleanScene}. Atmospheric depth with detailed environmental surfaces.`.replace(/,\s*\./g, ".") : "An evocative, detailed scene environment with natural architectural depth and rich surfaces.",
         elements: elements.slice(0, 6)
       }
     };
@@ -44497,9 +44601,9 @@ function serializeIdeogramV4(input2) {
     const attire = main?.attire ? `, wearing ${main.attire}` : "";
     subjectsText = `${main?.name || "Character"} (${main?.appearance || "distinct traits"}${attire}), ${main?.action || brief.action || "in the scene"}`;
   }
-  const quoted = extractQuotedText(`${brief.action} ${cue?.visualFocus || ""}`);
+  const quoted = extractQuotedText2(`${brief.action} ${cue?.visualFocus || ""}`);
   const textClause = quoted ? ` featuring clean typography reading '${quoted}'` : "";
-  const backgroundText = `Behind, ${brief.scene}.`;
+  const backgroundText = `Behind, ${cleanScene}.`;
   const lightingSpecs = `${brief.lighting ? `${brief.lighting}, ` : ""}${isPhoto ? "shot on 35mm film, f/1.8 aperture, natural depth of field and tack-sharp focus" : "clean linework, rich volumetric shading, and painterly depth"}${suffix ? `, ${suffix}` : ""}.`;
   const paletteText = `color palette ${palette.join(", ")}`;
   const structuredPrompt = `${shotMediumText} ${subjectsText}${textClause}. ${backgroundText} ${lightingSpecs} ${paletteText}`;
@@ -44962,8 +45066,16 @@ function buildV2ImageRequest(input2) {
     const referencePlan = resolveReferencePlan({ brief: input2.metadata?.brief, cue, portraits: input2.portraits, characterDNALibrary: input2.characterDNALibrary });
     const compiled = compileModelPrompt({ brief: input2.brief, shotSpec, styleDNA: effectiveStyleDNA, profile, outputPlan, referencePlan, detailLevel: rebuild?.fitToModel ? "compact" : config2.imagePromptDetail, promptExpansionEnabled: profile.promptExpansion?.enabled, userBudgetOverride: rebuild?.fitToModel ? Math.min(profile.softBudgets.standard[0], profile.hardMaxCharacters) : config2.imagePromptBudgetOverride ? config2.imagePromptBudget : null, cue });
     request.prompt = compiled.prompt;
-    if (compiled.negativePrompt !== undefined)
+    if (compiled.negativePrompt !== undefined) {
       request.negativePrompt = compiled.negativePrompt;
+    } else if (profile.negativePolicy === "positive-only" || profile.dialect === "ideogram-v4" || profile.dialect === "flux3-klein") {
+      delete request.negativePrompt;
+      if (request.parameters) {
+        delete request.parameters.negativePrompt;
+        delete request.parameters.negative_prompt;
+        delete request.parameters.negative;
+      }
+    }
     if (compiled.parameterHints)
       request.parameters = { ...request.parameters, ...compiled.parameterHints };
     if (metadata) {
@@ -45104,14 +45216,27 @@ function stripDanglingImageReferences(parameters) {
   }
   return result;
 }
+function isPositiveOnlyModel(model) {
+  if (!model)
+    return false;
+  const lower = model.toLowerCase();
+  return lower.includes("ideogram") || lower.includes("flux-3/klein") || lower.includes("flux-3-klein") || lower.includes("nano-banana") || lower.includes("recraft");
+}
 function sanitizeImagePayloadParameters(parameters, provider, model) {
   if (!parameters || typeof parameters !== "object")
     return parameters;
+  let result = { ...parameters };
+  if (isPositiveOnlyModel(model)) {
+    delete result.negativePrompt;
+    delete result.negative_prompt;
+    delete result.negative;
+    delete result.uc;
+  }
   if (provider?.toLowerCase() === "nanogpt" && isStrictTextToImageModel(provider, model)) {
-    return stripDanglingImageReferences(parameters);
+    result = stripDanglingImageReferences(result);
   }
   let totalBytes = 0;
-  const references = parameters.resolvedReferenceImages ?? parameters.resolvedSourceImages ?? parameters.referenceImages;
+  const references = result.resolvedReferenceImages ?? result.resolvedSourceImages ?? result.referenceImages;
   if (Array.isArray(references)) {
     for (const ref of references) {
       if (typeof ref === "string") {
@@ -45122,9 +45247,9 @@ function sanitizeImagePayloadParameters(parameters, provider, model) {
     }
   }
   if (provider?.toLowerCase() === "nanogpt" && totalBytes >= NANO_GPT_PAYLOAD_LIMIT_BYTES) {
-    return stripDanglingImageReferences(parameters);
+    return stripDanglingImageReferences(result);
   }
-  return parameters;
+  return result;
 }
 var MAX_SAFE_REFERENCE_BYTES, NANO_GPT_PAYLOAD_LIMIT_BYTES;
 var init_image_payload_sanitizer = __esm(() => {
@@ -47795,6 +47920,9 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
           if (approved.promptProfile?.output)
             assertCapabilityOutput(approved.promptProfile.output, approved.parameters ?? {});
           const { promptProfile: _promptProfile, ...providerRequest } = approved;
+          if (approved.promptProfile?.negativeMode === "positive-only" || approved.promptProfileV2?.negativePolicy === "positive-only" || sanitizeImagePayloadParameters({}, activeProvider, approved.model) && approved.model && /ideogram|flux-3.*klein|recraft|banana/i.test(approved.model)) {
+            delete providerRequest.negativePrompt;
+          }
           const rawParams = providerOutputParameters(approved.parameters ?? {});
           const safeParams = sanitizeImagePayloadParameters(rawParams, activeProvider, approved.model);
           if (cacheOptions.waitForDispatch) {

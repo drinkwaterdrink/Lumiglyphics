@@ -67,33 +67,91 @@ function cleanActionAndDirection(rawAction?: string, rawDirection?: string): str
   return `${act}, ${cleanDir}`;
 }
 
+export function sanitizeQuoteAndUnitNotation(text: string): string {
+  if (!text) return '';
+  return text
+    // Replace 5'11" with 5 ft 11 in
+    .replace(/\b(\d+)'\s*(\d+)(?:"|''|’’)?\b/g, '$1 ft $2 in')
+    // Replace 6' with 6 ft
+    .replace(/\b(\d+)'\b/g, '$1 ft')
+    // Replace 11" with 11 inches
+    .replace(/\b(\d+)"\b/g, '$1 inches')
+    // Replace remaining double quotes with single quotes to protect JSON strings
+    .replace(/"/g, "'")
+    // Clean up punctuation collisions like ",." or ", ," or ";."
+    .replace(/,\s*\./g, '.')
+    .replace(/;\s*\./g, '.')
+    .replace(/,\s*,/g, ',')
+    .replace(/;\s*;/g, ';')
+    .trim();
+}
+
+export function formatSceneProse(sceneText: string): string {
+  if (!sceneText) return '';
+  return sanitizeQuoteAndUnitNotation(sceneText)
+    .split(/\s*;\s*/)
+    .map(part => part.trim().replace(/\.+$/, ''))
+    .filter(Boolean)
+    .join(', ')
+    .replace(/,\s*\./g, '.')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function parseSubjectsFromBrief(brief: VisualBrief, cue?: VisualCue): SubjectFact[] {
   if (brief.subjectMode === 'none') return [];
+
+  const isNarrativeUndressed = /\b(?:naked|nude|undressed|bare skin|unclothed|topless|stripping|in the bath|in the shower)\b/i.test(`${brief.action} ${brief.scene}`);
 
   if (brief.subjectMode === 'ensemble') {
     const lines = brief.subjects.split('\n').filter((line: string) => line.includes(':'));
     return lines.map((line: string) => {
       const colon = line.indexOf(':');
       const name = line.slice(0, colon).trim();
-      const rest = line.slice(colon + 1).trim();
+      const rawRest = line.slice(colon + 1).trim();
+      const sanitizedRest = sanitizeQuoteAndUnitNotation(rawRest);
+      
+      const wearingMatch = sanitizedRest.match(/;\s*(?:wearing|dressed in)\s+(.*)$/i);
+      let appearance = sanitizedRest;
+      let attire: string | undefined = undefined;
+      if (wearingMatch) {
+        appearance = sanitizedRest.slice(0, wearingMatch.index).trim();
+        attire = wearingMatch[1]!.trim();
+      } else {
+        const hasClothing = /\b(?:wearing|dressed in|outfit|coat|jacket|shirt|pants|trousers|dress|robe|suit|hoodie|sweater|uniform|vest|skirt)\b/i.test(sanitizedRest);
+        if (!hasClothing && !isNarrativeUndressed) {
+          attire = 'scene-appropriate casual clothing';
+        }
+      }
+
       return {
         name,
-        appearance: rest
+        appearance,
+        attire
       };
     });
   }
 
   // Single subject
   const name = brief.subjectPreparation?.name || cue?.character || 'Subject';
-  const appearance = brief.subjectPreparation?.identity || brief.subjects;
-  const attire = brief.subjectPreparation?.attire ?? undefined;
+  const rawAppearance = brief.subjectPreparation?.identity || brief.subjects;
+  const sanitizedAppearance = sanitizeQuoteAndUnitNotation(rawAppearance);
+  let attire = brief.subjectPreparation?.attire ? sanitizeQuoteAndUnitNotation(brief.subjectPreparation.attire) : undefined;
+  
+  if (!attire) {
+    const hasClothing = /\b(?:wearing|dressed in|outfit|coat|jacket|shirt|pants|trousers|dress|robe|suit|hoodie|sweater|uniform|vest|skirt)\b/i.test(sanitizedAppearance);
+    if (!hasClothing && !isNarrativeUndressed) {
+      attire = 'everyday clothing suitable for the scene';
+    }
+  }
+
   const action = cleanActionAndDirection(brief.action, brief.subjectPreparation?.direction);
 
   return [{
     name,
-    appearance,
+    appearance: sanitizedAppearance,
     attire,
-    action
+    action: action ? sanitizeQuoteAndUnitNotation(action) : undefined
   }];
 }
 

@@ -1484,6 +1484,9 @@ export async function generateAssets(
           assertModelOutputParameters(activeProvider, approved.model, approved.parameters ?? {});
           if(approved.promptProfile?.output)assertCapabilityOutput(approved.promptProfile.output,approved.parameters??{});
           const {promptProfile:_promptProfile,...providerRequest}=approved;
+          if (approved.promptProfile?.negativeMode === 'positive-only' || approved.promptProfileV2?.negativePolicy === 'positive-only' || sanitizeImagePayloadParameters({}, activeProvider, approved.model) && approved.model && /ideogram|flux-3.*klein|recraft|banana/i.test(approved.model)) {
+            delete providerRequest.negativePrompt;
+          }
           const rawParams = providerOutputParameters(approved.parameters ?? {});
           const safeParams = sanitizeImagePayloadParameters(rawParams, activeProvider, approved.model);
           // The last asynchronous boundary: toggles during review/connection refresh

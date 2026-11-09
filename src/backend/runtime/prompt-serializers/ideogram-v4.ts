@@ -3,7 +3,9 @@ import type { SerializerInput, SerializerResult } from './types.js';
 import {
   parseSubjectsFromBrief,
   formatCameraFraming,
-  formatStyleDNAProse
+  formatStyleDNAProse,
+  formatSceneProse,
+  sanitizeQuoteAndUnitNotation
 } from './helpers.js';
 import type { VisualBrief } from '../../../shared/image-templates.js';
 import type { StyleDNA } from '../../../shared/style-dna.js';
@@ -135,6 +137,8 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
   const suffix = styleDNA?.suffix?.trim() || '';
   const medium = styleDNA?.medium?.trim() || '';
 
+  const cleanScene = formatSceneProse(brief.scene);
+
   // Mode A: Direct JSON Mode (Native NanoGPT endpoint schema)
   if (isDirectJson) {
     // 1. High-level description
@@ -142,15 +146,16 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
     if (brief.subjectMode === 'none') {
       subjectSummary = `a cinematic view of ${cue?.visualFocus || brief.action || 'the scene'}, with no visible people`;
     } else if (brief.subjectMode === 'ensemble' || subjects.length > 1) {
-      subjectSummary = `an ensemble scene with ${subjects.length} visible characters: ${subjects.map(s => s.name).join(' and ')}`;
+      const charCountPhrase = subjects.length === 1 ? '1 visible character' : `${subjects.length} visible characters`;
+      subjectSummary = `an ensemble scene with ${charCountPhrase}: ${subjects.map(s => s.name).join(' and ')}`;
     } else {
       const main = subjects[0];
       const attire = main?.attire ? ` wearing ${main.attire}` : '';
       subjectSummary = `${main?.name || 'a character'} (${main?.appearance || 'distinct features'}${attire})`;
     }
 
-    const actionText = brief.action ? ` ${brief.action.trim().replace(/\.+$/, '')}.` : '';
-    const highLevel = `${prefix}${isPhoto ? 'A candid' : 'A detailed'} ${cameraText} ${medium || (isPhoto ? 'photograph' : 'illustration')} of ${subjectSummary} in ${brief.scene.trim()}.${actionText}`.replace(/\s+/g, ' ').trim();
+    const actionText = brief.action ? ` ${sanitizeQuoteAndUnitNotation(brief.action.trim().replace(/\.+$/, ''))}.` : '';
+    const highLevel = `${prefix}${isPhoto ? 'A candid' : 'A detailed'} ${cameraText} ${medium || (isPhoto ? 'photograph' : 'illustration')} of ${subjectSummary} in ${cleanScene}.${actionText}`.replace(/\s+/g, ' ').replace(/,\s*\./g, '.').trim();
 
     // 2. Style description (photo vs art branches)
     const styleDescription: Record<string, unknown> = {};
@@ -222,10 +227,11 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
     });
 
     // Midground environment element (Element 4)
+    const midgroundBackdrop = cleanScene.slice(0, 200).replace(/[,\s]+$/, '').trim();
     elements.push({
       type: 'obj',
       bbox: [180, 40, 740, 960],
-      desc: `Midground environmental backdrop: ${brief.scene.slice(0, 200).replace(/\s+\S*$/, '')}.`,
+      desc: `Midground environmental backdrop: ${midgroundBackdrop}.`,
       color_palette: [palette[2]!, palette[3]!]
     });
 
@@ -253,7 +259,7 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
       high_level_description: highLevel,
       style_description: styleDescription,
       compositional_deconstruction: {
-        background: brief.scene ? `${brief.scene.trim()}. Atmospheric depth with detailed environmental surfaces.` : 'An evocative, detailed scene environment with natural architectural depth and rich surfaces.',
+        background: cleanScene ? `${cleanScene}. Atmospheric depth with detailed environmental surfaces.`.replace(/,\s*\./g, '.') : 'An evocative, detailed scene environment with natural architectural depth and rich surfaces.',
         elements: elements.slice(0, 6)
       }
     };
@@ -302,7 +308,7 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
   const textClause = quoted ? ` featuring clean typography reading '${quoted}'` : '';
 
   // [4. Detailed Background & Surfaces]
-  const backgroundText = `Behind, ${brief.scene}.`;
+  const backgroundText = `Behind, ${cleanScene}.`;
 
   // [5. Lighting & Camera/Render Specs]
   const lightingSpecs = `${brief.lighting ? `${brief.lighting}, ` : ''}${isPhoto ? 'shot on 35mm film, f/1.8 aperture, natural depth of field and tack-sharp focus' : 'clean linework, rich volumetric shading, and painterly depth'}${suffix ? `, ${suffix}` : ''}.`;

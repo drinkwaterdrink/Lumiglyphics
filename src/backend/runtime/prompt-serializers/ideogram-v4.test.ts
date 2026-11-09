@@ -50,6 +50,7 @@ describe('Ideogram V4 Native Prompting Engine', () => {
     const result = compileModelPrompt({
       brief: baseBrief,
       shotSpec,
+      styleDNA: {},
       outputPlan,
       profile
     });
@@ -104,6 +105,7 @@ describe('Ideogram V4 Native Prompting Engine', () => {
     const result = compileModelPrompt({
       brief: baseBrief,
       shotSpec,
+      styleDNA: {},
       outputPlan,
       profile
     });
@@ -127,6 +129,7 @@ describe('Ideogram V4 Native Prompting Engine', () => {
     const result = compileModelPrompt({
       brief: ensembleBrief,
       shotSpec,
+      styleDNA: {},
       outputPlan,
       profile
     });
@@ -152,6 +155,7 @@ describe('Ideogram V4 Native Prompting Engine', () => {
     const result = compileModelPrompt({
       brief: baseBrief,
       shotSpec,
+      styleDNA: {},
       outputPlan,
       profile
     });

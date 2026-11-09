@@ -1,25 +1,25 @@
 {
   "flux3-klein/solo": {
-    "prompt": "Mira is reading an open book beside the window, reading. Mira: silver hair, violet eyes, wearing green coat. Photographed as a medium shot, eye-level angle, natural 50mm lens perspective, moderate depth of field. Setting: Rainy library with brass lamps and red curtains. Lighting: warm lamplight against cool rain. Rendered in watercolor illustration, palette of muted green and brass. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay. Use reference image 1 specifically for Mira's facial identity and hair; follow the scene prompt for current pose, outfit, and setting.",
+    "prompt": "watercolor illustration on rough cold-press watercolor paper, set in Rainy library with brass lamps and red curtains. Illuminated by warm lamplight against cool rain. deep edge-to-edge focus across all depth planes from foreground to background. Rich volumetric shading and authentic textural contrast. In the center foreground, <subject_mira> Mira (silver hair, violet eyes, wearing green coat) is reading an open book beside the window, reading. In the background, Rainy library with brass lamps and red curtains forms silhouettes and environmental shapes against ambient atmospheric light gradients. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay. Use reference image 1 specifically for Mira's facial identity and hair; follow the scene prompt for current pose, outfit, and setting.",
     "negativePrompt": "",
     "warnings": []
   },
   "flux3-klein/ensemble": {
-    "prompt": "An ensemble scene featuring 2 visible characters: Mira, Jo. reading an open book beside the window Mira: silver hair, violet eyes, green coat. Jo: black curls, amber eyes, blue jacket. Photographed as a medium-wide shot, eye-level angle, wide-angle lens, moderate depth of field. Setting: Rainy library with brass lamps and red curtains. Lighting: warm lamplight against cool rain. Rendered in watercolor illustration, palette of muted green and brass. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.",
+    "prompt": "watercolor illustration on rough cold-press watercolor paper, set in Rainy library with brass lamps and red curtains. Illuminated by warm lamplight against cool rain. deep edge-to-edge focus across all depth planes from foreground to background. Rich volumetric shading and authentic textural contrast. Frame-left in the foreground, <character_mira> Mira (silver hair, violet eyes, green coat); Frame-right in the foreground, <character_jo> Jo (black curls, amber eyes, blue jacket) reading an open book beside the window. In the background, Rainy library with brass lamps and red curtains forms silhouettes and environmental shapes against ambient atmospheric light gradients. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.",
     "negativePrompt": "",
     "warnings": []
   },
   "flux3-klein/environment": {
-    "prompt": "A detailed view with no visible people. an open book resting on an empty desk. Photographed as a macro detail close-up, eye-level angle, telephoto lens compression, selective crisp focus on the main subject. Setting: Rainy library with brass lamps and red curtains. Lighting: warm lamplight against cool rain. Rendered in watercolor illustration, palette of muted green and brass.",
+    "prompt": "watercolor illustration on rough cold-press watercolor paper, set in Rainy library with brass lamps and red curtains. Illuminated by warm lamplight against cool rain. deep edge-to-edge focus across all depth planes from foreground to background. Rich volumetric shading and authentic textural contrast. An empty scene with clean unbranded surfaces and no people present, centering on an open book resting on an empty desk. In the background, Rainy library with brass lamps and red curtains forms silhouettes and environmental shapes against ambient atmospheric light gradients.",
     "negativePrompt": "",
     "warnings": []
   },
   "flux3-klein/long": {
-    "prompt": "Mira is reading an open book beside the window, reading. Mira: silver hair, violet eyes, wearing green coat.",
+    "prompt": "In the center foreground, <subject_mira> Mira (silver hair, violet eyes, wearing green coat) is reading an open book beside the window, reading.",
     "negativePrompt": "",
     "warnings": [
-      "Prompt fitted by condensing camera and environment details (108/1600 chars).",
-      "FLUX.3 Klein prompt is short (108 chars); BFL guidelines recommend full scene captions."
+      "Prompt fitted by condensing camera and environment details (144/1600 chars).",
+      "FLUX.3 Klein prompt is short (144 chars); BFL guidelines recommend full scene captions."
     ]
   },
   "flux3/solo": {

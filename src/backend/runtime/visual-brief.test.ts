@@ -158,8 +158,8 @@ test("pulls Character DNA for non-primary characters and resolves diminutives li
 test('character with locked DNA generates locked DNA identitySource and passes ImagePromptMetadataSchema', () => {
   const marselineDna = createEmptyCharacterDNA("Marseline Vane");
   marselineDna.locked = true;
-  marselineDna.hairStyle = "raven curls";
-  marselineDna.eyeColor = "hazel";
+  marselineDna.hair.style = "raven curls";
+  marselineDna.eyes.color = "hazel";
   marselineDna.signatureOutfit = "black velvet coat";
 
   const dnaLibrary = {

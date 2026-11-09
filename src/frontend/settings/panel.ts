@@ -811,6 +811,15 @@ export class VisualNovelSettingsPanel {
                 </select>
                 <small>Direct JSON uses Ideogram 4's native schema with bounding boxes and color palettes to lock composition and bypass safety refusals. You can also force it for other models to experiment.</small>
               </label>
+              <label data-field ${find('FLUX.3 Klein prompt mode','flux klein prompt mode pup caption upsampler bfl 1/6 background bounding box auto')}>
+                <span>FLUX.3 Klein prompting style</span>
+                <select name="flux3KleinPromptMode">
+                  <option value="auto">Auto (Official BFL PUP File-Level format for FLUX.3 Klein)</option>
+                  <option value="pup-caption">BFL PUP Caption (Force 7 Golden Rules &amp; Layout Boxes)</option>
+                  <option value="off">Off (Standard generic prose)</option>
+                </select>
+                <small>Uses Black Forest Labs' official 9B Prompt Upsampler format with frame-relative spatial anchors, 1/6th background rule, typography locks, and NanoGPT layout boxes. Force on to test with other models.</small>
+              </label>
               <label data-field ${find('Dialogue safe area','safe area text overlay dialogue speech framing clearance')}>
                 <span>Dialogue safe area</span>
                 <select name="dialogueSafeArea">
@@ -1625,6 +1634,7 @@ export class VisualNovelSettingsPanel {
         return { dynamicImageTemplates: checked };
       case "imagePromptEngineVersion": return { imagePromptEngineVersion: target.value === "1" ? 1 : 2 };
       case "ideogramPromptMode": return { ideogramPromptMode: target.value as any };
+      case "flux3KleinPromptMode": return { flux3KleinPromptMode: target.value as any };
       case "automaticImagePromptSettings": return {automaticImagePromptSettings:checked};
       case "imagePromptBudgetOverride": return {imagePromptBudgetOverride:checked};
       case "imagePromptBudget": {
@@ -2196,6 +2206,7 @@ export class VisualNovelSettingsPanel {
   private syncEveryday(config: VisualNovelConfig): void {
     this.control<HTMLSelectElement>("imagePromptEngineVersion").value = String(config.imagePromptEngineVersion ?? 2);
     this.control<HTMLSelectElement>("ideogramPromptMode").value = config.ideogramPromptMode ?? "auto";
+    this.control<HTMLSelectElement>("flux3KleinPromptMode").value = config.flux3KleinPromptMode ?? "auto";
     this.control<HTMLSelectElement>("imageResolutionPreference").value = config.imageResolutionPreference ?? "high";
     this.control<HTMLSelectElement>("dialogueSafeArea").value = config.dialogueSafeArea ?? "auto";
     this.control<HTMLSelectElement>("imagePromptDetail").value = config.imagePromptDetail ?? "auto";

@@ -170,8 +170,19 @@ export function resolveRouteDialect(
   const normModel = modelId.trim().toLowerCase();
   const normProvider = provider.trim().toLowerCase();
   const ideogramMode = settings?.ideogramPromptMode ?? 'auto';
+  const flux3KleinMode = settings?.flux3KleinPromptMode ?? 'auto';
 
-  // Manual override takes precedence:
+  // Manual FLUX.3 Klein override takes precedence:
+  if (flux3KleinMode === 'pup-caption') {
+    return {
+      dialect: 'flux3-klein',
+      family: 'flux',
+      negativePolicy: 'positive-only',
+      features: { references: true, layoutBoxes: true, exactText: true }
+    };
+  }
+
+  // Manual Ideogram override:
   if (ideogramMode === 'json' || ideogramMode === 'structured-prose') {
     return {
       dialect: 'ideogram-v4',
@@ -185,6 +196,22 @@ export function resolveRouteDialect(
     return {
       dialect: 'generic-prose',
       family: 'ideogram',
+      negativePolicy: 'positive-only',
+      features: { references: true }
+    };
+  }
+
+  if (
+    flux3KleinMode === 'off' &&
+    (normModel === 'blackforestlabs/flux-3/klein/text-to-image' ||
+      normModel === 'blackforestlabs/flux-3/klein/edit-image' ||
+      normModel === 'blackforestlabs/flux-3/klein/base/text-to-image' ||
+      normModel === 'blackforestlabs/flux-3/klein/base/edit-image' ||
+      /(?:^|[\/._-])flux[-_.]?3.*klein/.test(normModel))
+  ) {
+    return {
+      dialect: 'generic-prose',
+      family: 'flux',
       negativePolicy: 'positive-only',
       features: { references: true }
     };
