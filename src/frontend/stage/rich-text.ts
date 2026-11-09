@@ -306,6 +306,7 @@ const DANGEROUS_HTML_TAGS = new Set([
 ]);
 
 export function stripUnknownPresetTags(text: string): string {
+  text = text.replace(/<(?:[a-zA-Z0-9_-]+_)?true_thoughts?\b[^>]*>[\s\S]*?<\/(?:[a-zA-Z0-9_-]+_)?true_thoughts?\s*>/gi, "");
   return text.replace(/<\/?([A-Za-z][\w-]*)(?:\s+[\w:-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))*\s*\/?>/g, (match, name: string) => {
     const lower = name.toLowerCase();
     if (ALLOWED_TAGS.has(lower) || isTextEffectId(lower) || lower === "img" || lower === "pimg" || DANGEROUS_HTML_TAGS.has(lower)) {

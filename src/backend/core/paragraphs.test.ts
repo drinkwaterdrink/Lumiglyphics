@@ -256,6 +256,27 @@ describe("narrative preparation", () => {
     ]);
   });
 
+  test("completely filters <true_thoughts> character internal monologue tags from reader dialogue and prose", () => {
+    const raw = [
+      "Your face runs hot as you look her over.",
+      "",
+      "<true_thoughts character=\"Marseline Vane\">It stood up out of the packing and picked his arm like a berth assignment.</true_thoughts>",
+      "",
+      "\"Uh, hello. What's your name?\"",
+      "",
+      "<true_thoughts character=\"Kallirrhoe Tskhin\">Grandmother's stories had this exact thing.</true_thoughts>",
+      "",
+      "\"I am what was sent,\" she says."
+    ].join("\n");
+
+    const prepared = prepareNarrative(raw);
+    expect(prepared.paragraphs.map(p => p.text)).toEqual([
+      "Your face runs hot as you look her over.",
+      "\"Uh, hello. What's your name?\"",
+      "\"I am what was sent,\" she says."
+    ]);
+  });
+
   test("extracts spatial scene location from structured continuity blocks", () => {
     const raw = [
       "<cognition_trace>",

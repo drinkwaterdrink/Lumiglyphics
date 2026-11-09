@@ -221,3 +221,62 @@ test("protects attire clause from being truncated in ensemble and scales with hi
   assert.ok(brief.subjects.includes("CharacterA"));
   assert.ok(brief.subjects.includes("CharacterB"));
 });
+
+test("injects Location DNA and active Item DNA into visual brief", () => {
+  const config = normalizeConfig({});
+  const brief = buildVisualBrief(
+    config,
+    {
+      ...scene,
+      environment: {
+        ...scene.environment,
+        location: "Flat 3"
+      }
+    },
+    {
+      ...cue,
+      visualDescription: "Marseline raises the carved yew staff defensively."
+    },
+    undefined,
+    undefined,
+    {
+      locations: {
+        "flat-3": {
+          id: "flat-3",
+          name: "Flat 3",
+          aliases: [],
+          environmentDescription: "An open-plan cedar loft with shattered packing debris and lead-lined crate.",
+          lighting: "gray noon window light through high panes",
+          architecture: "industrial dockside cedar loft",
+          persistentElements: ["lead-lined crate"],
+          lastUpdated: 0
+        }
+      },
+      items: {
+        "carved-yew-staff": {
+          id: "carved-yew-staff",
+          name: "carved yew staff",
+          aliases: ["yew staff"],
+          itemType: "staff",
+          description: "carved yew staff encrusted in diamonds wrapped in vines",
+          materials: "aged dark yew wood, rough diamonds",
+          distinctiveFeatures: ["living coiled vines"],
+          colors: ["#2D1B00", "#15803D"],
+          lastUpdated: 0
+        }
+      },
+      revision: 0
+    }
+  );
+
+  // Verifies Location DNA is injected into scene and lighting
+  assert.ok(brief.scene.includes("open-plan cedar loft"));
+  assert.ok(brief.scene.includes("industrial dockside cedar loft"));
+  assert.ok(brief.lighting.includes("gray noon window light"));
+  assert.ok(brief.sources.includes("location DNA"));
+
+  // Verifies Item DNA is injected into action
+  assert.ok(brief.action.includes("carved yew staff encrusted in diamonds wrapped in vines"));
+  assert.ok(brief.action.includes("aged dark yew wood, rough diamonds"));
+  assert.ok(brief.sources.includes("item DNA"));
+});

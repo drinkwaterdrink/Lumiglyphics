@@ -46,6 +46,8 @@ import {sharedStyleSnapshot} from '../../shared/shared-style-snapshot.js';
 import { buildVisualBrief, resolveTemplateIdentity } from "./visual-brief.js";
 import type { CharacterDNA, CharacterDNALibrary } from "../../shared/character-dna.js";
 import { loadCharacterDNALibrary } from "./character-dna-store.js";
+import { loadStoryDNASet } from "./story-dna-store.js";
+import type { StoryDNASet } from "../../shared/story-dna.js";
 import {
   appearanceMapKeyFor,
   characterAppearanceKey,
@@ -322,11 +324,12 @@ export function compileTemplateCue(
   scene: SceneState,
   cue: VisualCue,
   appearances?: CharacterAppearanceMap,
-  characterDNALibrary?: CharacterDNALibrary | Record<string, CharacterDNA>
+  characterDNALibrary?: CharacterDNALibrary | Record<string, CharacterDNA>,
+  storyDNASet?: StoryDNASet
 ) {
   if (!cue.imageTemplate) throw new Error("This cue has no image template snapshot.");
   if (cue.imageTemplate.subjectMode === "ensemble" && cue.ensembleOverflow) throw new Error("This scene exceeds the 16-person ensemble limit. Choose a smaller group or another picture template; no cast members were silently omitted from a generated image.");
-  const brief = buildVisualBrief(config, scene, cue, appearances, characterDNALibrary);
+  const brief = buildVisualBrief(config, scene, cue, appearances, characterDNALibrary, storyDNASet);
   const format = (value: string) => config.imagePromptFormat === "tags" ? value.replace(/;\s*|\n+/g, ", ") : value;
   const compiled = renderImageTemplate(cue.imageTemplate, { style: config.promptPrefix, scene: format(brief.scene), subjects: format(brief.subjects), action: format(brief.action), composition: format(brief.composition), lighting: brief.lighting, suffix: config.promptSuffix, negative: config.negativePrompt });
   if (!compiled.prompt.trim()) throw new Error("The image template produced an empty prompt.");
@@ -1039,10 +1042,11 @@ export async function generateAssets(
   const anchorable = plan.visualCues.some(cueUsesCharacterReference) && referenceAnchoringEnabled(config) && provider !== null && REFERENCE_PROVIDERS.has(provider);
   const cardSource = anchorable && config.referenceSource === "card";
 
-  const [initialPortraits, characterAppearance, characterDNALibrary] = await Promise.all([
+  const [initialPortraits, characterAppearance, characterDNALibrary, storyDNASet] = await Promise.all([
     anchorable ? loadPortraits(spindle, plan.key.chatId, userId).catch(() => ({} as Record<string, StoredPortrait>)) : Promise.resolve({} as Record<string, StoredPortrait>),
     loadCharacterAppearance(spindle, userId, plan.key.chatId).catch(() => ({} as CharacterAppearanceMap)),
-    loadCharacterDNALibrary(spindle, plan.key.chatId, userId).catch(() => ({ version: 1 as const, characters: {} }))
+    loadCharacterDNALibrary(spindle, plan.key.chatId, userId).catch(() => ({ version: 1 as const, characters: {} })),
+    loadStoryDNASet(spindle, plan.key.chatId, userId).catch(() => ({ locations: {}, items: {}, revision: 0 }))
   ]);
   const portraits: Record<string, StoredPortrait> = { ...initialPortraits };
 
@@ -1365,7 +1369,7 @@ export async function generateAssets(
           const metadataFor = (selectedCue: VisualCue): ImagePromptMetadata | undefined => selectedCue.imageTemplate ? {
             ...(selectedCue.presentationRuleTrace ? {presentationRuleTrace:selectedCue.presentationRuleTrace} : {}),
             template: selectedCue.imageTemplate, selectionReason: selectedCue.imageTemplateReason ?? "Default template", format: config.imagePromptFormat,
-            brief: compileTemplateCue(config, scene, selectedCue, characterAppearance, characterDNALibrary).brief,
+            brief: compileTemplateCue(config, scene, selectedCue, characterAppearance, characterDNALibrary, storyDNASet).brief,
             sharedStyle:sharedStyleSnapshot(config,selectedCue.imageTemplate),
             trackerStatus: selectedCue.trackerStatus ?? (config.includeSimTrackerContext ? "not_found" : "disabled"),
             ...(selectedCue.trackerSourceMessageId ? { trackerSourceMessageId: selectedCue.trackerSourceMessageId } : {})
@@ -1383,7 +1387,7 @@ export async function generateAssets(
           frozen=prepareCapabilityOutput(frozen,config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined,config.imageResolutionPreference);
           if (config.imagePromptEngineVersion === 2 && cue.imageTemplate) {
             const profileV2=await loadImagePromptProfileV2(spindle,config,selected?.provider??provider,frozen.model,frozen.parameters);
-            const built=buildV2ImageRequest({config,cue,request:frozen,profile:profileV2,brief:initialMetadata?.brief??compileTemplateCue(config,scene,cue,characterAppearance).brief,metadata:initialMetadata,styleId:config.selectedSharedStyleId,portraits,characterDNALibrary,shadow:{prompt:frozen.prompt,...(frozen.negativePrompt!==undefined?{negativePrompt:frozen.negativePrompt}:{})},referenceSummary:portrait?`${portrait.source??'captured'} portrait: ${portrait.name} (${portrait.imageId})`:wantsCapture?'No reference yet; this picture will establish the portrait':'No extension reference'});
+            const built=buildV2ImageRequest({config,cue,request:frozen,profile:profileV2,brief:initialMetadata?.brief??compileTemplateCue(config,scene,cue,characterAppearance,characterDNALibrary,storyDNASet).brief,metadata:initialMetadata,styleId:config.selectedSharedStyleId,portraits,characterDNALibrary,shadow:{prompt:frozen.prompt,...(frozen.negativePrompt!==undefined?{negativePrompt:frozen.negativePrompt}:{})},referenceSummary:portrait?`${portrait.source??'captured'} portrait: ${portrait.name} (${portrait.imageId})`:wantsCapture?'No reference yet; this picture will establish the portrait':'No extension reference'});
             frozen=built.request;if(initialMetadata&&built.metadata)Object.assign(initialMetadata,built.metadata);
           }
           const adaptation=await adaptImagePrompt(spindle,frozen,initialMetadata,config,userId,jobSignal,cacheOptions.skipAutomaticPromptRepair);

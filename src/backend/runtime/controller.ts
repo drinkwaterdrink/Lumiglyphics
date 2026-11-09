@@ -5,6 +5,7 @@ import {ImageDispatchPolicy} from './image-dispatch-policy.js';
 import type {ImageActivityInput} from '../../shared/image-usage.js';
 import {resolveSceneAmbient} from '../../shared/scene-atmosphere.js';
 import {handleCharacterDnaRequest} from './character-dna-workflow.js';
+import {handleStoryDnaRequest} from './story-dna-workflow.js';
 import { fitPromptToBudget } from "../../shared/prompt-length.js";
 import {normalizeImageVersionHistory} from '../../shared/image-version-history.js';
 import {ImageRetryQueue} from './image-retry-queue.js';
@@ -512,8 +513,18 @@ function assetView(record: StoredTurnRecord, job: StoredTurnRecord["jobs"][numbe
   const explanationRequest=record.imageRequests?.filter(request=>request.jobId===job.jobId).at(-1);
   const template = record.imageRequests?.filter(r => r.jobId === job.jobId && r.state === "approved").at(-1)?.imagePromptMetadata?.template ?? cue?.imageTemplate;
   const role = template?.id === 'manga-page' ? 'scene' : template?.category === 'portrait' ? 'portrait' : template?.category === 'environment' && template.subjectMode === 'none' ? 'background' : 'scene';
+  const allCharacters: string[] = [];
+  if (cue?.character?.trim()) allCharacters.push(cue.character.trim());
+  if (cue?.ensembleSubjects && Array.isArray(cue.ensembleSubjects)) {
+    for (const s of cue.ensembleSubjects) {
+      if (s?.name?.trim() && !allCharacters.includes(s.name.trim())) {
+        allCharacters.push(s.name.trim());
+      }
+    }
+  }
+  const primaryCharacter = cue?.character?.trim() || allCharacters[0];
   return {
-    ...(cue ? {stageAsset:{role,...(cue.imageTemplateReason==='Manual template selection'||(cue.visualSources?.includes('manual subject correction')||cue.visualSources?.includes('manual artwork replacement'))?{manual:true}:{}),sceneId:cue.sceneId,sceneRevision:cue.sceneRevision,...(role==='portrait'&&cue.character?{character:cue.character,attire:cue.resolvedAttire??cue.attire??null}:{})}} : {}),
+    ...(cue ? {stageAsset:{role,...(cue.imageTemplateReason==='Manual template selection'||(cue.visualSources?.includes('manual subject correction')||cue.visualSources?.includes('manual artwork replacement'))?{manual:true}:{}),sceneId:cue.sceneId,sceneRevision:cue.sceneRevision,...(primaryCharacter?{character:primaryCharacter}:{}),...(allCharacters.length>0?{characters:allCharacters}:{}),...(cue.resolvedAttire!==undefined||cue.attire!=null?{attire:cue.resolvedAttire??cue.attire??null}:{})}} : {}),
     jobId: job.jobId,
     explanation: pictureExplanation({cue,metadata:explanationRequest?.imagePromptMetadata,reviewState:explanationRequest?.state,cached:job.provider===CACHE_JOB_PROVIDER}),
     diagnostic: {...imageDiagnostic(cue, job.status === 'failed'),...(record.plannerMode ? {planner:record.plannerMode} : {})},
@@ -2087,6 +2098,10 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       const library=await manageLocationArt(spindle,action.chatId,action,userId);
       if(action.action!=="list")releaseSceneCacheScope(spindle,userId,action.chatId,"scope_cleared");
       spindle.sendToFrontend({type:'vn_location_art',chatId:action.chatId,requestId:action.requestId,library},userId);
+      return;
+    }
+    case "vn_story_dna": {
+      await handleStoryDnaRequest(spindle, request, userId);
       return;
     }
     case "vn_character_dna": {

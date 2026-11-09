@@ -4,7 +4,7 @@ import {samePresentationTurn} from './presentation-entities.js';
 import {selectPresentationSnapshot} from './presentation-selectors.js';
 import type {AssetView,TurnView} from '../protocol.js';
 import type {StageAssetRole} from './stage-assets.js';
-export type StageAssetMetadata={role:StageAssetRole;manual?:boolean;sceneId:string;sceneRevision?:number;character?:string;attire?:string|null;displayImageUrl?:string};
+export type StageAssetMetadata={role:StageAssetRole;manual?:boolean;sceneId:string;sceneRevision?:number;character?:string;characters?:string[];attire?:string|null;displayImageUrl?:string};
 export type CastPortrait={name:string;asset:AssetView|null;active:boolean};
 export type CastComposition={background:AssetView;portraits:CastPortrait[];otherCast:CastPortrait[];offScene:CastPortrait[];scope:string};
 const nameKey=(s:string)=>s.trim().toLocaleLowerCase();

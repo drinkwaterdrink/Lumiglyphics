@@ -151,6 +151,8 @@ export type VisualNovelConfig = {
   novelAiQualityTags: boolean;
   novelAiUseDefaultNegative: boolean;
   customPlannerInstructions: string;
+  referencePromptOverride?: string;
+  characterDnaPromptOverride?: string;
   customCss: string;
   ignoredTags: string;
   displayRegexRules: string;
@@ -239,6 +241,8 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   novelAiQualityTags: true,
   novelAiUseDefaultNegative: true,
   customPlannerInstructions: "",
+  referencePromptOverride: "",
+  characterDnaPromptOverride: "",
   customCss: "",
   ignoredTags: "",
   displayRegexRules: "",
@@ -473,6 +477,8 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     novelAiQualityTags: bool(input.novelAiQualityTags, DEFAULT_CONFIG.novelAiQualityTags),
     novelAiUseDefaultNegative: bool(input.novelAiUseDefaultNegative, DEFAULT_CONFIG.novelAiUseDefaultNegative),
     customPlannerInstructions: stringValue(input.customPlannerInstructions, DEFAULT_CONFIG.customPlannerInstructions),
+    referencePromptOverride: stringValue(input.referencePromptOverride, DEFAULT_CONFIG.referencePromptOverride ?? ""),
+    characterDnaPromptOverride: stringValue(input.characterDnaPromptOverride, DEFAULT_CONFIG.characterDnaPromptOverride ?? ""),
     customCss: stringValue(input.customCss, DEFAULT_CONFIG.customCss),
     ignoredTags: stringValue(input.ignoredTags, DEFAULT_CONFIG.ignoredTags),
     displayRegexRules: stringValue(input.displayRegexRules, DEFAULT_CONFIG.displayRegexRules),

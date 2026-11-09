@@ -320,23 +320,124 @@ export class DossierCard {
       const dt = document.createElement('dt');
       const dd = document.createElement('dd');
       dt.textContent = referenceFieldInfo(field).label;
-      if (value.length > maxFactChars) {
-        const span = document.createElement('span');
-        const toggle = document.createElement('button');
-        let expanded = false;
-        span.textContent = `${value.slice(0, maxFactChars).trimEnd()}… `;
-        toggle.type = 'button';
-        toggle.dataset.factExpand = '';
-        toggle.textContent = 'Show full';
-        toggle.onclick = () => {
-          expanded = !expanded;
-          span.textContent = expanded ? `${value} ` : `${value.slice(0, maxFactChars).trimEnd()}… `;
-          toggle.textContent = expanded ? 'Show less' : 'Show full';
+
+      const contentSpan = document.createElement('span');
+      contentSpan.className = 'fact-value-text';
+
+      const renderText = (currentVal: string) => {
+        contentSpan.textContent = '';
+        if (currentVal.length > maxFactChars) {
+          const span = document.createElement('span');
+          const toggle = document.createElement('button');
+          let expanded = false;
+          span.textContent = `${currentVal.slice(0, maxFactChars).trimEnd()}… `;
+          toggle.type = 'button';
+          toggle.dataset.factExpand = '';
+          toggle.textContent = 'Show full';
+          toggle.onclick = () => {
+            expanded = !expanded;
+            span.textContent = expanded ? `${currentVal} ` : `${currentVal.slice(0, maxFactChars).trimEnd()}… `;
+            toggle.textContent = expanded ? 'Show less' : 'Show full';
+          };
+          contentSpan.append(span, toggle);
+        } else {
+          contentSpan.textContent = currentVal;
+        }
+      };
+
+      let activeVal = value;
+      renderText(activeVal);
+      dd.append(contentSpan);
+
+      // Fact Action buttons (Edit & Delete)
+      const actionSpan = document.createElement('span');
+      actionSpan.className = 'fact-actions';
+      actionSpan.style.cssText = 'margin-left:8px;display:inline-flex;gap:4px;vertical-align:middle;';
+
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.title = 'Edit reference fact';
+      editBtn.className = 'fact-edit-btn';
+      editBtn.textContent = '✏️';
+      editBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:11px;opacity:0.6;padding:0 2px;';
+      editBtn.onmouseenter = () => { editBtn.style.opacity = '1'; };
+      editBtn.onmouseleave = () => { editBtn.style.opacity = '0.6'; };
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.title = 'Delete reference fact';
+      delBtn.className = 'fact-del-btn';
+      delBtn.textContent = '🗑️';
+      delBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:11px;opacity:0.6;padding:0 2px;';
+      delBtn.onmouseenter = () => { delBtn.style.opacity = '1'; };
+      delBtn.onmouseleave = () => { delBtn.style.opacity = '0.6'; };
+
+      editBtn.onclick = () => {
+        if (dd.querySelector('.fact-edit-input')) return;
+        contentSpan.style.display = 'none';
+        actionSpan.style.display = 'none';
+
+        const editWrap = document.createElement('div');
+        editWrap.className = 'fact-edit-input';
+        editWrap.style.cssText = 'display:flex;gap:4px;margin-top:4px;align-items:center;';
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = activeVal;
+        input.style.cssText = 'flex:1;font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid rgba(255,255,255,0.25);background:rgba(0,0,0,0.3);color:inherit;';
+
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.textContent = '✓';
+        saveBtn.title = 'Save';
+        saveBtn.style.cssText = 'padding:2px 8px;font-size:12px;border-radius:4px;cursor:pointer;background:rgba(255,255,255,0.15);border:none;color:inherit;';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.textContent = '✕';
+        cancelBtn.title = 'Cancel';
+        cancelBtn.style.cssText = 'padding:2px 8px;font-size:12px;border-radius:4px;cursor:pointer;background:transparent;border:none;color:inherit;opacity:0.7;';
+
+        saveBtn.onclick = () => {
+          const newVal = input.value.trim();
+          if (newVal) {
+            activeVal = newVal;
+            const match = dossier.facts.find(f => f.field === field);
+            if (match) match.value = newVal;
+            if (dossier.state && field in dossier.state) dossier.state[field] = newVal;
+          }
+          renderText(activeVal);
+          editWrap.remove();
+          contentSpan.style.display = '';
+          actionSpan.style.display = 'inline-flex';
         };
-        dd.append(span, toggle);
-      } else {
-        dd.textContent = value;
-      }
+
+        cancelBtn.onclick = () => {
+          editWrap.remove();
+          contentSpan.style.display = '';
+          actionSpan.style.display = 'inline-flex';
+        };
+
+        input.onkeydown = (e) => {
+          if (e.key === 'Enter') saveBtn.click();
+          if (e.key === 'Escape') cancelBtn.click();
+        };
+
+        editWrap.append(input, saveBtn, cancelBtn);
+        dd.append(editWrap);
+        input.focus();
+      };
+
+      delBtn.onclick = () => {
+        dt.remove();
+        dd.remove();
+        const idx = dossier.facts.findIndex(f => f.field === field);
+        if (idx >= 0) dossier.facts.splice(idx, 1);
+        if (dossier.state && field in dossier.state) delete dossier.state[field];
+      };
+
+      actionSpan.append(editBtn, delBtn);
+      dd.append(actionSpan);
       list.append(dt, dd);
     };
 
@@ -735,6 +836,25 @@ export class DossierCard {
       };
       tabs.append(button);
     }
+    const folioBtn = document.createElement('button');
+    folioBtn.type = 'button';
+    folioBtn.className = 'chip folio-shortcut-chip';
+    folioBtn.style.cssText = 'background:rgba(168,85,247,0.18);color:#d8b4fe;border:1px solid rgba(168,85,247,0.35);';
+    folioBtn.innerHTML = '👤 Character Folio';
+    folioBtn.title = 'Open Character Folio for character DNA, portraits and lore';
+    folioBtn.onclick = () => {
+      this.folioOpener?.('');
+    };
+    tabs.append(folioBtn);
+
+    const addRefBtn = document.createElement('button');
+    addRefBtn.type = 'button';
+    addRefBtn.className = 'chip add-ref-chip';
+    addRefBtn.style.cssText = 'background:rgba(56,189,248,0.18);color:#38bdf8;border:1px solid rgba(56,189,248,0.35);margin-left:auto;';
+    addRefBtn.textContent = '＋ Add Reference';
+    addRefBtn.title = 'Manually add a location or item to the story world';
+    filters.append(addRefBtn);
+
     category.value = this.category;
     filters.append(inputWrap, category);
 
@@ -760,10 +880,76 @@ export class DossierCard {
       panel.append(hint);
     }
 
-    // World Sheet Scene Map (.world-sheet-map)
+    const addRefPanel = document.createElement('div');
+    addRefPanel.className = 'add-ref-panel';
+    addRefPanel.style.display = 'none';
+    addRefPanel.style.cssText = 'display:none;margin:8px 0 12px;padding:12px;border-radius:8px;background:rgba(0,0,0,0.35);border:1px solid rgba(56,189,248,0.35);';
+    addRefPanel.innerHTML = '<div style="font-weight:700;font-size:12px;margin-bottom:8px;color:#38bdf8;">＋ Add Story Reference / Artifact</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
+      '<input data-add-ref-name type="text" placeholder="Name (e.g. Carved Yew Staff, Flat 3)" style="padding:6px 8px;font-size:11px;border-radius:4px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.25);color:inherit;" />' +
+      '<select data-add-ref-kind style="padding:6px 8px;font-size:11px;border-radius:4px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.25);color:inherit;">' +
+      '<option value="object">💎 Item / Unique Artifact</option>' +
+      '<option value="place">📍 Location / Place</option>' +
+      '</select></div>' +
+      '<textarea data-add-ref-desc placeholder="Physical description, materials, visual traits (e.g. carved yew staff encrusted in diamonds wrapped in vines)..." style="width:100%;height:55px;box-sizing:border-box;padding:6px 8px;font-size:11px;border-radius:4px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.25);color:inherit;margin-bottom:8px;"></textarea>' +
+      '<div style="display:flex;justify-content:flex-end;gap:8px;">' +
+      '<button type="button" data-add-ref-cancel style="padding:4px 10px;font-size:11px;border-radius:4px;background:transparent;border:1px solid rgba(255,255,255,0.2);color:inherit;cursor:pointer;">Cancel</button>' +
+      '<button type="button" data-add-ref-save style="padding:4px 12px;font-size:11px;font-weight:600;border-radius:4px;background:#0284c7;border:none;color:#fff;cursor:pointer;">Save Reference</button>' +
+      '</div>';
+    panel.append(addRefPanel);
+
+    addRefBtn.onclick = () => {
+      addRefPanel.style.display = addRefPanel.style.display === 'none' ? 'block' : 'none';
+      if (addRefPanel.style.display === 'block') {
+        addRefPanel.querySelector<HTMLInputElement>('[data-add-ref-name]')?.focus();
+      }
+    };
+    addRefPanel.querySelector('[data-add-ref-cancel]')!.addEventListener('click', () => {
+      addRefPanel.style.display = 'none';
+    });
+    addRefPanel.querySelector('[data-add-ref-save]')!.addEventListener('click', () => {
+      const nameInput = addRefPanel.querySelector<HTMLInputElement>('[data-add-ref-name]')!;
+      const kindSelect = addRefPanel.querySelector<HTMLSelectElement>('[data-add-ref-kind]')!;
+      const descInput = addRefPanel.querySelector<HTMLTextAreaElement>('[data-add-ref-desc]')!;
+      const name = nameInput.value.trim();
+      const kind = kindSelect.value as ReferenceKind;
+      const desc = descInput.value.trim();
+      if (!name || !desc) return;
+      const newEntity: any = {
+        id: 'custom:' + Date.now() + ':' + name.toLowerCase().replace(/[^a-z0-9]/g, ''),
+        name,
+        kind,
+        aliases: [],
+        firstParagraph: 0,
+        facts: [{
+          id: 'f_custom_' + Date.now(),
+          entityId: name,
+          field: 'description',
+          value: desc,
+          visibility: 'observed',
+          source: { provider: 'user', recordId: 'manual', observedAt: Date.now() },
+          revealedAt: { key: { chatId: 'manual' }, paragraphIndex: 0 }
+        }]
+      };
+      entries.unshift({
+        entity: newEntity,
+        current: true,
+        pinned: true,
+        label: name + ': ' + desc,
+        overview: desc,
+        earlier: false
+      } as any);
+      this.selectedEntityId = newEntity.id;
+      addRefPanel.style.display = 'none';
+      nameInput.value = '';
+      descInput.value = '';
+      render();
+    });
+
+    // World Sheet Scene Topology Map (.world-sheet-map)
     const worldSheet = document.createElement('div');
     worldSheet.className = 'world-sheet-map';
-    worldSheet.innerHTML = '<svg class="world-map-svg" viewBox="0 0 330 250" aria-hidden="true"><path d="M90 60C160 62 155 90 205 110M90 60C60 90 48 135 48 170M48 170C120 205 130 190 205 190M205 110C225 155 205 170 205 190"/></svg>';
+    worldSheet.innerHTML = '<svg class="world-map-svg" viewBox="0 0 330 250" aria-hidden="true"><path d="M90 60C160 62 155 90 205 110M90 60C60 90 48 135 48 170M48 170C120 205 130 190 205 190M205 110C225 155 205 170 205 190" stroke="rgba(56,189,248,0.25)" stroke-width="1.5" stroke-dasharray="4 4"/></svg>';
     panel.append(worldSheet);
 
     // World Lens Card slot right under the map canvas
@@ -829,15 +1015,21 @@ export class DossierCard {
 
       const activeEntry = filtered.find(e => e.entity.id === this.selectedEntityId) ?? filtered[0];
 
-      // Populate World Sheet Map Nodes
-      filtered.slice(0, 8).forEach(({ entity }, i) => {
+      // Populate World Sheet Scene Topology Map Nodes
+      const places = filtered.filter(e => e.entity.kind === 'place');
+      const mapEntries = places.length > 0 ? places.slice(0, 8) : filtered.slice(0, 8);
+      mapEntries.forEach(({ entity }, i) => {
         const pos = MAP_POSITIONS[i % MAP_POSITIONS.length]!;
+        const vis = visualResolver?.(entity);
+        const isActiveLoc = vis?.isActiveLocation;
         const nodeBtn = document.createElement('button');
         nodeBtn.type = 'button';
-        nodeBtn.className = `map-node-pill ${this.selectedEntityId === entity.id ? 'active' : ''}`;
+        nodeBtn.className = `map-node-pill ${this.selectedEntityId === entity.id ? 'active' : ''} ${isActiveLoc ? 'active-location' : ''}`;
         nodeBtn.style.left = `${pos[0]}%`;
         nodeBtn.style.top = `${pos[1]}%`;
-        nodeBtn.innerHTML = html`<span class="index-dot"></span><b>${entity.name}</b><small>${entity.kind === 'npc' ? 'Character' : entity.kind === 'place' ? 'Location' : 'Item'}</small>`.value;
+        const iconSym = entity.kind === 'place' ? (isActiveLoc ? '★' : '📍') : entity.kind === 'object' ? '💎' : '👤';
+        const subTxt = isActiveLoc ? 'ACTIVE LOCATION' : (entity.kind === 'npc' ? 'Character' : entity.kind === 'place' ? 'Location' : 'Item');
+        nodeBtn.innerHTML = html`<span class="index-dot"></span><b>${iconSym} ${entity.name}</b><small>${subTxt}</small>`.value;
         nodeBtn.onclick = () => {
           this.selectedEntityId = entity.id;
           render();

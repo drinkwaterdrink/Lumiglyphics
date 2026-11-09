@@ -65,18 +65,25 @@ export class CharacterFolio implements WorkspaceSurface {
     this.handlers.onCancelDNA?.();this.chatId=chatId;this.discoveredIds.clear();this.library=Object.create(null);this.dirty.clear();this.saving.clear();this.savedLibrary=Object.create(null);this.loreMap=Object.create(null);this.deleted={};this.revision=0;this.activeCharacterId=null;this.proposal=null;this.pending=false;this.notice='';this.latestTurnText='';this.deleteConfirm=false;this.mergeOther='';this.accumulatedCgs.clear();this.renderRoster();this.renderDetail();
   }
   getContext():string|null{return this.chatId;}
-  ingestCgs(items: Array<{ characterName?: string; imageUrl: string; caption?: string }>): void {
+  ingestCgs(items: Array<{ characterName?: string; characterNames?: string[]; imageUrl: string; caption?: string }>): void {
     let changed = false;
     for (const item of items) {
-      if (!item.imageUrl || !item.characterName?.trim()) continue;
-      const charName = item.characterName.trim();
-      const matchId = findMatchingCharacterId(this.library, charName);
-      const key = (matchId && this.library[matchId]) ? this.library[matchId].name.toLowerCase() : charName.toLowerCase();
-      const list = this.accumulatedCgs.get(key) || [];
-      if (!list.some(c => c.imageUrl === item.imageUrl)) {
-        list.push({ imageUrl: item.imageUrl, caption: item.caption || 'Scene picture' });
-        this.accumulatedCgs.set(key, list);
-        changed = true;
+      if (!item.imageUrl) continue;
+      const names = (item.characterNames && item.characterNames.length > 0)
+        ? item.characterNames
+        : item.characterName?.trim() ? [item.characterName.trim()] : [];
+      if (names.length === 0) continue;
+      for (const rawName of names) {
+        const charName = rawName.trim();
+        if (!charName) continue;
+        const matchId = findMatchingCharacterId(this.library, charName);
+        const key = (matchId && this.library[matchId]) ? this.library[matchId].name.toLowerCase() : charName.toLowerCase();
+        const list = this.accumulatedCgs.get(key) || [];
+        if (!list.some(c => c.imageUrl === item.imageUrl)) {
+          list.push({ imageUrl: item.imageUrl, caption: item.caption || 'Scene picture' });
+          this.accumulatedCgs.set(key, list);
+          changed = true;
+        }
       }
     }
     if (changed) {
@@ -718,28 +725,32 @@ export class CharacterFolio implements WorkspaceSurface {
 
     // 3. From assets stageAsset character & CG collection
     for (const asset of visibleAssets) {
-      const charName = asset.stageAsset?.character?.trim();
+      const charNames = asset.stageAsset?.characters ?? (asset.stageAsset?.character ? [asset.stageAsset.character] : []);
       const imageUrl = ['generated','browser_ready'].includes(asset.status) ? sceneImageCandidatesFor(asset)[0] : undefined;
-      if (charName && imageUrl) {
-        detectedNames.add(charName);
-        const matchingId = findMatchingCharacterId(this.library, charName);
-        const key = (matchingId && this.library[matchingId]) ? this.library[matchingId].name.toLowerCase() : charName.toLowerCase();
-        const existingLore = this.loreMap[key] || {};
-        existingLore.cgs = existingLore.cgs || [];
-        if (!existingLore.cgs.some(c => c.imageUrl === imageUrl)) {
-          existingLore.cgs.unshift({
-            imageUrl,
-            caption: asset.stageAsset?.attire || asset.stageAsset?.role || 'Scene portrait'
-          });
-        }
-        this.loreMap[key] = existingLore;
-        const accList = this.accumulatedCgs.get(key) || [];
-        if (!accList.some(c => c.imageUrl === imageUrl)) {
-          accList.unshift({
-            imageUrl,
-            caption: asset.stageAsset?.attire || asset.stageAsset?.role || 'Scene portrait'
-          });
-          this.accumulatedCgs.set(key, accList);
+      if (charNames.length > 0 && imageUrl) {
+        for (const rawName of charNames) {
+          const charName = rawName.trim();
+          if (!charName) continue;
+          detectedNames.add(charName);
+          const matchingId = findMatchingCharacterId(this.library, charName);
+          const key = (matchingId && this.library[matchingId]) ? this.library[matchingId].name.toLowerCase() : charName.toLowerCase();
+          const existingLore = this.loreMap[key] || {};
+          existingLore.cgs = existingLore.cgs || [];
+          if (!existingLore.cgs.some(c => c.imageUrl === imageUrl)) {
+            existingLore.cgs.unshift({
+              imageUrl,
+              caption: asset.stageAsset?.attire || asset.stageAsset?.role || 'Scene portrait'
+            });
+          }
+          this.loreMap[key] = existingLore;
+          const accList = this.accumulatedCgs.get(key) || [];
+          if (!accList.some(c => c.imageUrl === imageUrl)) {
+            accList.unshift({
+              imageUrl,
+              caption: asset.stageAsset?.attire || asset.stageAsset?.role || 'Scene portrait'
+            });
+            this.accumulatedCgs.set(key, accList);
+          }
         }
       }
     }

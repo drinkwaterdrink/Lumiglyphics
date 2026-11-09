@@ -74,4 +74,114 @@ describe('DossierCard & World Lens Header', () => {
       restore();
     }
   });
+
+  it('renders Folio shortcut chip and Add Reference button, allowing manual reference creation', () => {
+    const restore = installFakeDocument();
+    try {
+      const mount = new FakeNode('div');
+      const card = new DossierCard(mount as unknown as HTMLElement, () => {}, () => false);
+
+      let openedFolio = false;
+      card.setFolioOpener(() => {
+        openedFolio = true;
+      });
+
+      const mockEntries = [
+        {
+          entity: { id: 'flat-3', name: 'Flat 3', kind: 'place' as const, aliases: [] },
+          current: true,
+          pinned: false,
+          note: undefined
+        }
+      ];
+
+      const trigger = new FakeNode('button');
+      card.openTray(mockEntries as any, trigger as unknown as HTMLElement, () => {});
+
+      const folioShortcut = card.host.querySelector('.folio-shortcut-chip');
+      expect(folioShortcut).not.toBeNull();
+      (folioShortcut as unknown as HTMLButtonElement)?.click();
+      expect(openedFolio).toBe(true);
+
+      const addRefBtn = card.host.querySelector('.add-ref-chip');
+      expect(addRefBtn).not.toBeNull();
+
+      const addRefPanel = card.host.querySelector('.add-ref-panel');
+      expect(addRefPanel).not.toBeNull();
+      expect((addRefPanel as unknown as HTMLElement)?.style.display).toBe('none');
+
+      // Click to open panel
+      (addRefBtn as unknown as HTMLButtonElement)?.click();
+      expect((addRefPanel as unknown as HTMLElement)?.style.display).toBe('block');
+
+      // Fill in and save
+      const nameInput = addRefPanel?.querySelector('[data-add-ref-name]') as unknown as HTMLInputElement;
+      const descInput = addRefPanel?.querySelector('[data-add-ref-desc]') as unknown as HTMLTextAreaElement;
+      const saveBtn = addRefPanel?.querySelector('[data-add-ref-save]') as unknown as HTMLButtonElement;
+
+      nameInput.value = 'Carved Yew Staff';
+      descInput.value = 'Carved yew staff encrusted in diamonds wrapped in vines';
+      saveBtn?.click();
+
+      expect((addRefPanel as unknown as HTMLElement)?.style.display).toBe('none');
+      const lensTitle = card.host.querySelector('.world-lens h3');
+      expect(lensTitle?.textContent).toBe('Carved Yew Staff');
+    } finally {
+      restore();
+    }
+  });
+  it('renders edit and delete buttons on fact rows in reference card and allows editing/deleting facts', () => {
+    const restore = installFakeDocument();
+    try {
+      const mount = new FakeNode('div');
+      const card = new DossierCard(mount as unknown as HTMLElement, () => {}, () => false);
+
+      const dossier = {
+        entity: { id: 'cedar-loft', name: 'The Cedar Loft', kind: 'place' as const, aliases: [] },
+        facts: [
+          { field: 'description', value: 'High cedar wood ceiling with shattered crates on the floor', source: { provider: 'model' as const } }
+        ],
+        state: {
+          description: 'High cedar wood ceiling with shattered crates on the floor'
+        }
+      };
+
+      const prefs = {
+        fieldGroups: {},
+        rememberReferences: false,
+        maxFactChars: 320,
+        pinnedEntities: [],
+        overrides: []
+      };
+
+      const trigger = new FakeNode('button');
+      card.open(dossier as any, prefs as any, 'c1', trigger as unknown as HTMLElement);
+
+      const editBtn = card.host.querySelector('.fact-edit-btn') as unknown as HTMLButtonElement;
+      expect(editBtn).not.toBeNull();
+      const delBtn = card.host.querySelector('.fact-del-btn') as unknown as HTMLButtonElement;
+      expect(delBtn).not.toBeNull();
+
+      // Click edit
+      editBtn.click();
+      const input = card.host.querySelector('.fact-edit-input input') as unknown as HTMLInputElement;
+      expect(input).not.toBeNull();
+      expect(input.value).toBe('High cedar wood ceiling with shattered crates on the floor');
+
+      // Edit value and save
+      input.value = 'High cedar wood ceiling with golden lanterns';
+      const saveBtn = card.host.querySelector('.fact-edit-input button') as unknown as HTMLButtonElement;
+      saveBtn.click();
+
+      expect(dossier.facts[0].value).toBe('High cedar wood ceiling with golden lanterns');
+      const textSpan = card.host.querySelector('.fact-value-text');
+      expect(textSpan?.textContent).toBe('High cedar wood ceiling with golden lanterns');
+
+      // Click delete
+      delBtn.click();
+      expect(dossier.facts.length).toBe(0);
+    } finally {
+      restore();
+    }
+  });
 });

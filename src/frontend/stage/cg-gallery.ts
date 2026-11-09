@@ -8,6 +8,7 @@ export interface CGItem {
   imageUrl: string;
   title: string;
   characterName?: string | undefined;
+  characterNames?: string[] | undefined;
   chapterTitle?: string | undefined;
   storyExcerpt?: string | undefined;
   unlockedAt: string;
@@ -494,11 +495,21 @@ export class CgGalleryModal {
       const imageUrl = sceneImageCandidatesFor(asset)[0];
       if (!imageUrl) continue;
       const id = JSON.stringify([scope,asset.jobId]);
+      const charList = asset.stageAsset?.characters ?? (asset.stageAsset?.character ? [asset.stageAsset.character] : []);
+      const primaryChar = charList[0] || asset.stageAsset?.character;
       newItems.push({id,sourceMessageId:turn.messageId,imageUrl,
-        title:asset.stageAsset?.character || `Moment at ¶${asset.paragraphIndex+1}`,
-        characterName:asset.stageAsset?.character,storyExcerpt:turn.paragraphs[asset.paragraphIndex] || '',
-        unlockedAt:old.find(item=>item.id===id)?.unlockedAt ?? new Date().toLocaleTimeString(),
-        isMilestone:asset.stageAsset?.role==='background'||asset.paragraphIndex===0});
+        title: primaryChar ? (charList.length > 1 ? `${primaryChar} & ${charList.length - 1} more` : primaryChar) : `Moment at ¶${asset.paragraphIndex+1}`,
+        characterName: primaryChar,
+        characterNames: charList,
+        storyExcerpt: turn.paragraphs[asset.paragraphIndex] || '',
+        unlockedAt: old.find(item=>item.id===id)?.unlockedAt ?? new Date().toLocaleTimeString(),
+        isMilestone: asset.stageAsset?.role==='background'||asset.paragraphIndex===0});
+
+
+
+
+
+
     }
     this.ownerChat = turn.chatId;
     this.items = [...retained.filter(item=>item.sourceMessageId!==turn?.messageId),...newItems].slice(-256);

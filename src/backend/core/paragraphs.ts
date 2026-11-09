@@ -43,6 +43,10 @@ export const BUILTIN_HEURISTIC_TAGS: readonly string[] = [
   "location",
   "environment",
   "atmosphere",
+  "true_thoughts",
+  "true-thoughts",
+  "true_thought",
+  "true-thought",
   "think",
   "thought",
   "reasoning",
@@ -497,7 +501,12 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
     const unwrapTag = (_match: string, prefix: string | undefined, tagKind: string, attrSource: string, body: string) => {
       const speakerMatch = attrSource.match(/(?:speaker|name|character)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
       const speaker = (speakerMatch ? speakerMatch[1] ?? speakerMatch[2] ?? speakerMatch[3] ?? "" : "").trim();
-      const isCustomTag = Boolean(prefix) || (tagKind.toLowerCase() !== "thought" && tagKind.toLowerCase() !== "think") || Boolean(speaker);
+      const kindLower = tagKind.toLowerCase();
+      if (kindLower.includes("true_thought") || kindLower.includes("true-thought")) {
+        // <true_thoughts> are private character internal monologues from presets, hidden from user dialogue
+        return _match;
+      }
+      const isCustomTag = Boolean(prefix) || (kindLower !== "thought" && kindLower !== "think") || Boolean(speaker);
       if (!isCustomTag) {
         // Plain untagged <thought> without speaker attribute is LLM internal chain-of-thought; leave for heuristic stripping
         return _match;
@@ -543,7 +552,7 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
       hidden.push({ start: match.index, end: match.index + match[0].length });
     }
     const DYNAMIC_METADATA_PATTERN =
-      /<(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|metadata|params|memory|context|audit|matrix|protocol|analysis|scratchpad|hud|state|system|ooc|notes|log|reflection|reasoning|pre_response|inner_monologue|world_info|quest|chapter)\b[^>]*>[\s\S]*?<\/(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|metadata|params|memory|context|audit|matrix|protocol|analysis|scratchpad|hud|state|system|ooc|notes|log|reflection|reasoning|pre_response|inner_monologue|world_info|quest|chapter)\s*>/gi;
+      /<(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|metadata|params|memory|context|audit|matrix|protocol|analysis|scratchpad|hud|state|system|ooc|notes|log|reflection|reasoning|pre_response|inner_monologue|true_thoughts?|true-thoughts?|world_info|quest|chapter)\b[^>]*>[\s\S]*?<\/(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|metadata|params|memory|context|audit|matrix|protocol|analysis|scratchpad|hud|state|system|ooc|notes|log|reflection|reasoning|pre_response|inner_monologue|true_thoughts?|true-thoughts?|world_info|quest|chapter)\s*>/gi;
     for (const match of content.matchAll(DYNAMIC_METADATA_PATTERN)) {
       hidden.push({ start: match.index, end: match.index + match[0].length });
     }
