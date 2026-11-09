@@ -145,6 +145,10 @@ describe('Ideogram V4 Native Prompting Engine', () => {
     expect(marseline.bbox[1]).not.toEqual(aleister.bbox[1]);
     expect(marseline.desc).toContain('charcoal coat');
     expect(aleister.desc).toContain('tailored suit');
+
+    // High level description includes character DNA traits and attire, not just bare names
+    expect(parsed.high_level_description).toContain('Marseline Vane (silver hair, violet eyes, wearing charcoal coat)');
+    expect(parsed.high_level_description).toContain('Aleister (black hair, amber eyes, wearing tailored suit)');
   });
 
   test('Structured Plain-Text Mode follows the 6-part formula with color palette', () => {

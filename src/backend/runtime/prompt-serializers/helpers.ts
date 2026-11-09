@@ -105,36 +105,49 @@ export function parseSubjectsFromBrief(brief: VisualBrief, cue?: VisualCue): Sub
 
   if (brief.subjectMode === 'ensemble') {
     const lines = brief.subjects.split('\n').filter((line: string) => line.includes(':'));
-    return lines.map((line: string) => {
-      const colon = line.indexOf(':');
-      const name = line.slice(0, colon).trim();
-      const rawRest = line.slice(colon + 1).trim();
-      const sanitizedRest = sanitizeQuoteAndUnitNotation(rawRest);
-      
-      const wearingMatch = sanitizedRest.match(/;\s*(?:wearing|dressed in)\s+(.*)$/i);
-      let appearance = sanitizedRest;
-      let attire: string | undefined = undefined;
-      if (wearingMatch) {
-        appearance = sanitizedRest.slice(0, wearingMatch.index).trim();
-        attire = wearingMatch[1]!.trim();
-      } else {
-        const hasClothing = /\b(?:wearing|dressed in|outfit|coat|jacket|shirt|pants|trousers|dress|robe|suit|hoodie|sweater|uniform|vest|skirt)\b/i.test(sanitizedRest);
-        if (!hasClothing && !isNarrativeUndressed) {
-          attire = 'scene-appropriate casual clothing';
+    if (lines.length > 0) {
+      return lines.map((line: string) => {
+        const colon = line.indexOf(':');
+        const name = line.slice(0, colon).trim();
+        const rawRest = line.slice(colon + 1).trim();
+        const sanitizedRest = sanitizeQuoteAndUnitNotation(rawRest);
+        
+        const wearingMatch = sanitizedRest.match(/;\s*(?:wearing|dressed in)\s+(.*)$/i);
+        let appearance = sanitizedRest;
+        let attire: string | undefined = undefined;
+        if (wearingMatch) {
+          appearance = sanitizedRest.slice(0, wearingMatch.index).trim();
+          attire = wearingMatch[1]!.trim();
+        } else {
+          const hasClothing = /\b(?:wearing|dressed in|outfit|coat|jacket|shirt|pants|trousers|dress|robe|suit|hoodie|sweater|uniform|vest|skirt)\b/i.test(sanitizedRest);
+          if (!hasClothing && !isNarrativeUndressed) {
+            attire = 'scene-appropriate casual clothing';
+          }
         }
-      }
 
-      return {
-        name,
-        appearance,
-        attire
-      };
-    });
+        return {
+          name,
+          appearance,
+          attire
+        };
+      });
+    }
+
+    if (brief.subjects.trim()) {
+      const names = brief.subjects.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+      if (names.length > 0) {
+        return names.map(name => ({
+          name,
+          appearance: 'distinct physical features',
+          attire: isNarrativeUndressed ? undefined : 'scene-appropriate casual clothing'
+        }));
+      }
+    }
   }
 
   // Single subject
   const name = brief.subjectPreparation?.name || cue?.character || 'Subject';
-  const rawAppearance = brief.subjectPreparation?.identity || brief.subjects;
+  const rawAppearance = brief.subjectPreparation?.identity || cue?.resolvedIdentity || brief.subjects;
   const sanitizedAppearance = sanitizeQuoteAndUnitNotation(rawAppearance);
   let attire = brief.subjectPreparation?.attire ? sanitizeQuoteAndUnitNotation(brief.subjectPreparation.attire) : undefined;
   

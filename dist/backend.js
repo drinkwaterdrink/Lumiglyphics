@@ -43063,32 +43063,44 @@ function parseSubjectsFromBrief(brief, cue) {
   if (brief.subjectMode === "ensemble") {
     const lines = brief.subjects.split(`
 `).filter((line2) => line2.includes(":"));
-    return lines.map((line2) => {
-      const colon = line2.indexOf(":");
-      const name2 = line2.slice(0, colon).trim();
-      const rawRest = line2.slice(colon + 1).trim();
-      const sanitizedRest = sanitizeQuoteAndUnitNotation(rawRest);
-      const wearingMatch = sanitizedRest.match(/;\s*(?:wearing|dressed in)\s+(.*)$/i);
-      let appearance = sanitizedRest;
-      let attire2 = undefined;
-      if (wearingMatch) {
-        appearance = sanitizedRest.slice(0, wearingMatch.index).trim();
-        attire2 = wearingMatch[1].trim();
-      } else {
-        const hasClothing = /\b(?:wearing|dressed in|outfit|coat|jacket|shirt|pants|trousers|dress|robe|suit|hoodie|sweater|uniform|vest|skirt)\b/i.test(sanitizedRest);
-        if (!hasClothing && !isNarrativeUndressed) {
-          attire2 = "scene-appropriate casual clothing";
+    if (lines.length > 0) {
+      return lines.map((line2) => {
+        const colon = line2.indexOf(":");
+        const name2 = line2.slice(0, colon).trim();
+        const rawRest = line2.slice(colon + 1).trim();
+        const sanitizedRest = sanitizeQuoteAndUnitNotation(rawRest);
+        const wearingMatch = sanitizedRest.match(/;\s*(?:wearing|dressed in)\s+(.*)$/i);
+        let appearance = sanitizedRest;
+        let attire2 = undefined;
+        if (wearingMatch) {
+          appearance = sanitizedRest.slice(0, wearingMatch.index).trim();
+          attire2 = wearingMatch[1].trim();
+        } else {
+          const hasClothing = /\b(?:wearing|dressed in|outfit|coat|jacket|shirt|pants|trousers|dress|robe|suit|hoodie|sweater|uniform|vest|skirt)\b/i.test(sanitizedRest);
+          if (!hasClothing && !isNarrativeUndressed) {
+            attire2 = "scene-appropriate casual clothing";
+          }
         }
+        return {
+          name: name2,
+          appearance,
+          attire: attire2
+        };
+      });
+    }
+    if (brief.subjects.trim()) {
+      const names = brief.subjects.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+      if (names.length > 0) {
+        return names.map((name2) => ({
+          name: name2,
+          appearance: "distinct physical features",
+          attire: isNarrativeUndressed ? undefined : "scene-appropriate casual clothing"
+        }));
       }
-      return {
-        name: name2,
-        appearance,
-        attire: attire2
-      };
-    });
+    }
   }
   const name = brief.subjectPreparation?.name || cue?.character || "Subject";
-  const rawAppearance = brief.subjectPreparation?.identity || brief.subjects;
+  const rawAppearance = brief.subjectPreparation?.identity || cue?.resolvedIdentity || brief.subjects;
   const sanitizedAppearance = sanitizeQuoteAndUnitNotation(rawAppearance);
   let attire = brief.subjectPreparation?.attire ? sanitizeQuoteAndUnitNotation(brief.subjectPreparation.attire) : undefined;
   if (!attire) {
@@ -44747,11 +44759,19 @@ function serializeIdeogramV4(input2) {
       subjectSummary = `a cinematic view of ${cue?.visualFocus || brief.action || "the scene"}, with no visible people`;
     } else if (brief.subjectMode === "ensemble" || subjects.length > 1) {
       const charCountPhrase = subjects.length === 1 ? "1 visible character" : `${subjects.length} visible characters`;
-      subjectSummary = `an ensemble scene with ${charCountPhrase}: ${subjects.map((s) => s.name).join(" and ")}`;
+      const charDetails = subjects.map((s) => {
+        const attireStr = s.attire ? `, wearing ${s.attire}` : "";
+        const hasDna = s.appearance && s.appearance !== s.name && !/^one visible/i.test(s.appearance) && s.appearance !== "appearance not established";
+        const traits = hasDna ? ` (${s.appearance}${attireStr})` : attireStr ? ` (${attireStr.replace(/^,\s*/, "")})` : "";
+        return `${s.name}${traits}`;
+      }).join(" and ");
+      subjectSummary = `an ensemble scene with ${charCountPhrase}: ${charDetails}`;
     } else {
       const main = subjects[0];
       const attire = main?.attire ? ` wearing ${main.attire}` : "";
-      subjectSummary = `${main?.name || "a character"} (${main?.appearance || "distinct features"}${attire})`;
+      const hasDna = main?.appearance && main.appearance !== main.name && !/^one visible/i.test(main.appearance) && main.appearance !== "appearance not established";
+      const traits = hasDna ? ` (${main.appearance}${attire})` : attire ? ` (${attire.trim()})` : "";
+      subjectSummary = `${main?.name || "a character"}${traits}`;
     }
     const actionText = brief.action ? ` ${sanitizeQuoteAndUnitNotation(brief.action.trim().replace(/\.+$/, ""))}.` : "";
     const highLevel = `${prefix}${isPhoto ? "A candid" : "A detailed"} ${cameraText} ${medium || (isPhoto ? "photograph" : "illustration")} of ${subjectSummary} in ${cleanScene}.${actionText}`.replace(/\s+/g, " ").replace(/,\s*\./g, ".").trim();
@@ -44776,20 +44796,24 @@ function serializeIdeogramV4(input2) {
         const xMin = 80 + i * charWidth;
         const xMax = Math.min(960, xMin + charWidth - 40);
         const attireStr = sub.attire ? `, wearing ${sub.attire}` : "";
+        const hasDna = sub.appearance && sub.appearance !== sub.name && !/^one visible/i.test(sub.appearance) && sub.appearance !== "appearance not established";
+        const appearanceDesc = hasDna ? sub.appearance : "distinct physical features";
         elements.push({
           type: "obj",
           bbox: [160, xMin, 880, xMax],
-          desc: `${sub.name}: ${sub.appearance}${attireStr}. Positioned ${i === 0 ? "on the left" : i === 1 ? "towards the center" : "on the right"} of the scene.`,
+          desc: `${sub.name}: ${appearanceDesc}${attireStr}. Positioned ${i === 0 ? "on the left" : i === 1 ? "towards the center" : "on the right"} of the scene.`,
           color_palette: [palette[i % palette.length], palette[(i + 1) % palette.length]]
         });
       });
     } else if (subjects.length === 1 && brief.subjectMode !== "none") {
       const main = subjects[0];
       const attireStr = main.attire ? `, wearing ${main.attire}` : "";
+      const hasDna = main.appearance && main.appearance !== main.name && !/^one visible/i.test(main.appearance) && main.appearance !== "appearance not established";
+      const appearanceDesc = hasDna ? main.appearance : "distinct physical features";
       elements.push({
         type: "obj",
         bbox: [120, 200, 880, 800],
-        desc: `${main.name}: ${main.appearance}${attireStr}, ${main.action || brief.action || "featured in the scene"}.`,
+        desc: `${main.name}: ${appearanceDesc}${attireStr}, ${main.action || brief.action || "featured in the scene"}.`,
         color_palette: [palette[0], palette[1]]
       });
       elements.push({

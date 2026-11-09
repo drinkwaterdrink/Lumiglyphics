@@ -147,11 +147,19 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
       subjectSummary = `a cinematic view of ${cue?.visualFocus || brief.action || 'the scene'}, with no visible people`;
     } else if (brief.subjectMode === 'ensemble' || subjects.length > 1) {
       const charCountPhrase = subjects.length === 1 ? '1 visible character' : `${subjects.length} visible characters`;
-      subjectSummary = `an ensemble scene with ${charCountPhrase}: ${subjects.map(s => s.name).join(' and ')}`;
+      const charDetails = subjects.map(s => {
+        const attireStr = s.attire ? `, wearing ${s.attire}` : '';
+        const hasDna = s.appearance && s.appearance !== s.name && !/^one visible/i.test(s.appearance) && s.appearance !== 'appearance not established';
+        const traits = hasDna ? ` (${s.appearance}${attireStr})` : (attireStr ? ` (${attireStr.replace(/^,\s*/, '')})` : '');
+        return `${s.name}${traits}`;
+      }).join(' and ');
+      subjectSummary = `an ensemble scene with ${charCountPhrase}: ${charDetails}`;
     } else {
       const main = subjects[0];
       const attire = main?.attire ? ` wearing ${main.attire}` : '';
-      subjectSummary = `${main?.name || 'a character'} (${main?.appearance || 'distinct features'}${attire})`;
+      const hasDna = main?.appearance && main.appearance !== main.name && !/^one visible/i.test(main.appearance) && main.appearance !== 'appearance not established';
+      const traits = hasDna ? ` (${main.appearance}${attire})` : (attire ? ` (${attire.trim()})` : '');
+      subjectSummary = `${main?.name || 'a character'}${traits}`;
     }
 
     const actionText = brief.action ? ` ${sanitizeQuoteAndUnitNotation(brief.action.trim().replace(/\.+$/, ''))}.` : '';
@@ -183,10 +191,12 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
         const xMin = 80 + i * charWidth;
         const xMax = Math.min(960, xMin + charWidth - 40);
         const attireStr = sub.attire ? `, wearing ${sub.attire}` : '';
+        const hasDna = sub.appearance && sub.appearance !== sub.name && !/^one visible/i.test(sub.appearance) && sub.appearance !== 'appearance not established';
+        const appearanceDesc = hasDna ? sub.appearance : 'distinct physical features';
         elements.push({
           type: 'obj',
           bbox: [160, xMin, 880, xMax],
-          desc: `${sub.name}: ${sub.appearance}${attireStr}. Positioned ${i === 0 ? 'on the left' : i === 1 ? 'towards the center' : 'on the right'} of the scene.`,
+          desc: `${sub.name}: ${appearanceDesc}${attireStr}. Positioned ${i === 0 ? 'on the left' : i === 1 ? 'towards the center' : 'on the right'} of the scene.`,
           color_palette: [palette[i % palette.length], palette[(i + 1) % palette.length]]
         });
       });
@@ -194,10 +204,12 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
       // Single character layout (respecting dialogue safe area above y=880)
       const main = subjects[0]!;
       const attireStr = main.attire ? `, wearing ${main.attire}` : '';
+      const hasDna = main.appearance && main.appearance !== main.name && !/^one visible/i.test(main.appearance) && main.appearance !== 'appearance not established';
+      const appearanceDesc = hasDna ? main.appearance : 'distinct physical features';
       elements.push({
         type: 'obj',
         bbox: [120, 200, 880, 800],
-        desc: `${main.name}: ${main.appearance}${attireStr}, ${main.action || brief.action || 'featured in the scene'}.`,
+        desc: `${main.name}: ${appearanceDesc}${attireStr}, ${main.action || brief.action || 'featured in the scene'}.`,
         color_palette: [palette[0]!, palette[1]!]
       });
 
