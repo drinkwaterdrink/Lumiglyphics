@@ -44298,9 +44298,23 @@ var init_generic_tags = __esm(() => {
 // src/backend/runtime/prompt-serializers/ideogram-v4.ts
 function extractIdeogramPalette(brief, styleDNA) {
   if (styleDNA?.palette && Array.isArray(styleDNA.palette)) {
-    const validHex = styleDNA.palette.map((c) => c.trim().toUpperCase()).filter((c) => /^#[0-9A-F]{6}$/i.test(c));
-    if (validHex.length >= 3) {
-      return validHex.slice(0, 8);
+    const hexes = [];
+    for (const c of styleDNA.palette) {
+      const trimmed = c.trim().toUpperCase();
+      if (/^#[0-9A-F]{6}$/i.test(trimmed)) {
+        if (!hexes.includes(trimmed))
+          hexes.push(trimmed);
+      } else {
+        const lower = c.toLowerCase();
+        for (const [name, hex3] of Object.entries(COLOR_NAME_TO_HEX)) {
+          if (new RegExp(`\\b${name}\\b`).test(lower) && !hexes.includes(hex3)) {
+            hexes.push(hex3);
+          }
+        }
+      }
+    }
+    if (hexes.length >= 3) {
+      return hexes.slice(0, 6);
     }
   }
   const text4 = `${brief.lighting || ""} ${brief.scene || ""}`.toLowerCase();
@@ -44350,6 +44364,8 @@ function serializeIdeogramV4(input2) {
   const isDirectJson = profile.ideogramMode !== "structured-prose";
   const cameraText = formatCameraFraming(shotSpec, styleDNA) || "medium shot";
   const prefix = styleDNA?.prefix?.trim() ? `${styleDNA.prefix.trim()}. ` : "";
+  const suffix = styleDNA?.suffix?.trim() || "";
+  const medium = styleDNA?.medium?.trim() || "";
   if (isDirectJson) {
     let subjectSummary = "";
     if (brief.subjectMode === "none") {
@@ -44362,19 +44378,19 @@ function serializeIdeogramV4(input2) {
       subjectSummary = `${main?.name || "a character"} (${main?.appearance || "distinct features"}${attire})`;
     }
     const actionText = brief.action ? ` ${brief.action.trim().replace(/\.+$/, "")}.` : "";
-    const highLevel = `${prefix}${isPhoto ? "A candid" : "A detailed"} ${cameraText} ${isPhoto ? "photograph" : "illustration"} of ${subjectSummary} in ${brief.scene.trim()}.${actionText}`.replace(/\s+/g, " ").trim();
+    const highLevel = `${prefix}${isPhoto ? "A candid" : "A detailed"} ${cameraText} ${medium || (isPhoto ? "photograph" : "illustration")} of ${subjectSummary} in ${brief.scene.trim()}.${actionText}`.replace(/\s+/g, " ").trim();
     const styleDescription = {};
     if (isPhoto) {
-      styleDescription.aesthetics = `${prefix}Atmospheric cinematic realism with balanced dynamic range, authentic surface textures, and fine tonal gradation.`.trim();
+      styleDescription.aesthetics = [prefix, "Atmospheric cinematic realism with balanced dynamic range, authentic surface textures, and fine tonal gradation.", suffix].filter(Boolean).join(" ").trim();
       styleDescription.lighting = brief.lighting ? `${brief.lighting.trim()}, providing natural directional fill and soft ambient falloff.` : "Natural ambient lighting with soft directional fill and atmospheric bounce.";
       styleDescription.photo = `Shot on a full-frame sensor with a ${shotSpec?.camera?.lens || "35mm"} prime lens, f/1.8 aperture, tack-sharp focal plane, and natural depth of field.`;
       styleDescription.medium = "photograph";
       styleDescription.color_palette = palette;
     } else {
-      styleDescription.aesthetics = `${prefix}Intricate visual novel illustration with expressive character artistry, clean silhouette definition, and rich environmental depth.`.trim();
+      styleDescription.aesthetics = [prefix, "Intricate visual novel illustration with expressive character artistry, clean silhouette definition, and rich environmental depth."].filter(Boolean).join(" ").trim();
       styleDescription.lighting = brief.lighting ? `${brief.lighting.trim()}, creating gentle rim lighting and volumetric atmospheric mood.` : "Cinematic atmospheric lighting with gentle rim accents and balanced contrast.";
       styleDescription.medium = "digital_illustration";
-      styleDescription.art_style = "Crisp refined line art combined with layered volumetric shading, clean material textures, and painterly environmental depth.";
+      styleDescription.art_style = [medium ? `${medium} style.` : "", "Crisp refined line art combined with layered volumetric shading, clean material textures, and painterly environmental depth.", suffix].filter(Boolean).join(" ").trim();
       styleDescription.color_palette = palette;
     }
     const elements = [];
@@ -44465,7 +44481,7 @@ function serializeIdeogramV4(input2) {
       warnings
     };
   }
-  const shotMediumText = `A ${cameraText} ${isPhoto ? "photograph" : "digital illustration"} of`;
+  const shotMediumText = `${prefix ? `${prefix} ` : ""}A ${cameraText} ${medium || (isPhoto ? "photograph" : "digital illustration")} of`;
   let subjectsText = "";
   if (brief.subjectMode === "none") {
     subjectsText = `the environment featuring ${cue?.visualFocus || brief.action || "the scenery"}, with no people present`;
@@ -44484,7 +44500,7 @@ function serializeIdeogramV4(input2) {
   const quoted = extractQuotedText(`${brief.action} ${cue?.visualFocus || ""}`);
   const textClause = quoted ? ` featuring clean typography reading '${quoted}'` : "";
   const backgroundText = `Behind, ${brief.scene}.`;
-  const lightingSpecs = `${brief.lighting ? `${brief.lighting}, ` : ""}${isPhoto ? "shot on 35mm film, f/1.8 aperture, natural depth of field and tack-sharp focus" : "clean linework, rich volumetric shading, and painterly depth"}.`;
+  const lightingSpecs = `${brief.lighting ? `${brief.lighting}, ` : ""}${isPhoto ? "shot on 35mm film, f/1.8 aperture, natural depth of field and tack-sharp focus" : "clean linework, rich volumetric shading, and painterly depth"}${suffix ? `, ${suffix}` : ""}.`;
   const paletteText = `color palette ${palette.join(", ")}`;
   const structuredPrompt = `${shotMediumText} ${subjectsText}${textClause}. ${backgroundText} ${lightingSpecs} ${paletteText}`;
   sections.push({
@@ -44501,9 +44517,41 @@ function serializeIdeogramV4(input2) {
     warnings
   };
 }
+var COLOR_NAME_TO_HEX;
 var init_ideogram_v4 = __esm(() => {
   init_prompt_document();
   init_helpers();
+  COLOR_NAME_TO_HEX = {
+    black: "#0A0A0A",
+    white: "#FFFFFF",
+    silver: "#E2E8F0",
+    grey: "#64748B",
+    gray: "#64748B",
+    red: "#DC2626",
+    crimson: "#991B1B",
+    ruby: "#BE123C",
+    blue: "#2563EB",
+    navy: "#1E3A8A",
+    cyan: "#06B6D4",
+    teal: "#0D9488",
+    green: "#16A34A",
+    emerald: "#059669",
+    forest: "#14532D",
+    gold: "#D97706",
+    golden: "#F59E0B",
+    amber: "#D97706",
+    yellow: "#FACC15",
+    orange: "#EA580C",
+    purple: "#9333EA",
+    violet: "#7C3AED",
+    magenta: "#D946EF",
+    pink: "#EC4899",
+    rose: "#F43F5E",
+    brown: "#78350F",
+    bronze: "#92400E",
+    brass: "#CA8A04",
+    copper: "#B45309"
+  };
 });
 // src/backend/runtime/prompt-serializers/index.ts
 function getPromptSerializer(dialect) {

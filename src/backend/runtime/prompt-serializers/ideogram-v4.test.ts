@@ -192,4 +192,38 @@ describe('Ideogram V4 Native Prompting Engine', () => {
     expect(forcedProse.dialect).toBe('ideogram-v4');
     expect(forcedProse.ideogramMode).toBe('structured-prose');
   });
+
+  test('Style prompts, prefix, suffix, and named palettes are seamlessly integrated into Ideogram', () => {
+    const customStyle: StyleDNA = {
+      prefix: 'masterpiece visual novel key visual',
+      suffix: 'dramatic rim light, high contrast volumetric fog',
+      medium: 'dark fantasy anime illustration',
+      palette: ['crimson and gold', 'obsidian black']
+    };
+
+    const profile = resolveImagePromptProfileV2('nanogpt', 'ideogram/v4/instant');
+    const result = compileModelPrompt({
+      brief: baseBrief,
+      shotSpec,
+      outputPlan,
+      profile,
+      styleDNA: customStyle
+    });
+
+    // 1. Result must still be valid JSON
+    expect(result.prompt.startsWith('{')).toBe(true);
+    const parsed = JSON.parse(result.prompt);
+
+    // 2. High level incorporates prefix and medium
+    expect(parsed.high_level_description).toContain('masterpiece visual novel key visual');
+    expect(parsed.high_level_description).toContain('dark fantasy anime illustration');
+
+    // 3. Style description incorporates aesthetics, art_style and suffix
+    expect(parsed.style_description.art_style).toContain('dark fantasy anime illustration style');
+    expect(parsed.style_description.art_style).toContain('dramatic rim light, high contrast volumetric fog');
+
+    // 4. Palette extracts crimson (#991B1B) and gold (#D97706)
+    expect(parsed.style_description.color_palette).toContain('#991B1B');
+    expect(parsed.style_description.color_palette).toContain('#D97706');
+  });
 });

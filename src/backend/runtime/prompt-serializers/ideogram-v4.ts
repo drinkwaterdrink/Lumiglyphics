@@ -8,18 +8,61 @@ import {
 import type { VisualBrief } from '../../../shared/image-templates.js';
 import type { StyleDNA } from '../../../shared/style-dna.js';
 
+const COLOR_NAME_TO_HEX: Record<string, string> = {
+  black: '#0A0A0A',
+  white: '#FFFFFF',
+  silver: '#E2E8F0',
+  grey: '#64748B',
+  gray: '#64748B',
+  red: '#DC2626',
+  crimson: '#991B1B',
+  ruby: '#BE123C',
+  blue: '#2563EB',
+  navy: '#1E3A8A',
+  cyan: '#06B6D4',
+  teal: '#0D9488',
+  green: '#16A34A',
+  emerald: '#059669',
+  forest: '#14532D',
+  gold: '#D97706',
+  golden: '#F59E0B',
+  amber: '#D97706',
+  yellow: '#FACC15',
+  orange: '#EA580C',
+  purple: '#9333EA',
+  violet: '#7C3AED',
+  magenta: '#D946EF',
+  pink: '#EC4899',
+  rose: '#F43F5E',
+  brown: '#78350F',
+  bronze: '#92400E',
+  brass: '#CA8A04',
+  copper: '#B45309'
+};
+
 /**
  * Extracts or generates 4 to 6 uppercase #RRGGBB hex codes based on scene atmosphere,
  * lighting, and character appearance to satisfy Ideogram's strict color_palette rules.
  */
 export function extractIdeogramPalette(brief: VisualBrief, styleDNA?: StyleDNA): string[] {
-  // Check if styleDNA has valid custom hex codes
+  // Check if styleDNA has valid custom hex codes or named color words
   if (styleDNA?.palette && Array.isArray(styleDNA.palette)) {
-    const validHex = styleDNA.palette
-      .map(c => c.trim().toUpperCase())
-      .filter(c => /^#[0-9A-F]{6}$/i.test(c));
-    if (validHex.length >= 3) {
-      return validHex.slice(0, 8);
+    const hexes: string[] = [];
+    for (const c of styleDNA.palette) {
+      const trimmed = c.trim().toUpperCase();
+      if (/^#[0-9A-F]{6}$/i.test(trimmed)) {
+        if (!hexes.includes(trimmed)) hexes.push(trimmed);
+      } else {
+        const lower = c.toLowerCase();
+        for (const [name, hex] of Object.entries(COLOR_NAME_TO_HEX)) {
+          if (new RegExp(`\\b${name}\\b`).test(lower) && !hexes.includes(hex)) {
+            hexes.push(hex);
+          }
+        }
+      }
+    }
+    if (hexes.length >= 3) {
+      return hexes.slice(0, 6);
     }
   }
 
@@ -89,6 +132,8 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
 
   const cameraText = formatCameraFraming(shotSpec, styleDNA) || 'medium shot';
   const prefix = styleDNA?.prefix?.trim() ? `${styleDNA.prefix.trim()}. ` : '';
+  const suffix = styleDNA?.suffix?.trim() || '';
+  const medium = styleDNA?.medium?.trim() || '';
 
   // Mode A: Direct JSON Mode (Native NanoGPT endpoint schema)
   if (isDirectJson) {
@@ -105,21 +150,21 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
     }
 
     const actionText = brief.action ? ` ${brief.action.trim().replace(/\.+$/, '')}.` : '';
-    const highLevel = `${prefix}${isPhoto ? 'A candid' : 'A detailed'} ${cameraText} ${isPhoto ? 'photograph' : 'illustration'} of ${subjectSummary} in ${brief.scene.trim()}.${actionText}`.replace(/\s+/g, ' ').trim();
+    const highLevel = `${prefix}${isPhoto ? 'A candid' : 'A detailed'} ${cameraText} ${medium || (isPhoto ? 'photograph' : 'illustration')} of ${subjectSummary} in ${brief.scene.trim()}.${actionText}`.replace(/\s+/g, ' ').trim();
 
     // 2. Style description (photo vs art branches)
     const styleDescription: Record<string, unknown> = {};
     if (isPhoto) {
-      styleDescription.aesthetics = `${prefix}Atmospheric cinematic realism with balanced dynamic range, authentic surface textures, and fine tonal gradation.`.trim();
+      styleDescription.aesthetics = [prefix, 'Atmospheric cinematic realism with balanced dynamic range, authentic surface textures, and fine tonal gradation.', suffix].filter(Boolean).join(' ').trim();
       styleDescription.lighting = brief.lighting ? `${brief.lighting.trim()}, providing natural directional fill and soft ambient falloff.` : 'Natural ambient lighting with soft directional fill and atmospheric bounce.';
       styleDescription.photo = `Shot on a full-frame sensor with a ${shotSpec?.camera?.lens || '35mm'} prime lens, f/1.8 aperture, tack-sharp focal plane, and natural depth of field.`;
       styleDescription.medium = 'photograph';
       styleDescription.color_palette = palette;
     } else {
-      styleDescription.aesthetics = `${prefix}Intricate visual novel illustration with expressive character artistry, clean silhouette definition, and rich environmental depth.`.trim();
+      styleDescription.aesthetics = [prefix, 'Intricate visual novel illustration with expressive character artistry, clean silhouette definition, and rich environmental depth.'].filter(Boolean).join(' ').trim();
       styleDescription.lighting = brief.lighting ? `${brief.lighting.trim()}, creating gentle rim lighting and volumetric atmospheric mood.` : 'Cinematic atmospheric lighting with gentle rim accents and balanced contrast.';
       styleDescription.medium = 'digital_illustration';
-      styleDescription.art_style = 'Crisp refined line art combined with layered volumetric shading, clean material textures, and painterly environmental depth.';
+      styleDescription.art_style = [medium ? `${medium} style.` : '', 'Crisp refined line art combined with layered volumetric shading, clean material textures, and painterly environmental depth.', suffix].filter(Boolean).join(' ').trim();
       styleDescription.color_palette = palette;
     }
 
@@ -233,7 +278,7 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
 
   // Mode B: Structured Plain-Text Mode (6-part formula)
   // [1. Shot Type + Exact Medium]
-  const shotMediumText = `A ${cameraText} ${isPhoto ? 'photograph' : 'digital illustration'} of`;
+  const shotMediumText = `${prefix ? `${prefix} ` : ''}A ${cameraText} ${medium || (isPhoto ? 'photograph' : 'digital illustration')} of`;
 
   // [2. Main Subject + Spatial Placement]
   let subjectsText = '';
@@ -260,7 +305,7 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
   const backgroundText = `Behind, ${brief.scene}.`;
 
   // [5. Lighting & Camera/Render Specs]
-  const lightingSpecs = `${brief.lighting ? `${brief.lighting}, ` : ''}${isPhoto ? 'shot on 35mm film, f/1.8 aperture, natural depth of field and tack-sharp focus' : 'clean linework, rich volumetric shading, and painterly depth'}.`;
+  const lightingSpecs = `${brief.lighting ? `${brief.lighting}, ` : ''}${isPhoto ? 'shot on 35mm film, f/1.8 aperture, natural depth of field and tack-sharp focus' : 'clean linework, rich volumetric shading, and painterly depth'}${suffix ? `, ${suffix}` : ''}.`;
 
   // [6. color palette #HEX1, #HEX2, #HEX3]
   const paletteText = `color palette ${palette.join(', ')}`;
