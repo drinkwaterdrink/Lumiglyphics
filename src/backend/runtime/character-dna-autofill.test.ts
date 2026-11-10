@@ -45,3 +45,53 @@ it('uses canonical saved reader paragraphs for tagged dialogue and never sends u
  record=null;result=await collect();expect(result.evidence.filter(e=>e.source.startsWith('Story '))).toEqual([]);
  swipe=1;result=await collect();expect(result.evidence.filter(e=>e.source.startsWith('Story '))).toEqual([]);
 });
+
+
+it('matches SimTracker character using aliases, tracker2 tags, and word boundaries', async () => {
+  const s: any = {
+    chat: {
+      getMessages: async () => [{
+        id: 'msg1',
+        content: 'Conversation.\n<tracker2>\ncharacters:\n  Lady Marseline Vane:\n    aliases: [Mars, Vane]\n    appearance: tall with thick black hair and bronze eyes\n    attire: linen work shirt with rolled sleeves\n</tracker2>',
+        is_user: false
+      }]
+    },
+    chats: { get: async () => ({ character_id: null }) },
+    personas: { getActive: async () => null },
+    userStorage: { getJson: async () => null }
+  };
+  const target = createEmptyCharacterDNA('Marseline');
+  target.aliases = ['Vane'];
+  const config: any = { includeSimTrackerContext: true, includeCharacterContext: false, includeLorebookContext: false };
+  const evidence = await collectCharacterDnaEvidence(s, { chatId: 'c', userId: 'u', target, config, signal: new AbortController().signal });
+  const trackerEv = evidence.evidence.find(e => e.source === 'SimTracker');
+  expect(trackerEv).toBeDefined();
+  expect(trackerEv?.text).toContain('bronze eyes');
+  expect(trackerEv?.text).toContain('linen work shirt');
+  expect(evidence.statuses.find(s => s.source === 'SimTracker')?.status).toBe('available');
+});
+
+it('sanitizes generic everyday casual attire fallbacks during proposal', async () => {
+  const target = createEmptyCharacterDNA('Cassidy');
+  const s: any = {
+    connections: { list: async () => [{ id: 'text', provider: 'openai', model: 'm', type: 'text', enabled: true }] },
+    generate: {
+      raw: async () => ({
+        content: JSON.stringify({
+          changes: [
+            { path: 'signatureOutfit', value: 'everyday casual attire', classification: 'generated', sourceRefs: [] },
+            { path: 'activeOutfit', value: 'casual clothes', classification: 'generated', sourceRefs: [] }
+          ]
+        })
+      })
+    }
+  };
+  const result = await proposeCharacterDna(s, {
+    chatId: 'c', userId: 'u', target, config: { plannerConnectionId: 'text' } as any,
+    signal: new AbortController().signal, revision: 0,
+    evidence: { evidence: [], statuses: [] },
+    fields: ['signatureOutfit', 'activeOutfit']
+  });
+  expect(result.changes.find(c => c.path === 'signatureOutfit')?.value).toBe('');
+  expect(result.changes.find(c => c.path === 'activeOutfit')?.value).toBe('');
+});

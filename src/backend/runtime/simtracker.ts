@@ -28,7 +28,7 @@ function character(value: unknown, mappings: TrackerMappings): TrackerCharacter 
   return {
     name: name.slice(0, 160), aliases, present,
     identity: join([scalar(r.appearance), first(r.age, r.approx_age, a.age), first(a.species, r.species, r.species_ancestry), first(r.gender, a.gender, r.sex), first(a.height, r.height), first(a.weight, r.weight), first(a.build, body.build, body.frame, r.body_type), first(a.skin, r.skin), face.shape, face.features, scalar(a.face), first(a.eyes, face.eyes, r.eyes), scalar(a.hair), hair.color, hair.length, hair.texture, hair.style, first(a.marks, r.marks), first(a.summary, a.description, r.physical_description, r.physicalDescription, r.visual_desc, r.identity_anchor), ...readMappedTrackerValues(r,mappings.identity)]),
-    attire: first(join(readMappedTrackerValues(r,mappings.attire),1000), wardrobe.summary, r.clothing, scalar(r.wardrobe)).slice(0, 1000),
+    attire: first(join(readMappedTrackerValues(r,mappings.attire),1000), r.attire, r.outfit, r.clothing, r.clothes, wardrobe.summary, wardrobe.attire, wardrobe.outfit, scalar(r.wardrobe)).slice(0, 1000),
     sceneState: join([r.position, r.zone, r.condition, r.hands, r.blocking, r.visual_state, r.current_action, r.action, live.position, live.condition, performance.expression, performance.gesture, ...readMappedTrackerValues(r,mappings.sceneState)], 1400)
   };
 }
@@ -38,8 +38,23 @@ function worldDescription(value: unknown, mappings: TrackerMappings): string {
   return join([w.location, w.environment, w.description, w.weather, w.lighting, w.timeOfDay, w.time_of_day, object(w.location).name, object(w.location).description, ...readMappedTrackerValues(w,mappings.world)], 3000);
 }
 
-function trackerBlocks(content:string){
- return [...content.matchAll(/<tracker\b[^>]*>([\s\S]*?)<\/tracker>/gi),...[...content.matchAll(/```(?:sim|tracker|json|yaml|yml)?\s*([\s\S]*?)```/gi)].filter(match=>/["']?(?:characters|characterData|worldData)["']?\s*:/.test(match[1]!))].sort((a,b)=>(b.index??0)-(a.index??0)).slice(0,8);
+function trackerBlocks(content: string) {
+  const matches: Array<[string, string] & { index?: number }> = [];
+  const tagRegex = /<(tracker2?|simtracker|sim_tracker|status|state)\b[^>]*>([\s\S]*?)<\/\1>/gi;
+  for (const m of content.matchAll(tagRegex)) {
+    const arr = [m[0], m[2]!] as [string, string] & { index?: number };
+    arr.index = m.index;
+    matches.push(arr);
+  }
+  const codeRegex = /```(?:sim|tracker|tracker2|json|yaml|yml)?\s*([\s\S]*?)```/gi;
+  for (const m of content.matchAll(codeRegex)) {
+    if (/["']?(?:characters|characterData|worldData)["']?\s*:/.test(m[1]!)) {
+      const arr = [m[0], m[1]!] as [string, string] & { index?: number };
+      arr.index = m.index;
+      matches.push(arr);
+    }
+  }
+  return matches.sort((a, b) => (b.index ?? 0) - (a.index ?? 0)).slice(0, 8);
 }
 function parsePayload(raw:string):Record<string,unknown>{
  const cleaned=raw.trim().replace(/([:\[,])\s*\+(\d+(?:\.\d+)?)/g,'$1 $2');

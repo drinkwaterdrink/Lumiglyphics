@@ -1175,6 +1175,10 @@ export class CharacterFolio implements WorkspaceSurface {
     idGrid.className = 'folio-fields-grid';
 
     idGrid.append(
+      this.createFormField('Aliases / Known As', (char.aliases ?? []).join(', '), 'e.g. Lady Marseline, Vane, Mars (comma-separated)', v => {
+        char.aliases = v.split(/[,;\n]/).map(s => s.trim()).filter(Boolean);
+        onFieldChange();
+      }),
       this.createFormField('Age', char.build.age ?? '', 'e.g. late 20s, early 30s', v => { char.build.age = v; onFieldChange(); }, el => onSingleAutoFill('age', el)),
       this.createFormField('Gender', char.build.gender ?? '', 'e.g. woman, man', v => { char.build.gender = v; onFieldChange(); }, el => onSingleAutoFill('gender', el)),
       this.createFormField('Species', char.build.species ?? '', 'e.g. human, elf, kitsune', v => { char.build.species = v; onFieldChange(); }, el => onSingleAutoFill('species', el)),

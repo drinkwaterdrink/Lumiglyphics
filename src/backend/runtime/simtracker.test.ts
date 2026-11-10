@@ -85,3 +85,14 @@ test('tracker accepts scalar appearance and name-keyed JSON/YAML NPC records',()
 test('YAML duplicate keys and excessive alias expansion fail nonfatally',()=>{
  for(const raw of ['characters: []\ncharacters: []','a: &a [x,x,x,x,x,x,x,x,x,x,x]\ncharacters: [*a,*a,*a,*a,*a,*a,*a,*a,*a,*a,*a]'])assert.equal(extractSimTracker([{id:'m',content:`<tracker>${raw}</tracker>`}],'m').status,'malformed');
 });
+
+test('recognizes tracker2, simtracker, and status wrapper tags', () => {
+  for (const tag of ['tracker2', 'simtracker', 'status']) {
+    const raw = `<${tag}>\ncharacters:\n  Marseline:\n    appearance: tall with bronze eyes\n</${tag}>`;
+    const result = extractSimTracker([{ id: 'm', content: raw }], 'm');
+    assert.equal(result.status, 'detected');
+    assert.equal(result.cast.length, 1);
+    assert.equal(result.cast[0]?.name, 'Marseline');
+    assert.match(result.cast[0]?.identity ?? '', /bronze eyes/);
+  }
+});

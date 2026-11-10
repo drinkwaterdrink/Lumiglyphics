@@ -85,6 +85,24 @@ describe('CharacterFolio & Character DNA', () => {
     expect(clause).not.toContain('worn denim overalls');
   });
 
+  it('filters out generic filler attire like everyday casual clothes from prompt clauses and tags', () => {
+    const dna = createEmptyCharacterDNA('Marseline Vane', 'marseline');
+    dna.build = { gender: 'woman', species: 'human' };
+    dna.signatureOutfit = 'everyday casual attire';
+
+    const clause = formatCharacterDNAToPromptClause(dna);
+    expect(clause).not.toContain('casual');
+    expect(clause).not.toContain('attire');
+
+    const tags = formatCharacterDNAToTags(dna);
+    expect(tags.some(t => /casual|attire/i.test(t))).toBe(false);
+
+    dna.activeOutfit = 'casual clothes';
+    const activeClause = formatCharacterDNAToPromptClause(dna);
+    expect(activeClause).not.toContain('casual');
+    expect(activeClause).not.toContain('clothes');
+  });
+
   it('merges DNA patches while respecting locked state', () => {
     const base = createEmptyCharacterDNA('Rena', 'rena');
     base.hair.color = 'silver';

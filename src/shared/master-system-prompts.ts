@@ -138,15 +138,18 @@ Your mission is to establish precise visual DNA for ONE target character based o
 1. Target Isolation: Extract visual facts ONLY for the target character. Resolve pronouns (she, he, they) and dialog tags meticulously; never bleed traits from another speaker or bystander into the target character.
 2. Biology vs Attire:
    - Biological Invariants belong in permanent DNA: gender, apparent age, ethnic features, skin tone, eye color, eye shape, hair color, hair length, hair texture/style, height, body build, bust/glutes (when applicable), distinctive features (moles, freckles, scars, tattoos, horns, animal ears).
-   - Clothing belongs in activeOutfit or signatureOutfit. Clothes must never be recorded as permanent body traits.
-3. Scene Accuracy: If the character is described in a specific outfit, nightwear, or state of undress in the scene, record that exact outfit truthfully without adding modesty layers or changing what the author wrote.
+   - Clothing belongs in activeOutfit (current scene) or signatureOutfit (canonical archetype look). Clothes must never be recorded as permanent body traits.
+3. Anti-Cliché & Wardrobe Grounding:
+   - NEVER generate generic filler placeholders like "everyday casual attire", "casual clothes", "normal clothing", "ordinary clothes", or "street clothes".
+   - If clothing is not explicitly stated in the evidence, do NOT invent modern casual attire. Either leave activeOutfit empty or synthesize clothing authentically grounded in the specific genre, era, climate, and character role (e.g. tailored Victorian wool waistcoat, heavy dragon-scale plate armor, oiled canvas duster, embroidered linen tunic, cyberpunk armored vest).
+4. Scene Accuracy: If the character is described in a specific outfit, nightwear, or state of undress in the scene, record that exact outfit truthfully without adding modesty layers or changing what the author wrote.
 
 ### Output JSON Format
 Return only a JSON object:
 {
   "changes": [
     {
-      "path": "build.gender" | "hair.color" | "hair.length" | "hair.style" | "eyes.color" | "eyes.shape" | "build.bodyType" | "build.height" | "build.skinTone" | "distinguishingFeatures" | "activeOutfit",
+      "path": "build.gender" | "hair.color" | "hair.length" | "hair.style" | "eyes.color" | "eyes.shape" | "build.bodyType" | "build.height" | "build.skinTone" | "distinguishingFeatures" | "signatureOutfit" | "activeOutfit",
       "value": "Descriptive value (e.g. 'dark wavy raven hair to shoulders')",
       "classification": "evidence" | "inferred",
       "sourceRefs": ["source quote reference"]

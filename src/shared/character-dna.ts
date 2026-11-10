@@ -92,6 +92,15 @@ const STOP_WORDS = new Set([
   'with', 'under', 'over', 'her', 'his', 'their', 'the', 'a', 'an', 'and', 'of', 'in', 'on', 'for', 'to', 'frame', 'body', 'build', 'very', 'slightly'
 ]);
 
+export const GENERIC_ATTIRE_RE = /^(?:wearing\s+)?(?:everyday|casual|normal|ordinary|standard|typical|street)?\s*(?:casual\s*)?(?:attire|clothes|clothing|outfit|wear|dress|garb)\.?$/i;
+
+export function isGenericAttire(attire?: string | null): boolean {
+  if (!attire) return false;
+  const trimmed = attire.trim();
+  if (!trimmed) return false;
+  return GENERIC_ATTIRE_RE.test(trimmed);
+}
+
 function formatAgeClause(rawAge?: string): string {
   const age = rawAge?.trim() ?? '';
   if (!age) return '';
@@ -248,7 +257,7 @@ export function formatCharacterDNAToTags(dna: CharacterDNA): string[] {
   const dedupedTags = Array.from(new Set(tags.filter(Boolean)));
 
   const currentOutfit = dna.activeOutfit || dna.signatureOutfit;
-  if (currentOutfit) {
+  if (currentOutfit && !isGenericAttire(currentOutfit)) {
     dedupedTags.push(currentOutfit.startsWith('wearing ') ? currentOutfit : `wearing ${currentOutfit}`);
   }
 
@@ -316,7 +325,7 @@ export function formatCharacterDNAToPromptClause(dna: CharacterDNA): string {
   const deduped = deduplicateDescriptiveClauses(rawClauses, hasIdentityLead);
 
   const currentOutfit = dna.activeOutfit || dna.signatureOutfit;
-  if (currentOutfit) {
+  if (currentOutfit && !isGenericAttire(currentOutfit)) {
     deduped.push(currentOutfit.startsWith('wearing ') ? currentOutfit : `wearing ${currentOutfit}`);
   }
 
