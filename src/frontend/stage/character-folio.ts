@@ -1,3 +1,4 @@
+import {isScenarioTitle} from '../../shared/card-role.js';
 import {samePresentationTurn} from '../../shared/presentation-entities.js';
 import {sceneImageCandidatesFor} from './image-loader.js';
 import {DNA_FIELDS,DNA_FIELD_LABELS,dnaFieldValue,applyDnaChanges,type DnaField,type DnaProposal} from '../../shared/character-dna-workflow.js';
@@ -790,7 +791,7 @@ export class CharacterFolio implements WorkspaceSurface {
           }
         }
       }
-      const isDeleted = Boolean(findCharacterDNA(this.deleted, name) || findMatchingCharacterId(this.deleted, name));
+      const isDeleted = Boolean(isScenarioTitle(name) || findCharacterDNA(this.deleted, name) || findMatchingCharacterId(this.deleted, name));
       if (!match && !isDeleted) {
         const dna = createEmptyCharacterDNA(name);
         const assetWithImage = visibleAssets.find(a => {
@@ -1084,7 +1085,36 @@ export class CharacterFolio implements WorkspaceSurface {
 
     const saveButton=document.createElement('button');saveButton.type='button';saveButton.className='folio-action-btn btn-accent';saveButton.textContent='Save changes';saveButton.setAttribute('data-dna-save','');saveButton.disabled=!this.dirty.has(char.id)||this.saving.has(char.id);saveButton.onclick=()=>{this.cancelProposal();this.saving.add(char.id);saveButton.disabled=true;this.handlers.onSaveDNA?.(structuredClone(char),this.revision);};
     heroActions.append(autoFillAllBtn, lockToggleBtn, copyPromptBtn,deleteButton,saveButton);
-    heroCard.append(heroTop, heroActions);
+    const heroAliases = document.createElement('div');
+    heroAliases.className = 'folio-hero-aliases';
+    heroAliases.style.cssText = 'margin:10px 0 6px;padding:8px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.14);border-radius:8px;display:flex;flex-direction:column;gap:4px;';
+    const aliasHeader = document.createElement('div');
+    aliasHeader.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;';
+    const aliasTitle = document.createElement('label');
+    aliasTitle.style.cssText = 'font-size:11.5px;font-weight:700;color:var(--vn-accent,#a8d3c8);display:flex;align-items:center;gap:5px;';
+    aliasTitle.innerHTML = '🏷️ <span>Aliases & Nicknames</span>';
+    const aliasSubtitle = document.createElement('small');
+    aliasSubtitle.style.cssText = 'font-size:10px;opacity:0.65;font-weight:400;';
+    aliasSubtitle.textContent = 'SimTracker, lore & prompt matching';
+    aliasHeader.append(aliasTitle, aliasSubtitle);
+    const aliasInput = document.createElement('input');
+    aliasInput.type = 'text';
+    aliasInput.className = 'folio-aliases-input';
+    aliasInput.placeholder = 'e.g. Mars, Lady Vane, Headmistress (comma-separated)';
+    aliasInput.value = (char.aliases ?? []).join(', ');
+    aliasInput.style.cssText = 'width:100%;box-sizing:border-box;padding:6px 10px;font-size:12px;border-radius:6px;border:1px solid rgba(255,255,255,0.18);background:rgba(0,0,0,0.3);color:inherit;';
+    aliasInput.setAttribute('aria-label', `Aliases and nicknames for ${char.name}`);
+    aliasInput.oninput = () => {
+      char.aliases = aliasInput.value.split(/[,;\n]/).map(s => s.trim()).filter(Boolean);
+      char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+      this.dirty.add(char.id);
+      const save = this.element.querySelector<HTMLButtonElement>('[data-dna-save]');
+      if (save) save.disabled = this.saving.has(char.id);
+      const idGridInput = this.element.querySelector<HTMLInputElement>(`#dna-${char.id}-Aliases---Known-As`);
+      if (idGridInput && idGridInput !== aliasInput) idGridInput.value = aliasInput.value;
+    };
+    heroAliases.append(aliasHeader, aliasInput);
+    heroCard.append(heroTop, heroAliases, heroActions);
     this.detailContainer.append(heroCard);
     this.renderWorkflow(char);
 

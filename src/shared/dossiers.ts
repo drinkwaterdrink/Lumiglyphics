@@ -3,6 +3,7 @@ import {REFERENCE_FIELD_GROUPS,referenceFieldInfo} from './reference-fields.js';
 import {referenceHistoryFor,type ReferenceHistory,type HistoricalReference} from './reference-history.js';
 import {samePresentationTurn,type ReaderPresentation,type PresentationSnapshot,type PresentationEntity,type EntityFact} from './presentation-entities.js';
 import {presentationTurnKey} from './presentation-selectors.js';
+import {isScenarioTitle} from './card-role.js';
 const OverrideSchema=z.object({chatId:z.string().min(1).max(256),kind:z.enum(['npc','place','object']),name:z.string().min(1).max(256),suppressed:z.boolean().default(false),pinned:z.boolean().default(false),note:z.string().max(600).default('')}).strict();
 export const TooltipPreferencesSchema=z.object({enabled:z.boolean().default(false),rememberReferences:z.boolean().default(true),actionsEnabled:z.boolean().default(false),categories:z.object({npcs:z.boolean().default(true),locations:z.boolean().default(true),objects:z.boolean().default(true)}).default({npcs:true,locations:true,objects:true}),fieldGroups:z.record(z.string(),z.boolean()).default({}),detail:z.enum(['brief','standard','expanded']).default('brief'),linking:z.enum(['important','all-known','menu-only']).default('important'),maxLinksPerParagraph:z.number().int().min(1).max(6).default(3),maxFactsPerEntity:z.number().int().min(1).max(32).default(8),maxFactChars:z.number().int().min(80).max(1200).default(320),overrides:z.array(OverrideSchema).max(64).default([])});
 export type TooltipPreferences=z.infer<typeof TooltipPreferencesSchema>;
@@ -17,7 +18,7 @@ export function normalizeTooltipPreferences(value:unknown):TooltipPreferences {
 export function entityOverride(prefs:TooltipPreferences,chatId:string,entity:Pick<PresentationEntity,'kind'|'name'>) {return prefs.overrides.find(o=>o.chatId===chatId&&o.kind===entity.kind&&o.name===entity.name);}
 export function eligibleEntities(entities:readonly PresentationEntity[],prefs:TooltipPreferences,chatId=''):PresentationEntity[] {
  if(!prefs.enabled)return [];
- return entities.filter(e=>prefs.categories[e.kind==='npc'?'npcs':e.kind==='place'?'locations':'objects']&&!entityOverride(prefs,chatId,e)?.suppressed);
+ return entities.filter(e=>prefs.categories[e.kind==='npc'?'npcs':e.kind==='place'?'locations':'objects']&&!entityOverride(prefs,chatId,e)?.suppressed&&!(e.kind==='npc'&&isScenarioTitle(e.name)));
 }
 export type DossierAnchor={start:number;end:number;entityId:string};
 /** Incremental mention accounting needs reveal names, never state replay. */

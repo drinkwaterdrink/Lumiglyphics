@@ -21673,6 +21673,15 @@ var STOP_WORDS = new Set([
   "very",
   "slightly"
 ]);
+var GENERIC_ATTIRE_RE = /^(?:wearing\s+)?(?:everyday|casual|normal|ordinary|standard|typical|street)?\s*(?:casual\s*)?(?:attire|clothes|clothing|outfit|wear|dress|garb)\.?$/i;
+function isGenericAttire(attire) {
+  if (!attire)
+    return false;
+  const trimmed = attire.trim();
+  if (!trimmed)
+    return false;
+  return GENERIC_ATTIRE_RE.test(trimmed);
+}
 function formatAgeClause(rawAge) {
   const age = rawAge?.trim() ?? "";
   if (!age)
@@ -21820,7 +21829,7 @@ function formatCharacterDNAToPromptClause(dna) {
   }
   const deduped = deduplicateDescriptiveClauses(rawClauses, hasIdentityLead);
   const currentOutfit = dna.activeOutfit || dna.signatureOutfit;
-  if (currentOutfit) {
+  if (currentOutfit && !isGenericAttire(currentOutfit)) {
     deduped.push(currentOutfit.startsWith("wearing ") ? currentOutfit : `wearing ${currentOutfit}`);
   }
   const visualDemeanor = filterVisualDemeanor(dna.demeanor);
@@ -22184,6 +22193,15 @@ var StoredCardRoleSchema = exports_external.object({
   cardId: exports_external.string().min(1).max(200),
   role: CardRoleSchema
 }).strict();
+var SCENARIO_KEYWORD_RE = /\b(?:academy|rpg|adventure|simulator|simulation|chronicles|campaign|setting|universe|guild|tavern|inn|empire|kingdom|city|realm|station|dungeon|manor|estate|school|university|sanctuary|asylum|narrator|storyteller|game\s*master|dm|gm|cyoa|sandbox)\b/i;
+function isScenarioTitle(name) {
+  if (!name)
+    return false;
+  const trimmed = name.trim();
+  if (!trimmed)
+    return false;
+  return SCENARIO_KEYWORD_RE.test(trimmed);
+}
 
 // src/shared/subject-correction.ts
 var SubjectCorrectionSchema = exports_external.discriminatedUnion("kind", [
@@ -29563,7 +29581,7 @@ function entityOverride(prefs, chatId, entity) {
 function eligibleEntities(entities, prefs, chatId = "") {
   if (!prefs.enabled)
     return [];
-  return entities.filter((e) => prefs.categories[e.kind === "npc" ? "npcs" : e.kind === "place" ? "locations" : "objects"] && !entityOverride(prefs, chatId, e)?.suppressed);
+  return entities.filter((e) => prefs.categories[e.kind === "npc" ? "npcs" : e.kind === "place" ? "locations" : "objects"] && !entityOverride(prefs, chatId, e)?.suppressed && !(e.kind === "npc" && isScenarioTitle(e.name)));
 }
 function createReferenceLinkBudget(value, paragraphs, prefs) {
   const counts = [0], firstLinkedAt = new Map;
@@ -30858,7 +30876,21 @@ class DossierCard {
         evidence.type = "button";
         evidence.textContent = "Read story reference";
         evidence.onclick = () => open2(activeEntry.entity.id, trigger);
-        lensCard.append(lensTitle, lensDesc, ctaBtn, evidence);
+        const hideBtn = document.createElement("button");
+        hideBtn.type = "button";
+        hideBtn.style.cssText = "display:inline-block;margin-top:6px!important;margin-left:6px!important;min-height:0!important;min-width:0!important;padding:4px 10px!important;font-size:10.5px!important;font-weight:600!important;border-radius:6px!important;background:rgba(255,255,255,0.08)!important;color:var(--vn-muted-text,#d1dfd5)!important;border:1px solid rgba(255,255,255,0.18)!important;cursor:pointer;";
+        hideBtn.textContent = "✕ Hide from Lens";
+        hideBtn.title = "Hide this reference from World Lens";
+        hideBtn.onclick = () => {
+          if (this.update(activeEntry.entity, { suppressed: true })) {
+            const idx = entries.findIndex((e) => e.entity.id === activeEntry.entity.id);
+            if (idx >= 0)
+              entries.splice(idx, 1);
+            this.selectedEntityId = null;
+            render2();
+          }
+        };
+        lensCard.append(lensTitle, lensDesc, ctaBtn, evidence, hideBtn);
       } else {
         lensCard.innerHTML = "<h3>No matching references</h3><p>Try another category or clear the search.</p>";
       }
@@ -43270,15 +43302,18 @@ Your mission is to establish precise visual DNA for ONE target character based o
 1. Target Isolation: Extract visual facts ONLY for the target character. Resolve pronouns (she, he, they) and dialog tags meticulously; never bleed traits from another speaker or bystander into the target character.
 2. Biology vs Attire:
    - Biological Invariants belong in permanent DNA: gender, apparent age, ethnic features, skin tone, eye color, eye shape, hair color, hair length, hair texture/style, height, body build, bust/glutes (when applicable), distinctive features (moles, freckles, scars, tattoos, horns, animal ears).
-   - Clothing belongs in activeOutfit or signatureOutfit. Clothes must never be recorded as permanent body traits.
-3. Scene Accuracy: If the character is described in a specific outfit, nightwear, or state of undress in the scene, record that exact outfit truthfully without adding modesty layers or changing what the author wrote.
+   - Clothing belongs in activeOutfit (current scene) or signatureOutfit (canonical archetype look). Clothes must never be recorded as permanent body traits.
+3. Anti-Cliché & Wardrobe Grounding:
+   - NEVER generate generic filler placeholders like "everyday casual attire", "casual clothes", "normal clothing", "ordinary clothes", or "street clothes".
+   - If clothing is not explicitly stated in the evidence, do NOT invent modern casual attire. Either leave activeOutfit empty or synthesize clothing authentically grounded in the specific genre, era, climate, and character role (e.g. tailored Victorian wool waistcoat, heavy dragon-scale plate armor, oiled canvas duster, embroidered linen tunic, cyberpunk armored vest).
+4. Scene Accuracy: If the character is described in a specific outfit, nightwear, or state of undress in the scene, record that exact outfit truthfully without adding modesty layers or changing what the author wrote.
 
 ### Output JSON Format
 Return only a JSON object:
 {
   "changes": [
     {
-      "path": "build.gender" | "hair.color" | "hair.length" | "hair.style" | "eyes.color" | "eyes.shape" | "build.bodyType" | "build.height" | "build.skinTone" | "distinguishingFeatures" | "activeOutfit",
+      "path": "build.gender" | "hair.color" | "hair.length" | "hair.style" | "eyes.color" | "eyes.shape" | "build.bodyType" | "build.height" | "build.skinTone" | "distinguishingFeatures" | "signatureOutfit" | "activeOutfit",
       "value": "Descriptive value (e.g. 'dark wavy raven hair to shoulders')",
       "classification": "evidence" | "inferred",
       "sourceRefs": ["source quote reference"]
@@ -50739,7 +50774,7 @@ function modelOutputHelp(provider, model, parameters) {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.143";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.146";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -51241,7 +51276,7 @@ section[data-state="planning"],section[data-state="empty"],section[data-state="z
 .studio-layout-toggle:hover{background:color-mix(in srgb,var(--accent) 20%,transparent)}
 .studio-tab-panel{display:flex;flex-direction:column;gap:12px;background:var(--vn-shell-field,rgba(255,255,255,.03));border:1px solid var(--edge);border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 4px 16px rgba(0,0,0,.15);transition:border-color .2s ease}.studio-tab-panel[hidden]{display:none!important}
 .studio-card-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:4px}
-.studio-card-title{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;color:var(--vn-shell-text,#f4f7ee)}
+.studio-card-title{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;color:var(--vn-shell-text,#f4f7ee)}.studio-activity-details{margin:8px 0;border:1px solid var(--edge);border-radius:10px;background:rgba(255,255,255,.02);padding:0 10px}.studio-activity-details[open]{padding-bottom:10px}.studio-activity-details summary{font-size:12px;font-weight:600;cursor:pointer;color:var(--vn-shell-muted,#aaa)}
 @container(max-width:600px){section{width:auto}[data-context]{gap:10px}[data-studio-body]{padding:12px}[data-thumbnail]{width:56px;height:72px}}
 `;
 
@@ -51304,7 +51339,12 @@ class ImageStudio {
     this.root = this.host.attachShadow({ mode: "open" });
     this.root.innerHTML = `<style>${CSS3}</style><button type="button" data-launch aria-expanded="false">Image prompts</button><section hidden aria-label="Image prompts"><div class="row" data-studio-header><div><h2>Image prompts</h2><small data-build>${LUMIGLYPHICS_VERSION}</small></div><button type="button" data-close aria-label="Close image prompts" title="Close image prompts">×</button></div><div data-studio-body><label class="toggle"><input type="checkbox" data-review checked>Review before generating</label><small data-review-help>Applies to the next image batch. Held pictures stay held. You can keep reading.</small><details data-card-role><summary>Card role for this chat</summary><label>Card role<select data-role aria-label="Card role"><option value="auto">Auto</option><option value="character">Character</option><option value="scenario">Scenario / world / narrator</option></select></label><button type="button" data-save-role>Save card role</button><small data-role-help>Applies to future replies. Existing pictures and held prompts stay unchanged. Auto uses available visual evidence.</small></details><details data-turn-recovery><summary>Reply recovery</summary><small>Retry unfinished pictures prepares only unfinished slots again and stops their current work. Completed pictures stay. New previews always need approval. Replan asks the story-reader model to reconsider the whole reply and may use text tokens.</small><button type="button" data-retry-unfinished>Prepare unfinished previews</button><button type="button" data-replan>Replan this reply</button></details><label>Picture<select data-picture aria-label="Picture"></select></label><label data-history hidden>Recorded request<select data-request aria-label="Recorded request"></select></label><div data-batch-recovery hidden><p data-batch-status role="status"></p><button type="button" data-stop-images>Stop pending pictures</button><small>Stops this reply’s waiting image work. Requests already sent may still finish at the provider. Completed pictures stay.</small></div><p data-scene></p><p data-meta></p><p data-model-help role="status" hidden></p><label>Picture template<select data-template aria-label="Picture template"></select></label><button type="button" data-use-template>Use template</button><div data-template-confirm hidden><p>Replacing rebuilds this prompt and parameters from the selected template. Your current edits will be replaced.</p><div class="row"><button type="button" data-keep>Keep edits</button><button type="button" data-replace>Replace with template</button></div></div><details data-recovery hidden><summary>Correct this picture’s subject</summary><small>Prepare a new preview for this picture only. No image is generated until you approve it.</small><label>Picture subject<select data-subject-mode aria-label="Picture subject"><option value="character">Character</option><option value="environment">Environment / no people</option></select></label><div data-person-fields><label>Character name<input data-subject-name aria-label="Character name" list="vn-subject-candidates" maxlength="160"></label><datalist id="vn-subject-candidates" data-candidates></datalist><label>Appearance<textarea data-subject-appearance aria-label="Appearance" maxlength="2000" placeholder="Concrete visual details, separated by commas: hair, eyes, skin, clothes, species…"></textarea></label><small>Use known appearance by leaving this blank, or supply details for this picture.</small><label class="toggle"><input type="checkbox" data-save-appearance>Save appearance for this character in this chat</label></div><small data-environment-help hidden>Choose a no-people template above. Character appearance and references are omitted.</small><button type="button" data-correct>Prepare corrected preview</button></details><details data-diagnostics><summary>Picture diagnostics</summary><p data-diagnostic></p><button type="button" data-copy-diagnostic>Copy diagnostics</button><small>Copies subject and template names and status only. No appearance descriptions, chat text, prompts or provider error payloads are included.</small></details><details><summary>Prompt sources</summary><p data-provenance></p></details><p data-edit-help role="status"></p><label>Positive prompt <small data-positive-count></small><textarea data-positive maxlength="65000" aria-label="Positive prompt" spellcheck="false" inputmode="text"></textarea></label><label>Negative prompt <small data-negative-count></small><textarea data-negative maxlength="65000" aria-label="Negative prompt" spellcheck="false" inputmode="text"></textarea></label><small data-prompt-profile></small><small data-combined-count role="status"></small><small>Regenerate prompt uses your story-reader model to prepare fresh wording. It uses text tokens; an image is generated only after approval.</small><small>Negative prompts and individual settings are model dependent.</small><details><summary>Parameters and references</summary><p data-reference></p><label>Parameters (JSON)<textarea data-parameters aria-label="Parameters (JSON)" spellcheck="false" inputmode="text"></textarea></label><small>Advanced overrides for this picture only. Reference bytes and host-managed fields are omitted. Your provider may ignore unsupported parameters.</small></details><small>Shows the extension request prepared for Lumiverse; the host converts it for the provider.</small></div><footer data-studio-footer><div class="row"><button type="button" data-generate>Generate this</button><button type="button" data-skip>Skip</button><button type="button" data-reset>Reset edits</button><button type="button" data-retry-image>Retry this picture</button><button type="button" data-prepare>Edit and regenerate</button><button type="button" data-regenerate-prompt>Regenerate prompt</button><button type="button" data-copy>Copy prompt</button></div><div data-notice-row hidden><p data-notice role="status"></p><button type="button" data-dismiss-notice aria-label="Dismiss image prompt notice" title="Dismiss image prompt notice">&#215;</button></div></footer></section>`;
     this.layoutInspector();
-    this.el("[data-context]").after(this.activity.element);
+    const activityDetails = document.createElement("details");
+    activityDetails.dataset.activityDetails = "";
+    activityDetails.className = "studio-activity-details";
+    activityDetails.innerHTML = "<summary>Image activity &amp; generation status</summary>";
+    activityDetails.append(this.activity.element);
+    this.el("[data-context]").after(activityDetails);
     const scope = document.createElement("small");
     scope.dataset.correctionScope = "";
     scope.setAttribute("role", "status");
@@ -52161,12 +52201,12 @@ class ImageStudio {
     const explanation = document.createElement("details");
     explanation.dataset.pictureExplanation = "";
     explanation.innerHTML = '<summary>Why this picture?</summary><p data-picture-explanation-text style="white-space:pre-wrap;overflow-wrap:anywhere"></p>';
-    const corrections = document.createElement("div");
+    const corrections = document.createElement("details");
     corrections.dataset.pictureCorrections = "";
     corrections.setAttribute("role", "group");
     corrections.setAttribute("aria-label", "Correct this picture");
-    const correctionTitle = document.createElement("strong");
-    correctionTitle.textContent = "What needs changing?";
+    const correctionTitle = document.createElement("summary");
+    correctionTitle.textContent = "What needs changing? (Subject, camera, wording)";
     corrections.append(correctionTitle);
     const correctionButtons = document.createElement("div");
     correctionButtons.style.cssText = "display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0";
@@ -52183,8 +52223,8 @@ class ImageStudio {
     correctionHelp.dataset.correctionHelp = "";
     correctionHelp.setAttribute("role", "status");
     correctionHelp.textContent = "Open the controls you need, review your changes, then choose the explicit preview or generation action.";
-    corrections.append(correctionButtons);
-    panelPicture.append(cardHeader("\uD83D\uDDBC️", "Picture & Scene Moment", "Review or inspect"), explanation, context, corrections, versionsContainer, detail, this.brief.element, this.el("[data-recovery]").closest("details"));
+    corrections.append(correctionButtons, correctionHelp);
+    panelPicture.append(cardHeader("\uD83D\uDDBC️", "Picture & Scene Moment", "Review or inspect"), context, versionsContainer, explanation, corrections, detail, this.brief.element, this.el("[data-recovery]").closest("details"));
     const panelModel = document.createElement("div");
     panelModel.className = "studio-tab-panel";
     panelModel.dataset.tabPanel = "model";
@@ -55371,7 +55411,7 @@ class CharacterFolio {
           }
         }
       }
-      const isDeleted = Boolean(findCharacterDNA(this.deleted, name) || findMatchingCharacterId(this.deleted, name));
+      const isDeleted = Boolean(isScenarioTitle(name) || findCharacterDNA(this.deleted, name) || findMatchingCharacterId(this.deleted, name));
       if (!match && !isDeleted) {
         const dna = createEmptyCharacterDNA(name);
         const assetWithImage = visibleAssets.find((a) => {
@@ -55735,7 +55775,38 @@ class CharacterFolio {
       this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
     };
     heroActions.append(autoFillAllBtn, lockToggleBtn, copyPromptBtn, deleteButton, saveButton);
-    heroCard.append(heroTop, heroActions);
+    const heroAliases = document.createElement("div");
+    heroAliases.className = "folio-hero-aliases";
+    heroAliases.style.cssText = "margin:10px 0 6px;padding:8px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.14);border-radius:8px;display:flex;flex-direction:column;gap:4px;";
+    const aliasHeader = document.createElement("div");
+    aliasHeader.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;";
+    const aliasTitle = document.createElement("label");
+    aliasTitle.style.cssText = "font-size:11.5px;font-weight:700;color:var(--vn-accent,#a8d3c8);display:flex;align-items:center;gap:5px;";
+    aliasTitle.innerHTML = "\uD83C\uDFF7️ <span>Aliases & Nicknames</span>";
+    const aliasSubtitle = document.createElement("small");
+    aliasSubtitle.style.cssText = "font-size:10px;opacity:0.65;font-weight:400;";
+    aliasSubtitle.textContent = "SimTracker, lore & prompt matching";
+    aliasHeader.append(aliasTitle, aliasSubtitle);
+    const aliasInput = document.createElement("input");
+    aliasInput.type = "text";
+    aliasInput.className = "folio-aliases-input";
+    aliasInput.placeholder = "e.g. Mars, Lady Vane, Headmistress (comma-separated)";
+    aliasInput.value = (char.aliases ?? []).join(", ");
+    aliasInput.style.cssText = "width:100%;box-sizing:border-box;padding:6px 10px;font-size:12px;border-radius:6px;border:1px solid rgba(255,255,255,0.18);background:rgba(0,0,0,0.3);color:inherit;";
+    aliasInput.setAttribute("aria-label", `Aliases and nicknames for ${char.name}`);
+    aliasInput.oninput = () => {
+      char.aliases = aliasInput.value.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+      char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+      this.dirty.add(char.id);
+      const save = this.element.querySelector("[data-dna-save]");
+      if (save)
+        save.disabled = this.saving.has(char.id);
+      const idGridInput = this.element.querySelector(`#dna-${char.id}-Aliases---Known-As`);
+      if (idGridInput && idGridInput !== aliasInput)
+        idGridInput.value = aliasInput.value;
+    };
+    heroAliases.append(aliasHeader, aliasInput);
+    heroCard.append(heroTop, heroAliases, heroActions);
     this.detailContainer.append(heroCard);
     this.renderWorkflow(char);
     const subtabs = document.createElement("div");
@@ -55811,7 +55882,10 @@ class CharacterFolio {
     idCard.innerHTML = `<div class="folio-group-header"><h4>\uD83D\uDC64 Identity & Demeanor</h4></div>`;
     const idGrid = document.createElement("div");
     idGrid.className = "folio-fields-grid";
-    idGrid.append(this.createFormField("Age", char.build.age ?? "", "e.g. late 20s, early 30s", (v) => {
+    idGrid.append(this.createFormField("Aliases / Known As", (char.aliases ?? []).join(", "), "e.g. Lady Marseline, Vane, Mars (comma-separated)", (v) => {
+      char.aliases = v.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+      onFieldChange();
+    }), this.createFormField("Age", char.build.age ?? "", "e.g. late 20s, early 30s", (v) => {
       char.build.age = v;
       onFieldChange();
     }, (el) => onSingleAutoFill("age", el)), this.createFormField("Gender", char.build.gender ?? "", "e.g. woman, man", (v) => {

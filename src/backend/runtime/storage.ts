@@ -7,7 +7,8 @@ import {samePresentationTurn} from '../../shared/presentation-entities.js';
 import {mergeImageLibrary} from './image-library.js';
 import {loadCastArt} from './cast-art.js';
 import {setupAppearance,type CastArtRecord} from '../../shared/cast-art.js';
-import { CardRoleSchema, StoredCardRoleSchema, type CardRole } from "../../shared/card-role.js";
+import { CardRoleSchema, StoredCardRoleSchema, type CardRole, isScenarioTitle } from "../../shared/card-role.js";
+import { areNamesEquivalent } from "../../shared/nicknames.js";
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { ReadingPositionSchema, type ReadingPosition } from "../../shared/reading-position.js";
 import {normalizeImageVersionHistory,type ImageVersionHistory} from '../../shared/image-version-history.js';
@@ -1037,8 +1038,94 @@ export async function saveCorrectedAppearance(spindle:SpindleAPI,chatId:string,n
  const entry=Object.values(registry).find(e=>characterAppearanceKey(e.name)===characterAppearanceKey(name));
  if(entry) {entry.tags=tags; const category=subjectCategoryFromTags(tags); if(category!=="unknown") entry.subjectCategory=category;}
  const report=mergeCharacterDeclarations(registry,[{name,tags}]);
- const registryPath=characterRegistryPath(chatId);
- await serializedWrite(scopedKey(userId,registryPath),()=>spindle.userStorage.setJson(registryPath,{schemaVersion:CHARACTER_REGISTRY_SCHEMA_VERSION,characters:report.registry,updatedAt:new Date().toISOString()},{indent:2,userId}));
+ const registryPath=characterRegistryPath(chatId); await serializedWrite(scopedKey(userId,registryPath),()=>spindle.userStorage.setJson(registryPath,{schemaVersion:CHARACTER_REGISTRY_SCHEMA_VERSION,characters:report.registry,updatedAt:new Date().toISOString()},{indent:2,userId}));
+}
+
+export async function purgeDeletedCharacterFromStorage(
+  spindle: SpindleAPI,
+  chatId: string,
+  name: string,
+  aliases: string[] = [],
+  userId?: string
+): Promise<void> {
+  const names = [name, ...aliases].map(n => n.trim()).filter(Boolean);
+  if (!names.length) return;
+  const isMatch = (target: string | null | undefined): boolean => {
+    if (!target) return false;
+    const targetKey = characterAppearanceKey(target);
+    return names.some(n => characterAppearanceKey(n) === targetKey || areNamesEquivalent(target, n));
+  };
+
+  const visualPath = singleCharacterStatePath(chatId);
+  await serializedWrite(scopedKey(userId, visualPath), async () => {
+    const current = await loadSingleCharacterState(spindle, chatId, userId);
+    if (isMatch(current.protagonist.name)) {
+      await spindle.userStorage.setJson(visualPath, {
+        ...current,
+        protagonist: { name: "", tags: [] },
+        updatedAt: new Date().toISOString()
+      }, { indent: 2, ...(userOptions(userId) ?? {}) });
+    }
+  });
+
+  const rosterPath = chatRosterPath(chatId);
+  await serializedWrite(scopedKey(userId, rosterPath), async () => {
+    const map = await spindle.userStorage.getJson<Record<string, unknown>>(rosterPath, { fallback: {}, ...(userOptions(userId) ?? {}) });
+    if (map && typeof map === "object" && !Array.isArray(map)) {
+      let changed = false;
+      for (const k of Object.keys(map)) {
+        if (isMatch(k)) {
+          delete map[k];
+          changed = true;
+        }
+      }
+      if (changed) {
+        await spindle.userStorage.setJson(rosterPath, map, { indent: 2, ...(userOptions(userId) ?? {}) });
+      }
+    }
+  });
+
+  const registryPathToUse = characterRegistryPath(chatId);
+  await serializedWrite(scopedKey(userId, registryPathToUse), async () => {
+    const raw = await spindle.userStorage.getJson<unknown>(registryPathToUse, { fallback: null, ...(userOptions(userId) ?? {}) });
+    const reg = normalizeCharacterRegistry(raw);
+    let changed = false;
+    for (const [id, entry] of Object.entries(reg)) {
+      if (isMatch(entry.name) || entry.aliases.some(a => isMatch(a))) {
+        delete reg[id];
+        changed = true;
+      }
+    }
+    if (changed) {
+      await spindle.userStorage.setJson(registryPathToUse, {
+        schemaVersion: CHARACTER_REGISTRY_SCHEMA_VERSION,
+        characters: reg,
+        updatedAt: new Date().toISOString()
+      }, { indent: 2, ...(userOptions(userId) ?? {}) });
+    }
+  });
+
+  try {
+    if (spindle.chats?.get) {
+      const chat = await spindle.chats.get(chatId, userId);
+      if (chat?.character_id) {
+        const card = await spindle.characters?.get?.(chat.character_id, userId);
+        if (card && (isMatch(card.name) || isScenarioTitle(card.name) || isScenarioTitle(name))) {
+          await saveCardRole(spindle, chatId, chat.character_id, "scenario", userId);
+        }
+      }
+    }
+  } catch {}
+
+  try {
+    const rawPrefs = await spindle.userStorage.getJson<any>("settings/tooltips.json", { fallback: null, ...(userOptions(userId) ?? {}) });
+    if (rawPrefs && Array.isArray(rawPrefs.overrides)) {
+      if (!rawPrefs.overrides.some((o: any) => o.chatId === chatId && isMatch(o.name))) {
+        rawPrefs.overrides.unshift({ chatId, kind: "npc", name, suppressed: true });
+        await spindle.userStorage.setJson("settings/tooltips.json", rawPrefs, { indent: 2, ...(userOptions(userId) ?? {}) });
+      }
+    }
+  } catch {}
 }
 
 

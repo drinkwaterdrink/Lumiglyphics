@@ -6,6 +6,7 @@ import type { TurnPlan } from '../../shared/contracts.js';
 import { MAX_PRESENTATION_PARAGRAPHS, type ReaderPresentation,type ReaderPresentationV2, type PresentationEntity, type EntityStateDelta, type PresentationState, type EvidenceSource } from '../../shared/presentation-entities.js';
 import {parseReaderPresentation} from '../../shared/presentation-selectors.js';
 import { buildCompactPresentation, type PresentationBeat } from './presentation-timeline.js';
+import { isScenarioTitle } from '../../shared/card-role.js';
 import type { ContextProposal } from '../../shared/context-sources.js';
 
 const COMPANION_CODEX_FIELDS = new Set([
@@ -34,7 +35,7 @@ export function projectTurnPresentation(plan:TurnPlan, options?: ProjectPresenta
   const source={provider:'story' as const,recordId:plan.key.assistantMessageId,chatId:plan.key.chatId,messageId:plan.key.assistantMessageId,sourceFingerprint:plan.key.sourceFingerprint,observedAt:plan.createdAt};
   const anchor=(paragraphIndex:number)=>({key:plan.key,paragraphIndex});
   const entity=(kind:PresentationEntity['kind'],name:string,at:number):PresentationEntity|null=>{
-    const trimmed=name.trim();if(!trimmed||trimmed.length>256)return null;
+    const trimmed=name.trim();if(!trimmed||trimmed.length>256||(kind==='npc'&&isScenarioTitle(trimmed)))return null;
     const mapKey=`${kind}:${trimmed}`;
     const existing=byName.get(mapKey);
     if(existing){existing.firstParagraph=Math.min(existing.firstParagraph,at);return existing;}

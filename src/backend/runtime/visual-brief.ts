@@ -9,7 +9,8 @@ import { resolveImageTemplate, type ImageTemplate } from "../../shared/image-tem
 import type { VisualBrief } from "../../shared/image-templates.js";
 export type { VisualBrief } from "../../shared/image-templates.js";
 import { POSE_EXPRESSION_CATALOGUE, poseById, sanitizePoseExpression } from "../../shared/character.js";
-import { formatCharacterDNAToPromptClause, type CharacterDNA, type CharacterDNALibrary } from "../../shared/character-dna.js";
+import { formatCharacterDNAToPromptClause, findCharacterDNA, type CharacterDNA, type CharacterDNALibrary } from "../../shared/character-dna.js";
+import { isScenarioTitle } from "../../shared/card-role.js";
 import { areNamesEquivalent, findMatchingCharacterId } from "../../shared/nicknames.js";
 import { findMatchingLocation, findMatchingItem, formatLocationDNAToPromptClause, formatItemDNAToPromptClause, type StoryDNASet } from "../../shared/story-dna.js";
 
@@ -99,7 +100,10 @@ export function resolveTemplateIdentity(
   characterDNALibrary?: CharacterDNALibrary | Record<string, CharacterDNA>,
   storyDNASet?: StoryDNASet
 ) {
-  const name = normalizeCharacterName(cue.character || scene.character || scene.cast[0] || "");
+  const rawName = normalizeCharacterName(cue.character || scene.character || scene.cast[0] || "");
+  const deletedChars = (characterDNALibrary && 'deleted' in characterDNALibrary ? characterDNALibrary.deleted : undefined) as Record<string, CharacterDNA> | undefined;
+  const isExcluded = isScenarioTitle(rawName) || Boolean(deletedChars && (findCharacterDNA(deletedChars, rawName) || findMatchingCharacterId(deletedChars, rawName)));
+  const name = isExcluded ? "" : rawName;
   const sameCharacter = characterAppearanceKey(name) === characterAppearanceKey(scene.character || scene.cast[0] || "");
 
   let lockedDNA: CharacterDNA | undefined;
@@ -167,7 +171,9 @@ export function buildVisualBrief(
     ? (('characters' in characterDNALibrary ? characterDNALibrary.characters : characterDNALibrary) as Record<string, CharacterDNA>)
     : undefined;
 
-  const members = (cue.ensembleSubjects ?? scene.cast.map(name => ({name,appearance:""}))).map(member=>{
+  const deletedLibrary = (characterDNALibrary && 'deleted' in characterDNALibrary ? characterDNALibrary.deleted : undefined) as Record<string, CharacterDNA> | undefined;
+  const isMemberExcluded = (n: string) => isScenarioTitle(n) || Boolean(deletedLibrary && (findCharacterDNA(deletedLibrary, n) || findMatchingCharacterId(deletedLibrary, n)));
+  const members = (cue.ensembleSubjects ?? scene.cast.map(name => ({name,appearance:""}))).filter(m => !isMemberExcluded(m.name)).map(member=>{
     let dnaAppearance: string | undefined;
     let memberDna: CharacterDNA | undefined;
     if (chars) {

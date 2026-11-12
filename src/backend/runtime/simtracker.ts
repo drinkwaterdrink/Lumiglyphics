@@ -14,22 +14,82 @@ const scalar = (value: unknown, max = 500): string => typeof value === "string" 
 const join = (values: unknown[], max = 3000): string => [...new Set(values.map(value => scalar(value)).filter(Boolean))].join("; ").slice(0, max);
 const first = (...values: unknown[]): string => values.map(value => scalar(value)).find(Boolean) ?? "";
 
+function lowerRecord(val: unknown): Record<string, unknown> {
+  const obj = object(val);
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    out[k.toLowerCase()] = v;
+  }
+  return out;
+}
+
 function character(value: unknown, mappings: TrackerMappings): TrackerCharacter | null {
-  const record = object(value);
-  const r = { ...record, ...object(record.stats) };
-  const name = first(r.name, r.characterName, r.character_name);
+  const rawRecord = object(value);
+  const rawStats = object(rawRecord.stats ?? (rawRecord as any).Stats);
+  const record = lowerRecord(rawRecord);
+  const stats = lowerRecord(rawStats);
+  const r = { ...record, ...stats };
+  const name = first(r.name, r.charactername, r.character_name);
   if (!name || name === "__state") return null;
-  const a = object(r.appearance), hair = object(a.hair), face = object(a.face), body = object(a.body), wardrobe = object(r.wardrobe);
-  const rawAliases = r.aliases ?? r.alias ?? r.nicknames ?? r.aka;
+
+  const rawA = r.appearance ?? r.visual ?? r.looks ?? r.look;
+  const a = lowerRecord(rawA);
+  const hair = lowerRecord(r.hair ?? a.hair);
+  const face = lowerRecord(r.face ?? a.face);
+  const body = lowerRecord(r.body ?? a.body);
+  const wardrobe = lowerRecord(r.wardrobe ?? r.clothing ?? r.outfit);
+
+  const rawAliases = r.aliases ?? r.alias ?? r.nicknames ?? r.nickname ?? r.aka;
   const aliases = (Array.isArray(rawAliases) ? rawAliases : scalar(rawAliases).split(/[,/|;]/)).map(value => scalar(value, 160)).filter(Boolean).slice(0, 8);
   const presence = r.presence ?? r.present ?? r.is_present ?? r.here;
   const present = typeof presence === "boolean" ? presence : /^(yes|true|present|here|on-screen|onscreen)$/i.test(scalar(presence)) ? true : /^(no|false|absent|away|elsewhere|offscreen|off-screen)$/i.test(scalar(presence)) ? false : null;
-  const live = object(r.live), performance = object(object(r.performance).current);
+  const live = lowerRecord(r.live);
+  const performance = lowerRecord(lowerRecord(r.performance).current);
+
+  const hairDesc = first(scalar(r.hair), scalar(a.hair), join([hair.color, hair.length, hair.texture, hair.style], 500));
+  const eyesDesc = first(scalar(r.eyes), scalar(a.eyes), face.eyes, join([lowerRecord(r.eyes).color, lowerRecord(r.eyes).shape], 300));
+  const skinDesc = first(scalar(r.skin), scalar(a.skin), body.skin);
+  const buildDesc = first(scalar(r.build), scalar(a.build), scalar(r.body), scalar(a.body), body.build, body.frame, r.body_type, r.bodytype);
+  const bustDesc = first(r.bust, r.chest, r.breasts, body.bust, body.chest);
+  const hipsDesc = first(r.hips, r.waist, r.glutes, body.hips, body.waist);
+  const faceDesc = first(scalar(r.face), scalar(a.face), join([face.shape, face.features, face.expression], 500));
+  const visualDesc = first(
+    r.description, r.visual_description, r.visualdescription, r.physical_description, r.physicaldescription,
+    r.visual_desc, r.visualdesc, r.look, r.looks, r.details, r.summary, r.features, r.traits,
+    a.description, a.summary, a.visual, a.details, a.overview, r.identity_anchor
+  );
+
   return {
     name: name.slice(0, 160), aliases, present,
-    identity: join([scalar(r.appearance), first(r.age, r.approx_age, a.age), first(a.species, r.species, r.species_ancestry), first(r.gender, a.gender, r.sex), first(a.height, r.height), first(a.weight, r.weight), first(a.build, body.build, body.frame, r.body_type), first(a.skin, r.skin), face.shape, face.features, scalar(a.face), first(a.eyes, face.eyes, r.eyes), scalar(a.hair), hair.color, hair.length, hair.texture, hair.style, first(a.marks, r.marks), first(a.summary, a.description, r.physical_description, r.physicalDescription, r.visual_desc, r.identity_anchor), ...readMappedTrackerValues(r,mappings.identity)]),
-    attire: first(join(readMappedTrackerValues(r,mappings.attire),1000), r.attire, r.outfit, r.clothing, r.clothes, wardrobe.summary, wardrobe.attire, wardrobe.outfit, scalar(r.wardrobe)).slice(0, 1000),
-    sceneState: join([r.position, r.zone, r.condition, r.hands, r.blocking, r.visual_state, r.current_action, r.action, live.position, live.condition, performance.expression, performance.gesture, ...readMappedTrackerValues(r,mappings.sceneState)], 1400)
+    identity: join([
+      scalar(r.appearance),
+      visualDesc,
+      first(r.age, r.approx_age, r.approxage, a.age),
+      first(r.species, r.species_ancestry, a.species),
+      first(r.gender, r.sex, a.gender),
+      first(r.height, a.height),
+      first(r.weight, a.weight),
+      buildDesc,
+      bustDesc ? `bust: ${scalar(bustDesc)}` : '',
+      hipsDesc ? `hips/waist: ${scalar(hipsDesc)}` : '',
+      skinDesc,
+      faceDesc,
+      eyesDesc,
+      hairDesc,
+      first(r.marks, a.marks, r.features, r.distinguishing_features),
+      ...readMappedTrackerValues(r, mappings.identity)
+    ]),
+    attire: first(
+      join(readMappedTrackerValues(r, mappings.attire), 1000),
+      r.attire, r.outfit, r.clothing, r.clothes, r.dress, r.apparel,
+      wardrobe.summary, wardrobe.attire, wardrobe.outfit, wardrobe.clothing, wardrobe.current,
+      scalar(r.wardrobe)
+    ).slice(0, 1000),
+    sceneState: join([
+      r.position, r.zone, r.condition, r.hands, r.blocking, r.visual_state, r.visualstate, r.current_action, r.action,
+      live.position, live.condition, performance.expression, performance.gesture,
+      ...readMappedTrackerValues(r, mappings.sceneState)
+    ], 1400)
   };
 }
 
@@ -63,15 +123,19 @@ function parsePayload(raw:string):Record<string,unknown>{
  return object(doc.toJS({maxAliasCount:10}));
 }
 function trackerCast(parsed:Record<string,unknown>):unknown[]{
- const cast=parsed.characters??parsed.characterData;if(Array.isArray(cast))return cast;
+ const p = lowerRecord(parsed);
+ const cast = p.characters ?? p.characterdata ?? p.cast ?? p.npcs ?? p.entities ?? p.people ?? p.actors;
+ if(Array.isArray(cast))return cast;
  const entries=cast&&typeof cast==='object'?object(cast):parsed;
- return Object.entries(entries).filter(([name,value])=>!['worldData','characters','characterData','__state'].includes(name)&&value&&typeof value==='object'&&!Array.isArray(value)).map(([name,value])=>({name,...object(value)}));
+ return Object.entries(entries).filter(([name,value])=>!['worlddata','world_data','characters','characterdata','cast','npcs','entities','people','actors','__state','world'].includes(name.toLowerCase())&&value&&typeof value==='object'&&!Array.isArray(value)).map(([name,value])=>({name,...object(value)}));
 }
 /** Cast setup scans recent snapshots independently; old snapshots never establish current presence. */
-export function scanTrackerCastHistory(messages:readonly TrackerMessage[],targetMessageId:string,mappings?:TrackerMappings){
- const target=messages.findIndex(m=>m.id===targetMessageId);if(target<0)return [];
+export function scanTrackerCastHistory(messages:readonly TrackerMessage[],targetMessageId?:string,mappings?:TrackerMappings){
+ const target=targetMessageId?messages.findIndex(m=>m.id===targetMessageId):messages.length-1;
+ const effectiveTarget=target>=0?target:messages.length-1;
+ if(effectiveTarget<0)return [];
  const result:Array<{character:TrackerCharacter,messageId:string}>=[];
- for(const message of messages.slice(Math.max(0,target-29),target+1).reverse()){
+ for(const message of messages.slice(Math.max(0,effectiveTarget-29),effectiveTarget+1).reverse()){
   if(message.content.length>64000)continue;
   for(const block of trackerBlocks(message.content)){
    const evidence=extractSimTracker([{id:message.id,content:`<tracker>${block[1]}</tracker>`}],message.id,mappings);

@@ -8,7 +8,7 @@ import { normalizeStoryDocuments } from '../../shared/story-documents.js';
 import {imageDetailGuidance} from './prompt-detail.js';
 import { normalizeStoryReferences } from "../../shared/story-references.js";
 import { loadCardRole } from "./storage.js";
-import type { CardRole } from "../../shared/card-role.js";
+import { type CardRole, isLikelyScenarioCard, isScenarioTitle } from "../../shared/card-role.js";
 import type { ChatMessageDTO, SpindleAPI } from "lumiverse-spindle-types";
 import { z } from "zod";
 import type { VisualNovelConfig } from "../../config.js";
@@ -1494,7 +1494,8 @@ function resolveSingleCharacter(
     ? normalizeCharacterName(planner.cues[0].character)
     : "";
   const firstPlannerChar = nonPersonaChars[0]?.name ? normalizeCharacterName(nonPersonaChars[0].name) : "";
-  const targetCharName = activeSceneChar || activeCueChar || firstPlannerChar;
+  const candidateTarget = activeSceneChar || activeCueChar || firstPlannerChar;
+  const targetCharName = isScenarioTitle(candidateTarget) ? "" : candidateTarget;
 
   const cardIdentity = buildCardIdentity(visualContext);
   const cardHasCharacter = Boolean(cardIdentity && isUsableIdentity(cardIdentity.name, cardIdentity.tags));
@@ -1529,7 +1530,7 @@ function resolveSingleCharacter(
 
   // 1. A USABLE per-chat frozen baseline is authoritative when continuing the same character.
   //    A name-only / empty state is NOT usable, so it is repaired below instead.
-  if (isUsableIdentity(frozenName, frozen.protagonist.tags)) {
+  if (isUsableIdentity(frozenName, frozen.protagonist.tags) && !isScenarioTitle(frozenName)) {
     return {
       ...frozen,
       protagonist: { name: frozenName, tags: toUsableTags(frozenName, frozen.protagonist.tags) },
@@ -1606,8 +1607,8 @@ type PlannerOutput = z.infer<typeof PlannerOutputSchema>;
 function seedTurnRegistry(input: PlanTurnInput): CharacterRegistry {
   const declarations: CharacterDeclaration[] = [];
   const frozen = input.singleCharacter.protagonist;
-  if (normalizeCharacterName(frozen.name)) declarations.push({ name: frozen.name, tags: frozen.tags });
-  for (const [name, tags] of Object.entries(input.characterAppearance)) declarations.push({ name, tags });
+  if (normalizeCharacterName(frozen.name) && !isScenarioTitle(frozen.name)) declarations.push({ name: frozen.name, tags: frozen.tags });
+  for (const [name, tags] of Object.entries(input.characterAppearance)) if (!isScenarioTitle(name)) declarations.push({ name, tags });
   return mergeCharacterDeclarations(input.characterRegistry ?? {}, declarations).registry;
 }
 
@@ -1772,9 +1773,10 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     }
   }
 
-  const cardRole=input.cardRole??await loadCardRole(spindle,input.chatId,visualContext.cardId,input.userId);
-  visualContext.cardRole=cardRole;
+  const loadedRole=input.cardRole??await loadCardRole(spindle,input.chatId,visualContext.cardId,input.userId);
   const attachedCardName=visualContext.characterIdentity?.name??input.message.name??'';
+  const cardRole=loadedRole==='auto'&&(isLikelyScenarioCard(visualContext.characterIdentity)||isScenarioTitle(attachedCardName))?'scenario':loadedRole;
+  visualContext.cardRole=cardRole;
   const scenarioReferenceName = cardRole === "scenario" ? characterAppearanceKey(attachedCardName) : "";
   if(cardRole==='scenario') {
     const wrapper=characterAppearanceKey(attachedCardName);
@@ -1974,12 +1976,12 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   // Retain this chat's original entity baseline even when the active companion changes later in the turn.
   for (const state of [input.singleCharacter, characterState]) {
     const name = state.protagonist.name;
-    if (isUsableIdentity(name, state.protagonist.tags) && !appearanceMapKeyFor(turnAppearances, name)) turnAppearances[name] = singleCharacterTagBlock(state);
+    if (isUsableIdentity(name, state.protagonist.tags) && !isScenarioTitle(name) && !appearanceMapKeyFor(turnAppearances, name)) turnAppearances[name] = singleCharacterTagBlock(state);
   }
   const timeline = resolveCueTimeline({ paragraphs: narrative.paragraphs.length, proposals, cues: planner.cues,
     roster: planner.characters, appearances: turnAppearances, registry: turnRegistry,
-    baseline: { name: protagonistName, identity: identityBlock },
-    previousCharacter: input.previousScene?.character || input.singleCharacter.protagonist.name,
+    baseline: { name: isScenarioTitle(protagonistName) ? "" : protagonistName, identity: isScenarioTitle(protagonistName) ? "" : identityBlock },
+    previousCharacter: (input.previousScene?.character && !isScenarioTitle(input.previousScene.character)) ? input.previousScene.character : (isScenarioTitle(input.singleCharacter.protagonist.name) ? "" : input.singleCharacter.protagonist.name),
     previousAttire: input.previousScene?.attire ?? null, continuity, isPersona, isReset: isAttireReset });
 
   for (const proposal of proposals) {

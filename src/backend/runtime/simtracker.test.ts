@@ -96,3 +96,30 @@ test('recognizes tracker2, simtracker, and status wrapper tags', () => {
     assert.match(result.cast[0]?.identity ?? '', /bronze eyes/);
   }
 });
+
+test('parses capitalized keys, top-level descriptions, bust, hips, and clothing', () => {
+  const yaml = `<tracker2>
+Characters:
+  - Name: Veronica Drake
+    Description: Voluptuous 30-year-old sorceress with porcelain skin and piercing violet eyes
+    Hair: Raven black, waist-length curls
+    Eyes: Piercing violet
+    Skin: Pale porcelain
+    Build: Curvy hourglass
+    Bust: Generous DD-cup
+    Hips: Wide flared hips
+    Outfit: Midnight velvet corset dress
+</tracker2>`;
+  const result = extractSimTracker([{ id: 'm1', content: yaml }], 'm1');
+  assert.equal(result.status, 'detected');
+  assert.equal(result.cast.length, 1);
+  const c = result.cast[0]!;
+  assert.equal(c.name, 'Veronica Drake');
+  assert.match(c.identity, /porcelain skin/);
+  assert.match(c.identity, /violet eyes/);
+  assert.match(c.identity, /Raven black/);
+  assert.match(c.identity, /Curvy hourglass/);
+  assert.match(c.identity, /bust: Generous DD-cup/);
+  assert.match(c.identity, /hips\/waist: Wide flared hips/);
+  assert.match(c.attire, /Midnight velvet corset dress/);
+});

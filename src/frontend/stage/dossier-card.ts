@@ -1060,7 +1060,8 @@ export class DossierCard {
         };
 
         const evidence=document.createElement('button');evidence.type='button';evidence.textContent='Read story reference';evidence.onclick=()=>open(activeEntry.entity.id,trigger);
-        lensCard.append(lensTitle, lensDesc, ctaBtn,evidence);
+        const hideBtn=document.createElement('button');hideBtn.type='button';hideBtn.style.cssText='display:inline-block;margin-top:6px!important;margin-left:6px!important;min-height:0!important;min-width:0!important;padding:4px 10px!important;font-size:10.5px!important;font-weight:600!important;border-radius:6px!important;background:rgba(255,255,255,0.08)!important;color:var(--vn-muted-text,#d1dfd5)!important;border:1px solid rgba(255,255,255,0.18)!important;cursor:pointer;';hideBtn.textContent='✕ Hide from Lens';hideBtn.title='Hide this reference from World Lens';hideBtn.onclick=()=>{if(this.update(activeEntry.entity,{suppressed:true})){const idx=entries.findIndex(e=>e.entity.id===activeEntry.entity.id);if(idx>=0)entries.splice(idx,1);this.selectedEntityId=null;render();}};
+        lensCard.append(lensTitle, lensDesc, ctaBtn, evidence, hideBtn);
       } else {
         lensCard.innerHTML = '<h3>No matching references</h3><p>Try another category or clear the search.</p>';
       }

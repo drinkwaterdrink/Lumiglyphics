@@ -13,6 +13,7 @@ import {assertPromptLengths,compactNegativePrompt} from '../../shared/prompt-len
 import {applyImageEdits,type ImageGenerationRequest} from './image-review.js';
 import {resolvePlannerConnection} from './connections.js';
 import {extractIdeogramPalette} from './prompt-serializers/ideogram-v4.js';
+import {isScenarioTitle} from '../../shared/card-role.js';
 
 const output=z.object({prompt:z.string().trim().min(1).max(65000),negativePrompt:z.string().max(65000)}).strict();
 
@@ -112,7 +113,7 @@ function ensureFluxKleinTags(promptText: string, brief?: VisualBrief): string {
     : brief.subjects.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
 
   names.forEach((name: string) => {
-    if (!name || name.length < 2) return;
+    if (!name || name.length < 2 || isScenarioTitle(name)) return;
     const tag = lines.length > 1 || names.length > 1
       ? `<character_${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}>`
       : `<subject_${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}>`;

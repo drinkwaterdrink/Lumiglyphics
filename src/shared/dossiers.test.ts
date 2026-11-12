@@ -86,3 +86,11 @@ test('location names and IDs describe the same current scene conservatively',()=
  const prefs=normalizeTooltipPreferences({enabled:true});expect(referenceEntries(snapshot,prefs).find(e=>e.entity.id==='m')!.label).toBe('In this scene');
  snapshot.stateByEntity.m.location='Inn';expect(referenceEntries(snapshot,prefs).find(e=>e.entity.id==='m')!.label).toBe('Elsewhere');
 });
+
+test('scenario/institution card titles are never eligible as NPC entities in World Lens', () => {
+ const prefs = normalizeTooltipPreferences({ enabled: true });
+ const academy = { id: 'ra', kind: 'npc' as const, name: 'Rookthorn Academy', aliases: [], firstParagraph: 0, facts: [] };
+ const mira = { id: 'm', kind: 'npc' as const, name: 'Mira', aliases: [], firstParagraph: 0, facts: [] };
+ const eligible = eligibleEntities([academy, mira], prefs);
+ expect(eligible.map(e => e.name)).toEqual(['Mira']);
+});

@@ -401,3 +401,31 @@ it('setActiveCharacter with empty string does not create blank character, facts 
     restore();
   }
 });
+
+it('renders prominent hero aliases field and excludes scenario card titles from auto-population', () => {
+  const restore = installFakeDocument();
+  try {
+    const folio = new CharacterFolio();
+    const dna = createEmptyCharacterDNA('Marseline', 'marseline');
+    dna.aliases = ['Lady Marseline', 'Mars'];
+    folio.setLibrary({ version: 2, revision: 1, characters: { marseline: dna } });
+
+    // 1. Prominent hero aliases field in Hero Card
+    const heroAliasInput = folio.detailContainer.querySelector<HTMLInputElement>('.folio-hero-aliases input');
+    expect(heroAliasInput).not.toBeNull();
+    expect(heroAliasInput?.value).toBe('Lady Marseline, Mars');
+
+    // 2. Scenario title like "Rookthorn Academy" is excluded from auto-population
+    folio.syncFromTurn({
+      paragraphs: ['Welcome to Rookthorn Academy. Aleister stands in the courtyard.'],
+      subjectCandidates: ['Rookthorn Academy', 'Aleister'],
+      assets: []
+    } as any);
+
+    const names = Object.values((folio as any).library).map((c: any) => c.name);
+    expect(names).not.toContain('Rookthorn Academy');
+    expect(names).toContain('Aleister');
+  } finally {
+    restore();
+  }
+});

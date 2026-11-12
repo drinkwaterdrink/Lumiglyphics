@@ -1,3 +1,4 @@
+import {isScenarioTitle} from '../../shared/card-role.js';
 import {archiveCurrentImageVersion,resolveImageVersion,imageVersionView} from './image-version-provenance.js';
 import {handleImageReviewRpc} from './review-rpc-handlers.js';
 import {ImageUsageLedger} from './image-usage.js';
@@ -614,7 +615,39 @@ export function turnView(record: StoredTurnRecord): TurnView {
     ...(record.plan.scenes[0]?.environment?.location ? { location: record.plan.scenes[0].environment.location } : {}),
     cardRole:record.cardRole??'auto',
     cardRoleAvailable:Boolean(record.cardId),
-    subjectCandidates:[...new Map(record.plan.visualCues.filter(c=>c.character).map(c=>[c.character!,{name:c.character!,appearance:c.resolvedIdentity??''}])).values()].slice(0,32),
+    subjectCandidates: (() => {
+      const candMap = new Map<string, { name: string; appearance: string }>();
+      for (const c of record.plan.visualCues) {
+        if (c.character && !isScenarioTitle(c.character)) {
+          candMap.set(c.character.toLowerCase(), { name: c.character, appearance: c.resolvedIdentity ?? '' });
+        }
+      }
+      for (const s of record.plan.scenes ?? []) {
+        for (const name of s.cast ?? []) {
+          if (name && !isScenarioTitle(name) && !candMap.has(name.toLowerCase())) {
+            candMap.set(name.toLowerCase(), { name, appearance: '' });
+          }
+        }
+      }
+      if (presentation) {
+        if ('entities' in presentation && Array.isArray(presentation.entities)) {
+          for (const ent of presentation.entities) {
+            if (ent.kind === 'npc' && ent.name && !isScenarioTitle(ent.name) && !candMap.has(ent.name.toLowerCase())) {
+              candMap.set(ent.name.toLowerCase(), { name: ent.name, appearance: '' });
+            }
+          }
+        } else if ('snapshots' in presentation && Array.isArray((presentation as any).snapshots)) {
+          for (const snap of (presentation as any).snapshots) {
+            for (const ent of snap.entities ?? []) {
+              if (ent.kind === 'npc' && ent.name && !isScenarioTitle(ent.name) && !candMap.has(ent.name.toLowerCase())) {
+                candMap.set(ent.name.toLowerCase(), { name: ent.name, appearance: '' });
+              }
+            }
+          }
+        }
+      }
+      return [...candMap.values()].slice(0, 32);
+    })(),
     speaker: record.speaker,
     userSpeaker: record.userSpeaker || "You",
     paragraphs: record.plan.paragraphs.map((paragraph) => paragraph.text),

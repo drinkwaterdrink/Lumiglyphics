@@ -1,16 +1,68 @@
+import {isScenarioTitle} from '../../shared/card-role.js';
+import {scanTrackerCastHistory} from './simtracker.js';
 import type {SpindleAPI} from 'lumiverse-spindle-types';
-import {createEmptyCharacterDNA,findCharacterDNA,type CharacterDNA} from '../../shared/character-dna.js';
+import {createEmptyCharacterDNA,findCharacterDNA,extractDNAPartsFromText,type CharacterDNA} from '../../shared/character-dna.js';
 import {applyDnaChanges,dnaFieldValue,DNA_FIELDS,type DnaRequest,type DnaProposal} from '../../shared/character-dna-workflow.js';
 import {loadCharacterDNALibrary,saveCharacterDNA,mutateCharacterDnaLibrary} from './character-dna-store.js';
 import {collectCharacterDnaEvidence,proposeCharacterDna} from './character-dna-autofill.js';
-import {loadConfig,loadReadingPosition} from './storage.js';
+import {loadConfig,loadReadingPosition,purgeDeletedCharacterFromStorage} from './storage.js';
 type Session={abort?:AbortController;proposal?:DnaProposal;target?:CharacterDNA;created?:number;contextKey?:string};
 const sessions=new WeakMap<object,Map<string,Session>>();
 export async function handleCharacterDnaRequest(spindle:SpindleAPI,request:DnaRequest,userId:string):Promise<void>{
  let map=sessions.get(spindle);if(!map){map=new Map();sessions.set(spindle,map);}const scope=JSON.stringify([userId,request.chatId]);for(const[key,state]of map)if(Date.now()-(state.created??0)>300000){state.abort?.abort();map.delete(key);}if(map.size>=64&&!map.has(scope)){const oldest=map.keys().next().value!;map.get(oldest)?.abort?.abort();map.delete(oldest);}const previous=map.get(scope);
  const reply=async(proposal?:DnaProposal)=>spindle.sendToFrontend({type:'vn_character_dna',chatId:request.chatId,requestId:request.requestId,library:await loadCharacterDNALibrary(spindle,request.chatId,userId),...(proposal?{proposal}:{})},userId);
  try{
-  if(request.action==='list'){await reply();return;}
+  if(request.action==='list'){
+    try {
+      const config = await loadConfig(spindle, userId);
+      if (config.includeSimTrackerContext) {
+        const messages = await spindle.chat?.getMessages?.(request.chatId).catch(() => []);
+        if (messages && messages.length > 0) {
+          const tracker = scanTrackerCastHistory(messages, undefined, config.simTrackerMappings);
+          if (tracker && tracker.length > 0) {
+            const library = await loadCharacterDNALibrary(spindle, request.chatId, userId);
+            const toAdd: CharacterDNA[] = [];
+            for (const item of tracker) {
+              const charName = item.character.name.trim();
+              if (!charName || isScenarioTitle(charName)) continue;
+              if (library.deleted?.[charName] || findCharacterDNA(library.deleted ?? {}, charName)) continue;
+              if (!findCharacterDNA(library.characters, charName)) {
+                const dna = createEmptyCharacterDNA(charName);
+                dna.aliases = item.character.aliases ?? [];
+                if (item.character.attire) dna.activeOutfit = item.character.attire;
+                if (item.character.identity) {
+                  const parts = extractDNAPartsFromText(item.character.identity);
+                  if (parts.hair?.color) dna.hair.color = parts.hair.color;
+                  if (parts.hair?.length) dna.hair.length = parts.hair.length;
+                  if (parts.hair?.style) dna.hair.style = parts.hair.style;
+                  if (parts.eyes?.color) dna.eyes.color = parts.eyes.color;
+                  if (parts.eyes?.shape) dna.eyes.shape = parts.eyes.shape;
+                  if (parts.build?.gender) dna.build.gender = parts.build.gender;
+                  if (parts.build?.species) dna.build.species = parts.build.species;
+                  if (parts.build?.height) dna.build.height = parts.build.height;
+                  if (parts.build?.bodyType) dna.build.bodyType = parts.build.bodyType;
+                }
+                toAdd.push(dna);
+              }
+            }
+            if (toAdd.length > 0) {
+              await mutateCharacterDnaLibrary(spindle, request.chatId, userId, library.revision ?? 0, l => {
+                for (const dna of toAdd) {
+                  if (!l.characters[dna.id] && !l.deleted?.[dna.id] && !findCharacterDNA(l.deleted ?? {}, dna.name)) {
+                    l.characters[dna.id] = dna;
+                  }
+                }
+              });
+            }
+          }
+        }
+      }
+    } catch {
+      // Non-fatal if context scan fails
+    }
+    await reply();
+    return;
+  }
   if(request.action==='cancel'){previous?.abort?.abort();map.delete(scope);return;}
   if(['propose','autofill','harvest'].includes(request.action)&&'characterName'in request){
    previous?.abort?.abort();const state:Session={abort:new AbortController(),created:Date.now()};map.set(scope,state);
@@ -38,7 +90,10 @@ export async function handleCharacterDnaRequest(spindle:SpindleAPI,request:DnaRe
   previous?.abort?.abort();map.delete(scope);
   if(request.action==='save'){await saveCharacterDNA(spindle,request.chatId,request.dna,userId,request.revision);await reply();return;}
   if(request.action==='delete'||request.action==='restore'){
-   await mutateCharacterDnaLibrary(spindle,request.chatId,userId,request.revision,l=>{l.deleted??={};if(request.action==='delete'){const record=l.characters[request.characterId]??request.dna;if(!record||record.id!==request.characterId)throw new Error('Character no longer exists.');l.deleted[record.id]=record;delete l.characters[record.id];}else{const record=l.deleted[request.characterId];if(!record)throw new Error('Character is not deleted.');l.characters[record.id]=record;delete l.deleted[record.id];}});await reply();return;
+   let deletedRecord: CharacterDNA | undefined;
+   await mutateCharacterDnaLibrary(spindle,request.chatId,userId,request.revision,l=>{l.deleted??={};if(request.action==='delete'){const record=l.characters[request.characterId]??request.dna;if(!record||record.id!==request.characterId)throw new Error('Character no longer exists.');l.deleted[record.id]=record;delete l.characters[record.id];deletedRecord=record;}else{const record=l.deleted[request.characterId];if(!record)throw new Error('Character is not deleted.');l.characters[record.id]=record;delete l.deleted[record.id];}});
+   if(request.action==='delete'&&deletedRecord){await purgeDeletedCharacterFromStorage(spindle,request.chatId,deletedRecord.name,deletedRecord.aliases??[],userId);}
+   await reply();return;
   }
   if(request.action==='merge'){
    await mutateCharacterDnaLibrary(spindle,request.chatId,userId,request.revision,l=>{
