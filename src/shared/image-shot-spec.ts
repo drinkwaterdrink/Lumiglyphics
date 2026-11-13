@@ -70,6 +70,7 @@ export const SubjectPlacementSchema = z.object({
   horizontal: z.enum(['far-left', 'left', 'center', 'right', 'far-right']).optional(),
   depth: z.enum(['foreground', 'midground', 'background']).optional(),
   scale: z.enum(['small', 'medium', 'large', 'dominant']).optional(),
+  blocking: z.string().max(240).optional(),
   box: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional()
 }).strict();
 export type SubjectPlacement = z.infer<typeof SubjectPlacementSchema>;
@@ -92,7 +93,8 @@ export type ShotCamera = z.infer<typeof ShotCameraSchema>;
 
 export const ShotCompositionSchema = z.object({
   mode: CompositionModeSchema,
-  subjectPlacements: z.array(SubjectPlacementSchema).max(16)
+  subjectPlacements: z.array(SubjectPlacementSchema).max(16),
+  stagingNote: z.string().max(300).optional()
 }).strict();
 export type ShotComposition = z.infer<typeof ShotCompositionSchema>;
 

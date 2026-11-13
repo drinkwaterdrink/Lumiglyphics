@@ -3,6 +3,7 @@ import type { SerializerInput, SerializerResult } from './types.js';
 import {
   parseSubjectsFromBrief,
   formatCameraFraming,
+  formatSpatialPlacements,
   formatDialogueSafeArea,
   formatStyleDNAProse,
   formatReferenceDirectives
@@ -44,6 +45,19 @@ export function serializeGenericProse(input: SerializerInput): SerializerResult 
     compressible: false,
     text: subjectText
   });
+
+  if (shotSpec.composition.stagingNote || shotSpec.composition.subjectPlacements.some(p => p.blocking)) {
+    const spatialText = formatSpatialPlacements(shotSpec);
+    if (spatialText) {
+      sections.push({
+        id: 'spatial-staging',
+        priority: 0,
+        required: false,
+        compressible: true,
+        text: `Scene staging: ${spatialText}.`
+      });
+    }
+  }
 
   // Camera & Framing (P1)
   const cameraText = formatCameraFraming(shotSpec, styleDNA);

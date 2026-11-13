@@ -42,10 +42,64 @@ function stringHash(str: string): number {
   return hash >>> 0;
 }
 
-const ACTION_VERBS_REGEX = /\b(?:fight|strike|slash|parry|draws?|fires?|shoots?|runs?|sprints?|lunges?|jumps?|leaps?|dodges?|escapes?|climbs?|dances?|swords?|combat|spells?|attacks?)\b/i;
-const REACTION_WORDS_REGEX = /\b(?:gasps?|shock|shocks?|cries?|crying|smiles?|grins?|freezes?|frozen|blushes?|blushing|tears?|glances?|stares?|staring|wide-eyed|stunned|awe|trembles?|hesitates?)\b/i;
-const DIALOGUE_WORDS_REGEX = /\b(?:says?|tells?|asks?|speaks?|whispers?|murmurs?|mutters?|answers?|replies?|explains?|argues?)\b/i;
-const CONFRONTATION_WORDS_REGEX = /\b(?:glare|glares?|confronts?|threatens?|corners?|surrounds?|draws? weapon|standoff|face-off)\b/i;
+const ACTION_VERBS_REGEX = /\b(?:fight|strike|slash|parry|draws?|fires?|shoots?|runs?|sprints?|lunges?|jumps?|leaps?|dodges?|escapes?|climbs?|dances?|swords?|combat|spells?|attacks?|throws?|rushes?|charges?)\b/i;
+const REACTION_WORDS_REGEX = /\b(?:gasps?|shock|shocks?|cries?|crying|smiles?|grins?|freezes?|frozen|blushes?|blushing|tears?|glances?|stares?|staring|wide-eyed|stunned|awe|trembles?|hesitates?|flinches?|winces?)\b/i;
+const DIALOGUE_WORDS_REGEX = /\b(?:says?|tells?|asks?|speaks?|whispers?|murmurs?|mutters?|answers?|replies?|explains?|argues?|confesses?|calls out)\b/i;
+const CONFRONTATION_WORDS_REGEX = /\b(?:glare|glares?|confronts?|threatens?|corners?|surrounds?|draws? weapon|standoff|face-off|blocks? the path|points? (?:a|his|her) (?:blade|gun|wand))\b/i;
+
+const FOREGROUND_DEPTH_REGEX = /\b(?:foreground|closest|in front|nearest|over[- ]the[- ]shoulder|framing the edge|frontmost|lower edge|right beside the camera)\b/i;
+const BACKGROUND_DEPTH_REGEX = /\b(?:background|rear|far\b|distant|distance|doorway|entrance|threshold|across the room|behind|corner|stairs|balcony|back wall|hearth|hallway|far side)\b/i;
+const MIDGROUND_DEPTH_REGEX = /\b(?:midground|middle|center of the room|at the table|across the desk|counter|booth|couch|sofa|beside the table|middle distance)\b/i;
+const EXPLICIT_LINEUP_REGEX = /\b(?:side[- ]by[- ]side|shoulder[- ]to[- ]shoulder|lined up|in a row|standing abreast|walking abreast)\b/i;
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function findSubjectClue(
+  subjectName: string,
+  spatialRelationships: readonly string[] | undefined,
+  narrativeClauses: readonly string[]
+): { clue: string; fromPlannerHint: boolean } | undefined {
+  const fullName = subjectName.trim();
+  const firstName = fullName.split(/\s+/)[0] || fullName;
+  const matchName = (text: string): boolean => {
+    if (fullName.length >= 2 && new RegExp(`\\b${escapeRegex(fullName)}\\b`, 'i').test(text)) return true;
+    if (firstName.length >= 2 && new RegExp(`\\b${escapeRegex(firstName)}\\b`, 'i').test(text)) return true;
+    return false;
+  };
+
+  if (spatialRelationships && spatialRelationships.length > 0) {
+    const hintMatch = spatialRelationships.find(rel => matchName(rel));
+    if (hintMatch) {
+      return { clue: hintMatch.trim().slice(0, 240), fromPlannerHint: true };
+    }
+  }
+
+  const clauseMatch = narrativeClauses.find(clause => clause.length > fullName.length + 8 && matchName(clause));
+  if (clauseMatch) {
+    return { clue: clauseMatch.trim().slice(0, 240), fromPlannerHint: false };
+  }
+  return undefined;
+}
+
+function inferHorizontalFromClue(clue?: string): SubjectPlacement['horizontal'] | undefined {
+  if (!clue) return undefined;
+  if (/\bfar[- ]left\b/i.test(clue)) return 'far-left';
+  if (/\bfar[- ]right\b/i.test(clue)) return 'far-right';
+  if (/\b(?:left|left side|left edge)\b/i.test(clue)) return 'left';
+  if (/\b(?:right|right side|right edge)\b/i.test(clue)) return 'right';
+  if (/\b(?:center|centre|middle)\b/i.test(clue)) return 'center';
+  return undefined;
+}
+
+function inferDepthFromClue(clue?: string): SubjectPlacement['depth'] | undefined {
+  if (!clue) return undefined;
+  if (FOREGROUND_DEPTH_REGEX.test(clue)) return 'foreground';
+  if (BACKGROUND_DEPTH_REGEX.test(clue)) return 'background';
+  if (MIDGROUND_DEPTH_REGEX.test(clue)) return 'midground';
+  return undefined;
+}
 
 /**
  * Resolves semantic intent from brief, cue, template, and narrative evidence.
@@ -60,12 +114,14 @@ export function resolveShotIntent(
   if (cue?.shotHint?.intent) return cue.shotHint.intent;
   if (template?.intent) return template.intent;
 
+  const narrativeText = `${brief.action} ${cue?.visualDescription ?? ''} ${cue?.visualFocus ?? ''}`.trim();
+
   // Object/environment mode
   if (brief.subjectMode === 'none') {
     if (
       template?.category === 'detail' ||
-      /\b(?:key|book|colander|mug|ring|letter|sword|dagger|device|phone|note|gem|door|window)\b/i.test(
-        brief.action + ' ' + brief.scene
+      /\b(?:key|book|colander|mug|ring|letter|sword|dagger|device|phone|note|gem|door|window|lock|relic)\b/i.test(
+        `${narrativeText} ${brief.scene}`
       )
     ) {
       return 'detail';
@@ -77,17 +133,17 @@ export function resolveShotIntent(
   if (brief.subjectMode === 'ensemble') {
     const castCount = visualSubjectPolicy({mode:brief.subjectMode,members:cue?.ensembleSubjects,subjectText:brief.subjects}).count;
     if (castCount === 2) {
-      if (CONFRONTATION_WORDS_REGEX.test(brief.action)) return 'confrontation';
-      if (DIALOGUE_WORDS_REGEX.test(brief.action)) return 'dialogue';
+      if (CONFRONTATION_WORDS_REGEX.test(narrativeText)) return 'confrontation';
+      if (DIALOGUE_WORDS_REGEX.test(narrativeText)) return 'dialogue';
       return 'two-shot';
     }
     return 'ensemble';
   }
 
   // Single-subject mode
-  if (ACTION_VERBS_REGEX.test(brief.action)) return 'action';
-  if (REACTION_WORDS_REGEX.test(brief.action)) return 'reaction';
-  if (DIALOGUE_WORDS_REGEX.test(brief.action)) return 'dialogue';
+  if (ACTION_VERBS_REGEX.test(narrativeText)) return 'action';
+  if (REACTION_WORDS_REGEX.test(narrativeText)) return 'reaction';
+  if (DIALOGUE_WORDS_REGEX.test(narrativeText)) return 'dialogue';
 
   return 'portrait';
 }
@@ -188,31 +244,31 @@ export function resolveShotSpec(input: ShotDirectorInput): ImageShotSpec {
         break;
       case 'dialogue':
         shotSize = 'medium';
-        angle = pick(['eye-level', 'three-quarter'] as const, 1);
+        angle = pick(['eye-level', 'three-quarter', 'over-the-shoulder'] as const, 1);
         lens = 'normal';
         depthOfField = 'moderate';
         mode = pick(['rule-of-thirds', 'layered-depth'] as const, 2);
         break;
       case 'two-shot':
         shotSize = pick(['medium', 'medium-wide'] as const);
-        angle = pick(['eye-level', 'three-quarter'] as const, 1);
+        angle = pick(['three-quarter', 'over-the-shoulder', 'eye-level'] as const, 1);
         lens = pick(['normal', 'wide'] as const, 2);
         depthOfField = 'moderate';
-        mode = pick(['layered-depth', 'lateral-ensemble'] as const, 3);
+        mode = pick(['layered-depth', 'rule-of-thirds', 'foreground-obstruction'] as const, 3);
         break;
       case 'confrontation':
         shotSize = pick(['medium-wide', 'medium'] as const);
         angle = pick(['three-quarter', 'over-the-shoulder', 'low-angle'] as const, 1);
         lens = pick(['normal', 'wide'] as const, 2);
         depthOfField = 'moderate';
-        mode = pick(['layered-depth', 'rule-of-thirds'] as const, 3);
+        mode = pick(['layered-depth', 'foreground-obstruction', 'rule-of-thirds'] as const, 3);
         break;
       case 'action':
         shotSize = pick(['medium-wide', 'full-body'] as const);
-        angle = pick(['eye-level', 'low-angle'] as const, 1);
+        angle = pick(['eye-level', 'low-angle', 'three-quarter'] as const, 1);
         lens = pick(['normal', 'wide'] as const, 2);
         depthOfField = pick(['moderate', 'deep'] as const, 3);
-        mode = pick(['rule-of-thirds', 'leading-lines'] as const, 4);
+        mode = pick(['rule-of-thirds', 'leading-lines', 'layered-depth'] as const, 4);
         break;
       case 'environment':
       case 'establishing':
@@ -220,7 +276,7 @@ export function resolveShotSpec(input: ShotDirectorInput): ImageShotSpec {
         angle = pick(['eye-level', 'high-angle'] as const, 1);
         lens = pick(['wide', 'ultrawide'] as const, 2);
         depthOfField = 'deep';
-        mode = pick(['layered-depth', 'frame-within-frame'] as const, 3);
+        mode = pick(['layered-depth', 'frame-within-frame', 'leading-lines'] as const, 3);
         break;
       case 'detail':
         shotSize = pick(['close-up', 'macro'] as const);
@@ -230,11 +286,11 @@ export function resolveShotSpec(input: ShotDirectorInput): ImageShotSpec {
         mode = pick(['centered', 'rule-of-thirds'] as const, 4);
         break;
       case 'ensemble':
-        shotSize = pick(['medium-wide', 'wide'] as const);
-        angle = 'eye-level';
-        lens = pick(['wide', 'normal'] as const, 1);
-        depthOfField = pick(['deep', 'moderate'] as const, 2);
-        mode = pick(['lateral-ensemble', 'layered-depth'] as const, 3);
+        shotSize = pick(['wide', 'medium-wide', 'establishing'] as const);
+        angle = pick(['three-quarter', 'eye-level', 'high-angle', 'over-the-shoulder'] as const, 1);
+        lens = pick(['wide', 'normal'] as const, 2);
+        depthOfField = pick(['deep', 'moderate'] as const, 3);
+        mode = pick(['layered-depth', 'frame-within-frame', 'leading-lines', 'rule-of-thirds'] as const, 4);
         break;
       case 'manga-page':
         shotSize = 'full-body';
@@ -252,13 +308,27 @@ export function resolveShotSpec(input: ShotDirectorInput): ImageShotSpec {
         break;
     }
 
-    // Planner hint overrides
-    if (cue?.shotHint?.preferredShotSize) shotSize = cue.shotHint.preferredShotSize;
-    if (cue?.shotHint?.preferredAngle) angle = cue.shotHint.preferredAngle;
-    if (/\b(?:screams?|shatters?|weeps?|sobbing|terrified|horrified|catastrophic|devastating|executes?|unleashes?|betrayal)\b/i.test(`${brief.action} ${cue?.expression ?? ''}`)) {
+    const fullNarrative = `${brief.action} ${cue?.visualDescription ?? ''} ${cue?.expression ?? ''} ${brief.scene}`.trim();
+
+    // Context-driven kinetic / perspective cues before planner hint override
+    if (/\b(?:kneels?|kneeling|crouched|crawling|fallen|on the floor|looms? over|towering)\b/i.test(fullNarrative) && intent !== 'detail') {
+      angle = intent === 'action' ? 'ground-level' : 'low-angle';
+    } else if (/\b(?:from above|balcony|staircase|overlooking|across the hall|crowded room)\b/i.test(fullNarrative) && (intent === 'ensemble' || intent === 'environment' || intent === 'establishing')) {
+      angle = 'high-angle';
+    } else if (/\b(?:doorway|archway|through the|framed by|over (?:his|her|their) shoulder)\b/i.test(fullNarrative) && intent !== 'portrait' && intent !== 'reaction') {
+      if (intent === 'two-shot' || intent === 'dialogue' || intent === 'confrontation') angle = 'over-the-shoulder';
+      mode = 'frame-within-frame';
+    }
+
+    if (/\b(?:screams?|shatters?|weeps?|sobbing|terrified|horrified|catastrophic|devastating|executes?|unleashes?|betrayal)\b/i.test(fullNarrative)) {
       if (intent === 'reaction') { shotSize = 'close-up'; depthOfField = 'shallow'; }
       else if (intent === 'action' || intent === 'confrontation') { angle = 'low-angle'; }
     }
+
+    // Planner hint overrides (highest semantic precedence before style/manual overrides)
+    if (cue?.shotHint?.preferredShotSize) shotSize = cue.shotHint.preferredShotSize;
+    if (cue?.shotHint?.preferredAngle) angle = cue.shotHint.preferredAngle;
+    if (cue?.shotHint?.preferredCompositionMode) mode = cue.shotHint.preferredCompositionMode;
 
     // Precedence 3: Intentionally selected style camera hints (override generic narrative defaults so smartphone/deep-focus styles never get portrait/bokeh overrides)
     if (styleDNA?.cameraHints && styleDNA.cameraHints.length > 0) {
@@ -305,14 +375,24 @@ export function resolveShotSpec(input: ShotDirectorInput): ImageShotSpec {
 
   // Aspect-Ratio-Aware Composition Adjustments
   const orientation = outputPlan.orientation;
+  const lineupNarrative = `${brief.action} ${cue?.visualDescription ?? ''}`;
+  const explicitLineupRequested =
+    manualOverrides.mode === 'lateral-ensemble' ||
+    cue?.shotHint?.preferredCompositionMode === 'lateral-ensemble' ||
+    EXPLICIT_LINEUP_REGEX.test(lineupNarrative);
+
   if (orientation === 'portrait') {
     // 9:16 favors vertical depth and stacked subject blocking
-    if (mode === 'lateral-ensemble') mode = 'layered-depth';
+    if (mode === 'lateral-ensemble' || ((intent === 'ensemble' || intent === 'two-shot') && !cue?.shotHint?.preferredCompositionMode)) {
+      mode = 'layered-depth';
+    }
     if (intent === 'action' && shotSize === 'medium') shotSize = 'full-body';
   } else if (orientation === 'landscape') {
-    // 16:9 and 21:9 favor lateral arrangements
-    if (intent === 'ensemble' || intent === 'two-shot') {
+    // 16:9 / 21:9 widescreen uses horizontal room for depth and environmental staging unless lineup is explicit
+    if (explicitLineupRequested && (intent === 'ensemble' || intent === 'two-shot') && !manualOverrides.mode && !cue?.shotHint?.preferredCompositionMode) {
       mode = 'lateral-ensemble';
+    } else if (mode === 'lateral-ensemble' && !explicitLineupRequested) {
+      mode = 'layered-depth';
     }
   } else if (orientation === 'square') {
     // 1:1 favors centralized or layered composition
@@ -321,20 +401,71 @@ export function resolveShotSpec(input: ShotDirectorInput): ImageShotSpec {
 
   // Subject Placements
   const subjectPlacements: SubjectPlacement[] = [];
+  let stagingNote: string | undefined = cue?.shotHint?.sceneStagingNote?.trim() || undefined;
+  const focusTarget = cue?.shotHint?.focalSubject?.trim() || cue?.character || undefined;
+
   if (brief.subjectMode === 'ensemble' && cue?.ensembleSubjects && cue.ensembleSubjects.length > 0) {
-    const horizontalOptions: Array<SubjectPlacement['horizontal']> =
+    const narrativeClauses = `${cue.visualDescription ?? ''}; ${brief.action ?? ''}`
+      .split(/[.;\n]+/)
+      .map(part => part.trim())
+      .filter(Boolean);
+    const relationships = cue.shotHint?.spatialRelationships;
+
+    const fallbackHorizontalPool: Array<SubjectPlacement['horizontal']> =
       orientation === 'portrait'
         ? ['center', 'left', 'right', 'center']
-        : ['far-left', 'left', 'center', 'right', 'far-right'];
+        : ['left', 'right', 'center', 'far-right', 'far-left'];
+    const defaultDepthCycle: Array<NonNullable<SubjectPlacement['depth']>> =
+      cue.ensembleSubjects.length === 2
+        ? ['foreground', 'midground']
+        : ['foreground', 'midground', 'background', 'midground', 'background'];
+
+    const usedSlots = new Set<string>();
+    const focalLower = focusTarget?.toLowerCase();
 
     cue.ensembleSubjects.forEach((sub, i) => {
+      const matched = findSubjectClue(sub.name, relationships, narrativeClauses);
+      const isFocal = Boolean(focalLower && sub.name.toLowerCase().includes(focalLower));
+      const inferredDepth =
+        inferDepthFromClue(matched?.clue) ??
+        (isFocal && i === 0 ? 'foreground' : defaultDepthCycle[i % defaultDepthCycle.length]!);
+
+      let chosenHorizontal = inferHorizontalFromClue(matched?.clue);
+      if (!chosenHorizontal) {
+        const startOffset = (seed + i) % fallbackHorizontalPool.length;
+        for (let step = 0; step < fallbackHorizontalPool.length; step++) {
+          const candidate = fallbackHorizontalPool[(startOffset + step) % fallbackHorizontalPool.length]!;
+          if (!usedSlots.has(`${inferredDepth}:${candidate}`)) {
+            chosenHorizontal = candidate;
+            break;
+          }
+        }
+        chosenHorizontal ??= fallbackHorizontalPool[i % fallbackHorizontalPool.length]!;
+      }
+      usedSlots.add(`${inferredDepth}:${chosenHorizontal}`);
+
+      const scale: NonNullable<SubjectPlacement['scale']> =
+        inferredDepth === 'foreground'
+          ? (isFocal && cue.ensembleSubjects!.length <= 2 && angle === 'over-the-shoulder' ? 'dominant' : 'large')
+          : inferredDepth === 'midground'
+            ? 'medium'
+            : 'small';
+
       subjectPlacements.push({
         subject: sub.name,
-        horizontal: horizontalOptions[i % horizontalOptions.length],
-        depth: i === 0 ? 'foreground' : i === 1 ? 'midground' : 'background',
-        scale: i === 0 ? 'large' : 'medium'
+        horizontal: chosenHorizontal,
+        depth: inferredDepth,
+        scale,
+        ...(matched?.clue ? { blocking: matched.clue } : {})
       });
     });
+
+    if (!stagingNote && !explicitLineupRequested && subjectPlacements.length >= 2) {
+      const distinctDepths = new Set(subjectPlacements.map(p => p.depth));
+      if (distinctDepths.size >= 2 || subjectPlacements.some(p => p.blocking)) {
+        stagingNote = 'Stage characters naturally across room depths interacting with each other and props rather than facing the camera in a row.';
+      }
+    }
   } else if (brief.subjectMode === 'one' && cue?.character) {
     subjectPlacements.push({
       subject: cue.character,
@@ -384,11 +515,12 @@ export function resolveShotSpec(input: ShotDirectorInput): ImageShotSpec {
       angle,
       lens,
       depthOfField,
-      ...(cue?.character ? { focusTarget: cue.character } : {})
+      ...(focusTarget ? { focusTarget } : {})
     },
     composition: {
       mode,
-      subjectPlacements
+      subjectPlacements,
+      ...(stagingNote ? { stagingNote } : {})
     },
     ...(manualOverrides.crop ? { crop: manualOverrides.crop } : {}),
     ...(safeArea ? { safeArea } : {}),

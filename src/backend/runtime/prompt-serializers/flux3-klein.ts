@@ -10,6 +10,38 @@ import {
 } from './helpers.js';
 import type { VisualBrief } from '../../../shared/image-templates.js';
 import type { StyleDNA } from '../../../shared/style-dna.js';
+import type { SubjectPlacement } from '../../../shared/image-shot-spec.js';
+
+function resolveKleinPlacement(
+  placement: SubjectPlacement | undefined,
+  idx: number
+): { anchor: string; box: { x_min: number; y_min: number; x_max: number; y_max: number } } {
+  const depth = placement?.depth ?? (idx === 0 ? 'foreground' : idx === 1 ? 'midground' : 'background');
+  const horiz = placement?.horizontal ?? (idx === 0 ? 'left' : idx === 1 ? 'right' : 'center');
+  const xCenterMap: Record<NonNullable<SubjectPlacement['horizontal']>, number> = {
+    'far-left': 0.18,
+    'left': 0.29,
+    'center': 0.50,
+    'right': 0.71,
+    'far-right': 0.82
+  };
+  const depthBand: Record<'foreground' | 'midground' | 'background', [number, number, number]> = {
+    foreground: [0.16, 0.90, 0.34],
+    midground: [0.22, 0.78, 0.26],
+    background: [0.14, 0.58, 0.18]
+  };
+  const [yMin, yMax, width] = depthBand[depth];
+  const centerX = xCenterMap[horiz] ?? 0.50;
+  const xMin = Number(Math.max(0.04, Math.min(0.96 - width, centerX - width / 2)).toFixed(2));
+  const xMax = Number(Math.min(0.96, xMin + width).toFixed(2));
+  const horizPhrase = horiz === 'center' ? 'in the center' : `on the ${horiz.replace('-', ' ')}`;
+  const baseAnchor = `In the ${depth} ${horizPhrase}`;
+  const anchor = placement?.blocking ? `${baseAnchor} (${placement.blocking.replace(/\.+$/, '')})` : baseAnchor;
+  return {
+    anchor,
+    box: { x_min: xMin, y_min: yMin, x_max: xMax, y_max: yMax }
+  };
+}
 
 /**
  * Checks if the request should follow the photographic or illustration/artwork branch.
@@ -154,32 +186,54 @@ export function serializeFlux3Klein(input: SerializerInput): SerializerResult {
       text: subjectClause
     });
   } else {
-    // Multi-character ensemble with frame-relative spatial anchors
+    // Multi-character ensemble with depth-aware scene staging (or frame-relative anchors fallback)
+    const placements = shotSpec.composition.subjectPlacements || [];
+    const hasDirectedPlacements = placements.length >= 2;
     const charWidth = Number((0.85 / Math.min(subjects.length, 3)).toFixed(2));
     const ensembleClauses: string[] = [];
 
     subjects.slice(0, 4).forEach((s, i) => {
       const label = `character_${s.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
-      const xMin = Number((0.08 + i * charWidth).toFixed(2));
-      const xMax = Number(Math.min(0.95, xMin + charWidth - 0.04).toFixed(2));
       const attireStr = s.attire ? `, wearing ${s.attire}` : '';
-      const anchor = i === 0
-        ? 'Frame-left in the foreground'
-        : i === 1
-          ? 'Frame-right in the foreground'
-          : 'In the center midground';
 
-      layoutBoxes.push({
-        label,
-        description: `${s.name}: ${s.appearance}${attireStr}`,
-        box: { x_min: xMin, y_min: 0.18, x_max: xMax, y_max: 0.90 }
-      });
+      if (hasDirectedPlacements) {
+        const matchedPlacement = placements.find(p => p.subject.trim().toLowerCase() === s.name.trim().toLowerCase()) ?? placements[i];
+        const resolved = resolveKleinPlacement(matchedPlacement, i);
+        layoutBoxes.push({
+          label,
+          description: `${s.name}: ${s.appearance}${attireStr}`,
+          box: resolved.box
+        });
+        ensembleClauses.push(`${resolved.anchor}, <${label}> ${s.name} (${s.appearance}${attireStr})`);
+      } else {
+        const xMin = Number((0.08 + i * charWidth).toFixed(2));
+        const xMax = Number(Math.min(0.95, xMin + charWidth - 0.04).toFixed(2));
+        const anchor = i === 0
+          ? 'Frame-left in the foreground'
+          : i === 1
+            ? 'Frame-right in the foreground'
+            : 'In the center midground';
 
-      ensembleClauses.push(`${anchor}, <${label}> ${s.name} (${s.appearance}${attireStr})`);
+        layoutBoxes.push({
+          label,
+          description: `${s.name}: ${s.appearance}${attireStr}`,
+          box: { x_min: xMin, y_min: 0.18, x_max: xMax, y_max: 0.90 }
+        });
+
+        ensembleClauses.push(`${anchor}, <${label}> ${s.name} (${s.appearance}${attireStr})`);
+      }
     });
 
+    if (subjects.length > 4) {
+      subjects.slice(4).forEach(s => {
+        const attireStr = s.attire ? `, wearing ${s.attire}` : '';
+        ensembleClauses.push(`Further in the background, ${s.name} (${s.appearance}${attireStr})`);
+      });
+    }
+
     const actionText = brief.action ? ` ${sanitizeQuoteAndUnitNotation(brief.action.trim().replace(/\.+$/, ''))}.` : '.';
-    const ensembleText = `${ensembleClauses.join('; ')}${actionText}`.replace(/\s+/g, ' ').replace(/,\s*\./g, '.');
+    const stagingText = shotSpec.composition.stagingNote ? ` ${shotSpec.composition.stagingNote.trim().replace(/\.+$/, '')}.` : '';
+    const ensembleText = `${ensembleClauses.join('; ')}${actionText}${stagingText}`.replace(/\s+/g, ' ').replace(/,\s*\./g, '.');
 
     sections.push({
       id: 'ensemble-subjects',

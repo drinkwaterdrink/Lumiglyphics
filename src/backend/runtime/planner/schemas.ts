@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   CameraLockSchema,
+  PlannerShotHintSchema,
   SceneBoundaryProposalSchema,
   StageEffectSchema,
   SubjectCategorySchema
@@ -73,6 +74,7 @@ export const PlannerCueSchema = z.object({
   character: z.string().trim().nullable().optional(),
   characterId: z.string().trim().nullable().optional(),
   attire: z.string().trim().nullable().optional(),
+  shotHint: PlannerShotHintSchema.optional(),
   promptDelta: z.string().trim().optional(),
   effect: z.string().trim().nullable().optional(),
   bgm: z.string().trim().nullable().optional(),

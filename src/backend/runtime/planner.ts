@@ -19,6 +19,7 @@ import {
   ChoiceSchema,
   ContinuityStateSchema,
   MAX_CACHE_CUES_PER_TURN,
+  PlannerShotHintSchema,
   SceneBoundaryProposalSchema,
   SceneEnvironmentSchema,
   SceneStateSchema,
@@ -29,12 +30,14 @@ import {
   VisualCueSchema,
   type CharacterContinuity,
   type IndexedContinuityDelta,
+  type PlannerShotHint,
   type SceneEnvironment,
   type SceneState,
   type StageEffect,
   type TurnPlan
 } from "../../shared/contracts.js";
 import { normalizeActionProp, ActionPropSchema } from "../../shared/action-prop.js";
+import { CameraAngleSchema, CompositionModeSchema, ShotIntentSchema, ShotSizeSchema } from "../../shared/image-shot-spec.js";
 import { reduceContinuity } from "../core/continuity.js";
 import { resolveCueTimeline } from "../core/cue-state.js";
 import { repairScenarioSubjects } from "./scenario-subjects.js";
@@ -193,7 +196,7 @@ function plannerInstruction(config: VisualNovelConfig, visualContext?: VisualCon
     "action: When the visible character interacts with a prominent visible prop or performs a bounded physical gesture, specify 'action' (e.g. 'holding brass key in right raised hand', or {action:'holding',object:'brass key',relationship:'in right raised hand'}); otherwise null. Free-form prose and injection tokens are forbidden.",
     "speakers: Attribute EVERY paragraph index to its literal on-screen nameplate name. Use the character's actual name for their dialogue and actions. When the text is written from the player's first-person point of view, use the player/persona name. Use \"Narrator\" for omniscient scene narration that belongs to no character. Never use the story or scenario card title as a speaker name.",
     hasAudio ? audioInstructions.join("\n") : "",
-    `Shape: {effects:[{paragraphIndex,effect}],scenes:[{startParagraph,boundary:{claimedNewScene,reason,location,timeOfDay,majorTimeJump,environmentReplacement,forced},environment:{location,timeOfDay,weather,lighting,description,persistentElements,removedElements?},environmentChanges?:{description?,lighting?,timeOfDay?,weather?,addElements?,removeElements?,replaceElements?:[{from,to}],clearElements?,clearLighting?,clearWeather?},cast,character?,characterId?,attire?,ambient?,basePrompt,compositionLock}],cues:[{paragraphIndex,templateId,templateReason,visualDescription,visualFocus?,expression,action?,character?,characterId?,attire?,effect?${hasAudio ? ",bgm?,sfx?" : ""}}],choices:[{label,submission}],characters:[{name,description,species?,anatomy?,characterId?,aliases?,subjectCategory?}],speakers:[{paragraphIndex,name}]}`,
+    `Shape: {effects:[{paragraphIndex,effect}],scenes:[{startParagraph,boundary:{claimedNewScene,reason,location,timeOfDay,majorTimeJump,environmentReplacement,forced},environment:{location,timeOfDay,weather,lighting,description,persistentElements,removedElements?},environmentChanges?:{description?,lighting?,timeOfDay?,weather?,addElements?,removeElements?,replaceElements?:[{from,to}],clearElements?,clearLighting?,clearWeather?},cast,character?,characterId?,attire?,ambient?,basePrompt,compositionLock}],cues:[{paragraphIndex,templateId,templateReason,visualDescription,visualFocus?,visibleCharacters?,expression,action?,character?,characterId?,attire?,shotHint?:{intent?,focalSubject?,preferredShotSize?,preferredAngle?,preferredCompositionMode?,spatialRelationships?,sceneStagingNote?},effect?${hasAudio ? ",bgm?,sfx?" : ""}}],choices:[{label,submission}],characters:[{name,description,species?,anatomy?,characterId?,aliases?,subjectCategory?}],speakers:[{paragraphIndex,name}]}`,
     config.customPlannerInstructions ? config.customPlannerInstructions.trim() : "",
     buildRpgPromptGuidance(previousRpgState, config.rpgMode)
   ].filter(Boolean).join("\n");
@@ -427,12 +430,64 @@ function normalizeScene(value: unknown, defaultLoc?: string): unknown {
 function inputTemplateInstructions(config: VisualNovelConfig): string {
   const selected = resolveImageTemplate(config).template;
   const templates = config.dynamicImageTemplates ? config.imageTemplates.filter(template => template.enabled) : [selected];
+  const enabledIds = new Set(templates.map(t => t.id));
   return [
-    config.dynamicImageTemplates ? "Choose templateId from this enabled catalog for each meaningful visual cue. New locations favor environment, reactions favor portrait, motion favors action, focal props favor detail. A category change alone does not justify a new image." : `Use templateId ${selected.id} on every cue. Dynamic selection is off.`,
-    config.readerPreferences?.directorAi !== false ? "Director AI shot framing is active: actively vary shot framing between portrait (emotions/whispers/reactions), action (physical conflict/dynamic events), and environment (establishing views/scenery changes)." : "",
-    "Template catalog (Use when guidance): " + JSON.stringify(templates.map(t => ({ id: t.id, name: t.name, category: t.category, useWhen: t.useWhen, subjectMode: t.subjectMode, framing: t.framing }))),
-    "templateReason is a short decision label, not hidden reasoning. visualDescription is a grounded visible event, with only the selected subject for single-character templates. For ensemble templates, provide visibleCharacters: the names of EVERY physically present character at that exact paragraph, including the user/persona when present; exclude offscreen, departed, remembered or merely mentioned people. Describe their visible interaction and spatial arrangement. visualFocus names the actual object for detail. Do not include character actions in environment descriptions. Resolve appearance from reference evidence; retain saved identity and separate temporary wardrobe/action from lasting traits. Report no invented identity facts."
+    config.dynamicImageTemplates ? "Act as a visual director choosing the single best templateId from the enabled catalog for each cue:\n- Full-room / multi-person moments (3+ present OR whenever showing everyone staged in their real places inside the setting matters): favor ensemble.\n- Two characters interacting, talking, negotiating, or confronting each other: favor two-shot.\n- Intense emotional spike, shock, tear, or whispered reveal: favor dramatic-closeup (or portrait if dramatic-closeup is disabled).\n- Unposed everyday mid-gesture / casual conversation beat: favor candid-moment (or portrait).\n- Physical motion, strike, sprint, spell, or kinetic effort: favor action (or key-visual for major climax beats).\n- Sweeping location scale or atmosphere shift: favor cinematic-wide or environment (no people).\n- Pivotal object, clue, weapon, note, or hand gesture: favor detail.\nA template switch alone does not justify an unnecessary extra image." : `Use templateId ${selected.id} on every cue. Dynamic selection is off.`,
+    config.readerPreferences?.directorAi !== false ? "Director AI cinematography is active: vary shot scale, camera angle, and depth blocking across consecutive cues like a filmed scene—never repeat the same flat framing beat after beat. Supply shotHint on every cue whenever camera framing or spatial staging matters:\n- intent: portrait | reaction | dialogue | two-shot | confrontation | action | ensemble | environment | detail | establishing\n- focalSubject: exact person or object in sharpest focus\n- preferredShotSize: extreme-close-up | close-up | medium-close-up | medium | medium-wide | full-body | wide | establishing | macro\n- preferredAngle: eye-level | three-quarter | low-angle | high-angle | over-the-shoulder | profile | ground-level | overhead\n- preferredCompositionMode: layered-depth | rule-of-thirds | frame-within-frame | foreground-obstruction | leading-lines | centered | symmetrical | negative-space\n- spatialRelationships (crucial whenever >=2 people are visible, including 16:9 widescreen): array of short physical blocking statements saying WHERE in foreground/midground/background each character is, their posture/activity, and who/what they face (e.g. [\"Mira crouched foreground-left inspecting the grate\", \"Kael leaning in the midground doorway\", \"Orin seated at the rear table\"]). NEVER arrange people in a flat side-by-side row unless the text literally lines them up.\n- sceneStagingNote: concise 1-sentence camera/eyeline blocking direction (e.g. \"Angled three-quarter view past the foreground table toward Kael in the archway\")." : "",
+    `Enabled catalog (${enabledIds.size} active): ` + JSON.stringify(templates.map(t => ({ id: t.id, name: t.name, category: t.category, useWhen: t.useWhen, subjectMode: t.subjectMode, framing: t.framing }))),
+    "templateReason is a short decision label, not hidden reasoning. visualDescription is a grounded visible event, with only the selected subject for single-character templates. For ensemble/two-shot templates, provide visibleCharacters: EVERY physically present character at that exact paragraph, including the user/persona when present; omit offscreen, departed, remembered or merely mentioned people. Describe their real posture, activity, and spatial interaction. visualFocus names the actual object for detail. Do not put character actions in environment descriptions. Resolve appearance from reference evidence; retain saved identity and separate temporary wardrobe/action from lasting traits. Report no invented identity facts."
   ].filter(Boolean).join("\n");
+}
+
+function normalizeEnumToken(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const cleaned = raw.trim().toLowerCase().replace(/[\s_]+/g, "-");
+  return cleaned || undefined;
+}
+
+function normalizeShotHint(raw: unknown): PlannerShotHint | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  const rawIntent = normalizeEnumToken(r.intent);
+  const intentAlias = rawIntent === "twoshot" ? "two-shot" : rawIntent === "manga" ? "manga-page" : rawIntent;
+  const intent = ShotIntentSchema.safeParse(intentAlias);
+  const rawSize = normalizeEnumToken(r.preferredShotSize ?? r.preferred_shot_size ?? r.shotSize ?? r.shot_size);
+  const sizeAlias = rawSize === "bust" || rawSize === "upper-body" ? "medium-close-up"
+    : rawSize === "ecu" ? "extreme-close-up"
+    : rawSize === "cu" || rawSize === "closeup" ? "close-up"
+    : rawSize === "wide-shot" ? "wide"
+    : rawSize === "full" || rawSize === "full-shot" ? "full-body" : rawSize;
+  const preferredShotSize = ShotSizeSchema.safeParse(sizeAlias);
+  const rawAngle = normalizeEnumToken(r.preferredAngle ?? r.preferred_angle ?? r.angle ?? r.cameraAngle ?? r.camera_angle);
+  const angleAlias = rawAngle === "ots" || rawAngle === "over-shoulder" ? "over-the-shoulder"
+    : rawAngle === "three-quarters" || rawAngle === "3/4" ? "three-quarter"
+    : rawAngle === "birds-eye" || rawAngle === "bird-eye" ? "overhead" : rawAngle;
+  const preferredAngle = CameraAngleSchema.safeParse(angleAlias);
+  const rawMode = normalizeEnumToken(r.preferredCompositionMode ?? r.preferred_composition_mode ?? r.compositionMode ?? r.composition_mode ?? r.mode);
+  const modeAlias = rawMode === "thirds" ? "rule-of-thirds" : rawMode === "depth" ? "layered-depth" : rawMode;
+  const preferredCompositionMode = CompositionModeSchema.safeParse(modeAlias);
+  const rawFocal = r.focalSubject ?? r.focal_subject ?? r.focusTarget ?? r.focus_target;
+  const focalSubject = typeof rawFocal === "string" && rawFocal.trim() ? rawFocal.trim().slice(0, 256) : undefined;
+  const rawSpatial = r.spatialRelationships ?? r.spatial_relationships ?? r.blocking;
+  const spatialList = Array.isArray(rawSpatial)
+    ? rawSpatial.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).map(item => item.trim().slice(0, 256)).slice(0, 8)
+    : typeof rawSpatial === "string" && rawSpatial.trim()
+      ? rawSpatial.split(/[;\n]+/).map(item => item.trim().slice(0, 256)).filter(Boolean).slice(0, 8)
+      : undefined;
+  const rawNote = r.sceneStagingNote ?? r.scene_staging_note ?? r.stagingNote ?? r.staging_note;
+  const sceneStagingNote = typeof rawNote === "string" && rawNote.trim() ? rawNote.trim().slice(0, 300) : undefined;
+  const candidate: Record<string, unknown> = {
+    ...(intent.success ? { intent: intent.data } : {}),
+    ...(focalSubject ? { focalSubject } : {}),
+    ...(preferredShotSize.success ? { preferredShotSize: preferredShotSize.data } : {}),
+    ...(preferredAngle.success ? { preferredAngle: preferredAngle.data } : {}),
+    ...(preferredCompositionMode.success ? { preferredCompositionMode: preferredCompositionMode.data } : {}),
+    ...(spatialList && spatialList.length > 0 ? { spatialRelationships: spatialList } : {}),
+    ...(sceneStagingNote ? { sceneStagingNote } : {})
+  };
+  if (Object.keys(candidate).length === 0) return undefined;
+  const parsed = PlannerShotHintSchema.safeParse(candidate);
+  return parsed.success ? parsed.data : undefined;
 }
 
 function normalizeCue(value: unknown): unknown {
@@ -457,6 +512,7 @@ function normalizeCue(value: unknown): unknown {
     character: typeof record.character === "string" ? record.character.trim() : null,
     characterId: normalizeCharacterId(record.characterId ?? record.character_id) || null,
     attire: typeof record.attire === "string" ? record.attire.trim() : null,
+    ...(normalizeShotHint(record.shotHint ?? record.shot_hint) ? { shotHint: normalizeShotHint(record.shotHint ?? record.shot_hint) } : {}),
     effect: normalizeStageEffect(record.effect),
     promptDelta: typeof record.promptDelta === "string"
       ? record.promptDelta.trim()
@@ -2103,21 +2159,37 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
         : selectPoseExpression(POSE_EXPRESSION_CATALOGUE, cue.paragraphIndex, paragraph?.text ?? "", cue.expression);
       let selection = resolveImageTemplate(input.config, input.config.dynamicImageTemplates ? cue.templateId : undefined);
       if (input.config.dynamicImageTemplates && input.config.readerPreferences?.directorAi !== false && !cue.templateId) {
-        const pLower = (paragraph?.text ?? "").toLowerCase();
-        const hasAction = /\b(strikes?|slashes?|dodges?|sprints?|grabs?|explodes?|shatters?|leaps?|clashes?|punches?|tackles?|shoots?|firing|defends?|parr(y|ies))\b/i.test(pLower);
-        const hasEmotion = /\b(whispers?|smil(es?|ing)|tears?|gaze[sd]?|blush(es|ed|ing)?|sigh(s|ed|ing)?|frown(s|ed|ing)?|gasps?|murmurs?|trembl(es?|ing))\b/i.test(pLower);
-        const hasScenery = /\b(arrives?|enters?|walked into|outside|corridor|chamber|courtyard|streets?|sky|forest|horizon|scenery|landscape)\b/i.test(pLower) || /<scene_header>|<scene\b/i.test(paragraph?.text ?? "");
+        const pLower = `${paragraph?.text ?? ""} ${cue.visualDescription ?? ""}`.toLowerCase();
+        const visibleCount = Array.isArray(cue.visibleCharacters) ? cue.visibleCharacters.length : 0;
+        const hasClimax = /\b(explodes?|shatters?|unleashes?|betrayal|devastating|catastrophic|awakens?|climaxes?|standoff)\b/i.test(pLower);
+        const hasAction = /\b(strikes?|slashes?|dodges?|sprints?|grabs?|leaps?|clashes?|punches?|tackles?|shoots?|firing|defends?|parr(y|ies)|lunges?)\b/i.test(pLower);
+        const hasPeakEmotion = /\b(sobbing|weeps?|terrified|horrified|gasps?|wide-eyed|tears?|stunned|trembl(es?|ing)|whispered? threat|stares? in shock)\b/i.test(pLower);
+        const hasEmotion = /\b(whispers?|smil(es?|ing)|gaze[sd]?|blush(es|ed|ing)?|sigh(s|ed|ing)?|frown(s|ed|ing)?|murmurs?)\b/i.test(pLower);
+        const hasDetailFocus = Boolean(cue.visualFocus?.trim()) && visibleCount === 0 && !cue.character && /\b(key|letter|note|ring|blade|clue|glass|coin|lock|diary|relic|screen)\b/i.test(pLower);
+        const hasScenery = /\b(arrives?|enters?|walked into|outside|corridor|chamber|courtyard|streets?|sky|forest|horizon|scenery|landscape|skyline)\b/i.test(pLower) || /<scene_header>|<scene\b/i.test(paragraph?.text ?? "");
 
-        let targetCategory: "action" | "portrait" | "environment" | null = null;
-        if (hasAction) targetCategory = "action";
-        else if (hasEmotion) targetCategory = "portrait";
-        else if (hasScenery) targetCategory = "environment";
+        const enabledById = (tid: string) => input.config.imageTemplates.find(t => t.enabled && t.id === tid);
+        let candidate: typeof input.config.imageTemplates[number] | undefined;
+        if (visibleCount >= 3 || cue.shotHint?.intent === "ensemble") {
+          candidate = enabledById("ensemble");
+        } else if (visibleCount === 2 || cue.shotHint?.intent === "two-shot") {
+          candidate = enabledById("two-shot") ?? enabledById("ensemble");
+        } else if (hasClimax) {
+          candidate = enabledById("key-visual") ?? enabledById("action");
+        } else if (hasAction) {
+          candidate = enabledById("action");
+        } else if (hasPeakEmotion) {
+          candidate = enabledById("dramatic-closeup") ?? enabledById("portrait");
+        } else if (hasDetailFocus) {
+          candidate = enabledById("detail");
+        } else if (hasEmotion) {
+          candidate = enabledById("candid-moment") ?? enabledById("portrait");
+        } else if (hasScenery) {
+          candidate = enabledById("cinematic-wide") ?? enabledById("environment");
+        }
 
-        if (targetCategory && selection.template.category !== targetCategory) {
-          const candidate = input.config.imageTemplates.find(t => t.enabled && t.category === targetCategory);
-          if (candidate) {
-            selection = { template: templateSnapshot(candidate), fallbackReason: `Director AI framing: biased to ${targetCategory} from context.` };
-          }
+        if (candidate && selection.template.id !== candidate.id) {
+          selection = { template: templateSnapshot(candidate), fallbackReason: `Director AI framing: selected ${candidate.id} from context.` };
         }
       }
       const originalSnapshot=timeline.snapshots[cue.paragraphIndex]!;
@@ -2179,6 +2251,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
         attire: pictureSnapshot.attire ?? undefined,
         resolvedIdentity: pictureSnapshot.identity,
         resolvedAttire: pictureSnapshot.attire,
+        ...(cue.shotHint ? { shotHint: cue.shotHint } : {}),
         ...(effectMap.has(cue.paragraphIndex) ? { effect: effectMap.get(cue.paragraphIndex)! } : {}),
         promptDelta: "",
         assetJobId: id("asset", `${sourceFingerprint}:${cue.paragraphIndex}:${index}`),

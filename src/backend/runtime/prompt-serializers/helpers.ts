@@ -228,18 +228,32 @@ export function formatCameraFraming(shotSpec: ImageShotSpec, styleDNA?: StyleDNA
 }
 
 export function formatSpatialPlacements(shotSpec: ImageShotSpec): string {
-  if (!shotSpec.composition.subjectPlacements || shotSpec.composition.subjectPlacements.length <= 1) {
+  const placements = shotSpec.composition.subjectPlacements;
+  if (!placements || placements.length <= 1) {
     return '';
   }
 
-  const descriptions = shotSpec.composition.subjectPlacements.map((p) => {
-    const posParts: string[] = [];
-    if (p.depth) posParts.push(`in the ${p.depth}`);
-    if (p.horizontal) posParts.push(`on the ${p.horizontal.replace('-', ' ')}`);
-    return `${p.subject} positioned ${posParts.join(', ')}`;
+  const hasRichBlocking = Boolean(shotSpec.composition.stagingNote) || placements.some(p => Boolean(p.blocking));
+  if (!hasRichBlocking) {
+    const descriptions = placements.map((p) => {
+      const posParts: string[] = [];
+      if (p.depth) posParts.push(`in the ${p.depth}`);
+      if (p.horizontal) posParts.push(`on the ${p.horizontal.replace('-', ' ')}`);
+      return `${p.subject} positioned ${posParts.join(', ')}`;
+    });
+
+    return descriptions.join('; ');
+  }
+
+  const descriptions = placements.map((p) => {
+    const depthText = p.depth ? `in the ${p.depth}` : 'in the scene';
+    const horizText = p.horizontal ? ` (${p.horizontal.replace('-', ' ')})` : '';
+    const blockingText = p.blocking ? `: ${p.blocking.replace(/\.+$/, '')}` : '';
+    return `${p.subject} ${depthText}${horizText}${blockingText}`;
   });
 
-  return descriptions.join('; ');
+  const staging = shotSpec.composition.stagingNote ? `. ${shotSpec.composition.stagingNote.replace(/\.+$/, '')}` : '';
+  return `${descriptions.join('; ')}${staging}`;
 }
 
 export function formatDialogueSafeArea(shotSpec: ImageShotSpec): string | null {

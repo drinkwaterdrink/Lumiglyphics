@@ -9,6 +9,7 @@ import {
 } from './helpers.js';
 import type { VisualBrief } from '../../../shared/image-templates.js';
 import type { StyleDNA } from '../../../shared/style-dna.js';
+import type { ImageShotSpec, SubjectPlacement } from '../../../shared/image-shot-spec.js';
 
 const COLOR_NAME_TO_HEX: Record<string, string> = {
   black: '#0A0A0A',
@@ -122,6 +123,50 @@ function extractQuotedText(text: string): string | null {
   return match && match[1] ? match[1].trim() : null;
 }
 
+function findPlacementForSubject(
+  subjectName: string,
+  shotSpec?: ImageShotSpec
+): SubjectPlacement | undefined {
+  const placements = shotSpec?.composition?.subjectPlacements;
+  if (!placements || placements.length <= 1) return undefined;
+  const target = subjectName.trim().toLowerCase();
+  return placements.find(p => p.subject.trim().toLowerCase() === target)
+    ?? placements.find(p => target.includes(p.subject.trim().toLowerCase()) || p.subject.trim().toLowerCase().includes(target));
+}
+
+function resolveIdeogramEnsembleBbox(
+  placement: SubjectPlacement | undefined,
+  index: number,
+  total: number
+): [number, number, number, number] {
+  const defaultDepths: Array<'foreground' | 'midground' | 'background'> =
+    total === 2 ? ['foreground', 'midground'] : ['foreground', 'midground', 'background'];
+  const defaultHoriz: Array<NonNullable<SubjectPlacement['horizontal']>> = ['left', 'right', 'center', 'far-right', 'far-left'];
+
+  const depth = placement?.depth ?? defaultDepths[index % defaultDepths.length]!;
+  const horizontal = placement?.horizontal ?? defaultHoriz[index % defaultHoriz.length]!;
+
+  const xCenterMap: Record<NonNullable<SubjectPlacement['horizontal']>, number> = {
+    'far-left': 185,
+    'left': 285,
+    'center': 500,
+    'right': 715,
+    'far-right': 815
+  };
+  const yBandMap: Record<'foreground' | 'midground' | 'background', [number, number, number]> = {
+    foreground: [160, 880, 320],
+    midground: [230, 790, 250],
+    background: [155, 590, 180]
+  };
+
+  const centerX = xCenterMap[horizontal] ?? 500;
+  const [yMin, yMax, width] = yBandMap[depth];
+  const halfW = Math.floor(width / 2);
+  const xMin = Math.max(40, Math.min(960 - width, centerX - halfW));
+  const xMax = Math.min(960, xMin + width);
+  return [yMin, xMin, yMax, xMax];
+}
+
 export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
   const { brief, shotSpec, styleDNA, profile, cue } = input;
   const warnings: string[] = [];
@@ -163,7 +208,8 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
     }
 
     const actionText = brief.action ? ` ${sanitizeQuoteAndUnitNotation(brief.action.trim().replace(/\.+$/, ''))}.` : '';
-    const highLevel = `${prefix}${isPhoto ? 'A candid' : 'A detailed'} ${cameraText} ${medium || (isPhoto ? 'photograph' : 'illustration')} of ${subjectSummary} in ${cleanScene}.${actionText}`.replace(/\s+/g, ' ').replace(/,\s*\./g, '.').trim();
+    const stagingDirective = shotSpec?.composition?.stagingNote ? ` ${shotSpec.composition.stagingNote.trim().replace(/\.+$/, '')}.` : '';
+    const highLevel = `${prefix}${isPhoto ? 'A candid' : 'A detailed'} ${cameraText} ${medium || (isPhoto ? 'photograph' : 'illustration')} of ${subjectSummary} in ${cleanScene}.${actionText}${stagingDirective}`.replace(/\s+/g, ' ').replace(/,\s*\./g, '.').trim();
 
     // 2. Style description (photo vs art branches)
     const styleDescription: Record<string, unknown> = {};
@@ -184,19 +230,35 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
     // 3. Compositional deconstruction (4 to 6 elements for safety refusal bypass)
     const elements: Array<Record<string, unknown>> = [];
 
+    let overflowCastDescriptions = '';
     if (brief.subjectMode === 'ensemble' && subjects.length >= 2) {
-      // Multi-character spatial layout
-      const charWidth = Math.floor(800 / Math.min(subjects.length, 3));
-      subjects.slice(0, 3).forEach((sub, i) => {
-        const xMin = 80 + i * charWidth;
-        const xMax = Math.min(960, xMin + charWidth - 40);
+      // Multi-character depth-aware spatial layout (top 3 focal characters get dedicated bboxes, any additional characters integrate into the midground scene)
+      const featured = subjects.slice(0, 3);
+      const overflow = subjects.slice(3);
+      if (overflow.length > 0) {
+        overflowCastDescriptions = ` Also present in the scene: ${overflow.map((sub, oIdx) => {
+          const placement = findPlacementForSubject(sub.name, shotSpec);
+          const attireStr = sub.attire ? `, wearing ${sub.attire}` : '';
+          const blocking = placement?.blocking ? ` (${placement.blocking})` : ` in the ${placement?.depth ?? 'background'}`;
+          return `${sub.name} (${sub.appearance || 'distinct physical features'}${attireStr})${blocking || (oIdx >= 0 ? '' : '')}`;
+        }).join('; ')}.`;
+      }
+
+      featured.forEach((sub, i) => {
+        const placement = findPlacementForSubject(sub.name, shotSpec);
+        const bbox = resolveIdeogramEnsembleBbox(placement, i, subjects.length);
         const attireStr = sub.attire ? `, wearing ${sub.attire}` : '';
         const hasDna = sub.appearance && sub.appearance !== sub.name && !/^one visible/i.test(sub.appearance) && sub.appearance !== 'appearance not established';
         const appearanceDesc = hasDna ? sub.appearance : 'distinct physical features';
+        const depthLabel = placement?.depth ?? (i === 0 ? 'foreground' : i === 1 ? 'midground' : 'background');
+        const horizLabel = (placement?.horizontal ?? (i === 0 ? 'left' : i === 1 ? 'right' : 'center')).replace('-', ' ');
+        const stagingClause = placement?.blocking
+          ? `${placement.blocking.replace(/\.+$/, '')}, situated in the ${depthLabel} (${horizLabel}).`
+          : `Staged naturally in the ${depthLabel} (${horizLabel}) of the scene in active posture, not facing the camera in a row.`;
         elements.push({
           type: 'obj',
-          bbox: [160, xMin, 880, xMax],
-          desc: `${sub.name}: ${appearanceDesc}${attireStr}. Positioned ${i === 0 ? 'on the left' : i === 1 ? 'towards the center' : 'on the right'} of the scene.`,
+          bbox,
+          desc: `${sub.name}: ${appearanceDesc}${attireStr}. ${stagingClause}`,
           color_palette: [palette[i % palette.length], palette[(i + 1) % palette.length]]
         });
       });
@@ -243,7 +305,7 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
     elements.push({
       type: 'obj',
       bbox: [180, 40, 740, 960],
-      desc: `Midground environmental backdrop: ${midgroundBackdrop}.`,
+      desc: `Midground environmental backdrop: ${midgroundBackdrop}.${overflowCastDescriptions}`,
       color_palette: [palette[2]!, palette[3]!]
     });
 
@@ -304,11 +366,17 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
     subjectsText = `the environment featuring ${cue?.visualFocus || brief.action || 'the scenery'}, with no people present`;
   } else if (brief.subjectMode === 'ensemble' || subjects.length > 1) {
     const list = subjects.map((s, idx) => {
-      const pos = idx === 0 ? 'positioned on the left' : idx === 1 ? 'positioned on the right' : 'in the center';
+      const placement = findPlacementForSubject(s.name, shotSpec);
+      const depth = placement?.depth ?? (idx === 0 ? 'foreground' : idx === 1 ? 'midground' : 'background');
+      const horiz = (placement?.horizontal ?? (idx === 0 ? 'left' : idx === 1 ? 'right' : 'center')).replace('-', ' ');
+      const pos = placement?.blocking
+        ? `${placement.blocking.replace(/\.+$/, '')} in the ${depth} (${horiz})`
+        : `staged in the ${depth} (${horiz})`;
       const attire = s.attire ? `, wearing ${s.attire}` : '';
-      return `${s.name} (${s.appearance}${attire}) ${pos}`;
+      return `${s.name} (${s.appearance}${attire}), ${pos}`;
     }).join('; ');
-    subjectsText = `an ensemble of ${subjects.length} characters: ${list}. Action: ${brief.action || 'interacting together'}`;
+    const staging = shotSpec?.composition?.stagingNote ? ` ${shotSpec.composition.stagingNote.trim().replace(/\.+$/, '')}.` : '';
+    subjectsText = `a natural full-scene ensemble of ${subjects.length} characters: ${list}. Action: ${brief.action || 'interacting naturally within the scene'}${staging}`;
   } else {
     const main = subjects[0];
     const attire = main?.attire ? `, wearing ${main.attire}` : '';

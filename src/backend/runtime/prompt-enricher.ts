@@ -55,7 +55,9 @@ SCENE SPECIFICATION:
 - Subject(s): ${brief.subjects}
 ${characterDNA ? `- Character Visual DNA: ${characterDNA.name} (${JSON.stringify(characterDNA.hair)}, ${JSON.stringify(characterDNA.eyes)}, build: ${JSON.stringify(characterDNA.build)}, outfit: ${characterDNA.signatureOutfit})` : ''}
 ${locationDNA ? `- Location DNA: ${locationDNA.name} (features: ${locationDNA.architecturalFeatures.join(', ')}, materials: ${locationDNA.dominantMaterials.join(', ')}, props: ${locationDNA.prominentProps.join(', ')})` : ''}
-${shotSpec ? `- Camera Framing: ${shotSpec.camera.shotSize}, angle: ${shotSpec.camera.angle}, lens: ${shotSpec.camera.lens}` : ''}
+${shotSpec ? `- Camera Framing: ${shotSpec.camera.shotSize}, angle: ${shotSpec.camera.angle}, lens: ${shotSpec.camera.lens}, depth of field: ${shotSpec.camera.depthOfField}, composition: ${shotSpec.composition.mode}${shotSpec.camera.focusTarget ? `, focus on: ${shotSpec.camera.focusTarget}` : ''}` : ''}
+${shotSpec?.composition.stagingNote ? `- Scene Blocking Note: ${shotSpec.composition.stagingNote}` : ''}
+${shotSpec?.composition.subjectPlacements && shotSpec.composition.subjectPlacements.length > 1 ? `- Spatial Staging: ${shotSpec.composition.subjectPlacements.map(p => `${p.subject} (${[p.depth, p.horizontal, p.blocking].filter(Boolean).join(', ')})`).join('; ')}` : ''}
 - Lighting: ${brief.lighting}
 
 Output pure enriched descriptive prose:`;

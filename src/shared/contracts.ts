@@ -5,7 +5,7 @@ import { z } from "zod";
 import { ActionPropFieldSchema, ActionPropSchema, type ActionProp } from "./action-prop.js";
 import { PanelArtifactSchema } from "./panels.js";
 import { ImageTemplateSnapshotSchema } from "./image-templates.js";
-import { ShotIntentSchema, ShotSizeSchema, CameraAngleSchema } from "./image-shot-spec.js";
+import { ShotIntentSchema, ShotSizeSchema, CameraAngleSchema, CompositionModeSchema } from "./image-shot-spec.js";
 import { SkillCheckSchema, RpgStateSchema } from "./rpg-state.js";
 
 export { ActionPropFieldSchema, ActionPropSchema, type ActionProp };
@@ -212,7 +212,9 @@ export const PlannerShotHintSchema = z.object({
   focalSubject: z.string().max(256).optional(),
   preferredShotSize: ShotSizeSchema.optional(),
   preferredAngle: CameraAngleSchema.optional(),
-  spatialRelationships: z.array(z.string().max(256)).max(8).optional()
+  preferredCompositionMode: CompositionModeSchema.optional(),
+  spatialRelationships: z.array(z.string().max(256)).max(8).optional(),
+  sceneStagingNote: z.string().max(300).optional()
 }).strict();
 export type PlannerShotHint = z.infer<typeof PlannerShotHintSchema>;
 

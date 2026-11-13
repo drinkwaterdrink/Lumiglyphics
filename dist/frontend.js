@@ -19760,6 +19760,7 @@ var SubjectPlacementSchema = exports_external.object({
   horizontal: exports_external.enum(["far-left", "left", "center", "right", "far-right"]).optional(),
   depth: exports_external.enum(["foreground", "midground", "background"]).optional(),
   scale: exports_external.enum(["small", "medium", "large", "dominant"]).optional(),
+  blocking: exports_external.string().max(240).optional(),
   box: exports_external.tuple([exports_external.number(), exports_external.number(), exports_external.number(), exports_external.number()]).optional()
 }).strict();
 var ShotOutputSchema = exports_external.object({
@@ -19776,7 +19777,8 @@ var ShotCameraSchema = exports_external.object({
 }).strict();
 var ShotCompositionSchema = exports_external.object({
   mode: CompositionModeSchema,
-  subjectPlacements: exports_external.array(SubjectPlacementSchema).max(16)
+  subjectPlacements: exports_external.array(SubjectPlacementSchema).max(16),
+  stagingNote: exports_external.string().max(300).optional()
 }).strict();
 var ShotSafeAreaSchema = exports_external.object({
   edge: exports_external.enum(["top", "bottom", "left", "right"]),
@@ -19947,29 +19949,139 @@ PRODUCTION:
 A detailed, editorially finished tall portrait page, composed for a mobile screen. Keep every panel and gutter inside the page, with modest outer margins and no oversized white border. Follow the requested output dimensions. This is one page image, not separate images per panel.
 {{suffix}}`;
 var LEGACY_MANGA_NEGATIVE = "identity drift, different face between panels, changed hairstyle, changed accessories, inconsistent wardrobe, repeated panel composition, broken reading order, extra limbs, fused hands, unreadable lettering, misspelled dialogue, random text, covered face, flat poses, weak contrast, muddy colors, photorealistic rendering, 3D CGI, watermark, logo";
-var body = `{{style}}
+var LEGACY_BODY = `{{style}}
 {{subjects}}
 {{action}}
 {{scene}}
 {{composition}}
 {{lighting}}
 {{suffix}}`;
-var BUILTIN_IMAGE_TEMPLATES = [
-  { id: "portrait", name: "Character portrait", category: "portrait", enabled: true, useWhen: "A named character's expression or reaction is the main visual beat.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "portrait", referencePolicy: "character", cameraPolicy: "directed", intent: "portrait", safeAreaPolicy: "auto" },
-  { id: "environment", name: "Environment", category: "environment", enabled: true, useWhen: "Entering a new place, revealing scenery, or a meaningful change in atmosphere.", positive: `{{style}}
+var LEGACY_ENVIRONMENT_POSITIVE = `{{style}}
 {{scene}}
 {{composition}}
 {{lighting}}
 An environment view without people.
-{{suffix}}`, negative: "{{negative}}", subjectMode: "none", framing: "wide", referencePolicy: "none", cameraPolicy: "directed", intent: "environment", safeAreaPolicy: "none" },
-  { id: "action", name: "Story action", category: "action", enabled: true, useWhen: "A significant movement or event matters more than a facial reaction. Focus on one visible character.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "full body", referencePolicy: "character", cameraPolicy: "directed", intent: "action", safeAreaPolicy: "auto" },
-  { id: "detail", name: "Detail / object", category: "detail", enabled: true, useWhen: "An important object, clue, or other close-up is the visual focus.", positive: `{{style}}
+{{suffix}}`;
+var LEGACY_DETAIL_POSITIVE = `{{style}}
 {{action}}
 {{scene}}
 {{composition}}
 {{lighting}}
 An object detail without people.
-{{suffix}}`, negative: "{{negative}}", subjectMode: "none", framing: "close-up", referencePolicy: "none", cameraPolicy: "directed", intent: "detail", safeAreaPolicy: "none" },
+{{suffix}}`;
+var LEGACY_ENSEMBLE_POSITIVE = `{{style}}
+Depict one coherent scene with the complete visible cast below, including the user's persona when listed. Each named appearance belongs only to that individual; keep faces, hair, build and clothing distinct.
+CAST:
+{{subjects}}
+SETTING: {{scene}}
+MOMENT: {{action}}
+{{composition}}
+{{lighting}}
+Use an external camera view so the listed persona is visible too. Compose readable interactions and spatial relationships, with natural poses and clear silhouettes. Show only the supplied moment, no extra people, duplicated individuals, merged bodies, split panels or invented events.
+{{suffix}}`;
+var LEGACY_ENSEMBLE_NEGATIVE = "{{negative}}, duplicate person, merged identities, swapped hair or clothing, fused bodies, extra limbs, cropped-out cast, split screen";
+var LEGACY_TWO_SHOT_POSITIVE = `{{style}}
+A medium two-shot composition depicting two characters interacting.
+CAST:
+{{subjects}}
+SETTING: {{scene}}
+INTERACTION: {{action}}
+{{composition}}
+{{lighting}}
+Compose both subjects naturally in the frame with distinct body language and eye line. Clear dialogue safe area in the lower third.
+{{suffix}}`;
+var LEGACY_TWO_SHOT_NEGATIVE = "{{negative}}, single character, crowded group, fused bodies, mismatched eye-contact, obscured expressions";
+var body = LEGACY_BODY;
+var BUILTIN_IMAGE_TEMPLATES = [
+  {
+    id: "portrait",
+    name: "Character portrait",
+    category: "portrait",
+    enabled: true,
+    useWhen: "A single named character's subtle expression, gaze, or emotional shift is the main visual beat (first-person POV reaction).",
+    positive: `{{style}}
+An expressive cinematic character portrait with natural asymmetric poise and living environmental depth.
+SUBJECT: {{subjects}}
+MOMENT & EXPRESSION: {{action}}
+SETTING: {{scene}}
+{{composition}}
+{{lighting}}
+Capture authentic facial nuance, believable eyeline, and natural posture rather than a rigid frontal stare.
+{{suffix}}`,
+    negative: "{{negative}}",
+    subjectMode: "one",
+    framing: "portrait",
+    referencePolicy: "character",
+    cameraPolicy: "directed",
+    intent: "portrait",
+    safeAreaPolicy: "auto"
+  },
+  {
+    id: "environment",
+    name: "Environment",
+    category: "environment",
+    enabled: true,
+    useWhen: "Entering a new place, revealing scenery, or shifting atmosphere with strong foreground-to-horizon depth.",
+    positive: `{{style}}
+A layered environmental scene with foreground textures, architectural or natural midground detail, and deep atmospheric distance.
+{{scene}}
+{{composition}}
+{{lighting}}
+An environment view without people.
+{{suffix}}`,
+    negative: "{{negative}}",
+    subjectMode: "none",
+    framing: "wide",
+    referencePolicy: "none",
+    cameraPolicy: "directed",
+    intent: "environment",
+    safeAreaPolicy: "none"
+  },
+  {
+    id: "action",
+    name: "Story action",
+    category: "action",
+    enabled: true,
+    useWhen: "A dynamic single-character movement, physical effort, clash, or sudden gesture matters more than a static reaction.",
+    positive: `{{style}}
+A kinetic single-character action frame with dynamic weight transfer, diagonal energy, and tangible interaction with the surroundings.
+SUBJECT: {{subjects}}
+ACTION: {{action}}
+SETTING: {{scene}}
+{{composition}}
+{{lighting}}
+Show motion through posture, clothing, and camera perspective rather than a stiff standing pose.
+{{suffix}}`,
+    negative: "{{negative}}",
+    subjectMode: "one",
+    framing: "full body",
+    referencePolicy: "character",
+    cameraPolicy: "directed",
+    intent: "action",
+    safeAreaPolicy: "auto"
+  },
+  {
+    id: "detail",
+    name: "Detail / object",
+    category: "detail",
+    enabled: true,
+    useWhen: "An important object, clue, weapon, letter, or tactile close-up is the visual focus.",
+    positive: `{{style}}
+A tactile close-up focusing on a pivotal physical detail in the scene.
+{{action}}
+{{scene}}
+{{composition}}
+{{lighting}}
+An object detail without people.
+{{suffix}}`,
+    negative: "{{negative}}",
+    subjectMode: "none",
+    framing: "close-up",
+    referencePolicy: "none",
+    cameraPolicy: "directed",
+    intent: "detail",
+    safeAreaPolicy: "none"
+  },
   { id: "custom", name: "Custom", category: "custom", enabled: false, useWhen: "Use this when its custom instructions suit the scene.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "upper body", referencePolicy: "character", cameraPolicy: "fixed", intent: "custom", safeAreaPolicy: "auto" },
   {
     outputAspectRatio: "9:16",
@@ -20002,7 +20114,7 @@ Strong ink contours, manga shading, halftones, expressive contrast, coherent col
     name: "Full scene / ensemble",
     category: "action",
     enabled: false,
-    useWhen: "A shared scene or interaction should show everyone physically present, including the user's persona. List visibleCharacters for this exact moment; omit offscreen, departed, remembered and merely mentioned characters.",
+    useWhen: "A full-scene beat showing everyone physically present staged organically across the room or setting as the story happens (seated, working, talking in clusters, moving across foreground/midground/background)—including the user's persona when present. List visibleCharacters for this exact moment; omit offscreen or departed characters.",
     subjectMode: "ensemble",
     framing: "wide",
     referencePolicy: "none",
@@ -20010,23 +20122,23 @@ Strong ink contours, manga shading, halftones, expressive contrast, coherent col
     intent: "ensemble",
     safeAreaPolicy: "auto",
     positive: `{{style}}
-Depict one coherent scene with the complete visible cast below, including the user's persona when listed. Each named appearance belongs only to that individual; keep faces, hair, build and clothing distinct.
+Depict one unified, lived-in full scene showing the complete visible cast below (including the user's persona when listed) staged naturally where they belong in the setting.
 CAST:
 {{subjects}}
-SETTING: {{scene}}
-MOMENT: {{action}}
+SETTING & ARCHITECTURE: {{scene}}
+SCENE ACTION & BLOCKING: {{action}}
 {{composition}}
 {{lighting}}
-Use an external camera view so the listed persona is visible too. Compose readable interactions and spatial relationships, with natural poses and clear silhouettes. Show only the supplied moment, no extra people, duplicated individuals, merged bodies, split panels or invented events.
+Use an objective external camera pulled back enough to show room geometry and depth across foreground, midground, and background planes. Every character must be occupied in their real story posture, activity, and sightlines—seated, leaning, moving, conversing, or interacting with props—NEVER lined up side-by-side in a flat front-facing row. Keep each named individual's face, hair, build, and clothing distinct, with no extra crowd, duplicated people, merged bodies, or split panels.
 {{suffix}}`,
-    negative: "{{negative}}, duplicate person, merged identities, swapped hair or clothing, fused bodies, extra limbs, cropped-out cast, split screen"
+    negative: "{{negative}}, side-by-side lineup, police lineup, group portrait row, characters standing shoulder-to-shoulder facing camera, stiff standing poses, duplicate person, merged identities, swapped hair or clothing, fused bodies, extra limbs, cropped-out cast, split screen"
   },
   {
     id: "two-shot",
     name: "Two-shot dialogue",
     category: "action",
     enabled: false,
-    useWhen: "Two characters conversing, interacting, or in direct tension. Focus on mid-range framing and relational chemistry.",
+    useWhen: "Two characters conversing, negotiating, tending to something together, or locked in direct tension. Emphasize angled depth, over-the-shoulder, or across-the-table blocking rather than standing shoulder-to-shoulder.",
     subjectMode: "ensemble",
     framing: "upper body",
     referencePolicy: "character",
@@ -20034,23 +20146,23 @@ Use an external camera view so the listed persona is visible too. Compose readab
     intent: "two-shot",
     safeAreaPolicy: "auto",
     positive: `{{style}}
-A medium two-shot composition depicting two characters interacting.
+A dynamic narrative two-shot framing two characters in active spatial interaction.
 CAST:
 {{subjects}}
 SETTING: {{scene}}
-INTERACTION: {{action}}
+INTERACTION & BLOCKING: {{action}}
 {{composition}}
 {{lighting}}
-Compose both subjects naturally in the frame with distinct body language and eye line. Clear dialogue safe area in the lower third.
+Stage both characters with natural depth separation, angled body orientation, believable eyelines toward each other or a shared focal point, and distinct emotional posture—avoid stiff side-by-side posing facing the lens. Keep the lower quarter readable for dialogue UI.
 {{suffix}}`,
-    negative: "{{negative}}, single character, crowded group, fused bodies, mismatched eye-contact, obscured expressions"
+    negative: "{{negative}}, side-by-side lineup, staring blankly straight at camera, crowded group, fused bodies, mismatched eye-contact, obscured expressions"
   },
   {
     id: "cinematic-wide",
     name: "Cinematic wide establishing",
     category: "environment",
     enabled: false,
-    useWhen: "Sweeping cinematic view of a setting or landscape with deep horizon, rich atmospheric depth, and sense of scale.",
+    useWhen: "Sweeping cinematic establishing view of a location or exterior vista with deep perspective, leading lines, atmospheric layers, and strong sense of scale.",
     subjectMode: "none",
     framing: "wide",
     referencePolicy: "none",
@@ -20058,20 +20170,20 @@ Compose both subjects naturally in the frame with distinct body language and eye
     intent: "establishing",
     safeAreaPolicy: "none",
     positive: `{{style}}
-An expansive cinematic wide-angle establishing shot.
+An expansive cinematic wide-angle establishing shot with multi-plane depth.
 ENVIRONMENT: {{scene}}
 ATMOSPHERE: {{lighting}}
 {{composition}}
-Focus on grand architectural or natural scale, atmospheric depth, deep perspective, and immersive environmental storytelling. Clean vista without focal character obstructions.
+Anchor the frame with foreground framing elements, clear architectural or landscape leading lines into the midground, and a rich atmospheric horizon. Clean vista without focal character obstructions.
 {{suffix}}`,
-    negative: "{{negative}}, close-up, cropped horizon, portrait orientation, cramped framing, blurry backdrop"
+    negative: "{{negative}}, close-up, cropped horizon, cramped framing, flat depth, blurry backdrop"
   },
   {
     id: "dramatic-closeup",
     name: "Dramatic close-up",
     category: "portrait",
     enabled: false,
-    useWhen: "High-stakes emotional intensity, sudden revelation, or dramatic eye/facial expression peak.",
+    useWhen: "High-stakes emotional peak, sudden shock, whispered confession, quiet realization, or intense facial micro-expression.",
     subjectMode: "one",
     framing: "close-up",
     referencePolicy: "character",
@@ -20079,22 +20191,22 @@ Focus on grand architectural or natural scale, atmospheric depth, deep perspecti
     intent: "reaction",
     safeAreaPolicy: "auto",
     positive: `{{style}}
-A tight cinematic dramatic close-up focused on intense emotional expression.
+A tight cinematic dramatic close-up locked onto intense emotional nuance.
 SUBJECT: {{subjects}}
 EMOTION & MOMENT: {{action}}
 SETTING CONTEXT: {{scene}}
 {{composition}}
 {{lighting}}
-Shallow depth of field, sharp focus on eyes and facial nuance, cinematic key lighting with soft background bokeh.
+Asymmetric framing, razor-sharp focus on eyes and subtle expression, sculptural key-to-shadow contrast, and soft atmospheric depth separation.
 {{suffix}}`,
-    negative: "{{negative}}, wide shot, full body, blank expression, stiff pose, cropped forehead, flat lighting"
+    negative: "{{negative}}, wide shot, full body, blank expression, stiff frontal pose, cropped forehead, flat lighting"
   },
   {
     id: "key-visual",
     name: "Key visual / Climax",
     category: "action",
     enabled: false,
-    useWhen: "A definitive story milestone, heroic pose, promotional climax shot, or defining narrative moment.",
+    useWhen: "A definitive story climax, commanding entrance, decisive stance, or sweeping dramatic reveal.",
     subjectMode: "one",
     framing: "full body",
     referencePolicy: "character",
@@ -20102,22 +20214,22 @@ Shallow depth of field, sharp focus on eyes and facial nuance, cinematic key lig
     intent: "action",
     safeAreaPolicy: "auto",
     positive: `{{style}}
-A striking visual novel key visual illustration with dynamic heroic composition.
+A striking visual novel key visual with commanding narrative composition and environmental scale.
 SUBJECT: {{subjects}}
-HEROIC MOMENT: {{action}}
+CLIMAX MOMENT: {{action}}
 ENVIRONMENT: {{scene}}
 {{composition}}
 {{lighting}}
-Full-figure presence, iconic silhouette, dynamic camera perspective, dramatic environmental rim lighting, and memorable narrative impact.
+Dynamic camera angle, powerful full-figure silhouette, dramatic environmental rim lighting, and cinematic depth.
 {{suffix}}`,
-    negative: "{{negative}}, mundane snapshot, dull pose, awkward limbs, cropped feet, off-center clutter"
+    negative: "{{negative}}, mundane snapshot, stiff pose, awkward limbs, cropped feet, flat front lighting"
   },
   {
     id: "candid-moment",
     name: "Candid moment",
     category: "portrait",
     enabled: false,
-    useWhen: "An unposed, authentic slice-of-life interaction, contemplative pause, or natural mid-gesture beat.",
+    useWhen: "An unposed, lived-in slice-of-life beat captured mid-gesture, mid-thought, or mid-conversation without theatrical posing.",
     subjectMode: "one",
     framing: "portrait",
     referencePolicy: "character",
@@ -20125,13 +20237,13 @@ Full-figure presence, iconic silhouette, dynamic camera perspective, dramatic en
     intent: "dialogue",
     safeAreaPolicy: "auto",
     positive: `{{style}}
-A natural candid portrait capturing an unposed, authentic narrative slice-of-life moment.
+An unposed candid narrative frame catching an authentic mid-moment beat.
 SUBJECT: {{subjects}}
 GESTURE & MOMENT: {{action}}
 ENVIRONMENT: {{scene}}
 {{composition}}
 {{lighting}}
-Spontaneous posture, relaxed candid framing, soft environmental illumination, expressive natural mood.
+Relaxed weight distribution, natural glance or mid-action posture, lived-in environmental details, and spontaneous atmospheric lighting.
 {{suffix}}`,
     negative: "{{negative}}, stiff mannequin pose, artificial looking straight at camera, extreme fisheye, harsh flash"
   }
@@ -20139,6 +20251,34 @@ Spontaneous posture, relaxed candid framing, soft environmental illumination, ex
 function validateImageTemplates(value) {
   return ImageTemplateListSchema.parse(value);
 }
+var LEGACY_TEMPLATE_DEFAULTS = {
+  portrait: {
+    positives: [LEGACY_BODY],
+    useWhens: ["A named character's expression or reaction is the main visual beat."]
+  },
+  environment: {
+    positives: [LEGACY_ENVIRONMENT_POSITIVE],
+    useWhens: ["Entering a new place, revealing scenery, or a meaningful change in atmosphere."]
+  },
+  action: {
+    positives: [LEGACY_BODY],
+    useWhens: ["A significant movement or event matters more than a facial reaction. Focus on one visible character."]
+  },
+  detail: {
+    positives: [LEGACY_DETAIL_POSITIVE],
+    useWhens: ["An important object, clue, or other close-up is the visual focus."]
+  },
+  ensemble: {
+    positives: [LEGACY_ENSEMBLE_POSITIVE],
+    negatives: [LEGACY_ENSEMBLE_NEGATIVE],
+    useWhens: ["A shared scene or interaction should show everyone physically present, including the user's persona. List visibleCharacters for this exact moment; omit offscreen, departed, remembered and merely mentioned characters."]
+  },
+  "two-shot": {
+    positives: [LEGACY_TWO_SHOT_POSITIVE],
+    negatives: [LEGACY_TWO_SHOT_NEGATIVE],
+    useWhens: ["Two characters conversing, interacting, or in direct tension. Focus on mid-range framing and relational chemistry."]
+  }
+};
 function upgradeImageTemplates(value) {
   const templates = validateImageTemplates(value);
   for (const templateId of ["manga-page", "ensemble", "two-shot", "cinematic-wide", "dramatic-closeup", "key-visual", "candid-moment"]) {
@@ -20149,14 +20289,24 @@ function upgradeImageTemplates(value) {
     }
   }
   return templates.map((t) => {
-    if (t.id !== "manga-page")
+    if (t.id === "manga-page") {
+      const builtin2 = BUILTIN_IMAGE_TEMPLATES.find((template) => template.id === "manga-page");
+      return {
+        ...t,
+        ...t.outputAspectRatio === undefined ? { outputAspectRatio: "9:16" } : {},
+        ...t.positive === LEGACY_MANGA_POSITIVE ? { positive: builtin2.positive } : {},
+        ...[LEGACY_MANGA_NEGATIVE, "identity drift, wardrobe drift, repeated compositions, broken reading order, extra limbs, malformed hands, unreadable or misspelled lettering, unrequested text, obscured faces, stiff poses, weak contrast, muddy colors, photorealism, 3D CGI, watermark, logo"].includes(t.negative) ? { negative: builtin2.negative } : {}
+      };
+    }
+    const legacy = LEGACY_TEMPLATE_DEFAULTS[t.id];
+    const builtin = BUILTIN_IMAGE_TEMPLATES.find((template) => template.id === t.id);
+    if (!legacy || !builtin)
       return t;
-    const builtin = BUILTIN_IMAGE_TEMPLATES.find((template) => template.id === "manga-page");
     return {
       ...t,
-      ...t.outputAspectRatio === undefined ? { outputAspectRatio: "9:16" } : {},
-      ...t.positive === LEGACY_MANGA_POSITIVE ? { positive: builtin.positive } : {},
-      ...[LEGACY_MANGA_NEGATIVE, "identity drift, wardrobe drift, repeated compositions, broken reading order, extra limbs, malformed hands, unreadable or misspelled lettering, unrequested text, obscured faces, stiff poses, weak contrast, muddy colors, photorealism, 3D CGI, watermark, logo"].includes(t.negative) ? { negative: builtin.negative } : {}
+      ...legacy.positives.includes(t.positive) ? { positive: builtin.positive } : {},
+      ...legacy.negatives && legacy.negatives.includes(t.negative) ? { negative: builtin.negative } : {},
+      ...legacy.useWhens && legacy.useWhens.includes(t.useWhen) ? { useWhen: builtin.useWhen } : {}
     };
   });
 }
@@ -20480,7 +20630,9 @@ var PlannerShotHintSchema = exports_external.object({
   focalSubject: exports_external.string().max(256).optional(),
   preferredShotSize: ShotSizeSchema.optional(),
   preferredAngle: CameraAngleSchema.optional(),
-  spatialRelationships: exports_external.array(exports_external.string().max(256)).max(8).optional()
+  preferredCompositionMode: CompositionModeSchema.optional(),
+  spatialRelationships: exports_external.array(exports_external.string().max(256)).max(8).optional(),
+  sceneStagingNote: exports_external.string().max(300).optional()
 }).strict();
 var VisualCueKindSchema = exports_external.enum(["flattened_scene", "background", "sprite"]);
 var VisualCueSchema = exports_external.object({
@@ -43183,19 +43335,21 @@ Output must be strictly ONE valid JSON object with no markdown code fences, comm
 - Set boundary.claimedNewScene: false and boundary.reason: 'none' when continuing the current setting. Only set claimedNewScene: true for genuine location transitions. Do not create new scenes for emotional shifts, dialogue turns, character entrances, or camera adjustments.
 
 ### 2. Camera Framing & Composition Architecture
-Select the optimal image template and camera framing for each visual moment:
-- PORTRAIT (Single Subject Focus): Use when a single character is emotionally focal or speaking directly.
-  * Framing: Upper-bust or waist-up medium portrait.
-  * Eye level: Direct eye contact or subtle angle.
+Select the optimal image template and dynamic camera framing for each visual moment:
+- PORTRAIT / DRAMATIC CLOSE-UP (Single Subject Focus): Use when a single character is emotionally focal, reacting, or speaking directly.
+  * Framing: Asymmetric medium close-up or tight close-up for high emotion; candid medium for slice-of-life beats.
+  * Camera Variety: Vary eye-level, three-quarter, over-the-shoulder, low-angle, or high-angle perspectives across cues rather than repeating identical straight-on shots.
   * POV Contract: Single-character pictures use the FIRST-PERSON POV of the User/Persona. The visible character on screen is the companion/NPC, NEVER the user/persona.
   * Reaction Rule: When the user acts or speaks, the visible companion's expression must depict their emotional reaction TO the user (amused, fond, listening, startled, pensive), never the user's private physical state.
-- SCENE ENSEMBLE (Multi-Character Staging): Use whenever two or more characters are physically present and interacting in the scene.
-  * Framing: Medium-wide to wide spatial shot showing relative positioning (e.g. seated opposite, standing side-by-side, confronting across a table).
-  * External Camera: Ensemble pictures use an objective third-person camera. Include the User/Persona in ensembleSubjects when physically visible in the space.
-  * Spatial Anchors: Specify left, center, right horizontal distribution so characters do not blend together.
-- ACTION / DYNAMIC BEATS: Use for sudden movements, impacts, physical contact, reaching, or dramatic object interaction.
-- ENVIRONMENT / ATMOSPHERE: Use when establishing a new location, mood, or quiet moment without people (subjectMode: "none").
-- MANGA PAGE: Use for sequential dramatic beats or multi-panel storytelling.
+- TWO-SHOT INTERACTION (Two Visible Subjects): Use when two characters converse, negotiate, embrace, or confront each other directly.
+  * Staging: Use relational blocking (over-the-shoulder, angled across a table, asymmetric depth) rather than stiff shoulder-to-shoulder posing.
+- FULL SCENE / ENSEMBLE TABLEAU (Multi-Character & Whole-Room Staging): Use whenever 3+ characters are physically present OR showing everyone naturally placed inside the full setting matters.
+  * Framing: Pulled-back wide or medium-wide external camera view showing room geometry across foreground, midground, and background depth.
+  * External Camera: Include the User/Persona in visibleCharacters when physically present in the space.
+  * Organic Spatial Blocking: Supply shotHint.spatialRelationships specifying each character's actual depth, posture, activity, and sightline (e.g. seated at a rear booth, leaning in the archway, working at the foreground desk). NEVER line characters up side-by-side in a flat row unless the story literally aligns them.
+- ACTION / KEY VISUAL: Use for kinetic movement, physical impacts, spells, or dramatic climax silhouettes with dynamic angles and weight shift.
+- ENVIRONMENT / CINEMATIC WIDE / DETAIL: Use for new locations, sweeping atmosphere (subjectMode: "none"), or focal props/clues.
+- MANGA PAGE: Use for sequential multi-panel storytelling beats.
 - DIALOGUE SAFE AREA: The bottom 25% of the frame is reserved for the dialogue text overlay. Keep focal faces, hands, and essential props in the upper 75% of the frame.
 
 ### 3. Stage Effects & Psychological Impact Hierarchy
@@ -43238,12 +43392,22 @@ Return:
   }],
   "cues": [{
     "paragraphIndex": 0,
+    "templateId": "portrait | two-shot | ensemble | action | dramatic-closeup | candid-moment | key-visual | environment | cinematic-wide | detail",
     "character": "CompanionName",
     "visualDescription": "Concrete visual scene description of what happens in this exact instant",
     "visualFocus": "primary focal subject or object",
-    "poseExpressionId": "expression_id",
+    "expression": "expression_id",
     "action": "physical action or prop interaction",
-    "ensembleSubjects": [{"name": "Name1", "appearance": "traits", "attire": "clothing"}]
+    "visibleCharacters": ["Name1", "Name2"],
+    "shotHint": {
+      "intent": "ensemble",
+      "focalSubject": "Name1",
+      "preferredShotSize": "wide",
+      "preferredAngle": "three-quarter",
+      "preferredCompositionMode": "layered-depth",
+      "spatialRelationships": ["Name1 seated foreground-left at the counter", "Name2 leaning in the midground doorway"],
+      "sceneStagingNote": "Angled three-quarter view across the room showing both characters engaged in the space"
+    }
   }],
   "effects": [{"paragraphIndex": 1, "effect": "shake_hard"}],
   "audioCues": [{"paragraphIndex": 0, "bgm": "intimate_warm", "sfx": "cloth_rustle"}]
@@ -50774,7 +50938,7 @@ function modelOutputHelp(provider, model, parameters) {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.146";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.147";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;

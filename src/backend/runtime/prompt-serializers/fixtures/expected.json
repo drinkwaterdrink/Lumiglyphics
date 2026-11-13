@@ -28,7 +28,7 @@
     "warnings": []
   },
   "flux3/ensemble": {
-    "prompt": "An ensemble scene with 2 characters: Mira, Jo. reading an open book beside the window Mira has silver hair, violet eyes, green coat. Jo has black curls, amber eyes, blue jacket. Set in Rainy library with brass lamps and red curtains. Shot composition: medium-wide shot, eye-level angle, wide-angle lens, moderate depth of field. Lighting is warm lamplight against cool rain. Art style: watercolor illustration, palette of muted green and brass. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.",
+    "prompt": "An ensemble scene with 2 characters: Mira, Jo. reading an open book beside the window Mira has silver hair, violet eyes, green coat. Jo has black curls, amber eyes, blue jacket. Set in Rainy library with brass lamps and red curtains. Shot composition: medium-wide shot, three-quarter view, wide-angle lens, moderate depth of field. Lighting is warm lamplight against cool rain. Art style: watercolor illustration, palette of muted green and brass. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.",
     "negativePrompt": "",
     "warnings": []
   },
@@ -50,7 +50,7 @@
     "warnings": []
   },
   "gpt-image-2.5/ensemble": {
-    "prompt": "IMAGE\nA complete 9:16 visual scene illustrating reading an open book beside the window.\n\nSUBJECTS\n• Mira: silver hair, violet eyes, green coat\n• Jo: black curls, amber eyes, blue jacket\n\nMOMENT\nreading an open book beside the window\n\nCOMPOSITION\nFraming: medium-wide shot, eye-level angle, wide-angle lens, moderate depth of field.\n\nLIGHTING & ENVIRONMENT\nSetting: Rainy library with brass lamps and red curtains\nLighting: warm lamplight against cool rain\n\nVISUAL TREATMENT\nwatercolor illustration, palette of muted green and brass\n\nCONSTRAINTS\n• Dialogue overlay: Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.\n• Maintain crisp anatomy, cohesive spatial coherence, and clean focus without extraneous clutter.",
+    "prompt": "IMAGE\nA complete 9:16 visual scene illustrating reading an open book beside the window.\n\nSUBJECTS\n• Mira: silver hair, violet eyes, green coat\n• Jo: black curls, amber eyes, blue jacket\n\nMOMENT\nreading an open book beside the window\n\nCOMPOSITION\nFraming: medium-wide shot, three-quarter view, wide-angle lens, moderate depth of field.\n\nLIGHTING & ENVIRONMENT\nSetting: Rainy library with brass lamps and red curtains\nLighting: warm lamplight against cool rain\n\nVISUAL TREATMENT\nwatercolor illustration, palette of muted green and brass\n\nCONSTRAINTS\n• Dialogue overlay: Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.\n• Maintain crisp anatomy, cohesive spatial coherence, and clean focus without extraneous clutter.",
     "negativePrompt": "",
     "warnings": []
   },
@@ -72,7 +72,7 @@
     "warnings": []
   },
   "grok-imagine-2/ensemble": {
-    "prompt": "2 visible characters: Mira (silver hair, violet eyes, green coat) and Jo (black curls, amber eyes, blue jacket). Action: reading an open book beside the window. Surroundings and physical textures: Rainy library with brass lamps and red curtains. Art direction: watercolor illustration. Lighting: warm lamplight against cool rain. Color palette: muted green and brass. Camera framing: medium-wide shot, eye-level angle, wide-angle lens, moderate depth of field. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.",
+    "prompt": "2 visible characters: Mira (silver hair, violet eyes, green coat) and Jo (black curls, amber eyes, blue jacket). Action: reading an open book beside the window. Surroundings and physical textures: Rainy library with brass lamps and red curtains. Art direction: watercolor illustration. Lighting: warm lamplight against cool rain. Color palette: muted green and brass. Camera framing: medium-wide shot, three-quarter view, wide-angle lens, moderate depth of field. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.",
     "negativePrompt": "",
     "warnings": []
   },
@@ -94,7 +94,7 @@
     "warnings": []
   },
   "qwen-image-3/ensemble": {
-    "prompt": "2 characters (Mira: silver hair, violet eyes, green coat, Jo: black curls, amber eyes, blue jacket), reading an open book beside the window medium-wide shot, eye-level angle, wide-angle lens, moderate depth of field Rainy library with brass lamps and red curtains watercolor illustration Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.",
+    "prompt": "2 characters (Mira: silver hair, violet eyes, green coat, Jo: black curls, amber eyes, blue jacket), reading an open book beside the window medium-wide shot, three-quarter view, wide-angle lens, moderate depth of field Rainy library with brass lamps and red curtains watercolor illustration Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.",
     "negativePrompt": "blurry, low quality, distorted anatomy, extra limbs, malformed hands, oversaturated, bad proportions",
     "warnings": []
   },
@@ -116,7 +116,7 @@
     "warnings": []
   },
   "nano-banana-2.1/ensemble": {
-    "prompt": "Create one coherent 9:16 scene.\n\nForeground:\nClean foreground leading into the scene.\n\nMidground:\nMain focal area.\n\nBackground:\n Rainy library with brass lamps and red curtains\n\nAction:\nreading an open book beside the window\n\nCharacters:\n• Mira: silver hair, violet eyes, green coat\n• Jo: black curls, amber eyes, blue jacket\n\nCamera:\nmedium-wide shot, eye-level angle, wide-angle lens, moderate depth of field.\n\nLighting:\nwarm lamplight against cool rain.\n\nPreserve:\nVisual medium: watercolor illustration, palette of muted green and brass.\nKeep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.\nSemantic negative: an uncluttered scene free of stray artifacts, deformed limbs, or extra unlisted characters.",
+    "prompt": "Create one coherent 9:16 scene.\n\nForeground:\nClean foreground leading into the scene.\n\nMidground:\nMain focal area.\n\nBackground:\n Rainy library with brass lamps and red curtains\n\nAction:\nreading an open book beside the window\n\nCharacters:\n• Mira: silver hair, violet eyes, green coat\n• Jo: black curls, amber eyes, blue jacket\n\nCamera:\nmedium-wide shot, three-quarter view, wide-angle lens, moderate depth of field.\n\nLighting:\nwarm lamplight against cool rain.\n\nPreserve:\nVisual medium: watercolor illustration, palette of muted green and brass.\nKeep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.\nSemantic negative: an uncluttered scene free of stray artifacts, deformed limbs, or extra unlisted characters.",
     "negativePrompt": "",
     "warnings": []
   },
@@ -138,7 +138,7 @@
     "warnings": []
   },
   "seedream-5/ensemble": {
-    "prompt": "An ensemble featuring Mira (silver hair, violet eyes, green coat); Jo (black curls, amber eyes, blue jacket). Current action: reading an open book beside the window. Setting: Rainy library with brass lamps and red curtains. Framing: medium-wide shot, eye-level angle, wide-angle lens, moderate depth of field. Lighting: warm lamplight against cool rain. Style: watercolor illustration, palette of muted green and brass. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.",
+    "prompt": "An ensemble featuring Mira (silver hair, violet eyes, green coat); Jo (black curls, amber eyes, blue jacket). Current action: reading an open book beside the window. Setting: Rainy library with brass lamps and red curtains. Framing: medium-wide shot, three-quarter view, wide-angle lens, moderate depth of field. Lighting: warm lamplight against cool rain. Style: watercolor illustration, palette of muted green and brass. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.",
     "negativePrompt": "",
     "warnings": []
   },
@@ -161,7 +161,7 @@
     "warnings": []
   },
   "anima/ensemble": {
-    "prompt": "watercolor illustration, 2characters, multiple people, [Mira: silver hair, violet eyes, green coat], [Jo: black curls, amber eyes, blue jacket], reading an open book beside the window, medium shot, Rainy library with brass lamps and red curtains, warm lamplight against cool rain, [Layout: Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.]",
+    "prompt": "watercolor illustration, 2characters, multiple people, [Mira: silver hair, violet eyes, green coat], [Jo: black curls, amber eyes, blue jacket], reading an open book beside the window, medium shot, from side, Rainy library with brass lamps and red curtains, warm lamplight against cool rain, [Layout: Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.]",
     "negativePrompt": "worst quality, low quality, deformed anatomy, bad hands, missing limbs",
     "warnings": []
   },
@@ -183,7 +183,7 @@
     "warnings": []
   },
   "novelai/ensemble": {
-    "prompt": "watercolor illustration, 2characters, multiple people, [Mira: silver hair, violet eyes, green coat], [Jo: black curls, amber eyes, blue jacket], reading an open book beside the window, medium shot, Rainy library with brass lamps and red curtains, warm lamplight against cool rain, [Layout: Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.]",
+    "prompt": "watercolor illustration, 2characters, multiple people, [Mira: silver hair, violet eyes, green coat], [Jo: black curls, amber eyes, blue jacket], reading an open book beside the window, medium shot, from side, Rainy library with brass lamps and red curtains, warm lamplight against cool rain, [Layout: Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.]",
     "negativePrompt": "worst quality, low quality, deformed anatomy, bad hands, missing limbs",
     "warnings": []
   },
@@ -207,7 +207,7 @@
     ]
   },
   "generic-prose/ensemble": {
-    "prompt": "A group of 2 people: Mira (silver hair, violet eyes, green coat), Jo (black curls, amber eyes, blue jacket). Action: reading an open book beside the window. Framing: medium-wide shot, eye-level angle, wide-angle lens, moderate depth of field. Setting: Rainy library with brass lamps and red curtains. Lighting: warm lamplight against cool rain. Art style: watercolor illustration, palette of muted green and brass. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.",
+    "prompt": "A group of 2 people: Mira (silver hair, violet eyes, green coat), Jo (black curls, amber eyes, blue jacket). Action: reading an open book beside the window. Framing: medium-wide shot, three-quarter view, wide-angle lens, moderate depth of field. Setting: Rainy library with brass lamps and red curtains. Lighting: warm lamplight against cool rain. Art style: watercolor illustration, palette of muted green and brass. Keep faces, hands and key focal action above the bottom 25% of the frame; reserve that region as quiet visual space for the dialogue overlay.",
     "negativePrompt": "",
     "warnings": [
       "Model-specific prompting profile unavailable; using conservative generic prompting."
@@ -236,7 +236,7 @@
     ]
   },
   "generic-tags/ensemble": {
-    "prompt": "2characters, multiple people, Mira, silver hair, violet eyes, green coat, Jo, black curls, amber eyes, blue jacket, reading an open book beside the window, medium-wide, eye-level, Rainy library with brass lamps and red curtains, watercolor illustration",
+    "prompt": "2characters, multiple people, Mira, silver hair, violet eyes, green coat, Jo, black curls, amber eyes, blue jacket, reading an open book beside the window, medium-wide, three-quarter, Rainy library with brass lamps and red curtains, watercolor illustration",
     "negativePrompt": "worst quality, low quality, deformed, extra limbs",
     "warnings": [
       "Model-specific prompting profile unavailable; using conservative generic prompting."

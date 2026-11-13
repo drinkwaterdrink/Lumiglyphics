@@ -241,7 +241,7 @@ export function buildVisualBrief(
     scene: text([environment.location, locClause || environment.description, ...relevantPersistentElements, environment.timeOfDay, environment.weather]),
     subjects: noPeople ? "" : ensemble ? group : text([subjectLabel, appearance, template.category === "portrait" ? pose : ""]),
     action: noPeople ? template.category === "detail" || template.category === "custom" ? (cue.visualFocus ?? "").slice(0, 1000) : "" : text([cleanedVisualDescription, ...activeItemClauses, compileActionProp(cue.action), template.category === "portrait" ? "" : pose]),
-    composition: `${template.framing}; eye-level view; ${noPeople ? "no people" : ensemble ? `${members.length} visible characters, including every listed subject; distinct faces and silhouettes` : "one visible character"}; keep the lower quarter clear for dialogue`,
+    composition: `${cue.shotHint?.preferredShotSize ?? template.framing}; ${cue.shotHint?.preferredAngle ? `${cue.shotHint.preferredAngle} perspective` : template.cameraPolicy === "fixed" ? "eye-level view" : "dynamic narrative perspective"}; ${noPeople ? "no people" : ensemble ? (cue.shotHint?.spatialRelationships?.length ? `${members.length} visible characters staged naturally in the scene (${cue.shotHint.spatialRelationships.slice(0, 4).join("; ")})${cue.shotHint.sceneStagingNote ? `; ${cue.shotHint.sceneStagingNote}` : ""}` : `${members.length} visible characters staged naturally across room depths in active posture, including every listed subject; distinct faces and silhouettes`) : "one visible character"}; keep the lower quarter clear for dialogue`,
     lighting: text([environment.lighting, locDNA?.lighting], 1000),
     subjectMode: template.subjectMode,
     framing: template.framing,

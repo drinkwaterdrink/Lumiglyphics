@@ -17,19 +17,21 @@ Output must be strictly ONE valid JSON object with no markdown code fences, comm
 - Set boundary.claimedNewScene: false and boundary.reason: 'none' when continuing the current setting. Only set claimedNewScene: true for genuine location transitions. Do not create new scenes for emotional shifts, dialogue turns, character entrances, or camera adjustments.
 
 ### 2. Camera Framing & Composition Architecture
-Select the optimal image template and camera framing for each visual moment:
-- PORTRAIT (Single Subject Focus): Use when a single character is emotionally focal or speaking directly.
-  * Framing: Upper-bust or waist-up medium portrait.
-  * Eye level: Direct eye contact or subtle angle.
+Select the optimal image template and dynamic camera framing for each visual moment:
+- PORTRAIT / DRAMATIC CLOSE-UP (Single Subject Focus): Use when a single character is emotionally focal, reacting, or speaking directly.
+  * Framing: Asymmetric medium close-up or tight close-up for high emotion; candid medium for slice-of-life beats.
+  * Camera Variety: Vary eye-level, three-quarter, over-the-shoulder, low-angle, or high-angle perspectives across cues rather than repeating identical straight-on shots.
   * POV Contract: Single-character pictures use the FIRST-PERSON POV of the User/Persona. The visible character on screen is the companion/NPC, NEVER the user/persona.
   * Reaction Rule: When the user acts or speaks, the visible companion's expression must depict their emotional reaction TO the user (amused, fond, listening, startled, pensive), never the user's private physical state.
-- SCENE ENSEMBLE (Multi-Character Staging): Use whenever two or more characters are physically present and interacting in the scene.
-  * Framing: Medium-wide to wide spatial shot showing relative positioning (e.g. seated opposite, standing side-by-side, confronting across a table).
-  * External Camera: Ensemble pictures use an objective third-person camera. Include the User/Persona in ensembleSubjects when physically visible in the space.
-  * Spatial Anchors: Specify left, center, right horizontal distribution so characters do not blend together.
-- ACTION / DYNAMIC BEATS: Use for sudden movements, impacts, physical contact, reaching, or dramatic object interaction.
-- ENVIRONMENT / ATMOSPHERE: Use when establishing a new location, mood, or quiet moment without people (subjectMode: "none").
-- MANGA PAGE: Use for sequential dramatic beats or multi-panel storytelling.
+- TWO-SHOT INTERACTION (Two Visible Subjects): Use when two characters converse, negotiate, embrace, or confront each other directly.
+  * Staging: Use relational blocking (over-the-shoulder, angled across a table, asymmetric depth) rather than stiff shoulder-to-shoulder posing.
+- FULL SCENE / ENSEMBLE TABLEAU (Multi-Character & Whole-Room Staging): Use whenever 3+ characters are physically present OR showing everyone naturally placed inside the full setting matters.
+  * Framing: Pulled-back wide or medium-wide external camera view showing room geometry across foreground, midground, and background depth.
+  * External Camera: Include the User/Persona in visibleCharacters when physically present in the space.
+  * Organic Spatial Blocking: Supply shotHint.spatialRelationships specifying each character's actual depth, posture, activity, and sightline (e.g. seated at a rear booth, leaning in the archway, working at the foreground desk). NEVER line characters up side-by-side in a flat row unless the story literally aligns them.
+- ACTION / KEY VISUAL: Use for kinetic movement, physical impacts, spells, or dramatic climax silhouettes with dynamic angles and weight shift.
+- ENVIRONMENT / CINEMATIC WIDE / DETAIL: Use for new locations, sweeping atmosphere (subjectMode: "none"), or focal props/clues.
+- MANGA PAGE: Use for sequential multi-panel storytelling beats.
 - DIALOGUE SAFE AREA: The bottom 25% of the frame is reserved for the dialogue text overlay. Keep focal faces, hands, and essential props in the upper 75% of the frame.
 
 ### 3. Stage Effects & Psychological Impact Hierarchy
@@ -72,12 +74,22 @@ Return:
   }],
   "cues": [{
     "paragraphIndex": 0,
+    "templateId": "portrait | two-shot | ensemble | action | dramatic-closeup | candid-moment | key-visual | environment | cinematic-wide | detail",
     "character": "CompanionName",
     "visualDescription": "Concrete visual scene description of what happens in this exact instant",
     "visualFocus": "primary focal subject or object",
-    "poseExpressionId": "expression_id",
+    "expression": "expression_id",
     "action": "physical action or prop interaction",
-    "ensembleSubjects": [{"name": "Name1", "appearance": "traits", "attire": "clothing"}]
+    "visibleCharacters": ["Name1", "Name2"],
+    "shotHint": {
+      "intent": "ensemble",
+      "focalSubject": "Name1",
+      "preferredShotSize": "wide",
+      "preferredAngle": "three-quarter",
+      "preferredCompositionMode": "layered-depth",
+      "spatialRelationships": ["Name1 seated foreground-left at the counter", "Name2 leaning in the midground doorway"],
+      "sceneStagingNote": "Angled three-quarter view across the room showing both characters engaged in the space"
+    }
   }],
   "effects": [{"paragraphIndex": 1, "effect": "shake_hard"}],
   "audioCues": [{"paragraphIndex": 0, "bgm": "intimate_warm", "sfx": "cloth_rustle"}]

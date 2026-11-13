@@ -20467,6 +20467,7 @@ var init_image_shot_spec = __esm(() => {
     horizontal: exports_external.enum(["far-left", "left", "center", "right", "far-right"]).optional(),
     depth: exports_external.enum(["foreground", "midground", "background"]).optional(),
     scale: exports_external.enum(["small", "medium", "large", "dominant"]).optional(),
+    blocking: exports_external.string().max(240).optional(),
     box: exports_external.tuple([exports_external.number(), exports_external.number(), exports_external.number(), exports_external.number()]).optional()
   }).strict();
   ShotOutputSchema = exports_external.object({
@@ -20483,7 +20484,8 @@ var init_image_shot_spec = __esm(() => {
   }).strict();
   ShotCompositionSchema = exports_external.object({
     mode: CompositionModeSchema,
-    subjectPlacements: exports_external.array(SubjectPlacementSchema).max(16)
+    subjectPlacements: exports_external.array(SubjectPlacementSchema).max(16),
+    stagingNote: exports_external.string().max(300).optional()
   }).strict();
   ShotSafeAreaSchema = exports_external.object({
     edge: exports_external.enum(["top", "bottom", "left", "right"]),
@@ -20789,14 +20791,24 @@ function upgradeImageTemplates(value) {
     }
   }
   return templates.map((t) => {
-    if (t.id !== "manga-page")
+    if (t.id === "manga-page") {
+      const builtin2 = BUILTIN_IMAGE_TEMPLATES.find((template) => template.id === "manga-page");
+      return {
+        ...t,
+        ...t.outputAspectRatio === undefined ? { outputAspectRatio: "9:16" } : {},
+        ...t.positive === LEGACY_MANGA_POSITIVE ? { positive: builtin2.positive } : {},
+        ...[LEGACY_MANGA_NEGATIVE, "identity drift, wardrobe drift, repeated compositions, broken reading order, extra limbs, malformed hands, unreadable or misspelled lettering, unrequested text, obscured faces, stiff poses, weak contrast, muddy colors, photorealism, 3D CGI, watermark, logo"].includes(t.negative) ? { negative: builtin2.negative } : {}
+      };
+    }
+    const legacy = LEGACY_TEMPLATE_DEFAULTS[t.id];
+    const builtin = BUILTIN_IMAGE_TEMPLATES.find((template) => template.id === t.id);
+    if (!legacy || !builtin)
       return t;
-    const builtin = BUILTIN_IMAGE_TEMPLATES.find((template) => template.id === "manga-page");
     return {
       ...t,
-      ...t.outputAspectRatio === undefined ? { outputAspectRatio: "9:16" } : {},
-      ...t.positive === LEGACY_MANGA_POSITIVE ? { positive: builtin.positive } : {},
-      ...[LEGACY_MANGA_NEGATIVE, "identity drift, wardrobe drift, repeated compositions, broken reading order, extra limbs, malformed hands, unreadable or misspelled lettering, unrequested text, obscured faces, stiff poses, weak contrast, muddy colors, photorealism, 3D CGI, watermark, logo"].includes(t.negative) ? { negative: builtin.negative } : {}
+      ...legacy.positives.includes(t.positive) ? { positive: builtin.positive } : {},
+      ...legacy.negatives && legacy.negatives.includes(t.negative) ? { negative: builtin.negative } : {},
+      ...legacy.useWhens && legacy.useWhens.includes(t.useWhen) ? { useWhen: builtin.useWhen } : {}
     };
   });
 }
@@ -20856,13 +20868,42 @@ STYLE AND LIGHTING:
 Strong ink contours, manga shading, halftone textures, clean negative space, expressive contrast and a coherent color palette. Keep panel gutters clear and identity and clothing consistent.
 PRODUCTION:
 A detailed, editorially finished tall portrait page, composed for a mobile screen. Keep every panel and gutter inside the page, with modest outer margins and no oversized white border. Follow the requested output dimensions. This is one page image, not separate images per panel.
-{{suffix}}`, LEGACY_MANGA_NEGATIVE = "identity drift, different face between panels, changed hairstyle, changed accessories, inconsistent wardrobe, repeated panel composition, broken reading order, extra limbs, fused hands, unreadable lettering, misspelled dialogue, random text, covered face, flat poses, weak contrast, muddy colors, photorealistic rendering, 3D CGI, watermark, logo", body = `{{style}}
+{{suffix}}`, LEGACY_MANGA_NEGATIVE = "identity drift, different face between panels, changed hairstyle, changed accessories, inconsistent wardrobe, repeated panel composition, broken reading order, extra limbs, fused hands, unreadable lettering, misspelled dialogue, random text, covered face, flat poses, weak contrast, muddy colors, photorealistic rendering, 3D CGI, watermark, logo", LEGACY_BODY = `{{style}}
 {{subjects}}
 {{action}}
 {{scene}}
 {{composition}}
 {{lighting}}
-{{suffix}}`, BUILTIN_IMAGE_TEMPLATES;
+{{suffix}}`, LEGACY_ENVIRONMENT_POSITIVE = `{{style}}
+{{scene}}
+{{composition}}
+{{lighting}}
+An environment view without people.
+{{suffix}}`, LEGACY_DETAIL_POSITIVE = `{{style}}
+{{action}}
+{{scene}}
+{{composition}}
+{{lighting}}
+An object detail without people.
+{{suffix}}`, LEGACY_ENSEMBLE_POSITIVE = `{{style}}
+Depict one coherent scene with the complete visible cast below, including the user's persona when listed. Each named appearance belongs only to that individual; keep faces, hair, build and clothing distinct.
+CAST:
+{{subjects}}
+SETTING: {{scene}}
+MOMENT: {{action}}
+{{composition}}
+{{lighting}}
+Use an external camera view so the listed persona is visible too. Compose readable interactions and spatial relationships, with natural poses and clear silhouettes. Show only the supplied moment, no extra people, duplicated individuals, merged bodies, split panels or invented events.
+{{suffix}}`, LEGACY_ENSEMBLE_NEGATIVE = "{{negative}}, duplicate person, merged identities, swapped hair or clothing, fused bodies, extra limbs, cropped-out cast, split screen", LEGACY_TWO_SHOT_POSITIVE = `{{style}}
+A medium two-shot composition depicting two characters interacting.
+CAST:
+{{subjects}}
+SETTING: {{scene}}
+INTERACTION: {{action}}
+{{composition}}
+{{lighting}}
+Compose both subjects naturally in the frame with distinct body language and eye line. Clear dialogue safe area in the lower third.
+{{suffix}}`, LEGACY_TWO_SHOT_NEGATIVE = "{{negative}}, single character, crowded group, fused bodies, mismatched eye-contact, obscured expressions", body, BUILTIN_IMAGE_TEMPLATES, LEGACY_TEMPLATE_DEFAULTS;
 var init_image_templates = __esm(() => {
   init_presentation_rules();
   init_shared_style_snapshot();
@@ -20946,22 +20987,97 @@ var init_image_templates = __esm(() => {
     }).strict().optional()
   }).strict();
   ImageTemplateListSchema = exports_external.array(ImageTemplateSchema).max(32).refine((templates) => new Set(templates.map((t) => t.id)).size === templates.length, "Template IDs must be unique.");
+  body = LEGACY_BODY;
   BUILTIN_IMAGE_TEMPLATES = [
-    { id: "portrait", name: "Character portrait", category: "portrait", enabled: true, useWhen: "A named character's expression or reaction is the main visual beat.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "portrait", referencePolicy: "character", cameraPolicy: "directed", intent: "portrait", safeAreaPolicy: "auto" },
-    { id: "environment", name: "Environment", category: "environment", enabled: true, useWhen: "Entering a new place, revealing scenery, or a meaningful change in atmosphere.", positive: `{{style}}
+    {
+      id: "portrait",
+      name: "Character portrait",
+      category: "portrait",
+      enabled: true,
+      useWhen: "A single named character's subtle expression, gaze, or emotional shift is the main visual beat (first-person POV reaction).",
+      positive: `{{style}}
+An expressive cinematic character portrait with natural asymmetric poise and living environmental depth.
+SUBJECT: {{subjects}}
+MOMENT & EXPRESSION: {{action}}
+SETTING: {{scene}}
+{{composition}}
+{{lighting}}
+Capture authentic facial nuance, believable eyeline, and natural posture rather than a rigid frontal stare.
+{{suffix}}`,
+      negative: "{{negative}}",
+      subjectMode: "one",
+      framing: "portrait",
+      referencePolicy: "character",
+      cameraPolicy: "directed",
+      intent: "portrait",
+      safeAreaPolicy: "auto"
+    },
+    {
+      id: "environment",
+      name: "Environment",
+      category: "environment",
+      enabled: true,
+      useWhen: "Entering a new place, revealing scenery, or shifting atmosphere with strong foreground-to-horizon depth.",
+      positive: `{{style}}
+A layered environmental scene with foreground textures, architectural or natural midground detail, and deep atmospheric distance.
 {{scene}}
 {{composition}}
 {{lighting}}
 An environment view without people.
-{{suffix}}`, negative: "{{negative}}", subjectMode: "none", framing: "wide", referencePolicy: "none", cameraPolicy: "directed", intent: "environment", safeAreaPolicy: "none" },
-    { id: "action", name: "Story action", category: "action", enabled: true, useWhen: "A significant movement or event matters more than a facial reaction. Focus on one visible character.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "full body", referencePolicy: "character", cameraPolicy: "directed", intent: "action", safeAreaPolicy: "auto" },
-    { id: "detail", name: "Detail / object", category: "detail", enabled: true, useWhen: "An important object, clue, or other close-up is the visual focus.", positive: `{{style}}
+{{suffix}}`,
+      negative: "{{negative}}",
+      subjectMode: "none",
+      framing: "wide",
+      referencePolicy: "none",
+      cameraPolicy: "directed",
+      intent: "environment",
+      safeAreaPolicy: "none"
+    },
+    {
+      id: "action",
+      name: "Story action",
+      category: "action",
+      enabled: true,
+      useWhen: "A dynamic single-character movement, physical effort, clash, or sudden gesture matters more than a static reaction.",
+      positive: `{{style}}
+A kinetic single-character action frame with dynamic weight transfer, diagonal energy, and tangible interaction with the surroundings.
+SUBJECT: {{subjects}}
+ACTION: {{action}}
+SETTING: {{scene}}
+{{composition}}
+{{lighting}}
+Show motion through posture, clothing, and camera perspective rather than a stiff standing pose.
+{{suffix}}`,
+      negative: "{{negative}}",
+      subjectMode: "one",
+      framing: "full body",
+      referencePolicy: "character",
+      cameraPolicy: "directed",
+      intent: "action",
+      safeAreaPolicy: "auto"
+    },
+    {
+      id: "detail",
+      name: "Detail / object",
+      category: "detail",
+      enabled: true,
+      useWhen: "An important object, clue, weapon, letter, or tactile close-up is the visual focus.",
+      positive: `{{style}}
+A tactile close-up focusing on a pivotal physical detail in the scene.
 {{action}}
 {{scene}}
 {{composition}}
 {{lighting}}
 An object detail without people.
-{{suffix}}`, negative: "{{negative}}", subjectMode: "none", framing: "close-up", referencePolicy: "none", cameraPolicy: "directed", intent: "detail", safeAreaPolicy: "none" },
+{{suffix}}`,
+      negative: "{{negative}}",
+      subjectMode: "none",
+      framing: "close-up",
+      referencePolicy: "none",
+      cameraPolicy: "directed",
+      intent: "detail",
+      safeAreaPolicy: "none"
+    },
     { id: "custom", name: "Custom", category: "custom", enabled: false, useWhen: "Use this when its custom instructions suit the scene.", positive: body, negative: "{{negative}}", subjectMode: "one", framing: "upper body", referencePolicy: "character", cameraPolicy: "fixed", intent: "custom", safeAreaPolicy: "auto" },
     {
       outputAspectRatio: "9:16",
@@ -20994,7 +21110,7 @@ Strong ink contours, manga shading, halftones, expressive contrast, coherent col
       name: "Full scene / ensemble",
       category: "action",
       enabled: false,
-      useWhen: "A shared scene or interaction should show everyone physically present, including the user's persona. List visibleCharacters for this exact moment; omit offscreen, departed, remembered and merely mentioned characters.",
+      useWhen: "A full-scene beat showing everyone physically present staged organically across the room or setting as the story happens (seated, working, talking in clusters, moving across foreground/midground/background)\u2014including the user's persona when present. List visibleCharacters for this exact moment; omit offscreen or departed characters.",
       subjectMode: "ensemble",
       framing: "wide",
       referencePolicy: "none",
@@ -21002,23 +21118,23 @@ Strong ink contours, manga shading, halftones, expressive contrast, coherent col
       intent: "ensemble",
       safeAreaPolicy: "auto",
       positive: `{{style}}
-Depict one coherent scene with the complete visible cast below, including the user's persona when listed. Each named appearance belongs only to that individual; keep faces, hair, build and clothing distinct.
+Depict one unified, lived-in full scene showing the complete visible cast below (including the user's persona when listed) staged naturally where they belong in the setting.
 CAST:
 {{subjects}}
-SETTING: {{scene}}
-MOMENT: {{action}}
+SETTING & ARCHITECTURE: {{scene}}
+SCENE ACTION & BLOCKING: {{action}}
 {{composition}}
 {{lighting}}
-Use an external camera view so the listed persona is visible too. Compose readable interactions and spatial relationships, with natural poses and clear silhouettes. Show only the supplied moment, no extra people, duplicated individuals, merged bodies, split panels or invented events.
+Use an objective external camera pulled back enough to show room geometry and depth across foreground, midground, and background planes. Every character must be occupied in their real story posture, activity, and sightlines\u2014seated, leaning, moving, conversing, or interacting with props\u2014NEVER lined up side-by-side in a flat front-facing row. Keep each named individual's face, hair, build, and clothing distinct, with no extra crowd, duplicated people, merged bodies, or split panels.
 {{suffix}}`,
-      negative: "{{negative}}, duplicate person, merged identities, swapped hair or clothing, fused bodies, extra limbs, cropped-out cast, split screen"
+      negative: "{{negative}}, side-by-side lineup, police lineup, group portrait row, characters standing shoulder-to-shoulder facing camera, stiff standing poses, duplicate person, merged identities, swapped hair or clothing, fused bodies, extra limbs, cropped-out cast, split screen"
     },
     {
       id: "two-shot",
       name: "Two-shot dialogue",
       category: "action",
       enabled: false,
-      useWhen: "Two characters conversing, interacting, or in direct tension. Focus on mid-range framing and relational chemistry.",
+      useWhen: "Two characters conversing, negotiating, tending to something together, or locked in direct tension. Emphasize angled depth, over-the-shoulder, or across-the-table blocking rather than standing shoulder-to-shoulder.",
       subjectMode: "ensemble",
       framing: "upper body",
       referencePolicy: "character",
@@ -21026,23 +21142,23 @@ Use an external camera view so the listed persona is visible too. Compose readab
       intent: "two-shot",
       safeAreaPolicy: "auto",
       positive: `{{style}}
-A medium two-shot composition depicting two characters interacting.
+A dynamic narrative two-shot framing two characters in active spatial interaction.
 CAST:
 {{subjects}}
 SETTING: {{scene}}
-INTERACTION: {{action}}
+INTERACTION & BLOCKING: {{action}}
 {{composition}}
 {{lighting}}
-Compose both subjects naturally in the frame with distinct body language and eye line. Clear dialogue safe area in the lower third.
+Stage both characters with natural depth separation, angled body orientation, believable eyelines toward each other or a shared focal point, and distinct emotional posture\u2014avoid stiff side-by-side posing facing the lens. Keep the lower quarter readable for dialogue UI.
 {{suffix}}`,
-      negative: "{{negative}}, single character, crowded group, fused bodies, mismatched eye-contact, obscured expressions"
+      negative: "{{negative}}, side-by-side lineup, staring blankly straight at camera, crowded group, fused bodies, mismatched eye-contact, obscured expressions"
     },
     {
       id: "cinematic-wide",
       name: "Cinematic wide establishing",
       category: "environment",
       enabled: false,
-      useWhen: "Sweeping cinematic view of a setting or landscape with deep horizon, rich atmospheric depth, and sense of scale.",
+      useWhen: "Sweeping cinematic establishing view of a location or exterior vista with deep perspective, leading lines, atmospheric layers, and strong sense of scale.",
       subjectMode: "none",
       framing: "wide",
       referencePolicy: "none",
@@ -21050,20 +21166,20 @@ Compose both subjects naturally in the frame with distinct body language and eye
       intent: "establishing",
       safeAreaPolicy: "none",
       positive: `{{style}}
-An expansive cinematic wide-angle establishing shot.
+An expansive cinematic wide-angle establishing shot with multi-plane depth.
 ENVIRONMENT: {{scene}}
 ATMOSPHERE: {{lighting}}
 {{composition}}
-Focus on grand architectural or natural scale, atmospheric depth, deep perspective, and immersive environmental storytelling. Clean vista without focal character obstructions.
+Anchor the frame with foreground framing elements, clear architectural or landscape leading lines into the midground, and a rich atmospheric horizon. Clean vista without focal character obstructions.
 {{suffix}}`,
-      negative: "{{negative}}, close-up, cropped horizon, portrait orientation, cramped framing, blurry backdrop"
+      negative: "{{negative}}, close-up, cropped horizon, cramped framing, flat depth, blurry backdrop"
     },
     {
       id: "dramatic-closeup",
       name: "Dramatic close-up",
       category: "portrait",
       enabled: false,
-      useWhen: "High-stakes emotional intensity, sudden revelation, or dramatic eye/facial expression peak.",
+      useWhen: "High-stakes emotional peak, sudden shock, whispered confession, quiet realization, or intense facial micro-expression.",
       subjectMode: "one",
       framing: "close-up",
       referencePolicy: "character",
@@ -21071,22 +21187,22 @@ Focus on grand architectural or natural scale, atmospheric depth, deep perspecti
       intent: "reaction",
       safeAreaPolicy: "auto",
       positive: `{{style}}
-A tight cinematic dramatic close-up focused on intense emotional expression.
+A tight cinematic dramatic close-up locked onto intense emotional nuance.
 SUBJECT: {{subjects}}
 EMOTION & MOMENT: {{action}}
 SETTING CONTEXT: {{scene}}
 {{composition}}
 {{lighting}}
-Shallow depth of field, sharp focus on eyes and facial nuance, cinematic key lighting with soft background bokeh.
+Asymmetric framing, razor-sharp focus on eyes and subtle expression, sculptural key-to-shadow contrast, and soft atmospheric depth separation.
 {{suffix}}`,
-      negative: "{{negative}}, wide shot, full body, blank expression, stiff pose, cropped forehead, flat lighting"
+      negative: "{{negative}}, wide shot, full body, blank expression, stiff frontal pose, cropped forehead, flat lighting"
     },
     {
       id: "key-visual",
       name: "Key visual / Climax",
       category: "action",
       enabled: false,
-      useWhen: "A definitive story milestone, heroic pose, promotional climax shot, or defining narrative moment.",
+      useWhen: "A definitive story climax, commanding entrance, decisive stance, or sweeping dramatic reveal.",
       subjectMode: "one",
       framing: "full body",
       referencePolicy: "character",
@@ -21094,22 +21210,22 @@ Shallow depth of field, sharp focus on eyes and facial nuance, cinematic key lig
       intent: "action",
       safeAreaPolicy: "auto",
       positive: `{{style}}
-A striking visual novel key visual illustration with dynamic heroic composition.
+A striking visual novel key visual with commanding narrative composition and environmental scale.
 SUBJECT: {{subjects}}
-HEROIC MOMENT: {{action}}
+CLIMAX MOMENT: {{action}}
 ENVIRONMENT: {{scene}}
 {{composition}}
 {{lighting}}
-Full-figure presence, iconic silhouette, dynamic camera perspective, dramatic environmental rim lighting, and memorable narrative impact.
+Dynamic camera angle, powerful full-figure silhouette, dramatic environmental rim lighting, and cinematic depth.
 {{suffix}}`,
-      negative: "{{negative}}, mundane snapshot, dull pose, awkward limbs, cropped feet, off-center clutter"
+      negative: "{{negative}}, mundane snapshot, stiff pose, awkward limbs, cropped feet, flat front lighting"
     },
     {
       id: "candid-moment",
       name: "Candid moment",
       category: "portrait",
       enabled: false,
-      useWhen: "An unposed, authentic slice-of-life interaction, contemplative pause, or natural mid-gesture beat.",
+      useWhen: "An unposed, lived-in slice-of-life beat captured mid-gesture, mid-thought, or mid-conversation without theatrical posing.",
       subjectMode: "one",
       framing: "portrait",
       referencePolicy: "character",
@@ -21117,17 +21233,45 @@ Full-figure presence, iconic silhouette, dynamic camera perspective, dramatic en
       intent: "dialogue",
       safeAreaPolicy: "auto",
       positive: `{{style}}
-A natural candid portrait capturing an unposed, authentic narrative slice-of-life moment.
+An unposed candid narrative frame catching an authentic mid-moment beat.
 SUBJECT: {{subjects}}
 GESTURE & MOMENT: {{action}}
 ENVIRONMENT: {{scene}}
 {{composition}}
 {{lighting}}
-Spontaneous posture, relaxed candid framing, soft environmental illumination, expressive natural mood.
+Relaxed weight distribution, natural glance or mid-action posture, lived-in environmental details, and spontaneous atmospheric lighting.
 {{suffix}}`,
       negative: "{{negative}}, stiff mannequin pose, artificial looking straight at camera, extreme fisheye, harsh flash"
     }
   ];
+  LEGACY_TEMPLATE_DEFAULTS = {
+    portrait: {
+      positives: [LEGACY_BODY],
+      useWhens: ["A named character's expression or reaction is the main visual beat."]
+    },
+    environment: {
+      positives: [LEGACY_ENVIRONMENT_POSITIVE],
+      useWhens: ["Entering a new place, revealing scenery, or a meaningful change in atmosphere."]
+    },
+    action: {
+      positives: [LEGACY_BODY],
+      useWhens: ["A significant movement or event matters more than a facial reaction. Focus on one visible character."]
+    },
+    detail: {
+      positives: [LEGACY_DETAIL_POSITIVE],
+      useWhens: ["An important object, clue, or other close-up is the visual focus."]
+    },
+    ensemble: {
+      positives: [LEGACY_ENSEMBLE_POSITIVE],
+      negatives: [LEGACY_ENSEMBLE_NEGATIVE],
+      useWhens: ["A shared scene or interaction should show everyone physically present, including the user's persona. List visibleCharacters for this exact moment; omit offscreen, departed, remembered and merely mentioned characters."]
+    },
+    "two-shot": {
+      positives: [LEGACY_TWO_SHOT_POSITIVE],
+      negatives: [LEGACY_TWO_SHOT_NEGATIVE],
+      useWhens: ["Two characters conversing, interacting, or in direct tension. Focus on mid-range framing and relational chemistry."]
+    }
+  };
 });
 
 // src/shared/rpg-state.ts
@@ -21502,7 +21646,9 @@ var init_contracts = __esm(() => {
     focalSubject: exports_external.string().max(256).optional(),
     preferredShotSize: ShotSizeSchema.optional(),
     preferredAngle: CameraAngleSchema.optional(),
-    spatialRelationships: exports_external.array(exports_external.string().max(256)).max(8).optional()
+    preferredCompositionMode: CompositionModeSchema.optional(),
+    spatialRelationships: exports_external.array(exports_external.string().max(256)).max(8).optional(),
+    sceneStagingNote: exports_external.string().max(300).optional()
   }).strict();
   VisualCueKindSchema = exports_external.enum(["flattened_scene", "background", "sprite"]);
   VisualCueSchema = exports_external.object({
@@ -37588,7 +37734,7 @@ function buildVisualBrief(config2, scene, cue, appearances, characterDNALibrary,
     scene: text([environment.location, locClause || environment.description, ...relevantPersistentElements, environment.timeOfDay, environment.weather]),
     subjects: noPeople ? "" : ensemble ? group : text([subjectLabel, appearance, template.category === "portrait" ? pose : ""]),
     action: noPeople ? template.category === "detail" || template.category === "custom" ? (cue.visualFocus ?? "").slice(0, 1000) : "" : text([cleanedVisualDescription, ...activeItemClauses, compileActionProp(cue.action), template.category === "portrait" ? "" : pose]),
-    composition: `${template.framing}; eye-level view; ${noPeople ? "no people" : ensemble ? `${members2.length} visible characters, including every listed subject; distinct faces and silhouettes` : "one visible character"}; keep the lower quarter clear for dialogue`,
+    composition: `${cue.shotHint?.preferredShotSize ?? template.framing}; ${cue.shotHint?.preferredAngle ? `${cue.shotHint.preferredAngle} perspective` : template.cameraPolicy === "fixed" ? "eye-level view" : "dynamic narrative perspective"}; ${noPeople ? "no people" : ensemble ? cue.shotHint?.spatialRelationships?.length ? `${members2.length} visible characters staged naturally in the scene (${cue.shotHint.spatialRelationships.slice(0, 4).join("; ")})${cue.shotHint.sceneStagingNote ? `; ${cue.shotHint.sceneStagingNote}` : ""}` : `${members2.length} visible characters staged naturally across room depths in active posture, including every listed subject; distinct faces and silhouettes` : "one visible character"}; keep the lower quarter clear for dialogue`,
     lighting: text([environment.lighting, locDNA?.lighting], 1000),
     subjectMode: template.subjectMode,
     framing: template.framing,
@@ -40137,6 +40283,7 @@ var init_schemas3 = __esm(() => {
     character: exports_external.string().trim().nullable().optional(),
     characterId: exports_external.string().trim().nullable().optional(),
     attire: exports_external.string().trim().nullable().optional(),
+    shotHint: PlannerShotHintSchema.optional(),
     promptDelta: exports_external.string().trim().optional(),
     effect: exports_external.string().trim().nullable().optional(),
     bgm: exports_external.string().trim().nullable().optional(),
@@ -40268,7 +40415,7 @@ function plannerInstruction(config2, visualContext, promptProfile, paragraphCoun
     `speakers: Attribute EVERY paragraph index to its literal on-screen nameplate name. Use the character's actual name for their dialogue and actions. When the text is written from the player's first-person point of view, use the player/persona name. Use "Narrator" for omniscient scene narration that belongs to no character. Never use the story or scenario card title as a speaker name.`,
     hasAudio ? audioInstructions.join(`
 `) : "",
-    `Shape: {effects:[{paragraphIndex,effect}],scenes:[{startParagraph,boundary:{claimedNewScene,reason,location,timeOfDay,majorTimeJump,environmentReplacement,forced},environment:{location,timeOfDay,weather,lighting,description,persistentElements,removedElements?},environmentChanges?:{description?,lighting?,timeOfDay?,weather?,addElements?,removeElements?,replaceElements?:[{from,to}],clearElements?,clearLighting?,clearWeather?},cast,character?,characterId?,attire?,ambient?,basePrompt,compositionLock}],cues:[{paragraphIndex,templateId,templateReason,visualDescription,visualFocus?,expression,action?,character?,characterId?,attire?,effect?${hasAudio ? ",bgm?,sfx?" : ""}}],choices:[{label,submission}],characters:[{name,description,species?,anatomy?,characterId?,aliases?,subjectCategory?}],speakers:[{paragraphIndex,name}]}`,
+    `Shape: {effects:[{paragraphIndex,effect}],scenes:[{startParagraph,boundary:{claimedNewScene,reason,location,timeOfDay,majorTimeJump,environmentReplacement,forced},environment:{location,timeOfDay,weather,lighting,description,persistentElements,removedElements?},environmentChanges?:{description?,lighting?,timeOfDay?,weather?,addElements?,removeElements?,replaceElements?:[{from,to}],clearElements?,clearLighting?,clearWeather?},cast,character?,characterId?,attire?,ambient?,basePrompt,compositionLock}],cues:[{paragraphIndex,templateId,templateReason,visualDescription,visualFocus?,visibleCharacters?,expression,action?,character?,characterId?,attire?,shotHint?:{intent?,focalSubject?,preferredShotSize?,preferredAngle?,preferredCompositionMode?,spatialRelationships?,sceneStagingNote?},effect?${hasAudio ? ",bgm?,sfx?" : ""}}],choices:[{label,submission}],characters:[{name,description,species?,anatomy?,characterId?,aliases?,subjectCategory?}],speakers:[{paragraphIndex,name}]}`,
     config2.customPlannerInstructions ? config2.customPlannerInstructions.trim() : "",
     buildRpgPromptGuidance(previousRpgState, config2.rpgMode)
   ].filter(Boolean).join(`
@@ -40465,13 +40612,71 @@ function normalizeScene(value, defaultLoc) {
 function inputTemplateInstructions(config2) {
   const selected = resolveImageTemplate(config2).template;
   const templates = config2.dynamicImageTemplates ? config2.imageTemplates.filter((template) => template.enabled) : [selected];
+  const enabledIds = new Set(templates.map((t) => t.id));
   return [
-    config2.dynamicImageTemplates ? "Choose templateId from this enabled catalog for each meaningful visual cue. New locations favor environment, reactions favor portrait, motion favors action, focal props favor detail. A category change alone does not justify a new image." : `Use templateId ${selected.id} on every cue. Dynamic selection is off.`,
-    config2.readerPreferences?.directorAi !== false ? "Director AI shot framing is active: actively vary shot framing between portrait (emotions/whispers/reactions), action (physical conflict/dynamic events), and environment (establishing views/scenery changes)." : "",
-    "Template catalog (Use when guidance): " + JSON.stringify(templates.map((t) => ({ id: t.id, name: t.name, category: t.category, useWhen: t.useWhen, subjectMode: t.subjectMode, framing: t.framing }))),
-    "templateReason is a short decision label, not hidden reasoning. visualDescription is a grounded visible event, with only the selected subject for single-character templates. For ensemble templates, provide visibleCharacters: the names of EVERY physically present character at that exact paragraph, including the user/persona when present; exclude offscreen, departed, remembered or merely mentioned people. Describe their visible interaction and spatial arrangement. visualFocus names the actual object for detail. Do not include character actions in environment descriptions. Resolve appearance from reference evidence; retain saved identity and separate temporary wardrobe/action from lasting traits. Report no invented identity facts."
+    config2.dynamicImageTemplates ? `Act as a visual director choosing the single best templateId from the enabled catalog for each cue:
+- Full-room / multi-person moments (3+ present OR whenever showing everyone staged in their real places inside the setting matters): favor ensemble.
+- Two characters interacting, talking, negotiating, or confronting each other: favor two-shot.
+- Intense emotional spike, shock, tear, or whispered reveal: favor dramatic-closeup (or portrait if dramatic-closeup is disabled).
+- Unposed everyday mid-gesture / casual conversation beat: favor candid-moment (or portrait).
+- Physical motion, strike, sprint, spell, or kinetic effort: favor action (or key-visual for major climax beats).
+- Sweeping location scale or atmosphere shift: favor cinematic-wide or environment (no people).
+- Pivotal object, clue, weapon, note, or hand gesture: favor detail.
+A template switch alone does not justify an unnecessary extra image.` : `Use templateId ${selected.id} on every cue. Dynamic selection is off.`,
+    config2.readerPreferences?.directorAi !== false ? `Director AI cinematography is active: vary shot scale, camera angle, and depth blocking across consecutive cues like a filmed scene\u2014never repeat the same flat framing beat after beat. Supply shotHint on every cue whenever camera framing or spatial staging matters:
+- intent: portrait | reaction | dialogue | two-shot | confrontation | action | ensemble | environment | detail | establishing
+- focalSubject: exact person or object in sharpest focus
+- preferredShotSize: extreme-close-up | close-up | medium-close-up | medium | medium-wide | full-body | wide | establishing | macro
+- preferredAngle: eye-level | three-quarter | low-angle | high-angle | over-the-shoulder | profile | ground-level | overhead
+- preferredCompositionMode: layered-depth | rule-of-thirds | frame-within-frame | foreground-obstruction | leading-lines | centered | symmetrical | negative-space
+- spatialRelationships (crucial whenever >=2 people are visible, including 16:9 widescreen): array of short physical blocking statements saying WHERE in foreground/midground/background each character is, their posture/activity, and who/what they face (e.g. ["Mira crouched foreground-left inspecting the grate", "Kael leaning in the midground doorway", "Orin seated at the rear table"]). NEVER arrange people in a flat side-by-side row unless the text literally lines them up.
+- sceneStagingNote: concise 1-sentence camera/eyeline blocking direction (e.g. "Angled three-quarter view past the foreground table toward Kael in the archway").` : "",
+    `Enabled catalog (${enabledIds.size} active): ` + JSON.stringify(templates.map((t) => ({ id: t.id, name: t.name, category: t.category, useWhen: t.useWhen, subjectMode: t.subjectMode, framing: t.framing }))),
+    "templateReason is a short decision label, not hidden reasoning. visualDescription is a grounded visible event, with only the selected subject for single-character templates. For ensemble/two-shot templates, provide visibleCharacters: EVERY physically present character at that exact paragraph, including the user/persona when present; omit offscreen, departed, remembered or merely mentioned people. Describe their real posture, activity, and spatial interaction. visualFocus names the actual object for detail. Do not put character actions in environment descriptions. Resolve appearance from reference evidence; retain saved identity and separate temporary wardrobe/action from lasting traits. Report no invented identity facts."
   ].filter(Boolean).join(`
 `);
+}
+function normalizeEnumToken(raw) {
+  if (typeof raw !== "string")
+    return;
+  const cleaned = raw.trim().toLowerCase().replace(/[\s_]+/g, "-");
+  return cleaned || undefined;
+}
+function normalizeShotHint(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw))
+    return;
+  const r = raw;
+  const rawIntent = normalizeEnumToken(r.intent);
+  const intentAlias = rawIntent === "twoshot" ? "two-shot" : rawIntent === "manga" ? "manga-page" : rawIntent;
+  const intent = ShotIntentSchema.safeParse(intentAlias);
+  const rawSize = normalizeEnumToken(r.preferredShotSize ?? r.preferred_shot_size ?? r.shotSize ?? r.shot_size);
+  const sizeAlias = rawSize === "bust" || rawSize === "upper-body" ? "medium-close-up" : rawSize === "ecu" ? "extreme-close-up" : rawSize === "cu" || rawSize === "closeup" ? "close-up" : rawSize === "wide-shot" ? "wide" : rawSize === "full" || rawSize === "full-shot" ? "full-body" : rawSize;
+  const preferredShotSize = ShotSizeSchema.safeParse(sizeAlias);
+  const rawAngle = normalizeEnumToken(r.preferredAngle ?? r.preferred_angle ?? r.angle ?? r.cameraAngle ?? r.camera_angle);
+  const angleAlias = rawAngle === "ots" || rawAngle === "over-shoulder" ? "over-the-shoulder" : rawAngle === "three-quarters" || rawAngle === "3/4" ? "three-quarter" : rawAngle === "birds-eye" || rawAngle === "bird-eye" ? "overhead" : rawAngle;
+  const preferredAngle = CameraAngleSchema.safeParse(angleAlias);
+  const rawMode = normalizeEnumToken(r.preferredCompositionMode ?? r.preferred_composition_mode ?? r.compositionMode ?? r.composition_mode ?? r.mode);
+  const modeAlias = rawMode === "thirds" ? "rule-of-thirds" : rawMode === "depth" ? "layered-depth" : rawMode;
+  const preferredCompositionMode = CompositionModeSchema.safeParse(modeAlias);
+  const rawFocal = r.focalSubject ?? r.focal_subject ?? r.focusTarget ?? r.focus_target;
+  const focalSubject = typeof rawFocal === "string" && rawFocal.trim() ? rawFocal.trim().slice(0, 256) : undefined;
+  const rawSpatial = r.spatialRelationships ?? r.spatial_relationships ?? r.blocking;
+  const spatialList = Array.isArray(rawSpatial) ? rawSpatial.filter((item) => typeof item === "string" && Boolean(item.trim())).map((item) => item.trim().slice(0, 256)).slice(0, 8) : typeof rawSpatial === "string" && rawSpatial.trim() ? rawSpatial.split(/[;\n]+/).map((item) => item.trim().slice(0, 256)).filter(Boolean).slice(0, 8) : undefined;
+  const rawNote = r.sceneStagingNote ?? r.scene_staging_note ?? r.stagingNote ?? r.staging_note;
+  const sceneStagingNote = typeof rawNote === "string" && rawNote.trim() ? rawNote.trim().slice(0, 300) : undefined;
+  const candidate = {
+    ...intent.success ? { intent: intent.data } : {},
+    ...focalSubject ? { focalSubject } : {},
+    ...preferredShotSize.success ? { preferredShotSize: preferredShotSize.data } : {},
+    ...preferredAngle.success ? { preferredAngle: preferredAngle.data } : {},
+    ...preferredCompositionMode.success ? { preferredCompositionMode: preferredCompositionMode.data } : {},
+    ...spatialList && spatialList.length > 0 ? { spatialRelationships: spatialList } : {},
+    ...sceneStagingNote ? { sceneStagingNote } : {}
+  };
+  if (Object.keys(candidate).length === 0)
+    return;
+  const parsed = PlannerShotHintSchema.safeParse(candidate);
+  return parsed.success ? parsed.data : undefined;
 }
 function normalizeCue(value) {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -40490,6 +40695,7 @@ function normalizeCue(value) {
     character: typeof record3.character === "string" ? record3.character.trim() : null,
     characterId: normalizeCharacterId(record3.characterId ?? record3.character_id) || null,
     attire: typeof record3.attire === "string" ? record3.attire.trim() : null,
+    ...normalizeShotHint(record3.shotHint ?? record3.shot_hint) ? { shotHint: normalizeShotHint(record3.shotHint ?? record3.shot_hint) } : {},
     effect: normalizeStageEffect(record3.effect),
     promptDelta: typeof record3.promptDelta === "string" ? record3.promptDelta.trim() : typeof record3.prompt_delta === "string" ? record3.prompt_delta.trim() : "",
     bgm: typeof record3.bgm === "string" ? record3.bgm.trim() : typeof record3.music === "string" ? record3.music.trim() : null,
@@ -41814,22 +42020,35 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
     const pose = cueIsUser ? selectPoseExpression(POSE_EXPRESSION_CATALOGUE, cue.paragraphIndex, "", "listen") : selectPoseExpression(POSE_EXPRESSION_CATALOGUE, cue.paragraphIndex, paragraph?.text ?? "", cue.expression);
     let selection = resolveImageTemplate(input2.config, input2.config.dynamicImageTemplates ? cue.templateId : undefined);
     if (input2.config.dynamicImageTemplates && input2.config.readerPreferences?.directorAi !== false && !cue.templateId) {
-      const pLower = (paragraph?.text ?? "").toLowerCase();
-      const hasAction = /\b(strikes?|slashes?|dodges?|sprints?|grabs?|explodes?|shatters?|leaps?|clashes?|punches?|tackles?|shoots?|firing|defends?|parr(y|ies))\b/i.test(pLower);
-      const hasEmotion = /\b(whispers?|smil(es?|ing)|tears?|gaze[sd]?|blush(es|ed|ing)?|sigh(s|ed|ing)?|frown(s|ed|ing)?|gasps?|murmurs?|trembl(es?|ing))\b/i.test(pLower);
-      const hasScenery = /\b(arrives?|enters?|walked into|outside|corridor|chamber|courtyard|streets?|sky|forest|horizon|scenery|landscape)\b/i.test(pLower) || /<scene_header>|<scene\b/i.test(paragraph?.text ?? "");
-      let targetCategory = null;
-      if (hasAction)
-        targetCategory = "action";
-      else if (hasEmotion)
-        targetCategory = "portrait";
-      else if (hasScenery)
-        targetCategory = "environment";
-      if (targetCategory && selection.template.category !== targetCategory) {
-        const candidate = input2.config.imageTemplates.find((t) => t.enabled && t.category === targetCategory);
-        if (candidate) {
-          selection = { template: templateSnapshot(candidate), fallbackReason: `Director AI framing: biased to ${targetCategory} from context.` };
-        }
+      const pLower = `${paragraph?.text ?? ""} ${cue.visualDescription ?? ""}`.toLowerCase();
+      const visibleCount = Array.isArray(cue.visibleCharacters) ? cue.visibleCharacters.length : 0;
+      const hasClimax = /\b(explodes?|shatters?|unleashes?|betrayal|devastating|catastrophic|awakens?|climaxes?|standoff)\b/i.test(pLower);
+      const hasAction = /\b(strikes?|slashes?|dodges?|sprints?|grabs?|leaps?|clashes?|punches?|tackles?|shoots?|firing|defends?|parr(y|ies)|lunges?)\b/i.test(pLower);
+      const hasPeakEmotion = /\b(sobbing|weeps?|terrified|horrified|gasps?|wide-eyed|tears?|stunned|trembl(es?|ing)|whispered? threat|stares? in shock)\b/i.test(pLower);
+      const hasEmotion = /\b(whispers?|smil(es?|ing)|gaze[sd]?|blush(es|ed|ing)?|sigh(s|ed|ing)?|frown(s|ed|ing)?|murmurs?)\b/i.test(pLower);
+      const hasDetailFocus = Boolean(cue.visualFocus?.trim()) && visibleCount === 0 && !cue.character && /\b(key|letter|note|ring|blade|clue|glass|coin|lock|diary|relic|screen)\b/i.test(pLower);
+      const hasScenery = /\b(arrives?|enters?|walked into|outside|corridor|chamber|courtyard|streets?|sky|forest|horizon|scenery|landscape|skyline)\b/i.test(pLower) || /<scene_header>|<scene\b/i.test(paragraph?.text ?? "");
+      const enabledById = (tid) => input2.config.imageTemplates.find((t) => t.enabled && t.id === tid);
+      let candidate;
+      if (visibleCount >= 3 || cue.shotHint?.intent === "ensemble") {
+        candidate = enabledById("ensemble");
+      } else if (visibleCount === 2 || cue.shotHint?.intent === "two-shot") {
+        candidate = enabledById("two-shot") ?? enabledById("ensemble");
+      } else if (hasClimax) {
+        candidate = enabledById("key-visual") ?? enabledById("action");
+      } else if (hasAction) {
+        candidate = enabledById("action");
+      } else if (hasPeakEmotion) {
+        candidate = enabledById("dramatic-closeup") ?? enabledById("portrait");
+      } else if (hasDetailFocus) {
+        candidate = enabledById("detail");
+      } else if (hasEmotion) {
+        candidate = enabledById("candid-moment") ?? enabledById("portrait");
+      } else if (hasScenery) {
+        candidate = enabledById("cinematic-wide") ?? enabledById("environment");
+      }
+      if (candidate && selection.template.id !== candidate.id) {
+        selection = { template: templateSnapshot(candidate), fallbackReason: `Director AI framing: selected ${candidate.id} from context.` };
       }
     }
     const originalSnapshot = timeline.snapshots[cue.paragraphIndex];
@@ -41894,6 +42113,7 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
       attire: pictureSnapshot.attire ?? undefined,
       resolvedIdentity: pictureSnapshot.identity,
       resolvedAttire: pictureSnapshot.attire,
+      ...cue.shotHint ? { shotHint: cue.shotHint } : {},
       ...effectMap.has(cue.paragraphIndex) ? { effect: effectMap.get(cue.paragraphIndex) } : {},
       promptDelta: "",
       assetJobId: id6("asset", `${sourceFingerprint}:${cue.paragraphIndex}:${index}`),
@@ -42128,6 +42348,7 @@ var init_planner = __esm(() => {
   init_card_role();
   init_contracts();
   init_action_prop();
+  init_image_shot_spec();
   init_continuity();
   init_cue_state();
   init_scenario_subjects();
@@ -42684,6 +42905,57 @@ function stringHash(str) {
   }
   return hash3 >>> 0;
 }
+function escapeRegex2(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function findSubjectClue(subjectName, spatialRelationships, narrativeClauses) {
+  const fullName = subjectName.trim();
+  const firstName = fullName.split(/\s+/)[0] || fullName;
+  const matchName = (text4) => {
+    if (fullName.length >= 2 && new RegExp(`\\b${escapeRegex2(fullName)}\\b`, "i").test(text4))
+      return true;
+    if (firstName.length >= 2 && new RegExp(`\\b${escapeRegex2(firstName)}\\b`, "i").test(text4))
+      return true;
+    return false;
+  };
+  if (spatialRelationships && spatialRelationships.length > 0) {
+    const hintMatch = spatialRelationships.find((rel) => matchName(rel));
+    if (hintMatch) {
+      return { clue: hintMatch.trim().slice(0, 240), fromPlannerHint: true };
+    }
+  }
+  const clauseMatch = narrativeClauses.find((clause) => clause.length > fullName.length + 8 && matchName(clause));
+  if (clauseMatch) {
+    return { clue: clauseMatch.trim().slice(0, 240), fromPlannerHint: false };
+  }
+  return;
+}
+function inferHorizontalFromClue(clue) {
+  if (!clue)
+    return;
+  if (/\bfar[- ]left\b/i.test(clue))
+    return "far-left";
+  if (/\bfar[- ]right\b/i.test(clue))
+    return "far-right";
+  if (/\b(?:left|left side|left edge)\b/i.test(clue))
+    return "left";
+  if (/\b(?:right|right side|right edge)\b/i.test(clue))
+    return "right";
+  if (/\b(?:center|centre|middle)\b/i.test(clue))
+    return "center";
+  return;
+}
+function inferDepthFromClue(clue) {
+  if (!clue)
+    return;
+  if (FOREGROUND_DEPTH_REGEX.test(clue))
+    return "foreground";
+  if (BACKGROUND_DEPTH_REGEX.test(clue))
+    return "background";
+  if (MIDGROUND_DEPTH_REGEX.test(clue))
+    return "midground";
+  return;
+}
 function resolveShotIntent(brief, template, cue, manualIntent) {
   if (manualIntent)
     return manualIntent;
@@ -42691,8 +42963,9 @@ function resolveShotIntent(brief, template, cue, manualIntent) {
     return cue.shotHint.intent;
   if (template?.intent)
     return template.intent;
+  const narrativeText = `${brief.action} ${cue?.visualDescription ?? ""} ${cue?.visualFocus ?? ""}`.trim();
   if (brief.subjectMode === "none") {
-    if (template?.category === "detail" || /\b(?:key|book|colander|mug|ring|letter|sword|dagger|device|phone|note|gem|door|window)\b/i.test(brief.action + " " + brief.scene)) {
+    if (template?.category === "detail" || /\b(?:key|book|colander|mug|ring|letter|sword|dagger|device|phone|note|gem|door|window|lock|relic)\b/i.test(`${narrativeText} ${brief.scene}`)) {
       return "detail";
     }
     return "environment";
@@ -42700,19 +42973,19 @@ function resolveShotIntent(brief, template, cue, manualIntent) {
   if (brief.subjectMode === "ensemble") {
     const castCount = visualSubjectPolicy({ mode: brief.subjectMode, members: cue?.ensembleSubjects, subjectText: brief.subjects }).count;
     if (castCount === 2) {
-      if (CONFRONTATION_WORDS_REGEX.test(brief.action))
+      if (CONFRONTATION_WORDS_REGEX.test(narrativeText))
         return "confrontation";
-      if (DIALOGUE_WORDS_REGEX.test(brief.action))
+      if (DIALOGUE_WORDS_REGEX.test(narrativeText))
         return "dialogue";
       return "two-shot";
     }
     return "ensemble";
   }
-  if (ACTION_VERBS_REGEX.test(brief.action))
+  if (ACTION_VERBS_REGEX.test(narrativeText))
     return "action";
-  if (REACTION_WORDS_REGEX.test(brief.action))
+  if (REACTION_WORDS_REGEX.test(narrativeText))
     return "reaction";
-  if (DIALOGUE_WORDS_REGEX.test(brief.action))
+  if (DIALOGUE_WORDS_REGEX.test(narrativeText))
     return "dialogue";
   return "portrait";
 }
@@ -42798,31 +43071,31 @@ function resolveShotSpec(input2) {
         break;
       case "dialogue":
         shotSize = "medium";
-        angle = pick2(["eye-level", "three-quarter"], 1);
+        angle = pick2(["eye-level", "three-quarter", "over-the-shoulder"], 1);
         lens = "normal";
         depthOfField = "moderate";
         mode = pick2(["rule-of-thirds", "layered-depth"], 2);
         break;
       case "two-shot":
         shotSize = pick2(["medium", "medium-wide"]);
-        angle = pick2(["eye-level", "three-quarter"], 1);
+        angle = pick2(["three-quarter", "over-the-shoulder", "eye-level"], 1);
         lens = pick2(["normal", "wide"], 2);
         depthOfField = "moderate";
-        mode = pick2(["layered-depth", "lateral-ensemble"], 3);
+        mode = pick2(["layered-depth", "rule-of-thirds", "foreground-obstruction"], 3);
         break;
       case "confrontation":
         shotSize = pick2(["medium-wide", "medium"]);
         angle = pick2(["three-quarter", "over-the-shoulder", "low-angle"], 1);
         lens = pick2(["normal", "wide"], 2);
         depthOfField = "moderate";
-        mode = pick2(["layered-depth", "rule-of-thirds"], 3);
+        mode = pick2(["layered-depth", "foreground-obstruction", "rule-of-thirds"], 3);
         break;
       case "action":
         shotSize = pick2(["medium-wide", "full-body"]);
-        angle = pick2(["eye-level", "low-angle"], 1);
+        angle = pick2(["eye-level", "low-angle", "three-quarter"], 1);
         lens = pick2(["normal", "wide"], 2);
         depthOfField = pick2(["moderate", "deep"], 3);
-        mode = pick2(["rule-of-thirds", "leading-lines"], 4);
+        mode = pick2(["rule-of-thirds", "leading-lines", "layered-depth"], 4);
         break;
       case "environment":
       case "establishing":
@@ -42830,7 +43103,7 @@ function resolveShotSpec(input2) {
         angle = pick2(["eye-level", "high-angle"], 1);
         lens = pick2(["wide", "ultrawide"], 2);
         depthOfField = "deep";
-        mode = pick2(["layered-depth", "frame-within-frame"], 3);
+        mode = pick2(["layered-depth", "frame-within-frame", "leading-lines"], 3);
         break;
       case "detail":
         shotSize = pick2(["close-up", "macro"]);
@@ -42840,11 +43113,11 @@ function resolveShotSpec(input2) {
         mode = pick2(["centered", "rule-of-thirds"], 4);
         break;
       case "ensemble":
-        shotSize = pick2(["medium-wide", "wide"]);
-        angle = "eye-level";
-        lens = pick2(["wide", "normal"], 1);
-        depthOfField = pick2(["deep", "moderate"], 2);
-        mode = pick2(["lateral-ensemble", "layered-depth"], 3);
+        shotSize = pick2(["wide", "medium-wide", "establishing"]);
+        angle = pick2(["three-quarter", "eye-level", "high-angle", "over-the-shoulder"], 1);
+        lens = pick2(["wide", "normal"], 2);
+        depthOfField = pick2(["deep", "moderate"], 3);
+        mode = pick2(["layered-depth", "frame-within-frame", "leading-lines", "rule-of-thirds"], 4);
         break;
       case "manga-page":
         shotSize = "full-body";
@@ -42861,11 +43134,17 @@ function resolveShotSpec(input2) {
         mode = "centered";
         break;
     }
-    if (cue?.shotHint?.preferredShotSize)
-      shotSize = cue.shotHint.preferredShotSize;
-    if (cue?.shotHint?.preferredAngle)
-      angle = cue.shotHint.preferredAngle;
-    if (/\b(?:screams?|shatters?|weeps?|sobbing|terrified|horrified|catastrophic|devastating|executes?|unleashes?|betrayal)\b/i.test(`${brief.action} ${cue?.expression ?? ""}`)) {
+    const fullNarrative = `${brief.action} ${cue?.visualDescription ?? ""} ${cue?.expression ?? ""} ${brief.scene}`.trim();
+    if (/\b(?:kneels?|kneeling|crouched|crawling|fallen|on the floor|looms? over|towering)\b/i.test(fullNarrative) && intent !== "detail") {
+      angle = intent === "action" ? "ground-level" : "low-angle";
+    } else if (/\b(?:from above|balcony|staircase|overlooking|across the hall|crowded room)\b/i.test(fullNarrative) && (intent === "ensemble" || intent === "environment" || intent === "establishing")) {
+      angle = "high-angle";
+    } else if (/\b(?:doorway|archway|through the|framed by|over (?:his|her|their) shoulder)\b/i.test(fullNarrative) && intent !== "portrait" && intent !== "reaction") {
+      if (intent === "two-shot" || intent === "dialogue" || intent === "confrontation")
+        angle = "over-the-shoulder";
+      mode = "frame-within-frame";
+    }
+    if (/\b(?:screams?|shatters?|weeps?|sobbing|terrified|horrified|catastrophic|devastating|executes?|unleashes?|betrayal)\b/i.test(fullNarrative)) {
       if (intent === "reaction") {
         shotSize = "close-up";
         depthOfField = "shallow";
@@ -42873,6 +43152,12 @@ function resolveShotSpec(input2) {
         angle = "low-angle";
       }
     }
+    if (cue?.shotHint?.preferredShotSize)
+      shotSize = cue.shotHint.preferredShotSize;
+    if (cue?.shotHint?.preferredAngle)
+      angle = cue.shotHint.preferredAngle;
+    if (cue?.shotHint?.preferredCompositionMode)
+      mode = cue.shotHint.preferredCompositionMode;
     if (styleDNA?.cameraHints && styleDNA.cameraHints.length > 0) {
       const hint = styleDNA.cameraHints.join(" ").toLowerCase();
       if (hint.includes("phone-wide") || hint.includes("wide")) {
@@ -42910,30 +43195,66 @@ function resolveShotSpec(input2) {
   if (manualOverrides.mode)
     mode = manualOverrides.mode;
   const orientation = outputPlan.orientation;
+  const lineupNarrative = `${brief.action} ${cue?.visualDescription ?? ""}`;
+  const explicitLineupRequested = manualOverrides.mode === "lateral-ensemble" || cue?.shotHint?.preferredCompositionMode === "lateral-ensemble" || EXPLICIT_LINEUP_REGEX.test(lineupNarrative);
   if (orientation === "portrait") {
-    if (mode === "lateral-ensemble")
+    if (mode === "lateral-ensemble" || (intent === "ensemble" || intent === "two-shot") && !cue?.shotHint?.preferredCompositionMode) {
       mode = "layered-depth";
+    }
     if (intent === "action" && shotSize === "medium")
       shotSize = "full-body";
   } else if (orientation === "landscape") {
-    if (intent === "ensemble" || intent === "two-shot") {
+    if (explicitLineupRequested && (intent === "ensemble" || intent === "two-shot") && !manualOverrides.mode && !cue?.shotHint?.preferredCompositionMode) {
       mode = "lateral-ensemble";
+    } else if (mode === "lateral-ensemble" && !explicitLineupRequested) {
+      mode = "layered-depth";
     }
   } else if (orientation === "square") {
     if (mode === "lateral-ensemble")
       mode = "layered-depth";
   }
   const subjectPlacements = [];
+  let stagingNote = cue?.shotHint?.sceneStagingNote?.trim() || undefined;
+  const focusTarget = cue?.shotHint?.focalSubject?.trim() || cue?.character || undefined;
   if (brief.subjectMode === "ensemble" && cue?.ensembleSubjects && cue.ensembleSubjects.length > 0) {
-    const horizontalOptions = orientation === "portrait" ? ["center", "left", "right", "center"] : ["far-left", "left", "center", "right", "far-right"];
+    const narrativeClauses = `${cue.visualDescription ?? ""}; ${brief.action ?? ""}`.split(/[.;\n]+/).map((part) => part.trim()).filter(Boolean);
+    const relationships = cue.shotHint?.spatialRelationships;
+    const fallbackHorizontalPool = orientation === "portrait" ? ["center", "left", "right", "center"] : ["left", "right", "center", "far-right", "far-left"];
+    const defaultDepthCycle = cue.ensembleSubjects.length === 2 ? ["foreground", "midground"] : ["foreground", "midground", "background", "midground", "background"];
+    const usedSlots = new Set;
+    const focalLower = focusTarget?.toLowerCase();
     cue.ensembleSubjects.forEach((sub, i) => {
+      const matched = findSubjectClue(sub.name, relationships, narrativeClauses);
+      const isFocal = Boolean(focalLower && sub.name.toLowerCase().includes(focalLower));
+      const inferredDepth = inferDepthFromClue(matched?.clue) ?? (isFocal && i === 0 ? "foreground" : defaultDepthCycle[i % defaultDepthCycle.length]);
+      let chosenHorizontal = inferHorizontalFromClue(matched?.clue);
+      if (!chosenHorizontal) {
+        const startOffset = (seed + i) % fallbackHorizontalPool.length;
+        for (let step = 0;step < fallbackHorizontalPool.length; step++) {
+          const candidate = fallbackHorizontalPool[(startOffset + step) % fallbackHorizontalPool.length];
+          if (!usedSlots.has(`${inferredDepth}:${candidate}`)) {
+            chosenHorizontal = candidate;
+            break;
+          }
+        }
+        chosenHorizontal ??= fallbackHorizontalPool[i % fallbackHorizontalPool.length];
+      }
+      usedSlots.add(`${inferredDepth}:${chosenHorizontal}`);
+      const scale = inferredDepth === "foreground" ? isFocal && cue.ensembleSubjects.length <= 2 && angle === "over-the-shoulder" ? "dominant" : "large" : inferredDepth === "midground" ? "medium" : "small";
       subjectPlacements.push({
         subject: sub.name,
-        horizontal: horizontalOptions[i % horizontalOptions.length],
-        depth: i === 0 ? "foreground" : i === 1 ? "midground" : "background",
-        scale: i === 0 ? "large" : "medium"
+        horizontal: chosenHorizontal,
+        depth: inferredDepth,
+        scale,
+        ...matched?.clue ? { blocking: matched.clue } : {}
       });
     });
+    if (!stagingNote && !explicitLineupRequested && subjectPlacements.length >= 2) {
+      const distinctDepths = new Set(subjectPlacements.map((p) => p.depth));
+      if (distinctDepths.size >= 2 || subjectPlacements.some((p) => p.blocking)) {
+        stagingNote = "Stage characters naturally across room depths interacting with each other and props rather than facing the camera in a row.";
+      }
+    }
   } else if (brief.subjectMode === "one" && cue?.character) {
     subjectPlacements.push({
       subject: cue.character,
@@ -42974,11 +43295,12 @@ function resolveShotSpec(input2) {
       angle,
       lens,
       depthOfField,
-      ...cue?.character ? { focusTarget: cue.character } : {}
+      ...focusTarget ? { focusTarget } : {}
     },
     composition: {
       mode,
-      subjectPlacements
+      subjectPlacements,
+      ...stagingNote ? { stagingNote } : {}
     },
     ...manualOverrides.crop ? { crop: manualOverrides.crop } : {},
     ...safeArea ? { safeArea } : {},
@@ -42986,13 +43308,17 @@ function resolveShotSpec(input2) {
     revision
   });
 }
-var ACTION_VERBS_REGEX, REACTION_WORDS_REGEX, DIALOGUE_WORDS_REGEX, CONFRONTATION_WORDS_REGEX;
+var ACTION_VERBS_REGEX, REACTION_WORDS_REGEX, DIALOGUE_WORDS_REGEX, CONFRONTATION_WORDS_REGEX, FOREGROUND_DEPTH_REGEX, BACKGROUND_DEPTH_REGEX, MIDGROUND_DEPTH_REGEX, EXPLICIT_LINEUP_REGEX;
 var init_shot_director = __esm(() => {
   init_image_shot_spec();
-  ACTION_VERBS_REGEX = /\b(?:fight|strike|slash|parry|draws?|fires?|shoots?|runs?|sprints?|lunges?|jumps?|leaps?|dodges?|escapes?|climbs?|dances?|swords?|combat|spells?|attacks?)\b/i;
-  REACTION_WORDS_REGEX = /\b(?:gasps?|shock|shocks?|cries?|crying|smiles?|grins?|freezes?|frozen|blushes?|blushing|tears?|glances?|stares?|staring|wide-eyed|stunned|awe|trembles?|hesitates?)\b/i;
-  DIALOGUE_WORDS_REGEX = /\b(?:says?|tells?|asks?|speaks?|whispers?|murmurs?|mutters?|answers?|replies?|explains?|argues?)\b/i;
-  CONFRONTATION_WORDS_REGEX = /\b(?:glare|glares?|confronts?|threatens?|corners?|surrounds?|draws? weapon|standoff|face-off)\b/i;
+  ACTION_VERBS_REGEX = /\b(?:fight|strike|slash|parry|draws?|fires?|shoots?|runs?|sprints?|lunges?|jumps?|leaps?|dodges?|escapes?|climbs?|dances?|swords?|combat|spells?|attacks?|throws?|rushes?|charges?)\b/i;
+  REACTION_WORDS_REGEX = /\b(?:gasps?|shock|shocks?|cries?|crying|smiles?|grins?|freezes?|frozen|blushes?|blushing|tears?|glances?|stares?|staring|wide-eyed|stunned|awe|trembles?|hesitates?|flinches?|winces?)\b/i;
+  DIALOGUE_WORDS_REGEX = /\b(?:says?|tells?|asks?|speaks?|whispers?|murmurs?|mutters?|answers?|replies?|explains?|argues?|confesses?|calls out)\b/i;
+  CONFRONTATION_WORDS_REGEX = /\b(?:glare|glares?|confronts?|threatens?|corners?|surrounds?|draws? weapon|standoff|face-off|blocks? the path|points? (?:a|his|her) (?:blade|gun|wand))\b/i;
+  FOREGROUND_DEPTH_REGEX = /\b(?:foreground|closest|in front|nearest|over[- ]the[- ]shoulder|framing the edge|frontmost|lower edge|right beside the camera)\b/i;
+  BACKGROUND_DEPTH_REGEX = /\b(?:background|rear|far\b|distant|distance|doorway|entrance|threshold|across the room|behind|corner|stairs|balcony|back wall|hearth|hallway|far side)\b/i;
+  MIDGROUND_DEPTH_REGEX = /\b(?:midground|middle|center of the room|at the table|across the desk|counter|booth|couch|sofa|beside the table|middle distance)\b/i;
+  EXPLICIT_LINEUP_REGEX = /\b(?:side[- ]by[- ]side|shoulder[- ]to[- ]shoulder|lined up|in a row|standing abreast|walking abreast)\b/i;
 });
 
 // src/shared/reference-plan.ts
@@ -43452,18 +43778,30 @@ function formatCameraFraming(shotSpec, styleDNA) {
   return parts.join(", ");
 }
 function formatSpatialPlacements(shotSpec) {
-  if (!shotSpec.composition.subjectPlacements || shotSpec.composition.subjectPlacements.length <= 1) {
+  const placements = shotSpec.composition.subjectPlacements;
+  if (!placements || placements.length <= 1) {
     return "";
   }
-  const descriptions = shotSpec.composition.subjectPlacements.map((p) => {
-    const posParts = [];
-    if (p.depth)
-      posParts.push(`in the ${p.depth}`);
-    if (p.horizontal)
-      posParts.push(`on the ${p.horizontal.replace("-", " ")}`);
-    return `${p.subject} positioned ${posParts.join(", ")}`;
+  const hasRichBlocking = Boolean(shotSpec.composition.stagingNote) || placements.some((p) => Boolean(p.blocking));
+  if (!hasRichBlocking) {
+    const descriptions2 = placements.map((p) => {
+      const posParts = [];
+      if (p.depth)
+        posParts.push(`in the ${p.depth}`);
+      if (p.horizontal)
+        posParts.push(`on the ${p.horizontal.replace("-", " ")}`);
+      return `${p.subject} positioned ${posParts.join(", ")}`;
+    });
+    return descriptions2.join("; ");
+  }
+  const descriptions = placements.map((p) => {
+    const depthText = p.depth ? `in the ${p.depth}` : "in the scene";
+    const horizText = p.horizontal ? ` (${p.horizontal.replace("-", " ")})` : "";
+    const blockingText = p.blocking ? `: ${p.blocking.replace(/\.+$/, "")}` : "";
+    return `${p.subject} ${depthText}${horizText}${blockingText}`;
   });
-  return descriptions.join("; ");
+  const staging = shotSpec.composition.stagingNote ? `. ${shotSpec.composition.stagingNote.replace(/\.+$/, "")}` : "";
+  return `${descriptions.join("; ")}${staging}`;
 }
 function formatDialogueSafeArea(shotSpec) {
   if (!shotSpec.safeArea)
@@ -43522,6 +43860,33 @@ var init_helpers = __esm(() => {
 });
 
 // src/backend/runtime/prompt-serializers/flux3-klein.ts
+function resolveKleinPlacement(placement, idx) {
+  const depth = placement?.depth ?? (idx === 0 ? "foreground" : idx === 1 ? "midground" : "background");
+  const horiz = placement?.horizontal ?? (idx === 0 ? "left" : idx === 1 ? "right" : "center");
+  const xCenterMap = {
+    "far-left": 0.18,
+    left: 0.29,
+    center: 0.5,
+    right: 0.71,
+    "far-right": 0.82
+  };
+  const depthBand = {
+    foreground: [0.16, 0.9, 0.34],
+    midground: [0.22, 0.78, 0.26],
+    background: [0.14, 0.58, 0.18]
+  };
+  const [yMin, yMax, width] = depthBand[depth];
+  const centerX = xCenterMap[horiz] ?? 0.5;
+  const xMin = Number(Math.max(0.04, Math.min(0.96 - width, centerX - width / 2)).toFixed(2));
+  const xMax = Number(Math.min(0.96, xMin + width).toFixed(2));
+  const horizPhrase = horiz === "center" ? "in the center" : `on the ${horiz.replace("-", " ")}`;
+  const baseAnchor = `In the ${depth} ${horizPhrase}`;
+  const anchor2 = placement?.blocking ? `${baseAnchor} (${placement.blocking.replace(/\.+$/, "")})` : baseAnchor;
+  return {
+    anchor: anchor2,
+    box: { x_min: xMin, y_min: yMin, x_max: xMax, y_max: yMax }
+  };
+}
 function isPhotographicMedium(styleDNA, brief) {
   const text4 = `${styleDNA?.medium || ""} ${styleDNA?.prefix || ""} ${brief?.scene || ""}`.toLowerCase();
   if (/\b(?:photo|photograph|candid|35mm|film|dslr|smartphone|camera roll|snapshot|raw photo)\b/.test(text4)) {
@@ -43623,23 +43988,43 @@ function serializeFlux3Klein(input2) {
       text: subjectClause
     });
   } else {
+    const placements = shotSpec.composition.subjectPlacements || [];
+    const hasDirectedPlacements = placements.length >= 2;
     const charWidth = Number((0.85 / Math.min(subjects.length, 3)).toFixed(2));
     const ensembleClauses = [];
     subjects.slice(0, 4).forEach((s, i) => {
       const label = `character_${s.name.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
-      const xMin = Number((0.08 + i * charWidth).toFixed(2));
-      const xMax = Number(Math.min(0.95, xMin + charWidth - 0.04).toFixed(2));
       const attireStr = s.attire ? `, wearing ${s.attire}` : "";
-      const anchor2 = i === 0 ? "Frame-left in the foreground" : i === 1 ? "Frame-right in the foreground" : "In the center midground";
-      layoutBoxes.push({
-        label,
-        description: `${s.name}: ${s.appearance}${attireStr}`,
-        box: { x_min: xMin, y_min: 0.18, x_max: xMax, y_max: 0.9 }
-      });
-      ensembleClauses.push(`${anchor2}, <${label}> ${s.name} (${s.appearance}${attireStr})`);
+      if (hasDirectedPlacements) {
+        const matchedPlacement = placements.find((p) => p.subject.trim().toLowerCase() === s.name.trim().toLowerCase()) ?? placements[i];
+        const resolved = resolveKleinPlacement(matchedPlacement, i);
+        layoutBoxes.push({
+          label,
+          description: `${s.name}: ${s.appearance}${attireStr}`,
+          box: resolved.box
+        });
+        ensembleClauses.push(`${resolved.anchor}, <${label}> ${s.name} (${s.appearance}${attireStr})`);
+      } else {
+        const xMin = Number((0.08 + i * charWidth).toFixed(2));
+        const xMax = Number(Math.min(0.95, xMin + charWidth - 0.04).toFixed(2));
+        const anchor2 = i === 0 ? "Frame-left in the foreground" : i === 1 ? "Frame-right in the foreground" : "In the center midground";
+        layoutBoxes.push({
+          label,
+          description: `${s.name}: ${s.appearance}${attireStr}`,
+          box: { x_min: xMin, y_min: 0.18, x_max: xMax, y_max: 0.9 }
+        });
+        ensembleClauses.push(`${anchor2}, <${label}> ${s.name} (${s.appearance}${attireStr})`);
+      }
     });
+    if (subjects.length > 4) {
+      subjects.slice(4).forEach((s) => {
+        const attireStr = s.attire ? `, wearing ${s.attire}` : "";
+        ensembleClauses.push(`Further in the background, ${s.name} (${s.appearance}${attireStr})`);
+      });
+    }
     const actionText = brief.action ? ` ${sanitizeQuoteAndUnitNotation(brief.action.trim().replace(/\.+$/, ""))}.` : ".";
-    const ensembleText = `${ensembleClauses.join("; ")}${actionText}`.replace(/\s+/g, " ").replace(/,\s*\./g, ".");
+    const stagingText = shotSpec.composition.stagingNote ? ` ${shotSpec.composition.stagingNote.trim().replace(/\.+$/, "")}.` : "";
+    const ensembleText = `${ensembleClauses.join("; ")}${actionText}${stagingText}`.replace(/\s+/g, " ").replace(/,\s*\./g, ".");
     sections.push({
       id: "ensemble-subjects",
       priority: 0,
@@ -44812,6 +45197,18 @@ function serializeGenericProse(input2) {
     compressible: false,
     text: subjectText
   });
+  if (shotSpec.composition.stagingNote || shotSpec.composition.subjectPlacements.some((p) => p.blocking)) {
+    const spatialText = formatSpatialPlacements(shotSpec);
+    if (spatialText) {
+      sections.push({
+        id: "spatial-staging",
+        priority: 0,
+        required: false,
+        compressible: true,
+        text: `Scene staging: ${spatialText}.`
+      });
+    }
+  }
   const cameraText = formatCameraFraming(shotSpec, styleDNA);
   if (cameraText) {
     sections.push({
@@ -45021,6 +45418,37 @@ function extractQuotedText2(text4) {
   const match = text4.match(/['"]([^'"]{1,40})['"]/);
   return match && match[1] ? match[1].trim() : null;
 }
+function findPlacementForSubject(subjectName, shotSpec) {
+  const placements = shotSpec?.composition?.subjectPlacements;
+  if (!placements || placements.length <= 1)
+    return;
+  const target2 = subjectName.trim().toLowerCase();
+  return placements.find((p) => p.subject.trim().toLowerCase() === target2) ?? placements.find((p) => target2.includes(p.subject.trim().toLowerCase()) || p.subject.trim().toLowerCase().includes(target2));
+}
+function resolveIdeogramEnsembleBbox(placement, index, total) {
+  const defaultDepths = total === 2 ? ["foreground", "midground"] : ["foreground", "midground", "background"];
+  const defaultHoriz = ["left", "right", "center", "far-right", "far-left"];
+  const depth = placement?.depth ?? defaultDepths[index % defaultDepths.length];
+  const horizontal = placement?.horizontal ?? defaultHoriz[index % defaultHoriz.length];
+  const xCenterMap = {
+    "far-left": 185,
+    left: 285,
+    center: 500,
+    right: 715,
+    "far-right": 815
+  };
+  const yBandMap = {
+    foreground: [160, 880, 320],
+    midground: [230, 790, 250],
+    background: [155, 590, 180]
+  };
+  const centerX = xCenterMap[horizontal] ?? 500;
+  const [yMin, yMax, width] = yBandMap[depth];
+  const halfW = Math.floor(width / 2);
+  const xMin = Math.max(40, Math.min(960 - width, centerX - halfW));
+  const xMax = Math.min(960, xMin + width);
+  return [yMin, xMin, yMax, xMax];
+}
 function serializeIdeogramV4(input2) {
   const { brief, shotSpec, styleDNA, profile, cue } = input2;
   const warnings = [];
@@ -45055,7 +45483,8 @@ function serializeIdeogramV4(input2) {
       subjectSummary = `${main?.name || "a character"}${traits}`;
     }
     const actionText = brief.action ? ` ${sanitizeQuoteAndUnitNotation(brief.action.trim().replace(/\.+$/, ""))}.` : "";
-    const highLevel = `${prefix}${isPhoto ? "A candid" : "A detailed"} ${cameraText} ${medium || (isPhoto ? "photograph" : "illustration")} of ${subjectSummary} in ${cleanScene}.${actionText}`.replace(/\s+/g, " ").replace(/,\s*\./g, ".").trim();
+    const stagingDirective = shotSpec?.composition?.stagingNote ? ` ${shotSpec.composition.stagingNote.trim().replace(/\.+$/, "")}.` : "";
+    const highLevel = `${prefix}${isPhoto ? "A candid" : "A detailed"} ${cameraText} ${medium || (isPhoto ? "photograph" : "illustration")} of ${subjectSummary} in ${cleanScene}.${actionText}${stagingDirective}`.replace(/\s+/g, " ").replace(/,\s*\./g, ".").trim();
     const styleDescription = {};
     if (isPhoto) {
       styleDescription.aesthetics = [prefix, "Atmospheric cinematic realism with balanced dynamic range, authentic surface textures, and fine tonal gradation.", suffix].filter(Boolean).join(" ").trim();
@@ -45071,18 +45500,31 @@ function serializeIdeogramV4(input2) {
       styleDescription.color_palette = palette;
     }
     const elements = [];
+    let overflowCastDescriptions = "";
     if (brief.subjectMode === "ensemble" && subjects.length >= 2) {
-      const charWidth = Math.floor(800 / Math.min(subjects.length, 3));
-      subjects.slice(0, 3).forEach((sub, i) => {
-        const xMin = 80 + i * charWidth;
-        const xMax = Math.min(960, xMin + charWidth - 40);
+      const featured = subjects.slice(0, 3);
+      const overflow = subjects.slice(3);
+      if (overflow.length > 0) {
+        overflowCastDescriptions = ` Also present in the scene: ${overflow.map((sub, oIdx) => {
+          const placement = findPlacementForSubject(sub.name, shotSpec);
+          const attireStr = sub.attire ? `, wearing ${sub.attire}` : "";
+          const blocking = placement?.blocking ? ` (${placement.blocking})` : ` in the ${placement?.depth ?? "background"}`;
+          return `${sub.name} (${sub.appearance || "distinct physical features"}${attireStr})${blocking || (oIdx >= 0 ? "" : "")}`;
+        }).join("; ")}.`;
+      }
+      featured.forEach((sub, i) => {
+        const placement = findPlacementForSubject(sub.name, shotSpec);
+        const bbox = resolveIdeogramEnsembleBbox(placement, i, subjects.length);
         const attireStr = sub.attire ? `, wearing ${sub.attire}` : "";
         const hasDna = sub.appearance && sub.appearance !== sub.name && !/^one visible/i.test(sub.appearance) && sub.appearance !== "appearance not established";
         const appearanceDesc = hasDna ? sub.appearance : "distinct physical features";
+        const depthLabel = placement?.depth ?? (i === 0 ? "foreground" : i === 1 ? "midground" : "background");
+        const horizLabel = (placement?.horizontal ?? (i === 0 ? "left" : i === 1 ? "right" : "center")).replace("-", " ");
+        const stagingClause = placement?.blocking ? `${placement.blocking.replace(/\.+$/, "")}, situated in the ${depthLabel} (${horizLabel}).` : `Staged naturally in the ${depthLabel} (${horizLabel}) of the scene in active posture, not facing the camera in a row.`;
         elements.push({
           type: "obj",
-          bbox: [160, xMin, 880, xMax],
-          desc: `${sub.name}: ${appearanceDesc}${attireStr}. Positioned ${i === 0 ? "on the left" : i === 1 ? "towards the center" : "on the right"} of the scene.`,
+          bbox,
+          desc: `${sub.name}: ${appearanceDesc}${attireStr}. ${stagingClause}`,
           color_palette: [palette[i % palette.length], palette[(i + 1) % palette.length]]
         });
       });
@@ -45121,7 +45563,7 @@ function serializeIdeogramV4(input2) {
     elements.push({
       type: "obj",
       bbox: [180, 40, 740, 960],
-      desc: `Midground environmental backdrop: ${midgroundBackdrop}.`,
+      desc: `Midground environmental backdrop: ${midgroundBackdrop}.${overflowCastDescriptions}`,
       color_palette: [palette[2], palette[3]]
     });
     elements.push({
@@ -45169,11 +45611,15 @@ function serializeIdeogramV4(input2) {
     subjectsText = `the environment featuring ${cue?.visualFocus || brief.action || "the scenery"}, with no people present`;
   } else if (brief.subjectMode === "ensemble" || subjects.length > 1) {
     const list = subjects.map((s, idx) => {
-      const pos = idx === 0 ? "positioned on the left" : idx === 1 ? "positioned on the right" : "in the center";
+      const placement = findPlacementForSubject(s.name, shotSpec);
+      const depth = placement?.depth ?? (idx === 0 ? "foreground" : idx === 1 ? "midground" : "background");
+      const horiz = (placement?.horizontal ?? (idx === 0 ? "left" : idx === 1 ? "right" : "center")).replace("-", " ");
+      const pos = placement?.blocking ? `${placement.blocking.replace(/\.+$/, "")} in the ${depth} (${horiz})` : `staged in the ${depth} (${horiz})`;
       const attire = s.attire ? `, wearing ${s.attire}` : "";
-      return `${s.name} (${s.appearance}${attire}) ${pos}`;
+      return `${s.name} (${s.appearance}${attire}), ${pos}`;
     }).join("; ");
-    subjectsText = `an ensemble of ${subjects.length} characters: ${list}. Action: ${brief.action || "interacting together"}`;
+    const staging = shotSpec?.composition?.stagingNote ? ` ${shotSpec.composition.stagingNote.trim().replace(/\.+$/, "")}.` : "";
+    subjectsText = `a natural full-scene ensemble of ${subjects.length} characters: ${list}. Action: ${brief.action || "interacting naturally within the scene"}${staging}`;
   } else {
     const main = subjects[0];
     const attire = main?.attire ? `, wearing ${main.attire}` : "";

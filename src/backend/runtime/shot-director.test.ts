@@ -177,7 +177,7 @@ test('Aspect ratio awareness adapts composition mode and framing', () => {
   expect(portraitSpec.composition.mode).toBe('layered-depth');
   expect(portraitSpec.output.orientation).toBe('portrait');
 
-  // 16:9 landscape
+  // 16:9 landscape defaults to depth/scene staging rather than forcing a side-by-side lineup
   const landscapePlan = resolveImageOutputPlan({ requestedRatio: '16:9' });
   const landscapeSpec = resolveShotSpec({
     brief: createMockBrief({
@@ -192,8 +192,24 @@ test('Aspect ratio awareness adapts composition mode and framing', () => {
       ]
     })
   });
-  expect(landscapeSpec.composition.mode).toBe('lateral-ensemble');
+  expect(['layered-depth', 'rule-of-thirds', 'foreground-obstruction', 'frame-within-frame', 'leading-lines']).toContain(landscapeSpec.composition.mode);
   expect(landscapeSpec.output.orientation).toBe('landscape');
+
+  // Explicit lineup wording in landscape still supports lateral-ensemble
+  const explicitLineupSpec = resolveShotSpec({
+    brief: createMockBrief({
+      subjectMode: 'ensemble',
+      action: 'Standing side-by-side in a row along the stone wall'
+    }),
+    outputPlan: landscapePlan,
+    cue: createMockCue({
+      ensembleSubjects: [
+        { name: 'A', appearance: 'first' },
+        { name: 'B', appearance: 'second' }
+      ]
+    })
+  });
+  expect(explicitLineupSpec.composition.mode).toBe('lateral-ensemble');
 
   // 1:1 square
   const squarePlan = resolveImageOutputPlan({ requestedRatio: '1:1' });
@@ -557,4 +573,118 @@ test('Smart photo prompt generator deduplicates Character DNA, strips NovelAI br
   expect(compiled.prompt).not.toContain('galley corner with teacups');
   // 6. Negative prompt is preserved
   expect(compiled.negativePrompt).toContain('plastic skin, poreless');
+});
+
+
+test('Living-tableau ensemble staging uses shotHint.spatialRelationships and depth planes instead of a lineup', async () => {
+  const { templateSnapshot } = await import('../../shared/image-templates.js');
+  const { buildVisualBrief } = await import('./visual-brief.js');
+  const { compileModelPrompt } = await import('./model-prompt-compiler.js');
+  const { resolveImagePromptProfileV2 } = await import('../../shared/image-prompt-profile-v2.js');
+
+  const outputPlan = resolveImageOutputPlan({ requestedRatio: '16:9' });
+  const ensembleTemplate = BUILTIN_IMAGE_TEMPLATES.find(t => t.id === 'ensemble')!;
+  const cue = createMockCue({
+    character: 'Marseline',
+    imageTemplate: templateSnapshot(ensembleTemplate),
+    ensembleSubjects: [
+      { name: 'Marseline', appearance: 'silver hair, dark coat' },
+      { name: 'Aleister', appearance: 'blond hair, wool waistcoat' },
+      { name: 'Kallirrhoe', appearance: 'black curls, bell collar' },
+      { name: 'Orin', appearance: 'tall courier, leather satchel' }
+    ],
+    shotHint: {
+      intent: 'ensemble',
+      focalSubject: 'Marseline',
+      preferredShotSize: 'wide',
+      preferredAngle: 'three-quarter',
+      preferredCompositionMode: 'layered-depth',
+      spatialRelationships: [
+        'Marseline crouched foreground-left inspecting the floorboards',
+        'Aleister seated at the midground oak desk reading',
+        'Kallirrhoe perched near the hearth in the background-right',
+        'Orin leaning in the rear doorway watching them'
+      ],
+      sceneStagingNote: 'Deep three-quarter interior view across the cluttered room'
+    }
+  });
+  const brief = buildVisualBrief(
+    DEFAULT_CONFIG,
+    {
+      sceneId: 'room-1',
+      revision: 1,
+      startParagraph: 0,
+      environment: {
+        location: 'Study',
+        description: 'Oak-paneled study with a central desk and stone hearth',
+        timeOfDay: 'evening',
+        weather: 'rain',
+        lighting: 'warm hearthfire and desk lamp',
+        persistentElements: ['oak desk', 'stone hearth']
+      },
+      cast: ['Marseline', 'Aleister', 'Kallirrhoe', 'Orin'],
+      character: 'Marseline',
+      identityPrompt: null,
+      attire: null,
+      basePrompt: 'study',
+      compositionLock: 'wide',
+      continuity: { revision: 1, characters: {}, facts: {} },
+      cameraLock: { framing: 'wide', angle: 'eye level', perspective: 'straight-on', lens: null, subjectAnchor: 'center', horizon: 'stable', safeDialogueRegion: 'lower quarter', aspectRatio: '16:9' }
+    },
+    cue
+  );
+
+  expect(brief.composition).toContain('three-quarter perspective');
+  expect(brief.composition).not.toContain('eye-level view');
+
+  const shotSpec = resolveShotSpec({ brief, outputPlan, template: ensembleTemplate, cue });
+  expect(shotSpec.source).toBe('planner');
+  expect(shotSpec.camera.angle).toBe('three-quarter');
+  expect(shotSpec.composition.mode).toBe('layered-depth');
+  expect(shotSpec.composition.stagingNote).toContain('three-quarter');
+
+  const marseline = shotSpec.composition.subjectPlacements.find(p => p.subject === 'Marseline')!;
+  const aleister = shotSpec.composition.subjectPlacements.find(p => p.subject === 'Aleister')!;
+  const kallirrhoe = shotSpec.composition.subjectPlacements.find(p => p.subject === 'Kallirrhoe')!;
+  const orin = shotSpec.composition.subjectPlacements.find(p => p.subject === 'Orin')!;
+
+  expect(marseline.depth).toBe('foreground');
+  expect(marseline.scale).toBe('large');
+  expect(aleister.depth).toBe('midground');
+  expect(aleister.scale).toBe('medium');
+  expect(kallirrhoe.depth).toBe('background');
+  expect(kallirrhoe.scale).toBe('small');
+  expect(orin.depth).toBe('background');
+  expect(orin.blocking).toContain('rear doorway');
+
+  // Verify Ideogram V4 JSON uses depth-layered heights & preserves 4th cast member in midground backdrop
+  const ideo = compileModelPrompt({
+    brief,
+    shotSpec,
+    styleDNA: {},
+    outputPlan,
+    profile: resolveImagePromptProfileV2('nanogpt', 'ideogram/v4/instant'),
+    cue
+  });
+  const ideoJson = JSON.parse(ideo.prompt);
+  const elM = ideoJson.compositional_deconstruction.elements.find((e: any) => e.desc?.includes('Marseline:'));
+  const elK = ideoJson.compositional_deconstruction.elements.find((e: any) => e.desc?.includes('Kallirrhoe:'));
+  const backdrop = ideoJson.compositional_deconstruction.elements.find((e: any) => e.desc?.startsWith('Midground environmental backdrop:'));
+  expect(elM.bbox[2]).toBeGreaterThan(elK.bbox[2]);
+  expect(backdrop.desc).toContain('Orin');
+
+  // Verify FLUX.3 Klein uses depth-staggered boxes and rich blocking anchor
+  const klein = compileModelPrompt({
+    brief,
+    shotSpec,
+    styleDNA: {},
+    outputPlan,
+    profile: resolveImagePromptProfileV2('nanogpt', 'blackforestlabs/flux-3/klein/text-to-image'),
+    cue
+  });
+  expect(klein.prompt).toContain('inspecting the floorboards');
+  const boxes = klein.parameterHints!.layout_boxes as Array<{ label: string; box: { y_max: number } }>;
+  const boxM = boxes.find(b => b.label.includes('marseline'))!;
+  const boxK = boxes.find(b => b.label.includes('kallirrhoe'))!;
+  expect(boxM.box.y_max).toBeGreaterThan(boxK.box.y_max);
 });
