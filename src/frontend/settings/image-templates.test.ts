@@ -42,7 +42,7 @@ describe("template workspace", () => {
 
   test("the list explains purpose, dynamic inclusion and saved default before opening one editor", () => {
     expect(node("[data-template-detail]")?.hidden).toBe(true);
-    expect(node('[data-template-row="portrait"]')?.textContent).toContain("expression or reaction");
+    expect(node('[data-template-row="portrait"]')?.textContent).toContain("subtle expression, gaze, or emotional shift");
     expect(node('[data-template-row="portrait"]')?.textContent).toContain("Default");
     expect(mount.querySelectorAll('[data-dynamic-template="portrait"]')).toHaveLength(1);
     open();

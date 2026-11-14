@@ -5,8 +5,12 @@ import {ImageUsageLedger} from './image-usage.js';
 import {ImageDispatchPolicy} from './image-dispatch-policy.js';
 import type {ImageActivityInput} from '../../shared/image-usage.js';
 import {resolveSceneAmbient} from '../../shared/scene-atmosphere.js';
-import {handleCharacterDnaRequest} from './character-dna-workflow.js';
+import { createEmptyCharacterDNA, findCharacterDNA, swipeTurnTag } from '../../shared/character-dna.js';
+import { mutateCharacterDnaLibrary } from './character-dna-store.js';
+import { handleCharacterDnaRequest } from './character-dna-workflow.js';
 import {handleStoryDnaRequest} from './story-dna-workflow.js';
+import { mutateStoryDNASet } from './story-dna-store.js';
+import { harvestTurnStoryDNA } from './story-dna-harvester.js';
 import { fitPromptToBudget } from "../../shared/prompt-length.js";
 import {normalizeImageVersionHistory} from '../../shared/image-version-history.js';
 import {ImageRetryQueue} from './image-retry-queue.js';
@@ -1231,8 +1235,20 @@ async function processAssistantMessage(
       releaseSceneCacheScope(spindle, userId, chatId, "scope_cleared");
     }
     const chatState = await loadChatState(spindle, chatId, userId);
-    const previousTurnRecord = !replacesGreeting && config.rpgMode === "full" && chatState.activeTurnPath
-      ? await loadTurnRecord(spindle, chatState.activeTurnPath, userId).catch(() => null)
+    const currentAssistantIndex = assistantTurns.findIndex((candidate) => candidate.id === message.id);
+    const priorAssistantTurn = currentAssistantIndex > 0
+      ? assistantTurns[currentAssistantIndex - 1]
+      : (assistantTurns.at(-1) && assistantTurns.at(-1)!.id !== message.id ? assistantTurns.at(-1) : null);
+    const msgSegment = encodeURIComponent(message.id).replaceAll("%", "_");
+    const isReswipeOrReplan = !replacesGreeting && (
+      Boolean(existing)
+      || Boolean(chatState.activeTurnPath && chatState.activeTurnPath.includes(msgSegment))
+    );
+    const priorTurnRecord = !replacesGreeting && priorAssistantTurn
+      ? await loadTurnRecord(spindle, turnPath(chatId, priorAssistantTurn.id, priorAssistantTurn.swipe_id ?? 0), userId).catch(() => null)
+      : null;
+    const previousTurnRecord = !replacesGreeting && config.rpgMode === "full" && (isReswipeOrReplan ? true : chatState.activeTurnPath)
+      ? (isReswipeOrReplan ? priorTurnRecord : await loadTurnRecord(spindle, chatState.activeTurnPath!, userId).catch(() => null))
       : null;
     const setupToken = castArtToken(spindle, chatId, userId);
     const identityCurrent = () => !operation.controller.signal.aborted && setupToken === castArtToken(spindle, chatId, userId);
@@ -1261,8 +1277,8 @@ async function processAssistantMessage(
       message,
       content: resolved,
       sourceFingerprint: fingerprint,
-      previousScene: replacesGreeting ? null : options?.retry && existing ? existing.plan.scenes[0] ?? null : chatState.latestScene,
-      previousContinuity: replacesGreeting ? null : options?.retry && existing ? existing.plan.initialContinuity : chatState.terminalContinuity,
+      previousScene: replacesGreeting ? null : isReswipeOrReplan ? (priorTurnRecord ? (priorTurnRecord.plan.scenes.at(-1) ?? null) : (options?.retry && existing ? existing.plan.scenes[0] ?? null : null)) : chatState.latestScene,
+      previousContinuity: replacesGreeting ? null : isReswipeOrReplan ? (priorTurnRecord ? priorTurnRecord.plan.terminalContinuity : (options?.retry && existing ? existing.plan.initialContinuity : null)) : chatState.terminalContinuity,
       previousRpgState: previousTurnRecord?.plan.rpgState ?? null,
       recentMessages,
       config,
@@ -1401,6 +1417,66 @@ async function processAssistantMessage(
           spindle.sendToFrontend({ type: "vn_error", chatId, operation: "generate_assets", error: errorText(error) }, userId);
         }
       });
+    }
+    if (spindle.userStorage) {
+      try {
+        const swipeTag = swipeTurnTag(message.id, message.swipe_id);
+        const turnCastNames = new Set<string>();
+        const lowerText = resolved.toLowerCase();
+        for (const sc of result.plan.scenes ?? []) {
+          if (typeof sc.character === 'string' && sc.character.trim()) turnCastNames.add(sc.character.trim());
+          for (const ch of sc.cast ?? []) {
+            if (typeof ch === 'string' && ch.trim()) turnCastNames.add(ch.trim());
+          }
+        }
+        for (const cue of result.plan.visualCues ?? []) {
+          if (typeof cue.character === 'string' && cue.character.trim()) turnCastNames.add(cue.character.trim());
+          for (const sub of cue.ensembleSubjects ?? []) {
+            if (!sub.persona && sub.name?.trim()) turnCastNames.add(sub.name.trim());
+          }
+        }
+        const pres = view.presentation;
+        const presEntities = pres
+          ? ('entities' in pres ? pres.entities : (pres as { snapshots: Array<{ entities?: any[] }> }).snapshots.flatMap((s) => s.entities ?? []))
+          : [];
+        for (const ent of presEntities) {
+          if (ent.kind === 'npc' && ent.name?.trim()) {
+            if (lowerText.includes(ent.name.trim().toLowerCase())) {
+              turnCastNames.add(ent.name.trim());
+            }
+          }
+        }
+        if (turnCastNames.size > 0) {
+          await mutateCharacterDnaLibrary(spindle, chatId, userId, undefined, l => {
+            for (const rawName of turnCastNames) {
+              const name = rawName.trim();
+              if (!name || isScenarioTitle(name)) continue;
+              if (userSpeaker !== 'You' && name.toLowerCase() === userSpeaker.toLowerCase()) continue;
+              if (l.deleted?.[name] || findCharacterDNA(l.deleted ?? {}, name)) continue;
+              const existingChar = findCharacterDNA(l.characters, name);
+              if (!existingChar) {
+                const dna = createEmptyCharacterDNA(name);
+                dna.autoDiscovered = true;
+                dna.seenInSwipes = [swipeTag];
+                l.characters[dna.id] = dna;
+              } else if (existingChar.autoDiscovered) {
+                const seen = existingChar.seenInSwipes ?? [];
+                if (!seen.includes(swipeTag)) {
+                  existingChar.seenInSwipes = [...seen, swipeTag].slice(-60);
+                }
+              }
+            }
+          });
+        }
+        const prevLocationName = replacesGreeting
+          ? null
+          : isReswipeOrReplan
+            ? (priorTurnRecord?.plan.scenes.at(-1)?.environment.location ?? null)
+            : (chatState.latestScene?.environment.location ?? null);
+        await mutateStoryDNASet(spindle, chatId, userId, undefined, (set) => {
+          harvestTurnStoryDNA(record.plan, set, swipeTag, prevLocationName);
+        });
+      } catch {}
     }
   }, dedupeId);
 

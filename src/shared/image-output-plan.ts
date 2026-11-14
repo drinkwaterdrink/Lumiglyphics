@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isFluxKleinModel, isFlux3KleinSquareModel } from './image-model-output.js';
 import {
   type ModelOutputCapabilities,
   chooseModelOutput
@@ -131,8 +132,10 @@ export function resolveImageOutputPlan(options: ResolveImageOutputPlanOptions): 
     rawRequestedRatio && rawRequestedRatio !== 'default' ? rawRequestedRatio : undefined;
 
   // 2. If capabilities are available, run chooseModelOutput
+  const isKleinModel = isFluxKleinModel(modelId);
+  const effectiveResolutionPref = isKleinModel ? 'standard' : resolutionPreference;
   if (capabilities) {
-    const prepared = chooseModelOutput(capabilities, parameters, requestedRatio, resolutionPreference);
+    const prepared = chooseModelOutput(capabilities, parameters, requestedRatio, effectiveResolutionPref);
     const preparedParams = prepared.parameters;
     const size = typeof preparedParams.size === 'string' ? preparedParams.size : undefined;
 
@@ -175,7 +178,8 @@ export function resolveImageOutputPlan(options: ResolveImageOutputPlanOptions): 
   }
 
   // 3. Fallback when no capabilities are published
-  const fallbackSize = typeof parameters.size === 'string' ? parameters.size : '1024x1024';
+  const rawFallbackSize = typeof parameters.size === 'string' ? parameters.size : '1024x1024';
+  const fallbackSize = isFlux3KleinSquareModel(modelId) || (isKleinModel && /(?:1536|2048|4096)/.test(rawFallbackSize)) ? '1024x1024' : rawFallbackSize;
   const fallbackRatio = requestedRatio ?? formatRatioFromDimensions(fallbackSize) ?? '1:1';
   const orientation = computeOrientation(fallbackRatio);
 

@@ -1,16 +1,96 @@
 import {isScenarioTitle} from '../../shared/card-role.js';
-import {scanTrackerCastHistory} from './simtracker.js';
+import {scanTrackerCastHistory,type TrackerCharacter} from './simtracker.js';
 import type {SpindleAPI} from 'lumiverse-spindle-types';
-import {createEmptyCharacterDNA,findCharacterDNA,extractDNAPartsFromText,type CharacterDNA} from '../../shared/character-dna.js';
+import {createEmptyCharacterDNA,findCharacterDNA,extractDNAPartsFromText,isCharacterActiveOnBranch,swipeTurnTag,type CharacterDNA,type CharacterDNALibrary} from '../../shared/character-dna.js';
 import {applyDnaChanges,dnaFieldValue,DNA_FIELDS,type DnaRequest,type DnaProposal} from '../../shared/character-dna-workflow.js';
 import {loadCharacterDNALibrary,saveCharacterDNA,mutateCharacterDnaLibrary} from './character-dna-store.js';
 import {collectCharacterDnaEvidence,proposeCharacterDna} from './character-dna-autofill.js';
 import {loadConfig,loadReadingPosition,purgeDeletedCharacterFromStorage} from './storage.js';
 type Session={abort?:AbortController;proposal?:DnaProposal;target?:CharacterDNA;created?:number;contextKey?:string};
 const sessions=new WeakMap<object,Map<string,Session>>();
+export function activeBranchSwipeTags(
+  messages: ReadonlyArray<{ id?: string; message_id?: string; swipe_id?: number | string | null }> | null | undefined
+): Set<string> {
+  const tags = new Set<string>();
+  if (!Array.isArray(messages)) return tags;
+  for (const m of messages) {
+    const id = m?.id ?? m?.message_id;
+    if (!id) continue;
+    const rawSwipe = m?.swipe_id;
+    const swipeId = typeof rawSwipe === 'number' && Number.isFinite(rawSwipe)
+      ? rawSwipe
+      : typeof rawSwipe === 'string' && /^\d+$/.test(rawSwipe)
+        ? Number(rawSwipe)
+        : 0;
+    tags.add(swipeTurnTag(String(id), swipeId));
+  }
+  return tags;
+}
+
+export function filterLibraryForActiveBranch(
+  library: CharacterDNALibrary,
+  activeTags: ReadonlySet<string>
+): CharacterDNALibrary {
+  if (!activeTags || activeTags.size === 0) return library;
+  const filtered: Record<string, CharacterDNA> = Object.create(null);
+  for (const [id, dna] of Object.entries(library.characters)) {
+    if (isCharacterActiveOnBranch(dna, activeTags)) filtered[id] = dna;
+  }
+  return { ...library, characters: filtered };
+}
+
+export function upsertTrackerRelationship(
+  dna: CharacterDNA,
+  item: { character: TrackerCharacter; messageId: string }
+): boolean {
+  const { character, messageId } = item;
+  if (!character.relationship && character.affection === undefined && character.trust === undefined && !character.dynamicLabel) {
+    return false;
+  }
+  const targetName = 'Protagonist / User';
+  const rels = Array.isArray(dna.relationships) ? [...dna.relationships] : [];
+  const idx = rels.findIndex((r) => r.targetName.trim().toLowerCase() === targetName.toLowerCase());
+  const existing = idx >= 0 ? rels[idx]! : undefined;
+  const nextAff = character.affection !== undefined ? Math.max(-100, Math.min(100, Math.round(character.affection))) : (existing?.affinity ?? 0);
+  const nextTrust = character.trust !== undefined ? Math.max(-100, Math.min(100, Math.round(character.trust))) : (existing?.trust ?? 0);
+  const nextDynamic = (character.dynamicLabel || existing?.dynamicLabel || '').slice(0, 160);
+  const nextStatus = (character.relationship || existing?.status || '').slice(0, 300);
+  const prevBeats = existing?.recentBeats ?? [];
+  const beatText = character.relationship ? character.relationship.slice(0, 500) : '';
+  const hasSameLatestBeat = prevBeats.length > 0 && prevBeats[0]?.text === beatText && prevBeats[0]?.messageId === messageId;
+  const recentBeats = beatText && !hasSameLatestBeat
+    ? [{ text: beatText, messageId, timestamp: Date.now() }, ...prevBeats].slice(0, 12)
+    : prevBeats;
+  const changed = !existing
+    || existing.affinity !== nextAff
+    || existing.trust !== nextTrust
+    || existing.dynamicLabel !== nextDynamic
+    || existing.status !== nextStatus
+    || recentBeats.length !== prevBeats.length;
+  if (!changed) return false;
+  const updated = {
+    targetName,
+    affinity: nextAff,
+    trust: nextTrust,
+    dynamicLabel: nextDynamic,
+    status: nextStatus,
+    recentBeats,
+    lastUpdated: Date.now(),
+  };
+  if (idx >= 0) rels[idx] = updated;
+  else rels.push(updated);
+  dna.relationships = rels.slice(0, 40);
+  return true;
+}
+
 export async function handleCharacterDnaRequest(spindle:SpindleAPI,request:DnaRequest,userId:string):Promise<void>{
  let map=sessions.get(spindle);if(!map){map=new Map();sessions.set(spindle,map);}const scope=JSON.stringify([userId,request.chatId]);for(const[key,state]of map)if(Date.now()-(state.created??0)>300000){state.abort?.abort();map.delete(key);}if(map.size>=64&&!map.has(scope)){const oldest=map.keys().next().value!;map.get(oldest)?.abort?.abort();map.delete(oldest);}const previous=map.get(scope);
- const reply=async(proposal?:DnaProposal)=>spindle.sendToFrontend({type:'vn_character_dna',chatId:request.chatId,requestId:request.requestId,library:await loadCharacterDNALibrary(spindle,request.chatId,userId),...(proposal?{proposal}:{})},userId);
+ const reply=async(proposal?:DnaProposal)=>{
+  const msgs = typeof spindle.chat?.getMessages === 'function' ? await spindle.chat.getMessages(request.chatId).catch(() => []) : [];
+  const tags = activeBranchSwipeTags(msgs);
+  const rawLib = await loadCharacterDNALibrary(spindle,request.chatId,userId);
+  spindle.sendToFrontend({type:'vn_character_dna',chatId:request.chatId,requestId:request.requestId,library:filterLibraryForActiveBranch(rawLib, tags),...(proposal?{proposal}:{})},userId);
+ };
  try{
   if(request.action==='list'){
     try {
@@ -22,13 +102,18 @@ export async function handleCharacterDnaRequest(spindle:SpindleAPI,request:DnaRe
           if (tracker && tracker.length > 0) {
             const library = await loadCharacterDNALibrary(spindle, request.chatId, userId);
             const toAdd: CharacterDNA[] = [];
+            const updates: Array<{ id: string; tag: string; item: (typeof tracker)[number] }> = [];
             for (const item of tracker) {
               const charName = item.character.name.trim();
               if (!charName || isScenarioTitle(charName)) continue;
               if (library.deleted?.[charName] || findCharacterDNA(library.deleted ?? {}, charName)) continue;
-              if (!findCharacterDNA(library.characters, charName)) {
+              const tag = swipeTurnTag(item.messageId, item.swipeId);
+              const existing = findCharacterDNA(library.characters, charName);
+              if (!existing) {
                 const dna = createEmptyCharacterDNA(charName);
                 dna.aliases = item.character.aliases ?? [];
+                dna.autoDiscovered = true;
+                dna.seenInSwipes = [tag];
                 if (item.character.attire) dna.activeOutfit = item.character.attire;
                 if (item.character.identity) {
                   const parts = extractDNAPartsFromText(item.character.identity);
@@ -42,14 +127,28 @@ export async function handleCharacterDnaRequest(spindle:SpindleAPI,request:DnaRe
                   if (parts.build?.height) dna.build.height = parts.build.height;
                   if (parts.build?.bodyType) dna.build.bodyType = parts.build.bodyType;
                 }
+                upsertTrackerRelationship(dna, item);
                 toAdd.push(dna);
+              } else {
+                updates.push({ id: existing.id, tag, item });
               }
             }
-            if (toAdd.length > 0) {
+            if (toAdd.length > 0 || updates.length > 0) {
               await mutateCharacterDnaLibrary(spindle, request.chatId, userId, library.revision ?? 0, l => {
                 for (const dna of toAdd) {
                   if (!l.characters[dna.id] && !l.deleted?.[dna.id] && !findCharacterDNA(l.deleted ?? {}, dna.name)) {
                     l.characters[dna.id] = dna;
+                  }
+                }
+                for (const u of updates) {
+                  const current = l.characters[u.id];
+                  if (!current) continue;
+                  const swipes = current.seenInSwipes ?? [];
+                  if (current.autoDiscovered && !swipes.includes(u.tag)) {
+                    current.seenInSwipes = [...swipes, u.tag].slice(-60);
+                  }
+                  if (!current.locked) {
+                    upsertTrackerRelationship(current, u.item);
                   }
                 }
               });
@@ -84,7 +183,7 @@ export async function handleCharacterDnaRequest(spindle:SpindleAPI,request:DnaRe
    await mutateCharacterDnaLibrary(spindle,request.chatId,userId,p.baseRevision,l=>{
     if(l.deleted?.[p.characterId])throw new Error('This character was deleted.');
     const target=l.characters[p.characterId]??state.target!;if(target.locked)throw new Error('Unlock DNA before applying suggestions.');
-    const next=applyDnaChanges(target,selected);next.fieldSources={...target.fieldSources};for(const c of selected)next.fieldSources[c.path]={classification:c.classification,sources:c.sourceRefs.map(id=>{const e=p.evidence.find(e=>e.id===id)!;return `${e.source}: ${e.text}`.slice(0,1000);})};next.lastUpdated=Date.now();l.characters[p.characterId]=next;
+    const next=applyDnaChanges(target,selected);next.fieldSources={...target.fieldSources};for(const c of selected)next.fieldSources[c.path]={classification:c.classification,sources:c.sourceRefs.map(id=>{const e=p.evidence.find(e=>e.id===id)!;return `${e.source}: ${e.text}`.slice(0,1000);})};if(target.autoDiscovered)next.autoDiscovered=false;next.lastUpdated=Date.now();l.characters[p.characterId]=next;
    });map.delete(scope);await reply();return;
   }
   previous?.abort?.abort();map.delete(scope);

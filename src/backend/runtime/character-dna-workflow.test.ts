@@ -1,7 +1,7 @@
 import {it,expect} from 'bun:test';
-import {handleCharacterDnaRequest} from './character-dna-workflow.js';
+import {filterLibraryForActiveBranch, handleCharacterDnaRequest, upsertTrackerRelationship} from './character-dna-workflow.js';
 import {saveCharacterDNA,loadCharacterDNALibrary} from './character-dna-store.js';
-import {createEmptyCharacterDNA} from '../../shared/character-dna.js';
+import {createEmptyCharacterDNA, swipeTurnTag} from '../../shared/character-dna.js';
 import {isFrontendRequest} from '../../protocol.js';
 function fixture(){const data=new Map<string,unknown>(),messages:any[]=[];const spindle:any={userStorage:{getJson:async(p:string,o:any)=>structuredClone(data.get(p)??o?.fallback??null),setJson:async(p:string,v:any)=>{data.set(p,structuredClone(v));}},sendToFrontend:(message:any,userId:string)=>messages.push({message,userId})};return{spindle,data,messages};}
 it('strictly rejects arbitrary caller JSON, invalid targets and unknown DNA fields',()=>{
@@ -45,4 +45,67 @@ it('refuses a pending DNA proposal after the cursor moves within the same reply'
  await saveReadingPosition(spindle,{version:1,key,paragraphIndex:1},'u');await handleCharacterDnaRequest(spindle,{type:'vn_character_dna',action:'propose',chatId:'c',requestId:'p',characterName:'Nadine'},'u');const proposal=messages.at(-1)?.message.proposal;expect(proposal).toBeDefined();
  await saveReadingPosition(spindle,{version:1,key,paragraphIndex:0},'u');await handleCharacterDnaRequest(spindle,{type:'vn_character_dna',action:'apply',chatId:'c',requestId:'apply',proposalId:proposal.id,fields:['hair.color']},'u');
  expect(messages.at(-1)?.message.error).toContain('story context changed');expect(Object.keys((await loadCharacterDNALibrary(spindle,'c','u')).characters)).toHaveLength(0);
+});
+
+it('upserts tracker relationships without duplicating identical message beats and filters inactive swipe entries', () => {
+  const dna = createEmptyCharacterDNA('Veronica Drake', 'veronica');
+  const changed1 = upsertTrackerRelationship(dna, {
+    messageId: 'm1',
+    character: {
+      name: 'Veronica Drake',
+      aliases: [],
+      present: true,
+      identity: '',
+      attire: '',
+      sceneState: '',
+      relationship: 'Shared an uneasy truce in the crypt',
+      affection: 35,
+      trust: 20,
+      dynamicLabel: 'Reluctant allies',
+    },
+  });
+  expect(changed1).toBe(true);
+  expect(dna.relationships).toHaveLength(1);
+  expect(dna.relationships[0]!.affinity).toBe(35);
+  expect(dna.relationships[0]!.trust).toBe(20);
+  expect(dna.relationships[0]!.dynamicLabel).toBe('Reluctant allies');
+  expect(dna.relationships[0]!.recentBeats).toHaveLength(1);
+
+  // Re-planning the same message with unchanged beat should not append duplicate beat
+  const changed2 = upsertTrackerRelationship(dna, {
+    messageId: 'm1',
+    character: {
+      name: 'Veronica Drake',
+      aliases: [],
+      present: true,
+      identity: '',
+      attire: '',
+      sceneState: '',
+      relationship: 'Shared an uneasy truce in the crypt',
+      affection: 35,
+      trust: 20,
+      dynamicLabel: 'Reluctant allies',
+    },
+  });
+  expect(changed2).toBe(false);
+  expect(dna.relationships[0]!.recentBeats).toHaveLength(1);
+
+  const swipe0 = swipeTurnTag('m1', 0);
+  const swipe1 = swipeTurnTag('m1', 1);
+  const autoDiscoveredSwipe0 = { ...createEmptyCharacterDNA('Lyra', 'lyra'), autoDiscovered: true, seenInSwipes: [swipe0] };
+  const autoDiscoveredSwipe1 = { ...createEmptyCharacterDNA('Bram', 'bram'), autoDiscovered: true, seenInSwipes: [swipe1] };
+  const manual = { ...createEmptyCharacterDNA('Nadine', 'nadine'), autoDiscovered: false, seenInSwipes: [swipe0] };
+  const locked = { ...createEmptyCharacterDNA('Locked', 'locked'), autoDiscovered: true, locked: true, seenInSwipes: [swipe0] };
+
+  const lib = {
+    version: 2 as const,
+    characters: {
+      lyra: autoDiscoveredSwipe0,
+      bram: autoDiscoveredSwipe1,
+      nadine: manual,
+      locked,
+    },
+  };
+  const filtered = filterLibraryForActiveBranch(lib, new Set([swipe1]));
+  expect(Object.keys(filtered.characters).sort()).toEqual(['bram', 'locked', 'nadine']);
 });

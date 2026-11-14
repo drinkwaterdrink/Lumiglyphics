@@ -6,7 +6,9 @@ import type { TurnPlan } from '../../shared/contracts.js';
 import { MAX_PRESENTATION_PARAGRAPHS, type ReaderPresentation,type ReaderPresentationV2, type PresentationEntity, type EntityStateDelta, type PresentationState, type EvidenceSource } from '../../shared/presentation-entities.js';
 import {parseReaderPresentation} from '../../shared/presentation-selectors.js';
 import { buildCompactPresentation, type PresentationBeat } from './presentation-timeline.js';
+import { deriveShortAliases } from '../../shared/story-dna.js';
 import { isScenarioTitle } from '../../shared/card-role.js';
+import { isSignificantStoryItem } from './story-dna-harvester.js';
 import type { ContextProposal } from '../../shared/context-sources.js';
 
 const COMPANION_CODEX_FIELDS = new Set([
@@ -41,7 +43,7 @@ export function projectTurnPresentation(plan:TurnPlan, options?: ProjectPresenta
     if(existing){existing.firstParagraph=Math.min(existing.firstParagraph,at);return existing;}
     if(entities.length>=32){warnings.add('entity-budget');return null;}
     // Exact names only. Case variants/ambiguous aliases are not silently merged.
-    const value:PresentationEntity={id:`e${entities.length+1}`,kind,name:trimmed,aliases:[],firstParagraph:at,facts:[]};
+    const value:PresentationEntity={id:`e${entities.length+1}`,kind,name:trimmed,aliases:kind==='npc'?[]:deriveShortAliases(trimmed),firstParagraph:at,facts:[]};
     entities.push(value);byName.set(mapKey,value);
     const prior=kind==='npc' ? continuity.characters[trimmed] : undefined;
     baseline[value.id]=prior ? {appearance:describe(prior.appearance),outfit:describe(prior.wardrobe)} : {};
@@ -97,8 +99,16 @@ export function projectTurnPresentation(plan:TurnPlan, options?: ProjectPresenta
       drawableEntityId=person?.id??null;
       if(person && cue.resolvedIdentity){fact(person,at,'appearance',cue.resolvedIdentity);change(person,at,{appearance:cue.resolvedIdentity.slice(0,1200)});}
       if(person && cue.attire)change(person,at,{outfit:cue.attire.slice(0,1200)});
+      const actionObj = typeof cue.action === 'object' && cue.action !== null ? cue.action.object : undefined;
+      if (actionObj && isSignificantStoryItem(actionObj, cue.visualFocus ?? cue.visualDescription)) {
+        const propObj = entity('object', actionObj, at);
+        if (propObj) {
+          fact(propObj, at, 'description', cue.visualFocus?.trim() || actionObj);
+          if (cue.character?.trim()) fact(propObj, at, 'owner', cue.character.trim());
+        }
+      }
     }
-    for(const document of documentsAt.get(at)??[])entity('object',document.name,at);
+    for(const document of documentsAt.get(at)??[]){const docEntity=entity('object',document.name,at);if(docEntity){const preview=document.sections.map(s=>s.text.trim()).filter(Boolean).join(' ').slice(0,320);fact(docEntity,at,'significance',preview||`${document.kind} revealed in scene`);}}
     for(const reference of referencesAt.get(at)??[]) {
       const subject=entity(reference.kind,reference.name,at);
       if(subject){

@@ -429,3 +429,148 @@ it('renders prominent hero aliases field and excludes scenario card titles from 
     restore();
   }
 });
+
+it('caches, prunes, and restores auto-discovered characters across swipe changes', () => {
+  const restore = installFakeDocument();
+  try {
+    const folio = new CharacterFolio();
+    const saved = createEmptyCharacterDNA('Nadine', 'nadine');
+    saved.autoDiscovered = false;
+    folio.setLibrary({ version: 2, revision: 1, characters: { nadine: saved } });
+
+    // Swipe 0 discovers Lyra
+    folio.syncFromTurn({
+      chatId: 'c1',
+      messageId: 'm1',
+      swipeId: 0,
+      sourceFingerprint: 'fp-00000001',
+      revision: 0,
+      paragraphs: ['Lyra greets Nadine at the gate.'],
+      subjectCandidates: [{ name: 'Lyra', appearance: 'silver braid' }],
+      assets: [],
+    } as any, 0);
+    expect(Object.values((folio as any).library).some((c: any) => c.name === 'Lyra')).toBe(true);
+
+    // Switching to Swipe 1 introduces Bram instead of Lyra -> Lyra is pruned from active library, saved Nadine stays
+    folio.syncFromTurn({
+      chatId: 'c1',
+      messageId: 'm1',
+      swipeId: 1,
+      sourceFingerprint: 'fp-00000002',
+      revision: 0,
+      paragraphs: ['Bram greets Nadine inside the tavern.'],
+      subjectCandidates: [{ name: 'Bram', appearance: 'scarred brow' }],
+      assets: [],
+    } as any, 0);
+    const namesSwipe1 = Object.values((folio as any).library).map((c: any) => c.name);
+    expect(namesSwipe1).toContain('Nadine');
+    expect(namesSwipe1).toContain('Bram');
+    expect(namesSwipe1).not.toContain('Lyra');
+
+    // Switching back to Swipe 0 restores Lyra from swipe cache and prunes Bram
+    folio.syncFromTurn({
+      chatId: 'c1',
+      messageId: 'm1',
+      swipeId: 0,
+      sourceFingerprint: 'fp-00000001',
+      revision: 0,
+      paragraphs: ['Lyra greets Nadine at the gate.'],
+      subjectCandidates: [{ name: 'Lyra', appearance: 'silver braid' }],
+      assets: [],
+    } as any, 0);
+    const namesBack = Object.values((folio as any).library).map((c: any) => c.name);
+    expect(namesBack).toContain('Lyra');
+    expect(namesBack).not.toContain('Bram');
+  } finally {
+    restore();
+  }
+});
+
+it('renders Relationships sub-tab with SVG constellation, integrates RPG companion state, and persists bonds & player notes', () => {
+  const restore = installFakeDocument();
+  try {
+    const savedCalls: any[] = [];
+    const folio = new CharacterFolio({
+      onSaveDNA: (dna) => savedCalls.push(dna),
+    });
+    const nadine = createEmptyCharacterDNA('Nadine', 'nadine');
+    nadine.autoDiscovered = false;
+    nadine.relationships = [
+      {
+        targetName: 'Darby',
+        affinity: 45,
+        trust: 30,
+        dynamicLabel: 'Protective sibling',
+        status: 'Loyal despite tension',
+        recentBeats: [{ text: 'Covered for him after curfew', messageId: 'm0' }],
+        lastUpdated: 1000,
+      },
+    ];
+    folio.setLibrary({ version: 2, revision: 1, characters: { nadine } });
+    folio.syncFromTurn({
+      chatId: 'c1',
+      messageId: 'm1',
+      swipeId: 0,
+      sourceFingerprint: 'fp-00000001',
+      revision: 0,
+      paragraphs: ['Nadine adjusts her satchel.'],
+      rpgState: {
+        turnCounter: 1,
+        vitals: {
+          name: 'Hero',
+          level: 1,
+          archetype: 'Traveler',
+          hp: 100,
+          maxHp: 100,
+          stamina: 100,
+          maxStamina: 100,
+          stress: 0,
+          currency: '0g',
+          inventory: [],
+          statusEffects: [],
+          companions: [{ name: 'Nadine', hp: 100, maxHp: 100, affinity: 60, status: 'Trusting ally' }],
+        },
+        quests: [],
+        atlas: { currentLocationId: 'loc-1', nodes: [], edges: [] },
+      },
+      assets: [],
+    } as any, 0);
+
+    // Switch to Relationships tab
+    const relBtn = folio.detailContainer.querySelector('[data-subtab="relationships"]') as unknown as HTMLButtonElement;
+    expect(relBtn).not.toBeNull();
+    relBtn.click();
+
+    const web = folio.detailContainer.querySelector('[data-relationship-web]');
+    expect(web).not.toBeNull();
+    expect(web?.querySelector('svg')).not.toBeNull();
+    expect(folio.detailContainer.querySelector('[data-bond-target="Darby"]')).not.toBeNull();
+    expect(folio.detailContainer.querySelector('[data-bond-target="Protagonist / User"]')).not.toBeNull();
+
+    // Add a new bond
+    const addTarget = folio.detailContainer.querySelector('[data-add-bond-target]') as unknown as HTMLInputElement;
+    const addDyn = folio.detailContainer.querySelector('[data-add-bond-dynamic]') as unknown as HTMLInputElement;
+    const addAff = folio.detailContainer.querySelector('[data-add-bond-affinity]') as unknown as HTMLInputElement;
+    addTarget.value = 'Aleister';
+    addDyn.value = 'Academic rival';
+    addAff.value = '-35';
+    (folio.detailContainer.querySelector('[data-add-bond-btn]') as unknown as HTMLButtonElement).click();
+
+    expect(savedCalls.length).toBeGreaterThanOrEqual(1);
+    const lastRelSave = savedCalls.at(-1);
+    expect(lastRelSave.relationships.some((r: any) => r.targetName === 'Aleister' && r.affinity === -35)).toBe(true);
+
+    // Switch to Story Lore tab and save Player Notes to char.notes
+    const loreBtn = folio.detailContainer.querySelector('[data-subtab="lore"]') as unknown as HTMLButtonElement;
+    loreBtn.click();
+    const notesEl = folio.detailContainer.querySelector('[data-player-notes]') as unknown as HTMLTextAreaElement;
+    expect(notesEl).not.toBeNull();
+    notesEl.value = 'Carries a hidden brass locket';
+    (folio.detailContainer.querySelector('[data-save-notes]') as unknown as HTMLButtonElement).click();
+
+    const lastNoteSave = savedCalls.at(-1);
+    expect(lastNoteSave.notes).toBe('Carries a hidden brass locket');
+  } finally {
+    restore();
+  }
+});

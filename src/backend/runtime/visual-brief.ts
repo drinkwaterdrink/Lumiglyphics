@@ -12,7 +12,7 @@ import { POSE_EXPRESSION_CATALOGUE, poseById, sanitizePoseExpression } from "../
 import { formatCharacterDNAToPromptClause, findCharacterDNA, type CharacterDNA, type CharacterDNALibrary } from "../../shared/character-dna.js";
 import { isScenarioTitle } from "../../shared/card-role.js";
 import { areNamesEquivalent, findMatchingCharacterId } from "../../shared/nicknames.js";
-import { findMatchingLocation, findMatchingItem, formatLocationDNAToPromptClause, formatItemDNAToPromptClause, type StoryDNASet } from "../../shared/story-dna.js";
+import { deriveShortAliases, findMatchingLocation, findMatchingItem, formatLocationDNAToPromptClause, formatItemDNAToPromptClause, type StoryDNASet } from "../../shared/story-dna.js";
 
 const text = (values: (string | null | undefined)[], max = 4000) => [...new Set(values.map(value => value?.trim()).filter(Boolean))].join("; ").slice(0, max);
 
@@ -213,7 +213,10 @@ export function buildVisualBrief(
     const description = `${boundedLook || "appearance not established"}${attireText}`;
     return `${member.name}: ${description}`;
   }).join("\n");
-  const locDNA = storyDNASet?.locations ? findMatchingLocation(storyDNASet.locations, environment.location) : undefined;
+  const rawLocDNA = storyDNASet?.locations ? findMatchingLocation(storyDNASet.locations, environment.location) : undefined;
+  const locDNA = rawLocDNA && (!rawLocDNA.autoDiscovered || rawLocDNA.locked || Boolean(rawLocDNA.architecture?.trim()))
+    ? rawLocDNA
+    : undefined;
   const locClause = locDNA ? formatLocationDNAToPromptClause(locDNA) : undefined;
 
   const activeItemClauses: string[] = [];
@@ -221,8 +224,9 @@ export function buildVisualBrief(
     const actionText = typeof cue.action === "string" ? cue.action : (cue.action?.object ?? "");
     const combinedContext = `${cleanedVisualDescription} ${actionText} ${cue.visualFocus ?? ""} ${environment.description ?? ""}`.toLowerCase();
     for (const item of Object.values(storyDNASet.items)) {
-      const itemName = item.name.toLowerCase();
-      const matches = combinedContext.includes(itemName) || item.aliases.some(a => combinedContext.includes(a.toLowerCase()));
+      if (item.autoDiscovered && !item.locked) continue;
+      const itemTerms = [item.name, ...deriveShortAliases(item.name, item.aliases)].map(t => t.toLowerCase()).filter(t => t.length >= 4);
+      const matches = itemTerms.some(term => combinedContext.includes(term));
       if (matches) {
         activeItemClauses.push(formatItemDNAToPromptClause(item));
       }
@@ -238,9 +242,9 @@ export function buildVisualBrief(
       direction:pose.slice(0,1000),shortened:!ensemble&&(identity.length>4000||(attire?.length??0)>2000||pose.length>1000),
       subjectsInPositive:template.positive.includes('{{subjects}}'),subjectsInNegative:template.negative.includes('{{subjects}}'),
     }}:{}),
-    scene: text([environment.location, locClause || environment.description, ...relevantPersistentElements, environment.timeOfDay, environment.weather]),
+    scene: text([environment.location, locClause, environment.description, ...relevantPersistentElements, environment.timeOfDay, environment.weather]),
     subjects: noPeople ? "" : ensemble ? group : text([subjectLabel, appearance, template.category === "portrait" ? pose : ""]),
-    action: noPeople ? template.category === "detail" || template.category === "custom" ? (cue.visualFocus ?? "").slice(0, 1000) : "" : text([cleanedVisualDescription, ...activeItemClauses, compileActionProp(cue.action), template.category === "portrait" ? "" : pose]),
+    action: noPeople ? (template.category === "detail" || template.category === "custom" ? text([(cue.visualFocus ?? "").slice(0, 1000), ...activeItemClauses], 1000) : text([...activeItemClauses], 1000)) : text([cleanedVisualDescription, ...activeItemClauses, compileActionProp(cue.action), template.category === "portrait" ? "" : pose]),
     composition: `${cue.shotHint?.preferredShotSize ?? template.framing}; ${cue.shotHint?.preferredAngle ? `${cue.shotHint.preferredAngle} perspective` : template.cameraPolicy === "fixed" ? "eye-level view" : "dynamic narrative perspective"}; ${noPeople ? "no people" : ensemble ? (cue.shotHint?.spatialRelationships?.length ? `${members.length} visible characters staged naturally in the scene (${cue.shotHint.spatialRelationships.slice(0, 4).join("; ")})${cue.shotHint.sceneStagingNote ? `; ${cue.shotHint.sceneStagingNote}` : ""}` : `${members.length} visible characters staged naturally across room depths in active posture, including every listed subject; distinct faces and silhouettes`) : "one visible character"}; keep the lower quarter clear for dialogue`,
     lighting: text([environment.lighting, locDNA?.lighting], 1000),
     subjectMode: template.subjectMode,

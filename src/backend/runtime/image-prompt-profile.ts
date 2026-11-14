@@ -1,5 +1,6 @@
 import type {SpindleAPI} from 'lumiverse-spindle-types';
 import type {VisualNovelConfig} from '../../config.js';
+import {isFluxKleinModel} from '../../shared/image-model-output.js';
 import {parsePromptCapabilities,resolveImagePromptProfile,type ImagePromptProfile} from '../../shared/image-prompt-profile.js';
 import {parseModelOutputCatalog,chooseModelOutput,type ModelOutputCapabilities} from '../../shared/model-output-capabilities.js';
 import {resolveImagePromptProfileV2,type ImagePromptProfileV2} from '../../shared/image-prompt-profile-v2.js';
@@ -55,7 +56,8 @@ export async function plannerImagePromptProfileV2(spindle:SpindleAPI,config:Visu
 /** Resolve size before review; never revisit the live catalogue for an approved request. */
 export function prepareCapabilityOutput(request:ImageGenerationRequest,requestedRatio?:string,resolutionPreference?:'standard'|'high'|'ultra'):ImageGenerationRequest{
  const profile=request.promptProfile;if(!profile?.output)return request;
- const prepared=chooseModelOutput(profile.output,request.parameters??{},requestedRatio,resolutionPreference);
+ const effectivePref=isFluxKleinModel(request.model)?(resolutionPreference==='standard'?'standard':resolutionPreference):resolutionPreference;
+ const prepared=chooseModelOutput(profile.output,request.parameters??{},requestedRatio,effectivePref);
  const parameters=prepared.parameters;
  const managed=parameters.rawRequestOverride===undefined||parameters._lumiglyphicsCatalogOutput===true||parameters._lumiglyphicsAnimaAspect===true||parameters._lumiglyphicsQwenOutput===true;
  return {...request,parameters,promptProfile:{...profile,outputManaged:managed,outputSummary:`${profile.outputSource==='live'?'Live catalogue':'Catalogue snapshot'}: ${prepared.summary}`}};

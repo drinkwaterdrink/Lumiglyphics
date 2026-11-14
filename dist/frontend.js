@@ -18791,6 +18791,405 @@ function describePresentationAction(action, name = (id2) => id2) {
   return action.kind === "hold_background" ? "keep the background until the scene changes" : action.kind === "prefer_template" ? `prefer ${name(action.templateId)}` : action.kind === "limit_music" ? action.level === "quiet" ? "lower background music to 35% of its saved volume" : "mute background music" : action.intensity === "gentle" ? "limit one-shot effects to Gentle" : "disable one-shot effects";
 }
 
+// src/shared/story-dna.ts
+var LocationDNASchema = exports_external.object({
+  id: exports_external.string().trim().min(1).max(256),
+  name: exports_external.string().trim().min(1).max(160),
+  aliases: exports_external.array(exports_external.string().trim().max(160)).max(16).default([]),
+  environmentDescription: exports_external.string().trim().max(2000).optional(),
+  lighting: exports_external.string().trim().max(500).optional(),
+  atmosphere: exports_external.string().trim().max(500).optional(),
+  architecture: exports_external.string().trim().max(500).optional(),
+  persistentElements: exports_external.array(exports_external.string().trim().max(300)).max(24).default([]),
+  locked: exports_external.boolean().optional(),
+  referenceImageUrl: exports_external.string().trim().max(2048).optional(),
+  connectedLocations: exports_external.array(exports_external.string().trim().max(160)).max(24).optional(),
+  loreText: exports_external.string().trim().max(4000).optional(),
+  notes: exports_external.string().trim().max(2000).optional(),
+  autoDiscovered: exports_external.boolean().optional(),
+  seenInSwipes: exports_external.array(exports_external.string().trim().max(160)).max(64).optional(),
+  lastUpdated: exports_external.number().int().nonnegative().default(() => Date.now())
+}).strict();
+var ItemDNASchema = exports_external.object({
+  id: exports_external.string().trim().min(1).max(256),
+  name: exports_external.string().trim().min(1).max(160),
+  aliases: exports_external.array(exports_external.string().trim().max(160)).max(16).default([]),
+  itemType: exports_external.string().trim().max(100).optional(),
+  description: exports_external.string().trim().max(2000),
+  materials: exports_external.string().trim().max(500).optional(),
+  distinctiveFeatures: exports_external.array(exports_external.string().trim().max(300)).max(24).default([]),
+  colors: exports_external.array(exports_external.string().trim().max(60)).max(12).default([]),
+  heldBy: exports_external.string().trim().max(160).optional(),
+  locked: exports_external.boolean().optional(),
+  referenceImageUrl: exports_external.string().trim().max(2048).optional(),
+  loreText: exports_external.string().trim().max(4000).optional(),
+  notes: exports_external.string().trim().max(2000).optional(),
+  autoDiscovered: exports_external.boolean().optional(),
+  seenInSwipes: exports_external.array(exports_external.string().trim().max(160)).max(64).optional(),
+  lastUpdated: exports_external.number().int().nonnegative().default(() => Date.now())
+}).strict();
+var StoryDNASetSchema = exports_external.object({
+  locations: exports_external.record(exports_external.string(), LocationDNASchema).default({}),
+  items: exports_external.record(exports_external.string(), ItemDNASchema).default({}),
+  deletedLocations: exports_external.record(exports_external.string(), LocationDNASchema).optional(),
+  deletedItems: exports_external.record(exports_external.string(), ItemDNASchema).optional(),
+  revision: exports_external.number().int().nonnegative().default(0)
+}).strict();
+function createLocationId(name) {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "location";
+}
+function createItemId(name) {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "item";
+}
+var GENERIC_ALIAS_WORDS = new Set([
+  "the",
+  "and",
+  "for",
+  "with",
+  "from",
+  "into",
+  "this",
+  "that",
+  "room",
+  "hall",
+  "wing",
+  "floor",
+  "area",
+  "place",
+  "zone",
+  "site",
+  "town",
+  "city",
+  "land",
+  "keep",
+  "camp",
+  "shop",
+  "home",
+  "house",
+  "door",
+  "gate",
+  "wall",
+  "road",
+  "path",
+  "street",
+  "court",
+  "yard",
+  "key",
+  "keys",
+  "book",
+  "page",
+  "note",
+  "card",
+  "ring",
+  "mask",
+  "coat",
+  "robe",
+  "bag",
+  "pack",
+  "box",
+  "case",
+  "cup",
+  "mug",
+  "glass",
+  "blade",
+  "sword",
+  "staff",
+  "wand",
+  "coin",
+  "item",
+  "thing",
+  "relic",
+  "old",
+  "new",
+  "dark",
+  "light",
+  "black",
+  "white",
+  "red",
+  "blue",
+  "green",
+  "silver",
+  "golden",
+  "gold",
+  "iron",
+  "stone",
+  "crystal",
+  "ancient",
+  "great",
+  "grand",
+  "small",
+  "little",
+  "lost",
+  "hidden",
+  "secret",
+  "upper",
+  "lower",
+  "north",
+  "south",
+  "east",
+  "west",
+  "inner",
+  "outer",
+  "high",
+  "deep",
+  "royal",
+  "broken",
+  "first",
+  "last"
+]);
+var TRAILING_CONTAINER_SUFFIXES = new Set([
+  "academy",
+  "manor",
+  "cathedral",
+  "tavern",
+  "inn",
+  "keep",
+  "citadel",
+  "tower",
+  "library",
+  "sanctum",
+  "chapel",
+  "market",
+  "shrine",
+  "ruins",
+  "cavern",
+  "forest",
+  "observatory",
+  "conservatory",
+  "castle",
+  "palace",
+  "temple",
+  "monastery",
+  "courtyard",
+  "wing",
+  "hall",
+  "chamber",
+  "room",
+  "amulet",
+  "grimoire",
+  "chalice",
+  "signet",
+  "blade",
+  "sword",
+  "dagger",
+  "relic",
+  "talisman",
+  "locket",
+  "pendant",
+  "compass",
+  "lantern",
+  "scroll",
+  "codex",
+  "crown",
+  "scepter",
+  "sceptre",
+  "medallion",
+  "ring",
+  "satchel"
+]);
+function deriveShortAliases(name, existing = []) {
+  const baseName = name.trim();
+  const baseLower = baseName.toLowerCase();
+  const seen = new Set;
+  if (baseLower)
+    seen.add(baseLower);
+  const out = [];
+  const push = (raw, allowShort = false) => {
+    const clean = raw.replace(/\s+/g, " ").trim();
+    const lower = clean.toLowerCase();
+    if (!clean || seen.has(lower))
+      return;
+    if (!allowShort && (clean.length < 4 || GENERIC_ALIAS_WORDS.has(lower)))
+      return;
+    seen.add(lower);
+    out.push(clean);
+  };
+  for (const item of existing) {
+    if (typeof item === "string")
+      push(item, true);
+  }
+  if (baseName) {
+    const parenClean = baseName.replace(/\s*\([^)]*\)\s*$/, "").replace(/\s*(?:,|—|–|\s-\s).*$/, "").trim();
+    if (parenClean && parenClean !== baseName)
+      push(parenClean);
+    const noArticle = (parenClean || baseName).replace(/^(?:the|an?)\s+/i, "").trim();
+    if (noArticle && noArticle.toLowerCase() !== baseLower) {
+      push(noArticle);
+    }
+    const working = noArticle || parenClean || baseName;
+    const ofSplit = working.split(/\s+of(?:\s+the)?\s+/i);
+    if (ofSplit.length >= 2) {
+      const head = ofSplit[0]?.trim() ?? "";
+      if (head && !GENERIC_ALIAS_WORDS.has(head.toLowerCase())) {
+        push(head);
+      }
+    }
+    const words = working.split(/\s+/);
+    if (words.length >= 2) {
+      const lastWord = words[words.length - 1]?.toLowerCase() ?? "";
+      const prefix = words.slice(0, -1).join(" ");
+      if (TRAILING_CONTAINER_SUFFIXES.has(lastWord) && prefix.length >= 5 && !prefix.includes("'s") && !prefix.includes("’s") && !GENERIC_ALIAS_WORDS.has(prefix.toLowerCase())) {
+        push(prefix);
+      }
+    }
+  }
+  return out.slice(0, 12);
+}
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function matchesBoundaryCandidate(queryLower, candidateRaw) {
+  const candidate = candidateRaw.trim().toLowerCase();
+  if (!candidate)
+    return false;
+  if (candidate === queryLower)
+    return true;
+  if (candidate.length >= 5 && !GENERIC_ALIAS_WORDS.has(candidate)) {
+    const candidateRe = new RegExp(`(?:^|[^\\p{L}\\p{N}_])${escapeRegExp(candidate)}(?:$|[^\\p{L}\\p{N}_])`, "iu");
+    if (candidateRe.test(queryLower))
+      return true;
+  }
+  if (queryLower.length >= 5 && !GENERIC_ALIAS_WORDS.has(queryLower)) {
+    const queryRe = new RegExp(`(?:^|[^\\p{L}\\p{N}_])${escapeRegExp(queryLower)}(?:$|[^\\p{L}\\p{N}_])`, "iu");
+    if (queryRe.test(candidate))
+      return true;
+  }
+  return false;
+}
+function findMatchingLocation(locations, name) {
+  const query = name.trim().toLowerCase();
+  if (!query)
+    return;
+  if (locations[query])
+    return locations[query];
+  const directId = createLocationId(query);
+  if (locations[directId])
+    return locations[directId];
+  const exact = Object.values(locations).find((loc) => {
+    if (loc.name.trim().toLowerCase() === query)
+      return true;
+    if (createLocationId(loc.name) === directId)
+      return true;
+    return loc.aliases.some((a) => a.trim().toLowerCase() === query || createLocationId(a) === directId);
+  });
+  if (exact)
+    return exact;
+  return Object.values(locations).find((loc) => {
+    const candidates = [loc.name, ...deriveShortAliases(loc.name, loc.aliases)];
+    return candidates.some((candidate) => matchesBoundaryCandidate(query, candidate));
+  });
+}
+function findMatchingItem(items, name) {
+  const query = name.trim().toLowerCase();
+  if (!query)
+    return;
+  if (items[query])
+    return items[query];
+  const directId = createItemId(query);
+  if (items[directId])
+    return items[directId];
+  const exact = Object.values(items).find((item) => {
+    if (item.name.trim().toLowerCase() === query)
+      return true;
+    if (createItemId(item.name) === directId)
+      return true;
+    return item.aliases.some((a) => a.trim().toLowerCase() === query || createItemId(a) === directId);
+  });
+  if (exact)
+    return exact;
+  return Object.values(items).find((item) => {
+    const candidates = [item.name, ...deriveShortAliases(item.name, item.aliases)];
+    return candidates.some((candidate) => matchesBoundaryCandidate(query, candidate));
+  });
+}
+function formatLocationDNAToPromptClause(dna) {
+  const parts = [];
+  if (dna.environmentDescription)
+    parts.push(dna.environmentDescription);
+  if (dna.architecture)
+    parts.push(`architecture: ${dna.architecture}`);
+  if (dna.lighting)
+    parts.push(`lighting: ${dna.lighting}`);
+  if (dna.atmosphere)
+    parts.push(`atmosphere: ${dna.atmosphere}`);
+  if (dna.persistentElements && dna.persistentElements.length > 0) {
+    parts.push(`features: ${dna.persistentElements.slice(0, 6).join(", ")}`);
+  }
+  return parts.join("; ");
+}
+function formatItemDNAToPromptClause(dna) {
+  const parts = [];
+  if (dna.description)
+    parts.push(dna.description);
+  if (dna.materials)
+    parts.push(`materials: ${dna.materials}`);
+  if (dna.distinctiveFeatures && dna.distinctiveFeatures.length > 0) {
+    parts.push(dna.distinctiveFeatures.join(", "));
+  }
+  if (dna.colors && dna.colors.length > 0) {
+    parts.push(`colors: ${dna.colors.join(", ")}`);
+  }
+  return parts.join("; ");
+}
+var StoryDnaRequestSchema = exports_external.discriminatedUnion("action", [
+  exports_external.object({
+    type: exports_external.literal("vn_story_dna"),
+    action: exports_external.literal("list"),
+    chatId: exports_external.string(),
+    requestId: exports_external.string().optional()
+  }),
+  exports_external.object({
+    type: exports_external.literal("vn_story_dna"),
+    action: exports_external.literal("save_location"),
+    chatId: exports_external.string(),
+    requestId: exports_external.string().optional(),
+    location: LocationDNASchema,
+    revision: exports_external.number().int().optional()
+  }),
+  exports_external.object({
+    type: exports_external.literal("vn_story_dna"),
+    action: exports_external.literal("save_item"),
+    chatId: exports_external.string(),
+    requestId: exports_external.string().optional(),
+    item: ItemDNASchema,
+    revision: exports_external.number().int().optional()
+  }),
+  exports_external.object({
+    type: exports_external.literal("vn_story_dna"),
+    action: exports_external.literal("delete_location"),
+    chatId: exports_external.string(),
+    requestId: exports_external.string().optional(),
+    locationId: exports_external.string(),
+    revision: exports_external.number().int().optional()
+  }),
+  exports_external.object({
+    type: exports_external.literal("vn_story_dna"),
+    action: exports_external.literal("delete_item"),
+    chatId: exports_external.string(),
+    requestId: exports_external.string().optional(),
+    itemId: exports_external.string(),
+    revision: exports_external.number().int().optional()
+  }),
+  exports_external.object({
+    type: exports_external.literal("vn_story_dna"),
+    action: exports_external.literal("autofill_location"),
+    chatId: exports_external.string(),
+    requestId: exports_external.string().optional(),
+    locationId: exports_external.string().optional(),
+    locationName: exports_external.string(),
+    messageId: exports_external.string().optional()
+  }),
+  exports_external.object({
+    type: exports_external.literal("vn_story_dna"),
+    action: exports_external.literal("autofill_item"),
+    chatId: exports_external.string(),
+    requestId: exports_external.string().optional(),
+    itemId: exports_external.string().optional(),
+    itemName: exports_external.string(),
+    messageId: exports_external.string().optional()
+  })
+]);
+
 // src/shared/reference-fields.ts
 var REFERENCE_FIELD_GROUPS = [
   { id: "overview", label: "Overview" },
@@ -19796,6 +20195,38 @@ var ImageShotSpecSchema = exports_external.object({
   source: exports_external.enum(["planner", "deterministic-fallback", "manual"]),
   revision: exports_external.number().int().min(0).default(0)
 }).strict();
+
+// src/shared/image-model-output.ts
+var KLEIN_OUTPUT_SIZES = ["768x768", "1024x1024", "1536x1536", "2048x2048", "4096x4096"];
+var ANIMA_MODELS = new Set(["anima", "anima/text-to-image", "anima/text-to-image-lora", "wavespeed-ai/anima/text-to-image", "wavespeed-ai/anima/text-to-image-lora"]);
+function isFluxKleinModel(model) {
+  const id2 = String(model ?? "").trim().toLowerCase();
+  return Boolean(id2) && id2.includes("klein");
+}
+function isFlux3KleinSquareModel(model) {
+  const id2 = String(model ?? "").trim().toLowerCase();
+  return Boolean(id2) && (/flux[-_./]?3.*klein/i.test(id2) || id2.startsWith("blackforestlabs/flux-3/klein"));
+}
+function imageOutputRule(provider, model) {
+  if (provider?.trim().toLowerCase() !== "nanogpt")
+    return null;
+  const id2 = model?.trim().toLowerCase() ?? "";
+  if (ANIMA_MODELS.has(id2))
+    return "anima";
+  if (id2 === "qwen-image-2.1-turbo")
+    return "qwen-turbo";
+  return isFlux3KleinSquareModel(id2) ? "klein-square" : null;
+}
+function modelOutputHelp(provider, model, parameters) {
+  const rule = imageOutputRule(provider, model);
+  if (rule === "qwen-turbo")
+    return `Qwen Image 2.1 Turbo uses size "1k" or "2k" and separate framing (${String(parameters.aspectRatio ?? "1:1")}). 9:16 is supported. Other requested shapes use the closest supported ratio before review. The prepared resolution is ${String(parameters.size ?? "1k")}. Custom connection raw overrides take priority; prepare a new preview after changing connection settings.`;
+  if (rule === "klein-square")
+    return `FLUX.3 Klein supports square images only; 9:16 is unavailable with this model. Visible size field: ${String(parameters.size ?? "1024x1024")}. Supported sizes: ${KLEIN_OUTPUT_SIZES.join(", ")}. A connection's custom raw override takes priority and may change these fields.`;
+  if (rule === "anima")
+    return `Anima uses size "1k" or "1.5k" with a separate aspectRatio (9:16 is supported for text-to-image). Visible size field: ${String(parameters.size ?? "1k")}; framing: ${String(parameters.aspectRatio ?? "connection default")}. With an image reference, Anima keeps the reference's aspect ratio. A connection's custom raw override takes priority and may change these fields.`;
+  return "";
+}
 
 // src/shared/model-output-capabilities.ts
 function ratio(value) {
@@ -21742,6 +22173,20 @@ var CharacterBuildDNASchema = exports_external.object({
   species: exports_external.string().trim().max(100).optional(),
   age: exports_external.string().trim().max(100).optional()
 }).strict();
+var CharacterRelationshipBeatSchema = exports_external.object({
+  text: exports_external.string().max(500),
+  messageId: exports_external.string().max(120).optional(),
+  timestamp: exports_external.number().int().nonnegative().optional()
+}).strict();
+var CharacterRelationshipSchema = exports_external.object({
+  targetName: exports_external.string().min(1).max(120),
+  affinity: exports_external.number().int().min(-100).max(100).default(0),
+  trust: exports_external.number().int().min(-100).max(100).default(0),
+  dynamicLabel: exports_external.string().max(160).default(""),
+  status: exports_external.string().max(300).default(""),
+  recentBeats: exports_external.array(CharacterRelationshipBeatSchema).max(12).default([]),
+  lastUpdated: exports_external.number().int().nonnegative().default(() => Date.now())
+}).strict();
 var CharacterDNASchema = exports_external.object({
   id: exports_external.string().trim().min(1).max(256),
   name: exports_external.string().trim().min(1).max(160),
@@ -21763,6 +22208,9 @@ var CharacterDNASchema = exports_external.object({
   secondaryReferenceImageUrl: exports_external.string().trim().max(5000000).optional(),
   referenceImageId: exports_external.string().trim().max(256).optional(),
   secondaryReferenceImageId: exports_external.string().trim().max(256).optional(),
+  relationships: exports_external.array(CharacterRelationshipSchema).max(40).default([]),
+  autoDiscovered: exports_external.boolean().optional(),
+  seenInSwipes: exports_external.array(exports_external.string().max(160)).max(60).optional(),
   lastUpdated: exports_external.number().int().nonnegative().default(() => Date.now()),
   fieldSources: exports_external.record(exports_external.string(), exports_external.object({ classification: exports_external.enum(["evidence", "inferred", "generated", "manual"]), sources: exports_external.array(exports_external.string().max(1000)).max(8) }).strict()).optional()
 }).strict();
@@ -22153,78 +22601,6 @@ function previewCursorForTurn(preview, index, turn) {
     return null;
   return Math.max(0, Math.min(Number.isFinite(index) ? Math.floor(index) : 0, turn.paragraphs.length - 1));
 }
-
-// src/shared/story-dna.ts
-var LocationDNASchema = exports_external.object({
-  id: exports_external.string().trim().min(1).max(256),
-  name: exports_external.string().trim().min(1).max(160),
-  aliases: exports_external.array(exports_external.string().trim().max(160)).max(16).default([]),
-  environmentDescription: exports_external.string().trim().max(2000).optional(),
-  lighting: exports_external.string().trim().max(500).optional(),
-  atmosphere: exports_external.string().trim().max(500).optional(),
-  architecture: exports_external.string().trim().max(500).optional(),
-  persistentElements: exports_external.array(exports_external.string().trim().max(300)).max(24).default([]),
-  lastUpdated: exports_external.number().int().nonnegative().default(() => Date.now())
-}).strict();
-var ItemDNASchema = exports_external.object({
-  id: exports_external.string().trim().min(1).max(256),
-  name: exports_external.string().trim().min(1).max(160),
-  aliases: exports_external.array(exports_external.string().trim().max(160)).max(16).default([]),
-  itemType: exports_external.string().trim().max(100).optional(),
-  description: exports_external.string().trim().max(2000),
-  materials: exports_external.string().trim().max(500).optional(),
-  distinctiveFeatures: exports_external.array(exports_external.string().trim().max(300)).max(24).default([]),
-  colors: exports_external.array(exports_external.string().trim().max(60)).max(12).default([]),
-  heldBy: exports_external.string().trim().max(160).optional(),
-  lastUpdated: exports_external.number().int().nonnegative().default(() => Date.now())
-}).strict();
-var StoryDNASetSchema = exports_external.object({
-  locations: exports_external.record(exports_external.string(), LocationDNASchema).default({}),
-  items: exports_external.record(exports_external.string(), ItemDNASchema).default({}),
-  deletedLocations: exports_external.record(exports_external.string(), LocationDNASchema).optional(),
-  deletedItems: exports_external.record(exports_external.string(), ItemDNASchema).optional(),
-  revision: exports_external.number().int().nonnegative().default(0)
-}).strict();
-var StoryDnaRequestSchema = exports_external.discriminatedUnion("action", [
-  exports_external.object({
-    type: exports_external.literal("vn_story_dna"),
-    action: exports_external.literal("list"),
-    chatId: exports_external.string(),
-    requestId: exports_external.string().optional()
-  }),
-  exports_external.object({
-    type: exports_external.literal("vn_story_dna"),
-    action: exports_external.literal("save_location"),
-    chatId: exports_external.string(),
-    requestId: exports_external.string().optional(),
-    location: LocationDNASchema,
-    revision: exports_external.number().int().optional()
-  }),
-  exports_external.object({
-    type: exports_external.literal("vn_story_dna"),
-    action: exports_external.literal("save_item"),
-    chatId: exports_external.string(),
-    requestId: exports_external.string().optional(),
-    item: ItemDNASchema,
-    revision: exports_external.number().int().optional()
-  }),
-  exports_external.object({
-    type: exports_external.literal("vn_story_dna"),
-    action: exports_external.literal("delete_location"),
-    chatId: exports_external.string(),
-    requestId: exports_external.string().optional(),
-    locationId: exports_external.string(),
-    revision: exports_external.number().int().optional()
-  }),
-  exports_external.object({
-    type: exports_external.literal("vn_story_dna"),
-    action: exports_external.literal("delete_item"),
-    chatId: exports_external.string(),
-    requestId: exports_external.string().optional(),
-    itemId: exports_external.string(),
-    revision: exports_external.number().int().optional()
-  })
-]);
 
 // src/shared/image-retries.ts
 var id3 = exports_external.string().trim().min(1).max(256);
@@ -29763,22 +30139,32 @@ function linkEntityMentions(text, entities, prefs, chatId = "", limit = prefs.ma
   const owners = new Map;
   for (const e of entities)
     for (const name of [e.name, ...e.aliases]) {
-      const ids = owners.get(name) ?? new Set;
+      const key = name.trim().toLowerCase();
+      if (!key)
+        continue;
+      const ids = owners.get(key) ?? new Set;
       ids.add(e.id);
-      owners.set(name, ids);
+      owners.set(key, ids);
     }
   const excluded = [...protectedRanges, ...[...text.matchAll(/`[^`]*`|\[[^\]]*\]\([^)]*\)/g)].map((m) => [m.index, m.index + m[0].length])];
   const candidates = [];
   for (const e of eligible)
     for (const name of [e.name, ...e.aliases]) {
-      if (owners.get(name)?.size !== 1 || /^(?:he|she|they|it|you|we|i|him|her|them)$/i.test(name))
+      const key = name.trim().toLowerCase();
+      if (/^[\x00-\x7F]+$/.test(key) && key.length < 3 || owners.get(key)?.size !== 1 || /^(?:he|she|they|it|you|we|i|him|her|them|me|us|the|a|an|in|on|at|to|of|or|by|as|is|go|do|so|no|up|my)$/i.test(key))
         continue;
-      let start = text.indexOf(name), scanned = 0;
-      while (start >= 0 && scanned++ < 12) {
-        const end = start + name.length, before = Array.from(text.slice(Math.max(0, start - 2), start)).at(-1) ?? "", after = Array.from(text.slice(end, end + 2))[0] ?? "";
+      const nameRe = new RegExp(name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "giu");
+      let m;
+      let scanned = 0;
+      while ((m = nameRe.exec(text)) && scanned++ < 12) {
+        if (m[0].length === 0) {
+          nameRe.lastIndex++;
+          continue;
+        }
+        const start = m.index;
+        const end = start + m[0].length, before = Array.from(text.slice(Math.max(0, start - 2), start)).at(-1) ?? "", after = Array.from(text.slice(end, end + 2))[0] ?? "";
         if (!/[\p{L}\p{N}_]/u.test(before) && !/[\p{L}\p{N}_]/u.test(after) && !excluded.some(([a, b]) => start >= a && start < b))
           candidates.push({ start, end, entityId: e.id, pinned: entityOverride(prefs, chatId, e)?.pinned === true });
-        start = text.indexOf(name, end);
       }
     }
   candidates.sort((a, b) => Number(b.pinned) - Number(a.pinned) || a.start - b.start || b.end - a.end);
@@ -30127,17 +30513,6 @@ function fallbackSvgForKind(kind, name) {
   }
   return `<svg viewBox="0 0 120 120" aria-hidden="true" focusable="false"><defs><linearGradient id="vnItemGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="rgba(232,190,116,0.28)"/><stop offset="100%" stop-color="rgba(20,24,38,0.94)"/></linearGradient></defs><rect width="120" height="120" rx="14" fill="url(#vnItemGrad)"/><polygon points="60,20 94,60 60,100 26,60" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.34)" stroke-width="1.5"/><circle cx="60" cy="60" r="12" fill="rgba(255,255,255,0.2)"/></svg>`;
 }
-var MAP_POSITIONS = [
-  [18, 14],
-  [62, 22],
-  [15, 52],
-  [60, 58],
-  [38, 36],
-  [78, 40],
-  [26, 72],
-  [68, 74]
-];
-
 class DossierCard {
   closeCallback;
   update;
@@ -30149,9 +30524,46 @@ class DossierCard {
   category = "all";
   scope = "all";
   selectedEntityId = null;
+  hubView = "scene";
+  storyDna = { locations: {}, items: {}, revision: 0 };
+  storyDnaRequester = null;
+  storyDnaError = null;
+  sceneHubContext = null;
+  activeDossierContext = null;
+  awaitingDnaSync = false;
   folioOpener = null;
   setFolioOpener(fn) {
     this.folioOpener = fn;
+  }
+  setStoryDna(storyDna) {
+    this.storyDna = storyDna;
+    this.storyDnaError = null;
+    if (this.awaitingDnaSync && this.activeDossierContext && this.isOpen()) {
+      this.awaitingDnaSync = false;
+      const ctx = this.activeDossierContext;
+      this.open(ctx.dossier, ctx.prefs, ctx.chatId, ctx.trigger, ctx.actions, ctx.storyDocument, ctx.visual);
+      return;
+    }
+    const statusEl = this.host.querySelector("[data-story-dna-status]");
+    if (statusEl) {
+      statusEl.textContent = "Saved Story DNA synced.";
+      statusEl.hidden = false;
+    }
+  }
+  setStoryDnaRequester(fn) {
+    this.storyDnaRequester = fn;
+  }
+  setStoryDnaError(error61) {
+    this.storyDnaError = error61;
+    this.awaitingDnaSync = false;
+    const statusEl = this.host.querySelector("[data-story-dna-status]");
+    if (statusEl) {
+      statusEl.textContent = error61;
+      statusEl.hidden = false;
+    }
+  }
+  setSceneHubContext(ctx) {
+    this.sceneHubContext = ctx;
   }
   constructor(mount, closeCallback, update, documentState = () => {}) {
     this.closeCallback = closeCallback;
@@ -30214,10 +30626,16 @@ class DossierCard {
     return !this.host.hidden;
   }
   open(dossier, prefs, chatId, trigger, actions, storyDocument, visual) {
+    const kind = dossier.entity.kind;
+    if (kind === "npc" && this.folioOpener) {
+      this.close();
+      this.folioOpener(dossier.entity.name);
+      return;
+    }
     this.documentState(false);
     this.returnFocus = trigger;
+    this.activeDossierContext = { dossier, prefs, chatId, trigger, actions, storyDocument, visual };
     this.host.replaceChildren();
-    const kind = dossier.entity.kind;
     const panel = document.createElement("section");
     panel.dataset.vnDossierCard = "";
     panel.dataset.dossierKind = kind;
@@ -30352,6 +30770,9 @@ class DossierCard {
       addLegacyBadge("\uD83D\uDCCC Pinned", "pinned");
     folioMeta.append(legacyBadges);
     panel.append(folioMeta);
+    if (kind === "place" || kind === "object") {
+      panel.append(this.buildStoryDnaStudio(kind, dossier));
+    }
     const facts = dossier.facts.filter((f) => f.value.trim() && prefs.fieldGroups[referenceFieldInfo(f.field).section] !== false);
     const earlier = prefs.rememberReferences ? (dossier.earlier ?? []).filter((e) => prefs.fieldGroups[referenceFieldInfo(e.reference.field).section] !== false) : [];
     const lasting = facts.filter((f) => !referenceFieldInfo(f.field).living);
@@ -30494,7 +30915,7 @@ class DossierCard {
       section.append(list);
       panel.append(section);
     }
-    if (kind === "place" && visual?.presentCharacters?.length && visual.onSelectEntity) {
+    if (kind === "place" && visual?.presentCharacters?.length && (visual.onSelectEntity || this.folioOpener)) {
       const castSection = document.createElement("section");
       castSection.dataset.dossierPresentCast = "";
       const castHeading = document.createElement("h3");
@@ -30507,6 +30928,10 @@ class DossierCard {
         chip.dataset.dossierCastChip = "";
         chip.textContent = `\uD83D\uDC64 ${char.name}`;
         chip.onclick = () => {
+          if (this.folioOpener) {
+            this.folioOpener(char.name);
+            return;
+          }
           const prevReturn = this.trayReturn;
           this.trayReturn = () => {
             this.trayReturn = prevReturn;
@@ -30757,11 +31182,13 @@ class DossierCard {
   }
   openTray(entries, trigger, open2, note, visualResolver) {
     this.documentState(false);
+    this.activeDossierContext = null;
     if (!this.isOpen()) {
       this.query = "";
       this.category = "all";
       this.scope = "all";
       this.selectedEntityId = null;
+      this.hubView = "scene";
     }
     this.returnFocus = trigger;
     this.trayReturn = () => this.openTray(entries, trigger, open2, note, visualResolver);
@@ -30805,7 +31232,7 @@ class DossierCard {
     const pageSub = document.createElement("div");
     pageSub.className = "page-sub";
     pageSub.style.cssText = "font-size:11px;opacity:0.75;margin-top:2px;";
-    pageSub.textContent = "People, places and items established in the story.";
+    pageSub.textContent = "Scene scenery DNA, connected locations and story items.";
     titleBlock.append(pageTitle, pageSub);
     panel.append(titleBlock);
     const tabs = document.createElement("div");
@@ -30827,7 +31254,7 @@ class DossierCard {
     const category = document.createElement("select");
     category.setAttribute("aria-label", "Reference category");
     category.style.display = "none";
-    for (const [value, label] of [["all", "All"], ["npc", "People"], ["place", "Places"], ["object", "Items"]]) {
+    for (const [value, label] of [["all", "All"], ["place", "Places"], ["object", "Items"]]) {
       const option = document.createElement("option");
       option.value = value;
       option.textContent = label;
@@ -30929,15 +31356,68 @@ class DossierCard {
         overview: desc,
         earlier: false
       });
+      if (this.storyDnaRequester) {
+        if (kind === "place") {
+          this.storyDnaRequester({
+            action: "save_location",
+            location: {
+              id: createLocationId(name),
+              name,
+              aliases: deriveShortAliases(name),
+              environmentDescription: desc.slice(0, 2000),
+              persistentElements: [],
+              connectedLocations: [],
+              autoDiscovered: false,
+              lastUpdated: Date.now()
+            }
+          });
+        } else {
+          this.storyDnaRequester({
+            action: "save_item",
+            item: {
+              id: createItemId(name),
+              name,
+              aliases: deriveShortAliases(name),
+              description: desc.slice(0, 2000),
+              distinctiveFeatures: [],
+              colors: [],
+              autoDiscovered: false,
+              lastUpdated: Date.now()
+            }
+          });
+        }
+      }
       this.selectedEntityId = newEntity.id;
       addRefPanel.style.display = "none";
       nameInput.value = "";
       descInput.value = "";
       render2();
     });
+    const hubToggleBar = document.createElement("div");
+    hubToggleBar.className = "world-hub-tabs";
+    hubToggleBar.dataset.worldHeaderTabs = "";
+    const sceneTabBtn = document.createElement("button");
+    sceneTabBtn.type = "button";
+    sceneTabBtn.className = "chip";
+    sceneTabBtn.dataset.worldHubTab = "scene";
+    sceneTabBtn.textContent = "\uD83C\uDFDB️ Current Scene";
+    const atlasTabBtn = document.createElement("button");
+    atlasTabBtn.type = "button";
+    atlasTabBtn.className = "chip";
+    atlasTabBtn.dataset.worldHubTab = "atlas";
+    atlasTabBtn.textContent = "\uD83D\uDDFA️ Connected Atlas";
+    sceneTabBtn.onclick = () => {
+      this.hubView = "scene";
+      render2();
+    };
+    atlasTabBtn.onclick = () => {
+      this.hubView = "atlas";
+      render2();
+    };
+    hubToggleBar.append(sceneTabBtn, atlasTabBtn);
+    panel.append(hubToggleBar);
     const worldSheet = document.createElement("div");
     worldSheet.className = "world-sheet-map";
-    worldSheet.innerHTML = '<svg class="world-map-svg" viewBox="0 0 330 250" aria-hidden="true"><path d="M90 60C160 62 155 90 205 110M90 60C60 90 48 135 48 170M48 170C120 205 130 190 205 190M205 110C225 155 205 170 205 190" stroke="rgba(56,189,248,0.25)" stroke-width="1.5" stroke-dasharray="4 4"/></svg>';
     panel.append(worldSheet);
     const lensSlot = document.createElement("div");
     lensSlot.className = "world-lens-slot";
@@ -30974,37 +31454,230 @@ class DossierCard {
       this.scope = scope.value;
       list.replaceChildren();
       worldStrip.replaceChildren();
-      const svg = worldSheet.querySelector(".world-map-svg");
+      sceneTabBtn.setAttribute("aria-pressed", String(this.hubView === "scene"));
+      atlasTabBtn.setAttribute("aria-pressed", String(this.hubView === "atlas"));
+      if (this.hubView === "scene")
+        sceneTabBtn.classList.add("active");
+      else
+        sceneTabBtn.classList.remove("active");
+      if (this.hubView === "atlas")
+        atlasTabBtn.classList.add("active");
+      else
+        atlasTabBtn.classList.remove("active");
       worldSheet.replaceChildren();
-      if (svg)
-        worldSheet.append(svg);
-      const filtered = entries.filter(({ entity }) => (this.scope === "all" || !entity.id.startsWith("earlier:")) && (this.category === "all" || entity.kind === this.category) && (!this.query.trim() || [entity.name, ...entity.aliases].some((name) => name.toLocaleLowerCase().includes(this.query.trim().toLocaleLowerCase()))));
-      count.textContent = filtered.length ? `${filtered.length} reference${filtered.length === 1 ? "" : "s"}` : "No references match. Try another name or category.";
+      const filtered = entries.filter(({ entity }) => entity.kind !== "npc" && (this.scope === "all" || !entity.id.startsWith("earlier:")) && (this.category === "all" || entity.kind === this.category) && (!this.query.trim() || [entity.name, ...entity.aliases].some((name) => name.toLocaleLowerCase().includes(this.query.trim().toLocaleLowerCase()))));
+      count.textContent = filtered.length ? `${filtered.length} reference${filtered.length === 1 ? "" : "s"}` : "No locations or items match. Try another filter.";
       countBadge.textContent = `${filtered.length} FOUND`;
       if (!filtered.some((e) => e.entity.id === this.selectedEntityId)) {
         this.selectedEntityId = filtered[0]?.entity.id ?? null;
       }
       const activeEntry = filtered.find((e) => e.entity.id === this.selectedEntityId) ?? filtered[0];
-      const places = filtered.filter((e) => e.entity.kind === "place");
-      const mapEntries = places.length > 0 ? places.slice(0, 8) : filtered.slice(0, 8);
-      mapEntries.forEach(({ entity }, i) => {
-        const pos = MAP_POSITIONS[i % MAP_POSITIONS.length];
-        const vis = visualResolver?.(entity);
-        const isActiveLoc = vis?.isActiveLocation;
-        const nodeBtn = document.createElement("button");
-        nodeBtn.type = "button";
-        nodeBtn.className = `map-node-pill ${this.selectedEntityId === entity.id ? "active" : ""} ${isActiveLoc ? "active-location" : ""}`;
-        nodeBtn.style.left = `${pos[0]}%`;
-        nodeBtn.style.top = `${pos[1]}%`;
-        const iconSym = entity.kind === "place" ? isActiveLoc ? "★" : "\uD83D\uDCCD" : entity.kind === "object" ? "\uD83D\uDC8E" : "\uD83D\uDC64";
-        const subTxt = isActiveLoc ? "ACTIVE LOCATION" : entity.kind === "npc" ? "Character" : entity.kind === "place" ? "Location" : "Item";
-        nodeBtn.innerHTML = html`<span class="index-dot"></span><b>${iconSym} ${entity.name}</b><small>${subTxt}</small>`.value;
-        nodeBtn.onclick = () => {
-          this.selectedEntityId = entity.id;
-          render2();
-        };
-        worldSheet.append(nodeBtn);
-      });
+      const castByKey = new Map;
+      for (const c of this.sceneHubContext?.presentCast ?? []) {
+        castByKey.set(c.name.trim().toLowerCase(), c);
+      }
+      for (const e of entries) {
+        if (e.entity.kind !== "npc")
+          continue;
+        const key = e.entity.name.trim().toLowerCase();
+        if (!castByKey.has(key)) {
+          const vis = visualResolver?.(e.entity);
+          castByKey.set(key, { id: e.entity.id, name: e.entity.name, imageUrl: vis?.imageUrl, present: vis?.isPresent ?? e.current });
+        }
+      }
+      const presentCast = [...castByKey.values()];
+      if (this.hubView === "scene") {
+        const sceneHub = document.createElement("div");
+        sceneHub.className = "world-scene-hub";
+        sceneHub.dataset.worldSceneHub = "";
+        const activePlaceEntry = entries.find((e) => e.entity.kind === "place" && visualResolver?.(e.entity)?.isActiveLocation) ?? entries.find((e) => e.entity.kind === "place");
+        const activeLocName = this.sceneHubContext?.activeLocationName ?? activePlaceEntry?.entity.name ?? "Current Story Scene";
+        const matchedLocDna = this.sceneHubContext?.locationDna ?? findMatchingLocation(this.storyDna.locations, activeLocName);
+        const locImageUrl = this.sceneHubContext?.locationImageUrl ?? (activePlaceEntry ? visualResolver?.(activePlaceEntry.entity)?.imageUrl : undefined) ?? matchedLocDna?.referenceImageUrl;
+        const banner = document.createElement("div");
+        banner.className = "world-scene-banner";
+        if (locImageUrl) {
+          const img = document.createElement("img");
+          img.src = locImageUrl;
+          img.alt = activeLocName;
+          banner.append(img);
+        } else {
+          banner.innerHTML = fallbackSvgForKind("place", activeLocName);
+        }
+        const bannerOverlay = document.createElement("div");
+        bannerOverlay.className = "world-scene-banner-overlay";
+        const locTitle = document.createElement("h3");
+        locTitle.textContent = `\uD83D\uDCCD ${activeLocName}`;
+        const dnaPills = document.createElement("div");
+        dnaPills.className = "world-scene-dna-pills";
+        for (const trait of [matchedLocDna?.lighting, matchedLocDna?.atmosphere, matchedLocDna?.architecture].filter(Boolean)) {
+          const pill = document.createElement("span");
+          pill.className = "scene-dna-pill";
+          pill.textContent = trait;
+          dnaPills.append(pill);
+        }
+        if (activePlaceEntry) {
+          const editSceneryBtn = document.createElement("button");
+          editSceneryBtn.type = "button";
+          editSceneryBtn.className = "world-lens-cta";
+          editSceneryBtn.dataset.sceneHubEdit = "";
+          editSceneryBtn.textContent = "✨ Inspect & Edit Scenery DNA";
+          editSceneryBtn.onclick = () => open2(activePlaceEntry.entity.id, trigger);
+          bannerOverlay.append(locTitle, dnaPills, editSceneryBtn);
+        } else {
+          bannerOverlay.append(locTitle, dnaPills);
+        }
+        banner.append(bannerOverlay);
+        sceneHub.append(banner);
+        const castWrap = document.createElement("div");
+        castWrap.className = "world-scene-cast";
+        const castTitle = document.createElement("div");
+        castTitle.className = "world-scene-subhead";
+        castTitle.textContent = "\uD83D\uDC65 Present in Scene · Open in Character Folio";
+        const castRow = document.createElement("div");
+        castRow.className = "world-scene-cast-row";
+        if (presentCast.length > 0) {
+          for (const char of presentCast) {
+            const pill = document.createElement("button");
+            pill.type = "button";
+            pill.className = "present-cast-pill";
+            pill.dataset.presentCastPill = char.name;
+            pill.textContent = `\uD83D\uDC64 ${char.name} →`;
+            pill.onclick = () => {
+              if (this.folioOpener)
+                this.folioOpener(char.name);
+            };
+            castRow.append(pill);
+          }
+        } else {
+          const emptyCast = document.createElement("span");
+          emptyCast.className = "world-scene-empty";
+          emptyCast.textContent = "No named characters established in this paragraph yet.";
+          castRow.append(emptyCast);
+        }
+        castWrap.append(castTitle, castRow);
+        sceneHub.append(castWrap);
+        const activeObjects = filtered.filter((e) => e.entity.kind === "object");
+        if (activeObjects.length > 0) {
+          const itemsWrap = document.createElement("div");
+          itemsWrap.className = "world-scene-items";
+          const itemsTitle = document.createElement("div");
+          itemsTitle.className = "world-scene-subhead";
+          itemsTitle.textContent = "\uD83D\uDC8E Active Artifacts & Items";
+          const itemsRow = document.createElement("div");
+          itemsRow.className = "world-scene-cast-row";
+          for (const { entity } of activeObjects.slice(0, 6)) {
+            const pill = document.createElement("button");
+            pill.type = "button";
+            pill.className = `present-item-pill ${this.selectedEntityId === entity.id ? "active" : ""}`;
+            pill.textContent = `✦ ${entity.name}`;
+            pill.onclick = () => {
+              this.selectedEntityId = entity.id;
+              render2();
+            };
+            itemsRow.append(pill);
+          }
+          itemsWrap.append(itemsTitle, itemsRow);
+          sceneHub.append(itemsWrap);
+        }
+        worldSheet.append(sceneHub);
+      } else {
+        const atlasWrap = document.createElement("div");
+        atlasWrap.className = "world-atlas-view";
+        atlasWrap.dataset.worldAtlasView = "";
+        const placeMap = new Map;
+        for (const e of entries) {
+          if (e.entity.kind !== "place")
+            continue;
+          const vis = visualResolver?.(e.entity);
+          const dna = findMatchingLocation(this.storyDna.locations, e.entity.name);
+          placeMap.set(createLocationId(e.entity.name), {
+            id: createLocationId(e.entity.name),
+            name: e.entity.name,
+            entryId: e.entity.id,
+            isActive: Boolean(vis?.isActiveLocation),
+            connections: [...new Set([...dna?.connectedLocations ?? [], ...vis?.connectedLocations ?? []])]
+          });
+        }
+        for (const loc of Object.values(this.storyDna.locations)) {
+          const key = createLocationId(loc.name);
+          if (!placeMap.has(key)) {
+            placeMap.set(key, {
+              id: key,
+              name: loc.name,
+              entryId: `dna:loc:${loc.id}`,
+              isActive: Boolean(this.sceneHubContext?.activeLocationName && createLocationId(this.sceneHubContext.activeLocationName) === key),
+              connections: loc.connectedLocations ?? []
+            });
+          }
+        }
+        const nodes = [...placeMap.values()].slice(0, 10);
+        const coords = new Map;
+        nodes.forEach((node2, idx) => {
+          if (nodes.length === 1) {
+            coords.set(node2.id, { x: 165, y: 105 });
+          } else {
+            const angle = idx / nodes.length * Math.PI * 2 - Math.PI / 2;
+            const rx = 108;
+            const ry = 68;
+            coords.set(node2.id, {
+              x: Math.round(165 + Math.cos(angle) * rx),
+              y: Math.round(105 + Math.sin(angle) * ry)
+            });
+          }
+        });
+        const drawnEdges = new Set;
+        const edgePaths = [];
+        for (const node2 of nodes) {
+          const from = coords.get(node2.id);
+          if (!from)
+            continue;
+          for (const targetName of node2.connections) {
+            const targetKey = createLocationId(targetName);
+            const to = coords.get(targetKey);
+            if (!to || targetKey === node2.id)
+              continue;
+            const edgeKey = [node2.id, targetKey].sort().join("::");
+            if (drawnEdges.has(edgeKey))
+              continue;
+            drawnEdges.add(edgeKey);
+            edgePaths.push(`<line x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" stroke="rgba(168,211,200,0.45)" stroke-width="1.8" stroke-dasharray="4 3"/>`);
+          }
+        }
+        if (nodes.length > 0 && edgePaths.length === 0) {
+          for (let i = 1;i < nodes.length; i++) {
+            const prev = coords.get(nodes[i - 1].id);
+            const curr = coords.get(nodes[i].id);
+            edgePaths.push(`<line x1="${prev.x}" y1="${prev.y}" x2="${curr.x}" y2="${curr.y}" stroke="rgba(168,211,200,0.22)" stroke-width="1.3" stroke-dasharray="3 5"/>`);
+          }
+        }
+        atlasWrap.innerHTML = `<svg class="world-map-svg" viewBox="0 0 330 210" aria-hidden="true">${edgePaths.join("")}</svg>`;
+        for (const node2 of nodes) {
+          const pt = coords.get(node2.id);
+          const nodeBtn = document.createElement("button");
+          nodeBtn.type = "button";
+          nodeBtn.className = `map-node-pill ${this.selectedEntityId === node2.entryId ? "active" : ""} ${node2.isActive ? "active-location" : ""}`;
+          nodeBtn.style.left = `${Math.max(4, Math.min(72, Math.round(pt.x / 330 * 100 - 11)))}%`;
+          nodeBtn.style.top = `${Math.max(4, Math.min(76, Math.round(pt.y / 210 * 100 - 10)))}%`;
+          const badge = node2.isActive ? `★ ACTIVE · \uD83D\uDC65 ${presentCast.length}` : "Location";
+          nodeBtn.innerHTML = html`<span class="index-dot"></span><b>${node2.isActive ? "★" : "\uD83D\uDCCD"} ${node2.name}</b><small>${badge}</small>`.value;
+          nodeBtn.onclick = () => {
+            if (node2.entryId) {
+              this.selectedEntityId = node2.entryId;
+              render2();
+            }
+          };
+          atlasWrap.append(nodeBtn);
+        }
+        if (nodes.length === 0) {
+          const emptyAtlas = document.createElement("p");
+          emptyAtlas.className = "world-scene-empty";
+          emptyAtlas.style.padding = "16px";
+          emptyAtlas.textContent = "Visit or add locations to map the story atlas.";
+          atlasWrap.append(emptyAtlas);
+        }
+        worldSheet.append(atlasWrap);
+      }
       const lensCard = document.createElement("div");
       lensCard.className = "world-lens";
       if (activeEntry) {
@@ -31124,7 +31797,208 @@ class DossierCard {
       close.focus();
     }
   }
+  buildStoryDnaStudio(kind, dossier) {
+    const wrap = document.createElement("section");
+    wrap.className = "story-dna-studio";
+    wrap.dataset.storyDnaStudio = kind;
+    const status = document.createElement("p");
+    status.dataset.storyDnaStatus = "";
+    status.className = "story-dna-status";
+    status.hidden = !this.storyDnaError;
+    if (this.storyDnaError)
+      status.textContent = this.storyDnaError;
+    const head = document.createElement("div");
+    head.className = "story-dna-studio-head";
+    const heading = document.createElement("h3");
+    heading.textContent = kind === "place" ? "\uD83D\uDCCD Scenery DNA Studio" : "\uD83D\uDC8E Item DNA Studio";
+    const existingLoc = kind === "place" ? findMatchingLocation(this.storyDna.locations, dossier.entity.name) : undefined;
+    const existingItem = kind === "object" ? findMatchingItem(this.storyDna.items, dossier.entity.name) : undefined;
+    let isLocked = Boolean(kind === "place" ? existingLoc?.locked : existingItem?.locked);
+    const actionsRow = document.createElement("div");
+    actionsRow.className = "story-dna-studio-actions";
+    const lockBtn = document.createElement("button");
+    lockBtn.type = "button";
+    lockBtn.dataset.storyDnaLock = "";
+    lockBtn.setAttribute("aria-pressed", String(isLocked));
+    lockBtn.textContent = isLocked ? "\uD83D\uDD12 Locked DNA" : "\uD83D\uDD13 Lock DNA";
+    const autofillBtn = document.createElement("button");
+    autofillBtn.type = "button";
+    autofillBtn.dataset.storyDnaAutofill = "";
+    autofillBtn.textContent = "✨ Auto-Fill DNA";
+    autofillBtn.disabled = isLocked || !this.storyDnaRequester;
+    lockBtn.onclick = () => {
+      isLocked = !isLocked;
+      lockBtn.setAttribute("aria-pressed", String(isLocked));
+      lockBtn.textContent = isLocked ? "\uD83D\uDD12 Locked DNA" : "\uD83D\uDD13 Lock DNA";
+      autofillBtn.disabled = isLocked || !this.storyDnaRequester;
+      saveBtn.click();
+    };
+    actionsRow.append(lockBtn, autofillBtn);
+    head.append(heading, actionsRow);
+    wrap.append(head, status);
+    const factVal = (...fields2) => {
+      for (const f of fields2) {
+        const hit = dossier.facts.find((x) => x.field === f)?.value || dossier.state?.[f];
+        if (hit?.trim())
+          return hit.trim();
+      }
+      return "";
+    };
+    const form = document.createElement("div");
+    form.className = "story-dna-form";
+    const addField = (key, labelText, value, multiline = false, placeholder = "") => {
+      const row = document.createElement("label");
+      row.className = "story-dna-field";
+      const lbl = document.createElement("span");
+      lbl.textContent = labelText;
+      const input2 = document.createElement(multiline ? "textarea" : "input");
+      if (!multiline)
+        input2.type = "text";
+      input2.dataset.dnaField = key;
+      input2.value = value;
+      if (placeholder)
+        input2.placeholder = placeholder;
+      row.append(lbl, input2);
+      form.append(row);
+      return input2;
+    };
+    const preview = document.createElement("div");
+    preview.className = "story-dna-preview";
+    const previewLabel = document.createElement("small");
+    previewLabel.textContent = "Prompt Injection Preview";
+    const previewText = document.createElement("code");
+    previewText.dataset.storyDnaPreview = "";
+    preview.append(previewLabel, previewText);
+    const footer = document.createElement("div");
+    footer.className = "story-dna-footer";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.dataset.storyDnaSave = "";
+    saveBtn.textContent = kind === "place" ? "Save Scenery DNA" : "Save Item DNA";
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.dataset.storyDnaDelete = "";
+    delBtn.textContent = "Delete DNA";
+    footer.append(saveBtn, delBtn);
+    if (kind === "place") {
+      const aliasesIn = addField("aliases", "Short Aliases (comma-separated)", (existingLoc?.aliases ?? dossier.entity.aliases ?? []).join(", "));
+      const descIn = addField("environmentDescription", "Environment & Scenery Description", existingLoc?.environmentDescription ?? factVal("description", "impression", "surroundings", "layout"), true);
+      const archIn = addField("architecture", "Architecture / Layout", existingLoc?.architecture ?? factVal("layout", "architecture"));
+      const lightIn = addField("lighting", "Lighting", existingLoc?.lighting ?? "");
+      const atmIn = addField("atmosphere", "Atmosphere / Weather", existingLoc?.atmosphere ?? "");
+      const elemIn = addField("persistentElements", "Persistent Props / Landmarks (comma-separated)", (existingLoc?.persistentElements ?? []).join(", "));
+      const connIn = addField("connectedLocations", "Connected Locations (comma-separated)", (existingLoc?.connectedLocations ?? []).join(", "));
+      const loreIn = addField("loreText", "Lore / History", existingLoc?.loreText ?? factVal("history", "publicHistory", "significance", "customs"), true);
+      const notesIn = addField("notes", "Personal Notes", existingLoc?.notes ?? "", true);
+      const buildLoc = () => ({
+        id: existingLoc?.id ?? createLocationId(dossier.entity.name),
+        name: existingLoc?.name ?? dossier.entity.name,
+        aliases: aliasesIn.value.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 16),
+        ...descIn.value.trim() ? { environmentDescription: descIn.value.trim().slice(0, 2000) } : {},
+        ...archIn.value.trim() ? { architecture: archIn.value.trim().slice(0, 500) } : {},
+        ...lightIn.value.trim() ? { lighting: lightIn.value.trim().slice(0, 500) } : {},
+        ...atmIn.value.trim() ? { atmosphere: atmIn.value.trim().slice(0, 500) } : {},
+        persistentElements: elemIn.value.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 24),
+        connectedLocations: connIn.value.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 24),
+        ...loreIn.value.trim() ? { loreText: loreIn.value.trim().slice(0, 4000) } : {},
+        ...notesIn.value.trim() ? { notes: notesIn.value.trim().slice(0, 2000) } : {},
+        ...existingLoc?.referenceImageUrl ? { referenceImageUrl: existingLoc.referenceImageUrl } : {},
+        locked: isLocked,
+        autoDiscovered: false,
+        lastUpdated: Date.now()
+      });
+      const refreshPreview = () => {
+        const clause = formatLocationDNAToPromptClause(buildLoc());
+        previewText.textContent = clause || "Fill scenery details above to inject consistent location visuals into generated art.";
+      };
+      [aliasesIn, descIn, archIn, lightIn, atmIn, elemIn, connIn, loreIn, notesIn].forEach((el) => el.addEventListener("input", refreshPreview));
+      refreshPreview();
+      autofillBtn.onclick = () => {
+        this.awaitingDnaSync = true;
+        status.textContent = "Scanning story & SimTracker for scenery clues...";
+        status.hidden = false;
+        this.storyDnaRequester?.({
+          action: "autofill_location",
+          locationId: existingLoc?.id,
+          locationName: dossier.entity.name
+        });
+      };
+      saveBtn.onclick = () => {
+        const nextLoc = buildLoc();
+        this.storyDnaRequester?.({ action: "save_location", location: nextLoc });
+        status.textContent = "Saving Scenery DNA...";
+        status.hidden = false;
+      };
+      delBtn.onclick = () => {
+        if (existingLoc) {
+          this.storyDnaRequester?.({ action: "delete_location", locationId: existingLoc.id });
+          status.textContent = "Deleted Location DNA.";
+          status.hidden = false;
+        }
+      };
+    } else {
+      const aliasesIn = addField("aliases", "Short Aliases (comma-separated)", (existingItem?.aliases ?? dossier.entity.aliases ?? []).join(", "));
+      const typeIn = addField("itemType", "Item Type / Category", existingItem?.itemType ?? "");
+      const descIn = addField("description", "Visual Description (Prompt Injection)", existingItem?.description ?? factVal("description", "appearance", "significance") ?? dossier.entity.name, true);
+      const matIn = addField("materials", "Materials / Craftsmanship", existingItem?.materials ?? "");
+      const featIn = addField("distinctiveFeatures", "Distinctive Features (comma-separated)", (existingItem?.distinctiveFeatures ?? []).join(", "));
+      const colIn = addField("colors", "Colors (comma-separated)", (existingItem?.colors ?? []).join(", "));
+      const heldIn = addField("heldBy", "Held / Owned By", existingItem?.heldBy ?? factVal("owner"));
+      const loreIn = addField("loreText", "Lore / Significance", existingItem?.loreText ?? factVal("provenance", "significance", "history", "function"), true);
+      const notesIn = addField("notes", "Personal Notes", existingItem?.notes ?? "", true);
+      const buildItem = () => ({
+        id: existingItem?.id ?? createItemId(dossier.entity.name),
+        name: existingItem?.name ?? dossier.entity.name,
+        aliases: aliasesIn.value.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 16),
+        ...typeIn.value.trim() ? { itemType: typeIn.value.trim().slice(0, 100) } : {},
+        description: (descIn.value.trim() || dossier.entity.name).slice(0, 2000),
+        ...matIn.value.trim() ? { materials: matIn.value.trim().slice(0, 500) } : {},
+        distinctiveFeatures: featIn.value.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 24),
+        colors: colIn.value.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 12),
+        ...heldIn.value.trim() ? { heldBy: heldIn.value.trim().slice(0, 160) } : {},
+        ...loreIn.value.trim() ? { loreText: loreIn.value.trim().slice(0, 4000) } : {},
+        ...notesIn.value.trim() ? { notes: notesIn.value.trim().slice(0, 2000) } : {},
+        ...existingItem?.referenceImageUrl ? { referenceImageUrl: existingItem.referenceImageUrl } : {},
+        locked: isLocked,
+        autoDiscovered: false,
+        lastUpdated: Date.now()
+      });
+      const refreshPreview = () => {
+        const clause = formatItemDNAToPromptClause(buildItem());
+        previewText.textContent = clause || "Describe this artifact so prompts stay consistent whenever it appears.";
+      };
+      [aliasesIn, typeIn, descIn, matIn, featIn, colIn, heldIn, loreIn, notesIn].forEach((el) => el.addEventListener("input", refreshPreview));
+      refreshPreview();
+      autofillBtn.onclick = () => {
+        this.awaitingDnaSync = true;
+        status.textContent = "Scanning story for artifact details...";
+        status.hidden = false;
+        this.storyDnaRequester?.({
+          action: "autofill_item",
+          itemId: existingItem?.id,
+          itemName: dossier.entity.name
+        });
+      };
+      saveBtn.onclick = () => {
+        const nextItem = buildItem();
+        this.storyDnaRequester?.({ action: "save_item", item: nextItem });
+        status.textContent = "Saving Item DNA...";
+        status.hidden = false;
+      };
+      delBtn.onclick = () => {
+        if (existingItem) {
+          this.storyDnaRequester?.({ action: "delete_item", itemId: existingItem.id });
+          status.textContent = "Deleted Item DNA.";
+          status.hidden = false;
+        }
+      };
+    }
+    wrap.append(form, preview, footer);
+    return wrap;
+  }
   close() {
+    this.activeDossierContext = null;
+    this.awaitingDnaSync = false;
     this.documentState(false);
     if (this.host.hidden)
       return;
@@ -31263,6 +32137,47 @@ section[data-reference-current] h3,section[data-reference-observations] h3{font-
 [data-vn-dossier-card] :is(button,input,select,textarea,summary):focus-visible{outline:2px solid var(--vn-accent,#9ec6f0);outline-offset:2px}
 @media(min-width:700px){[data-vn-dossier]{align-items:center}}
 @media(max-width:420px){[data-vn-dossier-card]{padding:14px;border-radius:14px}[data-vn-dossier-card] header{top:-14px}[data-reference-overview]{padding:10px}[data-dossier-hero="npc"],[data-dossier-hero="object"]{grid-template-columns:76px minmax(0,1fr)}[data-dossier-media="npc"]{width:76px;height:92px}[data-dossier-media="object"]{width:76px;height:76px}}
+.world-hub-tabs{display:flex;gap:6px;margin:4px 0 6px}
+.world-scene-hub{padding:10px;display:flex;flex-direction:column;gap:10px}
+.world-scene-banner{position:relative;height:142px;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,.16);background:rgba(12,20,24,.88)}
+.world-scene-banner img,.world-scene-banner svg{width:100%;height:100%;object-fit:cover;display:block}
+.world-scene-banner-overlay{position:absolute;inset:auto 0 0 0;padding:10px 12px;background:linear-gradient(transparent,rgba(6,12,16,.92));display:flex;flex-direction:column;gap:5px}
+.world-scene-banner-overlay h3{margin:0;font-size:14px;font-weight:700;color:#fff}
+.world-scene-dna-pills{display:flex;flex-wrap:wrap;gap:4px}
+.scene-dna-pill{font-size:9.5px;padding:2px 7px;border-radius:999px;background:rgba(168,211,200,.2);border:1px solid rgba(168,211,200,.35);color:#dff3ee}
+.world-scene-subhead{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;opacity:.8;margin-bottom:5px}
+.world-scene-cast-row{display:flex;flex-wrap:wrap;gap:6px}
+.present-cast-pill,.present-item-pill{min-height:0!important;padding:5px 10px!important;margin:0!important;font-size:11px!important;border-radius:999px!important;background:rgba(168,85,247,.16)!important;border:1px solid rgba(168,85,247,.38)!important;color:#e9d5ff!important}
+.present-item-pill{background:rgba(56,189,248,.14)!important;border-color:rgba(56,189,248,.34)!important;color:#bae6fd!important}
+.present-item-pill.active{background:rgba(56,189,248,.32)!important;border-color:#fff!important}
+.world-scene-empty{font-size:11px;opacity:.68}
+.world-atlas-view{position:relative;height:215px;width:100%}
+.story-dna-studio{margin:12px 0;padding:12px;border-radius:12px;background:rgba(18,32,38,.7);border:1px solid rgba(130,185,165,.32);display:flex;flex-direction:column;gap:10px}
+.story-dna-studio-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
+.story-dna-studio-head h3{margin:0;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em;color:#d6ecad}
+.story-dna-studio-actions{display:flex;gap:6px}
+.story-dna-studio-actions button{min-height:32px!important;min-width:0!important;padding:4px 10px!important;font-size:11px!important;margin:0!important}
+.story-dna-status{margin:0;font-size:11px;color:#93c5fd}
+.story-dna-form{display:grid;grid-template-columns:1fr;gap:8px}
+.story-dna-field{display:flex;flex-direction:column;gap:3px;font-size:11px}
+.story-dna-field span{opacity:.82;font-weight:600}
+.story-dna-field input,.story-dna-field textarea{box-sizing:border-box;width:100%;padding:7px 9px;border-radius:8px;border:1px solid rgba(255,255,255,.16);background:rgba(0,0,0,.28);color:inherit;font:inherit;font-size:12px}
+.story-dna-field textarea{min-height:54px;margin:0}
+.story-dna-preview{padding:8px 10px;border-radius:8px;background:rgba(0,0,0,.28);border:1px dashed rgba(168,211,200,.35)}
+.story-dna-preview small{display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.03em;opacity:.7;margin-bottom:3px}
+.story-dna-preview code{display:block;font-size:11px;line-height:1.45;white-space:pre-wrap;color:#cbe9e0}
+.story-dna-footer{display:flex;gap:8px;justify-content:flex-end}
+.story-dna-footer button{min-height:36px!important;margin:0!important;font-size:12px!important}
+.vn-inline-tooltip-popover{position:fixed;z-index:260;width:min(320px,calc(100vw - 24px));padding:12px;border-radius:14px;background:rgba(15,23,36,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(168,211,200,.36);box-shadow:0 14px 36px rgba(0,0,0,.58);color:#eef4f1;display:flex;flex-direction:column;gap:8px}
+.vn-inline-tooltip-head{display:flex;align-items:center;gap:10px}
+.vn-inline-tooltip-thumb{width:42px;height:42px;border-radius:8px;overflow:hidden;flex:none;display:grid;place-items:center;background:rgba(255,255,255,.08);font-weight:700}
+.vn-inline-tooltip-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.vn-inline-tooltip-title{flex:1;min-width:0}
+.vn-inline-tooltip-title strong{display:block;font-size:13.5px;line-height:1.25}
+.vn-inline-tooltip-title small{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.04em;opacity:.75}
+.vn-inline-tooltip-close{min-width:28px;min-height:28px;border-radius:50%;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit;cursor:pointer;font-size:14px;line-height:1}
+.vn-inline-tooltip-body{margin:0;font-size:11.5px;line-height:1.45;opacity:.92;white-space:pre-line}
+.vn-inline-tooltip-cta{width:100%;padding:7px 10px;border-radius:8px;border:none;background:var(--vn-accent,#a8d3c8);color:#0e1e1a;font-weight:700;font-size:11.5px;cursor:pointer;text-align:center}
 ` + DOCUMENT_READER_CSS;
 var DOCKED_DOSSIER_CSS = `
 [data-vn-dossier][data-vn-workspace-tool="story"]{position:relative;inset:auto;display:flex;align-items:stretch;padding:0;background:transparent;height:100%;z-index:auto}
@@ -31289,6 +32204,10 @@ class StageDossiers {
   paragraphs = [];
   index = -1;
   history;
+  storyDna = { locations: {}, items: {}, revision: 0 };
+  storyDnaRequester;
+  tooltipPopover = null;
+  tooltipDismissCleanup = null;
   snapshotAt = () => {
     return;
   };
@@ -31328,12 +32247,24 @@ class StageDossiers {
     this.tray.hidden = true;
     this.tray.onclick = (event) => {
       event.stopPropagation();
+      this.dismissTooltipPopover();
       if (this.workspace)
         this.workspace.open("story", this.tray);
       else
         this.openReferences();
     };
     controls.append(this.tray);
+  }
+  setStoryDna(storyDna) {
+    this.storyDna = storyDna;
+    this.card.setStoryDna(storyDna);
+  }
+  setStoryDnaRequester(fn) {
+    this.storyDnaRequester = fn;
+    this.card.setStoryDnaRequester(fn);
+  }
+  setStoryDnaError(error61) {
+    this.card.setStoryDnaError(error61);
   }
   connectWorkspace(workspace, mount) {
     if (this.workspaceMounted && this.workspace === workspace)
@@ -31344,10 +32275,11 @@ class StageDossiers {
     style.textContent = DOSSIER_CSS + DOCKED_DOSSIER_CSS;
     mount.append(style);
     this.card.setDocked();
-    this.card.setFolioOpener((charName) => {
-      this.workspace?.open("character");
-      this.folioOpener?.(charName);
-    });
+    if (this.folioOpener)
+      this.card.setFolioOpener((charName) => {
+        this.workspace?.open("character");
+        this.folioOpener?.(charName);
+      });
     workspace.register("story", { element: this.card.host, hideAtHome: true, enter: () => this.openReferences(), leave: () => this.card.close(), back: () => this.card.back() });
   }
   folioOpener;
@@ -31358,10 +32290,63 @@ class StageDossiers {
       this.workspace?.open("character");
     });
   }
+  buildSceneHubContext(snapshot) {
+    const eligible = snapshot ? eligibleEntities(snapshot.entities, this.prefs, snapshot.at.key.chatId) : [];
+    const activePlace = snapshot?.locationId ? eligible.find((e) => e.kind === "place" && e.id === snapshot.locationId) : eligible.find((e) => e.kind === "place");
+    const firstStoredLoc = Object.values(this.storyDna.locations)[0];
+    const activeLocationName = activePlace?.name ?? firstStoredLoc?.name;
+    const locationDna = activeLocationName ? findMatchingLocation(this.storyDna.locations, activeLocationName) : undefined;
+    const locationImageUrl = locationDna?.referenceImageUrl ?? (activePlace ? this.resolveVisualContext(activePlace).imageUrl : this.displayedImageUrl?.() ?? undefined);
+    const npcList = eligible.filter((e) => e.kind === "npc");
+    const sortedCast = [...npcList].sort((a, b) => Number(snapshot.presentEntityIds.includes(b.id)) - Number(snapshot.presentEntityIds.includes(a.id)));
+    const presentCast = sortedCast.map((e) => ({ id: e.id, name: e.name, imageUrl: this.resolveVisualContext(e).imageUrl, present: Boolean(snapshot?.presentEntityIds.includes(e.id)) }));
+    const activeItems = eligible.filter((e) => e.kind === "object").map((e) => ({ id: e.id, name: e.name, imageUrl: this.resolveVisualContext(e).imageUrl }));
+    return {
+      ...activePlace ? { activeLocationId: activePlace.id } : {},
+      ...activeLocationName ? { activeLocationName } : {},
+      ...locationImageUrl ? { locationImageUrl } : {},
+      ...locationDna ? { locationDna } : {},
+      presentCast,
+      activeItems
+    };
+  }
+  mergedTrayEntries(snapshot) {
+    const base = snapshot ? referenceEntriesWithHistory(snapshot, this.prefs, this.history) : [];
+    const merged = [...base];
+    for (const loc of Object.values(this.storyDna.locations)) {
+      if (base.some((e) => e.entity.kind === "place" && Boolean(findMatchingLocation({ [loc.id]: loc }, e.entity.name))))
+        continue;
+      const desc = formatLocationDNAToPromptClause(loc) || loc.notes || "Saved location profile.";
+      merged.push({
+        entity: { id: `dna:loc:${loc.id}`, kind: "place", name: loc.name, aliases: loc.aliases, firstParagraph: 0, facts: desc ? [{ id: `dna_loc_${loc.id}`, entityId: `dna:loc:${loc.id}`, field: "description", value: desc, visibility: "observed", source: { provider: "user", recordId: loc.id, chatId: snapshot?.at.key.chatId ?? "local", messageId: "story-dna", sourceFingerprint: "dna", observedAt: loc.lastUpdated }, revealedAt: { key: snapshot?.at.key ?? { chatId: "local", assistantMessageId: "0", swipeId: 0, sourceFingerprint: "0" }, paragraphIndex: 0 } }] : [] },
+        current: false,
+        pinned: false,
+        label: desc,
+        overview: desc,
+        earlier: false
+      });
+    }
+    for (const item of Object.values(this.storyDna.items)) {
+      if (base.some((e) => e.entity.kind === "object" && Boolean(findMatchingItem({ [item.id]: item }, e.entity.name))))
+        continue;
+      const desc = formatItemDNAToPromptClause(item) || item.description || "Saved item profile.";
+      merged.push({
+        entity: { id: `dna:item:${item.id}`, kind: "object", name: item.name, aliases: item.aliases, firstParagraph: 0, facts: desc ? [{ id: `dna_item_${item.id}`, entityId: `dna:item:${item.id}`, field: "description", value: desc, visibility: "observed", source: { provider: "user", recordId: item.id, chatId: snapshot?.at.key.chatId ?? "local", messageId: "story-dna", sourceFingerprint: "dna", observedAt: item.lastUpdated }, revealedAt: { key: snapshot?.at.key ?? { chatId: "local", assistantMessageId: "0", swipeId: 0, sourceFingerprint: "0" }, paragraphIndex: 0 } }] : [] },
+        current: false,
+        pinned: false,
+        label: desc,
+        overview: desc,
+        earlier: false
+      });
+    }
+    return merged;
+  }
   openReferences() {
     const snapshot = this.snapshot();
     this.hold();
-    this.card.openTray(snapshot ? referenceEntriesWithHistory(snapshot, this.prefs, this.history) : [], this.tray, (id6, trigger) => this.open(id6, trigger), !this.prefs.enabled ? "Story references are disabled. You can enable them in Reading settings." : this.limitationNote() ?? (!snapshot ? "No established references are available at this reading position." : this.prefs.rememberReferences && this.history?.truncated ? "Showing a limited recent selection of earlier descriptions." : undefined), (entity) => this.resolveVisualContext(entity));
+    this.dismissTooltipPopover();
+    this.card.setSceneHubContext(this.buildSceneHubContext(snapshot));
+    this.card.openTray(this.mergedTrayEntries(snapshot), this.tray, (id6, trigger) => this.open(id6, trigger), !this.prefs.enabled ? "Story references are disabled. You can enable them in Reading settings." : this.limitationNote() ?? (!snapshot && !Object.keys(this.storyDna.locations).length && !Object.keys(this.storyDna.items).length ? "No established references are available at this reading position." : this.prefs.rememberReferences && this.history?.truncated ? "Showing a limited recent selection of earlier descriptions." : undefined), (entity) => this.resolveVisualContext(entity));
   }
   limitationNote() {
     if (this.presentation?.version !== 2 || !this.presentation.warnings?.length)
@@ -31376,13 +32361,15 @@ class StageDossiers {
   }
   openTrayFromStage() {
     const snapshot = this.snapshot();
-    if (!snapshot || this.tray.hidden)
+    if (this.tray.hidden && !Object.keys(this.storyDna.locations).length && !Object.keys(this.storyDna.items).length)
       return false;
-    const entries = referenceEntriesWithHistory(snapshot, this.prefs, this.history);
+    const entries = this.mergedTrayEntries(snapshot);
     if (!entries.length)
       return false;
     this.hold();
     this.dossierOpen?.(true);
+    this.dismissTooltipPopover();
+    this.card.setSceneHubContext(this.buildSceneHubContext(snapshot));
     if (this.workspace) {
       this.workspace.open("story", this.root.querySelector('[data-vn-control="lens"]') ?? this.tray);
       return true;
@@ -31405,6 +32392,7 @@ class StageDossiers {
     return [...places, ...others].slice(0, 6).map((e) => ({ id: e.entity.id, name: e.entity.name, kind: e.entity.kind, pinned: e.pinned }));
   }
   setContext(value, paragraphs, history) {
+    this.dismissTooltipPopover();
     this.card.close();
     this.card.resetForContext();
     this.index = -1;
@@ -31427,6 +32415,7 @@ class StageDossiers {
     if (JSON.stringify(next) === JSON.stringify(this.history))
       return;
     this.history = next;
+    this.dismissTooltipPopover();
     this.card.close();
     this.dossierOpen?.(false);
     if (this.ready)
@@ -31438,6 +32427,7 @@ class StageDossiers {
       return;
     this.prefs = next;
     this.resetLinkBudget();
+    this.dismissTooltipPopover();
     this.card.close();
     this.dossierOpen?.(false);
     if (this.ready)
@@ -31449,6 +32439,7 @@ class StageDossiers {
   }
   cursor(index) {
     if (index !== this.index) {
+      this.dismissTooltipPopover();
       this.card.close();
       this.dossierOpen?.(false);
       this.index = index;
@@ -31459,18 +32450,126 @@ class StageDossiers {
   snapshot() {
     return this.snapshotAt(this.index);
   }
+  dismissTooltipPopover() {
+    if (this.tooltipDismissCleanup) {
+      this.tooltipDismissCleanup();
+      this.tooltipDismissCleanup = null;
+    }
+    if (this.tooltipPopover) {
+      this.tooltipPopover.remove();
+      this.tooltipPopover = null;
+    }
+  }
+  showTooltipPopover(id6, trigger) {
+    const snapshot = this.snapshot();
+    if (!snapshot) {
+      this.open(id6, trigger);
+      return;
+    }
+    if (this.tooltipPopover?.dataset.entityId === id6) {
+      this.dismissTooltipPopover();
+      return;
+    }
+    this.dismissTooltipPopover();
+    const current = eligibleEntities(snapshot.entities, this.prefs, snapshot.at.key.chatId).some((e) => e.id === id6);
+    const selected = current ? selectReaderDossier(id6, snapshot, this.prefs.detail, this.prefs.fieldGroups, this.prefs.maxFactsPerEntity) : selectEarlierDossier(id6, snapshot, this.prefs, this.history);
+    if (!selected) {
+      this.open(id6, trigger);
+      return;
+    }
+    const entity = selected.entity;
+    const visual = this.resolveVisualContext(entity);
+    const pop = document.createElement("div");
+    pop.className = "vn-inline-tooltip-popover";
+    pop.dataset.entityId = id6;
+    pop.setAttribute("role", "dialog");
+    pop.setAttribute("aria-label", `${entity.name} quick summary`);
+    pop.addEventListener("click", (e) => e.stopPropagation());
+    const head = document.createElement("div");
+    head.className = "vn-inline-tooltip-head";
+    const thumb = document.createElement("div");
+    thumb.className = "vn-inline-tooltip-thumb";
+    if (visual.imageUrl) {
+      const img = document.createElement("img");
+      img.src = visual.imageUrl;
+      img.alt = "";
+      thumb.append(img);
+    } else
+      thumb.textContent = entity.kind === "npc" ? "\uD83D\uDC64" : entity.kind === "place" ? "\uD83D\uDCCD" : "✦";
+    const title = document.createElement("div");
+    title.className = "vn-inline-tooltip-title";
+    const strong = document.createElement("strong");
+    strong.textContent = entity.name;
+    const small = document.createElement("small");
+    small.textContent = entity.kind === "npc" ? "Character" : entity.kind === "place" ? "Location DNA" : "Item / Artifact";
+    title.append(strong, small);
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "vn-inline-tooltip-close";
+    closeBtn.textContent = "×";
+    closeBtn.setAttribute("aria-label", "Close summary");
+    closeBtn.onclick = () => this.dismissTooltipPopover();
+    head.append(thumb, title, closeBtn);
+    const body2 = document.createElement("p");
+    body2.className = "vn-inline-tooltip-body";
+    const matchedLoc = entity.kind === "place" ? findMatchingLocation(this.storyDna.locations, entity.name) : undefined;
+    const matchedItem = entity.kind === "object" ? findMatchingItem(this.storyDna.items, entity.name) : undefined;
+    const dnaSummary = matchedLoc ? formatLocationDNAToPromptClause(matchedLoc) : matchedItem ? formatItemDNAToPromptClause(matchedItem) : "";
+    const factLines = selected.facts.slice(0, 2).map((f) => f.value);
+    body2.textContent = [dnaSummary, ...factLines].filter(Boolean).slice(0, 2).join(`
+`) || (visual.summarySnippet ?? "Established story reference.");
+    const cta = document.createElement("button");
+    cta.type = "button";
+    cta.className = "vn-inline-tooltip-cta";
+    cta.textContent = entity.kind === "npc" ? "Open in Character Folio →" : "Inspect & Edit DNA in World Lens →";
+    cta.onclick = () => {
+      this.dismissTooltipPopover();
+      if (entity.kind === "npc" && this.folioOpener) {
+        this.folioOpener(entity.name);
+        this.workspace?.open("character");
+      } else
+        this.open(id6, trigger);
+    };
+    pop.append(head, body2, cta);
+    this.root.append(pop);
+    const rect = typeof trigger.getBoundingClientRect === "function" ? trigger.getBoundingClientRect() : null;
+    if (rect && (rect.width > 0 || rect.height > 0)) {
+      const top = Math.max(12, Math.min((typeof window !== "undefined" ? window.innerHeight : 720) - 180, rect.bottom + 8));
+      const left = Math.max(12, Math.min((typeof window !== "undefined" ? window.innerWidth : 1024) - 336, rect.left));
+      pop.style.top = `${top}px`;
+      pop.style.left = `${left}px`;
+    } else {
+      pop.style.top = "56px";
+      pop.style.left = "16px";
+    }
+    this.tooltipPopover = pop;
+    const doc2 = this.root.ownerDocument;
+    const onDocClick = () => {
+      this.dismissTooltipPopover();
+    };
+    const onKeyDown = (e) => {
+      if (e.key === "Escape")
+        this.dismissTooltipPopover();
+    };
+    doc2?.addEventListener?.("click", onDocClick);
+    doc2?.addEventListener?.("keydown", onKeyDown);
+    this.tooltipDismissCleanup = () => {
+      doc2?.removeEventListener?.("click", onDocClick);
+      doc2?.removeEventListener?.("keydown", onKeyDown);
+    };
+  }
   refresh(index) {
     this.cursor(index);
     this.ready = true;
     clearEntityAnchors(this.text);
     const snapshot = this.snapshot();
     const eligible = snapshot ? eligibleEntities(snapshot.entities, this.prefs, snapshot.at.key.chatId) : [];
-    this.tray.hidden = !snapshot || !referenceEntriesWithHistory(snapshot, this.prefs, this.history).length;
+    this.tray.hidden = !snapshot || !this.mergedTrayEntries(snapshot).length;
     if (!snapshot || !eligible.length || this.prefs.linking === "menu-only")
       return;
     const { used, priorIds } = this.priorLinks(index);
     const anchors = linkEntityMentions(this.text.textContent ?? "", snapshot.entities, this.prefs, snapshot.at.key.chatId, Math.min(this.prefs.maxLinksPerParagraph, 24 - used), protectedEntityRanges(this.text), this.prefs.linking === "important" ? priorIds : new Set);
-    applyEntityAnchors(this.text, anchors, (id6, trigger) => this.open(id6, trigger), (id6) => selectReaderDossier(id6, snapshot, "brief", this.prefs.fieldGroups)?.facts[0]?.value ?? "View established story information");
+    applyEntityAnchors(this.text, anchors, (id6, trigger) => this.showTooltipPopover(id6, trigger), (id6) => selectReaderDossier(id6, snapshot, "brief", this.prefs.fieldGroups)?.facts[0]?.value ?? "View established story information");
   }
   resolveVisualContext(entity) {
     const snapshot = this.snapshot();
@@ -31480,13 +32579,15 @@ class StageDossiers {
     const activePlace = snapshot?.locationId ? eligible.find((e) => e.kind === "place" && e.id === snapshot.locationId) : undefined;
     const locationName = entity.kind !== "place" ? activePlace?.name : undefined;
     const presentCharacters = entity.kind === "place" && isActiveLocation ? eligible.filter((e) => e.kind === "npc" && snapshot.presentEntityIds.includes(e.id)).map((e) => ({ id: e.id, name: e.name })) : [];
-    let imageUrl;
+    const matchedLoc = entity.kind === "place" ? findMatchingLocation(this.storyDna.locations, entity.name) : undefined;
+    const matchedItem = entity.kind === "object" ? findMatchingItem(this.storyDna.items, entity.name) : undefined;
+    let imageUrl = matchedLoc?.referenceImageUrl ?? matchedItem?.referenceImageUrl;
     let imageCaption;
     const names = new Set([entity.name, ...entity.aliases].map((n) => n.trim().toLocaleLowerCase()).filter(Boolean));
     const urlOf = (a) => a.stageAsset?.displayImageUrl ?? sceneImageUrlFor(a) ?? undefined;
     const readyAssets = (this.turnMedia?.assets ?? []).filter((a) => (a.status === "generated" || a.status === "browser_ready") && Boolean(urlOf(a)) && a.paragraphIndex <= Math.max(0, this.index));
     const pool = readyAssets;
-    if (entity.kind === "npc") {
+    if (!imageUrl && entity.kind === "npc") {
       const portrait = [...pool].reverse().find((a) => a.stageAsset?.role === "portrait" && a.stageAsset.character && names.has(a.stageAsset.character.trim().toLocaleLowerCase()));
       if (portrait && urlOf(portrait)) {
         imageUrl = urlOf(portrait);
@@ -31504,7 +32605,7 @@ class StageDossiers {
           imageCaption = `Current scene · ${entity.name}`;
         }
       }
-    } else if (entity.kind === "place") {
+    } else if (!imageUrl && entity.kind === "place") {
       const bg = [...pool].reverse().find((a) => {
         const snap = this.snapshotAt(a.paragraphIndex);
         return (a.stageAsset?.role === "background" || a.stageAsset?.role === "scene" || !a.stageAsset) && snap?.locationId === entity.id;
@@ -31516,7 +32617,7 @@ class StageDossiers {
         imageUrl = this.displayedImageUrl();
         imageCaption = `Current location · ${entity.name}`;
       }
-    } else {
+    } else if (!imageUrl) {
       const prop = [...pool].reverse().find((a) => a.paragraphIndex === entity.firstParagraph || this.snapshotAt(a.paragraphIndex)?.drawableEntityId === entity.id);
       if (prop && urlOf(prop)) {
         imageUrl = urlOf(prop);
@@ -31526,7 +32627,7 @@ class StageDossiers {
         imageCaption = `Current scene · ${entity.name}`;
       }
     }
-    const summaryFact = snapshot ? selectReaderDossier(entity.id, snapshot, "brief", this.prefs.fieldGroups)?.facts[0]?.value : undefined;
+    const summaryFact = (matchedLoc ? formatLocationDNAToPromptClause(matchedLoc) : matchedItem ? formatItemDNAToPromptClause(matchedItem) : "") || (snapshot ? selectReaderDossier(entity.id, snapshot, "brief", this.prefs.fieldGroups)?.facts[0]?.value : undefined);
     const anchorFact = entity.facts.find((f) => f.field === "anchors" || f.field === "anchor_traits" || f.field === "visual_anchors");
     const anchors = anchorFact ? anchorFact.value.split(/[,;\n]/).map((a) => a.trim()).filter(Boolean) : undefined;
     return {
@@ -31536,19 +32637,44 @@ class StageDossiers {
       isActiveLocation,
       ...locationName ? { locationName } : {},
       ...presentCharacters.length ? { presentCharacters } : {},
+      ...matchedLoc?.connectedLocations?.length ? { connectedLocations: matchedLoc.connectedLocations } : {},
       ...summaryFact ? { summarySnippet: summaryFact } : {},
       ...anchors && anchors.length ? { anchors } : {},
       onSelectEntity: (targetId, trigger) => this.open(targetId, trigger)
     };
   }
   open(id6, trigger) {
+    this.dismissTooltipPopover();
     const snapshot = this.snapshot();
+    if (id6.startsWith("dna:loc:") || id6.startsWith("dna:item:")) {
+      const isLoc = id6.startsWith("dna:loc:");
+      const slug = id6.slice(isLoc ? "dna:loc:".length : "dna:item:".length);
+      const loc = isLoc ? this.storyDna.locations[slug] : undefined;
+      const item = !isLoc ? this.storyDna.items[slug] : undefined;
+      if (loc || item) {
+        const entity = loc ? { id: id6, kind: "place", name: loc.name, aliases: loc.aliases, firstParagraph: 0, facts: [] } : { id: id6, kind: "object", name: item.name, aliases: item.aliases, firstParagraph: 0, facts: [] };
+        const synthetic = { entity, facts: [], overview: [], earlier: [], state: {} };
+        this.hold();
+        this.dossierOpen?.(true);
+        if (this.workspace && this.workspace.destination !== "story") {
+          this.workspace.open("story", trigger);
+          this.card.clearBack();
+        }
+        this.card.open(synthetic, this.prefs, snapshot?.at.key.chatId ?? "local", trigger, undefined, undefined, this.resolveVisualContext(entity));
+      }
+      return;
+    }
     if (!snapshot)
       return;
     const current = eligibleEntities(snapshot.entities, this.prefs, snapshot.at.key.chatId).some((e) => e.id === id6);
     const selected = current ? selectReaderDossier(id6, snapshot, this.prefs.detail, this.prefs.fieldGroups, this.prefs.maxFactsPerEntity) : selectEarlierDossier(id6, snapshot, this.prefs, this.history);
     if (!selected)
       return;
+    if (selected.entity.kind === "npc" && this.folioOpener) {
+      this.folioOpener(selected.entity.name);
+      this.workspace?.open("character");
+      return;
+    }
     const dossier = current ? dossierWithHistory(selected, snapshot, this.prefs, this.history) : selected;
     this.hold();
     this.dossierOpen?.(true);
@@ -31593,6 +32719,7 @@ class StageDossiers {
     return true;
   }
   destroy() {
+    this.dismissTooltipPopover();
     this.card.destroy();
     this.tray.remove();
   }
@@ -40466,6 +41593,15 @@ class VnStage {
   setFolioOpener(fn) {
     this.dossiers.setFolioOpener(fn);
   }
+  setStoryDna(storyDna) {
+    this.dossiers.setStoryDna(storyDna);
+  }
+  setStoryDnaRequester(fn) {
+    this.dossiers.setStoryDnaRequester(fn);
+  }
+  setStoryDnaError(error61) {
+    this.dossiers.setStoryDnaError(error61);
+  }
   setTooltipPreferences(prefs) {
     this.actionDraftsEnabled = prefs.enabled && prefs.actionsEnabled;
     this.dossiers.setPreferences(prefs);
@@ -47554,7 +48690,7 @@ class VisualNovelSettingsPanel {
                 <option value="standard">Standard (1K — Fast &amp; economical, ~1024px)</option>
                 <option value="ultra">Maximum / Ultra (4K / Highest published size)</option>
               </select>
-              <small>Preferred quality tier. When a model offers both 1K and 2K sizes, High selects 2K. If a model only supports 1K, it gracefully uses the model's highest size.</small>
+              <small data-resolution-hint>Preferred quality tier. When a model offers both 1K and 2K sizes, High selects 2K. If a model only supports 1K, it gracefully uses the model's highest size.</small>
             </label>
             <fieldset data-prompt-model-settings ${find("Automatic image prompting", "prompt budget characters limit model profile auto detect prompt engine compiler v1 v2")}><legend>Image prompting</legend>
               <label data-field ${find("Prompt engine", "prompt engine compiler v1 v2 model aware shot director")}>
@@ -48622,8 +49758,12 @@ class VisualNovelSettingsPanel {
       }
       case "imageOutputAspectRatio":
         return { imageOutputAspectRatio: normalizeImageOutputRatio(target2.value) };
-      case "imageResolutionPreference":
+      case "imageResolutionPreference": {
+        const activeModel = this.effectiveImageModel(this.config.imageConnectionId, this.config.imageModel);
+        if (isFluxKleinModel(activeModel))
+          return { imageResolutionPreference: "standard" };
         return { imageResolutionPreference: target2.value === "standard" || target2.value === "ultra" ? target2.value : "high" };
+      }
       case "dialogueSafeArea":
         return { dialogueSafeArea: target2.value === "always" ? "always" : target2.value === "off" ? "off" : "auto" };
       case "imagePromptDetail":
@@ -48752,8 +49892,14 @@ class VisualNovelSettingsPanel {
       case "setupParserConnectionId":
         return { parserConnectionId: target2.value.trim() || null };
       case "imageConnectionId":
-      case "setupImageConnectionId":
-        return { imageConnectionId: target2.value.trim() || null };
+      case "setupImageConnectionId": {
+        const imageConnectionId = target2.value.trim() || null;
+        const activeModel = this.effectiveImageModel(imageConnectionId, this.config.imageModel);
+        if (isFluxKleinModel(activeModel) && this.config.imageResolutionPreference !== "standard") {
+          return { imageConnectionId, imageResolutionPreference: "standard" };
+        }
+        return { imageConnectionId };
+      }
       case "textSpeedStep": {
         if (target2.value === "custom") {
           this.showCustom("textSpeed", true);
@@ -49077,6 +50223,12 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
     try {
       const values = this.readAdvanced(keys);
       patch = Object.fromEntries(keys.map((name) => [name, values[name]]));
+      if (Object.prototype.hasOwnProperty.call(patch, "imageModel")) {
+        const activeModel = this.effectiveImageModel(this.config.imageConnectionId, String(patch.imageModel ?? ""));
+        if (isFluxKleinModel(activeModel) && this.config.imageResolutionPreference !== "standard") {
+          patch = { ...patch, imageResolutionPreference: "standard" };
+        }
+      }
     } catch (error61) {
       for (const [name, label] of [["parserParameters", "Story reader parameters"], ["imageParameters", "Image parameters"]]) {
         try {
@@ -49321,7 +50473,7 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
     this.control("imagePromptEngineVersion").value = String(config2.imagePromptEngineVersion ?? 2);
     this.control("ideogramPromptMode").value = config2.ideogramPromptMode ?? "auto";
     this.control("flux3KleinPromptMode").value = config2.flux3KleinPromptMode ?? "auto";
-    this.control("imageResolutionPreference").value = config2.imageResolutionPreference ?? "high";
+    this.syncResolutionPreferenceForModel(config2);
     this.control("dialogueSafeArea").value = config2.dialogueSafeArea ?? "auto";
     this.control("imagePromptDetail").value = config2.imagePromptDetail ?? "auto";
     this.control("automaticImagePromptSettings").checked = config2.automaticImagePromptSettings;
@@ -49576,9 +50728,30 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
         summary.textContent = { ready: "Story reader ready", loading: "Checking…", attention: "Needs a look", blocked: "Needs attention" }[readiness.level];
     }
   }
+  effectiveImageModel(connectionId, imageModelOverride) {
+    const override = imageModelOverride.trim();
+    if (override)
+      return override;
+    const selected = this.connectionStates.image.options.find((option) => connectionId ? option.id === connectionId : option.isDefault);
+    return (selected?.model ?? "").trim();
+  }
+  syncResolutionPreferenceForModel(config2) {
+    const select = this.control("imageResolutionPreference");
+    const hint = this.root.querySelector("[data-resolution-hint]");
+    const activeModel = this.effectiveImageModel(config2.imageConnectionId, config2.imageModel);
+    const isKlein = isFluxKleinModel(activeModel);
+    for (const option of Array.from(select.options)) {
+      option.disabled = isKlein && option.value !== "standard";
+    }
+    select.value = isKlein ? "standard" : config2.imageResolutionPreference ?? "high";
+    if (hint) {
+      hint.textContent = isKlein ? `FLUX Klein (${activeModel}) detected — automatically locked to Standard (1K) so images generate cleanly.` : "Preferred quality tier. When a model offers both 1K and 2K sizes, High selects 2K. If a model only supports 1K, it gracefully uses the model's highest size.";
+    }
+  }
   updateImageModelHint() {
     const selected = this.connectionStates.image.options.find((option) => this.config.imageConnectionId ? option.id === this.config.imageConnectionId : option.isDefault);
     this.root.querySelector("[data-prompt-profile-status]").textContent = promptProfileSummary(resolveImagePromptProfile(selected?.provider, this.config.imageModel || selected?.model, this.config));
+    this.syncResolutionPreferenceForModel(this.config);
     const modelInput = this.control("imageModel");
     const hint = this.root.querySelector("[data-image-model-hint]");
     if (selected?.model) {
@@ -50913,32 +52086,8 @@ class PreparedBriefView {
   }
 }
 
-// src/shared/image-model-output.ts
-var KLEIN_OUTPUT_SIZES = ["768x768", "1024x1024", "1536x1536", "2048x2048", "4096x4096"];
-var ANIMA_MODELS = new Set(["anima", "anima/text-to-image", "anima/text-to-image-lora", "wavespeed-ai/anima/text-to-image", "wavespeed-ai/anima/text-to-image-lora"]);
-function imageOutputRule(provider, model) {
-  if (provider?.trim().toLowerCase() !== "nanogpt")
-    return null;
-  const id8 = model?.trim().toLowerCase() ?? "";
-  if (ANIMA_MODELS.has(id8))
-    return "anima";
-  if (id8 === "qwen-image-2.1-turbo")
-    return "qwen-turbo";
-  return ["blackforestlabs/flux-3/klein/base/text-to-image", "blackforestlabs/flux-3/klein/text-to-image"].includes(id8) ? "klein-square" : null;
-}
-function modelOutputHelp(provider, model, parameters) {
-  const rule = imageOutputRule(provider, model);
-  if (rule === "qwen-turbo")
-    return `Qwen Image 2.1 Turbo uses size "1k" or "2k" and separate framing (${String(parameters.aspectRatio ?? "1:1")}). 9:16 is supported. Other requested shapes use the closest supported ratio before review. The prepared resolution is ${String(parameters.size ?? "1k")}. Custom connection raw overrides take priority; prepare a new preview after changing connection settings.`;
-  if (rule === "klein-square")
-    return `FLUX.3 Klein supports square images only; 9:16 is unavailable with this model. Visible size field: ${String(parameters.size ?? "1024x1024")}. Supported sizes: ${KLEIN_OUTPUT_SIZES.join(", ")}. A connection's custom raw override takes priority and may change these fields.`;
-  if (rule === "anima")
-    return `Anima uses size "1k" or "1.5k" with a separate aspectRatio (9:16 is supported for text-to-image). Visible size field: ${String(parameters.size ?? "1k")}; framing: ${String(parameters.aspectRatio ?? "connection default")}. With an image reference, Anima keeps the reference's aspect ratio. A connection's custom raw override takes priority and may change these fields.`;
-  return "";
-}
-
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.147";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.148";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -54776,6 +55925,9 @@ class CharacterFolio {
   activeSubTab = "dna";
   latestTurnText = "";
   discoveredIds = new Set;
+  swipeCharacterCache = new Map;
+  lastRenderedSwipeKey = null;
+  turnRpgCompanions = new Map;
   storyCursor = "";
   chatId = null;
   revision = 0;
@@ -54796,6 +55948,10 @@ class CharacterFolio {
     this.handlers.onCancelDNA?.();
     this.chatId = chatId;
     this.discoveredIds.clear();
+    this.swipeCharacterCache.clear();
+    this.lastRenderedSwipeKey = null;
+    this.turnRpgCompanions.clear();
+    this.activeSubTab = "dna";
     this.library = Object.create(null);
     this.dirty.clear();
     this.saving.clear();
@@ -55195,7 +56351,7 @@ class CharacterFolio {
           top: -14px;
           z-index: 8;
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
+          grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
           gap: 4px;
           padding: 4px;
           background: var(--vn-shell-panel, rgba(15, 23, 42, 0.95));
@@ -55339,6 +56495,108 @@ class CharacterFolio {
           border: 1px solid rgba(255, 255, 255, 0.04);
         }
 
+        /* Relationships Tab & Constellation Web */
+        .rel-web-wrap {
+          background: rgba(0, 0, 0, 0.28);
+          border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.1));
+          border-radius: 10px;
+          padding: 8px;
+          overflow: hidden;
+        }
+        .rel-web-svg {
+          width: 100%;
+          height: auto;
+          display: block;
+          max-height: 240px;
+        }
+        .rel-web-node {
+          cursor: pointer;
+        }
+        .rel-bond-card {
+          background: rgba(0, 0, 0, 0.25);
+          border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.1));
+          border-radius: 10px;
+          padding: 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          transition: border-color 0.15s ease;
+        }
+        .rel-bond-card.is-highlighted {
+          border-color: var(--vn-shell-accent, #6ee7b7);
+        }
+        .rel-bond-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .rel-bond-title {
+          font-size: 13px;
+          font-weight: 700;
+          color: var(--vn-shell-text, #f8fafc);
+        }
+        .rel-bond-badges {
+          display: flex;
+          gap: 6px;
+          flex-wrap: wrap;
+          align-items: center;
+        }
+        .rel-meter-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+          gap: 10px;
+        }
+        .rel-slider-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .rel-slider-row input[type="range"] {
+          flex: 1;
+          accent-color: var(--vn-shell-accent, #6ee7b7);
+        }
+        .rel-slider-row input[type="number"] {
+          width: 68px;
+          padding: 6px 8px;
+          border-radius: 6px;
+          border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.12));
+          background: rgba(0, 0, 0, 0.3);
+          color: var(--vn-shell-text, #f1f5f9);
+          font-size: 12px;
+        }
+        .rel-text-input {
+          width: 100%;
+          padding: 8px 10px;
+          border-radius: 6px;
+          border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.12));
+          background: rgba(0, 0, 0, 0.25);
+          color: var(--vn-shell-text, #f1f5f9);
+          font-size: 12px;
+          box-sizing: border-box;
+          font-family: inherit;
+        }
+        .rel-beat-list {
+          margin: 4px 0 0;
+          padding-left: 18px;
+          font-size: 11.5px;
+          line-height: 1.5;
+          color: var(--vn-shell-muted, #cbd5e1);
+        }
+        .rel-actions-row {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .rel-btn-sm {
+          min-height: 34px;
+          padding: 5px 12px;
+          font-size: 11.5px;
+        }
+
         /* Lore Tab Styles */
         .folio-quote-box {
           border-left: 3px solid var(--vn-shell-accent, #6ee7b7);
@@ -55458,6 +56716,39 @@ class CharacterFolio {
   leave() {}
   syncFromTurn(turn, paragraphIndex = 0) {
     const cursorKey = JSON.stringify([turn?.chatId, turn?.messageId, turn?.swipeId, turn?.sourceFingerprint, turn?.revision, paragraphIndex]);
+    const currentSwipeKey = turn?.messageId ? `${turn.messageId}::${turn.swipeId ?? 0}` : null;
+    if (this.lastRenderedSwipeKey && currentSwipeKey && this.lastRenderedSwipeKey !== currentSwipeKey) {
+      for (const [id8, dna] of Object.entries(this.library)) {
+        const isTemporary = Boolean(dna.autoDiscovered || this.discoveredIds.has(id8));
+        if (!isTemporary || dna.locked || this.dirty.has(id8) || this.saving.has(id8))
+          continue;
+        const swipes = dna.seenInSwipes && dna.seenInSwipes.length > 0 ? dna.seenInSwipes : [this.lastRenderedSwipeKey];
+        for (const sKey of swipes) {
+          let bucket = this.swipeCharacterCache.get(sKey);
+          if (!bucket) {
+            bucket = new Map;
+            this.swipeCharacterCache.set(sKey, bucket);
+          }
+          bucket.set(id8, structuredClone(dna));
+        }
+        if (!swipes.includes(currentSwipeKey)) {
+          delete this.library[id8];
+          delete this.savedLibrary[id8];
+          this.discoveredIds.delete(id8);
+        }
+      }
+      const cachedBucket = this.swipeCharacterCache.get(currentSwipeKey);
+      if (cachedBucket) {
+        for (const [id8, cachedDna] of cachedBucket.entries()) {
+          if (!this.library[id8] && !this.deleted[id8] && !findCharacterDNA(this.deleted, cachedDna.name)) {
+            this.library[id8] = structuredClone(cachedDna);
+            this.discoveredIds.add(id8);
+          }
+        }
+      }
+    }
+    if (currentSwipeKey)
+      this.lastRenderedSwipeKey = currentSwipeKey;
     const cancelledProposal = this.storyCursor !== cursorKey && (this.pending || Boolean(this.proposal));
     if (this.storyCursor !== cursorKey) {
       if (cancelledProposal)
@@ -55477,6 +56768,16 @@ class CharacterFolio {
     };
     const detectedNames = new Set;
     this.latestTurnText = visibleText;
+    this.turnRpgCompanions.clear();
+    for (const comp of turn?.rpgState?.vitals?.companions ?? []) {
+      if (comp.name?.trim()) {
+        this.turnRpgCompanions.set(comp.name.trim().toLowerCase(), {
+          name: comp.name.trim(),
+          affinity: Number.isFinite(comp.affinity) ? Math.round(comp.affinity) : 0,
+          status: comp.status || ""
+        });
+      }
+    }
     const candidate = turn?.presentation && cursor >= 0 ? selectPresentationSnapshot(turn.presentation, cursor) : undefined;
     const snapshot = candidate && turn && samePresentationTurn(candidate.at.key, { chatId: turn.chatId, assistantMessageId: turn.messageId, swipeId: turn.swipeId, sourceFingerprint: turn.sourceFingerprint, revision: turn.revision }) ? candidate : undefined;
     for (const snap of snapshot ? [snapshot] : []) {
@@ -55486,6 +56787,11 @@ class CharacterFolio {
           detectedNames.add(name);
           const key = name.toLowerCase();
           const existingLore = this.loreMap[key] || {};
+          const presentInSnap = snap.presentEntityIds ? snap.presentEntityIds.includes(ent.id) : false;
+          if (!mentioned(name) && !presentInSnap) {
+            detectedNames.delete(name);
+            continue;
+          }
           existingLore.inScene = snap.presentEntityIds?.includes(ent.id) ?? true;
           const anyEnt = ent;
           if (anyEnt.quote)
@@ -55575,6 +56881,17 @@ class CharacterFolio {
           }
         }
       }
+      if (match && currentSwipeKey && match.autoDiscovered) {
+        const seen = match.seenInSwipes ?? [];
+        if (!seen.includes(currentSwipeKey))
+          match.seenInSwipes = [...seen, currentSwipeKey].slice(-60);
+        let bucket = this.swipeCharacterCache.get(currentSwipeKey);
+        if (!bucket) {
+          bucket = new Map;
+          this.swipeCharacterCache.set(currentSwipeKey, bucket);
+        }
+        bucket.set(match.id, structuredClone(match));
+      }
       const isDeleted = Boolean(isScenarioTitle(name) || findCharacterDNA(this.deleted, name) || findMatchingCharacterId(this.deleted, name));
       if (!match && !isDeleted) {
         const dna = createEmptyCharacterDNA(name);
@@ -55586,6 +56903,16 @@ class CharacterFolio {
           dna.avatarUrl = sceneImageCandidatesFor(assetWithImage)[0];
         }
         this.library[dna.id] = dna;
+        dna.autoDiscovered = true;
+        if (currentSwipeKey) {
+          dna.seenInSwipes = [currentSwipeKey];
+          let bucket = this.swipeCharacterCache.get(currentSwipeKey);
+          if (!bucket) {
+            bucket = new Map;
+            this.swipeCharacterCache.set(currentSwipeKey, bucket);
+          }
+          bucket.set(dna.id, structuredClone(dna));
+        }
         this.discoveredIds.add(dna.id);
         changed = true;
       }
@@ -55618,9 +56945,13 @@ class CharacterFolio {
     if (acceptedSave && this.library[acceptedSave.id]?.lastUpdated === acceptedSave.updatedAt)
       this.dirty.delete(acceptedSave.id);
     const next = Object.create(null);
-    for (const dna of Object.values(this.library))
-      if (!this.deleted[dna.id] && (Object.values(incoming).some((c) => c.id === dna.id) || !findCharacterDNA(this.deleted, dna.name)))
+    for (const dna of Object.values(this.library)) {
+      const incomingMatch = Object.values(incoming).some((c) => c.id === dna.id);
+      if (authoritative && dna.autoDiscovered && !dna.locked && !incomingMatch && !this.dirty.has(dna.id) && !this.saving.has(dna.id))
+        continue;
+      if (!this.deleted[dna.id] && (incomingMatch || !findCharacterDNA(this.deleted, dna.name)))
         next[dna.id] = dna;
+    }
     for (const dna of Object.values(incoming)) {
       if (this.dirty.has(dna.id) && next[dna.id]) {
         const local = next[dna.id], base = this.savedLibrary[dna.id];
@@ -55648,6 +56979,9 @@ class CharacterFolio {
               else
                 local[key] = dna[key];
             }
+          if (JSON.stringify(local.relationships ?? []) === JSON.stringify(base.relationships ?? [])) {
+            local.relationships = structuredClone(dna.relationships ?? []);
+          }
         }
         this.savedLibrary[dna.id] = structuredClone(dna);
         continue;
@@ -55800,6 +57134,7 @@ class CharacterFolio {
           return;
         }
         const created = createEmptyCharacterDNA(name.trim());
+        created.autoDiscovered = false;
         this.library[created.id] = created;
         this.activeCharacterId = created.id;
         this.handlers.onSaveDNA?.(created, this.revision);
@@ -55896,6 +57231,7 @@ class CharacterFolio {
     lockToggleBtn.onclick = () => {
       this.cancelProposal();
       char.locked = !char.locked;
+      char.autoDiscovered = false;
       char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
       this.dirty.add(char.id);
       this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
@@ -55934,6 +57270,7 @@ class CharacterFolio {
     saveButton.disabled = !this.dirty.has(char.id) || this.saving.has(char.id);
     saveButton.onclick = () => {
       this.cancelProposal();
+      char.autoDiscovered = false;
       this.saving.add(char.id);
       saveButton.disabled = true;
       this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
@@ -55977,14 +57314,27 @@ class CharacterFolio {
     subtabs.className = "folio-subtabs";
     const dnaTabBtn = document.createElement("button");
     dnaTabBtn.type = "button";
+    dnaTabBtn.setAttribute("data-subtab", "dna");
     dnaTabBtn.className = `subtab-btn${this.activeSubTab === "dna" ? " active" : ""}`;
     dnaTabBtn.innerHTML = `✨ Visual DNA`;
     dnaTabBtn.onclick = () => {
       this.activeSubTab = "dna";
       this.renderDetail();
     };
+    const effectiveBondData = this.collectEffectiveBonds(char, lore);
+    const bondCount = effectiveBondData.bonds.length;
+    const relTabBtn = document.createElement("button");
+    relTabBtn.type = "button";
+    relTabBtn.setAttribute("data-subtab", "relationships");
+    relTabBtn.className = `subtab-btn${this.activeSubTab === "relationships" ? " active" : ""}`;
+    relTabBtn.textContent = bondCount > 0 ? `\uD83E\uDD1D Relationships (${bondCount})` : "\uD83E\uDD1D Relationships";
+    relTabBtn.onclick = () => {
+      this.activeSubTab = "relationships";
+      this.renderDetail();
+    };
     const loreTabBtn = document.createElement("button");
     loreTabBtn.type = "button";
+    loreTabBtn.setAttribute("data-subtab", "lore");
     loreTabBtn.className = `subtab-btn${this.activeSubTab === "lore" ? " active" : ""}`;
     loreTabBtn.innerHTML = `\uD83D\uDCD6 Story Lore`;
     loreTabBtn.onclick = () => {
@@ -55994,16 +57344,19 @@ class CharacterFolio {
     const cgsCount = lore.cgs?.length || 0;
     const cgsTabBtn = document.createElement("button");
     cgsTabBtn.type = "button";
+    cgsTabBtn.setAttribute("data-subtab", "cgs");
     cgsTabBtn.className = `subtab-btn${this.activeSubTab === "cgs" ? " active" : ""}`;
     cgsTabBtn.textContent = `\uD83D\uDDBC️ Gallery & References (${cgsCount})`;
     cgsTabBtn.onclick = () => {
       this.activeSubTab = "cgs";
       this.renderDetail();
     };
-    subtabs.append(dnaTabBtn, loreTabBtn, cgsTabBtn);
+    subtabs.append(dnaTabBtn, relTabBtn, loreTabBtn, cgsTabBtn);
     this.detailContainer.append(subtabs);
     if (this.activeSubTab === "dna") {
       this.renderDnaTab(char, isMale);
+    } else if (this.activeSubTab === "relationships") {
+      this.renderRelationshipsTab(char, lore);
     } else if (this.activeSubTab === "lore") {
       this.renderLoreTab(char, lore);
     } else if (this.activeSubTab === "cgs") {
@@ -56134,6 +57487,428 @@ class CharacterFolio {
     wardCard.append(wardGrid);
     this.detailContainer.append(idCard, propCard, faceCard, wardCard);
   }
+  escapeSvgText(text) {
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  collectEffectiveBonds(char, lore) {
+    const bonds = structuredClone(char.relationships ?? []);
+    const candidates = [char.name, ...char.aliases ?? []].map((n2) => n2.trim().toLowerCase()).filter(Boolean);
+    for (const [compKey, comp] of this.turnRpgCompanions.entries()) {
+      const matched = candidates.includes(compKey) || candidates.some((c) => areNamesEquivalent(c, comp.name));
+      if (!matched)
+        continue;
+      if (!bonds.some((b) => b.targetName.trim().toLowerCase() === "protagonist / user")) {
+        bonds.unshift({
+          targetName: "Protagonist / User",
+          affinity: Math.max(-100, Math.min(100, Math.round(comp.affinity))),
+          trust: 0,
+          dynamicLabel: "Companion",
+          status: comp.status || "Tracked in RPG companion state",
+          recentBeats: [],
+          lastUpdated: Date.now(),
+          fromRpgCompanion: true
+        });
+      }
+      break;
+    }
+    const signals = (lore.facts ?? []).filter((f) => /relationship|affinity|trust|bond|dynamic/i.test(f.field || ""));
+    const incoming = [];
+    for (const other of Object.values(this.library)) {
+      if (other.id === char.id)
+        continue;
+      for (const rel of other.relationships ?? []) {
+        const tgt = rel.targetName.trim().toLowerCase();
+        if (candidates.includes(tgt) || candidates.some((c) => areNamesEquivalent(c, rel.targetName))) {
+          incoming.push({ fromName: other.name, bond: rel });
+        }
+      }
+    }
+    return { bonds, signals, incoming };
+  }
+  renderRelationshipsTab(char, lore) {
+    const wrap = document.createElement("div");
+    wrap.style.display = "flex";
+    wrap.style.flexDirection = "column";
+    wrap.style.gap = "12px";
+    const { bonds, signals, incoming } = this.collectEffectiveBonds(char, lore);
+    const persistRelationships = (nextRels, noticeMsg) => {
+      char.relationships = nextRels.slice(0, 40);
+      char.autoDiscovered = false;
+      char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+      this.dirty.add(char.id);
+      if (noticeMsg)
+        this.notice = noticeMsg;
+      this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+      this.renderRoster();
+      this.renderDetail();
+    };
+    const webCard = document.createElement("div");
+    webCard.className = "folio-group-card";
+    const webHeader = document.createElement("div");
+    webHeader.className = "folio-group-header";
+    const webTitle = document.createElement("h4");
+    webTitle.textContent = "\uD83D\uDD78️ Relationship Constellation Web";
+    const webBadge = document.createElement("span");
+    webBadge.style.fontSize = "10px";
+    webBadge.style.opacity = "0.7";
+    webBadge.textContent = `${bonds.length} BOND${bonds.length === 1 ? "" : "S"}`;
+    webHeader.appendChild(webTitle);
+    webHeader.appendChild(webBadge);
+    webCard.appendChild(webHeader);
+    const webBox = document.createElement("div");
+    webBox.className = "rel-web-wrap";
+    webBox.setAttribute("data-relationship-web", char.id);
+    const cx = 210;
+    const cy = 110;
+    const rx = bonds.length <= 2 ? 128 : 142;
+    const ry = bonds.length <= 2 ? 72 : 76;
+    const svgLines = [];
+    const svgNodes = [];
+    if (bonds.length === 0) {
+      svgNodes.push(`<circle cx="${cx}" cy="${cy}" r="66" fill="none" stroke="rgba(148,163,184,0.22)" stroke-dasharray="4 4" stroke-width="1.2" />`, `<text x="${cx}" y="${cy + 46}" text-anchor="middle" fill="#94a3b8" font-size="10.5">No tracked bonds yet — add a bond below</text>`);
+    } else {
+      bonds.forEach((bond, idx) => {
+        const angle = -Math.PI / 2 + idx * 2 * Math.PI / bonds.length;
+        const nx = Math.round(cx + rx * Math.cos(angle));
+        const ny = Math.round(cy + ry * Math.sin(angle));
+        const strokeColor = bond.affinity >= 25 ? "#34d399" : bond.affinity <= -25 ? "#f43f5e" : bond.affinity !== 0 || bond.trust !== 0 ? "#fbbf24" : "#94a3b8";
+        const strokeWidth = (1.6 + Math.min(2.4, Math.abs(bond.affinity) / 42)).toFixed(2);
+        const mx = Math.round((cx + nx) / 2);
+        const my = Math.round((cy + ny) / 2);
+        const affLabel = `${bond.affinity >= 0 ? "+" : ""}${bond.affinity}`;
+        const shortDyn = bond.dynamicLabel ? bond.dynamicLabel.slice(0, 16) : affLabel;
+        const shortTarget = bond.targetName.length > 18 ? `${bond.targetName.slice(0, 16)}…` : bond.targetName;
+        svgLines.push(`<line x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-opacity="0.72" />`, `<rect x="${mx - 26}" y="${my - 9}" width="52" height="16" rx="8" fill="#0f172a" stroke="${strokeColor}" stroke-opacity="0.65" stroke-width="0.9" />`, `<text x="${mx}" y="${my + 2.5}" text-anchor="middle" fill="${strokeColor}" font-size="8.5" font-weight="700">${this.escapeSvgText(affLabel)}</text>`);
+        svgNodes.push(`<g class="rel-web-node" data-constellation-node="${this.escapeSvgText(bond.targetName)}">`, `<circle cx="${nx}" cy="${ny}" r="18" fill="rgba(15,23,42,0.94)" stroke="${strokeColor}" stroke-width="2" />`, `<text x="${nx}" y="${ny + 3.5}" text-anchor="middle" fill="#f8fafc" font-size="9.5" font-weight="700">${this.escapeSvgText((bond.targetName[0] || "?").toUpperCase())}</text>`, `<text x="${nx}" y="${ny + 30}" text-anchor="middle" fill="#e2e8f0" font-size="9.5" font-weight="600">${this.escapeSvgText(shortTarget)}</text>`, `<text x="${nx}" y="${ny + 41}" text-anchor="middle" fill="#94a3b8" font-size="8">${this.escapeSvgText(shortDyn)}</text>`, `</g>`);
+      });
+    }
+    const centerLabel = char.name.length > 16 ? `${char.name.slice(0, 14)}…` : char.name;
+    const centerGroup = `<g><circle cx="${cx}" cy="${cy}" r="24" fill="rgba(16,33,43,0.98)" stroke="var(--vn-shell-accent,#6ee7b7)" stroke-width="2.2" /><text x="${cx}" y="${cy + 4}" text-anchor="middle" fill="#6ee7b7" font-size="11" font-weight="700">${this.escapeSvgText((char.name[0] || "?").toUpperCase())}</text><text x="${cx}" y="${cy + 36}" text-anchor="middle" fill="#6ee7b7" font-size="9.5" font-weight="700">${this.escapeSvgText(centerLabel)}</text></g>`;
+    webBox.innerHTML = `<svg viewBox="0 0 420 220" class="rel-web-svg" role="img" aria-label="Relationship constellation for ${this.escapeSvgText(char.name)}">${svgLines.join("")}${svgNodes.join("")}${centerGroup}</svg>`;
+    for (const nodeEl of webBox.querySelectorAll("[data-constellation-node]")) {
+      nodeEl.addEventListener("click", () => {
+        const target2 = nodeEl.getAttribute("data-constellation-node") || "";
+        const cards = wrap.querySelectorAll(".rel-bond-card");
+        for (const c of cards)
+          c.classList.remove("is-highlighted");
+        for (const c of cards) {
+          if (c.getAttribute("data-bond-target") === target2) {
+            c.classList.add("is-highlighted");
+            c.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+            const dynInput = c.querySelector("[data-bond-dynamic]");
+            dynInput?.focus?.();
+          }
+        }
+      });
+    }
+    webCard.append(webBox);
+    wrap.append(webCard);
+    const bondsSection = document.createElement("div");
+    bondsSection.className = "folio-group-card";
+    bondsSection.innerHTML = `<div class="folio-group-header"><h4>\uD83D\uDCAC Tracked Bonds & Affinities</h4><span style="font-size:10px;opacity:0.7">EDIT & SAVE TO DNA</span></div>`;
+    if (bonds.length === 0) {
+      const emptyNote = document.createElement("p");
+      emptyNote.style.cssText = "margin:0;font-size:12px;color:var(--vn-shell-muted,#94a3b8);";
+      emptyNote.textContent = "No saved relationships yet. Bonds discovered from SimTracker or RPG companions will appear here automatically, or you can add one below.";
+      bondsSection.append(emptyNote);
+    }
+    for (const bond of bonds) {
+      const card = document.createElement("div");
+      card.className = "rel-bond-card";
+      card.setAttribute("data-bond-target", bond.targetName);
+      const header = document.createElement("div");
+      header.className = "rel-bond-header";
+      const title = document.createElement("span");
+      title.className = "rel-bond-title";
+      title.textContent = bond.targetName;
+      const badges = document.createElement("div");
+      badges.className = "rel-bond-badges";
+      const affColor = bond.affinity >= 25 ? "#34d399" : bond.affinity <= -25 ? "#f43f5e" : "#fbbf24";
+      const scoreBadge = document.createElement("span");
+      scoreBadge.className = "folio-tag";
+      scoreBadge.style.borderColor = affColor;
+      scoreBadge.style.color = affColor;
+      scoreBadge.textContent = `Affinity ${bond.affinity >= 0 ? "+" : ""}${bond.affinity} · Trust ${bond.trust >= 0 ? "+" : ""}${bond.trust}`;
+      badges.append(scoreBadge);
+      if (bond.fromRpgCompanion) {
+        const rpgBadge = document.createElement("span");
+        rpgBadge.className = "folio-tag";
+        rpgBadge.textContent = "RPG Companion Sync (Unsaved)";
+        badges.append(rpgBadge);
+      }
+      header.append(title, badges);
+      card.append(header);
+      const meterGrid = document.createElement("div");
+      meterGrid.className = "rel-meter-grid";
+      const affField = document.createElement("div");
+      affField.className = "folio-field";
+      const affLabel = document.createElement("label");
+      affLabel.textContent = "Affinity (-100 to +100)";
+      const affRow = document.createElement("div");
+      affRow.className = "rel-slider-row";
+      const affRange = document.createElement("input");
+      affRange.type = "range";
+      affRange.min = "-100";
+      affRange.max = "100";
+      affRange.value = String(bond.affinity);
+      affRange.setAttribute("data-bond-affinity-range", "");
+      const affNum = document.createElement("input");
+      affNum.type = "number";
+      affNum.min = "-100";
+      affNum.max = "100";
+      affNum.value = String(bond.affinity);
+      affNum.setAttribute("data-bond-affinity", "");
+      affNum.setAttribute("aria-label", `Affinity with ${bond.targetName}`);
+      affRange.oninput = () => {
+        affNum.value = affRange.value;
+      };
+      affNum.oninput = () => {
+        const clamped = Math.max(-100, Math.min(100, Math.round(Number(affNum.value) || 0)));
+        affRange.value = String(clamped);
+      };
+      affRow.append(affRange, affNum);
+      affField.append(affLabel, affRow);
+      const trustField = document.createElement("div");
+      trustField.className = "folio-field";
+      const trustLabel = document.createElement("label");
+      trustLabel.textContent = "Trust (-100 to +100)";
+      const trustRow = document.createElement("div");
+      trustRow.className = "rel-slider-row";
+      const trustRange = document.createElement("input");
+      trustRange.type = "range";
+      trustRange.min = "-100";
+      trustRange.max = "100";
+      trustRange.value = String(bond.trust);
+      trustRange.setAttribute("data-bond-trust-range", "");
+      const trustNum = document.createElement("input");
+      trustNum.type = "number";
+      trustNum.min = "-100";
+      trustNum.max = "100";
+      trustNum.value = String(bond.trust);
+      trustNum.setAttribute("data-bond-trust", "");
+      trustNum.setAttribute("aria-label", `Trust with ${bond.targetName}`);
+      trustRange.oninput = () => {
+        trustNum.value = trustRange.value;
+      };
+      trustNum.oninput = () => {
+        const clamped = Math.max(-100, Math.min(100, Math.round(Number(trustNum.value) || 0)));
+        trustRange.value = String(clamped);
+      };
+      trustRow.append(trustRange, trustNum);
+      trustField.append(trustLabel, trustRow);
+      meterGrid.append(affField, trustField);
+      card.append(meterGrid);
+      const textGrid = document.createElement("div");
+      textGrid.className = "rel-meter-grid";
+      const dynField = document.createElement("div");
+      dynField.className = "folio-field";
+      const dynLabel = document.createElement("label");
+      dynLabel.textContent = "Dynamic Label";
+      const dynInput = document.createElement("input");
+      dynInput.type = "text";
+      dynInput.maxLength = 160;
+      dynInput.className = "rel-text-input";
+      dynInput.value = bond.dynamicLabel || "";
+      dynInput.placeholder = "e.g. reluctant allies, protective mentor, rival";
+      dynInput.setAttribute("data-bond-dynamic", "");
+      dynInput.setAttribute("aria-label", `Dynamic label with ${bond.targetName}`);
+      dynField.append(dynLabel, dynInput);
+      const statusField = document.createElement("div");
+      statusField.className = "folio-field";
+      const statusLabel = document.createElement("label");
+      statusLabel.textContent = "Current Dynamic / Status";
+      const statusInput = document.createElement("input");
+      statusInput.type = "text";
+      statusInput.maxLength = 300;
+      statusInput.className = "rel-text-input";
+      statusInput.value = bond.status || "";
+      statusInput.placeholder = "Brief summary of current relational standing...";
+      statusInput.setAttribute("data-bond-status", "");
+      statusInput.setAttribute("aria-label", `Status with ${bond.targetName}`);
+      statusField.append(statusLabel, statusInput);
+      textGrid.append(dynField, statusField);
+      card.append(textGrid);
+      if (bond.recentBeats && bond.recentBeats.length > 0) {
+        const beatsDetails = document.createElement("details");
+        const beatsSummary = document.createElement("summary");
+        beatsSummary.style.cssText = "cursor:pointer;font-size:11px;font-weight:600;color:var(--vn-shell-muted,#94a3b8);";
+        beatsSummary.textContent = `Recent Relational Beats (${bond.recentBeats.length})`;
+        const beatsUl = document.createElement("ul");
+        beatsUl.className = "rel-beat-list";
+        for (const beat of bond.recentBeats.slice(0, 6)) {
+          const li = document.createElement("li");
+          li.textContent = beat.text;
+          beatsUl.append(li);
+        }
+        beatsDetails.append(beatsSummary, beatsUl);
+        card.append(beatsDetails);
+      }
+      const actionRow = document.createElement("div");
+      actionRow.className = "rel-actions-row";
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "folio-action-btn rel-btn-sm";
+      deleteBtn.textContent = "Delete Bond";
+      deleteBtn.setAttribute("data-bond-delete", bond.targetName);
+      deleteBtn.onclick = () => {
+        const nextRels = (char.relationships ?? []).filter((r) => r.targetName.trim().toLowerCase() !== bond.targetName.trim().toLowerCase());
+        persistRelationships(nextRels, `Removed relationship with ${bond.targetName}.`);
+      };
+      const saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.className = "folio-action-btn btn-accent rel-btn-sm";
+      saveBtn.textContent = bond.fromRpgCompanion ? "Save to DNA" : "Save Bond";
+      saveBtn.setAttribute("data-bond-save", bond.targetName);
+      saveBtn.onclick = () => {
+        const nextAff = Math.max(-100, Math.min(100, Math.round(Number(affNum.value) || 0)));
+        const nextTrust = Math.max(-100, Math.min(100, Math.round(Number(trustNum.value) || 0)));
+        const nextDyn = dynInput.value.trim().slice(0, 160);
+        const nextStatus = statusInput.value.trim().slice(0, 300);
+        const nextRels = structuredClone(char.relationships ?? []);
+        const idx = nextRels.findIndex((r) => r.targetName.trim().toLowerCase() === bond.targetName.trim().toLowerCase());
+        const updatedBond = {
+          targetName: bond.targetName.trim().slice(0, 120),
+          affinity: nextAff,
+          trust: nextTrust,
+          dynamicLabel: nextDyn,
+          status: nextStatus,
+          recentBeats: structuredClone(bond.recentBeats ?? []),
+          lastUpdated: Date.now()
+        };
+        if (idx >= 0)
+          nextRels[idx] = updatedBond;
+        else
+          nextRels.push(updatedBond);
+        persistRelationships(nextRels, `Saved relationship with ${updatedBond.targetName}.`);
+      };
+      actionRow.append(deleteBtn, saveBtn);
+      card.append(actionRow);
+      bondsSection.append(card);
+    }
+    wrap.append(bondsSection);
+    if (incoming.length > 0 || signals.length > 0) {
+      const signalsCard = document.createElement("div");
+      signalsCard.className = "folio-group-card";
+      signalsCard.innerHTML = `<div class="folio-group-header"><h4>\uD83D\uDCE1 Cross-Cast & Tracker Signals</h4></div>`;
+      const ul = document.createElement("ul");
+      ul.style.cssText = "margin:0;padding-left:18px;font-size:12px;line-height:1.6;color:var(--vn-shell-text,#f1f5f9);";
+      for (const inc of incoming) {
+        const li = document.createElement("li");
+        li.textContent = `${inc.fromName} → ${char.name}: Affinity ${inc.bond.affinity >= 0 ? "+" : ""}${inc.bond.affinity}${inc.bond.dynamicLabel ? ` (${inc.bond.dynamicLabel})` : ""}${inc.bond.status ? ` — ${inc.bond.status}` : ""}`;
+        ul.append(li);
+      }
+      for (const sig of signals) {
+        const li = document.createElement("li");
+        li.textContent = `${sig.field}: ${sig.value}`;
+        ul.append(li);
+      }
+      signalsCard.append(ul);
+      wrap.append(signalsCard);
+    }
+    const addCard = document.createElement("div");
+    addCard.className = "folio-group-card";
+    addCard.innerHTML = `<div class="folio-group-header"><h4>➕ Add Relationship Bond</h4></div>`;
+    const suggestListId = `rel-targets-${char.id.replace(/[^a-zA-Z0-9_-]/g, "")}`;
+    const datalist = document.createElement("datalist");
+    datalist.setAttribute("id", suggestListId);
+    const targetSuggestions = new Set(["Protagonist / User"]);
+    for (const other of Object.values(this.library)) {
+      if (other.id !== char.id && other.name.trim())
+        targetSuggestions.add(other.name.trim());
+    }
+    for (const s of targetSuggestions) {
+      const opt = document.createElement("option");
+      opt.value = s;
+      datalist.append(opt);
+    }
+    addCard.append(datalist);
+    const addGrid = document.createElement("div");
+    addGrid.className = "rel-meter-grid";
+    const targetField = document.createElement("div");
+    targetField.className = "folio-field";
+    const targetLbl = document.createElement("label");
+    targetLbl.textContent = "Target Character / Protagonist";
+    const targetInput = document.createElement("input");
+    targetInput.type = "text";
+    targetInput.maxLength = 120;
+    targetInput.className = "rel-text-input";
+    targetInput.placeholder = "e.g. Protagonist / User or cast member";
+    targetInput.setAttribute("list", suggestListId);
+    targetInput.setAttribute("data-add-bond-target", "");
+    targetField.append(targetLbl, targetInput);
+    const newDynField = document.createElement("div");
+    newDynField.className = "folio-field";
+    const newDynLbl = document.createElement("label");
+    newDynLbl.textContent = "Dynamic Label";
+    const newDynInput = document.createElement("input");
+    newDynInput.type = "text";
+    newDynInput.maxLength = 160;
+    newDynInput.className = "rel-text-input";
+    newDynInput.placeholder = "e.g. trusted confidant, uneasy rival";
+    newDynInput.setAttribute("data-add-bond-dynamic", "");
+    newDynField.append(newDynLbl, newDynInput);
+    const newStatusField = document.createElement("div");
+    newStatusField.className = "folio-field";
+    const newStatusLbl = document.createElement("label");
+    newStatusLbl.textContent = "Status / Tension";
+    const newStatusInput = document.createElement("input");
+    newStatusInput.type = "text";
+    newStatusInput.maxLength = 300;
+    newStatusInput.className = "rel-text-input";
+    newStatusInput.placeholder = "Initial relationship standing...";
+    newStatusInput.setAttribute("data-add-bond-status", "");
+    newStatusField.append(newStatusLbl, newStatusInput);
+    const newAffField = document.createElement("div");
+    newAffField.className = "folio-field";
+    const newAffLbl = document.createElement("label");
+    newAffLbl.textContent = "Initial Affinity (-100..100)";
+    const newAffInput = document.createElement("input");
+    newAffInput.type = "number";
+    newAffInput.min = "-100";
+    newAffInput.max = "100";
+    newAffInput.value = "0";
+    newAffInput.className = "rel-text-input";
+    newAffInput.setAttribute("data-add-bond-affinity", "");
+    newAffField.append(newAffLbl, newAffInput);
+    addGrid.append(targetField, newDynField, newStatusField, newAffField);
+    addCard.append(addGrid);
+    const addActions = document.createElement("div");
+    addActions.className = "rel-actions-row";
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "folio-action-btn btn-accent rel-btn-sm";
+    addBtn.textContent = "+ Add Relationship Bond";
+    addBtn.setAttribute("data-add-bond-btn", "");
+    addBtn.onclick = () => {
+      const targetName = targetInput.value.trim().slice(0, 120);
+      if (!targetName) {
+        this.notice = "Enter a target name to add a relationship bond.";
+        this.renderDetail();
+        return;
+      }
+      const affinity = Math.max(-100, Math.min(100, Math.round(Number(newAffInput.value) || 0)));
+      const nextRels = structuredClone(char.relationships ?? []);
+      const idx = nextRels.findIndex((r) => r.targetName.trim().toLowerCase() === targetName.toLowerCase());
+      const entry = {
+        targetName,
+        affinity,
+        trust: idx >= 0 ? nextRels[idx].trust : 0,
+        dynamicLabel: newDynInput.value.trim().slice(0, 160),
+        status: newStatusInput.value.trim().slice(0, 300),
+        recentBeats: idx >= 0 ? structuredClone(nextRels[idx].recentBeats ?? []) : [],
+        lastUpdated: Date.now()
+      };
+      if (idx >= 0)
+        nextRels[idx] = entry;
+      else
+        nextRels.push(entry);
+      persistRelationships(nextRels, `Added relationship with ${targetName}.`);
+    };
+    addActions.append(addBtn);
+    addCard.append(addActions);
+    wrap.append(addCard);
+    this.detailContainer.append(wrap);
+  }
   renderLoreTab(char, lore) {
     const loreWrap = document.createElement("div");
     loreWrap.style.display = "flex";
@@ -56194,15 +57969,39 @@ class CharacterFolio {
     }
     const notesCard = document.createElement("div");
     notesCard.className = "folio-group-card";
-    notesCard.innerHTML = `<div class="folio-group-header"><h4>✏️ Player Notes</h4></div>`;
+    notesCard.innerHTML = `<div class="folio-group-header"><h4>✏️ Player Notes</h4><span style="font-size:10px;opacity:0.7">PERSISTENT CHARACTER NOTES</span></div>`;
     const textarea = document.createElement("textarea");
-    textarea.style.cssText = "width:100%;height:80px;padding:8px 10px;border-radius:6px;border:1px solid var(--vn-shell-border,rgba(255,255,255,0.12));background:rgba(0,0,0,0.25);color:var(--vn-shell-text,#f1f5f9);font-size:12px;box-sizing:border-box;font-family:inherit;";
+    textarea.setAttribute("data-player-notes", char.id);
+    textarea.style.cssText = "width:100%;height:88px;padding:8px 10px;border-radius:6px;border:1px solid var(--vn-shell-border,rgba(255,255,255,0.12));background:rgba(0,0,0,0.25);color:var(--vn-shell-text,#f1f5f9);font-size:12px;box-sizing:border-box;font-family:inherit;resize:vertical;";
     textarea.placeholder = "Add private notes about this character...";
-    textarea.value = lore.playerNote || "";
-    textarea.addEventListener("change", () => {
-      lore.playerNote = textarea.value.trim();
-    });
-    notesCard.append(textarea);
+    textarea.value = char.notes ?? lore.playerNote ?? "";
+    const notesFooter = document.createElement("div");
+    notesFooter.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:4px;";
+    const notesStatus = document.createElement("small");
+    notesStatus.style.cssText = "font-size:11px;color:var(--vn-shell-muted,#94a3b8);";
+    notesStatus.textContent = "Saved with this character profile";
+    const saveNotesBtn = document.createElement("button");
+    saveNotesBtn.type = "button";
+    saveNotesBtn.className = "folio-action-btn rel-btn-sm";
+    saveNotesBtn.textContent = "Save Notes";
+    saveNotesBtn.setAttribute("data-save-notes", "");
+    const persistNotes = () => {
+      const nextNote = textarea.value.trim().slice(0, 1000);
+      lore.playerNote = nextNote;
+      if (nextNote)
+        char.notes = nextNote;
+      else
+        delete char.notes;
+      char.autoDiscovered = false;
+      char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+      this.dirty.add(char.id);
+      this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+      notesStatus.textContent = "Notes saved ✓";
+    };
+    textarea.addEventListener("change", persistNotes);
+    saveNotesBtn.onclick = persistNotes;
+    notesFooter.append(notesStatus, saveNotesBtn);
+    notesCard.append(textarea, notesFooter);
     loreWrap.append(notesCard);
     this.detailContainer.append(loreWrap);
   }
@@ -59896,6 +61695,18 @@ function setupVisualNovelFrontend(baseContext) {
     dnaRequests.set(requestId, { chatId: owner, action: body2.action, turnToken: dnaTurnToken, ...body2.action === "save" ? { saved: { id: body2.dna.id, updatedAt: body2.dna.lastUpdated } } : {} });
     ctx.sendToBackend(checked.data);
   };
+  const sendStoryDna = (body2) => {
+    const owner = chatId();
+    if (!owner)
+      return;
+    const requestId = createUiId();
+    const checked = StoryDnaRequestSchema.safeParse({ type: "vn_story_dna", chatId: owner, requestId, ...body2 });
+    if (!checked.success) {
+      stage.setStoryDnaError(checked.error.issues[0]?.message ?? "Invalid location or item DNA field.");
+      return;
+    }
+    ctx.sendToBackend(checked.data);
+  };
   const characterFolio = new CharacterFolio({
     onSaveDNA: (dna, revision) => sendDna({ action: "save", dna, revision }),
     onAutoFillDNA: (characterName, characterId, fields2) => sendDna({ action: "propose", characterName, characterId, ...fields2 ? { fields: fields2 } : {} }),
@@ -59932,6 +61743,7 @@ function setupVisualNovelFrontend(baseContext) {
     characterFolio.setActiveCharacter(charName);
     stage.workspace.open("character");
   });
+  stage.setStoryDnaRequester((body2) => sendStoryDna(body2));
   const panelRequests = new Map;
   panels.onResolveTemplate = (template) => new Promise((resolve, reject) => {
     const requestId = createUiId();
@@ -60286,6 +62098,7 @@ function setupVisualNovelFrontend(baseContext) {
     characterFolio.setContext(next.chatId);
     if (next?.chatId) {
       sendDna({ action: "list" });
+      sendStoryDna({ action: "list" });
     }
     imageLibrary.setContext(next, stage.getState().currentParagraphIndex);
     settingsPanel?.setImagePreviewMetadata(next?.imageRequests?.at(-1)?.imagePromptMetadata);
@@ -60488,6 +62301,16 @@ function setupVisualNovelFrontend(baseContext) {
         if (message.error.includes("DNA changed"))
           sendDna({ action: "list" });
       }
+      return;
+    }
+    if (type === "vn_story_dna" && message.type === "vn_story_dna") {
+      if (message.chatId === chatId())
+        stage.setStoryDna(message.storyDna);
+      return;
+    }
+    if (type === "vn_error" && message.type === "vn_error" && message.operation === "vn_story_dna") {
+      if (!message.chatId || message.chatId === chatId())
+        stage.setStoryDnaError(message.error);
       return;
     }
     if (type === "vn_cast_art" && message.type === "vn_cast_art") {

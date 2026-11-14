@@ -6,12 +6,22 @@ export const ANIMA_OUTPUT_RATIOS = ['1:1', '1:2', '2:1', '1:3', '3:1', '2:3', '3
 export const QWEN_TURBO_OUTPUT_RATIOS = ['1:1','3:2','16:9','21:9','9:16','2:3','3:4','4:5'] as const;
 const ANIMA_MODELS = new Set(['anima', 'anima/text-to-image', 'anima/text-to-image-lora', 'wavespeed-ai/anima/text-to-image', 'wavespeed-ai/anima/text-to-image-lora']);
 
+export function isFluxKleinModel(model: string | null | undefined): boolean {
+  const id = String(model ?? '').trim().toLowerCase();
+  return Boolean(id) && id.includes('klein');
+}
+
+export function isFlux3KleinSquareModel(model: string | null | undefined): boolean {
+  const id = String(model ?? '').trim().toLowerCase();
+  return Boolean(id) && (/flux[-_./]?3.*klein/i.test(id) || id.startsWith('blackforestlabs/flux-3/klein'));
+}
+
 export function imageOutputRule(provider: string | null | undefined, model: string | null | undefined): 'anima' | 'klein-square' | 'qwen-turbo' | null {
   if (provider?.trim().toLowerCase() !== 'nanogpt') return null;
   const id = model?.trim().toLowerCase() ?? '';
   if (ANIMA_MODELS.has(id)) return 'anima';
   if (id === 'qwen-image-2.1-turbo') return 'qwen-turbo';
-  return ['blackforestlabs/flux-3/klein/base/text-to-image','blackforestlabs/flux-3/klein/text-to-image'].includes(id) ? 'klein-square' : null;
+  return isFlux3KleinSquareModel(id) ? 'klein-square' : null;
 }
 
 /** Derived from the recorded request, so old/held previews keep their own size. */

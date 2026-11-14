@@ -1,3 +1,4 @@
+import {isFluxKleinModel} from '../../shared/image-model-output.js';
 import {buildV2ImageRequest} from './v2-request-builder.js';
 import type {ImageActivityInput} from '../../shared/image-usage.js';
 import {castAllocationCandidates} from './cast-allocation.js';
@@ -342,19 +343,21 @@ export function compileImagePrompt(
   cue: VisualCue,
   characterAppearance?: CharacterAppearanceMap,
   syntax?: Config["promptSyntax"],
-  provider?: string | null
+  provider?: string | null,
+  characterDNALibrary?: CharacterDNALibrary | Record<string, CharacterDNA>,
+  storyDNASet?: StoryDNASet
 ): string {
-  if (cue.imageTemplate) return compileTemplateCue(config, scene, cue, characterAppearance).prompt;
-  if (provider === "novelai") return compileNovelAiRequest(config, scene, cue, characterAppearance).prompt;
+  if (cue.imageTemplate) return compileTemplateCue(config, scene, cue, characterAppearance, characterDNALibrary, storyDNASet).prompt;
+  if (provider === "novelai") return compileNovelAiRequest(config, scene, cue, characterAppearance, characterDNALibrary, storyDNASet).prompt;
   const selectedSyntax = syntax ?? (config as any).promptSyntax ?? "comfyui";
   const entry = describeCue(config, scene, cue, characterAppearance, provider ?? (selectedSyntax === "nai" ? "novelai" : null)).entry;
   return renderPrompt(entry.prompt, selectedSyntax);
 }
 
 /** One compiled payload is shared by generation and cache identity. */
-export function compileNovelAiRequest(config: VisualNovelConfig, scene: SceneState, cue: VisualCue, appearances?: CharacterAppearanceMap) {
+export function compileNovelAiRequest(config: VisualNovelConfig, scene: SceneState, cue: VisualCue, appearances?: CharacterAppearanceMap, characterDNALibrary?: CharacterDNALibrary | Record<string, CharacterDNA>, storyDNASet?: StoryDNASet) {
   if (cue.imageTemplate) {
-    const compiled = compileTemplateCue(config, scene, cue, appearances);
+    const compiled = compileTemplateCue(config, scene, cue, appearances, characterDNALibrary, storyDNASet);
     // The complete self-contained template is the scene caption. Duplicating its
     // subjects into host character captions would silently change that prompt.
     return { prompt: compiled.prompt, negativePrompt: compiled.negativePrompt, parameters: { qualityToggle: false, negativePrompt: compiled.negativePrompt, characterTags: [] as { tags: string }[] } };
@@ -383,9 +386,11 @@ export function compileNegativePrompt(
   config: VisualNovelConfig,
   scene: SceneState,
   cue: VisualCue,
-  characterAppearance?: CharacterAppearanceMap
+  characterAppearance?: CharacterAppearanceMap,
+  characterDNALibrary?: CharacterDNALibrary | Record<string, CharacterDNA>,
+  storyDNASet?: StoryDNASet
 ): string {
-  if (cue.imageTemplate) return compileTemplateCue(config, scene, cue, characterAppearance).negativePrompt;
+  if (cue.imageTemplate) return compileTemplateCue(config, scene, cue, characterAppearance, characterDNALibrary, storyDNASet).negativePrompt;
   const entry = compilePromptEntry(config, scene, cue, characterAppearance);
   if (entry.negative) return entry.negative;
   const compilerConfig = normalizeConfig({
@@ -433,10 +438,12 @@ export function sceneImageIdentityFor(
   characterAppearance: CharacterAppearanceMap | undefined,
   provider: string | null,
   reference?: SceneImageReference,
-  profileRevision?: string
+  profileRevision?: string,
+  characterDNALibrary?: CharacterDNALibrary | Record<string, CharacterDNA>,
+  storyDNASet?: StoryDNASet
 ): SceneImageIdentity {
   if (cue.imageTemplate) {
-    const compiled = compileTemplateCue(config, scene, cue, characterAppearance);
+    const compiled = compileTemplateCue(config, scene, cue, characterAppearance, characterDNALibrary, storyDNASet);
     const brief = {...compiled.brief};
     // Display provenance does not change the rendered image or invalidate saved art.
     delete brief.subjectPreparation;
@@ -601,7 +608,7 @@ export async function resolveCacheCues(
   existingJobs: readonly AssetJob[],
   cache: SceneImageCache,
   userId?: string,
-  options: { resolvedSourceText?: string; provider?: string | null; verifyImage?: SceneImageVerifier; log?: (line: string) => void; includeBudgeted?: boolean } = {}
+  options: { resolvedSourceText?: string; provider?: string | null; verifyImage?: SceneImageVerifier; log?: (line: string) => void; includeBudgeted?: boolean; characterDNALibrary?: CharacterDNALibrary | Record<string, CharacterDNA>; storyDNASet?: StoryDNASet } = {}
 ): Promise<AssetJob[]> {
   const candidates = options.includeBudgeted || (plan.classifierVisuals && config.systemOneMode === "on")
     ? [...plan.visualCues, ...(plan.cacheCues ?? [])]
@@ -616,6 +623,14 @@ export async function resolveCacheCues(
   if (provider === "novelai") config = { ...config, imageModel: config.imageModel || profile.model || "nai-diffusion-4-5-full" };
   const verify = options.verifyImage ?? defaultSceneImageVerifier(spindle, userId);
   const log = options.log ?? (() => {});
+  const [characterDNALibrary, storyDNASet] = await Promise.all([
+    options.characterDNALibrary !== undefined
+      ? Promise.resolve(options.characterDNALibrary)
+      : loadCharacterDNALibrary(spindle, plan.key.chatId, userId).catch(() => ({ version: 1 as const, characters: {} })),
+    options.storyDNASet !== undefined
+      ? Promise.resolve(options.storyDNASet)
+      : loadStoryDNASet(spindle, plan.key.chatId, userId).catch(() => ({ locations: {}, items: {}, revision: 0 }))
+  ]);
   // Card mode keys carry the chosen reference, so candidates resolve it the
   // same way the budgeted path does (stored portraits + one context lookup).
   const referenceSource = pending.some(cueUsesCharacterReference) && referenceAnchoringEnabled(config) && provider !== null && REFERENCE_PROVIDERS.has(provider);
@@ -684,7 +699,7 @@ export async function resolveCacheCues(
         const captured = compatiblePortrait(candidatePortraits[visual.characterKey], portraitIdentityFingerprint(visual.characterName, visual.baseIdentity, config, provider));
         reference = captured ? { source: "captured", imageId: captured.imageId } : { source: "none" };
       }
-      const cacheIdentity = sceneImageIdentityFor(config, scene, cue, characterAppearance, provider, reference, profile.cacheProfile);
+      const cacheIdentity = sceneImageIdentityFor(config, scene, cue, characterAppearance, provider, reference, profile.cacheProfile, characterDNALibrary, storyDNASet);
       key = sceneImageCacheKey(cacheIdentity);
       keyDigest = sceneIdentityDigest(cacheIdentity);
     } catch {
@@ -1157,7 +1172,7 @@ export async function generateAssets(
     if (!cache || (!plan.cacheCues?.length && !plan.classifierVisuals)) return Promise.resolve();
     resolvingCandidates = resolvingCandidates.then(async () => {
       if (!stillAdmitted()) return;
-      const extra = await resolveCacheCues(spindle, plan, config, characterAppearance, jobs, cache, userId, { ...cacheOptions, provider, verifyImage: verify, log: cacheLog });
+      const extra = await resolveCacheCues(spindle, plan, config, characterAppearance, jobs, cache, userId, { ...cacheOptions, provider, verifyImage: verify, log: cacheLog, characterDNALibrary, storyDNASet });
       if (!stillAdmitted()) return;
       for (const job of extra) {
         if (jobs.some((existing) => existing.jobId === job.jobId)) continue;
@@ -1200,9 +1215,9 @@ export async function generateAssets(
         const visualState = resolveCueCharacterVisualState(scene, cue, characterAppearance);
         const canAnchor = anchorable && cueUsesCharacterReference(cue);
         if (cue.imageTemplate?.subjectMode !== "none" && cue.imageTemplate?.subjectMode !== "ensemble" && cue.resolvedIdentity !== undefined && !cue.resolvedIdentity.trim()) throw new Error(`No usable appearance was resolved for "${visualState.characterName}". Replan this turn with a character description; the previous character will not be substituted.`);
-        const prompt = compileImagePrompt(config, scene, cue, characterAppearance, undefined, provider);
-        const nai = provider === "novelai" ? compileNovelAiRequest(config, scene, cue, characterAppearance) : null;
-        const negativePrompt = nai?.negativePrompt ?? compileNegativePrompt(config, scene, cue, characterAppearance);
+        const prompt = compileImagePrompt(config, scene, cue, characterAppearance, undefined, provider, characterDNALibrary, storyDNASet);
+        const nai = provider === "novelai" ? compileNovelAiRequest(config, scene, cue, characterAppearance, characterDNALibrary, storyDNASet) : null;
+        const negativePrompt = nai?.negativePrompt ?? compileNegativePrompt(config, scene, cue, characterAppearance, characterDNALibrary, storyDNASet);
         const characterName = visualState.characterName;
         const characterKey = visualState.characterKey;
 
@@ -1257,7 +1272,9 @@ export async function generateAssets(
             const cacheIdentity = sceneImageIdentityFor(
               config, scene, cue, characterAppearance, provider,
               cardSource ? cardReferenceForCache(cardPortrait, portrait) : cue.imageTemplate ? portrait ? { source: "captured", imageId: portrait.imageId } : { source: "none" } : undefined,
-              profile.cacheProfile
+              profile.cacheProfile,
+              characterDNALibrary,
+              storyDNASet
             );
             cacheKey = sceneImageCacheKey(cacheIdentity);
             cacheDigest = sceneIdentityDigest(cacheIdentity);
@@ -1384,7 +1401,7 @@ export async function generateAssets(
           const enrichFor=(selectedCue:VisualCue)=>(request:ImageGenerationRequest,guidance?:string)=>enrichImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,guidance);
           frozen.parameters = modelOutputParameters(selected?.provider ?? provider, frozen.model, globalOutputParameters(config.imageOutputAspectRatio, selected?.provider ?? provider, frozen.model, frozen.parameters ?? {}));
           frozen.promptProfile=await loadImagePromptProfile(spindle,config,selected?.provider??provider,frozen.model);
-          frozen=prepareCapabilityOutput(frozen,config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined,config.imageResolutionPreference);
+          frozen=prepareCapabilityOutput(frozen,config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined,config.automaticImagePromptSettings&&isFluxKleinModel(frozen.model)?'standard':config.imageResolutionPreference);
           if (config.imagePromptEngineVersion === 2 && cue.imageTemplate) {
             const profileV2=await loadImagePromptProfileV2(spindle,config,selected?.provider??provider,frozen.model,frozen.parameters);
             const built=buildV2ImageRequest({config,cue,request:frozen,profile:profileV2,brief:initialMetadata?.brief??compileTemplateCue(config,scene,cue,characterAppearance,characterDNALibrary,storyDNASet).brief,metadata:initialMetadata,styleId:config.selectedSharedStyleId,portraits,characterDNALibrary,shadow:{prompt:frozen.prompt,...(frozen.negativePrompt!==undefined?{negativePrompt:frozen.negativePrompt}:{})},referenceSummary:portrait?`${portrait.source??'captured'} portrait: ${portrait.name} (${portrait.imageId})`:wantsCapture?'No reference yet; this picture will establish the portrait':'No extension reference'});
@@ -1413,7 +1430,7 @@ export async function generateAssets(
               const template = latestConfig.imageTemplates.find(item => item.id === templateId);
               if (!template) throw new Error("This template is unavailable.");
               const nextCue = { ...cue, imageTemplate: templateSnapshot(template), imageTemplateReason: "Manual template selection", presentationRuleTrace: undefined };
-              const nextCompiled = compileTemplateCue(config, scene, nextCue, characterAppearance);
+              const nextCompiled = compileTemplateCue(config, scene, nextCue, characterAppearance, characterDNALibrary, storyDNASet);
               const usesReference = referenceAnchoringEnabled(config) && cueUsesCharacterReference(nextCue) && provider !== null && REFERENCE_PROVIDERS.has(provider);
               let nextPortrait: StoredPortrait | undefined;
               if (usesReference) {
@@ -1453,7 +1470,8 @@ export async function generateAssets(
               };
               if (!effectiveModel) delete request.model;
               request.parameters = modelOutputParameters(effectiveProvider, request.model, globalOutputParameters(latestConfig.imageOutputAspectRatio, effectiveProvider, request.model, request.parameters ?? {}));
-              const preparedRequest=prepareCapabilityOutput(request,latestConfig.imageOutputAspectRatio!=='default'?latestConfig.imageOutputAspectRatio:nextCue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined,latestConfig.imageResolutionPreference);
+              request.promptProfile = await loadImagePromptProfile(spindle, latestConfig, effectiveProvider, request.model);
+              const preparedRequest=prepareCapabilityOutput(request,latestConfig.imageOutputAspectRatio!=='default'?latestConfig.imageOutputAspectRatio:nextCue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined,latestConfig.automaticImagePromptSettings&&isFluxKleinModel(request.model)?'standard':latestConfig.imageResolutionPreference);
               const nextMetadata=metadataFor(nextCue)!;
               if (latestConfig.imagePromptEngineVersion === 2) {
                 const profileV2=await loadImagePromptProfileV2(spindle,latestConfig,effectiveProvider,request.model,request.parameters);
@@ -1477,7 +1495,7 @@ export async function generateAssets(
           // A locally edited request cannot populate the compiler's original cache key.
           if (cacheOptions.disableCacheStore || JSON.stringify(approved) !== JSON.stringify(frozen)) { cacheKey = null; settle?.({ kind: "released" }); settle = null; }
           // Review callbacks cannot replace the frozen budget used to prepare this request.
-          if(frozen.promptProfile)approved.promptProfile=frozen.promptProfile;else delete approved.promptProfile;
+          if (approved.model === frozen.model && (approved.connection_id || selected?.id) === (frozen.connection_id || selected?.id)) { if(frozen.promptProfile)approved.promptProfile=frozen.promptProfile;else delete approved.promptProfile; } else { approved.promptProfile = await loadImagePromptProfile(spindle, config, (approved.connection_id && approved.connection_id !== selected?.id && typeof spindle.imageGen?.getConnection === 'function' ? (await spindle.imageGen.getConnection(approved.connection_id, userId))?.provider?.trim().toLowerCase() : undefined) ?? selected?.provider ?? provider, approved.model); }
           assertPromptLengths(approved.prompt,approved.negativePrompt,approved.promptProfile);
           assertEffectivePromptBudget(approved);
           const activeConnectionId = approved.connection_id || selected?.id;

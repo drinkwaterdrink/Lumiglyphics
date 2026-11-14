@@ -5,6 +5,8 @@ import {
   StoryDNASetSchema,
   createLocationId,
   createItemId,
+  deriveShortAliases,
+  isStoryEntryActiveOnBranch,
   findMatchingLocation,
   findMatchingItem,
   formatLocationDNAToPromptClause,
@@ -106,4 +108,19 @@ test('formats Location and Item DNA into concise prompt clauses', () => {
   expect(itemClause).toContain('materials: yew wood, rough diamonds');
   expect(itemClause).toContain('living coiled vines');
   expect(itemClause).toContain('colors: #2D1B00, #15803D');
+});
+
+test('derives short aliases and filters active-branch swipe entries', () => {
+  const aliases = deriveShortAliases('Carved Yew Staff of Eldoria (Blessed)', ['Old Staff']);
+  expect(aliases).toContain('Old Staff');
+  expect(aliases).toContain('Carved Yew Staff of Eldoria');
+
+  const locAliases = deriveShortAliases("Harbor Master's Office — North Pier");
+  expect(locAliases.length).toBeGreaterThanOrEqual(1);
+
+  const activeSwipes = new Set(['m2::1']);
+  expect(isStoryEntryActiveOnBranch({ autoDiscovered: false, seenInSwipes: ['m2::0'] }, activeSwipes)).toBe(true);
+  expect(isStoryEntryActiveOnBranch({ autoDiscovered: true, locked: true, seenInSwipes: ['m2::0'] }, activeSwipes)).toBe(true);
+  expect(isStoryEntryActiveOnBranch({ autoDiscovered: true, seenInSwipes: ['m2::0'] }, activeSwipes)).toBe(false);
+  expect(isStoryEntryActiveOnBranch({ autoDiscovered: true, seenInSwipes: ['m2::0', 'm2::1'] }, activeSwipes)).toBe(true);
 });

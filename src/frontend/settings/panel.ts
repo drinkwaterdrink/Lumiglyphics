@@ -20,6 +20,7 @@ import type {LocationArtLibrary,LocationArtAction} from '../../shared/stage-asse
 import { TooltipSettingsPanel } from "./tooltips.js";
 import { TrackerMappingsPanel } from "./tracker-mappings.js";
 import { IMAGE_OUTPUT_RATIOS, normalizeImageOutputRatio } from "../../shared/image-output.js";
+import { isFluxKleinModel } from "../../shared/image-model-output.js";
 import { ContextSourcesPanel } from './context-sources.js';
 import type { ContextSourceReport } from '../../shared/context-sources.js';
 import { BUILTIN_SHARED_STYLES, applySharedStyle, restoredSharedStyleId } from "../../shared/image-styles.js";
@@ -850,7 +851,7 @@ export class VisualNovelSettingsPanel {
                 <option value="standard">Standard (1K — Fast &amp; economical, ~1024px)</option>
                 <option value="ultra">Maximum / Ultra (4K / Highest published size)</option>
               </select>
-              <small>Preferred quality tier. When a model offers both 1K and 2K sizes, High selects 2K. If a model only supports 1K, it gracefully uses the model's highest size.</small>
+              <small data-resolution-hint>Preferred quality tier. When a model offers both 1K and 2K sizes, High selects 2K. If a model only supports 1K, it gracefully uses the model's highest size.</small>
             </label>
             <fieldset data-prompt-model-settings ${find('Automatic image prompting','prompt budget characters limit model profile auto detect prompt engine compiler v1 v2')}><legend>Image prompting</legend>
               <label data-field ${find('Prompt engine','prompt engine compiler v1 v2 model aware shot director')}>
@@ -1789,7 +1790,11 @@ export class VisualNovelSettingsPanel {
         target.removeAttribute('aria-invalid');return {imagePromptBudget:value};
       }
       case "imageOutputAspectRatio": return { imageOutputAspectRatio: normalizeImageOutputRatio(target.value) };
-      case "imageResolutionPreference": return { imageResolutionPreference: target.value === "standard" || target.value === "ultra" ? target.value : "high" };
+      case "imageResolutionPreference": {
+        const activeModel = this.effectiveImageModel(this.config.imageConnectionId, this.config.imageModel);
+        if (isFluxKleinModel(activeModel)) return { imageResolutionPreference: "standard" };
+        return { imageResolutionPreference: target.value === "standard" || target.value === "ultra" ? target.value : "high" };
+      }
       case "dialogueSafeArea": return { dialogueSafeArea: target.value === "always" ? "always" : target.value === "off" ? "off" : "auto" };
       case "imagePromptDetail": return { imagePromptDetail: target.value === "compact" || target.value === "standard" || target.value === "detailed" ? target.value : "auto" };
       case "persistentCastArt": return {persistentCastArt:checked};
@@ -1878,8 +1883,14 @@ export class VisualNovelSettingsPanel {
       case "setupParserConnectionId":
         return { parserConnectionId: target.value.trim() || null };
       case "imageConnectionId":
-      case "setupImageConnectionId":
-        return { imageConnectionId: target.value.trim() || null };
+      case "setupImageConnectionId": {
+        const imageConnectionId = target.value.trim() || null;
+        const activeModel = this.effectiveImageModel(imageConnectionId, this.config.imageModel);
+        if (isFluxKleinModel(activeModel) && this.config.imageResolutionPreference !== "standard") {
+          return { imageConnectionId, imageResolutionPreference: "standard" };
+        }
+        return { imageConnectionId };
+      }
       case "textSpeedStep": {
         if (target.value === "custom") { this.showCustom("textSpeed", true); return null; }
         return { textSpeed: Number(target.value) };
@@ -2193,6 +2204,12 @@ export class VisualNovelSettingsPanel {
     try {
       const values=this.readAdvanced(keys);
       patch=Object.fromEntries(keys.map(name=>[name,values[name]])) as Partial<VisualNovelConfig>;
+      if (Object.prototype.hasOwnProperty.call(patch, "imageModel")) {
+        const activeModel = this.effectiveImageModel(this.config.imageConnectionId, String(patch.imageModel ?? ""));
+        if (isFluxKleinModel(activeModel) && this.config.imageResolutionPreference !== "standard") {
+          patch = { ...patch, imageResolutionPreference: "standard" };
+        }
+      }
     } catch (error) {
       // Show the field that failed, wherever the user is.
       for (const [name, label] of [["parserParameters", "Story reader parameters"], ["imageParameters", "Image parameters"]] as const) {
@@ -2363,7 +2380,7 @@ export class VisualNovelSettingsPanel {
     this.control<HTMLSelectElement>("imagePromptEngineVersion").value = String(config.imagePromptEngineVersion ?? 2);
     this.control<HTMLSelectElement>("ideogramPromptMode").value = config.ideogramPromptMode ?? "auto";
     this.control<HTMLSelectElement>("flux3KleinPromptMode").value = config.flux3KleinPromptMode ?? "auto";
-    this.control<HTMLSelectElement>("imageResolutionPreference").value = config.imageResolutionPreference ?? "high";
+    this.syncResolutionPreferenceForModel(config);
     this.control<HTMLSelectElement>("dialogueSafeArea").value = config.dialogueSafeArea ?? "auto";
     this.control<HTMLSelectElement>("imagePromptDetail").value = config.imagePromptDetail ?? "auto";
     this.control<HTMLInputElement>("automaticImagePromptSettings").checked=config.automaticImagePromptSettings;
@@ -2628,9 +2645,35 @@ export class VisualNovelSettingsPanel {
     }
   }
 
+  private effectiveImageModel(connectionId: string | null, imageModelOverride: string): string {
+    const override = imageModelOverride.trim();
+    if (override) return override;
+    const selected = this.connectionStates.image.options.find((option) =>
+      connectionId ? option.id === connectionId : option.isDefault
+    );
+    return (selected?.model ?? "").trim();
+  }
+
+  private syncResolutionPreferenceForModel(config: VisualNovelConfig): void {
+    const select = this.control<HTMLSelectElement>("imageResolutionPreference");
+    const hint = this.root.querySelector<HTMLElement>("[data-resolution-hint]");
+    const activeModel = this.effectiveImageModel(config.imageConnectionId, config.imageModel);
+    const isKlein = isFluxKleinModel(activeModel);
+    for (const option of Array.from(select.options)) {
+      option.disabled = isKlein && option.value !== "standard";
+    }
+    select.value = isKlein ? "standard" : (config.imageResolutionPreference ?? "high");
+    if (hint) {
+      hint.textContent = isKlein
+        ? `FLUX Klein (${activeModel}) detected — automatically locked to Standard (1K) so images generate cleanly.`
+        : "Preferred quality tier. When a model offers both 1K and 2K sizes, High selects 2K. If a model only supports 1K, it gracefully uses the model's highest size.";
+    }
+  }
+
   private updateImageModelHint(): void {
     const selected = this.connectionStates.image.options.find((option) => this.config.imageConnectionId?option.id === this.config.imageConnectionId:option.isDefault);
     this.root.querySelector<HTMLElement>("[data-prompt-profile-status]")!.textContent=promptProfileSummary(resolveImagePromptProfile(selected?.provider,this.config.imageModel||selected?.model,this.config));
+    this.syncResolutionPreferenceForModel(this.config);
     const modelInput = this.control<HTMLInputElement>("imageModel");
     const hint = this.root.querySelector<HTMLElement>("[data-image-model-hint]")!;
     if (selected?.model) {

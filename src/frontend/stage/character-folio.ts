@@ -3,7 +3,7 @@ import {samePresentationTurn} from '../../shared/presentation-entities.js';
 import {sceneImageCandidatesFor} from './image-loader.js';
 import {DNA_FIELDS,DNA_FIELD_LABELS,dnaFieldValue,applyDnaChanges,type DnaField,type DnaProposal} from '../../shared/character-dna-workflow.js';
 import {areNamesEquivalent,findMatchingCharacterId} from '../../shared/nicknames.js';
-import type { CharacterDNA, CharacterDNALibrary } from '../../shared/character-dna.js';
+import type { CharacterDNA, CharacterDNALibrary, CharacterRelationship } from '../../shared/character-dna.js';
 import {
   createEmptyCharacterDNA,
   findCharacterDNA,
@@ -45,9 +45,12 @@ export class CharacterFolio implements WorkspaceSurface {
   private library: Record<string, CharacterDNA> = Object.create(null);
   private loreMap: Record<string, CharacterLoreContext> = Object.create(null);
   private activeCharacterId: string | null = null;
-  private activeSubTab: 'dna' | 'lore' | 'cgs' = 'dna';
+  private activeSubTab: 'dna' | 'relationships' | 'lore' | 'cgs' = 'dna';
   private latestTurnText = '';
   private discoveredIds = new Set<string>();
+  private swipeCharacterCache = new Map<string, Map<string, CharacterDNA>>();
+  private lastRenderedSwipeKey: string | null = null;
+  private turnRpgCompanions = new Map<string, { name: string; affinity: number; status: string }>();
   private storyCursor = "";
   private chatId:string|null=null;
   private revision=0;
@@ -65,7 +68,7 @@ export class CharacterFolio implements WorkspaceSurface {
 
   setContext(chatId:string|null):void{
     if(this.chatId===chatId)return;
-    this.handlers.onCancelDNA?.();this.chatId=chatId;this.discoveredIds.clear();this.library=Object.create(null);this.dirty.clear();this.saving.clear();this.savedLibrary=Object.create(null);this.loreMap=Object.create(null);this.deleted={};this.revision=0;this.activeCharacterId=null;this.proposal=null;this.pending=false;this.notice='';this.latestTurnText='';this.deleteConfirm=false;this.mergeOther='';this.accumulatedCgs.clear();this.renderRoster();this.renderDetail();
+    this.handlers.onCancelDNA?.();this.chatId=chatId;this.discoveredIds.clear();this.swipeCharacterCache.clear();this.lastRenderedSwipeKey=null;this.turnRpgCompanions.clear();this.activeSubTab='dna';this.library=Object.create(null);this.dirty.clear();this.saving.clear();this.savedLibrary=Object.create(null);this.loreMap=Object.create(null);this.deleted={};this.revision=0;this.activeCharacterId=null;this.proposal=null;this.pending=false;this.notice='';this.latestTurnText='';this.deleteConfirm=false;this.mergeOther='';this.accumulatedCgs.clear();this.renderRoster();this.renderDetail();
   }
   getContext():string|null{return this.chatId;}
   ingestCgs(items: Array<{ characterName?: string; characterNames?: string[]; imageUrl: string; caption?: string }>): void {
@@ -416,7 +419,7 @@ export class CharacterFolio implements WorkspaceSurface {
           top: -14px;
           z-index: 8;
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
+          grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
           gap: 4px;
           padding: 4px;
           background: var(--vn-shell-panel, rgba(15, 23, 42, 0.95));
@@ -560,6 +563,108 @@ export class CharacterFolio implements WorkspaceSurface {
           border: 1px solid rgba(255, 255, 255, 0.04);
         }
 
+        /* Relationships Tab & Constellation Web */
+        .rel-web-wrap {
+          background: rgba(0, 0, 0, 0.28);
+          border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.1));
+          border-radius: 10px;
+          padding: 8px;
+          overflow: hidden;
+        }
+        .rel-web-svg {
+          width: 100%;
+          height: auto;
+          display: block;
+          max-height: 240px;
+        }
+        .rel-web-node {
+          cursor: pointer;
+        }
+        .rel-bond-card {
+          background: rgba(0, 0, 0, 0.25);
+          border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.1));
+          border-radius: 10px;
+          padding: 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          transition: border-color 0.15s ease;
+        }
+        .rel-bond-card.is-highlighted {
+          border-color: var(--vn-shell-accent, #6ee7b7);
+        }
+        .rel-bond-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .rel-bond-title {
+          font-size: 13px;
+          font-weight: 700;
+          color: var(--vn-shell-text, #f8fafc);
+        }
+        .rel-bond-badges {
+          display: flex;
+          gap: 6px;
+          flex-wrap: wrap;
+          align-items: center;
+        }
+        .rel-meter-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+          gap: 10px;
+        }
+        .rel-slider-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .rel-slider-row input[type="range"] {
+          flex: 1;
+          accent-color: var(--vn-shell-accent, #6ee7b7);
+        }
+        .rel-slider-row input[type="number"] {
+          width: 68px;
+          padding: 6px 8px;
+          border-radius: 6px;
+          border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.12));
+          background: rgba(0, 0, 0, 0.3);
+          color: var(--vn-shell-text, #f1f5f9);
+          font-size: 12px;
+        }
+        .rel-text-input {
+          width: 100%;
+          padding: 8px 10px;
+          border-radius: 6px;
+          border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.12));
+          background: rgba(0, 0, 0, 0.25);
+          color: var(--vn-shell-text, #f1f5f9);
+          font-size: 12px;
+          box-sizing: border-box;
+          font-family: inherit;
+        }
+        .rel-beat-list {
+          margin: 4px 0 0;
+          padding-left: 18px;
+          font-size: 11.5px;
+          line-height: 1.5;
+          color: var(--vn-shell-muted, #cbd5e1);
+        }
+        .rel-actions-row {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .rel-btn-sm {
+          min-height: 34px;
+          padding: 5px 12px;
+          font-size: 11.5px;
+        }
+
         /* Lore Tab Styles */
         .folio-quote-box {
           border-left: 3px solid var(--vn-shell-accent, #6ee7b7);
@@ -685,6 +790,34 @@ export class CharacterFolio implements WorkspaceSurface {
 
   syncFromTurn(turn: TurnView | null, paragraphIndex = 0): void {
     const cursorKey=JSON.stringify([turn?.chatId,turn?.messageId,turn?.swipeId,turn?.sourceFingerprint,turn?.revision,paragraphIndex]);
+    const currentSwipeKey = turn?.messageId ? `${turn.messageId}::${turn.swipeId ?? 0}` : null;
+    if (this.lastRenderedSwipeKey && currentSwipeKey && this.lastRenderedSwipeKey !== currentSwipeKey) {
+      for (const [id, dna] of Object.entries(this.library)) {
+        const isTemporary = Boolean(dna.autoDiscovered || this.discoveredIds.has(id));
+        if (!isTemporary || dna.locked || this.dirty.has(id) || this.saving.has(id)) continue;
+        const swipes = dna.seenInSwipes && dna.seenInSwipes.length > 0 ? dna.seenInSwipes : [this.lastRenderedSwipeKey];
+        for (const sKey of swipes) {
+          let bucket = this.swipeCharacterCache.get(sKey);
+          if (!bucket) { bucket = new Map(); this.swipeCharacterCache.set(sKey, bucket); }
+          bucket.set(id, structuredClone(dna));
+        }
+        if (!swipes.includes(currentSwipeKey)) {
+          delete this.library[id];
+          delete this.savedLibrary[id];
+          this.discoveredIds.delete(id);
+        }
+      }
+      const cachedBucket = this.swipeCharacterCache.get(currentSwipeKey);
+      if (cachedBucket) {
+        for (const [id, cachedDna] of cachedBucket.entries()) {
+          if (!this.library[id] && !this.deleted[id] && !findCharacterDNA(this.deleted, cachedDna.name)) {
+            this.library[id] = structuredClone(cachedDna);
+            this.discoveredIds.add(id);
+          }
+        }
+      }
+    }
+    if (currentSwipeKey) this.lastRenderedSwipeKey = currentSwipeKey;
     const cancelledProposal=this.storyCursor!==cursorKey&&(this.pending||Boolean(this.proposal));
     if(this.storyCursor!==cursorKey){if(cancelledProposal)this.cancelProposal();this.storyCursor=cursorKey;}
     const before = JSON.stringify([this.loreMap,Object.keys(this.library)]);
@@ -700,6 +833,16 @@ export class CharacterFolio implements WorkspaceSurface {
 
     // Collect latest story text for fast local regex auto-fill
     this.latestTurnText = visibleText;
+    this.turnRpgCompanions.clear();
+    for (const comp of turn?.rpgState?.vitals?.companions ?? []) {
+      if (comp.name?.trim()) {
+        this.turnRpgCompanions.set(comp.name.trim().toLowerCase(), {
+          name: comp.name.trim(),
+          affinity: Number.isFinite(comp.affinity) ? Math.round(comp.affinity) : 0,
+          status: comp.status || '',
+        });
+      }
+    }
 
     // 1. From presentation snapshots (NPC entities + observations/quotes/facts)
     const candidate=turn?.presentation&&cursor>=0?selectPresentationSnapshot(turn.presentation,cursor):undefined;
@@ -711,7 +854,7 @@ export class CharacterFolio implements WorkspaceSurface {
           detectedNames.add(name);
           const key = name.toLowerCase();
           const existingLore = this.loreMap[key] || {};
-          existingLore.inScene = snap.presentEntityIds?.includes(ent.id) ?? true;
+          const presentInSnap = snap.presentEntityIds ? snap.presentEntityIds.includes(ent.id) : false; if (!mentioned(name) && !presentInSnap) { detectedNames.delete(name); continue; } existingLore.inScene = snap.presentEntityIds?.includes(ent.id) ?? true;
           const anyEnt = ent as any;
           if (anyEnt.quote) existingLore.quote = anyEnt.quote;
           if (Array.isArray(anyEnt.verifiedObservations) && anyEnt.verifiedObservations.length) existingLore.observations = anyEnt.verifiedObservations;
@@ -791,6 +934,7 @@ export class CharacterFolio implements WorkspaceSurface {
           }
         }
       }
+      if (match && currentSwipeKey && match.autoDiscovered) { const seen = match.seenInSwipes ?? []; if (!seen.includes(currentSwipeKey)) match.seenInSwipes = [...seen, currentSwipeKey].slice(-60); let bucket = this.swipeCharacterCache.get(currentSwipeKey); if (!bucket) { bucket = new Map(); this.swipeCharacterCache.set(currentSwipeKey, bucket); } bucket.set(match.id, structuredClone(match)); }
       const isDeleted = Boolean(isScenarioTitle(name) || findCharacterDNA(this.deleted, name) || findMatchingCharacterId(this.deleted, name));
       if (!match && !isDeleted) {
         const dna = createEmptyCharacterDNA(name);
@@ -802,7 +946,7 @@ export class CharacterFolio implements WorkspaceSurface {
           dna.avatarUrl = sceneImageCandidatesFor(assetWithImage)[0];
         }
         this.library[dna.id] = dna;
-        this.discoveredIds.add(dna.id);
+        dna.autoDiscovered = true; if (currentSwipeKey) { dna.seenInSwipes = [currentSwipeKey]; let bucket = this.swipeCharacterCache.get(currentSwipeKey); if (!bucket) { bucket = new Map(); this.swipeCharacterCache.set(currentSwipeKey, bucket); } bucket.set(dna.id, structuredClone(dna)); } this.discoveredIds.add(dna.id);
         changed = true;
       }
     }
@@ -826,12 +970,17 @@ export class CharacterFolio implements WorkspaceSurface {
     if(acceptedSave)this.saving.delete(acceptedSave.id);
     if(acceptedSave&&this.library[acceptedSave.id]?.lastUpdated===acceptedSave.updatedAt)this.dirty.delete(acceptedSave.id);
     const next:Record<string,CharacterDNA>=Object.create(null);
-    for(const dna of Object.values(this.library))if(!this.deleted[dna.id]&&(Object.values(incoming).some(c=>c.id===dna.id)||!findCharacterDNA(this.deleted,dna.name)))next[dna.id]=dna;
+    for(const dna of Object.values(this.library)){
+      const incomingMatch=Object.values(incoming).some(c=>c.id===dna.id);
+      if(authoritative&&dna.autoDiscovered&&!dna.locked&&!incomingMatch&&!this.dirty.has(dna.id)&&!this.saving.has(dna.id))continue;
+      if(!this.deleted[dna.id]&&(incomingMatch||!findCharacterDNA(this.deleted,dna.name)))next[dna.id]=dna;
+    }
     for(const dna of Object.values(incoming)){
       if(this.dirty.has(dna.id)&&next[dna.id]){
         const local=next[dna.id]!,base=this.savedLibrary[dna.id];
         if(base){for(const path of DNA_FIELDS){if(JSON.stringify(dnaFieldValue(local,path))!==JSON.stringify(dnaFieldValue(base,path)))continue;const[a,b]=path.split('.'),value=structuredClone(dnaFieldValue(dna,path));if(b){if(value===undefined)delete(local as any)[a!][b];else(local as any)[a!][b]=value;}else{if(value===undefined)delete(local as any)[a!];else(local as any)[a!]=value;}}
           for(const key of ['locked','avatarUrl','notes'] as const)if(local[key]===base[key]){if(dna[key]===undefined)delete(local as any)[key];else(local as any)[key]=dna[key];}
+          if(JSON.stringify(local.relationships??[])===JSON.stringify(base.relationships??[])){local.relationships=structuredClone(dna.relationships??[]);}
         }
         this.savedLibrary[dna.id]=structuredClone(dna);continue;
       }
@@ -965,6 +1114,7 @@ export class CharacterFolio implements WorkspaceSurface {
         const existing=findCharacterDNA(this.library,name);if(existing){this.setActiveCharacter(existing.id);return;}
         if(findCharacterDNA(this.deleted,name)){this.notice='This character was deleted. Use Undo delete to restore it.';this.renderDetail();return;}
         const created = createEmptyCharacterDNA(name.trim());
+        created.autoDiscovered = false;
         this.library[created.id] = created;
         this.activeCharacterId = created.id;
         this.handlers.onSaveDNA?.(created,this.revision);
@@ -1067,7 +1217,7 @@ export class CharacterFolio implements WorkspaceSurface {
     lockToggleBtn.innerHTML = char.locked ? `🔓 <span>Unlock DNA</span>` : `🔒 <span>Lock DNA</span>`;
     lockToggleBtn.onclick = () => {
       this.cancelProposal();
-      char.locked = !char.locked;char.lastUpdated=Math.max(Date.now(),char.lastUpdated+1);this.dirty.add(char.id);
+      char.locked = !char.locked;char.autoDiscovered=false;char.lastUpdated=Math.max(Date.now(),char.lastUpdated+1);this.dirty.add(char.id);
       this.handlers.onSaveDNA?.(structuredClone(char),this.revision);
       this.renderRoster();
       this.renderDetail();
@@ -1083,7 +1233,7 @@ export class CharacterFolio implements WorkspaceSurface {
     };
     const deleteButton=document.createElement('button');deleteButton.type='button';deleteButton.className='folio-action-btn';deleteButton.textContent='Delete character';deleteButton.onclick=()=>{this.cancelProposal();this.deleteConfirm=true;this.renderDetail();};
 
-    const saveButton=document.createElement('button');saveButton.type='button';saveButton.className='folio-action-btn btn-accent';saveButton.textContent='Save changes';saveButton.setAttribute('data-dna-save','');saveButton.disabled=!this.dirty.has(char.id)||this.saving.has(char.id);saveButton.onclick=()=>{this.cancelProposal();this.saving.add(char.id);saveButton.disabled=true;this.handlers.onSaveDNA?.(structuredClone(char),this.revision);};
+    const saveButton=document.createElement('button');saveButton.type='button';saveButton.className='folio-action-btn btn-accent';saveButton.textContent='Save changes';saveButton.setAttribute('data-dna-save','');saveButton.disabled=!this.dirty.has(char.id)||this.saving.has(char.id);saveButton.onclick=()=>{this.cancelProposal();char.autoDiscovered=false;this.saving.add(char.id);saveButton.disabled=true;this.handlers.onSaveDNA?.(structuredClone(char),this.revision);};
     heroActions.append(autoFillAllBtn, lockToggleBtn, copyPromptBtn,deleteButton,saveButton);
     const heroAliases = document.createElement('div');
     heroAliases.className = 'folio-hero-aliases';
@@ -1124,6 +1274,7 @@ export class CharacterFolio implements WorkspaceSurface {
 
     const dnaTabBtn = document.createElement('button');
     dnaTabBtn.type = 'button';
+    dnaTabBtn.setAttribute('data-subtab', 'dna');
     dnaTabBtn.className = `subtab-btn${this.activeSubTab === 'dna' ? ' active' : ''}`;
     dnaTabBtn.innerHTML = `✨ Visual DNA`;
     dnaTabBtn.onclick = () => {
@@ -1131,8 +1282,21 @@ export class CharacterFolio implements WorkspaceSurface {
       this.renderDetail();
     };
 
+    const effectiveBondData = this.collectEffectiveBonds(char, lore);
+    const bondCount = effectiveBondData.bonds.length;
+    const relTabBtn = document.createElement('button');
+    relTabBtn.type = 'button';
+    relTabBtn.setAttribute('data-subtab', 'relationships');
+    relTabBtn.className = `subtab-btn${this.activeSubTab === 'relationships' ? ' active' : ''}`;
+    relTabBtn.textContent = bondCount > 0 ? `🤝 Relationships (${bondCount})` : '🤝 Relationships';
+    relTabBtn.onclick = () => {
+      this.activeSubTab = 'relationships';
+      this.renderDetail();
+    };
+
     const loreTabBtn = document.createElement('button');
     loreTabBtn.type = 'button';
+    loreTabBtn.setAttribute('data-subtab', 'lore');
     loreTabBtn.className = `subtab-btn${this.activeSubTab === 'lore' ? ' active' : ''}`;
     loreTabBtn.innerHTML = `📖 Story Lore`;
     loreTabBtn.onclick = () => {
@@ -1143,6 +1307,7 @@ export class CharacterFolio implements WorkspaceSurface {
     const cgsCount = (lore.cgs?.length || 0);
     const cgsTabBtn = document.createElement('button');
     cgsTabBtn.type = 'button';
+    cgsTabBtn.setAttribute('data-subtab', 'cgs');
     cgsTabBtn.className = `subtab-btn${this.activeSubTab === 'cgs' ? ' active' : ''}`;
     cgsTabBtn.textContent = `🖼️ Gallery & References (${cgsCount})`;
     cgsTabBtn.onclick = () => {
@@ -1150,12 +1315,14 @@ export class CharacterFolio implements WorkspaceSurface {
       this.renderDetail();
     };
 
-    subtabs.append(dnaTabBtn, loreTabBtn, cgsTabBtn);
+    subtabs.append(dnaTabBtn, relTabBtn, loreTabBtn, cgsTabBtn);
     this.detailContainer.append(subtabs);
 
     // 3. TAB CONTENT
     if (this.activeSubTab === 'dna') {
       this.renderDnaTab(char, isMale);
+    } else if (this.activeSubTab === 'relationships') {
+      this.renderRelationshipsTab(char, lore);
     } else if (this.activeSubTab === 'lore') {
       this.renderLoreTab(char, lore);
     } else if (this.activeSubTab === 'cgs') {
@@ -1279,6 +1446,518 @@ export class CharacterFolio implements WorkspaceSurface {
     this.detailContainer.append(idCard, propCard, faceCard, wardCard);
   }
 
+  private escapeSvgText(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  private collectEffectiveBonds(
+    char: CharacterDNA,
+    lore: CharacterLoreContext
+  ): {
+    bonds: Array<CharacterRelationship & { fromRpgCompanion?: boolean }>;
+    signals: Array<{ field: string; value: string }>;
+    incoming: Array<{ fromName: string; bond: CharacterRelationship }>;
+  } {
+    const bonds: Array<CharacterRelationship & { fromRpgCompanion?: boolean }> = structuredClone(char.relationships ?? []);
+
+    // Match active RPG companion telemetry against this character's name or aliases
+    const candidates = [char.name, ...(char.aliases ?? [])].map((n) => n.trim().toLowerCase()).filter(Boolean);
+    for (const [compKey, comp] of this.turnRpgCompanions.entries()) {
+      const matched =
+        candidates.includes(compKey) ||
+        candidates.some((c) => areNamesEquivalent(c, comp.name));
+      if (!matched) continue;
+      if (!bonds.some((b) => b.targetName.trim().toLowerCase() === 'protagonist / user')) {
+        bonds.unshift({
+          targetName: 'Protagonist / User',
+          affinity: Math.max(-100, Math.min(100, Math.round(comp.affinity))),
+          trust: 0,
+          dynamicLabel: 'Companion',
+          status: comp.status || 'Tracked in RPG companion state',
+          recentBeats: [],
+          lastUpdated: Date.now(),
+          fromRpgCompanion: true,
+        });
+      }
+      break;
+    }
+
+    const signals = (lore.facts ?? []).filter((f) =>
+      /relationship|affinity|trust|bond|dynamic/i.test(f.field || '')
+    );
+
+    const incoming: Array<{ fromName: string; bond: CharacterRelationship }> = [];
+    for (const other of Object.values(this.library)) {
+      if (other.id === char.id) continue;
+      for (const rel of other.relationships ?? []) {
+        const tgt = rel.targetName.trim().toLowerCase();
+        if (candidates.includes(tgt) || candidates.some((c) => areNamesEquivalent(c, rel.targetName))) {
+          incoming.push({ fromName: other.name, bond: rel });
+        }
+      }
+    }
+
+    return { bonds, signals, incoming };
+  }
+
+  private renderRelationshipsTab(char: CharacterDNA, lore: CharacterLoreContext): void {
+    const wrap = document.createElement('div');
+    wrap.style.display = 'flex';
+    wrap.style.flexDirection = 'column';
+    wrap.style.gap = '12px';
+
+    const { bonds, signals, incoming } = this.collectEffectiveBonds(char, lore);
+
+    const persistRelationships = (nextRels: CharacterRelationship[], noticeMsg?: string) => {
+      char.relationships = nextRels.slice(0, 40);
+      char.autoDiscovered = false;
+      char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+      this.dirty.add(char.id);
+      if (noticeMsg) this.notice = noticeMsg;
+      this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+      this.renderRoster();
+      this.renderDetail();
+    };
+
+    // 1. Relationship Constellation Web Card
+    const webCard = document.createElement('div');
+    webCard.className = 'folio-group-card';
+    const webHeader = document.createElement('div');
+    webHeader.className = 'folio-group-header';
+    const webTitle = document.createElement('h4');
+    webTitle.textContent = '🕸️ Relationship Constellation Web';
+    const webBadge = document.createElement('span');
+    webBadge.style.fontSize = '10px';
+    webBadge.style.opacity = '0.7';
+    webBadge.textContent = `${bonds.length} BOND${bonds.length === 1 ? '' : 'S'}`;
+    webHeader.appendChild(webTitle);
+    webHeader.appendChild(webBadge);
+    webCard.appendChild(webHeader);
+
+    const webBox = document.createElement('div');
+    webBox.className = 'rel-web-wrap';
+    webBox.setAttribute('data-relationship-web', char.id);
+
+    const cx = 210;
+    const cy = 110;
+    const rx = bonds.length <= 2 ? 128 : 142;
+    const ry = bonds.length <= 2 ? 72 : 76;
+
+    const svgLines: string[] = [];
+    const svgNodes: string[] = [];
+
+    if (bonds.length === 0) {
+      svgNodes.push(
+        `<circle cx="${cx}" cy="${cy}" r="66" fill="none" stroke="rgba(148,163,184,0.22)" stroke-dasharray="4 4" stroke-width="1.2" />`,
+        `<text x="${cx}" y="${cy + 46}" text-anchor="middle" fill="#94a3b8" font-size="10.5">No tracked bonds yet — add a bond below</text>`
+      );
+    } else {
+      bonds.forEach((bond, idx) => {
+        const angle = (-Math.PI / 2) + (idx * 2 * Math.PI) / bonds.length;
+        const nx = Math.round(cx + rx * Math.cos(angle));
+        const ny = Math.round(cy + ry * Math.sin(angle));
+        const strokeColor =
+          bond.affinity >= 25
+            ? '#34d399'
+            : bond.affinity <= -25
+              ? '#f43f5e'
+              : bond.affinity !== 0 || bond.trust !== 0
+                ? '#fbbf24'
+                : '#94a3b8';
+        const strokeWidth = (1.6 + Math.min(2.4, Math.abs(bond.affinity) / 42)).toFixed(2);
+        const mx = Math.round((cx + nx) / 2);
+        const my = Math.round((cy + ny) / 2);
+        const affLabel = `${bond.affinity >= 0 ? '+' : ''}${bond.affinity}`;
+        const shortDyn = bond.dynamicLabel ? bond.dynamicLabel.slice(0, 16) : affLabel;
+        const shortTarget = bond.targetName.length > 18 ? `${bond.targetName.slice(0, 16)}…` : bond.targetName;
+
+        svgLines.push(
+          `<line x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-opacity="0.72" />`,
+          `<rect x="${mx - 26}" y="${my - 9}" width="52" height="16" rx="8" fill="#0f172a" stroke="${strokeColor}" stroke-opacity="0.65" stroke-width="0.9" />`,
+          `<text x="${mx}" y="${my + 2.5}" text-anchor="middle" fill="${strokeColor}" font-size="8.5" font-weight="700">${this.escapeSvgText(affLabel)}</text>`
+        );
+
+        svgNodes.push(
+          `<g class="rel-web-node" data-constellation-node="${this.escapeSvgText(bond.targetName)}">`,
+          `<circle cx="${nx}" cy="${ny}" r="18" fill="rgba(15,23,42,0.94)" stroke="${strokeColor}" stroke-width="2" />`,
+          `<text x="${nx}" y="${ny + 3.5}" text-anchor="middle" fill="#f8fafc" font-size="9.5" font-weight="700">${this.escapeSvgText((bond.targetName[0] || '?').toUpperCase())}</text>`,
+          `<text x="${nx}" y="${ny + 30}" text-anchor="middle" fill="#e2e8f0" font-size="9.5" font-weight="600">${this.escapeSvgText(shortTarget)}</text>`,
+          `<text x="${nx}" y="${ny + 41}" text-anchor="middle" fill="#94a3b8" font-size="8">${this.escapeSvgText(shortDyn)}</text>`,
+          `</g>`
+        );
+      });
+    }
+
+    const centerLabel = char.name.length > 16 ? `${char.name.slice(0, 14)}…` : char.name;
+    const centerGroup = `<g><circle cx="${cx}" cy="${cy}" r="24" fill="rgba(16,33,43,0.98)" stroke="var(--vn-shell-accent,#6ee7b7)" stroke-width="2.2" /><text x="${cx}" y="${cy + 4}" text-anchor="middle" fill="#6ee7b7" font-size="11" font-weight="700">${this.escapeSvgText((char.name[0] || '?').toUpperCase())}</text><text x="${cx}" y="${cy + 36}" text-anchor="middle" fill="#6ee7b7" font-size="9.5" font-weight="700">${this.escapeSvgText(centerLabel)}</text></g>`;
+
+    webBox.innerHTML = `<svg viewBox="0 0 420 220" class="rel-web-svg" role="img" aria-label="Relationship constellation for ${this.escapeSvgText(char.name)}">${svgLines.join('')}${svgNodes.join('')}${centerGroup}</svg>`;
+
+    for (const nodeEl of webBox.querySelectorAll('[data-constellation-node]')) {
+      (nodeEl as unknown as HTMLElement).addEventListener('click', () => {
+        const target = nodeEl.getAttribute('data-constellation-node') || '';
+        const cards = wrap.querySelectorAll('.rel-bond-card');
+        for (const c of cards) c.classList.remove('is-highlighted');
+        for (const c of cards) {
+          if (c.getAttribute('data-bond-target') === target) {
+            c.classList.add('is-highlighted');
+            (c as unknown as { scrollIntoView?: (opts?: unknown) => void }).scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+            const dynInput = c.querySelector<HTMLInputElement>('[data-bond-dynamic]');
+            dynInput?.focus?.();
+          }
+        }
+      });
+    }
+
+    webCard.append(webBox);
+    wrap.append(webCard);
+
+    // 2. Editable Bond Cards
+    const bondsSection = document.createElement('div');
+    bondsSection.className = 'folio-group-card';
+    bondsSection.innerHTML = `<div class="folio-group-header"><h4>💬 Tracked Bonds & Affinities</h4><span style="font-size:10px;opacity:0.7">EDIT & SAVE TO DNA</span></div>`;
+
+    if (bonds.length === 0) {
+      const emptyNote = document.createElement('p');
+      emptyNote.style.cssText = 'margin:0;font-size:12px;color:var(--vn-shell-muted,#94a3b8);';
+      emptyNote.textContent = 'No saved relationships yet. Bonds discovered from SimTracker or RPG companions will appear here automatically, or you can add one below.';
+      bondsSection.append(emptyNote);
+    }
+
+    for (const bond of bonds) {
+      const card = document.createElement('div');
+      card.className = 'rel-bond-card';
+      card.setAttribute('data-bond-target', bond.targetName);
+
+      const header = document.createElement('div');
+      header.className = 'rel-bond-header';
+      const title = document.createElement('span');
+      title.className = 'rel-bond-title';
+      title.textContent = bond.targetName;
+
+      const badges = document.createElement('div');
+      badges.className = 'rel-bond-badges';
+      const affColor = bond.affinity >= 25 ? '#34d399' : bond.affinity <= -25 ? '#f43f5e' : '#fbbf24';
+      const scoreBadge = document.createElement('span');
+      scoreBadge.className = 'folio-tag';
+      scoreBadge.style.borderColor = affColor;
+      scoreBadge.style.color = affColor;
+      scoreBadge.textContent = `Affinity ${bond.affinity >= 0 ? '+' : ''}${bond.affinity} · Trust ${bond.trust >= 0 ? '+' : ''}${bond.trust}`;
+      badges.append(scoreBadge);
+
+      if (bond.fromRpgCompanion) {
+        const rpgBadge = document.createElement('span');
+        rpgBadge.className = 'folio-tag';
+        rpgBadge.textContent = 'RPG Companion Sync (Unsaved)';
+        badges.append(rpgBadge);
+      }
+
+      header.append(title, badges);
+      card.append(header);
+
+      const meterGrid = document.createElement('div');
+      meterGrid.className = 'rel-meter-grid';
+
+      // Affinity slider + number
+      const affField = document.createElement('div');
+      affField.className = 'folio-field';
+      const affLabel = document.createElement('label');
+      affLabel.textContent = 'Affinity (-100 to +100)';
+      const affRow = document.createElement('div');
+      affRow.className = 'rel-slider-row';
+      const affRange = document.createElement('input');
+      affRange.type = 'range';
+      affRange.min = '-100';
+      affRange.max = '100';
+      affRange.value = String(bond.affinity);
+      affRange.setAttribute('data-bond-affinity-range', '');
+      const affNum = document.createElement('input');
+      affNum.type = 'number';
+      affNum.min = '-100';
+      affNum.max = '100';
+      affNum.value = String(bond.affinity);
+      affNum.setAttribute('data-bond-affinity', '');
+      affNum.setAttribute('aria-label', `Affinity with ${bond.targetName}`);
+      affRange.oninput = () => { affNum.value = affRange.value; };
+      affNum.oninput = () => {
+        const clamped = Math.max(-100, Math.min(100, Math.round(Number(affNum.value) || 0)));
+        affRange.value = String(clamped);
+      };
+      affRow.append(affRange, affNum);
+      affField.append(affLabel, affRow);
+
+      // Trust slider + number
+      const trustField = document.createElement('div');
+      trustField.className = 'folio-field';
+      const trustLabel = document.createElement('label');
+      trustLabel.textContent = 'Trust (-100 to +100)';
+      const trustRow = document.createElement('div');
+      trustRow.className = 'rel-slider-row';
+      const trustRange = document.createElement('input');
+      trustRange.type = 'range';
+      trustRange.min = '-100';
+      trustRange.max = '100';
+      trustRange.value = String(bond.trust);
+      trustRange.setAttribute('data-bond-trust-range', '');
+      const trustNum = document.createElement('input');
+      trustNum.type = 'number';
+      trustNum.min = '-100';
+      trustNum.max = '100';
+      trustNum.value = String(bond.trust);
+      trustNum.setAttribute('data-bond-trust', '');
+      trustNum.setAttribute('aria-label', `Trust with ${bond.targetName}`);
+      trustRange.oninput = () => { trustNum.value = trustRange.value; };
+      trustNum.oninput = () => {
+        const clamped = Math.max(-100, Math.min(100, Math.round(Number(trustNum.value) || 0)));
+        trustRange.value = String(clamped);
+      };
+      trustRow.append(trustRange, trustNum);
+      trustField.append(trustLabel, trustRow);
+
+      meterGrid.append(affField, trustField);
+      card.append(meterGrid);
+
+      // Dynamic Label & Status
+      const textGrid = document.createElement('div');
+      textGrid.className = 'rel-meter-grid';
+
+      const dynField = document.createElement('div');
+      dynField.className = 'folio-field';
+      const dynLabel = document.createElement('label');
+      dynLabel.textContent = 'Dynamic Label';
+      const dynInput = document.createElement('input');
+      dynInput.type = 'text';
+      dynInput.maxLength = 160;
+      dynInput.className = 'rel-text-input';
+      dynInput.value = bond.dynamicLabel || '';
+      dynInput.placeholder = 'e.g. reluctant allies, protective mentor, rival';
+      dynInput.setAttribute('data-bond-dynamic', '');
+      dynInput.setAttribute('aria-label', `Dynamic label with ${bond.targetName}`);
+      dynField.append(dynLabel, dynInput);
+
+      const statusField = document.createElement('div');
+      statusField.className = 'folio-field';
+      const statusLabel = document.createElement('label');
+      statusLabel.textContent = 'Current Dynamic / Status';
+      const statusInput = document.createElement('input');
+      statusInput.type = 'text';
+      statusInput.maxLength = 300;
+      statusInput.className = 'rel-text-input';
+      statusInput.value = bond.status || '';
+      statusInput.placeholder = 'Brief summary of current relational standing...';
+      statusInput.setAttribute('data-bond-status', '');
+      statusInput.setAttribute('aria-label', `Status with ${bond.targetName}`);
+      statusField.append(statusLabel, statusInput);
+
+      textGrid.append(dynField, statusField);
+      card.append(textGrid);
+
+      // Recent Beats
+      if (bond.recentBeats && bond.recentBeats.length > 0) {
+        const beatsDetails = document.createElement('details');
+        const beatsSummary = document.createElement('summary');
+        beatsSummary.style.cssText = 'cursor:pointer;font-size:11px;font-weight:600;color:var(--vn-shell-muted,#94a3b8);';
+        beatsSummary.textContent = `Recent Relational Beats (${bond.recentBeats.length})`;
+        const beatsUl = document.createElement('ul');
+        beatsUl.className = 'rel-beat-list';
+        for (const beat of bond.recentBeats.slice(0, 6)) {
+          const li = document.createElement('li');
+          li.textContent = beat.text;
+          beatsUl.append(li);
+        }
+        beatsDetails.append(beatsSummary, beatsUl);
+        card.append(beatsDetails);
+      }
+
+      // Actions
+      const actionRow = document.createElement('div');
+      actionRow.className = 'rel-actions-row';
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'folio-action-btn rel-btn-sm';
+      deleteBtn.textContent = 'Delete Bond';
+      deleteBtn.setAttribute('data-bond-delete', bond.targetName);
+      deleteBtn.onclick = () => {
+        const nextRels = (char.relationships ?? []).filter(
+          (r) => r.targetName.trim().toLowerCase() !== bond.targetName.trim().toLowerCase()
+        );
+        persistRelationships(nextRels, `Removed relationship with ${bond.targetName}.`);
+      };
+
+      const saveBtn = document.createElement('button');
+      saveBtn.type = 'button';
+      saveBtn.className = 'folio-action-btn btn-accent rel-btn-sm';
+      saveBtn.textContent = bond.fromRpgCompanion ? 'Save to DNA' : 'Save Bond';
+      saveBtn.setAttribute('data-bond-save', bond.targetName);
+      saveBtn.onclick = () => {
+        const nextAff = Math.max(-100, Math.min(100, Math.round(Number(affNum.value) || 0)));
+        const nextTrust = Math.max(-100, Math.min(100, Math.round(Number(trustNum.value) || 0)));
+        const nextDyn = dynInput.value.trim().slice(0, 160);
+        const nextStatus = statusInput.value.trim().slice(0, 300);
+        const nextRels = structuredClone(char.relationships ?? []);
+        const idx = nextRels.findIndex(
+          (r) => r.targetName.trim().toLowerCase() === bond.targetName.trim().toLowerCase()
+        );
+        const updatedBond: CharacterRelationship = {
+          targetName: bond.targetName.trim().slice(0, 120),
+          affinity: nextAff,
+          trust: nextTrust,
+          dynamicLabel: nextDyn,
+          status: nextStatus,
+          recentBeats: structuredClone(bond.recentBeats ?? []),
+          lastUpdated: Date.now(),
+        };
+        if (idx >= 0) nextRels[idx] = updatedBond;
+        else nextRels.push(updatedBond);
+        persistRelationships(nextRels, `Saved relationship with ${updatedBond.targetName}.`);
+      };
+
+      actionRow.append(deleteBtn, saveBtn);
+      card.append(actionRow);
+      bondsSection.append(card);
+    }
+
+    wrap.append(bondsSection);
+
+    // 3. Incoming Bonds & Narrative Tracker Signals (if present)
+    if (incoming.length > 0 || signals.length > 0) {
+      const signalsCard = document.createElement('div');
+      signalsCard.className = 'folio-group-card';
+      signalsCard.innerHTML = `<div class="folio-group-header"><h4>📡 Cross-Cast & Tracker Signals</h4></div>`;
+      const ul = document.createElement('ul');
+      ul.style.cssText = 'margin:0;padding-left:18px;font-size:12px;line-height:1.6;color:var(--vn-shell-text,#f1f5f9);';
+      for (const inc of incoming) {
+        const li = document.createElement('li');
+        li.textContent = `${inc.fromName} → ${char.name}: Affinity ${inc.bond.affinity >= 0 ? '+' : ''}${inc.bond.affinity}${inc.bond.dynamicLabel ? ` (${inc.bond.dynamicLabel})` : ''}${inc.bond.status ? ` — ${inc.bond.status}` : ''}`;
+        ul.append(li);
+      }
+      for (const sig of signals) {
+        const li = document.createElement('li');
+        li.textContent = `${sig.field}: ${sig.value}`;
+        ul.append(li);
+      }
+      signalsCard.append(ul);
+      wrap.append(signalsCard);
+    }
+
+    // 4. + Add Relationship Bond Form
+    const addCard = document.createElement('div');
+    addCard.className = 'folio-group-card';
+    addCard.innerHTML = `<div class="folio-group-header"><h4>➕ Add Relationship Bond</h4></div>`;
+
+    const suggestListId = `rel-targets-${char.id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+    const datalist = document.createElement('datalist');
+    datalist.setAttribute('id', suggestListId);
+    const targetSuggestions = new Set<string>(['Protagonist / User']);
+    for (const other of Object.values(this.library)) {
+      if (other.id !== char.id && other.name.trim()) targetSuggestions.add(other.name.trim());
+    }
+    for (const s of targetSuggestions) {
+      const opt = document.createElement('option');
+      opt.value = s;
+      datalist.append(opt);
+    }
+    addCard.append(datalist);
+
+    const addGrid = document.createElement('div');
+    addGrid.className = 'rel-meter-grid';
+
+    const targetField = document.createElement('div');
+    targetField.className = 'folio-field';
+    const targetLbl = document.createElement('label');
+    targetLbl.textContent = 'Target Character / Protagonist';
+    const targetInput = document.createElement('input');
+    targetInput.type = 'text';
+    targetInput.maxLength = 120;
+    targetInput.className = 'rel-text-input';
+    targetInput.placeholder = 'e.g. Protagonist / User or cast member';
+    targetInput.setAttribute('list', suggestListId);
+    targetInput.setAttribute('data-add-bond-target', '');
+    targetField.append(targetLbl, targetInput);
+
+    const newDynField = document.createElement('div');
+    newDynField.className = 'folio-field';
+    const newDynLbl = document.createElement('label');
+    newDynLbl.textContent = 'Dynamic Label';
+    const newDynInput = document.createElement('input');
+    newDynInput.type = 'text';
+    newDynInput.maxLength = 160;
+    newDynInput.className = 'rel-text-input';
+    newDynInput.placeholder = 'e.g. trusted confidant, uneasy rival';
+    newDynInput.setAttribute('data-add-bond-dynamic', '');
+    newDynField.append(newDynLbl, newDynInput);
+
+    const newStatusField = document.createElement('div');
+    newStatusField.className = 'folio-field';
+    const newStatusLbl = document.createElement('label');
+    newStatusLbl.textContent = 'Status / Tension';
+    const newStatusInput = document.createElement('input');
+    newStatusInput.type = 'text';
+    newStatusInput.maxLength = 300;
+    newStatusInput.className = 'rel-text-input';
+    newStatusInput.placeholder = 'Initial relationship standing...';
+    newStatusInput.setAttribute('data-add-bond-status', '');
+    newStatusField.append(newStatusLbl, newStatusInput);
+
+    const newAffField = document.createElement('div');
+    newAffField.className = 'folio-field';
+    const newAffLbl = document.createElement('label');
+    newAffLbl.textContent = 'Initial Affinity (-100..100)';
+    const newAffInput = document.createElement('input');
+    newAffInput.type = 'number';
+    newAffInput.min = '-100';
+    newAffInput.max = '100';
+    newAffInput.value = '0';
+    newAffInput.className = 'rel-text-input';
+    newAffInput.setAttribute('data-add-bond-affinity', '');
+    newAffField.append(newAffLbl, newAffInput);
+
+    addGrid.append(targetField, newDynField, newStatusField, newAffField);
+    addCard.append(addGrid);
+
+    const addActions = document.createElement('div');
+    addActions.className = 'rel-actions-row';
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'folio-action-btn btn-accent rel-btn-sm';
+    addBtn.textContent = '+ Add Relationship Bond';
+    addBtn.setAttribute('data-add-bond-btn', '');
+    addBtn.onclick = () => {
+      const targetName = targetInput.value.trim().slice(0, 120);
+      if (!targetName) {
+        this.notice = 'Enter a target name to add a relationship bond.';
+        this.renderDetail();
+        return;
+      }
+      const affinity = Math.max(-100, Math.min(100, Math.round(Number(newAffInput.value) || 0)));
+      const nextRels = structuredClone(char.relationships ?? []);
+      const idx = nextRels.findIndex((r) => r.targetName.trim().toLowerCase() === targetName.toLowerCase());
+      const entry: CharacterRelationship = {
+        targetName,
+        affinity,
+        trust: idx >= 0 ? nextRels[idx]!.trust : 0,
+        dynamicLabel: newDynInput.value.trim().slice(0, 160),
+        status: newStatusInput.value.trim().slice(0, 300),
+        recentBeats: idx >= 0 ? structuredClone(nextRels[idx]!.recentBeats ?? []) : [],
+        lastUpdated: Date.now(),
+      };
+      if (idx >= 0) nextRels[idx] = entry;
+      else nextRels.push(entry);
+      persistRelationships(nextRels, `Added relationship with ${targetName}.`);
+    };
+    addActions.append(addBtn);
+    addCard.append(addActions);
+    wrap.append(addCard);
+
+    this.detailContainer.append(wrap);
+  }
+
   private renderLoreTab(char: CharacterDNA, lore: CharacterLoreContext): void {
     const loreWrap = document.createElement('div');
     loreWrap.style.display = 'flex';
@@ -1350,15 +2029,37 @@ export class CharacterFolio implements WorkspaceSurface {
     // Player Notes
     const notesCard = document.createElement('div');
     notesCard.className = 'folio-group-card';
-    notesCard.innerHTML = `<div class="folio-group-header"><h4>✏️ Player Notes</h4></div>`;
+    notesCard.innerHTML = `<div class="folio-group-header"><h4>✏️ Player Notes</h4><span style="font-size:10px;opacity:0.7">PERSISTENT CHARACTER NOTES</span></div>`;
     const textarea = document.createElement('textarea');
-    textarea.style.cssText = 'width:100%;height:80px;padding:8px 10px;border-radius:6px;border:1px solid var(--vn-shell-border,rgba(255,255,255,0.12));background:rgba(0,0,0,0.25);color:var(--vn-shell-text,#f1f5f9);font-size:12px;box-sizing:border-box;font-family:inherit;';
+    textarea.setAttribute('data-player-notes', char.id);
+    textarea.style.cssText = 'width:100%;height:88px;padding:8px 10px;border-radius:6px;border:1px solid var(--vn-shell-border,rgba(255,255,255,0.12));background:rgba(0,0,0,0.25);color:var(--vn-shell-text,#f1f5f9);font-size:12px;box-sizing:border-box;font-family:inherit;resize:vertical;';
     textarea.placeholder = 'Add private notes about this character...';
-    textarea.value = lore.playerNote || '';
-    textarea.addEventListener('change', () => {
-      lore.playerNote = textarea.value.trim();
-    });
-    notesCard.append(textarea);
+    textarea.value = char.notes ?? lore.playerNote ?? '';
+    const notesFooter = document.createElement('div');
+    notesFooter.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:4px;';
+    const notesStatus = document.createElement('small');
+    notesStatus.style.cssText = 'font-size:11px;color:var(--vn-shell-muted,#94a3b8);';
+    notesStatus.textContent = 'Saved with this character profile';
+    const saveNotesBtn = document.createElement('button');
+    saveNotesBtn.type = 'button';
+    saveNotesBtn.className = 'folio-action-btn rel-btn-sm';
+    saveNotesBtn.textContent = 'Save Notes';
+    saveNotesBtn.setAttribute('data-save-notes', '');
+    const persistNotes = () => {
+      const nextNote = textarea.value.trim().slice(0, 1000);
+      lore.playerNote = nextNote;
+      if (nextNote) char.notes = nextNote;
+      else delete char.notes;
+      char.autoDiscovered = false;
+      char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+      this.dirty.add(char.id);
+      this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+      notesStatus.textContent = 'Notes saved ✓';
+    };
+    textarea.addEventListener('change', persistNotes);
+    saveNotesBtn.onclick = persistNotes;
+    notesFooter.append(notesStatus, saveNotesBtn);
+    notesCard.append(textarea, notesFooter);
     loreWrap.append(notesCard);
 
     this.detailContainer.append(loreWrap);

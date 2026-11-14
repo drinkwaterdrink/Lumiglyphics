@@ -6,6 +6,19 @@ import { InteractionTray } from './interaction-tray.js';
 import type { InteractionDraft, DraftMergeMode } from '../../shared/scene-interactions.js';
 import { entityOverride, type ReferenceKind, type referenceEntries, type ReaderDossier, type TooltipPreferences } from '../../shared/dossiers.js';
 import { referenceFieldInfo, REFERENCE_FIELD_GROUPS } from '../../shared/reference-fields.js';
+import {
+  createItemId,
+  createLocationId,
+  deriveShortAliases,
+  findMatchingItem,
+  findMatchingLocation,
+  formatItemDNAToPromptClause,
+  formatLocationDNAToPromptClause,
+  type ItemDNA,
+  type LocationDNA,
+  type StoryDnaActionBody,
+  type StoryDNASet,
+} from '../../shared/story-dna.js';
 
 export interface DossierVisualContext {
   imageUrl?: string;
@@ -16,7 +29,17 @@ export interface DossierVisualContext {
   presentCharacters?: Array<{ id: string; name: string }>;
   summarySnippet?: string;
   anchors?: string[];
+  connectedLocations?: string[];
   onSelectEntity?: (id: string, trigger: HTMLElement) => void;
+}
+
+export interface DossierSceneHubContext {
+  activeLocationId?: string | undefined;
+  activeLocationName?: string | undefined;
+  locationImageUrl?: string | undefined;
+  locationDna?: LocationDNA | undefined;
+  presentCast: Array<{ id: string; name: string; imageUrl?: string | undefined; present?: boolean | undefined }>;
+  activeItems: Array<{ id: string; name: string; imageUrl?: string | undefined }>;
 }
 
 function entityInitials(name: string): string {
@@ -56,10 +79,59 @@ export class DossierCard {
   private category: ReferenceKind = 'all';
   private scope = 'all';
   private selectedEntityId: string | null = null;
+  private hubView: 'scene' | 'atlas' = 'scene';
+  private storyDna: StoryDNASet = { locations: {}, items: {}, revision: 0 };
+  private storyDnaRequester: ((body: StoryDnaActionBody) => void) | null = null;
+  private storyDnaError: string | null = null;
+  private sceneHubContext: DossierSceneHubContext | null = null;
+  private activeDossierContext: {
+    dossier: ReaderDossier;
+    prefs: TooltipPreferences;
+    chatId: string;
+    trigger: HTMLElement;
+    actions?: Parameters<DossierCard['open']>[4];
+    storyDocument?: StoryDocument | undefined;
+    visual?: DossierVisualContext | undefined;
+  } | null = null;
+  private awaitingDnaSync = false;
   private folioOpener: ((characterName: string) => void) | null = null;
 
   setFolioOpener(fn: (characterName: string) => void): void {
     this.folioOpener = fn;
+  }
+
+  setStoryDna(storyDna: StoryDNASet): void {
+    this.storyDna = storyDna;
+    this.storyDnaError = null;
+    if (this.awaitingDnaSync && this.activeDossierContext && this.isOpen()) {
+      this.awaitingDnaSync = false;
+      const ctx = this.activeDossierContext;
+      this.open(ctx.dossier, ctx.prefs, ctx.chatId, ctx.trigger, ctx.actions, ctx.storyDocument, ctx.visual);
+      return;
+    }
+    const statusEl = this.host.querySelector<HTMLElement>('[data-story-dna-status]');
+    if (statusEl) {
+      statusEl.textContent = 'Saved Story DNA synced.';
+      statusEl.hidden = false;
+    }
+  }
+
+  setStoryDnaRequester(fn: (body: StoryDnaActionBody) => void): void {
+    this.storyDnaRequester = fn;
+  }
+
+  setStoryDnaError(error: string): void {
+    this.storyDnaError = error;
+    this.awaitingDnaSync = false;
+    const statusEl = this.host.querySelector<HTMLElement>('[data-story-dna-status]');
+    if (statusEl) {
+      statusEl.textContent = error;
+      statusEl.hidden = false;
+    }
+  }
+
+  setSceneHubContext(ctx: DossierSceneHubContext | null): void {
+    this.sceneHubContext = ctx;
   }
 
   constructor(
@@ -148,11 +220,16 @@ export class DossierCard {
     storyDocument?: StoryDocument,
     visual?: DossierVisualContext
   ): void {
+    const kind = dossier.entity.kind;
+    if (kind === 'npc' && this.folioOpener) {
+      this.close();
+      this.folioOpener(dossier.entity.name);
+      return;
+    }
     this.documentState(false);
     this.returnFocus = trigger;
+    this.activeDossierContext = { dossier, prefs, chatId, trigger, actions, storyDocument, visual };
     this.host.replaceChildren();
-
-    const kind = dossier.entity.kind;
     const panel = document.createElement('section');
     panel.dataset.vnDossierCard = '';
     panel.dataset.dossierKind = kind;
@@ -307,6 +384,10 @@ export class DossierCard {
 
     panel.append(folioMeta);
 
+    if (kind === 'place' || kind === 'object') {
+      panel.append(this.buildStoryDnaStudio(kind, dossier));
+    }
+
     // Facts extraction
     const facts = dossier.facts.filter(f => f.value.trim() && prefs.fieldGroups[referenceFieldInfo(f.field).section] !== false);
     const earlier = prefs.rememberReferences ? (dossier.earlier ?? []).filter(e => prefs.fieldGroups[referenceFieldInfo(e.reference.field).section] !== false) : [];
@@ -458,7 +539,7 @@ export class DossierCard {
     }
 
     // For Location sheets: Present characters
-    if (kind === 'place' && visual?.presentCharacters?.length && visual.onSelectEntity) {
+    if (kind === 'place' && visual?.presentCharacters?.length && (visual.onSelectEntity || this.folioOpener)) {
       const castSection = document.createElement('section');
       castSection.dataset.dossierPresentCast = '';
       const castHeading = document.createElement('h3');
@@ -471,6 +552,10 @@ export class DossierCard {
         chip.dataset.dossierCastChip = '';
         chip.textContent = `👤 ${char.name}`;
         chip.onclick = () => {
+          if (this.folioOpener) {
+            this.folioOpener(char.name);
+            return;
+          }
           const prevReturn = this.trayReturn;
           this.trayReturn = () => {
             this.trayReturn = prevReturn;
@@ -737,11 +822,13 @@ export class DossierCard {
     visualResolver?: (entity: ReaderDossier['entity']) => DossierVisualContext
   ): void {
     this.documentState(false);
+    this.activeDossierContext = null;
     if (!this.isOpen()) {
       this.query = '';
       this.category = 'all';
       this.scope = 'all';
       this.selectedEntityId = null;
+      this.hubView = 'scene';
     }
     this.returnFocus = trigger;
     this.trayReturn = () => this.openTray(entries, trigger, open, note, visualResolver);
@@ -790,7 +877,7 @@ export class DossierCard {
     const pageSub = document.createElement('div');
     pageSub.className = 'page-sub';
     pageSub.style.cssText = 'font-size:11px;opacity:0.75;margin-top:2px;';
-    pageSub.textContent = 'People, places and items established in the story.';
+    pageSub.textContent = 'Scene scenery DNA, connected locations and story items.';
     titleBlock.append(pageTitle, pageSub);
     panel.append(titleBlock);
 
@@ -819,7 +906,7 @@ export class DossierCard {
     category.setAttribute('aria-label', 'Reference category');
     category.style.display = 'none';
 
-    for (const [value, label] of [['all', 'All'], ['npc', 'People'], ['place', 'Places'], ['object', 'Items']]) {
+    for (const [value, label] of [['all', 'All'], ['place', 'Places'], ['object', 'Items']]) {
       const option = document.createElement('option');
       option.value = value!;
       option.textContent = label!;
@@ -939,6 +1026,37 @@ export class DossierCard {
         overview: desc,
         earlier: false
       } as any);
+      if (this.storyDnaRequester) {
+        if (kind === 'place') {
+          this.storyDnaRequester({
+            action: 'save_location',
+            location: {
+              id: createLocationId(name),
+              name,
+              aliases: deriveShortAliases(name),
+              environmentDescription: desc.slice(0, 2000),
+              persistentElements: [],
+              connectedLocations: [],
+              autoDiscovered: false,
+              lastUpdated: Date.now(),
+            },
+          });
+        } else {
+          this.storyDnaRequester({
+            action: 'save_item',
+            item: {
+              id: createItemId(name),
+              name,
+              aliases: deriveShortAliases(name),
+              description: desc.slice(0, 2000),
+              distinctiveFeatures: [],
+              colors: [],
+              autoDiscovered: false,
+              lastUpdated: Date.now(),
+            },
+          });
+        }
+      }
       this.selectedEntityId = newEntity.id;
       addRefPanel.style.display = 'none';
       nameInput.value = '';
@@ -946,10 +1064,27 @@ export class DossierCard {
       render();
     });
 
-    // World Sheet Scene Topology Map (.world-sheet-map)
+    // Dual-View World Lens Header (Current Scene Hub + Connected Atlas)
+    const hubToggleBar = document.createElement('div');
+    hubToggleBar.className = 'world-hub-tabs';
+    hubToggleBar.dataset.worldHeaderTabs = '';
+    const sceneTabBtn = document.createElement('button');
+    sceneTabBtn.type = 'button';
+    sceneTabBtn.className = 'chip';
+    sceneTabBtn.dataset.worldHubTab = 'scene';
+    sceneTabBtn.textContent = '🏛️ Current Scene';
+    const atlasTabBtn = document.createElement('button');
+    atlasTabBtn.type = 'button';
+    atlasTabBtn.className = 'chip';
+    atlasTabBtn.dataset.worldHubTab = 'atlas';
+    atlasTabBtn.textContent = '🗺️ Connected Atlas';
+    sceneTabBtn.onclick = () => { this.hubView = 'scene'; render(); };
+    atlasTabBtn.onclick = () => { this.hubView = 'atlas'; render(); };
+    hubToggleBar.append(sceneTabBtn, atlasTabBtn);
+    panel.append(hubToggleBar);
+
     const worldSheet = document.createElement('div');
     worldSheet.className = 'world-sheet-map';
-    worldSheet.innerHTML = '<svg class="world-map-svg" viewBox="0 0 330 250" aria-hidden="true"><path d="M90 60C160 62 155 90 205 110M90 60C60 90 48 135 48 170M48 170C120 205 130 190 205 190M205 110C225 155 205 170 205 190" stroke="rgba(56,189,248,0.25)" stroke-width="1.5" stroke-dasharray="4 4"/></svg>';
     panel.append(worldSheet);
 
     // World Lens Card slot right under the map canvas
@@ -995,18 +1130,22 @@ export class DossierCard {
       list.replaceChildren();
       worldStrip.replaceChildren();
 
-      // Clear map nodes from worldSheet while keeping the svg
-      const svg = worldSheet.querySelector('.world-map-svg');
-      worldSheet.replaceChildren();
-      if (svg) worldSheet.append(svg);
+      sceneTabBtn.setAttribute('aria-pressed', String(this.hubView === 'scene'));
+      atlasTabBtn.setAttribute('aria-pressed', String(this.hubView === 'atlas'));
+      if (this.hubView === 'scene') sceneTabBtn.classList.add('active'); else sceneTabBtn.classList.remove('active');
+      if (this.hubView === 'atlas') atlasTabBtn.classList.add('active'); else atlasTabBtn.classList.remove('active');
 
+      worldSheet.replaceChildren();
+
+      // World Lens focuses on Places & Items; any cast entries become Scene Hub cast pills -> Character Folio.
       const filtered = entries.filter(({ entity }) =>
+        entity.kind !== 'npc' &&
         (this.scope === 'all' || !entity.id.startsWith('earlier:')) &&
         (this.category === 'all' || entity.kind === this.category) &&
         (!this.query.trim() || [entity.name, ...entity.aliases].some(name => name.toLocaleLowerCase().includes(this.query.trim().toLocaleLowerCase())))
       );
 
-      count.textContent = filtered.length ? `${filtered.length} reference${filtered.length === 1 ? '' : 's'}` : 'No references match. Try another name or category.';
+      count.textContent = filtered.length ? `${filtered.length} reference${filtered.length === 1 ? '' : 's'}` : 'No locations or items match. Try another filter.';
       countBadge.textContent = `${filtered.length} FOUND`;
 
       if (!filtered.some(e => e.entity.id === this.selectedEntityId)) {
@@ -1015,27 +1154,218 @@ export class DossierCard {
 
       const activeEntry = filtered.find(e => e.entity.id === this.selectedEntityId) ?? filtered[0];
 
-      // Populate World Sheet Scene Topology Map Nodes
-      const places = filtered.filter(e => e.entity.kind === 'place');
-      const mapEntries = places.length > 0 ? places.slice(0, 8) : filtered.slice(0, 8);
-      mapEntries.forEach(({ entity }, i) => {
-        const pos = MAP_POSITIONS[i % MAP_POSITIONS.length]!;
-        const vis = visualResolver?.(entity);
-        const isActiveLoc = vis?.isActiveLocation;
-        const nodeBtn = document.createElement('button');
-        nodeBtn.type = 'button';
-        nodeBtn.className = `map-node-pill ${this.selectedEntityId === entity.id ? 'active' : ''} ${isActiveLoc ? 'active-location' : ''}`;
-        nodeBtn.style.left = `${pos[0]}%`;
-        nodeBtn.style.top = `${pos[1]}%`;
-        const iconSym = entity.kind === 'place' ? (isActiveLoc ? '★' : '📍') : entity.kind === 'object' ? '💎' : '👤';
-        const subTxt = isActiveLoc ? 'ACTIVE LOCATION' : (entity.kind === 'npc' ? 'Character' : entity.kind === 'place' ? 'Location' : 'Item');
-        nodeBtn.innerHTML = html`<span class="index-dot"></span><b>${iconSym} ${entity.name}</b><small>${subTxt}</small>`.value;
-        nodeBtn.onclick = () => {
-          this.selectedEntityId = entity.id;
-          render();
-        };
-        worldSheet.append(nodeBtn);
-      });
+      // Gather Present Cast from sceneHubContext + any NPCs present in incoming entries
+      const castByKey = new Map<string, { id: string; name: string; imageUrl?: string | undefined; present?: boolean | undefined }>();
+      for (const c of this.sceneHubContext?.presentCast ?? []) {
+        castByKey.set(c.name.trim().toLowerCase(), c);
+      }
+      for (const e of entries) {
+        if (e.entity.kind !== 'npc') continue;
+        const key = e.entity.name.trim().toLowerCase();
+        if (!castByKey.has(key)) {
+          const vis = visualResolver?.(e.entity);
+          castByKey.set(key, { id: e.entity.id, name: e.entity.name, imageUrl: vis?.imageUrl, present: vis?.isPresent ?? e.current });
+        }
+      }
+      const presentCast = [...castByKey.values()];
+
+      if (this.hubView === 'scene') {
+        const sceneHub = document.createElement('div');
+        sceneHub.className = 'world-scene-hub';
+        sceneHub.dataset.worldSceneHub = '';
+
+        const activePlaceEntry = entries.find(e => e.entity.kind === 'place' && visualResolver?.(e.entity)?.isActiveLocation)
+          ?? entries.find(e => e.entity.kind === 'place');
+        const activeLocName = this.sceneHubContext?.activeLocationName ?? activePlaceEntry?.entity.name ?? 'Current Story Scene';
+        const matchedLocDna = this.sceneHubContext?.locationDna ?? findMatchingLocation(this.storyDna.locations, activeLocName);
+        const locImageUrl = this.sceneHubContext?.locationImageUrl
+          ?? (activePlaceEntry ? visualResolver?.(activePlaceEntry.entity)?.imageUrl : undefined)
+          ?? matchedLocDna?.referenceImageUrl;
+
+        const banner = document.createElement('div');
+        banner.className = 'world-scene-banner';
+        if (locImageUrl) {
+          const img = document.createElement('img');
+          img.src = locImageUrl;
+          img.alt = activeLocName;
+          banner.append(img);
+        } else {
+          banner.innerHTML = fallbackSvgForKind('place', activeLocName);
+        }
+        const bannerOverlay = document.createElement('div');
+        bannerOverlay.className = 'world-scene-banner-overlay';
+        const locTitle = document.createElement('h3');
+        locTitle.textContent = `📍 ${activeLocName}`;
+        const dnaPills = document.createElement('div');
+        dnaPills.className = 'world-scene-dna-pills';
+        for (const trait of [matchedLocDna?.lighting, matchedLocDna?.atmosphere, matchedLocDna?.architecture].filter(Boolean)) {
+          const pill = document.createElement('span');
+          pill.className = 'scene-dna-pill';
+          pill.textContent = trait!;
+          dnaPills.append(pill);
+        }
+        if (activePlaceEntry) {
+          const editSceneryBtn = document.createElement('button');
+          editSceneryBtn.type = 'button';
+          editSceneryBtn.className = 'world-lens-cta';
+          editSceneryBtn.dataset.sceneHubEdit = '';
+          editSceneryBtn.textContent = '✨ Inspect & Edit Scenery DNA';
+          editSceneryBtn.onclick = () => open(activePlaceEntry.entity.id, trigger);
+          bannerOverlay.append(locTitle, dnaPills, editSceneryBtn);
+        } else {
+          bannerOverlay.append(locTitle, dnaPills);
+        }
+        banner.append(bannerOverlay);
+        sceneHub.append(banner);
+
+        const castWrap = document.createElement('div');
+        castWrap.className = 'world-scene-cast';
+        const castTitle = document.createElement('div');
+        castTitle.className = 'world-scene-subhead';
+        castTitle.textContent = '👥 Present in Scene · Open in Character Folio';
+        const castRow = document.createElement('div');
+        castRow.className = 'world-scene-cast-row';
+        if (presentCast.length > 0) {
+          for (const char of presentCast) {
+            const pill = document.createElement('button');
+            pill.type = 'button';
+            pill.className = 'present-cast-pill';
+            pill.dataset.presentCastPill = char.name;
+            pill.textContent = `👤 ${char.name} →`;
+            pill.onclick = () => {
+              if (this.folioOpener) this.folioOpener(char.name);
+            };
+            castRow.append(pill);
+          }
+        } else {
+          const emptyCast = document.createElement('span');
+          emptyCast.className = 'world-scene-empty';
+          emptyCast.textContent = 'No named characters established in this paragraph yet.';
+          castRow.append(emptyCast);
+        }
+        castWrap.append(castTitle, castRow);
+        sceneHub.append(castWrap);
+
+        const activeObjects = filtered.filter(e => e.entity.kind === 'object');
+        if (activeObjects.length > 0) {
+          const itemsWrap = document.createElement('div');
+          itemsWrap.className = 'world-scene-items';
+          const itemsTitle = document.createElement('div');
+          itemsTitle.className = 'world-scene-subhead';
+          itemsTitle.textContent = '💎 Active Artifacts & Items';
+          const itemsRow = document.createElement('div');
+          itemsRow.className = 'world-scene-cast-row';
+          for (const { entity } of activeObjects.slice(0, 6)) {
+            const pill = document.createElement('button');
+            pill.type = 'button';
+            pill.className = `present-item-pill ${this.selectedEntityId === entity.id ? 'active' : ''}`;
+            pill.textContent = `✦ ${entity.name}`;
+            pill.onclick = () => {
+              this.selectedEntityId = entity.id;
+              render();
+            };
+            itemsRow.append(pill);
+          }
+          itemsWrap.append(itemsTitle, itemsRow);
+          sceneHub.append(itemsWrap);
+        }
+
+        worldSheet.append(sceneHub);
+      } else {
+        // Connected Atlas Topological SVG Graph
+        const atlasWrap = document.createElement('div');
+        atlasWrap.className = 'world-atlas-view';
+        atlasWrap.dataset.worldAtlasView = '';
+
+        const placeMap = new Map<string, { id: string; name: string; entryId?: string; isActive: boolean; connections: string[] }>();
+        for (const e of entries) {
+          if (e.entity.kind !== 'place') continue;
+          const vis = visualResolver?.(e.entity);
+          const dna = findMatchingLocation(this.storyDna.locations, e.entity.name);
+          placeMap.set(createLocationId(e.entity.name), {
+            id: createLocationId(e.entity.name),
+            name: e.entity.name,
+            entryId: e.entity.id,
+            isActive: Boolean(vis?.isActiveLocation),
+            connections: [...new Set([...(dna?.connectedLocations ?? []), ...(vis?.connectedLocations ?? [])])],
+          });
+        }
+        for (const loc of Object.values(this.storyDna.locations)) {
+          const key = createLocationId(loc.name);
+          if (!placeMap.has(key)) {
+            placeMap.set(key, {
+              id: key,
+              name: loc.name,
+              entryId: `dna:loc:${loc.id}`,
+              isActive: Boolean(this.sceneHubContext?.activeLocationName && createLocationId(this.sceneHubContext.activeLocationName) === key),
+              connections: loc.connectedLocations ?? [],
+            });
+          }
+        }
+        const nodes = [...placeMap.values()].slice(0, 10);
+        const coords = new Map<string, { x: number; y: number }>();
+        nodes.forEach((node, idx) => {
+          if (nodes.length === 1) {
+            coords.set(node.id, { x: 165, y: 105 });
+          } else {
+            const angle = (idx / nodes.length) * Math.PI * 2 - Math.PI / 2;
+            const rx = 108;
+            const ry = 68;
+            coords.set(node.id, {
+              x: Math.round(165 + Math.cos(angle) * rx),
+              y: Math.round(105 + Math.sin(angle) * ry),
+            });
+          }
+        });
+        const drawnEdges = new Set<string>();
+        const edgePaths: string[] = [];
+        for (const node of nodes) {
+          const from = coords.get(node.id);
+          if (!from) continue;
+          for (const targetName of node.connections) {
+            const targetKey = createLocationId(targetName);
+            const to = coords.get(targetKey);
+            if (!to || targetKey === node.id) continue;
+            const edgeKey = [node.id, targetKey].sort().join('::');
+            if (drawnEdges.has(edgeKey)) continue;
+            drawnEdges.add(edgeKey);
+            edgePaths.push(`<line x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" stroke="rgba(168,211,200,0.45)" stroke-width="1.8" stroke-dasharray="4 3"/>`);
+          }
+        }
+        if (nodes.length > 0 && edgePaths.length === 0) {
+          for (let i = 1; i < nodes.length; i++) {
+            const prev = coords.get(nodes[i - 1]!.id)!;
+            const curr = coords.get(nodes[i]!.id)!;
+            edgePaths.push(`<line x1="${prev.x}" y1="${prev.y}" x2="${curr.x}" y2="${curr.y}" stroke="rgba(168,211,200,0.22)" stroke-width="1.3" stroke-dasharray="3 5"/>`);
+          }
+        }
+        atlasWrap.innerHTML = `<svg class="world-map-svg" viewBox="0 0 330 210" aria-hidden="true">${edgePaths.join('')}</svg>`;
+        for (const node of nodes) {
+          const pt = coords.get(node.id)!;
+          const nodeBtn = document.createElement('button');
+          nodeBtn.type = 'button';
+          nodeBtn.className = `map-node-pill ${this.selectedEntityId === node.entryId ? 'active' : ''} ${node.isActive ? 'active-location' : ''}`;
+          nodeBtn.style.left = `${Math.max(4, Math.min(72, Math.round((pt.x / 330) * 100 - 11)))}%`;
+          nodeBtn.style.top = `${Math.max(4, Math.min(76, Math.round((pt.y / 210) * 100 - 10)))}%`;
+          const badge = node.isActive ? `★ ACTIVE · 👥 ${presentCast.length}` : 'Location';
+          nodeBtn.innerHTML = html`<span class="index-dot"></span><b>${node.isActive ? '★' : '📍'} ${node.name}</b><small>${badge}</small>`.value;
+          nodeBtn.onclick = () => {
+            if (node.entryId) {
+              this.selectedEntityId = node.entryId;
+              render();
+            }
+          };
+          atlasWrap.append(nodeBtn);
+        }
+        if (nodes.length === 0) {
+          const emptyAtlas = document.createElement('p');
+          emptyAtlas.className = 'world-scene-empty';
+          emptyAtlas.style.padding = '16px';
+          emptyAtlas.textContent = 'Visit or add locations to map the story atlas.';
+          atlasWrap.append(emptyAtlas);
+        }
+        worldSheet.append(atlasWrap);
+      }
 
       // World Lens Preview Card at bottom of map
       const lensCard = document.createElement('div');
@@ -1156,7 +1486,226 @@ export class DossierCard {
     }
   }
 
+  private buildStoryDnaStudio(kind: 'place' | 'object', dossier: ReaderDossier): HTMLElement {
+    const wrap = document.createElement('section');
+    wrap.className = 'story-dna-studio';
+    wrap.dataset.storyDnaStudio = kind;
+
+    const status = document.createElement('p');
+    status.dataset.storyDnaStatus = '';
+    status.className = 'story-dna-status';
+    status.hidden = !this.storyDnaError;
+    if (this.storyDnaError) status.textContent = this.storyDnaError;
+
+    const head = document.createElement('div');
+    head.className = 'story-dna-studio-head';
+    const heading = document.createElement('h3');
+    heading.textContent = kind === 'place' ? '📍 Scenery DNA Studio' : '💎 Item DNA Studio';
+
+    const existingLoc = kind === 'place' ? findMatchingLocation(this.storyDna.locations, dossier.entity.name) : undefined;
+    const existingItem = kind === 'object' ? findMatchingItem(this.storyDna.items, dossier.entity.name) : undefined;
+    let isLocked = Boolean(kind === 'place' ? existingLoc?.locked : existingItem?.locked);
+
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'story-dna-studio-actions';
+
+    const lockBtn = document.createElement('button');
+    lockBtn.type = 'button';
+    lockBtn.dataset.storyDnaLock = '';
+    lockBtn.setAttribute('aria-pressed', String(isLocked));
+    lockBtn.textContent = isLocked ? '🔒 Locked DNA' : '🔓 Lock DNA';
+
+    const autofillBtn = document.createElement('button');
+    autofillBtn.type = 'button';
+    autofillBtn.dataset.storyDnaAutofill = '';
+    autofillBtn.textContent = '✨ Auto-Fill DNA';
+    autofillBtn.disabled = isLocked || !this.storyDnaRequester;
+
+    lockBtn.onclick = () => {
+      isLocked = !isLocked;
+      lockBtn.setAttribute('aria-pressed', String(isLocked));
+      lockBtn.textContent = isLocked ? '🔒 Locked DNA' : '🔓 Lock DNA';
+      autofillBtn.disabled = isLocked || !this.storyDnaRequester;
+      saveBtn.click();
+    };
+
+    actionsRow.append(lockBtn, autofillBtn);
+    head.append(heading, actionsRow);
+    wrap.append(head, status);
+
+    const factVal = (...fields: string[]) => {
+      for (const f of fields) {
+        const hit = dossier.facts.find(x => x.field === f)?.value || dossier.state?.[f];
+        if (hit?.trim()) return hit.trim();
+      }
+      return '';
+    };
+
+    const form = document.createElement('div');
+    form.className = 'story-dna-form';
+
+    const addField = (key: string, labelText: string, value: string, multiline = false, placeholder = '') => {
+      const row = document.createElement('label');
+      row.className = 'story-dna-field';
+      const lbl = document.createElement('span');
+      lbl.textContent = labelText;
+      const input = document.createElement(multiline ? 'textarea' : 'input') as HTMLInputElement | HTMLTextAreaElement;
+      if (!multiline) (input as HTMLInputElement).type = 'text';
+      input.dataset.dnaField = key;
+      input.value = value;
+      if (placeholder) input.placeholder = placeholder;
+      row.append(lbl, input);
+      form.append(row);
+      return input;
+    };
+
+    const preview = document.createElement('div');
+    preview.className = 'story-dna-preview';
+    const previewLabel = document.createElement('small');
+    previewLabel.textContent = 'Prompt Injection Preview';
+    const previewText = document.createElement('code');
+    previewText.dataset.storyDnaPreview = '';
+    preview.append(previewLabel, previewText);
+
+    const footer = document.createElement('div');
+    footer.className = 'story-dna-footer';
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.dataset.storyDnaSave = '';
+    saveBtn.textContent = kind === 'place' ? 'Save Scenery DNA' : 'Save Item DNA';
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.dataset.storyDnaDelete = '';
+    delBtn.textContent = 'Delete DNA';
+    footer.append(saveBtn, delBtn);
+
+    if (kind === 'place') {
+      const aliasesIn = addField('aliases', 'Short Aliases (comma-separated)', (existingLoc?.aliases ?? dossier.entity.aliases ?? []).join(', '));
+      const descIn = addField('environmentDescription', 'Environment & Scenery Description', existingLoc?.environmentDescription ?? factVal('description', 'impression', 'surroundings', 'layout'), true);
+      const archIn = addField('architecture', 'Architecture / Layout', existingLoc?.architecture ?? factVal('layout', 'architecture'));
+      const lightIn = addField('lighting', 'Lighting', existingLoc?.lighting ?? '');
+      const atmIn = addField('atmosphere', 'Atmosphere / Weather', existingLoc?.atmosphere ?? '');
+      const elemIn = addField('persistentElements', 'Persistent Props / Landmarks (comma-separated)', (existingLoc?.persistentElements ?? []).join(', '));
+      const connIn = addField('connectedLocations', 'Connected Locations (comma-separated)', (existingLoc?.connectedLocations ?? []).join(', '));
+      const loreIn = addField('loreText', 'Lore / History', existingLoc?.loreText ?? factVal('history', 'publicHistory', 'significance', 'customs'), true);
+      const notesIn = addField('notes', 'Personal Notes', existingLoc?.notes ?? '', true);
+
+      const buildLoc = (): LocationDNA => ({
+        id: existingLoc?.id ?? createLocationId(dossier.entity.name),
+        name: existingLoc?.name ?? dossier.entity.name,
+        aliases: aliasesIn.value.split(',').map(x => x.trim()).filter(Boolean).slice(0, 16),
+        ...(descIn.value.trim() ? { environmentDescription: descIn.value.trim().slice(0, 2000) } : {}),
+        ...(archIn.value.trim() ? { architecture: archIn.value.trim().slice(0, 500) } : {}),
+        ...(lightIn.value.trim() ? { lighting: lightIn.value.trim().slice(0, 500) } : {}),
+        ...(atmIn.value.trim() ? { atmosphere: atmIn.value.trim().slice(0, 500) } : {}),
+        persistentElements: elemIn.value.split(',').map(x => x.trim()).filter(Boolean).slice(0, 24),
+        connectedLocations: connIn.value.split(',').map(x => x.trim()).filter(Boolean).slice(0, 24),
+        ...(loreIn.value.trim() ? { loreText: loreIn.value.trim().slice(0, 4000) } : {}),
+        ...(notesIn.value.trim() ? { notes: notesIn.value.trim().slice(0, 2000) } : {}),
+        ...(existingLoc?.referenceImageUrl ? { referenceImageUrl: existingLoc.referenceImageUrl } : {}),
+        locked: isLocked,
+        autoDiscovered: false,
+        lastUpdated: Date.now(),
+      });
+
+      const refreshPreview = () => {
+        const clause = formatLocationDNAToPromptClause(buildLoc());
+        previewText.textContent = clause || 'Fill scenery details above to inject consistent location visuals into generated art.';
+      };
+      [aliasesIn, descIn, archIn, lightIn, atmIn, elemIn, connIn, loreIn, notesIn].forEach(el => el.addEventListener('input', refreshPreview));
+      refreshPreview();
+
+      autofillBtn.onclick = () => {
+        this.awaitingDnaSync = true;
+        status.textContent = 'Scanning story & SimTracker for scenery clues...';
+        status.hidden = false;
+        this.storyDnaRequester?.({
+          action: 'autofill_location',
+          locationId: existingLoc?.id,
+          locationName: dossier.entity.name,
+        });
+      };
+      saveBtn.onclick = () => {
+        const nextLoc = buildLoc();
+        this.storyDnaRequester?.({ action: 'save_location', location: nextLoc });
+        status.textContent = 'Saving Scenery DNA...';
+        status.hidden = false;
+      };
+      delBtn.onclick = () => {
+        if (existingLoc) {
+          this.storyDnaRequester?.({ action: 'delete_location', locationId: existingLoc.id });
+          status.textContent = 'Deleted Location DNA.';
+          status.hidden = false;
+        }
+      };
+    } else {
+      const aliasesIn = addField('aliases', 'Short Aliases (comma-separated)', (existingItem?.aliases ?? dossier.entity.aliases ?? []).join(', '));
+      const typeIn = addField('itemType', 'Item Type / Category', existingItem?.itemType ?? '');
+      const descIn = addField('description', 'Visual Description (Prompt Injection)', existingItem?.description ?? factVal('description', 'appearance', 'significance') ?? dossier.entity.name, true);
+      const matIn = addField('materials', 'Materials / Craftsmanship', existingItem?.materials ?? '');
+      const featIn = addField('distinctiveFeatures', 'Distinctive Features (comma-separated)', (existingItem?.distinctiveFeatures ?? []).join(', '));
+      const colIn = addField('colors', 'Colors (comma-separated)', (existingItem?.colors ?? []).join(', '));
+      const heldIn = addField('heldBy', 'Held / Owned By', existingItem?.heldBy ?? factVal('owner'));
+      const loreIn = addField('loreText', 'Lore / Significance', existingItem?.loreText ?? factVal('provenance', 'significance', 'history', 'function'), true);
+      const notesIn = addField('notes', 'Personal Notes', existingItem?.notes ?? '', true);
+
+      const buildItem = (): ItemDNA => ({
+        id: existingItem?.id ?? createItemId(dossier.entity.name),
+        name: existingItem?.name ?? dossier.entity.name,
+        aliases: aliasesIn.value.split(',').map(x => x.trim()).filter(Boolean).slice(0, 16),
+        ...(typeIn.value.trim() ? { itemType: typeIn.value.trim().slice(0, 100) } : {}),
+        description: (descIn.value.trim() || dossier.entity.name).slice(0, 2000),
+        ...(matIn.value.trim() ? { materials: matIn.value.trim().slice(0, 500) } : {}),
+        distinctiveFeatures: featIn.value.split(',').map(x => x.trim()).filter(Boolean).slice(0, 24),
+        colors: colIn.value.split(',').map(x => x.trim()).filter(Boolean).slice(0, 12),
+        ...(heldIn.value.trim() ? { heldBy: heldIn.value.trim().slice(0, 160) } : {}),
+        ...(loreIn.value.trim() ? { loreText: loreIn.value.trim().slice(0, 4000) } : {}),
+        ...(notesIn.value.trim() ? { notes: notesIn.value.trim().slice(0, 2000) } : {}),
+        ...(existingItem?.referenceImageUrl ? { referenceImageUrl: existingItem.referenceImageUrl } : {}),
+        locked: isLocked,
+        autoDiscovered: false,
+        lastUpdated: Date.now(),
+      });
+
+      const refreshPreview = () => {
+        const clause = formatItemDNAToPromptClause(buildItem());
+        previewText.textContent = clause || 'Describe this artifact so prompts stay consistent whenever it appears.';
+      };
+      [aliasesIn, typeIn, descIn, matIn, featIn, colIn, heldIn, loreIn, notesIn].forEach(el => el.addEventListener('input', refreshPreview));
+      refreshPreview();
+
+      autofillBtn.onclick = () => {
+        this.awaitingDnaSync = true;
+        status.textContent = 'Scanning story for artifact details...';
+        status.hidden = false;
+        this.storyDnaRequester?.({
+          action: 'autofill_item',
+          itemId: existingItem?.id,
+          itemName: dossier.entity.name,
+        });
+      };
+      saveBtn.onclick = () => {
+        const nextItem = buildItem();
+        this.storyDnaRequester?.({ action: 'save_item', item: nextItem });
+        status.textContent = 'Saving Item DNA...';
+        status.hidden = false;
+      };
+      delBtn.onclick = () => {
+        if (existingItem) {
+          this.storyDnaRequester?.({ action: 'delete_item', itemId: existingItem.id });
+          status.textContent = 'Deleted Item DNA.';
+          status.hidden = false;
+        }
+      };
+    }
+
+    wrap.append(form, preview, footer);
+    return wrap;
+  }
+
   close(): void {
+    this.activeDossierContext = null;
+    this.awaitingDnaSync = false;
     this.documentState(false);
     if (this.host.hidden) return;
     this.host.hidden = true;
@@ -1294,6 +1843,47 @@ section[data-reference-current] h3,section[data-reference-observations] h3{font-
 [data-vn-dossier-card] :is(button,input,select,textarea,summary):focus-visible{outline:2px solid var(--vn-accent,#9ec6f0);outline-offset:2px}
 @media(min-width:700px){[data-vn-dossier]{align-items:center}}
 @media(max-width:420px){[data-vn-dossier-card]{padding:14px;border-radius:14px}[data-vn-dossier-card] header{top:-14px}[data-reference-overview]{padding:10px}[data-dossier-hero="npc"],[data-dossier-hero="object"]{grid-template-columns:76px minmax(0,1fr)}[data-dossier-media="npc"]{width:76px;height:92px}[data-dossier-media="object"]{width:76px;height:76px}}
+.world-hub-tabs{display:flex;gap:6px;margin:4px 0 6px}
+.world-scene-hub{padding:10px;display:flex;flex-direction:column;gap:10px}
+.world-scene-banner{position:relative;height:142px;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,.16);background:rgba(12,20,24,.88)}
+.world-scene-banner img,.world-scene-banner svg{width:100%;height:100%;object-fit:cover;display:block}
+.world-scene-banner-overlay{position:absolute;inset:auto 0 0 0;padding:10px 12px;background:linear-gradient(transparent,rgba(6,12,16,.92));display:flex;flex-direction:column;gap:5px}
+.world-scene-banner-overlay h3{margin:0;font-size:14px;font-weight:700;color:#fff}
+.world-scene-dna-pills{display:flex;flex-wrap:wrap;gap:4px}
+.scene-dna-pill{font-size:9.5px;padding:2px 7px;border-radius:999px;background:rgba(168,211,200,.2);border:1px solid rgba(168,211,200,.35);color:#dff3ee}
+.world-scene-subhead{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;opacity:.8;margin-bottom:5px}
+.world-scene-cast-row{display:flex;flex-wrap:wrap;gap:6px}
+.present-cast-pill,.present-item-pill{min-height:0!important;padding:5px 10px!important;margin:0!important;font-size:11px!important;border-radius:999px!important;background:rgba(168,85,247,.16)!important;border:1px solid rgba(168,85,247,.38)!important;color:#e9d5ff!important}
+.present-item-pill{background:rgba(56,189,248,.14)!important;border-color:rgba(56,189,248,.34)!important;color:#bae6fd!important}
+.present-item-pill.active{background:rgba(56,189,248,.32)!important;border-color:#fff!important}
+.world-scene-empty{font-size:11px;opacity:.68}
+.world-atlas-view{position:relative;height:215px;width:100%}
+.story-dna-studio{margin:12px 0;padding:12px;border-radius:12px;background:rgba(18,32,38,.7);border:1px solid rgba(130,185,165,.32);display:flex;flex-direction:column;gap:10px}
+.story-dna-studio-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
+.story-dna-studio-head h3{margin:0;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em;color:#d6ecad}
+.story-dna-studio-actions{display:flex;gap:6px}
+.story-dna-studio-actions button{min-height:32px!important;min-width:0!important;padding:4px 10px!important;font-size:11px!important;margin:0!important}
+.story-dna-status{margin:0;font-size:11px;color:#93c5fd}
+.story-dna-form{display:grid;grid-template-columns:1fr;gap:8px}
+.story-dna-field{display:flex;flex-direction:column;gap:3px;font-size:11px}
+.story-dna-field span{opacity:.82;font-weight:600}
+.story-dna-field input,.story-dna-field textarea{box-sizing:border-box;width:100%;padding:7px 9px;border-radius:8px;border:1px solid rgba(255,255,255,.16);background:rgba(0,0,0,.28);color:inherit;font:inherit;font-size:12px}
+.story-dna-field textarea{min-height:54px;margin:0}
+.story-dna-preview{padding:8px 10px;border-radius:8px;background:rgba(0,0,0,.28);border:1px dashed rgba(168,211,200,.35)}
+.story-dna-preview small{display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.03em;opacity:.7;margin-bottom:3px}
+.story-dna-preview code{display:block;font-size:11px;line-height:1.45;white-space:pre-wrap;color:#cbe9e0}
+.story-dna-footer{display:flex;gap:8px;justify-content:flex-end}
+.story-dna-footer button{min-height:36px!important;margin:0!important;font-size:12px!important}
+.vn-inline-tooltip-popover{position:fixed;z-index:260;width:min(320px,calc(100vw - 24px));padding:12px;border-radius:14px;background:rgba(15,23,36,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(168,211,200,.36);box-shadow:0 14px 36px rgba(0,0,0,.58);color:#eef4f1;display:flex;flex-direction:column;gap:8px}
+.vn-inline-tooltip-head{display:flex;align-items:center;gap:10px}
+.vn-inline-tooltip-thumb{width:42px;height:42px;border-radius:8px;overflow:hidden;flex:none;display:grid;place-items:center;background:rgba(255,255,255,.08);font-weight:700}
+.vn-inline-tooltip-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.vn-inline-tooltip-title{flex:1;min-width:0}
+.vn-inline-tooltip-title strong{display:block;font-size:13.5px;line-height:1.25}
+.vn-inline-tooltip-title small{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.04em;opacity:.75}
+.vn-inline-tooltip-close{min-width:28px;min-height:28px;border-radius:50%;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit;cursor:pointer;font-size:14px;line-height:1}
+.vn-inline-tooltip-body{margin:0;font-size:11.5px;line-height:1.45;opacity:.92;white-space:pre-line}
+.vn-inline-tooltip-cta{width:100%;padding:7px 10px;border-radius:8px;border:none;background:var(--vn-accent,#a8d3c8);color:#0e1e1a;font-weight:700;font-size:11.5px;cursor:pointer;text-align:center}
 ` + DOCUMENT_READER_CSS;
 
 export const DOCKED_DOSSIER_CSS = `

@@ -301,7 +301,7 @@ export function serializeIdeogramV4(input: SerializerInput): SerializerResult {
     });
 
     // Midground environment element (Element 4)
-    const midgroundBackdrop = cleanScene.slice(0, 200).replace(/[,\s]+$/, '').trim();
+    const midgroundBackdrop = cleanScene.slice(0, 500).replace(/[,\s]+$/, '').trim();
     elements.push({
       type: 'obj',
       bbox: [180, 40, 740, 960],

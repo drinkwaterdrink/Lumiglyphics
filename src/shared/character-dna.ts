@@ -25,6 +25,23 @@ export const CharacterBuildDNASchema = z.object({
 }).strict();
 export type CharacterBuildDNA = z.infer<typeof CharacterBuildDNASchema>;
 
+export const CharacterRelationshipBeatSchema = z.object({
+  text: z.string().max(500),
+  messageId: z.string().max(120).optional(),
+  timestamp: z.number().int().nonnegative().optional(),
+}).strict();
+
+export const CharacterRelationshipSchema = z.object({
+  targetName: z.string().min(1).max(120),
+  affinity: z.number().int().min(-100).max(100).default(0),
+  trust: z.number().int().min(-100).max(100).default(0),
+  dynamicLabel: z.string().max(160).default(""),
+  status: z.string().max(300).default(""),
+  recentBeats: z.array(CharacterRelationshipBeatSchema).max(12).default([]),
+  lastUpdated: z.number().int().nonnegative().default(() => Date.now()),
+}).strict();
+export type CharacterRelationship = z.infer<typeof CharacterRelationshipSchema>;
+
 export const CharacterDNASchema = z.object({
   id: z.string().trim().min(1).max(256),
   name: z.string().trim().min(1).max(160),
@@ -46,6 +63,9 @@ export const CharacterDNASchema = z.object({
   secondaryReferenceImageUrl: z.string().trim().max(5000000).optional(),
   referenceImageId: z.string().trim().max(256).optional(),
   secondaryReferenceImageId: z.string().trim().max(256).optional(),
+  relationships: z.array(CharacterRelationshipSchema).max(40).default([]),
+  autoDiscovered: z.boolean().optional(),
+  seenInSwipes: z.array(z.string().max(160)).max(60).optional(),
   lastUpdated: z.number().int().nonnegative().default(() => Date.now()),
   fieldSources:z.record(z.string(),z.object({classification:z.enum(['evidence','inferred','generated','manual']),sources:z.array(z.string().max(1000)).max(8)}).strict()).optional()
 }).strict();
@@ -461,6 +481,23 @@ export function mergeCharacterDNA(base: CharacterDNA, patch: Partial<CharacterDN
     signatureOutfit: patch.signatureOutfit !== undefined ? patch.signatureOutfit : base.signatureOutfit,
     activeOutfit: patch.activeOutfit !== undefined ? patch.activeOutfit : base.activeOutfit,
     locked: patch.locked !== undefined ? patch.locked : base.locked,
+    autoDiscovered: patch.autoDiscovered !== undefined ? patch.autoDiscovered : base.autoDiscovered,
+    seenInSwipes: patch.seenInSwipes ? Array.from(new Set([...(base.seenInSwipes ?? []), ...patch.seenInSwipes])).slice(-60) : base.seenInSwipes,
     lastUpdated: Date.now()
   });
+}
+
+export function swipeTurnTag(messageId: string, swipeId?: number | null): string {
+  const num = typeof swipeId === 'number' && Number.isFinite(swipeId) ? swipeId : 0;
+  return `${String(messageId).trim()}::${num}`;
+}
+
+export function isCharacterActiveOnBranch(
+  char: CharacterDNA,
+  activeBranchSwipeTags?: ReadonlySet<string> | null
+): boolean {
+  if (!char.autoDiscovered || char.locked) return true;
+  if (!char.seenInSwipes || char.seenInSwipes.length === 0) return true;
+  if (!activeBranchSwipeTags || activeBranchSwipeTags.size === 0) return true;
+  return char.seenInSwipes.some((tag) => activeBranchSwipeTags.has(tag));
 }

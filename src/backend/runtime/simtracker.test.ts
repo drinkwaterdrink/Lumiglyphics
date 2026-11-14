@@ -123,3 +123,22 @@ Characters:
   assert.match(c.identity, /hips\/waist: Wide flared hips/);
   assert.match(c.attire, /Midnight velvet corset dress/);
 });
+
+test('extracts relationship, affection, trust, and dynamicLabel fields from tracker payloads', () => {
+  const trackerContent = `<tracker2>
+Characters:
+  - Name: Veronica Drake
+    Relationship: Reluctant allies after surviving the ritual together
+    Affection: 42
+    Trust: 18
+    Dynamic: Guarded partners
+</tracker2>`;
+  const result = extractSimTracker([{ id: 'm-rel', content: trackerContent }], 'm-rel');
+  assert.equal(result.status, 'detected');
+  assert.equal(result.cast.length, 1);
+  const c = result.cast[0]!;
+  assert.equal(c.relationship, 'Reluctant allies after surviving the ritual together');
+  assert.equal(c.affection, 42);
+  assert.equal(c.trust, 18);
+  assert.equal(c.dynamicLabel, 'Guarded partners');
+});

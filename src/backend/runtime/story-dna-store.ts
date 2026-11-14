@@ -73,7 +73,7 @@ export async function saveLocationDNA(
   const parsed = LocationDNASchema.parse(loc);
   return mutateStoryDNASet(spindle, chatId, userId, revision, (set) => {
     const id = parsed.id || createLocationId(parsed.name);
-    set.locations[id] = { ...parsed, id, lastUpdated: Date.now() };
+    set.locations[id] = { ...parsed, id, autoDiscovered: false, lastUpdated: Date.now() };
     if (set.deletedLocations?.[id]) delete set.deletedLocations[id];
   });
 }
@@ -88,7 +88,7 @@ export async function saveItemDNA(
   const parsed = ItemDNASchema.parse(item);
   return mutateStoryDNASet(spindle, chatId, userId, revision, (set) => {
     const id = parsed.id || createItemId(parsed.name);
-    set.items[id] = { ...parsed, id, lastUpdated: Date.now() };
+    set.items[id] = { ...parsed, id, autoDiscovered: false, lastUpdated: Date.now() };
     if (set.deletedItems?.[id]) delete set.deletedItems[id];
   });
 }

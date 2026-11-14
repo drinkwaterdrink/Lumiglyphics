@@ -64,11 +64,11 @@ describe('DossierCard & World Lens Header', () => {
       const trigger = new FakeNode('button');
       card.openTray(mockEntries as any, trigger as unknown as HTMLElement, () => {});
 
-      const ctaBtn = card.host.querySelector('.world-lens-cta');
-      expect(ctaBtn).not.toBeNull();
-      expect(ctaBtn?.textContent).toContain('Open character folio');
+      const pillBtn = card.host.querySelector('[data-present-cast-pill="Nadine Pruitt"]');
+      expect(pillBtn).not.toBeNull();
+      expect(pillBtn?.textContent).toContain('Nadine Pruitt');
 
-      (ctaBtn as unknown as HTMLButtonElement)?.click();
+      (pillBtn as unknown as HTMLButtonElement)?.click();
       expect(openedChar as string | null).toBe('Nadine Pruitt');
     } finally {
       restore();
@@ -180,6 +180,107 @@ describe('DossierCard & World Lens Header', () => {
       // Click delete
       delBtn.click();
       expect(dossier.facts.length).toBe(0);
+    } finally {
+      restore();
+    }
+  });
+
+  it('removes People tab, persists + Add Reference via storyDnaRequester, and renders Connected Atlas SVG', () => {
+    const restore = installFakeDocument();
+    try {
+      const host = new FakeNode('div');
+      const card = new DossierCard(host as unknown as HTMLElement);
+      const sentBodies: any[] = [];
+      card.setStoryDnaRequester((body) => sentBodies.push(body));
+      card.setStoryDna({
+        version: 1,
+        locations: {
+          'flat-3': {
+            id: 'flat-3',
+            name: 'Flat 3',
+            aliases: ['The Loft'],
+            environmentDescription: 'Cedar loft above the harbor',
+            persistentElements: ['oak desk'],
+            connectedLocations: ['Courtyard'],
+            lastUpdated: 100,
+          },
+          courtyard: {
+            id: 'courtyard',
+            name: 'Courtyard',
+            aliases: [],
+            environmentDescription: 'Rain-slick cobblestones',
+            persistentElements: [],
+            connectedLocations: ['Flat 3'],
+            lastUpdated: 101,
+          },
+        },
+        items: {},
+      });
+
+      const entries = [
+        { entity: { id: 'flat-3', name: 'Flat 3', kind: 'place' as const, aliases: ['The Loft'] }, current: true, pinned: false, note: undefined },
+        { entity: { id: 'courtyard', name: 'Courtyard', kind: 'place' as const, aliases: [] }, current: false, pinned: false, note: undefined },
+        { entity: { id: 'nadine', name: 'Nadine Pruitt', kind: 'npc' as const, aliases: [] }, current: true, pinned: true, note: undefined },
+      ];
+      const trigger = new FakeNode('button');
+      card.openTray(entries as any, trigger as unknown as HTMLElement, () => {});
+
+      const catLabels = Array.from(card.host.querySelectorAll('[data-reference-categories] button')).map((b) => b.textContent);
+      expect(catLabels.some((t) => t?.includes('People'))).toBe(false);
+
+      // + Add Reference -> save_item
+      const addBtn = card.host.querySelector('.add-ref-chip') as unknown as HTMLButtonElement;
+      addBtn.click();
+      const nameInput = card.host.querySelector('[data-add-ref-name]') as unknown as HTMLInputElement;
+      const kindSelect = card.host.querySelector('[data-add-ref-kind]') as unknown as HTMLSelectElement;
+      const descInput = card.host.querySelector('[data-add-ref-desc]') as unknown as HTMLTextAreaElement;
+      nameInput.value = 'Carved Yew Staff';
+      kindSelect.value = 'object';
+      descInput.value = 'Ancient staff wrapped in emerald vines';
+      (card.host.querySelector('[data-add-ref-save]') as unknown as HTMLButtonElement).click();
+
+      expect(sentBodies.some((b) => b.action === 'save_item' && b.item.name === 'Carved Yew Staff')).toBe(true);
+
+      // Connected Atlas toggle renders SVG edges & location node buttons
+      const atlasTab = card.host.querySelector('[data-world-hub-tab="atlas"]') as unknown as HTMLButtonElement;
+      atlasTab.click();
+      const atlasView = card.host.querySelector('[data-world-atlas-view]');
+      expect(atlasView).not.toBeNull();
+      expect(atlasView?.querySelector('svg')).not.toBeNull();
+      expect(atlasView?.querySelectorAll('.map-node-pill').length).toBeGreaterThanOrEqual(2);
+    } finally {
+      restore();
+    }
+  });
+
+  it('opens Scenery DNA Studio inside DossierCard and triggers autofill and save actions', () => {
+    const restore = installFakeDocument();
+    try {
+      const host = new FakeNode('div');
+      const card = new DossierCard(host as unknown as HTMLElement);
+      const sentBodies: any[] = [];
+      card.setStoryDnaRequester((body) => sentBodies.push(body));
+
+      const placeDossier = {
+        entity: { id: 'flat-3', name: 'Flat 3', kind: 'place' as const, aliases: ['The Loft'] },
+        facts: [{ field: 'description', value: 'Exposed cedar beams and rain-streaked skylights', status: 'established', confidence: 'stated', source: 'turn' }],
+        state: {},
+        pinned: false,
+      };
+      const trigger = new FakeNode('button');
+      card.open(placeDossier as any, { overrides: [], fieldGroups: {} } as any, 'c1', trigger as unknown as HTMLElement);
+
+      const descField = card.host.querySelector('[data-dna-field="environmentDescription"]') as unknown as HTMLTextAreaElement;
+      const previewEl = card.host.querySelector('[data-story-dna-preview]');
+      expect(descField).not.toBeNull();
+      expect(previewEl?.textContent).toContain('Exposed cedar beams');
+
+      descField.value = 'Exposed cedar beams with warm brass lamps';
+      (card.host.querySelector('[data-story-dna-autofill]') as unknown as HTMLButtonElement).click();
+      (card.host.querySelector('[data-story-dna-save]') as unknown as HTMLButtonElement).click();
+
+      expect(sentBodies.some((b) => b.action === 'autofill_location' && b.locationName === 'Flat 3')).toBe(true);
+      expect(sentBodies.some((b) => b.action === 'save_location' && b.location.environmentDescription?.includes('warm brass lamps'))).toBe(true);
     } finally {
       restore();
     }

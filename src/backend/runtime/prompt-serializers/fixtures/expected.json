@@ -10,7 +10,7 @@
     "warnings": []
   },
   "flux3-klein/environment": {
-    "prompt": "watercolor illustration on rough cold-press watercolor paper, set in Rainy library with brass lamps and red curtains. Illuminated by warm lamplight against cool rain. deep edge-to-edge focus across all depth planes from foreground to background. Rich volumetric shading and authentic textural contrast. An empty scene with clean unbranded surfaces and no people present, centering on an open book resting on an empty desk. In the background, Rainy library with brass lamps and red curtains forms silhouettes and environmental shapes against ambient atmospheric light gradients.",
+    "prompt": "watercolor illustration on rough cold-press watercolor paper, set in Rainy library with brass lamps and red curtains. Illuminated by warm lamplight against cool rain. deep edge-to-edge focus across all depth planes from foreground to background. Rich volumetric shading and authentic textural contrast. An empty scene with no people present, centering on an open book resting on an empty desk. In the background, Rainy library with brass lamps and red curtains forms silhouettes and environmental shapes against ambient atmospheric light gradients.",
     "negativePrompt": "",
     "warnings": []
   },

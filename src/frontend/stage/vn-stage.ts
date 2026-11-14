@@ -11,6 +11,7 @@ import type {ReferenceHistory} from '../../shared/reference-history.js';
 import type {TurnView,AssetView} from "../../protocol.js";
 import { StageDossiers } from "./dossiers.js";
 import type { TooltipPreferences } from "../../shared/dossiers.js";
+import type { StoryDnaActionBody, StoryDNASet } from "../../shared/story-dna.js";
 import { gameMoveKey, type GameMoveSnapshot } from '../../shared/game-moves.js';
 import { mergeInteractionDraft } from '../../shared/scene-interactions.js';
 import { ReplyDraftEditor } from './interaction-tray.js';
@@ -418,6 +419,9 @@ export class VnStage {
     this.dossiers.setFolioOpener(fn);
   }
 
+  setStoryDna(storyDna: StoryDNASet): void { this.dossiers.setStoryDna(storyDna); }
+  setStoryDnaRequester(fn: (body: StoryDnaActionBody) => void): void { this.dossiers.setStoryDnaRequester(fn); }
+  setStoryDnaError(error: string): void { this.dossiers.setStoryDnaError(error); }
   setTooltipPreferences(prefs:TooltipPreferences):void {this.actionDraftsEnabled=prefs.enabled&&prefs.actionsEnabled;this.dossiers.setPreferences(prefs);if(!this.actionDraftsEnabled)this.closeMoveDraft();const view=selectVnStageView(this.state);this.renderInteraction(view.showChoices,view.showStandardInput,view.isBusy);}
 
   private storeReplyDraft(text:string):boolean {if(this.destroyed||selectVnStageView(this.state).isBusy||this.state.isUserTurn)return false;this.toggleAutoPlay(false);this.toggleSkip(false);this.dispatch({type:'set-draft',draft:text});return true;}

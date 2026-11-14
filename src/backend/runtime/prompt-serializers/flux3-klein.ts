@@ -161,7 +161,7 @@ export function serializeFlux3Klein(input: SerializerInput): SerializerResult {
       priority: 0,
       required: true,
       compressible: false,
-      text: `An empty scene with clean unbranded surfaces and no people present, centering on ${focus}.`
+      text: `An empty scene with no people present, centering on ${focus}.`
     });
   } else if (subjects.length === 1) {
     const s = subjects[0]!;

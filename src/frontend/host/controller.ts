@@ -5,6 +5,7 @@ import {progressForCursor} from '../speech/read-along.js';
 import {musicTrackForPosition,locationForPosition} from '../../shared/scene-atmosphere.js';
 import {resumeCardModel} from '../stage/resume-card.js';
 import {DnaRequestSchema,DNA_FIELD_LABELS,type DnaRequest,type DnaField} from '../../shared/character-dna-workflow.js';
+import { StoryDnaRequestSchema, type StoryDnaActionBody } from '../../shared/story-dna.js';
 import {inspectorState,pictureStateSummary} from '../image-review/inspector-model.js';
 import {scopedPictureOperations,type LocalPictureOperations} from '../image-review/local-operations.js';
 import type {ImageRetryQueueView} from '../../shared/image-retries.js';
@@ -750,6 +751,17 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     dnaRequests.set(requestId,{chatId:owner,action:body.action,turnToken:dnaTurnToken,...(body.action==='save'?{saved:{id:body.dna.id,updatedAt:body.dna.lastUpdated}}:{})});
     ctx.sendToBackend(checked.data);
   };
+  const sendStoryDna = (body: StoryDnaActionBody) => {
+    const owner = chatId();
+    if (!owner) return;
+    const requestId = createUiId();
+    const checked = StoryDnaRequestSchema.safeParse({ type: 'vn_story_dna', chatId: owner, requestId, ...body });
+    if (!checked.success) {
+      stage.setStoryDnaError(checked.error.issues[0]?.message ?? 'Invalid location or item DNA field.');
+      return;
+    }
+    ctx.sendToBackend(checked.data);
+  };
   const characterFolio = new CharacterFolio({
     onSaveDNA:(dna,revision)=>sendDna({action:'save',dna,revision}),
     onAutoFillDNA:(characterName,characterId,fields)=>sendDna({action:'propose',characterName,characterId,...(fields?{fields}:{})}),
@@ -779,6 +791,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     characterFolio.setActiveCharacter(charName);
     stage.workspace.open('character');
   });
+  stage.setStoryDnaRequester((body) => sendStoryDna(body));
   const panelRequests = new Map<string, { resolve: (template: string) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   panels.onResolveTemplate = (template) => new Promise((resolve, reject) => {
     const requestId = createUiId();
@@ -1122,6 +1135,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
 
     if (next?.chatId) {
       sendDna({action:'list'});
+      sendStoryDna({action:'list'});
     }
     imageLibrary.setContext(next,stage.getState().currentParagraphIndex);
     settingsPanel?.setImagePreviewMetadata(next?.imageRequests?.at(-1)?.imagePromptMetadata);
@@ -1259,6 +1273,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       if(owner&&(!dnaTurnScoped(owner.action)||owner.turnToken===dnaTurnToken)&&owner.chatId===chatId()&&owner.chatId===characterFolio.getContext()){characterFolio.showError(message.error);if(message.error.includes('DNA changed'))sendDna({action:'list'});}
       return;
     }
+    if(type==='vn_story_dna'&&message.type==='vn_story_dna'){if(message.chatId===chatId())stage.setStoryDna(message.storyDna);return;}
+    if(type==='vn_error'&&message.type==='vn_error'&&message.operation==='vn_story_dna'){if(!message.chatId||message.chatId===chatId())stage.setStoryDnaError(message.error);return;}
     if(type==='vn_cast_art'&&message.type==='vn_cast_art'){const accepted=settingsPanel?.setCastArt(message.chatId,message.requestId,message.library);if(accepted&&active&&turn&&message.chatId===chatId())ctx.sendToBackend({type:'vn_get_state',chatId:message.chatId,viewOpen:true,prepare:false});return;}
     if(type==='vn_cast_gallery'&&message.type==='vn_cast_gallery'){settingsPanel?.setCastGallery(message.chatId,message.requestId,message.gallery);return;}
     if(type==='vn_error'&&message.type==='vn_error'&&message.operation==='vn_cast_gallery'){if(message.chatId===chatId())settingsPanel?.castArtError(message.error,message.requestId);return;}

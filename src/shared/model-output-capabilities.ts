@@ -46,19 +46,26 @@ export function chooseModelOutput(capabilities:ModelOutputCapabilities,parameter
  let size:string|undefined;
  const pref=resolutionPreference??'standard';
  const isKleinSquare=sizes.includes('768x768')&&sizes.includes('1024x1024')&&sizes.includes('4096x4096');
- const targetArea=isKleinSquare?(pref==='standard'?1024*1024:1536*1536):(pref==='ultra'?4096*4096:pref==='high'?2048*2048:1024*1024);
- const requestedArea=(pref==='standard'&&current?area(current):undefined)??targetArea;
+ const isKlein2=sizes.includes('1024*1024')&&sizes.includes('1280*720')&&sizes.includes('720*1280')&&sizes.includes('1536*1536')&&!sizes.includes('2048*2048');
+ const effectivePref=isKleinSquare||isKlein2?'standard':pref;
+ const targetArea=isKleinSquare||isKlein2?1024*1024:(effectivePref==='ultra'?4096*4096:effectivePref==='high'?2048*2048:1024*1024);
+ const validCurrent=current&&sizes.includes(current)?current:undefined;
+ const keepCurrent=validCurrent&&(pref==='standard'||(area(validCurrent)!==undefined&&area(validCurrent)!<=1024*1024))?validCurrent:undefined;
+ const requestedArea=(effectivePref==='standard'&&keepCurrent?area(keepCurrent):undefined)??targetArea;
+ const standardSizes=effectivePref==='standard'?sizes.filter(v=>{const a=area(v);return a!==undefined&&a<=1024*1024;}):[];
+ const pixelPool=standardSizes.length>0?standardSizes:sizes;
  // Prefer framing, then the nearest existing pixel area. Tier-only routes keep a valid tier.
- if(requested&&!capabilities.ratios)size=closest(sizes,requested.value,requestedArea);
- if(pref==='standard')size??=sizes.includes(current)?current:undefined;
- if(pref==='ultra'){
+ if(isKleinSquare){size=keepCurrent??'1024x1024';}
+ else if(requested&&!capabilities.ratios)size=closest(pixelPool,requested.value,requestedArea);
+ if(effectivePref==='standard')size??=keepCurrent;
+ if(effectivePref==='ultra'){
   size??=sizes.find(value=>value.toLowerCase()==='4k')??sizes.find(value=>value.toLowerCase()==='2k')??sizes.find(value=>/^\d+(?:\.\d+)?k$/i.test(value));
- }else if(pref==='high'){
+ }else if(effectivePref==='high'){
   size??=sizes.find(value=>value.toLowerCase()==='2k')??sizes.find(value=>value.toLowerCase()==='1k')??sizes.find(value=>/^\d+(?:\.\d+)?k$/i.test(value));
  }else{
   size??=sizes.find(value=>value.toLowerCase()==='1k')??sizes.find(value=>/^\d+(?:\.\d+)?k$/i.test(value));
  }
- size??=closest(sizes,requested?.value??1,requestedArea)??sizes[0]!;
+ size??=closest(pixelPool,requested?.value??1,requestedArea)??sizes[0]!;
  result.size=size;
  delete result.width;delete result.height;delete result.resolution;
  let actual=ratio(size);

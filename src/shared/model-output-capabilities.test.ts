@@ -50,3 +50,16 @@ test('raw nulls cannot hide unsupported outgoing fields behind valid visible val
  expect(()=>assertCapabilityOutput(caps,{size:'1k',rawRequestOverride:{size:null}})).toThrow('null');
  expect(()=>assertCapabilityOutput(caps,{size:'1k',aspectRatio:'9:16',rawRequestOverride:{aspect_ratio:null}})).toThrow('null');
 });
+
+
+test('FLUX Klein models auto-select 1K standard sizes under high/ultra preferences or unsupported portrait template dimensions',()=>{
+ const flux3Caps=parseOutputCapabilities({resolutions:['768x768','1024x1024','1536x1536','2048x2048','4096x4096']})!;
+ expect(chooseModelOutput(flux3Caps,{size:'864x1536'},'9:16','high').parameters.size).toBe('1024x1024');
+ expect(chooseModelOutput(flux3Caps,{size:'1536x1536'},'1:1','ultra').parameters.size).toBe('1024x1024');
+ expect(chooseModelOutput(flux3Caps,{size:'1536x1536'},'9:16','standard').parameters.size).toBe('1536x1536');
+
+ const flux2Caps=parseOutputCapabilities({resolutions:['1024*1024','1280*720','720*1280','1536*1536']})!;
+ expect(chooseModelOutput(flux2Caps,{size:'1536*1536'},'9:16','high').parameters.size).toBe('720*1280');
+ expect(chooseModelOutput(flux2Caps,{size:'1536*1536'},'16:9','ultra').parameters.size).toBe('1280*720');
+ expect(chooseModelOutput(flux2Caps,{size:'1536*1536'},'1:1','high').parameters.size).toBe('1024*1024');
+});

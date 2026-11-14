@@ -45,16 +45,16 @@ export function linkEntityMentions(text:string,entities:readonly PresentationEnt
  if(prefs.linking==='menu-only'||text.length>20000||limit<=0)return [];
  const eligible=eligibleEntities(entities,prefs,chatId).filter(e=>!excludedEntityIds.has(e.id)||entityOverride(prefs,chatId,e)?.pinned);
  const owners=new Map<string,Set<string>>();
- for(const e of entities)for(const name of [e.name,...e.aliases]){const ids=owners.get(name)??new Set<string>();ids.add(e.id);owners.set(name,ids);}
+ for(const e of entities)for(const name of [e.name,...e.aliases]){const key=name.trim().toLowerCase();if(!key)continue;const ids=owners.get(key)??new Set<string>();ids.add(e.id);owners.set(key,ids);}
  const excluded=[...protectedRanges,...[...text.matchAll(/`[^`]*`|\[[^\]]*\]\([^)]*\)/g)].map(m=>[m.index!,m.index!+m[0].length] as const)];
  const candidates:Array<DossierAnchor&{pinned:boolean}>=[];
- for(const e of eligible)for(const name of [e.name,...e.aliases]) {
-  if(owners.get(name)?.size!==1||/^(?:he|she|they|it|you|we|i|him|her|them)$/i.test(name))continue;
-  let start=text.indexOf(name),scanned=0;
-  while(start>=0&&scanned++<12) {
-   const end=start+name.length, before=Array.from(text.slice(Math.max(0,start-2),start)).at(-1)??'',after=Array.from(text.slice(end,end+2))[0]??'';
+ for(const e of eligible)for(const name of [e.name,...e.aliases]) {const key=name.trim().toLowerCase();
+  if((/^[\x00-\x7F]+$/.test(key)&&key.length<3)||owners.get(key)?.size!==1||/^(?:he|she|they|it|you|we|i|him|her|them|me|us|the|a|an|in|on|at|to|of|or|by|as|is|go|do|so|no|up|my)$/i.test(key))continue;
+  const nameRe=new RegExp(name.trim().replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'giu');let m:RegExpExecArray|null;let scanned=0;
+  while((m=nameRe.exec(text))&&scanned++<12) {if(m[0].length===0){nameRe.lastIndex++;continue;}const start=m.index;
+   const end=start+(m[0].length), before=Array.from(text.slice(Math.max(0,start-2),start)).at(-1)??'',after=Array.from(text.slice(end,end+2))[0]??'';
    if(!/[\p{L}\p{N}_]/u.test(before)&&!/[\p{L}\p{N}_]/u.test(after)&&!excluded.some(([a,b])=>start>=a!&&start<b!))candidates.push({start,end,entityId:e.id,pinned:entityOverride(prefs,chatId,e)?.pinned===true});
-   start=text.indexOf(name,end);
+
   }
  }
  candidates.sort((a,b)=>Number(b.pinned)-Number(a.pinned)||a.start-b.start||b.end-a.end);

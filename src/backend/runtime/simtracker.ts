@@ -1,7 +1,7 @@
 import {parseDocument} from "yaml";
 import { normalizeTrackerMappings, readMappedTrackerValues, type TrackerMappings } from "../../shared/tracker-mappings.js";
-export type TrackerMessage = { id: string; content: string };
-export type TrackerCharacter = { name: string; aliases: string[]; present: boolean | null; identity: string; attire: string; sceneState: string };
+export type TrackerMessage = { id: string; content: string; swipe_id?: number | string | null };
+export type TrackerCharacter = { name: string; aliases: string[]; present: boolean | null; identity: string; attire: string; sceneState: string; relationship?: string; affection?: number; trust?: number; desire?: number; stress?: number; dynamicLabel?: string };
 export type SimTrackerEvidence = {
   status: "detected" | "not_found" | "unsupported" | "malformed";
   sourceMessageId?: string;
@@ -59,6 +59,18 @@ function character(value: unknown, mappings: TrackerMappings): TrackerCharacter 
     a.description, a.summary, a.visual, a.details, a.overview, r.identity_anchor
   );
 
+  const numOrUndef = (v: unknown): number | undefined => {
+    if (typeof v === "number" && Number.isFinite(v)) return Math.round(v);
+    if (typeof v === "string" && /^-?\d+(?:\.\d+)?$/.test(v.trim())) return Math.round(Number(v.trim()));
+    return undefined;
+  };
+  const relationshipStr = first(scalar(r.relationship), scalar(r.rel), scalar(r.relationshipstatus), scalar(r.relationship_status), scalar(r.bond), scalar(r.status));
+  const affectionNum = numOrUndef(r.affection ?? r.affinity ?? r.love ?? r.romance);
+  const trustNum = numOrUndef(r.trust);
+  const desireNum = numOrUndef(r.desire ?? r.lust);
+  const stressNum = numOrUndef(r.stress);
+  const dynamicStr = first(scalar(r.dynamic), scalar(r.dynamiclabel), scalar(r.dynamic_label));
+
   return {
     name: name.slice(0, 160), aliases, present,
     identity: join([
@@ -89,7 +101,13 @@ function character(value: unknown, mappings: TrackerMappings): TrackerCharacter 
       r.position, r.zone, r.condition, r.hands, r.blocking, r.visual_state, r.visualstate, r.current_action, r.action,
       live.position, live.condition, performance.expression, performance.gesture,
       ...readMappedTrackerValues(r, mappings.sceneState)
-    ], 1400)
+    ], 1400),
+    ...(relationshipStr ? { relationship: relationshipStr.slice(0, 300) } : {}),
+    ...(affectionNum !== undefined ? { affection: affectionNum } : {}),
+    ...(trustNum !== undefined ? { trust: trustNum } : {}),
+    ...(desireNum !== undefined ? { desire: desireNum } : {}),
+    ...(stressNum !== undefined ? { stress: stressNum } : {}),
+    ...(dynamicStr ? { dynamicLabel: dynamicStr.slice(0, 160) } : {})
   };
 }
 
@@ -134,12 +152,13 @@ export function scanTrackerCastHistory(messages:readonly TrackerMessage[],target
  const target=targetMessageId?messages.findIndex(m=>m.id===targetMessageId):messages.length-1;
  const effectiveTarget=target>=0?target:messages.length-1;
  if(effectiveTarget<0)return [];
- const result:Array<{character:TrackerCharacter,messageId:string}>=[];
+ const result:Array<{character:TrackerCharacter,messageId:string,swipeId:number}>=[];
  for(const message of messages.slice(Math.max(0,effectiveTarget-29),effectiveTarget+1).reverse()){
   if(message.content.length>64000)continue;
+  const swipeId = typeof message.swipe_id === "number" && Number.isFinite(message.swipe_id) ? message.swipe_id : typeof message.swipe_id === "string" && /^\d+$/.test(message.swipe_id) ? Number(message.swipe_id) : 0;
   for(const block of trackerBlocks(message.content)){
    const evidence=extractSimTracker([{id:message.id,content:`<tracker>${block[1]}</tracker>`}],message.id,mappings);
-   for(const character of evidence.cast)result.push({character,messageId:message.id});
+   for(const character of evidence.cast)result.push({character,messageId:message.id,swipeId});
   }
  }
  return result;

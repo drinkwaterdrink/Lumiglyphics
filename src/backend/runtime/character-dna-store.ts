@@ -43,7 +43,7 @@ export async function saveCharacterDNA(spindle:SpindleAPI,chatId:string,dna:Char
   if(existing&&(existing.id!==parsed.id||existing.name!==parsed.name))throw new Error('This character already exists. Open its saved profile or merge identities explicitly.');
   const id=existing?.id??parsed.id;parsed.fieldSources={...existing?.fieldSources,...parsed.fieldSources};
   for(const path of DNA_FIELDS)if(JSON.stringify(existing&&dnaFieldValue(existing,path))!==JSON.stringify(dnaFieldValue(parsed,path)))parsed.fieldSources[path]={classification:'manual',sources:[]};
-  l.characters[id]={...parsed,id};
+  l.characters[id]={...parsed,id,...(existing?.autoDiscovered||parsed.autoDiscovered?{autoDiscovered:false}:{})};
  });
 }
 export async function getEffectiveCharacterDNA(spindle:SpindleAPI,chatId:string,identity:string,userId?:string):Promise<CharacterDNA|null>{return findCharacterDNA((await loadCharacterDNALibrary(spindle,chatId,userId)).characters,identity)??null;}
