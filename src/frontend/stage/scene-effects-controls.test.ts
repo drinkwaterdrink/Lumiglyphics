@@ -125,6 +125,11 @@ describe("Scene Effects Controls & New Immersive Effects", () => {
       "underwater_bubbles",
       "floating_runes",
       "snowstorm",
+      "sandstorm",
+      "spores",
+      "aurora",
+      "candlelight_warmth",
+      "neon_haze",
     ] as const;
 
     const nodeCount = (html: string) => (html.match(/<(?:i|b|div|svg|path|polygon|rect|g)\b/g) ?? []).length;
@@ -162,6 +167,27 @@ describe("Scene Effects Controls & New Immersive Effects", () => {
     stage.triggerEffect("cinema_bars");
     expect(fx.innerHTML).toContain("vn-cinema-bar--top");
     expect(fx.innerHTML).toContain("vn-cinema-bar--bottom");
+
+    for (const [fxId, expectedClass] of [
+      ["slash_arc", "vn-fx-slash"],
+      ["shockwave", "vn-fx-shockwave"],
+      ["lens_flare", "vn-fx-lens-flare"],
+      ["shatter", "vn-fx-shatter"],
+    ] as const) {
+      expect(StageEffectSchema.safeParse(fxId).success).toBe(true);
+      stage.triggerEffect(fxId);
+      expect(fx.innerHTML).toContain(expectedClass);
+      const html = generateCueEffectMarkup(fxId);
+      expect(html).toBe(generateCueEffectMarkup(fxId));
+      expect((html.match(/<(?:i|b|div|svg|path|polygon|rect|polyline|g)\b/g) ?? []).length).toBeLessThanOrEqual(120);
+    }
+
+    for (const amb of AmbientEffectSchema.options) {
+      expect(ALL_SCENE_EFFECT_IDS).toContain(amb);
+    }
+    for (const fxId of StageEffectSchema.options) {
+      expect(ALL_SCENE_EFFECT_IDS).toContain(fxId);
+    }
   });
 
   test("SCENE_EFFECT_CATEGORIES covers all catalog effect ids and provides human descriptions", () => {

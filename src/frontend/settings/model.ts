@@ -671,6 +671,11 @@ export const SCENE_EFFECT_CATEGORIES: ReadonlyArray<SceneEffectCategory> = [
       { id: "floating_runes", label: "Floating Runes", desc: "Ethereal mystic sigils and arcane glyphs" },
       { id: "underwater_bubbles", label: "Underwater Bubbles", desc: "Aquatic rising bubbles and water caustics" },
       { id: "shooting_stars", label: "Shooting Stars", desc: "Meteors streaking across starry night skies" },
+      { id: "sandstorm", label: "Desert Sandstorm", desc: "Swirling desert grit gusts and warm ochre haze" },
+      { id: "spores", label: "Bioluminescent Spores", desc: "Drifting luminous twilight spores for caves and woods" },
+      { id: "aurora", label: "Aurora Borealis", desc: "Shimmering emerald and violet polar ribbons across night skies" },
+      { id: "candlelight_warmth", label: "Candlelight & Hearth", desc: "Warm flickering amber hearth glow and gentle golden motes" },
+      { id: "neon_haze", label: "Neon Haze", desc: "Cyberpunk cyan-magenta prism wash and holographic scan sheen" },
     ]
   },
   {
@@ -717,6 +722,10 @@ export const SCENE_EFFECT_CATEGORIES: ReadonlyArray<SceneEffectCategory> = [
       { id: "sparkle_burst", label: "Sparkle Burst", desc: "Twinkling starburst on magic, epiphanies, or joy" },
       { id: "hearts_burst", label: "Hearts Burst", desc: "Floating heart blossoms on romance, kisses, and love" },
       { id: "confetti", label: "Confetti", desc: "Celebration confetti blast on victories and parties" },
+      { id: "slash_arc", label: "Blade Slash Arc", desc: "Crisp diagonal sword or claw strike arc with luminous trail" },
+      { id: "shockwave", label: "Force Shockwave", desc: "Expanding radial shockwave ripple on magic blasts and impacts" },
+      { id: "lens_flare", label: "Anamorphic Flare", desc: "Dramatic optical light flare sweep on heroic entrances and reveals" },
+      { id: "shatter", label: "Crystal Shatter", desc: "Jagged ice or glass fracture lines on broken barriers and reveals" },
     ]
   }
 ];

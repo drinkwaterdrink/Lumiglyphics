@@ -21143,6 +21143,11 @@ var AmbientEffectSchema = exports_external.enum([
   "floating_runes",
   "underwater_bubbles",
   "shooting_stars",
+  "sandstorm",
+  "spores",
+  "aurora",
+  "candlelight_warmth",
+  "neon_haze",
   "vignette_dark",
   "sepia_flashback",
   "desaturate",
@@ -21207,7 +21212,11 @@ var StageEffectSchema = exports_external.enum([
   "hearts_burst",
   "confetti",
   "glitch",
-  "cinema_bars"
+  "cinema_bars",
+  "slash_arc",
+  "shockwave",
+  "lens_flare",
+  "shatter"
 ]);
 var PlannerShotHintSchema = exports_external.object({
   intent: ShotIntentSchema.optional(),
@@ -22231,7 +22240,19 @@ function musicTrackForPosition(input2) {
   }
   return track;
 }
-var weatherEffects = new Set(["rain", "heavy_rain", "snow", "fog"]);
+var weatherEffects = new Set(["rain", "heavy_rain", "snow", "snowstorm", "fog"]);
+var OUTDOOR_WEATHER_AMBIENTS = new Set([
+  "rain",
+  "heavy_rain",
+  "snow",
+  "snowstorm",
+  "fog",
+  "autumn_leaves",
+  "sakura",
+  "shooting_stars",
+  "sandstorm",
+  "aurora"
+]);
 
 // src/shared/reading-position.ts
 var ReadingPositionSchema = exports_external.object({
@@ -35754,6 +35775,323 @@ var VN_EFFECTS_CSS = `
   animation: vn-cinema-bar-bottom 450ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* -------------------------------------------------------------------------- */
+/* New Ambient Effects: Sandstorm, Bioluminescent Spores, Aurora,             */
+/* Candlelight & Hearth, Neon Haze                                            */
+/* -------------------------------------------------------------------------- */
+
+@keyframes vn-sand-blow {
+  0% { transform: translate3d(-14vw, 0, 0) scaleX(0.9); opacity: 0; }
+  18% { opacity: var(--o, 0.65); }
+  85% { opacity: var(--o, 0.65); }
+  100% { transform: translate3d(118vw, 6vh, 0) scaleX(1.3); opacity: 0; }
+}
+.vn-sandstorm-haze {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(125deg, rgba(180, 118, 48, 0.24) 0%, rgba(217, 160, 82, 0.14) 55%, rgba(154, 92, 34, 0.26) 100%);
+}
+.vn-sand-grain {
+  position: absolute;
+  width: var(--sz, 20px);
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(245, 208, 138, 0.85), rgba(217, 152, 72, 0.45));
+  pointer-events: none;
+  animation: vn-sand-blow var(--fd, 1.4s) linear var(--dl, 0s) infinite;
+}
+
+@keyframes vn-spore-float {
+  0% { transform: translate3d(0, 12px, 0) scale(0.7); opacity: 0; }
+  25% { opacity: var(--o, 0.78); }
+  50% { transform: translate3d(var(--dx, 18px), -28px, 0) scale(1.08); opacity: var(--o, 0.85); }
+  80% { opacity: var(--o, 0.68); }
+  100% { transform: translate3d(calc(var(--dx, 18px) * 1.4), -68px, 0) scale(0.65); opacity: 0; }
+}
+.vn-spores-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 80%, rgba(16, 185, 129, 0.15), transparent 65%);
+}
+.vn-spore {
+  position: absolute;
+  width: var(--sz, 6px);
+  height: var(--sz, 6px);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: vn-spore-float var(--fd, 9s) ease-in-out var(--dl, 0s) infinite;
+}
+.vn-spore--emerald {
+  background: radial-gradient(circle, rgba(167, 243, 208, 0.96) 0%, rgba(52, 211, 153, 0.45) 55%, transparent 100%);
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.55);
+}
+.vn-spore--cyan {
+  background: radial-gradient(circle, rgba(165, 243, 252, 0.96) 0%, rgba(34, 211, 238, 0.45) 55%, transparent 100%);
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.55);
+}
+
+@keyframes vn-aurora-wave {
+  0%, 100% { transform: translate3d(-4%, -2%, 0) scaleX(1) skewX(-8deg); opacity: 0.52; }
+  50% { transform: translate3d(4%, 3%, 0) scaleX(1.08) skewX(6deg); opacity: 0.78; }
+}
+@keyframes vn-aurora-twinkle {
+  0%, 100% { transform: scale(0.75); opacity: 0.25; }
+  50% { transform: scale(1.15); opacity: var(--o, 0.75); }
+}
+.vn-aurora-veil {
+  position: absolute;
+  inset: 0 0 42% 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.vn-aurora-band {
+  position: absolute;
+  inset: -12% -12% 0 -12%;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+.vn-aurora-band--1 {
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.34) 0%, rgba(52, 211, 153, 0.16) 52%, transparent 100%);
+  animation: vn-aurora-wave 14s ease-in-out infinite;
+}
+.vn-aurora-band--2 {
+  background: linear-gradient(170deg, rgba(139, 92, 246, 0.24) 0%, rgba(34, 211, 238, 0.18) 55%, transparent 100%);
+  animation: vn-aurora-wave 19s ease-in-out -5s infinite reverse;
+}
+.vn-aurora-band--3 {
+  background: radial-gradient(ellipse at 52% 18%, rgba(110, 231, 183, 0.26), transparent 68%);
+  animation: vn-aurora-wave 11s ease-in-out -3s infinite;
+}
+.vn-aurora-star {
+  position: absolute;
+  width: var(--sz, 4px);
+  height: var(--sz, 4px);
+  border-radius: 50%;
+  background: rgba(236, 253, 245, 0.92);
+  box-shadow: 0 0 6px rgba(167, 243, 208, 0.65);
+  pointer-events: none;
+  animation: vn-aurora-twinkle var(--fd, 4s) ease-in-out var(--dl, 0s) infinite;
+}
+
+@keyframes vn-candle-flicker {
+  0%, 100% { transform: scale(1); opacity: 0.78; }
+  35% { transform: scale(1.03); opacity: 0.94; }
+  70% { transform: scale(0.985); opacity: 0.74; }
+}
+@keyframes vn-candle-mote-rise {
+  0% { transform: translate3d(0, 10px, 0) scale(0.7); opacity: 0; }
+  25% { opacity: var(--o, 0.6); }
+  75% { opacity: var(--o, 0.55); }
+  100% { transform: translate3d(var(--dx, 10px), -54px, 0) scale(0.5); opacity: 0; }
+}
+.vn-candle-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 78%, rgba(251, 146, 60, 0.22) 0%, rgba(245, 158, 11, 0.1) 42%, transparent 74%),
+    radial-gradient(ellipse at center, transparent 58%, rgba(41, 22, 8, 0.34) 100%);
+  animation: vn-candle-flicker 3.6s ease-in-out infinite;
+}
+.vn-candle-mote {
+  position: absolute;
+  width: var(--sz, 4px);
+  height: var(--sz, 4px);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(254, 240, 138, 0.95) 0%, rgba(251, 146, 60, 0.45) 60%, transparent 100%);
+  pointer-events: none;
+  animation: vn-candle-mote-rise var(--fd, 8s) ease-in-out var(--dl, 0s) infinite;
+}
+
+@keyframes vn-neon-scan-drift {
+  0% { transform: translate3d(0, -12%, 0); opacity: 0.28; }
+  50% { transform: translate3d(0, 12%, 0); opacity: 0.48; }
+  100% { transform: translate3d(0, -12%, 0); opacity: 0.28; }
+}
+@keyframes vn-neon-prism-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(0.85); opacity: 0.25; }
+  50% { transform: translate3d(var(--dx, 12px), -18px, 0) scale(1.1); opacity: var(--o, 0.65); }
+}
+.vn-neon-wash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(125deg, rgba(6, 182, 212, 0.16) 0%, transparent 44%, rgba(236, 72, 153, 0.16) 100%);
+  mix-blend-mode: screen;
+}
+.vn-neon-scan {
+  position: absolute;
+  inset: -15% 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(34, 211, 238, 0.05) 0px, rgba(34, 211, 238, 0.05) 2px, transparent 2px, transparent 6px);
+  animation: vn-neon-scan-drift 7s ease-in-out infinite;
+}
+.vn-neon-prism {
+  position: absolute;
+  width: var(--sz, 5px);
+  height: var(--sz, 5px);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: vn-neon-prism-drift var(--fd, 7s) ease-in-out var(--dl, 0s) infinite;
+}
+.vn-neon-prism--cyan {
+  background: radial-gradient(circle, rgba(165, 243, 252, 0.95), rgba(6, 182, 212, 0.4) 60%, transparent 100%);
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.5);
+}
+.vn-neon-prism--magenta {
+  background: radial-gradient(circle, rgba(251, 207, 232, 0.95), rgba(236, 72, 153, 0.4) 60%, transparent 100%);
+  box-shadow: 0 0 8px rgba(236, 72, 153, 0.5);
+}
+
+/* -------------------------------------------------------------------------- */
+/* New One-Shot Stage Effects: Slash Arc, Shockwave, Lens Flare, Shatter      */
+/* -------------------------------------------------------------------------- */
+
+@keyframes vn-slash-cut {
+  0% { transform: translate3d(-12%, 12%, 0) scale(0.5); opacity: 0; }
+  22% { transform: translate3d(0, 0, 0) scale(1.04); opacity: 1; }
+  100% { transform: translate3d(6%, -6%, 0) scale(1.08); opacity: 0; }
+}
+@keyframes vn-slash-spark-fly {
+  0% { transform: translate3d(0, 0, 0) scale(1); opacity: 1; }
+  100% { transform: translate3d(var(--tx, 20px), var(--ty, -20px), 0) scale(0.2); opacity: 0; }
+}
+.vn-fx-slash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.vn-slash-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  animation: vn-slash-cut 480ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.vn-slash-spark {
+  position: absolute;
+  width: var(--sz, 5px);
+  height: var(--sz, 5px);
+  border-radius: 50%;
+  background: #e0f2fe;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.9);
+  pointer-events: none;
+  animation: vn-slash-spark-fly 460ms ease-out both;
+}
+
+@keyframes vn-shockwave-expand {
+  0% { transform: translate3d(-50%, -50%, 0) scale(0.12); opacity: 0.95; }
+  65% { opacity: 0.55; }
+  100% { transform: translate3d(-50%, -50%, 0) scale(1.75); opacity: 0; }
+}
+.vn-fx-shockwave {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.vn-shockwave-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 72vmin;
+  height: 72vmin;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.vn-shockwave-ring--outer {
+  border: 3px solid rgba(224, 242, 254, 0.85);
+  box-shadow: 0 0 28px rgba(56, 189, 248, 0.55), inset 0 0 22px rgba(255, 255, 255, 0.35);
+  animation: vn-shockwave-expand 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.vn-shockwave-ring--inner {
+  border: 2px solid rgba(255, 255, 255, 0.75);
+  animation: vn-shockwave-expand 520ms cubic-bezier(0.16, 1, 0.3, 1) 70ms both;
+}
+
+@keyframes vn-lens-flare-sweep {
+  0% { transform: translate3d(-25%, 0, 0) scaleX(0.45); opacity: 0; }
+  30% { transform: translate3d(0, 0, 0) scaleX(1.1); opacity: 0.95; }
+  100% { transform: translate3d(25%, 0, 0) scaleX(0.75); opacity: 0; }
+}
+@keyframes vn-lens-halo-pulse {
+  0% { transform: translate3d(-50%, -50%, 0) scale(0.4); opacity: 0; }
+  35% { transform: translate3d(-50%, -50%, 0) scale(1.05); opacity: 0.82; }
+  100% { transform: translate3d(-50%, -50%, 0) scale(1.35); opacity: 0; }
+}
+.vn-fx-lens-flare {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+.vn-flare-streak {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  top: 38%;
+  height: 16%;
+  background: linear-gradient(90deg, transparent 0%, rgba(56, 189, 248, 0.35) 28%, rgba(254, 240, 138, 0.85) 50%, rgba(251, 146, 60, 0.42) 72%, transparent 100%);
+  pointer-events: none;
+  animation: vn-lens-flare-sweep 840ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.vn-flare-core {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 34vmin;
+  height: 34vmin;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.92) 0%, rgba(253, 224, 71, 0.45) 36%, transparent 72%);
+  pointer-events: none;
+  animation: vn-lens-halo-pulse 820ms ease-out both;
+}
+.vn-flare-halo {
+  position: absolute;
+  left: 62%;
+  top: 42%;
+  width: 48vmin;
+  height: 48vmin;
+  border-radius: 50%;
+  background: radial-gradient(circle, transparent 48%, rgba(56, 189, 248, 0.28) 62%, rgba(251, 191, 36, 0.2) 72%, transparent 82%);
+  pointer-events: none;
+  animation: vn-lens-halo-pulse 860ms ease-out 40ms both;
+}
+
+@keyframes vn-shatter-web-flash {
+  0% { transform: scale(0.92); opacity: 0; }
+  16% { transform: scale(1); opacity: 0.95; }
+  100% { transform: scale(1.06); opacity: 0; }
+}
+@keyframes vn-shatter-shard-fly {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); opacity: 0.95; }
+  100% { transform: translate3d(var(--tx, 60px), var(--ty, 40px), 0) rotate(var(--rot, 90deg)) scale(0.45); opacity: 0; }
+}
+.vn-fx-shatter {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.vn-shatter-web {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  animation: vn-shatter-web-flash 640ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.vn-shatter-shard {
+  position: absolute;
+  width: var(--sz, 14px);
+  height: var(--sz, 14px);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(186, 230, 253, 0.65) 100%);
+  clip-path: polygon(50% 0%, 100% 62%, 18% 100%);
+  pointer-events: none;
+  animation: vn-shatter-shard-fly 640ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 `;
 
 // src/frontend/stage/procedural-particles.ts
@@ -35805,6 +36143,16 @@ function generateAmbientMarkup(effect) {
       return generateFloatingRunesMarkup();
     case "snowstorm":
       return generateSnowstormMarkup();
+    case "sandstorm":
+      return generateSandstormMarkup();
+    case "spores":
+      return generateSporesMarkup();
+    case "aurora":
+      return generateAuroraMarkup();
+    case "candlelight_warmth":
+      return generateCandlelightMarkup();
+    case "neon_haze":
+      return generateNeonHazeMarkup();
     case "vignette_dark":
     case "sepia_flashback":
     case "desaturate":
@@ -35829,6 +36177,14 @@ function generateCueEffectMarkup(effect) {
       return generateGlitchMarkup();
     case "cinema_bars":
       return generateCinemaBarsMarkup();
+    case "slash_arc":
+      return generateSlashArcMarkup();
+    case "shockwave":
+      return generateShockwaveMarkup();
+    case "lens_flare":
+      return generateLensFlareMarkup();
+    case "shatter":
+      return generateShatterMarkup();
     default:
       return "";
   }
@@ -36263,6 +36619,135 @@ function generateGlitchMarkup() {
 }
 function generateCinemaBarsMarkup() {
   return `<div class="vn-cinema-bar vn-cinema-bar--top"></div><div class="vn-cinema-bar vn-cinema-bar--bottom"></div>`;
+}
+function generateSandstormMarkup() {
+  const count = 42;
+  const grains = [];
+  for (let i = 0;i < count; i++) {
+    const dur = pseudo(141, i, 0.9, 2);
+    grains.push(`<i class="vn-pt vn-sand-grain" style="${vars({
+      left: `${n(pseudo(140, i, -15, 25))}%`,
+      top: `${n(strat(142, i, count, 2, 98))}%`,
+      "--sz": `${n(pseudo(143, i, 12, 34))}px`,
+      "--o": n(pseudo(144, i, 0.4, 0.85), 2),
+      "--fd": `${n(dur, 2)}s`,
+      "--dl": `${n(-pseudo(145, i, 0, dur), 2)}s`
+    })}"></i>`);
+  }
+  return `<div class="vn-sandstorm-haze"></div><div class="vn-fx-layer vn-sandstorm-gusts">${grains.join("")}</div>`;
+}
+function generateSporesMarkup() {
+  const count = 30;
+  const spores = [];
+  for (let i = 0;i < count; i++) {
+    const dur = pseudo(151, i, 6.5, 13);
+    spores.push(`<i class="vn-pt vn-spore vn-spore--${i % 2 === 0 ? "emerald" : "cyan"}" style="${vars({
+      left: `${n(strat(150, i, count, 2, 98))}%`,
+      top: `${n(pseudo(152, i, 18, 96))}%`,
+      "--sz": `${n(pseudo(153, i, 4, 10))}px`,
+      "--dx": `${n(pseudo(154, i, -36, 36))}px`,
+      "--o": n(pseudo(155, i, 0.45, 0.92), 2),
+      "--fd": `${n(dur, 2)}s`,
+      "--dl": `${n(-pseudo(156, i, 0, dur), 2)}s`
+    })}"></i>`);
+  }
+  return `<div class="vn-spores-glow"></div><div class="vn-fx-layer vn-spores">${spores.join("")}</div>`;
+}
+function generateAuroraMarkup() {
+  const glints = [];
+  const count = 20;
+  for (let i = 0;i < count; i++) {
+    const dur = pseudo(161, i, 2.8, 5.5);
+    glints.push(`<i class="vn-pt vn-aurora-star" style="${vars({
+      left: `${n(strat(160, i, count, 3, 97))}%`,
+      top: `${n(pseudo(162, i, 3, 46))}%`,
+      "--sz": `${n(pseudo(163, i, 3, 6))}px`,
+      "--o": n(pseudo(164, i, 0.35, 0.85), 2),
+      "--fd": `${n(dur, 2)}s`,
+      "--dl": `${n(-pseudo(165, i, 0, dur), 2)}s`
+    })}"></i>`);
+  }
+  return `<div class="vn-aurora-veil"><div class="vn-aurora-band vn-aurora-band--1"></div><div class="vn-aurora-band vn-aurora-band--2"></div><div class="vn-aurora-band vn-aurora-band--3"></div></div><div class="vn-fx-layer vn-aurora">${glints.join("")}</div>`;
+}
+function generateCandlelightMarkup() {
+  const count = 22;
+  const motes = [];
+  for (let i = 0;i < count; i++) {
+    const dur = pseudo(171, i, 5.5, 11);
+    motes.push(`<i class="vn-pt vn-candle-mote" style="${vars({
+      left: `${n(strat(170, i, count, 6, 94))}%`,
+      top: `${n(pseudo(172, i, 30, 96))}%`,
+      "--sz": `${n(pseudo(173, i, 3.2, 6.5))}px`,
+      "--dx": `${n(pseudo(174, i, -18, 18))}px`,
+      "--o": n(pseudo(175, i, 0.35, 0.78), 2),
+      "--fd": `${n(dur, 2)}s`,
+      "--dl": `${n(-pseudo(176, i, 0, dur), 2)}s`
+    })}"></i>`);
+  }
+  return `<div class="vn-candle-glow"></div><div class="vn-fx-layer vn-candle-motes">${motes.join("")}</div>`;
+}
+function generateNeonHazeMarkup() {
+  const count = 18;
+  const prisms = [];
+  for (let i = 0;i < count; i++) {
+    const dur = pseudo(181, i, 5, 9.5);
+    prisms.push(`<i class="vn-pt vn-neon-prism vn-neon-prism--${i % 2 === 0 ? "cyan" : "magenta"}" style="${vars({
+      left: `${n(strat(180, i, count, 4, 96))}%`,
+      top: `${n(pseudo(182, i, 8, 92))}%`,
+      "--sz": `${n(pseudo(183, i, 3.5, 8))}px`,
+      "--dx": `${n(pseudo(184, i, -22, 22))}px`,
+      "--o": n(pseudo(185, i, 0.28, 0.72), 2),
+      "--fd": `${n(dur, 2)}s`,
+      "--dl": `${n(-pseudo(186, i, 0, dur), 2)}s`
+    })}"></i>`);
+  }
+  return `<div class="vn-neon-wash"></div><div class="vn-neon-scan"></div><div class="vn-fx-layer vn-neon-prisms">${prisms.join("")}</div>`;
+}
+function generateSlashArcMarkup() {
+  const sparks = [];
+  for (let i = 0;i < 6; i++) {
+    sparks.push(`<i class="vn-pt vn-slash-spark" style="${vars({
+      left: `${n(18 + i * 13)}%`,
+      top: `${n(80 - i * 11.5)}%`,
+      "--sz": `${n(pseudo(190, i, 4, 7.5))}px`,
+      "--tx": `${n(pseudo(191, i, -36, 36))}px`,
+      "--ty": `${n(pseudo(192, i, -36, 36))}px`
+    })}"></i>`);
+  }
+  return `<div class="vn-fx-slash"><svg class="vn-slash-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d="M 8 88 Q 48 44 92 10 Q 52 52 12 92 Z" fill="rgba(165,243,252,0.85)"/><path d="M 10 89 Q 50 47 90 12 Q 50 49 11 90 Z" fill="rgba(255,255,255,0.96)"/></svg>${sparks.join("")}</div>`;
+}
+function generateShockwaveMarkup() {
+  return `<div class="vn-fx-shockwave"><div class="vn-shockwave-ring vn-shockwave-ring--outer"></div><div class="vn-shockwave-ring vn-shockwave-ring--inner"></div></div>`;
+}
+function generateLensFlareMarkup() {
+  return `<div class="vn-fx-lens-flare"><div class="vn-flare-halo"></div><div class="vn-flare-streak"></div><div class="vn-flare-core"></div></div>`;
+}
+function generateShatterMarkup() {
+  const shards = [];
+  for (let i = 0;i < 14; i++) {
+    const angle = i / 14 * Math.PI * 2 + pseudo(200, i, -0.2, 0.2);
+    const dist = pseudo(201, i, 65, 160);
+    shards.push(`<i class="vn-pt vn-shatter-shard" style="${vars({
+      left: `${n(50 + Math.cos(angle) * 8)}%`,
+      top: `${n(48 + Math.sin(angle) * 8)}%`,
+      "--sz": `${n(pseudo(202, i, 10, 22))}px`,
+      "--tx": `${n(Math.cos(angle) * dist)}px`,
+      "--ty": `${n(Math.sin(angle) * dist)}px`,
+      "--rot": `${n(pseudo(203, i, -180, 180))}deg`
+    })}"></i>`);
+  }
+  const cracks = [
+    "50,48 32,34 14,18",
+    "50,48 68,30 88,12",
+    "50,48 76,54 96,62",
+    "50,48 64,74 78,94",
+    "50,48 30,72 16,90",
+    "50,48 22,46 4,40",
+    "32,34 26,18",
+    "68,30 72,44",
+    "64,74 44,88"
+  ].map((pts) => `<polyline points="${pts}" fill="none" stroke="rgba(224,247,255,0.88)" stroke-width="0.55" stroke-linecap="round"/>`).join("");
+  return `<div class="vn-fx-shatter"><svg class="vn-shatter-web" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${cracks}</svg>${shards.join("")}</div>`;
 }
 
 // src/frontend/stage/rpg-hud.ts
@@ -41493,7 +41978,11 @@ var STAGE_EFFECT_IDS = new Set([
   "hearts_burst",
   "confetti",
   "glitch",
-  "cinema_bars"
+  "cinema_bars",
+  "slash_arc",
+  "shockwave",
+  "lens_flare",
+  "shatter"
 ]);
 var AMBIENT_EFFECT_IDS = new Set([
   "rain",
@@ -41509,6 +41998,11 @@ var AMBIENT_EFFECT_IDS = new Set([
   "floating_runes",
   "underwater_bubbles",
   "shooting_stars",
+  "sandstorm",
+  "spores",
+  "aurora",
+  "candlelight_warmth",
+  "neon_haze",
   "vignette_dark",
   "sepia_flashback",
   "desaturate",
@@ -43043,6 +43537,18 @@ class VnStage {
         break;
       case "cinema_bars":
         this.triggerFxBurst("cinema_bars", 1200);
+        break;
+      case "slash_arc":
+        this.triggerFxBurst("slash_arc", 520);
+        break;
+      case "shockwave":
+        this.triggerFxBurst("shockwave", 680);
+        break;
+      case "lens_flare":
+        this.triggerFxBurst("lens_flare", 880);
+        break;
+      case "shatter":
+        this.triggerFxBurst("shatter", 680);
         break;
     }
   }
@@ -45229,7 +45735,7 @@ Return:
     },
     "cast": ["Name1", "Name2"],
     "basePrompt": "comma-separated Danbooru/visual tags for location, lighting, and weather only",
-    "ambient": "rain | fog | heavy_rain | snow | null"
+    "ambient": "rain | fog | candlelight_warmth | sunbeams | neon_haze | null (only outdoor weather when outdoors; null or indoor-fit mood when enclosed indoors)"
   }],
   "cues": [{
     "paragraphIndex": 0,
@@ -48574,7 +49080,12 @@ var SCENE_EFFECT_CATEGORIES = [
       { id: "embers", label: "Floating Embers", desc: "Rising fiery sparks and glowing warm cinders" },
       { id: "floating_runes", label: "Floating Runes", desc: "Ethereal mystic sigils and arcane glyphs" },
       { id: "underwater_bubbles", label: "Underwater Bubbles", desc: "Aquatic rising bubbles and water caustics" },
-      { id: "shooting_stars", label: "Shooting Stars", desc: "Meteors streaking across starry night skies" }
+      { id: "shooting_stars", label: "Shooting Stars", desc: "Meteors streaking across starry night skies" },
+      { id: "sandstorm", label: "Desert Sandstorm", desc: "Swirling desert grit gusts and warm ochre haze" },
+      { id: "spores", label: "Bioluminescent Spores", desc: "Drifting luminous twilight spores for caves and woods" },
+      { id: "aurora", label: "Aurora Borealis", desc: "Shimmering emerald and violet polar ribbons across night skies" },
+      { id: "candlelight_warmth", label: "Candlelight & Hearth", desc: "Warm flickering amber hearth glow and gentle golden motes" },
+      { id: "neon_haze", label: "Neon Haze", desc: "Cyberpunk cyan-magenta prism wash and holographic scan sheen" }
     ]
   },
   {
@@ -48620,7 +49131,11 @@ var SCENE_EFFECT_CATEGORIES = [
     effects: [
       { id: "sparkle_burst", label: "Sparkle Burst", desc: "Twinkling starburst on magic, epiphanies, or joy" },
       { id: "hearts_burst", label: "Hearts Burst", desc: "Floating heart blossoms on romance, kisses, and love" },
-      { id: "confetti", label: "Confetti", desc: "Celebration confetti blast on victories and parties" }
+      { id: "confetti", label: "Confetti", desc: "Celebration confetti blast on victories and parties" },
+      { id: "slash_arc", label: "Blade Slash Arc", desc: "Crisp diagonal sword or claw strike arc with luminous trail" },
+      { id: "shockwave", label: "Force Shockwave", desc: "Expanding radial shockwave ripple on magic blasts and impacts" },
+      { id: "lens_flare", label: "Anamorphic Flare", desc: "Dramatic optical light flare sweep on heroic entrances and reveals" },
+      { id: "shatter", label: "Crystal Shatter", desc: "Jagged ice or glass fracture lines on broken barriers and reveals" }
     ]
   }
 ];
@@ -52862,7 +53377,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.151";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.152";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;

@@ -85,6 +85,16 @@ export function generateAmbientMarkup(effect: AmbientEffect): string {
       return generateFloatingRunesMarkup();
     case "snowstorm":
       return generateSnowstormMarkup();
+    case "sandstorm":
+      return generateSandstormMarkup();
+    case "spores":
+      return generateSporesMarkup();
+    case "aurora":
+      return generateAuroraMarkup();
+    case "candlelight_warmth":
+      return generateCandlelightMarkup();
+    case "neon_haze":
+      return generateNeonHazeMarkup();
     case "vignette_dark":
     case "sepia_flashback":
     case "desaturate":
@@ -112,6 +122,14 @@ export function generateCueEffectMarkup(effect: StageEffect): string {
       return generateGlitchMarkup();
     case "cinema_bars":
       return generateCinemaBarsMarkup();
+    case "slash_arc":
+      return generateSlashArcMarkup();
+    case "shockwave":
+      return generateShockwaveMarkup();
+    case "lens_flare":
+      return generateLensFlareMarkup();
+    case "shatter":
+      return generateShatterMarkup();
 
     default:
       return "";
@@ -673,4 +691,145 @@ function generateGlitchMarkup(): string {
 
 function generateCinemaBarsMarkup(): string {
   return `<div class="vn-cinema-bar vn-cinema-bar--top"></div><div class="vn-cinema-bar vn-cinema-bar--bottom"></div>`;
+}
+
+/* -------------------------------------------------------------------------- */
+/* New Ambient Effects: Sandstorm, Bioluminescent Spores, Aurora,             */
+/* Candlelight & Hearth, Neon Haze                                            */
+/* -------------------------------------------------------------------------- */
+
+function generateSandstormMarkup(): string {
+  const count = 42;
+  const grains: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const dur = pseudo(141, i, 0.9, 2.0);
+    grains.push(`<i class="vn-pt vn-sand-grain" style="${vars({
+      left: `${n(pseudo(140, i, -15, 25))}%`,
+      top: `${n(strat(142, i, count, 2, 98))}%`,
+      "--sz": `${n(pseudo(143, i, 12, 34))}px`,
+      "--o": n(pseudo(144, i, 0.4, 0.85), 2),
+      "--fd": `${n(dur, 2)}s`,
+      "--dl": `${n(-pseudo(145, i, 0, dur), 2)}s`,
+    })}"></i>`);
+  }
+  return `<div class="vn-sandstorm-haze"></div><div class="vn-fx-layer vn-sandstorm-gusts">${grains.join("")}</div>`;
+}
+
+function generateSporesMarkup(): string {
+  const count = 30;
+  const spores: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const dur = pseudo(151, i, 6.5, 13);
+    spores.push(`<i class="vn-pt vn-spore vn-spore--${i % 2 === 0 ? "emerald" : "cyan"}" style="${vars({
+      left: `${n(strat(150, i, count, 2, 98))}%`,
+      top: `${n(pseudo(152, i, 18, 96))}%`,
+      "--sz": `${n(pseudo(153, i, 4, 10))}px`,
+      "--dx": `${n(pseudo(154, i, -36, 36))}px`,
+      "--o": n(pseudo(155, i, 0.45, 0.92), 2),
+      "--fd": `${n(dur, 2)}s`,
+      "--dl": `${n(-pseudo(156, i, 0, dur), 2)}s`,
+    })}"></i>`);
+  }
+  return `<div class="vn-spores-glow"></div><div class="vn-fx-layer vn-spores">${spores.join("")}</div>`;
+}
+
+function generateAuroraMarkup(): string {
+  const glints: string[] = [];
+  const count = 20;
+  for (let i = 0; i < count; i++) {
+    const dur = pseudo(161, i, 2.8, 5.5);
+    glints.push(`<i class="vn-pt vn-aurora-star" style="${vars({
+      left: `${n(strat(160, i, count, 3, 97))}%`,
+      top: `${n(pseudo(162, i, 3, 46))}%`,
+      "--sz": `${n(pseudo(163, i, 3, 6))}px`,
+      "--o": n(pseudo(164, i, 0.35, 0.85), 2),
+      "--fd": `${n(dur, 2)}s`,
+      "--dl": `${n(-pseudo(165, i, 0, dur), 2)}s`,
+    })}"></i>`);
+  }
+  return `<div class="vn-aurora-veil"><div class="vn-aurora-band vn-aurora-band--1"></div><div class="vn-aurora-band vn-aurora-band--2"></div><div class="vn-aurora-band vn-aurora-band--3"></div></div><div class="vn-fx-layer vn-aurora">${glints.join("")}</div>`;
+}
+
+function generateCandlelightMarkup(): string {
+  const count = 22;
+  const motes: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const dur = pseudo(171, i, 5.5, 11);
+    motes.push(`<i class="vn-pt vn-candle-mote" style="${vars({
+      left: `${n(strat(170, i, count, 6, 94))}%`,
+      top: `${n(pseudo(172, i, 30, 96))}%`,
+      "--sz": `${n(pseudo(173, i, 3.2, 6.5))}px`,
+      "--dx": `${n(pseudo(174, i, -18, 18))}px`,
+      "--o": n(pseudo(175, i, 0.35, 0.78), 2),
+      "--fd": `${n(dur, 2)}s`,
+      "--dl": `${n(-pseudo(176, i, 0, dur), 2)}s`,
+    })}"></i>`);
+  }
+  return `<div class="vn-candle-glow"></div><div class="vn-fx-layer vn-candle-motes">${motes.join("")}</div>`;
+}
+
+function generateNeonHazeMarkup(): string {
+  const count = 18;
+  const prisms: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const dur = pseudo(181, i, 5.0, 9.5);
+    prisms.push(`<i class="vn-pt vn-neon-prism vn-neon-prism--${i % 2 === 0 ? "cyan" : "magenta"}" style="${vars({
+      left: `${n(strat(180, i, count, 4, 96))}%`,
+      top: `${n(pseudo(182, i, 8, 92))}%`,
+      "--sz": `${n(pseudo(183, i, 3.5, 8))}px`,
+      "--dx": `${n(pseudo(184, i, -22, 22))}px`,
+      "--o": n(pseudo(185, i, 0.28, 0.72), 2),
+      "--fd": `${n(dur, 2)}s`,
+      "--dl": `${n(-pseudo(186, i, 0, dur), 2)}s`,
+    })}"></i>`);
+  }
+  return `<div class="vn-neon-wash"></div><div class="vn-neon-scan"></div><div class="vn-fx-layer vn-neon-prisms">${prisms.join("")}</div>`;
+}
+
+/* -------------------------------------------------------------------------- */
+/* New One-Shot Stage Effects: Slash Arc, Shockwave, Lens Flare, Shatter      */
+/* -------------------------------------------------------------------------- */
+
+function generateSlashArcMarkup(): string {
+  const sparks: string[] = [];
+  for (let i = 0; i < 6; i++) {
+    sparks.push(`<i class="vn-pt vn-slash-spark" style="${vars({
+      left: `${n(18 + i * 13)}%`,
+      top: `${n(80 - i * 11.5)}%`,
+      "--sz": `${n(pseudo(190, i, 4, 7.5))}px`,
+      "--tx": `${n(pseudo(191, i, -36, 36))}px`,
+      "--ty": `${n(pseudo(192, i, -36, 36))}px`,
+    })}"></i>`);
+  }
+  return `<div class="vn-fx-slash"><svg class="vn-slash-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d="M 8 88 Q 48 44 92 10 Q 52 52 12 92 Z" fill="rgba(165,243,252,0.85)"/><path d="M 10 89 Q 50 47 90 12 Q 50 49 11 90 Z" fill="rgba(255,255,255,0.96)"/></svg>${sparks.join("")}</div>`;
+}
+
+function generateShockwaveMarkup(): string {
+  return `<div class="vn-fx-shockwave"><div class="vn-shockwave-ring vn-shockwave-ring--outer"></div><div class="vn-shockwave-ring vn-shockwave-ring--inner"></div></div>`;
+}
+
+function generateLensFlareMarkup(): string {
+  return `<div class="vn-fx-lens-flare"><div class="vn-flare-halo"></div><div class="vn-flare-streak"></div><div class="vn-flare-core"></div></div>`;
+}
+
+function generateShatterMarkup(): string {
+  const shards: string[] = [];
+  for (let i = 0; i < 14; i++) {
+    const angle = (i / 14) * Math.PI * 2 + pseudo(200, i, -0.2, 0.2);
+    const dist = pseudo(201, i, 65, 160);
+    shards.push(`<i class="vn-pt vn-shatter-shard" style="${vars({
+      left: `${n(50 + Math.cos(angle) * 8)}%`,
+      top: `${n(48 + Math.sin(angle) * 8)}%`,
+      "--sz": `${n(pseudo(202, i, 10, 22))}px`,
+      "--tx": `${n(Math.cos(angle) * dist)}px`,
+      "--ty": `${n(Math.sin(angle) * dist)}px`,
+      "--rot": `${n(pseudo(203, i, -180, 180))}deg`,
+    })}"></i>`);
+  }
+  const cracks = [
+    "50,48 32,34 14,18", "50,48 68,30 88,12", "50,48 76,54 96,62",
+    "50,48 64,74 78,94", "50,48 30,72 16,90", "50,48 22,46 4,40",
+    "32,34 26,18", "68,30 72,44", "64,74 44,88"
+  ].map(pts => `<polyline points="${pts}" fill="none" stroke="rgba(224,247,255,0.88)" stroke-width="0.55" stroke-linecap="round"/>`).join("");
+  return `<div class="vn-fx-shatter"><svg class="vn-shatter-web" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${cracks}</svg>${shards.join("")}</div>`;
 }

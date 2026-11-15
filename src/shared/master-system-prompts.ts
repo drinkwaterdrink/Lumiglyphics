@@ -70,7 +70,7 @@ Return:
     },
     "cast": ["Name1", "Name2"],
     "basePrompt": "comma-separated Danbooru/visual tags for location, lighting, and weather only",
-    "ambient": "rain | fog | heavy_rain | snow | null"
+    "ambient": "rain | fog | candlelight_warmth | sunbeams | neon_haze | null (only outdoor weather when outdoors; null or indoor-fit mood when enclosed indoors)"
   }],
   "cues": [{
     "paragraphIndex": 0,

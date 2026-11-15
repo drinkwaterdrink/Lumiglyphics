@@ -133,6 +133,11 @@ export const AmbientEffectSchema = z.enum([
   "floating_runes",
   "underwater_bubbles",
   "shooting_stars",
+  "sandstorm",
+  "spores",
+  "aurora",
+  "candlelight_warmth",
+  "neon_haze",
   "vignette_dark",
   "sepia_flashback",
   "desaturate",
@@ -203,7 +208,11 @@ export const StageEffectSchema = z.enum([
   "hearts_burst",
   "confetti",
   "glitch",
-  "cinema_bars"
+  "cinema_bars",
+  "slash_arc",
+  "shockwave",
+  "lens_flare",
+  "shatter"
 ]);
 export type StageEffect = z.infer<typeof StageEffectSchema>;
 

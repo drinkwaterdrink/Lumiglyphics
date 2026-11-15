@@ -22296,6 +22296,11 @@ var init_contracts = __esm(() => {
     "floating_runes",
     "underwater_bubbles",
     "shooting_stars",
+    "sandstorm",
+    "spores",
+    "aurora",
+    "candlelight_warmth",
+    "neon_haze",
     "vignette_dark",
     "sepia_flashback",
     "desaturate",
@@ -22360,7 +22365,11 @@ var init_contracts = __esm(() => {
     "hearts_burst",
     "confetti",
     "glitch",
-    "cinema_bars"
+    "cinema_bars",
+    "slash_arc",
+    "shockwave",
+    "lens_flare",
+    "shatter"
   ]);
   PlannerShotHintSchema = exports_external.object({
     intent: ShotIntentSchema.optional(),
@@ -22663,14 +22672,18 @@ function deriveWeatherAmbient(weather) {
   if (typeof weather !== "string")
     return null;
   const text = weather.slice(0, 2000).trim().toLowerCase().replace(/[_-]+/g, " ");
-  if (/\b(no|not|without|chance|possible|possibly|forecast|stopped|ended|cleared|clearing|dry|sunny|previously|earlier|might|may|could|would|if|unlikely)\b/.test(text) || /^clear\b|\bclear\s+(?:sky|skies|weather|night|day|morning|evening)\b|\bafter\s+(?:the\s+)?(?:rain|storm|snow|fog|downpour|blizzard)\b/.test(text))
+  if (/\b(no|not|without|chance|possible|possibly|forecast|stopped|ended|cleared|clearing|dry|sunny|previously|earlier|might|may|could|would|if|unlikely)\b/.test(text) || /^clear\b|\bclear\s+(?:sky|skies|weather|night|day|morning|evening)\b|\bafter\s+(?:the\s+)?(?:rain|storm|snow|fog|downpour|blizzard|sandstorm)\b/.test(text))
     return null;
   if (/\b(heavy rain(?:fall)?|downpour|rainstorm|thunderstorm|storm|stormy)\b/.test(text))
     return "heavy_rain";
-  if (/\b(blizzard|whiteout|snowstorm|heavy snow)\b/.test(text))
+  if (/\b(snowstorm)\b/.test(text))
+    return "snowstorm";
+  if (/\b(blizzard|whiteout|heavy snow|snow|snowfall|snowing|snowy|flurries)\b/.test(text))
     return "snow";
-  if (/\b(snow|snowfall|snowing|snowy|flurries)\b/.test(text))
-    return "snow";
+  if (/\b(sandstorm|dust storm|desert storm)\b/.test(text))
+    return "sandstorm";
+  if (/\b(aurora(?: borealis)?|northern lights)\b/.test(text))
+    return "aurora";
   if (/\b(rain|rainfall|raining|rainy|drizzle|drizzling|showers)\b/.test(text))
     return "rain";
   if (/\b(fog|foggy|mist|misty)\b/.test(text))
@@ -22685,20 +22698,82 @@ function deriveWeatherAmbient(weather) {
     return "sunbeams";
   return null;
 }
-function resolveSceneAmbient(input2) {
-  if (input2.explicit !== undefined)
-    return { ambient: input2.explicit, ambientSource: "explicit" };
-  const previous = input2.previous;
-  if (previous?.sameScene && previous.ambient !== undefined && (previous.ambientSource === "explicit" || previous.ambientSource === undefined && (previous.ambient === null || !weatherEffects.has(previous.ambient))))
-    return { ambient: previous.ambient, ambientSource: "explicit" };
-  const location = input2.location.slice(0, 2000).toLowerCase(), description = (input2.description ?? "").slice(0, 4000).toLowerCase();
-  const outdoor = /\b(outside|outdoor|outdoors|exterior|garden|terrace|balcony|courtyard|rooftop|street|park|forest|beach)\b/.test(location);
-  const interior = !outdoor && (/\b(inside|indoor|indoors|interior|room|hall|lounge|restaurant|bedroom|kitchen|bathroom|library|cafe|tavern|house|office|shop|cabin)\b/.test(location) || /^(?:inside|indoors|interior)\b/.test(description.trim()));
-  return { ambient: interior ? null : deriveWeatherAmbient(input2.weather), ambientSource: "weather" };
+function isEnclosedInterior(location, description = "") {
+  const loc = location.slice(0, 2000).toLowerCase(), desc = description.slice(0, 4000).toLowerCase();
+  if (/\b(?:inner\s+shrine|shrine\s+interior)\b/.test(loc))
+    return true;
+  const outdoor = OUTDOOR_LOCATION_RE.test(loc);
+  return !outdoor && (INTERIOR_LOCATION_RE.test(loc) || /^(?:inside|indoors|interior)\b/.test(desc.trim()));
 }
-var weatherEffects;
+function allowsAmbientIndoors(ambient, location, description = "") {
+  if (!OUTDOOR_WEATHER_AMBIENTS.has(ambient))
+    return true;
+  const text = `${location} ${stripWindowClauses(description)}`.toLowerCase();
+  if (ambient === "fog")
+    return /\b(bathhouse|hot\s+spring|onsen|sauna|steam\s+room|boiler\s+room|steam[- ]filled|clouds?\s+of\s+steam|thick\s+steam|smoke[- ]filled|thick\s+smoke|heavy\s+smoke|incense\s+(?:haze|smoke)|fog\s+fills|mist\s+(?:fills|inside))\b/.test(text);
+  return /\b(open[- ]air|roofless|no\s+roof|shattered\s+roof|collapsed\s+(?:roof|ceiling)|hole\s+in\s+the\s+(?:roof|ceiling))\b/.test(text);
+}
+function inferContextualAmbient(input2) {
+  const loc = input2.location.slice(0, 2000).toLowerCase();
+  const desc = stripWindowClauses((input2.description ?? "").slice(0, 4000)).toLowerCase();
+  const light = (input2.lighting ?? "").slice(0, 1000).toLowerCase();
+  const envText = `${loc} ${desc}`;
+  const litText = `${loc} ${desc} ${light}`;
+  if (/\b(underwater|beneath\s+the\s+(?:waves|surface|sea)|ocean\s+floor|seafloor|deep\s+sea|coral\s+reef|submerged)\b/.test(envText))
+    return "underwater_bubbles";
+  if (/\b(bioluminescen\w*|glowing\s+spores?|luminous\s+spores?|glowing\s+mushrooms?|fungal\s+spores?)\b/.test(envText))
+    return "spores";
+  if (/\b(fireflies|lightning\s+bugs?)\b/.test(envText))
+    return "fireflies";
+  if (/\b(embers|flying\s+sparks|wildfire|burning\s+ruins|raging\s+inferno|blazing\s+forge|molten\s+lava)\b/.test(envText))
+    return "embers";
+  if (/\b(sunbeams?|god\s+rays|shafts\s+of\s+(?:sunlight|light)|sunlight\s+streaming)\b/.test(litText))
+    return "sunbeams";
+  if (!input2.interior && /\b(aurora(?: borealis)?|northern\s+lights)\b/.test(envText))
+    return "aurora";
+  if (/\b(neon\s+(?:haze|lights?|signs?|lit)|holographic\s+haze|cyberpunk)\b/.test(litText))
+    return "neon_haze";
+  if (input2.interior && !/\b(pitch\s+(?:black|dark)|unlit|extinguished|snuffed|dungeon)\b/.test(litText) && /\b(fireplace|crackling\s+hearth|hearth\s+fire|roaring\s+fire|candlelit|candlelight|candelabra)\b/.test(litText))
+    return "candlelight_warmth";
+  return null;
+}
+function resolveSceneAmbient(input2) {
+  const interior = isEnclosedInterior(input2.location, input2.description ?? "");
+  const respect = Boolean(input2.respectEnclosure);
+  const isForbiddenIndoors = (effect) => Boolean(respect && interior && effect && !allowsAmbientIndoors(effect, input2.location, input2.description ?? ""));
+  const fallbackContext = () => respect ? inferContextualAmbient({ location: input2.location, description: input2.description, lighting: input2.lighting, timeOfDay: input2.timeOfDay, interior }) : null;
+  if (input2.explicit !== undefined) {
+    if (input2.explicit !== null && isForbiddenIndoors(input2.explicit)) {
+      return { ambient: fallbackContext(), ambientSource: "weather" };
+    }
+    return { ambient: input2.explicit, ambientSource: "explicit" };
+  }
+  const previous = input2.previous;
+  if (previous?.sameScene && previous.ambient !== undefined && (previous.ambientSource === "explicit" || previous.ambientSource === undefined && (previous.ambient === null || !weatherEffects.has(previous.ambient))) && !isForbiddenIndoors(previous.ambient)) {
+    return { ambient: previous.ambient, ambientSource: "explicit" };
+  }
+  const weather = deriveWeatherAmbient(input2.weather);
+  if (weather && (!interior || respect && allowsAmbientIndoors(weather, input2.location, input2.description ?? "")))
+    return { ambient: weather, ambientSource: "weather" };
+  return { ambient: fallbackContext(), ambientSource: "weather" };
+}
+var weatherEffects, OUTDOOR_WEATHER_AMBIENTS, OUTDOOR_LOCATION_RE, INTERIOR_LOCATION_RE, stripWindowClauses = (description) => description.replace(/\b(?:outside|beyond|through|against|past|out)\s+(?:the\s+|a\s+)?(?:windows?|windowpanes?|panes?|glass|shutters?|curtains?|blinds)\b[^.;!\n]*/gi, " ");
 var init_scene_atmosphere = __esm(() => {
-  weatherEffects = new Set(["rain", "heavy_rain", "snow", "fog"]);
+  weatherEffects = new Set(["rain", "heavy_rain", "snow", "snowstorm", "fog"]);
+  OUTDOOR_WEATHER_AMBIENTS = new Set([
+    "rain",
+    "heavy_rain",
+    "snow",
+    "snowstorm",
+    "fog",
+    "autumn_leaves",
+    "sakura",
+    "shooting_stars",
+    "sandstorm",
+    "aurora"
+  ]);
+  OUTDOOR_LOCATION_RE = /\b(outside|outdoor|outdoors|exterior|open[- ]air|garden|terrace|balcony|courtyard|patio|veranda|porch|rooftop|street|alley|alleyway|road|path|trail|park|forest|woods|glade|clearing|meadow|field|beach|shore|coast|cliff|mountain|peak|bridge|harbor|harbour|dock|pier|plaza|square|market|graveyard|cemetery|camp|campsite|ruins|swamp|marsh|desert|dunes|tundra|glacier|deck|bow|stern)\b/;
+  INTERIOR_LOCATION_RE = /\b(inside|indoor|indoors|interior|room|hall|hallway|corridor|foyer|lobby|lounge|parlor|parlour|study|den|restaurant|diner|bistro|bakery|bedroom|kitchen|bathroom|restroom|library|archive|cafe|caf\u00E9|coffee\s*shop|tavern|inn|pub|bar|saloon|house|home|apartment|flat|suite|penthouse|loft|dorm|dormitory|office|cubicle|shop|store|boutique|cabin|cottage|shack|hut|classroom|lecture\s*hall|lab|laboratory|workshop|studio|forge|smithy|temple|church|chapel|cathedral|cellar|basement|attic|vault|chamber|throne\s*room|ballroom|salon|clinic|hospital|ward|infirmary|prison|cell|dungeon|bunker|shelter|carriage|train\s*car|subway\s*car|elevator|cockpit|galley|quarters|tent|yurt|cave|cavern|grotto|tunnel|mine|sewer|bathhouse|sauna)\b/;
 });
 
 // src/shared/nicknames.ts
@@ -40836,7 +40911,27 @@ var init_planner_effects = __esm(() => {
     distortion: "glitch",
     cinematic_bars: "cinema_bars",
     letterbox: "cinema_bars",
-    widescreen_bars: "cinema_bars"
+    widescreen_bars: "cinema_bars",
+    slash: "slash_arc",
+    sword_slash: "slash_arc",
+    katana_slash: "slash_arc",
+    blade_slash: "slash_arc",
+    claw_slash: "slash_arc",
+    cut: "slash_arc",
+    shock_wave: "shockwave",
+    blast_wave: "shockwave",
+    ripple: "shockwave",
+    force_wave: "shockwave",
+    energy_blast: "shockwave",
+    flare: "lens_flare",
+    sun_flare: "lens_flare",
+    glare: "lens_flare",
+    anamorphic_flare: "lens_flare",
+    glass_shatter: "shatter",
+    ice_shatter: "shatter",
+    mirror_crack: "shatter",
+    fracture: "shatter",
+    crack: "shatter"
   };
   AMBIENT_SYNONYMS = {
     raining: "rain",
@@ -40919,7 +41014,28 @@ var init_planner_effects = __esm(() => {
     tension: "danger_pulse",
     alarm: "danger_pulse",
     threat: "danger_pulse",
-    red_pulse: "danger_pulse"
+    red_pulse: "danger_pulse",
+    dust_storm: "sandstorm",
+    desert_storm: "sandstorm",
+    sand_storm: "sandstorm",
+    sand: "sandstorm",
+    bioluminescence: "spores",
+    bioluminescent_spores: "spores",
+    glowing_spores: "spores",
+    fungal_spores: "spores",
+    northern_lights: "aurora",
+    aurora_borealis: "aurora",
+    polar_lights: "aurora",
+    candlelight: "candlelight_warmth",
+    candle_light: "candlelight_warmth",
+    hearth_glow: "candlelight_warmth",
+    fireplace_glow: "candlelight_warmth",
+    hearth: "candlelight_warmth",
+    warm_candles: "candlelight_warmth",
+    neon: "neon_haze",
+    cyberpunk: "neon_haze",
+    neon_glow: "neon_haze",
+    hologram_haze: "neon_haze"
   };
 });
 
@@ -42090,9 +42206,9 @@ function plannerInstruction(config2, visualContext, promptProfile, paragraphCoun
     "environmentChanges: On continuing scenes, use 'environmentChanges' for intentional visual state mutations: {description?, lighting?, timeOfDay?, weather?, addElements?, removeElements?, replaceElements?: [{from, to}], clearElements?, clearLighting?, clearWeather?}. Setting lighting, timeOfDay, or weather to null (or using clearLighting/clearWeather) explicitly clears the field. Setting description replaces it (it cannot be cleared; when lighting/time/weather change without a description, the scene description is re-synthesized automatically). Location changes belong only in boundary and environment.location.",
     "cues selects paragraph indexes where illustration updates should occur. For each cue, select an expression from the expression catalogue matching the companion's emotional reaction at that moment: [idle, speak, smile, smirk, laugh, think, sad, angry, surprise, wave, shy, listen, pouting, teary_pouting, nervous, nervous_pouting, blushing_shyly, full_face_blush, lovestruck, aroused, lustful, excited, joyful, giggling, happy_smiling, happy_tears, playful_winking, bored, confused, curious, depressed, determined, disappointed, disgusted, embarrassed, enraged, exhausted, flustered, forced_smiling, guilty, indifferent, jealous, melancholic, relieved, scared, seductive_smiling, serious, shocked, sleepy, smug, suspicious, taunting, thinking, worried, acting_cute, acting_coy, admiring, cozy].",
     config2.maxImagesPerTurn > 0 ? `Generate ${targetCount > 0 ? targetCount : config2.maxImagesPerTurn} distinct cues spread across key dialogue or action beats in the turn (target: ${targetCount > 0 ? targetCount : config2.maxImagesPerTurn} cues, budget: ${config2.maxImagesPerTurn}). Distribute cues evenly across distinct beats, always including paragraph 0 as the opening cue.` : "Generate cues spread across distinct visual or emotional beats (unlimited). Always include paragraph 0.",
-    `effect: Use sparse one-shot accents for meaningful story beats, usually 1\u20133 when the text calls for them; quiet turns need none. Choose ids from: ${StageEffectSchema.options.join(", ")}. Impact/explosion -> shake_hard; earthquake -> rumble; sudden reveal -> zoom_punch; shock -> flash_white; blackout/scene cut -> fade_to_black; lightning strike -> lightning; fear -> heartbeat; confession/kiss -> hearts_burst; celebration -> confetti.`,
+    `effect: Use sparse one-shot accents for meaningful story beats, usually 1\u20133 when the text calls for them; quiet turns need none. Choose ids from: ${StageEffectSchema.options.join(", ")}. Impact/explosion -> shake_hard; earthquake/collapsing ground -> rumble; energy blast/sonic boom/door blown open -> shockwave; sword/blade/claw strike -> slash_arc; shattered glass/ice/barrier -> shatter; sudden reveal -> zoom_punch; shock -> flash_white; radiant/dramatic reveal -> lens_flare; blackout/scene cut -> fade_to_black; lightning strike -> lightning; fear -> heartbeat; confession/kiss -> hearts_burst; celebration -> confetti; digital glitch -> glitch; widescreen drama -> cinema_bars.`,
     "Return effects in a separate effects:[{paragraphIndex,effect}] list at ANY paragraph. Effects do not count toward the image cue limit. A cue's effect is also accepted. Do not add illustration cues just to carry effects.",
-    `ambient: Set a persistent weather or mood overlay using: ${AmbientEffectSchema.options.join(", ")}. Rain -> rain; downpour -> heavy_rain; snowfall -> snow; mist -> fog; flashback -> sepia_flashback; dream -> dream_haze; dread -> danger_pulse. Keep the current ambient shown in PREVIOUS SCENE unless weather or mood changes. Omit to keep it; set null only to clear it.`,
+    `ambient: Set a persistent atmospheric overlay using: ${AmbientEffectSchema.options.join(", ")}. ENCLOSURE RULE: Never select or keep outdoor weather (rain, heavy_rain, snow, snowstorm, fog, autumn_leaves, sakura, shooting_stars, sandstorm, aurora) inside an enclosed room/building (tavern, bedroom, library, corridor, shop, cabin, office, dungeon) \u2014 even if PREVIOUS SCENE outside was foggy or raining \u2014 unless steam/smoke literally fills the interior (bathhouse, sauna, smoke-filled room) or the roof is open/collapsed! When entering indoors from outdoor weather, set null to clear it or pick an indoor-fit overlay (candlelight_warmth near hearths/candles, sunbeams through sunlit windows, floating_runes near active spellwork, neon_haze in cyber interiors). Guides: rain -> rain; downpour/storm -> heavy_rain; snow -> snow; blizzard -> snowstorm; mist/steam room -> fog; desert gale -> sandstorm; arctic sky -> aurora; glowing flora/caves -> spores; underwater -> underwater_bubbles; hearth/candles -> candlelight_warmth; cyber/neon -> neon_haze; flashback -> sepia_flashback; dream -> dream_haze; dread -> danger_pulse. Keep the current ambient shown in PREVIOUS SCENE only if still physically valid here; omit to keep it; set null only to clear it.`,
     'Effects example: {"effects":[{"paragraphIndex":5,"effect":"shake_hard"}],"scenes":[{"startParagraph":0,"ambient":"heavy_rain"}]}. Keep other required scene fields.',
     config2.mode === "cyoa" && config2.generateChoices ? `choices: If the response does not contain authored Choice tags, return 2 to 4 contextual choices from the user's/persona's perspective. For each choice provide 'label' (a concise button text, e.g. 'Step closer and call her bluff') and 'submission' (a natural, descriptive action or dialogue sentence written in first-person prose from the user's perspective reacting to the scene, e.g. 'I take a slow step toward the desk, meeting her eyes with a quiet smirk. "Are you really in a position to be making demands, Hina?"'). NEVER return an index, number, or option code for submission.` : "Return an empty choices array.",
     "characters: Return name and ONE compact comma-separated line containing physical appearance tags. Capture permanent physical traits including species/race (e.g. elf, demon, catgirl, kitsune, furry, anthro, monster girl) and non-human anatomy (e.g. animal ears, horns, tail, wings, fangs, scales, fur, paws, claws). A description that merely repeats the name is invalid. If a new character enters or is introduced in this turn, include them in 'characters'. Keep stable traits and never invent appearance that contradicts the card or KNOWN CHARACTERS baseline.",
@@ -43696,7 +43812,7 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
         subjectCategory: timeline.snapshots[proposal.startParagraph].subjectCategory
       } : {},
       attire: timeline.snapshots[proposal.startParagraph].attire,
-      ...resolveSceneAmbient({ weather: mergedEnv.weather, location: mergedEnv.location, description: mergedEnv.description, explicit: proposal.ambient !== undefined ? normalizeAmbientEffect(proposal.ambient) : undefined, ...reusedScene ? { previous: { sameScene: true, ambient: reusedScene.ambient, ambientSource: reusedScene.ambientSource } } : {} }),
+      ...resolveSceneAmbient({ weather: mergedEnv.weather, location: mergedEnv.location, description: mergedEnv.description, lighting: mergedEnv.lighting, timeOfDay: mergedEnv.timeOfDay, respectEnclosure: true, explicit: proposal.ambient !== undefined ? normalizeAmbientEffect(proposal.ambient) : undefined, ...reusedScene ? { previous: { sameScene: true, ambient: reusedScene.ambient, ambientSource: reusedScene.ambientSource } } : {} }),
       continuity,
       basePrompt,
       identityPrompt: timeline.snapshots[proposal.startParagraph].identity || null,

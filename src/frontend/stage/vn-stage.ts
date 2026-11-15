@@ -1405,6 +1405,18 @@ export class VnStage {
       case "cinema_bars":
         this.triggerFxBurst("cinema_bars", 1200);
         break;
+      case "slash_arc":
+        this.triggerFxBurst("slash_arc", 520);
+        break;
+      case "shockwave":
+        this.triggerFxBurst("shockwave", 680);
+        break;
+      case "lens_flare":
+        this.triggerFxBurst("lens_flare", 880);
+        break;
+      case "shatter":
+        this.triggerFxBurst("shatter", 680);
+        break;
     }
   }
 

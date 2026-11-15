@@ -24,6 +24,10 @@ export const STAGE_EFFECT_IDS: ReadonlySet<string> = new Set([
   "confetti",
   "glitch",
   "cinema_bars",
+  "slash_arc",
+  "shockwave",
+  "lens_flare",
+  "shatter",
 ]);
 
 export const AMBIENT_EFFECT_IDS: ReadonlySet<string> = new Set([
@@ -40,6 +44,11 @@ export const AMBIENT_EFFECT_IDS: ReadonlySet<string> = new Set([
   "floating_runes",
   "underwater_bubbles",
   "shooting_stars",
+  "sandstorm",
+  "spores",
+  "aurora",
+  "candlelight_warmth",
+  "neon_haze",
   "vignette_dark",
   "sepia_flashback",
   "desaturate",

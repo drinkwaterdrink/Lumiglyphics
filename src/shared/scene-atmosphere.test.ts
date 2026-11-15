@@ -6,3 +6,13 @@ test('weather derives from established facts and clears indoors unless explicitl
 test('explicit prior ambience survives while weather changes are reevaluated',()=>{expect(resolveSceneAmbient({weather:'clear',location:'Garden',previous:{sameScene:true,ambient:'sepia_flashback',ambientSource:'explicit'}}).ambient).toBe('sepia_flashback');expect(resolveSceneAmbient({weather:'clear',location:'Garden',previous:{sameScene:true,ambient:'rain',ambientSource:'weather'}}).ambient).toBeNull();});
 
 test('an SFX-only sibling cannot erase a music cue at the same paragraph',()=>{expect(musicTrackForPosition({turn:{...turn,audioCues:[...turn.audioCues!,{paragraphIndex:0,sfx:'bell'}]},index:0,policy:'location'})).toBe('garden');});
+
+test('smart enclosure clears stale outdoor fog indoors while preserving indoor steam, hearth warmth, and spores',()=>{
+ expect(resolveSceneAmbient({weather:'fog',location:'Library',description:'Fog presses outside the windows.',explicit:'fog',respectEnclosure:true}).ambient).toBeNull();
+ expect(resolveSceneAmbient({weather:'rain',location:'Tavern',previous:{sameScene:true,ambient:'rain',ambientSource:'explicit'},respectEnclosure:true}).ambient).toBeNull();
+ expect(resolveSceneAmbient({weather:'fog',location:'Bathhouse',description:'Thick clouds of steam fill the bathhouse.',explicit:'fog',respectEnclosure:true}).ambient).toBe('fog');
+ expect(resolveSceneAmbient({weather:'fog',location:'Study',lighting:'warm crackling fireplace and candlelight',explicit:'fog',respectEnclosure:true}).ambient).toBe('candlelight_warmth');
+ expect(resolveSceneAmbient({weather:'clear',location:'Cavern',description:'Bioluminescent spores drift between glowing mushrooms.',respectEnclosure:true}).ambient).toBe('spores');
+ expect(resolveSceneAmbient({weather:'sandstorm',location:'Dunes'}).ambient).toBe('sandstorm');
+ expect(resolveSceneAmbient({weather:'aurora borealis',location:'Glacier'}).ambient).toBe('aurora');
+});

@@ -194,4 +194,42 @@ describe("planner effects integration", () => {
       } else expect(dropped).toEqual([]);
     });
   }
+
+  test("clears carried outdoor fog when moving indoors and recognizes new effect aliases", async () => {
+    const outdoorFoggy = (await plan(payload({
+      scenes: [baseScene({
+        environment: { location: "Foggy cobblestone street", timeOfDay: "night", weather: "fog", lighting: "streetlamp", description: "Pea-soup fog blankets the street", persistentElements: [] },
+        ambient: "fog"
+      })]
+    }))).plan.scenes[0]!;
+    expect(outdoorFoggy.ambient).toBe("fog");
+
+    const movedIndoors = await plan(payload({
+      scenes: [baseScene({
+        boundary: { claimedNewScene: true, reason: "location_change", location: "Oak Tavern", timeOfDay: "night", majorTimeJump: false, environmentReplacement: false, forced: false },
+        environment: { location: "Oak Tavern", timeOfDay: "night", weather: "fog", lighting: "warm wooden lamps", description: "Inside the warm oak tavern, fog presses against the frosted windows", persistentElements: ["oak bar"] },
+        ambient: "fog"
+      })],
+      cues: [{ ...idle, effect: "sword slash" }]
+    }), {}, outdoorFoggy);
+    expect(movedIndoors.plan.scenes[0]?.ambient).toBeNull();
+    expect(movedIndoors.plan.effectCues).toEqual([{ paragraphIndex: 0, effect: "slash_arc" }]);
+
+    const hearthStudy = await plan(payload({
+      scenes: [baseScene({
+        environment: { location: "Study", timeOfDay: "night", weather: "clear", lighting: "crackling fireplace and candlelight", description: "An oak-paneled private study", persistentElements: ["bookshelf"] }
+      })],
+      effects: [
+        { paragraphIndex: 1, effect: "energy blast" },
+        { paragraphIndex: 2, effect: "sun flare" },
+        { paragraphIndex: 3, effect: "glass shatter" }
+      ]
+    }));
+    expect(hearthStudy.plan.scenes[0]?.ambient).toBe("candlelight_warmth");
+    expect(hearthStudy.plan.effectCues).toEqual([
+      { paragraphIndex: 1, effect: "shockwave" },
+      { paragraphIndex: 2, effect: "lens_flare" },
+      { paragraphIndex: 3, effect: "shatter" }
+    ]);
+  });
 });

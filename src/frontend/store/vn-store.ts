@@ -33,7 +33,11 @@ export type StageEffect =
   | "hearts_burst"
   | "confetti"
   | "glitch"
-  | "cinema_bars";
+  | "cinema_bars"
+  | "slash_arc"
+  | "shockwave"
+  | "lens_flare"
+  | "shatter";
 
 export type AmbientEffect =
   | "rain"
@@ -49,6 +53,11 @@ export type AmbientEffect =
   | "floating_runes"
   | "underwater_bubbles"
   | "shooting_stars"
+  | "sandstorm"
+  | "spores"
+  | "aurora"
+  | "candlelight_warmth"
+  | "neon_haze"
   | "vignette_dark"
   | "sepia_flashback"
   | "desaturate"
