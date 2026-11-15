@@ -1,2 +1,2 @@
 /** Kept in sync with package.json and spindle.json by bundle verification. */
-export const LUMIGLYPHICS_VERSION = '0.2.11-beta.153';
+export const LUMIGLYPHICS_VERSION = '0.2.11-beta.154';
