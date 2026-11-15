@@ -1430,7 +1430,13 @@ export async function generateAssets(
             referenceSummary: portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference"
           };
           const initialMetadata = metadataFor(cue);
-          const regenerateFor=(selectedCue:VisualCue)=>(request:ImageGenerationRequest,guidance?:string)=>guidance?enrichImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,guidance):rewriteImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,request.prompt.length+(request.negativePrompt?.length??0)>(request.promptProfile?.maxCharacters??3000)||request.promptProfile?.negativeMode==='positive-only'&&Boolean(request.negativePrompt?.trim())?'fit':'reroll');
+          const regenerateFor=(selectedCue:VisualCue)=>(request:ImageGenerationRequest,guidance?:string)=>{
+            if(guidance)return enrichImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,guidance);
+            const maxAllowed=request.promptProfileV2?.hardMaxCharacters??request.promptProfile?.maxCharacters??3000;
+            const posOnly=request.promptProfile?.negativeMode==='positive-only'||request.promptProfileV2?.negativePolicy==='positive-only';
+            const mode=(request.prompt.length+(request.negativePrompt?.length??0)>maxAllowed)||(posOnly&&Boolean(request.negativePrompt?.trim()))?'fit':'reroll';
+            return rewriteImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,mode);
+          };
           const enrichFor=(selectedCue:VisualCue)=>(request:ImageGenerationRequest,guidance?:string)=>enrichImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,guidance);
           frozen.parameters = modelOutputParameters(selected?.provider ?? provider, frozen.model, globalOutputParameters(config.imageOutputAspectRatio, selected?.provider ?? provider, frozen.model, frozen.parameters ?? {}));
           frozen.promptProfile=await loadImagePromptProfile(spindle,config,selected?.provider??provider,frozen.model);

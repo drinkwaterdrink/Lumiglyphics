@@ -209,3 +209,21 @@ test('length repair feeds back the measured candidate and failure reports its ac
  expect(second.previousCandidate.prompt).toBe(bad.prompt);expect(second.targetCombinedCharacters).toBeLessThan(2900);
  expect(request.prompt).toContain('silver-haired');
 });
+
+test('reroll preserves full length and retries if the writer over-condenses a rich draft',async()=>{
+ const richPrompt='A wide medium shot photograph at twilight on rain-slick cobblestones. '+'Lantern reflections shimmer across puddles beside dark timber eaves and brass streetlamps. '.repeat(24);
+ const profile=resolveImagePromptProfile('nanogpt','unknown',{imagePromptBudgetOverride:true,imagePromptBudget:6000});
+ const richReq={...request,promptProfile:profile,prompt:richPrompt};
+ const tooShort='A traveller stands on wet cobblestones at twilight.';
+ const richRetry='An evocative wide medium shot photograph on glistening cobblestones at blue hour. '+'Warm amber lanterns cast long rippled reflections across shallow rain puddles beneath carved oak gables. '.repeat(20);
+ const {spindle,calls}=api([
+  {content:JSON.stringify({prompt:tooShort,negativePrompt:'blur'})},
+  {content:JSON.stringify({prompt:richRetry,negativePrompt:'blur'})}
+ ]);
+ const rewritten=await rewriteImagePrompt(spindle,richReq,undefined,normalizeConfig({}),'u',new AbortController().signal,'reroll');
+ expect(calls).toHaveLength(2);
+ expect(calls[0].messages[0].content).toContain('CREATIVE REWRITE (PRESERVE FULL RICHNESS)');
+ expect(calls[0].messages[0].content).not.toContain('First shorten repetitive style/template prose');
+ expect(calls[1].messages.at(-1).content).toContain('too short');
+ expect(rewritten.prompt).toBe(richRetry.trim());
+});
