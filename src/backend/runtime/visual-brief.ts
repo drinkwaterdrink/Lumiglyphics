@@ -12,7 +12,7 @@ import { POSE_EXPRESSION_CATALOGUE, poseById, sanitizePoseExpression } from "../
 import { formatCharacterDNAToPromptClause, findCharacterDNA, type CharacterDNA, type CharacterDNALibrary } from "../../shared/character-dna.js";
 import { isScenarioTitle } from "../../shared/card-role.js";
 import { areNamesEquivalent, findMatchingCharacterId } from "../../shared/nicknames.js";
-import { deriveShortAliases, findMatchingLocation, findMatchingItem, formatLocationDNAToPromptClause, formatItemDNAToPromptClause, type StoryDNASet } from "../../shared/story-dna.js";
+import { deriveShortAliases, findMatchingLocation, findMatchingItem, formatLocationDNAToPromptClause, formatItemDNAToPromptClause, matchesBoundaryCandidate, type StoryDNASet } from "../../shared/story-dna.js";
 
 const text = (values: (string | null | undefined)[], max = 4000) => [...new Set(values.map(value => value?.trim()).filter(Boolean))].join("; ").slice(0, max);
 
@@ -29,9 +29,39 @@ export function sanitizeVisualNarrativeDescription(raw?: string | null): string 
   if (!raw || !raw.trim()) return "";
   return raw
     .replace(/\b(?:with\s+)?no\s+(?:visible|magical|magic|supernatural|glowing)\s+(?:aura|glow|halo|mana|light)\s*,?\s*(?:only\s+)?/gi, "")
-    .replace(/\bwithout\s+any\s+(?:visible\s+)?(?:aura|glow|halo)\s*,?\s*/gi, "")
+    .replace(/\bwithout\s+any\s+(?:visible\s+)?(?:aura|glow|halo|scars|blood|wounds|weapons)\s*,?\s*/gi, "")
+    .replace(/\b(?:no\s+(?:visible|apparent|discernible)\s+(?:scars|wounds|blood|tears|trace|sign)|(?:absent|devoid)\s+of\s+[^,.]+)\s*,?\s*/gi, "")
     .replace(/\s{2,}/g, " ")
     .trim();
+}
+
+/**
+ * Enriches base lighting with filmic chromatic LUT color-grading cues inferred from narrative mood
+ * when the existing lighting string does not already carry explicit color-temperature/LUT direction.
+ */
+export function enrichLightingWithChromaticLut(baseLighting?: string | null, narrativeContext?: string | null): string {
+  const base = (baseLighting ?? "").trim();
+  const ctx = (narrativeContext ?? "").toLowerCase();
+  if (!ctx) return base;
+  if (/\b(?:kelvin|lut|teal-and-amber|tungsten|halation|color\s*grade|chromatic)\b/i.test(base)) {
+    return base;
+  }
+  let lutCue = "";
+  if (/\b(?:blood|ambush|alarm|siren|betray|blade|threat|panic|tense|danger|murder)\b/.test(ctx)) {
+    lutCue = "teal-and-amber dramatic rim lighting, deep shadows";
+  } else if (/\b(?:hearth|fireplace|tavern|candle|embrace|kiss|tender|warmth|cozy|intimate)\b/.test(ctx)) {
+    lutCue = "warm tungsten halation, soft golden rim highlights";
+  } else if (/\b(?:grief|funeral|tears|despair|frost|blizzard|lonely|bleak|sorrow|overcast)\b/.test(ctx)) {
+    lutCue = "cool cyan-slate overcast color grade, muted midtones";
+  } else if (/\b(?:arcane|ritual|portal|mana|neon|cyber|hologram|synth|bioluminesc)\b/.test(ctx)) {
+    lutCue = "violet-and-cyan specular split lighting, luminous bounce";
+  } else if (/\b(?:sunrise|sunset|golden hour|dusk|twilight)\b/.test(ctx)) {
+    lutCue = "golden-hour directional rim flare, warm atmospheric haze";
+  }
+  if (!lutCue) return base;
+  if (!base) return lutCue;
+  if (base.toLowerCase().includes(lutCue.split(",")[0] ?? "")) return base;
+  return text([base, lutCue], 1000);
 }
 
 function propKeywords(phrase: string): string[] {
@@ -118,7 +148,7 @@ export function resolveTemplateIdentity(
     }
   }
 
-  const dnaAppearance = lockedDNA ? formatCharacterDNAToPromptClause(lockedDNA) : undefined;
+  const dnaAppearance = lockedDNA ? formatCharacterDNAToPromptClause(lockedDNA, { includeOutfit: false }) : undefined;
   const saved = (lockedDNA?.locked && dnaAppearance)
     || Object.entries(appearances ?? {}).find(([key]) => areNamesEquivalent(key, name))?.[1]?.trim()
     || dnaAppearance;
@@ -180,7 +210,7 @@ export function buildVisualBrief(
       const matchId = findMatchingCharacterId(chars, member.name);
       if (matchId && chars[matchId]) {
         memberDna = chars[matchId];
-        dnaAppearance = formatCharacterDNAToPromptClause(memberDna);
+        dnaAppearance = formatCharacterDNAToPromptClause(memberDna, { includeOutfit: false });
       }
     }
     const saved = Object.entries(appearances ?? {}).find(([key]) => areNamesEquivalent(key, member.name))?.[1];
@@ -195,7 +225,7 @@ export function buildVisualBrief(
       ? String(member.attire)
       : (memberDna?.activeOutfit || memberDna?.signatureOutfit || contWardrobe || undefined);
     const appearanceBase = manual ? member.appearance : (fallbackAppearance || member.appearance);
-    const appearance = memberAttire ? applyAttireOverride(appearanceBase, memberAttire) : appearanceBase;
+    const appearance = memberAttire ? applyAttireOverride(appearanceBase, '') : appearanceBase;
     return {...member, appearance, attire: memberAttire};
   });
   // Reserve room for every name before sharing the remaining appearance budget.
@@ -210,14 +240,14 @@ export function buildVisualBrief(
     const attireText = ("attire" in member && member.attire) ? `; wearing ${member.attire}` : "";
     const remainingForLook = Math.max(0, descriptionBudget - attireText.length);
     const boundedLook = look.length > remainingForLook ? look.slice(0, remainingForLook).replace(/\s+\S*$/, "") : look;
-    const description = `${boundedLook || "appearance not established"}${attireText}`;
+    const description = boundedLook ? `${boundedLook}${attireText}` : attireText ? attireText.replace(/^;\s*/, "") : "appearance not established";
     return `${member.name}: ${description}`;
   }).join("\n");
   const rawLocDNA = storyDNASet?.locations ? findMatchingLocation(storyDNASet.locations, environment.location) : undefined;
   const locDNA = rawLocDNA && (!rawLocDNA.autoDiscovered || rawLocDNA.locked || Boolean(rawLocDNA.architecture?.trim()))
     ? rawLocDNA
     : undefined;
-  const locClause = locDNA ? formatLocationDNAToPromptClause(locDNA) : undefined;
+  const locClause = locDNA ? formatLocationDNAToPromptClause(locDNA, { includeLighting: !environment.lighting, includePersistentElements: true }) : undefined;
 
   const activeItemClauses: string[] = [];
   if (storyDNASet?.items) {
@@ -226,7 +256,7 @@ export function buildVisualBrief(
     for (const item of Object.values(storyDNASet.items)) {
       if (item.autoDiscovered && !item.locked) continue;
       const itemTerms = [item.name, ...deriveShortAliases(item.name, item.aliases)].map(t => t.toLowerCase()).filter(t => t.length >= 4);
-      const matches = itemTerms.some(term => combinedContext.includes(term));
+      const matches = itemTerms.some(term => matchesBoundaryCandidate(combinedContext, term));
       if (matches) {
         activeItemClauses.push(formatItemDNAToPromptClause(item));
       }
@@ -246,7 +276,7 @@ export function buildVisualBrief(
     subjects: noPeople ? "" : ensemble ? group : text([subjectLabel, appearance, template.category === "portrait" ? pose : ""]),
     action: noPeople ? (template.category === "detail" || template.category === "custom" ? text([(cue.visualFocus ?? "").slice(0, 1000), ...activeItemClauses], 1000) : text([...activeItemClauses], 1000)) : text([cleanedVisualDescription, ...activeItemClauses, compileActionProp(cue.action), template.category === "portrait" ? "" : pose]),
     composition: `${cue.shotHint?.preferredShotSize ?? template.framing}; ${cue.shotHint?.preferredAngle ? `${cue.shotHint.preferredAngle} perspective` : template.cameraPolicy === "fixed" ? "eye-level view" : "dynamic narrative perspective"}; ${noPeople ? "no people" : ensemble ? (cue.shotHint?.spatialRelationships?.length ? `${members.length} visible characters staged naturally in the scene (${cue.shotHint.spatialRelationships.slice(0, 4).join("; ")})${cue.shotHint.sceneStagingNote ? `; ${cue.shotHint.sceneStagingNote}` : ""}` : `${members.length} visible characters staged naturally across room depths in active posture, including every listed subject; distinct faces and silhouettes`) : "one visible character"}; keep the lower quarter clear for dialogue`,
-    lighting: text([environment.lighting, locDNA?.lighting], 1000),
+    lighting: config.chromaticLutEnabled !== false ? enrichLightingWithChromaticLut(text([environment.lighting, locDNA?.lighting], 1000), `${cleanedVisualDescription} ${environment.description ?? ""} ${environment.weather ?? ""}`) : text([environment.lighting, locDNA?.lighting], 1000),
     subjectMode: template.subjectMode,
     framing: template.framing,
     referencePolicy: noPeople || ensemble ? "none" : template.referencePolicy,

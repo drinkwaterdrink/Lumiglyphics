@@ -736,10 +736,14 @@ export class VisualNovelSettingsPanel {
             ${group("Cinematic presentation", `
               <label data-check ${find("Cinematic chapter cards", "cinematic chapter title splash cards location letterbox turn intro splash screen")}><input name="chapterTitleCards" type="checkbox" /><span>Cinematic chapter cards<small>Display elegant letterbox scene & location title splashes on turn start</small></span></label>
               <label data-check ${find("Director AI shot framing", "director ai shot selection framing portrait action scenery intelligent cues")}><input name="directorAi" type="checkbox" /><span>Director AI shot framing<small>Intelligently balances portrait emotion closeups, dynamic action framing, and scenery establishing shots</small></span></label>
+              <label data-check ${find("2.5D virtual camera rig", "virtual camera rig pan zoom focal speaker choreography eyeline")}><input name="virtualCameraEnabled" type="checkbox" /><span>2.5D virtual camera rig<small>Subtly pans and zooms artwork toward the active speaker and dramatic focus on stage</small></span></label>
+              <label data-check ${find("Confidant bond banners", "confidant bond banners resonance cut in relationship tier persona")}><input name="confidantCutInsEnabled" type="checkbox" /><span>Confidant bond banners<small>Show celebratory resonance banners on stage when a relationship tier levels up</small></span></label>
             `, { find: find("Cinematic presentation", "chapter cards title splash cinematic intro director ai") })}
             ${group("Smart AI reader & filtering", `
               <label data-check ${find("Smart prose & metadata filter", "smart prose filter metadata cognition trace neural dock auto clean preset raw")}><input name="smartProseFilter" type="checkbox" /><span>Smart prose & metadata filter<small>Automatically detects and removes AI reasoning, cognition traces, simulation docks, and status headers from story text</small></span></label>
               <label data-check ${find("Smart preset dialogue extraction", "smart dialogue extract tags eidos dialogue speech thought attribute speaker nameplate")}><input name="smartDialogueExtraction" type="checkbox" /><span>Smart preset dialogue extraction<small>Automatically extracts custom preset tags (&lt;dialogue&gt;, &lt;eidos_dialogue&gt;, &lt;thought&gt;) and assigns the correct speaker nameplate</small></span></label>
+              <label data-check ${find("Mind ledger & thought cabinet", "mind ledger thought cabinet secrets known facts false beliefs theory of mind mystery")}><input name="mindLedgerEnabled" type="checkbox" /><span>Mind ledger &amp; thought cabinet<small>Track character secrets, known facts, false beliefs, and narrative mysteries inside Character Folio and World Lens</small></span></label>
+              <label data-check ${find("Chapter codex auto-archive", "chapter codex auto archive timeline scene memory summary world lens")}><input name="chapterCodexEnabled" type="checkbox" /><span>Chapter codex auto-archive<small>Automatically archive completed scene locations and key visual moments into the World Lens Chapter Codex</small></span></label>
             `, { find: find("Smart AI reader & filtering", "smart filter prose dialogue extraction cognition trace preset metadata") })}
             ${group("Your turn", `
               <label data-field ${find("How you reply", "reply mode cyoa choose suggestions write standard")}><span>How you reply</span><select name="mode"><option value="standard">Write your own reply</option><option value="cyoa">Choose from suggestions</option></select></label>
@@ -901,6 +905,8 @@ export class VisualNovelSettingsPanel {
                 <small>Controls how descriptive the V2 compiler is when writing atmosphere, secondary lighting, and textures.</small>
               </label>
               <label data-check><input name="automaticImagePromptSettings" type="checkbox"><span>Automatic model settings<small>Uses model-specific wording guidance and published prompt limits. Existing size controls still apply.</small></span></label>
+              <label data-check ${find("3+N spatial frustum & OTS framing", "spatial frustum layout boxes over the shoulder dorsal ots ensemble") }><input name="spatialFrustumEnabled" type="checkbox" /><span>3+N spatial frustum &amp; OTS framing<small>Bound 1–3 primary subjects in 2D layout boxes, group extras into background silhouettes, and enforce dorsal over-the-shoulder framing</small></span></label>
+              <label data-check ${find("Chromatic lighting LUT & affirmative rewriter", "chromatic lighting lut color temperature affirmative anti drift negation") }><input name="chromaticLutEnabled" type="checkbox" /><span>Chromatic lighting LUT &amp; affirmative rewriter<small>Inject cinematic color-temperature tokens per atmosphere and rewrite literary negations into affirmative visual phrasing</small></span></label>
               <label data-check><input name="imagePromptBudgetOverride" type="checkbox"><span>Set a manual prompt budget<small>Combined positive + negative characters. Verified provider ceilings still apply.</small></span></label>
               <label data-field data-prompt-budget-field><span>Character budget</span><input name="imagePromptBudget" type="number" min="256" max="50000" step="1" inputmode="numeric"><small>256–50,000. A ceiling, not a minimum; useful detail matters more than filling it.</small></label>
               <p data-prompt-profile-status role="status"></p><small>Settings summary uses the bundled catalogue. Prepared pictures show live metadata when available. Unknown limits use a 3,000-character fallback. Held pictures keep their prepared budget. Counts use conservative UTF-16 characters, not tokens.</small>
@@ -1783,6 +1789,10 @@ export class VisualNovelSettingsPanel {
       case "ideogramPromptMode": return { ideogramPromptMode: target.value as any };
       case "flux3KleinPromptMode": return { flux3KleinPromptMode: target.value as any };
       case "automaticImagePromptSettings": return {automaticImagePromptSettings:checked};
+      case "spatialFrustumEnabled": return { spatialFrustumEnabled: checked };
+      case "chromaticLutEnabled": return { chromaticLutEnabled: checked };
+      case "mindLedgerEnabled": return { mindLedgerEnabled: checked };
+      case "chapterCodexEnabled": return { chapterCodexEnabled: checked };
       case "imagePromptBudgetOverride": return {imagePromptBudgetOverride:checked};
       case "imagePromptBudget": {
         const value=Number(target.value);
@@ -1873,6 +1883,8 @@ export class VisualNovelSettingsPanel {
       case "sentimentLighting": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, sentimentLighting: checked }) };
       case "smartProseFilter": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, smartProseFilter: checked }) };
       case "smartDialogueExtraction": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, smartDialogueExtraction: checked }) };
+      case "virtualCameraEnabled": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, virtualCameraEnabled: checked }) };
+      case "confidantCutInsEnabled": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, confidantCutInsEnabled: checked }) };
       
       case "bgmVolume": return { bgmVolume: clamp(Number(target.value), 0, 1, DEFAULT_CONFIG.bgmVolume) };
       case "sfxVolume": return { sfxVolume: clamp(Number(target.value), 0, 1, DEFAULT_CONFIG.sfxVolume) };
@@ -2384,6 +2396,10 @@ export class VisualNovelSettingsPanel {
     this.control<HTMLSelectElement>("dialogueSafeArea").value = config.dialogueSafeArea ?? "auto";
     this.control<HTMLSelectElement>("imagePromptDetail").value = config.imagePromptDetail ?? "auto";
     this.control<HTMLInputElement>("automaticImagePromptSettings").checked=config.automaticImagePromptSettings;
+    this.control<HTMLInputElement>("spatialFrustumEnabled").checked = config.spatialFrustumEnabled !== false;
+    this.control<HTMLInputElement>("chromaticLutEnabled").checked = config.chromaticLutEnabled !== false;
+    this.control<HTMLInputElement>("mindLedgerEnabled").checked = config.mindLedgerEnabled !== false;
+    this.control<HTMLInputElement>("chapterCodexEnabled").checked = config.chapterCodexEnabled !== false;
     this.control<HTMLInputElement>("imagePromptBudgetOverride").checked=config.imagePromptBudgetOverride;
     this.control<HTMLInputElement>("imagePromptBudget").value=String(config.imagePromptBudget);
     this.control<HTMLInputElement>("imagePromptBudget").disabled=!config.imagePromptBudgetOverride;
@@ -2453,6 +2469,8 @@ export class VisualNovelSettingsPanel {
     this.control<HTMLInputElement>("sentimentLighting").checked = config.readerPreferences.sentimentLighting !== false;
     this.control<HTMLInputElement>("smartProseFilter").checked = config.readerPreferences.smartProseFilter !== false;
     this.control<HTMLInputElement>("smartDialogueExtraction").checked = config.readerPreferences.smartDialogueExtraction !== false;
+    this.control<HTMLInputElement>("virtualCameraEnabled").checked = config.readerPreferences.virtualCameraEnabled !== false;
+    this.control<HTMLInputElement>("confidantCutInsEnabled").checked = config.readerPreferences.confidantCutInsEnabled !== false;
     const isLight = config.themePreset === "paper-novel" || config.readerPreferences.theme === "light";
     const themeMode = isLight ? "light" : "dark";
     const themeStatus = this.root.querySelector<HTMLElement>("[data-aperture-theme-status]");

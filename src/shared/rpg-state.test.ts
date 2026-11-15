@@ -4,6 +4,7 @@ import {
   buildRpgPromptGuidance,
   computePacingFrustrationMultiplier,
   computeQuestUrgency,
+  evaluateContextualSkillCheck,
   formatSkillCheckSubmission,
   normalizeRpgMode,
   reduceRpgState,
@@ -113,5 +114,31 @@ describe("RPG & Adventure Mode (AdventureTime-inspired systems)", () => {
     assert.equal(buildRpgPromptGuidance(turn2, "off"), "");
     assert.match(buildRpgPromptGuidance(turn2, "lite"), /RPG SKILL CHECKS \(LITE MODE\)/);
     assert.match(buildRpgPromptGuidance(turn2, "full"), /STANDALONE RPG STATE & QUEST TRACKING \(FULL MODE\)/);
+  });
+
+  it("resets turnsSinceProgress on location/quest progress and applies contextual vitals to skill checks", () => {
+    const start = reduceRpgState(null, {
+      personaName: "Kael",
+      locations: [{ location: "Harbor", description: "Foggy docks." }],
+      vitals: { stress: 85, stamina: 10, companions: [{ name: "Mira", hp: 90, maxHp: 100, affinity: 60, status: "healthy" }] },
+    });
+    assert.equal(start.turnsSinceProgress, 0);
+
+    const idleTurn = reduceRpgState(start, { vitals: { stress: 85, stamina: 10 } });
+    assert.equal(idleTurn.turnsSinceProgress, 1);
+
+    const progressTurn = reduceRpgState(idleTurn, {
+      locations: [{ location: "Watchtower", description: "High stone tower." }],
+    });
+    assert.equal(progressTurn.turnsSinceProgress, 0);
+
+    const strCheck = evaluateContextualSkillCheck({ stat: "STR", dc: 14, modifier: 2, rollMode: "normal" }, start.vitals);
+    assert.equal(strCheck.modifier, 0);
+
+    const chaCheck = evaluateContextualSkillCheck({ stat: "CHA", dc: 12, modifier: 1, rollMode: "normal" }, {
+      ...start.vitals,
+      stress: 20,
+    });
+    assert.equal(chaCheck.modifier, 2);
   });
 });

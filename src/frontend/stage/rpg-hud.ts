@@ -1,6 +1,7 @@
 import {
   computePacingFrustrationMultiplier,
   computeQuestUrgency,
+  evaluateContextualSkillCheck,
   formatSkillCheckSubmission,
   resolveSkillCheck,
   type RpgMode,
@@ -30,7 +31,7 @@ export const RPG_HUD_CSS = `
 [data-vn-rpg-bar] {
   position: absolute;
   top: 14px;
-  left: 16px;
+  left: 64px;
   z-index: 32;
   pointer-events: auto;
   display: inline-flex;
@@ -249,7 +250,7 @@ export class RpgStageController {
 
   resolveChoiceSubmission(choice: VnChoice): string {
     if (this.rpgMode === "off" || !choice.check) return choice.value;
-    const outcome = resolveSkillCheck(choice.check);
+    const outcome = resolveSkillCheck(evaluateContextualSkillCheck(choice.check, this.rpgState?.vitals));
     this.showRollTheatre(outcome);
     return formatSkillCheckSubmission(choice.value, outcome);
   }
@@ -260,8 +261,9 @@ export class RpgStageController {
     const { check, rolls, natural, total, tier } = outcome;
     const rollDetail = rolls.length > 1 ? `2d20(${rolls.join(", ")}) → ${natural}` : `d20(${natural})`;
     const modStr = check.modifier > 0 ? `+${check.modifier}` : check.modifier < 0 ? `${check.modifier}` : "+0";
+    const d20Svg = `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:middle;margin-right:4px;"><polygon points="12,2 21,7 21,17 12,22 3,17 3,7" fill="rgba(124,156,255,0.22)" stroke="currentColor" stroke-width="1.6"/><text x="12" y="15.5" text-anchor="middle" fill="currentColor" font-size="9" font-weight="800">${natural}</text></svg>`;
     this.theatreEl.innerHTML = `
-      <div style="font-size:0.72rem;letter-spacing:0.08em;opacity:0.8;">🎲 ${esc(check.stat)} SKILL CHECK (DC ${check.dc})</div>
+      <div style="font-size:0.72rem;letter-spacing:0.08em;opacity:0.85;display:inline-flex;align-items:center;justify-content:center;">${d20Svg}${esc(check.stat)} SKILL CHECK (DC ${check.dc})</div>
       <div style="font-size:1rem;font-weight:700;">${esc(TIER_LABELS[tier])}</div>
       <div style="font-size:0.78rem;opacity:0.88;">${esc(rollDetail)} ${modStr} = <b>${total}</b> vs DC ${check.dc}</div>
     `;
@@ -295,7 +297,7 @@ export class RpgStageController {
     if (!this.drawerEl || !this.rpgState) return;
     const state = this.rpgState;
     const v = state.vitals;
-    const pressure = computePacingFrustrationMultiplier(state.turnCounter);
+    const pressure = computePacingFrustrationMultiplier(state.turnsSinceProgress ?? state.turnCounter);
 
     let bodyHtml = "";
     if (this.activeTab === "vitals") {
@@ -318,7 +320,7 @@ export class RpgStageController {
         bodyHtml = `<div class="vn-rpg-card">No active quests recorded yet.</div>`;
       } else {
         bodyHtml = state.quests.map((q) => {
-          const urgency = computeQuestUrgency(q, state.turnCounter);
+          const urgency = computeQuestUrgency(q);
           const badge = urgency !== "none" ? ` · <span style="text-transform:uppercase;font-weight:700;">${esc(urgency.replace("_", " "))}</span>` : "";
           return `<div class="vn-rpg-card"><b>${esc(q.title)}</b> <small>[${esc(q.status.toUpperCase())}${badge}]</small><div style="margin-top:4px;opacity:0.9;">${esc(q.objective)}</div></div>`;
         }).join("");

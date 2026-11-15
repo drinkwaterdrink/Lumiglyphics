@@ -84,6 +84,46 @@ import { buildRpgPromptGuidance, reduceRpgState, SkillCheckSchema, type RpgState
 import { PlannerEnvironmentChangesSchema, PlannerEnvironmentInputSchema, type PlannerEnvironmentChanges, type PlannerEnvironmentInput, type PlannerEnvironmentProposal, PlannerSceneSchema, PlannerCueSchema, PlannerChoiceSchema, PlannerCharacterSchema, PlannerSpeakerSchema, PlannerOutputSchema, type HintMessage, readGameHints, gameHintsForTurn, FIXED_CAMERA, stableHash, id, isAttireReset, BOUNDARY_REASONS, normalizeBoundaryReason, asBoolean } from "./planner/schemas.js";
 export { PlannerEnvironmentChangesSchema, PlannerEnvironmentInputSchema, type PlannerEnvironmentChanges, type PlannerEnvironmentInput, type PlannerEnvironmentProposal, gameHintsForTurn };
 
+/**
+ * Selects the highest dramatic salience cues when distinctCues exceeds cueLimit,
+ * preserving chronological paragraph ordering while routing overflow cues to cache reuse.
+ */
+export function selectDramaticPeakCues<T extends { paragraphIndex: number; visualDescription?: string | null | undefined; visualFocus?: string | null | undefined; templateId?: string | null | undefined; shotHint?: { intent?: string | null | undefined } | null | undefined; visibleCharacters?: string[] | null | undefined }>(
+  cues: readonly T[],
+  limit: number,
+  paragraphs?: ReadonlyArray<{ index: number; text: string }>
+): { selected: T[]; overflow: T[] } {
+  if (limit <= 0 || cues.length <= limit) {
+    return { selected: [...cues], overflow: [] };
+  }
+  const paraMap = new Map((paragraphs ?? []).map((p) => [p.index, p.text]));
+  const scored = cues.map((cue, idx) => {
+    const pText = paraMap.get(cue.paragraphIndex) ?? '';
+    const combined = `${pText} ${cue.visualDescription ?? ''}`.toLowerCase();
+    let score = 0;
+    if (idx === 0) score += 2;
+    if (/\b(explodes?|shatters?|unleashes?|betrayal|devastating|catastrophic|awakens?|climaxes?|standoff|screams?|dies?|killed)\b/i.test(combined)) score += 5;
+    if (/\b(strikes?|slashes?|dodges?|sprints?|grabs?|leaps?|clashes?|punches?|tackles?|shoots?|defends?|parr(y|ies)|lunges?|kisses?|embrac)\b/i.test(combined)) score += 4;
+    if (/\b(sobbing|weeps?|terrified|horrified|gasps?|wide-eyed|tears?|stunned|trembl(es?|ing)|whispers?|shock)\b/i.test(combined)) score += 3;
+    if ((cue.visibleCharacters?.length ?? 0) >= 2 || cue.shotHint?.intent === 'ensemble' || cue.shotHint?.intent === 'two-shot' || Boolean(cue.templateId)) score += 2;
+    if (cue.visualFocus?.trim()) score += 1;
+    return { cue, idx, score };
+  });
+  const topIds = new Set(
+    [...scored]
+      .sort((a, b) => b.score - a.score || a.cue.paragraphIndex - b.cue.paragraphIndex)
+      .slice(0, limit)
+      .map((s) => s.idx)
+  );
+  const selected: T[] = [];
+  const overflow: T[] = [];
+  for (const item of scored) {
+    if (topIds.has(item.idx)) selected.push(item.cue);
+    else overflow.push(item.cue);
+  }
+  return { selected, overflow };
+}
+
 export type PlanTurnInput = {
   /** Escaped UI transport consumes the same parsed prose before model enrichment. */
   onNarrativePrepared?: (paragraphs: readonly string[]) => void;
@@ -2142,11 +2182,12 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   const cueLimit = input.config.maxImagesPerTurn;
   const classifierVisuals = input.config.systemOneMode === "on" && Boolean(systemOne?.expressions.size)
     && input.config.generateImages && !input.config.useNativeCardImages;
-  const selectedCues = classifierVisuals ? distinctCues : cueLimit > 0 ? distinctCues.slice(0, cueLimit) : distinctCues;
+  const peakSelection = !classifierVisuals && cueLimit > 0 ? selectDramaticPeakCues(distinctCues, cueLimit, promptParagraphs) : null;
+  const selectedCues = peakSelection ? peakSelection.selected : distinctCues;
   // Cues beyond the image cap are kept as reuse-only candidates. They never
   // add a provider request: only an exact-compatible cached image can turn one
   // into an extra swap (see runtime/images.ts resolveCacheCues).
-  const cacheCandidates = !classifierVisuals && cueLimit > 0 ? distinctCues.slice(cueLimit, cueLimit + MAX_CACHE_CUES_PER_TURN) : [];
+  const cacheCandidates = peakSelection ? peakSelection.overflow.slice(0, MAX_CACHE_CUES_PER_TURN) : [];
   const materializeCue = (cue: typeof distinctCues[number], index: number) => {
       const scene = sceneForParagraph(scenes, cue.paragraphIndex);
       const paragraph = promptParagraphs.find((candidate) => candidate.index === cue.paragraphIndex);

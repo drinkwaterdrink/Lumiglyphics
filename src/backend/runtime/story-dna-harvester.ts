@@ -47,14 +47,20 @@ export function isSignificantStoryItem(name: string, contextText?: string): bool
 
   const words = trimmed.toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length === 0) return false;
-  if (words.length === 1 && MUNDANE_ITEM_WORDS.has(words[0]!)) return false;
+  const headWord = words[words.length - 1]!;
+  if (words.length === 1 && MUNDANE_ITEM_WORDS.has(headWord)) return false;
+
+  const hasExplicitSignificance = SIGNIFICANCE_HINT_RE.test(trimmed) || Boolean(contextText && SIGNIFICANCE_HINT_RE.test(contextText));
+  if (MUNDANE_ITEM_WORDS.has(headWord) && !hasExplicitSignificance) {
+    return false;
+  }
 
   const allMundaneOrModifiers = words.every(
     (w) => MUNDANE_ITEM_WORDS.has(w) || COMMON_MUNDANE_MODIFIERS.has(w)
   );
   if (!allMundaneOrModifiers) return true;
 
-  if (words.length >= 2 && contextText && SIGNIFICANCE_HINT_RE.test(contextText)) {
+  if (words.length >= 2 && hasExplicitSignificance) {
     return true;
   }
   return false;
@@ -107,7 +113,8 @@ export function harvestTurnStoryDNA(
   plan: TurnPlan,
   set: StoryDNASet,
   swipeTag: string,
-  prevLocationName?: string | null
+  prevLocationName?: string | null,
+  options?: { mindLedgerEnabled?: boolean; chapterCodexEnabled?: boolean }
 ): boolean {
   let changed = false;
   let lastLoc: LocationDNA | undefined = prevLocationName
@@ -176,6 +183,27 @@ export function harvestTurnStoryDNA(
             changed = true;
           }
         }
+      }
+    }
+
+    if (options?.chapterCodexEnabled !== false && (!lastLoc || lastLoc.id !== loc.id)) {
+      const codex = set.chapterCodex ?? [];
+      const lastEntry = codex.at(-1);
+      if (!lastEntry || lastEntry.location.toLowerCase() !== loc.name.toLowerCase()) {
+        const entryId = `ch-${loc.id}-${codex.length + 1}`.slice(0, 250);
+        set.chapterCodex = [
+          ...codex,
+          {
+            id: entryId,
+            title: loc.name.slice(0, 180),
+            location: loc.name.slice(0, 180),
+            summary: (scene.environment.description?.trim() || loc.environmentDescription || `Scene at ${loc.name}`).slice(0, 2000),
+            ...(plan.key?.assistantMessageId ? { messageId: plan.key.assistantMessageId.slice(0, 160) } : {}),
+            seenInSwipes: swipeTag ? [swipeTag] : [],
+            timestamp: Date.now()
+          }
+        ].slice(-40);
+        changed = true;
       }
     }
 
@@ -295,6 +323,32 @@ export function harvestTurnStoryDNA(
       description: cue.visualFocus?.trim() || prop,
       ...(cue.character?.trim() ? { heldBy: cue.character.trim() } : {}),
     });
+  }
+
+  if (options?.mindLedgerEnabled !== false) {
+    const ledger = [...(set.thoughtCabinet ?? [])];
+    for (const ref of plan.storyReferences ?? []) {
+      if (ref.field !== 'significance' && ref.field !== 'statedGoals' && ref.field !== 'customs' && ref.field !== 'risks') continue;
+      const cleanVal = ref.value?.trim();
+      if (!cleanVal) continue;
+      const title = `${ref.name}: ${cleanVal.split(/[.;!?]/)[0]?.trim() || cleanVal}`.slice(0, 160);
+      if (ledger.some((e) => e.title.toLowerCase() === title.toLowerCase())) continue;
+      const category = ref.field === 'risks' ? 'foreshadowing' : ref.field === 'statedGoals' ? 'promise' : ref.field === 'significance' ? 'clue' : 'secret';
+      const entryId = `tc-${createItemId(ref.name)}-${ledger.length + 1}`.slice(0, 250);
+      ledger.push({
+        id: entryId,
+        title,
+        category,
+        description: `${ref.evidence?.trim() || cleanVal}`.slice(0, 1500),
+        status: 'germinating',
+        seenInSwipes: swipeTag ? [swipeTag] : [],
+        updatedAt: Date.now()
+      });
+      changed = true;
+    }
+    if (changed && ledger.length > (set.thoughtCabinet?.length ?? 0)) {
+      set.thoughtCabinet = ledger.slice(-40);
+    }
   }
 
   return changed;

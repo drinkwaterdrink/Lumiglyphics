@@ -115,7 +115,8 @@ export function compileModelPrompt(input: ModelPromptCompilerInput): ModelPrompt
   // 3b. Inject custom Style Prefix at P0 (front-loaded opening authority) and Style Suffix at P0/P1
   const cleanPrefix = styleDNA.prefix?.trim() ?? '';
   const isIdeogramJson = profile.dialect === 'ideogram-v4' && profile.ideogramMode !== 'structured-prose';
-  if (cleanPrefix && !isIdeogramJson) {
+  const kleinConsumedPrefix = profile.dialect === 'flux3-klein' && sections.some(s => s.id === 'medium-optics-opening' && s.text.toLowerCase().startsWith(cleanPrefix.toLowerCase()));
+  if (cleanPrefix && !isIdeogramJson && !kleinConsumedPrefix) {
     const prefixText = isTagDialect ? cleanPrefix.replace(/[,;:\s]+$/, '') : formatProseSentence(cleanPrefix, true);
     if (prefixText) {
       sections = [
@@ -160,7 +161,7 @@ export function compileModelPrompt(input: ModelPromptCompilerInput): ModelPrompt
     sections
   };
 
-  // 3c. Merge custom negative prompt or built-in style avoidIntent when supported
+  // 3c. Merge custom negative prompt when supported
   let effectiveNegativePrompt = serialized.negativePrompt;
   if (profile.negativePolicy !== 'positive-only') {
     const customNeg = styleDNA.negative?.trim();

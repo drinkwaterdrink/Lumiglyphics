@@ -177,6 +177,7 @@ export type RpgAtlas = z.infer<typeof RpgAtlasSchema>;
 
 export const RpgStateSchema = z.object({
   turnCounter: z.number().int().nonnegative().default(0),
+  turnsSinceProgress: z.number().int().nonnegative().default(0),
   vitals: RpgVitalsSchema,
   quests: z.array(RpgQuestSchema).max(16).default([]),
   atlas: RpgAtlasSchema,
@@ -235,6 +236,7 @@ export function reduceRpgState(previous: RpgState | null | undefined, update: Rp
   });
 
   const questMap = new Map<string, RpgQuest>();
+  let progressed = false;
   for (const existing of previous?.quests ?? []) {
     questMap.set(existing.id, {
       ...existing,
@@ -244,6 +246,8 @@ export function reduceRpgState(previous: RpgState | null | undefined, update: Rp
   for (const q of update.quests ?? []) {
     const id = q.id?.trim() || slugId("quest", q.title);
     const prev = questMap.get(id);
+    const nextStatus = q.status ?? prev?.status ?? "active";
+    if (!prev || (prev.status !== "completed" && nextStatus === "completed")) progressed = true;
     questMap.set(
       id,
       RpgQuestSchema.parse({
@@ -267,9 +271,11 @@ export function reduceRpgState(previous: RpgState | null | undefined, update: Rp
     const nodeId = slugId("node", clean);
     const existingNode = nodes.find((n) => n.id === nodeId);
     if (existingNode) {
+      if (currentLocationId !== nodeId) progressed = true;
       if (currentLocationId !== nodeId) existingNode.visits += 1;
       if (loc.description && !existingNode.summary) existingNode.summary = loc.description.slice(0, 300);
     } else if (nodes.length < 48) {
+      progressed = true;
       nodes.push({
         id: nodeId,
         label: clean.slice(0, 160),
@@ -290,6 +296,7 @@ export function reduceRpgState(previous: RpgState | null | undefined, update: Rp
 
   return RpgStateSchema.parse({
     turnCounter: (previous?.turnCounter ?? 0) + 1,
+    turnsSinceProgress: progressed ? 0 : ((previous?.turnsSinceProgress ?? 0) + 1),
     vitals: nextVitals,
     quests: [...questMap.values()].slice(0, 16),
     atlas: {
@@ -298,6 +305,23 @@ export function reduceRpgState(previous: RpgState | null | undefined, update: Rp
       edges,
     },
   });
+}
+
+export function evaluateContextualSkillCheck(check: SkillCheck, vitals?: RpgVitals | null): SkillCheck {
+  if (!vitals) return check;
+  let mod = check.modifier ?? 0;
+  let rollMode = check.rollMode ?? "normal";
+  if (vitals.stress >= 80) {
+    mod -= 1;
+  }
+  if (vitals.stamina <= 15 && (check.stat === "STR" || check.stat === "DEX" || check.stat === "CON")) {
+    mod -= 1;
+  }
+  if ((check.stat === "CHA" || check.stat === "WIS") && vitals.companions.some((c) => c.affinity >= 50)) {
+    mod += 1;
+  }
+  const clampedMod = Math.max(-10, Math.min(20, mod));
+  return { ...check, modifier: clampedMod, rollMode };
 }
 
 export function buildRpgPromptGuidance(state: RpgState | null | undefined, mode: RpgMode): string {
@@ -319,7 +343,7 @@ export function buildRpgPromptGuidance(state: RpgState | null | undefined, mode:
         .map((q) => `${q.title} (${computeQuestUrgency(q)})`)
         .join("; ");
       lines.push(
-        `- Current RPG Snapshot (Turn ${state.turnCounter}, Pacing Pressure ${computePacingFrustrationMultiplier(state.turnCounter)}x): HP ${state.vitals.hp}/${state.vitals.maxHp}, STA ${state.vitals.stamina}/${state.vitals.maxStamina}, Stress ${state.vitals.stress}/100${activeQuests ? ` | Active Quests: ${activeQuests}` : ""}.`,
+        `- Current RPG Snapshot (Turn ${state.turnCounter}, Pacing Pressure ${computePacingFrustrationMultiplier(state.turnsSinceProgress ?? state.turnCounter)}x): HP ${state.vitals.hp}/${state.vitals.maxHp}, STA ${state.vitals.stamina}/${state.vitals.maxStamina}, Stress ${state.vitals.stress}/100${activeQuests ? ` | Active Quests: ${activeQuests}` : ""}.`,
       );
     }
   }

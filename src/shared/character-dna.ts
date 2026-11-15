@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { areNamesEquivalent } from './nicknames.js';
 
 export const CharacterHairDNASchema = z.object({
   color: z.string().trim().max(100).optional(),
@@ -53,6 +54,15 @@ export const CharacterDNASchema = z.object({
   demeanor: z.string().trim().max(200).optional(),
   signatureOutfit: z.string().trim().max(1000).default(''),
   activeOutfit: z.string().trim().max(1000).optional(),
+  wardrobeStates: z.record(z.string().trim().max(60), z.string().trim().max(1000)).optional(),
+  activeWardrobeKey: z.string().trim().max(60).optional(),
+  transientConditions: z.array(z.string().trim().max(160)).max(12).optional(),
+  mindLedger: z.object({
+    knownFacts: z.array(z.string().trim().max(300)).max(24).optional(),
+    falseBeliefs: z.array(z.string().trim().max(300)).max(24).optional(),
+    secrets: z.array(z.string().trim().max(300)).max(24).optional(),
+    updatedAt: z.number().int().nonnegative().optional(),
+  }).strict().optional(),
   distinguishingFeatures: z.array(z.string().trim().max(200)).max(24).default([]),
   colorPalette: z.array(z.string().trim().max(60)).max(12).default([]),
   locked: z.boolean().default(false),
@@ -80,11 +90,17 @@ export const CharacterDNALibrarySchema = z.object({
 }).strict();
 export type CharacterDNALibrary = z.infer<typeof CharacterDNALibrarySchema>;
 
-/** Identity matching is exact after Unicode/case/whitespace normalization, never fuzzy by surname. */
+/** Identity matching is exact after Unicode/case/whitespace normalization, with unambiguous nickname fallback. */
 export const dnaNameKey=(value:string)=>value.normalize('NFKC').trim().toLocaleLowerCase().replace(/\s+/g,' ');
 export function findCharacterDNA(records:Record<string,CharacterDNA>,identity:string):CharacterDNA|undefined{
   const key=dnaNameKey(identity);
-  const all=Object.values(records);const direct=all.find(c=>dnaNameKey(c.id)===key)||all.find(c=>dnaNameKey(c.name)===key);if(direct)return direct;const aliases=all.filter(c=>c.aliases.some(a=>dnaNameKey(a)===key));return aliases.length===1?aliases[0]:undefined;
+  const all=Object.values(records);
+  const direct=all.find(c=>dnaNameKey(c.id)===key)||all.find(c=>dnaNameKey(c.name)===key);
+  if(direct)return direct;
+  const aliases=all.filter(c=>c.aliases.some(a=>dnaNameKey(a)===key));
+  if(aliases.length===1)return aliases[0];
+  const nickMatches=all.filter(c=>areNamesEquivalent(c.name,identity)||c.aliases.some(a=>areNamesEquivalent(a,identity)));
+  return nickMatches.length===1?nickMatches[0]:undefined;
 }
 
 export function createEmptyCharacterDNA(name: string, id?: string): CharacterDNA {
@@ -236,7 +252,10 @@ function deduplicateDescriptiveClauses(rawClauses: string[], isFirstIdentityClau
 /**
  * Formats a CharacterDNA record into comma-separated tags suitable for image prompt generation.
  */
-export function formatCharacterDNAToTags(dna: CharacterDNA): string[] {
+export function formatCharacterDNAToTags(
+  dna: CharacterDNA,
+  options?: { includeOutfit?: boolean | undefined }
+): string[] {
   const tags: string[] = [];
   const isMale = dna.build.gender?.toLowerCase() === 'man' || dna.build.gender?.toLowerCase() === 'male';
 
@@ -276,7 +295,7 @@ export function formatCharacterDNAToTags(dna: CharacterDNA): string[] {
 
   const dedupedTags = Array.from(new Set(tags.filter(Boolean)));
 
-  const currentOutfit = dna.activeOutfit || dna.signatureOutfit;
+  const currentOutfit = options?.includeOutfit !== false ? (dna.activeOutfit || dna.signatureOutfit) : undefined;
   if (currentOutfit && !isGenericAttire(currentOutfit)) {
     dedupedTags.push(currentOutfit.startsWith('wearing ') ? currentOutfit : `wearing ${currentOutfit}`);
   }
@@ -290,7 +309,10 @@ export function formatCharacterDNAToTags(dna: CharacterDNA): string[] {
 /**
  * Formats a CharacterDNA record into a cohesive descriptive clause for natural-language prompt models (like FLUX, Grok, Recraft).
  */
-export function formatCharacterDNAToPromptClause(dna: CharacterDNA): string {
+export function formatCharacterDNAToPromptClause(
+  dna: CharacterDNA,
+  options?: { includeOutfit?: boolean | undefined }
+): string {
   const rawClauses: string[] = [];
   const isMale = dna.build.gender?.toLowerCase() === 'man' || dna.build.gender?.toLowerCase() === 'male';
 
@@ -344,7 +366,7 @@ export function formatCharacterDNAToPromptClause(dna: CharacterDNA): string {
 
   const deduped = deduplicateDescriptiveClauses(rawClauses, hasIdentityLead);
 
-  const currentOutfit = dna.activeOutfit || dna.signatureOutfit;
+  const currentOutfit = options?.includeOutfit !== false ? (dna.activeOutfit || dna.signatureOutfit) : undefined;
   if (currentOutfit && !isGenericAttire(currentOutfit)) {
     deduped.push(currentOutfit.startsWith('wearing ') ? currentOutfit : `wearing ${currentOutfit}`);
   }
@@ -500,4 +522,38 @@ export function isCharacterActiveOnBranch(
   if (!char.seenInSwipes || char.seenInSwipes.length === 0) return true;
   if (!activeBranchSwipeTags || activeBranchSwipeTags.size === 0) return true;
   return char.seenInSwipes.some((tag) => activeBranchSwipeTags.has(tag));
+}
+
+/** Prune auto-discovered, unlocked characters whose swipe tags belong exclusively to replaced swipes. */
+export function scrubCharacterDNASwipes(
+  library: CharacterDNALibrary,
+  activeMessageSwipes: Record<string, string>
+): CharacterDNALibrary {
+  const nextCharacters: Record<string, CharacterDNA> = {};
+  for (const [id, char] of Object.entries(library.characters)) {
+    if (!char.autoDiscovered || char.locked || !char.seenInSwipes || char.seenInSwipes.length === 0) {
+      nextCharacters[id] = char;
+      continue;
+    }
+    const knownMessageIds = char.seenInSwipes
+      .map((tag) => tag.split('::')[0] ?? '')
+      .filter((msgId) => Object.prototype.hasOwnProperty.call(activeMessageSwipes, msgId));
+    if (knownMessageIds.length === 0) {
+      nextCharacters[id] = char;
+      continue;
+    }
+    const isActive = char.seenInSwipes.some((tag) => {
+      const msgId = tag.split('::')[0] ?? '';
+      const activeTag = activeMessageSwipes[msgId];
+      return !activeTag || tag === activeTag;
+    });
+    if (isActive) {
+      nextCharacters[id] = char;
+    }
+  }
+  return CharacterDNALibrarySchema.parse({
+    ...library,
+    characters: nextCharacters,
+    revision: (library.revision ?? 0) + 1
+  });
 }

@@ -170,10 +170,17 @@ export function serializeFlux3Klein(input: SerializerInput): SerializerResult {
     const actionStr = s.action || (brief.action ? sanitizeQuoteAndUnitNotation(brief.action) : 'standing poised in the scene');
 
     // 0.0 - 1.0 decimal fraction coordinates for NanoGPT
+    const placement0 = shotSpec.composition.subjectPlacements?.[0];
+    const resolved0 = placement0 ? resolveKleinPlacement(placement0, 0) : undefined;
+    const rawBox = resolved0?.box ?? { x_min: 0.25, y_min: 0.15, x_max: 0.75, y_max: 0.90 };
+    const singleBox = {
+      ...rawBox,
+      y_max: shotSpec.safeArea ? Math.min(rawBox.y_max, 0.78) : rawBox.y_max
+    };
     layoutBoxes.push({
       label,
       description: `${s.name}: ${s.appearance}${attireStr}`,
-      box: { x_min: 0.25, y_min: 0.15, x_max: 0.75, y_max: 0.90 }
+      box: singleBox
     });
 
     const subjectClause = `In the center foreground, <${label}> ${s.name} (${s.appearance}${attireStr}) is ${actionStr.replace(/\.+$/, '')}.`.replace(/\s+/g, ' ').replace(/,\s*\./g, '.');
@@ -186,25 +193,35 @@ export function serializeFlux3Klein(input: SerializerInput): SerializerResult {
       text: subjectClause
     });
   } else {
-    // Multi-character ensemble with depth-aware scene staging (or frame-relative anchors fallback)
+    // 3+N Spatial Frustum & Dorsal OTS Conditioning: keep 1-3 primary boxed subjects, group extras in background
     const placements = shotSpec.composition.subjectPlacements || [];
     const hasDirectedPlacements = placements.length >= 2;
-    const charWidth = Number((0.85 / Math.min(subjects.length, 3)).toFixed(2));
+    const isOts = shotSpec.camera.angle === 'over-the-shoulder';
+    const primarySubjects = subjects.slice(0, 3);
+    const charWidth = Number((0.85 / Math.min(primarySubjects.length, 3)).toFixed(2));
     const ensembleClauses: string[] = [];
 
-    subjects.slice(0, 4).forEach((s, i) => {
+    primarySubjects.forEach((s, i) => {
       const label = `character_${s.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
       const attireStr = s.attire ? `, wearing ${s.attire}` : '';
+      const otsRole = isOts && i === 0
+        ? '; in out-of-focus foreground frame edge, dorsal over-the-shoulder silhouette'
+        : isOts && i === 1
+          ? '; tack-sharp midground focal subject facing camera'
+          : '';
 
       if (hasDirectedPlacements) {
         const matchedPlacement = placements.find(p => p.subject.trim().toLowerCase() === s.name.trim().toLowerCase()) ?? placements[i];
         const resolved = resolveKleinPlacement(matchedPlacement, i);
+        const clampedBox = shotSpec.safeArea
+          ? { ...resolved.box, y_max: Math.min(resolved.box.y_max, 0.78) }
+          : resolved.box;
         layoutBoxes.push({
           label,
           description: `${s.name}: ${s.appearance}${attireStr}`,
-          box: resolved.box
+          box: clampedBox
         });
-        ensembleClauses.push(`${resolved.anchor}, <${label}> ${s.name} (${s.appearance}${attireStr})`);
+        ensembleClauses.push(`${resolved.anchor}, <${label}> ${s.name} (${s.appearance}${attireStr}${otsRole})`);
       } else {
         const xMin = Number((0.08 + i * charWidth).toFixed(2));
         const xMax = Number(Math.min(0.95, xMin + charWidth - 0.04).toFixed(2));
@@ -217,18 +234,16 @@ export function serializeFlux3Klein(input: SerializerInput): SerializerResult {
         layoutBoxes.push({
           label,
           description: `${s.name}: ${s.appearance}${attireStr}`,
-          box: { x_min: xMin, y_min: 0.18, x_max: xMax, y_max: 0.90 }
+          box: { x_min: xMin, y_min: 0.18, x_max: xMax, y_max: shotSpec.safeArea ? 0.78 : 0.90 }
         });
 
-        ensembleClauses.push(`${anchor}, <${label}> ${s.name} (${s.appearance}${attireStr})`);
+        ensembleClauses.push(`${anchor}, <${label}> ${s.name} (${s.appearance}${attireStr}${otsRole})`);
       }
     });
 
-    if (subjects.length > 4) {
-      subjects.slice(4).forEach(s => {
-        const attireStr = s.attire ? `, wearing ${s.attire}` : '';
-        ensembleClauses.push(`Further in the background, ${s.name} (${s.appearance}${attireStr})`);
-      });
+    if (subjects.length > 3) {
+      const backgroundNames = subjects.slice(3).map(s => `${s.name}${s.attire ? ` in ${s.attire}` : ''}`).join(', ');
+      ensembleClauses.push(`Background group further back in the scene: ${backgroundNames}`);
     }
 
     const actionText = brief.action ? ` ${sanitizeQuoteAndUnitNotation(brief.action.trim().replace(/\.+$/, ''))}.` : '.';

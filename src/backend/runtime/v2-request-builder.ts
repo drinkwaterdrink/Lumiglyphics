@@ -6,7 +6,7 @@ import {resolveStyleDNA,type StyleDNA} from '../../shared/style-dna.js';
 import {ImageShotSpecSchema,type ImageShotSpec} from '../../shared/image-shot-spec.js';
 import {resolveImageOutputPlan} from './image-output-plan.js';
 import {resolveShotSpec,type ShotDirectorInput} from './shot-director.js';
-import {resolveReferencePlan} from './reference-plan.js';
+import {createReferencePlan, resolveReferencePlan} from './reference-plan.js';
 import {compileModelPrompt} from './model-prompt-compiler.js';
 import type {ImageGenerationRequest,RebuildOptions} from './image-review.js';
 import type {StoredPortrait} from './storage.js';
@@ -68,7 +68,9 @@ export function buildV2ImageRequest(input:V2ImageRequestInput):{request:ImageGen
  request.promptProfileV2=profile;request.outputPlan=outputPlan;request.shotSpec=shotSpec;request.styleSnapshot=styleSnapshot.styleDNA;
  request.parameters={...request.parameters,...outputPlan.parameters};
  if(cue.imageTemplate?.cameraPolicy!=='fixed'||Boolean(rebuild?.manualCamera||rebuild?.fitToModel||input.styleId)){
-  const referencePlan=resolveReferencePlan({brief:input.metadata?.brief,cue,portraits:input.portraits,characterDNALibrary:input.characterDNALibrary});
+  const isTextToImageModel=/\/text-to-image$/i.test(request.model??'');
+  const referencePayloadSupported=!isTextToImageModel&&(profile.features.references===true||profile.dialect==='novelai'||['comfyui','swarmui'].some(p=>(profile.family??'').toLowerCase().includes(p)));
+  const referencePlan=referencePayloadSupported?resolveReferencePlan({brief:input.metadata?.brief,cue,portraits:input.portraits,characterDNALibrary:input.characterDNALibrary}):createReferencePlan([]);
   const compiled=compileModelPrompt({brief:input.brief,shotSpec,styleDNA:effectiveStyleDNA,profile,outputPlan,referencePlan,detailLevel:rebuild?.fitToModel?'compact':config.imagePromptDetail,promptExpansionEnabled:profile.promptExpansion?.enabled,userBudgetOverride:rebuild?.fitToModel?Math.min(profile.softBudgets.standard[0],profile.hardMaxCharacters):config.imagePromptBudgetOverride?config.imagePromptBudget:null,cue});
   request.prompt=compiled.prompt;
   if(compiled.negativePrompt!==undefined){
@@ -82,6 +84,9 @@ export function buildV2ImageRequest(input:V2ImageRequestInput):{request:ImageGen
     }
   }
   if(compiled.parameterHints)request.parameters={...request.parameters,...compiled.parameterHints};
+  if(config.spatialFrustumEnabled===false&&request.parameters&&'layout_boxes' in request.parameters){
+   delete request.parameters.layout_boxes;
+  }
   if(metadata){
    metadata.budgetSummary={complexity:compiled.budgetPlan.complexity,softRange:compiled.budgetPlan.softRange,hardLimit:compiled.budgetPlan.hardLimit,finalCharacters:request.prompt.length+(request.negativePrompt?.length??0)};
    metadata.promptLintWarnings=compiled.warnings;metadata.referenceSummary=input.referenceSummary;

@@ -5,7 +5,7 @@ import type { ChatMessageDTO, PersonaDTO, SpindleAPI } from "lumiverse-spindle-t
 import { DEFAULT_CONFIG } from "../../config";
 import { ContinuityStateSchema, SceneStateSchema } from "../../shared/contracts";
 import { emptySingleCharacter } from "../core/visual-state";
-import { gameHintsForTurn, parseIgnoredTags, planTurn } from "./planner";
+import { gameHintsForTurn, parseIgnoredTags, planTurn, selectDramaticPeakCues } from "./planner";
 
 const message: ChatMessageDTO & { role: "assistant" } = {
   id: "assistant-1",
@@ -1332,4 +1332,24 @@ test('optional documents are literal, source-scoped and never trigger a repair c
    assert.equal(readerPresentationFor(result.plan,oldSwipe),undefined);
   }
  }
+});
+
+
+test('selectDramaticPeakCues prioritizes dramatic peak beats while preserving chronological order', () => {
+  const cues = [
+    { paragraphIndex: 0, visualDescription: 'Calm arrival in hallway' },
+    { paragraphIndex: 1, visualDescription: 'Quiet footsteps' },
+    { paragraphIndex: 2, visualDescription: 'The chandelier explodes as Mira draws her blade in a sudden betrayal' },
+    { paragraphIndex: 3, visualDescription: 'Dust settles quietly' },
+    { paragraphIndex: 4, visualDescription: 'Final dramatic standoff at the balcony' },
+  ];
+  const { selected, overflow } = selectDramaticPeakCues(cues, 2, [
+    { index: 0, text: 'They enter.' },
+    { index: 1, text: 'Walking silently.' },
+    { index: 2, text: 'Chaos erupts!' },
+    { index: 3, text: 'Quiet moment.' },
+    { index: 4, text: 'A final standoff!' },
+  ]);
+  assert.deepEqual(selected.map((c) => c.paragraphIndex), [2, 4]);
+  assert.deepEqual(overflow.map((c) => c.paragraphIndex), [0, 1, 3]);
 });

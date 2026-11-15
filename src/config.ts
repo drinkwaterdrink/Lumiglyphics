@@ -106,6 +106,10 @@ export type VisualNovelConfig = {
   flux3KleinPromptMode?: Flux3KleinPromptMode;
   dialogueSafeArea: "auto" | "always" | "off";
   imageFramingDirector?: boolean;
+  spatialFrustumEnabled: boolean;
+  chromaticLutEnabled: boolean;
+  mindLedgerEnabled: boolean;
+  chapterCodexEnabled: boolean;
   imagePromptDetail?: "auto" | "compact" | "standard" | "detailed";
   imagePromptFormat: "description" | "tags";
   automaticImagePromptSettings: boolean;
@@ -203,6 +207,10 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   flux3KleinPromptMode: "auto",
   dialogueSafeArea: "auto",
   imageFramingDirector: true,
+  spatialFrustumEnabled: true,
+  chromaticLutEnabled: true,
+  mindLedgerEnabled: true,
+  chapterCodexEnabled: true,
   imagePromptDetail: "auto",
   imagePromptFormat: "description",
   automaticImagePromptSettings: true,
@@ -442,6 +450,10 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     flux3KleinPromptMode: input.flux3KleinPromptMode === "pup-caption" || input.flux3KleinPromptMode === "off" ? input.flux3KleinPromptMode : "auto",
     dialogueSafeArea: input.dialogueSafeArea === "always" ? "always" : input.dialogueSafeArea === "off" ? "off" : "auto",
     imageFramingDirector: bool(input.imageFramingDirector, true),
+    spatialFrustumEnabled: bool(input.spatialFrustumEnabled, DEFAULT_CONFIG.spatialFrustumEnabled),
+    chromaticLutEnabled: bool(input.chromaticLutEnabled, DEFAULT_CONFIG.chromaticLutEnabled),
+    mindLedgerEnabled: bool(input.mindLedgerEnabled, DEFAULT_CONFIG.mindLedgerEnabled),
+    chapterCodexEnabled: bool(input.chapterCodexEnabled, DEFAULT_CONFIG.chapterCodexEnabled),
     imagePromptDetail: input.imagePromptDetail === "compact" || input.imagePromptDetail === "standard" || input.imagePromptDetail === "detailed" ? input.imagePromptDetail : "auto",
     imagePromptFormat: input.imagePromptFormat === "tags" ? "tags" : "description",
     automaticImagePromptSettings: bool(input.automaticImagePromptSettings, true),

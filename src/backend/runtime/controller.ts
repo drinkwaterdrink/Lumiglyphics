@@ -1474,7 +1474,7 @@ async function processAssistantMessage(
             ? (priorTurnRecord?.plan.scenes.at(-1)?.environment.location ?? null)
             : (chatState.latestScene?.environment.location ?? null);
         await mutateStoryDNASet(spindle, chatId, userId, undefined, (set) => {
-          harvestTurnStoryDNA(record.plan, set, swipeTag, prevLocationName);
+          harvestTurnStoryDNA(record.plan, set, swipeTag, prevLocationName, { mindLedgerEnabled: config.mindLedgerEnabled, chapterCodexEnabled: config.chapterCodexEnabled });
         });
       } catch {}
     }

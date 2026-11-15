@@ -3,6 +3,7 @@ import type {SpindleAPI} from 'lumiverse-spindle-types';
 import type {VisualNovelConfig} from '../../config.js';
 import {z} from 'zod';
 import {dnaNameKey,isGenericAttire,type CharacterDNA} from '../../shared/character-dna.js';
+import {areNamesEquivalent} from '../../shared/nicknames.js';
 import {DNA_FIELDS,DnaChangeSchema,applyDnaChanges,type DnaField,type DnaEvidence,type DnaSourceStatus,type DnaProposal} from '../../shared/character-dna-workflow.js';
 import {loadVisualContext} from './context.js';
 import {collectContextSources,optionalRpcReader} from './context-providers/index.js';
@@ -64,7 +65,6 @@ export async function collectCharacterDnaEvidence(spindle:SpindleAPI,input:Input
   const latest=trackerScope.at(-1);
   if(latest){
    const tracker=scanTrackerCastHistory(trackerScope,latest.id,config.simTrackerMappings);
-   const targetTokens=[target.name,...target.aliases].flatMap(n=>n.toLowerCase().split(/\s+/)).filter(w=>w.length>=3);
    const isMatch=(tChar:{name:string;aliases:string[]})=>{
     const tKey=dnaNameKey(tChar.name);
     if(names.includes(tKey))return true;
@@ -76,8 +76,9 @@ export async function collectCharacterDnaEvidence(spindle:SpindleAPI,input:Input
      const regex=new RegExp('(^|[^\\p{L}\\p{N}])' + escaped + '(?=$|[^\\p{L}\\p{N}])','iu');
      if(regex.test(tKey)||tChar.aliases.some(a=>regex.test(dnaNameKey(a))))return true;
     }
-    const tTokens=[tChar.name,...tChar.aliases].flatMap(n=>n.toLowerCase().split(/\s+/)).filter(w=>w.length>=3);
-    if(targetTokens.some(tok=>tTokens.includes(tok)))return true;
+    const targetForms=[target.name,...target.aliases];
+    const trackerForms=[tChar.name,...tChar.aliases];
+    if(targetForms.some(tf=>trackerForms.some(cf=>areNamesEquivalent(tf,cf))))return true;
     return false;
    };
    const matching=tracker.filter(t=>isMatch(t.character));

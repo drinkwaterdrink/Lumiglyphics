@@ -19,8 +19,10 @@ export function readMappedTrackerValues(record:unknown, paths:readonly string[])
   const parsed=pathSchema.safeParse(path);if(!parsed.success)continue;
   let value:unknown=record;
   for(const part of parsed.data.split('.')) {
-   if(!value||typeof value!=='object'||Array.isArray(value)||!Object.prototype.hasOwnProperty.call(value,part)){value=undefined;break;}
-   value=(value as Record<string,unknown>)[part];
+   if(!value||typeof value!=='object'||Array.isArray(value)){value=undefined;break;}
+   const obj=value as Record<string,unknown>;
+   if(Object.prototype.hasOwnProperty.call(obj,part)){value=obj[part];}
+   else{const lp=part.toLowerCase();const mk=Object.keys(obj).find(k=>k.toLowerCase()===lp&&!blocked.has(k.toLowerCase()));if(mk!==undefined){value=obj[mk];}else{value=undefined;break;}}
   }
   for(const item of (Array.isArray(value)?value.slice(0,8):[value])) {
    const text=typeof item==='string'?item.trim().slice(0,500):typeof item==='number'&&Number.isFinite(item)?String(item):'';

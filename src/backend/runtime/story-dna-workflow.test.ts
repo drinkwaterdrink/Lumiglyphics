@@ -105,6 +105,8 @@ test('handleStoryDnaRequest > lists, saves location/item, and deletes', async ()
 test('isSignificantStoryItem filters mundane props and harvestTurnStoryDNA harvests locations, edges, and significant items', () => {
   expect(isSignificantStoryItem('door')).toBe(false);
   expect(isSignificantStoryItem('old wooden cup')).toBe(false);
+  expect(isSignificantStoryItem('rusted iron door')).toBe(false);
+  expect(isSignificantStoryItem('enchanted iron door', 'glowing with runic sigils')).toBe(true);
   expect(isSignificantStoryItem('ancient silver heirloom locket', 'passed down for centuries')).toBe(true);
   expect(isSignificantStoryItem('Carved Yew Staff')).toBe(true);
 
@@ -158,6 +160,7 @@ test('isSignificantStoryItem filters mundane props and harvestTurnStoryDNA harve
   expect(set.items['carved-yew-staff']).toBeDefined();
   expect(set.items['glowing-brass-compass']).toBeDefined();
   expect(set.items['wooden-cup']).toBeUndefined();
+  expect(set.chapterCodex?.map((c) => c.location)).toEqual(['Flat 3', 'North Pier']);
 
   // Branch filtering removes Swipe-0-only auto-discovered entries when on Swipe 1
   const branchSwipe1 = filterStoryDnaForActiveBranch(set, new Set(['m5::1']));

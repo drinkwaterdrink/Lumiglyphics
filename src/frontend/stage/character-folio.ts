@@ -1107,20 +1107,48 @@ export class CharacterFolio implements WorkspaceSurface {
     addChip.type = 'button';
     addChip.className = 'folio-add-chip';
     addChip.innerHTML = `<span>+</span><span>Add Character</span>`;
+    const commitNewCharacter = (rawName: string) => {
+      const trimmed = rawName.trim();
+      if (!trimmed) return;
+      if (trimmed.length > 160) { this.showError('Character names must be 160 characters or fewer.'); return; }
+      const existing = findCharacterDNA(this.library, trimmed);
+      if (existing) { this.setActiveCharacter(existing.id); return; }
+      if (findCharacterDNA(this.deleted, trimmed)) { this.notice = 'This character was deleted. Use Undo delete to restore it.'; this.renderDetail(); return; }
+      const created = createEmptyCharacterDNA(trimmed);
+      created.autoDiscovered = false;
+      this.library[created.id] = created;
+      this.activeCharacterId = created.id;
+      this.handlers.onSaveDNA?.(created, this.revision);
+      this.renderRoster();
+      this.renderDetail();
+    };
     addChip.onclick = () => {
-      const name = prompt('Enter character name:');
-      if (name && name.trim()) {
-        if(name.trim().length>160){this.showError('Character names must be 160 characters or fewer.');return;}
-        const existing=findCharacterDNA(this.library,name);if(existing){this.setActiveCharacter(existing.id);return;}
-        if(findCharacterDNA(this.deleted,name)){this.notice='This character was deleted. Use Undo delete to restore it.';this.renderDetail();return;}
-        const created = createEmptyCharacterDNA(name.trim());
-        created.autoDiscovered = false;
-        this.library[created.id] = created;
-        this.activeCharacterId = created.id;
-        this.handlers.onSaveDNA?.(created,this.revision);
-        this.renderRoster();
-        this.renderDetail();
-      }
+      const existingForm = this.rosterCarousel.querySelector('[data-folio-inline-add]');
+      if (existingForm) { (existingForm.querySelector('input') as HTMLInputElement | null)?.focus(); return; }
+      const form = document.createElement('div');
+      form.setAttribute('data-folio-inline-add', '');
+      form.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:3px 6px;border-radius:10px;background:rgba(15,23,42,0.92);border:1px solid rgba(110,231,183,0.45);';
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.placeholder = 'Character name...';
+      inp.maxLength = 160;
+      inp.style.cssText = 'width:130px;background:transparent;border:none;outline:none;color:#f8fafc;font-size:12px;padding:3px 4px;';
+      const ok = document.createElement('button');
+      ok.type = 'button';
+      ok.className = 'folio-action-btn';
+      ok.textContent = 'Add';
+      ok.style.cssText = 'padding:3px 8px;font-size:11px;';
+      const cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'folio-action-btn';
+      cancel.textContent = '✕';
+      cancel.style.cssText = 'padding:3px 6px;font-size:11px;opacity:0.75;';
+      ok.onclick = () => { const v = inp.value; form.remove(); commitNewCharacter(v); };
+      cancel.onclick = () => form.remove();
+      inp.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); ok.click(); } else if (e.key === 'Escape') { e.preventDefault(); form.remove(); } };
+      form.append(inp, ok, cancel);
+      this.rosterCarousel.insertBefore(form, addChip);
+      inp.focus();
     };
     this.rosterCarousel.append(addChip);
     const last=Object.values(this.deleted).at(-1);if(last){const undo=document.createElement('button');undo.type='button';undo.className='folio-action-btn';undo.textContent='Undo delete';undo.onclick=()=>this.handlers.onRestoreDNA?.(last.id,this.revision);this.rosterCarousel.append(undo);}
@@ -1442,6 +1470,67 @@ export class CharacterFolio implements WorkspaceSurface {
       }, el => onSingleAutoFill('distinguishingFeatures', el))
     );
     wardCard.append(wardGrid);
+    if (char.wardrobeStates && Object.keys(char.wardrobeStates).length > 0) {
+      const presetWrap = document.createElement('div');
+      presetWrap.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px;';
+      const lbl = document.createElement('span');
+      lbl.style.cssText = 'font-size:11px;opacity:0.75;margin-right:2px;';
+      lbl.textContent = 'Wardrobe Presets:';
+      presetWrap.append(lbl);
+      for (const [key, outfitVal] of Object.entries(char.wardrobeStates)) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'folio-action-btn';
+        const isActive = char.activeWardrobeKey === key || char.activeOutfit === outfitVal;
+        chip.style.cssText = `padding:4px 9px;font-size:11px;border-radius:999px;${isActive ? 'border-color:#6ee7b7;background:rgba(110,231,183,0.18);' : 'opacity:0.85;'}`;
+        chip.textContent = key;
+        chip.title = outfitVal;
+        chip.onclick = () => {
+          char.activeWardrobeKey = key;
+          char.activeOutfit = outfitVal;
+          char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+          this.dirty.add(char.id);
+          this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+          this.renderDetail();
+        };
+        presetWrap.append(chip);
+      }
+      wardCard.append(presetWrap);
+    }
+    if (char.transientConditions?.length) {
+      const condWrap = document.createElement('div');
+      condWrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;';
+      for (const cond of char.transientConditions) {
+        const pill = document.createElement('span');
+        pill.style.cssText = 'font-size:11px;padding:3px 8px;border-radius:999px;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.3);color:#fde68a;';
+        pill.textContent = cond;
+        condWrap.append(pill);
+      }
+      wardCard.append(condWrap);
+    }
+    if (char.mindLedger && ((char.mindLedger.knownFacts?.length ?? 0) > 0 || (char.mindLedger.falseBeliefs?.length ?? 0) > 0 || (char.mindLedger.secrets?.length ?? 0) > 0)) {
+      const mlCard = document.createElement('div');
+      mlCard.style.cssText = 'margin-top:10px;padding:10px;border-radius:8px;background:rgba(15,23,42,0.5);border:1px solid rgba(148,163,184,0.2);display:flex;flex-direction:column;gap:4px;';
+      const mlHdr = document.createElement('div');
+      mlHdr.style.cssText = 'font-size:11px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#93c5fd;';
+      mlHdr.textContent = '🧠 Epistemic Mind Ledger';
+      mlCard.append(mlHdr);
+      const addList = (title: string, items?: string[]) => {
+        if (!items?.length) return;
+        const p = document.createElement('div');
+        p.style.cssText = 'font-size:11.5px;line-height:1.4;color:#e2e8f0;';
+        const b = document.createElement('strong');
+        b.textContent = `${title}: `;
+        const s = document.createElement('span');
+        s.textContent = items.join(' · ');
+        p.append(b, s);
+        mlCard.append(p);
+      };
+      addList('Known Facts', char.mindLedger.knownFacts);
+      addList('False Beliefs', char.mindLedger.falseBeliefs);
+      addList('Secrets', char.mindLedger.secrets);
+      wardCard.append(mlCard);
+    }
 
     this.detailContainer.append(idCard, propCard, faceCard, wardCard);
   }

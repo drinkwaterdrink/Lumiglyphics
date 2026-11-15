@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { deriveShortAliases } from './story-dna.js';
+import { deriveShortAliases, matchesBoundaryCandidate } from './story-dna.js';
 import { REFERENCE_FIELDS, referenceFieldMatchesKind } from './reference-fields.js';
 export const StoryReferenceSchema = z.object({
  kind: z.enum(['npc','place','object']), name: z.string().trim().min(1).max(256),
@@ -24,10 +24,10 @@ export function normalizeStoryReferences(value: unknown, paragraphs: readonly {t
   const evidGrounded = normPara.includes(normEvid) || normEvid.includes(normPara);
   if (!evidGrounded) continue;
   let nameGrounded = normPara.includes(normName) || normEvid.includes(normName);
-  if (!nameGrounded && r.kind !== 'npc') {
+  if (!nameGrounded) {
    for (const alias of deriveShortAliases(r.name)) {
     const lower = alias.toLowerCase();
-    if (lower.length >= 4 && (normPara.includes(lower) || normEvid.includes(lower))) {
+    if (lower.length >= 4 && (matchesBoundaryCandidate(normPara, lower) || matchesBoundaryCandidate(normEvid, lower))) {
      nameGrounded = true;
      break;
     }

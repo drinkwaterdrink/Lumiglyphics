@@ -21,9 +21,15 @@ export function deriveWeatherAmbient(weather:unknown):AmbientEffect|null {
  // Negated, hypothetical, and ended weather must not start an overlay.
  if(/\b(no|not|without|chance|possible|possibly|forecast|stopped|ended|cleared|clearing|dry|sunny|previously|earlier|might|may|could|would|if|unlikely)\b/.test(text)||/^clear\b|\bclear\s+(?:sky|skies|weather|night|day|morning|evening)\b|\bafter\s+(?:the\s+)?(?:rain|storm|snow|fog|downpour|blizzard)\b/.test(text))return null;
  if(/\b(heavy rain(?:fall)?|downpour|rainstorm|thunderstorm|storm|stormy)\b/.test(text))return 'heavy_rain';
- if(/\b(snow|snowfall|snowing|snowy|blizzard|flurries)\b/.test(text))return 'snow';
+ if(/\b(blizzard|whiteout|snowstorm|heavy snow)\b/.test(text))return 'snow';
+ if(/\b(snow|snowfall|snowing|snowy|flurries)\b/.test(text))return 'snow';
  if(/\b(rain|rainfall|raining|rainy|drizzle|drizzling|showers)\b/.test(text))return 'rain';
- if(/\b(fog|foggy|mist|misty)\b/.test(text))return 'fog';return null;
+ if(/\b(fog|foggy|mist|misty)\b/.test(text))return 'fog';
+ if(/\b(ash|ashes|embers|cinders|volcanic)\b/.test(text))return 'embers';
+ if(/\b(cherry blossoms?|sakura|petals)\b/.test(text))return 'sakura';
+ if(/\b(falling leaves|autumn leaves)\b/.test(text))return 'autumn_leaves';
+ if(/\b(sunbeams?|god rays|dappled sunlight|crepuscular)\b/.test(text))return 'sunbeams';
+ return null;
 }
 const weatherEffects=new Set<AmbientEffect>(['rain','heavy_rain','snow','fog']);
 export function resolveSceneAmbient(input:{weather:unknown;location:string;description?:string;explicit?:AmbientEffect|null|undefined;previous?:{sameScene:boolean;ambient?:AmbientEffect|null|undefined;ambientSource?:'explicit'|'weather'|undefined}}):{ambient:AmbientEffect|null;ambientSource:'explicit'|'weather'} {

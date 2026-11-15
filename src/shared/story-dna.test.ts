@@ -7,6 +7,7 @@ import {
   createItemId,
   deriveShortAliases,
   isStoryEntryActiveOnBranch,
+  scrubStoryDNASwipes,
   findMatchingLocation,
   findMatchingItem,
   formatLocationDNAToPromptClause,
@@ -123,4 +124,20 @@ test('derives short aliases and filters active-branch swipe entries', () => {
   expect(isStoryEntryActiveOnBranch({ autoDiscovered: true, locked: true, seenInSwipes: ['m2::0'] }, activeSwipes)).toBe(true);
   expect(isStoryEntryActiveOnBranch({ autoDiscovered: true, seenInSwipes: ['m2::0'] }, activeSwipes)).toBe(false);
   expect(isStoryEntryActiveOnBranch({ autoDiscovered: true, seenInSwipes: ['m2::0', 'm2::1'] }, activeSwipes)).toBe(true);
+
+  const scrubbed = scrubStoryDNASwipes(
+    StoryDNASetSchema.parse({
+      locations: {
+        'swipe0-only': { id: 'swipe0-only', name: 'Old Alley', aliases: [], persistentElements: [], autoDiscovered: true, seenInSwipes: ['m2::0'], lastUpdated: 0 },
+        'swipe1-kept': { id: 'swipe1-kept', name: 'New Plaza', aliases: [], persistentElements: [], autoDiscovered: true, seenInSwipes: ['m2::1'], lastUpdated: 0 },
+        'locked-kept': { id: 'locked-kept', name: 'Vault', aliases: [], persistentElements: [], autoDiscovered: true, locked: true, seenInSwipes: ['m2::0'], lastUpdated: 0 },
+      },
+      items: {},
+      revision: 1,
+    }),
+    { m2: 'm2::1' }
+  );
+  expect(scrubbed.locations['swipe0-only']).toBeUndefined();
+  expect(scrubbed.locations['swipe1-kept']).toBeDefined();
+  expect(scrubbed.locations['locked-kept']).toBeDefined();
 });

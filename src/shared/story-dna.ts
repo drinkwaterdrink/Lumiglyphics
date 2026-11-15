@@ -40,9 +40,34 @@ export const ItemDNASchema = z.object({
 }).strict();
 export type ItemDNA = z.infer<typeof ItemDNASchema>;
 
+export const ThoughtCabinetEntrySchema = z.object({
+  id: z.string().trim().min(1).max(256),
+  title: z.string().trim().min(1).max(160),
+  category: z.enum(['mystery', 'clue', 'promise', 'foreshadowing', 'secret']).default('mystery'),
+  description: z.string().trim().max(1500),
+  status: z.enum(['germinating', 'internalized', 'resolved']).default('germinating'),
+  seenInSwipes: z.array(z.string().trim().max(160)).max(64).optional(),
+  updatedAt: z.number().int().nonnegative().default(() => Date.now()),
+}).strict();
+export type ThoughtCabinetEntry = z.infer<typeof ThoughtCabinetEntrySchema>;
+
+export const ChapterCodexEntrySchema = z.object({
+  id: z.string().trim().min(1).max(256),
+  title: z.string().trim().min(1).max(180),
+  location: z.string().trim().max(180),
+  summary: z.string().trim().max(2000),
+  imageUrl: z.string().trim().max(2048).optional(),
+  messageId: z.string().trim().max(160).optional(),
+  seenInSwipes: z.array(z.string().trim().max(160)).max(64).optional(),
+  timestamp: z.number().int().nonnegative().default(() => Date.now()),
+}).strict();
+export type ChapterCodexEntry = z.infer<typeof ChapterCodexEntrySchema>;
+
 export const StoryDNASetSchema = z.object({
   locations: z.record(z.string(), LocationDNASchema).default({}),
   items: z.record(z.string(), ItemDNASchema).default({}),
+  thoughtCabinet: z.array(ThoughtCabinetEntrySchema).max(40).optional(),
+  chapterCodex: z.array(ChapterCodexEntrySchema).max(40).optional(),
   deletedLocations: z.record(z.string(), LocationDNASchema).optional(),
   deletedItems: z.record(z.string(), ItemDNASchema).optional(),
   revision: z.number().int().nonnegative().default(0),
@@ -156,7 +181,7 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function matchesBoundaryCandidate(queryLower: string, candidateRaw: string): boolean {
+export function matchesBoundaryCandidate(queryLower: string, candidateRaw: string): boolean {
   const candidate = candidateRaw.trim().toLowerCase();
   if (!candidate) return false;
   if (candidate === queryLower) return true;
@@ -214,13 +239,16 @@ export function findMatchingItem(
 }
 
 /** Formats Location DNA into a prompt clause for environment/scene injection */
-export function formatLocationDNAToPromptClause(dna: LocationDNA): string {
+export function formatLocationDNAToPromptClause(
+  dna: LocationDNA,
+  options?: { includeLighting?: boolean | undefined; includePersistentElements?: boolean | undefined }
+): string {
   const parts: string[] = [];
   if (dna.environmentDescription) parts.push(dna.environmentDescription);
   if (dna.architecture) parts.push(`architecture: ${dna.architecture}`);
-  if (dna.lighting) parts.push(`lighting: ${dna.lighting}`);
+  if (options?.includeLighting !== false && dna.lighting) parts.push(`lighting: ${dna.lighting}`);
   if (dna.atmosphere) parts.push(`atmosphere: ${dna.atmosphere}`);
-  if (dna.persistentElements && dna.persistentElements.length > 0) {
+  if (options?.includePersistentElements !== false && dna.persistentElements && dna.persistentElements.length > 0) {
     parts.push(`features: ${dna.persistentElements.slice(0, 6).join(', ')}`);
   }
   return parts.join('; ');
@@ -301,4 +329,47 @@ export const StoryDnaRequestSchema = z.discriminatedUnion('action', [
 
 export type StoryDnaRequest = z.infer<typeof StoryDnaRequestSchema>;
 export type StoryDnaActionBody<T = StoryDnaRequest> = T extends StoryDnaRequest ? Omit<T, 'type' | 'chatId' | 'requestId'> : never;
+
+function isSwipeEntryActive(
+  entry: { autoDiscovered?: boolean | undefined; locked?: boolean | undefined; seenInSwipes?: string[] | undefined },
+  activeMessageSwipes: Record<string, string>
+): boolean {
+  if (!entry.autoDiscovered || entry.locked) return true;
+  if (!entry.seenInSwipes || entry.seenInSwipes.length === 0) return true;
+  const knownMessageIds = entry.seenInSwipes.map((tag) => tag.split('::')[0] ?? '').filter((id) => Object.prototype.hasOwnProperty.call(activeMessageSwipes, id));
+  if (knownMessageIds.length === 0) return true;
+  return entry.seenInSwipes.some((tag) => {
+    const msgId = tag.split('::')[0] ?? '';
+    const activeTag = activeMessageSwipes[msgId];
+    return !activeTag || tag === activeTag;
+  });
+}
+
+export function scrubStoryDNASwipes(
+  set: StoryDNASet,
+  activeMessageSwipes: Record<string, string>
+): StoryDNASet {
+  const nextLocations: Record<string, LocationDNA> = {};
+  for (const [id, loc] of Object.entries(set.locations)) {
+    if (isSwipeEntryActive(loc, activeMessageSwipes)) nextLocations[id] = loc;
+  }
+  const nextItems: Record<string, ItemDNA> = {};
+  for (const [id, item] of Object.entries(set.items)) {
+    if (isSwipeEntryActive(item, activeMessageSwipes)) nextItems[id] = item;
+  }
+  const nextThoughtCabinet = set.thoughtCabinet?.filter((t) =>
+    !t.seenInSwipes?.length || isSwipeEntryActive({ autoDiscovered: true, seenInSwipes: t.seenInSwipes }, activeMessageSwipes)
+  );
+  const nextChapterCodex = set.chapterCodex?.filter((c) =>
+    !c.seenInSwipes?.length || isSwipeEntryActive({ autoDiscovered: true, seenInSwipes: c.seenInSwipes }, activeMessageSwipes)
+  );
+  return StoryDNASetSchema.parse({
+    ...set,
+    locations: nextLocations,
+    items: nextItems,
+    ...(nextThoughtCabinet !== undefined ? { thoughtCabinet: nextThoughtCabinet } : {}),
+    ...(nextChapterCodex !== undefined ? { chapterCodex: nextChapterCodex } : {}),
+    revision: (set.revision ?? 0) + 1
+  });
+}
 

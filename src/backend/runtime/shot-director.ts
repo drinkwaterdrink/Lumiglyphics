@@ -362,6 +362,7 @@ export function resolveShotSpec(input: ShotDirectorInput): ImageShotSpec {
       depthOfField = previousShot.camera.depthOfField;
       if (previousShot.camera.shotSize === shotSize && previousShot.camera.angle === angle) {
         angle = angle === 'eye-level' ? 'three-quarter' : 'eye-level';
+        if (shotSize === 'medium') shotSize = 'medium-close-up';
       }
     }
   }

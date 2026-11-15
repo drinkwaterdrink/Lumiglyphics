@@ -39,17 +39,32 @@ const CSS = `
 @media(max-height:500px){section{inset:max(76px,calc(env(safe-area-inset-top) + 64px)) 8px max(12px,env(safe-area-inset-bottom));width:auto;max-height:none}[data-studio-header],[data-studio-footer]{padding:8px 12px}[data-studio-footer] .row{flex-wrap:nowrap;overflow-x:auto}[data-studio-footer] .row button{flex:none}[data-studio-footer] [data-notice]{max-height:12dvh}}
 `;
 const INSPECTOR_CSS=`
-:host{--paper:var(--vn-shell-panel,#171822)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])){--paper:#f8faf6;color:#172721;--vn-shell-text:#172721;--vn-shell-muted:#4b6b5d;--vn-shell-field:#ffffff;--vn-shell-button:#e5eee2;--accent:#1e5a40;--edge:rgba(86,128,107,.35)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) section{color:#172721!important;background:#f8faf6!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) details{background:#ffffff!important;border-color:rgba(86,128,107,.3)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-context]{background:#eef5ee!important;border-color:rgba(86,128,107,.3)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-scene]{color:#142820!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) textarea{background:#ffffff!important;color:#142820!important;border-color:rgba(86,128,107,.35)!important}section{width:min(510px,calc(100% - 24px));color:var(--vn-shell-text,#eee);backdrop-filter:blur(16px)}section small,section p{color:var(--vn-shell-muted,#bbc)}[data-studio-body]{padding-top:14px}details{border:1px solid color-mix(in srgb,var(--edge) 65%,transparent);border-radius:10px;background:rgba(255,255,255,.025);padding:0 12px;margin:8px 0}details[open]{padding-bottom:12px;background:rgba(255,255,255,.04);border-color:color-mix(in srgb,var(--accent) 42%,var(--edge))}summary{font-weight:600}[data-context]{display:flex;gap:12px;align-items:flex-start;margin:10px 0;padding:12px;border-radius:12px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 12%,rgba(255,255,255,.03)),rgba(0,0,0,.24));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--edge))}[data-context-text]{min-width:0;flex:1}[data-status]{font-size:16px;display:block}[data-paragraph]{display:inline-block;margin-top:4px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.07);font-size:11px;font-weight:600}[data-scene]{margin:6px 0 0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;font-size:13px}[data-thumbnail]{width:74px;height:92px;flex:none;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--edge));border-radius:10px;background:var(--vn-shell-field,#101119);display:grid;place-items:center;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.35)}[data-thumbnail] img{width:100%;height:100%;object-fit:cover}[data-placeholder]{font-size:30px;color:var(--accent)}[data-state-detail]{margin:8px 0;font-size:13px}[data-meta]{font-size:12px;margin:6px 0;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.05);display:inline-block}[data-prompt-editor]{margin:14px 0;padding:12px;border-radius:12px;background:rgba(255,255,255,.025);border:1px solid color-mix(in srgb,var(--edge) 70%,transparent)}[data-edit-help]{font-size:12px;margin:0 0 8px}label{font-weight:500;margin:10px 0}label small{float:right;font-weight:400;font-size:11px}textarea{margin-top:6px;font:16px/1.5 var(--vn-shell-family,system-ui);border-radius:8px}[data-positive]{min-height:135px;resize:vertical}[data-negative]{min-height:68px;resize:vertical}[data-budget-meter]{height:6px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin:8px 0 4px}[data-budget-fill]{height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width .2s ease,background-color .2s ease}[data-budget-fill][data-tone="warn"]{background:#f5c462}[data-budget-fill][data-tone="over"]{background:var(--vn-shell-danger,#ffb4ab)}[data-combined-count]{display:block;font-variant-numeric:tabular-nums;text-align:right;font-size:12px}[data-validation]{display:block;color:var(--vn-shell-danger,#ffb4ab);margin:6px 0}[aria-invalid="true"]{border-color:var(--vn-shell-danger,#ffb4ab)}[data-picture-strip]{display:flex;gap:8px;margin-bottom:8px}[data-picture-strip] button{flex:1;min-width:0;padding:6px 8px;font-size:12px;display:flex;align-items:center;gap:6px;border-radius:10px}[data-picture-strip] img{width:30px;height:34px;object-fit:cover;border-radius:5px}[data-picture-strip] [aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,var(--vn-shell-button,#252632));box-shadow:inset 0 0 0 1px var(--accent)}[data-picture-navigation] label{margin:0}[data-retry-queue]{margin:8px 0;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid color-mix(in srgb,var(--edge) 55%,transparent)}[data-retry-queue] [data-queue-status]{display:block;margin-top:6px;font-size:12px}[data-studio-footer] .row{display:block}[data-studio-footer] button{width:100%;border-color:var(--accent);font-weight:650}[data-action-help]{display:block;font-size:12px;text-align:center;margin-top:6px}[data-notice-row]{border-top:1px solid var(--edge);margin-top:10px}[data-notice]{font-size:12px}[data-rewrite-changed]{padding:10px;border:1px solid var(--accent);border-radius:8px;margin:8px 0;background:color-mix(in srgb,var(--accent) 8%,transparent)}[data-rewrite-changed] p{margin:0 0 8px}[data-previous-scene]{padding-left:20px;overflow-wrap:anywhere}[data-reply-settings] details{margin-left:4px}[data-secondary-actions]{margin-bottom:8px}[data-secondary-actions] button{font-size:13px}[data-subject-name]{width:100%}
+:host{--paper:var(--vn-shell-panel,#171822)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])){--paper:#f8faf6;color:#172721;--vn-shell-text:#172721;--vn-shell-muted:#4b6b5d;--vn-shell-field:#ffffff;--vn-shell-button:#e5eee2;--accent:#1e5a40;--edge:rgba(86,128,107,.35)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) section{color:#172721!important;background:#f8faf6!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) details{background:#ffffff!important;border-color:rgba(86,128,107,.3)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-context]{background:#eef5ee!important;border-color:rgba(86,128,107,.3)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-scene]{color:#142820!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) textarea{background:#ffffff!important;color:#142820!important;border-color:rgba(86,128,107,.35)!important}section{width:min(520px,calc(100% - 24px));color:var(--vn-shell-text,#eee);backdrop-filter:blur(16px)}section small,section p{color:var(--vn-shell-muted,#bbc)}[data-studio-body]{padding-top:12px}details{border:1px solid color-mix(in srgb,var(--edge) 65%,transparent);border-radius:10px;background:rgba(255,255,255,.025);padding:0 12px;margin:8px 0}details[open]{padding-bottom:12px;background:rgba(255,255,255,.04);border-color:color-mix(in srgb,var(--accent) 42%,var(--edge))}summary{font-weight:600}[data-context]{display:flex;gap:12px;align-items:flex-start;margin:8px 0 10px;padding:10px 12px;border-radius:12px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 12%,rgba(255,255,255,.03)),rgba(0,0,0,.24));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--edge))}[data-context-text]{min-width:0;flex:1}[data-status]{font-size:15px;display:block}[data-paragraph]{display:inline-block;margin-top:3px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.07);font-size:11px;font-weight:600}[data-scene]{margin:5px 0 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12.5px}[data-thumbnail]{width:66px;height:82px;flex:none;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--edge));border-radius:10px;background:var(--vn-shell-field,#101119);display:grid;place-items:center;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.35)}[data-thumbnail] img{width:100%;height:100%;object-fit:cover}[data-placeholder]{font-size:28px;color:var(--accent)}[data-state-detail]{margin:8px 0;font-size:13px}[data-meta]{font-size:12px;margin:4px 0;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.05);display:inline-block}[data-prompt-editor]{margin:8px 0;padding:12px;border-radius:12px;background:rgba(255,255,255,.025);border:1px solid color-mix(in srgb,var(--edge) 70%,transparent)}[data-edit-help]{font-size:12px;margin:0 0 8px}label{font-weight:500;margin:10px 0}label small{float:right;font-weight:400;font-size:11px}textarea{margin-top:6px;font:15px/1.5 var(--vn-shell-family,system-ui);border-radius:8px}[data-positive]{min-height:130px;resize:vertical;transition:min-height .2s ease}[data-positive][data-expanded="true"]{min-height:260px}[data-negative]{min-height:68px;resize:vertical}[data-budget-meter]{height:6px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin:8px 0 4px}[data-budget-fill]{height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width .2s ease,background-color .2s ease}[data-budget-fill][data-tone="warn"]{background:#f5c462}[data-budget-fill][data-tone="over"]{background:var(--vn-shell-danger,#ffb4ab)}[data-combined-count]{display:block;font-variant-numeric:tabular-nums;text-align:right;font-size:12px}[data-validation]{display:block;color:var(--vn-shell-danger,#ffb4ab);margin:6px 0}[aria-invalid="true"]{border-color:var(--vn-shell-danger,#ffb4ab)}[data-picture-strip]{display:flex;gap:8px;margin-bottom:8px;overflow-x:auto;scrollbar-width:thin;-webkit-overflow-scrolling:touch;padding-bottom:4px}[data-picture-strip] button{flex:0 0 auto;min-width:134px;max-width:210px;padding:6px 10px;font-size:12px;display:flex;align-items:center;gap:8px;border-radius:10px}[data-picture-strip] img{width:30px;height:34px;object-fit:cover;border-radius:5px;flex:none}[data-picture-strip] [aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,var(--vn-shell-button,#252632));box-shadow:inset 0 0 0 1px var(--accent)}[data-picture-navigation] label{margin:0}[data-retry-queue]{margin:8px 0;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid color-mix(in srgb,var(--edge) 55%,transparent)}[data-retry-queue] [data-queue-status]{display:block;margin-top:6px;font-size:12px}[data-studio-footer] .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}[data-studio-footer] button{flex:1 1 115px;min-height:40px;border-color:var(--accent);font-weight:650;justify-content:center}[data-studio-footer] button[data-generate],[data-studio-footer] button[data-prepare],[data-studio-footer] button[data-primary-repair]{flex:1.6 1 165px;background:color-mix(in srgb,var(--accent) 20%,var(--vn-shell-button,#252632))}[data-action-help]{display:block;font-size:11.5px;text-align:center;margin-top:6px}[data-notice-row]{border-top:1px solid var(--edge);margin-top:10px}[data-notice]{font-size:12px}[data-rewrite-changed]{padding:10px;border:1px solid var(--accent);border-radius:8px;margin:8px 0;background:color-mix(in srgb,var(--accent) 8%,transparent)}[data-rewrite-changed] p{margin:0 0 8px}[data-previous-scene]{padding-left:20px;overflow-wrap:anywhere}[data-reply-settings] details{margin-left:4px}[data-secondary-actions]{margin-bottom:8px}[data-secondary-actions] button{font-size:13px}[data-subject-name]{width:100%}
 section[data-state="planning"],section[data-state="empty"],section[data-state="zero-budget"],section[data-state="idle"]{bottom:auto;max-height:calc(100% - 92px)}
-.studio-tab-bar{position:sticky;top:0;z-index:20;background:var(--paper);display:flex;align-items:center;gap:6px;overflow-x:auto;padding:6px 0 10px;margin-bottom:12px;border-bottom:1px solid var(--edge);scrollbar-width:none;-webkit-overflow-scrolling:touch}.studio-tab-bar::-webkit-scrollbar{display:none}
+.studio-tab-bar{position:sticky;top:0;z-index:20;background:var(--paper);display:flex;align-items:center;gap:6px;overflow-x:auto;padding:6px 0 10px;margin-bottom:10px;border-bottom:1px solid var(--edge);scrollbar-width:none;-webkit-overflow-scrolling:touch}.studio-tab-bar::-webkit-scrollbar{display:none}
 .studio-tab-btn{background:var(--vn-shell-field,rgba(255,255,255,.05));border:1px solid var(--edge);border-radius:20px;padding:5px 12px;font-size:11.5px;font-weight:600;color:var(--vn-shell-muted,#aaa);cursor:pointer;white-space:nowrap;flex:none;min-height:32px;transition:all .15s cubic-bezier(0.2,0,0,1)}.studio-tab-btn:hover{background:rgba(255,255,255,.08);color:var(--vn-shell-text,#eee);transform:translateY(-1px)}.studio-tab-btn[aria-selected="true"]{background:color-mix(in srgb,var(--accent) 24%,var(--vn-shell-button,#252632));border-color:var(--accent);color:var(--accent);font-weight:700;box-shadow:0 0 10px color-mix(in srgb,var(--accent) 25%,transparent)}
 :is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) .studio-tab-btn{background:#eef3e5;color:#4b6b5d;border-color:rgba(35,65,50,.18)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) .studio-tab-btn[aria-selected="true"]{background:#dcebad;color:#172721;border-color:#234b39}
 .studio-layout-toggle{margin-left:auto;background:var(--vn-shell-field,rgba(255,255,255,.08));border:1px solid var(--accent);border-radius:20px;padding:4px 10px;font-size:11px;font-weight:700;color:var(--accent);cursor:pointer;white-space:nowrap;flex:none;min-height:30px;transition:all .15s ease}
 .studio-layout-toggle:hover{background:color-mix(in srgb,var(--accent) 20%,transparent)}
-.studio-tab-panel{display:flex;flex-direction:column;gap:12px;background:var(--vn-shell-field,rgba(255,255,255,.03));border:1px solid var(--edge);border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 4px 16px rgba(0,0,0,.15);transition:border-color .2s ease}.studio-tab-panel[hidden]{display:none!important}
+.studio-tab-panel{display:flex;flex-direction:column;gap:10px;background:var(--vn-shell-field,rgba(255,255,255,.03));border:1px solid var(--edge);border-radius:14px;padding:12px;margin-bottom:10px;box-shadow:0 4px 16px rgba(0,0,0,.15);transition:border-color .2s ease}.studio-tab-panel[hidden]{display:none!important}
 .studio-card-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:4px}
-.studio-card-title{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;color:var(--vn-shell-text,#f4f7ee)}.studio-activity-details{margin:8px 0;border:1px solid var(--edge);border-radius:10px;background:rgba(255,255,255,.02);padding:0 10px}.studio-activity-details[open]{padding-bottom:10px}.studio-activity-details summary{font-size:12px;font-weight:600;cursor:pointer;color:var(--vn-shell-muted,#aaa)}
-@container(max-width:600px){section{width:auto}[data-context]{gap:10px}[data-studio-body]{padding:12px}[data-thumbnail]{width:56px;height:72px}}
+.studio-card-title{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;color:var(--vn-shell-text,#f4f7ee)}.studio-activity-details{margin:6px 0;border:1px solid var(--edge);border-radius:10px;background:rgba(255,255,255,.02);padding:0 10px}.studio-activity-details[open]{padding-bottom:10px}.studio-activity-details summary{font-size:12px;font-weight:600;cursor:pointer;color:var(--vn-shell-muted,#aaa)}
+.studio-clause-bar{display:flex;gap:6px;overflow-x:auto;padding:2px 0 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch}.studio-clause-bar::-webkit-scrollbar{display:none}
+.studio-clause-pill{flex:0 0 auto;min-height:28px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:650;border:1px solid var(--edge);background:rgba(255,255,255,.05);color:inherit;transition:all .14s ease}.studio-clause-pill[aria-expanded="true"]{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 18%,transparent)}
+.studio-clause-pill[data-tone="char"]{border-color:rgba(124,156,255,.45)}.studio-clause-pill[data-tone="loc"]{border-color:rgba(116,214,170,.45)}.studio-clause-pill[data-tone="cam"]{border-color:rgba(245,196,98,.45)}.studio-clause-pill[data-tone="style"]{border-color:rgba(214,145,255,.45)}
+.studio-clause-inspector{padding:8px 10px;border-radius:10px;background:rgba(0,0,0,.22);border:1px solid color-mix(in srgb,var(--accent) 35%,var(--edge));font-size:12px;margin-bottom:8px;display:flex;flex-direction:column;gap:6px}
+.studio-clause-inspector-text{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-family:ui-monospace,monospace;font-size:11.5px;max-height:110px;overflow:auto}
+.studio-quickbar{display:flex;gap:6px;overflow-x:auto;margin:4px 0 6px;padding-bottom:2px;scrollbar-width:none;-webkit-overflow-scrolling:touch}.studio-quickbar::-webkit-scrollbar{display:none}
+.studio-quickbar button{flex:0 0 auto;min-height:30px;padding:4px 10px;border-radius:8px;font-size:11.5px;font-weight:600}
+.studio-viewfinder{border:1px solid var(--edge);border-radius:12px;padding:10px;background:rgba(0,0,0,.2);display:flex;flex-direction:column;gap:8px}
+.studio-vf-stage{position:relative;width:100%;max-height:165px;margin:0 auto;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--edge));border-radius:8px;background:radial-gradient(circle at 50% 38%,rgba(124,156,255,.16),rgba(0,0,0,.46));overflow:hidden;aspect-ratio:16/9}
+.studio-vf-grid{position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(to right,transparent 33%,rgba(255,255,255,.12) 33%,rgba(255,255,255,.12) 33.5%,transparent 33.5%,transparent 66.5%,rgba(255,255,255,.12) 66.5%,rgba(255,255,255,.12) 67%,transparent 67%),linear-gradient(to bottom,transparent 33%,rgba(255,255,255,.12) 33%,rgba(255,255,255,.12) 33.5%,transparent 33.5%,transparent 66.5%,rgba(255,255,255,.12) 66.5%,rgba(255,255,255,.12) 67%,transparent 67%)}
+.studio-vf-safe-curtain{position:absolute;left:0;right:0;bottom:0;height:25%;background:repeating-linear-gradient(-45deg,rgba(220,235,173,.12),rgba(220,235,173,.12) 6px,rgba(0,0,0,.35) 6px,rgba(0,0,0,.35) 12px);border-top:1px dashed var(--accent);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--accent);letter-spacing:.03em;pointer-events:none}
+.studio-vf-subjects{position:absolute;inset:8px 8px 26% 8px;pointer-events:none;display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap}
+.studio-vf-subject-chip{padding:3px 8px;border-radius:999px;background:rgba(15,24,20,.82);border:1px solid var(--accent);color:#fff;font-size:10.5px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.4)}
+.studio-vf-pill-row{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;-webkit-overflow-scrolling:touch}.studio-vf-pill-row::-webkit-scrollbar{display:none}
+.studio-vf-pill{flex:0 0 auto;min-height:28px;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid var(--edge);background:rgba(255,255,255,.04)}.studio-vf-pill[aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 22%,var(--vn-shell-button,#252632));color:var(--accent);font-weight:700}
+@container(max-width:600px){section{width:auto}[data-context]{gap:10px}[data-studio-body]{padding:10px}[data-thumbnail]{width:54px;height:70px}}
 `;
 
 export class ImageStudio {
@@ -82,7 +97,7 @@ export class ImageStudio {
   private templates: ImageTemplate[] = [];
   private templateRequest = "";
   private defaultTemplate = "portrait";
-  private studioLayoutMode: 'unified' | 'tabs' = (typeof window !== 'undefined' && typeof window.matchMedia === 'function') ? 'unified' : 'tabs';
+  private studioLayoutMode: 'unified' | 'tabs' = 'tabs';
   private rebuilding = new Set<string>();
   private rerolling = new Set<string>();
   private cursor = 0;
@@ -105,7 +120,9 @@ export class ImageStudio {
     activityDetails.className = 'studio-activity-details';
     activityDetails.innerHTML = '<summary>Image activity &amp; generation status</summary>';
     activityDetails.append(this.activity.element);
-    this.el('[data-context]').after(activityDetails);
+    const prevVersMount = this.root.querySelector<HTMLElement>('[data-previous-versions-container]');
+    if (prevVersMount?.parentElement) prevVersMount.parentElement.insertBefore(activityDetails, prevVersMount);
+    else this.el('[data-context]').after(activityDetails);
     const scope=document.createElement('small');scope.dataset.correctionScope='';scope.setAttribute('role','status');
     this.el('[data-save-appearance]').closest('label')!.after(scope);
     this.el<HTMLInputElement>('[data-save-appearance]').onchange=()=>this.updateCorrectionScope();
@@ -351,7 +368,11 @@ export class ImageStudio {
       for (const sel of ['[data-camera-shot-size]','[data-camera-angle]','[data-camera-lens]','[data-camera-composition]','[data-camera-depth]','[data-camera-safe-area]']) {
         this.el<HTMLSelectElement>(sel).disabled = auto;
       }
+      this.syncDirectorViewfinder();
     };
+    for (const sel of ['[data-camera-shot-size]','[data-camera-angle]','[data-camera-lens]','[data-camera-composition]','[data-camera-safe-area]']) {
+      this.el<HTMLSelectElement>(sel).onchange = () => this.syncDirectorViewfinder();
+    }
 
     this.el<HTMLButtonElement>('[data-apply-camera]').onclick = () => {
       if (this.record()?.state !== 'review') {
@@ -781,7 +802,7 @@ export class ImageStudio {
     const correctionHelp=document.createElement('small');correctionHelp.dataset.correctionHelp='';correctionHelp.setAttribute('role','status');
     correctionHelp.textContent='Open the controls you need, review your changes, then choose the explicit preview or generation action.';
     corrections.append(correctionButtons, correctionHelp);
-    panelPicture.append(cardHeader('🖼️', 'Picture & Scene Moment', 'Review or inspect'), context, versionsContainer, explanation, corrections, detail, this.brief.element, this.el('[data-recovery]').closest('details')!);
+    panelPicture.append(cardHeader('🖼️', 'Picture & Scene Moment', 'Review or inspect'), versionsContainer, explanation, corrections, detail, this.brief.element, this.el('[data-recovery]').closest('details')!);
 
     const panelModel = document.createElement('div');
     panelModel.className = 'studio-tab-panel';
@@ -795,18 +816,20 @@ export class ImageStudio {
     panelStyle.hidden = this.studioLayoutMode === 'tabs';
     panelStyle.append(cardHeader('🎨', 'Visual Style', 'Select or change style'), styleTools);
 
+    const viewfinder = this.createDirectorViewfinder();
     const panelCamera = document.createElement('div');
     panelCamera.className = 'studio-tab-panel';
     panelCamera.dataset.tabPanel = 'camera';
     panelCamera.hidden = this.studioLayoutMode === 'tabs';
-    panelCamera.append(cardHeader('📐', 'Camera & Framing', 'Composition & ratios'), template, cameraTools, outputOptions);
+    panelCamera.append(cardHeader('📐', 'Camera & Framing', 'Viewfinder, shots & ratios'), viewfinder, template, cameraTools, outputOptions);
 
+    this.mountPromptEditorEnhancements(editor);
     const panelPrompt = document.createElement('div');
     panelPrompt.className = 'studio-tab-panel';
     panelPrompt.dataset.tabPanel = 'prompt';
     panelPrompt.hidden = this.studioLayoutMode === 'tabs';
     const editTools=document.createElement('div');editTools.className='row';editTools.dataset.promptEditTools='';editTools.hidden=true;editTools.innerHTML='<button type="button" data-prompt-undo aria-label="Undo prompt edit">Undo</button><button type="button" data-prompt-redo aria-label="Redo prompt edit">Redo</button>';
-    panelPrompt.append(cardHeader('📝', 'Prompt Studio & AI Enhancements', 'Wording & token budget'), meta, model, editor);
+    panelPrompt.append(cardHeader('📝', 'Prompt Studio & AI Enhancements', 'Source clauses, wording & budget'), meta, model, editor);
 
     const panelHistory = document.createElement('div');
     panelHistory.className = 'studio-tab-panel';
@@ -823,11 +846,322 @@ export class ImageStudio {
 
     const overview=document.createElement('p');overview.dataset.pictureOverview='';overview.setAttribute('role','status');overview.setAttribute('aria-atomic','true');overview.style.cssText='font-size:12px;margin:0 0 10px;overflow-wrap:anywhere';
     tools.replaceChildren(tabs, editTools, panelPicture, panelModel, panelStyle, panelCamera, panelPrompt, panelHistory);
-    body.replaceChildren(overview,navigation,correctionHelp,tools,notice);
+    body.replaceChildren(overview,navigation,context,correctionHelp,tools,notice);
     for(const field of ['positive','negative','parameters']){const note=document.createElement('small');note.dataset.promptLint=field;note.setAttribute('role','status');this.el(`[data-${field}]`).after(note);}
     const actionHelp=document.createElement('small');actionHelp.dataset.actionHelp='';this.el('[data-studio-footer]').append(actionHelp);
     const style=document.createElement('style');style.textContent=INSPECTOR_CSS+PREPARED_BRIEF_CSS+DOCKED_STUDIO_CSS;this.root.append(style);
   }
+  private createDirectorViewfinder(): HTMLElement {
+    const box = document.createElement('div');
+    box.dataset.directorViewfinder = '';
+    box.className = 'studio-viewfinder';
+    const topRow = document.createElement('div');
+    topRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap';
+    const title = document.createElement('strong');
+    title.style.cssText = 'font-size:12px;color:var(--accent)';
+    title.textContent = '🎬 Director’s Viewfinder';
+    const badge = document.createElement('small');
+    badge.dataset.viewfinderSummary = '';
+    badge.style.cssText = 'font-size:11px;font-weight:600;opacity:0.85';
+    topRow.append(title, badge);
+
+    const frame = document.createElement('div');
+    frame.dataset.viewfinderFrame = '';
+    frame.className = 'studio-vf-stage';
+    const grid = document.createElement('div');
+    grid.className = 'studio-vf-grid';
+    const subjects = document.createElement('div');
+    subjects.dataset.viewfinderSubjects = '';
+    subjects.className = 'studio-vf-subjects';
+    const curtain = document.createElement('div');
+    curtain.dataset.viewfinderSafeCurtain = '';
+    curtain.className = 'studio-vf-safe-curtain';
+    curtain.textContent = 'VN Dialogue Safe Zone (Bottom 25%)';
+    frame.append(grid, subjects, curtain);
+
+    const sizeRow = document.createElement('div');
+    sizeRow.dataset.viewfinderSizePills = '';
+    sizeRow.className = 'studio-vf-pill-row';
+    sizeRow.setAttribute('aria-label', 'Shot size quick presets');
+    const shotSizes = [
+      ['extreme-close-up', 'ECU'],
+      ['close-up', 'Close-Up'],
+      ['medium-close-up', 'Med-Close'],
+      ['medium', 'Medium'],
+      ['full-body', 'Full-Body'],
+      ['wide', 'Wide'],
+      ['establishing', 'Establishing']
+    ] as const;
+    for (const [val, label] of shotSizes) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'studio-vf-pill';
+      btn.dataset.vfShot = val;
+      btn.textContent = label;
+      btn.setAttribute('aria-pressed', 'false');
+      btn.onclick = () => {
+        const auto = this.el<HTMLInputElement>('[data-auto-director]');
+        auto.checked = false;
+        for (const sel of ['[data-camera-shot-size]','[data-camera-angle]','[data-camera-lens]','[data-camera-composition]','[data-camera-depth]','[data-camera-safe-area]']) {
+          this.el<HTMLSelectElement>(sel).disabled = false;
+        }
+        this.el<HTMLSelectElement>('[data-camera-shot-size]').value = val;
+        this.syncDirectorViewfinder();
+      };
+      sizeRow.append(btn);
+    }
+
+    const angleRow = document.createElement('div');
+    angleRow.dataset.viewfinderAnglePills = '';
+    angleRow.className = 'studio-vf-pill-row';
+    angleRow.setAttribute('aria-label', 'Camera angle quick presets');
+    const angles = [
+      ['eye-level', 'Eye-Level'],
+      ['three-quarter', '3/4'],
+      ['low-angle', 'Low'],
+      ['high-angle', 'High'],
+      ['over-the-shoulder', 'OTS'],
+      ['profile', 'Profile'],
+      ['overhead', 'Overhead']
+    ] as const;
+    for (const [val, label] of angles) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'studio-vf-pill';
+      btn.dataset.vfAngle = val;
+      btn.textContent = label;
+      btn.setAttribute('aria-pressed', 'false');
+      btn.onclick = () => {
+        const auto = this.el<HTMLInputElement>('[data-auto-director]');
+        auto.checked = false;
+        for (const sel of ['[data-camera-shot-size]','[data-camera-angle]','[data-camera-lens]','[data-camera-composition]','[data-camera-depth]','[data-camera-safe-area]']) {
+          this.el<HTMLSelectElement>(sel).disabled = false;
+        }
+        this.el<HTMLSelectElement>('[data-camera-angle]').value = val;
+        this.syncDirectorViewfinder();
+      };
+      angleRow.append(btn);
+    }
+
+    box.append(topRow, frame, sizeRow, angleRow);
+    return box;
+  }
+
+  private activeClauseKey = '';
+  private mountPromptEditorEnhancements(editor: HTMLElement): void {
+    const posLabel = editor.querySelector<HTMLElement>('[data-positive]')?.closest('label') ?? null;
+    const clauseBar = document.createElement('div');
+    clauseBar.dataset.promptClauseBar = '';
+    clauseBar.className = 'studio-clause-bar';
+    clauseBar.setAttribute('aria-label', 'Prompt source clauses');
+
+    const inspector = document.createElement('div');
+    inspector.dataset.clauseInspector = '';
+    inspector.className = 'studio-clause-inspector';
+    inspector.hidden = true;
+    const inspHead = document.createElement('div');
+    inspHead.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px';
+    const inspTitle = document.createElement('strong');
+    inspTitle.dataset.clauseInspectorTitle = '';
+    const inspClose = document.createElement('button');
+    inspClose.type = 'button';
+    inspClose.textContent = '×';
+    inspClose.style.cssText = 'min-height:24px;width:28px;padding:0;font-size:16px';
+    inspClose.onclick = () => { this.activeClauseKey = ''; this.syncPromptClausePills(); };
+    inspHead.append(inspTitle, inspClose);
+    const inspText = document.createElement('pre');
+    inspText.dataset.clauseInspectorText = '';
+    inspText.className = 'studio-clause-inspector-text';
+    const inspActions = document.createElement('div');
+    inspActions.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap';
+    const copyClauseBtn = document.createElement('button');
+    copyClauseBtn.type = 'button';
+    copyClauseBtn.style.cssText = 'min-height:28px;padding:3px 10px;font-size:11px';
+    copyClauseBtn.textContent = 'Copy clause';
+    copyClauseBtn.onclick = async () => {
+      const txt = inspText.textContent ?? '';
+      if (!txt) return;
+      try { await navigator.clipboard.writeText(txt); this.setNotice('Clause copied.'); }
+      catch { this.setNotice('Copy unavailable here.'); }
+    };
+    const appendClauseBtn = document.createElement('button');
+    appendClauseBtn.type = 'button';
+    appendClauseBtn.style.cssText = 'min-height:28px;padding:3px 10px;font-size:11px;border-color:var(--accent)';
+    appendClauseBtn.textContent = 'Append to prompt';
+    appendClauseBtn.onclick = () => {
+      const txt = (inspText.textContent ?? '').trim();
+      const field = this.el<HTMLTextAreaElement>('[data-positive]');
+      if (!txt || field.readOnly) return;
+      const cur = field.value.trim();
+      field.value = cur ? `${cur}, ${txt}` : txt;
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      this.setNotice('Appended clause to prompt draft.');
+    };
+    inspActions.append(copyClauseBtn, appendClauseBtn);
+    inspector.append(inspHead, inspText, inspActions);
+
+    const quickBar = document.createElement('div');
+    quickBar.dataset.promptQuickBar = '';
+    quickBar.className = 'studio-quickbar';
+    const quickUndo = document.createElement('button');
+    quickUndo.type = 'button';
+    quickUndo.dataset.quickUndo = '';
+    quickUndo.textContent = '↶ Undo';
+    quickUndo.onclick = () => this.movePromptHistory(false);
+    const quickRedo = document.createElement('button');
+    quickRedo.type = 'button';
+    quickRedo.dataset.quickRedo = '';
+    quickRedo.textContent = '↷ Redo';
+    quickRedo.onclick = () => this.movePromptHistory(true);
+    const quickCopy = document.createElement('button');
+    quickCopy.type = 'button';
+    quickCopy.textContent = '📋 Copy';
+    quickCopy.onclick = () => { void this.copy(); };
+    const quickFit = document.createElement('button');
+    quickFit.type = 'button';
+    quickFit.dataset.quickFit = '';
+    quickFit.textContent = '✨ Fit';
+    quickFit.onclick = () => this.el<HTMLButtonElement>('[data-fit-model]')?.click();
+    const quickReframe = document.createElement('button');
+    quickReframe.type = 'button';
+    quickReframe.dataset.quickReframe = '';
+    quickReframe.textContent = '📐 Reframe';
+    quickReframe.onclick = () => this.el<HTMLButtonElement>('[data-reframe]')?.click();
+    const quickExpand = document.createElement('button');
+    quickExpand.type = 'button';
+    quickExpand.dataset.promptExpand = '';
+    quickExpand.textContent = '⤢ Expand';
+    quickExpand.onclick = () => {
+      const ta = this.el<HTMLTextAreaElement>('[data-positive]');
+      const expanded = ta.dataset.expanded === 'true';
+      if (expanded) {
+        delete ta.dataset.expanded;
+        quickExpand.textContent = '⤢ Expand';
+      } else {
+        ta.dataset.expanded = 'true';
+        quickExpand.textContent = '⤡ Compact';
+      }
+    };
+    quickBar.append(quickUndo, quickRedo, quickCopy, quickFit, quickReframe, quickExpand);
+
+    editor.insertBefore(clauseBar, posLabel);
+    editor.insertBefore(inspector, posLabel);
+    editor.insertBefore(quickBar, posLabel);
+  }
+
+  private syncDirectorViewfinder(): void {
+    const vf = this.root.querySelector<HTMLElement>('[data-director-viewfinder]');
+    if (!vf) return;
+    const record = this.record();
+    const shotSpec = record?.imagePromptMetadata?.shotSpec ?? record?.shotSpec;
+    const auto = this.el<HTMLInputElement>('[data-auto-director]').checked;
+    const activeShot = (!auto ? this.el<HTMLSelectElement>('[data-camera-shot-size]').value : '') || shotSpec?.camera.shotSize || 'medium';
+    const activeAngle = (!auto ? this.el<HTMLSelectElement>('[data-camera-angle]').value : '') || shotSpec?.camera.angle || 'eye-level';
+    const safeMode = !auto ? this.el<HTMLSelectElement>('[data-camera-safe-area]').value : (shotSpec?.safeArea ? 'always' : 'auto');
+    const compMode = (!auto ? this.el<HTMLSelectElement>('[data-camera-composition]').value : '') || shotSpec?.composition.mode || 'rule-of-thirds';
+
+    const summary = vf.querySelector<HTMLElement>('[data-viewfinder-summary]');
+    if (summary) summary.textContent = `${auto ? 'Auto' : 'Manual'} · ${activeShot} · ${activeAngle} · ${compMode}`;
+
+    const frame = vf.querySelector<HTMLElement>('[data-viewfinder-frame]');
+    if (frame) {
+      const params = record?.parameters as Record<string, unknown> | undefined;
+      const ratioRaw = String(params?.aspectRatio ?? params?.aspect_ratio ?? '16:9');
+      frame.style.aspectRatio = ratioRaw === '9:16' ? '9 / 16' : ratioRaw === '1:1' ? '1 / 1' : ratioRaw === '4:3' ? '4 / 3' : ratioRaw === '3:4' ? '3 / 4' : '16 / 9';
+    }
+    const curtain = vf.querySelector<HTMLElement>('[data-viewfinder-safe-curtain]');
+    if (curtain) curtain.hidden = safeMode === 'off';
+
+    const subjectsBox = vf.querySelector<HTMLElement>('[data-viewfinder-subjects]');
+    if (subjectsBox) {
+      subjectsBox.replaceChildren();
+      const placements = shotSpec?.composition.subjectPlacements ?? [];
+      if (placements.length > 0) {
+        for (const p of placements.slice(0, 4)) {
+          const chip = document.createElement('span');
+          chip.className = 'studio-vf-subject-chip';
+          chip.textContent = `${p.subject || 'Subject'} (${p.horizontal}, ${p.depth})`;
+          subjectsBox.append(chip);
+        }
+      } else {
+        const names = record?.imagePromptMetadata?.brief?.subjectPreparation?.name
+          ? [record.imagePromptMetadata.brief.subjectPreparation.name]
+          : (record?.imagePromptMetadata?.brief?.subjects
+            ? record.imagePromptMetadata.brief.subjects.split('\n').map(l => l.split(':')[0]?.trim() || '').filter(Boolean)
+            : []);
+        for (const name of (names.length ? names : ['Scene Focus']).slice(0, 4)) {
+          const chip = document.createElement('span');
+          chip.className = 'studio-vf-subject-chip';
+          chip.textContent = name;
+          subjectsBox.append(chip);
+        }
+      }
+    }
+
+    for (const pill of vf.querySelectorAll<HTMLButtonElement>('[data-vf-shot]')) {
+      pill.setAttribute('aria-pressed', String(pill.dataset.vfShot === activeShot));
+    }
+    for (const pill of vf.querySelectorAll<HTMLButtonElement>('[data-vf-angle]')) {
+      pill.setAttribute('aria-pressed', String(pill.dataset.vfAngle === activeAngle));
+    }
+  }
+
+  private syncPromptClausePills(): void {
+    const bar = this.root.querySelector<HTMLElement>('[data-prompt-clause-bar]');
+    const inspector = this.root.querySelector<HTMLElement>('[data-clause-inspector]');
+    if (!bar || !inspector) return;
+    const record = this.record();
+    const brief = record?.imagePromptMetadata?.brief;
+    const styleName = record?.imagePromptMetadata?.sharedStyle?.presetName || record?.imagePromptMetadata?.styleSnapshot?.medium || '';
+    const clauses: Array<{ key: string; tone: string; label: string; text: string }> = [];
+    if (brief?.subjects) {
+      clauses.push({ key: 'char', tone: 'char', label: '🧬 Character DNA', text: brief.subjects });
+    }
+    if (brief?.scene || brief?.lighting) {
+      const locText = [brief.scene, brief.lighting].filter(Boolean).join(', ');
+      if (locText) clauses.push({ key: 'loc', tone: 'loc', label: '🏛️ Scene & Light', text: locText });
+    }
+    if (brief?.framing || record?.imagePromptMetadata?.shotSpec) {
+      const ss = record?.imagePromptMetadata?.shotSpec;
+      const camText = [brief?.framing, ss ? `${ss.camera.shotSize}, ${ss.camera.angle}, ${ss.camera.lens} lens, ${ss.composition.mode}` : ''].filter(Boolean).join(' · ');
+      if (camText) clauses.push({ key: 'cam', tone: 'cam', label: '🎥 Camera & Framing', text: camText });
+    }
+    if (brief?.action) {
+      clauses.push({ key: 'action', tone: 'cam', label: '🎬 Action Beat', text: brief.action });
+    }
+    if (styleName || record?.imagePromptMetadata?.styleSnapshot?.prefix) {
+      const stText = [styleName, record?.imagePromptMetadata?.styleSnapshot?.prefix].filter(Boolean).join(' — ');
+      clauses.push({ key: 'style', tone: 'style', label: '🎨 Shared Style', text: stText });
+    }
+
+    bar.replaceChildren();
+    bar.hidden = clauses.length === 0;
+    if (!clauses.some(c => c.key === this.activeClauseKey)) this.activeClauseKey = '';
+
+    for (const clause of clauses) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'studio-clause-pill';
+      btn.dataset.tone = clause.tone;
+      btn.textContent = clause.label;
+      btn.setAttribute('aria-expanded', String(this.activeClauseKey === clause.key));
+      btn.onclick = () => {
+        this.activeClauseKey = this.activeClauseKey === clause.key ? '' : clause.key;
+        this.syncPromptClausePills();
+      };
+      bar.append(btn);
+    }
+
+    const active = clauses.find(c => c.key === this.activeClauseKey);
+    inspector.hidden = !active;
+    if (active) {
+      const title = inspector.querySelector<HTMLElement>('[data-clause-inspector-title]');
+      const bodyText = inspector.querySelector<HTMLElement>('[data-clause-inspector-text]');
+      if (title) title.textContent = active.label;
+      if (bodyText) bodyText.textContent = active.text;
+    }
+  }
+
   /** Navigation only: the selected request's existing actions retain approval and dispatch. */
   private openCorrection(goal:'subject'|'camera'|'prompt'|'replacement'):void {
     const help=this.el('[data-correction-help]');
@@ -880,7 +1214,7 @@ export class ImageStudio {
   }
   private editSnapshot():PromptEditSnapshot{return {prompt:this.el<HTMLTextAreaElement>('[data-positive]').value,negativePrompt:this.el<HTMLTextAreaElement>('[data-negative]').value,parametersText:this.el<HTMLTextAreaElement>('[data-parameters]').value};}
   private historyFor():PromptHistory|undefined {const r=this.record();if(!r||!this.turn)return;const key=JSON.stringify([this.turn.chatId,this.turn.messageId,this.turn.swipeId,this.turn.sourceFingerprint,this.turn.revision,r.jobId,r.requestId,r.state==='review'?'review':'replacement']);let history=this.editHistories.get(key);if(!history){history=new PromptHistory(this.editSnapshot());this.editHistories.set(key,history);while(this.editHistories.size>8)this.editHistories.delete(this.editHistories.keys().next().value!);}return history;}
-  private updateHistoryButtons():void{const h=this.historyFor();this.el<HTMLButtonElement>('[data-prompt-undo]').disabled=!h?.canUndo||this.el<HTMLTextAreaElement>('[data-positive]').disabled;this.el<HTMLButtonElement>('[data-prompt-redo]').disabled=!h?.canRedo||this.el<HTMLTextAreaElement>('[data-positive]').disabled;}
+  private updateHistoryButtons():void{const h=this.historyFor();const disPos=this.el<HTMLTextAreaElement>('[data-positive]').disabled;this.el<HTMLButtonElement>('[data-prompt-undo]').disabled=!h?.canUndo||disPos;this.el<HTMLButtonElement>('[data-prompt-redo]').disabled=!h?.canRedo||disPos;const qUndo=this.root.querySelector<HTMLButtonElement>('[data-quick-undo]');const qRedo=this.root.querySelector<HTMLButtonElement>('[data-quick-redo]');if(qUndo)qUndo.disabled=!h?.canUndo||disPos;if(qRedo)qRedo.disabled=!h?.canRedo||disPos;}
   private movePromptHistory(redo:boolean):void{if(this.composing||this.el<HTMLTextAreaElement>('[data-positive]').disabled)return;const r=this.record(),h=this.historyFor();if(!r||!h)return;const next=redo?h.redo():h.undo();this.el<HTMLTextAreaElement>('[data-positive]').value=next.prompt;this.el<HTMLTextAreaElement>('[data-negative]').value=next.negativePrompt;this.el<HTMLTextAreaElement>('[data-parameters]').value=next.parametersText;this.drafts.set(this.draftKey(r),{prompt:next.prompt,negative:next.negativePrompt,parameters:next.parametersText});this.updateCounts();this.updateHistoryButtons();this.scheduleLint();}
   private scheduleLint():void{if(this.lintTimer)clearTimeout(this.lintTimer);this.lintTimer=setTimeout(()=>{this.lintTimer=null;this.updateInlineLint();},200);}
   private updateInlineLint():void{const record=this.record();for(const field of ['positive','negative','parameters'])this.el(`[data-prompt-lint="${field}"]`).textContent='';if(!record)return;const snapshot=this.editSnapshot();const profile=record.promptProfileV2??{...resolveImagePromptProfileV2(record.provider,record.model),...(record.promptProfile?{hardMaxCharacters:record.promptProfile.maxCharacters}:{})};const result=lintCompiledPrompt({prompt:snapshot.prompt,negativePrompt:snapshot.negativePrompt,profile,brief:record.imagePromptMetadata?.brief,referenceAttachmentKnown:false});for(const field of ['positive','negative'] as const){const messages=[...result.errors,...result.warnings].filter(message=>field==='negative'?message.includes('positive-only'):!message.includes('positive-only'));this.el(`[data-prompt-lint="${field}"]`).textContent=messages.length?`Advisory: ${messages.join(' ')}`:'';}try{const value=JSON.parse(snapshot.parametersText);if(!value||typeof value!=='object'||Array.isArray(value))throw Error();}catch{this.el('[data-prompt-lint="parameters"]').textContent='Parameters must be a JSON object. Your text is kept for editing.';}}
@@ -1599,7 +1933,7 @@ export class ImageStudio {
       }
     }
     const strip=this.el('[data-picture-strip]');strip.replaceChildren();
-    const assets=this.turn?.assets??[];strip.hidden=assets.length<2||assets.length>3;
+    const assets=this.turn?.assets??[];strip.hidden=assets.length<2;
     const stateFor=(jobId:string)=>this.stateForJob(jobId,this.turn?.imageRequests?.filter(record=>record.jobId===jobId).at(-1));
     const overview=this.el('[data-picture-overview]');overview.hidden=planning||assets.length<2;overview.textContent=overview.hidden?'':pictureStateSummary(assets.map(entry=>stateFor(entry.jobId)));
     if(!strip.hidden)for(const [index,entry] of assets.entries()){
@@ -1608,7 +1942,13 @@ export class ImageStudio {
       if(entry.imageUrl){const thumb=document.createElement('img');thumb.src=entry.imageUrl;thumb.alt='';button.append(thumb);}const caption=document.createElement('span');caption.textContent=`Picture ${index+1} · ${label}`;button.append(caption);
       button.onclick=()=>{this.selectedJob=entry.jobId;this.selectedRequest='';this.render();};strip.append(button);
     }
-    this.el('[data-picture]').closest('label')!.hidden=assets.length>=2&&assets.length<=3;
+    this.el('[data-picture]').closest('label')!.hidden=assets.length>=2;
+    this.syncDirectorViewfinder();
+    this.syncPromptClausePills();
+    const qFit=this.root.querySelector<HTMLButtonElement>('[data-quick-fit]');
+    const qRef=this.root.querySelector<HTMLButtonElement>('[data-quick-reframe]');
+    if(qFit)qFit.disabled=this.el<HTMLButtonElement>('[data-fit-model]').disabled;
+    if(qRef)qRef.disabled=this.el<HTMLButtonElement>('[data-reframe]').disabled;
     this.el('[data-request-history]').hidden=this.records().length<2;
     const previous=this.previousWording.get(this.selectedJob);
     this.el('[data-rewrite-changed]').hidden=record?.state!=='review'||!previous||previous.requestId===record.requestId||pending;

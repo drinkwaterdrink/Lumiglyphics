@@ -167,6 +167,7 @@ export class VnStage {
   private readerPreferences: ReaderPreferences | null = null;
   private currentAmbient: AmbientEffect | null = null;
   private turnLocation: string | null = null;
+  private lastChapterLocation = "";
   private ambientOverride: AmbientEffect | null | undefined = undefined;
   private sceneFxTimer: ReturnType<typeof setTimeout> | null = null;
   private fxBurstTimer: ReturnType<typeof setTimeout> | null = null;
@@ -2539,9 +2540,11 @@ export class VnStage {
     this.recordBacklogAndRead(paragraph.id, paragraph.speaker, cleanText, formatted, this.state.currentParagraphIndex);
     if (!this.isRewinding) {
       this.triggerParagraphEffects(paragraph);
-      if (this.state.currentParagraphIndex === 0 && !this.isSkipping) {
+      const locNorm = (this.turnLocation ?? "").trim().toLowerCase();
+      if (this.state.currentParagraphIndex === 0 && !this.isSkipping && Boolean(locNorm) && locNorm !== this.lastChapterLocation) {
+        this.lastChapterLocation = locNorm;
         const title = this.turnLocation || paragraph.speaker || "Scene";
-        const excerpt = paragraph.text.replace(/[*_#`]/g, "").slice(0, 80).trim();
+        const excerpt = paragraph.text.replace(/["“”][^"“”]*["“”]/g, " ").replace(/[*_#`]/g, "").replace(/\s{2,}/g, " ").trim().slice(0, 80);
         const eyebrow = this.turnLocation && paragraph.speaker ? paragraph.speaker.toUpperCase() : `SCENE ${this.state.paragraphs.length > 0 ? "START" : ""}`;
         this.triggerChapterCard(title, excerpt, eyebrow);
       }
@@ -2550,6 +2553,7 @@ export class VnStage {
       }
     }
 
+    this.applyVirtualCameraMotion(paragraph.text, Boolean(paragraph.speaker), paragraph.effect ?? paragraph.cue?.effect);
     if (this.textSpeed <= 0 || this.isSkipping || this.isRewinding) {
       this.clearTypewriter();
       this.dialogueText.innerHTML = formatted;
@@ -2562,19 +2566,35 @@ export class VnStage {
     }
   }
 
+  private applyVirtualCameraMotion(text: string, hasSpeaker: boolean, explicitEffect?: StageEffect | null): void {
+    if (this.readerPreferences?.virtualCameraEnabled === false || this.effectIntensity === "off" || this.isSkipping) {
+      delete this.activeImageEl.dataset.vnCameraMotion;
+      return;
+    }
+    const lower = text.toLowerCase();
+    if (explicitEffect || /\b(explodes?|shatters?|lunges?|strikes?|slashes?|screams?|crashes?)\b/.test(lower)) {
+      this.activeImageEl.dataset.vnCameraMotion = "push-in";
+    } else if (hasSpeaker) {
+      this.activeImageEl.dataset.vnCameraMotion = "pan-focus";
+    } else {
+      this.activeImageEl.dataset.vnCameraMotion = "drift";
+    }
+  }
+
   private updateAtmosphericLighting(text: string, ambient?: AmbientEffect | null): void {
     if (this.readerPreferences?.atmosphericLighting === false || this.effectIntensity === "off") {
       delete this.scene.dataset.vnAtmosphere;
       return;
     }
     const lower = text.toLocaleLowerCase();
+    const unquotedLower = text.replace(/["“”][^"“”]*["“”]/g, " ").toLocaleLowerCase();
     let atmosphere = "";
     if (this.readerPreferences?.sentimentLighting !== false) {
-      if (/\b(blood|bleed|danger|threat|kill|strike|weapon|blade|sword|gun|attack|peril|scream|wound|fatal)\b/.test(lower)) {
+      if (/\b(blood|bleed|danger|threat|kill|strike|weapon|blade|sword|gun|attack|peril|scream|wound|fatal)\b/.test(unquotedLower)) {
         atmosphere = "danger_crimson";
-      } else if (/\b(remember|memory|flashback|years ago|past|once upon|nostalgia|forgotten|reminisce|childhood)\b/.test(lower)) {
+      } else if (/\b(remember|memory|flashback|years ago|past|once upon|nostalgia|forgotten|reminisce|childhood)\b/.test(unquotedLower)) {
         atmosphere = "sepia_flashback";
-      } else if (/\b(kiss|heart|love|blush|embrace|caress|whisper|tender|intimate|warmth|passion|breath against)\b/.test(lower)) {
+      } else if (/\b(kiss|heart|love|blush|embrace|caress|whisper|tender|intimate|warmth|passion|breath against)\b/.test(unquotedLower)) {
         atmosphere = "romance_rose";
       }
     }

@@ -16,6 +16,8 @@ export type ReaderPreferences = {
   smartProseFilter?: boolean | undefined;
   smartDialogueExtraction?: boolean | undefined;
   readabilityScrim?: boolean | undefined;
+  virtualCameraEnabled?: boolean | undefined;
+  confidantCutInsEnabled?: boolean | undefined;
 };
 export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   adjustableSheetEnabled: false,
@@ -26,6 +28,8 @@ export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   smartProseFilter: true,
   smartDialogueExtraction: true,
   readabilityScrim: true,
+  virtualCameraEnabled: true,
+  confidantCutInsEnabled: true,
 };
 export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
   const input = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -48,6 +52,8 @@ export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
     smartProseFilter: input.smartProseFilter !== undefined ? input.smartProseFilter === true : (DEFAULT_READER_PREFERENCES.smartProseFilter ?? true),
     smartDialogueExtraction: input.smartDialogueExtraction !== undefined ? input.smartDialogueExtraction === true : (DEFAULT_READER_PREFERENCES.smartDialogueExtraction ?? true),
     readabilityScrim: input.readabilityScrim !== undefined ? input.readabilityScrim === true : (DEFAULT_READER_PREFERENCES.readabilityScrim ?? true),
+    virtualCameraEnabled: input.virtualCameraEnabled !== undefined ? input.virtualCameraEnabled === true : (DEFAULT_READER_PREFERENCES.virtualCameraEnabled ?? true),
+    confidantCutInsEnabled: input.confidantCutInsEnabled !== undefined ? input.confidantCutInsEnabled === true : (DEFAULT_READER_PREFERENCES.confidantCutInsEnabled ?? true),
   };
 }
 const RATIOS = { compact: 0.22, reading: 0.34, expanded: 0.6 } as const;

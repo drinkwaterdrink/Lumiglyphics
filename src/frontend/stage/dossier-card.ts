@@ -1367,6 +1367,46 @@ export class DossierCard {
         worldSheet.append(atlasWrap);
       }
 
+      if ((this.storyDna.chapterCodex?.length ?? 0) > 0 || (this.storyDna.thoughtCabinet?.length ?? 0) > 0) {
+        const codexCard = document.createElement('div');
+        codexCard.style.cssText = 'display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:10px;background:rgba(15,23,42,0.55);border:1px solid rgba(148,163,184,0.2);';
+        codexCard.dataset.worldCodexSection = '';
+        if (this.storyDna.chapterCodex?.length) {
+          const chHdr = document.createElement('div');
+          chHdr.style.cssText = 'font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#a7f3d0;';
+          chHdr.textContent = `📖 Chapter Codex (${this.storyDna.chapterCodex.length})`;
+          const chList = document.createElement('div');
+          chList.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;';
+          for (const ch of this.storyDna.chapterCodex.slice(-6).reverse()) {
+            const pill = document.createElement('span');
+            pill.style.cssText = 'font-size:11px;padding:4px 8px;border-radius:7px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.28);color:#e2e8f0;';
+            pill.title = ch.summary;
+            pill.textContent = ch.title;
+            chList.append(pill);
+          }
+          codexCard.append(chHdr, chList);
+        }
+        if (this.storyDna.thoughtCabinet?.length) {
+          const tcHdr = document.createElement('div');
+          tcHdr.style.cssText = 'font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#fde68a;margin-top:2px;';
+          tcHdr.textContent = `🧠 Thought Cabinet (${this.storyDna.thoughtCabinet.length})`;
+          const tcList = document.createElement('div');
+          tcList.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+          for (const tc of this.storyDna.thoughtCabinet.slice(-4).reverse()) {
+            const row = document.createElement('div');
+            row.style.cssText = 'font-size:11px;line-height:1.35;padding:5px 8px;border-radius:6px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.25);color:#fef3c7;';
+            const b = document.createElement('strong');
+            b.textContent = `[${tc.category}] ${tc.title}: `;
+            const span = document.createElement('span');
+            span.textContent = tc.description.slice(0, 120);
+            row.append(b, span);
+            tcList.append(row);
+          }
+          codexCard.append(tcHdr, tcList);
+        }
+        worldSheet.append(codexCard);
+      }
+
       // World Lens Preview Card at bottom of map
       const lensCard = document.createElement('div');
       lensCard.className = 'world-lens';
@@ -1391,7 +1431,7 @@ export class DossierCard {
 
         const evidence=document.createElement('button');evidence.type='button';evidence.textContent='Read story reference';evidence.onclick=()=>open(activeEntry.entity.id,trigger);
         const hideBtn=document.createElement('button');hideBtn.type='button';hideBtn.style.cssText='display:inline-block;margin-top:6px!important;margin-left:6px!important;min-height:0!important;min-width:0!important;padding:4px 10px!important;font-size:10.5px!important;font-weight:600!important;border-radius:6px!important;background:rgba(255,255,255,0.08)!important;color:var(--vn-muted-text,#d1dfd5)!important;border:1px solid rgba(255,255,255,0.18)!important;cursor:pointer;';hideBtn.textContent='✕ Hide from Lens';hideBtn.title='Hide this reference from World Lens';hideBtn.onclick=()=>{if(this.update(activeEntry.entity,{suppressed:true})){const idx=entries.findIndex(e=>e.entity.id===activeEntry.entity.id);if(idx>=0)entries.splice(idx,1);this.selectedEntityId=null;render();}};
-        lensCard.append(lensTitle, lensDesc, ctaBtn, evidence, hideBtn);
+        lensCard.append(lensTitle, lensDesc, ctaBtn, ...(activeEntry.entity.kind === 'npc' ? [evidence] : []), hideBtn);
       } else {
         lensCard.innerHTML = '<h3>No matching references</h3><p>Try another category or clear the search.</p>';
       }
