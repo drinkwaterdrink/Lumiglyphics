@@ -485,7 +485,7 @@ export async function autofillLocationDNA(
             {
               role: 'system',
               content:
-                'Extract concise visual Scenery DNA JSON for ONLY the named story location using the evidence provided. Preserve sensory architecture, lighting, atmosphere, and recurring landmark props so image generation stays consistent. Return strict JSON matching {"environmentDescription"?:string,"lighting"?:string,"atmosphere"?:string,"architecture"?:string,"persistentElements"?:string[],"loreText"?:string}.',
+                'Extract image-prompt-ready visual Scenery DNA JSON for ONLY the named story location using the evidence provided. Write concrete, camera-visible spatial architecture, materials, light quality/color temperature, atmosphere, and recurring landmark props without abstract lore or raw measurements so diffusion models render consistent backgrounds. Keep named story details concise. Return strict JSON matching {"environmentDescription"?:string,"lighting"?:string,"atmosphere"?:string,"architecture"?:string,"persistentElements"?:string[],"loreText"?:string}.',
             },
             {
               role: 'user',
@@ -610,7 +610,7 @@ export async function autofillItemDNA(
             {
               role: 'system',
               content:
-                'Extract concise visual Item DNA JSON for ONLY the named story object/artifact using the evidence provided. Return strict JSON matching {"itemType"?:string,"description"?:string,"materials"?:string,"distinctiveFeatures"?:string[],"colors"?:string[],"heldBy"?:string,"loreText"?:string}.',
+                'Extract image-prompt-ready visual Item DNA JSON for ONLY the named story object/artifact using the evidence provided. Write concrete surface materials, craftsmanship, wear/patina, silhouettes, and descriptive named colors (never hex codes like #FF0000 or abstract measurements) in "colors" so image generators render the prop accurately. Return strict JSON matching {"itemType"?:string,"description"?:string,"materials"?:string,"distinctiveFeatures"?:string[],"colors"?:string[],"heldBy"?:string,"loreText"?:string}.',
             },
             {
               role: 'user',

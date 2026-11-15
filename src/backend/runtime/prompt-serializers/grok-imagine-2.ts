@@ -3,6 +3,7 @@ import type { SerializerInput, SerializerResult } from './types.js';
 import {
   parseSubjectsFromBrief,
   formatCameraFraming,
+  formatSpatialPlacements,
   formatDialogueSafeArea,
   formatReferenceDirectives
 } from './helpers.js';
@@ -102,9 +103,11 @@ export function serializeGrokImagine2(input: SerializerInput): SerializerResult 
   }
 
   // 7. Composition & camera framing & crop (P1)
+  const spatialText = brief.subjectMode === 'ensemble' ? formatSpatialPlacements(shotSpec) : '';
   const cameraText = formatCameraFraming(shotSpec);
   const safeAreaText = formatDialogueSafeArea(shotSpec);
   const compParts = [
+    spatialText ? `${spatialText}.` : '',
     cameraText ? `Camera framing: ${cameraText}.` : '',
     safeAreaText ? safeAreaText : ''
   ].filter(Boolean);

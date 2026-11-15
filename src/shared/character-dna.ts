@@ -137,11 +137,144 @@ export function isGenericAttire(attire?: string | null): boolean {
   return GENERIC_ATTIRE_RE.test(trimmed);
 }
 
-function formatAgeClause(rawAge?: string): string {
+function formatAgeClause(rawAge?: string, options?: { optimizeForImagePrompt?: boolean; tagMode?: boolean }): string {
   const age = rawAge?.trim() ?? '';
   if (!age) return '';
+  if (options?.optimizeForImagePrompt) {
+    return translateNumericAgeToVisualDescriptor(age, options.tagMode);
+  }
   if (/^\d{1,3}$/.test(age)) return `${age}-year-old`;
   return age;
+}
+
+/**
+ * Translates numeric ages (e.g., "18", "24", "38-year-old", "65 years old")
+ * into camera-visible life-stage & facial maturity cues so diffusion/flow models
+ * don't misinterpret bare numerals. Preserves already visual descriptors like "late 20s".
+ */
+export function translateNumericAgeToVisualDescriptor(rawAge?: string, tagMode = false): string {
+  const raw = rawAge?.trim() ?? '';
+  if (!raw) return '';
+
+  // Match standalone numbers or "18", "18-year-old", "18 years old", "age 18", "18yo"
+  const match = raw.match(/^(?:age\s+)?(\d{1,3})(?:\s*(?:-\s*year\s*-\s*old|years?\s+old|yo|y\/o|yrs?))?$/i);
+  if (!match?.[1]) {
+    // Replace embedded numeric age tokens inside longer phrases like "18-year-old college student"
+    return raw.replace(/\b(\d{1,3})\s*(?:-\s*year\s*-\s*old|years?\s+old|y\/o)\b/gi, (_, d: string) =>
+      ageNumberToDescriptor(Number(d), tagMode)
+    ).trim();
+  }
+  return ageNumberToDescriptor(Number(match[1]), tagMode);
+}
+
+function ageNumberToDescriptor(n: number, tagMode: boolean): string {
+  if (!Number.isFinite(n) || n < 0) return '';
+  if (n <= 4) return tagMode ? 'toddler' : 'young toddler';
+  if (n <= 9) return tagMode ? 'child' : 'young child';
+  if (n <= 12) return tagMode ? 'preteen' : 'preteen child';
+  if (n <= 15) return tagMode ? 'young teen' : 'young teenager with youthful facial proportions';
+  if (n <= 17) return tagMode ? 'late teen' : 'late-teenager with youthful features';
+  if (n <= 19) return tagMode ? 'young adult, youthful features' : 'young adult in late teens with fresh youthful features';
+  if (n <= 23) return tagMode ? 'young adult, early 20s' : 'young adult in early twenties';
+  if (n <= 26) return tagMode ? 'young adult, mid 20s' : 'young adult in mid-twenties';
+  if (n <= 29) return tagMode ? 'young adult, late 20s' : 'young adult in late twenties';
+  if (n <= 33) return tagMode ? 'early 30s adult' : 'adult in early thirties';
+  if (n <= 36) return tagMode ? 'mid 30s adult' : 'adult in mid-thirties';
+  if (n <= 39) return tagMode ? 'late 30s adult' : 'adult in late thirties';
+  if (n <= 44) return tagMode ? 'early 40s mature adult' : 'mature adult in early forties';
+  if (n <= 49) return tagMode ? 'late 40s mature adult' : 'mature adult in late forties';
+  if (n <= 59) return tagMode ? 'middle-aged' : 'middle-aged adult with seasoned character lines';
+  if (n <= 74) return tagMode ? 'older adult' : 'older adult with silver-streaked maturity and weathered features';
+  if (n < 120) return tagMode ? 'elderly' : 'elderly figure with deep character lines and silver-white hair';
+  return tagMode ? 'ageless figure' : 'ageless timeless adult appearance';
+}
+
+/**
+ * Translates numeric heights ("5'11\"", "5 ft 11 in", "180 cm", "1.82 m") into
+ * proportional stature descriptors that image generators actually understand spatially.
+ */
+export function translateNumericHeightToVisualDescriptor(rawHeight?: string, tagMode = false): string {
+  const raw = rawHeight?.trim() ?? '';
+  if (!raw) return '';
+
+  const cm = parseHeightToCm(raw);
+  if (cm === null) return raw;
+
+  const band = cmToStatureDescriptor(cm, tagMode);
+  // Preserve any trailing non-numeric physique descriptors (e.g. "5'11\" broad-shouldered" -> "tall stature broad-shouldered")
+  const stripped = raw
+    .replace(/\b\d\s*(?:'|’|ft|feet)\s*\d{1,2}\s*(?:"|”|in|inches)?\b/gi, '')
+    .replace(/\b\d\s*(?:'|’|ft|feet)\b/gi, '')
+    .replace(/\b\d{2,3}\s*cm\b/gi, '')
+    .replace(/\b[12]\.\d{1,2}\s*m\b/gi, '')
+    .replace(/[(),]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!stripped || /^(?:height|tall|short|average)$/i.test(stripped)) return band;
+  return `${band} ${stripped}`.trim();
+}
+
+function parseHeightToCm(raw: string): number | null {
+  const ftIn = raw.match(/\b(\d)\s*(?:'|’|ft|feet)\s*(\d{1,2})\s*(?:"|”|in|inches)?\b/i);
+  if (ftIn?.[1] && ftIn[2]) {
+    const feet = Number(ftIn[1]);
+    const inches = Number(ftIn[2]);
+    if (feet >= 3 && feet <= 8 && inches >= 0 && inches < 12) {
+      return Math.round((feet * 12 + inches) * 2.54);
+    }
+  }
+  const ftOnly = raw.match(/\b(\d)\s*(?:'|’|ft|feet)\b/i);
+  if (ftOnly?.[1]) {
+    const feet = Number(ftOnly[1]);
+    if (feet >= 3 && feet <= 8) return Math.round(feet * 30.48);
+  }
+  const cmMatch = raw.match(/\b(1\d\d|2\d\d|[89]\d)\s*cm\b/i);
+  if (cmMatch?.[1]) {
+    return Number(cmMatch[1]);
+  }
+  const mMatch = raw.match(/\b([12]\.\d{1,2})\s*m\b/i);
+  if (mMatch?.[1]) {
+    return Math.round(Number(mMatch[1]) * 100);
+  }
+  return null;
+}
+
+function cmToStatureDescriptor(cm: number, tagMode: boolean): string {
+  if (cm < 152) return tagMode ? 'very short, petite' : 'very short petite stature';
+  if (cm <= 160) return tagMode ? 'petite' : 'petite short stature';
+  if (cm <= 167) return tagMode ? 'short stature' : 'compact below-average height';
+  if (cm <= 174) return tagMode ? 'average height' : 'average proportional height';
+  if (cm <= 180) return tagMode ? 'tall' : 'tall well-proportioned stature';
+  if (cm <= 189) return tagMode ? 'very tall' : 'noticeably tall long-limbed stature';
+  return tagMode ? 'towering stature' : 'towering imposing stature';
+}
+
+/**
+ * Optimizes free-form character appearance strings (e.g. saved Cast / SimTracker descriptions)
+ * for diffusion & flow models by converting literal age numbers and ruler heights/weights
+ * into natural visual descriptors.
+ */
+export function optimizeAppearanceTextForImagePrompt(rawText: string, tagMode = false): string {
+  const text = rawText.trim();
+  if (!text) return '';
+  return text
+    .replace(/\b(\d{1,3})\s*(?:-\s*year\s*-\s*old|years?\s+old|y\/o)\b/gi, (_, d: string) =>
+      ageNumberToDescriptor(Number(d), tagMode)
+    )
+    .replace(/\b(\d)\s*(?:'|’|ft|feet)\s*(\d{1,2})\s*(?:"|”|in|inches)?\b/gi, (m) => {
+      const cm = parseHeightToCm(m);
+      return cm !== null ? cmToStatureDescriptor(cm, tagMode) : m;
+    })
+    .replace(/\b(1\d\d|2\d\d|[89]\d)\s*cm\b/gi, (m) => {
+      const cm = parseHeightToCm(m);
+      return cm !== null ? cmToStatureDescriptor(cm, tagMode) : m;
+    })
+    .replace(/\b([12]\.\d{1,2})\s*m\b/gi, (m) => {
+      const cm = parseHeightToCm(m);
+      return cm !== null ? cmToStatureDescriptor(cm, tagMode) : m;
+    })
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 }
 
 function formatGenderSpecies(gender?: string, species?: string): string {
@@ -252,14 +385,29 @@ function deduplicateDescriptiveClauses(rawClauses: string[], isFirstIdentityClau
 /**
  * Formats a CharacterDNA record into comma-separated tags suitable for image prompt generation.
  */
-export function formatCharacterDNAToTags(
+export function formatCharacterDNAForImagePrompt(
+  dna: CharacterDNA,
+  options?: { includeOutfit?: boolean | undefined }
+): string {
+  return formatCharacterDNAToPromptClause(dna, { ...options, optimizeForImagePrompt: true });
+}
+
+export function formatCharacterDNATagsForImagePrompt(
   dna: CharacterDNA,
   options?: { includeOutfit?: boolean | undefined }
 ): string[] {
+  return formatCharacterDNAToTags(dna, { ...options, optimizeForImagePrompt: true });
+}
+
+export function formatCharacterDNAToTags(
+  dna: CharacterDNA,
+  options?: { includeOutfit?: boolean | undefined; optimizeForImagePrompt?: boolean | undefined }
+): string[] {
+  const optimize = options?.optimizeForImagePrompt === true;
   const tags: string[] = [];
   const isMale = dna.build.gender?.toLowerCase() === 'man' || dna.build.gender?.toLowerCase() === 'male';
 
-  const age = formatAgeClause(dna.build.age);
+  const age = formatAgeClause(dna.build.age, { optimizeForImagePrompt: optimize, tagMode: true });
   if (age) tags.push(age);
   const genderSpecies = formatGenderSpecies(dna.build.gender, dna.build.species);
   if (genderSpecies) tags.push(genderSpecies);
@@ -267,8 +415,10 @@ export function formatCharacterDNAToTags(
   const skin = formatSkinClause(dna.build.skinTone, false);
   if (skin) tags.push(skin);
 
-  if (dna.build.height || dna.build.bodyType) {
-    tags.push([dna.build.height, dna.build.bodyType].filter(Boolean).join(' '));
+  const rawHeight = dna.build.height?.trim();
+  const height = optimize && rawHeight ? translateNumericHeightToVisualDescriptor(rawHeight, true) : rawHeight;
+  if (height || dna.build.bodyType) {
+    tags.push([height, dna.build.bodyType].filter(Boolean).join(' '));
   }
 
   if (dna.build.bust && (!isMale || /chest|shoulder|pec/i.test(dna.build.bust))) {
@@ -311,13 +461,14 @@ export function formatCharacterDNAToTags(
  */
 export function formatCharacterDNAToPromptClause(
   dna: CharacterDNA,
-  options?: { includeOutfit?: boolean | undefined }
+  options?: { includeOutfit?: boolean | undefined; optimizeForImagePrompt?: boolean | undefined }
 ): string {
+  const optimize = options?.optimizeForImagePrompt === true;
   const rawClauses: string[] = [];
   const isMale = dna.build.gender?.toLowerCase() === 'man' || dna.build.gender?.toLowerCase() === 'male';
 
   const identityBits: string[] = [];
-  const age = formatAgeClause(dna.build.age);
+  const age = formatAgeClause(dna.build.age, { optimizeForImagePrompt: optimize, tagMode: false });
   if (age) identityBits.push(age);
 
   let inferredHeight = dna.build.height?.trim() ?? '';
@@ -329,6 +480,9 @@ export function formatCharacterDNAToPromptClause(
         break;
       }
     }
+  }
+  if (optimize && inferredHeight) {
+    inferredHeight = translateNumericHeightToVisualDescriptor(inferredHeight, false);
   }
 
   if (inferredHeight || dna.build.bodyType) {

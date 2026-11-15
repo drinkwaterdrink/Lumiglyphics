@@ -12,8 +12,8 @@ import {
   deriveShortAliases,
   findMatchingItem,
   findMatchingLocation,
-  formatItemDNAToPromptClause,
-  formatLocationDNAToPromptClause,
+  formatItemDNAForImagePrompt,
+  formatLocationDNAForImagePrompt,
   type ItemDNA,
   type LocationDNA,
   type StoryDnaActionBody,
@@ -1656,7 +1656,7 @@ export class DossierCard {
       });
 
       const refreshPreview = () => {
-        const clause = formatLocationDNAToPromptClause(buildLoc());
+        const clause = formatLocationDNAForImagePrompt(buildLoc());
         previewText.textContent = clause || 'Fill scenery details above to inject consistent location visuals into generated art.';
       };
       [aliasesIn, descIn, archIn, lightIn, atmIn, elemIn, connIn, loreIn, notesIn].forEach(el => el.addEventListener('input', refreshPreview));
@@ -1715,7 +1715,7 @@ export class DossierCard {
       });
 
       const refreshPreview = () => {
-        const clause = formatItemDNAToPromptClause(buildItem());
+        const clause = formatItemDNAForImagePrompt(buildItem());
         previewText.textContent = clause || 'Describe this artifact so prompts stay consistent whenever it appears.';
       };
       [aliasesIn, typeIn, descIn, matIn, featIn, colIn, heldIn, loreIn, notesIn].forEach(el => el.addEventListener('input', refreshPreview));

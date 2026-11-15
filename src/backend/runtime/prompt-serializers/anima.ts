@@ -17,22 +17,38 @@ export function serializeAnima(input: SerializerInput): SerializerResult {
 
   // 1. Medium & style tags (P2)
   const styleTags: string[] = [];
-  if (styleDNA.medium) styleTags.push(styleDNA.medium.toLowerCase());
-  else styleTags.push('anime illustration');
+  if (styleDNA.medium) {
+    styleTags.push(styleDNA.medium.toLowerCase());
+  } else if (styleDNA.realism && styleDNA.realism.length > 0) {
+    styleTags.push('photographic');
+  } else if (!styleDNA.prefix?.trim() && (!styleDNA.rendering || styleDNA.rendering.length === 0)) {
+    styleTags.push('anime illustration');
+  }
+  if (styleDNA.rendering && styleDNA.rendering.length > 0) {
+    styleTags.push(...styleDNA.rendering.map((s: string) => s.toLowerCase()));
+  }
   if (styleDNA.shading && styleDNA.shading.length > 0) {
     styleTags.push(...styleDNA.shading.map((s: string) => s.toLowerCase()));
   }
   if (styleDNA.linework && styleDNA.linework.length > 0) {
     styleTags.push(...styleDNA.linework.map((s: string) => s.toLowerCase()));
   }
+  if (styleDNA.palette && styleDNA.palette.length > 0) {
+    styleTags.push(...styleDNA.palette.map((s: string) => s.toLowerCase()));
+  }
+  if (styleDNA.atmosphere && styleDNA.atmosphere.length > 0) {
+    styleTags.push(...styleDNA.atmosphere.map((s: string) => s.toLowerCase()));
+  }
 
-  sections.push({
-    id: 'style-tags',
-    priority: 2,
-    required: false,
-    compressible: true,
-    text: styleTags.join(', ')
-  });
+  if (styleTags.length > 0) {
+    sections.push({
+      id: 'style-tags',
+      priority: 2,
+      required: false,
+      compressible: true,
+      text: [...new Set(styleTags)].join(', ')
+    });
+  }
 
   // 2. Subject count & appearance tags (P0)
   const appearanceTags: string[] = [];

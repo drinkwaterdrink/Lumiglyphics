@@ -19124,33 +19124,58 @@ function findMatchingItem(items, name) {
   });
 }
 function formatLocationDNAToPromptClause(dna, options) {
+  const optimize = options?.optimizeForImagePrompt === true;
   const parts = [];
   if (dna.environmentDescription)
-    parts.push(dna.environmentDescription);
-  if (dna.architecture)
-    parts.push(`architecture: ${dna.architecture}`);
-  if (options?.includeLighting !== false && dna.lighting)
-    parts.push(`lighting: ${dna.lighting}`);
-  if (dna.atmosphere)
-    parts.push(`atmosphere: ${dna.atmosphere}`);
-  if (options?.includePersistentElements !== false && dna.persistentElements && dna.persistentElements.length > 0) {
-    parts.push(`features: ${dna.persistentElements.slice(0, 6).join(", ")}`);
+    parts.push(dna.environmentDescription.trim());
+  if (dna.architecture) {
+    parts.push(optimize ? `built with ${dna.architecture.trim()}` : `architecture: ${dna.architecture}`);
   }
-  return parts.join("; ");
+  if (options?.includeLighting !== false && dna.lighting) {
+    parts.push(optimize ? `lit by ${dna.lighting.trim()}` : `lighting: ${dna.lighting}`);
+  }
+  if (dna.atmosphere) {
+    const atm = dna.atmosphere.trim();
+    parts.push(optimize ? /atmosphere|mood|ambience/i.test(atm) ? atm : `${atm} atmosphere` : `atmosphere: ${dna.atmosphere}`);
+  }
+  if (options?.includePersistentElements !== false && dna.persistentElements && dna.persistentElements.length > 0) {
+    const elems = dna.persistentElements.slice(0, 6).join(", ");
+    parts.push(optimize ? `featuring ${elems}` : `features: ${elems}`);
+  }
+  return parts.join(optimize ? ", " : "; ");
 }
-function formatItemDNAToPromptClause(dna) {
+function formatItemDNAToPromptClause(dna, options) {
+  const optimize = options?.optimizeForImagePrompt === true;
   const parts = [];
-  if (dna.description)
-    parts.push(dna.description);
-  if (dna.materials)
-    parts.push(`materials: ${dna.materials}`);
+  if (dna.description) {
+    parts.push(dna.description.trim());
+  } else if (optimize && dna.name) {
+    parts.push(dna.name.trim());
+  }
+  if (dna.materials) {
+    parts.push(optimize ? `crafted from ${dna.materials.trim()}` : `materials: ${dna.materials}`);
+  }
   if (dna.distinctiveFeatures && dna.distinctiveFeatures.length > 0) {
-    parts.push(dna.distinctiveFeatures.join(", "));
+    const feats = dna.distinctiveFeatures.join(", ");
+    parts.push(optimize ? `with ${feats}` : feats);
   }
   if (dna.colors && dna.colors.length > 0) {
-    parts.push(`colors: ${dna.colors.join(", ")}`);
+    if (optimize) {
+      const namedColors = dna.colors.map((c) => c.trim()).filter((c) => Boolean(c) && !/^#[0-9a-f]{3,8}$/i.test(c));
+      if (namedColors.length > 0) {
+        parts.push(`colored in ${namedColors.join(", ")}`);
+      }
+    } else {
+      parts.push(`colors: ${dna.colors.join(", ")}`);
+    }
   }
-  return parts.join("; ");
+  return parts.join(optimize ? ", " : "; ");
+}
+function formatLocationDNAForImagePrompt(dna, options) {
+  return formatLocationDNAToPromptClause(dna, { ...options, optimizeForImagePrompt: true });
+}
+function formatItemDNAForImagePrompt(dna) {
+  return formatItemDNAToPromptClause(dna, { optimizeForImagePrompt: true });
 }
 var StoryDnaRequestSchema = exports_external.discriminatedUnion("action", [
   exports_external.object({
@@ -20074,6 +20099,64 @@ var BUILTIN_STYLE_DNA = Object.freeze({
     shading: ["planar light and shadow blocking"],
     preserve: ["scene established mood, clothing and objects", "scene lighting organizing depth"],
     avoidIntent: ["plastic CGI surfaces", "uniform airbrush smoothing", "muddy values"]
+  },
+  "builtin-style:fullmetal-alchemy": {
+    medium: "high-budget 2000s Japanese studio cel anime frame",
+    rendering: ["expressive angular anime faces with crisp dual eye highlights", "gouache-painted European stonework and brass backgrounds"],
+    linework: ["decisive tapered dark sepia ink contours", "clean architectural perspective lines"],
+    shading: ["crisp two-tone studio cel shading", "deep umber cast shadows", "warm amber key-light edge highlights"],
+    palette: ["slate steel", "burnt amber gold", "crimson accent", "charcoal masonry"],
+    atmosphere: ["atmospheric industrial steam", "dramatic alchemical rim contrast"],
+    preserve: ["subject identity, uniform or outfit details and dramatic pose", "scene lighting direction"],
+    avoidIntent: ["3D CGI", "glossy plastic anime skin", "chibi proportions", "watercolor bleed", "flat sterile vector fill"]
+  },
+  "builtin-style:ghibli-pastoral": {
+    medium: "theatrical hand-painted anime cel with storybook gouache scenery",
+    rendering: ["luminous hand-painted foliage and cumulus skies", "gentle analog cel warmth"],
+    linework: ["fine warm-brown ink contours"],
+    shading: ["soft organic cel shading", "sunlit bounce illumination"],
+    palette: ["sunlit sage green", "cerulean sky", "warm cream highlights"],
+    atmosphere: ["breathable pastoral air and nostalgic warmth"],
+    preserve: ["subject identity and clothing", "open sky and nature atmosphere"],
+    avoidIntent: ["neon cyberpunk bloom", "heavy black comics ink", "harsh plastic 3D shading"]
+  },
+  "builtin-style:dark-academia-oil": {
+    medium: "classical chiaroscuro oil painting on linen canvas",
+    rendering: ["sculptural oil impasto focal highlights", "restrained old-master glazing"],
+    shading: ["dramatic candlelit chiaroscuro lighting"],
+    texture: ["woven linen canvas weave", "antique mahogany and parchment patina"],
+    palette: ["deep burnt umber", "warm ochre candlelight", "tarnished brass", "slate shadow"],
+    preserve: ["subject likeness, period fabrics and prop craftsmanship"],
+    avoidIntent: ["flat digital airbrushing", "neon oversaturation", "anime outlines", "smooth CGI plastic"]
+  },
+  "builtin-style:ukiyo-neo-ink": {
+    medium: "neo-ukiyo-e carved woodblock print and sumi ink illustration",
+    rendering: ["flat mineral pigment planes", "subtle bokashi tonal ink gradations"],
+    linework: ["bold calligraphic woodcut keyblock outlines"],
+    texture: ["handmade kozo and washi paper grain"],
+    palette: ["Prussian indigo", "vermilion seal red", "warm ochre", "charcoal ink"],
+    preserve: ["crisp character silhouettes and scenic layering"],
+    avoidIntent: ["photorealistic 3D rendering", "glossy airbrush gradients", "photographic bokeh"]
+  },
+  "builtin-style:cinematic-anamorphic": {
+    medium: "35mm anamorphic theatrical film still",
+    cameraHints: ["widescreen anamorphic depth of field", "subtle oval background bokeh"],
+    realism: ["unretouched photographic optics", "natural skin texture and worn fabric weaves"],
+    rendering: ["organic photochemical film look", "gentle halation around practical lights"],
+    texture: ["fine 35mm film grain"],
+    palette: ["tungsten practical warmth against cool twilight shadows"],
+    preserve: ["real-world set materiality and subject likeness"],
+    avoidIntent: ["glossy beauty retouching", "plastic poreless skin", "CGI sheen", "flat smartphone HDR"]
+  },
+  "builtin-style:noir-chiaroscuro": {
+    medium: "silver-gelatin black-and-white film noir still",
+    cameraHints: ["low-angle geometric noir framing", "deep contrast shadow blocking"],
+    realism: ["authentic silver-halide photographic grain", "unretouched tonal realism"],
+    rendering: ["hard Venetian-blind key light", "wet-surface specular highlights"],
+    texture: ["medium silver-halide film grain", "drifting smoke diffusion"],
+    palette: ["monochrome silver gelatin", "ink-deep black", "luminous chalk highlight"],
+    preserve: ["silhouette clarity and dramatic light beams"],
+    avoidIntent: ["color tinting", "flat low-contrast gray wash", "cartoon outlines", "CGI plasticity"]
   }
 });
 
@@ -20090,7 +20173,13 @@ var BUILTIN_SHARED_STYLES = [
   { id: "builtin-style:documentary", name: "Documentary — observational realism", description: "Unstaged visual storytelling with surroundings kept readable.", positive: "An observational documentary photograph.", suffix: "A believable witness viewpoint, purposeful but unposed framing, authentic surface detail and restrained color correction. Keep the setting legible with moderate depth of field; preserve the scene's actual light and the subject's established appearance.", negative: "glamour retouching, artificial posing, CGI, excessively blurred surroundings, watermark, logo" },
   { id: "builtin-style:film", name: "35 mm film — organic color", description: "Subtle film grain and gentle highlight rolloff while retaining the scene's mood.", positive: "A natural color photograph captured on 35 mm film.", suffix: "Fine organic grain, gentle highlight rolloff, restrained color separation and subtle optical softness. Plausible photographic perspective and natural textures. Preserve the scene's lighting, time and mood rather than imposing a new color cast.", negative: "heavy grain obscuring detail, exaggerated light leaks, waxy textures, watermark, logo" },
   { id: "builtin-style:watercolor", name: "Watercolor — paper and pigment", description: "Transparent washes, tactile paper and selective line detail.", positive: "A hand-painted watercolor illustration on textured paper.", suffix: "Transparent layered washes, subtle pigment pooling, softly broken edges and fine pencil or ink accents around important details. Use the scene's colors and light, leaving intentional areas of untouched paper. Retain recognizable subject and object shapes.", negative: "glossy 3D rendering, muddy washes, illegible subject shapes, watermark, logo" },
-  { id: "builtin-style:painterly", name: "Painterly fantasy — gouache and brushwork", description: "Opaque painted color, selective brush texture and coherent scene light.", positive: "A hand-painted narrative illustration in gouache.", suffix: "Opaque layered pigment, visible but controlled brushwork, simplified value shapes and carefully rendered focal details. Keep the scene's established mood, clothing and objects; use its lighting to organize depth and color.", negative: "plastic CGI surfaces, uniform airbrush smoothing, muddy values, watermark, logo" }
+  { id: "builtin-style:painterly", name: "Painterly fantasy — gouache and brushwork", description: "Opaque painted color, selective brush texture and coherent scene light.", positive: "A hand-painted narrative illustration in gouache.", suffix: "Opaque layered pigment, visible but controlled brushwork, simplified value shapes and carefully rendered focal details. Keep the scene's established mood, clothing and objects; use its lighting to organize depth and color.", negative: "plastic CGI surfaces, uniform airbrush smoothing, muddy values, watermark, logo" },
+  { id: "builtin-style:fullmetal-alchemy", name: "Anime — alchemical studio cel (FMA style)", description: "Fullmetal Alchemist-inspired 2000s cel animation over rich European gouache backgrounds.", positive: "A Fullmetal Alchemist-inspired high-budget 2000s Japanese studio anime frame with crisp dark sepia ink linework and sculpted cel shading.", suffix: "Expressive angular anime anatomy and fierce readable eyes with crisp dual highlights; clean tapered dark-umber outlines, strong two-tone cast shadows, rich gouache-painted European stonework, ironwork and brass backdrops with atmospheric steam, and warm amber-gold versus steel-slate contrast.", negative: "3D CGI, glossy plastic anime skin, chibi proportions, blurry mushy lineart, watercolor bleed, flat sterile vector fill, watermark, logo" },
+  { id: "builtin-style:ghibli-pastoral", name: "Anime — painted storybook pastoral", description: "Sunlit hand-painted watercolor-gouache nature backdrops with delicate brown ink character cels.", positive: "A nostalgic hand-painted theatrical anime frame uniting expressive cel characters with luminous watercolor-gouache scenery.", suffix: "Warm dappled sunlight, painterly cumulus clouds and botanical brushwork in the environment, fine dark-brown ink contours and soft organic bounced shadow on figures, gentle analog warmth and breathable open sky composition.", negative: "neon cyberpunk bloom, heavy black comics ink, harsh plastic 3D shading, sterile digital vector look, watermark, logo" },
+  { id: "builtin-style:dark-academia-oil", name: "Fine art — dark academia chiaroscuro oil", description: "Old-master oil on linen with deep umber shadows, candlelit impasto and scholarly patina.", positive: "A classic chiaroscuro oil painting on woven linen canvas with luminous focal impasto and deep umber shadows.", suffix: "Controlled visible oil brushwork carving planes of light across faces, wool, parchment and tarnished brass; warm candlelight against cool shadowed stone, subtle crackle patina and rich tonal depth without muddy blacks.", negative: "flat digital airbrushing, neon oversaturation, anime lineart, smooth CGI plastic, modern flash glare, watermark, logo" },
+  { id: "builtin-style:ukiyo-neo-ink", name: "Print — neo-ukiyo woodblock & sumi ink", description: "Bold carved keyblock lines, mineral pigment bokashi gradients and handmade paper fiber.", positive: "A refined neo-ukiyo-e woodblock print combining bold calligraphic sumi keylines with flat mineral-pigment tonal planes.", suffix: "Authentic carved block registration, subtle vertical bokashi color fades on handmade kozo paper texture, disciplined indigo, vermilion and warm ochre color harmony, clean silhouette choreography and rhythmic negative space.", negative: "photorealistic 3D rendering, glossy airbrush gradients, soft photographic bokeh, noisy digital grain, watermark, logo" },
+  { id: "builtin-style:cinematic-anamorphic", name: "Cinema — 35mm anamorphic film still", description: "Theatrical widescreen 35mm frame with grounded practical light, halation and film grain.", positive: "An unretouched 35mm theatrical anamorphic film still with grounded practical lighting and organic optical depth.", suffix: "Balanced tungsten-and-twilight color separation, gentle amber halation around practical light sources, subtle oval background bokeh, fine photochemical grain, tactile fabric and natural unvarnished skin texture. Preserve scene staging and continuity.", negative: "glossy fashion retouching, plastic poreless skin, CGI sheen, flat smartphone HDR, artificial neon bloom, watermark, logo" },
+  { id: "builtin-style:noir-chiaroscuro", name: "Cinema — silver-gelatin monochrome noir", description: "Stark black-and-white silver-halide contrast with Venetian shadows and slick reflections.", positive: "A classic black-and-white silver-gelatin film noir still sculpted by stark directional key light and ink-deep shadow.", suffix: "Hard architectural shadow geometry, gleaming wet-pavement or glass specular highlights, curling haze catching beams of light, authentic medium silver-halide film grain and legible silhouette readability across foreground and midground.", negative: "color photography, pastel tinting, flat low-contrast gray wash, cartoon outlines, CGI plasticity, watermark, logo" }
 ];
 function applySharedStyle(preset, currentSuffix) {
   return { promptPrefix: preset.positive, promptSuffix: preset.suffix ?? currentSuffix, negativePrompt: preset.negative };
@@ -22457,13 +22546,118 @@ function isGenericAttire(attire) {
     return false;
   return GENERIC_ATTIRE_RE.test(trimmed);
 }
-function formatAgeClause(rawAge) {
+function formatAgeClause(rawAge, options) {
   const age = rawAge?.trim() ?? "";
   if (!age)
     return "";
+  if (options?.optimizeForImagePrompt) {
+    return translateNumericAgeToVisualDescriptor(age, options.tagMode);
+  }
   if (/^\d{1,3}$/.test(age))
     return `${age}-year-old`;
   return age;
+}
+function translateNumericAgeToVisualDescriptor(rawAge, tagMode = false) {
+  const raw = rawAge?.trim() ?? "";
+  if (!raw)
+    return "";
+  const match = raw.match(/^(?:age\s+)?(\d{1,3})(?:\s*(?:-\s*year\s*-\s*old|years?\s+old|yo|y\/o|yrs?))?$/i);
+  if (!match?.[1]) {
+    return raw.replace(/\b(\d{1,3})\s*(?:-\s*year\s*-\s*old|years?\s+old|y\/o)\b/gi, (_, d) => ageNumberToDescriptor(Number(d), tagMode)).trim();
+  }
+  return ageNumberToDescriptor(Number(match[1]), tagMode);
+}
+function ageNumberToDescriptor(n, tagMode) {
+  if (!Number.isFinite(n) || n < 0)
+    return "";
+  if (n <= 4)
+    return tagMode ? "toddler" : "young toddler";
+  if (n <= 9)
+    return tagMode ? "child" : "young child";
+  if (n <= 12)
+    return tagMode ? "preteen" : "preteen child";
+  if (n <= 15)
+    return tagMode ? "young teen" : "young teenager with youthful facial proportions";
+  if (n <= 17)
+    return tagMode ? "late teen" : "late-teenager with youthful features";
+  if (n <= 19)
+    return tagMode ? "young adult, youthful features" : "young adult in late teens with fresh youthful features";
+  if (n <= 23)
+    return tagMode ? "young adult, early 20s" : "young adult in early twenties";
+  if (n <= 26)
+    return tagMode ? "young adult, mid 20s" : "young adult in mid-twenties";
+  if (n <= 29)
+    return tagMode ? "young adult, late 20s" : "young adult in late twenties";
+  if (n <= 33)
+    return tagMode ? "early 30s adult" : "adult in early thirties";
+  if (n <= 36)
+    return tagMode ? "mid 30s adult" : "adult in mid-thirties";
+  if (n <= 39)
+    return tagMode ? "late 30s adult" : "adult in late thirties";
+  if (n <= 44)
+    return tagMode ? "early 40s mature adult" : "mature adult in early forties";
+  if (n <= 49)
+    return tagMode ? "late 40s mature adult" : "mature adult in late forties";
+  if (n <= 59)
+    return tagMode ? "middle-aged" : "middle-aged adult with seasoned character lines";
+  if (n <= 74)
+    return tagMode ? "older adult" : "older adult with silver-streaked maturity and weathered features";
+  if (n < 120)
+    return tagMode ? "elderly" : "elderly figure with deep character lines and silver-white hair";
+  return tagMode ? "ageless figure" : "ageless timeless adult appearance";
+}
+function translateNumericHeightToVisualDescriptor(rawHeight, tagMode = false) {
+  const raw = rawHeight?.trim() ?? "";
+  if (!raw)
+    return "";
+  const cm = parseHeightToCm(raw);
+  if (cm === null)
+    return raw;
+  const band = cmToStatureDescriptor(cm, tagMode);
+  const stripped = raw.replace(/\b\d\s*(?:'|’|ft|feet)\s*\d{1,2}\s*(?:"|”|in|inches)?\b/gi, "").replace(/\b\d\s*(?:'|’|ft|feet)\b/gi, "").replace(/\b\d{2,3}\s*cm\b/gi, "").replace(/\b[12]\.\d{1,2}\s*m\b/gi, "").replace(/[(),]/g, " ").replace(/\s+/g, " ").trim();
+  if (!stripped || /^(?:height|tall|short|average)$/i.test(stripped))
+    return band;
+  return `${band} ${stripped}`.trim();
+}
+function parseHeightToCm(raw) {
+  const ftIn = raw.match(/\b(\d)\s*(?:'|’|ft|feet)\s*(\d{1,2})\s*(?:"|”|in|inches)?\b/i);
+  if (ftIn?.[1] && ftIn[2]) {
+    const feet = Number(ftIn[1]);
+    const inches = Number(ftIn[2]);
+    if (feet >= 3 && feet <= 8 && inches >= 0 && inches < 12) {
+      return Math.round((feet * 12 + inches) * 2.54);
+    }
+  }
+  const ftOnly = raw.match(/\b(\d)\s*(?:'|’|ft|feet)\b/i);
+  if (ftOnly?.[1]) {
+    const feet = Number(ftOnly[1]);
+    if (feet >= 3 && feet <= 8)
+      return Math.round(feet * 30.48);
+  }
+  const cmMatch = raw.match(/\b(1\d\d|2\d\d|[89]\d)\s*cm\b/i);
+  if (cmMatch?.[1]) {
+    return Number(cmMatch[1]);
+  }
+  const mMatch = raw.match(/\b([12]\.\d{1,2})\s*m\b/i);
+  if (mMatch?.[1]) {
+    return Math.round(Number(mMatch[1]) * 100);
+  }
+  return null;
+}
+function cmToStatureDescriptor(cm, tagMode) {
+  if (cm < 152)
+    return tagMode ? "very short, petite" : "very short petite stature";
+  if (cm <= 160)
+    return tagMode ? "petite" : "petite short stature";
+  if (cm <= 167)
+    return tagMode ? "short stature" : "compact below-average height";
+  if (cm <= 174)
+    return tagMode ? "average height" : "average proportional height";
+  if (cm <= 180)
+    return tagMode ? "tall" : "tall well-proportioned stature";
+  if (cm <= 189)
+    return tagMode ? "very tall" : "noticeably tall long-limbed stature";
+  return tagMode ? "towering stature" : "towering imposing stature";
 }
 function formatGenderSpecies(gender, species) {
   const g = gender?.trim() ?? "";
@@ -22553,11 +22747,15 @@ function deduplicateDescriptiveClauses(rawClauses, isFirstIdentityClause = false
   });
   return result;
 }
+function formatCharacterDNAForImagePrompt(dna, options) {
+  return formatCharacterDNAToPromptClause(dna, { ...options, optimizeForImagePrompt: true });
+}
 function formatCharacterDNAToPromptClause(dna, options) {
+  const optimize = options?.optimizeForImagePrompt === true;
   const rawClauses = [];
   const isMale = dna.build.gender?.toLowerCase() === "man" || dna.build.gender?.toLowerCase() === "male";
   const identityBits = [];
-  const age = formatAgeClause(dna.build.age);
+  const age = formatAgeClause(dna.build.age, { optimizeForImagePrompt: optimize, tagMode: false });
   if (age)
     identityBits.push(age);
   let inferredHeight = dna.build.height?.trim() ?? "";
@@ -22569,6 +22767,9 @@ function formatCharacterDNAToPromptClause(dna, options) {
         break;
       }
     }
+  }
+  if (optimize && inferredHeight) {
+    inferredHeight = translateNumericHeightToVisualDescriptor(inferredHeight, false);
   }
   if (inferredHeight || dna.build.bodyType) {
     identityBits.push([inferredHeight, dna.build.bodyType].filter(Boolean).join(" "));
@@ -32138,7 +32339,7 @@ class DossierCard {
         lastUpdated: Date.now()
       });
       const refreshPreview = () => {
-        const clause = formatLocationDNAToPromptClause(buildLoc());
+        const clause = formatLocationDNAForImagePrompt(buildLoc());
         previewText.textContent = clause || "Fill scenery details above to inject consistent location visuals into generated art.";
       };
       [aliasesIn, descIn, archIn, lightIn, atmIn, elemIn, connIn, loreIn, notesIn].forEach((el) => el.addEventListener("input", refreshPreview));
@@ -32194,7 +32395,7 @@ class DossierCard {
         lastUpdated: Date.now()
       });
       const refreshPreview = () => {
-        const clause = formatItemDNAToPromptClause(buildItem());
+        const clause = formatItemDNAForImagePrompt(buildItem());
         previewText.textContent = clause || "Describe this artifact so prompts stay consistent whenever it appears.";
       };
       [aliasesIn, typeIn, descIn, matIn, featIn, colIn, heldIn, loreIn, notesIn].forEach((el) => el.addEventListener("input", refreshPreview));
@@ -51945,70 +52146,70 @@ var ImagePromptProfileV2Schema = exports_external.object({
 var V2_SERIALIZER_REVISION = "2026.10-rev1";
 var DIALECT_BUDGETS = {
   "flux3-klein": {
-    simple: [900, 2200],
-    standard: [1200, 2600],
-    complex: [1600, 2850],
-    dense: [1800, 3000]
+    simple: [1100, 2600],
+    standard: [1400, 3200],
+    complex: [1800, 3600],
+    dense: [2100, 4200]
   },
   flux3: {
-    simple: [900, 2000],
-    standard: [1200, 2500],
-    complex: [1500, 2800],
-    dense: [1800, 3000]
+    simple: [1000, 2400],
+    standard: [1300, 3000],
+    complex: [1700, 3500],
+    dense: [2000, 4000]
   },
   "gpt-image-2.5": {
-    simple: [800, 1900],
-    standard: [1100, 2400],
-    complex: [1400, 2800],
-    dense: [1700, 3000]
+    simple: [950, 2300],
+    standard: [1300, 3000],
+    complex: [1650, 3500],
+    dense: [2000, 4200]
   },
   "grok-imagine-2": {
-    simple: [550, 1400],
-    standard: [800, 1800],
-    complex: [1000, 2200],
-    dense: [1200, 2600]
+    simple: [650, 1800],
+    standard: [950, 2400],
+    complex: [1200, 2900],
+    dense: [1500, 3400]
   },
   "qwen-image-3": {
-    simple: [300, 650],
-    standard: [400, 750],
-    complex: [500, 850],
-    dense: [600, 900]
+    simple: [350, 750],
+    standard: [480, 760],
+    complex: [580, 760],
+    dense: [640, 760]
   },
   "nano-banana-2.1": {
-    simple: [800, 1800],
-    standard: [1200, 2200],
-    complex: [1500, 2600],
-    dense: [1800, 3000]
+    simple: [950, 2200],
+    standard: [1350, 2800],
+    complex: [1700, 3400],
+    dense: [2100, 4000]
   },
   "seedream-5": {
-    simple: [700, 1800],
-    standard: [1000, 2300],
-    complex: [1300, 2700],
-    dense: [1600, 3000]
+    simple: [850, 2200],
+    standard: [1200, 2800],
+    complex: [1500, 3300],
+    dense: [1850, 3800]
   },
   anima: {
-    simple: [250, 650],
-    standard: [400, 800],
-    complex: [500, 900],
-    dense: [600, 1000]
+    simple: [350, 1000],
+    standard: [550, 1350],
+    complex: [750, 1700],
+    dense: [950, 2100]
   },
   novelai: {
-    simple: [300, 700],
-    standard: [450, 900],
-    complex: [600, 1100],
-    dense: [700, 1200]
+    simple: [350, 1000],
+    standard: [550, 1350],
+    complex: [750, 1750],
+    dense: [950, 2100]
   },
   "generic-prose": {
-    simple: [800, 2000],
-    standard: [1200, 2500],
-    complex: [1500, 2800],
-    dense: [1800, 3000]
+    simple: [850, 2200],
+    standard: [1250, 2800],
+    complex: [1550, 3200],
+    dense: [1850, 3600]
   },
   "generic-tags": {
-    simple: [250, 600],
-    standard: [400, 750],
-    complex: [500, 900],
-    dense: [600, 1000]
+    simple: [350, 950],
+    standard: [500, 1300],
+    complex: [700, 1650],
+    dense: [850, 2000]
   },
   "ideogram-v4": {
     simple: [800, 2500],
@@ -52018,10 +52219,10 @@ var DIALECT_BUDGETS = {
   }
 };
 var QWEN3_NO_EXPANSION_BUDGETS = {
-  simple: [550, 1000],
-  standard: [700, 1200],
-  complex: [800, 1400],
-  dense: [900, 1500]
+  simple: [600, 1200],
+  standard: [750, 1500],
+  complex: [900, 1750],
+  dense: [1050, 2000]
 };
 function resolveRouteDialect(provider, modelId, parameters, settings) {
   const normModel = modelId.trim().toLowerCase();
@@ -52661,7 +52862,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.150";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.151";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -58229,7 +58430,7 @@ class CharacterFolio {
       try {
         if (!navigator.clipboard)
           throw new Error("Clipboard unavailable");
-        await navigator.clipboard.writeText(formatCharacterDNAToPromptClause(char));
+        await navigator.clipboard.writeText(formatCharacterDNAForImagePrompt(char));
         copyPromptBtn.textContent = "Copied!";
       } catch {
         copyPromptBtn.textContent = "Copy failed — try again";
@@ -58382,7 +58583,7 @@ class CharacterFolio {
     const previewCode = document.createElement("p");
     previewCode.className = "folio-prompt-text";
     const updatePreview = () => {
-      const clause = formatCharacterDNAToPromptClause(char);
+      const clause = formatCharacterDNAForImagePrompt(char);
       const state = previewHeader.querySelector("[data-dna-save-state]");
       if (state)
         state.textContent = this.dirty.has(char.id) ? "Unsaved changes — Save changes to use in pictures" : "Saved DNA is used for matching pictured characters";

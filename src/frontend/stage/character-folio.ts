@@ -7,7 +7,7 @@ import type { CharacterDNA, CharacterDNALibrary, CharacterRelationship } from '.
 import {
   createEmptyCharacterDNA,
   findCharacterDNA,
-  formatCharacterDNAToPromptClause,
+  formatCharacterDNAForImagePrompt,
   formatCharacterDNAToTags,
 } from '../../shared/character-dna.js';
 import { APERTURE_ICONS } from '../theme/aperture-theme.js';
@@ -1269,7 +1269,7 @@ export class CharacterFolio implements WorkspaceSurface {
     copyPromptBtn.className = 'folio-action-btn';
     copyPromptBtn.innerHTML = `📋 <span>Copy Prompt</span>`;
     copyPromptBtn.onclick = async () => {
-      try{if(!navigator.clipboard)throw new Error('Clipboard unavailable');await navigator.clipboard.writeText(formatCharacterDNAToPromptClause(char));copyPromptBtn.textContent='Copied!';}
+      try{if(!navigator.clipboard)throw new Error('Clipboard unavailable');await navigator.clipboard.writeText(formatCharacterDNAForImagePrompt(char));copyPromptBtn.textContent='Copied!';}
       catch{copyPromptBtn.textContent='Copy failed — try again';}
     };
     const deleteButton=document.createElement('button');deleteButton.type='button';deleteButton.className='folio-action-btn';deleteButton.textContent='Delete character';deleteButton.onclick=()=>{this.cancelProposal();this.deleteConfirm=true;this.renderDetail();};
@@ -1410,7 +1410,7 @@ export class CharacterFolio implements WorkspaceSurface {
     const previewCode = document.createElement('p');
     previewCode.className = 'folio-prompt-text';
     const updatePreview = () => {
-      const clause = formatCharacterDNAToPromptClause(char);
+      const clause = formatCharacterDNAForImagePrompt(char);
       const state=previewHeader.querySelector('[data-dna-save-state]');if(state)state.textContent=this.dirty.has(char.id)?'Unsaved changes — Save changes to use in pictures':'Saved DNA is used for matching pictured characters';
       previewCode.textContent = clause ? `${char.name}: ${clause}.` : `${char.name} has no traits defined yet.`;
     };

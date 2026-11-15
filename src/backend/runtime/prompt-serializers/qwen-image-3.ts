@@ -40,6 +40,17 @@ export function serializeQwenImage3(input: SerializerInput): SerializerResult {
       text: subjectText
     });
 
+    const spatialText = brief.subjectMode === 'ensemble' ? formatSpatialPlacements(shotSpec) : '';
+    if (spatialText) {
+      sections.push({
+        id: 'spatial',
+        priority: 1,
+        required: false,
+        compressible: true,
+        text: spatialText
+      });
+    }
+
     const cameraText = formatCameraFraming(shotSpec);
     if (cameraText) {
       sections.push({
@@ -61,13 +72,30 @@ export function serializeQwenImage3(input: SerializerInput): SerializerResult {
       });
     }
 
-    if (styleDNA.medium) {
+    if (brief.lighting) {
+      sections.push({
+        id: 'lighting',
+        priority: 1,
+        required: false,
+        compressible: true,
+        text: `lighting: ${brief.lighting.trim()}`
+      });
+    }
+
+    const compactStyleParts = [
+      styleDNA.medium,
+      styleDNA.linework?.[0],
+      styleDNA.shading?.[0],
+      styleDNA.palette?.[0]
+    ].map(s => s?.trim()).filter(Boolean);
+    const styleText = (compactStyleParts.length > 0 ? compactStyleParts.join(', ') : formatStyleDNAProse(styleDNA)).trim();
+    if (styleText) {
       sections.push({
         id: 'style',
         priority: 2,
         required: false,
         compressible: true,
-        text: styleDNA.medium
+        text: styleText
       });
     }
 
@@ -86,9 +114,9 @@ export function serializeQwenImage3(input: SerializerInput): SerializerResult {
     if (refs.length > 0) {
       sections.push({
         id: 'references',
-        priority: 2,
+        priority: 1,
         required: false,
-        compressible: true,
+        compressible: false,
         text: refs.join(' ')
       });
     }
@@ -169,14 +197,22 @@ export function serializeQwenImage3(input: SerializerInput): SerializerResult {
 
     const safeArea = formatDialogueSafeArea(shotSpec);
     const refs = formatReferenceDirectives(referencePlan);
-    const constraints = [...(safeArea ? [safeArea] : []), ...refs];
-    if (constraints.length > 0) {
+    if (safeArea) {
       sections.push({
-        id: 'constraints',
+        id: 'safe-area',
         priority: 2,
         required: false,
         compressible: true,
-        text: constraints.join(' ')
+        text: safeArea
+      });
+    }
+    if (refs.length > 0) {
+      sections.push({
+        id: 'references',
+        priority: 1,
+        required: false,
+        compressible: false,
+        text: refs.join(' ')
       });
     }
   }

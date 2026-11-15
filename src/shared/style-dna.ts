@@ -171,6 +171,64 @@ export const BUILTIN_STYLE_DNA: Readonly<Record<string, StyleDNA>> = Object.free
     shading: ['planar light and shadow blocking'],
     preserve: ['scene established mood, clothing and objects', 'scene lighting organizing depth'],
     avoidIntent: ['plastic CGI surfaces', 'uniform airbrush smoothing', 'muddy values']
+  },
+  'builtin-style:fullmetal-alchemy': {
+    medium: 'high-budget 2000s Japanese studio cel anime frame',
+    rendering: ['expressive angular anime faces with crisp dual eye highlights', 'gouache-painted European stonework and brass backgrounds'],
+    linework: ['decisive tapered dark sepia ink contours', 'clean architectural perspective lines'],
+    shading: ['crisp two-tone studio cel shading', 'deep umber cast shadows', 'warm amber key-light edge highlights'],
+    palette: ['slate steel', 'burnt amber gold', 'crimson accent', 'charcoal masonry'],
+    atmosphere: ['atmospheric industrial steam', 'dramatic alchemical rim contrast'],
+    preserve: ['subject identity, uniform or outfit details and dramatic pose', 'scene lighting direction'],
+    avoidIntent: ['3D CGI', 'glossy plastic anime skin', 'chibi proportions', 'watercolor bleed', 'flat sterile vector fill']
+  },
+  'builtin-style:ghibli-pastoral': {
+    medium: 'theatrical hand-painted anime cel with storybook gouache scenery',
+    rendering: ['luminous hand-painted foliage and cumulus skies', 'gentle analog cel warmth'],
+    linework: ['fine warm-brown ink contours'],
+    shading: ['soft organic cel shading', 'sunlit bounce illumination'],
+    palette: ['sunlit sage green', 'cerulean sky', 'warm cream highlights'],
+    atmosphere: ['breathable pastoral air and nostalgic warmth'],
+    preserve: ['subject identity and clothing', 'open sky and nature atmosphere'],
+    avoidIntent: ['neon cyberpunk bloom', 'heavy black comics ink', 'harsh plastic 3D shading']
+  },
+  'builtin-style:dark-academia-oil': {
+    medium: 'classical chiaroscuro oil painting on linen canvas',
+    rendering: ['sculptural oil impasto focal highlights', 'restrained old-master glazing'],
+    shading: ['dramatic candlelit chiaroscuro lighting'],
+    texture: ['woven linen canvas weave', 'antique mahogany and parchment patina'],
+    palette: ['deep burnt umber', 'warm ochre candlelight', 'tarnished brass', 'slate shadow'],
+    preserve: ['subject likeness, period fabrics and prop craftsmanship'],
+    avoidIntent: ['flat digital airbrushing', 'neon oversaturation', 'anime outlines', 'smooth CGI plastic']
+  },
+  'builtin-style:ukiyo-neo-ink': {
+    medium: 'neo-ukiyo-e carved woodblock print and sumi ink illustration',
+    rendering: ['flat mineral pigment planes', 'subtle bokashi tonal ink gradations'],
+    linework: ['bold calligraphic woodcut keyblock outlines'],
+    texture: ['handmade kozo and washi paper grain'],
+    palette: ['Prussian indigo', 'vermilion seal red', 'warm ochre', 'charcoal ink'],
+    preserve: ['crisp character silhouettes and scenic layering'],
+    avoidIntent: ['photorealistic 3D rendering', 'glossy airbrush gradients', 'photographic bokeh']
+  },
+  'builtin-style:cinematic-anamorphic': {
+    medium: '35mm anamorphic theatrical film still',
+    cameraHints: ['widescreen anamorphic depth of field', 'subtle oval background bokeh'],
+    realism: ['unretouched photographic optics', 'natural skin texture and worn fabric weaves'],
+    rendering: ['organic photochemical film look', 'gentle halation around practical lights'],
+    texture: ['fine 35mm film grain'],
+    palette: ['tungsten practical warmth against cool twilight shadows'],
+    preserve: ['real-world set materiality and subject likeness'],
+    avoidIntent: ['glossy beauty retouching', 'plastic poreless skin', 'CGI sheen', 'flat smartphone HDR']
+  },
+  'builtin-style:noir-chiaroscuro': {
+    medium: 'silver-gelatin black-and-white film noir still',
+    cameraHints: ['low-angle geometric noir framing', 'deep contrast shadow blocking'],
+    realism: ['authentic silver-halide photographic grain', 'unretouched tonal realism'],
+    rendering: ['hard Venetian-blind key light', 'wet-surface specular highlights'],
+    texture: ['medium silver-halide film grain', 'drifting smoke diffusion'],
+    palette: ['monochrome silver gelatin', 'ink-deep black', 'luminous chalk highlight'],
+    preserve: ['silhouette clarity and dramatic light beams'],
+    avoidIntent: ['color tinting', 'flat low-contrast gray wash', 'cartoon outlines', 'CGI plasticity']
   }
 });
 
@@ -221,6 +279,30 @@ const BUILTIN_STYLE_DEFAULT_AFFIXES: Readonly<Record<string, { positive: string;
   'builtin-style:painterly': {
     positive: 'A hand-painted narrative illustration in gouache.',
     suffix: 'Opaque layered pigment, visible but controlled brushwork, simplified value shapes and carefully rendered focal details. Keep the scene\'s established mood, clothing and objects; use its lighting to organize depth and color.'
+  },
+  'builtin-style:fullmetal-alchemy': {
+    positive: 'A Fullmetal Alchemist-inspired high-budget 2000s Japanese studio anime frame with crisp dark sepia ink linework and sculpted cel shading.',
+    suffix: 'Expressive angular anime anatomy and fierce readable eyes with crisp dual highlights; clean tapered dark-umber outlines, strong two-tone cast shadows, rich gouache-painted European stonework, ironwork and brass backdrops with atmospheric steam, and warm amber-gold versus steel-slate contrast.'
+  },
+  'builtin-style:ghibli-pastoral': {
+    positive: 'A nostalgic hand-painted theatrical anime frame uniting expressive cel characters with luminous watercolor-gouache scenery.',
+    suffix: 'Warm dappled sunlight, painterly cumulus clouds and botanical brushwork in the environment, fine dark-brown ink contours and soft organic bounced shadow on figures, gentle analog warmth and breathable open sky composition.'
+  },
+  'builtin-style:dark-academia-oil': {
+    positive: 'A classic chiaroscuro oil painting on woven linen canvas with luminous focal impasto and deep umber shadows.',
+    suffix: 'Controlled visible oil brushwork carving planes of light across faces, wool, parchment and tarnished brass; warm candlelight against cool shadowed stone, subtle crackle patina and rich tonal depth without muddy blacks.'
+  },
+  'builtin-style:ukiyo-neo-ink': {
+    positive: 'A refined neo-ukiyo-e woodblock print combining bold calligraphic sumi keylines with flat mineral-pigment tonal planes.',
+    suffix: 'Authentic carved block registration, subtle vertical bokashi color fades on handmade kozo paper texture, disciplined indigo, vermilion and warm ochre color harmony, clean silhouette choreography and rhythmic negative space.'
+  },
+  'builtin-style:cinematic-anamorphic': {
+    positive: 'An unretouched 35mm theatrical anamorphic film still with grounded practical lighting and organic optical depth.',
+    suffix: 'Balanced tungsten-and-twilight color separation, gentle amber halation around practical light sources, subtle oval background bokeh, fine photochemical grain, tactile fabric and natural unvarnished skin texture. Preserve scene staging and continuity.'
+  },
+  'builtin-style:noir-chiaroscuro': {
+    positive: 'A classic black-and-white silver-gelatin film noir still sculpted by stark directional key light and ink-deep shadow.',
+    suffix: 'Hard architectural shadow geometry, gleaming wet-pavement or glass specular highlights, curling haze catching beams of light, authentic medium silver-halide film grain and legible silhouette readability across foreground and midground.'
   }
 };
 

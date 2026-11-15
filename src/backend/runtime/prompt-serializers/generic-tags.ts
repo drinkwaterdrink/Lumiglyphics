@@ -67,14 +67,43 @@ export function serializeGenericTags(input: SerializerInput): SerializerResult {
     });
   }
 
+  // Lighting tags (P1)
+  if (brief.lighting) {
+    sections.push({
+      id: 'lighting',
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: brief.lighting.replace(/;\s*|\n+/g, ', ').toLowerCase()
+    });
+  }
+
   // Style tags (P2)
-  if (styleDNA.medium) {
+  const styleTags: string[] = [];
+  if (styleDNA.medium) styleTags.push(styleDNA.medium.toLowerCase());
+  else if (styleDNA.realism && styleDNA.realism.length > 0) styleTags.push('photographic');
+  if (styleDNA.rendering && styleDNA.rendering.length > 0) {
+    styleTags.push(...styleDNA.rendering.map((s: string) => s.toLowerCase()));
+  }
+  if (styleDNA.linework && styleDNA.linework.length > 0) {
+    styleTags.push(...styleDNA.linework.map((s: string) => s.toLowerCase()));
+  }
+  if (styleDNA.shading && styleDNA.shading.length > 0) {
+    styleTags.push(...styleDNA.shading.map((s: string) => s.toLowerCase()));
+  }
+  if (styleDNA.palette && styleDNA.palette.length > 0) {
+    styleTags.push(...styleDNA.palette.map((s: string) => s.toLowerCase()));
+  }
+  if (styleDNA.atmosphere && styleDNA.atmosphere.length > 0) {
+    styleTags.push(...styleDNA.atmosphere.map((s: string) => s.toLowerCase()));
+  }
+  if (styleTags.length > 0) {
     sections.push({
       id: 'style',
       priority: 2,
       required: false,
       compressible: true,
-      text: styleDNA.medium.toLowerCase()
+      text: [...new Set(styleTags)].join(', ')
     });
   }
 

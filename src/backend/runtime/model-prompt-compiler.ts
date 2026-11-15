@@ -86,7 +86,8 @@ export function compileModelPrompt(input: ModelPromptCompilerInput): ModelPrompt
     profile,
     complexity,
     promptExpansionEnabled,
-    userBudgetOverride
+    userBudgetOverride,
+    detailLevel
   );
 
   // 3. Dispatch to dialect-specific serializer

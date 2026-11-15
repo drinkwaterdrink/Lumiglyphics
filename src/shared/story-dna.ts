@@ -241,31 +241,69 @@ export function findMatchingItem(
 /** Formats Location DNA into a prompt clause for environment/scene injection */
 export function formatLocationDNAToPromptClause(
   dna: LocationDNA,
-  options?: { includeLighting?: boolean | undefined; includePersistentElements?: boolean | undefined }
+  options?: { includeLighting?: boolean | undefined; includePersistentElements?: boolean | undefined; optimizeForImagePrompt?: boolean | undefined }
 ): string {
+  const optimize = options?.optimizeForImagePrompt === true;
   const parts: string[] = [];
-  if (dna.environmentDescription) parts.push(dna.environmentDescription);
-  if (dna.architecture) parts.push(`architecture: ${dna.architecture}`);
-  if (options?.includeLighting !== false && dna.lighting) parts.push(`lighting: ${dna.lighting}`);
-  if (dna.atmosphere) parts.push(`atmosphere: ${dna.atmosphere}`);
-  if (options?.includePersistentElements !== false && dna.persistentElements && dna.persistentElements.length > 0) {
-    parts.push(`features: ${dna.persistentElements.slice(0, 6).join(', ')}`);
+  if (dna.environmentDescription) parts.push(dna.environmentDescription.trim());
+  if (dna.architecture) {
+    parts.push(optimize ? `built with ${dna.architecture.trim()}` : `architecture: ${dna.architecture}`);
   }
-  return parts.join('; ');
+  if (options?.includeLighting !== false && dna.lighting) {
+    parts.push(optimize ? `lit by ${dna.lighting.trim()}` : `lighting: ${dna.lighting}`);
+  }
+  if (dna.atmosphere) {
+    const atm = dna.atmosphere.trim();
+    parts.push(optimize ? (/atmosphere|mood|ambience/i.test(atm) ? atm : `${atm} atmosphere`) : `atmosphere: ${dna.atmosphere}`);
+  }
+  if (options?.includePersistentElements !== false && dna.persistentElements && dna.persistentElements.length > 0) {
+    const elems = dna.persistentElements.slice(0, 6).join(', ');
+    parts.push(optimize ? `featuring ${elems}` : `features: ${elems}`);
+  }
+  return parts.join(optimize ? ', ' : '; ');
 }
 
 /** Formats Item DNA into a prompt clause for prop/action injection */
-export function formatItemDNAToPromptClause(dna: ItemDNA): string {
+export function formatItemDNAToPromptClause(
+  dna: ItemDNA,
+  options?: { optimizeForImagePrompt?: boolean | undefined }
+): string {
+  const optimize = options?.optimizeForImagePrompt === true;
   const parts: string[] = [];
-  if (dna.description) parts.push(dna.description);
-  if (dna.materials) parts.push(`materials: ${dna.materials}`);
+  if (dna.description) {
+    parts.push(dna.description.trim());
+  } else if (optimize && dna.name) {
+    parts.push(dna.name.trim());
+  }
+  if (dna.materials) {
+    parts.push(optimize ? `crafted from ${dna.materials.trim()}` : `materials: ${dna.materials}`);
+  }
   if (dna.distinctiveFeatures && dna.distinctiveFeatures.length > 0) {
-    parts.push(dna.distinctiveFeatures.join(', '));
+    const feats = dna.distinctiveFeatures.join(', ');
+    parts.push(optimize ? `with ${feats}` : feats);
   }
   if (dna.colors && dna.colors.length > 0) {
-    parts.push(`colors: ${dna.colors.join(', ')}`);
+    if (optimize) {
+      const namedColors = dna.colors.map((c) => c.trim()).filter((c) => Boolean(c) && !/^#[0-9a-f]{3,8}$/i.test(c));
+      if (namedColors.length > 0) {
+        parts.push(`colored in ${namedColors.join(', ')}`);
+      }
+    } else {
+      parts.push(`colors: ${dna.colors.join(', ')}`);
+    }
   }
-  return parts.join('; ');
+  return parts.join(optimize ? ', ' : '; ');
+}
+
+export function formatLocationDNAForImagePrompt(
+  dna: LocationDNA,
+  options?: { includeLighting?: boolean | undefined; includePersistentElements?: boolean | undefined }
+): string {
+  return formatLocationDNAToPromptClause(dna, { ...options, optimizeForImagePrompt: true });
+}
+
+export function formatItemDNAForImagePrompt(dna: ItemDNA): string {
+  return formatItemDNAToPromptClause(dna, { optimizeForImagePrompt: true });
 }
 
 export const StoryDnaRequestSchema = z.discriminatedUnion('action', [

@@ -91,16 +91,24 @@ export function resolveUsefulPromptBudget(
   profile: ImagePromptProfileV2,
   complexity: SceneComplexity,
   promptExpansionEnabled?: boolean,
-  userBudgetOverride?: number | null
+  userBudgetOverride?: number | null,
+  detailLevel?: 'auto' | 'compact' | 'standard' | 'detailed'
 ): PromptBudgetPlan {
   const hardLimit = profile.hardMaxCharacters;
 
-  // Choose base soft range from profile or default heuristics
-  let softRange: [number, number] = profile.softBudgets[complexity];
+  // Choose base soft range from profile
+  let softRange: [number, number] = [...profile.softBudgets[complexity]];
 
-  // Qwen expansion-on adjustment: when expansion is on, keep target concise
+  // Respect explicit prompt detail setting when no fixed override replaces soft range
+  if (detailLevel === 'detailed') {
+    softRange = [Math.round(softRange[0] * 1.2), Math.round(softRange[1] * 1.35)];
+  } else if (detailLevel === 'compact') {
+    softRange = [Math.round(softRange[0] * 0.75), Math.round(softRange[1] * 0.8)];
+  }
+
+  // Qwen expansion-on adjustment: keep expansion target within safe ceiling
   if (profile.dialect === 'qwen-image-3' && promptExpansionEnabled) {
-    softRange = profile.softBudgets[complexity];
+    softRange = [...softRange];
   }
 
   // Safety headroom below provider hard max

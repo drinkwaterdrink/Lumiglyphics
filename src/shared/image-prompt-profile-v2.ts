@@ -68,70 +68,70 @@ export const V2_SERIALIZER_REVISION = '2026.10-rev1';
 
 const DIALECT_BUDGETS: Record<PromptDialectId, SoftBudgets> = {
   'flux3-klein': {
-    simple: [900, 2200],
-    standard: [1200, 2600],
-    complex: [1600, 2850],
-    dense: [1800, 3000]
+    simple: [1100, 2600],
+    standard: [1400, 3200],
+    complex: [1800, 3600],
+    dense: [2100, 4200]
   },
   flux3: {
-    simple: [900, 2000],
-    standard: [1200, 2500],
-    complex: [1500, 2800],
-    dense: [1800, 3000]
+    simple: [1000, 2400],
+    standard: [1300, 3000],
+    complex: [1700, 3500],
+    dense: [2000, 4000]
   },
   'gpt-image-2.5': {
-    simple: [800, 1900],
-    standard: [1100, 2400],
-    complex: [1400, 2800],
-    dense: [1700, 3000]
+    simple: [950, 2300],
+    standard: [1300, 3000],
+    complex: [1650, 3500],
+    dense: [2000, 4200]
   },
   'grok-imagine-2': {
-    simple: [550, 1400],
-    standard: [800, 1800],
-    complex: [1000, 2200],
-    dense: [1200, 2600]
+    simple: [650, 1800],
+    standard: [950, 2400],
+    complex: [1200, 2900],
+    dense: [1500, 3400]
   },
   'qwen-image-3': {
-    simple: [300, 650],
-    standard: [400, 750],
-    complex: [500, 850],
-    dense: [600, 900]
+    simple: [350, 750],
+    standard: [480, 760],
+    complex: [580, 760],
+    dense: [640, 760]
   },
   'nano-banana-2.1': {
-    simple: [800, 1800],
-    standard: [1200, 2200],
-    complex: [1500, 2600],
-    dense: [1800, 3000]
+    simple: [950, 2200],
+    standard: [1350, 2800],
+    complex: [1700, 3400],
+    dense: [2100, 4000]
   },
   'seedream-5': {
-    simple: [700, 1800],
-    standard: [1000, 2300],
-    complex: [1300, 2700],
-    dense: [1600, 3000]
+    simple: [850, 2200],
+    standard: [1200, 2800],
+    complex: [1500, 3300],
+    dense: [1850, 3800]
   },
   anima: {
-    simple: [250, 650],
-    standard: [400, 800],
-    complex: [500, 900],
-    dense: [600, 1000]
+    simple: [350, 1000],
+    standard: [550, 1350],
+    complex: [750, 1700],
+    dense: [950, 2100]
   },
   novelai: {
-    simple: [300, 700],
-    standard: [450, 900],
-    complex: [600, 1100],
-    dense: [700, 1200]
+    simple: [350, 1000],
+    standard: [550, 1350],
+    complex: [750, 1750],
+    dense: [950, 2100]
   },
   'generic-prose': {
-    simple: [800, 2000],
-    standard: [1200, 2500],
-    complex: [1500, 2800],
-    dense: [1800, 3000]
+    simple: [850, 2200],
+    standard: [1250, 2800],
+    complex: [1550, 3200],
+    dense: [1850, 3600]
   },
   'generic-tags': {
-    simple: [250, 600],
-    standard: [400, 750],
-    complex: [500, 900],
-    dense: [600, 1000]
+    simple: [350, 950],
+    standard: [500, 1300],
+    complex: [700, 1650],
+    dense: [850, 2000]
   },
   'ideogram-v4': {
     simple: [800, 2500],
@@ -142,10 +142,10 @@ const DIALECT_BUDGETS: Record<PromptDialectId, SoftBudgets> = {
 };
 
 const QWEN3_NO_EXPANSION_BUDGETS: SoftBudgets = {
-  simple: [550, 1000],
-  standard: [700, 1200],
-  complex: [800, 1400],
-  dense: [900, 1500]
+  simple: [600, 1200],
+  standard: [750, 1500],
+  complex: [900, 1750],
+  dense: [1050, 2000]
 };
 
 interface RouteDialectResolution {

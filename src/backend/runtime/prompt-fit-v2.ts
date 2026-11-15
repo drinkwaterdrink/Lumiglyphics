@@ -9,6 +9,41 @@ export interface FitPromptResult {
   warnings: string[];
 }
 
+const PROTECTED_STYLE_IDS = new Set([
+  'style',
+  'style-tags',
+  'visual-style',
+  'visual-treatment',
+  'art-direction',
+  'sec-visual-treatment'
+]);
+
+function deduplicateAndBoundText(raw: string, maxChars: number): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  // First deduplicate repeated sentences/clauses in verbose environment blocks
+  const parts = trimmed.split(/(?<=[.!?])\s+|\s*;\s*/).map(p => p.trim()).filter(Boolean);
+  const uniqueParts: string[] = [];
+  const seen = new Set<string>();
+  for (const part of parts) {
+    const cleanPart = part.replace(/\.{2,}$/, '.');
+    const normalized = cleanPart.replace(/^(?:Setting|Environment|Background|Lighting|Style|Visual medium):\s*/i, '').replace(/[.!?,;:\s]+$/g, '').toLowerCase();
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    uniqueParts.push(cleanPart);
+  }
+  const deduped = (uniqueParts.length > 0 ? uniqueParts.join(' ') : trimmed).replace(/\s+/g, ' ').trim();
+  if (deduped.length <= maxChars) return deduped;
+  if (maxChars <= 24) return '';
+  const slice = deduped.slice(0, maxChars);
+  const sentenceBreak = Math.max(slice.lastIndexOf('. '), slice.lastIndexOf('; '), slice.lastIndexOf(', '));
+  if (sentenceBreak > Math.floor(maxChars * 0.45)) {
+    return slice.slice(0, sentenceBreak + 1).replace(/[,;\s]+$/, '').trim();
+  }
+  const wordBreak = slice.lastIndexOf(' ');
+  return (wordBreak > Math.floor(maxChars * 0.4) ? slice.slice(0, wordBreak) : slice).replace(/[,;\s]+$/, '').trim();
+}
+
 function resolveSeparator(dialect: PromptDialectId, sections: PromptSection[]): string {
   if (dialect === 'anima' || dialect === 'generic-tags' || dialect === 'novelai') {
     return ', ';
@@ -60,20 +95,81 @@ export function fitPromptDocumentToBudget(
     }
   }
 
-  // Stage 2: Drop compressible P2 sections (secondary atmosphere, materials)
-  currentSections = currentSections.filter(s => !(s.priority === 2 && s.compressible));
-  prompt = assemblePromptSections(currentSections, separator);
-  if (prompt.length <= maxBudget) {
-    warnings.push(`Prompt fitted by compressing secondary visual treatment (${prompt.length}/${maxBudget} chars).`);
-    return {
-      document: { ...document, sections: currentSections, warnings },
-      prompt,
-      fitted: true,
-      warnings
-    };
+  // Stage 1.5: Deduplicate & proportionally trim bloated compressible P1/P2 prose sections
+  // (e.g. oversized scenery descriptions) BEFORE dropping Style, Lighting, or Camera.
+  const oversizeThreshold = Math.max(180, Math.floor(maxBudget * 0.28));
+  const bloatedIndices = currentSections
+    .map((s, idx) => ({ s, idx }))
+    .filter(({ s }) => s.compressible && !s.required && s.priority !== 0 && !PROTECTED_STYLE_IDS.has(s.id) && s.text.length > oversizeThreshold);
+
+  if (bloatedIndices.length > 0) {
+    const excess = prompt.length - maxBudget;
+    let remainingReduction = excess;
+    const adjusted = currentSections.map(s => ({ ...s }));
+    // Largest bloated sections shrink first
+    bloatedIndices.sort((a, b) => b.s.text.length - a.s.text.length);
+    for (const { idx } of bloatedIndices) {
+      if (remainingReduction <= 0) break;
+      const sec = adjusted[idx]!;
+      const minKeep = Math.max(90, Math.floor(maxBudget * 0.14));
+      const desired = Math.max(minKeep, sec.text.length - remainingReduction - 8);
+      const compacted = deduplicateAndBoundText(sec.text, desired);
+      if (compacted && compacted.length < sec.text.length) {
+        remainingReduction -= (sec.text.length - compacted.length);
+        sec.text = compacted;
+      }
+    }
+    const candidatePrompt = assemblePromptSections(adjusted, separator);
+    if (candidatePrompt.length <= maxBudget) {
+      warnings.push(`Prompt fitted by condensing oversized environment or secondary details while preserving style and lighting (${candidatePrompt.length}/${maxBudget} chars).`);
+      return {
+        document: { ...document, sections: adjusted, warnings },
+        prompt: candidatePrompt,
+        fitted: true,
+        warnings
+      };
+    }
+    currentSections = adjusted;
+    prompt = candidatePrompt;
   }
 
-  // Stage 3: Drop all P2 sections
+  // Stage 2: Drop non-style compressible P2 sections (secondary atmosphere, safe-area extras)
+  const nonStyleP2 = currentSections.filter(s => !(s.priority === 2 && s.compressible && !PROTECTED_STYLE_IDS.has(s.id)));
+  if (nonStyleP2.length < currentSections.length) {
+    currentSections = nonStyleP2;
+    prompt = assemblePromptSections(currentSections, separator);
+    if (prompt.length <= maxBudget) {
+      warnings.push(`Prompt fitted by compressing secondary visual treatment while preserving primary style (${prompt.length}/${maxBudget} chars).`);
+      return {
+        document: { ...document, sections: currentSections, warnings },
+        prompt,
+        fitted: true,
+        warnings
+      };
+    }
+  }
+
+  // Stage 2.5: Condense long style sections proportionally before dropping style outright
+  const longStyleIdx = currentSections.findIndex(s => s.priority === 2 && s.compressible && PROTECTED_STYLE_IDS.has(s.id) && s.text.length > 140);
+  if (longStyleIdx !== -1 && prompt.length - maxBudget > 0) {
+    const styleSec = currentSections[longStyleIdx]!;
+    const trimmedStyle = deduplicateAndBoundText(styleSec.text, Math.max(100, styleSec.text.length - (prompt.length - maxBudget) - 8));
+    if (trimmedStyle && trimmedStyle.length < styleSec.text.length) {
+      currentSections = currentSections.map((s, idx) => idx === longStyleIdx ? { ...s, text: trimmedStyle } : s);
+      prompt = assemblePromptSections(currentSections, separator);
+      if (prompt.length <= maxBudget) {
+        warnings.push(`Prompt fitted by condensing style phrasing to stay within budget (${prompt.length}/${maxBudget} chars).`);
+        return {
+          document: { ...document, sections: currentSections, warnings },
+          prompt,
+          fitted: true,
+          warnings
+        };
+      }
+    }
+  }
+
+  // Stage 3: Drop all remaining P2 sections if still over budget
   currentSections = currentSections.filter(s => s.priority !== 2);
   prompt = assemblePromptSections(currentSections, separator);
   if (prompt.length <= maxBudget) {

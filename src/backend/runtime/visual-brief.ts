@@ -9,10 +9,10 @@ import { resolveImageTemplate, type ImageTemplate } from "../../shared/image-tem
 import type { VisualBrief } from "../../shared/image-templates.js";
 export type { VisualBrief } from "../../shared/image-templates.js";
 import { POSE_EXPRESSION_CATALOGUE, poseById, sanitizePoseExpression } from "../../shared/character.js";
-import { formatCharacterDNAToPromptClause, findCharacterDNA, type CharacterDNA, type CharacterDNALibrary } from "../../shared/character-dna.js";
+import { formatCharacterDNAForImagePrompt, optimizeAppearanceTextForImagePrompt, findCharacterDNA, type CharacterDNA, type CharacterDNALibrary } from "../../shared/character-dna.js";
 import { isScenarioTitle } from "../../shared/card-role.js";
 import { areNamesEquivalent, findMatchingCharacterId } from "../../shared/nicknames.js";
-import { deriveShortAliases, findMatchingLocation, findMatchingItem, formatLocationDNAToPromptClause, formatItemDNAToPromptClause, matchesBoundaryCandidate, type StoryDNASet } from "../../shared/story-dna.js";
+import { deriveShortAliases, findMatchingLocation, findMatchingItem, formatLocationDNAForImagePrompt, formatItemDNAForImagePrompt, matchesBoundaryCandidate, type StoryDNASet } from "../../shared/story-dna.js";
 
 const text = (values: (string | null | undefined)[], max = 4000) => [...new Set(values.map(value => value?.trim()).filter(Boolean))].join("; ").slice(0, max);
 
@@ -148,7 +148,7 @@ export function resolveTemplateIdentity(
     }
   }
 
-  const dnaAppearance = lockedDNA ? formatCharacterDNAToPromptClause(lockedDNA, { includeOutfit: false }) : undefined;
+  const dnaAppearance = lockedDNA ? formatCharacterDNAForImagePrompt(lockedDNA, { includeOutfit: false }) : undefined;
   const saved = (lockedDNA?.locked && dnaAppearance)
     || Object.entries(appearances ?? {}).find(([key]) => areNamesEquivalent(key, name))?.[1]?.trim()
     || dnaAppearance;
@@ -158,7 +158,7 @@ export function resolveTemplateIdentity(
     sameCharacter,
     saved,
     resolved,
-    identity: cue.visualSources?.includes("manual subject correction") ? resolved : saved || resolved,
+    identity: optimizeAppearanceTextForImagePrompt(cue.visualSources?.includes("manual subject correction") ? resolved : saved || resolved),
     lockedDNA
   };
 }
@@ -210,7 +210,7 @@ export function buildVisualBrief(
       const matchId = findMatchingCharacterId(chars, member.name);
       if (matchId && chars[matchId]) {
         memberDna = chars[matchId];
-        dnaAppearance = formatCharacterDNAToPromptClause(memberDna, { includeOutfit: false });
+        dnaAppearance = formatCharacterDNAForImagePrompt(memberDna, { includeOutfit: false });
       }
     }
     const saved = Object.entries(appearances ?? {}).find(([key]) => areNamesEquivalent(key, member.name))?.[1];
@@ -232,11 +232,11 @@ export function buildVisualBrief(
   // A long first description must never erase the persona or the last cast member.
   const nameBudget = members.reduce((total, member) => total + member.name.length + 4, 0);
   if (ensemble && nameBudget > 4000) throw new Error("The ensemble names exceed the prompt preview limit. Shorten cast display names before preparing this picture.");
-  const isHighCap = Boolean(config.imageModel && /ideogram|recraft|grok|flux.*pro|midjourney|gpt-image/i.test(config.imageModel)) || Boolean(config.imagePromptBudgetOverride);
+  const isHighCap = Boolean(config.imageModel && /ideogram|recraft|grok|flux|nano-banana|seedream|midjourney|gpt-image/i.test(config.imageModel)) || Boolean(config.imagePromptBudgetOverride);
   const baseBudget = isHighCap ? (config.imagePromptBudgetOverride ? config.imagePromptBudget : 4000) : 1800;
   const descriptionBudget = Math.max(0, Math.floor((Math.max(baseBudget, nameBudget) - nameBudget) / Math.max(1, members.length)));
   const group = members.map(member => {
-    const look = member.appearance.trim();
+    const look = optimizeAppearanceTextForImagePrompt(member.appearance.trim());
     const attireText = ("attire" in member && member.attire) ? `; wearing ${member.attire}` : "";
     const remainingForLook = Math.max(0, descriptionBudget - attireText.length);
     const boundedLook = look.length > remainingForLook ? look.slice(0, remainingForLook).replace(/\s+\S*$/, "") : look;
@@ -247,18 +247,19 @@ export function buildVisualBrief(
   const locDNA = rawLocDNA && (!rawLocDNA.autoDiscovered || rawLocDNA.locked || Boolean(rawLocDNA.architecture?.trim()))
     ? rawLocDNA
     : undefined;
-  const locClause = locDNA ? formatLocationDNAToPromptClause(locDNA, { includeLighting: !environment.lighting, includePersistentElements: true }) : undefined;
+  const locClause = locDNA ? formatLocationDNAForImagePrompt(locDNA, { includeLighting: !environment.lighting, includePersistentElements: true }) : undefined;
 
   const activeItemClauses: string[] = [];
   if (storyDNASet?.items) {
     const actionText = typeof cue.action === "string" ? cue.action : (cue.action?.object ?? "");
     const combinedContext = `${cleanedVisualDescription} ${actionText} ${cue.visualFocus ?? ""} ${environment.description ?? ""}`.toLowerCase();
     for (const item of Object.values(storyDNASet.items)) {
-      if (item.autoDiscovered && !item.locked) continue;
+      const hasVisualDetail = Boolean(item.materials?.trim() || item.distinctiveFeatures?.length || item.colors?.length || (item.description?.trim() && item.description.trim().toLowerCase() !== item.name.trim().toLowerCase()));
+      if (item.autoDiscovered && !item.locked && !hasVisualDetail) continue;
       const itemTerms = [item.name, ...deriveShortAliases(item.name, item.aliases)].map(t => t.toLowerCase()).filter(t => t.length >= 4);
       const matches = itemTerms.some(term => matchesBoundaryCandidate(combinedContext, term));
       if (matches) {
-        activeItemClauses.push(formatItemDNAToPromptClause(item));
+        activeItemClauses.push(formatItemDNAForImagePrompt(item));
       }
     }
   }
@@ -274,7 +275,7 @@ export function buildVisualBrief(
     }}:{}),
     scene: text([environment.location, locClause, environment.description, ...relevantPersistentElements, environment.timeOfDay, environment.weather]),
     subjects: noPeople ? "" : ensemble ? group : text([subjectLabel, appearance, template.category === "portrait" ? pose : ""]),
-    action: noPeople ? (template.category === "detail" || template.category === "custom" ? text([(cue.visualFocus ?? "").slice(0, 1000), ...activeItemClauses], 1000) : text([...activeItemClauses], 1000)) : text([cleanedVisualDescription, ...activeItemClauses, compileActionProp(cue.action), template.category === "portrait" ? "" : pose]),
+    action: noPeople ? (template.category === "detail" || template.category === "custom" ? text([(cue.visualFocus ?? "").slice(0, 1200), ...activeItemClauses], 2400) : text([...activeItemClauses], 2400)) : text([cleanedVisualDescription, ...activeItemClauses, compileActionProp(cue.action), template.category === "portrait" ? "" : pose]),
     composition: `${cue.shotHint?.preferredShotSize ?? template.framing}; ${cue.shotHint?.preferredAngle ? `${cue.shotHint.preferredAngle} perspective` : template.cameraPolicy === "fixed" ? "eye-level view" : "dynamic narrative perspective"}; ${noPeople ? "no people" : ensemble ? (cue.shotHint?.spatialRelationships?.length ? `${members.length} visible characters staged naturally in the scene (${cue.shotHint.spatialRelationships.slice(0, 4).join("; ")})${cue.shotHint.sceneStagingNote ? `; ${cue.shotHint.sceneStagingNote}` : ""}` : `${members.length} visible characters staged naturally across room depths in active posture, including every listed subject; distinct faces and silhouettes`) : "one visible character"}; keep the lower quarter clear for dialogue`,
     lighting: config.chromaticLutEnabled !== false ? enrichLightingWithChromaticLut(text([environment.lighting, locDNA?.lighting], 1000), `${cleanedVisualDescription} ${environment.description ?? ""} ${environment.weather ?? ""}`) : text([environment.lighting, locDNA?.lighting], 1000),
     subjectMode: template.subjectMode,

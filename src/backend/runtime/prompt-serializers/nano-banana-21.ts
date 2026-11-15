@@ -187,12 +187,22 @@ export function serializeNanoBanana21(input: SerializerInput): SerializerResult 
     });
   }
 
-  // Preserve & Style
+  // Visual Style (dedicated P2 protected style section)
   const styleText = formatStyleDNAProse(styleDNA);
+  if (styleText) {
+    sections.push({
+      id: 'style',
+      priority: 2,
+      required: false,
+      compressible: true,
+      text: `Visual medium & style:\n${styleText}.`
+    });
+  }
+
+  // Preserve & Constraints
   const safeArea = formatDialogueSafeArea(shotSpec);
   const refs = formatReferenceDirectives(referencePlan);
   const preserveLines = [
-    styleText ? `Visual medium: ${styleText}.` : '',
     safeArea ? safeArea : '',
     ...refs,
     'Semantic negative: an uncluttered scene free of stray artifacts, deformed limbs, or extra unlisted characters.'
