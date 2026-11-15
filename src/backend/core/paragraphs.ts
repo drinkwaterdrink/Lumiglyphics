@@ -6,6 +6,7 @@ export type PrepareNarrativeOptions = {
   ignoredTags?: readonly string[];
   smartProseFilter?: boolean;
   smartDialogueExtraction?: boolean;
+  smartBeatSegmentation?: boolean;
 };
 
 export type DetectedSceneMetadata = {
@@ -488,10 +489,155 @@ export function findStructuredSidecarRanges(content: string): Array<{ start: num
   return ranges;
 }
 
+const BEAT_MAX_CHARS = 220;
+const BEAT_TRIGGER_CHARS = 240;
+const ABBREVIATION_RE = /\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St|Col|Lt|Gen|Sgt|Capt|Rev|vs|etc|e\.g|i\.e|p\.m|a\.m)$/i;
+const ATTRIBUTION_START_RE = /^(?:he|she|they|it|we|you|i|said|asked|replied|whispered|murmured|muttered|answered|called|added|continued|noted|explained|snapped|sighed|laughed|smiled|frowned|nodded|shook)\b/i;
+
+function isQuoteBeatLine(line: string): boolean {
+  return /["“”«»]/.test(line) || /^[A-Z][\w' .-]{0,24}:\s+\S/.test(line);
+}
+
+function splitBalancedSentences(paragraph: string): string[] {
+  const sentences: string[] = [];
+  let start = 0;
+  let quoteOpen = false;
+  let tagDepth = 0;
+
+  for (let i = 0; i < paragraph.length; i += 1) {
+    const ch = paragraph[i]!;
+    if (ch === "<") {
+      const tagEnd = paragraph.indexOf(">", i + 1);
+      if (tagEnd > i) {
+        const tagInner = paragraph.slice(i + 1, tagEnd);
+        if (!tagInner.endsWith("/") && !/^\s*br\b/i.test(tagInner)) {
+          if (/^\s*\//.test(tagInner)) tagDepth = Math.max(0, tagDepth - 1);
+          else if (/^\s*[a-zA-Z]/.test(tagInner)) tagDepth += 1;
+        }
+        i = tagEnd;
+        continue;
+      }
+    }
+    if (ch === "“") { quoteOpen = true; continue; }
+    if (ch === "”") { quoteOpen = false; continue; }
+    if (ch === '"') { quoteOpen = !quoteOpen; continue; }
+    if (tagDepth > 0 || quoteOpen) continue;
+    if (ch !== "." && ch !== "!" && ch !== "?" && ch !== "…") continue;
+
+    let end = i + 1;
+    while (end < paragraph.length && /[.!?…"”’')\]]/.test(paragraph[end]!)) {
+      if (paragraph[end] === '"') quoteOpen = false;
+      end += 1;
+    }
+
+    if (ABBREVIATION_RE.test(paragraph.slice(start, i))) continue;
+    if (ch === "." && /(?:^|\s)[A-Z]$/.test(paragraph.slice(start, i))) continue;
+
+    let wsEnd = end;
+    while (wsEnd < paragraph.length && /\s/.test(paragraph[wsEnd]!)) wsEnd += 1;
+    if (wsEnd === end || wsEnd >= paragraph.length) continue;
+
+    const beforeEnd = paragraph.slice(start, end);
+    const rest = paragraph.slice(wsEnd);
+    if (/[!?…"”]$/.test(beforeEnd.trimEnd())) {
+      const nextToken = rest.match(/^(?:[A-Z][a-z]+\s+(?:said|asked|replied|whispered|murmured|muttered|answered|called|added|sighed|laughed|smiled|frowned|nodded)\b|[a-z]+)/);
+      if (nextToken && (/^[a-z]/.test(nextToken[0]) || ATTRIBUTION_START_RE.test(nextToken[0]))) continue;
+    }
+
+    const piece = paragraph.slice(start, end).trim();
+    if (piece) sentences.push(piece);
+    start = wsEnd;
+    i = wsEnd - 1;
+  }
+
+  const tail = paragraph.slice(start).trim();
+  if (tail) sentences.push(tail);
+  return sentences.length > 0 ? sentences : [paragraph.trim()];
+}
+
+function chunkSingleParagraph(paragraph: string): string[] {
+  const quotePairs = paragraph.match(/(?:^|[\s(])["“][^"”\n]{2,}["”]/g)?.length ?? 0;
+  const hasActionToQuoteShift = quotePairs >= 1 && /[.!?]\s+["“][^"”\n]{2,}["”]/.test(paragraph);
+  if (paragraph.length <= BEAT_TRIGGER_CHARS && quotePairs < 2 && !hasActionToQuoteShift) return [paragraph];
+  const sentences = splitBalancedSentences(paragraph);
+  if (sentences.length <= 1) return [paragraph];
+
+  const beats: string[] = [];
+  let current = sentences[0]!;
+  let currentSentenceCount = 1;
+
+  for (let i = 1; i < sentences.length; i += 1) {
+    const next = sentences[i]!;
+    const currentHasQuote = /["“”]/.test(current);
+    const nextHasQuote = /["“”]/.test(next);
+    const combinedLength = current.length + 1 + next.length;
+    const shouldSplitForSpeakerShift =
+      (!currentHasQuote && /^["“]/.test(next) && current.length >= 24 && next.length >= 8) ||
+      (currentHasQuote !== nextHasQuote && (current.length >= 65 || next.length >= 65)) ||
+      (currentHasQuote && nextHasQuote && current.length >= 50);
+
+    if (combinedLength > BEAT_MAX_CHARS || shouldSplitForSpeakerShift || (currentSentenceCount >= 2 && current.length >= 130)) {
+      beats.push(current);
+      current = next;
+      currentSentenceCount = 1;
+    } else {
+      current = `${current} ${next}`;
+      currentSentenceCount += 1;
+    }
+  }
+  beats.push(current);
+
+  if (beats.length > 1) {
+    const last = beats[beats.length - 1]!;
+    const prev = beats[beats.length - 2]!;
+    if (last.length < 38 && !/["“”]/.test(last) && prev.length + 1 + last.length <= 275) {
+      beats.splice(beats.length - 2, 2, `${prev} ${last}`);
+    }
+  }
+  return beats;
+}
+
+function segmentBeatTexts(text: string): string[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  const lines = trimmed.split("\n").map((line) => line.trim()).filter(Boolean);
+  if (lines.length <= 1) return chunkSingleParagraph(trimmed);
+
+  const hasBeatStructure = lines.some(isQuoteBeatLine) || trimmed.length >= BEAT_TRIGGER_CHARS;
+  if (!hasBeatStructure) return [trimmed];
+
+  const beats: string[] = [];
+  let buffer = "";
+  for (const line of lines) {
+    for (const sub of chunkSingleParagraph(line)) {
+      const subIsDialogue = isQuoteBeatLine(sub);
+      if (!buffer) {
+        if (subIsDialogue) beats.push(sub);
+        else buffer = sub;
+        continue;
+      }
+      if (subIsDialogue || isQuoteBeatLine(buffer) || buffer.length + 1 + sub.length > 180) {
+        beats.push(buffer);
+        if (subIsDialogue) {
+          beats.push(sub);
+          buffer = "";
+        } else {
+          buffer = sub;
+        }
+      } else {
+        buffer = `${buffer}\n${sub}`;
+      }
+    }
+  }
+  if (buffer) beats.push(buffer);
+  return beats.length > 0 ? beats : [trimmed];
+}
+
 export function prepareNarrative(content: string, options: PrepareNarrativeOptions = {}): PreparedNarrative {
   content = content.replace(/\r\n?/g, "\n");
   const smartProseFilter = options.smartProseFilter !== false;
   const smartDialogueExtraction = options.smartDialogueExtraction !== false;
+  const smartBeatSegmentation = options.smartBeatSegmentation !== false;
 
   const detectedSceneMetadata = extractDetectedSceneMetadata(content);
 
@@ -604,8 +750,14 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
     rawChoices.push(...extracted.choices);
     const text = cleanNarrativeBlock(stripIgnoredTags(extracted.text, effectiveIgnoredTags), smartProseFilter);
     if (text) {
-      paragraphs.push({ index: paragraphs.length, sourceIndex: block.sourceIndex, text });
-      paragraphEnds.push(offset);
+      const beats = smartBeatSegmentation ? segmentBeatTexts(text) : [text];
+      const blockSpan = Math.max(1, offset - start);
+      for (let i = 0; i < beats.length; i += 1) {
+        const beat = beats[i]!;
+        const beatEnd = i === beats.length - 1 ? offset : start + Math.max(1, Math.round(((i + 1) / beats.length) * blockSpan));
+        paragraphs.push({ index: paragraphs.length, sourceIndex: block.sourceIndex, text: beat });
+        paragraphEnds.push(beatEnd);
+      }
     }
   }
   if (!paragraphs.length && spans.length) paragraphs.push({ index: 0, sourceIndex: 0, text: "A new panel is available in Panels." });
@@ -619,7 +771,7 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
           if (
             paragraph.text === dialogueText ||
             (dialogueText.length >= 12 && paragraph.text.includes(dialogueText)) ||
-            (paragraph.text.length >= 12 && dialogueText.includes(paragraph.text))
+            (paragraph.text.length >= 3 && dialogueText.includes(paragraph.text))
           ) {
             matchedSpeaker = speaker;
             break;

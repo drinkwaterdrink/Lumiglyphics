@@ -21407,8 +21407,8 @@ var TurnPlanSchema = exports_external.object({
     if (paragraph.index !== index) {
       context.addIssue({ code: "custom", path: ["paragraphs", index, "index"], message: "Paragraph indexes must be contiguous and zero-based." });
     }
-    if (index > 0 && paragraph.sourceIndex <= plan.paragraphs[index - 1].sourceIndex) {
-      context.addIssue({ code: "custom", path: ["paragraphs", index, "sourceIndex"], message: "Source indexes must be strictly increasing." });
+    if (index > 0 && paragraph.sourceIndex < plan.paragraphs[index - 1].sourceIndex) {
+      context.addIssue({ code: "custom", path: ["paragraphs", index, "sourceIndex"], message: "Source indexes must be non-decreasing." });
     }
   }
   const finalParagraphIndex = plan.paragraphs.length - 1;
@@ -23124,6 +23124,8 @@ var SavedLibraryImageSchema = exports_external.object({
   rawFingerprint: id5.optional(),
   template: exports_external.string().max(256).optional(),
   role: exports_external.enum(["scene", "background", "portrait"]).default("scene"),
+  characters: exports_external.array(exports_external.string().max(160)).max(24).optional(),
+  caption: exports_external.string().max(300).optional(),
   prompt: exports_external.string().max(65000).optional(),
   negativePrompt: exports_external.string().max(65000).optional(),
   model: exports_external.string().max(256).optional(),
@@ -23143,7 +23145,8 @@ var ImageLibraryRequestSchema = exports_external.object({
   order: exports_external.enum(["newest", "oldest"]),
   role: exports_external.enum(["all", "scene", "background", "portrait"]).default("all"),
   templateQuery: exports_external.string().max(64).default(""),
-  cursor: exports_external.string().regex(/^\d{1,5}:\d{1,3}$/).optional()
+  cursor: exports_external.string().regex(/^\d{1,5}:\d{1,3}$/).optional(),
+  limit: exports_external.number().int().min(1).max(120).optional()
 }).strict();
 var url2 = exports_external.string().max(2048).refine((v) => v.startsWith("/api/v1/images/") && !v.includes("\\") && !/[\r\n]/.test(v));
 var LibraryImageViewSchema = SavedLibraryImageSchema.extend({
@@ -23154,7 +23157,7 @@ var LibraryImageViewSchema = SavedLibraryImageSchema.extend({
   versionLabel: exports_external.enum(["current", "replaced", "alternate"])
 }).strict();
 var LibraryReplySchema = exports_external.object({ key: TurnKeySchema, messageNumber: exports_external.number().int().positive(), speaker: exports_external.string().max(256), versionLabel: exports_external.enum(["current", "alternate"]).default("current"), paragraphs: exports_external.array(exports_external.object({ index: exports_external.number().int().nonnegative(), text: exports_external.string().max(12000), speaker: exports_external.string().max(256) }).strict()).max(256), truncated: exports_external.boolean() }).strict();
-var ImageLibraryPageSchema = exports_external.object({ entries: exports_external.array(LibraryImageViewSchema).max(24), replies: exports_external.array(LibraryReplySchema).max(24).default([]), nextCursor: exports_external.string().nullable(), notice: exports_external.string().max(1000) }).strict();
+var ImageLibraryPageSchema = exports_external.object({ entries: exports_external.array(LibraryImageViewSchema).max(120), replies: exports_external.array(LibraryReplySchema).max(120).default([]), nextCursor: exports_external.string().nullable(), notice: exports_external.string().max(1000) }).strict();
 
 // src/shared/card-role.ts
 var CardRoleSchema = exports_external.enum(["auto", "character", "scenario"]);
@@ -23164,13 +23167,20 @@ var StoredCardRoleSchema = exports_external.object({
   role: CardRoleSchema
 }).strict();
 var SCENARIO_KEYWORD_RE = /\b(?:academy|rpg|adventure|simulator|simulation|chronicles|campaign|setting|universe|guild|tavern|inn|empire|kingdom|city|realm|station|dungeon|manor|estate|school|university|sanctuary|asylum|narrator|storyteller|game\s*master|dm|gm|cyoa|sandbox)\b/i;
+var TECHNICAL_WRAPPER_NAME_RE = /^(?:setup\s*inherit|inherit|default|system|assistant|user|card|template|wrapper|preset|character|unknown|none|null|undefined|scene|narrator(?:\s*bot)?)$/i;
+function isTechnicalWrapperName(name) {
+  if (!name)
+    return false;
+  const compact = name.trim().replace(/[_-]+/g, "");
+  return TECHNICAL_WRAPPER_NAME_RE.test(compact) || TECHNICAL_WRAPPER_NAME_RE.test(name.trim());
+}
 function isScenarioTitle(name) {
   if (!name)
     return false;
   const trimmed = name.trim();
   if (!trimmed)
     return false;
-  return SCENARIO_KEYWORD_RE.test(trimmed);
+  return SCENARIO_KEYWORD_RE.test(trimmed) || isTechnicalWrapperName(trimmed);
 }
 
 // src/shared/subject-correction.ts
@@ -24845,18 +24855,21 @@ aside[data-vn-workspace] {
   min-height: 48px;
   max-height: calc(100% - 160px) !important;
   padding: 16px 14px 8px !important;
-  border: 1px solid rgba(224, 238, 217, 0.32) !important;
-  border-radius: 16px !important;
-  background: var(--aperture-dialogue-bg, rgba(4, 13, 17, var(--caption-opacity, 0.72))) !important;
-  -webkit-backdrop-filter: blur(var(--caption-blur, 8px)) !important;
-  backdrop-filter: blur(var(--caption-blur, 8px)) !important;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
   display: flex !important;
   flex-direction: column !important;
   gap: 4px !important;
   overflow: hidden !important;
   pointer-events: auto !important;
   transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
+}
+
+:where([data-vn-root]) [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]) {
+  border: 1px solid var(--aperture-dialogue-border, var(--vn-dialogue-border, rgba(224, 238, 217, 0.32)));
+  border-radius: 16px;
+  background: var(--aperture-dialogue-bg, var(--vn-dialogue-bg, rgba(4, 13, 17, var(--caption-opacity, 0.72))));
+  -webkit-backdrop-filter: blur(var(--caption-blur, 8px));
+  backdrop-filter: blur(var(--caption-blur, 8px));
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 [data-vn-dialogue]::before {
@@ -25019,13 +25032,16 @@ aside[data-vn-workspace] {
   max-height: none;
   margin: 0;
   font-size: var(--reader-font, 15px) !important;
-  line-height: 1.55 !important;
+  line-height: 1.55;
   letter-spacing: 0;
-  color: var(--aperture-text, #f9faf6) !important;
-  font-family: Georgia, 'Times New Roman', serif;
-  text-shadow: 0 2px 7px rgba(0, 0, 0, 0.82), 0 1px 1px black;
   user-select: text !important;
   overflow-wrap: break-word !important;
+}
+
+:where([data-vn-root]) [data-vn-dialogue-text] {
+  color: var(--aperture-text, var(--vn-text, #f9faf6));
+  font-family: var(--vn-font-family, Georgia, 'Times New Roman', serif);
+  text-shadow: 0 2px 7px rgba(0, 0, 0, 0.82), 0 1px 1px black;
 }
 
 /* Dialogue Footer */
@@ -25240,10 +25256,12 @@ aside[data-vn-workspace] {
 }
 
 .reader-action-row > .action:not(.nav-step-btn) [data-vn-control-label] {
-  font-size: 10px !important;
-  font-weight: 600 !important;
-  letter-spacing: 0.04em !important;
-  line-height: 1 !important;
+  display: block !important;
+  font-size: 9.5px !important;
+  font-weight: 650 !important;
+  letter-spacing: 0.03em !important;
+  line-height: 1.05 !important;
+  white-space: nowrap !important;
 }
 
 .reader-action-row > .action:not(.nav-step-btn) [data-vn-control-icon] svg {
@@ -25816,12 +25834,6 @@ body.theme-light .folio-quote-callout {
   min-height: 48px;
   max-height: calc(100% - 140px) !important;
   padding: 10px 14px 10px !important;
-  border: 1px solid rgba(160, 205, 185, 0.28) !important;
-  border-radius: 16px !important;
-  background: rgba(8, 18, 15, var(--caption-opacity, 0.82)) !important;
-  -webkit-backdrop-filter: blur(var(--caption-blur, 14px)) !important;
-  backdrop-filter: blur(var(--caption-blur, 14px)) !important;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
   display: flex !important;
   flex-direction: column !important;
   gap: 2px !important;
@@ -25829,6 +25841,15 @@ body.theme-light .folio-quote-callout {
   pointer-events: auto !important;
   touch-action: pan-y !important;
   transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
+}
+
+:where([data-vn-root]) [data-vn-dialogue] {
+  border: 1px solid var(--aperture-dialogue-border, var(--vn-dialogue-border, rgba(160, 205, 185, 0.28)));
+  border-radius: 16px;
+  background: var(--aperture-dialogue-bg, var(--vn-dialogue-bg, rgba(8, 18, 15, var(--caption-opacity, 0.82))));
+  -webkit-backdrop-filter: blur(var(--caption-blur, 14px));
+  backdrop-filter: blur(var(--caption-blur, 14px));
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 /* Draggable Top Resize Grip */
@@ -25971,11 +25992,14 @@ body.theme-light .folio-quote-callout {
   touch-action: pan-y !important;
   user-select: text !important;
   font-size: var(--reader-font, 15px) !important;
-  line-height: 1.55 !important;
-  color: var(--aperture-text, #f9faf6) !important;
-  font-family: Georgia, 'Times New Roman', serif !important;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;
+  line-height: 1.55;
   margin: 0 !important;
+}
+
+:where([data-vn-root]) [data-vn-dialogue-text] {
+  color: var(--aperture-text, var(--vn-text, #f9faf6));
+  font-family: var(--vn-font-family, Georgia, 'Times New Roman', serif);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
 /* Integrated Progress Scrubber docked inside Dialogue Card */
@@ -26137,9 +26161,23 @@ body.theme-light .folio-quote-callout {
   transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
+:where([data-vn-root]) [data-vn-dialogue] {
+  box-shadow: 0 4px 28px var(--vn-atmosphere-glow, rgba(0, 0, 0, 0.5)), 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
 [data-vn-dialogue] {
-  box-shadow: 0 4px 28px var(--vn-atmosphere-glow, rgba(0, 0, 0, 0.5)), 0 1px 3px rgba(0, 0, 0, 0.5) !important;
   transition: box-shadow 0.4s ease, border-color 0.4s ease, opacity 0.24s ease, transform 0.24s ease !important;
+}
+
+[data-vn-status-stack] {
+  top: calc(74px + env(safe-area-inset-top, 0px)) !important;
+  z-index: 26 !important;
+}
+
+[data-vn-root][data-vn-phase="awaiting-input"]:has([data-vn-input]:focus) [data-vn-dialogue],
+[data-vn-root][data-vn-phase="awaiting-input"]:has([data-vn-input]:focus) .reader-progress {
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 [data-vn-scrubber] [data-vn-scrub-dot].active {
@@ -26216,7 +26254,7 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
 [data-vn-interaction]:not([hidden]) {
   position: absolute !important;
   inset: calc(70px + env(safe-area-inset-top, 0px)) 14px calc(var(--caption-height, 142px) + 104px + env(safe-area-inset-bottom, 0px)) 14px !important;
-  z-index: 24 !important;
+  z-index: 34 !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
@@ -26229,7 +26267,7 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   gap: 10px !important;
   max-width: 600px !important;
   margin: 0 auto !important;
-  padding: 0 !important;
+  padding: 6px 0 !important;
   background: transparent !important;
   pointer-events: auto !important;
 }
@@ -26251,7 +26289,7 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
 }
 
 [data-vn-interaction-title] {
-  font-family: Georgia, serif !important;
+  font-family: var(--vn-font-family, Georgia, serif);
   font-size: 16px !important;
   font-weight: 700 !important;
   letter-spacing: 0.08em !important;
@@ -26294,7 +26332,7 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   border: 1px solid var(--aperture-choice-border, rgba(160, 205, 185, 0.22)) !important;
   border-radius: 10px !important;
   color: var(--aperture-text, #f5f9f2) !important;
-  font: 14px/1.5 system-ui, -apple-system, sans-serif !important;
+  font: 16px/1.5 system-ui, -apple-system, sans-serif !important;
   padding: 8px 10px !important;
   resize: vertical !important;
 }
@@ -26455,12 +26493,15 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   display: inline-block !important;
-  color: var(--aperture-accent, #dcebad) !important;
   font-size: 12px !important;
   font-weight: 750 !important;
   letter-spacing: 0.105em !important;
   line-height: 1.4 !important;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8) !important;
+}
+
+:where([data-vn-root]) [data-vn-speaker] {
+  color: var(--aperture-accent, var(--vn-accent, #dcebad));
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
 }
 
 [data-vn-root] [data-vn-dialogue] [data-vn-speaker]::before,
@@ -26484,10 +26525,9 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
 }
 
 /* Keep current reader controls tappable without crowding narrow headers.
-   Gallery remains reachable from APERTURE navigation; Artwork stays in the header. */
+   Artwork stays in the header; History is in navigation. */
 [data-vn-reader-header] .round-ghost { width:44px!important;height:44px!important;min-width:44px!important;min-height:44px!important;flex-shrink:0!important; }
 @media(max-width:600px){
- [data-vn-reader-header] [data-action="gallery-toggle"] { display:inline-flex!important; }
  [data-vn-reader-header] .reading-heading { min-width:0;overflow:hidden; }
 }
 `;
@@ -26651,12 +26691,16 @@ aside[data-vn-workspace] > header > div {
 
 [data-workspace-content]:has(> [data-vn-workspace-tool="history"]),
 [data-workspace-content]:has(> [data-vn-workspace-tool="character"]),
+[data-workspace-content]:has(> [data-vn-workspace-tool="artwork"]),
 [data-workspace-content]:has(> [data-character-folio]),
 [data-workspace-content]:has(> .character-folio-surface),
+[data-workspace-content]:has(> [data-vn-image-studio]),
 [data-surface="history"] [data-workspace-content],
 [data-surface="character"] [data-workspace-content],
+[data-surface="artwork"] [data-workspace-content],
 [data-vn-workspace="history"] [data-workspace-content],
-[data-vn-workspace="character"] [data-workspace-content] {
+[data-vn-workspace="character"] [data-workspace-content],
+[data-vn-workspace="artwork"] [data-workspace-content] {
   padding: 0 !important;
   overflow: hidden !important;
   display: flex !important;
@@ -27676,7 +27720,7 @@ section[data-reference-observations] h3 {
   min-width: 100% !important;
   min-height: 100% !important;
   object-fit: cover !important;
-  object-position: center center !important;
+  object-position: 50% 30% !important;
 }
 
 [data-vn-root] [data-vn-scene-image][data-vn-scene-image-fit="contain"],
@@ -27727,6 +27771,10 @@ section[data-reference-observations] h3 {
 [data-vn-root][data-vn-preset="lumiverse"] [data-vn-dialogue] {
   border-color: rgba(224, 238, 217, 0.32) !important;
   background: rgba(4, 13, 17, var(--caption-opacity, 0.76)) !important;
+}
+[data-vn-root][data-vn-preset="lumiverse"] [data-vn-dialogue-text] {
+  color: var(--lumiverse-text, #eff4e9) !important;
+  font-family: var(--vn-font-family, inherit);
 }
 [data-vn-root][data-vn-preset="lumiverse"] [data-vn-speaker] {
   color: #e0eeb1 !important;
@@ -28309,7 +28357,6 @@ class ReaderWorkspace {
         <small data-reader-caption-small data-reader-caption>Visual novel</small>
       </div>
       <div data-reader-header-actions class="topbar-actions" style="display:flex;align-items:center;gap:6px;margin-left:auto">
-        <button type="button" class="round-ghost" data-action="gallery-toggle" title="Story CG Gallery" aria-label="Open CG Gallery">${APERTURE_ICONS.grid}</button>
         <button type="button" class="round-ghost" data-action="cast-toggle" title="Cast portraits" aria-label="Show cast portraits">${APERTURE_ICONS.cast}</button>
         <button type="button" class="round-ghost" data-action="panels-toggle" title="Panels" aria-label="Open Panels">${APERTURE_ICONS.panel}</button>
         <button type="button" class="round-ghost" data-action="voice-toggle" title="Voice controls" aria-label="Voice controls">${APERTURE_ICONS.speaker}</button>
@@ -28347,10 +28394,9 @@ class ReaderWorkspace {
           <button type="button" data-aperture-route="world" class="aperture-link"><span class="number">02</span><span>World Lens</span>${APERTURE_ICONS.world}</button>
           <button type="button" data-aperture-route="character" class="aperture-link"><span class="number">03</span><span>Character folio</span>${APERTURE_ICONS.cast}</button>
           <button type="button" data-aperture-route="studio" class="aperture-link"><span class="number">04</span><span>Art studio</span>${APERTURE_ICONS.image}</button>
-          <button type="button" data-aperture-route="library" class="aperture-link"><span class="number">05</span><span>Image library</span>${APERTURE_ICONS.grid}</button>
-          <button type="button" data-aperture-route="history" class="aperture-link"><span class="number">06</span><span>History</span>${APERTURE_ICONS.history}</button>
-          <button type="button" data-aperture-route="settings" class="aperture-link"><span class="number">07</span><span>Settings</span>${APERTURE_ICONS.settings}</button>
-          <button type="button" data-aperture-route="workspace" class="aperture-link"><span class="number">08</span><span>Workspace</span>${APERTURE_ICONS.layers}</button>
+          <button type="button" data-aperture-route="history" class="aperture-link"><span class="number">05</span><span>History</span>${APERTURE_ICONS.history}</button>
+          <button type="button" data-aperture-route="settings" class="aperture-link"><span class="number">06</span><span>Settings</span>${APERTURE_ICONS.settings}</button>
+          <button type="button" data-aperture-route="workspace" class="aperture-link"><span class="number">07</span><span>Workspace</span>${APERTURE_ICONS.layers}</button>
           <button type="button" data-aperture-route="chat" class="aperture-link"><span class="number">→</span><span>Back to Lumiverse chat</span>${APERTURE_ICONS.chat}</button>
         </div>
         <div class="aperture-foot"><span>CHAPTER IV</span><span>EVERY DETAIL HAS A PLACE</span></div>
@@ -28430,9 +28476,6 @@ class ReaderWorkspace {
     }, { signal });
     this.panel.addEventListener("click", (event) => event.stopPropagation(), { signal });
     this.panel.addEventListener("wheel", (event) => event.stopPropagation(), { signal, passive: true });
-    q('[data-action="gallery-toggle"]')?.addEventListener("click", () => {
-      this.shell.dispatchEvent(new CustomEvent("lumiglyphics:gallery-toggle", { bubbles: true }));
-    }, { signal });
     q('[data-action="cast-toggle"]')?.addEventListener("click", () => {
       this.shell.dispatchEvent(new CustomEvent("lumiglyphics:cast-toggle", { bubbles: true }));
     }, { signal });
@@ -28512,9 +28555,7 @@ class ReaderWorkspace {
         this.open("character", openMenuBtn);
       else if (route === "studio")
         this.open("artwork", openMenuBtn);
-      else if (route === "library") {
-        this.shell.dispatchEvent(new CustomEvent("lumiglyphics:gallery-toggle", { bubbles: true }));
-      } else if (route === "history")
+      else if (route === "history")
         this.open("history", openMenuBtn);
       else if (route === "settings")
         this.open("settings", openMenuBtn);
@@ -29439,969 +29480,6 @@ class CastStage {
     this.clearDisplay();
     this.host.remove();
     this.style.remove();
-  }
-}
-
-// src/frontend/stage/image-lightbox.ts
-class ImageLightbox {
-  host;
-  img;
-  captionEl;
-  zoomBtn;
-  prevBtn;
-  nextBtn;
-  exportBtn;
-  deleteBtn;
-  items = [];
-  activeIndex = -1;
-  isOpen = false;
-  scale = 1;
-  zoomMode = "fit";
-  translateX = 0;
-  translateY = 0;
-  isDragging = false;
-  startX = 0;
-  startY = 0;
-  initialPinchDist = 0;
-  initialPinchScale = 1;
-  lastTapTime = 0;
-  onDelete;
-  onClose;
-  constructor(mountParent) {
-    this.host = document.createElement("div");
-    this.host.className = "vn-interactive-lightbox";
-    this.host.setAttribute("data-cg-lightbox", "");
-    this.host.hidden = true;
-    this.host.style.cssText = `
-      position: fixed;
-      inset: 0;
-      z-index: 100050;
-      background: rgba(0, 0, 0, 0.94);
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      user-select: none;
-      -webkit-user-select: none;
-      touch-action: none;
-    `;
-    const topBar = document.createElement("div");
-    topBar.className = "lightbox-topbar";
-    topBar.style.cssText = `
-      position: absolute;
-      top: calc(14px + env(safe-area-inset-top, 0px));
-      left: 14px;
-      right: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      z-index: 100060;
-      pointer-events: auto;
-    `;
-    const backBtn = document.createElement("button");
-    backBtn.type = "button";
-    backBtn.className = "lightbox-btn lightbox-back-btn";
-    backBtn.setAttribute("data-cg-lightbox-back", "");
-    backBtn.innerHTML = "← <span>Back</span>";
-    backBtn.style.cssText = this.btnStyle();
-    backBtn.onclick = () => this.close();
-    const actions = document.createElement("div");
-    actions.style.cssText = "display:flex;align-items:center;gap:8px;flex-wrap:wrap;";
-    this.zoomBtn = document.createElement("button");
-    this.zoomBtn.type = "button";
-    this.zoomBtn.className = "lightbox-btn lightbox-zoom-btn";
-    this.zoomBtn.textContent = "\uD83D\uDD0D Fit";
-    this.zoomBtn.title = "Toggle Zoom (Fit / 100% / 200%)";
-    this.zoomBtn.style.cssText = this.btnStyle();
-    this.zoomBtn.onclick = () => this.cycleZoom();
-    this.prevBtn = document.createElement("button");
-    this.prevBtn.type = "button";
-    this.prevBtn.className = "lightbox-btn";
-    this.prevBtn.setAttribute("data-cg-prev", "");
-    this.prevBtn.innerHTML = "◀ <span>Prev</span>";
-    this.prevBtn.style.cssText = this.btnStyle();
-    this.prevBtn.onclick = () => this.step(-1);
-    this.nextBtn = document.createElement("button");
-    this.nextBtn.type = "button";
-    this.nextBtn.className = "lightbox-btn";
-    this.nextBtn.setAttribute("data-cg-next", "");
-    this.nextBtn.innerHTML = "<span>Next</span> ▶";
-    this.nextBtn.style.cssText = this.btnStyle();
-    this.nextBtn.onclick = () => this.step(1);
-    this.exportBtn = document.createElement("button");
-    this.exportBtn.type = "button";
-    this.exportBtn.className = "lightbox-btn";
-    this.exportBtn.setAttribute("data-cg-download", "");
-    this.exportBtn.innerHTML = "\uD83D\uDCE5 <span>Save</span>";
-    this.exportBtn.style.cssText = this.btnStyle();
-    this.exportBtn.onclick = () => this.exportCurrent();
-    this.deleteBtn = document.createElement("button");
-    this.deleteBtn.type = "button";
-    this.deleteBtn.className = "lightbox-btn lightbox-del-btn";
-    this.deleteBtn.setAttribute("data-cg-delete", "");
-    this.deleteBtn.innerHTML = "\uD83D\uDDD1️";
-    this.deleteBtn.title = "Delete picture";
-    this.deleteBtn.style.cssText = this.btnStyle("rgba(239, 68, 68, 0.25)", "rgba(239, 68, 68, 0.45)", "#fca5a5");
-    this.deleteBtn.onclick = () => this.deleteCurrent();
-    const closeBtn = document.createElement("button");
-    closeBtn.type = "button";
-    closeBtn.className = "lightbox-btn lightbox-close-btn";
-    closeBtn.setAttribute("data-cg-lightbox-close", "");
-    closeBtn.innerHTML = "✕";
-    closeBtn.title = "Close";
-    closeBtn.style.cssText = this.btnStyle() + "width:38px;padding:0;text-align:center;justify-content:center;";
-    closeBtn.onclick = () => this.close();
-    actions.append(this.zoomBtn, this.prevBtn, this.nextBtn, this.exportBtn, this.deleteBtn, closeBtn);
-    topBar.append(backBtn, actions);
-    const viewport = document.createElement("div");
-    viewport.className = "lightbox-viewport";
-    viewport.style.cssText = `
-      position: relative;
-      width: 100%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      cursor: grab;
-    `;
-    this.img = document.createElement("img");
-    this.img.className = "lightbox-img";
-    this.img.setAttribute("data-cg-lightbox-img", "");
-    this.img.alt = "Artwork preview";
-    this.img.style.cssText = `
-      max-width: 94vw;
-      max-height: 80vh;
-      object-fit: contain;
-      border-radius: 8px;
-      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.9);
-      transition: transform 0.08s ease-out;
-      transform-origin: center center;
-      will-change: transform;
-      pointer-events: auto;
-    `;
-    viewport.append(this.img);
-    this.captionEl = document.createElement("div");
-    this.captionEl.className = "lightbox-caption";
-    this.captionEl.setAttribute("data-cg-lightbox-quote", "");
-    this.captionEl.style.cssText = `
-      position: absolute;
-      bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-      left: 20px;
-      right: 20px;
-      max-width: 820px;
-      margin: 0 auto;
-      text-align: center;
-      font-size: 13px;
-      font-style: italic;
-      color: rgba(241, 245, 249, 0.92);
-      text-shadow: 0 2px 6px rgba(0,0,0,0.85);
-      pointer-events: none;
-      line-height: 1.5;
-    `;
-    this.host.append(topBar, viewport, this.captionEl);
-    if (mountParent)
-      mountParent.append(this.host);
-    else if (typeof document !== "undefined" && document.body)
-      document.body.append(this.host);
-    this.attachEvents(viewport);
-  }
-  btnStyle(bg = "rgba(255, 255, 255, 0.12)", border = "rgba(255, 255, 255, 0.2)", color = "#fff") {
-    return `
-      min-height: 38px;
-      padding: 6px 14px;
-      border-radius: 8px;
-      border: 1px solid ${border};
-      background: ${bg};
-      color: ${color};
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    `;
-  }
-  attachEvents(viewport) {
-    viewport.addEventListener("mousedown", (e) => {
-      if (e.button !== 0)
-        return;
-      this.isDragging = true;
-      this.startX = e.clientX - this.translateX;
-      this.startY = e.clientY - this.translateY;
-      viewport.style.cursor = "grabbing";
-      e.preventDefault();
-    });
-    window.addEventListener("mousemove", (e) => {
-      if (!this.isDragging || !this.isOpen)
-        return;
-      this.translateX = e.clientX - this.startX;
-      this.translateY = e.clientY - this.startY;
-      this.applyTransform();
-    });
-    window.addEventListener("mouseup", () => {
-      if (!this.isDragging)
-        return;
-      this.isDragging = false;
-      viewport.style.cursor = "grab";
-    });
-    viewport.addEventListener("wheel", (e) => {
-      if (!this.isOpen)
-        return;
-      e.preventDefault();
-      const delta = e.deltaY < 0 ? 1.15 : 0.85;
-      this.scale = Math.max(0.3, Math.min(4.5, this.scale * delta));
-      this.updateZoomModeLabel();
-      this.applyTransform();
-    }, { passive: false });
-    viewport.addEventListener("touchstart", (e) => {
-      if (e.touches.length === 2) {
-        const t0 = e.touches[0];
-        const t1 = e.touches[1];
-        if (!t0 || !t1)
-          return;
-        const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
-        this.initialPinchDist = dist;
-        this.initialPinchScale = this.scale;
-      } else if (e.touches.length === 1) {
-        const t0 = e.touches[0];
-        if (!t0)
-          return;
-        const now = Date.now();
-        if (now - this.lastTapTime < 320) {
-          this.cycleZoom();
-          this.lastTapTime = 0;
-          return;
-        }
-        this.lastTapTime = now;
-        this.isDragging = true;
-        this.startX = t0.clientX - this.translateX;
-        this.startY = t0.clientY - this.translateY;
-      }
-    }, { passive: true });
-    viewport.addEventListener("touchmove", (e) => {
-      if (!this.isOpen)
-        return;
-      if (e.touches.length === 2 && this.initialPinchDist > 0) {
-        const t0 = e.touches[0];
-        const t1 = e.touches[1];
-        if (!t0 || !t1)
-          return;
-        const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
-        const factor = dist / this.initialPinchDist;
-        this.scale = Math.max(0.4, Math.min(4.5, this.initialPinchScale * factor));
-        this.updateZoomModeLabel();
-        this.applyTransform();
-        e.preventDefault();
-      } else if (e.touches.length === 1 && this.isDragging) {
-        const t0 = e.touches[0];
-        if (!t0)
-          return;
-        this.translateX = t0.clientX - this.startX;
-        this.translateY = t0.clientY - this.startY;
-        this.applyTransform();
-        e.preventDefault();
-      }
-    }, { passive: false });
-    viewport.addEventListener("touchend", (e) => {
-      if (e.touches.length < 2) {
-        this.initialPinchDist = 0;
-      }
-      if (e.touches.length === 0) {
-        this.isDragging = false;
-      }
-    });
-    window.addEventListener("keydown", (e) => {
-      if (!this.isOpen)
-        return;
-      if (e.key === "Escape") {
-        this.close();
-      } else if (e.key === "ArrowLeft") {
-        this.step(-1);
-      } else if (e.key === "ArrowRight") {
-        this.step(1);
-      } else if (e.key === "+" || e.key === "=") {
-        this.scale = Math.min(4.5, this.scale * 1.25);
-        this.updateZoomModeLabel();
-        this.applyTransform();
-      } else if (e.key === "-" || e.key === "_") {
-        this.scale = Math.max(0.4, this.scale * 0.8);
-        this.updateZoomModeLabel();
-        this.applyTransform();
-      } else if (e.key === "0") {
-        this.resetTransform();
-      }
-    });
-  }
-  applyTransform() {
-    this.img.style.transform = `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
-  }
-  resetTransform() {
-    this.scale = 1;
-    this.translateX = 0;
-    this.translateY = 0;
-    this.zoomMode = "fit";
-    this.zoomBtn.innerHTML = "\uD83D\uDD0D Fit";
-    this.applyTransform();
-  }
-  cycleZoom() {
-    if (this.zoomMode === "fit") {
-      this.zoomMode = "100";
-      this.scale = 1.6;
-      this.zoomBtn.textContent = "\uD83D\uDD0D 100%";
-    } else if (this.zoomMode === "100") {
-      this.zoomMode = "200";
-      this.scale = 2.6;
-      this.zoomBtn.textContent = "\uD83D\uDD0D 200%";
-    } else {
-      this.resetTransform();
-      return;
-    }
-    this.applyTransform();
-  }
-  updateZoomModeLabel() {
-    if (Math.abs(this.scale - 1) < 0.15) {
-      this.zoomMode = "fit";
-      this.zoomBtn.innerHTML = "\uD83D\uDD0D Fit";
-    } else if (Math.abs(this.scale - 1.6) < 0.25) {
-      this.zoomMode = "100";
-      this.zoomBtn.innerHTML = "\uD83D\uDD0D 100%";
-    } else if (this.scale >= 2) {
-      this.zoomMode = "200";
-      this.zoomBtn.innerHTML = "\uD83D\uDD0D 200%";
-    } else {
-      this.zoomBtn.textContent = `\uD83D\uDD0D ${Math.round(this.scale * 100)}%`;
-    }
-  }
-  get hidden() {
-    return Boolean(this.host.hidden);
-  }
-  set hidden(val) {
-    this.host.hidden = val;
-    if (val) {
-      this.close();
-    }
-  }
-  get isOpenState() {
-    return this.isOpen;
-  }
-  open(items, index = 0) {
-    if (typeof items === "string") {
-      this.items = [{ imageUrl: items }];
-      this.activeIndex = 0;
-    } else {
-      this.items = items;
-      this.activeIndex = Math.max(0, Math.min(items.length - 1, index));
-    }
-    this.isOpen = true;
-    this.host.hidden = false;
-    this.renderCurrent();
-  }
-  close() {
-    this.isOpen = false;
-    this.host.hidden = true;
-    this.resetTransform();
-    this.onClose?.();
-  }
-  renderCurrent() {
-    const item = this.items[this.activeIndex];
-    if (!item)
-      return;
-    this.resetTransform();
-    this.img.src = item.imageUrl;
-    const captionText = item.storyExcerpt ? `“${item.storyExcerpt}”` : item.caption || item.title || "";
-    this.captionEl.textContent = captionText;
-    this.captionEl.style.display = captionText ? "block" : "none";
-    this.prevBtn.style.display = this.items.length > 1 ? "inline-flex" : "none";
-    this.nextBtn.style.display = this.items.length > 1 ? "inline-flex" : "none";
-    this.deleteBtn.style.display = this.onDelete ? "inline-flex" : "none";
-  }
-  step(delta) {
-    if (this.items.length <= 1)
-      return;
-    this.activeIndex = (this.activeIndex + delta + this.items.length) % this.items.length;
-    this.renderCurrent();
-  }
-  exportCurrent() {
-    const item = this.items[this.activeIndex];
-    if (!item?.imageUrl)
-      return;
-    const a = document.createElement("a");
-    a.href = item.imageUrl;
-    a.download = `lumiglyphics-artwork-${Date.now()}.png`;
-    a.click();
-  }
-  deleteCurrent() {
-    const item = this.items[this.activeIndex];
-    if (!item)
-      return;
-    if (typeof window !== "undefined" && window.confirm && !window.confirm("Delete this picture?"))
-      return;
-    const idx = this.activeIndex;
-    this.items = this.items.filter((_, i) => i !== idx);
-    this.onDelete?.(item, idx);
-    if (this.items.length === 0) {
-      this.close();
-    } else {
-      this.activeIndex = Math.min(this.activeIndex, this.items.length - 1);
-      this.renderCurrent();
-    }
-  }
-}
-
-// src/frontend/stage/cg-gallery.ts
-class CgGalleryModal {
-  mount;
-  backdrop;
-  modal;
-  grid;
-  counter;
-  filterContainer;
-  lightbox;
-  items = [];
-  ownerChat = null;
-  currentFilter = "all";
-  activeLightboxIndex = -1;
-  isOpen = false;
-  onDeleteImage;
-  constructor(mount) {
-    this.mount = mount;
-    this.backdrop = document.createElement("div");
-    this.backdrop.className = "cg-gallery-backdrop";
-    this.backdrop.hidden = true;
-    this.backdrop.innerHTML = `
-      <style>
-        .cg-gallery-backdrop {
-          position: fixed;
-          inset: 0;
-          z-index: 100005;
-          background: rgba(4, 8, 12, 0.92);
-          backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px));
-          color: #f1f5f9;
-          font-family: inherit;
-        }
-        .cg-gallery-modal {
-          width: 100%;
-          max-width: 1000px;
-          height: 88vh;
-          max-height: 850px;
-          background: var(--vn-shell-panel, rgba(15, 23, 42, 0.95));
-          border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.12));
-          border-radius: 16px;
-          display: flex;
-          flex-direction: column;
-          overflow: hidden;
-          box-shadow: 0 25px 60px -12px rgba(0, 0, 0, 0.85);
-          position: relative;
-        }
-        .cg-gallery-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 14px 20px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-          background: rgba(0, 0, 0, 0.25);
-        }
-        .cg-gallery-title h2 {
-          margin: 0;
-          font-size: 18px;
-          font-weight: 700;
-          letter-spacing: -0.01em;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-        .cg-gallery-counter {
-          font-size: 12px;
-          font-weight: 600;
-          color: var(--vn-shell-accent, #6ee7b7);
-          background: rgba(110, 231, 183, 0.1);
-          padding: 3px 8px;
-          border-radius: 12px;
-          border: 1px solid rgba(110, 231, 183, 0.2);
-        }
-        .cg-gallery-close {
-          min-width: 44px;
-          min-height: 44px;
-          width: 44px;
-          height: 44px;
-          border-radius: 50%;
-          border: 1px solid rgba(255, 255, 255, 0.18);
-          background: rgba(255, 255, 255, 0.08);
-          color: inherit;
-          cursor: pointer;
-          display: grid;
-          place-items: center;
-          font-size: 16px;
-          transition: background 0.15s ease, border-color 0.15s ease;
-        }
-        .cg-gallery-close:hover {
-          background: rgba(255, 255, 255, 0.2);
-          border-color: rgba(255, 255, 255, 0.3);
-        }
-        .cg-gallery-nav {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 10px 20px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-          background: rgba(0, 0, 0, 0.1);
-          overflow-x: auto;
-        }
-        .cg-tab-btn {
-          padding: 6px 14px;
-          border-radius: 6px;
-          border: 1px solid transparent;
-          background: transparent;
-          color: rgba(255, 255, 255, 0.6);
-          font-size: 12px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.15s ease;
-          white-space: nowrap;
-        }
-        .cg-tab-btn:hover {
-          color: #fff;
-          background: rgba(255, 255, 255, 0.05);
-        }
-        .cg-tab-btn.active {
-          color: #fff;
-          background: rgba(255, 255, 255, 0.12);
-          border-color: rgba(255, 255, 255, 0.18);
-        }
-        .cg-gallery-grid {
-          flex: 1 1 auto;
-          min-height: 0;
-          overflow-y: auto;
-          -webkit-overflow-scrolling: touch;
-          touch-action: pan-y;
-          overscroll-behavior: contain;
-          padding: 16px;
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-          gap: 14px;
-          align-content: start;
-        }
-        @media (max-width: 600px) {
-          .cg-gallery-grid {
-            grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
-            padding: 12px;
-          }
-        }
-        .cg-card {
-          position: relative;
-          width: 100%;
-          aspect-ratio: 16 / 10;
-          min-height: 110px;
-          border-radius: 12px;
-          overflow: hidden;
-          background: var(--vn-shell-field, rgba(0, 0, 0, 0.4));
-          border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.1));
-          cursor: pointer;
-          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-          transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1), border-color 0.2s ease, box-shadow 0.2s ease;
-          display: flex;
-          flex-direction: column;
-        }
-        .cg-card:hover {
-          transform: translateY(-3px) scale(1.02);
-          border-color: var(--vn-shell-accent, #6ee7b7);
-          box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.65);
-        }
-        .cg-card:active {
-          transform: scale(0.97);
-        }
-        .cg-card img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          display: block;
-        }
-        .cg-card-badge {
-          position: absolute;
-          top: 8px;
-          left: 8px;
-          font-size: 10px;
-          font-weight: 700;
-          padding: 2px 7px;
-          border-radius: 9999px;
-          background: rgba(0, 0, 0, 0.65);
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          color: #f1f5f9;
-          z-index: 2;
-        }
-        .cg-card-overlay {
-          position: absolute;
-          inset: 0;
-          background: linear-gradient(to top, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.4) 40%, transparent 80%);
-          display: flex;
-          flex-direction: column;
-          justify-content: flex-end;
-          padding: 8px 10px;
-          opacity: 1;
-          pointer-events: none;
-        }
-        .cg-card-title {
-          font-size: 12px;
-          font-weight: 650;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          color: #fff;
-          text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
-        }
-        .cg-card-meta {
-          font-size: 10px;
-          color: rgba(255, 255, 255, 0.75);
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .cg-card-delete {
-          position: absolute;
-          top: 6px;
-          right: 6px;
-          width: 26px;
-          height: 26px;
-          border-radius: 50%;
-          background: rgba(0, 0, 0, 0.7);
-          border: 1px solid rgba(255, 255, 255, 0.25);
-          color: #fca5a5;
-          font-size: 13px;
-          font-weight: 700;
-          cursor: pointer;
-          display: grid;
-          place-items: center;
-          z-index: 3;
-          opacity: 0.85;
-          transition: opacity 0.2s, background 0.2s, transform 0.2s;
-        }
-        .cg-card-delete:hover {
-          opacity: 1;
-          background: rgba(220, 38, 38, 0.85);
-          color: #fff;
-          transform: scale(1.1);
-        }
-        .cg-lightbox {
-          position: fixed;
-          inset: 0;
-          z-index: 100010;
-          background: rgba(0, 0, 0, 0.96);
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: calc(64px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px));
-          box-sizing: border-box;
-        }
-        .cg-lightbox img {
-          max-width: 92vw;
-          max-height: 72vh;
-          object-fit: contain;
-          border-radius: 8px;
-          box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85);
-          pointer-events: auto;
-        }
-        .cg-lightbox-quote {
-          margin-top: 16px;
-          max-width: 800px;
-          font-style: italic;
-          font-size: 14px;
-          text-align: center;
-          color: #e2e8f0;
-          line-height: 1.6;
-          pointer-events: auto;
-        }
-        .cg-lightbox-top-bar {
-          position: absolute;
-          top: calc(16px + env(safe-area-inset-top, 0px));
-          left: 16px;
-          right: 16px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          z-index: 100020;
-          pointer-events: auto;
-        }
-        .cg-lightbox-actions {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-        .cg-lightbox-btn {
-          min-height: 40px;
-          padding: 8px 16px;
-          border-radius: 8px;
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          background: rgba(255, 255, 255, 0.12);
-          color: #fff;
-          font-size: 13px;
-          font-weight: 600;
-          cursor: pointer;
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          backdrop-filter: blur(8px);
-          transition: background 0.15s ease, border-color 0.15s ease;
-        }
-        .cg-lightbox-btn:hover {
-          background: rgba(255, 255, 255, 0.22);
-          border-color: rgba(255, 255, 255, 0.35);
-        }
-        .cg-lightbox-close-pill {
-          background: rgba(239, 68, 68, 0.2);
-          border-color: rgba(239, 68, 68, 0.4);
-          color: #fca5a5;
-        }
-        .cg-lightbox-close-pill:hover {
-          background: rgba(239, 68, 68, 0.35);
-          border-color: rgba(239, 68, 68, 0.6);
-          color: #fff;
-        }
-        .cg-empty-state {
-          grid-column: 1 / -1;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          height: 300px;
-          color: rgba(255, 255, 255, 0.4);
-          gap: 12px;
-          font-size: 14px;
-        }
-      </style>
-      <div class="cg-gallery-modal">
-        <header class="cg-gallery-header">
-          <div class="cg-gallery-title">
-            <h2>Story CG Gallery <span class="cg-gallery-counter" data-cg-counter>0 Unlocked</span></h2>
-          </div>
-          <button type="button" class="cg-gallery-close" data-cg-close aria-label="Close CG Gallery">${APERTURE_ICONS.close}</button>
-        </header>
-        <nav class="cg-gallery-nav" data-cg-tabs>
-          <button type="button" class="cg-tab-btn active" data-cg-tab="all">All Visual Moments</button>
-          <button type="button" class="cg-tab-btn" data-cg-tab="milestones">Milestone CGs</button>
-          <button type="button" class="cg-tab-btn" data-cg-tab="portraits">Character Portraits</button>
-        </nav>
-        <div class="cg-gallery-grid" data-cg-grid></div>
-      </div>
-      `;
-    this.modal = this.backdrop.querySelector(".cg-gallery-modal");
-    this.grid = this.backdrop.querySelector("[data-cg-grid]");
-    this.counter = this.backdrop.querySelector("[data-cg-counter]");
-    this.filterContainer = this.backdrop.querySelector("[data-cg-tabs]");
-    this.lightbox = new ImageLightbox(this.backdrop);
-    this.lightbox.onDelete = (item, index) => {
-      const list = this.filteredItems();
-      const cgItem = list[index];
-      if (cgItem) {
-        this.items = this.items.filter((i) => i.id !== cgItem.id);
-        this.render();
-        this.onDeleteImage?.(cgItem);
-      }
-    };
-    this.mount.append(this.backdrop);
-    this.attachEvents();
-  }
-  attachEvents() {
-    this.backdrop.querySelector("[data-cg-close]")?.addEventListener("click", () => this.close());
-    this.backdrop.addEventListener("click", (e) => {
-      if (e.target === this.backdrop)
-        this.close();
-    });
-    this.filterContainer.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-cg-tab]");
-      if (!btn)
-        return;
-      this.filterContainer.querySelectorAll(".cg-tab-btn").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      this.currentFilter = btn.dataset.cgTab || "all";
-      this.render();
-    });
-    window.addEventListener("keydown", (e) => {
-      if (!this.isOpen)
-        return;
-      if (e.key === "Escape") {
-        if (!this.lightbox.hidden) {
-          this.closeLightbox();
-        } else {
-          this.close();
-        }
-      }
-      if (e.key === "ArrowLeft" && !this.lightbox.hidden) {
-        const list = this.filteredItems();
-        if (list.length > 0)
-          this.openLightbox((this.activeLightboxIndex - 1 + list.length) % list.length);
-      }
-      if (e.key === "ArrowRight" && !this.lightbox.hidden) {
-        const list = this.filteredItems();
-        if (list.length > 0)
-          this.openLightbox((this.activeLightboxIndex + 1) % list.length);
-      }
-    });
-  }
-  syncFromTurn(turn, paragraphIndex = -1) {
-    if (!turn) {
-      this.items = [];
-      this.ownerChat = null;
-      this.closeLightbox();
-      this.render();
-      return;
-    }
-    const old = this.items;
-    const retained = this.ownerChat === turn.chatId ? old : [];
-    const scope = turn ? JSON.stringify([turn.chatId, turn.messageId, turn.swipeId, turn.sourceFingerprint, turn.revision]) : "";
-    const newItems = [];
-    if (turn)
-      for (const asset of turn.assets ?? []) {
-        if (asset.paragraphIndex > paragraphIndex || !["generated", "browser_ready"].includes(asset.status))
-          continue;
-        const imageUrl = sceneImageCandidatesFor(asset)[0];
-        if (!imageUrl)
-          continue;
-        const id6 = JSON.stringify([scope, asset.jobId]);
-        const charList = asset.stageAsset?.characters ?? (asset.stageAsset?.character ? [asset.stageAsset.character] : []);
-        const primaryChar = charList[0] || asset.stageAsset?.character;
-        newItems.push({
-          id: id6,
-          sourceMessageId: turn.messageId,
-          imageUrl,
-          title: primaryChar ? charList.length > 1 ? `${primaryChar} & ${charList.length - 1} more` : primaryChar : `Moment at ¶${asset.paragraphIndex + 1}`,
-          characterName: primaryChar,
-          characterNames: charList,
-          storyExcerpt: turn.paragraphs[asset.paragraphIndex] || "",
-          unlockedAt: old.find((item) => item.id === id6)?.unlockedAt ?? new Date().toLocaleTimeString(),
-          isMilestone: asset.stageAsset?.role === "background" || asset.paragraphIndex === 0
-        });
-      }
-    this.ownerChat = turn.chatId;
-    this.items = [...retained.filter((item) => item.sourceMessageId !== turn?.messageId), ...newItems].slice(-256);
-    if (JSON.stringify(old) !== JSON.stringify(this.items)) {
-      this.closeLightbox();
-      this.render();
-    }
-  }
-  setItems(items) {
-    this.items = items;
-  }
-  removeImage(imageUrl) {
-    const oldLen = this.items.length;
-    this.items = this.items.filter((item) => item.imageUrl !== imageUrl);
-    if (this.items.length !== oldLen) {
-      this.closeLightbox();
-      this.render();
-    }
-    this.render();
-  }
-  open() {
-    this.isOpen = true;
-    this.backdrop.hidden = false;
-    this.mount.dataset.vnGalleryOpen = "true";
-    if (typeof document !== "undefined" && document.body) {
-      document.body.dataset.vnGalleryOpen = "true";
-    }
-    this.render();
-  }
-  close() {
-    this.isOpen = false;
-    this.backdrop.hidden = true;
-    delete this.mount.dataset.vnGalleryOpen;
-    if (typeof document !== "undefined" && document.body) {
-      delete document.body.dataset.vnGalleryOpen;
-    }
-    this.closeLightbox();
-  }
-  openLightbox(index) {
-    this.activeLightboxIndex = index;
-    const list = this.filteredItems();
-    const item = list[index];
-    if (!item)
-      return;
-    const lightboxItems = list.map((i) => ({
-      imageUrl: i.imageUrl,
-      title: i.title,
-      caption: i.title,
-      storyExcerpt: i.storyExcerpt
-    }));
-    this.lightbox.open(lightboxItems, index);
-  }
-  closeLightbox() {
-    this.activeLightboxIndex = -1;
-    this.lightbox.close();
-  }
-  filteredItems() {
-    if (this.currentFilter === "milestones") {
-      return this.items.filter((i) => i.isMilestone);
-    }
-    if (this.currentFilter === "portraits") {
-      return this.items.filter((i) => Boolean(i.characterName));
-    }
-    return this.items;
-  }
-  render() {
-    const list = this.filteredItems();
-    this.counter.textContent = `${this.items.length} Unlocked`;
-    this.grid.replaceChildren();
-    if (list.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "cg-empty-state";
-      empty.innerHTML = `<span>No story CGs unlocked in this category yet. Advance the story or generate scenes to collect artwork.</span>`;
-      this.grid.append(empty);
-      return;
-    }
-    list.forEach((item, index) => {
-      const card = document.createElement("div");
-      card.className = "cg-card";
-      card.onclick = () => this.openLightbox(index);
-      const img = document.createElement("img");
-      img.src = item.imageUrl;
-      img.alt = item.title;
-      img.loading = "lazy";
-      const badge = document.createElement("div");
-      badge.className = "cg-card-badge";
-      badge.textContent = item.isMilestone ? "✨ Milestone" : item.characterName ? `\uD83D\uDC64 ${item.characterName}` : "\uD83D\uDDBC️ Scene";
-      const overlay = document.createElement("div");
-      overlay.className = "cg-card-overlay";
-      const title = document.createElement("div");
-      title.className = "cg-card-title";
-      title.textContent = item.title;
-      const meta3 = document.createElement("div");
-      meta3.className = "cg-card-meta";
-      meta3.textContent = item.characterName ? `Cast: ${item.characterName}` : item.storyExcerpt ? item.storyExcerpt.slice(0, 45) + "..." : "Story Moment";
-      overlay.append(title, meta3);
-      const delBtn = document.createElement("button");
-      delBtn.type = "button";
-      delBtn.className = "cg-card-delete";
-      delBtn.title = "Delete picture";
-      delBtn.setAttribute("aria-label", `Delete picture ${item.title}`);
-      delBtn.textContent = "✕";
-      delBtn.onclick = (e) => {
-        e.stopPropagation();
-        if (typeof window !== "undefined" && window.confirm && !window.confirm(`Delete "${item.title}" from story gallery?`))
-          return;
-        this.items = this.items.filter((i) => i.id !== item.id);
-        this.render();
-        this.onDeleteImage?.(item);
-      };
-      card.append(img, badge, delBtn, overlay);
-      this.grid.append(card);
-    });
   }
 }
 
@@ -31685,15 +30763,15 @@ class DossierCard {
     header.append(backBtn, title, close);
     panel.append(header);
     const titleBlock = document.createElement("div");
-    titleBlock.style.cssText = "margin:4px 0 10px;";
+    titleBlock.style.cssText = "margin:2px 0 6px;display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;";
     const pageTitle = document.createElement("h1");
     pageTitle.className = "page-title";
-    pageTitle.style.cssText = "margin:0;font-size:26px;font-family:Georgia,serif;letter-spacing:-0.03em;line-height:1.2;";
+    pageTitle.style.cssText = "margin:0;font-size:20px;font-family:Georgia,serif;letter-spacing:-0.02em;line-height:1.15;";
     pageTitle.textContent = "Look closer.";
     const pageSub = document.createElement("div");
     pageSub.className = "page-sub";
-    pageSub.style.cssText = "font-size:11px;opacity:0.75;margin-top:2px;";
-    pageSub.textContent = "Scene scenery DNA, connected locations and story items.";
+    pageSub.style.cssText = "font-size:11px;opacity:0.75;";
+    pageSub.textContent = "Locations, scene items & cast lore.";
     titleBlock.append(pageTitle, pageSub);
     panel.append(titleBlock);
     const tabs = document.createElement("div");
@@ -31708,7 +30786,7 @@ class DossierCard {
     const search = document.createElement("input");
     search.type = "search";
     search.maxLength = 160;
-    search.placeholder = "Find a known reference…";
+    search.placeholder = "Find reference…";
     search.setAttribute("aria-label", "Search references");
     search.value = this.query;
     inputWrap.append(search);
@@ -31735,7 +30813,7 @@ class DossierCard {
     folioBtn.type = "button";
     folioBtn.className = "chip folio-shortcut-chip";
     folioBtn.style.cssText = "background:rgba(168,85,247,0.18);color:#d8b4fe;border:1px solid rgba(168,85,247,0.35);";
-    folioBtn.innerHTML = "\uD83D\uDC64 Character Folio";
+    folioBtn.innerHTML = "\uD83D\uDC64 Folio";
     folioBtn.title = "Open Character Folio for character DNA, portraits and lore";
     folioBtn.onclick = () => {
       this.folioOpener?.("");
@@ -31745,9 +30823,9 @@ class DossierCard {
     addRefBtn.type = "button";
     addRefBtn.className = "chip add-ref-chip";
     addRefBtn.style.cssText = "background:rgba(56,189,248,0.18);color:#38bdf8;border:1px solid rgba(56,189,248,0.35);margin-left:auto;";
-    addRefBtn.textContent = "＋ Add Reference";
+    addRefBtn.textContent = "＋ Add";
     addRefBtn.title = "Manually add a location or item to the story world";
-    filters.append(addRefBtn);
+    tabs.append(addRefBtn);
     category.value = this.category;
     filters.append(inputWrap, category);
     const scope = document.createElement("select");
@@ -32043,9 +31121,40 @@ class DossierCard {
         }
         worldSheet.append(sceneHub);
       } else {
+        const atlasSection = document.createElement("div");
+        atlasSection.style.cssText = "display:flex;flex-direction:column;gap:8px;margin-top:6px;";
+        const atlasBar = document.createElement("div");
+        atlasBar.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:11px;opacity:0.88;";
+        const legend = document.createElement("span");
+        legend.textContent = "★ Active · \uD83D\uDCCD Visited · Dashed = path";
+        let atlasZoom = Number(worldSheet.dataset.atlasZoom || "1");
+        if (!Number.isFinite(atlasZoom) || atlasZoom < 0.7 || atlasZoom > 1.8)
+          atlasZoom = 1;
+        const zoomControls = document.createElement("div");
+        zoomControls.style.cssText = "display:flex;align-items:center;gap:4px;";
+        const atlasViewport = document.createElement("div");
+        atlasViewport.style.cssText = "overflow:auto;max-height:240px;border-radius:10px;border:1px solid var(--vn-panel-border,rgba(255,255,255,.16));background:rgba(12,24,20,0.55);";
         const atlasWrap = document.createElement("div");
         atlasWrap.className = "world-atlas-view";
         atlasWrap.dataset.worldAtlasView = "";
+        const applyAtlasZoom = (next) => {
+          atlasZoom = Math.max(0.75, Math.min(1.75, Number(next.toFixed(2))));
+          worldSheet.dataset.atlasZoom = String(atlasZoom);
+          atlasWrap.style.transform = `scale(${atlasZoom})`;
+          atlasWrap.style.transformOrigin = "top left";
+          atlasWrap.style.width = `${Math.round(100 / Math.min(1, atlasZoom) * atlasZoom)}%`;
+        };
+        for (const [label, aria, delta] of [["−", "Zoom out atlas", -0.25], ["1:1", "Reset atlas zoom", 0], ["+", "Zoom in atlas", 0.25]]) {
+          const zBtn = document.createElement("button");
+          zBtn.type = "button";
+          zBtn.textContent = label;
+          zBtn.setAttribute("aria-label", aria);
+          zBtn.style.cssText = "min-width:44px;min-height:44px;padding:6px 10px;margin:0;font-size:12px;font-weight:700;";
+          zBtn.onclick = () => applyAtlasZoom(delta === 0 ? 1 : atlasZoom + delta);
+          zoomControls.append(zBtn);
+        }
+        atlasBar.append(legend, zoomControls);
+        applyAtlasZoom(atlasZoom);
         const placeMap = new Map;
         for (const e of entries) {
           if (e.entity.kind !== "place")
@@ -32118,10 +31227,11 @@ class DossierCard {
           const nodeBtn = document.createElement("button");
           nodeBtn.type = "button";
           nodeBtn.className = `map-node-pill ${this.selectedEntityId === node2.entryId ? "active" : ""} ${node2.isActive ? "active-location" : ""}`;
-          nodeBtn.style.left = `${Math.max(4, Math.min(72, Math.round(pt.x / 330 * 100 - 11)))}%`;
-          nodeBtn.style.top = `${Math.max(4, Math.min(76, Math.round(pt.y / 210 * 100 - 10)))}%`;
-          const badge = node2.isActive ? `★ ACTIVE · \uD83D\uDC65 ${presentCast.length}` : "Location";
-          nodeBtn.innerHTML = html`<span class="index-dot"></span><b>${node2.isActive ? "★" : "\uD83D\uDCCD"} ${node2.name}</b><small>${badge}</small>`.value;
+          nodeBtn.style.left = `${Math.max(4, Math.min(68, Math.round(pt.x / 330 * 100 - 11)))}%`;
+          nodeBtn.style.top = `${Math.max(4, Math.min(72, Math.round(pt.y / 210 * 100 - 10)))}%`;
+          nodeBtn.style.maxWidth = "120px";
+          const badge = node2.isActive ? `★ ACTIVE · \uD83D\uDC65 ${presentCast.length}` : "Visited";
+          nodeBtn.innerHTML = html`<span class="index-dot"></span><b style="white-space:normal;line-height:1.2;word-break:break-word">${node2.isActive ? "★" : "\uD83D\uDCCD"} ${node2.name}</b><small>${badge}</small>`.value;
           nodeBtn.onclick = () => {
             if (node2.entryId) {
               this.selectedEntityId = node2.entryId;
@@ -32137,7 +31247,32 @@ class DossierCard {
           emptyAtlas.textContent = "Visit or add locations to map the story atlas.";
           atlasWrap.append(emptyAtlas);
         }
-        worldSheet.append(atlasWrap);
+        atlasViewport.append(atlasWrap);
+        atlasSection.append(atlasBar, atlasViewport);
+        const selectedAtlasNode = nodes.find((n) => n.entryId === this.selectedEntityId) ?? nodes.find((n) => n.isActive) ?? nodes[0];
+        if (selectedAtlasNode) {
+          const matchedEntry = entries.find((e) => e.entity.id === selectedAtlasNode.entryId || e.entity.kind === "place" && createLocationId(e.entity.name) === selectedAtlasNode.id);
+          const quickCard = document.createElement("div");
+          quickCard.className = "world-lens";
+          quickCard.dataset.atlasQuickCard = "";
+          quickCard.style.marginTop = "2px";
+          const qTitle = document.createElement("h3");
+          qTitle.textContent = `${selectedAtlasNode.isActive ? "★ " : "\uD83D\uDCCD "}${selectedAtlasNode.name}`;
+          const qMeta = document.createElement("p");
+          const connText = selectedAtlasNode.connections.length ? `Connected: ${selectedAtlasNode.connections.join(", ")}` : selectedAtlasNode.isActive ? "Current active location" : "Visited location";
+          qMeta.textContent = connText;
+          quickCard.append(qTitle, qMeta);
+          if (matchedEntry) {
+            const qBtn = document.createElement("button");
+            qBtn.type = "button";
+            qBtn.className = "world-lens-cta";
+            qBtn.textContent = "Inspect location →";
+            qBtn.onclick = () => open2(matchedEntry.entity.id, trigger);
+            quickCard.append(qBtn);
+          }
+          atlasSection.append(quickCard);
+        }
+        worldSheet.append(atlasSection);
       }
       if ((this.storyDna.chapterCodex?.length ?? 0) > 0 || (this.storyDna.thoughtCabinet?.length ?? 0) > 0) {
         const codexCard = document.createElement("div");
@@ -32218,6 +31353,20 @@ class DossierCard {
         lensCard.append(lensTitle, lensDesc, ctaBtn, ...activeEntry.entity.kind === "npc" ? [evidence] : [], hideBtn);
       } else {
         lensCard.innerHTML = "<h3>No matching references</h3><p>Try another category or clear the search.</p>";
+        const resetBtn = document.createElement("button");
+        resetBtn.type = "button";
+        resetBtn.className = "world-lens-cta";
+        resetBtn.textContent = "Reset filters";
+        resetBtn.onclick = () => {
+          this.category = "all";
+          this.query = "";
+          this.scope = "all";
+          category.value = "all";
+          search.value = "";
+          scope.value = "all";
+          render2();
+        };
+        lensCard.append(resetBtn);
       }
       lensSlot.replaceChildren(lensCard);
       for (const { entity, pinned } of filtered) {
@@ -32619,8 +31768,9 @@ section[data-reference-current] h3,section[data-reference-observations] h3{font-
 [data-reference-notes] label{display:block;font-size:.85em}
 [data-vn-dossier-card] textarea{display:block;box-sizing:border-box;width:100%;min-height:90px;margin:8px 0;font:inherit;color:inherit;background:#0002;border:1px solid var(--vn-panel-border,#666);border-radius:8px;padding:10px}
 [data-vn-dossier-card] summary{box-sizing:border-box;cursor:pointer;min-height:44px;padding:12px 0;font-weight:600;line-height:1.4}
-[data-reference-filters]{display:grid;grid-template-columns:1fr;gap:8px;margin:10px 0 6px}
-[data-reference-filters] select{box-sizing:border-box;min-width:0;width:100%;min-height:40px;font:inherit;font-size:14px;color:inherit;background:var(--vn-button-bg,#ffffff0d);border:1px solid var(--vn-panel-border,#666);border-radius:9px;padding:6px 8px}
+[data-reference-filters]{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;margin:4px 0 8px;align-items:center}
+[data-reference-filters] input{font-size:16px}
+[data-reference-filters] select{box-sizing:border-box;min-width:0;width:auto;max-width:150px;min-height:44px;font:inherit;font-size:16px;color:inherit;background:var(--vn-button-bg,#ffffff0d);border:1px solid var(--vn-panel-border,#666);border-radius:9px;padding:6px 8px}
 [data-reference-history-note]{font-size:.75em;line-height:1.4;color:var(--vn-muted-text)}
 [data-vn-reference-sheet]{display:flex;flex-direction:column;overflow:hidden}
 [data-vn-reference-sheet] header,[data-reference-filters],[data-reference-count]{flex:none}
@@ -33579,6 +32729,7 @@ var DEFAULT_READER_PREFERENCES = {
   theme: "light",
   smartProseFilter: true,
   smartDialogueExtraction: true,
+  smartBeatSegmentation: true,
   readabilityScrim: true,
   virtualCameraEnabled: true,
   confidantCutInsEnabled: true
@@ -33602,6 +32753,7 @@ function normalizeReaderPreferences(value) {
     ...input2.sentimentLighting !== undefined ? { sentimentLighting: input2.sentimentLighting === true } : {},
     smartProseFilter: input2.smartProseFilter !== undefined ? input2.smartProseFilter === true : DEFAULT_READER_PREFERENCES.smartProseFilter ?? true,
     smartDialogueExtraction: input2.smartDialogueExtraction !== undefined ? input2.smartDialogueExtraction === true : DEFAULT_READER_PREFERENCES.smartDialogueExtraction ?? true,
+    smartBeatSegmentation: input2.smartBeatSegmentation !== undefined ? input2.smartBeatSegmentation === true : DEFAULT_READER_PREFERENCES.smartBeatSegmentation ?? true,
     readabilityScrim: input2.readabilityScrim !== undefined ? input2.readabilityScrim === true : DEFAULT_READER_PREFERENCES.readabilityScrim ?? true,
     virtualCameraEnabled: input2.virtualCameraEnabled !== undefined ? input2.virtualCameraEnabled === true : DEFAULT_READER_PREFERENCES.virtualCameraEnabled ?? true,
     confidantCutInsEnabled: input2.confidantCutInsEnabled !== undefined ? input2.confidantCutInsEnabled === true : DEFAULT_READER_PREFERENCES.confidantCutInsEnabled ?? true
@@ -36896,11 +36048,38 @@ var RPG_HUD_CSS = `
 }
 @media (max-width: 760px) {
   [data-vn-rpg-bar] {
-    top: calc(58px + env(safe-area-inset-top, 0px));
+    top: calc(76px + env(safe-area-inset-top, 0px));
     left: 12px;
-    right: 12px;
-    justify-content: space-between;
+    right: auto;
+    max-width: calc(100% - 24px);
+    min-height: 36px;
+    padding: 4px 12px;
+    font-size: 0.72rem;
+    justify-content: flex-start;
   }
+}
+[data-vn-check-info] {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0 5px;
+  margin-left: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 0.75em;
+  font-weight: 700;
+  cursor: pointer;
+}
+.vn-rpg-check-breakdown {
+  margin-top: 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--vn-surface-elevated, rgba(14, 17, 26, 0.9));
+  border: 1px solid var(--vn-border, rgba(255, 255, 255, 0.16));
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--vn-text, #f4f6fb);
 }
 [data-vn-rpg-bar]:hover {
   transform: translateY(-1px);
@@ -37118,6 +36297,15 @@ class RpgStageController {
   update(mode, state) {
     this.rpgMode = mode;
     this.rpgState = mode === "full" ? state ?? null : null;
+    if (mode === "lite") {
+      if (this.barEl) {
+        this.barEl.innerHTML = `<span>\uD83C\uDFB2 d20 Lite Active</span>`;
+        this.barEl.title = "Adventure Time Lite is active — d20 skill checks & roll odds appear on choices.";
+        this.barEl.hidden = false;
+      }
+      this.toggleDrawer(false);
+      return;
+    }
     if (mode !== "full" || !this.rpgState) {
       if (this.barEl)
         this.barEl.hidden = true;
@@ -37146,8 +36334,9 @@ class RpgStageController {
     const singleProb = Math.max(0.05, Math.min(0.95, (21 - needed) / 20));
     const odds = check2.rollMode === "advantage" ? 1 - Math.pow(1 - singleProb, 2) : check2.rollMode === "disadvantage" ? Math.pow(singleProb, 2) : singleProb;
     const pct = Math.round(odds * 100);
-    if (sources.length > 0 && !button.title) {
-      button.title = sources.map((src) => `${src.label}: ${src.delta >= 0 ? `+${src.delta}` : src.delta}${src.advantage ? " (ADV)" : ""}`).join(", ");
+    const breakdownText = sources.length > 0 ? sources.map((src) => `${src.label}: ${src.delta >= 0 ? `+${src.delta}` : src.delta}${src.advantage ? " (ADV)" : ""}`).join(", ") : "";
+    if (breakdownText && !button.title) {
+      button.title = breakdownText;
     }
     const badge = document.createElement("span");
     badge.dataset.vnChoiceCheck = "";
@@ -37160,6 +36349,36 @@ class RpgStageController {
     fill.style.cssText = `display:block;height:100%;width:${pct}%;background:${meterColor};`;
     meter.appendChild(fill);
     badge.appendChild(meter);
+    if (breakdownText) {
+      const info = document.createElement("span");
+      info.setAttribute("role", "button");
+      info.tabIndex = 0;
+      info.dataset.vnCheckInfo = "";
+      info.setAttribute("aria-label", `Inspect ${check2.stat} modifiers`);
+      info.textContent = "ⓘ";
+      const toggleInfo = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const parent = button.parentElement;
+        if (!parent)
+          return;
+        const existing = parent.querySelector(".vn-rpg-check-breakdown");
+        if (existing) {
+          existing.remove();
+          return;
+        }
+        const card = document.createElement("div");
+        card.className = "vn-rpg-check-breakdown";
+        card.textContent = `Modifiers (${check2.stat} DC ${check2.dc}): ${breakdownText}`;
+        parent.appendChild(card);
+      };
+      info.addEventListener("click", toggleInfo);
+      info.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ")
+          toggleInfo(event);
+      });
+      badge.appendChild(info);
+    }
     button.appendChild(badge);
   }
   resolveChoiceSubmission(choice) {
@@ -42545,7 +41764,6 @@ class VnStage {
   dialogueLive;
   dossiers;
   workspace;
-  cgGallery;
   progress;
   readingState;
   sceneHud;
@@ -42681,7 +41899,6 @@ class VnStage {
     this.scene = queryRequired(this.themeRoot, "[data-vn-scene]");
     this.castStage = new CastStage(this.root, this.createImage);
     this.rpgHud.mount(this.root, this.root);
-    this.cgGallery = new CgGalleryModal(shell);
     this.sceneImages = Array.from(this.themeRoot.querySelectorAll("[data-vn-scene-image]"));
     this.sceneBackdropEl = this.themeRoot.querySelector("[data-vn-scene-backdrop]");
     this.activeImageEl = queryRequired(this.themeRoot, "[data-vn-scene-image][data-vn-layer='active']");
@@ -43422,7 +42639,6 @@ class VnStage {
   }
   setCastTurn(turn, index) {
     this.dossiers.setTurnMedia(turn);
-    this.cgGallery.syncFromTurn(turn, index);
     return this.castStage.set(turn, index);
   }
   reset() {
@@ -44297,9 +43513,6 @@ class VnStage {
     });
     this.outerRoot.addEventListener("lumiglyphics:cast-toggle", () => {
       this.castStage.toggle();
-    });
-    this.outerRoot.addEventListener("lumiglyphics:gallery-toggle", () => {
-      this.cgGallery.open();
     });
     const settingsBtn = this.themeRoot.querySelector("[data-vn-control='settings']");
     settingsBtn?.addEventListener("click", (event) => {
@@ -45570,7 +44783,9 @@ class VnStage {
     this.gameChoiceList.hidden = !showGame;
     this.renderGameChoices(showGame, isBusy || this.gameBusy);
     this.inputForm.hidden = !showStandardInput;
-    const hint = showChoices ? showGame ? "Pick a move or choose a reply." : "Choose a reply." : showStandardInput ? showGame ? "Pick a move, or write your own reply. Ctrl+Enter sends it." : "Write your reply. Ctrl+Enter sends it." : "";
+    const hasCoarsePointer = typeof window !== "undefined" && Boolean(window.matchMedia?.("(pointer: coarse)").matches);
+    const sendHint = hasCoarsePointer ? "" : " Ctrl+Enter sends it.";
+    const hint = showChoices ? showGame ? "Pick a move or choose a reply." : "Choose a reply." : showStandardInput ? showGame ? `Pick a move, or write your own reply.${sendHint}` : `Write your reply.${sendHint}` : "";
     if (this.interactionHint.textContent !== hint)
       this.interactionHint.textContent = hint;
     if (showChoices) {
@@ -50059,6 +49274,7 @@ class VisualNovelSettingsPanel {
             ${group("Smart AI reader & filtering", `
               <label data-check ${find("Smart prose & metadata filter", "smart prose filter metadata cognition trace neural dock auto clean preset raw")}><input name="smartProseFilter" type="checkbox" /><span>Smart prose & metadata filter<small>Automatically detects and removes AI reasoning, cognition traces, simulation docks, and status headers from story text</small></span></label>
               <label data-check ${find("Smart preset dialogue extraction", "smart dialogue extract tags eidos dialogue speech thought attribute speaker nameplate")}><input name="smartDialogueExtraction" type="checkbox" /><span>Smart preset dialogue extraction<small>Automatically extracts custom preset tags (&lt;dialogue&gt;, &lt;eidos_dialogue&gt;, &lt;thought&gt;) and assigns the correct speaker nameplate</small></span></label>
+              <label data-check ${find("Stage beat pacing", "smart beat segmentation chunk split long paragraphs dialogue pacing mobile")}><input name="smartBeatSegmentation" type="checkbox" /><span>Stage beat pacing<small>Breaks dense prose walls and multi-speaker lines into visual novel beats on dialogue and scene transitions</small></span></label>
               <label data-check ${find("Mind ledger & thought cabinet", "mind ledger thought cabinet secrets known facts false beliefs theory of mind mystery")}><input name="mindLedgerEnabled" type="checkbox" /><span>Mind ledger &amp; thought cabinet<small>Track character secrets, known facts, false beliefs, and narrative mysteries inside Character Folio and World Lens</small></span></label>
               <label data-check ${find("Chapter codex auto-archive", "chapter codex auto archive timeline scene memory summary world lens")}><input name="chapterCodexEnabled" type="checkbox" /><span>Chapter codex auto-archive<small>Automatically archive completed scene locations and key visual moments into the World Lens Chapter Codex</small></span></label>
             `, { find: find("Smart AI reader & filtering", "smart filter prose dialogue extraction cognition trace preset metadata") })}
@@ -51376,6 +50592,8 @@ class VisualNovelSettingsPanel {
         return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, smartProseFilter: checked }) };
       case "smartDialogueExtraction":
         return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, smartDialogueExtraction: checked }) };
+      case "smartBeatSegmentation":
+        return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, smartBeatSegmentation: checked }) };
       case "virtualCameraEnabled":
         return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, virtualCameraEnabled: checked }) };
       case "confidantCutInsEnabled":
@@ -52052,6 +51270,7 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
     this.control("sentimentLighting").checked = config2.readerPreferences.sentimentLighting !== false;
     this.control("smartProseFilter").checked = config2.readerPreferences.smartProseFilter !== false;
     this.control("smartDialogueExtraction").checked = config2.readerPreferences.smartDialogueExtraction !== false;
+    this.control("smartBeatSegmentation").checked = config2.readerPreferences.smartBeatSegmentation !== false;
     this.control("virtualCameraEnabled").checked = config2.readerPreferences.virtualCameraEnabled !== false;
     this.control("confidantCutInsEnabled").checked = config2.readerPreferences.confidantCutInsEnabled !== false;
     const isLight = config2.themePreset === "paper-novel" || config2.readerPreferences.theme === "light";
@@ -52558,7 +51777,7 @@ class VersionComparison {
   dragging = false;
   constructor() {
     this.element.dataset.versionComparison = "";
-    this.element.innerHTML = '<summary>Compare saved artwork</summary><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0"><label>Saved version<select data-compare-version aria-label="Saved version to compare"></select></label><label>Comparison view<select data-compare-mode aria-label="Comparison view"><option value="wipe">Split Curtain</option><option value="side">Side by side</option></select></label></div><div data-compare-images style="position:relative;height:260px;background:var(--vn-shell-field,#17212c);overflow:hidden;border-radius:10px;border:1px solid var(--edge,rgba(255,255,255,.15));touch-action:pan-y;user-select:none"><img data-compare-current alt="Current picture" hidden><img data-compare-saved alt="Saved version" hidden><span data-compare-badge-left style="position:absolute;top:8px;left:8px;z-index:4;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,0.68);color:#fff;font-size:10px;font-weight:700;letter-spacing:.04em;pointer-events:none">SAVED</span><span data-compare-badge-right style="position:absolute;top:8px;right:8px;z-index:4;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,0.68);color:#fff;font-size:10px;font-weight:700;letter-spacing:.04em;pointer-events:none">CURRENT</span><div data-compare-divider style="position:absolute;top:0;bottom:0;left:50%;width:2px;background:var(--accent,#dcebad);box-shadow:0 0 8px rgba(0,0,0,.6);z-index:5;cursor:ew-resize;transform:translateX(-1px)"><span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:28px;height:28px;border-radius:999px;background:var(--accent,#dcebad);color:#0f2019;display:grid;place-items:center;font-size:13px;font-weight:800;box-shadow:0 2px 8px rgba(0,0,0,.45)">⇔</span></div></div><label data-compare-range-label>Drag curtain or slide to reveal saved version<input data-compare-range type="range" min="0" max="100" value="50" aria-label="Reveal saved version"></label><small data-compare-value>50%</small><p data-compare-status role="status"></p><small>Comparing never restores or generates an image. Use the separate Restore button to change the active picture.</small>';
+    this.element.innerHTML = '<summary>Compare saved artwork</summary><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0"><label>Saved version<select data-compare-version aria-label="Saved version to compare" style="font-size:16px"></select></label><label>Comparison view<select data-compare-mode aria-label="Comparison view" style="font-size:16px"><option value="wipe">Split Curtain</option><option value="side">Side by side</option></select></label></div><div data-compare-images style="position:relative;height:260px;background:var(--vn-shell-field,#17212c);overflow:hidden;border-radius:10px;border:1px solid var(--edge,rgba(255,255,255,.15));touch-action:none;user-select:none"><img data-compare-current alt="Current picture" hidden><img data-compare-saved alt="Saved version" hidden><span data-compare-badge-left style="position:absolute;top:8px;left:8px;z-index:4;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,0.68);color:#fff;font-size:10px;font-weight:700;letter-spacing:.04em;pointer-events:none">SAVED</span><span data-compare-badge-right style="position:absolute;top:8px;right:8px;z-index:4;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,0.68);color:#fff;font-size:10px;font-weight:700;letter-spacing:.04em;pointer-events:none">CURRENT</span><div data-compare-divider style="position:absolute;top:0;bottom:0;left:50%;width:2px;background:var(--accent,#dcebad);box-shadow:0 0 8px rgba(0,0,0,.6);z-index:5;cursor:ew-resize;touch-action:none;transform:translateX(-1px)"><span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:44px;height:44px;border-radius:999px;background:transparent;display:grid;place-items:center"><span style="width:28px;height:28px;border-radius:999px;background:var(--accent,#dcebad);color:#0f2019;display:grid;place-items:center;font-size:13px;font-weight:800;box-shadow:0 2px 8px rgba(0,0,0,.45)">⇔</span></span></div></div><label data-compare-range-label>Drag curtain or slide to reveal saved version<input data-compare-range type="range" min="0" max="100" value="50" aria-label="Reveal saved version"></label><small data-compare-value>50%</small><p data-compare-status role="status"></p><small>Comparing never restores or generates an image. Use the separate Restore button to change the active picture.</small>';
     this.select.onchange = () => {
       this.signature = "";
       this.render();
@@ -52592,6 +51811,11 @@ class VersionComparison {
         return;
       this.dragging = true;
       const ev = e;
+      if (typeof ev.pointerId === "number") {
+        try {
+          images.setPointerCapture?.(ev.pointerId);
+        } catch {}
+      }
       if (typeof ev.clientX === "number")
         updateFromPointer(ev.clientX);
     });
@@ -52645,6 +51869,7 @@ class VersionComparison {
     const amount = this.element.querySelector("[data-compare-range]").value;
     const images = this.element.querySelector("[data-compare-images]");
     images.style.display = side ? "grid" : "block";
+    images.style.touchAction = side ? "pan-y" : "none";
     images.style.gridTemplateColumns = "1fr 1fr";
     const divider = this.element.querySelector("[data-compare-divider]");
     if (divider) {
@@ -53416,6 +52641,7 @@ var PREPARED_BRIEF_CSS = `
 [data-prepared-brief]{margin:12px 0;border-top:1px solid var(--edge)}
 [data-prepared-brief] p{font-size:12px;line-height:1.5;margin:8px 0}
 :is([data-brief-rows],[data-cast-rows],[data-style-rows],[data-engine-rows]){display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px 12px;margin:12px 0;font-size:13px}
+@media(max-width:420px){:is([data-brief-rows],[data-cast-rows],[data-style-rows],[data-engine-rows]){grid-template-columns:minmax(0,1fr);gap:4px}}
 :is([data-brief-rows],[data-cast-rows],[data-style-rows],[data-engine-rows]) dt{color:var(--vn-shell-muted,#bbc);font-weight:500}
 :is([data-brief-rows],[data-cast-rows],[data-style-rows],[data-engine-rows]) dd{margin:0;min-width:0;max-height:10em;overflow:auto;overflow-wrap:anywhere;white-space:pre-wrap}
 :is([data-brief-rows],[data-cast-rows],[data-style-rows],[data-engine-rows]) dd:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -53423,7 +52649,7 @@ var PREPARED_BRIEF_CSS = `
 [data-engine-pill]{display:inline-block;padding:2px 8px;font-size:11px;font-weight:600;border-radius:12px;background:rgba(220,235,173,0.15);color:var(--accent);margin-bottom:8px}
 [data-engine-warning]{color:#ffaa88;font-size:12px;margin:4px 0}
 [data-shadow-box]{margin:8px 0;padding:8px;border-radius:6px;background:var(--vn-shell-field,rgba(0,0,0,0.3));border:1px solid var(--edge)}
-[data-shadow-box] textarea{width:100%;min-height:60px;font:12px monospace;background:transparent;border:none;color:inherit;resize:vertical}
+[data-shadow-box] textarea{width:100%;min-height:60px;font:16px/1.4 monospace;background:transparent;border:none;color:inherit;resize:vertical}
 `;
 
 class PreparedBriefView {
@@ -53639,7 +52865,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.155";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.156";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -54171,7 +53397,7 @@ var CSS3 = `
 @media(max-height:500px){section{inset:max(76px,calc(env(safe-area-inset-top) + 64px)) 8px calc(max(12px,env(safe-area-inset-bottom)) + var(--reader-keyboard-inset,0px));width:auto;max-height:none}[data-studio-header],[data-studio-footer]{padding:8px 12px}[data-studio-footer] .row{flex-wrap:nowrap;overflow-x:auto}[data-studio-footer] .row button{flex:none}[data-studio-footer] [data-notice]{max-height:12dvh}}
 `;
 var INSPECTOR_CSS = `
-:host{--paper:var(--vn-shell-panel,#171822)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])){--paper:#f8faf6;color:#172721;--vn-shell-text:#172721;--vn-shell-muted:#4b6b5d;--vn-shell-field:#ffffff;--vn-shell-button:#e5eee2;--accent:#1e5a40;--edge:rgba(86,128,107,.35)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) section{color:#172721!important;background:#f8faf6!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) details{background:#ffffff!important;border-color:rgba(86,128,107,.3)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-context]{background:#eef5ee!important;border-color:rgba(86,128,107,.3)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-scene]{color:#142820!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) textarea{background:#ffffff!important;color:#142820!important;border-color:rgba(86,128,107,.35)!important}section{width:min(520px,calc(100% - 24px));color:var(--vn-shell-text,#eee);backdrop-filter:blur(16px)}section small,section p{color:var(--vn-shell-muted,#bbc)}[data-studio-body]{padding-top:12px}details{border:1px solid color-mix(in srgb,var(--edge) 65%,transparent);border-radius:10px;background:rgba(255,255,255,.025);padding:0 12px;margin:8px 0}details[open]{padding-bottom:12px;background:rgba(255,255,255,.04);border-color:color-mix(in srgb,var(--accent) 42%,var(--edge))}summary{font-weight:600}[data-context]{display:flex;gap:12px;align-items:flex-start;margin:8px 0 10px;padding:10px 12px;border-radius:12px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 12%,rgba(255,255,255,.03)),rgba(0,0,0,.24));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--edge))}[data-context-text]{min-width:0;flex:1}[data-status]{font-size:15px;display:block}[data-paragraph]{display:inline-block;margin-top:3px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.07);font-size:11px;font-weight:600}[data-scene]{margin:5px 0 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12.5px}[data-thumbnail]{width:66px;height:82px;flex:none;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--edge));border-radius:10px;background:var(--vn-shell-field,#101119);display:grid;place-items:center;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.35)}[data-thumbnail] img{width:100%;height:100%;object-fit:cover}[data-placeholder]{font-size:28px;color:var(--accent)}[data-state-detail]{margin:8px 0;font-size:13px}[data-meta]{font-size:12px;margin:4px 0;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.05);display:inline-block}[data-prompt-editor]{margin:8px 0;padding:12px;border-radius:12px;background:rgba(255,255,255,.025);border:1px solid color-mix(in srgb,var(--edge) 70%,transparent)}[data-edit-help]{font-size:12px;margin:0 0 8px}label{font-weight:500;margin:10px 0}label small{float:right;font-weight:400;font-size:11px}textarea{margin-top:6px;font:15px/1.5 var(--vn-shell-family,system-ui);border-radius:8px}[data-positive]{min-height:130px;resize:vertical;transition:min-height .2s ease}[data-positive][data-expanded="true"]{min-height:260px}[data-negative]{min-height:68px;resize:vertical}[data-budget-meter]{height:6px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin:8px 0 4px}[data-budget-fill]{height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width .2s ease,background-color .2s ease}[data-budget-fill][data-tone="warn"]{background:#f5c462}[data-budget-fill][data-tone="over"]{background:var(--vn-shell-danger,#ffb4ab)}[data-combined-count]{display:block;font-variant-numeric:tabular-nums;text-align:right;font-size:12px}[data-validation]{display:block;color:var(--vn-shell-danger,#ffb4ab);margin:6px 0}[aria-invalid="true"]{border-color:var(--vn-shell-danger,#ffb4ab)}[data-picture-strip]{display:flex;gap:8px;margin-bottom:8px;overflow-x:auto;scrollbar-width:thin;-webkit-overflow-scrolling:touch;padding-bottom:4px}[data-picture-strip] button{flex:0 0 auto;min-width:134px;max-width:210px;padding:6px 10px;font-size:12px;display:flex;align-items:center;gap:8px;border-radius:10px}[data-picture-strip] img{width:30px;height:34px;object-fit:cover;border-radius:5px;flex:none}[data-picture-strip] [aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,var(--vn-shell-button,#252632));box-shadow:inset 0 0 0 1px var(--accent)}[data-picture-navigation] label{margin:0}[data-retry-queue]{margin:8px 0;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid color-mix(in srgb,var(--edge) 55%,transparent)}[data-retry-queue] [data-queue-status]{display:block;margin-top:6px;font-size:12px}[data-studio-footer] .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}[data-studio-footer] button{flex:1 1 115px;min-height:44px;min-width:44px;border-color:var(--accent);font-weight:650;justify-content:center}[data-studio-footer] button[data-generate],[data-studio-footer] button[data-prepare],[data-studio-footer] button[data-primary-repair]{flex:1.6 1 165px;background:color-mix(in srgb,var(--accent) 20%,var(--vn-shell-button,#252632))}[data-action-help]{display:block;font-size:11.5px;text-align:center;margin-top:6px}[data-notice-row]{border-top:1px solid var(--edge);margin-top:10px}[data-notice]{font-size:12px}[data-rewrite-changed]{padding:10px;border:1px solid var(--accent);border-radius:8px;margin:8px 0;background:color-mix(in srgb,var(--accent) 8%,transparent)}[data-rewrite-changed] p{margin:0 0 8px}[data-previous-scene]{padding-left:20px;overflow-wrap:anywhere}[data-reply-settings] details{margin-left:4px}[data-secondary-actions]{margin-bottom:8px}[data-secondary-actions] button{font-size:13px}[data-subject-name]{width:100%}
+:host{--paper:var(--vn-shell-panel,#171822)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])){--paper:#f8faf6;color:#172721;--vn-shell-text:#172721;--vn-shell-muted:#4b6b5d;--vn-shell-field:#ffffff;--vn-shell-button:#e5eee2;--accent:#1e5a40;--edge:rgba(86,128,107,.35)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) section{color:#172721!important;background:#f8faf6!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) details{background:#ffffff!important;border-color:rgba(86,128,107,.3)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-context]{background:#eef5ee!important;border-color:rgba(86,128,107,.3)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-scene]{color:#142820!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) textarea{background:#ffffff!important;color:#142820!important;border-color:rgba(86,128,107,.35)!important}section{width:min(520px,calc(100% - 24px));color:var(--vn-shell-text,#eee);backdrop-filter:blur(16px)}section small,section p{color:var(--vn-shell-muted,#bbc)}[data-studio-body]{padding-top:12px}details{border:1px solid color-mix(in srgb,var(--edge) 65%,transparent);border-radius:10px;background:rgba(255,255,255,.025);padding:0 12px;margin:8px 0}details[open]{padding-bottom:12px;background:rgba(255,255,255,.04);border-color:color-mix(in srgb,var(--accent) 42%,var(--edge))}summary{font-weight:600}[data-context]{display:flex;gap:12px;align-items:flex-start;margin:8px 0 10px;padding:12px;border-radius:14px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 12%,rgba(255,255,255,.03)),rgba(0,0,0,.24));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--edge))}[data-context-text]{min-width:0;flex:1}[data-status]{font-size:15px;display:block}[data-paragraph]{display:inline-block;margin-top:3px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.07);font-size:11px;font-weight:600}[data-scene]{margin:5px 0 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12.5px}[data-thumbnail]{width:84px;height:108px;flex:none;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--edge));border-radius:12px;background:var(--vn-shell-field,#101119);display:grid;place-items:center;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.35)}[data-thumbnail] img{width:100%;height:100%;object-fit:cover}[data-placeholder]{font-size:28px;color:var(--accent)}[data-state-detail]{margin:8px 0;font-size:13px}[data-meta]{font-size:12px;margin:4px 0;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.05);display:inline-block}[data-prompt-editor]{margin:8px 0;padding:12px;border-radius:12px;background:rgba(255,255,255,.025);border:1px solid color-mix(in srgb,var(--edge) 70%,transparent)}[data-edit-help]{font-size:12px;margin:0 0 8px}label{font-weight:500;margin:10px 0}label small{float:right;font-weight:400;font-size:11px}textarea{margin-top:6px;font:16px/1.5 var(--vn-shell-family,system-ui);border-radius:8px}select,input:not([type=checkbox]){font-size:16px}[data-positive]{min-height:130px;resize:vertical;transition:min-height .2s ease}[data-positive][data-expanded="true"]{min-height:260px}[data-negative]{min-height:68px;resize:vertical}[data-budget-meter]{height:6px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin:8px 0 4px}[data-budget-fill]{height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width .2s ease,background-color .2s ease}[data-budget-fill][data-tone="warn"]{background:#f5c462}[data-budget-fill][data-tone="over"]{background:var(--vn-shell-danger,#ffb4ab)}[data-combined-count]{display:block;font-variant-numeric:tabular-nums;text-align:right;font-size:12px}[data-validation]{display:block;color:var(--vn-shell-danger,#ffb4ab);margin:6px 0}[aria-invalid="true"]{border-color:var(--vn-shell-danger,#ffb4ab)}[data-picture-strip]{display:flex;gap:8px;margin-bottom:8px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:4px}[data-picture-strip] button{flex:0 0 auto;min-width:134px;max-width:210px;min-height:48px;padding:6px 10px;font-size:12px;display:flex;align-items:center;gap:8px;border-radius:12px}[data-picture-strip] img{width:34px;height:40px;object-fit:cover;border-radius:6px;flex:none}[data-picture-strip] [aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,var(--vn-shell-button,#252632));box-shadow:inset 0 0 0 1px var(--accent)}[data-picture-navigation] label{margin:0}[data-retry-queue]{margin:8px 0;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid color-mix(in srgb,var(--edge) 55%,transparent)}[data-retry-queue] [data-queue-status]{display:block;margin-top:6px;font-size:12px}[data-studio-footer] .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}[data-studio-footer] button{flex:1 1 115px;min-height:44px;min-width:44px;border-color:var(--accent);font-weight:650;justify-content:center}[data-studio-footer] button[data-generate],[data-studio-footer] button[data-prepare],[data-studio-footer] button[data-primary-repair]{flex:1.6 1 165px;background:color-mix(in srgb,var(--accent) 20%,var(--vn-shell-button,#252632))}[data-action-help]{display:block;font-size:11.5px;text-align:center;margin-top:6px}[data-notice-row]{border-top:1px solid var(--edge);margin-top:10px}[data-notice]{font-size:12px}[data-rewrite-changed]{padding:10px;border:1px solid var(--accent);border-radius:8px;margin:8px 0;background:color-mix(in srgb,var(--accent) 8%,transparent)}[data-rewrite-changed] p{margin:0 0 8px}[data-previous-scene]{padding-left:20px;overflow-wrap:anywhere}[data-reply-settings] details{margin-left:4px}[data-secondary-actions]{margin-bottom:8px}[data-secondary-actions] button{font-size:13px}[data-subject-name]{width:100%}
 section[data-state="planning"],section[data-state="empty"],section[data-state="zero-budget"],section[data-state="idle"]{bottom:auto;max-height:calc(100% - 92px)}
 .studio-tab-bar{position:sticky;top:0;z-index:20;background:var(--paper);display:flex;align-items:center;gap:6px;overflow-x:auto;padding:6px 0 10px;margin-bottom:10px;border-bottom:1px solid var(--edge);scrollbar-width:none;-webkit-overflow-scrolling:touch}.studio-tab-bar::-webkit-scrollbar{display:none}
 .studio-tab-btn{background:var(--vn-shell-field,rgba(255,255,255,.05));border:1px solid var(--edge);border-radius:20px;padding:5px 12px;font-size:11.5px;font-weight:600;color:var(--vn-shell-muted,#aaa);cursor:pointer;white-space:nowrap;flex:none;min-height:44px;min-width:44px;transition:all .15s cubic-bezier(0.2,0,0,1)}.studio-tab-btn:hover{background:rgba(255,255,255,.08);color:var(--vn-shell-text,#eee);transform:translateY(-1px)}.studio-tab-btn[aria-selected="true"]{background:color-mix(in srgb,var(--accent) 24%,var(--vn-shell-button,#252632));border-color:var(--accent);color:var(--accent);font-weight:700;box-shadow:0 0 10px color-mix(in srgb,var(--accent) 25%,transparent)}
@@ -54179,6 +53405,25 @@ section[data-state="planning"],section[data-state="empty"],section[data-state="z
 .studio-layout-toggle{margin-left:auto;background:var(--vn-shell-field,rgba(255,255,255,.08));border:1px solid var(--accent);border-radius:20px;padding:4px 10px;font-size:11px;font-weight:700;color:var(--accent);cursor:pointer;white-space:nowrap;flex:none;min-height:44px;min-width:44px;transition:all .15s ease}
 .studio-layout-toggle:hover{background:color-mix(in srgb,var(--accent) 20%,transparent)}
 .studio-tab-panel{display:flex;flex-direction:column;gap:10px;background:var(--vn-shell-field,rgba(255,255,255,.03));border:1px solid var(--edge);border-radius:14px;padding:12px;margin-bottom:10px;box-shadow:0 4px 16px rgba(0,0,0,.15);transition:border-color .2s ease}.studio-tab-panel[hidden]{display:none!important}
+.studio-hero-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.studio-hero-actions button{min-height:44px;min-width:44px;padding:6px 10px;font-size:11.5px;font-weight:650;border-radius:10px}
+.studio-hub-heading{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--vn-shell-muted,#9eb7a9);margin:4px 0 6px}
+.studio-hub-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.studio-hub-tile{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:3px;min-height:76px;padding:10px 12px;border-radius:14px;text-align:left;background:color-mix(in srgb,var(--accent) 7%,var(--vn-shell-button,rgba(255,255,255,.05)));border:1px solid var(--edge);transition:border-color .15s ease,transform .12s ease}
+.studio-hub-tile:hover{border-color:var(--accent);transform:translateY(-1px)}
+.studio-hub-tile-title{font-size:13px;font-weight:750;color:var(--vn-shell-text,#f4f7ee)}
+.studio-hub-tile-sub{font-size:11px;color:var(--vn-shell-muted,#9eb7a9);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.studio-hub-secondary{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.studio-hub-secondary button{flex:1 1 135px;min-height:44px;font-size:12px;font-weight:650;border-radius:12px}
+.studio-sheet-header{position:sticky;top:52px;z-index:15;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;margin:-4px 0 6px;border-radius:12px;background:var(--paper);border:1px solid var(--edge);box-shadow:0 4px 12px rgba(0,0,0,.18)}
+section[data-layout-mode="unified"] .studio-sheet-header{display:none!important}
+.studio-sheet-header strong{font-size:13px;flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.studio-sheet-header button{min-height:44px;min-width:44px;padding:6px 12px;border-radius:10px;font-size:12px;font-weight:700}
+.studio-sheet-done{background:var(--accent)!important;color:#0f2019!important;border-color:var(--accent)!important}
+:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) .studio-sheet-done{background:#234b39!important;color:#fbfdf7!important;border-color:#234b39!important}
+.studio-camera-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}.studio-camera-grid label{margin:0}
+@container(max-width:310px){.studio-camera-grid{grid-template-columns:1fr}}
+.studio-vf-stage{touch-action:none;cursor:crosshair}
+.studio-vf-reticle{position:absolute;width:24px;height:24px;border-radius:999px;border:2px solid var(--accent);box-shadow:0 0 0 2px rgba(0,0,0,.55);transform:translate(-50%,-50%);pointer-events:none;z-index:4}
+.studio-vf-reticle::after{content:'';position:absolute;inset:7px;border-radius:999px;background:var(--accent)}
 .studio-card-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:4px}
 .studio-card-title{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;color:var(--vn-shell-text,#f4f7ee)}.studio-activity-details{margin:6px 0;border:1px solid var(--edge);border-radius:10px;background:rgba(255,255,255,.02);padding:0 10px}.studio-activity-details[open]{padding-bottom:10px}.studio-activity-details summary{font-size:12px;font-weight:600;cursor:pointer;color:var(--vn-shell-muted,#aaa)}
 .studio-clause-bar{display:flex;gap:6px;overflow-x:auto;padding:2px 0 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch}.studio-clause-bar::-webkit-scrollbar{display:none}
@@ -54193,10 +53438,10 @@ section[data-state="planning"],section[data-state="empty"],section[data-state="z
 .studio-vf-grid{position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(to right,transparent 33%,rgba(255,255,255,.12) 33%,rgba(255,255,255,.12) 33.5%,transparent 33.5%,transparent 66.5%,rgba(255,255,255,.12) 66.5%,rgba(255,255,255,.12) 67%,transparent 67%),linear-gradient(to bottom,transparent 33%,rgba(255,255,255,.12) 33%,rgba(255,255,255,.12) 33.5%,transparent 33.5%,transparent 66.5%,rgba(255,255,255,.12) 66.5%,rgba(255,255,255,.12) 67%,transparent 67%)}
 .studio-vf-safe-curtain{position:absolute;left:0;right:0;bottom:0;height:25%;background:repeating-linear-gradient(-45deg,rgba(220,235,173,.12),rgba(220,235,173,.12) 6px,rgba(0,0,0,.35) 6px,rgba(0,0,0,.35) 12px);border-top:1px dashed var(--accent);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--accent);letter-spacing:.03em;pointer-events:none}
 .studio-vf-subjects{position:absolute;inset:8px 8px 26% 8px;pointer-events:none;display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap}
-.studio-vf-subject-chip{padding:3px 8px;border-radius:999px;background:rgba(15,24,20,.82);border:1px solid var(--accent);color:#fff;font-size:10.5px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.4)}
-.studio-vf-pill-row{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;-webkit-overflow-scrolling:touch}.studio-vf-pill-row::-webkit-scrollbar{display:none}
+.studio-vf-subject-chip{pointer-events:auto;min-height:44px;padding:6px 12px;border-radius:999px;background:rgba(15,24,20,.82);border:1px solid var(--accent);color:#fff;font-size:11px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.4)}
+.studio-vf-pill-row{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;-webkit-overflow-scrolling:touch}.studio-vf-pill-row::-webkit-overflow-scrolling:touch;scrollbar-width:none}.studio-vf-pill-row::-webkit-scrollbar{display:none}
 .studio-vf-pill{flex:0 0 auto;min-height:44px;min-width:44px;padding:6px 12px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid var(--edge);background:rgba(255,255,255,.04)}.studio-vf-pill[aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 22%,var(--vn-shell-button,#252632));color:var(--accent);font-weight:700}
-@container(max-width:600px){section{width:auto}[data-context]{gap:10px}[data-studio-body]{padding:10px}[data-thumbnail]{width:54px;height:70px}}
+@container(max-width:600px){section{width:auto}[data-context]{gap:10px}[data-studio-body]{padding:10px}[data-thumbnail]{width:74px;height:96px}}
 `;
 
 class ImageStudio {
@@ -54234,6 +53479,7 @@ class ImageStudio {
   templateRequest = "";
   defaultTemplate = "portrait";
   studioLayoutMode = "tabs";
+  draftFocalPoint = { x: 50, y: 36 };
   rebuilding = new Set;
   rerolling = new Set;
   cursor = 0;
@@ -54573,7 +53819,7 @@ class ImageStudio {
       }
       this.syncDirectorViewfinder();
     };
-    for (const sel of ["[data-camera-shot-size]", "[data-camera-angle]", "[data-camera-lens]", "[data-camera-composition]", "[data-camera-safe-area]"]) {
+    for (const sel of ["[data-camera-shot-size]", "[data-camera-angle]", "[data-camera-lens]", "[data-camera-composition]", "[data-camera-depth]", "[data-camera-safe-area]"]) {
       this.el(sel).onchange = () => this.syncDirectorViewfinder();
     }
     this.el("[data-apply-camera]").onclick = () => {
@@ -54649,6 +53895,10 @@ class ImageStudio {
     this.root.addEventListener("keydown", (event) => {
       const keyEvent = event;
       if (keyEvent.key === "Escape") {
+        if (this.studioLayoutMode === "tabs" && this.activeTab !== "picture") {
+          this.switchTab("picture");
+          return;
+        }
         this.el("[data-close]").click();
         return;
       }
@@ -54848,8 +54098,8 @@ class ImageStudio {
     const body2 = this.el("[data-studio-body]");
     const context = document.createElement("div");
     context.dataset.context = "";
-    context.innerHTML = '<div data-thumbnail style="position:relative;cursor:pointer" title="Click to view fullscreen"><img data-preview hidden alt="Selected picture"><span data-placeholder aria-hidden="true">◇</span><button type="button" data-preview-fullscreen aria-label="View fullscreen" style="position:absolute;bottom:3px;right:3px;width:24px;height:24px;border-radius:4px;border:none;background:rgba(0,0,0,0.7);color:#fff;font-size:13px;display:grid;place-items:center;cursor:pointer;padding:0;line-height:1">⛶</button></div><div data-context-text><strong data-status role="status"></strong><small data-paragraph></small></div>';
-    context.querySelector("[data-thumbnail]").addEventListener("click", () => {
+    context.innerHTML = '<div data-thumbnail style="position:relative;cursor:pointer" title="Click to view fullscreen"><img data-preview hidden alt="Selected picture"><span data-placeholder aria-hidden="true">◇</span><div data-preview-safe-curtain hidden class="studio-vf-safe-curtain" style="font-size:8.5px;letter-spacing:0">SAFE ZONE</div><span aria-hidden="true" style="position:absolute;bottom:4px;right:4px;width:24px;height:24px;border-radius:6px;border:1px solid rgba(255,255,255,0.28);background:rgba(0,0,0,0.68);color:#fff;font-size:12px;display:grid;place-items:center;pointer-events:none;line-height:1">⛶</span></div><div data-context-text><strong data-status role="status"></strong><small data-paragraph></small></div>';
+    const openHeroFullscreen = () => {
       const img = this.el("[data-preview]");
       if (!img.src || img.hidden)
         return;
@@ -54864,8 +54114,41 @@ class ImageStudio {
         prompt: record2?.prompt,
         negativePrompt: record2?.negativePrompt
       });
-    });
+    };
+    context.querySelector("[data-thumbnail]").addEventListener("click", openHeroFullscreen);
     context.querySelector("[data-context-text]").append(this.el("[data-scene]"));
+    const heroActions = document.createElement("div");
+    heroActions.className = "studio-hero-actions";
+    const safeMaskBtn = document.createElement("button");
+    safeMaskBtn.type = "button";
+    safeMaskBtn.dataset.toggleSafeMask = "";
+    safeMaskBtn.setAttribute("aria-pressed", "false");
+    safeMaskBtn.textContent = "\uD83C\uDFAD Safe Zone";
+    safeMaskBtn.onclick = () => {
+      const curtain = context.querySelector("[data-preview-safe-curtain]");
+      if (!curtain)
+        return;
+      curtain.hidden = !curtain.hidden;
+      const active = !curtain.hidden;
+      safeMaskBtn.setAttribute("aria-pressed", String(active));
+      safeMaskBtn.style.borderColor = active ? "var(--accent)" : "";
+    };
+    const fsHeroBtn = document.createElement("button");
+    fsHeroBtn.type = "button";
+    fsHeroBtn.dataset.heroFullscreen = "";
+    fsHeroBtn.textContent = "⛶ Fullscreen";
+    fsHeroBtn.onclick = openHeroFullscreen;
+    const compareHeroBtn = document.createElement("button");
+    compareHeroBtn.type = "button";
+    compareHeroBtn.dataset.hubCompareBtn = "";
+    compareHeroBtn.hidden = true;
+    compareHeroBtn.textContent = "⇔ Compare";
+    compareHeroBtn.onclick = () => {
+      this.comparison.element.open = true;
+      this.comparison.element.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+    };
+    heroActions.append(safeMaskBtn, fsHeroBtn, compareHeroBtn);
+    context.querySelector("[data-context-text]").append(heroActions);
     const versionsContainer = document.createElement("div");
     versionsContainer.dataset.previousVersionsContainer = "";
     versionsContainer.hidden = true;
@@ -54906,7 +54189,7 @@ class ImageStudio {
         <small style="opacity:0.75;font-size:10px">Cinematic detail &amp; lighting</small>
       </div>
       <div style="display:flex;gap:6px">
-        <input type="text" data-enrich-guidance placeholder="Optional direction (e.g. 'longer hair, golden hour rim lighting, bokeh')..." maxlength="400" style="flex:1;min-height:44px;padding:6px 10px;border-radius:8px;border:1px solid var(--edge);background:var(--vn-shell-field,#101119);color:inherit;font-size:12px" />
+        <input type="text" data-enrich-guidance placeholder="Optional direction (e.g. 'longer hair, golden hour rim lighting, bokeh')..." maxlength="400" style="flex:1;min-height:44px;padding:6px 10px;border-radius:8px;border:1px solid var(--edge);background:var(--vn-shell-field,#101119);color:inherit;font-size:16px" />
         <button type="button" data-enrich-submit style="flex:none;min-height:44px;min-width:44px;padding:6px 14px;border-radius:8px;background:color-mix(in srgb,var(--accent) 22%,var(--vn-shell-button,#252632));border:1px solid var(--accent);color:#fff;font-weight:650;font-size:12px;cursor:pointer;white-space:nowrap">✨ Enrich</button>
       </div>
     `;
@@ -54952,6 +54235,7 @@ class ImageStudio {
     tools.append(template);
     const styleTools = document.createElement("details");
     styleTools.dataset.styleTools = "";
+    styleTools.open = true;
     styleTools.innerHTML = `<summary>Change Style</summary>
       <div style="margin:8px 0">
         <div data-active-style-badge style="font-size:11px;font-weight:600;margin-bottom:6px;color:var(--accent,#7c9cff)">
@@ -54964,65 +54248,68 @@ class ImageStudio {
     tools.append(styleTools);
     const cameraTools = document.createElement("details");
     cameraTools.dataset.cameraTools = "";
+    cameraTools.open = true;
     cameraTools.innerHTML = `<summary>Camera &amp; Director overrides</summary>
       <div style="margin:8px 0">
         <label class="toggle"><input type="checkbox" data-auto-director checked>Auto Director (smart shot choices)</label>
         <div data-manual-camera-controls style="margin-top:8px">
-          <label>Shot size<select data-camera-shot-size disabled>
-            <option value="">Auto</option>
-            <option value="extreme-close-up">Extreme close-up</option>
-            <option value="close-up">Close-up</option>
-            <option value="medium-close-up">Medium close-up</option>
-            <option value="medium">Medium</option>
-            <option value="medium-wide">Medium-wide</option>
-            <option value="full-body">Full-body</option>
-            <option value="wide">Wide</option>
-            <option value="establishing">Establishing</option>
-            <option value="macro">Macro</option>
-          </select></label>
-          <label>Angle<select data-camera-angle disabled>
-            <option value="">Auto</option>
-            <option value="eye-level">Eye-level</option>
-            <option value="low-angle">Low-angle</option>
-            <option value="high-angle">High-angle</option>
-            <option value="overhead">Overhead</option>
-            <option value="ground-level">Ground-level</option>
-            <option value="three-quarter">Three-quarter</option>
-            <option value="profile">Profile</option>
-            <option value="over-the-shoulder">Over-the-shoulder</option>
-          </select></label>
-          <label>Lens feel<select data-camera-lens disabled>
-            <option value="">Auto</option>
-            <option value="ultrawide">Ultrawide</option>
-            <option value="wide">Wide</option>
-            <option value="normal">Normal (50mm)</option>
-            <option value="portrait">Portrait (85mm)</option>
-            <option value="telephoto">Telephoto</option>
-            <option value="macro">Macro</option>
-          </select></label>
-          <label>Composition<select data-camera-composition disabled>
-            <option value="">Auto</option>
-            <option value="centered">Centered</option>
-            <option value="rule-of-thirds">Rule of thirds</option>
-            <option value="symmetrical">Symmetrical</option>
-            <option value="layered-depth">Layered depth</option>
-            <option value="leading-lines">Leading lines</option>
-            <option value="negative-space">Negative space</option>
-            <option value="lateral-ensemble">Lateral ensemble</option>
-          </select></label>
-          <label>Depth of field<select data-camera-depth disabled>
-            <option value="">Auto</option>
-            <option value="deep">Deep focus</option>
-            <option value="moderate">Moderate</option>
-            <option value="shallow">Shallow / bokeh</option>
-            <option value="selective">Selective</option>
-          </select></label>
-          <label>Dialogue safe area<select data-camera-safe-area disabled>
-            <option value="auto">Auto</option>
-            <option value="always">Always reserve bottom</option>
-            <option value="off">Off (full bleed)</option>
-          </select></label>
-          <button type="button" data-apply-camera style="margin-top:6px">Apply camera</button>
+          <div class="studio-camera-grid">
+            <label>Shot size<select data-camera-shot-size disabled>
+              <option value="">Auto</option>
+              <option value="extreme-close-up">Extreme close-up</option>
+              <option value="close-up">Close-up</option>
+              <option value="medium-close-up">Medium close-up</option>
+              <option value="medium">Medium</option>
+              <option value="medium-wide">Medium-wide</option>
+              <option value="full-body">Full-body</option>
+              <option value="wide">Wide</option>
+              <option value="establishing">Establishing</option>
+              <option value="macro">Macro</option>
+            </select></label>
+            <label>Angle<select data-camera-angle disabled>
+              <option value="">Auto</option>
+              <option value="eye-level">Eye-level</option>
+              <option value="low-angle">Low-angle</option>
+              <option value="high-angle">High-angle</option>
+              <option value="overhead">Overhead</option>
+              <option value="ground-level">Ground-level</option>
+              <option value="three-quarter">Three-quarter</option>
+              <option value="profile">Profile</option>
+              <option value="over-the-shoulder">Over-the-shoulder</option>
+            </select></label>
+            <label>Lens feel<select data-camera-lens disabled>
+              <option value="">Auto</option>
+              <option value="ultrawide">Ultrawide</option>
+              <option value="wide">Wide</option>
+              <option value="normal">Normal (50mm)</option>
+              <option value="portrait">Portrait (85mm)</option>
+              <option value="telephoto">Telephoto</option>
+              <option value="macro">Macro</option>
+            </select></label>
+            <label>Composition<select data-camera-composition disabled>
+              <option value="">Auto</option>
+              <option value="centered">Centered</option>
+              <option value="rule-of-thirds">Rule of thirds</option>
+              <option value="symmetrical">Symmetrical</option>
+              <option value="layered-depth">Layered depth</option>
+              <option value="leading-lines">Leading lines</option>
+              <option value="negative-space">Negative space</option>
+              <option value="lateral-ensemble">Lateral ensemble</option>
+            </select></label>
+            <label>Depth of field<select data-camera-depth disabled>
+              <option value="">Auto</option>
+              <option value="deep">Deep focus</option>
+              <option value="moderate">Moderate</option>
+              <option value="shallow">Shallow / bokeh</option>
+              <option value="selective">Selective</option>
+            </select></label>
+            <label>Dialogue safe area<select data-camera-safe-area disabled>
+              <option value="auto">Auto</option>
+              <option value="always">Always reserve bottom</option>
+              <option value="off">Off (full bleed)</option>
+            </select></label>
+          </div>
+          <button type="button" data-apply-camera style="margin-top:10px;width:100%">Apply camera</button>
         </div>
       </div>`;
     tools.append(cameraTools);
@@ -55073,8 +54360,8 @@ class ImageStudio {
     tabs.setAttribute("role", "tablist");
     tabs.setAttribute("aria-label", "Artwork studio sections");
     const tabDefs = [
-      { id: "picture", label: "\uD83D\uDDBC️ Picture" },
-      { id: "prompt", label: "\uD83D\uDCDD Prompt" },
+      { id: "picture", label: "\uD83C\uDFE0 Hub" },
+      { id: "prompt", label: "\uD83D\uDCDD Words" },
       { id: "camera", label: "\uD83D\uDCD0 Camera" },
       { id: "style", label: "\uD83C\uDFA8 Style" },
       { id: "model", label: "⚡ Model" },
@@ -55095,11 +54382,11 @@ class ImageStudio {
     layoutToggle.type = "button";
     layoutToggle.className = "studio-layout-toggle";
     layoutToggle.dataset.layoutModeToggle = "";
-    layoutToggle.textContent = this.studioLayoutMode === "unified" ? "\uD83C\uDF1F All in One" : "\uD83D\uDCD1 Tab Focus";
-    layoutToggle.title = "Toggle between all-in-one unified view and single tab focus";
+    layoutToggle.textContent = this.studioLayoutMode === "unified" ? "\uD83C\uDF1F All in One" : "\uD83D\uDCD1 Focus Sheets";
+    layoutToggle.title = "Toggle between all-in-one unified view and Focus Sheet mode";
     layoutToggle.onclick = () => {
       this.studioLayoutMode = this.studioLayoutMode === "unified" ? "tabs" : "unified";
-      layoutToggle.textContent = this.studioLayoutMode === "unified" ? "\uD83C\uDF1F All in One" : "\uD83D\uDCD1 Tab Focus";
+      layoutToggle.textContent = this.studioLayoutMode === "unified" ? "\uD83C\uDF1F All in One" : "\uD83D\uDCD1 Focus Sheets";
       this.switchTab(this.activeTab);
     };
     tabs.append(layoutToggle);
@@ -55122,9 +54409,74 @@ class ImageStudio {
       }
       return h;
     };
+    const sheetHeader = (titleText) => {
+      const bar = document.createElement("div");
+      bar.className = "studio-sheet-header";
+      const backBtn = document.createElement("button");
+      backBtn.type = "button";
+      backBtn.dataset.sheetBack = "";
+      backBtn.textContent = "← Hub";
+      backBtn.onclick = () => this.switchTab("picture");
+      const title = document.createElement("strong");
+      title.textContent = titleText;
+      const doneBtn = document.createElement("button");
+      doneBtn.type = "button";
+      doneBtn.className = "studio-sheet-done";
+      doneBtn.dataset.sheetDone = "";
+      doneBtn.textContent = "Done ✓";
+      doneBtn.onclick = () => this.switchTab("picture");
+      bar.append(backBtn, title, doneBtn);
+      return bar;
+    };
     const panelPicture = document.createElement("div");
     panelPicture.className = "studio-tab-panel";
     panelPicture.dataset.tabPanel = "picture";
+    const hubBox = document.createElement("div");
+    hubBox.dataset.studioHub = "";
+    const hubHeading = document.createElement("div");
+    hubHeading.className = "studio-hub-heading";
+    hubHeading.textContent = "What do you want to adjust?";
+    const hubGrid = document.createElement("div");
+    hubGrid.className = "studio-hub-grid";
+    for (const [tabId, titleText, subText] of [
+      ["camera", "\uD83D\uDCD0 Camera", "Auto framing"],
+      ["style", "\uD83C\uDFA8 Style", "Neutral / scene"],
+      ["prompt", "\uD83D\uDCDD Edit Wording", "Clauses & prompt"],
+      ["model", "⚡ Model & Retry", "Active default"]
+    ]) {
+      const tile = document.createElement("button");
+      tile.type = "button";
+      tile.className = "studio-hub-tile";
+      tile.dataset.hubTile = tabId;
+      const tileTitle = document.createElement("span");
+      tileTitle.className = "studio-hub-tile-title";
+      tileTitle.textContent = titleText;
+      const tileSub = document.createElement("span");
+      tileSub.className = "studio-hub-tile-sub";
+      tileSub.dataset.hubSub = tabId;
+      tileSub.textContent = subText;
+      tile.append(tileTitle, tileSub);
+      tile.onclick = () => this.switchTab(tabId);
+      hubGrid.append(tile);
+    }
+    const hubSecondary = document.createElement("div");
+    hubSecondary.className = "studio-hub-secondary";
+    const quickEnrichBtn = document.createElement("button");
+    quickEnrichBtn.type = "button";
+    quickEnrichBtn.dataset.hubQuickEnrich = "";
+    quickEnrichBtn.textContent = "✨ Quick Enrich Wording";
+    quickEnrichBtn.onclick = () => {
+      this.switchTab("prompt");
+      const input2 = this.root.querySelector("[data-enrich-guidance]");
+      input2?.focus({ preventScroll: false });
+    };
+    const historyHubBtn = document.createElement("button");
+    historyHubBtn.type = "button";
+    historyHubBtn.dataset.hubTile = "history";
+    historyHubBtn.textContent = "\uD83D\uDD52 History, Brief & Logs";
+    historyHubBtn.onclick = () => this.switchTab("history");
+    hubSecondary.append(quickEnrichBtn, historyHubBtn);
+    hubBox.append(hubHeading, hubGrid, hubSecondary);
     const explanation = document.createElement("details");
     explanation.dataset.pictureExplanation = "";
     explanation.innerHTML = '<summary>Why this picture?</summary><p data-picture-explanation-text style="white-space:pre-wrap;overflow-wrap:anywhere"></p>';
@@ -55151,23 +54503,23 @@ class ImageStudio {
     correctionHelp.setAttribute("role", "status");
     correctionHelp.textContent = "Open the controls you need, review your changes, then choose the explicit preview or generation action.";
     corrections.append(correctionButtons, correctionHelp);
-    panelPicture.append(cardHeader("\uD83D\uDDBC️", "Picture & Scene Moment", "Review or inspect"), versionsContainer, explanation, corrections, detail, this.brief.element, this.el("[data-recovery]").closest("details"));
+    panelPicture.append(cardHeader("\uD83C\uDFE0", "Director’s Command Hub", "Tap any focus card below"), context, hubBox, versionsContainer, explanation, corrections, detail, this.brief.element, this.el("[data-recovery]").closest("details"));
     const panelModel = document.createElement("div");
     panelModel.className = "studio-tab-panel";
     panelModel.dataset.tabPanel = "model";
     panelModel.hidden = this.studioLayoutMode === "tabs";
-    panelModel.append(cardHeader("⚡", "Image Model & Generation", "Switch model or rerun"), modelTools);
+    panelModel.append(sheetHeader("⚡ Model & Retry"), cardHeader("⚡", "Image Model & Generation", "Switch model or rerun"), modelTools);
     const panelStyle = document.createElement("div");
     panelStyle.className = "studio-tab-panel";
     panelStyle.dataset.tabPanel = "style";
     panelStyle.hidden = this.studioLayoutMode === "tabs";
-    panelStyle.append(cardHeader("\uD83C\uDFA8", "Visual Style", "Select or change style"), styleTools);
+    panelStyle.append(sheetHeader("\uD83C\uDFA8 Visual Style"), cardHeader("\uD83C\uDFA8", "Visual Style", "Select or change style"), styleTools);
     const viewfinder = this.createDirectorViewfinder();
     const panelCamera = document.createElement("div");
     panelCamera.className = "studio-tab-panel";
     panelCamera.dataset.tabPanel = "camera";
     panelCamera.hidden = this.studioLayoutMode === "tabs";
-    panelCamera.append(cardHeader("\uD83D\uDCD0", "Camera & Framing", "Viewfinder, shots & ratios"), viewfinder, template, cameraTools, outputOptions);
+    panelCamera.append(sheetHeader("\uD83D\uDCD0 Camera & Framing"), cardHeader("\uD83D\uDCD0", "Camera & Framing", "Viewfinder, shots & ratios"), viewfinder, template, cameraTools, outputOptions);
     this.mountPromptEditorEnhancements(editor);
     const panelPrompt = document.createElement("div");
     panelPrompt.className = "studio-tab-panel";
@@ -55178,19 +54530,19 @@ class ImageStudio {
     editTools.dataset.promptEditTools = "";
     editTools.hidden = true;
     editTools.innerHTML = '<button type="button" data-prompt-undo aria-label="Undo prompt edit">Undo</button><button type="button" data-prompt-redo aria-label="Redo prompt edit">Redo</button>';
-    panelPrompt.append(cardHeader("\uD83D\uDCDD", "Prompt Studio & AI Enhancements", "Source clauses, wording & budget"), meta3, model, editor);
+    panelPrompt.append(sheetHeader("\uD83D\uDCDD Edit Wording"), cardHeader("\uD83D\uDCDD", "Prompt Studio & AI Enhancements", "Source clauses, wording & budget"), meta3, model, editor);
     const panelHistory = document.createElement("div");
     panelHistory.className = "studio-tab-panel";
     panelHistory.dataset.tabPanel = "history";
     panelHistory.hidden = this.studioLayoutMode === "tabs";
-    panelHistory.append(cardHeader("\uD83D\uDCDC", "History & Diagnostics", "Versions, parameters & debug logs"), this.el("[data-diagnostics]").closest("details"), this.el("[data-provenance]").closest("details"), this.el("[data-parameters]").closest("details"), history, settings);
+    panelHistory.append(sheetHeader("\uD83D\uDCDC History & Settings"), cardHeader("\uD83D\uDCDC", "History & Diagnostics", "Versions, parameters & debug logs"), this.el("[data-diagnostics]").closest("details"), this.el("[data-provenance]").closest("details"), this.el("[data-parameters]").closest("details"), history, settings);
     const overview = document.createElement("p");
     overview.dataset.pictureOverview = "";
     overview.setAttribute("role", "status");
     overview.setAttribute("aria-atomic", "true");
     overview.style.cssText = "font-size:12px;margin:0 0 10px;overflow-wrap:anywhere";
     tools.replaceChildren(tabs, editTools, panelPicture, panelModel, panelStyle, panelCamera, panelPrompt, panelHistory);
-    body2.replaceChildren(overview, navigation, context, correctionHelp, tools, notice);
+    body2.replaceChildren(overview, navigation, tools, notice);
     for (const field of ["positive", "negative", "parameters"]) {
       const note = document.createElement("small");
       note.dataset.promptLint = field;
@@ -55229,7 +54581,49 @@ class ImageStudio {
     curtain.dataset.viewfinderSafeCurtain = "";
     curtain.className = "studio-vf-safe-curtain";
     curtain.textContent = "VN Dialogue Safe Zone (Bottom 25%)";
-    frame.append(grid, subjects, curtain);
+    const reticle = document.createElement("div");
+    reticle.dataset.vfReticle = "";
+    reticle.className = "studio-vf-reticle";
+    reticle.style.left = `${this.draftFocalPoint.x}%`;
+    reticle.style.top = `${this.draftFocalPoint.y}%`;
+    frame.append(grid, subjects, curtain, reticle);
+    let vfDragging = false;
+    const updateFocalFromPointer = (ev) => {
+      if (ev.target?.closest(".studio-vf-subject-chip"))
+        return;
+      const rect = frame.getBoundingClientRect();
+      if (!rect.width || !rect.height)
+        return;
+      const x = Math.round(Math.max(15, Math.min(85, (ev.clientX - rect.left) / rect.width * 100)));
+      const y = Math.round(Math.max(18, Math.min(72, (ev.clientY - rect.top) / rect.height * 100)));
+      this.draftFocalPoint = { x, y };
+      const autoEl = this.el("[data-auto-director]");
+      if (autoEl.checked) {
+        autoEl.checked = false;
+        for (const sel of ["[data-camera-shot-size]", "[data-camera-angle]", "[data-camera-lens]", "[data-camera-composition]", "[data-camera-depth]", "[data-camera-safe-area]"]) {
+          this.el(sel).disabled = false;
+        }
+      }
+      this.syncDirectorViewfinder();
+    };
+    frame.addEventListener("pointerdown", (ev) => {
+      if (ev.target?.closest(".studio-vf-subject-chip"))
+        return;
+      vfDragging = true;
+      frame.setPointerCapture?.(ev.pointerId);
+      updateFocalFromPointer(ev);
+    });
+    frame.addEventListener("pointermove", (ev) => {
+      if (vfDragging)
+        updateFocalFromPointer(ev);
+    });
+    frame.addEventListener("pointerup", (ev) => {
+      vfDragging = false;
+      frame.releasePointerCapture?.(ev.pointerId);
+    });
+    frame.addEventListener("pointercancel", () => {
+      vfDragging = false;
+    });
     const sizeRow = document.createElement("div");
     sizeRow.dataset.viewfinderSizePills = "";
     sizeRow.className = "studio-vf-pill-row";
@@ -55452,12 +54846,20 @@ class ImageStudio {
     const compMode = (!auto ? this.el("[data-camera-composition]").value : "") || shotSpec?.composition.mode || "rule-of-thirds";
     const summary = vf.querySelector("[data-viewfinder-summary]");
     if (summary)
-      summary.textContent = `${auto ? "Auto" : "Manual"} · ${activeShot} · ${activeAngle} · ${compMode}`;
+      summary.textContent = `${auto ? "Auto" : "Manual"} · ${activeShot} · ${activeAngle} · ${compMode}${!auto ? ` · Focus ${this.draftFocalPoint.x}%,${this.draftFocalPoint.y}%` : ""}`;
+    const camHubSub = this.root.querySelector('[data-hub-sub="camera"]');
+    if (camHubSub)
+      camHubSub.textContent = `${auto ? "Auto" : "Manual"} · ${activeShot}`;
     const frame = vf.querySelector("[data-viewfinder-frame]");
     if (frame) {
       const params = record2?.parameters;
       const ratioRaw = String(params?.aspectRatio ?? params?.aspect_ratio ?? "16:9");
       frame.style.aspectRatio = ratioRaw === "9:16" ? "9 / 16" : ratioRaw === "1:1" ? "1 / 1" : ratioRaw === "4:3" ? "4 / 3" : ratioRaw === "3:4" ? "3 / 4" : "16 / 9";
+      const reticle = frame.querySelector("[data-vf-reticle]");
+      if (reticle) {
+        reticle.style.left = `${this.draftFocalPoint.x}%`;
+        reticle.style.top = `${this.draftFocalPoint.y}%`;
+      }
     }
     const curtain = vf.querySelector("[data-viewfinder-safe-curtain]");
     if (curtain)
@@ -55479,9 +54881,6 @@ class ImageStudio {
         const curIdx = cycle.indexOf(compSel.value);
         compSel.value = cycle[(curIdx + 1) % cycle.length];
         this.syncDirectorViewfinder();
-        const applyBtn = this.el("[data-apply-camera]");
-        if (!applyBtn.disabled)
-          applyBtn.click();
       };
       if (placements.length > 0) {
         for (const p of placements.slice(0, 4)) {
@@ -55815,6 +55214,9 @@ class ImageStudio {
       error61 = cause instanceof Error ? cause.message : String(cause);
     }
     this.el("[data-combined-count]").textContent = `${total.toLocaleString()} / ${maximum.toLocaleString()} combined characters${error61 ? " — blocked draft; repair required" : ""}`;
+    const promptHubSub = this.root.querySelector('[data-hub-sub="prompt"]');
+    if (promptHubSub)
+      promptHubSub.textContent = `${total.toLocaleString()} / ${maximum.toLocaleString()} chars`;
     const fill = this.root.querySelector("[data-budget-fill]");
     if (fill) {
       const pct = Math.min(100, Math.round(total / Math.max(1, maximum) * 100));
@@ -55988,6 +55390,7 @@ class ImageStudio {
       this.recoveryJob = "";
       this.retryQueueJobs.clear();
       this.retryActive = null;
+      this.draftFocalPoint = { x: 50, y: 36 };
     }
     this.replanning = false;
     this.recovering = null;
@@ -56678,7 +56081,23 @@ ${metadata.presentationRuleTrace.summary}`;
         });
     }
     this.comparison.setContext(JSON.stringify([this.turn?.chatId, this.turn?.messageId, this.turn?.swipeId, this.turn?.sourceFingerprint, this.turn?.revision, this.selectedJob]), asset);
+    const sec = this.el("section");
+    sec.dataset.layoutMode = this.studioLayoutMode;
+    sec.dataset.activeTab = this.activeTab;
     const versions2 = asset?.previousVersions ?? [];
+    const compareHeroBtn = this.root.querySelector("[data-hub-compare-btn]");
+    if (compareHeroBtn) {
+      compareHeroBtn.hidden = versions2.length === 0 || planning;
+      compareHeroBtn.textContent = versions2.length > 0 ? `⇔ Compare (${versions2.length})` : "⇔ Compare";
+    }
+    const styleHubSub = this.root.querySelector('[data-hub-sub="style"]');
+    const activeStyleText = this.root.querySelector("[data-active-style-name]")?.textContent?.trim();
+    if (styleHubSub)
+      styleHubSub.textContent = activeStyleText || "Neutral / scene";
+    const modelHubSub = this.root.querySelector('[data-hub-sub="model"]');
+    const activeModelText = this.root.querySelector("[data-active-model-name]")?.textContent?.trim();
+    if (modelHubSub)
+      modelHubSub.textContent = activeModelText || "Active default";
     const container = this.root.querySelector("[data-previous-versions-container]");
     const vStrip = this.root.querySelector("[data-versions-strip]");
     const countLabel = this.root.querySelector("[data-versions-count]");
@@ -56842,6 +56261,9 @@ ${metadata.presentationRuleTrace.summary}`;
   }
   switchTab(tabId) {
     this.activeTab = tabId;
+    const section = this.el("section");
+    section.dataset.activeTab = tabId;
+    section.dataset.layoutMode = this.studioLayoutMode;
     this.el("[data-prompt-edit-tools]").hidden = tabId !== "prompt" && tabId !== "history" && this.studioLayoutMode === "tabs";
     const tabBtns = this.root.querySelectorAll(".studio-tab-btn");
     for (const btn of tabBtns) {
@@ -56852,6 +56274,9 @@ ${metadata.presentationRuleTrace.summary}`;
       for (const panel of panels) {
         panel.hidden = panel.dataset.tabPanel !== tabId;
       }
+      const body2 = this.root.querySelector("[data-studio-body]");
+      if (body2)
+        body2.scrollTop = 0;
     } else {
       for (const panel of panels) {
         panel.hidden = false;
@@ -56954,7 +56379,7 @@ var DOCKED_STUDIO_CSS = `
 :host([data-vn-workspace-tool]) section,:host([data-vn-workspace-tool]) section[data-state]{position:relative;inset:auto;width:100%;max-width:none;height:100%;max-height:none;border:0;border-radius:0;box-shadow:none}
 :host([data-vn-workspace-tool]) [data-studio-header]{display:none}
 :host([data-vn-workspace-tool]) [data-studio-body]{padding:18px;flex:1}
-:host([data-vn-workspace-tool]) [data-studio-footer]{padding:12px 18px;margin-bottom:calc(76px + env(safe-area-inset-bottom, 0px));background:transparent;border-top:1px solid var(--edge)}
+:host([data-vn-workspace-tool]) [data-studio-footer]{padding:12px 18px;margin-bottom:env(safe-area-inset-bottom, 0px);background:transparent;border-top:1px solid var(--edge)}
 :host([data-vn-workspace-tool]) [data-studio-footer] button{border-radius:999px;font-weight:750;background:var(--accent);color:#0f2019;border:1px solid var(--accent);box-shadow:0 4px 14px rgba(0,0,0,.25)}
 :is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-studio-footer] button{background:#234b39;color:#fbfdf7;border-color:#234b39;box-shadow:0 4px 14px rgba(35,65,50,.2)}
 :is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) section{color:#172721}
@@ -57135,7 +56560,7 @@ header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:
 button{-webkit-tap-highlight-color:transparent}summary::before{content:'▸';margin-right:8px}details[open]>summary::before{content:'▾'}[data-template-query]{min-width:0;min-height:44px;width:100%;border:1px solid var(--vn-shell-border,rgba(134,219,178,.22));border-radius:8px;background:var(--vn-shell-field,#101a1e);padding:8px;color:inherit}
 
 :host([data-open=true]){pointer-events:auto;background:#0005}
-[data-history-views]{display:flex;gap:6px;margin:0 0 14px;padding:4px;border-radius:999px;background:rgba(0,0,0,.22);border:1px solid rgba(160,205,185,.25)}[data-history-view]{flex:1;border:0;background:transparent;border-radius:999px;padding:8px 16px;font-weight:650;font-size:12px;color:#a6bfae;cursor:pointer;transition:all .15s ease}[data-history-view][aria-pressed=true]{background:#dcebad;color:#0e1e18;box-shadow:0 2px 10px rgba(0,0,0,.3);font-weight:800}[data-history-return]{flex:none;margin:0 14px 12px;align-self:center;min-width:160px;border-radius:999px;font-weight:600}[data-grid][data-mode=story]{display:flex;flex-direction:column;gap:12px}[data-reply]{padding:16px 18px;border-radius:14px;background:rgba(18,38,30,.55);border:1px solid rgba(160,205,185,.22);border-left:3px solid #dcebad;box-shadow:0 4px 16px rgba(0,0,0,.25)}[data-reply] h3{display:inline-block;margin:0 0 6px;padding:2px 10px;border-radius:999px;background:rgba(220,238,173,.18);color:#dcebad;font-size:11px;font-weight:750;letter-spacing:.06em;text-transform:uppercase}[data-reply-preview]{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin:8px 0;line-height:1.68;font-family:Georgia,serif;font-size:14.5px;color:#f3f7ee}[data-reply] details{border:1px solid rgba(160,205,185,.18);border-radius:10px;padding:4px 12px;background:rgba(0,0,0,.22);margin:8px 0}[data-reply] details p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.72;font-family:Georgia,serif;font-size:14.5px;color:#f3f7ee}[data-reply] details strong{display:inline-block;padding:1px 8px;border-radius:999px;background:rgba(220,238,173,.15);font-size:11px;font-weight:700;color:#dcebad}[data-reply-pictures]{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:8px}[data-reply-pictures] img{height:180px;border-radius:6px}[data-image-card]{border-radius:12px;border:1px solid rgba(160,205,185,.2);background:rgba(18,38,30,.4);transition:transform .15s ease,border-color .15s ease}[data-image-card]:hover{transform:translateY(-2px);border-color:#dcebad}[data-current-scene-backlog]{border-left-color:var(--vn-shell-accent,#dcebad)}[data-current-scene-item]{padding:12px 14px;border-radius:12px;background:rgba(18,28,38,0.45);border:1px solid rgba(134,219,178,0.18);margin:8px 0;display:flex;flex-direction:column;gap:6px;transition:all 140ms ease}[data-current-scene-item][data-current-passage="true"]{border-color:var(--vn-shell-accent,#86dbb2);background:rgba(134,219,178,0.08);box-shadow:0 0 12px rgba(134,219,178,0.12)}[data-current-scene-head]{display:flex;align-items:center;justify-content:space-between;gap:8px}.vn-speaker-badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:750;letter-spacing:0.04em;text-transform:uppercase;background:rgba(134,219,178,0.16);border:1px solid rgba(134,219,178,0.35);color:var(--vn-shell-accent,#86dbb2)}[data-vn-backlog-jump]{min-height:28px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;background:rgba(220,238,173,.14);border:1px solid rgba(220,238,173,.35);color:var(--vn-shell-accent,#dcebad)}
+[data-history-views]{display:flex;gap:6px;margin:0 0 14px;padding:4px;border-radius:999px;background:rgba(0,0,0,.22);border:1px solid rgba(160,205,185,.25)}[data-history-view]{flex:1;border:0;background:transparent;border-radius:999px;padding:8px 16px;font-weight:650;font-size:12px;color:#a6bfae;cursor:pointer;transition:all .15s ease}[data-history-view][aria-pressed=true]{background:#dcebad;color:#0e1e18;box-shadow:0 2px 10px rgba(0,0,0,.3);font-weight:800}[data-history-return]{flex:none;margin:0 14px 12px;align-self:center;min-width:160px;border-radius:999px;font-weight:600}[data-load-more]{display:block;width:100%;margin:14px auto 4px;border-radius:999px;font-weight:650;text-align:center}[data-grid][data-mode=story]{display:flex;flex-direction:column;gap:12px}[data-reply]{padding:16px 18px;border-radius:14px;background:rgba(18,38,30,.55);border:1px solid rgba(160,205,185,.22);border-left:3px solid #dcebad;box-shadow:0 4px 16px rgba(0,0,0,.25)}[data-reply] h3{display:inline-block;margin:0 0 6px;padding:2px 10px;border-radius:999px;background:rgba(220,238,173,.18);color:#dcebad;font-size:11px;font-weight:750;letter-spacing:.06em;text-transform:uppercase}[data-reply-preview]{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin:8px 0;line-height:1.68;font-family:Georgia,serif;font-size:14.5px;color:#f3f7ee}[data-reply] details{border:1px solid rgba(160,205,185,.18);border-radius:10px;padding:4px 12px;background:rgba(0,0,0,.22);margin:8px 0}[data-reply] details p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.72;font-family:Georgia,serif;font-size:14.5px;color:#f3f7ee}[data-reply] details strong{display:inline-block;padding:1px 8px;border-radius:999px;background:rgba(220,238,173,.15);font-size:11px;font-weight:700;color:#dcebad}[data-reply-pictures]{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:8px}[data-reply-pictures] img{height:180px;border-radius:6px}[data-image-card]{border-radius:12px;border:1px solid rgba(160,205,185,.2);background:rgba(18,38,30,.4);transition:transform .15s ease,border-color .15s ease}[data-image-card]:hover{transform:translateY(-2px);border-color:#dcebad}[data-current-scene-backlog]{border-left-color:var(--vn-shell-accent,#dcebad)}[data-current-scene-item]{padding:12px 14px;border-radius:12px;background:rgba(18,28,38,0.45);border:1px solid rgba(134,219,178,0.18);margin:8px 0;display:flex;flex-direction:column;gap:6px;transition:all 140ms ease}[data-current-scene-item][data-current-passage="true"]{border-color:var(--vn-shell-accent,#86dbb2);background:rgba(134,219,178,0.08);box-shadow:0 0 12px rgba(134,219,178,0.12)}[data-current-scene-head]{display:flex;align-items:center;justify-content:space-between;gap:8px}.vn-speaker-badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:750;letter-spacing:0.04em;text-transform:uppercase;background:rgba(134,219,178,0.16);border:1px solid rgba(134,219,178,0.35);color:var(--vn-shell-accent,#86dbb2)}[data-vn-backlog-jump]{min-height:28px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;background:rgba(220,238,173,.14);border:1px solid rgba(220,238,173,.35);color:var(--vn-shell-accent,#dcebad)}
 :is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])){color:#142820!important;--vn-shell-text:#142820;--vn-shell-muted:#4b6b5d;--vn-shell-border:rgba(86,128,107,.35);--vn-shell-bg:#f8faf6;--vn-shell-field:#ffffff;--vn-shell-accent:#1e5a40}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) section{background:#f8faf6!important;border-color:rgba(86,128,107,.35)!important;color:#142820!important;box-shadow:0 12px 48px rgba(18,38,29,.2)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) button,:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) select,:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) textarea,:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-template-query]{background:#ffffff!important;border-color:rgba(86,128,107,.35)!important;color:#142820!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-image-card]{background:#ffffff!important;border-color:rgba(86,128,107,.3)!important;color:#142820!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-reply]{background:#ffffff!important;border-color:rgba(86,128,107,.3)!important;color:#142820!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-reply-preview],:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-reply] details p{color:#142820!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-history-views]{background:#eef3eb!important;border-color:rgba(86,128,107,.3)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-history-view]{color:#4b6b5d!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-history-view][aria-pressed=true]{background:#25523d!important;color:#ffffff!important}
 `;
 function sameLibraryContext(next, previous) {
@@ -57166,6 +56591,8 @@ class ImageLibrary {
   zoom = 1;
   opened = false;
   searchTimer;
+  pageLimit;
+  appendPending = false;
   onReadingHistoryRefresh;
   readingHistorySlot = document.createElement("div");
   currentSceneEntries = [];
@@ -57192,6 +56619,49 @@ class ImageLibrary {
       const control = this.el(selector);
       filters.insertBefore(control, filters.children[1]);
     }
+    const quickFilters = document.createElement("div");
+    quickFilters.dataset.historyQuickFilters = "";
+    quickFilters.style.cssText = "display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none;-webkit-overflow-scrolling:touch;";
+    const makePill = (attr, label, onClick) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.setAttribute(attr, "");
+      b.textContent = label;
+      b.style.cssText = "flex:0 0 auto;min-height:44px;padding:6px 12px;border-radius:999px;font-size:11.5px;font-weight:650;white-space:nowrap;";
+      b.onclick = onClick;
+      return b;
+    };
+    const pillRange = makePill("data-quick-range", "Read so far", () => {
+      const sel = this.el("[data-range]");
+      sel.value = sel.value === "read" ? "all" : "read";
+      this.pages = ["0:0"];
+      this.pageIndex = 0;
+      this.load();
+    });
+    const pillVersions = makePill("data-quick-versions", "Active story", () => {
+      const sel = this.el("[data-versions]");
+      sel.value = sel.value === "active" ? "all" : "active";
+      this.pages = ["0:0"];
+      this.pageIndex = 0;
+      this.load();
+    });
+    const pillOrder = makePill("data-quick-order", "Newest", () => {
+      const sel = this.el("[data-order]");
+      sel.value = sel.value === "newest" ? "oldest" : "newest";
+      this.pages = ["0:0"];
+      this.pageIndex = 0;
+      this.load();
+    });
+    const pillRole = makePill("data-quick-role", "All types", () => {
+      const sel = this.el("[data-role]");
+      const order = ["all", "scene", "background", "portrait"];
+      sel.value = order[(order.indexOf(sel.value) + 1) % order.length];
+      this.pages = ["0:0"];
+      this.pageIndex = 0;
+      this.load();
+    });
+    quickFilters.append(pillRange, pillVersions, pillOrder, pillRole);
+    filters.after(quickFilters);
     const tabs = document.createElement("nav");
     tabs.dataset.historyViews = "";
     tabs.setAttribute("aria-label", "History views");
@@ -57212,6 +56682,13 @@ class ImageLibrary {
     this.readingHistorySlot.dataset.readingHistory = "";
     this.readingHistorySlot.hidden = true;
     tabs.after(this.readingHistorySlot);
+    const loadMoreBtn = document.createElement("button");
+    loadMoreBtn.type = "button";
+    loadMoreBtn.dataset.loadMore = "";
+    loadMoreBtn.hidden = true;
+    loadMoreBtn.textContent = "Load older replies & images";
+    loadMoreBtn.onclick = () => this.loadMore();
+    this.el("[data-browse]").append(loadMoreBtn);
     const returnButton = document.createElement("button");
     returnButton.type = "button";
     returnButton.dataset.historyReturn = "";
@@ -57333,6 +56810,7 @@ Negative prompt:
   }
   useHistoryEntry() {
     this.mode = "story";
+    this.pageLimit = 72;
     this.el("[data-library-launch]").hidden = true;
     this.el("h2").textContent = "History";
     this.el("[data-browse] .note").textContent = "Saved replies and pictures from this chat. Browsing never generates images.";
@@ -57402,6 +56880,7 @@ Negative prompt:
     if (cancelSearch)
       clearTimeout(this.searchTimer);
     this.pending = "";
+    this.appendPending = false;
   }
   open(mode = "images", opener) {
     if (!this.context)
@@ -57435,6 +56914,10 @@ Negative prompt:
       (this.opener ?? this.el("[data-library-launch]")).focus();
     }
   }
+  buildRequest(cursor) {
+    const req = { type: "vn_image_library", mode: this.mode, chatId: this.context.chatId, requestId: createUiId(), anchor: { messageId: this.context.messageId, swipeId: this.context.swipeId, sourceFingerprint: this.context.sourceFingerprint, paragraphIndex: this.cursor }, range: this.el("[data-range]").value, versions: this.el("[data-versions]").value, includeReplaced: this.el("[data-replaced]").checked, order: this.el("[data-order]").value, role: this.el("[data-role]").value, templateQuery: this.el("[data-template-query]").value.trim(), ...this.pageLimit ? { limit: this.pageLimit } : {}, ...cursor && cursor !== "0:0" ? { cursor } : {} };
+    return req;
+  }
   load() {
     this.readingHistorySlot.hidden = this.mode !== "story" || this.pageIndex !== 0;
     if (!this.readingHistorySlot.hidden)
@@ -57445,20 +56928,58 @@ Negative prompt:
     this.page = null;
     this.back(false);
     this.el("[data-grid]").replaceChildren();
+    this.el("[data-load-more]").hidden = true;
     this.status(this.mode === "story" ? "Loading story history…" : "Loading saved pictures…");
     this.el("[data-retry]").hidden = true;
-    const requestId = createUiId();
-    this.pending = requestId;
-    const request = { type: "vn_image_library", mode: this.mode, chatId: this.context.chatId, requestId, anchor: { messageId: this.context.messageId, swipeId: this.context.swipeId, sourceFingerprint: this.context.sourceFingerprint, paragraphIndex: this.cursor }, range: this.el("[data-range]").value, versions: this.el("[data-versions]").value, includeReplaced: this.el("[data-replaced]").checked, order: this.el("[data-order]").value, role: "all", templateQuery: "", ...this.pages[this.pageIndex] !== "0:0" ? { cursor: this.pages[this.pageIndex] } : {} };
-    request.role = this.el("[data-role]").value;
-    request.templateQuery = this.el("[data-template-query]").value.trim();
-    this.timer = setTimeout(() => this.error(this.context?.chatId ?? "", requestId, "Loading timed out. You can retry."), 15000);
+    const request = this.buildRequest(this.pages[this.pageIndex]);
+    this.pending = request.requestId;
+    this.timer = setTimeout(() => this.error(this.context?.chatId ?? "", request.requestId, "Loading timed out. You can retry."), 15000);
     this.updatePaging();
     try {
       this.send(request);
     } catch (error61) {
-      this.error(request.chatId, requestId, error61 instanceof Error ? error61.message : String(error61));
+      this.error(request.chatId, request.requestId, error61 instanceof Error ? error61.message : String(error61));
     }
+  }
+  loadMore() {
+    const nextCursor = this.page?.nextCursor;
+    if (!this.context || !this.opened || !nextCursor || this.pending)
+      return;
+    this.cancel();
+    this.appendPending = true;
+    this.el("[data-retry]").hidden = true;
+    const loadMoreBtn = this.el("[data-load-more]");
+    loadMoreBtn.disabled = true;
+    loadMoreBtn.textContent = "Loading older…";
+    const request = this.buildRequest(nextCursor);
+    this.pending = request.requestId;
+    this.timer = setTimeout(() => this.error(this.context?.chatId ?? "", request.requestId, "Loading timed out. You can retry."), 15000);
+    this.updatePaging();
+    try {
+      this.send(request);
+    } catch (error61) {
+      this.error(request.chatId, request.requestId, error61 instanceof Error ? error61.message : String(error61));
+    }
+  }
+  mergePage(previous, incoming) {
+    const entryKey = (e) => JSON.stringify([e.key, e.paragraphIndex, e.jobId ?? "", e.imageId ?? "", e.versionLabel]);
+    const seenEntries = new Set(previous.entries.map(entryKey));
+    const mergedEntries = [...previous.entries, ...incoming.entries.filter((e) => {
+      const k = entryKey(e);
+      if (seenEntries.has(k))
+        return false;
+      seenEntries.add(k);
+      return true;
+    })];
+    const seenReplies = new Set(previous.replies.map((r) => JSON.stringify(r.key)));
+    const mergedReplies = [...previous.replies, ...incoming.replies.filter((r) => {
+      const k = JSON.stringify(r.key);
+      if (seenReplies.has(k))
+        return false;
+      seenReplies.add(k);
+      return true;
+    })];
+    return { ...incoming, entries: mergedEntries, replies: mergedReplies, notice: incoming.notice || previous.notice };
   }
   receive(chatId, requestId, input2) {
     if (!this.opened || chatId !== this.context?.chatId || requestId !== this.pending)
@@ -57472,9 +56993,13 @@ Negative prompt:
       this.error(chatId, requestId, "The library response belongs to a different chat.");
       return;
     }
+    const wasAppending = this.appendPending;
+    const priorScroll = wasAppending ? this.el(".body").scrollTop : 0;
     this.cancel(false);
-    this.page = parsed.data;
+    this.page = wasAppending && this.page ? this.mergePage(this.page, parsed.data) : parsed.data;
     this.render();
+    if (wasAppending)
+      this.el(".body").scrollTop = priorScroll;
   }
   error(chatId, requestId, message) {
     if (!this.opened || chatId !== this.context?.chatId || requestId !== this.pending)
@@ -57488,6 +57013,10 @@ Negative prompt:
     this.el("[data-page-prev]").disabled = !!this.pending || this.pageIndex === 0;
     this.el("[data-page-next]").disabled = !!this.pending || !this.page?.nextCursor;
     this.el("[data-page-label]").textContent = `Page ${this.pageIndex + 1}`;
+    const loadMoreBtn = this.el("[data-load-more]");
+    loadMoreBtn.hidden = !this.page?.nextCursor;
+    loadMoreBtn.disabled = !!this.pending;
+    loadMoreBtn.textContent = this.appendPending ? "Loading older…" : this.mode === "story" ? "Load older replies & images" : "Load older images";
   }
   render() {
     const grid = this.el("[data-grid]");
@@ -57496,6 +57025,23 @@ Negative prompt:
     this.el("[data-range] option[value=all]").textContent = this.mode === "story" ? "All saved replies" : "All story images";
     for (const tab of this.root.querySelectorAll("[data-history-view]"))
       tab.setAttribute("aria-pressed", String(tab.dataset.historyView === this.mode));
+    const rangeVal = this.el("[data-range]").value;
+    const verVal = this.el("[data-versions]").value;
+    const ordVal = this.el("[data-order]").value;
+    const roleVal = this.el("[data-role]").value;
+    const syncPill = (sel, label, active) => {
+      const b = this.root.querySelector(sel);
+      if (!b)
+        return;
+      b.textContent = label;
+      b.setAttribute("aria-pressed", String(active));
+      b.style.borderColor = active ? "var(--vn-shell-accent,#86dbb2)" : "";
+      b.style.color = active ? "var(--vn-shell-accent,#86dbb2)" : "";
+    };
+    syncPill("[data-quick-range]", rangeVal === "all" ? "All story" : "Read so far", rangeVal === "all");
+    syncPill("[data-quick-versions]", verVal === "all" ? "All versions" : "Active only", verVal === "all");
+    syncPill("[data-quick-order]", ordVal === "oldest" ? "Oldest ↑" : "Newest ↓", ordVal === "oldest");
+    syncPill("[data-quick-role]", { all: "All types", scene: "Scenes", background: "Places", portrait: "Portraits" }[roleVal] ?? "All types", roleVal !== "all");
     const buildCard = (entryIndex, entry) => {
       const button = document.createElement("button");
       button.type = "button";
@@ -57887,6 +57433,420 @@ var DOCKED_LIBRARY_CSS = `
 :is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-page-label]{color:#3b5d4c!important;font-weight:650!important}
 `;
 
+// src/frontend/stage/image-lightbox.ts
+class ImageLightbox {
+  host;
+  img;
+  captionEl;
+  zoomBtn;
+  prevBtn;
+  nextBtn;
+  exportBtn;
+  deleteBtn;
+  items = [];
+  activeIndex = -1;
+  isOpen = false;
+  scale = 1;
+  zoomMode = "fit";
+  translateX = 0;
+  translateY = 0;
+  isDragging = false;
+  startX = 0;
+  startY = 0;
+  initialPinchDist = 0;
+  initialPinchScale = 1;
+  lastTapTime = 0;
+  onDelete;
+  onClose;
+  constructor(mountParent) {
+    this.host = document.createElement("div");
+    this.host.className = "vn-interactive-lightbox";
+    this.host.setAttribute("data-cg-lightbox", "");
+    this.host.hidden = true;
+    this.host.style.cssText = `
+      position: fixed;
+      inset: 0;
+      z-index: 100050;
+      background: rgba(0, 0, 0, 0.94);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    `;
+    const topBar = document.createElement("div");
+    topBar.className = "lightbox-topbar";
+    topBar.style.cssText = `
+      position: absolute;
+      top: calc(14px + env(safe-area-inset-top, 0px));
+      left: 14px;
+      right: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      z-index: 100060;
+      pointer-events: auto;
+    `;
+    const backBtn = document.createElement("button");
+    backBtn.type = "button";
+    backBtn.className = "lightbox-btn lightbox-back-btn";
+    backBtn.setAttribute("data-cg-lightbox-back", "");
+    backBtn.innerHTML = "← <span>Back</span>";
+    backBtn.style.cssText = this.btnStyle();
+    backBtn.onclick = () => this.close();
+    const actions = document.createElement("div");
+    actions.style.cssText = "display:flex;align-items:center;gap:8px;flex-wrap:wrap;";
+    this.zoomBtn = document.createElement("button");
+    this.zoomBtn.type = "button";
+    this.zoomBtn.className = "lightbox-btn lightbox-zoom-btn";
+    this.zoomBtn.textContent = "\uD83D\uDD0D Fit";
+    this.zoomBtn.title = "Toggle Zoom (Fit / 100% / 200%)";
+    this.zoomBtn.style.cssText = this.btnStyle();
+    this.zoomBtn.onclick = () => this.cycleZoom();
+    this.prevBtn = document.createElement("button");
+    this.prevBtn.type = "button";
+    this.prevBtn.className = "lightbox-btn";
+    this.prevBtn.setAttribute("data-cg-prev", "");
+    this.prevBtn.innerHTML = "◀ <span>Prev</span>";
+    this.prevBtn.style.cssText = this.btnStyle();
+    this.prevBtn.onclick = () => this.step(-1);
+    this.nextBtn = document.createElement("button");
+    this.nextBtn.type = "button";
+    this.nextBtn.className = "lightbox-btn";
+    this.nextBtn.setAttribute("data-cg-next", "");
+    this.nextBtn.innerHTML = "<span>Next</span> ▶";
+    this.nextBtn.style.cssText = this.btnStyle();
+    this.nextBtn.onclick = () => this.step(1);
+    this.exportBtn = document.createElement("button");
+    this.exportBtn.type = "button";
+    this.exportBtn.className = "lightbox-btn";
+    this.exportBtn.setAttribute("data-cg-download", "");
+    this.exportBtn.innerHTML = "\uD83D\uDCE5 <span>Save</span>";
+    this.exportBtn.style.cssText = this.btnStyle();
+    this.exportBtn.onclick = () => this.exportCurrent();
+    this.deleteBtn = document.createElement("button");
+    this.deleteBtn.type = "button";
+    this.deleteBtn.className = "lightbox-btn lightbox-del-btn";
+    this.deleteBtn.setAttribute("data-cg-delete", "");
+    this.deleteBtn.innerHTML = "\uD83D\uDDD1️";
+    this.deleteBtn.title = "Delete picture";
+    this.deleteBtn.style.cssText = this.btnStyle("rgba(239, 68, 68, 0.25)", "rgba(239, 68, 68, 0.45)", "#fca5a5");
+    this.deleteBtn.onclick = () => this.deleteCurrent();
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "lightbox-btn lightbox-close-btn";
+    closeBtn.setAttribute("data-cg-lightbox-close", "");
+    closeBtn.innerHTML = "✕";
+    closeBtn.title = "Close";
+    closeBtn.style.cssText = this.btnStyle() + "width:38px;padding:0;text-align:center;justify-content:center;";
+    closeBtn.onclick = () => this.close();
+    actions.append(this.zoomBtn, this.prevBtn, this.nextBtn, this.exportBtn, this.deleteBtn, closeBtn);
+    topBar.append(backBtn, actions);
+    const viewport = document.createElement("div");
+    viewport.className = "lightbox-viewport";
+    viewport.style.cssText = `
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      cursor: grab;
+    `;
+    this.img = document.createElement("img");
+    this.img.className = "lightbox-img";
+    this.img.setAttribute("data-cg-lightbox-img", "");
+    this.img.alt = "Artwork preview";
+    this.img.style.cssText = `
+      max-width: 94vw;
+      max-height: 80vh;
+      object-fit: contain;
+      border-radius: 8px;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.9);
+      transition: transform 0.08s ease-out;
+      transform-origin: center center;
+      will-change: transform;
+      pointer-events: auto;
+    `;
+    viewport.append(this.img);
+    this.captionEl = document.createElement("div");
+    this.captionEl.className = "lightbox-caption";
+    this.captionEl.setAttribute("data-cg-lightbox-quote", "");
+    this.captionEl.style.cssText = `
+      position: absolute;
+      bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+      left: 20px;
+      right: 20px;
+      max-width: 820px;
+      margin: 0 auto;
+      text-align: center;
+      font-size: 13px;
+      font-style: italic;
+      color: rgba(241, 245, 249, 0.92);
+      text-shadow: 0 2px 6px rgba(0,0,0,0.85);
+      pointer-events: none;
+      line-height: 1.5;
+    `;
+    this.host.append(topBar, viewport, this.captionEl);
+    if (mountParent)
+      mountParent.append(this.host);
+    else if (typeof document !== "undefined" && document.body)
+      document.body.append(this.host);
+    this.attachEvents(viewport);
+  }
+  btnStyle(bg = "rgba(255, 255, 255, 0.12)", border = "rgba(255, 255, 255, 0.2)", color = "#fff") {
+    return `
+      min-height: 38px;
+      padding: 6px 14px;
+      border-radius: 8px;
+      border: 1px solid ${border};
+      background: ${bg};
+      color: ${color};
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    `;
+  }
+  attachEvents(viewport) {
+    viewport.addEventListener("mousedown", (e) => {
+      if (e.button !== 0)
+        return;
+      this.isDragging = true;
+      this.startX = e.clientX - this.translateX;
+      this.startY = e.clientY - this.translateY;
+      viewport.style.cursor = "grabbing";
+      e.preventDefault();
+    });
+    window.addEventListener("mousemove", (e) => {
+      if (!this.isDragging || !this.isOpen)
+        return;
+      this.translateX = e.clientX - this.startX;
+      this.translateY = e.clientY - this.startY;
+      this.applyTransform();
+    });
+    window.addEventListener("mouseup", () => {
+      if (!this.isDragging)
+        return;
+      this.isDragging = false;
+      viewport.style.cursor = "grab";
+    });
+    viewport.addEventListener("wheel", (e) => {
+      if (!this.isOpen)
+        return;
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 1.15 : 0.85;
+      this.scale = Math.max(0.3, Math.min(4.5, this.scale * delta));
+      this.updateZoomModeLabel();
+      this.applyTransform();
+    }, { passive: false });
+    viewport.addEventListener("touchstart", (e) => {
+      if (e.touches.length === 2) {
+        const t0 = e.touches[0];
+        const t1 = e.touches[1];
+        if (!t0 || !t1)
+          return;
+        const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+        this.initialPinchDist = dist;
+        this.initialPinchScale = this.scale;
+      } else if (e.touches.length === 1) {
+        const t0 = e.touches[0];
+        if (!t0)
+          return;
+        const now = Date.now();
+        if (now - this.lastTapTime < 320) {
+          this.cycleZoom();
+          this.lastTapTime = 0;
+          return;
+        }
+        this.lastTapTime = now;
+        this.isDragging = true;
+        this.startX = t0.clientX - this.translateX;
+        this.startY = t0.clientY - this.translateY;
+      }
+    }, { passive: true });
+    viewport.addEventListener("touchmove", (e) => {
+      if (!this.isOpen)
+        return;
+      if (e.touches.length === 2 && this.initialPinchDist > 0) {
+        const t0 = e.touches[0];
+        const t1 = e.touches[1];
+        if (!t0 || !t1)
+          return;
+        const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+        const factor = dist / this.initialPinchDist;
+        this.scale = Math.max(0.4, Math.min(4.5, this.initialPinchScale * factor));
+        this.updateZoomModeLabel();
+        this.applyTransform();
+        e.preventDefault();
+      } else if (e.touches.length === 1 && this.isDragging) {
+        const t0 = e.touches[0];
+        if (!t0)
+          return;
+        this.translateX = t0.clientX - this.startX;
+        this.translateY = t0.clientY - this.startY;
+        this.applyTransform();
+        e.preventDefault();
+      }
+    }, { passive: false });
+    viewport.addEventListener("touchend", (e) => {
+      if (e.touches.length < 2) {
+        this.initialPinchDist = 0;
+      }
+      if (e.touches.length === 0) {
+        this.isDragging = false;
+      }
+    });
+    window.addEventListener("keydown", (e) => {
+      if (!this.isOpen)
+        return;
+      if (e.key === "Escape") {
+        this.close();
+      } else if (e.key === "ArrowLeft") {
+        this.step(-1);
+      } else if (e.key === "ArrowRight") {
+        this.step(1);
+      } else if (e.key === "+" || e.key === "=") {
+        this.scale = Math.min(4.5, this.scale * 1.25);
+        this.updateZoomModeLabel();
+        this.applyTransform();
+      } else if (e.key === "-" || e.key === "_") {
+        this.scale = Math.max(0.4, this.scale * 0.8);
+        this.updateZoomModeLabel();
+        this.applyTransform();
+      } else if (e.key === "0") {
+        this.resetTransform();
+      }
+    });
+  }
+  applyTransform() {
+    this.img.style.transform = `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
+  }
+  resetTransform() {
+    this.scale = 1;
+    this.translateX = 0;
+    this.translateY = 0;
+    this.zoomMode = "fit";
+    this.zoomBtn.innerHTML = "\uD83D\uDD0D Fit";
+    this.applyTransform();
+  }
+  cycleZoom() {
+    if (this.zoomMode === "fit") {
+      this.zoomMode = "100";
+      this.scale = 1.6;
+      this.zoomBtn.textContent = "\uD83D\uDD0D 100%";
+    } else if (this.zoomMode === "100") {
+      this.zoomMode = "200";
+      this.scale = 2.6;
+      this.zoomBtn.textContent = "\uD83D\uDD0D 200%";
+    } else {
+      this.resetTransform();
+      return;
+    }
+    this.applyTransform();
+  }
+  updateZoomModeLabel() {
+    if (Math.abs(this.scale - 1) < 0.15) {
+      this.zoomMode = "fit";
+      this.zoomBtn.innerHTML = "\uD83D\uDD0D Fit";
+    } else if (Math.abs(this.scale - 1.6) < 0.25) {
+      this.zoomMode = "100";
+      this.zoomBtn.innerHTML = "\uD83D\uDD0D 100%";
+    } else if (this.scale >= 2) {
+      this.zoomMode = "200";
+      this.zoomBtn.innerHTML = "\uD83D\uDD0D 200%";
+    } else {
+      this.zoomBtn.textContent = `\uD83D\uDD0D ${Math.round(this.scale * 100)}%`;
+    }
+  }
+  get hidden() {
+    return Boolean(this.host.hidden);
+  }
+  set hidden(val) {
+    this.host.hidden = val;
+    if (val) {
+      this.close();
+    }
+  }
+  get isOpenState() {
+    return this.isOpen;
+  }
+  open(items, index = 0) {
+    if (typeof items === "string") {
+      this.items = [{ imageUrl: items }];
+      this.activeIndex = 0;
+    } else {
+      this.items = items;
+      this.activeIndex = Math.max(0, Math.min(items.length - 1, index));
+    }
+    this.isOpen = true;
+    this.host.hidden = false;
+    this.renderCurrent();
+  }
+  close() {
+    this.isOpen = false;
+    this.host.hidden = true;
+    this.resetTransform();
+    this.onClose?.();
+  }
+  renderCurrent() {
+    const item = this.items[this.activeIndex];
+    if (!item)
+      return;
+    this.resetTransform();
+    this.img.src = item.imageUrl;
+    const captionText = item.storyExcerpt ? `“${item.storyExcerpt}”` : item.caption || item.title || "";
+    this.captionEl.textContent = captionText;
+    this.captionEl.style.display = captionText ? "block" : "none";
+    this.prevBtn.style.display = this.items.length > 1 ? "inline-flex" : "none";
+    this.nextBtn.style.display = this.items.length > 1 ? "inline-flex" : "none";
+    this.deleteBtn.style.display = this.onDelete ? "inline-flex" : "none";
+  }
+  step(delta) {
+    if (this.items.length <= 1)
+      return;
+    this.activeIndex = (this.activeIndex + delta + this.items.length) % this.items.length;
+    this.renderCurrent();
+  }
+  exportCurrent() {
+    const item = this.items[this.activeIndex];
+    if (!item?.imageUrl)
+      return;
+    const a = document.createElement("a");
+    a.href = item.imageUrl;
+    a.download = `lumiglyphics-artwork-${Date.now()}.png`;
+    a.click();
+  }
+  deleteCurrent() {
+    const item = this.items[this.activeIndex];
+    if (!item)
+      return;
+    if (typeof window !== "undefined" && window.confirm && !window.confirm("Delete this picture?"))
+      return;
+    const idx = this.activeIndex;
+    this.items = this.items.filter((_, i) => i !== idx);
+    this.onDelete?.(item, idx);
+    if (this.items.length === 0) {
+      this.close();
+    } else {
+      this.activeIndex = Math.min(this.activeIndex, this.items.length - 1);
+      this.renderCurrent();
+    }
+  }
+}
+
 // src/frontend/stage/character-folio.ts
 class CharacterFolio {
   handlers;
@@ -57915,6 +57875,7 @@ class CharacterFolio {
   deleteConfirm = false;
   mergeOther = "";
   accumulatedCgs = new Map;
+  persistentGalleries = Object.create(null);
   lightbox;
   setContext(chatId) {
     if (this.chatId === chatId)
@@ -57941,11 +57902,24 @@ class CharacterFolio {
     this.deleteConfirm = false;
     this.mergeOther = "";
     this.accumulatedCgs.clear();
+    this.persistentGalleries = Object.create(null);
     this.renderRoster();
     this.renderDetail();
   }
   getContext() {
     return this.chatId;
+  }
+  setGalleries(galleries) {
+    const next = Object.create(null);
+    if (galleries) {
+      for (const [key, list] of Object.entries(galleries)) {
+        if (Array.isArray(list) && list.length > 0)
+          next[key] = list.slice();
+      }
+    }
+    this.persistentGalleries = next;
+    this.renderRoster();
+    this.renderDetail();
   }
   ingestCgs(items) {
     let changed = false;
@@ -57980,6 +57954,16 @@ class CharacterFolio {
       const filtered = list.filter((item) => item.imageUrl !== imageUrl);
       if (filtered.length !== list.length) {
         this.accumulatedCgs.set(k, filtered);
+        changed = true;
+      }
+    }
+    for (const [k, list] of Object.entries(this.persistentGalleries)) {
+      const filtered = list.filter((item) => item.imageUrl !== imageUrl);
+      if (filtered.length !== list.length) {
+        if (filtered.length > 0)
+          this.persistentGalleries[k] = filtered;
+        else
+          delete this.persistentGalleries[k];
         changed = true;
       }
     }
@@ -58069,7 +58053,7 @@ class CharacterFolio {
           min-height: 0 !important;
           flex: 1 1 auto !important;
           overflow: hidden !important;
-          background: var(--vn-shell-bg, #0b1114);
+          background: var(--vn-shell-panel, var(--aperture-workspace-bg, #0b1114));
           color: var(--vn-shell-text, #e2e8f0);
           font-family: var(--vn-shell-family, ui-sans-serif, system-ui, sans-serif);
           box-sizing: border-box !important;
@@ -58335,7 +58319,11 @@ class CharacterFolio {
           -webkit-backdrop-filter: blur(12px);
         }
         .subtab-btn {
-          padding: 8px;
+          padding: 8px 10px;
+          min-height: 44px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
           border-radius: 7px;
           font-size: 12px;
           font-weight: 600;
@@ -59380,7 +59368,7 @@ class CharacterFolio {
       this.activeSubTab = "lore";
       this.renderDetail();
     };
-    const cgsCount = lore.cgs?.length || 0;
+    const cgsCount = this.collectCharacterCgs(char).length;
     const cgsTabBtn = document.createElement("button");
     cgsTabBtn.type = "button";
     cgsTabBtn.setAttribute("data-subtab", "cgs");
@@ -59425,11 +59413,12 @@ class CharacterFolio {
     this.detailContainer.append(stickySave);
   }
   renderDnaTab(char, isMale) {
-    const previewBox = document.createElement("div");
+    const previewBox = document.createElement("details");
     previewBox.className = "folio-prompt-preview";
-    const previewHeader = document.createElement("div");
+    const previewHeader = document.createElement("summary");
     previewHeader.className = "folio-prompt-header";
-    previewHeader.innerHTML = `<span>⚡ Appearance Prompt Preview:</span><span data-dna-save-state style="opacity:0.75;font-size:11px"></span>`;
+    previewHeader.style.cursor = "pointer";
+    previewHeader.innerHTML = `<span>⚡ Appearance Prompt Preview (tap to inspect)</span><span data-dna-save-state style="opacity:0.75;font-size:11px"></span>`;
     const previewCode = document.createElement("p");
     previewCode.className = "folio-prompt-text";
     const updatePreview = () => {
@@ -59696,7 +59685,7 @@ class CharacterFolio {
       b.className = "folio-action-btn";
       b.textContent = lbl;
       b.title = title;
-      b.style.cssText = "padding:2px 7px;font-size:10px;min-height:22px;";
+      b.style.cssText = "padding:6px 10px;font-size:12px;min-height:44px;min-width:44px;";
       b.onclick = onClick;
       return b;
     };
@@ -60230,13 +60219,10 @@ class CharacterFolio {
     loreWrap.append(notesCard);
     this.detailContainer.append(loreWrap);
   }
-  renderCgsTab(char, lore) {
-    const cgsWrap = document.createElement("div");
-    cgsWrap.style.display = "flex";
-    cgsWrap.style.flexDirection = "column";
-    cgsWrap.style.gap = "14px";
+  collectCharacterCgs(char) {
     const collected = [];
     const seenUrls = new Set;
+    const matchesCharacter = (key) => areNamesEquivalent(key, char.name) || char.aliases.some((a) => areNamesEquivalent(key, a));
     const addImage = (url3, caption) => {
       if (!url3 || seenUrls.has(url3))
         return;
@@ -60250,19 +60236,31 @@ class CharacterFolio {
     if (char.avatarUrl)
       addImage(char.avatarUrl, "Active Avatar");
     for (const [key, list] of this.accumulatedCgs.entries()) {
-      if (areNamesEquivalent(key, char.name) || char.aliases.some((a) => areNamesEquivalent(key, a))) {
-        for (const cg of list) {
+      if (matchesCharacter(key)) {
+        for (const cg of list)
           addImage(cg.imageUrl, cg.caption);
-        }
+      }
+    }
+    for (const [key, list] of Object.entries(this.persistentGalleries)) {
+      if (matchesCharacter(key)) {
+        for (const cg of list)
+          addImage(cg.imageUrl, cg.caption);
       }
     }
     for (const [key, ctx] of Object.entries(this.loreMap)) {
-      if (areNamesEquivalent(key, char.name) || char.aliases.some((a) => areNamesEquivalent(key, a))) {
-        for (const cg of ctx.cgs ?? []) {
+      if (matchesCharacter(key)) {
+        for (const cg of ctx.cgs ?? [])
           addImage(cg.imageUrl, cg.caption);
-        }
       }
     }
+    return collected;
+  }
+  renderCgsTab(char, lore) {
+    const cgsWrap = document.createElement("div");
+    cgsWrap.style.display = "flex";
+    cgsWrap.style.flexDirection = "column";
+    cgsWrap.style.gap = "14px";
+    const collected = this.collectCharacterCgs(char);
     const guide = document.createElement("p");
     guide.className = "folio-gallery-guide";
     guide.style.cssText = "font-size:12px;opacity:0.85;margin:0 0 6px;line-height:1.4;";
@@ -60410,10 +60408,15 @@ class CharacterFolio {
     this.detailContainer.append(cgsWrap);
   }
   createFormField(label, initialValue, placeholder, onChange, onAutoFill) {
+    const labels2 = { Age: "build.age", Gender: "build.gender", Species: "build.species", Height: "build.height", "Body Type": "build.bodyType", "Bust & Cleavage": "build.bust", "Muscular Chest / Shoulders": "build.bust", "Hips, Waist & Glutes": "build.hipsGlutes", "Skin Tone & Complexion": "build.skinTone", "Hair Color": "hair.color", "Hair Length": "hair.length", "Hair Style": "hair.style", "Eye Color": "eyes.color", "Eye Shape": "eyes.shape", "Facial Structure": "faceFeatures", "Demeanor & Posture": "demeanor", "Signature Outfit": "signatureOutfit", "Signature Attire (Default outfit)": "signatureOutfit", "Active Scene Attire": "activeOutfit", "Active Scene Attire (Dynamic override)": "activeOutfit", "Distinguishing Marks & Anchors": "distinguishingFeatures" };
+    const path = labels2[label];
     const field = document.createElement("div");
     field.className = "folio-field";
+    const headRow = document.createElement("div");
+    headRow.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:6px;";
     const lbl = document.createElement("label");
     lbl.textContent = label;
+    headRow.append(lbl);
     const wrap = document.createElement("div");
     wrap.className = "folio-input-wrap";
     const input2 = document.createElement("input");
@@ -60430,6 +60433,16 @@ class CharacterFolio {
       if (composing || value === lastValue)
         return;
       lastValue = value;
+      const activeChar = this.activeCharacterId ? this.library[this.activeCharacterId] : undefined;
+      if (activeChar && path) {
+        activeChar.fieldSources = { ...activeChar.fieldSources ?? {}, [path]: { classification: "manual", sources: [] } };
+        const existingBadge = headRow.querySelector(".folio-field-source");
+        if (existingBadge) {
+          existingBadge.textContent = "Manual";
+          existingBadge.title = "Edited manually";
+          existingBadge.style.opacity = "0.78";
+        }
+      }
       onChange(value);
     };
     input2.addEventListener("compositionstart", () => {
@@ -60458,17 +60471,31 @@ class CharacterFolio {
       btn.onclick = () => onAutoFill(input2);
       wrap.append(btn);
     }
-    field.append(lbl, wrap);
-    const labels2 = { Age: "build.age", Gender: "build.gender", Species: "build.species", Height: "build.height", "Body Type": "build.bodyType", "Skin Tone & Complexion": "build.skinTone", "Hair Color": "hair.color", "Hair Length": "hair.length", "Hair Style": "hair.style", "Eye Color": "eyes.color", "Eye Shape": "eyes.shape", "Facial Structure": "faceFeatures", "Demeanor & Posture": "demeanor", "Signature Outfit": "signatureOutfit", "Active Scene Attire": "activeOutfit" };
-    const path = labels2[label], source = this.activeCharacterId && path ? this.library[this.activeCharacterId]?.fieldSources?.[path] : undefined;
+    const source = this.activeCharacterId && path ? this.library[this.activeCharacterId]?.fieldSources?.[path] : undefined;
     if (source) {
       const badge = document.createElement("small");
       badge.className = "folio-field-source";
       badge.textContent = source.classification === "manual" ? "Manual" : source.classification === "generated" ? "Generated" : source.classification === "inferred" ? "Inferred" : "Evidence";
       badge.title = source.sources.join(`
 `) || "User-approved appearance detail";
-      field.append(badge);
+      badge.style.cssText = "font-size:10px;opacity:0.65;padding:1px 6px;border-radius:999px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);white-space:nowrap;cursor:pointer;";
+      badge.onclick = () => {
+        const srcText = source.sources.filter(Boolean).join(" · ") || "User-approved appearance detail";
+        this.notice = `${label} (${badge.textContent}): ${srcText}`;
+        const existing = field.querySelector("[data-source-detail]");
+        if (existing) {
+          existing.remove();
+          return;
+        }
+        const detail = document.createElement("small");
+        detail.dataset.sourceDetail = "";
+        detail.style.cssText = "font-size:11px;opacity:0.78;line-height:1.35;margin-top:2px;";
+        detail.textContent = srcText;
+        field.append(detail);
+      };
+      headRow.append(badge);
     }
+    field.append(headRow, wrap);
     return field;
   }
   requestAutoFill(char, fields2) {
@@ -63952,19 +63979,11 @@ function setupVisualNovelFrontend(baseContext) {
       const owner = chatId();
       if (owner) {
         ctx.sendToBackend({ type: "vn_delete_image", chatId: owner, imageUrl });
-        stage.cgGallery.removeImage(imageUrl);
       }
     },
     onClose: () => stage.workspace.close()
   });
   stage.workspace.register("character", characterFolio);
-  stage.cgGallery.onDeleteImage = (item) => {
-    const owner = chatId();
-    if (owner) {
-      ctx.sendToBackend({ type: "vn_delete_image", chatId: owner, imageUrl: item.imageUrl });
-      characterFolio.removeCg(item.imageUrl);
-    }
-  };
   stage.setFolioOpener((charName) => {
     characterFolio.setActiveCharacter(charName);
     stage.workspace.open("character");
@@ -64195,6 +64214,8 @@ function setupVisualNovelFrontend(baseContext) {
     stage.setReferenceHistory(undefined);
     characterFolio.setContext(null);
     dnaRequests.clear();
+    dnaTurnToken = "";
+    dnaChangedThisTurn = false;
     preparationActive = false;
     stage.clearPreparationPreview();
     imageStudio.setPlanning(chatId(), false);
@@ -64253,9 +64274,6 @@ function setupVisualNovelFrontend(baseContext) {
     if (!turn)
       return;
     characterFolio.syncFromTurn(turn, paragraphIndex);
-    const galleryItems = stage.cgGallery?.items ?? [];
-    if (galleryItems.length > 0)
-      characterFolio.ingestCgs(galleryItems);
     const sourceTurn = turn;
     const assetFailure = currentAssetFailure(turn, paragraphIndex);
     if (assetFailure)
@@ -64527,6 +64545,7 @@ function setupVisualNovelFrontend(baseContext) {
         return;
       dnaRevision = message.library.revision ?? 0;
       characterFolio.setLibrary(message.library, owner.action !== "list", owner.saved);
+      characterFolio.setGalleries(message.characterGalleries);
       stage.setCharacterDnaLibrary(message.library.characters);
       if (message.proposal)
         characterFolio.setProposal(message.proposal);
@@ -64837,6 +64856,8 @@ function setupVisualNovelFrontend(baseContext) {
   const unsubChat = ctx.events.on("CHAT_SWITCHED", () => {
     characterFolio.setContext(null);
     dnaRequests.clear();
+    dnaTurnToken = "";
+    dnaChangedThisTurn = false;
     preparationActive = false;
     externalReview.cancel();
     imageBridge.cancelAll();
@@ -64896,6 +64917,8 @@ function setupVisualNovelFrontend(baseContext) {
       return;
     characterFolio.setContext(null);
     dnaRequests.clear();
+    dnaTurnToken = "";
+    dnaChangedThisTurn = false;
     deactivate();
     stage.workspace.destroy();
     destroyed = true;

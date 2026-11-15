@@ -6,7 +6,7 @@ import { POSE_EXPRESSION_CATALOGUE } from "../../shared/character.js";
 import { getAudioCatalog, tokenizeText } from "./audio-catalog.js";
 
 /** Caps per question. Candidates are chosen by relevance to the paragraph, not catalog order. */
-export const SYSTEM_ONE_LIMITS = { paragraphs: 24, expressions: 16, music: 24, sounds: 24 } as const;
+export const SYSTEM_ONE_LIMITS = { paragraphs: 36, expressions: 16, music: 24, sounds: 24 } as const;
 const RELEVANCE_STOPWORDS = new Set(["the", "and", "for", "with", "that", "this", "from", "into", "was", "were", "you", "are", "but", "not", "its", "their", "they", "them", "had", "has", "have", "she", "her", "his", "him"]);
 
 const SEMANTIC_SYNONYMS: ReadonlyArray< readonly [RegExp, readonly string[]] > = [

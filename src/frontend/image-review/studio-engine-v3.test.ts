@@ -236,4 +236,59 @@ describe("ImageStudio Engine V3 Features (Phase 2)", () => {
 
     studio.destroy();
   });
+
+  test("Option 3 Command Hub navigates to Focus Sheets, toggles Hero Safe Zone, and keeps viewfinder local", () => {
+    const sent: FrontendRequest[] = [];
+    const mount = new FakeNode("div") as unknown as HTMLElement;
+    const studio = new ImageStudio(mount, (req) => sent.push(req), () => {});
+
+    studio.setTurn(createMockTurn());
+    studio.open();
+
+    const root = (studio as any).root;
+    const section = root.querySelector("section");
+    expect(root.querySelector("[data-studio-hub]")).not.toBeNull();
+    expect(root.querySelector('[data-hub-sub="prompt"]').textContent).toContain("/");
+
+    // Open Camera Focus Sheet via Hub tile
+    const camTile = root.querySelector('[data-hub-tile="camera"]');
+    expect(camTile).not.toBeNull();
+    camTile.click();
+    expect(section.dataset.activeTab).toBe("camera");
+    expect(root.querySelector('[data-tab-panel="camera"]').hidden).toBe(false);
+    expect(root.querySelector('[data-tab-panel="picture"]').hidden).toBe(true);
+
+    // Subject chip in Viewfinder updates local composition without sending network request
+    const baselineRequests = sent.length;
+    const subjectChip = root.querySelector(".studio-vf-subject-chip");
+    expect(subjectChip).not.toBeNull();
+    subjectChip.click();
+    expect(sent.length).toBe(baselineRequests);
+    expect(root.querySelector("[data-auto-director]").checked).toBe(false);
+    expect(root.querySelector('[data-hub-sub="camera"]').textContent).toContain("Manual");
+
+    // Return to Hub via sticky sheet Done button
+    const doneBtn = root.querySelector('[data-tab-panel="camera"] [data-sheet-done]');
+    expect(doneBtn).not.toBeNull();
+    doneBtn.click();
+    expect(section.dataset.activeTab).toBe("picture");
+    expect(root.querySelector('[data-tab-panel="picture"]').hidden).toBe(false);
+
+    // Hero Safe Zone curtain toggle
+    const safeMaskBtn = root.querySelector("[data-toggle-safe-mask]");
+    const curtain = root.querySelector("[data-preview-safe-curtain]");
+    expect(curtain.hidden).toBe(true);
+    safeMaskBtn.click();
+    expect(curtain.hidden).toBe(false);
+    expect(safeMaskBtn.getAttribute("aria-pressed")).toBe("true");
+
+    // Escape returns from Focus Sheet -> Hub first without closing studio
+    root.querySelector('[data-hub-tile="prompt"]').click();
+    expect(section.dataset.activeTab).toBe("prompt");
+    root.dispatchEvent({ type: "keydown", key: "Escape", preventDefault() {}, stopPropagation() {} });
+    expect(section.dataset.activeTab).toBe("picture");
+    expect(section.hidden).toBe(false);
+
+    studio.destroy();
+  });
 });

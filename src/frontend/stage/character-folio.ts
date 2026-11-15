@@ -65,13 +65,25 @@ export class CharacterFolio implements WorkspaceSurface {
   private deleteConfirm=false;
   private mergeOther='';
   private accumulatedCgs = new Map<string, Array<{ imageUrl: string; caption?: string }>>();
+  private persistentGalleries: Record<string, Array<{ imageUrl: string; imageId?: string; caption?: string; messageId?: string }>> = Object.create(null);
   private readonly lightbox: ImageLightbox;
 
   setContext(chatId:string|null):void{
     if(this.chatId===chatId)return;
-    this.handlers.onCancelDNA?.();this.chatId=chatId;this.discoveredIds.clear();this.swipeCharacterCache.clear();this.lastRenderedSwipeKey=null;this.turnRpgCompanions.clear();this.activeSubTab='dna';this.library=Object.create(null);this.dirty.clear();this.saving.clear();this.savedLibrary=Object.create(null);this.loreMap=Object.create(null);this.deleted={};this.revision=0;this.activeCharacterId=null;this.proposal=null;this.pending=false;this.notice='';this.latestTurnText='';this.deleteConfirm=false;this.mergeOther='';this.accumulatedCgs.clear();this.renderRoster();this.renderDetail();
+    this.handlers.onCancelDNA?.();this.chatId=chatId;this.discoveredIds.clear();this.swipeCharacterCache.clear();this.lastRenderedSwipeKey=null;this.turnRpgCompanions.clear();this.activeSubTab='dna';this.library=Object.create(null);this.dirty.clear();this.saving.clear();this.savedLibrary=Object.create(null);this.loreMap=Object.create(null);this.deleted={};this.revision=0;this.activeCharacterId=null;this.proposal=null;this.pending=false;this.notice='';this.latestTurnText='';this.deleteConfirm=false;this.mergeOther='';this.accumulatedCgs.clear();this.persistentGalleries=Object.create(null);this.renderRoster();this.renderDetail();
   }
   getContext():string|null{return this.chatId;}
+  setGalleries(galleries?: Record<string, Array<{ imageUrl: string; imageId?: string; caption?: string; messageId?: string }>>): void {
+    const next: Record<string, Array<{ imageUrl: string; imageId?: string; caption?: string; messageId?: string }>> = Object.create(null);
+    if (galleries) {
+      for (const [key, list] of Object.entries(galleries)) {
+        if (Array.isArray(list) && list.length > 0) next[key] = list.slice();
+      }
+    }
+    this.persistentGalleries = next;
+    this.renderRoster();
+    this.renderDetail();
+  }
   ingestCgs(items: Array<{ characterName?: string; characterNames?: string[]; imageUrl: string; caption?: string }>): void {
     let changed = false;
     for (const item of items) {
@@ -105,6 +117,14 @@ export class CharacterFolio implements WorkspaceSurface {
       const filtered = list.filter(item => item.imageUrl !== imageUrl);
       if (filtered.length !== list.length) {
         this.accumulatedCgs.set(k, filtered);
+        changed = true;
+      }
+    }
+    for (const [k, list] of Object.entries(this.persistentGalleries)) {
+      const filtered = list.filter(item => item.imageUrl !== imageUrl);
+      if (filtered.length !== list.length) {
+        if (filtered.length > 0) this.persistentGalleries[k] = filtered;
+        else delete this.persistentGalleries[k];
         changed = true;
       }
     }
@@ -164,7 +184,7 @@ export class CharacterFolio implements WorkspaceSurface {
           min-height: 0 !important;
           flex: 1 1 auto !important;
           overflow: hidden !important;
-          background: var(--vn-shell-bg, #0b1114);
+          background: var(--vn-shell-panel, var(--aperture-workspace-bg, #0b1114));
           color: var(--vn-shell-text, #e2e8f0);
           font-family: var(--vn-shell-family, ui-sans-serif, system-ui, sans-serif);
           box-sizing: border-box !important;
@@ -430,7 +450,11 @@ export class CharacterFolio implements WorkspaceSurface {
           -webkit-backdrop-filter: blur(12px);
         }
         .subtab-btn {
-          padding: 8px;
+          padding: 8px 10px;
+          min-height: 44px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
           border-radius: 7px;
           font-size: 12px;
           font-weight: 600;
@@ -1349,7 +1373,7 @@ export class CharacterFolio implements WorkspaceSurface {
       this.renderDetail();
     };
 
-    const cgsCount = (lore.cgs?.length || 0);
+    const cgsCount = this.collectCharacterCgs(char).length;
     const cgsTabBtn = document.createElement('button');
     cgsTabBtn.type = 'button';
     cgsTabBtn.setAttribute('data-subtab', 'cgs');
@@ -1400,12 +1424,13 @@ export class CharacterFolio implements WorkspaceSurface {
 
   private renderDnaTab(char: CharacterDNA, isMale: boolean): void {
     // Live Prompt Injection Preview Box
-    const previewBox = document.createElement('div');
+    const previewBox = document.createElement('details');
     previewBox.className = 'folio-prompt-preview';
 
-    const previewHeader = document.createElement('div');
+    const previewHeader = document.createElement('summary');
     previewHeader.className = 'folio-prompt-header';
-    previewHeader.innerHTML = `<span>⚡ Appearance Prompt Preview:</span><span data-dna-save-state style="opacity:0.75;font-size:11px"></span>`;
+    previewHeader.style.cursor = 'pointer';
+    previewHeader.innerHTML = `<span>⚡ Appearance Prompt Preview (tap to inspect)</span><span data-dna-save-state style="opacity:0.75;font-size:11px"></span>`;
 
     const previewCode = document.createElement('p');
     previewCode.className = 'folio-prompt-text';
@@ -1681,7 +1706,7 @@ export class CharacterFolio implements WorkspaceSurface {
       b.className = 'folio-action-btn';
       b.textContent = lbl;
       b.title = title;
-      b.style.cssText = 'padding:2px 7px;font-size:10px;min-height:22px;';
+      b.style.cssText = 'padding:6px 10px;font-size:12px;min-height:44px;min-width:44px;';
       b.onclick = onClick;
       return b;
     };
@@ -2286,16 +2311,11 @@ export class CharacterFolio implements WorkspaceSurface {
     this.detailContainer.append(loreWrap);
   }
 
-  private renderCgsTab(char: CharacterDNA, lore: CharacterLoreContext): void {
-    const cgsWrap = document.createElement('div');
-    cgsWrap.style.display = 'flex';
-    cgsWrap.style.flexDirection = 'column';
-    cgsWrap.style.gap = '14px';
-
-    // Collect all pictures for this character across lore, aliases, nickname matches, avatar, and references
+  private collectCharacterCgs(char: CharacterDNA): Array<{ imageUrl: string; caption?: string | undefined }> {
     const collected: Array<{ imageUrl: string; caption?: string | undefined }> = [];
     const seenUrls = new Set<string>();
-
+    const matchesCharacter = (key: string) =>
+      areNamesEquivalent(key, char.name) || char.aliases.some(a => areNamesEquivalent(key, a));
     const addImage = (url?: string, caption?: string) => {
       if (!url || seenUrls.has(url)) return;
       seenUrls.add(url);
@@ -2307,20 +2327,33 @@ export class CharacterFolio implements WorkspaceSurface {
     if (char.avatarUrl) addImage(char.avatarUrl, 'Active Avatar');
 
     for (const [key, list] of this.accumulatedCgs.entries()) {
-      if (areNamesEquivalent(key, char.name) || char.aliases.some(a => areNamesEquivalent(key, a))) {
-        for (const cg of list) {
-          addImage(cg.imageUrl, cg.caption);
-        }
+      if (matchesCharacter(key)) {
+        for (const cg of list) addImage(cg.imageUrl, cg.caption);
+      }
+    }
+
+    for (const [key, list] of Object.entries(this.persistentGalleries)) {
+      if (matchesCharacter(key)) {
+        for (const cg of list) addImage(cg.imageUrl, cg.caption);
       }
     }
 
     for (const [key, ctx] of Object.entries(this.loreMap)) {
-      if (areNamesEquivalent(key, char.name) || char.aliases.some(a => areNamesEquivalent(key, a))) {
-        for (const cg of ctx.cgs ?? []) {
-          addImage(cg.imageUrl, cg.caption);
-        }
+      if (matchesCharacter(key)) {
+        for (const cg of ctx.cgs ?? []) addImage(cg.imageUrl, cg.caption);
       }
     }
+
+    return collected;
+  }
+
+  private renderCgsTab(char: CharacterDNA, lore: CharacterLoreContext): void {
+    const cgsWrap = document.createElement('div');
+    cgsWrap.style.display = 'flex';
+    cgsWrap.style.flexDirection = 'column';
+    cgsWrap.style.gap = '14px';
+
+    const collected = this.collectCharacterCgs(char);
 
     // Top instruction note
     const guide = document.createElement('p');
@@ -2485,11 +2518,16 @@ export class CharacterFolio implements WorkspaceSurface {
     onChange: (value: string) => void,
     onAutoFill?: (inputEl: HTMLInputElement) => void
   ): HTMLElement {
+    const labels:Record<string,DnaField>={'Age':'build.age','Gender':'build.gender','Species':'build.species','Height':'build.height','Body Type':'build.bodyType','Bust & Cleavage':'build.bust','Muscular Chest / Shoulders':'build.bust','Hips, Waist & Glutes':'build.hipsGlutes','Skin Tone & Complexion':'build.skinTone','Hair Color':'hair.color','Hair Length':'hair.length','Hair Style':'hair.style','Eye Color':'eyes.color','Eye Shape':'eyes.shape','Facial Structure':'faceFeatures','Demeanor & Posture':'demeanor','Signature Outfit':'signatureOutfit','Signature Attire (Default outfit)':'signatureOutfit','Active Scene Attire':'activeOutfit','Active Scene Attire (Dynamic override)':'activeOutfit','Distinguishing Marks & Anchors':'distinguishingFeatures'};
+    const path=labels[label];
     const field = document.createElement('div');
     field.className = 'folio-field';
 
+    const headRow = document.createElement('div');
+    headRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:6px;';
     const lbl = document.createElement('label');
     lbl.textContent = label;
+    headRow.append(lbl);
 
     const wrap = document.createElement('div');
     wrap.className = 'folio-input-wrap';
@@ -2501,7 +2539,22 @@ export class CharacterFolio implements WorkspaceSurface {
     input.value = initialValue;
     input.placeholder = placeholder;
     let composing=false,lastValue=initialValue;
-    const changed=()=>{const value=input.value.trim();if(composing||value===lastValue)return;lastValue=value;onChange(value);};
+    const changed=()=>{
+      const value=input.value.trim();
+      if(composing||value===lastValue)return;
+      lastValue=value;
+      const activeChar=this.activeCharacterId?this.library[this.activeCharacterId]:undefined;
+      if(activeChar&&path){
+        activeChar.fieldSources={...(activeChar.fieldSources??{}),[path]:{classification:'manual',sources:[]}};
+        const existingBadge=headRow.querySelector<HTMLElement>('.folio-field-source');
+        if(existingBadge){
+          existingBadge.textContent='Manual';
+          existingBadge.title='Edited manually';
+          existingBadge.style.opacity='0.78';
+        }
+      }
+      onChange(value);
+    };
     input.addEventListener('compositionstart',()=>{composing=true;});input.addEventListener('compositionend',()=>{composing=false;changed();});
     input.addEventListener('input',changed);input.addEventListener('change',changed);
     if(label==='Gender')input.addEventListener('blur',()=>{if(!this.pending)this.renderDetail();});
@@ -2520,10 +2573,27 @@ export class CharacterFolio implements WorkspaceSurface {
       wrap.append(btn);
     }
 
-    field.append(lbl, wrap);
-    const labels:Record<string,DnaField>={'Age':'build.age','Gender':'build.gender','Species':'build.species','Height':'build.height','Body Type':'build.bodyType','Skin Tone & Complexion':'build.skinTone','Hair Color':'hair.color','Hair Length':'hair.length','Hair Style':'hair.style','Eye Color':'eyes.color','Eye Shape':'eyes.shape','Facial Structure':'faceFeatures','Demeanor & Posture':'demeanor','Signature Outfit':'signatureOutfit','Active Scene Attire':'activeOutfit'};
-    const path=labels[label],source=this.activeCharacterId&&path?this.library[this.activeCharacterId]?.fieldSources?.[path]:undefined;
-    if(source){const badge=document.createElement('small');badge.className='folio-field-source';badge.textContent=source.classification==='manual'?'Manual':source.classification==='generated'?'Generated':source.classification==='inferred'?'Inferred':'Evidence';badge.title=source.sources.join('\n')||'User-approved appearance detail';field.append(badge);}
+    const source=this.activeCharacterId&&path?this.library[this.activeCharacterId]?.fieldSources?.[path]:undefined;
+    if(source){
+      const badge=document.createElement('small');
+      badge.className='folio-field-source';
+      badge.textContent=source.classification==='manual'?'Manual':source.classification==='generated'?'Generated':source.classification==='inferred'?'Inferred':'Evidence';
+      badge.title=source.sources.join('\n')||'User-approved appearance detail';
+      badge.style.cssText='font-size:10px;opacity:0.65;padding:1px 6px;border-radius:999px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);white-space:nowrap;cursor:pointer;';
+      badge.onclick=()=>{
+        const srcText=source.sources.filter(Boolean).join(' · ')||'User-approved appearance detail';
+        this.notice=`${label} (${badge.textContent}): ${srcText}`;
+        const existing=field.querySelector<HTMLElement>('[data-source-detail]');
+        if(existing){existing.remove();return;}
+        const detail=document.createElement('small');
+        detail.dataset.sourceDetail='';
+        detail.style.cssText='font-size:11px;opacity:0.78;line-height:1.35;margin-top:2px;';
+        detail.textContent=srcText;
+        field.append(detail);
+      };
+      headRow.append(badge);
+    }
+    field.append(headRow, wrap);
     return field;
   }
 

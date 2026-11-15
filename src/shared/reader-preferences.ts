@@ -15,6 +15,7 @@ export type ReaderPreferences = {
   sentimentLighting?: boolean | undefined;
   smartProseFilter?: boolean | undefined;
   smartDialogueExtraction?: boolean | undefined;
+  smartBeatSegmentation?: boolean | undefined;
   readabilityScrim?: boolean | undefined;
   virtualCameraEnabled?: boolean | undefined;
   confidantCutInsEnabled?: boolean | undefined;
@@ -27,6 +28,7 @@ export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   theme: "light",
   smartProseFilter: true,
   smartDialogueExtraction: true,
+  smartBeatSegmentation: true,
   readabilityScrim: true,
   virtualCameraEnabled: true,
   confidantCutInsEnabled: true,
@@ -51,6 +53,7 @@ export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
     ...(input.sentimentLighting !== undefined ? { sentimentLighting: input.sentimentLighting === true } : {}),
     smartProseFilter: input.smartProseFilter !== undefined ? input.smartProseFilter === true : (DEFAULT_READER_PREFERENCES.smartProseFilter ?? true),
     smartDialogueExtraction: input.smartDialogueExtraction !== undefined ? input.smartDialogueExtraction === true : (DEFAULT_READER_PREFERENCES.smartDialogueExtraction ?? true),
+    smartBeatSegmentation: input.smartBeatSegmentation !== undefined ? input.smartBeatSegmentation === true : (DEFAULT_READER_PREFERENCES.smartBeatSegmentation ?? true),
     readabilityScrim: input.readabilityScrim !== undefined ? input.readabilityScrim === true : (DEFAULT_READER_PREFERENCES.readabilityScrim ?? true),
     virtualCameraEnabled: input.virtualCameraEnabled !== undefined ? input.virtualCameraEnabled === true : (DEFAULT_READER_PREFERENCES.virtualCameraEnabled ?? true),
     confidantCutInsEnabled: input.confidantCutInsEnabled !== undefined ? input.confidantCutInsEnabled === true : (DEFAULT_READER_PREFERENCES.confidantCutInsEnabled ?? true),

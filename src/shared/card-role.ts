@@ -10,12 +10,30 @@ export const SCENARIO_KEYWORD_RE = /\b(?:academy|rpg|adventure|simulator|simulat
 
 export const SCENARIO_TAG_RE = /^(?:scenario|narrator|rpg|cyoa|sandbox|world|setting|location|adventure|storyteller|gm|dm)$/i;
 
+/** Wrapper/internal preset card handles or technical placeholders that must never surface as story speakers. */
+export const TECHNICAL_WRAPPER_NAME_RE = /^(?:setup\s*inherit|inherit|default|system|assistant|user|card|template|wrapper|preset|character|unknown|none|null|undefined|scene|narrator(?:\s*bot)?)$/i;
+
+/** Returns true when a card or speaker label is a technical placeholder rather than a real character name. */
+export function isTechnicalWrapperName(name: string | null | undefined): boolean {
+  if (!name) return false;
+  const compact = name.trim().replace(/[_-]+/g, "");
+  return TECHNICAL_WRAPPER_NAME_RE.test(compact) || TECHNICAL_WRAPPER_NAME_RE.test(name.trim());
+}
+
+/** Sanitizes wrapper/internal card identifiers into empty string so downstream display falls back to scene/narrator cleanly. */
+export function sanitizeDisplayCharacterName(name: string | null | undefined): string {
+  if (!name) return "";
+  const trimmed = name.trim();
+  if (!trimmed || isTechnicalWrapperName(trimmed)) return "";
+  return trimmed;
+}
+
 /** Returns true if a name is likely a scenario, world, or institution card title rather than a character. */
 export function isScenarioTitle(name: string | null | undefined): boolean {
   if (!name) return false;
   const trimmed = name.trim();
   if (!trimmed) return false;
-  return SCENARIO_KEYWORD_RE.test(trimmed);
+  return SCENARIO_KEYWORD_RE.test(trimmed) || isTechnicalWrapperName(trimmed);
 }
 
 /** Determines if card metadata indicates a scenario/narrator/sandbox world card. */

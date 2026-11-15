@@ -48,4 +48,42 @@ describe('F13 library change detection',()=>{
    expect(requests[2]!.anchor.messageId).toBe('m2');
   }finally{restore();}
  });
+
+ test('useHistoryEntry uses larger limit and Load older merges earlier replies and images without dropping existing ones',()=>{
+  const restore=installFakeDocument();
+  try{
+   const requests:Array<any>=[];
+   const library=new ImageLibrary(document.createElement('div'),(req)=>requests.push(req),()=>{});
+   library.useHistoryEntry();
+   library.setContext(turn({messageId:'m3'}),0);
+   library.open('story');
+   expect(requests).toHaveLength(1);
+   expect(requests[0]!.limit).toBe(72);
+
+   const key3={chatId:'chat-1',assistantMessageId:'m3',swipeId:0,sourceFingerprint:'fingerprint-3',revision:1};
+   const key2={chatId:'chat-1',assistantMessageId:'m2',swipeId:0,sourceFingerprint:'fingerprint-2',revision:1};
+   library.receive('chat-1',requests[0]!.requestId,{
+    entries:[{key:key3,jobId:'j3',createdAt:'2026-10-13T12:00:00.000Z',messageNumber:3,paragraphIndex:0,role:'scene',versionLabel:'current',available:true,imageId:'img3',thumbnailUrl:'/api/v1/images/img3',imageUrl:'/api/v1/images/img3',excerpt:'Scene 3'}],
+    replies:[{key:key3,messageNumber:3,versionLabel:'current',speaker:'Narrator',paragraphs:[{index:0,speaker:'Narrator',text:'Newest reply'}],truncated:false}],
+    nextCursor:'1:0',notice:'',
+   });
+
+   const shadow=(library as any).root as ShadowRoot;
+   const loadMore=shadow.querySelector('[data-load-more]') as HTMLButtonElement;
+   expect(loadMore.hidden).toBe(false);
+   loadMore.click();
+
+   expect(requests).toHaveLength(2);
+   expect(requests[1]!.cursor).toBe('1:0');
+   library.receive('chat-1',requests[1]!.requestId,{
+    entries:[{key:key2,jobId:'j2',createdAt:'2026-10-13T11:59:00.000Z',messageNumber:2,paragraphIndex:0,role:'scene',versionLabel:'current',available:true,imageId:'img2',thumbnailUrl:'/api/v1/images/img2',imageUrl:'/api/v1/images/img2',excerpt:'Scene 2'}],
+    replies:[{key:key2,messageNumber:2,versionLabel:'current',speaker:'Narrator',paragraphs:[{index:0,speaker:'Narrator',text:'Older reply'}],truncated:false}],
+    nextCursor:null,notice:'',
+   });
+
+   expect(shadow.querySelectorAll('[data-reply]')).toHaveLength(2);
+   expect(shadow.querySelectorAll('[data-image-card]')).toHaveLength(2);
+   expect(loadMore.hidden).toBe(true);
+  }finally{restore();}
+ });
 });

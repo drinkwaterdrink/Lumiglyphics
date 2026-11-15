@@ -1,9 +1,9 @@
 import {test,expect} from 'bun:test';
 import type {SpindleAPI} from 'lumiverse-spindle-types';
 import {TurnPlanSchema,AssetJobSchema} from '../../shared/contracts.js';
-import {saveTurnRecord,loadTurnRecord,turnPath,type StoredTurnRecord} from './storage.js';
+import {saveTurnRecord,loadTurnRecord,turnPath,purgeDeletedImageFromChatTurns,type StoredTurnRecord} from './storage.js';
 import {fingerprintForMessage} from './planner.js';
-import {mergeImageLibrary,readImageLibraryPage} from './image-library.js';
+import {mergeImageLibrary,readImageLibraryPage,collectActiveCharacterGalleries} from './image-library.js';
 import {isFrontendRequest} from '../../protocol.js';
 import {registerVisualNovelBackend} from './controller.js';
 import {ImageLibraryArchiveSchema} from '../../shared/image-library.js';
@@ -197,4 +197,56 @@ test('Story history recovers valid images and text when a saved speaker is malfo
   const f=fixture();const saved=record() as any;saved.speaker=speaker;f.data.set(`u:${turnPath('chat','m1',0)}`,saved);
   const page=await readImageLibraryPage(f.api,request({mode:'story'}),'u');expect(page.entries).toHaveLength(1);expect(page.replies.at(-1)!.speaker).toBe('');expect(page.replies.at(-1)!.paragraphs[0]!.text).toBe('A library.');
  }
+});
+
+test('readImageLibraryPage honors larger page limit for story history without cap at 24',async()=>{
+ const f=fixture();
+ for(let i=0;i<28;i++)await saveTurnRecord(f.api,turnPath('chat',`m${i}`,0),record(`m${i}`,`img-${i}`),'u');
+ const page=await readImageLibraryPage(f.api,request({mode:'story',limit:72}),'u');
+ expect(page.entries).toHaveLength(28);
+ expect(page.nextCursor).toBeNull();
+});
+
+test('collectActiveCharacterGalleries aggregates active-branch character images across multiple turns',async()=>{
+ const f=fixture();
+ f.messages[1]!.swipe_id=0;
+ const t1=record('m1','img-nadine-1',0);
+ t1.plan.scenes[0]!.cast=['Nadine'];
+ t1.plan.visualCues[0]!.kind='flattened_scene';
+ t1.plan.visualCues[0]!.imageTemplate={id:'evening-library',name:'Evening Library',category:'custom',enabled:true,useWhen:'In library',positive:'{{scene}}',negative:'',subjectMode:'one',framing:'upper body',referencePolicy:'character',revision:'1234abcd'};
+ await saveTurnRecord(f.api,turnPath('chat','m1',0),t1,'u');
+ const alt1=record('m1','img-nadine-alt',1);
+ alt1.plan.scenes[0]!.cast=['Nadine'];
+ alt1.plan.visualCues[0]!.kind='flattened_scene';
+ await saveTurnRecord(f.api,turnPath('chat','m1',1),alt1,'u');
+ const t2=record('m2','img-nadine-2',0);
+ t2.plan.visualCues[0]!.character='Nadine';
+ t2.plan.visualCues[0]!.ensembleSubjects=[{name:'Nadine',appearance:'tall woman',attire:'coat'},{name:'Darby',appearance:'man in suit',attire:'suit'}];
+ await saveTurnRecord(f.api,turnPath('chat','m2',0),t2,'u');
+
+ const galleries=await collectActiveCharacterGalleries(f.api,'chat','u',f.messages);
+ expect(galleries['nadine']?.map(x=>x.imageId)).toEqual(['img-nadine-2','img-nadine-1']);
+ expect(galleries['nadine']?.[1]?.caption).toBe('Evening Library');
+ expect(galleries['darby']?.map(x=>x.imageId)).toEqual(['img-nadine-2']);
+});
+
+test('purgeDeletedImageFromChatTurns strips deleted image across older turns and reports active turn change',async()=>{
+ const f=fixture();
+ await saveTurnRecord(f.api,turnPath('chat','m1',0),record('m1','img-del',0),'u');
+ const t2=record('m2','img-keep',0);
+ t2.previousImages={'0':{imageId:'img-del',imageUrl:'/api/v1/images/img-del',jobId:'job'} as any};
+ t2.previousVersions={'0':[{imageId:'img-del',imageUrl:'/api/v1/images/img-del',jobId:'job'} as any]};
+ await saveTurnRecord(f.api,turnPath('chat','m2',0),t2,'u');
+
+ const activeChanged=await purgeDeletedImageFromChatTurns(f.api,'chat','img-del',undefined,'u',turnPath('chat','m29',0));
+ expect(activeChanged).toBe(false);
+ const older=await loadTurnRecord(f.api,turnPath('chat','m1',0),'u');
+ expect(older?.jobs[0]?.imageId).toBeNull();
+ expect((older?.imageLibrary as any)?.entries).toHaveLength(0);
+ const newer=await loadTurnRecord(f.api,turnPath('chat','m2',0),'u');
+ expect(newer?.previousImages?.['0']).toBeUndefined();
+ expect(newer?.previousVersions?.['0']).toBeUndefined();
+
+ const activeHit=await purgeDeletedImageFromChatTurns(f.api,'chat','img-keep',undefined,'u',turnPath('chat','m2',0));
+ expect(activeHit).toBe(true);
 });

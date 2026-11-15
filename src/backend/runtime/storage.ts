@@ -1128,6 +1128,88 @@ export async function purgeDeletedCharacterFromStorage(
   } catch {}
 }
 
+/** Remove a deleted imageId from every stored turn record (jobs, fallbacks, versions & imageLibrary) in this chat. */
+export async function purgeDeletedImageFromChatTurns(
+  spindle: SpindleAPI,
+  chatId: string,
+  imageId: string,
+  jobId: string | undefined,
+  userId?: string,
+  activeTurnPath?: string | null,
+): Promise<boolean> {
+  if (!spindle.userStorage?.getJson || !imageId) return false;
+  const prefix = `turns/${safeSegment(chatId)}/`;
+  const pathSet = new Set<string>();
+  if (activeTurnPath?.startsWith(prefix)) pathSet.add(activeTurnPath);
+  if (typeof spindle.userStorage.list === "function") {
+    try {
+      const listed = await spindle.userStorage.list(prefix, userId);
+      for (const entry of listed) {
+        if (typeof entry !== "string") continue;
+        const rel = entry.replaceAll("\\", "/");
+        const path = rel.startsWith(prefix) ? rel : rel.startsWith("turns/") ? "" : prefix + rel;
+        const tail = path.slice(prefix.length);
+        if (path.startsWith(prefix) && path.length <= 1200 && /^[^/]+\/[^/]+\.json$/.test(tail) && !tail.split("/").some(p => p === "." || p === "..") && !/[\r\n\0:]/.test(tail)) {
+          pathSet.add(path);
+        }
+      }
+    } catch {}
+  }
+  let activeTurnChanged = false;
+  for (const path of pathSet) {
+    await serializedWrite(scopedKey(userId, path), async () => {
+      const raw = await spindle.userStorage.getJson<Record<string, unknown> | null>(path, { fallback: null, ...(userOptions(userId) ?? {}) });
+      if (!raw || typeof raw !== "object" || !Array.isArray(raw.jobs)) return;
+      let changed = false;
+      const jobs = (raw.jobs as Array<Record<string, unknown>>).map((j) => {
+        if (j && (j.imageId === imageId || (path === activeTurnPath && jobId && j.jobId === jobId))) {
+          changed = true;
+          return { ...j, status: "cancelled", imageId: null, imageUrl: null, generatedAt: null, readyAt: null, finishedAt: new Date().toISOString() };
+        }
+        return j;
+      });
+      let previousImages = raw.previousImages as Record<string, { imageId?: string }> | undefined;
+      if (previousImages && typeof previousImages === "object") {
+        const nextPrev: Record<string, { imageId?: string }> = { ...previousImages };
+        for (const [k, v] of Object.entries(nextPrev)) {
+          if (v?.imageId === imageId) { delete nextPrev[k]; changed = true; }
+        }
+        previousImages = nextPrev;
+      }
+      let previousVersions = raw.previousVersions as Record<string, Array<{ imageId?: string }>> | undefined;
+      if (previousVersions && typeof previousVersions === "object") {
+        const nextVersions: Record<string, Array<{ imageId?: string }>> = {};
+        for (const [k, list] of Object.entries(previousVersions)) {
+          if (Array.isArray(list)) {
+            const filtered = list.filter((item) => item?.imageId !== imageId);
+            if (filtered.length !== list.length) changed = true;
+            if (filtered.length > 0) nextVersions[k] = filtered;
+          }
+        }
+        previousVersions = nextVersions;
+      }
+      let imageLibrary = raw.imageLibrary as { version?: unknown; entries?: Array<{ imageId?: string }> } | undefined;
+      if (imageLibrary && typeof imageLibrary === "object" && imageLibrary.version === 1 && Array.isArray(imageLibrary.entries)) {
+        const filtered = imageLibrary.entries.filter((entry) => entry?.imageId !== imageId);
+        if (filtered.length !== imageLibrary.entries.length) {
+          imageLibrary = { ...imageLibrary, entries: filtered };
+          changed = true;
+        }
+      }
+      if (!changed) return;
+      if (path === activeTurnPath) activeTurnChanged = true;
+      await spindle.userStorage.setJson(path, {
+        ...raw,
+        jobs,
+        ...(previousImages ? { previousImages } : {}),
+        ...(previousVersions ? { previousVersions } : {}),
+        ...(imageLibrary ? { imageLibrary } : {}),
+        updatedAt: new Date().toISOString()
+      }, { indent: 2, ...(userOptions(userId) ?? {}) });
+    });
+  }
+  return activeTurnChanged;
+}
 
 /** Conditional writes run inside the existing queue so an obsolete operation cannot write after a newer turn. */
 export async function saveTurnRecordIfCurrent(spindle: SpindleAPI, path: string, record: StoredTurnRecord, userId: string | undefined, isCurrent: () => boolean): Promise<boolean> {

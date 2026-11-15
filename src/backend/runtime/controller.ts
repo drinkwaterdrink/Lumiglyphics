@@ -1,4 +1,4 @@
-import {isScenarioTitle} from '../../shared/card-role.js';
+import {isScenarioTitle,sanitizeDisplayCharacterName} from '../../shared/card-role.js';
 import {archiveCurrentImageVersion,resolveImageVersion,imageVersionView} from './image-version-provenance.js';
 import {handleImageReviewRpc} from './review-rpc-handlers.js';
 import {ImageUsageLedger} from './image-usage.js';
@@ -116,6 +116,7 @@ import {
   saveTurnRecordIfCurrent,
   saveTurnRecord,
   mutateActiveTurnRecord,
+  purgeDeletedImageFromChatTurns,
   turnPath,
   updateConfig,
   type StoredTurnRecord
@@ -1426,7 +1427,7 @@ async function processAssistantMessage(
           chatId,
           plan: result.plan,
           content: resolved,
-          speakerName: message.name,
+          speakerName: sanitizeDisplayCharacterName(message.name) || undefined,
           userId,
         });
       } catch (err) {
@@ -1482,7 +1483,7 @@ async function processAssistantMessage(
       ...(relation === 'current' && existing?.forceImageReview ? {forceImageReview:true} : {}),
       ...(relation === 'current' && existing?.replanRequestIds ? {replanRequestIds:existing.replanRequestIds} : {}),
       ...(result.cardId ? {cardId:result.cardId} : {}),
-      speaker: result.cardRole === "scenario" ? "Narrator" : message.name || "Narrator",
+      speaker: result.cardRole === "scenario" ? "Narrator" : sanitizeDisplayCharacterName(message.name) || "Narrator",
       userSpeaker,
       status: "ready",
       plan: result.plan,
@@ -1857,28 +1858,11 @@ async function handleDeleteImage(
   } catch {}
   sceneCache.invalidateImage(imageId, "image_deleted");
   const chatState = await loadChatState(spindle, request.chatId, userId);
-  if (chatState.activeTurnPath) {
-    const next = await mutateActiveTurnRecord(spindle, request.chatId, chatState.activeTurnPath, userId, (record) => {
-      let changed = false;
-      const jobs = record.jobs.map(j => {
-        if (j.imageId === imageId || (request.jobId && j.jobId === request.jobId)) {
-          changed = true;
-          return AssetJobSchema.parse({ ...j, status: 'cancelled', imageId: null, imageUrl: null, finishedAt: new Date().toISOString() });
-        }
-        return j;
-      });
-      const previousImages = { ...(record.previousImages ?? {}) };
-      for (const [id, prev] of Object.entries(previousImages)) {
-        if ((prev as { imageId?: string })?.imageId === imageId) {
-          delete previousImages[id];
-          changed = true;
-        }
-      }
-      if (!changed) return null;
-      return { ...record, jobs, previousImages, updatedAt: new Date().toISOString() };
-    });
-    if (next) {
-      const view = await turnViewWithAudio(spindle, next, userId);
+  const activeTurnChanged = await purgeDeletedImageFromChatTurns(spindle, request.chatId, imageId, request.jobId, userId, chatState.activeTurnPath);
+  if (activeTurnChanged && chatState.activeTurnPath) {
+    const refreshed = await loadTurnRecord(spindle, chatState.activeTurnPath, userId);
+    if (refreshed) {
+      const view = await turnViewWithAudio(spindle, refreshed, userId);
       spindle.sendToFrontend({ type: 'vn_turn', turn: view }, userId);
     }
   }

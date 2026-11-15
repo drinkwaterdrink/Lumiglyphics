@@ -876,19 +876,19 @@ export class DossierCard {
     panel.append(header);
 
     const titleBlock = document.createElement('div');
-    titleBlock.style.cssText = 'margin:4px 0 10px;';
+    titleBlock.style.cssText = 'margin:2px 0 6px;display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;';
     const pageTitle = document.createElement('h1');
     pageTitle.className = 'page-title';
-    pageTitle.style.cssText = 'margin:0;font-size:26px;font-family:Georgia,serif;letter-spacing:-0.03em;line-height:1.2;';
+    pageTitle.style.cssText = 'margin:0;font-size:20px;font-family:Georgia,serif;letter-spacing:-0.02em;line-height:1.15;';
     pageTitle.textContent = 'Look closer.';
     const pageSub = document.createElement('div');
     pageSub.className = 'page-sub';
-    pageSub.style.cssText = 'font-size:11px;opacity:0.75;margin-top:2px;';
-    pageSub.textContent = 'Scene scenery DNA, connected locations and story items.';
+    pageSub.style.cssText = 'font-size:11px;opacity:0.75;';
+    pageSub.textContent = 'Locations, scene items & cast lore.';
     titleBlock.append(pageTitle, pageSub);
     panel.append(titleBlock);
 
-    // Filter Chips (.chip-row)
+    // Filter Chips (.chip-row) — compact single scrollable bar
     const tabs = document.createElement('div');
     tabs.dataset.referenceCategories = '';
     tabs.className = 'chip-row';
@@ -904,7 +904,7 @@ export class DossierCard {
     const search = document.createElement('input');
     search.type = 'search';
     search.maxLength = 160;
-    search.placeholder = 'Find a known reference…';
+    search.placeholder = 'Find reference…';
     search.setAttribute('aria-label', 'Search references');
     search.value = this.query;
     inputWrap.append(search);
@@ -934,7 +934,7 @@ export class DossierCard {
     folioBtn.type = 'button';
     folioBtn.className = 'chip folio-shortcut-chip';
     folioBtn.style.cssText = 'background:rgba(168,85,247,0.18);color:#d8b4fe;border:1px solid rgba(168,85,247,0.35);';
-    folioBtn.innerHTML = '👤 Character Folio';
+    folioBtn.innerHTML = '👤 Folio';
     folioBtn.title = 'Open Character Folio for character DNA, portraits and lore';
     folioBtn.onclick = () => {
       this.folioOpener?.('');
@@ -945,9 +945,9 @@ export class DossierCard {
     addRefBtn.type = 'button';
     addRefBtn.className = 'chip add-ref-chip';
     addRefBtn.style.cssText = 'background:rgba(56,189,248,0.18);color:#38bdf8;border:1px solid rgba(56,189,248,0.35);margin-left:auto;';
-    addRefBtn.textContent = '＋ Add Reference';
+    addRefBtn.textContent = '＋ Add';
     addRefBtn.title = 'Manually add a location or item to the story world';
-    filters.append(addRefBtn);
+    tabs.append(addRefBtn);
 
     category.value = this.category;
     filters.append(inputWrap, category);
@@ -1280,9 +1280,43 @@ export class DossierCard {
         worldSheet.append(sceneHub);
       } else {
         // Connected Atlas Topological SVG Graph
+        const atlasSection = document.createElement('div');
+        atlasSection.style.cssText = 'display:flex;flex-direction:column;gap:8px;margin-top:6px;';
+
+        const atlasBar = document.createElement('div');
+        atlasBar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:11px;opacity:0.88;';
+        const legend = document.createElement('span');
+        legend.textContent = '★ Active · 📍 Visited · Dashed = path';
+
+        let atlasZoom = Number((worldSheet.dataset.atlasZoom) || '1');
+        if (!Number.isFinite(atlasZoom) || atlasZoom < 0.7 || atlasZoom > 1.8) atlasZoom = 1;
+        const zoomControls = document.createElement('div');
+        zoomControls.style.cssText = 'display:flex;align-items:center;gap:4px;';
+
+        const atlasViewport = document.createElement('div');
+        atlasViewport.style.cssText = 'overflow:auto;max-height:240px;border-radius:10px;border:1px solid var(--vn-panel-border,rgba(255,255,255,.16));background:rgba(12,24,20,0.55);';
+
         const atlasWrap = document.createElement('div');
         atlasWrap.className = 'world-atlas-view';
         atlasWrap.dataset.worldAtlasView = '';
+        const applyAtlasZoom = (next: number) => {
+          atlasZoom = Math.max(0.75, Math.min(1.75, Number(next.toFixed(2))));
+          worldSheet.dataset.atlasZoom = String(atlasZoom);
+          atlasWrap.style.transform = `scale(${atlasZoom})`;
+          atlasWrap.style.transformOrigin = 'top left';
+          atlasWrap.style.width = `${Math.round(100 / Math.min(1, atlasZoom) * atlasZoom)}%`;
+        };
+        for (const [label, aria, delta] of [['−', 'Zoom out atlas', -0.25], ['1:1', 'Reset atlas zoom', 0], ['+', 'Zoom in atlas', 0.25]] as const) {
+          const zBtn = document.createElement('button');
+          zBtn.type = 'button';
+          zBtn.textContent = label;
+          zBtn.setAttribute('aria-label', aria);
+          zBtn.style.cssText = 'min-width:44px;min-height:44px;padding:6px 10px;margin:0;font-size:12px;font-weight:700;';
+          zBtn.onclick = () => applyAtlasZoom(delta === 0 ? 1 : atlasZoom + delta);
+          zoomControls.append(zBtn);
+        }
+        atlasBar.append(legend, zoomControls);
+        applyAtlasZoom(atlasZoom);
 
         const placeMap = new Map<string, { id: string; name: string; entryId?: string; isActive: boolean; connections: string[] }>();
         for (const e of entries) {
@@ -1352,10 +1386,11 @@ export class DossierCard {
           const nodeBtn = document.createElement('button');
           nodeBtn.type = 'button';
           nodeBtn.className = `map-node-pill ${this.selectedEntityId === node.entryId ? 'active' : ''} ${node.isActive ? 'active-location' : ''}`;
-          nodeBtn.style.left = `${Math.max(4, Math.min(72, Math.round((pt.x / 330) * 100 - 11)))}%`;
-          nodeBtn.style.top = `${Math.max(4, Math.min(76, Math.round((pt.y / 210) * 100 - 10)))}%`;
-          const badge = node.isActive ? `★ ACTIVE · 👥 ${presentCast.length}` : 'Location';
-          nodeBtn.innerHTML = html`<span class="index-dot"></span><b>${node.isActive ? '★' : '📍'} ${node.name}</b><small>${badge}</small>`.value;
+          nodeBtn.style.left = `${Math.max(4, Math.min(68, Math.round((pt.x / 330) * 100 - 11)))}%`;
+          nodeBtn.style.top = `${Math.max(4, Math.min(72, Math.round((pt.y / 210) * 100 - 10)))}%`;
+          nodeBtn.style.maxWidth = '120px';
+          const badge = node.isActive ? `★ ACTIVE · 👥 ${presentCast.length}` : 'Visited';
+          nodeBtn.innerHTML = html`<span class="index-dot"></span><b style="white-space:normal;line-height:1.2;word-break:break-word">${node.isActive ? '★' : '📍'} ${node.name}</b><small>${badge}</small>`.value;
           nodeBtn.onclick = () => {
             if (node.entryId) {
               this.selectedEntityId = node.entryId;
@@ -1371,7 +1406,33 @@ export class DossierCard {
           emptyAtlas.textContent = 'Visit or add locations to map the story atlas.';
           atlasWrap.append(emptyAtlas);
         }
-        worldSheet.append(atlasWrap);
+        atlasViewport.append(atlasWrap);
+        atlasSection.append(atlasBar, atlasViewport);
+
+        const selectedAtlasNode = nodes.find(n => n.entryId === this.selectedEntityId) ?? nodes.find(n => n.isActive) ?? nodes[0];
+        if (selectedAtlasNode) {
+          const matchedEntry = entries.find(e => e.entity.id === selectedAtlasNode.entryId || (e.entity.kind === 'place' && createLocationId(e.entity.name) === selectedAtlasNode.id));
+          const quickCard = document.createElement('div');
+          quickCard.className = 'world-lens';
+          quickCard.dataset.atlasQuickCard = '';
+          quickCard.style.marginTop = '2px';
+          const qTitle = document.createElement('h3');
+          qTitle.textContent = `${selectedAtlasNode.isActive ? '★ ' : '📍 '}${selectedAtlasNode.name}`;
+          const qMeta = document.createElement('p');
+          const connText = selectedAtlasNode.connections.length ? `Connected: ${selectedAtlasNode.connections.join(', ')}` : (selectedAtlasNode.isActive ? 'Current active location' : 'Visited location');
+          qMeta.textContent = connText;
+          quickCard.append(qTitle, qMeta);
+          if (matchedEntry) {
+            const qBtn = document.createElement('button');
+            qBtn.type = 'button';
+            qBtn.className = 'world-lens-cta';
+            qBtn.textContent = 'Inspect location →';
+            qBtn.onclick = () => open(matchedEntry.entity.id, trigger);
+            quickCard.append(qBtn);
+          }
+          atlasSection.append(quickCard);
+        }
+        worldSheet.append(atlasSection);
       }
 
       if ((this.storyDna.chapterCodex?.length ?? 0) > 0 || (this.storyDna.thoughtCabinet?.length ?? 0) > 0) {
@@ -1441,6 +1502,20 @@ export class DossierCard {
         lensCard.append(lensTitle, lensDesc, ctaBtn, ...(activeEntry.entity.kind === 'npc' ? [evidence] : []), hideBtn);
       } else {
         lensCard.innerHTML = '<h3>No matching references</h3><p>Try another category or clear the search.</p>';
+        const resetBtn = document.createElement('button');
+        resetBtn.type = 'button';
+        resetBtn.className = 'world-lens-cta';
+        resetBtn.textContent = 'Reset filters';
+        resetBtn.onclick = () => {
+          this.category = 'all';
+          this.query = '';
+          this.scope = 'all';
+          category.value = 'all';
+          search.value = '';
+          scope.value = 'all';
+          render();
+        };
+        lensCard.append(resetBtn);
       }
       lensSlot.replaceChildren(lensCard);
 
@@ -1872,8 +1947,9 @@ section[data-reference-current] h3,section[data-reference-observations] h3{font-
 [data-reference-notes] label{display:block;font-size:.85em}
 [data-vn-dossier-card] textarea{display:block;box-sizing:border-box;width:100%;min-height:90px;margin:8px 0;font:inherit;color:inherit;background:#0002;border:1px solid var(--vn-panel-border,#666);border-radius:8px;padding:10px}
 [data-vn-dossier-card] summary{box-sizing:border-box;cursor:pointer;min-height:44px;padding:12px 0;font-weight:600;line-height:1.4}
-[data-reference-filters]{display:grid;grid-template-columns:1fr;gap:8px;margin:10px 0 6px}
-[data-reference-filters] select{box-sizing:border-box;min-width:0;width:100%;min-height:40px;font:inherit;font-size:14px;color:inherit;background:var(--vn-button-bg,#ffffff0d);border:1px solid var(--vn-panel-border,#666);border-radius:9px;padding:6px 8px}
+[data-reference-filters]{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;margin:4px 0 8px;align-items:center}
+[data-reference-filters] input{font-size:16px}
+[data-reference-filters] select{box-sizing:border-box;min-width:0;width:auto;max-width:150px;min-height:44px;font:inherit;font-size:16px;color:inherit;background:var(--vn-button-bg,#ffffff0d);border:1px solid var(--vn-panel-border,#666);border-radius:9px;padding:6px 8px}
 [data-reference-history-note]{font-size:.75em;line-height:1.4;color:var(--vn-muted-text)}
 [data-vn-reference-sheet]{display:flex;flex-direction:column;overflow:hidden}
 [data-vn-reference-sheet] header,[data-reference-filters],[data-reference-count]{flex:none}

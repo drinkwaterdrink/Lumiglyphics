@@ -742,6 +742,7 @@ export class VisualNovelSettingsPanel {
             ${group("Smart AI reader & filtering", `
               <label data-check ${find("Smart prose & metadata filter", "smart prose filter metadata cognition trace neural dock auto clean preset raw")}><input name="smartProseFilter" type="checkbox" /><span>Smart prose & metadata filter<small>Automatically detects and removes AI reasoning, cognition traces, simulation docks, and status headers from story text</small></span></label>
               <label data-check ${find("Smart preset dialogue extraction", "smart dialogue extract tags eidos dialogue speech thought attribute speaker nameplate")}><input name="smartDialogueExtraction" type="checkbox" /><span>Smart preset dialogue extraction<small>Automatically extracts custom preset tags (&lt;dialogue&gt;, &lt;eidos_dialogue&gt;, &lt;thought&gt;) and assigns the correct speaker nameplate</small></span></label>
+              <label data-check ${find("Stage beat pacing", "smart beat segmentation chunk split long paragraphs dialogue pacing mobile")}><input name="smartBeatSegmentation" type="checkbox" /><span>Stage beat pacing<small>Breaks dense prose walls and multi-speaker lines into visual novel beats on dialogue and scene transitions</small></span></label>
               <label data-check ${find("Mind ledger & thought cabinet", "mind ledger thought cabinet secrets known facts false beliefs theory of mind mystery")}><input name="mindLedgerEnabled" type="checkbox" /><span>Mind ledger &amp; thought cabinet<small>Track character secrets, known facts, false beliefs, and narrative mysteries inside Character Folio and World Lens</small></span></label>
               <label data-check ${find("Chapter codex auto-archive", "chapter codex auto archive timeline scene memory summary world lens")}><input name="chapterCodexEnabled" type="checkbox" /><span>Chapter codex auto-archive<small>Automatically archive completed scene locations and key visual moments into the World Lens Chapter Codex</small></span></label>
             `, { find: find("Smart AI reader & filtering", "smart filter prose dialogue extraction cognition trace preset metadata") })}
@@ -1885,6 +1886,7 @@ export class VisualNovelSettingsPanel {
       case "sentimentLighting": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, sentimentLighting: checked }) };
       case "smartProseFilter": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, smartProseFilter: checked }) };
       case "smartDialogueExtraction": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, smartDialogueExtraction: checked }) };
+      case "smartBeatSegmentation": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, smartBeatSegmentation: checked }) };
       case "virtualCameraEnabled": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, virtualCameraEnabled: checked }) };
       case "confidantCutInsEnabled": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, confidantCutInsEnabled: checked }) };
       
@@ -2472,6 +2474,7 @@ export class VisualNovelSettingsPanel {
     this.control<HTMLInputElement>("sentimentLighting").checked = config.readerPreferences.sentimentLighting !== false;
     this.control<HTMLInputElement>("smartProseFilter").checked = config.readerPreferences.smartProseFilter !== false;
     this.control<HTMLInputElement>("smartDialogueExtraction").checked = config.readerPreferences.smartDialogueExtraction !== false;
+    this.control<HTMLInputElement>("smartBeatSegmentation").checked = config.readerPreferences.smartBeatSegmentation !== false;
     this.control<HTMLInputElement>("virtualCameraEnabled").checked = config.readerPreferences.virtualCameraEnabled !== false;
     this.control<HTMLInputElement>("confidantCutInsEnabled").checked = config.readerPreferences.confidantCutInsEnabled !== false;
     const isLight = config.themePreset === "paper-novel" || config.readerPreferences.theme === "light";

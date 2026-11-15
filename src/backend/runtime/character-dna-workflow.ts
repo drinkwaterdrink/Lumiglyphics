@@ -5,6 +5,7 @@ import {createEmptyCharacterDNA,findCharacterDNA,extractDNAPartsFromText,isChara
 import {applyDnaChanges,dnaFieldValue,DNA_FIELDS,type DnaRequest,type DnaProposal} from '../../shared/character-dna-workflow.js';
 import {loadCharacterDNALibrary,saveCharacterDNA,mutateCharacterDnaLibrary} from './character-dna-store.js';
 import {collectCharacterDnaEvidence,proposeCharacterDna} from './character-dna-autofill.js';
+import {collectActiveCharacterGalleries} from './image-library.js';
 import {loadConfig,loadReadingPosition,purgeDeletedCharacterFromStorage} from './storage.js';
 type Session={abort?:AbortController;proposal?:DnaProposal;target?:CharacterDNA;created?:number;contextKey?:string};
 const sessions=new WeakMap<object,Map<string,Session>>();
@@ -105,7 +106,8 @@ export async function handleCharacterDnaRequest(spindle:SpindleAPI,request:DnaRe
   const msgs = typeof spindle.chat?.getMessages === 'function' ? await spindle.chat.getMessages(request.chatId).catch(() => []) : [];
   const tags = activeBranchSwipeTags(msgs);
   const rawLib = await loadCharacterDNALibrary(spindle,request.chatId,userId);
-  spindle.sendToFrontend({type:'vn_character_dna',chatId:request.chatId,requestId:request.requestId,library:filterLibraryForActiveBranch(rawLib, tags),...(proposal?{proposal}:{})},userId);
+  const characterGalleries = await collectActiveCharacterGalleries(spindle, request.chatId, userId, msgs).catch(() => ({}));
+  spindle.sendToFrontend({type:'vn_character_dna',chatId:request.chatId,requestId:request.requestId,library:filterLibraryForActiveBranch(rawLib, tags),...(Object.keys(characterGalleries).length>0?{characterGalleries}:{}),...(proposal?{proposal}:{})},userId);
  };
  try{
   if(request.action==='list'){

@@ -7,6 +7,7 @@ export const PREPARED_BRIEF_CSS=`
 [data-prepared-brief]{margin:12px 0;border-top:1px solid var(--edge)}
 [data-prepared-brief] p{font-size:12px;line-height:1.5;margin:8px 0}
 :is([data-brief-rows],[data-cast-rows],[data-style-rows],[data-engine-rows]){display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px 12px;margin:12px 0;font-size:13px}
+@media(max-width:420px){:is([data-brief-rows],[data-cast-rows],[data-style-rows],[data-engine-rows]){grid-template-columns:minmax(0,1fr);gap:4px}}
 :is([data-brief-rows],[data-cast-rows],[data-style-rows],[data-engine-rows]) dt{color:var(--vn-shell-muted,#bbc);font-weight:500}
 :is([data-brief-rows],[data-cast-rows],[data-style-rows],[data-engine-rows]) dd{margin:0;min-width:0;max-height:10em;overflow:auto;overflow-wrap:anywhere;white-space:pre-wrap}
 :is([data-brief-rows],[data-cast-rows],[data-style-rows],[data-engine-rows]) dd:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -14,7 +15,7 @@ export const PREPARED_BRIEF_CSS=`
 [data-engine-pill]{display:inline-block;padding:2px 8px;font-size:11px;font-weight:600;border-radius:12px;background:rgba(220,235,173,0.15);color:var(--accent);margin-bottom:8px}
 [data-engine-warning]{color:#ffaa88;font-size:12px;margin:4px 0}
 [data-shadow-box]{margin:8px 0;padding:8px;border-radius:6px;background:var(--vn-shell-field,rgba(0,0,0,0.3));border:1px solid var(--edge)}
-[data-shadow-box] textarea{width:100%;min-height:60px;font:12px monospace;background:transparent;border:none;color:inherit;resize:vertical}
+[data-shadow-box] textarea{width:100%;min-height:60px;font:16px/1.4 monospace;background:transparent;border:none;color:inherit;resize:vertical}
 `;
 /** Read-only projection. Navigation never submits or changes a draft. */
 export class PreparedBriefView{

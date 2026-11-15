@@ -8,7 +8,7 @@ import { normalizeStoryDocuments } from '../../shared/story-documents.js';
 import {imageDetailGuidance} from './prompt-detail.js';
 import { normalizeStoryReferences } from "../../shared/story-references.js";
 import { loadCardRole } from "./storage.js";
-import { type CardRole, isLikelyScenarioCard, isScenarioTitle } from "../../shared/card-role.js";
+import { type CardRole, isLikelyScenarioCard, isScenarioTitle, sanitizeDisplayCharacterName } from "../../shared/card-role.js";
 import type { ChatMessageDTO, SpindleAPI } from "lumiverse-spindle-types";
 import { z } from "zod";
 import type { VisualNovelConfig } from "../../config.js";
@@ -249,7 +249,7 @@ function plannerInstruction(config: VisualNovelConfig, visualContext?: VisualCon
 function recentContext(messages: PlanTurnInput["recentMessages"], maximum: number): string {
   if (maximum <= 0) return "";
   return messages.slice(-maximum).map((message) => {
-    const role = message.is_user ? "User" : message.name || "Assistant";
+    const role = message.is_user ? "User" : sanitizeDisplayCharacterName(message.name) || "Assistant";
     return `${role}: ${stripTextEffectTags(message.content)}`;
   }).join("\n\n");
 }
@@ -1103,11 +1103,11 @@ function fallbackPlanner(input: PlanTurnInput, paragraphCount: number): z.infer<
             removedElements: []
           },
       cast: (() => {
-        const speaker = input.message.name?.trim();
+        const speaker = sanitizeDisplayCharacterName(input.message.name);
         const isUserSpeaker = speaker ? ["user", "player", "persona", "{{user}}"].includes(speaker.toLowerCase()) : true;
         return speaker && !isUserSpeaker
           ? [speaker]
-          : (previous?.cast ?? [input.message.name].filter(Boolean));
+          : (previous?.cast ?? (speaker ? [speaker] : []));
       })(),
       character: input.externalScene?.characterName || previous?.character || input.singleCharacter.protagonist.name || null,
       basePrompt: previous?.basePrompt ?? synthesizeBasePrompt({
@@ -1607,7 +1607,7 @@ function referenceCharacterName(input: PlanTurnInput, visualContext: VisualConte
   if (frozenName) return frozenName;
   const cardName = normalizeCharacterName(visualContext.cardRole === "scenario" ? "" : visualContext.characterIdentity?.name ?? "");
   if (cardName) return cardName;
-  return normalizeCharacterName(input.message.name?.trim() ?? "") || "Protagonist";
+  return normalizeCharacterName(sanitizeDisplayCharacterName(input.message.name)) || "Protagonist";
 }
 
 function knownCharacterBlock(input: PlanTurnInput, visualContext: VisualContextSnapshot, registry: CharacterRegistry = {}): string {
@@ -1761,7 +1761,7 @@ function resolveSingleCharacter(
   const plannerUsable = plannerTags.length >= 2 && isUsableIdentity(plannerName, plannerTags);
   const plannerIsPersona = Boolean(personaName) && characterAppearanceKey(plannerName) === characterAppearanceKey(personaName);
   const cardName = normalizeCharacterName(visualContext.cardRole === "scenario" ? "" : visualContext.characterIdentity?.name ?? "");
-  const speakerName = normalizeCharacterName(input.message.name?.trim() ?? "");
+  const speakerName = normalizeCharacterName(sanitizeDisplayCharacterName(input.message.name));
   const name = frozenName
     || (plannerUsable && !plannerIsPersona ? plannerName : "")
     || cardName
@@ -1923,7 +1923,7 @@ async function resolveDisplayMacros(
   }
   if (!userDisplay) userDisplay = "You";
 
-  const characterName = (input.message.name || "").trim() || "???";
+  const characterName = sanitizeDisplayCharacterName(input.message.name) || "???";
   const replacements: Array<[RegExp, string]> = [
     [/\{\{\s*(?:user|persona)\s*\}\}/gi, userDisplay],
     [/\{\{\s*(?:char|character)\s*\}\}/gi, characterName],
@@ -1949,6 +1949,7 @@ export async function prepareEarlyNarrativeParagraphs(
     ignoredTags,
     smartProseFilter: input.config.readerPreferences?.smartProseFilter !== false,
     smartDialogueExtraction: input.config.readerPreferences?.smartDialogueExtraction !== false,
+    smartBeatSegmentation: input.config.readerPreferences?.smartBeatSegmentation !== false,
   });
   return narrative.paragraphs.map((paragraph) => paragraph.text);
 }
@@ -1977,6 +1978,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     ignoredTags,
     smartProseFilter: input.config.readerPreferences?.smartProseFilter !== false,
     smartDialogueExtraction: input.config.readerPreferences?.smartDialogueExtraction !== false,
+    smartBeatSegmentation: input.config.readerPreferences?.smartBeatSegmentation !== false,
   });
   if (narrative.paragraphs.length === 0) throw new Error("The assistant response does not contain a revealable paragraph.");
   // Preview delivery is optional enrichment; a disconnected frontend must not fail planning.

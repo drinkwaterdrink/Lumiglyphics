@@ -327,18 +327,21 @@ aside[data-vn-workspace] {
   min-height: 48px;
   max-height: calc(100% - 160px) !important;
   padding: 16px 14px 8px !important;
-  border: 1px solid rgba(224, 238, 217, 0.32) !important;
-  border-radius: 16px !important;
-  background: var(--aperture-dialogue-bg, rgba(4, 13, 17, var(--caption-opacity, 0.72))) !important;
-  -webkit-backdrop-filter: blur(var(--caption-blur, 8px)) !important;
-  backdrop-filter: blur(var(--caption-blur, 8px)) !important;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
   display: flex !important;
   flex-direction: column !important;
   gap: 4px !important;
   overflow: hidden !important;
   pointer-events: auto !important;
   transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
+}
+
+:where([data-vn-root]) [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]) {
+  border: 1px solid var(--aperture-dialogue-border, var(--vn-dialogue-border, rgba(224, 238, 217, 0.32)));
+  border-radius: 16px;
+  background: var(--aperture-dialogue-bg, var(--vn-dialogue-bg, rgba(4, 13, 17, var(--caption-opacity, 0.72))));
+  -webkit-backdrop-filter: blur(var(--caption-blur, 8px));
+  backdrop-filter: blur(var(--caption-blur, 8px));
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 [data-vn-dialogue]::before {
@@ -501,13 +504,16 @@ aside[data-vn-workspace] {
   max-height: none;
   margin: 0;
   font-size: var(--reader-font, 15px) !important;
-  line-height: 1.55 !important;
+  line-height: 1.55;
   letter-spacing: 0;
-  color: var(--aperture-text, #f9faf6) !important;
-  font-family: Georgia, 'Times New Roman', serif;
-  text-shadow: 0 2px 7px rgba(0, 0, 0, 0.82), 0 1px 1px black;
   user-select: text !important;
   overflow-wrap: break-word !important;
+}
+
+:where([data-vn-root]) [data-vn-dialogue-text] {
+  color: var(--aperture-text, var(--vn-text, #f9faf6));
+  font-family: var(--vn-font-family, Georgia, 'Times New Roman', serif);
+  text-shadow: 0 2px 7px rgba(0, 0, 0, 0.82), 0 1px 1px black;
 }
 
 /* Dialogue Footer */
@@ -722,10 +728,12 @@ aside[data-vn-workspace] {
 }
 
 .reader-action-row > .action:not(.nav-step-btn) [data-vn-control-label] {
-  font-size: 10px !important;
-  font-weight: 600 !important;
-  letter-spacing: 0.04em !important;
-  line-height: 1 !important;
+  display: block !important;
+  font-size: 9.5px !important;
+  font-weight: 650 !important;
+  letter-spacing: 0.03em !important;
+  line-height: 1.05 !important;
+  white-space: nowrap !important;
 }
 
 .reader-action-row > .action:not(.nav-step-btn) [data-vn-control-icon] svg {

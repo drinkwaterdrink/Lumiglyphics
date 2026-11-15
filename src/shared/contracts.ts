@@ -395,8 +395,8 @@ export const TurnPlanSchema = z.object({
     if (paragraph.index !== index) {
       context.addIssue({ code: "custom", path: ["paragraphs", index, "index"], message: "Paragraph indexes must be contiguous and zero-based." });
     }
-    if (index > 0 && paragraph.sourceIndex <= plan.paragraphs[index - 1]!.sourceIndex) {
-      context.addIssue({ code: "custom", path: ["paragraphs", index, "sourceIndex"], message: "Source indexes must be strictly increasing." });
+    if (index > 0 && paragraph.sourceIndex < plan.paragraphs[index - 1]!.sourceIndex) {
+      context.addIssue({ code: "custom", path: ["paragraphs", index, "sourceIndex"], message: "Source indexes must be non-decreasing." });
     }
   }
 

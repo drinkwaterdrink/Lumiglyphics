@@ -288,3 +288,18 @@ const preset: VisualNovelThemePreset = "lumiverse";
 test("VisualNovelThemePreset unions the canonical ids", () => {
   expect(preset).toBe("lumiverse");
 });
+
+describe("Aperture reader cascade allows presets and typography to theme dialogue text", () => {
+  test("base Aperture reader rules do not lock [data-vn-dialogue] or [data-vn-dialogue-text] at high-specificity !important", () => {
+    const { APERTURE_CSS_LENS_FOLIO } = require("./aperture/lens-folio.js");
+    const { APERTURE_CSS_ROUTE_BAR_READER } = require("./aperture/route-bar-reader.js");
+    const { APERTURE_CSS_SHEETS_STAGE_PALETTES } = require("./aperture/sheets-stage-palettes.js");
+    expect(APERTURE_CSS_LENS_FOLIO).not.toMatch(/font-family:\s*Georgia[^;]*!important/);
+    expect(APERTURE_CSS_LENS_FOLIO).not.toMatch(/background:\s*rgba\(8,\s*18,\s*15[^)]*\)\s*!important/);
+    expect(APERTURE_CSS_ROUTE_BAR_READER).not.toMatch(/background:\s*var\(--aperture-dialogue-bg[^)]*\)\s*!important/);
+    for (const id of EXPECTED_PRESETS) {
+      expect(APERTURE_CSS_SHEETS_STAGE_PALETTES).toContain(`[data-vn-root][data-vn-preset="${id}"] [data-vn-dialogue]`);
+      expect(APERTURE_CSS_SHEETS_STAGE_PALETTES).toContain(`[data-vn-root][data-vn-preset="${id}"] [data-vn-dialogue-text]`);
+    }
+  });
+});

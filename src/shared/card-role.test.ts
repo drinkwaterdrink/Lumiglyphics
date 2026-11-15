@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { isScenarioTitle, isLikelyScenarioCard, SCENARIO_KEYWORD_RE } from "./card-role.js";
+import { isScenarioTitle, isLikelyScenarioCard, isTechnicalWrapperName, sanitizeDisplayCharacterName, SCENARIO_KEYWORD_RE } from "./card-role.js";
 
 describe("Scenario Card Detection & Keyword Matching", () => {
   it("detects scenario and institution titles as scenario titles", () => {
@@ -31,5 +31,13 @@ describe("Scenario Card Detection & Keyword Matching", () => {
     expect(isLikelyScenarioCard({ name: "Aleister", tags: ["narrator"] })).toBe(true);
     expect(isLikelyScenarioCard({ name: "A Unknown Card", description: "Scenario: You arrive at a remote village." })).toBe(true);
     expect(isLikelyScenarioCard({ name: "Elena", tags: ["female", "elf"], description: "A graceful elf warrior with silver hair." })).toBe(false);
+  });
+
+  it("identifies and sanitizes wrapper/technical handles like setupinherit", () => {
+    expect(isTechnicalWrapperName("setupinherit")).toBe(true);
+    expect(isTechnicalWrapperName("setup_inherit")).toBe(true);
+    expect(isScenarioTitle("setupinherit")).toBe(true);
+    expect(sanitizeDisplayCharacterName("setupinherit")).toBe("");
+    expect(sanitizeDisplayCharacterName("Elena Rostova")).toBe("Elena Rostova");
   });
 });

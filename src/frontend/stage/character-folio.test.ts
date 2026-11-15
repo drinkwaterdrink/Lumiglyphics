@@ -574,3 +574,47 @@ it('renders Relationships sub-tab with SVG constellation, integrates RPG compani
     restore();
   }
 });
+
+it('hydrates persistent galleries across VN deactivation and matches subtab badge count to rendered cards', () => {
+  const restore = installFakeDocument();
+  try {
+    const folio: any = new CharacterFolio({});
+    folio.setContext('chat-1');
+    const nadine = createEmptyCharacterDNA('Nadine', 'nadine');
+    nadine.referenceImageUrl = 'https://example.com/face.png';
+    folio.setLibrary({ version: 2, revision: 1, characters: { nadine } });
+    folio.setGalleries({
+      nadine: [
+        { imageUrl: 'https://example.com/face.png', caption: 'Portrait' },
+        { imageUrl: 'https://example.com/scene-1.png', caption: 'Library scene' },
+        { imageUrl: 'https://example.com/scene-2.png', caption: 'Garden scene' },
+      ],
+    });
+
+    // Simulate VN deactivate -> reopen cycle wiping local state then backend re-hydrating
+    folio.setContext(null);
+    expect(folio.getContext()).toBeNull();
+    folio.setContext('chat-1');
+    folio.setLibrary({ version: 2, revision: 1, characters: { nadine } });
+    folio.setGalleries({
+      nadine: [
+        { imageUrl: 'https://example.com/face.png', caption: 'Portrait' },
+        { imageUrl: 'https://example.com/scene-1.png', caption: 'Library scene' },
+        { imageUrl: 'https://example.com/scene-2.png', caption: 'Garden scene' },
+      ],
+    });
+
+    const cgsBtn = folio.detailContainer.querySelector('[data-subtab="cgs"]') as unknown as HTMLButtonElement;
+    expect(cgsBtn.textContent).toContain('(3)');
+    cgsBtn.click();
+    const cards = folio.detailContainer.querySelectorAll('.folio-cg-card');
+    expect(cards.length).toBe(3);
+
+    folio.removeCg('https://example.com/scene-1.png');
+    const updatedBtn = folio.detailContainer.querySelector('[data-subtab="cgs"]') as unknown as HTMLButtonElement;
+    expect(updatedBtn.textContent).toContain('(2)');
+    expect(folio.detailContainer.querySelectorAll('.folio-cg-card').length).toBe(2);
+  } finally {
+    restore();
+  }
+});

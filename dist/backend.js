@@ -19031,13 +19031,27 @@ var init_zod = __esm(() => {
 });
 
 // src/shared/card-role.ts
+function isTechnicalWrapperName(name) {
+  if (!name)
+    return false;
+  const compact = name.trim().replace(/[_-]+/g, "");
+  return TECHNICAL_WRAPPER_NAME_RE.test(compact) || TECHNICAL_WRAPPER_NAME_RE.test(name.trim());
+}
+function sanitizeDisplayCharacterName(name) {
+  if (!name)
+    return "";
+  const trimmed = name.trim();
+  if (!trimmed || isTechnicalWrapperName(trimmed))
+    return "";
+  return trimmed;
+}
 function isScenarioTitle(name) {
   if (!name)
     return false;
   const trimmed = name.trim();
   if (!trimmed)
     return false;
-  return SCENARIO_KEYWORD_RE.test(trimmed);
+  return SCENARIO_KEYWORD_RE.test(trimmed) || isTechnicalWrapperName(trimmed);
 }
 function isLikelyScenarioCard(card) {
   if (!card)
@@ -19052,7 +19066,7 @@ function isLikelyScenarioCard(card) {
     return true;
   return false;
 }
-var CardRoleSchema, StoredCardRoleSchema, SCENARIO_KEYWORD_RE, SCENARIO_TAG_RE;
+var CardRoleSchema, StoredCardRoleSchema, SCENARIO_KEYWORD_RE, SCENARIO_TAG_RE, TECHNICAL_WRAPPER_NAME_RE;
 var init_card_role = __esm(() => {
   init_zod();
   CardRoleSchema = exports_external.enum(["auto", "character", "scenario"]);
@@ -19063,6 +19077,7 @@ var init_card_role = __esm(() => {
   }).strict();
   SCENARIO_KEYWORD_RE = /\b(?:academy|rpg|adventure|simulator|simulation|chronicles|campaign|setting|universe|guild|tavern|inn|empire|kingdom|city|realm|station|dungeon|manor|estate|school|university|sanctuary|asylum|narrator|storyteller|game\s*master|dm|gm|cyoa|sandbox)\b/i;
   SCENARIO_TAG_RE = /^(?:scenario|narrator|rpg|cyoa|sandbox|world|setting|location|adventure|storyteller|gm|dm)$/i;
+  TECHNICAL_WRAPPER_NAME_RE = /^(?:setup\s*inherit|inherit|default|system|assistant|user|card|template|wrapper|preset|character|unknown|none|null|undefined|scene|narrator(?:\s*bot)?)$/i;
 });
 
 // src/shared/presentation-rules.ts
@@ -22636,8 +22651,8 @@ var init_contracts = __esm(() => {
       if (paragraph.index !== index) {
         context.addIssue({ code: "custom", path: ["paragraphs", index, "index"], message: "Paragraph indexes must be contiguous and zero-based." });
       }
-      if (index > 0 && paragraph.sourceIndex <= plan.paragraphs[index - 1].sourceIndex) {
-        context.addIssue({ code: "custom", path: ["paragraphs", index, "sourceIndex"], message: "Source indexes must be strictly increasing." });
+      if (index > 0 && paragraph.sourceIndex < plan.paragraphs[index - 1].sourceIndex) {
+        context.addIssue({ code: "custom", path: ["paragraphs", index, "sourceIndex"], message: "Source indexes must be non-decreasing." });
       }
     }
     const finalParagraphIndex = plan.paragraphs.length - 1;
@@ -33911,6 +33926,8 @@ var init_image_library = __esm(() => {
     rawFingerprint: id4.optional(),
     template: exports_external.string().max(256).optional(),
     role: exports_external.enum(["scene", "background", "portrait"]).default("scene"),
+    characters: exports_external.array(exports_external.string().max(160)).max(24).optional(),
+    caption: exports_external.string().max(300).optional(),
     prompt: exports_external.string().max(65000).optional(),
     negativePrompt: exports_external.string().max(65000).optional(),
     model: exports_external.string().max(256).optional(),
@@ -33930,7 +33947,8 @@ var init_image_library = __esm(() => {
     order: exports_external.enum(["newest", "oldest"]),
     role: exports_external.enum(["all", "scene", "background", "portrait"]).default("all"),
     templateQuery: exports_external.string().max(64).default(""),
-    cursor: exports_external.string().regex(/^\d{1,5}:\d{1,3}$/).optional()
+    cursor: exports_external.string().regex(/^\d{1,5}:\d{1,3}$/).optional(),
+    limit: exports_external.number().int().min(1).max(120).optional()
   }).strict();
   url2 = exports_external.string().max(2048).refine((v) => v.startsWith("/api/v1/images/") && !v.includes("\\") && !/[\r\n]/.test(v));
   LibraryImageViewSchema = SavedLibraryImageSchema.extend({
@@ -33941,7 +33959,7 @@ var init_image_library = __esm(() => {
     versionLabel: exports_external.enum(["current", "replaced", "alternate"])
   }).strict();
   LibraryReplySchema = exports_external.object({ key: TurnKeySchema, messageNumber: exports_external.number().int().positive(), speaker: exports_external.string().max(256), versionLabel: exports_external.enum(["current", "alternate"]).default("current"), paragraphs: exports_external.array(exports_external.object({ index: exports_external.number().int().nonnegative(), text: exports_external.string().max(12000), speaker: exports_external.string().max(256) }).strict()).max(256), truncated: exports_external.boolean() }).strict();
-  ImageLibraryPageSchema = exports_external.object({ entries: exports_external.array(LibraryImageViewSchema).max(24), replies: exports_external.array(LibraryReplySchema).max(24).default([]), nextCursor: exports_external.string().nullable(), notice: exports_external.string().max(1000) }).strict();
+  ImageLibraryPageSchema = exports_external.object({ entries: exports_external.array(LibraryImageViewSchema).max(120), replies: exports_external.array(LibraryReplySchema).max(120).default([]), nextCursor: exports_external.string().nullable(), notice: exports_external.string().max(1000) }).strict();
 });
 
 // src/backend/runtime/template-output.ts
@@ -34608,14 +34626,33 @@ var init_image_review = __esm(() => {
 });
 
 // src/backend/runtime/image-library.ts
+function cueCharacters(cue, scene) {
+  const names = [];
+  if (cue?.character?.trim())
+    names.push(cue.character.trim());
+  if (Array.isArray(cue?.ensembleSubjects)) {
+    for (const subject of cue.ensembleSubjects)
+      if (subject?.name?.trim() && !names.includes(subject.name.trim()))
+        names.push(subject.name.trim());
+  }
+  if (names.length === 0 && cue?.kind !== "background" && Array.isArray(scene?.cast)) {
+    for (const member of scene.cast)
+      if (member?.trim() && !names.includes(member.trim()))
+        names.push(member.trim());
+  }
+  return names.slice(0, 24);
+}
 function collect(record2) {
   const entries = [];
   for (const job of record2.jobs) {
     if (!job.imageId || !["generated", "browser_ready"].includes(job.status) || !sameKey(job.ownerTurnKey, record2.plan.key))
       continue;
     const cue = [...record2.plan.visualCues, ...record2.plan.cacheCues ?? []].find((c) => c.assetJobId === job.jobId);
+    const scene = cue ? record2.plan.scenes.find((s) => s.sceneId === cue.sceneId) : undefined;
     const request = job.provider === "cache" ? undefined : (record2.imageRequests ?? []).filter((r) => r.jobId === job.jobId && r.state === "approved" && r.createdAt <= (job.generatedAt ?? record2.updatedAt)).at(-1);
     const template = request?.imagePromptMetadata?.template ?? cue?.imageTemplate;
+    const characters = cueCharacters(cue, scene);
+    const caption = (cue?.resolvedAttire || cue?.attire || template?.name || "").trim().slice(0, 300);
     const parsed = SavedLibraryImageSchema.safeParse({
       key: record2.plan.key,
       imageId: job.imageId,
@@ -34626,6 +34663,8 @@ function collect(record2) {
       ...record2.source ? { rawFingerprint: record2.source.rawFingerprint } : {},
       role: template?.category === "portrait" ? "portrait" : template?.category === "environment" ? "background" : "scene",
       ...template ? { template: template.name } : {},
+      ...characters.length ? { characters } : {},
+      ...caption ? { caption } : {},
       ...request ? { prompt: request.prompt, negativePrompt: request.negativePrompt, model: request.model, provider: request.provider } : {}
     });
     if (parsed.success)
@@ -34694,6 +34733,7 @@ function parseRecord(raw) {
 }
 async function readImageLibraryPage(api2, input2, user) {
   const request = ImageLibraryRequestSchema.parse(input2);
+  const limit = request.limit ?? 24;
   if (!await api2.chats.get(request.chatId, user))
     throw new Error("This chat is unavailable.");
   const readMessages = async () => (await api2.chat.getMessages(request.chatId)).filter((m) => !m.is_user && m.role !== "system");
@@ -34743,7 +34783,7 @@ async function readImageLibraryPage(api2, input2, user) {
   const notices = new Set;
   if (listed.length > 1e4)
     notices.add("The scan is limited to 10,000 saved turn files.");
-  while (file2 < sources.length && entries.length < 24 && scanned < 24) {
+  while (file2 < sources.length && entries.length < limit && scanned < limit) {
     const source = sources[file2];
     scanned++;
     let record2 = null;
@@ -34779,10 +34819,14 @@ async function readImageLibraryPage(api2, input2, user) {
         return [];
       const sameVersion = active && e.key.sourceFingerprint === record2.plan.key.sourceFingerprint && e.key.revision === record2.plan.key.revision;
       const current = sameVersion && record2.jobs.some((j) => j.jobId === e.jobId && (j.imageId === e.imageId || !["generated", "browser_ready"].includes(j.status) && record2.previousImages?.[j.jobId]?.imageId === e.imageId));
-      if (request.versions === "active" && !sameVersion)
+      if (request.versions === "active" && !sameVersion) {
+        notices.add("Some earlier replies or edited messages have saved images on alternate versions. Switch Message versions in Filters to include them.");
         return [];
-      if (sameVersion && !current && !request.includeReplaced)
+      }
+      if (sameVersion && !current && !request.includeReplaced) {
+        notices.add('Some regenerated/replaced pictures are hidden. Check "Include replaced pictures" in Filters to view them.');
         return [];
+      }
       if (request.range === "read" && source.message.id === request.anchor.messageId && (e.paragraphIndex > request.anchor.paragraphIndex || sameVersion && e.key.sourceFingerprint !== request.anchor.sourceFingerprint))
         return [];
       return [{ ...e, messageNumber: source.index + 1, versionLabel: sameVersion ? current ? "current" : "replaced" : "alternate" }];
@@ -34792,6 +34836,7 @@ async function readImageLibraryPage(api2, input2, user) {
       let budget = 12000;
       const paragraphs = [];
       let truncated = false;
+      const cleanSpeaker = sanitizeDisplayCharacterName(record2.speaker);
       for (const paragraph of visible) {
         if (paragraphs.length >= 256 || budget <= 0) {
           truncated = true;
@@ -34801,12 +34846,13 @@ async function readImageLibraryPage(api2, input2, user) {
         if (text2.length < paragraph.text.length)
           truncated = true;
         budget -= text2.length;
-        paragraphs.push({ index: paragraph.index, text: text2, speaker: (record2.plan.paragraphSpeakers[paragraph.index] ?? record2.speaker).slice(0, 256) });
+        const pSpeaker = sanitizeDisplayCharacterName(record2.plan.paragraphSpeakers[paragraph.index]) || cleanSpeaker;
+        paragraphs.push({ index: paragraph.index, text: text2, speaker: pSpeaker.slice(0, 256) });
       }
-      replies.push({ versionLabel: active ? "current" : "alternate", key: record2.plan.key, messageNumber: source.index + 1, speaker: record2.speaker.slice(0, 256), paragraphs, truncated });
+      replies.push({ versionLabel: active ? "current" : "alternate", key: record2.plan.key, messageNumber: source.index + 1, speaker: cleanSpeaker.slice(0, 256), paragraphs, truncated });
     }
     let i = entrySkip;
-    for (;i < rows.length && entries.length < 24; i++) {
+    for (;i < rows.length && entries.length < limit; i++) {
       const row = rows[i];
       let thumbnailUrl;
       try {
@@ -34829,12 +34875,115 @@ async function readImageLibraryPage(api2, input2, user) {
     throw new Error("The story changed while loading. Refresh the library.");
   return ImageLibraryPageSchema.parse({ entries, replies, nextCursor: file2 < sources.length ? `${file2}:${entrySkip}` : null, notice: [...notices].join(" ") });
 }
+async function collectActiveCharacterGalleries(api2, chatId, userId, messages) {
+  const galleries = {};
+  if (!api2.userStorage?.getJson)
+    return galleries;
+  const prefix = `turns/${imageLibrarySegment(chatId)}/`;
+  const assistantMsgs = messages.filter((m) => !m.is_user && m.role !== "system" && (m.id || m.message_id));
+  if (assistantMsgs.length === 0)
+    return galleries;
+  let listedSet = null;
+  if (typeof api2.userStorage.list === "function") {
+    try {
+      const listed = (await api2.userStorage.list(prefix, userId)).flatMap((entry) => {
+        if (typeof entry !== "string")
+          return [];
+        const relative = entry.replaceAll("\\", "/");
+        const path = relative.startsWith(prefix) ? relative : relative.startsWith("turns/") ? "" : prefix + relative;
+        const tail = path.slice(prefix.length);
+        if (!path.startsWith(prefix) || path.length > 1200 || !/^[^/]+\/[^/]+\.json$/.test(tail) || tail.split("/").some((p) => p === "." || p === "..") || /[\r\n\0:]/.test(tail))
+          return [];
+        return [path];
+      });
+      listedSet = new Set(listed);
+    } catch {
+      listedSet = null;
+    }
+  }
+  const candidatePaths = [];
+  for (let i = assistantMsgs.length - 1;i >= 0 && candidatePaths.length < 120; i--) {
+    const m = assistantMsgs[i];
+    const msgId = String(m.id ?? m.message_id);
+    const swipe = String(m.swipe_id ?? 0);
+    const path = `${prefix}${imageLibrarySegment(msgId)}/${imageLibrarySegment(swipe)}.json`;
+    if (listedSet && !listedSet.has(path))
+      continue;
+    candidatePaths.push(path);
+    if (!listedSet && candidatePaths.length >= 40)
+      break;
+  }
+  const seenUrls = new Map;
+  const pushPhoto = (rawName, entry) => {
+    const key = dnaNameKey(rawName);
+    if (!key)
+      return;
+    const list = galleries[key] ?? (galleries[key] = []);
+    if (list.length >= 48)
+      return;
+    const seen = seenUrls.get(key) ?? (() => {
+      const s = new Set;
+      seenUrls.set(key, s);
+      return s;
+    })();
+    if (seen.has(entry.imageUrl))
+      return;
+    seen.add(entry.imageUrl);
+    list.push(entry);
+  };
+  for (const path of candidatePaths) {
+    let record2 = null;
+    try {
+      record2 = parseRecord(await api2.userStorage.getJson(path, { fallback: null, ...userId ? { userId } : {} }));
+    } catch {
+      record2 = null;
+    }
+    if (!record2 || record2.plan.key.chatId !== chatId)
+      continue;
+    const cues = [...record2.plan.visualCues, ...record2.plan.cacheCues ?? []];
+    const jobsNewest = [...record2.jobs].sort((a, b) => b.paragraphIndex - a.paragraphIndex || String(b.generatedAt ?? "").localeCompare(String(a.generatedAt ?? "")));
+    for (const job of jobsNewest) {
+      const imageId = job.imageId || (!["generated", "browser_ready"].includes(job.status) ? record2.previousImages?.[job.jobId]?.imageId : undefined);
+      if (!imageId)
+        continue;
+      const cue = cues.find((c) => c.assetJobId === job.jobId);
+      const scene = cue ? record2.plan.scenes.find((s) => s.sceneId === cue.sceneId) : undefined;
+      const names = cueCharacters(cue, scene);
+      if (names.length === 0)
+        continue;
+      const request = job.provider === "cache" ? undefined : (record2.imageRequests ?? []).filter((r) => r.jobId === job.jobId && r.state === "approved").at(-1);
+      const template = request?.imagePromptMetadata?.template ?? cue?.imageTemplate;
+      const caption = (cue?.resolvedAttire || cue?.attire || template?.name || "Scene portrait").trim().slice(0, 300);
+      const imageUrl = `/api/v1/images/${encodeURIComponent(imageId)}`;
+      for (const name of names)
+        pushPhoto(name, { imageUrl, imageId, caption, messageId: record2.plan.key.assistantMessageId });
+    }
+    const archive = ImageLibraryArchiveSchema.safeParse(record2.imageLibrary);
+    if (archive.success) {
+      for (const saved of [...archive.data.entries].reverse()) {
+        if (!saved.characters?.length)
+          continue;
+        if (saved.key.sourceFingerprint !== record2.plan.key.sourceFingerprint || saved.key.revision !== record2.plan.key.revision)
+          continue;
+        if (!record2.jobs.some((j) => j.jobId === saved.jobId && j.imageId === saved.imageId))
+          continue;
+        const imageUrl = `/api/v1/images/${encodeURIComponent(saved.imageId)}`;
+        const caption = (saved.caption || saved.template || "Scene portrait").trim().slice(0, 300);
+        for (const name of saved.characters)
+          pushPhoto(name, { imageUrl, imageId: saved.imageId, caption, messageId: saved.key.assistantMessageId });
+      }
+    }
+  }
+  return galleries;
+}
 var imageLibrarySegment = (value) => encodeURIComponent(value).replaceAll("%", "_"), occurrence = (e) => JSON.stringify([e.key, e.jobId, e.imageId]), sameKey = (a, b) => a.chatId === b.chatId && a.assistantMessageId === b.assistantMessageId && String(a.swipeId ?? 0) === String(b.swipeId ?? 0) && a.sourceFingerprint === b.sourceFingerprint && a.revision === b.revision;
 var init_image_library2 = __esm(() => {
   init_contracts();
   init_image_library();
   init_planner();
   init_image_review();
+  init_character_dna();
+  init_card_role();
 });
 
 // src/shared/cast-art.ts
@@ -36334,6 +36483,7 @@ function normalizeReaderPreferences(value) {
     ...input2.sentimentLighting !== undefined ? { sentimentLighting: input2.sentimentLighting === true } : {},
     smartProseFilter: input2.smartProseFilter !== undefined ? input2.smartProseFilter === true : DEFAULT_READER_PREFERENCES.smartProseFilter ?? true,
     smartDialogueExtraction: input2.smartDialogueExtraction !== undefined ? input2.smartDialogueExtraction === true : DEFAULT_READER_PREFERENCES.smartDialogueExtraction ?? true,
+    smartBeatSegmentation: input2.smartBeatSegmentation !== undefined ? input2.smartBeatSegmentation === true : DEFAULT_READER_PREFERENCES.smartBeatSegmentation ?? true,
     readabilityScrim: input2.readabilityScrim !== undefined ? input2.readabilityScrim === true : DEFAULT_READER_PREFERENCES.readabilityScrim ?? true,
     virtualCameraEnabled: input2.virtualCameraEnabled !== undefined ? input2.virtualCameraEnabled === true : DEFAULT_READER_PREFERENCES.virtualCameraEnabled ?? true,
     confidantCutInsEnabled: input2.confidantCutInsEnabled !== undefined ? input2.confidantCutInsEnabled === true : DEFAULT_READER_PREFERENCES.confidantCutInsEnabled ?? true
@@ -36349,6 +36499,7 @@ var init_reader_preferences = __esm(() => {
     theme: "light",
     smartProseFilter: true,
     smartDialogueExtraction: true,
+    smartBeatSegmentation: true,
     readabilityScrim: true,
     virtualCameraEnabled: true,
     confidantCutInsEnabled: true
@@ -38079,6 +38230,91 @@ async function purgeDeletedCharacterFromStorage(spindle2, chatId, name, aliases 
       }
     }
   } catch {}
+}
+async function purgeDeletedImageFromChatTurns(spindle2, chatId, imageId, jobId, userId, activeTurnPath) {
+  if (!spindle2.userStorage?.getJson || !imageId)
+    return false;
+  const prefix = `turns/${safeSegment(chatId)}/`;
+  const pathSet = new Set;
+  if (activeTurnPath?.startsWith(prefix))
+    pathSet.add(activeTurnPath);
+  if (typeof spindle2.userStorage.list === "function") {
+    try {
+      const listed = await spindle2.userStorage.list(prefix, userId);
+      for (const entry of listed) {
+        if (typeof entry !== "string")
+          continue;
+        const rel = entry.replaceAll("\\", "/");
+        const path2 = rel.startsWith(prefix) ? rel : rel.startsWith("turns/") ? "" : prefix + rel;
+        const tail = path2.slice(prefix.length);
+        if (path2.startsWith(prefix) && path2.length <= 1200 && /^[^/]+\/[^/]+\.json$/.test(tail) && !tail.split("/").some((p) => p === "." || p === "..") && !/[\r\n\0:]/.test(tail)) {
+          pathSet.add(path2);
+        }
+      }
+    } catch {}
+  }
+  let activeTurnChanged = false;
+  for (const path2 of pathSet) {
+    await serializedWrite(scopedKey(userId, path2), async () => {
+      const raw = await spindle2.userStorage.getJson(path2, { fallback: null, ...userOptions(userId) ?? {} });
+      if (!raw || typeof raw !== "object" || !Array.isArray(raw.jobs))
+        return;
+      let changed = false;
+      const jobs = raw.jobs.map((j) => {
+        if (j && (j.imageId === imageId || path2 === activeTurnPath && jobId && j.jobId === jobId)) {
+          changed = true;
+          return { ...j, status: "cancelled", imageId: null, imageUrl: null, generatedAt: null, readyAt: null, finishedAt: new Date().toISOString() };
+        }
+        return j;
+      });
+      let previousImages = raw.previousImages;
+      if (previousImages && typeof previousImages === "object") {
+        const nextPrev = { ...previousImages };
+        for (const [k, v] of Object.entries(nextPrev)) {
+          if (v?.imageId === imageId) {
+            delete nextPrev[k];
+            changed = true;
+          }
+        }
+        previousImages = nextPrev;
+      }
+      let previousVersions = raw.previousVersions;
+      if (previousVersions && typeof previousVersions === "object") {
+        const nextVersions = {};
+        for (const [k, list] of Object.entries(previousVersions)) {
+          if (Array.isArray(list)) {
+            const filtered = list.filter((item) => item?.imageId !== imageId);
+            if (filtered.length !== list.length)
+              changed = true;
+            if (filtered.length > 0)
+              nextVersions[k] = filtered;
+          }
+        }
+        previousVersions = nextVersions;
+      }
+      let imageLibrary = raw.imageLibrary;
+      if (imageLibrary && typeof imageLibrary === "object" && imageLibrary.version === 1 && Array.isArray(imageLibrary.entries)) {
+        const filtered = imageLibrary.entries.filter((entry) => entry?.imageId !== imageId);
+        if (filtered.length !== imageLibrary.entries.length) {
+          imageLibrary = { ...imageLibrary, entries: filtered };
+          changed = true;
+        }
+      }
+      if (!changed)
+        return;
+      if (path2 === activeTurnPath)
+        activeTurnChanged = true;
+      await spindle2.userStorage.setJson(path2, {
+        ...raw,
+        jobs,
+        ...previousImages ? { previousImages } : {},
+        ...previousVersions ? { previousVersions } : {},
+        ...imageLibrary ? { imageLibrary } : {},
+        updatedAt: new Date().toISOString()
+      }, { indent: 2, ...userOptions(userId) ?? {} });
+    });
+  }
+  return activeTurnChanged;
 }
 async function saveTurnRecordIfCurrent(spindle2, path2, record3, userId, isCurrent) {
   let saved = false;
@@ -40771,11 +41007,162 @@ function findStructuredSidecarRanges(content) {
   }
   return ranges;
 }
+function isQuoteBeatLine(line2) {
+  return /["\u201C\u201D\u00AB\u00BB]/.test(line2) || /^[A-Z][\w' .-]{0,24}:\s+\S/.test(line2);
+}
+function splitBalancedSentences(paragraph) {
+  const sentences = [];
+  let start = 0;
+  let quoteOpen = false;
+  let tagDepth = 0;
+  for (let i = 0;i < paragraph.length; i += 1) {
+    const ch = paragraph[i];
+    if (ch === "<") {
+      const tagEnd = paragraph.indexOf(">", i + 1);
+      if (tagEnd > i) {
+        const tagInner = paragraph.slice(i + 1, tagEnd);
+        if (!tagInner.endsWith("/") && !/^\s*br\b/i.test(tagInner)) {
+          if (/^\s*\//.test(tagInner))
+            tagDepth = Math.max(0, tagDepth - 1);
+          else if (/^\s*[a-zA-Z]/.test(tagInner))
+            tagDepth += 1;
+        }
+        i = tagEnd;
+        continue;
+      }
+    }
+    if (ch === "\u201C") {
+      quoteOpen = true;
+      continue;
+    }
+    if (ch === "\u201D") {
+      quoteOpen = false;
+      continue;
+    }
+    if (ch === '"') {
+      quoteOpen = !quoteOpen;
+      continue;
+    }
+    if (tagDepth > 0 || quoteOpen)
+      continue;
+    if (ch !== "." && ch !== "!" && ch !== "?" && ch !== "\u2026")
+      continue;
+    let end = i + 1;
+    while (end < paragraph.length && /[.!?\u2026"\u201D\u2019')\]]/.test(paragraph[end])) {
+      if (paragraph[end] === '"')
+        quoteOpen = false;
+      end += 1;
+    }
+    if (ABBREVIATION_RE.test(paragraph.slice(start, i)))
+      continue;
+    if (ch === "." && /(?:^|\s)[A-Z]$/.test(paragraph.slice(start, i)))
+      continue;
+    let wsEnd = end;
+    while (wsEnd < paragraph.length && /\s/.test(paragraph[wsEnd]))
+      wsEnd += 1;
+    if (wsEnd === end || wsEnd >= paragraph.length)
+      continue;
+    const beforeEnd = paragraph.slice(start, end);
+    const rest = paragraph.slice(wsEnd);
+    if (/[!?\u2026"\u201D]$/.test(beforeEnd.trimEnd())) {
+      const nextToken = rest.match(/^(?:[A-Z][a-z]+\s+(?:said|asked|replied|whispered|murmured|muttered|answered|called|added|sighed|laughed|smiled|frowned|nodded)\b|[a-z]+)/);
+      if (nextToken && (/^[a-z]/.test(nextToken[0]) || ATTRIBUTION_START_RE.test(nextToken[0])))
+        continue;
+    }
+    const piece = paragraph.slice(start, end).trim();
+    if (piece)
+      sentences.push(piece);
+    start = wsEnd;
+    i = wsEnd - 1;
+  }
+  const tail = paragraph.slice(start).trim();
+  if (tail)
+    sentences.push(tail);
+  return sentences.length > 0 ? sentences : [paragraph.trim()];
+}
+function chunkSingleParagraph(paragraph) {
+  const quotePairs = paragraph.match(/(?:^|[\s(])["\u201C][^"\u201D\n]{2,}["\u201D]/g)?.length ?? 0;
+  const hasActionToQuoteShift = quotePairs >= 1 && /[.!?]\s+["\u201C][^"\u201D\n]{2,}["\u201D]/.test(paragraph);
+  if (paragraph.length <= BEAT_TRIGGER_CHARS && quotePairs < 2 && !hasActionToQuoteShift)
+    return [paragraph];
+  const sentences = splitBalancedSentences(paragraph);
+  if (sentences.length <= 1)
+    return [paragraph];
+  const beats = [];
+  let current = sentences[0];
+  let currentSentenceCount = 1;
+  for (let i = 1;i < sentences.length; i += 1) {
+    const next = sentences[i];
+    const currentHasQuote = /["\u201C\u201D]/.test(current);
+    const nextHasQuote = /["\u201C\u201D]/.test(next);
+    const combinedLength = current.length + 1 + next.length;
+    const shouldSplitForSpeakerShift = !currentHasQuote && /^["\u201C]/.test(next) && current.length >= 24 && next.length >= 8 || currentHasQuote !== nextHasQuote && (current.length >= 65 || next.length >= 65) || currentHasQuote && nextHasQuote && current.length >= 50;
+    if (combinedLength > BEAT_MAX_CHARS || shouldSplitForSpeakerShift || currentSentenceCount >= 2 && current.length >= 130) {
+      beats.push(current);
+      current = next;
+      currentSentenceCount = 1;
+    } else {
+      current = `${current} ${next}`;
+      currentSentenceCount += 1;
+    }
+  }
+  beats.push(current);
+  if (beats.length > 1) {
+    const last = beats[beats.length - 1];
+    const prev = beats[beats.length - 2];
+    if (last.length < 38 && !/["\u201C\u201D]/.test(last) && prev.length + 1 + last.length <= 275) {
+      beats.splice(beats.length - 2, 2, `${prev} ${last}`);
+    }
+  }
+  return beats;
+}
+function segmentBeatTexts(text3) {
+  const trimmed = text3.trim();
+  if (!trimmed)
+    return [];
+  const lines = trimmed.split(`
+`).map((line2) => line2.trim()).filter(Boolean);
+  if (lines.length <= 1)
+    return chunkSingleParagraph(trimmed);
+  const hasBeatStructure = lines.some(isQuoteBeatLine) || trimmed.length >= BEAT_TRIGGER_CHARS;
+  if (!hasBeatStructure)
+    return [trimmed];
+  const beats = [];
+  let buffer = "";
+  for (const line2 of lines) {
+    for (const sub of chunkSingleParagraph(line2)) {
+      const subIsDialogue = isQuoteBeatLine(sub);
+      if (!buffer) {
+        if (subIsDialogue)
+          beats.push(sub);
+        else
+          buffer = sub;
+        continue;
+      }
+      if (subIsDialogue || isQuoteBeatLine(buffer) || buffer.length + 1 + sub.length > 180) {
+        beats.push(buffer);
+        if (subIsDialogue) {
+          beats.push(sub);
+          buffer = "";
+        } else {
+          buffer = sub;
+        }
+      } else {
+        buffer = `${buffer}
+${sub}`;
+      }
+    }
+  }
+  if (buffer)
+    beats.push(buffer);
+  return beats.length > 0 ? beats : [trimmed];
+}
 function prepareNarrative(content, options2 = {}) {
   content = content.replace(/\r\n?/g, `
 `);
   const smartProseFilter = options2.smartProseFilter !== false;
   const smartDialogueExtraction = options2.smartDialogueExtraction !== false;
+  const smartBeatSegmentation = options2.smartBeatSegmentation !== false;
   const detectedSceneMetadata = extractDetectedSceneMetadata(content);
   const extractedSpeakers = new Map;
   if (smartDialogueExtraction) {
@@ -40882,8 +41269,14 @@ ${cleanBody}
     rawChoices.push(...extracted.choices);
     const text3 = cleanNarrativeBlock(stripIgnoredTags(extracted.text, effectiveIgnoredTags), smartProseFilter);
     if (text3) {
-      paragraphs.push({ index: paragraphs.length, sourceIndex: block2.sourceIndex, text: text3 });
-      paragraphEnds.push(offset);
+      const beats = smartBeatSegmentation ? segmentBeatTexts(text3) : [text3];
+      const blockSpan = Math.max(1, offset - start);
+      for (let i = 0;i < beats.length; i += 1) {
+        const beat = beats[i];
+        const beatEnd = i === beats.length - 1 ? offset : start + Math.max(1, Math.round((i + 1) / beats.length * blockSpan));
+        paragraphs.push({ index: paragraphs.length, sourceIndex: block2.sourceIndex, text: beat });
+        paragraphEnds.push(beatEnd);
+      }
     }
   }
   if (!paragraphs.length && spans.length)
@@ -40894,7 +41287,7 @@ ${cleanBody}
       let matchedSpeaker = extractedSpeakers.get(paragraph.text);
       if (!matchedSpeaker) {
         for (const [dialogueText, speaker] of extractedSpeakers.entries()) {
-          if (paragraph.text === dialogueText || dialogueText.length >= 12 && paragraph.text.includes(dialogueText) || paragraph.text.length >= 12 && dialogueText.includes(paragraph.text)) {
+          if (paragraph.text === dialogueText || dialogueText.length >= 12 && paragraph.text.includes(dialogueText) || paragraph.text.length >= 3 && dialogueText.includes(paragraph.text)) {
             matchedSpeaker = speaker;
             break;
           }
@@ -40934,7 +41327,7 @@ ${cleanBody}
     ...detectedSpeakers.length > 0 ? { detectedSpeakers } : {}
   };
 }
-var BUILTIN_HEURISTIC_TAGS, INLINE_IMG_REGEX, PROSE_FORMATTING_TAGS, SIDECAR_EXEMPT_TAGS, STRUCTURED_LINE_PATTERNS, TAG_ONLY_LINE;
+var BUILTIN_HEURISTIC_TAGS, INLINE_IMG_REGEX, PROSE_FORMATTING_TAGS, SIDECAR_EXEMPT_TAGS, STRUCTURED_LINE_PATTERNS, TAG_ONLY_LINE, BEAT_MAX_CHARS = 220, BEAT_TRIGGER_CHARS = 240, ABBREVIATION_RE, ATTRIBUTION_START_RE;
 var init_paragraphs = __esm(() => {
   init_text_effects();
   init_panels();
@@ -41052,6 +41445,8 @@ var init_paragraphs = __esm(() => {
     /^\s*[{}\[\],]+\s*$/
   ];
   TAG_ONLY_LINE = /^\s*<\/?[A-Za-z][\w-]*(?:\s[^<>]*)?\/?>\s*$/;
+  ABBREVIATION_RE = /\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St|Col|Lt|Gen|Sgt|Capt|Rev|vs|etc|e\.g|i\.e|p\.m|a\.m)$/i;
+  ATTRIBUTION_START_RE = /^(?:he|she|they|it|we|you|i|said|asked|replied|whispered|murmured|muttered|answered|called|added|continued|noted|explained|snapped|sighed|laughed|smiled|frowned|nodded|shook)\b/i;
 });
 
 // src/backend/core/scene-boundary.ts
@@ -41994,7 +42389,7 @@ var init_system_one = __esm(() => {
   init_zod();
   init_character();
   init_audio_catalog();
-  SYSTEM_ONE_LIMITS = { paragraphs: 24, expressions: 16, music: 24, sounds: 24 };
+  SYSTEM_ONE_LIMITS = { paragraphs: 36, expressions: 16, music: 24, sounds: 24 };
   RELEVANCE_STOPWORDS = new Set(["the", "and", "for", "with", "that", "this", "from", "into", "was", "were", "you", "are", "but", "not", "its", "their", "they", "them", "had", "has", "have", "she", "her", "his", "him"]);
   SEMANTIC_SYNONYMS = [
     [/\b(?:furious|rage|raging|shouted|shouts|glared|glares|snarled|hostile|wrath)\b/i, ["angry", "frown", "scowl", "tense", "battle", "dramatic"]],
@@ -42539,7 +42934,7 @@ function recentContext(messages, maximum) {
   if (maximum <= 0)
     return "";
   return messages.slice(-maximum).map((message) => {
-    const role = message.is_user ? "User" : message.name || "Assistant";
+    const role = message.is_user ? "User" : sanitizeDisplayCharacterName(message.name) || "Assistant";
     return `${role}: ${stripTextEffectTags(message.content)}`;
   }).join(`
 
@@ -43245,9 +43640,9 @@ function fallbackPlanner(input2, paragraphCount) {
         removedElements: []
       },
       cast: (() => {
-        const speaker = input2.message.name?.trim();
+        const speaker = sanitizeDisplayCharacterName(input2.message.name);
         const isUserSpeaker = speaker ? ["user", "player", "persona", "{{user}}"].includes(speaker.toLowerCase()) : true;
-        return speaker && !isUserSpeaker ? [speaker] : previous?.cast ?? [input2.message.name].filter(Boolean);
+        return speaker && !isUserSpeaker ? [speaker] : previous?.cast ?? (speaker ? [speaker] : []);
       })(),
       character: input2.externalScene?.characterName || previous?.character || input2.singleCharacter.protagonist.name || null,
       basePrompt: previous?.basePrompt ?? synthesizeBasePrompt({
@@ -43652,7 +44047,7 @@ function referenceCharacterName(input2, visualContext) {
   const cardName = normalizeCharacterName(visualContext.cardRole === "scenario" ? "" : visualContext.characterIdentity?.name ?? "");
   if (cardName)
     return cardName;
-  return normalizeCharacterName(input2.message.name?.trim() ?? "") || "Protagonist";
+  return normalizeCharacterName(sanitizeDisplayCharacterName(input2.message.name)) || "Protagonist";
 }
 function knownCharacterBlock(input2, visualContext, registry2 = {}) {
   const name = referenceCharacterName(input2, visualContext);
@@ -43785,7 +44180,7 @@ function resolveSingleCharacter(input2, planner, visualContext, usedFallback) {
   const plannerUsable = plannerTags.length >= 2 && isUsableIdentity(plannerName, plannerTags);
   const plannerIsPersona = Boolean(personaName) && characterAppearanceKey(plannerName) === characterAppearanceKey(personaName);
   const cardName = normalizeCharacterName(visualContext.cardRole === "scenario" ? "" : visualContext.characterIdentity?.name ?? "");
-  const speakerName = normalizeCharacterName(input2.message.name?.trim() ?? "");
+  const speakerName = normalizeCharacterName(sanitizeDisplayCharacterName(input2.message.name));
   const name = frozenName || (plannerUsable && !plannerIsPersona ? plannerName : "") || cardName || plannerName || speakerName || "Protagonist";
   if (!usedFallback) {
     const globalKey = appearanceMapKeyFor(input2.characterAppearance, name);
@@ -43881,7 +44276,7 @@ async function resolveDisplayMacros(spindle2, input2, content) {
   }
   if (!userDisplay)
     userDisplay = "You";
-  const characterName = (input2.message.name || "").trim() || "???";
+  const characterName = sanitizeDisplayCharacterName(input2.message.name) || "???";
   const replacements = [
     [/\{\{\s*(?:user|persona)\s*\}\}/gi, userDisplay],
     [/\{\{\s*(?:char|character)\s*\}\}/gi, characterName]
@@ -43898,7 +44293,8 @@ async function prepareEarlyNarrativeParagraphs(spindle2, input2) {
   const narrative = prepareNarrative(resolvedContent, {
     ignoredTags,
     smartProseFilter: input2.config.readerPreferences?.smartProseFilter !== false,
-    smartDialogueExtraction: input2.config.readerPreferences?.smartDialogueExtraction !== false
+    smartDialogueExtraction: input2.config.readerPreferences?.smartDialogueExtraction !== false,
+    smartBeatSegmentation: input2.config.readerPreferences?.smartBeatSegmentation !== false
   });
   return narrative.paragraphs.map((paragraph) => paragraph.text);
 }
@@ -43909,7 +44305,8 @@ async function planTurn(spindle2, input2) {
   const narrative = prepareNarrative(resolvedContent, {
     ignoredTags,
     smartProseFilter: input2.config.readerPreferences?.smartProseFilter !== false,
-    smartDialogueExtraction: input2.config.readerPreferences?.smartDialogueExtraction !== false
+    smartDialogueExtraction: input2.config.readerPreferences?.smartDialogueExtraction !== false,
+    smartBeatSegmentation: input2.config.readerPreferences?.smartBeatSegmentation !== false
   });
   if (narrative.paragraphs.length === 0)
     throw new Error("The assistant response does not contain a revealable paragraph.");
@@ -52727,6 +53124,7 @@ init_character_dna();
 init_character_dna_workflow();
 init_character_dna_store();
 init_character_dna_autofill();
+init_image_library2();
 init_storage();
 var sessions = new WeakMap;
 function activeBranchSwipeTags(messages) {
@@ -52825,7 +53223,8 @@ async function handleCharacterDnaRequest(spindle2, request, userId) {
     const msgs = typeof spindle2.chat?.getMessages === "function" ? await spindle2.chat.getMessages(request.chatId).catch(() => []) : [];
     const tags = activeBranchSwipeTags(msgs);
     const rawLib = await loadCharacterDNALibrary(spindle2, request.chatId, userId);
-    spindle2.sendToFrontend({ type: "vn_character_dna", chatId: request.chatId, requestId: request.requestId, library: filterLibraryForActiveBranch(rawLib, tags), ...proposal ? { proposal } : {} }, userId);
+    const characterGalleries = await collectActiveCharacterGalleries(spindle2, request.chatId, userId, msgs).catch(() => ({}));
+    spindle2.sendToFrontend({ type: "vn_character_dna", chatId: request.chatId, requestId: request.requestId, library: filterLibraryForActiveBranch(rawLib, tags), ...Object.keys(characterGalleries).length > 0 ? { characterGalleries } : {}, ...proposal ? { proposal } : {} }, userId);
   };
   try {
     if (request.action === "list") {
@@ -55476,7 +55875,7 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
           chatId,
           plan: result.plan,
           content: resolved,
-          speakerName: message.name,
+          speakerName: sanitizeDisplayCharacterName(message.name) || undefined,
           userId
         });
       } catch (err) {
@@ -55530,7 +55929,7 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
       ...relation === "current" && existing?.forceImageReview ? { forceImageReview: true } : {},
       ...relation === "current" && existing?.replanRequestIds ? { replanRequestIds: existing.replanRequestIds } : {},
       ...result.cardId ? { cardId: result.cardId } : {},
-      speaker: result.cardRole === "scenario" ? "Narrator" : message.name || "Narrator",
+      speaker: result.cardRole === "scenario" ? "Narrator" : sanitizeDisplayCharacterName(message.name) || "Narrator",
       userSpeaker,
       status: "ready",
       plan: result.plan,
@@ -55894,29 +56293,11 @@ async function handleDeleteImage(spindle2, rawRequest, userId) {
   } catch {}
   sceneCache.invalidateImage(imageId, "image_deleted");
   const chatState = await loadChatState(spindle2, request.chatId, userId);
-  if (chatState.activeTurnPath) {
-    const next = await mutateActiveTurnRecord(spindle2, request.chatId, chatState.activeTurnPath, userId, (record5) => {
-      let changed = false;
-      const jobs = record5.jobs.map((j) => {
-        if (j.imageId === imageId || request.jobId && j.jobId === request.jobId) {
-          changed = true;
-          return AssetJobSchema.parse({ ...j, status: "cancelled", imageId: null, imageUrl: null, finishedAt: new Date().toISOString() });
-        }
-        return j;
-      });
-      const previousImages = { ...record5.previousImages ?? {} };
-      for (const [id9, prev] of Object.entries(previousImages)) {
-        if (prev?.imageId === imageId) {
-          delete previousImages[id9];
-          changed = true;
-        }
-      }
-      if (!changed)
-        return null;
-      return { ...record5, jobs, previousImages, updatedAt: new Date().toISOString() };
-    });
-    if (next) {
-      const view = await turnViewWithAudio(spindle2, next, userId);
+  const activeTurnChanged = await purgeDeletedImageFromChatTurns(spindle2, request.chatId, imageId, request.jobId, userId, chatState.activeTurnPath);
+  if (activeTurnChanged && chatState.activeTurnPath) {
+    const refreshed = await loadTurnRecord(spindle2, chatState.activeTurnPath, userId);
+    if (refreshed) {
+      const view = await turnViewWithAudio(spindle2, refreshed, userId);
       spindle2.sendToFrontend({ type: "vn_turn", turn: view }, userId);
     }
   }

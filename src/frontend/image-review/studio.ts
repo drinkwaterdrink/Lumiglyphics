@@ -39,7 +39,7 @@ const CSS = `
 @media(max-height:500px){section{inset:max(76px,calc(env(safe-area-inset-top) + 64px)) 8px calc(max(12px,env(safe-area-inset-bottom)) + var(--reader-keyboard-inset,0px));width:auto;max-height:none}[data-studio-header],[data-studio-footer]{padding:8px 12px}[data-studio-footer] .row{flex-wrap:nowrap;overflow-x:auto}[data-studio-footer] .row button{flex:none}[data-studio-footer] [data-notice]{max-height:12dvh}}
 `;
 const INSPECTOR_CSS=`
-:host{--paper:var(--vn-shell-panel,#171822)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])){--paper:#f8faf6;color:#172721;--vn-shell-text:#172721;--vn-shell-muted:#4b6b5d;--vn-shell-field:#ffffff;--vn-shell-button:#e5eee2;--accent:#1e5a40;--edge:rgba(86,128,107,.35)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) section{color:#172721!important;background:#f8faf6!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) details{background:#ffffff!important;border-color:rgba(86,128,107,.3)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-context]{background:#eef5ee!important;border-color:rgba(86,128,107,.3)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-scene]{color:#142820!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) textarea{background:#ffffff!important;color:#142820!important;border-color:rgba(86,128,107,.35)!important}section{width:min(520px,calc(100% - 24px));color:var(--vn-shell-text,#eee);backdrop-filter:blur(16px)}section small,section p{color:var(--vn-shell-muted,#bbc)}[data-studio-body]{padding-top:12px}details{border:1px solid color-mix(in srgb,var(--edge) 65%,transparent);border-radius:10px;background:rgba(255,255,255,.025);padding:0 12px;margin:8px 0}details[open]{padding-bottom:12px;background:rgba(255,255,255,.04);border-color:color-mix(in srgb,var(--accent) 42%,var(--edge))}summary{font-weight:600}[data-context]{display:flex;gap:12px;align-items:flex-start;margin:8px 0 10px;padding:10px 12px;border-radius:12px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 12%,rgba(255,255,255,.03)),rgba(0,0,0,.24));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--edge))}[data-context-text]{min-width:0;flex:1}[data-status]{font-size:15px;display:block}[data-paragraph]{display:inline-block;margin-top:3px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.07);font-size:11px;font-weight:600}[data-scene]{margin:5px 0 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12.5px}[data-thumbnail]{width:66px;height:82px;flex:none;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--edge));border-radius:10px;background:var(--vn-shell-field,#101119);display:grid;place-items:center;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.35)}[data-thumbnail] img{width:100%;height:100%;object-fit:cover}[data-placeholder]{font-size:28px;color:var(--accent)}[data-state-detail]{margin:8px 0;font-size:13px}[data-meta]{font-size:12px;margin:4px 0;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.05);display:inline-block}[data-prompt-editor]{margin:8px 0;padding:12px;border-radius:12px;background:rgba(255,255,255,.025);border:1px solid color-mix(in srgb,var(--edge) 70%,transparent)}[data-edit-help]{font-size:12px;margin:0 0 8px}label{font-weight:500;margin:10px 0}label small{float:right;font-weight:400;font-size:11px}textarea{margin-top:6px;font:15px/1.5 var(--vn-shell-family,system-ui);border-radius:8px}[data-positive]{min-height:130px;resize:vertical;transition:min-height .2s ease}[data-positive][data-expanded="true"]{min-height:260px}[data-negative]{min-height:68px;resize:vertical}[data-budget-meter]{height:6px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin:8px 0 4px}[data-budget-fill]{height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width .2s ease,background-color .2s ease}[data-budget-fill][data-tone="warn"]{background:#f5c462}[data-budget-fill][data-tone="over"]{background:var(--vn-shell-danger,#ffb4ab)}[data-combined-count]{display:block;font-variant-numeric:tabular-nums;text-align:right;font-size:12px}[data-validation]{display:block;color:var(--vn-shell-danger,#ffb4ab);margin:6px 0}[aria-invalid="true"]{border-color:var(--vn-shell-danger,#ffb4ab)}[data-picture-strip]{display:flex;gap:8px;margin-bottom:8px;overflow-x:auto;scrollbar-width:thin;-webkit-overflow-scrolling:touch;padding-bottom:4px}[data-picture-strip] button{flex:0 0 auto;min-width:134px;max-width:210px;padding:6px 10px;font-size:12px;display:flex;align-items:center;gap:8px;border-radius:10px}[data-picture-strip] img{width:30px;height:34px;object-fit:cover;border-radius:5px;flex:none}[data-picture-strip] [aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,var(--vn-shell-button,#252632));box-shadow:inset 0 0 0 1px var(--accent)}[data-picture-navigation] label{margin:0}[data-retry-queue]{margin:8px 0;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid color-mix(in srgb,var(--edge) 55%,transparent)}[data-retry-queue] [data-queue-status]{display:block;margin-top:6px;font-size:12px}[data-studio-footer] .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}[data-studio-footer] button{flex:1 1 115px;min-height:44px;min-width:44px;border-color:var(--accent);font-weight:650;justify-content:center}[data-studio-footer] button[data-generate],[data-studio-footer] button[data-prepare],[data-studio-footer] button[data-primary-repair]{flex:1.6 1 165px;background:color-mix(in srgb,var(--accent) 20%,var(--vn-shell-button,#252632))}[data-action-help]{display:block;font-size:11.5px;text-align:center;margin-top:6px}[data-notice-row]{border-top:1px solid var(--edge);margin-top:10px}[data-notice]{font-size:12px}[data-rewrite-changed]{padding:10px;border:1px solid var(--accent);border-radius:8px;margin:8px 0;background:color-mix(in srgb,var(--accent) 8%,transparent)}[data-rewrite-changed] p{margin:0 0 8px}[data-previous-scene]{padding-left:20px;overflow-wrap:anywhere}[data-reply-settings] details{margin-left:4px}[data-secondary-actions]{margin-bottom:8px}[data-secondary-actions] button{font-size:13px}[data-subject-name]{width:100%}
+:host{--paper:var(--vn-shell-panel,#171822)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])){--paper:#f8faf6;color:#172721;--vn-shell-text:#172721;--vn-shell-muted:#4b6b5d;--vn-shell-field:#ffffff;--vn-shell-button:#e5eee2;--accent:#1e5a40;--edge:rgba(86,128,107,.35)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) section{color:#172721!important;background:#f8faf6!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) details{background:#ffffff!important;border-color:rgba(86,128,107,.3)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-context]{background:#eef5ee!important;border-color:rgba(86,128,107,.3)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-scene]{color:#142820!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) textarea{background:#ffffff!important;color:#142820!important;border-color:rgba(86,128,107,.35)!important}section{width:min(520px,calc(100% - 24px));color:var(--vn-shell-text,#eee);backdrop-filter:blur(16px)}section small,section p{color:var(--vn-shell-muted,#bbc)}[data-studio-body]{padding-top:12px}details{border:1px solid color-mix(in srgb,var(--edge) 65%,transparent);border-radius:10px;background:rgba(255,255,255,.025);padding:0 12px;margin:8px 0}details[open]{padding-bottom:12px;background:rgba(255,255,255,.04);border-color:color-mix(in srgb,var(--accent) 42%,var(--edge))}summary{font-weight:600}[data-context]{display:flex;gap:12px;align-items:flex-start;margin:8px 0 10px;padding:12px;border-radius:14px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 12%,rgba(255,255,255,.03)),rgba(0,0,0,.24));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--edge))}[data-context-text]{min-width:0;flex:1}[data-status]{font-size:15px;display:block}[data-paragraph]{display:inline-block;margin-top:3px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.07);font-size:11px;font-weight:600}[data-scene]{margin:5px 0 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12.5px}[data-thumbnail]{width:84px;height:108px;flex:none;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--edge));border-radius:12px;background:var(--vn-shell-field,#101119);display:grid;place-items:center;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.35)}[data-thumbnail] img{width:100%;height:100%;object-fit:cover}[data-placeholder]{font-size:28px;color:var(--accent)}[data-state-detail]{margin:8px 0;font-size:13px}[data-meta]{font-size:12px;margin:4px 0;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.05);display:inline-block}[data-prompt-editor]{margin:8px 0;padding:12px;border-radius:12px;background:rgba(255,255,255,.025);border:1px solid color-mix(in srgb,var(--edge) 70%,transparent)}[data-edit-help]{font-size:12px;margin:0 0 8px}label{font-weight:500;margin:10px 0}label small{float:right;font-weight:400;font-size:11px}textarea{margin-top:6px;font:16px/1.5 var(--vn-shell-family,system-ui);border-radius:8px}select,input:not([type=checkbox]){font-size:16px}[data-positive]{min-height:130px;resize:vertical;transition:min-height .2s ease}[data-positive][data-expanded="true"]{min-height:260px}[data-negative]{min-height:68px;resize:vertical}[data-budget-meter]{height:6px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin:8px 0 4px}[data-budget-fill]{height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width .2s ease,background-color .2s ease}[data-budget-fill][data-tone="warn"]{background:#f5c462}[data-budget-fill][data-tone="over"]{background:var(--vn-shell-danger,#ffb4ab)}[data-combined-count]{display:block;font-variant-numeric:tabular-nums;text-align:right;font-size:12px}[data-validation]{display:block;color:var(--vn-shell-danger,#ffb4ab);margin:6px 0}[aria-invalid="true"]{border-color:var(--vn-shell-danger,#ffb4ab)}[data-picture-strip]{display:flex;gap:8px;margin-bottom:8px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:4px}[data-picture-strip] button{flex:0 0 auto;min-width:134px;max-width:210px;min-height:48px;padding:6px 10px;font-size:12px;display:flex;align-items:center;gap:8px;border-radius:12px}[data-picture-strip] img{width:34px;height:40px;object-fit:cover;border-radius:6px;flex:none}[data-picture-strip] [aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,var(--vn-shell-button,#252632));box-shadow:inset 0 0 0 1px var(--accent)}[data-picture-navigation] label{margin:0}[data-retry-queue]{margin:8px 0;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid color-mix(in srgb,var(--edge) 55%,transparent)}[data-retry-queue] [data-queue-status]{display:block;margin-top:6px;font-size:12px}[data-studio-footer] .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}[data-studio-footer] button{flex:1 1 115px;min-height:44px;min-width:44px;border-color:var(--accent);font-weight:650;justify-content:center}[data-studio-footer] button[data-generate],[data-studio-footer] button[data-prepare],[data-studio-footer] button[data-primary-repair]{flex:1.6 1 165px;background:color-mix(in srgb,var(--accent) 20%,var(--vn-shell-button,#252632))}[data-action-help]{display:block;font-size:11.5px;text-align:center;margin-top:6px}[data-notice-row]{border-top:1px solid var(--edge);margin-top:10px}[data-notice]{font-size:12px}[data-rewrite-changed]{padding:10px;border:1px solid var(--accent);border-radius:8px;margin:8px 0;background:color-mix(in srgb,var(--accent) 8%,transparent)}[data-rewrite-changed] p{margin:0 0 8px}[data-previous-scene]{padding-left:20px;overflow-wrap:anywhere}[data-reply-settings] details{margin-left:4px}[data-secondary-actions]{margin-bottom:8px}[data-secondary-actions] button{font-size:13px}[data-subject-name]{width:100%}
 section[data-state="planning"],section[data-state="empty"],section[data-state="zero-budget"],section[data-state="idle"]{bottom:auto;max-height:calc(100% - 92px)}
 .studio-tab-bar{position:sticky;top:0;z-index:20;background:var(--paper);display:flex;align-items:center;gap:6px;overflow-x:auto;padding:6px 0 10px;margin-bottom:10px;border-bottom:1px solid var(--edge);scrollbar-width:none;-webkit-overflow-scrolling:touch}.studio-tab-bar::-webkit-scrollbar{display:none}
 .studio-tab-btn{background:var(--vn-shell-field,rgba(255,255,255,.05));border:1px solid var(--edge);border-radius:20px;padding:5px 12px;font-size:11.5px;font-weight:600;color:var(--vn-shell-muted,#aaa);cursor:pointer;white-space:nowrap;flex:none;min-height:44px;min-width:44px;transition:all .15s cubic-bezier(0.2,0,0,1)}.studio-tab-btn:hover{background:rgba(255,255,255,.08);color:var(--vn-shell-text,#eee);transform:translateY(-1px)}.studio-tab-btn[aria-selected="true"]{background:color-mix(in srgb,var(--accent) 24%,var(--vn-shell-button,#252632));border-color:var(--accent);color:var(--accent);font-weight:700;box-shadow:0 0 10px color-mix(in srgb,var(--accent) 25%,transparent)}
@@ -47,6 +47,25 @@ section[data-state="planning"],section[data-state="empty"],section[data-state="z
 .studio-layout-toggle{margin-left:auto;background:var(--vn-shell-field,rgba(255,255,255,.08));border:1px solid var(--accent);border-radius:20px;padding:4px 10px;font-size:11px;font-weight:700;color:var(--accent);cursor:pointer;white-space:nowrap;flex:none;min-height:44px;min-width:44px;transition:all .15s ease}
 .studio-layout-toggle:hover{background:color-mix(in srgb,var(--accent) 20%,transparent)}
 .studio-tab-panel{display:flex;flex-direction:column;gap:10px;background:var(--vn-shell-field,rgba(255,255,255,.03));border:1px solid var(--edge);border-radius:14px;padding:12px;margin-bottom:10px;box-shadow:0 4px 16px rgba(0,0,0,.15);transition:border-color .2s ease}.studio-tab-panel[hidden]{display:none!important}
+.studio-hero-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.studio-hero-actions button{min-height:44px;min-width:44px;padding:6px 10px;font-size:11.5px;font-weight:650;border-radius:10px}
+.studio-hub-heading{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--vn-shell-muted,#9eb7a9);margin:4px 0 6px}
+.studio-hub-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.studio-hub-tile{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:3px;min-height:76px;padding:10px 12px;border-radius:14px;text-align:left;background:color-mix(in srgb,var(--accent) 7%,var(--vn-shell-button,rgba(255,255,255,.05)));border:1px solid var(--edge);transition:border-color .15s ease,transform .12s ease}
+.studio-hub-tile:hover{border-color:var(--accent);transform:translateY(-1px)}
+.studio-hub-tile-title{font-size:13px;font-weight:750;color:var(--vn-shell-text,#f4f7ee)}
+.studio-hub-tile-sub{font-size:11px;color:var(--vn-shell-muted,#9eb7a9);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.studio-hub-secondary{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.studio-hub-secondary button{flex:1 1 135px;min-height:44px;font-size:12px;font-weight:650;border-radius:12px}
+.studio-sheet-header{position:sticky;top:52px;z-index:15;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;margin:-4px 0 6px;border-radius:12px;background:var(--paper);border:1px solid var(--edge);box-shadow:0 4px 12px rgba(0,0,0,.18)}
+section[data-layout-mode="unified"] .studio-sheet-header{display:none!important}
+.studio-sheet-header strong{font-size:13px;flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.studio-sheet-header button{min-height:44px;min-width:44px;padding:6px 12px;border-radius:10px;font-size:12px;font-weight:700}
+.studio-sheet-done{background:var(--accent)!important;color:#0f2019!important;border-color:var(--accent)!important}
+:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) .studio-sheet-done{background:#234b39!important;color:#fbfdf7!important;border-color:#234b39!important}
+.studio-camera-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}.studio-camera-grid label{margin:0}
+@container(max-width:310px){.studio-camera-grid{grid-template-columns:1fr}}
+.studio-vf-stage{touch-action:none;cursor:crosshair}
+.studio-vf-reticle{position:absolute;width:24px;height:24px;border-radius:999px;border:2px solid var(--accent);box-shadow:0 0 0 2px rgba(0,0,0,.55);transform:translate(-50%,-50%);pointer-events:none;z-index:4}
+.studio-vf-reticle::after{content:'';position:absolute;inset:7px;border-radius:999px;background:var(--accent)}
 .studio-card-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:4px}
 .studio-card-title{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;color:var(--vn-shell-text,#f4f7ee)}.studio-activity-details{margin:6px 0;border:1px solid var(--edge);border-radius:10px;background:rgba(255,255,255,.02);padding:0 10px}.studio-activity-details[open]{padding-bottom:10px}.studio-activity-details summary{font-size:12px;font-weight:600;cursor:pointer;color:var(--vn-shell-muted,#aaa)}
 .studio-clause-bar{display:flex;gap:6px;overflow-x:auto;padding:2px 0 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch}.studio-clause-bar::-webkit-scrollbar{display:none}
@@ -61,10 +80,10 @@ section[data-state="planning"],section[data-state="empty"],section[data-state="z
 .studio-vf-grid{position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(to right,transparent 33%,rgba(255,255,255,.12) 33%,rgba(255,255,255,.12) 33.5%,transparent 33.5%,transparent 66.5%,rgba(255,255,255,.12) 66.5%,rgba(255,255,255,.12) 67%,transparent 67%),linear-gradient(to bottom,transparent 33%,rgba(255,255,255,.12) 33%,rgba(255,255,255,.12) 33.5%,transparent 33.5%,transparent 66.5%,rgba(255,255,255,.12) 66.5%,rgba(255,255,255,.12) 67%,transparent 67%)}
 .studio-vf-safe-curtain{position:absolute;left:0;right:0;bottom:0;height:25%;background:repeating-linear-gradient(-45deg,rgba(220,235,173,.12),rgba(220,235,173,.12) 6px,rgba(0,0,0,.35) 6px,rgba(0,0,0,.35) 12px);border-top:1px dashed var(--accent);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--accent);letter-spacing:.03em;pointer-events:none}
 .studio-vf-subjects{position:absolute;inset:8px 8px 26% 8px;pointer-events:none;display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap}
-.studio-vf-subject-chip{padding:3px 8px;border-radius:999px;background:rgba(15,24,20,.82);border:1px solid var(--accent);color:#fff;font-size:10.5px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.4)}
-.studio-vf-pill-row{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;-webkit-overflow-scrolling:touch}.studio-vf-pill-row::-webkit-scrollbar{display:none}
+.studio-vf-subject-chip{pointer-events:auto;min-height:44px;padding:6px 12px;border-radius:999px;background:rgba(15,24,20,.82);border:1px solid var(--accent);color:#fff;font-size:11px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.4)}
+.studio-vf-pill-row{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;-webkit-overflow-scrolling:touch}.studio-vf-pill-row::-webkit-overflow-scrolling:touch;scrollbar-width:none}.studio-vf-pill-row::-webkit-scrollbar{display:none}
 .studio-vf-pill{flex:0 0 auto;min-height:44px;min-width:44px;padding:6px 12px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid var(--edge);background:rgba(255,255,255,.04)}.studio-vf-pill[aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 22%,var(--vn-shell-button,#252632));color:var(--accent);font-weight:700}
-@container(max-width:600px){section{width:auto}[data-context]{gap:10px}[data-studio-body]{padding:10px}[data-thumbnail]{width:54px;height:70px}}
+@container(max-width:600px){section{width:auto}[data-context]{gap:10px}[data-studio-body]{padding:10px}[data-thumbnail]{width:74px;height:96px}}
 `;
 
 export class ImageStudio {
@@ -98,6 +117,7 @@ export class ImageStudio {
   private templateRequest = "";
   private defaultTemplate = "portrait";
   private studioLayoutMode: 'unified' | 'tabs' = 'tabs';
+  private draftFocalPoint: { x: number; y: number } = { x: 50, y: 36 };
   private rebuilding = new Set<string>();
   private rerolling = new Set<string>();
   private cursor = 0;
@@ -370,7 +390,7 @@ export class ImageStudio {
       }
       this.syncDirectorViewfinder();
     };
-    for (const sel of ['[data-camera-shot-size]','[data-camera-angle]','[data-camera-lens]','[data-camera-composition]','[data-camera-safe-area]']) {
+    for (const sel of ['[data-camera-shot-size]','[data-camera-angle]','[data-camera-lens]','[data-camera-composition]','[data-camera-depth]','[data-camera-safe-area]']) {
       this.el<HTMLSelectElement>(sel).onchange = () => this.syncDirectorViewfinder();
     }
 
@@ -444,7 +464,14 @@ export class ImageStudio {
     });
     this.root.addEventListener("keydown", event => {
       const keyEvent = event as KeyboardEvent;
-      if (keyEvent.key === "Escape") { this.el<HTMLButtonElement>("[data-close]").click(); return; }
+      if (keyEvent.key === "Escape") {
+        if (this.studioLayoutMode === "tabs" && this.activeTab !== "picture") {
+          this.switchTab("picture");
+          return;
+        }
+        this.el<HTMLButtonElement>("[data-close]").click();
+        return;
+      }
       if (keyEvent.key === "Enter" && (keyEvent.ctrlKey || keyEvent.metaKey)) {
         const generate = this.el<HTMLButtonElement>("[data-generate]");
         if (!generate.hidden && !generate.disabled) { keyEvent.preventDefault(); generate.click(); }
@@ -555,8 +582,8 @@ export class ImageStudio {
   private layoutInspector():void {
     const body=this.el<HTMLElement>('[data-studio-body]');
     const context=document.createElement('div');context.dataset.context='';
-    context.innerHTML='<div data-thumbnail style="position:relative;cursor:pointer" title="Click to view fullscreen"><img data-preview hidden alt="Selected picture"><span data-placeholder aria-hidden="true">◇</span><button type="button" data-preview-fullscreen aria-label="View fullscreen" style="position:absolute;bottom:3px;right:3px;width:24px;height:24px;border-radius:4px;border:none;background:rgba(0,0,0,0.7);color:#fff;font-size:13px;display:grid;place-items:center;cursor:pointer;padding:0;line-height:1">⛶</button></div><div data-context-text><strong data-status role="status"></strong><small data-paragraph></small></div>';
-    context.querySelector('[data-thumbnail]')!.addEventListener('click', () => {
+    context.innerHTML='<div data-thumbnail style="position:relative;cursor:pointer" title="Click to view fullscreen"><img data-preview hidden alt="Selected picture"><span data-placeholder aria-hidden="true">◇</span><div data-preview-safe-curtain hidden class="studio-vf-safe-curtain" style="font-size:8.5px;letter-spacing:0">SAFE ZONE</div><span aria-hidden="true" style="position:absolute;bottom:4px;right:4px;width:24px;height:24px;border-radius:6px;border:1px solid rgba(255,255,255,0.28);background:rgba(0,0,0,0.68);color:#fff;font-size:12px;display:grid;place-items:center;pointer-events:none;line-height:1">⛶</span></div><div data-context-text><strong data-status role="status"></strong><small data-paragraph></small></div>';
+    const openHeroFullscreen = () => {
       const img = this.el<HTMLImageElement>('[data-preview]');
       if (!img.src || img.hidden) return;
       const record = this.record();
@@ -570,8 +597,40 @@ export class ImageStudio {
         prompt: record?.prompt,
         negativePrompt: record?.negativePrompt
       });
-    });
+    };
+    context.querySelector('[data-thumbnail]')!.addEventListener('click', openHeroFullscreen);
     context.querySelector('[data-context-text]')!.append(this.el('[data-scene]'));
+    const heroActions = document.createElement('div');
+    heroActions.className = 'studio-hero-actions';
+    const safeMaskBtn = document.createElement('button');
+    safeMaskBtn.type = 'button';
+    safeMaskBtn.dataset.toggleSafeMask = '';
+    safeMaskBtn.setAttribute('aria-pressed', 'false');
+    safeMaskBtn.textContent = '🎭 Safe Zone';
+    safeMaskBtn.onclick = () => {
+      const curtain = context.querySelector<HTMLElement>('[data-preview-safe-curtain]');
+      if (!curtain) return;
+      curtain.hidden = !curtain.hidden;
+      const active = !curtain.hidden;
+      safeMaskBtn.setAttribute('aria-pressed', String(active));
+      safeMaskBtn.style.borderColor = active ? 'var(--accent)' : '';
+    };
+    const fsHeroBtn = document.createElement('button');
+    fsHeroBtn.type = 'button';
+    fsHeroBtn.dataset.heroFullscreen = '';
+    fsHeroBtn.textContent = '⛶ Fullscreen';
+    fsHeroBtn.onclick = openHeroFullscreen;
+    const compareHeroBtn = document.createElement('button');
+    compareHeroBtn.type = 'button';
+    compareHeroBtn.dataset.hubCompareBtn = '';
+    compareHeroBtn.hidden = true;
+    compareHeroBtn.textContent = '⇔ Compare';
+    compareHeroBtn.onclick = () => {
+      this.comparison.element.open = true;
+      this.comparison.element.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+    };
+    heroActions.append(safeMaskBtn, fsHeroBtn, compareHeroBtn);
+    context.querySelector('[data-context-text]')!.append(heroActions);
     const versionsContainer = document.createElement('div');
     versionsContainer.dataset.previousVersionsContainer = '';
     versionsContainer.hidden = true;
@@ -602,7 +661,7 @@ export class ImageStudio {
         <small style="opacity:0.75;font-size:10px">Cinematic detail &amp; lighting</small>
       </div>
       <div style="display:flex;gap:6px">
-        <input type="text" data-enrich-guidance placeholder="Optional direction (e.g. 'longer hair, golden hour rim lighting, bokeh')..." maxlength="400" style="flex:1;min-height:44px;padding:6px 10px;border-radius:8px;border:1px solid var(--edge);background:var(--vn-shell-field,#101119);color:inherit;font-size:12px" />
+        <input type="text" data-enrich-guidance placeholder="Optional direction (e.g. 'longer hair, golden hour rim lighting, bokeh')..." maxlength="400" style="flex:1;min-height:44px;padding:6px 10px;border-radius:8px;border:1px solid var(--edge);background:var(--vn-shell-field,#101119);color:inherit;font-size:16px" />
         <button type="button" data-enrich-submit style="flex:none;min-height:44px;min-width:44px;padding:6px 14px;border-radius:8px;background:color-mix(in srgb,var(--accent) 22%,var(--vn-shell-button,#252632));border:1px solid var(--accent);color:#fff;font-weight:650;font-size:12px;cursor:pointer;white-space:nowrap">✨ Enrich</button>
       </div>
     `;
@@ -623,7 +682,7 @@ export class ImageStudio {
     const template=document.createElement('details');template.dataset.templateTools='';template.innerHTML='<summary>Template and framing</summary>';
     for(const selector of ['[data-template]','[data-use-template]','[data-template-confirm]']){const element=this.el(selector);template.append(element.tagName?.toUpperCase()==='SELECT'?element.closest('label')!:element);}tools.append(template);
 
-    const styleTools=document.createElement('details');styleTools.dataset.styleTools='';
+    const styleTools=document.createElement('details');styleTools.dataset.styleTools='';styleTools.open=true;
     styleTools.innerHTML=`<summary>Change Style</summary>
       <div style="margin:8px 0">
         <div data-active-style-badge style="font-size:11px;font-weight:600;margin-bottom:6px;color:var(--accent,#7c9cff)">
@@ -635,66 +694,68 @@ export class ImageStudio {
       </div>`;
     tools.append(styleTools);
 
-    const cameraTools=document.createElement('details');cameraTools.dataset.cameraTools='';
+    const cameraTools=document.createElement('details');cameraTools.dataset.cameraTools='';cameraTools.open=true;
     cameraTools.innerHTML=`<summary>Camera &amp; Director overrides</summary>
       <div style="margin:8px 0">
         <label class="toggle"><input type="checkbox" data-auto-director checked>Auto Director (smart shot choices)</label>
         <div data-manual-camera-controls style="margin-top:8px">
-          <label>Shot size<select data-camera-shot-size disabled>
-            <option value="">Auto</option>
-            <option value="extreme-close-up">Extreme close-up</option>
-            <option value="close-up">Close-up</option>
-            <option value="medium-close-up">Medium close-up</option>
-            <option value="medium">Medium</option>
-            <option value="medium-wide">Medium-wide</option>
-            <option value="full-body">Full-body</option>
-            <option value="wide">Wide</option>
-            <option value="establishing">Establishing</option>
-            <option value="macro">Macro</option>
-          </select></label>
-          <label>Angle<select data-camera-angle disabled>
-            <option value="">Auto</option>
-            <option value="eye-level">Eye-level</option>
-            <option value="low-angle">Low-angle</option>
-            <option value="high-angle">High-angle</option>
-            <option value="overhead">Overhead</option>
-            <option value="ground-level">Ground-level</option>
-            <option value="three-quarter">Three-quarter</option>
-            <option value="profile">Profile</option>
-            <option value="over-the-shoulder">Over-the-shoulder</option>
-          </select></label>
-          <label>Lens feel<select data-camera-lens disabled>
-            <option value="">Auto</option>
-            <option value="ultrawide">Ultrawide</option>
-            <option value="wide">Wide</option>
-            <option value="normal">Normal (50mm)</option>
-            <option value="portrait">Portrait (85mm)</option>
-            <option value="telephoto">Telephoto</option>
-            <option value="macro">Macro</option>
-          </select></label>
-          <label>Composition<select data-camera-composition disabled>
-            <option value="">Auto</option>
-            <option value="centered">Centered</option>
-            <option value="rule-of-thirds">Rule of thirds</option>
-            <option value="symmetrical">Symmetrical</option>
-            <option value="layered-depth">Layered depth</option>
-            <option value="leading-lines">Leading lines</option>
-            <option value="negative-space">Negative space</option>
-            <option value="lateral-ensemble">Lateral ensemble</option>
-          </select></label>
-          <label>Depth of field<select data-camera-depth disabled>
-            <option value="">Auto</option>
-            <option value="deep">Deep focus</option>
-            <option value="moderate">Moderate</option>
-            <option value="shallow">Shallow / bokeh</option>
-            <option value="selective">Selective</option>
-          </select></label>
-          <label>Dialogue safe area<select data-camera-safe-area disabled>
-            <option value="auto">Auto</option>
-            <option value="always">Always reserve bottom</option>
-            <option value="off">Off (full bleed)</option>
-          </select></label>
-          <button type="button" data-apply-camera style="margin-top:6px">Apply camera</button>
+          <div class="studio-camera-grid">
+            <label>Shot size<select data-camera-shot-size disabled>
+              <option value="">Auto</option>
+              <option value="extreme-close-up">Extreme close-up</option>
+              <option value="close-up">Close-up</option>
+              <option value="medium-close-up">Medium close-up</option>
+              <option value="medium">Medium</option>
+              <option value="medium-wide">Medium-wide</option>
+              <option value="full-body">Full-body</option>
+              <option value="wide">Wide</option>
+              <option value="establishing">Establishing</option>
+              <option value="macro">Macro</option>
+            </select></label>
+            <label>Angle<select data-camera-angle disabled>
+              <option value="">Auto</option>
+              <option value="eye-level">Eye-level</option>
+              <option value="low-angle">Low-angle</option>
+              <option value="high-angle">High-angle</option>
+              <option value="overhead">Overhead</option>
+              <option value="ground-level">Ground-level</option>
+              <option value="three-quarter">Three-quarter</option>
+              <option value="profile">Profile</option>
+              <option value="over-the-shoulder">Over-the-shoulder</option>
+            </select></label>
+            <label>Lens feel<select data-camera-lens disabled>
+              <option value="">Auto</option>
+              <option value="ultrawide">Ultrawide</option>
+              <option value="wide">Wide</option>
+              <option value="normal">Normal (50mm)</option>
+              <option value="portrait">Portrait (85mm)</option>
+              <option value="telephoto">Telephoto</option>
+              <option value="macro">Macro</option>
+            </select></label>
+            <label>Composition<select data-camera-composition disabled>
+              <option value="">Auto</option>
+              <option value="centered">Centered</option>
+              <option value="rule-of-thirds">Rule of thirds</option>
+              <option value="symmetrical">Symmetrical</option>
+              <option value="layered-depth">Layered depth</option>
+              <option value="leading-lines">Leading lines</option>
+              <option value="negative-space">Negative space</option>
+              <option value="lateral-ensemble">Lateral ensemble</option>
+            </select></label>
+            <label>Depth of field<select data-camera-depth disabled>
+              <option value="">Auto</option>
+              <option value="deep">Deep focus</option>
+              <option value="moderate">Moderate</option>
+              <option value="shallow">Shallow / bokeh</option>
+              <option value="selective">Selective</option>
+            </select></label>
+            <label>Dialogue safe area<select data-camera-safe-area disabled>
+              <option value="auto">Auto</option>
+              <option value="always">Always reserve bottom</option>
+              <option value="off">Off (full bleed)</option>
+            </select></label>
+          </div>
+          <button type="button" data-apply-camera style="margin-top:10px;width:100%">Apply camera</button>
         </div>
       </div>`;
     tools.append(cameraTools);
@@ -734,8 +795,8 @@ export class ImageStudio {
     tabs.setAttribute('aria-label', 'Artwork studio sections');
 
     const tabDefs = [
-      { id: 'picture', label: '🖼️ Picture' },
-      { id: 'prompt', label: '📝 Prompt' },
+      { id: 'picture', label: '🏠 Hub' },
+      { id: 'prompt', label: '📝 Words' },
       { id: 'camera', label: '📐 Camera' },
       { id: 'style', label: '🎨 Style' },
       { id: 'model', label: '⚡ Model' },
@@ -758,11 +819,11 @@ export class ImageStudio {
     layoutToggle.type = 'button';
     layoutToggle.className = 'studio-layout-toggle';
     layoutToggle.dataset.layoutModeToggle = '';
-    layoutToggle.textContent = this.studioLayoutMode === 'unified' ? '🌟 All in One' : '📑 Tab Focus';
-    layoutToggle.title = 'Toggle between all-in-one unified view and single tab focus';
+    layoutToggle.textContent = this.studioLayoutMode === 'unified' ? '🌟 All in One' : '📑 Focus Sheets';
+    layoutToggle.title = 'Toggle between all-in-one unified view and Focus Sheet mode';
     layoutToggle.onclick = () => {
       this.studioLayoutMode = this.studioLayoutMode === 'unified' ? 'tabs' : 'unified';
-      layoutToggle.textContent = this.studioLayoutMode === 'unified' ? '🌟 All in One' : '📑 Tab Focus';
+      layoutToggle.textContent = this.studioLayoutMode === 'unified' ? '🌟 All in One' : '📑 Focus Sheets';
       this.switchTab(this.activeTab);
     };
     tabs.append(layoutToggle);
@@ -787,9 +848,76 @@ export class ImageStudio {
       return h;
     };
 
+    const sheetHeader = (titleText: string) => {
+      const bar = document.createElement('div');
+      bar.className = 'studio-sheet-header';
+      const backBtn = document.createElement('button');
+      backBtn.type = 'button';
+      backBtn.dataset.sheetBack = '';
+      backBtn.textContent = '← Hub';
+      backBtn.onclick = () => this.switchTab('picture');
+      const title = document.createElement('strong');
+      title.textContent = titleText;
+      const doneBtn = document.createElement('button');
+      doneBtn.type = 'button';
+      doneBtn.className = 'studio-sheet-done';
+      doneBtn.dataset.sheetDone = '';
+      doneBtn.textContent = 'Done ✓';
+      doneBtn.onclick = () => this.switchTab('picture');
+      bar.append(backBtn, title, doneBtn);
+      return bar;
+    };
+
     const panelPicture = document.createElement('div');
     panelPicture.className = 'studio-tab-panel';
     panelPicture.dataset.tabPanel = 'picture';
+    const hubBox = document.createElement('div');
+    hubBox.dataset.studioHub = '';
+    const hubHeading = document.createElement('div');
+    hubHeading.className = 'studio-hub-heading';
+    hubHeading.textContent = 'What do you want to adjust?';
+    const hubGrid = document.createElement('div');
+    hubGrid.className = 'studio-hub-grid';
+    for (const [tabId, titleText, subText] of [
+      ['camera', '📐 Camera', 'Auto framing'],
+      ['style', '🎨 Style', 'Neutral / scene'],
+      ['prompt', '📝 Edit Wording', 'Clauses & prompt'],
+      ['model', '⚡ Model & Retry', 'Active default']
+    ] as const) {
+      const tile = document.createElement('button');
+      tile.type = 'button';
+      tile.className = 'studio-hub-tile';
+      tile.dataset.hubTile = tabId;
+      const tileTitle = document.createElement('span');
+      tileTitle.className = 'studio-hub-tile-title';
+      tileTitle.textContent = titleText;
+      const tileSub = document.createElement('span');
+      tileSub.className = 'studio-hub-tile-sub';
+      tileSub.dataset.hubSub = tabId;
+      tileSub.textContent = subText;
+      tile.append(tileTitle, tileSub);
+      tile.onclick = () => this.switchTab(tabId);
+      hubGrid.append(tile);
+    }
+    const hubSecondary = document.createElement('div');
+    hubSecondary.className = 'studio-hub-secondary';
+    const quickEnrichBtn = document.createElement('button');
+    quickEnrichBtn.type = 'button';
+    quickEnrichBtn.dataset.hubQuickEnrich = '';
+    quickEnrichBtn.textContent = '✨ Quick Enrich Wording';
+    quickEnrichBtn.onclick = () => {
+      this.switchTab('prompt');
+      const input = this.root.querySelector<HTMLInputElement>('[data-enrich-guidance]');
+      input?.focus({ preventScroll: false });
+    };
+    const historyHubBtn = document.createElement('button');
+    historyHubBtn.type = 'button';
+    historyHubBtn.dataset.hubTile = 'history';
+    historyHubBtn.textContent = '🕒 History, Brief & Logs';
+    historyHubBtn.onclick = () => this.switchTab('history');
+    hubSecondary.append(quickEnrichBtn, historyHubBtn);
+    hubBox.append(hubHeading, hubGrid, hubSecondary);
+
     const explanation=document.createElement('details');explanation.dataset.pictureExplanation='';explanation.innerHTML='<summary>Why this picture?</summary><p data-picture-explanation-text style="white-space:pre-wrap;overflow-wrap:anywhere"></p>';
     const corrections=document.createElement('details');corrections.dataset.pictureCorrections='';
     corrections.setAttribute('role','group');corrections.setAttribute('aria-label','Correct this picture');
@@ -802,26 +930,26 @@ export class ImageStudio {
     const correctionHelp=document.createElement('small');correctionHelp.dataset.correctionHelp='';correctionHelp.setAttribute('role','status');
     correctionHelp.textContent='Open the controls you need, review your changes, then choose the explicit preview or generation action.';
     corrections.append(correctionButtons, correctionHelp);
-    panelPicture.append(cardHeader('🖼️', 'Picture & Scene Moment', 'Review or inspect'), versionsContainer, explanation, corrections, detail, this.brief.element, this.el('[data-recovery]').closest('details')!);
+    panelPicture.append(cardHeader('🏠', 'Director’s Command Hub', 'Tap any focus card below'), context, hubBox, versionsContainer, explanation, corrections, detail, this.brief.element, this.el('[data-recovery]').closest('details')!);
 
     const panelModel = document.createElement('div');
     panelModel.className = 'studio-tab-panel';
     panelModel.dataset.tabPanel = 'model';
     panelModel.hidden = this.studioLayoutMode === 'tabs';
-    panelModel.append(cardHeader('⚡', 'Image Model & Generation', 'Switch model or rerun'), modelTools);
+    panelModel.append(sheetHeader('⚡ Model & Retry'), cardHeader('⚡', 'Image Model & Generation', 'Switch model or rerun'), modelTools);
 
     const panelStyle = document.createElement('div');
     panelStyle.className = 'studio-tab-panel';
     panelStyle.dataset.tabPanel = 'style';
     panelStyle.hidden = this.studioLayoutMode === 'tabs';
-    panelStyle.append(cardHeader('🎨', 'Visual Style', 'Select or change style'), styleTools);
+    panelStyle.append(sheetHeader('🎨 Visual Style'), cardHeader('🎨', 'Visual Style', 'Select or change style'), styleTools);
 
     const viewfinder = this.createDirectorViewfinder();
     const panelCamera = document.createElement('div');
     panelCamera.className = 'studio-tab-panel';
     panelCamera.dataset.tabPanel = 'camera';
     panelCamera.hidden = this.studioLayoutMode === 'tabs';
-    panelCamera.append(cardHeader('📐', 'Camera & Framing', 'Viewfinder, shots & ratios'), viewfinder, template, cameraTools, outputOptions);
+    panelCamera.append(sheetHeader('📐 Camera & Framing'), cardHeader('📐', 'Camera & Framing', 'Viewfinder, shots & ratios'), viewfinder, template, cameraTools, outputOptions);
 
     this.mountPromptEditorEnhancements(editor);
     const panelPrompt = document.createElement('div');
@@ -829,13 +957,14 @@ export class ImageStudio {
     panelPrompt.dataset.tabPanel = 'prompt';
     panelPrompt.hidden = this.studioLayoutMode === 'tabs';
     const editTools=document.createElement('div');editTools.className='row';editTools.dataset.promptEditTools='';editTools.hidden=true;editTools.innerHTML='<button type="button" data-prompt-undo aria-label="Undo prompt edit">Undo</button><button type="button" data-prompt-redo aria-label="Redo prompt edit">Redo</button>';
-    panelPrompt.append(cardHeader('📝', 'Prompt Studio & AI Enhancements', 'Source clauses, wording & budget'), meta, model, editor);
+    panelPrompt.append(sheetHeader('📝 Edit Wording'), cardHeader('📝', 'Prompt Studio & AI Enhancements', 'Source clauses, wording & budget'), meta, model, editor);
 
     const panelHistory = document.createElement('div');
     panelHistory.className = 'studio-tab-panel';
     panelHistory.dataset.tabPanel = 'history';
     panelHistory.hidden = this.studioLayoutMode === 'tabs';
     panelHistory.append(
+      sheetHeader('📜 History & Settings'),
       cardHeader('📜', 'History & Diagnostics', 'Versions, parameters & debug logs'),
       this.el('[data-diagnostics]').closest('details')!,
       this.el('[data-provenance]').closest('details')!,
@@ -846,7 +975,7 @@ export class ImageStudio {
 
     const overview=document.createElement('p');overview.dataset.pictureOverview='';overview.setAttribute('role','status');overview.setAttribute('aria-atomic','true');overview.style.cssText='font-size:12px;margin:0 0 10px;overflow-wrap:anywhere';
     tools.replaceChildren(tabs, editTools, panelPicture, panelModel, panelStyle, panelCamera, panelPrompt, panelHistory);
-    body.replaceChildren(overview,navigation,context,correctionHelp,tools,notice);
+    body.replaceChildren(overview,navigation,tools,notice);
     for(const field of ['positive','negative','parameters']){const note=document.createElement('small');note.dataset.promptLint=field;note.setAttribute('role','status');this.el(`[data-${field}]`).after(note);}
     const actionHelp=document.createElement('small');actionHelp.dataset.actionHelp='';this.el('[data-studio-footer]').append(actionHelp);
     const style=document.createElement('style');style.textContent=INSPECTOR_CSS+PREPARED_BRIEF_CSS+DOCKED_STUDIO_CSS;this.root.append(style);
@@ -877,7 +1006,43 @@ export class ImageStudio {
     curtain.dataset.viewfinderSafeCurtain = '';
     curtain.className = 'studio-vf-safe-curtain';
     curtain.textContent = 'VN Dialogue Safe Zone (Bottom 25%)';
-    frame.append(grid, subjects, curtain);
+    const reticle = document.createElement('div');
+    reticle.dataset.vfReticle = '';
+    reticle.className = 'studio-vf-reticle';
+    reticle.style.left = `${this.draftFocalPoint.x}%`;
+    reticle.style.top = `${this.draftFocalPoint.y}%`;
+    frame.append(grid, subjects, curtain, reticle);
+    let vfDragging = false;
+    const updateFocalFromPointer = (ev: PointerEvent) => {
+      if ((ev.target as HTMLElement | null)?.closest('.studio-vf-subject-chip')) return;
+      const rect = frame.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const x = Math.round(Math.max(15, Math.min(85, ((ev.clientX - rect.left) / rect.width) * 100)));
+      const y = Math.round(Math.max(18, Math.min(72, ((ev.clientY - rect.top) / rect.height) * 100)));
+      this.draftFocalPoint = { x, y };
+      const autoEl = this.el<HTMLInputElement>('[data-auto-director]');
+      if (autoEl.checked) {
+        autoEl.checked = false;
+        for (const sel of ['[data-camera-shot-size]','[data-camera-angle]','[data-camera-lens]','[data-camera-composition]','[data-camera-depth]','[data-camera-safe-area]']) {
+          this.el<HTMLSelectElement>(sel).disabled = false;
+        }
+      }
+      this.syncDirectorViewfinder();
+    };
+    frame.addEventListener('pointerdown', (ev: PointerEvent) => {
+      if ((ev.target as HTMLElement | null)?.closest('.studio-vf-subject-chip')) return;
+      vfDragging = true;
+      frame.setPointerCapture?.(ev.pointerId);
+      updateFocalFromPointer(ev);
+    });
+    frame.addEventListener('pointermove', (ev: PointerEvent) => {
+      if (vfDragging) updateFocalFromPointer(ev);
+    });
+    frame.addEventListener('pointerup', (ev: PointerEvent) => {
+      vfDragging = false;
+      frame.releasePointerCapture?.(ev.pointerId);
+    });
+    frame.addEventListener('pointercancel', () => { vfDragging = false; });
 
     const sizeRow = document.createElement('div');
     sizeRow.dataset.viewfinderSizePills = '';
@@ -1100,13 +1265,20 @@ export class ImageStudio {
     const compMode = (!auto ? this.el<HTMLSelectElement>('[data-camera-composition]').value : '') || shotSpec?.composition.mode || 'rule-of-thirds';
 
     const summary = vf.querySelector<HTMLElement>('[data-viewfinder-summary]');
-    if (summary) summary.textContent = `${auto ? 'Auto' : 'Manual'} · ${activeShot} · ${activeAngle} · ${compMode}`;
+    if (summary) summary.textContent = `${auto ? 'Auto' : 'Manual'} · ${activeShot} · ${activeAngle} · ${compMode}${!auto ? ` · Focus ${this.draftFocalPoint.x}%,${this.draftFocalPoint.y}%` : ''}`;
+    const camHubSub = this.root.querySelector<HTMLElement>('[data-hub-sub="camera"]');
+    if (camHubSub) camHubSub.textContent = `${auto ? 'Auto' : 'Manual'} · ${activeShot}`;
 
     const frame = vf.querySelector<HTMLElement>('[data-viewfinder-frame]');
     if (frame) {
       const params = record?.parameters as Record<string, unknown> | undefined;
       const ratioRaw = String(params?.aspectRatio ?? params?.aspect_ratio ?? '16:9');
       frame.style.aspectRatio = ratioRaw === '9:16' ? '9 / 16' : ratioRaw === '1:1' ? '1 / 1' : ratioRaw === '4:3' ? '4 / 3' : ratioRaw === '3:4' ? '3 / 4' : '16 / 9';
+      const reticle = frame.querySelector<HTMLElement>('[data-vf-reticle]');
+      if (reticle) {
+        reticle.style.left = `${this.draftFocalPoint.x}%`;
+        reticle.style.top = `${this.draftFocalPoint.y}%`;
+      }
     }
     const curtain = vf.querySelector<HTMLElement>('[data-viewfinder-safe-curtain]');
     if (curtain) curtain.hidden = safeMode === 'off';
@@ -1128,8 +1300,6 @@ export class ImageStudio {
         const curIdx = cycle.indexOf(compSel.value);
         compSel.value = cycle[(curIdx + 1) % cycle.length]!;
         this.syncDirectorViewfinder();
-        const applyBtn = this.el<HTMLButtonElement>('[data-apply-camera]');
-        if (!applyBtn.disabled) applyBtn.click();
       };
       if (placements.length > 0) {
         for (const p of placements.slice(0, 4)) {
@@ -1375,6 +1545,8 @@ export class ImageStudio {
     let error='';
     try{assertPromptLengths(this.el<HTMLTextAreaElement>('[data-positive]').value,this.el<HTMLTextAreaElement>('[data-negative]').value,profile);}catch(cause){error=cause instanceof Error?cause.message:String(cause);}
     this.el<HTMLElement>('[data-combined-count]').textContent=`${total.toLocaleString()} / ${maximum.toLocaleString()} combined characters${error?' — blocked draft; repair required':''}`;
+    const promptHubSub = this.root.querySelector<HTMLElement>('[data-hub-sub="prompt"]');
+    if (promptHubSub) promptHubSub.textContent = `${total.toLocaleString()} / ${maximum.toLocaleString()} chars`;
     const fill=this.root.querySelector<HTMLElement>('[data-budget-fill]');if(fill){const pct=Math.min(100,Math.round((total/Math.max(1,maximum))*100));fill.style.width=`${pct}%`;fill.dataset.tone=total>maximum?'over':pct>=85?'warn':'ok';}
     this.el<HTMLElement>('[data-prompt-profile]').textContent=profile?promptProfileSummary(profile):'Legacy request · 3,000 combined characters. Counts are characters, not tokens.';
     if(!error&&!this.el<HTMLTextAreaElement>('[data-positive]').value.trim())error='Enter a positive prompt before generating.';
@@ -1481,7 +1653,7 @@ export class ImageStudio {
     if(!turn||(this.planningChat&&turn.chatId!==this.planningChat))this.planningChat='';
     if(this.turn?.chatId!==turn?.chatId||!turn)this.setOpen(false);
     if(this.turn?.chatId!==turn?.chatId)this.preferences.clear();
-    if (this.turn?.chatId !== turn?.chatId || this.turn?.sourceFingerprint !== turn?.sourceFingerprint || this.turn?.messageId !== turn?.messageId || this.turn?.swipeId !== turn?.swipeId || this.turn?.revision !== turn?.revision) { this.workspaceScroll=0;this.lastOpenCursor=null;this.editHistories.clear();this.drafts.clear(); this.previousWording.clear(); this.submitted.clear(); this.preparing.clear();this.preparationStarts.clear(); this.rebuilding.clear(); this.rerolling.clear(); this.selectedJob = ""; this.selectedRequest = ""; this.recoveryJob = "";this.retryQueueJobs.clear();this.retryActive=null; }
+    if (this.turn?.chatId !== turn?.chatId || this.turn?.sourceFingerprint !== turn?.sourceFingerprint || this.turn?.messageId !== turn?.messageId || this.turn?.swipeId !== turn?.swipeId || this.turn?.revision !== turn?.revision) { this.workspaceScroll=0;this.lastOpenCursor=null;this.editHistories.clear();this.drafts.clear(); this.previousWording.clear(); this.submitted.clear(); this.preparing.clear();this.preparationStarts.clear(); this.rebuilding.clear(); this.rerolling.clear(); this.selectedJob = ""; this.selectedRequest = ""; this.recoveryJob = "";this.retryQueueJobs.clear();this.retryActive=null;this.draftFocalPoint={x:50,y:36}; }
     this.replanning = false;this.recovering=null;
     this.turn = turn;
     for(const pending of [this.rerolling,this.rebuilding])for(const id of pending){
@@ -2024,7 +2196,21 @@ export class ImageStudio {
       }).catch(()=>{if(!controller.signal.aborted){image.hidden=true;this.el('[data-placeholder]').hidden=false;}});
     }
     this.comparison.setContext(JSON.stringify([this.turn?.chatId,this.turn?.messageId,this.turn?.swipeId,this.turn?.sourceFingerprint,this.turn?.revision,this.selectedJob]),asset);
+    const sec = this.el('section');
+    sec.dataset.layoutMode = this.studioLayoutMode;
+    sec.dataset.activeTab = this.activeTab;
     const versions = asset?.previousVersions ?? [];
+    const compareHeroBtn = this.root.querySelector<HTMLButtonElement>('[data-hub-compare-btn]');
+    if (compareHeroBtn) {
+      compareHeroBtn.hidden = versions.length === 0 || planning;
+      compareHeroBtn.textContent = versions.length > 0 ? `⇔ Compare (${versions.length})` : '⇔ Compare';
+    }
+    const styleHubSub = this.root.querySelector<HTMLElement>('[data-hub-sub="style"]');
+    const activeStyleText = this.root.querySelector<HTMLElement>('[data-active-style-name]')?.textContent?.trim();
+    if (styleHubSub) styleHubSub.textContent = activeStyleText || 'Neutral / scene';
+    const modelHubSub = this.root.querySelector<HTMLElement>('[data-hub-sub="model"]');
+    const activeModelText = this.root.querySelector<HTMLElement>('[data-active-model-name]')?.textContent?.trim();
+    if (modelHubSub) modelHubSub.textContent = activeModelText || 'Active default';
     const container = this.root.querySelector<HTMLElement>('[data-previous-versions-container]');
     const vStrip = this.root.querySelector<HTMLElement>('[data-versions-strip]');
     const countLabel = this.root.querySelector<HTMLElement>('[data-versions-count]');
@@ -2138,6 +2324,9 @@ export class ImageStudio {
 
   private switchTab(tabId: string): void {
     this.activeTab = tabId;
+    const section = this.el('section');
+    section.dataset.activeTab = tabId;
+    section.dataset.layoutMode = this.studioLayoutMode;
     this.el<HTMLElement>('[data-prompt-edit-tools]').hidden = tabId !== 'prompt' && tabId !== 'history' && this.studioLayoutMode === 'tabs';
     const tabBtns = this.root.querySelectorAll<HTMLButtonElement>('.studio-tab-btn');
     for (const btn of tabBtns) {
@@ -2148,6 +2337,8 @@ export class ImageStudio {
       for (const panel of panels) {
         panel.hidden = panel.dataset.tabPanel !== tabId;
       }
+      const body = this.root.querySelector<HTMLElement>('[data-studio-body]');
+      if (body) body.scrollTop = 0;
     } else {
       for (const panel of panels) {
         panel.hidden = false;
@@ -2237,7 +2428,7 @@ const DOCKED_STUDIO_CSS=`
 :host([data-vn-workspace-tool]) section,:host([data-vn-workspace-tool]) section[data-state]{position:relative;inset:auto;width:100%;max-width:none;height:100%;max-height:none;border:0;border-radius:0;box-shadow:none}
 :host([data-vn-workspace-tool]) [data-studio-header]{display:none}
 :host([data-vn-workspace-tool]) [data-studio-body]{padding:18px;flex:1}
-:host([data-vn-workspace-tool]) [data-studio-footer]{padding:12px 18px;margin-bottom:calc(76px + env(safe-area-inset-bottom, 0px));background:transparent;border-top:1px solid var(--edge)}
+:host([data-vn-workspace-tool]) [data-studio-footer]{padding:12px 18px;margin-bottom:env(safe-area-inset-bottom, 0px);background:transparent;border-top:1px solid var(--edge)}
 :host([data-vn-workspace-tool]) [data-studio-footer] button{border-radius:999px;font-weight:750;background:var(--accent);color:#0f2019;border:1px solid var(--accent);box-shadow:0 4px 14px rgba(0,0,0,.25)}
 :is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-studio-footer] button{background:#234b39;color:#fbfdf7;border-color:#234b39;box-shadow:0 4px 14px rgba(35,65,50,.2)}
 :is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) section{color:#172721}

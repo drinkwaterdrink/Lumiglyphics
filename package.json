@@ -1,6 +1,6 @@
 {
   "name": "lumiglyphics",
-  "version": "0.2.11-beta.155",
+  "version": "0.2.11-beta.156",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.0",
@@ -17,7 +17,6 @@
     "test:artwork-corrections": "node --experimental-strip-types ./scripts/test-artwork-corrections-browser.ts",
     "test:artwork-return": "node --experimental-strip-types ./scripts/test-artwork-return-browser.ts",
     "test:folio-reveal": "node --experimental-strip-types ./scripts/test-folio-reveal-browser.ts",
-    "test:cg-gallery": "node --experimental-strip-types ./scripts/test-cg-gallery-browser.ts",
     "test:artwork-reveal": "node --experimental-strip-types ./scripts/test-artwork-reveal-browser.ts",
     "test:host-lifecycle": "node --experimental-strip-types ./scripts/test-host-lifecycle-browser.ts",
     "test:preparation-preview": "bun run ./scripts/test-preparation-preview-browser.ts",

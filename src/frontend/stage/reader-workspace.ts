@@ -90,7 +90,6 @@ export class ReaderWorkspace {
         <small data-reader-caption-small data-reader-caption>Visual novel</small>
       </div>
       <div data-reader-header-actions class="topbar-actions" style="display:flex;align-items:center;gap:6px;margin-left:auto">
-        <button type="button" class="round-ghost" data-action="gallery-toggle" title="Story CG Gallery" aria-label="Open CG Gallery">${APERTURE_ICONS.grid}</button>
         <button type="button" class="round-ghost" data-action="cast-toggle" title="Cast portraits" aria-label="Show cast portraits">${APERTURE_ICONS.cast}</button>
         <button type="button" class="round-ghost" data-action="panels-toggle" title="Panels" aria-label="Open Panels">${APERTURE_ICONS.panel}</button>
         <button type="button" class="round-ghost" data-action="voice-toggle" title="Voice controls" aria-label="Voice controls">${APERTURE_ICONS.speaker}</button>
@@ -128,10 +127,9 @@ export class ReaderWorkspace {
           <button type="button" data-aperture-route="world" class="aperture-link"><span class="number">02</span><span>World Lens</span>${APERTURE_ICONS.world}</button>
           <button type="button" data-aperture-route="character" class="aperture-link"><span class="number">03</span><span>Character folio</span>${APERTURE_ICONS.cast}</button>
           <button type="button" data-aperture-route="studio" class="aperture-link"><span class="number">04</span><span>Art studio</span>${APERTURE_ICONS.image}</button>
-          <button type="button" data-aperture-route="library" class="aperture-link"><span class="number">05</span><span>Image library</span>${APERTURE_ICONS.grid}</button>
-          <button type="button" data-aperture-route="history" class="aperture-link"><span class="number">06</span><span>History</span>${APERTURE_ICONS.history}</button>
-          <button type="button" data-aperture-route="settings" class="aperture-link"><span class="number">07</span><span>Settings</span>${APERTURE_ICONS.settings}</button>
-          <button type="button" data-aperture-route="workspace" class="aperture-link"><span class="number">08</span><span>Workspace</span>${APERTURE_ICONS.layers}</button>
+          <button type="button" data-aperture-route="history" class="aperture-link"><span class="number">05</span><span>History</span>${APERTURE_ICONS.history}</button>
+          <button type="button" data-aperture-route="settings" class="aperture-link"><span class="number">06</span><span>Settings</span>${APERTURE_ICONS.settings}</button>
+          <button type="button" data-aperture-route="workspace" class="aperture-link"><span class="number">07</span><span>Workspace</span>${APERTURE_ICONS.layers}</button>
           <button type="button" data-aperture-route="chat" class="aperture-link"><span class="number">→</span><span>Back to Lumiverse chat</span>${APERTURE_ICONS.chat}</button>
         </div>
         <div class="aperture-foot"><span>CHAPTER IV</span><span>EVERY DETAIL HAS A PLACE</span></div>
@@ -186,9 +184,6 @@ export class ReaderWorkspace {
     this.panel.addEventListener('wheel', event => event.stopPropagation(), {signal, passive: true});
 
     // Topbar Actions
-    q('[data-action="gallery-toggle"]')?.addEventListener('click', () => {
-      this.shell.dispatchEvent(new CustomEvent("lumiglyphics:gallery-toggle", { bubbles: true }));
-    }, {signal});
     q('[data-action="cast-toggle"]')?.addEventListener('click', () => {
       this.shell.dispatchEvent(new CustomEvent("lumiglyphics:cast-toggle", { bubbles: true }));
     }, {signal});
@@ -259,9 +254,6 @@ export class ReaderWorkspace {
       else if (route === 'world') this.open('story',openMenuBtn);
       else if (route === 'character') this.open('character',openMenuBtn);
       else if (route === 'studio') this.open('artwork',openMenuBtn);
-      else if (route === 'library') {
-        this.shell.dispatchEvent(new CustomEvent("lumiglyphics:gallery-toggle", { bubbles: true }));
-      }
       else if (route === 'history') this.open('history',openMenuBtn);
       else if (route === 'settings') this.open('settings',openMenuBtn);
       else if (route === 'workspace') this.openMore(openMenuBtn);

@@ -775,19 +775,11 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       const owner=chatId();
       if(owner){
         ctx.sendToBackend({type:'vn_delete_image',chatId:owner,imageUrl});
-        stage.cgGallery.removeImage(imageUrl);
       }
     },
     onClose:()=>stage.workspace.close()
   });
   stage.workspace.register('character', characterFolio);
-  stage.cgGallery.onDeleteImage = (item) => {
-    const owner=chatId();
-    if(owner){
-      ctx.sendToBackend({type:'vn_delete_image',chatId:owner,imageUrl:item.imageUrl});
-      characterFolio.removeCg(item.imageUrl);
-    }
-  };
   stage.setFolioOpener((charName) => {
     characterFolio.setActiveCharacter(charName);
     stage.workspace.open('character');
@@ -1022,7 +1014,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
 
   function deactivate(): void {
     if(turn){invalidatedReferenceTurn=referenceTurnToken(turn);turn=withoutReferenceHistory(turn);}stage.setReferenceHistory(undefined);
-    characterFolio.setContext(null);dnaRequests.clear();
+    characterFolio.setContext(null);dnaRequests.clear();dnaTurnToken='';dnaChangedThisTurn=false;
     preparationActive=false;stage.clearPreparationPreview();imageStudio.setPlanning(chatId(),false);
     imageLibrary.close();sceneScrubber.clear();relationshipTracker.disable();if(loadedReadingCursor.turn)loadedReadingCursor.load(withoutReferenceHistory(loadedReadingCursor.turn));
     if (destroyed) return;
@@ -1069,8 +1061,6 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   async function syncImageForParagraph(paragraphIndex: number): Promise<void> {
     if (!turn) return;
     characterFolio.syncFromTurn(turn,paragraphIndex);
-    const galleryItems = (stage.cgGallery as any)?.items ?? [];
-    if (galleryItems.length > 0) characterFolio.ingestCgs(galleryItems);
     const sourceTurn = turn;
     const assetFailure = currentAssetFailure(turn, paragraphIndex);
     if (assetFailure) reportStageError(assetFailure);
@@ -1276,6 +1266,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       if(!owner||(dnaTurnScoped(owner.action)&&owner.turnToken!==dnaTurnToken)||owner.chatId!==message.chatId||message.chatId!==chatId()||message.chatId!==characterFolio.getContext())return;
       dnaRevision=message.library.revision??0;
       characterFolio.setLibrary(message.library,owner.action!=='list',owner.saved);
+      characterFolio.setGalleries(message.characterGalleries);
       stage.setCharacterDnaLibrary(message.library.characters);
       if(message.proposal)characterFolio.setProposal(message.proposal);
       return;
@@ -1508,7 +1499,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const unsubBackend = ctx.onBackendMessage(routeBackend);
   const unsubAction = action.onClick(toggleVisualNovel);
   const unsubChat = ctx.events.on("CHAT_SWITCHED", () => {
-    characterFolio.setContext(null);dnaRequests.clear();
+    characterFolio.setContext(null);dnaRequests.clear();dnaTurnToken='';dnaChangedThisTurn=false;
     preparationActive=false;
     externalReview.cancel(); imageBridge.cancelAll();
     settingsPanel?.clearCastArt();
@@ -1559,7 +1550,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
 
   const cleanup = (): void => {
     if (destroyed) return;
-    characterFolio.setContext(null);dnaRequests.clear();
+    characterFolio.setContext(null);dnaRequests.clear();dnaTurnToken='';dnaChangedThisTurn=false;
     deactivate();
     stage.workspace.destroy();
     destroyed = true;

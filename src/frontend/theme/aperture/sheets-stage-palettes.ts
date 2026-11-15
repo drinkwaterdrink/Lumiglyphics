@@ -157,12 +157,16 @@ aside[data-vn-workspace] > header > div {
 
 [data-workspace-content]:has(> [data-vn-workspace-tool="history"]),
 [data-workspace-content]:has(> [data-vn-workspace-tool="character"]),
+[data-workspace-content]:has(> [data-vn-workspace-tool="artwork"]),
 [data-workspace-content]:has(> [data-character-folio]),
 [data-workspace-content]:has(> .character-folio-surface),
+[data-workspace-content]:has(> [data-vn-image-studio]),
 [data-surface="history"] [data-workspace-content],
 [data-surface="character"] [data-workspace-content],
+[data-surface="artwork"] [data-workspace-content],
 [data-vn-workspace="history"] [data-workspace-content],
-[data-vn-workspace="character"] [data-workspace-content] {
+[data-vn-workspace="character"] [data-workspace-content],
+[data-vn-workspace="artwork"] [data-workspace-content] {
   padding: 0 !important;
   overflow: hidden !important;
   display: flex !important;
@@ -1182,7 +1186,7 @@ section[data-reference-observations] h3 {
   min-width: 100% !important;
   min-height: 100% !important;
   object-fit: cover !important;
-  object-position: center center !important;
+  object-position: 50% 30% !important;
 }
 
 [data-vn-root] [data-vn-scene-image][data-vn-scene-image-fit="contain"],
@@ -1233,6 +1237,10 @@ section[data-reference-observations] h3 {
 [data-vn-root][data-vn-preset="lumiverse"] [data-vn-dialogue] {
   border-color: rgba(224, 238, 217, 0.32) !important;
   background: rgba(4, 13, 17, var(--caption-opacity, 0.76)) !important;
+}
+[data-vn-root][data-vn-preset="lumiverse"] [data-vn-dialogue-text] {
+  color: var(--lumiverse-text, #eff4e9) !important;
+  font-family: var(--vn-font-family, inherit);
 }
 [data-vn-root][data-vn-preset="lumiverse"] [data-vn-speaker] {
   color: #e0eeb1 !important;

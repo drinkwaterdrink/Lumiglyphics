@@ -274,7 +274,7 @@ export type BackendResponse =
       imageId: string;
       characterKey: string;
     }
-  | { type: "vn_character_dna"; chatId: string; requestId: string; library: CharacterDNALibrary; activeDna?: CharacterDNA; proposal?: DnaProposal; error?: string }
+  | { type: "vn_character_dna"; chatId: string; requestId: string; library: CharacterDNALibrary; activeDna?: CharacterDNA; proposal?: DnaProposal; characterGalleries?: Record<string, Array<{ imageUrl: string; imageId?: string; caption?: string; messageId?: string }>>; error?: string }
   | { type: "vn_story_dna"; chatId: string; requestId?: string; storyDna: StoryDNASet }
   | { type: "vn_error"; chatId?: string; requestId?:string; operation: string; error: string };
 

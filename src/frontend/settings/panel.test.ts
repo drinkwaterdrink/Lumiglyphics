@@ -68,7 +68,7 @@ describe("settings panel markup", () => {
     expect(source).not.toMatch(/@import/i);
   });
   test("modern reading and audio toggles have dedicated controls with search find tags", () => {
-    for (const name of ["smartPacing", "chapterTitleCards", "typewriterAudio", "typewriterVolume", "readerTypography", "atmosphericLighting", "directorAi", "sentimentLighting", "smartProseFilter", "smartDialogueExtraction"]) {
+    for (const name of ["smartPacing", "chapterTitleCards", "typewriterAudio", "typewriterVolume", "readerTypography", "atmosphericLighting", "directorAi", "sentimentLighting", "smartProseFilter", "smartDialogueExtraction", "smartBeatSegmentation"]) {
       expect(names.filter((candidate) => candidate === name)).toEqual([name]);
     }
     expect(source).toContain('find("Intelligent dramatic pacing"');
@@ -81,6 +81,7 @@ describe("settings panel markup", () => {
     expect(source).toContain('find("Dynamic atmospheric lighting"');
     expect(source).toContain('find("Smart prose & metadata filter"');
     expect(source).toContain('find("Smart preset dialogue extraction"');
+    expect(source).toContain('find("Stage beat pacing"');
   });
   test("appearance preview does not use unsafe non-null assertions on removed details element", () => {
     expect(source).not.toContain("data-appearance-preview']!");

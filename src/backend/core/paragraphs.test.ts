@@ -375,4 +375,33 @@ describe("narrative preparation", () => {
       { paragraphIndex: 1, speaker: "Tulver" }
     ]);
   });
+
+  test("splits dense monolithic walls and single-newline dialogue into readable VN beats without dropping text", () => {
+    const denseWall = [
+      "Other ways. Laura kept her thumb on the cold zinc rim of the jar and looked at the salt shaker instead of his mouth.",
+      "Three glasses of cheap pinot on an empty stomach had already softened the fence she usually kept around forty-four years of good sense, and Dana bringing up that five-o'clock timer hadn't helped.",
+      "She knew what relaxing could do to a woman who had spent six months sleeping alone on one side of a king bed.",
+      "That did not mean she was going to hotbox her own kitchen with a twenty-year-old guest before dinner.",
+      "Riss had a nose like a bloodhound, the carpet in the living room held every smell for three days, and the cop two doors down was bound to step onto his back deck the second a cloud of weed smoke drifted over the fence.",
+      "Still, the dull ache in her left hip wasn't waiting until Monday, and the gas-station gummies in her purse weren't worth the sugar they were rolled in.",
+      "Two hits outside on the patio with a sweatshirt on would fix that without ruining the house."
+    ].join(" ");
+
+    const segmented = prepareNarrative(denseWall);
+    expect(segmented.paragraphs.length).toBeGreaterThanOrEqual(4);
+    expect(segmented.paragraphs.every((p) => p.text.length <= 250)).toBe(true);
+    expect(segmented.paragraphs.map((p) => p.text).join(" ")).toBe(denseWall);
+
+    const rawMode = prepareNarrative(denseWall, { smartBeatSegmentation: false });
+    expect(rawMode.paragraphs).toHaveLength(1);
+    expect(rawMode.paragraphs[0]!.text).toBe(denseWall);
+
+    const singleNewlineTurns = "\"Wait,\" Elena whispered, keeping her hand near the latch.\nMarcus stepped back from the rain-streaked glass. \"They found the key.\"";
+    const turnPrepared = prepareNarrative(singleNewlineTurns);
+    expect(turnPrepared.paragraphs.map((p) => p.text)).toEqual([
+      "\"Wait,\" Elena whispered, keeping her hand near the latch.",
+      "Marcus stepped back from the rain-streaked glass.",
+      "\"They found the key.\""
+    ]);
+  });
 });

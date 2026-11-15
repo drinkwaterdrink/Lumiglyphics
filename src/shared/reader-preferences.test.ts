@@ -10,6 +10,7 @@ test("defaults match the conservative reading sheet", () => {
   expect(prefs.theme).toBe("light");
   expect(prefs.smartProseFilter).toBe(true);
   expect(prefs.smartDialogueExtraction).toBe(true);
+  expect(prefs.smartBeatSegmentation).toBe(true);
 });
 test("roundtrips valid sizes and clamps opacity", () => {
   const prefs = normalizeReaderPreferences({
@@ -48,6 +49,7 @@ test("customization and accessibility preferences normalize cleanly", () => {
     sentimentLighting: true,
     smartProseFilter: false,
     smartDialogueExtraction: false,
+    smartBeatSegmentation: false,
   });
   expect(prefs.typography).toBe("novelist");
   expect(normalizeReaderPreferences({ typography: "cinematic" }).typography).toBe("cinematic");
@@ -63,4 +65,5 @@ test("customization and accessibility preferences normalize cleanly", () => {
   expect(prefs.sentimentLighting).toBe(true);
   expect(prefs.smartProseFilter).toBe(false);
   expect(prefs.smartDialogueExtraction).toBe(false);
+  expect(prefs.smartBeatSegmentation).toBe(false);
 });

@@ -4,7 +4,6 @@ import {prepareDialogueSource} from './rich-text.js';
 import { ReaderWorkspace } from "./reader-workspace.js";
 import {presentEffect} from '../host/effect-presentation.js';
 import {CastStage} from "./cast-stage.js";
-import { CgGalleryModal } from "./cg-gallery.js";
 import {PreparationPreview} from './preparation-preview.js';
 import type {NarrativePreview} from '../../shared/preparation-preview.js';
 import type {ReferenceHistory} from '../../shared/reference-history.js';
@@ -188,7 +187,6 @@ export class VnStage {
   private readonly dialogueLive: HTMLElement | null;
   private dossiers!: StageDossiers;
   readonly workspace: ReaderWorkspace;
-  readonly cgGallery: CgGalleryModal;
   private readonly progress: HTMLElement;
   private readonly readingState: HTMLElement;
   private readonly sceneHud: HTMLElement | null;
@@ -345,7 +343,6 @@ export class VnStage {
     this.scene = queryRequired(this.themeRoot, "[data-vn-scene]");
     this.castStage = new CastStage(this.root,this.createImage);
     this.rpgHud.mount(this.root, this.root);
-    this.cgGallery = new CgGalleryModal(shell);
     this.sceneImages = Array.from(this.themeRoot.querySelectorAll<HTMLImageElement>("[data-vn-scene-image]"));
     this.sceneBackdropEl = this.themeRoot.querySelector<HTMLImageElement>("[data-vn-scene-backdrop]");
     this.activeImageEl = queryRequired(this.themeRoot, "[data-vn-scene-image][data-vn-layer='active']");
@@ -1051,7 +1048,6 @@ export class VnStage {
   }
   setCastTurn(turn:TurnView|null,index:number):AssetView|null {
     this.dossiers.setTurnMedia(turn);
-    this.cgGallery.syncFromTurn(turn,index);
     return this.castStage.set(turn,index);
   }
 
@@ -1067,7 +1063,6 @@ export class VnStage {
     this.castStage.set(null,0);
     this.rpgState = null;
     this.rpgHud.update(this.rpgMode, null);
-    // Note: Do not wipe cgGallery on transient reset() - preserved across story turns in the chat
     this.dossiers.setTurnMedia(null);this.dossiers.setContext(undefined,[]);
     this.clearAllTimers();
     this.dismissTransientOverlays();
@@ -1940,10 +1935,6 @@ export class VnStage {
 
     this.outerRoot.addEventListener("lumiglyphics:cast-toggle", () => {
       this.castStage.toggle();
-    });
-
-    this.outerRoot.addEventListener("lumiglyphics:gallery-toggle", () => {
-      this.cgGallery.open();
     });
 
     const settingsBtn = this.themeRoot.querySelector<HTMLButtonElement>("[data-vn-control='settings']");
@@ -3212,10 +3203,12 @@ export class VnStage {
     this.gameChoiceList.hidden = !showGame;
     this.renderGameChoices(showGame, isBusy || this.gameBusy);
     this.inputForm.hidden = !showStandardInput;
+    const hasCoarsePointer = typeof window !== "undefined" && Boolean(window.matchMedia?.("(pointer: coarse)").matches);
+    const sendHint = hasCoarsePointer ? "" : " Ctrl+Enter sends it.";
     const hint = showChoices
       ? showGame ? "Pick a move or choose a reply." : "Choose a reply."
       : showStandardInput
-        ? showGame ? "Pick a move, or write your own reply. Ctrl+Enter sends it." : "Write your reply. Ctrl+Enter sends it."
+        ? showGame ? `Pick a move, or write your own reply.${sendHint}` : `Write your reply.${sendHint}`
         : "";
     if (this.interactionHint.textContent !== hint) this.interactionHint.textContent = hint;
 

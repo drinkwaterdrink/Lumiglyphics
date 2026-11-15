@@ -307,12 +307,6 @@ body.theme-light .folio-quote-callout {
   min-height: 48px;
   max-height: calc(100% - 140px) !important;
   padding: 10px 14px 10px !important;
-  border: 1px solid rgba(160, 205, 185, 0.28) !important;
-  border-radius: 16px !important;
-  background: rgba(8, 18, 15, var(--caption-opacity, 0.82)) !important;
-  -webkit-backdrop-filter: blur(var(--caption-blur, 14px)) !important;
-  backdrop-filter: blur(var(--caption-blur, 14px)) !important;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
   display: flex !important;
   flex-direction: column !important;
   gap: 2px !important;
@@ -320,6 +314,15 @@ body.theme-light .folio-quote-callout {
   pointer-events: auto !important;
   touch-action: pan-y !important;
   transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
+}
+
+:where([data-vn-root]) [data-vn-dialogue] {
+  border: 1px solid var(--aperture-dialogue-border, var(--vn-dialogue-border, rgba(160, 205, 185, 0.28)));
+  border-radius: 16px;
+  background: var(--aperture-dialogue-bg, var(--vn-dialogue-bg, rgba(8, 18, 15, var(--caption-opacity, 0.82))));
+  -webkit-backdrop-filter: blur(var(--caption-blur, 14px));
+  backdrop-filter: blur(var(--caption-blur, 14px));
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 /* Draggable Top Resize Grip */
@@ -462,11 +465,14 @@ body.theme-light .folio-quote-callout {
   touch-action: pan-y !important;
   user-select: text !important;
   font-size: var(--reader-font, 15px) !important;
-  line-height: 1.55 !important;
-  color: var(--aperture-text, #f9faf6) !important;
-  font-family: Georgia, 'Times New Roman', serif !important;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;
+  line-height: 1.55;
   margin: 0 !important;
+}
+
+:where([data-vn-root]) [data-vn-dialogue-text] {
+  color: var(--aperture-text, var(--vn-text, #f9faf6));
+  font-family: var(--vn-font-family, Georgia, 'Times New Roman', serif);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
 /* Integrated Progress Scrubber docked inside Dialogue Card */
@@ -628,9 +634,23 @@ body.theme-light .folio-quote-callout {
   transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
+:where([data-vn-root]) [data-vn-dialogue] {
+  box-shadow: 0 4px 28px var(--vn-atmosphere-glow, rgba(0, 0, 0, 0.5)), 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
 [data-vn-dialogue] {
-  box-shadow: 0 4px 28px var(--vn-atmosphere-glow, rgba(0, 0, 0, 0.5)), 0 1px 3px rgba(0, 0, 0, 0.5) !important;
   transition: box-shadow 0.4s ease, border-color 0.4s ease, opacity 0.24s ease, transform 0.24s ease !important;
+}
+
+[data-vn-status-stack] {
+  top: calc(74px + env(safe-area-inset-top, 0px)) !important;
+  z-index: 26 !important;
+}
+
+[data-vn-root][data-vn-phase="awaiting-input"]:has([data-vn-input]:focus) [data-vn-dialogue],
+[data-vn-root][data-vn-phase="awaiting-input"]:has([data-vn-input]:focus) .reader-progress {
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 [data-vn-scrubber] [data-vn-scrub-dot].active {
@@ -707,7 +727,7 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
 [data-vn-interaction]:not([hidden]) {
   position: absolute !important;
   inset: calc(70px + env(safe-area-inset-top, 0px)) 14px calc(var(--caption-height, 142px) + 104px + env(safe-area-inset-bottom, 0px)) 14px !important;
-  z-index: 24 !important;
+  z-index: 34 !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
@@ -720,7 +740,7 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   gap: 10px !important;
   max-width: 600px !important;
   margin: 0 auto !important;
-  padding: 0 !important;
+  padding: 6px 0 !important;
   background: transparent !important;
   pointer-events: auto !important;
 }
@@ -742,7 +762,7 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
 }
 
 [data-vn-interaction-title] {
-  font-family: Georgia, serif !important;
+  font-family: var(--vn-font-family, Georgia, serif);
   font-size: 16px !important;
   font-weight: 700 !important;
   letter-spacing: 0.08em !important;
@@ -785,7 +805,7 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   border: 1px solid var(--aperture-choice-border, rgba(160, 205, 185, 0.22)) !important;
   border-radius: 10px !important;
   color: var(--aperture-text, #f5f9f2) !important;
-  font: 14px/1.5 system-ui, -apple-system, sans-serif !important;
+  font: 16px/1.5 system-ui, -apple-system, sans-serif !important;
   padding: 8px 10px !important;
   resize: vertical !important;
 }
@@ -946,12 +966,15 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   display: inline-block !important;
-  color: var(--aperture-accent, #dcebad) !important;
   font-size: 12px !important;
   font-weight: 750 !important;
   letter-spacing: 0.105em !important;
   line-height: 1.4 !important;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8) !important;
+}
+
+:where([data-vn-root]) [data-vn-speaker] {
+  color: var(--aperture-accent, var(--vn-accent, #dcebad));
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
 }
 
 [data-vn-root] [data-vn-dialogue] [data-vn-speaker]::before,
@@ -975,10 +998,9 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
 }
 
 /* Keep current reader controls tappable without crowding narrow headers.
-   Gallery remains reachable from APERTURE navigation; Artwork stays in the header. */
+   Artwork stays in the header; History is in navigation. */
 [data-vn-reader-header] .round-ghost { width:44px!important;height:44px!important;min-width:44px!important;min-height:44px!important;flex-shrink:0!important; }
 @media(max-width:600px){
- [data-vn-reader-header] [data-action="gallery-toggle"] { display:inline-flex!important; }
  [data-vn-reader-header] .reading-heading { min-width:0;overflow:hidden; }
 }
 `;

@@ -54,11 +54,38 @@ export const RPG_HUD_CSS = `
 }
 @media (max-width: 760px) {
   [data-vn-rpg-bar] {
-    top: calc(58px + env(safe-area-inset-top, 0px));
+    top: calc(76px + env(safe-area-inset-top, 0px));
     left: 12px;
-    right: 12px;
-    justify-content: space-between;
+    right: auto;
+    max-width: calc(100% - 24px);
+    min-height: 36px;
+    padding: 4px 12px;
+    font-size: 0.72rem;
+    justify-content: flex-start;
   }
+}
+[data-vn-check-info] {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0 5px;
+  margin-left: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 0.75em;
+  font-weight: 700;
+  cursor: pointer;
+}
+.vn-rpg-check-breakdown {
+  margin-top: 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--vn-surface-elevated, rgba(14, 17, 26, 0.9));
+  border: 1px solid var(--vn-border, rgba(255, 255, 255, 0.16));
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--vn-text, #f4f6fb);
 }
 [data-vn-rpg-bar]:hover {
   transform: translateY(-1px);
@@ -294,6 +321,15 @@ export class RpgStageController {
   update(mode: RpgMode, state: RpgState | null | undefined): void {
     this.rpgMode = mode;
     this.rpgState = mode === "full" ? (state ?? null) : null;
+    if (mode === "lite") {
+      if (this.barEl) {
+        this.barEl.innerHTML = `<span>🎲 d20 Lite Active</span>`;
+        this.barEl.title = "Adventure Time Lite is active — d20 skill checks & roll odds appear on choices.";
+        this.barEl.hidden = false;
+      }
+      this.toggleDrawer(false);
+      return;
+    }
     if (mode !== "full" || !this.rpgState) {
       if (this.barEl) this.barEl.hidden = true;
       this.toggleDrawer(false);
@@ -325,10 +361,11 @@ export class RpgStageController {
         ? Math.pow(singleProb, 2)
         : singleProb;
     const pct = Math.round(odds * 100);
-    if (sources.length > 0 && !button.title) {
-      button.title = sources
-        .map((src) => `${src.label}: ${src.delta >= 0 ? `+${src.delta}` : src.delta}${src.advantage ? " (ADV)" : ""}`)
-        .join(", ");
+    const breakdownText = sources.length > 0
+      ? sources.map((src) => `${src.label}: ${src.delta >= 0 ? `+${src.delta}` : src.delta}${src.advantage ? " (ADV)" : ""}`).join(", ")
+      : "";
+    if (breakdownText && !button.title) {
+      button.title = breakdownText;
     }
     const badge = document.createElement("span");
     badge.dataset.vnChoiceCheck = "";
@@ -341,6 +378,34 @@ export class RpgStageController {
     fill.style.cssText = `display:block;height:100%;width:${pct}%;background:${meterColor};`;
     meter.appendChild(fill);
     badge.appendChild(meter);
+    if (breakdownText) {
+      const info = document.createElement("span");
+      info.setAttribute("role", "button");
+      info.tabIndex = 0;
+      info.dataset.vnCheckInfo = "";
+      info.setAttribute("aria-label", `Inspect ${check.stat} modifiers`);
+      info.textContent = "ⓘ";
+      const toggleInfo = (event: Event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const parent = button.parentElement;
+        if (!parent) return;
+        const existing = parent.querySelector<HTMLElement>(".vn-rpg-check-breakdown");
+        if (existing) {
+          existing.remove();
+          return;
+        }
+        const card = document.createElement("div");
+        card.className = "vn-rpg-check-breakdown";
+        card.textContent = `Modifiers (${check.stat} DC ${check.dc}): ${breakdownText}`;
+        parent.appendChild(card);
+      };
+      info.addEventListener("click", toggleInfo);
+      info.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") toggleInfo(event);
+      });
+      badge.appendChild(info);
+    }
     button.appendChild(badge);
   }
 

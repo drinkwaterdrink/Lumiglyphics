@@ -4,19 +4,35 @@ import {ImageLibraryArchiveSchema,ImageLibraryPageSchema,ImageLibraryRequestSche
 import type {StoredTurnRecord} from './storage.js';
 import {fingerprintForMessage} from './planner.js';
 import {safeImageHistory} from './image-review.js';
+import {dnaNameKey} from '../../shared/character-dna.js';
+import {sanitizeDisplayCharacterName} from '../../shared/card-role.js';
 
 export const imageLibrarySegment=(value:string)=>encodeURIComponent(value).replaceAll('%','_');
 const occurrence=(e:SavedLibraryImage)=>JSON.stringify([e.key,e.jobId,e.imageId]);
 const sameKey=(a:TurnKey,b:TurnKey)=>a.chatId===b.chatId&&a.assistantMessageId===b.assistantMessageId&&String(a.swipeId??0)===String(b.swipeId??0)&&a.sourceFingerprint===b.sourceFingerprint&&a.revision===b.revision;
+function cueCharacters(
+ cue:StoredTurnRecord['plan']['visualCues'][number]|undefined,
+ scene?:StoredTurnRecord['plan']['scenes'][number],
+):string[]{
+ const names:string[]=[];
+ if(cue?.character?.trim())names.push(cue.character.trim());
+ if(Array.isArray(cue?.ensembleSubjects))for(const subject of cue.ensembleSubjects)if(subject?.name?.trim()&&!names.includes(subject.name.trim()))names.push(subject.name.trim());
+ if(names.length===0&&cue?.kind!=='background'&&Array.isArray(scene?.cast))for(const member of scene.cast)if(member?.trim()&&!names.includes(member.trim()))names.push(member.trim());
+ return names.slice(0,24);
+}
 function collect(record:StoredTurnRecord):SavedLibraryImage[]{
  const entries:SavedLibraryImage[]=[];
  for(const job of record.jobs){
   if(!job.imageId||!['generated','browser_ready'].includes(job.status)||!sameKey(job.ownerTurnKey,record.plan.key))continue;
   const cue=[...record.plan.visualCues,...(record.plan.cacheCues??[])].find(c=>c.assetJobId===job.jobId);
+  const scene=cue?record.plan.scenes.find(s=>s.sceneId===cue.sceneId):undefined;
   const request=job.provider==='cache'?undefined:(record.imageRequests??[]).filter(r=>r.jobId===job.jobId&&r.state==='approved'&&r.createdAt<=(job.generatedAt??record.updatedAt)).at(-1);
   const template=request?.imagePromptMetadata?.template??cue?.imageTemplate;
+  const characters=cueCharacters(cue,scene);
+  const caption=(cue?.resolvedAttire||cue?.attire||template?.name||'').trim().slice(0,300);
   const parsed=SavedLibraryImageSchema.safeParse({key:record.plan.key,imageId:job.imageId,jobId:job.jobId,paragraphIndex:job.paragraphIndex,createdAt:job.generatedAt??record.updatedAt,excerpt:(record.plan.paragraphs[job.paragraphIndex]?.text??'').slice(0,600),
    ...(record.source?{rawFingerprint:record.source.rawFingerprint}:{}),role:template?.category==='portrait'?'portrait':template?.category==='environment'?'background':'scene',...(template?{template:template.name}:{}),
+   ...(characters.length?{characters}:{}),...(caption?{caption}:{}),
    ...(request?{prompt:request.prompt,negativePrompt:request.negativePrompt,model:request.model,provider:request.provider}:{})});
   if(parsed.success)entries.push(parsed.data);
  }
@@ -57,9 +73,10 @@ function parseRecord(raw:unknown):StoredTurnRecord|null{
  const result={...r,speaker:typeof r.speaker==='string'?r.speaker:'',previousImages,updatedAt:typeof r.updatedAt==='string'?r.updatedAt:plan.data.createdAt,plan:plan.data,jobs:r.jobs.flatMap(j=>{const parsed=AssetJobSchema.safeParse(j);return parsed.success?[parsed.data]:[];}),imageRequests:safeImageHistory(r.imageRequests??[])};
  delete result.source;if(source)result.source=source;return result;
 }
-/** Read-only pagination: at most 24 turn files and 24 verified images per request. */
+/** Read-only pagination: bounded turn files and verified images per request (default 24, max 120). */
 export async function readImageLibraryPage(api:SpindleAPI,input:ImageLibraryRequest,user:string):Promise<ImageLibraryPage>{
  const request=ImageLibraryRequestSchema.parse(input);
+ const limit=request.limit??24;
  if(!await api.chats.get(request.chatId,user))throw new Error('This chat is unavailable.');
  const readMessages=async()=> (await api.chat.getMessages(request.chatId)).filter(m=>!m.is_user&&m.role!=='system');
  const messages=await readMessages();
@@ -94,7 +111,7 @@ export async function readImageLibraryPage(api:SpindleAPI,input:ImageLibraryRequ
  const replies:ImageLibraryPage['replies']=[];
  const entries:LibraryImageView[]=[];const notices=new Set<string>();
  if(listed.length>10000)notices.add('The scan is limited to 10,000 saved turn files.');
- while(file<sources.length&&entries.length<24&&scanned<24){
+ while(file<sources.length&&entries.length<limit&&scanned<limit){
   const source=sources[file]!;scanned++;
   let record:StoredTurnRecord|null=null;
   try{record=parseRecord(await api.userStorage.getJson(source.path,{fallback:null,userId:user}));}catch{notices.add('Some saved replies could not be read.');}
@@ -113,19 +130,20 @@ export async function readImageLibraryPage(api:SpindleAPI,input:ImageLibraryRequ
    if(request.templateQuery&&!e.template?.toLocaleLowerCase().includes(request.templateQuery.toLocaleLowerCase()))return [];
    const sameVersion=active&&e.key.sourceFingerprint===record.plan.key.sourceFingerprint&&e.key.revision===record.plan.key.revision;
    const current=sameVersion&&record.jobs.some(j=>j.jobId===e.jobId&&(j.imageId===e.imageId||(!['generated','browser_ready'].includes(j.status)&&record.previousImages?.[j.jobId]?.imageId===e.imageId)));
-   if(request.versions==='active'&&!sameVersion)return [];
-   if(sameVersion&&!current&&!request.includeReplaced)return [];
+   if(request.versions==='active'&&!sameVersion){notices.add('Some earlier replies or edited messages have saved images on alternate versions. Switch Message versions in Filters to include them.');return [];}
+   if(sameVersion&&!current&&!request.includeReplaced){notices.add('Some regenerated/replaced pictures are hidden. Check "Include replaced pictures" in Filters to view them.');return [];}
    if(request.range==='read'&&source.message.id===request.anchor.messageId&&(e.paragraphIndex>request.anchor.paragraphIndex|| (sameVersion&&e.key.sourceFingerprint!==request.anchor.sourceFingerprint)))return [];
    return [{...e,messageNumber:source.index+1,versionLabel:(sameVersion?(current?'current':'replaced'):'alternate') as LibraryImageView['versionLabel']}];
   }).sort((a,b)=>request.order==='newest'?b.createdAt.localeCompare(a.createdAt):a.createdAt.localeCompare(b.createdAt));
   if(request.mode==='story'&&(active||request.versions==='all')&&(!request.templateQuery&&request.role==='all'||rows.length)){
    const visible=record.plan.paragraphs.filter(p=>request.range!=='read'||source.message.id!==request.anchor.messageId||p.index<=request.anchor.paragraphIndex);
    let budget=12000;const paragraphs:ImageLibraryPage['replies'][number]['paragraphs']=[];let truncated=false;
-   for(const paragraph of visible){if(paragraphs.length>=256||budget<=0){truncated=true;break;}const text=paragraph.text.slice(0,budget);if(text.length<paragraph.text.length)truncated=true;budget-=text.length;paragraphs.push({index:paragraph.index,text,speaker:(record.plan.paragraphSpeakers[paragraph.index]??record.speaker).slice(0,256)});}
-   replies.push({versionLabel:active?'current':'alternate',key:record.plan.key,messageNumber:source.index+1,speaker:record.speaker.slice(0,256),paragraphs,truncated});
+   const cleanSpeaker=sanitizeDisplayCharacterName(record.speaker);
+   for(const paragraph of visible){if(paragraphs.length>=256||budget<=0){truncated=true;break;}const text=paragraph.text.slice(0,budget);if(text.length<paragraph.text.length)truncated=true;budget-=text.length;const pSpeaker=sanitizeDisplayCharacterName(record.plan.paragraphSpeakers[paragraph.index])||cleanSpeaker;paragraphs.push({index:paragraph.index,text,speaker:pSpeaker.slice(0,256)});}
+   replies.push({versionLabel:active?'current':'alternate',key:record.plan.key,messageNumber:source.index+1,speaker:cleanSpeaker.slice(0,256),paragraphs,truncated});
   }
   let i=entrySkip;
-  for(;i<rows.length&&entries.length<24;i++){
+  for(;i<rows.length&&entries.length<limit;i++){
    const row=rows[i]!;let thumbnailUrl:string|undefined;
    try{const image=await api.images.get(row.imageId,{userId:user,specificity:'sm'});if(image&&['image/png','image/jpeg','image/webp','image/avif','image/gif'].includes(image.mime_type)&&image.url.startsWith('/api/v1/images/')&&!image.url.includes('\\'))thumbnailUrl=image.url;}catch{/* unavailable stays visible */}
    entries.push({...row,available:!!thumbnailUrl,...(thumbnailUrl?{thumbnailUrl,imageUrl:`/api/v1/images/${encodeURIComponent(row.imageId)}`}:{})});
@@ -137,4 +155,92 @@ export async function readImageLibraryPage(api:SpindleAPI,input:ImageLibraryRequ
  const currentAnchor=parseRecord(await api.userStorage.getJson(anchorPath,{fallback:null,userId:user}));
  if(signature!==JSON.stringify(currentMessages.map(m=>[m.id,m.swipe_id??0,fingerprintForMessage(m)]))||!currentAnchor||!sameKey(anchor.plan.key,currentAnchor.plan.key))throw new Error('The story changed while loading. Refresh the library.');
  return ImageLibraryPageSchema.parse({entries,replies,nextCursor:file<sources.length?`${file}:${entrySkip}`:null,notice:[...notices].join(' ')});
+}
+
+export interface CharacterGalleryEntry {
+ imageUrl:string;
+ imageId?:string;
+ caption?:string;
+ messageId?:string;
+}
+
+/** Collect persisted character gallery photos across all active-branch saved turns (newest first). */
+export async function collectActiveCharacterGalleries(
+ api:SpindleAPI,
+ chatId:string,
+ userId:string|undefined,
+ messages:ReadonlyArray<{id?:string;message_id?:string;swipe_id?:number|string|null;is_user?:boolean;role?:string}>,
+):Promise<Record<string,CharacterGalleryEntry[]>>{
+ const galleries:Record<string,CharacterGalleryEntry[]>={};
+ if(!api.userStorage?.getJson)return galleries;
+ const prefix=`turns/${imageLibrarySegment(chatId)}/`;
+ const assistantMsgs=messages.filter(m=>!m.is_user&&m.role!=='system'&&(m.id||m.message_id));
+ if(assistantMsgs.length===0)return galleries;
+ let listedSet:Set<string>|null=null;
+ if(typeof api.userStorage.list==='function'){
+  try{
+   const listed=(await api.userStorage.list(prefix,userId)).flatMap(entry=>{
+    if(typeof entry!=='string')return [];
+    const relative=entry.replaceAll('\\','/');
+    const path=relative.startsWith(prefix)?relative:relative.startsWith('turns/')?'':prefix+relative;
+    const tail=path.slice(prefix.length);
+    if(!path.startsWith(prefix)||path.length>1200||!/^[^/]+\/[^/]+\.json$/.test(tail)||tail.split('/').some(p=>p==='.'||p==='..')||/[\r\n\0:]/.test(tail))return [];
+    return [path];
+   });
+   listedSet=new Set(listed);
+  }catch{listedSet=null;}
+ }
+ const candidatePaths:string[]=[];
+ for(let i=assistantMsgs.length-1;i>=0&&candidatePaths.length<120;i--){
+  const m=assistantMsgs[i]!;
+  const msgId=String(m.id??m.message_id);
+  const swipe=String(m.swipe_id??0);
+  const path=`${prefix}${imageLibrarySegment(msgId)}/${imageLibrarySegment(swipe)}.json`;
+  if(listedSet&&!listedSet.has(path))continue;
+  candidatePaths.push(path);
+  if(!listedSet&&candidatePaths.length>=40)break;
+ }
+ const seenUrls=new Map<string,Set<string>>();
+ const pushPhoto=(rawName:string,entry:CharacterGalleryEntry)=>{
+  const key=dnaNameKey(rawName);
+  if(!key)return;
+  const list=galleries[key]??(galleries[key]=[]);
+  if(list.length>=48)return;
+  const seen=seenUrls.get(key)??(()=>{const s=new Set<string>();seenUrls.set(key,s);return s;})();
+  if(seen.has(entry.imageUrl))return;
+  seen.add(entry.imageUrl);
+  list.push(entry);
+ };
+ for(const path of candidatePaths){
+  let record:StoredTurnRecord|null=null;
+  try{record=parseRecord(await api.userStorage.getJson(path,{fallback:null,...(userId?{userId}:{})}));}catch{record=null;}
+  if(!record||record.plan.key.chatId!==chatId)continue;
+  const cues=[...record.plan.visualCues,...(record.plan.cacheCues??[])];
+  const jobsNewest=[...record.jobs].sort((a,b)=>(b.paragraphIndex-a.paragraphIndex)||String(b.generatedAt??'').localeCompare(String(a.generatedAt??'')));
+  for(const job of jobsNewest){
+   const imageId=job.imageId||(!['generated','browser_ready'].includes(job.status)?record.previousImages?.[job.jobId]?.imageId:undefined);
+   if(!imageId)continue;
+   const cue=cues.find(c=>c.assetJobId===job.jobId);
+   const scene=cue?record.plan.scenes.find(s=>s.sceneId===cue.sceneId):undefined;
+   const names=cueCharacters(cue,scene);
+   if(names.length===0)continue;
+   const request=job.provider==='cache'?undefined:(record.imageRequests??[]).filter(r=>r.jobId===job.jobId&&r.state==='approved').at(-1);
+   const template=request?.imagePromptMetadata?.template??cue?.imageTemplate;
+   const caption=(cue?.resolvedAttire||cue?.attire||template?.name||'Scene portrait').trim().slice(0,300);
+   const imageUrl=`/api/v1/images/${encodeURIComponent(imageId)}`;
+   for(const name of names)pushPhoto(name,{imageUrl,imageId,caption,messageId:record.plan.key.assistantMessageId});
+  }
+  const archive=ImageLibraryArchiveSchema.safeParse(record.imageLibrary);
+  if(archive.success){
+   for(const saved of [...archive.data.entries].reverse()){
+    if(!saved.characters?.length)continue;
+    if(saved.key.sourceFingerprint!==record.plan.key.sourceFingerprint||saved.key.revision!==record.plan.key.revision)continue;
+    if(!record.jobs.some(j=>j.jobId===saved.jobId&&j.imageId===saved.imageId))continue;
+    const imageUrl=`/api/v1/images/${encodeURIComponent(saved.imageId)}`;
+    const caption=(saved.caption||saved.template||'Scene portrait').trim().slice(0,300);
+    for(const name of saved.characters)pushPhoto(name,{imageUrl,imageId:saved.imageId,caption,messageId:saved.key.assistantMessageId});
+   }
+  }
+ }
+ return galleries;
 }
