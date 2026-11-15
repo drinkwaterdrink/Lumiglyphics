@@ -1,4 +1,4 @@
-import { mobileSheetDetentHeight, normalizeReaderPreferences, sheetHeight, snapMobileSheetDetent, type ReaderPreferences } from "../../shared/reader-preferences.js";
+import { MOBILE_SHEET_DETENTS, mobileSheetDetentHeight, normalizeReaderPreferences, sheetHeight, snapMobileSheetDetent, type ReaderPreferences } from "../../shared/reader-preferences.js";
 
 /** Owns only reader presentation. It cannot advance prose or request an image. */
 export class DialogueSheet {
@@ -73,8 +73,7 @@ export class DialogueSheet {
 
     const onMove = (clientY: number) => {
       if (!this.drag) return;
-      const minFloor = this.isMobileViewport() ? 48 : 120;
-      const height = Math.min(this.usableHeight(), Math.max(minFloor, this.drag.height + (this.drag.y - clientY) * this.coordinateScale()));
+      const height = Math.min(this.usableHeight(), Math.max(this.minHeightFloor(), this.drag.height + (this.drag.y - clientY) * this.coordinateScale()));
       this.applyOccupiedMetrics(height);
     };
     const onUp = (_clientY: number) => {
@@ -162,15 +161,21 @@ export class DialogueSheet {
     this.drag = null;
   }
   private isMobileViewport(): boolean {
-    const width = this.root.clientWidth || (typeof window !== "undefined" ? window.innerWidth : 0);
-    return (width > 0 && width <= 768) || this.root.dataset.vnMobileDetent === "true";
+    if (this.root.dataset.vnMobileDetent === "true") return true;
+    const width = (typeof window !== "undefined" && window.innerWidth > 0) ? window.innerWidth : this.root.clientWidth;
+    return width > 0 && width <= 768;
+  }
+  private minHeightFloor(): number {
+    return this.isMobileViewport() ? MOBILE_SHEET_DETENTS.compact : 120;
   }
   private applyOccupiedMetrics(heightPx: number, detent?: ReaderPreferences["sheetSize"]): void {
     const readerHeight = this.root.clientHeight || this.root.getBoundingClientRect().height;
     const usable = this.usableHeight();
-    const activeDetent = detent ?? (this.isMobileViewport()
-      ? snapMobileSheetDetent(heightPx, usable, readerHeight).detent
-      : this.preferences.sheetSize);
+    const activeDetent = detent ?? (this.hidden || heightPx <= MOBILE_SHEET_DETENTS.compact + 4
+      ? "compact"
+      : (this.isMobileViewport()
+          ? (heightPx >= mobileSheetDetentHeight("expanded", usable, readerHeight) - 16 ? "expanded" : "reading")
+          : this.preferences.sheetSize));
     const occupiedRatio = this.hidden
       ? 0
       : Math.max(0, Math.min(1, heightPx / Math.max(1, readerHeight || heightPx || 1)));
@@ -202,11 +207,12 @@ export class DialogueSheet {
   private resize(): void {
     const usable = this.usableHeight();
     const readerHeight = this.root.clientHeight || this.root.getBoundingClientRect().height;
-    const h = this.isMobileViewport()
-      ? (this.preferences.heightRatio !== undefined
-          ? snapMobileSheetDetent(usable * this.preferences.heightRatio, usable, readerHeight).px
-          : mobileSheetDetentHeight(this.preferences.sheetSize, usable, readerHeight))
-      : sheetHeight(this.preferences.sheetSize, usable, this.preferences.heightRatio);
+    const minFloor = this.minHeightFloor();
+    const h = this.preferences.heightRatio !== undefined
+      ? Math.round(Math.min(usable, Math.max(minFloor, usable * this.preferences.heightRatio)))
+      : (this.isMobileViewport()
+          ? mobileSheetDetentHeight(this.preferences.sheetSize, usable, readerHeight)
+          : sheetHeight(this.preferences.sheetSize, usable));
     const kbInset = this.keyboardInset();
     this.root.dataset.vnReplyCompact = String(readerHeight > 0 && readerHeight < 340);
     this.root.style.setProperty("--vn-reader-height", `${readerHeight}px`);
@@ -217,16 +223,15 @@ export class DialogueSheet {
   private changeHeight(height: number): void {
     const usable = this.usableHeight();
     const readerHeight = this.root.clientHeight || this.root.getBoundingClientRect().height;
-    if (this.isMobileViewport()) {
-      const snapped = snapMobileSheetDetent(height, usable, readerHeight);
-      this.setPreferences({
-        ...this.preferences,
-        sheetSize: snapped.detent,
-        heightRatio: usable > 0 ? snapped.px / usable : undefined,
-      });
-    } else {
-      this.setPreferences({ ...this.preferences, heightRatio: height / Math.max(1, usable) });
-    }
+    const clamped = Math.min(usable, Math.max(this.minHeightFloor(), height));
+    const nextSize = this.isMobileViewport()
+      ? snapMobileSheetDetent(clamped, usable, readerHeight).detent
+      : this.preferences.sheetSize;
+    this.setPreferences({
+      ...this.preferences,
+      sheetSize: nextSize,
+      heightRatio: clamped / Math.max(1, usable),
+    });
     this.save({ ...this.preferences });
   }
   setPreferences(value: ReaderPreferences): void {

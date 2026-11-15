@@ -40,7 +40,7 @@ export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
     backgroundOpacity: typeof input.backgroundOpacity === "number" && Number.isFinite(input.backgroundOpacity)
       ? Math.max(0, Math.min(1, input.backgroundOpacity)) : 0.9,
     theme: input.theme === "dark" ? "dark" : "light",
-    ...(typeof input.heightRatio === "number" && Number.isFinite(input.heightRatio) ? { heightRatio: Math.max(.12, Math.min(1, input.heightRatio)) } : {}),
+    ...(typeof input.heightRatio === "number" && Number.isFinite(input.heightRatio) ? { heightRatio: Math.max(.05, Math.min(1, input.heightRatio)) } : {}),
     ...(typeof input.typography === "string" && ["novelist", "modern", "cinematic", "retro", "terminal", "manga", "fantasy", "accessible"].includes(input.typography) ? { typography: input.typography as ReaderPreferences["typography"] } : {}),
     ...(input.smartPacing !== undefined ? { smartPacing: input.smartPacing === true } : {}),
     ...(input.typewriterAudio === "off" || input.typewriterAudio === "blip" || input.typewriterAudio === "click" || input.typewriterAudio === "pip" ? { typewriterAudio: input.typewriterAudio } : {}),

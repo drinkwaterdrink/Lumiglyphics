@@ -94,6 +94,24 @@ describe("Wave 4 P5 #1: Mobile 3-Detent DialogueSheet", () => {
     handle.dispatchEvent(new FakeEvent("pointerup", { pointerId: 1, clientY: 740 } as never));
     expect(saved.at(-1)?.sheetSize).toBe("compact");
 
+    // Dragging to an arbitrary intermediate height preserves the user's height without snapping
+    currentDialogueHeight = 142;
+    handle.dispatchEvent(new FakeEvent("pointerdown", { button: 0, pointerId: 2, clientY: 600 } as never));
+    handle.dispatchEvent(new FakeEvent("pointermove", { pointerId: 2, clientY: 512 } as never));
+    expect(dialogue.style.height).toBe("230px");
+    currentDialogueHeight = 230;
+    handle.dispatchEvent(new FakeEvent("pointerup", { pointerId: 2, clientY: 512 } as never));
+    expect(dialogue.style.height).toBe("230px");
+
+    currentDialogueHeight = 230;
+    handle.dispatchEvent(new FakeEvent("pointerdown", { button: 0, pointerId: 3, clientY: 512 } as never));
+    handle.dispatchEvent(new FakeEvent("pointermove", { pointerId: 3, clientY: 650 } as never));
+    expect(dialogue.style.height).toBe("92px");
+    currentDialogueHeight = 92;
+    handle.dispatchEvent(new FakeEvent("pointerup", { pointerId: 3, clientY: 650 } as never));
+    expect(dialogue.style.height).toBe("92px");
+    expect(root.dataset.vnSheetDetent).toBe("reading");
+
     sheet.snapToDetent("expanded");
     expect(sheet.getDetent()).toBe("expanded");
     expect(dialogue.style.height).toBe("520px");
