@@ -150,7 +150,7 @@ function assertRawPromptOverride(request:ImageGenerationRequest):void{
 
 /** Explicit rerolls and exceptional over-budget repair use the story-reader
  * connection. Scene identity, image parameters and reference bytes stay frozen. */
-export async function rewriteImagePrompt(spindle:SpindleAPI,request:ImageGenerationRequest,metadata:ImagePromptMetadata|undefined,config:VisualNovelConfig,userId:string|undefined,signal:AbortSignal,mode:'reroll'|'fit'):Promise<ImageGenerationRequest>{
+export async function rewriteImagePrompt(spindle:SpindleAPI,request:ImageGenerationRequest,metadata:ImagePromptMetadata|undefined,config:VisualNovelConfig,userId:string|undefined,signal:AbortSignal,mode:'reroll'|'fit',pinnedClauses?:readonly string[]):Promise<ImageGenerationRequest>{
  if(signal.aborted)throw cancelled();
  assertRawPromptOverride(request);
  const connection=await resolvePlannerConnection(spindle,config,userId);
@@ -187,7 +187,9 @@ export async function rewriteImagePrompt(spindle:SpindleAPI,request:ImageGenerat
  }
 
  const protection=promptProtection(request.prompt,metadata,mode==='fit');
- const anchors=isIdeogram ? {entries:[],expandedCharacters:0,maskedPrompt:request.prompt} : createPromptAnchors(request.prompt,protection);
+ const anchors=isIdeogram
+  ? {entries:[],expandedCharacters:0,maskedPrompt:request.prompt}
+  : createPromptAnchors(request.prompt,protection,pinnedClauses,{dialect,maxPinnedCharacters:Math.floor(maximum*0.25)});
  const draftCombinedLen=request.prompt.length+(request.negativePrompt?.length??0);
  const rerollPreferredHigh=mode==='reroll'
   ? Math.min(maximum,Math.max(targetHigh,Math.ceil(draftCombinedLen*1.12)))
@@ -241,7 +243,7 @@ export async function rewriteImagePrompt(spindle:SpindleAPI,request:ImageGenerat
    : 'Use priorityBudget for expanded character accounting. Its latest targetCombinedCharacters supersedes the preferred range when repairing an oversized attempt. identityCharacters is the exact protected cast cost, not the short anchor token length. positiveBeyondIdentityCharacters is the allowance for ALL other positive wording. Allocate scenePriorityCharacters first to the evidenced action, subject/object contact, relative positions and essential framing. Allocate negativeTargetCharacters only to targeted exclusions; zero means no allowance, not permission to discard essential constraints. supportingDetailCharacters is the remaining space for setting, medium, style, materials and lighting. These are flexible priorities, not minimum lengths. Preserve essential style/composition/lettering intent before decorative adjectives, and do not pad sparse evidence.\nFirst shorten repetitive style/template prose and verbose negative lists: merge synonymous flaws into precise exclusions, retain specific identity/anatomy/lettering/composition constraints, and use the adaptive negative allowance rather than a fixed-length list. Reduce redundancy before unique visible detail. If essential exclusions need more than their suggested allowance, take space from supporting detail before scene action or identity.',
   dialectInstructions,
   mode==='reroll'?'Produce a genuinely different, equally rich and vivid visual description of the SAME evidenced instant. Vary phrasing, sentence structure, and supported camera perspective while retaining comparable length and full style/atmosphere detail; do not repeat the old positive prompt verbatim.':'Fit the current draft to its model budget and negative-field policy while preserving visual intent. If only negative-field adaptation is needed, preserve useful positive detail. Do not add detail just to reach the target.',
-  anchors.entries.length?'IMMUTABLE IDENTITY ANCHORS: Include each token below exactly once in the positive prompt, at the appropriate subject position. Do not rewrite, duplicate or negate its appearance facts elsewhere. The application replaces tokens with their exact owned identity blocks before generation. Names can be used separately for actions and positions. Never place tokens in negativePrompt. Budget for the expanded text, not the short token. '+JSON.stringify(anchors.entries):'',
+  (anchors.entries.length||anchors.pinnedEntries?.length)?'IMMUTABLE IDENTITY & PINNED ANCHORS: Include each token below exactly once in the positive prompt, at the appropriate subject or scene position. Do not rewrite, duplicate or negate its facts elsewhere. The application replaces tokens with their exact owned blocks before generation. Never place tokens in negativePrompt. Budget for the expanded text, not the short token. '+JSON.stringify([...anchors.entries,...(anchors.pinnedEntries??[])]):'',
  ].filter(Boolean).join('\n');
 
  const context={prompt:anchors.maskedPrompt,negativePrompt:request.negativePrompt??'',identityCharacters:anchors.expandedCharacters,scenePriorities:retainedSceneEvidence(request.prompt,metadata?.brief),...(metadata?{template:metadata.template.name,category:metadata.template.category,brief:{subjectMode:metadata.brief.subjectMode,subjects:anchors.entries.length?anchors.entries.map(e=>e.token).join('\n'):metadata.brief.subjects}}: {})};
@@ -299,7 +301,8 @@ export async function enrichImagePrompt(
   config: VisualNovelConfig,
   userId: string | undefined,
   signal: AbortSignal,
-  guidance?: string
+  guidance?: string,
+  pinnedClauses?: readonly string[]
 ): Promise<ImageGenerationRequest> {
   if (signal.aborted) throw cancelled();
   assertRawPromptOverride(request);
@@ -337,7 +340,9 @@ export async function enrichImagePrompt(
   }
 
   const protection = promptProtection(request.prompt, metadata, false);
-  const anchors = isIdeogram ? { entries: [], expandedCharacters: 0, maskedPrompt: request.prompt } : createPromptAnchors(request.prompt, protection);
+  const anchors = isIdeogram
+    ? { entries: [], expandedCharacters: 0, maskedPrompt: request.prompt }
+    : createPromptAnchors(request.prompt, protection, pinnedClauses, { dialect, maxPinnedCharacters: Math.floor(maximum * 0.25) });
 
   const dialectInstructions = isIdeogram
     ? [
@@ -371,8 +376,8 @@ export async function enrichImagePrompt(
       ? 'This model uses no negative prompt. Leave negativePrompt as an empty string.'
       : 'Maintain a refined negative prompt targeting anatomical deformities, blur, bad hands, artifacts, and unwanted text.',
     `Budget: Aim for an enriched prompt between ${targetLow} and ${targetHigh} characters. Do NOT make it short or sparse; enrich it with artistic substance and cinematic depth.`,
-    anchors.entries.length
-      ? 'IMMUTABLE IDENTITY ANCHORS: Include each token below exactly once in the positive prompt at the character location: ' + JSON.stringify(anchors.entries)
+    (anchors.entries.length || anchors.pinnedEntries?.length)
+      ? 'IMMUTABLE IDENTITY & PINNED ANCHORS: Include each token below exactly once in the positive prompt at the character or scene location: ' + JSON.stringify([...anchors.entries, ...(anchors.pinnedEntries ?? [])])
       : ''
   ].filter(Boolean).join('\n');
 

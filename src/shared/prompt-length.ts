@@ -42,7 +42,8 @@ export function fitPromptToBudget(
   prompt: string,
   negative = '',
   maxCharacters = IMAGE_PROMPT_MAX_CHARS,
-  negativeMode?: 'dual' | 'positive-only' | string
+  negativeMode?: 'dual' | 'positive-only' | string,
+  options?: { pinnedClauses?: readonly string[]; reserveStyleTail?: boolean }
 ): { prompt: string; negativePrompt: string; fitted: boolean } {
   let effectiveNegative = negativeMode === 'positive-only' ? '' : compactNegativePrompt(negative);
   let effectivePrompt = compactPromptText(prompt, true);
@@ -96,16 +97,56 @@ export function fitPromptToBudget(
   const allowedPositive = Math.max(100, maxCharacters - effectiveNegative.length);
   if (effectivePrompt.length > allowedPositive) {
     const tags = effectivePrompt.split(/,\s*|\r?\n/).map(t => t.trim()).filter(Boolean);
-    let curPrompt = '';
+    const pinnedSet = new Set((options?.pinnedClauses ?? []).map(c => c.trim().toLowerCase()).filter(Boolean));
+    const isStyleOrQualityTag = (tag: string): boolean =>
+      /\b(?:style|aesthetic|palette|cel shading|watercolor|oil painting|anime|illustration|masterpiece|best quality|detailed lighting)\b/i.test(tag)
+      || /^by\s+/i.test(tag);
+    const isPinnedTag = (tag: string): boolean => {
+      if (/\[\[LG_(?:PIN|CAST)_\d+_\d+\]\]/.test(tag)) return true;
+      const lower = tag.toLowerCase();
+      return [...pinnedSet].some(pin => pin.includes(lower) || lower.includes(pin));
+    };
+
+    const reservedCap = Math.min(Math.floor(allowedPositive * 0.25), allowedPositive);
+    const reserved: string[] = [];
+    let reservedLen = 0;
+    // Collect explicit pinned tags first, then optional style tail tags from the back
     for (const tag of tags) {
-      const candidate = curPrompt ? `${curPrompt}, ${tag}` : tag;
-      if (candidate.length <= allowedPositive) {
-        curPrompt = candidate;
-      } else {
+      if (!isPinnedTag(tag)) continue;
+      const nextLen = reservedLen ? reservedLen + 2 + tag.length : tag.length;
+      if (nextLen <= reservedCap) {
+        reserved.push(tag);
+        reservedLen = nextLen;
+      }
+    }
+    if (options?.reserveStyleTail !== false) {
+      for (let i = tags.length - 1; i >= 0; i--) {
+        const tag = tags[i]!;
+        if (reserved.includes(tag) || !isStyleOrQualityTag(tag)) continue;
+        const nextLen = reservedLen ? reservedLen + 2 + tag.length : tag.length;
+        if (nextLen <= reservedCap) {
+          reserved.push(tag);
+          reservedLen = nextLen;
+        }
+      }
+    }
+
+    const bodyBudget = Math.max(40, allowedPositive - (reserved.length ? reservedLen + 2 : 0));
+    const body: string[] = [];
+    let bodyLen = 0;
+    for (const tag of tags) {
+      if (reserved.includes(tag)) continue;
+      const nextLen = bodyLen ? bodyLen + 2 + tag.length : tag.length;
+      if (nextLen <= bodyBudget) {
+        body.push(tag);
+        bodyLen = nextLen;
+      } else if (!body.length && bodyBudget > 16) {
+        body.push(tag.slice(0, bodyBudget).replace(/\s+\S*$/, '').trim());
         break;
       }
     }
-    effectivePrompt = curPrompt || effectivePrompt.slice(0, allowedPositive).replace(/\s+\S*$/, '');
+    const combined = [...body, ...reserved].filter(Boolean).join(', ');
+    effectivePrompt = combined || effectivePrompt.slice(0, allowedPositive).replace(/\s+\S*$/, '');
   }
 
   return {

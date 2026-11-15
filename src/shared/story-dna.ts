@@ -56,6 +56,9 @@ export const ChapterCodexEntrySchema = z.object({
   title: z.string().trim().min(1).max(180),
   location: z.string().trim().max(180),
   summary: z.string().trim().max(2000),
+  who: z.array(z.string().trim().max(120)).max(16).optional(),
+  where: z.string().trim().max(180).optional(),
+  whatChanged: z.array(z.string().trim().max(280)).max(12).optional(),
   imageUrl: z.string().trim().max(2048).optional(),
   messageId: z.string().trim().max(160).optional(),
   seenInSwipes: z.array(z.string().trim().max(160)).max(64).optional(),
@@ -63,11 +66,21 @@ export const ChapterCodexEntrySchema = z.object({
 }).strict();
 export type ChapterCodexEntry = z.infer<typeof ChapterCodexEntrySchema>;
 
+export const NpcBeliefSchema = z.object({
+  topic: z.string().trim().min(1).max(120),
+  belief: z.string().trim().min(1).max(400),
+  knowsSecret: z.literal(false).default(false),
+  seenInSwipes: z.array(z.string().trim().max(160)).max(64).optional(),
+  updatedAt: z.number().int().nonnegative().default(() => Date.now()),
+}).strict();
+export type NpcBelief = z.infer<typeof NpcBeliefSchema>;
+
 export const StoryDNASetSchema = z.object({
   locations: z.record(z.string(), LocationDNASchema).default({}),
   items: z.record(z.string(), ItemDNASchema).default({}),
   thoughtCabinet: z.array(ThoughtCabinetEntrySchema).max(40).optional(),
   chapterCodex: z.array(ChapterCodexEntrySchema).max(40).optional(),
+  npcBeliefs: z.record(z.string(), z.array(NpcBeliefSchema).max(12)).optional(),
   deletedLocations: z.record(z.string(), LocationDNASchema).optional(),
   deletedItems: z.record(z.string(), ItemDNASchema).optional(),
   revision: z.number().int().nonnegative().default(0),
@@ -409,12 +422,23 @@ export function scrubStoryDNASwipes(
   const nextChapterCodex = set.chapterCodex?.filter((c) =>
     !c.seenInSwipes?.length || isSwipeEntryActive({ autoDiscovered: true, seenInSwipes: c.seenInSwipes }, activeMessageSwipes)
   );
+  let nextNpcBeliefs: Record<string, NpcBelief[]> | undefined;
+  if (set.npcBeliefs) {
+    nextNpcBeliefs = {};
+    for (const [npc, entries] of Object.entries(set.npcBeliefs)) {
+      const kept = entries.filter((entry) =>
+        !entry.seenInSwipes?.length || isSwipeEntryActive({ autoDiscovered: true, seenInSwipes: entry.seenInSwipes }, activeMessageSwipes)
+      );
+      if (kept.length > 0) nextNpcBeliefs[npc] = kept;
+    }
+  }
   return StoryDNASetSchema.parse({
     ...set,
     locations: nextLocations,
     items: nextItems,
     ...(nextThoughtCabinet !== undefined ? { thoughtCabinet: nextThoughtCabinet } : {}),
     ...(nextChapterCodex !== undefined ? { chapterCodex: nextChapterCodex } : {}),
+    ...(nextNpcBeliefs !== undefined ? { npcBeliefs: nextNpcBeliefs } : {}),
     revision: (set.revision ?? 0) + 1
   });
 }

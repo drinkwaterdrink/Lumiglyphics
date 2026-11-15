@@ -1,4 +1,4 @@
-import { normalizeReaderPreferences, sheetHeight, type ReaderPreferences } from "../../shared/reader-preferences.js";
+import { mobileSheetDetentHeight, normalizeReaderPreferences, sheetHeight, snapMobileSheetDetent, type ReaderPreferences } from "../../shared/reader-preferences.js";
 
 /** Owns only reader presentation. It cannot advance prose or request an image. */
 export class DialogueSheet {
@@ -31,9 +31,10 @@ export class DialogueSheet {
     this.tools.dataset.vnSheetTools = "";
     this.tools.className = "caption-head-actions";
     this.tools.innerHTML = `<button type="button" class="caption-tool" data-action="caption-auto" aria-pressed="false" title="Toggle auto-play (A)" aria-label="Toggle auto-play"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg></button>
+      <button type="button" class="caption-tool" data-action="caption-expand" aria-pressed="false" aria-label="Cycle dialogue sheet height" title="Resize dialogue sheet"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 15 7-7 7 7"/></svg></button>
       <button type="button" class="caption-tool" data-vn-hide-text aria-pressed="false" aria-label="Hide text reader to view full artwork" title="Hide text reader"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>`;
     this.auto = this.tools.querySelector("[data-action='caption-auto']")!;
-    this.expand = this.tools.querySelector("[data-action='caption-expand']") ?? document.createElement("button");
+    this.expand = this.tools.querySelector("[data-action='caption-expand']")!;
     this.hide = this.tools.querySelector("[data-vn-hide-text]")!;
 
     this.show = document.createElement("button");
@@ -61,33 +62,25 @@ export class DialogueSheet {
     this.auto.addEventListener("click", () => this.onToggleAutoPlay?.(), { signal });
     this.hide.addEventListener("click", () => this.setHidden(!this.hidden), { signal });
     this.expand.addEventListener("click", () => {
-      const isExpanded = dialogue.classList.contains("large-caption");
-      if (isExpanded) {
-        dialogue.classList.remove("large-caption");
-        dialogue.style.height = "";
-        this.expand.innerHTML = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 15 7-7 7 7"/></svg>';
-        this.expand.setAttribute("aria-label", "Expand dialogue panel");
-        this.resize();
-      } else {
-        dialogue.classList.add("large-caption");
-        dialogue.style.height = "min(65vh, 420px)";
-        this.expand.innerHTML = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 9 7 7 7-7"/></svg>';
-        this.expand.setAttribute("aria-label", "Reduce dialogue height");
-      }
+      const order: ReaderPreferences["sheetSize"][] = this.isMobileViewport()
+        ? ["compact", "reading", "expanded"]
+        : ["reading", "expanded"];
+      const idx = order.indexOf(this.preferences.sheetSize);
+      const next = order[(idx + 1) % order.length]!;
+      this.snapToDetent(next);
     }, { signal });
     this.show.addEventListener("click", event => { event.stopPropagation(); this.setHidden(false); this.handle.focus(); }, { signal });
 
     const onMove = (clientY: number) => {
       if (!this.drag) return;
-      const height = Math.min(this.usableHeight(), Math.max(120, this.drag.height + (this.drag.y - clientY) * this.coordinateScale()));
-      root.style.setProperty("--vn-sheet-height", `${height}px`);
-      root.style.setProperty("--caption-height", `${height}px`);
-      dialogue.style.setProperty("--caption-height", `${height}px`);
-      dialogue.style.height = `${height}px`;
+      const minFloor = this.isMobileViewport() ? 48 : 120;
+      const height = Math.min(this.usableHeight(), Math.max(minFloor, this.drag.height + (this.drag.y - clientY) * this.coordinateScale()));
+      this.applyOccupiedMetrics(height);
     };
-    const onUp = (clientY: number) => {
+    const onUp = (_clientY: number) => {
       if (!this.drag) return;
-      const height = dialogue.getBoundingClientRect().height * this.coordinateScale();
+      const measured = dialogue.getBoundingClientRect().height || Number.parseFloat(dialogue.style.height) || this.drag.height;
+      const height = measured * this.coordinateScale();
       this.cancelDrag();
       this.changeHeight(height);
     };
@@ -168,18 +161,72 @@ export class DialogueSheet {
     }
     this.drag = null;
   }
+  private isMobileViewport(): boolean {
+    const width = this.root.clientWidth || (typeof window !== "undefined" ? window.innerWidth : 0);
+    return (width > 0 && width <= 768) || this.root.dataset.vnMobileDetent === "true";
+  }
+  private applyOccupiedMetrics(heightPx: number, detent?: ReaderPreferences["sheetSize"]): void {
+    const readerHeight = this.root.clientHeight || this.root.getBoundingClientRect().height;
+    const usable = this.usableHeight();
+    const activeDetent = detent ?? (this.isMobileViewport()
+      ? snapMobileSheetDetent(heightPx, usable, readerHeight).detent
+      : this.preferences.sheetSize);
+    const occupiedRatio = this.hidden
+      ? 0
+      : Math.max(0, Math.min(1, heightPx / Math.max(1, readerHeight || heightPx || 1)));
+    this.root.dataset.vnSheetDetent = this.hidden ? "compact" : activeDetent;
+    this.root.style.setProperty("--vn-dialogue-occupied-ratio", occupiedRatio.toFixed(3));
+    this.root.style.setProperty("--vn-sheet-height", `${heightPx}px`);
+    this.root.style.setProperty("--caption-height", `${heightPx}px`);
+    this.dialogue.style.setProperty("--caption-height", `${heightPx}px`);
+    this.dialogue.style.height = `${heightPx}px`;
+    this.dialogue.classList?.toggle?.("large-caption", activeDetent === "expanded");
+    this.expand.setAttribute("aria-pressed", String(activeDetent === "expanded"));
+  }
+  getDetent(): ReaderPreferences["sheetSize"] {
+    return this.preferences.sheetSize;
+  }
+  snapToDetent(size: ReaderPreferences["sheetSize"]): void {
+    const usable = this.usableHeight();
+    const readerHeight = this.root.clientHeight || this.root.getBoundingClientRect().height;
+    const targetPx = this.isMobileViewport()
+      ? mobileSheetDetentHeight(size, usable, readerHeight)
+      : sheetHeight(size, usable);
+    this.setPreferences({
+      ...this.preferences,
+      sheetSize: size,
+      heightRatio: usable > 0 ? targetPx / usable : undefined,
+    });
+    this.save({ ...this.preferences });
+  }
   private resize(): void {
     const usable = this.usableHeight();
-    const h = sheetHeight(this.preferences.sheetSize, usable, this.preferences.heightRatio);
-    const readerHeight=this.root.clientHeight || this.root.getBoundingClientRect().height;
-    this.root.dataset.vnReplyCompact=String(readerHeight<340);
+    const readerHeight = this.root.clientHeight || this.root.getBoundingClientRect().height;
+    const h = this.isMobileViewport()
+      ? (this.preferences.heightRatio !== undefined
+          ? snapMobileSheetDetent(usable * this.preferences.heightRatio, usable, readerHeight).px
+          : mobileSheetDetentHeight(this.preferences.sheetSize, usable, readerHeight))
+      : sheetHeight(this.preferences.sheetSize, usable, this.preferences.heightRatio);
+    const kbInset = this.keyboardInset();
+    this.root.dataset.vnReplyCompact = String(readerHeight > 0 && readerHeight < 340);
     this.root.style.setProperty("--vn-reader-height", `${readerHeight}px`);
-    this.root.style.setProperty("--vn-sheet-keyboard-inset", `${this.keyboardInset()}px`);
-    this.root.style.setProperty("--vn-sheet-height", `${h}px`);
-    this.root.style.setProperty("--caption-height", `${h}px`);
+    this.root.style.setProperty("--vn-sheet-keyboard-inset", `${kbInset}px`);
+    this.root.style.setProperty("--reader-keyboard-inset", `${kbInset}px`);
+    this.applyOccupiedMetrics(h);
   }
   private changeHeight(height: number): void {
-    this.setPreferences({ ...this.preferences, heightRatio: height / Math.max(1, this.usableHeight()) });
+    const usable = this.usableHeight();
+    const readerHeight = this.root.clientHeight || this.root.getBoundingClientRect().height;
+    if (this.isMobileViewport()) {
+      const snapped = snapMobileSheetDetent(height, usable, readerHeight);
+      this.setPreferences({
+        ...this.preferences,
+        sheetSize: snapped.detent,
+        heightRatio: usable > 0 ? snapped.px / usable : undefined,
+      });
+    } else {
+      this.setPreferences({ ...this.preferences, heightRatio: height / Math.max(1, usable) });
+    }
     this.save({ ...this.preferences });
   }
   setPreferences(value: ReaderPreferences): void {
@@ -189,7 +236,7 @@ export class DialogueSheet {
     this.root.style.setProperty("--vn-sheet-opacity", String(this.preferences.backgroundOpacity));
     this.root.style.setProperty("--caption-opacity", String(this.preferences.backgroundOpacity));
     this.tools.hidden = false;
-    this.expand.hidden = true;
+    this.expand.hidden = false;
     this.hide.hidden = false;
     this.resize();
   }
@@ -198,6 +245,7 @@ export class DialogueSheet {
     this.root.dataset.vnTextHidden = String(this.hidden);
     this.hide.setAttribute("aria-pressed", String(this.hidden));
     this.show.hidden = !this.hidden;
+    this.resize();
     if (this.hidden) { this.pause(); this.show.focus(); }
   }
   isHidden(): boolean { return this.hidden; }

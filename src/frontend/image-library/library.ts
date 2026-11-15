@@ -354,7 +354,8 @@ const DOCKED_LIBRARY_CSS=`
   z-index: 10 !important;
 }
 :host([data-vn-workspace-tool]) footer[data-library-footer] button {
-  min-height: 34px !important;
+  min-height: 44px;
+  min-width: 44px;
   border-radius: 999px !important;
   padding: 4px 14px !important;
   background: var(--aperture-ghost-bg, rgba(22, 46, 36, 0.8)) !important;

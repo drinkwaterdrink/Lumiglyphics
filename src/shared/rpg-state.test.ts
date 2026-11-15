@@ -4,7 +4,9 @@ import {
   buildRpgPromptGuidance,
   computePacingFrustrationMultiplier,
   computeQuestUrgency,
+  evaluateChoiceGate,
   evaluateContextualSkillCheck,
+  evaluateContextualSkillCheckDetailed,
   formatSkillCheckSubmission,
   normalizeRpgMode,
   reduceRpgState,
@@ -152,5 +154,70 @@ describe("RPG & Adventure Mode (AdventureTime-inspired systems)", () => {
       { ...start.vitals, inventory: ["Brass Key"] }
     );
     assert.equal(gearCheck.rollMode, "advantage");
+  });
+
+  it("applies additive rpgDeltas cleanly, clamps bounds, and gates choices on flags/items", () => {
+    const base = reduceRpgState(null, {
+      personaName: "Lyra",
+      vitals: {
+        hp: 80,
+        maxHp: 100,
+        stamina: 50,
+        maxStamina: 100,
+        stress: 20,
+        inventory: ["Iron Dagger"],
+        companions: [{ name: "Rowan", hp: 100, maxHp: 100, affinity: 40, status: "healthy" }],
+      },
+    });
+    const withDebt = reduceRpgState(base, {
+      rpgDeltas: { flagsSet: { owes_debt: true } },
+    });
+    const deduped = reduceRpgState(withDebt, {
+      rpgDeltas: { itemsAdded: ["iron dagger"] },
+    });
+    assert.deepEqual(deduped.vitals.inventory, ["Iron Dagger"]);
+
+    const next = reduceRpgState(withDebt, {
+      dramaticProgress: true,
+      rpgDeltas: {
+        hpDelta: 50,
+        staminaDelta: -90,
+        stressDelta: 15,
+        itemsAdded: ["Silver Pass"],
+        itemsRemoved: ["Iron Dagger"],
+        flagsSet: { met_guild: true },
+        flagsCleared: ["owes_debt"],
+        companionAffinityDeltas: [{ name: "Rowan", affinityDelta: 40, status: "trusted" }],
+      },
+    });
+    assert.equal(next.vitals.hp, 100);
+    assert.equal(next.vitals.stamina, 0);
+    assert.equal(next.vitals.stress, 35);
+    assert.deepEqual(next.vitals.inventory, ["Silver Pass"]);
+    assert.equal(next.flags.met_guild, true);
+    assert.equal(next.flags.owes_debt, undefined);
+    assert.equal(next.vitals.companions[0]?.affinity, 80);
+    assert.equal(next.vitals.companions[0]?.status, "trusted");
+    assert.equal(next.turnsSinceProgress, 0);
+
+    const lockedFlag = evaluateChoiceGate({ flags: ["missing_flag"] }, "Talk to the informant first", next);
+    assert.deepEqual(lockedFlag, { locked: true, lockedReason: "Talk to the informant first" });
+
+    const lockedItem = evaluateChoiceGate({ items: ["Skeleton Key"] }, undefined, next);
+    assert.deepEqual(lockedItem, { locked: true, lockedReason: "Requires Skeleton Key" });
+
+    const unlocked = evaluateChoiceGate({ flags: ["met_guild"], items: ["silver pass"] }, "Locked", next);
+    assert.deepEqual(unlocked, { locked: false, lockedReason: null });
+
+    const detailed = evaluateContextualSkillCheckDetailed(
+      { stat: "CHA", dc: 14, modifier: 1, rollMode: "normal", reason: "Present Silver Pass to guards" },
+      next.vitals,
+    );
+    assert.ok(detailed.sources.some((s) => s.label === "Base" && s.delta === 1));
+    assert.ok(detailed.sources.some((s) => s.label === "Companion Bond" && s.delta === 1));
+    assert.ok(detailed.sources.some((s) => s.label === "Bond Advantage" && s.advantage));
+    assert.ok(detailed.sources.some((s) => s.label === "Gear: Silver Pass" && s.delta === 1));
+    assert.equal(detailed.check.modifier, 3);
+    assert.equal(detailed.check.rollMode, "advantage");
   });
 });

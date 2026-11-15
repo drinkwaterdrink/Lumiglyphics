@@ -243,6 +243,36 @@ export function sceneIdentityDigest(identity: SceneImageIdentity): string {
 }
 
 /**
+ * Two-tier digest helpers:
+ * - `backdropDigestOf`: captures only the physical location, time/weather, lighting,
+ *   persistent props, style signature, output shape, and provider/model so revisiting
+ *   a room or running in scene-change-only mode matches even when characters/poses shift.
+ * - `beatDigestOf`: captures the full structured cue/beat identity.
+ */
+export function backdropDigestOf(
+  identity: Pick<SceneImageIdentity, "environment" | "styleDnaDigest" | "outputPlanDigest"> & {
+    request?: Partial<Pick<SceneImageIdentity["request"], "provider" | "model" | "promptSyntax">>;
+  }
+): string {
+  return cyrb53(canonicalJson({
+    location: identity.environment.location.trim().toLowerCase(),
+    timeWeather: identity.environment.timeWeather.trim().toLowerCase(),
+    lighting: identity.environment.lighting?.trim().toLowerCase() ?? null,
+    description: identity.environment.description?.trim().toLowerCase() ?? null,
+    persistentElements: identity.environment.persistentElements,
+    provider: identity.request?.provider ?? null,
+    model: identity.request?.model ?? "",
+    promptSyntax: identity.request?.promptSyntax ?? "",
+    styleDnaDigest: identity.styleDnaDigest ?? "",
+    outputPlanDigest: identity.outputPlanDigest ?? ""
+  }));
+}
+
+export function beatDigestOf(identity: SceneImageIdentity): string {
+  return sceneIdentityDigest(identity);
+}
+
+/**
  * Hash the structured identity. Two FNV-1a hashes of the canonical JSON
  * (forward and reversed) give the short map key; the appended cyrb53 digest is
  * an independent-algorithm content guard that is also stored on each entry and

@@ -56,10 +56,39 @@ export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
     confidantCutInsEnabled: input.confidantCutInsEnabled !== undefined ? input.confidantCutInsEnabled === true : (DEFAULT_READER_PREFERENCES.confidantCutInsEnabled ?? true),
   };
 }
+export const MOBILE_SHEET_DETENTS = { compact: 48, reading: 142, expandedRatio: 0.65 } as const;
 const RATIOS = { compact: 0.22, reading: 0.34, expanded: 0.6 } as const;
 export function sheetHeight(size: ReaderPreferences["sheetSize"], usableHeight: number, heightRatio?: number): number {
   const height = Number.isFinite(usableHeight) ? Math.max(0, usableHeight) : 224;
   return Math.round(Math.min(height, Math.max(224, height * (heightRatio ?? RATIOS[size]))));
+}
+/** Computes pixel height for the 3-detent mobile DialogueSheet (Peek 48px / Reader 142px / Expanded 65vh). */
+export function mobileSheetDetentHeight(
+  size: ReaderPreferences["sheetSize"],
+  usableHeight: number,
+  readerHeight?: number,
+): number {
+  const usable = Number.isFinite(usableHeight) ? Math.max(MOBILE_SHEET_DETENTS.compact, usableHeight) : MOBILE_SHEET_DETENTS.reading;
+  if (size === "compact") return Math.min(usable, MOBILE_SHEET_DETENTS.compact);
+  if (size === "reading") return Math.min(usable, MOBILE_SHEET_DETENTS.reading);
+  const full = Number.isFinite(readerHeight) && (readerHeight ?? 0) > 0 ? readerHeight! : usable;
+  return Math.min(usable, Math.max(MOBILE_SHEET_DETENTS.reading, Math.round(full * MOBILE_SHEET_DETENTS.expandedRatio)));
+}
+/** Snaps an arbitrary mobile sheet drag height to the nearest Peek / Reader / Expanded detent. */
+export function snapMobileSheetDetent(
+  height: number,
+  usableHeight: number,
+  readerHeight?: number,
+): { detent: ReaderPreferences["sheetSize"]; px: number } {
+  const candidates: Array<{ detent: ReaderPreferences["sheetSize"]; px: number }> = (
+    ["compact", "reading", "expanded"] as const
+  ).map((detent) => ({
+    detent,
+    px: mobileSheetDetentHeight(detent, usableHeight, readerHeight),
+  }));
+  return candidates.reduce((best, item) =>
+    Math.abs(item.px - height) < Math.abs(best.px - height) ? item : best
+  );
 }
 export function nearestSheetSize(height: number, usableHeight: number): ReaderPreferences["sheetSize"] {
   return (Object.keys(RATIOS) as ReaderPreferences["sheetSize"][]).reduce((best, size) =>

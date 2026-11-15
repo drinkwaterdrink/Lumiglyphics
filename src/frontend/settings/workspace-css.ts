@@ -49,7 +49,7 @@ textarea[spellcheck=false]{font-family:var(--lumiverse-font-mono,ui-monospace,mo
 [data-character-tabs]{display:flex;gap:8px;border-bottom:1px solid var(--set-border);padding-bottom:12px}
 [data-character-tabs] button{flex:1;background:transparent}
 [data-character-tabs] [aria-pressed=true]{background:var(--set-hover);border-color:var(--set-accent)}
-[data-draft-bar]{position:static;bottom:auto;display:flex;flex-wrap:wrap;gap:12px;background:var(--set-field);border:1px solid var(--set-border);border-radius:12px;padding:16px;margin-top:16px;box-shadow:none}
+[data-draft-bar]{position:sticky;bottom:calc(.75rem + var(--reader-keyboard-inset,0px));z-index:10;display:flex;flex-wrap:wrap;gap:12px;background:var(--set-field);border:1px solid var(--set-border);border-radius:12px;padding:16px;margin-top:16px;box-shadow:0 8px 24px rgba(0,0,0,.22)}
 [data-draft-bar] small{font-size:.9rem}
 dialog{width:min(440px,calc(100% - 24px));max-height:calc(100dvh - 32px);overflow:auto;padding:20px;border:1px solid var(--set-border);border-radius:16px;background:var(--set-field);color:var(--set-text);font:inherit;box-shadow:0 20px 60px #0006}
 dialog::backdrop{background:#0008}

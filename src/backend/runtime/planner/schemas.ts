@@ -7,7 +7,7 @@ import {
   SubjectCategorySchema
 } from "../../../shared/contracts.js";
 import { ActionPropSchema } from "../../../shared/action-prop.js";
-import { SkillCheckSchema, RpgQuestStatusSchema, RpgCompanionSchema } from "../../../shared/rpg-state.js";
+import { ChoiceRequirementsSchema, RpgDeltasSchema, SkillCheckSchema, RpgQuestStatusSchema, RpgCompanionSchema } from "../../../shared/rpg-state.js";
 
 export const PlannerEnvironmentChangesSchema = z.object({
   description: z.string().trim().min(1).optional(),
@@ -84,7 +84,10 @@ export const PlannerCueSchema = z.object({
 export const PlannerChoiceSchema = z.object({
   label: z.string().trim().min(1),
   submission: z.string().trim().min(1),
-  check: SkillCheckSchema.optional()
+  check: SkillCheckSchema.optional(),
+  requires: ChoiceRequirementsSchema.optional(),
+  lockedReason: z.string().trim().max(160).optional(),
+  setsFlags: z.record(z.string().trim().min(1).max(120), z.boolean()).optional()
 }).strict();
 
 export const PlannerRpgUpdateSchema = z.object({
@@ -133,7 +136,9 @@ export const PlannerOutputSchema = z.object({
   choices: z.array(PlannerChoiceSchema).max(6).default([]),
   characters: z.array(PlannerCharacterSchema).default([]),
   speakers: z.array(PlannerSpeakerSchema).default([]),
-  rpg: PlannerRpgUpdateSchema
+  rpg: PlannerRpgUpdateSchema,
+  rpgDeltas: RpgDeltasSchema.optional(),
+  resolvedThreads: z.array(z.string().trim().min(1).max(160)).max(8).optional()
 }).strict();
 
 export type HintMessage = { id: string; is_user: boolean; metadata?: Record<string, unknown> };

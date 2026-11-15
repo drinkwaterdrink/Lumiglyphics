@@ -15,14 +15,14 @@ export async function handleImageReviewRpc(request:ImageReviewRpcRequest,context
       if(typeof request.requestId!=='string'||!request.requestId||request.requestId.length>100)throw new Error('Invalid prompt selection.');
       const {open,turn,gate}=context.current();
       if(!open||!turn||turn.assistantMessageId!==request.messageId||turn.sourceFingerprint!==request.sourceFingerprint)throw new Error('This prompt belongs to an older or closed turn.');
-      if(!await gate?.regenerate(request.requestId,request.edits,request.guidance))throw new Error('This prompt is already being handled or cancelled.');
+      if(!await gate?.regenerate(request.requestId,request.edits,request.guidance,request.pinnedClauses))throw new Error('This prompt is already being handled or cancelled.');
       return;
     }
     case "vn_enrich_image_prompt": {
       if(typeof request.requestId!=='string'||!request.requestId||request.requestId.length>100)throw new Error('Invalid prompt selection.');
       const {open,turn,gate}=context.current();
       if(!open||!turn||turn.assistantMessageId!==request.messageId||turn.sourceFingerprint!==request.sourceFingerprint)throw new Error('This prompt belongs to an older or closed turn.');
-      if(!await gate?.enrich(request.requestId,request.guidance,request.edits))throw new Error('This prompt is already being handled or cancelled.');
+      if(!await gate?.enrich(request.requestId,request.guidance,request.edits,request.pinnedClauses))throw new Error('This prompt is already being handled or cancelled.');
       return;
     }
     case "vn_reprepare_image_template": {

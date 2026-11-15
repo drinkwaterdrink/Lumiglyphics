@@ -9,6 +9,7 @@ import {resolveStyleDNA} from '../../shared/style-dna.js';
 import {assertCapabilityOutput} from '../../shared/model-output-capabilities.js';
 import {findCastArt,saveCastArt,castArtToken,type CastArtIdentity} from './cast-art.js';
 import {findLocationArt,saveLocationArt,locationArtToken,type LocationArtIdentity} from './location-art.js';
+import {findBackdropArt,saveBackdropArt} from './scene-art-index.js';
 import { globalOutputParameters, templateOutputParameters, modelOutputParameters, assertModelOutputParameters, providerOutputParameters } from "./template-output.js";
 import { sanitizeImagePayloadParameters } from "../../shared/image-payload-sanitizer.js";
 import { applyAttireOverride } from "./attire.js";
@@ -24,6 +25,8 @@ import { AssetJobSchema, MAX_CACHE_CUES_PER_TURN, type AssetJob, type SceneState
 import { AssetScheduler } from "../core/asset-scheduler.js";
 import {
   SceneImageCache,
+  backdropDigestOf,
+  beatDigestOf,
   canonicalJson,
   cyrb53,
   sceneEpisodeOf,
@@ -872,6 +875,18 @@ function replaceJob(jobs: AssetJob[], next: AssetJob): AssetJob[] {
   return jobs.map((job) => job.jobId === next.jobId ? next : job);
 }
 
+function backdropDigestForCue(
+  config: VisualNovelConfig,
+  scene: SceneState,
+  cue: VisualCue,
+  characterAppearance: CharacterAppearanceMap | undefined,
+  provider: string | null,
+  profileRevision: string,
+): string {
+  const identity = sceneImageIdentityFor(config, scene, cue, characterAppearance, provider, { source: "none" }, profileRevision);
+  return backdropDigestOf(identity);
+}
+
 /** Allocate classifier turns after cache lookup. Only distinct misses spend slots. */
 export async function prepareAssetJobs(
   spindle: SpindleAPI,
@@ -882,6 +897,31 @@ export async function prepareAssetJobs(
   userId?: string,
   options: Pick<SceneCacheOptions, "resolvedSourceText" | "verifyImage"> = {}
 ): Promise<AssetJob[]> {
+  if (config.imageGenerationTrigger === "scene-change" && plan.visualCues.length > 0) {
+    const profile = await resolveImageProfile(spindle, config, userId);
+    const effective = profile.provider === "novelai"
+      ? { ...config, imageModel: config.imageModel || profile.model || "nai-diffusion-4-5-full" }
+      : config;
+    const kept: VisualCue[] = [];
+    const deferred: VisualCue[] = [];
+    const seenScenes = new Set<string>();
+    for (const cue of plan.visualCues) {
+      const scene = sceneForCue(plan, cue);
+      const digest = backdropDigestForCue(effective, scene, cue, characterAppearance, profile.provider, profile.cacheProfile);
+      const sceneKey = `${cue.sceneId}:${digest}`;
+      if (!seenScenes.has(sceneKey)) {
+        seenScenes.add(sceneKey);
+        kept.push(cue);
+      } else {
+        deferred.push(cue);
+      }
+    }
+    plan.visualCues = kept;
+    const occupied = new Set(kept.map((c) => c.paragraphIndex));
+    plan.cacheCues = [...(plan.cacheCues ?? []), ...deferred]
+      .filter((c) => !occupied.has(c.paragraphIndex))
+      .slice(0, MAX_CACHE_CUES_PER_TURN);
+  }
   const castAllocation=castAllocationCandidates(plan,config,characterAppearance);
   if(castAllocation||(config.persistentLocationArt||config.persistentCastArt)&&!(plan.classifierVisuals&&config.systemOneMode==='on')){
     const profile=await resolveImageProfile(spindle,config,userId);
@@ -921,7 +961,32 @@ export async function prepareAssetJobs(
     plan.cacheCues=[...remaining,...(castAllocation?.reuseOnly??[])].filter(cue=>!occupied.has(cue.paragraphIndex)).slice(0,MAX_CACHE_CUES_PER_TURN);
     return selected;
   }
-  const candidates = createAssetJobs(plan, config, characterAppearance);
+  const rawCandidates = createAssetJobs(plan, config, characterAppearance);
+  const candidates: AssetJob[] = [];
+  if (config.imageGenerationTrigger === "scene-change" || config.persistentLocationArt) {
+    const profile = await resolveImageProfile(spindle, config, userId);
+    const effective = profile.provider === "novelai"
+      ? { ...config, imageModel: config.imageModel || profile.model || "nai-diffusion-4-5-full" }
+      : config;
+    for (const job of rawCandidates) {
+      const cue = plan.visualCues.find((c) => c.assetJobId === job.jobId);
+      if (!cue) { candidates.push(job); continue; }
+      const allowBackdropReuse = config.imageGenerationTrigger === "scene-change"
+        || (config.persistentLocationArt && cue.imageTemplate?.subjectMode === "none");
+      if (allowBackdropReuse) {
+        const scene = sceneForCue(plan, cue);
+        const backdropDigest = backdropDigestForCue(effective, scene, cue, characterAppearance, profile.provider, profile.cacheProfile);
+        const persisted = await findBackdropArt(spindle, plan.key.chatId, backdropDigest, userId).catch(() => null);
+        if (persisted) {
+          candidates.push(locationArtJob(plan, cue, persisted, backdropDigest));
+          continue;
+        }
+      }
+      candidates.push(job);
+    }
+  } else {
+    candidates.push(...rawCandidates);
+  }
   if (!plan.classifierVisuals || config.systemOneMode !== "on") return candidates;
   const scope = sceneImageScope(userId, plan.key.chatId);
   retainPlanEpisodes(cache, scope, plan);
@@ -1430,14 +1495,14 @@ export async function generateAssets(
             referenceSummary: portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference"
           };
           const initialMetadata = metadataFor(cue);
-          const regenerateFor=(selectedCue:VisualCue)=>(request:ImageGenerationRequest,guidance?:string)=>{
-            if(guidance)return enrichImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,guidance);
+          const regenerateFor=(selectedCue:VisualCue)=>(request:ImageGenerationRequest,guidance?:string,pinnedClauses?:readonly string[])=>{
+            if(guidance)return enrichImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,guidance,pinnedClauses);
             const maxAllowed=request.promptProfileV2?.hardMaxCharacters??request.promptProfile?.maxCharacters??3000;
             const posOnly=request.promptProfile?.negativeMode==='positive-only'||request.promptProfileV2?.negativePolicy==='positive-only';
             const mode=(request.prompt.length+(request.negativePrompt?.length??0)>maxAllowed)||(posOnly&&Boolean(request.negativePrompt?.trim()))?'fit':'reroll';
-            return rewriteImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,mode);
+            return rewriteImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,mode,pinnedClauses);
           };
-          const enrichFor=(selectedCue:VisualCue)=>(request:ImageGenerationRequest,guidance?:string)=>enrichImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,guidance);
+          const enrichFor=(selectedCue:VisualCue)=>(request:ImageGenerationRequest,guidance?:string,pinnedClauses?:readonly string[])=>enrichImagePrompt(spindle,request,metadataFor(selectedCue),config,userId,jobSignal,guidance,pinnedClauses);
           frozen.parameters = modelOutputParameters(selected?.provider ?? provider, frozen.model, globalOutputParameters(config.imageOutputAspectRatio, selected?.provider ?? provider, frozen.model, frozen.parameters ?? {}));
           frozen.promptProfile=await loadImagePromptProfile(spindle,config,selected?.provider??provider,frozen.model);
           frozen=prepareCapabilityOutput(frozen,config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined,config.automaticImagePromptSettings&&isFluxKleinModel(frozen.model)?'standard':config.imageResolutionPreference);
@@ -1618,6 +1683,19 @@ export async function generateAssets(
               if(await saveCastArt(spindle,plan.key.chatId,{...castIdentity,imageId:result.imageId},userId,{token:castToken,signal:jobSignal}))void resolveCandidatesNow();
             }catch(error){
               spindle.sendToFrontend({type:'vn_cast_art_notice',chatId:plan.key.chatId,error:error instanceof Error?error.message:String(error)},userId);
+            }
+          }
+          if (!promptWasRewritten && (config.imageGenerationTrigger === "scene-change" || config.persistentLocationArt || cue.imageTemplate?.subjectMode === "none")) {
+            try {
+              const backdropIdentity = sceneImageIdentityFor(config, scene, cue, characterAppearance, provider, { source: "none" }, profile.cacheProfile);
+              await saveBackdropArt(spindle, plan.key.chatId, {
+                backdropDigest: backdropDigestOf(backdropIdentity),
+                beatDigest: beatDigestOf(backdropIdentity),
+                location: scene.environment.location,
+                imageId: result.imageId,
+              }, userId);
+            } catch {
+              // Non-fatal: backdrop indexing is opportunistic.
             }
           }
           if (cache && admission && cacheKey) {

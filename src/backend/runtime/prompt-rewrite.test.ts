@@ -227,3 +227,37 @@ test('reroll preserves full length and retries if the writer over-condenses a ri
  expect(calls[1].messages.at(-1).content).toContain('too short');
  expect(rewritten.prompt).toBe(richRetry.trim());
 });
+
+test('P4 #4: rewriteImagePrompt preserves [[LG_PIN_n]] pinned clauses across reroll and sanitizes positive-only dialects', async () => {
+  const { resolveImagePromptProfileV2 } = await import('../../shared/image-prompt-profile-v2.js');
+  const fluxProfile = resolveImagePromptProfileV2('nanogpt', 'blackforestlabs/flux-3/klein/text-to-image');
+  const draftReq = {
+    ...request,
+    model: 'blackforestlabs/flux-3/klein/text-to-image',
+    promptProfile: resolveImagePromptProfile('nanogpt', 'blackforestlabs/flux-3/klein/text-to-image'),
+    promptProfileV2: fluxProfile,
+    prompt: 'A medium shot at twilight. Mira watches the lanterns by the brass railing, photorealistic lighting.'
+  };
+  let seenUserMsg = '';
+  const { spindle, calls } = api([{
+    content: JSON.stringify({
+      prompt: 'Twilight settles over the balcony as Mira stands beside [[LG_PIN_0_0]] in warm amber glow.',
+      negativePrompt: ''
+    })
+  }]);
+  const rewritten = await rewriteImagePrompt(
+    spindle,
+    draftReq,
+    undefined,
+    normalizeConfig({}),
+    'pin-user',
+    new AbortController().signal,
+    'reroll',
+    ['by the brass railing, photorealistic lighting']
+  );
+  seenUserMsg = String(calls[0]?.messages[1]?.content ?? '');
+  expect(seenUserMsg).toContain('[[LG_PIN_0_0]]');
+  expect(rewritten.prompt).toContain('by the brass railing, lifelike natural lighting');
+  expect(rewritten.prompt).not.toContain('photorealistic');
+  expect(rewritten.prompt).not.toContain('[[LG_PIN_');
+});

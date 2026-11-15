@@ -175,18 +175,45 @@ export const RpgAtlasSchema = z.object({
 }).strict();
 export type RpgAtlas = z.infer<typeof RpgAtlasSchema>;
 
+export const ChoiceRequirementsSchema = z.object({
+  flags: z.array(z.string().trim().min(1).max(120)).max(8).optional(),
+  items: z.array(z.string().trim().min(1).max(120)).max(8).optional(),
+}).strict();
+export type ChoiceRequirements = z.infer<typeof ChoiceRequirementsSchema>;
+
+export const RpgCompanionDeltaSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  affinityDelta: z.number().int().min(-100).max(100).default(0),
+  status: z.string().trim().max(120).optional(),
+}).strict();
+
+export const RpgDeltasSchema = z.object({
+  hpDelta: z.number().int().min(-9999).max(9999).optional(),
+  staminaDelta: z.number().int().min(-9999).max(9999).optional(),
+  stressDelta: z.number().int().min(-100).max(100).optional(),
+  itemsAdded: z.array(z.string().trim().min(1).max(160)).max(12).optional(),
+  itemsRemoved: z.array(z.string().trim().min(1).max(160)).max(12).optional(),
+  flagsSet: z.record(z.string().trim().min(1).max(120), z.boolean()).optional(),
+  flagsCleared: z.array(z.string().trim().min(1).max(120)).max(16).optional(),
+  companionAffinityDeltas: z.array(RpgCompanionDeltaSchema).max(8).optional(),
+}).strict();
+export type RpgDeltas = z.infer<typeof RpgDeltasSchema>;
+
 export const RpgStateSchema = z.object({
   turnCounter: z.number().int().nonnegative().default(0),
   turnsSinceProgress: z.number().int().nonnegative().default(0),
   vitals: RpgVitalsSchema,
   quests: z.array(RpgQuestSchema).max(16).default([]),
   atlas: RpgAtlasSchema,
+  flags: z.record(z.string().trim().min(1).max(120), z.boolean()).default({}),
 }).strict();
 export type RpgState = z.infer<typeof RpgStateSchema>;
 
 export interface RpgTurnUpdate {
   personaName?: string | undefined;
+  dramaticProgress?: boolean | undefined;
   locations?: ReadonlyArray<{ location: string; description?: string | undefined }> | undefined;
+  rpgDeltas?: RpgDeltas | undefined;
   vitals?: {
     name?: string | undefined;
     level?: number | undefined;
@@ -219,24 +246,79 @@ export function reduceRpgState(previous: RpgState | null | undefined, update: Rp
   const baseVitals = previous?.vitals ?? RpgVitalsSchema.parse({ name: update.personaName || "Adventurer" });
   const maxHp = update.vitals?.maxHp ?? baseVitals.maxHp;
   const maxStamina = update.vitals?.maxStamina ?? baseVitals.maxStamina;
+  const deltas = update.rpgDeltas;
+  const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.trunc(n)));
+
+  const baseHp = update.vitals?.hp !== undefined ? update.vitals.hp : baseVitals.hp;
+  const baseStamina = update.vitals?.stamina !== undefined ? update.vitals.stamina : baseVitals.stamina;
+  const baseStress = update.vitals?.stress !== undefined ? update.vitals.stress : baseVitals.stress;
+  const nextHp = clamp(baseHp + (deltas?.hpDelta ?? 0), 0, maxHp);
+  const nextStamina = clamp(baseStamina + (deltas?.staminaDelta ?? 0), 0, maxStamina);
+  const nextStress = clamp(baseStress + (deltas?.stressDelta ?? 0), 0, 100);
+
+  let nextInventory = [...(update.vitals?.inventory ?? baseVitals.inventory)];
+  let progressed = Boolean(update.dramaticProgress);
+  if (deltas?.itemsRemoved?.length) {
+    const removeSet = new Set(deltas.itemsRemoved.map((item) => item.trim().toLowerCase()));
+    nextInventory = nextInventory.filter((item) => !removeSet.has(item.trim().toLowerCase()));
+  }
+  if (deltas?.itemsAdded?.length) {
+    for (const added of deltas.itemsAdded) {
+      const clean = added.trim();
+      if (clean && !nextInventory.some((existing) => existing.toLowerCase() === clean.toLowerCase())) {
+        nextInventory.push(clean);
+        progressed = true;
+      }
+    }
+  }
+  nextInventory = nextInventory.slice(0, 24);
+
+  const companionMap = new Map<string, RpgCompanion>();
+  for (const comp of update.vitals?.companions ?? baseVitals.companions) {
+    companionMap.set(comp.name.trim().toLowerCase(), { ...comp });
+  }
+  for (const delta of deltas?.companionAffinityDeltas ?? []) {
+    const key = delta.name.trim().toLowerCase();
+    const existing = companionMap.get(key);
+    if (existing) {
+      existing.affinity = clamp(existing.affinity + delta.affinityDelta, -100, 100);
+      if (delta.status) existing.status = delta.status;
+    } else {
+      companionMap.set(key, RpgCompanionSchema.parse({
+        name: delta.name,
+        affinity: clamp(delta.affinityDelta, -100, 100),
+        ...(delta.status ? { status: delta.status } : {}),
+      }));
+    }
+  }
+
+  const nextFlags: Record<string, boolean> = { ...(previous?.flags ?? {}) };
+  for (const key of deltas?.flagsCleared ?? []) {
+    delete nextFlags[key];
+  }
+  for (const [k, v] of Object.entries(deltas?.flagsSet ?? {})) {
+    if (nextFlags[k] !== v) progressed = true;
+    nextFlags[k] = v;
+  }
+  const trimmedFlags = Object.fromEntries(Object.entries(nextFlags).slice(-64));
+
   const nextVitals = RpgVitalsSchema.parse({
     ...baseVitals,
     name: update.vitals?.name?.trim() || update.personaName?.trim() || baseVitals.name,
     ...(update.vitals?.level !== undefined ? { level: update.vitals.level } : {}),
     ...(update.vitals?.archetype ? { archetype: update.vitals.archetype } : {}),
     maxHp,
-    hp: Math.min(maxHp, update.vitals?.hp ?? baseVitals.hp),
+    hp: nextHp,
     maxStamina,
-    stamina: Math.min(maxStamina, update.vitals?.stamina ?? baseVitals.stamina),
-    ...(update.vitals?.stress !== undefined ? { stress: update.vitals.stress } : {}),
+    stamina: nextStamina,
+    stress: nextStress,
     ...(update.vitals?.currency !== undefined ? { currency: update.vitals.currency } : {}),
-    ...(update.vitals?.inventory !== undefined ? { inventory: update.vitals.inventory } : {}),
+    inventory: nextInventory,
     ...(update.vitals?.statusEffects !== undefined ? { statusEffects: update.vitals.statusEffects } : {}),
-    ...(update.vitals?.companions !== undefined ? { companions: update.vitals.companions } : {}),
+    companions: [...companionMap.values()].slice(0, 8),
   });
 
   const questMap = new Map<string, RpgQuest>();
-  let progressed = false;
   for (const existing of previous?.quests ?? []) {
     questMap.set(existing.id, {
       ...existing,
@@ -247,7 +329,7 @@ export function reduceRpgState(previous: RpgState | null | undefined, update: Rp
     const id = q.id?.trim() || slugId("quest", q.title);
     const prev = questMap.get(id);
     const nextStatus = q.status ?? prev?.status ?? "active";
-    if (!prev || (prev.status !== "completed" && nextStatus === "completed")) progressed = true;
+    if (!prev || (prev.status !== "completed" && nextStatus === "completed") || prev.objective !== q.objective) progressed = true;
     questMap.set(
       id,
       RpgQuestSchema.parse({
@@ -304,26 +386,42 @@ export function reduceRpgState(previous: RpgState | null | undefined, update: Rp
       nodes,
       edges,
     },
+    flags: trimmedFlags,
   });
 }
 
-export function evaluateContextualSkillCheck(check: SkillCheck, vitals?: RpgVitals | null): SkillCheck {
-  if (!vitals) return check;
+export interface SkillCheckModifierSource {
+  label: string;
+  delta: number;
+  advantage?: boolean;
+}
+
+export function evaluateContextualSkillCheckDetailed(
+  check: SkillCheck,
+  vitals?: RpgVitals | null,
+): { check: SkillCheck; sources: SkillCheckModifierSource[] } {
+  const sources: SkillCheckModifierSource[] = [];
+  if (check.modifier) sources.push({ label: "Base", delta: check.modifier });
+  if (!vitals) return { check, sources };
   let mod = check.modifier ?? 0;
   let rollMode = check.rollMode ?? "normal";
   if (vitals.stress >= 80) {
     mod -= 1;
+    sources.push({ label: "High Stress", delta: -1 });
   }
   if (vitals.stamina <= 15 && (check.stat === "STR" || check.stat === "DEX" || check.stat === "CON")) {
     mod -= 1;
+    sources.push({ label: "Low Stamina", delta: -1 });
   }
   if ((check.stat === "CHA" || check.stat === "WIS") && vitals.companions.some((c) => c.affinity >= 50)) {
     mod += 1;
+    sources.push({ label: "Companion Bond", delta: 1 });
   }
   // High companion bond (>= 75) grants tactical/emotional edge -> advantage on relational/insight checks
   if ((check.stat === "CHA" || check.stat === "WIS") && vitals.companions.some((c) => c.affinity >= 75)) {
     if (rollMode === "normal") rollMode = "advantage";
     else if (rollMode === "disadvantage") rollMode = "normal";
+    sources.push({ label: "Bond Advantage", delta: 0, advantage: true });
   }
   // Matching key inventory gear lends +1 or advantage when check reason references the item
   const reasonLower = (check.reason ?? "").toLowerCase();
@@ -334,33 +432,68 @@ export function evaluateContextualSkillCheck(check: SkillCheck, vitals?: RpgVita
   if (matchingGear) {
     mod += 1;
     if (rollMode === "normal") rollMode = "advantage";
+    sources.push({ label: `Gear: ${matchingGear}`, delta: 1, advantage: true });
   }
   const clampedMod = Math.max(-10, Math.min(20, mod));
-  return { ...check, modifier: clampedMod, rollMode };
+  return { check: { ...check, modifier: clampedMod, rollMode }, sources };
 }
 
-export function buildRpgPromptGuidance(state: RpgState | null | undefined, mode: RpgMode): string {
+export function evaluateContextualSkillCheck(check: SkillCheck, vitals?: RpgVitals | null): SkillCheck {
+  return evaluateContextualSkillCheckDetailed(check, vitals).check;
+}
+
+export function evaluateChoiceGate(
+  requires: ChoiceRequirements | undefined,
+  customReason: string | undefined,
+  state: RpgState | null | undefined,
+): { locked: boolean; lockedReason: string | null } {
+  if (!requires) return { locked: false, lockedReason: null };
+  const flags = state?.flags ?? {};
+  const inventory = (state?.vitals.inventory ?? []).map((item) => item.trim().toLowerCase());
+  for (const requiredFlag of requires.flags ?? []) {
+    if (!flags[requiredFlag]) {
+      return { locked: true, lockedReason: customReason?.trim() || `Requires ${requiredFlag.replace(/[_-]+/g, " ")}` };
+    }
+  }
+  for (const requiredItem of requires.items ?? []) {
+    const needle = requiredItem.trim().toLowerCase();
+    const hasItem = inventory.some((owned) => owned === needle || owned.includes(needle));
+    if (!hasItem) {
+      return { locked: true, lockedReason: customReason?.trim() || `Requires ${requiredItem}` };
+    }
+  }
+  return { locked: false, lockedReason: null };
+}
+
+/** Static RPG schema & choice instructions (KV-cache safe for system prompt). */
+export function buildRpgStaticRules(mode: RpgMode): string {
   if (mode === "off") return "";
   const lines: string[] = [
     mode === "lite"
       ? "RPG SKILL CHECKS (LITE MODE):"
       : "STANDALONE RPG STATE & QUEST TRACKING (FULL MODE):",
     "- When generating choices where the outcome is risky, contested, or uncertain, attach an optional `check: { stat: 'STR'|'DEX'|'CON'|'INT'|'WIS'|'CHA'|'LUCK', dc: 5..30, modifier: -10..20, rollMode: 'normal'|'advantage'|'disadvantage', reason?: string }` to that choice.",
+    "- Choices may optionally declare `requires: { flags?: string[], items?: string[] }`, `lockedReason?: string`, and `setsFlags?: Record<string, boolean>` for gated story paths.",
     "- If the user's message begins with `[SKILL CHECK: ...]`, honor the rolled tier (`CRITICAL_SUCCESS`, `SUCCESS`, `PARTIAL`, `FAILURE`, `CRITICAL_FAILURE`) honestly in the story consequences without sycophancy.",
   ];
   if (mode === "full") {
     lines.push(
-      "- Also return an optional top-level `rpg: { vitals?: { name?, level?, archetype?, hp?, maxHp?, stamina?, maxStamina?, stress?, currency?, inventory?, statusEffects?, companions?: [{ name, hp, maxHp, affinity, status }] }, quests?: [{ id?, title, objective, status?: 'active'|'completed'|'failed', deadlineTurns?: number|null }] }` reflecting any story-established changes to vitals, inventory, companions, or quests.",
+      "- Also return optional `rpg: { vitals?, quests? }` AND additive `rpgDeltas: { hpDelta?, staminaDelta?, stressDelta?, itemsAdded?, itemsRemoved?, flagsSet?, flagsCleared?, companionAffinityDeltas?: [{ name, affinityDelta, status? }] }` reflecting story-established state changes.",
     );
-    if (state) {
-      const activeQuests = state.quests
-        .filter((q) => q.status === "active")
-        .map((q) => `${q.title} (${computeQuestUrgency(q)})`)
-        .join("; ");
-      lines.push(
-        `- Current RPG Snapshot (Turn ${state.turnCounter}, Pacing Pressure ${computePacingFrustrationMultiplier(state.turnsSinceProgress ?? state.turnCounter)}x): HP ${state.vitals.hp}/${state.vitals.maxHp}, STA ${state.vitals.stamina}/${state.vitals.maxStamina}, Stress ${state.vitals.stress}/100${activeQuests ? ` | Active Quests: ${activeQuests}` : ""}.`,
-      );
-    }
   }
   return lines.join("\n");
+}
+
+/** Dynamic per-turn RPG snapshot (routed to user turn delta bus so system prompt stays static). */
+export function buildRpgTurnSnapshot(state: RpgState | null | undefined, mode: RpgMode): string {
+  if (mode !== "full" || !state) return "";
+  const activeQuests = state.quests
+    .filter((q) => q.status === "active")
+    .map((q) => `${q.title} (${computeQuestUrgency(q)})`)
+    .join("; ");
+  return `- Current RPG Snapshot (Turn ${state.turnCounter}, Pacing Pressure ${computePacingFrustrationMultiplier(state.turnsSinceProgress ?? state.turnCounter)}x): HP ${state.vitals.hp}/${state.vitals.maxHp}, STA ${state.vitals.stamina}/${state.vitals.maxStamina}, Stress ${state.vitals.stress}/100${activeQuests ? ` | Active Quests: ${activeQuests}` : ""}.`;
+}
+
+export function buildRpgPromptGuidance(state: RpgState | null | undefined, mode: RpgMode): string {
+  return [buildRpgStaticRules(mode), buildRpgTurnSnapshot(state, mode)].filter(Boolean).join("\n");
 }

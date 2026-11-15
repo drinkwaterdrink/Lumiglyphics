@@ -30,7 +30,7 @@ export const ContextSourcesRequestSchema = z.object({type:z.literal("vn_get_cont
 export const RecoverImagesRequestSchema=z.object({type:z.literal('vn_recover_images'),...recoveryScope,revision:z.number().int().nonnegative(),action:z.enum(['stop','retry'])}).strict();
 const imageOperationScope = {chatId:z.string().min(1).max(128),messageId:z.string().min(1).max(128),sourceFingerprint:z.string().min(1).max(256)};
 const imageOperationEdits = z.object({prompt:z.string().trim().min(1).max(65000).optional(),negativePrompt:z.string().max(65000).optional(),parameters:z.record(z.string(),z.unknown()).optional()}).strict();
-const imagePromptOperation = {guidance:z.string().max(400).optional(),edits:imageOperationEdits.optional()};
+const imagePromptOperation = {guidance:z.string().max(400).optional(),edits:imageOperationEdits.optional(),pinnedClauses:z.array(z.string().trim().min(1).max(300)).max(8).optional()};
 export const RewriteImagePromptRequestSchema = z.object({type:z.enum(['vn_regenerate_image_prompt','vn_enrich_image_prompt']),...imageOperationScope,requestId:z.string().min(1).max(100),...imagePromptOperation}).strict();
 export const PrepareImageRequestSchema = z.object({type:z.literal('vn_prepare_image'),...imageOperationScope,jobId:z.string().min(1).max(200),templateId:z.string().min(1).max(100).optional(),...imagePromptOperation,regeneratePrompt:z.boolean().optional(),promptOperation:z.enum(['rewrite','enrich']).optional(),reframe:z.boolean().optional(),styleId:z.string().max(100).optional(),fitToModel:z.boolean().optional(),model:z.string().max(200).optional(),connectionId:z.string().max(200).optional(),quickGenerate:z.boolean().optional(),manualCamera:z.object({shotSize:z.string().optional(),angle:z.string().optional(),lensFeel:z.string().optional(),composition:z.string().optional(),depth:z.string().optional(),dialogueSafeArea:z.enum(['auto','always','off']).optional()}).strict().optional()}).strict();
 export const RestorePreviousImageRequestSchema=z.object({type:z.literal('vn_restore_previous_image'),...imageOperationScope,swipeId:z.number().int().nonnegative().nullable(),revision:z.number().int().nonnegative(),jobId:z.string().min(1).max(200),versionId:z.string().min(1).max(256)}).strict();
@@ -50,9 +50,9 @@ export type FrontendRequest =
   | z.infer<typeof SetCardRoleRequestSchema>
   | { type: "vn_reading_position"; position: ReadingPosition }
   | { type: "vn_image_review"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; action: "generate" | "skip"; edits?: ImageRequestEdits }
-  | { type:'vn_prepare_image';chatId:string;messageId:string;sourceFingerprint:string;jobId:string;templateId?:string;edits?:ImageRequestEdits;regeneratePrompt?:boolean;promptOperation?:'rewrite'|'enrich';guidance?:string;reframe?:boolean|undefined;styleId?:string|undefined;fitToModel?:boolean|undefined;model?:string|undefined;connectionId?:string|undefined;quickGenerate?:boolean|undefined;manualCamera?:{shotSize?:string|undefined;angle?:string|undefined;lensFeel?:string|undefined;composition?:string|undefined;depth?:string|undefined;dialogueSafeArea?:'auto'|'always'|'off'|undefined}|undefined }
-  | { type: "vn_regenerate_image_prompt"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; edits?: ImageRequestEdits | undefined; guidance?: string | undefined }
-  | { type: "vn_enrich_image_prompt"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; guidance?: string | undefined; edits?: ImageRequestEdits | undefined }
+  | { type:'vn_prepare_image';chatId:string;messageId:string;sourceFingerprint:string;jobId:string;templateId?:string;edits?:ImageRequestEdits;regeneratePrompt?:boolean;promptOperation?:'rewrite'|'enrich';guidance?:string;pinnedClauses?:string[]|undefined;reframe?:boolean|undefined;styleId?:string|undefined;fitToModel?:boolean|undefined;model?:string|undefined;connectionId?:string|undefined;quickGenerate?:boolean|undefined;manualCamera?:{shotSize?:string|undefined;angle?:string|undefined;lensFeel?:string|undefined;composition?:string|undefined;depth?:string|undefined;dialogueSafeArea?:'auto'|'always'|'off'|undefined}|undefined }
+  | { type: "vn_regenerate_image_prompt"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; edits?: ImageRequestEdits | undefined; guidance?: string | undefined; pinnedClauses?: string[] | undefined }
+  | { type: "vn_enrich_image_prompt"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; guidance?: string | undefined; edits?: ImageRequestEdits | undefined; pinnedClauses?: string[] | undefined }
   | z.infer<typeof RestorePreviousImageRequestSchema>
   | {
       type: "vn_reprepare_image_template";
@@ -92,6 +92,8 @@ export type FrontendRequest =
    * request that says nothing about the view never opens it).
    */
   | { type: "vn_get_state"; chatId?: string; viewOpen?: boolean; prepare?:boolean; requestId?: string }
+  /** Strict read-only snapshot lookup for a stored historical turn/swipe; never plans or generates. */
+  | { type: "vn_get_turn_snapshot"; chatId: string; messageId: string; swipeId?: number; requestId?: string }
   | { type: "vn_get_connection_catalog" }
   | { type: "vn_get_system_one_key_status" }
   | { type: "vn_set_system_one_key"; key: string }
@@ -168,6 +170,8 @@ export type AudioCueView = {
 };
 
 export type TurnView = {
+  /** True when returned from a strictly read-only historical inspection request (`vn_get_turn_snapshot`). */
+  historical?: boolean;
   sceneLocations?: import("./shared/scene-atmosphere.js").SceneLocation[];
   referenceHistory?:ReferenceHistory;
   /** Present only when the reply-cost setting is on. */
@@ -196,7 +200,7 @@ export type TurnView = {
   musicLimits?: Array<'quiet'|'mute'|null>;
   /** Per-paragraph persistent ambient effect ids; null entries mean no ambient. */
   ambients?: Array<string | null>;
-  choices: Array<{ id: string; label: string; value: string; check?: import("./shared/rpg-state.js").SkillCheck }>;
+  choices: Array<{ id: string; label: string; value: string; disabled?: boolean; lockedReason?: string; check?: import("./shared/rpg-state.js").SkillCheck; setsFlags?: Record<string, boolean> }>;
   rpgState?: import("./shared/rpg-state.js").RpgState;
   assets: AssetView[];
   imageRequests?: ImageRequestRecord[];
@@ -244,6 +248,7 @@ export type BackendResponse =
     errors?: ConnectionCatalogErrors;
   }
   | { type: "vn_turn"; turn: TurnView }
+  | { type: "vn_turn_snapshot"; chatId: string; messageId: string; swipeId: number; turn: TurnView | null; requestId?: string }
   | {type:'vn_reference_history_invalidated';chatId:string}
   | { type: "vn_asset"; chatId: string; messageId: string; asset: AssetView; sourceFingerprint?: string; swipeId?: number; revision?: number }
   | { type: "vn_planning"; chatId: string }
@@ -291,6 +296,7 @@ export function isFrontendRequest(value: unknown): value is FrontendRequest {
   if ((value as {type?:unknown}).type === "vn_correct_image_subject") return CorrectImageSubjectRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_set_card_role") return SetCardRoleRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_delete_image") return DeleteImageRequestSchema.safeParse(value).success;
+  if ((value as { type?: unknown }).type === "vn_get_turn_snapshot") return z.object({ type: z.literal("vn_get_turn_snapshot"), chatId: z.string().min(1).max(128), messageId: z.string().min(1).max(128), swipeId: z.number().int().min(0).optional(), requestId: z.string().min(1).max(128).optional() }).strict().safeParse(value).success;
   if ((value as { type?: unknown }).type === "vn_reading_position") return ReadingPositionSchema.safeParse((value as { position?: unknown }).position).success;
   return typeof (value as { type?: unknown }).type === "string"
     && String((value as { type: string }).type).startsWith("vn_");

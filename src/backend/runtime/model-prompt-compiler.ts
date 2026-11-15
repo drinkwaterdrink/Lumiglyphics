@@ -106,11 +106,12 @@ export function compileModelPrompt(input: ModelPromptCompilerInput): ModelPrompt
 
   const isTagDialect = profile.dialect === 'anima' || profile.dialect === 'generic-tags' || profile.dialect === 'novelai';
   let sections: PromptSection[] = serialized.document.sections.map(sec => {
-    // Protect real resolved styles (where styleDNA.preserve is set) from being dropped at Stage 2/3 of budget fitting
-    if (styleDNA.preserve && STYLE_SECTION_IDS.has(sec.id)) {
-      return { ...sec, priority: 1, compressible: false };
-    }
-    return sec;
+    if (!STYLE_SECTION_IDS.has(sec.id)) return sec;
+    // Always protect style sections above generic P2 fluff: locked styles (`styleDNA.preserve`)
+    // stay P1 non-compressible, while unlocked styles keep a reservable P1 compressible slice.
+    return styleDNA.preserve
+      ? { ...sec, priority: 1, compressible: false }
+      : { ...sec, priority: 1, compressible: true };
   });
 
   // 3b. Inject custom Style Prefix at P0 (front-loaded opening authority) and Style Suffix at P0/P1

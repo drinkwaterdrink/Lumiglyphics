@@ -831,6 +831,7 @@ export class VisualNovelSettingsPanel {
             <p data-generation-inactive hidden>Generation settings are kept. Choose Generate illustrations to use them.</p>
             <div data-generated-only>
               <label data-check ${find('Data saver','pause automatic images metered network calls activity')}><input name="dataSaverMode" type="checkbox"><span>Data saver<small>Off by default. Pause unsent automatic image calls. Saved artwork and prompt previews remain available. Approve individual pictures to generate them. Calls already sent may finish and bill.</small></span></label>
+              <label data-field ${find("Image generation trigger", "image generation trigger per beat scene change only save tokens calls")}><span>When pictures generate</span><select name="imageGenerationTrigger"><option value="per-beat">Every visual beat (Default)</option><option value="scene-change">Scene change only (Reuse backdrop &amp; skip dialogue-only beats)</option></select><small>Every visual beat draws cues as planned. Scene change only generates once per new room or setting jump and reuses saved backdrops when revisiting.</small></label>
               ${group("Prompt review", `<label data-check><input name="reviewImages" type="checkbox" /><span>Review before generating<small>Applies to the next image batch. Hold pictures to inspect and edit their prompts in the Image prompts panel. The inspector stays available in automatic mode.</small></span></label>`, { find: find("Prompt review", "inspect approve preview prompts automatic") })}
               ${group("Pictures per reply", `
                 <fieldset aria-label="Pictures per reply">
@@ -1772,6 +1773,7 @@ export class VisualNovelSettingsPanel {
       case "enabled": return {enabled:checked};
       case "mode": return { mode: target.value === "cyoa" ? "cyoa" : "standard" };
       case "rpgMode": return { rpgMode: normalizeRpgMode(target.value) };
+      case "imageGenerationTrigger": return { imageGenerationTrigger: target.value === "scene-change" ? "scene-change" : "per-beat" };
       case "skipMode": return { skipMode: target.value === "all" ? "all" : "read" };
       case "generateChoices": return { generateChoices: checked };
       case "showReplyCost": return { showReplyCost: checked };
@@ -2407,6 +2409,7 @@ export class VisualNovelSettingsPanel {
 
     this.control<HTMLSelectElement>("mode").value = config.mode;
     this.control<HTMLSelectElement>("rpgMode").value = config.rpgMode;
+    this.control<HTMLSelectElement>("imageGenerationTrigger").value = config.imageGenerationTrigger;
     this.control<HTMLSelectElement>("skipMode").value = config.skipMode;
     this.control<HTMLInputElement>("generateChoices").checked = config.generateChoices;
     this.control<HTMLInputElement>("autoEnter").checked = config.autoEnter;

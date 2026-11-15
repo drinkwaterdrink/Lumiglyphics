@@ -41,6 +41,9 @@ export type Flux3KleinPromptMode = (typeof FLUX3_KLEIN_PROMPT_MODES)[number];
  * - "card": one fixed sprite per character resolved from the card's assets. Characters the card
  *   does not know still use captured renders.
  */
+export const IMAGE_GENERATION_TRIGGERS = ["per-beat", "scene-change"] as const;
+export type ImageGenerationTrigger = (typeof IMAGE_GENERATION_TRIGGERS)[number];
+
 export const REFERENCE_SOURCES = ["captured", "card"] as const;
 export type VisualNovelReferenceSource = (typeof REFERENCE_SOURCES)[number];
 
@@ -97,6 +100,7 @@ export type VisualNovelConfig = {
   /** Show a per-reply line of model calls, tokens and images in the reader. Off by default. */
   showReplyCost: boolean;
   generateImages: boolean;
+  imageGenerationTrigger: ImageGenerationTrigger;
   reviewImages: boolean;
   dynamicImageTemplates: boolean;
   defaultImageTemplateId: string;
@@ -198,6 +202,7 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   debugLogging: false,
   showReplyCost: false,
   generateImages: true,
+  imageGenerationTrigger: "per-beat",
   reviewImages: true,
   dynamicImageTemplates: false,
   defaultImageTemplateId: "portrait",
@@ -441,6 +446,7 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     debugLogging: bool(input.debugLogging, DEFAULT_CONFIG.debugLogging),
     showReplyCost: bool(input.showReplyCost, DEFAULT_CONFIG.showReplyCost),
     generateImages: bool(input.generateImages, DEFAULT_CONFIG.generateImages),
+    imageGenerationTrigger: input.imageGenerationTrigger === "scene-change" ? "scene-change" : "per-beat",
     reviewImages: bool(input.reviewImages, DEFAULT_CONFIG.reviewImages),
     dynamicImageTemplates: bool(input.dynamicImageTemplates, false),
     defaultImageTemplateId: nullableString(input.defaultImageTemplateId) ?? "portrait",

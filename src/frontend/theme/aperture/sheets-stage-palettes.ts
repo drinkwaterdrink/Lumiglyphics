@@ -90,10 +90,10 @@ aside[data-vn-workspace] > header > div {
 [data-workspace-back],
 .workspace-back-btn:not(.has-label),
 [data-workspace-close] {
-  width: 34px !important;
-  height: 34px !important;
-  min-width: 34px !important;
-  min-height: 34px !important;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   border-radius: 50% !important;
   background: var(--vn-shell-button, rgba(255, 255, 255, 0.08)) !important;
   border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.18)) !important;
@@ -114,7 +114,7 @@ aside[data-vn-workspace] > header > div {
 }
 
 .workspace-back-btn.has-label {
-  height: 34px !important;
+  min-height: 44px;
   border-radius: 8px !important;
   padding: 0 12px !important;
   width: auto !important;
@@ -502,7 +502,7 @@ body.theme-light [data-surface="settings"]:before,
 }
 .chip {
   flex: 0 0 auto !important;
-  height: 34px !important;
+  min-height: 44px;
   min-width: 68px !important;
   padding: 0 16px !important;
   border-radius: 999px !important;
@@ -1080,7 +1080,7 @@ section[data-reference-observations] h3 {
 
 [data-vn-backlog-search] {
   flex: 1 !important;
-  min-height: 34px !important;
+  min-height: 44px;
   padding: 6px 12px !important;
   font-size: 13px !important;
   background: rgba(16, 26, 30, 0.7) !important;

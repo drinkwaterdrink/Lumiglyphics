@@ -83,7 +83,9 @@ export interface VnChoice {
   label: string;
   value: string;
   disabled?: boolean;
+  lockedReason?: string;
   check?: SkillCheck;
+  setsFlags?: Record<string, boolean>;
 }
 
 export interface VnSceneImage {

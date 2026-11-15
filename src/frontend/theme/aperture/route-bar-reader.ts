@@ -59,8 +59,10 @@ body.theme-dark .route-bar,
 }
 
 .route-bar .route-actions button {
-  width: 38px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   border: 0;
   border-radius: 11px;
   display: grid;
@@ -320,9 +322,9 @@ aside[data-vn-workspace] {
   left: 15px !important;
   right: 15px !important;
   top: auto !important;
-  bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
   height: var(--caption-height, 142px);
-  min-height: 100px !important;
+  min-height: 48px;
   max-height: calc(100% - 160px) !important;
   padding: 16px 14px 8px !important;
   border: 1px solid rgba(224, 238, 217, 0.32) !important;
@@ -361,10 +363,10 @@ aside[data-vn-workspace] {
 /* Draggable Top Resize Grip */
 .resize-grip {
   position: absolute !important;
-  top: 0 !important;
+  top: -12px;
   left: 0 !important;
   right: 0 !important;
-  height: 24px !important;
+  height: 44px; min-height: 44px;
   display: flex !important;
   justify-content: center !important;
   align-items: center !important;
@@ -452,8 +454,10 @@ aside[data-vn-workspace] {
 }
 
 .caption-tool {
-  width: 26px !important;
-  height: 24px !important;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   display: grid !important;
   place-items: center !important;
   color: #f0f4e7 !important;
@@ -584,10 +588,10 @@ aside[data-vn-workspace] {
 }
 
 .round-ghost {
-  width: 34px !important;
-  height: 34px !important;
-  min-width: 34px !important;
-  min-height: 34px !important;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   border-radius: 50% !important;
   border: 1px solid var(--aperture-button-border, rgba(245, 249, 240, 0.34)) !important;
   background: var(--aperture-ghost-bg, rgba(5, 15, 19, 0.5)) !important;
@@ -648,7 +652,7 @@ aside[data-vn-workspace] {
 [data-vn-root] .reader-actions {
   position: absolute !important;
   inset: auto 0 0 !important;
-  bottom: 0 !important;
+  bottom: var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px)) !important;
   left: 0 !important;
   right: 0 !important;
   height: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
@@ -669,7 +673,6 @@ aside[data-vn-workspace] {
 }
 
 /* Hide legacy clean-restore unless active, and hide dialogue footer passage label */
-[data-vn-clean-restore],
 [data-vn-clean-restore][hidden],
 .caption-foot,
 [data-vn-dialogue-footer] {

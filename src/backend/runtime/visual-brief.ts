@@ -13,6 +13,7 @@ import { formatCharacterDNAForImagePrompt, optimizeAppearanceTextForImagePrompt,
 import { isScenarioTitle } from "../../shared/card-role.js";
 import { areNamesEquivalent, findMatchingCharacterId } from "../../shared/nicknames.js";
 import { deriveShortAliases, findMatchingLocation, findMatchingItem, formatLocationDNAForImagePrompt, formatItemDNAForImagePrompt, matchesBoundaryCandidate, type StoryDNASet } from "../../shared/story-dna.js";
+import { isEnclosedInterior } from "../../shared/scene-atmosphere.js";
 
 const text = (values: (string | null | undefined)[], max = 4000) => [...new Set(values.map(value => value?.trim()).filter(Boolean))].join("; ").slice(0, max);
 
@@ -39,23 +40,78 @@ export function sanitizeVisualNarrativeDescription(raw?: string | null): string 
  * Enriches base lighting with filmic chromatic LUT color-grading cues inferred from narrative mood
  * when the existing lighting string does not already carry explicit color-temperature/LUT direction.
  */
-export function enrichLightingWithChromaticLut(baseLighting?: string | null, narrativeContext?: string | null): string {
+export interface ColorScriptKeyframe {
+  enclosure: "interior" | "exterior";
+  lighting: string;
+}
+
+/**
+ * Deterministic Seat 1 ColorScript keyframe: resolves enclosure-safe key/fill/rim lighting
+ * + optional Chromatic LUT grading without adding negated light words or outdoor spill indoors.
+ */
+export function deriveColorScriptKeyframe(input: {
+  baseLighting?: string | null;
+  location?: string | null;
+  timeOfDay?: string | null;
+  weather?: string | null;
+  description?: string | null;
+  narrativeContext?: string | null;
+  chromaticLutEnabled?: boolean;
+}): ColorScriptKeyframe {
+  const loc = (input.location ?? "").trim();
+  const desc = (input.description ?? "").trim();
+  const ctxText = `${desc} ${input.narrativeContext ?? ""}`;
+  const interior = loc ? isEnclosedInterior(loc, desc) : false;
+  const enclosure: "interior" | "exterior" = interior ? "interior" : "exterior";
+  const hasWindow = /\b(?:window|windows|skylight|glass\s+roof|balcony\s+door)\b/i.test(ctxText);
+
+  let base = sanitizeVisualNarrativeDescription(input.baseLighting);
+  if (!base) {
+    const tod = (input.timeOfDay ?? "").toLowerCase();
+    const weather = (input.weather ?? "").toLowerCase();
+    if (interior && !hasWindow) {
+      base = /\b(?:night|midnight|dark|late)\b/.test(tod)
+        ? "warm ambient interior key light, soft shadow fill"
+        : "diffused interior ambient key light, soft fill";
+    } else if (/\b(?:night|midnight)\b/.test(tod)) {
+      base = "cool moonlit rim light, deep indigo shadows";
+    } else if (/\b(?:dusk|sunset|twilight)\b/.test(tod)) {
+      base = "warm low-angle amber key light, cool lavender shadow fill";
+    } else if (/\b(?:rain|storm|overcast|fog)\b/.test(weather)) {
+      base = "soft overcast diffused daylight, gentle contrast";
+    }
+  }
+  if (input.chromaticLutEnabled === false) {
+    return { enclosure, lighting: sanitizeVisualNarrativeDescription(base) };
+  }
+  const enriched = enrichLightingWithChromaticLut(base, `${ctxText} ${input.timeOfDay ?? ""}`, { interior, hasWindow });
+  return { enclosure, lighting: sanitizeVisualNarrativeDescription(enriched) };
+}
+
+export function enrichLightingWithChromaticLut(
+  baseLighting?: string | null,
+  narrativeContext?: string | null,
+  enclosureOpts?: { interior?: boolean; hasWindow?: boolean }
+): string {
   const base = (baseLighting ?? "").trim();
   const ctx = (narrativeContext ?? "").toLowerCase();
   if (!ctx) return base;
   if (/\b(?:kelvin|lut|teal-and-amber|tungsten|halation|color\s*grade|chromatic)\b/i.test(base)) {
     return base;
   }
+  const blockOutdoorFlare = Boolean(enclosureOpts?.interior && !enclosureOpts?.hasWindow);
   let lutCue = "";
   if (/\b(?:blood|ambush|alarm|siren|betray|blade|threat|panic|tense|danger|murder)\b/.test(ctx)) {
     lutCue = "teal-and-amber dramatic rim lighting, deep shadows";
   } else if (/\b(?:hearth|fireplace|tavern|candle|embrace|kiss|tender|warmth|cozy|intimate)\b/.test(ctx)) {
     lutCue = "warm tungsten halation, soft golden rim highlights";
   } else if (/\b(?:grief|funeral|tears|despair|frost|blizzard|lonely|bleak|sorrow|overcast)\b/.test(ctx)) {
-    lutCue = "cool cyan-slate overcast color grade, muted midtones";
+    lutCue = blockOutdoorFlare
+      ? "muted slate interior fill, soft shadowed contours"
+      : "cool cyan-slate overcast color grade, muted midtones";
   } else if (/\b(?:arcane|ritual|portal|mana|neon|cyber|hologram|synth|bioluminesc)\b/.test(ctx)) {
     lutCue = "violet-and-cyan specular split lighting, luminous bounce";
-  } else if (/\b(?:sunrise|sunset|golden hour|dusk|twilight)\b/.test(ctx)) {
+  } else if (!blockOutdoorFlare && /\b(?:sunrise|sunset|golden hour|dusk|twilight)\b/.test(ctx)) {
     lutCue = "golden-hour directional rim flare, warm atmospheric haze";
   }
   if (!lutCue) return base;
@@ -277,7 +333,15 @@ export function buildVisualBrief(
     subjects: noPeople ? "" : ensemble ? group : text([subjectLabel, appearance, template.category === "portrait" ? pose : ""]),
     action: noPeople ? (template.category === "detail" || template.category === "custom" ? text([(cue.visualFocus ?? "").slice(0, 1200), ...activeItemClauses], 2400) : text([...activeItemClauses], 2400)) : text([cleanedVisualDescription, ...activeItemClauses, compileActionProp(cue.action), template.category === "portrait" ? "" : pose]),
     composition: `${cue.shotHint?.preferredShotSize ?? template.framing}; ${cue.shotHint?.preferredAngle ? `${cue.shotHint.preferredAngle} perspective` : template.cameraPolicy === "fixed" ? "eye-level view" : "dynamic narrative perspective"}; ${noPeople ? "no people" : ensemble ? (cue.shotHint?.spatialRelationships?.length ? `${members.length} visible characters staged naturally in the scene (${cue.shotHint.spatialRelationships.slice(0, 4).join("; ")})${cue.shotHint.sceneStagingNote ? `; ${cue.shotHint.sceneStagingNote}` : ""}` : `${members.length} visible characters staged naturally across room depths in active posture, including every listed subject; distinct faces and silhouettes`) : "one visible character"}; keep the lower quarter clear for dialogue`,
-    lighting: config.chromaticLutEnabled !== false ? enrichLightingWithChromaticLut(text([environment.lighting, locDNA?.lighting], 1000), `${cleanedVisualDescription} ${environment.description ?? ""} ${environment.weather ?? ""}`) : text([environment.lighting, locDNA?.lighting], 1000),
+    lighting: deriveColorScriptKeyframe({
+      baseLighting: text([environment.lighting, locDNA?.lighting], 1000),
+      location: environment.location,
+      timeOfDay: environment.timeOfDay,
+      weather: environment.weather,
+      description: environment.description,
+      narrativeContext: cleanedVisualDescription,
+      chromaticLutEnabled: config.chromaticLutEnabled !== false
+    }).lighting,
     subjectMode: template.subjectMode,
     framing: template.framing,
     referencePolicy: noPeople || ensemble ? "none" : template.referencePolicy,

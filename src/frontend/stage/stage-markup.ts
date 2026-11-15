@@ -102,8 +102,9 @@ export const THEME_MARKUP = `
           <div class="speaker"><span data-vn-speaker></span><span class="caption-split">/</span><span data-vn-caption-scene>SCENE</span></div>
         </div>
         <div class="scroll-copy">
-          <p data-vn-dialogue-text aria-live="polite" aria-atomic="true"></p>
+          <p data-vn-dialogue-text></p>
         </div>
+        <div data-vn-dialogue-live class="sr-only" aria-live="polite" aria-atomic="true"></div>
         <div data-vn-dialogue-footer class="caption-foot" style="display:none">
           <span data-vn-progress></span>
           <span class="caption-foot-dot">✧</span>

@@ -1,12 +1,13 @@
 import {
   computePacingFrustrationMultiplier,
   computeQuestUrgency,
-  evaluateContextualSkillCheck,
+  evaluateContextualSkillCheckDetailed,
   formatSkillCheckSubmission,
   resolveSkillCheck,
   type RpgMode,
   type RpgState,
   type SkillCheck,
+  type SkillCheckModifierSource,
   type SkillCheckOutcome,
 } from "../../shared/rpg-state.js";
 import type { VnChoice } from "../store/vn-store.js";
@@ -30,14 +31,17 @@ export const RPG_HUD_CSS = `
 }
 [data-vn-rpg-bar] {
   position: absolute;
-  top: 14px;
-  left: 64px;
+  top: calc(var(--reader-header, 56px) + env(safe-area-inset-top, 0px) + 8px);
+  left: max(12px, env(safe-area-inset-left, 0px));
+  max-width: calc(100% - 24px);
+  min-height: 44px;
   z-index: 32;
   pointer-events: auto;
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  padding: 5px 12px;
+  gap: 8px 10px;
+  padding: 6px 14px;
   border-radius: 999px;
   background: var(--vn-surface, rgba(14, 17, 26, 0.84));
   border: 1px solid var(--vn-border, rgba(255, 255, 255, 0.16));
@@ -48,6 +52,14 @@ export const RPG_HUD_CSS = `
   backdrop-filter: blur(12px);
   transition: transform 140ms ease, border-color 140ms ease;
 }
+@media (max-width: 760px) {
+  [data-vn-rpg-bar] {
+    top: calc(58px + env(safe-area-inset-top, 0px));
+    left: 12px;
+    right: 12px;
+    justify-content: space-between;
+  }
+}
 [data-vn-rpg-bar]:hover {
   transform: translateY(-1px);
   border-color: var(--vn-accent, #7c9cff);
@@ -55,13 +67,27 @@ export const RPG_HUD_CSS = `
 [data-vn-rpg-bar][hidden] {
   display: none !important;
 }
+[data-vn-choice-lock] {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: rgba(248, 113, 113, 0.14);
+  border: 1px solid rgba(248, 113, 113, 0.36);
+  color: rgba(254, 202, 202, 0.92);
+}
 [data-vn-rpg-theatre] {
   position: absolute;
   top: 64px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 48;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -152,6 +178,16 @@ export const RPG_HUD_CSS = `
   background: color-mix(in srgb, var(--vn-text, #ffffff) 5%, transparent);
   border: 1px solid var(--vn-border, rgba(255, 255, 255, 0.1));
 }
+[data-vn-rpg-theatre][data-roll-phase="rolling"] .vn-rpg-roll-total {
+  opacity: 0.45;
+  transform: scale(0.92);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+.vn-rpg-breakdown {
+  font-size: 0.72rem;
+  opacity: 0.82;
+  letter-spacing: 0.02em;
+}
 `;
 
 const TIER_LABELS: Record<SkillCheckOutcome["tier"], string> = {
@@ -170,6 +206,24 @@ function esc(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/** Format an itemized skill-check roll breakdown string for UI and tooltips. */
+export function formatSkillCheckBreakdown(
+  natural: number,
+  check: SkillCheck,
+  sources: SkillCheckModifierSource[],
+  total: number,
+): string {
+  const parts = [`d20(${natural})`];
+  for (const src of sources) {
+    if (src.delta !== 0) {
+      parts.push(`${src.delta > 0 ? `+${src.delta}` : `${src.delta}`} ${src.label}`);
+    } else if (src.advantage) {
+      parts.push(src.label);
+    }
+  }
+  return `${parts.join(" · ")} = ${total} vs DC ${check.dc}`;
+}
+
 export class RpgStageController {
   private rpgMode: RpgMode = "off";
   private rpgState: RpgState | null = null;
@@ -178,6 +232,7 @@ export class RpgStageController {
   private theatreEl: HTMLElement | null = null;
   private drawerEl: HTMLElement | null = null;
   private theatreTimer: ReturnType<typeof setTimeout> | null = null;
+  private settleTimer: ReturnType<typeof setTimeout> | null = null;
 
   mount(stageEl: HTMLElement, hudEl: HTMLElement): void {
     const bar = document.createElement("button");
@@ -197,6 +252,8 @@ export class RpgStageController {
     theatre.hidden = true;
     theatre.setAttribute("role", "status");
     theatre.setAttribute("aria-live", "polite");
+    theatre.title = "Click to dismiss";
+    theatre.addEventListener("click", () => this.dismissTheatre());
     stageEl.appendChild(theatre);
     this.theatreEl = theatre;
 
@@ -210,11 +267,22 @@ export class RpgStageController {
     this.drawerEl = drawer;
   }
 
-  destroy(): void {
+  private dismissTheatre(): void {
     if (this.theatreTimer) {
       clearTimeout(this.theatreTimer);
       this.theatreTimer = null;
     }
+    if (this.settleTimer) {
+      clearTimeout(this.settleTimer);
+      this.settleTimer = null;
+    }
+    if (this.theatreEl) {
+      this.theatreEl.hidden = true;
+    }
+  }
+
+  destroy(): void {
+    this.dismissTheatre();
     this.barEl?.remove();
     this.theatreEl?.remove();
     this.drawerEl?.remove();
@@ -238,8 +306,15 @@ export class RpgStageController {
   }
 
   decorateChoiceButton(button: HTMLButtonElement, choice: VnChoice): void {
+    if (choice.disabled && choice.lockedReason) {
+      const lockPill = document.createElement("span");
+      lockPill.dataset.vnChoiceLock = "";
+      lockPill.textContent = `🔒 ${choice.lockedReason}`;
+      button.appendChild(lockPill);
+      button.title = choice.lockedReason;
+    }
     if (this.rpgMode === "off" || !choice.check) return;
-    const check = evaluateContextualSkillCheck(choice.check, this.rpgState?.vitals);
+    const { check, sources } = evaluateContextualSkillCheckDetailed(choice.check, this.rpgState?.vitals);
     const modStr = check.modifier > 0 ? ` +${check.modifier}` : check.modifier < 0 ? ` ${check.modifier}` : "";
     const rollTag = check.rollMode === "advantage" ? " · ADV" : check.rollMode === "disadvantage" ? " · DIS" : "";
     const needed = check.dc - check.modifier;
@@ -250,6 +325,11 @@ export class RpgStageController {
         ? Math.pow(singleProb, 2)
         : singleProb;
     const pct = Math.round(odds * 100);
+    if (sources.length > 0 && !button.title) {
+      button.title = sources
+        .map((src) => `${src.label}: ${src.delta >= 0 ? `+${src.delta}` : src.delta}${src.advantage ? " (ADV)" : ""}`)
+        .join(", ");
+    }
     const badge = document.createElement("span");
     badge.dataset.vnChoiceCheck = "";
     badge.style.cssText = "display:inline-flex;align-items:center;gap:6px;margin-left:8px;font-size:0.78em;transform:perspective(220px) rotateX(4deg);";
@@ -265,20 +345,30 @@ export class RpgStageController {
   }
 
   resolveChoiceSubmission(choice: VnChoice): string {
-    if (this.rpgMode === "off" || !choice.check) return choice.value;
-    const outcome = resolveSkillCheck(evaluateContextualSkillCheck(choice.check, this.rpgState?.vitals));
-    this.showRollTheatre(outcome);
-    return formatSkillCheckSubmission(choice.value, outcome);
+    let payload = choice.value;
+    if (this.rpgMode !== "off" && choice.setsFlags && Object.keys(choice.setsFlags).length > 0) {
+      const flagPairs = Object.entries(choice.setsFlags)
+        .map(([key, val]) => `${key}=${val ? "true" : "false"}`)
+        .join(", ");
+      payload = `${payload}\n[FLAGS: ${flagPairs}]`;
+    }
+    if (this.rpgMode === "off" || !choice.check) return payload;
+    const { check, sources } = evaluateContextualSkillCheckDetailed(choice.check, this.rpgState?.vitals);
+    const outcome = resolveSkillCheck(check);
+    this.showRollTheatre(outcome, sources);
+    return formatSkillCheckSubmission(payload, outcome);
   }
 
   onRollEffect?: (effect: "shake_hard" | "zoom_punch") => void;
 
-  private showRollTheatre(outcome: SkillCheckOutcome): void {
+  private showRollTheatre(outcome: SkillCheckOutcome, sources: SkillCheckModifierSource[] = []): void {
     if (!this.theatreEl) return;
     if (this.theatreTimer) clearTimeout(this.theatreTimer);
+    if (this.settleTimer) clearTimeout(this.settleTimer);
     const { check, rolls, natural, total, tier } = outcome;
     const rollDetail = rolls.length > 1 ? `2d20(${rolls.join(", ")}) → ${natural}` : `d20(${natural})`;
     const modStr = check.modifier > 0 ? `+${check.modifier}` : check.modifier < 0 ? `${check.modifier}` : "+0";
+    const breakdown = formatSkillCheckBreakdown(natural, check, sources, total);
     const d20Svg = `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:middle;margin-right:4px;"><polygon points="12,2 21,7 21,17 12,22 3,17 3,7" fill="rgba(124,156,255,0.22)" stroke="currentColor" stroke-width="1.6"/><text x="12" y="15.5" text-anchor="middle" fill="currentColor" font-size="9" font-weight="800">${natural}</text></svg>`;
     const critAccent = tier === "critical_success"
       ? "border-color:rgba(250,204,21,0.7);box-shadow:0 0 28px rgba(250,204,21,0.32);"
@@ -289,14 +379,19 @@ export class RpgStageController {
       this.theatreEl.style.cssText += critAccent;
       this.onRollEffect?.(tier === "critical_success" ? "zoom_punch" : "shake_hard");
     }
+    this.theatreEl.dataset.rollPhase = "rolling";
     this.theatreEl.innerHTML = `
       <div style="font-size:0.72rem;letter-spacing:0.08em;opacity:0.85;display:inline-flex;align-items:center;justify-content:center;">${d20Svg}${esc(check.stat)} SKILL CHECK (DC ${check.dc})</div>
       <div style="font-size:1rem;font-weight:700;">${esc(TIER_LABELS[tier])}</div>
-      <div style="font-size:0.78rem;opacity:0.88;">${esc(rollDetail)} ${modStr} = <b>${total}</b> vs DC ${check.dc}</div>
+      <div class="vn-rpg-roll-total" style="font-size:0.78rem;opacity:0.88;">${esc(rollDetail)} ${modStr} = <b>${total}</b> vs DC ${check.dc}</div>
+      <div class="vn-rpg-breakdown">${esc(breakdown)}</div>
     `;
     this.theatreEl.hidden = false;
+    this.settleTimer = setTimeout(() => {
+      if (this.theatreEl) this.theatreEl.dataset.rollPhase = "settled";
+    }, 450);
     this.theatreTimer = setTimeout(() => {
-      if (this.theatreEl) this.theatreEl.hidden = true;
+      this.dismissTheatre();
     }, 4200);
   }
 

@@ -21,6 +21,20 @@ const PROTECTED_STYLE_IDS = new Set([
 function deduplicateAndBoundText(raw: string, maxChars: number): string {
   const trimmed = raw.trim();
   if (!trimmed) return '';
+  const looksLikeTagList = trimmed.includes(',') && !/[.!?](?:\s|$)/.test(trimmed);
+  if (looksLikeTagList) {
+    const tags = trimmed.split(/,\s*/).map(t => t.trim()).filter(Boolean);
+    const seen = new Set<string>();
+    const kept: string[] = [];
+    for (const tag of tags) {
+      const norm = tag.toLowerCase();
+      if (seen.has(norm)) continue;
+      seen.add(norm);
+      const next = kept.length ? `${kept.join(', ')}, ${tag}` : tag;
+      if (next.length <= maxChars) kept.push(tag);
+    }
+    return kept.join(', ');
+  }
   // First deduplicate repeated sentences/clauses in verbose environment blocks
   const parts = trimmed.split(/(?<=[.!?])\s+|\s*;\s*/).map(p => p.trim()).filter(Boolean);
   const uniqueParts: string[] = [];
@@ -169,24 +183,65 @@ export function fitPromptDocumentToBudget(
     }
   }
 
-  // Stage 3: Drop all remaining P2 sections if still over budget
+  // Stage 3: Drop remaining non-style P2 sections; keep a reserved style slice
+  // until compressible P1 environment/camera fluff has been shed.
+  const withoutUnprotectedP2 = currentSections.filter(s => s.priority !== 2 || PROTECTED_STYLE_IDS.has(s.id));
+  if (withoutUnprotectedP2.length < currentSections.length) {
+    currentSections = withoutUnprotectedP2;
+    prompt = assemblePromptSections(currentSections, separator);
+    if (prompt.length <= maxBudget) {
+      warnings.push(`Prompt fitted by removing non-essential secondary sections while preserving primary style (${prompt.length}/${maxBudget} chars).`);
+      return {
+        document: { ...document, sections: currentSections, warnings },
+        prompt,
+        fitted: true,
+        warnings
+      };
+    }
+  }
+
+  // Stage 4: Drop compressible P1 sections (camera/environment extras) before style
+  const withoutCompressibleP1 = currentSections.filter(s => !(s.priority === 1 && s.compressible && !PROTECTED_STYLE_IDS.has(s.id)));
+  if (withoutCompressibleP1.length < currentSections.length) {
+    currentSections = withoutCompressibleP1;
+    prompt = assemblePromptSections(currentSections, separator);
+    if (prompt.length <= maxBudget) {
+      warnings.push(`Prompt fitted by condensing camera and environment details while preserving primary style (${prompt.length}/${maxBudget} chars).`);
+      return {
+        document: { ...document, sections: currentSections, warnings },
+        prompt,
+        fitted: true,
+        warnings
+      };
+    }
+  }
+
+  // Stage 4.25: Condense protected style down to a reserved slice (>= 48 chars or ~16% of budget)
+  const reservedStyleIdx = currentSections.findIndex(s => PROTECTED_STYLE_IDS.has(s.id) && s.compressible && s.text.length > 48);
+  if (reservedStyleIdx !== -1 && prompt.length > maxBudget) {
+    const styleSec = currentSections[reservedStyleIdx]!;
+    const minStyleSlice = Math.max(48, Math.floor(maxBudget * 0.16));
+    const trimmedStyle = deduplicateAndBoundText(styleSec.text, Math.max(minStyleSlice, styleSec.text.length - (prompt.length - maxBudget) - 8));
+    if (trimmedStyle && trimmedStyle.length < styleSec.text.length) {
+      currentSections = currentSections.map((s, idx) => idx === reservedStyleIdx ? { ...s, text: trimmedStyle } : s);
+      prompt = assemblePromptSections(currentSections, separator);
+      if (prompt.length <= maxBudget) {
+        warnings.push(`Prompt fitted with reserved style slice (${prompt.length}/${maxBudget} chars).`);
+        return {
+          document: { ...document, sections: currentSections, warnings },
+          prompt,
+          fitted: true,
+          warnings
+        };
+      }
+    }
+  }
+
+  // Stage 4.5: Drop unprotected P2 style sections only as a last resort before P0
   currentSections = currentSections.filter(s => s.priority !== 2);
   prompt = assemblePromptSections(currentSections, separator);
   if (prompt.length <= maxBudget) {
-    warnings.push(`Prompt fitted by removing secondary style and material sections (${prompt.length}/${maxBudget} chars).`);
-    return {
-      document: { ...document, sections: currentSections, warnings },
-      prompt,
-      fitted: true,
-      warnings
-    };
-  }
-
-  // Stage 4: Drop compressible P1 sections (camera/environment detail)
-  currentSections = currentSections.filter(s => !(s.priority === 1 && s.compressible));
-  prompt = assemblePromptSections(currentSections, separator);
-  if (prompt.length <= maxBudget) {
-    warnings.push(`Prompt fitted by condensing camera and environment details (${prompt.length}/${maxBudget} chars).`);
+    warnings.push(`Prompt fitted by removing remaining secondary style sections (${prompt.length}/${maxBudget} chars).`);
     return {
       document: { ...document, sections: currentSections, warnings },
       prompt,

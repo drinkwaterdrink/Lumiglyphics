@@ -1849,7 +1849,7 @@ export const DOSSIER_CSS = `
 [data-dossier-present-cast]{margin:12px 0;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--vn-panel-border,#666)}
 [data-dossier-present-cast] h3{margin:0 0 8px;font-size:.8em;text-transform:uppercase;letter-spacing:.03em;opacity:.85}
 [data-dossier-cast-chips]{display:flex;flex-wrap:wrap;gap:6px}
-[data-dossier-cast-chip]{margin:0!important;min-height:36px!important;padding:5px 11px!important;border-radius:999px!important;font-size:.8em!important;font-weight:600!important}
+[data-dossier-cast-chip]{margin:0!important;min-height:44px;min-width:44px;padding:8px 12px!important;border-radius:999px!important;font-size:.8em!important;font-weight:600!important}
 [data-vn-dossier-card] dl{margin:0}
 [data-vn-dossier-card] dt{font-size:.75em;opacity:.92;margin-top:12px;line-height:1.4;font-weight:700;text-transform:uppercase;letter-spacing:.025em;color:#a8c7b8}
 [data-vn-dossier-card] dt:first-child{margin-top:0}
@@ -1900,7 +1900,7 @@ section[data-reference-current] h3,section[data-reference-observations] h3{font-
 .scene-dna-pill{font-size:9.5px;padding:2px 7px;border-radius:999px;background:rgba(168,211,200,.2);border:1px solid rgba(168,211,200,.35);color:#dff3ee}
 .world-scene-subhead{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;opacity:.8;margin-bottom:5px}
 .world-scene-cast-row{display:flex;flex-wrap:wrap;gap:6px}
-.present-cast-pill,.present-item-pill{min-height:0!important;padding:5px 10px!important;margin:0!important;font-size:11px!important;border-radius:999px!important;background:rgba(168,85,247,.16)!important;border:1px solid rgba(168,85,247,.38)!important;color:#e9d5ff!important}
+.present-cast-pill,.present-item-pill{min-height:44px;min-width:44px;padding:8px 12px!important;margin:0!important;font-size:12px!important;border-radius:999px!important;background:rgba(168,85,247,.16)!important;border:1px solid rgba(168,85,247,.38)!important;color:#e9d5ff!important}
 .present-item-pill{background:rgba(56,189,248,.14)!important;border-color:rgba(56,189,248,.34)!important;color:#bae6fd!important}
 .present-item-pill.active{background:rgba(56,189,248,.32)!important;border-color:#fff!important}
 .world-scene-empty{font-size:11px;opacity:.68}
@@ -1909,7 +1909,7 @@ section[data-reference-current] h3,section[data-reference-observations] h3{font-
 .story-dna-studio-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
 .story-dna-studio-head h3{margin:0;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em;color:#d6ecad}
 .story-dna-studio-actions{display:flex;gap:6px}
-.story-dna-studio-actions button{min-height:32px!important;min-width:0!important;padding:4px 10px!important;font-size:11px!important;margin:0!important}
+.story-dna-studio-actions button{min-height:44px;min-width:44px;padding:6px 12px!important;font-size:12px!important;margin:0!important}
 .story-dna-status{margin:0;font-size:11px;color:#93c5fd}
 .story-dna-form{display:grid;grid-template-columns:1fr;gap:8px}
 .story-dna-field{display:flex;flex-direction:column;gap:3px;font-size:11px}
@@ -1920,7 +1920,7 @@ section[data-reference-current] h3,section[data-reference-observations] h3{font-
 .story-dna-preview small{display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.03em;opacity:.7;margin-bottom:3px}
 .story-dna-preview code{display:block;font-size:11px;line-height:1.45;white-space:pre-wrap;color:#cbe9e0}
 .story-dna-footer{display:flex;gap:8px;justify-content:flex-end}
-.story-dna-footer button{min-height:36px!important;margin:0!important;font-size:12px!important}
+.story-dna-footer button{min-height:44px;min-width:44px;margin:0!important;font-size:12px!important}
 .vn-inline-tooltip-popover{position:fixed;z-index:260;width:min(320px,calc(100vw - 24px));padding:12px;border-radius:14px;background:rgba(15,23,36,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(168,211,200,.36);box-shadow:0 14px 36px rgba(0,0,0,.58);color:#eef4f1;display:flex;flex-direction:column;gap:8px}
 .vn-inline-tooltip-head{display:flex;align-items:center;gap:10px}
 .vn-inline-tooltip-thumb{width:42px;height:42px;border-radius:8px;overflow:hidden;flex:none;display:grid;place-items:center;background:rgba(255,255,255,.08);font-weight:700}
@@ -1928,7 +1928,7 @@ section[data-reference-current] h3,section[data-reference-observations] h3{font-
 .vn-inline-tooltip-title{flex:1;min-width:0}
 .vn-inline-tooltip-title strong{display:block;font-size:13.5px;line-height:1.25}
 .vn-inline-tooltip-title small{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.04em;opacity:.75}
-.vn-inline-tooltip-close{min-width:28px;min-height:28px;border-radius:50%;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit;cursor:pointer;font-size:14px;line-height:1}
+.vn-inline-tooltip-close{min-width:44px;min-height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit;cursor:pointer;font-size:14px;line-height:1}
 .vn-inline-tooltip-body{margin:0;font-size:11.5px;line-height:1.45;opacity:.92;white-space:pre-line}
 .vn-inline-tooltip-cta{width:100%;padding:7px 10px;border-radius:8px;border:none;background:var(--vn-accent,#a8d3c8);color:#0e1e1a;font-weight:700;font-size:11.5px;cursor:pointer;text-align:center}
 ` + DOCUMENT_READER_CSS;

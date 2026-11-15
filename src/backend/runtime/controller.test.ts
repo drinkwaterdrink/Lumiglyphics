@@ -1302,3 +1302,104 @@ test('turn assets carry bounded recorded picture explanations',()=>{
 });
 
 test('recorded legacy scene weather clears inside and projects cursor-specific locations',()=>{const record:StoredTurnRecord={schemaVersion:1,speaker:'Mira',status:'ready',plan:{...plan,paragraphs:[...plan.paragraphs,{...plan.paragraphs[0]!,index:1,sourceIndex:1}],scenes:[{...plan.scenes[0]!,ambient:undefined,environment:{...plan.scenes[0]!.environment,location:'Garden',weather:'rain'}},{...plan.scenes[0]!,sceneId:'inside',startParagraph:1,ambient:undefined,environment:{...plan.scenes[0]!.environment,location:'Library',weather:'rain'}}]},jobs:[],updatedAt:now} as StoredTurnRecord;const view=turnView(record);expect(view.ambients).toEqual(['rain',null]);expect(view.sceneLocations).toEqual([{paragraphIndex:0,location:'Garden'},{paragraphIndex:1,location:'Library'}]);});
+
+test('P1 #14: reopening a view with reviewImages off sweeps orphaned queued/generating jobs cleanly', async () => {
+  const f = generationFixture();
+  const orphanPath = turnPath('chat', 'message', 0);
+  f.spindle.chat.getMessages = async () => [{ id: 'message', role: 'assistant', is_user: false, swipe_id: 0, name: 'Mira', content: 'The door opens.' }] as any;
+  registerVisualNovelBackend(f.spindle);
+  const { fingerprintForMessage } = await import('./planner.js');
+  const exactFingerprint = fingerprintForMessage({ id: 'message', swipe_id: 0, content: 'The door opens.' });
+  const exactKey = { ...key, sourceFingerprint: exactFingerprint };
+  const queuedOrphan = AssetJobSchema.parse({
+    ...generatedJob(),
+    jobId: 'queued-job',
+    ownerTurnKey: exactKey,
+    status: 'queued',
+    imageId: null,
+    imageUrl: null,
+    readyAt: null,
+    generatedAt: null
+  });
+  const doneJob = AssetJobSchema.parse({ ...generatedJob(), jobId: 'done-job', ownerTurnKey: exactKey });
+  await saveTurnRecord(f.spindle, orphanPath, {
+    schemaVersion: 1,
+    speaker: 'Mira',
+    status: 'planning',
+    plan: { ...plan, key: exactKey },
+    jobs: [queuedOrphan, doneJob],
+    updatedAt: now
+  }, 'orphan-user');
+  await saveChatState(f.spindle, 'chat', {
+    schemaVersion: 1,
+    activeTurnPath: orphanPath,
+    latestScene: null,
+    terminalContinuity: { revision: 0, characters: {}, facts: {} },
+    updatedAt: now
+  }, 'orphan-user');
+
+  await sendState(f.spindle, 'chat', 'orphan-user', { viewOpen: true, requestId: 'reopen-check' });
+  const stateReply = [...f.sent].reverse().find((m: any) => m.type === 'vn_state' && m.requestId === 'reopen-check') as any;
+  expect(stateReply?.turn?.assets.find((a: any) => a.jobId === 'queued-job')?.status).toBe('cancelled');
+  expect(stateReply?.turn?.assets.find((a: any) => a.jobId === 'done-job')?.status).toBe('generated');
+  expect(f.sent.filter((m: any) => m.type === 'vn_planning').length).toBe(0);
+});
+
+test('P1 #39: vn_get_turn_snapshot inspects historical turns read-only without planning', async () => {
+  const f = generationFixture();
+  f.data.set('config.json', { ...(f.data.get('config.json') as object), enabled: true });
+  const histPath = turnPath('chat', 'older-msg', 1);
+  await saveTurnRecord(f.spindle, histPath, {
+    schemaVersion: 1,
+    speaker: 'Mira',
+    status: 'ready',
+    plan: { ...plan, key: { chatId: 'chat', assistantMessageId: 'older-msg', swipeId: 1, sourceFingerprint: 'feedface1234', revision: 0 } },
+    jobs: [generatedJob()],
+    updatedAt: now
+  }, 'hist-user');
+  registerVisualNovelBackend(f.spindle);
+
+  f.request({ type: 'vn_get_turn_snapshot', chatId: 'chat', messageId: 'older-msg', swipeId: 1, requestId: 'snap-1' }, 'hist-user');
+  await waitFor(() => f.sent.some((m: any) => m.type === 'vn_turn_snapshot' && m.requestId === 'snap-1'));
+  const snap = f.sent.find((m: any) => m.type === 'vn_turn_snapshot' && m.requestId === 'snap-1') as any;
+  expect(snap.turn?.historical).toBe(true);
+  expect(snap.turn?.messageId).toBe('older-msg');
+  expect(snap.turn?.swipeId).toBe(1);
+  expect(f.sent.some((m: any) => m.type === 'vn_planning')).toBe(false);
+});
+
+test('P1 rollback: deleting the active turn restores chatState to the surviving prior assistant turn', async () => {
+  const f = generationFixture();
+  const { fingerprintForMessage } = await import('./planner.js');
+  const firstFp = fingerprintForMessage({ id: 'msg-1', swipe_id: 0, content: 'First beat.' });
+  const secondFp = fingerprintForMessage({ id: 'msg-2', swipe_id: 0, content: 'Second beat.' });
+  const firstPath = turnPath('chat', 'msg-1', 0);
+  const secondPath = turnPath('chat', 'msg-2', 0);
+  const firstPlan = TurnPlanSchema.parse({
+    ...plan,
+    key: { chatId: 'chat', assistantMessageId: 'msg-1', swipeId: 0, sourceFingerprint: firstFp, revision: 0 },
+    paragraphs: [{ index: 0, sourceIndex: 0, text: 'First beat.' }]
+  });
+  const secondPlan = TurnPlanSchema.parse({
+    ...plan,
+    key: { chatId: 'chat', assistantMessageId: 'msg-2', swipeId: 0, sourceFingerprint: secondFp, revision: 0 },
+    paragraphs: [{ index: 0, sourceIndex: 0, text: 'Second beat.' }]
+  });
+  await saveTurnRecord(f.spindle, firstPath, { schemaVersion: 1, speaker: 'Mira', status: 'ready', plan: firstPlan, jobs: [], updatedAt: now }, 'del-user');
+  await saveTurnRecord(f.spindle, secondPath, { schemaVersion: 1, speaker: 'Mira', status: 'ready', plan: secondPlan, jobs: [], updatedAt: now }, 'del-user');
+  await saveChatState(f.spindle, 'chat', {
+    schemaVersion: 1,
+    activeTurnPath: secondPath,
+    latestScene: secondPlan.scenes[0]!,
+    terminalContinuity: secondPlan.terminalContinuity,
+    updatedAt: now
+  }, 'del-user');
+  f.spindle.chat.getMessages = async () => [{ id: 'msg-1', role: 'assistant', is_user: false, swipe_id: 0, name: 'Mira', content: 'First beat.' }] as any;
+  registerVisualNovelBackend(f.spindle);
+
+  f.fire('MESSAGE_DELETED', { chatId: 'chat', messageId: 'msg-2' }, 'del-user');
+  await waitFor(() => (f.data.get(chatStatePath('chat')) as StoredChatState | undefined)?.activeTurnPath === firstPath);
+  const saved = f.data.get(chatStatePath('chat')) as StoredChatState;
+  expect(saved.activeTurnPath).toBe(firstPath);
+  expect(saved.latestScene?.sceneId).toBe(firstPlan.scenes[0]!.sceneId);
+});

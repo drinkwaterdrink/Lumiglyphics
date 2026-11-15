@@ -11,6 +11,7 @@ import {
   isStoryEntryActiveOnBranch,
   type ItemDNA,
   type LocationDNA,
+  type NpcBelief,
   type StoryDNASet,
 } from '../../shared/story-dna.js';
 import { loadConfig, loadTurnRecord, turnPath } from './storage.js';
@@ -191,13 +192,36 @@ export function harvestTurnStoryDNA(
       const lastEntry = codex.at(-1);
       if (!lastEntry || lastEntry.location.toLowerCase() !== loc.name.toLowerCase()) {
         const entryId = `ch-${loc.id}-${codex.length + 1}`.slice(0, 250);
+        const who = Array.from(new Set(
+          [scene.character, ...(scene.cast ?? [])]
+            .map((name) => (name ?? "").trim())
+            .filter(Boolean)
+        )).slice(0, 12);
+        const whatChanged: string[] = [];
+        const prevName = lastLoc?.name || prevLocationName?.trim();
+        if (prevName && prevName.toLowerCase() !== loc.name.toLowerCase()) {
+          whatChanged.push(`Moved from ${prevName} to ${loc.name}`);
+        }
+        if (scene.environment.timeOfDay) whatChanged.push(`Time: ${scene.environment.timeOfDay}`);
+        if (scene.environment.weather) whatChanged.push(`Weather: ${scene.environment.weather}`);
+        if (scene.attire) whatChanged.push(`Attire: ${scene.attire.slice(0, 140)}`);
+        const baseDesc = (scene.environment.description?.trim() || loc.environmentDescription || `Scene at ${loc.name}`).slice(0, 1400);
+        const structuredSummary = [
+          who.length > 0 ? `Who: ${who.join(", ")}` : "",
+          `Where: ${loc.name}`,
+          whatChanged.length > 0 ? `Changed: ${whatChanged.join("; ")}` : "",
+          baseDesc
+        ].filter(Boolean).join(" | ").slice(0, 2000);
         set.chapterCodex = [
           ...codex,
           {
             id: entryId,
             title: loc.name.slice(0, 180),
             location: loc.name.slice(0, 180),
-            summary: (scene.environment.description?.trim() || loc.environmentDescription || `Scene at ${loc.name}`).slice(0, 2000),
+            who,
+            where: loc.name.slice(0, 180),
+            whatChanged: whatChanged.slice(0, 12),
+            summary: structuredSummary,
             ...(plan.key?.assistantMessageId ? { messageId: plan.key.assistantMessageId.slice(0, 160) } : {}),
             seenInSwipes: swipeTag ? [swipeTag] : [],
             timestamp: Date.now()
@@ -325,14 +349,84 @@ export function harvestTurnStoryDNA(
     });
   }
 
+  // P10 #31: Link ItemDNA <-> RPG inventory so acquired RPG gear enters Story DNA canonically.
+  for (const invItem of plan.rpgState?.vitals.inventory ?? []) {
+    const cleanInv = invItem.trim();
+    if (!cleanInv) continue;
+    upsertItem(cleanInv, {
+      description: cleanInv,
+      heldBy: plan.rpgState?.vitals.name || 'Player',
+    });
+  }
+
   if (options?.mindLedgerEnabled !== false) {
     const ledger = [...(set.thoughtCabinet ?? [])];
+    const narrativeText = (plan.paragraphs ?? []).map((p) => p.text).join(' ').toLowerCase();
+    const completedQuests = (plan.rpgState?.quests ?? [])
+      .filter((q) => q.status === 'completed')
+      .map((q) => q.title.toLowerCase());
+    const explicitlyResolved = (plan.resolvedThreads ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean);
+    // 1. Advance existing Thought Cabinet threads (germinating -> internalized -> resolved)
+    for (const entry of ledger) {
+      if (entry.status === 'resolved') continue;
+      const keywords = entry.title
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((w) => w.length >= 4);
+      const mentioned = keywords.some((kw) => narrativeText.includes(kw));
+      const questResolved = completedQuests.some((qt) => keywords.some((kw) => qt.includes(kw)));
+      const entryTitleLower = entry.title.toLowerCase();
+      const entryIdLower = entry.id.toLowerCase();
+      const threadExplicitlyResolved = explicitlyResolved.some(
+        (t) => t === entryIdLower || t === entryTitleLower || entryTitleLower.includes(t) || t.includes(entryTitleLower)
+      );
+      if (threadExplicitlyResolved || questResolved || (mentioned && /\b(?:solved|uncovered|revealed|confessed|resolved|truth came out|mystery ended)\b/.test(narrativeText))) {
+        entry.status = 'resolved';
+        entry.updatedAt = Date.now();
+        changed = true;
+      } else if (entry.status === 'germinating' && mentioned) {
+        entry.status = 'internalized';
+        entry.updatedAt = Date.now();
+        changed = true;
+      }
+    }
+    // 2. Harvest new threads and spoiler-free public NPC beliefs from visible references
+    const nextBeliefs: Record<string, NpcBelief[]> = {
+      ...(set.npcBeliefs ?? {}),
+    };
     for (const ref of plan.storyReferences ?? []) {
-      if (ref.field !== 'significance' && ref.field !== 'statedGoals' && ref.field !== 'customs' && ref.field !== 'risks') continue;
       const cleanVal = ref.value?.trim();
       if (!cleanVal) continue;
+      if (ref.kind === 'npc' && (ref.field === 'statedGoals' || ref.field === 'relationships' || ref.field === 'condition')) {
+        const npcKey = ref.name.trim().slice(0, 120);
+        if (npcKey) {
+          const list = [...(nextBeliefs[npcKey] ?? [])];
+          const topic = ref.field;
+          const existingBelief = list.find((b) => b.topic === topic && b.belief.toLowerCase() === cleanVal.slice(0, 400).toLowerCase());
+          if (!existingBelief) {
+            list.push({
+              topic,
+              belief: cleanVal.slice(0, 400),
+              knowsSecret: false,
+              seenInSwipes: swipeTag ? [swipeTag] : [],
+              updatedAt: Date.now(),
+            });
+            nextBeliefs[npcKey] = list.slice(-12);
+            changed = true;
+          }
+        }
+      }
+      if (ref.field !== 'significance' && ref.field !== 'statedGoals' && ref.field !== 'customs' && ref.field !== 'risks') continue;
       const title = `${ref.name}: ${cleanVal.split(/[.;!?]/)[0]?.trim() || cleanVal}`.slice(0, 160);
-      if (ledger.some((e) => e.title.toLowerCase() === title.toLowerCase())) continue;
+      const existingEntry = ledger.find((e) => e.title.toLowerCase() === title.toLowerCase());
+      if (existingEntry) {
+        if (existingEntry.status === 'germinating') {
+          existingEntry.status = 'internalized';
+          existingEntry.updatedAt = Date.now();
+          changed = true;
+        }
+        continue;
+      }
       const category = ref.field === 'risks' ? 'foreshadowing' : ref.field === 'statedGoals' ? 'promise' : ref.field === 'significance' ? 'clue' : 'secret';
       const entryId = `tc-${createItemId(ref.name)}-${ledger.length + 1}`.slice(0, 250);
       ledger.push({
@@ -346,7 +440,10 @@ export function harvestTurnStoryDNA(
       });
       changed = true;
     }
-    if (changed && ledger.length > (set.thoughtCabinet?.length ?? 0)) {
+    if (Object.keys(nextBeliefs).length > 0) {
+      set.npcBeliefs = nextBeliefs;
+    }
+    if (changed) {
       set.thoughtCabinet = ledger.slice(-40);
     }
   }

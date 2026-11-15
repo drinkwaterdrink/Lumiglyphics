@@ -15,11 +15,11 @@
     "warnings": []
   },
   "flux3-klein/long": {
-    "prompt": "In the center foreground, <subject_mira> Mira (silver hair, violet eyes, wearing green coat) is reading an open book beside the window, reading.",
+    "prompt": "In the center foreground, <subject_mira> Mira (silver hair, violet eyes, wearing green coat) is reading an open book beside the window, reading. Visual treatment: watercolor illustration, palette of muted green and brass.",
     "negativePrompt": "",
     "warnings": [
-      "Prompt fitted by condensing camera and environment details (144/1710 chars).",
-      "FLUX.3 Klein prompt is short (144 chars); BFL guidelines recommend full scene captions."
+      "Prompt fitted by condensing camera and environment details while preserving primary style (221/1710 chars).",
+      "FLUX.3 Klein prompt is short (221 chars); BFL guidelines recommend full scene captions."
     ]
   },
   "flux3/solo": {

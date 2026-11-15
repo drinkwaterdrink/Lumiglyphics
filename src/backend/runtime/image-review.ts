@@ -136,8 +136,8 @@ export type ImagePreparationMetadata = {
   referenceSummary?: string;
   promptAdaptationError?: string;
   imagePromptMetadata?: ImagePromptMetadata;
-  regeneratePrompt?: (request: ImageGenerationRequest, guidance?: string) => Promise<ImageGenerationRequest>;
-  enrichPrompt?: (request: ImageGenerationRequest, guidance?: string) => Promise<ImageGenerationRequest>;
+  regeneratePrompt?: (request: ImageGenerationRequest, guidance?: string, pinnedClauses?: readonly string[]) => Promise<ImageGenerationRequest>;
+  enrichPrompt?: (request: ImageGenerationRequest, guidance?: string, pinnedClauses?: readonly string[]) => Promise<ImageGenerationRequest>;
   rebuildTemplate?: (templateId: string, options?: RebuildOptions) => Promise<{ request: ImageGenerationRequest; metadata: ImagePreparationMetadata }>;
 };
 /** Also synchronize NovelAI/host-managed prompt copies after compaction. */
@@ -234,7 +234,7 @@ export class ImageReviewGate {
     }
   }
 
-  async regenerate(requestId:string,edits?:ImageRequestEdits,guidance?:string):Promise<boolean> {
+  async regenerate(requestId:string,edits?:ImageRequestEdits,guidance?:string,pinnedClauses?:readonly string[]):Promise<boolean> {
     const item=this.pending.get(requestId);
     if((!item?.metadata.regeneratePrompt && !item?.metadata.enrichPrompt)||item.signal.aborted)return false;
     const draft=applyImageRewriteDraft(item.request,edits);
@@ -243,7 +243,7 @@ export class ImageReviewGate {
     this.pending.delete(requestId);
     try {
       const runner = (guidance && item.metadata.enrichPrompt) ? item.metadata.enrichPrompt : item.metadata.regeneratePrompt ?? item.metadata.enrichPrompt!;
-      const request=await runner(structuredClone(draft), guidance);
+      const request=await runner(structuredClone(draft), guidance, pinnedClauses);
       if(item.signal.aborted)throw aborted('Prompt regeneration cancelled.');
       assertPromptLengths(request.prompt,request.negativePrompt,request.promptProfile);
       const {promptAdaptationError: _previousAdaptationError,...metadata}=item.metadata;
@@ -261,14 +261,14 @@ export class ImageReviewGate {
     }
   }
 
-  async enrich(requestId: string, guidance?: string, edits?: ImageRequestEdits): Promise<boolean> {
+  async enrich(requestId: string, guidance?: string, edits?: ImageRequestEdits, pinnedClauses?: readonly string[]): Promise<boolean> {
     const item = this.pending.get(requestId);
     if ((!item?.metadata.enrichPrompt && !item?.metadata.regeneratePrompt) || item.signal.aborted) return false;
     const draft = applyImageRewriteDraft(item.request, edits);
     this.pending.delete(requestId);
     try {
       const runner = item.metadata.enrichPrompt ?? item.metadata.regeneratePrompt!;
-      const request = await runner(structuredClone(draft), guidance);
+      const request = await runner(structuredClone(draft), guidance, pinnedClauses);
       if (item.signal.aborted) throw aborted('Prompt enrichment cancelled.');
       assertPromptLengths(request.prompt, request.negativePrompt, request.promptProfile);
       const { promptAdaptationError: _previousAdaptationError, ...metadata } = item.metadata;

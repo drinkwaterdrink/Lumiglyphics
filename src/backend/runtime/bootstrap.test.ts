@@ -112,6 +112,10 @@ describe("existing-chat bootstrap", () => {
     expect(runtime.sent[0]).toMatchObject({ type: "vn_state", chatId: "chat-bootstrap", turn: null });
     expect(runtime.sent[1]).toMatchObject({ type: "vn_planning", chatId: "chat-bootstrap" });
     expect(runtime.sent[2]).toMatchObject({
+      type: "vn_narrative_preview",
+      paragraphs: ["The old door opens.", "Mira raises her lantern."]
+    });
+    expect(runtime.sent[3]).toMatchObject({
       type: "vn_turn",
       turn: { messageId: "assistant-1", paragraphs: ["The old door opens.", "Mira raises her lantern."] }
     });
@@ -135,7 +139,12 @@ describe("existing-chat bootstrap", () => {
 
     await sendState(runtime.spindle, "chat-bootstrap", "user-1", { viewOpen: true });
 
-    expect(runtime.sent.map(({ type }) => type)).toEqual(["vn_state", "vn_planning", "vn_turn"]);
+    expect(runtime.sent.map(({ type }) => type)).toEqual([
+      "vn_state",
+      "vn_planning",
+      "vn_narrative_preview",
+      "vn_turn"
+    ]);
     // One warning for the broken record, one for the audible planner fallback.
     expect(runtime.warnings).toHaveLength(2);
     expect(runtime.warnings[0]).toContain("rebuilding it from chat");

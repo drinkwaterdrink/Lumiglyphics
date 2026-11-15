@@ -1,7 +1,7 @@
 /** Layout is independent of theme color. Shell tokens follow every existing preset.
  * These rules never reach into the user-CSS theme root. */
 export const READER_SHELL_CSS = `
-[data-vn-reader-first="true"] { --reader-rail:82px; --reader-header:64px; --reader-gap:12px; --reader-bottom:0px; --reader-workspace:0px;--vn-shell-accent-contrast:var(--vn-shell-panel); font-family:var(--vn-shell-family); }
+[data-vn-reader-first="true"] { --reader-keyboard-inset:0px; --reader-rail:82px; --reader-header:64px; --reader-gap:12px; --reader-bottom:0px; --reader-workspace:0px;--vn-shell-accent-contrast:var(--vn-shell-panel); font-family:var(--vn-shell-family); }
 [data-vn-reader-first="true"][data-vn-preset="lumiverse"]{--vn-shell-accent-contrast:var(--lumiverse-primary-contrast,var(--vn-shell-panel));}
 [data-vn-reader-first="true"][data-vn-preset="literature-club"]{--vn-shell-accent-contrast:#2b0b18;--vn-shell-navigation-ink:#a72b53;}
 [data-vn-reader-first="true"] [hidden] { display:none!important; }
@@ -27,7 +27,7 @@ export const READER_SHELL_CSS = `
 [data-vn-reader-first="true"] [data-vn-exit] { z-index:20;top:auto;bottom:14px;left:8px;right:auto;width:66px;min-height:52px;white-space:normal;text-align:center;padding:8px 4px;border:0;border-radius:8px;background:transparent;box-shadow:none;font:550 11px/1.35 var(--vn-shell-family);gap:6px;flex-direction:column; }
 [data-vn-reader-first="true"] [data-vn-exit]::before { width:8px;height:8px;margin:0 0 4px; }
 [data-vn-workspace] { --vn-panel-solid:var(--vn-shell-panel);--vn-panel-border:var(--vn-shell-border);--vn-text:var(--vn-shell-text);--vn-muted-text:var(--vn-shell-muted);--vn-accent:var(--vn-shell-accent);--vn-chrome-text:var(--vn-shell-text);--vn-button-bg:var(--vn-shell-button); }
-aside[data-vn-workspace] { position:absolute;right:var(--reader-gap);top:calc(var(--reader-header) + var(--reader-gap));bottom:calc(var(--reader-bottom) + var(--reader-gap));width:calc(var(--reader-workspace) - var(--reader-gap));display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;background:var(--vn-shell-panel);color:var(--vn-shell-text);border:1px solid var(--vn-shell-border);border-radius:min(var(--vn-shell-radius),12px);z-index:10; }
+aside[data-vn-workspace] { position:absolute;right:var(--reader-gap);top:calc(var(--reader-header) + var(--reader-gap));bottom:calc(var(--reader-bottom) + var(--reader-gap) + var(--reader-keyboard-inset,0px));width:calc(var(--reader-workspace) - var(--reader-gap));display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;background:var(--vn-shell-panel);color:var(--vn-shell-text);border:1px solid var(--vn-shell-border);border-radius:min(var(--vn-shell-radius),12px);z-index:10; }
 [data-workspace-heading] { flex:none;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:20px 20px 15px;border-bottom:1px solid var(--vn-shell-border); }
 [data-workspace-heading]>div { min-width:0; }
 [data-workspace-title] { font:500 28px/1.2 var(--vn-shell-family);margin:5px 0 0;overflow-wrap:anywhere; }
@@ -67,6 +67,8 @@ aside[data-vn-workspace] { position:absolute;right:var(--reader-gap);top:calc(va
  [data-vn-reader-wordmark],[data-reader-search] kbd { display:none; }
 }
 @media(max-width:760px) {
+ [data-vn-root] [data-vn-interaction] { bottom:calc(var(--reader-bottom) + var(--reader-keyboard-inset,0px)); }
+ [data-vn-root] .reader-actions { bottom:calc(env(safe-area-inset-bottom,0px) + var(--reader-keyboard-inset,0px)); }
  [data-vn-reader-first="true"] { --reader-rail:0px;--reader-header:calc(56px + env(safe-area-inset-top));--reader-gap:0px;--reader-bottom:0px; }
  [data-vn-navigation] { display:none!important;visibility:hidden!important;pointer-events:none!important; }
  [data-vn-navigation-brand],[data-vn-navigation] [data-reader-destination="history"],[data-vn-navigation] [data-reader-destination="settings"] { display:none!important; }

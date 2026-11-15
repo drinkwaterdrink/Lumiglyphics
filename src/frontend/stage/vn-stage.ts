@@ -185,6 +185,7 @@ export class VnStage {
   private readonly narrative: HTMLElement;
   private readonly speaker: HTMLElement;
   private readonly dialogueText: HTMLElement;
+  private readonly dialogueLive: HTMLElement | null;
   private dossiers!: StageDossiers;
   readonly workspace: ReaderWorkspace;
   readonly cgGallery: CgGalleryModal;
@@ -363,6 +364,7 @@ export class VnStage {
     this.narrative = queryRequired(this.themeRoot, "[data-vn-narrative]");
     this.speaker = queryRequired(this.themeRoot, "[data-vn-speaker]");
     this.dialogueText = queryRequired(this.themeRoot, "[data-vn-dialogue-text]");
+    this.dialogueLive = this.themeRoot.querySelector<HTMLElement>("[data-vn-dialogue-live]");
     this.speechReadAlong=new ParagraphReadAlong(this.dialogueText);
     this.progress = queryRequired(this.themeRoot, "[data-vn-progress]");
     this.readingState = queryRequired(this.themeRoot, "[data-vn-reading-state]");
@@ -2607,6 +2609,15 @@ export class VnStage {
 
   private onTextRenderFinished(): void {
     if (this.destroyed) return;
+    if (this.dialogueLive) {
+      const current = selectVnStageView(this.state);
+      const rendered = (this.dialogueText.textContent ?? "").trim();
+      const speaker = current.paragraph?.speaker?.trim() || "";
+      const spoken = speaker ? `${speaker}: ${rendered}` : rendered;
+      if (spoken && this.dialogueLive.textContent !== spoken) {
+        this.dialogueLive.textContent = spoken;
+      }
+    }
     this.dossiers.refresh(this.state.currentParagraphIndex);
     this.renderSceneHud();
     this.renderScrubber();
@@ -2684,6 +2695,7 @@ export class VnStage {
   private startTypewriter(formatted: string): void {
     this.clearTypewriter();
     this.resetAutoRing();
+    if (this.dialogueLive) this.dialogueLive.textContent = "";
     this.dialogueText.innerHTML = formatted;
     // Split effect letters first so the typewriter reveals them one by one.
     applyTextEffects(this.dialogueText);
@@ -2741,7 +2753,7 @@ export class VnStage {
         if(this.displayPending?.key===key&&this.displayPending.source===prepared)return;
         this.displayPending?.controller.abort();const controller=new AbortController();this.displayPending={key,source:prepared,controller};
         const refreshOnly=this.currentRenderedParagraphId===paragraph.id;
-        this.clearTypewriter();this.isTyping=true;this.dialogueText.textContent='';this.currentRenderedParagraphId='';this.currentRenderedFormatted='';
+        this.clearTypewriter();this.isTyping=true;this.dialogueText.textContent='';if(this.dialogueLive)this.dialogueLive.textContent='';this.currentRenderedParagraphId='';this.currentRenderedFormatted='';
         this.showDisplayIssues(['Applying display rules…']);
         void this.displayExecutor.evaluate({text:prepared,rulesSource:this.displayRulesText,generation:`${key}:${++this.displayRequestSequence}`},controller.signal).then(result=>{
           if(controller.signal.aborted||this.destroyed||this.displayPending?.key!==key)return;
@@ -3218,6 +3230,7 @@ export class VnStage {
           button.textContent = choice.label;
           this.rpgHud.decorateChoiceButton(button, choice);
           button.disabled = Boolean(choice.disabled) || isBusy;
+          if (choice.disabled) button.setAttribute("aria-disabled", "true");
           item.append(button);
           return item;
         }),

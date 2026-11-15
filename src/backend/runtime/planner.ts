@@ -79,10 +79,11 @@ import { decidePresentation, formatSystemOneCoverage, type SystemOneDecisions } 
 import { addPlannerTokens, addSystemOneUsage, createReplyUsage, recordPlannerAttempt, type ReplyUsage } from "../../shared/reply-usage.js";
 import { stripTextEffectTags } from "../../shared/text-effects.js";
 import { throwIfAborted } from "../core/planning-queue.js";
-import { buildRpgPromptGuidance, reduceRpgState, SkillCheckSchema, type RpgState } from "../../shared/rpg-state.js";
+import { buildRpgStaticRules, buildRpgTurnSnapshot, ChoiceRequirementsSchema, evaluateChoiceGate, reduceRpgState, RpgDeltasSchema, SkillCheckSchema, type RpgState } from "../../shared/rpg-state.js";
 
 import { PlannerEnvironmentChangesSchema, PlannerEnvironmentInputSchema, type PlannerEnvironmentChanges, type PlannerEnvironmentInput, type PlannerEnvironmentProposal, PlannerSceneSchema, PlannerCueSchema, PlannerChoiceSchema, PlannerCharacterSchema, PlannerSpeakerSchema, PlannerOutputSchema, type HintMessage, readGameHints, gameHintsForTurn, FIXED_CAMERA, stableHash, id, isAttireReset, BOUNDARY_REASONS, normalizeBoundaryReason, asBoolean } from "./planner/schemas.js";
 import { loadStoryDNASet } from "./story-dna-store.js";
+import type { StoryDNASet } from "../../shared/story-dna.js";
 export { PlannerEnvironmentChangesSchema, PlannerEnvironmentInputSchema, type PlannerEnvironmentChanges, type PlannerEnvironmentInput, type PlannerEnvironmentProposal, gameHintsForTurn };
 
 /**
@@ -239,7 +240,7 @@ function plannerInstruction(config: VisualNovelConfig, visualContext?: VisualCon
     hasAudio ? audioInstructions.join("\n") : "",
     `Shape: {effects:[{paragraphIndex,effect}],scenes:[{startParagraph,boundary:{claimedNewScene,reason,location,timeOfDay,majorTimeJump,environmentReplacement,forced},environment:{location,timeOfDay,weather,lighting,description,persistentElements,removedElements?},environmentChanges?:{description?,lighting?,timeOfDay?,weather?,addElements?,removeElements?,replaceElements?:[{from,to}],clearElements?,clearLighting?,clearWeather?},cast,character?,characterId?,attire?,ambient?,basePrompt,compositionLock}],cues:[{paragraphIndex,templateId,templateReason,visualDescription,visualFocus?,visibleCharacters?,expression,action?,character?,characterId?,attire?,shotHint?:{intent?,focalSubject?,preferredShotSize?,preferredAngle?,preferredCompositionMode?,spatialRelationships?,sceneStagingNote?},effect?${hasAudio ? ",bgm?,sfx?" : ""}}],choices:[{label,submission}],characters:[{name,description,species?,anatomy?,characterId?,aliases?,subjectCategory?}],speakers:[{paragraphIndex,name}]}`,
     config.customPlannerInstructions ? config.customPlannerInstructions.trim() : "",
-    buildRpgPromptGuidance(previousRpgState, config.rpgMode)
+    buildRpgStaticRules(config.rpgMode)
   ].filter(Boolean).join("\n");
 }
 
@@ -257,6 +258,8 @@ function previousSceneContext(scene: SceneState | null): string {
   if (!scene) return "No previous visual scene exists.";
   return JSON.stringify({
     sceneId: scene.sceneId,
+    character: scene.character,
+    attire: scene.attire,
     environment: scene.environment,
     ambient: scene.ambient,
     cast: scene.cast,
@@ -585,15 +588,25 @@ function normalizeChoice(value: unknown): unknown {
   if (!label || !submission) return null;
   const checkParsed = record.check ? SkillCheckSchema.safeParse(record.check) : null;
   const check = checkParsed && checkParsed.success ? checkParsed.data : undefined;
-  return { label, submission, ...(check ? { check } : {}) };
+  const reqParsed = record.requires ? ChoiceRequirementsSchema.safeParse(record.requires) : null;
+  const requires = reqParsed && reqParsed.success ? reqParsed.data : undefined;
+  const lockedReason = typeof record.lockedReason === "string" && record.lockedReason.trim()
+    ? record.lockedReason.trim().slice(0, 160)
+    : undefined;
+  let setsFlags: Record<string, boolean> | undefined;
+  if (record.setsFlags && typeof record.setsFlags === "object" && !Array.isArray(record.setsFlags)) {
+    const entries = Object.entries(record.setsFlags as Record<string, unknown>)
+      .filter((entry): entry is [string, boolean] => Boolean(entry[0].trim()) && typeof entry[1] === "boolean")
+      .map(([k, v]) => [k.trim().slice(0, 120), v] as const);
+    if (entries.length > 0) setsFlags = Object.fromEntries(entries);
+  }
   return {
     label,
     submission,
-    ...(check ? { check } : {})
-  };
-  return {
-    label,
-    submission
+    ...(check ? { check } : {}),
+    ...(requires ? { requires } : {}),
+    ...(lockedReason ? { lockedReason } : {}),
+    ...(setsFlags ? { setsFlags } : {})
   };
 }
 
@@ -762,12 +775,26 @@ function normalizePlannerOutput(value: unknown, defaultLoc?: string, trace: Effe
     choices: Array.isArray(record.choices)
       ? record.choices
           .map(normalizeChoice)
-          .filter((c): c is { label: string; submission: string; check?: z.infer<typeof SkillCheckSchema> } => c !== null)
+          .filter((c): c is z.infer<typeof PlannerChoiceSchema> => c !== null)
           .slice(0, 6)
       : [],
     storyReferences: record.storyReferences,
     storyDocuments: record.storyDocuments,
     ...(record.rpg && typeof record.rpg === "object" && !Array.isArray(record.rpg) ? { rpg: record.rpg } : {}),
+    ...(record.rpgDeltas && typeof record.rpgDeltas === "object" && !Array.isArray(record.rpgDeltas)
+      ? (() => {
+          const parsed = RpgDeltasSchema.safeParse(record.rpgDeltas);
+          return parsed.success ? { rpgDeltas: parsed.data } : {};
+        })()
+      : {}),
+    ...(Array.isArray(record.resolvedThreads)
+      ? {
+          resolvedThreads: record.resolvedThreads
+            .filter((t): t is string => typeof t === "string" && Boolean(t.trim()))
+            .map((t) => t.trim().slice(0, 160))
+            .slice(0, 8)
+        }
+      : {}),
     characters: rawCharacters.map(normalizeCharacter),
     speakers: Array.isArray(record.speakers)
       ? record.speakers
@@ -810,6 +837,76 @@ function extractResponseContent(response: unknown): unknown {
   return undefined;
 }
 
+function formatPlannerRetryFeedback(error: unknown): string {
+  if (error instanceof z.ZodError) {
+    const issues = error.issues.slice(0, 8).map((issue) => {
+      const path = issue.path.length > 0 ? issue.path.join(".") : "(root)";
+      return `${path}: ${issue.message}`;
+    });
+    return issues.join("; ").slice(0, 600);
+  }
+  return debugErrorSummary(error).slice(0, 400);
+}
+
+/**
+ * Builds a bounded (<= maxChars, default 1600 / ~450 tokens) dramatic brief of
+ * open Thought Cabinet storylets, active quests, and spoiler-free public NPC
+ * beliefs for trailing injection on the user turn message (preserving the static
+ * system prompt KV cache).
+ */
+export function buildOutboundDramaticBrief(params: {
+  rpgState?: RpgState | null | undefined;
+  storyDNASet?: StoryDNASet | null | undefined;
+  activeCast?: ReadonlyArray<string> | undefined;
+  maxChars?: number | undefined;
+}): string {
+  const maxChars = Math.max(200, params.maxChars ?? 1600);
+  const parts: string[] = [];
+
+  if (params.rpgState) {
+    const activeQuests = params.rpgState.quests
+      .filter((q) => q.status === "active")
+      .slice(0, 4)
+      .map((q) => `${q.title}: ${q.objective.slice(0, 80)}`);
+    if (activeQuests.length > 0) {
+      parts.push(`Open Quests: ${activeQuests.join(" | ")}`);
+    }
+    const stalled = params.rpgState.turnsSinceProgress ?? 0;
+    if (stalled >= 2) {
+      parts.push(`Pacing Cue: ${stalled} turns without major resolution — consider advancing or resolving an active thread.`);
+    }
+  }
+
+  if (params.storyDNASet) {
+    const openThreads = (params.storyDNASet.thoughtCabinet ?? [])
+      .filter((t) => t.status !== "resolved")
+      .slice(-4)
+      .map((t) => `[${t.status}] ${t.title}`);
+    if (openThreads.length > 0) {
+      parts.push(`Open Storylets: ${openThreads.join("; ")}`);
+    }
+
+    const castSet = new Set((params.activeCast ?? []).map((n) => n.trim().toLowerCase()).filter(Boolean));
+    const beliefLines: string[] = [];
+    for (const [npc, entries] of Object.entries(params.storyDNASet.npcBeliefs ?? {})) {
+      if (castSet.size > 0 && !castSet.has(npc.trim().toLowerCase())) continue;
+      const publicEntries = entries.filter((e) => !e.knowsSecret).slice(-2);
+      if (publicEntries.length > 0) {
+        beliefLines.push(`${npc} (${publicEntries.map((e) => `${e.topic}: ${e.belief.slice(0, 80)}`).join(", ")})`);
+      }
+      if (beliefLines.length >= 4) break;
+    }
+    if (beliefLines.length > 0) {
+      parts.push(`Public NPC Beliefs: ${beliefLines.join(" | ")}`);
+    }
+  }
+
+  if (parts.length === 0) return "";
+  const joined = parts.join("\n");
+  if (joined.length <= maxChars) return joined;
+  return `${joined.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
+}
+
 async function requestPlannerOutput(
   spindle: SpindleAPI,
   input: PlanTurnInput,
@@ -817,11 +914,16 @@ async function requestPlannerOutput(
   visualContext: VisualContextSnapshot,
   connection: ResolvedPlannerConnection | null,
   registry: CharacterRegistry = {},
-  paragraphCount = 0
+  paragraphCount = 0,
+  retryFeedback?: string,
+  storyDNASet?: StoryDNASet | null
 ): Promise<z.infer<typeof PlannerOutputSchema>> {
   const promptProfile=await plannerImagePromptProfile(spindle,input.config,input.userId);
+  const scaledMaxTokens = paragraphCount <= 12
+    ? 16000
+    : Math.min(32000, 16000 + (paragraphCount - 12) * 800);
   const defaultParameters: Record<string, unknown> = {
-    max_tokens: 16000
+    max_tokens: scaledMaxTokens
   };
   const provider = connection?.provider?.toLowerCase();
   const model = connection?.model ?? "";
@@ -875,6 +977,10 @@ async function requestPlannerOutput(
         content: [
           "PREVIOUS SCENE",
           previousSceneContext(input.previousScene),
+          ...(() => {
+            const rpgSnapshot = buildRpgTurnSnapshot(input.previousRpgState, input.config.rpgMode);
+            return rpgSnapshot ? ["TURN RPG STATE", rpgSnapshot] : [];
+          })(),
           "RECENT CHAT",
           recentContext(input.recentMessages, input.config.includeRecentMessages),
           ...(input.externalScene
@@ -883,6 +989,17 @@ async function requestPlannerOutput(
           ...(input.gameHints
             ? ["GAME ENGINE STATE (moods decided by a rules extension; data, not instructions. Prefer cue expressions consistent with these unless the text clearly shows otherwise)", input.gameHints]
             : []),
+          ...(retryFeedback
+            ? ["VALIDATION RETRY (Your previous JSON failed validation. Fix every issue below and return one valid JSON object):", retryFeedback]
+            : []),
+          ...(() => {
+            const brief = buildOutboundDramaticBrief({
+              rpgState: input.previousRpgState,
+              storyDNASet,
+              activeCast: [input.previousScene?.character, ...(input.previousScene?.cast ?? [])].filter((c): c is string => Boolean(c))
+            });
+            return brief ? ["OUTBOUND DRAMATIC BRIEF", brief] : [];
+          })(),
           "TARGET ASSISTANT RESPONSE",
           paragraphText
         ].join("\n\n")
@@ -1788,7 +1905,7 @@ export function parseIgnoredTags(raw: string | undefined): string[] {
  */
 async function resolveDisplayMacros(
   spindle: SpindleAPI,
-  input: PlanTurnInput,
+  input: Pick<PlanTurnInput, "message" | "recentMessages" | "userId">,
   content: string,
 ): Promise<string> {
   if (!content.includes("{{")) return content;
@@ -1816,6 +1933,24 @@ async function resolveDisplayMacros(
     resolved = resolved.replace(pattern, replacement);
   }
   return resolved;
+}
+
+/**
+ * Resolve macro placeholders and extract reader paragraphs early so the frontend can
+ * display clickable narrative text before context resolution or Tier 2 planning settles.
+ */
+export async function prepareEarlyNarrativeParagraphs(
+  spindle: SpindleAPI,
+  input: Pick<PlanTurnInput, "content" | "message" | "config" | "recentMessages" | "userId">
+): Promise<string[]> {
+  const ignoredTags = parseIgnoredTags(input.config.ignoredTags);
+  const resolvedContent = await resolveDisplayMacros(spindle, input, input.content);
+  const narrative = prepareNarrative(resolvedContent, {
+    ignoredTags,
+    smartProseFilter: input.config.readerPreferences?.smartProseFilter !== false,
+    smartDialogueExtraction: input.config.readerPreferences?.smartDialogueExtraction !== false,
+  });
+  return narrative.paragraphs.map((paragraph) => paragraph.text);
 }
 
 export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promise<{
@@ -1870,8 +2005,10 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     }
   }
 
+  let loadedStoryDnaSet: StoryDNASet | null = null;
   try {
     const storyDNASet = await loadStoryDNASet(spindle, input.chatId, input.userId);
+    loadedStoryDnaSet = storyDNASet;
     const activeLocName = (narrative.detectedSceneMetadata?.location || input.previousScene?.environment.location || '').trim().toLowerCase();
     const matchedLocation = activeLocName
       ? Object.values(storyDNASet.locations).find((loc) =>
@@ -1892,7 +2029,16 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     }
     const recentCodex = (storyDNASet.chapterCodex ?? []).slice(-3);
     if (recentCodex.length > 0) {
-      visualContext.plannerContext += `\nRecent Chapter Memory: ${recentCodex.map((c) => `[${c.location || 'Scene'}] ${c.title}: ${c.summary}`).join(' ; ')}`;
+      const codexLines = recentCodex.map((c) => {
+        if (c.who?.length || c.whatChanged?.length || c.where) {
+          const who = c.who?.length ? `Who: ${c.who.join(', ')}` : '';
+          const where = c.where || c.location || 'Scene';
+          const changed = c.whatChanged?.length ? `Changed: ${c.whatChanged.join('; ')}` : c.summary.slice(0, 180);
+          return `- [${where}] ${[who, changed].filter(Boolean).join(' | ')}`;
+        }
+        return `- [${c.location || 'Scene'}] ${c.title}: ${c.summary}`;
+      });
+      visualContext.plannerContext += `\nRecent Chapter Memory:\n${codexLines.join('\n')}`;
     }
     const activeThreads = (storyDNASet.thoughtCabinet ?? []).filter((t) => t.status !== 'resolved').slice(-4);
     if (activeThreads.length > 0) {
@@ -1954,25 +2100,33 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
         spindle.log.warn(`System One decision failed; using story reader: ${debugErrorSummary(error)}`);
         return null;
       });
-  let systemOne = input.config.systemOneMode === "on" ? await systemOnePromise : null;
+  const canTryContinuation =
+    input.config.systemOneMode === "on" &&
+    !input.config.dynamicImageTemplates &&
+    resolveImageTemplate(input.config).template.category === "portrait" &&
+    input.previousScene !== null &&
+    narrative.paragraphs.length <= 7 &&
+    (Boolean(input.previousScene.identityPrompt) || isUsableIdentity(input.singleCharacter.protagonist.name, input.singleCharacter.protagonist.tags)) &&
+    (input.config.mode !== "cyoa" || narrative.choices.length > 0);
+  // Only block Tier 2 on System One when fast-path continuation is eligible;
+  // otherwise run System One in parallel with Tier 2 and fold its speaker/expression tags after.
+  let systemOne = canTryContinuation ? await systemOnePromise : null;
   let failedAttempts = 0;
   // The deterministic fallback is a last resort, not a peer: transient sidecar
   // failures (empty responses, truncation, malformed JSON) get one retry
   // before the turn downgrades.
   const PLANNER_ATTEMPTS = 2;
   let lastError: unknown = null;
+  let retryFeedback: string | undefined;
   planner = fallbackPlanner(input, narrative.paragraphs.length);
   usedFallback = true;
-  const useContinuation = !input.config.dynamicImageTemplates && resolveImageTemplate(input.config).template.category === "portrait" && input.config.systemOneMode === "on" && systemOne !== null && systemOne.coverage.sceneAnswered===true && systemOne.coverage.paragraphs.answered===narrative.paragraphs.length && input.previousScene !== null
-    && !systemOne.sceneChange && !systemOne.needsDescription
-    && narrative.paragraphs.length <= 7
-    && (Boolean(input.previousScene.identityPrompt) || isUsableIdentity(input.singleCharacter.protagonist.name, input.singleCharacter.protagonist.tags))
-    && (input.config.mode !== "cyoa" || narrative.choices.length > 0);
+  const useContinuation = canTryContinuation && systemOne !== null && systemOne.coverage.sceneAnswered===true && systemOne.coverage.paragraphs.answered===narrative.paragraphs.length
+    && !systemOne.sceneChange && !systemOne.needsDescription;
   if (useContinuation) usedFallback = false;
   for (let attempt = 1; !useContinuation && attempt <= PLANNER_ATTEMPTS; attempt += 1) {
     throwIfAborted(input.signal);
     try {
-      planner = await requestPlannerOutput(spindle, input, paragraphText, visualContext, plannerConnection, seedRegistry, promptParagraphs.length);
+      planner = await requestPlannerOutput(spindle, input, paragraphText, visualContext, plannerConnection, seedRegistry, promptParagraphs.length, retryFeedback, loadedStoryDnaSet);
       throwIfAborted(input.signal);
       // Require usable visual coverage when image generation is expected
       if (narrative.paragraphs.length > 0) {
@@ -2006,6 +2160,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     } catch (error) {
       throwIfAborted(input.signal);
       lastError = error;
+      retryFeedback = formatPlannerRetryFeedback(error);
       failedAttempts += 1;
       debug.line(`attempt ${attempt}/${PLANNER_ATTEMPTS} failed: ${debugErrorSummary(error)}`);
       if (input.config.debugLogging) {
@@ -2016,7 +2171,10 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   if (usedFallback && lastError !== null) {
     spindle.log.warn(`Visual planner fallback after ${PLANNER_ATTEMPTS} attempts: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
   }
-  if (input.config.systemOneMode === "compare") systemOne = await systemOnePromise;
+  if (!systemOne && (input.config.systemOneMode === "compare" || input.config.systemOneMode === "on")) {
+    systemOne = await systemOnePromise;
+    throwIfAborted(input.signal);
+  }
 
   if (systemOne) {
     if (input.config.systemOneMode === "compare") {
@@ -2375,17 +2533,41 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     }
   }
 
+  const personaDisplayNameForRpg = (personaName ?? "").trim();
+  const rpgState = input.config.rpgMode !== "off"
+    ? reduceRpgState(input.previousRpgState, {
+        personaName: personaDisplayNameForRpg || undefined,
+        dramaticProgress: Boolean(planner.resolvedThreads?.length),
+        locations: scenes.map((s) => ({ location: s.environment.location, description: s.environment.description })),
+        vitals: planner.rpg?.vitals,
+        quests: planner.rpg?.quests,
+        rpgDeltas: planner.rpgDeltas
+      })
+    : undefined;
+
   const finalParagraph = narrative.paragraphs.length - 1;
   const choices = narrative.choices.length > 0
     ? narrative.choices
-    : planner.choices.map((choice, index) => ChoiceSchema.parse({
-      id: id("choice", `${sourceFingerprint}:${index}:${choice.label}`),
-      label: choice.label,
-      submission: choice.submission,
-      source: "generated",
-      unlocksAfterParagraph: finalParagraph,
-      ...(input.config.rpgMode !== "off" && choice.check ? { check: choice.check } : {})
-    }));
+    : planner.choices.map((choice, index) => {
+      const gate = input.config.rpgMode !== "off"
+        ? evaluateChoiceGate(choice.requires, choice.lockedReason, rpgState ?? input.previousRpgState)
+        : { locked: false, lockedReason: null };
+      return ChoiceSchema.parse({
+        id: id("choice", `${sourceFingerprint}:${index}:${choice.label}`),
+        label: choice.label,
+        submission: choice.submission,
+        source: "generated",
+        unlocksAfterParagraph: finalParagraph,
+        ...(input.config.rpgMode !== "off" && choice.check ? { check: choice.check } : {}),
+        ...(input.config.rpgMode !== "off" && choice.requires ? { requires: choice.requires } : {}),
+        ...(input.config.rpgMode !== "off" && gate.locked
+          ? { disabled: true, ...(gate.lockedReason ? { lockedReason: gate.lockedReason } : {}) }
+          : {}),
+        ...(input.config.rpgMode !== "off" && choice.setsFlags && Object.keys(choice.setsFlags).length > 0
+          ? { setsFlags: choice.setsFlags }
+          : {})
+      });
+    });
 
   // Per-paragraph literal nameplate attribution. Display-only metadata: a
   // claimed speaker is accepted only when it matches a KNOWN name (planner
@@ -2461,14 +2643,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
 
   const terminalContinuity = reduceContinuity(continuity, continuityDeltas);
   const terminalSnapshot = timeline.snapshots.at(-1);
-  const rpgState = input.config.rpgMode === "full"
-    ? reduceRpgState(input.previousRpgState, {
-        personaName: personaDisplayName || undefined,
-        locations: scenes.map((s) => ({ location: s.environment.location, description: s.environment.description })),
-        vitals: planner.rpg?.vitals,
-        quests: planner.rpg?.quests
-      })
-    : undefined;
+
 
   let plan = validateTurnPlan(TurnPlanSchema.parse({
     schemaVersion: 1,
@@ -2497,6 +2672,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     } : undefined,
     planningStatus: usedFallback || cues.some((cue) => !cue.resolvedIdentity) || (cues.length === 0 && narrative.paragraphs.length > 0) ? "partial" : "planned",
     ...(rpgState ? { rpgState } : {}),
+    ...(planner.resolvedThreads?.length ? { resolvedThreads: planner.resolvedThreads } : {}),
     createdAt: new Date().toISOString()
   }));
   plan = await freshPlanPreferences(spindle,plan,input.config,input.previousScene,input.characterAppearance,input.userId);

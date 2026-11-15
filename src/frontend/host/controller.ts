@@ -286,7 +286,7 @@ export function stageTurnInput(
       ...effectForParagraph(next, index, intensity),
       ...ambientForParagraph(next, index, intensity)
     })),
-    choices: next.choices.map((choice) => ({ id: choice.id, label: choice.label, value: choice.value, ...(choice.check ? { check: choice.check } : {}) })),
+    choices: next.choices.map((choice) => ({ id: choice.id, label: choice.label, value: choice.value, ...(choice.disabled ? { disabled: true } : {}), ...(choice.lockedReason ? { lockedReason: choice.lockedReason } : {}), ...(choice.check ? { check: choice.check } : {}), ...(choice.setsFlags ? { setsFlags: choice.setsFlags } : {}) })),
     ...(next.rpgState ? { rpgState: next.rpgState } : {}),
     preserveImage,
     ...(presentation ? {presentation} : {}),
@@ -1224,7 +1224,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if(type==='vn_narrative_preview'){
       const parsed=NarrativePreviewSchema.safeParse(payload);if(!parsed.success)return;
       const preview=parsed.data;
-      if(!active||!preparationActive||preview.chatId!==chatId()||preview.sessionId!==stateRequestId||stage.isReadingUserParagraph())return;
+      if(!active||!preparationActive||preview.chatId!==chatId()||(preview.sessionId!==stateRequestId&&preview.sessionId!=='__open__')||stage.isReadingUserParagraph())return;
       const latest=ctx.messages.getLatestMessageId();if(latest&&latest!==preview.messageId)return;
       // Replanning an already displayed reply keeps its existing controls and local draft.
       if(turn&&turn.chatId===preview.chatId&&turn.messageId===preview.messageId&&turn.swipeId===preview.swipeId&&turn.sourceFingerprint===preview.sourceFingerprint)return;

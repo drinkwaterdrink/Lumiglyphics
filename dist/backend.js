@@ -19428,16 +19428,26 @@ function scrubStoryDNASwipes(set2, activeMessageSwipes) {
   }
   const nextThoughtCabinet = set2.thoughtCabinet?.filter((t) => !t.seenInSwipes?.length || isSwipeEntryActive({ autoDiscovered: true, seenInSwipes: t.seenInSwipes }, activeMessageSwipes));
   const nextChapterCodex = set2.chapterCodex?.filter((c) => !c.seenInSwipes?.length || isSwipeEntryActive({ autoDiscovered: true, seenInSwipes: c.seenInSwipes }, activeMessageSwipes));
+  let nextNpcBeliefs;
+  if (set2.npcBeliefs) {
+    nextNpcBeliefs = {};
+    for (const [npc, entries] of Object.entries(set2.npcBeliefs)) {
+      const kept = entries.filter((entry) => !entry.seenInSwipes?.length || isSwipeEntryActive({ autoDiscovered: true, seenInSwipes: entry.seenInSwipes }, activeMessageSwipes));
+      if (kept.length > 0)
+        nextNpcBeliefs[npc] = kept;
+    }
+  }
   return StoryDNASetSchema.parse({
     ...set2,
     locations: nextLocations,
     items: nextItems,
     ...nextThoughtCabinet !== undefined ? { thoughtCabinet: nextThoughtCabinet } : {},
     ...nextChapterCodex !== undefined ? { chapterCodex: nextChapterCodex } : {},
+    ...nextNpcBeliefs !== undefined ? { npcBeliefs: nextNpcBeliefs } : {},
     revision: (set2.revision ?? 0) + 1
   });
 }
-var LocationDNASchema, ItemDNASchema, ThoughtCabinetEntrySchema, ChapterCodexEntrySchema, StoryDNASetSchema, GENERIC_ALIAS_WORDS, TRAILING_CONTAINER_SUFFIXES, StoryDnaRequestSchema;
+var LocationDNASchema, ItemDNASchema, ThoughtCabinetEntrySchema, ChapterCodexEntrySchema, NpcBeliefSchema, StoryDNASetSchema, GENERIC_ALIAS_WORDS, TRAILING_CONTAINER_SUFFIXES, StoryDnaRequestSchema;
 var init_story_dna = __esm(() => {
   init_zod();
   LocationDNASchema = exports_external.object({
@@ -19490,16 +19500,27 @@ var init_story_dna = __esm(() => {
     title: exports_external.string().trim().min(1).max(180),
     location: exports_external.string().trim().max(180),
     summary: exports_external.string().trim().max(2000),
+    who: exports_external.array(exports_external.string().trim().max(120)).max(16).optional(),
+    where: exports_external.string().trim().max(180).optional(),
+    whatChanged: exports_external.array(exports_external.string().trim().max(280)).max(12).optional(),
     imageUrl: exports_external.string().trim().max(2048).optional(),
     messageId: exports_external.string().trim().max(160).optional(),
     seenInSwipes: exports_external.array(exports_external.string().trim().max(160)).max(64).optional(),
     timestamp: exports_external.number().int().nonnegative().default(() => Date.now())
+  }).strict();
+  NpcBeliefSchema = exports_external.object({
+    topic: exports_external.string().trim().min(1).max(120),
+    belief: exports_external.string().trim().min(1).max(400),
+    knowsSecret: exports_external.literal(false).default(false),
+    seenInSwipes: exports_external.array(exports_external.string().trim().max(160)).max(64).optional(),
+    updatedAt: exports_external.number().int().nonnegative().default(() => Date.now())
   }).strict();
   StoryDNASetSchema = exports_external.object({
     locations: exports_external.record(exports_external.string(), LocationDNASchema).default({}),
     items: exports_external.record(exports_external.string(), ItemDNASchema).default({}),
     thoughtCabinet: exports_external.array(ThoughtCabinetEntrySchema).max(40).optional(),
     chapterCodex: exports_external.array(ChapterCodexEntrySchema).max(40).optional(),
+    npcBeliefs: exports_external.record(exports_external.string(), exports_external.array(NpcBeliefSchema).max(12)).optional(),
     deletedLocations: exports_external.record(exports_external.string(), LocationDNASchema).optional(),
     deletedItems: exports_external.record(exports_external.string(), ItemDNASchema).optional(),
     revision: exports_external.number().int().nonnegative().default(0)
@@ -22021,23 +22042,75 @@ function reduceRpgState(previous, update) {
   const baseVitals = previous?.vitals ?? RpgVitalsSchema.parse({ name: update.personaName || "Adventurer" });
   const maxHp = update.vitals?.maxHp ?? baseVitals.maxHp;
   const maxStamina = update.vitals?.maxStamina ?? baseVitals.maxStamina;
+  const deltas = update.rpgDeltas;
+  const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, Math.trunc(n)));
+  const baseHp = update.vitals?.hp !== undefined ? update.vitals.hp : baseVitals.hp;
+  const baseStamina = update.vitals?.stamina !== undefined ? update.vitals.stamina : baseVitals.stamina;
+  const baseStress = update.vitals?.stress !== undefined ? update.vitals.stress : baseVitals.stress;
+  const nextHp = clamp(baseHp + (deltas?.hpDelta ?? 0), 0, maxHp);
+  const nextStamina = clamp(baseStamina + (deltas?.staminaDelta ?? 0), 0, maxStamina);
+  const nextStress = clamp(baseStress + (deltas?.stressDelta ?? 0), 0, 100);
+  let nextInventory = [...update.vitals?.inventory ?? baseVitals.inventory];
+  let progressed = Boolean(update.dramaticProgress);
+  if (deltas?.itemsRemoved?.length) {
+    const removeSet = new Set(deltas.itemsRemoved.map((item) => item.trim().toLowerCase()));
+    nextInventory = nextInventory.filter((item) => !removeSet.has(item.trim().toLowerCase()));
+  }
+  if (deltas?.itemsAdded?.length) {
+    for (const added of deltas.itemsAdded) {
+      const clean = added.trim();
+      if (clean && !nextInventory.some((existing) => existing.toLowerCase() === clean.toLowerCase())) {
+        nextInventory.push(clean);
+        progressed = true;
+      }
+    }
+  }
+  nextInventory = nextInventory.slice(0, 24);
+  const companionMap = new Map;
+  for (const comp of update.vitals?.companions ?? baseVitals.companions) {
+    companionMap.set(comp.name.trim().toLowerCase(), { ...comp });
+  }
+  for (const delta of deltas?.companionAffinityDeltas ?? []) {
+    const key = delta.name.trim().toLowerCase();
+    const existing = companionMap.get(key);
+    if (existing) {
+      existing.affinity = clamp(existing.affinity + delta.affinityDelta, -100, 100);
+      if (delta.status)
+        existing.status = delta.status;
+    } else {
+      companionMap.set(key, RpgCompanionSchema.parse({
+        name: delta.name,
+        affinity: clamp(delta.affinityDelta, -100, 100),
+        ...delta.status ? { status: delta.status } : {}
+      }));
+    }
+  }
+  const nextFlags = { ...previous?.flags ?? {} };
+  for (const key of deltas?.flagsCleared ?? []) {
+    delete nextFlags[key];
+  }
+  for (const [k, v] of Object.entries(deltas?.flagsSet ?? {})) {
+    if (nextFlags[k] !== v)
+      progressed = true;
+    nextFlags[k] = v;
+  }
+  const trimmedFlags = Object.fromEntries(Object.entries(nextFlags).slice(-64));
   const nextVitals = RpgVitalsSchema.parse({
     ...baseVitals,
     name: update.vitals?.name?.trim() || update.personaName?.trim() || baseVitals.name,
     ...update.vitals?.level !== undefined ? { level: update.vitals.level } : {},
     ...update.vitals?.archetype ? { archetype: update.vitals.archetype } : {},
     maxHp,
-    hp: Math.min(maxHp, update.vitals?.hp ?? baseVitals.hp),
+    hp: nextHp,
     maxStamina,
-    stamina: Math.min(maxStamina, update.vitals?.stamina ?? baseVitals.stamina),
-    ...update.vitals?.stress !== undefined ? { stress: update.vitals.stress } : {},
+    stamina: nextStamina,
+    stress: nextStress,
     ...update.vitals?.currency !== undefined ? { currency: update.vitals.currency } : {},
-    ...update.vitals?.inventory !== undefined ? { inventory: update.vitals.inventory } : {},
+    inventory: nextInventory,
     ...update.vitals?.statusEffects !== undefined ? { statusEffects: update.vitals.statusEffects } : {},
-    ...update.vitals?.companions !== undefined ? { companions: update.vitals.companions } : {}
+    companions: [...companionMap.values()].slice(0, 8)
   });
   const questMap = new Map;
-  let progressed = false;
   for (const existing of previous?.quests ?? []) {
     questMap.set(existing.id, {
       ...existing,
@@ -22048,7 +22121,7 @@ function reduceRpgState(previous, update) {
     const id2 = q.id?.trim() || slugId("quest", q.title);
     const prev = questMap.get(id2);
     const nextStatus = q.status ?? prev?.status ?? "active";
-    if (!prev || prev.status !== "completed" && nextStatus === "completed")
+    if (!prev || prev.status !== "completed" && nextStatus === "completed" || prev.objective !== q.objective)
       progressed = true;
     questMap.set(id2, RpgQuestSchema.parse({
       id: id2,
@@ -22101,28 +22174,51 @@ function reduceRpgState(previous, update) {
       currentLocationId,
       nodes,
       edges
-    }
+    },
+    flags: trimmedFlags
   });
 }
-function buildRpgPromptGuidance(state, mode) {
+function evaluateChoiceGate(requires, customReason, state) {
+  if (!requires)
+    return { locked: false, lockedReason: null };
+  const flags = state?.flags ?? {};
+  const inventory = (state?.vitals.inventory ?? []).map((item) => item.trim().toLowerCase());
+  for (const requiredFlag of requires.flags ?? []) {
+    if (!flags[requiredFlag]) {
+      return { locked: true, lockedReason: customReason?.trim() || `Requires ${requiredFlag.replace(/[_-]+/g, " ")}` };
+    }
+  }
+  for (const requiredItem of requires.items ?? []) {
+    const needle = requiredItem.trim().toLowerCase();
+    const hasItem = inventory.some((owned) => owned === needle || owned.includes(needle));
+    if (!hasItem) {
+      return { locked: true, lockedReason: customReason?.trim() || `Requires ${requiredItem}` };
+    }
+  }
+  return { locked: false, lockedReason: null };
+}
+function buildRpgStaticRules(mode) {
   if (mode === "off")
     return "";
   const lines = [
     mode === "lite" ? "RPG SKILL CHECKS (LITE MODE):" : "STANDALONE RPG STATE & QUEST TRACKING (FULL MODE):",
     "- When generating choices where the outcome is risky, contested, or uncertain, attach an optional `check: { stat: 'STR'|'DEX'|'CON'|'INT'|'WIS'|'CHA'|'LUCK', dc: 5..30, modifier: -10..20, rollMode: 'normal'|'advantage'|'disadvantage', reason?: string }` to that choice.",
+    "- Choices may optionally declare `requires: { flags?: string[], items?: string[] }`, `lockedReason?: string`, and `setsFlags?: Record<string, boolean>` for gated story paths.",
     "- If the user's message begins with `[SKILL CHECK: ...]`, honor the rolled tier (`CRITICAL_SUCCESS`, `SUCCESS`, `PARTIAL`, `FAILURE`, `CRITICAL_FAILURE`) honestly in the story consequences without sycophancy."
   ];
   if (mode === "full") {
-    lines.push("- Also return an optional top-level `rpg: { vitals?: { name?, level?, archetype?, hp?, maxHp?, stamina?, maxStamina?, stress?, currency?, inventory?, statusEffects?, companions?: [{ name, hp, maxHp, affinity, status }] }, quests?: [{ id?, title, objective, status?: 'active'|'completed'|'failed', deadlineTurns?: number|null }] }` reflecting any story-established changes to vitals, inventory, companions, or quests.");
-    if (state) {
-      const activeQuests = state.quests.filter((q) => q.status === "active").map((q) => `${q.title} (${computeQuestUrgency(q)})`).join("; ");
-      lines.push(`- Current RPG Snapshot (Turn ${state.turnCounter}, Pacing Pressure ${computePacingFrustrationMultiplier(state.turnsSinceProgress ?? state.turnCounter)}x): HP ${state.vitals.hp}/${state.vitals.maxHp}, STA ${state.vitals.stamina}/${state.vitals.maxStamina}, Stress ${state.vitals.stress}/100${activeQuests ? ` | Active Quests: ${activeQuests}` : ""}.`);
-    }
+    lines.push("- Also return optional `rpg: { vitals?, quests? }` AND additive `rpgDeltas: { hpDelta?, staminaDelta?, stressDelta?, itemsAdded?, itemsRemoved?, flagsSet?, flagsCleared?, companionAffinityDeltas?: [{ name, affinityDelta, status? }] }` reflecting story-established state changes.");
   }
   return lines.join(`
 `);
 }
-var RPG_MODES, SkillCheckStatSchema, SkillCheckRollModeSchema, SkillCheckSchema, RpgCompanionSchema, RpgVitalsSchema, RpgQuestStatusSchema, RpgQuestSchema, RpgLocationNodeSchema, RpgLocationEdgeSchema, RpgAtlasSchema, RpgStateSchema;
+function buildRpgTurnSnapshot(state, mode) {
+  if (mode !== "full" || !state)
+    return "";
+  const activeQuests = state.quests.filter((q) => q.status === "active").map((q) => `${q.title} (${computeQuestUrgency(q)})`).join("; ");
+  return `- Current RPG Snapshot (Turn ${state.turnCounter}, Pacing Pressure ${computePacingFrustrationMultiplier(state.turnsSinceProgress ?? state.turnCounter)}x): HP ${state.vitals.hp}/${state.vitals.maxHp}, STA ${state.vitals.stamina}/${state.vitals.maxStamina}, Stress ${state.vitals.stress}/100${activeQuests ? ` | Active Quests: ${activeQuests}` : ""}.`;
+}
+var RPG_MODES, SkillCheckStatSchema, SkillCheckRollModeSchema, SkillCheckSchema, RpgCompanionSchema, RpgVitalsSchema, RpgQuestStatusSchema, RpgQuestSchema, RpgLocationNodeSchema, RpgLocationEdgeSchema, RpgAtlasSchema, ChoiceRequirementsSchema, RpgCompanionDeltaSchema, RpgDeltasSchema, RpgStateSchema;
 var init_rpg_state = __esm(() => {
   init_zod();
   RPG_MODES = ["off", "lite", "full"];
@@ -22180,12 +22276,32 @@ var init_rpg_state = __esm(() => {
     nodes: exports_external.array(RpgLocationNodeSchema).max(48).default([]),
     edges: exports_external.array(RpgLocationEdgeSchema).max(96).default([])
   }).strict();
+  ChoiceRequirementsSchema = exports_external.object({
+    flags: exports_external.array(exports_external.string().trim().min(1).max(120)).max(8).optional(),
+    items: exports_external.array(exports_external.string().trim().min(1).max(120)).max(8).optional()
+  }).strict();
+  RpgCompanionDeltaSchema = exports_external.object({
+    name: exports_external.string().trim().min(1).max(120),
+    affinityDelta: exports_external.number().int().min(-100).max(100).default(0),
+    status: exports_external.string().trim().max(120).optional()
+  }).strict();
+  RpgDeltasSchema = exports_external.object({
+    hpDelta: exports_external.number().int().min(-9999).max(9999).optional(),
+    staminaDelta: exports_external.number().int().min(-9999).max(9999).optional(),
+    stressDelta: exports_external.number().int().min(-100).max(100).optional(),
+    itemsAdded: exports_external.array(exports_external.string().trim().min(1).max(160)).max(12).optional(),
+    itemsRemoved: exports_external.array(exports_external.string().trim().min(1).max(160)).max(12).optional(),
+    flagsSet: exports_external.record(exports_external.string().trim().min(1).max(120), exports_external.boolean()).optional(),
+    flagsCleared: exports_external.array(exports_external.string().trim().min(1).max(120)).max(16).optional(),
+    companionAffinityDeltas: exports_external.array(RpgCompanionDeltaSchema).max(8).optional()
+  }).strict();
   RpgStateSchema = exports_external.object({
     turnCounter: exports_external.number().int().nonnegative().default(0),
     turnsSinceProgress: exports_external.number().int().nonnegative().default(0),
     vitals: RpgVitalsSchema,
     quests: exports_external.array(RpgQuestSchema).max(16).default([]),
-    atlas: RpgAtlasSchema
+    atlas: RpgAtlasSchema,
+    flags: exports_external.record(exports_external.string().trim().min(1).max(120), exports_external.boolean()).default({})
   }).strict();
 });
 
@@ -22224,7 +22340,11 @@ var init_contracts = __esm(() => {
     submission: TextSchema,
     source: ChoiceSourceSchema,
     unlocksAfterParagraph: NonNegativeIntegerSchema,
-    check: SkillCheckSchema.optional()
+    check: SkillCheckSchema.optional(),
+    requires: ChoiceRequirementsSchema.optional(),
+    lockedReason: TextSchema.max(160).optional(),
+    disabled: exports_external.boolean().optional(),
+    setsFlags: exports_external.record(exports_external.string().trim().min(1).max(120), exports_external.boolean()).optional()
   }).strict();
   SubjectCategorySchema = exports_external.enum(["female", "male", "nonbinary", "nonhuman", "unknown"]);
   CharacterContinuitySchema = exports_external.object({
@@ -22509,6 +22629,7 @@ var init_contracts = __esm(() => {
     }).optional(),
     planningStatus: PlanningStatusSchema,
     rpgState: RpgStateSchema.optional(),
+    resolvedThreads: exports_external.array(exports_external.string().trim().min(1).max(160)).max(8).optional(),
     createdAt: TimestampSchema
   }).strict().superRefine((plan, context) => {
     for (const [index, paragraph] of plan.paragraphs.entries()) {
@@ -32882,13 +33003,35 @@ function harvestTurnStoryDNA(plan, set2, swipeTag, prevLocationName, options) {
       const lastEntry = codex.at(-1);
       if (!lastEntry || lastEntry.location.toLowerCase() !== loc.name.toLowerCase()) {
         const entryId = `ch-${loc.id}-${codex.length + 1}`.slice(0, 250);
+        const who = Array.from(new Set([scene.character, ...scene.cast ?? []].map((name) => (name ?? "").trim()).filter(Boolean))).slice(0, 12);
+        const whatChanged = [];
+        const prevName = lastLoc?.name || prevLocationName?.trim();
+        if (prevName && prevName.toLowerCase() !== loc.name.toLowerCase()) {
+          whatChanged.push(`Moved from ${prevName} to ${loc.name}`);
+        }
+        if (scene.environment.timeOfDay)
+          whatChanged.push(`Time: ${scene.environment.timeOfDay}`);
+        if (scene.environment.weather)
+          whatChanged.push(`Weather: ${scene.environment.weather}`);
+        if (scene.attire)
+          whatChanged.push(`Attire: ${scene.attire.slice(0, 140)}`);
+        const baseDesc = (scene.environment.description?.trim() || loc.environmentDescription || `Scene at ${loc.name}`).slice(0, 1400);
+        const structuredSummary = [
+          who.length > 0 ? `Who: ${who.join(", ")}` : "",
+          `Where: ${loc.name}`,
+          whatChanged.length > 0 ? `Changed: ${whatChanged.join("; ")}` : "",
+          baseDesc
+        ].filter(Boolean).join(" | ").slice(0, 2000);
         set2.chapterCodex = [
           ...codex,
           {
             id: entryId,
             title: loc.name.slice(0, 180),
             location: loc.name.slice(0, 180),
-            summary: (scene.environment.description?.trim() || loc.environmentDescription || `Scene at ${loc.name}`).slice(0, 2000),
+            who,
+            where: loc.name.slice(0, 180),
+            whatChanged: whatChanged.slice(0, 12),
+            summary: structuredSummary,
             ...plan.key?.assistantMessageId ? { messageId: plan.key.assistantMessageId.slice(0, 160) } : {},
             seenInSwipes: swipeTag ? [swipeTag] : [],
             timestamp: Date.now()
@@ -33004,17 +33147,77 @@ function harvestTurnStoryDNA(plan, set2, swipeTag, prevLocationName, options) {
       ...cue.character?.trim() ? { heldBy: cue.character.trim() } : {}
     });
   }
+  for (const invItem of plan.rpgState?.vitals.inventory ?? []) {
+    const cleanInv = invItem.trim();
+    if (!cleanInv)
+      continue;
+    upsertItem(cleanInv, {
+      description: cleanInv,
+      heldBy: plan.rpgState?.vitals.name || "Player"
+    });
+  }
   if (options?.mindLedgerEnabled !== false) {
     const ledger = [...set2.thoughtCabinet ?? []];
-    for (const ref of plan.storyReferences ?? []) {
-      if (ref.field !== "significance" && ref.field !== "statedGoals" && ref.field !== "customs" && ref.field !== "risks")
+    const narrativeText = (plan.paragraphs ?? []).map((p) => p.text).join(" ").toLowerCase();
+    const completedQuests = (plan.rpgState?.quests ?? []).filter((q) => q.status === "completed").map((q) => q.title.toLowerCase());
+    const explicitlyResolved = (plan.resolvedThreads ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean);
+    for (const entry of ledger) {
+      if (entry.status === "resolved")
         continue;
+      const keywords = entry.title.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4);
+      const mentioned = keywords.some((kw) => narrativeText.includes(kw));
+      const questResolved = completedQuests.some((qt) => keywords.some((kw) => qt.includes(kw)));
+      const entryTitleLower = entry.title.toLowerCase();
+      const entryIdLower = entry.id.toLowerCase();
+      const threadExplicitlyResolved = explicitlyResolved.some((t) => t === entryIdLower || t === entryTitleLower || entryTitleLower.includes(t) || t.includes(entryTitleLower));
+      if (threadExplicitlyResolved || questResolved || mentioned && /\b(?:solved|uncovered|revealed|confessed|resolved|truth came out|mystery ended)\b/.test(narrativeText)) {
+        entry.status = "resolved";
+        entry.updatedAt = Date.now();
+        changed = true;
+      } else if (entry.status === "germinating" && mentioned) {
+        entry.status = "internalized";
+        entry.updatedAt = Date.now();
+        changed = true;
+      }
+    }
+    const nextBeliefs = {
+      ...set2.npcBeliefs ?? {}
+    };
+    for (const ref of plan.storyReferences ?? []) {
       const cleanVal = ref.value?.trim();
       if (!cleanVal)
         continue;
-      const title = `${ref.name}: ${cleanVal.split(/[.;!?]/)[0]?.trim() || cleanVal}`.slice(0, 160);
-      if (ledger.some((e) => e.title.toLowerCase() === title.toLowerCase()))
+      if (ref.kind === "npc" && (ref.field === "statedGoals" || ref.field === "relationships" || ref.field === "condition")) {
+        const npcKey = ref.name.trim().slice(0, 120);
+        if (npcKey) {
+          const list = [...nextBeliefs[npcKey] ?? []];
+          const topic = ref.field;
+          const existingBelief = list.find((b) => b.topic === topic && b.belief.toLowerCase() === cleanVal.slice(0, 400).toLowerCase());
+          if (!existingBelief) {
+            list.push({
+              topic,
+              belief: cleanVal.slice(0, 400),
+              knowsSecret: false,
+              seenInSwipes: swipeTag ? [swipeTag] : [],
+              updatedAt: Date.now()
+            });
+            nextBeliefs[npcKey] = list.slice(-12);
+            changed = true;
+          }
+        }
+      }
+      if (ref.field !== "significance" && ref.field !== "statedGoals" && ref.field !== "customs" && ref.field !== "risks")
         continue;
+      const title = `${ref.name}: ${cleanVal.split(/[.;!?]/)[0]?.trim() || cleanVal}`.slice(0, 160);
+      const existingEntry = ledger.find((e) => e.title.toLowerCase() === title.toLowerCase());
+      if (existingEntry) {
+        if (existingEntry.status === "germinating") {
+          existingEntry.status = "internalized";
+          existingEntry.updatedAt = Date.now();
+          changed = true;
+        }
+        continue;
+      }
       const category = ref.field === "risks" ? "foreshadowing" : ref.field === "statedGoals" ? "promise" : ref.field === "significance" ? "clue" : "secret";
       const entryId = `tc-${createItemId(ref.name)}-${ledger.length + 1}`.slice(0, 250);
       ledger.push({
@@ -33028,7 +33231,10 @@ function harvestTurnStoryDNA(plan, set2, swipeTag, prevLocationName, options) {
       });
       changed = true;
     }
-    if (changed && ledger.length > (set2.thoughtCabinet?.length ?? 0)) {
+    if (Object.keys(nextBeliefs).length > 0) {
+      set2.npcBeliefs = nextBeliefs;
+    }
+    if (changed) {
       set2.thoughtCabinet = ledger.slice(-40);
     }
   }
@@ -33956,7 +34162,7 @@ function assertPromptLengths(prompt, negative = "", profile) {
   if (isPosOnly && negative.trim())
     throw new Error("This endpoint requires positive-only wording. Regenerate the prompt to incorporate essential constraints into the positive description, or clear the negative field after reviewing it.");
 }
-function fitPromptToBudget(prompt, negative = "", maxCharacters = IMAGE_PROMPT_MAX_CHARS, negativeMode) {
+function fitPromptToBudget(prompt, negative = "", maxCharacters = IMAGE_PROMPT_MAX_CHARS, negativeMode, options) {
   let effectiveNegative = negativeMode === "positive-only" ? "" : compactNegativePrompt(negative);
   let effectivePrompt = compactPromptText(prompt, true);
   if (effectivePrompt.length + effectiveNegative.length <= maxCharacters) {
@@ -34001,16 +34207,55 @@ function fitPromptToBudget(prompt, negative = "", maxCharacters = IMAGE_PROMPT_M
   const allowedPositive = Math.max(100, maxCharacters - effectiveNegative.length);
   if (effectivePrompt.length > allowedPositive) {
     const tags = effectivePrompt.split(/,\s*|\r?\n/).map((t) => t.trim()).filter(Boolean);
-    let curPrompt = "";
+    const pinnedSet = new Set((options?.pinnedClauses ?? []).map((c) => c.trim().toLowerCase()).filter(Boolean));
+    const isStyleOrQualityTag = (tag) => /\b(?:style|aesthetic|palette|cel shading|watercolor|oil painting|anime|illustration|masterpiece|best quality|detailed lighting)\b/i.test(tag) || /^by\s+/i.test(tag);
+    const isPinnedTag = (tag) => {
+      if (/\[\[LG_(?:PIN|CAST)_\d+_\d+\]\]/.test(tag))
+        return true;
+      const lower = tag.toLowerCase();
+      return [...pinnedSet].some((pin) => pin.includes(lower) || lower.includes(pin));
+    };
+    const reservedCap = Math.min(Math.floor(allowedPositive * 0.25), allowedPositive);
+    const reserved = [];
+    let reservedLen = 0;
     for (const tag of tags) {
-      const candidate = curPrompt ? `${curPrompt}, ${tag}` : tag;
-      if (candidate.length <= allowedPositive) {
-        curPrompt = candidate;
-      } else {
+      if (!isPinnedTag(tag))
+        continue;
+      const nextLen = reservedLen ? reservedLen + 2 + tag.length : tag.length;
+      if (nextLen <= reservedCap) {
+        reserved.push(tag);
+        reservedLen = nextLen;
+      }
+    }
+    if (options?.reserveStyleTail !== false) {
+      for (let i = tags.length - 1;i >= 0; i--) {
+        const tag = tags[i];
+        if (reserved.includes(tag) || !isStyleOrQualityTag(tag))
+          continue;
+        const nextLen = reservedLen ? reservedLen + 2 + tag.length : tag.length;
+        if (nextLen <= reservedCap) {
+          reserved.push(tag);
+          reservedLen = nextLen;
+        }
+      }
+    }
+    const bodyBudget = Math.max(40, allowedPositive - (reserved.length ? reservedLen + 2 : 0));
+    const body2 = [];
+    let bodyLen = 0;
+    for (const tag of tags) {
+      if (reserved.includes(tag))
+        continue;
+      const nextLen = bodyLen ? bodyLen + 2 + tag.length : tag.length;
+      if (nextLen <= bodyBudget) {
+        body2.push(tag);
+        bodyLen = nextLen;
+      } else if (!body2.length && bodyBudget > 16) {
+        body2.push(tag.slice(0, bodyBudget).replace(/\s+\S*$/, "").trim());
         break;
       }
     }
-    effectivePrompt = curPrompt || effectivePrompt.slice(0, allowedPositive).replace(/\s+\S*$/, "");
+    const combined = [...body2, ...reserved].filter(Boolean).join(", ");
+    effectivePrompt = combined || effectivePrompt.slice(0, allowedPositive).replace(/\s+\S*$/, "");
   }
   return {
     prompt: effectivePrompt.trim(),
@@ -34272,7 +34517,7 @@ class ImageReviewGate {
       throw error61;
     }
   }
-  async regenerate(requestId, edits, guidance2) {
+  async regenerate(requestId, edits, guidance2, pinnedClauses) {
     const item = this.pending.get(requestId);
     if (!item?.metadata.regeneratePrompt && !item?.metadata.enrichPrompt || item.signal.aborted)
       return false;
@@ -34280,7 +34525,7 @@ class ImageReviewGate {
     this.pending.delete(requestId);
     try {
       const runner = guidance2 && item.metadata.enrichPrompt ? item.metadata.enrichPrompt : item.metadata.regeneratePrompt ?? item.metadata.enrichPrompt;
-      const request = await runner(structuredClone(draft), guidance2);
+      const request = await runner(structuredClone(draft), guidance2, pinnedClauses);
       if (item.signal.aborted)
         throw aborted3("Prompt regeneration cancelled.");
       assertPromptLengths(request.prompt, request.negativePrompt, request.promptProfile);
@@ -34303,7 +34548,7 @@ class ImageReviewGate {
       throw error61;
     }
   }
-  async enrich(requestId, guidance2, edits) {
+  async enrich(requestId, guidance2, edits, pinnedClauses) {
     const item = this.pending.get(requestId);
     if (!item?.metadata.enrichPrompt && !item?.metadata.regeneratePrompt || item.signal.aborted)
       return false;
@@ -34311,7 +34556,7 @@ class ImageReviewGate {
     this.pending.delete(requestId);
     try {
       const runner = item.metadata.enrichPrompt ?? item.metadata.regeneratePrompt;
-      const request = await runner(structuredClone(draft), guidance2);
+      const request = await runner(structuredClone(draft), guidance2, pinnedClauses);
       if (item.signal.aborted)
         throw aborted3("Prompt enrichment cancelled.");
       assertPromptLengths(request.prompt, request.negativePrompt, request.promptProfile);
@@ -35214,6 +35459,23 @@ function sceneEpisodeOf(scene, scopeGeneration = 0) {
 }
 function sceneIdentityDigest(identity2) {
   return cyrb53(canonicalJson(identity2));
+}
+function backdropDigestOf(identity2) {
+  return cyrb53(canonicalJson({
+    location: identity2.environment.location.trim().toLowerCase(),
+    timeWeather: identity2.environment.timeWeather.trim().toLowerCase(),
+    lighting: identity2.environment.lighting?.trim().toLowerCase() ?? null,
+    description: identity2.environment.description?.trim().toLowerCase() ?? null,
+    persistentElements: identity2.environment.persistentElements,
+    provider: identity2.request?.provider ?? null,
+    model: identity2.request?.model ?? "",
+    promptSyntax: identity2.request?.promptSyntax ?? "",
+    styleDnaDigest: identity2.styleDnaDigest ?? "",
+    outputPlanDigest: identity2.outputPlanDigest ?? ""
+  }));
+}
+function beatDigestOf(identity2) {
+  return sceneIdentityDigest(identity2);
 }
 function sceneImageCacheKey(identity2) {
   const canonical = canonicalJson(identity2);
@@ -36212,6 +36474,7 @@ function normalizeConfigUncached(input2) {
     debugLogging: bool(input2.debugLogging, DEFAULT_CONFIG.debugLogging),
     showReplyCost: bool(input2.showReplyCost, DEFAULT_CONFIG.showReplyCost),
     generateImages: bool(input2.generateImages, DEFAULT_CONFIG.generateImages),
+    imageGenerationTrigger: input2.imageGenerationTrigger === "scene-change" ? "scene-change" : "per-beat",
     reviewImages: bool(input2.reviewImages, DEFAULT_CONFIG.reviewImages),
     dynamicImageTemplates: bool(input2.dynamicImageTemplates, false),
     defaultImageTemplateId: nullableString(input2.defaultImageTemplateId) ?? "portrait",
@@ -36331,6 +36594,7 @@ var init_config = __esm(() => {
     debugLogging: false,
     showReplyCost: false,
     generateImages: true,
+    imageGenerationTrigger: "per-beat",
     reviewImages: true,
     dynamicImageTemplates: false,
     defaultImageTemplateId: "portrait",
@@ -39567,7 +39831,34 @@ function sanitizeVisualNarrativeDescription(raw) {
     return "";
   return raw.replace(/\b(?:with\s+)?no\s+(?:visible|magical|magic|supernatural|glowing)\s+(?:aura|glow|halo|mana|light)\s*,?\s*(?:only\s+)?/gi, "").replace(/\bwithout\s+any\s+(?:visible\s+)?(?:aura|glow|halo|scars|blood|wounds|weapons)\s*,?\s*/gi, "").replace(/\b(?:no\s+(?:visible|apparent|discernible)\s+(?:scars|wounds|blood|tears|trace|sign)|(?:absent|devoid)\s+of\s+[^,.]+)\s*,?\s*/gi, "").replace(/\s{2,}/g, " ").trim();
 }
-function enrichLightingWithChromaticLut(baseLighting, narrativeContext) {
+function deriveColorScriptKeyframe(input2) {
+  const loc = (input2.location ?? "").trim();
+  const desc = (input2.description ?? "").trim();
+  const ctxText = `${desc} ${input2.narrativeContext ?? ""}`;
+  const interior = loc ? isEnclosedInterior(loc, desc) : false;
+  const enclosure = interior ? "interior" : "exterior";
+  const hasWindow = /\b(?:window|windows|skylight|glass\s+roof|balcony\s+door)\b/i.test(ctxText);
+  let base = sanitizeVisualNarrativeDescription(input2.baseLighting);
+  if (!base) {
+    const tod = (input2.timeOfDay ?? "").toLowerCase();
+    const weather = (input2.weather ?? "").toLowerCase();
+    if (interior && !hasWindow) {
+      base = /\b(?:night|midnight|dark|late)\b/.test(tod) ? "warm ambient interior key light, soft shadow fill" : "diffused interior ambient key light, soft fill";
+    } else if (/\b(?:night|midnight)\b/.test(tod)) {
+      base = "cool moonlit rim light, deep indigo shadows";
+    } else if (/\b(?:dusk|sunset|twilight)\b/.test(tod)) {
+      base = "warm low-angle amber key light, cool lavender shadow fill";
+    } else if (/\b(?:rain|storm|overcast|fog)\b/.test(weather)) {
+      base = "soft overcast diffused daylight, gentle contrast";
+    }
+  }
+  if (input2.chromaticLutEnabled === false) {
+    return { enclosure, lighting: sanitizeVisualNarrativeDescription(base) };
+  }
+  const enriched = enrichLightingWithChromaticLut(base, `${ctxText} ${input2.timeOfDay ?? ""}`, { interior, hasWindow });
+  return { enclosure, lighting: sanitizeVisualNarrativeDescription(enriched) };
+}
+function enrichLightingWithChromaticLut(baseLighting, narrativeContext, enclosureOpts) {
   const base = (baseLighting ?? "").trim();
   const ctx = (narrativeContext ?? "").toLowerCase();
   if (!ctx)
@@ -39575,16 +39866,17 @@ function enrichLightingWithChromaticLut(baseLighting, narrativeContext) {
   if (/\b(?:kelvin|lut|teal-and-amber|tungsten|halation|color\s*grade|chromatic)\b/i.test(base)) {
     return base;
   }
+  const blockOutdoorFlare = Boolean(enclosureOpts?.interior && !enclosureOpts?.hasWindow);
   let lutCue = "";
   if (/\b(?:blood|ambush|alarm|siren|betray|blade|threat|panic|tense|danger|murder)\b/.test(ctx)) {
     lutCue = "teal-and-amber dramatic rim lighting, deep shadows";
   } else if (/\b(?:hearth|fireplace|tavern|candle|embrace|kiss|tender|warmth|cozy|intimate)\b/.test(ctx)) {
     lutCue = "warm tungsten halation, soft golden rim highlights";
   } else if (/\b(?:grief|funeral|tears|despair|frost|blizzard|lonely|bleak|sorrow|overcast)\b/.test(ctx)) {
-    lutCue = "cool cyan-slate overcast color grade, muted midtones";
+    lutCue = blockOutdoorFlare ? "muted slate interior fill, soft shadowed contours" : "cool cyan-slate overcast color grade, muted midtones";
   } else if (/\b(?:arcane|ritual|portal|mana|neon|cyber|hologram|synth|bioluminesc)\b/.test(ctx)) {
     lutCue = "violet-and-cyan specular split lighting, luminous bounce";
-  } else if (/\b(?:sunrise|sunset|golden hour|dusk|twilight)\b/.test(ctx)) {
+  } else if (!blockOutdoorFlare && /\b(?:sunrise|sunset|golden hour|dusk|twilight)\b/.test(ctx)) {
     lutCue = "golden-hour directional rim flare, warm atmospheric haze";
   }
   if (!lutCue)
@@ -39754,7 +40046,15 @@ function buildVisualBrief(config2, scene, cue, appearances, characterDNALibrary,
     subjects: noPeople ? "" : ensemble ? group : text2([subjectLabel, appearance, template.category === "portrait" ? pose : ""]),
     action: noPeople ? template.category === "detail" || template.category === "custom" ? text2([(cue.visualFocus ?? "").slice(0, 1200), ...activeItemClauses], 2400) : text2([...activeItemClauses], 2400) : text2([cleanedVisualDescription, ...activeItemClauses, compileActionProp(cue.action), template.category === "portrait" ? "" : pose]),
     composition: `${cue.shotHint?.preferredShotSize ?? template.framing}; ${cue.shotHint?.preferredAngle ? `${cue.shotHint.preferredAngle} perspective` : template.cameraPolicy === "fixed" ? "eye-level view" : "dynamic narrative perspective"}; ${noPeople ? "no people" : ensemble ? cue.shotHint?.spatialRelationships?.length ? `${members2.length} visible characters staged naturally in the scene (${cue.shotHint.spatialRelationships.slice(0, 4).join("; ")})${cue.shotHint.sceneStagingNote ? `; ${cue.shotHint.sceneStagingNote}` : ""}` : `${members2.length} visible characters staged naturally across room depths in active posture, including every listed subject; distinct faces and silhouettes` : "one visible character"}; keep the lower quarter clear for dialogue`,
-    lighting: config2.chromaticLutEnabled !== false ? enrichLightingWithChromaticLut(text2([environment.lighting, locDNA?.lighting], 1000), `${cleanedVisualDescription} ${environment.description ?? ""} ${environment.weather ?? ""}`) : text2([environment.lighting, locDNA?.lighting], 1000),
+    lighting: deriveColorScriptKeyframe({
+      baseLighting: text2([environment.lighting, locDNA?.lighting], 1000),
+      location: environment.location,
+      timeOfDay: environment.timeOfDay,
+      weather: environment.weather,
+      description: environment.description,
+      narrativeContext: cleanedVisualDescription,
+      chromaticLutEnabled: config2.chromaticLutEnabled !== false
+    }).lighting,
     subjectMode: template.subjectMode,
     framing: template.framing,
     referencePolicy: noPeople || ensemble ? "none" : template.referencePolicy,
@@ -39774,6 +40074,7 @@ var init_visual_brief = __esm(() => {
   init_card_role();
   init_nicknames();
   init_story_dna();
+  init_scene_atmosphere();
   PROP_STOP_WORDS = new Set([
     "the",
     "a",
@@ -41978,7 +42279,10 @@ var init_schemas3 = __esm(() => {
   PlannerChoiceSchema = exports_external.object({
     label: exports_external.string().trim().min(1),
     submission: exports_external.string().trim().min(1),
-    check: SkillCheckSchema.optional()
+    check: SkillCheckSchema.optional(),
+    requires: ChoiceRequirementsSchema.optional(),
+    lockedReason: exports_external.string().trim().max(160).optional(),
+    setsFlags: exports_external.record(exports_external.string().trim().min(1).max(120), exports_external.boolean()).optional()
   }).strict();
   PlannerRpgUpdateSchema = exports_external.object({
     vitals: exports_external.object({
@@ -42023,7 +42327,9 @@ var init_schemas3 = __esm(() => {
     choices: exports_external.array(PlannerChoiceSchema).max(6).default([]),
     characters: exports_external.array(PlannerCharacterSchema).default([]),
     speakers: exports_external.array(PlannerSpeakerSchema).default([]),
-    rpg: PlannerRpgUpdateSchema
+    rpg: PlannerRpgUpdateSchema,
+    rpgDeltas: RpgDeltasSchema.optional(),
+    resolvedThreads: exports_external.array(exports_external.string().trim().min(1).max(160)).max(8).optional()
   }).strict();
   FIXED_CAMERA = CameraLockSchema.parse({
     framing: "upper body",
@@ -42225,7 +42531,7 @@ function plannerInstruction(config2, visualContext, promptProfile, paragraphCoun
 `) : "",
     `Shape: {effects:[{paragraphIndex,effect}],scenes:[{startParagraph,boundary:{claimedNewScene,reason,location,timeOfDay,majorTimeJump,environmentReplacement,forced},environment:{location,timeOfDay,weather,lighting,description,persistentElements,removedElements?},environmentChanges?:{description?,lighting?,timeOfDay?,weather?,addElements?,removeElements?,replaceElements?:[{from,to}],clearElements?,clearLighting?,clearWeather?},cast,character?,characterId?,attire?,ambient?,basePrompt,compositionLock}],cues:[{paragraphIndex,templateId,templateReason,visualDescription,visualFocus?,visibleCharacters?,expression,action?,character?,characterId?,attire?,shotHint?:{intent?,focalSubject?,preferredShotSize?,preferredAngle?,preferredCompositionMode?,spatialRelationships?,sceneStagingNote?},effect?${hasAudio ? ",bgm?,sfx?" : ""}}],choices:[{label,submission}],characters:[{name,description,species?,anatomy?,characterId?,aliases?,subjectCategory?}],speakers:[{paragraphIndex,name}]}`,
     config2.customPlannerInstructions ? config2.customPlannerInstructions.trim() : "",
-    buildRpgPromptGuidance(previousRpgState, config2.rpgMode)
+    buildRpgStaticRules(config2.rpgMode)
   ].filter(Boolean).join(`
 `);
 }
@@ -42244,6 +42550,8 @@ function previousSceneContext(scene) {
     return "No previous visual scene exists.";
   return JSON.stringify({
     sceneId: scene.sceneId,
+    character: scene.character,
+    attire: scene.attire,
     environment: scene.environment,
     ambient: scene.ambient,
     cast: scene.cast,
@@ -42531,15 +42839,22 @@ function normalizeChoice(value) {
     return null;
   const checkParsed = record3.check ? SkillCheckSchema.safeParse(record3.check) : null;
   const check2 = checkParsed && checkParsed.success ? checkParsed.data : undefined;
-  return { label, submission, ...check2 ? { check: check2 } : {} };
+  const reqParsed = record3.requires ? ChoiceRequirementsSchema.safeParse(record3.requires) : null;
+  const requires = reqParsed && reqParsed.success ? reqParsed.data : undefined;
+  const lockedReason = typeof record3.lockedReason === "string" && record3.lockedReason.trim() ? record3.lockedReason.trim().slice(0, 160) : undefined;
+  let setsFlags;
+  if (record3.setsFlags && typeof record3.setsFlags === "object" && !Array.isArray(record3.setsFlags)) {
+    const entries = Object.entries(record3.setsFlags).filter((entry) => Boolean(entry[0].trim()) && typeof entry[1] === "boolean").map(([k, v]) => [k.trim().slice(0, 120), v]);
+    if (entries.length > 0)
+      setsFlags = Object.fromEntries(entries);
+  }
   return {
     label,
     submission,
-    ...check2 ? { check: check2 } : {}
-  };
-  return {
-    label,
-    submission
+    ...check2 ? { check: check2 } : {},
+    ...requires ? { requires } : {},
+    ...lockedReason ? { lockedReason } : {},
+    ...setsFlags ? { setsFlags } : {}
   };
 }
 function normalizeCharacter(value) {
@@ -42677,6 +42992,13 @@ function normalizePlannerOutput(value, defaultLoc, trace = () => {}) {
     storyReferences: record3.storyReferences,
     storyDocuments: record3.storyDocuments,
     ...record3.rpg && typeof record3.rpg === "object" && !Array.isArray(record3.rpg) ? { rpg: record3.rpg } : {},
+    ...record3.rpgDeltas && typeof record3.rpgDeltas === "object" && !Array.isArray(record3.rpgDeltas) ? (() => {
+      const parsed = RpgDeltasSchema.safeParse(record3.rpgDeltas);
+      return parsed.success ? { rpgDeltas: parsed.data } : {};
+    })() : {},
+    ...Array.isArray(record3.resolvedThreads) ? {
+      resolvedThreads: record3.resolvedThreads.filter((t) => typeof t === "string" && Boolean(t.trim())).map((t) => t.trim().slice(0, 160)).slice(0, 8)
+    } : {},
     characters: rawCharacters.map(normalizeCharacter),
     speakers: Array.isArray(record3.speakers) ? record3.speakers.map((entry) => {
       if (!entry || typeof entry !== "object" || Array.isArray(entry))
@@ -42716,10 +43038,63 @@ function extractResponseContent(response) {
   }
   return;
 }
-async function requestPlannerOutput(spindle2, input2, paragraphText, visualContext, connection, registry2 = {}, paragraphCount = 0) {
+function formatPlannerRetryFeedback(error61) {
+  if (error61 instanceof exports_external.ZodError) {
+    const issues = error61.issues.slice(0, 8).map((issue2) => {
+      const path2 = issue2.path.length > 0 ? issue2.path.join(".") : "(root)";
+      return `${path2}: ${issue2.message}`;
+    });
+    return issues.join("; ").slice(0, 600);
+  }
+  return debugErrorSummary(error61).slice(0, 400);
+}
+function buildOutboundDramaticBrief(params) {
+  const maxChars = Math.max(200, params.maxChars ?? 1600);
+  const parts = [];
+  if (params.rpgState) {
+    const activeQuests = params.rpgState.quests.filter((q) => q.status === "active").slice(0, 4).map((q) => `${q.title}: ${q.objective.slice(0, 80)}`);
+    if (activeQuests.length > 0) {
+      parts.push(`Open Quests: ${activeQuests.join(" | ")}`);
+    }
+    const stalled = params.rpgState.turnsSinceProgress ?? 0;
+    if (stalled >= 2) {
+      parts.push(`Pacing Cue: ${stalled} turns without major resolution \u2014 consider advancing or resolving an active thread.`);
+    }
+  }
+  if (params.storyDNASet) {
+    const openThreads = (params.storyDNASet.thoughtCabinet ?? []).filter((t) => t.status !== "resolved").slice(-4).map((t) => `[${t.status}] ${t.title}`);
+    if (openThreads.length > 0) {
+      parts.push(`Open Storylets: ${openThreads.join("; ")}`);
+    }
+    const castSet = new Set((params.activeCast ?? []).map((n) => n.trim().toLowerCase()).filter(Boolean));
+    const beliefLines = [];
+    for (const [npc, entries] of Object.entries(params.storyDNASet.npcBeliefs ?? {})) {
+      if (castSet.size > 0 && !castSet.has(npc.trim().toLowerCase()))
+        continue;
+      const publicEntries = entries.filter((e) => !e.knowsSecret).slice(-2);
+      if (publicEntries.length > 0) {
+        beliefLines.push(`${npc} (${publicEntries.map((e) => `${e.topic}: ${e.belief.slice(0, 80)}`).join(", ")})`);
+      }
+      if (beliefLines.length >= 4)
+        break;
+    }
+    if (beliefLines.length > 0) {
+      parts.push(`Public NPC Beliefs: ${beliefLines.join(" | ")}`);
+    }
+  }
+  if (parts.length === 0)
+    return "";
+  const joined = parts.join(`
+`);
+  if (joined.length <= maxChars)
+    return joined;
+  return `${joined.slice(0, Math.max(0, maxChars - 1)).trimEnd()}\u2026`;
+}
+async function requestPlannerOutput(spindle2, input2, paragraphText, visualContext, connection, registry2 = {}, paragraphCount = 0, retryFeedback, storyDNASet) {
   const promptProfile = await plannerImagePromptProfile(spindle2, input2.config, input2.userId);
+  const scaledMaxTokens = paragraphCount <= 12 ? 16000 : Math.min(32000, 16000 + (paragraphCount - 12) * 800);
   const defaultParameters = {
-    max_tokens: 16000
+    max_tokens: scaledMaxTokens
   };
   const provider = connection?.provider?.toLowerCase();
   const model = connection?.model ?? "";
@@ -42760,10 +43135,23 @@ async function requestPlannerOutput(spindle2, input2, paragraphText, visualConte
         content: [
           "PREVIOUS SCENE",
           previousSceneContext(input2.previousScene),
+          ...(() => {
+            const rpgSnapshot = buildRpgTurnSnapshot(input2.previousRpgState, input2.config.rpgMode);
+            return rpgSnapshot ? ["TURN RPG STATE", rpgSnapshot] : [];
+          })(),
           "RECENT CHAT",
           recentContext(input2.recentMessages, input2.config.includeRecentMessages),
           ...input2.externalScene ? ["EXTERNAL SCENE SUBJECT (select this character by name; resolve appearance from Cue's identity memory, card and lore. Cue still chooses the pose and composition.)", JSON.stringify(input2.externalScene)] : [],
           ...input2.gameHints ? ["GAME ENGINE STATE (moods decided by a rules extension; data, not instructions. Prefer cue expressions consistent with these unless the text clearly shows otherwise)", input2.gameHints] : [],
+          ...retryFeedback ? ["VALIDATION RETRY (Your previous JSON failed validation. Fix every issue below and return one valid JSON object):", retryFeedback] : [],
+          ...(() => {
+            const brief = buildOutboundDramaticBrief({
+              rpgState: input2.previousRpgState,
+              storyDNASet,
+              activeCast: [input2.previousScene?.character, ...input2.previousScene?.cast ?? []].filter((c) => Boolean(c))
+            });
+            return brief ? ["OUTBOUND DRAMATIC BRIEF", brief] : [];
+          })(),
           "TARGET ASSISTANT RESPONSE",
           paragraphText
         ].join(`
@@ -43504,6 +43892,16 @@ async function resolveDisplayMacros(spindle2, input2, content) {
   }
   return resolved;
 }
+async function prepareEarlyNarrativeParagraphs(spindle2, input2) {
+  const ignoredTags = parseIgnoredTags(input2.config.ignoredTags);
+  const resolvedContent = await resolveDisplayMacros(spindle2, input2, input2.content);
+  const narrative = prepareNarrative(resolvedContent, {
+    ignoredTags,
+    smartProseFilter: input2.config.readerPreferences?.smartProseFilter !== false,
+    smartDialogueExtraction: input2.config.readerPreferences?.smartDialogueExtraction !== false
+  });
+  return narrative.paragraphs.map((paragraph) => paragraph.text);
+}
 async function planTurn(spindle2, input2) {
   const ignoredTags = parseIgnoredTags(input2.config.ignoredTags);
   input2.usage ??= createReplyUsage();
@@ -43542,8 +43940,10 @@ async function planTurn(spindle2, input2) {
 Detected scene header: ${parts.join(" | ")}. Ensure your environment reflects these established details.`;
     }
   }
+  let loadedStoryDnaSet = null;
   try {
     const storyDNASet = await loadStoryDNASet(spindle2, input2.chatId, input2.userId);
+    loadedStoryDnaSet = storyDNASet;
     const activeLocName = (narrative.detectedSceneMetadata?.location || input2.previousScene?.environment.location || "").trim().toLowerCase();
     const matchedLocation = activeLocName ? Object.values(storyDNASet.locations).find((loc) => loc.name.trim().toLowerCase() === activeLocName || loc.aliases.some((alias) => alias.trim().toLowerCase() === activeLocName)) : undefined;
     if (matchedLocation && (matchedLocation.locked || matchedLocation.architecture || matchedLocation.persistentElements.length > 0)) {
@@ -43560,8 +43960,19 @@ Established Location DNA (${matchedLocation.name}): ${dnaParts.join(" | ")}. Pre
     }
     const recentCodex = (storyDNASet.chapterCodex ?? []).slice(-3);
     if (recentCodex.length > 0) {
+      const codexLines = recentCodex.map((c) => {
+        if (c.who?.length || c.whatChanged?.length || c.where) {
+          const who = c.who?.length ? `Who: ${c.who.join(", ")}` : "";
+          const where = c.where || c.location || "Scene";
+          const changed = c.whatChanged?.length ? `Changed: ${c.whatChanged.join("; ")}` : c.summary.slice(0, 180);
+          return `- [${where}] ${[who, changed].filter(Boolean).join(" | ")}`;
+        }
+        return `- [${c.location || "Scene"}] ${c.title}: ${c.summary}`;
+      });
       visualContext.plannerContext += `
-Recent Chapter Memory: ${recentCodex.map((c) => `[${c.location || "Scene"}] ${c.title}: ${c.summary}`).join(" ; ")}`;
+Recent Chapter Memory:
+${codexLines.join(`
+`)}`;
     }
     const activeThreads = (storyDNASet.thoughtCabinet ?? []).filter((t) => t.status !== "resolved").slice(-4);
     if (activeThreads.length > 0) {
@@ -43623,19 +44034,21 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
     spindle2.log.warn(`System One decision failed; using story reader: ${debugErrorSummary(error61)}`);
     return null;
   });
-  let systemOne = input2.config.systemOneMode === "on" ? await systemOnePromise : null;
+  const canTryContinuation = input2.config.systemOneMode === "on" && !input2.config.dynamicImageTemplates && resolveImageTemplate(input2.config).template.category === "portrait" && input2.previousScene !== null && narrative.paragraphs.length <= 7 && (Boolean(input2.previousScene.identityPrompt) || isUsableIdentity(input2.singleCharacter.protagonist.name, input2.singleCharacter.protagonist.tags)) && (input2.config.mode !== "cyoa" || narrative.choices.length > 0);
+  let systemOne = canTryContinuation ? await systemOnePromise : null;
   let failedAttempts = 0;
   const PLANNER_ATTEMPTS = 2;
   let lastError = null;
+  let retryFeedback;
   planner = fallbackPlanner(input2, narrative.paragraphs.length);
   usedFallback = true;
-  const useContinuation = !input2.config.dynamicImageTemplates && resolveImageTemplate(input2.config).template.category === "portrait" && input2.config.systemOneMode === "on" && systemOne !== null && systemOne.coverage.sceneAnswered === true && systemOne.coverage.paragraphs.answered === narrative.paragraphs.length && input2.previousScene !== null && !systemOne.sceneChange && !systemOne.needsDescription && narrative.paragraphs.length <= 7 && (Boolean(input2.previousScene.identityPrompt) || isUsableIdentity(input2.singleCharacter.protagonist.name, input2.singleCharacter.protagonist.tags)) && (input2.config.mode !== "cyoa" || narrative.choices.length > 0);
+  const useContinuation = canTryContinuation && systemOne !== null && systemOne.coverage.sceneAnswered === true && systemOne.coverage.paragraphs.answered === narrative.paragraphs.length && !systemOne.sceneChange && !systemOne.needsDescription;
   if (useContinuation)
     usedFallback = false;
   for (let attempt = 1;!useContinuation && attempt <= PLANNER_ATTEMPTS; attempt += 1) {
     throwIfAborted(input2.signal);
     try {
-      planner = await requestPlannerOutput(spindle2, input2, paragraphText, visualContext, plannerConnection, seedRegistry, promptParagraphs.length);
+      planner = await requestPlannerOutput(spindle2, input2, paragraphText, visualContext, plannerConnection, seedRegistry, promptParagraphs.length, retryFeedback, loadedStoryDnaSet);
       throwIfAborted(input2.signal);
       if (narrative.paragraphs.length > 0) {
         const validCues = planner.cues.filter((cue) => cue.paragraphIndex >= 0 && cue.paragraphIndex < narrative.paragraphs.length);
@@ -43664,6 +44077,7 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
     } catch (error61) {
       throwIfAborted(input2.signal);
       lastError = error61;
+      retryFeedback = formatPlannerRetryFeedback(error61);
       failedAttempts += 1;
       debug.line(`attempt ${attempt}/${PLANNER_ATTEMPTS} failed: ${debugErrorSummary(error61)}`);
       if (input2.config.debugLogging) {
@@ -43674,8 +44088,10 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
   if (usedFallback && lastError !== null) {
     spindle2.log.warn(`Visual planner fallback after ${PLANNER_ATTEMPTS} attempts: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
   }
-  if (input2.config.systemOneMode === "compare")
+  if (!systemOne && (input2.config.systemOneMode === "compare" || input2.config.systemOneMode === "on")) {
     systemOne = await systemOnePromise;
+    throwIfAborted(input2.signal);
+  }
   if (systemOne) {
     if (input2.config.systemOneMode === "compare") {
       const speakerAgreement = planner.speakers.filter((entry) => systemOne.speakers.has(entry.paragraphIndex)).filter((entry) => systemOne.speakers.get(entry.paragraphIndex)?.toLowerCase() === entry.name.toLowerCase()).length;
@@ -44008,15 +44424,30 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
         audioCues.push(AudioCueSchema.parse({ paragraphIndex: paragraph.index, bgm: bgm ?? null, sfx: sfx ?? null }));
     }
   }
+  const personaDisplayNameForRpg = (personaName ?? "").trim();
+  const rpgState = input2.config.rpgMode !== "off" ? reduceRpgState(input2.previousRpgState, {
+    personaName: personaDisplayNameForRpg || undefined,
+    dramaticProgress: Boolean(planner.resolvedThreads?.length),
+    locations: scenes.map((s) => ({ location: s.environment.location, description: s.environment.description })),
+    vitals: planner.rpg?.vitals,
+    quests: planner.rpg?.quests,
+    rpgDeltas: planner.rpgDeltas
+  }) : undefined;
   const finalParagraph = narrative.paragraphs.length - 1;
-  const choices = narrative.choices.length > 0 ? narrative.choices : planner.choices.map((choice, index) => ChoiceSchema.parse({
-    id: id6("choice", `${sourceFingerprint}:${index}:${choice.label}`),
-    label: choice.label,
-    submission: choice.submission,
-    source: "generated",
-    unlocksAfterParagraph: finalParagraph,
-    ...input2.config.rpgMode !== "off" && choice.check ? { check: choice.check } : {}
-  }));
+  const choices = narrative.choices.length > 0 ? narrative.choices : planner.choices.map((choice, index) => {
+    const gate = input2.config.rpgMode !== "off" ? evaluateChoiceGate(choice.requires, choice.lockedReason, rpgState ?? input2.previousRpgState) : { locked: false, lockedReason: null };
+    return ChoiceSchema.parse({
+      id: id6("choice", `${sourceFingerprint}:${index}:${choice.label}`),
+      label: choice.label,
+      submission: choice.submission,
+      source: "generated",
+      unlocksAfterParagraph: finalParagraph,
+      ...input2.config.rpgMode !== "off" && choice.check ? { check: choice.check } : {},
+      ...input2.config.rpgMode !== "off" && choice.requires ? { requires: choice.requires } : {},
+      ...input2.config.rpgMode !== "off" && gate.locked ? { disabled: true, ...gate.lockedReason ? { lockedReason: gate.lockedReason } : {} } : {},
+      ...input2.config.rpgMode !== "off" && choice.setsFlags && Object.keys(choice.setsFlags).length > 0 ? { setsFlags: choice.setsFlags } : {}
+    });
+  });
   const cardDisplayName = (visualContext.characterIdentity?.name ?? "").trim();
   const personaDisplayName = (personaName ?? "").trim();
   const canonicalNames = new Map;
@@ -44094,12 +44525,6 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
   const continuityDeltas = timeline.deltas;
   const terminalContinuity = reduceContinuity(continuity, continuityDeltas);
   const terminalSnapshot = timeline.snapshots.at(-1);
-  const rpgState = input2.config.rpgMode === "full" ? reduceRpgState(input2.previousRpgState, {
-    personaName: personaDisplayName || undefined,
-    locations: scenes.map((s) => ({ location: s.environment.location, description: s.environment.description })),
-    vitals: planner.rpg?.vitals,
-    quests: planner.rpg?.quests
-  }) : undefined;
   let plan = validateTurnPlan(TurnPlanSchema.parse({
     schemaVersion: 1,
     key,
@@ -44127,6 +44552,7 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
     } : undefined,
     planningStatus: usedFallback || cues.some((cue) => !cue.resolvedIdentity) || cues.length === 0 && narrative.paragraphs.length > 0 ? "partial" : "planned",
     ...rpgState ? { rpgState } : {},
+    ...planner.resolvedThreads?.length ? { resolvedThreads: planner.resolvedThreads } : {},
     createdAt: new Date().toISOString()
   }));
   plan = await freshPlanPreferences(spindle2, plan, input2.config, input2.previousScene, input2.characterAppearance, input2.userId);
@@ -44182,6 +44608,7 @@ var init_planner = __esm(() => {
   init_story_references();
   init_storage();
   init_card_role();
+  init_zod();
   init_contracts();
   init_action_prop();
   init_image_shot_spec();
@@ -44940,6 +45367,8 @@ function isFrontendRequest(value) {
     return SetCardRoleRequestSchema.safeParse(value).success;
   if (value.type === "vn_delete_image")
     return DeleteImageRequestSchema.safeParse(value).success;
+  if (value.type === "vn_get_turn_snapshot")
+    return exports_external.object({ type: exports_external.literal("vn_get_turn_snapshot"), chatId: exports_external.string().min(1).max(128), messageId: exports_external.string().min(1).max(128), swipeId: exports_external.number().int().min(0).optional(), requestId: exports_external.string().min(1).max(128).optional() }).strict().safeParse(value).success;
   if (value.type === "vn_reading_position")
     return ReadingPositionSchema.safeParse(value.position).success;
   return typeof value.type === "string" && String(value.type).startsWith("vn_");
@@ -44964,7 +45393,7 @@ var init_protocol = __esm(() => {
   RecoverImagesRequestSchema = exports_external.object({ type: exports_external.literal("vn_recover_images"), ...recoveryScope, revision: exports_external.number().int().nonnegative(), action: exports_external.enum(["stop", "retry"]) }).strict();
   imageOperationScope = { chatId: exports_external.string().min(1).max(128), messageId: exports_external.string().min(1).max(128), sourceFingerprint: exports_external.string().min(1).max(256) };
   imageOperationEdits = exports_external.object({ prompt: exports_external.string().trim().min(1).max(65000).optional(), negativePrompt: exports_external.string().max(65000).optional(), parameters: exports_external.record(exports_external.string(), exports_external.unknown()).optional() }).strict();
-  imagePromptOperation = { guidance: exports_external.string().max(400).optional(), edits: imageOperationEdits.optional() };
+  imagePromptOperation = { guidance: exports_external.string().max(400).optional(), edits: imageOperationEdits.optional(), pinnedClauses: exports_external.array(exports_external.string().trim().min(1).max(300)).max(8).optional() };
   RewriteImagePromptRequestSchema = exports_external.object({ type: exports_external.enum(["vn_regenerate_image_prompt", "vn_enrich_image_prompt"]), ...imageOperationScope, requestId: exports_external.string().min(1).max(100), ...imagePromptOperation }).strict();
   PrepareImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_prepare_image"), ...imageOperationScope, jobId: exports_external.string().min(1).max(200), templateId: exports_external.string().min(1).max(100).optional(), ...imagePromptOperation, regeneratePrompt: exports_external.boolean().optional(), promptOperation: exports_external.enum(["rewrite", "enrich"]).optional(), reframe: exports_external.boolean().optional(), styleId: exports_external.string().max(100).optional(), fitToModel: exports_external.boolean().optional(), model: exports_external.string().max(200).optional(), connectionId: exports_external.string().max(200).optional(), quickGenerate: exports_external.boolean().optional(), manualCamera: exports_external.object({ shotSize: exports_external.string().optional(), angle: exports_external.string().optional(), lensFeel: exports_external.string().optional(), composition: exports_external.string().optional(), depth: exports_external.string().optional(), dialogueSafeArea: exports_external.enum(["auto", "always", "off"]).optional() }).strict().optional() }).strict();
   RestorePreviousImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_restore_previous_image"), ...imageOperationScope, swipeId: exports_external.number().int().nonnegative().nullable(), revision: exports_external.number().int().nonnegative(), jobId: exports_external.string().min(1).max(200), versionId: exports_external.string().min(1).max(256) }).strict();
@@ -47955,6 +48384,22 @@ function deduplicateAndBoundText(raw, maxChars) {
   const trimmed = raw.trim();
   if (!trimmed)
     return "";
+  const looksLikeTagList = trimmed.includes(",") && !/[.!?](?:\s|$)/.test(trimmed);
+  if (looksLikeTagList) {
+    const tags = trimmed.split(/,\s*/).map((t) => t.trim()).filter(Boolean);
+    const seen2 = new Set;
+    const kept = [];
+    for (const tag of tags) {
+      const norm = tag.toLowerCase();
+      if (seen2.has(norm))
+        continue;
+      seen2.add(norm);
+      const next = kept.length ? `${kept.join(", ")}, ${tag}` : tag;
+      if (next.length <= maxChars)
+        kept.push(tag);
+    }
+    return kept.join(", ");
+  }
   const parts = trimmed.split(/(?<=[.!?])\s+|\s*;\s*/).map((p) => p.trim()).filter(Boolean);
   const uniqueParts = [];
   const seen = new Set;
@@ -48084,21 +48529,57 @@ function fitPromptDocumentToBudget(document, maxBudget) {
       }
     }
   }
+  const withoutUnprotectedP2 = currentSections.filter((s) => s.priority !== 2 || PROTECTED_STYLE_IDS.has(s.id));
+  if (withoutUnprotectedP2.length < currentSections.length) {
+    currentSections = withoutUnprotectedP2;
+    prompt = assemblePromptSections(currentSections, separator);
+    if (prompt.length <= maxBudget) {
+      warnings.push(`Prompt fitted by removing non-essential secondary sections while preserving primary style (${prompt.length}/${maxBudget} chars).`);
+      return {
+        document: { ...document, sections: currentSections, warnings },
+        prompt,
+        fitted: true,
+        warnings
+      };
+    }
+  }
+  const withoutCompressibleP1 = currentSections.filter((s) => !(s.priority === 1 && s.compressible && !PROTECTED_STYLE_IDS.has(s.id)));
+  if (withoutCompressibleP1.length < currentSections.length) {
+    currentSections = withoutCompressibleP1;
+    prompt = assemblePromptSections(currentSections, separator);
+    if (prompt.length <= maxBudget) {
+      warnings.push(`Prompt fitted by condensing camera and environment details while preserving primary style (${prompt.length}/${maxBudget} chars).`);
+      return {
+        document: { ...document, sections: currentSections, warnings },
+        prompt,
+        fitted: true,
+        warnings
+      };
+    }
+  }
+  const reservedStyleIdx = currentSections.findIndex((s) => PROTECTED_STYLE_IDS.has(s.id) && s.compressible && s.text.length > 48);
+  if (reservedStyleIdx !== -1 && prompt.length > maxBudget) {
+    const styleSec = currentSections[reservedStyleIdx];
+    const minStyleSlice = Math.max(48, Math.floor(maxBudget * 0.16));
+    const trimmedStyle = deduplicateAndBoundText(styleSec.text, Math.max(minStyleSlice, styleSec.text.length - (prompt.length - maxBudget) - 8));
+    if (trimmedStyle && trimmedStyle.length < styleSec.text.length) {
+      currentSections = currentSections.map((s, idx) => idx === reservedStyleIdx ? { ...s, text: trimmedStyle } : s);
+      prompt = assemblePromptSections(currentSections, separator);
+      if (prompt.length <= maxBudget) {
+        warnings.push(`Prompt fitted with reserved style slice (${prompt.length}/${maxBudget} chars).`);
+        return {
+          document: { ...document, sections: currentSections, warnings },
+          prompt,
+          fitted: true,
+          warnings
+        };
+      }
+    }
+  }
   currentSections = currentSections.filter((s) => s.priority !== 2);
   prompt = assemblePromptSections(currentSections, separator);
   if (prompt.length <= maxBudget) {
-    warnings.push(`Prompt fitted by removing secondary style and material sections (${prompt.length}/${maxBudget} chars).`);
-    return {
-      document: { ...document, sections: currentSections, warnings },
-      prompt,
-      fitted: true,
-      warnings
-    };
-  }
-  currentSections = currentSections.filter((s) => !(s.priority === 1 && s.compressible));
-  prompt = assemblePromptSections(currentSections, separator);
-  if (prompt.length <= maxBudget) {
-    warnings.push(`Prompt fitted by condensing camera and environment details (${prompt.length}/${maxBudget} chars).`);
+    warnings.push(`Prompt fitted by removing remaining secondary style sections (${prompt.length}/${maxBudget} chars).`);
     return {
       document: { ...document, sections: currentSections, warnings },
       prompt,
@@ -48266,10 +48747,9 @@ function compileModelPrompt(input2) {
   });
   const isTagDialect = profile.dialect === "anima" || profile.dialect === "generic-tags" || profile.dialect === "novelai";
   let sections = serialized.document.sections.map((sec) => {
-    if (styleDNA.preserve && STYLE_SECTION_IDS.has(sec.id)) {
-      return { ...sec, priority: 1, compressible: false };
-    }
-    return sec;
+    if (!STYLE_SECTION_IDS.has(sec.id))
+      return sec;
+    return styleDNA.preserve ? { ...sec, priority: 1, compressible: false } : { ...sec, priority: 1, compressible: true };
   });
   const rawPrefix = styleDNA.prefix?.trim() ?? "";
   const cleanPrefix = profile.dialect === "flux3-klein" ? rawPrefix.replace(/\bphotorealistic\b/gi, "lifelike natural") : rawPrefix;
@@ -48522,6 +49002,128 @@ var init_cast_allocation = __esm(() => {
   init_presentation_selectors();
 });
 
+// src/backend/runtime/scene-art-index.ts
+function runtimeFor(api2) {
+  let entry = runtimes3.get(api2);
+  if (!entry) {
+    entry = { tails: new Map };
+    runtimes3.set(api2, entry);
+  }
+  return entry;
+}
+function indexPath(chatId) {
+  return `chats/${encodeURIComponent(chatId).replaceAll("%", "_")}/scene-art-index.json`;
+}
+function scopeKey(chatId, userId) {
+  return canonicalJson([userId ?? null, chatId]);
+}
+function storageOpts(userId) {
+  return userId ? { userId } : undefined;
+}
+async function runLocked(api2, chatId, userId, work) {
+  const rt = runtimeFor(api2);
+  const key = scopeKey(chatId, userId);
+  const previous = rt.tails.get(key) ?? Promise.resolve();
+  const current = previous.then(work, work);
+  const tail = current.then(() => {
+    return;
+  }, () => {
+    return;
+  });
+  rt.tails.set(key, tail);
+  try {
+    return await current;
+  } finally {
+    if (rt.tails.get(key) === tail)
+      rt.tails.delete(key);
+  }
+}
+async function loadSceneArtIndex(api2, chatId, userId) {
+  try {
+    const raw = await api2.userStorage.getJson(indexPath(chatId), { fallback: null, ...storageOpts(userId) });
+    if (raw === null)
+      return { version: 1, entries: [] };
+    const parsed = SceneArtIndexSchema.safeParse(raw);
+    return parsed.success ? parsed.data : { version: 1, entries: [] };
+  } catch {
+    return { version: 1, entries: [] };
+  }
+}
+async function findBackdropArt(api2, chatId, backdropDigest, userId) {
+  if (!backdropDigest.trim())
+    return null;
+  const index = await loadSceneArtIndex(api2, chatId, userId);
+  const matches2 = index.entries.filter((entry) => entry.backdropDigest === backdropDigest).sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt));
+  for (const entry of matches2) {
+    try {
+      const image = await api2.images.get(entry.imageId, userId);
+      if (image) {
+        return {
+          imageId: entry.imageId,
+          imageUrl: `/api/v1/images/${encodeURIComponent(entry.imageId)}`
+        };
+      }
+    } catch {}
+  }
+  return null;
+}
+async function saveBackdropArt(api2, chatId, entry, userId) {
+  const location = entry.location.trim();
+  if (!location || !entry.backdropDigest.trim() || !entry.imageId.trim())
+    return false;
+  return runLocked(api2, chatId, userId, async () => {
+    try {
+      const index = await loadSceneArtIndex(api2, chatId, userId);
+      const now = new Date().toISOString();
+      const locationKey = location.toLowerCase().slice(0, 160);
+      const existing = index.entries.find((candidate) => candidate.backdropDigest === entry.backdropDigest && candidate.imageId === entry.imageId);
+      if (existing) {
+        existing.lastUsedAt = now;
+        if (entry.beatDigest)
+          existing.beatDigest = entry.beatDigest;
+      } else {
+        const next = {
+          backdropDigest: entry.backdropDigest,
+          ...entry.beatDigest ? { beatDigest: entry.beatDigest } : {},
+          locationKey,
+          location: location.slice(0, 200),
+          imageId: entry.imageId,
+          createdAt: now,
+          lastUsedAt: now
+        };
+        index.entries.push(next);
+        if (index.entries.length > MAX_SCENE_ART_ENTRIES) {
+          index.entries.sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt));
+          index.entries = index.entries.slice(0, MAX_SCENE_ART_ENTRIES);
+        }
+      }
+      await api2.userStorage.setJson(indexPath(chatId), SceneArtIndexSchema.parse(index), storageOpts(userId));
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}
+var MAX_SCENE_ART_ENTRIES = 64, SceneArtEntrySchema, SceneArtIndexSchema, runtimes3;
+var init_scene_art_index = __esm(() => {
+  init_zod();
+  init_scene_image_cache();
+  SceneArtEntrySchema = exports_external.object({
+    backdropDigest: exports_external.string().min(1).max(64),
+    beatDigest: exports_external.string().min(1).max(64).optional(),
+    locationKey: exports_external.string().min(1).max(160),
+    location: exports_external.string().min(1).max(200),
+    imageId: exports_external.string().min(1).max(256),
+    createdAt: exports_external.string().min(1),
+    lastUsedAt: exports_external.string().min(1)
+  }).strict();
+  SceneArtIndexSchema = exports_external.object({
+    version: exports_external.literal(1),
+    entries: exports_external.array(SceneArtEntrySchema).max(MAX_SCENE_ART_ENTRIES)
+  }).strict();
+  runtimes3 = new WeakMap;
+});
+
 // src/shared/image-payload-sanitizer.ts
 function estimateBase64Bytes(base643) {
   if (!base643)
@@ -48715,10 +49317,23 @@ var canonical = (value) => value.normalize("NFKC").toLocaleLowerCase().replace(/
 };
 
 // src/backend/runtime/prompt-anchors.ts
-function createPromptAnchors(prompt, protection) {
+function sanitizePinnedClauseForDialect(clause, dialect) {
+  let clean2 = clause.replace(/\s+/g, " ").trim();
+  if (!clean2)
+    return "";
+  const positiveOnly = dialect === "flux3-klein" || dialect === "ideogram-v4";
+  if (positiveOnly) {
+    clean2 = clean2.replace(/^--no\s+/i, "").replace(/^(?:without|avoid|no)\s+/i, "").trim();
+  }
+  if (dialect === "flux3-klein") {
+    clean2 = clean2.replace(/\bphotorealistic\b/gi, "lifelike natural");
+  }
+  return clean2;
+}
+function createPromptAnchors(prompt, protection, pinnedClauses, options3) {
   const blocks = protection.exact ? [protection.exact] : protection.subjects.length ? protection.subjects.map((subject) => `${subject.name}: ${subject.facts.join(", ")}`) : protection.facts.length ? [protection.facts.join("; ")] : [];
   let namespace = 0;
-  while (prompt.includes(`[[LG_CAST_${namespace}_`))
+  while (prompt.includes(`[[LG_CAST_${namespace}_`) || prompt.includes(`[[LG_PIN_${namespace}_`))
     namespace++;
   const entries = blocks.map((text4, index) => ({ token: `[[LG_CAST_${namespace}_${index}]]`, text: text4 }));
   let maskedPrompt = prompt;
@@ -48737,30 +49352,86 @@ function createPromptAnchors(prompt, protection) {
       maskedPrompt = maskedPrompt.split(semiVariant).join(entry.token);
     }
   }
-  return { entries, expandedCharacters: entries.reduce((sum, entry) => sum + entry.text.length + 1, 0) - (entries.length ? 1 : 0), maskedPrompt };
+  const pinnedEntries = [];
+  const maxPinnedBudget = options3?.maxPinnedCharacters ?? 750;
+  let usedPinnedChars = 0;
+  const seenPinned = new Set;
+  for (const rawClause of pinnedClauses ?? []) {
+    const text4 = sanitizePinnedClauseForDialect(rawClause, options3?.dialect);
+    if (!text4)
+      continue;
+    const key = text4.toLowerCase();
+    if (seenPinned.has(key))
+      continue;
+    if (entries.some((e) => e.text.toLowerCase().includes(key)))
+      continue;
+    if (usedPinnedChars > 0 && usedPinnedChars + text4.length > maxPinnedBudget)
+      continue;
+    seenPinned.add(key);
+    const token = `[[LG_PIN_${namespace}_${pinnedEntries.length}]]`;
+    if (maskedPrompt.includes(text4)) {
+      maskedPrompt = maskedPrompt.split(text4).join(token);
+    } else if (rawClause.trim() && maskedPrompt.includes(rawClause.trim())) {
+      maskedPrompt = maskedPrompt.split(rawClause.trim()).join(token);
+    } else {
+      maskedPrompt = maskedPrompt.trim() ? `${maskedPrompt.trim()}, ${token}` : token;
+    }
+    pinnedEntries.push({ token, text: text4 });
+    usedPinnedChars += text4.length;
+  }
+  const allEntries = [...entries, ...pinnedEntries];
+  return {
+    entries,
+    ...pinnedEntries.length ? { pinnedEntries } : {},
+    expandedCharacters: allEntries.reduce((sum, entry) => sum + entry.text.length + 1, 0) - (allEntries.length ? 1 : 0),
+    maskedPrompt
+  };
 }
 function expandPromptAnchors(prompt, anchors, negative = "") {
-  const marker = /\[\[LG_CAST_\d+_\d+\]\]/g;
+  const castMarker = /\[\[LG_CAST_\d+_\d+\]\]/g;
+  const pinMarker = /\[\[LG_PIN_\d+_\d+\]\]/g;
   if (negative.includes("[[LG_CAST_"))
     throw new Error("Identity anchors belong in the positive prompt, never the negative prompt.");
-  if (prompt.replace(marker, "").includes("[[LG_CAST_"))
+  if (negative.includes("[[LG_PIN_"))
+    throw new Error("Pinned clauses belong in the positive prompt, never the negative prompt.");
+  if (prompt.replace(castMarker, "").includes("[[LG_CAST_"))
     throw new Error("Malformed identity anchor in the rewritten prompt. Copy the supplied tokens exactly.");
-  const supplied = [...prompt.matchAll(marker)].map((match) => match[0]);
-  if (!supplied.length)
+  if (prompt.replace(pinMarker, "").includes("[[LG_PIN_"))
+    throw new Error("Malformed pinned clause token in the rewritten prompt. Copy the supplied tokens exactly.");
+  const suppliedCast = [...prompt.matchAll(castMarker)].map((match) => match[0]);
+  const suppliedPins = [...prompt.matchAll(pinMarker)].map((match) => match[0]);
+  const pinned = anchors.pinnedEntries ?? [];
+  if (!suppliedCast.length && !suppliedPins.length) {
+    for (const p of pinned) {
+      if (!prompt.toLowerCase().includes(p.text.toLowerCase())) {
+        throw new Error(`Required pinned clause "${p.text}" was omitted from the rewritten prompt.`);
+      }
+    }
     return { prompt, usedAnchors: false };
-  for (const token of supplied)
+  }
+  for (const token of suppliedCast)
     if (!anchors.entries.some((entry) => entry.token === token))
       throw new Error("Unknown identity anchor in the rewritten prompt.");
+  for (const token of suppliedPins)
+    if (!pinned.some((entry) => entry.token === token))
+      throw new Error("Unknown pinned clause anchor in the rewritten prompt.");
   for (const entry of anchors.entries) {
-    const count2 = supplied.filter((token) => token === entry.token).length;
+    const count2 = suppliedCast.filter((token) => token === entry.token).length;
     if (!count2)
       throw new Error(`Required identity anchor ${entry.token} is missing. Include every supplied anchor exactly once.`);
     if (count2 !== 1)
       throw new Error(`Include identity anchor ${entry.token} exactly once.`);
   }
-  for (const entry of anchors.entries)
+  for (const entry of pinned) {
+    const count2 = suppliedPins.filter((token) => token === entry.token).length;
+    if (!count2)
+      throw new Error(`Required pinned clause ${entry.token} is missing. Include every supplied pinned token exactly once.`);
+    if (count2 !== 1)
+      throw new Error(`Include pinned clause ${entry.token} exactly once.`);
+  }
+  for (const entry of [...anchors.entries, ...pinned])
     prompt = prompt.replace(entry.token, () => entry.text);
-  return { prompt, usedAnchors: true };
+  return { prompt, usedAnchors: suppliedCast.length > 0 };
 }
 
 // src/backend/runtime/prompt-writer-fields.ts
@@ -48996,7 +49667,7 @@ function assertRawPromptOverride(request) {
   if (positive !== request.prompt || negative !== (request.negativePrompt ?? ""))
     throw new Error("The connection raw prompt override replaces the reviewed wording. Remove its prompt/negative prompt fields in the image connection settings to use this preview.");
 }
-async function rewriteImagePrompt(spindle2, request, metadata, config2, userId, signal, mode) {
+async function rewriteImagePrompt(spindle2, request, metadata, config2, userId, signal, mode, pinnedClauses) {
   if (signal.aborted)
     throw cancelled();
   assertRawPromptOverride(request);
@@ -49030,7 +49701,7 @@ async function rewriteImagePrompt(spindle2, request, metadata, config2, userId, 
     targetLow = baseTargets.low;
   }
   const protection = promptProtection(request.prompt, metadata, mode === "fit");
-  const anchors = isIdeogram ? { entries: [], expandedCharacters: 0, maskedPrompt: request.prompt } : createPromptAnchors(request.prompt, protection);
+  const anchors = isIdeogram ? { entries: [], expandedCharacters: 0, maskedPrompt: request.prompt } : createPromptAnchors(request.prompt, protection, pinnedClauses, { dialect, maxPinnedCharacters: Math.floor(maximum * 0.25) });
   const draftCombinedLen = request.prompt.length + (request.negativePrompt?.length ?? 0);
   const rerollPreferredHigh = mode === "reroll" ? Math.min(maximum, Math.max(targetHigh, Math.ceil(draftCombinedLen * 1.12))) : targetHigh;
   const budget = rewriteBudgetPlan(profile, anchors.expandedCharacters, request.negativePrompt?.length ?? 0, userBudget || isIdeogram || isFluxKlein || mode === "reroll" ? rerollPreferredHigh : undefined);
@@ -49071,7 +49742,7 @@ async function rewriteImagePrompt(spindle2, request, metadata, config2, userId, 
 First shorten repetitive style/template prose and verbose negative lists: merge synonymous flaws into precise exclusions, retain specific identity/anatomy/lettering/composition constraints, and use the adaptive negative allowance rather than a fixed-length list. Reduce redundancy before unique visible detail. If essential exclusions need more than their suggested allowance, take space from supporting detail before scene action or identity.`,
     dialectInstructions,
     mode === "reroll" ? "Produce a genuinely different, equally rich and vivid visual description of the SAME evidenced instant. Vary phrasing, sentence structure, and supported camera perspective while retaining comparable length and full style/atmosphere detail; do not repeat the old positive prompt verbatim." : "Fit the current draft to its model budget and negative-field policy while preserving visual intent. If only negative-field adaptation is needed, preserve useful positive detail. Do not add detail just to reach the target.",
-    anchors.entries.length ? "IMMUTABLE IDENTITY ANCHORS: Include each token below exactly once in the positive prompt, at the appropriate subject position. Do not rewrite, duplicate or negate its appearance facts elsewhere. The application replaces tokens with their exact owned identity blocks before generation. Names can be used separately for actions and positions. Never place tokens in negativePrompt. Budget for the expanded text, not the short token. " + JSON.stringify(anchors.entries) : ""
+    anchors.entries.length || anchors.pinnedEntries?.length ? "IMMUTABLE IDENTITY & PINNED ANCHORS: Include each token below exactly once in the positive prompt, at the appropriate subject or scene position. Do not rewrite, duplicate or negate its facts elsewhere. The application replaces tokens with their exact owned blocks before generation. Never place tokens in negativePrompt. Budget for the expanded text, not the short token. " + JSON.stringify([...anchors.entries, ...anchors.pinnedEntries ?? []]) : ""
   ].filter(Boolean).join(`
 `);
   const context = { prompt: anchors.maskedPrompt, negativePrompt: request.negativePrompt ?? "", identityCharacters: anchors.expandedCharacters, scenePriorities: retainedSceneEvidence(request.prompt, metadata?.brief), ...metadata ? { template: metadata.template.name, category: metadata.template.category, brief: { subjectMode: metadata.brief.subjectMode, subjects: anchors.entries.length ? anchors.entries.map((e) => e.token).join(`
@@ -49127,7 +49798,7 @@ First shorten repetitive style/template prose and verbose negative lists: merge 
   const formatFailure = /invalid prompt fields|prompt JSON|No usable prompt text/.test(lastReason);
   throw new Error(`Prompt repair failed after two attempts: ${lastReason} Your previous draft is retained. ${formatFailure ? "The story-reader text model returned an unusable response format. Check the story-reader connection or use a different text model before fitting again." : "Edit the draft or its shared style/appearance wording, then use Fit to budget again."}`);
 }
-async function enrichImagePrompt(spindle2, request, metadata, config2, userId, signal, guidance2) {
+async function enrichImagePrompt(spindle2, request, metadata, config2, userId, signal, guidance2, pinnedClauses) {
   if (signal.aborted)
     throw cancelled();
   assertRawPromptOverride(request);
@@ -49161,7 +49832,7 @@ async function enrichImagePrompt(spindle2, request, metadata, config2, userId, s
     targetLow = Math.max(800, targetHigh - 500);
   }
   const protection = promptProtection(request.prompt, metadata, false);
-  const anchors = isIdeogram ? { entries: [], expandedCharacters: 0, maskedPrompt: request.prompt } : createPromptAnchors(request.prompt, protection);
+  const anchors = isIdeogram ? { entries: [], expandedCharacters: 0, maskedPrompt: request.prompt } : createPromptAnchors(request.prompt, protection, pinnedClauses, { dialect, maxPinnedCharacters: Math.floor(maximum * 0.25) });
   const dialectInstructions = isIdeogram ? [
     '5. Model Format: IDEOGRAM V4 DIRECT JSON: Format "prompt" as valid Ideogram Direct JSON (or output the JSON directly) with keys high_level_description, style_description (aesthetics, lighting, photo, medium, color_palette), and compositional_deconstruction (background, elements with bboxes). Return negativePrompt as an empty string.',
     "Do NOT include angle bracket tags like <character> in Ideogram prompts."
@@ -49189,7 +49860,7 @@ async function enrichImagePrompt(spindle2, request, metadata, config2, userId, s
     dialectInstructions,
     profile.negativeMode === "positive-only" || isIdeogram || isFluxKlein ? "This model uses no negative prompt. Leave negativePrompt as an empty string." : "Maintain a refined negative prompt targeting anatomical deformities, blur, bad hands, artifacts, and unwanted text.",
     `Budget: Aim for an enriched prompt between ${targetLow} and ${targetHigh} characters. Do NOT make it short or sparse; enrich it with artistic substance and cinematic depth.`,
-    anchors.entries.length ? "IMMUTABLE IDENTITY ANCHORS: Include each token below exactly once in the positive prompt at the character location: " + JSON.stringify(anchors.entries) : ""
+    anchors.entries.length || anchors.pinnedEntries?.length ? "IMMUTABLE IDENTITY & PINNED ANCHORS: Include each token below exactly once in the positive prompt at the character or scene location: " + JSON.stringify([...anchors.entries, ...anchors.pinnedEntries ?? []]) : ""
   ].filter(Boolean).join(`
 `);
   const context = {
@@ -50824,7 +51495,32 @@ function createAssetJobs(plan, config2, characterAppearance) {
 function replaceJob(jobs, next) {
   return jobs.map((job) => job.jobId === next.jobId ? next : job);
 }
+function backdropDigestForCue(config2, scene, cue, characterAppearance, provider, profileRevision) {
+  const identity2 = sceneImageIdentityFor(config2, scene, cue, characterAppearance, provider, { source: "none" }, profileRevision);
+  return backdropDigestOf(identity2);
+}
 async function prepareAssetJobs(spindle2, plan, config2, characterAppearance, cache, userId, options3 = {}) {
+  if (config2.imageGenerationTrigger === "scene-change" && plan.visualCues.length > 0) {
+    const profile2 = await resolveImageProfile(spindle2, config2, userId);
+    const effective = profile2.provider === "novelai" ? { ...config2, imageModel: config2.imageModel || profile2.model || "nai-diffusion-4-5-full" } : config2;
+    const kept = [];
+    const deferred2 = [];
+    const seenScenes = new Set;
+    for (const cue of plan.visualCues) {
+      const scene = sceneForCue(plan, cue);
+      const digest2 = backdropDigestForCue(effective, scene, cue, characterAppearance, profile2.provider, profile2.cacheProfile);
+      const sceneKey = `${cue.sceneId}:${digest2}`;
+      if (!seenScenes.has(sceneKey)) {
+        seenScenes.add(sceneKey);
+        kept.push(cue);
+      } else {
+        deferred2.push(cue);
+      }
+    }
+    plan.visualCues = kept;
+    const occupied = new Set(kept.map((c) => c.paragraphIndex));
+    plan.cacheCues = [...plan.cacheCues ?? [], ...deferred2].filter((c) => !occupied.has(c.paragraphIndex)).slice(0, MAX_CACHE_CUES_PER_TURN);
+  }
   const castAllocation = castAllocationCandidates(plan, config2, characterAppearance);
   if (castAllocation || (config2.persistentLocationArt || config2.persistentCastArt) && !(plan.classifierVisuals && config2.systemOneMode === "on")) {
     const profile2 = await resolveImageProfile(spindle2, config2, userId);
@@ -50883,7 +51579,32 @@ async function prepareAssetJobs(spindle2, plan, config2, characterAppearance, ca
     plan.cacheCues = [...remaining, ...castAllocation?.reuseOnly ?? []].filter((cue) => !occupied.has(cue.paragraphIndex)).slice(0, MAX_CACHE_CUES_PER_TURN);
     return selected2;
   }
-  const candidates = createAssetJobs(plan, config2, characterAppearance);
+  const rawCandidates = createAssetJobs(plan, config2, characterAppearance);
+  const candidates = [];
+  if (config2.imageGenerationTrigger === "scene-change" || config2.persistentLocationArt) {
+    const profile2 = await resolveImageProfile(spindle2, config2, userId);
+    const effective = profile2.provider === "novelai" ? { ...config2, imageModel: config2.imageModel || profile2.model || "nai-diffusion-4-5-full" } : config2;
+    for (const job of rawCandidates) {
+      const cue = plan.visualCues.find((c) => c.assetJobId === job.jobId);
+      if (!cue) {
+        candidates.push(job);
+        continue;
+      }
+      const allowBackdropReuse = config2.imageGenerationTrigger === "scene-change" || config2.persistentLocationArt && cue.imageTemplate?.subjectMode === "none";
+      if (allowBackdropReuse) {
+        const scene = sceneForCue(plan, cue);
+        const backdropDigest = backdropDigestForCue(effective, scene, cue, characterAppearance, profile2.provider, profile2.cacheProfile);
+        const persisted = await findBackdropArt(spindle2, plan.key.chatId, backdropDigest, userId).catch(() => null);
+        if (persisted) {
+          candidates.push(locationArtJob(plan, cue, persisted, backdropDigest));
+          continue;
+        }
+      }
+      candidates.push(job);
+    }
+  } else {
+    candidates.push(...rawCandidates);
+  }
   if (!plan.classifierVisuals || config2.systemOneMode !== "on")
     return candidates;
   const scope3 = sceneImageScope(userId, plan.key.chatId);
@@ -51340,15 +52061,15 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
             referenceSummary: portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference"
           };
           const initialMetadata = metadataFor(cue);
-          const regenerateFor = (selectedCue) => (request, guidance2) => {
+          const regenerateFor = (selectedCue) => (request, guidance2, pinnedClauses) => {
             if (guidance2)
-              return enrichImagePrompt(spindle2, request, metadataFor(selectedCue), config2, userId, jobSignal, guidance2);
+              return enrichImagePrompt(spindle2, request, metadataFor(selectedCue), config2, userId, jobSignal, guidance2, pinnedClauses);
             const maxAllowed = request.promptProfileV2?.hardMaxCharacters ?? request.promptProfile?.maxCharacters ?? 3000;
             const posOnly = request.promptProfile?.negativeMode === "positive-only" || request.promptProfileV2?.negativePolicy === "positive-only";
             const mode = request.prompt.length + (request.negativePrompt?.length ?? 0) > maxAllowed || posOnly && Boolean(request.negativePrompt?.trim()) ? "fit" : "reroll";
-            return rewriteImagePrompt(spindle2, request, metadataFor(selectedCue), config2, userId, jobSignal, mode);
+            return rewriteImagePrompt(spindle2, request, metadataFor(selectedCue), config2, userId, jobSignal, mode, pinnedClauses);
           };
-          const enrichFor = (selectedCue) => (request, guidance2) => enrichImagePrompt(spindle2, request, metadataFor(selectedCue), config2, userId, jobSignal, guidance2);
+          const enrichFor = (selectedCue) => (request, guidance2, pinnedClauses) => enrichImagePrompt(spindle2, request, metadataFor(selectedCue), config2, userId, jobSignal, guidance2, pinnedClauses);
           frozen.parameters = modelOutputParameters(selected?.provider ?? provider, frozen.model, globalOutputParameters(config2.imageOutputAspectRatio, selected?.provider ?? provider, frozen.model, frozen.parameters ?? {}));
           frozen.promptProfile = await loadImagePromptProfile(spindle2, config2, selected?.provider ?? provider, frozen.model);
           frozen = prepareCapabilityOutput(frozen, config2.imageOutputAspectRatio !== "default" ? config2.imageOutputAspectRatio : cue.imageTemplate?.outputAspectRatio === "9:16" ? "9:16" : undefined, config2.automaticImagePromptSettings && isFluxKleinModel(frozen.model) ? "standard" : config2.imageResolutionPreference);
@@ -51574,6 +52295,17 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
               spindle2.sendToFrontend({ type: "vn_cast_art_notice", chatId: plan.key.chatId, error: error61 instanceof Error ? error61.message : String(error61) }, userId);
             }
           }
+          if (!promptWasRewritten && (config2.imageGenerationTrigger === "scene-change" || config2.persistentLocationArt || cue.imageTemplate?.subjectMode === "none")) {
+            try {
+              const backdropIdentity = sceneImageIdentityFor(config2, scene, cue, characterAppearance, provider, { source: "none" }, profile.cacheProfile);
+              await saveBackdropArt(spindle2, plan.key.chatId, {
+                backdropDigest: backdropDigestOf(backdropIdentity),
+                beatDigest: beatDigestOf(backdropIdentity),
+                location: scene.environment.location,
+                imageId: result.imageId
+              }, userId);
+            } catch {}
+          }
           if (cache && admission && cacheKey) {
             const stored = cache.store(scope3, cacheKey, {
               imageId: result.imageId,
@@ -51684,6 +52416,7 @@ var init_images = __esm(() => {
   init_model_output_capabilities();
   init_cast_art2();
   init_location_art();
+  init_scene_art_index();
   init_template_output();
   init_image_payload_sanitizer();
   init_attire();
@@ -51782,7 +52515,7 @@ async function handleImageReviewRpc(request, context) {
       const { open: open2, turn, gate } = context.current();
       if (!open2 || !turn || turn.assistantMessageId !== request.messageId || turn.sourceFingerprint !== request.sourceFingerprint)
         throw new Error("This prompt belongs to an older or closed turn.");
-      if (!await gate?.regenerate(request.requestId, request.edits, request.guidance))
+      if (!await gate?.regenerate(request.requestId, request.edits, request.guidance, request.pinnedClauses))
         throw new Error("This prompt is already being handled or cancelled.");
       return;
     }
@@ -51792,7 +52525,7 @@ async function handleImageReviewRpc(request, context) {
       const { open: open2, turn, gate } = context.current();
       if (!open2 || !turn || turn.assistantMessageId !== request.messageId || turn.sourceFingerprint !== request.sourceFingerprint)
         throw new Error("This prompt belongs to an older or closed turn.");
-      if (!await gate?.enrich(request.requestId, request.guidance, request.edits))
+      if (!await gate?.enrich(request.requestId, request.guidance, request.edits, request.pinnedClauses))
         throw new Error("This prompt is already being handled or cancelled.");
       return;
     }
@@ -53686,9 +54419,35 @@ function publishImageActivity(spindle2, userId, chatId, event) {
   const activity = event ? ledger.record(userId, event) : ledger.snapshot(userId, chatId);
   spindle2.sendToFrontend({ type: "vn_image_activity", chatId, activity }, userId);
 }
-async function cancelIncompleteJobs(spindle2, chatId, userId, abortedTurn) {
+function hasLiveAssetBatch(key) {
+  return assetControllers.has(key) || pendingAssetStarts.has(key) || recoveringImageBatches.has(key);
+}
+function hasIncompletePendingJobs(record5) {
+  return record5.jobs.some((job) => job.status === "queued" || job.status === "generating") || Boolean(record5.imageRequests?.some((request) => request.state === "review"));
+}
+function stampCancelledIncompleteJobs(record5, nowTime = new Date().toISOString()) {
+  const jobs = record5.jobs.map((job) => job.status === "queued" || job.status === "generating" ? AssetJobSchema.parse({ ...job, status: "cancelled", error: null, finishedAt: nowTime }) : job);
+  const imageRequests = record5.imageRequests?.map((request) => request.state === "review" ? { ...request, state: "cancelled" } : request) ?? [];
+  return { ...record5, jobs, imageRequests, updatedAt: nowTime };
+}
+function buildLatestSceneSnapshot(record5) {
+  const lastScene = record5.plan.scenes.at(-1) ?? null;
+  if (!lastScene || !record5.plan.terminalVisualState)
+    return lastScene;
+  return {
+    ...lastScene,
+    character: record5.plan.terminalVisualState.character,
+    ...record5.plan.terminalVisualState.characterId ? { characterId: record5.plan.terminalVisualState.characterId } : {},
+    ...record5.plan.terminalVisualState.subjectCategory ? { subjectCategory: record5.plan.terminalVisualState.subjectCategory } : {},
+    identityPrompt: record5.plan.terminalVisualState.identity || null,
+    attire: record5.plan.terminalVisualState.attire,
+    continuity: record5.plan.terminalContinuity,
+    activeAssetId: null
+  };
+}
+async function cancelIncompleteJobs(spindle2, chatId, userId, abortedTurn, abortedEpoch) {
   const key = runtimeKey(userId, chatId);
-  const unclaimed = () => !activeTurnKeys.has(key);
+  const unclaimed = () => !activeTurnKeys.has(key) && !hasLiveAssetBatch(key) && (abortedEpoch === undefined || (intakeEpochs.get(key) ?? 0) === abortedEpoch);
   const chatState = await loadChatState(spindle2, chatId, userId);
   if (!chatState.activeTurnPath || !unclaimed())
     return;
@@ -53699,10 +54458,9 @@ async function cancelIncompleteJobs(spindle2, chatId, userId, abortedTurn) {
   const next = await mutateActiveTurnRecord(spindle2, chatId, chatState.activeTurnPath, userId, (record5) => {
     if (abortedTurn && !turnKeyEquals(record5.plan.key, abortedTurn))
       return null;
-    if (!record5.jobs.some((job) => job.status === "queued" || job.status === "generating"))
+    if (!hasIncompletePendingJobs(record5))
       return null;
-    const jobs = record5.jobs.map((job) => job.status === "queued" || job.status === "generating" ? AssetJobSchema.parse({ ...job, status: "cancelled", error: null, finishedAt: nowTime }) : job);
-    return { ...record5, jobs, imageRequests: record5.imageRequests?.map((request) => request.state === "review" ? { ...request, state: "cancelled" } : request) ?? [], updatedAt: nowTime };
+    return stampCancelledIncompleteJobs(record5, nowTime);
   }, unclaimed);
   if (!next || !unclaimed())
     return;
@@ -53732,7 +54490,8 @@ function abortChatWork(spindle2, userId, chatId, reason) {
   pendingAssetStarts.delete(key);
   abortAssetBatch(key, reason);
   releaseSceneCacheAdmission(spindle2, userId, chatId, "view_closed");
-  cancelIncompleteJobs(spindle2, chatId, userId, abortedTurn).catch((error61) => {
+  const cleanupEpoch = intakeEpochs.get(key) ?? 0;
+  cancelIncompleteJobs(spindle2, chatId, userId, abortedTurn, cleanupEpoch).catch((error61) => {
     spindle2.log.warn(`Visual novel view-close cleanup failed: ${errorText2(error61)}`);
   });
 }
@@ -54018,7 +54777,15 @@ function turnView(record5) {
     ...record5.plan.panelSource ? { panelSource: record5.plan.panelSource } : {},
     ...record5.plan.paragraphSpeakers?.some((speaker) => speaker !== null) ? { paragraphSpeakers: record5.plan.paragraphSpeakers } : {},
     ...effectViews(record5),
-    choices: record5.plan.choices.map((choice) => ({ id: choice.id, label: choice.label, value: choice.submission, ...choice.check ? { check: choice.check } : {} })),
+    choices: record5.plan.choices.map((choice) => ({
+      id: choice.id,
+      label: choice.label,
+      value: choice.submission,
+      ...choice.disabled ? { disabled: true } : {},
+      ...choice.lockedReason ? { lockedReason: choice.lockedReason } : {},
+      ...choice.check ? { check: choice.check } : {},
+      ...choice.setsFlags ? { setsFlags: choice.setsFlags } : {}
+    })),
     ...record5.plan.rpgState ? { rpgState: record5.plan.rpgState } : {},
     assets: record5.jobs.map((job) => assetView(record5, job)),
     ...record5.imageRequests ? { imageRequests: record5.imageRequests } : {},
@@ -54118,8 +54885,9 @@ async function sendState(spindle2, chatId, userId, options3 = {}) {
       spindle2.log.warn(`Stored turn freshness check failed; sending the stored turn: ${errorText2(error61)}`);
     }
   }
-  if (options3.viewOpen === true && record5 && !stale && !assetControllers.has(runtimeKey(userId, chatId)) && record5.imageRequests?.some((request) => request.state === "review")) {
-    record5 = { ...record5, imageRequests: record5.imageRequests.map((request) => request.state === "review" ? { ...request, state: "cancelled" } : request), jobs: record5.jobs.map((job) => job.status === "queued" || job.status === "generating" ? AssetJobSchema.parse({ ...job, status: "cancelled", finishedAt: new Date().toISOString() }) : job) };
+  const stateKey = runtimeKey(userId, chatId);
+  if (!options3.readOnly && (options3.viewOpen === true || views.isOpen(userId, chatId)) && record5 && !stale && !hasLiveAssetBatch(stateKey) && !planningQueue.active().some((op) => op.userId === userId && op.chatId === chatId) && hasIncompletePendingJobs(record5)) {
+    record5 = stampCancelledIncompleteJobs(record5);
     if (chatState.activeTurnPath)
       await saveTurnRecord(spindle2, chatState.activeTurnPath, record5, userId);
   }
@@ -54162,20 +54930,10 @@ async function persistActiveTurn(spindle2, record5, path3, userId, isCurrent) {
     await saveTurnRecord(spindle2, path3, record5, userId);
   if (isCurrent && !isCurrent())
     return;
-  const lastScene = record5.plan.scenes.at(-1) ?? null;
   await saveChatState(spindle2, record5.plan.key.chatId, {
     schemaVersion: 1,
     activeTurnPath: path3,
-    latestScene: lastScene && record5.plan.terminalVisualState ? {
-      ...lastScene,
-      character: record5.plan.terminalVisualState.character,
-      ...record5.plan.terminalVisualState.characterId ? { characterId: record5.plan.terminalVisualState.characterId } : {},
-      ...record5.plan.terminalVisualState.subjectCategory ? { subjectCategory: record5.plan.terminalVisualState.subjectCategory } : {},
-      identityPrompt: record5.plan.terminalVisualState.identity || null,
-      attire: record5.plan.terminalVisualState.attire,
-      continuity: record5.plan.terminalContinuity,
-      activeAssetId: null
-    } : lastScene,
+    latestScene: buildLatestSceneSnapshot(record5),
     terminalContinuity: record5.plan.terminalContinuity,
     updatedAt: new Date().toISOString()
   }, userId, isCurrent);
@@ -54368,7 +55126,7 @@ async function startAssets(spindle2, record5, path3, userId, options3 = {}) {
           const writer = options3.promptOperation === "enrich" ? metadata.enrichPrompt : metadata.regeneratePrompt;
           if (!writer)
             throw new Error("The selected prompt operation is unavailable for this picture.");
-          draft = await writer(draft, options3.guidance);
+          draft = await writer(draft, options3.guidance, options3.pinnedClauses);
         }
         draft.parameters = modelOutputParameters(metadata.provider, draft.model, draft.parameters ?? {});
         const approvals = imageRetryQueues.get(key);
@@ -54526,7 +55284,7 @@ async function prepareSingleImageUnlocked(spindle2, request, userId, quick) {
     return;
   spindle2.sendToFrontend({ type: "vn_turn", turn: view }, userId);
   const rebuildOpts = request.type === "vn_prepare_image" && (request.reframe || request.styleId || request.fitToModel || request.model || request.connectionId || request.manualCamera) ? { ...request.reframe !== undefined ? { reframe: request.reframe } : {}, ...request.styleId !== undefined ? { styleId: request.styleId } : {}, ...request.fitToModel !== undefined ? { fitToModel: request.fitToModel } : {}, ...request.model !== undefined ? { model: request.model } : {}, ...request.connectionId !== undefined ? { connectionId: request.connectionId } : {}, ...request.manualCamera !== undefined ? { manualCamera: request.manualCamera } : {} } : undefined;
-  await startAssets(spindle2, next, path3, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId], ...quick || request.type === "vn_prepare_image" && request.quickGenerate ? { quickGenerate: true } : {}, ...request.type === "vn_prepare_image" && request.edits ? { initialEdits: request.edits } : {}, ...request.type === "vn_prepare_image" && (request.regeneratePrompt === true || request.promptOperation) ? { regeneratePrompt: true, ...request.promptOperation ? { promptOperation: request.promptOperation } : {}, ...request.guidance ? { guidance: request.guidance } : {} } : {}, ...rebuildOpts ? { rebuild: rebuildOpts } : {} });
+  await startAssets(spindle2, next, path3, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId], ...quick || request.type === "vn_prepare_image" && request.quickGenerate ? { quickGenerate: true } : {}, ...request.type === "vn_prepare_image" && request.edits ? { initialEdits: request.edits } : {}, ...request.type === "vn_prepare_image" && (request.regeneratePrompt === true || request.promptOperation) ? { regeneratePrompt: true, ...request.promptOperation ? { promptOperation: request.promptOperation } : {}, ...request.guidance ? { guidance: request.guidance } : {}, ...request.pinnedClauses?.length ? { pinnedClauses: request.pinnedClauses } : {} } : {}, ...rebuildOpts ? { rebuild: rebuildOpts } : {} });
 }
 async function processAssistantMessage(spindle2, chatId, message, content2, userId, options3) {
   if (!content2.trim() || message.is_user)
@@ -54578,14 +55336,15 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
     if (canReuseTurn) {
       dbg(spindle2, userId, `turn reused from storage chat=${chatId} message=${message.id} fingerprint=${fingerprint}`);
       const key = runtimeKey(userId, chatId);
-      const prevController = assetControllers.get(key);
-      if (prevController) {
-        prevController.abort();
-        assetControllers.delete(key);
+      pendingAssetStarts.delete(key);
+      abortAssetBatch(key, "Reusing stored turn.");
+      let reusable = existing;
+      if (hasIncompletePendingJobs(reusable)) {
+        reusable = stampCancelledIncompleteJobs(reusable);
       }
-      activeTurnKeys.set(key, existing.plan.key);
-      await persistActiveTurn(spindle2, existing, path3, userId);
-      spindle2.sendToFrontend({ type: "vn_turn", turn: await turnViewWithAudio(spindle2, existing, userId) }, userId);
+      activeTurnKeys.set(key, reusable.plan.key);
+      await persistActiveTurn(spindle2, reusable, path3, userId);
+      spindle2.sendToFrontend({ type: "vn_turn", turn: await turnViewWithAudio(spindle2, reusable, userId) }, userId);
       return;
     }
   }
@@ -54598,6 +55357,37 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
     const config2 = await loadConfig(spindle2, userId);
     rememberDebugFlag(userId, config2);
     const messages = await spindle2.chat.getMessages(chatId);
+    if (!views.isOpen(userId, chatId)) {
+      operation.controller.abort("The visual novel view closed before planning ran.");
+    }
+    if (operation.controller.signal.aborted || (intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch)
+      return;
+    let earlyPreviewSent = false;
+    try {
+      const earlyParagraphs = await prepareEarlyNarrativeParagraphs(spindle2, {
+        content: resolved,
+        message,
+        config: config2,
+        recentMessages: messages.slice(-Math.max(1, config2.includeRecentMessages)),
+        ...userId ? { userId } : {}
+      });
+      if (earlyParagraphs.length > 0 && !operation.controller.signal.aborted && views.isOpen(userId, chatId) && (intakeEpochs.get(intakeKey) ?? 0) === intakeEpoch) {
+        const sessionId = preparationSessions.get(intakeKey) ?? "__open__";
+        const preview = NarrativePreviewSchema.safeParse({
+          type: "vn_narrative_preview",
+          chatId,
+          messageId: message.id,
+          swipeId: message.swipe_id ?? 0,
+          sourceFingerprint: fingerprint,
+          sessionId,
+          paragraphs: earlyParagraphs
+        });
+        if (preview.success) {
+          spindle2.sendToFrontend(preview.data, userId);
+          earlyPreviewSent = true;
+        }
+      }
+    } catch {}
     const referenceSnapshot = referenceMessages(messages, message.id);
     const assistantTurns = messages.filter((candidate) => !candidate.is_user && candidate.content.trim());
     const replacesGreeting = relation === "reselected" && assistantTurns.length === 1 && assistantTurns[0].id === message.id;
@@ -54612,7 +55402,7 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
     const msgSegment = encodeURIComponent(message.id).replaceAll("%", "_");
     const isReswipeOrReplan = !replacesGreeting && (Boolean(existing) || Boolean(chatState.activeTurnPath && chatState.activeTurnPath.includes(msgSegment)));
     const priorTurnRecord = !replacesGreeting && priorAssistantTurn ? await loadTurnRecord(spindle2, turnPath(chatId, priorAssistantTurn.id, priorAssistantTurn.swipe_id ?? 0), userId).catch(() => null) : null;
-    const previousTurnRecord = !replacesGreeting && config2.rpgMode === "full" && (isReswipeOrReplan ? true : chatState.activeTurnPath) ? isReswipeOrReplan ? priorTurnRecord : await loadTurnRecord(spindle2, chatState.activeTurnPath, userId).catch(() => null) : null;
+    const previousTurnRecord = !replacesGreeting && config2.rpgMode !== "off" && (isReswipeOrReplan ? true : chatState.activeTurnPath) ? isReswipeOrReplan ? priorTurnRecord : await loadTurnRecord(spindle2, chatState.activeTurnPath, userId).catch(() => null) : null;
     const setupToken = castArtToken(spindle2, chatId, userId);
     const identityCurrent = () => !operation.controller.signal.aborted && setupToken === castArtToken(spindle2, chatId, userId);
     const singleCharacter = await loadSingleCharacterState(spindle2, chatId, userId);
@@ -54622,12 +55412,14 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
     if (!views.isOpen(userId, chatId)) {
       operation.controller.abort("The visual novel view closed before planning ran.");
     }
-    if (operation.controller.signal.aborted)
+    if (operation.controller.signal.aborted || (intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch)
       return;
     const result = await planTurn(spindle2, {
       onNarrativePrepared: (paragraphs) => {
-        const sessionId = preparationSessions.get(intakeKey);
-        if (!sessionId || operation.controller.signal.aborted || !views.isOpen(userId, chatId) || (intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch)
+        if (earlyPreviewSent)
+          return;
+        const sessionId = preparationSessions.get(intakeKey) ?? "__open__";
+        if (operation.controller.signal.aborted || !views.isOpen(userId, chatId) || (intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch)
           return;
         const preview = NarrativePreviewSchema.safeParse({ type: "vn_narrative_preview", chatId, messageId: message.id, swipeId: message.swipe_id ?? 0, sourceFingerprint: fingerprint, sessionId, paragraphs });
         if (preview.success)
@@ -54650,7 +55442,7 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
       ...config2.includeSimTrackerContext ? { simTrackerEvidence: extractSimTracker(messages, message.id, config2.simTrackerMappings) } : {},
       ...userId ? { userId } : {}
     });
-    if (operation.controller.signal.aborted)
+    if (operation.controller.signal.aborted || (intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch)
       return;
     dbg(spindle2, userId, [
       `planned chat=${chatId} message=${message.id} in ${Date.now() - planningStartedAt}ms`,
@@ -54763,10 +55555,10 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
     const key = runtimeKey(userId, chatId);
     activeTurnKeys.set(key, record5.plan.key);
     await persistActiveTurn(spindle2, record5, path3, userId, () => !operation.controller.signal.aborted);
-    if (operation.controller.signal.aborted)
+    if (operation.controller.signal.aborted || (intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch)
       return;
     const view = await turnViewWithAudio(spindle2, record5, userId);
-    if (operation.controller.signal.aborted)
+    if (operation.controller.signal.aborted || (intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch)
       return;
     spindle2.sendToFrontend({ type: "vn_turn", turn: view }, userId);
     if (!config2.useNativeCardImages && config2.generateImages) {
@@ -54811,6 +55603,20 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
         const nextLocationName = result.plan.scenes.at(-1)?.environment.location ?? null;
         const locationChanged = Boolean(prevLocationName && nextLocationName && prevLocationName.trim().toLowerCase() !== nextLocationName.trim().toLowerCase());
         if (turnCastNames.size > 0 || locationChanged || isReswipeOrReplan) {
+          const turnAttires = new Map;
+          for (const scene of record5.plan.scenes) {
+            const charKey = (scene.character || scene.cast?.[0] || "").trim().toLowerCase();
+            if (charKey && scene.attire && !isGenericAttire(scene.attire)) {
+              turnAttires.set(charKey, scene.attire.trim().slice(0, 600));
+            }
+          }
+          for (const cue of record5.plan.visualCues) {
+            const sceneForBeat = record5.plan.scenes.find((s) => s.sceneId === cue.sceneId);
+            const charKey = (cue.character || sceneForBeat?.character || "").trim().toLowerCase();
+            if (charKey && cue.attire && !isGenericAttire(cue.attire)) {
+              turnAttires.set(charKey, cue.attire.trim().slice(0, 600));
+            }
+          }
           await mutateCharacterDnaLibrary(spindle2, chatId, userId, undefined, (l) => {
             if (locationChanged) {
               for (const char of Object.values(l.characters)) {
@@ -54828,15 +55634,23 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
               if (l.deleted?.[name] || findCharacterDNA(l.deleted ?? {}, name))
                 continue;
               const existingChar = findCharacterDNA(l.characters, name);
+              const inferredAttire = turnAttires.get(name.toLowerCase());
               if (!existingChar) {
                 const dna = createEmptyCharacterDNA(name);
                 dna.autoDiscovered = true;
                 dna.seenInSwipes = [swipeTag];
+                if (inferredAttire)
+                  dna.activeOutfit = inferredAttire;
                 l.characters[dna.id] = dna;
-              } else if (existingChar.autoDiscovered) {
-                const seen = existingChar.seenInSwipes ?? [];
-                if (!seen.includes(swipeTag)) {
-                  existingChar.seenInSwipes = [...seen, swipeTag].slice(-60);
+              } else {
+                if (!existingChar.locked && inferredAttire) {
+                  existingChar.activeOutfit = inferredAttire;
+                }
+                if (existingChar.autoDiscovered) {
+                  const seen = existingChar.seenInSwipes ?? [];
+                  if (!seen.includes(swipeTag)) {
+                    existingChar.seenInSwipes = [...seen, swipeTag].slice(-60);
+                  }
                 }
               }
             }
@@ -54854,6 +55668,7 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
             set2.items = scrubbed.items;
             set2.thoughtCabinet = scrubbed.thoughtCabinet;
             set2.chapterCodex = scrubbed.chapterCodex;
+            set2.npcBeliefs = scrubbed.npcBeliefs;
           }
         });
       } catch {}
@@ -55323,6 +56138,10 @@ async function replanCurrentTurn(spindle2, request, userId) {
     const singleCharacter = await loadSingleCharacterState(spindle2, action.chatId, userId);
     const characterAppearance = await loadCharacterAppearance(spindle2, userId, action.chatId);
     const characterRegistry = await loadCharacterRegistry(spindle2, action.chatId, userId);
+    const replanAssistantTurns = messages.filter((m) => !m.is_user && m.content.trim());
+    const replanIndex = replanAssistantTurns.findIndex((m) => m.id === latest.id);
+    const replanPriorMessage = replanIndex > 0 ? replanAssistantTurns[replanIndex - 1] : null;
+    const replanPriorRecord = config2.rpgMode !== "off" && replanPriorMessage ? await loadTurnRecord(spindle2, turnPath(action.chatId, replanPriorMessage.id, replanPriorMessage.swipe_id ?? 0), userId).catch(() => null) : null;
     const recentMessages = config2.includeRecentMessages > 0 ? await resolveContextMessages(spindle2, action.chatId, messages.slice(-config2.includeRecentMessages), new Map, userId) : [];
     if (!isCurrent())
       return;
@@ -55342,6 +56161,7 @@ async function replanCurrentTurn(spindle2, request, userId) {
         sourceFingerprint: action.sourceFingerprint,
         previousScene: old.plan.scenes[0] ?? null,
         previousContinuity: old.plan.initialContinuity,
+        previousRpgState: config2.rpgMode !== "off" ? replanPriorRecord?.plan.rpgState ?? null : null,
         recentMessages,
         config: config2,
         singleCharacter,
@@ -55624,6 +56444,24 @@ async function handleFrontendMessage(spindle2, request, userId) {
     case "vn_get_state":
       await sendState(spindle2, request.chatId ?? "", userId, { requestId: request.requestId, ...request.viewOpen === undefined ? {} : { viewOpen: request.viewOpen }, ...request.prepare === false ? { readOnly: true } : {} });
       return;
+    case "vn_get_turn_snapshot": {
+      if (typeof request.chatId !== "string" || !request.chatId || typeof request.messageId !== "string" || !request.messageId)
+        return;
+      const swipeId = typeof request.swipeId === "number" ? request.swipeId : 0;
+      const snapshotPath = turnPath(request.chatId, request.messageId, swipeId);
+      const snapshotRecord = await loadTurnRecord(spindle2, snapshotPath, userId).catch(() => null);
+      const validRecord = snapshotRecord && snapshotRecord.plan.key.chatId === request.chatId ? snapshotRecord : null;
+      const view = validRecord ? { ...await turnViewWithAudio(spindle2, validRecord, userId), historical: true } : null;
+      spindle2.sendToFrontend({
+        type: "vn_turn_snapshot",
+        chatId: request.chatId,
+        messageId: request.messageId,
+        swipeId,
+        turn: view,
+        ...request.requestId ? { requestId: request.requestId } : {}
+      }, userId);
+      return;
+    }
     case "vn_reading_position": {
       const { position } = request;
       const state = await loadChatState(spindle2, position.key.chatId, userId);
@@ -55816,11 +56654,18 @@ async function handleFrontendMessage(spindle2, request, userId) {
       await markAssetReady(spindle2, request, userId);
       return;
     case "vn_cancel": {
+      const cancelKey = runtimeKey(userId, request.chatId);
       bumpIntakeEpoch(userId, request.chatId);
       planningQueue.cancelChat(userId, request.chatId);
-      pendingAssetStarts.delete(runtimeKey(userId, request.chatId));
-      assetControllers.get(runtimeKey(userId, request.chatId))?.abort("Cancelled from the visual novel UI.");
+      const abortedTurn = activeTurnKeys.get(cancelKey) ?? null;
+      activeTurnKeys.delete(cancelKey);
+      pendingAssetStarts.delete(cancelKey);
+      abortAssetBatch(cancelKey, "Cancelled from the visual novel UI.");
       releaseSceneCacheAdmission(spindle2, userId, request.chatId, "cancel");
+      const cleanupEpoch = intakeEpochs.get(cancelKey) ?? 0;
+      cancelIncompleteJobs(spindle2, request.chatId, userId, abortedTurn, cleanupEpoch).catch((error61) => {
+        spindle2.log.warn(`Visual novel cancel cleanup failed: ${errorText2(error61)}`);
+      });
       return;
     }
     case "vn_refresh": {
@@ -55868,16 +56713,37 @@ async function clearDeletedTurn(spindle2, payload, userId) {
   const record5 = await loadTurnRecord(spindle2, state.activeTurnPath, userId);
   if (!record5 || record5.plan.key.assistantMessageId !== candidate.messageId)
     return;
+  const key = runtimeKey(userId, candidate.chatId);
   bumpIntakeEpoch(userId, candidate.chatId);
   planningQueue.cancelChat(userId, candidate.chatId);
-  assetControllers.get(runtimeKey(userId, candidate.chatId))?.abort("The source assistant message was deleted.");
-  activeTurnKeys.delete(runtimeKey(userId, candidate.chatId));
+  activeTurnKeys.delete(key);
+  pendingAssetStarts.delete(key);
+  abortAssetBatch(key, "The source assistant message was deleted.");
   releaseSceneCacheScope(spindle2, userId, candidate.chatId, "scope_cleared");
+  let restoredPath = null;
+  let restoredRecord = null;
+  try {
+    const messages = await spindle2.chat.getMessages(candidate.chatId);
+    for (let i = messages.length - 1;i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.is_user || !msg.content.trim() || msg.id === candidate.messageId)
+        continue;
+      const priorPath = turnPath(candidate.chatId, msg.id, msg.swipe_id ?? 0);
+      const priorRecord = await loadTurnRecord(spindle2, priorPath, userId).catch(() => null);
+      if (priorRecord && priorRecord.plan.key.chatId === candidate.chatId) {
+        restoredPath = priorPath;
+        restoredRecord = priorRecord;
+        break;
+      }
+    }
+  } catch (error61) {
+    spindle2.log.warn(`Deleted turn rollback scan failed; clearing active turn: ${errorText2(error61)}`);
+  }
   await saveChatState(spindle2, candidate.chatId, {
     schemaVersion: 1,
-    activeTurnPath: null,
-    latestScene: null,
-    terminalContinuity: null,
+    activeTurnPath: restoredPath,
+    latestScene: restoredRecord ? buildLatestSceneSnapshot(restoredRecord) : null,
+    terminalContinuity: restoredRecord ? restoredRecord.plan.terminalContinuity : null,
     updatedAt: new Date().toISOString()
   }, userId);
   await sendState(spindle2, candidate.chatId, userId, { viewOpen: views.isOpen(userId, candidate.chatId) });

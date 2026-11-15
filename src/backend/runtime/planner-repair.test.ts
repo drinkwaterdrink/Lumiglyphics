@@ -468,4 +468,97 @@ test("planner tolerant parse recovers choices in alternate (choice/option/text) 
     expect(capturedParams?.thinkingConfig).toEqual({ thinkingLevel: "low" });
   });
 
+  test("Seat 5 TurnDeltaBus keeps role=system identical across RPG turns while shifting Turn N to role=user", async () => {
+    const requests: any[] = [];
+    const spindle: any = {
+      chats: { get: async () => ({ character_id: "character-1" }) },
+      characters: { get: async () => ({ id: "character-1", name: "Sandra", description: "", tags: [], extensions: {} }) },
+      personas: { getActive: async () => null },
+      connections: { get: async () => ({ id: "conn", provider: "google", model: "gemini-3.5-flash-lite", is_default: true }), list: async () => [] },
+      generate: {
+        raw: async (req: any) => {
+          requests.push(req);
+          return { content: JSON.stringify({ scenes: [{ startParagraph: 0, environment: { location: "Park" } }], cues: [{ paragraphIndex: 0 }] }) };
+        }
+      },
+      log: { warn: () => {} }
+    };
+    const makeRpg = (turnCounter: number) => ({
+      turnCounter,
+      turnsSinceProgress: turnCounter,
+      vitals: { name: "Hero", level: 1, archetype: "Scout", hp: 20, maxHp: 20, stamina: 10, maxStamina: 10, stress: 10, currency: "0g", inventory: [], statusEffects: [], companions: [] },
+      quests: [],
+      atlas: { currentLocationId: null, nodes: [], edges: [] }
+    });
+    const baseInput = {
+      chatId: "chat-1",
+      message: { ...message, content: "P0." },
+      content: "P0.",
+      previousScene: null,
+      previousContinuity: null,
+      recentMessages: [],
+      config: { ...DEFAULT_CONFIG, rpgMode: "full" as const, maxImagesPerTurn: 1, parserConnectionId: "conn", includeCharacterContext: false, includePersonaContext: false, includeLorebookContext: false, includeSimTrackerContext: false },
+      singleCharacter: emptySingleCharacter(),
+      characterAppearance: {}
+    };
+    await planTurn(spindle, { ...baseInput, previousRpgState: makeRpg(1) });
+    await planTurn(spindle, { ...baseInput, previousRpgState: makeRpg(2) });
+    expect(requests.length).toBe(2);
+    expect(requests[0].messages[0].content).toBe(requests[1].messages[0].content);
+    expect(requests[0].messages[1].content).toContain("TURN RPG STATE");
+    expect(requests[0].messages[1].content).toContain("Turn 1");
+    expect(requests[1].messages[1].content).toContain("Turn 2");
+  });
+
+  test("P2 retries malformed Attempt 1 output with Zod error-diff feedback in VALIDATION RETRY and preserves previous attire", async () => {
+    const requests: any[] = [];
+    let call = 0;
+    const spindle: any = {
+      chats: { get: async () => ({ character_id: "character-1" }) },
+      characters: { get: async () => ({ id: "character-1", name: "Sandra", description: "", tags: [], extensions: {} }) },
+      personas: { getActive: async () => null },
+      connections: { get: async () => ({ id: "conn", provider: "openai", model: "gpt-4o-mini", is_default: true }), list: async () => [] },
+      generate: {
+        raw: async (req: any) => {
+          requests.push(req);
+          call += 1;
+          if (call === 1) return { content: "not valid json at all" };
+          return { content: JSON.stringify({ scenes: [{ startParagraph: 0, environment: { location: "Park" } }], cues: [{ paragraphIndex: 0 }] }) };
+        }
+      },
+      log: { warn: () => {} }
+    };
+    const previousScene: any = {
+      sceneId: "s1",
+      revision: 1,
+      startParagraph: 0,
+      environment: { location: "Park", timeOfDay: "noon", weather: null, lighting: null, description: "A sunny park.", persistentElements: [], removedElements: [] },
+      cast: ["Sandra"],
+      character: "Sandra",
+      attire: "navy blazer, plaid skirt",
+      basePrompt: "park",
+      identityPrompt: null,
+      cameraLock: "eye level",
+      compositionLock: "centered",
+      activeAssetId: null,
+      priorSceneId: null
+    };
+    const res = await planTurn(spindle, {
+      chatId: "chat-1",
+      message: { ...message, content: Array.from({ length: 15 }, (_, i) => `Paragraph ${i}.`).join("\n\n") },
+      content: Array.from({ length: 15 }, (_, i) => `Paragraph ${i}.`).join("\n\n"),
+      previousScene,
+      previousContinuity: null,
+      recentMessages: [],
+      config: { ...DEFAULT_CONFIG, maxImagesPerTurn: 1, parserConnectionId: "conn", includeCharacterContext: false, includePersonaContext: false, includeLorebookContext: false, includeSimTrackerContext: false },
+      singleCharacter: emptySingleCharacter(),
+      characterAppearance: {}
+    });
+    expect(res.usedFallback).toBe(false);
+    expect(requests.length).toBe(2);
+    expect(requests[0].parameters.max_tokens).toBeGreaterThan(16000);
+    expect(requests[0].messages[1].content).toContain("navy blazer, plaid skirt");
+    expect(requests[1].messages[1].content).toContain("VALIDATION RETRY");
+  });
+
 });

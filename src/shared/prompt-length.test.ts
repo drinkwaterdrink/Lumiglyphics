@@ -42,3 +42,20 @@ test('fitPromptToBudget handles positive-only mode', () => {
  expect(result.prompt.length).toBeLessThanOrEqual(1200);
  expect(() => assertPromptLengths(result.prompt, result.negativePrompt, { version: 1, family: 'generic', format: 'tags', maxCharacters: 1200, negativeMode: 'positive-only', source: 'catalogue', guidance: '' })).not.toThrow();
 });
+
+
+test('P4 #35/#4: fitPromptToBudget preserves pinned clauses and trailing style tags under tight budget', () => {
+  const tags = [
+    'Mira standing at station platform',
+    ...Array.from({ length: 24 }, (_, idx) => `passing commuter prop ${idx} holding luggage under awning`),
+    'by hiromu arakawa',
+    'cel shading style'
+  ];
+  const prompt = tags.join(', ');
+  const fitted = fitPromptToBudget(prompt, '', 420, 'dual', {
+    pinnedClauses: ['Mira standing at station platform']
+  });
+  expect(fitted.prompt.length).toBeLessThanOrEqual(420);
+  expect(fitted.prompt).toContain('Mira standing at station platform');
+  expect(fitted.prompt).toContain('cel shading style');
+});

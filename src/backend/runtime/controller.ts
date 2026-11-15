@@ -5,7 +5,7 @@ import {ImageUsageLedger} from './image-usage.js';
 import {ImageDispatchPolicy} from './image-dispatch-policy.js';
 import type {ImageActivityInput} from '../../shared/image-usage.js';
 import {resolveSceneAmbient} from '../../shared/scene-atmosphere.js';
-import { createEmptyCharacterDNA, findCharacterDNA, scrubCharacterDNASwipes, swipeTurnTag } from '../../shared/character-dna.js';
+import { createEmptyCharacterDNA, findCharacterDNA, isGenericAttire, scrubCharacterDNASwipes, swipeTurnTag } from '../../shared/character-dna.js';
 import { scrubStoryDNASwipes } from '../../shared/story-dna.js';
 import type { AssetScheduler } from '../core/asset-scheduler.js';
 import { mutateCharacterDnaLibrary } from './character-dna-store.js';
@@ -74,7 +74,7 @@ import { resolveNativeCardJobs } from "./native-assets.js";
 import { handleReferenceImageResponse } from "./reference-source.js";
 import { CACHE_JOB_PROVIDER, createAssetJobs, prepareAssetJobs, generateAssets, resolveCacheCues, retainPlanEpisodes } from "./images.js";
 import { SceneImageCache, sceneImageScope } from "../core/scene-image-cache.js";
-import { fingerprintForMessage, gameHintsForTurn, planTurn } from "./planner.js";
+import { fingerprintForMessage, gameHintsForTurn, planTurn, prepareEarlyNarrativeParagraphs } from "./planner.js";
 import {readImageLibraryPage} from './image-library.js';
 import {
   isUnselectedGreeting,
@@ -219,42 +219,86 @@ export function viewRegistry(): ViewRegistry {
 }
 
 /**
+ * Return true while a live image generation/recovery batch still owns this chat
+ * key, so background or reopen cleanup never cancels an active batch.
+ */
+function hasLiveAssetBatch(key: string): boolean {
+  return assetControllers.has(key) || pendingAssetStarts.has(key) || recoveringImageBatches.has(key);
+}
+
+/**
+ * Return true when a stored turn record contains queued/generating jobs or
+ * pending review requests that would appear stuck if left un-owned.
+ */
+function hasIncompletePendingJobs(record: StoredTurnRecord): boolean {
+  return record.jobs.some((job) => job.status === "queued" || job.status === "generating")
+    || Boolean(record.imageRequests?.some((request) => request.state === "review"));
+}
+
+/**
+ * Stamp `"cancelled"` over any queued/generating jobs and review requests on a
+ * turn record whose live batch was aborted or lost on close/reload.
+ */
+function stampCancelledIncompleteJobs(
+  record: StoredTurnRecord,
+  nowTime = new Date().toISOString()
+): StoredTurnRecord {
+  const jobs = record.jobs.map((job) => job.status === "queued" || job.status === "generating"
+    ? AssetJobSchema.parse({ ...job, status: "cancelled", error: null, finishedAt: nowTime })
+    : job);
+  const imageRequests = record.imageRequests?.map((request) =>
+    request.state === "review" ? { ...request, state: "cancelled" as const } : request
+  ) ?? [];
+  return { ...record, jobs, imageRequests, updatedAt: nowTime };
+}
+
+/**
+ * Build the `latestScene` snapshot stored in `StoredChatState` for a turn
+ * record so both forward saves and deleted-turn rollbacks stay identical.
+ */
+function buildLatestSceneSnapshot(record: StoredTurnRecord) {
+  const lastScene = record.plan.scenes.at(-1) ?? null;
+  if (!lastScene || !record.plan.terminalVisualState) return lastScene;
+  return {
+    ...lastScene,
+    character: record.plan.terminalVisualState.character,
+    ...(record.plan.terminalVisualState.characterId ? { characterId: record.plan.terminalVisualState.characterId } : {}),
+    ...(record.plan.terminalVisualState.subjectCategory ? { subjectCategory: record.plan.terminalVisualState.subjectCategory } : {}),
+    identityPrompt: record.plan.terminalVisualState.identity || null,
+    attire: record.plan.terminalVisualState.attire,
+    continuity: record.plan.terminalContinuity,
+    activeAssetId: null
+  };
+}
+
+/**
  * Persist "cancelled" over any queued/generating job of the chat's active turn
- * so a view-close abort leaves nothing that looks stuck. Late in-flight results
- * are already rejected by the ownership check (`activeTurnKeys`).
+ * so a view-close, cancel, or generation abort leaves nothing that looks stuck.
+ * Guarded by turn ownership, live batch absence, and intake epoch.
  */
 async function cancelIncompleteJobs(
   spindle: SpindleAPI,
   chatId: string,
   userId: string | undefined,
-  abortedTurn: StoredTurnRecord["plan"]["key"] | null
+  abortedTurn: StoredTurnRecord["plan"]["key"] | null,
+  abortedEpoch?: number
 ): Promise<void> {
   const key = runtimeKey(userId, chatId);
-  // Runs unawaited after a close. The aborted batch never resumes on its own,
-  // so its jobs are stamped even if the view reopened meanwhile (otherwise a
-  // fast close/reopen leaves "generating" jobs that nothing will ever finish).
-  // Only a new owner claiming the chat's turn while we were loading (retry,
-  // reply, reuse) makes the stored jobs live work that must be left alone,
-  // and only the record of the aborted turn itself is ever touched.
-  const unclaimed = (): boolean => !activeTurnKeys.has(key);
+  const unclaimed = (): boolean => !activeTurnKeys.has(key)
+    && !hasLiveAssetBatch(key)
+    && (abortedEpoch === undefined || (intakeEpochs.get(key) ?? 0) === abortedEpoch);
   const chatState = await loadChatState(spindle, chatId, userId);
   if (!chatState.activeTurnPath || !unclaimed()) return;
-  // Preflight outside the write queues: a slow optional cleanup read should
-  // not monopolize the queues before a reopened view can claim fresh work.
-  // This snapshot is never written; the atomic mutation reloads the record.
   const candidate = await loadTurnRecord(spindle, chatState.activeTurnPath, userId);
   if (!candidate || !unclaimed() || (abortedTurn && !turnKeyEquals(candidate.plan.key, abortedTurn))) return;
   const nowTime = new Date().toISOString();
   const next = await mutateActiveTurnRecord(spindle, chatId, chatState.activeTurnPath, userId, record => {
     if (abortedTurn && !turnKeyEquals(record.plan.key, abortedTurn)) return null;
-    if (!record.jobs.some(job => job.status === "queued" || job.status === "generating")) return null;
-    const jobs = record.jobs.map(job => job.status === "queued" || job.status === "generating"
-      ? AssetJobSchema.parse({ ...job, status: "cancelled", error: null, finishedAt: nowTime }) : job);
-    return { ...record, jobs, imageRequests: record.imageRequests?.map(request => request.state === "review" ? { ...request, state: "cancelled" as const } : request) ?? [], updatedAt: nowTime };
+    if (!hasIncompletePendingJobs(record)) return null;
+    return stampCancelledIncompleteJobs(record, nowTime);
   }, unclaimed);
   if (!next || !unclaimed()) return;
   dbg(spindle, userId, `view-gate persisted cancelled jobs chat=${chatId}`);
-  // A reopened view may hold old spinners. Never publish cleanup over new work.
   for (const job of next.jobs) {
     if (job.status !== "cancelled" || job.finishedAt !== nowTime) continue;
     const asset = await assetViewWithCastArt(spindle, next, job, userId);
@@ -297,7 +341,8 @@ function abortChatWork(spindle: SpindleAPI, userId: string | undefined, chatId: 
   pendingAssetStarts.delete(key);
   abortAssetBatch(key, reason);
   releaseSceneCacheAdmission(spindle, userId, chatId, "view_closed");
-  void cancelIncompleteJobs(spindle, chatId, userId, abortedTurn).catch((error) => {
+  const cleanupEpoch = intakeEpochs.get(key) ?? 0;
+  void cancelIncompleteJobs(spindle, chatId, userId, abortedTurn, cleanupEpoch).catch((error) => {
     spindle.log.warn(`Visual novel view-close cleanup failed: ${errorText(error)}`);
   });
 }
@@ -664,7 +709,15 @@ export function turnView(record: StoredTurnRecord): TurnView {
       ? { paragraphSpeakers: record.plan.paragraphSpeakers }
       : {}),
     ...effectViews(record),
-    choices: record.plan.choices.map((choice) => ({ id: choice.id, label: choice.label, value: choice.submission, ...(choice.check ? { check: choice.check } : {}) })),
+    choices: record.plan.choices.map((choice) => ({
+      id: choice.id,
+      label: choice.label,
+      value: choice.submission,
+      ...(choice.disabled ? { disabled: true } : {}),
+      ...(choice.lockedReason ? { lockedReason: choice.lockedReason } : {}),
+      ...(choice.check ? { check: choice.check } : {}),
+      ...(choice.setsFlags ? { setsFlags: choice.setsFlags } : {})
+    })),
     ...(record.plan.rpgState ? { rpgState: record.plan.rpgState } : {}),
     assets: record.jobs.map((job) => assetView(record, job)),
     ...(record.imageRequests ? { imageRequests: record.imageRequests } : {}),
@@ -805,11 +858,21 @@ export async function sendState(
       spindle.log.warn(`Stored turn freshness check failed; sending the stored turn: ${errorText(error)}`);
     }
   }
-  // Recovery write only for an explicitly opened view: background/older-client
-  // state reconciles are read-only and must not persist cancellation of a
-  // review batch that a live (controller-owned) flow could still be driving.
-  if (options.viewOpen === true && record && !stale && !assetControllers.has(runtimeKey(userId, chatId)) && record.imageRequests?.some((request) => request.state === "review")) {
-    record = { ...record, imageRequests: record.imageRequests.map((request) => request.state === "review" ? { ...request, state: "cancelled" as const } : request), jobs: record.jobs.map((job) => job.status === "queued" || job.status === "generating" ? AssetJobSchema.parse({ ...job, status: "cancelled", finishedAt: new Date().toISOString() }) : job) };
+  // Recovery write for an opened view when no live asset/planning work owns
+  // the turn: background `readOnly` reconciles must never mutate records, while
+  // interactive opens must sweep all stranded queued/generating/review jobs even
+  // when `reviewImages` is disabled.
+  const stateKey = runtimeKey(userId, chatId);
+  if (
+    !options.readOnly
+    && (options.viewOpen === true || views.isOpen(userId, chatId))
+    && record
+    && !stale
+    && !hasLiveAssetBatch(stateKey)
+    && !planningQueue.active().some((op) => op.userId === userId && op.chatId === chatId)
+    && hasIncompletePendingJobs(record)
+  ) {
+    record = stampCancelledIncompleteJobs(record);
     if (chatState.activeTurnPath) await saveTurnRecord(spindle, chatState.activeTurnPath, record, userId);
   }
   if(record && !stale && spindle.chats?.get) {
@@ -854,20 +917,10 @@ async function persistActiveTurn(
     if (!await saveTurnRecordIfCurrent(spindle, path, record, userId, isCurrent)) return;
   } else await saveTurnRecord(spindle, path, record, userId);
   if (isCurrent && !isCurrent()) return;
-  const lastScene = record.plan.scenes.at(-1) ?? null;
   await saveChatState(spindle, record.plan.key.chatId, {
     schemaVersion: 1,
     activeTurnPath: path,
-    latestScene: lastScene && record.plan.terminalVisualState ? {
-      ...lastScene,
-      character: record.plan.terminalVisualState.character,
-      ...(record.plan.terminalVisualState.characterId ? { characterId: record.plan.terminalVisualState.characterId } : {}),
-      ...(record.plan.terminalVisualState.subjectCategory ? { subjectCategory: record.plan.terminalVisualState.subjectCategory } : {}),
-      identityPrompt: record.plan.terminalVisualState.identity || null,
-      attire: record.plan.terminalVisualState.attire,
-      continuity: record.plan.terminalContinuity,
-      activeAssetId: null
-    } : lastScene,
+    latestScene: buildLatestSceneSnapshot(record),
     terminalContinuity: record.plan.terminalContinuity,
     updatedAt: new Date().toISOString()
   }, userId, isCurrent);
@@ -878,7 +931,7 @@ async function startAssets(
   record: StoredTurnRecord,
   path: string,
   userId?: string,
-  options: { bypassJobIds?: Iterable<string>; onlyJobId?: string; forceReview?: boolean; initialEdits?: ImageRequestEdits; regeneratePrompt?:boolean; promptOperation?:'rewrite'|'enrich'; guidance?:string; quickGenerate?:boolean; rebuild?:import('./image-review.js').RebuildOptions } = {}
+  options: { bypassJobIds?: Iterable<string>; onlyJobId?: string; forceReview?: boolean; initialEdits?: ImageRequestEdits; regeneratePrompt?:boolean; promptOperation?:'rewrite'|'enrich'; guidance?:string; pinnedClauses?:string[]; quickGenerate?:boolean; rebuild?:import('./image-review.js').RebuildOptions } = {}
 ): Promise<void> {
   const key=runtimeKey(userId,record.plan.key.chatId),start=Symbol();pendingAssetStarts.set(key,start);
   abortAssetBatch(key,'A newer image batch is starting.');
@@ -1017,7 +1070,7 @@ async function startAssets(
           if(options.onlyJobId===job.jobId && options.regeneratePrompt){
             const writer=options.promptOperation==='enrich'?metadata.enrichPrompt:metadata.regeneratePrompt;
             if(!writer)throw new Error('The selected prompt operation is unavailable for this picture.');
-            draft=await writer(draft,options.guidance);
+            draft=await writer(draft,options.guidance,options.pinnedClauses);
           }
           draft.parameters = modelOutputParameters(metadata.provider, draft.model, draft.parameters ?? {});
           const approvals=imageRetryQueues.get(key);
@@ -1136,7 +1189,7 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
   if(!isCurrent())return;
   spindle.sendToFrontend({ type: "vn_turn", turn:view }, userId);
   const rebuildOpts = request.type === 'vn_prepare_image' && (request.reframe || request.styleId || request.fitToModel || request.model || request.connectionId || request.manualCamera) ? { ...(request.reframe !== undefined ? { reframe: request.reframe } : {}), ...(request.styleId !== undefined ? { styleId: request.styleId } : {}), ...(request.fitToModel !== undefined ? { fitToModel: request.fitToModel } : {}), ...(request.model !== undefined ? { model: request.model } : {}), ...(request.connectionId !== undefined ? { connectionId: request.connectionId } : {}), ...(request.manualCamera !== undefined ? { manualCamera: request.manualCamera } : {}) } : undefined;
-  await startAssets(spindle, next, path, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId],...((quick || (request.type === "vn_prepare_image" && request.quickGenerate)) ? { quickGenerate: true } : {}),...(request.type === 'vn_prepare_image' && request.edits ? {initialEdits:request.edits} : {}),...(request.type==='vn_prepare_image' && (request.regeneratePrompt===true||request.promptOperation) ? {regeneratePrompt:true,...(request.promptOperation?{promptOperation:request.promptOperation}:{}),...(request.guidance?{guidance:request.guidance}:{})} : {}),...(rebuildOpts?{rebuild:rebuildOpts}:{}) });
+  await startAssets(spindle, next, path, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId],...((quick || (request.type === "vn_prepare_image" && request.quickGenerate)) ? { quickGenerate: true } : {}),...(request.type === 'vn_prepare_image' && request.edits ? {initialEdits:request.edits} : {}),...(request.type==='vn_prepare_image' && (request.regeneratePrompt===true||request.promptOperation) ? {regeneratePrompt:true,...(request.promptOperation?{promptOperation:request.promptOperation}:{}),...(request.guidance?{guidance:request.guidance}:{}),...(request.pinnedClauses?.length?{pinnedClauses:request.pinnedClauses}:{})} : {}),...(rebuildOpts?{rebuild:rebuildOpts}:{}) });
 }
 
 async function processAssistantMessage(
@@ -1207,14 +1260,15 @@ async function processAssistantMessage(
     if (canReuseTurn) {
       dbg(spindle, userId, `turn reused from storage chat=${chatId} message=${message.id} fingerprint=${fingerprint}`);
       const key = runtimeKey(userId, chatId);
-      const prevController = assetControllers.get(key);
-      if (prevController) {
-        prevController.abort();
-        assetControllers.delete(key);
+      pendingAssetStarts.delete(key);
+      abortAssetBatch(key, "Reusing stored turn.");
+      let reusable = existing;
+      if (hasIncompletePendingJobs(reusable)) {
+        reusable = stampCancelledIncompleteJobs(reusable);
       }
-      activeTurnKeys.set(key, existing.plan.key);
-      await persistActiveTurn(spindle, existing, path, userId);
-      spindle.sendToFrontend({ type: "vn_turn", turn: await turnViewWithAudio(spindle, existing,userId) }, userId);
+      activeTurnKeys.set(key, reusable.plan.key);
+      await persistActiveTurn(spindle, reusable, path, userId);
+      spindle.sendToFrontend({ type: "vn_turn", turn: await turnViewWithAudio(spindle, reusable, userId) }, userId);
       return;
     }
   }
@@ -1227,6 +1281,43 @@ async function processAssistantMessage(
     const config = await loadConfig(spindle, userId);
     rememberDebugFlag(userId, config);
     const messages = await spindle.chat.getMessages(chatId) as NormalizedChatMessage[];
+    if (!views.isOpen(userId, chatId)) {
+      operation.controller.abort("The visual novel view closed before planning ran.");
+    }
+    if (operation.controller.signal.aborted || (intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch) return;
+    let earlyPreviewSent = false;
+    try {
+      const earlyParagraphs = await prepareEarlyNarrativeParagraphs(spindle, {
+        content: resolved,
+        message,
+        config,
+        recentMessages: messages.slice(-Math.max(1, config.includeRecentMessages)),
+        ...(userId ? { userId } : {})
+      });
+      if (
+        earlyParagraphs.length > 0
+        && !operation.controller.signal.aborted
+        && views.isOpen(userId, chatId)
+        && (intakeEpochs.get(intakeKey) ?? 0) === intakeEpoch
+      ) {
+        const sessionId = preparationSessions.get(intakeKey) ?? "__open__";
+        const preview = NarrativePreviewSchema.safeParse({
+          type: "vn_narrative_preview",
+          chatId,
+          messageId: message.id,
+          swipeId: message.swipe_id ?? 0,
+          sourceFingerprint: fingerprint,
+          sessionId,
+          paragraphs: earlyParagraphs
+        });
+        if (preview.success) {
+          spindle.sendToFrontend(preview.data, userId);
+          earlyPreviewSent = true;
+        }
+      }
+    } catch {
+      // Early preview is optional enrichment; planTurn will handle validation or retry.
+    }
     const referenceSnapshot=referenceMessages(messages,message.id);
     // Greeting replacement: the same stored message re-resolved to a different
     // scene while it is the chat's only assistant turn. The durable identity
@@ -1258,7 +1349,7 @@ async function processAssistantMessage(
     const priorTurnRecord = !replacesGreeting && priorAssistantTurn
       ? await loadTurnRecord(spindle, turnPath(chatId, priorAssistantTurn.id, priorAssistantTurn.swipe_id ?? 0), userId).catch(() => null)
       : null;
-    const previousTurnRecord = !replacesGreeting && config.rpgMode === "full" && (isReswipeOrReplan ? true : chatState.activeTurnPath)
+    const previousTurnRecord = !replacesGreeting && config.rpgMode !== "off" && (isReswipeOrReplan ? true : chatState.activeTurnPath)
       ? (isReswipeOrReplan ? priorTurnRecord : await loadTurnRecord(spindle, chatState.activeTurnPath!, userId).catch(() => null))
       : null;
     const setupToken = castArtToken(spindle, chatId, userId);
@@ -1275,11 +1366,12 @@ async function processAssistantMessage(
     if (!views.isOpen(userId, chatId)) {
       operation.controller.abort("The visual novel view closed before planning ran.");
     }
-    if (operation.controller.signal.aborted) return;
+    if (operation.controller.signal.aborted || (intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch) return;
     const result = await planTurn(spindle, {
       onNarrativePrepared: paragraphs=>{
-        const sessionId=preparationSessions.get(intakeKey);
-        if(!sessionId||operation.controller.signal.aborted||!views.isOpen(userId,chatId)||(intakeEpochs.get(intakeKey)??0)!==intakeEpoch)return;
+        if(earlyPreviewSent)return;
+        const sessionId=preparationSessions.get(intakeKey)??'__open__';
+        if(operation.controller.signal.aborted||!views.isOpen(userId,chatId)||(intakeEpochs.get(intakeKey)??0)!==intakeEpoch)return;
         const preview=NarrativePreviewSchema.safeParse({type:'vn_narrative_preview',chatId,messageId:message.id,swipeId:message.swipe_id??0,sourceFingerprint:fingerprint,sessionId,paragraphs});
         if(preview.success)spindle.sendToFrontend(preview.data,userId);
       },
@@ -1300,7 +1392,7 @@ async function processAssistantMessage(
       ...(config.includeSimTrackerContext ? { simTrackerEvidence: extractSimTracker(messages, message.id, config.simTrackerMappings) } : {}),
       ...(userId ? { userId } : {})
     });
-    if (operation.controller.signal.aborted) return;
+    if (operation.controller.signal.aborted || (intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch) return;
     dbg(spindle, userId, [
       `planned chat=${chatId} message=${message.id} in ${Date.now() - planningStartedAt}ms`,
       `fallback=${result.usedFallback ? "yes" : "no"}`,
@@ -1417,9 +1509,9 @@ async function processAssistantMessage(
     const key = runtimeKey(userId, chatId);
     activeTurnKeys.set(key, record.plan.key);
     await persistActiveTurn(spindle, record, path, userId, () => !operation.controller.signal.aborted);
-    if (operation.controller.signal.aborted) return;
+    if (operation.controller.signal.aborted || (intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch) return;
     const view = await turnViewWithAudio(spindle, record,userId);
-    if (operation.controller.signal.aborted) return;
+    if (operation.controller.signal.aborted || (intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch) return;
     spindle.sendToFrontend({ type: "vn_turn", turn: view }, userId);
     if (!config.useNativeCardImages && config.generateImages) {
       void startAssets(spindle, record, path, userId).catch((error) => {
@@ -1468,6 +1560,20 @@ async function processAssistantMessage(
           && prevLocationName.trim().toLowerCase() !== nextLocationName.trim().toLowerCase()
         );
         if (turnCastNames.size > 0 || locationChanged || isReswipeOrReplan) {
+          const turnAttires = new Map<string, string>();
+          for (const scene of record.plan.scenes) {
+            const charKey = (scene.character || scene.cast?.[0] || "").trim().toLowerCase();
+            if (charKey && scene.attire && !isGenericAttire(scene.attire)) {
+              turnAttires.set(charKey, scene.attire.trim().slice(0, 600));
+            }
+          }
+          for (const cue of record.plan.visualCues) {
+            const sceneForBeat = record.plan.scenes.find((s) => s.sceneId === cue.sceneId);
+            const charKey = (cue.character || sceneForBeat?.character || "").trim().toLowerCase();
+            if (charKey && cue.attire && !isGenericAttire(cue.attire)) {
+              turnAttires.set(charKey, cue.attire.trim().slice(0, 600));
+            }
+          }
           await mutateCharacterDnaLibrary(spindle, chatId, userId, undefined, l => {
             if (locationChanged) {
               for (const char of Object.values(l.characters)) {
@@ -1482,15 +1588,22 @@ async function processAssistantMessage(
               if (userSpeaker !== 'You' && name.toLowerCase() === userSpeaker.toLowerCase()) continue;
               if (l.deleted?.[name] || findCharacterDNA(l.deleted ?? {}, name)) continue;
               const existingChar = findCharacterDNA(l.characters, name);
+              const inferredAttire = turnAttires.get(name.toLowerCase());
               if (!existingChar) {
                 const dna = createEmptyCharacterDNA(name);
                 dna.autoDiscovered = true;
                 dna.seenInSwipes = [swipeTag];
+                if (inferredAttire) dna.activeOutfit = inferredAttire;
                 l.characters[dna.id] = dna;
-              } else if (existingChar.autoDiscovered) {
-                const seen = existingChar.seenInSwipes ?? [];
-                if (!seen.includes(swipeTag)) {
-                  existingChar.seenInSwipes = [...seen, swipeTag].slice(-60);
+              } else {
+                if (!existingChar.locked && inferredAttire) {
+                  existingChar.activeOutfit = inferredAttire;
+                }
+                if (existingChar.autoDiscovered) {
+                  const seen = existingChar.seenInSwipes ?? [];
+                  if (!seen.includes(swipeTag)) {
+                    existingChar.seenInSwipes = [...seen, swipeTag].slice(-60);
+                  }
                 }
               }
             }
@@ -1508,6 +1621,7 @@ async function processAssistantMessage(
             set.items = scrubbed.items;
             set.thoughtCabinet = scrubbed.thoughtCabinet;
             set.chapterCodex = scrubbed.chapterCodex;
+            set.npcBeliefs = scrubbed.npcBeliefs;
           }
         });
       } catch {}
@@ -1976,6 +2090,12 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
     const singleCharacter = await loadSingleCharacterState(spindle, action.chatId, userId);
     const characterAppearance = await loadCharacterAppearance(spindle, userId, action.chatId);
     const characterRegistry = await loadCharacterRegistry(spindle, action.chatId, userId);
+    const replanAssistantTurns = messages.filter(m => !m.is_user && m.content.trim());
+    const replanIndex = replanAssistantTurns.findIndex(m => m.id === latest.id);
+    const replanPriorMessage = replanIndex > 0 ? replanAssistantTurns[replanIndex - 1] : null;
+    const replanPriorRecord = config.rpgMode !== "off" && replanPriorMessage
+      ? await loadTurnRecord(spindle, turnPath(action.chatId, replanPriorMessage.id, replanPriorMessage.swipe_id ?? 0), userId).catch(() => null)
+      : null;
     const recentMessages = config.includeRecentMessages > 0 ? await resolveContextMessages(spindle, action.chatId, messages.slice(-config.includeRecentMessages), new Map(), userId) : [];
     if (!isCurrent()) return;
     imageRetryEpochs.set(key,(imageRetryEpochs.get(key)??0)+1);
@@ -1986,6 +2106,7 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
       spindle.sendToFrontend({type:'vn_planning',chatId:action.chatId},userId);
       const result = await planTurn(spindle, {signal:operation.controller.signal,chatId:action.chatId,message:latest,content:intake.text,sourceFingerprint:action.sourceFingerprint,
         previousScene:old.plan.scenes[0] ?? null,previousContinuity:old.plan.initialContinuity,
+        previousRpgState:config.rpgMode !== "off" ? (replanPriorRecord?.plan.rpgState ?? null) : null,
         recentMessages,config,singleCharacter,characterAppearance,characterRegistry,userId,
         gameHints:gameHintsForTurn(messages,latest.id),
         ...(config.includeSimTrackerContext ? {simTrackerEvidence:extractSimTracker(messages,latest.id,config.simTrackerMappings)} : {})});
@@ -2179,6 +2300,23 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
     case "vn_get_state":
       await sendState(spindle, request.chatId ?? "", userId, {requestId: request.requestId,...(request.viewOpen === undefined ? {} : { viewOpen: request.viewOpen }),...(request.prepare===false?{readOnly:true}:{})});
       return;
+    case "vn_get_turn_snapshot": {
+      if (typeof request.chatId !== "string" || !request.chatId || typeof request.messageId !== "string" || !request.messageId) return;
+      const swipeId = typeof request.swipeId === "number" ? request.swipeId : 0;
+      const snapshotPath = turnPath(request.chatId, request.messageId, swipeId);
+      const snapshotRecord = await loadTurnRecord(spindle, snapshotPath, userId).catch(() => null);
+      const validRecord = snapshotRecord && snapshotRecord.plan.key.chatId === request.chatId ? snapshotRecord : null;
+      const view = validRecord ? { ...(await turnViewWithAudio(spindle, validRecord, userId)), historical: true } : null;
+      spindle.sendToFrontend({
+        type: "vn_turn_snapshot",
+        chatId: request.chatId,
+        messageId: request.messageId,
+        swipeId,
+        turn: view,
+        ...(request.requestId ? { requestId: request.requestId } : {})
+      }, userId);
+      return;
+    }
     case "vn_reading_position": {
       const { position } = request;
       const state = await loadChatState(spindle, position.key.chatId, userId);
@@ -2354,11 +2492,18 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       await markAssetReady(spindle, request, userId);
       return;
     case "vn_cancel": {
+      const cancelKey = runtimeKey(userId, request.chatId);
       bumpIntakeEpoch(userId, request.chatId);
       planningQueue.cancelChat(userId, request.chatId);
-      pendingAssetStarts.delete(runtimeKey(userId,request.chatId));
-      assetControllers.get(runtimeKey(userId, request.chatId))?.abort("Cancelled from the visual novel UI.");
+      const abortedTurn = activeTurnKeys.get(cancelKey) ?? null;
+      activeTurnKeys.delete(cancelKey);
+      pendingAssetStarts.delete(cancelKey);
+      abortAssetBatch(cancelKey, "Cancelled from the visual novel UI.");
       releaseSceneCacheAdmission(spindle, userId, request.chatId, "cancel");
+      const cleanupEpoch = intakeEpochs.get(cancelKey) ?? 0;
+      void cancelIncompleteJobs(spindle, request.chatId, userId, abortedTurn, cleanupEpoch).catch((error) => {
+        spindle.log.warn(`Visual novel cancel cleanup failed: ${errorText(error)}`);
+      });
       return;
     }
     case "vn_refresh": {
@@ -2408,18 +2553,40 @@ async function clearDeletedTurn(spindle: SpindleAPI, payload: unknown, userId?: 
   const state = await loadChatState(spindle, candidate.chatId, userId);
   const record = await loadTurnRecord(spindle, state.activeTurnPath, userId);
   if (!record || record.plan.key.assistantMessageId !== candidate.messageId) return;
+  const key = runtimeKey(userId, candidate.chatId);
   bumpIntakeEpoch(userId, candidate.chatId);
   planningQueue.cancelChat(userId, candidate.chatId);
-  assetControllers.get(runtimeKey(userId, candidate.chatId))?.abort("The source assistant message was deleted.");
-  activeTurnKeys.delete(runtimeKey(userId, candidate.chatId));
-  // The chat's scene lineage restarts (latestScene becomes null): release the
-  // whole scope so the next "initial" episode never shares the old entries.
+  activeTurnKeys.delete(key);
+  pendingAssetStarts.delete(key);
+  abortAssetBatch(key, "The source assistant message was deleted.");
   releaseSceneCacheScope(spindle, userId, candidate.chatId, "scope_cleared");
+
+  // Walk backward through surviving assistant turns to restore the previous
+  // valid turn snapshot instead of stranding chatState on null.
+  let restoredPath: string | null = null;
+  let restoredRecord: StoredTurnRecord | null = null;
+  try {
+    const messages = await spindle.chat.getMessages(candidate.chatId) as NormalizedChatMessage[];
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i]!;
+      if (msg.is_user || !msg.content.trim() || msg.id === candidate.messageId) continue;
+      const priorPath = turnPath(candidate.chatId, msg.id, msg.swipe_id ?? 0);
+      const priorRecord = await loadTurnRecord(spindle, priorPath, userId).catch(() => null);
+      if (priorRecord && priorRecord.plan.key.chatId === candidate.chatId) {
+        restoredPath = priorPath;
+        restoredRecord = priorRecord;
+        break;
+      }
+    }
+  } catch (error) {
+    spindle.log.warn(`Deleted turn rollback scan failed; clearing active turn: ${errorText(error)}`);
+  }
+
   await saveChatState(spindle, candidate.chatId, {
     schemaVersion: 1,
-    activeTurnPath: null,
-    latestScene: null,
-    terminalContinuity: null,
+    activeTurnPath: restoredPath,
+    latestScene: restoredRecord ? buildLatestSceneSnapshot(restoredRecord) : null,
+    terminalContinuity: restoredRecord ? restoredRecord.plan.terminalContinuity : null,
     updatedAt: new Date().toISOString()
   }, userId);
   await sendState(spindle, candidate.chatId, userId, { viewOpen: views.isOpen(userId, candidate.chatId) });
