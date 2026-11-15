@@ -19161,6 +19161,14 @@ var StoryDnaRequestSchema = exports_external.discriminatedUnion("action", [
   }),
   exports_external.object({
     type: exports_external.literal("vn_story_dna"),
+    action: exports_external.literal("scrub_swipes"),
+    chatId: exports_external.string(),
+    requestId: exports_external.string().optional(),
+    activeSwipeId: exports_external.string().max(160).optional(),
+    validSwipeIds: exports_external.array(exports_external.string().max(160)).max(64).optional()
+  }),
+  exports_external.object({
+    type: exports_external.literal("vn_story_dna"),
     action: exports_external.literal("save_location"),
     chatId: exports_external.string(),
     requestId: exports_external.string().optional(),
@@ -20565,7 +20573,7 @@ Strong ink contours, manga shading, halftones, expressive contrast, coherent col
     id: "ensemble",
     name: "Full scene / ensemble",
     category: "action",
-    enabled: false,
+    enabled: true,
     useWhen: "A full-scene beat showing everyone physically present staged organically across the room or setting as the story happens (seated, working, talking in clusters, moving across foreground/midground/background)—including the user's persona when present. List visibleCharacters for this exact moment; omit offscreen or departed characters.",
     subjectMode: "ensemble",
     framing: "wide",
@@ -20589,7 +20597,7 @@ Use an objective external camera pulled back enough to show room geometry and de
     id: "two-shot",
     name: "Two-shot dialogue",
     category: "action",
-    enabled: false,
+    enabled: true,
     useWhen: "Two characters conversing, negotiating, tending to something together, or locked in direct tension. Emphasize angled depth, over-the-shoulder, or across-the-table blocking rather than standing shoulder-to-shoulder.",
     subjectMode: "ensemble",
     framing: "upper body",
@@ -20613,7 +20621,7 @@ Stage both characters with natural depth separation, angled body orientation, be
     id: "cinematic-wide",
     name: "Cinematic wide establishing",
     category: "environment",
-    enabled: false,
+    enabled: true,
     useWhen: "Sweeping cinematic establishing view of a location or exterior vista with deep perspective, leading lines, atmospheric layers, and strong sense of scale.",
     subjectMode: "none",
     framing: "wide",
@@ -20634,7 +20642,7 @@ Anchor the frame with foreground framing elements, clear architectural or landsc
     id: "dramatic-closeup",
     name: "Dramatic close-up",
     category: "portrait",
-    enabled: false,
+    enabled: true,
     useWhen: "High-stakes emotional peak, sudden shock, whispered confession, quiet realization, or intense facial micro-expression.",
     subjectMode: "one",
     framing: "close-up",
@@ -20657,7 +20665,7 @@ Asymmetric framing, razor-sharp focus on eyes and subtle expression, sculptural 
     id: "key-visual",
     name: "Key visual / Climax",
     category: "action",
-    enabled: false,
+    enabled: true,
     useWhen: "A definitive story climax, commanding entrance, decisive stance, or sweeping dramatic reveal.",
     subjectMode: "one",
     framing: "full body",
@@ -20680,7 +20688,7 @@ Dynamic camera angle, powerful full-figure silhouette, dramatic environmental ri
     id: "candid-moment",
     name: "Candid moment",
     category: "portrait",
-    enabled: false,
+    enabled: true,
     useWhen: "An unposed, lived-in slice-of-life beat captured mid-gesture, mid-thought, or mid-conversation without theatrical posing.",
     subjectMode: "one",
     framing: "portrait",
@@ -20733,11 +20741,12 @@ var LEGACY_TEMPLATE_DEFAULTS = {
 };
 function upgradeImageTemplates(value) {
   const templates = validateImageTemplates(value);
+  const initialCount = templates.length;
   for (const templateId of ["manga-page", "ensemble", "two-shot", "cinematic-wide", "dramatic-closeup", "key-visual", "candid-moment"]) {
     if (!templates.some((t) => t.id === templateId) && templates.length < 32) {
       const builtin = BUILTIN_IMAGE_TEMPLATES.find((t) => t.id === templateId);
       if (builtin)
-        templates.push({ ...builtin });
+        templates.push({ ...builtin, ...initialCount < 6 && templateId === "ensemble" ? { enabled: false } : {} });
     }
   }
   return templates.map((t) => {
@@ -20928,6 +20937,22 @@ function evaluateContextualSkillCheck(check2, vitals) {
   }
   if ((check2.stat === "CHA" || check2.stat === "WIS") && vitals.companions.some((c) => c.affinity >= 50)) {
     mod += 1;
+  }
+  if ((check2.stat === "CHA" || check2.stat === "WIS") && vitals.companions.some((c) => c.affinity >= 75)) {
+    if (rollMode === "normal")
+      rollMode = "advantage";
+    else if (rollMode === "disadvantage")
+      rollMode = "normal";
+  }
+  const reasonLower = (check2.reason ?? "").toLowerCase();
+  const matchingGear = vitals.inventory.find((item) => {
+    const normalized = typeof item === "string" ? item.trim().toLowerCase() : "";
+    return normalized.length >= 3 && reasonLower.includes(normalized);
+  });
+  if (matchingGear) {
+    mod += 1;
+    if (rollMode === "normal")
+      rollMode = "advantage";
   }
   const clampedMod = Math.max(-10, Math.min(20, mod));
   return { ...check2, modifier: clampedMod, rollMode };
@@ -22623,7 +22648,8 @@ var DnaRequestSchema = exports_external.discriminatedUnion("action", [
   exports_external.object({ ...envelope, action: exports_external.literal("apply"), proposalId: exports_external.string().min(1).max(128), fields: exports_external.array(DnaFieldSchema).min(1).max(19) }).strict(),
   exports_external.object({ ...envelope, action: exports_external.literal("cancel") }).strict(),
   exports_external.object({ ...envelope, action: exports_external.enum(["delete", "restore"]), characterId: exports_external.string().min(1).max(256), dna: CharacterDNASchema.optional(), revision: exports_external.number().int().nonnegative() }).strict(),
-  exports_external.object({ ...envelope, action: exports_external.literal("merge"), characterId: exports_external.string().min(1).max(256), otherId: exports_external.string().min(1).max(256), revision: exports_external.number().int().nonnegative() }).strict()
+  exports_external.object({ ...envelope, action: exports_external.literal("merge"), characterId: exports_external.string().min(1).max(256), otherId: exports_external.string().min(1).max(256), revision: exports_external.number().int().nonnegative() }).strict(),
+  exports_external.object({ ...envelope, action: exports_external.literal("scrub_swipes"), activeSwipeId: exports_external.string().max(160).optional(), validSwipeIds: exports_external.array(exports_external.string().max(160)).max(64).optional() }).strict()
 ]);
 function dnaFieldValue(dna, path) {
   const [a, b] = path.split(".");
@@ -30971,24 +30997,24 @@ class DossierCard {
       editBtn.title = "Edit reference fact";
       editBtn.className = "fact-edit-btn";
       editBtn.textContent = "✏️";
-      editBtn.style.cssText = "background:none;border:none;cursor:pointer;font-size:11px;opacity:0.6;padding:0 2px;";
+      editBtn.style.cssText = "width:26px;height:26px;min-width:26px;min-height:26px;display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);border-radius:6px;cursor:pointer;font-size:12px;opacity:0.78;padding:0;";
       editBtn.onmouseenter = () => {
         editBtn.style.opacity = "1";
       };
       editBtn.onmouseleave = () => {
-        editBtn.style.opacity = "0.6";
+        editBtn.style.opacity = "0.78";
       };
       const delBtn = document.createElement("button");
       delBtn.type = "button";
       delBtn.title = "Delete reference fact";
       delBtn.className = "fact-del-btn";
       delBtn.textContent = "\uD83D\uDDD1️";
-      delBtn.style.cssText = "background:none;border:none;cursor:pointer;font-size:11px;opacity:0.6;padding:0 2px;";
+      delBtn.style.cssText = "width:26px;height:26px;min-width:26px;min-height:26px;display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);border-radius:6px;cursor:pointer;font-size:12px;opacity:0.78;padding:0;";
       delBtn.onmouseenter = () => {
         delBtn.style.opacity = "1";
       };
       delBtn.onmouseleave = () => {
-        delBtn.style.opacity = "0.6";
+        delBtn.style.opacity = "0.78";
       };
       editBtn.onclick = () => {
         if (dd.querySelector(".fact-edit-input"))
@@ -31021,6 +31047,12 @@ class DossierCard {
               match.value = newVal;
             if (dossier.state && field in dossier.state)
               dossier.state[field] = newVal;
+            const notePrefix = `${field}: `;
+            const existingLines = (entityOverride(prefs, chatId, dossier.entity)?.note || "").split(`
+`).filter((l) => l.trim() && !l.startsWith(notePrefix));
+            existingLines.push(`${notePrefix}${newVal}`);
+            this.update(dossier.entity, { note: existingLines.join(`
+`).slice(0, 280) });
           }
           renderText(activeVal);
           editWrap.remove();
@@ -31050,6 +31082,11 @@ class DossierCard {
           dossier.facts.splice(idx, 1);
         if (dossier.state && field in dossier.state)
           delete dossier.state[field];
+        const notePrefix = `${field}: `;
+        const remainingLines = (entityOverride(prefs, chatId, dossier.entity)?.note || "").split(`
+`).filter((l) => l.trim() && !l.startsWith(notePrefix));
+        this.update(dossier.entity, { note: remainingLines.join(`
+`).slice(0, 280) });
       };
       actionSpan.append(editBtn, delBtn);
       dd.append(actionSpan);
@@ -36247,12 +36284,24 @@ class RpgStageController {
   decorateChoiceButton(button, choice) {
     if (this.rpgMode === "off" || !choice.check)
       return;
-    const check2 = choice.check;
+    const check2 = evaluateContextualSkillCheck(choice.check, this.rpgState?.vitals);
     const modStr = check2.modifier > 0 ? ` +${check2.modifier}` : check2.modifier < 0 ? ` ${check2.modifier}` : "";
     const rollTag = check2.rollMode === "advantage" ? " · ADV" : check2.rollMode === "disadvantage" ? " · DIS" : "";
+    const needed = check2.dc - check2.modifier;
+    const singleProb = Math.max(0.05, Math.min(0.95, (21 - needed) / 20));
+    const odds = check2.rollMode === "advantage" ? 1 - Math.pow(1 - singleProb, 2) : check2.rollMode === "disadvantage" ? Math.pow(singleProb, 2) : singleProb;
+    const pct = Math.round(odds * 100);
     const badge = document.createElement("span");
     badge.dataset.vnChoiceCheck = "";
-    badge.textContent = `\uD83C\uDFB2 ${check2.stat} DC ${check2.dc}${modStr}${rollTag}`;
+    badge.style.cssText = "display:inline-flex;align-items:center;gap:6px;margin-left:8px;font-size:0.78em;transform:perspective(220px) rotateX(4deg);";
+    badge.textContent = `\uD83C\uDFB2 ${check2.stat} DC ${check2.dc}${modStr}${rollTag} · ${pct}%`;
+    const meter = document.createElement("span");
+    meter.style.cssText = "display:inline-block;width:36px;height:4px;border-radius:999px;background:rgba(255,255,255,0.16);overflow:hidden;vertical-align:middle;";
+    const fill = document.createElement("span");
+    const meterColor = pct >= 70 ? "#6ee7b7" : pct >= 40 ? "#fcd34d" : "#f87171";
+    fill.style.cssText = `display:block;height:100%;width:${pct}%;background:${meterColor};`;
+    meter.appendChild(fill);
+    badge.appendChild(meter);
     button.appendChild(badge);
   }
   resolveChoiceSubmission(choice) {
@@ -36262,6 +36311,7 @@ class RpgStageController {
     this.showRollTheatre(outcome);
     return formatSkillCheckSubmission(choice.value, outcome);
   }
+  onRollEffect;
   showRollTheatre(outcome) {
     if (!this.theatreEl)
       return;
@@ -36271,6 +36321,11 @@ class RpgStageController {
     const rollDetail = rolls.length > 1 ? `2d20(${rolls.join(", ")}) → ${natural}` : `d20(${natural})`;
     const modStr = check2.modifier > 0 ? `+${check2.modifier}` : check2.modifier < 0 ? `${check2.modifier}` : "+0";
     const d20Svg = `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:middle;margin-right:4px;"><polygon points="12,2 21,7 21,17 12,22 3,17 3,7" fill="rgba(124,156,255,0.22)" stroke="currentColor" stroke-width="1.6"/><text x="12" y="15.5" text-anchor="middle" fill="currentColor" font-size="9" font-weight="800">${natural}</text></svg>`;
+    const critAccent = tier === "critical_success" ? "border-color:rgba(250,204,21,0.7);box-shadow:0 0 28px rgba(250,204,21,0.32);" : tier === "critical_failure" ? "border-color:rgba(248,113,113,0.75);box-shadow:0 0 28px rgba(239,68,68,0.35);" : "";
+    if (critAccent) {
+      this.theatreEl.style.cssText += critAccent;
+      this.onRollEffect?.(tier === "critical_success" ? "zoom_punch" : "shake_hard");
+    }
     this.theatreEl.innerHTML = `
       <div style="font-size:0.72rem;letter-spacing:0.08em;opacity:0.85;display:inline-flex;align-items:center;justify-content:center;">${d20Svg}${esc2(check2.stat)} SKILL CHECK (DC ${check2.dc})</div>
       <div style="font-size:1rem;font-weight:700;">${esc2(TIER_LABELS[tier])}</div>
@@ -41343,7 +41398,7 @@ var THEME_MARKUP = `
             title="Continue (Enter)"
           ><span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span></button>
 
-          <button data-vn-control="auto" type="button" aria-label="Auto play" aria-pressed="false" aria-keyshortcuts="A" title="Auto play (A)" style="display:none">
+          <button data-vn-control="auto" type="button" aria-label="Auto play" aria-pressed="false" aria-keyshortcuts="A" title="Auto play (A)">
             <span data-vn-auto-ring aria-hidden="true">
               <svg viewBox="0 0 16 16" width="14" height="14">
                 <circle class="vn-auto-track" cx="8" cy="8" r="6" fill="none" stroke-width="2" />
@@ -41352,7 +41407,7 @@ var THEME_MARKUP = `
             </span>
             <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" focusable="false" fill="currentColor" stroke="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3.2v9.6L12.6 8z" /></svg></span><span data-vn-control-label>Auto</span>
           </button>
-          <button data-vn-control="skip" type="button" aria-label="Skip" aria-pressed="false" aria-describedby="vn-skip-description" aria-keyshortcuts="S" title="Skip (S)" style="display:none">
+          <button data-vn-control="skip" type="button" aria-label="Skip" aria-pressed="false" aria-describedby="vn-skip-description" aria-keyshortcuts="S" title="Skip (S)">
             <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" focusable="false" fill="currentColor" stroke="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3.5v9L7.6 8z" /><path d="M8.2 3.5v9L13.8 8z" /></svg></span><span data-vn-control-label>Skip</span>
           </button>
           <span id="vn-skip-description" data-vn-skip-description hidden></span>
@@ -41538,6 +41593,14 @@ class VnStage {
   ambientOverride = undefined;
   sceneFxTimer = null;
   fxBurstTimer = null;
+  characterDnaLibrary = {};
+  folioOpenCallback = null;
+  dnaSaveRequester = null;
+  bondSnapshots = new Map;
+  speakerPeekEl = null;
+  bondBannerEl = null;
+  bondBannerTimer = null;
+  predecodedUrls = new Set;
   statusStack;
   emptyState;
   narrative;
@@ -41794,6 +41857,7 @@ class VnStage {
     this.render(null);
   }
   setFolioOpener(fn) {
+    this.folioOpenCallback = fn;
     this.dossiers.setFolioOpener(fn);
   }
   setStoryDna(storyDna) {
@@ -41804,6 +41868,189 @@ class VnStage {
   }
   setStoryDnaError(error61) {
     this.dossiers.setStoryDnaError(error61);
+  }
+  setCharacterDnaLibrary(library) {
+    const prev = this.bondSnapshots;
+    const hadBaseline = prev.size > 0;
+    const nextSnapshots = new Map;
+    let celebrated = null;
+    for (const char of Object.values(library)) {
+      const rels = char.relationships ?? [];
+      if (rels.length === 0)
+        continue;
+      const topRel = rels.reduce((best, item) => Math.abs(item.affinity ?? 0) >= Math.abs(best.affinity ?? 0) ? item : best, rels[0]);
+      const affinity = topRel.affinity ?? 0;
+      nextSnapshots.set(char.id, affinity);
+      if (hadBaseline && this.readerPreferences?.confidantCutInsEnabled !== false) {
+        const oldAffinity = prev.get(char.id);
+        const tierFor = (v) => v >= 85 ? "Soulbound" : v >= 60 ? "Devoted" : v >= 35 ? "Trusted" : v >= 15 ? "Warming" : v <= -50 ? "Rival / Hostile" : "Guarded";
+        if (typeof oldAffinity === "number" && affinity !== oldAffinity) {
+          const oldTier = tierFor(oldAffinity);
+          const newTier = tierFor(affinity);
+          if (newTier !== oldTier && affinity > oldAffinity || affinity - oldAffinity >= 12) {
+            celebrated = { name: char.name, target: topRel.targetName, label: topRel.dynamicLabel || newTier, affinity, tier: newTier };
+          }
+        }
+      }
+    }
+    this.bondSnapshots = nextSnapshots;
+    this.characterDnaLibrary = { ...library };
+    if (celebrated) {
+      this.showBondResonanceBanner(celebrated);
+    }
+  }
+  setCharacterDnaSaver(fn) {
+    this.dnaSaveRequester = fn;
+  }
+  predecodeUpcomingImages(urls) {
+    if (typeof Image !== "function")
+      return;
+    let scheduled = 0;
+    for (const raw of urls) {
+      const url3 = typeof raw === "string" ? raw.trim() : "";
+      if (!url3 || this.predecodedUrls.has(url3))
+        continue;
+      this.predecodedUrls.add(url3);
+      if (this.predecodedUrls.size > 96) {
+        const first = this.predecodedUrls.values().next().value;
+        if (first)
+          this.predecodedUrls.delete(first);
+      }
+      try {
+        const img = new Image;
+        img.decoding = "async";
+        img.src = url3;
+        if (typeof img.decode === "function")
+          img.decode().catch(() => {});
+      } catch {}
+      scheduled += 1;
+      if (scheduled >= 3)
+        break;
+    }
+  }
+  dismissBondBanner() {
+    this.bondBannerEl?.remove();
+    this.bondBannerEl = null;
+    if (this.bondBannerTimer) {
+      clearTimeout(this.bondBannerTimer);
+      this.bondBannerTimer = null;
+    }
+  }
+  dismissTransientOverlays() {
+    this.dismissChapterCard();
+    this.closeSpeakerPeek();
+    this.dismissBondBanner();
+  }
+  showBondResonanceBanner(info) {
+    if (this.destroyed || this.readerPreferences?.confidantCutInsEnabled === false)
+      return;
+    this.dismissBondBanner();
+    const el = document.createElement("div");
+    el.dataset.vnBondBanner = "";
+    el.setAttribute("role", "status");
+    el.style.cssText = "position:absolute;top:16px;right:16px;z-index:26;max-width:min(320px,85vw);padding:10px 14px;border-radius:10px;border:1px solid rgba(110,231,183,0.45);background:linear-gradient(135deg,rgba(15,23,42,0.94),rgba(30,41,59,0.92));color:#f8fafc;box-shadow:0 12px 28px rgba(0,0,0,0.45);backdrop-filter:blur(10px);display:flex;flex-direction:column;gap:2px;pointer-events:auto;";
+    const eyebrow = document.createElement("div");
+    eyebrow.style.cssText = "font-size:10px;text-transform:uppercase;letter-spacing:0.12em;color:#6ee7b7;font-weight:700;";
+    eyebrow.textContent = `Bond Resonance · ${info.tier}`;
+    const title = document.createElement("div");
+    title.style.cssText = "font-size:13px;font-weight:700;color:#ffffff;";
+    title.textContent = `${info.name} → ${info.target}`;
+    const meta3 = document.createElement("div");
+    meta3.style.cssText = "font-size:11px;color:rgba(226,232,240,0.85);";
+    meta3.textContent = `${info.label} (${info.affinity >= 0 ? `+${info.affinity}` : info.affinity})`;
+    el.append(eyebrow, title, meta3);
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      el.remove();
+    });
+    this.themeRoot.append(el);
+    this.bondBannerEl = el;
+    this.bondBannerTimer = setTimeout(() => {
+      this.bondBannerEl?.remove();
+      this.bondBannerEl = null;
+      this.bondBannerTimer = null;
+    }, 4200);
+  }
+  closeSpeakerPeek() {
+    this.speakerPeekEl?.remove();
+    this.speakerPeekEl = null;
+  }
+  toggleSpeakerPeek() {
+    if (this.speakerPeekEl) {
+      this.closeSpeakerPeek();
+      return;
+    }
+    const name = this.speaker.textContent?.trim() || "";
+    if (!name)
+      return;
+    const char = findCharacterDNA(this.characterDnaLibrary, name);
+    const card = document.createElement("div");
+    card.dataset.vnSpeakerPeek = "";
+    card.style.cssText = "position:relative;margin-top:6px;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.16);background:rgba(15,23,42,0.95);color:#f8fafc;box-shadow:0 12px 28px rgba(0,0,0,0.45);display:flex;flex-direction:column;gap:8px;max-width:340px;z-index:24;";
+    card.addEventListener("click", (e) => e.stopPropagation());
+    const head = document.createElement("div");
+    head.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;";
+    const title = document.createElement("strong");
+    title.style.cssText = "font-size:13px;color:#fff;";
+    title.textContent = char ? char.name : name;
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.textContent = "×";
+    closeBtn.setAttribute("aria-label", "Close quick peek");
+    closeBtn.style.cssText = "border:none;background:transparent;color:#94a3b8;font-size:16px;cursor:pointer;padding:2px 6px;";
+    closeBtn.addEventListener("click", () => this.closeSpeakerPeek());
+    head.append(title, closeBtn);
+    card.append(head);
+    if (char) {
+      const summary = [
+        char.demeanor ? char.demeanor : "",
+        char.activeOutfit || char.signatureOutfit ? `Wearing: ${char.activeOutfit || char.signatureOutfit}` : ""
+      ].filter(Boolean).join(" · ");
+      if (summary) {
+        const sub = document.createElement("div");
+        sub.style.cssText = "font-size:11px;color:#cbd5e1;line-height:1.4;";
+        sub.textContent = summary;
+        card.append(sub);
+      }
+      const wardrobeEntries = Object.entries(char.wardrobeStates ?? {});
+      if (wardrobeEntries.length > 0 && this.dnaSaveRequester) {
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;align-items:center;";
+        const lbl = document.createElement("span");
+        lbl.style.cssText = "font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#94a3b8;";
+        lbl.textContent = "Wardrobe:";
+        row.append(lbl);
+        for (const [key, outfit] of wardrobeEntries.slice(0, 6)) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          const active = char.activeWardrobeKey === key || char.activeOutfit === outfit;
+          btn.textContent = key;
+          btn.style.cssText = `padding:4px 8px;border-radius:999px;font-size:11px;cursor:pointer;border:1px solid ${active ? "rgba(110,231,183,0.75)" : "rgba(255,255,255,0.18)"};background:${active ? "rgba(110,231,183,0.18)" : "rgba(255,255,255,0.06)"};color:#f8fafc;`;
+          btn.addEventListener("click", () => {
+            const nextDna = { ...char, activeWardrobeKey: key, activeOutfit: outfit, lastUpdated: Date.now() };
+            this.characterDnaLibrary[char.id] = nextDna;
+            this.dnaSaveRequester?.(nextDna);
+            this.closeSpeakerPeek();
+            this.toggleSpeakerPeek();
+          });
+          row.append(btn);
+        }
+        card.append(row);
+      }
+    }
+    if (this.folioOpenCallback) {
+      const openBtn = document.createElement("button");
+      openBtn.type = "button";
+      openBtn.textContent = "\uD83D\uDCD6 Open Character Folio";
+      openBtn.style.cssText = "align-self:flex-start;padding:5px 10px;border-radius:6px;border:1px solid rgba(110,231,183,0.45);background:rgba(110,231,183,0.12);color:#a7f3d0;font-size:11px;font-weight:600;cursor:pointer;";
+      openBtn.addEventListener("click", () => {
+        this.closeSpeakerPeek();
+        this.folioOpenCallback?.(name);
+      });
+      card.append(openBtn);
+    }
+    this.speaker.parentElement?.append(card);
+    this.speakerPeekEl = card;
   }
   setTooltipPreferences(prefs) {
     this.actionDraftsEnabled = prefs.enabled && prefs.actionsEnabled;
@@ -41849,7 +42096,7 @@ class VnStage {
     this.toggleAutoPlay(false);
     this.toggleSkip(false);
     this.clearAllTimers();
-    this.dismissChapterCard();
+    this.dismissTransientOverlays();
     this.resetEffects();
     this.isSuspended = true;
   }
@@ -41959,7 +42206,7 @@ class VnStage {
     if (this.chapterCardTimer !== null)
       clearTimeout(this.chapterCardTimer);
     this.chapterCardTimer = setTimeout(() => {
-      this.dismissChapterCard();
+      this.dismissTransientOverlays();
     }, 2800);
   }
   dismissChapterCard() {
@@ -42258,7 +42505,7 @@ class VnStage {
     this.dossiers.setTurnMedia(null);
     this.dossiers.setContext(undefined, []);
     this.clearAllTimers();
-    this.dismissChapterCard();
+    this.dismissTransientOverlays();
     this.resetEffects();
     this.clearSceneImages();
     this.isAutoPlay = false;
@@ -42495,7 +42742,7 @@ class VnStage {
     this.dossiers.destroy();
     this.dialogueSheet?.destroy();
     this.clearAllTimers();
-    this.dismissChapterCard();
+    this.dismissTransientOverlays();
     this.typewriterAudio.destroy();
     this.resetEffects();
     if (this.crossfadeTimer !== null) {
@@ -43045,6 +43292,39 @@ class VnStage {
       this.previous();
     });
     this.exitButton.addEventListener("click", () => this.callbacks.onExit?.());
+    this.speaker.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.toggleSpeakerPeek();
+    });
+    this.rpgHud.onRollEffect = (fx) => this.triggerEffect(fx);
+    if (this.scrubber) {
+      let draggingScrubber = false;
+      const jumpFromPointer = (clientX, clientY) => {
+        const hit = typeof document.elementFromPoint === "function" ? document.elementFromPoint(clientX, clientY) : null;
+        const dot = hit instanceof Element ? hit.closest("[data-vn-scrub-dot]") : null;
+        const idxAttr = dot?.dataset.vnScrubIndex;
+        if (idxAttr !== undefined) {
+          const targetIdx = parseInt(idxAttr, 10);
+          if (!Number.isNaN(targetIdx) && targetIdx <= this.state.highestRevealedIndex && targetIdx !== this.state.currentParagraphIndex) {
+            this.jumpToParagraph(targetIdx);
+          }
+        }
+      };
+      this.scrubber.addEventListener("pointerdown", (event) => {
+        draggingScrubber = true;
+        jumpFromPointer(event.clientX, event.clientY);
+      });
+      this.scrubber.addEventListener("pointermove", (event) => {
+        if (!draggingScrubber)
+          return;
+        jumpFromPointer(event.clientX, event.clientY);
+      });
+      const stopScrub = () => {
+        draggingScrubber = false;
+      };
+      this.scrubber.addEventListener("pointerup", stopScrub);
+      this.scrubber.addEventListener("pointercancel", stopScrub);
+    }
     this.continueButton.addEventListener("click", (event) => {
       event.stopPropagation();
       this.advance();
@@ -43366,7 +43646,7 @@ class VnStage {
   jumpToParagraph(targetIndex) {
     if (this.destroyed || this.isBacklogOpen || this.dossiers.isOpen())
       return;
-    this.dismissChapterCard();
+    this.dismissTransientOverlays();
     const total = this.state.paragraphs.length;
     if (targetIndex < 0 || targetIndex >= total)
       return;
@@ -43384,7 +43664,7 @@ class VnStage {
     this.isAutoPlay = false;
     this.lastSkipStop = null;
     this.clearAllTimers();
-    this.dismissChapterCard();
+    this.dismissTransientOverlays();
     this.isTyping = false;
     this.typewriter.reset();
     this.updateControlButtons();
@@ -43439,6 +43719,7 @@ class VnStage {
       const isActive = idx === current;
       btn.dataset.read = String(isRead);
       btn.dataset.active = String(isActive);
+      btn.dataset.vnScrubIndex = String(idx);
       if (isRead && p && (p.cue || p.effect || p.ambient !== undefined))
         btn.dataset.hasCue = "true";
       btn.disabled = !isRead;
@@ -43501,7 +43782,7 @@ class VnStage {
     this.isAutoPlay = false;
     this.lastSkipStop = null;
     this.clearAllTimers();
-    this.dismissChapterCard();
+    this.dismissTransientOverlays();
     this.isTyping = false;
     this.typewriter.reset();
     this.updateControlButtons();
@@ -43520,7 +43801,7 @@ class VnStage {
     this.callbacks.onPrevious?.(this.state.currentParagraphIndex);
   }
   advance() {
-    this.dismissChapterCard();
+    this.dismissTransientOverlays();
     if (this.isSuspended || this.displayPending)
       return;
     if (this.workspace.isOpen() || this.isBacklogOpen || this.dossiers.isOpen())
@@ -43610,8 +43891,10 @@ class VnStage {
     this.speechReadAlong.setParagraph(view.paragraph?.id ?? "", view.paragraph ? this.state.currentParagraphIndex : -1);
     this.dialogueText.dataset.vnParagraphIndex = String(view.paragraph ? this.state.currentParagraphIndex : -1);
     const speaker = view.paragraph?.speaker ?? "";
-    if (this.speaker.textContent !== speaker)
+    if (this.speaker.textContent !== speaker) {
       this.speaker.textContent = speaker;
+      this.closeSpeakerPeek();
+    }
     this.workspace.setCaption(speaker ? `${speaker} · ${view.paragraphNumber} / ${view.paragraphCount}` : view.paragraph ? `Reading · ${view.paragraphNumber} / ${view.paragraphCount}` : "Visual novel");
     this.speaker.title = speaker;
     this.speaker.hidden = !view.paragraph?.speaker;
@@ -51662,28 +51945,28 @@ var ImagePromptProfileV2Schema = exports_external.object({
 var V2_SERIALIZER_REVISION = "2026.10-rev1";
 var DIALECT_BUDGETS = {
   "flux3-klein": {
-    simple: [900, 1800],
-    standard: [1200, 2200],
-    complex: [1600, 2600],
+    simple: [900, 2200],
+    standard: [1200, 2600],
+    complex: [1600, 2850],
     dense: [1800, 3000]
   },
   flux3: {
-    simple: [800, 1600],
-    standard: [1100, 2000],
-    complex: [1500, 2400],
-    dense: [1700, 2800]
+    simple: [900, 2000],
+    standard: [1200, 2500],
+    complex: [1500, 2800],
+    dense: [1800, 3000]
   },
   "gpt-image-2.5": {
-    simple: [700, 1500],
-    standard: [1000, 1900],
-    complex: [1300, 2200],
-    dense: [1500, 2600]
+    simple: [800, 1900],
+    standard: [1100, 2400],
+    complex: [1400, 2800],
+    dense: [1700, 3000]
   },
   "grok-imagine-2": {
-    simple: [450, 1000],
-    standard: [700, 1300],
-    complex: [900, 1500],
-    dense: [1000, 1600]
+    simple: [550, 1400],
+    standard: [800, 1800],
+    complex: [1000, 2200],
+    dense: [1200, 2600]
   },
   "qwen-image-3": {
     simple: [300, 650],
@@ -51698,10 +51981,10 @@ var DIALECT_BUDGETS = {
     dense: [1800, 3000]
   },
   "seedream-5": {
-    simple: [500, 1200],
-    standard: [800, 1500],
-    complex: [1000, 1800],
-    dense: [1200, 2000]
+    simple: [700, 1800],
+    standard: [1000, 2300],
+    complex: [1300, 2700],
+    dense: [1600, 3000]
   },
   anima: {
     simple: [250, 650],
@@ -51716,10 +51999,10 @@ var DIALECT_BUDGETS = {
     dense: [700, 1200]
   },
   "generic-prose": {
-    simple: [500, 1200],
-    standard: [800, 1600],
-    complex: [1000, 1900],
-    dense: [1200, 2200]
+    simple: [800, 2000],
+    standard: [1200, 2500],
+    complex: [1500, 2800],
+    dense: [1800, 3000]
   },
   "generic-tags": {
     simple: [250, 600],
@@ -52378,7 +52661,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.149";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.150";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -53996,6 +54279,7 @@ class ImageStudio {
     return box;
   }
   activeClauseKey = "";
+  mutedClauses = new Set;
   mountPromptEditorEnhancements(editor) {
     const posLabel = editor.querySelector("[data-positive]")?.closest("label") ?? null;
     const clauseBar = document.createElement("div");
@@ -54131,20 +54415,43 @@ class ImageStudio {
     if (subjectsBox) {
       subjectsBox.replaceChildren();
       const placements = shotSpec?.composition.subjectPlacements ?? [];
+      const cyclePlacement = () => {
+        const autoEl = this.el("[data-auto-director]");
+        if (autoEl.checked) {
+          autoEl.checked = false;
+          for (const sel of ["[data-camera-shot-size]", "[data-camera-angle]", "[data-camera-lens]", "[data-camera-composition]", "[data-camera-depth]", "[data-camera-safe-area]"]) {
+            this.el(sel).disabled = false;
+          }
+        }
+        const compSel = this.el("[data-camera-composition]");
+        const cycle = ["rule-of-thirds", "centered", "layered-depth"];
+        const curIdx = cycle.indexOf(compSel.value);
+        compSel.value = cycle[(curIdx + 1) % cycle.length];
+        this.syncDirectorViewfinder();
+        const applyBtn = this.el("[data-apply-camera]");
+        if (!applyBtn.disabled)
+          applyBtn.click();
+      };
       if (placements.length > 0) {
         for (const p of placements.slice(0, 4)) {
-          const chip = document.createElement("span");
+          const chip = document.createElement("button");
+          chip.type = "button";
           chip.className = "studio-vf-subject-chip";
           chip.textContent = `${p.subject || "Subject"} (${p.horizontal}, ${p.depth})`;
+          chip.title = "Click to cycle composition framing for this subject";
+          chip.onclick = cyclePlacement;
           subjectsBox.append(chip);
         }
       } else {
         const names = record2?.imagePromptMetadata?.brief?.subjectPreparation?.name ? [record2.imagePromptMetadata.brief.subjectPreparation.name] : record2?.imagePromptMetadata?.brief?.subjects ? record2.imagePromptMetadata.brief.subjects.split(`
 `).map((l) => l.split(":")[0]?.trim() || "").filter(Boolean) : [];
         for (const name of (names.length ? names : ["Scene Focus"]).slice(0, 4)) {
-          const chip = document.createElement("span");
+          const chip = document.createElement("button");
+          chip.type = "button";
           chip.className = "studio-vf-subject-chip";
           chip.textContent = name;
+          chip.title = "Click to cycle composition framing";
+          chip.onclick = cyclePlacement;
           subjectsBox.append(chip);
         }
       }
@@ -54195,7 +54502,11 @@ class ImageStudio {
       btn.type = "button";
       btn.className = "studio-clause-pill";
       btn.dataset.tone = clause.tone;
-      btn.textContent = clause.label;
+      const isMuted = this.mutedClauses.has(clause.key);
+      btn.dataset.muted = String(isMuted);
+      if (isMuted)
+        btn.style.cssText = "opacity:0.45;text-decoration:line-through;";
+      btn.textContent = isMuted ? `\uD83D\uDD07 ${clause.label}` : clause.label;
       btn.setAttribute("aria-expanded", String(this.activeClauseKey === clause.key));
       btn.onclick = () => {
         this.activeClauseKey = this.activeClauseKey === clause.key ? "" : clause.key;
@@ -54212,6 +54523,76 @@ class ImageStudio {
         title.textContent = active.label;
       if (bodyText)
         bodyText.textContent = active.text;
+      let actionsRow = inspector.querySelector("[data-clause-inspector-actions]");
+      if (!actionsRow) {
+        actionsRow = document.createElement("div");
+        actionsRow.setAttribute("data-clause-inspector-actions", "");
+        actionsRow.style.cssText = "display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;";
+        inspector.append(actionsRow);
+      }
+      actionsRow.replaceChildren();
+      const applyMutedFilterToDraft = (keyToToggle, muteNow) => {
+        const promptInput = this.root.querySelector("[data-positive]");
+        if (!promptInput || promptInput.readOnly)
+          return;
+        const clauseObj = clauses.find((c) => c.key === keyToToggle);
+        if (!clauseObj)
+          return;
+        const snippet = clauseObj.text.trim();
+        if (!snippet)
+          return;
+        if (muteNow) {
+          if (promptInput.value.includes(snippet)) {
+            promptInput.value = promptInput.value.replace(snippet, "").replace(/\s{2,}/g, " ").replace(/\.\s*\./g, ".").trim();
+            promptInput.dispatchEvent(new Event("input", { bubbles: true }));
+          }
+        } else if (!promptInput.value.includes(snippet)) {
+          promptInput.value = promptInput.value ? `${promptInput.value.trim()} ${snippet}` : snippet;
+          promptInput.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+      };
+      const isMuted = this.mutedClauses.has(active.key);
+      const isSolo = !isMuted && clauses.filter((c) => c.key !== active.key).every((c) => this.mutedClauses.has(c.key)) && clauses.length > 1;
+      const muteBtn = document.createElement("button");
+      muteBtn.type = "button";
+      muteBtn.setAttribute("data-clause-mute", "");
+      muteBtn.textContent = isMuted ? "\uD83D\uDD0A Unmute" : "\uD83D\uDD07 Mute";
+      muteBtn.style.cssText = "min-height:28px;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;";
+      muteBtn.onclick = () => {
+        const nextMute = !this.mutedClauses.has(active.key);
+        if (nextMute)
+          this.mutedClauses.add(active.key);
+        else
+          this.mutedClauses.delete(active.key);
+        applyMutedFilterToDraft(active.key, nextMute);
+        this.syncPromptClausePills();
+      };
+      const soloBtn = document.createElement("button");
+      soloBtn.type = "button";
+      soloBtn.setAttribute("data-clause-solo", "");
+      soloBtn.textContent = isSolo ? "✨ Un-solo" : "\uD83C\uDFAF Solo";
+      soloBtn.style.cssText = "min-height:28px;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;";
+      soloBtn.onclick = () => {
+        if (isSolo) {
+          for (const c of clauses) {
+            if (this.mutedClauses.has(c.key)) {
+              this.mutedClauses.delete(c.key);
+              applyMutedFilterToDraft(c.key, false);
+            }
+          }
+        } else {
+          this.mutedClauses.delete(active.key);
+          applyMutedFilterToDraft(active.key, false);
+          for (const c of clauses) {
+            if (c.key !== active.key) {
+              this.mutedClauses.add(c.key);
+              applyMutedFilterToDraft(c.key, true);
+            }
+          }
+        }
+        this.syncPromptClausePills();
+      };
+      actionsRow.append(muteBtn, soloBtn);
     }
   }
   openCorrection(goal) {
@@ -56989,16 +57370,16 @@ class CharacterFolio {
         .btn-field-autofill {
           position: absolute;
           right: 4px;
-          width: 26px;
-          height: 26px;
-          border-radius: 4px;
+          width: 34px;
+          height: 34px;
+          border-radius: 6px;
           border: none;
           background: transparent;
           color: var(--vn-shell-muted, #94a3b8);
           cursor: pointer;
           display: grid;
           place-items: center;
-          font-size: 13px;
+          font-size: 14px;
           transition: color 0.15s ease, background 0.15s ease;
         }
         .btn-field-autofill:hover {
@@ -57556,6 +57937,12 @@ class CharacterFolio {
     const save = this.element.querySelector("[data-dna-save]");
     if (save)
       save.disabled = !this.activeCharacterId || !this.dirty.has(this.activeCharacterId) || this.saving.has(this.activeCharacterId);
+    const stickyWrap = this.element.querySelector("[data-folio-sticky-save]");
+    if (stickyWrap)
+      stickyWrap.hidden = !this.activeCharacterId || !this.dirty.has(this.activeCharacterId);
+    const stickyBtn = this.element.querySelector("[data-dna-sticky-save]");
+    if (stickyBtn)
+      stickyBtn.disabled = !this.activeCharacterId || !this.dirty.has(this.activeCharacterId) || this.saving.has(this.activeCharacterId);
     const saveState = this.element.querySelector("[data-dna-save-state]");
     if (saveState)
       saveState.textContent = this.activeCharacterId && this.dirty.has(this.activeCharacterId) ? "Unsaved changes — Save changes to use in pictures" : "Saved DNA is used for matching pictured characters";
@@ -57737,6 +58124,16 @@ class CharacterFolio {
       undo.onclick = () => this.handlers.onRestoreDNA?.(last.id, this.revision);
       this.rosterCarousel.append(undo);
     }
+    if (this.handlers.onScrubSwipesDNA && Object.values(this.library).some((c) => c.autoDiscovered && !c.locked)) {
+      const scrubBtn = document.createElement("button");
+      scrubBtn.type = "button";
+      scrubBtn.className = "folio-action-btn";
+      scrubBtn.setAttribute("data-dna-scrub-swipes", "");
+      scrubBtn.textContent = "\uD83E\uDDF9 Scrub Swipes";
+      scrubBtn.title = "Remove un-locked auto-discovered characters from discarded swipes";
+      scrubBtn.onclick = () => this.handlers.onScrubSwipesDNA?.();
+      this.rosterCarousel.append(scrubBtn);
+    }
   }
   renderDetail() {
     this.detailContainer.replaceChildren();
@@ -57887,6 +58284,12 @@ class CharacterFolio {
       const save = this.element.querySelector("[data-dna-save]");
       if (save)
         save.disabled = this.saving.has(char.id);
+      const sw = this.element.querySelector("[data-folio-sticky-save]");
+      if (sw)
+        sw.hidden = false;
+      const sb = this.element.querySelector("[data-dna-sticky-save]");
+      if (sb)
+        sb.disabled = this.saving.has(char.id);
       const idGridInput = this.element.querySelector(`#dna-${char.id}-Aliases---Known-As`);
       if (idGridInput && idGridInput !== aliasInput)
         idGridInput.value = aliasInput.value;
@@ -57947,6 +58350,28 @@ class CharacterFolio {
     } else if (this.activeSubTab === "cgs") {
       this.renderCgsTab(char, lore);
     }
+    const stickySave = document.createElement("div");
+    stickySave.setAttribute("data-folio-sticky-save", "");
+    stickySave.hidden = !this.dirty.has(char.id);
+    stickySave.style.cssText = "position:sticky;bottom:0;z-index:8;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-radius:10px;background:rgba(15,23,42,0.96);border:1px solid rgba(110,231,183,0.45);box-shadow:0 8px 24px rgba(0,0,0,0.45);margin-top:8px;";
+    const stickyMsg = document.createElement("span");
+    stickyMsg.style.cssText = "font-size:12px;color:#cbd5e1;";
+    stickyMsg.textContent = `Unsaved DNA edits for ${char.name}`;
+    const stickyBtn = document.createElement("button");
+    stickyBtn.type = "button";
+    stickyBtn.className = "folio-action-btn btn-accent";
+    stickyBtn.setAttribute("data-dna-sticky-save", "");
+    stickyBtn.textContent = "Save changes";
+    stickyBtn.disabled = this.saving.has(char.id);
+    stickyBtn.onclick = () => {
+      this.cancelProposal();
+      char.autoDiscovered = false;
+      this.saving.add(char.id);
+      stickyBtn.disabled = true;
+      this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+    };
+    stickySave.append(stickyMsg, stickyBtn);
+    this.detailContainer.append(stickySave);
   }
   renderDnaTab(char, isMale) {
     const previewBox = document.createElement("div");
@@ -57973,6 +58398,12 @@ class CharacterFolio {
       const save = this.element.querySelector("[data-dna-save]");
       if (save)
         save.disabled = this.saving.has(char.id);
+      const sw = this.element.querySelector("[data-folio-sticky-save]");
+      if (sw)
+        sw.hidden = false;
+      const sb = this.element.querySelector("[data-dna-sticky-save]");
+      if (sb)
+        sb.disabled = this.saving.has(char.id);
       updatePreview();
     };
     const onSingleAutoFill = (fieldKey, _inputEl) => {
@@ -58195,15 +58626,50 @@ class CharacterFolio {
     webHeader.className = "folio-group-header";
     const webTitle = document.createElement("h4");
     webTitle.textContent = "\uD83D\uDD78️ Relationship Constellation Web";
+    const webHeaderRight = document.createElement("div");
+    webHeaderRight.style.cssText = "display:flex;align-items:center;gap:6px;";
+    const zoomControls = document.createElement("div");
+    zoomControls.style.cssText = "display:inline-flex;gap:3px;";
+    let zoomLevel = 1;
+    const applyZoom = () => {
+      const svgEl = webBox.querySelector("svg");
+      if (svgEl) {
+        svgEl.style.transform = `scale(${zoomLevel})`;
+        svgEl.style.transformOrigin = "center center";
+        svgEl.style.transition = "transform 0.16s ease";
+      }
+    };
+    const mkZoomBtn = (lbl, title, onClick) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "folio-action-btn";
+      b.textContent = lbl;
+      b.title = title;
+      b.style.cssText = "padding:2px 7px;font-size:10px;min-height:22px;";
+      b.onclick = onClick;
+      return b;
+    };
+    zoomControls.append(mkZoomBtn("−", "Zoom out constellation", () => {
+      zoomLevel = Math.max(0.75, Number((zoomLevel - 0.15).toFixed(2)));
+      applyZoom();
+    }), mkZoomBtn("1:1", "Reset constellation zoom", () => {
+      zoomLevel = 1;
+      applyZoom();
+    }), mkZoomBtn("+", "Zoom in constellation", () => {
+      zoomLevel = Math.min(1.6, Number((zoomLevel + 0.15).toFixed(2)));
+      applyZoom();
+    }));
     const webBadge = document.createElement("span");
     webBadge.style.fontSize = "10px";
     webBadge.style.opacity = "0.7";
     webBadge.textContent = `${bonds.length} BOND${bonds.length === 1 ? "" : "S"}`;
+    webHeaderRight.append(zoomControls, webBadge);
     webHeader.appendChild(webTitle);
-    webHeader.appendChild(webBadge);
+    webHeader.appendChild(webHeaderRight);
     webCard.appendChild(webHeader);
     const webBox = document.createElement("div");
     webBox.className = "rel-web-wrap";
+    webBox.style.overflow = "hidden";
     webBox.setAttribute("data-relationship-web", char.id);
     const cx = 210;
     const cy = 110;
@@ -58225,16 +58691,77 @@ class CharacterFolio {
         const affLabel = `${bond.affinity >= 0 ? "+" : ""}${bond.affinity}`;
         const shortDyn = bond.dynamicLabel ? bond.dynamicLabel.slice(0, 16) : affLabel;
         const shortTarget = bond.targetName.length > 18 ? `${bond.targetName.slice(0, 16)}…` : bond.targetName;
-        svgLines.push(`<line x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-opacity="0.72" />`, `<rect x="${mx - 26}" y="${my - 9}" width="52" height="16" rx="8" fill="#0f172a" stroke="${strokeColor}" stroke-opacity="0.65" stroke-width="0.9" />`, `<text x="${mx}" y="${my + 2.5}" text-anchor="middle" fill="${strokeColor}" font-size="8.5" font-weight="700">${this.escapeSvgText(affLabel)}</text>`);
-        svgNodes.push(`<g class="rel-web-node" data-constellation-node="${this.escapeSvgText(bond.targetName)}">`, `<circle cx="${nx}" cy="${ny}" r="18" fill="rgba(15,23,42,0.94)" stroke="${strokeColor}" stroke-width="2" />`, `<text x="${nx}" y="${ny + 3.5}" text-anchor="middle" fill="#f8fafc" font-size="9.5" font-weight="700">${this.escapeSvgText((bond.targetName[0] || "?").toUpperCase())}</text>`, `<text x="${nx}" y="${ny + 30}" text-anchor="middle" fill="#e2e8f0" font-size="9.5" font-weight="600">${this.escapeSvgText(shortTarget)}</text>`, `<text x="${nx}" y="${ny + 41}" text-anchor="middle" fill="#94a3b8" font-size="8">${this.escapeSvgText(shortDyn)}</text>`, `</g>`);
+        svgLines.push(`<line class="rel-pulse-filament" x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-opacity="0.78" stroke-dasharray="6 4"><animate attributeName="stroke-dashoffset" from="20" to="0" dur="2.2s" repeatCount="indefinite" /></line>`, `<rect x="${mx - 26}" y="${my - 9}" width="52" height="16" rx="8" fill="#0f172a" stroke="${strokeColor}" stroke-opacity="0.65" stroke-width="0.9" />`, `<text x="${mx}" y="${my + 2.5}" text-anchor="middle" fill="${strokeColor}" font-size="8.5" font-weight="700">${this.escapeSvgText(affLabel)}</text>`);
+        svgNodes.push(`<g class="rel-web-node" data-constellation-node="${this.escapeSvgText(bond.targetName)}" style="cursor:pointer;">`, `<circle cx="${nx}" cy="${ny}" r="18" fill="rgba(15,23,42,0.94)" stroke="${strokeColor}" stroke-width="2" />`, `<text x="${nx}" y="${ny + 3.5}" text-anchor="middle" fill="#f8fafc" font-size="9.5" font-weight="700">${this.escapeSvgText((bond.targetName[0] || "?").toUpperCase())}</text>`, `<text x="${nx}" y="${ny + 30}" text-anchor="middle" fill="#e2e8f0" font-size="9.5" font-weight="600">${this.escapeSvgText(shortTarget)}</text>`, `<text x="${nx}" y="${ny + 41}" text-anchor="middle" fill="#94a3b8" font-size="8">${this.escapeSvgText(shortDyn)}</text>`, `</g>`);
       });
     }
     const centerLabel = char.name.length > 16 ? `${char.name.slice(0, 14)}…` : char.name;
     const centerGroup = `<g><circle cx="${cx}" cy="${cy}" r="24" fill="rgba(16,33,43,0.98)" stroke="var(--vn-shell-accent,#6ee7b7)" stroke-width="2.2" /><text x="${cx}" y="${cy + 4}" text-anchor="middle" fill="#6ee7b7" font-size="11" font-weight="700">${this.escapeSvgText((char.name[0] || "?").toUpperCase())}</text><text x="${cx}" y="${cy + 36}" text-anchor="middle" fill="#6ee7b7" font-size="9.5" font-weight="700">${this.escapeSvgText(centerLabel)}</text></g>`;
     webBox.innerHTML = `<svg viewBox="0 0 420 220" class="rel-web-svg" role="img" aria-label="Relationship constellation for ${this.escapeSvgText(char.name)}">${svgLines.join("")}${svgNodes.join("")}${centerGroup}</svg>`;
+    const confidantInspector = document.createElement("div");
+    confidantInspector.setAttribute("data-confidant-inspector", "");
+    confidantInspector.hidden = true;
+    confidantInspector.style.cssText = "margin-top:8px;padding:10px 12px;border-radius:8px;border:1px solid rgba(110,231,183,0.3);background:rgba(15,23,42,0.88);display:flex;flex-direction:column;gap:6px;";
     for (const nodeEl of webBox.querySelectorAll("[data-constellation-node]")) {
       nodeEl.addEventListener("click", () => {
         const target2 = nodeEl.getAttribute("data-constellation-node") || "";
+        const bond = bonds.find((b) => b.targetName === target2);
+        if (bond) {
+          confidantInspector.hidden = false;
+          confidantInspector.replaceChildren();
+          const inspHead = document.createElement("div");
+          inspHead.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;";
+          const inspTitle = document.createElement("strong");
+          inspTitle.style.cssText = "font-size:12.5px;color:#f8fafc;";
+          inspTitle.textContent = `${bond.targetName} (${bond.affinity >= 0 ? `+${bond.affinity}` : bond.affinity} affinity · Trust ${bond.trust})`;
+          const inspClose = document.createElement("button");
+          inspClose.type = "button";
+          inspClose.textContent = "×";
+          inspClose.className = "folio-action-btn";
+          inspClose.style.cssText = "padding:1px 6px;min-height:20px;font-size:13px;";
+          inspClose.onclick = () => {
+            confidantInspector.hidden = true;
+          };
+          inspHead.append(inspTitle, inspClose);
+          const inspMeta = document.createElement("div");
+          inspMeta.style.cssText = "font-size:11.5px;color:#cbd5e1;";
+          inspMeta.textContent = [bond.dynamicLabel, bond.status].filter(Boolean).join(" — ") || "No bond notes recorded yet.";
+          const inspActions = document.createElement("div");
+          inspActions.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;";
+          if (!bond.fromRpgCompanion) {
+            const boostBtn = document.createElement("button");
+            boostBtn.type = "button";
+            boostBtn.className = "folio-action-btn btn-accent";
+            boostBtn.style.cssText = "padding:3px 9px;min-height:24px;font-size:11px;";
+            boostBtn.textContent = "+5 Affinity";
+            boostBtn.onclick = () => {
+              const nextRels = structuredClone(char.relationships ?? []);
+              const entry = nextRels.find((r) => r.targetName === bond.targetName);
+              if (entry) {
+                entry.affinity = Math.min(100, (entry.affinity ?? 0) + 5);
+                entry.lastUpdated = Date.now();
+                persistRelationships(nextRels, `Raised affinity with ${bond.targetName}.`);
+              }
+            };
+            inspActions.append(boostBtn);
+          }
+          const editCardBtn = document.createElement("button");
+          editCardBtn.type = "button";
+          editCardBtn.className = "folio-action-btn";
+          editCardBtn.style.cssText = "padding:3px 9px;min-height:24px;font-size:11px;";
+          editCardBtn.textContent = "Edit Bond Card";
+          editCardBtn.onclick = () => {
+            const cards2 = wrap.querySelectorAll(".rel-bond-card");
+            for (const c of cards2) {
+              if (c.getAttribute("data-bond-target") === target2) {
+                c.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+                c.querySelector("[data-bond-dynamic]")?.focus?.();
+              }
+            }
+          };
+          inspActions.append(editCardBtn);
+          confidantInspector.append(inspHead, inspMeta, inspActions);
+        }
         const cards = wrap.querySelectorAll(".rel-bond-card");
         for (const c of cards)
           c.classList.remove("is-highlighted");
@@ -58248,7 +58775,7 @@ class CharacterFolio {
         }
       });
     }
-    webCard.append(webBox);
+    webCard.append(webBox, confidantInspector);
     wrap.append(webCard);
     const bondsSection = document.createElement("div");
     bondsSection.className = "folio-group-card";
@@ -62323,7 +62850,7 @@ function setupVisualNovelFrontend(baseContext) {
   imageLibrary.setDocked();
   imageStudio.setLibraryOpener(() => imageLibrary.open("images"));
   const dnaRequests = new Map;
-  let dnaTurnToken = "";
+  let dnaTurnToken = "", dnaChangedThisTurn = false, dnaRevision = 0;
   const dnaTurnScoped = (action2) => ["list", "propose", "autofill", "harvest"].includes(action2);
   const sendDna = (body2) => {
     const owner = characterFolio.getContext();
@@ -62369,6 +62896,7 @@ function setupVisualNovelFrontend(baseContext) {
     onDeleteDNA: (dna, revision) => sendDna({ action: "delete", characterId: dna.id, dna, revision }),
     onRestoreDNA: (characterId, revision) => sendDna({ action: "restore", characterId, revision }),
     onMergeDNA: (characterId, otherId, revision) => sendDna({ action: "merge", characterId, otherId, revision }),
+    onScrubSwipesDNA: () => sendDna({ action: "scrub_swipes" }),
     onDeleteImage: (imageUrl) => {
       const owner = chatId();
       if (owner) {
@@ -62391,6 +62919,7 @@ function setupVisualNovelFrontend(baseContext) {
     stage.workspace.open("character");
   });
   stage.setStoryDnaRequester((body2) => sendStoryDna(body2));
+  stage.setCharacterDnaSaver((dna) => sendDna({ action: "save", dna, revision: dnaRevision }));
   const panelRequests = new Map;
   panels.onResolveTemplate = (template) => new Promise((resolve, reject) => {
     const requestId = createUiId();
@@ -62686,6 +63215,16 @@ function setupVisualNovelFrontend(baseContext) {
     const asset = castAsset ?? (hasPendingCastBackground && fallbackAsset?.stageAsset?.role === "portrait" ? null : fallbackAsset);
     const candidates = asset ? sceneImageCandidatesFor(asset) : [];
     const sceneUrl = candidates[0] ?? null;
+    const upcomingUrls = [];
+    for (const candidateAsset of sourceTurn.assets) {
+      if ((candidateAsset.paragraphIndex === paragraphIndex + 1 || candidateAsset.paragraphIndex === paragraphIndex + 2) && (candidateAsset.status === "generated" || candidateAsset.status === "browser_ready")) {
+        const nextUrl = sceneImageCandidatesFor(candidateAsset)[0];
+        if (nextUrl)
+          upcomingUrls.push(nextUrl);
+      }
+    }
+    if (upcomingUrls.length > 0)
+      stage.predecodeUpcomingImages(upcomingUrls);
     if (!asset || !sceneUrl) {
       vnDebug("image sync", `p${paragraphIndex}`, "no decodable asset yet");
       return;
@@ -62735,7 +63274,8 @@ function setupVisualNovelFrontend(baseContext) {
     turn = next;
     imageStudio.setTurn(next);
     const nextDnaToken = JSON.stringify([next.chatId, next.messageId, next.sourceFingerprint, next.swipeId, next.revision]);
-    if (nextDnaToken !== dnaTurnToken) {
+    dnaChangedThisTurn = nextDnaToken !== dnaTurnToken;
+    if (dnaChangedThisTurn) {
       characterFolio.invalidateContext();
       for (const [id8, r] of dnaRequests)
         if (dnaTurnScoped(r.action))
@@ -62743,7 +63283,7 @@ function setupVisualNovelFrontend(baseContext) {
       dnaTurnToken = nextDnaToken;
     }
     characterFolio.setContext(next.chatId);
-    if (next?.chatId) {
+    if (dnaChangedThisTurn && next?.chatId) {
       sendDna({ action: "list" });
       sendStoryDna({ action: "list" });
     }
@@ -62934,7 +63474,9 @@ function setupVisualNovelFrontend(baseContext) {
       dnaRequests.delete(message.requestId);
       if (!owner || dnaTurnScoped(owner.action) && owner.turnToken !== dnaTurnToken || owner.chatId !== message.chatId || message.chatId !== chatId() || message.chatId !== characterFolio.getContext())
         return;
+      dnaRevision = message.library.revision ?? 0;
       characterFolio.setLibrary(message.library, owner.action !== "list", owner.saved);
+      stage.setCharacterDnaLibrary(message.library.characters);
       if (message.proposal)
         characterFolio.setProposal(message.proposal);
       return;

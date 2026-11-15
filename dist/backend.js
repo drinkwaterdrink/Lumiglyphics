@@ -19376,6 +19376,42 @@ function formatItemDNAToPromptClause(dna) {
   }
   return parts.join("; ");
 }
+function isSwipeEntryActive(entry, activeMessageSwipes) {
+  if (!entry.autoDiscovered || entry.locked)
+    return true;
+  if (!entry.seenInSwipes || entry.seenInSwipes.length === 0)
+    return true;
+  const knownMessageIds = entry.seenInSwipes.map((tag) => tag.split("::")[0] ?? "").filter((id2) => Object.prototype.hasOwnProperty.call(activeMessageSwipes, id2));
+  if (knownMessageIds.length === 0)
+    return true;
+  return entry.seenInSwipes.some((tag) => {
+    const msgId = tag.split("::")[0] ?? "";
+    const activeTag = activeMessageSwipes[msgId];
+    return !activeTag || tag === activeTag;
+  });
+}
+function scrubStoryDNASwipes(set2, activeMessageSwipes) {
+  const nextLocations = {};
+  for (const [id2, loc] of Object.entries(set2.locations)) {
+    if (isSwipeEntryActive(loc, activeMessageSwipes))
+      nextLocations[id2] = loc;
+  }
+  const nextItems = {};
+  for (const [id2, item] of Object.entries(set2.items)) {
+    if (isSwipeEntryActive(item, activeMessageSwipes))
+      nextItems[id2] = item;
+  }
+  const nextThoughtCabinet = set2.thoughtCabinet?.filter((t) => !t.seenInSwipes?.length || isSwipeEntryActive({ autoDiscovered: true, seenInSwipes: t.seenInSwipes }, activeMessageSwipes));
+  const nextChapterCodex = set2.chapterCodex?.filter((c) => !c.seenInSwipes?.length || isSwipeEntryActive({ autoDiscovered: true, seenInSwipes: c.seenInSwipes }, activeMessageSwipes));
+  return StoryDNASetSchema.parse({
+    ...set2,
+    locations: nextLocations,
+    items: nextItems,
+    ...nextThoughtCabinet !== undefined ? { thoughtCabinet: nextThoughtCabinet } : {},
+    ...nextChapterCodex !== undefined ? { chapterCodex: nextChapterCodex } : {},
+    revision: (set2.revision ?? 0) + 1
+  });
+}
 var LocationDNASchema, ItemDNASchema, ThoughtCabinetEntrySchema, ChapterCodexEntrySchema, StoryDNASetSchema, GENERIC_ALIAS_WORDS, TRAILING_CONTAINER_SUFFIXES, StoryDnaRequestSchema;
 var init_story_dna = __esm(() => {
   init_zod();
@@ -19595,6 +19631,14 @@ var init_story_dna = __esm(() => {
       action: exports_external.literal("list"),
       chatId: exports_external.string(),
       requestId: exports_external.string().optional()
+    }),
+    exports_external.object({
+      type: exports_external.literal("vn_story_dna"),
+      action: exports_external.literal("scrub_swipes"),
+      chatId: exports_external.string(),
+      requestId: exports_external.string().optional(),
+      activeSwipeId: exports_external.string().max(160).optional(),
+      validSwipeIds: exports_external.array(exports_external.string().max(160)).max(64).optional()
     }),
     exports_external.object({
       type: exports_external.literal("vn_story_dna"),
@@ -20590,6 +20634,27 @@ function resolveStyleDNA(config2, selectedStyleId) {
   const targetId = selectedStyleId ?? config2.selectedSharedStyleId;
   if (targetId && Object.hasOwn(BUILTIN_STYLE_DNA, targetId)) {
     const dna = BUILTIN_STYLE_DNA[targetId];
+    const explicitOverride = selectedStyleId !== undefined && selectedStyleId !== null && selectedStyleId !== config2.selectedSharedStyleId;
+    const defaults = BUILTIN_STYLE_DEFAULT_AFFIXES[targetId];
+    const cleanedPrefix2 = cleanStyleAffix(config2.promptPrefix);
+    const cleanedSuffix2 = cleanStyleAffix(config2.promptSuffix);
+    const isCustomizedPrefix = !explicitOverride && cleanedPrefix2.length > 0 && cleanedPrefix2 !== HISTORICAL_UNTOUCHED_ANIME_PREFIX && cleanedPrefix2 !== cleanStyleAffix(defaults?.positive);
+    const isCustomizedSuffix = !explicitOverride && cleanedSuffix2.length > 0 && cleanedSuffix2 !== cleanStyleAffix(defaults?.suffix);
+    if (isCustomizedPrefix || isCustomizedSuffix) {
+      const inferred = inferPhotographicStyleTraits(isCustomizedPrefix ? cleanedPrefix2 : "", isCustomizedSuffix ? cleanedSuffix2 : "");
+      const mergedDNA = {
+        ...dna,
+        ...isCustomizedPrefix ? { prefix: cleanedPrefix2, ...dna.medium ? {} : { medium: cleanedPrefix2 } } : {},
+        ...isCustomizedSuffix ? { suffix: cleanedSuffix2 } : {},
+        ...inferred.cameraHints ? { cameraHints: [...new Set([...dna.cameraHints ?? [], ...inferred.cameraHints])] } : {}
+      };
+      return {
+        styleDNA: mergedDNA,
+        source: "builtin",
+        isLegacyLiteral: false,
+        ...mergedDNA.lightingOverlay ? { lightingOverlay: mergedDNA.lightingOverlay } : {}
+      };
+    }
     return {
       styleDNA: dna,
       source: "builtin",
@@ -20602,12 +20667,12 @@ function resolveStyleDNA(config2, selectedStyleId) {
     if (customPreset) {
       const cleanedPrefix2 = cleanStyleAffix(customPreset.positive);
       const cleanedSuffix2 = cleanStyleAffix(customPreset.suffix);
-      const cleanedNegative = customPreset.negative?.trim() || "";
+      const cleanedNegative2 = customPreset.negative?.trim() || "";
       const inferred = inferPhotographicStyleTraits(cleanedPrefix2, cleanedSuffix2);
       const legacyDNA = {
         ...cleanedPrefix2 ? { medium: cleanedPrefix2, prefix: cleanedPrefix2 } : {},
         ...cleanedSuffix2 ? { suffix: cleanedSuffix2 } : {},
-        ...cleanedNegative ? { negative: cleanedNegative } : {},
+        ...cleanedNegative2 ? { negative: cleanedNegative2 } : {},
         ...inferred,
         preserve: ["scene-defined lighting", "custom literal preset wording"]
       };
@@ -20629,12 +20694,13 @@ function resolveStyleDNA(config2, selectedStyleId) {
   }
   const cleanedPrefix = cleanStyleAffix(config2.promptPrefix);
   const cleanedSuffix = cleanStyleAffix(config2.promptSuffix);
+  const cleanedNegative = config2.negativePrompt?.trim() ?? "";
   if (cleanedPrefix.length > 0 || cleanedSuffix.length > 0) {
     const inferred = inferPhotographicStyleTraits(cleanedPrefix, cleanedSuffix);
-    const hasCustomCameraOrSuffix = cleanedSuffix.length > 0 || Boolean(inferred.cameraHints?.length);
     const legacyDNA = {
-      ...cleanedPrefix ? { medium: cleanedPrefix, ...hasCustomCameraOrSuffix ? { prefix: cleanedPrefix } : {} } : {},
+      ...cleanedPrefix ? { medium: cleanedPrefix, prefix: cleanedPrefix } : {},
       ...cleanedSuffix ? { suffix: cleanedSuffix } : {},
+      ...cleanedNegative && cleanedNegative !== HISTORICAL_UNTOUCHED_ANIME_PREFIX ? { negative: cleanedNegative } : {},
       ...inferred,
       preserve: ["scene-defined lighting", "custom literal prefix/suffix wording"]
     };
@@ -20651,7 +20717,7 @@ function resolveStyleDNA(config2, selectedStyleId) {
     isLegacyLiteral: false
   };
 }
-var StyleLightingOverlaySchema, StyleDNASchema, BUILTIN_STYLE_DNA, HISTORICAL_UNTOUCHED_ANIME_PREFIX = "masterpiece, best quality, anime visual novel scene";
+var StyleLightingOverlaySchema, StyleDNASchema, BUILTIN_STYLE_DNA, HISTORICAL_UNTOUCHED_ANIME_PREFIX = "masterpiece, best quality, anime visual novel scene", BUILTIN_STYLE_DEFAULT_AFFIXES;
 var init_style_dna = __esm(() => {
   init_zod();
   StyleLightingOverlaySchema = exports_external.object({
@@ -20774,6 +20840,53 @@ var init_style_dna = __esm(() => {
       avoidIntent: ["plastic CGI surfaces", "uniform airbrush smoothing", "muddy values"]
     }
   });
+  BUILTIN_STYLE_DEFAULT_AFFIXES = {
+    "builtin-style:neutral": { positive: "", suffix: "" },
+    "builtin-style:anime": {
+      positive: "A polished 2D anime illustration.",
+      suffix: "Precise ink contours, flat cel-shaded color regions, expressive but consistent facial construction, and carefully painted background details. Let the scene's lighting determine the palette and shadows."
+    },
+    "builtin-style:hunter-hand-drawn": {
+      positive: "A Hunter x Hunter-inspired hand-drawn adventure anime illustration.",
+      suffix: "Lively tapered pencil-and-ink contours, angular expressive faces, economical cel shading, and subtly textured painted scenery. Preserve the supplied subject's own identity, clothing and proportions. Let the scene determine the mood and colors."
+    },
+    "builtin-style:retro-cel": {
+      positive: "A traditional hand-painted anime cel illustration.",
+      suffix: "Confident ink outlines, limited layers of opaque cel shading, painted background texture, restrained colors, subtle analog grain and gentle softness at color boundaries. Keep the important details legible."
+    },
+    "builtin-style:ink-manga": {
+      positive: "A black-and-white manga ink illustration.",
+      suffix: "Varied pen weight, clean silhouettes, deliberate black shapes, fine hatching and selective screentone. Use white paper as negative space and retain readable expressions and object details. Follow the template's panel and lettering instructions."
+    },
+    "builtin-style:photoreal": {
+      positive: "A lifelike natural photograph.",
+      suffix: "Believable optics and perspective; realistic material texture, surface wear and fine detail. For visible people, preserve natural skin texture, small asymmetries and the supplied appearance. Follow the existing scene light, with plausible exposure and restrained color processing."
+    },
+    "builtin-style:phone-candid": {
+      positive: "An unposed candid snapshot taken with a cellphone camera.",
+      suffix: "Casual slightly imperfect framing, ordinary phone-wide perspective and mostly deep focus. Natural scene lighting, modest dynamic range, mild shadow noise, subtle JPEG compression and slight exposure or white-balance variation. Preserve real textures; keep the main subject recognizable and important details readable. Let motion softness occur only where movement warrants it."
+    },
+    "builtin-style:phone-flash": {
+      positive: "A casual handheld cellphone photograph with direct on-camera flash.",
+      suffix: "Close flash falloff, small specular highlights, candid framing and phone-wide perspective. Ambient scene detail remains visible where exposure permits. Modest sensor noise and compression, believable skin and material textures, and restrained sharpening."
+    },
+    "builtin-style:documentary": {
+      positive: "An observational documentary photograph.",
+      suffix: "A believable witness viewpoint, purposeful but unposed framing, authentic surface detail and restrained color correction. Keep the setting legible with moderate depth of field; preserve the scene's actual light and the subject's established appearance."
+    },
+    "builtin-style:film": {
+      positive: "A natural color photograph captured on 35 mm film.",
+      suffix: "Fine organic grain, gentle highlight rolloff, restrained color separation and subtle optical softness. Plausible photographic perspective and natural textures. Preserve the scene's lighting, time and mood rather than imposing a new color cast."
+    },
+    "builtin-style:watercolor": {
+      positive: "A hand-painted watercolor illustration on textured paper.",
+      suffix: "Transparent layered washes, subtle pigment pooling, softly broken edges and fine pencil or ink accents around important details. Use the scene's colors and light, leaving intentional areas of untouched paper. Retain recognizable subject and object shapes."
+    },
+    "builtin-style:painterly": {
+      positive: "A hand-painted narrative illustration in gouache.",
+      suffix: "Opaque layered pigment, visible but controlled brushwork, simplified value shapes and carefully rendered focal details. Keep the scene's established mood, clothing and objects; use its lighting to organize depth and color."
+    }
+  };
 });
 
 // src/shared/image-styles.ts
@@ -21268,11 +21381,12 @@ function validateImageTemplates(value) {
 }
 function upgradeImageTemplates(value) {
   const templates = validateImageTemplates(value);
+  const initialCount = templates.length;
   for (const templateId of ["manga-page", "ensemble", "two-shot", "cinematic-wide", "dramatic-closeup", "key-visual", "candid-moment"]) {
     if (!templates.some((t) => t.id === templateId) && templates.length < 32) {
       const builtin = BUILTIN_IMAGE_TEMPLATES.find((t) => t.id === templateId);
       if (builtin)
-        templates.push({ ...builtin });
+        templates.push({ ...builtin, ...initialCount < 6 && templateId === "ensemble" ? { enabled: false } : {} });
     }
   }
   return templates.map((t) => {
@@ -21594,7 +21708,7 @@ Strong ink contours, manga shading, halftones, expressive contrast, coherent col
       id: "ensemble",
       name: "Full scene / ensemble",
       category: "action",
-      enabled: false,
+      enabled: true,
       useWhen: "A full-scene beat showing everyone physically present staged organically across the room or setting as the story happens (seated, working, talking in clusters, moving across foreground/midground/background)\u2014including the user's persona when present. List visibleCharacters for this exact moment; omit offscreen or departed characters.",
       subjectMode: "ensemble",
       framing: "wide",
@@ -21618,7 +21732,7 @@ Use an objective external camera pulled back enough to show room geometry and de
       id: "two-shot",
       name: "Two-shot dialogue",
       category: "action",
-      enabled: false,
+      enabled: true,
       useWhen: "Two characters conversing, negotiating, tending to something together, or locked in direct tension. Emphasize angled depth, over-the-shoulder, or across-the-table blocking rather than standing shoulder-to-shoulder.",
       subjectMode: "ensemble",
       framing: "upper body",
@@ -21642,7 +21756,7 @@ Stage both characters with natural depth separation, angled body orientation, be
       id: "cinematic-wide",
       name: "Cinematic wide establishing",
       category: "environment",
-      enabled: false,
+      enabled: true,
       useWhen: "Sweeping cinematic establishing view of a location or exterior vista with deep perspective, leading lines, atmospheric layers, and strong sense of scale.",
       subjectMode: "none",
       framing: "wide",
@@ -21663,7 +21777,7 @@ Anchor the frame with foreground framing elements, clear architectural or landsc
       id: "dramatic-closeup",
       name: "Dramatic close-up",
       category: "portrait",
-      enabled: false,
+      enabled: true,
       useWhen: "High-stakes emotional peak, sudden shock, whispered confession, quiet realization, or intense facial micro-expression.",
       subjectMode: "one",
       framing: "close-up",
@@ -21686,7 +21800,7 @@ Asymmetric framing, razor-sharp focus on eyes and subtle expression, sculptural 
       id: "key-visual",
       name: "Key visual / Climax",
       category: "action",
-      enabled: false,
+      enabled: true,
       useWhen: "A definitive story climax, commanding entrance, decisive stance, or sweeping dramatic reveal.",
       subjectMode: "one",
       framing: "full body",
@@ -21709,7 +21823,7 @@ Dynamic camera angle, powerful full-figure silhouette, dramatic environmental ri
       id: "candid-moment",
       name: "Candid moment",
       category: "portrait",
-      enabled: false,
+      enabled: true,
       useWhen: "An unposed, lived-in slice-of-life beat captured mid-gesture, mid-thought, or mid-conversation without theatrical posing.",
       subjectMode: "one",
       framing: "portrait",
@@ -22867,6 +22981,33 @@ function isCharacterActiveOnBranch(char, activeBranchSwipeTags) {
     return true;
   return char.seenInSwipes.some((tag) => activeBranchSwipeTags.has(tag));
 }
+function scrubCharacterDNASwipes(library, activeMessageSwipes) {
+  const nextCharacters = {};
+  for (const [id3, char] of Object.entries(library.characters)) {
+    if (!char.autoDiscovered || char.locked || !char.seenInSwipes || char.seenInSwipes.length === 0) {
+      nextCharacters[id3] = char;
+      continue;
+    }
+    const knownMessageIds = char.seenInSwipes.map((tag) => tag.split("::")[0] ?? "").filter((msgId) => Object.prototype.hasOwnProperty.call(activeMessageSwipes, msgId));
+    if (knownMessageIds.length === 0) {
+      nextCharacters[id3] = char;
+      continue;
+    }
+    const isActive = char.seenInSwipes.some((tag) => {
+      const msgId = tag.split("::")[0] ?? "";
+      const activeTag = activeMessageSwipes[msgId];
+      return !activeTag || tag === activeTag;
+    });
+    if (isActive) {
+      nextCharacters[id3] = char;
+    }
+  }
+  return CharacterDNALibrarySchema.parse({
+    ...library,
+    characters: nextCharacters,
+    revision: (library.revision ?? 0) + 1
+  });
+}
 var CharacterHairDNASchema, CharacterEyesDNASchema, CharacterBuildDNASchema, CharacterRelationshipBeatSchema, CharacterRelationshipSchema, CharacterDNASchema, CharacterDNALibrarySchema, dnaNameKey = (value) => value.normalize("NFKC").trim().toLocaleLowerCase().replace(/\s+/g, " "), SKIN_WORD_RE, DANGLING_PREPOSITION_RE, NON_VISUAL_DEMEANOR_RE, VISUAL_POSTURE_CUE_RE, STOP_WORDS, GENERIC_ATTIRE_RE;
 var init_character_dna = __esm(() => {
   init_zod();
@@ -23008,7 +23149,8 @@ var init_character_dna_workflow = __esm(() => {
     exports_external.object({ ...envelope, action: exports_external.literal("apply"), proposalId: exports_external.string().min(1).max(128), fields: exports_external.array(DnaFieldSchema).min(1).max(19) }).strict(),
     exports_external.object({ ...envelope, action: exports_external.literal("cancel") }).strict(),
     exports_external.object({ ...envelope, action: exports_external.enum(["delete", "restore"]), characterId: exports_external.string().min(1).max(256), dna: CharacterDNASchema.optional(), revision: exports_external.number().int().nonnegative() }).strict(),
-    exports_external.object({ ...envelope, action: exports_external.literal("merge"), characterId: exports_external.string().min(1).max(256), otherId: exports_external.string().min(1).max(256), revision: exports_external.number().int().nonnegative() }).strict()
+    exports_external.object({ ...envelope, action: exports_external.literal("merge"), characterId: exports_external.string().min(1).max(256), otherId: exports_external.string().min(1).max(256), revision: exports_external.number().int().nonnegative() }).strict(),
+    exports_external.object({ ...envelope, action: exports_external.literal("scrub_swipes"), activeSwipeId: exports_external.string().max(160).optional(), validSwipeIds: exports_external.array(exports_external.string().max(160)).max(64).optional() }).strict()
   ]);
 });
 
@@ -31368,28 +31510,28 @@ var init_image_prompt_profile_v2 = __esm(() => {
   }).strict();
   DIALECT_BUDGETS = {
     "flux3-klein": {
-      simple: [900, 1800],
-      standard: [1200, 2200],
-      complex: [1600, 2600],
+      simple: [900, 2200],
+      standard: [1200, 2600],
+      complex: [1600, 2850],
       dense: [1800, 3000]
     },
     flux3: {
-      simple: [800, 1600],
-      standard: [1100, 2000],
-      complex: [1500, 2400],
-      dense: [1700, 2800]
+      simple: [900, 2000],
+      standard: [1200, 2500],
+      complex: [1500, 2800],
+      dense: [1800, 3000]
     },
     "gpt-image-2.5": {
-      simple: [700, 1500],
-      standard: [1000, 1900],
-      complex: [1300, 2200],
-      dense: [1500, 2600]
+      simple: [800, 1900],
+      standard: [1100, 2400],
+      complex: [1400, 2800],
+      dense: [1700, 3000]
     },
     "grok-imagine-2": {
-      simple: [450, 1000],
-      standard: [700, 1300],
-      complex: [900, 1500],
-      dense: [1000, 1600]
+      simple: [550, 1400],
+      standard: [800, 1800],
+      complex: [1000, 2200],
+      dense: [1200, 2600]
     },
     "qwen-image-3": {
       simple: [300, 650],
@@ -31404,10 +31546,10 @@ var init_image_prompt_profile_v2 = __esm(() => {
       dense: [1800, 3000]
     },
     "seedream-5": {
-      simple: [500, 1200],
-      standard: [800, 1500],
-      complex: [1000, 1800],
-      dense: [1200, 2000]
+      simple: [700, 1800],
+      standard: [1000, 2300],
+      complex: [1300, 2700],
+      dense: [1600, 3000]
     },
     anima: {
       simple: [250, 650],
@@ -31422,10 +31564,10 @@ var init_image_prompt_profile_v2 = __esm(() => {
       dense: [700, 1200]
     },
     "generic-prose": {
-      simple: [500, 1200],
-      standard: [800, 1600],
-      complex: [1000, 1900],
-      dense: [1200, 2200]
+      simple: [800, 2000],
+      standard: [1200, 2500],
+      complex: [1500, 2800],
+      dense: [1800, 3000]
     },
     "generic-tags": {
       simple: [250, 600],
@@ -33007,7 +33149,7 @@ function projectTurnPresentation(plan, options) {
       warnings.add("entity-budget");
       return null;
     }
-    const value = { id: `e${entities.length + 1}`, kind, name: trimmed, aliases: kind === "npc" ? [] : deriveShortAliases(trimmed), firstParagraph: at, facts: [] };
+    const value = { id: `e${entities.length + 1}`, kind, name: trimmed, aliases: deriveShortAliases(trimmed), firstParagraph: at, facts: [] };
     entities.push(value);
     byName.set(mapKey, value);
     const prior = kind === "npc" ? continuity.characters[trimmed] : undefined;
@@ -41539,6 +41681,94 @@ var init_schemas3 = __esm(() => {
   BOUNDARY_REASONS = ["initial", "location_change", "major_time_jump", "environment_replacement", "forced", "none"];
 });
 
+// src/backend/runtime/story-dna-store.ts
+async function read2(spindle2, chatId, userId) {
+  const raw = await spindle2.userStorage?.getJson(pathFor2(chatId), { fallback: null, ...userId ? { userId } : {} });
+  if (raw === null || raw === undefined) {
+    return { raw: null, set: { locations: {}, items: {}, revision: 0 } };
+  }
+  const parsed = StoryDNASetSchema.safeParse(raw);
+  if (parsed.success) {
+    return { raw, set: parsed.data };
+  }
+  return { raw, set: { locations: {}, items: {}, revision: 0 } };
+}
+async function loadStoryDNASet(spindle2, chatId, userId) {
+  return (await read2(spindle2, chatId, userId)).set;
+}
+async function mutateStoryDNASet(spindle2, chatId, userId, expectedRevision, mutation) {
+  if (!spindle2.userStorage)
+    throw new Error("Story DNA storage is unavailable. Your changes have not been saved.");
+  let scopes = queues2.get(spindle2);
+  if (!scopes) {
+    scopes = new Map;
+    queues2.set(spindle2, scopes);
+  }
+  const key = JSON.stringify([userId ?? null, chatId]);
+  const previous = scopes.get(key) ?? Promise.resolve();
+  const pending = previous.catch(() => {}).then(async () => {
+    const { set: set2 } = await read2(spindle2, chatId, userId);
+    if (expectedRevision !== undefined && expectedRevision !== (set2.revision ?? 0)) {
+      throw new Error("Story DNA changed. Reload the latest data before saving.");
+    }
+    mutation(set2);
+    set2.revision = (set2.revision ?? 0) + 1;
+    const options2 = { indent: 2, ...userId ? { userId } : {} };
+    await spindle2.userStorage.setJson(pathFor2(chatId), set2, options2);
+    return set2;
+  });
+  scopes.set(key, pending);
+  try {
+    return await pending;
+  } finally {
+    if (scopes.get(key) === pending)
+      scopes.delete(key);
+  }
+}
+async function saveLocationDNA(spindle2, chatId, loc, userId, revision) {
+  const parsed = LocationDNASchema.parse(loc);
+  return mutateStoryDNASet(spindle2, chatId, userId, revision, (set2) => {
+    const id7 = parsed.id || createLocationId(parsed.name);
+    set2.locations[id7] = { ...parsed, id: id7, autoDiscovered: false, lastUpdated: Date.now() };
+    if (set2.deletedLocations?.[id7])
+      delete set2.deletedLocations[id7];
+  });
+}
+async function saveItemDNA(spindle2, chatId, item, userId, revision) {
+  const parsed = ItemDNASchema.parse(item);
+  return mutateStoryDNASet(spindle2, chatId, userId, revision, (set2) => {
+    const id7 = parsed.id || createItemId(parsed.name);
+    set2.items[id7] = { ...parsed, id: id7, autoDiscovered: false, lastUpdated: Date.now() };
+    if (set2.deletedItems?.[id7])
+      delete set2.deletedItems[id7];
+  });
+}
+async function deleteLocationDNA(spindle2, chatId, locationId, userId, revision) {
+  return mutateStoryDNASet(spindle2, chatId, userId, revision, (set2) => {
+    const loc = set2.locations[locationId];
+    if (loc) {
+      set2.deletedLocations ??= {};
+      set2.deletedLocations[locationId] = loc;
+      delete set2.locations[locationId];
+    }
+  });
+}
+async function deleteItemDNA(spindle2, chatId, itemId, userId, revision) {
+  return mutateStoryDNASet(spindle2, chatId, userId, revision, (set2) => {
+    const it = set2.items[itemId];
+    if (it) {
+      set2.deletedItems ??= {};
+      set2.deletedItems[itemId] = it;
+      delete set2.items[itemId];
+    }
+  });
+}
+var pathFor2 = (chatId) => `chats/${encodeURIComponent(chatId).replace(/%/g, "_")}/story-dna.json`, queues2;
+var init_story_dna_store = __esm(() => {
+  init_story_dna();
+  queues2 = new WeakMap;
+});
+
 // src/backend/runtime/planner.ts
 function selectDramaticPeakCues(cues, limit, paragraphs) {
   if (limit <= 0 || cues.length <= limit) {
@@ -42955,6 +43185,33 @@ async function planTurn(spindle2, input2) {
 Detected scene header: ${parts.join(" | ")}. Ensure your environment reflects these established details.`;
     }
   }
+  try {
+    const storyDNASet = await loadStoryDNASet(spindle2, input2.chatId, input2.userId);
+    const activeLocName = (narrative.detectedSceneMetadata?.location || input2.previousScene?.environment.location || "").trim().toLowerCase();
+    const matchedLocation = activeLocName ? Object.values(storyDNASet.locations).find((loc) => loc.name.trim().toLowerCase() === activeLocName || loc.aliases.some((alias) => alias.trim().toLowerCase() === activeLocName)) : undefined;
+    if (matchedLocation && (matchedLocation.locked || matchedLocation.architecture || matchedLocation.persistentElements.length > 0)) {
+      const dnaParts = [
+        matchedLocation.environmentDescription ? `setting=${matchedLocation.environmentDescription}` : "",
+        matchedLocation.architecture ? `architecture=${matchedLocation.architecture}` : "",
+        matchedLocation.lighting ? `lighting=${matchedLocation.lighting}` : "",
+        matchedLocation.persistentElements.length > 0 ? `persistent_props=${matchedLocation.persistentElements.join("; ")}` : ""
+      ].filter(Boolean);
+      if (dnaParts.length > 0) {
+        visualContext.plannerContext += `
+Established Location DNA (${matchedLocation.name}): ${dnaParts.join(" | ")}. Preserve these canonical physical details unless the narrative explicitly alters them.`;
+      }
+    }
+    const recentCodex = (storyDNASet.chapterCodex ?? []).slice(-3);
+    if (recentCodex.length > 0) {
+      visualContext.plannerContext += `
+Recent Chapter Memory: ${recentCodex.map((c) => `[${c.location || "Scene"}] ${c.title}: ${c.summary}`).join(" ; ")}`;
+    }
+    const activeThreads = (storyDNASet.thoughtCabinet ?? []).filter((t) => t.status !== "resolved").slice(-4);
+    if (activeThreads.length > 0) {
+      visualContext.plannerContext += `
+Active Mystery/Narrative Threads: ${activeThreads.map((t) => `${t.title} (${t.category}: ${t.description})`).join(" ; ")}`;
+    }
+  } catch {}
   const loadedRole = input2.cardRole ?? await loadCardRole(spindle2, input2.chatId, visualContext.cardId, input2.userId);
   const attachedCardName = visualContext.characterIdentity?.name ?? input2.message.name ?? "";
   const cardRole = loadedRole === "auto" && (isLikelyScenarioCard(visualContext.characterIdentity) || isScenarioTitle(attachedCardName)) ? "scenario" : loadedRole;
@@ -43591,6 +43848,7 @@ var init_planner = __esm(() => {
   init_planning_queue();
   init_rpg_state();
   init_schemas3();
+  init_story_dna_store();
   FALLBACK_LOCATIONS = new Set([
     "the current setting",
     "current setting",
@@ -43799,12 +44057,12 @@ function normalizedScript(value, scope2, now) {
     return sourceStatus("lumiscript", "invalid");
   return proposalEvidence("lumiscript", parsed.data, now);
 }
-async function collectContextSources(read2, config2, scope2, signal, options2 = {}) {
+async function collectContextSources(read3, config2, scope2, signal, options2 = {}) {
   const now = options2.now ?? Date.now();
   const one = async (provider, endpoint) => {
     if (!endpoint)
       return sourceStatus(provider, "disabled");
-    if (!read2 || signal.aborted)
+    if (!read3 || signal.aborted)
       return sourceStatus(provider, "unavailable");
     let timer;
     let timedOut = false;
@@ -43817,7 +44075,7 @@ async function collectContextSources(read2, config2, scope2, signal, options2 = 
       abort = () => resolve(sourceStatus(provider, "unavailable"));
       signal.addEventListener("abort", abort, { once: true });
     });
-    const result = Promise.resolve().then(() => read2(endpoint)).then((value) => {
+    const result = Promise.resolve().then(() => read3(endpoint)).then((value) => {
       if (timedOut || signal.aborted)
         return sourceStatus(provider, "unavailable");
       try {
@@ -44084,94 +44342,6 @@ var init_character_dna_autofill = __esm(() => {
   init_entity_projection();
   init_presentation_selectors();
   init_presentation_entities();
-});
-
-// src/backend/runtime/story-dna-store.ts
-async function read2(spindle2, chatId, userId) {
-  const raw = await spindle2.userStorage?.getJson(pathFor2(chatId), { fallback: null, ...userId ? { userId } : {} });
-  if (raw === null || raw === undefined) {
-    return { raw: null, set: { locations: {}, items: {}, revision: 0 } };
-  }
-  const parsed = StoryDNASetSchema.safeParse(raw);
-  if (parsed.success) {
-    return { raw, set: parsed.data };
-  }
-  return { raw, set: { locations: {}, items: {}, revision: 0 } };
-}
-async function loadStoryDNASet(spindle2, chatId, userId) {
-  return (await read2(spindle2, chatId, userId)).set;
-}
-async function mutateStoryDNASet(spindle2, chatId, userId, expectedRevision, mutation) {
-  if (!spindle2.userStorage)
-    throw new Error("Story DNA storage is unavailable. Your changes have not been saved.");
-  let scopes = queues2.get(spindle2);
-  if (!scopes) {
-    scopes = new Map;
-    queues2.set(spindle2, scopes);
-  }
-  const key = JSON.stringify([userId ?? null, chatId]);
-  const previous = scopes.get(key) ?? Promise.resolve();
-  const pending = previous.catch(() => {}).then(async () => {
-    const { set: set2 } = await read2(spindle2, chatId, userId);
-    if (expectedRevision !== undefined && expectedRevision !== (set2.revision ?? 0)) {
-      throw new Error("Story DNA changed. Reload the latest data before saving.");
-    }
-    mutation(set2);
-    set2.revision = (set2.revision ?? 0) + 1;
-    const options2 = { indent: 2, ...userId ? { userId } : {} };
-    await spindle2.userStorage.setJson(pathFor2(chatId), set2, options2);
-    return set2;
-  });
-  scopes.set(key, pending);
-  try {
-    return await pending;
-  } finally {
-    if (scopes.get(key) === pending)
-      scopes.delete(key);
-  }
-}
-async function saveLocationDNA(spindle2, chatId, loc, userId, revision) {
-  const parsed = LocationDNASchema.parse(loc);
-  return mutateStoryDNASet(spindle2, chatId, userId, revision, (set2) => {
-    const id7 = parsed.id || createLocationId(parsed.name);
-    set2.locations[id7] = { ...parsed, id: id7, autoDiscovered: false, lastUpdated: Date.now() };
-    if (set2.deletedLocations?.[id7])
-      delete set2.deletedLocations[id7];
-  });
-}
-async function saveItemDNA(spindle2, chatId, item, userId, revision) {
-  const parsed = ItemDNASchema.parse(item);
-  return mutateStoryDNASet(spindle2, chatId, userId, revision, (set2) => {
-    const id7 = parsed.id || createItemId(parsed.name);
-    set2.items[id7] = { ...parsed, id: id7, autoDiscovered: false, lastUpdated: Date.now() };
-    if (set2.deletedItems?.[id7])
-      delete set2.deletedItems[id7];
-  });
-}
-async function deleteLocationDNA(spindle2, chatId, locationId, userId, revision) {
-  return mutateStoryDNASet(spindle2, chatId, userId, revision, (set2) => {
-    const loc = set2.locations[locationId];
-    if (loc) {
-      set2.deletedLocations ??= {};
-      set2.deletedLocations[locationId] = loc;
-      delete set2.locations[locationId];
-    }
-  });
-}
-async function deleteItemDNA(spindle2, chatId, itemId, userId, revision) {
-  return mutateStoryDNASet(spindle2, chatId, userId, revision, (set2) => {
-    const it = set2.items[itemId];
-    if (it) {
-      set2.deletedItems ??= {};
-      set2.deletedItems[itemId] = it;
-      delete set2.items[itemId];
-    }
-  });
-}
-var pathFor2 = (chatId) => `chats/${encodeURIComponent(chatId).replace(/%/g, "_")}/story-dna.json`, queues2;
-var init_story_dna_store = __esm(() => {
-  init_story_dna();
-  queues2 = new WeakMap;
 });
 
 // src/shared/image-retries.ts
@@ -45558,7 +45728,9 @@ function serializeFlux3Klein(input2) {
       description: `${s.name}: ${s.appearance}${attireStr}`,
       box: singleBox
     });
-    const subjectClause = `In the center foreground, <${label}> ${s.name} (${s.appearance}${attireStr}) is ${actionStr.replace(/\.+$/, "")}.`.replace(/\s+/g, " ").replace(/,\s*\./g, ".");
+    const subjectAnchor = resolved0?.anchor ?? "In the center foreground";
+    const stagingSuffix = shotSpec.composition.stagingNote ? ` ${sanitizeQuoteAndUnitNotation(shotSpec.composition.stagingNote.trim().replace(/\.+$/, ""))}.` : "";
+    const subjectClause = `${subjectAnchor}, <${label}> ${s.name} (${s.appearance}${attireStr}) is ${actionStr.replace(/\.+$/, "")}.${stagingSuffix}`.replace(/\s+/g, " ").replace(/,\s*\./g, ".").trim();
     sections.push({
       id: "subject-action",
       priority: 0,
@@ -45628,6 +45800,27 @@ function serializeFlux3Klein(input2) {
       required: false,
       compressible: true,
       text: `Above, <${typographyLabel}> displays clean legible lettering that reads exactly "${quoted}", the only text in the scene.`
+    });
+  }
+  const cameraText = formatCameraFraming(shotSpec, styleDNA);
+  if (cameraText) {
+    sections.push({
+      id: "camera-framing",
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: `Shot composition: ${cameraText}.`
+    });
+  }
+  const rawStyleText = formatStyleDNAProse(styleDNA);
+  if (rawStyleText) {
+    const styleText = isPhoto ? rawStyleText.replace(/\bphotorealistic\b/gi, "lifelike natural") : rawStyleText;
+    sections.push({
+      id: "visual-style",
+      priority: styleDNA.preserve ? 1 : 2,
+      required: false,
+      compressible: !styleDNA.preserve,
+      text: `Visual treatment: ${styleText}.`
     });
   }
   if (cleanScene) {
@@ -47538,11 +47731,12 @@ function compileModelPrompt(input2) {
     }
     return sec;
   });
-  const cleanPrefix = styleDNA.prefix?.trim() ?? "";
+  const rawPrefix = styleDNA.prefix?.trim() ?? "";
+  const cleanPrefix = profile.dialect === "flux3-klein" ? rawPrefix.replace(/\bphotorealistic\b/gi, "lifelike natural") : rawPrefix;
   const isIdeogramJson = profile.dialect === "ideogram-v4" && profile.ideogramMode !== "structured-prose";
   const kleinConsumedPrefix = profile.dialect === "flux3-klein" && sections.some((s) => s.id === "medium-optics-opening" && s.text.toLowerCase().startsWith(cleanPrefix.toLowerCase()));
   if (cleanPrefix && !isIdeogramJson && !kleinConsumedPrefix) {
-    const prefixText = isTagDialect ? cleanPrefix.replace(/[,;:\s]+$/, "") : formatProseSentence(cleanPrefix, true);
+    const prefixText = isTagDialect ? cleanPrefix.replace(/[,;:\s]+$/, "") : formatProseSentence(cleanPrefix, false);
     if (prefixText) {
       sections = [
         {
@@ -47556,9 +47750,10 @@ function compileModelPrompt(input2) {
       ];
     }
   }
-  const cleanSuffix = styleDNA.suffix?.trim() ?? "";
+  const rawSuffix = styleDNA.suffix?.trim() ?? "";
+  const cleanSuffix = profile.dialect === "flux3-klein" ? rawSuffix.replace(/\bphotorealistic\b/gi, "lifelike natural") : rawSuffix;
   if (cleanSuffix && !isIdeogramJson) {
-    const suffixText = isTagDialect ? cleanSuffix.replace(/^[,;:\s]+/, "").replace(/[,;:\s]+$/, "") : formatProseSentence(cleanSuffix, true);
+    const suffixText = isTagDialect ? cleanSuffix.replace(/^[,;:\s]+/, "").replace(/[,;:\s]+$/, "") : formatProseSentence(cleanSuffix, false);
     if (suffixText) {
       const constraintsIdx = sections.findIndex((s) => s.id === "constraints" || s.id === "sec-constraints" || s.id === "references");
       const suffixSection = {
@@ -47654,7 +47849,7 @@ function buildV2ImageRequest(input2) {
   const outputPlan = resolveImageOutputPlan({ capabilities: profile.outputCapabilities, parameters: input2.planParameters ?? request.parameters, requestedRatio: config2.imageOutputAspectRatio !== "default" ? config2.imageOutputAspectRatio : cue.imageTemplate?.outputAspectRatio === "9:16" ? "9:16" : undefined, resolutionPreference: config2.imageResolutionPreference, source: profile.capabilitySource, modelId: request.model });
   const styleSnapshot = resolveStyleDNA(config2, input2.styleId);
   const effectiveStyleDNA = { ...styleSnapshot.styleDNA };
-  if (cue.imageTemplate && !input2.styleId && !cue.imageTemplate.positive.includes("{{suffix}}")) {
+  if (cue.imageTemplate && !input2.styleId && cue.imageTemplate.positive.includes("{{style}}") && !cue.imageTemplate.positive.includes("{{suffix}}")) {
     delete effectiveStyleDNA.suffix;
   }
   const overrides = manualCameraOverrides(rebuild?.manualCamera);
@@ -49697,6 +49892,29 @@ function compileImagePrompt(config2, scene, cue, characterAppearance, syntax, pr
 function compileNovelAiRequest(config2, scene, cue, appearances, characterDNALibrary, storyDNASet) {
   if (cue.imageTemplate) {
     const compiled = compileTemplateCue(config2, scene, cue, appearances, characterDNALibrary, storyDNASet);
+    const model2 = config2.imageModel || "";
+    const caps2 = novelAiCapabilities(model2);
+    if (config2.imagePromptEngineVersion === 2 && caps2.structured && cue.imageTemplate.subjectMode === "ensemble" && (cue.ensembleSubjects?.length ?? 0) > 0) {
+      const subjects = cue.ensembleSubjects;
+      const spatialHints = cue.shotHint?.spatialRelationships ?? [];
+      const xSlots = subjects.length === 2 ? [0.28, 0.72] : subjects.length === 3 ? [0.2, 0.5, 0.8] : subjects.map((_, i) => Number((0.18 + 0.64 * i / Math.max(1, subjects.length - 1)).toFixed(2)));
+      const characterTags = subjects.map((subject, index) => {
+        const nameLower = subject.name.toLowerCase();
+        const hintLine = spatialHints.find((h) => h.toLowerCase().includes(nameLower)) ?? "";
+        const horiz = /\bfar[- ]left\b/i.test(hintLine) ? "far-left" : /\bfar[- ]right\b/i.test(hintLine) ? "far-right" : /\bleft\b/i.test(hintLine) ? "left" : /\bright\b/i.test(hintLine) ? "right" : /\bcenter(?:ed)?\b/i.test(hintLine) ? "center" : index === 0 ? "left" : index === subjects.length - 1 ? "right" : "center";
+        const depth = /\bforeground\b/i.test(hintLine) ? "foreground" : /\bmidground\b/i.test(hintLine) ? "midground" : /\b(background|rear)\b/i.test(hintLine) ? "background" : undefined;
+        const xMap = { "far-left": 0.16, left: 0.28, center: 0.5, right: 0.72, "far-right": 0.84 };
+        const yMap = { foreground: 0.56, midground: 0.46, background: 0.36 };
+        const x = xMap[horiz] ?? xSlots[index] ?? 0.5;
+        const y = depth ? yMap[depth] ?? 0.5 : 0.5;
+        const rawTags = [subject.appearance, subject.attire ? `wearing ${subject.attire}` : ""].filter(Boolean).join(", ");
+        return {
+          tags: renderNovelAiEmphasis(rawTags || subject.name, model2),
+          centers: [{ x, y }]
+        };
+      });
+      return { prompt: compiled.prompt, negativePrompt: compiled.negativePrompt, parameters: { qualityToggle: false, negativePrompt: compiled.negativePrompt, characterTags } };
+    }
     return { prompt: compiled.prompt, negativePrompt: compiled.negativePrompt, parameters: { qualityToggle: false, negativePrompt: compiled.negativePrompt, characterTags: [] } };
   }
   const model = config2.imageModel;
@@ -50251,6 +50469,7 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
   const castToken = castArtToken(spindle2, plan.key.chatId, userId);
   const providerKey = `image:${config2.imageConnectionId ?? "default"}`;
   const scheduler = new AssetScheduler({ [providerKey]: { concurrency: config2.imageConcurrency } });
+  cacheOptions.onScheduler?.(scheduler);
   cacheOptions.onJobCancellationReady?.((jobId) => {
     scheduler.cancelUnshared(jobId, "A saved version replaced this picture.");
   });
@@ -50666,7 +50885,7 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
                   preparedRequest.model = request.model;
                 else
                   delete preparedRequest.model;
-                const built = buildV2ImageRequest({ config: latestConfig, cue: nextCue, request: preparedRequest, profile: profileV2, brief: nextMetadata.brief, metadata: nextMetadata, styleId: options3?.styleId ?? nextCue.imageTemplate?.id, portraits, characterDNALibrary, planParameters: request.parameters, ...frozen.shotSpec && frozen.styleSnapshot ? { previousShot: { cue, shotSpec: frozen.shotSpec, styleDNA: frozen.styleSnapshot } } : {}, previousShotRevision: frozen.shotSpec?.revision ?? 0, rebuild: options3, shadow: { prompt: nextCompiled.prompt, ...nextCompiled.negativePrompt !== undefined ? { negativePrompt: nextCompiled.negativePrompt } : {} }, referenceSummary: portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" });
+                const built = buildV2ImageRequest({ config: latestConfig, cue: nextCue, request: preparedRequest, profile: profileV2, brief: nextMetadata.brief, metadata: nextMetadata, styleId: options3?.styleId ?? latestConfig.selectedSharedStyleId, portraits, characterDNALibrary, planParameters: request.parameters, ...frozen.shotSpec && frozen.styleSnapshot ? { previousShot: { cue, shotSpec: frozen.shotSpec, styleDNA: frozen.styleSnapshot } } : {}, previousShotRevision: frozen.shotSpec?.revision ?? 0, rebuild: options3, shadow: { prompt: nextCompiled.prompt, ...nextCompiled.negativePrompt !== undefined ? { negativePrompt: nextCompiled.negativePrompt } : {} }, referenceSummary: portrait ? `${portrait.source ?? "captured"} portrait: ${portrait.name} (${portrait.imageId})` : wantsCapture ? "No reference yet; this picture will establish the portrait" : "No extension reference" });
                 Object.assign(preparedRequest, built.request);
                 if (built.metadata)
                   Object.assign(nextMetadata, built.metadata);
@@ -51211,6 +51430,7 @@ class ImageDispatchPolicy {
 // src/backend/runtime/controller.ts
 init_scene_atmosphere();
 init_character_dna();
+init_story_dna();
 init_character_dna_store();
 
 // src/backend/runtime/character-dna-workflow.ts
@@ -51235,6 +51455,20 @@ function activeBranchSwipeTags(messages) {
     tags.add(swipeTurnTag(String(id7), swipeId));
   }
   return tags;
+}
+function activeMessageSwipeMap(tags, activeSwipeId) {
+  const map2 = {};
+  for (const tag of tags) {
+    const sep = tag.indexOf("::");
+    if (sep > 0)
+      map2[tag.slice(0, sep)] = tag;
+  }
+  if (Object.keys(map2).length === 0 && activeSwipeId?.includes("::")) {
+    const sep = activeSwipeId.indexOf("::");
+    if (sep > 0)
+      map2[activeSwipeId.slice(0, sep)] = activeSwipeId;
+  }
+  return map2;
 }
 function filterLibraryForActiveBranch(library, activeTags) {
   if (!activeTags || activeTags.size === 0)
@@ -51502,6 +51736,16 @@ async function handleCharacterDnaRequest(spindle2, request, userId) {
         delete l.characters[other.id];
       });
       await reply();
+    } else if (request.action === "scrub_swipes") {
+      const msgs = await spindle2.chat?.getMessages?.(request.chatId) ?? [];
+      const activeMap = activeMessageSwipeMap(activeBranchSwipeTags(msgs), request.activeSwipeId);
+      if (Object.keys(activeMap).length > 0) {
+        await mutateCharacterDnaLibrary(spindle2, request.chatId, userId, undefined, (l) => {
+          const scrubbed = scrubCharacterDNASwipes(l, activeMap);
+          l.characters = scrubbed.characters;
+        });
+      }
+      await reply();
     }
   } catch (error61) {
     spindle2.sendToFrontend({ type: "vn_error", operation: "vn_character_dna", chatId: request.chatId, requestId: request.requestId, error: error61 instanceof Error ? error61.message : "Character DNA could not be updated. Your saved profile is unchanged." }, userId);
@@ -51576,6 +51820,19 @@ async function handleStoryDnaRequest(spindle2, rawRequest, userId) {
       });
       const storyDna = await saveItemDNA(spindle2, request.chatId, drafted, userId);
       await reply(storyDna);
+      return;
+    }
+    if (request.action === "scrub_swipes") {
+      const msgs = await spindle2.chat?.getMessages?.(request.chatId) ?? [];
+      const activeMap = activeMessageSwipeMap(activeBranchSwipeTags(msgs), request.activeSwipeId);
+      const updated = Object.keys(activeMap).length > 0 ? await mutateStoryDNASet(spindle2, request.chatId, userId, undefined, (set2) => {
+        const scrubbed = scrubStoryDNASwipes(set2, activeMap);
+        set2.locations = scrubbed.locations;
+        set2.items = scrubbed.items;
+        set2.thoughtCabinet = scrubbed.thoughtCabinet;
+        set2.chapterCodex = scrubbed.chapterCodex;
+      }) : await loadStoryDNASet(spindle2, request.chatId, userId);
+      await reply(updated);
       return;
     }
   } catch (error61) {
@@ -52796,6 +53053,7 @@ init_storage();
 var contextSourceSession = new ContextSourceSession;
 var contextConfigSaves = new Map;
 var imageReviewGates = new Map;
+var activeAssetSchedulers = new Map;
 var preparingSingleImages = new Map;
 var assetBatchOperations = new Map;
 var recoveringImageBatches = new Map;
@@ -53474,6 +53732,7 @@ async function startAssets(spindle2, record5, path3, userId, options3 = {}) {
     await recordRequest({ ...request, state: "approved" });
     return ownsBatch();
   };
+  let batchScheduler;
   imageReviewGates.set(key, gate);
   const mergeJobs = (jobs) => (options3.onlyJobId ? current.jobs.map((job) => jobs.find((entry) => entry.jobId === job.jobId) ?? job) : jobs).map((job) => operations.overrides.get(job.jobId) ?? job);
   const batchPlan = options3.onlyJobId ? { ...record5.plan, visualCues: [...record5.plan.visualCues, ...record5.plan.cacheCues ?? []].filter((cue) => cue.assetJobId === options3.onlyJobId), cacheCues: [] } : record5.plan;
@@ -53489,6 +53748,9 @@ async function startAssets(spindle2, record5, path3, userId, options3 = {}) {
       if (!compareTurnKeys(active, changed.ownerTurnKey).accepted)
         return;
       current = { ...current, jobs: mergeJobs(jobs), updatedAt: new Date().toISOString() };
+      const schedEntry = activeAssetSchedulers.get(key);
+      if (schedEntry && schedEntry.scheduler === batchScheduler)
+        schedEntry.jobs = current.jobs;
       await saveBatch();
       const asset = await assetViewWithCastArt(spindle2, current, changed, userId);
       if (controller.signal.aborted || assetControllers.has(key) && assetControllers.get(key) !== controller || !compareTurnKeys(activeTurnKeys.get(key) ?? null, changed.ownerTurnKey).accepted)
@@ -53508,6 +53770,10 @@ async function startAssets(spindle2, record5, path3, userId, options3 = {}) {
     }, userId, {
       sceneCache,
       admission,
+      onScheduler: (scheduler) => {
+        batchScheduler = scheduler;
+        activeAssetSchedulers.set(key, { scheduler, key: record5.plan.key, jobs: batchJobs });
+      },
       onActivity: (event) => {
         if (event.kind === "provider-start")
           heldJobs.delete(event.jobId);
@@ -53594,6 +53860,8 @@ async function startAssets(spindle2, record5, path3, userId, options3 = {}) {
       assetControllers.delete(key);
     if (imageReviewGates.get(key) === gate)
       imageReviewGates.delete(key);
+    if (batchScheduler && activeAssetSchedulers.get(key)?.scheduler === batchScheduler)
+      activeAssetSchedulers.delete(key);
     imageRetryQueues.get(key)?.queue.wake();
   }
 }
@@ -53603,6 +53871,7 @@ function releaseAbortedImageBatch(key) {
   assetBatchOperations.delete(key);
   assetControllers.delete(key);
   imageReviewGates.delete(key);
+  activeAssetSchedulers.delete(key);
   preparingSingleImages.delete(key);
 }
 async function prepareSingleImage(spindle2, request, userId, quick) {
@@ -53984,8 +54253,18 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
             }
           }
         }
-        if (turnCastNames.size > 0) {
+        const prevLocationName = replacesGreeting ? null : isReswipeOrReplan ? priorTurnRecord?.plan.scenes.at(-1)?.environment.location ?? null : chatState.latestScene?.environment.location ?? null;
+        const nextLocationName = result.plan.scenes.at(-1)?.environment.location ?? null;
+        const locationChanged = Boolean(prevLocationName && nextLocationName && prevLocationName.trim().toLowerCase() !== nextLocationName.trim().toLowerCase());
+        if (turnCastNames.size > 0 || locationChanged || isReswipeOrReplan) {
           await mutateCharacterDnaLibrary(spindle2, chatId, userId, undefined, (l) => {
+            if (locationChanged) {
+              for (const char of Object.values(l.characters)) {
+                if (!char.locked && char.transientConditions?.length) {
+                  char.transientConditions = [];
+                }
+              }
+            }
             for (const rawName of turnCastNames) {
               const name = rawName.trim();
               if (!name || isScenarioTitle(name))
@@ -54007,11 +54286,21 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
                 }
               }
             }
+            if (isReswipeOrReplan) {
+              const scrubbed = scrubCharacterDNASwipes(l, { [record5.plan.key.assistantMessageId]: swipeTag });
+              l.characters = scrubbed.characters;
+            }
           });
         }
-        const prevLocationName = replacesGreeting ? null : isReswipeOrReplan ? priorTurnRecord?.plan.scenes.at(-1)?.environment.location ?? null : chatState.latestScene?.environment.location ?? null;
         await mutateStoryDNASet(spindle2, chatId, userId, undefined, (set2) => {
           harvestTurnStoryDNA(record5.plan, set2, swipeTag, prevLocationName, { mindLedgerEnabled: config2.mindLedgerEnabled, chapterCodexEnabled: config2.chapterCodexEnabled });
+          if (isReswipeOrReplan) {
+            const scrubbed = scrubStoryDNASwipes(set2, { [record5.plan.key.assistantMessageId]: swipeTag });
+            set2.locations = scrubbed.locations;
+            set2.items = scrubbed.items;
+            set2.thoughtCabinet = scrubbed.thoughtCabinet;
+            set2.chapterCodex = scrubbed.chapterCodex;
+          }
         });
       } catch {}
     }
@@ -54788,6 +55077,18 @@ async function handleFrontendMessage(spindle2, request, userId) {
       if (!record5 || record5.plan.key.chatId !== position.key.chatId || record5.plan.key.assistantMessageId !== position.key.assistantMessageId || String(record5.plan.key.swipeId ?? 0) !== String(position.key.swipeId ?? 0) || record5.plan.key.sourceFingerprint !== position.key.sourceFingerprint || position.paragraphIndex >= record5.plan.paragraphs.length)
         return;
       await saveReadingPosition(spindle2, position, userId);
+      const schedEntry = activeAssetSchedulers.get(runtimeKey(userId, position.key.chatId));
+      if (schedEntry && schedEntry.key.assistantMessageId === position.key.assistantMessageId && String(schedEntry.key.swipeId ?? 0) === String(position.key.swipeId ?? 0) && schedEntry.key.sourceFingerprint === position.key.sourceFingerprint) {
+        for (const job of schedEntry.jobs) {
+          if (job.status !== "queued")
+            continue;
+          if (job.paragraphIndex === position.paragraphIndex) {
+            schedEntry.scheduler.reprioritize(job.jobId, "visible");
+          } else if (job.paragraphIndex > position.paragraphIndex && job.paragraphIndex <= position.paragraphIndex + 2) {
+            schedEntry.scheduler.reprioritize(job.jobId, "next");
+          }
+        }
+      }
       return;
     }
     case "vn_get_connection_catalog": {

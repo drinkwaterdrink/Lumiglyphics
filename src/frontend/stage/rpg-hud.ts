@@ -239,12 +239,28 @@ export class RpgStageController {
 
   decorateChoiceButton(button: HTMLButtonElement, choice: VnChoice): void {
     if (this.rpgMode === "off" || !choice.check) return;
-    const check = choice.check;
+    const check = evaluateContextualSkillCheck(choice.check, this.rpgState?.vitals);
     const modStr = check.modifier > 0 ? ` +${check.modifier}` : check.modifier < 0 ? ` ${check.modifier}` : "";
     const rollTag = check.rollMode === "advantage" ? " · ADV" : check.rollMode === "disadvantage" ? " · DIS" : "";
+    const needed = check.dc - check.modifier;
+    const singleProb = Math.max(0.05, Math.min(0.95, (21 - needed) / 20));
+    const odds = check.rollMode === "advantage"
+      ? 1 - Math.pow(1 - singleProb, 2)
+      : check.rollMode === "disadvantage"
+        ? Math.pow(singleProb, 2)
+        : singleProb;
+    const pct = Math.round(odds * 100);
     const badge = document.createElement("span");
     badge.dataset.vnChoiceCheck = "";
-    badge.textContent = `🎲 ${check.stat} DC ${check.dc}${modStr}${rollTag}`;
+    badge.style.cssText = "display:inline-flex;align-items:center;gap:6px;margin-left:8px;font-size:0.78em;transform:perspective(220px) rotateX(4deg);";
+    badge.textContent = `🎲 ${check.stat} DC ${check.dc}${modStr}${rollTag} · ${pct}%`;
+    const meter = document.createElement("span");
+    meter.style.cssText = "display:inline-block;width:36px;height:4px;border-radius:999px;background:rgba(255,255,255,0.16);overflow:hidden;vertical-align:middle;";
+    const fill = document.createElement("span");
+    const meterColor = pct >= 70 ? "#6ee7b7" : pct >= 40 ? "#fcd34d" : "#f87171";
+    fill.style.cssText = `display:block;height:100%;width:${pct}%;background:${meterColor};`;
+    meter.appendChild(fill);
+    badge.appendChild(meter);
     button.appendChild(badge);
   }
 
@@ -255,6 +271,8 @@ export class RpgStageController {
     return formatSkillCheckSubmission(choice.value, outcome);
   }
 
+  onRollEffect?: (effect: "shake_hard" | "zoom_punch") => void;
+
   private showRollTheatre(outcome: SkillCheckOutcome): void {
     if (!this.theatreEl) return;
     if (this.theatreTimer) clearTimeout(this.theatreTimer);
@@ -262,6 +280,15 @@ export class RpgStageController {
     const rollDetail = rolls.length > 1 ? `2d20(${rolls.join(", ")}) → ${natural}` : `d20(${natural})`;
     const modStr = check.modifier > 0 ? `+${check.modifier}` : check.modifier < 0 ? `${check.modifier}` : "+0";
     const d20Svg = `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:middle;margin-right:4px;"><polygon points="12,2 21,7 21,17 12,22 3,17 3,7" fill="rgba(124,156,255,0.22)" stroke="currentColor" stroke-width="1.6"/><text x="12" y="15.5" text-anchor="middle" fill="currentColor" font-size="9" font-weight="800">${natural}</text></svg>`;
+    const critAccent = tier === "critical_success"
+      ? "border-color:rgba(250,204,21,0.7);box-shadow:0 0 28px rgba(250,204,21,0.32);"
+      : tier === "critical_failure"
+        ? "border-color:rgba(248,113,113,0.75);box-shadow:0 0 28px rgba(239,68,68,0.35);"
+        : "";
+    if (critAccent) {
+      this.theatreEl.style.cssText += critAccent;
+      this.onRollEffect?.(tier === "critical_success" ? "zoom_punch" : "shake_hard");
+    }
     this.theatreEl.innerHTML = `
       <div style="font-size:0.72rem;letter-spacing:0.08em;opacity:0.85;display:inline-flex;align-items:center;justify-content:center;">${d20Svg}${esc(check.stat)} SKILL CHECK (DC ${check.dc})</div>
       <div style="font-size:1rem;font-weight:700;">${esc(TIER_LABELS[tier])}</div>

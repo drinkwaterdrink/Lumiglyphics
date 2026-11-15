@@ -1,7 +1,7 @@
 import {isScenarioTitle} from '../../shared/card-role.js';
 import {scanTrackerCastHistory,type TrackerCharacter} from './simtracker.js';
 import type {SpindleAPI} from 'lumiverse-spindle-types';
-import {createEmptyCharacterDNA,findCharacterDNA,extractDNAPartsFromText,isCharacterActiveOnBranch,swipeTurnTag,type CharacterDNA,type CharacterDNALibrary} from '../../shared/character-dna.js';
+import {createEmptyCharacterDNA,findCharacterDNA,extractDNAPartsFromText,isCharacterActiveOnBranch,scrubCharacterDNASwipes,swipeTurnTag,type CharacterDNA,type CharacterDNALibrary} from '../../shared/character-dna.js';
 import {applyDnaChanges,dnaFieldValue,DNA_FIELDS,type DnaRequest,type DnaProposal} from '../../shared/character-dna-workflow.js';
 import {loadCharacterDNALibrary,saveCharacterDNA,mutateCharacterDnaLibrary} from './character-dna-store.js';
 import {collectCharacterDnaEvidence,proposeCharacterDna} from './character-dna-autofill.js';
@@ -25,6 +25,22 @@ export function activeBranchSwipeTags(
     tags.add(swipeTurnTag(String(id), swipeId));
   }
   return tags;
+}
+
+export function activeMessageSwipeMap(
+  tags: ReadonlySet<string>,
+  activeSwipeId?: string
+): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const tag of tags) {
+    const sep = tag.indexOf('::');
+    if (sep > 0) map[tag.slice(0, sep)] = tag;
+  }
+  if (Object.keys(map).length === 0 && activeSwipeId?.includes('::')) {
+    const sep = activeSwipeId.indexOf('::');
+    if (sep > 0) map[activeSwipeId.slice(0, sep)] = activeSwipeId;
+  }
+  return map;
 }
 
 export function filterLibraryForActiveBranch(
@@ -200,6 +216,16 @@ export async function handleCharacterDnaRequest(spindle:SpindleAPI,request:DnaRe
     let next=target;for(const path of DNA_FIELDS){const current=dnaFieldValue(next,path),value=dnaFieldValue(other,path);if((!current||(Array.isArray(current)&&!current.length))&&value){next=applyDnaChanges(next,[{path,value,classification:'generated',sourceRefs:[]}]);next.fieldSources={...next.fieldSources,[path]:other.fieldSources?.[path]??{classification:'manual',sources:[`Merged from ${other.name}`]}};}}
     next.aliases=[...new Set([...target.aliases,other.name,...other.aliases])].filter(n=>n!==target.name).slice(0,16);l.characters[target.id]=next;l.deleted??={};l.deleted[other.id]=other;delete l.characters[other.id];
    });await reply();
+  }else if(request.action==='scrub_swipes'){
+   const msgs=(await spindle.chat?.getMessages?.(request.chatId)??[]) as Parameters<typeof activeBranchSwipeTags>[0];
+   const activeMap=activeMessageSwipeMap(activeBranchSwipeTags(msgs),request.activeSwipeId);
+   if(Object.keys(activeMap).length>0){
+    await mutateCharacterDnaLibrary(spindle,request.chatId,userId,undefined,l=>{
+     const scrubbed=scrubCharacterDNASwipes(l,activeMap);
+     l.characters=scrubbed.characters;
+    });
+   }
+   await reply();
   }
  }catch(error){spindle.sendToFrontend({type:'vn_error',operation:'vn_character_dna',chatId:request.chatId,requestId:request.requestId,error:error instanceof Error?error.message:'Character DNA could not be updated. Your saved profile is unchanged.'},userId);}
 }

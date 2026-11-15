@@ -176,6 +176,54 @@ export const BUILTIN_STYLE_DNA: Readonly<Record<string, StyleDNA>> = Object.free
 
 export const HISTORICAL_UNTOUCHED_ANIME_PREFIX = 'masterpiece, best quality, anime visual novel scene';
 
+const BUILTIN_STYLE_DEFAULT_AFFIXES: Readonly<Record<string, { positive: string; suffix: string }>> = {
+  'builtin-style:neutral': { positive: '', suffix: '' },
+  'builtin-style:anime': {
+    positive: 'A polished 2D anime illustration.',
+    suffix: 'Precise ink contours, flat cel-shaded color regions, expressive but consistent facial construction, and carefully painted background details. Let the scene\'s lighting determine the palette and shadows.'
+  },
+  'builtin-style:hunter-hand-drawn': {
+    positive: 'A Hunter x Hunter-inspired hand-drawn adventure anime illustration.',
+    suffix: 'Lively tapered pencil-and-ink contours, angular expressive faces, economical cel shading, and subtly textured painted scenery. Preserve the supplied subject\'s own identity, clothing and proportions. Let the scene determine the mood and colors.'
+  },
+  'builtin-style:retro-cel': {
+    positive: 'A traditional hand-painted anime cel illustration.',
+    suffix: 'Confident ink outlines, limited layers of opaque cel shading, painted background texture, restrained colors, subtle analog grain and gentle softness at color boundaries. Keep the important details legible.'
+  },
+  'builtin-style:ink-manga': {
+    positive: 'A black-and-white manga ink illustration.',
+    suffix: 'Varied pen weight, clean silhouettes, deliberate black shapes, fine hatching and selective screentone. Use white paper as negative space and retain readable expressions and object details. Follow the template\'s panel and lettering instructions.'
+  },
+  'builtin-style:photoreal': {
+    positive: 'A lifelike natural photograph.',
+    suffix: 'Believable optics and perspective; realistic material texture, surface wear and fine detail. For visible people, preserve natural skin texture, small asymmetries and the supplied appearance. Follow the existing scene light, with plausible exposure and restrained color processing.'
+  },
+  'builtin-style:phone-candid': {
+    positive: 'An unposed candid snapshot taken with a cellphone camera.',
+    suffix: 'Casual slightly imperfect framing, ordinary phone-wide perspective and mostly deep focus. Natural scene lighting, modest dynamic range, mild shadow noise, subtle JPEG compression and slight exposure or white-balance variation. Preserve real textures; keep the main subject recognizable and important details readable. Let motion softness occur only where movement warrants it.'
+  },
+  'builtin-style:phone-flash': {
+    positive: 'A casual handheld cellphone photograph with direct on-camera flash.',
+    suffix: 'Close flash falloff, small specular highlights, candid framing and phone-wide perspective. Ambient scene detail remains visible where exposure permits. Modest sensor noise and compression, believable skin and material textures, and restrained sharpening.'
+  },
+  'builtin-style:documentary': {
+    positive: 'An observational documentary photograph.',
+    suffix: 'A believable witness viewpoint, purposeful but unposed framing, authentic surface detail and restrained color correction. Keep the setting legible with moderate depth of field; preserve the scene\'s actual light and the subject\'s established appearance.'
+  },
+  'builtin-style:film': {
+    positive: 'A natural color photograph captured on 35 mm film.',
+    suffix: 'Fine organic grain, gentle highlight rolloff, restrained color separation and subtle optical softness. Plausible photographic perspective and natural textures. Preserve the scene\'s lighting, time and mood rather than imposing a new color cast.'
+  },
+  'builtin-style:watercolor': {
+    positive: 'A hand-painted watercolor illustration on textured paper.',
+    suffix: 'Transparent layered washes, subtle pigment pooling, softly broken edges and fine pencil or ink accents around important details. Use the scene\'s colors and light, leaving intentional areas of untouched paper. Retain recognizable subject and object shapes.'
+  },
+  'builtin-style:painterly': {
+    positive: 'A hand-painted narrative illustration in gouache.',
+    suffix: 'Opaque layered pigment, visible but controlled brushwork, simplified value shapes and carefully rendered focal details. Keep the scene\'s established mood, clothing and objects; use its lighting to organize depth and color.'
+  }
+};
+
 export interface ResolvedStyleDNASnapshot {
   styleDNA: StyleDNA;
   source: 'builtin' | 'migrated' | 'custom' | 'legacy-literal';
@@ -185,7 +233,7 @@ export interface ResolvedStyleDNASnapshot {
 
 /**
  * Resolves semantic StyleDNA with backward-compatible legacy protection.
- * - Built-in styles receive full semantic StyleDNA.
+ * - Built-in styles receive full semantic StyleDNA (and preserve any custom prefix/suffix edits).
  * - Untouched historical default prefix ("masterpiece, best quality, anime visual novel scene")
  *   is cleanly migrated to the semantic built-in anime style.
  * - Custom user styles/presets retain both their positive prefix, suffix, and negative prompt,
@@ -201,6 +249,35 @@ export function resolveStyleDNA(
   // 1. Built-in styles
   if (targetId && Object.hasOwn(BUILTIN_STYLE_DNA, targetId)) {
     const dna = BUILTIN_STYLE_DNA[targetId]!;
+    const explicitOverride = selectedStyleId !== undefined && selectedStyleId !== null && selectedStyleId !== config.selectedSharedStyleId;
+    const defaults = BUILTIN_STYLE_DEFAULT_AFFIXES[targetId];
+    const cleanedPrefix = cleanStyleAffix(config.promptPrefix);
+    const cleanedSuffix = cleanStyleAffix(config.promptSuffix);
+    const isCustomizedPrefix = !explicitOverride
+      && cleanedPrefix.length > 0
+      && cleanedPrefix !== HISTORICAL_UNTOUCHED_ANIME_PREFIX
+      && cleanedPrefix !== cleanStyleAffix(defaults?.positive);
+    const isCustomizedSuffix = !explicitOverride
+      && cleanedSuffix.length > 0
+      && cleanedSuffix !== cleanStyleAffix(defaults?.suffix);
+    if (isCustomizedPrefix || isCustomizedSuffix) {
+      const inferred = inferPhotographicStyleTraits(
+        isCustomizedPrefix ? cleanedPrefix : '',
+        isCustomizedSuffix ? cleanedSuffix : ''
+      );
+      const mergedDNA: StyleDNA = {
+        ...dna,
+        ...(isCustomizedPrefix ? { prefix: cleanedPrefix, ...(dna.medium ? {} : { medium: cleanedPrefix }) } : {}),
+        ...(isCustomizedSuffix ? { suffix: cleanedSuffix } : {}),
+        ...(inferred.cameraHints ? { cameraHints: [...new Set([...(dna.cameraHints ?? []), ...inferred.cameraHints])] } : {})
+      };
+      return {
+        styleDNA: mergedDNA,
+        source: 'builtin',
+        isLegacyLiteral: false,
+        ...(mergedDNA.lightingOverlay ? { lightingOverlay: mergedDNA.lightingOverlay } : {})
+      };
+    }
     return {
       styleDNA: dna,
       source: 'builtin',
@@ -249,12 +326,13 @@ export function resolveStyleDNA(
   // 3. User custom preset or custom prefix/suffix: preserve as legacy-literal
   const cleanedPrefix = cleanStyleAffix(config.promptPrefix);
   const cleanedSuffix = cleanStyleAffix(config.promptSuffix);
+  const cleanedNegative = config.negativePrompt?.trim() ?? '';
   if (cleanedPrefix.length > 0 || cleanedSuffix.length > 0) {
     const inferred = inferPhotographicStyleTraits(cleanedPrefix, cleanedSuffix);
-    const hasCustomCameraOrSuffix = cleanedSuffix.length > 0 || Boolean(inferred.cameraHints?.length);
     const legacyDNA: StyleDNA = {
-      ...(cleanedPrefix ? { medium: cleanedPrefix, ...(hasCustomCameraOrSuffix ? { prefix: cleanedPrefix } : {}) } : {}),
+      ...(cleanedPrefix ? { medium: cleanedPrefix, prefix: cleanedPrefix } : {}),
       ...(cleanedSuffix ? { suffix: cleanedSuffix } : {}),
+      ...(cleanedNegative && cleanedNegative !== HISTORICAL_UNTOUCHED_ANIME_PREFIX ? { negative: cleanedNegative } : {}),
       ...inferred,
       preserve: ['scene-defined lighting', 'custom literal prefix/suffix wording']
     };

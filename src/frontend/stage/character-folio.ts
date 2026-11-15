@@ -24,6 +24,7 @@ export interface CharacterFolioHandlers {
   onDeleteDNA?:(dna:CharacterDNA,revision:number)=>void;
   onRestoreDNA?:(id:string,revision:number)=>void;
   onMergeDNA?:(id:string,otherId:string,revision:number)=>void;
+  onScrubSwipesDNA?: () => void;
   onDeleteImage?: (imageUrl: string) => void;
   onClose?: () => void;
 }
@@ -515,16 +516,16 @@ export class CharacterFolio implements WorkspaceSurface {
         .btn-field-autofill {
           position: absolute;
           right: 4px;
-          width: 26px;
-          height: 26px;
-          border-radius: 4px;
+          width: 34px;
+          height: 34px;
+          border-radius: 6px;
           border: none;
           background: transparent;
           color: var(--vn-shell-muted, #94a3b8);
           cursor: pointer;
           display: grid;
           place-items: center;
-          font-size: 13px;
+          font-size: 14px;
           transition: color 0.15s ease, background 0.15s ease;
         }
         .btn-field-autofill:hover {
@@ -1000,6 +1001,8 @@ export class CharacterFolio implements WorkspaceSurface {
     }
     this.renderRoster();
     const save=this.element.querySelector<HTMLButtonElement>('[data-dna-save]');if(save)save.disabled=!this.activeCharacterId||!this.dirty.has(this.activeCharacterId)||this.saving.has(this.activeCharacterId);
+    const stickyWrap=this.element.querySelector<HTMLElement>('[data-folio-sticky-save]');if(stickyWrap)stickyWrap.hidden=!this.activeCharacterId||!this.dirty.has(this.activeCharacterId);
+    const stickyBtn=this.element.querySelector<HTMLButtonElement>('[data-dna-sticky-save]');if(stickyBtn)stickyBtn.disabled=!this.activeCharacterId||!this.dirty.has(this.activeCharacterId)||this.saving.has(this.activeCharacterId);
     const saveState=this.element.querySelector('[data-dna-save-state]');if(saveState)saveState.textContent=this.activeCharacterId&&this.dirty.has(this.activeCharacterId)?'Unsaved changes — Save changes to use in pictures':'Saved DNA is used for matching pictured characters';
     const focused=document.activeElement;if(!focused||!this.element.contains(focused)||!focused.matches('input,textarea'))this.renderDetail();
   }
@@ -1152,6 +1155,16 @@ export class CharacterFolio implements WorkspaceSurface {
     };
     this.rosterCarousel.append(addChip);
     const last=Object.values(this.deleted).at(-1);if(last){const undo=document.createElement('button');undo.type='button';undo.className='folio-action-btn';undo.textContent='Undo delete';undo.onclick=()=>this.handlers.onRestoreDNA?.(last.id,this.revision);this.rosterCarousel.append(undo);}
+    if (this.handlers.onScrubSwipesDNA && Object.values(this.library).some(c => c.autoDiscovered && !c.locked)) {
+      const scrubBtn = document.createElement('button');
+      scrubBtn.type = 'button';
+      scrubBtn.className = 'folio-action-btn';
+      scrubBtn.setAttribute('data-dna-scrub-swipes', '');
+      scrubBtn.textContent = '🧹 Scrub Swipes';
+      scrubBtn.title = 'Remove un-locked auto-discovered characters from discarded swipes';
+      scrubBtn.onclick = () => this.handlers.onScrubSwipesDNA?.();
+      this.rosterCarousel.append(scrubBtn);
+    }
   }
 
   private renderDetail(): void {
@@ -1288,6 +1301,10 @@ export class CharacterFolio implements WorkspaceSurface {
       this.dirty.add(char.id);
       const save = this.element.querySelector<HTMLButtonElement>('[data-dna-save]');
       if (save) save.disabled = this.saving.has(char.id);
+      const sw = this.element.querySelector<HTMLElement>('[data-folio-sticky-save]');
+      if (sw) sw.hidden = false;
+      const sb = this.element.querySelector<HTMLButtonElement>('[data-dna-sticky-save]');
+      if (sb) sb.disabled = this.saving.has(char.id);
       const idGridInput = this.element.querySelector<HTMLInputElement>(`#dna-${char.id}-Aliases---Known-As`);
       if (idGridInput && idGridInput !== aliasInput) idGridInput.value = aliasInput.value;
     };
@@ -1356,6 +1373,29 @@ export class CharacterFolio implements WorkspaceSurface {
     } else if (this.activeSubTab === 'cgs') {
       this.renderCgsTab(char, lore);
     }
+
+    const stickySave = document.createElement('div');
+    stickySave.setAttribute('data-folio-sticky-save', '');
+    stickySave.hidden = !this.dirty.has(char.id);
+    stickySave.style.cssText = 'position:sticky;bottom:0;z-index:8;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-radius:10px;background:rgba(15,23,42,0.96);border:1px solid rgba(110,231,183,0.45);box-shadow:0 8px 24px rgba(0,0,0,0.45);margin-top:8px;';
+    const stickyMsg = document.createElement('span');
+    stickyMsg.style.cssText = 'font-size:12px;color:#cbd5e1;';
+    stickyMsg.textContent = `Unsaved DNA edits for ${char.name}`;
+    const stickyBtn = document.createElement('button');
+    stickyBtn.type = 'button';
+    stickyBtn.className = 'folio-action-btn btn-accent';
+    stickyBtn.setAttribute('data-dna-sticky-save', '');
+    stickyBtn.textContent = 'Save changes';
+    stickyBtn.disabled = this.saving.has(char.id);
+    stickyBtn.onclick = () => {
+      this.cancelProposal();
+      char.autoDiscovered = false;
+      this.saving.add(char.id);
+      stickyBtn.disabled = true;
+      this.handlers.onSaveDNA?.(structuredClone(char), this.revision);
+    };
+    stickySave.append(stickyMsg, stickyBtn);
+    this.detailContainer.append(stickySave);
   }
 
   private renderDnaTab(char: CharacterDNA, isMale: boolean): void {
@@ -1383,6 +1423,8 @@ export class CharacterFolio implements WorkspaceSurface {
       this.cancelProposal();
       char.lastUpdated=Math.max(Date.now(),char.lastUpdated+1);this.dirty.add(char.id);
       const save=this.element.querySelector<HTMLButtonElement>('[data-dna-save]');if(save)save.disabled=this.saving.has(char.id);
+      const sw=this.element.querySelector<HTMLElement>('[data-folio-sticky-save]');if(sw)sw.hidden=false;
+      const sb=this.element.querySelector<HTMLButtonElement>('[data-dna-sticky-save]');if(sb)sb.disabled=this.saving.has(char.id);
       updatePreview();
     };
 
@@ -1620,16 +1662,46 @@ export class CharacterFolio implements WorkspaceSurface {
     webHeader.className = 'folio-group-header';
     const webTitle = document.createElement('h4');
     webTitle.textContent = '🕸️ Relationship Constellation Web';
+    const webHeaderRight = document.createElement('div');
+    webHeaderRight.style.cssText = 'display:flex;align-items:center;gap:6px;';
+    const zoomControls = document.createElement('div');
+    zoomControls.style.cssText = 'display:inline-flex;gap:3px;';
+    let zoomLevel = 1;
+    const applyZoom = () => {
+      const svgEl = webBox.querySelector('svg');
+      if (svgEl) {
+        (svgEl as unknown as HTMLElement).style.transform = `scale(${zoomLevel})`;
+        (svgEl as unknown as HTMLElement).style.transformOrigin = 'center center';
+        (svgEl as unknown as HTMLElement).style.transition = 'transform 0.16s ease';
+      }
+    };
+    const mkZoomBtn = (lbl: string, title: string, onClick: () => void) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'folio-action-btn';
+      b.textContent = lbl;
+      b.title = title;
+      b.style.cssText = 'padding:2px 7px;font-size:10px;min-height:22px;';
+      b.onclick = onClick;
+      return b;
+    };
+    zoomControls.append(
+      mkZoomBtn('−', 'Zoom out constellation', () => { zoomLevel = Math.max(0.75, Number((zoomLevel - 0.15).toFixed(2))); applyZoom(); }),
+      mkZoomBtn('1:1', 'Reset constellation zoom', () => { zoomLevel = 1; applyZoom(); }),
+      mkZoomBtn('+', 'Zoom in constellation', () => { zoomLevel = Math.min(1.6, Number((zoomLevel + 0.15).toFixed(2))); applyZoom(); }),
+    );
     const webBadge = document.createElement('span');
     webBadge.style.fontSize = '10px';
     webBadge.style.opacity = '0.7';
     webBadge.textContent = `${bonds.length} BOND${bonds.length === 1 ? '' : 'S'}`;
+    webHeaderRight.append(zoomControls, webBadge);
     webHeader.appendChild(webTitle);
-    webHeader.appendChild(webBadge);
+    webHeader.appendChild(webHeaderRight);
     webCard.appendChild(webHeader);
 
     const webBox = document.createElement('div');
     webBox.className = 'rel-web-wrap';
+    webBox.style.overflow = 'hidden';
     webBox.setAttribute('data-relationship-web', char.id);
 
     const cx = 210;
@@ -1666,13 +1738,13 @@ export class CharacterFolio implements WorkspaceSurface {
         const shortTarget = bond.targetName.length > 18 ? `${bond.targetName.slice(0, 16)}…` : bond.targetName;
 
         svgLines.push(
-          `<line x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-opacity="0.72" />`,
+          `<line class="rel-pulse-filament" x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-opacity="0.78" stroke-dasharray="6 4"><animate attributeName="stroke-dashoffset" from="20" to="0" dur="2.2s" repeatCount="indefinite" /></line>`,
           `<rect x="${mx - 26}" y="${my - 9}" width="52" height="16" rx="8" fill="#0f172a" stroke="${strokeColor}" stroke-opacity="0.65" stroke-width="0.9" />`,
           `<text x="${mx}" y="${my + 2.5}" text-anchor="middle" fill="${strokeColor}" font-size="8.5" font-weight="700">${this.escapeSvgText(affLabel)}</text>`
         );
 
         svgNodes.push(
-          `<g class="rel-web-node" data-constellation-node="${this.escapeSvgText(bond.targetName)}">`,
+          `<g class="rel-web-node" data-constellation-node="${this.escapeSvgText(bond.targetName)}" style="cursor:pointer;">`,
           `<circle cx="${nx}" cy="${ny}" r="18" fill="rgba(15,23,42,0.94)" stroke="${strokeColor}" stroke-width="2" />`,
           `<text x="${nx}" y="${ny + 3.5}" text-anchor="middle" fill="#f8fafc" font-size="9.5" font-weight="700">${this.escapeSvgText((bond.targetName[0] || '?').toUpperCase())}</text>`,
           `<text x="${nx}" y="${ny + 30}" text-anchor="middle" fill="#e2e8f0" font-size="9.5" font-weight="600">${this.escapeSvgText(shortTarget)}</text>`,
@@ -1687,9 +1759,69 @@ export class CharacterFolio implements WorkspaceSurface {
 
     webBox.innerHTML = `<svg viewBox="0 0 420 220" class="rel-web-svg" role="img" aria-label="Relationship constellation for ${this.escapeSvgText(char.name)}">${svgLines.join('')}${svgNodes.join('')}${centerGroup}</svg>`;
 
+    const confidantInspector = document.createElement('div');
+    confidantInspector.setAttribute('data-confidant-inspector', '');
+    confidantInspector.hidden = true;
+    confidantInspector.style.cssText = 'margin-top:8px;padding:10px 12px;border-radius:8px;border:1px solid rgba(110,231,183,0.3);background:rgba(15,23,42,0.88);display:flex;flex-direction:column;gap:6px;';
+
     for (const nodeEl of webBox.querySelectorAll('[data-constellation-node]')) {
       (nodeEl as unknown as HTMLElement).addEventListener('click', () => {
         const target = nodeEl.getAttribute('data-constellation-node') || '';
+        const bond = bonds.find(b => b.targetName === target);
+        if (bond) {
+          confidantInspector.hidden = false;
+          confidantInspector.replaceChildren();
+          const inspHead = document.createElement('div');
+          inspHead.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;';
+          const inspTitle = document.createElement('strong');
+          inspTitle.style.cssText = 'font-size:12.5px;color:#f8fafc;';
+          inspTitle.textContent = `${bond.targetName} (${bond.affinity >= 0 ? `+${bond.affinity}` : bond.affinity} affinity · Trust ${bond.trust})`;
+          const inspClose = document.createElement('button');
+          inspClose.type = 'button';
+          inspClose.textContent = '×';
+          inspClose.className = 'folio-action-btn';
+          inspClose.style.cssText = 'padding:1px 6px;min-height:20px;font-size:13px;';
+          inspClose.onclick = () => { confidantInspector.hidden = true; };
+          inspHead.append(inspTitle, inspClose);
+          const inspMeta = document.createElement('div');
+          inspMeta.style.cssText = 'font-size:11.5px;color:#cbd5e1;';
+          inspMeta.textContent = [bond.dynamicLabel, bond.status].filter(Boolean).join(' — ') || 'No bond notes recorded yet.';
+          const inspActions = document.createElement('div');
+          inspActions.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;';
+          if (!bond.fromRpgCompanion) {
+            const boostBtn = document.createElement('button');
+            boostBtn.type = 'button';
+            boostBtn.className = 'folio-action-btn btn-accent';
+            boostBtn.style.cssText = 'padding:3px 9px;min-height:24px;font-size:11px;';
+            boostBtn.textContent = '+5 Affinity';
+            boostBtn.onclick = () => {
+              const nextRels = structuredClone(char.relationships ?? []);
+              const entry = nextRels.find(r => r.targetName === bond.targetName);
+              if (entry) {
+                entry.affinity = Math.min(100, (entry.affinity ?? 0) + 5);
+                entry.lastUpdated = Date.now();
+                persistRelationships(nextRels, `Raised affinity with ${bond.targetName}.`);
+              }
+            };
+            inspActions.append(boostBtn);
+          }
+          const editCardBtn = document.createElement('button');
+          editCardBtn.type = 'button';
+          editCardBtn.className = 'folio-action-btn';
+          editCardBtn.style.cssText = 'padding:3px 9px;min-height:24px;font-size:11px;';
+          editCardBtn.textContent = 'Edit Bond Card';
+          editCardBtn.onclick = () => {
+            const cards = wrap.querySelectorAll('.rel-bond-card');
+            for (const c of cards) {
+              if (c.getAttribute('data-bond-target') === target) {
+                (c as unknown as { scrollIntoView?: (opts?: unknown) => void }).scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+                c.querySelector<HTMLInputElement>('[data-bond-dynamic]')?.focus?.();
+              }
+            }
+          };
+          inspActions.append(editCardBtn);
+          confidantInspector.append(inspHead, inspMeta, inspActions);
+        }
         const cards = wrap.querySelectorAll('.rel-bond-card');
         for (const c of cards) c.classList.remove('is-highlighted');
         for (const c of cards) {
@@ -1703,7 +1835,7 @@ export class CharacterFolio implements WorkspaceSurface {
       });
     }
 
-    webCard.append(webBox);
+    webCard.append(webBox, confidantInspector);
     wrap.append(webCard);
 
     // 2. Editable Bond Cards

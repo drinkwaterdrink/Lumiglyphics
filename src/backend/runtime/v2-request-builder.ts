@@ -53,7 +53,7 @@ export function buildV2ImageRequest(input:V2ImageRequestInput):{request:ImageGen
  const outputPlan=resolveImageOutputPlan({capabilities:profile.outputCapabilities,parameters:input.planParameters??request.parameters,requestedRatio:config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined,resolutionPreference:config.imageResolutionPreference,source:profile.capabilitySource,modelId:request.model});
  const styleSnapshot=resolveStyleDNA(config,input.styleId);
  const effectiveStyleDNA:StyleDNA={...styleSnapshot.styleDNA};
- if(cue.imageTemplate&&!input.styleId&&!cue.imageTemplate.positive.includes('{{suffix}}')){
+ if(cue.imageTemplate&&!input.styleId&&cue.imageTemplate.positive.includes('{{style}}')&&!cue.imageTemplate.positive.includes('{{suffix}}')){
   delete effectiveStyleDNA.suffix;
  }
  const overrides=manualCameraOverrides(rebuild?.manualCamera);

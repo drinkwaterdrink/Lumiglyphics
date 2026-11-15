@@ -21,7 +21,8 @@ export const DnaRequestSchema=z.discriminatedUnion('action',[
  z.object({...envelope,action:z.literal('apply'),proposalId:z.string().min(1).max(128),fields:z.array(DnaFieldSchema).min(1).max(19)}).strict(),
  z.object({...envelope,action:z.literal('cancel')}).strict(),
  z.object({...envelope,action:z.enum(['delete','restore']),characterId:z.string().min(1).max(256),dna:CharacterDNASchema.optional(),revision:z.number().int().nonnegative()}).strict(),
- z.object({...envelope,action:z.literal('merge'),characterId:z.string().min(1).max(256),otherId:z.string().min(1).max(256),revision:z.number().int().nonnegative()}).strict()
+ z.object({...envelope,action:z.literal('merge'),characterId:z.string().min(1).max(256),otherId:z.string().min(1).max(256),revision:z.number().int().nonnegative()}).strict(),
+ z.object({...envelope,action:z.literal('scrub_swipes'),activeSwipeId:z.string().max(160).optional(),validSwipeIds:z.array(z.string().max(160)).max(64).optional()}).strict()
 ]);
 export type DnaRequest=z.infer<typeof DnaRequestSchema>;
 export function dnaFieldValue(dna:CharacterDNA,path:DnaField):string|string[]|undefined{const[a,b]=path.split('.');return b?(dna as any)[a!]?.[b]:(dna as any)[a!];}

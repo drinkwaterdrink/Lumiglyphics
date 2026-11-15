@@ -2,6 +2,7 @@ import { createPromptDocument, type PromptSection } from '../../../shared/prompt
 import type { SerializerInput, SerializerResult } from './types.js';
 import {
   parseSubjectsFromBrief,
+  formatCameraFraming,
   formatSceneProse,
   sanitizeQuoteAndUnitNotation,
   formatStyleDNAProse,
@@ -183,7 +184,9 @@ export function serializeFlux3Klein(input: SerializerInput): SerializerResult {
       box: singleBox
     });
 
-    const subjectClause = `In the center foreground, <${label}> ${s.name} (${s.appearance}${attireStr}) is ${actionStr.replace(/\.+$/, '')}.`.replace(/\s+/g, ' ').replace(/,\s*\./g, '.');
+    const subjectAnchor = resolved0?.anchor ?? 'In the center foreground';
+    const stagingSuffix = shotSpec.composition.stagingNote ? ` ${sanitizeQuoteAndUnitNotation(shotSpec.composition.stagingNote.trim().replace(/\.+$/, ''))}.` : '';
+    const subjectClause = `${subjectAnchor}, <${label}> ${s.name} (${s.appearance}${attireStr}) is ${actionStr.replace(/\.+$/, '')}.${stagingSuffix}`.replace(/\s+/g, ' ').replace(/,\s*\./g, '.').trim();
 
     sections.push({
       id: 'subject-action',
@@ -275,6 +278,31 @@ export function serializeFlux3Klein(input: SerializerInput): SerializerResult {
       required: false,
       compressible: true,
       text: `Above, <${typographyLabel}> displays clean legible lettering that reads exactly "${quoted}", the only text in the scene.`
+    });
+  }
+
+  // 4b. Camera & Framing (P1)
+  const cameraText = formatCameraFraming(shotSpec, styleDNA);
+  if (cameraText) {
+    sections.push({
+      id: 'camera-framing',
+      priority: 1,
+      required: false,
+      compressible: true,
+      text: `Shot composition: ${cameraText}.`
+    });
+  }
+
+  // 4c. Visual Treatment & Style DNA (P1/P2)
+  const rawStyleText = formatStyleDNAProse(styleDNA);
+  if (rawStyleText) {
+    const styleText = isPhoto ? rawStyleText.replace(/\bphotorealistic\b/gi, 'lifelike natural') : rawStyleText;
+    sections.push({
+      id: 'visual-style',
+      priority: styleDNA.preserve ? 1 : 2,
+      required: false,
+      compressible: !styleDNA.preserve,
+      text: `Visual treatment: ${styleText}.`
     });
   }
 

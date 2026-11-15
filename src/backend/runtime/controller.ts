@@ -5,7 +5,9 @@ import {ImageUsageLedger} from './image-usage.js';
 import {ImageDispatchPolicy} from './image-dispatch-policy.js';
 import type {ImageActivityInput} from '../../shared/image-usage.js';
 import {resolveSceneAmbient} from '../../shared/scene-atmosphere.js';
-import { createEmptyCharacterDNA, findCharacterDNA, swipeTurnTag } from '../../shared/character-dna.js';
+import { createEmptyCharacterDNA, findCharacterDNA, scrubCharacterDNASwipes, swipeTurnTag } from '../../shared/character-dna.js';
+import { scrubStoryDNASwipes } from '../../shared/story-dna.js';
+import type { AssetScheduler } from '../core/asset-scheduler.js';
 import { mutateCharacterDnaLibrary } from './character-dna-store.js';
 import { handleCharacterDnaRequest } from './character-dna-workflow.js';
 import {handleStoryDnaRequest} from './story-dna-workflow.js';
@@ -45,6 +47,7 @@ import type { ImageRequestEdits } from '../../shared/image-review.js';
 import { extractSimTracker } from "./simtracker.js";
 import { templateSnapshot } from "../../shared/image-templates.js";
 const imageReviewGates = new Map<string, ImageReviewGate>();
+const activeAssetSchedulers = new Map<string, { scheduler: AssetScheduler; key: StoredTurnRecord['plan']['key']; jobs: StoredTurnRecord['jobs'] }>();
 const preparingSingleImages = new Map<string,symbol>();
 /** A restored job supersedes only its own work; other jobs keep their batch. */
 const assetBatchOperations=new Map<string,{
@@ -948,6 +951,7 @@ async function startAssets(
   };
   const gate=new ImageReviewGate(recordRequest);
   operations.approveHeld=async requestId=>{const request=current.imageRequests?.find(item=>item.requestId===requestId);if(!request||request.state!=='prepared'||requestIds.get(request.jobId)!==requestId||!heldJobs.has(request.jobId)||!ownsBatch()||!views.isOpen(userId,record.plan.key.chatId)||operations.overrides.has(request.jobId))return false;heldJobs.delete(request.jobId);await recordRequest({...request,state:'approved'});return ownsBatch();};
+  let batchScheduler: AssetScheduler | undefined;
   imageReviewGates.set(key, gate);
   const mergeJobs = (jobs: StoredTurnRecord["jobs"]): StoredTurnRecord["jobs"] => (options.onlyJobId ? current.jobs.map((job) => jobs.find((entry) => entry.jobId === job.jobId) ?? job) : jobs).map(job=>operations.overrides.get(job.jobId)??job);
   const batchPlan = options.onlyJobId ? { ...record.plan, visualCues: [...record.plan.visualCues, ...(record.plan.cacheCues ?? [])].filter((cue) => cue.assetJobId === options.onlyJobId), cacheCues: [] } : record.plan;
@@ -967,6 +971,8 @@ async function startAssets(
         if (assetControllers.get(key) !== controller) return;
         if (!compareTurnKeys(active, changed.ownerTurnKey).accepted) return;
         current = { ...current, jobs: mergeJobs(jobs), updatedAt: new Date().toISOString() };
+        const schedEntry = activeAssetSchedulers.get(key);
+        if (schedEntry && schedEntry.scheduler === batchScheduler) schedEntry.jobs = current.jobs;
         await saveBatch();
         const asset=await assetViewWithCastArt(spindle,current,changed,userId);
         if(controller.signal.aborted||(assetControllers.has(key)&&assetControllers.get(key)!==controller)||!compareTurnKeys(activeTurnKeys.get(key)??null,changed.ownerTurnKey).accepted)return;
@@ -985,6 +991,10 @@ async function startAssets(
       userId,
       {
         sceneCache, admission,
+        onScheduler: (scheduler) => {
+          batchScheduler = scheduler;
+          activeAssetSchedulers.set(key, { scheduler, key: record.plan.key, jobs: batchJobs });
+        },
         onActivity:event=>{if(event.kind==='provider-start')heldJobs.delete(event.jobId);publishImageActivity(spindle,userId,record.plan.key.chatId,event);},
         requestIdForJob:jobId=>requestIds.get(jobId),
         canDispatch:job=>dispatch.allowed(userId,manualJobs.has(job.jobId),ownsBatch()&&views.isOpen(userId,record.plan.key.chatId)),
@@ -1045,6 +1055,7 @@ async function startAssets(
     if(assetBatchOperations.get(key)?.owner===controller)assetBatchOperations.delete(key);
     if (assetControllers.get(key) === controller) assetControllers.delete(key);
     if (imageReviewGates.get(key) === gate) imageReviewGates.delete(key);
+    if (batchScheduler && activeAssetSchedulers.get(key)?.scheduler === batchScheduler) activeAssetSchedulers.delete(key);
     imageRetryQueues.get(key)?.queue.wake();
   }
 }
@@ -1054,7 +1065,7 @@ async function startAssets(
 function releaseAbortedImageBatch(key:string):void {
  if(!assetControllers.get(key)?.signal.aborted)return;
  assetBatchOperations.delete(key);
- assetControllers.delete(key);imageReviewGates.delete(key);preparingSingleImages.delete(key);
+ assetControllers.delete(key);imageReviewGates.delete(key);activeAssetSchedulers.delete(key);preparingSingleImages.delete(key);
 }
 
 async function prepareSingleImage(spindle: SpindleAPI, request: Extract<FrontendRequest, { type: "vn_prepare_image" | "vn_correct_image_subject" }>, userId: string, quick?:QueuedRetryContext): Promise<void> {
@@ -1446,8 +1457,25 @@ async function processAssistantMessage(
             }
           }
         }
-        if (turnCastNames.size > 0) {
+        const prevLocationName = replacesGreeting
+          ? null
+          : isReswipeOrReplan
+            ? (priorTurnRecord?.plan.scenes.at(-1)?.environment.location ?? null)
+            : (chatState.latestScene?.environment.location ?? null);
+        const nextLocationName = result.plan.scenes.at(-1)?.environment.location ?? null;
+        const locationChanged = Boolean(
+          prevLocationName && nextLocationName
+          && prevLocationName.trim().toLowerCase() !== nextLocationName.trim().toLowerCase()
+        );
+        if (turnCastNames.size > 0 || locationChanged || isReswipeOrReplan) {
           await mutateCharacterDnaLibrary(spindle, chatId, userId, undefined, l => {
+            if (locationChanged) {
+              for (const char of Object.values(l.characters)) {
+                if (!char.locked && char.transientConditions?.length) {
+                  char.transientConditions = [];
+                }
+              }
+            }
             for (const rawName of turnCastNames) {
               const name = rawName.trim();
               if (!name || isScenarioTitle(name)) continue;
@@ -1466,15 +1494,21 @@ async function processAssistantMessage(
                 }
               }
             }
+            if (isReswipeOrReplan) {
+              const scrubbed = scrubCharacterDNASwipes(l, { [record.plan.key.assistantMessageId]: swipeTag });
+              l.characters = scrubbed.characters;
+            }
           });
         }
-        const prevLocationName = replacesGreeting
-          ? null
-          : isReswipeOrReplan
-            ? (priorTurnRecord?.plan.scenes.at(-1)?.environment.location ?? null)
-            : (chatState.latestScene?.environment.location ?? null);
         await mutateStoryDNASet(spindle, chatId, userId, undefined, (set) => {
           harvestTurnStoryDNA(record.plan, set, swipeTag, prevLocationName, { mindLedgerEnabled: config.mindLedgerEnabled, chapterCodexEnabled: config.chapterCodexEnabled });
+          if (isReswipeOrReplan) {
+            const scrubbed = scrubStoryDNASwipes(set, { [record.plan.key.assistantMessageId]: swipeTag });
+            set.locations = scrubbed.locations;
+            set.items = scrubbed.items;
+            set.thoughtCabinet = scrubbed.thoughtCabinet;
+            set.chapterCodex = scrubbed.chapterCodex;
+          }
         });
       } catch {}
     }
@@ -2155,6 +2189,20 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
         || record.plan.key.sourceFingerprint !== position.key.sourceFingerprint
         || position.paragraphIndex >= record.plan.paragraphs.length) return;
       await saveReadingPosition(spindle, position, userId);
+      const schedEntry = activeAssetSchedulers.get(runtimeKey(userId, position.key.chatId));
+      if (schedEntry
+        && schedEntry.key.assistantMessageId === position.key.assistantMessageId
+        && String(schedEntry.key.swipeId ?? 0) === String(position.key.swipeId ?? 0)
+        && schedEntry.key.sourceFingerprint === position.key.sourceFingerprint) {
+        for (const job of schedEntry.jobs) {
+          if (job.status !== "queued") continue;
+          if (job.paragraphIndex === position.paragraphIndex) {
+            schedEntry.scheduler.reprioritize(job.jobId, "visible");
+          } else if (job.paragraphIndex > position.paragraphIndex && job.paragraphIndex <= position.paragraphIndex + 2) {
+            schedEntry.scheduler.reprioritize(job.jobId, "next");
+          }
+        }
+      }
       return;
     }
     case "vn_get_connection_catalog": {

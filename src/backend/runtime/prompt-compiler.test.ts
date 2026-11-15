@@ -252,4 +252,46 @@ describe('Model-Aware Prompt Engine v2: Compiler & Budgeting', () => {
     expect(lintLimit.valid).toBe(false);
     expect(lintLimit.errors.some(e => e.includes('Hard prompt character limit exceeded'))).toBe(true);
   });
+
+  it('preserves full custom style prefix + suffix and rich scene details >= 1200 chars for FLUX.3 Klein & Generic Prose', () => {
+    const richBrief = createMockBrief({
+      subjectMode: 'ensemble',
+      subjects: [
+        'Marseline: tall elf scholar, silver-white braided hair, amber eyes, emerald spectacles, wearing velvet embroidered cloak and satchel',
+        'Julian: broad-shouldered clockmaker, copper-streaked stubble, grease-smudged linen shirt, brass monocle, leather work apron'
+      ].join('\n'),
+      action: 'examining a glowing brass astrolabe laid out over hand-drawn star charts across the oak workbench while gesturing toward a fracture in the outer gimbal',
+      scene: 'A vaulted obsidian-and-brass clockwork observatory perched high above a mist-shrouded canyon at midnight, ringed with towering arched lancet windows, brass telescopes, celestial murals, stacks of leatherbound folios, and wet rain streaks across cold leaded panes',
+      lighting: 'warm amber lantern glow cutting through cool azure moonlight filtering from high clerestory arches with soft dust motes suspended in the air',
+      composition: 'medium two-shot across the foreground workbench with deep architectural perspective toward the observatory dome'
+    });
+    const customConfig = {
+      ...DEFAULT_CONFIG,
+      selectedSharedStyleId: '',
+      promptPrefix: 'Rich painterly theatrical digital illustration with crisp ink contours, luminous volumetric rim light, and fine hand-painted gouache texture',
+      promptSuffix: 'filmic anamorphic lens depth, rich atmospheric perspective, crisp material textures across brass, velvet, and weathered parchment',
+      imagePromptDetail: 'detailed' as const
+    };
+    const styleSnapshot = resolveStyleDNA(customConfig);
+    expect(styleSnapshot.styleDNA.prefix).toBe(customConfig.promptPrefix);
+    expect(styleSnapshot.styleDNA.suffix).toBe(customConfig.promptSuffix);
+
+    for (const modelId of ['blackforestlabs/flux-3/klein/text-to-image', 'custom/unknown-prose-model']) {
+      const profile = resolveImagePromptProfileV2('nanogpt', modelId);
+      const outputPlan = resolveImageOutputPlan({ capabilities: profile.outputCapabilities, source: 'catalogue', modelId: profile.exactModel });
+      const shotSpec = resolveShotSpec({ brief: richBrief, outputPlan, styleDNA: styleSnapshot.styleDNA });
+      const compiled = compileModelPrompt({
+        brief: richBrief,
+        shotSpec,
+        styleDNA: styleSnapshot.styleDNA,
+        profile,
+        outputPlan,
+        detailLevel: 'detailed',
+        cue: { subjectCategory: 'ensemble', ensembleSubjects: [{ name: 'Marseline' }, { name: 'Julian' }] } as any
+      });
+      expect(compiled.prompt).toContain('Rich painterly theatrical digital illustration');
+      expect(compiled.prompt.toLowerCase()).toContain('filmic anamorphic lens depth');
+      expect(compiled.prompt.length).toBeGreaterThanOrEqual(1200);
+    }
+  });
 });

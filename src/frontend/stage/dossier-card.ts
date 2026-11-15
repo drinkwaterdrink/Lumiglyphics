@@ -440,18 +440,18 @@ export class DossierCard {
       editBtn.title = 'Edit reference fact';
       editBtn.className = 'fact-edit-btn';
       editBtn.textContent = '✏️';
-      editBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:11px;opacity:0.6;padding:0 2px;';
+      editBtn.style.cssText = 'width:26px;height:26px;min-width:26px;min-height:26px;display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);border-radius:6px;cursor:pointer;font-size:12px;opacity:0.78;padding:0;';
       editBtn.onmouseenter = () => { editBtn.style.opacity = '1'; };
-      editBtn.onmouseleave = () => { editBtn.style.opacity = '0.6'; };
+      editBtn.onmouseleave = () => { editBtn.style.opacity = '0.78'; };
 
       const delBtn = document.createElement('button');
       delBtn.type = 'button';
       delBtn.title = 'Delete reference fact';
       delBtn.className = 'fact-del-btn';
       delBtn.textContent = '🗑️';
-      delBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:11px;opacity:0.6;padding:0 2px;';
+      delBtn.style.cssText = 'width:26px;height:26px;min-width:26px;min-height:26px;display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);border-radius:6px;cursor:pointer;font-size:12px;opacity:0.78;padding:0;';
       delBtn.onmouseenter = () => { delBtn.style.opacity = '1'; };
-      delBtn.onmouseleave = () => { delBtn.style.opacity = '0.6'; };
+      delBtn.onmouseleave = () => { delBtn.style.opacity = '0.78'; };
 
       editBtn.onclick = () => {
         if (dd.querySelector('.fact-edit-input')) return;
@@ -486,6 +486,10 @@ export class DossierCard {
             const match = dossier.facts.find(f => f.field === field);
             if (match) match.value = newVal;
             if (dossier.state && field in dossier.state) dossier.state[field] = newVal;
+            const notePrefix = `${field}: `;
+            const existingLines = (entityOverride(prefs, chatId, dossier.entity)?.note || '').split('\n').filter((l: string) => l.trim() && !l.startsWith(notePrefix));
+            existingLines.push(`${notePrefix}${newVal}`);
+            this.update(dossier.entity, { note: existingLines.join('\n').slice(0, 280) });
           }
           renderText(activeVal);
           editWrap.remove();
@@ -515,6 +519,9 @@ export class DossierCard {
         const idx = dossier.facts.findIndex(f => f.field === field);
         if (idx >= 0) dossier.facts.splice(idx, 1);
         if (dossier.state && field in dossier.state) delete dossier.state[field];
+        const notePrefix = `${field}: `;
+        const remainingLines = (entityOverride(prefs, chatId, dossier.entity)?.note || '').split('\n').filter((l: string) => l.trim() && !l.startsWith(notePrefix));
+        this.update(dossier.entity, { note: remainingLines.join('\n').slice(0, 280) });
       };
 
       actionSpan.append(editBtn, delBtn);

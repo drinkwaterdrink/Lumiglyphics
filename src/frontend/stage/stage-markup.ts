@@ -133,7 +133,7 @@ export const THEME_MARKUP = `
             title="Continue (Enter)"
           ><span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span></button>
 
-          <button data-vn-control="auto" type="button" aria-label="Auto play" aria-pressed="false" aria-keyshortcuts="A" title="Auto play (A)" style="display:none">
+          <button data-vn-control="auto" type="button" aria-label="Auto play" aria-pressed="false" aria-keyshortcuts="A" title="Auto play (A)">
             <span data-vn-auto-ring aria-hidden="true">
               <svg viewBox="0 0 16 16" width="14" height="14">
                 <circle class="vn-auto-track" cx="8" cy="8" r="6" fill="none" stroke-width="2" />
@@ -142,7 +142,7 @@ export const THEME_MARKUP = `
             </span>
             <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" focusable="false" fill="currentColor" stroke="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3.2v9.6L12.6 8z" /></svg></span><span data-vn-control-label>Auto</span>
           </button>
-          <button data-vn-control="skip" type="button" aria-label="Skip" aria-pressed="false" aria-describedby="vn-skip-description" aria-keyshortcuts="S" title="Skip (S)" style="display:none">
+          <button data-vn-control="skip" type="button" aria-label="Skip" aria-pressed="false" aria-describedby="vn-skip-description" aria-keyshortcuts="S" title="Skip (S)">
             <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" focusable="false" fill="currentColor" stroke="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3.5v9L7.6 8z" /><path d="M8.2 3.5v9L13.8 8z" /></svg></span><span data-vn-control-label>Skip</span>
           </button>
           <span id="vn-skip-description" data-vn-skip-description hidden></span>

@@ -1,7 +1,7 @@
 import {it,expect} from 'bun:test';
-import {filterLibraryForActiveBranch, handleCharacterDnaRequest, upsertTrackerRelationship} from './character-dna-workflow.js';
-import {saveCharacterDNA,loadCharacterDNALibrary} from './character-dna-store.js';
-import {createEmptyCharacterDNA, swipeTurnTag} from '../../shared/character-dna.js';
+import {activeMessageSwipeMap, filterLibraryForActiveBranch, handleCharacterDnaRequest, upsertTrackerRelationship} from './character-dna-workflow.js';
+import {loadCharacterDNALibrary, mutateCharacterDnaLibrary, saveCharacterDNA} from './character-dna-store.js';
+import {createEmptyCharacterDNA, scrubCharacterDNASwipes, swipeTurnTag} from '../../shared/character-dna.js';
 import {isFrontendRequest} from '../../protocol.js';
 function fixture(){const data=new Map<string,unknown>(),messages:any[]=[];const spindle:any={userStorage:{getJson:async(p:string,o:any)=>structuredClone(data.get(p)??o?.fallback??null),setJson:async(p:string,v:any)=>{data.set(p,structuredClone(v));}},sendToFrontend:(message:any,userId:string)=>messages.push({message,userId})};return{spindle,data,messages};}
 it('strictly rejects arbitrary caller JSON, invalid targets and unknown DNA fields',()=>{
@@ -108,4 +108,25 @@ it('upserts tracker relationships without duplicating identical message beats an
   };
   const filtered = filterLibraryForActiveBranch(lib, new Set([swipe1]));
   expect(Object.keys(filtered.characters).sort()).toEqual(['bram', 'locked', 'nadine']);
+
+  const map = activeMessageSwipeMap(new Set([swipe1]));
+  expect(map).toEqual({ m1: swipe1 });
+  const scrubbed = scrubCharacterDNASwipes(lib, map);
+  expect(Object.keys(scrubbed.characters).sort()).toEqual(['bram', 'locked', 'nadine']);
+});
+
+it('handles scrub_swipes action by removing discarded auto-discovered characters from storage', async () => {
+  const { spindle, data } = fixture();
+  const swipe0 = swipeTurnTag('m2', 0);
+  const swipe1 = swipeTurnTag('m2', 1);
+  spindle.chat = { getMessages: async () => [{ id: 'm2', swipe_id: 1 }] };
+  await mutateCharacterDnaLibrary(spindle, 'chat-scrub', 'u', undefined, l => {
+    l.characters.ghost = { ...createEmptyCharacterDNA('Ghost', 'ghost'), autoDiscovered: true, seenInSwipes: [swipe0] };
+    l.characters.keeper = { ...createEmptyCharacterDNA('Keeper', 'keeper'), autoDiscovered: true, seenInSwipes: [swipe1] };
+  });
+
+  await handleCharacterDnaRequest(spindle, { type: 'vn_character_dna', action: 'scrub_swipes', chatId: 'chat-scrub', requestId: 'req-scrub' }, 'u');
+  const after = await loadCharacterDNALibrary(spindle, 'chat-scrub', 'u');
+  expect(Object.keys(after.characters)).toEqual(['keeper']);
+  expect(data.size).toBeGreaterThan(0);
 });

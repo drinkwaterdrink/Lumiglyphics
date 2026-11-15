@@ -140,5 +140,17 @@ describe("RPG & Adventure Mode (AdventureTime-inspired systems)", () => {
       stress: 20,
     });
     assert.equal(chaCheck.modifier, 2);
+
+    const allyCheck = evaluateContextualSkillCheck(
+      { stat: "CHA", dc: 14, modifier: 0, rollMode: "normal", reason: "Convince Mira to open the vault" },
+      { ...start.vitals, companions: [{ name: "Mira", hp: 90, maxHp: 100, affinity: 80, status: "healthy" }] }
+    );
+    assert.equal(allyCheck.rollMode, "advantage");
+
+    const gearCheck = evaluateContextualSkillCheck(
+      { stat: "INT", dc: 13, modifier: 0, rollMode: "normal", reason: "Unlock the cipher with Brass Key" },
+      { ...start.vitals, inventory: ["Brass Key"] }
+    );
+    assert.equal(gearCheck.rollMode, "advantage");
   });
 });

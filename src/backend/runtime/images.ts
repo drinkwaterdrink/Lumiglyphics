@@ -358,9 +358,40 @@ export function compileImagePrompt(
 export function compileNovelAiRequest(config: VisualNovelConfig, scene: SceneState, cue: VisualCue, appearances?: CharacterAppearanceMap, characterDNALibrary?: CharacterDNALibrary | Record<string, CharacterDNA>, storyDNASet?: StoryDNASet) {
   if (cue.imageTemplate) {
     const compiled = compileTemplateCue(config, scene, cue, appearances, characterDNALibrary, storyDNASet);
+    const model = config.imageModel || "";
+    const caps = novelAiCapabilities(model);
+    if (config.imagePromptEngineVersion === 2 && caps.structured && cue.imageTemplate.subjectMode === "ensemble" && (cue.ensembleSubjects?.length ?? 0) > 0) {
+      const subjects = cue.ensembleSubjects!;
+      const spatialHints = cue.shotHint?.spatialRelationships ?? [];
+      const xSlots = subjects.length === 2 ? [0.28, 0.72] : subjects.length === 3 ? [0.20, 0.50, 0.80] : subjects.map((_, i) => Number((0.18 + (0.64 * i) / Math.max(1, subjects.length - 1)).toFixed(2)));
+      const characterTags = subjects.map((subject, index) => {
+        const nameLower = subject.name.toLowerCase();
+        const hintLine = spatialHints.find((h) => h.toLowerCase().includes(nameLower)) ?? "";
+        const horiz = /\bfar[- ]left\b/i.test(hintLine) ? "far-left"
+          : /\bfar[- ]right\b/i.test(hintLine) ? "far-right"
+          : /\bleft\b/i.test(hintLine) ? "left"
+          : /\bright\b/i.test(hintLine) ? "right"
+          : /\bcenter(?:ed)?\b/i.test(hintLine) ? "center"
+          : (index === 0 ? "left" : index === subjects.length - 1 ? "right" : "center");
+        const depth = /\bforeground\b/i.test(hintLine) ? "foreground"
+          : /\bmidground\b/i.test(hintLine) ? "midground"
+          : /\b(background|rear)\b/i.test(hintLine) ? "background"
+          : undefined;
+        const xMap: Record<string, number> = { "far-left": 0.16, "left": 0.28, "center": 0.50, "right": 0.72, "far-right": 0.84 };
+        const yMap: Record<string, number> = { foreground: 0.56, midground: 0.46, background: 0.36 };
+        const x = xMap[horiz] ?? xSlots[index] ?? 0.50;
+        const y = depth ? (yMap[depth] ?? 0.50) : 0.50;
+        const rawTags = [subject.appearance, subject.attire ? `wearing ${subject.attire}` : ""].filter(Boolean).join(", ");
+        return {
+          tags: renderNovelAiEmphasis(rawTags || subject.name, model),
+          centers: [{ x, y }]
+        };
+      });
+      return { prompt: compiled.prompt, negativePrompt: compiled.negativePrompt, parameters: { qualityToggle: false, negativePrompt: compiled.negativePrompt, characterTags } };
+    }
     // The complete self-contained template is the scene caption. Duplicating its
     // subjects into host character captions would silently change that prompt.
-    return { prompt: compiled.prompt, negativePrompt: compiled.negativePrompt, parameters: { qualityToggle: false, negativePrompt: compiled.negativePrompt, characterTags: [] as { tags: string }[] } };
+    return { prompt: compiled.prompt, negativePrompt: compiled.negativePrompt, parameters: { qualityToggle: false, negativePrompt: compiled.negativePrompt, characterTags: [] as { tags: string; centers?: Array<{ x: number; y: number }> }[] } };
   }
   const model = config.imageModel;
   const caps = novelAiCapabilities(model);
@@ -550,6 +581,7 @@ export type SceneCacheOptions = {
   canDispatch?:(job:Readonly<AssetJob>)=>boolean;
   requestIdForJob?:(jobId:string)=>string|undefined;
   onActivity?:(event:ImageActivityInput)=>void;
+  onScheduler?:(scheduler:AssetScheduler)=>void;
 
   /** Controller can supersede one picture without aborting unrelated jobs. */
   onJobCancellationReady?:(cancelJob:(jobId:string)=>void)=>void;
@@ -1047,6 +1079,7 @@ export async function generateAssets(
   const castToken=castArtToken(spindle,plan.key.chatId,userId);
   const providerKey = `image:${config.imageConnectionId ?? "default"}`;
   const scheduler = new AssetScheduler({ [providerKey]: { concurrency: config.imageConcurrency } });
+  cacheOptions.onScheduler?.(scheduler);
   cacheOptions.onJobCancellationReady?.(jobId=>{scheduler.cancelUnshared(jobId,'A saved version replaced this picture.');});
   const cache = cacheOptions.sceneCache ?? null;
   // Provider detection also selects creation-reference formatting, even when
@@ -1476,7 +1509,7 @@ export async function generateAssets(
               if (latestConfig.imagePromptEngineVersion === 2) {
                 const profileV2=await loadImagePromptProfileV2(spindle,latestConfig,effectiveProvider,request.model,request.parameters);
                 if(request.model)preparedRequest.model=request.model;else delete preparedRequest.model;
-                const built=buildV2ImageRequest({config:latestConfig,cue:nextCue,request:preparedRequest,profile:profileV2,brief:nextMetadata.brief,metadata:nextMetadata,styleId:options?.styleId??nextCue.imageTemplate?.id,portraits,characterDNALibrary,planParameters:request.parameters,...(frozen.shotSpec&&frozen.styleSnapshot?{previousShot:{cue,shotSpec:frozen.shotSpec,styleDNA:frozen.styleSnapshot}}:{}),previousShotRevision:frozen.shotSpec?.revision??0,rebuild:options,shadow:{prompt:nextCompiled.prompt,...(nextCompiled.negativePrompt!==undefined?{negativePrompt:nextCompiled.negativePrompt}:{})},referenceSummary:portrait?`${portrait.source??'captured'} portrait: ${portrait.name} (${portrait.imageId})`:wantsCapture?'No reference yet; this picture will establish the portrait':'No extension reference'});
+                const built=buildV2ImageRequest({config:latestConfig,cue:nextCue,request:preparedRequest,profile:profileV2,brief:nextMetadata.brief,metadata:nextMetadata,styleId:options?.styleId??latestConfig.selectedSharedStyleId,portraits,characterDNALibrary,planParameters:request.parameters,...(frozen.shotSpec&&frozen.styleSnapshot?{previousShot:{cue,shotSpec:frozen.shotSpec,styleDNA:frozen.styleSnapshot}}:{}),previousShotRevision:frozen.shotSpec?.revision??0,rebuild:options,shadow:{prompt:nextCompiled.prompt,...(nextCompiled.negativePrompt!==undefined?{negativePrompt:nextCompiled.negativePrompt}:{})},referenceSummary:portrait?`${portrait.source??'captured'} portrait: ${portrait.name} (${portrait.imageId})`:wantsCapture?'No reference yet; this picture will establish the portrait':'No extension reference'});
                 Object.assign(preparedRequest,built.request);if(built.metadata)Object.assign(nextMetadata,built.metadata);
               }
               const adapted=await adaptImagePrompt(spindle,preparedRequest,nextMetadata,config,userId,jobSignal);

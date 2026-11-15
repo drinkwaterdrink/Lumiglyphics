@@ -68,28 +68,28 @@ export const V2_SERIALIZER_REVISION = '2026.10-rev1';
 
 const DIALECT_BUDGETS: Record<PromptDialectId, SoftBudgets> = {
   'flux3-klein': {
-    simple: [900, 1800],
-    standard: [1200, 2200],
-    complex: [1600, 2600],
+    simple: [900, 2200],
+    standard: [1200, 2600],
+    complex: [1600, 2850],
     dense: [1800, 3000]
   },
   flux3: {
-    simple: [800, 1600],
-    standard: [1100, 2000],
-    complex: [1500, 2400],
-    dense: [1700, 2800]
+    simple: [900, 2000],
+    standard: [1200, 2500],
+    complex: [1500, 2800],
+    dense: [1800, 3000]
   },
   'gpt-image-2.5': {
-    simple: [700, 1500],
-    standard: [1000, 1900],
-    complex: [1300, 2200],
-    dense: [1500, 2600]
+    simple: [800, 1900],
+    standard: [1100, 2400],
+    complex: [1400, 2800],
+    dense: [1700, 3000]
   },
   'grok-imagine-2': {
-    simple: [450, 1000],
-    standard: [700, 1300],
-    complex: [900, 1500],
-    dense: [1000, 1600]
+    simple: [550, 1400],
+    standard: [800, 1800],
+    complex: [1000, 2200],
+    dense: [1200, 2600]
   },
   'qwen-image-3': {
     simple: [300, 650],
@@ -104,10 +104,10 @@ const DIALECT_BUDGETS: Record<PromptDialectId, SoftBudgets> = {
     dense: [1800, 3000]
   },
   'seedream-5': {
-    simple: [500, 1200],
-    standard: [800, 1500],
-    complex: [1000, 1800],
-    dense: [1200, 2000]
+    simple: [700, 1800],
+    standard: [1000, 2300],
+    complex: [1300, 2700],
+    dense: [1600, 3000]
   },
   anima: {
     simple: [250, 650],
@@ -122,10 +122,10 @@ const DIALECT_BUDGETS: Record<PromptDialectId, SoftBudgets> = {
     dense: [700, 1200]
   },
   'generic-prose': {
-    simple: [500, 1200],
-    standard: [800, 1600],
-    complex: [1000, 1900],
-    dense: [1200, 2200]
+    simple: [800, 2000],
+    standard: [1200, 2500],
+    complex: [1500, 2800],
+    dense: [1800, 3000]
   },
   'generic-tags': {
     simple: [250, 600],

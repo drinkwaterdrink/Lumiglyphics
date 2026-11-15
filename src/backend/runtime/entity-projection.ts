@@ -43,7 +43,7 @@ export function projectTurnPresentation(plan:TurnPlan, options?: ProjectPresenta
     if(existing){existing.firstParagraph=Math.min(existing.firstParagraph,at);return existing;}
     if(entities.length>=32){warnings.add('entity-budget');return null;}
     // Exact names only. Case variants/ambiguous aliases are not silently merged.
-    const value:PresentationEntity={id:`e${entities.length+1}`,kind,name:trimmed,aliases:kind==='npc'?[]:deriveShortAliases(trimmed),firstParagraph:at,facts:[]};
+    const value:PresentationEntity={id:`e${entities.length+1}`,kind,name:trimmed,aliases:deriveShortAliases(trimmed),firstParagraph:at,facts:[]};
     entities.push(value);byName.set(mapKey,value);
     const prior=kind==='npc' ? continuity.characters[trimmed] : undefined;
     baseline[value.id]=prior ? {appearance:describe(prior.appearance),outfit:describe(prior.wardrobe)} : {};

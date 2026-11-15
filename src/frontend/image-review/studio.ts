@@ -948,6 +948,7 @@ export class ImageStudio {
   }
 
   private activeClauseKey = '';
+  private mutedClauses = new Set<string>();
   private mountPromptEditorEnhancements(editor: HTMLElement): void {
     const posLabel = editor.querySelector<HTMLElement>('[data-positive]')?.closest('label') ?? null;
     const clauseBar = document.createElement('div');
@@ -1076,11 +1077,30 @@ export class ImageStudio {
     if (subjectsBox) {
       subjectsBox.replaceChildren();
       const placements = shotSpec?.composition.subjectPlacements ?? [];
+      const cyclePlacement = () => {
+        const autoEl = this.el<HTMLInputElement>('[data-auto-director]');
+        if (autoEl.checked) {
+          autoEl.checked = false;
+          for (const sel of ['[data-camera-shot-size]','[data-camera-angle]','[data-camera-lens]','[data-camera-composition]','[data-camera-depth]','[data-camera-safe-area]']) {
+            this.el<HTMLSelectElement>(sel).disabled = false;
+          }
+        }
+        const compSel = this.el<HTMLSelectElement>('[data-camera-composition]');
+        const cycle = ['rule-of-thirds', 'centered', 'layered-depth'];
+        const curIdx = cycle.indexOf(compSel.value);
+        compSel.value = cycle[(curIdx + 1) % cycle.length]!;
+        this.syncDirectorViewfinder();
+        const applyBtn = this.el<HTMLButtonElement>('[data-apply-camera]');
+        if (!applyBtn.disabled) applyBtn.click();
+      };
       if (placements.length > 0) {
         for (const p of placements.slice(0, 4)) {
-          const chip = document.createElement('span');
+          const chip = document.createElement('button');
+          chip.type = 'button';
           chip.className = 'studio-vf-subject-chip';
           chip.textContent = `${p.subject || 'Subject'} (${p.horizontal}, ${p.depth})`;
+          chip.title = 'Click to cycle composition framing for this subject';
+          chip.onclick = cyclePlacement;
           subjectsBox.append(chip);
         }
       } else {
@@ -1090,9 +1110,12 @@ export class ImageStudio {
             ? record.imagePromptMetadata.brief.subjects.split('\n').map(l => l.split(':')[0]?.trim() || '').filter(Boolean)
             : []);
         for (const name of (names.length ? names : ['Scene Focus']).slice(0, 4)) {
-          const chip = document.createElement('span');
+          const chip = document.createElement('button');
+          chip.type = 'button';
           chip.className = 'studio-vf-subject-chip';
           chip.textContent = name;
+          chip.title = 'Click to cycle composition framing';
+          chip.onclick = cyclePlacement;
           subjectsBox.append(chip);
         }
       }
@@ -1143,7 +1166,10 @@ export class ImageStudio {
       btn.type = 'button';
       btn.className = 'studio-clause-pill';
       btn.dataset.tone = clause.tone;
-      btn.textContent = clause.label;
+      const isMuted = this.mutedClauses.has(clause.key);
+      btn.dataset.muted = String(isMuted);
+      if (isMuted) btn.style.cssText = 'opacity:0.45;text-decoration:line-through;';
+      btn.textContent = isMuted ? `🔇 ${clause.label}` : clause.label;
       btn.setAttribute('aria-expanded', String(this.activeClauseKey === clause.key));
       btn.onclick = () => {
         this.activeClauseKey = this.activeClauseKey === clause.key ? '' : clause.key;
@@ -1159,6 +1185,77 @@ export class ImageStudio {
       const bodyText = inspector.querySelector<HTMLElement>('[data-clause-inspector-text]');
       if (title) title.textContent = active.label;
       if (bodyText) bodyText.textContent = active.text;
+
+      let actionsRow = inspector.querySelector<HTMLElement>('[data-clause-inspector-actions]');
+      if (!actionsRow) {
+        actionsRow = document.createElement('div');
+        actionsRow.setAttribute('data-clause-inspector-actions', '');
+        actionsRow.style.cssText = 'display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;';
+        inspector.append(actionsRow);
+      }
+      actionsRow.replaceChildren();
+
+      const applyMutedFilterToDraft = (keyToToggle: string, muteNow: boolean) => {
+        const promptInput = this.root.querySelector<HTMLTextAreaElement>('[data-positive]');
+        if (!promptInput || promptInput.readOnly) return;
+        const clauseObj = clauses.find(c => c.key === keyToToggle);
+        if (!clauseObj) return;
+        const snippet = clauseObj.text.trim();
+        if (!snippet) return;
+        if (muteNow) {
+          if (promptInput.value.includes(snippet)) {
+            promptInput.value = promptInput.value.replace(snippet, '').replace(/\s{2,}/g, ' ').replace(/\.\s*\./g, '.').trim();
+            promptInput.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        } else if (!promptInput.value.includes(snippet)) {
+          promptInput.value = promptInput.value ? `${promptInput.value.trim()} ${snippet}` : snippet;
+          promptInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      };
+
+      const isMuted = this.mutedClauses.has(active.key);
+      const isSolo = !isMuted && clauses.filter(c => c.key !== active.key).every(c => this.mutedClauses.has(c.key)) && clauses.length > 1;
+
+      const muteBtn = document.createElement('button');
+      muteBtn.type = 'button';
+      muteBtn.setAttribute('data-clause-mute', '');
+      muteBtn.textContent = isMuted ? '🔊 Unmute' : '🔇 Mute';
+      muteBtn.style.cssText = 'min-height:28px;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;';
+      muteBtn.onclick = () => {
+        const nextMute = !this.mutedClauses.has(active.key);
+        if (nextMute) this.mutedClauses.add(active.key);
+        else this.mutedClauses.delete(active.key);
+        applyMutedFilterToDraft(active.key, nextMute);
+        this.syncPromptClausePills();
+      };
+
+      const soloBtn = document.createElement('button');
+      soloBtn.type = 'button';
+      soloBtn.setAttribute('data-clause-solo', '');
+      soloBtn.textContent = isSolo ? '✨ Un-solo' : '🎯 Solo';
+      soloBtn.style.cssText = 'min-height:28px;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;';
+      soloBtn.onclick = () => {
+        if (isSolo) {
+          for (const c of clauses) {
+            if (this.mutedClauses.has(c.key)) {
+              this.mutedClauses.delete(c.key);
+              applyMutedFilterToDraft(c.key, false);
+            }
+          }
+        } else {
+          this.mutedClauses.delete(active.key);
+          applyMutedFilterToDraft(active.key, false);
+          for (const c of clauses) {
+            if (c.key !== active.key) {
+              this.mutedClauses.add(c.key);
+              applyMutedFilterToDraft(c.key, true);
+            }
+          }
+        }
+        this.syncPromptClausePills();
+      };
+
+      actionsRow.append(muteBtn, soloBtn);
     }
   }
 

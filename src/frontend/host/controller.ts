@@ -742,7 +742,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   imageLibrary.setDocked();
   imageStudio.setLibraryOpener(()=>imageLibrary.open('images'));
   const dnaRequests=new Map<string,{chatId:string;action:DnaRequest['action'];turnToken:string;saved?:{id:string;updatedAt:number}}>();
-  let dnaTurnToken='';
+  let dnaTurnToken='',dnaChangedThisTurn=false,dnaRevision=0;
   const dnaTurnScoped=(action:DnaRequest['action'])=>['list','propose','autofill','harvest'].includes(action);
   type DnaBody<T=DnaRequest>=T extends DnaRequest?Omit<T,'type'|'chatId'|'requestId'>:never;
   const sendDna=(body:DnaBody)=>{
@@ -770,6 +770,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     onDeleteDNA:(dna,revision)=>sendDna({action:'delete',characterId:dna.id,dna,revision}),
     onRestoreDNA:(characterId,revision)=>sendDna({action:'restore',characterId,revision}),
     onMergeDNA:(characterId,otherId,revision)=>sendDna({action:'merge',characterId,otherId,revision}),
+    onScrubSwipesDNA:()=>sendDna({action:'scrub_swipes'}),
     onDeleteImage:(imageUrl)=>{
       const owner=chatId();
       if(owner){
@@ -792,6 +793,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     stage.workspace.open('character');
   });
   stage.setStoryDnaRequester((body) => sendStoryDna(body));
+  stage.setCharacterDnaSaver((dna) => sendDna({ action: 'save', dna, revision: dnaRevision }));
   const panelRequests = new Map<string, { resolve: (template: string) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   panels.onResolveTemplate = (template) => new Promise((resolve, reject) => {
     const requestId = createUiId();
@@ -1079,6 +1081,14 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     const asset = castAsset ?? (hasPendingCastBackground && fallbackAsset?.stageAsset?.role === "portrait" ? null : fallbackAsset);
     const candidates = asset ? sceneImageCandidatesFor(asset) : [];
     const sceneUrl = candidates[0] ?? null;
+    const upcomingUrls: string[] = [];
+    for (const candidateAsset of sourceTurn.assets) {
+      if ((candidateAsset.paragraphIndex === paragraphIndex + 1 || candidateAsset.paragraphIndex === paragraphIndex + 2) && (candidateAsset.status === 'generated' || candidateAsset.status === 'browser_ready')) {
+        const nextUrl = sceneImageCandidatesFor(candidateAsset)[0];
+        if (nextUrl) upcomingUrls.push(nextUrl);
+      }
+    }
+    if (upcomingUrls.length > 0) stage.predecodeUpcomingImages(upcomingUrls);
     if (!asset || !sceneUrl) {
       vnDebug("image sync", `p${paragraphIndex}`, "no decodable asset yet");
       return;
@@ -1130,10 +1140,10 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if(!turn||turn.chatId!==next.chatId||turn.messageId!==next.messageId||turn.sourceFingerprint!==next.sourceFingerprint||turn.swipeId!==next.swipeId||turn.revision!==next.revision)retryQueue=null;
     turn = next;
     imageStudio.setTurn(next);
-    const nextDnaToken=JSON.stringify([next.chatId,next.messageId,next.sourceFingerprint,next.swipeId,next.revision]);if(nextDnaToken!==dnaTurnToken){characterFolio.invalidateContext();for(const[id,r]of dnaRequests)if(dnaTurnScoped(r.action))dnaRequests.delete(id);dnaTurnToken=nextDnaToken;}
+    const nextDnaToken=JSON.stringify([next.chatId,next.messageId,next.sourceFingerprint,next.swipeId,next.revision]);dnaChangedThisTurn=nextDnaToken!==dnaTurnToken;if(dnaChangedThisTurn){characterFolio.invalidateContext();for(const[id,r]of dnaRequests)if(dnaTurnScoped(r.action))dnaRequests.delete(id);dnaTurnToken=nextDnaToken;}
     characterFolio.setContext(next.chatId);
 
-    if (next?.chatId) {
+    if (dnaChangedThisTurn && next?.chatId) {
       sendDna({action:'list'});
       sendStoryDna({action:'list'});
     }
@@ -1264,7 +1274,9 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if(type==='vn_character_dna'&&message.type==='vn_character_dna'){
       const owner=dnaRequests.get(message.requestId);dnaRequests.delete(message.requestId);
       if(!owner||(dnaTurnScoped(owner.action)&&owner.turnToken!==dnaTurnToken)||owner.chatId!==message.chatId||message.chatId!==chatId()||message.chatId!==characterFolio.getContext())return;
+      dnaRevision=message.library.revision??0;
       characterFolio.setLibrary(message.library,owner.action!=='list',owner.saved);
+      stage.setCharacterDnaLibrary(message.library.characters);
       if(message.proposal)characterFolio.setProposal(message.proposal);
       return;
     }

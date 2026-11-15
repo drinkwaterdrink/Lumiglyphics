@@ -12,6 +12,7 @@ import type {TurnView,AssetView} from "../../protocol.js";
 import { StageDossiers } from "./dossiers.js";
 import type { TooltipPreferences } from "../../shared/dossiers.js";
 import type { StoryDnaActionBody, StoryDNASet } from "../../shared/story-dna.js";
+import { findCharacterDNA, type CharacterDNA } from "../../shared/character-dna.js";
 import { gameMoveKey, type GameMoveSnapshot } from '../../shared/game-moves.js';
 import { mergeInteractionDraft } from '../../shared/scene-interactions.js';
 import { ReplyDraftEditor } from './interaction-tray.js';
@@ -171,6 +172,14 @@ export class VnStage {
   private ambientOverride: AmbientEffect | null | undefined = undefined;
   private sceneFxTimer: ReturnType<typeof setTimeout> | null = null;
   private fxBurstTimer: ReturnType<typeof setTimeout> | null = null;
+  private characterDnaLibrary: Record<string, CharacterDNA> = {};
+  private folioOpenCallback: ((charName: string) => void) | null = null;
+  private dnaSaveRequester: ((dna: CharacterDNA) => void) | null = null;
+  private bondSnapshots = new Map<string, number>();
+  private speakerPeekEl: HTMLElement | null = null;
+  private bondBannerEl: HTMLElement | null = null;
+  private bondBannerTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly predecodedUrls = new Set<string>();
   private readonly statusStack: HTMLElement;
   private readonly emptyState: HTMLElement;
   private readonly narrative: HTMLElement;
@@ -417,12 +426,192 @@ export class VnStage {
   }
 
   setFolioOpener(fn: (charName: string) => void): void {
-    this.dossiers.setFolioOpener(fn);
+    this.folioOpenCallback = fn; this.dossiers.setFolioOpener(fn);
   }
 
   setStoryDna(storyDna: StoryDNASet): void { this.dossiers.setStoryDna(storyDna); }
   setStoryDnaRequester(fn: (body: StoryDnaActionBody) => void): void { this.dossiers.setStoryDnaRequester(fn); }
   setStoryDnaError(error: string): void { this.dossiers.setStoryDnaError(error); }
+
+  setCharacterDnaLibrary(library: Record<string, CharacterDNA>): void {
+    const prev = this.bondSnapshots;
+    const hadBaseline = prev.size > 0;
+    const nextSnapshots = new Map<string, number>();
+    let celebrated: { name: string; target: string; label: string; affinity: number; tier: string } | null = null;
+    for (const char of Object.values(library)) {
+      const rels = char.relationships ?? [];
+      if (rels.length === 0) continue;
+      const topRel = rels.reduce((best, item) => (Math.abs(item.affinity ?? 0) >= Math.abs(best.affinity ?? 0) ? item : best), rels[0]!);
+      const affinity = topRel.affinity ?? 0;
+      nextSnapshots.set(char.id, affinity);
+      if (hadBaseline && this.readerPreferences?.confidantCutInsEnabled !== false) {
+        const oldAffinity = prev.get(char.id);
+        const tierFor = (v: number) => v >= 85 ? "Soulbound" : v >= 60 ? "Devoted" : v >= 35 ? "Trusted" : v >= 15 ? "Warming" : v <= -50 ? "Rival / Hostile" : "Guarded";
+        if (typeof oldAffinity === "number" && affinity !== oldAffinity) {
+          const oldTier = tierFor(oldAffinity);
+          const newTier = tierFor(affinity);
+          if ((newTier !== oldTier && affinity > oldAffinity) || affinity - oldAffinity >= 12) {
+            celebrated = { name: char.name, target: topRel.targetName, label: topRel.dynamicLabel || newTier, affinity, tier: newTier };
+          }
+        }
+      }
+    }
+    this.bondSnapshots = nextSnapshots;
+    this.characterDnaLibrary = { ...library };
+    if (celebrated) {
+      this.showBondResonanceBanner(celebrated);
+    }
+  }
+
+  setCharacterDnaSaver(fn: (dna: CharacterDNA) => void): void {
+    this.dnaSaveRequester = fn;
+  }
+
+  predecodeUpcomingImages(urls: readonly string[]): void {
+    if (typeof Image !== "function") return;
+    let scheduled = 0;
+    for (const raw of urls) {
+      const url = typeof raw === "string" ? raw.trim() : "";
+      if (!url || this.predecodedUrls.has(url)) continue;
+      this.predecodedUrls.add(url);
+      if (this.predecodedUrls.size > 96) {
+        const first = this.predecodedUrls.values().next().value;
+        if (first) this.predecodedUrls.delete(first);
+      }
+      try {
+        const img = new Image();
+        img.decoding = "async";
+        img.src = url;
+        if (typeof img.decode === "function") img.decode().catch(() => {});
+      } catch {
+        // Pre-decoding is opportunistic.
+      }
+      scheduled += 1;
+      if (scheduled >= 3) break;
+    }
+  }
+
+  private dismissBondBanner(): void {
+    this.bondBannerEl?.remove();
+    this.bondBannerEl = null;
+    if (this.bondBannerTimer) { clearTimeout(this.bondBannerTimer); this.bondBannerTimer = null; }
+  }
+
+  private dismissTransientOverlays(): void {
+    this.dismissChapterCard();
+    this.closeSpeakerPeek();
+    this.dismissBondBanner();
+  }
+
+  private showBondResonanceBanner(info: { name: string; target: string; label: string; affinity: number; tier: string }): void {
+    if (this.destroyed || this.readerPreferences?.confidantCutInsEnabled === false) return;
+    this.dismissBondBanner();
+    const el = document.createElement("div");
+    el.dataset.vnBondBanner = "";
+    el.setAttribute("role", "status");
+    el.style.cssText = "position:absolute;top:16px;right:16px;z-index:26;max-width:min(320px,85vw);padding:10px 14px;border-radius:10px;border:1px solid rgba(110,231,183,0.45);background:linear-gradient(135deg,rgba(15,23,42,0.94),rgba(30,41,59,0.92));color:#f8fafc;box-shadow:0 12px 28px rgba(0,0,0,0.45);backdrop-filter:blur(10px);display:flex;flex-direction:column;gap:2px;pointer-events:auto;";
+    const eyebrow = document.createElement("div");
+    eyebrow.style.cssText = "font-size:10px;text-transform:uppercase;letter-spacing:0.12em;color:#6ee7b7;font-weight:700;";
+    eyebrow.textContent = `Bond Resonance · ${info.tier}`;
+    const title = document.createElement("div");
+    title.style.cssText = "font-size:13px;font-weight:700;color:#ffffff;";
+    title.textContent = `${info.name} → ${info.target}`;
+    const meta = document.createElement("div");
+    meta.style.cssText = "font-size:11px;color:rgba(226,232,240,0.85);";
+    meta.textContent = `${info.label} (${info.affinity >= 0 ? `+${info.affinity}` : info.affinity})`;
+    el.append(eyebrow, title, meta);
+    el.addEventListener("click", (e) => { e.stopPropagation(); el.remove(); });
+    this.themeRoot.append(el);
+    this.bondBannerEl = el;
+    this.bondBannerTimer = setTimeout(() => {
+      this.bondBannerEl?.remove();
+      this.bondBannerEl = null;
+      this.bondBannerTimer = null;
+    }, 4200);
+  }
+
+  private closeSpeakerPeek(): void {
+    this.speakerPeekEl?.remove();
+    this.speakerPeekEl = null;
+  }
+
+  private toggleSpeakerPeek(): void {
+    if (this.speakerPeekEl) { this.closeSpeakerPeek(); return; }
+    const name = this.speaker.textContent?.trim() || "";
+    if (!name) return;
+    const char = findCharacterDNA(this.characterDnaLibrary, name);
+    const card = document.createElement("div");
+    card.dataset.vnSpeakerPeek = "";
+    card.style.cssText = "position:relative;margin-top:6px;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.16);background:rgba(15,23,42,0.95);color:#f8fafc;box-shadow:0 12px 28px rgba(0,0,0,0.45);display:flex;flex-direction:column;gap:8px;max-width:340px;z-index:24;";
+    card.addEventListener("click", (e) => e.stopPropagation());
+
+    const head = document.createElement("div");
+    head.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;";
+    const title = document.createElement("strong");
+    title.style.cssText = "font-size:13px;color:#fff;";
+    title.textContent = char ? char.name : name;
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.textContent = "×";
+    closeBtn.setAttribute("aria-label", "Close quick peek");
+    closeBtn.style.cssText = "border:none;background:transparent;color:#94a3b8;font-size:16px;cursor:pointer;padding:2px 6px;";
+    closeBtn.addEventListener("click", () => this.closeSpeakerPeek());
+    head.append(title, closeBtn);
+    card.append(head);
+
+    if (char) {
+      const summary = [
+        char.demeanor ? char.demeanor : "",
+        char.activeOutfit || char.signatureOutfit ? `Wearing: ${char.activeOutfit || char.signatureOutfit}` : ""
+      ].filter(Boolean).join(" · ");
+      if (summary) {
+        const sub = document.createElement("div");
+        sub.style.cssText = "font-size:11px;color:#cbd5e1;line-height:1.4;";
+        sub.textContent = summary;
+        card.append(sub);
+      }
+      const wardrobeEntries = Object.entries(char.wardrobeStates ?? {});
+      if (wardrobeEntries.length > 0 && this.dnaSaveRequester) {
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;align-items:center;";
+        const lbl = document.createElement("span");
+        lbl.style.cssText = "font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#94a3b8;";
+        lbl.textContent = "Wardrobe:";
+        row.append(lbl);
+        for (const [key, outfit] of wardrobeEntries.slice(0, 6)) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          const active = char.activeWardrobeKey === key || char.activeOutfit === outfit;
+          btn.textContent = key;
+          btn.style.cssText = `padding:4px 8px;border-radius:999px;font-size:11px;cursor:pointer;border:1px solid ${active ? "rgba(110,231,183,0.75)" : "rgba(255,255,255,0.18)"};background:${active ? "rgba(110,231,183,0.18)" : "rgba(255,255,255,0.06)"};color:#f8fafc;`;
+          btn.addEventListener("click", () => {
+            const nextDna: CharacterDNA = { ...char, activeWardrobeKey: key, activeOutfit: outfit, lastUpdated: Date.now() };
+            this.characterDnaLibrary[char.id] = nextDna;
+            this.dnaSaveRequester?.(nextDna);
+            this.closeSpeakerPeek();
+            this.toggleSpeakerPeek();
+          });
+          row.append(btn);
+        }
+        card.append(row);
+      }
+    }
+
+    if (this.folioOpenCallback) {
+      const openBtn = document.createElement("button");
+      openBtn.type = "button";
+      openBtn.textContent = "📖 Open Character Folio";
+      openBtn.style.cssText = "align-self:flex-start;padding:5px 10px;border-radius:6px;border:1px solid rgba(110,231,183,0.45);background:rgba(110,231,183,0.12);color:#a7f3d0;font-size:11px;font-weight:600;cursor:pointer;";
+      openBtn.addEventListener("click", () => {
+        this.closeSpeakerPeek();
+        this.folioOpenCallback?.(name);
+      });
+      card.append(openBtn);
+    }
+
+    this.speaker.parentElement?.append(card);
+    this.speakerPeekEl = card;
+  }
   setTooltipPreferences(prefs:TooltipPreferences):void {this.actionDraftsEnabled=prefs.enabled&&prefs.actionsEnabled;this.dossiers.setPreferences(prefs);if(!this.actionDraftsEnabled)this.closeMoveDraft();const view=selectVnStageView(this.state);this.renderInteraction(view.showChoices,view.showStandardInput,view.isBusy);}
 
   private storeReplyDraft(text:string):boolean {if(this.destroyed||selectVnStageView(this.state).isBusy||this.state.isUserTurn)return false;this.toggleAutoPlay(false);this.toggleSkip(false);this.dispatch({type:'set-draft',draft:text});return true;}
@@ -454,7 +643,7 @@ export class VnStage {
     this.toggleAutoPlay(false);
     this.toggleSkip(false);
     this.clearAllTimers();
-    this.dismissChapterCard();
+    this.dismissTransientOverlays();
     this.resetEffects();
     this.isSuspended = true;
   }
@@ -552,7 +741,7 @@ export class VnStage {
     this.chapterCard.dataset.vnActive = "true";
     if (this.chapterCardTimer !== null) clearTimeout(this.chapterCardTimer);
     this.chapterCardTimer = setTimeout(() => {
-      this.dismissChapterCard();
+      this.dismissTransientOverlays();
     }, 2800);
   }
 
@@ -879,7 +1068,7 @@ export class VnStage {
     // Note: Do not wipe cgGallery on transient reset() - preserved across story turns in the chat
     this.dossiers.setTurnMedia(null);this.dossiers.setContext(undefined,[]);
     this.clearAllTimers();
-    this.dismissChapterCard();
+    this.dismissTransientOverlays();
     this.resetEffects();
     this.clearSceneImages();
     this.isAutoPlay = false;
@@ -1115,7 +1304,7 @@ export class VnStage {
     this.dossiers.destroy();
     this.dialogueSheet?.destroy();
     this.clearAllTimers();
-    this.dismissChapterCard();
+    this.dismissTransientOverlays();
     this.typewriterAudio.destroy();
     this.resetEffects();
     if (this.crossfadeTimer !== null) {
@@ -1681,6 +1870,36 @@ export class VnStage {
       this.previous();
     });
     this.exitButton.addEventListener("click", () => this.callbacks.onExit?.());
+    this.speaker.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.toggleSpeakerPeek();
+    });
+    this.rpgHud.onRollEffect = (fx) => this.triggerEffect(fx);
+    if (this.scrubber) {
+      let draggingScrubber = false;
+      const jumpFromPointer = (clientX: number, clientY: number) => {
+        const hit = typeof document.elementFromPoint === "function" ? document.elementFromPoint(clientX, clientY) : null;
+        const dot = hit instanceof Element ? hit.closest<HTMLElement>("[data-vn-scrub-dot]") : null;
+        const idxAttr = dot?.dataset.vnScrubIndex;
+        if (idxAttr !== undefined) {
+          const targetIdx = parseInt(idxAttr, 10);
+          if (!Number.isNaN(targetIdx) && targetIdx <= this.state.highestRevealedIndex && targetIdx !== this.state.currentParagraphIndex) {
+            this.jumpToParagraph(targetIdx);
+          }
+        }
+      };
+      this.scrubber.addEventListener("pointerdown", (event) => {
+        draggingScrubber = true;
+        jumpFromPointer(event.clientX, event.clientY);
+      });
+      this.scrubber.addEventListener("pointermove", (event) => {
+        if (!draggingScrubber) return;
+        jumpFromPointer(event.clientX, event.clientY);
+      });
+      const stopScrub = () => { draggingScrubber = false; };
+      this.scrubber.addEventListener("pointerup", stopScrub);
+      this.scrubber.addEventListener("pointercancel", stopScrub);
+    }
     this.continueButton.addEventListener("click", (event) => {
       event.stopPropagation();
       this.advance();
@@ -1982,7 +2201,7 @@ export class VnStage {
 
   jumpToParagraph(targetIndex: number): void {
     if (this.destroyed || this.isBacklogOpen || this.dossiers.isOpen()) return;
-    this.dismissChapterCard();
+    this.dismissTransientOverlays();
     const total = this.state.paragraphs.length;
     if (targetIndex < 0 || targetIndex >= total) return;
     const current = this.state.currentParagraphIndex;
@@ -1996,7 +2215,7 @@ export class VnStage {
     this.isAutoPlay = false;
     this.lastSkipStop = null;
     this.clearAllTimers();
-    this.dismissChapterCard();
+    this.dismissTransientOverlays();
     this.isTyping = false;
     this.typewriter.reset();
     this.updateControlButtons();
@@ -2048,6 +2267,7 @@ export class VnStage {
       const isActive = idx === current;
       btn.dataset.read = String(isRead);
       btn.dataset.active = String(isActive);
+      btn.dataset.vnScrubIndex = String(idx);
       if (isRead && p && (p.cue || p.effect || p.ambient !== undefined)) btn.dataset.hasCue = "true";
       btn.disabled = !isRead;
       const label = `Paragraph ${idx + 1} of ${count}${isRead&&p?.speaker ? ` (${p.speaker})` : ""}`;
@@ -2105,7 +2325,7 @@ export class VnStage {
     this.isAutoPlay = false;
     this.lastSkipStop = null;
     this.clearAllTimers();
-    this.dismissChapterCard();
+    this.dismissTransientOverlays();
     this.isTyping = false;
     this.typewriter.reset();
     this.updateControlButtons();
@@ -2122,7 +2342,7 @@ export class VnStage {
   }
 
   private advance(): void {
-    this.dismissChapterCard();
+    this.dismissTransientOverlays();
     if (this.isSuspended||this.displayPending) return;
     if (this.workspace.isOpen() || this.isBacklogOpen || this.dossiers.isOpen()) return;
     if (this.lastSkipStop !== null) {
@@ -2231,7 +2451,7 @@ export class VnStage {
       view.paragraph ? this.state.currentParagraphIndex : -1,
     );
     const speaker = view.paragraph?.speaker ?? "";
-    if (this.speaker.textContent !== speaker) this.speaker.textContent = speaker;
+    if (this.speaker.textContent !== speaker) { this.speaker.textContent = speaker; this.closeSpeakerPeek(); }
     this.workspace.setCaption(speaker ? `${speaker} · ${view.paragraphNumber} / ${view.paragraphCount}` : view.paragraph ? `Reading · ${view.paragraphNumber} / ${view.paragraphCount}` : "Visual novel");
     this.speaker.title = speaker;
     this.speaker.hidden = !view.paragraph?.speaker;

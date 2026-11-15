@@ -2,16 +2,18 @@ import type { SpindleAPI } from 'lumiverse-spindle-types';
 import {
   type StoryDNASet,
   StoryDnaRequestSchema,
-  type StoryDnaRequest
+  type StoryDnaRequest,
+  scrubStoryDNASwipes,
 } from '../../shared/story-dna.js';
 import {
   loadStoryDNASet,
   saveLocationDNA,
   saveItemDNA,
   deleteLocationDNA,
-  deleteItemDNA
+  deleteItemDNA,
+  mutateStoryDNASet,
 } from './story-dna-store.js';
-import { activeBranchSwipeTags } from './character-dna-workflow.js';
+import { activeBranchSwipeTags, activeMessageSwipeMap } from './character-dna-workflow.js';
 import {
   autofillItemDNA,
   autofillLocationDNA,
@@ -91,6 +93,22 @@ export async function handleStoryDnaRequest(
       });
       const storyDna = await saveItemDNA(spindle, request.chatId, drafted, userId);
       await reply(storyDna);
+      return;
+    }
+
+    if (request.action === 'scrub_swipes') {
+      const msgs = ((await spindle.chat?.getMessages?.(request.chatId)) ?? []) as Parameters<typeof activeBranchSwipeTags>[0];
+      const activeMap = activeMessageSwipeMap(activeBranchSwipeTags(msgs), request.activeSwipeId);
+      const updated = Object.keys(activeMap).length > 0
+        ? await mutateStoryDNASet(spindle, request.chatId, userId, undefined, (set) => {
+            const scrubbed = scrubStoryDNASwipes(set, activeMap);
+            set.locations = scrubbed.locations;
+            set.items = scrubbed.items;
+            set.thoughtCabinet = scrubbed.thoughtCabinet;
+            set.chapterCodex = scrubbed.chapterCodex;
+          })
+        : await loadStoryDNASet(spindle, request.chatId, userId);
+      await reply(updated);
       return;
     }
   } catch (error) {

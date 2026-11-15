@@ -320,6 +320,21 @@ export function evaluateContextualSkillCheck(check: SkillCheck, vitals?: RpgVita
   if ((check.stat === "CHA" || check.stat === "WIS") && vitals.companions.some((c) => c.affinity >= 50)) {
     mod += 1;
   }
+  // High companion bond (>= 75) grants tactical/emotional edge -> advantage on relational/insight checks
+  if ((check.stat === "CHA" || check.stat === "WIS") && vitals.companions.some((c) => c.affinity >= 75)) {
+    if (rollMode === "normal") rollMode = "advantage";
+    else if (rollMode === "disadvantage") rollMode = "normal";
+  }
+  // Matching key inventory gear lends +1 or advantage when check reason references the item
+  const reasonLower = (check.reason ?? "").toLowerCase();
+  const matchingGear = vitals.inventory.find((item) => {
+    const normalized = typeof item === "string" ? item.trim().toLowerCase() : "";
+    return normalized.length >= 3 && reasonLower.includes(normalized);
+  });
+  if (matchingGear) {
+    mod += 1;
+    if (rollMode === "normal") rollMode = "advantage";
+  }
   const clampedMod = Math.max(-10, Math.min(20, mod));
   return { ...check, modifier: clampedMod, rollMode };
 }

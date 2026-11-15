@@ -113,11 +113,14 @@ export function compileModelPrompt(input: ModelPromptCompilerInput): ModelPrompt
   });
 
   // 3b. Inject custom Style Prefix at P0 (front-loaded opening authority) and Style Suffix at P0/P1
-  const cleanPrefix = styleDNA.prefix?.trim() ?? '';
+  const rawPrefix = styleDNA.prefix?.trim() ?? '';
+  const cleanPrefix = profile.dialect === 'flux3-klein'
+    ? rawPrefix.replace(/\bphotorealistic\b/gi, 'lifelike natural')
+    : rawPrefix;
   const isIdeogramJson = profile.dialect === 'ideogram-v4' && profile.ideogramMode !== 'structured-prose';
   const kleinConsumedPrefix = profile.dialect === 'flux3-klein' && sections.some(s => s.id === 'medium-optics-opening' && s.text.toLowerCase().startsWith(cleanPrefix.toLowerCase()));
   if (cleanPrefix && !isIdeogramJson && !kleinConsumedPrefix) {
-    const prefixText = isTagDialect ? cleanPrefix.replace(/[,;:\s]+$/, '') : formatProseSentence(cleanPrefix, true);
+    const prefixText = isTagDialect ? cleanPrefix.replace(/[,;:\s]+$/, '') : formatProseSentence(cleanPrefix, false);
     if (prefixText) {
       sections = [
         {
@@ -132,9 +135,12 @@ export function compileModelPrompt(input: ModelPromptCompilerInput): ModelPrompt
     }
   }
 
-  const cleanSuffix = styleDNA.suffix?.trim() ?? '';
+  const rawSuffix = styleDNA.suffix?.trim() ?? '';
+  const cleanSuffix = profile.dialect === 'flux3-klein'
+    ? rawSuffix.replace(/\bphotorealistic\b/gi, 'lifelike natural')
+    : rawSuffix;
   if (cleanSuffix && !isIdeogramJson) {
-    const suffixText = isTagDialect ? cleanSuffix.replace(/^[,;:\s]+/, '').replace(/[,;:\s]+$/, '') : formatProseSentence(cleanSuffix, true);
+    const suffixText = isTagDialect ? cleanSuffix.replace(/^[,;:\s]+/, '').replace(/[,;:\s]+$/, '') : formatProseSentence(cleanSuffix, false);
     if (suffixText) {
       const constraintsIdx = sections.findIndex(s => s.id === 'constraints' || s.id === 'sec-constraints' || s.id === 'references');
       const suffixSection: PromptSection = {

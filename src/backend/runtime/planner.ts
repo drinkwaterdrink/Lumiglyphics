@@ -82,6 +82,7 @@ import { throwIfAborted } from "../core/planning-queue.js";
 import { buildRpgPromptGuidance, reduceRpgState, SkillCheckSchema, type RpgState } from "../../shared/rpg-state.js";
 
 import { PlannerEnvironmentChangesSchema, PlannerEnvironmentInputSchema, type PlannerEnvironmentChanges, type PlannerEnvironmentInput, type PlannerEnvironmentProposal, PlannerSceneSchema, PlannerCueSchema, PlannerChoiceSchema, PlannerCharacterSchema, PlannerSpeakerSchema, PlannerOutputSchema, type HintMessage, readGameHints, gameHintsForTurn, FIXED_CAMERA, stableHash, id, isAttireReset, BOUNDARY_REASONS, normalizeBoundaryReason, asBoolean } from "./planner/schemas.js";
+import { loadStoryDNASet } from "./story-dna-store.js";
 export { PlannerEnvironmentChangesSchema, PlannerEnvironmentInputSchema, type PlannerEnvironmentChanges, type PlannerEnvironmentInput, type PlannerEnvironmentProposal, gameHintsForTurn };
 
 /**
@@ -1867,6 +1868,38 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     if (parts.length > 0) {
       visualContext.plannerContext += `\nDetected scene header: ${parts.join(' | ')}. Ensure your environment reflects these established details.`;
     }
+  }
+
+  try {
+    const storyDNASet = await loadStoryDNASet(spindle, input.chatId, input.userId);
+    const activeLocName = (narrative.detectedSceneMetadata?.location || input.previousScene?.environment.location || '').trim().toLowerCase();
+    const matchedLocation = activeLocName
+      ? Object.values(storyDNASet.locations).find((loc) =>
+          loc.name.trim().toLowerCase() === activeLocName ||
+          loc.aliases.some((alias) => alias.trim().toLowerCase() === activeLocName)
+        )
+      : undefined;
+    if (matchedLocation && (matchedLocation.locked || matchedLocation.architecture || matchedLocation.persistentElements.length > 0)) {
+      const dnaParts = [
+        matchedLocation.environmentDescription ? `setting=${matchedLocation.environmentDescription}` : '',
+        matchedLocation.architecture ? `architecture=${matchedLocation.architecture}` : '',
+        matchedLocation.lighting ? `lighting=${matchedLocation.lighting}` : '',
+        matchedLocation.persistentElements.length > 0 ? `persistent_props=${matchedLocation.persistentElements.join('; ')}` : ''
+      ].filter(Boolean);
+      if (dnaParts.length > 0) {
+        visualContext.plannerContext += `\nEstablished Location DNA (${matchedLocation.name}): ${dnaParts.join(' | ')}. Preserve these canonical physical details unless the narrative explicitly alters them.`;
+      }
+    }
+    const recentCodex = (storyDNASet.chapterCodex ?? []).slice(-3);
+    if (recentCodex.length > 0) {
+      visualContext.plannerContext += `\nRecent Chapter Memory: ${recentCodex.map((c) => `[${c.location || 'Scene'}] ${c.title}: ${c.summary}`).join(' ; ')}`;
+    }
+    const activeThreads = (storyDNASet.thoughtCabinet ?? []).filter((t) => t.status !== 'resolved').slice(-4);
+    if (activeThreads.length > 0) {
+      visualContext.plannerContext += `\nActive Mystery/Narrative Threads: ${activeThreads.map((t) => `${t.title} (${t.category}: ${t.description})`).join(' ; ')}`;
+    }
+  } catch {
+    // Story DNA enrichment is opportunistic; planner continues if storage is unavailable.
   }
 
   const loadedRole=input.cardRole??await loadCardRole(spindle,input.chatId,visualContext.cardId,input.userId);
