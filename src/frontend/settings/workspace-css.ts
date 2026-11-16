@@ -1,9 +1,9 @@
 /** Settings-only layout. Reader themes and user CSS remain independent. */
 export const WORKSPACE_CSS=`
-:host{overflow-wrap:anywhere;font-size:1rem;--set-radius:14px;--set-control:44px}
+:host{overflow-wrap:anywhere;font-size:1rem;--set-radius:min(var(--vn-shell-radius,14px),16px);--set-control:44px}
 [data-shell]{padding:16px;gap:12px;max-width:1120px;margin:auto}
-[data-workspace-header]{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--set-field);border:1px solid var(--set-border);border-radius:12px;padding:4px;min-width:0}
-[data-workspace-header] button{border:0;background:transparent;border-radius:8px;min-width:44px;padding:8px 10px}
+[data-workspace-header]{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--set-field);border:1px solid var(--set-border);border-radius:var(--set-radius);padding:4px;min-width:0;box-shadow:var(--vn-shell-shadow,none)}
+[data-workspace-header] button{border:0;background:transparent;border-radius:calc(var(--set-radius) * .7);min-width:44px;padding:8px 10px}
 [data-toggle-search] svg{display:block;width:20px;height:20px}
 [data-category-picker]{flex:1 1 8rem;display:flex;justify-content:space-between;align-items:center;gap:8px;min-width:0;text-align:left}
 [data-page-label]{overflow-wrap:anywhere}
@@ -18,10 +18,10 @@ export const WORKSPACE_CSS=`
 [data-panes]{display:block;min-width:0}
 [data-pane]{gap:20px;padding:8px 0 16px}
 [data-pane-head]{gap:6px;margin:0 0 4px}
-[data-pane-head] h2{font-size:1.5rem;letter-spacing:0;outline-offset:4px}
-[data-pane-head] p{font-size:1rem;line-height:1.5}
+[data-pane-head] h2{font-family:var(--set-display-font,inherit);font-size:1.55rem;letter-spacing:-.01em;outline-offset:4px}
+[data-pane-head] p{font-size:.98rem;line-height:1.5}
 [data-home]{display:grid;gap:20px;padding-top:12px}
-[data-home] h1{font-size:1.75rem;margin:0 0 4px;line-height:1.2}
+[data-home] h1{font-family:var(--set-display-font,inherit);font-size:1.85rem;margin:0 0 4px;line-height:1.2}
 [data-home-categories]{display:grid;gap:0;border-top:1px solid var(--set-border)}
 [data-home-categories] button,[data-page-links] button,[data-category-options] button{width:100%;display:flex;align-items:center;gap:14px;text-align:left;white-space:normal;border:0;border-bottom:1px solid var(--set-border);border-radius:0;background:transparent;padding:16px 4px;min-height:64px}
 [data-home-categories] svg{width:24px;height:24px;flex:none;color:var(--set-accent)}

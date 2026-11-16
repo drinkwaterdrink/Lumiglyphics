@@ -3,6 +3,7 @@ import type { TurnView } from "../../protocol.js";
 import { MAX_PANELS, PanelArtifactSchema, panelHash, type PanelArtifact } from "../../shared/panels.js";
 import { panelDocument } from "./panel-document.js";
 import { renderPanelRule, type PanelRule } from "./panel-rules.js";
+import { VN_SHELL_PRESET_TOKENS_CSS } from "../theme/palette-tokens.js";
 
 type Pin = { key: string; follow: string | null; card: PanelArtifact; message: string; fingerprint: string; x: number; y: number; width: number; height: number; collapsed: boolean; remote: boolean };
 type Capture = { title: string; html: string };
@@ -15,9 +16,10 @@ export function clampPanel(value: number, maximum: number): number {
 }
 
 const CSS = `
+${VN_SHELL_PRESET_TOKENS_CSS}
 summary{cursor:pointer}summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .drawer{box-sizing:border-box;overflow-wrap:anywhere}
-:host{position:absolute;inset:0;pointer-events:none;z-index:50;font:13px/1.45 var(--vn-shell-family,system-ui);color:var(--ink);--edge:var(--vn-shell-border,rgba(134,219,178,.22));--ink:var(--vn-shell-text,#dbebe2);--muted:var(--vn-shell-muted,#9ab3a6);--paper:var(--vn-shell-panel,#0e181c);--accent:var(--vn-shell-accent,#86dbb2);--field:var(--vn-shell-field,#101a1e);--btn:var(--vn-shell-button,#16262a);--radius:var(--vn-shell-radius,999px)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])){--edge:rgba(86,128,107,.35);--ink:#142820;--muted:#4b6b5d;--paper:#ffffff;--accent:#1e5a40;--field:#f3f7f2;--btn:#e5eee2}
+:host{position:absolute;inset:0;pointer-events:none;z-index:50;font:13px/1.45 var(--vn-shell-family,system-ui);color:var(--ink);--edge:var(--vn-shell-border,rgba(134,219,178,.22));--ink:var(--vn-shell-text,#dbebe2);--muted:var(--vn-shell-muted,#9ab3a6);--paper:var(--vn-shell-panel,#0e181c);--accent:var(--vn-shell-accent,#86dbb2);--field:var(--vn-shell-field,#101a1e);--btn:var(--vn-shell-button,#16262a);--radius:var(--vn-shell-radius,999px)}
 button,input,textarea{font:inherit;color:inherit}button{cursor:pointer;background:var(--btn);border:1px solid var(--edge);border-radius:min(var(--radius),8px);padding:7px 12px;min-height:34px;transition:border-color .14s ease,background-color .14s ease,transform .12s ease}button:hover{border-color:var(--accent)}button:active{transform:scale(.97)}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .launcher{display:none!important;position:absolute;top:max(12px,env(safe-area-inset-top));left:max(12px,env(safe-area-inset-left));pointer-events:auto;display:inline-flex;align-items:center;gap:8px;border-radius:var(--radius);min-height:44px;padding:8px 15px 8px 13px;background:var(--vn-shell-bg,#171822ed);color:var(--ink);font-weight:650;box-shadow:var(--vn-shell-shadow,0 4px 14px #0006);backdrop-filter:blur(12px)}
 .launcher::before{content:"";flex:none;width:5px;height:5px;margin:0 7px 7px 0;border-radius:1px;background:var(--accent);box-shadow:7px 0 0 var(--accent),0 7px 0 var(--accent),7px 7px 0 var(--accent)}

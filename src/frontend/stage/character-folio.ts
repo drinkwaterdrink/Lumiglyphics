@@ -204,7 +204,7 @@ export class CharacterFolio implements WorkspaceSurface {
           min-height: 0 !important;
           flex: 1 1 auto !important;
           overflow: hidden !important;
-          background: var(--vn-shell-panel, var(--aperture-workspace-bg, #0b1114));
+          background: transparent;
           color: var(--vn-shell-text, #e2e8f0);
           font-family: var(--vn-shell-family, ui-sans-serif, system-ui, sans-serif);
           box-sizing: border-box !important;
@@ -217,7 +217,7 @@ export class CharacterFolio implements WorkspaceSurface {
           padding: 10px 14px;
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
-          background: var(--vn-shell-field, rgba(0, 0, 0, 0.25));
+          background: color-mix(in srgb, var(--vn-shell-field, #0d161a) 72%, transparent);
           border-bottom: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.08));
           flex-shrink: 0;
           scrollbar-width: none;
@@ -230,7 +230,7 @@ export class CharacterFolio implements WorkspaceSurface {
           align-items: center;
           gap: 8px;
           padding: 5px 12px 5px 6px;
-          border-radius: 9999px;
+          border-radius: var(--vn-shell-radius, 9999px);
           border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.12));
           background: var(--vn-shell-button, rgba(255, 255, 255, 0.06));
           color: inherit;
@@ -242,7 +242,7 @@ export class CharacterFolio implements WorkspaceSurface {
           transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
         }
         .folio-roster-item:hover {
-          background: rgba(255, 255, 255, 0.1);
+          background: var(--vn-shell-bg-hover, rgba(255, 255, 255, 0.1));
         }
         .folio-roster-item:active {
           transform: scale(0.97);
@@ -257,7 +257,7 @@ export class CharacterFolio implements WorkspaceSurface {
           width: 26px;
           height: 26px;
           border-radius: 50%;
-          background: rgba(255, 255, 255, 0.12);
+          background: var(--vn-shell-field, rgba(255, 255, 255, 0.12));
           display: flex;
           align-items: center;
           justify-content: center;
@@ -265,7 +265,7 @@ export class CharacterFolio implements WorkspaceSurface {
           font-weight: 700;
           overflow: hidden;
           flex-shrink: 0;
-          border: 1px solid rgba(255, 255, 255, 0.15);
+          border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.15));
         }
         .folio-avatar img {
           width: 100%;
@@ -285,8 +285,8 @@ export class CharacterFolio implements WorkspaceSurface {
           width: 6px;
           height: 6px;
           border-radius: 50%;
-          background: #34d399;
-          box-shadow: 0 0 6px rgba(52, 211, 153, 0.8);
+          background: var(--vn-shell-accent, #34d399);
+          box-shadow: 0 0 6px color-mix(in srgb, var(--vn-shell-accent, #34d399) 75%, transparent);
         }
         .folio-lock-badge {
           font-size: 11px;
@@ -380,6 +380,7 @@ export class CharacterFolio implements WorkspaceSurface {
         }
         .folio-hero-title h2 {
           margin: 0;
+          font-family: var(--vn-shell-display-font, inherit);
           font-size: 18px;
           font-weight: 700;
           color: var(--vn-shell-text, #f1f5f9);
@@ -402,14 +403,14 @@ export class CharacterFolio implements WorkspaceSurface {
           letter-spacing: 0.04em;
           padding: 2px 6px;
           border-radius: 4px;
-          background: rgba(255, 255, 255, 0.08);
+          background: var(--vn-shell-field, rgba(255, 255, 255, 0.08));
           color: var(--vn-shell-text, #cbd5e1);
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.1));
         }
         .folio-tag.tag-scene {
-          background: rgba(52, 211, 153, 0.15);
-          color: #6ee7b7;
-          border-color: rgba(52, 211, 153, 0.3);
+          background: color-mix(in srgb, var(--vn-shell-accent, #6ee7b7) 16%, transparent);
+          color: var(--vn-shell-accent, #6ee7b7);
+          border-color: color-mix(in srgb, var(--vn-shell-accent, #6ee7b7) 38%, transparent);
         }
         .folio-tag.tag-lock {
           background: color-mix(in srgb, var(--vn-shell-accent, #6ee7b7) 18%, transparent);
@@ -432,7 +433,7 @@ export class CharacterFolio implements WorkspaceSurface {
           gap: 6px;
           min-height:44px;
           padding: 8px 10px;
-          border-radius: 8px;
+          border-radius: min(var(--vn-shell-radius, 12px), 10px);
           font-size: 12px;
           font-weight: 600;
           cursor: pointer;
@@ -443,11 +444,11 @@ export class CharacterFolio implements WorkspaceSurface {
           white-space: nowrap;
         }
         .folio-action-btn:hover {
-          background: rgba(255, 255, 255, 0.12);
+          background: var(--vn-shell-bg-hover, rgba(255, 255, 255, 0.12));
         }
         .folio-action-btn.btn-accent {
           background: var(--vn-shell-accent, #6ee7b7);
-          color: #0b1114;
+          color: var(--vn-shell-accent-contrast, #0b1114);
           border-color: var(--vn-shell-accent, #6ee7b7);
         }
         .folio-action-btn.btn-accent:hover {
@@ -545,7 +546,7 @@ export class CharacterFolio implements WorkspaceSurface {
           padding: 8px 34px 8px 10px;
           border-radius: 6px;
           border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.12));
-          background: rgba(0, 0, 0, 0.25);
+          background: var(--vn-shell-field, rgba(0, 0, 0, 0.25));
           color: var(--vn-shell-text, #f1f5f9);
           font-size: 12px;
           font-family: inherit;
@@ -574,14 +575,14 @@ export class CharacterFolio implements WorkspaceSurface {
         }
         .btn-field-autofill:hover {
           color: var(--vn-shell-accent, #6ee7b7);
-          background: rgba(255, 255, 255, 0.08);
+          background: color-mix(in srgb, var(--vn-shell-accent, #6ee7b7) 12%, transparent);
         }
 
         /* Prompt Preview Box */
         .folio-prompt-preview {
-          background: rgba(0, 0, 0, 0.35);
+          background: var(--vn-shell-field, rgba(0, 0, 0, 0.35));
           border: 1px dashed var(--vn-shell-border, rgba(255, 255, 255, 0.15));
-          border-radius: 10px;
+          border-radius: min(var(--vn-shell-radius, 12px), 10px);
           padding: 12px;
           display: flex;
           flex-direction: column;
@@ -599,18 +600,18 @@ export class CharacterFolio implements WorkspaceSurface {
           font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
           font-size: 11.5px;
           line-height: 1.5;
-          color: color-mix(in srgb, var(--vn-shell-accent, #6ee7b7) 90%, #fff);
+          color: var(--vn-shell-text, #e2e8f0);
           word-break: break-word;
-          background: rgba(0, 0, 0, 0.25);
+          background: color-mix(in srgb, var(--vn-shell-bg, #0d161a) 55%, transparent);
           padding: 8px 10px;
           border-radius: 6px;
           margin: 0;
-          border: 1px solid rgba(255, 255, 255, 0.04);
+          border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.08));
         }
 
         /* Relationships Tab & Constellation Web */
         .rel-web-wrap {
-          background: rgba(0, 0, 0, 0.28);
+          background: var(--vn-shell-field, rgba(0, 0, 0, 0.28));
           border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.1));
           border-radius: 10px;
           padding: 8px;
@@ -626,7 +627,7 @@ export class CharacterFolio implements WorkspaceSurface {
           cursor: pointer;
         }
         .rel-bond-card {
-          background: rgba(0, 0, 0, 0.25);
+          background: var(--vn-shell-field, rgba(0, 0, 0, 0.25));
           border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.1));
           border-radius: 10px;
           padding: 12px;
@@ -675,7 +676,7 @@ export class CharacterFolio implements WorkspaceSurface {
           padding: 6px 8px;
           border-radius: 6px;
           border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.12));
-          background: rgba(0, 0, 0, 0.3);
+          background: var(--vn-shell-field, rgba(0, 0, 0, 0.3));
           color: var(--vn-shell-text, #f1f5f9);
           font-size: 12px;
         }
@@ -684,7 +685,7 @@ export class CharacterFolio implements WorkspaceSurface {
           padding: 8px 10px;
           border-radius: 6px;
           border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.12));
-          background: rgba(0, 0, 0, 0.25);
+          background: var(--vn-shell-field, rgba(0, 0, 0, 0.25));
           color: var(--vn-shell-text, #f1f5f9);
           font-size: 12px;
           box-sizing: border-box;
@@ -717,7 +718,7 @@ export class CharacterFolio implements WorkspaceSurface {
           font-style: italic;
           font-size: 13px;
           line-height: 1.5;
-          background: rgba(255, 255, 255, 0.04);
+          background: var(--vn-shell-field, rgba(255, 255, 255, 0.04));
           border-radius: 0 8px 8px 0;
           color: var(--vn-shell-text, #f1f5f9);
         }
@@ -727,7 +728,7 @@ export class CharacterFolio implements WorkspaceSurface {
           gap: 8px;
         }
         .observation-card {
-          background: rgba(0, 0, 0, 0.25);
+          background: var(--vn-shell-field, rgba(0, 0, 0, 0.25));
           border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.06));
           border-radius: 8px;
           padding: 8px 10px;
@@ -751,9 +752,9 @@ export class CharacterFolio implements WorkspaceSurface {
           gap: 10px;
         }
         .folio-cg-card {
-          border-radius: 10px;
+          border-radius: min(var(--vn-shell-radius, 12px), 10px);
           overflow: hidden;
-          background: rgba(0, 0, 0, 0.3);
+          background: var(--vn-shell-panel, rgba(0, 0, 0, 0.3));
           border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.1));
           display: flex;
           flex-direction: column;
@@ -770,7 +771,7 @@ export class CharacterFolio implements WorkspaceSurface {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          background: rgba(0, 0, 0, 0.4);
+          background: var(--vn-shell-field, rgba(0, 0, 0, 0.4));
           gap: 6px;
         }
         .folio-cg-caption {
@@ -794,7 +795,7 @@ export class CharacterFolio implements WorkspaceSurface {
         }
         .btn-set-avatar:hover {
           background: var(--vn-shell-accent, #6ee7b7);
-          color: #000;
+          color: var(--vn-shell-accent-contrast, #000);
         }
 
         .folio-empty {

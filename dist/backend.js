@@ -36629,6 +36629,7 @@ function normalizeReaderPreferences(value) {
     theme: input2.theme === "dark" ? "dark" : "light",
     ...typeof input2.heightRatio === "number" && Number.isFinite(input2.heightRatio) ? { heightRatio: Math.max(0.05, Math.min(1, input2.heightRatio)) } : {},
     ...typeof input2.typography === "string" && ["novelist", "modern", "cinematic", "retro", "terminal", "manga", "fantasy", "accessible"].includes(input2.typography) ? { typography: input2.typography } : {},
+    ...typeof input2.dialogueStyle === "string" && READER_DIALOGUE_STYLES.includes(input2.dialogueStyle) ? { dialogueStyle: input2.dialogueStyle } : {},
     ...input2.smartPacing !== undefined ? { smartPacing: input2.smartPacing === true } : {},
     ...input2.typewriterAudio === "off" || input2.typewriterAudio === "blip" || input2.typewriterAudio === "click" || input2.typewriterAudio === "pip" ? { typewriterAudio: input2.typewriterAudio } : {},
     ...typeof input2.typewriterVolume === "number" && Number.isFinite(input2.typewriterVolume) ? { typewriterVolume: Math.max(0, Math.min(1, input2.typewriterVolume)) } : {},
@@ -36644,8 +36645,15 @@ function normalizeReaderPreferences(value) {
     confidantCutInsEnabled: input2.confidantCutInsEnabled !== undefined ? input2.confidantCutInsEnabled === true : DEFAULT_READER_PREFERENCES.confidantCutInsEnabled ?? true
   };
 }
-var DEFAULT_READER_PREFERENCES;
+var READER_DIALOGUE_STYLES, DEFAULT_READER_PREFERENCES;
 var init_reader_preferences = __esm(() => {
+  READER_DIALOGUE_STYLES = [
+    "preset",
+    "glass-card",
+    "cinema-bar",
+    "editorial-page",
+    "terminal-hud"
+  ];
   DEFAULT_READER_PREFERENCES = {
     adjustableSheetEnabled: false,
     layout: "overlay",

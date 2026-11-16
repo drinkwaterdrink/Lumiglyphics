@@ -1,4 +1,6 @@
 /** Part of the APERTURE stylesheet. aperture-theme.ts joins the parts in order. */
+import { VN_SHELL_PRESET_TOKENS_CSS } from "../palette-tokens.js";
+
 export const APERTURE_CSS_SHEETS_STAGE_PALETTES = `/* =========================================================================
    CANONICAL FULL-SCREEN SHEET GEOMETRY FOR WORKSPACE, FOLIO & LENS
    ========================================================================= */
@@ -13,17 +15,11 @@ aside[data-vn-workspace] {
   border: 0 !important;
   border-radius: 0 !important;
   z-index: 60 !important;
-  background: var(--aperture-workspace-bg, linear-gradient(155deg, #151f20 0%, #101a1e 58%, #0b1419 100%)) !important;
-  color: var(--aperture-text, #eff4e9) !important;
+  background: var(--vn-shell-surface-gradient, var(--aperture-workspace-bg, #101a1e)) !important;
+  color: var(--vn-shell-text, var(--aperture-text, #eff4e9)) !important;
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden !important;
-}
-
-body.theme-light aside[data-vn-workspace],
-[data-aperture-mode="light"] aside[data-vn-workspace] {
-  background: linear-gradient(147deg, #eef3e5 0%, #e8eee0 58%, #dce7d3 100%) !important;
-  color: #172721 !important;
 }
 
 [data-workspace-heading],
@@ -44,12 +40,6 @@ aside[data-vn-workspace] > header {
   box-sizing: border-box !important;
 }
 
-:is(body.theme-light, [data-aperture-mode="light"], [data-vn-shell][data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-workspace-heading], aside[data-vn-workspace] > header) {
-  background: rgba(238, 243, 229, 0.96) !important;
-  border-bottom: 1px solid rgba(35, 75, 57, 0.16) !important;
-  color: #152c22 !important;
-}
-
 [data-workspace-heading] > div,
 aside[data-vn-workspace] > header > div {
   flex: 1 1 auto !important;
@@ -59,32 +49,24 @@ aside[data-vn-workspace] > header > div {
 
 [data-workspace-title],
 [data-workspace-heading] h2 {
-  font-family: Georgia, serif !important;
+  font-family: var(--vn-shell-display-font, Georgia, serif) !important;
   font-size: 17px !important;
   font-weight: 700 !important;
   margin: 0 !important;
-  color: #f4f8ee !important;
+  color: var(--vn-shell-text, #f4f8ee) !important;
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
 }
 
-:is(body.theme-light, [data-aperture-mode="light"], [data-vn-shell][data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-workspace-title], [data-workspace-heading] h2) {
-  color: #152c22 !important;
-}
-
 [data-workspace-subtitle] {
   font-size: 10px !important;
-  color: #9cb5a8 !important;
+  color: var(--vn-shell-muted, #9cb5a8) !important;
   margin: 2px 0 0 !important;
   letter-spacing: 0.04em !important;
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
-}
-
-:is(body.theme-light, [data-aperture-mode="light"], [data-vn-shell][data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-workspace-subtitle] {
-  color: #385b4b !important;
 }
 
 [data-workspace-back],
@@ -136,12 +118,6 @@ aside[data-vn-workspace] > header > div {
   border-color: var(--vn-shell-accent, #38bdf8) !important;
 }
 
-:is(body.theme-light, [data-aperture-mode="light"], [data-vn-shell][data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-workspace-back], .workspace-back-btn, [data-workspace-close]) {
-  background: rgba(0, 0, 0, 0.05) !important;
-  border-color: rgba(35, 75, 57, 0.18) !important;
-  color: #1a3327 !important;
-}
-
 [data-workspace-content] {
   flex: 1 1 auto !important;
   min-height: 0 !important;
@@ -190,14 +166,8 @@ aside[data-vn-workspace] > header > div {
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden !important;
-  background: var(--aperture-workspace-bg, linear-gradient(155deg, #151f20 0%, #101a1e 58%, #0b1419 100%)) !important;
-  color: var(--aperture-text, #eff4e9) !important;
-}
-
-body.theme-light [data-vn-dossier],
-[data-aperture-mode="light"] [data-vn-dossier] {
-  background: linear-gradient(147deg, #eef3e5 0%, #e8eee0 58%, #dce7d3 100%) !important;
-  color: #172721 !important;
+  background: var(--vn-shell-surface-gradient, var(--aperture-workspace-bg, #101a1e)) !important;
+  color: var(--vn-shell-text, var(--aperture-text, #eff4e9)) !important;
 }
 
 [data-vn-dossier-card] {
@@ -228,15 +198,10 @@ body.theme-light [data-vn-dossier],
   justify-content: space-between !important;
   padding: 0 18px !important;
   margin: 0 -18px 12px -18px !important;
-  background: rgba(17, 31, 31, 0.92) !important;
-  border-bottom: 1px solid rgba(220, 238, 217, 0.12) !important;
+  background: var(--vn-shell-panel, rgba(17, 31, 31, 0.92)) !important;
+  border-bottom: 1px solid var(--vn-shell-border, rgba(220, 238, 217, 0.12)) !important;
   backdrop-filter: blur(16px) !important;
   z-index: 10 !important;
-}
-
-body.theme-light [data-vn-dossier-card] header {
-  background: rgba(234, 241, 226, 0.92) !important;
-  border-bottom: 1px solid rgba(61, 86, 75, 0.12) !important;
 }
 
 [data-vn-dossier-card] header h2 {
@@ -343,39 +308,7 @@ aside[data-vn-workspace]:before,
 .settings-page:before,
 [data-settings-route]:before,
 [data-surface="settings"]:before {
-  background: repeating-radial-gradient(ellipse at 105% 88%, transparent 0 44px, var(--aperture-ring-color, rgba(140, 195, 160, 0.12)) 45px, transparent 46px) !important;
-}
-
-/* Light Mode Radial Lines */
-body.theme-light aside[data-vn-workspace]:before,
-body.theme-light [data-workspace-content]:before,
-[data-aperture-mode="light"] aside[data-vn-workspace]:before,
-[data-aperture-mode="light"] [data-workspace-content]:before {
-  background: repeating-radial-gradient(ellipse at 102% 96%, transparent 0 59px, var(--aperture-ring-color, rgba(45, 78, 62, 0.08)) 60px, transparent 61px) !important;
-}
-body.theme-light [data-vn-reference-sheet]:before,
-body.theme-light [data-surface="world"]:before,
-[data-aperture-mode="light"] [data-vn-reference-sheet]:before,
-[data-aperture-mode="light"] [data-surface="world"]:before {
-  background: repeating-radial-gradient(circle at -12% 35%, transparent 0 52px, var(--aperture-ring-color, rgba(45, 78, 62, 0.08)) 53px, transparent 54px) !important;
-}
-body.theme-light [data-vn-dossier]:before,
-body.theme-light [data-vn-dossier-card]:before,
-body.theme-light [data-surface="character"]:before,
-[data-aperture-mode="light"] [data-vn-dossier]:before,
-[data-aperture-mode="light"] [data-vn-dossier-card]:before,
-[data-aperture-mode="light"] [data-surface="character"]:before {
-  background: repeating-radial-gradient(ellipse at 108% 18%, transparent 0 49px, rgba(45, 78, 62, 0.08) 50px, transparent 51px) !important;
-}
-body.theme-light [data-vn-settings]:before,
-body.theme-light .settings-page:before,
-body.theme-light [data-settings-route]:before,
-body.theme-light [data-surface="settings"]:before,
-[data-aperture-mode="light"] [data-vn-settings]:before,
-[data-aperture-mode="light"] .settings-page:before,
-[data-aperture-mode="light"] [data-settings-route]:before,
-[data-aperture-mode="light"] [data-surface="settings"]:before {
-  background: repeating-radial-gradient(ellipse at 105% 88%, transparent 0 44px, rgba(45, 78, 62, 0.08) 45px, transparent 46px) !important;
+  background: repeating-radial-gradient(ellipse at 105% 88%, transparent 0 44px, var(--vn-shell-ring, var(--aperture-ring-color, rgba(140, 195, 160, 0.12))) 45px, transparent 46px) !important;
 }
 
 /* Hide reader header when workspace is open */
@@ -521,45 +454,45 @@ body.theme-light [data-surface="settings"]:before,
   padding-left: 0 !important;
 }
 
-/* Characters & Places Folio Text Contrast - Dark Mode */
+/* Characters & Places Folio Text Contrast — Preset Driven */
 .observation-cell span {
-  color: #9cb5a8 !important;
+  color: var(--vn-shell-muted, #9cb5a8) !important;
   opacity: 1 !important;
   font-weight: 650 !important;
 }
 .observation-cell strong {
-  color: #ffffff !important;
+  color: var(--vn-shell-text, #ffffff) !important;
   font-weight: 700 !important;
 }
 .observation-cell em {
-  color: #d6ecad !important;
-  background: rgba(220, 238, 177, 0.2) !important;
+  color: var(--vn-shell-accent, #d6ecad) !important;
+  background: color-mix(in srgb, var(--vn-shell-accent, #dcebad) 18%, transparent) !important;
 }
 [data-vn-dossier-card] dt {
-  color: #a8c7b8 !important;
+  color: var(--vn-shell-muted, #a8c7b8) !important;
   opacity: 1 !important;
   font-weight: 700 !important;
 }
 [data-vn-dossier-card] dd {
-  color: #f2f7f0 !important;
+  color: var(--vn-shell-text, #f2f7f0) !important;
   opacity: 1 !important;
 }
 section[data-reference-current] h3,
 section[data-reference-observations] h3 {
-  color: #dcebad !important;
+  color: var(--vn-shell-accent, #dcebad) !important;
   opacity: 1 !important;
   font-weight: 700 !important;
 }
 [data-dossier-present-cast] h3 {
-  color: #dcebad !important;
+  color: var(--vn-shell-accent, #dcebad) !important;
   opacity: 1 !important;
 }
 
 /* History Workspace Surface */
 [data-surface="history"],
 [data-vn-workspace-tool="history"] {
-  background: var(--aperture-workspace-bg, #11241c) !important;
-  color: var(--aperture-text, #f3f7ee) !important;
+  background: var(--vn-shell-surface-gradient, var(--aperture-workspace-bg, #11241c)) !important;
+  color: var(--vn-shell-text, var(--aperture-text, #f3f7ee)) !important;
   height: 100% !important;
   width: 100% !important;
   display: flex !important;
@@ -568,171 +501,31 @@ section[data-reference-observations] h3 {
   min-height: 0 !important;
 }
 
-/* Light mode specific rules for World Lens & Folio */
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-vn-shell], [data-vn-root], [data-vn-dossier], [data-vn-dossier-card], [data-vn-reference-sheet], aside[data-vn-workspace], [data-vn-settings], .settings-page, [data-surface="history"], [data-vn-workspace-tool="history"]) {
-  background: linear-gradient(147deg, #eef3e5 0%, #e8eee0 58%, #dce7d3 100%) !important;
-  color: #172721 !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-image-studio], [data-image-studio] section, .settings-page, [data-vn-settings] section, [data-vn-workspace] section) {
-  background: #eef3e5 !important;
-  color: #172721 !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-image-studio] header, .settings-page header, [data-vn-settings] header) {
-  background: #e4ebe0 !important;
-  border-color: #bccdc0 !important;
-  color: #172721 !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .world-sheet-map {
-  background: #dbe6db !important;
-  border-color: #a9c2b2 !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .world-map-svg path {
-  stroke: #385950 !important;
-  opacity: 0.52 !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .map-node-pill {
-  background: rgba(248, 251, 242, 0.98) !important;
-  color: #19352a !important;
-  border-color: #9bb1a5 !important;
-  box-shadow: 0 4px 17px rgba(36, 66, 56, 0.15) !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .map-node-pill b {
-  color: #19352a !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .map-node-pill small {
-  color: #4e6e60 !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .map-node-pill.active {
-  background: #18362d !important;
-  color: #f7f9ee !important;
-  border-color: #18362d !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .map-node-pill.active b {
-  color: #f7f9ee !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .map-node-pill.active small {
-  color: #d3e6d8 !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .world-lens {
-  position: relative !important;
-  inset: auto !important;
-  margin: 10px 0 8px !important;
-  width: 100% !important;
-  box-sizing: border-box !important;
-  border-radius: 12px !important;
-  padding: 12px 14px !important;
-  background: rgba(251, 252, 245, 0.97) !important;
-  color: #19362a !important;
-  border: 1px solid #c0cec2 !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .world-lens h3 {
-  color: #19362a !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .world-lens p {
-  color: #455e51 !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .world-lens-cta {
-  color: #2b604b !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .world-strip button {
-  background: #fbfdf5 !important;
-  color: #1b392e !important;
-  border: 1px solid #a3baaa !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .world-strip button b {
-  color: #1c382f !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .world-strip button small {
-  color: #546c5f !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .chip {
-  color: #274638 !important;
-  border-color: #8da997 !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .chip.active {
-  color: #f6f9eb !important;
-  border-color: #244c38 !important;
-  background: #244c38 !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .observation-cell span {
-  color: #2b5946 !important;
-  opacity: 1 !important;
-  font-weight: 700 !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .observation-cell strong {
-  color: #12241d !important;
-  font-weight: 700 !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .observation-cell em {
-  color: #1d4d38 !important;
-  background: rgba(56, 102, 79, 0.15) !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-vn-dossier-card] dt {
-  color: #2b5946 !important;
-  opacity: 1 !important;
-  font-weight: 700 !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-vn-dossier-card] dd {
-  color: #142820 !important;
-  opacity: 1 !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) section[data-reference-current] h3,
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) section[data-reference-observations] h3 {
-  color: #1e4533 !important;
-  opacity: 1 !important;
-  font-weight: 700 !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-reference-overview] {
-  background: rgba(225, 238, 222, 0.85) !important;
-  border: 1px solid rgba(86, 128, 107, 0.35) !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-dossier-present-cast] {
-  background: rgba(225, 238, 222, 0.85) !important;
-  border-color: rgba(86, 128, 107, 0.35) !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-dossier-present-cast] h3 {
-  color: #1e4533 !important;
-  opacity: 1 !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-dossier-cast-chip] {
-  color: #153226 !important;
-  background: #e5eee2 !important;
-  border-color: #8dafa0 !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-reference-list] button {
-  background: #fbfdf7 !important;
-  border-color: #9cb5a7 !important;
-  color: #142820 !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-reference-row-title] {
-  color: #142820 !important;
-}
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-reference-snippet] {
-  color: #3b5a4b !important;
-  opacity: 1 !important;
-}
+
+
+
 
 /* Aperture Dialogue History & Backlog Replay */
 [data-vn-backlog] {
-  background: linear-gradient(180deg, rgba(8, 14, 18, 0.96) 0%, rgba(13, 22, 28, 0.98) 100%) !important;
-  border: 1px solid rgba(134, 219, 178, 0.22) !important;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  background: var(--vn-shell-panel, #0d161c) !important;
+  border: 1px solid var(--vn-shell-border, rgba(134, 219, 178, 0.22)) !important;
+  box-shadow: var(--vn-shell-shadow, 0 24px 64px rgba(0, 0, 0, 0.65)) !important;
   backdrop-filter: blur(16px) !important;
-  border-radius: 16px !important;
+  border-radius: var(--vn-shell-radius, 16px) !important;
 }
 
 [data-vn-backlog-item] {
-  background: rgba(16, 26, 30, 0.75) !important;
-  border: 1px solid rgba(134, 219, 178, 0.12) !important;
-  border-radius: 12px !important;
+  background: var(--vn-shell-field, rgba(16, 26, 30, 0.75)) !important;
+  border: 1px solid var(--vn-shell-border, rgba(134, 219, 178, 0.12)) !important;
+  border-radius: min(var(--vn-shell-radius, 12px), 12px) !important;
   padding: 12px 16px !important;
   margin-bottom: 12px !important;
   transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease !important;
 }
 
 [data-vn-backlog-item]:hover {
-  background: rgba(22, 38, 42, 0.85) !important;
-  border-color: rgba(134, 219, 178, 0.28) !important;
+  background: var(--vn-shell-hover-bg, rgba(22, 38, 42, 0.85)) !important;
+  border-color: var(--vn-shell-accent, rgba(134, 219, 178, 0.35)) !important;
 }
 
 .backlog-item-header {
@@ -743,10 +536,10 @@ section[data-reference-observations] h3 {
 }
 
 [data-vn-backlog-speaker] {
-  font-family: var(--font-header, system-ui, sans-serif) !important;
+  font-family: var(--vn-shell-display-font, var(--font-header, system-ui, sans-serif)) !important;
   font-size: 13px !important;
   font-weight: 700 !important;
-  color: #86dbb2 !important;
+  color: var(--vn-shell-accent, #86dbb2) !important;
   letter-spacing: 0.04em !important;
   text-transform: uppercase !important;
 }
@@ -754,16 +547,16 @@ section[data-reference-observations] h3 {
 [data-vn-backlog-text] {
   font-size: 14.5px !important;
   line-height: 1.65 !important;
-  color: #dbebe2 !important;
+  color: var(--vn-shell-text, #dbebe2) !important;
   margin: 0 !important;
 }
 
 .backlog-jump-btn {
   appearance: none !important;
-  background: rgba(56, 102, 79, 0.35) !important;
-  border: 1px solid rgba(134, 219, 178, 0.35) !important;
-  border-radius: 6px !important;
-  color: #a9e8cb !important;
+  background: var(--vn-shell-button, rgba(56, 102, 79, 0.35)) !important;
+  border: 1px solid var(--vn-shell-border, rgba(134, 219, 178, 0.35)) !important;
+  border-radius: min(var(--vn-shell-radius, 8px), 8px) !important;
+  color: var(--vn-shell-accent, #a9e8cb) !important;
   font-size: 11px !important;
   font-weight: 650 !important;
   padding: 3px 10px !important;
@@ -773,9 +566,9 @@ section[data-reference-observations] h3 {
 }
 
 .backlog-jump-btn:hover {
-  background: rgba(134, 219, 178, 0.25) !important;
-  color: #ffffff !important;
-  border-color: #86dbb2 !important;
+  background: var(--vn-shell-accent, #86dbb2) !important;
+  color: var(--vn-shell-accent-contrast, #081218) !important;
+  border-color: var(--vn-shell-accent, #86dbb2) !important;
   transform: translateY(-1px) !important;
 }
 
@@ -785,58 +578,19 @@ section[data-reference-observations] h3 {
 
 /* Speaking Voice Button Pulse Animation */
 @keyframes aperture-voice-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(134, 219, 178, 0.6); }
-  70% { box-shadow: 0 0 0 8px rgba(134, 219, 178, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(134, 219, 178, 0); }
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--vn-shell-accent, #86dbb2) 55%, transparent); }
+  70% { box-shadow: 0 0 0 8px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
 }
 
 [data-action="voice-toggle"].speaking {
-  color: #86dbb2 !important;
-  background: rgba(134, 219, 178, 0.18) !important;
-  border-color: #86dbb2 !important;
+  color: var(--vn-shell-accent, #86dbb2) !important;
+  background: color-mix(in srgb, var(--vn-shell-accent, #86dbb2) 18%, transparent) !important;
+  border-color: var(--vn-shell-accent, #86dbb2) !important;
   animation: aperture-voice-pulse 1.8s infinite !important;
 }
 
-/* Light Mode Overrides for Backlog */
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-vn-backlog] {
-  background: rgba(246, 250, 244, 0.98) !important;
-  border-color: rgba(86, 128, 107, 0.35) !important;
-  box-shadow: 0 24px 64px rgba(18, 38, 29, 0.22) !important;
-}
-
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-vn-backlog-item] {
-  background: #ffffff !important;
-  border-color: rgba(86, 128, 107, 0.25) !important;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04) !important;
-}
-
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-vn-backlog-item]:hover {
-  background: #f4f8f2 !important;
-  border-color: rgba(86, 128, 107, 0.45) !important;
-}
-
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-vn-backlog-speaker] {
-  color: #184e36 !important;
-  font-weight: 700 !important;
-}
-
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-vn-backlog-text] {
-  color: #142820 !important;
-}
-
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .backlog-jump-btn {
-  background: #e5eee2 !important;
-  border-color: #8dafa0 !important;
-  color: #153226 !important;
-}
-
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .backlog-jump-btn:hover {
-  background: #2b5946 !important;
-  border-color: #2b5946 !important;
-  color: #ffffff !important;
-}
-
-/* Light Mode contrast tokens are driven cleanly through --vn-shell-* variables instead of blanket !important overrides. */
+/* Theme contrast tokens are driven cleanly through --vn-shell-* variables per preset. */
 
 /* Reading Typography Modes */
 [data-vn-root][data-vn-typography="novelist"] [data-vn-dialogue-text],
@@ -931,9 +685,9 @@ section[data-reference-observations] h3 {
   text-align: center;
   padding: 24px 32px;
   max-width: min(90%, 540px);
-  background: linear-gradient(180deg, rgba(14, 24, 28, 0.94) 0%, rgba(8, 14, 18, 0.98) 100%);
-  border: 1px solid rgba(134, 219, 178, 0.32);
-  border-radius: 16px;
+  background: var(--vn-shell-surface-gradient, linear-gradient(180deg, rgba(14, 24, 28, 0.94) 0%, rgba(8, 14, 18, 0.98) 100%));
+  border: 1px solid var(--vn-shell-border-strong, var(--vn-shell-border, rgba(134, 219, 178, 0.32)));
+  border-radius: var(--vn-shell-radius, 16px);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.12);
   transform: scale(0.95);
   transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
@@ -945,20 +699,20 @@ section[data-reference-observations] h3 {
 
 .chapter-eyebrow {
   display: inline-block;
-  font-family: var(--font-header, system-ui, sans-serif);
+  font-family: var(--vn-shell-family, system-ui, sans-serif);
   font-size: 11px;
   font-weight: 750;
   letter-spacing: 0.16em;
-  color: #86dbb2;
+  color: var(--vn-shell-accent, #86dbb2);
   text-transform: uppercase;
   margin-bottom: 8px;
 }
 
 .chapter-title {
-  font-family: Georgia, "Cinzel", serif;
+  font-family: var(--vn-shell-display-font, Georgia, serif);
   font-size: clamp(20px, 4vw, 28px);
   font-weight: 700;
-  color: #f4fbf7;
+  color: var(--vn-shell-text, #f4fbf7);
   margin: 0 0 8px;
   line-height: 1.25;
 }
@@ -966,7 +720,7 @@ section[data-reference-observations] h3 {
 .chapter-subtitle {
   font-size: 13.5px;
   line-height: 1.5;
-  color: #9ab3a6;
+  color: var(--vn-shell-muted, #9ab3a6);
   margin: 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1051,7 +805,7 @@ section[data-reference-observations] h3 {
   align-items: center !important;
   gap: 10px !important;
   padding: 8px 16px !important;
-  border-bottom: 1px solid rgba(134, 219, 178, 0.14) !important;
+  border-bottom: 1px solid var(--vn-shell-border, rgba(160, 205, 185, 0.16)) !important;
 }
 
 [data-vn-backlog-search] {
@@ -1059,49 +813,28 @@ section[data-reference-observations] h3 {
   min-height: 44px;
   padding: 6px 12px !important;
   font-size: 13px !important;
-  background: rgba(16, 26, 30, 0.7) !important;
-  border: 1px solid rgba(134, 219, 178, 0.22) !important;
-  border-radius: 8px !important;
-  color: #dbebe2 !important;
+  background: var(--vn-shell-field, rgba(16, 26, 30, 0.7)) !important;
+  border: 1px solid var(--vn-shell-border, rgba(160, 205, 185, 0.22)) !important;
+  border-radius: min(var(--vn-shell-radius, 8px), 10px) !important;
+  color: var(--vn-shell-text, #dbebe2) !important;
 }
 
 [data-vn-backlog-search]::placeholder {
-  color: #7a9488 !important;
+  color: var(--vn-shell-muted, #7a9488) !important;
 }
 
 .backlog-search-count {
   font-size: 11px !important;
-  color: #86dbb2 !important;
+  color: var(--vn-shell-accent, #86dbb2) !important;
   font-weight: 600 !important;
   flex: none !important;
 }
 
-/* Light Mode Overrides for Search Bar & Chapter Card */
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) [data-vn-backlog-search] {
-  background: #ffffff !important;
-  border-color: rgba(86, 128, 107, 0.35) !important;
-  color: #142820 !important;
-}
-
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .chapter-card-inner {
-  background: linear-gradient(180deg, rgba(246, 250, 244, 0.98) 0%, rgba(235, 244, 232, 0.98) 100%) !important;
-  border-color: rgba(86, 128, 107, 0.35) !important;
-  box-shadow: 0 24px 64px rgba(18, 38, 29, 0.25) !important;
-}
-
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .chapter-title {
-  color: #142820 !important;
-}
-
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .chapter-subtitle {
-  color: #4b6b5d !important;
-}
-
 /* Anchor Trait Badges */
 .tag.anchor-tag {
-  background: rgba(134, 219, 178, 0.18) !important;
-  color: #86dbb2 !important;
-  border: 1px solid rgba(134, 219, 178, 0.35) !important;
+  background: color-mix(in srgb, var(--vn-shell-accent, #86dbb2) 16%, transparent) !important;
+  color: var(--vn-shell-accent, #86dbb2) !important;
+  border: 1px solid color-mix(in srgb, var(--vn-shell-accent, #86dbb2) 38%, transparent) !important;
   font-weight: 650 !important;
   display: inline-flex !important;
   align-items: center !important;
@@ -1109,12 +842,6 @@ section[data-reference-observations] h3 {
   padding: 2px 8px !important;
   border-radius: 999px !important;
   font-size: 11px !important;
-}
-
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) .tag.anchor-tag {
-  background: #e2ede5 !important;
-  color: #184e36 !important;
-  border-color: #8dafa0 !important;
 }
 
 
@@ -1167,509 +894,283 @@ section[data-reference-observations] h3 {
 }
 
 /* =========================================================================
-   APERTURE THEME SUITE PALETTES (Full UI Reskinning)
+   UNIFIED PALETTE TOKENS & ARCHITECTURAL TEXT VIEWER STYLES
    ========================================================================= */
 
-/* 1. Aperture Obsidian / Emerald (Host Default) */
-:is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="lumiverse"],
-[data-vn-root][data-vn-preset="lumiverse"] {
-  --aperture-overlay-bg: linear-gradient(170deg, #16241f, #0d1714, #070d0b);
-  --aperture-ring-color: rgba(160, 205, 185, 0.08);
-  --aperture-workspace-bg: linear-gradient(160deg, #131e1a, #0c1411, #060b09);
-  --aperture-accent-surface: #183628;
-  --aperture-ghost-bg: rgba(14, 30, 24, 0.65);
-  --aperture-accent: #dcebad;
-  --aperture-accent-hover: #ecf8cd;
-  --aperture-accent-contrast: #11241c;
-  --aperture-accent-glow: rgba(220, 238, 173, 0.35);
-  --aperture-text: #eff4e9;
-  --aperture-muted: #9cb5a8;
-  --aperture-dialogue-bg: rgba(4, 13, 17, var(--caption-opacity, 0.76));
-  --aperture-dialogue-border: rgba(224, 238, 217, 0.32);
-  --aperture-bottom-bar-bg: rgba(7, 16, 13, 0.94);
-  --aperture-bottom-bar-border: rgba(160, 205, 185, 0.16);
-  --aperture-button-bg: rgba(14, 30, 24, 0.92);
-  --aperture-button-border: rgba(160, 205, 185, 0.3);
-  --aperture-button-text: #edf3ea;
-  --aperture-button-hover-bg: rgba(35, 75, 57, 0.95);
-  --aperture-input-form-bg: rgba(11, 24, 18, 0.92);
-  --aperture-input-bg: rgba(6, 14, 11, 0.8);
-  --aperture-choice-bg: rgba(11, 24, 18, 0.92);
-  --aperture-choice-border: rgba(160, 205, 185, 0.28);
-  --aperture-choice-hover-bg: rgba(35, 75, 57, 0.95);
-  --vn-shell-panel: #111a1e;
-  --vn-shell-field: #182429;
-  --vn-shell-button: #23342e;
-  --vn-shell-text: #eff4e9;
-  --vn-shell-muted: #a4bbb1;
-  --vn-shell-border: rgba(220, 238, 217, 0.14);
-  --vn-shell-accent: #dce9b5;
-  --vn-shell-accent-contrast: #1c3525;
-}
+${VN_SHELL_PRESET_TOKENS_CSS}
+
+/* 1. Lumiverse (Host Adaptive Obsidian Glass) */
 [data-vn-root][data-vn-preset="lumiverse"] [data-vn-dialogue] {
-  border-color: rgba(224, 238, 217, 0.32) !important;
-  background: rgba(4, 13, 17, var(--caption-opacity, 0.76)) !important;
+  border-radius: 16px;
+  border-color: var(--lumiverse-border, rgba(224, 238, 217, 0.32));
+  background: var(--lumiverse-card-bg, rgba(6, 15, 18, var(--caption-opacity, 0.8)));
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.44), inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 [data-vn-root][data-vn-preset="lumiverse"] [data-vn-dialogue-text] {
-  color: var(--lumiverse-text, #eff4e9) !important;
+  color: var(--lumiverse-text, #eff4e9);
   font-family: var(--vn-font-family, inherit);
 }
 [data-vn-root][data-vn-preset="lumiverse"] [data-vn-speaker] {
-  color: #e0eeb1 !important;
-  background: rgba(12, 24, 20, 0.9) !important;
-  border-color: rgba(224, 238, 217, 0.35) !important;
+  color: var(--lumiverse-primary, #dcebad);
 }
 
-/* 2. Aperture Sage Editorial (Modern Light) */
-:is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="paper-novel"],
-[data-vn-root][data-vn-preset="paper-novel"] {
-  --aperture-overlay-bg: linear-gradient(170deg, #f4efe6, #eae5db, #ded9ce);
-  --aperture-ring-color: rgba(35, 75, 57, 0.08);
-  --aperture-workspace-bg: linear-gradient(160deg, #f5f2e9, #ebe7dc, #dfdad0);
-  --aperture-accent-surface: #e4ebe0;
-  --aperture-ghost-bg: rgba(238, 243, 229, 0.85);
-  --aperture-accent: #24533e;
-  --aperture-accent-hover: #1a3e2e;
-  --aperture-accent-contrast: #f4f7eb;
-  --aperture-accent-glow: rgba(36, 83, 62, 0.25);
-  --aperture-text: #172721;
-  --aperture-muted: #53685f;
-  --aperture-dialogue-bg: rgba(246, 248, 244, var(--caption-opacity, 0.92));
-  --aperture-dialogue-border: rgba(46, 96, 71, 0.38);
-  --aperture-bottom-bar-bg: rgba(238, 243, 232, 0.96);
-  --aperture-bottom-bar-border: rgba(53, 80, 69, 0.2);
-  --aperture-button-bg: rgba(225, 234, 218, 0.95);
-  --aperture-button-border: rgba(46, 96, 71, 0.3);
-  --aperture-button-text: #172721;
-  --aperture-button-hover-bg: rgba(205, 220, 196, 0.98);
-  --aperture-input-form-bg: rgba(244, 247, 240, 0.95);
-  --aperture-input-bg: rgba(255, 255, 255, 0.9);
-  --aperture-choice-bg: rgba(240, 245, 235, 0.95);
-  --aperture-choice-border: rgba(46, 96, 71, 0.25);
-  --aperture-choice-hover-bg: rgba(220, 235, 212, 0.98);
-  --vn-shell-panel: #eef3e5;
-  --vn-shell-field: #ffffff;
-  --vn-shell-button: #d8e5d5;
-  --vn-shell-text: #172721;
-  --vn-shell-muted: #53685f;
-  --vn-shell-border: rgba(53, 80, 69, 0.18);
-  --vn-shell-accent: #24533e;
-  --vn-shell-accent-contrast: #f4f7eb;
-}
+/* 2. Paper Novel / Sage Editorial — Warm Vellum Hardcover Bookplate */
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-dialogue] {
-  border-color: rgba(46, 96, 71, 0.38) !important;
-  background: rgba(246, 248, 244, var(--caption-opacity, 0.92)) !important;
-  color: #172721 !important;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+  border-radius: 5px;
+  border-color: rgba(138, 47, 35, 0.45);
+  background: rgba(248, 242, 229, var(--caption-opacity, 0.94));
+  color: #241d17;
+  outline: 1px solid rgba(101, 75, 43, 0.32);
+  outline-offset: -6px;
+  box-shadow: inset 4px 0 0 #8a2f23, 0 16px 40px rgba(34, 20, 8, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+[data-vn-root][data-vn-preset="paper-novel"] [data-vn-dialogue]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(101, 75, 43, 0.025) 0 1px, transparent 1px 18px);
 }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-dialogue-text] {
-  color: #172721 !important;
+  color: #241d17 !important;
   text-shadow: none !important;
+  line-height: 1.65;
 }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-speaker] {
-  color: #1a4f36 !important;
-  background: #e7efe4 !important;
-  border-color: rgba(46, 96, 71, 0.4) !important;
+  color: #8a2f23 !important;
+  font-variant: small-caps;
+}
+[data-vn-root][data-vn-preset="paper-novel"] [data-vn-speaker]::before {
+  content: "◆ ";
+  font-size: 0.85em;
+  opacity: 0.9;
 }
 
-/* 3. Aperture Midnight OLED (Ultra Dark Mint) */
-:is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="midnight-noir"],
-[data-vn-root][data-vn-preset="midnight-noir"] {
-  --aperture-overlay-bg: linear-gradient(170deg, #0d0d10, #060608, #000000);
-  --aperture-ring-color: rgba(255, 255, 255, 0.07);
-  --aperture-workspace-bg: linear-gradient(160deg, #0a0a0d, #040406, #000000);
-  --aperture-accent-surface: #121815;
-  --aperture-ghost-bg: rgba(8, 12, 10, 0.7);
-  --aperture-accent: #6ee7b7;
-  --aperture-accent-hover: #a7f3d0;
-  --aperture-accent-contrast: #021a11;
-  --aperture-accent-glow: rgba(110, 231, 183, 0.35);
-  --aperture-text: #f8fafc;
-  --aperture-muted: #94a3b8;
-  --aperture-dialogue-bg: rgba(0, 0, 0, var(--caption-opacity, 0.94));
-  --aperture-dialogue-border: rgba(110, 231, 183, 0.38);
-  --aperture-bottom-bar-bg: rgba(2, 3, 5, 0.96);
-  --aperture-bottom-bar-border: rgba(110, 231, 183, 0.2);
-  --aperture-button-bg: rgba(10, 15, 13, 0.94);
-  --aperture-button-border: rgba(110, 231, 183, 0.3);
-  --aperture-button-text: #f8fafc;
-  --aperture-button-hover-bg: rgba(20, 40, 30, 0.95);
-  --aperture-input-form-bg: rgba(5, 8, 7, 0.95);
-  --aperture-input-bg: rgba(0, 0, 0, 0.9);
-  --aperture-choice-bg: rgba(8, 12, 10, 0.94);
-  --aperture-choice-border: rgba(110, 231, 183, 0.28);
-  --aperture-choice-hover-bg: rgba(18, 38, 28, 0.96);
-  --vn-shell-panel: #07090b;
-  --vn-shell-field: #0e1215;
-  --vn-shell-button: #13221b;
-  --vn-shell-text: #f8fafc;
-  --vn-shell-muted: #80998f;
-  --vn-shell-border: rgba(110, 231, 183, 0.18);
-  --vn-shell-accent: #6ee7b7;
-  --vn-shell-accent-contrast: #021a11;
-}
+/* 3. Midnight Noir — Art-Deco Marquee & Stepped Brass OLED */
 [data-vn-root][data-vn-preset="midnight-noir"] [data-vn-dialogue] {
-  border-color: rgba(110, 231, 183, 0.38) !important;
-  background: rgba(0, 0, 0, var(--caption-opacity, 0.94)) !important;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(110, 231, 183, 0.15) !important;
+  border-radius: 3px;
+  border-color: rgba(217, 164, 65, 0.56);
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.015) 0 1px, transparent 1px 4px), rgba(4, 6, 12, var(--caption-opacity, 0.95));
+  outline: 1px solid rgba(217, 164, 65, 0.24);
+  outline-offset: -5px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 236, 196, 0.14);
+}
+[data-vn-root][data-vn-preset="midnight-noir"] [data-vn-dialogue]::after {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border: 1px solid rgba(217, 164, 65, 0.55);
+  clip-path: polygon(0 0, 14px 0, 14px 1px, 1px 1px, 1px 14px, 0 14px, 0 0, 100% 0, 100% 14px, calc(100% - 1px) 14px, calc(100% - 1px) 1px, calc(100% - 14px) 1px, calc(100% - 14px) 0, 100% 0, 100% 100%, calc(100% - 14px) 100%, calc(100% - 14px) calc(100% - 1px), calc(100% - 1px) calc(100% - 1px), calc(100% - 1px) calc(100% - 14px), 100% calc(100% - 14px), 100% 100%, 0 100%, 0 calc(100% - 14px), 1px calc(100% - 14px), 1px calc(100% - 1px), 14px calc(100% - 1px), 14px 100%, 0 100%);
+  pointer-events: none;
 }
 [data-vn-root][data-vn-preset="midnight-noir"] [data-vn-dialogue-text] {
-  color: #f8fafc !important;
+  color: #f5f1e6;
 }
 [data-vn-root][data-vn-preset="midnight-noir"] [data-vn-speaker] {
-  color: #6ee7b7 !important;
-  background: #050508 !important;
-  border-color: rgba(110, 231, 183, 0.4) !important;
+  color: #efc76e !important;
+  font-style: italic;
+  letter-spacing: 0.08em !important;
 }
+[data-vn-root][data-vn-preset="midnight-noir"] [data-vn-speaker]::before { content: "— "; opacity: 0.7; }
+[data-vn-root][data-vn-preset="midnight-noir"] [data-vn-speaker]::after { content: " —"; opacity: 0.7; }
 
-/* 4. Aperture Solar Dusk (Warm Amber) */
-:is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="golden-hour"],
-[data-vn-root][data-vn-preset="golden-hour"] {
-  --aperture-overlay-bg: linear-gradient(170deg, #26160b, #180c05, #0d0602);
-  --aperture-ring-color: rgba(245, 158, 11, 0.1);
-  --aperture-workspace-bg: linear-gradient(160deg, #201209, #150a04, #0c0502);
-  --aperture-accent-surface: #381e0e;
-  --aperture-ghost-bg: rgba(32, 20, 10, 0.65);
-  --aperture-accent: #f59e0b;
-  --aperture-accent-hover: #fbbf24;
-  --aperture-accent-contrast: #241403;
-  --aperture-accent-glow: rgba(245, 158, 11, 0.35);
-  --aperture-text: #fef3c7;
-  --aperture-muted: #d97706;
-  --aperture-dialogue-bg: rgba(26, 17, 8, var(--caption-opacity, 0.88));
-  --aperture-dialogue-border: rgba(245, 158, 11, 0.45);
-  --aperture-bottom-bar-bg: rgba(18, 12, 6, 0.95);
-  --aperture-bottom-bar-border: rgba(245, 158, 11, 0.22);
-  --aperture-button-bg: rgba(32, 20, 10, 0.94);
-  --aperture-button-border: rgba(245, 158, 11, 0.32);
-  --aperture-button-text: #fef3c7;
-  --aperture-button-hover-bg: rgba(55, 34, 15, 0.95);
-  --aperture-input-form-bg: rgba(28, 18, 9, 0.95);
-  --aperture-input-bg: rgba(15, 9, 4, 0.88);
-  --aperture-choice-bg: rgba(28, 18, 9, 0.94);
-  --aperture-choice-border: rgba(245, 158, 11, 0.3);
-  --aperture-choice-hover-bg: rgba(55, 34, 15, 0.96);
-  --vn-shell-panel: #1a1208;
-  --vn-shell-field: #241a0e;
-  --vn-shell-button: #352210;
-  --vn-shell-text: #fef3c7;
-  --vn-shell-muted: #d4a359;
-  --vn-shell-border: rgba(245, 158, 11, 0.22);
-  --vn-shell-accent: #f59e0b;
-  --vn-shell-accent-contrast: #241403;
-}
+/* 4. Golden Hour / Solar Dusk — Smoked Amber & Gold Clasp */
 [data-vn-root][data-vn-preset="golden-hour"] [data-vn-dialogue] {
-  border-color: rgba(245, 158, 11, 0.45) !important;
-  background: rgba(26, 17, 8, var(--caption-opacity, 0.86)) !important;
-  box-shadow: 0 16px 44px rgba(45, 22, 6, 0.4), inset 0 1px 0 rgba(254, 215, 170, 0.2) !important;
+  border-radius: 16px;
+  border-color: rgba(239, 179, 94, 0.55);
+  background: radial-gradient(ellipse 65% 110% at 50% -25%, rgba(255, 200, 120, 0.14), transparent 68%), rgba(28, 18, 9, var(--caption-opacity, 0.9));
+  outline: 1px solid rgba(255, 212, 138, 0.28);
+  outline-offset: -6px;
+  box-shadow: 0 16px 46px rgba(42, 18, 4, 0.5), inset 0 1px 0 rgba(255, 228, 175, 0.22);
+}
+[data-vn-root][data-vn-preset="golden-hour"] [data-vn-dialogue]::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  background: linear-gradient(135deg, #fff1cf, #d29a52);
+  transform: rotate(45deg);
+  box-shadow: 0 0 8px rgba(246, 220, 164, 0.75);
+  pointer-events: none;
 }
 [data-vn-root][data-vn-preset="golden-hour"] [data-vn-dialogue-text] {
-  color: #fef3c7 !important;
+  color: #fff5e0;
 }
 [data-vn-root][data-vn-preset="golden-hour"] [data-vn-speaker] {
-  color: #fbbf24 !important;
-  background: #24160a !important;
-  border-color: rgba(245, 158, 11, 0.4) !important;
+  color: #f8c97d !important;
 }
+[data-vn-root][data-vn-preset="golden-hour"] [data-vn-speaker]::before { content: "✧ "; }
 
-/* 5. Aperture Minimal Slate (Studio Slate / Ice Blue) */
-:is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="boxed-console"],
-[data-vn-root][data-vn-preset="boxed-console"] {
-  --aperture-overlay-bg: linear-gradient(170deg, #182026, #10161a, #0a0d10);
-  --aperture-ring-color: rgba(56, 189, 248, 0.09);
-  --aperture-workspace-bg: linear-gradient(160deg, #141a20, #0e1217, #080b0e);
-  --aperture-accent-surface: #1a2733;
-  --aperture-ghost-bg: rgba(18, 26, 34, 0.65);
-  --aperture-accent: #94a3b8;
-  --aperture-accent-hover: #cbd5e1;
-  --aperture-accent-contrast: #0f172a;
-  --aperture-accent-glow: rgba(148, 163, 184, 0.35);
-  --aperture-text: #f1f5f9;
-  --aperture-muted: #64748b;
-  --aperture-dialogue-bg: rgba(15, 23, 42, var(--caption-opacity, 0.88));
-  --aperture-dialogue-border: rgba(148, 163, 184, 0.35);
-  --aperture-bottom-bar-bg: rgba(10, 15, 28, 0.95);
-  --aperture-bottom-bar-border: rgba(148, 163, 184, 0.2);
-  --aperture-button-bg: rgba(22, 32, 54, 0.92);
-  --aperture-button-border: rgba(148, 163, 184, 0.3);
-  --aperture-button-text: #f1f5f9;
-  --aperture-button-hover-bg: rgba(35, 48, 78, 0.95);
-  --aperture-input-form-bg: rgba(18, 27, 48, 0.94);
-  --aperture-input-bg: rgba(9, 13, 24, 0.85);
-  --aperture-choice-bg: rgba(18, 27, 48, 0.92);
-  --aperture-choice-border: rgba(148, 163, 184, 0.25);
-  --aperture-choice-hover-bg: rgba(35, 48, 78, 0.95);
-  --vn-shell-panel: #0f172a;
-  --vn-shell-field: #1e293b;
-  --vn-shell-button: #334155;
-  --vn-shell-text: #f1f5f9;
-  --vn-shell-muted: #94a3b8;
-  --vn-shell-border: rgba(148, 163, 184, 0.22);
-  --vn-shell-accent: #94a3b8;
-  --vn-shell-accent-contrast: #0f172a;
-}
+/* 5. Boxed Console — Tactical Phosphor Hardware Bezel */
 [data-vn-root][data-vn-preset="boxed-console"] [data-vn-dialogue] {
-  border-color: rgba(148, 163, 184, 0.35) !important;
-  background: rgba(15, 23, 42, var(--caption-opacity, 0.88)) !important;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  border-radius: 3px;
+  border-color: rgba(125, 255, 161, 0.45);
+  background: repeating-linear-gradient(0deg, rgba(125, 255, 161, 0.03) 0 1px, transparent 1px 4px), rgba(9, 15, 12, var(--caption-opacity, 0.92));
+  outline: 1px solid rgba(125, 255, 161, 0.16);
+  outline-offset: -5px;
+  box-shadow: inset 3px 0 0 rgba(125, 255, 161, 0.55), 0 14px 36px rgba(0, 0, 0, 0.58);
 }
 [data-vn-root][data-vn-preset="boxed-console"] [data-vn-dialogue-text] {
-  color: #f1f5f9 !important;
+  color: #e7f9eb;
+  text-shadow: 0 0 6px rgba(125, 255, 161, 0.14);
 }
 [data-vn-root][data-vn-preset="boxed-console"] [data-vn-speaker] {
-  color: #94a3b8 !important;
-  background: #1e293b !important;
-  border-color: rgba(148, 163, 184, 0.4) !important;
+  color: #7dffa1 !important;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
 }
+[data-vn-root][data-vn-preset="boxed-console"] [data-vn-speaker]::before { content: "> "; opacity: 0.78; }
+[data-vn-root][data-vn-preset="boxed-console"] [data-vn-speaker]::after { content: "_"; opacity: 0.9; }
 
-/* 6. Aperture Cyber Amethyst (Vibrant Violet Neon) */
-:is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="yamaku-classic"],
-[data-vn-root][data-vn-preset="yamaku-classic"] {
-  --aperture-overlay-bg: linear-gradient(170deg, #260c2d, #17061c, #0c020f);
-  --aperture-ring-color: rgba(217, 70, 239, 0.1);
-  --aperture-workspace-bg: linear-gradient(160deg, #200a26, #140519, #0a020d);
-  --aperture-accent-surface: #381042;
-  --aperture-ghost-bg: rgba(36, 12, 42, 0.65);
-  --aperture-accent: #c084fc;
-  --aperture-accent-hover: #e879f9;
-  --aperture-accent-contrast: #1e0836;
-  --aperture-accent-glow: rgba(192, 132, 252, 0.38);
-  --aperture-text: #faf5ff;
-  --aperture-muted: #a855f7;
-  --aperture-dialogue-bg: rgba(20, 10, 36, var(--caption-opacity, 0.88));
-  --aperture-dialogue-border: rgba(192, 132, 252, 0.42);
-  --aperture-bottom-bar-bg: rgba(14, 7, 26, 0.95);
-  --aperture-bottom-bar-border: rgba(192, 132, 252, 0.22);
-  --aperture-button-bg: rgba(28, 14, 48, 0.92);
-  --aperture-button-border: rgba(192, 132, 252, 0.32);
-  --aperture-button-text: #faf5ff;
-  --aperture-button-hover-bg: rgba(48, 22, 82, 0.95);
-  --aperture-input-form-bg: rgba(24, 12, 42, 0.94);
-  --aperture-input-bg: rgba(12, 5, 22, 0.85);
-  --aperture-choice-bg: rgba(24, 12, 42, 0.92);
-  --aperture-choice-border: rgba(192, 132, 252, 0.28);
-  --aperture-choice-hover-bg: rgba(48, 22, 82, 0.95);
-  --vn-shell-panel: #150a22;
-  --vn-shell-field: #200e35;
-  --vn-shell-button: #341755;
-  --vn-shell-text: #faf5ff;
-  --vn-shell-muted: #b97dec;
-  --vn-shell-border: rgba(192, 132, 252, 0.24);
-  --vn-shell-accent: #c084fc;
-  --vn-shell-accent-contrast: #1e0836;
-}
+/* 6. Yamaku Classic / Cyber Amethyst — Smoked Plum Classic Stage */
 [data-vn-root][data-vn-preset="yamaku-classic"] [data-vn-dialogue] {
-  border-color: rgba(192, 132, 252, 0.42) !important;
-  background: rgba(20, 10, 36, var(--caption-opacity, 0.88)) !important;
-  box-shadow: 0 16px 44px rgba(35, 10, 60, 0.4), inset 0 1px 0 rgba(233, 213, 255, 0.2) !important;
+  border-radius: 6px;
+  border-color: rgba(255, 112, 149, 0.44);
+  background: linear-gradient(to top, rgba(20, 17, 15, var(--caption-opacity, 0.92)) 0%, rgba(28, 24, 20, 0.65) 100%);
+  box-shadow: 0 16px 44px rgba(18, 6, 24, 0.55), inset 0 1px 0 rgba(255, 160, 190, 0.2);
 }
 [data-vn-root][data-vn-preset="yamaku-classic"] [data-vn-dialogue-text] {
-  color: #faf5ff !important;
+  color: #fef7f9;
 }
 [data-vn-root][data-vn-preset="yamaku-classic"] [data-vn-speaker] {
-  color: #c084fc !important;
-  background: #1c0d32 !important;
-  border-color: rgba(192, 132, 252, 0.4) !important;
+  color: #ff7095 !important;
 }
 
-/* 7. Aperture Rose Blossom (Pastel Elegance) */
-:is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="literature-club"],
-[data-vn-root][data-vn-preset="literature-club"] {
-  --aperture-overlay-bg: linear-gradient(170deg, #2b0b1a, #1c0611, #12030a);
-  --aperture-ring-color: rgba(251, 113, 133, 0.1);
-  --aperture-workspace-bg: linear-gradient(160deg, #220a16, #18060f, #0f0309);
-  --aperture-accent-surface: #3d1226;
-  --aperture-ghost-bg: rgba(45, 14, 28, 0.65);
-  --aperture-accent: #fb7185;
-  --aperture-accent-hover: #fda4af;
-  --aperture-accent-contrast: #280710;
-  --aperture-accent-glow: rgba(251, 113, 133, 0.38);
-  --aperture-text: #fff1f2;
-  --aperture-muted: #f43f5e;
-  --aperture-dialogue-bg: rgba(35, 12, 24, var(--caption-opacity, 0.86));
-  --aperture-dialogue-border: rgba(251, 113, 133, 0.42);
-  --aperture-bottom-bar-bg: rgba(24, 8, 16, 0.95);
-  --aperture-bottom-bar-border: rgba(251, 113, 133, 0.22);
-  --aperture-button-bg: rgba(45, 14, 28, 0.92);
-  --aperture-button-border: rgba(251, 113, 133, 0.32);
-  --aperture-button-text: #fff1f2;
-  --aperture-button-hover-bg: rgba(70, 20, 42, 0.95);
-  --aperture-input-form-bg: rgba(40, 13, 26, 0.94);
-  --aperture-input-bg: rgba(18, 5, 12, 0.85);
-  --aperture-choice-bg: rgba(40, 13, 26, 0.92);
-  --aperture-choice-border: rgba(251, 113, 133, 0.28);
-  --aperture-choice-hover-bg: rgba(70, 20, 42, 0.95);
-  --vn-shell-panel: #200a15;
-  --vn-shell-field: #2e0f1f;
-  --vn-shell-button: #44142d;
-  --vn-shell-text: #fff1f2;
-  --vn-shell-muted: #e78297;
-  --vn-shell-border: rgba(251, 113, 133, 0.22);
-  --vn-shell-accent: #fb7185;
-  --vn-shell-accent-contrast: #280710;
-}
+/* 7. Literature Club / Rose Blossom — Stitched Stationery */
 [data-vn-root][data-vn-preset="literature-club"] [data-vn-dialogue] {
-  border-color: rgba(251, 113, 133, 0.42) !important;
-  background: rgba(35, 12, 24, var(--caption-opacity, 0.86)) !important;
-  box-shadow: 0 16px 40px rgba(60, 10, 30, 0.35), inset 0 1px 0 rgba(254, 205, 211, 0.2) !important;
+  border-radius: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  outline: 1.5px dashed rgba(232, 80, 124, 0.36);
+  outline-offset: -6px;
+  background: linear-gradient(to bottom, rgba(255, 166, 206, 0.94) 0%, rgba(236, 148, 191, 0.78) 100%);
+  box-shadow: 0 14px 36px rgba(150, 60, 95, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+[data-vn-root][data-vn-preset="literature-club"] [data-vn-dialogue]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.16) 1.5px, transparent 1.7px);
+  background-size: 16px 16px;
 }
 [data-vn-root][data-vn-preset="literature-club"] [data-vn-dialogue-text] {
-  color: #fff1f2 !important;
+  color: #ffffff;
+  font-weight: 700;
+  text-shadow: 0 1.5px 2px rgba(97, 30, 58, 0.9), 1px 0 2px rgba(97, 30, 58, 0.75);
 }
 [data-vn-root][data-vn-preset="literature-club"] [data-vn-speaker] {
-  color: #fb7185 !important;
-  background: #2a0e1c !important;
-  border-color: rgba(251, 113, 133, 0.4) !important;
+  color: #ffffff !important;
+  text-shadow: 0 1px 3px #b8285a !important;
 }
+[data-vn-root][data-vn-preset="literature-club"] [data-vn-speaker]::before { content: "♡ "; }
 
-/* 8. Aperture Astral Glass (Cosmic Cyan & Deep Blue) */
-:is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="astral-glass"],
-[data-vn-root][data-vn-preset="astral-glass"] {
-  --aperture-overlay-bg: linear-gradient(170deg, #091a2e, #05101e, #02070e);
-  --aperture-ring-color: rgba(56, 189, 248, 0.1);
-  --aperture-workspace-bg: linear-gradient(160deg, #071526, #040d18, #02060c);
-  --aperture-accent-surface: #0e2744;
-  --aperture-ghost-bg: rgba(12, 28, 48, 0.65);
-  --aperture-accent: #38bdf8;
-  --aperture-accent-hover: #7dd3fc;
-  --aperture-accent-contrast: #032030;
-  --aperture-accent-glow: rgba(56, 189, 248, 0.38);
-  --aperture-text: #f0f9ff;
-  --aperture-muted: #0284c7;
-  --aperture-dialogue-bg: rgba(8, 20, 36, var(--caption-opacity, 0.88));
-  --aperture-dialogue-border: rgba(56, 189, 248, 0.38);
-  --aperture-bottom-bar-bg: rgba(5, 14, 25, 0.95);
-  --aperture-bottom-bar-border: rgba(56, 189, 248, 0.2);
-  --aperture-button-bg: rgba(12, 28, 48, 0.92);
-  --aperture-button-border: rgba(56, 189, 248, 0.3);
-  --aperture-button-text: #f0f9ff;
-  --aperture-button-hover-bg: rgba(20, 48, 80, 0.95);
-  --aperture-input-form-bg: rgba(10, 24, 42, 0.94);
-  --aperture-input-bg: rgba(4, 11, 20, 0.85);
-  --aperture-choice-bg: rgba(10, 24, 42, 0.92);
-  --aperture-choice-border: rgba(56, 189, 248, 0.25);
-  --aperture-choice-hover-bg: rgba(20, 48, 80, 0.95);
-  --vn-shell-panel: #061528;
-  --vn-shell-field: #0a203c;
-  --vn-shell-button: #11335c;
-  --vn-shell-text: #f0f9ff;
-  --vn-shell-muted: #64b5f6;
-  --vn-shell-border: rgba(56, 189, 248, 0.22);
-  --vn-shell-accent: #38bdf8;
-  --vn-shell-accent-contrast: #032030;
-}
+/* 8. Astral Glass — Frosted Celestial Prism & Starlight Brackets */
 [data-vn-root][data-vn-preset="astral-glass"] [data-vn-dialogue] {
-  border-color: rgba(56, 189, 248, 0.38) !important;
-  background: rgba(8, 20, 36, var(--caption-opacity, 0.88)) !important;
-  box-shadow: 0 16px 44px rgba(6, 25, 50, 0.4), inset 0 1px 0 rgba(186, 230, 253, 0.2) !important;
+  border-radius: 16px;
+  border-color: rgba(82, 213, 255, 0.45);
+  background: radial-gradient(ellipse at 0% 0%, rgba(82, 213, 255, 0.14), transparent 48%), radial-gradient(ellipse at 100% 100%, rgba(167, 139, 250, 0.12), transparent 52%), rgba(8, 20, 38, var(--caption-opacity, 0.86));
+  outline: 1px solid rgba(167, 139, 250, 0.25);
+  outline-offset: -5px;
+  box-shadow: 0 18px 46px rgba(3, 14, 34, 0.55), inset 0 1px 0 rgba(186, 230, 253, 0.25);
+}
+[data-vn-root][data-vn-preset="astral-glass"] [data-vn-dialogue]::after {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border: 1px solid rgba(141, 228, 255, 0.55);
+  clip-path: polygon(0 0, 18px 0, 18px 1px, 1px 1px, 1px 18px, 0 18px, 0 0, 100% 0, 100% 18px, calc(100% - 1px) 18px, calc(100% - 1px) 1px, calc(100% - 18px) 1px, calc(100% - 18px) 0, 100% 0, 100% 100%, calc(100% - 18px) 100%, calc(100% - 18px) calc(100% - 1px), calc(100% - 1px) calc(100% - 1px), calc(100% - 1px) calc(100% - 18px), 100% calc(100% - 18px), 100% 100%, 0 100%, 0 calc(100% - 18px), 1px calc(100% - 18px), 1px calc(100% - 1px), 18px calc(100% - 1px), 18px 100%, 0 100%);
+  pointer-events: none;
 }
 [data-vn-root][data-vn-preset="astral-glass"] [data-vn-dialogue-text] {
-  color: #f0f9ff !important;
+  color: #eef7ff;
 }
 [data-vn-root][data-vn-preset="astral-glass"] [data-vn-speaker] {
-  color: #38bdf8 !important;
-  background: #091a2e !important;
-  border-color: rgba(56, 189, 248, 0.4) !important;
+  color: #52d5ff !important;
 }
+[data-vn-root][data-vn-preset="astral-glass"] [data-vn-speaker]::before { content: "✦ "; }
 
-/* 9. Aperture Neon Rain (Electric Mint & Cyberpunk Indigo) */
-:is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="neon-rain"],
-[data-vn-root][data-vn-preset="neon-rain"] {
-  --aperture-overlay-bg: linear-gradient(170deg, #081a1e, #041014, #01080a);
-  --aperture-ring-color: rgba(45, 212, 191, 0.1);
-  --aperture-workspace-bg: linear-gradient(160deg, #071518, #030d10, #010608);
-  --aperture-accent-surface: #0e2d33;
-  --aperture-ghost-bg: rgba(14, 26, 38, 0.65);
-  --aperture-accent: #2dd4bf;
-  --aperture-accent-hover: #5eead4;
-  --aperture-accent-contrast: #022420;
-  --aperture-accent-glow: rgba(45, 212, 191, 0.38);
-  --aperture-text: #f0fdfa;
-  --aperture-muted: #0d9488;
-  --aperture-dialogue-bg: rgba(12, 20, 32, var(--caption-opacity, 0.9));
-  --aperture-dialogue-border: rgba(45, 212, 191, 0.4);
-  --aperture-bottom-bar-bg: rgba(8, 14, 22, 0.95);
-  --aperture-bottom-bar-border: rgba(45, 212, 191, 0.22);
-  --aperture-button-bg: rgba(14, 26, 38, 0.92);
-  --aperture-button-border: rgba(45, 212, 191, 0.32);
-  --aperture-button-text: #f0fdfa;
-  --aperture-button-hover-bg: rgba(22, 45, 60, 0.95);
-  --aperture-input-form-bg: rgba(13, 22, 34, 0.94);
-  --aperture-input-bg: rgba(6, 11, 18, 0.85);
-  --aperture-choice-bg: rgba(13, 22, 34, 0.92);
-  --aperture-choice-border: rgba(45, 212, 191, 0.28);
-  --aperture-choice-hover-bg: rgba(22, 45, 60, 0.95);
-  --vn-shell-panel: #0a131e;
-  --vn-shell-field: #101e2e;
-  --vn-shell-button: #193248;
-  --vn-shell-text: #f0fdfa;
-  --vn-shell-muted: #6ee7b7;
-  --vn-shell-border: rgba(45, 212, 191, 0.24);
-  --vn-shell-accent: #2dd4bf;
-  --vn-shell-accent-contrast: #022420;
-}
+/* 9. Neon Rain — Wet Asphalt Cyber Telemetry Plate */
 [data-vn-root][data-vn-preset="neon-rain"] [data-vn-dialogue] {
-  border-color: rgba(45, 212, 191, 0.4) !important;
-  background: rgba(12, 20, 32, var(--caption-opacity, 0.9)) !important;
-  box-shadow: 0 16px 44px rgba(10, 25, 35, 0.4), inset 0 1px 0 rgba(204, 251, 241, 0.2) !important;
+  border-radius: 6px;
+  border-color: rgba(45, 212, 191, 0.48);
+  background: repeating-linear-gradient(0deg, transparent 0 5px, rgba(45, 212, 191, 0.03) 5px 6px), linear-gradient(125deg, rgba(45, 212, 191, 0.08), transparent 46%, rgba(244, 114, 182, 0.06)), rgba(8, 20, 27, var(--caption-opacity, 0.9));
+  box-shadow: inset 3px 0 0 rgba(244, 114, 182, 0.6), 0 16px 44px rgba(2, 16, 24, 0.55), inset 0 1px 0 rgba(94, 234, 212, 0.2);
 }
 [data-vn-root][data-vn-preset="neon-rain"] [data-vn-dialogue-text] {
-  color: #f0fdfa !important;
+  color: #e9fffb;
 }
 [data-vn-root][data-vn-preset="neon-rain"] [data-vn-speaker] {
   color: #2dd4bf !important;
-  background: #091722 !important;
-  border-color: rgba(45, 212, 191, 0.4) !important;
 }
+[data-vn-root][data-vn-preset="neon-rain"] [data-vn-speaker]::before { content: "// "; opacity: 0.72; }
 
-/* 10. Aperture Obsidian Reliquary (Crimson & Gold) */
-:is([data-vn-root], [data-vn-shell], :host, body)[data-vn-preset="obsidian-reliquary"],
-[data-vn-root][data-vn-preset="obsidian-reliquary"] {
-  --aperture-overlay-bg: linear-gradient(170deg, #220b12, #14050a, #0a0205);
-  --aperture-ring-color: rgba(245, 158, 11, 0.1);
-  --aperture-workspace-bg: linear-gradient(160deg, #1d0910, #120408, #090204);
-  --aperture-accent-surface: #38101a;
-  --aperture-ghost-bg: rgba(32, 9, 14, 0.65);
-  --aperture-accent: #f59e0b;
-  --aperture-accent-hover: #fbbf24;
-  --aperture-accent-contrast: #241202;
-  --aperture-accent-glow: rgba(245, 158, 11, 0.38);
-  --aperture-text: #fffbeb;
-  --aperture-muted: #dc2626;
-  --aperture-dialogue-bg: rgba(28, 8, 12, var(--caption-opacity, 0.9));
-  --aperture-dialogue-border: rgba(220, 38, 38, 0.45);
-  --aperture-bottom-bar-bg: rgba(18, 5, 8, 0.96);
-  --aperture-bottom-bar-border: rgba(220, 38, 38, 0.22);
-  --aperture-button-bg: rgba(32, 9, 14, 0.94);
-  --aperture-button-border: rgba(220, 38, 38, 0.35);
-  --aperture-button-text: #fffbeb;
-  --aperture-button-hover-bg: rgba(55, 15, 24, 0.95);
-  --aperture-input-form-bg: rgba(30, 8, 13, 0.95);
-  --aperture-input-bg: rgba(15, 4, 7, 0.88);
-  --aperture-choice-bg: rgba(30, 8, 13, 0.94);
-  --aperture-choice-border: rgba(220, 38, 38, 0.3);
-  --aperture-choice-hover-bg: rgba(55, 15, 24, 0.96);
-  --vn-shell-panel: #1a060a;
-  --vn-shell-field: #260a0f;
-  --vn-shell-button: #3d1018;
-  --vn-shell-text: #fffbeb;
-  --vn-shell-muted: #e57373;
-  --vn-shell-border: rgba(220, 38, 38, 0.24);
-  --vn-shell-accent: #f59e0b;
-  --vn-shell-accent-contrast: #241202;
-}
+/* 10. Obsidian Reliquary — Sterling Silver & Royal Amethyst */
 [data-vn-root][data-vn-preset="obsidian-reliquary"] [data-vn-dialogue] {
-  border-color: rgba(220, 38, 38, 0.45) !important;
-  background: rgba(28, 8, 12, var(--caption-opacity, 0.9)) !important;
-  box-shadow: 0 16px 44px rgba(40, 5, 10, 0.45), inset 0 1px 0 rgba(254, 202, 202, 0.2) !important;
+  border-radius: 10px;
+  border-color: rgba(201, 168, 248, 0.48);
+  background: radial-gradient(ellipse at 50% 0%, rgba(201, 168, 248, 0.14), transparent 65%), repeating-linear-gradient(135deg, transparent 0 22px, rgba(219, 226, 237, 0.025) 22px 23px), rgba(22, 15, 33, var(--caption-opacity, 0.9));
+  outline: 1px solid rgba(219, 226, 237, 0.24);
+  outline-offset: -6px;
+  box-shadow: 0 18px 46px rgba(14, 4, 26, 0.55), inset 0 1px 0 rgba(219, 226, 237, 0.22);
 }
 [data-vn-root][data-vn-preset="obsidian-reliquary"] [data-vn-dialogue-text] {
-  color: #fffbeb !important;
+  color: #f7f2ff;
 }
 [data-vn-root][data-vn-preset="obsidian-reliquary"] [data-vn-speaker] {
-  color: #f59e0b !important;
-  background: #24080d !important;
-  border-color: rgba(220, 38, 38, 0.45) !important;
+  color: #c9a8f8 !important;
+}
+[data-vn-root][data-vn-preset="obsidian-reliquary"] [data-vn-speaker]::before { content: "❖ "; color: #dbe6f5; }
+
+/* =========================================================================
+   ALTERNATE TEXT VIEWER STYLES (Independent of Theme Palette)
+   ========================================================================= */
+
+[data-vn-root][data-vn-dialogue-style="cinema-bar"] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]) {
+  left: 0 !important;
+  right: 0 !important;
+  bottom: calc(56px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
+  border-radius: 0 !important;
+  border-left: 0 !important;
+  border-right: 0 !important;
+  border-bottom: 0 !important;
+  border-top: 1px solid var(--vn-shell-border-strong, var(--aperture-dialogue-border)) !important;
+  outline: none !important;
+  background: linear-gradient(to top, color-mix(in srgb, var(--vn-shell-panel, #060a10) 94%, black) 0%, color-mix(in srgb, var(--vn-shell-panel, #060a10) 76%, transparent) 72%, transparent 100%) !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+  padding-inline: max(18px, 4vw) !important;
+}
+
+[data-vn-root][data-vn-dialogue-style="editorial-page"] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]) {
+  border-radius: 4px !important;
+  outline: 1px solid color-mix(in srgb, var(--vn-shell-accent, #dcebad) 26%, transparent) !important;
+  outline-offset: -6px !important;
+  box-shadow: inset 4px 0 0 var(--vn-shell-accent, #dcebad), 0 16px 40px rgba(0, 0, 0, 0.36) !important;
+}
+[data-vn-root][data-vn-dialogue-style="editorial-page"] [data-vn-dialogue-text] {
+  font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  line-height: 1.66;
+}
+
+[data-vn-root][data-vn-dialogue-style="terminal-hud"] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]) {
+  border-radius: 2px !important;
+  outline: 1px solid var(--vn-shell-border, rgba(160, 205, 185, 0.3)) !important;
+  outline-offset: -5px !important;
+  background-image: repeating-linear-gradient(0deg, color-mix(in srgb, var(--vn-shell-accent, #dcebad) 3.5%, transparent) 0 1px, transparent 1px 4px) !important;
+  box-shadow: inset 3px 0 0 var(--vn-shell-accent, #dcebad), 6px 6px 0 rgba(0, 0, 0, 0.45) !important;
+}
+
+[data-vn-root][data-vn-dialogue-style="glass-card"] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]) {
+  border-radius: 20px !important;
+  outline: none !important;
+  backdrop-filter: blur(18px) saturate(1.2) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.2) !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.24) !important;
 }
 
 `;

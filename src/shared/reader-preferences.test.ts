@@ -56,6 +56,9 @@ test("customization and accessibility preferences normalize cleanly", () => {
   expect(normalizeReaderPreferences({ typography: "terminal" }).typography).toBe("terminal");
   expect(normalizeReaderPreferences({ typography: "manga" }).typography).toBe("manga");
   expect(normalizeReaderPreferences({ typography: "fantasy" }).typography).toBe("fantasy");
+  expect(normalizeReaderPreferences({ dialogueStyle: "cinema-bar" }).dialogueStyle).toBe("cinema-bar");
+  expect(normalizeReaderPreferences({ dialogueStyle: "editorial-page" }).dialogueStyle).toBe("editorial-page");
+  expect(normalizeReaderPreferences({ dialogueStyle: "unknown" }).dialogueStyle).toBeUndefined();
   expect(prefs.smartPacing).toBe(true);
   expect(prefs.typewriterAudio).toBe("blip");
   expect(prefs.typewriterVolume).toBe(0.6);

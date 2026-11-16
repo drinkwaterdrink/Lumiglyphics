@@ -725,6 +725,8 @@ export class VnStage {
       delete this.root.dataset.vnAtmosphericLighting;
     }
     this.readerPreferences = preferences;
+    this.root.dataset.vnDialogueStyle = preferences.dialogueStyle ?? "preset";
+    this.panelMount.dataset.vnDialogueStyle = preferences.dialogueStyle ?? "preset";
     if (preferences.typography) this.root.dataset.vnTypography = preferences.typography;
     if (preferences.typewriterAudio) this.typewriterAudio.setMode(preferences.typewriterAudio);
     if (typeof preferences.typewriterVolume === "number") this.typewriterAudio.setVolume(preferences.typewriterVolume);
@@ -1033,12 +1035,17 @@ export class VnStage {
   private applyThemePreset(preset: VisualNovelThemePreset): void {
     this.presetStyle.textContent = THEME_PRESET_CSS[preset] ?? "";
     this.root.dataset.vnPreset = preset;
-    // Mirror the preset on the outer shell so framework chrome outside the
-    // theme root (Back to chat, Panels, speech dock) can match it.
+    // Mirror the preset on the outer shell and every mounted tool/panel host so
+    // menus, settings, studio, library, dossiers, and dock stay visually cohesive.
     this.panelMount.dataset.vnPreset = preset;
-    const mode = preset === "paper-novel" || preset === "yamaku-classic" || preset === "literature-club" ? "light" : "dark";
-    this.root.dataset.apertureMode = mode;
-    this.panelMount.dataset.apertureMode = mode;
+    delete this.root.dataset.apertureMode;
+    delete this.panelMount.dataset.apertureMode;
+    for (const child of this.panelMount.querySelectorAll?.<HTMLElement>(
+      "[data-vn-settings], [data-image-library], [data-image-studio], [data-vn-panel-layer], [data-vn-speech-dock], [data-vn-workspace], [data-vn-dossier], [data-vn-reference-sheet], [data-vn-dossier-card], [data-character-folio], .vn-speech-settings"
+    ) ?? []) {
+      child.dataset.vnPreset = preset;
+      delete child.dataset.apertureMode;
+    }
   }
 
   /** Moves from a game-engine extension, shown with the reply options whenever it's the player's turn. */

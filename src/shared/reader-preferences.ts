@@ -1,3 +1,13 @@
+export const READER_DIALOGUE_STYLES = [
+  "preset",
+  "glass-card",
+  "cinema-bar",
+  "editorial-page",
+  "terminal-hud",
+] as const;
+
+export type ReaderDialogueStyle = (typeof READER_DIALOGUE_STYLES)[number];
+
 export type ReaderPreferences = {
   adjustableSheetEnabled: boolean;
   layout: "overlay" | "image-first";
@@ -6,6 +16,7 @@ export type ReaderPreferences = {
   heightRatio?: number | undefined;
   theme?: ("light" | "dark") | undefined;
   typography?: ("novelist" | "modern" | "cinematic" | "retro" | "terminal" | "manga" | "fantasy" | "accessible") | undefined;
+  dialogueStyle?: ReaderDialogueStyle | undefined;
   smartPacing?: boolean | undefined;
   typewriterAudio?: ("off" | "blip" | "click" | "pip") | undefined;
   typewriterVolume?: number | undefined;
@@ -44,6 +55,7 @@ export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
     theme: input.theme === "dark" ? "dark" : "light",
     ...(typeof input.heightRatio === "number" && Number.isFinite(input.heightRatio) ? { heightRatio: Math.max(.05, Math.min(1, input.heightRatio)) } : {}),
     ...(typeof input.typography === "string" && ["novelist", "modern", "cinematic", "retro", "terminal", "manga", "fantasy", "accessible"].includes(input.typography) ? { typography: input.typography as ReaderPreferences["typography"] } : {}),
+    ...(typeof input.dialogueStyle === "string" && (READER_DIALOGUE_STYLES as readonly string[]).includes(input.dialogueStyle) ? { dialogueStyle: input.dialogueStyle as ReaderDialogueStyle } : {}),
     ...(input.smartPacing !== undefined ? { smartPacing: input.smartPacing === true } : {}),
     ...(input.typewriterAudio === "off" || input.typewriterAudio === "blip" || input.typewriterAudio === "click" || input.typewriterAudio === "pip" ? { typewriterAudio: input.typewriterAudio } : {}),
     ...(typeof input.typewriterVolume === "number" && Number.isFinite(input.typewriterVolume) ? { typewriterVolume: Math.max(0, Math.min(1, input.typewriterVolume)) } : {}),

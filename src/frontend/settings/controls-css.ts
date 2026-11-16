@@ -1,18 +1,22 @@
+import { VN_SHELL_PRESET_TOKENS_CSS } from "../theme/palette-tokens.js";
+
 /**
  * Shared look for Cue's settings surfaces. The main settings panel and the
  * speech section live in separate shadow roots, so both inline this string to
- * stay visually identical. Docked reader shell tokens win; native host tokens (`--lumiverse-*`)
- * remain the fallback outside the reader. The final fallbacks
- * are a dark theme.
+ * stay visually identical. Docked reader shell tokens and active theme preset
+ * tokens win; native host tokens (`--lumiverse-*`) remain the fallback.
  */
-export const SETTINGS_TOKENS_CSS = `
+export const SETTINGS_TOKENS_CSS = `${VN_SHELL_PRESET_TOKENS_CSS}
 :host {
   --set-accent: var(--vn-shell-accent, var(--lumiverse-primary, #e0eeb1));
+  --set-accent-hover: var(--vn-shell-accent-hover, var(--set-accent));
   --set-accent-text: var(--vn-shell-accent-contrast, var(--lumiverse-primary-contrast, #1c3525));
+  --set-glow: var(--vn-shell-glow, rgba(220, 238, 173, 0.25));
   --set-text: var(--vn-shell-text, var(--lumiverse-text, #eff4e9));
   --set-muted: var(--vn-shell-muted, var(--lumiverse-text-muted, #a4bbb1));
   --set-border: var(--vn-shell-border, var(--lumiverse-border, rgba(220, 238, 217, 0.16)));
-  --set-surface: var(--vn-shell-panel, var(--lumiverse-card-bg, rgba(255,255,255,.035)));
+  --set-border-strong: var(--vn-shell-border-strong, var(--set-border));
+  --set-surface: color-mix(in srgb, var(--vn-shell-field, #101a1e) 76%, transparent);
   --set-field: var(--vn-shell-field, var(--lumiverse-bg-elevated, #101a1e));
   --set-hover: var(--vn-shell-button, var(--lumiverse-fill-medium, #23342e));
   --set-success: var(--lumiverse-success, #8ce8b0);
@@ -21,7 +25,8 @@ export const SETTINGS_TOKENS_CSS = `
   --set-success-ink: color-mix(in srgb, var(--set-success) 35%, var(--set-text));
   --set-warning-ink: color-mix(in srgb, var(--set-warning) 35%, var(--set-text));
   --set-danger-ink: color-mix(in srgb, var(--set-danger) 35%, var(--set-text));
-  --set-radius: .8rem;
+  --set-radius: min(var(--vn-shell-radius, .8rem), 1rem);
+  --set-display-font: var(--vn-shell-display-font, inherit);
   --set-control: 2.75rem;
   display: block;
   color: var(--set-text);

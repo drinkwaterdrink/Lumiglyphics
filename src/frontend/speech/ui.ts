@@ -1,5 +1,6 @@
 import {audioProgressFraction,type SpeechPlaybackProgress} from './read-along.js';
 import type { SpeechStatus } from "./controller.js";
+import { VN_SHELL_PRESET_TOKENS_CSS } from "../theme/palette-tokens.js";
 
 /**
  * Minimal speech dock: Play/Pause + Stop + a truthful status line for the
@@ -17,13 +18,14 @@ export type SpeechDockOptions = {
 };
 
 const DOCK_CSS = `
+${VN_SHELL_PRESET_TOKENS_CSS}
 :host {
   position: absolute;
   top: calc(58px + env(safe-area-inset-top, 0px));
   right: max(12px, env(safe-area-inset-right, 0px));
   z-index: 85;
   width: min(310px, calc(100vw - 24px));
-  font: 13px/1.4 var(--lumiverse-font-family, system-ui, -apple-system, sans-serif);
+  font: 13px/1.4 var(--vn-shell-family, var(--lumiverse-font-family, system-ui, -apple-system, sans-serif));
   pointer-events: auto;
 }
 :host(:not([data-open="true"])) {
@@ -34,12 +36,12 @@ const DOCK_CSS = `
   flex-direction: column;
   gap: 10px;
   padding: 12px 14px;
-  border-radius: 16px;
-  border: 1px solid var(--aperture-border, rgba(220, 238, 173, 0.28));
-  background: var(--aperture-surface-strong, rgba(11, 22, 18, 0.94));
-  color: var(--aperture-text, #f4f7ee);
+  border-radius: min(var(--vn-shell-radius, 16px), 16px);
+  border: 1px solid var(--vn-shell-border, var(--aperture-border, rgba(220, 238, 173, 0.28)));
+  background: var(--vn-shell-surface-gradient, var(--vn-shell-panel, var(--aperture-surface-strong, rgba(11, 22, 18, 0.94))));
+  color: var(--vn-shell-text, var(--aperture-text, #f4f7ee));
   font-family: var(--vn-shell-family, inherit);
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  box-shadow: var(--vn-shell-shadow, 0 14px 36px rgba(0, 0, 0, 0.55));
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   animation: tts-pop 0.18s cubic-bezier(0.16, 1, 0.3, 1);
@@ -62,17 +64,17 @@ const DOCK_CSS = `
   font-weight: 750;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--aperture-accent, #dcebad);
+  color: var(--vn-shell-accent, var(--aperture-accent, #dcebad));
 }
 .tts-dot {
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: rgba(160, 195, 175, 0.45);
+  background: color-mix(in srgb, var(--vn-shell-accent, #dcebad) 40%, transparent);
 }
 :host([data-playing="true"]) .tts-dot {
-  background: var(--aperture-accent, #dcebad);
-  box-shadow: 0 0 8px var(--aperture-accent, #dcebad);
+  background: var(--vn-shell-accent, var(--aperture-accent, #dcebad));
+  box-shadow: 0 0 8px var(--vn-shell-accent, var(--aperture-accent, #dcebad));
 }
 .tts-controls {
   display: flex;
@@ -88,10 +90,10 @@ button {
   min-width: 44px;
   padding: 0 14px;
   flex: 1 1 auto;
-  border-radius: 999px;
-  border: 1px solid rgba(220, 238, 173, 0.28);
-  background: rgba(220, 238, 173, 0.12);
-  color: var(--aperture-text, #f4f7ee);
+  border-radius: var(--vn-shell-radius, 999px);
+  border: 1px solid var(--vn-shell-border, rgba(220, 238, 173, 0.28));
+  background: var(--vn-shell-button, rgba(220, 238, 173, 0.12));
+  color: var(--vn-shell-text, var(--aperture-text, #f4f7ee));
   font: inherit;
   font-size: 12px;
   font-weight: 650;
@@ -100,8 +102,8 @@ button {
   transition: background-color 0.14s ease, border-color 0.14s ease, transform 0.12s ease;
 }
 button[data-tts-primary] {
-  background: var(--aperture-accent, #dcebad);
-  color: var(--aperture-accent-fg, #0d1f17);
+  background: var(--vn-shell-accent, var(--aperture-accent, #dcebad));
+  color: var(--vn-shell-accent-contrast, var(--aperture-accent-fg, #0d1f17));
   border-color: transparent;
   font-weight: 750;
 }
@@ -112,8 +114,8 @@ button[data-tts-icon] {
   height: 44px;
   min-height: 44px;
   padding: 0;
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.14);
+  background: var(--vn-shell-field, rgba(255, 255, 255, 0.06));
+  border-color: var(--vn-shell-border, rgba(255, 255, 255, 0.14));
 }
 button[data-speech-close] {
   flex: 0 0 44px;
@@ -125,19 +127,19 @@ button[data-speech-close] {
   font-size: 15px;
   background: transparent;
   border-color: transparent;
-  color: rgba(244, 247, 238, 0.68);
+  color: var(--vn-shell-muted, rgba(244, 247, 238, 0.68));
 }
 button:hover:not(:disabled) {
-  border-color: var(--aperture-accent, #dcebad);
+  border-color: var(--vn-shell-accent, var(--aperture-accent, #dcebad));
   filter: brightness(1.06);
 }
 button:active:not(:disabled) { transform: scale(0.95); }
-button:focus-visible { outline: 2px solid var(--aperture-accent, #dcebad); outline-offset: 2px; }
+button:focus-visible { outline: 2px solid var(--vn-shell-accent, var(--aperture-accent, #dcebad)); outline-offset: 2px; }
 button:disabled { opacity: 0.42; cursor: default; }
 [data-status] {
   font-size: 12px;
   line-height: 1.35;
-  color: var(--aperture-muted, rgba(235, 242, 230, 0.78));
+  color: var(--vn-shell-muted, var(--aperture-muted, rgba(235, 242, 230, 0.78)));
   overflow-wrap: anywhere;
 }
 [data-status]:empty { display: none; }

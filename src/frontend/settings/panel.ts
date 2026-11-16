@@ -26,6 +26,7 @@ import type { ContextSourceReport } from '../../shared/context-sources.js';
 import { BUILTIN_SHARED_STYLES, applySharedStyle, restoredSharedStyleId } from "../../shared/image-styles.js";
 import { ImageTemplateEditor } from "./image-templates.js";
 import { normalizeReaderPreferences } from "../../shared/reader-preferences.js";
+import { THEME_PALETTE_SPECS } from "../theme/palette-tokens.js";
 import { normalizeRpgMode } from "../../shared/rpg-state.js";
 import type { ImagePromptMetadata } from "../../shared/image-templates.js";
 import {
@@ -270,15 +271,15 @@ label[data-check] small { margin-top: .1rem; }
 
 /* Theme tiles */
 [data-tiles] { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: .55rem; }
-[data-tiles] label { position: relative; display: grid; gap: .4rem; padding: .45rem; border: 1px solid var(--set-border); border-radius: .75rem; cursor: pointer; background: var(--set-field); transition: border-color .15s, transform .15s; }
-[data-tiles] label:hover { border-color: color-mix(in srgb, var(--set-accent) 50%, var(--set-border)); }
-[data-tiles] label:has(input:checked) { border-color: var(--set-accent); box-shadow: 0 0 0 1px var(--set-accent); }
+[data-tiles] label { position: relative; display: grid; gap: .4rem; padding: .45rem; border: 1px solid var(--set-border); border-radius: min(var(--set-radius, .75rem), 1rem); cursor: pointer; background: var(--set-field); transition: border-color .15s, box-shadow .15s, transform .15s; }
+[data-tiles] label:hover { border-color: color-mix(in srgb, var(--set-accent) 55%, var(--set-border)); transform: translateY(-1px); }
+[data-tiles] label:has(input:checked) { border-color: var(--set-accent); box-shadow: 0 0 0 1px var(--set-accent), 0 6px 16px var(--set-glow, transparent); }
 [data-tiles] label:has(input:checked) > span:last-child::after { content: " ✓"; color: var(--set-accent); }
 [data-tiles] input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
-[data-tiles] > label > span:last-child { font-size: .84rem; font-weight: 600; text-align: center; }
-[data-swatch] { display: grid; align-content: end; height: 3.6rem; padding: .35rem .45rem; border-radius: .5rem; background: linear-gradient(160deg, #2a2140, #0a0b10 70%); overflow: hidden; }
-[data-swatch] i { display: block; height: 1.75rem; padding: .22rem .4rem; border-radius: .35rem; border: 1px solid var(--swatch-border); background: var(--swatch-bg); color: var(--swatch-text); font: 600 .62rem/1.2 var(--swatch-font); font-style: normal; white-space: nowrap; overflow: hidden; }
-[data-swatch] i::before { content: "Mira"; display: block; color: var(--swatch-accent); font-size: .55rem; }
+[data-tiles] > label > span:last-child { font-size: .84rem; font-weight: 600; text-align: center; font-family: var(--set-display-font, inherit); }
+[data-swatch] { display: grid; align-content: end; height: 3.85rem; padding: .35rem .45rem; border-radius: calc(var(--swatch-radius, .5rem) * .75); background: var(--swatch-surface, linear-gradient(160deg, #2a2140, #0a0b10 70%)); border: 1px solid color-mix(in srgb, var(--swatch-accent, #ffffff) 22%, transparent); overflow: hidden; }
+[data-swatch] i { display: block; height: 1.85rem; padding: .22rem .42rem; border-radius: calc(var(--swatch-radius, .35rem) * .6); border: 1px solid var(--swatch-border); background: var(--swatch-bg); color: var(--swatch-text); font: 600 .62rem/1.2 var(--swatch-font); font-style: normal; white-space: nowrap; overflow: hidden; }
+[data-swatch] i::before { content: "Mira"; display: block; color: var(--swatch-accent); font-size: .55rem; letter-spacing: .04em; }
 
 /* Setup guide */
 [data-setup] { display: grid; gap: 1rem; padding: 1.1rem 1.15rem 1.15rem; border: 1px solid color-mix(in srgb, var(--set-accent) 55%, var(--set-border)); border-radius: calc(var(--set-radius) + .1rem); background: linear-gradient(180deg, color-mix(in srgb, var(--set-accent) 10%, transparent), transparent 9rem), var(--set-surface); }
@@ -302,9 +303,13 @@ label[data-check] small { margin-top: .1rem; }
 
 /* Live sample */
 [data-sample] { display: grid; gap: .35rem; }
-[data-sample-stage] { position: relative; height: 8.25rem; border-radius: .7rem; overflow: hidden; background: radial-gradient(circle at 50% 35%, rgba(73,58,91,.55), transparent 48%), #08090d; font-family: var(--sample-font); color: var(--sample-text); border: 1px solid var(--set-border); }
+[data-sample-stage] { position: relative; height: 8.25rem; border-radius: min(var(--set-radius, .7rem), 1rem); overflow: hidden; background: radial-gradient(circle at 50% 35%, rgba(73,58,91,.55), transparent 48%), #08090d; font-family: var(--sample-font); color: var(--sample-text); border: 1px solid var(--set-border); }
 [data-sample-picture] { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: var(--sample-fit, cover); }
-[data-sample-dialogue] { position: absolute; left: .55rem; right: .55rem; bottom: .55rem; min-height: 3.9rem; padding: .45rem .8rem .55rem; border: 1px solid var(--sample-border); border-radius: .55rem; background: var(--sample-bg); font-size: calc(.86rem * var(--sample-scale, 1)); line-height: 1.4; }
+[data-sample-dialogue] { position: absolute; left: .55rem; right: .55rem; bottom: .55rem; min-height: 3.9rem; padding: .45rem .8rem .55rem; border: 1px solid var(--sample-border); border-radius: min(var(--set-radius, .55rem), .85rem); background: var(--sample-bg); font-size: calc(.86rem * var(--sample-scale, 1)); line-height: 1.4; transition: all .18s ease; }
+[data-sample-stage][data-dialogue-style="cinema-bar"] [data-sample-dialogue] { left: 0; right: 0; bottom: 0; border-radius: 0; border-left: 0; border-right: 0; border-bottom: 0; background: linear-gradient(to top, color-mix(in srgb, var(--set-field, #070a10) 94%, black) 0%, color-mix(in srgb, var(--set-field, #070a10) 72%, transparent) 75%, transparent 100%); }
+[data-sample-stage][data-dialogue-style="editorial-page"] [data-sample-dialogue] { border-radius: .25rem; box-shadow: inset 3px 0 0 var(--sample-accent); outline: 1px solid color-mix(in srgb, var(--sample-accent) 25%, transparent); outline-offset: -4px; }
+[data-sample-stage][data-dialogue-style="terminal-hud"] [data-sample-dialogue] { border-radius: 2px; background-image: repeating-linear-gradient(0deg, color-mix(in srgb, var(--sample-accent) 5%, transparent) 0 1px, transparent 1px 4px); box-shadow: inset 3px 0 0 var(--sample-accent); }
+[data-sample-stage][data-dialogue-style="glass-card"] [data-sample-dialogue] { border-radius: .95rem; backdrop-filter: blur(12px); box-shadow: inset 0 1px 0 rgba(255,255,255,.25); }
 [data-sample-speaker] { display: block; color: var(--sample-accent); font-weight: 700; font-size: .8em; letter-spacing: .02em; }
 [data-sample-text] { margin: 0; min-height: 2.6em; }
 [data-sample-caret] { display: inline-block; width: .5em; height: 1em; margin-left: .15em; vertical-align: -.15em; background: var(--sample-accent); opacity: 0; }
@@ -393,7 +398,8 @@ function imageSourceOptions(name: string): string {
 function themeTiles(name = "themePreset"): string {
   return `<div data-tiles role="radiogroup" aria-label="Theme">${THEME_PRESET_OPTIONS.map(({ value, label }) => {
     const tokens = themePreviewTokens(value);
-    const style = `--swatch-accent:${tokens.accent};--swatch-text:${tokens.text};--swatch-bg:${tokens.dialogueBg};--swatch-border:${tokens.dialogueBorder};--swatch-font:${tokens.fontFamily}`;
+    const palette = THEME_PALETTE_SPECS[value];
+    const style = `--swatch-surface:${palette.surfaceGradient};--swatch-radius:${palette.radius};--swatch-accent:${tokens.accent};--swatch-text:${tokens.text};--swatch-bg:${tokens.dialogueBg};--swatch-border:${tokens.dialogueBorder};--swatch-font:${tokens.fontFamily}`;
     return `<label><input type="radio" name="${name}" value="${value}" /><span data-swatch style="${esc(style)}"><i>The wind picks up…</i></span><span>${esc(label.replace(/ \(.*\)$/, ""))}</span></label>`;
   }).join("")}</div>`;
 }
@@ -768,6 +774,7 @@ export class VisualNovelSettingsPanel {
               <label data-field ${find("Text panel size", "panel size compact reading expanded sheet")}><span>Text panel size</span><select name="readerSheetSize"><option value="custom" disabled>Custom (dragged)</option><option value="compact">Compact</option><option value="reading">Reading</option><option value="expanded">Expanded</option></select></label>
               <label data-field ${find("Dialogue background opacity", "opacity transparent solid subtitle background")}><span>Dialogue background opacity <output data-opacity-output style="font:11px ui-monospace,monospace;margin-left:6px;"></output></span><input name="readerBackgroundOpacity" type="range" min="0" max="1" step="0.01" /></label>
               <label data-field ${find("Reading typography", "font typography typeface serif sans dyslexic font size style novelist modern retro accessible cinematic terminal manga fantasy")}><span>Reading typography</span><select name="readerTypography"><option value="modern">Modern Clean (Outfit / Inter)</option><option value="novelist">Classic Novelist (Georgia / Serif)</option><option value="cinematic">Cinematic Drama (Cinzel / Baskerville)</option><option value="retro">Arcade Monospace (Pixel / JetBrains)</option><option value="terminal">Cyberpunk Terminal (Share Tech / Fira)</option><option value="manga">Anime &amp; Manga (Comic Neue / Casual)</option><option value="fantasy">Dark Fantasy Gothic (Merriweather / Antiqua)</option><option value="accessible">Accessible Sans (High Legibility)</option></select></label>
+              <label data-field ${find("Text viewer style", "dialogue box viewer style frame subtitle cinema bar editorial bookplate terminal hud glass card")}><span>Text viewer style</span><select name="readerDialogueStyle"><option value="preset">Theme signature (crafted borders &amp; framing)</option><option value="glass-card">Frosted glass slab (rounded prism edge)</option><option value="cinema-bar">Cinema subtitle ribbon (full-width edge gradient)</option><option value="editorial-page">Editorial bookplate (margin rule &amp; double ink line)</option><option value="terminal-hud">Tactical console HUD (scanlines &amp; crisp frame)</option></select></label>
               <fieldset ${find("Text size", "font scale bigger smaller large")}>
                 <legend>Text size</legend>
                 ${segments("textScaleStep", TEXT_SCALE_STEPS, true)}
@@ -789,18 +796,18 @@ export class VisualNovelSettingsPanel {
                 ${optionList("effectIntensity", EFFECT_INTENSITY_OPTIONS)}
               </fieldset>
               <label data-check ${find("Film grain filters", "film grain filters analog texture noise clean pure")}><input name="filmGrain" type="checkbox" /><span>Film grain filters<small>Analog film grain texture overlay on mood grades (vignette, sepia flashback, noir, danger pulse). Uncheck for 100% clean, grain-free scene effects.</small></span></label>
-              <details class="scene-effects-details" style="margin-top: 10px; border: 1px solid var(--border-color, rgba(255,255,255,0.15)); border-radius: 8px; padding: 10px 14px; background: rgba(0,0,0,0.12);">
+              <details class="scene-effects-details" style="margin-top: 10px; border: 1px solid var(--set-border); border-radius: var(--set-radius, 8px); padding: 10px 14px; background: var(--set-field);">
                 <summary style="cursor: pointer; font-weight: 500; font-size: 13px; user-select: none; display: flex; align-items: center; justify-content: space-between;">
                   <span>Individual scene effect toggles</span>
                   <small style="opacity: 0.7; font-size: 11px;">Configure per effect</small>
                 </summary>
                 <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; margin-bottom: 12px;">
-                  <button type="button" data-enable-all-effects class="settings-sub-btn" style="font-size: 12px; min-height: 44px; min-width: 44px; padding: 8px 14px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: inherit; cursor: pointer;">Enable all</button>
-                  <button type="button" data-disable-all-effects class="settings-sub-btn" style="font-size: 12px; min-height: 44px; min-width: 44px; padding: 8px 14px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: inherit; cursor: pointer;">Disable all</button>
+                  <button type="button" data-enable-all-effects class="settings-sub-btn" style="font-size: 12px; min-height: 44px; min-width: 44px; padding: 8px 14px; border-radius: var(--set-radius, 6px); border: 1px solid var(--set-border); background: var(--set-hover); color: inherit; cursor: pointer;">Enable all</button>
+                  <button type="button" data-disable-all-effects class="settings-sub-btn" style="font-size: 12px; min-height: 44px; min-width: 44px; padding: 8px 14px; border-radius: var(--set-radius, 6px); border: 1px solid var(--set-border); background: var(--set-hover); color: inherit; cursor: pointer;">Disable all</button>
                 </div>
                 ${SCENE_EFFECT_CATEGORIES.map(category => `
                   <div style="margin-bottom: 14px;">
-                    <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.8; margin-bottom: 6px; padding-bottom: 2px; border-bottom: 1px solid rgba(255,255,255,0.08);">${category.title}</div>
+                    <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.85; margin-bottom: 6px; padding-bottom: 2px; border-bottom: 1px solid var(--set-border);">${category.title}</div>
                     <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px;">
                       ${category.effects.map(effect => `
                         <label data-check style="display: flex; align-items: flex-start; gap: 6px; font-size: 12px; margin: 0; padding: 4px; cursor: pointer;">
@@ -1820,16 +1827,15 @@ export class VisualNovelSettingsPanel {
       case "themePreset":
       case "setupThemePreset": {
         const preset = normalizeThemePreset(target.value);
-        const isLight = preset === "paper-novel";
-        const themeMode: "light" | "dark" = isLight ? "light" : "dark";
-        this.host.dataset.apertureMode = themeMode;
+        delete this.host.dataset.apertureMode;
         this.host.dataset.vnPreset = preset;
+        for (const speechHost of this.root.querySelectorAll<HTMLElement>("[data-speech-mount] > *")) {
+          delete speechHost.dataset.apertureMode;
+          speechHost.dataset.vnPreset = preset;
+        }
         const status = this.root.querySelector<HTMLElement>("[data-aperture-theme-status]");
         if (status) status.textContent = `${THEME_PRESET_LABELS[preset].toUpperCase()} / ACTIVE`;
-        return {
-          themePreset: preset,
-          readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, theme: themeMode }),
-        };
+        return { themePreset: preset };
       }
       case "castMode": return {castMode:checked};
       case "dataSaverMode":return {dataSaverMode:(target as HTMLInputElement).checked};
@@ -1871,6 +1877,7 @@ export class VisualNovelSettingsPanel {
         return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, backgroundOpacity: opacity }) };
       }
       case "readerTypography": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, typography: target.value }) };
+      case "readerDialogueStyle": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, dialogueStyle: target.value }) };
       case "typewriterAudio": return { readerPreferences: normalizeReaderPreferences({ ...this.config.readerPreferences, typewriterAudio: target.value }) };
       case "typewriterVolume": {
         const vol = Math.max(0, Math.min(1, parseFloat(target.value) || 0));
@@ -2461,6 +2468,8 @@ export class VisualNovelSettingsPanel {
     const mini = this.root.querySelector<HTMLElement>("[data-mini-caption-preview]");
     if (mini) mini.style.setProperty("--caption-opacity", String(config.readerPreferences.backgroundOpacity));
     this.control<HTMLSelectElement>("readerTypography").value = config.readerPreferences.typography ?? "modern";
+    const dialogueStyleSelect = this.root.querySelector<HTMLSelectElement>('select[name="readerDialogueStyle"]');
+    if (dialogueStyleSelect) dialogueStyleSelect.value = config.readerPreferences.dialogueStyle ?? "preset";
     this.control<HTMLSelectElement>("typewriterAudio").value = config.readerPreferences.typewriterAudio ?? "blip";
     this.control<HTMLInputElement>("typewriterVolume").value = String(config.readerPreferences.typewriterVolume ?? 0.35);
     const twVolOut = this.root.querySelector<HTMLElement>("[data-typewriter-volume-output]");
@@ -2477,12 +2486,14 @@ export class VisualNovelSettingsPanel {
     this.control<HTMLInputElement>("smartBeatSegmentation").checked = config.readerPreferences.smartBeatSegmentation !== false;
     this.control<HTMLInputElement>("virtualCameraEnabled").checked = config.readerPreferences.virtualCameraEnabled !== false;
     this.control<HTMLInputElement>("confidantCutInsEnabled").checked = config.readerPreferences.confidantCutInsEnabled !== false;
-    const isLight = config.themePreset === "paper-novel" || config.readerPreferences.theme === "light";
-    const themeMode = isLight ? "light" : "dark";
     const themeStatus = this.root.querySelector<HTMLElement>("[data-aperture-theme-status]");
     if (themeStatus) themeStatus.textContent = `${THEME_PRESET_LABELS[config.themePreset].toUpperCase()} / ACTIVE`;
-    this.host.dataset.apertureMode = themeMode;
+    delete this.host.dataset.apertureMode;
     this.host.dataset.vnPreset = config.themePreset;
+    for (const speechHost of this.root.querySelectorAll<HTMLElement>("[data-speech-mount] > *")) {
+      delete speechHost.dataset.apertureMode;
+      speechHost.dataset.vnPreset = config.themePreset;
+    }
     this.showCustomQuiet("textScale", !scaleStep);
 
     const source = imageSourceFromConfig(config);
@@ -2559,6 +2570,7 @@ export class VisualNovelSettingsPanel {
     stage.style.setProperty("--sample-scale", String(config.textScale));
     this.root.querySelector<HTMLElement>("[data-sample]")!.dataset.effects = config.effectIntensity;
     stage.dataset.preset = config.themePreset;
+    stage.dataset.dialogueStyle = config.readerPreferences.dialogueStyle ?? "preset";
     const picture = this.root.querySelector<HTMLElement>("[data-sample-picture]")!;
     picture.hidden = imageSourceFromConfig(config) === "text";
 

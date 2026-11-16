@@ -303,3 +303,40 @@ describe("Aperture reader cascade allows presets and typography to theme dialogu
     }
   });
 });
+
+describe("cross-menu theme cohesion and text viewer styles", () => {
+  test("foundation surface never hardcodes dark green gradients or orbital rings", () => {
+    const { APERTURE_CSS_FOUNDATION } = require("./aperture/foundation.js");
+    expect(APERTURE_CSS_FOUNDATION).not.toContain("#151f20 !important");
+    expect(APERTURE_CSS_FOUNDATION).not.toContain("rgba(189, 215, 174");
+    expect(APERTURE_CSS_FOUNDATION).toContain("var(--vn-shell-surface-gradient");
+    expect(APERTURE_CSS_FOUNDATION).toContain("var(--vn-shell-ring");
+  });
+
+  test("VN_SHELL_PRESET_TOKENS_CSS emits :host and shell tokens for every preset with no light/dark mode overrides", () => {
+    const { VN_SHELL_PRESET_TOKENS_CSS, THEME_PALETTE_SPECS } = require("./palette-tokens.js");
+    const { SETTINGS_TOKENS_CSS } = require("../settings/controls-css.js");
+    const { APERTURE_CSS_SHEETS_STAGE_PALETTES } = require("./aperture/sheets-stage-palettes.js");
+    for (const id of EXPECTED_PRESETS) {
+      expect(VN_SHELL_PRESET_TOKENS_CSS).toContain(`:host([data-vn-preset="${id}"])`);
+      expect(VN_SHELL_PRESET_TOKENS_CSS).toContain(`[data-vn-shell][data-vn-preset="${id}"]`);
+      expect(THEME_PALETTE_SPECS[id].accent.length).toBeGreaterThan(0);
+    }
+    expect(VN_SHELL_PRESET_TOKENS_CSS).toContain("--vn-shell-accent: #52d5ff;");
+    expect(SETTINGS_TOKENS_CSS).toContain(':host([data-vn-preset="astral-glass"])');
+    expect(APERTURE_CSS_SHEETS_STAGE_PALETTES).not.toContain('[data-aperture-mode="light"]');
+  });
+
+  test("APERTURE_CSS_SHEETS_STAGE_PALETTES includes all independent Text Viewer styles", () => {
+    const { APERTURE_CSS_SHEETS_STAGE_PALETTES } = require("./aperture/sheets-stage-palettes.js");
+    for (const styleId of ["cinema-bar", "editorial-page", "terminal-hud", "glass-card"]) {
+      expect(APERTURE_CSS_SHEETS_STAGE_PALETTES).toContain(`[data-vn-dialogue-style="${styleId}"] [data-vn-dialogue]`);
+    }
+  });
+
+  test("World Lens docked styles suppress duplicate header and preserve active filter pill contrast", () => {
+    const { DOCKED_DOSSIER_CSS } = require("../stage/dossier-card.js");
+    expect(DOCKED_DOSSIER_CSS).toContain(".dossier-topbar-header");
+    expect(DOCKED_DOSSIER_CSS).toContain("var(--vn-shell-accent-contrast");
+  });
+});
