@@ -5,7 +5,8 @@ export const StageAssetRoleSchema=z.enum(['scene','background','portrait']);
 export type StageAssetRole=z.infer<typeof StageAssetRoleSchema>;
 export const LocationArtVariantSchema=z.object({
  id,imageId:id,requestFingerprint:id,environmentFingerprint:id,
- approved:z.literal(true),createdAt:z.string().max(64)
+ approved:z.literal(true),createdAt:z.string().max(64),
+ lastUsedAt:z.number().nonnegative().optional(),pinned:z.boolean().optional()
 }).strict();
 export const LocationArtRecordSchema=z.object({
  entityId:id,name:id,artRevision:z.number().int().nonnegative(),

@@ -3,12 +3,19 @@ import type { SceneState, VisualCue } from '../../shared/contracts.js';
 import type { PromptDocument, PromptSection } from '../../shared/prompt-document.js';
 import { createPromptDocument } from '../../shared/prompt-document.js';
 
+export const LocationSpatialAnchorsSchema = z.object({
+  focalZones: z.array(z.string().trim().max(120)).max(6).default([]),
+  exitPaths: z.array(z.string().trim().max(120)).max(6).default([]),
+  lightSources: z.array(z.string().trim().max(120)).max(6).default([]),
+}).strict();
+
 export const LocationDNASchema = z.object({
   name: z.string().trim().max(200),
   architecturalFeatures: z.array(z.string().trim().max(200)).max(16).default([]),
   dominantMaterials: z.array(z.string().trim().max(100)).max(12).default([]),
   prominentProps: z.array(z.string().trim().max(200)).max(16).default([]),
-  lightingAtmosphere: z.string().trim().max(500).default('')
+  lightingAtmosphere: z.string().trim().max(500).default(''),
+  spatialAnchors: LocationSpatialAnchorsSchema.optional(),
 }).strict();
 export type LocationDNA = z.infer<typeof LocationDNASchema>;
 
@@ -86,26 +93,58 @@ export function extractLocationDNA(scene: SceneState, narrativeText = ''): Locat
   }
 
   const lightingAtmosphere = [env.timeOfDay, env.weather, env.lighting].filter(Boolean).join(', ') || 'ambient lighting';
+  const exitPaths: string[] = [];
+  const lightSources: string[] = [];
+  const focalZones: string[] = [];
+  for (const feat of features) {
+    if (/\b(?:doorway|door|stair|corridor|hallway|balcony|archway|threshold|path)\b/i.test(feat)) exitPaths.push(feat);
+    else if (/\b(?:counter|table|hearth|fireplace|bookshelf)\b/i.test(feat)) focalZones.push(feat);
+  }
+  const sourcePool = `${env.lighting || ''} ${env.description || ''} ${narrativeText}`.split(/[.;,\n]+/).map(s => s.trim()).filter(Boolean);
+  for (const clause of sourcePool) {
+    if (clause.length < 100 && /\b(?:lantern|candle|hearth|fireplace|chandelier|window|skylight|sconce|lamp|moonlight|sunlight)\b/i.test(clause)) {
+      lightSources.push(clause);
+    }
+    if (clause.length < 100 && /\b(?:altar|desk|table|bench|counter|anvil|throne|bar)\b/i.test(clause)) {
+      focalZones.push(clause);
+    }
+  }
+  const spatialAnchors = (focalZones.length || exitPaths.length || lightSources.length)
+    ? {
+        focalZones: [...new Set(focalZones)].slice(0, 6),
+        exitPaths: [...new Set(exitPaths)].slice(0, 6),
+        lightSources: [...new Set(lightSources)].slice(0, 6),
+      }
+    : undefined;
 
   return LocationDNASchema.parse({
     name: locationName,
     architecturalFeatures: [...new Set(features)].slice(0, 8),
     dominantMaterials: [...new Set(materials)].slice(0, 6),
     prominentProps: [...new Set(props)].slice(0, 8),
-    lightingAtmosphere
+    lightingAtmosphere,
+    ...(spatialAnchors ? { spatialAnchors } : {}),
   });
 }
 
+function escapeRegexForCondition(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
- * Extracts temporary physical conditions (e.g. rain mist on bare feet, clay smudges, sweat, bruises) from text.
+ * Extracts temporary physical conditions (e.g. rain mist on bare feet, clay smudges, sweat, bruises) from text,
+ * scoped to clauses that reference the target character so conditions never bleed across speakers in ensemble text.
  */
-export function extractTemporaryConditions(characterName: string, text: string): string[] {
+export function extractTemporaryConditions(
+  characterName: string,
+  text: string,
+  otherCharacterNames: string[] = [],
+): string[] {
   if (!text) return [];
-  const lower = text.toLowerCase();
-  const nameFirst = (characterName.split(' ')[0] || characterName).toLowerCase();
+  const cleanName = characterName.trim();
+  const nameFirst = (cleanName.split(/\s+/)[0] || cleanName).trim();
   const conditions: string[] = [];
 
-  // Patterns for physical states
   const patterns = [
     /(?:rain mist|soaked|drenched|wet from the rain)/i,
     /(?:clay|mud|dirt|soot|dust|slip)[^.;,\n]*(?:smudges?|caked|on (?:her|his|their|the) (?:hands|arms|forearms|face|hem|feet|nails))/i,
@@ -115,10 +154,54 @@ export function extractTemporaryConditions(characterName: string, text: string):
     /(?:sweat glistening|beads of sweat|windblown hair)/i
   ];
 
-  for (const pat of patterns) {
-    const match = text.match(pat);
-    if (match?.[0]) {
-      conditions.push(match[0].trim());
+  const NON_NAME_STARTERS = new Set([
+    'a', 'an', 'and', 'as', 'behind', 'blood', 'but', 'cold', 'damp', 'dark', 'dry', 'dust',
+    'gray', 'grey', 'he', 'her', 'hers', 'his', 'in', 'ink', 'mud', 'on', 'rain', 'she',
+    'soaked', 'soft', 'soot', 'sweat', 'the', 'their', 'theirs', 'they', 'under', 'warm', 'wet', 'with',
+  ]);
+  const clauses = text.split(/[.!?\n;]+/).map(c => c.trim()).filter(Boolean);
+  const fullRe = cleanName.length >= 2 ? new RegExp(`\\b${escapeRegexForCondition(cleanName)}\\b`, 'i') : null;
+  const firstRe = nameFirst.length >= 2 ? new RegExp(`\\b${escapeRegexForCondition(nameFirst)}\\b`, 'i') : null;
+  const otherRes = otherCharacterNames
+    .flatMap((n) => {
+      const t = n.trim();
+      const f = (t.split(/\s+/)[0] || '').trim();
+      return [t, f].filter((v) => v.length >= 2 && v.toLowerCase() !== cleanName.toLowerCase() && v.toLowerCase() !== nameFirst.toLowerCase());
+    })
+    .map((v) => new RegExp(`\\b${escapeRegexForCondition(v)}\\b`, 'i'));
+
+  const scanTarget: string[] = [];
+  let activeSubject: 'self' | 'other' | null = null;
+  for (const clause of clauses) {
+    const mentionsSelf = Boolean((fullRe && fullRe.test(clause)) || (firstRe && firstRe.test(clause)));
+    const mentionsKnownOther = otherRes.some((re) => re.test(clause));
+    if (mentionsSelf && !mentionsKnownOther) {
+      activeSubject = 'self';
+      scanTarget.push(clause);
+      continue;
+    }
+    const leadMatch = clause.match(/^([A-Z][a-z]{2,})\b/);
+    const leadLower = leadMatch?.[1]?.toLowerCase() ?? '';
+    const hasMidProperNoun = /\s+[A-Z][a-z]{2,}\b/.test(clause);
+    const looksLikeOtherSubject =
+      mentionsKnownOther ||
+      (Boolean(leadLower) && !NON_NAME_STARTERS.has(leadLower)) ||
+      hasMidProperNoun;
+    if (looksLikeOtherSubject) {
+      activeSubject = 'other';
+      continue;
+    }
+    if (activeSubject === 'self' || activeSubject === null) {
+      scanTarget.push(clause);
+    }
+  }
+
+  for (const clause of scanTarget) {
+    for (const pat of patterns) {
+      const match = clause.match(pat);
+      if (match?.[0]) {
+        conditions.push(match[0].trim());
+      }
     }
   }
 
@@ -142,7 +225,7 @@ export function buildVisualContinuity(
   for (const name of presentNames) {
     const norm = name.trim().toLowerCase();
     const priorChar = prior?.characters[norm];
-    const temporary = extractTemporaryConditions(name, narrativeText);
+    const temporary = extractTemporaryConditions(name, narrativeText, presentNames.filter((n) => n !== name));
 
     characters[norm] = CharacterVisualStateSchema.parse({
       name,
@@ -176,6 +259,7 @@ export function formatLocationDNAToClause(loc: LocationDNA): string {
   if (loc.architecturalFeatures.length > 0) parts.push(loc.architecturalFeatures.join(', '));
   if (loc.dominantMaterials.length > 0) parts.push(`features ${loc.dominantMaterials.join(' and ')}`);
   if (loc.prominentProps.length > 0) parts.push(`with visible ${loc.prominentProps.join(', ')}`);
+  if (loc.spatialAnchors?.focalZones.length) parts.push(`key zone ${loc.spatialAnchors.focalZones.slice(0, 2).join(' and ')}`);
   if (loc.lightingAtmosphere) parts.push(loc.lightingAtmosphere);
   return parts.join('; ');
 }

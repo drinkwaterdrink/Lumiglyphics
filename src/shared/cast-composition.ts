@@ -5,7 +5,7 @@ import {selectPresentationSnapshot} from './presentation-selectors.js';
 import type {AssetView,TurnView} from '../protocol.js';
 import type {StageAssetRole} from './stage-assets.js';
 export type StageAssetMetadata={role:StageAssetRole;manual?:boolean;sceneId:string;sceneRevision?:number;character?:string;characters?:string[];attire?:string|null;displayImageUrl?:string};
-export type CastPortrait={name:string;asset:AssetView|null;active:boolean};
+export type CastPortrait={name:string;asset:AssetView|null;active:boolean;attireMismatch?:boolean};
 export type CastComposition={background:AssetView;portraits:CastPortrait[];otherCast:CastPortrait[];offScene:CastPortrait[];scope:string};
 const nameKey=(s:string)=>s.trim().toLocaleLowerCase();
 /** Current-turn, cursor-bounded projection. Never borrow a face across a scene,
@@ -32,10 +32,10 @@ export function selectCastComposition(turn:TurnView,index:number,selectedName?:s
  const candidate=turn.presentation?selectPresentationSnapshot(turn.presentation,index):undefined;
  const snapshot=candidate&&samePresentationTurn(candidate.at.key,{chatId:turn.chatId,assistantMessageId:turn.messageId,swipeId:turn.swipeId,sourceFingerprint:turn.sourceFingerprint,revision:turn.revision})?candidate:undefined;
  const offScene:CastPortrait[]=[];
- if(snapshot)for(const [key,p] of byName){const entity=snapshot.entities.find(e=>e.kind==='npc'&&nameKey(e.name)===key);if(entity){const state=snapshot.stateByEntity[entity.id];if(state?.outfit && p.asset?.stageAsset?.attire && state.outfit!==p.asset.stageAsset.attire)p.asset=null;
+ if(snapshot)for(const [key,p] of byName){const entity=snapshot.entities.find(e=>e.kind==='npc'&&nameKey(e.name)===key);if(entity){const state=snapshot.stateByEntity[entity.id];if(state?.outfit && p.asset?.stageAsset?.attire && state.outfit!==p.asset.stageAsset.attire)p.attireMismatch=true;
  if(state?.presence==='absent'){
   byName.delete(key);
-  if(absenceDisplay==='dim'&&p.asset&&p.asset.paragraphIndex<index&&offScene.length<8){const earlier=selectPresentationSnapshot(turn.presentation!,p.asset.paragraphIndex);if(earlier&&samePresentationTurn(earlier.at.key,snapshot.at.key)&&earlier.stateByEntity[entity.id]?.presence==='present')offScene.push({...p,active:false});}
+  if(absenceDisplay==='dim'&&!p.attireMismatch&&p.asset&&p.asset.paragraphIndex<index&&offScene.length<8){const earlier=selectPresentationSnapshot(turn.presentation!,p.asset.paragraphIndex);if(earlier&&samePresentationTurn(earlier.at.key,snapshot.at.key)&&earlier.stateByEntity[entity.id]?.presence==='present')offScene.push({...p,active:false});}
  }
  }}
  const all=[...byName.values()];

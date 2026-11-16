@@ -285,4 +285,45 @@ describe('DossierCard & World Lens Header', () => {
       restore();
     }
   });
+
+  it('pins unrecorded scene location to World DNA and swaps scene wardrobe in Current Scene hub', () => {
+    const restore = installFakeDocument();
+    try {
+      const host = new FakeNode('div');
+      const card = new DossierCard(host as unknown as HTMLElement);
+      const sentBodies: any[] = [];
+      const wardrobeCalls: Array<{ char: string; key: string; outfit: string }> = [];
+      card.setStoryDnaRequester((body) => sentBodies.push(body));
+      card.setSceneHubContext({
+        activeLocationName: 'Old Boathouse',
+        presentCast: [
+          {
+            id: 'npc-dana',
+            name: 'Dana',
+            dnaId: 'dna-dana',
+            present: true,
+            activeWardrobeKey: 'casual',
+            wardrobeStates: { casual: 'flannel shirt', coat: 'yellow rain slicker' },
+          },
+        ],
+        activeItems: [],
+        onSelectWardrobe: (char, key, outfit) => wardrobeCalls.push({ char, key, outfit }),
+      });
+
+      const trigger = new FakeNode('button');
+      card.openTray([], trigger as unknown as HTMLElement, () => {}, undefined);
+
+      const pinBtn = card.host.querySelector('[data-scene-pin-location="Old Boathouse"]') as unknown as HTMLButtonElement;
+      expect(pinBtn).not.toBeNull();
+      pinBtn.click();
+      expect(sentBodies.some((b) => b.action === 'save_location' && b.location.name === 'Old Boathouse')).toBe(true);
+
+      const swapBtn = card.host.querySelector('[data-scene-wardrobe-option="Dana:coat"]') as unknown as HTMLButtonElement;
+      expect(swapBtn).not.toBeNull();
+      swapBtn.click();
+      expect(wardrobeCalls).toEqual([{ char: 'dna-dana', key: 'coat', outfit: 'yellow rain slicker' }]);
+    } finally {
+      restore();
+    }
+  });
 });

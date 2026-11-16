@@ -1,4 +1,4 @@
-import {SceneScrubber} from '../stage/scene-scrubber.js';
+﻿import {SceneScrubber} from '../stage/scene-scrubber.js';
 import {RelationshipTracker} from '../stage/relationship-tracker.js';
 import {sceneHistoryFor,turnHistoryKey} from '../../shared/scene-history.js';
 import {progressForCursor} from '../speech/read-along.js';
@@ -191,14 +191,18 @@ export function shouldPreserveImage(previous: TurnView | null, next: TurnView): 
  * - null / absent -> unknown, fall back to the turn speaker (card name),
  *   which is exactly the pre-attribution behavior.
  */
-export function nameplateForParagraph(view: TurnView, index: number): string {
-  const snapshot=view.presentation?selectPresentationSnapshot(view.presentation,index):undefined;
-  const key={chatId:view.chatId,assistantMessageId:view.messageId,swipeId:view.swipeId,sourceFingerprint:view.sourceFingerprint,revision:view.revision};
-  if(snapshot && snapshot.at.paragraphIndex===index && samePresentationTurn(snapshot.at.key,key) && snapshot.speakerEntityId) {
-    const speaker=snapshot.entities.find(e=>e.id===snapshot.speakerEntityId&&e.kind==='npc');
-    if(speaker)return speaker.name;
+export function effectiveSpeakerAttribution(view: TurnView, index: number): string | null | undefined {
+  const snapshot = view.presentation ? selectPresentationSnapshot(view.presentation, index) : undefined;
+  const key = { chatId: view.chatId, assistantMessageId: view.messageId, swipeId: view.swipeId, sourceFingerprint: view.sourceFingerprint, revision: view.revision };
+  if (snapshot && snapshot.at.paragraphIndex === index && samePresentationTurn(snapshot.at.key, key) && snapshot.speakerEntityId) {
+    const speaker = snapshot.entities.find((e) => e.id === snapshot.speakerEntityId && e.kind === "npc");
+    if (speaker) return speaker.name;
   }
-  const attributed = view.paragraphSpeakers?.[index];
+  return view.paragraphSpeakers?.[index];
+}
+
+export function nameplateForParagraph(view: TurnView, index: number): string {
+  const attributed = effectiveSpeakerAttribution(view, index);
   return attributed === undefined || attributed === null ? view.speaker : attributed;
 }
 
@@ -218,7 +222,7 @@ export function speechCursorFor(view: TurnView, index: number): SpeechCursor | n
     swipeId:view.swipeId,revision:view.revision,
     paragraphIndex: index,
     text,
-    paragraphSpeaker: view.paragraphSpeakers?.[index],
+    paragraphSpeaker: effectiveSpeakerAttribution(view, index),
     turnSpeaker: view.speaker,
   };
 }
@@ -586,7 +590,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const syncGameChoices = (): void => {
     const id = chatId();
     const choices = gameBridge?.choicesFor(id) ?? [];
-    stage.setGameChoices(choices, gameBridge?.busyFor(id) ?? false);
+    const status = gameBridge?.busyStatusFor(id) ?? { busy: false, timedOut: false, providers: [], busyLabel: null };
+    stage.setGameChoices(choices, { busy: status.busy, timedOut: status.timedOut });
   };
 
   let imageLibraryOpen=false;
@@ -599,6 +604,10 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     mount: app.root,
     themePreset: configRef.current?.themePreset ?? "lumiverse",
     isAutoAdvanceHeld: () => isSpeechHoldingAuto()||imageLibraryOpen||imageStudioOpen||externalReviewOpen,
+    isTypewriterAudioMuted: () => {
+      const kind = speech?.getStatus().kind;
+      return kind === "loading" || kind === "playing";
+    },
     onExit: () => deactivate(),
     onTooltipPreferencesChange: tooltips => { ctx.sendToBackend({type:"vn_set_config",patch:{tooltips},chatId:chatId()}); },
     onReaderPreferencesChange: readerPreferences => {
@@ -648,6 +657,10 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       if (!gameBridge.pick(activeChatId,picked)) throw new Error("That move is no longer available. Refresh the available moves.");
       speech.setCursor(null);
       stage.presentUserParagraph(picked.label, turn?.userSpeaker || "You");
+    },
+    onGameCancel: (provider) => {
+      const activeChatId = chatId();
+      if (activeChatId) gameBridge?.cancelBusy(activeChatId, provider);
     },
     onReviewImages:()=>imageStudio.open(),
     onReroll: () => {
@@ -780,7 +793,12 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     onClose:()=>stage.workspace.close()
   });
   stage.workspace.register('character', characterFolio);
+  stage.setNpcActionToolsHandler((tools, charName) => {
+    characterFolio.setSceneActionTools(tools, charName);
+  });
+  characterFolio.setSceneActionResolver((charName) => stage.buildNpcSceneActionTools(charName));
   stage.setFolioOpener((charName) => {
+    characterFolio.setSceneActionTools(stage.buildNpcSceneActionTools(charName), charName);
     characterFolio.setActiveCharacter(charName);
     stage.workspace.open('character');
   });
@@ -849,7 +867,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
           skipped += 1;
           continue;
         }
-        settingsPanel?.setAudioStatus(`Importing ${sent + 1}/${audioFiles.length}: ${file.name}…`);
+        settingsPanel?.setAudioStatus(`Importing ${sent + 1}/${audioFiles.length}: ${file.name}â€¦`);
         try {
           const bytes = new Uint8Array(await file.arrayBuffer());
           const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
@@ -880,7 +898,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
         }
       }
       ctx.sendToBackend({ type: "vn_import_audio_done", fileCount: sent });
-      settingsPanel?.setAudioStatus(`Sent ${sent} file(s)${skipped ? `, skipped ${skipped}` : ""}; scanning…`);
+      settingsPanel?.setAudioStatus(`Sent ${sent} file(s)${skipped ? `, skipped ${skipped}` : ""}; scanningâ€¦`);
     },
     onSave: (patch, requestId) => {
       const current = configRef.current;
@@ -1376,6 +1394,21 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       } else {
         applyTurn(next, turn);
       }
+      return;
+    }
+    if (type === "vn_turn_lore_patch" && message.type === "vn_turn_lore_patch") {
+      if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId || turn.swipeId !== message.swipeId || turn.sourceFingerprint !== message.sourceFingerprint) return;
+      if (invalidatedReferenceTurn === referenceTurnToken(turn) && message.referenceHistory !== undefined) return;
+      turn = {
+        ...turn,
+        ...(message.presentation !== undefined ? { presentation: message.presentation } : {}),
+        ...(message.referenceHistory !== undefined ? { referenceHistory: message.referenceHistory } : {}),
+      };
+      loadedReadingCursor.load(turn);
+      stage.patchTurnLore({
+        presentation: message.presentation,
+        referenceHistory: message.referenceHistory,
+      });
       return;
     }
     if (type === "vn_asset" && message.type === "vn_asset") {

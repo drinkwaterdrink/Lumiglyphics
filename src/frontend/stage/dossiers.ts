@@ -2,8 +2,8 @@ import { sceneImageUrlFor } from "./image-loader.js";
 import type { ReaderWorkspace } from "./reader-workspace.js";
 import {validateStoryDocuments,visibleStoryDocuments} from '../../shared/story-documents.js';
 import {stripTextEffectTags} from '../../shared/text-effects.js';
-import {availableInteractionVerbs,buildInteractionDraft,mergeInteractionDraft} from '../../shared/scene-interactions.js';
-import {referenceEntriesWithHistory,dossierWithHistory,selectEarlierDossier,normalizeTooltipPreferences,linkEntityMentions,createReferenceLinkBudget,eligibleEntities,selectReaderDossier,entityOverride,type TooltipPreferences} from '../../shared/dossiers.js';
+import {availableInteractionVerbs,buildInteractionDraft,buildSyntheticInteractionDraft,mergeInteractionDraft,type DraftMergeMode,type InteractionDraft} from '../../shared/scene-interactions.js';
+import {referenceEntriesWithHistory,dossierWithHistory,selectEarlierDossier,normalizeTooltipPreferences,linkEntityMentions,createReferenceLinkBudget,eligibleEntities,selectReaderDossier,entityOverride,applyOverrideFactEdits,type TooltipPreferences} from '../../shared/dossiers.js';
 import {referenceHistoryFor,type ReferenceHistory} from '../../shared/reference-history.js';
 import {samePresentationTurn,type ReaderPresentation,type PresentationEntity,type PresentationSnapshot} from '../../shared/presentation-entities.js';
 import {parseReaderPresentation,presentationTurnKey,createPresentationCursor} from '../../shared/presentation-selectors.js';
@@ -15,6 +15,7 @@ import {
   type StoryDnaActionBody,
   type StoryDNASet,
 } from '../../shared/story-dna.js';
+import { findCharacterDNA, type CharacterDNA } from '../../shared/character-dna.js';
 import type {AssetView,TurnView} from '../../protocol.js';
 import {applyEntityAnchors,clearEntityAnchors,protectedEntityRanges} from './entity-anchors.js';
 import {DossierCard,DOSSIER_CSS,DOCKED_DOSSIER_CSS,type DossierSceneHubContext,type DossierVisualContext} from './dossier-card.js';
@@ -23,6 +24,8 @@ export class StageDossiers {
  private history:ReferenceHistory|undefined;
  private storyDna:StoryDNASet={locations:{},items:{},revision:0};
  private storyDnaRequester?:(body:StoryDnaActionBody)=>void;
+ private characterDnaLibrary:Record<string,CharacterDNA>={};
+ private characterDnaSaver?:(dna:CharacterDNA)=>void;
  private tooltipPopover:HTMLElement|null=null;
  private tooltipDismissCleanup:(()=>void)|null=null;
  private snapshotAt:(index:number)=>PresentationSnapshot|undefined=()=>undefined;
@@ -48,6 +51,13 @@ export class StageDossiers {
  setStoryDnaError(error:string):void {
   this.card.setStoryDnaError(error);
  }
+ setCharacterDnaLibrary(library:Record<string,CharacterDNA>):void {
+  this.characterDnaLibrary={...library};
+  if(this.card.isOpen())this.card.setSceneHubContext(this.buildSceneHubContext(this.snapshot()));
+ }
+ setCharacterDnaSaver(fn:(dna:CharacterDNA)=>void):void {
+  this.characterDnaSaver=fn;
+ }
  connectWorkspace(workspace:ReaderWorkspace,mount:HTMLElement):void {
   if(this.workspaceMounted&&this.workspace===workspace)return;
   this.workspace=workspace;this.workspaceMounted=true;
@@ -57,9 +67,47 @@ export class StageDossiers {
   workspace.register('story',{element:this.card.host,hideAtHome:true,enter:()=>this.openReferences(),leave:()=>this.card.close(),back:()=>this.card.back()});
  }
  private folioOpener?: (charName: string) => void;
+ private npcActionToolsHandler?: (tools: { drafts: InteractionDraft[]; current: () => string; focus: () => void; apply: (draft: InteractionDraft, mode: DraftMergeMode) => boolean } | null, charName?: string) => void;
+ setNpcActionToolsHandler(fn: (tools: { drafts: InteractionDraft[]; current: () => string; focus: () => void; apply: (draft: InteractionDraft, mode: DraftMergeMode) => boolean } | null, charName?: string) => void): void {
+  this.npcActionToolsHandler = fn;
+ }
+ buildNpcActionTools(charName: string): { drafts: InteractionDraft[]; current: () => string; focus: () => void; apply: (draft: InteractionDraft, mode: DraftMergeMode) => boolean } | null {
+  const snapshot = this.snapshot();
+  if (!snapshot || !this.ready || !this.prefs.enabled || !this.prefs.actionsEnabled || !this.draftTools) return null;
+  const targetKey = charName.trim().toLocaleLowerCase();
+  if (!targetKey) return null;
+  const entity = eligibleEntities(snapshot.entities, this.prefs, snapshot.at.key.chatId).find(
+   (e) => e.kind === 'npc' && [e.name, ...e.aliases].some((alias) => alias.trim().toLocaleLowerCase() === targetKey),
+  );
+  if (!entity) return null;
+  const drafts = availableInteractionVerbs(entity, snapshot).flatMap((verb) => {
+   const draft = buildInteractionDraft(entity, verb, snapshot);
+   return draft ? [draft] : [];
+  });
+  if (drafts.length === 0) return null;
+  const tools = this.draftTools;
+  return {
+   drafts,
+   current: tools.current,
+   focus: tools.focus,
+   apply: (draft, mode) => {
+    const now = this.snapshot();
+    if (!now || !this.ready || !this.prefs.enabled || !this.prefs.actionsEnabled || !samePresentationTurn(now.at.key, draft.key) || now.at.paragraphIndex !== draft.paragraphIndex) return false;
+    const liveEntity = eligibleEntities(now.entities, this.prefs, now.at.key.chatId).find((e) => e.id === draft.entityId);
+    if (!liveEntity || !buildInteractionDraft(liveEntity, draft.verb, now)) return false;
+    const text = mergeInteractionDraft(tools.current(), draft.text, mode);
+    return text !== null && tools.apply(text);
+   },
+  };
+ }
+ private matchStoryDocument(entity: PresentationEntity, docs: readonly import('../../shared/story-documents.js').StoryDocument[]): import('../../shared/story-documents.js').StoryDocument | undefined {
+  const names = new Set([entity.name, ...entity.aliases].map((n) => n.trim().toLocaleLowerCase()).filter(Boolean));
+  return docs.find((d) => names.has(d.name.trim().toLocaleLowerCase()));
+ }
  setFolioOpener(fn: (charName: string) => void): void {
   this.folioOpener = fn;
   this.card.setFolioOpener((charName) => {
+    this.npcActionToolsHandler?.(this.buildNpcActionTools(charName), charName);
     fn(charName);
     this.workspace?.open('character');
   });
@@ -73,7 +121,18 @@ export class StageDossiers {
   const locationImageUrl=locationDna?.referenceImageUrl??(activePlace?this.resolveVisualContext(activePlace).imageUrl:this.displayedImageUrl?.()??undefined);
   const npcList=eligible.filter(e=>e.kind==='npc');
   const sortedCast=[...npcList].sort((a,b)=>Number(snapshot!.presentEntityIds.includes(b.id))-Number(snapshot!.presentEntityIds.includes(a.id)));
-  const presentCast=sortedCast.map(e=>({id:e.id,name:e.name,imageUrl:this.resolveVisualContext(e).imageUrl,present:Boolean(snapshot?.presentEntityIds.includes(e.id))}));
+  const presentCast=sortedCast.map(e=>{
+   const matchedChar=findCharacterDNA(this.characterDnaLibrary,e.name);
+   const hasWardrobe=Boolean(matchedChar?.wardrobeStates&&Object.keys(matchedChar.wardrobeStates).length>0);
+   return {
+    id:e.id,
+    name:e.name,
+    imageUrl:this.resolveVisualContext(e).imageUrl,
+    present:Boolean(snapshot?.presentEntityIds.includes(e.id)),
+    ...(matchedChar?{dnaId:matchedChar.id}:{}),
+    ...(hasWardrobe?{wardrobeStates:matchedChar!.wardrobeStates,activeWardrobeKey:matchedChar!.activeWardrobeKey,activeOutfit:matchedChar!.activeOutfit}:{}),
+   };
+  });
   const activeItems=eligible.filter(e=>e.kind==='object').map(e=>({id:e.id,name:e.name,imageUrl:this.resolveVisualContext(e).imageUrl}));
   return {
    ...(activePlace?{activeLocationId:activePlace.id}:{}),
@@ -82,6 +141,14 @@ export class StageDossiers {
    ...(locationDna?{locationDna}:{}),
    presentCast,
    activeItems,
+   ...(this.characterDnaSaver?{onSelectWardrobe:(charIdOrName:string,key:string,outfit:string)=>{
+     const target=this.characterDnaLibrary[charIdOrName]??findCharacterDNA(this.characterDnaLibrary,charIdOrName);
+     if(!target)return;
+     const nextDna:CharacterDNA={...target,activeWardrobeKey:key,activeOutfit:outfit,lastUpdated:Date.now()};
+     this.characterDnaLibrary={...this.characterDnaLibrary,[target.id]:nextDna};
+     this.characterDnaSaver?.(nextDna);
+     if(this.card.isOpen())this.card.setSceneHubContext(this.buildSceneHubContext(this.snapshot()));
+   }}:{}),
   };
  }
  private mergedTrayEntries(snapshot:PresentationSnapshot|undefined) {
@@ -152,9 +219,19 @@ export class StageDossiers {
   const key=this.presentation?presentationTurnKey(this.presentation):undefined;this.history=key?referenceHistoryFor(history,key):undefined;
   clearEntityAnchors(this.text);this.tray.hidden=true;
  }
+ patchLore(value:ReaderPresentation|undefined,paragraphs:readonly string[],history?:ReferenceHistory):void {
+  this.paragraphs=paragraphs;
+  this.presentation=parseReaderPresentation(value,undefined,paragraphs.length);
+  this.snapshotAt=this.presentation?createPresentationCursor(this.presentation):()=>undefined;
+  this.resetLinkBudget();
+  if(this.presentation?.documents)this.presentation.documents=validateStoryDocuments(this.presentation.documents,paragraphs.map(text=>({text:stripTextEffectTags(text)})));
+  const key=this.presentation?presentationTurnKey(this.presentation):undefined;
+  this.history=key?referenceHistoryFor(history,key):undefined;
+  if(this.ready&&this.index>=0)this.refresh(this.index);
+ }
  setHistory(history:ReferenceHistory|undefined):void{const key=this.presentation?presentationTurnKey(this.presentation):undefined,next=key?referenceHistoryFor(history,key):undefined;if(JSON.stringify(next)===JSON.stringify(this.history))return;this.history=next;this.dismissTooltipPopover();this.card.close();this.dossierOpen?.(false);if(this.ready)this.refresh(this.index);}
  setPreferences(value:TooltipPreferences):void{const next=normalizeTooltipPreferences(value);if(JSON.stringify(next)===JSON.stringify(this.prefs))return;this.prefs=next;this.resetLinkBudget();this.dismissTooltipPopover();this.card.close();this.dossierOpen?.(false);if(this.ready)this.refresh(this.index);else{clearEntityAnchors(this.text);this.tray.hidden=true;}}
- cursor(index:number):void{if(index!==this.index){this.dismissTooltipPopover();this.card.close();this.dossierOpen?.(false);this.index=index;this.ready=false;this.tray.hidden=true;}}
+ cursor(index:number):void{if(index!==this.index){this.dismissTooltipPopover();this.card.close();this.dossierOpen?.(false);this.npcActionToolsHandler?.(null);this.index=index;this.ready=false;this.tray.hidden=true;}}
  private snapshot(){return this.snapshotAt(this.index);}
  private dismissTooltipPopover():void {
   if(this.tooltipDismissCleanup){this.tooltipDismissCleanup();this.tooltipDismissCleanup=null;}
@@ -165,8 +242,9 @@ export class StageDossiers {
   if(this.tooltipPopover?.dataset.entityId===id){this.dismissTooltipPopover();return;}
   this.dismissTooltipPopover();
   const current=eligibleEntities(snapshot.entities,this.prefs,snapshot.at.key.chatId).some(e=>e.id===id);
-  const selected=current?selectReaderDossier(id,snapshot,this.prefs.detail,this.prefs.fieldGroups,this.prefs.maxFactsPerEntity):selectEarlierDossier(id,snapshot,this.prefs,this.history);
-  if(!selected){this.open(id,trigger);return;}
+  const rawSelected=current?selectReaderDossier(id,snapshot,this.prefs.detail,this.prefs.fieldGroups,this.prefs.maxFactsPerEntity):selectEarlierDossier(id,snapshot,this.prefs,this.history);
+  if(!rawSelected){this.open(id,trigger);return;}
+  const selected=applyOverrideFactEdits(rawSelected,entityOverride(this.prefs,snapshot.at.key.chatId,rawSelected.entity));
   const entity=selected.entity;
   const visual=this.resolveVisualContext(entity);
   const pop=document.createElement('div');
@@ -195,7 +273,11 @@ export class StageDossiers {
   cta.textContent=entity.kind==='npc'?'Open in Character Folio →':'Inspect & Edit DNA in World Lens →';
   cta.onclick=()=>{
    this.dismissTooltipPopover();
-   if(entity.kind==='npc'&&this.folioOpener){this.folioOpener(entity.name);this.workspace?.open('character');}
+   if(entity.kind==='npc'&&this.folioOpener){
+    this.npcActionToolsHandler?.(this.buildNpcActionTools(entity.name), entity.name);
+    this.folioOpener(entity.name);
+    this.workspace?.open('character');
+   }
    else this.open(id,trigger);
   };
   pop.append(head,body,cta);
@@ -223,7 +305,11 @@ export class StageDossiers {
   // Global deterministic 24-link reply cap, evaluated only through this cursor.
   const {used,priorIds}=this.priorLinks(index);
   const anchors=linkEntityMentions(this.text.textContent??'',snapshot.entities,this.prefs,snapshot.at.key.chatId,Math.min(this.prefs.maxLinksPerParagraph,24-used),protectedEntityRanges(this.text),this.prefs.linking==='important'?priorIds:new Set());
-  applyEntityAnchors(this.text,anchors,(id,trigger)=>this.showTooltipPopover(id,trigger),id=>selectReaderDossier(id,snapshot,'brief',this.prefs.fieldGroups)?.facts[0]?.value??'View established story information');
+  applyEntityAnchors(this.text,anchors,(id,trigger)=>this.showTooltipPopover(id,trigger),id=>{
+   const raw=selectReaderDossier(id,snapshot,'brief',this.prefs.fieldGroups);
+   const edited=raw?applyOverrideFactEdits(raw,entityOverride(this.prefs,snapshot.at.key.chatId,raw.entity)):undefined;
+   return edited?.facts[0]?.value??'View established story information';
+  });
  }
  private resolveVisualContext(entity:PresentationEntity):DossierVisualContext {
   const snapshot=this.snapshot();
@@ -258,7 +344,9 @@ export class StageDossiers {
    if(prop&&urlOf(prop)){imageUrl=urlOf(prop);imageCaption=`Scene detail · ${entity.name}`;}
    else if(isPresent&&this.displayedImageUrl?.()){imageUrl=this.displayedImageUrl()!;imageCaption=`Current scene · ${entity.name}`;}
   }
-  const summaryFact=(matchedLoc?formatLocationDNAToPromptClause(matchedLoc):matchedItem?formatItemDNAToPromptClause(matchedItem):'')||(snapshot?selectReaderDossier(entity.id,snapshot,'brief',this.prefs.fieldGroups)?.facts[0]?.value:undefined);
+  const briefRaw=snapshot?selectReaderDossier(entity.id,snapshot,'brief',this.prefs.fieldGroups):undefined;
+  const briefEdited=briefRaw&&snapshot?applyOverrideFactEdits(briefRaw,entityOverride(this.prefs,snapshot.at.key.chatId,entity)):briefRaw;
+  const summaryFact=(matchedLoc?formatLocationDNAToPromptClause(matchedLoc):matchedItem?formatItemDNAToPromptClause(matchedItem):'')||briefEdited?.facts[0]?.value;
   const anchorFact=entity.facts.find(f=>f.field==='anchors'||f.field==='anchor_traits'||f.field==='visual_anchors');const anchors=anchorFact?anchorFact.value.split(/[,;\n]/).map(a=>a.trim()).filter(Boolean):undefined;
   return {
    ...(imageUrl?{imageUrl}:{}),
@@ -285,10 +373,21 @@ export class StageDossiers {
     const entity:PresentationEntity=loc
      ?{id,kind:'place',name:loc.name,aliases:loc.aliases,firstParagraph:0,facts:[]}
      :{id,kind:'object',name:item!.name,aliases:item!.aliases,firstParagraph:0,facts:[]};
-    const synthetic={entity,facts:[],overview:[],earlier:[],state:{}} as unknown as ReturnType<typeof selectReaderDossier>;
+    const rawSynthetic={entity,facts:[],overview:[],earlier:[],state:{}} as unknown as NonNullable<ReturnType<typeof selectReaderDossier>>;
+    const synthetic=snapshot?applyOverrideFactEdits(rawSynthetic,entityOverride(this.prefs,snapshot.at.key.chatId,entity)):rawSynthetic;
+    const syntheticActions=this.prefs.actionsEnabled&&this.draftTools?{
+     drafts:buildSyntheticInteractionDraft(entity,snapshot?.at.key,snapshot?.at.paragraphIndex??Math.max(0,this.index)),
+     current:this.draftTools.current,focus:this.draftTools.focus,
+     apply:(draft:InteractionDraft,mode:DraftMergeMode)=>{
+      if(!this.prefs.enabled||!this.prefs.actionsEnabled||!this.draftTools)return false;
+      const text=mergeInteractionDraft(this.draftTools.current(),draft.text,mode);
+      return text!==null&&this.draftTools.apply(text);
+     }
+    }:undefined;
+    const itemDocument=!isLoc?this.matchStoryDocument(entity,visibleStoryDocuments(this.presentation?.documents??[],Math.max(0,this.index))):undefined;
     this.hold();this.dossierOpen?.(true);
     if(this.workspace&&this.workspace.destination!=='story'){this.workspace.open('story',trigger);this.card.clearBack();}
-    this.card.open(synthetic!,this.prefs,snapshot?.at.key.chatId??'local',trigger,undefined,undefined,this.resolveVisualContext(entity));
+    this.card.open(synthetic as unknown as NonNullable<ReturnType<typeof selectReaderDossier>>,this.prefs,snapshot?.at.key.chatId??'local',trigger,syntheticActions,itemDocument,this.resolveVisualContext(entity));
    }
    return;
   }
@@ -297,32 +396,36 @@ export class StageDossiers {
   const selected=current?selectReaderDossier(id,snapshot,this.prefs.detail,this.prefs.fieldGroups,this.prefs.maxFactsPerEntity):selectEarlierDossier(id,snapshot,this.prefs,this.history);
   if(!selected)return;
   if(selected.entity.kind==='npc'&&this.folioOpener){
+   this.npcActionToolsHandler?.(this.buildNpcActionTools(selected.entity.name), selected.entity.name);
    this.folioOpener(selected.entity.name);
    this.workspace?.open('character');
    return;
   }
-  const dossier=current?dossierWithHistory(selected,snapshot,this.prefs,this.history):selected;this.hold();this.dossierOpen?.(true);
+  const rawDossier=current?dossierWithHistory(selected,snapshot,this.prefs,this.history):selected;
+  const dossier=applyOverrideFactEdits(rawDossier,entityOverride(this.prefs,snapshot.at.key.chatId,rawDossier.entity));this.hold();this.dossierOpen?.(true);
   const actions=current&&this.prefs.actionsEnabled&&this.draftTools?{
    drafts:availableInteractionVerbs(dossier.entity,snapshot).flatMap(verb=>{const draft=buildInteractionDraft(dossier.entity,verb,snapshot);return draft?[draft]:[];}),
    current:this.draftTools.current,focus:this.draftTools.focus,
-   apply:(draft:import('../../shared/scene-interactions.js').InteractionDraft,mode:import('../../shared/scene-interactions.js').DraftMergeMode)=>{
+   apply:(draft:InteractionDraft,mode:DraftMergeMode)=>{
     const now=this.snapshot();if(!now||!this.ready||!this.prefs.enabled||!this.prefs.actionsEnabled||!samePresentationTurn(now.at.key,draft.key)||now.at.paragraphIndex!==draft.paragraphIndex)return false;
     const entity=eligibleEntities(now.entities,this.prefs,now.at.key.chatId).find(e=>e.id===draft.entityId);
     if(!entity||!buildInteractionDraft(entity,draft.verb,now))return false;
     const text=mergeInteractionDraft(this.draftTools!.current(),draft.text,mode);return text!==null&&this.draftTools!.apply(text);
    }
   }:undefined;
-  const storyDocument=current&&dossier.entity.kind==='object'?visibleStoryDocuments(this.presentation?.documents??[],this.index).find(d=>d.name===dossier.entity.name):undefined;
+  const storyDocument=current&&dossier.entity.kind==='object'?this.matchStoryDocument(dossier.entity,visibleStoryDocuments(this.presentation?.documents??[],this.index)):undefined;
 
   // Inline story links must enter the workspace before exposing its docked card.
   if(this.workspace&&this.workspace.destination!=='story'){this.workspace.open('story',trigger);this.card.clearBack();}
   this.card.open(dossier,this.prefs,snapshot.at.key.chatId,trigger,actions,storyDocument,this.resolveVisualContext(dossier.entity));
  }
- private updateOverride(entity:PresentationEntity,patch:{suppressed?:boolean;pinned?:boolean;note?:string}):boolean {
+ private updateOverride(entity:PresentationEntity,patch:{suppressed?:boolean;pinned?:boolean;note?:string;factEdits?:Record<string,string|null>}):boolean {
   const snapshot=this.snapshot();if(!snapshot)return false;const chatId=snapshot.at.key.chatId;
   const existing=entityOverride(this.prefs,chatId,entity);
   if(!existing&&this.prefs.overrides.length>=64)return false;
-  const override={chatId,kind:entity.kind,name:entity.name,suppressed:false,pinned:false,note:'',...existing,...patch};
+  const {factEdits:patchFactEdits,...restPatch}=patch;
+  const mergedFactEdits=patchFactEdits?{...(existing?.factEdits??{}),...patchFactEdits}:existing?.factEdits;
+  const override={chatId,kind:entity.kind,name:entity.name,suppressed:false,pinned:false,note:'',...existing,...restPatch,...(mergedFactEdits?{factEdits:mergedFactEdits}:{})};
   this.prefs={...this.prefs,overrides:[override,...this.prefs.overrides.filter(o=>!(o.chatId===chatId&&o.kind===entity.kind&&o.name===entity.name))].slice(0,64)};
   this.resetLinkBudget();
   this.save(this.prefs);this.refresh(this.index);return true;

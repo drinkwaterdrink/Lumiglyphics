@@ -12,7 +12,8 @@ import { mutateCharacterDnaLibrary } from './character-dna-store.js';
 import { handleCharacterDnaRequest } from './character-dna-workflow.js';
 import {handleStoryDnaRequest} from './story-dna-workflow.js';
 import { mutateStoryDNASet } from './story-dna-store.js';
-import { harvestTurnStoryDNA } from './story-dna-harvester.js';
+import { filterStoryDnaForActiveBranch, harvestTurnStoryDNA } from './story-dna-harvester.js';
+import { activeBranchSwipeTags } from './character-dna-workflow.js';
 import { fitPromptToBudget } from "../../shared/prompt-length.js";
 import {normalizeImageVersionHistory} from '../../shared/image-version-history.js';
 import {ImageRetryQueue} from './image-retry-queue.js';
@@ -74,7 +75,7 @@ import { resolveNativeCardJobs } from "./native-assets.js";
 import { handleReferenceImageResponse } from "./reference-source.js";
 import { CACHE_JOB_PROVIDER, createAssetJobs, prepareAssetJobs, generateAssets, resolveCacheCues, retainPlanEpisodes } from "./images.js";
 import { SceneImageCache, sceneImageScope } from "../core/scene-image-cache.js";
-import { fingerprintForMessage, gameHintsForTurn, planTurn, prepareEarlyNarrativeParagraphs } from "./planner.js";
+import { extractTurnLoreAsync, fingerprintForMessage, gameHintsForTurn, planTurn, prepareEarlyNarrativeParagraphs } from "./planner.js";
 import {readImageLibraryPage} from './image-library.js';
 import {
   isUnselectedGreeting,
@@ -154,8 +155,130 @@ function capEpochMap(map: Map<string, number>, max = 256): void {
     map.delete(oldest);
   }
 }
+const pendingLoreJobs = new Map<string, { timer?: ReturnType<typeof setTimeout>; controller: AbortController }>();
+
+export function cancelSplitHorizonLore(key: string): void {
+  const pending = pendingLoreJobs.get(key);
+  if (!pending) return;
+  if (pending.timer) clearTimeout(pending.timer);
+  pending.controller.abort("Superseded by a newer turn or intake.");
+  pendingLoreJobs.delete(key);
+}
+
+export function scheduleSplitHorizonLore(
+  spindle: SpindleAPI,
+  params: {
+    userId?: string;
+    chatId: string;
+    path: string;
+    turnKey: StoredTurnRecord["plan"]["key"];
+    intakeEpoch: number;
+    config: VisualNovelConfig;
+    paragraphs: readonly { index: number; text: string }[];
+    cardRole?: StoredTurnRecord["cardRole"];
+    scenarioReferenceName?: string;
+    prevLocationName: string | null;
+    messages: readonly ChatMessageDTO[];
+    delayMs?: number;
+  }
+): void {
+  const { config, paragraphs } = params;
+  if (!paragraphs.length || (!config.collectEntityReferences && !config.tooltips.enabled)) return;
+  const key = runtimeKey(params.userId, params.chatId);
+  cancelSplitHorizonLore(key);
+  const controller = new AbortController();
+  const isCurrent = () =>
+    !controller.signal.aborted
+    && views.isOpen(params.userId, params.chatId)
+    && (intakeEpochs.get(key) ?? 0) === params.intakeEpoch
+    && compareTurnKeys(activeTurnKeys.get(key) ?? null, params.turnKey).accepted;
+
+  const run = async () => {
+    try {
+      if (!isCurrent()) return;
+      const lore = await extractTurnLoreAsync(spindle, {
+        config,
+        paragraphs,
+        ...(params.cardRole ? { cardRole: params.cardRole } : {}),
+        ...(params.scenarioReferenceName ? { scenarioReferenceName: params.scenarioReferenceName } : {}),
+        ...(params.userId ? { userId: params.userId } : {}),
+        signal: controller.signal,
+      });
+      if (!isCurrent()) return;
+      if (lore.storyReferences.length === 0 && lore.storyDocuments.length === 0) return;
+      const updated = await mutateActiveTurnRecord(spindle, params.chatId, params.path, params.userId, (current) => ({
+        ...current,
+        plan: {
+          ...current.plan,
+          ...(lore.storyReferences.length ? { storyReferences: lore.storyReferences } : {}),
+          ...(lore.storyDocuments.length ? { storyDocuments: lore.storyDocuments } : {}),
+        },
+      }), isCurrent);
+      if (!updated || !isCurrent()) return;
+      if (spindle.userStorage) {
+        try {
+          const swipeTag = swipeTurnTag(params.turnKey.assistantMessageId, Number(params.turnKey.swipeId ?? 0) || 0);
+          const nextStoryDna = await mutateStoryDNASet(spindle, params.chatId, params.userId, undefined, (set) => {
+            harvestTurnStoryDNA(updated.plan, set, swipeTag, params.prevLocationName, {
+              mindLedgerEnabled: config.mindLedgerEnabled,
+              chapterCodexEnabled: config.chapterCodexEnabled,
+            });
+          });
+          if (isCurrent()) {
+            const filtered = filterStoryDnaForActiveBranch(nextStoryDna, activeBranchSwipeTags(params.messages));
+            spindle.sendToFrontend({ type: "vn_story_dna", chatId: params.chatId, storyDna: filtered }, params.userId);
+          }
+        } catch {}
+      }
+      if (!isCurrent()) return;
+      const presentation = readerPresentationFor(updated.plan, updated.presentation);
+      let referenceHistory;
+      try {
+        if (config.tooltips.enabled && config.tooltips.rememberReferences) {
+          referenceHistory = await readReferenceHistory(spindle, updated, params.userId);
+        }
+      } catch {}
+      if (!isCurrent()) return;
+      spindle.sendToFrontend({
+        type: "vn_turn_lore_patch",
+        chatId: params.chatId,
+        messageId: params.turnKey.assistantMessageId,
+        swipeId: Number(params.turnKey.swipeId ?? 0) || 0,
+        sourceFingerprint: params.turnKey.sourceFingerprint,
+        revision: params.turnKey.revision,
+        ...(presentation ? { presentation } : {}),
+        ...(referenceHistory ? { referenceHistory } : {}),
+      }, params.userId);
+    } catch (error) {
+      if (!isAbortError(error, controller.signal)) {
+        dbg(spindle, params.userId, `split-horizon lore extraction failed: ${errorText(error)}`);
+      }
+    } finally {
+      if (pendingLoreJobs.get(key)?.controller === controller) {
+        pendingLoreJobs.delete(key);
+      }
+    }
+  };
+
+  const delayMs = Math.max(0, params.delayMs ?? 1500);
+  if (delayMs === 0) {
+    pendingLoreJobs.set(key, { controller });
+    void run();
+    return;
+  }
+  const timer = setTimeout(() => {
+    const entry = pendingLoreJobs.get(key);
+    if (entry && entry.controller === controller) {
+      delete entry.timer;
+    }
+    void run();
+  }, delayMs);
+  pendingLoreJobs.set(key, { timer, controller });
+}
+
 function bumpIntakeEpoch(userId: string | undefined, chatId: string): void {
   const key = runtimeKey(userId, chatId);
+  cancelSplitHorizonLore(key);
   imageRetryEpochs.set(key,(imageRetryEpochs.get(key)??0)+1);
   capEpochMap(imageRetryEpochs);
   imageRetryQueues.get(key)?.queue.cancel();imageRetryQueues.delete(key);
@@ -838,6 +961,8 @@ export async function sendState(
           if (swipeRecord && relateRecord(swipeRecord, latest, { selectionText: latest.content, stableSelection: true }) === "current") {
             record = swipeRecord;
             chatState.activeTurnPath = swipePath;
+            activeTurnKeys.set(runtimeKey(userId, chatId), swipeRecord.plan.key);
+            await saveChatState(spindle, chatId, chatState, userId);
           }
         }
         const isSame = latest.id === record.plan.key.assistantMessageId;
@@ -1189,7 +1314,7 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
   const view=await turnViewWithAudio(spindle,next,userId);
   if(!isCurrent())return;
   spindle.sendToFrontend({ type: "vn_turn", turn:view }, userId);
-  const rebuildOpts = request.type === 'vn_prepare_image' && (request.reframe || request.styleId || request.fitToModel || request.model || request.connectionId || request.manualCamera) ? { ...(request.reframe !== undefined ? { reframe: request.reframe } : {}), ...(request.styleId !== undefined ? { styleId: request.styleId } : {}), ...(request.fitToModel !== undefined ? { fitToModel: request.fitToModel } : {}), ...(request.model !== undefined ? { model: request.model } : {}), ...(request.connectionId !== undefined ? { connectionId: request.connectionId } : {}), ...(request.manualCamera !== undefined ? { manualCamera: request.manualCamera } : {}) } : undefined;
+  const rebuildOpts = request.type === 'vn_prepare_image' && (request.reframe || request.relight || request.lockContinuity || request.manualLighting || request.styleId || request.fitToModel || request.model || request.connectionId || request.manualCamera) ? { ...(request.reframe !== undefined ? { reframe: request.reframe } : {}), ...(request.relight !== undefined ? { relight: request.relight } : {}), ...(request.lockContinuity !== undefined ? { lockContinuity: request.lockContinuity } : {}), ...(request.manualLighting !== undefined ? { manualLighting: request.manualLighting } : {}), ...(request.styleId !== undefined ? { styleId: request.styleId } : {}), ...(request.fitToModel !== undefined ? { fitToModel: request.fitToModel } : {}), ...(request.model !== undefined ? { model: request.model } : {}), ...(request.connectionId !== undefined ? { connectionId: request.connectionId } : {}), ...(request.manualCamera !== undefined ? { manualCamera: request.manualCamera } : {}) } : undefined;
   await startAssets(spindle, next, path, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId],...((quick || (request.type === "vn_prepare_image" && request.quickGenerate)) ? { quickGenerate: true } : {}),...(request.type === 'vn_prepare_image' && request.edits ? {initialEdits:request.edits} : {}),...(request.type==='vn_prepare_image' && (request.regeneratePrompt===true||request.promptOperation) ? {regeneratePrompt:true,...(request.promptOperation?{promptOperation:request.promptOperation}:{}),...(request.guidance?{guidance:request.guidance}:{}),...(request.pinnedClauses?.length?{pinnedClauses:request.pinnedClauses}:{})} : {}),...(rebuildOpts?{rebuild:rebuildOpts}:{}) });
 }
 
@@ -1343,10 +1468,9 @@ async function processAssistantMessage(
       ? assistantTurns[currentAssistantIndex - 1]
       : (assistantTurns.at(-1) && assistantTurns.at(-1)!.id !== message.id ? assistantTurns.at(-1) : null);
     const msgSegment = encodeURIComponent(message.id).replaceAll("%", "_");
-    const isReswipeOrReplan = !replacesGreeting && (
-      Boolean(existing)
-      || Boolean(chatState.activeTurnPath && chatState.activeTurnPath.includes(msgSegment))
-    );
+    const isSwitchingSwipe = !replacesGreeting && Boolean(chatState.activeTurnPath && chatState.activeTurnPath.includes(msgSegment));
+    const isSameSwipeReplan = !replacesGreeting && (Boolean(existing) || Boolean(options?.forceRegenerate));
+    const isReswipeOrReplan = isSwitchingSwipe || isSameSwipeReplan;
     const priorTurnRecord = !replacesGreeting && priorAssistantTurn
       ? await loadTurnRecord(spindle, turnPath(chatId, priorAssistantTurn.id, priorAssistantTurn.swipe_id ?? 0), userId).catch(() => null)
       : null;
@@ -1384,6 +1508,7 @@ async function processAssistantMessage(
       previousScene: replacesGreeting ? null : isReswipeOrReplan ? (priorTurnRecord ? (priorTurnRecord.plan.scenes.at(-1) ?? null) : (options?.retry && existing ? existing.plan.scenes[0] ?? null : null)) : chatState.latestScene,
       previousContinuity: replacesGreeting ? null : isReswipeOrReplan ? (priorTurnRecord ? priorTurnRecord.plan.terminalContinuity : (options?.retry && existing ? existing.plan.initialContinuity : null)) : chatState.terminalContinuity,
       previousRpgState: previousTurnRecord?.plan.rpgState ?? null,
+      splitHorizonLore: true,
       recentMessages,
       config,
       singleCharacter,
@@ -1450,21 +1575,20 @@ async function processAssistantMessage(
         }
       }
     }
-    let userSpeaker = "You";
-    try {
-      const persona = await spindle.personas?.getActive?.(userId);
-      if (persona?.name?.trim()) {
-        userSpeaker = persona.name.trim();
-      }
-    } catch {}
+    let userSpeaker = result.personaName?.trim() || "You";
     if (userSpeaker === "You") {
       try {
-        const recent = (await spindle.chat.getMessages(chatId) as NormalizedChatMessage[]);
-        const lastUser = [...recent].reverse().find((m) => m.role === "user" || Boolean(m.is_user));
-        if (lastUser?.name?.trim()) {
-          userSpeaker = lastUser.name.trim();
+        const persona = await spindle.personas?.getActive?.(userId);
+        if (persona?.name?.trim()) {
+          userSpeaker = persona.name.trim();
         }
       } catch {}
+    }
+    if (userSpeaker === "You") {
+      const lastUser = [...messages].reverse().find((m) => m.role === "user" || Boolean(m.is_user));
+      if (lastUser?.name?.trim()) {
+        userSpeaker = lastUser.name.trim();
+      }
     }
 
     const settingsSnapshot: Record<string, unknown> = {
@@ -1513,7 +1637,27 @@ async function processAssistantMessage(
     if (operation.controller.signal.aborted || (intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch) return;
     const view = await turnViewWithAudio(spindle, record,userId);
     if (operation.controller.signal.aborted || (intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch) return;
+    const prevLocationName = replacesGreeting
+      ? null
+      : isReswipeOrReplan
+        ? (priorTurnRecord?.plan.scenes.at(-1)?.environment.location ?? null)
+        : (chatState.latestScene?.environment.location ?? null);
     spindle.sendToFrontend({ type: "vn_turn", turn: view }, userId);
+    if (!(record.plan.storyReferences?.length || record.plan.storyDocuments?.length)) {
+      scheduleSplitHorizonLore(spindle, {
+        ...(userId ? { userId } : {}),
+        chatId,
+        path,
+        turnKey: record.plan.key,
+        intakeEpoch,
+        config,
+        paragraphs: record.plan.paragraphs,
+        ...(record.cardRole ? { cardRole: record.cardRole } : {}),
+        ...(message.name ? { scenarioReferenceName: message.name } : {}),
+        prevLocationName,
+        messages,
+      });
+    }
     if (!config.useNativeCardImages && config.generateImages) {
       void startAssets(spindle, record, path, userId).catch((error) => {
         if (!isAbortError(error)) {
@@ -1550,11 +1694,6 @@ async function processAssistantMessage(
             }
           }
         }
-        const prevLocationName = replacesGreeting
-          ? null
-          : isReswipeOrReplan
-            ? (priorTurnRecord?.plan.scenes.at(-1)?.environment.location ?? null)
-            : (chatState.latestScene?.environment.location ?? null);
         const nextLocationName = result.plan.scenes.at(-1)?.environment.location ?? null;
         const locationChanged = Boolean(
           prevLocationName && nextLocationName
@@ -1608,7 +1747,7 @@ async function processAssistantMessage(
                 }
               }
             }
-            if (isReswipeOrReplan) {
+            if (isSameSwipeReplan) {
               const scrubbed = scrubCharacterDNASwipes(l, { [record.plan.key.assistantMessageId]: swipeTag });
               l.characters = scrubbed.characters;
             }
@@ -1616,7 +1755,7 @@ async function processAssistantMessage(
         }
         await mutateStoryDNASet(spindle, chatId, userId, undefined, (set) => {
           harvestTurnStoryDNA(record.plan, set, swipeTag, prevLocationName, { mindLedgerEnabled: config.mindLedgerEnabled, chapterCodexEnabled: config.chapterCodexEnabled });
-          if (isReswipeOrReplan) {
+          if (isSameSwipeReplan) {
             const scrubbed = scrubStoryDNASwipes(set, { [record.plan.key.assistantMessageId]: swipeTag });
             set.locations = scrubbed.locations;
             set.items = scrubbed.items;
@@ -2091,6 +2230,7 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
       const result = await planTurn(spindle, {signal:operation.controller.signal,chatId:action.chatId,message:latest,content:intake.text,sourceFingerprint:action.sourceFingerprint,
         previousScene:old.plan.scenes[0] ?? null,previousContinuity:old.plan.initialContinuity,
         previousRpgState:config.rpgMode !== "off" ? (replanPriorRecord?.plan.rpgState ?? null) : null,
+        splitHorizonLore: true,
         recentMessages,config,singleCharacter,characterAppearance,characterRegistry,userId,
         gameHints:gameHintsForTurn(messages,latest.id),
         ...(config.includeSimTrackerContext ? {simTrackerEvidence:extractSimTracker(messages,latest.id,config.simTrackerMappings)} : {})});
@@ -2139,6 +2279,19 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
       if (!current()) return;
       activeTurnKeys.set(key,plan.key);
       spindle.sendToFrontend({type:'vn_turn',turn:view},userId);
+      scheduleSplitHorizonLore(spindle, {
+        ...(userId ? { userId } : {}),
+        chatId: action.chatId,
+        path: state.activeTurnPath!,
+        turnKey: plan.key,
+        intakeEpoch: epoch,
+        config,
+        paragraphs: plan.paragraphs,
+        ...(record.cardRole ? { cardRole: record.cardRole } : {}),
+        ...(latest.name ? { scenarioReferenceName: latest.name } : {}),
+        prevLocationName: replanPriorRecord?.plan.scenes.at(-1)?.environment.location ?? null,
+        messages: freshMessages,
+      });
       if (!config.useNativeCardImages && config.generateImages) void startAssets(spindle,record,state.activeTurnPath!,userId,{forceReview:true}).catch(error => {
         if (!isAbortError(error)) spindle.sendToFrontend({type:'vn_error',chatId:action.chatId,operation:'prepare_image',error:errorText(error)},userId);
       });
@@ -2190,7 +2343,7 @@ async function queueImageRetries(spindle:SpindleAPI,raw:QueueImageRetriesRequest
   }
   ids.push(id);
  }
- if(currentQueue())entry.queue.enqueue(action.requestId,ids);
+ if(currentQueue()){if(ids.length>0)entry.queue.enqueue(action.requestId,ids,action.priorityJobIds);else if(action.jobIds!.length>0)entry.queue.markRequest(action.requestId);}
 }
 
 async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendRequest, userId: string): Promise<void> {

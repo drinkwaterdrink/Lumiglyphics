@@ -39,10 +39,20 @@ test('reset/forget invalidate in-flight saves without deleting host images',asyn
  expect(await saveCastArt(api,'c',art,undefined,{token})).toBe(false);
  expect((await loadCastArt(api,'c')).characters).toHaveLength(0);expect(ids.has('image')).toBe(true);
 });
-test('concurrent variant writes serialize; capacity never silently drops records',async()=>{
- const {api}=fixture();await Promise.all(Array.from({length:8},(_,i)=>saveCastArt(api,'c',{...art,imageId:`image${i}`})));
+test('concurrent variant writes serialize; LRU evicts unpinned capacity and throws only when all 8 are pinned',async()=>{
+ const {api}=fixture();
+ await Promise.all(Array.from({length:8},(_,i)=>saveCastArt(api,'c',{...art,imageId:`image${i}`})));
  const library=await loadCastArt(api,'c');expect(library.characters[0]?.variants).toHaveLength(8);
- await expect(saveCastArt(api,'c',{...art,imageId:'ninth'})).rejects.toThrow(/8/);
+ // Unpinned variants evict the oldest LRU entry cleanly to accept a 9th variant.
+ await expect(saveCastArt(api,'c',{...art,imageId:'ninth'})).resolves.toBe(true);
+ const afterEvict=await loadCastArt(api,'c');
+ expect(afterEvict.characters[0]?.variants).toHaveLength(8);
+ expect(afterEvict.characters[0]?.variants.some(v=>v.imageId==='ninth')).toBe(true);
+ // When all 8 variants are pinned, saving a new variant must throw and preserve all 8.
+ const raw=await api.userStorage.getJson<any>('chats/c/cast-art.json');
+ raw.characters[0].variants=raw.characters[0].variants.map((v:any)=>({...v,pinned:true}));
+ await api.userStorage.setJson('chats/c/cast-art.json',raw);
+ await expect(saveCastArt(api,'c',{...art,imageId:'tenth'})).rejects.toThrow(/8/);
  expect((await loadCastArt(api,'c')).characters[0]?.variants).toHaveLength(8);
 });
 test('unknown storage versions are preserved rather than overwritten',async()=>{

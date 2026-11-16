@@ -22,11 +22,38 @@ export function availableInteractionVerbs(entity:PresentationEntity,snapshot:Pre
  const present=snapshot.presentEntityIds.includes(entity.id)&&state?.presence!=='absent'&&!(place&&snapshot.locationId&&place.id!==snapshot.locationId);
  return present?['ask','approach','custom']:['custom'];
 }
+function formatInteractionText(entityName: string, verb: InteractionVerb): string {
+ const name = entityName.replace(/[\r\n]+/g, ' ').trim();
+ if (verb === 'ask') return `I ask ${name} about `;
+ if (verb === 'approach') return `I try to approach ${name}.`;
+ if (verb === 'examine') return `I try to examine ${name}.`;
+ if (verb === 'use') return `I try to use ${name} to `;
+ return `I want to interact with ${name}: `;
+}
+
 export function buildInteractionDraft(entity:PresentationEntity,verb:InteractionVerb,snapshot:PresentationSnapshot):InteractionDraft|null {
  if(!availableInteractionVerbs(entity,snapshot).includes(verb))return null;
- const name=entity.name.replace(/[\r\n]+/g,' ').trim();
- const text=verb==='ask'?`I ask ${name} about `:verb==='approach'?`I try to approach ${name}.`:verb==='examine'?`I try to examine ${name}.`:verb==='use'?`I try to use ${name} to `:`I want to interact with ${name}: `;
- return {entityId:entity.id,verb,text,origin:'local',key:{...snapshot.at.key},paragraphIndex:snapshot.at.paragraphIndex};
+ return {entityId:entity.id,verb,text:formatInteractionText(entity.name,verb),origin:'local',key:{...snapshot.at.key},paragraphIndex:snapshot.at.paragraphIndex};
+}
+
+export function buildSyntheticInteractionDraft(
+ entity: Pick<PresentationEntity, 'id' | 'kind' | 'name'>,
+ key: TurnKey = { chatId: 'local', assistantMessageId: 'synthetic', swipeId: 0, sourceFingerprint: '', revision: 0 },
+ paragraphIndex = 0,
+): InteractionDraft[] {
+ const verbs: InteractionVerb[] = entity.kind === 'object'
+  ? ['examine', 'use', 'custom']
+  : entity.kind === 'place'
+   ? ['examine', 'custom']
+   : ['ask', 'approach', 'custom'];
+ return verbs.map((verb) => ({
+  entityId: entity.id,
+  verb,
+  text: formatInteractionText(entity.name, verb),
+  origin: 'local' as const,
+  key: { ...key },
+  paragraphIndex,
+ }));
 }
 export function mergeInteractionDraft(current:string,text:string,mode:DraftMergeMode):string|null {
  if(!text.trim()||text.length>6000)return null;

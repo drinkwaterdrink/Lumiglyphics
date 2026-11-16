@@ -32,7 +32,13 @@ const imageOperationScope = {chatId:z.string().min(1).max(128),messageId:z.strin
 const imageOperationEdits = z.object({prompt:z.string().trim().min(1).max(65000).optional(),negativePrompt:z.string().max(65000).optional(),parameters:z.record(z.string(),z.unknown()).optional()}).strict();
 const imagePromptOperation = {guidance:z.string().max(400).optional(),edits:imageOperationEdits.optional(),pinnedClauses:z.array(z.string().trim().min(1).max(300)).max(8).optional()};
 export const RewriteImagePromptRequestSchema = z.object({type:z.enum(['vn_regenerate_image_prompt','vn_enrich_image_prompt']),...imageOperationScope,requestId:z.string().min(1).max(100),...imagePromptOperation}).strict();
-export const PrepareImageRequestSchema = z.object({type:z.literal('vn_prepare_image'),...imageOperationScope,jobId:z.string().min(1).max(200),templateId:z.string().min(1).max(100).optional(),...imagePromptOperation,regeneratePrompt:z.boolean().optional(),promptOperation:z.enum(['rewrite','enrich']).optional(),reframe:z.boolean().optional(),styleId:z.string().max(100).optional(),fitToModel:z.boolean().optional(),model:z.string().max(200).optional(),connectionId:z.string().max(200).optional(),quickGenerate:z.boolean().optional(),manualCamera:z.object({shotSize:z.string().optional(),angle:z.string().optional(),lensFeel:z.string().optional(),composition:z.string().optional(),depth:z.string().optional(),dialogueSafeArea:z.enum(['auto','always','off']).optional()}).strict().optional()}).strict();
+const ManualLightingSchema = z.object({
+  timeOfDay: z.string().trim().max(64).optional(),
+  keyLightDirection: z.enum(["left", "right", "backlit", "overhead", "ambient"]).optional(),
+  mood: z.string().trim().max(64).optional(),
+}).strict();
+export type ManualLightingSpec = z.infer<typeof ManualLightingSchema>;
+export const PrepareImageRequestSchema = z.object({type:z.literal('vn_prepare_image'),...imageOperationScope,jobId:z.string().min(1).max(200),templateId:z.string().min(1).max(100).optional(),...imagePromptOperation,regeneratePrompt:z.boolean().optional(),promptOperation:z.enum(['rewrite','enrich']).optional(),reframe:z.boolean().optional(),relight:z.boolean().optional(),lockContinuity:z.boolean().optional(),styleId:z.string().max(100).optional(),fitToModel:z.boolean().optional(),model:z.string().max(200).optional(),connectionId:z.string().max(200).optional(),quickGenerate:z.boolean().optional(),manualCamera:z.object({shotSize:z.string().optional(),angle:z.string().optional(),lensFeel:z.string().optional(),composition:z.string().optional(),depth:z.string().optional(),dialogueSafeArea:z.enum(['auto','always','off']).optional(),focalPoint:z.object({x:z.number().min(0).max(100),y:z.number().min(0).max(100)}).strict().optional()}).strict().optional(),manualLighting:ManualLightingSchema.optional()}).strict();
 export const RestorePreviousImageRequestSchema=z.object({type:z.literal('vn_restore_previous_image'),...imageOperationScope,swipeId:z.number().int().nonnegative().nullable(),revision:z.number().int().nonnegative(),jobId:z.string().min(1).max(200),versionId:z.string().min(1).max(256)}).strict();
 export const DeleteImageRequestSchema=z.object({type:z.literal('vn_delete_image'),chatId:z.string().min(1).max(256),imageId:z.string().min(1).max(256).optional(),imageUrl:z.string().min(1).max(2048).optional(),jobId:z.string().min(1).max(256).optional()}).strict();
 export type FrontendRequest =
@@ -50,7 +56,7 @@ export type FrontendRequest =
   | z.infer<typeof SetCardRoleRequestSchema>
   | { type: "vn_reading_position"; position: ReadingPosition }
   | { type: "vn_image_review"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; action: "generate" | "skip"; edits?: ImageRequestEdits }
-  | { type:'vn_prepare_image';chatId:string;messageId:string;sourceFingerprint:string;jobId:string;templateId?:string;edits?:ImageRequestEdits;regeneratePrompt?:boolean;promptOperation?:'rewrite'|'enrich';guidance?:string;pinnedClauses?:string[]|undefined;reframe?:boolean|undefined;styleId?:string|undefined;fitToModel?:boolean|undefined;model?:string|undefined;connectionId?:string|undefined;quickGenerate?:boolean|undefined;manualCamera?:{shotSize?:string|undefined;angle?:string|undefined;lensFeel?:string|undefined;composition?:string|undefined;depth?:string|undefined;dialogueSafeArea?:'auto'|'always'|'off'|undefined}|undefined }
+  | { type:'vn_prepare_image';chatId:string;messageId:string;sourceFingerprint:string;jobId:string;templateId?:string;edits?:ImageRequestEdits;regeneratePrompt?:boolean;promptOperation?:'rewrite'|'enrich';guidance?:string;pinnedClauses?:string[]|undefined;reframe?:boolean|undefined;relight?:boolean|undefined;lockContinuity?:boolean|undefined;styleId?:string|undefined;fitToModel?:boolean|undefined;model?:string|undefined;connectionId?:string|undefined;quickGenerate?:boolean|undefined;manualCamera?:{shotSize?:string|undefined;angle?:string|undefined;lensFeel?:string|undefined;composition?:string|undefined;depth?:string|undefined;dialogueSafeArea?:'auto'|'always'|'off'|undefined;focalPoint?:{x:number;y:number}|undefined}|undefined;manualLighting?:ManualLightingSpec|undefined }
   | { type: "vn_regenerate_image_prompt"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; edits?: ImageRequestEdits | undefined; guidance?: string | undefined; pinnedClauses?: string[] | undefined }
   | { type: "vn_enrich_image_prompt"; chatId: string; messageId: string; sourceFingerprint: string; requestId: string; guidance?: string | undefined; edits?: ImageRequestEdits | undefined; pinnedClauses?: string[] | undefined }
   | z.infer<typeof RestorePreviousImageRequestSchema>
@@ -62,6 +68,9 @@ export type FrontendRequest =
       requestId: string;
       templateId: string;
       reframe?: boolean | undefined;
+      relight?: boolean | undefined;
+      lockContinuity?: boolean | undefined;
+      manualLighting?: ManualLightingSpec | undefined;
       styleId?: string | undefined;
       fitToModel?: boolean | undefined;
       model?: string | undefined;
@@ -73,7 +82,7 @@ export type FrontendRequest =
         lensFeel?: string | undefined;
         composition?: string | undefined;
         depth?: string | undefined;
-        dialogueSafeArea?: "auto" | "always" | "off" | undefined;
+        dialogueSafeArea?: "auto" | "always" | "off" | undefined; focalPoint?: { x: number; y: number } | undefined;
       } | undefined;
     }
   | { type: "vn_external_image"; request: CueImageRequest }
@@ -248,6 +257,7 @@ export type BackendResponse =
     errors?: ConnectionCatalogErrors;
   }
   | { type: "vn_turn"; turn: TurnView }
+  | { type: "vn_turn_lore_patch"; chatId: string; messageId: string; swipeId: number; sourceFingerprint: string; revision: number; presentation?: ReaderPresentation; referenceHistory?: ReferenceHistory }
   | { type: "vn_turn_snapshot"; chatId: string; messageId: string; swipeId: number; turn: TurnView | null; requestId?: string }
   | {type:'vn_reference_history_invalidated';chatId:string}
   | { type: "vn_asset"; chatId: string; messageId: string; asset: AssetView; sourceFingerprint?: string; swipeId?: number; revision?: number }

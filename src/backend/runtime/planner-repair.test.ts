@@ -506,8 +506,8 @@ test("planner tolerant parse recovers choices in alternate (choice/option/text) 
     expect(requests.length).toBe(2);
     expect(requests[0].messages[0].content).toBe(requests[1].messages[0].content);
     expect(requests[0].messages[1].content).toContain("TURN RPG STATE");
-    expect(requests[0].messages[1].content).toContain("Turn 1");
-    expect(requests[1].messages[1].content).toContain("Turn 2");
+    expect(requests[0].messages[1].content).toContain("[STATE] T1");
+    expect(requests[1].messages[1].content).toContain("[STATE] T2");
   });
 
   test("P2 retries malformed Attempt 1 output with Zod error-diff feedback in VALIDATION RETRY and preserves previous attire", async () => {

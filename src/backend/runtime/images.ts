@@ -2,10 +2,13 @@ import {isFluxKleinModel} from '../../shared/image-model-output.js';
 import {buildV2ImageRequest} from './v2-request-builder.js';
 import type {ImageActivityInput} from '../../shared/image-usage.js';
 import {castAllocationCandidates} from './cast-allocation.js';
-import {loadImagePromptProfile,loadImagePromptProfileV2,prepareCapabilityOutput} from "./image-prompt-profile.js";
-import {resolveImageOutputPlan} from './image-output-plan.js';
-import {resolveShotSpec} from './shot-director.js';
-import {resolveStyleDNA} from '../../shared/style-dna.js';
+import { loadImagePromptProfile, loadImagePromptProfileV2, prepareCapabilityOutput } from "./image-prompt-profile.js";
+import { resolveImageOutputPlan } from './image-output-plan.js';
+import { resolveShotSpec } from './shot-director.js';
+import { resolveReferencePlan, type ReferencePlan } from './reference-plan.js';
+import { resolveStyleDNA, type StyleDNA } from '../../shared/style-dna.js';
+import type { ImageShotSpec } from '../../shared/image-shot-spec.js';
+import { V2_SERIALIZER_REVISION, resolveImagePromptProfileV2 } from "../../shared/image-prompt-profile-v2.js";
 import {assertCapabilityOutput} from '../../shared/model-output-capabilities.js';
 import {findCastArt,saveCastArt,castArtToken,type CastArtIdentity} from './cast-art.js';
 import {findLocationArt,saveLocationArt,locationArtToken,type LocationArtIdentity} from './location-art.js';
@@ -41,7 +44,6 @@ import {
   type SceneImageOutcome,
   type SceneImageProvenance
 } from "../core/scene-image-cache.js";
-import { V2_SERIALIZER_REVISION } from "../../shared/image-prompt-profile-v2.js";
 import { POSE_EXPRESSION_CATALOGUE, poseById } from "../../shared/character.js";
 import { compileActionProp } from "../../shared/action-prop.js";
 import { renderImageTemplate, templateSnapshot, type ImagePromptMetadata } from "../../shared/image-templates.js";
@@ -465,6 +467,83 @@ export type SceneImageReference =
   | { source: "captured"; imageId?: string }
   | { source: "none" };
 
+export function computeDeterministicV2Plan(input: {
+  config: VisualNovelConfig;
+  scene: SceneState;
+  cue: VisualCue;
+  characterAppearance?: CharacterAppearanceMap | undefined;
+  characterDNALibrary?: CharacterDNALibrary | Record<string, CharacterDNA> | undefined;
+  storyDNASet?: StoryDNASet | undefined;
+  provider?: string | null | undefined;
+  portraits?: Record<string, StoredPortrait | undefined> | undefined;
+  reference?: SceneImageReference | undefined;
+  relightRevision?: number | undefined;
+  reframeRevision?: number | undefined;
+}) {
+  const { config, scene, cue, characterAppearance, characterDNALibrary, storyDNASet } = input;
+  const compiled = compileTemplateCue(config, scene, cue, characterAppearance, characterDNALibrary, storyDNASet);
+  const brief = { ...compiled.brief };
+  // Display provenance does not change the rendered image or invalidate saved art.
+  delete brief.subjectPreparation;
+  const outputPlan = resolveImageOutputPlan({
+    requestedRatio: config.imageOutputAspectRatio !== 'default'
+      ? config.imageOutputAspectRatio
+      : cue.imageTemplate?.outputAspectRatio === '9:16'
+        ? '9:16'
+        : undefined,
+    modelId: config.imageModel,
+  });
+  const styleDNA = resolveStyleDNA(
+    config,
+    cue.imageTemplate?.cameraPolicy === 'fixed' ? cue.imageTemplate.id : config.selectedSharedStyleId,
+  ).styleDNA;
+  const shotSpec = resolveShotSpec({
+    brief,
+    outputPlan,
+    template: cue.imageTemplate,
+    cue,
+    styleDNA,
+    dialogueSafeAreaSetting: config.dialogueSafeArea,
+    isDialogueOverlayTarget: !cue.visualSources?.includes('location art') && !cue.visualSources?.includes('cast art'),
+  });
+  const anchoring = referenceAnchoringEnabled(config) && cueUsesCharacterReference(cue);
+  const referencePlan = anchoring
+    ? resolveReferencePlan({
+        brief,
+        cue,
+        ...(input.portraits ? { portraits: input.portraits } : {}),
+        characterDNALibrary,
+      })
+    : undefined;
+  const referencePlanDigest = cyrb53(
+    canonicalJson({
+      refs: (referencePlan?.references ?? []).map((ref) => ({
+        imageId: ref.imageId,
+        role: ref.role,
+        subject: ref.subject ?? null,
+        wireIndex: ref.wireIndex ?? null,
+      })),
+      anchor: anchoring ? (input.reference ?? { source: 'none' }) : null,
+    }),
+  );
+  const continuityDigest = cyrb53(canonicalJson(scene.continuity ?? null));
+  return {
+    compiled,
+    brief,
+    outputPlan,
+    styleDNA,
+    shotSpec,
+    referencePlan,
+    shotSpecDigest: cyrb53(canonicalJson(shotSpec)),
+    styleDnaDigest: cyrb53(canonicalJson(styleDNA)),
+    outputPlanDigest: cyrb53(canonicalJson(outputPlan)),
+    referencePlanDigest,
+    continuityDigest,
+    ...(typeof input.relightRevision === 'number' && input.relightRevision > 0 ? { relightRevision: input.relightRevision } : {}),
+    ...(typeof input.reframeRevision === 'number' && input.reframeRevision > 0 ? { reframeRevision: input.reframeRevision } : {}),
+  };
+}
+
 export function sceneImageIdentityFor(
   config: VisualNovelConfig,
   scene: SceneState,
@@ -474,36 +553,38 @@ export function sceneImageIdentityFor(
   reference?: SceneImageReference,
   profileRevision?: string,
   characterDNALibrary?: CharacterDNALibrary | Record<string, CharacterDNA>,
-  storyDNASet?: StoryDNASet
+  storyDNASet?: StoryDNASet,
+  portraits?: Record<string, StoredPortrait | undefined>,
+  revisions?: { relightRevision?: number; reframeRevision?: number }
 ): SceneImageIdentity {
   if (cue.imageTemplate) {
-    const compiled = compileTemplateCue(config, scene, cue, characterAppearance, characterDNALibrary, storyDNASet);
-    const brief = {...compiled.brief};
-    // Display provenance does not change the rendered image or invalidate saved art.
-    delete brief.subjectPreparation;
+    const v2Plan = computeDeterministicV2Plan({
+      config,
+      scene,
+      cue,
+      characterAppearance,
+      characterDNALibrary,
+      storyDNASet,
+      provider,
+      portraits,
+      reference,
+      relightRevision: revisions?.relightRevision,
+      reframeRevision: revisions?.reframeRevision,
+    });
+    const compiled = v2Plan.compiled;
+    const brief = v2Plan.brief;
     const visual = resolveCueCharacterVisualState(scene, cue, characterAppearance);
     const { connectionId, workflowId } = splitConnectionSelection(config.imageConnectionId);
-    const generationStyle=resolveStyleDNA(config,cue.imageTemplate.cameraPolicy==='fixed'?cue.imageTemplate.id:config.selectedSharedStyleId).styleDNA;
     const v2Fields = config.imagePromptEngineVersion === 2 ? {
       promptEngineVersion: 2 as const,
       serializerRevision: V2_SERIALIZER_REVISION,
-      shotSpecDigest: cyrb53(canonicalJson(resolveShotSpec({
-        brief,
-        outputPlan: resolveImageOutputPlan({
-          requestedRatio: config.imageOutputAspectRatio !== 'default' ? config.imageOutputAspectRatio : cue.imageTemplate?.outputAspectRatio === '9:16' ? '9:16' : undefined,
-          modelId: config.imageModel
-        }),
-        template: cue.imageTemplate,
-        cue,
-        styleDNA: generationStyle,
-        dialogueSafeAreaSetting: config.dialogueSafeArea,
-        isDialogueOverlayTarget: !cue.visualSources?.includes('location art') && !cue.visualSources?.includes('cast art')
-      }))),
-      styleDnaDigest: cyrb53(canonicalJson(generationStyle)),
-      outputPlanDigest: cyrb53(canonicalJson(resolveImageOutputPlan({
-        requestedRatio: config.imageOutputAspectRatio !== 'default' ? config.imageOutputAspectRatio : cue.imageTemplate?.outputAspectRatio === '9:16' ? '9:16' : undefined,
-        modelId: config.imageModel
-      })))
+      shotSpecDigest: v2Plan.shotSpecDigest,
+      styleDnaDigest: v2Plan.styleDnaDigest,
+      outputPlanDigest: v2Plan.outputPlanDigest,
+      referencePlanDigest: v2Plan.referencePlanDigest,
+      continuityDigest: v2Plan.continuityDigest,
+      ...(v2Plan.relightRevision !== undefined ? { relightRevision: v2Plan.relightRevision } : {}),
+      ...(v2Plan.reframeRevision !== undefined ? { reframeRevision: v2Plan.reframeRevision } : {}),
     } : {};
     return {
       ...v2Fields,
@@ -740,12 +821,12 @@ export async function resolveCacheCues(
     } catch {
       continue;
     }
-    const locationIdentity=locationArtIdentityFor(config,scene,cue,characterAppearance,provider,profile.cacheProfile);
+    const locationIdentity=locationArtIdentityFor(config,scene,cue,characterAppearance,provider,profile.cacheProfile,characterDNALibrary,storyDNASet);
     if(locationIdentity){
       const art=await findLocationArt(spindle,plan.key.chatId,locationIdentity,userId).catch(()=>null);
       if(art){resolved.push(locationArtJob(plan,cue,art,locationIdentity.requestFingerprint));continue;}
     }
-    const castIdentity=castArtIdentityFor(config,scene,cue,characterAppearance,provider,profile.cacheProfile);
+    const castIdentity=castArtIdentityFor(config,scene,cue,characterAppearance,provider,profile.cacheProfile,characterDNALibrary,storyDNASet);
     if(castIdentity){
       const art=await findCastArt(spindle,plan.key.chatId,castIdentity,userId).catch(()=>null);
       if(art){resolved.push(locationArtJob(plan,cue,art,castIdentity.requestFingerprint));continue;}
@@ -809,14 +890,24 @@ async function verifyEntry(
 }
 
 /** Only explicit environment templates enter the reusable place library. */
-export function locationArtIdentityFor(config:VisualNovelConfig,scene:SceneState,cue:VisualCue,appearance:CharacterAppearanceMap|undefined,provider:string|null,profileRevision:string):LocationArtIdentity|null {
+export function locationArtIdentityFor(
+  config: VisualNovelConfig,
+  scene: SceneState,
+  cue: VisualCue,
+  appearance: CharacterAppearanceMap | undefined,
+  provider: string | null,
+  profileRevision: string,
+  characterDNALibrary?: CharacterDNALibrary | Record<string, CharacterDNA>,
+  storyDNASet?: StoryDNASet
+): LocationArtIdentity | null {
   if(!config.persistentLocationArt||provider===null||cue.imageTemplate?.category!=='environment'||cue.imageTemplate.subjectMode!=='none'||!scene.environment.location.trim())return null;
-  const identity=sceneImageIdentityFor(config,scene,cue,appearance,provider,{source:'none'},profileRevision);
+  const identity=sceneImageIdentityFor(config,scene,cue,appearance,provider,{source:'none'},profileRevision,characterDNALibrary,storyDNASet);
   const environment=canonicalJson(scene.environment);
   return {location:scene.environment.location,description:scene.environment.description.slice(0,4000),requestFingerprint:sceneImageCacheKey(identity),environmentFingerprint:`env:${hash(environment)}${hashReverse(environment)}`};
 }
 /** Whole rectangular portrait reuse; never substitute it for an image reference.
- * Reference-capable providers retain their anchoring/capture pipeline. */
+ * Reference-capable providers retain their anchoring/capture pipeline.
+ * Strips transient scene/action/location noise so portrait cache hits carry across scenes. */
 export function castAppearanceIdentity(scene:SceneState,cue:VisualCue,appearance?:CharacterAppearanceMap):{character:string,fingerprint:string}|null {
  if(cue.imageTemplate?.category!=='portrait'||cue.imageTemplate.subjectMode!=='one'||(cue.resolvedIdentity!==undefined&&!cue.resolvedIdentity.trim()))return null;
  const visual=resolveCueCharacterVisualState(scene,cue,appearance);
@@ -824,13 +915,43 @@ export function castAppearanceIdentity(scene:SceneState,cue:VisualCue,appearance
  const text=canonicalJson([visual.characterId,visual.baseIdentity,visual.attire]);
  return {character:visual.characterName,fingerprint:`look:${hash(text)}${hashReverse(text)}`};
 }
-export function castArtIdentityFor(config:VisualNovelConfig,scene:SceneState,cue:VisualCue,appearance:CharacterAppearanceMap|undefined,provider:string|null,profileRevision:string):CastArtIdentity|null {
+export function castArtIdentityFor(
+  config: VisualNovelConfig,
+  scene: SceneState,
+  cue: VisualCue,
+  appearance: CharacterAppearanceMap | undefined,
+  provider: string | null,
+  profileRevision: string,
+  characterDNALibrary?: CharacterDNALibrary | Record<string, CharacterDNA>,
+  storyDNASet?: StoryDNASet
+): CastArtIdentity | null {
  if(!config.persistentCastArt||provider===null||cue.imageTemplate?.category!=='portrait'||cue.imageTemplate.subjectMode!=='one')return null;
  if(referenceAnchoringEnabled(config)&&cueUsesCharacterReference(cue)&&REFERENCE_PROVIDERS.has(provider))return null;
  if(cue.resolvedIdentity!==undefined&&!cue.resolvedIdentity.trim())return null;
  const visual=resolveCueCharacterVisualState(scene,cue,appearance);
  if(!visual.characterName.trim()||!visual.baseIdentity.trim())return null;
- const identity=sceneImageIdentityFor(config,scene,cue,appearance,provider,{source:'none'},profileRevision);
+ const canonicalScene: SceneState = {
+   ...scene,
+   environment: {
+     location: 'Portrait study',
+     timeOfDay: null,
+     weather: null,
+     lighting: '',
+     description: '',
+     persistentElements: [],
+   },
+   continuity: { revision: 0, characters: {}, facts: {} },
+ };
+ const canonicalCue: VisualCue = {
+   ...cue,
+   action: null,
+   expression: null,
+   poseExpressionId: 'idle',
+   visualDescription: undefined,
+   shotHint: undefined,
+   promptDelta: '',
+ };
+ const identity=sceneImageIdentityFor(config,canonicalScene,canonicalCue,appearance,provider,{source:'none'},profileRevision,characterDNALibrary,storyDNASet);
  const description=canonicalJson([visual.characterId,visual.baseIdentity,visual.attire]);
  return {character:visual.characterName,description:visual.identity.slice(0,4000),requestFingerprint:sceneImageCacheKey(identity),appearanceFingerprint:`look:${hash(description)}${hashReverse(description)}`};
 }
@@ -882,8 +1003,10 @@ function backdropDigestForCue(
   characterAppearance: CharacterAppearanceMap | undefined,
   provider: string | null,
   profileRevision: string,
+  characterDNALibrary?: CharacterDNALibrary | Record<string, CharacterDNA>,
+  storyDNASet?: StoryDNASet,
 ): string {
-  const identity = sceneImageIdentityFor(config, scene, cue, characterAppearance, provider, { source: "none" }, profileRevision);
+  const identity = sceneImageIdentityFor(config, scene, cue, characterAppearance, provider, { source: "none" }, profileRevision, characterDNALibrary, storyDNASet);
   return backdropDigestOf(identity);
 }
 
@@ -897,6 +1020,10 @@ export async function prepareAssetJobs(
   userId?: string,
   options: Pick<SceneCacheOptions, "resolvedSourceText" | "verifyImage"> = {}
 ): Promise<AssetJob[]> {
+  const [characterDNALibrary, storyDNASet] = await Promise.all([
+    loadCharacterDNALibrary(spindle, plan.key.chatId, userId).catch(() => ({ version: 1 as const, characters: {} })),
+    loadStoryDNASet(spindle, plan.key.chatId, userId).catch(() => ({ locations: {}, items: {}, revision: 0 })),
+  ]);
   if (config.imageGenerationTrigger === "scene-change" && plan.visualCues.length > 0) {
     const profile = await resolveImageProfile(spindle, config, userId);
     const effective = profile.provider === "novelai"
@@ -907,7 +1034,7 @@ export async function prepareAssetJobs(
     const seenScenes = new Set<string>();
     for (const cue of plan.visualCues) {
       const scene = sceneForCue(plan, cue);
-      const digest = backdropDigestForCue(effective, scene, cue, characterAppearance, profile.provider, profile.cacheProfile);
+      const digest = backdropDigestForCue(effective, scene, cue, characterAppearance, profile.provider, profile.cacheProfile, characterDNALibrary, storyDNASet);
       const sceneKey = `${cue.sceneId}:${digest}`;
       if (!seenScenes.has(sceneKey)) {
         seenScenes.add(sceneKey);
@@ -931,7 +1058,7 @@ export async function prepareAssetJobs(
     let warm:AssetJob[]=[];
     if(castAllocation){
       retainPlanEpisodes(cache,sceneImageScope(userId,plan.key.chatId),plan);
-      warm=await resolveCacheCues(spindle,{...plan,visualCues:all,cacheCues:[]},effective,characterAppearance,[],cache,userId,{...options,provider:profile.provider,includeBudgeted:true});
+      warm=await resolveCacheCues(spindle,{...plan,visualCues:all,cacheCues:[]},effective,characterAppearance,[],cache,userId,{...options,provider:profile.provider,includeBudgeted:true,characterDNALibrary,storyDNASet});
       // A cache hit must not skip a required first reference capture.
       if(referenceAnchoringEnabled(effective)&&profile.provider&&REFERENCE_PROVIDERS.has(profile.provider)){
         const portraits=await loadPortraits(spindle,plan.key.chatId,userId).catch(()=>({} as Record<string,StoredPortrait>));
@@ -943,8 +1070,8 @@ export async function prepareAssetJobs(
     const seen=new Set<string>();let slots=0;const limit=config.maxImagesPerTurn>0?config.maxImagesPerTurn:Infinity;
     for(const cue of all){
       const scene=sceneForCue(plan,cue);
-      const place=locationArtIdentityFor(effective,scene,cue,characterAppearance,profile.provider,profile.cacheProfile);
-      const cast=castArtIdentityFor(effective,scene,cue,characterAppearance,profile.provider,profile.cacheProfile);
+      const place=locationArtIdentityFor(effective,scene,cue,characterAppearance,profile.provider,profile.cacheProfile,characterDNALibrary,storyDNASet);
+      const cast=castArtIdentityFor(effective,scene,cue,characterAppearance,profile.provider,profile.cacheProfile,characterDNALibrary,storyDNASet);
       const identity=place??cast;
       const art=place?await findLocationArt(spindle,plan.key.chatId,place,userId).catch(()=>null):cast?await findCastArt(spindle,plan.key.chatId,cast,userId).catch(()=>null):null;
       if(art&&identity){selected.push(locationArtJob(plan,cue,art,identity.requestFingerprint));admitted.push(cue);continue;}
@@ -975,7 +1102,7 @@ export async function prepareAssetJobs(
         || (config.persistentLocationArt && cue.imageTemplate?.subjectMode === "none");
       if (allowBackdropReuse) {
         const scene = sceneForCue(plan, cue);
-        const backdropDigest = backdropDigestForCue(effective, scene, cue, characterAppearance, profile.provider, profile.cacheProfile);
+        const backdropDigest = backdropDigestForCue(effective, scene, cue, characterAppearance, profile.provider, profile.cacheProfile, characterDNALibrary, storyDNASet);
         const persisted = await findBackdropArt(spindle, plan.key.chatId, backdropDigest, userId).catch(() => null);
         if (persisted) {
           candidates.push(locationArtJob(plan, cue, persisted, backdropDigest));
@@ -993,7 +1120,7 @@ export async function prepareAssetJobs(
   const profile = await resolveImageProfile(spindle, config, userId);
   const provider = profile.provider;
   if (provider === "novelai") config = { ...config, imageModel: config.imageModel || profile.model || "nai-diffusion-4-5-full" };
-  let warm = await resolveCacheCues(spindle, plan, config, characterAppearance, [], cache, userId, { ...options, provider });
+  let warm = await resolveCacheCues(spindle, plan, config, characterAppearance, [], cache, userId, { ...options, provider, characterDNALibrary, storyDNASet });
   // Preserve the normal path's requirement to acquire a missing reference portrait.
   if (referenceAnchoringEnabled(config) && provider && REFERENCE_PROVIDERS.has(provider)) {
     const portraits = await loadPortraits(spindle, plan.key.chatId, userId).catch(() => ({} as Record<string, StoredPortrait>));
@@ -1073,6 +1200,67 @@ export function referenceParametersFor(
   return {
     resolvedSourceImages: [{ data: portrait.data, mimeType: portrait.mimeType }]
   };
+}
+
+/** Wire up to 3 bounded, wire-indexed reference payloads onto provider parameters. */
+export function multiReferenceParametersFor(
+  provider: string | null,
+  referencePlan: ReferencePlan | undefined,
+  config: VisualNovelConfig,
+  fallbackPortrait?: Pick<StoredPortrait, "data" | "mimeType"> | null,
+  supportsGenericRefs = false,
+): Record<string, unknown> {
+  const wired = (referencePlan?.references ?? [])
+    .filter((ref) => typeof ref.wireIndex === "number" && Boolean(ref.dataUrl))
+    .slice(0, 3);
+  const parsed = wired
+    .map((ref) => {
+      const data = parseDataUrl(ref.dataUrl);
+      return data ? { ...data, ref } : null;
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+  if (parsed.length === 0) {
+    return fallbackPortrait && provider ? referenceParametersFor(provider, fallbackPortrait, config) : {};
+  }
+
+  if (provider === "novelai") {
+    const raw = Number(config.imageParameters.referenceStrength);
+    const strength = Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : 0.6;
+    return {
+      resolvedReferenceImages: parsed.map(({ data, ref }) => ({
+        data,
+        strength,
+        infoExtracted: 1,
+        refType: ref.role === "clothing" ? "style&character" : "character",
+      })),
+    };
+  }
+  if (provider === "comfyui") {
+    const raw = Number(config.imageParameters.referenceStrength);
+    const strength = Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : 0.7;
+    return {
+      resolvedSourceImages: parsed.map(({ data, mimeType }) => ({ data, mimeType })),
+      ...(config.imageParameters.denoise !== undefined ? {} : { denoise: strength }),
+    };
+  }
+  if (provider === "swarmui") {
+    return {
+      resolvedSourceImages: parsed.map(({ data, mimeType }) => ({ data, mimeType })),
+    };
+  }
+  if (supportsGenericRefs) {
+    return {
+      resolvedReferenceImages: parsed.map(({ data, mimeType, ref }) => ({
+        data: ref.dataUrl ?? `data:${mimeType};base64,${data}`,
+        mimeType,
+        wireIndex: ref.wireIndex,
+        role: ref.role,
+        ...(ref.subject ? { subject: ref.subject } : {}),
+      })),
+    };
+  }
+  return {};
 }
 
 /** Parse a base64 data URL into raw base64 bytes and a MIME type. */
@@ -1300,22 +1488,36 @@ export async function generateAssets(
     const scheduledCues = plan.classifierVisuals
       ? plan.visualCues.filter((cue) => initialJobs.some((job) => job.jobId === cue.assetJobId))
       : plan.visualCues;
+    const sceneShotChain = new Map<string, Promise<{ cue: VisualCue; shotSpec: ImageShotSpec; styleDNA: StyleDNA } | undefined>>();
     const promises = scheduledCues.map((cue) => {
       const existing = initialJobs.find((job) => job.jobId === cue.assetJobId);
       if (!existing) throw new Error(`Missing asset job ${cue.assetJobId}.`);
       // A retry keeps finished images: such jobs are preserved as-is and never
       // re-scheduled (the scheduler only accepts queued jobs).
       if (existing.status === "generated" || existing.status === "browser_ready") return Promise.resolve(existing);
+      const sceneScopeKey = `${cue.sceneId}:${cue.sceneRevision}`;
+      const priorSceneShotPromise = sceneShotChain.get(sceneScopeKey);
+      let resolveSceneShot: ((value: { cue: VisualCue; shotSpec: ImageShotSpec; styleDNA: StyleDNA } | undefined) => void) | undefined;
+      sceneShotChain.set(sceneScopeKey, new Promise((resolve) => { resolveSceneShot = resolve; }));
       const job = AssetJobSchema.parse({ ...existing, provider: providerKey });
       const scheduled=scheduler.schedule(job, async (scheduledJob, jobSignal) => {
+        let settledShotChain = false;
+        const releaseSceneShot = (value?: { cue: VisualCue; shotSpec: ImageShotSpec; styleDNA: StyleDNA }) => {
+          if (!settledShotChain) {
+            settledShotChain = true;
+            resolveSceneShot?.(value);
+          }
+        };
+        try {
         if (signal.aborted) throw abortError(signal);
         const scene = sceneForCue(plan, cue);
         const visualState = resolveCueCharacterVisualState(scene, cue, characterAppearance);
         const canAnchor = anchorable && cueUsesCharacterReference(cue);
         if (cue.imageTemplate?.subjectMode !== "none" && cue.imageTemplate?.subjectMode !== "ensemble" && cue.resolvedIdentity !== undefined && !cue.resolvedIdentity.trim()) throw new Error(`No usable appearance was resolved for "${visualState.characterName}". Replan this turn with a character description; the previous character will not be substituted.`);
-        const prompt = compileImagePrompt(config, scene, cue, characterAppearance, undefined, provider, characterDNALibrary, storyDNASet);
+        const initialCompiled = cue.imageTemplate ? compileTemplateCue(config, scene, cue, characterAppearance, characterDNALibrary, storyDNASet) : null;
         const nai = provider === "novelai" ? compileNovelAiRequest(config, scene, cue, characterAppearance, characterDNALibrary, storyDNASet) : null;
-        const negativePrompt = nai?.negativePrompt ?? compileNegativePrompt(config, scene, cue, characterAppearance, characterDNALibrary, storyDNASet);
+        const prompt = initialCompiled ? initialCompiled.prompt : compileImagePrompt(config, scene, cue, characterAppearance, undefined, provider, characterDNALibrary, storyDNASet);
+        const negativePrompt = nai?.negativePrompt ?? (initialCompiled ? initialCompiled.negativePrompt : compileNegativePrompt(config, scene, cue, characterAppearance, characterDNALibrary, storyDNASet));
         const characterName = visualState.characterName;
         const characterKey = visualState.characterKey;
 
@@ -1440,8 +1642,41 @@ export async function generateAssets(
           if (config.debugLogging && anchorable) {
             spindle.log.info(`[VN] cue p${cue.paragraphIndex}: ${portrait ? `anchored to portrait ${portrait.imageId} (${portrait.name})` : wantsCapture ? `no portrait for "${characterName}" yet — capturing this render` : `unanchored (character="${characterName}")`}`);
           }
-          const parameters = portrait && provider
-            ? { ...config.imageParameters, ...referenceParametersFor(provider, portrait, config) }
+          const compatiblePortraitsFor = (
+            targetKey: string,
+            resolved: StoredPortrait | undefined,
+          ): Record<string, StoredPortrait> | undefined => {
+            if (!referenceAnchoringEnabled(config) || !cueUsesCharacterReference(cue)) return undefined;
+            const out: Record<string, StoredPortrait> = {};
+            for (const [k, p] of Object.entries(portraits)) {
+              if (!p) continue;
+              const stripped = k.replace(/^card:/, '');
+              if (targetKey && stripped === targetKey) {
+                if (resolved) out[k] = resolved;
+                continue;
+              }
+              out[k] = p;
+            }
+            if (targetKey && resolved) out[targetKey] = resolved;
+            return out;
+          };
+          const activePortraits = compatiblePortraitsFor(characterKey, portrait);
+          const activeDnaForRefs = !referenceAnchoringEnabled(config) || !cueUsesCharacterReference(cue) || wantsCapture
+            ? undefined
+            : characterDNALibrary;
+          const v1RefPlan = provider && REFERENCE_PROVIDERS.has(provider) && (portrait || activeDnaForRefs)
+            ? resolveReferencePlan({
+                brief: initialCompiled?.brief,
+                cue,
+                portraits: activePortraits,
+                characterDNALibrary: activeDnaForRefs,
+              })
+            : undefined;
+          const multiRefParams = provider && (portrait || (v1RefPlan?.references.length ?? 0) > 0)
+            ? multiReferenceParametersFor(provider, v1RefPlan, config, portrait)
+            : {};
+          const parameters = (portrait || (v1RefPlan?.references.length ?? 0) > 0) && provider
+            ? { ...config.imageParameters, ...multiRefParams }
             : {
                 ...config.imageParameters,
                 ...(provider === "comfyui" && config.imageParameters.denoise === undefined ? { denoise: 0.0 } : {})
@@ -1481,10 +1716,12 @@ export async function generateAssets(
             frozen.parameters = { ...frozen.parameters, negativePrompt };
           }
           if (!cueUsesCharacterReference(cue)) frozen = { ...frozen, parameters: withoutImageReferences(frozen.parameters ?? {}) };
-          const metadataFor = (selectedCue: VisualCue): ImagePromptMetadata | undefined => selectedCue.imageTemplate ? {
+          const metadataFor = (selectedCue: VisualCue, targetScene: SceneState = scene): ImagePromptMetadata | undefined => selectedCue.imageTemplate ? {
             ...(selectedCue.presentationRuleTrace ? {presentationRuleTrace:selectedCue.presentationRuleTrace} : {}),
             template: selectedCue.imageTemplate, selectionReason: selectedCue.imageTemplateReason ?? "Default template", format: config.imagePromptFormat,
-            brief: compileTemplateCue(config, scene, selectedCue, characterAppearance, characterDNALibrary, storyDNASet).brief,
+            brief: (selectedCue === cue && targetScene === scene && initialCompiled)
+              ? initialCompiled.brief
+              : compileTemplateCue(config, targetScene, selectedCue, characterAppearance, characterDNALibrary, storyDNASet).brief,
             sharedStyle:sharedStyleSnapshot(config,selectedCue.imageTemplate),
             trackerStatus: selectedCue.trackerStatus ?? (config.includeSimTrackerContext ? "not_found" : "disabled"),
             ...(selectedCue.trackerSourceMessageId ? { trackerSourceMessageId: selectedCue.trackerSourceMessageId } : {})
@@ -1507,9 +1744,38 @@ export async function generateAssets(
           frozen.promptProfile=await loadImagePromptProfile(spindle,config,selected?.provider??provider,frozen.model);
           frozen=prepareCapabilityOutput(frozen,config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined,config.automaticImagePromptSettings&&isFluxKleinModel(frozen.model)?'standard':config.imageResolutionPreference);
           if (config.imagePromptEngineVersion === 2 && cue.imageTemplate) {
+            const previousSceneShot = priorSceneShotPromise ? await priorSceneShotPromise : undefined;
             const profileV2=await loadImagePromptProfileV2(spindle,config,selected?.provider??provider,frozen.model,frozen.parameters);
-            const built=buildV2ImageRequest({config,cue,request:frozen,profile:profileV2,brief:initialMetadata?.brief??compileTemplateCue(config,scene,cue,characterAppearance,characterDNALibrary,storyDNASet).brief,metadata:initialMetadata,styleId:config.selectedSharedStyleId,portraits,characterDNALibrary,shadow:{prompt:frozen.prompt,...(frozen.negativePrompt!==undefined?{negativePrompt:frozen.negativePrompt}:{})},referenceSummary:portrait?`${portrait.source??'captured'} portrait: ${portrait.name} (${portrait.imageId})`:wantsCapture?'No reference yet; this picture will establish the portrait':'No extension reference'});
-            frozen=built.request;if(initialMetadata&&built.metadata)Object.assign(initialMetadata,built.metadata);
+            const built=buildV2ImageRequest({
+              config,
+              cue,
+              request:frozen,
+              profile:profileV2,
+              brief:initialMetadata?.brief??initialCompiled!.brief,
+              metadata:initialMetadata,
+              styleId:config.selectedSharedStyleId,
+              portraits: activePortraits,
+              characterDNALibrary: activeDnaForRefs,
+              ...(previousSceneShot ? { previousSceneShot, shotTransitionMode: 'cross-beat' as const } : {}),
+              shadow:{prompt:frozen.prompt,...(frozen.negativePrompt!==undefined?{negativePrompt:frozen.negativePrompt}:{})},
+              referenceSummary:portrait?`${portrait.source??'captured'} portrait: ${portrait.name} (${portrait.imageId})`:wantsCapture?'No reference yet; this picture will establish the portrait':'No extension reference'
+            });
+            frozen=built.request;
+            if (profileV2.features.references === true && referenceAnchoringEnabled(config) && cueUsesCharacterReference(cue) && !wantsCapture && (built.referencePlan?.references.length ?? 0) > 0) {
+              const effProv = selected?.provider?.trim().toLowerCase() ?? provider;
+              const multi = multiReferenceParametersFor(effProv, built.referencePlan, config, portrait, true);
+              if (Object.keys(multi).length > 0) {
+                frozen = { ...frozen, parameters: { ...(frozen.parameters ?? {}), ...multi } };
+              }
+            }
+            if(initialMetadata&&built.metadata)Object.assign(initialMetadata,built.metadata);
+            if (frozen.shotSpec && frozen.styleSnapshot) {
+              releaseSceneShot({ cue, shotSpec: frozen.shotSpec, styleDNA: frozen.styleSnapshot });
+            } else {
+              releaseSceneShot(undefined);
+            }
+          } else {
+            releaseSceneShot(undefined);
           }
           const adaptation=await adaptImagePrompt(spindle,frozen,initialMetadata,config,userId,jobSignal,cacheOptions.skipAutomaticPromptRepair);
           frozen=adaptation.request;
@@ -1533,8 +1799,29 @@ export async function generateAssets(
               const latestConfig = await loadConfig(spindle, userId);
               const template = latestConfig.imageTemplates.find(item => item.id === templateId);
               if (!template) throw new Error("This template is unavailable.");
+              const relightScene: SceneState = (options?.relight || options?.manualLighting)
+                ? {
+                    ...scene,
+                    environment: {
+                      ...scene.environment,
+                      ...(options.manualLighting?.timeOfDay ? { timeOfDay: options.manualLighting.timeOfDay } : {}),
+                      ...(options.manualLighting?.lightingMood || options.manualLighting?.keyLightDirection
+                        ? {
+                            lighting: [
+                              options.manualLighting?.lightingMood ?? scene.environment.lighting,
+                              options.manualLighting?.keyLightDirection ? `${options.manualLighting.keyLightDirection} key light` : '',
+                            ]
+                              .filter(Boolean)
+                              .join(', '),
+                          }
+                        : options?.relight && !scene.environment.lighting
+                          ? { lighting: 'atmospheric relit key light' }
+                          : {}),
+                    },
+                  }
+                : scene;
               const nextCue = { ...cue, imageTemplate: templateSnapshot(template), imageTemplateReason: "Manual template selection", presentationRuleTrace: undefined };
-              const nextCompiled = compileTemplateCue(config, scene, nextCue, characterAppearance, characterDNALibrary, storyDNASet);
+              const nextCompiled = compileTemplateCue(config, relightScene, nextCue, characterAppearance, characterDNALibrary, storyDNASet);
               const usesReference = referenceAnchoringEnabled(config) && cueUsesCharacterReference(nextCue) && provider !== null && REFERENCE_PROVIDERS.has(provider);
               let nextPortrait: StoredPortrait | undefined;
               if (usesReference) {
@@ -1553,7 +1840,11 @@ export async function generateAssets(
               if (signal.aborted || jobSignal.aborted) throw abortError(jobSignal);
               portrait = nextPortrait;
               wantsCapture = usesReference && Boolean(characterKey) && Boolean(identityFingerprint) && !nextPortrait;
-              const nextNai = provider === "novelai" ? compileNovelAiRequest(config, scene, nextCue, characterAppearance) : null;
+              const nextPortraitsForCue = compatiblePortraitsFor(characterKey, nextPortrait);
+              const nextDnaForRefs = !referenceAnchoringEnabled(config) || !cueUsesCharacterReference(nextCue) || wantsCapture
+                ? undefined
+                : characterDNALibrary;
+              const nextNai = provider === "novelai" ? compileNovelAiRequest(config, relightScene, nextCue, characterAppearance) : null;
               const updated = applyImageEdits({...frozen,prompt:nextCompiled.prompt,negativePrompt:nextCompiled.negativePrompt}, {});
               const effectiveConnectionId = options?.connectionId !== undefined ? (options.connectionId.trim() || undefined) : selected?.id;
               const effectiveSelected = effectiveConnectionId && typeof spindle.imageGen?.getConnection === 'function'
@@ -1561,6 +1852,12 @@ export async function generateAssets(
                 : selected;
               const effectiveProvider = effectiveSelected?.provider?.trim().toLowerCase() ?? selected?.provider ?? provider;
               const effectiveModel = options?.model !== undefined ? (options.model.trim() || undefined) : (updated.model || config.imageModel || effectiveSelected?.model);
+              const nextRefPlan = effectiveProvider && (nextPortrait || nextDnaForRefs)
+                ? resolveReferencePlan({ brief: nextCompiled.brief, cue: nextCue, portraits: nextPortraitsForCue, characterDNALibrary: nextDnaForRefs })
+                : undefined;
+              const nextMultiRef = effectiveProvider
+                ? multiReferenceParametersFor(effectiveProvider, nextRefPlan, latestConfig, nextPortrait)
+                : {};
               const request: ImageGenerationRequest = {
                 ...updated,
                 ...(effectiveConnectionId ? { connection_id: effectiveConnectionId } : {}),
@@ -1568,7 +1865,7 @@ export async function generateAssets(
                 ...(effectiveModel ? { model: effectiveModel } : {}),
                 parameters: {
                   ...withoutImageReferences({ ...templateOutputParameters(nextCue.imageTemplate, effectiveProvider, latestConfig.imageParameters, effectiveSelected?.default_parameters ?? {}, effectiveModel), ...effectiveParameters }),
-                  ...(nextPortrait && effectiveProvider ? referenceParametersFor(effectiveProvider, nextPortrait, latestConfig) : {}),
+                  ...nextMultiRef,
                   ...(nextNai?.parameters ?? {})
                 }
               };
@@ -1576,12 +1873,42 @@ export async function generateAssets(
               request.parameters = modelOutputParameters(effectiveProvider, request.model, globalOutputParameters(latestConfig.imageOutputAspectRatio, effectiveProvider, request.model, request.parameters ?? {}));
               request.promptProfile = await loadImagePromptProfile(spindle, latestConfig, effectiveProvider, request.model);
               const preparedRequest=prepareCapabilityOutput(request,latestConfig.imageOutputAspectRatio!=='default'?latestConfig.imageOutputAspectRatio:nextCue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined,latestConfig.automaticImagePromptSettings&&isFluxKleinModel(request.model)?'standard':latestConfig.imageResolutionPreference);
-              const nextMetadata=metadataFor(nextCue)!;
+              const nextMetadata=metadataFor(nextCue, relightScene)!;
               if (latestConfig.imagePromptEngineVersion === 2) {
                 const profileV2=await loadImagePromptProfileV2(spindle,latestConfig,effectiveProvider,request.model,request.parameters);
                 if(request.model)preparedRequest.model=request.model;else delete preparedRequest.model;
-                const built=buildV2ImageRequest({config:latestConfig,cue:nextCue,request:preparedRequest,profile:profileV2,brief:nextMetadata.brief,metadata:nextMetadata,styleId:options?.styleId??latestConfig.selectedSharedStyleId,portraits,characterDNALibrary,planParameters:request.parameters,...(frozen.shotSpec&&frozen.styleSnapshot?{previousShot:{cue,shotSpec:frozen.shotSpec,styleDNA:frozen.styleSnapshot}}:{}),previousShotRevision:frozen.shotSpec?.revision??0,rebuild:options,shadow:{prompt:nextCompiled.prompt,...(nextCompiled.negativePrompt!==undefined?{negativePrompt:nextCompiled.negativePrompt}:{})},referenceSummary:portrait?`${portrait.source??'captured'} portrait: ${portrait.name} (${portrait.imageId})`:wantsCapture?'No reference yet; this picture will establish the portrait':'No extension reference'});
-                Object.assign(preparedRequest,built.request);if(built.metadata)Object.assign(nextMetadata,built.metadata);
+                const explicitTransition: 'same-picture' | 'reframe' | undefined =
+                  options?.reframe && options?.lockContinuity
+                    ? 'reframe'
+                    : options?.relight && !options?.reframe
+                      ? 'same-picture'
+                      : undefined;
+                const built=buildV2ImageRequest({
+                  config:latestConfig,
+                  cue:nextCue,
+                  request:preparedRequest,
+                  profile:profileV2,
+                  brief:nextMetadata.brief,
+                  metadata:nextMetadata,
+                  styleId:options?.styleId??latestConfig.selectedSharedStyleId,
+                  portraits: nextPortraitsForCue,
+                  characterDNALibrary: nextDnaForRefs,
+                  planParameters:request.parameters,
+                  ...(frozen.shotSpec&&frozen.styleSnapshot?{previousShot:{cue,shotSpec:frozen.shotSpec,styleDNA:frozen.styleSnapshot}}:{...(frozen.shotSpec&&frozen.styleSnapshot?{}:{})}),
+                  ...(explicitTransition ? { shotTransitionMode: explicitTransition } : {}),
+                  previousShotRevision:frozen.shotSpec?.revision??0,
+                  rebuild:options,
+                  shadow:{prompt:nextCompiled.prompt,...(nextCompiled.negativePrompt!==undefined?{negativePrompt:nextCompiled.negativePrompt}:{})},
+                  referenceSummary:nextPortrait?`${nextPortrait.source??'captured'} portrait: ${nextPortrait.name} (${nextPortrait.imageId})`:wantsCapture?'No reference yet; this picture will establish the portrait':'No extension reference'
+                });
+                Object.assign(preparedRequest,built.request);
+                if (profileV2.features.references === true && referenceAnchoringEnabled(latestConfig) && cueUsesCharacterReference(nextCue) && !wantsCapture && (built.referencePlan?.references.length ?? 0) > 0) {
+                  const rebuiltMulti = multiReferenceParametersFor(effectiveProvider ?? null, built.referencePlan, latestConfig, nextPortrait, true);
+                  if (Object.keys(rebuiltMulti).length > 0) {
+                    preparedRequest.parameters = { ...(preparedRequest.parameters ?? {}), ...rebuiltMulti };
+                  }
+                }
+                if(built.metadata)Object.assign(nextMetadata,built.metadata);
               }
               const adapted=await adaptImagePrompt(spindle,preparedRequest,nextMetadata,config,userId,jobSignal);
               const {promptAdaptationError:_previousAdaptationError,...cleanMetadata}=baseMetadata;
@@ -1668,7 +1995,7 @@ export async function generateAssets(
           const imageUrl = `/api/v1/images/${encodeURIComponent(result.imageId)}`;
           // Store only completed requests matching the compiler preparation. Edited
           // requests remain independent; they cannot poison automatic compatibility.
-          const placeIdentity=!promptWasRewritten&&profileCacheIdentity(selected)===profile.cacheProfile&&JSON.stringify(approved)===JSON.stringify(frozen)?locationArtIdentityFor(config,scene,cue,characterAppearance,provider,profile.cacheProfile):null;
+          const placeIdentity=!promptWasRewritten&&profileCacheIdentity(selected)===profile.cacheProfile&&JSON.stringify(approved)===JSON.stringify(frozen)?locationArtIdentityFor(config,scene,cue,characterAppearance,provider,profile.cacheProfile,characterDNALibrary,storyDNASet):null;
           if(placeIdentity){
             try{
               if(await saveLocationArt(spindle,plan.key.chatId,{...placeIdentity,imageId:result.imageId},userId,{token:placeToken,signal:jobSignal}))void resolveCandidatesNow();
@@ -1677,7 +2004,7 @@ export async function generateAssets(
             }
           }
 
-          const castIdentity=!promptWasRewritten&&profileCacheIdentity(selected)===profile.cacheProfile&&JSON.stringify(approved)===JSON.stringify(frozen)?castArtIdentityFor(config,scene,cue,characterAppearance,provider,profile.cacheProfile):null;
+          const castIdentity=!promptWasRewritten&&profileCacheIdentity(selected)===profile.cacheProfile&&JSON.stringify(approved)===JSON.stringify(frozen)?castArtIdentityFor(config,scene,cue,characterAppearance,provider,profile.cacheProfile,characterDNALibrary,storyDNASet):null;
           if(castIdentity){
             try{
               if(await saveCastArt(spindle,plan.key.chatId,{...castIdentity,imageId:result.imageId},userId,{token:castToken,signal:jobSignal}))void resolveCandidatesNow();
@@ -1687,7 +2014,7 @@ export async function generateAssets(
           }
           if (!promptWasRewritten && (config.imageGenerationTrigger === "scene-change" || config.persistentLocationArt || cue.imageTemplate?.subjectMode === "none")) {
             try {
-              const backdropIdentity = sceneImageIdentityFor(config, scene, cue, characterAppearance, provider, { source: "none" }, profile.cacheProfile);
+              const backdropIdentity = sceneImageIdentityFor(config, scene, cue, characterAppearance, provider, { source: "none" }, profile.cacheProfile, characterDNALibrary, storyDNASet);
               await saveBackdropArt(spindle, plan.key.chatId, {
                 backdropDigest: backdropDigestOf(backdropIdentity),
                 beatDigest: beatDigestOf(backdropIdentity),
@@ -1736,6 +2063,9 @@ export async function generateAssets(
             captureResolve?.(portraits[characterKey] ?? null);
             capturePromises.delete(characterKey);
           }
+        }
+        } finally {
+          releaseSceneShot();
         }
       }, { independent: Boolean(cacheOptions.independentRequests) });
       return scheduled.promise.then(result=>{if(scheduled.reused&&result.imageId)activity(job,'cache-reuse');return result;});

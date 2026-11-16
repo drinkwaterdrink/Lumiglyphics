@@ -356,7 +356,8 @@ body.theme-light .folio-quote-callout {
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
-  min-height: 22px !important;
+  min-height: 44px !important;
+  touch-action: none !important;
   margin-top: 2px !important;
   margin-bottom: 4px !important;
   padding-bottom: 4px !important;

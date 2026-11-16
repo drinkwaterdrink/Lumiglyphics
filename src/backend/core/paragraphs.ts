@@ -762,14 +762,18 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
   }
   if (!paragraphs.length && spans.length) paragraphs.push({ index: 0, sourceIndex: 0, text: "A new panel is available in Panels." });
 
+  const stripEdgeQuotes = (s: string) => s.trim().replace(/^["“”'‘’`«»]+|["“”'‘’`«»]+$/g, "").trim();
   const detectedSpeakers: DetectedSpeakerInfo[] = [];
   if (extractedSpeakers.size > 0) {
     for (const paragraph of paragraphs) {
-      let matchedSpeaker = extractedSpeakers.get(paragraph.text);
+      const normalizedPara = stripEdgeQuotes(paragraph.text);
+      let matchedSpeaker = extractedSpeakers.get(paragraph.text) ?? (normalizedPara ? extractedSpeakers.get(normalizedPara) : undefined);
       if (!matchedSpeaker) {
         for (const [dialogueText, speaker] of extractedSpeakers.entries()) {
+          const normalizedDialogue = stripEdgeQuotes(dialogueText);
           if (
             paragraph.text === dialogueText ||
+            (normalizedPara.length > 0 && normalizedPara === normalizedDialogue) ||
             (dialogueText.length >= 12 && paragraph.text.includes(dialogueText)) ||
             (paragraph.text.length >= 3 && dialogueText.includes(paragraph.text))
           ) {

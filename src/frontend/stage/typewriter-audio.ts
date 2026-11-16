@@ -6,10 +6,11 @@ export type TypewriterAudioMode = "off" | "blip" | "click" | "pip";
  */
 export class TypewriterAudioSynthesizer {
   private ctx: AudioContext | null = null;
+  private clickNoiseBuffer: AudioBuffer | null = null;
   private mode: TypewriterAudioMode = "blip";
   private volume = 0.35;
   private lastPlayTime = 0;
-  private readonly minIntervalMs = 38;
+  private readonly minIntervalMs = 30;
 
   constructor(mode: TypewriterAudioMode = "blip", volume = 0.35) {
     this.mode = mode;
@@ -43,7 +44,7 @@ export class TypewriterAudioSynthesizer {
 
   play(): void {
     if (this.mode === "off" || this.volume <= 0) return;
-    const now = Date.now();
+    const now = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
     if (now - this.lastPlayTime < this.minIntervalMs) return;
     this.lastPlayTime = now;
 
@@ -94,16 +95,19 @@ export class TypewriterAudioSynthesizer {
   }
 
   private playClick(ctx: AudioContext): void {
-    // Mechanical micro-click: brief bandpassed noise burst
-    const bufferSize = Math.floor(ctx.sampleRate * 0.012);
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.3));
+    // Mechanical micro-click: reuse cached bandpassed noise buffer matching current sampleRate
+    if (!this.clickNoiseBuffer || this.clickNoiseBuffer.sampleRate !== ctx.sampleRate) {
+      const bufferSize = Math.floor(ctx.sampleRate * 0.012);
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.3));
+      }
+      this.clickNoiseBuffer = buffer;
     }
 
     const noise = ctx.createBufferSource();
-    noise.buffer = buffer;
+    noise.buffer = this.clickNoiseBuffer;
 
     const filter = ctx.createBiquadFilter();
     filter.type = "bandpass";
@@ -143,6 +147,7 @@ export class TypewriterAudioSynthesizer {
   }
 
   destroy(): void {
+    this.clickNoiseBuffer = null;
     if (this.ctx && this.ctx.state !== "closed") {
       this.ctx.close().catch(() => {});
       this.ctx = null;

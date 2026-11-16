@@ -64,17 +64,54 @@ export function parseGameState(detail: unknown): GameState | null {
   return { provider, chatId, choices, busy: d.busy === true, busyLabel: text(d.busyLabel, 120) };
 }
 
+export interface GameBusyStatus {
+  busy: boolean;
+  timedOut: boolean;
+  providers: string[];
+  busyLabel: string | null;
+}
+
 /** Keeps the latest state per provider and tells the host when the active chat's choices change. */
 export class GameBridge {
   private states = new Map<string, GameState>();
+  private timers = new Map<string, ReturnType<typeof setTimeout>>();
+  private timedOutProviders = new Set<string>();
   private dead = false;
   private revision = 0;
 
   constructor(
     private readonly target: Pick<Window, "addEventListener" | "removeEventListener" | "dispatchEvent">,
     private readonly onChange: () => void,
+    private readonly busyTimeoutMs = 15_000,
   ) {
     target.addEventListener(GAME_STATE_EVENT, this.receive);
+  }
+
+  private clearTimer(provider: string): void {
+    const timer = this.timers.get(provider);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      this.timers.delete(provider);
+    }
+  }
+
+  private clearAllTimers(): void {
+    for (const timer of this.timers.values()) clearTimeout(timer);
+    this.timers.clear();
+  }
+
+  private armTimer(provider: string): void {
+    this.clearTimer(provider);
+    this.timedOutProviders.delete(provider);
+    const timer = setTimeout(() => {
+      this.timers.delete(provider);
+      if (this.dead) return;
+      const state = this.states.get(provider);
+      if (!state?.busy) return;
+      this.timedOutProviders.add(provider);
+      this.onChange();
+    }, this.busyTimeoutMs);
+    this.timers.set(provider, timer);
   }
 
   private receive = (event: Event): void => {
@@ -83,9 +120,19 @@ export class GameBridge {
     if (!state) return;
     if (!this.states.has(state.provider) && this.states.size >= MAX_PROVIDERS) {
       const oldest = this.states.keys().next().value;
-      if (oldest !== undefined) this.states.delete(oldest);
+      if (oldest !== undefined) {
+        this.states.delete(oldest);
+        this.clearTimer(oldest);
+        this.timedOutProviders.delete(oldest);
+      }
     }
     this.states.set(state.provider, {...state, choices:state.choices.map(choice=>({...choice,revision:++this.revision}))});
+    if (state.busy) {
+      this.armTimer(state.provider);
+    } else {
+      this.clearTimer(state.provider);
+      this.timedOutProviders.delete(state.provider);
+    }
     this.onChange();
   };
 
@@ -95,15 +142,50 @@ export class GameBridge {
     return [...this.states.values()].filter((s) => s.chatId === chatId).flatMap((s) => s.choices.map(choice=>({...choice})));
   }
 
+  /** Detailed busy/timeout status for the active chat's game providers. */
+  busyStatusFor(chatId: string): GameBusyStatus {
+    if (!chatId) return { busy: false, timedOut: false, providers: [], busyLabel: null };
+    const providers: string[] = [];
+    for (const [provider, state] of this.states) {
+      if (state.chatId === chatId && state.busy) providers.push(provider);
+    }
+    return {
+      busy: providers.length > 0,
+      timedOut: providers.some((p) => this.timedOutProviders.has(p)),
+      providers,
+      busyLabel: providers.length > 0 ? providers.join(", ") : null,
+    };
+  }
+
   /** A provider is busy resolving the last pick (its buttons should wait). */
   busyFor(chatId: string): boolean {
-    return [...this.states.values()].some((s) => s.chatId === chatId && s.busy);
+    return this.busyStatusFor(chatId).busy;
+  }
+
+  /** Cancel a stuck busy state and request fresh moves from providers. */
+  cancelBusy(chatId: string, provider?: string): void {
+    if (this.dead || !chatId) return;
+    for (const [key, state] of [...this.states.entries()]) {
+      if (state.chatId === chatId && (!provider || key === provider)) {
+        this.clearTimer(key);
+        this.timedOutProviders.delete(key);
+        this.states.set(key, { ...state, busy: false });
+      }
+    }
+    this.target.dispatchEvent(new CustomEvent(GAME_REQUEST_EVENT, { detail: { version: 1, chatId } }));
+    this.onChange();
   }
 
   /** Ask providers to (re)send their state, e.g. after a chat switch or reopening the stage. */
   request(chatId: string): void {
     if (this.dead || !chatId) return;
-    for (const [provider,state] of this.states) if(state.chatId===chatId)this.states.delete(provider);
+    for (const [provider, state] of this.states) {
+      if (state.chatId === chatId) {
+        this.states.delete(provider);
+        this.clearTimer(provider);
+        this.timedOutProviders.delete(provider);
+      }
+    }
     this.onChange();
     this.target.dispatchEvent(new CustomEvent(GAME_REQUEST_EVENT, { detail: { version: 1, chatId } }));
   }
@@ -119,18 +201,25 @@ export class GameBridge {
     if (!this.resolve(chatId,choice)) return false;
     // Picked choices are spent until the provider sends a fresh set.
     const state = this.states.get(choice.provider);
-    if (state?.chatId === chatId) this.states.set(choice.provider, { ...state, choices: [], busy: true });
+    if (state?.chatId === chatId) {
+      this.states.set(choice.provider, { ...state, choices: [], busy: true });
+      this.armTimer(choice.provider);
+    }
     this.target.dispatchEvent(new CustomEvent(GAME_PICK_EVENT, { detail: { version: 1, provider: choice.provider, chatId, id: choice.id } }));
     this.onChange();
     return true;
   }
 
   clear(): void {
+    this.clearAllTimers();
+    this.timedOutProviders.clear();
     this.states.clear();
   }
 
   destroy(): void {
     this.dead = true;
+    this.clearAllTimers();
+    this.timedOutProviders.clear();
     this.states.clear();
     this.target.removeEventListener(GAME_STATE_EVENT, this.receive);
   }

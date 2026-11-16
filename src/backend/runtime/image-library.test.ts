@@ -250,3 +250,24 @@ test('purgeDeletedImageFromChatTurns strips deleted image across older turns and
  const activeHit=await purgeDeletedImageFromChatTurns(f.api,'chat','img-keep',undefined,'u',turnPath('chat','m2',0));
  expect(activeHit).toBe(true);
 });
+
+test('templateQuery matches character names, speakers, and scene locations across images and story replies',async()=>{
+ const f=fixture();
+ const r1=record('m1','img-laura',0);
+ r1.speaker='Laura';
+ r1.plan.scenes[0]!.environment.location='Callahan Kitchen';
+ r1.plan.visualCues[0]!.character='Laura';
+ await saveTurnRecord(f.api,turnPath('chat','m1',0),r1,'u');
+ const r2=record('m2','img-dana',0);
+ r2.speaker='Dana';
+ r2.plan.scenes[0]!.environment.location='Back Patio';
+ r2.plan.visualCues[0]!.character='Dana';
+ await saveTurnRecord(f.api,turnPath('chat','m2',0),r2,'u');
+
+ const lauraImages=await readImageLibraryPage(f.api,request({templateQuery:'Laura'}),'u');
+ expect(lauraImages.entries.map(e=>e.imageId)).toEqual(['img-laura']);
+
+ const kitchenStory=await readImageLibraryPage(f.api,request({mode:'story',templateQuery:'Kitchen'}),'u');
+ expect(kitchenStory.entries.map(e=>e.imageId)).toEqual(['img-laura']);
+ expect(kitchenStory.replies.map(r=>r.key.assistantMessageId)).toEqual(['m1']);
+});

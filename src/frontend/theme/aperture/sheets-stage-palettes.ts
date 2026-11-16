@@ -836,35 +836,7 @@ section[data-reference-observations] h3 {
   color: #ffffff !important;
 }
 
-/* Extension-wide Light Mode Text & Contrast Guarantee for Settings, Folios, Places & Workspaces */
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-cast-workspace], [data-place-workspace], [data-image-studio], [data-vn-panel-layer], [data-reader-workspace], [data-folio-body]) {
-  color: #142820 !important;
-}
-
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-cast-workspace], [data-place-workspace], [data-image-studio], [data-vn-panel-layer]) :is(p, span, label, small, strong, em, dt, dd, h2, h3, h4) {
-  color: #142820 !important;
-}
-
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-cast-workspace], [data-place-workspace], [data-image-studio], [data-vn-panel-layer]) :is(small, .muted, [data-muted]) {
-  color: #4b6b5d !important;
-}
-
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-cast-workspace], [data-place-workspace], [data-image-studio], [data-vn-panel-layer]) :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
-  background-color: #ffffff !important;
-  color: #142820 !important;
-  border-color: rgba(86, 128, 107, 0.35) !important;
-}
-
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-cast-workspace], [data-place-workspace], [data-image-studio], [data-vn-panel-layer]) :is(button:not([data-action="voice-toggle"]):not(.launcher)) {
-  background-color: #e5eee2 !important;
-  color: #142820 !important;
-  border-color: rgba(86, 128, 107, 0.35) !important;
-}
-
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-cast-workspace], [data-place-workspace], [data-image-studio], [data-vn-panel-layer]) :is(button:not([data-action="voice-toggle"]):not(.launcher)):hover {
-  background-color: #d6e4d2 !important;
-  border-color: #56806b !important;
-}
+/* Light Mode contrast tokens are driven cleanly through --vn-shell-* variables instead of blanket !important overrides. */
 
 /* Reading Typography Modes */
 [data-vn-root][data-vn-typography="novelist"] [data-vn-dialogue-text],

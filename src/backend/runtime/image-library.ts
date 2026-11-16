@@ -125,9 +125,24 @@ export async function readImageLibraryPage(api:SpindleAPI,input:ImageLibraryRequ
   const candidates=[...(archive.success?archive.data.entries:[]),...collect(record)];
   const first=new Map<string,SavedLibraryImage>();for(const candidate of candidates)if(!first.has(occurrence(candidate)))first.set(occurrence(candidate),candidate);
   const unique=[...first.values()].filter(e=>e.key.chatId===request.chatId&&e.key.assistantMessageId===source.message.id);
+  const queryLower=request.templateQuery?.trim().toLocaleLowerCase()??'';
+  const cleanSpeaker=sanitizeDisplayCharacterName(record.speaker);
+  const replyLocations=record.plan.scenes.map(s=>s.environment?.location).filter(Boolean);
+  const matchesQuery=(entry?:typeof unique[number])=>{
+   if(!queryLower)return true;
+   if(entry){
+    if(entry.template?.toLocaleLowerCase().includes(queryLower))return true;
+    if(entry.caption?.toLocaleLowerCase().includes(queryLower))return true;
+    if((entry.characters??[]).some(c=>c.toLocaleLowerCase().includes(queryLower)))return true;
+   }
+   if(cleanSpeaker.toLocaleLowerCase().includes(queryLower))return true;
+   if(record.plan.paragraphSpeakers.some(s=>s?.toLocaleLowerCase().includes(queryLower)))return true;
+   if(replyLocations.some(loc=>loc.toLocaleLowerCase().includes(queryLower)))return true;
+   return false;
+  };
   const rows=unique.flatMap(e=>{
    if(request.role!=='all'&&e.role!==request.role)return [];
-   if(request.templateQuery&&!e.template?.toLocaleLowerCase().includes(request.templateQuery.toLocaleLowerCase()))return [];
+   if(request.templateQuery&&!matchesQuery(e))return [];
    const sameVersion=active&&e.key.sourceFingerprint===record.plan.key.sourceFingerprint&&e.key.revision===record.plan.key.revision;
    const current=sameVersion&&record.jobs.some(j=>j.jobId===e.jobId&&(j.imageId===e.imageId||(!['generated','browser_ready'].includes(j.status)&&record.previousImages?.[j.jobId]?.imageId===e.imageId)));
    if(request.versions==='active'&&!sameVersion){notices.add('Some earlier replies or edited messages have saved images on alternate versions. Switch Message versions in Filters to include them.');return [];}
@@ -135,10 +150,9 @@ export async function readImageLibraryPage(api:SpindleAPI,input:ImageLibraryRequ
    if(request.range==='read'&&source.message.id===request.anchor.messageId&&(e.paragraphIndex>request.anchor.paragraphIndex|| (sameVersion&&e.key.sourceFingerprint!==request.anchor.sourceFingerprint)))return [];
    return [{...e,messageNumber:source.index+1,versionLabel:(sameVersion?(current?'current':'replaced'):'alternate') as LibraryImageView['versionLabel']}];
   }).sort((a,b)=>request.order==='newest'?b.createdAt.localeCompare(a.createdAt):a.createdAt.localeCompare(b.createdAt));
-  if(request.mode==='story'&&(active||request.versions==='all')&&(!request.templateQuery&&request.role==='all'||rows.length)){
+  if(request.mode==='story'&&(active||request.versions==='all')&&(!request.templateQuery&&request.role==='all'||rows.length||(request.role==='all'&&matchesQuery()))){
    const visible=record.plan.paragraphs.filter(p=>request.range!=='read'||source.message.id!==request.anchor.messageId||p.index<=request.anchor.paragraphIndex);
    let budget=12000;const paragraphs:ImageLibraryPage['replies'][number]['paragraphs']=[];let truncated=false;
-   const cleanSpeaker=sanitizeDisplayCharacterName(record.speaker);
    for(const paragraph of visible){if(paragraphs.length>=256||budget<=0){truncated=true;break;}const text=paragraph.text.slice(0,budget);if(text.length<paragraph.text.length)truncated=true;budget-=text.length;const pSpeaker=sanitizeDisplayCharacterName(record.plan.paragraphSpeakers[paragraph.index])||cleanSpeaker;paragraphs.push({index:paragraph.index,text,speaker:pSpeaker.slice(0,256)});}
    replies.push({versionLabel:active?'current':'alternate',key:record.plan.key,messageNumber:source.index+1,speaker:cleanSpeaker.slice(0,256),paragraphs,truncated});
   }

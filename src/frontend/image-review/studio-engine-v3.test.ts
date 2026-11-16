@@ -291,4 +291,53 @@ describe("ImageStudio Engine V3 Features (Phase 2)", () => {
 
     studio.destroy();
   });
+
+  test("supports Hub batch controls with cost badges, Hero card swipe, typing auto-compaction, and focalPoint camera wire-through (#3/#5/#7)", () => {
+    const sent: FrontendRequest[] = [];
+    const mount = new FakeNode("div") as unknown as HTMLElement;
+    const studio = new ImageStudio(mount, (req) => sent.push(req), () => {});
+
+    studio.setTurn(createMockTurn());
+    studio.open();
+
+    const root = (studio as any).root;
+    const section = root.querySelector("section");
+
+    // #3: Hub batch bar + cost-tier badges visible when >1 held pictures
+    const hubBatch = root.querySelector("[data-hub-batch]");
+    expect(hubBatch).not.toBeNull();
+    expect(hubBatch.hidden).toBe(false);
+    const hubApprove = root.querySelector("[data-hub-batch-approve]");
+    expect(hubApprove.hidden).toBe(false);
+    expect(hubApprove.textContent).toContain("Approve all held (2)");
+    expect(root.querySelectorAll("[data-cost-legend] .studio-cost-pill").length).toBe(3);
+
+    // #5: Horizontal swipe left/right on [data-context] cycles between pictures
+    const ctx = root.querySelector("[data-context]");
+    expect(ctx.dataset.swipeable).toBe("true");
+    const initialJob = (root.querySelector("[data-picture]") as HTMLSelectElement).value;
+    ctx.dispatchEvent({ type: "pointerdown", clientX: 240, clientY: 120, target: ctx, stopPropagation() {} });
+    ctx.dispatchEvent({ type: "pointerup", clientX: 140, clientY: 124, target: ctx, stopPropagation() {} });
+    const nextJob = (root.querySelector("[data-picture]") as HTMLSelectElement).value;
+    expect(nextJob).not.toBe(initialJob);
+    ctx.dispatchEvent({ type: "pointerdown", clientX: 140, clientY: 120, target: ctx, stopPropagation() {} });
+    ctx.dispatchEvent({ type: "pointerup", clientX: 240, clientY: 122, target: ctx, stopPropagation() {} });
+    expect((root.querySelector("[data-picture]") as HTMLSelectElement).value).toBe(initialJob);
+
+    // #5: Focusing a textarea marks section[data-typing="true"] for compact hero display
+    const pos = root.querySelector("[data-positive]");
+    root.dispatchEvent({ type: "focusin", target: pos, stopPropagation() {} });
+    expect(section.dataset.typing).toBe("true");
+
+    // #7: Viewfinder dragged focalPoint is sent through Apply Camera on vn_reprepare_image_template
+    (studio as any).draftFocalPoint = { x: 26, y: 31 };
+    const autoDirector = root.querySelector("[data-auto-director]") as HTMLInputElement;
+    autoDirector.checked = false;
+    root.querySelector("[data-apply-camera]").click();
+    const camReq = sent.find((r) => r.type === "vn_reprepare_image_template") as any;
+    expect(camReq).toBeDefined();
+    expect(camReq.manualCamera?.focalPoint).toEqual({ x: 26, y: 31 });
+
+    studio.destroy();
+  });
 });

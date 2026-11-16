@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+export const LocationSpatialAnchorsSchema = z.object({
+  lightSourceAxis: z.enum(['left', 'right', 'backlit', 'overhead', 'ambient']).optional(),
+  windowOrPortalSide: z.enum(['left', 'right', 'center-back', 'none']).optional(),
+  horizonHeight: z.enum(['low', 'mid', 'high']).optional(),
+  landmarks: z.array(z.string().trim().min(1).max(80)).max(6).default([]),
+}).strict();
+export type LocationSpatialAnchors = z.infer<typeof LocationSpatialAnchorsSchema>;
+
 export const LocationDNASchema = z.object({
   id: z.string().trim().min(1).max(256),
   name: z.string().trim().min(1).max(160),
@@ -9,6 +17,7 @@ export const LocationDNASchema = z.object({
   atmosphere: z.string().trim().max(500).optional(),
   architecture: z.string().trim().max(500).optional(),
   persistentElements: z.array(z.string().trim().max(300)).max(24).default([]),
+  spatialAnchors: LocationSpatialAnchorsSchema.optional(),
   locked: z.boolean().optional(),
   referenceImageUrl: z.string().trim().max(2048).optional(),
   connectedLocations: z.array(z.string().trim().max(160)).max(24).optional(),

@@ -42,6 +42,7 @@ import {
   type VnTurnInput,
 } from "../store";
 import { generateAmbientMarkup, generateCueEffectMarkup } from "./procedural-particles.js";
+let cueFxUid = 0;
 import { RpgStageController, RPG_HUD_CSS } from "./rpg-hud.js";
 import type { RpgMode, RpgState } from "../../shared/rpg-state.js";
 
@@ -97,6 +98,7 @@ export interface VnStageCallbacks {
   onPrevious?: (paragraphIndex: number) => void;
   onChoice?: (choice: VnChoice) => void | Promise<void>;
   onGameChoice?: (choice: VnGameChoice) => void | Promise<void>;
+  onGameCancel?: (provider?: string) => void;
   onSubmit?: (text: string) => void | Promise<void>;
   onExit?: () => void;
   onReroll?: () => void | Promise<void>;
@@ -118,6 +120,8 @@ export interface VnStageOptions extends VnStageCallbacks {
   skipMode?: "read" | "all";
   /** Optional predicate indicating an external hold on auto-play advance (e.g. speech loading/playing). */
   isAutoAdvanceHeld?: () => boolean;
+  /** Optional predicate muting procedural typewriter audio while speech is playing/loading. */
+  isTypewriterAudioMuted?: () => boolean;
 }
 
 export interface VnSceneImageRequest {
@@ -210,6 +214,7 @@ export class VnStage {
   private moveDraftEpoch = 0;
   private actionDraftsEnabled = false;
   private gameBusy = false;
+  private gameBusyTimedOut = false;
   private readonly inputForm: HTMLFormElement;
   private readonly input: HTMLTextAreaElement;
   private readonly submitButton: HTMLButtonElement;
@@ -241,6 +246,7 @@ export class VnStage {
   private autoPlayDelay = 2000;
   private skipMode: "read" | "all" = "read";
   private readonly isAutoAdvanceHeld: (() => boolean) | undefined;
+  private readonly isTypewriterAudioMuted: (() => boolean) | undefined;
   private isAutoPlay = false;
   private isSkipping = false;
   private isBacklogOpen = false;
@@ -279,6 +285,7 @@ export class VnStage {
     this.callbacks = options;
     this.createImage = options.createImage;
     this.isAutoAdvanceHeld = options.isAutoAdvanceHeld;
+    this.isTypewriterAudioMuted = options.isTypewriterAudioMuted;
 
     this.host = document.createElement("div");
     this.host.setAttribute("data-vn-stage-host", "");
@@ -427,6 +434,12 @@ export class VnStage {
   setFolioOpener(fn: (charName: string) => void): void {
     this.folioOpenCallback = fn; this.dossiers.setFolioOpener(fn);
   }
+  setNpcActionToolsHandler(fn: Parameters<StageDossiers["setNpcActionToolsHandler"]>[0]): void {
+    this.dossiers.setNpcActionToolsHandler(fn);
+  }
+  buildNpcSceneActionTools(charName: string): ReturnType<StageDossiers["buildNpcActionTools"]> {
+    return this.dossiers.buildNpcActionTools(charName);
+  }
 
   setStoryDna(storyDna: StoryDNASet): void { this.dossiers.setStoryDna(storyDna); }
   setStoryDnaRequester(fn: (body: StoryDnaActionBody) => void): void { this.dossiers.setStoryDnaRequester(fn); }
@@ -457,6 +470,7 @@ export class VnStage {
     }
     this.bondSnapshots = nextSnapshots;
     this.characterDnaLibrary = { ...library };
+    this.dossiers.setCharacterDnaLibrary(this.characterDnaLibrary);
     if (celebrated) {
       this.showBondResonanceBanner(celebrated);
     }
@@ -464,6 +478,7 @@ export class VnStage {
 
   setCharacterDnaSaver(fn: (dna: CharacterDNA) => void): void {
     this.dnaSaveRequester = fn;
+    this.dossiers.setCharacterDnaSaver(fn);
   }
 
   predecodeUpcomingImages(urls: readonly string[]): void {
@@ -553,7 +568,7 @@ export class VnStage {
     closeBtn.type = "button";
     closeBtn.textContent = "×";
     closeBtn.setAttribute("aria-label", "Close quick peek");
-    closeBtn.style.cssText = "border:none;background:transparent;color:#94a3b8;font-size:16px;cursor:pointer;padding:2px 6px;";
+    closeBtn.style.cssText = "border:none;background:transparent;color:#94a3b8;font-size:16px;cursor:pointer;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;padding:0 10px;";
     closeBtn.addEventListener("click", () => this.closeSpeakerPeek());
     head.append(title, closeBtn);
     card.append(head);
@@ -582,7 +597,7 @@ export class VnStage {
           btn.type = "button";
           const active = char.activeWardrobeKey === key || char.activeOutfit === outfit;
           btn.textContent = key;
-          btn.style.cssText = `padding:4px 8px;border-radius:999px;font-size:11px;cursor:pointer;border:1px solid ${active ? "rgba(110,231,183,0.75)" : "rgba(255,255,255,0.18)"};background:${active ? "rgba(110,231,183,0.18)" : "rgba(255,255,255,0.06)"};color:#f8fafc;`;
+          btn.style.cssText = `min-height:44px;padding:6px 12px;border-radius:999px;font-size:11px;cursor:pointer;border:1px solid ${active ? "rgba(110,231,183,0.75)" : "rgba(255,255,255,0.18)"};background:${active ? "rgba(110,231,183,0.18)" : "rgba(255,255,255,0.06)"};color:#f8fafc;`;
           btn.addEventListener("click", () => {
             const nextDna: CharacterDNA = { ...char, activeWardrobeKey: key, activeOutfit: outfit, lastUpdated: Date.now() };
             this.characterDnaLibrary[char.id] = nextDna;
@@ -600,7 +615,7 @@ export class VnStage {
       const openBtn = document.createElement("button");
       openBtn.type = "button";
       openBtn.textContent = "📖 Open Character Folio";
-      openBtn.style.cssText = "align-self:flex-start;padding:5px 10px;border-radius:6px;border:1px solid rgba(110,231,183,0.45);background:rgba(110,231,183,0.12);color:#a7f3d0;font-size:11px;font-weight:600;cursor:pointer;";
+      openBtn.style.cssText = "align-self:flex-start;min-height:44px;padding:8px 14px;border-radius:6px;border:1px solid rgba(110,231,183,0.45);background:rgba(110,231,183,0.12);color:#a7f3d0;font-size:12px;font-weight:600;cursor:pointer;";
       openBtn.addEventListener("click", () => {
         this.closeSpeakerPeek();
         this.folioOpenCallback?.(name);
@@ -1027,9 +1042,12 @@ export class VnStage {
   }
 
   /** Moves from a game-engine extension, shown with the reply options whenever it's the player's turn. */
-  setGameChoices(choices: readonly VnGameChoice[], busy = false): void {
+  setGameChoices(choices: readonly VnGameChoice[], busy: boolean | { busy: boolean; timedOut?: boolean } = false): void {
     this.gameChoices = choices.map(choice=>({...choice}));
-    this.gameBusy = busy;
+    const busyFlag = typeof busy === "boolean" ? busy : busy.busy;
+    const timedOutFlag = typeof busy === "boolean" ? false : Boolean(busy.timedOut);
+    this.gameBusy = busyFlag;
+    this.gameBusyTimedOut = busyFlag && timedOutFlag;
     const view = selectVnStageView(this.state);
     this.renderInteraction(view.showChoices, view.showStandardInput, view.isBusy);
   }
@@ -1184,6 +1202,14 @@ export class VnStage {
   }
   stopPreparationPreview():void{this.preparationPreview.stopped();}
   setReferenceHistory(history:ReferenceHistory|undefined):void{this.dossiers.setHistory(history);}
+  patchTurnLore(patch:{presentation?:TurnView["presentation"]|undefined;referenceHistory?:ReferenceHistory|undefined}):void{
+    const paragraphs=this.state.paragraphs.map(p=>p.text);
+    this.dossiers.patchLore(patch.presentation,paragraphs,patch.referenceHistory);
+    this.renderSceneHud();
+    const sceneSpan=this.themeRoot.querySelector<HTMLElement>("[data-vn-caption-scene]");
+    const activePlace=this.dossiers.sceneHudEntries().find(e=>e.kind==="place")?.name;
+    if(sceneSpan&&activePlace)sceneSpan.textContent=activePlace.trim().toUpperCase();
+  }
 
   setActivity(
     label: string | null,
@@ -1535,7 +1561,7 @@ export class VnStage {
     if (typeof this.fxOverlay.offsetWidth === "number") {
       void this.fxOverlay.offsetWidth;
     }
-    this.fxOverlay.innerHTML = generateCueEffectMarkup(effect);
+    this.fxOverlay.innerHTML = generateCueEffectMarkup(effect, ++cueFxUid);
     this.fxOverlay.dataset.vnEffect = effect;
     this.fxBurstTimer = setTimeout(() => {
       if (this.destroyed) return;
@@ -1888,7 +1914,22 @@ export class VnStage {
       let draggingScrubber = false;
       const jumpFromPointer = (clientX: number, clientY: number) => {
         const hit = typeof document.elementFromPoint === "function" ? document.elementFromPoint(clientX, clientY) : null;
-        const dot = hit instanceof Element ? hit.closest<HTMLElement>("[data-vn-scrub-dot]") : null;
+        let dot = hit instanceof Element ? hit.closest<HTMLElement>("[data-vn-scrub-dot]") : null;
+        if (!dot && this.scrubber) {
+          const dots = Array.from(this.scrubber.querySelectorAll<HTMLElement>("[data-vn-scrub-dot]"));
+          dot = dots.find((candidate) => {
+            if (typeof candidate.getBoundingClientRect !== "function") return false;
+            const r = candidate.getBoundingClientRect();
+            return clientX >= r.left && clientX <= r.right;
+          }) ?? null;
+          if (!dot && dots.length > 0 && typeof this.scrubber.getBoundingClientRect === "function") {
+            const box = this.scrubber.getBoundingClientRect();
+            if (box.width > 0) {
+              const ratio = Math.min(1, Math.max(0, (clientX - box.left) / box.width));
+              dot = dots[Math.min(dots.length - 1, Math.floor(ratio * dots.length))] ?? null;
+            }
+          }
+        }
         const idxAttr = dot?.dataset.vnScrubIndex;
         if (idxAttr !== undefined) {
           const targetIdx = parseInt(idxAttr, 10);
@@ -1899,13 +1940,21 @@ export class VnStage {
       };
       this.scrubber.addEventListener("pointerdown", (event) => {
         draggingScrubber = true;
+        if (typeof this.scrubber?.setPointerCapture === "function") {
+          try { this.scrubber.setPointerCapture(event.pointerId); } catch {}
+        }
         jumpFromPointer(event.clientX, event.clientY);
       });
       this.scrubber.addEventListener("pointermove", (event) => {
         if (!draggingScrubber) return;
         jumpFromPointer(event.clientX, event.clientY);
       });
-      const stopScrub = () => { draggingScrubber = false; };
+      const stopScrub = (event?: PointerEvent) => {
+        draggingScrubber = false;
+        if (event && this.scrubber && typeof this.scrubber.hasPointerCapture === "function" && this.scrubber.hasPointerCapture(event.pointerId) && typeof this.scrubber.releasePointerCapture === "function") {
+          try { this.scrubber.releasePointerCapture(event.pointerId); } catch {}
+        }
+      };
       this.scrubber.addEventListener("pointerup", stopScrub);
       this.scrubber.addEventListener("pointercancel", stopScrub);
     }
@@ -1983,9 +2032,16 @@ export class VnStage {
     let touchStartY = 0;
     let touchStartTime = 0;
     let isTouchSwiping = false;
-    let lastTapTime = 0;
-    let lastTapX = 0;
-    let lastTapY = 0;
+    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+    let longPressHandled = false;
+    let longPressStart: { id: number; x: number; y: number } | null = null;
+    const cancelLongPress = () => {
+      if (longPressTimer !== null) {
+        globalThis.clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+      longPressStart = null;
+    };
 
     this.root.addEventListener("touchstart", (event: TouchEvent) => {
       const touch = event.touches[0];
@@ -2007,10 +2063,11 @@ export class VnStage {
         // Check if user is scrolling inside dialogue text or scrollable card
         const target = event.target as HTMLElement | null;
         if(target?.closest("[data-vn-interaction]"))return;
-        const scrollable = target?.closest("[data-vn-dialogue-text], [data-workspace-content], [data-vn-backlog-dialog]");
+        const scrollable = target?.closest(".scroll-copy, [data-vn-dialogue-text], [data-workspace-content], [data-vn-backlog-dialog]");
         const isScrollingText = scrollable && scrollable.scrollHeight > scrollable.clientHeight && Math.abs(dy) > 15;
 
         if (!isScrollingText && dt < 450 && Math.abs(dx) > 45 && Math.abs(dx) > 1.6 * Math.abs(dy)) {
+          cancelLongPress();
           isTouchSwiping = true;
           if (sheetGesture) sheetGesture.moved = true; // suppress tap advance
           if (dx < -45) {
@@ -2025,12 +2082,31 @@ export class VnStage {
     this.root.addEventListener("pointerdown", event => {
       sheetGesture = event.target instanceof Element && event.target.closest("[data-vn-dialogue]")
         ? { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false } : null;
+      cancelLongPress();
+      longPressHandled = false;
+      if (event.button === 0 && !this.workspace.isOpen() && !this.isBacklogOpen && !this.dossiers.isOpen() && !isInteractiveTarget(event.target)) {
+        longPressStart = { id: event.pointerId, x: event.clientX, y: event.clientY };
+        longPressTimer = globalThis.setTimeout(() => {
+          longPressTimer = null;
+          longPressStart = null;
+          longPressHandled = true;
+          if (sheetGesture) sheetGesture.moved = true;
+          this.toggleHud();
+        }, 460);
+      }
     }, { passive: true });
     this.root.addEventListener("pointermove", event => {
       if (sheetGesture?.id === event.pointerId && Math.hypot(event.clientX - sheetGesture.x, event.clientY - sheetGesture.y) > 8) sheetGesture.moved = true;
+      if (longPressStart?.id === event.pointerId && Math.hypot(event.clientX - longPressStart.x, event.clientY - longPressStart.y) > 8) cancelLongPress();
     }, { passive: true });
-    this.root.addEventListener("pointercancel", () => { if (sheetGesture) sheetGesture.moved = true; }, { passive: true });
+    this.root.addEventListener("pointerup", () => { cancelLongPress(); }, { passive: true });
+    this.root.addEventListener("pointercancel", () => { cancelLongPress(); if (sheetGesture) sheetGesture.moved = true; }, { passive: true });
     this.root.addEventListener("click", (event) => {
+      if (longPressHandled) {
+        longPressHandled = false;
+        event.preventDefault();
+        return;
+      }
       if (isTouchSwiping) {
         isTouchSwiping = false;
         return;
@@ -2038,18 +2114,6 @@ export class VnStage {
       const dragged = sheetGesture?.moved;
       sheetGesture = null;
       if (this.root.dataset.vnPageFocus === "true") return;
-
-      const now = performance.now();
-      const isDoubleTap = (now - lastTapTime < 320) && (Math.hypot(event.clientX - lastTapX, event.clientY - lastTapY) < 32);
-      lastTapTime = now;
-      lastTapX = event.clientX;
-      lastTapY = event.clientY;
-
-      if (isDoubleTap && !isInteractiveTarget(event.target)) {
-        event.preventDefault();
-        this.toggleHud();
-        return;
-      }
 
       if (this.dialogueSheet?.isHidden() || this.root.dataset.vnHudHidden === "true") {
         if (!isInteractiveTarget(event.target)) this.toggleHud(false);
@@ -2707,7 +2771,7 @@ export class VnStage {
       // timer churn in the background; ticks resume and catch up on return.
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       const complete = this.typewriter.step(this.readerPreferences?.smartPacing !== false, (char, effectLetter) => {
-        if ((effectLetter || char.trim()) && !this.isSkipping && !this.isRewinding) this.typewriterAudio.play();
+        if ((effectLetter || char.trim()) && !this.isSkipping && !this.isRewinding && !this.isTypewriterAudioMuted?.()) this.typewriterAudio.play();
       });
       if (complete) this.completeTypewriter();
     }, this.textSpeed);
@@ -3138,7 +3202,9 @@ export class VnStage {
 
   private renderGameChoices(show: boolean, isBusy: boolean): void {
     this.gameMoves.hidden=!show;
-    this.gameMovesSummary.textContent=`Available moves (${this.gameChoices.length})`;
+    this.gameMovesSummary.textContent = this.gameBusyTimedOut
+      ? `Moves paused (${this.gameChoices.length})`
+      : `Available moves (${this.gameChoices.length})`;
     if (!show) {
       if (this.gameChoiceList.childElementCount > 0) this.gameChoiceList.replaceChildren();
       return;
@@ -3148,47 +3214,81 @@ export class VnStage {
       const key = choice.group ?? "";
       groups.set(key, [...(groups.get(key) ?? []), choice]);
     }
-    this.gameChoiceList.replaceChildren(
-      ...[...groups].map(([group, choices]) => {
-        const section = document.createElement("div");
-        section.setAttribute("data-vn-game-group", "");
-        if (group && groups.size > 1) {
-          const heading = document.createElement("span");
-          heading.setAttribute("data-vn-game-group-label", "");
-          heading.textContent = group;
-          section.append(heading);
+    const items: HTMLElement[] = [];
+    if (this.gameBusyTimedOut) {
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.dataset.vnGameCancel = "";
+      cancel.textContent = "Stuck? Refresh moves";
+      cancel.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this.callbacks.onGameCancel?.();
+      });
+      items.push(cancel);
+    }
+    for (const [group, choices] of groups) {
+      const section = document.createElement("div");
+      section.setAttribute("data-vn-game-group", "");
+      if (group && groups.size > 1) {
+        const heading = document.createElement("span");
+        heading.setAttribute("data-vn-game-group-label", "");
+        heading.textContent = group;
+        section.append(heading);
+      }
+      for (const choice of choices) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.setAttribute("data-vn-game-choice", "");
+        button.dataset.vnGameChoiceId = choice.id;
+        button.dataset.vnGameChoiceKey = gameMoveKey(choice);
+        button.disabled = isBusy;
+        if (choice.detail) button.title = choice.detail;
+        const label = document.createElement("span");
+        label.textContent = choice.label;
+        if(choice.provider){const provider=document.createElement('small');provider.dataset.vnGameProvider='';provider.textContent=choice.provider;label.append(provider);}
+        button.append(label);
+        if (choice.odds !== null) {
+          const odds = document.createElement("span");
+          odds.setAttribute("data-vn-game-odds", choice.odds >= 0.7 ? "good" : choice.odds >= 0.4 ? "fair" : "poor");
+          odds.textContent = `${Math.round(choice.odds * 100)}%`;
+          button.append(odds);
         }
-        for (const choice of choices) {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.setAttribute("data-vn-game-choice", "");
-          button.dataset.vnGameChoiceId = choice.id;
-          button.dataset.vnGameChoiceKey = gameMoveKey(choice);
-          button.disabled = isBusy;
-          if (choice.detail) button.title = choice.detail;
-          const label = document.createElement("span");
-          label.textContent = choice.label;
-          if(choice.provider){const provider=document.createElement('small');provider.dataset.vnGameProvider='';provider.textContent=choice.provider;label.append(provider);}
-          button.append(label);
-          if (choice.odds !== null) {
-            const odds = document.createElement("span");
-            odds.setAttribute("data-vn-game-odds", choice.odds >= 0.67 ? "good" : choice.odds >= 0.34 ? "fair" : "poor");
-            odds.textContent = `${Math.round(choice.odds * 100)}%`;
-            button.append(odds);
-          }
-          const row=document.createElement('div');row.dataset.vnGameMoveRow='';row.append(button);
-          if(this.actionDraftsEnabled){
-            const edit=document.createElement('button');edit.type='button';edit.dataset.vnEditGameMove='';edit.disabled=isBusy;
-            edit.setAttribute('aria-label',`Edit ${choice.label} as message`);edit.title='Edit as message';edit.textContent='✎';
-            edit.addEventListener('click',event=>{event.stopPropagation();if(!this.actionDraftsEnabled||this.gameBusy||!selectVnStageView(this.state).acceptsInput||!this.gameChoices.some(item=>gameMoveKey(item)===gameMoveKey(choice)))return;
-              this.moveDraftSelection={key:gameMoveKey(choice),epoch:this.moveDraftEpoch};this.panelMount.dataset.vnMoveDraftOpen='true';this.moveDraftEditor.open(choice.label);
-            });row.append(edit);
-          }
-          section.append(row);
+        const row=document.createElement('div');row.dataset.vnGameMoveRow='';row.append(button);
+        let detailPanel: HTMLDivElement | null = null;
+        if (choice.detail) {
+          const info = document.createElement("button");
+          info.type = "button";
+          info.dataset.vnGameDetailToggle = "";
+          info.setAttribute("aria-expanded", "false");
+          info.setAttribute("aria-label", `Inspect ${choice.label} details`);
+          info.title = "Move details";
+          info.textContent = "ⓘ";
+          detailPanel = document.createElement("div");
+          detailPanel.dataset.vnGameDetail = "";
+          detailPanel.hidden = true;
+          detailPanel.textContent = choice.detail;
+          info.addEventListener("click", (event) => {
+            event.stopPropagation();
+            if (!detailPanel) return;
+            const nextHidden = !detailPanel.hidden;
+            detailPanel.hidden = nextHidden;
+            info.setAttribute("aria-expanded", String(!nextHidden));
+          });
+          row.append(info);
         }
-        return section;
-      }),
-    );
+        if(this.actionDraftsEnabled){
+          const edit=document.createElement('button');edit.type='button';edit.dataset.vnEditGameMove='';edit.disabled=isBusy;
+          edit.setAttribute('aria-label',`Edit ${choice.label} as message`);edit.title='Edit as message';edit.textContent='✎';
+          edit.addEventListener('click',event=>{event.stopPropagation();if(!this.actionDraftsEnabled||this.gameBusy||!selectVnStageView(this.state).acceptsInput||!this.gameChoices.some(item=>gameMoveKey(item)===gameMoveKey(choice)))return;
+            this.moveDraftSelection={key:gameMoveKey(choice),epoch:this.moveDraftEpoch};this.panelMount.dataset.vnMoveDraftOpen='true';this.moveDraftEditor.open(choice.label);
+          });row.append(edit);
+        }
+        section.append(row);
+        if (detailPanel) section.append(detailPanel);
+      }
+      items.push(section);
+    }
+    this.gameChoiceList.replaceChildren(...items);
   }
 
   private renderInteraction(
@@ -3197,7 +3297,7 @@ export class VnStage {
     isBusy: boolean,
   ): void {
     if(!selectVnStageView(this.state).acceptsInput)this.closeMoveDraft();
-    const showGame = (showChoices || showStandardInput) && this.gameChoices.length > 0;
+    const showGame = (showChoices || showStandardInput) && (this.gameChoices.length > 0 || this.gameBusyTimedOut);
     this.interaction.hidden = !showChoices && !showStandardInput;
     this.choiceList.hidden = !showChoices;
     this.gameChoiceList.hidden = !showGame;

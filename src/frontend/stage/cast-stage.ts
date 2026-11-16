@@ -10,7 +10,8 @@ const CSS=`
 [data-vn-cast-portraits]{position:relative;display:flex;gap:.75rem;justify-content:center;max-width:100%;width:min(100%,700px)}
 [data-vn-cast-card]{position:relative;margin:0;flex:1 1 0;min-width:0;max-width:320px;overflow:visible;border:none;background:transparent;box-shadow:none;transition:transform 220ms cubic-bezier(.2,.8,.2,1),opacity 220ms ease,filter 220ms ease}
 [data-vn-cast-card][data-active=true]{transform:translateY(-6px);filter:drop-shadow(0 0 16px rgba(220,238,173,0.35))}
-[data-vn-cast-portraits]:has([data-vn-cast-card][data-active=true]) [data-vn-cast-card][data-active=false]{opacity:.86;filter:brightness(.88) saturate(.92)}
+[data-vn-cast-portraits]:has([data-vn-cast-card][data-active=true]) [data-vn-cast-card][data-active=false]{opacity:.84;filter:brightness(.86) saturate(.84)}
+[data-vn-cast-card][data-attire-mismatch=true] figcaption{border-color:rgba(246,196,83,0.55);color:#f9e7b2}
 @media(prefers-reduced-motion:reduce){[data-vn-cast-card]{transition:none}[data-vn-cast-card][data-active=true]{transform:none}}
 [data-vn-effect-intensity=off] [data-vn-cast-card]{transition:none;transform:none}
 [data-vn-cast-media]{display:grid;align-items:start}
@@ -32,8 +33,11 @@ const CSS=`
 [data-vn-cast-toggle]:focus-visible{outline:2px solid var(--vn-accent,#dcebad);outline-offset:2px}
 [data-vn-cast-toggle=hide]:focus-visible{outline-offset:-3px}
 [data-vn-cast-tray]{display:flex;flex-wrap:wrap;justify-content:center;gap:.35rem;max-height:5.5rem;overflow:auto;pointer-events:auto}
-[data-vn-cast-tray] button{min-height:44px;padding:.35rem .7rem;border:1px solid rgba(220,238,217,0.25);border-radius:999px;background:rgba(11,23,19,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#f4f7ee;font:inherit;font-size:.8rem;font-weight:600;cursor:pointer}
-@media(max-height:500px){[data-vn-cast]{inset:var(--vn-cast-top,4rem) 1rem auto}[data-vn-cast-card] img,[data-vn-cast-placeholder]{height:min(clamp(60px,23vh,120px),var(--vn-cast-height,120px))}}
+[data-vn-cast-tray] button{display:inline-flex;align-items:center;gap:.4rem;min-height:44px;padding:.35rem .7rem;border:1px solid rgba(220,238,217,0.25);border-radius:999px;background:rgba(11,23,19,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#f4f7ee;font:inherit;font-size:.8rem;font-weight:600;cursor:pointer}
+[data-vn-cast-readiness]{width:6px;height:6px;border-radius:999px;flex:none;background:#86efac}
+[data-vn-cast-readiness=pending]{background:#cbd5e1}
+[data-vn-cast-readiness=mismatch]{background:#fbbf24}
+@media(max-height:500px){[data-vn-cast]{inset:var(--vn-cast-top,4rem) 1rem auto}[data-vn-cast-card][data-active=true]{transform:translateY(-4px)}[data-vn-cast-card] img,[data-vn-cast-placeholder]{height:min(clamp(60px,23vh,120px),var(--vn-cast-height,120px))}}
 `;
 /** Reuses ready art only. No transparent-cutout assumption, storage or provider calls. */
 export class CastStage {
@@ -77,7 +81,7 @@ export class CastStage {
   for(const portrait of composition.portraits)this.renderPortrait(portraits,portrait,epoch);
   portraits.lastElementChild?.append(this.toggleButton('hide'));
   const tray=document.createElement('nav');tray.dataset.vnCastTray='';tray.setAttribute('aria-label','Other scene portraits');
-  for(const portrait of composition.otherCast){const button=document.createElement('button');button.type='button';button.textContent=portrait.name;button.title=`Show ${portrait.name}`;button.setAttribute("aria-label",button.title);button.onclick=e=>{e.stopPropagation();this.selected=portrait.name;this.refresh();};tray.append(button);}
+  for(const portrait of composition.otherCast){const button=document.createElement('button');button.type='button';button.title=`Show ${portrait.name}`;button.setAttribute("aria-label",button.title);const dot=document.createElement('span');dot.dataset.vnCastReadiness=portrait.attireMismatch?'mismatch':portrait.asset?'ready':'pending';dot.setAttribute('aria-hidden','true');const name=document.createElement('span');name.textContent=portrait.name;button.append(dot,name);button.onclick=e=>{e.stopPropagation();this.selected=portrait.name;this.refresh();};tray.append(button);}
   const offScene=document.createElement('div');offScene.dataset.vnCastOffScene='';offScene.hidden=!composition.offScene.length;offScene.setAttribute('aria-label','Off scene');offScene.setAttribute('role','region');offScene.tabIndex=0;for(const type of ['click','keydown','pointerdown','pointerup','touchstart','touchend','wheel'])offScene.addEventListener(type,event=>event.stopPropagation(),{passive:true});
   if(composition.offScene.length){const label=document.createElement('strong');label.textContent='Off scene';offScene.append(label);if(!composition.portraits.length)offScene.append(this.toggleButton('hide'));}
   for(const portrait of composition.offScene){const item=document.createElement('figure');item.style.cssText='margin:0;display:inline-grid;gap:4px;justify-items:center;max-width:72px;opacity:.65;filter:saturate(.5)';const label=document.createElement('figcaption');label.textContent=portrait.name;label.style.cssText='font-size:11px;white-space:normal;text-align:center';item.append(label);offScene.append(item);const signal=this.loadAbort.signal;void loadVnImageCandidates(sceneImageCandidatesFor(portrait.asset!),this.createImage,signal).then(url=>{if(signal.aborted||epoch!==this.epoch||this.disposed)return;const image=document.createElement('img');image.src=url;image.alt=`${portrait.name} · Off scene`;image.style.cssText='width:52px;height:60px;object-fit:contain';item.prepend(image);this.fit();}).catch(()=>{if(!signal.aborted){label.textContent=`${portrait.name} · Portrait unavailable`;this.fit();}});}
@@ -112,7 +116,7 @@ export class CastStage {
   const exactOld=existingCards.find(c=>c.dataset.vnCastIdentity===JSON.stringify([portrait.name,portrait.asset?.stageAsset?.attire??null])&&Number(c.dataset.vnCastParagraph)<=(portrait.asset?.paragraphIndex??-1));
   // Scope is cleared before rendering; only matching attire from an earlier or equal passage can bridge a replacement.
   const prior=exactOld?.querySelector<HTMLImageElement>('[data-vn-cast-current]')??exactOld?.querySelector('img');
-  const card=document.createElement('figure');card.dataset.vnCastCard='';card.dataset.vnCastParagraph=String(portrait.asset?.paragraphIndex??-1);card.dataset.vnCastCharacter=portrait.name;card.dataset.vnCastIdentity=JSON.stringify([portrait.name,portrait.asset?.stageAsset?.attire??null]);card.dataset.active=String(portrait.active);
+  const card=document.createElement('figure');card.dataset.vnCastCard='';card.dataset.vnCastParagraph=String(portrait.asset?.paragraphIndex??-1);card.dataset.vnCastCharacter=portrait.name;card.dataset.vnCastIdentity=JSON.stringify([portrait.name,portrait.asset?.stageAsset?.attire??null]);card.dataset.active=String(portrait.active);if(portrait.attireMismatch)card.dataset.attireMismatch='true';
   const placeholder=document.createElement('div');placeholder.dataset.vnCastPlaceholder='';placeholder.textContent=portrait.asset?'Loading portrait…':'Portrait unavailable';
   const media=document.createElement('div');media.dataset.vnCastMedia='';media.append(prior&&portrait.asset?prior.cloneNode(true):placeholder);
   const label=document.createElement('figcaption');label.textContent=portrait.name+(portrait.active?' · speaking':'');card.append(media,label);parent.append(card);

@@ -34,11 +34,27 @@ export async function findLocationArt(api:SpindleAPI,chat:string,identity:Locati
  if(token!==locationArtToken(api,chat,user))return null;
  const record=library.locations.find(r=>r.entityId===locationId(identity.location));if(!record)return null;
  const compatible=record.variants.filter(v=>v.requestFingerprint===identity.requestFingerprint&&v.environmentFingerprint===identity.environmentFingerprint);
- compatible.sort((a,b)=>Number(b.id===record.preferredVariantId)-Number(a.id===record.preferredVariantId)||b.createdAt.localeCompare(a.createdAt));
+ compatible.sort((a,b)=>Number(b.id===record.preferredVariantId)-Number(a.id===record.preferredVariantId)||(b.lastUsedAt??0)-(a.lastUsedAt??0)||b.createdAt.localeCompare(a.createdAt));
  for(const v of compatible){
   if(token!==locationArtToken(api,chat,user))return null;
   // Resolve existence under the originating user; never reuse stale signed URLs.
-  try{const image=await api.images.get(v.imageId,user);if(token!==locationArtToken(api,chat,user))return null;if(image)return {imageId:v.imageId,imageUrl:`/api/v1/images/${encodeURIComponent(v.imageId)}`};}catch{/* unverifiable => normal generation */}
+  try{
+   const image=await api.images.get(v.imageId,user);
+   if(token!==locationArtToken(api,chat,user))return null;
+   if(image){
+    const touchedAt=Date.now();
+    void transaction(api,chat,user,async()=>{
+     if(token!==locationArtToken(api,chat,user))return;
+     const latest=await loadLocationArt(api,chat,user);
+     const rec=latest.locations.find(r=>r.entityId===record.entityId);
+     const target=rec?.variants.find(item=>item.id===v.id);
+     if(!target)return;
+     target.lastUsedAt=touchedAt;
+     await api.userStorage.setJson(path(chat),LocationArtLibrarySchema.parse(latest),options(user));
+    }).catch(()=>{});
+    return {imageId:v.imageId,imageUrl:`/api/v1/images/${encodeURIComponent(v.imageId)}`};
+   }
+  }catch{/* unverifiable => normal generation */}
  }
  return null;
 }
@@ -49,10 +65,18 @@ export async function saveLocationArt(api:SpindleAPI,chat:string,art:LocationArt
   const library=await loadLocationArt(api,chat,user),entityId=locationId(art.location);
   let record=library.locations.find(r=>r.entityId===entityId);
   if(!record){if(library.locations.length>=128)throw new Error('Location art limit reached (128 places). Forget a place to make room.');record={entityId,name:art.location,artRevision:0,description:art.description,preferredVariantId:null,variants:[]};library.locations.push(record);}
-  if(record.variants.some(v=>v.imageId===art.imageId&&v.requestFingerprint===art.requestFingerprint&&v.environmentFingerprint===art.environmentFingerprint))return true;
-  if(record.variants.length>=8)throw new Error('Location art limit reached (8 variants per place). Forget a variant to make room.');
-  const createdAt=new Date().toISOString();
-  record.variants.push({id:variantId(art),imageId:art.imageId,requestFingerprint:art.requestFingerprint,environmentFingerprint:art.environmentFingerprint,approved:true,createdAt});record.artRevision++;
+  const existing=record.variants.find(v=>v.imageId===art.imageId&&v.requestFingerprint===art.requestFingerprint&&v.environmentFingerprint===art.environmentFingerprint);
+  if(existing){existing.lastUsedAt=Date.now();await api.userStorage.setJson(path(chat),LocationArtLibrarySchema.parse(library),options(user));return true;}
+  if(record.variants.length>=8){
+   const evictable=record.variants.filter(v=>!v.pinned&&v.id!==record.preferredVariantId);
+   if(evictable.length===0)throw new Error('Location art limit reached (8 variants per place, all pinned). Unpin a variant to make room.');
+   evictable.sort((a,b)=>(a.lastUsedAt??Date.parse(a.createdAt)??0)-(b.lastUsedAt??Date.parse(b.createdAt)??0));
+   const victim=evictable[0]!;
+   record.variants=record.variants.filter(v=>v.id!==victim.id);
+  }
+  const now=Date.now();
+  const createdAt=new Date(now).toISOString();
+  record.variants.push({id:variantId(art),imageId:art.imageId,requestFingerprint:art.requestFingerprint,environmentFingerprint:art.environmentFingerprint,approved:true,createdAt,lastUsedAt:now});record.artRevision++;
   if(guard.signal?.aborted||token!==locationArtToken(api,chat,user))return false;
   await api.userStorage.setJson(path(chat),LocationArtLibrarySchema.parse(library),options(user));return true;
  });

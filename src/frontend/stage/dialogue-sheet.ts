@@ -53,6 +53,7 @@ export class DialogueSheet {
 
     const header = this.header = dialogue.querySelector<HTMLElement>("[data-vn-sheet-header]") || document.createElement("div");
     header.dataset.vnSheetHeader = "";
+    header.style.touchAction = "none";
     if (!header.parentElement) dialogue.prepend(header);
     header.append(this.tools);
     root.append(this.show);
@@ -84,13 +85,14 @@ export class DialogueSheet {
       this.changeHeight(height);
     };
 
-    this.handle.addEventListener("pointerdown", event => {
+    const startPointerDrag = (target: HTMLElement, event: PointerEvent) => {
       if (event.button !== 0) return;
       event.preventDefault();
       this.drag = { id: event.pointerId, y: event.clientY, height: dialogue.getBoundingClientRect().height * this.coordinateScale() };
-      if (typeof this.handle.setPointerCapture === "function") this.handle.setPointerCapture(event.pointerId);
+      if (typeof target.setPointerCapture === "function") target.setPointerCapture(event.pointerId);
       this.pause();
-    }, { signal });
+    };
+    this.handle.addEventListener("pointerdown", event => startPointerDrag(this.handle, event), { signal });
     this.handle.addEventListener("pointermove", event => {
       if (this.drag && this.drag.id === event.pointerId) onMove(event.clientY);
     }, { signal });
@@ -98,6 +100,20 @@ export class DialogueSheet {
       if (this.drag && this.drag.id === event.pointerId) onUp(event.clientY);
     }, { signal });
     this.handle.addEventListener("pointercancel", () => { this.cancelDrag(); this.resize(); }, { signal });
+
+    const isHeaderInteractive = (target: EventTarget | null) =>
+      target instanceof Element && Boolean(target.closest("[data-vn-sheet-tools], button, a, input, select, textarea"));
+    header.addEventListener("pointerdown", event => {
+      if (isHeaderInteractive(event.target)) return;
+      startPointerDrag(header, event);
+    }, { signal });
+    header.addEventListener("pointermove", event => {
+      if (this.drag && this.drag.id === event.pointerId) onMove(event.clientY);
+    }, { signal });
+    header.addEventListener("pointerup", event => {
+      if (this.drag && this.drag.id === event.pointerId) onUp(event.clientY);
+    }, { signal });
+    header.addEventListener("pointercancel", () => { this.cancelDrag(); this.resize(); }, { signal });
 
     window.addEventListener("pointermove", event => {
       if (this.drag && this.drag.id === event.pointerId) {
@@ -109,12 +125,17 @@ export class DialogueSheet {
       if (this.drag && this.drag.id === event.pointerId) onUp(event.clientY);
     }, { signal });
 
-    this.handle.addEventListener("touchstart", event => {
+    const startTouchDrag = (event: TouchEvent) => {
       if (event.touches[0]) {
         event.preventDefault();
         this.drag = { id: event.touches[0].identifier, y: event.touches[0].clientY, height: dialogue.getBoundingClientRect().height * this.coordinateScale() };
         this.pause();
       }
+    };
+    this.handle.addEventListener("touchstart", startTouchDrag, { signal, passive: false });
+    header.addEventListener("touchstart", event => {
+      if (isHeaderInteractive(event.target)) return;
+      startTouchDrag(event);
     }, { signal, passive: false });
     window.addEventListener("touchmove", event => {
       if (this.drag && event.touches[0]) {
@@ -155,8 +176,12 @@ export class DialogueSheet {
     return Math.max(0, this.root.getBoundingClientRect().bottom - (viewport.height + viewport.offsetTop)) * this.coordinateScale();
   }
   private cancelDrag(): void {
-    if (this.drag && typeof this.handle.hasPointerCapture === "function" && this.handle.hasPointerCapture(this.drag.id) && typeof this.handle.releasePointerCapture === "function") {
-      this.handle.releasePointerCapture(this.drag.id);
+    if (this.drag) {
+      for (const el of [this.handle, this.header]) {
+        if (el && typeof el.hasPointerCapture === "function" && el.hasPointerCapture(this.drag.id) && typeof el.releasePointerCapture === "function") {
+          el.releasePointerCapture(this.drag.id);
+        }
+      }
     }
     this.drag = null;
   }

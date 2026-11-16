@@ -36,10 +36,26 @@ export async function findCastArt(api:SpindleAPI,chat:string,identity:CastArtIde
  if(token!==castArtToken(api,chat,user))return null;
  const record=library.characters.find(r=>r.entityId===characterId(identity.character));if(!record)return null;
  const compatible=record.variants.filter(v=>v.requestFingerprint===identity.requestFingerprint&&v.appearanceFingerprint===identity.appearanceFingerprint);
- compatible.sort((a,b)=>Number(b.id===record.preferredVariantId)-Number(a.id===record.preferredVariantId)||b.createdAt.localeCompare(a.createdAt));
+ compatible.sort((a,b)=>Number(b.id===record.preferredVariantId)-Number(a.id===record.preferredVariantId)||(b.lastUsedAt??0)-(a.lastUsedAt??0)||b.createdAt.localeCompare(a.createdAt));
  for(const v of compatible){
   // Resolve existence under the originating user; never reuse stale signed URLs.
-  try{const image=await api.images.get(v.imageId,user);if(token!==castArtToken(api,chat,user))return null;if(image)return {imageId:v.imageId,imageUrl:`/api/v1/images/${encodeURIComponent(v.imageId)}`};}catch{/* unverifiable => normal generation */}
+  try{
+   const image=await api.images.get(v.imageId,user);
+   if(token!==castArtToken(api,chat,user))return null;
+   if(image){
+    const touchedAt=Date.now();
+    void transaction(api,chat,user,async()=>{
+     if(token!==castArtToken(api,chat,user))return;
+     const latest=await loadCastArt(api,chat,user);
+     const rec=latest.characters.find(r=>r.entityId===record.entityId);
+     const target=rec?.variants.find(item=>item.id===v.id);
+     if(!target)return;
+     target.lastUsedAt=touchedAt;
+     await api.userStorage.setJson(path(chat),CastArtLibrarySchema.parse(latest),options(user));
+    }).catch(()=>{});
+    return {imageId:v.imageId,imageUrl:`/api/v1/images/${encodeURIComponent(v.imageId)}`};
+   }
+  }catch{/* unverifiable => normal generation */}
  }
  return null;
 }
@@ -50,10 +66,18 @@ export async function saveCastArt(api:SpindleAPI,chat:string,art:CastArtIdentity
   const library=await loadCastArt(api,chat,user),entityId=characterId(art.character);
   let record=library.characters.find(r=>r.entityId===entityId);
   if(!record){if(library.characters.length>=128)throw new Error('Cast art limit reached (128 characters). Forget a character to make room.');record={entityId,name:art.character,artRevision:0,description:art.description,preferredVariantId:null,variants:[]};library.characters.push(record);}
-  if(record.variants.some(v=>v.imageId===art.imageId&&v.requestFingerprint===art.requestFingerprint&&v.appearanceFingerprint===art.appearanceFingerprint))return true;
-  if(record.variants.length>=8)throw new Error('Cast art limit reached (8 variants per character). Forget a variant to make room.');
-  const createdAt=new Date().toISOString();
-  record.variants.push({id:variantId(art),imageId:art.imageId,requestFingerprint:art.requestFingerprint,appearanceFingerprint:art.appearanceFingerprint,approved:true,createdAt,description:art.description});record.artRevision++;
+  const existing=record.variants.find(v=>v.imageId===art.imageId&&v.requestFingerprint===art.requestFingerprint&&v.appearanceFingerprint===art.appearanceFingerprint);
+  if(existing){existing.lastUsedAt=Date.now();await api.userStorage.setJson(path(chat),CastArtLibrarySchema.parse(library),options(user));return true;}
+  if(record.variants.length>=8){
+   const evictable=record.variants.filter(v=>!v.pinned&&v.id!==record.preferredVariantId);
+   if(evictable.length===0)throw new Error('Cast art limit reached (8 variants per character, all pinned). Unpin a variant to make room.');
+   evictable.sort((a,b)=>(a.lastUsedAt??Date.parse(a.createdAt)??0)-(b.lastUsedAt??Date.parse(b.createdAt)??0));
+   const victim=evictable[0]!;
+   record.variants=record.variants.filter(v=>v.id!==victim.id);
+  }
+  const now=Date.now();
+  const createdAt=new Date(now).toISOString();
+  record.variants.push({id:variantId(art),imageId:art.imageId,requestFingerprint:art.requestFingerprint,appearanceFingerprint:art.appearanceFingerprint,approved:true,createdAt,lastUsedAt:now,description:art.description});record.artRevision++;
   if(guard.signal?.aborted||token!==castArtToken(api,chat,user))return false;
   await api.userStorage.setJson(path(chat),CastArtLibrarySchema.parse(library),options(user));return true;
  });

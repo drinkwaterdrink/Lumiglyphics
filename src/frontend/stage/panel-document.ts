@@ -23,7 +23,7 @@ export function panelDocument(html: string, remote = false): string {
     if (tag === "input" && !["checkbox", "radio"].includes(element.getAttribute("type") ?? "")) { element.remove(); continue; }
     if (tag === "img") {
       const src = element.getAttribute("src") ?? "";
-      if (!/^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(src) && !(remote && /^https:\/\//i.test(src))) element.removeAttribute("src");
+      if (!/^data:image\/(?:png|jpeg|gif|webp|avif);base64,[a-z0-9+/=\s]+$/i.test(src) && !(remote && /^https:\/\//i.test(src))) element.removeAttribute("src");
       element.setAttribute("referrerpolicy", "no-referrer");
     }
   }

@@ -3,7 +3,7 @@ import type { SpeechSettings } from "../../speech-config.js";
 import { DEFAULT_SPEECH_SETTINGS } from "../../speech-config.js";
 import { DELIVERY_ADAPTER_VERSION, deliveryTagAllowedForModel, formatOutboundText } from "./delivery.js";
 import { resolveVoiceForParagraph } from "./voice-resolution.js";
-import { stripTextEffectTags } from "../../shared/text-effects.js";
+import { prepareSpeechText } from "../../shared/text-effects.js";
 import { SpeechTransportError, type TtsTransport } from "./transport.js";
 
 /**
@@ -305,8 +305,8 @@ export class SpeechController {
       snapshot.model,
       this.settings.deliveryAllProviders,
     );
-    // Text effect tags (<shake>, <whisper>, ...) are display markup: never read them aloud.
-    const spoken = stripTextEffectTags(cursor.text);
+    // Text effect tags (<shake>, <whisper>, ...) and HTML/Markdown markup: never read them aloud.
+    const spoken = prepareSpeechText(cursor.text);
     const outbound = tagAllowed
       ? formatOutboundText(spoken, this.settings.deliveryMode, this.settings.deliveryTag)
       : spoken;
@@ -390,7 +390,7 @@ export class SpeechController {
       && this.active
       && this.visible
       && this.cursor !== null
-      && stripTextEffectTags(this.cursor.text).trim().length > 0;
+      && prepareSpeechText(this.cursor.text).length > 0;
   }
 
   private speakerLabel(): { speaker?: string } {

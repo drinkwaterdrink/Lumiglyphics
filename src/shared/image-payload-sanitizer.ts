@@ -113,3 +113,53 @@ export function sanitizeImagePayloadParameters<T extends Record<string, unknown>
 
   return result;
 }
+
+export type CompressDataUrlFn = (dataUrl: string, maxBytes: number) => Promise<string>;
+
+export interface BudgetedReferenceCandidate {
+  dataUrl?: string | undefined;
+  priority: number; // lower = higher priority (1 primary, 2 secondary/clothing, 3 location/extra)
+}
+
+/**
+ * Compress any oversized reference image down below `maxPerRefBytes` (1.5 MB) when a
+ * compressor is provided, and trim lowest-priority candidates cleanly so cumulative
+ * payload bytes stay below `maxTotalBytes` (10 MB Nano-GPT ceiling).
+ */
+export async function enforceReferencePayloadBudget<T extends BudgetedReferenceCandidate>(
+  candidates: readonly T[],
+  compress?: CompressDataUrlFn,
+  maxPerRefBytes = MAX_SAFE_REFERENCE_BYTES,
+  maxTotalBytes = NANO_GPT_PAYLOAD_LIMIT_BYTES,
+): Promise<Array<T & { byteSize: number }>> {
+  const prepared: Array<T & { byteSize: number }> = [];
+  for (const item of candidates) {
+    let dataUrl = item.dataUrl;
+    if (!dataUrl) continue;
+    let bytes = estimateBase64Bytes(dataUrl);
+    if (bytes > maxPerRefBytes && compress) {
+      try {
+        const compressed = await compress(dataUrl, maxPerRefBytes);
+        const compressedBytes = estimateBase64Bytes(compressed);
+        if (compressedBytes > 0 && compressedBytes < bytes) {
+          dataUrl = compressed;
+          bytes = compressedBytes;
+        }
+      } catch {
+        // Keep original measurement and let per-ref guard decide below.
+      }
+    }
+    if (bytes > maxPerRefBytes) continue;
+    prepared.push({ ...item, dataUrl, byteSize: bytes });
+  }
+
+  const ordered = [...prepared].sort((a, b) => a.priority - b.priority);
+  const accepted: Array<T & { byteSize: number }> = [];
+  let runningBytes = 0;
+  for (const item of ordered) {
+    if (runningBytes + item.byteSize >= maxTotalBytes) continue;
+    runningBytes += item.byteSize;
+    accepted.push(item);
+  }
+  return accepted;
+}

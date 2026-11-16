@@ -14,7 +14,8 @@ export type CastSetupInput=Omit<z.infer<typeof CastSetupInputSchema>,'anchors'>&
 export function setupAppearance(setup:CastSetup):string{const parts:string[]=[];if(setup.anchors&&setup.anchors.length>0)parts.push(setup.anchors.map(a=>`(${a}:1.2)`).join(', '));parts.push(setup.appearance);const outfit=setup.outfits.find(o=>o.id===setup.defaultOutfitId)?.description;if(outfit)parts.push(outfit);return parts.filter(Boolean).join(', ');}
 export const CastArtVariantSchema=z.object({
  id,imageId:id,requestFingerprint:id,appearanceFingerprint:id,description:z.string().max(4000),
- displayImageId:id.optional(),approved:z.literal(true),createdAt:z.string().max(64)
+ displayImageId:id.optional(),approved:z.literal(true),createdAt:z.string().max(64),
+ lastUsedAt:z.number().nonnegative().optional(),pinned:z.boolean().optional()
 }).strict();
 export const CastArtRecordSchema=z.object({
  entityId:id,name:id,artRevision:z.number().int().nonnegative(),

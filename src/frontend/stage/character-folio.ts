@@ -12,6 +12,8 @@ import {
 } from '../../shared/character-dna.js';
 import { APERTURE_ICONS } from '../theme/aperture-theme.js';
 import { ImageLightbox } from './image-lightbox.js';
+import { InteractionTray } from './interaction-tray.js';
+import type { DraftMergeMode, InteractionDraft } from '../../shared/scene-interactions.js';
 import type { WorkspaceSurface } from './reader-workspace.js';
 import type { TurnView, AssetView } from '../../protocol.js';
 
@@ -39,6 +41,13 @@ export interface CharacterLoreContext {
   cgs?: Array<{ imageUrl: string; caption?: string }>;
 }
 
+export interface CharacterSceneActionTools {
+  drafts: InteractionDraft[];
+  current: () => string;
+  focus: () => void;
+  apply: (draft: InteractionDraft, mode: DraftMergeMode) => boolean;
+}
+
 export class CharacterFolio implements WorkspaceSurface {
   readonly element: HTMLElement;
   private readonly rosterCarousel: HTMLElement;
@@ -53,6 +62,9 @@ export class CharacterFolio implements WorkspaceSurface {
   private lastRenderedSwipeKey: string | null = null;
   private turnRpgCompanions = new Map<string, { name: string; affinity: number; status: string }>();
   private storyCursor = "";
+  private sceneActionTools: CharacterSceneActionTools | null = null;
+  private sceneActionForName: string | null = null;
+  private sceneActionResolver?: ((characterName: string) => CharacterSceneActionTools | null) | undefined;
   private chatId:string|null=null;
   private revision=0;
   private dirty=new Set<string>();
@@ -68,9 +80,17 @@ export class CharacterFolio implements WorkspaceSurface {
   private persistentGalleries: Record<string, Array<{ imageUrl: string; imageId?: string; caption?: string; messageId?: string }>> = Object.create(null);
   private readonly lightbox: ImageLightbox;
 
+  setSceneActionTools(tools: CharacterSceneActionTools | null, forCharacterName?: string): void {
+    this.sceneActionTools = tools;
+    this.sceneActionForName = forCharacterName?.trim() || null;
+    if (this.activeCharacterId) this.renderDetail();
+  }
+  setSceneActionResolver(resolver: ((characterName: string) => CharacterSceneActionTools | null) | undefined): void {
+    this.sceneActionResolver = resolver;
+  }
   setContext(chatId:string|null):void{
     if(this.chatId===chatId)return;
-    this.handlers.onCancelDNA?.();this.chatId=chatId;this.discoveredIds.clear();this.swipeCharacterCache.clear();this.lastRenderedSwipeKey=null;this.turnRpgCompanions.clear();this.activeSubTab='dna';this.library=Object.create(null);this.dirty.clear();this.saving.clear();this.savedLibrary=Object.create(null);this.loreMap=Object.create(null);this.deleted={};this.revision=0;this.activeCharacterId=null;this.proposal=null;this.pending=false;this.notice='';this.latestTurnText='';this.deleteConfirm=false;this.mergeOther='';this.accumulatedCgs.clear();this.persistentGalleries=Object.create(null);this.renderRoster();this.renderDetail();
+    this.handlers.onCancelDNA?.();this.chatId=chatId;this.sceneActionTools=null;this.sceneActionForName=null;this.discoveredIds.clear();this.swipeCharacterCache.clear();this.lastRenderedSwipeKey=null;this.turnRpgCompanions.clear();this.activeSubTab='dna';this.library=Object.create(null);this.dirty.clear();this.saving.clear();this.savedLibrary=Object.create(null);this.loreMap=Object.create(null);this.deleted={};this.revision=0;this.activeCharacterId=null;this.proposal=null;this.pending=false;this.notice='';this.latestTurnText='';this.deleteConfirm=false;this.mergeOther='';this.accumulatedCgs.clear();this.persistentGalleries=Object.create(null);this.renderRoster();this.renderDetail();
   }
   getContext():string|null{return this.chatId;}
   setGalleries(galleries?: Record<string, Array<{ imageUrl: string; imageId?: string; caption?: string; messageId?: string }>>): void {
@@ -844,7 +864,7 @@ export class CharacterFolio implements WorkspaceSurface {
     }
     if (currentSwipeKey) this.lastRenderedSwipeKey = currentSwipeKey;
     const cancelledProposal=this.storyCursor!==cursorKey&&(this.pending||Boolean(this.proposal));
-    if(this.storyCursor!==cursorKey){if(cancelledProposal)this.cancelProposal();this.storyCursor=cursorKey;}
+    if(this.storyCursor!==cursorKey){if(cancelledProposal)this.cancelProposal();this.storyCursor=cursorKey;this.sceneActionTools=null;this.sceneActionForName=null;}
     const before = JSON.stringify([this.loreMap,Object.keys(this.library)]);
     this.loreMap = Object.create(null);
     const cursor = turn && Number.isInteger(paragraphIndex) ? Math.min(paragraphIndex,turn.paragraphs.length-1) : -1;
@@ -1335,6 +1355,19 @@ export class CharacterFolio implements WorkspaceSurface {
     heroAliases.append(aliasHeader, aliasInput);
     heroCard.append(heroTop, heroAliases, heroActions);
     this.detailContainer.append(heroCard);
+    const resolvedActionTools = this.sceneActionResolver?.(char.name)
+      ?? (this.sceneActionTools && (!this.sceneActionForName || areNamesEquivalent(this.sceneActionForName, char.name)) ? this.sceneActionTools : null);
+    if (lore?.inScene === true && resolvedActionTools && resolvedActionTools.drafts.length > 0) {
+      const actionWrap = document.createElement('div');
+      actionWrap.setAttribute('data-folio-scene-actions', '');
+      actionWrap.append(new InteractionTray(resolvedActionTools.drafts, resolvedActionTools.current, (draft, mode) => {
+        if (!resolvedActionTools.apply(draft, mode)) return false;
+        this.handlers.onClose?.();
+        resolvedActionTools.focus();
+        return true;
+      }).host);
+      this.detailContainer.append(actionWrap);
+    }
     this.renderWorkflow(char);
 
     // 2. STICKY SUB-TABS SELECTOR
@@ -1929,13 +1962,6 @@ export class CharacterFolio implements WorkspaceSurface {
       affNum.value = String(bond.affinity);
       affNum.setAttribute('data-bond-affinity', '');
       affNum.setAttribute('aria-label', `Affinity with ${bond.targetName}`);
-      affRange.oninput = () => { affNum.value = affRange.value; };
-      affNum.oninput = () => {
-        const clamped = Math.max(-100, Math.min(100, Math.round(Number(affNum.value) || 0)));
-        affRange.value = String(clamped);
-      };
-      affRow.append(affRange, affNum);
-      affField.append(affLabel, affRow);
 
       // Trust slider + number
       const trustField = document.createElement('div');
@@ -1957,16 +1983,6 @@ export class CharacterFolio implements WorkspaceSurface {
       trustNum.value = String(bond.trust);
       trustNum.setAttribute('data-bond-trust', '');
       trustNum.setAttribute('aria-label', `Trust with ${bond.targetName}`);
-      trustRange.oninput = () => { trustNum.value = trustRange.value; };
-      trustNum.oninput = () => {
-        const clamped = Math.max(-100, Math.min(100, Math.round(Number(trustNum.value) || 0)));
-        trustRange.value = String(clamped);
-      };
-      trustRow.append(trustRange, trustNum);
-      trustField.append(trustLabel, trustRow);
-
-      meterGrid.append(affField, trustField);
-      card.append(meterGrid);
 
       // Dynamic Label & Status
       const textGrid = document.createElement('div');
@@ -1999,6 +2015,63 @@ export class CharacterFolio implements WorkspaceSurface {
       statusInput.setAttribute('data-bond-status', '');
       statusInput.setAttribute('aria-label', `Status with ${bond.targetName}`);
       statusField.append(statusLabel, statusInput);
+
+      const markBondDraftDirty = () => {
+        const nextAff = Math.max(-100, Math.min(100, Math.round(Number(affNum.value) || 0)));
+        const nextTrust = Math.max(-100, Math.min(100, Math.round(Number(trustNum.value) || 0)));
+        const nextDyn = dynInput.value.trim().slice(0, 160);
+        const nextStatus = statusInput.value.trim().slice(0, 300);
+        const nextRels = structuredClone(char.relationships ?? []);
+        const idx = nextRels.findIndex(
+          (r) => r.targetName.trim().toLowerCase() === bond.targetName.trim().toLowerCase(),
+        );
+        const draftBond: CharacterRelationship = {
+          targetName: bond.targetName.trim().slice(0, 120),
+          affinity: nextAff,
+          trust: nextTrust,
+          dynamicLabel: nextDyn,
+          status: nextStatus,
+          recentBeats: structuredClone(bond.recentBeats ?? []),
+          lastUpdated: Date.now(),
+        };
+        if (idx >= 0) nextRels[idx] = draftBond;
+        else nextRels.push(draftBond);
+        char.relationships = nextRels.slice(0, 40);
+        char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+        this.dirty.add(char.id);
+        const save = this.element.querySelector<HTMLButtonElement>('[data-dna-save]');
+        if (save) save.disabled = this.saving.has(char.id);
+        const sw = this.element.querySelector<HTMLElement>('[data-folio-sticky-save]');
+        if (sw) sw.hidden = false;
+        const sb = this.element.querySelector<HTMLButtonElement>('[data-dna-sticky-save]');
+        if (sb) sb.disabled = this.saving.has(char.id);
+        const state = this.element.querySelector('[data-dna-save-state]');
+        if (state) state.textContent = 'Unsaved changes — Save changes to use in pictures';
+      };
+
+      affRange.oninput = () => { affNum.value = affRange.value; markBondDraftDirty(); };
+      affNum.oninput = () => {
+        const clamped = Math.max(-100, Math.min(100, Math.round(Number(affNum.value) || 0)));
+        affRange.value = String(clamped);
+        markBondDraftDirty();
+      };
+      affRow.append(affRange, affNum);
+      affField.append(affLabel, affRow);
+
+      trustRange.oninput = () => { trustNum.value = trustRange.value; markBondDraftDirty(); };
+      trustNum.oninput = () => {
+        const clamped = Math.max(-100, Math.min(100, Math.round(Number(trustNum.value) || 0)));
+        trustRange.value = String(clamped);
+        markBondDraftDirty();
+      };
+      trustRow.append(trustRange, trustNum);
+      trustField.append(trustLabel, trustRow);
+
+      dynInput.oninput = () => markBondDraftDirty();
+      statusInput.oninput = () => markBondDraftDirty();
+
+      meterGrid.append(affField, trustField);
+      card.append(meterGrid);
 
       textGrid.append(dynField, statusField);
       card.append(textGrid);

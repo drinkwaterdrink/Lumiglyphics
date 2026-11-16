@@ -1409,10 +1409,6 @@ export const VN_EFFECTS_CSS = `
   transition: none !important;
 }
 
-[data-vn-effect-intensity="off"] [data-vn-scene-image],
-[data-vn-root][data-vn-effect-intensity="off"] [data-vn-scene-image] {
-  filter: none !important;
-}
 
 @media (prefers-reduced-motion: reduce) {
   /* Suppress camera motion, shakes, punches, tilts, and rapid particle motion */
@@ -1427,7 +1423,9 @@ export const VN_EFFECTS_CSS = `
   [data-vn-zoom="punch"],
   [data-vn-tilt],
   .vn-blur-pulse,
-  [data-vn-blur] {
+  [data-vn-blur],
+  [data-vn-scene].vn-glitch,
+  [data-vn-scene][data-vn-glitch="true"] {
     animation: none !important;
     transform: none !important;
     filter: none !important;
@@ -1446,6 +1444,12 @@ export const VN_EFFECTS_CSS = `
   [data-vn-ambient]::before,
   [data-vn-ambient]::after,
   [data-vn-fx] *,
+  .vn-fx-slash,
+  .vn-fx-shockwave,
+  .vn-fx-lens-flare,
+  .vn-fx-shatter,
+  .vn-fx-glitch,
+  .vn-cinema-bar,
   .vn-rain-bg, .vn-rain-mg, .vn-rain-fg,
   .vn-heavy-rain-bg, .vn-heavy-rain-mg, .vn-heavy-rain-fg,
   .vn-snow-bg, .vn-snow-mg, .vn-snow-fg,
@@ -1491,6 +1495,12 @@ export const VN_EFFECTS_CSS = `
 [data-vn-fx][data-vn-effect="hearts_burst"] { --vn-fx-still: 950ms; }
 [data-vn-fx][data-vn-effect="confetti"] { --vn-fx-still: 1200ms; }
 [data-vn-fx][data-vn-effect="lightning"] { --vn-fx-still: 550ms; }
+[data-vn-fx][data-vn-effect="slash_arc"] { --vn-fx-still: 480ms; }
+[data-vn-fx][data-vn-effect="shockwave"] { --vn-fx-still: 620ms; }
+[data-vn-fx][data-vn-effect="lens_flare"] { --vn-fx-still: 860ms; }
+[data-vn-fx][data-vn-effect="shatter"] { --vn-fx-still: 640ms; }
+[data-vn-fx][data-vn-effect="glitch"] { --vn-fx-still: 350ms; }
+[data-vn-fx][data-vn-effect="cinema_bars"] { --vn-fx-still: 450ms; }
 
 @keyframes vn-fx-still-fade {
   0% { opacity: 0; }
@@ -1768,10 +1778,10 @@ export const VN_EFFECTS_CSS = `
 /* -------------------------------------------------------------------------- */
 
 @keyframes vn-sand-blow {
-  0% { transform: translate3d(-14vw, 0, 0) scaleX(0.9); opacity: 0; }
+  0% { transform: translate3d(-14cqw, 0, 0) scaleX(0.9); opacity: 0; }
   18% { opacity: var(--o, 0.65); }
   85% { opacity: var(--o, 0.65); }
-  100% { transform: translate3d(118vw, 6vh, 0) scaleX(1.3); opacity: 0; }
+  100% { transform: translate3d(118cqw, 6cqh, 0) scaleX(1.3); opacity: 0; }
 }
 .vn-sandstorm-haze {
   position: absolute;

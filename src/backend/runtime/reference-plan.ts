@@ -4,6 +4,13 @@ import {
   type ReferenceRole,
   createReferencePlan
 } from '../../shared/reference-plan.js';
+import {
+  estimateBase64Bytes,
+  MAX_SAFE_REFERENCE_BYTES,
+  NANO_GPT_PAYLOAD_LIMIT_BYTES,
+  enforceReferencePayloadBudget,
+  type CompressDataUrlFn,
+} from '../../shared/image-payload-sanitizer.js';
 import type { VisualBrief } from '../../shared/image-templates.js';
 import type { VisualCue } from '../../shared/contracts.js';
 import type { StoredPortrait } from './storage.js';
@@ -13,42 +20,52 @@ import type { CharacterDNA, CharacterDNALibrary } from '../../shared/character-d
 
 export * from '../../shared/reference-plan.js';
 
+export const MAX_ATTACHED_REFS = 3;
+
 export interface ResolveReferencePlanOptions {
   brief?: VisualBrief | undefined;
   cue?: VisualCue | undefined;
   portraits?: Record<string, StoredPortrait | undefined> | undefined;
-  referenceImages?: Array<{ data: string; mimeType?: string; label?: string; role?: ReferenceRole }> | undefined;
+  referenceImages?: Array<{ data: string; mimeType?: string; label?: string; role?: ReferenceRole; subject?: string }> | undefined;
   characterDNALibrary?: CharacterDNALibrary | Record<string, CharacterDNA> | undefined;
+  maxRefs?: number | undefined;
+  maxPerRefBytes?: number | undefined;
+  maxTotalBytes?: number | undefined;
+  compressDataUrl?: CompressDataUrlFn | undefined;
 }
 
-/**
- * Resolves an explicit ReferencePlan for the scene.
- * Only includes references that are genuinely attached.
- * Never writes "use the reference image" when no image is being supplied.
- * Supports multiple references (primary face identity + secondary outfit / attire) and nickname matching.
- */
-export function resolveReferencePlan(options: ResolveReferencePlanOptions): ReferencePlan {
-  const references: ReferenceItem[] = [];
+function hydrateDataUrl(raw?: string | null, mimeType = 'image/png'): string | undefined {
+  const clean = raw?.trim();
+  if (!clean) return undefined;
+  return clean.startsWith('data:') ? clean : `data:${mimeType};base64,${clean}`;
+}
 
-  // 1. Explicit reference images passed directly
+function gatherReferenceCandidates(options: ResolveReferencePlanOptions): Array<ReferenceItem & { priority: number }> {
+  const candidates: Array<ReferenceItem & { priority: number }> = [];
+
   if (options.referenceImages && options.referenceImages.length > 0) {
     for (let i = 0; i < options.referenceImages.length; i++) {
       const item = options.referenceImages[i]!;
-      references.push({
+      const mimeType = item.mimeType ?? 'image/png';
+      const dataUrl = hydrateDataUrl(item.data, mimeType);
+      if (!dataUrl) continue;
+      candidates.push({
         imageId: `ref-${i + 1}`,
         role: item.role ?? 'identity',
+        ...(item.subject ? { subject: item.subject } : {}),
         label: item.label ?? `Reference Image ${i + 1}`,
-        mimeType: item.mimeType ?? 'image/png'
+        dataUrl,
+        mimeType,
+        priority: item.role === 'identity' ? 1 : item.role === 'clothing' ? 2 : 3,
       });
     }
-    return createReferencePlan(references);
+    return candidates;
   }
 
   const chars = options.characterDNALibrary
     ? (('characters' in options.characterDNALibrary ? options.characterDNALibrary.characters : options.characterDNALibrary) as Record<string, CharacterDNA>)
     : undefined;
 
-  // Helper to find a stored portrait by character name, with nickname equivalence
   const findPortraitFor = (name: string): StoredPortrait | undefined => {
     if (!options.portraits || !name) return undefined;
     const normalized = normalizeCharacterName(name);
@@ -60,90 +77,143 @@ export function resolveReferencePlan(options: ResolveReferencePlanOptions): Refe
     })?.[1];
   };
 
-  // 2. Character portrait reference from cue/brief (Primary character)
   if (options.cue) {
     const characterName = options.cue.character || options.brief?.subjectPreparation?.name;
     if (characterName) {
       const normalized = normalizeCharacterName(characterName);
 
-      // Check Character DNA for explicitly selected references
       if (chars) {
         const matchId = findMatchingCharacterId(chars, characterName);
         const dna = matchId ? chars[matchId] : undefined;
-        if (dna?.referenceImageUrl) {
-          references.push({
+        const primaryUrl = hydrateDataUrl(dna?.referenceImageUrl);
+        if (dna && primaryUrl) {
+          candidates.push({
             imageId: dna.referenceImageId || `ref-${dna.id}-identity`,
             role: 'identity',
             subject: dna.name,
             label: `${dna.name} primary face reference`,
-            dataUrl: dna.referenceImageUrl,
-            mimeType: 'image/png'
+            dataUrl: primaryUrl,
+            mimeType: 'image/png',
+            priority: 1,
           });
         }
-        if (dna?.secondaryReferenceImageUrl) {
-          references.push({
+        const secondaryUrl = hydrateDataUrl(dna?.secondaryReferenceImageUrl);
+        if (dna && secondaryUrl) {
+          candidates.push({
             imageId: dna.secondaryReferenceImageId || `ref-${dna.id}-attire`,
             role: 'clothing',
             subject: dna.name,
             label: `${dna.name} outfit reference`,
-            dataUrl: dna.secondaryReferenceImageUrl,
-            mimeType: 'image/png'
+            dataUrl: secondaryUrl,
+            mimeType: 'image/png',
+            priority: 2,
           });
         }
       }
 
-      // Check for matching stored portrait if primary reference wasn't already added
-      if (!references.some(r => r.subject && areNamesEquivalent(r.subject, characterName) && r.role === 'identity')) {
+      if (!candidates.some(r => r.subject && areNamesEquivalent(r.subject, characterName) && r.role === 'identity')) {
         const portrait = findPortraitFor(characterName);
-        if (portrait && portrait.data) {
-          references.push({
+        const portraitUrl = hydrateDataUrl(portrait?.data, portrait?.mimeType ?? 'image/png');
+        if (portrait && portraitUrl) {
+          candidates.push({
             imageId: `portrait-${normalized || 'main'}`,
             role: 'identity',
             subject: characterName,
             label: `${characterName} character portrait`,
-            mimeType: portrait.mimeType ?? 'image/png'
+            dataUrl: portraitUrl,
+            mimeType: portrait.mimeType ?? 'image/png',
+            priority: 1,
           });
         }
       }
     }
 
-    // 3. Ensemble / Cast member references
     if (options.cue.ensembleSubjects && options.cue.ensembleSubjects.length > 0) {
       for (const member of options.cue.ensembleSubjects) {
-        if (!member.name || references.some(r => r.subject && areNamesEquivalent(r.subject, member.name))) continue;
-        if (references.length >= 8) break; // Keep within model reference ceiling
+        if (!member.name || candidates.some(r => r.subject && areNamesEquivalent(r.subject, member.name))) continue;
 
-        // Check DNA first
         if (chars) {
           const matchId = findMatchingCharacterId(chars, member.name);
           const dna = matchId ? chars[matchId] : undefined;
-          if (dna?.referenceImageUrl) {
-            references.push({
+          const memberUrl = hydrateDataUrl(dna?.referenceImageUrl);
+          if (dna && memberUrl) {
+            candidates.push({
               imageId: dna.referenceImageId || `ref-${dna.id}-identity`,
               role: 'identity',
               subject: dna.name,
               label: `${dna.name} character reference`,
-              dataUrl: dna.referenceImageUrl,
-              mimeType: 'image/png'
+              dataUrl: memberUrl,
+              mimeType: 'image/png',
+              priority: 2,
             });
             continue;
           }
         }
 
-        // Check stored portraits
         const memberPortrait = findPortraitFor(member.name);
-        if (memberPortrait && memberPortrait.data) {
-          references.push({
+        const memberUrl = hydrateDataUrl(memberPortrait?.data, memberPortrait?.mimeType ?? 'image/png');
+        if (memberPortrait && memberUrl) {
+          candidates.push({
             imageId: `portrait-${normalizeCharacterName(member.name) || 'member'}`,
             role: 'identity',
             subject: member.name,
             label: `${member.name} character portrait`,
-            mimeType: memberPortrait.mimeType ?? 'image/png'
+            dataUrl: memberUrl,
+            mimeType: memberPortrait.mimeType ?? 'image/png',
+            priority: 2,
           });
         }
       }
     }
   }
 
-  return createReferencePlan(references);
+  return candidates;
+}
+
+function finalizeAttachedRefs(items: ReadonlyArray<ReferenceItem & { byteSize?: number }>, maxRefs = MAX_ATTACHED_REFS): ReferencePlan {
+  const capped = items.slice(0, Math.max(1, Math.min(MAX_ATTACHED_REFS, maxRefs))).map((item, idx) => ({
+    ...item,
+    wireIndex: idx + 1,
+    ...(item.byteSize !== undefined ? { byteSize: item.byteSize } : {}),
+  }));
+  return createReferencePlan(capped);
+}
+
+/**
+ * Resolves a bounded, wire-indexed ReferencePlan synchronously (<= 3 refs, <= 1.5MB/ref, < 10MB cumulative).
+ * Only attaches refs with hydrated pixel payloads (`dataUrl`) and assigns 1-based `wireIndex`.
+ */
+export function resolveReferencePlan(options: ResolveReferencePlanOptions): ReferencePlan {
+  const maxPerRef = options.maxPerRefBytes ?? MAX_SAFE_REFERENCE_BYTES;
+  const maxTotal = options.maxTotalBytes ?? NANO_GPT_PAYLOAD_LIMIT_BYTES;
+  const maxRefs = options.maxRefs ?? MAX_ATTACHED_REFS;
+  const ordered = gatherReferenceCandidates(options).sort((a, b) => a.priority - b.priority);
+  const kept: Array<ReferenceItem & { byteSize: number }> = [];
+  let totalBytes = 0;
+  for (const candidate of ordered) {
+    if (!candidate.dataUrl) continue;
+    const byteSize = estimateBase64Bytes(candidate.dataUrl);
+    if (byteSize <= 0 || byteSize > maxPerRef) continue;
+    if (totalBytes + byteSize >= maxTotal) continue;
+    totalBytes += byteSize;
+    const { priority: _p, ...rest } = candidate;
+    kept.push({ ...rest, byteSize });
+    if (kept.length >= maxRefs) break;
+  }
+  return finalizeAttachedRefs(kept, maxRefs);
+}
+
+/**
+ * Async variant that invokes an image compressor on oversized references before enforcing the 10MB budget and <= 3 ref cap.
+ */
+export async function resolveReferencePlanBudgeted(options: ResolveReferencePlanOptions): Promise<ReferencePlan> {
+  const candidates = gatherReferenceCandidates(options);
+  const accepted = await enforceReferencePayloadBudget(
+    candidates,
+    options.compressDataUrl,
+    options.maxPerRefBytes ?? MAX_SAFE_REFERENCE_BYTES,
+    options.maxTotalBytes ?? NANO_GPT_PAYLOAD_LIMIT_BYTES,
+  );
+  const cleaned = accepted.map(({ priority: _p, ...rest }) => rest);
+  return finalizeAttachedRefs(cleaned, options.maxRefs ?? MAX_ATTACHED_REFS);
 }

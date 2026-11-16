@@ -688,3 +688,16 @@ test('Living-tableau ensemble staging uses shotHint.spatialRelationships and dep
   const boxK = boxes.find(b => b.label.includes('kallirrhoe'))!;
   expect(boxM.box.y_max).toBeGreaterThan(boxK.box.y_max);
 });
+
+test('Manual focalPoint reticle overrides subject horizontal placement and records crop framing cue', () => {
+  const brief = createMockBrief({ subjectMode: 'one', subjects: 'Laura', action: 'standing by the window' });
+  const spec = resolveShotSpec({
+    brief,
+    outputPlan: { requestedRatio: '9:16', actualRatio: '9:16', orientation: 'portrait' },
+    cue: { cueId: 'c1', paragraphIndex: 0, sceneId: 's1', sceneRevision: 0, kind: 'portrait', character: 'Laura', assetJobId: 'j1', promptDelta: 'portrait' },
+    manualOverrides: { focalPoint: { x: 24, y: 28 } }
+  });
+  expect(spec.source).toBe('manual');
+  expect(spec.composition.subjectPlacements[0]?.horizontal).toBe('left');
+  expect(spec.crop).toContain('upper left focal framing (24%, 28%)');
+});

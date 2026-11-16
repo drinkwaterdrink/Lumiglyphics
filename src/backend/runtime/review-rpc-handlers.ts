@@ -31,6 +31,9 @@ export async function handleImageReviewRpc(request:ImageReviewRpcRequest,context
       if (!open || !turn || turn.assistantMessageId !== request.messageId || turn.sourceFingerprint !== request.sourceFingerprint) throw new Error("This review belongs to an older or closed turn.");
       if (!(await gate?.reprepare(request.requestId, request.templateId, {
         reframe: request.reframe,
+        relight: request.relight,
+        lockContinuity: request.lockContinuity,
+        manualLighting: request.manualLighting,
         styleId: request.styleId,
         fitToModel: request.fitToModel,
         model: request.model,

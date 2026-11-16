@@ -1,8 +1,13 @@
 function stripReasoningBlocks(text: string): string {
   // 1. Strip all closed reasoning / thinking tags (think, thought, thinking, reasoning, reflection, plan)
   let cleaned = text.replace(/<(?:think|thought|thinking|reasoning|reflection|plan)\b[\s\S]*?<\/(?:think|thought|thinking|reasoning|reflection|plan)>/gi, "");
-  // 2. Strip unclosed leading reasoning tags if cut off before closing tag
-  cleaned = cleaned.replace(/^\s*<(?:think|thought|thinking|reasoning|reflection|plan)\b[\s\S]*?(?=```|\{)/gi, "");
+  // 2. Strip unclosed leading reasoning tags if cut off before closing tag (prefer fenced JSON over scratchpad braces)
+  if (/^\s*<(?:think|thought|thinking|reasoning|reflection|plan)\b/i.test(cleaned)) {
+    const afterFence = cleaned.replace(/^\s*<(?:think|thought|thinking|reasoning|reflection|plan)\b[\s\S]*?(?=```(?:json)?\s*[\{\[])/i, "");
+    cleaned = afterFence !== cleaned
+      ? afterFence
+      : cleaned.replace(/^\s*<(?:think|thought|thinking|reasoning|reflection|plan)\b[\s\S]*?(?=```|\{)/i, "");
+  }
   return cleaned.trim();
 }
 
@@ -254,6 +259,21 @@ export function jsonObject(content: unknown, trace?: JsonParseTrace): unknown {
     if (parsed && typeof parsed === "object") {
       if (trace) trace.extract = "brace-span";
       return parsed;
+    }
+    // 5b. Skip stray scratchpad '{' tokens (e.g. from unclosed reasoning preambles)
+    let scanFrom = start + 1;
+    let attempts = 0;
+    while (scanFrom >= 0 && scanFrom < stripped.length && attempts < 24) {
+      const nextBrace = stripped.indexOf("{", scanFrom);
+      if (nextBrace < 0 || (end >= 0 && nextBrace >= end)) break;
+      attempts++;
+      const retryCandidate = end > nextBrace ? stripped.slice(nextBrace, end + 1) : stripped.slice(nextBrace);
+      const retryParsed = tryParseJson(retryCandidate, trace);
+      if (retryParsed && typeof retryParsed === "object") {
+        if (trace) trace.extract = "brace-span-retry";
+        return retryParsed;
+      }
+      scanFrom = nextBrace + 1;
     }
   }
 

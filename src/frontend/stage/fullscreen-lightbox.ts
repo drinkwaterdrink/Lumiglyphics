@@ -2,12 +2,18 @@
  * Edge-to-edge Fullscreen Image Lightbox for History & Artwork Review Studio.
  */
 
-export interface LightboxOptions {
+export interface LightboxGalleryItem {
   src: string;
   title?: string | undefined;
   subtitle?: string | undefined;
   prompt?: string | undefined;
   negativePrompt?: string | undefined;
+}
+
+export interface LightboxOptions extends LightboxGalleryItem {
+  gallery?: readonly LightboxGalleryItem[] | undefined;
+  galleryIndex?: number | undefined;
+  themeSource?: HTMLElement | undefined;
 }
 
 const LIGHTBOX_CSS = `
@@ -17,11 +23,13 @@ const LIGHTBOX_CSS = `
   z-index: 999999;
   display: none;
   flex-direction: column;
-  background: rgba(4, 8, 12, 0.94);
+  background: color-mix(in srgb, var(--vn-shell-panel, #04080c) 94%, #000);
+  color: var(--vn-shell-text, #f4f6fb);
+  font-family: var(--vn-shell-family, system-ui);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   user-select: none;
-  touch-action: pan-y;
+  touch-action: none;
 }
 .vn-lightbox-backdrop.open {
   display: flex !important;
@@ -80,13 +88,14 @@ const LIGHTBOX_CSS = `
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 40px;
-  height: 40px;
-  padding: 0 12px;
+  min-width: 44px;
+  min-height: 44px;
+  height: 44px;
+  padding: 0 14px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.25));
+  background: var(--vn-shell-button, rgba(255, 255, 255, 0.12));
+  color: var(--vn-shell-text, #fff);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -95,13 +104,13 @@ const LIGHTBOX_CSS = `
   -webkit-tap-highlight-color: transparent;
 }
 .vn-lightbox-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
-  border-color: rgba(255, 255, 255, 0.45);
+  background: color-mix(in srgb, var(--vn-shell-accent, #9ec6f0) 20%, var(--vn-shell-button, rgba(255, 255, 255, 0.25)));
+  border-color: var(--vn-shell-accent, rgba(255, 255, 255, 0.45));
 }
 .vn-lightbox-btn.active {
-  background: #7c9cff;
-  border-color: #7c9cff;
-  color: #0d121f;
+  background: var(--vn-shell-accent, #7c9cff);
+  border-color: var(--vn-shell-accent, #7c9cff);
+  color: var(--vn-shell-accent-contrast, #0d121f);
 }
 .vn-lightbox-close {
   min-width: 44px;
@@ -125,22 +134,69 @@ const LIGHTBOX_CSS = `
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
   padding: 68px 16px 24px;
   cursor: zoom-in;
+  touch-action: none;
 }
 .vn-lightbox-viewport.zoomed {
   cursor: grab;
 }
+.vn-lightbox-viewport.zoomed:active {
+  cursor: grabbing;
+}
 .vn-lightbox-img {
   max-width: 95vw;
-  max-height: 85vh;
+  max-height: 82vh;
   object-fit: contain;
   border-radius: 6px;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
-  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
   transform-origin: center center;
+  will-change: transform;
+}
+.vn-lightbox-rail {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 16px max(12px, env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--vn-shell-panel, #080c12) 88%, #000);
+  border-top: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.14));
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.vn-lightbox-rail::-webkit-scrollbar {
+  display: none;
+}
+.vn-lightbox-rail[hidden] {
+  display: none !important;
+}
+.vn-lightbox-rail-item {
+  flex: 0 0 auto;
+  min-width: 48px;
+  min-height: 48px;
+  width: 56px;
+  height: 56px;
+  padding: 2px;
+  border-radius: 8px;
+  border: 2px solid var(--vn-shell-border, rgba(255, 255, 255, 0.2));
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+}
+.vn-lightbox-rail-item[aria-current="true"] {
+  border-color: var(--vn-shell-accent, #9ec6f0);
+  box-shadow: 0 0 0 1px var(--vn-shell-accent, #9ec6f0);
+}
+.vn-lightbox-rail-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 5px;
+  display: block;
 }
 .vn-lightbox-info-drawer {
   position: absolute;
@@ -150,9 +206,9 @@ const LIGHTBOX_CSS = `
   max-height: 40vh;
   overflow-y: auto;
   padding: 16px 20px max(16px, env(safe-area-inset-bottom));
-  background: rgba(10, 16, 24, 0.95);
-  border-top: 1px solid rgba(255, 255, 255, 0.14);
-  color: #e0e5ed;
+  background: color-mix(in srgb, var(--vn-shell-panel, #0a1018) 96%, #000);
+  border-top: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.14));
+  color: var(--vn-shell-text, #e0e5ed);
   font-size: 13px;
   line-height: 1.5;
   backdrop-filter: blur(20px);
@@ -180,11 +236,21 @@ export class FullscreenLightbox {
   private titleEl: HTMLElement;
   private subtitleEl: HTMLElement;
   private infoDrawer: HTMLElement;
+  private railEl: HTMLElement;
   private zoomLevel = 1;
+  private panX = 0;
+  private panY = 0;
   private infoOpen = false;
   private currentOptions: LightboxOptions | null = null;
+  private galleryItems: readonly LightboxGalleryItem[] = [];
+  private galleryIndex = 0;
   private touchStartY = 0;
   private touchStartX = 0;
+  private panStartX = 0;
+  private panStartY = 0;
+  private isPanning = false;
+  private pinchStartDist = 0;
+  private pinchStartZoom = 1;
 
   constructor() {
     this.backdrop = document.createElement("div");
@@ -212,6 +278,7 @@ export class FullscreenLightbox {
       <div class="vn-lightbox-viewport" data-viewport>
         <img class="vn-lightbox-img" alt="Fullscreen image" />
       </div>
+      <div class="vn-lightbox-rail" hidden data-rail aria-label="Gallery navigation"></div>
       <div class="vn-lightbox-info-drawer" hidden data-drawer></div>
     `;
 
@@ -220,6 +287,7 @@ export class FullscreenLightbox {
     this.titleEl = this.backdrop.querySelector(".vn-lightbox-title")!;
     this.subtitleEl = this.backdrop.querySelector(".vn-lightbox-subtitle")!;
     this.img = this.backdrop.querySelector(".vn-lightbox-img")!;
+    this.railEl = this.backdrop.querySelector("[data-rail]")!;
     this.infoDrawer = this.backdrop.querySelector("[data-drawer]")!;
 
     this.wireEvents();
@@ -239,9 +307,15 @@ export class FullscreenLightbox {
       e.stopPropagation();
       this.close();
     } else if (e.key === "+" || e.key === "=") {
-      this.setZoom(Math.min(3, this.zoomLevel + 0.5));
+      this.setZoom(Math.min(4, this.zoomLevel + 0.5));
     } else if (e.key === "-") {
       this.setZoom(Math.max(1, this.zoomLevel - 0.5));
+    } else if (e.key === "ArrowRight" && this.galleryItems.length > 1) {
+      e.preventDefault();
+      this.selectGalleryItem((this.galleryIndex + 1) % this.galleryItems.length);
+    } else if (e.key === "ArrowLeft" && this.galleryItems.length > 1) {
+      e.preventDefault();
+      this.selectGalleryItem((this.galleryIndex - 1 + this.galleryItems.length) % this.galleryItems.length);
     }
   };
 
@@ -257,7 +331,12 @@ export class FullscreenLightbox {
       this.close();
     });
 
+    let suppressNextClick = false;
     viewport.addEventListener("click", (e) => {
+      if (suppressNextClick) {
+        suppressNextClick = false;
+        return;
+      }
       if (e.target === viewport) {
         this.close();
       } else if (e.target === this.img) {
@@ -281,40 +360,83 @@ export class FullscreenLightbox {
       this.toggleInfo();
     });
 
-    // Touch gesture: swipe down to dismiss
-    this.backdrop.addEventListener("touchstart", (e) => {
-      if (e.touches.length === 1) {
+    const touchDist = (t: TouchList) =>
+      Math.hypot(t[0]!.clientX - t[1]!.clientX, t[0]!.clientY - t[1]!.clientY);
+
+    viewport.addEventListener("touchstart", (e) => {
+      if (e.touches.length === 2) {
+        this.isPanning = false;
+        this.pinchStartDist = touchDist(e.touches);
+        this.pinchStartZoom = this.zoomLevel;
+      } else if (e.touches.length === 1) {
+        this.pinchStartDist = 0;
         this.touchStartY = e.touches[0]!.clientY;
         this.touchStartX = e.touches[0]!.clientX;
+        if (this.zoomLevel > 1) {
+          this.isPanning = true;
+          this.panStartX = this.panX;
+          this.panStartY = this.panY;
+        }
       }
     }, { passive: true });
 
-    this.backdrop.addEventListener("touchend", (e) => {
+    viewport.addEventListener("touchmove", (e) => {
+      if (e.touches.length === 2 && this.pinchStartDist > 0) {
+        const nextZoom = Math.min(4, Math.max(1, this.pinchStartZoom * (touchDist(e.touches) / this.pinchStartDist)));
+        this.setZoom(nextZoom);
+      } else if (e.touches.length === 1 && this.isPanning && this.zoomLevel > 1) {
+        const dx = e.touches[0]!.clientX - this.touchStartX;
+        const dy = e.touches[0]!.clientY - this.touchStartY;
+        if (Math.hypot(dx, dy) > 6) suppressNextClick = true;
+        this.panX = this.panStartX + dx;
+        this.panY = this.panStartY + dy;
+        this.applyTransform();
+      }
+    }, { passive: true });
+
+    viewport.addEventListener("touchend", (e) => {
+      if (e.touches.length < 2) this.pinchStartDist = 0;
+      if (e.touches.length === 0) this.isPanning = false;
       if (e.changedTouches.length === 1 && this.zoomLevel === 1) {
         const deltaY = e.changedTouches[0]!.clientY - this.touchStartY;
-        const deltaX = Math.abs(e.changedTouches[0]!.clientX - this.touchStartX);
-        if (deltaY > 70 && deltaX < 120) {
+        const deltaX = e.changedTouches[0]!.clientX - this.touchStartX;
+        if (deltaY > 70 && Math.abs(deltaY) > Math.abs(deltaX) * 1.4) {
           this.close();
+          return;
+        }
+        if (this.galleryItems.length > 1 && Math.abs(deltaX) > 60 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+          suppressNextClick = true;
+          const nextIdx = deltaX < 0
+            ? (this.galleryIndex + 1) % this.galleryItems.length
+            : (this.galleryIndex - 1 + this.galleryItems.length) % this.galleryItems.length;
+          this.selectGalleryItem(nextIdx);
         }
       }
     }, { passive: true });
   }
 
+  private applyTransform(): void {
+    if (this.zoomLevel > 1) {
+      this.img.style.transform = `translate3d(${this.panX}px, ${this.panY}px, 0) scale(${this.zoomLevel})`;
+    } else {
+      this.img.style.transform = "translate3d(0, 0, 0) scale(1)";
+    }
+  }
+
   private setZoom(level: number): void {
     this.zoomLevel = level;
+    if (level <= 1) {
+      this.panX = 0;
+      this.panY = 0;
+    }
     const viewport = this.backdrop.querySelector("[data-viewport]") as HTMLElement;
     const zoomBtn = this.backdrop.querySelector('[data-action="zoom-toggle"]') as HTMLButtonElement;
 
+    this.applyTransform();
     if (level > 1) {
-      this.img.style.transform = `scale(${level})`;
-      this.img.style.maxWidth = "none";
-      this.img.style.maxHeight = "none";
       viewport.classList.add("zoomed");
       zoomBtn.textContent = `${Math.round(level * 100)}%`;
     } else {
-      this.img.style.transform = "none";
-      this.img.style.maxWidth = "95vw";
-      this.img.style.maxHeight = "85vh";
       viewport.classList.remove("zoomed");
       zoomBtn.textContent = "Fit";
     }
@@ -335,28 +457,95 @@ export class FullscreenLightbox {
     this.infoDrawer.hidden = !this.infoOpen;
   }
 
-  public show(options: LightboxOptions): void {
-    this.currentOptions = options;
-    this.titleEl.textContent = options.title ?? "Story Artwork";
-    this.subtitleEl.textContent = options.subtitle ?? "";
-    this.subtitleEl.hidden = !options.subtitle;
+  private applyThemeTokens(themeSource?: HTMLElement): void {
+    if (typeof getComputedStyle !== "function") return;
+    const source = themeSource ?? document.querySelector<HTMLElement>("[data-vn-root], [data-vn-shell]") ?? document.documentElement;
+    if (!source) return;
+    const style = getComputedStyle(source);
+    const props = [
+      "--vn-shell-bg",
+      "--vn-shell-panel",
+      "--vn-shell-button",
+      "--vn-shell-text",
+      "--vn-shell-muted",
+      "--vn-shell-border",
+      "--vn-shell-accent",
+      "--vn-shell-accent-contrast",
+      "--vn-shell-family",
+    ];
+    for (const prop of props) {
+      const value = style.getPropertyValue(prop).trim();
+      if (value) this.backdrop.style.setProperty(prop, value);
+    }
+  }
 
-    this.img.src = options.src;
+  private renderGalleryRail(): void {
+    if (this.galleryItems.length <= 1) {
+      this.railEl.hidden = true;
+      this.railEl.replaceChildren();
+      return;
+    }
+    this.railEl.hidden = false;
+    this.railEl.replaceChildren(...this.galleryItems.map((item, idx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "vn-lightbox-rail-item";
+      btn.setAttribute("aria-label", item.title || `Image ${idx + 1}`);
+      btn.setAttribute("aria-current", idx === this.galleryIndex ? "true" : "false");
+      const thumb = document.createElement("img");
+      thumb.src = item.src;
+      thumb.alt = "";
+      btn.append(thumb);
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        this.selectGalleryItem(idx);
+      };
+      return btn;
+    }));
+  }
+
+  private selectGalleryItem(index: number): void {
+    const item = this.galleryItems[index];
+    if (!item) return;
+    this.galleryIndex = index;
+    this.presentItem(item);
+    this.renderGalleryRail();
+  }
+
+  private presentItem(item: LightboxGalleryItem): void {
+    this.titleEl.textContent = item.title ?? "Story Artwork";
+    this.subtitleEl.textContent = item.subtitle ?? "";
+    this.subtitleEl.hidden = !item.subtitle;
+
+    this.img.src = item.src;
     this.setZoom(1);
     this.infoOpen = false;
     this.infoDrawer.hidden = true;
 
     let infoHtml = "";
-    if (options.prompt) {
-      infoHtml += `<strong>Positive Prompt:</strong><pre>${this.escapeHtml(options.prompt)}</pre>`;
+    if (item.prompt) {
+      infoHtml += `<strong>Positive Prompt:</strong><pre>${this.escapeHtml(item.prompt)}</pre>`;
     }
-    if (options.negativePrompt) {
-      infoHtml += `<div style="margin-top:10px"><strong>Negative Prompt:</strong><pre>${this.escapeHtml(options.negativePrompt)}</pre></div>`;
+    if (item.negativePrompt) {
+      infoHtml += `<div style="margin-top:10px"><strong>Negative Prompt:</strong><pre>${this.escapeHtml(item.negativePrompt)}</pre></div>`;
     }
     this.infoDrawer.innerHTML = infoHtml || "<p style='margin:0;opacity:0.7'>No recorded prompt metadata.</p>";
 
     const infoBtn = this.backdrop.querySelector('[data-action="info-toggle"]') as HTMLButtonElement;
-    infoBtn.hidden = !options.prompt && !options.negativePrompt;
+    infoBtn.classList.remove("active");
+    infoBtn.hidden = !item.prompt && !item.negativePrompt;
+  }
+
+  public show(options: LightboxOptions): void {
+    this.currentOptions = options;
+    this.applyThemeTokens(options.themeSource);
+    this.galleryItems = options.gallery && options.gallery.length > 0 ? options.gallery : [];
+    const requestedIdx = options.galleryIndex ?? 0;
+    this.galleryIndex = this.galleryItems.length > 0
+      ? Math.min(Math.max(0, requestedIdx), this.galleryItems.length - 1)
+      : 0;
+    this.presentItem(options);
+    this.renderGalleryRail();
 
     if (!this.backdrop.parentNode) {
       document.body.appendChild(this.backdrop);

@@ -2095,7 +2095,10 @@ ${VN_TEXT_EFFECTS_CSS}
 [data-vn-game-move-row] { display:flex; align-items:stretch; gap:.4rem; }
 [data-vn-game-move-row] [data-vn-game-choice] { flex:1; min-width:0; }
 [data-vn-game-provider] { display:block; margin-top:.25rem; font-size:.75em; opacity:.75; }
-[data-vn-edit-game-move] { flex:none; width:44px; min-height:44px; padding:0; color:var(--vn-text); background:var(--vn-button-bg); border:1px solid var(--vn-panel-border); border-radius:.65rem; font-size:1.25rem; cursor:pointer; }
+[data-vn-edit-game-move], [data-vn-game-detail-toggle] { flex:none; width:44px; min-height:44px; padding:0; color:var(--vn-text); background:var(--vn-button-bg); border:1px solid var(--vn-panel-border); border-radius:.65rem; font-size:1.15rem; cursor:pointer; }
+[data-vn-game-detail] { margin:.25rem 0 .45rem; padding:.5rem .75rem; border-radius:.6rem; border:1px solid var(--vn-panel-border); background:var(--vn-panel-bg); color:var(--vn-text); font-size:.84rem; line-height:1.45; }
+[data-vn-game-detail][hidden] { display:none; }
+[data-vn-game-cancel] { width:100%; min-height:44px; padding:.55rem .85rem; margin-bottom:.45rem; border-radius:.65rem; border:1px solid var(--vn-accent); background:color-mix(in srgb, var(--vn-accent) 16%, var(--vn-panel-bg)); color:var(--vn-text); font:inherit; font-weight:600; cursor:pointer; }
 [data-vn-move-draft] { width:var(--vn-composer-width); max-width:100%; padding:.85rem; box-sizing:border-box; border:1px solid var(--vn-panel-border); border-radius:.8rem; color:var(--vn-text); background:var(--vn-panel-bg); }
 [data-vn-move-draft] p { font-size:.85rem; line-height:1.5; }
 [data-vn-move-draft] label { display:block; }
@@ -2136,7 +2139,7 @@ ${VN_TEXT_EFFECTS_CSS}
   [data-vn-root]:not([data-vn-adjustable-sheet="true"]) [data-vn-scene-hud] { top: calc(max(0.75rem, env(safe-area-inset-top)) + 3.4rem); max-width: calc(100% - 1.5rem); }
   [data-vn-hud-pill] { min-height: 1.7rem; font-size: 0.71rem; padding: 0.18rem 0.54rem; }
 }
-[data-vn-scrubber] { display: inline-flex; align-items: center; gap: 0.32rem; flex-wrap: wrap; }
+[data-vn-scrubber] { display: inline-flex; align-items: center; gap: 0.32rem; flex-wrap: wrap; min-height: 44px; touch-action: none; }
 [data-vn-scrub-dot] {
   position: relative;
   width: 0.56rem; height: 0.56rem; min-width: 0; min-height: 0; padding: 0; border-radius: 999px;

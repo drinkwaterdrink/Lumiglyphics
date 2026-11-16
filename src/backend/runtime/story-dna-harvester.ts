@@ -18,6 +18,7 @@ import { loadConfig, loadTurnRecord, turnPath } from './storage.js';
 import { extractSimTracker } from './simtracker.js';
 import { targetDnaPassages } from './character-dna-autofill.js';
 import { resolvePlannerConnection } from './connections.js';
+import { jsonObject } from './planner/json-repair.js';
 import { loadVisualContext } from './context.js';
 
 const MUNDANE_ITEM_WORDS = new Set([
@@ -590,8 +591,7 @@ export async function autofillLocationDNA(
             },
           ],
         });
-        const text = responseText(res).replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
-        const parsed = LocationAutofillOutputSchema.safeParse(JSON.parse(text));
+        const parsed = LocationAutofillOutputSchema.safeParse(jsonObject(responseText(res)));
         if (parsed.success) {
           if (parsed.data.environmentDescription) base.environmentDescription = parsed.data.environmentDescription;
           if (parsed.data.lighting) base.lighting = parsed.data.lighting;
@@ -715,8 +715,7 @@ export async function autofillItemDNA(
             },
           ],
         });
-        const text = responseText(res).replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
-        const parsed = ItemAutofillOutputSchema.safeParse(JSON.parse(text));
+        const parsed = ItemAutofillOutputSchema.safeParse(jsonObject(responseText(res)));
         if (parsed.success) {
           if (parsed.data.itemType) base.itemType = parsed.data.itemType;
           if (parsed.data.description) base.description = parsed.data.description;

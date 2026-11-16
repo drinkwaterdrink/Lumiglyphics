@@ -4,7 +4,8 @@ import {referenceHistoryFor,type ReferenceHistory,type HistoricalReference} from
 import {samePresentationTurn,type ReaderPresentation,type PresentationSnapshot,type PresentationEntity,type EntityFact} from './presentation-entities.js';
 import {presentationTurnKey} from './presentation-selectors.js';
 import {isScenarioTitle} from './card-role.js';
-const OverrideSchema=z.object({chatId:z.string().min(1).max(256),kind:z.enum(['npc','place','object']),name:z.string().min(1).max(256),suppressed:z.boolean().default(false),pinned:z.boolean().default(false),note:z.string().max(600).default('')}).strict();
+const OverrideSchema=z.object({chatId:z.string().min(1).max(256),kind:z.enum(['npc','place','object']),name:z.string().min(1).max(256),suppressed:z.boolean().default(false),pinned:z.boolean().default(false),note:z.string().max(600).default(''),factEdits:z.record(z.string().min(1).max(64),z.string().max(600).nullable()).optional()}).strict();
+export type DossierOverride=z.infer<typeof OverrideSchema>;
 export const TooltipPreferencesSchema=z.object({enabled:z.boolean().default(false),rememberReferences:z.boolean().default(true),actionsEnabled:z.boolean().default(false),categories:z.object({npcs:z.boolean().default(true),locations:z.boolean().default(true),objects:z.boolean().default(true)}).default({npcs:true,locations:true,objects:true}),fieldGroups:z.record(z.string(),z.boolean()).default({}),detail:z.enum(['brief','standard','expanded']).default('brief'),linking:z.enum(['important','all-known','menu-only']).default('important'),maxLinksPerParagraph:z.number().int().min(1).max(6).default(3),maxFactsPerEntity:z.number().int().min(1).max(32).default(8),maxFactChars:z.number().int().min(80).max(1200).default(320),overrides:z.array(OverrideSchema).max(64).default([])});
 export type TooltipPreferences=z.infer<typeof TooltipPreferencesSchema>;
 export function normalizeTooltipPreferences(value:unknown):TooltipPreferences {
@@ -66,6 +67,23 @@ export function linkEntityMentions(text:string,entities:readonly PresentationEnt
  return limit<=0?[]:selected.sort((a,b)=>a.start-b.start);
 }
 export type ReaderDossier={entity:PresentationEntity;facts:EntityFact[];state:Record<string,string>;earlier?:HistoricalReference[]};
+export function applyOverrideFactEdits(dossier:ReaderDossier,override:DossierOverride|undefined):ReaderDossier {
+ const edits=override?.factEdits;
+ if(!edits||Object.keys(edits).length===0)return dossier;
+ const facts=dossier.facts.flatMap(f=>{
+  if(!Object.prototype.hasOwnProperty.call(edits,f.field))return [f];
+  const next=edits[f.field];
+  if(next===null||next===undefined)return [];
+  return [{...f,value:next}];
+ });
+ const state:Record<string,string>={};
+ for(const [k,v] of Object.entries(dossier.state)){
+  if(!Object.prototype.hasOwnProperty.call(edits,k)){state[k]=v;continue;}
+  const next=edits[k];
+  if(next!==null&&next!==undefined)state[k]=next;
+ }
+ return {...dossier,entity:{...dossier.entity,facts},facts,state};
+}
 export function selectReaderDossier(id:string,snapshot:PresentationSnapshot,detail:TooltipPreferences['detail'],fieldGroups:Record<string,boolean>={},maxFacts?:number):ReaderDossier|null {
  const entity=snapshot.entities.find(e=>e.id===id&&e.firstParagraph<=snapshot.at.paragraphIndex);if(!entity)return null;
  const facts=entity.facts.filter(f=>f.entityId===id&&f.visibility==='observed'&&f.source.chatId===snapshot.at.key.chatId&&f.source.messageId===snapshot.at.key.assistantMessageId&&f.source.sourceFingerprint===snapshot.at.key.sourceFingerprint&&f.revealedAt&&samePresentationTurn(f.revealedAt.key,snapshot.at.key)&&f.revealedAt.paragraphIndex<=snapshot.at.paragraphIndex);

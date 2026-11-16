@@ -43,6 +43,45 @@ export function sanitizeVisualNarrativeDescription(raw?: string | null): string 
 export interface ColorScriptKeyframe {
   enclosure: "interior" | "exterior";
   lighting: string;
+  keyLightDirection?: string;
+  windDirection?: string;
+}
+
+export interface SceneAtmosphereVector {
+  enclosure: "interior" | "exterior";
+  keyLightDirection?: string;
+  windDirection?: string;
+}
+
+export function deriveSceneAtmosphereVector(input: {
+  enclosure: "interior" | "exterior";
+  hasWindow: boolean;
+  lighting?: string | null;
+  weather?: string | null;
+  contextText?: string | null;
+}): SceneAtmosphereVector {
+  const combined = `${input.lighting ?? ""} ${input.weather ?? ""} ${input.contextText ?? ""}`.toLowerCase();
+  let keyLightDirection: string | undefined;
+  if (input.hasWindow && /\bwindow|skylight\b/.test(combined)) {
+    keyLightDirection = "side-lit from window";
+  } else if (/\b(?:hearth|fireplace|firelight|forge)\b/.test(combined)) {
+    keyLightDirection = "warm low-angle firelight";
+  } else if (/\b(?:moonlight|moonlit|sunset|golden hour|dusk)\b/.test(combined) && (!input.enclosure || input.enclosure === "exterior" || input.hasWindow)) {
+    keyLightDirection = "directional low-angle rim";
+  } else if (/\b(?:chandelier|ceiling|overhead|spotlight|lantern)\b/.test(combined)) {
+    keyLightDirection = "soft overhead key";
+  }
+  let windDirection: string | undefined;
+  const allowWind = input.enclosure === "exterior" || /\b(?:open window|draft|breeze through|vent)\b/.test(combined);
+  if (allowWind) {
+    if (/\b(?:gale|storm|howling wind|strong wind|gust)\b/.test(combined)) windDirection = "directional gusting wind";
+    else if (/\b(?:breeze|windblown|fluttering)\b/.test(combined)) windDirection = "gentle breeze";
+  }
+  return {
+    enclosure: input.enclosure,
+    ...(keyLightDirection ? { keyLightDirection } : {}),
+    ...(windDirection ? { windDirection } : {}),
+  };
 }
 
 /**
@@ -81,11 +120,28 @@ export function deriveColorScriptKeyframe(input: {
       base = "soft overcast diffused daylight, gentle contrast";
     }
   }
+  const atmosphere = deriveSceneAtmosphereVector({
+    enclosure,
+    hasWindow,
+    lighting: base,
+    weather: input.weather ?? null,
+    contextText: ctxText,
+  });
   if (input.chromaticLutEnabled === false) {
-    return { enclosure, lighting: sanitizeVisualNarrativeDescription(base) };
+    return {
+      enclosure,
+      lighting: sanitizeVisualNarrativeDescription(base),
+      ...(atmosphere.keyLightDirection ? { keyLightDirection: atmosphere.keyLightDirection } : {}),
+      ...(atmosphere.windDirection ? { windDirection: atmosphere.windDirection } : {}),
+    };
   }
   const enriched = enrichLightingWithChromaticLut(base, `${ctxText} ${input.timeOfDay ?? ""}`, { interior, hasWindow });
-  return { enclosure, lighting: sanitizeVisualNarrativeDescription(enriched) };
+  return {
+    enclosure,
+    lighting: sanitizeVisualNarrativeDescription(enriched),
+    ...(atmosphere.keyLightDirection ? { keyLightDirection: atmosphere.keyLightDirection } : {}),
+    ...(atmosphere.windDirection ? { windDirection: atmosphere.windDirection } : {}),
+  };
 }
 
 export function enrichLightingWithChromaticLut(

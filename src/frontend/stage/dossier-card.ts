@@ -38,8 +38,18 @@ export interface DossierSceneHubContext {
   activeLocationName?: string | undefined;
   locationImageUrl?: string | undefined;
   locationDna?: LocationDNA | undefined;
-  presentCast: Array<{ id: string; name: string; imageUrl?: string | undefined; present?: boolean | undefined }>;
+  presentCast: Array<{
+    id: string;
+    name: string;
+    imageUrl?: string | undefined;
+    present?: boolean | undefined;
+    dnaId?: string | undefined;
+    wardrobeStates?: Record<string, string> | undefined;
+    activeWardrobeKey?: string | undefined;
+    activeOutfit?: string | undefined;
+  }>;
   activeItems: Array<{ id: string; name: string; imageUrl?: string | undefined }>;
+  onSelectWardrobe?: ((charIdOrName: string, key: string, outfit: string) => void) | undefined;
 }
 
 function entityInitials(name: string): string {
@@ -137,7 +147,7 @@ export class DossierCard {
   constructor(
     mount: HTMLElement,
     private closeCallback: () => void,
-    private update: (entity: ReaderDossier['entity'], patch: { suppressed?: boolean; pinned?: boolean; note?: string }) => boolean,
+    private update: (entity: ReaderDossier['entity'], patch: { suppressed?: boolean; pinned?: boolean; note?: string; factEdits?: Record<string, string | null> }) => boolean,
     private documentState: (open: boolean) => void = () => {}
   ) {
     this.host.dataset.vnDossier = '';
@@ -486,10 +496,7 @@ export class DossierCard {
             const match = dossier.facts.find(f => f.field === field);
             if (match) match.value = newVal;
             if (dossier.state && field in dossier.state) dossier.state[field] = newVal;
-            const notePrefix = `${field}: `;
-            const existingLines = (entityOverride(prefs, chatId, dossier.entity)?.note || '').split('\n').filter((l: string) => l.trim() && !l.startsWith(notePrefix));
-            existingLines.push(`${notePrefix}${newVal}`);
-            this.update(dossier.entity, { note: existingLines.join('\n').slice(0, 280) });
+            this.update(dossier.entity, { factEdits: { [field]: newVal } });
           }
           renderText(activeVal);
           editWrap.remove();
@@ -519,9 +526,7 @@ export class DossierCard {
         const idx = dossier.facts.findIndex(f => f.field === field);
         if (idx >= 0) dossier.facts.splice(idx, 1);
         if (dossier.state && field in dossier.state) delete dossier.state[field];
-        const notePrefix = `${field}: `;
-        const remainingLines = (entityOverride(prefs, chatId, dossier.entity)?.note || '').split('\n').filter((l: string) => l.trim() && !l.startsWith(notePrefix));
-        this.update(dossier.entity, { note: remainingLines.join('\n').slice(0, 280) });
+        this.update(dossier.entity, { factEdits: { [field]: null } });
       };
 
       actionSpan.append(editBtn, delBtn);
@@ -1162,7 +1167,7 @@ export class DossierCard {
       const activeEntry = filtered.find(e => e.entity.id === this.selectedEntityId) ?? filtered[0];
 
       // Gather Present Cast from sceneHubContext + any NPCs present in incoming entries
-      const castByKey = new Map<string, { id: string; name: string; imageUrl?: string | undefined; present?: boolean | undefined }>();
+      const castByKey = new Map<string, DossierSceneHubContext['presentCast'][number]>();
       for (const c of this.sceneHubContext?.presentCast ?? []) {
         castByKey.set(c.name.trim().toLowerCase(), c);
       }
@@ -1222,6 +1227,35 @@ export class DossierCard {
         } else {
           bannerOverlay.append(locTitle, dnaPills);
         }
+        if (!matchedLocDna && activeLocName && activeLocName !== 'Current Story Scene' && this.storyDnaRequester) {
+          const pinLocBtn = document.createElement('button');
+          pinLocBtn.type = 'button';
+          pinLocBtn.className = 'world-lens-cta';
+          pinLocBtn.dataset.scenePinLocation = activeLocName;
+          pinLocBtn.textContent = '📌 Pin location to World';
+          pinLocBtn.onclick = () => {
+            this.storyDnaRequester?.({
+              action: 'save_location',
+              location: {
+                id: createLocationId(activeLocName),
+                name: activeLocName,
+                aliases: [],
+                lighting: '',
+                atmosphere: '',
+                architecture: '',
+                environmentDescription: '',
+                persistentElements: [],
+                connectedLocations: [],
+                notes: '',
+                locked: false,
+                lastUpdated: Date.now(),
+              },
+            });
+            pinLocBtn.textContent = '📌 Pinned to World ✓';
+            pinLocBtn.disabled = true;
+          };
+          bannerOverlay.append(pinLocBtn);
+        }
         banner.append(bannerOverlay);
         sceneHub.append(banner);
 
@@ -1252,6 +1286,39 @@ export class DossierCard {
         }
         castWrap.append(castTitle, castRow);
         sceneHub.append(castWrap);
+
+        const wardrobeCandidates = presentCast.filter(c => c.wardrobeStates && Object.keys(c.wardrobeStates).length > 0);
+        if (wardrobeCandidates.length > 0 && this.sceneHubContext?.onSelectWardrobe) {
+          const wardrobeWrap = document.createElement('div');
+          wardrobeWrap.className = 'world-scene-cast';
+          wardrobeWrap.dataset.sceneWardrobeSwap = '';
+          const wTitle = document.createElement('div');
+          wTitle.className = 'world-scene-subhead';
+          wTitle.textContent = '👗 Quick Scene Wardrobe Swap';
+          wardrobeWrap.append(wTitle);
+          for (const char of wardrobeCandidates.slice(0, 3)) {
+            const charLabel = document.createElement('div');
+            charLabel.style.cssText = 'font-size:11px;opacity:0.8;margin:4px 0 3px;font-weight:600;';
+            charLabel.textContent = char.name;
+            const wRow = document.createElement('div');
+            wRow.className = 'world-scene-cast-row';
+            for (const [key, outfit] of Object.entries(char.wardrobeStates!)) {
+              const wBtn = document.createElement('button');
+              wBtn.type = 'button';
+              const isActive = char.activeWardrobeKey === key || (!char.activeWardrobeKey && char.activeOutfit === outfit);
+              wBtn.className = `present-item-pill ${isActive ? 'active' : ''}`;
+              wBtn.dataset.sceneWardrobeOption = `${char.name}:${key}`;
+              wBtn.textContent = key;
+              wBtn.title = outfit;
+              wBtn.onclick = () => {
+                this.sceneHubContext?.onSelectWardrobe?.(char.dnaId ?? char.name, key, outfit);
+              };
+              wRow.append(wBtn);
+            }
+            wardrobeWrap.append(charLabel, wRow);
+          }
+          sceneHub.append(wardrobeWrap);
+        }
 
         const activeObjects = filtered.filter(e => e.entity.kind === 'object');
         if (activeObjects.length > 0) {
@@ -1483,23 +1550,18 @@ export class DossierCard {
         const lensTitle = document.createElement('h3');
         lensTitle.textContent = activeEntry.entity.name;
         const lensDesc = document.createElement('p');
-        lensDesc.textContent = vis?.summarySnippet ?? (activeEntry.entity.kind === 'npc' ? 'Character recognized in current scene.' : activeEntry.entity.kind === 'place' ? 'Location recognized in current scene.' : 'Item recognized in current scene.');
+        lensDesc.textContent = vis?.summarySnippet ?? (activeEntry.entity.kind === 'place' ? 'Location recognized in current scene.' : 'Item recognized in current scene.');
 
         const ctaBtn = document.createElement('button');
         ctaBtn.type = 'button';
         ctaBtn.className = 'world-lens-cta';
-        ctaBtn.textContent = activeEntry.entity.kind === 'npc' ? 'Open character folio →' : activeEntry.entity.kind === 'object' ? 'See known documents →' : 'Inspect reference →';
+        ctaBtn.textContent = activeEntry.entity.kind === 'object' ? 'See known documents →' : 'Inspect reference →';
         ctaBtn.onclick = () => {
-          if (activeEntry.entity.kind === 'npc' && this.folioOpener) {
-            this.folioOpener(activeEntry.entity.name);
-          } else {
-            open(activeEntry.entity.id, trigger);
-          }
+          open(activeEntry.entity.id, trigger);
         };
 
-        const evidence=document.createElement('button');evidence.type='button';evidence.textContent='Read story reference';evidence.onclick=()=>open(activeEntry.entity.id,trigger);
         const hideBtn=document.createElement('button');hideBtn.type='button';hideBtn.style.cssText='display:inline-block;margin-top:6px!important;margin-left:6px!important;min-height:0!important;min-width:0!important;padding:4px 10px!important;font-size:10.5px!important;font-weight:600!important;border-radius:6px!important;background:rgba(255,255,255,0.08)!important;color:var(--vn-muted-text,#d1dfd5)!important;border:1px solid rgba(255,255,255,0.18)!important;cursor:pointer;';hideBtn.textContent='✕ Hide from Lens';hideBtn.title='Hide this reference from World Lens';hideBtn.onclick=()=>{if(this.update(activeEntry.entity,{suppressed:true})){const idx=entries.findIndex(e=>e.entity.id===activeEntry.entity.id);if(idx>=0)entries.splice(idx,1);this.selectedEntityId=null;render();}};
-        lensCard.append(lensTitle, lensDesc, ctaBtn, ...(activeEntry.entity.kind === 'npc' ? [evidence] : []), hideBtn);
+        lensCard.append(lensTitle, lensDesc, ctaBtn, hideBtn);
       } else {
         lensCard.innerHTML = '<h3>No matching references</h3><p>Try another category or clear the search.</p>';
         const resetBtn = document.createElement('button');
@@ -1516,6 +1578,36 @@ export class DossierCard {
           render();
         };
         lensCard.append(resetBtn);
+        const missingLoc = this.sceneHubContext?.activeLocationName;
+        if (missingLoc && missingLoc !== 'Current Story Scene' && !findMatchingLocation(this.storyDna.locations, missingLoc) && this.storyDnaRequester) {
+          const pinFallbackBtn = document.createElement('button');
+          pinFallbackBtn.type = 'button';
+          pinFallbackBtn.className = 'world-lens-cta';
+          pinFallbackBtn.dataset.scenePinFallback = missingLoc;
+          pinFallbackBtn.textContent = `📌 Pin ${missingLoc} to World`;
+          pinFallbackBtn.onclick = () => {
+            this.storyDnaRequester?.({
+              action: 'save_location',
+              location: {
+                id: createLocationId(missingLoc),
+                name: missingLoc,
+                aliases: [],
+                lighting: '',
+                atmosphere: '',
+                architecture: '',
+                environmentDescription: '',
+                persistentElements: [],
+                connectedLocations: [],
+                notes: '',
+                locked: false,
+                lastUpdated: Date.now(),
+              },
+            });
+            pinFallbackBtn.textContent = `📌 ${missingLoc} pinned ✓`;
+            pinFallbackBtn.disabled = true;
+          };
+          lensCard.append(pinFallbackBtn);
+        }
       }
       lensSlot.replaceChildren(lensCard);
 
@@ -1854,7 +1946,7 @@ export const DOSSIER_CSS = `
 [data-vn-references][hidden]{display:none!important}
 [data-vn-root] [data-vn-references]{min-width:44px!important;min-height:44px!important;width:44px;height:44px;padding:0!important;display:inline-flex;align-items:center;justify-content:center}
 [data-vn-references] svg{width:20px;height:20px;display:block;flex:none}
-[data-vn-root] [data-entity-anchor]{font:inherit;font-weight:650;color:inherit;background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 16%,transparent);border:0;border-bottom:1px dotted var(--vn-accent,#9ec6f0);border-radius:.2em;padding:0 .08em;cursor:pointer;text-align:inherit;display:inline;line-height:inherit;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+[data-vn-root] [data-entity-anchor]{font:inherit;font-weight:650;color:inherit;background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 16%,transparent);border:0;text-decoration:underline 1.5px color-mix(in srgb,var(--vn-accent,#9ec6f0) 80%,transparent);text-underline-offset:3px;border-radius:.15em;padding:0;cursor:pointer;text-align:inherit;display:inline;line-height:inherit;box-decoration-break:clone;-webkit-box-decoration-break:clone}
 [data-vn-root] [data-entity-anchor]:hover{background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 28%,transparent)}
 [data-entity-anchor]:focus-visible{outline:2px solid var(--vn-accent,#9ec6f0);outline-offset:3px}
 [data-vn-dossier][hidden]{display:none!important}

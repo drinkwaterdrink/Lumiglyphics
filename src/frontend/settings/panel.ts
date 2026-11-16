@@ -595,9 +595,9 @@ export class VisualNovelSettingsPanel {
                   </label>
                 </div>
                 <div style="display:flex;gap:6px;align-items:flex-end;">
-                  <input type="text" name="systemPromptProfileName" placeholder="Profile name..." style="padding:4px 8px;font-size:0.8rem;border-radius:6px;background:var(--set-field);color:inherit;border:1px solid var(--set-border);width:140px;" />
-                  <button type="button" data-system-prompt-profile-save class="btn" style="padding:4px 10px;font-size:0.8rem;border-radius:6px;border:1px solid var(--set-border);background:var(--set-field);cursor:pointer;">💾 Save</button>
-                  <button type="button" data-system-prompt-profile-delete class="btn" style="padding:4px 10px;font-size:0.8rem;border-radius:6px;border:1px solid var(--set-border);background:var(--set-field);cursor:pointer;color:#fca5a5;">🗑️</button>
+                  <input type="text" name="systemPromptProfileName" placeholder="Profile name..." style="min-height:44px;padding:8px 10px;font-size:0.8rem;border-radius:6px;background:var(--set-field);color:inherit;border:1px solid var(--set-border);width:140px;box-sizing:border-box;" />
+                  <button type="button" data-system-prompt-profile-save class="btn" style="min-height:44px;min-width:44px;padding:8px 12px;font-size:0.8rem;border-radius:6px;border:1px solid var(--set-border);background:var(--set-field);cursor:pointer;">💾 Save</button>
+                  <button type="button" data-system-prompt-profile-delete class="btn" style="min-height:44px;min-width:44px;padding:8px 12px;font-size:0.8rem;border-radius:6px;border:1px solid var(--set-border);background:var(--set-field);cursor:pointer;color:#fca5a5;">🗑️</button>
                 </div>
               </div>
               
@@ -795,8 +795,8 @@ export class VisualNovelSettingsPanel {
                   <small style="opacity: 0.7; font-size: 11px;">Configure per effect</small>
                 </summary>
                 <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; margin-bottom: 12px;">
-                  <button type="button" data-enable-all-effects class="settings-sub-btn" style="font-size: 11px; padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: inherit; cursor: pointer;">Enable all</button>
-                  <button type="button" data-disable-all-effects class="settings-sub-btn" style="font-size: 11px; padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: inherit; cursor: pointer;">Disable all</button>
+                  <button type="button" data-enable-all-effects class="settings-sub-btn" style="font-size: 12px; min-height: 44px; min-width: 44px; padding: 8px 14px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: inherit; cursor: pointer;">Enable all</button>
+                  <button type="button" data-disable-all-effects class="settings-sub-btn" style="font-size: 12px; min-height: 44px; min-width: 44px; padding: 8px 14px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: inherit; cursor: pointer;">Disable all</button>
                 </div>
                 ${SCENE_EFFECT_CATEGORIES.map(category => `
                   <div style="margin-bottom: 14px;">

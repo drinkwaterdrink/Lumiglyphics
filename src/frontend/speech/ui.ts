@@ -84,8 +84,9 @@ button {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 36px;
-  padding: 0 12px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 14px;
   flex: 1 1 auto;
   border-radius: 999px;
   border: 1px solid rgba(220, 238, 173, 0.28);
@@ -105,21 +106,21 @@ button[data-tts-primary] {
   font-weight: 750;
 }
 button[data-tts-icon] {
-  flex: 0 0 34px;
-  min-width: 34px;
-  width: 34px;
-  height: 34px;
-  min-height: 34px;
+  flex: 0 0 44px;
+  min-width: 44px;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
   padding: 0;
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.14);
 }
 button[data-speech-close] {
-  flex: 0 0 26px;
-  min-width: 26px;
-  width: 26px;
-  height: 26px;
-  min-height: 26px;
+  flex: 0 0 44px;
+  min-width: 44px;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
   padding: 0;
   font-size: 15px;
   background: transparent;

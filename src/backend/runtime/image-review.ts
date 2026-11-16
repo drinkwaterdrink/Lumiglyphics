@@ -115,6 +115,13 @@ export function applyImageRewriteDraft(request:ImageGenerationRequest,edits:Imag
 
 export type RebuildOptions = {
   reframe?: boolean | undefined;
+  relight?: boolean | undefined;
+  lockContinuity?: boolean | undefined;
+  manualLighting?: {
+    lightingMood?: string | undefined;
+    keyLightDirection?: string | undefined;
+    timeOfDay?: string | undefined;
+  } | undefined;
   styleId?: string | undefined;
   fitToModel?: boolean | undefined;
   model?: string | undefined;
@@ -127,6 +134,7 @@ export type RebuildOptions = {
     composition?: string | undefined;
     depth?: string | undefined;
     dialogueSafeArea?: "auto" | "always" | "off" | undefined;
+    focalPoint?: { x: number; y: number } | undefined;
   } | undefined;
 };
 

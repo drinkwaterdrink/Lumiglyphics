@@ -8,7 +8,9 @@ export function clearEntityAnchors(root:HTMLElement):void {
 }
 export function applyEntityAnchors(root:HTMLElement,anchors:readonly DossierAnchor[],open:(id:string,button:HTMLElement)=>void,preview:(id:string)=>string):void {
  clearEntityAnchors(root);
- const doc=root.ownerDocument,walker=doc.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+ const doc=root.ownerDocument??(typeof document!=='undefined'?document:undefined);
+ if(!doc||typeof doc.createTreeWalker!=='function')return;
+ const walker=doc.createTreeWalker(root,typeof NodeFilter!=='undefined'?NodeFilter.SHOW_TEXT:4);
  const nodes:Array<{node:Text,start:number,end:number}>=[];let offset=0;
  while(walker.nextNode()){const node=walker.currentNode as Text;nodes.push({node,start:offset,end:offset+node.data.length});offset+=node.data.length;}
  for(const a of [...anchors].sort((a,b)=>b.start-a.start)) {
@@ -23,7 +25,9 @@ export function applyEntityAnchors(root:HTMLElement,anchors:readonly DossierAnch
 }
 
 export function protectedEntityRanges(root:HTMLElement):Array<[number,number]> {
- const walker=root.ownerDocument.createTreeWalker(root,NodeFilter.SHOW_TEXT);let offset=0;const result:Array<[number,number]>=[];
+ const doc=root.ownerDocument??(typeof document!=='undefined'?document:undefined);
+ if(!doc||typeof doc.createTreeWalker!=='function')return [];
+ const walker=doc.createTreeWalker(root,typeof NodeFilter!=='undefined'?NodeFilter.SHOW_TEXT:4);let offset=0;const result:Array<[number,number]>=[];
  while(walker.nextNode()){const node=walker.currentNode as Text,end=offset+node.length;if(node.parentElement?.closest('a,code,button,[data-vn-text-fx]'))result.push([offset,end]);offset=end;}
  return result;
 }

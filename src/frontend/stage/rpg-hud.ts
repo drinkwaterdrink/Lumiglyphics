@@ -67,8 +67,8 @@ export const RPG_HUD_CSS = `
 [data-vn-check-info] {
   display: inline-grid;
   place-items: center;
-  min-width: 24px;
-  min-height: 24px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0 5px;
   margin-left: 4px;
   border-radius: 999px;
@@ -130,6 +130,14 @@ export const RPG_HUD_CSS = `
 [data-vn-rpg-theatre][hidden] {
   display: none !important;
 }
+[data-vn-rpg-theatre][data-roll-tier="critical_success"] {
+  border-color: rgba(250, 204, 21, 0.7);
+  box-shadow: 0 0 28px rgba(250, 204, 21, 0.32);
+}
+[data-vn-rpg-theatre][data-roll-tier="critical_failure"] {
+  border-color: rgba(248, 113, 113, 0.75);
+  box-shadow: 0 0 28px rgba(239, 68, 68, 0.35);
+}
 @keyframes vn-rpg-pop {
   from { opacity: 0; transform: translate(-50%, -8px) scale(0.95); }
   to { opacity: 1; transform: translate(-50%, 0) scale(1); }
@@ -172,7 +180,9 @@ export const RPG_HUD_CSS = `
   gap: 6px;
 }
 .vn-rpg-tab {
-  padding: 5px 12px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 6px 12px;
   border-radius: 999px;
   border: 1px solid transparent;
   background: transparent;
@@ -180,6 +190,10 @@ export const RPG_HUD_CSS = `
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
+}
+[data-rpg-close] {
+  min-width: 44px;
+  min-height: 44px;
 }
 .vn-rpg-tab[aria-selected="true"] {
   background: color-mix(in srgb, var(--vn-accent, #7c9cff) 20%, transparent);
@@ -254,6 +268,7 @@ export function formatSkillCheckBreakdown(
 export class RpgStageController {
   private rpgMode: RpgMode = "off";
   private rpgState: RpgState | null = null;
+  private rollLog: Array<{ stat: string; dc: number; natural: number; total: number; tier: SkillCheckOutcome["tier"] }> = [];
   private activeTab: "vitals" | "quests" | "atlas" = "vitals";
   private barEl: HTMLButtonElement | null = null;
   private theatreEl: HTMLElement | null = null;
@@ -321,13 +336,14 @@ export class RpgStageController {
   update(mode: RpgMode, state: RpgState | null | undefined): void {
     this.rpgMode = mode;
     this.rpgState = mode === "full" ? (state ?? null) : null;
+    if (mode === "off") {
+      this.rollLog = [];
+    }
     if (mode === "lite") {
-      if (this.barEl) {
-        this.barEl.innerHTML = `<span>🎲 d20 Lite Active</span>`;
-        this.barEl.title = "Adventure Time Lite is active — d20 skill checks & roll odds appear on choices.";
-        this.barEl.hidden = false;
+      this.renderLiteBar();
+      if (this.drawerEl && !this.drawerEl.hidden) {
+        this.renderDrawer();
       }
-      this.toggleDrawer(false);
       return;
     }
     if (mode !== "full" || !this.rpgState) {
@@ -339,6 +355,16 @@ export class RpgStageController {
     if (this.drawerEl && !this.drawerEl.hidden) {
       this.renderDrawer();
     }
+  }
+
+  private renderLiteBar(): void {
+    if (!this.barEl) return;
+    const countSuffix = this.rollLog.length > 0 ? ` · ${this.rollLog.length} Roll${this.rollLog.length === 1 ? "" : "s"}` : "";
+    const span = document.createElement("span");
+    span.textContent = `🎲 d20 Lite Active${countSuffix}`;
+    this.barEl.replaceChildren(span);
+    this.barEl.title = "Adventure Time Lite is active — click for Lite rules & recent checks.";
+    this.barEl.hidden = false;
   }
 
   decorateChoiceButton(button: HTMLButtonElement, choice: VnChoice): void {
@@ -383,22 +409,32 @@ export class RpgStageController {
       info.setAttribute("role", "button");
       info.tabIndex = 0;
       info.dataset.vnCheckInfo = "";
+      info.setAttribute("aria-expanded", "false");
       info.setAttribute("aria-label", `Inspect ${check.stat} modifiers`);
       info.textContent = "ⓘ";
+      const choiceKey = choice.id || choice.label;
       const toggleInfo = (event: Event) => {
         event.preventDefault();
         event.stopPropagation();
-        const parent = button.parentElement;
-        if (!parent) return;
-        const existing = parent.querySelector<HTMLElement>(".vn-rpg-check-breakdown");
-        if (existing) {
-          existing.remove();
-          return;
-        }
+        const scope = button.closest("ol, ul, [data-vn-choices]") ?? button.parentElement;
+        if (!scope) return;
+        const existing = scope.querySelector<HTMLElement>(".vn-rpg-check-breakdown");
+        const isSameChoice = existing?.dataset.vnCheckFor === choiceKey;
+        if (existing) existing.remove();
+        scope.querySelectorAll<HTMLElement>("[data-vn-check-info]").forEach((el) => {
+          el.setAttribute("aria-expanded", "false");
+        });
+        if (isSameChoice) return;
         const card = document.createElement("div");
         card.className = "vn-rpg-check-breakdown";
+        card.dataset.vnCheckFor = choiceKey;
         card.textContent = `Modifiers (${check.stat} DC ${check.dc}): ${breakdownText}`;
-        parent.appendChild(card);
+        if (typeof button.insertAdjacentElement === "function") {
+          button.insertAdjacentElement("afterend", card);
+        } else {
+          button.parentElement?.insertBefore(card, button.nextSibling);
+        }
+        info.setAttribute("aria-expanded", "true");
       };
       info.addEventListener("click", toggleInfo);
       info.addEventListener("keydown", (event) => {
@@ -431,17 +467,20 @@ export class RpgStageController {
     if (this.theatreTimer) clearTimeout(this.theatreTimer);
     if (this.settleTimer) clearTimeout(this.settleTimer);
     const { check, rolls, natural, total, tier } = outcome;
+    this.rollLog.unshift({ stat: check.stat, dc: check.dc, natural, total, tier });
+    if (this.rollLog.length > 12) this.rollLog.length = 12;
+    if (this.rpgMode === "lite") {
+      this.renderLiteBar();
+      if (this.drawerEl && !this.drawerEl.hidden) this.renderDrawer();
+    }
     const rollDetail = rolls.length > 1 ? `2d20(${rolls.join(", ")}) → ${natural}` : `d20(${natural})`;
     const modStr = check.modifier > 0 ? `+${check.modifier}` : check.modifier < 0 ? `${check.modifier}` : "+0";
     const breakdown = formatSkillCheckBreakdown(natural, check, sources, total);
     const d20Svg = `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:middle;margin-right:4px;"><polygon points="12,2 21,7 21,17 12,22 3,17 3,7" fill="rgba(124,156,255,0.22)" stroke="currentColor" stroke-width="1.6"/><text x="12" y="15.5" text-anchor="middle" fill="currentColor" font-size="9" font-weight="800">${natural}</text></svg>`;
-    const critAccent = tier === "critical_success"
-      ? "border-color:rgba(250,204,21,0.7);box-shadow:0 0 28px rgba(250,204,21,0.32);"
-      : tier === "critical_failure"
-        ? "border-color:rgba(248,113,113,0.75);box-shadow:0 0 28px rgba(239,68,68,0.35);"
-        : "";
-    if (critAccent) {
-      this.theatreEl.style.cssText += critAccent;
+    this.theatreEl.style.borderColor = "";
+    this.theatreEl.style.boxShadow = "";
+    this.theatreEl.dataset.rollTier = tier;
+    if (tier === "critical_success" || tier === "critical_failure") {
       this.onRollEffect?.(tier === "critical_success" ? "zoom_punch" : "shake_hard");
     }
     this.theatreEl.dataset.rollPhase = "rolling";
@@ -481,7 +520,27 @@ export class RpgStageController {
   }
 
   private renderDrawer(): void {
-    if (!this.drawerEl || !this.rpgState) return;
+    if (!this.drawerEl) return;
+    if (this.rpgMode === "lite") {
+      const recentHtml = this.rollLog.length === 0
+        ? `<div class="vn-rpg-card">No skill checks rolled in this session yet. Select a choice with a d20 badge to test your luck.</div>`
+        : `<div class="vn-rpg-card"><b>Recent Checks (${this.rollLog.length})</b><ul style="margin:6px 0 0;padding-left:18px;">${this.rollLog.map((r) => `<li><b>${esc(r.stat)}</b> vs DC ${r.dc} — d20(${r.natural}) → <b>${r.total}</b> <small>[${esc(TIER_LABELS[r.tier])}]</small></li>`).join("")}</ul></div>`;
+      this.drawerEl.innerHTML = `
+        <div class="vn-rpg-sheet" role="dialog" aria-label="Adventure Time Lite Sheet">
+          <div class="vn-rpg-sheet-head">
+            <div style="font-weight:700;font-size:0.9rem;">🎲 d20 Lite Rules &amp; Recent Checks</div>
+            <button type="button" class="vn-rpg-tab" data-rpg-close aria-label="Close Lite Sheet">✕</button>
+          </div>
+          <div class="vn-rpg-sheet-body">
+            <div class="vn-rpg-card"><b>Lite Rules</b><div style="margin-top:4px;opacity:0.88;">Skill checks roll 1d20 plus modifiers against the choice DC. Nat 20 scores a Critical Success; Nat 1 scores a Critical Failure. Switch to Full RPG in settings to track HP, Stamina, Quests, and the Node Atlas.</div></div>
+            ${recentHtml}
+          </div>
+        </div>
+      `;
+      this.drawerEl.querySelector("[data-rpg-close]")?.addEventListener("click", () => this.toggleDrawer(false));
+      return;
+    }
+    if (!this.rpgState) return;
     const state = this.rpgState;
     const v = state.vitals;
     const pressure = computePacingFrustrationMultiplier(state.turnsSinceProgress ?? state.turnCounter);

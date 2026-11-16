@@ -51,9 +51,6 @@ export class ReaderWorkspace {
   private readonly input: HTMLInputElement;
   private readonly results: HTMLElement;
   private readonly apertureOverlay: HTMLElement;
-  private readonly routeBar: HTMLElement;
-  private readonly routeName: HTMLElement;
-  private readonly routeStep: HTMLElement;
   private readonly abort = new AbortController();
   private readonly tools = new Map<ReaderDestination, WorkspaceSurface>();
   private current: ReaderDestination | 'more' | null = null;
@@ -86,7 +83,7 @@ export class ReaderWorkspace {
     <header data-vn-reader-header class="reader-topbar">
       <button type="button" class="round-ghost" data-aperture-open aria-label="Open APERTURE navigation" title="Open APERTURE navigation">${APERTURE_ICONS.menu}</button>
       <div class="reading-heading" style="padding-left:4px">
-        <strong data-reader-caption-strong>Chapter IV</strong>
+        <strong data-reader-caption-strong>Current Scene</strong>
         <small data-reader-caption-small data-reader-caption>Visual novel</small>
       </div>
       <div data-reader-header-actions class="topbar-actions" style="display:flex;align-items:center;gap:6px;margin-left:auto">
@@ -103,18 +100,6 @@ export class ReaderWorkspace {
       <header data-workspace-heading><button type="button" class="workspace-back-btn" data-workspace-back aria-label="Go back to previous screen" title="Back">${APERTURE_ICONS.back}</button><div><p data-workspace-subtitle></p><h2 data-workspace-title></h2></div><button type="button" data-workspace-close aria-label="Close workspace and return to reader">${readerIcon('close')}</button></header>
       <div data-workspace-content></div>
     </aside>
-    <div class="route-bar" hidden aria-label="Quick navigation bar">
-      <div>
-        <div class="route-name">WORKSPACE</div>
-        <div class="route-step">ACTIVE SCENE / YOUR WORLD</div>
-      </div>
-      <div class="route-actions">
-        <button type="button" data-route-bar-action="back" aria-label="Go back to previous screen" title="Back">${APERTURE_ICONS.back}</button>
-        <button type="button" data-route-bar-action="read" aria-label="Return to reading">${APERTURE_ICONS.book}</button>
-        <button type="button" data-route-bar-action="settings" class="dock-settings" aria-label="Open extension settings" title="Extension settings">${APERTURE_ICONS.settings}<span>Settings</span></button>
-        <button type="button" data-route-bar-action="menu" class="menu-key">${APERTURE_ICONS.spark} Navigate</button>
-      </div>
-    </div>
     <nav class="aperture-overlay" id="apertureNav" aria-label="APERTURE navigation" aria-hidden="true">
       <div class="aperture-content">
         <div class="aperture-top">
@@ -130,9 +115,10 @@ export class ReaderWorkspace {
           <button type="button" data-aperture-route="history" class="aperture-link"><span class="number">05</span><span>History</span>${APERTURE_ICONS.history}</button>
           <button type="button" data-aperture-route="settings" class="aperture-link"><span class="number">06</span><span>Settings</span>${APERTURE_ICONS.settings}</button>
           <button type="button" data-aperture-route="workspace" class="aperture-link"><span class="number">07</span><span>Workspace</span>${APERTURE_ICONS.layers}</button>
+          <button type="button" data-action="cast-toggle" class="aperture-link" style="min-height:44px"><span class="number">08</span><span>Toggle cast portraits</span>${APERTURE_ICONS.cast}</button>
           <button type="button" data-aperture-route="chat" class="aperture-link"><span class="number">→</span><span>Back to Lumiverse chat</span>${APERTURE_ICONS.chat}</button>
         </div>
-        <div class="aperture-foot"><span>CHAPTER IV</span><span>EVERY DETAIL HAS A PLACE</span></div>
+        <div class="aperture-foot"><span data-aperture-chapter>CURRENT SCENE</span><span>EVERY DETAIL HAS A PLACE</span></div>
       </div>
     </nav>
     <dialog data-reader-command aria-label="Find menus and settings"><form method="dialog"><header><h2>Find your way</h2><button type="submit" aria-label="Close menu search">${readerIcon('close')}</button></header></form><label>${readerIcon('search')}<input type="search" maxlength="120" placeholder="Search menus and settings…" aria-label="Search menus and settings" autocomplete="off"></label><div data-reader-command-results></div><p>Navigation only. Searching never starts generation.</p></dialog>`;
@@ -146,9 +132,6 @@ export class ReaderWorkspace {
     this.search = q('[data-reader-command]');
     this.input = q('[data-reader-command] input'); this.results = q('[data-reader-command-results]');
     this.apertureOverlay = q('.aperture-overlay');
-    this.routeBar = q('.route-bar');
-    this.routeName = q('.route-bar .route-name');
-    this.routeStep = q('.route-bar .route-step');
 
     this.more = document.createElement('div'); this.more.dataset.readerMore = '';
     this.renderWorkspaceDestinations();
@@ -235,17 +218,13 @@ export class ReaderWorkspace {
     const closeMenuBtn = q('[data-action="aperture-close"]');
     closeMenuBtn.addEventListener('click', () => this.toggleAperture(false), {signal});
 
-    this.routeBar.addEventListener('click', event => {
-      const target = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-route-bar-action]') : null;
-      if (!target) return;
-      const act = target.dataset.routeBarAction;
-      if (act === 'read') this.close();
-      else if (act === 'back') this.goBack();
-      else if (act === 'settings') this.open('settings');
-      else if (act === 'menu') this.toggleAperture();
-    }, {signal});
-
     this.apertureOverlay.addEventListener('click', event => {
+      const castBtn = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-action="cast-toggle"]') : null;
+      if (castBtn) {
+        this.toggleAperture(false);
+        this.shell.dispatchEvent(new CustomEvent('lumiglyphics:cast-toggle', { bubbles: true }));
+        return;
+      }
       const link = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-aperture-route]') : null;
       if (!link) return;
       const route = link.dataset.apertureRoute;
@@ -280,8 +259,8 @@ export class ReaderWorkspace {
     const heroCard = document.createElement('div');
     heroCard.className = 'workspace-scene-card';
     heroCard.innerHTML = `<div class="micro">CURRENT SCENE</div>
-      <h2 class="workspace-scene-title">Kit Hall</h2>
-      <p class="workspace-scene-sub">Chapter IV · Current passage</p>
+      <h2 class="workspace-scene-title" data-workspace-scene-title>Active Scene</h2>
+      <p class="workspace-scene-sub" data-workspace-scene-sub>Current passage</p>
       <button type="button" class="btn workspace-scene-cta">Resume reading <span>→</span></button>
       <div class="workspace-scene-orbit" aria-hidden="true"></div>`;
     heroCard.querySelector('button')?.addEventListener('click', () => this.close());
@@ -363,9 +342,6 @@ export class ReaderWorkspace {
       this.title.textContent = id === 'story' ? 'World Lens' : d.label; this.subtitle.textContent = d.hint;
       this.panel.hidden = false; this.shell.dataset.vnWorkspace = id;
       this.panel.dataset.surface = id;
-      this.routeBar.hidden = false;
-      this.routeName.textContent = (id === 'story' ? 'World Lens' : d.label).toUpperCase();
-      this.routeStep.textContent = 'ACTIVE SCENE / YOUR WORLD';
       const tool = this.tools.get(id);
       if (tool) { this.rememberHome(tool.element); this.content.append(tool.element); tool.element.hidden=false;tool.enter(); }
       else { const empty = document.createElement('p'); empty.dataset.workspaceEmpty = ''; empty.textContent = id === 'settings' ? 'Settings are available in the host’s Lumiglyphics settings tab.' : 'There is nothing available here at this reading position yet.'; this.content.append(empty); }
@@ -388,9 +364,6 @@ export class ReaderWorkspace {
       this.panel.hidden = false;
       this.shell.dataset.vnWorkspace = 'more';
       this.panel.dataset.surface = 'workspace';
-      this.routeBar.hidden = false;
-      this.routeName.textContent = 'WORKSPACE';
-      this.routeStep.textContent = 'ACTIVE SCENE / YOUR WORLD';
       this.syncReader();
       this.closeButton.focus({preventScroll:true});
     }
@@ -402,7 +375,6 @@ export class ReaderWorkspace {
     this.changing = true;
     try {
       this.release(); this.current = null; this.panel.hidden = true; delete this.shell.dataset.vnWorkspace;
-      this.routeBar.hidden = true;
       this.toggleAperture(false);
       this.syncReader();
       if (restoreFocus) { if (this.opener?.isConnected && this.opener.getClientRects().length && !this.opener.closest('[hidden]')) this.opener.focus({preventScroll:true}); else this.focusReader(); }
@@ -421,13 +393,25 @@ export class ReaderWorkspace {
   setCaption(text: string): void {
     const el = this.header.querySelector<HTMLElement>('[data-reader-caption]');
     const strong = this.header.querySelector<HTMLElement>('[data-reader-caption-strong]');
+    const heroTitle = this.more.querySelector<HTMLElement>('[data-workspace-scene-title]');
+    const heroSub = this.more.querySelector<HTMLElement>('[data-workspace-scene-sub]');
+    const footChapter = this.apertureOverlay.querySelector<HTMLElement>('[data-aperture-chapter]');
     if (text.includes("·")) {
       const parts = text.split("·").map(s => s.trim());
-      if (strong) strong.textContent = parts[0] || 'Chapter IV';
-      if (el) el.textContent = parts.slice(1).join(' · ');
+      const title = parts[0] || 'Current Scene';
+      const sub = parts.slice(1).join(' · ') || 'Current passage';
+      if (strong) strong.textContent = title;
+      if (el) el.textContent = sub;
+      if (heroTitle) heroTitle.textContent = title;
+      if (heroSub) heroSub.textContent = sub;
+      if (footChapter) footChapter.textContent = title.toUpperCase();
     } else {
-      if (strong) strong.textContent = text || 'Chapter IV';
+      const title = text || 'Current Scene';
+      if (strong) strong.textContent = title;
       if (el) el.textContent = 'Visual novel';
+      if (heroTitle) heroTitle.textContent = title;
+      if (heroSub) heroSub.textContent = 'Current passage';
+      if (footChapter) footChapter.textContent = title.toUpperCase();
     }
   }
   setAttention(count: number): void {
@@ -506,6 +490,6 @@ export class ReaderWorkspace {
     this.resumeCard.destroy();
     this.abort.abort(); this.media?.removeEventListener?.('change', this.onMedia); this.reader.inert = false; this.reader.removeAttribute('aria-hidden');
     for(const element of this.shell.querySelectorAll<HTMLElement>('[data-vn-panel-layer],[data-vn-speech-dock]'))element.inert=false;
-    this.nav.remove(); this.header.remove(); this.panel.remove(); this.search.remove(); this.apertureOverlay.remove(); this.routeBar.remove(); this.tools.clear(); this.homes.clear();
+    this.nav.remove(); this.header.remove(); this.panel.remove(); this.search.remove(); this.apertureOverlay.remove(); this.tools.clear(); this.homes.clear();
   }
 }

@@ -133,20 +133,6 @@ body.theme-dark .route-bar .route-actions .menu-key,
   height: 1px !important;
 }
 
-/* Route bar suppressed in favor of sticky workspace top header */
-.route-bar,
-.route-bar[hidden],
-[hidden].route-bar,
-.route-bar:not([data-active="true"]),
-[data-vn-shell]:not([data-vn-workspace]) .route-bar,
-[data-vn-shell]:not([data-vn-workspace]) > .route-bar,
-:not([data-vn-workspace]) > .route-bar,
-[data-vn-root] .route-bar,
-[data-vn-reader-first="true"]:not([data-vn-workspace]) .route-bar,
-[data-vn-workspace] .route-bar {
-  display: none !important;
-}
-
 /* Hide legacy elements in APERTURE v4 while allowing TTS mini-player popover when open */
 .vn-speech-dock:not([data-open="true"]),
 [data-vn-panel-layer] .launcher,
@@ -157,9 +143,11 @@ body.theme-dark .route-bar .route-actions .menu-key,
   display: block !important;
 }
 
-/* Hide duplicate Cast icon in topbar (Cast lives in the bottom navigation bar) */
-[data-vn-reader-header] [data-action="cast-toggle"] {
-  display: none !important;
+/* Hide duplicate Cast icon in mobile topbar (Cast lives in the bottom navigation bar on mobile) */
+@media (max-width: 639px) {
+  [data-vn-reader-header] [data-action="cast-toggle"] {
+    display: none !important;
+  }
 }
 .round-ghost[data-action="voice-toggle"].speaking {
   border-color: var(--aperture-accent, #dcebad) !important;
@@ -403,8 +391,9 @@ aside[data-vn-workspace] {
   align-items: center !important;
   justify-content: space-between !important;
   width: 100% !important;
-  flex: 0 0 24px !important;
-  min-height: 24px !important;
+  flex: 0 0 auto !important;
+  min-height: 44px !important;
+  touch-action: none !important;
   border-bottom: 1px solid rgba(228, 240, 218, 0.15) !important;
   padding-bottom: 3px !important;
   margin-bottom: 2px !important;

@@ -16,7 +16,9 @@ export const ReferenceItemSchema = z.object({
   label: z.string().max(256).optional(),
   dataUrl: z.string().optional(),
   mimeType: z.string().max(64).optional(),
-  strength: z.number().min(0).max(1).optional()
+  strength: z.number().min(0).max(1).optional(),
+  wireIndex: z.number().int().min(1).max(3).optional(),
+  byteSize: z.number().int().nonnegative().optional()
 }).strict();
 export type ReferenceItem = z.infer<typeof ReferenceItemSchema>;
 

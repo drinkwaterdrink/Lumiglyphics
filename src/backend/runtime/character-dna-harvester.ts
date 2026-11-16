@@ -16,6 +16,7 @@ import { samePresentationTurn } from '../../shared/presentation-entities.js';
 
 export {loadCharacterDNALibrary,saveCharacterDNA,getEffectiveCharacterDNA} from './character-dna-store.js';
 import {getEffectiveCharacterDNA} from './character-dna-store.js';
+import {jsonObject} from './planner/json-repair.js';
 
 export interface HarvestOptions {
   userId?: string;
@@ -197,10 +198,9 @@ Output only the JSON:`;
  */
 export function parseCharacterDNALlmOutput(llmResponse: string): Partial<CharacterDNA> | null {
   try {
-    const jsonMatch = llmResponse.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return null;
-    const data = JSON.parse(jsonMatch[0]);
-    if (!data || typeof data !== 'object') return null;
+    const raw = jsonObject(llmResponse);
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const data = raw as Record<string, any>;
 
     const partial: Partial<CharacterDNA> = {
       hair: {},

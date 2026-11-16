@@ -106,10 +106,10 @@ export function generateAmbientMarkup(effect: AmbientEffect): string {
   }
 }
 
-export function generateCueEffectMarkup(effect: StageEffect): string {
+export function generateCueEffectMarkup(effect: StageEffect, instanceId?: string | number): string {
   switch (effect) {
     case "speed_lines":
-      return generateSpeedLinesMarkup();
+      return generateSpeedLinesMarkup(instanceId);
     case "sparkle_burst":
       return generateSparkleBurstMarkup();
     case "hearts_burst":
@@ -417,7 +417,8 @@ const BURST_SVG_ATTRS = `viewBox="0 0 800 600" preserveAspectRatio="none" aria-h
  * Manga focus lines: tapered wedges converge on an irregular clear centre.
  * Two interleaved sets flicker against each other while the frame settles.
  */
-function generateSpeedLinesMarkup(): string {
+function generateSpeedLinesMarkup(instanceId?: string | number): string {
+  const focusId = instanceId !== undefined ? `vn-sl-focus-${instanceId}` : "vn-sl-focus";
   const count = 76;
   const sets: [string[], string[]] = [[], []];
   for (let i = 0; i < count; i++) {
@@ -430,8 +431,8 @@ function generateSpeedLinesMarkup(): string {
     sets[i % 2]!.push(`<polygon points="${point(angle, inner)} ${point(angle - half, outer)} ${point(angle + half, outer)}" opacity="${opacity}"/>`);
   }
   return `<svg class="vn-speed-lines" ${BURST_SVG_ATTRS}>
-    <defs><radialGradient id="vn-sl-focus" cx="50%" cy="50%" r="72%"><stop offset=".45" stop-color="#05060a" stop-opacity="0"/><stop offset="1" stop-color="#05060a" stop-opacity=".42"/></radialGradient></defs>
-    <rect class="vn-speed-lines-vignette" width="800" height="600" fill="url(#vn-sl-focus)"/>
+    <defs><radialGradient id="${focusId}" cx="50%" cy="50%" r="72%"><stop offset=".45" stop-color="#05060a" stop-opacity="0"/><stop offset="1" stop-color="#05060a" stop-opacity=".42"/></radialGradient></defs>
+    <rect class="vn-speed-lines-vignette" width="800" height="600" fill="url(#${focusId})"/>
     <g class="vn-speed-lines-a" fill="#fff">${sets[0].join("")}</g>
     <g class="vn-speed-lines-b" fill="#fff">${sets[1].join("")}</g>
   </svg>`.replace(/\n\s*/g, "");

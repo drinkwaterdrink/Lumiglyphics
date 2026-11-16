@@ -484,14 +484,118 @@ export function buildRpgStaticRules(mode: RpgMode): string {
   return lines.join("\n");
 }
 
-/** Dynamic per-turn RPG snapshot (routed to user turn delta bus so system prompt stays static). */
-export function buildRpgTurnSnapshot(state: RpgState | null | undefined, mode: RpgMode): string {
+export interface RpgSnapshotOptions {
+  activeCast?: readonly string[] | undefined;
+  thoughtCabinet?: ReadonlyArray<{ title: string; status: string }> | undefined;
+  npcBeliefs?: Record<string, ReadonlyArray<{ fact: string; knowsSecret: boolean }>> | undefined;
+  maxChars?: number | undefined;
+}
+
+/** Dynamic per-turn RPG snapshot (routed to user turn delta bus so system prompt stays static, <= 480 chars). */
+export function buildRpgTurnSnapshot(
+  state: RpgState | null | undefined,
+  mode: RpgMode,
+  options?: RpgSnapshotOptions,
+): string {
   if (mode !== "full" || !state) return "";
-  const activeQuests = state.quests
+  const cap = Math.max(160, Math.min(960, Math.trunc(options?.maxChars ?? 480)));
+  const pressure = computePacingFrustrationMultiplier(state.turnsSinceProgress ?? state.turnCounter);
+  const locId = state.atlas?.currentLocationId ?? null;
+  const locLabel = locId
+    ? ((state.atlas?.nodes ?? []).find((n) => n.id === locId)?.label ?? locId).trim().slice(0, 32)
+    : "none";
+  const v = state.vitals ?? { hp: 0, maxHp: 0, stamina: 0, maxStamina: 0, stress: 0, inventory: [], companions: [] };
+  const header = `[STATE] T${state.turnCounter ?? 0} P${pressure}x @ ${locLabel} | HP:${v.hp}/${v.maxHp} STA:${v.stamina}/${v.maxStamina} STR:${v.stress}`;
+
+  const segments: string[] = [header];
+  let used = header.length;
+
+  const packSegment = (prefix: string, tokens: string[]): void => {
+    if (tokens.length === 0) return;
+    const fitted: string[] = [];
+    const sep = " | ";
+    let len = used + sep.length + prefix.length;
+    if (len + 4 > cap) return;
+    for (let i = 0; i < tokens.length; i++) {
+      const tok = tokens[i]!;
+      const itemLen = (fitted.length > 0 ? 1 : 0) + tok.length;
+      const overflowReserve = i < tokens.length - 1 ? 5 : 0; // ",+99"
+      if (len + itemLen + overflowReserve <= cap) {
+        fitted.push(tok);
+        len += itemLen;
+      } else {
+        const remaining = tokens.length - fitted.length;
+        if (fitted.length > 0 && remaining > 0) {
+          const suffix = `,+${remaining}`;
+          if (len + suffix.length <= cap) {
+            segments.push(`${prefix}${fitted.join(",")}${suffix}`);
+            used = len + suffix.length;
+            return;
+          }
+        }
+        break;
+      }
+    }
+    if (fitted.length > 0) {
+      segments.push(`${prefix}${fitted.join(",")}`);
+      used = len;
+    }
+  };
+
+  const activeFlags = Object.entries(state.flags ?? {})
+    .filter(([, on]) => on)
+    .map(([k]) => k.trim().slice(0, 24))
+    .sort();
+  packSegment("Flags:", activeFlags);
+
+  const gear = (v.inventory ?? []).map((item) => item.trim().slice(0, 18)).filter(Boolean);
+  packSegment("Gear:", gear);
+
+  const companions = v.companions ?? [];
+  if (companions.length > 0) {
+    const castSet = new Set((options?.activeCast ?? []).map((n) => n.trim().toLowerCase()).filter(Boolean));
+    const sorted = [...companions].sort((a, b) => {
+      const aCast = castSet.has(a.name.trim().toLowerCase()) ? 1 : 0;
+      const bCast = castSet.has(b.name.trim().toLowerCase()) ? 1 : 0;
+      if (aCast !== bCast) return bCast - aCast;
+      return b.affinity - a.affinity;
+    });
+    const partyTokens = sorted.map((c) => {
+      const aff = c.affinity >= 0 ? `+${c.affinity}` : `${c.affinity}`;
+      const st = c.status && c.status !== "healthy" ? `,${c.status.trim().slice(0, 10)}` : "";
+      return `${c.name.trim().slice(0, 14)}(aff:${aff}${st})`;
+    });
+    packSegment("Party:", partyTokens);
+  }
+
+  const activeQuests = (state.quests ?? [])
     .filter((q) => q.status === "active")
-    .map((q) => `${q.title} (${computeQuestUrgency(q)})`)
-    .join("; ");
-  return `- Current RPG Snapshot (Turn ${state.turnCounter}, Pacing Pressure ${computePacingFrustrationMultiplier(state.turnsSinceProgress ?? state.turnCounter)}x): HP ${state.vitals.hp}/${state.vitals.maxHp}, STA ${state.vitals.stamina}/${state.vitals.maxStamina}, Stress ${state.vitals.stress}/100${activeQuests ? ` | Active Quests: ${activeQuests}` : ""}.`;
+    .map((q) => `${q.title.trim().slice(0, 26)}(${computeQuestUrgency(q)})`);
+  packSegment("Q:", activeQuests);
+
+  const openThoughts = (options?.thoughtCabinet ?? [])
+    .filter((t) => t.status === "open" || t.status === "unresolved")
+    .slice(0, 3)
+    .map((t) => t.title.trim().slice(0, 24))
+    .filter(Boolean);
+  packSegment("Threads:", openThoughts);
+
+  if (options?.npcBeliefs) {
+    const castSet = new Set((options.activeCast ?? []).map((n) => n.trim().toLowerCase()).filter(Boolean));
+    const beliefTokens: string[] = [];
+    for (const [npc, entries] of Object.entries(options.npcBeliefs)) {
+      if (castSet.size > 0 && !castSet.has(npc.trim().toLowerCase())) continue;
+      for (const entry of entries) {
+        if (entry.knowsSecret) continue;
+        beliefTokens.push(`${npc.trim().slice(0, 10)}:${entry.fact.trim().slice(0, 22)}`);
+        if (beliefTokens.length >= 3) break;
+      }
+      if (beliefTokens.length >= 3) break;
+    }
+    packSegment("Beliefs:", beliefTokens);
+  }
+
+  return segments.join(" | ").slice(0, cap);
 }
 
 export function buildRpgPromptGuidance(state: RpgState | null | undefined, mode: RpgMode): string {

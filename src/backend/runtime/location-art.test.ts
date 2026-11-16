@@ -27,10 +27,15 @@ test('reset/forget invalidate in-flight saves without deleting host images',asyn
  expect(await saveLocationArt(api,'c',art,undefined,{token})).toBe(false);
  expect((await loadLocationArt(api,'c')).locations).toHaveLength(0);expect(ids.has('image')).toBe(true);
 });
-test('concurrent variant writes serialize; capacity never silently drops records',async()=>{
- const {api}=fixture();await Promise.all(Array.from({length:8},(_,i)=>saveLocationArt(api,'c',{...art,imageId:`image${i}`})));
+test('concurrent variant writes serialize; capacity evicts oldest LRU or rejects when all 8 are pinned',async()=>{
+ const {api,data}=fixture();await Promise.all(Array.from({length:8},(_,i)=>saveLocationArt(api,'c',{...art,imageId:`image${i}`})));
  const library=await loadLocationArt(api,'c');expect(library.locations[0]?.variants).toHaveLength(8);
- await expect(saveLocationArt(api,'c',{...art,imageId:'ninth'})).rejects.toThrow(/8/);
+ expect(await saveLocationArt(api,'c',{...art,imageId:'ninth'})).toBe(true);
+ const afterEvict=await loadLocationArt(api,'c');expect(afterEvict.locations[0]?.variants).toHaveLength(8);
+ expect(afterEvict.locations[0]?.variants.some(v=>v.imageId==='ninth')).toBe(true);
+ const storageKey=[...data.keys()][0]!;const current=data.get(storageKey) as {version:1,locations:Array<{variants:Array<{pinned?:boolean}>}>};
+ for(const v of current.locations[0]!.variants)v.pinned=true;
+ await expect(saveLocationArt(api,'c',{...art,imageId:'tenth'})).rejects.toThrow(/8/);
  expect((await loadLocationArt(api,'c')).locations[0]?.variants).toHaveLength(8);
 });
 test('unknown storage versions are preserved rather than overwritten',async()=>{

@@ -23,9 +23,10 @@ export class SceneScrubber {
   this.render(current);
  }
 
- private render(current:number):void{
+ private ensureStructure():void{
+  if(this.element.querySelector('[data-scene-history-details]'))return;
   this.element.innerHTML=`<details data-scene-history-details style="margin-bottom:12px;border:1px solid rgba(134,219,178,.18);border-radius:10px;padding:8px 12px;background:rgba(0,0,0,.15)">
-    <summary style="font-weight:700;font-size:13px;cursor:pointer;color:var(--vn-shell-accent,#86dbb2);display:flex;align-items:center;justify-content:space-between">
+    <summary style="font-weight:700;font-size:13px;cursor:pointer;color:var(--vn-shell-accent,#86dbb2);display:flex;align-items:center;justify-content:space-between;min-height:44px">
       <span>Scene Navigation &amp; Markers</span>
       <small data-scene-summary-tag style="opacity:0.75;font-weight:500;font-size:11px"></small>
     </summary>
@@ -33,24 +34,27 @@ export class SceneScrubber {
       <p data-scene-source style="font-size:12px;opacity:0.8;margin:4px 0 8px"></p>
       <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">
         Select revealed passage
-        <input data-scene-range aria-label="Revealed passage" type="range" min="0" value="0" style="width:100%;min-height:36px;margin:4px 0">
+        <input data-scene-range aria-label="Revealed passage" type="range" min="0" value="0" style="width:100%;min-height:44px;margin:4px 0">
       </label>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
         <output data-scene-selected style="font-size:12px;font-weight:600"></output>
-        <button type="button" data-scene-seek style="min-height:32px;padding:4px 12px;font-size:12px;border-radius:6px">Read passage</button>
+        <button type="button" data-scene-seek style="min-height:44px;min-width:44px;padding:8px 14px;font-size:12px;border-radius:6px">Read passage</button>
       </div>
       <p data-scene-history-note role="status" style="font-size:11px;opacity:0.7;margin:4px 0"></p>
       <div data-scene-events></div>
       <div data-scene-paging style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px">
-        <button type="button" data-scene-prev style="min-height:30px;padding:2px 8px;font-size:11px">Previous markers</button>
+        <button type="button" data-scene-prev style="min-height:44px;min-width:44px;padding:8px 12px;font-size:12px">Previous markers</button>
         <small data-scene-page style="font-size:11px"></small>
-        <button type="button" data-scene-next style="min-height:30px;padding:2px 8px;font-size:11px">Next markers</button>
+        <button type="button" data-scene-next style="min-height:44px;min-width:44px;padding:8px 12px;font-size:12px">Next markers</button>
       </div>
     </div>
   </details>`;
+ }
 
+ private render(current:number):void{
+  this.ensureStructure();
   const q=<T extends HTMLElement>(selector:string)=>this.element.querySelector<T>(selector)!;
-  const model=this.model,range=q<HTMLInputElement>('[data-scene-range]'),jump=q<HTMLButtonElement>('[data-scene-seek]'),note=q('[data-scene-history-note]');
+  const model=this.model,range=q<HTMLInputElement>('[data-scene-range]'),jump=q<HTMLButtonElement>('[data-scene-seek]'),note=q('[data-scene-history-note]'),eventsContainer=q('[data-scene-events]');
 
   q('[data-scene-source]').textContent=model?`Current reader · ${historySourceLabel(model.key)}`:'Current reader unavailable';
   range.max=String(Math.max(0,model?.through??0));
@@ -73,6 +77,7 @@ export class SceneScrubber {
 
   note.textContent=model?.unavailable?'Scene and presence metadata are not established. Revealed passage navigation is still available.':model?.truncated?'Showing a bounded selection of recorded markers; the range still covers every revealed passage.':'Markers show recorded locations and presence, not inferred relationships.';
 
+  eventsContainer.replaceChildren();
   const events=model?.events??[];
   this.page=Math.min(this.page,Math.max(0,Math.ceil(events.length/25)-1));
   for(const event of events.slice(this.page*25,(this.page+1)*25)){
@@ -80,15 +85,15 @@ export class SceneScrubber {
     button.type='button';
     button.dataset.sceneEvent=event.kind;
     button.textContent=`${event.paragraphIndex+1} · ${event.label}`;
-    button.style.cssText='display:block;text-align:left;min-height:36px;width:100%;margin:4px 0;padding:6px 10px;font-size:12px;border-radius:6px;white-space:normal;overflow-wrap:anywhere';
+    button.style.cssText='display:block;text-align:left;min-height:44px;min-width:44px;width:100%;margin:4px 0;padding:8px 12px;font-size:12px;border-radius:6px;white-space:normal;overflow-wrap:anywhere';
     button.onclick=()=>read(event.key,event.paragraphIndex);
-    q('[data-scene-events]').append(button);
+    eventsContainer.append(button);
   }
   if(!events.length){
     const empty=document.createElement('p');
     empty.style.cssText='font-size:12px;opacity:0.75;margin:4px 0';
     empty.textContent='No scene markers recorded at this passage.';
-    q('[data-scene-events]').append(empty);
+    eventsContainer.append(empty);
   }
 
   const previous=q<HTMLButtonElement>('[data-scene-prev]'),next=q<HTMLButtonElement>('[data-scene-next]'),paging=q<HTMLElement>('[data-scene-paging]');

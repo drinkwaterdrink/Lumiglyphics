@@ -27,7 +27,7 @@ type PlannerBehaviour = "success" | "fail" | "emptyCharacters";
 
 function spindleFor(
   behaviour: PlannerBehaviour,
-  captured: { systemMessage: string },
+  captured: { systemMessage: string; userMessage?: string },
   options: { plannerCharacterName?: string; plannerCharacterDescription?: string; noCard?: boolean; cardName?: string; cardDescription?: string; sceneCharacter?: string } = {}
 ): SpindleAPI {
   return {
@@ -53,6 +53,7 @@ function spindleFor(
     generate: {
       raw: async (request: { messages: Array<{ role: string; content: string }> }) => {
         captured.systemMessage = request.messages[0]?.content ?? "";
+        captured.userMessage = request.messages[1]?.content ?? "";
         if (behaviour === "fail") throw new Error("planner unavailable");
         return { content: JSON.stringify({
           scenes: [{
@@ -191,8 +192,8 @@ describe("fresh single-character fallback", () => {
   });
 
   test("later planner success never overwrites the frozen fallback-seeded protagonist", async () => {
-    const capturedFail = { systemMessage: "" };
-    const capturedSuccess = { systemMessage: "" };
+    const capturedFail = { systemMessage: "", userMessage: "" };
+    const capturedSuccess = { systemMessage: "", userMessage: "" };
     const fallback = await plan(spindleFor("fail", capturedFail), emptySingleCharacter());
     expect(fallback.singleCharacter.protagonist.name).toBe("Mira");
 
@@ -208,8 +209,9 @@ describe("fresh single-character fallback", () => {
     const scene = success.plan.scenes[0]!;
     expect(scene.identityPrompt).toBe("silver hair, green eyes, red wool coat");
     expect(scene.cast).toEqual(["Mira"]);
-    // The frozen identity is fed back to the planner as the known-character baseline.
-    expect(capturedSuccess.systemMessage).toContain("Mira: silver hair, green eyes, red wool coat");
+    // The frozen identity is fed back to the planner in the user turn envelope (keeping system KV-static).
+    expect(capturedSuccess.userMessage).toContain("Mira: silver hair, green eyes, red wool coat");
+    expect(capturedSuccess.systemMessage).not.toContain("Mira: silver hair, green eyes, red wool coat");
   });
 
   test("never injects the speaker name as an appearance tag when there is no card", async () => {

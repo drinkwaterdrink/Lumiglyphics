@@ -127,11 +127,18 @@ export const PlannerSpeakerSchema = z.object({
   name: z.string().trim().min(1)
 });
 
+export const PlannerAudioCueSchema = z.object({
+  paragraphIndex: z.number().int().nonnegative(),
+  bgm: z.string().nullable().optional(),
+  sfx: z.string().nullable().optional(),
+});
+
 export const PlannerOutputSchema = z.object({
   storyReferences: z.unknown().optional(),
   storyDocuments: z.unknown().optional(),
   scenes: z.array(PlannerSceneSchema).default([]),
   cues: z.array(PlannerCueSchema).default([]),
+  audioCues: z.array(PlannerAudioCueSchema).optional(),
   effects: z.array(z.object({ paragraphIndex: z.number().int().nonnegative(), effect: StageEffectSchema })).default([]),
   choices: z.array(PlannerChoiceSchema).max(6).default([]),
   characters: z.array(PlannerCharacterSchema).default([]),

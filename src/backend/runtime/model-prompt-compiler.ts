@@ -16,6 +16,8 @@ import { getPromptSerializer } from './prompt-serializers/index.js';
 import { fitPromptDocumentToBudget } from './prompt-fit-v2.js';
 import { lintCompiledPrompt, type PromptLintResult } from './prompt-lint.js';
 
+export type SubjectPromptMode = 'delta-only' | 'full-prose';
+
 export interface ModelPromptCompilerInput {
   brief: VisualBrief;
   shotSpec: ImageShotSpec;
@@ -27,6 +29,71 @@ export interface ModelPromptCompilerInput {
   promptExpansionEnabled?: boolean | undefined;
   userBudgetOverride?: number | null | undefined;
   cue?: VisualCue | undefined;
+  modelId?: string | undefined;
+  denoiseStrength?: number | undefined;
+}
+
+export function resolveSubjectPromptMode(input: {
+  profile: ImagePromptProfileV2;
+  referencePlan?: ReferencePlan | undefined;
+  brief: VisualBrief;
+  cue?: VisualCue | undefined;
+  modelId?: string | undefined;
+  denoiseStrength?: number | undefined;
+}): SubjectPromptMode {
+  if (!input.profile.features.references) return 'full-prose';
+  if (/\/text-to-image$/i.test(input.modelId ?? '')) return 'full-prose';
+  if (input.profile.dialect === 'novelai' || input.profile.dialect === 'anima') return 'full-prose';
+  if (typeof input.denoiseStrength === 'number' && input.denoiseStrength >= 0.5) return 'full-prose';
+  const hasWiredIdentity = Boolean(
+    input.referencePlan?.references.some(
+      (ref) => ref.role === 'identity' && typeof ref.wireIndex === 'number' && ref.wireIndex >= 1 && Boolean(ref.dataUrl)
+    )
+  );
+  if (!hasWiredIdentity) return 'full-prose';
+  const occlusionText = `${input.brief.action ?? ''} ${input.cue?.visualDescription ?? ''}`;
+  if (/\b(?:silhouette|back[- ]?view|turned away|from behind|shadowed face)\b/i.test(occlusionText)) {
+    return 'full-prose';
+  }
+  return 'delta-only';
+}
+
+function applyDeltaOnlySubjectBrief(brief: VisualBrief, referencePlan?: ReferencePlan): VisualBrief {
+  const wiredIdentityRefs = (referencePlan?.references ?? []).filter(
+    (ref) => ref.role === 'identity' && typeof ref.wireIndex === 'number' && ref.wireIndex >= 1 && Boolean(ref.dataUrl)
+  );
+  if (wiredIdentityRefs.length === 0) return brief;
+  const primaryRef = wiredIdentityRefs[0]!;
+  if (brief.subjectMode === 'one' && brief.subjectPreparation) {
+    const attire = brief.subjectPreparation.attire?.trim();
+    const subjectName = brief.subjectPreparation.name || primaryRef.subject || 'subject';
+    const deltaIdentity = attire
+      ? `matching Reference Image ${primaryRef.wireIndex}'s facial identity and hair; wearing ${attire}`
+      : `matching Reference Image ${primaryRef.wireIndex}'s facial identity and hair`;
+    return {
+      ...brief,
+      subjects: `${subjectName}, ${deltaIdentity}`,
+      subjectPreparation: {
+        ...brief.subjectPreparation,
+        identity: deltaIdentity,
+      },
+    };
+  }
+  if (brief.subjectMode === 'ensemble' && brief.subjects) {
+    const lines = brief.subjects.split('\n').map((line) => {
+      const colonIdx = line.indexOf(':');
+      if (colonIdx <= 0) return line;
+      const name = line.slice(0, colonIdx).trim();
+      const matched = wiredIdentityRefs.find((r) => r.subject && r.subject.trim().toLowerCase() === name.toLowerCase());
+      if (!matched) return line;
+      const body = line.slice(colonIdx + 1);
+      const attireMatch = body.match(/;\s*(?:wearing|attired in)\s+([^;\n]+)/i);
+      const attireClause = attireMatch?.[1] ? `; wearing ${attireMatch[1].trim()}` : '';
+      return `${name}: matching Reference Image ${matched.wireIndex}'s facial identity and hair${attireClause}`;
+    });
+    return { ...brief, subjects: lines.join('\n') };
+  }
+  return brief;
 }
 
 export interface ModelPromptCompilerResult {
@@ -75,11 +142,25 @@ export function compileModelPrompt(input: ModelPromptCompilerInput): ModelPrompt
     detailLevel = 'auto',
     promptExpansionEnabled = profile.promptExpansion?.enabled,
     userBudgetOverride,
-    cue
+    cue,
+    modelId,
+    denoiseStrength,
   } = input;
 
+  const subjectPromptMode = resolveSubjectPromptMode({
+    profile,
+    referencePlan,
+    brief,
+    cue,
+    modelId,
+    denoiseStrength,
+  });
+  const effectiveBrief = subjectPromptMode === 'delta-only'
+    ? applyDeltaOnlySubjectBrief(brief, referencePlan)
+    : brief;
+
   // 1. Classify scene complexity
-  const complexity: SceneComplexity = classifySceneComplexity({ brief, shotSpec, cue });
+  const complexity: SceneComplexity = classifySceneComplexity({ brief: effectiveBrief, shotSpec, cue });
 
   // 2. Resolve soft and hard budget ranges
   const budgetPlan: PromptBudgetPlan = resolveUsefulPromptBudget(
@@ -93,7 +174,7 @@ export function compileModelPrompt(input: ModelPromptCompilerInput): ModelPrompt
   // 3. Dispatch to dialect-specific serializer
   const serializer = getPromptSerializer(profile.dialect);
   const serialized = serializer({
-    brief,
+    brief: effectiveBrief,
     shotSpec,
     styleDNA,
     profile,

@@ -190,7 +190,7 @@ export class SpeechSettingsSection {
       if (!id) { onChange(null); return; }
       // Keep a previously chosen voice override only when the profile stays the same.
       const voice = selected && selected.connectionId === id ? selected.voice : "";
-      onChange({ connectionId: id, voice });
+      onChange({ connectionId: id, voice, ...(selected?.parameters ? { parameters: selected.parameters } : {}) });
     });
     return select;
   }
@@ -225,7 +225,6 @@ export class SpeechSettingsSection {
     }
     input.addEventListener("input", () => {
       this.activeDrafts.set(fieldKey, input.value);
-      if (selected) selected.voice = input.value;
     });
     input.addEventListener("change", () => {
       this.activeDrafts.delete(fieldKey);

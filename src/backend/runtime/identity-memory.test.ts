@@ -61,7 +61,7 @@ function spindleFor(
     },
     generate: {
       raw: async (request: { messages: Array<{ role: string; content: string }> }) => {
-        captured.systemMessage = request.messages[0]?.content ?? "";
+        captured.systemMessage = request.messages.map((m) => m.content).join("\n");
         return { content: JSON.stringify({
           scenes: [{
             startParagraph: 0,

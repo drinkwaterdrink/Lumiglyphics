@@ -42,6 +42,9 @@ export type SceneImageIdentity = {
   styleDnaDigest?: string;
   outputPlanDigest?: string;
   referencePlanDigest?: string;
+  continuityDigest?: string;
+  relightRevision?: number;
+  reframeRevision?: number;
   /** Durable identity: registry id and persisted subject class, never the display name alone. */
   subject: { characterId: string; subjectCategory: string };
   /** Resolved identity tags after the wardrobe override, plus the wardrobe itself. */

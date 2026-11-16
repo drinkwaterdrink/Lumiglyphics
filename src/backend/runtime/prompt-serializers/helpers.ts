@@ -224,6 +224,10 @@ export function formatCameraFraming(shotSpec: ImageShotSpec, styleDNA?: StyleDNA
     parts.push(dofMap[shotSpec.camera.depthOfField] || `${shotSpec.camera.depthOfField} depth of field`);
   }
 
+  if (shotSpec.crop) {
+    parts.push(shotSpec.crop);
+  }
+
   return parts.join(', ');
 }
 
@@ -288,8 +292,13 @@ export function formatReferenceDirectives(referencePlan?: ReferencePlan): string
     return [];
   }
 
-  return referencePlan.references.map((ref: ReferenceItem, idx: number) => {
-    const num = idx + 1;
+  const hasWireIndices = referencePlan.references.some((ref) => typeof ref.wireIndex === 'number');
+  const activeRefs = hasWireIndices
+    ? referencePlan.references.filter((ref) => typeof ref.wireIndex === 'number')
+    : referencePlan.references;
+
+  return activeRefs.map((ref: ReferenceItem, idx: number) => {
+    const num = typeof ref.wireIndex === 'number' ? ref.wireIndex : idx + 1;
     if (ref.role === 'identity' && ref.subject) {
       return `Use reference image ${num} specifically for ${ref.subject}'s facial identity and hair; follow the scene prompt for current pose, outfit, and setting.`;
     }

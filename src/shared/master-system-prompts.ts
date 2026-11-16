@@ -89,10 +89,11 @@ Return:
       "preferredCompositionMode": "layered-depth",
       "spatialRelationships": ["Name1 seated foreground-left at the counter", "Name2 leaning in the midground doorway"],
       "sceneStagingNote": "Angled three-quarter view across the room showing both characters engaged in the space"
-    }
+    },
+    "bgm": "intimate_warm",
+    "sfx": "cloth_rustle"
   }],
-  "effects": [{"paragraphIndex": 1, "effect": "shake_hard"}],
-  "audioCues": [{"paragraphIndex": 0, "bgm": "intimate_warm", "sfx": "cloth_rustle"}]
+  "effects": [{"paragraphIndex": 1, "effect": "shake_hard"}]
 }`;
 
 export const MASTER_LORE_REFERENCE_PROMPT = `You are the Master Story Lore & World Lens Intelligence Engine.

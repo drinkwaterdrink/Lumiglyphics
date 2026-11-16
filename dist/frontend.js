@@ -35,9 +35,11 @@ class SceneScrubber {
     this.model = model;
     this.render(current);
   }
-  render(current) {
+  ensureStructure() {
+    if (this.element.querySelector("[data-scene-history-details]"))
+      return;
     this.element.innerHTML = `<details data-scene-history-details style="margin-bottom:12px;border:1px solid rgba(134,219,178,.18);border-radius:10px;padding:8px 12px;background:rgba(0,0,0,.15)">
-    <summary style="font-weight:700;font-size:13px;cursor:pointer;color:var(--vn-shell-accent,#86dbb2);display:flex;align-items:center;justify-content:space-between">
+    <summary style="font-weight:700;font-size:13px;cursor:pointer;color:var(--vn-shell-accent,#86dbb2);display:flex;align-items:center;justify-content:space-between;min-height:44px">
       <span>Scene Navigation &amp; Markers</span>
       <small data-scene-summary-tag style="opacity:0.75;font-weight:500;font-size:11px"></small>
     </summary>
@@ -45,23 +47,26 @@ class SceneScrubber {
       <p data-scene-source style="font-size:12px;opacity:0.8;margin:4px 0 8px"></p>
       <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">
         Select revealed passage
-        <input data-scene-range aria-label="Revealed passage" type="range" min="0" value="0" style="width:100%;min-height:36px;margin:4px 0">
+        <input data-scene-range aria-label="Revealed passage" type="range" min="0" value="0" style="width:100%;min-height:44px;margin:4px 0">
       </label>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
         <output data-scene-selected style="font-size:12px;font-weight:600"></output>
-        <button type="button" data-scene-seek style="min-height:32px;padding:4px 12px;font-size:12px;border-radius:6px">Read passage</button>
+        <button type="button" data-scene-seek style="min-height:44px;min-width:44px;padding:8px 14px;font-size:12px;border-radius:6px">Read passage</button>
       </div>
       <p data-scene-history-note role="status" style="font-size:11px;opacity:0.7;margin:4px 0"></p>
       <div data-scene-events></div>
       <div data-scene-paging style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px">
-        <button type="button" data-scene-prev style="min-height:30px;padding:2px 8px;font-size:11px">Previous markers</button>
+        <button type="button" data-scene-prev style="min-height:44px;min-width:44px;padding:8px 12px;font-size:12px">Previous markers</button>
         <small data-scene-page style="font-size:11px"></small>
-        <button type="button" data-scene-next style="min-height:30px;padding:2px 8px;font-size:11px">Next markers</button>
+        <button type="button" data-scene-next style="min-height:44px;min-width:44px;padding:8px 12px;font-size:12px">Next markers</button>
       </div>
     </div>
   </details>`;
+  }
+  render(current) {
+    this.ensureStructure();
     const q = (selector) => this.element.querySelector(selector);
-    const model = this.model, range = q("[data-scene-range]"), jump = q("[data-scene-seek]"), note = q("[data-scene-history-note]");
+    const model = this.model, range = q("[data-scene-range]"), jump = q("[data-scene-seek]"), note = q("[data-scene-history-note]"), eventsContainer = q("[data-scene-events]");
     q("[data-scene-source]").textContent = model ? `Current reader · ${historySourceLabel(model.key)}` : "Current reader unavailable";
     range.max = String(Math.max(0, model?.through ?? 0));
     range.value = String(Math.min(Math.max(0, current), model?.through ?? 0));
@@ -83,6 +88,7 @@ class SceneScrubber {
         read(model.key, Number(range.value));
     };
     note.textContent = model?.unavailable ? "Scene and presence metadata are not established. Revealed passage navigation is still available." : model?.truncated ? "Showing a bounded selection of recorded markers; the range still covers every revealed passage." : "Markers show recorded locations and presence, not inferred relationships.";
+    eventsContainer.replaceChildren();
     const events = model?.events ?? [];
     this.page = Math.min(this.page, Math.max(0, Math.ceil(events.length / 25) - 1));
     for (const event of events.slice(this.page * 25, (this.page + 1) * 25)) {
@@ -90,15 +96,15 @@ class SceneScrubber {
       button.type = "button";
       button.dataset.sceneEvent = event.kind;
       button.textContent = `${event.paragraphIndex + 1} · ${event.label}`;
-      button.style.cssText = "display:block;text-align:left;min-height:36px;width:100%;margin:4px 0;padding:6px 10px;font-size:12px;border-radius:6px;white-space:normal;overflow-wrap:anywhere";
+      button.style.cssText = "display:block;text-align:left;min-height:44px;min-width:44px;width:100%;margin:4px 0;padding:8px 12px;font-size:12px;border-radius:6px;white-space:normal;overflow-wrap:anywhere";
       button.onclick = () => read(event.key, event.paragraphIndex);
-      q("[data-scene-events]").append(button);
+      eventsContainer.append(button);
     }
     if (!events.length) {
       const empty = document.createElement("p");
       empty.style.cssText = "font-size:12px;opacity:0.75;margin:4px 0";
       empty.textContent = "No scene markers recorded at this passage.";
-      q("[data-scene-events]").append(empty);
+      eventsContainer.append(empty);
     }
     const previous = q("[data-scene-prev]"), next = q("[data-scene-next]"), paging = q("[data-scene-paging]");
     if (events.length <= 25) {
@@ -18792,6 +18798,12 @@ function describePresentationAction(action, name = (id2) => id2) {
 }
 
 // src/shared/story-dna.ts
+var LocationSpatialAnchorsSchema = exports_external.object({
+  lightSourceAxis: exports_external.enum(["left", "right", "backlit", "overhead", "ambient"]).optional(),
+  windowOrPortalSide: exports_external.enum(["left", "right", "center-back", "none"]).optional(),
+  horizonHeight: exports_external.enum(["low", "mid", "high"]).optional(),
+  landmarks: exports_external.array(exports_external.string().trim().min(1).max(80)).max(6).default([])
+}).strict();
 var LocationDNASchema = exports_external.object({
   id: exports_external.string().trim().min(1).max(256),
   name: exports_external.string().trim().min(1).max(160),
@@ -18801,6 +18813,7 @@ var LocationDNASchema = exports_external.object({
   atmosphere: exports_external.string().trim().max(500).optional(),
   architecture: exports_external.string().trim().max(500).optional(),
   persistentElements: exports_external.array(exports_external.string().trim().max(300)).max(24).default([]),
+  spatialAnchors: LocationSpatialAnchorsSchema.optional(),
   locked: exports_external.boolean().optional(),
   referenceImageUrl: exports_external.string().trim().max(2048).optional(),
   connectedLocations: exports_external.array(exports_external.string().trim().max(160)).max(24).optional(),
@@ -21813,6 +21826,31 @@ function stripTextEffectTags(text) {
     return text;
   return text.replace(new RegExp(TEXT_EFFECT_TAG_PATTERN.source, "gi"), "");
 }
+var ENTITY_MAP = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+  "&apos;": "'",
+  "&nbsp;": " "
+};
+function prepareSpeechText(text) {
+  if (!text)
+    return "";
+  let out = stripTextEffectTags(text);
+  out = out.replace(/<r[tp]\b[^>]*>[\s\S]*?<\/r[tp]>/gi, "");
+  out = out.replace(/<br\s*\/?>/gi, " ");
+  out = out.replace(/<[^>]+>/g, "");
+  out = out.replace(/&(amp|lt|gt|quot|#39|apos|nbsp);/gi, (m) => ENTITY_MAP[m.toLowerCase()] ?? m);
+  out = out.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+  out = out.replace(/^\s{0,3}#{1,6}\s+/gm, "");
+  out = out.replace(/^\s*>\s*/gm, "");
+  out = out.replace(/\*\*/g, "").replace(/__/g, "").replace(/~~/g, "").replace(/`/g, "");
+  out = out.replace(/\*/g, "");
+  out = out.replace(/(^|[^\w])_([^_\n]+)_([^\w]|$)/g, "$1$2$3");
+  return out.replace(/[ \t\r\n]+/g, " ").trim();
+}
 
 // src/shared/relationship-observations.ts
 function relationshipObservations(turn, index, enabled) {
@@ -23046,7 +23084,7 @@ function previewCursorForTurn(preview, index, turn) {
 
 // src/shared/image-retries.ts
 var id3 = exports_external.string().trim().min(1).max(256);
-var QueueImageRetriesSchema = exports_external.object({ type: exports_external.literal("vn_queue_image_retries"), version: exports_external.literal(1), chatId: id3, messageId: id3, sourceFingerprint: id3, swipeId: exports_external.number().int().nonnegative(), revision: exports_external.number().int().nonnegative(), requestId: id3, action: exports_external.enum(["enqueue", "clear"]), jobIds: exports_external.array(id3).min(1).max(24).optional() }).strict().refine((r) => r.action === "clear" || Boolean(r.jobIds?.length), "Choose at least one picture.");
+var QueueImageRetriesSchema = exports_external.object({ type: exports_external.literal("vn_queue_image_retries"), version: exports_external.literal(1), chatId: id3, messageId: id3, sourceFingerprint: id3, swipeId: exports_external.number().int().nonnegative(), revision: exports_external.number().int().nonnegative(), requestId: id3, action: exports_external.enum(["enqueue", "clear"]), jobIds: exports_external.array(id3).min(1).max(24).optional(), priorityJobIds: exports_external.array(id3).min(1).max(24).optional() }).strict().refine((r) => r.action === "clear" || Boolean(r.jobIds?.length), "Choose at least one picture.");
 
 // src/shared/cast-art.ts
 var id4 = exports_external.string().trim().min(1).max(256);
@@ -23069,7 +23107,9 @@ var CastArtVariantSchema = exports_external.object({
   description: exports_external.string().max(4000),
   displayImageId: id4.optional(),
   approved: exports_external.literal(true),
-  createdAt: exports_external.string().max(64)
+  createdAt: exports_external.string().max(64),
+  lastUsedAt: exports_external.number().nonnegative().optional(),
+  pinned: exports_external.boolean().optional()
 }).strict();
 var CastArtRecordSchema = exports_external.object({
   entityId: id4,
@@ -23205,7 +23245,12 @@ var imageOperationScope = { chatId: exports_external.string().min(1).max(128), m
 var imageOperationEdits = exports_external.object({ prompt: exports_external.string().trim().min(1).max(65000).optional(), negativePrompt: exports_external.string().max(65000).optional(), parameters: exports_external.record(exports_external.string(), exports_external.unknown()).optional() }).strict();
 var imagePromptOperation = { guidance: exports_external.string().max(400).optional(), edits: imageOperationEdits.optional(), pinnedClauses: exports_external.array(exports_external.string().trim().min(1).max(300)).max(8).optional() };
 var RewriteImagePromptRequestSchema = exports_external.object({ type: exports_external.enum(["vn_regenerate_image_prompt", "vn_enrich_image_prompt"]), ...imageOperationScope, requestId: exports_external.string().min(1).max(100), ...imagePromptOperation }).strict();
-var PrepareImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_prepare_image"), ...imageOperationScope, jobId: exports_external.string().min(1).max(200), templateId: exports_external.string().min(1).max(100).optional(), ...imagePromptOperation, regeneratePrompt: exports_external.boolean().optional(), promptOperation: exports_external.enum(["rewrite", "enrich"]).optional(), reframe: exports_external.boolean().optional(), styleId: exports_external.string().max(100).optional(), fitToModel: exports_external.boolean().optional(), model: exports_external.string().max(200).optional(), connectionId: exports_external.string().max(200).optional(), quickGenerate: exports_external.boolean().optional(), manualCamera: exports_external.object({ shotSize: exports_external.string().optional(), angle: exports_external.string().optional(), lensFeel: exports_external.string().optional(), composition: exports_external.string().optional(), depth: exports_external.string().optional(), dialogueSafeArea: exports_external.enum(["auto", "always", "off"]).optional() }).strict().optional() }).strict();
+var ManualLightingSchema = exports_external.object({
+  timeOfDay: exports_external.string().trim().max(64).optional(),
+  keyLightDirection: exports_external.enum(["left", "right", "backlit", "overhead", "ambient"]).optional(),
+  mood: exports_external.string().trim().max(64).optional()
+}).strict();
+var PrepareImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_prepare_image"), ...imageOperationScope, jobId: exports_external.string().min(1).max(200), templateId: exports_external.string().min(1).max(100).optional(), ...imagePromptOperation, regeneratePrompt: exports_external.boolean().optional(), promptOperation: exports_external.enum(["rewrite", "enrich"]).optional(), reframe: exports_external.boolean().optional(), relight: exports_external.boolean().optional(), lockContinuity: exports_external.boolean().optional(), styleId: exports_external.string().max(100).optional(), fitToModel: exports_external.boolean().optional(), model: exports_external.string().max(200).optional(), connectionId: exports_external.string().max(200).optional(), quickGenerate: exports_external.boolean().optional(), manualCamera: exports_external.object({ shotSize: exports_external.string().optional(), angle: exports_external.string().optional(), lensFeel: exports_external.string().optional(), composition: exports_external.string().optional(), depth: exports_external.string().optional(), dialogueSafeArea: exports_external.enum(["auto", "always", "off"]).optional(), focalPoint: exports_external.object({ x: exports_external.number().min(0).max(100), y: exports_external.number().min(0).max(100) }).strict().optional() }).strict().optional(), manualLighting: ManualLightingSchema.optional() }).strict();
 var RestorePreviousImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_restore_previous_image"), ...imageOperationScope, swipeId: exports_external.number().int().nonnegative().nullable(), revision: exports_external.number().int().nonnegative(), jobId: exports_external.string().min(1).max(200), versionId: exports_external.string().min(1).max(256) }).strict();
 var DeleteImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_delete_image"), chatId: exports_external.string().min(1).max(256), imageId: exports_external.string().min(1).max(256).optional(), imageUrl: exports_external.string().min(1).max(2048).optional(), jobId: exports_external.string().min(1).max(256).optional() }).strict();
 var REFERENCE_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
@@ -24661,20 +24706,6 @@ body.theme-dark .route-bar .route-actions .menu-key,
   height: 1px !important;
 }
 
-/* Route bar suppressed in favor of sticky workspace top header */
-.route-bar,
-.route-bar[hidden],
-[hidden].route-bar,
-.route-bar:not([data-active="true"]),
-[data-vn-shell]:not([data-vn-workspace]) .route-bar,
-[data-vn-shell]:not([data-vn-workspace]) > .route-bar,
-:not([data-vn-workspace]) > .route-bar,
-[data-vn-root] .route-bar,
-[data-vn-reader-first="true"]:not([data-vn-workspace]) .route-bar,
-[data-vn-workspace] .route-bar {
-  display: none !important;
-}
-
 /* Hide legacy elements in APERTURE v4 while allowing TTS mini-player popover when open */
 .vn-speech-dock:not([data-open="true"]),
 [data-vn-panel-layer] .launcher,
@@ -24685,9 +24716,11 @@ body.theme-dark .route-bar .route-actions .menu-key,
   display: block !important;
 }
 
-/* Hide duplicate Cast icon in topbar (Cast lives in the bottom navigation bar) */
-[data-vn-reader-header] [data-action="cast-toggle"] {
-  display: none !important;
+/* Hide duplicate Cast icon in mobile topbar (Cast lives in the bottom navigation bar on mobile) */
+@media (max-width: 639px) {
+  [data-vn-reader-header] [data-action="cast-toggle"] {
+    display: none !important;
+  }
 }
 .round-ghost[data-action="voice-toggle"].speaking {
   border-color: var(--aperture-accent, #dcebad) !important;
@@ -24931,8 +24964,9 @@ aside[data-vn-workspace] {
   align-items: center !important;
   justify-content: space-between !important;
   width: 100% !important;
-  flex: 0 0 24px !important;
-  min-height: 24px !important;
+  flex: 0 0 auto !important;
+  min-height: 44px !important;
+  touch-action: none !important;
   border-bottom: 1px solid rgba(228, 240, 218, 0.15) !important;
   padding-bottom: 3px !important;
   margin-bottom: 2px !important;
@@ -25883,7 +25917,8 @@ body.theme-light .folio-quote-callout {
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
-  min-height: 22px !important;
+  min-height: 44px !important;
+  touch-action: none !important;
   margin-top: 2px !important;
   margin-bottom: 4px !important;
   padding-bottom: 4px !important;
@@ -27370,35 +27405,7 @@ section[data-reference-observations] h3 {
   color: #ffffff !important;
 }
 
-/* Extension-wide Light Mode Text & Contrast Guarantee for Settings, Folios, Places & Workspaces */
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-cast-workspace], [data-place-workspace], [data-image-studio], [data-vn-panel-layer], [data-reader-workspace], [data-folio-body]) {
-  color: #142820 !important;
-}
-
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-cast-workspace], [data-place-workspace], [data-image-studio], [data-vn-panel-layer]) :is(p, span, label, small, strong, em, dt, dd, h2, h3, h4) {
-  color: #142820 !important;
-}
-
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-cast-workspace], [data-place-workspace], [data-image-studio], [data-vn-panel-layer]) :is(small, .muted, [data-muted]) {
-  color: #4b6b5d !important;
-}
-
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-cast-workspace], [data-place-workspace], [data-image-studio], [data-vn-panel-layer]) :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
-  background-color: #ffffff !important;
-  color: #142820 !important;
-  border-color: rgba(86, 128, 107, 0.35) !important;
-}
-
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-cast-workspace], [data-place-workspace], [data-image-studio], [data-vn-panel-layer]) :is(button:not([data-action="voice-toggle"]):not(.launcher)) {
-  background-color: #e5eee2 !important;
-  color: #142820 !important;
-  border-color: rgba(86, 128, 107, 0.35) !important;
-}
-
-:is(:host-context(body.theme-light), :host-context([data-aperture-mode="light"]), :host([data-aperture-mode="light"]), body.theme-light, [data-aperture-mode="light"], [data-vn-root][data-aperture-mode="light"]) :is([data-cast-workspace], [data-place-workspace], [data-image-studio], [data-vn-panel-layer]) :is(button:not([data-action="voice-toggle"]):not(.launcher)):hover {
-  background-color: #d6e4d2 !important;
-  border-color: #56806b !important;
-}
+/* Light Mode contrast tokens are driven cleanly through --vn-shell-* variables instead of blanket !important overrides. */
 
 /* Reading Typography Modes */
 [data-vn-root][data-vn-typography="novelist"] [data-vn-dialogue-text],
@@ -28315,9 +28322,6 @@ class ReaderWorkspace {
   input;
   results;
   apertureOverlay;
-  routeBar;
-  routeName;
-  routeStep;
   abort = new AbortController;
   tools = new Map;
   current = null;
@@ -28353,7 +28357,7 @@ class ReaderWorkspace {
     <header data-vn-reader-header class="reader-topbar">
       <button type="button" class="round-ghost" data-aperture-open aria-label="Open APERTURE navigation" title="Open APERTURE navigation">${APERTURE_ICONS.menu}</button>
       <div class="reading-heading" style="padding-left:4px">
-        <strong data-reader-caption-strong>Chapter IV</strong>
+        <strong data-reader-caption-strong>Current Scene</strong>
         <small data-reader-caption-small data-reader-caption>Visual novel</small>
       </div>
       <div data-reader-header-actions class="topbar-actions" style="display:flex;align-items:center;gap:6px;margin-left:auto">
@@ -28370,18 +28374,6 @@ class ReaderWorkspace {
       <header data-workspace-heading><button type="button" class="workspace-back-btn" data-workspace-back aria-label="Go back to previous screen" title="Back">${APERTURE_ICONS.back}</button><div><p data-workspace-subtitle></p><h2 data-workspace-title></h2></div><button type="button" data-workspace-close aria-label="Close workspace and return to reader">${readerIcon("close")}</button></header>
       <div data-workspace-content></div>
     </aside>
-    <div class="route-bar" hidden aria-label="Quick navigation bar">
-      <div>
-        <div class="route-name">WORKSPACE</div>
-        <div class="route-step">ACTIVE SCENE / YOUR WORLD</div>
-      </div>
-      <div class="route-actions">
-        <button type="button" data-route-bar-action="back" aria-label="Go back to previous screen" title="Back">${APERTURE_ICONS.back}</button>
-        <button type="button" data-route-bar-action="read" aria-label="Return to reading">${APERTURE_ICONS.book}</button>
-        <button type="button" data-route-bar-action="settings" class="dock-settings" aria-label="Open extension settings" title="Extension settings">${APERTURE_ICONS.settings}<span>Settings</span></button>
-        <button type="button" data-route-bar-action="menu" class="menu-key">${APERTURE_ICONS.spark} Navigate</button>
-      </div>
-    </div>
     <nav class="aperture-overlay" id="apertureNav" aria-label="APERTURE navigation" aria-hidden="true">
       <div class="aperture-content">
         <div class="aperture-top">
@@ -28397,9 +28389,10 @@ class ReaderWorkspace {
           <button type="button" data-aperture-route="history" class="aperture-link"><span class="number">05</span><span>History</span>${APERTURE_ICONS.history}</button>
           <button type="button" data-aperture-route="settings" class="aperture-link"><span class="number">06</span><span>Settings</span>${APERTURE_ICONS.settings}</button>
           <button type="button" data-aperture-route="workspace" class="aperture-link"><span class="number">07</span><span>Workspace</span>${APERTURE_ICONS.layers}</button>
+          <button type="button" data-action="cast-toggle" class="aperture-link" style="min-height:44px"><span class="number">08</span><span>Toggle cast portraits</span>${APERTURE_ICONS.cast}</button>
           <button type="button" data-aperture-route="chat" class="aperture-link"><span class="number">→</span><span>Back to Lumiverse chat</span>${APERTURE_ICONS.chat}</button>
         </div>
-        <div class="aperture-foot"><span>CHAPTER IV</span><span>EVERY DETAIL HAS A PLACE</span></div>
+        <div class="aperture-foot"><span data-aperture-chapter>CURRENT SCENE</span><span>EVERY DETAIL HAS A PLACE</span></div>
       </div>
     </nav>
     <dialog data-reader-command aria-label="Find menus and settings"><form method="dialog"><header><h2>Find your way</h2><button type="submit" aria-label="Close menu search">${readerIcon("close")}</button></header></form><label>${readerIcon("search")}<input type="search" maxlength="120" placeholder="Search menus and settings…" aria-label="Search menus and settings" autocomplete="off"></label><div data-reader-command-results></div><p>Navigation only. Searching never starts generation.</p></dialog>`;
@@ -28417,9 +28410,6 @@ class ReaderWorkspace {
     this.input = q("[data-reader-command] input");
     this.results = q("[data-reader-command-results]");
     this.apertureOverlay = q(".aperture-overlay");
-    this.routeBar = q(".route-bar");
-    this.routeName = q(".route-bar .route-name");
-    this.routeStep = q(".route-bar .route-step");
     this.more = document.createElement("div");
     this.more.dataset.readerMore = "";
     this.renderWorkspaceDestinations();
@@ -28527,21 +28517,13 @@ class ReaderWorkspace {
     openMenuBtn.addEventListener("click", () => this.toggleAperture(true), { signal });
     const closeMenuBtn = q('[data-action="aperture-close"]');
     closeMenuBtn.addEventListener("click", () => this.toggleAperture(false), { signal });
-    this.routeBar.addEventListener("click", (event) => {
-      const target2 = event.target instanceof Element ? event.target.closest("[data-route-bar-action]") : null;
-      if (!target2)
-        return;
-      const act = target2.dataset.routeBarAction;
-      if (act === "read")
-        this.close();
-      else if (act === "back")
-        this.goBack();
-      else if (act === "settings")
-        this.open("settings");
-      else if (act === "menu")
-        this.toggleAperture();
-    }, { signal });
     this.apertureOverlay.addEventListener("click", (event) => {
+      const castBtn = event.target instanceof Element ? event.target.closest('[data-action="cast-toggle"]') : null;
+      if (castBtn) {
+        this.toggleAperture(false);
+        this.shell.dispatchEvent(new CustomEvent("lumiglyphics:cast-toggle", { bubbles: true }));
+        return;
+      }
       const link = event.target instanceof Element ? event.target.closest("[data-aperture-route]") : null;
       if (!link)
         return;
@@ -28586,8 +28568,8 @@ class ReaderWorkspace {
     const heroCard = document.createElement("div");
     heroCard.className = "workspace-scene-card";
     heroCard.innerHTML = `<div class="micro">CURRENT SCENE</div>
-      <h2 class="workspace-scene-title">Kit Hall</h2>
-      <p class="workspace-scene-sub">Chapter IV · Current passage</p>
+      <h2 class="workspace-scene-title" data-workspace-scene-title>Active Scene</h2>
+      <p class="workspace-scene-sub" data-workspace-scene-sub>Current passage</p>
       <button type="button" class="btn workspace-scene-cta">Resume reading <span>→</span></button>
       <div class="workspace-scene-orbit" aria-hidden="true"></div>`;
     heroCard.querySelector("button")?.addEventListener("click", () => this.close());
@@ -28685,9 +28667,6 @@ class ReaderWorkspace {
       this.panel.hidden = false;
       this.shell.dataset.vnWorkspace = id6;
       this.panel.dataset.surface = id6;
-      this.routeBar.hidden = false;
-      this.routeName.textContent = (id6 === "story" ? "World Lens" : d.label).toUpperCase();
-      this.routeStep.textContent = "ACTIVE SCENE / YOUR WORLD";
       const tool = this.tools.get(id6);
       if (tool) {
         this.rememberHome(tool.element);
@@ -28729,9 +28708,6 @@ class ReaderWorkspace {
       this.panel.hidden = false;
       this.shell.dataset.vnWorkspace = "more";
       this.panel.dataset.surface = "workspace";
-      this.routeBar.hidden = false;
-      this.routeName.textContent = "WORKSPACE";
-      this.routeStep.textContent = "ACTIVE SCENE / YOUR WORLD";
       this.syncReader();
       this.closeButton.focus({ preventScroll: true });
     } finally {
@@ -28748,7 +28724,6 @@ class ReaderWorkspace {
       this.current = null;
       this.panel.hidden = true;
       delete this.shell.dataset.vnWorkspace;
-      this.routeBar.hidden = true;
       this.toggleAperture(false);
       this.syncReader();
       if (restoreFocus) {
@@ -28793,17 +28768,35 @@ class ReaderWorkspace {
   setCaption(text) {
     const el = this.header.querySelector("[data-reader-caption]");
     const strong = this.header.querySelector("[data-reader-caption-strong]");
+    const heroTitle = this.more.querySelector("[data-workspace-scene-title]");
+    const heroSub = this.more.querySelector("[data-workspace-scene-sub]");
+    const footChapter = this.apertureOverlay.querySelector("[data-aperture-chapter]");
     if (text.includes("·")) {
       const parts = text.split("·").map((s) => s.trim());
+      const title = parts[0] || "Current Scene";
+      const sub = parts.slice(1).join(" · ") || "Current passage";
       if (strong)
-        strong.textContent = parts[0] || "Chapter IV";
+        strong.textContent = title;
       if (el)
-        el.textContent = parts.slice(1).join(" · ");
+        el.textContent = sub;
+      if (heroTitle)
+        heroTitle.textContent = title;
+      if (heroSub)
+        heroSub.textContent = sub;
+      if (footChapter)
+        footChapter.textContent = title.toUpperCase();
     } else {
+      const title = text || "Current Scene";
       if (strong)
-        strong.textContent = text || "Chapter IV";
+        strong.textContent = title;
       if (el)
         el.textContent = "Visual novel";
+      if (heroTitle)
+        heroTitle.textContent = title;
+      if (heroSub)
+        heroSub.textContent = "Current passage";
+      if (footChapter)
+        footChapter.textContent = title.toUpperCase();
     }
   }
   setAttention(count) {
@@ -28977,7 +28970,6 @@ class ReaderWorkspace {
     this.panel.remove();
     this.search.remove();
     this.apertureOverlay.remove();
-    this.routeBar.remove();
     this.tools.clear();
     this.homes.clear();
   }
@@ -29111,10 +29103,10 @@ function selectCastComposition(turn, index, selectedName, absenceDisplay = "hide
       if (entity) {
         const state = snapshot.stateByEntity[entity.id];
         if (state?.outfit && p.asset?.stageAsset?.attire && state.outfit !== p.asset.stageAsset.attire)
-          p.asset = null;
+          p.attireMismatch = true;
         if (state?.presence === "absent") {
           byName.delete(key);
-          if (absenceDisplay === "dim" && p.asset && p.asset.paragraphIndex < index && offScene.length < 8) {
+          if (absenceDisplay === "dim" && !p.attireMismatch && p.asset && p.asset.paragraphIndex < index && offScene.length < 8) {
             const earlier = selectPresentationSnapshot(turn.presentation, p.asset.paragraphIndex);
             if (earlier && samePresentationTurn(earlier.at.key, snapshot.at.key) && earlier.stateByEntity[entity.id]?.presence === "present")
               offScene.push({ ...p, active: false });
@@ -29137,7 +29129,8 @@ var CSS = `
 [data-vn-cast-portraits]{position:relative;display:flex;gap:.75rem;justify-content:center;max-width:100%;width:min(100%,700px)}
 [data-vn-cast-card]{position:relative;margin:0;flex:1 1 0;min-width:0;max-width:320px;overflow:visible;border:none;background:transparent;box-shadow:none;transition:transform 220ms cubic-bezier(.2,.8,.2,1),opacity 220ms ease,filter 220ms ease}
 [data-vn-cast-card][data-active=true]{transform:translateY(-6px);filter:drop-shadow(0 0 16px rgba(220,238,173,0.35))}
-[data-vn-cast-portraits]:has([data-vn-cast-card][data-active=true]) [data-vn-cast-card][data-active=false]{opacity:.86;filter:brightness(.88) saturate(.92)}
+[data-vn-cast-portraits]:has([data-vn-cast-card][data-active=true]) [data-vn-cast-card][data-active=false]{opacity:.84;filter:brightness(.86) saturate(.84)}
+[data-vn-cast-card][data-attire-mismatch=true] figcaption{border-color:rgba(246,196,83,0.55);color:#f9e7b2}
 @media(prefers-reduced-motion:reduce){[data-vn-cast-card]{transition:none}[data-vn-cast-card][data-active=true]{transform:none}}
 [data-vn-effect-intensity=off] [data-vn-cast-card]{transition:none;transform:none}
 [data-vn-cast-media]{display:grid;align-items:start}
@@ -29159,8 +29152,11 @@ var CSS = `
 [data-vn-cast-toggle]:focus-visible{outline:2px solid var(--vn-accent,#dcebad);outline-offset:2px}
 [data-vn-cast-toggle=hide]:focus-visible{outline-offset:-3px}
 [data-vn-cast-tray]{display:flex;flex-wrap:wrap;justify-content:center;gap:.35rem;max-height:5.5rem;overflow:auto;pointer-events:auto}
-[data-vn-cast-tray] button{min-height:44px;padding:.35rem .7rem;border:1px solid rgba(220,238,217,0.25);border-radius:999px;background:rgba(11,23,19,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#f4f7ee;font:inherit;font-size:.8rem;font-weight:600;cursor:pointer}
-@media(max-height:500px){[data-vn-cast]{inset:var(--vn-cast-top,4rem) 1rem auto}[data-vn-cast-card] img,[data-vn-cast-placeholder]{height:min(clamp(60px,23vh,120px),var(--vn-cast-height,120px))}}
+[data-vn-cast-tray] button{display:inline-flex;align-items:center;gap:.4rem;min-height:44px;padding:.35rem .7rem;border:1px solid rgba(220,238,217,0.25);border-radius:999px;background:rgba(11,23,19,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#f4f7ee;font:inherit;font-size:.8rem;font-weight:600;cursor:pointer}
+[data-vn-cast-readiness]{width:6px;height:6px;border-radius:999px;flex:none;background:#86efac}
+[data-vn-cast-readiness=pending]{background:#cbd5e1}
+[data-vn-cast-readiness=mismatch]{background:#fbbf24}
+@media(max-height:500px){[data-vn-cast]{inset:var(--vn-cast-top,4rem) 1rem auto}[data-vn-cast-card][data-active=true]{transform:translateY(-4px)}[data-vn-cast-card] img,[data-vn-cast-placeholder]{height:min(clamp(60px,23vh,120px),var(--vn-cast-height,120px))}}
 `;
 
 class CastStage {
@@ -29289,9 +29285,14 @@ class CastStage {
     for (const portrait of composition.otherCast) {
       const button = document.createElement("button");
       button.type = "button";
-      button.textContent = portrait.name;
       button.title = `Show ${portrait.name}`;
       button.setAttribute("aria-label", button.title);
+      const dot = document.createElement("span");
+      dot.dataset.vnCastReadiness = portrait.attireMismatch ? "mismatch" : portrait.asset ? "ready" : "pending";
+      dot.setAttribute("aria-hidden", "true");
+      const name = document.createElement("span");
+      name.textContent = portrait.name;
+      button.append(dot, name);
       button.onclick = (e) => {
         e.stopPropagation();
         this.selected = portrait.name;
@@ -29394,6 +29395,8 @@ class CastStage {
     card.dataset.vnCastCharacter = portrait.name;
     card.dataset.vnCastIdentity = JSON.stringify([portrait.name, portrait.asset?.stageAsset?.attire ?? null]);
     card.dataset.active = String(portrait.active);
+    if (portrait.attireMismatch)
+      card.dataset.attireMismatch = "true";
     const placeholder = document.createElement("div");
     placeholder.dataset.vnCastPlaceholder = "";
     placeholder.textContent = portrait.asset ? "Loading portrait…" : "Portrait unavailable";
@@ -29601,12 +29604,33 @@ function availableInteractionVerbs(entity, snapshot) {
   const present = snapshot.presentEntityIds.includes(entity.id) && state?.presence !== "absent" && !(place && snapshot.locationId && place.id !== snapshot.locationId);
   return present ? ["ask", "approach", "custom"] : ["custom"];
 }
+function formatInteractionText(entityName, verb) {
+  const name = entityName.replace(/[\r\n]+/g, " ").trim();
+  if (verb === "ask")
+    return `I ask ${name} about `;
+  if (verb === "approach")
+    return `I try to approach ${name}.`;
+  if (verb === "examine")
+    return `I try to examine ${name}.`;
+  if (verb === "use")
+    return `I try to use ${name} to `;
+  return `I want to interact with ${name}: `;
+}
 function buildInteractionDraft(entity, verb, snapshot) {
   if (!availableInteractionVerbs(entity, snapshot).includes(verb))
     return null;
-  const name = entity.name.replace(/[\r\n]+/g, " ").trim();
-  const text = verb === "ask" ? `I ask ${name} about ` : verb === "approach" ? `I try to approach ${name}.` : verb === "examine" ? `I try to examine ${name}.` : verb === "use" ? `I try to use ${name} to ` : `I want to interact with ${name}: `;
-  return { entityId: entity.id, verb, text, origin: "local", key: { ...snapshot.at.key }, paragraphIndex: snapshot.at.paragraphIndex };
+  return { entityId: entity.id, verb, text: formatInteractionText(entity.name, verb), origin: "local", key: { ...snapshot.at.key }, paragraphIndex: snapshot.at.paragraphIndex };
+}
+function buildSyntheticInteractionDraft(entity, key = { chatId: "local", assistantMessageId: "synthetic", swipeId: 0, sourceFingerprint: "", revision: 0 }, paragraphIndex = 0) {
+  const verbs = entity.kind === "object" ? ["examine", "use", "custom"] : entity.kind === "place" ? ["examine", "custom"] : ["ask", "approach", "custom"];
+  return verbs.map((verb) => ({
+    entityId: entity.id,
+    verb,
+    text: formatInteractionText(entity.name, verb),
+    origin: "local",
+    key: { ...key },
+    paragraphIndex
+  }));
 }
 function mergeInteractionDraft(current, text, mode) {
   if (!text.trim() || text.length > 6000)
@@ -29618,7 +29642,7 @@ ${text}`;
 }
 
 // src/shared/dossiers.ts
-var OverrideSchema = exports_external.object({ chatId: exports_external.string().min(1).max(256), kind: exports_external.enum(["npc", "place", "object"]), name: exports_external.string().min(1).max(256), suppressed: exports_external.boolean().default(false), pinned: exports_external.boolean().default(false), note: exports_external.string().max(600).default("") }).strict();
+var OverrideSchema = exports_external.object({ chatId: exports_external.string().min(1).max(256), kind: exports_external.enum(["npc", "place", "object"]), name: exports_external.string().min(1).max(256), suppressed: exports_external.boolean().default(false), pinned: exports_external.boolean().default(false), note: exports_external.string().max(600).default(""), factEdits: exports_external.record(exports_external.string().min(1).max(64), exports_external.string().max(600).nullable()).optional() }).strict();
 var TooltipPreferencesSchema = exports_external.object({ enabled: exports_external.boolean().default(false), rememberReferences: exports_external.boolean().default(true), actionsEnabled: exports_external.boolean().default(false), categories: exports_external.object({ npcs: exports_external.boolean().default(true), locations: exports_external.boolean().default(true), objects: exports_external.boolean().default(true) }).default({ npcs: true, locations: true, objects: true }), fieldGroups: exports_external.record(exports_external.string(), exports_external.boolean()).default({}), detail: exports_external.enum(["brief", "standard", "expanded"]).default("brief"), linking: exports_external.enum(["important", "all-known", "menu-only"]).default("important"), maxLinksPerParagraph: exports_external.number().int().min(1).max(6).default(3), maxFactsPerEntity: exports_external.number().int().min(1).max(32).default(8), maxFactChars: exports_external.number().int().min(80).max(1200).default(320), overrides: exports_external.array(OverrideSchema).max(64).default([]) });
 function normalizeTooltipPreferences(value) {
   const input2 = value && typeof value === "object" ? value : {};
@@ -29708,6 +29732,30 @@ function linkEntityMentions(text, entities, prefs, chatId = "", limit = prefs.ma
   }
   return limit <= 0 ? [] : selected.sort((a, b) => a.start - b.start);
 }
+function applyOverrideFactEdits(dossier, override) {
+  const edits = override?.factEdits;
+  if (!edits || Object.keys(edits).length === 0)
+    return dossier;
+  const facts = dossier.facts.flatMap((f) => {
+    if (!Object.prototype.hasOwnProperty.call(edits, f.field))
+      return [f];
+    const next = edits[f.field];
+    if (next === null || next === undefined)
+      return [];
+    return [{ ...f, value: next }];
+  });
+  const state = {};
+  for (const [k, v] of Object.entries(dossier.state)) {
+    if (!Object.prototype.hasOwnProperty.call(edits, k)) {
+      state[k] = v;
+      continue;
+    }
+    const next = edits[k];
+    if (next !== null && next !== undefined)
+      state[k] = next;
+  }
+  return { ...dossier, entity: { ...dossier.entity, facts }, facts, state };
+}
 function selectReaderDossier(id6, snapshot, detail, fieldGroups = {}, maxFacts) {
   const entity = snapshot.entities.find((e) => e.id === id6 && e.firstParagraph <= snapshot.at.paragraphIndex);
   if (!entity)
@@ -29776,7 +29824,10 @@ function clearEntityAnchors(root) {
 }
 function applyEntityAnchors(root, anchors, open2, preview) {
   clearEntityAnchors(root);
-  const doc2 = root.ownerDocument, walker = doc2.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const doc2 = root.ownerDocument ?? (typeof document !== "undefined" ? document : undefined);
+  if (!doc2 || typeof doc2.createTreeWalker !== "function")
+    return;
+  const walker = doc2.createTreeWalker(root, typeof NodeFilter !== "undefined" ? NodeFilter.SHOW_TEXT : 4);
   const nodes = [];
   let offset = 0;
   while (walker.nextNode()) {
@@ -29807,7 +29858,10 @@ function applyEntityAnchors(root, anchors, open2, preview) {
   }
 }
 function protectedEntityRanges(root) {
-  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const doc2 = root.ownerDocument ?? (typeof document !== "undefined" ? document : undefined);
+  if (!doc2 || typeof doc2.createTreeWalker !== "function")
+    return [];
+  const walker = doc2.createTreeWalker(root, typeof NodeFilter !== "undefined" ? NodeFilter.SHOW_TEXT : 4);
   let offset = 0;
   const result = [];
   while (walker.nextNode()) {
@@ -30395,12 +30449,7 @@ class DossierCard {
               match.value = newVal;
             if (dossier.state && field in dossier.state)
               dossier.state[field] = newVal;
-            const notePrefix = `${field}: `;
-            const existingLines = (entityOverride(prefs, chatId, dossier.entity)?.note || "").split(`
-`).filter((l) => l.trim() && !l.startsWith(notePrefix));
-            existingLines.push(`${notePrefix}${newVal}`);
-            this.update(dossier.entity, { note: existingLines.join(`
-`).slice(0, 280) });
+            this.update(dossier.entity, { factEdits: { [field]: newVal } });
           }
           renderText(activeVal);
           editWrap.remove();
@@ -30430,11 +30479,7 @@ class DossierCard {
           dossier.facts.splice(idx, 1);
         if (dossier.state && field in dossier.state)
           delete dossier.state[field];
-        const notePrefix = `${field}: `;
-        const remainingLines = (entityOverride(prefs, chatId, dossier.entity)?.note || "").split(`
-`).filter((l) => l.trim() && !l.startsWith(notePrefix));
-        this.update(dossier.entity, { note: remainingLines.join(`
-`).slice(0, 280) });
+        this.update(dossier.entity, { factEdits: { [field]: null } });
       };
       actionSpan.append(editBtn, delBtn);
       dd.append(actionSpan);
@@ -31066,6 +31111,35 @@ class DossierCard {
         } else {
           bannerOverlay.append(locTitle, dnaPills);
         }
+        if (!matchedLocDna && activeLocName && activeLocName !== "Current Story Scene" && this.storyDnaRequester) {
+          const pinLocBtn = document.createElement("button");
+          pinLocBtn.type = "button";
+          pinLocBtn.className = "world-lens-cta";
+          pinLocBtn.dataset.scenePinLocation = activeLocName;
+          pinLocBtn.textContent = "\uD83D\uDCCC Pin location to World";
+          pinLocBtn.onclick = () => {
+            this.storyDnaRequester?.({
+              action: "save_location",
+              location: {
+                id: createLocationId(activeLocName),
+                name: activeLocName,
+                aliases: [],
+                lighting: "",
+                atmosphere: "",
+                architecture: "",
+                environmentDescription: "",
+                persistentElements: [],
+                connectedLocations: [],
+                notes: "",
+                locked: false,
+                lastUpdated: Date.now()
+              }
+            });
+            pinLocBtn.textContent = "\uD83D\uDCCC Pinned to World ✓";
+            pinLocBtn.disabled = true;
+          };
+          bannerOverlay.append(pinLocBtn);
+        }
         banner.append(bannerOverlay);
         sceneHub.append(banner);
         const castWrap = document.createElement("div");
@@ -31096,6 +31170,38 @@ class DossierCard {
         }
         castWrap.append(castTitle, castRow);
         sceneHub.append(castWrap);
+        const wardrobeCandidates = presentCast.filter((c) => c.wardrobeStates && Object.keys(c.wardrobeStates).length > 0);
+        if (wardrobeCandidates.length > 0 && this.sceneHubContext?.onSelectWardrobe) {
+          const wardrobeWrap = document.createElement("div");
+          wardrobeWrap.className = "world-scene-cast";
+          wardrobeWrap.dataset.sceneWardrobeSwap = "";
+          const wTitle = document.createElement("div");
+          wTitle.className = "world-scene-subhead";
+          wTitle.textContent = "\uD83D\uDC57 Quick Scene Wardrobe Swap";
+          wardrobeWrap.append(wTitle);
+          for (const char of wardrobeCandidates.slice(0, 3)) {
+            const charLabel = document.createElement("div");
+            charLabel.style.cssText = "font-size:11px;opacity:0.8;margin:4px 0 3px;font-weight:600;";
+            charLabel.textContent = char.name;
+            const wRow = document.createElement("div");
+            wRow.className = "world-scene-cast-row";
+            for (const [key, outfit] of Object.entries(char.wardrobeStates)) {
+              const wBtn = document.createElement("button");
+              wBtn.type = "button";
+              const isActive = char.activeWardrobeKey === key || !char.activeWardrobeKey && char.activeOutfit === outfit;
+              wBtn.className = `present-item-pill ${isActive ? "active" : ""}`;
+              wBtn.dataset.sceneWardrobeOption = `${char.name}:${key}`;
+              wBtn.textContent = key;
+              wBtn.title = outfit;
+              wBtn.onclick = () => {
+                this.sceneHubContext?.onSelectWardrobe?.(char.dnaId ?? char.name, key, outfit);
+              };
+              wRow.append(wBtn);
+            }
+            wardrobeWrap.append(charLabel, wRow);
+          }
+          sceneHub.append(wardrobeWrap);
+        }
         const activeObjects = filtered.filter((e) => e.entity.kind === "object");
         if (activeObjects.length > 0) {
           const itemsWrap = document.createElement("div");
@@ -31320,22 +31426,14 @@ class DossierCard {
         const lensTitle = document.createElement("h3");
         lensTitle.textContent = activeEntry.entity.name;
         const lensDesc = document.createElement("p");
-        lensDesc.textContent = vis?.summarySnippet ?? (activeEntry.entity.kind === "npc" ? "Character recognized in current scene." : activeEntry.entity.kind === "place" ? "Location recognized in current scene." : "Item recognized in current scene.");
+        lensDesc.textContent = vis?.summarySnippet ?? (activeEntry.entity.kind === "place" ? "Location recognized in current scene." : "Item recognized in current scene.");
         const ctaBtn = document.createElement("button");
         ctaBtn.type = "button";
         ctaBtn.className = "world-lens-cta";
-        ctaBtn.textContent = activeEntry.entity.kind === "npc" ? "Open character folio →" : activeEntry.entity.kind === "object" ? "See known documents →" : "Inspect reference →";
+        ctaBtn.textContent = activeEntry.entity.kind === "object" ? "See known documents →" : "Inspect reference →";
         ctaBtn.onclick = () => {
-          if (activeEntry.entity.kind === "npc" && this.folioOpener) {
-            this.folioOpener(activeEntry.entity.name);
-          } else {
-            open2(activeEntry.entity.id, trigger);
-          }
+          open2(activeEntry.entity.id, trigger);
         };
-        const evidence = document.createElement("button");
-        evidence.type = "button";
-        evidence.textContent = "Read story reference";
-        evidence.onclick = () => open2(activeEntry.entity.id, trigger);
         const hideBtn = document.createElement("button");
         hideBtn.type = "button";
         hideBtn.style.cssText = "display:inline-block;margin-top:6px!important;margin-left:6px!important;min-height:0!important;min-width:0!important;padding:4px 10px!important;font-size:10.5px!important;font-weight:600!important;border-radius:6px!important;background:rgba(255,255,255,0.08)!important;color:var(--vn-muted-text,#d1dfd5)!important;border:1px solid rgba(255,255,255,0.18)!important;cursor:pointer;";
@@ -31350,7 +31448,7 @@ class DossierCard {
             render2();
           }
         };
-        lensCard.append(lensTitle, lensDesc, ctaBtn, ...activeEntry.entity.kind === "npc" ? [evidence] : [], hideBtn);
+        lensCard.append(lensTitle, lensDesc, ctaBtn, hideBtn);
       } else {
         lensCard.innerHTML = "<h3>No matching references</h3><p>Try another category or clear the search.</p>";
         const resetBtn = document.createElement("button");
@@ -31367,6 +31465,36 @@ class DossierCard {
           render2();
         };
         lensCard.append(resetBtn);
+        const missingLoc = this.sceneHubContext?.activeLocationName;
+        if (missingLoc && missingLoc !== "Current Story Scene" && !findMatchingLocation(this.storyDna.locations, missingLoc) && this.storyDnaRequester) {
+          const pinFallbackBtn = document.createElement("button");
+          pinFallbackBtn.type = "button";
+          pinFallbackBtn.className = "world-lens-cta";
+          pinFallbackBtn.dataset.scenePinFallback = missingLoc;
+          pinFallbackBtn.textContent = `\uD83D\uDCCC Pin ${missingLoc} to World`;
+          pinFallbackBtn.onclick = () => {
+            this.storyDnaRequester?.({
+              action: "save_location",
+              location: {
+                id: createLocationId(missingLoc),
+                name: missingLoc,
+                aliases: [],
+                lighting: "",
+                atmosphere: "",
+                architecture: "",
+                environmentDescription: "",
+                persistentElements: [],
+                connectedLocations: [],
+                notes: "",
+                locked: false,
+                lastUpdated: Date.now()
+              }
+            });
+            pinFallbackBtn.textContent = `\uD83D\uDCCC ${missingLoc} pinned ✓`;
+            pinFallbackBtn.disabled = true;
+          };
+          lensCard.append(pinFallbackBtn);
+        }
       }
       lensSlot.replaceChildren(lensCard);
       for (const { entity, pinned } of filtered) {
@@ -31675,7 +31803,7 @@ var DOSSIER_CSS = `
 [data-vn-references][hidden]{display:none!important}
 [data-vn-root] [data-vn-references]{min-width:44px!important;min-height:44px!important;width:44px;height:44px;padding:0!important;display:inline-flex;align-items:center;justify-content:center}
 [data-vn-references] svg{width:20px;height:20px;display:block;flex:none}
-[data-vn-root] [data-entity-anchor]{font:inherit;font-weight:650;color:inherit;background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 16%,transparent);border:0;border-bottom:1px dotted var(--vn-accent,#9ec6f0);border-radius:.2em;padding:0 .08em;cursor:pointer;text-align:inherit;display:inline;line-height:inherit;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+[data-vn-root] [data-entity-anchor]{font:inherit;font-weight:650;color:inherit;background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 16%,transparent);border:0;text-decoration:underline 1.5px color-mix(in srgb,var(--vn-accent,#9ec6f0) 80%,transparent);text-underline-offset:3px;border-radius:.15em;padding:0;cursor:pointer;text-align:inherit;display:inline;line-height:inherit;box-decoration-break:clone;-webkit-box-decoration-break:clone}
 [data-vn-root] [data-entity-anchor]:hover{background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 28%,transparent)}
 [data-entity-anchor]:focus-visible{outline:2px solid var(--vn-accent,#9ec6f0);outline-offset:3px}
 [data-vn-dossier][hidden]{display:none!important}
@@ -31856,6 +31984,8 @@ class StageDossiers {
   history;
   storyDna = { locations: {}, items: {}, revision: 0 };
   storyDnaRequester;
+  characterDnaLibrary = {};
+  characterDnaSaver;
   tooltipPopover = null;
   tooltipDismissCleanup = null;
   snapshotAt = () => {
@@ -31916,6 +32046,14 @@ class StageDossiers {
   setStoryDnaError(error61) {
     this.card.setStoryDnaError(error61);
   }
+  setCharacterDnaLibrary(library) {
+    this.characterDnaLibrary = { ...library };
+    if (this.card.isOpen())
+      this.card.setSceneHubContext(this.buildSceneHubContext(this.snapshot()));
+  }
+  setCharacterDnaSaver(fn) {
+    this.characterDnaSaver = fn;
+  }
   connectWorkspace(workspace, mount) {
     if (this.workspaceMounted && this.workspace === workspace)
       return;
@@ -31933,9 +32071,51 @@ class StageDossiers {
     workspace.register("story", { element: this.card.host, hideAtHome: true, enter: () => this.openReferences(), leave: () => this.card.close(), back: () => this.card.back() });
   }
   folioOpener;
+  npcActionToolsHandler;
+  setNpcActionToolsHandler(fn) {
+    this.npcActionToolsHandler = fn;
+  }
+  buildNpcActionTools(charName) {
+    const snapshot = this.snapshot();
+    if (!snapshot || !this.ready || !this.prefs.enabled || !this.prefs.actionsEnabled || !this.draftTools)
+      return null;
+    const targetKey = charName.trim().toLocaleLowerCase();
+    if (!targetKey)
+      return null;
+    const entity = eligibleEntities(snapshot.entities, this.prefs, snapshot.at.key.chatId).find((e) => e.kind === "npc" && [e.name, ...e.aliases].some((alias) => alias.trim().toLocaleLowerCase() === targetKey));
+    if (!entity)
+      return null;
+    const drafts = availableInteractionVerbs(entity, snapshot).flatMap((verb) => {
+      const draft = buildInteractionDraft(entity, verb, snapshot);
+      return draft ? [draft] : [];
+    });
+    if (drafts.length === 0)
+      return null;
+    const tools = this.draftTools;
+    return {
+      drafts,
+      current: tools.current,
+      focus: tools.focus,
+      apply: (draft, mode) => {
+        const now = this.snapshot();
+        if (!now || !this.ready || !this.prefs.enabled || !this.prefs.actionsEnabled || !samePresentationTurn(now.at.key, draft.key) || now.at.paragraphIndex !== draft.paragraphIndex)
+          return false;
+        const liveEntity = eligibleEntities(now.entities, this.prefs, now.at.key.chatId).find((e) => e.id === draft.entityId);
+        if (!liveEntity || !buildInteractionDraft(liveEntity, draft.verb, now))
+          return false;
+        const text = mergeInteractionDraft(tools.current(), draft.text, mode);
+        return text !== null && tools.apply(text);
+      }
+    };
+  }
+  matchStoryDocument(entity, docs) {
+    const names = new Set([entity.name, ...entity.aliases].map((n) => n.trim().toLocaleLowerCase()).filter(Boolean));
+    return docs.find((d) => names.has(d.name.trim().toLocaleLowerCase()));
+  }
   setFolioOpener(fn) {
     this.folioOpener = fn;
     this.card.setFolioOpener((charName) => {
+      this.npcActionToolsHandler?.(this.buildNpcActionTools(charName), charName);
       fn(charName);
       this.workspace?.open("character");
     });
@@ -31949,7 +32129,18 @@ class StageDossiers {
     const locationImageUrl = locationDna?.referenceImageUrl ?? (activePlace ? this.resolveVisualContext(activePlace).imageUrl : this.displayedImageUrl?.() ?? undefined);
     const npcList = eligible.filter((e) => e.kind === "npc");
     const sortedCast = [...npcList].sort((a, b) => Number(snapshot.presentEntityIds.includes(b.id)) - Number(snapshot.presentEntityIds.includes(a.id)));
-    const presentCast = sortedCast.map((e) => ({ id: e.id, name: e.name, imageUrl: this.resolveVisualContext(e).imageUrl, present: Boolean(snapshot?.presentEntityIds.includes(e.id)) }));
+    const presentCast = sortedCast.map((e) => {
+      const matchedChar = findCharacterDNA(this.characterDnaLibrary, e.name);
+      const hasWardrobe = Boolean(matchedChar?.wardrobeStates && Object.keys(matchedChar.wardrobeStates).length > 0);
+      return {
+        id: e.id,
+        name: e.name,
+        imageUrl: this.resolveVisualContext(e).imageUrl,
+        present: Boolean(snapshot?.presentEntityIds.includes(e.id)),
+        ...matchedChar ? { dnaId: matchedChar.id } : {},
+        ...hasWardrobe ? { wardrobeStates: matchedChar.wardrobeStates, activeWardrobeKey: matchedChar.activeWardrobeKey, activeOutfit: matchedChar.activeOutfit } : {}
+      };
+    });
     const activeItems = eligible.filter((e) => e.kind === "object").map((e) => ({ id: e.id, name: e.name, imageUrl: this.resolveVisualContext(e).imageUrl }));
     return {
       ...activePlace ? { activeLocationId: activePlace.id } : {},
@@ -31957,7 +32148,17 @@ class StageDossiers {
       ...locationImageUrl ? { locationImageUrl } : {},
       ...locationDna ? { locationDna } : {},
       presentCast,
-      activeItems
+      activeItems,
+      ...this.characterDnaSaver ? { onSelectWardrobe: (charIdOrName, key, outfit) => {
+        const target2 = this.characterDnaLibrary[charIdOrName] ?? findCharacterDNA(this.characterDnaLibrary, charIdOrName);
+        if (!target2)
+          return;
+        const nextDna = { ...target2, activeWardrobeKey: key, activeOutfit: outfit, lastUpdated: Date.now() };
+        this.characterDnaLibrary = { ...this.characterDnaLibrary, [target2.id]: nextDna };
+        this.characterDnaSaver?.(nextDna);
+        if (this.card.isOpen())
+          this.card.setSceneHubContext(this.buildSceneHubContext(this.snapshot()));
+      } } : {}
     };
   }
   mergedTrayEntries(snapshot) {
@@ -32060,6 +32261,20 @@ class StageDossiers {
     clearEntityAnchors(this.text);
     this.tray.hidden = true;
   }
+  patchLore(value, paragraphs, history) {
+    this.paragraphs = paragraphs;
+    this.presentation = parseReaderPresentation(value, undefined, paragraphs.length);
+    this.snapshotAt = this.presentation ? createPresentationCursor(this.presentation) : () => {
+      return;
+    };
+    this.resetLinkBudget();
+    if (this.presentation?.documents)
+      this.presentation.documents = validateStoryDocuments(this.presentation.documents, paragraphs.map((text) => ({ text: stripTextEffectTags(text) })));
+    const key = this.presentation ? presentationTurnKey(this.presentation) : undefined;
+    this.history = key ? referenceHistoryFor(history, key) : undefined;
+    if (this.ready && this.index >= 0)
+      this.refresh(this.index);
+  }
   setHistory(history) {
     const key = this.presentation ? presentationTurnKey(this.presentation) : undefined, next = key ? referenceHistoryFor(history, key) : undefined;
     if (JSON.stringify(next) === JSON.stringify(this.history))
@@ -32092,6 +32307,7 @@ class StageDossiers {
       this.dismissTooltipPopover();
       this.card.close();
       this.dossierOpen?.(false);
+      this.npcActionToolsHandler?.(null);
       this.index = index;
       this.ready = false;
       this.tray.hidden = true;
@@ -32122,11 +32338,12 @@ class StageDossiers {
     }
     this.dismissTooltipPopover();
     const current = eligibleEntities(snapshot.entities, this.prefs, snapshot.at.key.chatId).some((e) => e.id === id6);
-    const selected = current ? selectReaderDossier(id6, snapshot, this.prefs.detail, this.prefs.fieldGroups, this.prefs.maxFactsPerEntity) : selectEarlierDossier(id6, snapshot, this.prefs, this.history);
-    if (!selected) {
+    const rawSelected = current ? selectReaderDossier(id6, snapshot, this.prefs.detail, this.prefs.fieldGroups, this.prefs.maxFactsPerEntity) : selectEarlierDossier(id6, snapshot, this.prefs, this.history);
+    if (!rawSelected) {
       this.open(id6, trigger);
       return;
     }
+    const selected = applyOverrideFactEdits(rawSelected, entityOverride(this.prefs, snapshot.at.key.chatId, rawSelected.entity));
     const entity = selected.entity;
     const visual = this.resolveVisualContext(entity);
     const pop = document.createElement("div");
@@ -32175,6 +32392,7 @@ class StageDossiers {
     cta.onclick = () => {
       this.dismissTooltipPopover();
       if (entity.kind === "npc" && this.folioOpener) {
+        this.npcActionToolsHandler?.(this.buildNpcActionTools(entity.name), entity.name);
         this.folioOpener(entity.name);
         this.workspace?.open("character");
       } else
@@ -32219,7 +32437,11 @@ class StageDossiers {
       return;
     const { used, priorIds } = this.priorLinks(index);
     const anchors = linkEntityMentions(this.text.textContent ?? "", snapshot.entities, this.prefs, snapshot.at.key.chatId, Math.min(this.prefs.maxLinksPerParagraph, 24 - used), protectedEntityRanges(this.text), this.prefs.linking === "important" ? priorIds : new Set);
-    applyEntityAnchors(this.text, anchors, (id6, trigger) => this.showTooltipPopover(id6, trigger), (id6) => selectReaderDossier(id6, snapshot, "brief", this.prefs.fieldGroups)?.facts[0]?.value ?? "View established story information");
+    applyEntityAnchors(this.text, anchors, (id6, trigger) => this.showTooltipPopover(id6, trigger), (id6) => {
+      const raw = selectReaderDossier(id6, snapshot, "brief", this.prefs.fieldGroups);
+      const edited = raw ? applyOverrideFactEdits(raw, entityOverride(this.prefs, snapshot.at.key.chatId, raw.entity)) : undefined;
+      return edited?.facts[0]?.value ?? "View established story information";
+    });
   }
   resolveVisualContext(entity) {
     const snapshot = this.snapshot();
@@ -32277,7 +32499,9 @@ class StageDossiers {
         imageCaption = `Current scene · ${entity.name}`;
       }
     }
-    const summaryFact = (matchedLoc ? formatLocationDNAToPromptClause(matchedLoc) : matchedItem ? formatItemDNAToPromptClause(matchedItem) : "") || (snapshot ? selectReaderDossier(entity.id, snapshot, "brief", this.prefs.fieldGroups)?.facts[0]?.value : undefined);
+    const briefRaw = snapshot ? selectReaderDossier(entity.id, snapshot, "brief", this.prefs.fieldGroups) : undefined;
+    const briefEdited = briefRaw && snapshot ? applyOverrideFactEdits(briefRaw, entityOverride(this.prefs, snapshot.at.key.chatId, entity)) : briefRaw;
+    const summaryFact = (matchedLoc ? formatLocationDNAToPromptClause(matchedLoc) : matchedItem ? formatItemDNAToPromptClause(matchedItem) : "") || briefEdited?.facts[0]?.value;
     const anchorFact = entity.facts.find((f) => f.field === "anchors" || f.field === "anchor_traits" || f.field === "visual_anchors");
     const anchors = anchorFact ? anchorFact.value.split(/[,;\n]/).map((a) => a.trim()).filter(Boolean) : undefined;
     return {
@@ -32303,14 +32527,27 @@ class StageDossiers {
       const item = !isLoc ? this.storyDna.items[slug] : undefined;
       if (loc || item) {
         const entity = loc ? { id: id6, kind: "place", name: loc.name, aliases: loc.aliases, firstParagraph: 0, facts: [] } : { id: id6, kind: "object", name: item.name, aliases: item.aliases, firstParagraph: 0, facts: [] };
-        const synthetic = { entity, facts: [], overview: [], earlier: [], state: {} };
+        const rawSynthetic = { entity, facts: [], overview: [], earlier: [], state: {} };
+        const synthetic = snapshot ? applyOverrideFactEdits(rawSynthetic, entityOverride(this.prefs, snapshot.at.key.chatId, entity)) : rawSynthetic;
+        const syntheticActions = this.prefs.actionsEnabled && this.draftTools ? {
+          drafts: buildSyntheticInteractionDraft(entity, snapshot?.at.key, snapshot?.at.paragraphIndex ?? Math.max(0, this.index)),
+          current: this.draftTools.current,
+          focus: this.draftTools.focus,
+          apply: (draft, mode) => {
+            if (!this.prefs.enabled || !this.prefs.actionsEnabled || !this.draftTools)
+              return false;
+            const text = mergeInteractionDraft(this.draftTools.current(), draft.text, mode);
+            return text !== null && this.draftTools.apply(text);
+          }
+        } : undefined;
+        const itemDocument = !isLoc ? this.matchStoryDocument(entity, visibleStoryDocuments(this.presentation?.documents ?? [], Math.max(0, this.index))) : undefined;
         this.hold();
         this.dossierOpen?.(true);
         if (this.workspace && this.workspace.destination !== "story") {
           this.workspace.open("story", trigger);
           this.card.clearBack();
         }
-        this.card.open(synthetic, this.prefs, snapshot?.at.key.chatId ?? "local", trigger, undefined, undefined, this.resolveVisualContext(entity));
+        this.card.open(synthetic, this.prefs, snapshot?.at.key.chatId ?? "local", trigger, syntheticActions, itemDocument, this.resolveVisualContext(entity));
       }
       return;
     }
@@ -32321,11 +32558,13 @@ class StageDossiers {
     if (!selected)
       return;
     if (selected.entity.kind === "npc" && this.folioOpener) {
+      this.npcActionToolsHandler?.(this.buildNpcActionTools(selected.entity.name), selected.entity.name);
       this.folioOpener(selected.entity.name);
       this.workspace?.open("character");
       return;
     }
-    const dossier = current ? dossierWithHistory(selected, snapshot, this.prefs, this.history) : selected;
+    const rawDossier = current ? dossierWithHistory(selected, snapshot, this.prefs, this.history) : selected;
+    const dossier = applyOverrideFactEdits(rawDossier, entityOverride(this.prefs, snapshot.at.key.chatId, rawDossier.entity));
     this.hold();
     this.dossierOpen?.(true);
     const actions = current && this.prefs.actionsEnabled && this.draftTools ? {
@@ -32346,7 +32585,7 @@ class StageDossiers {
         return text !== null && this.draftTools.apply(text);
       }
     } : undefined;
-    const storyDocument = current && dossier.entity.kind === "object" ? visibleStoryDocuments(this.presentation?.documents ?? [], this.index).find((d) => d.name === dossier.entity.name) : undefined;
+    const storyDocument = current && dossier.entity.kind === "object" ? this.matchStoryDocument(dossier.entity, visibleStoryDocuments(this.presentation?.documents ?? [], this.index)) : undefined;
     if (this.workspace && this.workspace.destination !== "story") {
       this.workspace.open("story", trigger);
       this.card.clearBack();
@@ -32361,7 +32600,9 @@ class StageDossiers {
     const existing = entityOverride(this.prefs, chatId, entity);
     if (!existing && this.prefs.overrides.length >= 64)
       return false;
-    const override = { chatId, kind: entity.kind, name: entity.name, suppressed: false, pinned: false, note: "", ...existing, ...patch };
+    const { factEdits: patchFactEdits, ...restPatch } = patch;
+    const mergedFactEdits = patchFactEdits ? { ...existing?.factEdits ?? {}, ...patchFactEdits } : existing?.factEdits;
+    const override = { chatId, kind: entity.kind, name: entity.name, suppressed: false, pinned: false, note: "", ...existing, ...restPatch, ...mergedFactEdits ? { factEdits: mergedFactEdits } : {} };
     this.prefs = { ...this.prefs, overrides: [override, ...this.prefs.overrides.filter((o) => !(o.chatId === chatId && o.kind === entity.kind && o.name === entity.name))].slice(0, 64) };
     this.resetLinkBudget();
     this.save(this.prefs);
@@ -32838,6 +33079,7 @@ class DialogueSheet {
     dialogue.prepend(this.handle);
     const header = this.header = dialogue.querySelector("[data-vn-sheet-header]") || document.createElement("div");
     header.dataset.vnSheetHeader = "";
+    header.style.touchAction = "none";
     if (!header.parentElement)
       dialogue.prepend(header);
     header.append(this.tools);
@@ -32871,15 +33113,16 @@ class DialogueSheet {
       this.cancelDrag();
       this.changeHeight(height);
     };
-    this.handle.addEventListener("pointerdown", (event) => {
+    const startPointerDrag = (target2, event) => {
       if (event.button !== 0)
         return;
       event.preventDefault();
       this.drag = { id: event.pointerId, y: event.clientY, height: dialogue.getBoundingClientRect().height * this.coordinateScale() };
-      if (typeof this.handle.setPointerCapture === "function")
-        this.handle.setPointerCapture(event.pointerId);
+      if (typeof target2.setPointerCapture === "function")
+        target2.setPointerCapture(event.pointerId);
       this.pause();
-    }, { signal });
+    };
+    this.handle.addEventListener("pointerdown", (event) => startPointerDrag(this.handle, event), { signal });
     this.handle.addEventListener("pointermove", (event) => {
       if (this.drag && this.drag.id === event.pointerId)
         onMove(event.clientY);
@@ -32889,6 +33132,24 @@ class DialogueSheet {
         onUp(event.clientY);
     }, { signal });
     this.handle.addEventListener("pointercancel", () => {
+      this.cancelDrag();
+      this.resize();
+    }, { signal });
+    const isHeaderInteractive = (target2) => target2 instanceof Element && Boolean(target2.closest("[data-vn-sheet-tools], button, a, input, select, textarea"));
+    header.addEventListener("pointerdown", (event) => {
+      if (isHeaderInteractive(event.target))
+        return;
+      startPointerDrag(header, event);
+    }, { signal });
+    header.addEventListener("pointermove", (event) => {
+      if (this.drag && this.drag.id === event.pointerId)
+        onMove(event.clientY);
+    }, { signal });
+    header.addEventListener("pointerup", (event) => {
+      if (this.drag && this.drag.id === event.pointerId)
+        onUp(event.clientY);
+    }, { signal });
+    header.addEventListener("pointercancel", () => {
       this.cancelDrag();
       this.resize();
     }, { signal });
@@ -32902,12 +33163,18 @@ class DialogueSheet {
       if (this.drag && this.drag.id === event.pointerId)
         onUp(event.clientY);
     }, { signal });
-    this.handle.addEventListener("touchstart", (event) => {
+    const startTouchDrag = (event) => {
       if (event.touches[0]) {
         event.preventDefault();
         this.drag = { id: event.touches[0].identifier, y: event.touches[0].clientY, height: dialogue.getBoundingClientRect().height * this.coordinateScale() };
         this.pause();
       }
+    };
+    this.handle.addEventListener("touchstart", startTouchDrag, { signal, passive: false });
+    header.addEventListener("touchstart", (event) => {
+      if (isHeaderInteractive(event.target))
+        return;
+      startTouchDrag(event);
     }, { signal, passive: false });
     window.addEventListener("touchmove", (event) => {
       if (this.drag && event.touches[0]) {
@@ -32954,8 +33221,12 @@ class DialogueSheet {
     return Math.max(0, this.root.getBoundingClientRect().bottom - (viewport.height + viewport.offsetTop)) * this.coordinateScale();
   }
   cancelDrag() {
-    if (this.drag && typeof this.handle.hasPointerCapture === "function" && this.handle.hasPointerCapture(this.drag.id) && typeof this.handle.releasePointerCapture === "function") {
-      this.handle.releasePointerCapture(this.drag.id);
+    if (this.drag) {
+      for (const el of [this.handle, this.header]) {
+        if (el && typeof el.hasPointerCapture === "function" && el.hasPointerCapture(this.drag.id) && typeof el.releasePointerCapture === "function") {
+          el.releasePointerCapture(this.drag.id);
+        }
+      }
     }
     this.drag = null;
   }
@@ -33072,10 +33343,11 @@ class DialogueSheet {
 // src/frontend/stage/typewriter-audio.ts
 class TypewriterAudioSynthesizer {
   ctx = null;
+  clickNoiseBuffer = null;
   mode = "blip";
   volume = 0.35;
   lastPlayTime = 0;
-  minIntervalMs = 38;
+  minIntervalMs = 30;
   constructor(mode = "blip", volume = 0.35) {
     this.mode = mode;
     this.volume = Math.max(0, Math.min(1, volume));
@@ -33107,7 +33379,7 @@ class TypewriterAudioSynthesizer {
   play() {
     if (this.mode === "off" || this.volume <= 0)
       return;
-    const now = Date.now();
+    const now = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
     if (now - this.lastPlayTime < this.minIntervalMs)
       return;
     this.lastPlayTime = now;
@@ -33148,14 +33420,17 @@ class TypewriterAudioSynthesizer {
     osc.stop(t + 0.028);
   }
   playClick(ctx) {
-    const bufferSize = Math.floor(ctx.sampleRate * 0.012);
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0;i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.3));
+    if (!this.clickNoiseBuffer || this.clickNoiseBuffer.sampleRate !== ctx.sampleRate) {
+      const bufferSize = Math.floor(ctx.sampleRate * 0.012);
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0;i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.3));
+      }
+      this.clickNoiseBuffer = buffer;
     }
     const noise = ctx.createBufferSource();
-    noise.buffer = buffer;
+    noise.buffer = this.clickNoiseBuffer;
     const filter = ctx.createBiquadFilter();
     filter.type = "bandpass";
     filter.frequency.value = 1600;
@@ -33185,6 +33460,7 @@ class TypewriterAudioSynthesizer {
     osc.stop(t + 0.024);
   }
   destroy() {
+    this.clickNoiseBuffer = null;
     if (this.ctx && this.ctx.state !== "closed") {
       this.ctx.close().catch(() => {});
       this.ctx = null;
@@ -34677,10 +34953,6 @@ var VN_EFFECTS_CSS = `
   transition: none !important;
 }
 
-[data-vn-effect-intensity="off"] [data-vn-scene-image],
-[data-vn-root][data-vn-effect-intensity="off"] [data-vn-scene-image] {
-  filter: none !important;
-}
 
 @media (prefers-reduced-motion: reduce) {
   /* Suppress camera motion, shakes, punches, tilts, and rapid particle motion */
@@ -34695,7 +34967,9 @@ var VN_EFFECTS_CSS = `
   [data-vn-zoom="punch"],
   [data-vn-tilt],
   .vn-blur-pulse,
-  [data-vn-blur] {
+  [data-vn-blur],
+  [data-vn-scene].vn-glitch,
+  [data-vn-scene][data-vn-glitch="true"] {
     animation: none !important;
     transform: none !important;
     filter: none !important;
@@ -34714,6 +34988,12 @@ var VN_EFFECTS_CSS = `
   [data-vn-ambient]::before,
   [data-vn-ambient]::after,
   [data-vn-fx] *,
+  .vn-fx-slash,
+  .vn-fx-shockwave,
+  .vn-fx-lens-flare,
+  .vn-fx-shatter,
+  .vn-fx-glitch,
+  .vn-cinema-bar,
   .vn-rain-bg, .vn-rain-mg, .vn-rain-fg,
   .vn-heavy-rain-bg, .vn-heavy-rain-mg, .vn-heavy-rain-fg,
   .vn-snow-bg, .vn-snow-mg, .vn-snow-fg,
@@ -34759,6 +35039,12 @@ var VN_EFFECTS_CSS = `
 [data-vn-fx][data-vn-effect="hearts_burst"] { --vn-fx-still: 950ms; }
 [data-vn-fx][data-vn-effect="confetti"] { --vn-fx-still: 1200ms; }
 [data-vn-fx][data-vn-effect="lightning"] { --vn-fx-still: 550ms; }
+[data-vn-fx][data-vn-effect="slash_arc"] { --vn-fx-still: 480ms; }
+[data-vn-fx][data-vn-effect="shockwave"] { --vn-fx-still: 620ms; }
+[data-vn-fx][data-vn-effect="lens_flare"] { --vn-fx-still: 860ms; }
+[data-vn-fx][data-vn-effect="shatter"] { --vn-fx-still: 640ms; }
+[data-vn-fx][data-vn-effect="glitch"] { --vn-fx-still: 350ms; }
+[data-vn-fx][data-vn-effect="cinema_bars"] { --vn-fx-still: 450ms; }
 
 @keyframes vn-fx-still-fade {
   0% { opacity: 0; }
@@ -35036,10 +35322,10 @@ var VN_EFFECTS_CSS = `
 /* -------------------------------------------------------------------------- */
 
 @keyframes vn-sand-blow {
-  0% { transform: translate3d(-14vw, 0, 0) scaleX(0.9); opacity: 0; }
+  0% { transform: translate3d(-14cqw, 0, 0) scaleX(0.9); opacity: 0; }
   18% { opacity: var(--o, 0.65); }
   85% { opacity: var(--o, 0.65); }
-  100% { transform: translate3d(118vw, 6vh, 0) scaleX(1.3); opacity: 0; }
+  100% { transform: translate3d(118cqw, 6cqh, 0) scaleX(1.3); opacity: 0; }
 }
 .vn-sandstorm-haze {
   position: absolute;
@@ -35416,10 +35702,10 @@ function generateAmbientMarkup(effect) {
       return "";
   }
 }
-function generateCueEffectMarkup(effect) {
+function generateCueEffectMarkup(effect, instanceId) {
   switch (effect) {
     case "speed_lines":
-      return generateSpeedLinesMarkup();
+      return generateSpeedLinesMarkup(instanceId);
     case "sparkle_burst":
       return generateSparkleBurstMarkup();
     case "hearts_burst":
@@ -35644,7 +35930,8 @@ function generateFogMarkup() {
   ].join("");
 }
 var BURST_SVG_ATTRS = `viewBox="0 0 800 600" preserveAspectRatio="none" aria-hidden="true"`;
-function generateSpeedLinesMarkup() {
+function generateSpeedLinesMarkup(instanceId) {
+  const focusId = instanceId !== undefined ? `vn-sl-focus-${instanceId}` : "vn-sl-focus";
   const count = 76;
   const sets = [[], []];
   for (let i = 0;i < count; i++) {
@@ -35657,8 +35944,8 @@ function generateSpeedLinesMarkup() {
     sets[i % 2].push(`<polygon points="${point(angle, inner)} ${point(angle - half, outer)} ${point(angle + half, outer)}" opacity="${opacity}"/>`);
   }
   return `<svg class="vn-speed-lines" ${BURST_SVG_ATTRS}>
-    <defs><radialGradient id="vn-sl-focus" cx="50%" cy="50%" r="72%"><stop offset=".45" stop-color="#05060a" stop-opacity="0"/><stop offset="1" stop-color="#05060a" stop-opacity=".42"/></radialGradient></defs>
-    <rect class="vn-speed-lines-vignette" width="800" height="600" fill="url(#vn-sl-focus)"/>
+    <defs><radialGradient id="${focusId}" cx="50%" cy="50%" r="72%"><stop offset=".45" stop-color="#05060a" stop-opacity="0"/><stop offset="1" stop-color="#05060a" stop-opacity=".42"/></radialGradient></defs>
+    <rect class="vn-speed-lines-vignette" width="800" height="600" fill="url(#${focusId})"/>
     <g class="vn-speed-lines-a" fill="#fff">${sets[0].join("")}</g>
     <g class="vn-speed-lines-b" fill="#fff">${sets[1].join("")}</g>
   </svg>`.replace(/\n\s*/g, "");
@@ -36061,8 +36348,8 @@ var RPG_HUD_CSS = `
 [data-vn-check-info] {
   display: inline-grid;
   place-items: center;
-  min-width: 24px;
-  min-height: 24px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0 5px;
   margin-left: 4px;
   border-radius: 999px;
@@ -36124,6 +36411,14 @@ var RPG_HUD_CSS = `
 [data-vn-rpg-theatre][hidden] {
   display: none !important;
 }
+[data-vn-rpg-theatre][data-roll-tier="critical_success"] {
+  border-color: rgba(250, 204, 21, 0.7);
+  box-shadow: 0 0 28px rgba(250, 204, 21, 0.32);
+}
+[data-vn-rpg-theatre][data-roll-tier="critical_failure"] {
+  border-color: rgba(248, 113, 113, 0.75);
+  box-shadow: 0 0 28px rgba(239, 68, 68, 0.35);
+}
 @keyframes vn-rpg-pop {
   from { opacity: 0; transform: translate(-50%, -8px) scale(0.95); }
   to { opacity: 1; transform: translate(-50%, 0) scale(1); }
@@ -36166,7 +36461,9 @@ var RPG_HUD_CSS = `
   gap: 6px;
 }
 .vn-rpg-tab {
-  padding: 5px 12px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 6px 12px;
   border-radius: 999px;
   border: 1px solid transparent;
   background: transparent;
@@ -36174,6 +36471,10 @@ var RPG_HUD_CSS = `
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
+}
+[data-rpg-close] {
+  min-width: 44px;
+  min-height: 44px;
 }
 .vn-rpg-tab[aria-selected="true"] {
   background: color-mix(in srgb, var(--vn-accent, #7c9cff) 20%, transparent);
@@ -36235,6 +36536,7 @@ function formatSkillCheckBreakdown(natural, check2, sources, total) {
 class RpgStageController {
   rpgMode = "off";
   rpgState = null;
+  rollLog = [];
   activeTab = "vitals";
   barEl = null;
   theatreEl = null;
@@ -36297,13 +36599,14 @@ class RpgStageController {
   update(mode, state) {
     this.rpgMode = mode;
     this.rpgState = mode === "full" ? state ?? null : null;
+    if (mode === "off") {
+      this.rollLog = [];
+    }
     if (mode === "lite") {
-      if (this.barEl) {
-        this.barEl.innerHTML = `<span>\uD83C\uDFB2 d20 Lite Active</span>`;
-        this.barEl.title = "Adventure Time Lite is active — d20 skill checks & roll odds appear on choices.";
-        this.barEl.hidden = false;
+      this.renderLiteBar();
+      if (this.drawerEl && !this.drawerEl.hidden) {
+        this.renderDrawer();
       }
-      this.toggleDrawer(false);
       return;
     }
     if (mode !== "full" || !this.rpgState) {
@@ -36316,6 +36619,16 @@ class RpgStageController {
     if (this.drawerEl && !this.drawerEl.hidden) {
       this.renderDrawer();
     }
+  }
+  renderLiteBar() {
+    if (!this.barEl)
+      return;
+    const countSuffix = this.rollLog.length > 0 ? ` · ${this.rollLog.length} Roll${this.rollLog.length === 1 ? "" : "s"}` : "";
+    const span = document.createElement("span");
+    span.textContent = `\uD83C\uDFB2 d20 Lite Active${countSuffix}`;
+    this.barEl.replaceChildren(span);
+    this.barEl.title = "Adventure Time Lite is active — click for Lite rules & recent checks.";
+    this.barEl.hidden = false;
   }
   decorateChoiceButton(button, choice) {
     if (choice.disabled && choice.lockedReason) {
@@ -36354,23 +36667,35 @@ class RpgStageController {
       info.setAttribute("role", "button");
       info.tabIndex = 0;
       info.dataset.vnCheckInfo = "";
+      info.setAttribute("aria-expanded", "false");
       info.setAttribute("aria-label", `Inspect ${check2.stat} modifiers`);
       info.textContent = "ⓘ";
+      const choiceKey = choice.id || choice.label;
       const toggleInfo = (event) => {
         event.preventDefault();
         event.stopPropagation();
-        const parent = button.parentElement;
-        if (!parent)
+        const scope = button.closest("ol, ul, [data-vn-choices]") ?? button.parentElement;
+        if (!scope)
           return;
-        const existing = parent.querySelector(".vn-rpg-check-breakdown");
-        if (existing) {
+        const existing = scope.querySelector(".vn-rpg-check-breakdown");
+        const isSameChoice = existing?.dataset.vnCheckFor === choiceKey;
+        if (existing)
           existing.remove();
+        scope.querySelectorAll("[data-vn-check-info]").forEach((el) => {
+          el.setAttribute("aria-expanded", "false");
+        });
+        if (isSameChoice)
           return;
-        }
         const card = document.createElement("div");
         card.className = "vn-rpg-check-breakdown";
+        card.dataset.vnCheckFor = choiceKey;
         card.textContent = `Modifiers (${check2.stat} DC ${check2.dc}): ${breakdownText}`;
-        parent.appendChild(card);
+        if (typeof button.insertAdjacentElement === "function") {
+          button.insertAdjacentElement("afterend", card);
+        } else {
+          button.parentElement?.insertBefore(card, button.nextSibling);
+        }
+        info.setAttribute("aria-expanded", "true");
       };
       info.addEventListener("click", toggleInfo);
       info.addEventListener("keydown", (event) => {
@@ -36404,13 +36729,22 @@ class RpgStageController {
     if (this.settleTimer)
       clearTimeout(this.settleTimer);
     const { check: check2, rolls, natural, total, tier } = outcome;
+    this.rollLog.unshift({ stat: check2.stat, dc: check2.dc, natural, total, tier });
+    if (this.rollLog.length > 12)
+      this.rollLog.length = 12;
+    if (this.rpgMode === "lite") {
+      this.renderLiteBar();
+      if (this.drawerEl && !this.drawerEl.hidden)
+        this.renderDrawer();
+    }
     const rollDetail = rolls.length > 1 ? `2d20(${rolls.join(", ")}) → ${natural}` : `d20(${natural})`;
     const modStr = check2.modifier > 0 ? `+${check2.modifier}` : check2.modifier < 0 ? `${check2.modifier}` : "+0";
     const breakdown = formatSkillCheckBreakdown(natural, check2, sources, total);
     const d20Svg = `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:middle;margin-right:4px;"><polygon points="12,2 21,7 21,17 12,22 3,17 3,7" fill="rgba(124,156,255,0.22)" stroke="currentColor" stroke-width="1.6"/><text x="12" y="15.5" text-anchor="middle" fill="currentColor" font-size="9" font-weight="800">${natural}</text></svg>`;
-    const critAccent = tier === "critical_success" ? "border-color:rgba(250,204,21,0.7);box-shadow:0 0 28px rgba(250,204,21,0.32);" : tier === "critical_failure" ? "border-color:rgba(248,113,113,0.75);box-shadow:0 0 28px rgba(239,68,68,0.35);" : "";
-    if (critAccent) {
-      this.theatreEl.style.cssText += critAccent;
+    this.theatreEl.style.borderColor = "";
+    this.theatreEl.style.boxShadow = "";
+    this.theatreEl.dataset.rollTier = tier;
+    if (tier === "critical_success" || tier === "critical_failure") {
       this.onRollEffect?.(tier === "critical_success" ? "zoom_punch" : "shake_hard");
     }
     this.theatreEl.dataset.rollPhase = "rolling";
@@ -36451,7 +36785,26 @@ class RpgStageController {
       this.renderDrawer();
   }
   renderDrawer() {
-    if (!this.drawerEl || !this.rpgState)
+    if (!this.drawerEl)
+      return;
+    if (this.rpgMode === "lite") {
+      const recentHtml = this.rollLog.length === 0 ? `<div class="vn-rpg-card">No skill checks rolled in this session yet. Select a choice with a d20 badge to test your luck.</div>` : `<div class="vn-rpg-card"><b>Recent Checks (${this.rollLog.length})</b><ul style="margin:6px 0 0;padding-left:18px;">${this.rollLog.map((r) => `<li><b>${esc2(r.stat)}</b> vs DC ${r.dc} — d20(${r.natural}) → <b>${r.total}</b> <small>[${esc2(TIER_LABELS[r.tier])}]</small></li>`).join("")}</ul></div>`;
+      this.drawerEl.innerHTML = `
+        <div class="vn-rpg-sheet" role="dialog" aria-label="Adventure Time Lite Sheet">
+          <div class="vn-rpg-sheet-head">
+            <div style="font-weight:700;font-size:0.9rem;">\uD83C\uDFB2 d20 Lite Rules &amp; Recent Checks</div>
+            <button type="button" class="vn-rpg-tab" data-rpg-close aria-label="Close Lite Sheet">✕</button>
+          </div>
+          <div class="vn-rpg-sheet-body">
+            <div class="vn-rpg-card"><b>Lite Rules</b><div style="margin-top:4px;opacity:0.88;">Skill checks roll 1d20 plus modifiers against the choice DC. Nat 20 scores a Critical Success; Nat 1 scores a Critical Failure. Switch to Full RPG in settings to track HP, Stamina, Quests, and the Node Atlas.</div></div>
+            ${recentHtml}
+          </div>
+        </div>
+      `;
+      this.drawerEl.querySelector("[data-rpg-close]")?.addEventListener("click", () => this.toggleDrawer(false));
+      return;
+    }
+    if (!this.rpgState)
       return;
     const state = this.rpgState;
     const v = state.vitals;
@@ -39054,7 +39407,10 @@ ${VN_TEXT_EFFECTS_CSS}
 [data-vn-game-move-row] { display:flex; align-items:stretch; gap:.4rem; }
 [data-vn-game-move-row] [data-vn-game-choice] { flex:1; min-width:0; }
 [data-vn-game-provider] { display:block; margin-top:.25rem; font-size:.75em; opacity:.75; }
-[data-vn-edit-game-move] { flex:none; width:44px; min-height:44px; padding:0; color:var(--vn-text); background:var(--vn-button-bg); border:1px solid var(--vn-panel-border); border-radius:.65rem; font-size:1.25rem; cursor:pointer; }
+[data-vn-edit-game-move], [data-vn-game-detail-toggle] { flex:none; width:44px; min-height:44px; padding:0; color:var(--vn-text); background:var(--vn-button-bg); border:1px solid var(--vn-panel-border); border-radius:.65rem; font-size:1.15rem; cursor:pointer; }
+[data-vn-game-detail] { margin:.25rem 0 .45rem; padding:.5rem .75rem; border-radius:.6rem; border:1px solid var(--vn-panel-border); background:var(--vn-panel-bg); color:var(--vn-text); font-size:.84rem; line-height:1.45; }
+[data-vn-game-detail][hidden] { display:none; }
+[data-vn-game-cancel] { width:100%; min-height:44px; padding:.55rem .85rem; margin-bottom:.45rem; border-radius:.65rem; border:1px solid var(--vn-accent); background:color-mix(in srgb, var(--vn-accent) 16%, var(--vn-panel-bg)); color:var(--vn-text); font:inherit; font-weight:600; cursor:pointer; }
 [data-vn-move-draft] { width:var(--vn-composer-width); max-width:100%; padding:.85rem; box-sizing:border-box; border:1px solid var(--vn-panel-border); border-radius:.8rem; color:var(--vn-text); background:var(--vn-panel-bg); }
 [data-vn-move-draft] p { font-size:.85rem; line-height:1.5; }
 [data-vn-move-draft] label { display:block; }
@@ -39095,7 +39451,7 @@ ${VN_TEXT_EFFECTS_CSS}
   [data-vn-root]:not([data-vn-adjustable-sheet="true"]) [data-vn-scene-hud] { top: calc(max(0.75rem, env(safe-area-inset-top)) + 3.4rem); max-width: calc(100% - 1.5rem); }
   [data-vn-hud-pill] { min-height: 1.7rem; font-size: 0.71rem; padding: 0.18rem 0.54rem; }
 }
-[data-vn-scrubber] { display: inline-flex; align-items: center; gap: 0.32rem; flex-wrap: wrap; }
+[data-vn-scrubber] { display: inline-flex; align-items: center; gap: 0.32rem; flex-wrap: wrap; min-height: 44px; touch-action: none; }
 [data-vn-scrub-dot] {
   position: relative;
   width: 0.56rem; height: 0.56rem; min-width: 0; min-height: 0; padding: 0; border-radius: 999px;
@@ -41708,6 +42064,7 @@ function createBadgeIconSvg(icon) {
   return svg;
 }
 // src/frontend/stage/vn-stage.ts
+var cueFxUid = 0;
 var MAX_BACKLOG_ENTRIES = 200;
 var TEXT_SHAKE_HEURISTIC_REGEX = /\*\s*(?:thud|slam|crash|smack|shake)[!?.,]*\s*\*/i;
 var errorMessage = (error61) => error61 instanceof Error && error61.message.trim() ? error61.message : "The request failed. Try again.";
@@ -41787,6 +42144,7 @@ class VnStage {
   moveDraftEpoch = 0;
   actionDraftsEnabled = false;
   gameBusy = false;
+  gameBusyTimedOut = false;
   inputForm;
   input;
   submitButton;
@@ -41818,6 +42176,7 @@ class VnStage {
   autoPlayDelay = 2000;
   skipMode = "read";
   isAutoAdvanceHeld;
+  isTypewriterAudioMuted;
   isAutoPlay = false;
   isSkipping = false;
   isBacklogOpen = false;
@@ -41851,6 +42210,7 @@ class VnStage {
     this.callbacks = options;
     this.createImage = options.createImage;
     this.isAutoAdvanceHeld = options.isAutoAdvanceHeld;
+    this.isTypewriterAudioMuted = options.isTypewriterAudioMuted;
     this.host = document.createElement("div");
     this.host.setAttribute("data-vn-stage-host", "");
     this.shadow = this.host.attachShadow({ mode: "open" });
@@ -42015,6 +42375,12 @@ class VnStage {
     this.folioOpenCallback = fn;
     this.dossiers.setFolioOpener(fn);
   }
+  setNpcActionToolsHandler(fn) {
+    this.dossiers.setNpcActionToolsHandler(fn);
+  }
+  buildNpcSceneActionTools(charName) {
+    return this.dossiers.buildNpcActionTools(charName);
+  }
   setStoryDna(storyDna) {
     this.dossiers.setStoryDna(storyDna);
   }
@@ -42050,12 +42416,14 @@ class VnStage {
     }
     this.bondSnapshots = nextSnapshots;
     this.characterDnaLibrary = { ...library };
+    this.dossiers.setCharacterDnaLibrary(this.characterDnaLibrary);
     if (celebrated) {
       this.showBondResonanceBanner(celebrated);
     }
   }
   setCharacterDnaSaver(fn) {
     this.dnaSaveRequester = fn;
+    this.dossiers.setCharacterDnaSaver(fn);
   }
   predecodeUpcomingImages(urls) {
     if (typeof Image !== "function")
@@ -42152,7 +42520,7 @@ class VnStage {
     closeBtn.type = "button";
     closeBtn.textContent = "×";
     closeBtn.setAttribute("aria-label", "Close quick peek");
-    closeBtn.style.cssText = "border:none;background:transparent;color:#94a3b8;font-size:16px;cursor:pointer;padding:2px 6px;";
+    closeBtn.style.cssText = "border:none;background:transparent;color:#94a3b8;font-size:16px;cursor:pointer;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;padding:0 10px;";
     closeBtn.addEventListener("click", () => this.closeSpeakerPeek());
     head.append(title, closeBtn);
     card.append(head);
@@ -42180,7 +42548,7 @@ class VnStage {
           btn.type = "button";
           const active = char.activeWardrobeKey === key || char.activeOutfit === outfit;
           btn.textContent = key;
-          btn.style.cssText = `padding:4px 8px;border-radius:999px;font-size:11px;cursor:pointer;border:1px solid ${active ? "rgba(110,231,183,0.75)" : "rgba(255,255,255,0.18)"};background:${active ? "rgba(110,231,183,0.18)" : "rgba(255,255,255,0.06)"};color:#f8fafc;`;
+          btn.style.cssText = `min-height:44px;padding:6px 12px;border-radius:999px;font-size:11px;cursor:pointer;border:1px solid ${active ? "rgba(110,231,183,0.75)" : "rgba(255,255,255,0.18)"};background:${active ? "rgba(110,231,183,0.18)" : "rgba(255,255,255,0.06)"};color:#f8fafc;`;
           btn.addEventListener("click", () => {
             const nextDna = { ...char, activeWardrobeKey: key, activeOutfit: outfit, lastUpdated: Date.now() };
             this.characterDnaLibrary[char.id] = nextDna;
@@ -42197,7 +42565,7 @@ class VnStage {
       const openBtn = document.createElement("button");
       openBtn.type = "button";
       openBtn.textContent = "\uD83D\uDCD6 Open Character Folio";
-      openBtn.style.cssText = "align-self:flex-start;padding:5px 10px;border-radius:6px;border:1px solid rgba(110,231,183,0.45);background:rgba(110,231,183,0.12);color:#a7f3d0;font-size:11px;font-weight:600;cursor:pointer;";
+      openBtn.style.cssText = "align-self:flex-start;min-height:44px;padding:8px 14px;border-radius:6px;border:1px solid rgba(110,231,183,0.45);background:rgba(110,231,183,0.12);color:#a7f3d0;font-size:12px;font-weight:600;cursor:pointer;";
       openBtn.addEventListener("click", () => {
         this.closeSpeakerPeek();
         this.folioOpenCallback?.(name);
@@ -42617,7 +42985,10 @@ class VnStage {
   }
   setGameChoices(choices, busy = false) {
     this.gameChoices = choices.map((choice) => ({ ...choice }));
-    this.gameBusy = busy;
+    const busyFlag = typeof busy === "boolean" ? busy : busy.busy;
+    const timedOutFlag = typeof busy === "boolean" ? false : Boolean(busy.timedOut);
+    this.gameBusy = busyFlag;
+    this.gameBusyTimedOut = busyFlag && timedOutFlag;
     const view = selectVnStageView(this.state);
     this.renderInteraction(view.showChoices, view.showStandardInput, view.isBusy);
   }
@@ -42789,6 +43160,15 @@ class VnStage {
   }
   setReferenceHistory(history) {
     this.dossiers.setHistory(history);
+  }
+  patchTurnLore(patch) {
+    const paragraphs = this.state.paragraphs.map((p) => p.text);
+    this.dossiers.patchLore(patch.presentation, paragraphs, patch.referenceHistory);
+    this.renderSceneHud();
+    const sceneSpan = this.themeRoot.querySelector("[data-vn-caption-scene]");
+    const activePlace = this.dossiers.sceneHudEntries().find((e) => e.kind === "place")?.name;
+    if (sceneSpan && activePlace)
+      sceneSpan.textContent = activePlace.trim().toUpperCase();
   }
   setActivity(label, kind = "loading") {
     this.dispatch({
@@ -43127,7 +43507,7 @@ class VnStage {
     if (typeof this.fxOverlay.offsetWidth === "number") {
       this.fxOverlay.offsetWidth;
     }
-    this.fxOverlay.innerHTML = generateCueEffectMarkup(effect);
+    this.fxOverlay.innerHTML = generateCueEffectMarkup(effect, ++cueFxUid);
     this.fxOverlay.dataset.vnEffect = effect;
     this.fxBurstTimer = setTimeout(() => {
       if (this.destroyed)
@@ -43467,7 +43847,23 @@ class VnStage {
       let draggingScrubber = false;
       const jumpFromPointer = (clientX, clientY) => {
         const hit = typeof document.elementFromPoint === "function" ? document.elementFromPoint(clientX, clientY) : null;
-        const dot = hit instanceof Element ? hit.closest("[data-vn-scrub-dot]") : null;
+        let dot = hit instanceof Element ? hit.closest("[data-vn-scrub-dot]") : null;
+        if (!dot && this.scrubber) {
+          const dots = Array.from(this.scrubber.querySelectorAll("[data-vn-scrub-dot]"));
+          dot = dots.find((candidate) => {
+            if (typeof candidate.getBoundingClientRect !== "function")
+              return false;
+            const r = candidate.getBoundingClientRect();
+            return clientX >= r.left && clientX <= r.right;
+          }) ?? null;
+          if (!dot && dots.length > 0 && typeof this.scrubber.getBoundingClientRect === "function") {
+            const box = this.scrubber.getBoundingClientRect();
+            if (box.width > 0) {
+              const ratio2 = Math.min(1, Math.max(0, (clientX - box.left) / box.width));
+              dot = dots[Math.min(dots.length - 1, Math.floor(ratio2 * dots.length))] ?? null;
+            }
+          }
+        }
         const idxAttr = dot?.dataset.vnScrubIndex;
         if (idxAttr !== undefined) {
           const targetIdx = parseInt(idxAttr, 10);
@@ -43478,6 +43874,11 @@ class VnStage {
       };
       this.scrubber.addEventListener("pointerdown", (event) => {
         draggingScrubber = true;
+        if (typeof this.scrubber?.setPointerCapture === "function") {
+          try {
+            this.scrubber.setPointerCapture(event.pointerId);
+          } catch {}
+        }
         jumpFromPointer(event.clientX, event.clientY);
       });
       this.scrubber.addEventListener("pointermove", (event) => {
@@ -43485,8 +43886,13 @@ class VnStage {
           return;
         jumpFromPointer(event.clientX, event.clientY);
       });
-      const stopScrub = () => {
+      const stopScrub = (event) => {
         draggingScrubber = false;
+        if (event && this.scrubber && typeof this.scrubber.hasPointerCapture === "function" && this.scrubber.hasPointerCapture(event.pointerId) && typeof this.scrubber.releasePointerCapture === "function") {
+          try {
+            this.scrubber.releasePointerCapture(event.pointerId);
+          } catch {}
+        }
       };
       this.scrubber.addEventListener("pointerup", stopScrub);
       this.scrubber.addEventListener("pointercancel", stopScrub);
@@ -43570,9 +43976,16 @@ class VnStage {
     let touchStartY = 0;
     let touchStartTime = 0;
     let isTouchSwiping = false;
-    let lastTapTime = 0;
-    let lastTapX = 0;
-    let lastTapY = 0;
+    let longPressTimer = null;
+    let longPressHandled = false;
+    let longPressStart = null;
+    const cancelLongPress = () => {
+      if (longPressTimer !== null) {
+        globalThis.clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+      longPressStart = null;
+    };
     this.root.addEventListener("touchstart", (event) => {
       const touch = event.touches[0];
       if (event.touches.length === 1 && touch) {
@@ -43591,9 +44004,10 @@ class VnStage {
         const target2 = event.target;
         if (target2?.closest("[data-vn-interaction]"))
           return;
-        const scrollable = target2?.closest("[data-vn-dialogue-text], [data-workspace-content], [data-vn-backlog-dialog]");
+        const scrollable = target2?.closest(".scroll-copy, [data-vn-dialogue-text], [data-workspace-content], [data-vn-backlog-dialog]");
         const isScrollingText = scrollable && scrollable.scrollHeight > scrollable.clientHeight && Math.abs(dy) > 15;
         if (!isScrollingText && dt < 450 && Math.abs(dx) > 45 && Math.abs(dx) > 1.6 * Math.abs(dy)) {
+          cancelLongPress();
           isTouchSwiping = true;
           if (sheetGesture)
             sheetGesture.moved = true;
@@ -43607,16 +44021,40 @@ class VnStage {
     }, { passive: true });
     this.root.addEventListener("pointerdown", (event) => {
       sheetGesture = event.target instanceof Element && event.target.closest("[data-vn-dialogue]") ? { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false } : null;
+      cancelLongPress();
+      longPressHandled = false;
+      if (event.button === 0 && !this.workspace.isOpen() && !this.isBacklogOpen && !this.dossiers.isOpen() && !isInteractiveTarget(event.target)) {
+        longPressStart = { id: event.pointerId, x: event.clientX, y: event.clientY };
+        longPressTimer = globalThis.setTimeout(() => {
+          longPressTimer = null;
+          longPressStart = null;
+          longPressHandled = true;
+          if (sheetGesture)
+            sheetGesture.moved = true;
+          this.toggleHud();
+        }, 460);
+      }
     }, { passive: true });
     this.root.addEventListener("pointermove", (event) => {
       if (sheetGesture?.id === event.pointerId && Math.hypot(event.clientX - sheetGesture.x, event.clientY - sheetGesture.y) > 8)
         sheetGesture.moved = true;
+      if (longPressStart?.id === event.pointerId && Math.hypot(event.clientX - longPressStart.x, event.clientY - longPressStart.y) > 8)
+        cancelLongPress();
+    }, { passive: true });
+    this.root.addEventListener("pointerup", () => {
+      cancelLongPress();
     }, { passive: true });
     this.root.addEventListener("pointercancel", () => {
+      cancelLongPress();
       if (sheetGesture)
         sheetGesture.moved = true;
     }, { passive: true });
     this.root.addEventListener("click", (event) => {
+      if (longPressHandled) {
+        longPressHandled = false;
+        event.preventDefault();
+        return;
+      }
       if (isTouchSwiping) {
         isTouchSwiping = false;
         return;
@@ -43625,16 +44063,6 @@ class VnStage {
       sheetGesture = null;
       if (this.root.dataset.vnPageFocus === "true")
         return;
-      const now = performance.now();
-      const isDoubleTap = now - lastTapTime < 320 && Math.hypot(event.clientX - lastTapX, event.clientY - lastTapY) < 32;
-      lastTapTime = now;
-      lastTapX = event.clientX;
-      lastTapY = event.clientY;
-      if (isDoubleTap && !isInteractiveTarget(event.target)) {
-        event.preventDefault();
-        this.toggleHud();
-        return;
-      }
       if (this.dialogueSheet?.isHidden() || this.root.dataset.vnHudHidden === "true") {
         if (!isInteractiveTarget(event.target))
           this.toggleHud(false);
@@ -44284,7 +44712,7 @@ class VnStage {
       if (typeof document !== "undefined" && document.visibilityState === "hidden")
         return;
       const complete = this.typewriter.step(this.readerPreferences?.smartPacing !== false, (char, effectLetter) => {
-        if ((effectLetter || char.trim()) && !this.isSkipping && !this.isRewinding)
+        if ((effectLetter || char.trim()) && !this.isSkipping && !this.isRewinding && !this.isTypewriterAudioMuted?.())
           this.typewriterAudio.play();
       });
       if (complete)
@@ -44704,7 +45132,7 @@ class VnStage {
   }
   renderGameChoices(show, isBusy) {
     this.gameMoves.hidden = !show;
-    this.gameMovesSummary.textContent = `Available moves (${this.gameChoices.length})`;
+    this.gameMovesSummary.textContent = this.gameBusyTimedOut ? `Moves paused (${this.gameChoices.length})` : `Available moves (${this.gameChoices.length})`;
     if (!show) {
       if (this.gameChoiceList.childElementCount > 0)
         this.gameChoiceList.replaceChildren();
@@ -44715,7 +45143,19 @@ class VnStage {
       const key = choice.group ?? "";
       groups.set(key, [...groups.get(key) ?? [], choice]);
     }
-    this.gameChoiceList.replaceChildren(...[...groups].map(([group, choices]) => {
+    const items = [];
+    if (this.gameBusyTimedOut) {
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.dataset.vnGameCancel = "";
+      cancel.textContent = "Stuck? Refresh moves";
+      cancel.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this.callbacks.onGameCancel?.();
+      });
+      items.push(cancel);
+    }
+    for (const [group, choices] of groups) {
       const section = document.createElement("div");
       section.setAttribute("data-vn-game-group", "");
       if (group && groups.size > 1) {
@@ -44744,13 +45184,36 @@ class VnStage {
         button.append(label);
         if (choice.odds !== null) {
           const odds = document.createElement("span");
-          odds.setAttribute("data-vn-game-odds", choice.odds >= 0.67 ? "good" : choice.odds >= 0.34 ? "fair" : "poor");
+          odds.setAttribute("data-vn-game-odds", choice.odds >= 0.7 ? "good" : choice.odds >= 0.4 ? "fair" : "poor");
           odds.textContent = `${Math.round(choice.odds * 100)}%`;
           button.append(odds);
         }
         const row = document.createElement("div");
         row.dataset.vnGameMoveRow = "";
         row.append(button);
+        let detailPanel = null;
+        if (choice.detail) {
+          const info = document.createElement("button");
+          info.type = "button";
+          info.dataset.vnGameDetailToggle = "";
+          info.setAttribute("aria-expanded", "false");
+          info.setAttribute("aria-label", `Inspect ${choice.label} details`);
+          info.title = "Move details";
+          info.textContent = "ⓘ";
+          detailPanel = document.createElement("div");
+          detailPanel.dataset.vnGameDetail = "";
+          detailPanel.hidden = true;
+          detailPanel.textContent = choice.detail;
+          info.addEventListener("click", (event) => {
+            event.stopPropagation();
+            if (!detailPanel)
+              return;
+            const nextHidden = !detailPanel.hidden;
+            detailPanel.hidden = nextHidden;
+            info.setAttribute("aria-expanded", String(!nextHidden));
+          });
+          row.append(info);
+        }
         if (this.actionDraftsEnabled) {
           const edit = document.createElement("button");
           edit.type = "button";
@@ -44770,14 +45233,17 @@ class VnStage {
           row.append(edit);
         }
         section.append(row);
+        if (detailPanel)
+          section.append(detailPanel);
       }
-      return section;
-    }));
+      items.push(section);
+    }
+    this.gameChoiceList.replaceChildren(...items);
   }
   renderInteraction(showChoices, showStandardInput, isBusy) {
     if (!selectVnStageView(this.state).acceptsInput)
       this.closeMoveDraft();
-    const showGame = (showChoices || showStandardInput) && this.gameChoices.length > 0;
+    const showGame = (showChoices || showStandardInput) && (this.gameChoices.length > 0 || this.gameBusyTimedOut);
     this.interaction.hidden = !showChoices && !showStandardInput;
     this.choiceList.hidden = !showChoices;
     this.gameChoiceList.hidden = !showGame;
@@ -44889,7 +45355,6 @@ class AudioEngine {
   setInterval;
   clearInterval;
   activeBgm = null;
-  outgoingBgm = null;
   activeSfx = new Set;
   destroyed = false;
   constructor(options = {}) {
@@ -45010,6 +45475,20 @@ class AudioEngine {
       this.fadeVolume(this.activeBgm, 1, duration3);
       return;
     }
+    const rescue = [...this.bgmTracks].find((item) => item !== this.activeBgm && item.src === cleanSrc);
+    if (rescue) {
+      if (this.activeBgm) {
+        this.fadeOutAndCleanup(this.activeBgm, duration3);
+        this.activeBgm = null;
+      }
+      this.clearFade(rescue);
+      this.activeBgm = rescue;
+      if (rescue.player.paused) {
+        rescue.player.play().catch(() => {});
+      }
+      this.fadeVolume(rescue, 1, duration3);
+      return;
+    }
     if (this.activeBgm) {
       this.fadeOutAndCleanup(this.activeBgm, duration3);
       this.activeBgm = null;
@@ -45025,14 +45504,10 @@ class AudioEngine {
   }
   stopBgm(options = {}) {
     const duration3 = options.fadeDuration ?? options.crossfadeDuration ?? this.crossfadeDuration;
-    if (this.activeBgm) {
-      this.fadeOutAndCleanup(this.activeBgm, duration3);
-      this.activeBgm = null;
+    for (const item of [...this.bgmTracks]) {
+      this.fadeOutAndCleanup(item, duration3);
     }
-    if (this.outgoingBgm) {
-      this.fadeOutAndCleanup(this.outgoingBgm, duration3);
-      this.outgoingBgm = null;
-    }
+    this.activeBgm = null;
   }
   playSfx(src, options = {}) {
     if (this.destroyed)
@@ -45072,7 +45547,6 @@ class AudioEngine {
     }
     this.bgmTracks.clear();
     this.activeBgm = null;
-    this.outgoingBgm = null;
     for (const sfx of this.activeSfx) {
       sfx.pause();
     }
@@ -45111,14 +45585,11 @@ class AudioEngine {
   }
   fadeOutAndCleanup(item, durationMs) {
     this.clearFade(item);
-    this.outgoingBgm = item;
     if (durationMs <= 0) {
       item.player.pause();
       this.clearAtten(item);
       this.clearSpeech(item);
       this.bgmTracks.delete(item);
-      if (this.outgoingBgm === item)
-        this.outgoingBgm = null;
       return;
     }
     const startVolume = item.gain;
@@ -45136,8 +45607,6 @@ class AudioEngine {
         this.clearSpeech(item);
         item.player.pause();
         this.bgmTracks.delete(item);
-        if (this.outgoingBgm === item)
-          this.outgoingBgm = null;
       }
     }, intervalMs);
   }
@@ -45227,10 +45696,11 @@ Return:
       "preferredCompositionMode": "layered-depth",
       "spatialRelationships": ["Name1 seated foreground-left at the counter", "Name2 leaning in the midground doorway"],
       "sceneStagingNote": "Angled three-quarter view across the room showing both characters engaged in the space"
-    }
+    },
+    "bgm": "intimate_warm",
+    "sfx": "cloth_rustle"
   }],
-  "effects": [{"paragraphIndex": 1, "effect": "shake_hard"}],
-  "audioCues": [{"paragraphIndex": 0, "bgm": "intimate_warm", "sfx": "cloth_rustle"}]
+  "effects": [{"paragraphIndex": 1, "effect": "shake_hard"}]
 }`;
 var MASTER_LORE_REFERENCE_PROMPT = `You are the Master Story Lore & World Lens Intelligence Engine.
 Your mission is to extract an accurate, permanent descriptive profile of important explicitly named NPCs, locations, and unique artifacts throughout the visible story text.
@@ -47236,7 +47706,9 @@ var LocationArtVariantSchema = exports_external.object({
   requestFingerprint: id6,
   environmentFingerprint: id6,
   approved: exports_external.literal(true),
-  createdAt: exports_external.string().max(64)
+  createdAt: exports_external.string().max(64),
+  lastUsedAt: exports_external.number().nonnegative().optional(),
+  pinned: exports_external.boolean().optional()
 }).strict();
 var LocationArtRecordSchema = exports_external.object({
   entityId: id6,
@@ -49124,9 +49596,9 @@ class VisualNovelSettingsPanel {
                   </label>
                 </div>
                 <div style="display:flex;gap:6px;align-items:flex-end;">
-                  <input type="text" name="systemPromptProfileName" placeholder="Profile name..." style="padding:4px 8px;font-size:0.8rem;border-radius:6px;background:var(--set-field);color:inherit;border:1px solid var(--set-border);width:140px;" />
-                  <button type="button" data-system-prompt-profile-save class="btn" style="padding:4px 10px;font-size:0.8rem;border-radius:6px;border:1px solid var(--set-border);background:var(--set-field);cursor:pointer;">\uD83D\uDCBE Save</button>
-                  <button type="button" data-system-prompt-profile-delete class="btn" style="padding:4px 10px;font-size:0.8rem;border-radius:6px;border:1px solid var(--set-border);background:var(--set-field);cursor:pointer;color:#fca5a5;">\uD83D\uDDD1️</button>
+                  <input type="text" name="systemPromptProfileName" placeholder="Profile name..." style="min-height:44px;padding:8px 10px;font-size:0.8rem;border-radius:6px;background:var(--set-field);color:inherit;border:1px solid var(--set-border);width:140px;box-sizing:border-box;" />
+                  <button type="button" data-system-prompt-profile-save class="btn" style="min-height:44px;min-width:44px;padding:8px 12px;font-size:0.8rem;border-radius:6px;border:1px solid var(--set-border);background:var(--set-field);cursor:pointer;">\uD83D\uDCBE Save</button>
+                  <button type="button" data-system-prompt-profile-delete class="btn" style="min-height:44px;min-width:44px;padding:8px 12px;font-size:0.8rem;border-radius:6px;border:1px solid var(--set-border);background:var(--set-field);cursor:pointer;color:#fca5a5;">\uD83D\uDDD1️</button>
                 </div>
               </div>
               
@@ -49327,8 +49799,8 @@ class VisualNovelSettingsPanel {
                   <small style="opacity: 0.7; font-size: 11px;">Configure per effect</small>
                 </summary>
                 <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; margin-bottom: 12px;">
-                  <button type="button" data-enable-all-effects class="settings-sub-btn" style="font-size: 11px; padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: inherit; cursor: pointer;">Enable all</button>
-                  <button type="button" data-disable-all-effects class="settings-sub-btn" style="font-size: 11px; padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: inherit; cursor: pointer;">Disable all</button>
+                  <button type="button" data-enable-all-effects class="settings-sub-btn" style="font-size: 12px; min-height: 44px; min-width: 44px; padding: 8px 14px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: inherit; cursor: pointer;">Enable all</button>
+                  <button type="button" data-disable-all-effects class="settings-sub-btn" style="font-size: 12px; min-height: 44px; min-width: 44px; padding: 8px 14px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: inherit; cursor: pointer;">Disable all</button>
                 </div>
                 ${SCENE_EFFECT_CATEGORIES.map((category) => `
                   <div style="margin-bottom: 14px;">
@@ -52865,7 +53337,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.156";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.158";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -53040,11 +53512,13 @@ var LIGHTBOX_CSS = `
   z-index: 999999;
   display: none;
   flex-direction: column;
-  background: rgba(4, 8, 12, 0.94);
+  background: color-mix(in srgb, var(--vn-shell-panel, #04080c) 94%, #000);
+  color: var(--vn-shell-text, #f4f6fb);
+  font-family: var(--vn-shell-family, system-ui);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   user-select: none;
-  touch-action: pan-y;
+  touch-action: none;
 }
 .vn-lightbox-backdrop.open {
   display: flex !important;
@@ -53103,13 +53577,14 @@ var LIGHTBOX_CSS = `
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 40px;
-  height: 40px;
-  padding: 0 12px;
+  min-width: 44px;
+  min-height: 44px;
+  height: 44px;
+  padding: 0 14px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.25));
+  background: var(--vn-shell-button, rgba(255, 255, 255, 0.12));
+  color: var(--vn-shell-text, #fff);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -53118,13 +53593,13 @@ var LIGHTBOX_CSS = `
   -webkit-tap-highlight-color: transparent;
 }
 .vn-lightbox-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
-  border-color: rgba(255, 255, 255, 0.45);
+  background: color-mix(in srgb, var(--vn-shell-accent, #9ec6f0) 20%, var(--vn-shell-button, rgba(255, 255, 255, 0.25)));
+  border-color: var(--vn-shell-accent, rgba(255, 255, 255, 0.45));
 }
 .vn-lightbox-btn.active {
-  background: #7c9cff;
-  border-color: #7c9cff;
-  color: #0d121f;
+  background: var(--vn-shell-accent, #7c9cff);
+  border-color: var(--vn-shell-accent, #7c9cff);
+  color: var(--vn-shell-accent-contrast, #0d121f);
 }
 .vn-lightbox-close {
   min-width: 44px;
@@ -53148,22 +53623,69 @@ var LIGHTBOX_CSS = `
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
   padding: 68px 16px 24px;
   cursor: zoom-in;
+  touch-action: none;
 }
 .vn-lightbox-viewport.zoomed {
   cursor: grab;
 }
+.vn-lightbox-viewport.zoomed:active {
+  cursor: grabbing;
+}
 .vn-lightbox-img {
   max-width: 95vw;
-  max-height: 85vh;
+  max-height: 82vh;
   object-fit: contain;
   border-radius: 6px;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
-  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
   transform-origin: center center;
+  will-change: transform;
+}
+.vn-lightbox-rail {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 16px max(12px, env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--vn-shell-panel, #080c12) 88%, #000);
+  border-top: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.14));
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.vn-lightbox-rail::-webkit-scrollbar {
+  display: none;
+}
+.vn-lightbox-rail[hidden] {
+  display: none !important;
+}
+.vn-lightbox-rail-item {
+  flex: 0 0 auto;
+  min-width: 48px;
+  min-height: 48px;
+  width: 56px;
+  height: 56px;
+  padding: 2px;
+  border-radius: 8px;
+  border: 2px solid var(--vn-shell-border, rgba(255, 255, 255, 0.2));
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+}
+.vn-lightbox-rail-item[aria-current="true"] {
+  border-color: var(--vn-shell-accent, #9ec6f0);
+  box-shadow: 0 0 0 1px var(--vn-shell-accent, #9ec6f0);
+}
+.vn-lightbox-rail-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 5px;
+  display: block;
 }
 .vn-lightbox-info-drawer {
   position: absolute;
@@ -53173,9 +53695,9 @@ var LIGHTBOX_CSS = `
   max-height: 40vh;
   overflow-y: auto;
   padding: 16px 20px max(16px, env(safe-area-inset-bottom));
-  background: rgba(10, 16, 24, 0.95);
-  border-top: 1px solid rgba(255, 255, 255, 0.14);
-  color: #e0e5ed;
+  background: color-mix(in srgb, var(--vn-shell-panel, #0a1018) 96%, #000);
+  border-top: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.14));
+  color: var(--vn-shell-text, #e0e5ed);
   font-size: 13px;
   line-height: 1.5;
   backdrop-filter: blur(20px);
@@ -53203,11 +53725,21 @@ class FullscreenLightbox {
   titleEl;
   subtitleEl;
   infoDrawer;
+  railEl;
   zoomLevel = 1;
+  panX = 0;
+  panY = 0;
   infoOpen = false;
   currentOptions = null;
+  galleryItems = [];
+  galleryIndex = 0;
   touchStartY = 0;
   touchStartX = 0;
+  panStartX = 0;
+  panStartY = 0;
+  isPanning = false;
+  pinchStartDist = 0;
+  pinchStartZoom = 1;
   constructor() {
     this.backdrop = document.createElement("div");
     this.backdrop.className = "vn-lightbox-backdrop";
@@ -53232,12 +53764,14 @@ class FullscreenLightbox {
       <div class="vn-lightbox-viewport" data-viewport>
         <img class="vn-lightbox-img" alt="Fullscreen image" />
       </div>
+      <div class="vn-lightbox-rail" hidden data-rail aria-label="Gallery navigation"></div>
       <div class="vn-lightbox-info-drawer" hidden data-drawer></div>
     `;
     this.backdrop.append(style, content);
     this.titleEl = this.backdrop.querySelector(".vn-lightbox-title");
     this.subtitleEl = this.backdrop.querySelector(".vn-lightbox-subtitle");
     this.img = this.backdrop.querySelector(".vn-lightbox-img");
+    this.railEl = this.backdrop.querySelector("[data-rail]");
     this.infoDrawer = this.backdrop.querySelector("[data-drawer]");
     this.wireEvents();
   }
@@ -53254,9 +53788,15 @@ class FullscreenLightbox {
       e.stopPropagation();
       this.close();
     } else if (e.key === "+" || e.key === "=") {
-      this.setZoom(Math.min(3, this.zoomLevel + 0.5));
+      this.setZoom(Math.min(4, this.zoomLevel + 0.5));
     } else if (e.key === "-") {
       this.setZoom(Math.max(1, this.zoomLevel - 0.5));
+    } else if (e.key === "ArrowRight" && this.galleryItems.length > 1) {
+      e.preventDefault();
+      this.selectGalleryItem((this.galleryIndex + 1) % this.galleryItems.length);
+    } else if (e.key === "ArrowLeft" && this.galleryItems.length > 1) {
+      e.preventDefault();
+      this.selectGalleryItem((this.galleryIndex - 1 + this.galleryItems.length) % this.galleryItems.length);
     }
   };
   wireEvents() {
@@ -53269,7 +53809,12 @@ class FullscreenLightbox {
       e.stopPropagation();
       this.close();
     });
+    let suppressNextClick = false;
     viewport.addEventListener("click", (e) => {
+      if (suppressNextClick) {
+        suppressNextClick = false;
+        return;
+      }
       if (e.target === viewport) {
         this.close();
       } else if (e.target === this.img) {
@@ -53289,36 +53834,77 @@ class FullscreenLightbox {
       e.stopPropagation();
       this.toggleInfo();
     });
-    this.backdrop.addEventListener("touchstart", (e) => {
-      if (e.touches.length === 1) {
+    const touchDist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    viewport.addEventListener("touchstart", (e) => {
+      if (e.touches.length === 2) {
+        this.isPanning = false;
+        this.pinchStartDist = touchDist(e.touches);
+        this.pinchStartZoom = this.zoomLevel;
+      } else if (e.touches.length === 1) {
+        this.pinchStartDist = 0;
         this.touchStartY = e.touches[0].clientY;
         this.touchStartX = e.touches[0].clientX;
+        if (this.zoomLevel > 1) {
+          this.isPanning = true;
+          this.panStartX = this.panX;
+          this.panStartY = this.panY;
+        }
       }
     }, { passive: true });
-    this.backdrop.addEventListener("touchend", (e) => {
+    viewport.addEventListener("touchmove", (e) => {
+      if (e.touches.length === 2 && this.pinchStartDist > 0) {
+        const nextZoom = Math.min(4, Math.max(1, this.pinchStartZoom * (touchDist(e.touches) / this.pinchStartDist)));
+        this.setZoom(nextZoom);
+      } else if (e.touches.length === 1 && this.isPanning && this.zoomLevel > 1) {
+        const dx = e.touches[0].clientX - this.touchStartX;
+        const dy = e.touches[0].clientY - this.touchStartY;
+        if (Math.hypot(dx, dy) > 6)
+          suppressNextClick = true;
+        this.panX = this.panStartX + dx;
+        this.panY = this.panStartY + dy;
+        this.applyTransform();
+      }
+    }, { passive: true });
+    viewport.addEventListener("touchend", (e) => {
+      if (e.touches.length < 2)
+        this.pinchStartDist = 0;
+      if (e.touches.length === 0)
+        this.isPanning = false;
       if (e.changedTouches.length === 1 && this.zoomLevel === 1) {
         const deltaY = e.changedTouches[0].clientY - this.touchStartY;
-        const deltaX = Math.abs(e.changedTouches[0].clientX - this.touchStartX);
-        if (deltaY > 70 && deltaX < 120) {
+        const deltaX = e.changedTouches[0].clientX - this.touchStartX;
+        if (deltaY > 70 && Math.abs(deltaY) > Math.abs(deltaX) * 1.4) {
           this.close();
+          return;
+        }
+        if (this.galleryItems.length > 1 && Math.abs(deltaX) > 60 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+          suppressNextClick = true;
+          const nextIdx = deltaX < 0 ? (this.galleryIndex + 1) % this.galleryItems.length : (this.galleryIndex - 1 + this.galleryItems.length) % this.galleryItems.length;
+          this.selectGalleryItem(nextIdx);
         }
       }
     }, { passive: true });
   }
+  applyTransform() {
+    if (this.zoomLevel > 1) {
+      this.img.style.transform = `translate3d(${this.panX}px, ${this.panY}px, 0) scale(${this.zoomLevel})`;
+    } else {
+      this.img.style.transform = "translate3d(0, 0, 0) scale(1)";
+    }
+  }
   setZoom(level) {
     this.zoomLevel = level;
+    if (level <= 1) {
+      this.panX = 0;
+      this.panY = 0;
+    }
     const viewport = this.backdrop.querySelector("[data-viewport]");
     const zoomBtn = this.backdrop.querySelector('[data-action="zoom-toggle"]');
+    this.applyTransform();
     if (level > 1) {
-      this.img.style.transform = `scale(${level})`;
-      this.img.style.maxWidth = "none";
-      this.img.style.maxHeight = "none";
       viewport.classList.add("zoomed");
       zoomBtn.textContent = `${Math.round(level * 100)}%`;
     } else {
-      this.img.style.transform = "none";
-      this.img.style.maxWidth = "95vw";
-      this.img.style.maxHeight = "85vh";
       viewport.classList.remove("zoomed");
       zoomBtn.textContent = "Fit";
     }
@@ -53336,25 +53922,90 @@ class FullscreenLightbox {
     infoBtn.classList.toggle("active", this.infoOpen);
     this.infoDrawer.hidden = !this.infoOpen;
   }
-  show(options) {
-    this.currentOptions = options;
-    this.titleEl.textContent = options.title ?? "Story Artwork";
-    this.subtitleEl.textContent = options.subtitle ?? "";
-    this.subtitleEl.hidden = !options.subtitle;
-    this.img.src = options.src;
+  applyThemeTokens(themeSource) {
+    if (typeof getComputedStyle !== "function")
+      return;
+    const source = themeSource ?? document.querySelector("[data-vn-root], [data-vn-shell]") ?? document.documentElement;
+    if (!source)
+      return;
+    const style = getComputedStyle(source);
+    const props = [
+      "--vn-shell-bg",
+      "--vn-shell-panel",
+      "--vn-shell-button",
+      "--vn-shell-text",
+      "--vn-shell-muted",
+      "--vn-shell-border",
+      "--vn-shell-accent",
+      "--vn-shell-accent-contrast",
+      "--vn-shell-family"
+    ];
+    for (const prop of props) {
+      const value = style.getPropertyValue(prop).trim();
+      if (value)
+        this.backdrop.style.setProperty(prop, value);
+    }
+  }
+  renderGalleryRail() {
+    if (this.galleryItems.length <= 1) {
+      this.railEl.hidden = true;
+      this.railEl.replaceChildren();
+      return;
+    }
+    this.railEl.hidden = false;
+    this.railEl.replaceChildren(...this.galleryItems.map((item, idx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "vn-lightbox-rail-item";
+      btn.setAttribute("aria-label", item.title || `Image ${idx + 1}`);
+      btn.setAttribute("aria-current", idx === this.galleryIndex ? "true" : "false");
+      const thumb = document.createElement("img");
+      thumb.src = item.src;
+      thumb.alt = "";
+      btn.append(thumb);
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        this.selectGalleryItem(idx);
+      };
+      return btn;
+    }));
+  }
+  selectGalleryItem(index) {
+    const item = this.galleryItems[index];
+    if (!item)
+      return;
+    this.galleryIndex = index;
+    this.presentItem(item);
+    this.renderGalleryRail();
+  }
+  presentItem(item) {
+    this.titleEl.textContent = item.title ?? "Story Artwork";
+    this.subtitleEl.textContent = item.subtitle ?? "";
+    this.subtitleEl.hidden = !item.subtitle;
+    this.img.src = item.src;
     this.setZoom(1);
     this.infoOpen = false;
     this.infoDrawer.hidden = true;
     let infoHtml = "";
-    if (options.prompt) {
-      infoHtml += `<strong>Positive Prompt:</strong><pre>${this.escapeHtml(options.prompt)}</pre>`;
+    if (item.prompt) {
+      infoHtml += `<strong>Positive Prompt:</strong><pre>${this.escapeHtml(item.prompt)}</pre>`;
     }
-    if (options.negativePrompt) {
-      infoHtml += `<div style="margin-top:10px"><strong>Negative Prompt:</strong><pre>${this.escapeHtml(options.negativePrompt)}</pre></div>`;
+    if (item.negativePrompt) {
+      infoHtml += `<div style="margin-top:10px"><strong>Negative Prompt:</strong><pre>${this.escapeHtml(item.negativePrompt)}</pre></div>`;
     }
     this.infoDrawer.innerHTML = infoHtml || "<p style='margin:0;opacity:0.7'>No recorded prompt metadata.</p>";
     const infoBtn = this.backdrop.querySelector('[data-action="info-toggle"]');
-    infoBtn.hidden = !options.prompt && !options.negativePrompt;
+    infoBtn.classList.remove("active");
+    infoBtn.hidden = !item.prompt && !item.negativePrompt;
+  }
+  show(options) {
+    this.currentOptions = options;
+    this.applyThemeTokens(options.themeSource);
+    this.galleryItems = options.gallery && options.gallery.length > 0 ? options.gallery : [];
+    const requestedIdx = options.galleryIndex ?? 0;
+    this.galleryIndex = this.galleryItems.length > 0 ? Math.min(Math.max(0, requestedIdx), this.galleryItems.length - 1) : 0;
+    this.presentItem(options);
+    this.renderGalleryRail();
     if (!this.backdrop.parentNode) {
       document.body.appendChild(this.backdrop);
     }
@@ -53386,8 +54037,7 @@ class FullscreenLightbox {
 
 // src/frontend/image-review/studio.ts
 var CSS3 = `
-:host{position:absolute;inset:0;pointer-events:none;z-index:9;font:14px/1.45 var(--vn-shell-family,system-ui);color:var(--vn-shell-text,#f4f7ee);--paper:#11241c;--edge:rgba(160,205,185,.22);--accent:#dcebad;--vn-shell-field:rgba(14,28,22,.85);--vn-shell-button:rgba(22,46,36,.8)}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])){color:#172721;--paper:#eef3e5;--edge:rgba(35,65,50,.18);--accent:#234b39;--vn-shell-field:#fbfdf7;--vn-shell-button:#e2ecde;--vn-shell-text:#172721;--vn-shell-muted:#4b6b5d}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) section{color:#172721!important;background:#eef3e5!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) section small,:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) section p{color:#4b6b5d!important}
+:host{position:absolute;inset:0;pointer-events:none;z-index:9;font:14px/1.45 var(--vn-shell-family,system-ui);color:var(--vn-shell-text,#f4f7ee);--paper:var(--vn-shell-panel,#11241c);--edge:var(--vn-shell-border,rgba(160,205,185,.22));--accent:var(--vn-shell-accent,#dcebad)}
 [hidden]{display:none!important}button,input,input:not([type=checkbox]),textarea,select{font:inherit;color:inherit;box-sizing:border-box}button{cursor:pointer;min-height:44px;padding:8px 12px;border:1px solid var(--edge);border-radius:9px;background:var(--vn-shell-button,#252632)}button:disabled{opacity:.55;cursor:default}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 [data-launch]{max-width:130px;position:absolute;top:70px;right:max(12px,env(safe-area-inset-right));pointer-events:auto;background:var(--paper)}section{pointer-events:auto;position:absolute;right:12px;top:124px;width:min(490px,calc(100% - 24px));max-height:calc(100% - 144px);display:flex;flex-direction:column;overflow:hidden;overscroll-behavior:contain;box-sizing:border-box;border:1px solid var(--edge);border-radius:12px;padding:0;background:var(--paper);box-shadow:0 12px 40px #0009}
 [data-launch][data-waiting]:not([data-waiting="0"])::after{content:attr(data-waiting);position:absolute;top:-7px;right:-4px;min-width:20px;height:20px;padding:0 3px;display:grid;place-items:center;border-radius:999px;background:var(--accent);color:var(--paper);font:700 11px/1 system-ui;border:1px solid var(--edge);box-sizing:border-box}h2{margin:0;font-size:19px}small,p{color:var(--vn-shell-muted,#bbc);overflow-wrap:anywhere}label{display:block;margin:12px 0}textarea,select{width:100%;background:var(--vn-shell-field,#101119);border:1px solid var(--edge);border-radius:6px;padding:8px}textarea{min-height:90px;font:16px/1.5 ui-monospace,monospace}textarea[readonly]{opacity:.85}.row{display:flex;gap:8px;flex-wrap:wrap}.row button:first-child{border-color:var(--accent)}[data-notice]{color:var(--accent);white-space:pre-wrap}details{margin:10px 0}summary::before{content:"▸";margin-right:8px}details[open]>summary::before{content:"▾"}summary{cursor:pointer;min-height:44px;display:flex;align-items:center}.toggle{display:flex;align-items:center;gap:8px}.toggle input{width:20px;height:20px}
@@ -53397,11 +54047,10 @@ var CSS3 = `
 @media(max-height:500px){section{inset:max(76px,calc(env(safe-area-inset-top) + 64px)) 8px calc(max(12px,env(safe-area-inset-bottom)) + var(--reader-keyboard-inset,0px));width:auto;max-height:none}[data-studio-header],[data-studio-footer]{padding:8px 12px}[data-studio-footer] .row{flex-wrap:nowrap;overflow-x:auto}[data-studio-footer] .row button{flex:none}[data-studio-footer] [data-notice]{max-height:12dvh}}
 `;
 var INSPECTOR_CSS = `
-:host{--paper:var(--vn-shell-panel,#171822)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])){--paper:#f8faf6;color:#172721;--vn-shell-text:#172721;--vn-shell-muted:#4b6b5d;--vn-shell-field:#ffffff;--vn-shell-button:#e5eee2;--accent:#1e5a40;--edge:rgba(86,128,107,.35)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) section{color:#172721!important;background:#f8faf6!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) details{background:#ffffff!important;border-color:rgba(86,128,107,.3)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-context]{background:#eef5ee!important;border-color:rgba(86,128,107,.3)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-scene]{color:#142820!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) textarea{background:#ffffff!important;color:#142820!important;border-color:rgba(86,128,107,.35)!important}section{width:min(520px,calc(100% - 24px));color:var(--vn-shell-text,#eee);backdrop-filter:blur(16px)}section small,section p{color:var(--vn-shell-muted,#bbc)}[data-studio-body]{padding-top:12px}details{border:1px solid color-mix(in srgb,var(--edge) 65%,transparent);border-radius:10px;background:rgba(255,255,255,.025);padding:0 12px;margin:8px 0}details[open]{padding-bottom:12px;background:rgba(255,255,255,.04);border-color:color-mix(in srgb,var(--accent) 42%,var(--edge))}summary{font-weight:600}[data-context]{display:flex;gap:12px;align-items:flex-start;margin:8px 0 10px;padding:12px;border-radius:14px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 12%,rgba(255,255,255,.03)),rgba(0,0,0,.24));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--edge))}[data-context-text]{min-width:0;flex:1}[data-status]{font-size:15px;display:block}[data-paragraph]{display:inline-block;margin-top:3px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.07);font-size:11px;font-weight:600}[data-scene]{margin:5px 0 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12.5px}[data-thumbnail]{width:84px;height:108px;flex:none;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--edge));border-radius:12px;background:var(--vn-shell-field,#101119);display:grid;place-items:center;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.35)}[data-thumbnail] img{width:100%;height:100%;object-fit:cover}[data-placeholder]{font-size:28px;color:var(--accent)}[data-state-detail]{margin:8px 0;font-size:13px}[data-meta]{font-size:12px;margin:4px 0;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.05);display:inline-block}[data-prompt-editor]{margin:8px 0;padding:12px;border-radius:12px;background:rgba(255,255,255,.025);border:1px solid color-mix(in srgb,var(--edge) 70%,transparent)}[data-edit-help]{font-size:12px;margin:0 0 8px}label{font-weight:500;margin:10px 0}label small{float:right;font-weight:400;font-size:11px}textarea{margin-top:6px;font:16px/1.5 var(--vn-shell-family,system-ui);border-radius:8px}select,input:not([type=checkbox]){font-size:16px}[data-positive]{min-height:130px;resize:vertical;transition:min-height .2s ease}[data-positive][data-expanded="true"]{min-height:260px}[data-negative]{min-height:68px;resize:vertical}[data-budget-meter]{height:6px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin:8px 0 4px}[data-budget-fill]{height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width .2s ease,background-color .2s ease}[data-budget-fill][data-tone="warn"]{background:#f5c462}[data-budget-fill][data-tone="over"]{background:var(--vn-shell-danger,#ffb4ab)}[data-combined-count]{display:block;font-variant-numeric:tabular-nums;text-align:right;font-size:12px}[data-validation]{display:block;color:var(--vn-shell-danger,#ffb4ab);margin:6px 0}[aria-invalid="true"]{border-color:var(--vn-shell-danger,#ffb4ab)}[data-picture-strip]{display:flex;gap:8px;margin-bottom:8px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:4px}[data-picture-strip] button{flex:0 0 auto;min-width:134px;max-width:210px;min-height:48px;padding:6px 10px;font-size:12px;display:flex;align-items:center;gap:8px;border-radius:12px}[data-picture-strip] img{width:34px;height:40px;object-fit:cover;border-radius:6px;flex:none}[data-picture-strip] [aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,var(--vn-shell-button,#252632));box-shadow:inset 0 0 0 1px var(--accent)}[data-picture-navigation] label{margin:0}[data-retry-queue]{margin:8px 0;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid color-mix(in srgb,var(--edge) 55%,transparent)}[data-retry-queue] [data-queue-status]{display:block;margin-top:6px;font-size:12px}[data-studio-footer] .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}[data-studio-footer] button{flex:1 1 115px;min-height:44px;min-width:44px;border-color:var(--accent);font-weight:650;justify-content:center}[data-studio-footer] button[data-generate],[data-studio-footer] button[data-prepare],[data-studio-footer] button[data-primary-repair]{flex:1.6 1 165px;background:color-mix(in srgb,var(--accent) 20%,var(--vn-shell-button,#252632))}[data-action-help]{display:block;font-size:11.5px;text-align:center;margin-top:6px}[data-notice-row]{border-top:1px solid var(--edge);margin-top:10px}[data-notice]{font-size:12px}[data-rewrite-changed]{padding:10px;border:1px solid var(--accent);border-radius:8px;margin:8px 0;background:color-mix(in srgb,var(--accent) 8%,transparent)}[data-rewrite-changed] p{margin:0 0 8px}[data-previous-scene]{padding-left:20px;overflow-wrap:anywhere}[data-reply-settings] details{margin-left:4px}[data-secondary-actions]{margin-bottom:8px}[data-secondary-actions] button{font-size:13px}[data-subject-name]{width:100%}
+:host{--paper:var(--vn-shell-panel,#171822)}section{width:min(520px,calc(100% - 24px));color:var(--vn-shell-text,#eee);backdrop-filter:blur(16px)}section small,section p{color:var(--vn-shell-muted,#bbc)}[data-studio-body]{padding-top:12px}details{border:1px solid color-mix(in srgb,var(--edge) 65%,transparent);border-radius:10px;background:var(--vn-shell-field,rgba(255,255,255,.025));padding:0 12px;margin:8px 0}details[open]{padding-bottom:12px;background:var(--vn-shell-field,rgba(255,255,255,.04));border-color:color-mix(in srgb,var(--accent) 42%,var(--edge))}summary{font-weight:600}[data-context]{display:flex;gap:12px;align-items:flex-start;margin:8px 0 10px;padding:12px;border-radius:14px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 12%,var(--vn-shell-field,rgba(255,255,255,.03))),rgba(0,0,0,.18));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--edge))}[data-context-text]{min-width:0;flex:1}[data-status]{font-size:15px;display:block}[data-paragraph]{display:inline-block;margin-top:3px;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--accent) 12%,var(--vn-shell-field,rgba(255,255,255,.07)));font-size:11px;font-weight:600}[data-scene]{margin:5px 0 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12.5px}[data-thumbnail]{width:84px;height:108px;flex:none;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--edge));border-radius:12px;background:var(--vn-shell-field,#101119);display:grid;place-items:center;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.35)}[data-thumbnail] img{width:100%;height:100%;object-fit:cover}[data-placeholder]{font-size:28px;color:var(--accent)}[data-state-detail]{margin:8px 0;font-size:13px}[data-meta]{font-size:12px;margin:4px 0;padding:4px 10px;border-radius:999px;background:var(--vn-shell-field,rgba(255,255,255,.05));display:inline-block}[data-prompt-editor]{margin:8px 0;padding:12px;border-radius:12px;background:var(--vn-shell-field,rgba(255,255,255,.025));border:1px solid color-mix(in srgb,var(--edge) 70%,transparent)}[data-edit-help]{font-size:12px;margin:0 0 8px}label{font-weight:500;margin:10px 0}label small{float:right;font-weight:400;font-size:11px}textarea{margin-top:6px;font:16px/1.5 var(--vn-shell-family,system-ui);border-radius:8px}select,input:not([type=checkbox]){font-size:16px}[data-positive]{min-height:130px;resize:vertical;transition:min-height .2s ease}[data-positive][data-expanded="true"]{min-height:260px}[data-negative]{min-height:68px;resize:vertical}[data-budget-meter]{height:6px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin:8px 0 4px}[data-budget-fill]{height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width .2s ease,background-color .2s ease}[data-budget-fill][data-tone="warn"]{background:#f5c462}[data-budget-fill][data-tone="over"]{background:var(--vn-shell-danger,#ffb4ab)}[data-combined-count]{display:block;font-variant-numeric:tabular-nums;text-align:right;font-size:12px}[data-validation]{display:block;color:var(--vn-shell-danger,#ffb4ab);margin:6px 0}[aria-invalid="true"]{border-color:var(--vn-shell-danger,#ffb4ab)}[data-picture-strip]{display:flex;gap:8px;margin-bottom:8px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:4px}[data-picture-strip] button{flex:0 0 auto;min-width:134px;max-width:210px;min-height:48px;padding:6px 10px;font-size:12px;display:flex;align-items:center;gap:8px;border-radius:12px}[data-picture-strip] img{width:34px;height:40px;object-fit:cover;border-radius:6px;flex:none}[data-picture-strip] [aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,var(--vn-shell-button,#252632));box-shadow:inset 0 0 0 1px var(--accent)}[data-picture-navigation] label{margin:0}[data-retry-queue]{margin:8px 0;padding:8px 10px;border-radius:10px;background:var(--vn-shell-field,rgba(255,255,255,.03));border:1px solid color-mix(in srgb,var(--edge) 55%,transparent)}[data-retry-queue] [data-queue-status]{display:block;margin-top:6px;font-size:12px}[data-studio-footer] .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}[data-studio-footer] button{flex:1 1 115px;min-height:44px;min-width:44px;border-color:var(--edge);background:var(--vn-shell-button,#252632);color:var(--vn-shell-text,#eee);font-weight:650;justify-content:center}[data-studio-footer] button[data-skip],[data-studio-footer] button[data-reset],[data-studio-footer] button[data-copy]{background:transparent;border-color:var(--edge)}[data-studio-footer] button[data-generate],[data-studio-footer] button[data-prepare],[data-studio-footer] button[data-primary-repair]{flex:1.6 1 165px;background:var(--accent);color:var(--vn-shell-accent-contrast,#0f2019);border-color:var(--accent);font-weight:750}[data-action-help]{display:block;font-size:11.5px;text-align:center;margin-top:6px}[data-notice-row]{border-top:1px solid var(--edge);margin-top:10px}[data-notice]{font-size:12px}[data-rewrite-changed]{padding:10px;border:1px solid var(--accent);border-radius:8px;margin:8px 0;background:color-mix(in srgb,var(--accent) 8%,transparent)}[data-rewrite-changed] p{margin:0 0 8px}[data-previous-scene]{padding-left:20px;overflow-wrap:anywhere}[data-reply-settings] details{margin-left:4px}[data-secondary-actions]{margin-bottom:8px}[data-secondary-actions] button{font-size:13px}[data-subject-name]{width:100%}
 section[data-state="planning"],section[data-state="empty"],section[data-state="zero-budget"],section[data-state="idle"]{bottom:auto;max-height:calc(100% - 92px)}
 .studio-tab-bar{position:sticky;top:0;z-index:20;background:var(--paper);display:flex;align-items:center;gap:6px;overflow-x:auto;padding:6px 0 10px;margin-bottom:10px;border-bottom:1px solid var(--edge);scrollbar-width:none;-webkit-overflow-scrolling:touch}.studio-tab-bar::-webkit-scrollbar{display:none}
-.studio-tab-btn{background:var(--vn-shell-field,rgba(255,255,255,.05));border:1px solid var(--edge);border-radius:20px;padding:5px 12px;font-size:11.5px;font-weight:600;color:var(--vn-shell-muted,#aaa);cursor:pointer;white-space:nowrap;flex:none;min-height:44px;min-width:44px;transition:all .15s cubic-bezier(0.2,0,0,1)}.studio-tab-btn:hover{background:rgba(255,255,255,.08);color:var(--vn-shell-text,#eee);transform:translateY(-1px)}.studio-tab-btn[aria-selected="true"]{background:color-mix(in srgb,var(--accent) 24%,var(--vn-shell-button,#252632));border-color:var(--accent);color:var(--accent);font-weight:700;box-shadow:0 0 10px color-mix(in srgb,var(--accent) 25%,transparent)}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) .studio-tab-btn{background:#eef3e5;color:#4b6b5d;border-color:rgba(35,65,50,.18)}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) .studio-tab-btn[aria-selected="true"]{background:#dcebad;color:#172721;border-color:#234b39}
+.studio-tab-btn{background:var(--vn-shell-field,rgba(255,255,255,.05));border:1px solid var(--edge);border-radius:20px;padding:5px 12px;font-size:11.5px;font-weight:600;color:var(--vn-shell-muted,#aaa);cursor:pointer;white-space:nowrap;flex:none;min-height:44px;min-width:44px;transition:all .15s cubic-bezier(0.2,0,0,1)}.studio-tab-btn:hover{background:color-mix(in srgb,var(--accent) 10%,var(--vn-shell-button,rgba(255,255,255,.08)));color:var(--vn-shell-text,#eee);transform:translateY(-1px)}.studio-tab-btn[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:var(--vn-shell-accent-contrast,#0f2019);font-weight:700;box-shadow:0 0 10px color-mix(in srgb,var(--accent) 25%,transparent)}
 .studio-layout-toggle{margin-left:auto;background:var(--vn-shell-field,rgba(255,255,255,.08));border:1px solid var(--accent);border-radius:20px;padding:4px 10px;font-size:11px;font-weight:700;color:var(--accent);cursor:pointer;white-space:nowrap;flex:none;min-height:44px;min-width:44px;transition:all .15s ease}
 .studio-layout-toggle:hover{background:color-mix(in srgb,var(--accent) 20%,transparent)}
 .studio-tab-panel{display:flex;flex-direction:column;gap:10px;background:var(--vn-shell-field,rgba(255,255,255,.03));border:1px solid var(--edge);border-radius:14px;padding:12px;margin-bottom:10px;box-shadow:0 4px 16px rgba(0,0,0,.15);transition:border-color .2s ease}.studio-tab-panel[hidden]{display:none!important}
@@ -53413,12 +54062,22 @@ section[data-state="planning"],section[data-state="empty"],section[data-state="z
 .studio-hub-tile-title{font-size:13px;font-weight:750;color:var(--vn-shell-text,#f4f7ee)}
 .studio-hub-tile-sub{font-size:11px;color:var(--vn-shell-muted,#9eb7a9);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
 .studio-hub-secondary{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.studio-hub-secondary button{flex:1 1 135px;min-height:44px;font-size:12px;font-weight:650;border-radius:12px}
-.studio-sheet-header{position:sticky;top:52px;z-index:15;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;margin:-4px 0 6px;border-radius:12px;background:var(--paper);border:1px solid var(--edge);box-shadow:0 4px 12px rgba(0,0,0,.18)}
+.studio-sheet-header{position:sticky;top:var(--studio-tab-h,52px);z-index:15;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;margin:-4px 0 6px;border-radius:12px;background:var(--paper);border:1px solid var(--edge);box-shadow:0 4px 12px rgba(0,0,0,.18)}
 section[data-layout-mode="unified"] .studio-sheet-header{display:none!important}
 .studio-sheet-header strong{font-size:13px;flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .studio-sheet-header button{min-height:44px;min-width:44px;padding:6px 12px;border-radius:10px;font-size:12px;font-weight:700}
-.studio-sheet-done{background:var(--accent)!important;color:#0f2019!important;border-color:var(--accent)!important}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) .studio-sheet-done{background:#234b39!important;color:#fbfdf7!important;border-color:#234b39!important}
+.studio-sheet-done{background:var(--accent)!important;color:var(--vn-shell-accent-contrast,#0f2019)!important;border-color:var(--accent)!important}
+[data-context][data-swipeable="true"]{cursor:grab;touch-action:pan-y}
+section[data-typing="true"] [data-context]{padding:8px 10px;gap:8px;align-items:center}
+section[data-typing="true"] [data-thumbnail]{width:44px;height:44px;border-radius:8px}
+section[data-typing="true"] [data-scene],section[data-typing="true"] .studio-hero-actions{display:none!important}
+.studio-hub-batch{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;border-radius:12px;background:color-mix(in srgb,var(--accent) 10%,rgba(255,255,255,.03));border:1px solid color-mix(in srgb,var(--accent) 32%,var(--edge))}.studio-hub-batch[hidden]{display:none!important}
+.studio-hub-batch button{flex:1 1 130px;min-height:44px;min-width:44px;font-size:12px;font-weight:700;border-radius:10px}
+.studio-cost-legend{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:11px;color:var(--vn-shell-muted,#9eb7a9);margin:2px 0 4px}
+.studio-cost-pill{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:var(--vn-shell-muted,#b8c7be);vertical-align:middle}
+.studio-cost-pill[data-tier="free"]{border-color:rgba(134,219,178,.42);color:#9de8c4;background:rgba(134,219,178,.1)}
+.studio-cost-pill[data-tier="text"]{border-color:rgba(147,197,253,.42);color:#bae6fd;background:rgba(56,189,248,.1)}
+.studio-cost-pill[data-tier="image"]{border-color:rgba(245,196,98,.48);color:#fcd34d;background:rgba(245,196,98,.1)}
 .studio-camera-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}.studio-camera-grid label{margin:0}
 @container(max-width:310px){.studio-camera-grid{grid-template-columns:1fr}}
 .studio-vf-stage{touch-action:none;cursor:crosshair}
@@ -53493,6 +54152,7 @@ class ImageStudio {
   recovering = null;
   dismissedNotices = new Set;
   renderHeavyTimeout = null;
+  tabObserver = null;
   constructor(mount, send, saveReview, onVisibility, onOperations) {
     this.send = send;
     this.saveReview = saveReview;
@@ -53637,14 +54297,20 @@ class ImageStudio {
       this.el("[data-template]").value = this.record()?.imagePromptMetadata?.template.id ?? this.defaultTemplate;
     };
     this.el("[data-replace]").onclick = () => this.rebuildTemplate();
+    const isLockContinuity = () => {
+      const subLock = this.el("[data-lock-subject]")?.checked ?? true;
+      const lightLock = this.el("[data-lock-lighting]")?.checked ?? false;
+      return subLock || lightLock;
+    };
     this.el("[data-reframe]").onclick = () => {
+      const lockContinuity = isLockContinuity();
       if (this.record()?.state !== "review") {
         if (!this.turn || !this.selectedJob || this.preparing.has(this.selectedJob))
           return;
         const templateId2 = this.record()?.imagePromptMetadata?.template.id ?? this.el("[data-template]").value ?? this.defaultTemplate;
         this.beginPreparation(this.selectedJob);
         this.render();
-        this.send({ type: "vn_prepare_image", chatId: this.turn.chatId, messageId: this.turn.messageId, sourceFingerprint: this.turn.sourceFingerprint, jobId: this.selectedJob, ...templateId2 ? { templateId: templateId2 } : {}, reframe: true });
+        this.send({ type: "vn_prepare_image", chatId: this.turn.chatId, messageId: this.turn.messageId, sourceFingerprint: this.turn.sourceFingerprint, jobId: this.selectedJob, ...templateId2 ? { templateId: templateId2 } : {}, reframe: true, lockContinuity });
         return;
       }
       const record2 = this.record();
@@ -53660,7 +54326,8 @@ class ImageStudio {
         sourceFingerprint: this.turn.sourceFingerprint,
         requestId: record2.requestId,
         templateId,
-        reframe: true
+        reframe: true,
+        lockContinuity
       });
     };
     this.el("[data-fit-model]").onclick = () => {
@@ -53822,11 +54489,27 @@ class ImageStudio {
     for (const sel of ["[data-camera-shot-size]", "[data-camera-angle]", "[data-camera-lens]", "[data-camera-composition]", "[data-camera-depth]", "[data-camera-safe-area]"]) {
       this.el(sel).onchange = () => this.syncDirectorViewfinder();
     }
-    this.el("[data-apply-camera]").onclick = () => {
+    const dispatchCameraOperation = (mode) => {
+      const auto = this.el("[data-auto-director]").checked;
+      const lockContinuity = isLockContinuity();
+      const manualCamera = auto ? undefined : {
+        shotSize: this.el("[data-camera-shot-size]").value || undefined,
+        angle: this.el("[data-camera-angle]").value || undefined,
+        lensFeel: this.el("[data-camera-lens]").value || undefined,
+        composition: this.el("[data-camera-composition]").value || undefined,
+        depth: this.el("[data-camera-depth]").value || undefined,
+        dialogueSafeArea: this.el("[data-camera-safe-area]").value || "auto",
+        focalPoint: { x: Math.round(this.draftFocalPoint.x), y: Math.round(this.draftFocalPoint.y) }
+      };
+      const flags = {
+        ...mode === "reframe" ? { reframe: true } : {},
+        ...mode === "relight" ? { relight: true } : {},
+        lockContinuity,
+        ...manualCamera ? { manualCamera } : {}
+      };
       if (this.record()?.state !== "review") {
         if (!this.turn || !this.selectedJob || this.preparing.has(this.selectedJob))
           return;
-        const auto2 = this.el("[data-auto-director]").checked;
         const templateId2 = this.record()?.imagePromptMetadata?.template.id ?? this.el("[data-template]").value ?? this.defaultTemplate;
         this.beginPreparation(this.selectedJob);
         this.render();
@@ -53837,54 +54520,44 @@ class ImageStudio {
           sourceFingerprint: this.turn.sourceFingerprint,
           jobId: this.selectedJob,
           ...templateId2 ? { templateId: templateId2 } : {},
-          ...auto2 ? {} : {
-            manualCamera: {
-              shotSize: this.el("[data-camera-shot-size]").value || undefined,
-              angle: this.el("[data-camera-angle]").value || undefined,
-              lensFeel: this.el("[data-camera-lens]").value || undefined,
-              composition: this.el("[data-camera-composition]").value || undefined,
-              depth: this.el("[data-camera-depth]").value || undefined,
-              dialogueSafeArea: this.el("[data-camera-safe-area]").value || "auto"
-            }
-          }
+          ...flags
         });
         return;
       }
       const record2 = this.record();
       if (!record2 || record2.state !== "review" || this.rebuilding.has(record2.requestId) || !this.turn)
         return;
-      const auto = this.el("[data-auto-director]").checked;
       const templateId = record2.imagePromptMetadata?.template.id ?? this.el("[data-template]").value ?? this.defaultTemplate;
       this.rebuilding.add(record2.requestId);
       this.render();
-      if (auto) {
-        this.send({
-          type: "vn_reprepare_image_template",
-          chatId: this.turn.chatId,
-          messageId: this.turn.messageId,
-          sourceFingerprint: this.turn.sourceFingerprint,
-          requestId: record2.requestId,
-          templateId
-        });
-      } else {
-        this.send({
-          type: "vn_reprepare_image_template",
-          chatId: this.turn.chatId,
-          messageId: this.turn.messageId,
-          sourceFingerprint: this.turn.sourceFingerprint,
-          requestId: record2.requestId,
-          templateId,
-          manualCamera: {
-            shotSize: this.el("[data-camera-shot-size]").value || undefined,
-            angle: this.el("[data-camera-angle]").value || undefined,
-            lensFeel: this.el("[data-camera-lens]").value || undefined,
-            composition: this.el("[data-camera-composition]").value || undefined,
-            depth: this.el("[data-camera-depth]").value || undefined,
-            dialogueSafeArea: this.el("[data-camera-safe-area]").value || "auto"
-          }
-        });
-      }
+      this.send({
+        type: "vn_reprepare_image_template",
+        chatId: this.turn.chatId,
+        messageId: this.turn.messageId,
+        sourceFingerprint: this.turn.sourceFingerprint,
+        requestId: record2.requestId,
+        templateId,
+        ...flags
+      });
     };
+    this.el("[data-apply-camera]").onclick = () => dispatchCameraOperation("apply");
+    this.el("[data-camera-reframe]").onclick = () => dispatchCameraOperation("reframe");
+    this.el("[data-camera-relight]").onclick = () => dispatchCameraOperation("relight");
+    const isTypingInput = (el) => {
+      const tag = el?.tagName?.toUpperCase?.();
+      return tag === "TEXTAREA" || tag === "INPUT" && !["checkbox", "radio", "range", "button", "submit"].includes(el.type);
+    };
+    this.root.addEventListener("focusin", (event) => {
+      if (isTypingInput(event.target))
+        this.el("section").dataset.typing = "true";
+    });
+    this.root.addEventListener("focusout", () => {
+      setTimeout(() => {
+        const active = this.root.activeElement;
+        if (!isTypingInput(active))
+          delete this.el("section").dataset.typing;
+      }, 60);
+    });
     for (const type of ["click", "keydown", "wheel", "pointerdown", "pointerup", "touchstart", "touchend"])
       this.root.addEventListener(type, (event) => event.stopPropagation());
     this.root.addEventListener("click", (event) => {
@@ -54309,7 +54982,15 @@ class ImageStudio {
               <option value="off">Off (full bleed)</option>
             </select></label>
           </div>
-          <button type="button" data-apply-camera style="margin-top:10px;width:100%">Apply camera</button>
+          <div data-continuity-locks style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px">
+            <label class="toggle" style="margin:0;flex:1 1 160px;min-height:44px;padding:6px 10px;border:1px solid var(--edge);border-radius:10px;background:var(--vn-shell-field,rgba(255,255,255,.04))"><input type="checkbox" data-lock-subject checked>Lock subject / Outfit</label>
+            <label class="toggle" style="margin:0;flex:1 1 160px;min-height:44px;padding:6px 10px;border:1px solid var(--edge);border-radius:10px;background:var(--vn-shell-field,rgba(255,255,255,.04))"><input type="checkbox" data-lock-lighting>Lock atmosphere / Lighting</label>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+            <button type="button" data-camera-reframe style="flex:1 1 120px;min-height:44px">\uD83D\uDCD0 Reframe</button>
+            <button type="button" data-camera-relight style="flex:1 1 120px;min-height:44px">☀️ Relight</button>
+          </div>
+          <button type="button" data-apply-camera style="margin-top:8px;width:100%">Apply camera</button>
         </div>
       </div>`;
     tools.append(cameraTools);
@@ -54390,6 +55071,16 @@ class ImageStudio {
       this.switchTab(this.activeTab);
     };
     tabs.append(layoutToggle);
+    const syncTabHeight = () => {
+      const measured = typeof tabs.getBoundingClientRect === "function" ? tabs.getBoundingClientRect().height : 52;
+      const height = Math.max(44, Math.ceil(measured || 52));
+      this.el("section").style?.setProperty?.("--studio-tab-h", `${height}px`);
+    };
+    syncTabHeight();
+    if (typeof ResizeObserver !== "undefined") {
+      this.tabObserver = new ResizeObserver(syncTabHeight);
+      this.tabObserver.observe(tabs);
+    }
     const cardHeader = (iconText, titleText, subtitleText) => {
       const h = document.createElement("div");
       h.className = "studio-card-header";
@@ -54433,29 +55124,69 @@ class ImageStudio {
     panelPicture.dataset.tabPanel = "picture";
     const hubBox = document.createElement("div");
     hubBox.dataset.studioHub = "";
+    const hubBatchBar = document.createElement("div");
+    hubBatchBar.className = "studio-hub-batch";
+    hubBatchBar.dataset.hubBatch = "";
+    hubBatchBar.hidden = true;
+    const mkHubBatchBtn = (attr, label, onClick) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.setAttribute(attr, "");
+      b.textContent = label;
+      b.hidden = true;
+      b.onclick = onClick;
+      return b;
+    };
+    const hubBatchApprove = mkHubBatchBtn("data-hub-batch-approve", "Approve all held", () => this.decideAll("generate"));
+    const hubRetryUnfinished = mkHubBatchBtn("data-hub-retry-unfinished", "Retry unfinished", () => this.el("[data-queue-unfinished]").click());
+    const hubStopPending = mkHubBatchBtn("data-hub-stop-pending", "Stop pending", () => this.el("[data-stop-images]").click());
+    const hubClearQueue = mkHubBatchBtn("data-hub-clear-queue", "Clear queued retries", () => this.el("[data-clear-retries]").click());
+    hubBatchBar.append(hubBatchApprove, hubRetryUnfinished, hubStopPending, hubClearQueue);
+    const costLegend = document.createElement("div");
+    costLegend.className = "studio-cost-legend";
+    costLegend.dataset.costLegend = "";
+    for (const [tier, tag, hint] of [
+      ["free", "Free draft", "Camera, Style, Edits"],
+      ["text", "Text tokens", "AI Rewrite / Enrich"],
+      ["image", "Image request", "Generate / Regen"]
+    ]) {
+      const pill = document.createElement("span");
+      pill.className = "studio-cost-pill";
+      pill.dataset.tier = tier;
+      pill.textContent = tag;
+      pill.title = hint;
+      costLegend.append(pill);
+    }
     const hubHeading = document.createElement("div");
     hubHeading.className = "studio-hub-heading";
     hubHeading.textContent = "What do you want to adjust?";
     const hubGrid = document.createElement("div");
     hubGrid.className = "studio-hub-grid";
-    for (const [tabId, titleText, subText] of [
-      ["camera", "\uD83D\uDCD0 Camera", "Auto framing"],
-      ["style", "\uD83C\uDFA8 Style", "Neutral / scene"],
-      ["prompt", "\uD83D\uDCDD Edit Wording", "Clauses & prompt"],
-      ["model", "⚡ Model & Retry", "Active default"]
+    for (const [tabId, titleText, subText, tier, tierLabel] of [
+      ["camera", "\uD83D\uDCD0 Camera", "Auto framing", "free", "Free draft"],
+      ["style", "\uD83C\uDFA8 Style", "Neutral / scene", "free", "Free draft"],
+      ["prompt", "\uD83D\uDCDD Edit Wording", "Clauses & prompt", "free", "Free draft"],
+      ["model", "⚡ Model & Retry", "Active default", "image", "Image request"]
     ]) {
       const tile = document.createElement("button");
       tile.type = "button";
       tile.className = "studio-hub-tile";
       tile.dataset.hubTile = tabId;
+      const tileTop = document.createElement("div");
+      tileTop.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%";
       const tileTitle = document.createElement("span");
       tileTitle.className = "studio-hub-tile-title";
       tileTitle.textContent = titleText;
+      const costPill = document.createElement("span");
+      costPill.className = "studio-cost-pill";
+      costPill.dataset.tier = tier;
+      costPill.textContent = tierLabel;
+      tileTop.append(tileTitle, costPill);
       const tileSub = document.createElement("span");
       tileSub.className = "studio-hub-tile-sub";
       tileSub.dataset.hubSub = tabId;
       tileSub.textContent = subText;
-      tile.append(tileTitle, tileSub);
+      tile.append(tileTop, tileSub);
       tile.onclick = () => this.switchTab(tabId);
       hubGrid.append(tile);
     }
@@ -54464,7 +55195,12 @@ class ImageStudio {
     const quickEnrichBtn = document.createElement("button");
     quickEnrichBtn.type = "button";
     quickEnrichBtn.dataset.hubQuickEnrich = "";
-    quickEnrichBtn.textContent = "✨ Quick Enrich Wording";
+    quickEnrichBtn.append(document.createTextNode("✨ Quick Enrich Wording "));
+    const enrichCost = document.createElement("span");
+    enrichCost.className = "studio-cost-pill";
+    enrichCost.dataset.tier = "text";
+    enrichCost.textContent = "Text tokens";
+    quickEnrichBtn.append(enrichCost);
     quickEnrichBtn.onclick = () => {
       this.switchTab("prompt");
       const input2 = this.root.querySelector("[data-enrich-guidance]");
@@ -54476,7 +55212,58 @@ class ImageStudio {
     historyHubBtn.textContent = "\uD83D\uDD52 History, Brief & Logs";
     historyHubBtn.onclick = () => this.switchTab("history");
     hubSecondary.append(quickEnrichBtn, historyHubBtn);
-    hubBox.append(hubHeading, hubGrid, hubSecondary);
+    hubBox.append(hubBatchBar, costLegend, hubHeading, hubGrid, hubSecondary);
+    let heroSwipeOrigin = null;
+    const stepHeroAsset = (delta) => {
+      const assets = this.turn?.assets ?? [];
+      if (assets.length <= 1)
+        return;
+      const currentIdx = Math.max(0, assets.findIndex((a) => a.jobId === this.selectedJob));
+      const next = assets[(currentIdx + delta + assets.length) % assets.length];
+      if (!next || next.jobId === this.selectedJob)
+        return;
+      this.selectedJob = next.jobId;
+      this.selectedRequest = "";
+      this.el("[data-picture]").value = next.jobId;
+      this.render();
+    };
+    const startSwipe = (x, y, target2) => {
+      if (typeof target2?.closest === "function" && target2.closest("button,a,input,select,textarea")) {
+        heroSwipeOrigin = null;
+        return;
+      }
+      heroSwipeOrigin = { x, y };
+    };
+    const finishSwipe = (x, y) => {
+      if (!heroSwipeOrigin)
+        return;
+      const dx = x - heroSwipeOrigin.x;
+      const dy = y - heroSwipeOrigin.y;
+      heroSwipeOrigin = null;
+      if (Math.abs(dx) >= 48 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+        stepHeroAsset(dx < 0 ? 1 : -1);
+      }
+    };
+    context.addEventListener("pointerdown", (e) => {
+      const pe = e;
+      startSwipe(pe.clientX, pe.clientY, pe.target);
+    });
+    context.addEventListener("pointerup", (e) => {
+      const pe = e;
+      finishSwipe(pe.clientX, pe.clientY);
+    });
+    context.addEventListener("touchstart", (e) => {
+      const te = e;
+      const t = te.touches?.[0];
+      if (t)
+        startSwipe(t.clientX, t.clientY, te.target);
+    });
+    context.addEventListener("touchend", (e) => {
+      const te = e;
+      const t = te.changedTouches?.[0];
+      if (t)
+        finishSwipe(t.clientX, t.clientY);
+    });
     const explanation = document.createElement("details");
     explanation.dataset.pictureExplanation = "";
     explanation.innerHTML = '<summary>Why this picture?</summary><p data-picture-explanation-text style="white-space:pre-wrap;overflow-wrap:anywhere"></p>';
@@ -55314,13 +56101,47 @@ class ImageStudio {
     if (retry.dataset.available !== undefined)
       retry.disabled = retry.dataset.available !== "true" || Boolean(error61 && record2 && this.drafts.has(this.draftKey(record2)));
     this.updateCorrectionNavigation();
+    const planning = !this.turn || Boolean(this.planningChat) || this.turn.status === "planning";
     const reviewable = (this.turn?.imageRequests ?? []).filter((r) => r.state === "review");
+    const reviewJobIds = new Set(reviewable.map((r) => r.jobId));
     const batchBtn = this.root.querySelector("[data-batch-approve]");
     if (batchBtn) {
       batchBtn.hidden = reviewable.length <= 1;
       batchBtn.textContent = `Approve all held (${reviewable.length})`;
       if (batchBtn.dataset.available !== undefined)
         batchBtn.disabled = Boolean(error61);
+    }
+    const ctxEl = this.root.querySelector("[data-context]");
+    if (ctxEl)
+      ctxEl.dataset.swipeable = String(!planning && (this.turn?.assets.length ?? 0) > 1);
+    const hubBatch = this.root.querySelector("[data-hub-batch]");
+    if (hubBatch) {
+      const assets = this.turn?.assets ?? [];
+      const hasBusy = !planning && assets.some((entry) => entry.status === "queued" || entry.status === "generating");
+      const retryableUnfinished = planning ? [] : assets.filter((a) => a.source !== "cache" && !["generated", "browser_ready"].includes(a.status) && !reviewJobIds.has(a.jobId) && !this.retryQueueJobs.has(a.jobId) && this.retryActive !== a.jobId);
+      const hubApprove = hubBatch.querySelector("[data-hub-batch-approve]");
+      const hubRetry = hubBatch.querySelector("[data-hub-retry-unfinished]");
+      const hubStop = hubBatch.querySelector("[data-hub-stop-pending]");
+      const hubClear = hubBatch.querySelector("[data-hub-clear-queue]");
+      if (hubApprove) {
+        hubApprove.hidden = planning || reviewable.length <= 1;
+        hubApprove.textContent = `Approve all held (${reviewable.length}) · Image`;
+        hubApprove.disabled = Boolean(error61);
+      }
+      if (hubRetry) {
+        hubRetry.hidden = retryableUnfinished.length === 0;
+        hubRetry.textContent = `Retry unfinished (${retryableUnfinished.length}) · Image`;
+        hubRetry.disabled = this.replanning || Boolean(this.recovering);
+      }
+      if (hubStop) {
+        hubStop.hidden = !hasBusy;
+        hubStop.disabled = Boolean(this.recovering);
+      }
+      if (hubClear) {
+        hubClear.hidden = planning || this.retryQueueJobs.size === 0;
+        hubClear.textContent = `Clear queued (${this.retryQueueJobs.size})`;
+      }
+      hubBatch.hidden = Boolean(hubApprove?.hidden ?? true) && Boolean(hubRetry?.hidden ?? true) && Boolean(hubStop?.hidden ?? true) && Boolean(hubClear?.hidden ?? true);
     }
     this.updateCostEstimate();
   }
@@ -55931,8 +56752,10 @@ ${metadata.presentationRuleTrace.summary}`;
     const reviewableCount = (this.turn?.imageRequests ?? []).filter((r) => r.state === "review").length;
     const canRegenAll = reviewableCount > 0 || (this.turn?.assets ?? []).some((a) => a.source !== "cache") && this.preparing.size === 0;
     regenAll.disabled = !editable || !canRegenAll || this.preparing.size > 0;
-    const applyCameraBtn = this.el("[data-apply-camera]");
-    applyCameraBtn.disabled = !editable || !asset || asset.source === "cache" || this.preparing.has(this.selectedJob) || Boolean(record2 && this.rebuilding.has(record2.requestId));
+    const cameraBlocked = !editable || !asset || asset.source === "cache" || this.preparing.has(this.selectedJob) || Boolean(record2 && this.rebuilding.has(record2.requestId));
+    for (const sel of ["[data-apply-camera]", "[data-camera-reframe]", "[data-camera-relight]"]) {
+      this.el(sel).disabled = cameraBlocked;
+    }
     const autoDirector = this.el("[data-auto-director]");
     const shotSpec = record2?.imagePromptMetadata?.shotSpec ?? record2?.shotSpec;
     if (shotSpec && shotSpec.source === "manual") {
@@ -56353,6 +57176,8 @@ ${metadata.presentationRuleTrace.summary}`;
     this.preferences.error(error61, id8);
   }
   destroy() {
+    this.tabObserver?.disconnect();
+    this.tabObserver = null;
     this.comparison.destroy();
     if (this.lintTimer)
       clearTimeout(this.lintTimer);
@@ -56380,17 +57205,9 @@ var DOCKED_STUDIO_CSS = `
 :host([data-vn-workspace-tool]) [data-studio-header]{display:none}
 :host([data-vn-workspace-tool]) [data-studio-body]{padding:18px;flex:1}
 :host([data-vn-workspace-tool]) [data-studio-footer]{padding:12px 18px;margin-bottom:env(safe-area-inset-bottom, 0px);background:transparent;border-top:1px solid var(--edge)}
-:host([data-vn-workspace-tool]) [data-studio-footer] button{border-radius:999px;font-weight:750;background:var(--accent);color:#0f2019;border:1px solid var(--accent);box-shadow:0 4px 14px rgba(0,0,0,.25)}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-studio-footer] button{background:#234b39;color:#fbfdf7;border-color:#234b39;box-shadow:0 4px 14px rgba(35,65,50,.2)}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) section{color:#172721}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) section small,:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) section p{color:#436353}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-context]{background:rgba(235,243,230,.92);border-color:#b9ccbe;color:#172721}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-thumbnail]{background:#fdfefc;border-color:#b9ccbe}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) details{background:rgba(235,243,230,.7);border-color:#b9ccbe;color:#172721}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) details[open]{background:rgba(240,247,236,.95);border-color:#234b39}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) textarea,:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) select,:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) input{background:#fdfefb;border-color:#b3c5b8;color:#172721}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-retry-queue]{background:rgba(235,243,230,.8);border-color:#b9ccbe}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-retry-queue] button{background:#e2ecde;border-color:#b3c5b8;color:#172721;border-radius:999px}
+:host([data-vn-workspace-tool]) [data-studio-footer] button{border-radius:999px;min-height:44px;min-width:44px;font-weight:650;background:var(--vn-shell-button,rgba(255,255,255,.06));color:var(--vn-shell-text,inherit);border:1px solid var(--edge)}
+:host([data-vn-workspace-tool]) [data-studio-footer] button[data-skip],:host([data-vn-workspace-tool]) [data-studio-footer] button[data-reset],:host([data-vn-workspace-tool]) [data-studio-footer] button[data-copy]{background:transparent;border-color:var(--edge)}
+:host([data-vn-workspace-tool]) [data-studio-footer] button[data-generate],:host([data-vn-workspace-tool]) [data-studio-footer] button[data-prepare],:host([data-vn-workspace-tool]) [data-studio-footer] button[data-primary-repair]{font-weight:750;background:var(--accent);color:var(--vn-shell-accent-contrast,#0f2019);border-color:var(--accent);box-shadow:0 4px 14px rgba(0,0,0,.25)}
 [data-workspace-library]{display:none}
 :host([data-vn-workspace-tool]) [data-workspace-library]{display:block;width:100%;background:transparent;margin-bottom:16px}
 `;
@@ -56548,20 +57365,19 @@ class ExternalImageReview {
 
 // src/frontend/image-library/library.ts
 var css = `
-:host{position:absolute;inset:0;pointer-events:none;z-index:58;color:var(--vn-shell-text,#f4f1e9);font:14px/1.5 system-ui}
+:host{position:absolute;inset:0;pointer-events:none;z-index:58;color:var(--vn-shell-text,#f4f1e9);font:14px/1.5 var(--vn-shell-family,system-ui)}
 :host([hidden]),:host(:not([data-open="true"])),:host([data-vn-workspace-tool]:not([data-open="true"])),:host([data-vn-workspace-tool][hidden]){display:none!important}
 *{box-sizing:border-box}[hidden]{display:none!important}button,input,select,textarea{font:inherit;color:inherit}button,select{min-height:44px;border:1px solid var(--vn-shell-border,rgba(134,219,178,.22));border-radius:8px;background:var(--vn-shell-field,#101a1e);padding:8px 12px}button{cursor:pointer}button:disabled{opacity:.45;cursor:default}button:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--vn-shell-accent,#86dbb2);outline-offset:2px}
-[data-library-launch]{position:absolute;right:16px;top:140px;pointer-events:auto;width:44px;padding:9px;background:var(--vn-shell-bg,#0d161a)}svg{width:24px;height:24px;display:block;margin:auto}
-section{position:absolute;inset:max(76px,calc(env(safe-area-inset-top) + 64px)) 12px max(12px,env(safe-area-inset-bottom));max-width:940px;margin:auto;pointer-events:auto;border:1px solid var(--vn-shell-border,rgba(134,219,178,.22));border-radius:14px;background:var(--vn-shell-bg,#0d161a);box-shadow:0 12px 48px #0009;display:flex;flex-direction:column;overflow:hidden}
+[data-library-launch]{position:absolute;right:16px;top:140px;pointer-events:auto;width:44px;padding:9px;background:var(--vn-shell-bg,var(--vn-shell-panel,#0d161a))}svg{width:24px;height:24px;display:block;margin:auto}
+section{position:absolute;inset:max(76px,calc(env(safe-area-inset-top) + 64px)) 12px max(12px,env(safe-area-inset-bottom));max-width:940px;margin:auto;pointer-events:auto;border:1px solid var(--vn-shell-border,rgba(134,219,178,.22));border-radius:14px;background:var(--vn-shell-bg,var(--vn-shell-panel,#0d161a));box-shadow:0 12px 48px #0009;display:flex;flex-direction:column;overflow:hidden}
 header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--vn-shell-border,rgba(134,219,178,.22));flex:none}h2{font-size:18px;margin:0;flex:1}header button{width:44px;padding:0;font-size:24px}.body{overflow:auto;overscroll-behavior:contain;padding:12px 14px;min-height:0;flex:1}[data-library-close]{flex:none}
 .filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px}label{display:block;color:var(--vn-shell-muted,#9ab3a6);font-size:12px}select{width:100%;font-size:14px}.check{display:flex;align-items:center;gap:8px;min-height:44px;font-size:14px}.check input{width:20px;height:20px}
-[data-library-status]{color:var(--vn-shell-muted,#9ab3a6);margin:8px 0;overflow-wrap:anywhere}[data-grid]{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:10px}[data-image-card]{display:flex;flex-direction:column;padding:0;text-align:left;overflow:hidden;min-width:0;position:relative}[data-image-card] img{width:100%;height:160px;object-fit:contain;background:#0003}[data-image-card] .missing{display:grid;place-items:center;width:100%;height:160px;color:var(--vn-shell-muted,#9ab3a6)}.caption{padding:8px;overflow-wrap:anywhere}.caption strong{display:block}.caption small{display:block;font-size:11px;color:var(--vn-shell-muted,#9ab3a6)}footer{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--vn-shell-border,rgba(134,219,178,.22))}[data-page-label]{color:var(--vn-shell-muted,#9ab3a6);font-size:12px}
+[data-library-status]{color:var(--vn-shell-muted,#9ab3a6);margin:8px 0;overflow-wrap:anywhere}[data-grid]{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:10px}[data-image-card]{display:flex;flex-direction:column;padding:0;text-align:left;overflow:hidden;min-width:0;position:relative;border-radius:12px;border:1px solid var(--vn-shell-border,rgba(160,205,185,.2));background:var(--vn-shell-field,rgba(18,38,30,.4));transition:transform .15s ease,border-color .15s ease}[data-image-card]:hover{transform:translateY(-2px);border-color:var(--vn-shell-accent,#dcebad)}[data-image-card-open]{display:flex;flex-direction:column;width:100%;height:100%;padding:0;border:0;background:transparent;text-align:left;border-radius:inherit}[data-image-card] img{width:100%;height:160px;object-fit:contain;background:#0003}[data-image-card] .missing{display:grid;place-items:center;width:100%;height:160px;color:var(--vn-shell-muted,#9ab3a6)}.caption{padding:8px;overflow-wrap:anywhere}.caption strong{display:block}.caption small{display:block;font-size:11px;color:var(--vn-shell-muted,#9ab3a6)}[data-library-toast]{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 14px;background:var(--vn-shell-field,#14242b);border-top:1px solid var(--vn-shell-accent,#86dbb2);color:var(--vn-shell-text,#f4f1e9);font-size:13px}[data-library-toast] button{min-height:44px;min-width:44px;font-weight:700;background:var(--vn-shell-accent,#86dbb2);color:var(--vn-shell-accent-contrast,#0d161a);border-color:var(--vn-shell-accent,#86dbb2)}footer{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--vn-shell-border,rgba(134,219,178,.22))}[data-page-label]{color:var(--vn-shell-muted,#9ab3a6);font-size:12px}
 [data-detail]{min-width:0}.viewer-tools{display:flex;gap:8px;justify-content:center;align-items:center;margin-bottom:8px;flex-wrap:wrap}.viewer-tools button{min-width:44px}[data-image-viewport]{overflow:auto;overscroll-behavior:contain;max-height:55dvh;background:#0003;border-radius:8px;cursor:pointer}[data-full-image]{display:block;width:100%;max-height:55dvh;object-fit:contain;margin:auto}[data-excerpt]{overflow-wrap:anywhere;white-space:pre-wrap;margin:12px 0}[data-description]{color:var(--vn-shell-muted,#9ab3a6);overflow-wrap:anywhere}details{border-top:1px solid var(--vn-shell-border,rgba(134,219,178,.22));margin-top:10px}summary{min-height:44px;display:flex;align-items:center;cursor:pointer}textarea{width:100%;min-height:120px;background:var(--vn-shell-field,#101a1e);border:1px solid var(--vn-shell-border,rgba(134,219,178,.22));border-radius:8px;padding:8px;font:16px/1.5 ui-monospace,monospace;resize:vertical}.prompt-label{margin:10px 0}.note{color:var(--vn-shell-muted,#9ab3a6);font-size:12px} @media(max-width:480px){section{left:8px;right:8px}.body{padding:10px}.filters{grid-template-columns:1fr 1fr}.filters label:last-child{grid-column:1/-1}[data-library-launch]{right:12px}[data-grid]{grid-template-columns:repeat(2,minmax(0,1fr))}}
 button{-webkit-tap-highlight-color:transparent}summary::before{content:'▸';margin-right:8px}details[open]>summary::before{content:'▾'}[data-template-query]{min-width:0;min-height:44px;width:100%;border:1px solid var(--vn-shell-border,rgba(134,219,178,.22));border-radius:8px;background:var(--vn-shell-field,#101a1e);padding:8px;color:inherit}
 
 :host([data-open=true]){pointer-events:auto;background:#0005}
-[data-history-views]{display:flex;gap:6px;margin:0 0 14px;padding:4px;border-radius:999px;background:rgba(0,0,0,.22);border:1px solid rgba(160,205,185,.25)}[data-history-view]{flex:1;border:0;background:transparent;border-radius:999px;padding:8px 16px;font-weight:650;font-size:12px;color:#a6bfae;cursor:pointer;transition:all .15s ease}[data-history-view][aria-pressed=true]{background:#dcebad;color:#0e1e18;box-shadow:0 2px 10px rgba(0,0,0,.3);font-weight:800}[data-history-return]{flex:none;margin:0 14px 12px;align-self:center;min-width:160px;border-radius:999px;font-weight:600}[data-load-more]{display:block;width:100%;margin:14px auto 4px;border-radius:999px;font-weight:650;text-align:center}[data-grid][data-mode=story]{display:flex;flex-direction:column;gap:12px}[data-reply]{padding:16px 18px;border-radius:14px;background:rgba(18,38,30,.55);border:1px solid rgba(160,205,185,.22);border-left:3px solid #dcebad;box-shadow:0 4px 16px rgba(0,0,0,.25)}[data-reply] h3{display:inline-block;margin:0 0 6px;padding:2px 10px;border-radius:999px;background:rgba(220,238,173,.18);color:#dcebad;font-size:11px;font-weight:750;letter-spacing:.06em;text-transform:uppercase}[data-reply-preview]{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin:8px 0;line-height:1.68;font-family:Georgia,serif;font-size:14.5px;color:#f3f7ee}[data-reply] details{border:1px solid rgba(160,205,185,.18);border-radius:10px;padding:4px 12px;background:rgba(0,0,0,.22);margin:8px 0}[data-reply] details p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.72;font-family:Georgia,serif;font-size:14.5px;color:#f3f7ee}[data-reply] details strong{display:inline-block;padding:1px 8px;border-radius:999px;background:rgba(220,238,173,.15);font-size:11px;font-weight:700;color:#dcebad}[data-reply-pictures]{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:8px}[data-reply-pictures] img{height:180px;border-radius:6px}[data-image-card]{border-radius:12px;border:1px solid rgba(160,205,185,.2);background:rgba(18,38,30,.4);transition:transform .15s ease,border-color .15s ease}[data-image-card]:hover{transform:translateY(-2px);border-color:#dcebad}[data-current-scene-backlog]{border-left-color:var(--vn-shell-accent,#dcebad)}[data-current-scene-item]{padding:12px 14px;border-radius:12px;background:rgba(18,28,38,0.45);border:1px solid rgba(134,219,178,0.18);margin:8px 0;display:flex;flex-direction:column;gap:6px;transition:all 140ms ease}[data-current-scene-item][data-current-passage="true"]{border-color:var(--vn-shell-accent,#86dbb2);background:rgba(134,219,178,0.08);box-shadow:0 0 12px rgba(134,219,178,0.12)}[data-current-scene-head]{display:flex;align-items:center;justify-content:space-between;gap:8px}.vn-speaker-badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:750;letter-spacing:0.04em;text-transform:uppercase;background:rgba(134,219,178,0.16);border:1px solid rgba(134,219,178,0.35);color:var(--vn-shell-accent,#86dbb2)}[data-vn-backlog-jump]{min-height:28px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;background:rgba(220,238,173,.14);border:1px solid rgba(220,238,173,.35);color:var(--vn-shell-accent,#dcebad)}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])){color:#142820!important;--vn-shell-text:#142820;--vn-shell-muted:#4b6b5d;--vn-shell-border:rgba(86,128,107,.35);--vn-shell-bg:#f8faf6;--vn-shell-field:#ffffff;--vn-shell-accent:#1e5a40}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) section{background:#f8faf6!important;border-color:rgba(86,128,107,.35)!important;color:#142820!important;box-shadow:0 12px 48px rgba(18,38,29,.2)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) button,:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) select,:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) textarea,:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-template-query]{background:#ffffff!important;border-color:rgba(86,128,107,.35)!important;color:#142820!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-image-card]{background:#ffffff!important;border-color:rgba(86,128,107,.3)!important;color:#142820!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-reply]{background:#ffffff!important;border-color:rgba(86,128,107,.3)!important;color:#142820!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-reply-preview],:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-reply] details p{color:#142820!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-history-views]{background:#eef3eb!important;border-color:rgba(86,128,107,.3)!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-history-view]{color:#4b6b5d!important}:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"]),:host-context([data-theme="light"])) [data-history-view][aria-pressed=true]{background:#25523d!important;color:#ffffff!important}
+[data-history-views]{display:flex;gap:6px;margin:0 0 14px;padding:4px;border-radius:999px;background:var(--vn-shell-field,rgba(0,0,0,.22));border:1px solid var(--vn-shell-border,rgba(160,205,185,.25))}[data-history-view]{flex:1;border:0;background:transparent;border-radius:999px;padding:8px 16px;font-weight:650;font-size:12px;color:var(--vn-shell-muted,#a6bfae);cursor:pointer;transition:all .15s ease}[data-history-view][aria-pressed=true]{background:var(--vn-shell-accent,#dcebad);color:var(--vn-shell-accent-contrast,#0e1e18);box-shadow:0 2px 10px rgba(0,0,0,.3);font-weight:800}[data-history-return]{flex:none;margin:0 14px 12px;align-self:center;min-width:160px;border-radius:999px;font-weight:600}[data-load-more]{display:block;width:100%;margin:14px auto 4px;border-radius:999px;font-weight:650;text-align:center}[data-grid][data-mode=story]{display:flex;flex-direction:column;gap:12px}[data-reply]{padding:16px 18px;border-radius:14px;background:var(--vn-shell-field,rgba(18,38,30,.55));border:1px solid var(--vn-shell-border,rgba(160,205,185,.22));border-left:3px solid var(--vn-shell-accent,#dcebad);box-shadow:0 4px 16px rgba(0,0,0,.25)}[data-reply] h3{display:inline-block;margin:0 0 6px;padding:2px 10px;border-radius:999px;background:color-mix(in srgb,var(--vn-shell-accent,#dcebad) 18%,transparent);color:var(--vn-shell-accent,#dcebad);font-size:11px;font-weight:750;letter-spacing:.06em;text-transform:uppercase}[data-reply-preview]{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin:8px 0;line-height:1.68;font-family:Georgia,serif;font-size:14.5px;color:var(--vn-shell-text,#f3f7ee)}[data-reply] details{border:1px solid var(--vn-shell-border,rgba(160,205,185,.18));border-radius:10px;padding:4px 12px;background:var(--vn-shell-bg,var(--vn-shell-panel,rgba(0,0,0,.22)));margin:8px 0}[data-reply] details p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.72;font-family:Georgia,serif;font-size:14.5px;color:var(--vn-shell-text,#f3f7ee)}[data-reply] details strong{display:inline-block;padding:1px 8px;border-radius:999px;background:color-mix(in srgb,var(--vn-shell-accent,#dcebad) 15%,transparent);font-size:11px;font-weight:700;color:var(--vn-shell-accent,#dcebad)}[data-reply-pictures]{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:8px}[data-reply-pictures] img{height:180px;border-radius:6px}[data-current-scene-backlog]{border-left-color:var(--vn-shell-accent,#dcebad)}[data-current-scene-item]{padding:12px 14px;border-radius:12px;background:var(--vn-shell-field,rgba(18,28,38,0.45));border:1px solid var(--vn-shell-border,rgba(134,219,178,0.18));margin:8px 0;display:flex;flex-direction:column;gap:6px;transition:all 140ms ease}[data-current-scene-item][data-current-passage="true"]{border-color:var(--vn-shell-accent,#86dbb2);background:color-mix(in srgb,var(--vn-shell-accent,#86dbb2) 10%,transparent);box-shadow:0 0 12px color-mix(in srgb,var(--vn-shell-accent,#86dbb2) 14%,transparent)}[data-current-scene-head]{display:flex;align-items:center;justify-content:space-between;gap:8px}.vn-speaker-badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:750;letter-spacing:0.04em;text-transform:uppercase;background:color-mix(in srgb,var(--vn-shell-accent,#86dbb2) 16%,transparent);border:1px solid color-mix(in srgb,var(--vn-shell-accent,#86dbb2) 35%,transparent);color:var(--vn-shell-accent,#86dbb2)}[data-vn-backlog-jump]{min-height:44px;min-width:44px;padding:6px 12px;border-radius:999px;font-size:11px;font-weight:700;background:color-mix(in srgb,var(--vn-shell-accent,#dcebad) 14%,transparent);border:1px solid color-mix(in srgb,var(--vn-shell-accent,#dcebad) 35%,transparent);color:var(--vn-shell-accent,#dcebad)}
 `;
 function sameLibraryContext(next, previous) {
   if (next === previous)
@@ -56597,6 +57413,8 @@ class ImageLibrary {
   readingHistorySlot = document.createElement("div");
   currentSceneEntries = [];
   onJumpToParagraph = null;
+  pendingDelete = null;
+  undoToast = document.createElement("div");
   constructor(mount, send, onOpen) {
     this.send = send;
     this.onOpen = onOpen;
@@ -56604,7 +57422,31 @@ class ImageLibrary {
     this.host.dataset.imageLibrary = "";
     this.host.hidden = true;
     this.root = this.host.attachShadow({ mode: "open" });
-    this.root.innerHTML = `<style>${css}</style><button type="button" data-library-launch title="Image library" aria-label="Open image library" aria-expanded="false" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1.5"/><path d="m4 18 5-5 4 3 3-5 5 7"/></svg></button><section hidden role="dialog" aria-modal="true" aria-labelledby="library-title"><header><button type="button" data-detail-back hidden aria-label="Back to library" title="Back to library">‹</button><h2 id="library-title">Image library</h2><button type="button" data-library-close aria-label="Close image library" title="Close image library">×</button></header><div class="body"><div data-browse><div class="filters"><label>Story range<select data-range aria-label="Story range"><option value="read">Read so far</option><option value="all">All story images</option></select></label><label>Message versions<select data-versions aria-label="Message versions"><option value="active">Active story</option><option value="all">Include alternate versions</option></select></label><label>Sort<select data-order aria-label="Sort images"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label></div><label class="check"><input type="checkbox" data-replaced>Include replaced pictures</label><p class="note">Saved pictures from this chat. Viewing never generates an image. Older missing references cannot always be recovered.</p><div data-grid></div></div><div data-detail hidden><div class="viewer-tools"><button type="button" data-zoom-out aria-label="Zoom out" title="Zoom out">−</button><button type="button" data-fit>Fit</button><button type="button" data-zoom-in aria-label="Zoom in" title="Zoom in">+</button><span data-zoom-label>100%</span><button type="button" data-fullscreen style="margin-left:8px;font-weight:700">⛶ Fullscreen</button><button type="button" data-delete-picture style="margin-left:8px;background:rgba(239,68,68,0.2);color:#fca5a5;border:1px solid rgba(239,68,68,0.35);padding:4px 8px;border-radius:6px;font-size:12px;cursor:pointer;">\uD83D\uDDD1️ Delete</button></div><div data-image-viewport><img data-full-image alt="Selected story image" data-zoom="1" style="cursor:pointer" title="Click to view fullscreen"></div><p data-description></p><p data-excerpt></p><details data-prompts><summary>Prompt details</summary><p class="note">Read-only saved wording. Older pictures may have no recorded request.</p><label class="prompt-label">Saved positive prompt<textarea data-positive aria-label="Saved positive prompt" readonly></textarea></label><label class="prompt-label">Saved negative prompt<textarea data-negative aria-label="Saved negative prompt" readonly></textarea></label><button type="button" data-copy>Copy prompt</button></details></div><p data-library-status role="status"></p><button type="button" data-retry hidden>Retry loading</button></div><footer data-library-footer><button type="button" data-page-prev>Previous page</button><span data-page-label>Page 1</span><button type="button" data-page-next>Next page</button></footer></section>`;
+    this.root.innerHTML = `<style>${css}</style><button type="button" data-library-launch title="Image library" aria-label="Open image library" aria-expanded="false" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1.5"/><path d="m4 18 5-5 4 3 3-5 5 7"/></svg></button><section hidden role="dialog" aria-modal="true" aria-labelledby="library-title"><header><button type="button" data-detail-back hidden aria-label="Back to library" title="Back to library">‹</button><h2 id="library-title">Image library</h2><button type="button" data-library-close aria-label="Close image library" title="Close image library">×</button></header><div class="body"><div data-browse><div class="filters"><label>Story range<select data-range aria-label="Story range"><option value="read">Read so far</option><option value="all">All story images</option></select></label><label>Message versions<select data-versions aria-label="Message versions"><option value="active">Active story</option><option value="all">Include alternate versions</option></select></label><label>Sort<select data-order aria-label="Sort images"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label></div><label class="check"><input type="checkbox" data-replaced>Include replaced pictures</label><p class="note">Saved pictures from this chat. Viewing never generates an image. Older missing references cannot always be recovered.</p><div data-grid></div></div><div data-detail hidden><div class="viewer-tools"><button type="button" data-zoom-out aria-label="Zoom out" title="Zoom out">−</button><button type="button" data-fit>Fit</button><button type="button" data-zoom-in aria-label="Zoom in" title="Zoom in">+</button><span data-zoom-label>100%</span><button type="button" data-fullscreen style="margin-left:8px;font-weight:700">⛶ Fullscreen</button><button type="button" data-delete-picture style="margin-left:8px;background:rgba(239,68,68,0.2);color:#fca5a5;border:1px solid rgba(239,68,68,0.35);padding:8px 12px;min-height:44px;min-width:44px;border-radius:6px;font-size:12px;cursor:pointer;">\uD83D\uDDD1️ Delete</button></div><div data-image-viewport><img data-full-image alt="Selected story image" data-zoom="1" style="cursor:pointer" title="Click to view fullscreen"></div><p data-description></p><p data-excerpt></p><details data-prompts><summary>Prompt details</summary><p class="note">Read-only saved wording. Older pictures may have no recorded request.</p><label class="prompt-label">Saved positive prompt<textarea data-positive aria-label="Saved positive prompt" readonly></textarea></label><label class="prompt-label">Saved negative prompt<textarea data-negative aria-label="Saved negative prompt" readonly></textarea></label><button type="button" data-copy>Copy prompt</button></details></div><p data-library-status role="status"></p><button type="button" data-retry hidden>Retry loading</button></div><footer data-library-footer><button type="button" data-page-prev>Previous page</button><span data-page-label>Page 1</span><button type="button" data-page-next>Next page</button></footer></section>`;
+    this.undoToast.dataset.libraryToast = "";
+    this.undoToast.hidden = true;
+    this.undoToast.setAttribute("role", "status");
+    const toastMsg = document.createElement("span");
+    toastMsg.dataset.toastMessage = "";
+    const undoBtn = document.createElement("button");
+    undoBtn.type = "button";
+    undoBtn.dataset.libraryUndo = "";
+    undoBtn.textContent = "Undo";
+    this.undoToast.append(toastMsg, undoBtn);
+    this.el("section").insertBefore(this.undoToast, this.el("[data-library-footer]"));
+    undoBtn.onclick = () => {
+      if (!this.pendingDelete)
+        return;
+      const queued = this.pendingDelete;
+      clearTimeout(queued.timer);
+      this.pendingDelete = null;
+      this.undoToast.hidden = true;
+      if (this.page) {
+        this.page = { ...this.page, entries: [queued.entry, ...this.page.entries] };
+        this.render();
+      }
+      this.status("Picture restored.");
+    };
     const refresh = document.createElement("button");
     refresh.type = "button";
     refresh.dataset.refresh = "";
@@ -56662,6 +57504,11 @@ class ImageLibrary {
     });
     quickFilters.append(pillRange, pillVersions, pillOrder, pillRole);
     filters.after(quickFilters);
+    const chipStrip = document.createElement("div");
+    chipStrip.dataset.historyChipStrip = "";
+    chipStrip.hidden = true;
+    chipStrip.style.cssText = "display:flex;gap:6px;overflow-x:auto;padding:0 0 8px;scrollbar-width:none;-webkit-overflow-scrolling:touch;";
+    quickFilters.after(chipStrip);
     const tabs = document.createElement("nav");
     tabs.dataset.historyViews = "";
     tabs.setAttribute("aria-label", "History views");
@@ -56741,13 +57588,27 @@ class ImageLibrary {
     this.el("[data-delete-picture]").onclick = () => {
       if (!this.selected || !this.context)
         return;
-      if (typeof window !== "undefined" && window.confirm && !window.confirm(`Delete this saved picture from story history?`))
-        return;
       const deleted = this.selected;
-      this.send({ type: "vn_delete_image", chatId: this.context.chatId, imageId: deleted.imageId, imageUrl: deleted.imageUrl, jobId: deleted.jobId });
-      this.status("Picture deleted.");
+      const chatId = this.context.chatId;
+      this.flushPendingDelete();
+      const key = `${deleted.imageId ?? ""}:${deleted.jobId ?? ""}:${deleted.paragraphIndex}`;
+      if (this.page) {
+        this.page = { ...this.page, entries: this.page.entries.filter((e) => e !== deleted) };
+      }
+      this.undoToast.querySelector("[data-toast-message]").textContent = "Picture removed";
+      this.undoToast.hidden = false;
+      this.pendingDelete = {
+        key,
+        entry: deleted,
+        chatId,
+        timer: setTimeout(() => {
+          if (this.pendingDelete?.key !== key)
+            return;
+          this.flushPendingDelete();
+        }, 4500)
+      };
+      this.status("Picture removed. Undo within 4.5s.");
       this.back();
-      this.load();
     };
     this.el("[data-full-image]").onclick = () => this.openFullscreen();
     this.el("[data-copy]").onclick = async () => {
@@ -56797,15 +57658,43 @@ Negative prompt:
       }
     });
   }
-  openFullscreen() {
-    if (!this.selected?.imageUrl)
+  toGalleryItem(entry) {
+    return {
+      src: entry.imageUrl || entry.thumbnailUrl || "",
+      title: entry.template ?? (entry.role === "portrait" ? "Character Portrait" : "Story Picture"),
+      subtitle: `Reply ${entry.messageNumber} · Picture ${entry.paragraphIndex + 1} · ${entry.versionLabel}${entry.model ? " · " + entry.model : ""}`,
+      prompt: entry.prompt,
+      negativePrompt: entry.negativePrompt
+    };
+  }
+  openFullscreen(targetEntry) {
+    const entry = targetEntry ?? this.selected;
+    const src = entry?.imageUrl || entry?.thumbnailUrl;
+    if (!entry || !src)
       return;
+    const entries = (this.page?.entries ?? []).filter((e) => Boolean(e.imageUrl || e.thumbnailUrl));
+    const gallery = entries.map((e) => this.toGalleryItem(e));
+    const galleryIndex = Math.max(0, entries.indexOf(entry));
     FullscreenLightbox.open({
-      src: this.selected.imageUrl,
-      title: this.selected.template ?? (this.selected.role === "portrait" ? "Character Portrait" : "Story Picture"),
-      subtitle: `Reply ${this.selected.messageNumber} · Picture ${this.selected.paragraphIndex + 1} · ${this.selected.versionLabel}${this.selected.model ? " · " + this.selected.model : ""}`,
-      prompt: this.selected.prompt,
-      negativePrompt: this.selected.negativePrompt
+      ...this.toGalleryItem(entry),
+      src,
+      ...gallery.length > 1 ? { gallery, galleryIndex } : {},
+      themeSource: this.host
+    });
+  }
+  flushPendingDelete() {
+    if (!this.pendingDelete)
+      return;
+    const pending = this.pendingDelete;
+    clearTimeout(pending.timer);
+    this.pendingDelete = null;
+    this.undoToast.hidden = true;
+    this.send({
+      type: "vn_delete_image",
+      chatId: pending.chatId,
+      imageId: pending.entry.imageId,
+      imageUrl: pending.entry.imageUrl,
+      jobId: pending.entry.jobId
     });
   }
   useHistoryEntry() {
@@ -56901,6 +57790,7 @@ Negative prompt:
     this.el("[data-library-close]").focus();
   }
   close() {
+    this.flushPendingDelete();
     this.opener?.setAttribute("aria-expanded", "false");
     delete this.host.dataset.open;
     this.cancel();
@@ -57042,14 +57932,72 @@ Negative prompt:
     syncPill("[data-quick-versions]", verVal === "all" ? "All versions" : "Active only", verVal === "all");
     syncPill("[data-quick-order]", ordVal === "oldest" ? "Oldest ↑" : "Newest ↓", ordVal === "oldest");
     syncPill("[data-quick-role]", { all: "All types", scene: "Scenes", background: "Places", portrait: "Portraits" }[roleVal] ?? "All types", roleVal !== "all");
+    const chipStrip = this.root.querySelector("[data-history-chip-strip]");
+    if (chipStrip) {
+      chipStrip.replaceChildren();
+      const queryInput = this.el("[data-template-query]");
+      const activeQuery = queryInput.value.trim();
+      const activeLower = activeQuery.toLocaleLowerCase();
+      const candidates = new Map;
+      const pushLabel = (raw) => {
+        const clean = (raw ?? "").trim();
+        if (!clean || clean.length > 42)
+          return;
+        const key = clean.toLocaleLowerCase();
+        if (!candidates.has(key))
+          candidates.set(key, clean);
+      };
+      for (const e of this.page?.entries ?? [])
+        for (const c of e.characters ?? [])
+          pushLabel(c);
+      for (const r of this.page?.replies ?? []) {
+        if (r.speaker && r.speaker.toLocaleLowerCase() !== "narrator")
+          pushLabel(r.speaker);
+      }
+      for (const e of this.page?.entries ?? [])
+        pushLabel(e.template);
+      if (activeLower && !candidates.has(activeLower))
+        candidates.set(activeLower, activeQuery);
+      const list = [...candidates.values()].slice(0, 10);
+      chipStrip.hidden = list.length === 0 && !activeQuery;
+      if (!chipStrip.hidden) {
+        const makeChip = (label, value, active) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.dataset.historyChip = value;
+          btn.textContent = label;
+          btn.setAttribute("aria-pressed", String(active));
+          btn.style.cssText = "flex:0 0 auto;min-height:44px;padding:6px 12px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;";
+          if (active) {
+            btn.style.borderColor = "var(--vn-shell-accent,#86dbb2)";
+            btn.style.color = "var(--vn-shell-accent,#86dbb2)";
+          }
+          btn.onclick = () => {
+            queryInput.value = active && value ? "" : value;
+            this.pages = ["0:0"];
+            this.pageIndex = 0;
+            this.load();
+          };
+          return btn;
+        };
+        if (activeQuery)
+          chipStrip.append(makeChip("All filters", "", false));
+        for (const item of list)
+          chipStrip.append(makeChip(item, item, item.toLocaleLowerCase() === activeLower));
+      }
+    }
     const buildCard = (entryIndex, entry) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.dataset.imageCard = "";
-      button.dataset.entryIndex = String(entryIndex);
-      button.dataset.replyKey = JSON.stringify(entry.key);
-      button.style.position = "relative";
-      button.setAttribute("aria-label", `View ${entry.template ?? "picture"}, message ${entry.key.assistantMessageId}, paragraph ${entry.paragraphIndex + 1}`);
+      const card = document.createElement("div");
+      card.dataset.imageCard = "";
+      card.dataset.entryIndex = String(entryIndex);
+      card.dataset.replyKey = JSON.stringify(entry.key);
+      card.setAttribute("role", "group");
+      card.style.position = "relative";
+      card.setAttribute("aria-label", `${entry.template ?? "picture"}, message ${entry.key.assistantMessageId}, paragraph ${entry.paragraphIndex + 1}`);
+      const openBtn = document.createElement("button");
+      openBtn.type = "button";
+      openBtn.dataset.imageCardOpen = "";
+      openBtn.setAttribute("aria-label", `View ${entry.template ?? "picture"}, message ${entry.key.assistantMessageId}, paragraph ${entry.paragraphIndex + 1}`);
       if (entry.thumbnailUrl) {
         const image = document.createElement("img");
         image.src = entry.thumbnailUrl;
@@ -57061,31 +58009,14 @@ Negative prompt:
           const missing = document.createElement("span");
           missing.className = "missing";
           missing.textContent = "Image unavailable";
-          button.prepend(missing);
+          openBtn.prepend(missing);
         };
-        button.append(image);
-        const fsBtn = document.createElement("button");
-        fsBtn.type = "button";
-        fsBtn.title = "Open fullscreen";
-        fsBtn.setAttribute("aria-label", "Open fullscreen");
-        fsBtn.textContent = "⛶";
-        fsBtn.style.cssText = "position:absolute;top:6px;right:6px;width:30px;height:30px;min-height:30px;padding:0;border-radius:999px;background:rgba(4,8,14,0.78);border:1px solid rgba(255,255,255,0.35);color:#fff;font-size:13px;z-index:3;cursor:pointer;display:inline-flex;align-items:center;justify-content:center";
-        fsBtn.onclick = (e) => {
-          e.stopPropagation();
-          FullscreenLightbox.open({
-            src: entry.imageUrl || entry.thumbnailUrl || "",
-            title: entry.template ?? (entry.role === "portrait" ? "Character Portrait" : "Story Picture"),
-            subtitle: `Reply ${entry.messageNumber} · Picture ${entry.paragraphIndex + 1} · ${entry.versionLabel}${entry.model ? " · " + entry.model : ""}`,
-            prompt: entry.prompt,
-            negativePrompt: entry.negativePrompt
-          });
-        };
-        button.append(fsBtn);
+        openBtn.append(image);
       } else {
         const missing = document.createElement("span");
         missing.className = "missing";
         missing.textContent = "Image unavailable";
-        button.append(missing);
+        openBtn.append(missing);
       }
       const caption = document.createElement("span");
       caption.className = "caption";
@@ -57094,9 +58025,24 @@ Negative prompt:
       const detail = document.createElement("small");
       detail.textContent = `Picture ${entry.paragraphIndex + 1} · ${entry.versionLabel}`;
       caption.append(title, detail);
-      button.append(caption);
-      button.onclick = () => this.view(entry);
-      return button;
+      openBtn.append(caption);
+      openBtn.onclick = () => this.view(entry);
+      card.append(openBtn);
+      if (entry.thumbnailUrl) {
+        const fsBtn = document.createElement("button");
+        fsBtn.type = "button";
+        fsBtn.dataset.imageFullscreen = "";
+        fsBtn.title = "Open fullscreen";
+        fsBtn.setAttribute("aria-label", "Open fullscreen");
+        fsBtn.textContent = "⛶";
+        fsBtn.style.cssText = "position:absolute;top:6px;right:6px;width:44px;height:44px;min-width:44px;min-height:44px;padding:0;border-radius:999px;background:rgba(4,8,14,0.78);border:1px solid rgba(255,255,255,0.35);color:#fff;font-size:15px;z-index:3;cursor:pointer;display:inline-flex;align-items:center;justify-content:center";
+        fsBtn.onclick = (e) => {
+          e.stopPropagation();
+          this.openFullscreen(entry);
+        };
+        card.append(fsBtn);
+      }
+      return card;
     };
     if (this.mode === "story" && this.pageIndex === 0 && this.currentSceneEntries.length > 0) {
       const currentCard = document.createElement("article");
@@ -57338,14 +58284,14 @@ var DOCKED_LIBRARY_CSS = `
 :host([data-vn-workspace-tool]) [data-history-views] {
   margin: 6px 14px 10px !important;
   flex-shrink: 0 !important;
-  border-color: var(--aperture-button-border, rgba(160, 205, 185, 0.25)) !important;
+  border-color: var(--vn-shell-border, rgba(160, 205, 185, 0.25)) !important;
 }
 :host([data-vn-workspace-tool]) [data-history-view] {
-  color: var(--aperture-muted, #a6bfae) !important;
+  color: var(--vn-shell-muted, #a6bfae) !important;
 }
 :host([data-vn-workspace-tool]) [data-history-view][aria-pressed=true] {
-  background: var(--aperture-accent, #dcebad) !important;
-  color: var(--aperture-accent-contrast, #0e1e18) !important;
+  background: var(--vn-shell-accent, #dcebad) !important;
+  color: var(--vn-shell-accent-contrast, #0e1e18) !important;
   box-shadow: 0 2px 10px rgba(0,0,0,0.3) !important;
 }
 :host([data-vn-workspace-tool]) details {
@@ -57369,23 +58315,23 @@ var DOCKED_LIBRARY_CSS = `
 }
 :host([data-vn-workspace-tool]) [data-reading-history] { flex: 0 0 auto; }
 :host([data-vn-workspace-tool]) [data-reply] {
-  background: var(--aperture-ghost-bg, rgba(18, 38, 30, 0.55)) !important;
-  border: 1px solid var(--aperture-button-border, rgba(160, 205, 185, 0.22)) !important;
-  border-left: 3px solid var(--aperture-accent, #dcebad) !important;
-  color: var(--aperture-text, #f3f7ee) !important;
+  background: var(--vn-shell-field, rgba(18, 38, 30, 0.55)) !important;
+  border: 1px solid var(--vn-shell-border, rgba(160, 205, 185, 0.22)) !important;
+  border-left: 3px solid var(--vn-shell-accent, #dcebad) !important;
+  color: var(--vn-shell-text, #f3f7ee) !important;
 }
 :host([data-vn-workspace-tool]) [data-reply] h3 {
-  background: var(--aperture-accent-surface, rgba(220, 238, 173, 0.18)) !important;
-  color: var(--aperture-accent, #dcebad) !important;
+  background: color-mix(in srgb, var(--vn-shell-accent, #dcebad) 18%, transparent) !important;
+  color: var(--vn-shell-accent, #dcebad) !important;
 }
 :host([data-vn-workspace-tool]) [data-reply] details strong {
-  background: var(--aperture-accent-surface, rgba(220, 238, 173, 0.15)) !important;
-  color: var(--aperture-accent, #dcebad) !important;
+  background: color-mix(in srgb, var(--vn-shell-accent, #dcebad) 15%, transparent) !important;
+  color: var(--vn-shell-accent, #dcebad) !important;
 }
 :host([data-vn-workspace-tool]) [data-vn-backlog-jump] {
-  background: var(--aperture-accent-surface, rgba(220, 238, 173, 0.14)) !important;
-  border: 1px solid var(--aperture-button-border, rgba(220, 238, 173, 0.35)) !important;
-  color: var(--aperture-accent, #dcebad) !important;
+  background: color-mix(in srgb, var(--vn-shell-accent, #dcebad) 14%, transparent) !important;
+  border: 1px solid var(--vn-shell-border, rgba(220, 238, 173, 0.35)) !important;
+  color: var(--vn-shell-accent, #dcebad) !important;
 }
 :host([data-vn-workspace-tool]) footer[data-library-footer] {
   margin-top: auto !important;
@@ -57394,10 +58340,10 @@ var DOCKED_LIBRARY_CSS = `
   min-height: 50px !important;
   max-height: 52px !important;
   height: 52px !important;
-  background: var(--aperture-ghost-bg, rgba(9, 19, 15, 0.94)) !important;
+  background: var(--vn-shell-panel, rgba(9, 19, 15, 0.94)) !important;
   backdrop-filter: blur(14px) !important;
   -webkit-backdrop-filter: blur(14px) !important;
-  border-top: 1px solid var(--aperture-button-border, rgba(160, 205, 185, 0.2)) !important;
+  border-top: 1px solid var(--vn-shell-border, rgba(160, 205, 185, 0.2)) !important;
   padding: 6px 14px calc(6px + env(safe-area-inset-bottom, 0px)) !important;
   box-sizing: border-box !important;
   z-index: 10 !important;
@@ -57407,30 +58353,20 @@ var DOCKED_LIBRARY_CSS = `
   min-width: 44px;
   border-radius: 999px !important;
   padding: 4px 14px !important;
-  background: var(--aperture-ghost-bg, rgba(22, 46, 36, 0.8)) !important;
-  border: 1px solid var(--aperture-button-border, rgba(160, 205, 185, 0.25)) !important;
-  color: var(--aperture-text, #f4f7ee) !important;
+  background: var(--vn-shell-button, rgba(22, 46, 36, 0.8)) !important;
+  border: 1px solid var(--vn-shell-border, rgba(160, 205, 185, 0.25)) !important;
+  color: var(--vn-shell-text, #f4f7ee) !important;
   font-weight: 650 !important;
   font-size: 12px !important;
 }
 :host([data-vn-workspace-tool]) footer[data-library-footer] button:hover:not(:disabled) {
-  background: var(--aperture-accent-surface, rgba(35, 75, 57, 0.9)) !important;
-  border-color: var(--aperture-accent, #dcebad) !important;
-  color: var(--aperture-accent, #dcebad) !important;
+  background: color-mix(in srgb, var(--vn-shell-accent, #dcebad) 18%, var(--vn-shell-button, rgba(35, 75, 57, 0.9))) !important;
+  border-color: var(--vn-shell-accent, #dcebad) !important;
+  color: var(--vn-shell-accent, #dcebad) !important;
 }
 :host([data-vn-workspace-tool]) .filters { grid-template-columns: 1fr !important; }
 :host([data-vn-workspace-tool]) [data-grid] { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)) !important; }
 :host([data-vn-workspace-tool]) [data-detail-back] { font-size: 24px !important; }
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-history-views]{background:rgba(35,65,50,.1);border:1px solid rgba(35,65,50,.18)}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-history-view]{color:#244636!important}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-history-view][aria-pressed=true]{background:#234b39!important;color:#fbfdf7!important;box-shadow:0 2px 8px rgba(35,65,50,.2)}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-reply]{background:#e3ebd9!important;border:1px solid #b6ccbc!important;border-left:4px solid #234b39!important;box-shadow:0 4px 14px rgba(23,43,33,.08)!important;color:#172721!important}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-reply] h3{background:rgba(35,75,57,.14)!important;color:#234b39!important}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-reply-preview],:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-reply] details p{color:#172721!important}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-reply] details{background:#f2f7ec!important;border-color:#b8cdbe!important}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-reply] details strong{background:rgba(35,75,57,.12)!important;color:#234b39!important}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) footer[data-library-footer] button{background:#e4ebe0!important;border-color:#b3c5b8!important;color:#1a3327!important}
-:is(:host-context(body.theme-light),:host-context([data-aperture-mode="light"]),:host([data-aperture-mode="light"])) [data-page-label]{color:#3b5d4c!important;font-weight:650!important}
 `;
 
 // src/frontend/stage/image-lightbox.ts
@@ -57863,6 +58799,9 @@ class CharacterFolio {
   lastRenderedSwipeKey = null;
   turnRpgCompanions = new Map;
   storyCursor = "";
+  sceneActionTools = null;
+  sceneActionForName = null;
+  sceneActionResolver;
   chatId = null;
   revision = 0;
   dirty = new Set;
@@ -57877,11 +58816,22 @@ class CharacterFolio {
   accumulatedCgs = new Map;
   persistentGalleries = Object.create(null);
   lightbox;
+  setSceneActionTools(tools, forCharacterName) {
+    this.sceneActionTools = tools;
+    this.sceneActionForName = forCharacterName?.trim() || null;
+    if (this.activeCharacterId)
+      this.renderDetail();
+  }
+  setSceneActionResolver(resolver) {
+    this.sceneActionResolver = resolver;
+  }
   setContext(chatId) {
     if (this.chatId === chatId)
       return;
     this.handlers.onCancelDNA?.();
     this.chatId = chatId;
+    this.sceneActionTools = null;
+    this.sceneActionForName = null;
     this.discoveredIds.clear();
     this.swipeCharacterCache.clear();
     this.lastRenderedSwipeKey = null;
@@ -58716,6 +59666,8 @@ class CharacterFolio {
       if (cancelledProposal)
         this.cancelProposal();
       this.storyCursor = cursorKey;
+      this.sceneActionTools = null;
+      this.sceneActionForName = null;
     }
     const before = JSON.stringify([this.loreMap, Object.keys(this.library)]);
     this.loreMap = Object.create(null);
@@ -59336,6 +60288,19 @@ class CharacterFolio {
     heroAliases.append(aliasHeader, aliasInput);
     heroCard.append(heroTop, heroAliases, heroActions);
     this.detailContainer.append(heroCard);
+    const resolvedActionTools = this.sceneActionResolver?.(char.name) ?? (this.sceneActionTools && (!this.sceneActionForName || areNamesEquivalent(this.sceneActionForName, char.name)) ? this.sceneActionTools : null);
+    if (lore?.inScene === true && resolvedActionTools && resolvedActionTools.drafts.length > 0) {
+      const actionWrap = document.createElement("div");
+      actionWrap.setAttribute("data-folio-scene-actions", "");
+      actionWrap.append(new InteractionTray(resolvedActionTools.drafts, resolvedActionTools.current, (draft, mode) => {
+        if (!resolvedActionTools.apply(draft, mode))
+          return false;
+        this.handlers.onClose?.();
+        resolvedActionTools.focus();
+        return true;
+      }).host);
+      this.detailContainer.append(actionWrap);
+    }
     this.renderWorkflow(char);
     const subtabs = document.createElement("div");
     subtabs.className = "folio-subtabs";
@@ -59873,15 +60838,6 @@ class CharacterFolio {
       affNum.value = String(bond.affinity);
       affNum.setAttribute("data-bond-affinity", "");
       affNum.setAttribute("aria-label", `Affinity with ${bond.targetName}`);
-      affRange.oninput = () => {
-        affNum.value = affRange.value;
-      };
-      affNum.oninput = () => {
-        const clamped = Math.max(-100, Math.min(100, Math.round(Number(affNum.value) || 0)));
-        affRange.value = String(clamped);
-      };
-      affRow.append(affRange, affNum);
-      affField.append(affLabel, affRow);
       const trustField = document.createElement("div");
       trustField.className = "folio-field";
       const trustLabel = document.createElement("label");
@@ -59901,17 +60857,6 @@ class CharacterFolio {
       trustNum.value = String(bond.trust);
       trustNum.setAttribute("data-bond-trust", "");
       trustNum.setAttribute("aria-label", `Trust with ${bond.targetName}`);
-      trustRange.oninput = () => {
-        trustNum.value = trustRange.value;
-      };
-      trustNum.oninput = () => {
-        const clamped = Math.max(-100, Math.min(100, Math.round(Number(trustNum.value) || 0)));
-        trustRange.value = String(clamped);
-      };
-      trustRow.append(trustRange, trustNum);
-      trustField.append(trustLabel, trustRow);
-      meterGrid.append(affField, trustField);
-      card.append(meterGrid);
       const textGrid = document.createElement("div");
       textGrid.className = "rel-meter-grid";
       const dynField = document.createElement("div");
@@ -59940,6 +60885,68 @@ class CharacterFolio {
       statusInput.setAttribute("data-bond-status", "");
       statusInput.setAttribute("aria-label", `Status with ${bond.targetName}`);
       statusField.append(statusLabel, statusInput);
+      const markBondDraftDirty = () => {
+        const nextAff = Math.max(-100, Math.min(100, Math.round(Number(affNum.value) || 0)));
+        const nextTrust = Math.max(-100, Math.min(100, Math.round(Number(trustNum.value) || 0)));
+        const nextDyn = dynInput.value.trim().slice(0, 160);
+        const nextStatus = statusInput.value.trim().slice(0, 300);
+        const nextRels = structuredClone(char.relationships ?? []);
+        const idx = nextRels.findIndex((r) => r.targetName.trim().toLowerCase() === bond.targetName.trim().toLowerCase());
+        const draftBond = {
+          targetName: bond.targetName.trim().slice(0, 120),
+          affinity: nextAff,
+          trust: nextTrust,
+          dynamicLabel: nextDyn,
+          status: nextStatus,
+          recentBeats: structuredClone(bond.recentBeats ?? []),
+          lastUpdated: Date.now()
+        };
+        if (idx >= 0)
+          nextRels[idx] = draftBond;
+        else
+          nextRels.push(draftBond);
+        char.relationships = nextRels.slice(0, 40);
+        char.lastUpdated = Math.max(Date.now(), char.lastUpdated + 1);
+        this.dirty.add(char.id);
+        const save = this.element.querySelector("[data-dna-save]");
+        if (save)
+          save.disabled = this.saving.has(char.id);
+        const sw = this.element.querySelector("[data-folio-sticky-save]");
+        if (sw)
+          sw.hidden = false;
+        const sb = this.element.querySelector("[data-dna-sticky-save]");
+        if (sb)
+          sb.disabled = this.saving.has(char.id);
+        const state = this.element.querySelector("[data-dna-save-state]");
+        if (state)
+          state.textContent = "Unsaved changes — Save changes to use in pictures";
+      };
+      affRange.oninput = () => {
+        affNum.value = affRange.value;
+        markBondDraftDirty();
+      };
+      affNum.oninput = () => {
+        const clamped = Math.max(-100, Math.min(100, Math.round(Number(affNum.value) || 0)));
+        affRange.value = String(clamped);
+        markBondDraftDirty();
+      };
+      affRow.append(affRange, affNum);
+      affField.append(affLabel, affRow);
+      trustRange.oninput = () => {
+        trustNum.value = trustRange.value;
+        markBondDraftDirty();
+      };
+      trustNum.oninput = () => {
+        const clamped = Math.max(-100, Math.min(100, Math.round(Number(trustNum.value) || 0)));
+        trustRange.value = String(clamped);
+        markBondDraftDirty();
+      };
+      trustRow.append(trustRange, trustNum);
+      trustField.append(trustLabel, trustRow);
+      dynInput.oninput = () => markBondDraftDirty();
+      statusInput.oninput = () => markBondDraftDirty();
+      meterGrid.append(affField, trustField);
+      card.append(meterGrid);
       textGrid.append(dynField, statusField);
       card.append(textGrid);
       if (bond.recentBeats && bond.recentBeats.length > 0) {
@@ -60860,13 +61867,44 @@ function parseGameState(detail) {
 class GameBridge {
   target;
   onChange;
+  busyTimeoutMs;
   states = new Map;
+  timers = new Map;
+  timedOutProviders = new Set;
   dead = false;
   revision = 0;
-  constructor(target2, onChange) {
+  constructor(target2, onChange, busyTimeoutMs = 15000) {
     this.target = target2;
     this.onChange = onChange;
+    this.busyTimeoutMs = busyTimeoutMs;
     target2.addEventListener(GAME_STATE_EVENT, this.receive);
+  }
+  clearTimer(provider) {
+    const timer = this.timers.get(provider);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      this.timers.delete(provider);
+    }
+  }
+  clearAllTimers() {
+    for (const timer of this.timers.values())
+      clearTimeout(timer);
+    this.timers.clear();
+  }
+  armTimer(provider) {
+    this.clearTimer(provider);
+    this.timedOutProviders.delete(provider);
+    const timer = setTimeout(() => {
+      this.timers.delete(provider);
+      if (this.dead)
+        return;
+      const state = this.states.get(provider);
+      if (!state?.busy)
+        return;
+      this.timedOutProviders.add(provider);
+      this.onChange();
+    }, this.busyTimeoutMs);
+    this.timers.set(provider, timer);
   }
   receive = (event) => {
     if (this.dead)
@@ -60876,10 +61914,19 @@ class GameBridge {
       return;
     if (!this.states.has(state.provider) && this.states.size >= MAX_PROVIDERS) {
       const oldest = this.states.keys().next().value;
-      if (oldest !== undefined)
+      if (oldest !== undefined) {
         this.states.delete(oldest);
+        this.clearTimer(oldest);
+        this.timedOutProviders.delete(oldest);
+      }
     }
     this.states.set(state.provider, { ...state, choices: state.choices.map((choice) => ({ ...choice, revision: ++this.revision })) });
+    if (state.busy) {
+      this.armTimer(state.provider);
+    } else {
+      this.clearTimer(state.provider);
+      this.timedOutProviders.delete(state.provider);
+    }
     this.onChange();
   };
   choicesFor(chatId) {
@@ -60887,15 +61934,47 @@ class GameBridge {
       return [];
     return [...this.states.values()].filter((s) => s.chatId === chatId).flatMap((s) => s.choices.map((choice) => ({ ...choice })));
   }
+  busyStatusFor(chatId) {
+    if (!chatId)
+      return { busy: false, timedOut: false, providers: [], busyLabel: null };
+    const providers = [];
+    for (const [provider, state] of this.states) {
+      if (state.chatId === chatId && state.busy)
+        providers.push(provider);
+    }
+    return {
+      busy: providers.length > 0,
+      timedOut: providers.some((p) => this.timedOutProviders.has(p)),
+      providers,
+      busyLabel: providers.length > 0 ? providers.join(", ") : null
+    };
+  }
   busyFor(chatId) {
-    return [...this.states.values()].some((s) => s.chatId === chatId && s.busy);
+    return this.busyStatusFor(chatId).busy;
+  }
+  cancelBusy(chatId, provider) {
+    if (this.dead || !chatId)
+      return;
+    for (const [key, state] of [...this.states.entries()]) {
+      if (state.chatId === chatId && (!provider || key === provider)) {
+        this.clearTimer(key);
+        this.timedOutProviders.delete(key);
+        this.states.set(key, { ...state, busy: false });
+      }
+    }
+    this.target.dispatchEvent(new CustomEvent(GAME_REQUEST_EVENT, { detail: { version: 1, chatId } }));
+    this.onChange();
   }
   request(chatId) {
     if (this.dead || !chatId)
       return;
-    for (const [provider, state] of this.states)
-      if (state.chatId === chatId)
+    for (const [provider, state] of this.states) {
+      if (state.chatId === chatId) {
         this.states.delete(provider);
+        this.clearTimer(provider);
+        this.timedOutProviders.delete(provider);
+      }
+    }
     this.onChange();
     this.target.dispatchEvent(new CustomEvent(GAME_REQUEST_EVENT, { detail: { version: 1, chatId } }));
   }
@@ -60911,17 +61990,23 @@ class GameBridge {
     if (!this.resolve(chatId, choice))
       return false;
     const state = this.states.get(choice.provider);
-    if (state?.chatId === chatId)
+    if (state?.chatId === chatId) {
       this.states.set(choice.provider, { ...state, choices: [], busy: true });
+      this.armTimer(choice.provider);
+    }
     this.target.dispatchEvent(new CustomEvent(GAME_PICK_EVENT, { detail: { version: 1, provider: choice.provider, chatId, id: choice.id } }));
     this.onChange();
     return true;
   }
   clear() {
+    this.clearAllTimers();
+    this.timedOutProviders.clear();
     this.states.clear();
   }
   destroy() {
     this.dead = true;
+    this.clearAllTimers();
+    this.timedOutProviders.clear();
     this.states.clear();
     this.target.removeEventListener(GAME_STATE_EVENT, this.receive);
   }
@@ -61057,7 +62142,7 @@ function panelDocument(html2, remote = false) {
     }
     if (tag === "img") {
       const src = element.getAttribute("src") ?? "";
-      if (!/^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(src) && !(remote && /^https:\/\//i.test(src)))
+      if (!/^data:image\/(?:png|jpeg|gif|webp|avif);base64,[a-z0-9+/=\s]+$/i.test(src) && !(remote && /^https:\/\//i.test(src)))
         element.removeAttribute("src");
       element.setAttribute("referrerpolicy", "no-referrer");
     }
@@ -62109,7 +63194,7 @@ class SpeechController {
     if (this.disposed || myEpoch !== this.epoch)
       return;
     const tagAllowed = deliveryTagAllowedForModel(this.settings.deliveryMode, snapshot.model, this.settings.deliveryAllProviders);
-    const spoken = stripTextEffectTags(cursor.text);
+    const spoken = prepareSpeechText(cursor.text);
     const outbound = tagAllowed ? formatOutboundText(spoken, this.settings.deliveryMode, this.settings.deliveryTag) : spoken;
     const effectiveVoice = resolved.ref.voice || snapshot.voice;
     const key = [
@@ -62183,7 +63268,7 @@ class SpeechController {
     this.disposed = true;
   }
   eligible() {
-    return !this.disposed && this.settings.enabled && this.active && this.visible && this.cursor !== null && stripTextEffectTags(this.cursor.text).trim().length > 0;
+    return !this.disposed && this.settings.enabled && this.active && this.visible && this.cursor !== null && prepareSpeechText(this.cursor.text).length > 0;
   }
   speakerLabel() {
     const cursor = this.cursor;
@@ -62435,8 +63520,9 @@ button {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 36px;
-  padding: 0 12px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 14px;
   flex: 1 1 auto;
   border-radius: 999px;
   border: 1px solid rgba(220, 238, 173, 0.28);
@@ -62456,21 +63542,21 @@ button[data-tts-primary] {
   font-weight: 750;
 }
 button[data-tts-icon] {
-  flex: 0 0 34px;
-  min-width: 34px;
-  width: 34px;
-  height: 34px;
-  min-height: 34px;
+  flex: 0 0 44px;
+  min-width: 44px;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
   padding: 0;
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.14);
 }
 button[data-speech-close] {
-  flex: 0 0 26px;
-  min-width: 26px;
-  width: 26px;
-  height: 26px;
-  min-height: 26px;
+  flex: 0 0 44px;
+  min-width: 44px;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
   padding: 0;
   font-size: 15px;
   background: transparent;
@@ -62835,7 +63921,7 @@ class SpeechSettingsSection {
         return;
       }
       const voice = selected && selected.connectionId === id8 ? selected.voice : "";
-      onChange({ connectionId: id8, voice });
+      onChange({ connectionId: id8, voice, ...selected?.parameters ? { parameters: selected.parameters } : {} });
     });
     return select;
   }
@@ -62865,8 +63951,6 @@ class SpeechSettingsSection {
     }
     input2.addEventListener("input", () => {
       this.activeDrafts.set(fieldKey, input2.value);
-      if (selected)
-        selected.voice = input2.value;
     });
     input2.addEventListener("change", () => {
       this.activeDrafts.delete(fieldKey);
@@ -63384,7 +64468,7 @@ function shouldPreserveImage(previous, next) {
     return false;
   return true;
 }
-function nameplateForParagraph(view, index) {
+function effectiveSpeakerAttribution(view, index) {
   const snapshot = view.presentation ? selectPresentationSnapshot(view.presentation, index) : undefined;
   const key = { chatId: view.chatId, assistantMessageId: view.messageId, swipeId: view.swipeId, sourceFingerprint: view.sourceFingerprint, revision: view.revision };
   if (snapshot && snapshot.at.paragraphIndex === index && samePresentationTurn(snapshot.at.key, key) && snapshot.speakerEntityId) {
@@ -63392,7 +64476,10 @@ function nameplateForParagraph(view, index) {
     if (speaker)
       return speaker.name;
   }
-  const attributed = view.paragraphSpeakers?.[index];
+  return view.paragraphSpeakers?.[index];
+}
+function nameplateForParagraph(view, index) {
+  const attributed = effectiveSpeakerAttribution(view, index);
   return attributed === undefined || attributed === null ? view.speaker : attributed;
 }
 function speechCursorFor(view, index) {
@@ -63407,7 +64494,7 @@ function speechCursorFor(view, index) {
     revision: view.revision,
     paragraphIndex: index,
     text: text3,
-    paragraphSpeaker: view.paragraphSpeakers?.[index],
+    paragraphSpeaker: effectiveSpeakerAttribution(view, index),
     turnSpeaker: view.speaker
   };
 }
@@ -63690,7 +64777,8 @@ function setupVisualNovelFrontend(baseContext) {
   const syncGameChoices = () => {
     const id8 = chatId();
     const choices = gameBridge?.choicesFor(id8) ?? [];
-    stage.setGameChoices(choices, gameBridge?.busyFor(id8) ?? false);
+    const status = gameBridge?.busyStatusFor(id8) ?? { busy: false, timedOut: false, providers: [], busyLabel: null };
+    stage.setGameChoices(choices, { busy: status.busy, timedOut: status.timedOut });
   };
   let imageLibraryOpen = false;
   let imageStudioOpen = false;
@@ -63705,6 +64793,10 @@ function setupVisualNovelFrontend(baseContext) {
     mount: app.root,
     themePreset: configRef.current?.themePreset ?? "lumiverse",
     isAutoAdvanceHeld: () => isSpeechHoldingAuto() || imageLibraryOpen || imageStudioOpen || externalReviewOpen,
+    isTypewriterAudioMuted: () => {
+      const kind = speech?.getStatus().kind;
+      return kind === "loading" || kind === "playing";
+    },
     onExit: () => deactivate(),
     onTooltipPreferencesChange: (tooltips) => {
       ctx.sendToBackend({ type: "vn_set_config", patch: { tooltips }, chatId: chatId() });
@@ -63766,6 +64858,11 @@ function setupVisualNovelFrontend(baseContext) {
         throw new Error("That move is no longer available. Refresh the available moves.");
       speech.setCursor(null);
       stage.presentUserParagraph(picked.label, turn?.userSpeaker || "You");
+    },
+    onGameCancel: (provider) => {
+      const activeChatId = chatId();
+      if (activeChatId)
+        gameBridge?.cancelBusy(activeChatId, provider);
     },
     onReviewImages: () => imageStudio.open(),
     onReroll: () => {
@@ -63984,7 +65081,12 @@ function setupVisualNovelFrontend(baseContext) {
     onClose: () => stage.workspace.close()
   });
   stage.workspace.register("character", characterFolio);
+  stage.setNpcActionToolsHandler((tools, charName) => {
+    characterFolio.setSceneActionTools(tools, charName);
+  });
+  characterFolio.setSceneActionResolver((charName) => stage.buildNpcSceneActionTools(charName));
   stage.setFolioOpener((charName) => {
+    characterFolio.setSceneActionTools(stage.buildNpcSceneActionTools(charName), charName);
     characterFolio.setActiveCharacter(charName);
     stage.workspace.open("character");
   });
@@ -64054,7 +65156,7 @@ function setupVisualNovelFrontend(baseContext) {
           skipped += 1;
           continue;
         }
-        settingsPanel?.setAudioStatus(`Importing ${sent + 1}/${audioFiles.length}: ${file2.name}…`);
+        settingsPanel?.setAudioStatus(`Importing ${sent + 1}/${audioFiles.length}: ${file2.name}â€¦`);
         try {
           const bytes = new Uint8Array(await file2.arrayBuffer());
           const relativePath = file2.webkitRelativePath || file2.name;
@@ -64083,7 +65185,7 @@ function setupVisualNovelFrontend(baseContext) {
         }
       }
       ctx.sendToBackend({ type: "vn_import_audio_done", fileCount: sent });
-      settingsPanel?.setAudioStatus(`Sent ${sent} file(s)${skipped ? `, skipped ${skipped}` : ""}; scanning…`);
+      settingsPanel?.setAudioStatus(`Sent ${sent} file(s)${skipped ? `, skipped ${skipped}` : ""}; scanningâ€¦`);
     },
     onSave: (patch, requestId) => {
       const current = configRef.current;
@@ -64715,6 +65817,23 @@ function setupVisualNovelFrontend(baseContext) {
       } else {
         applyTurn(next, turn);
       }
+      return;
+    }
+    if (type === "vn_turn_lore_patch" && message.type === "vn_turn_lore_patch") {
+      if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId || turn.swipeId !== message.swipeId || turn.sourceFingerprint !== message.sourceFingerprint)
+        return;
+      if (invalidatedReferenceTurn === referenceTurnToken(turn) && message.referenceHistory !== undefined)
+        return;
+      turn = {
+        ...turn,
+        ...message.presentation !== undefined ? { presentation: message.presentation } : {},
+        ...message.referenceHistory !== undefined ? { referenceHistory: message.referenceHistory } : {}
+      };
+      loadedReadingCursor.load(turn);
+      stage.patchTurnLore({
+        presentation: message.presentation,
+        referenceHistory: message.referenceHistory
+      });
       return;
     }
     if (type === "vn_asset" && message.type === "vn_asset") {

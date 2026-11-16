@@ -120,7 +120,6 @@ export class AudioEngine {
   private readonly setInterval: (handler: () => void, timeout?: number) => TimerHandle;
   private readonly clearInterval: (handle: TimerHandle) => void;
   private activeBgm: ActiveBgm | null = null;
-  private outgoingBgm: ActiveBgm | null = null;
   private activeSfx = new Set<AudioPlayerElement>();
   private destroyed = false;
 
@@ -243,6 +242,22 @@ export class AudioEngine {
       return;
     }
 
+    // Rescue an in-flight fading track matching the requested source instead of spawning a duplicate element.
+    const rescue = [...this.bgmTracks].find((item) => item !== this.activeBgm && item.src === cleanSrc);
+    if (rescue) {
+      if (this.activeBgm) {
+        this.fadeOutAndCleanup(this.activeBgm, duration);
+        this.activeBgm = null;
+      }
+      this.clearFade(rescue);
+      this.activeBgm = rescue;
+      if (rescue.player.paused) {
+        rescue.player.play().catch(() => {});
+      }
+      this.fadeVolume(rescue, 1, duration);
+      return;
+    }
+
     // Fade out previous active track
     if (this.activeBgm) {
       this.fadeOutAndCleanup(this.activeBgm, duration);
@@ -270,14 +285,10 @@ export class AudioEngine {
    */
   stopBgm(options: { fadeDuration?: number; crossfadeDuration?: number } = {}): void {
     const duration = options.fadeDuration ?? options.crossfadeDuration ?? this.crossfadeDuration;
-    if (this.activeBgm) {
-      this.fadeOutAndCleanup(this.activeBgm, duration);
-      this.activeBgm = null;
+    for (const item of [...this.bgmTracks]) {
+      this.fadeOutAndCleanup(item, duration);
     }
-    if (this.outgoingBgm) {
-      this.fadeOutAndCleanup(this.outgoingBgm, duration);
-      this.outgoingBgm = null;
-    }
+    this.activeBgm = null;
   }
 
   /**
@@ -323,7 +334,6 @@ export class AudioEngine {
     for(const item of this.bgmTracks){this.clearFade(item);this.clearAtten(item);this.clearSpeech(item);item.player.pause();}
     this.bgmTracks.clear();
     this.activeBgm = null;
-    this.outgoingBgm = null;
     for (const sfx of this.activeSfx) {
       sfx.pause();
     }
@@ -369,13 +379,11 @@ export class AudioEngine {
 
   private fadeOutAndCleanup(item: ActiveBgm, durationMs: number): void {
     this.clearFade(item);
-    this.outgoingBgm = item;
 
     if (durationMs <= 0) {
       item.player.pause();
       this.clearAtten(item);this.clearSpeech(item);
       this.bgmTracks.delete(item);
-      if (this.outgoingBgm === item) this.outgoingBgm = null;
       return;
     }
 
@@ -395,7 +403,6 @@ export class AudioEngine {
         this.clearAtten(item);this.clearSpeech(item);
         item.player.pause();
         this.bgmTracks.delete(item);
-        if (this.outgoingBgm === item) this.outgoingBgm = null;
       }
     }, intervalMs);
   }

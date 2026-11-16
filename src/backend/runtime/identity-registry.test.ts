@@ -232,7 +232,7 @@ describe("explicit alias resolution before the timeline", () => {
   test("an appearance-map entry cannot override the registry's stable baseline, in prompts or planner context", async () => {
     const { spindle } = memorySpindle();
     let systemMessage = "";
-    spindle.generate = { raw: async (request: { messages: Array<{ content: string }> }) => { systemMessage = request.messages[0]!.content; return { content: JSON.stringify({ scenes: [scene], cues: [{ paragraphIndex: 0, character: "Kitsune" }], characters: [{ name: "Kitsune", description: "fox ears, blonde hair, green eyes, blue dress" }] }) }; } } as any;
+    spindle.generate = { raw: async (request: { messages: Array<{ content: string }> }) => { systemMessage = request.messages.map(m => m.content).join("\n"); return { content: JSON.stringify({ scenes: [scene], cues: [{ paragraphIndex: 0, character: "Kitsune" }], characters: [{ name: "Kitsune", description: "fox ears, blonde hair, green eyes, blue dress" }] }) }; } } as any;
     const result = await planTurn(spindle, {
       chatId: "chat", message, content, previousScene: null, previousContinuity: null, recentMessages: [], config,
       singleCharacter: emptySingleCharacter(),
@@ -264,7 +264,7 @@ describe("explicit alias resolution before the timeline", () => {
   test("the planner is told the stable ids, aliases and subject class of known characters", async () => {
     const { spindle } = memorySpindle();
     let systemMessage = "";
-    spindle.generate = { raw: async (request: { messages: Array<{ content: string }> }) => { systemMessage = request.messages[0]!.content; return { content: JSON.stringify({ scenes: [scene], cues: [{ paragraphIndex: 0 }], characters: [] }) }; } } as any;
+    spindle.generate = { raw: async (request: { messages: Array<{ content: string }> }) => { systemMessage = request.messages.map(m => m.content).join("\n"); return { content: JSON.stringify({ scenes: [scene], cues: [{ paragraphIndex: 0 }], characters: [] }) }; } } as any;
     await planTurn(spindle, {
       chatId: "chat", message, content, previousScene: null, previousContinuity: null, recentMessages: [], config,
       singleCharacter: seedSingleCharacter("Kitsune", KITSUNE_TAGS), characterAppearance: {},

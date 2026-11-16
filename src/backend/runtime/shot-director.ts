@@ -21,11 +21,13 @@ export interface ShotDirectorInput {
   template?: ImageTemplate | undefined;
   cue?: VisualCue | undefined;
   previousShot?: ImageShotSpec | undefined;
+  shotTransitionMode?: 'same-picture' | 'cross-beat' | 'reframe' | undefined;
   manualOverrides?: Partial<ImageShotSpec['camera'] & {
     intent?: ShotIntent;
     mode?: CompositionMode;
     safeArea?: ShotSafeArea;
     crop?: string;
+    focalPoint?: { x: number; y: number };
   }> | undefined;
   styleDNA?: StyleDNA | undefined;
   dialogueSafeAreaSetting?: 'auto' | 'always' | 'off' | undefined;
@@ -54,6 +56,17 @@ const EXPLICIT_LINEUP_REGEX = /\b(?:side[- ]by[- ]side|shoulder[- ]to[- ]shoulde
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function matchesCharacterToken(candidate: string, target?: string): boolean {
+  const cleanTarget = target?.trim();
+  const cleanCandidate = candidate.trim();
+  if (!cleanTarget || !cleanCandidate) return false;
+  if (cleanCandidate.toLowerCase() === cleanTarget.toLowerCase()) return true;
+  if (cleanTarget.length >= 2 && new RegExp(`\\b${escapeRegex(cleanTarget)}\\b`, 'i').test(cleanCandidate)) return true;
+  const firstToken = cleanTarget.split(/\s+/)[0] || cleanTarget;
+  if (firstToken.length >= 2 && new RegExp(`\\b${escapeRegex(firstToken)}\\b`, 'i').test(cleanCandidate)) return true;
+  return false;
 }
 
 function findSubjectClue(
@@ -159,6 +172,7 @@ export function resolveShotSpec(input: ShotDirectorInput): ImageShotSpec {
     template,
     cue,
     previousShot,
+    shotTransitionMode = 'same-picture',
     manualOverrides = {},
     styleDNA,
     dialogueSafeAreaSetting = 'auto',
@@ -350,19 +364,31 @@ export function resolveShotSpec(input: ShotDirectorInput): ImageShotSpec {
       }
     }
 
-    // Shot Continuity: Weak continuity evidence from previousShot
-    if (
-      previousShot &&
-      revision === previousShot.revision &&
-      cue?.character &&
-      previousShot.intent === intent
-    ) {
-      // Maintain consistent lens and depth across matching beats
-      lens = previousShot.camera.lens;
-      depthOfField = previousShot.camera.depthOfField;
-      if (previousShot.camera.shotSize === shotSize && previousShot.camera.angle === angle) {
-        angle = angle === 'eye-level' ? 'three-quarter' : 'eye-level';
-        if (shotSize === 'medium') shotSize = 'medium-close-up';
+    // Shot Continuity & Cross-Beat / Reframe Choreography
+    if (previousShot) {
+      if (shotTransitionMode === 'reframe') {
+        lens = previousShot.camera.lens;
+        depthOfField = previousShot.camera.depthOfField;
+        if (previousShot.camera.angle === 'eye-level') angle = 'three-quarter';
+        else if (previousShot.camera.angle === 'three-quarter') angle = 'profile';
+        else angle = 'eye-level';
+        if (previousShot.camera.shotSize === shotSize) {
+          shotSize = shotSize === 'medium' ? 'medium-close-up' : shotSize === 'medium-close-up' ? 'close-up' : 'medium';
+        }
+      } else if (
+        shotTransitionMode === 'cross-beat' ||
+        (revision === previousShot.revision && cue?.character && previousShot.intent === intent)
+      ) {
+        // Maintain consistent lens and depth across matching beats within the scene
+        lens = previousShot.camera.lens;
+        depthOfField = previousShot.camera.depthOfField;
+        if (previousShot.camera.shotSize === shotSize && previousShot.camera.angle === angle) {
+          angle = angle === 'eye-level' ? 'three-quarter' : 'eye-level';
+          if (shotSize === 'medium') shotSize = 'medium-close-up';
+          else if (shotSize === 'medium-close-up' && shotTransitionMode === 'cross-beat') shotSize = 'medium';
+        } else if (shotTransitionMode === 'cross-beat' && previousShot.camera.angle === angle) {
+          angle = angle === 'eye-level' ? 'three-quarter' : 'eye-level';
+        }
       }
     }
   }
@@ -426,7 +452,7 @@ export function resolveShotSpec(input: ShotDirectorInput): ImageShotSpec {
 
     cue.ensembleSubjects.forEach((sub, i) => {
       const matched = findSubjectClue(sub.name, relationships, narrativeClauses);
-      const isFocal = Boolean(focalLower && sub.name.toLowerCase().includes(focalLower));
+      const isFocal = matchesCharacterToken(sub.name, focusTarget);
       const inferredDepth =
         inferDepthFromClue(matched?.clue) ??
         (isFocal && i === 0 ? 'foreground' : defaultDepthCycle[i % defaultDepthCycle.length]!);
@@ -476,6 +502,31 @@ export function resolveShotSpec(input: ShotDirectorInput): ImageShotSpec {
     });
   }
 
+  let focalCropHint: string | undefined;
+  if (manualOverrides.focalPoint && Number.isFinite(manualOverrides.focalPoint.x) && Number.isFinite(manualOverrides.focalPoint.y)) {
+    const fx = Math.max(0, Math.min(100, Math.round(manualOverrides.focalPoint.x)));
+    const fy = Math.max(0, Math.min(100, Math.round(manualOverrides.focalPoint.y)));
+    const focalHorizontal: SubjectPlacement['horizontal'] =
+      fx < 20 ? 'far-left' : fx < 38 ? 'left' : fx > 80 ? 'far-right' : fx > 62 ? 'right' : 'center';
+    const focalVertical = fy < 36 ? 'upper' : fy > 64 ? 'lower' : 'mid-height';
+    const horizLabel = focalHorizontal.replace('-', ' ');
+    focalCropHint = `${focalVertical} ${horizLabel} focal framing (${fx}%, ${fy}%)`;
+    if (subjectPlacements.length > 0) {
+      const targetPlacement = (focusTarget ? subjectPlacements.find(p => matchesCharacterToken(p.subject, focusTarget)) : undefined) ?? subjectPlacements[0]!;
+      targetPlacement.horizontal = focalHorizontal;
+    } else if (focusTarget) {
+      subjectPlacements.push({
+        subject: focusTarget,
+        horizontal: focalHorizontal,
+        depth: 'foreground',
+        scale: shotSize === 'close-up' || shotSize === 'extreme-close-up' ? 'dominant' : 'large'
+      });
+    }
+    if (!stagingNote) {
+      stagingNote = `Place primary focal subject in the ${focalVertical} ${horizLabel} of the frame (focal reticle ${fx}%, ${fy}%).`;
+    }
+  }
+
   // Dialogue Safe Area Policy
   let safeArea: ShotSafeArea | undefined;
   if (manualOverrides.safeArea !== undefined) {
@@ -503,6 +554,17 @@ export function resolveShotSpec(input: ShotDirectorInput): ImageShotSpec {
     }
   }
 
+  const effectiveCrop = manualOverrides.crop ?? focalCropHint;
+  const hasManualFraming = Boolean(
+    manualOverrides.shotSize ||
+    manualOverrides.angle ||
+    manualOverrides.lens ||
+    manualOverrides.depthOfField ||
+    manualOverrides.mode ||
+    manualOverrides.focalPoint ||
+    manualOverrides.crop
+  );
+
   return ImageShotSpecSchema.parse({
     version: 1,
     intent,
@@ -523,9 +585,9 @@ export function resolveShotSpec(input: ShotDirectorInput): ImageShotSpec {
       subjectPlacements,
       ...(stagingNote ? { stagingNote } : {})
     },
-    ...(manualOverrides.crop ? { crop: manualOverrides.crop } : {}),
+    ...(effectiveCrop ? { crop: effectiveCrop } : {}),
     ...(safeArea ? { safeArea } : {}),
-    source: manualOverrides.shotSize || manualOverrides.angle ? 'manual' : cue?.shotHint ? 'planner' : 'deterministic-fallback',
+    source: hasManualFraming ? 'manual' : cue?.shotHint ? 'planner' : 'deterministic-fallback',
     revision
   });
 }

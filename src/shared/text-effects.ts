@@ -99,3 +99,35 @@ export function stripTextEffectTags(text: string): string {
   if (!text || text.indexOf("<") === -1) return text;
   return text.replace(new RegExp(TEXT_EFFECT_TAG_PATTERN.source, "gi"), "");
 }
+
+const ENTITY_MAP: Record<string, string> = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": "\"",
+  "&#39;": "'",
+  "&apos;": "'",
+  "&nbsp;": " ",
+};
+
+/**
+ * Clean display/HTML/Markdown formatting into plain speakable text for TTS.
+ * Never mutates stage display text; only applied to outbound TTS & cache keys.
+ */
+export function prepareSpeechText(text: string): string {
+  if (!text) return "";
+  let out = stripTextEffectTags(text);
+  // Drop furigana ruby annotations and replace line breaks with spaces before stripping tags.
+  out = out.replace(/<r[tp]\b[^>]*>[\s\S]*?<\/r[tp]>/gi, "");
+  out = out.replace(/<br\s*\/?>/gi, " ");
+  out = out.replace(/<[^>]+>/g, "");
+  out = out.replace(/&(amp|lt|gt|quot|#39|apos|nbsp);/gi, (m) => ENTITY_MAP[m.toLowerCase()] ?? m);
+  // Strip Markdown formatting delimiters cleanly without touching stage text.
+  out = out.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+  out = out.replace(/^\s{0,3}#{1,6}\s+/gm, "");
+  out = out.replace(/^\s*>\s*/gm, "");
+  out = out.replace(/\*\*/g, "").replace(/__/g, "").replace(/~~/g, "").replace(/`/g, "");
+  out = out.replace(/\*/g, "");
+  out = out.replace(/(^|[^\w])_([^_\n]+)_([^\w]|$)/g, "$1$2$3");
+  return out.replace(/[ \t\r\n]+/g, " ").trim();
+}

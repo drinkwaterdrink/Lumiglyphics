@@ -86,4 +86,26 @@ describe('F13 library change detection',()=>{
    expect(loadMore.hidden).toBe(true);
   }finally{restore();}
  });
+
+ test('renders dynamic character and template filter chips and applies templateQuery on click',()=>{
+  const restore=installFakeDocument();
+  try{
+   const requests:Array<any>=[];
+   const library=new ImageLibrary(document.createElement('div'),(req)=>requests.push(req),()=>{});
+   library.setContext(turn({messageId:'m3',sourceFingerprint:'fingerprint-1'}),0);
+   library.open('images');
+   const key={chatId:'chat-1',assistantMessageId:'m3',swipeId:0,sourceFingerprint:'fingerprint-1',revision:1};
+   library.receive('chat-1',requests[0]!.requestId,{
+    entries:[{key,jobId:'j1',createdAt:'2026-10-13T12:00:00.000Z',messageNumber:3,paragraphIndex:0,role:'portrait',versionLabel:'current',available:true,imageId:'img1',thumbnailUrl:'/api/v1/images/img1',imageUrl:'/api/v1/images/img1',excerpt:'Kitchen talk',characters:['Laura'],template:'Warm Portrait'}],
+    replies:[{key,messageNumber:3,versionLabel:'current',speaker:'Laura',paragraphs:[{index:0,speaker:'Laura',text:'Hi'}],truncated:false}],
+    nextCursor:null,notice:'',
+   });
+   const shadow=(library as any).root as ShadowRoot;
+   const lauraChip=shadow.querySelector('[data-history-chip="Laura"]') as HTMLButtonElement;
+   expect(lauraChip).not.toBeNull();
+   lauraChip.click();
+   expect(requests).toHaveLength(2);
+   expect(requests[1]!.templateQuery).toBe('Laura');
+  }finally{restore();}
+ });
 });
