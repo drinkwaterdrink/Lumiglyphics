@@ -230,3 +230,14 @@ test("story classes and font attributes cannot select fetching rules or custom f
   assert.equal(formatDialogueText('<font face="monospace" color="urlx" size="900">x</font>'), '<font face="monospace">x</font>');
   assert.equal(formatDialogueText('(Motti)The stocky recruit swallows. "Yessir."<sage:whisper>"Yessir."</sage>'), '(Motti)The stocky recruit swallows. <span data-vn-text-fx="whisper">"Yessir."</span>');
 });
+
+test("normalizes Braille blanks, wide Unicode spaces, and double horizontal spaces without breaking image marker stripping", () => {
+  assert.equal(
+    formatDialogueText("The\u2800shout\u2800hits\u2003you\u00A0\u00A0before  you   clear the threshold."),
+    "The shout hits you before you clear the threshold.",
+  );
+  assert.equal(
+    formatDialogueText("\u2801\u2803 preserved braille\u2800pattern"),
+    "\u2801\u2803 preserved braille\u2800pattern",
+  );
+});

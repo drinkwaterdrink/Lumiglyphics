@@ -606,25 +606,29 @@ section[data-reference-observations] h3 {
 [data-vn-root][data-vn-typography="retro"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="retro"] [data-vn-backlog-text] {
   font-family: "Courier New", "JetBrains Mono", Consolas, ui-monospace, monospace !important;
-  letter-spacing: 0.03em !important;
+  letter-spacing: 0.015em !important;
+  word-spacing: normal !important;
   line-height: 1.45 !important;
 }
 [data-vn-root][data-vn-typography="accessible"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="accessible"] [data-vn-backlog-text] {
   font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif !important;
-  letter-spacing: 0.04em !important;
+  letter-spacing: 0.02em !important;
+  word-spacing: normal !important;
   line-height: 1.56 !important;
 }
 [data-vn-root][data-vn-typography="cinematic"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="cinematic"] [data-vn-backlog-text] {
   font-family: "Cinzel", "Baskerville", "Palatino Linotype", "Palatino", serif !important;
-  letter-spacing: 0.02em !important;
+  letter-spacing: 0.01em !important;
+  word-spacing: normal !important;
   line-height: 1.48 !important;
 }
 [data-vn-root][data-vn-typography="terminal"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="terminal"] [data-vn-backlog-text] {
   font-family: "Share Tech Mono", "Fira Code", "Source Code Pro", Consolas, monospace !important;
-  letter-spacing: 0.04em !important;
+  letter-spacing: 0.015em !important;
+  word-spacing: normal !important;
   line-height: 1.45 !important;
 }
 [data-vn-root][data-vn-typography="manga"] [data-vn-dialogue-text],

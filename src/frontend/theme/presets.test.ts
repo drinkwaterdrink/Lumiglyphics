@@ -339,4 +339,10 @@ describe("cross-menu theme cohesion and text viewer styles", () => {
     expect(DOCKED_DOSSIER_CSS).toContain(".dossier-topbar-header");
     expect(DOCKED_DOSSIER_CSS).toContain("var(--vn-shell-accent-contrast");
   });
+
+  test("Aperture reader dialogue keeps word-spacing normal and hides empty [data-vn-speaker][hidden] pill", () => {
+    const { APERTURE_CSS_LENS_FOLIO } = require("./aperture/lens-folio.js");
+    expect(APERTURE_CSS_LENS_FOLIO).toContain("word-spacing: normal");
+    expect(APERTURE_CSS_LENS_FOLIO).toContain(".caption-head [data-vn-speaker][hidden]");
+  });
 });

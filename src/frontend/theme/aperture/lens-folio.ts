@@ -427,6 +427,10 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   user-select: text !important;
   font-size: var(--reader-font, 15px) !important;
   line-height: 1.42;
+  letter-spacing: 0;
+  word-spacing: normal;
+  font-kerning: normal;
+  text-align: left;
   margin: 0 !important;
 }
 
@@ -954,6 +958,16 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   border-radius: var(--vn-scrubber-radius, 999px) !important;
   background: color-mix(in srgb, var(--aperture-accent, #dcebad) 12%, transparent) !important;
   border: 1px solid color-mix(in srgb, var(--aperture-accent, #dcebad) 26%, transparent) !important;
+}
+
+[data-vn-root] [data-vn-dialogue] [data-vn-speaker][hidden],
+[data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-speaker][hidden],
+[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-speaker][hidden],
+[data-vn-dialogue] [data-vn-speaker][hidden],
+.caption-head [data-vn-speaker][hidden],
+.caption-head .caption-split[hidden],
+[data-vn-speaker][hidden] {
+  display: none !important;
 }
 
 /* Compact sleek header action icons with generous invisible 44px touch reach */

@@ -613,7 +613,10 @@ button[data-vn-badge]:active {
   color: var(--vn-text);
   font-size: calc(var(--vn-dialogue-font-size) * var(--vn-text-scale, 1));
   line-height: 1.44;
-  letter-spacing: 0.005em;
+  letter-spacing: 0;
+  word-spacing: normal;
+  font-kerning: normal;
+  text-align: left;
   text-wrap: pretty;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85), 0 2px 8px rgba(0, 0, 0, 0.6);
   white-space: pre-wrap;

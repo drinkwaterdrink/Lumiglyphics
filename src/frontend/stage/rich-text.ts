@@ -363,7 +363,10 @@ function applyDialogueQuotes(text: string, hasSpeaker: boolean): string {
 /** Prepare the exact pre-regex source; asynchronous workers and legacy formatting share the same ordering. */
 export function prepareDialogueSource(rawText:string,stripUnknownTags=false):string{
   // 1. Strip inline card images / asset markers
-  let text = rawText
+  let normalized = rawText;
+  if (!/[\u2801-\u28FF]/.test(normalized)) normalized = normalized.replace(/\u2800/g, " ");
+  normalized = normalized.replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, " ").replace(/([^\n]) {2,}/g, "$1 ");
+  let text = normalized
     .replace(/`[^`]+`|<([a-zA-Z][a-zA-Z0-9_-]*):([a-zA-Z][a-zA-Z0-9_-]*)\s*>([\s\S]*?)<\/\s*\1(?::\2)?\s*>/gi, (m, sp: string | undefined, eff: string | undefined, inner: string | undefined, offset: number, src: string) => {
       if (!sp || !eff || inner === undefined) return m;
       const id = eff.toLowerCase();

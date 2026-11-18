@@ -24047,7 +24047,11 @@ function applyDialogueQuotes(text, hasSpeaker) {
   return `"${trimmed}"`;
 }
 function prepareDialogueSource(rawText, stripUnknownTags = false) {
-  let text = rawText.replace(/`[^`]+`|<([a-zA-Z][a-zA-Z0-9_-]*):([a-zA-Z][a-zA-Z0-9_-]*)\s*>([\s\S]*?)<\/\s*\1(?::\2)?\s*>/gi, (m, sp, eff, inner, offset, src) => {
+  let normalized = rawText;
+  if (!/[\u2801-\u28FF]/.test(normalized))
+    normalized = normalized.replace(/\u2800/g, " ");
+  normalized = normalized.replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, " ").replace(/([^\n]) {2,}/g, "$1 ");
+  let text = normalized.replace(/`[^`]+`|<([a-zA-Z][a-zA-Z0-9_-]*):([a-zA-Z][a-zA-Z0-9_-]*)\s*>([\s\S]*?)<\/\s*\1(?::\2)?\s*>/gi, (m, sp, eff, inner, offset, src) => {
     if (!sp || !eff || inner === undefined)
       return m;
     const id6 = eff.toLowerCase();
@@ -25059,6 +25063,9 @@ aside[data-vn-workspace] {
   font-size: var(--reader-font, 15px) !important;
   line-height: 1.42;
   letter-spacing: 0;
+  word-spacing: normal;
+  font-kerning: normal;
+  text-align: left;
   user-select: text !important;
   overflow-wrap: break-word !important;
 }
@@ -25945,6 +25952,10 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   user-select: text !important;
   font-size: var(--reader-font, 15px) !important;
   line-height: 1.42;
+  letter-spacing: 0;
+  word-spacing: normal;
+  font-kerning: normal;
+  text-align: left;
   margin: 0 !important;
 }
 
@@ -26472,6 +26483,16 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   border-radius: var(--vn-scrubber-radius, 999px) !important;
   background: color-mix(in srgb, var(--aperture-accent, #dcebad) 12%, transparent) !important;
   border: 1px solid color-mix(in srgb, var(--aperture-accent, #dcebad) 26%, transparent) !important;
+}
+
+[data-vn-root] [data-vn-dialogue] [data-vn-speaker][hidden],
+[data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-speaker][hidden],
+[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-speaker][hidden],
+[data-vn-dialogue] [data-vn-speaker][hidden],
+.caption-head [data-vn-speaker][hidden],
+.caption-head .caption-split[hidden],
+[data-vn-speaker][hidden] {
+  display: none !important;
 }
 
 /* Compact sleek header action icons with generous invisible 44px touch reach */
@@ -27586,25 +27607,29 @@ section[data-reference-observations] h3 {
 [data-vn-root][data-vn-typography="retro"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="retro"] [data-vn-backlog-text] {
   font-family: "Courier New", "JetBrains Mono", Consolas, ui-monospace, monospace !important;
-  letter-spacing: 0.03em !important;
+  letter-spacing: 0.015em !important;
+  word-spacing: normal !important;
   line-height: 1.45 !important;
 }
 [data-vn-root][data-vn-typography="accessible"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="accessible"] [data-vn-backlog-text] {
   font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif !important;
-  letter-spacing: 0.04em !important;
+  letter-spacing: 0.02em !important;
+  word-spacing: normal !important;
   line-height: 1.56 !important;
 }
 [data-vn-root][data-vn-typography="cinematic"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="cinematic"] [data-vn-backlog-text] {
   font-family: "Cinzel", "Baskerville", "Palatino Linotype", "Palatino", serif !important;
-  letter-spacing: 0.02em !important;
+  letter-spacing: 0.01em !important;
+  word-spacing: normal !important;
   line-height: 1.48 !important;
 }
 [data-vn-root][data-vn-typography="terminal"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="terminal"] [data-vn-backlog-text] {
   font-family: "Share Tech Mono", "Fira Code", "Source Code Pro", Consolas, monospace !important;
-  letter-spacing: 0.04em !important;
+  letter-spacing: 0.015em !important;
+  word-spacing: normal !important;
   line-height: 1.45 !important;
 }
 [data-vn-root][data-vn-typography="manga"] [data-vn-dialogue-text],
@@ -38752,7 +38777,10 @@ button[data-vn-badge]:active {
   color: var(--vn-text);
   font-size: calc(var(--vn-dialogue-font-size) * var(--vn-text-scale, 1));
   line-height: 1.44;
-  letter-spacing: 0.005em;
+  letter-spacing: 0;
+  word-spacing: normal;
+  font-kerning: normal;
+  text-align: left;
   text-wrap: pretty;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85), 0 2px 8px rgba(0, 0, 0, 0.6);
   white-space: pre-wrap;
@@ -54233,7 +54261,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.164";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.165";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;

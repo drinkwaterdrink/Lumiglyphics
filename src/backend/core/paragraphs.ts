@@ -569,6 +569,7 @@ function cleanNarrativeBlock(block: string, smartProseFilter = true): string {
       }
       return true;
     })
+    .map((line) => line.replace(/ {2,}/g, " "))
     .join("\n")
     .trim();
 }
@@ -854,6 +855,7 @@ function findBalancedXmlTagRanges(
 export function prepareNarrative(content: string, options: PrepareNarrativeOptions = {}): PreparedNarrative {
   content = content.replace(/\r\n?/g, "\n");
   if (!/[\u2801-\u28FF]/.test(content)) content = content.replace(/\u2800/g, " ");
+  content = content.replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, " ");
   const smartProseFilter = options.smartProseFilter !== false;
   const smartDialogueExtraction = options.smartDialogueExtraction !== false;
   const smartBeatSegmentation = options.smartBeatSegmentation !== false;

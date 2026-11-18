@@ -41808,7 +41808,7 @@ function cleanNarrativeBlock(block2, smartProseFilter = true) {
         return false;
     }
     return true;
-  }).join(`
+  }).map((line2) => line2.replace(/ {2,}/g, " ")).join(`
 `).trim();
 }
 function stableChoiceId(label, index) {
@@ -42056,6 +42056,7 @@ function prepareNarrative(content, options2 = {}) {
 `);
   if (!/[\u2801-\u28FF]/.test(content))
     content = content.replace(/\u2800/g, " ");
+  content = content.replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, " ");
   const smartProseFilter = options2.smartProseFilter !== false;
   const smartDialogueExtraction = options2.smartDialogueExtraction !== false;
   const smartBeatSegmentation = options2.smartBeatSegmentation !== false;

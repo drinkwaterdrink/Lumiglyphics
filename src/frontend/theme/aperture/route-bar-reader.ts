@@ -515,6 +515,9 @@ aside[data-vn-workspace] {
   font-size: var(--reader-font, 15px) !important;
   line-height: 1.42;
   letter-spacing: 0;
+  word-spacing: normal;
+  font-kerning: normal;
+  text-align: left;
   user-select: text !important;
   overflow-wrap: break-word !important;
 }
