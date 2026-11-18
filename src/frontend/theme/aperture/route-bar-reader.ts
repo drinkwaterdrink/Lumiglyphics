@@ -513,7 +513,7 @@ aside[data-vn-workspace] {
   max-height: none;
   margin: 0;
   font-size: var(--reader-font, 15px) !important;
-  line-height: 1.55;
+  line-height: 1.42;
   letter-spacing: 0;
   user-select: text !important;
   overflow-wrap: break-word !important;

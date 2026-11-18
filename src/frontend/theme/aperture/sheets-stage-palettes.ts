@@ -546,7 +546,7 @@ section[data-reference-observations] h3 {
 
 [data-vn-backlog-text] {
   font-size: 14.5px !important;
-  line-height: 1.65 !important;
+  line-height: 1.48 !important;
   color: var(--vn-shell-text, #dbebe2) !important;
   margin: 0 !important;
 }
@@ -596,46 +596,46 @@ section[data-reference-observations] h3 {
 [data-vn-root][data-vn-typography="novelist"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="novelist"] [data-vn-backlog-text] {
   font-family: Georgia, "Times New Roman", Garamond, serif !important;
-  line-height: 1.7 !important;
+  line-height: 1.46 !important;
 }
 [data-vn-root][data-vn-typography="modern"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="modern"] [data-vn-backlog-text] {
   font-family: -apple-system, BlinkMacSystemFont, "Outfit", "Inter", "Segoe UI", Roboto, sans-serif !important;
-  line-height: 1.6 !important;
+  line-height: 1.42 !important;
 }
 [data-vn-root][data-vn-typography="retro"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="retro"] [data-vn-backlog-text] {
   font-family: "Courier New", "JetBrains Mono", Consolas, ui-monospace, monospace !important;
   letter-spacing: 0.03em !important;
-  line-height: 1.65 !important;
+  line-height: 1.45 !important;
 }
 [data-vn-root][data-vn-typography="accessible"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="accessible"] [data-vn-backlog-text] {
   font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif !important;
   letter-spacing: 0.04em !important;
-  line-height: 1.85 !important;
+  line-height: 1.56 !important;
 }
 [data-vn-root][data-vn-typography="cinematic"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="cinematic"] [data-vn-backlog-text] {
   font-family: "Cinzel", "Baskerville", "Palatino Linotype", "Palatino", serif !important;
   letter-spacing: 0.02em !important;
-  line-height: 1.75 !important;
+  line-height: 1.48 !important;
 }
 [data-vn-root][data-vn-typography="terminal"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="terminal"] [data-vn-backlog-text] {
   font-family: "Share Tech Mono", "Fira Code", "Source Code Pro", Consolas, monospace !important;
   letter-spacing: 0.04em !important;
-  line-height: 1.65 !important;
+  line-height: 1.45 !important;
 }
 [data-vn-root][data-vn-typography="manga"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="manga"] [data-vn-backlog-text] {
   font-family: "Comic Neue", "Chalkboard SE", "Chalkboard", "Comic Sans MS", -apple-system, sans-serif !important;
-  line-height: 1.6 !important;
+  line-height: 1.42 !important;
 }
 [data-vn-root][data-vn-typography="fantasy"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="fantasy"] [data-vn-backlog-text] {
   font-family: "Merriweather", "Crimson Text", "Book Antiqua", Georgia, serif !important;
-  line-height: 1.78 !important;
+  line-height: 1.48 !important;
 }
 [data-vn-root] [data-vn-dialogue-text] {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8), 0 0 1px rgba(0, 0, 0, 0.9);
@@ -935,7 +935,7 @@ ${VN_SHELL_PRESET_TOKENS_CSS}
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-dialogue-text] {
   color: #241d17 !important;
   text-shadow: none !important;
-  line-height: 1.65;
+  line-height: 1.48;
 }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-speaker] {
   color: #8a2f23 !important;
@@ -1161,7 +1161,7 @@ ${VN_SHELL_PRESET_TOKENS_CSS}
 }
 [data-vn-root][data-vn-dialogue-style="editorial-page"] [data-vn-dialogue-text] {
   font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
-  line-height: 1.66;
+  line-height: 1.48;
 }
 
 [data-vn-root][data-vn-dialogue-style="terminal-hud"] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]) {

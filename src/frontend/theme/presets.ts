@@ -165,7 +165,7 @@ const GOLDEN_HOUR_CSS = `
 [data-vn-root][data-vn-preset="golden-hour"] [data-vn-speaker]::after { color: #f8d0a9; content: "✦"; font-size: 0.66rem; }
 [data-vn-root][data-vn-preset="golden-hour"] [data-vn-speaker]::before { margin-right: 0.6rem; }
 [data-vn-root][data-vn-preset="golden-hour"] [data-vn-speaker]::after { margin-left: 0.6rem; }
-[data-vn-root][data-vn-preset="golden-hour"] [data-vn-dialogue-text] { color: #fff6e2; line-height: 1.65; text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35); }
+[data-vn-root][data-vn-preset="golden-hour"] [data-vn-dialogue-text] { color: #fff6e2; line-height: 1.45; text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35); }
 [data-vn-root][data-vn-preset="golden-hour"] [data-vn-progress] { color: rgba(255, 220, 166, 0.72); letter-spacing: 0.12em; }
 [data-vn-root][data-vn-preset="golden-hour"] [data-vn-continue] {
   right: 1.45rem;
@@ -400,7 +400,7 @@ const BOXED_CONSOLE_CSS = `
 }
 [data-vn-root][data-vn-preset="boxed-console"] [data-vn-speaker]::before { content: "> "; opacity: 0.7; }
 [data-vn-root][data-vn-preset="boxed-console"] [data-vn-speaker]::after { color: #7dffa1; content: "_"; }
-[data-vn-root][data-vn-preset="boxed-console"] [data-vn-dialogue-text] { line-height: 1.62; text-shadow: 0 0 6px rgba(125, 255, 161, 0.16); }
+[data-vn-root][data-vn-preset="boxed-console"] [data-vn-dialogue-text] { line-height: 1.45; text-shadow: 0 0 6px rgba(125, 255, 161, 0.16); }
 [data-vn-root][data-vn-preset="boxed-console"] [data-vn-progress] { padding-top: 0.5rem; border-top: 1px solid #24382c; letter-spacing: 0.14em; text-transform: uppercase; }
 [data-vn-root][data-vn-preset="boxed-console"] [data-vn-continue] {
   width: 2.8rem;
@@ -638,7 +638,7 @@ const PAPER_NOVEL_CSS = `
   box-shadow: 0 -0.2rem 0.6rem rgba(40, 26, 12, 0.2), inset 0 -2px 0 rgba(138, 47, 35, 0.85);
   backdrop-filter: none;
 }
-[data-vn-root][data-vn-preset="paper-novel"] [data-vn-dialogue-text] { color: #29221e; line-height: 1.7; letter-spacing: 0.002em; text-shadow: 0 1px rgba(255, 255, 255, 0.28); hanging-punctuation: first; }
+[data-vn-root][data-vn-preset="paper-novel"] [data-vn-dialogue-text] { color: #29221e; line-height: 1.48; letter-spacing: 0.002em; text-shadow: 0 1px rgba(255, 255, 255, 0.28); hanging-punctuation: first; }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-dialogue-footer] { justify-content: center; }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-progress] { color: #715f50; font-style: italic; letter-spacing: 0.06em; }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-reading-state] { font-style: italic; }
@@ -805,7 +805,7 @@ const PAPER_NOVEL_CSS = `
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-backlog-item] { border: 0; border-bottom: 1px solid rgba(101, 75, 43, 0.22); border-radius: 0; background: transparent; box-shadow: none; padding-left: 0.2rem; }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-backlog-item]:last-child { border-bottom-color: transparent; background: transparent; }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-backlog-speaker] { color: #8a2f23; font-variant: small-caps; text-transform: lowercase; letter-spacing: 0.1em; font-size: 0.95rem; }
-[data-vn-root][data-vn-preset="paper-novel"] [data-vn-backlog-text] { color: #29221e; line-height: 1.7; }
+[data-vn-root][data-vn-preset="paper-novel"] [data-vn-backlog-text] { color: #29221e; line-height: 1.48; }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-backlog-content]::-webkit-scrollbar-thumb { background: rgba(138, 47, 35, 0.4); }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-backlog-close] { border-radius: 2px; border-color: rgba(101, 75, 43, 0.5); background: #ebe0cb; color: #8a2f23; }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-backlog-close]:hover { border-color: #8a2f23; background: #8a2f23; color: #fbf5e8; }
@@ -899,7 +899,7 @@ const MIDNIGHT_NOIR_CSS = `
 }
 [data-vn-root][data-vn-preset="midnight-noir"] [data-vn-speaker]::before,
 [data-vn-root][data-vn-preset="midnight-noir"] [data-vn-speaker]::after { width: 0.32rem; height: 0.32rem; background: #d9a441; content: ""; transform: rotate(45deg); opacity: 0.85; }
-[data-vn-root][data-vn-preset="midnight-noir"] [data-vn-dialogue-text] { color: #f3efe5; line-height: 1.66; letter-spacing: 0.01em; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }
+[data-vn-root][data-vn-preset="midnight-noir"] [data-vn-dialogue-text] { color: #f3efe5; line-height: 1.46; letter-spacing: 0.01em; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }
 [data-vn-root][data-vn-preset="midnight-noir"] [data-vn-progress] { letter-spacing: 0.24em; text-transform: uppercase; color: rgba(217, 164, 65, 0.7); }
 [data-vn-root][data-vn-preset="midnight-noir"] [data-vn-continue] {
   width: 2.8rem;
@@ -1139,7 +1139,7 @@ const YAMAKU_CLASSIC_CSS = `
   color: #ffffff;
   font-family: "Comic Sans MS", "Segoe Print", "Trebuchet MS", cursive;
   font-weight: 600;
-  line-height: 1.55;
+  line-height: 1.45;
   letter-spacing: 0.005em;
   text-shadow: 0 1px 2px #000, 1px 0 2px #000, 0 -1px 2px #000, -1px 0 2px #000, 0 2px 3px rgba(0, 0, 0, 0.9);
 }
@@ -1354,7 +1354,7 @@ const LITERATURE_CLUB_CSS = `
   color: #ffffff;
   font-family: "Comic Sans MS", "Comfortaa", "Trebuchet MS", ui-rounded, sans-serif;
   font-weight: 700;
-  line-height: 1.55;
+  line-height: 1.45;
   text-shadow: 0 1.5px 2px rgba(97, 58, 78, 0.95), 1.5px 0 2px rgba(97, 58, 78, 0.95), 0 -1.5px 2px rgba(97, 58, 78, 0.95), -1.5px 0 2px rgba(97, 58, 78, 0.95);
 }
 [data-vn-root][data-vn-preset="literature-club"] [data-vn-controls] {

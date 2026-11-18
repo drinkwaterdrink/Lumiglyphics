@@ -426,7 +426,7 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   touch-action: pan-y !important;
   user-select: text !important;
   font-size: var(--reader-font, 15px) !important;
-  line-height: 1.55;
+  line-height: 1.42;
   margin: 0 !important;
 }
 

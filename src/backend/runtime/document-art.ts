@@ -359,7 +359,10 @@ export async function generateDocumentPropArtwork(params: {
   const { connectionId, workflowId } = splitConnectionSelection(config.imageConnectionId);
   const selected = connectionId && typeof spindle.imageGen?.getConnection === 'function'
     ? await spindle.imageGen.getConnection(connectionId, userId)
-    : undefined;
+    : typeof spindle.imageGen?.listConnections === 'function'
+      ? (await spindle.imageGen.listConnections(userId)).find((entry) => entry.is_default) ?? undefined
+      : undefined;
+  const effectiveConnectionId = connectionId || selected?.id;
   const provider = selected?.provider?.trim().toLowerCase() ?? null;
   const model = config.imageModel?.trim() || selected?.model || undefined;
 
@@ -386,31 +389,33 @@ export async function generateDocumentPropArtwork(params: {
     throw new Error('Image generation is unavailable for this connection.');
   }
 
+  const mergedBaseParams: Record<string, unknown> = {
+    ...(selected?.default_parameters ?? {}),
+    ...config.imageParameters,
+    ...(workflowId ? { workflow_id: workflowId } : {}),
+  };
+  const desiredRatio = config.imageOutputAspectRatio !== 'default'
+    ? config.imageOutputAspectRatio
+    : (provider === 'openrouter' || provider === 'nanogpt' || provider === 'novelai' ? '4:3' : 'default');
+  let shapedParams: Record<string, unknown>;
+  try {
+    shapedParams = globalOutputParameters(desiredRatio, provider, model, mergedBaseParams);
+  } catch {
+    shapedParams = mergedBaseParams;
+  }
   const rawParams = providerOutputParameters(
-    modelOutputParameters(
-      provider,
-      model,
-      globalOutputParameters(
-        config.imageOutputAspectRatio !== 'default' ? config.imageOutputAspectRatio : '4:3',
-        provider,
-        model,
-        {
-          ...(selected?.default_parameters ?? {}),
-          ...config.imageParameters,
-          ...(workflowId ? { workflow_id: workflowId } : {}),
-        },
-      ),
-    ),
+    modelOutputParameters(provider, model, shapedParams),
   );
   const safeParams = sanitizeImagePayloadParameters(rawParams, provider ?? undefined, model);
 
   const req: Parameters<SpindleAPI['imageGen']['generate']>[0] = {
     prompt: built.prompt,
     ...(built.negativePrompt && profileV2.negativePolicy !== 'positive-only' ? { negativePrompt: built.negativePrompt } : {}),
-    ...(connectionId ? { connection_id: connectionId } : {}),
+    ...(effectiveConnectionId ? { connection_id: effectiveConnectionId } : {}),
     ...(model ? { model } : {}),
     parameters: safeParams,
     owner_chat_id: chatId,
+    ...(userId ? { userId } : {}),
   };
 
   const generated = await spindle.imageGen.generate(req);

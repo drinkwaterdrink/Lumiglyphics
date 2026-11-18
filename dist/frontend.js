@@ -25057,7 +25057,7 @@ aside[data-vn-workspace] {
   max-height: none;
   margin: 0;
   font-size: var(--reader-font, 15px) !important;
-  line-height: 1.55;
+  line-height: 1.42;
   letter-spacing: 0;
   user-select: text !important;
   overflow-wrap: break-word !important;
@@ -25944,7 +25944,7 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   touch-action: pan-y !important;
   user-select: text !important;
   font-size: var(--reader-font, 15px) !important;
-  line-height: 1.55;
+  line-height: 1.42;
   margin: 0 !important;
 }
 
@@ -27526,7 +27526,7 @@ section[data-reference-observations] h3 {
 
 [data-vn-backlog-text] {
   font-size: 14.5px !important;
-  line-height: 1.65 !important;
+  line-height: 1.48 !important;
   color: var(--vn-shell-text, #dbebe2) !important;
   margin: 0 !important;
 }
@@ -27576,46 +27576,46 @@ section[data-reference-observations] h3 {
 [data-vn-root][data-vn-typography="novelist"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="novelist"] [data-vn-backlog-text] {
   font-family: Georgia, "Times New Roman", Garamond, serif !important;
-  line-height: 1.7 !important;
+  line-height: 1.46 !important;
 }
 [data-vn-root][data-vn-typography="modern"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="modern"] [data-vn-backlog-text] {
   font-family: -apple-system, BlinkMacSystemFont, "Outfit", "Inter", "Segoe UI", Roboto, sans-serif !important;
-  line-height: 1.6 !important;
+  line-height: 1.42 !important;
 }
 [data-vn-root][data-vn-typography="retro"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="retro"] [data-vn-backlog-text] {
   font-family: "Courier New", "JetBrains Mono", Consolas, ui-monospace, monospace !important;
   letter-spacing: 0.03em !important;
-  line-height: 1.65 !important;
+  line-height: 1.45 !important;
 }
 [data-vn-root][data-vn-typography="accessible"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="accessible"] [data-vn-backlog-text] {
   font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif !important;
   letter-spacing: 0.04em !important;
-  line-height: 1.85 !important;
+  line-height: 1.56 !important;
 }
 [data-vn-root][data-vn-typography="cinematic"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="cinematic"] [data-vn-backlog-text] {
   font-family: "Cinzel", "Baskerville", "Palatino Linotype", "Palatino", serif !important;
   letter-spacing: 0.02em !important;
-  line-height: 1.75 !important;
+  line-height: 1.48 !important;
 }
 [data-vn-root][data-vn-typography="terminal"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="terminal"] [data-vn-backlog-text] {
   font-family: "Share Tech Mono", "Fira Code", "Source Code Pro", Consolas, monospace !important;
   letter-spacing: 0.04em !important;
-  line-height: 1.65 !important;
+  line-height: 1.45 !important;
 }
 [data-vn-root][data-vn-typography="manga"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="manga"] [data-vn-backlog-text] {
   font-family: "Comic Neue", "Chalkboard SE", "Chalkboard", "Comic Sans MS", -apple-system, sans-serif !important;
-  line-height: 1.6 !important;
+  line-height: 1.42 !important;
 }
 [data-vn-root][data-vn-typography="fantasy"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-typography="fantasy"] [data-vn-backlog-text] {
   font-family: "Merriweather", "Crimson Text", "Book Antiqua", Georgia, serif !important;
-  line-height: 1.78 !important;
+  line-height: 1.48 !important;
 }
 [data-vn-root] [data-vn-dialogue-text] {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8), 0 0 1px rgba(0, 0, 0, 0.9);
@@ -27915,7 +27915,7 @@ ${VN_SHELL_PRESET_TOKENS_CSS}
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-dialogue-text] {
   color: #241d17 !important;
   text-shadow: none !important;
-  line-height: 1.65;
+  line-height: 1.48;
 }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-speaker] {
   color: #8a2f23 !important;
@@ -28141,7 +28141,7 @@ ${VN_SHELL_PRESET_TOKENS_CSS}
 }
 [data-vn-root][data-vn-dialogue-style="editorial-page"] [data-vn-dialogue-text] {
   font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
-  line-height: 1.66;
+  line-height: 1.48;
 }
 
 [data-vn-root][data-vn-dialogue-style="terminal-hud"] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]) {
@@ -38751,7 +38751,7 @@ button[data-vn-badge]:active {
   margin: 0;
   color: var(--vn-text);
   font-size: calc(var(--vn-dialogue-font-size) * var(--vn-text-scale, 1));
-  line-height: 1.6;
+  line-height: 1.44;
   letter-spacing: 0.005em;
   text-wrap: pretty;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85), 0 2px 8px rgba(0, 0, 0, 0.6);
@@ -41181,7 +41181,7 @@ var GOLDEN_HOUR_CSS = `
 [data-vn-root][data-vn-preset="golden-hour"] [data-vn-speaker]::after { color: #f8d0a9; content: "✦"; font-size: 0.66rem; }
 [data-vn-root][data-vn-preset="golden-hour"] [data-vn-speaker]::before { margin-right: 0.6rem; }
 [data-vn-root][data-vn-preset="golden-hour"] [data-vn-speaker]::after { margin-left: 0.6rem; }
-[data-vn-root][data-vn-preset="golden-hour"] [data-vn-dialogue-text] { color: #fff6e2; line-height: 1.65; text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35); }
+[data-vn-root][data-vn-preset="golden-hour"] [data-vn-dialogue-text] { color: #fff6e2; line-height: 1.45; text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35); }
 [data-vn-root][data-vn-preset="golden-hour"] [data-vn-progress] { color: rgba(255, 220, 166, 0.72); letter-spacing: 0.12em; }
 [data-vn-root][data-vn-preset="golden-hour"] [data-vn-continue] {
   right: 1.45rem;
@@ -41414,7 +41414,7 @@ var BOXED_CONSOLE_CSS = `
 }
 [data-vn-root][data-vn-preset="boxed-console"] [data-vn-speaker]::before { content: "> "; opacity: 0.7; }
 [data-vn-root][data-vn-preset="boxed-console"] [data-vn-speaker]::after { color: #7dffa1; content: "_"; }
-[data-vn-root][data-vn-preset="boxed-console"] [data-vn-dialogue-text] { line-height: 1.62; text-shadow: 0 0 6px rgba(125, 255, 161, 0.16); }
+[data-vn-root][data-vn-preset="boxed-console"] [data-vn-dialogue-text] { line-height: 1.45; text-shadow: 0 0 6px rgba(125, 255, 161, 0.16); }
 [data-vn-root][data-vn-preset="boxed-console"] [data-vn-progress] { padding-top: 0.5rem; border-top: 1px solid #24382c; letter-spacing: 0.14em; text-transform: uppercase; }
 [data-vn-root][data-vn-preset="boxed-console"] [data-vn-continue] {
   width: 2.8rem;
@@ -41650,7 +41650,7 @@ var PAPER_NOVEL_CSS = `
   box-shadow: 0 -0.2rem 0.6rem rgba(40, 26, 12, 0.2), inset 0 -2px 0 rgba(138, 47, 35, 0.85);
   backdrop-filter: none;
 }
-[data-vn-root][data-vn-preset="paper-novel"] [data-vn-dialogue-text] { color: #29221e; line-height: 1.7; letter-spacing: 0.002em; text-shadow: 0 1px rgba(255, 255, 255, 0.28); hanging-punctuation: first; }
+[data-vn-root][data-vn-preset="paper-novel"] [data-vn-dialogue-text] { color: #29221e; line-height: 1.48; letter-spacing: 0.002em; text-shadow: 0 1px rgba(255, 255, 255, 0.28); hanging-punctuation: first; }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-dialogue-footer] { justify-content: center; }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-progress] { color: #715f50; font-style: italic; letter-spacing: 0.06em; }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-reading-state] { font-style: italic; }
@@ -41817,7 +41817,7 @@ var PAPER_NOVEL_CSS = `
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-backlog-item] { border: 0; border-bottom: 1px solid rgba(101, 75, 43, 0.22); border-radius: 0; background: transparent; box-shadow: none; padding-left: 0.2rem; }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-backlog-item]:last-child { border-bottom-color: transparent; background: transparent; }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-backlog-speaker] { color: #8a2f23; font-variant: small-caps; text-transform: lowercase; letter-spacing: 0.1em; font-size: 0.95rem; }
-[data-vn-root][data-vn-preset="paper-novel"] [data-vn-backlog-text] { color: #29221e; line-height: 1.7; }
+[data-vn-root][data-vn-preset="paper-novel"] [data-vn-backlog-text] { color: #29221e; line-height: 1.48; }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-backlog-content]::-webkit-scrollbar-thumb { background: rgba(138, 47, 35, 0.4); }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-backlog-close] { border-radius: 2px; border-color: rgba(101, 75, 43, 0.5); background: #ebe0cb; color: #8a2f23; }
 [data-vn-root][data-vn-preset="paper-novel"] [data-vn-backlog-close]:hover { border-color: #8a2f23; background: #8a2f23; color: #fbf5e8; }
@@ -41909,7 +41909,7 @@ var MIDNIGHT_NOIR_CSS = `
 }
 [data-vn-root][data-vn-preset="midnight-noir"] [data-vn-speaker]::before,
 [data-vn-root][data-vn-preset="midnight-noir"] [data-vn-speaker]::after { width: 0.32rem; height: 0.32rem; background: #d9a441; content: ""; transform: rotate(45deg); opacity: 0.85; }
-[data-vn-root][data-vn-preset="midnight-noir"] [data-vn-dialogue-text] { color: #f3efe5; line-height: 1.66; letter-spacing: 0.01em; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }
+[data-vn-root][data-vn-preset="midnight-noir"] [data-vn-dialogue-text] { color: #f3efe5; line-height: 1.46; letter-spacing: 0.01em; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }
 [data-vn-root][data-vn-preset="midnight-noir"] [data-vn-progress] { letter-spacing: 0.24em; text-transform: uppercase; color: rgba(217, 164, 65, 0.7); }
 [data-vn-root][data-vn-preset="midnight-noir"] [data-vn-continue] {
   width: 2.8rem;
@@ -42147,7 +42147,7 @@ var YAMAKU_CLASSIC_CSS = `
   color: #ffffff;
   font-family: "Comic Sans MS", "Segoe Print", "Trebuchet MS", cursive;
   font-weight: 600;
-  line-height: 1.55;
+  line-height: 1.45;
   letter-spacing: 0.005em;
   text-shadow: 0 1px 2px #000, 1px 0 2px #000, 0 -1px 2px #000, -1px 0 2px #000, 0 2px 3px rgba(0, 0, 0, 0.9);
 }
@@ -42360,7 +42360,7 @@ var LITERATURE_CLUB_CSS = `
   color: #ffffff;
   font-family: "Comic Sans MS", "Comfortaa", "Trebuchet MS", ui-rounded, sans-serif;
   font-weight: 700;
-  line-height: 1.55;
+  line-height: 1.45;
   text-shadow: 0 1.5px 2px rgba(97, 58, 78, 0.95), 1.5px 0 2px rgba(97, 58, 78, 0.95), 0 -1.5px 2px rgba(97, 58, 78, 0.95), -1.5px 0 2px rgba(97, 58, 78, 0.95);
 }
 [data-vn-root][data-vn-preset="literature-club"] [data-vn-controls] {
@@ -54233,7 +54233,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.162";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.163";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;

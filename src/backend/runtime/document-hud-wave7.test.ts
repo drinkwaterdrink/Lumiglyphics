@@ -3,7 +3,7 @@ import { DEFAULT_CONFIG } from '../../config.js';
 import { atmosphereForPosition } from '../../shared/scene-atmosphere.js';
 import { TurnPlanSchema } from '../../shared/contracts.js';
 import { extractProseAtmosphereDelta, prepareNarrative } from '../core/paragraphs.js';
-import { buildDocumentPropPromptInput } from './document-art.js';
+import { buildDocumentPropPromptInput, generateDocumentPropArtwork } from './document-art.js';
 import { extractSimTracker } from './simtracker.js';
 
 function baseTurnPlan() {
@@ -165,5 +165,48 @@ characters: []
     expect(at2?.time).toBe('10:05 PM');
     expect(at2?.weather).toBe('Rain');
     expect(at2?.indoor).toBe(true);
+  });
+
+  test('generateDocumentPropArtwork forwards userId to operator-scoped imageGen & storage APIs', async () => {
+    const plan = baseTurnPlan();
+    let seenGenerateInput: Record<string, unknown> | undefined;
+    let seenListUserId: string | undefined;
+    let seenStorageUserId: string | undefined;
+    const mockSpindle = {
+      userStorage: {
+        getJson: async () => null,
+        setJson: async (_path: string, _val: unknown, opts?: { userId?: string }) => {
+          seenStorageUserId = opts?.userId;
+        },
+      },
+      imageGen: {
+        listConnections: async (userId?: string) => {
+          seenListUserId = userId;
+          return [{ id: 'conn-default', provider: 'openai', model: 'gpt-image-1', is_default: true }];
+        },
+        generate: async (req: Record<string, unknown>) => {
+          seenGenerateInput = req;
+          return { imageId: 'img-doc-1', imageDataUrl: 'data:image/png;base64,AA==', model: 'gpt-image-1', provider: 'openai' };
+        },
+      },
+      images: {
+        get: async () => null,
+      },
+    } as never;
+
+    const res = await generateDocumentPropArtwork({
+      spindle: mockSpindle,
+      chatId: 'chat-w7',
+      plan,
+      documentId: 'document-1',
+      throughParagraphIndex: 1,
+      userId: 'user-operator-42',
+    });
+
+    expect(res.imageId).toBe('img-doc-1');
+    expect(seenListUserId).toBe('user-operator-42');
+    expect(seenGenerateInput?.userId).toBe('user-operator-42');
+    expect(seenGenerateInput?.connection_id).toBe('conn-default');
+    expect(seenStorageUserId).toBe('user-operator-42');
   });
 });
