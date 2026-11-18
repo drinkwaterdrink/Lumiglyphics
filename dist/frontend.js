@@ -48946,7 +48946,17 @@ class TrackerMappingsPanel {
   constructor(save) {
     this.save = save;
     this.host.dataset.trackerMappings = "";
-    const fields2 = [["identity", "Appearance fields", "custom.look, features.visual"], ["attire", "Clothing fields", "custom.outfit"], ["sceneState", "Scene-state fields", "custom.position, custom.condition"], ["world", "World fields", "custom.environment"]];
+    const labels2 = {
+      identity: ["Appearance fields", "custom.look, features.visual"],
+      attire: ["Clothing fields", "custom.outfit"],
+      sceneState: ["Scene-state fields", "custom.position, custom.condition"],
+      world: ["World fields", "custom.environment"],
+      time: ["World time fields", "time, clock, current_time"],
+      date: ["World date fields", "date, day, calendar"],
+      temperature: ["Temperature fields", "temperature, temp"],
+      weather: ["Weather fields", "weather, forecast, conditions"]
+    };
+    const fields2 = TRACKER_MAPPING_FIELDS.map((key) => [key, ...labels2[key]]);
     this.host.innerHTML = "<summary>Custom SimTracker fields</summary><small>Standard tracker fields work automatically. Add up to six dotted paths per row, separated by commas. Character paths start inside a character entry (including its stats); world paths start inside worldData. Only plain values are read.</small>" + fields2.map(([key, label, hint]) => `<label>${label}<input type="text" data-mapping="${key}" placeholder="${hint}" maxlength="780" autocomplete="off" spellcheck="false"></label>`).join("") + '<small>Appearance and scene-state values supplement standard fields. Mapped clothing takes priority when found; otherwise standard clothing is used. Choose visible fields only; values may be included in future image planning. Existing prepared prompts stay unchanged.</small><div><button type="button" data-save-mappings>Save mappings</button><button type="button" data-reset-mappings>Use standard fields</button></div><p data-mapping-status role="status"></p>';
     this.host.addEventListener("input", (e) => {
       e.stopPropagation();
@@ -48955,7 +48965,7 @@ class TrackerMappingsPanel {
     });
     this.host.addEventListener("change", (e) => e.stopPropagation());
     this.host.querySelector("[data-save-mappings]").onclick = () => {
-      const candidate = Object.fromEntries(TRACKER_MAPPING_FIELDS.map((field) => [field, this.input(field).value.split(/[,\n]/).map((p) => p.trim()).filter(Boolean)]));
+      const candidate = Object.fromEntries(TRACKER_MAPPING_FIELDS.map((field) => [field, (this.input(field)?.value ?? "").split(/[,\n]/).map((p) => p.trim()).filter(Boolean)]));
       const result = TrackerMappingsSchema.safeParse(candidate);
       if (!result.success) {
         this.status("Use up to six dotted field paths per row. Expressions, brackets and reserved properties are not supported.");
@@ -48983,8 +48993,11 @@ class TrackerMappingsPanel {
     this.host.querySelector("[data-mapping-status]").textContent = value;
   }
   render() {
-    for (const field of TRACKER_MAPPING_FIELDS)
-      this.input(field).value = this.config[field].join(", ");
+    for (const field of TRACKER_MAPPING_FIELDS) {
+      const el = this.input(field);
+      if (el)
+        el.value = (this.config[field] ?? []).join(", ");
+    }
   }
   setConfig(value) {
     this.config = normalizeTrackerMappings(value);
@@ -54220,7 +54233,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.160";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.161";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;

@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { createDocumentReader } from './document-reader.js';
+import { TrackerMappingsPanel } from '../settings/tracker-mappings.js';
+import { TRACKER_MAPPING_FIELDS, normalizeTrackerMappings } from '../../shared/tracker-mappings.js';
 import { installFakeDocument } from './stage-test-dom.js';
 import { renderWorldAtmosphereStrip, selectWeatherGlyph } from './world-strip.js';
 
@@ -68,5 +70,15 @@ describe('Wave 7 Council A, B & C: Document Reader & World Clock Strip', () => {
     genBtn?.click();
     expect(generated).toBe(true);
     expect(panel.querySelector('[data-document-empty-text]')?.textContent).toContain('No verbatim text transcribed yet');
+  });
+
+  test('TrackerMappingsPanel renders every field in TRACKER_MAPPING_FIELDS without throwing at startup', () => {
+    const panel = new TrackerMappingsPanel(() => {});
+    for (const field of TRACKER_MAPPING_FIELDS) {
+      expect(panel.host.querySelector(`[data-mapping="${field}"]`)).not.toBeNull();
+    }
+    panel.setConfig(normalizeTrackerMappings({ time: ['worldData.time'], weather: ['weather'] }));
+    expect((panel.host.querySelector(`[data-mapping="time"]`) as HTMLInputElement).value).toBe('worldData.time');
+    panel.destroy();
   });
 });
