@@ -41406,6 +41406,8 @@ function cleanAttributeOrText(val) {
   return cleaned.length > 0 ? cleaned.slice(0, 160) : undefined;
 }
 function extractDetectedSceneMetadata(content) {
+  if (!/[\u2801-\u28FF]/.test(content))
+    content = content.replace(/\u2800/g, " ");
   let location;
   let title;
   let timeOfDay;
@@ -41523,6 +41525,66 @@ function extractDetectedSceneMetadata(content) {
       if (cleanLoc && cleanLoc.length > 2 && cleanLoc.length < 80) {
         location = cleanAttributeOrText(cleanLoc);
       }
+    }
+  }
+  for (const match of content.matchAll(/\[([^\]\n]*\|[^\]\n]*)\]/g)) {
+    const segments = match[1].split("|").map((s) => s.trim()).filter(Boolean);
+    if (segments.length < 2)
+      continue;
+    for (const seg of segments) {
+      const hasClockEmoji = /^[\uD83D\uDD70\uD83D\uDD52\u23F0\uD83D\uDD50-\uD83D\uDD67]/u.test(seg);
+      const hasCalEmoji = /^[\uD83D\uDDD3\uD83D\uDCC5\uD83D\uDCC6]/u.test(seg);
+      const hasPinEmoji = /^[\uD83D\uDCCD\uD83E\uDDED]/u.test(seg);
+      const hasWeatherEmoji = /^[\uD83C\uDF27\u26C8\uD83C\uDF24\u2600\u2601\u2744\uD83C\uDF2B\uD83C\uDF28\uD83D\uDCA8]/u.test(seg);
+      const val = seg.replace(/^(?:\uD83D\uDD70\uFE0F?|\uD83D\uDD52|\u23F0|\uD83D\uDDD3\uFE0F?|\uD83D\uDCC5|\uD83D\uDCC6|\uD83D\uDCCD|\uD83E\uDDED|\uD83C\uDF27\uFE0F?|\u26C8\uFE0F?|\uD83C\uDF24\uFE0F?|\u2600\uFE0F?|\u2601\uFE0F?|\u2744\uFE0F?|\uD83C\uDF2B\uFE0F?|\uD83C\uDF28\uFE0F?|\uD83D\uDCA8)\s*/u, "").trim();
+      if (!val)
+        continue;
+      if (hasClockEmoji || !time3 && CLOCK_VAL_RE.test(val) && val.length <= 24) {
+        const cMatch = val.match(CLOCK_VAL_RE);
+        if (cMatch && !time3)
+          time3 = cMatch[0];
+        if (!timeOfDay)
+          timeOfDay = cleanAttributeOrText(val);
+      } else if (hasCalEmoji && !date5) {
+        date5 = cleanAttributeOrText(val);
+      } else if (hasPinEmoji && !location) {
+        location = cleanAttributeOrText(val);
+      } else if (hasWeatherEmoji || /[-+]?\d+(?:\.\d+)?\s*\u00B0\s*[CF]\b/i.test(val)) {
+        const tMatch = val.match(/([-+]?\d+(?:\.\d+)?\s*\u00B0\s*[CF])\b/i);
+        if (tMatch && !temperature)
+          temperature = tMatch[1].replace(/\s+/g, "");
+        const wClean = val.replace(/,?\s*[-+]?\d+(?:\.\d+)?\s*\u00B0\s*[CF]\b/gi, "").replace(/[,\s]+$/, "").trim();
+        if (wClean && !weather)
+          weather = cleanAttributeOrText(wClean);
+      }
+    }
+  }
+  const worldStateMatch = content.match(/<state:world\b[^>]*>([\s\S]*?)<\/state:world\s*>/i);
+  if (worldStateMatch?.[1]) {
+    const ws = worldStateMatch[1];
+    const pickTag = (tagName) => ws.match(new RegExp(`<${tagName}\\b[^>]*>([^<]+)<\\/${tagName}>`, "i"))?.[1]?.trim();
+    const wsLoc = pickTag("loc");
+    const wsTime = pickTag("time");
+    const wsDate = pickTag("date");
+    const wsWeather = pickTag("weather");
+    if (wsLoc && !location)
+      location = cleanAttributeOrText(wsLoc);
+    if (wsTime && !time3) {
+      const cMatch = wsTime.match(CLOCK_VAL_RE);
+      if (cMatch)
+        time3 = cMatch[0];
+      if (!timeOfDay)
+        timeOfDay = cleanAttributeOrText(wsTime);
+    }
+    if (wsDate && !date5)
+      date5 = cleanAttributeOrText(wsDate);
+    if (wsWeather) {
+      const tMatch = wsWeather.match(/([-+]?\d+(?:\.\d+)?\s*\u00B0\s*[CF])\b/i);
+      if (tMatch && !temperature)
+        temperature = tMatch[1].replace(/\s+/g, "");
+      const wClean = wsWeather.replace(/,?\s*[-+]?\d+(?:\.\d+)?\s*\u00B0\s*[CF]\b/gi, "").replace(/[,\s]+$/, "").trim();
+      if (wClean && !weather)
+        weather = cleanAttributeOrText(wClean);
     }
   }
   if (!location && !title && !timeOfDay && !time3 && !date5 && !temperature && !season && !atmosphere && !lighting && !weather)
@@ -41734,11 +41796,15 @@ function cleanNarrativeBlock(block2, smartProseFilter = true) {
         return false;
       if (/^\[(?:Affinity|Stats?|Status|Inventory|Roll|Dice|Check|Turn|Take|Dynamic|Clock|Track|HP|MP|EXP|Level)\b[^\]]*\]$/i.test(trimmed))
         return false;
+      if (/^\[(?:[^\]\n]*\|){2,}[^\]\n]*\]$/.test(trimmed))
+        return false;
+      if (/^\[[\s\uFE0F]*(?:\uD83D\uDD70|\uD83D\uDD52|\u23F0|\uD83D\uDDD3|\uD83D\uDCC5|\uD83D\uDCC6|\uD83D\uDCCD|\uD83C\uDF27|\u26C8|\uD83C\uDF24|\u2600|\u2601|\u2744|\uD83C\uDF2B|\uD83C\uDF28)/u.test(trimmed))
+        return false;
       if (/^\[[^\]]+:\s*[^\]]+\]$/.test(trimmed))
         return false;
       if (/^<\/?(?:details|summary|div|span|p|section|header|footer|aside)\b[^>]*>$/i.test(trimmed))
         return false;
-      if (/^<\/?(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|hud|matrix|protocol|state|quest|log|chapter)\b[^>]*>$/i.test(trimmed))
+      if (/^<\/?(?:(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|hud|matrix|protocol|state|quest|log|chapter)|internal[-_]?states?|state:[a-zA-Z0-9_-]+)\b[^>]*>$/i.test(trimmed))
         return false;
     }
     return true;
@@ -41759,7 +41825,7 @@ function isStructuredLine(line2) {
 }
 function isStructuredSidecarBody(body2) {
   const lines = body2.split(`
-`).map((line2) => line2.trim()).filter((line2) => line2 && !/^<\/?[A-Za-z][\w-]*(?:\s[^<>]*)?\/?>$/.test(line2));
+`).map((line2) => line2.trim()).filter((line2) => line2 && !/^<\/?[A-Za-z][\w:-]*(?:\s[^<>]*)?\/?>$/.test(line2));
   if (lines.length < 2)
     return false;
   const structured = lines.filter(isStructuredLine).length;
@@ -41767,7 +41833,7 @@ function isStructuredSidecarBody(body2) {
 }
 function findStructuredSidecarRanges(content) {
   const ranges = [];
-  for (const match of content.matchAll(/<([A-Za-z][\w-]*)(\s[^<>]*)?>([\s\S]*?)<\/\1\s*>/g)) {
+  for (const match of content.matchAll(/<([A-Za-z][\w:-]*)(\s[^<>]*)?>([\s\S]*?)<\/\1\s*>/g)) {
     const name = match[1].toLowerCase();
     if (SIDECAR_EXEMPT_TAGS.has(name) || BUILTIN_HEURISTIC_TAGS.includes(name))
       continue;
@@ -41779,7 +41845,7 @@ function findStructuredSidecarRanges(content) {
   for (const line2 of content.split(`
 `)) {
     const match = TAG_ONLY_LINE.exec(line2);
-    const tag = /^\s*<\/?([A-Za-z][\w-]*)/.exec(line2)?.[1]?.toLowerCase();
+    const tag = /^\s*<\/?([A-Za-z][\w:-]*)/.exec(line2)?.[1]?.toLowerCase();
     if (match && tag && !SIDECAR_EXEMPT_TAGS.has(tag) && tag !== "choice" && tag !== "img") {
       ranges.push({ start: offset, end: offset + line2.length });
     }
@@ -41988,6 +42054,8 @@ function findBalancedXmlTagRanges(content, tagNamePatternSource, options2 = {}) 
 function prepareNarrative(content, options2 = {}) {
   content = content.replace(/\r\n?/g, `
 `);
+  if (!/[\u2801-\u28FF]/.test(content))
+    content = content.replace(/\u2800/g, " ");
   const smartProseFilter = options2.smartProseFilter !== false;
   const smartDialogueExtraction = options2.smartDialogueExtraction !== false;
   const smartBeatSegmentation = options2.smartBeatSegmentation !== false;
@@ -42036,6 +42104,9 @@ ${cleanBody}
   const spans = extractPanelSpans(content);
   const hidden = [];
   if (smartProseFilter) {
+    for (const match of content.matchAll(/(?:<!--\s*GFX[-_\s]*START\s*-->|\[GFX[-_\s]*START\]|<GFX[-_\s]*START\b[^>]*>)[\s\S]*?(?:<!--\s*GFX[-_\s]*END\s*-->|\[GFX[-_\s]*END\]|<\/GFX[-_\s]*START>|<\/GFX[-_\s]*END>|$)/gi)) {
+      hidden.push({ start: match.index, end: match.index + match[0].length });
+    }
     for (const match of content.matchAll(/<!--[\s\S]*?-->/g)) {
       hidden.push({ start: match.index, end: match.index + match[0].length });
     }
@@ -42175,7 +42246,7 @@ ${cleanBody}
     ...detectedSpeakers.length > 0 ? { detectedSpeakers } : {}
   };
 }
-var BUILTIN_HEURISTIC_TAGS, INLINE_IMG_REGEX, PROSE_FORMATTING_TAGS, SIDECAR_EXEMPT_TAGS, STRUCTURED_LINE_PATTERNS, TAG_ONLY_LINE, BEAT_MAX_CHARS = 220, BEAT_TRIGGER_CHARS = 240, ABBREVIATION_RE, ATTRIBUTION_START_RE, DYNAMIC_METADATA_TAG_SOURCE = "(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|metadata|params|memory|context|audit|matrix|protocol|analysis|scratchpad|hud|state|system|ooc|notes|log|reflection|reasoning|pre_response|inner_monologue|true_thoughts?|true-thoughts?|world_info|quest|chapter)";
+var BUILTIN_HEURISTIC_TAGS, INLINE_IMG_REGEX, PROSE_FORMATTING_TAGS, SIDECAR_EXEMPT_TAGS, STRUCTURED_LINE_PATTERNS, TAG_ONLY_LINE, BEAT_MAX_CHARS = 220, BEAT_TRIGGER_CHARS = 240, ABBREVIATION_RE, ATTRIBUTION_START_RE, DYNAMIC_METADATA_TAG_SOURCE = "(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|metadata|params|memory|context|audit|matrix|protocol|analysis|scratchpad|hud|state|system|ooc|notes|log|reflection|reasoning|pre_response|inner_monologue|true_thoughts?|true-thoughts?|world_info|quest|chapter)|internal[-_]?states?|state:[a-zA-Z0-9_-]+";
 var init_paragraphs = __esm(() => {
   init_text_effects();
   init_panels();
@@ -42256,7 +42327,11 @@ var init_paragraphs = __esm(() => {
     "sim",
     "status_block",
     "status-block",
-    "hud"
+    "hud",
+    "internal_states",
+    "internal-states",
+    "internal_state",
+    "internal-state"
   ];
   INLINE_IMG_REGEX = /<p?img\s*=\s*["'\u201C\u201D][^"'\u201C\u201D]+["'\u201C\u201D]\s*\/?>|<p?img\s*=\s*[^\s"'\u201C\u201D>][^\s>]*?[\s>]|<p?img\b[^>]*?\b(?:cmd|src)\s*=\s*["'\u201C\u201D][^"'\u201C\u201D]+["'\u201C\u201D][^>]*?\/?>|<p?img\b[^>]*?\b(?:cmd|src)\s*=\s*[^\s"'\u201C\u201D>]+[^>]*?\/?>|\{\{img::[^\}]+\}\}/gi;
   PROSE_FORMATTING_TAGS = new Set(["b", "i", "em", "strong", "u", "s", "br", "small", "sub", "sup", "mark", "img", "pimg"]);
@@ -42292,7 +42367,7 @@ var init_paragraphs = __esm(() => {
     /^\s*"[^"\n]{1,60}"\s*:/,
     /^\s*[{}\[\],]+\s*$/
   ];
-  TAG_ONLY_LINE = /^\s*<\/?[A-Za-z][\w-]*(?:\s[^<>]*)?\/?>\s*$/;
+  TAG_ONLY_LINE = /^\s*<\/?[A-Za-z][\w:-]*(?:\s[^<>]*)?\/?>\s*$/;
   ABBREVIATION_RE = /\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St|Col|Lt|Gen|Sgt|Capt|Rev|vs|etc|e\.g|i\.e|p\.m|a\.m)$/i;
   ATTRIBUTION_START_RE = /^(?:he|she|they|it|we|you|i|said|asked|replied|whispered|murmured|muttered|answered|called|added|continued|noted|explained|snapped|sighed|laughed|smiled|frowned|nodded|shook)\b/i;
 });

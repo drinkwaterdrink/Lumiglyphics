@@ -105,6 +105,10 @@ export const BUILTIN_HEURISTIC_TAGS: readonly string[] = [
   "status_block",
   "status-block",
   "hud",
+  "internal_states",
+  "internal-states",
+  "internal_state",
+  "internal-state",
 ];
 
 function cleanAttributeOrText(val: string | undefined): string | undefined {
@@ -114,6 +118,7 @@ function cleanAttributeOrText(val: string | undefined): string | undefined {
 }
 
 export function extractDetectedSceneMetadata(content: string): DetectedSceneMetadata | undefined {
+  if (!/[\u2801-\u28FF]/.test(content)) content = content.replace(/\u2800/g, " ");
   let location: string | undefined;
   let title: string | undefined;
   let timeOfDay: string | undefined;
@@ -226,6 +231,58 @@ export function extractDetectedSceneMetadata(content: string): DetectedSceneMeta
       if (cleanLoc && cleanLoc.length > 2 && cleanLoc.length < 80) {
         location = cleanAttributeOrText(cleanLoc);
       }
+    }
+  }
+
+  // 5. Pipe-delimited bracket HUD headers (e.g. `[🕰️ 5:15 PM | 🗓️ Monday, Sept 18 | 📍 Lobby | 🌧️ Rain, 52°F]`)
+  for (const match of content.matchAll(/\[([^\]\n]*\|[^\]\n]*)\]/g)) {
+    const segments = match[1]!.split("|").map((s) => s.trim()).filter(Boolean);
+    if (segments.length < 2) continue;
+    for (const seg of segments) {
+      const hasClockEmoji = /^[🕰🕒⏰🕐-🕧]/u.test(seg);
+      const hasCalEmoji = /^[🗓📅📆]/u.test(seg);
+      const hasPinEmoji = /^[📍🧭]/u.test(seg);
+      const hasWeatherEmoji = /^[🌧⛈🌤☀☁❄🌫🌨💨]/u.test(seg);
+      const val = seg.replace(/^(?:🕰️?|🕒|⏰|🗓️?|📅|📆|📍|🧭|🌧️?|⛈️?|🌤️?|☀️?|☁️?|❄️?|🌫️?|🌨️?|💨)\s*/u, "").trim();
+      if (!val) continue;
+      if (hasClockEmoji || (!time && CLOCK_VAL_RE.test(val) && val.length <= 24)) {
+        const cMatch = val.match(CLOCK_VAL_RE);
+        if (cMatch && !time) time = cMatch[0];
+        if (!timeOfDay) timeOfDay = cleanAttributeOrText(val);
+      } else if (hasCalEmoji && !date) {
+        date = cleanAttributeOrText(val);
+      } else if (hasPinEmoji && !location) {
+        location = cleanAttributeOrText(val);
+      } else if (hasWeatherEmoji || /[-+]?\d+(?:\.\d+)?\s*°\s*[CF]\b/i.test(val)) {
+        const tMatch = val.match(/([-+]?\d+(?:\.\d+)?\s*°\s*[CF])\b/i);
+        if (tMatch && !temperature) temperature = tMatch[1]!.replace(/\s+/g, "");
+        const wClean = val.replace(/,?\s*[-+]?\d+(?:\.\d+)?\s*°\s*[CF]\b/gi, "").replace(/[,\s]+$/, "").trim();
+        if (wClean && !weather) weather = cleanAttributeOrText(wClean);
+      }
+    }
+  }
+
+  // 6. Fallback from XML `<state:world>` sub-tags inside GFX / state blocks
+  const worldStateMatch = content.match(/<state:world\b[^>]*>([\s\S]*?)<\/state:world\s*>/i);
+  if (worldStateMatch?.[1]) {
+    const ws = worldStateMatch[1];
+    const pickTag = (tagName: string) => ws.match(new RegExp(`<${tagName}\\b[^>]*>([^<]+)<\\/${tagName}>`, "i"))?.[1]?.trim();
+    const wsLoc = pickTag("loc");
+    const wsTime = pickTag("time");
+    const wsDate = pickTag("date");
+    const wsWeather = pickTag("weather");
+    if (wsLoc && !location) location = cleanAttributeOrText(wsLoc);
+    if (wsTime && !time) {
+      const cMatch = wsTime.match(CLOCK_VAL_RE);
+      if (cMatch) time = cMatch[0];
+      if (!timeOfDay) timeOfDay = cleanAttributeOrText(wsTime);
+    }
+    if (wsDate && !date) date = cleanAttributeOrText(wsDate);
+    if (wsWeather) {
+      const tMatch = wsWeather.match(/([-+]?\d+(?:\.\d+)?\s*°\s*[CF])\b/i);
+      if (tMatch && !temperature) temperature = tMatch[1]!.replace(/\s+/g, "");
+      const wClean = wsWeather.replace(/,?\s*[-+]?\d+(?:\.\d+)?\s*°\s*[CF]\b/gi, "").replace(/[,\s]+$/, "").trim();
+      if (wClean && !weather) weather = cleanAttributeOrText(wClean);
     }
   }
 
@@ -504,9 +561,11 @@ function cleanNarrativeBlock(block: string, smartProseFilter = true): string {
         if (/^[─—–*_=\-]{3,}$/.test(trimmed)) return false;
         if (/^(?:🎲\s*|🎯\s*)?(?:Roll|Check|Dice|Difficulty|DC|Result)\s*[:=]/i.test(trimmed)) return false;
         if (/^\[(?:Affinity|Stats?|Status|Inventory|Roll|Dice|Check|Turn|Take|Dynamic|Clock|Track|HP|MP|EXP|Level)\b[^\]]*\]$/i.test(trimmed)) return false;
+        if (/^\[(?:[^\]\n]*\|){2,}[^\]\n]*\]$/.test(trimmed)) return false;
+        if (/^\[[\s\uFE0F]*(?:🕰|🕒|⏰|🗓|📅|📆|📍|🌧|⛈|🌤|☀|☁|❄|🌫|🌨)/u.test(trimmed)) return false;
         if (/^\[[^\]]+:\s*[^\]]+\]$/.test(trimmed)) return false;
         if (/^<\/?(?:details|summary|div|span|p|section|header|footer|aside)\b[^>]*>$/i.test(trimmed)) return false;
-        if (/^<\/?(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|hud|matrix|protocol|state|quest|log|chapter)\b[^>]*>$/i.test(trimmed)) return false;
+        if (/^<\/?(?:(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|hud|matrix|protocol|state|quest|log|chapter)|internal[-_]?states?|state:[a-zA-Z0-9_-]+)\b[^>]*>$/i.test(trimmed)) return false;
       }
       return true;
     })
@@ -540,7 +599,7 @@ const STRUCTURED_LINE_PATTERNS: readonly RegExp[] = [
   /^\s*[{}\[\],]+\s*$/,                                // JSON structure
 ];
 
-const TAG_ONLY_LINE = /^\s*<\/?[A-Za-z][\w-]*(?:\s[^<>]*)?\/?>\s*$/;
+const TAG_ONLY_LINE = /^\s*<\/?[A-Za-z][\w:-]*(?:\s[^<>]*)?\/?>\s*$/;
 
 function isStructuredLine(line: string): boolean {
   return STRUCTURED_LINE_PATTERNS.some((pattern) => pattern.test(line));
@@ -550,7 +609,7 @@ function isStructuredLine(line: string): boolean {
  *  least 60% of them structured. Lines that are only tags are ignored, so a
  *  sidecar that nests other tags is judged on its content. */
 export function isStructuredSidecarBody(body: string): boolean {
-  const lines = body.split("\n").map((line) => line.trim()).filter((line) => line && !/^<\/?[A-Za-z][\w-]*(?:\s[^<>]*)?\/?>$/.test(line));
+  const lines = body.split("\n").map((line) => line.trim()).filter((line) => line && !/^<\/?[A-Za-z][\w:-]*(?:\s[^<>]*)?\/?>$/.test(line));
   if (lines.length < 2) return false;
   const structured = lines.filter(isStructuredLine).length;
   return structured / lines.length >= 0.6;
@@ -561,7 +620,7 @@ export function isStructuredSidecarBody(body: string): boolean {
  *  in the original content. Prose wrapped in a tag is never returned. */
 export function findStructuredSidecarRanges(content: string): Array<{ start: number; end: number }> {
   const ranges: Array<{ start: number; end: number }> = [];
-  for (const match of content.matchAll(/<([A-Za-z][\w-]*)(\s[^<>]*)?>([\s\S]*?)<\/\1\s*>/g)) {
+  for (const match of content.matchAll(/<([A-Za-z][\w:-]*)(\s[^<>]*)?>([\s\S]*?)<\/\1\s*>/g)) {
     const name = match[1]!.toLowerCase();
     if (SIDECAR_EXEMPT_TAGS.has(name) || BUILTIN_HEURISTIC_TAGS.includes(name)) continue;
     if (!isStructuredSidecarBody(match[3] ?? "")) continue;
@@ -570,7 +629,7 @@ export function findStructuredSidecarRanges(content: string): Array<{ start: num
   let offset = 0;
   for (const line of content.split("\n")) {
     const match = TAG_ONLY_LINE.exec(line);
-    const tag = /^\s*<\/?([A-Za-z][\w-]*)/.exec(line)?.[1]?.toLowerCase();
+    const tag = /^\s*<\/?([A-Za-z][\w:-]*)/.exec(line)?.[1]?.toLowerCase();
     if (match && tag && !SIDECAR_EXEMPT_TAGS.has(tag) && tag !== "choice" && tag !== "img") {
       ranges.push({ start: offset, end: offset + line.length });
     }
@@ -724,7 +783,7 @@ function segmentBeatTexts(text: string): string[] {
 }
 
 const DYNAMIC_METADATA_TAG_SOURCE =
-  "(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|metadata|params|memory|context|audit|matrix|protocol|analysis|scratchpad|hud|state|system|ooc|notes|log|reflection|reasoning|pre_response|inner_monologue|true_thoughts?|true-thoughts?|world_info|quest|chapter)";
+  "(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|metadata|params|memory|context|audit|matrix|protocol|analysis|scratchpad|hud|state|system|ooc|notes|log|reflection|reasoning|pre_response|inner_monologue|true_thoughts?|true-thoughts?|world_info|quest|chapter)|internal[-_]?states?|state:[a-zA-Z0-9_-]+";
 
 type MatchedXmlTagRange = { start: number; end: number; isBoundaryClose?: boolean };
 
@@ -794,6 +853,7 @@ function findBalancedXmlTagRanges(
 
 export function prepareNarrative(content: string, options: PrepareNarrativeOptions = {}): PreparedNarrative {
   content = content.replace(/\r\n?/g, "\n");
+  if (!/[\u2801-\u28FF]/.test(content)) content = content.replace(/\u2800/g, " ");
   const smartProseFilter = options.smartProseFilter !== false;
   const smartDialogueExtraction = options.smartDialogueExtraction !== false;
   const smartBeatSegmentation = options.smartBeatSegmentation !== false;
@@ -851,6 +911,10 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
 
   // 2. Structural & pattern-based metadata masking if smartProseFilter is active
   if (smartProseFilter) {
+    // Strip trailing GFX state sections (`<!-- GFX_START --> ... <!-- GFX_END -->` or through EOF)
+    for (const match of content.matchAll(/(?:<!--\s*GFX[-_\s]*START\s*-->|\[GFX[-_\s]*START\]|<GFX[-_\s]*START\b[^>]*>)[\s\S]*?(?:<!--\s*GFX[-_\s]*END\s*-->|\[GFX[-_\s]*END\]|<\/GFX[-_\s]*START>|<\/GFX[-_\s]*END>|$)/gi)) {
+      hidden.push({ start: match.index, end: match.index + match[0].length });
+    }
     for (const match of content.matchAll(/<!--[\s\S]*?-->/g)) {
       hidden.push({ start: match.index, end: match.index + match[0].length });
     }

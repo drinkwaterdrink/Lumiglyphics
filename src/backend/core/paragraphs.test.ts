@@ -471,4 +471,47 @@ describe("narrative preparation", () => {
       "The lantern flickers at the threshold."
     ]);
   });
+
+  test("filters emoji pipe HUD header, GFX_START..GFX_END, trailing unclosed GFX_START, and <internal_states>/<state:*> blocks while extracting metadata and preserving <cornflower> speech", () => {
+    const sample = `[🕰️\u28005:15\u2800PM\u2800|\u2800🗓️\u2800Monday,\u2800September\u280018,\u28002000\u2800|\u2800📍\u2800Marten\u2800House\u2800-\u2800Fourth\u2800Floor\u2800Corridor\u2800|\u2800🌧️\u2800Cold\u2800Mountain\u2800Rain,\u280052°F\u2800]
+
+You\u2800pass\u2800through\u2800the\u2800open\u2800iron\u2800gate\u2800of\u2800Marten\u2800House.
+
+<cornflower>"Watch\u2800the\u2800third\u2800step\u2800down\u2800on\u2800the\u2800next\u2800flight,\u2800it's\u2800slick,"</cornflower>\u2800she\u2800says,\u2800shifting\u2800the\u2800heavy\u2800basket\u2800higher\u2800on\u2800her\u2800arm.
+
+You\u2800stop\u2800outside\u2800the\u2800dark\u2800wooden\u2800door\u2800marked\u280047.
+
+<!--\u2800GFX_START\u2800-->
+<internal_states>
+<state:world>
+\u2800<loc>Marten\u2800House\u2800-\u2800Fourth\u2800Floor\u2800Corridor</loc>
+\u2800<time>5:15\u2800PM</time>
+</state:world>
+<state:thoughts>
+\u2800<ent_think><name>Naomi\u2800Vance</name><tQ1>Get\u2800this\u2800laundry\u2800downstairs.</tQ1></ent_think>
+</state:thoughts>
+<state:vent>
+\u2800<vent>Okay\u2800we\u2800FINALLY\u2800have\u2800the\u2800full\u280016-section\u2800state\u2800engine\u2800wired\u2800up!</vent>
+</state:vent>
+</internal_states>
+<!--\u2800GFX_END\u2800-->`;
+
+    const res = prepareNarrative(sample);
+    expect(res.paragraphs.map((p) => p.text)).toEqual([
+      "You pass through the open iron gate of Marten House.",
+      "\"Watch the third step down on the next flight, it's slick,\" she says, shifting the heavy basket higher on her arm.",
+      "You stop outside the dark wooden door marked 47."
+    ]);
+    expect(res.detectedSceneMetadata?.time).toBe("5:15 PM");
+    expect(res.detectedSceneMetadata?.date).toBe("Monday, September 18, 2000");
+    expect(res.detectedSceneMetadata?.location).toBe("Marten House - Fourth Floor Corridor");
+    expect(res.detectedSceneMetadata?.temperature).toBe("52°F");
+    expect(res.detectedSceneMetadata?.weather).toBe("Cold Mountain Rain");
+
+    // Also strip everything after GFX_START even when GFX_END is missing (e.g. unclosed or streaming)
+    const truncatedGfx = "Story beat one.\n\n<!-- GFX_START -->\n<internal_states>\n<state:vent><vent>Leaked notes</vent></state:vent>";
+    expect(prepareNarrative(truncatedGfx).paragraphs.map((p) => p.text)).toEqual([
+      "Story beat one."
+    ]);
+  });
 });
