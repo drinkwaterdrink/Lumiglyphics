@@ -41451,9 +41451,9 @@ function extractDetectedSceneMetadata(content) {
     }
   }
   const structuredBlocks = [];
-  for (const match of content.matchAll(/<(?:[a-zA-Z0-9_-]+_)?(?:scene[-_]?header|scene[-_]?info|scene|setting|location[-_]?header|environment|atmosphere|chapter[-_]?header|chapter)\b[^>]*>([\s\S]*?)<\/(?:[a-zA-Z0-9_-]+_)?(?:scene[-_]?header|scene[-_]?info|scene|setting|location[-_]?header|environment|atmosphere|chapter[-_]?header|chapter)>/gi)) {
-    if (match[1])
-      structuredBlocks.push(match[1]);
+  for (const match of content.matchAll(/<((?:[a-zA-Z0-9_-]+_)?(?:scene[-_]?header|scene[-_]?info|scene|setting|location[-_]?header|environment|atmosphere|chapter[-_]?header|chapter))\b[^>]*>([\s\S]*?)<\/\1\s*>/gi)) {
+    if (match[2] && !/^[ \t]*<prose\b/im.test(match[2]))
+      structuredBlocks.push(match[2]);
   }
   for (const match of content.matchAll(/\[(?:Scene|Location|Setting|Environment|Atmosphere|Chapter|Time|Date|Weather|Temp(?:erature)?)\b[:\s]([^\]]+)\]/gi)) {
     if (match[1]) {
@@ -41937,6 +41937,54 @@ ${sub}`;
     beats.push(buffer);
   return beats.length > 0 ? beats : [trimmed];
 }
+function findBalancedXmlTagRanges(content, tagNamePatternSource, options2 = {}) {
+  const respectProse = options2.respectProseBoundary === true;
+  const prosePart = respectProse ? "|^[ \\t]*<(\\/?)(prose)\\b([^>]*)>" : "";
+  const tokenRegex = new RegExp(`<(\\/?)(${tagNamePatternSource})\\b([^>]*)>${prosePart}`, "gim");
+  const stacks = new Map;
+  const ranges = [];
+  for (const match of content.matchAll(tokenRegex)) {
+    const rawIndex = match.index ?? 0;
+    const end = rawIndex + match[0].length;
+    const isProse = respectProse && match[5] !== undefined;
+    const ltOffset = isProse ? match[0].indexOf("<") : 0;
+    const start = rawIndex + ltOffset;
+    const isClosing = (isProse ? match[4] : match[1]) === "/";
+    const rawTag = isProse ? match[5] : match[2];
+    const attrs = (isProse ? match[6] : match[3]) ?? "";
+    const key = rawTag.toLowerCase();
+    const selfClosing = !isClosing && /\/\s*$/.test(attrs.trimEnd());
+    if (isProse) {
+      if (!isClosing && !selfClosing) {
+        for (const openerStarts of stacks.values()) {
+          for (const openerStart of openerStarts) {
+            ranges.push({ start: openerStart, end: start, isBoundaryClose: true });
+          }
+        }
+      }
+      stacks.clear();
+      continue;
+    }
+    if (selfClosing) {
+      ranges.push({ start, end });
+      continue;
+    }
+    if (!isClosing) {
+      let list = stacks.get(key);
+      if (!list) {
+        list = [];
+        stacks.set(key, list);
+      }
+      list.push(start);
+    } else {
+      const list = stacks.get(key);
+      if (list && list.length > 0) {
+        ranges.push({ start: list.pop(), end });
+      }
+    }
+  }
+  return ranges;
+}
 function prepareNarrative(content, options2 = {}) {
   content = content.replace(/\r\n?/g, `
 `);
@@ -41974,9 +42022,15 @@ ${cleanBody}
 
 `;
     };
-    content = content.replace(/<([a-zA-Z0-9_-]+_)?(dialogue|dialog|speech|thought|think|line|say|speak|voice|quote|talk|message)\b([^>]*)>([\s\S]*?)<\/(?:[a-zA-Z0-9_-]+_)?(?:dialogue|dialog|speech|thought|think|line|say|speak|voice|quote|talk|message)>/gi, unwrapTag);
-    content = content.replace(/<([a-zA-Z0-9_-]+)\b([^>]*\b(?:speaker|character)\s*=[^>]*)>([\s\S]*?)<\/\1\s*>/gi, (_match, tagName, attrSource, body2) => {
-      return unwrapTag(_match, undefined, tagName, attrSource, body2);
+    content = content.replace(/<(([a-zA-Z0-9_-]+_)?(dialogue|dialog|speech|thought|think|line|say|speak|voice|quote|talk|message))\b([^>]*)>([\s\S]*?)<\/\1\s*>/gi, (match, _fullTag, prefix, tagKind, attrSource, body2) => {
+      if (/^[ \t]*<prose\b/im.test(body2))
+        return match;
+      return unwrapTag(match, prefix, tagKind, attrSource, body2);
+    });
+    content = content.replace(/<([a-zA-Z0-9_-]+)\b([^>]*\b(?:speaker|character)\s*=[^>]*)>([\s\S]*?)<\/\1\s*>/gi, (match, tagName, attrSource, body2) => {
+      if (/^[ \t]*<prose\b/im.test(body2))
+        return match;
+      return unwrapTag(match, undefined, tagName, attrSource, body2);
     });
   }
   const spans = extractPanelSpans(content);
@@ -41991,9 +42045,8 @@ ${cleanBody}
     for (const match of content.matchAll(/```(?:json|yaml|yml|state|meta|tracker|status)[\s\S]*?```/gi)) {
       hidden.push({ start: match.index, end: match.index + match[0].length });
     }
-    const DYNAMIC_METADATA_PATTERN = /<(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|metadata|params|memory|context|audit|matrix|protocol|analysis|scratchpad|hud|state|system|ooc|notes|log|reflection|reasoning|pre_response|inner_monologue|true_thoughts?|true-thoughts?|world_info|quest|chapter)\b[^>]*>[\s\S]*?<\/(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|metadata|params|memory|context|audit|matrix|protocol|analysis|scratchpad|hud|state|system|ooc|notes|log|reflection|reasoning|pre_response|inner_monologue|true_thoughts?|true-thoughts?|world_info|quest|chapter)\s*>/gi;
-    for (const match of content.matchAll(DYNAMIC_METADATA_PATTERN)) {
-      hidden.push({ start: match.index, end: match.index + match[0].length });
+    for (const range of findBalancedXmlTagRanges(content, DYNAMIC_METADATA_TAG_SOURCE, { respectProseBoundary: true })) {
+      hidden.push({ start: range.start, end: range.end });
     }
   }
   if (smartProseFilter) {
@@ -42009,16 +42062,28 @@ ${cleanBody}
     if (!tag)
       continue;
     const name = escapeRegExp3(tag);
-    const pattern = new RegExp(`<${name}\\b[^>]*>[\\s\\S]*?<\\/${name}\\s*>|<\\/?${name}\\b[^>]*>|\\[${name}\\b[^\\]]*\\][\\s\\S]*?\\[\\/${name}\\]|\\[\\/?${name}\\b[^\\]]*\\]`, "gi");
-    for (const match of content.matchAll(pattern)) {
-      const range = { start: match.index, end: match.index + match[0].length };
-      hidden.push(range);
+    const balancedXml = findBalancedXmlTagRanges(content, name, {
+      respectProseBoundary: tag.toLowerCase() !== "prose"
+    });
+    const tagRanges = [...balancedXml];
+    const standaloneAndBracket = new RegExp(`<\\/?${name}\\b[^>]*>|\\[${name}\\b[^\\]]*\\][\\s\\S]*?\\[\\/${name}\\]|\\[\\/?${name}\\b[^\\]]*\\]`, "gi");
+    for (const match of content.matchAll(standaloneAndBracket)) {
+      const mStart = match.index ?? 0;
+      const mEnd = mStart + match[0].length;
+      if (balancedXml.some((r) => mStart >= r.start && mEnd <= r.end))
+        continue;
+      tagRanges.push({ start: mStart, end: mEnd });
+    }
+    for (const range of tagRanges) {
+      hidden.push({ start: range.start, end: range.end });
       const nestedCards = spans.filter((span) => span.start < range.end && range.start < span.end);
       for (const card of nestedCards)
         spans.splice(spans.indexOf(card), 1);
-      if (/^(?:status|stats|inventory|hero|world_voice|tracker)$/i.test(tag) && match[0].length < MAX_PANEL_HTML / 6 && spans.length < MAX_PANELS) {
-        spans.push({ ...range, html: nestedCards.length ? nestedCards.map((card) => card.html).join(`
-`) : `<pre>${escapePanelText(match[0])}</pre>`, title: tag, followKey: `tag:${tag.toLowerCase()}` });
+      const isNestedInsideBalanced = balancedXml.some((other) => other !== range && !other.isBoundaryClose && other.start <= range.start && other.end >= range.end);
+      const rawSlice = content.slice(range.start, range.end);
+      if (!range.isBoundaryClose && !isNestedInsideBalanced && /^(?:status|stats|inventory|hero|world_voice|tracker)$/i.test(tag) && rawSlice.length < MAX_PANEL_HTML / 6 && spans.length < MAX_PANELS) {
+        spans.push({ start: range.start, end: range.end, html: nestedCards.length ? nestedCards.map((card) => card.html).join(`
+`) : `<pre>${escapePanelText(rawSlice)}</pre>`, title: tag, followKey: `tag:${tag.toLowerCase()}` });
       }
     }
   }
@@ -42110,7 +42175,7 @@ ${cleanBody}
     ...detectedSpeakers.length > 0 ? { detectedSpeakers } : {}
   };
 }
-var BUILTIN_HEURISTIC_TAGS, INLINE_IMG_REGEX, PROSE_FORMATTING_TAGS, SIDECAR_EXEMPT_TAGS, STRUCTURED_LINE_PATTERNS, TAG_ONLY_LINE, BEAT_MAX_CHARS = 220, BEAT_TRIGGER_CHARS = 240, ABBREVIATION_RE, ATTRIBUTION_START_RE;
+var BUILTIN_HEURISTIC_TAGS, INLINE_IMG_REGEX, PROSE_FORMATTING_TAGS, SIDECAR_EXEMPT_TAGS, STRUCTURED_LINE_PATTERNS, TAG_ONLY_LINE, BEAT_MAX_CHARS = 220, BEAT_TRIGGER_CHARS = 240, ABBREVIATION_RE, ATTRIBUTION_START_RE, DYNAMIC_METADATA_TAG_SOURCE = "(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|metadata|params|memory|context|audit|matrix|protocol|analysis|scratchpad|hud|state|system|ooc|notes|log|reflection|reasoning|pre_response|inner_monologue|true_thoughts?|true-thoughts?|world_info|quest|chapter)";
 var init_paragraphs = __esm(() => {
   init_text_effects();
   init_panels();

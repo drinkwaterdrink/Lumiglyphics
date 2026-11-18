@@ -24016,7 +24016,7 @@ var DANGEROUS_HTML_TAGS = new Set([
   "select"
 ]);
 function stripUnknownPresetTags(text) {
-  text = text.replace(/<(?:[a-zA-Z0-9_-]+_)?true_thoughts?\b[^>]*>[\s\S]*?<\/(?:[a-zA-Z0-9_-]+_)?true_thoughts?\s*>/gi, "");
+  text = text.replace(/<((?:[a-zA-Z0-9_-]+_)?true_thoughts?)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "");
   return text.replace(/<\/?([A-Za-z][\w-]*)(?:\s+[\w:-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))*\s*\/?>/g, (match, name) => {
     const lower = name.toLowerCase();
     if (ALLOWED_TAGS.has(lower) || isTextEffectId(lower) || lower === "img" || lower === "pimg" || DANGEROUS_HTML_TAGS.has(lower)) {
@@ -54233,7 +54233,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.161";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.162";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;

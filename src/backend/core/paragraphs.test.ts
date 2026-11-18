@@ -404,4 +404,71 @@ describe("narrative preparation", () => {
       "\"They found the key.\""
     ]);
   });
+
+  test("does not swallow opening <prose> narration up to </true_thoughts> when earlier metadata tags are mismatched or unclosed", () => {
+    const mismatchedPreProse = [
+      "<reasoning>",
+      "Plan the rainy inn arrival and avoid echoing.",
+      "</thinking>",
+      "",
+      "<prose>",
+      "You push past the wet iron gate and climb Marten House's broad stone steps.",
+      "",
+      "Iron slams three times deep inside the stone wall beside the staircase.",
+      "",
+      "<true_thoughts character=\"Orin\">Five past five and the fourth-floor boiler picks now to hammer.</true_thoughts>",
+      "",
+      "Orin sets his pen down and brushes dry grit from his sleeve. <span style=\"color:#E2C275\">\"Pfft, fourth-floor kickback again.\"</span>",
+      "</prose>"
+    ].join("\n");
+
+    const mismatchedResult = prepareNarrative(mismatchedPreProse);
+    expect(mismatchedResult.paragraphs.map((p) => p.text)).toEqual([
+      "You push past the wet iron gate and climb Marten House's broad stone steps.",
+      "Iron slams three times deep inside the stone wall beside the staircase.",
+      "Orin sets his pen down and brushes dry grit from his sleeve.",
+      "\"Pfft, fourth-floor kickback again.\""
+    ]);
+
+    const unclosedSameTag = [
+      "<true_thoughts>",
+      "Private note before prose with missing closer.",
+      "",
+      "<prose>",
+      "You push past the wet iron gate and climb Marten House's broad stone steps.",
+      "",
+      "<true_thoughts>",
+      "Second unclosed marker inside prose.",
+      "",
+      "Iron slams three times deep inside the stone wall beside the staircase.",
+      "",
+      "<true_thoughts character=\"Orin\">Five past five and the boiler hammers.</true_thoughts>",
+      "",
+      "Orin sets his pen down and brushes dry grit from his sleeve.",
+      "</prose>"
+    ].join("\n");
+
+    const unclosedResult = prepareNarrative(unclosedSameTag, { ignoredTags: ["true_thoughts"] });
+    expect(unclosedResult.paragraphs.map((p) => p.text)).toEqual([
+      "You push past the wet iron gate and climb Marten House's broad stone steps.",
+      "Second unclosed marker inside prose.",
+      "Iron slams three times deep inside the stone wall beside the staircase.",
+      "Orin sets his pen down and brushes dry grit from his sleeve."
+    ]);
+
+    const inlineMentionInClosedReasoning = [
+      "<reasoning>",
+      "Note: wrap the story inside <prose> tags cleanly.",
+      "</reasoning>",
+      "",
+      "<prose>",
+      "The lantern flickers at the threshold.",
+      "</prose>"
+    ].join("\n");
+
+    const inlineMentionResult = prepareNarrative(inlineMentionInClosedReasoning);
+    expect(inlineMentionResult.paragraphs.map((p) => p.text)).toEqual([
+      "The lantern flickers at the threshold."
+    ]);
+  });
 });
