@@ -913,6 +913,14 @@ export class VisualNovelSettingsPanel {
                 </select>
                 <small>Controls how descriptive the V2 compiler is when writing atmosphere, secondary lighting, and textures.</small>
               </label>
+              <label data-field ${find('Document closeup artwork','document flyer closeup prop image generation on click auto')}>
+                <span>Document closeup artwork</span>
+                <select name="documentImageMode">
+                  <option value="on-click">On click (Generate when opened — recommended)</option>
+                  <option value="auto">Auto (Render sensed documents in background)</option>
+                </select>
+                <small>Renders close-up macro inspection artwork for flyers, letters, notes, and maps revealed in the story.</small>
+              </label>
               <label data-check><input name="automaticImagePromptSettings" type="checkbox"><span>Automatic model settings<small>Uses model-specific wording guidance and published prompt limits. Existing size controls still apply.</small></span></label>
               <label data-check ${find("3+N spatial frustum & OTS framing", "spatial frustum layout boxes over the shoulder dorsal ots ensemble") }><input name="spatialFrustumEnabled" type="checkbox" /><span>3+N spatial frustum &amp; OTS framing<small>Bound 1–3 primary subjects in 2D layout boxes, group extras into background silhouettes, and enforce dorsal over-the-shoulder framing</small></span></label>
               <label data-check ${find("Chromatic lighting LUT & affirmative rewriter", "chromatic lighting lut color temperature affirmative anti drift negation") }><input name="chromaticLutEnabled" type="checkbox" /><span>Chromatic lighting LUT &amp; affirmative rewriter<small>Inject cinematic color-temperature tokens per atmosphere and rewrite literary negations into affirmative visual phrasing</small></span></label>
@@ -1817,6 +1825,7 @@ export class VisualNovelSettingsPanel {
       }
       case "dialogueSafeArea": return { dialogueSafeArea: target.value === "always" ? "always" : target.value === "off" ? "off" : "auto" };
       case "imagePromptDetail": return { imagePromptDetail: target.value === "compact" || target.value === "standard" || target.value === "detailed" ? target.value : "auto" };
+      case "documentImageMode": return { documentImageMode: target.value === "auto" ? "auto" : "on-click" };
       case "persistentCastArt": return {persistentCastArt:checked};
       case "persistentLocationArt": return {persistentLocationArt:checked};
       case "collectEntityReferences": return { collectEntityReferences: checked };
@@ -2347,6 +2356,7 @@ export class VisualNovelSettingsPanel {
 
   private syncFromConfig(config: VisualNovelConfig): void {
     this.control<HTMLSelectElement>("imageOutputAspectRatio").value = config.imageOutputAspectRatio;
+    this.control<HTMLSelectElement>("documentImageMode").value = config.documentImageMode === "auto" ? "auto" : "on-click";
     this.control<HTMLInputElement>("persistentCastArt").checked = config.persistentCastArt;
     this.control<HTMLInputElement>("persistentLocationArt").checked = config.persistentLocationArt;
     this.control<HTMLInputElement>("collectEntityReferences").checked = config.collectEntityReferences;

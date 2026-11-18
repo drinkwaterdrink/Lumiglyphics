@@ -248,14 +248,14 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   margin: 0 !important;
   box-sizing: border-box !important;
   top: auto !important;
-  bottom: calc(88px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
+  bottom: calc(104px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
   height: var(--caption-height, 146px);
   min-height: 48px;
-  max-height: calc(100% - 140px) !important;
-  padding: 10px 14px 10px !important;
+  max-height: calc(100% - 148px) !important;
+  padding: 8px 14px 9px !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 2px !important;
+  gap: 3px !important;
   overflow: hidden !important;
   pointer-events: auto !important;
   touch-action: pan-y !important;
@@ -268,17 +268,17 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   background: var(--aperture-dialogue-bg, var(--vn-dialogue-bg, rgba(8, 18, 15, var(--caption-opacity, 0.82))));
   -webkit-backdrop-filter: blur(var(--caption-blur, 14px));
   backdrop-filter: blur(var(--caption-blur, 14px));
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 
 /* Draggable Top Resize Grip */
 .resize-grip,
 [data-vn-sheet-handle] {
   position: absolute !important;
-  top: -14px;
+  top: -20px;
   left: 50% !important;
   transform: translateX(-50%) !important;
-  min-width: 44px;
+  min-width: 72px;
   height: 44px;
   cursor: ns-resize !important;
   display: flex !important;
@@ -290,31 +290,31 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 
 .resize-grip span {
   display: block !important;
-  width: 32px !important;
-  height: 3px !important;
+  width: 28px !important;
+  height: 2.5px !important;
   border-radius: var(--vn-scrubber-radius, 2px) !important;
-  background: color-mix(in srgb, var(--aperture-accent, #dcebad) 50%, transparent) !important;
+  background: color-mix(in srgb, var(--aperture-accent, #dcebad) 58%, transparent) !important;
 }
 
-/* Dialogue Header (Speaker, Scene, Expand, Minimize) */
+/* Dialogue Header (Speaker, Scene, Auto, Minimize) */
 .caption-head,
 [data-vn-sheet-header] {
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
-  min-height: 44px !important;
+  min-height: 26px !important;
   touch-action: none !important;
-  margin-top: 2px !important;
-  margin-bottom: 4px !important;
+  margin-top: 0 !important;
+  margin-bottom: 3px !important;
   padding-bottom: 4px !important;
-  border-bottom: 1px solid color-mix(in srgb, var(--aperture-accent, #dcebad) 20%, transparent) !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--aperture-accent, #dcebad) 16%, transparent) !important;
   flex: none !important;
 }
 
 .caption-head .speaker {
   display: flex !important;
   align-items: center !important;
-  gap: 4px !important;
+  gap: 5px !important;
 }
 
 .caption-head [data-vn-speaker] {
@@ -326,12 +326,12 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 }
 
 .caption-head .caption-split {
-  color: color-mix(in srgb, var(--aperture-accent, #dcebad) 45%, transparent) !important;
-  font-size: 10px !important;
+  color: color-mix(in srgb, var(--aperture-accent, #dcebad) 42%, transparent) !important;
+  font-size: 9px !important;
 }
 
 .caption-head [data-vn-caption-scene] {
-  font-size: 10px !important;
+  font-size: 9.5px !important;
   color: var(--aperture-muted, #9cb5a8) !important;
   letter-spacing: 0.06em !important;
 }
@@ -343,42 +343,54 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   width: auto !important;
   display: inline-flex !important;
   align-items: center !important;
-  gap: 6px !important;
+  gap: 2px !important;
   margin-left: auto !important;
+  padding: 1px 3px !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--aperture-button-bg, #0e1e18) 38%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #dcebad) 18%, transparent) !important;
 }
 
 .caption-tool,
 [data-vn-hide-text],
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-sheet-tools] button,
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-hide-text] {
-  position: static !important;
-  width: 44px !important;
-  height: 44px !important;
-  min-width: 44px !important;
-  min-height: 44px !important;
-  border-radius: min(var(--vn-shell-radius, 8px), 10px) !important;
-  border: 1px solid var(--aperture-button-border, rgba(255, 255, 255, 0.22)) !important;
-  background: color-mix(in srgb, var(--aperture-button-bg, #0e1e18) 55%, transparent) !important;
+  position: relative !important;
+  width: 28px;
+  height: 24px;
+  min-width: 28px;
+  min-height: 24px;
+  border-radius: 999px !important;
+  border: 0 !important;
+  background: transparent !important;
   color: var(--aperture-button-text, #edf3ea) !important;
+  opacity: 0.82 !important;
   display: grid !important;
   place-items: center !important;
   padding: 0 !important;
   cursor: pointer !important;
-  transition: all 0.15s ease !important;
+  transition: color 0.15s ease, background-color 0.15s ease, opacity 0.15s ease !important;
+}
+
+.caption-tool::after,
+[data-vn-hide-text]::after {
+  content: "";
+  position: absolute;
+  inset: -10px -8px;
 }
 
 .caption-tool:hover,
 [data-vn-hide-text]:hover,
 .caption-tool[data-active="true"] {
   background: color-mix(in srgb, var(--aperture-accent, #dcebad) 22%, transparent) !important;
-  border-color: var(--aperture-accent, #dcebad) !important;
   color: var(--aperture-accent, #dcebad) !important;
+  opacity: 1 !important;
 }
 
 .caption-tool svg,
 [data-vn-hide-text] svg {
-  width: 15px !important;
-  height: 15px !important;
+  width: 13.5px !important;
+  height: 13.5px !important;
 }
 
 /* Scrollable Copy */
@@ -394,7 +406,9 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   overscroll-behavior: contain !important;
   scrollbar-width: thin !important;
   scrollbar-color: color-mix(in srgb, var(--aperture-accent, #dcebad) 45%, transparent) transparent !important;
-  padding: 2px 2px 8px !important;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 4px, #000 calc(100% - 8px), transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, #000 4px, #000 calc(100% - 8px), transparent 100%);
+  padding: 2px 2px 6px !important;
   margin: 0 !important;
 }
 
@@ -582,7 +596,7 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 }
 
 :where([data-vn-root]) [data-vn-dialogue] {
-  box-shadow: 0 4px 28px var(--vn-atmosphere-glow, rgba(0, 0, 0, 0.5)), 0 1px 3px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--vn-dialogue-shadow, 0 18px 46px rgba(0, 0, 0, 0.45)), 0 4px 28px var(--vn-atmosphere-glow, rgba(0, 0, 0, 0.32)), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 [data-vn-dialogue] {
@@ -904,18 +918,19 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   inset: auto !important;
   transform: none !important;
   margin: 0 !important;
-  padding: 0 !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  background: transparent !important;
+  padding: 2px 8px !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #dcebad) 24%, transparent) !important;
+  border-radius: var(--vn-scrubber-radius, 999px) !important;
+  background: color-mix(in srgb, var(--aperture-accent, #dcebad) 11%, transparent) !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  display: inline-block !important;
+  display: inline-flex !important;
+  align-items: center !important;
   font-size: 12px !important;
   font-weight: 750 !important;
-  letter-spacing: 0.105em !important;
-  line-height: 1.4 !important;
+  letter-spacing: 0.08em !important;
+  line-height: 1.2 !important;
 }
 
 :where([data-vn-root]) [data-vn-speaker] {
@@ -932,12 +947,33 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
 }
 
 .caption-head [data-vn-speaker] {
-  display: inline !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 3px !important;
+  padding: 2px 8px !important;
+  border-radius: var(--vn-scrubber-radius, 999px) !important;
+  background: color-mix(in srgb, var(--aperture-accent, #dcebad) 12%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #dcebad) 26%, transparent) !important;
 }
 
-/* Keep current reader controls tappable without crowding narrow headers.
-   Artwork stays in the header; History is in navigation. */
-[data-vn-reader-header] .round-ghost { width:44px!important;height:44px!important;min-width:44px!important;min-height:44px!important;flex-shrink:0!important; }
+/* Compact sleek header action icons with generous invisible 44px touch reach */
+[data-vn-reader-header] .round-ghost {
+  position: relative !important;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  flex-shrink: 0 !important;
+}
+[data-vn-reader-header] .round-ghost::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+[data-vn-reader-header] .round-ghost svg {
+  width: 15px !important;
+  height: 15px !important;
+}
 @media(max-width:600px){
  [data-vn-reader-header] .reading-heading { min-width:0;overflow:hidden; }
 }

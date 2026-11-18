@@ -1,5 +1,6 @@
 import {parseDocument} from "yaml";
 import { normalizeTrackerMappings, readMappedTrackerValues, type TrackerMappings } from "../../shared/tracker-mappings.js";
+import type { WorldAtmosphereSnapshot } from "../../shared/contracts.js";
 export type TrackerMessage = { id: string; content: string; swipe_id?: number | string | null };
 export type TrackerCharacter = { name: string; aliases: string[]; present: boolean | null; identity: string; attire: string; sceneState: string; relationship?: string; affection?: number; trust?: number; desire?: number; stress?: number; dynamicLabel?: string };
 export type SimTrackerEvidence = {
@@ -7,6 +8,7 @@ export type SimTrackerEvidence = {
   sourceMessageId?: string;
   cast: TrackerCharacter[];
   world: string;
+  worldAtmosphere?: WorldAtmosphereSnapshot;
   warnings: string[];
 };
 const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -117,6 +119,120 @@ function worldDescription(value: unknown, mappings: TrackerMappings): string {
   return join([w.location, w.environment, w.description, w.weather, w.lighting, w.timeofday, w.time_of_day, locObj.name, locObj.description, ...readMappedTrackerValues(w,mappings.world)], 3000);
 }
 
+const CLOCK_RE = /\b(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?(?:\s*[AP]\.?M\.?)?\b/i;
+const TEMP_RE = /[-+]?\d+(?:\.\d+)?\s*(?:°\s*[CF]|degrees?\s*[CF]|[CF]\b)/i;
+
+function splitDateAndTime(raw: string): { time?: string; date?: string } {
+  const s = raw.trim().slice(0, 80);
+  if (!s) return {};
+  const clockMatch = s.match(CLOCK_RE);
+  if (!clockMatch) return { date: s };
+  const time = clockMatch[0].replace(/\s+/g, " ").trim();
+  const remainder = (s.slice(0, clockMatch.index) + s.slice((clockMatch.index ?? 0) + clockMatch[0].length))
+    .replace(/^[\s,|•·\-–—/]+|[\s,|•·\-–—/]+$/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return {
+    time,
+    ...(remainder.length >= 2 ? { date: remainder } : {}),
+  };
+}
+
+function normalizeTemperatureText(raw: string): string | undefined {
+  const s = raw.trim().slice(0, 32);
+  if (!s) return undefined;
+  const m = s.match(TEMP_RE);
+  if (m) {
+    return m[0]
+      .replace(/degrees?\s*/i, "°")
+      .replace(/\s*°\s*/g, "°")
+      .replace(/^([-+]?\d+(?:\.\d+)?)\s*([CF])$/i, (_, n, u) => `${n}°${u.toUpperCase()}`)
+      .replace(/°([cf])$/i, (_, u) => `°${u.toUpperCase()}`);
+  }
+  if (/^[-+]?\d+(?:\.\d+)?$/.test(s)) return s;
+  return s;
+}
+
+function extractSimTrackerAtmosphere(
+  parsed: Record<string, unknown>,
+  rawWorld: unknown,
+  mappings: TrackerMappings,
+): WorldAtmosphereSnapshot | undefined {
+  const pLower = lowerRecord(parsed);
+  const sources = [
+    lowerRecord(rawWorld),
+    lowerRecord(pLower.__state),
+    lowerRecord(pLower.state),
+    lowerRecord(pLower.status),
+    pLower,
+  ].filter((src) => Object.keys(src).length > 0);
+
+  const pickMapped = (paths: readonly string[]) => {
+    for (const src of sources) {
+      const vals = readMappedTrackerValues(src, paths);
+      const found = vals.map((v) => v.trim()).find(Boolean);
+      if (found) return found;
+    }
+    return "";
+  };
+
+  const pickFirstKey = (keys: readonly string[]) => {
+    for (const src of sources) {
+      for (const k of keys) {
+        const s = scalar(src[k], 80);
+        if (s) return s;
+      }
+    }
+    return "";
+  };
+
+  const rawTime = pickMapped(mappings.time) || pickFirstKey(["time", "clock", "current_time", "currenttime", "world_time", "worldtime"]);
+  const rawDate = pickMapped(mappings.date) || pickFirstKey(["date", "day", "calendar", "current_date", "currentdate", "world_date"]);
+  const rawDatetime = pickFirstKey(["datetime", "date_time", "timestamp"]);
+  const rawTemp = pickMapped(mappings.temperature) || pickFirstKey(["temperature", "temp", "outside_temp", "ambient_temp", "weather_temp"]);
+  const rawWeather = pickMapped(mappings.weather) || pickFirstKey(["weather", "conditions", "forecast", "climate"]);
+  const rawTod = pickFirstKey(["timeofday", "time_of_day", "tod", "period"]);
+  const rawSeason = pickFirstKey(["season"]);
+
+  let time: string | undefined;
+  let date: string | undefined;
+  if (rawTime) {
+    const split = splitDateAndTime(rawTime);
+    time = split.time ?? rawTime;
+    if (!rawDate && split.date) date = split.date;
+  }
+  if (rawDate) {
+    const split = splitDateAndTime(rawDate);
+    if (!time && split.time) {
+      time = split.time;
+      date = split.date ?? rawDate;
+    } else {
+      date = rawDate;
+    }
+  }
+  if (rawDatetime && (!time || !date)) {
+    const split = splitDateAndTime(rawDatetime);
+    if (!time && split.time) time = split.time;
+    if (!date && split.date) date = split.date;
+  }
+
+  const temperature = rawTemp ? normalizeTemperatureText(rawTemp) : undefined;
+  const weather = rawWeather && !/^(?:none|default|reset|n\/a)$/i.test(rawWeather) ? rawWeather.slice(0, 64) : undefined;
+  const timeOfDay = rawTod ? rawTod.slice(0, 48) : undefined;
+  const season = rawSeason ? rawSeason.slice(0, 32) : undefined;
+
+  if (!time && !date && !temperature && !weather && !timeOfDay && !season) return undefined;
+  return {
+    source: "simtracker",
+    ...(time ? { time } : {}),
+    ...(timeOfDay ? { timeOfDay } : {}),
+    ...(date ? { date } : {}),
+    ...(temperature ? { temperature } : {}),
+    ...(weather ? { weather } : {}),
+    ...(season ? { season } : {}),
+  };
+}
+
 function trackerBlocks(content: string) {
   const matches: Array<[string, string] & { index?: number }> = [];
   const tagRegex = /<(tracker2?|simtracker|sim_tracker|status|state)\b[^>]*>([\s\S]*?)<\/\1>/gi;
@@ -182,10 +298,11 @@ export function extractSimTracker(messages: readonly TrackerMessage[], targetMes
       catch { if (failure === "not_found") failure = "malformed"; warnings.push("A tracker block could not be parsed."); continue; }
       const rawCast = trackerCast(parsed);
       const pLower = lowerRecord(parsed); const rawWorld = parsed.worldData ?? pLower.worlddata ?? pLower.world_data ?? pLower.world ?? pLower.environment;
-      if (!rawCast.length && !rawWorld) { if (failure === "not_found") failure = "unsupported"; continue; }
+      const worldAtmosphere = extractSimTrackerAtmosphere(parsed, rawWorld, mappings);
+      if (!rawCast.length && !rawWorld && !worldAtmosphere) { if (failure === "not_found") failure = "unsupported"; continue; }
       const cast = (Array.isArray(rawCast) ? rawCast.slice(0, 20) : []).map(value=>character(value,mappings)).filter((item): item is TrackerCharacter => item !== null);
       const world = worldDescription(rawWorld,mappings);
-      if (!cast.length && !world) { if (failure === "not_found") failure = "unsupported"; continue; }
+      if (!cast.length && !world && !worldAtmosphere) { if (failure === "not_found") failure = "unsupported"; continue; }
       // Bound the evidence itself, not just its rendered representation.
       const bounded: TrackerCharacter[] = [];
       let remaining = 7300 - world.length;
@@ -194,7 +311,7 @@ export function extractSimTracker(messages: readonly TrackerMessage[], targetMes
         if (length > remaining) continue;
         bounded.push(item); remaining -= length;
       }
-      return { status: "detected", sourceMessageId: message.id.slice(0, 256), cast: bounded, world, warnings: warnings.slice(0, 8) };
+      return { status: "detected", sourceMessageId: message.id.slice(0, 256), cast: bounded, world, ...(worldAtmosphere ? { worldAtmosphere } : {}), warnings: warnings.slice(0, 8) };
     }
   }
   return { ...empty, status: failure, warnings: warnings.slice(0, 8) };

@@ -1068,21 +1068,28 @@ ${VN_SHELL_PRESET_TOKENS_CSS}
 }
 [data-vn-root][data-vn-preset="literature-club"] [data-vn-speaker]::before { content: "♡ "; }
 
-/* 8. Astral Glass — Frosted Celestial Prism & Starlight Brackets */
+/* 8. Astral Glass — Layered Optical Prism & Starlight Brackets */
 [data-vn-root][data-vn-preset="astral-glass"] [data-vn-dialogue] {
   border-radius: 16px;
-  border-color: rgba(82, 213, 255, 0.45);
+  border-color: rgba(110, 218, 255, 0.34);
   background: radial-gradient(ellipse at 0% 0%, rgba(82, 213, 255, 0.14), transparent 48%), radial-gradient(ellipse at 100% 100%, rgba(167, 139, 250, 0.12), transparent 52%), rgba(8, 20, 38, var(--caption-opacity, 0.86));
-  outline: 1px solid rgba(167, 139, 250, 0.25);
-  outline-offset: -5px;
-  box-shadow: 0 18px 46px rgba(3, 14, 34, 0.55), inset 0 1px 0 rgba(186, 230, 253, 0.25);
+  --vn-dialogue-shadow: 0 20px 50px rgba(3, 14, 34, 0.58), inset 0 1px 0 rgba(224, 244, 255, 0.32), inset 0 -1px 0 rgba(139, 155, 250, 0.16), inset 0 0 0 1px rgba(186, 230, 253, 0.08);
+  box-shadow: var(--vn-dialogue-shadow);
+}
+[data-vn-root][data-vn-preset="astral-glass"] [data-vn-dialogue]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(186, 230, 253, 0.09) 0%, rgba(167, 139, 250, 0.03) 34%, transparent 62%);
+  pointer-events: none;
 }
 [data-vn-root][data-vn-preset="astral-glass"] [data-vn-dialogue]::after {
   content: '';
   position: absolute;
-  inset: 7px;
-  border: 1px solid rgba(141, 228, 255, 0.55);
-  clip-path: polygon(0 0, 18px 0, 18px 1px, 1px 1px, 1px 18px, 0 18px, 0 0, 100% 0, 100% 18px, calc(100% - 1px) 18px, calc(100% - 1px) 1px, calc(100% - 18px) 1px, calc(100% - 18px) 0, 100% 0, 100% 100%, calc(100% - 18px) 100%, calc(100% - 18px) calc(100% - 1px), calc(100% - 1px) calc(100% - 1px), calc(100% - 1px) calc(100% - 18px), 100% calc(100% - 18px), 100% 100%, 0 100%, 0 calc(100% - 18px), 1px calc(100% - 18px), 1px calc(100% - 1px), 18px calc(100% - 1px), 18px 100%, 0 100%);
+  inset: 5px;
+  border: 1px solid rgba(141, 228, 255, 0.42);
+  clip-path: polygon(0 0, 10px 0, 10px 1px, 1px 1px, 1px 10px, 0 10px, 0 0, 100% 0, 100% 10px, calc(100% - 1px) 10px, calc(100% - 1px) 1px, calc(100% - 10px) 1px, calc(100% - 10px) 0, 100% 0, 100% 100%, calc(100% - 10px) 100%, calc(100% - 10px) calc(100% - 1px), calc(100% - 1px) calc(100% - 1px), calc(100% - 1px) calc(100% - 10px), 100% calc(100% - 10px), 100% 100%, 0 100%, 0 calc(100% - 10px), 1px calc(100% - 10px), 1px calc(100% - 1px), 10px calc(100% - 1px), 10px 100%, 0 100%);
   pointer-events: none;
 }
 [data-vn-root][data-vn-preset="astral-glass"] [data-vn-dialogue-text] {
@@ -1132,7 +1139,7 @@ ${VN_SHELL_PRESET_TOKENS_CSS}
 [data-vn-root][data-vn-dialogue-style="cinema-bar"] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]) {
   left: 0 !important;
   right: 0 !important;
-  bottom: calc(56px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
   border-radius: 0 !important;
   border-left: 0 !important;
   border-right: 0 !important;

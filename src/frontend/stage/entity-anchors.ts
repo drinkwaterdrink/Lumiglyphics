@@ -6,7 +6,7 @@ export function clearEntityAnchors(root:HTMLElement):void {
  for(const button of buttons)button.replaceWith(...button.childNodes);
  root.normalize();
 }
-export function applyEntityAnchors(root:HTMLElement,anchors:readonly DossierAnchor[],open:(id:string,button:HTMLElement)=>void,preview:(id:string)=>string):void {
+export function applyEntityAnchors(root:HTMLElement,anchors:readonly DossierAnchor[],open:(id:string,button:HTMLElement)=>void,preview:(id:string)=>string,isDocument?:(id:string)=>boolean):void {
  clearEntityAnchors(root);
  const doc=root.ownerDocument??(typeof document!=='undefined'?document:undefined);
  if(!doc||typeof doc.createTreeWalker!=='function')return;
@@ -17,7 +17,7 @@ export function applyEntityAnchors(root:HTMLElement,anchors:readonly DossierAnch
   const entry=nodes.find(n=>a.start>=n.start&&a.end<=n.end);if(!entry||entry.node.parentElement?.closest('a,code,button,[data-vn-text-fx]'))continue;
   const begin=a.start-entry.start,end=a.end-entry.start;if(begin<0||end>entry.node.length||end<=begin)continue;
   const tail=entry.node.splitText(end),label=entry.node.splitText(begin);
-  const button=doc.createElement('button');button.type='button';button.dataset.entityAnchor=a.entityId;button.textContent=label.data;
+  const button=doc.createElement('button');button.type='button';button.dataset.entityAnchor=a.entityId;if(isDocument?.(a.entityId))button.dataset.entityDoc='true';button.textContent=label.data;
   button.setAttribute('aria-label',`About ${label.data}`);button.setAttribute('aria-haspopup','dialog');button.title=preview(a.entityId);
   button.addEventListener('click',event=>{event.stopPropagation();open(a.entityId,button);});
   label.replaceWith(button);void tail;

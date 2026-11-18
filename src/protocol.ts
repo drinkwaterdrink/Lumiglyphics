@@ -41,11 +41,25 @@ export type ManualLightingSpec = z.infer<typeof ManualLightingSchema>;
 export const PrepareImageRequestSchema = z.object({type:z.literal('vn_prepare_image'),...imageOperationScope,jobId:z.string().min(1).max(200),templateId:z.string().min(1).max(100).optional(),...imagePromptOperation,regeneratePrompt:z.boolean().optional(),promptOperation:z.enum(['rewrite','enrich']).optional(),reframe:z.boolean().optional(),relight:z.boolean().optional(),lockContinuity:z.boolean().optional(),styleId:z.string().max(100).optional(),fitToModel:z.boolean().optional(),model:z.string().max(200).optional(),connectionId:z.string().max(200).optional(),quickGenerate:z.boolean().optional(),manualCamera:z.object({shotSize:z.string().optional(),angle:z.string().optional(),lensFeel:z.string().optional(),composition:z.string().optional(),depth:z.string().optional(),dialogueSafeArea:z.enum(['auto','always','off']).optional(),focalPoint:z.object({x:z.number().min(0).max(100),y:z.number().min(0).max(100)}).strict().optional()}).strict().optional(),manualLighting:ManualLightingSchema.optional()}).strict();
 export const RestorePreviousImageRequestSchema=z.object({type:z.literal('vn_restore_previous_image'),...imageOperationScope,swipeId:z.number().int().nonnegative().nullable(),revision:z.number().int().nonnegative(),jobId:z.string().min(1).max(200),versionId:z.string().min(1).max(256)}).strict();
 export const DeleteImageRequestSchema=z.object({type:z.literal('vn_delete_image'),chatId:z.string().min(1).max(256),imageId:z.string().min(1).max(256).optional(),imageUrl:z.string().min(1).max(2048).optional(),jobId:z.string().min(1).max(256).optional()}).strict();
+export const GenerateDocumentImageRequestSchema = z.object({
+  type: z.literal("vn_generate_document_image"),
+  chatId: z.string().min(1).max(200),
+  messageId: z.string().min(1).max(200),
+  swipeId: z.number().int().nonnegative(),
+  sourceFingerprint: z.string().min(1).max(200),
+  revision: z.number().int().nonnegative(),
+  documentId: z.string().min(1).max(200),
+  throughParagraphIndex: z.number().int().nonnegative(),
+  requestId: z.string().min(1).max(100),
+  forceRegenerate: z.boolean().optional(),
+}).strict();
+export type GenerateDocumentImageRequest = z.infer<typeof GenerateDocumentImageRequestSchema>;
 export type FrontendRequest =
   | QueueImageRetriesRequest
   | PresentationRuleRequest
   | z.infer<typeof ImageLibraryRequestSchema>
   | z.infer<typeof DeleteImageRequestSchema>
+  | GenerateDocumentImageRequest
   | z.infer<typeof CastGalleryRequestSchema>
   | z.infer<typeof CastArtRequestSchema>
   | z.infer<typeof LocationArtRequestSchema>
@@ -178,10 +192,19 @@ export type AudioCueView = {
   sfxUrl?: string | null;
 };
 
+export type DocumentAssetView = {
+  documentId: string;
+  contentHash: string;
+  imageId: string;
+  imageUrl: string;
+};
+
 export type TurnView = {
   /** True when returned from a strictly read-only historical inspection request (`vn_get_turn_snapshot`). */
   historical?: boolean;
   sceneLocations?: import("./shared/scene-atmosphere.js").SceneLocation[];
+  worldAtmosphere?: import("./shared/scene-atmosphere.js").SceneAtmosphereEntry[];
+  documentAssets?: Record<string, DocumentAssetView>;
   referenceHistory?:ReferenceHistory;
   /** Present only when the reply-cost setting is on. */
   replyCost?: { usage: ReplyUsage; imagesGenerated: number };
@@ -286,7 +309,23 @@ export type BackendResponse =
     }
   | { type: "vn_character_dna"; chatId: string; requestId: string; library: CharacterDNALibrary; activeDna?: CharacterDNA; proposal?: DnaProposal; characterGalleries?: Record<string, Array<{ imageUrl: string; imageId?: string; caption?: string; messageId?: string }>>; error?: string }
   | { type: "vn_story_dna"; chatId: string; requestId?: string; storyDna: StoryDNASet }
-  | { type: "vn_error"; chatId?: string; requestId?:string; operation: string; error: string };
+    | {
+      type: "vn_document_image";
+      chatId: string;
+      messageId: string;
+      swipeId: number;
+      sourceFingerprint: string;
+      revision: number;
+      documentId: string;
+      contentHash: string;
+      status: "generating" | "ready" | "failed";
+      cached?: boolean;
+      imageId?: string;
+      imageUrl?: string;
+      error?: string;
+      requestId?: string;
+    }
+| { type: "vn_error"; chatId?: string; requestId?:string; operation: string; error: string };
 
 export function isFrontendRequest(value: unknown): value is FrontendRequest {
   if((value as {type?:unknown}|null)?.type==='vn_story_dna')return StoryDnaRequestSchema.safeParse(value).success;
@@ -306,6 +345,7 @@ export function isFrontendRequest(value: unknown): value is FrontendRequest {
   if ((value as {type?:unknown}).type === "vn_correct_image_subject") return CorrectImageSubjectRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_set_card_role") return SetCardRoleRequestSchema.safeParse(value).success;
   if ((value as {type?:unknown}).type === "vn_delete_image") return DeleteImageRequestSchema.safeParse(value).success;
+  if ((value as {type?:unknown}).type === "vn_generate_document_image") return GenerateDocumentImageRequestSchema.safeParse(value).success;
   if ((value as { type?: unknown }).type === "vn_get_turn_snapshot") return z.object({ type: z.literal("vn_get_turn_snapshot"), chatId: z.string().min(1).max(128), messageId: z.string().min(1).max(128), swipeId: z.number().int().min(0).optional(), requestId: z.string().min(1).max(128).optional() }).strict().safeParse(value).success;
   if ((value as { type?: unknown }).type === "vn_reading_position") return ReadingPositionSchema.safeParse((value as { position?: unknown }).position).success;
   return typeof (value as { type?: unknown }).type === "string"

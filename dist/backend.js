@@ -19154,6 +19154,12 @@ var init_presentation_rules = __esm(() => {
 });
 
 // src/shared/story-documents.ts
+function isIdiomaticDocumentMention(paragraphText, start, end) {
+  const winStart = Math.max(0, start - 28);
+  const winEnd = Math.min(paragraphText.length, end + 28);
+  const snippet = paragraphText.slice(winStart, winEnd);
+  return IDIOMATIC_SURFACE_RE.test(snippet);
+}
 function normalizeStoryDocuments(value, paragraphs) {
   if (!Array.isArray(value))
     return [];
@@ -19163,35 +19169,58 @@ function normalizeStoryDocuments(value, paragraphs) {
   for (const raw of value.slice(0, 48)) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw))
       continue;
-    const { sections, ...identity } = raw;
+    const { sections, observations, ...identity } = raw;
     const parsed = DocumentIdentitySchema.safeParse(identity);
-    if (!parsed.success || !Array.isArray(sections))
+    if (!parsed.success)
       continue;
     const doc2 = parsed.data;
-    if (!paragraphs[doc2.paragraphIndex]?.text.includes(doc2.name) || seen.has(doc2.name))
+    const introText = paragraphs[doc2.paragraphIndex]?.text;
+    if (!introText || !introText.toLocaleLowerCase().includes(doc2.name.toLocaleLowerCase()) || seen.has(doc2.name.toLocaleLowerCase()))
       continue;
     const passages = [];
-    for (const item of sections.slice(0, 32)) {
-      const p = PassageProposalSchema.safeParse(item);
-      if (!p.success)
-        continue;
-      const s = p.data, text = paragraphs[s.paragraphIndex]?.text;
-      if (!text || s.paragraphIndex < doc2.paragraphIndex || !s.evidence.includes(doc2.name) || !s.evidence.includes(s.text) || !s.text.trim())
-        continue;
-      const evidenceStart = text.indexOf(s.evidence), inside = s.evidence.indexOf(s.text);
-      if (evidenceStart < 0 || text.indexOf(s.evidence, evidenceStart + 1) >= 0 || s.evidence.indexOf(s.text, inside + 1) >= 0)
-        continue;
-      const start = evidenceStart + inside, end = start + s.text.length;
-      if (passages.some((p2) => p2.paragraphIndex === s.paragraphIndex && start < p2.end && end > p2.start) || characters + s.text.length > 24000)
-        continue;
-      passages.push({ paragraphIndex: s.paragraphIndex, start, end, text: s.text });
-      characters += s.text.length;
-      if (passages.length === 16)
-        break;
+    if (Array.isArray(sections)) {
+      for (const item of sections.slice(0, 32)) {
+        const p = PassageProposalSchema.safeParse(item);
+        if (!p.success)
+          continue;
+        const s = p.data, text = paragraphs[s.paragraphIndex]?.text;
+        if (!text || s.paragraphIndex < doc2.paragraphIndex || !s.evidence.includes(s.text) || !s.text.trim())
+          continue;
+        const aliases = [doc2.name, ...doc2.aliases ?? []].map((a) => a.toLocaleLowerCase());
+        if (!aliases.some((a) => s.evidence.toLocaleLowerCase().includes(a)))
+          continue;
+        const evidenceStart = text.indexOf(s.evidence), inside = s.evidence.indexOf(s.text);
+        if (evidenceStart < 0 || text.indexOf(s.evidence, evidenceStart + 1) >= 0 || s.evidence.indexOf(s.text, inside + 1) >= 0)
+          continue;
+        const start = evidenceStart + inside, end = start + s.text.length;
+        if (passages.some((p2) => p2.paragraphIndex === s.paragraphIndex && start < p2.end && end > p2.start) || characters + s.text.length > 24000)
+          continue;
+        passages.push({ paragraphIndex: s.paragraphIndex, start, end, text: s.text });
+        characters += s.text.length;
+        if (passages.length === 16)
+          break;
+      }
+    }
+    const obsList = [];
+    if (Array.isArray(observations)) {
+      for (const item of observations.slice(0, 16)) {
+        const o = DocumentObservationSchema.safeParse(item);
+        if (!o.success)
+          continue;
+        const text = paragraphs[o.data.paragraphIndex]?.text;
+        if (!text || o.data.paragraphIndex < doc2.paragraphIndex || !text.includes(o.data.evidence))
+          continue;
+        obsList.push(o.data);
+      }
     }
     passages.sort((a, b) => a.paragraphIndex - b.paragraphIndex || a.start - b.start);
-    seen.add(doc2.name);
-    result.push({ ...doc2, id: `document-${result.length + 1}`, sections: passages });
+    seen.add(doc2.name.toLocaleLowerCase());
+    result.push({
+      ...doc2,
+      id: `document-${result.length + 1}`,
+      sections: passages,
+      ...obsList.length ? { observations: obsList } : {}
+    });
     if (result.length === 12)
       break;
   }
@@ -19208,7 +19237,8 @@ function validateStoryDocuments(value, paragraphs) {
     if (!parsed.success)
       continue;
     const d = parsed.data;
-    if (ids.has(d.id) || names.has(d.name) || !paragraphs[d.paragraphIndex]?.text.includes(d.name))
+    const introText = paragraphs[d.paragraphIndex]?.text;
+    if (ids.has(d.id) || names.has(d.name.toLocaleLowerCase()) || !introText || !introText.toLocaleLowerCase().includes(d.name.toLocaleLowerCase()))
       continue;
     const sections = d.sections.filter((s) => {
       if (s.paragraphIndex < d.paragraphIndex || s.end !== s.start + s.text.length || paragraphs[s.paragraphIndex]?.text.slice(s.start, s.end) !== s.text || characters + s.text.length > 24000)
@@ -19216,19 +19246,265 @@ function validateStoryDocuments(value, paragraphs) {
       characters += s.text.length;
       return true;
     });
+    const observations = (d.observations ?? []).filter((o) => o.paragraphIndex >= d.paragraphIndex && Boolean(paragraphs[o.paragraphIndex]?.text.includes(o.evidence)));
     ids.add(d.id);
-    names.add(d.name);
-    result.push({ ...d, sections });
+    names.add(d.name.toLocaleLowerCase());
+    result.push({ ...d, sections, ...observations.length ? { observations } : {} });
   }
   return result;
 }
-var DocumentIdentitySchema, PassageProposalSchema, StoryDocumentSectionSchema, StoryDocumentSchema;
+function visibleStoryDocuments(documents, paragraphIndex) {
+  return documents.filter((d) => d.paragraphIndex <= paragraphIndex).map((d) => ({
+    ...d,
+    sections: d.sections.filter((s) => s.paragraphIndex <= paragraphIndex).map((s) => ({ ...s })),
+    ...d.observations ? { observations: d.observations.filter((o) => o.paragraphIndex <= paragraphIndex).map((o) => ({ ...o })) } : {}
+  }));
+}
+function mapNounToDocumentKind(noun) {
+  const n = noun.toLowerCase();
+  if (/flyer|leaflet|handbill/.test(n))
+    return "flyer";
+  if (/pamphlet|brochure/.test(n))
+    return "pamphlet";
+  if (/poster/.test(n))
+    return "poster";
+  if (/notice|missive/.test(n))
+    return "notice";
+  if (/letter|envelope/.test(n))
+    return "letter";
+  if (/journal|diary|ledger|logbook/.test(n))
+    return "journal";
+  if (/map|blueprint|schematic/.test(n))
+    return "map";
+  if (/receipt|ticket|voucher|manifest/.test(n))
+    return "receipt";
+  if (/newspaper|gazette/.test(n))
+    return "newspaper";
+  if (/terminal|datapad/.test(n))
+    return "terminal";
+  return "note";
+}
+function senseDocumentsDeterministically(paragraphs) {
+  const detected = [];
+  const byKind = new Map;
+  let lastDocIndex = -1;
+  for (let i = 0;i < paragraphs.length; i++) {
+    const text = paragraphs[i]?.text ?? "";
+    if (!text.trim())
+      continue;
+    DOC_MEDIA_NOUN_RE.lastIndex = 0;
+    let m;
+    while ((m = DOC_MEDIA_NOUN_RE.exec(text)) !== null) {
+      const phrase = m[0].trim();
+      const baseNoun = (m[2] ?? phrase).trim();
+      const start = m.index;
+      const end = start + m[0].length;
+      if (isIdiomaticDocumentMention(text, start, end))
+        continue;
+      if (baseNoun.toLowerCase() === "note" && phrase.toLowerCase() === "note" && !/\b(?:written|folded|crumpled|pinned|tucked|slipped|hand|read|scribbled)\b/i.test(text.slice(Math.max(0, start - 32), Math.min(text.length, end + 32)))) {
+        continue;
+      }
+      if (baseNoun.toLowerCase() === "map" && lastDocIndex >= 0 && detected[lastDocIndex] && i - detected[lastDocIndex].paragraphIndex <= 2) {
+        SECONDARY_PAPER_ALIAS_RE.lastIndex = 0;
+        const hasSurfaceBridge = SECONDARY_PAPER_ALIAS_RE.test(text);
+        SECONDARY_PAPER_ALIAS_RE.lastIndex = 0;
+        if (hasSurfaceBridge || /\b(?:hand[- ]drawn|smear(?:ed|ing)|sketch(?:ed)?|printed|faded|margin|corner)\b/i.test(text.slice(Math.max(0, start - 36), Math.min(text.length, end + 24)))) {
+          continue;
+        }
+      }
+      const kind = mapNounToDocumentKind(baseNoun);
+      const existing = byKind.get(kind);
+      const visualMatches = [...text.matchAll(DOC_MATERIAL_CUE_RE)].map((x) => x[0].trim());
+      if (existing) {
+        if (!existing.aliases?.some((a) => a.toLowerCase() === phrase.toLowerCase()) && existing.name.toLowerCase() !== phrase.toLowerCase()) {
+          existing.aliases = [...existing.aliases ?? [], phrase].slice(0, 8);
+        }
+        if (visualMatches.length) {
+          existing.observations = existing.observations ?? [];
+          if (!existing.observations.some((o) => o.paragraphIndex === i)) {
+            existing.observations.push({
+              paragraphIndex: i,
+              summary: visualMatches.join("; ").slice(0, 480),
+              visualDetails: visualMatches.slice(0, 6).map((v) => v.slice(0, 150)),
+              evidence: text.slice(0, 1100)
+            });
+          }
+        }
+        lastDocIndex = detected.indexOf(existing);
+        continue;
+      }
+      const conditionMatch = phrase.match(/\b(crumpled|folded|damp|wet|soaked|torn|ripped|yellowed|faded|stained|sealed|handwritten|printed|tattered|creased|glowing|cracked)\b/i);
+      const doc2 = {
+        id: `document-${detected.length + 1}`,
+        name: phrase,
+        kind,
+        paragraphIndex: i,
+        aliases: [...new Set([baseNoun, phrase].filter((s) => s.length >= 3))],
+        ...visualMatches.length || conditionMatch ? {
+          visualDetails: [...new Set([conditionMatch?.[0], ...visualMatches])].filter(Boolean).join(", ").slice(0, 380)
+        } : {},
+        sections: [],
+        observations: [{
+          paragraphIndex: i,
+          ...visualMatches.length ? { summary: visualMatches.join("; ").slice(0, 480), visualDetails: visualMatches.slice(0, 6).map((v) => v.slice(0, 150)) } : {},
+          ...conditionMatch ? { condition: conditionMatch[0].toLowerCase() } : {},
+          evidence: text.slice(0, 1100)
+        }]
+      };
+      const quoted = text.match(/["\u201C]([^"\u201D]{8,400})["\u201D]/);
+      if (quoted && /\b(?:reads?|says?|printed|written|lettering|headline|text)\b/i.test(text)) {
+        const qText = quoted[1].trim();
+        const qStart = text.indexOf(qText);
+        if (qStart >= 0) {
+          doc2.sections.push({ paragraphIndex: i, start: qStart, end: qStart + qText.length, text: qText });
+        }
+      }
+      detected.push(doc2);
+      byKind.set(kind, doc2);
+      lastDocIndex = detected.length - 1;
+      if (detected.length >= 12)
+        return detected;
+    }
+    if (lastDocIndex >= 0 && detected[lastDocIndex] && i - detected[lastDocIndex].paragraphIndex <= 2) {
+      const target = detected[lastDocIndex];
+      SECONDARY_PAPER_ALIAS_RE.lastIndex = 0;
+      const paperMatch = SECONDARY_PAPER_ALIAS_RE.exec(text);
+      const visualMatches = [...text.matchAll(DOC_MATERIAL_CUE_RE)].map((x) => x[0].trim());
+      if (paperMatch || visualMatches.length) {
+        if (paperMatch) {
+          const surfaceAlias = paperMatch[0].trim();
+          if (surfaceAlias.length >= 4 && !target.aliases?.some((a) => a.toLowerCase() === surfaceAlias.toLowerCase())) {
+            target.aliases = [...target.aliases ?? [], surfaceAlias].slice(0, 8);
+          }
+        }
+        if (visualMatches.length) {
+          target.visualDetails = [target.visualDetails, ...visualMatches].filter(Boolean).join(", ").slice(0, 380);
+          target.observations = target.observations ?? [];
+          if (!target.observations.some((o) => o.paragraphIndex === i)) {
+            target.observations.push({
+              paragraphIndex: i,
+              summary: visualMatches.join("; ").slice(0, 480),
+              visualDetails: visualMatches.slice(0, 6).map((v) => v.slice(0, 150)),
+              ...paperMatch ? { material: paperMatch[0].replace(/^the\s+/i, "").trim() } : {},
+              evidence: text.slice(0, 1100)
+            });
+          }
+        }
+      }
+    }
+  }
+  return detected;
+}
+function mergeStoryDocuments(primary, secondary) {
+  const merged = primary.map((doc2) => ({
+    ...doc2,
+    sections: doc2.sections.map((s) => ({ ...s })),
+    ...doc2.aliases ? { aliases: [...doc2.aliases] } : {},
+    ...doc2.observations ? { observations: doc2.observations.map((o) => ({ ...o })) } : {}
+  }));
+  const findMatch = (candidate) => {
+    const names = new Set([candidate.name, ...candidate.aliases ?? []].map((s) => s.toLowerCase()));
+    for (const existing of merged) {
+      const existingNames = [existing.name, ...existing.aliases ?? []].map((s) => s.toLowerCase());
+      if (existingNames.some((n) => names.has(n)))
+        return existing;
+      if (existing.kind === candidate.kind && Math.abs(existing.paragraphIndex - candidate.paragraphIndex) <= 1) {
+        return existing;
+      }
+    }
+    return;
+  };
+  for (const extra of secondary) {
+    const match = findMatch(extra);
+    if (!match) {
+      if (merged.length < 12) {
+        merged.push({
+          ...extra,
+          id: `document-${merged.length + 1}`,
+          sections: extra.sections.map((s) => ({ ...s })),
+          ...extra.aliases ? { aliases: [...extra.aliases] } : {},
+          ...extra.observations ? { observations: extra.observations.map((o) => ({ ...o })) } : {}
+        });
+      }
+      continue;
+    }
+    const aliasSet = new Set([match.name, ...match.aliases ?? []].map((a) => a.toLowerCase()));
+    const newAliases = [extra.name, ...extra.aliases ?? []].filter((a) => {
+      const lower = a.toLowerCase();
+      if (aliasSet.has(lower))
+        return false;
+      aliasSet.add(lower);
+      return true;
+    });
+    if (newAliases.length) {
+      match.aliases = [...match.aliases ?? [], ...newAliases].slice(0, 8);
+    }
+    if (!match.visualDetails && extra.visualDetails) {
+      match.visualDetails = extra.visualDetails;
+    }
+    if (extra.observations?.length) {
+      match.observations = match.observations ?? [];
+      for (const obs of extra.observations) {
+        if (!match.observations.some((o) => o.paragraphIndex === obs.paragraphIndex)) {
+          match.observations.push({ ...obs });
+        }
+      }
+    }
+    for (const sec of extra.sections) {
+      if (!match.sections.some((s) => s.paragraphIndex === sec.paragraphIndex && s.text === sec.text)) {
+        match.sections.push({ ...sec });
+      }
+    }
+  }
+  return merged;
+}
+var STORY_DOCUMENT_KINDS, DocumentIdentitySchema, PassageProposalSchema, DocumentObservationSchema, StoryDocumentSectionSchema, StoryDocumentSchema, IDIOMATIC_SURFACE_RE, DOC_MEDIA_NOUN_RE, DOC_MATERIAL_CUE_RE, SECONDARY_PAPER_ALIAS_RE;
 var init_story_documents = __esm(() => {
   init_zod();
-  DocumentIdentitySchema = exports_external.object({ name: exports_external.string().trim().min(1).max(256), kind: exports_external.enum(["letter", "note", "journal", "notice", "phone", "terminal"]), paragraphIndex: exports_external.number().int().nonnegative() }).strict();
-  PassageProposalSchema = exports_external.object({ paragraphIndex: exports_external.number().int().nonnegative(), text: exports_external.string().min(1).max(6000), evidence: exports_external.string().min(1).max(1e4) }).strict();
+  STORY_DOCUMENT_KINDS = [
+    "flyer",
+    "letter",
+    "note",
+    "journal",
+    "map",
+    "poster",
+    "receipt",
+    "notice",
+    "newspaper",
+    "pamphlet",
+    "phone",
+    "terminal"
+  ];
+  DocumentIdentitySchema = exports_external.object({
+    name: exports_external.string().trim().min(1).max(256),
+    kind: exports_external.enum(STORY_DOCUMENT_KINDS),
+    paragraphIndex: exports_external.number().int().nonnegative(),
+    aliases: exports_external.array(exports_external.string().trim().min(2).max(160)).max(8).optional(),
+    visualDetails: exports_external.string().trim().min(1).max(400).optional()
+  }).strict();
+  PassageProposalSchema = exports_external.object({
+    paragraphIndex: exports_external.number().int().nonnegative(),
+    text: exports_external.string().min(1).max(6000),
+    evidence: exports_external.string().min(1).max(1e4)
+  }).strict();
+  DocumentObservationSchema = exports_external.object({
+    paragraphIndex: exports_external.number().int().nonnegative(),
+    summary: exports_external.string().trim().min(1).max(500).optional(),
+    visualDetails: exports_external.array(exports_external.string().trim().min(1).max(160)).max(8).optional(),
+    material: exports_external.string().trim().min(1).max(120).optional(),
+    condition: exports_external.string().trim().min(1).max(120).optional(),
+    evidence: exports_external.string().min(1).max(1200)
+  }).strict();
   StoryDocumentSectionSchema = exports_external.object({ paragraphIndex: exports_external.number().int().nonnegative(), start: exports_external.number().int().nonnegative(), end: exports_external.number().int().positive(), text: exports_external.string().min(1).max(6000) }).strict();
-  StoryDocumentSchema = DocumentIdentitySchema.extend({ id: exports_external.string().min(1).max(256), sections: exports_external.array(StoryDocumentSectionSchema).max(16) }).strict();
+  StoryDocumentSchema = DocumentIdentitySchema.extend({
+    id: exports_external.string().min(1).max(256),
+    sections: exports_external.array(StoryDocumentSectionSchema).max(16),
+    observations: exports_external.array(DocumentObservationSchema).max(16).optional()
+  }).strict();
+  IDIOMATIC_SURFACE_RE = /\b(?:on\s+paper|paper\s+trail|paper\s+tiger|paper\s+over|pushing\s+paper|(?:mak(?:e|es|ing)|made|tak(?:e|es|ing)|took)\s+(?:a\s+)?(?:mental\s+)?note\b|mental\s+note|side\s+note|note\s+to\s+self|note\s+of\s+(?:panic|fear|alarm|warning|sadness|hope|doubt|surprise)|letter\s+of\s+the\s+law|to\s+the\s+letter|red[- ]letter\s+day|map\s+out|on\s+the\s+map|playing\s+card|trump\s+card|short\s+notice|until\s+further\s+notice|at\s+a\s+moment'?s\s+notice|terminal\s+(?:illness|velocity|stage|station))\b/i;
+  DOC_MEDIA_NOUN_RE = /\b((?:crumpled|folded|damp|wet|soaked|torn|ripped|yellowed|faded|stained|sealed|handwritten|printed|laminated|weathered|tattered|creased|glowing|cracked)\s+)*(flyer|leaflet|pamphlet|brochure|handbill|poster|notice|letter|envelope|missive|note|journal|diary|ledger|logbook|manifest|receipt|ticket|voucher|parchment|scroll|map|blueprint|schematic|newspaper|gazette|datapad|terminal(?:\s+(?:screen|readout))?)\b/gi;
+  DOC_MATERIAL_CUE_RE = /\b(purple\s+ink|red\s+ink|blue\s+ink|black\s+ink|faded\s+ink|smear(?:ed|ing)\s+[^.!?;,\n]+|bleed(?:s|ing)\s+across[^.!?;,\n]+|hand-drawn\s+[^.!?;,\n]+|handwritten\s+[^.!?;,\n]+|wax\s+seal|stamped|crest|sketch(?:ed)?\s+[^.!?;,\n]+|list\s+of\s+[^.!?;,\n]+|map\s+(?:of|to)\s+[^.!?;,\n]+|price\s+list)\b/gi;
+  SECONDARY_PAPER_ALIAS_RE = /\b(?:the|damp|wet|crumpled|folded|torn|yellowed|faded|stained)\s+(paper|sheet|page|parchment|cardstock|slip)\b/gi;
 });
 
 // src/shared/story-dna.ts
@@ -21116,6 +21392,30 @@ var init_shared_style_snapshot = __esm(() => {
 });
 
 // src/shared/image-shot-spec.ts
+function createDefaultShotSpec(partial2) {
+  return ImageShotSpecSchema.parse({
+    version: 1,
+    intent: "portrait",
+    output: {
+      requestedRatio: "default",
+      actualRatio: "1:1",
+      orientation: "square"
+    },
+    camera: {
+      shotSize: "medium",
+      angle: "eye-level",
+      lens: "normal",
+      depthOfField: "moderate"
+    },
+    composition: {
+      mode: "centered",
+      subjectPlacements: []
+    },
+    source: "deterministic-fallback",
+    revision: 0,
+    ...partial2
+  });
+}
 var ShotIntentSchema, ShotSizeSchema, CameraAngleSchema, LensFeelSchema, CompositionModeSchema, SubjectPlacementSchema, ShotOutputSchema, ShotCameraSchema, ShotCompositionSchema, ShotSafeAreaSchema, ImageShotSpecSchema;
 var init_image_shot_spec = __esm(() => {
   init_zod();
@@ -22411,7 +22711,7 @@ var init_rpg_state = __esm(() => {
 });
 
 // src/shared/contracts.ts
-var IdentifierSchema, PropertyNameSchema, TextSchema, NonNegativeIntegerSchema, TurnKeySchema, ParagraphSchema, ChoiceSourceSchema, ChoiceSchema, SubjectCategorySchema, CharacterContinuitySchema, ContinuityStateSchema, CharacterContinuityPatchSchema, ContinuityDeltaSchema, IndexedContinuityDeltaSchema, SceneEnvironmentSchema, CameraLockSchema, AmbientEffectSchema, SceneStateSchema, SceneBoundaryReasonSchema, SceneBoundaryProposalSchema, StageEffectSchema, PlannerShotHintSchema, VisualCueKindSchema, VisualCueSchema, AssetJobStatusSchema, AssetJobPrioritySchema, TimestampSchema, AssetJobSchema, PlanningStatusSchema, AudioCueSchema, EffectCueSchema, MAX_CACHE_CUES_PER_TURN = 16, TurnPlanSchema;
+var IdentifierSchema, PropertyNameSchema, TextSchema, NonNegativeIntegerSchema, TurnKeySchema, ParagraphSchema, ChoiceSourceSchema, ChoiceSchema, SubjectCategorySchema, CharacterContinuitySchema, ContinuityStateSchema, CharacterContinuityPatchSchema, ContinuityDeltaSchema, IndexedContinuityDeltaSchema, WorldAtmosphereSnapshotSchema, SceneAtmosphereEntrySchema, SceneEnvironmentSchema, CameraLockSchema, AmbientEffectSchema, SceneStateSchema, SceneBoundaryReasonSchema, SceneBoundaryProposalSchema, StageEffectSchema, PlannerShotHintSchema, VisualCueKindSchema, VisualCueSchema, AssetJobStatusSchema, AssetJobPrioritySchema, TimestampSchema, AssetJobSchema, PlanningStatusSchema, AudioCueSchema, EffectCueSchema, MAX_CACHE_CUES_PER_TURN = 16, TurnPlanSchema;
 var init_contracts = __esm(() => {
   init_presentation_rules();
   init_story_documents();
@@ -22489,9 +22789,26 @@ var init_contracts = __esm(() => {
     paragraphIndex: NonNegativeIntegerSchema,
     delta: ContinuityDeltaSchema
   }).strict();
+  WorldAtmosphereSnapshotSchema = exports_external.object({
+    time: exports_external.string().trim().max(64).nullable().optional(),
+    timeOfDay: exports_external.string().trim().max(64).nullable().optional(),
+    date: exports_external.string().trim().max(80).nullable().optional(),
+    temperature: exports_external.string().trim().max(48).nullable().optional(),
+    weather: exports_external.string().trim().max(120).nullable().optional(),
+    season: exports_external.string().trim().max(48).nullable().optional(),
+    indoor: exports_external.boolean().optional(),
+    source: exports_external.enum(["simtracker", "header", "planner", "prose", "carried"]).optional()
+  }).strict();
+  SceneAtmosphereEntrySchema = WorldAtmosphereSnapshotSchema.extend({
+    paragraphIndex: NonNegativeIntegerSchema
+  }).strict();
   SceneEnvironmentSchema = exports_external.object({
     location: TextSchema,
     timeOfDay: exports_external.string().trim().nullable().default(null),
+    time: exports_external.string().trim().max(64).nullable().optional(),
+    date: exports_external.string().trim().max(80).nullable().optional(),
+    temperature: exports_external.string().trim().max(48).nullable().optional(),
+    season: exports_external.string().trim().max(48).nullable().optional(),
     weather: exports_external.string().trim().nullable().default(null),
     lighting: exports_external.string().trim().nullable().default(null),
     description: TextSchema,
@@ -22734,6 +23051,7 @@ var init_contracts = __esm(() => {
     }).optional(),
     planningStatus: PlanningStatusSchema,
     rpgState: RpgStateSchema.optional(),
+    worldAtmosphereTimeline: exports_external.array(SceneAtmosphereEntrySchema).max(64).optional(),
     resolvedThreads: exports_external.array(exports_external.string().trim().min(1).max(160)).max(8).optional(),
     createdAt: TimestampSchema
   }).strict().superRefine((plan, context) => {
@@ -30826,14 +31144,23 @@ function readMappedTrackerValues(record2, paths2) {
 var TRACKER_MAPPING_FIELDS, blocked, pathSchema, paths, TrackerMappingsSchema;
 var init_tracker_mappings = __esm(() => {
   init_zod();
-  TRACKER_MAPPING_FIELDS = ["identity", "attire", "sceneState", "world"];
+  TRACKER_MAPPING_FIELDS = ["identity", "attire", "sceneState", "world", "time", "date", "temperature", "weather"];
   blocked = new Set(["__proto__", "constructor", "prototype"]);
   pathSchema = exports_external.string().trim().min(1).max(128).refine((path) => {
     const parts = path.split(".");
     return parts.length <= 6 && parts.every((part) => /^[a-zA-Z_][a-zA-Z0-9_ -]*$/.test(part) && !blocked.has(part.toLowerCase()));
   }, "Use dotted field names, without expressions or reserved properties.");
   paths = exports_external.array(pathSchema).max(6).default([]);
-  TrackerMappingsSchema = exports_external.object({ identity: paths, attire: paths, sceneState: paths, world: paths }).strict();
+  TrackerMappingsSchema = exports_external.object({
+    identity: paths,
+    attire: paths,
+    sceneState: paths,
+    world: paths,
+    time: paths.optional().default([]),
+    date: paths.optional().default([]),
+    temperature: paths.optional().default([]),
+    weather: paths.optional().default([])
+  }).strict();
 });
 
 // src/backend/runtime/simtracker.ts
@@ -30939,6 +31266,107 @@ function worldDescription(value, mappings) {
   const locObj = lowerRecord(w.location);
   return join([w.location, w.environment, w.description, w.weather, w.lighting, w.timeofday, w.time_of_day, locObj.name, locObj.description, ...readMappedTrackerValues(w, mappings.world)], 3000);
 }
+function splitDateAndTime(raw) {
+  const s = raw.trim().slice(0, 80);
+  if (!s)
+    return {};
+  const clockMatch = s.match(CLOCK_RE);
+  if (!clockMatch)
+    return { date: s };
+  const time3 = clockMatch[0].replace(/\s+/g, " ").trim();
+  const remainder = (s.slice(0, clockMatch.index) + s.slice((clockMatch.index ?? 0) + clockMatch[0].length)).replace(/^[\s,|\u2022\u00B7\-\u2013\u2014/]+|[\s,|\u2022\u00B7\-\u2013\u2014/]+$/g, "").replace(/\s{2,}/g, " ").trim();
+  return {
+    time: time3,
+    ...remainder.length >= 2 ? { date: remainder } : {}
+  };
+}
+function normalizeTemperatureText(raw) {
+  const s = raw.trim().slice(0, 32);
+  if (!s)
+    return;
+  const m = s.match(TEMP_RE);
+  if (m) {
+    return m[0].replace(/degrees?\s*/i, "\xB0").replace(/\s*\u00B0\s*/g, "\xB0").replace(/^([-+]?\d+(?:\.\d+)?)\s*([CF])$/i, (_, n, u) => `${n}\xB0${u.toUpperCase()}`).replace(/\u00B0([cf])$/i, (_, u) => `\xB0${u.toUpperCase()}`);
+  }
+  if (/^[-+]?\d+(?:\.\d+)?$/.test(s))
+    return s;
+  return s;
+}
+function extractSimTrackerAtmosphere(parsed, rawWorld, mappings) {
+  const pLower = lowerRecord(parsed);
+  const sources = [
+    lowerRecord(rawWorld),
+    lowerRecord(pLower.__state),
+    lowerRecord(pLower.state),
+    lowerRecord(pLower.status),
+    pLower
+  ].filter((src) => Object.keys(src).length > 0);
+  const pickMapped = (paths2) => {
+    for (const src of sources) {
+      const vals = readMappedTrackerValues(src, paths2);
+      const found = vals.map((v) => v.trim()).find(Boolean);
+      if (found)
+        return found;
+    }
+    return "";
+  };
+  const pickFirstKey = (keys) => {
+    for (const src of sources) {
+      for (const k of keys) {
+        const s = scalar(src[k], 80);
+        if (s)
+          return s;
+      }
+    }
+    return "";
+  };
+  const rawTime = pickMapped(mappings.time) || pickFirstKey(["time", "clock", "current_time", "currenttime", "world_time", "worldtime"]);
+  const rawDate = pickMapped(mappings.date) || pickFirstKey(["date", "day", "calendar", "current_date", "currentdate", "world_date"]);
+  const rawDatetime = pickFirstKey(["datetime", "date_time", "timestamp"]);
+  const rawTemp = pickMapped(mappings.temperature) || pickFirstKey(["temperature", "temp", "outside_temp", "ambient_temp", "weather_temp"]);
+  const rawWeather = pickMapped(mappings.weather) || pickFirstKey(["weather", "conditions", "forecast", "climate"]);
+  const rawTod = pickFirstKey(["timeofday", "time_of_day", "tod", "period"]);
+  const rawSeason = pickFirstKey(["season"]);
+  let time3;
+  let date5;
+  if (rawTime) {
+    const split = splitDateAndTime(rawTime);
+    time3 = split.time ?? rawTime;
+    if (!rawDate && split.date)
+      date5 = split.date;
+  }
+  if (rawDate) {
+    const split = splitDateAndTime(rawDate);
+    if (!time3 && split.time) {
+      time3 = split.time;
+      date5 = split.date ?? rawDate;
+    } else {
+      date5 = rawDate;
+    }
+  }
+  if (rawDatetime && (!time3 || !date5)) {
+    const split = splitDateAndTime(rawDatetime);
+    if (!time3 && split.time)
+      time3 = split.time;
+    if (!date5 && split.date)
+      date5 = split.date;
+  }
+  const temperature = rawTemp ? normalizeTemperatureText(rawTemp) : undefined;
+  const weather = rawWeather && !/^(?:none|default|reset|n\/a)$/i.test(rawWeather) ? rawWeather.slice(0, 64) : undefined;
+  const timeOfDay = rawTod ? rawTod.slice(0, 48) : undefined;
+  const season = rawSeason ? rawSeason.slice(0, 32) : undefined;
+  if (!time3 && !date5 && !temperature && !weather && !timeOfDay && !season)
+    return;
+  return {
+    source: "simtracker",
+    ...time3 ? { time: time3 } : {},
+    ...timeOfDay ? { timeOfDay } : {},
+    ...date5 ? { date: date5 } : {},
+    ...temperature ? { temperature } : {},
+    ...weather ? { weather } : {},
+    ...season ? { season } : {}
+  };
+}
 function trackerBlocks(content) {
   const matches = [];
   const tagRegex = /<(tracker2?|simtracker|sim_tracker|status|state)\b[^>]*>([\s\S]*?)<\/\1>/gi;
@@ -31023,14 +31451,15 @@ function extractSimTracker(messages, targetMessageId, customMappings) {
       const rawCast = trackerCast(parsed);
       const pLower = lowerRecord(parsed);
       const rawWorld = parsed.worldData ?? pLower.worlddata ?? pLower.world_data ?? pLower.world ?? pLower.environment;
-      if (!rawCast.length && !rawWorld) {
+      const worldAtmosphere = extractSimTrackerAtmosphere(parsed, rawWorld, mappings);
+      if (!rawCast.length && !rawWorld && !worldAtmosphere) {
         if (failure === "not_found")
           failure = "unsupported";
         continue;
       }
       const cast = (Array.isArray(rawCast) ? rawCast.slice(0, 20) : []).map((value) => character(value, mappings)).filter((item) => item !== null);
       const world = worldDescription(rawWorld, mappings);
-      if (!cast.length && !world) {
+      if (!cast.length && !world && !worldAtmosphere) {
         if (failure === "not_found")
           failure = "unsupported";
         continue;
@@ -31044,7 +31473,7 @@ function extractSimTracker(messages, targetMessageId, customMappings) {
         bounded.push(item);
         remaining -= length;
       }
-      return { status: "detected", sourceMessageId: message.id.slice(0, 256), cast: bounded, world, warnings: warnings.slice(0, 8) };
+      return { status: "detected", sourceMessageId: message.id.slice(0, 256), cast: bounded, world, ...worldAtmosphere ? { worldAtmosphere } : {}, warnings: warnings.slice(0, 8) };
     }
   }
   return { ...empty, status: failure, warnings: warnings.slice(0, 8) };
@@ -31066,10 +31495,12 @@ function matchTrackerCharacter(evidence, name) {
   const aliases = evidence.cast.filter((item) => item.aliases.some((alias) => alias.toLowerCase() === key));
   return aliases.length === 1 ? aliases[0] : null;
 }
-var object2 = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : {}, scalar = (value, max = 500) => typeof value === "string" ? value.trim().slice(0, max) : typeof value === "number" && Number.isFinite(value) ? String(value) : "", join = (values, max = 3000) => [...new Set(values.map((value) => scalar(value)).filter(Boolean))].join("; ").slice(0, max), first = (...values) => values.map((value) => scalar(value)).find(Boolean) ?? "";
+var object2 = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : {}, scalar = (value, max = 500) => typeof value === "string" ? value.trim().slice(0, max) : typeof value === "number" && Number.isFinite(value) ? String(value) : "", join = (values, max = 3000) => [...new Set(values.map((value) => scalar(value)).filter(Boolean))].join("; ").slice(0, max), first = (...values) => values.map((value) => scalar(value)).find(Boolean) ?? "", CLOCK_RE, TEMP_RE;
 var init_simtracker = __esm(() => {
   init_dist();
   init_tracker_mappings();
+  CLOCK_RE = /\b(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?(?:\s*[AP]\.?M\.?)?\b/i;
+  TEMP_RE = /[-+]?\d+(?:\.\d+)?\s*(?:\u00B0\s*[CF]|degrees?\s*[CF]|[CF]\b)/i;
 });
 
 // src/backend/runtime/planner/json-repair.ts
@@ -33909,8 +34340,21 @@ function projectTurnPresentation(plan, options) {
     for (const document of documentsAt.get(at) ?? []) {
       const docEntity = entity("object", document.name, at);
       if (docEntity) {
+        if (document.aliases?.length) {
+          const seen = new Set([docEntity.name.toLowerCase(), ...docEntity.aliases.map((a) => a.toLowerCase())]);
+          for (const alias of document.aliases) {
+            const k = alias.toLowerCase();
+            if (!seen.has(k)) {
+              seen.add(k);
+              docEntity.aliases.push(alias);
+            }
+          }
+        }
+        const obsNote = document.observations?.find((o) => o.paragraphIndex === at)?.summary || document.visualDetails;
+        if (obsNote)
+          fact(docEntity, at, "appearance", obsNote.slice(0, 320));
         const preview = document.sections.map((s) => s.text.trim()).filter(Boolean).join(" ").slice(0, 320);
-        fact(docEntity, at, "significance", preview || `${document.kind} revealed in scene`);
+        fact(docEntity, at, "significance", preview || obsNote || `${document.kind} noticed in scene`);
       }
     }
     for (const reference of referencesAt.get(at) ?? []) {
@@ -36501,6 +36945,7 @@ var init_dossiers = __esm(() => {
   init_presentation_entities();
   init_presentation_selectors();
   init_card_role();
+  init_story_documents();
   OverrideSchema = exports_external.object({ chatId: exports_external.string().min(1).max(256), kind: exports_external.enum(["npc", "place", "object"]), name: exports_external.string().min(1).max(256), suppressed: exports_external.boolean().default(false), pinned: exports_external.boolean().default(false), note: exports_external.string().max(600).default(""), factEdits: exports_external.record(exports_external.string().min(1).max(64), exports_external.string().max(600).nullable()).optional() }).strict();
   TooltipPreferencesSchema = exports_external.object({ enabled: exports_external.boolean().default(false), rememberReferences: exports_external.boolean().default(true), actionsEnabled: exports_external.boolean().default(false), categories: exports_external.object({ npcs: exports_external.boolean().default(true), locations: exports_external.boolean().default(true), objects: exports_external.boolean().default(true) }).default({ npcs: true, locations: true, objects: true }), fieldGroups: exports_external.record(exports_external.string(), exports_external.boolean()).default({}), detail: exports_external.enum(["brief", "standard", "expanded"]).default("brief"), linking: exports_external.enum(["important", "all-known", "menu-only"]).default("important"), maxLinksPerParagraph: exports_external.number().int().min(1).max(6).default(3), maxFactsPerEntity: exports_external.number().int().min(1).max(32).default(8), maxFactChars: exports_external.number().int().min(80).max(1200).default(320), overrides: exports_external.array(OverrideSchema).max(64).default([]) });
 });
@@ -36813,6 +37258,7 @@ function normalizeConfigUncached(input2) {
     tooltips: normalizeTooltipPreferences(input2.tooltips),
     persistentLocationArt: input2.persistentLocationArt === true,
     persistentCastArt: input2.persistentCastArt === true,
+    documentImageMode: input2.documentImageMode === "auto" ? "auto" : "on-click",
     includeSimTrackerContext: bool(input2.includeSimTrackerContext, true),
     simTrackerMappings: normalizeTrackerMappings(input2.simTrackerMappings),
     contextSources: normalizeContextSources(input2.contextSources),
@@ -36932,6 +37378,7 @@ var init_config = __esm(() => {
     collectEntityReferences: false,
     persistentLocationArt: false,
     persistentCastArt: false,
+    documentImageMode: "on-click",
     tooltips: normalizeTooltipPreferences({}),
     includeSimTrackerContext: true,
     simTrackerMappings: normalizeTrackerMappings({}),
@@ -40962,9 +41409,14 @@ function extractDetectedSceneMetadata(content) {
   let location;
   let title;
   let timeOfDay;
+  let time3;
+  let date5;
+  let temperature;
+  let season;
   let atmosphere;
   let lighting;
   let weather;
+  const CLOCK_VAL_RE = /\b(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?(?:\s*[AP]\.?M\.?)?\b/i;
   const tagAttrRegex = /<(?:[a-zA-Z0-9_-]+_)?(?:scene[-_]?header|scene[-_]?info|scene|setting|location[-_]?header|environment|atmosphere|chapter[-_]?header|chapter)\b([^>]*)\/?>/gi;
   for (const match of content.matchAll(tagAttrRegex)) {
     const attrs = match[1] || "";
@@ -40977,8 +41429,19 @@ function extractDetectedSceneMetadata(content) {
         location = val;
       else if (["title", "chaptertitle"].includes(key) && !title)
         title = val;
-      else if (["time", "timeofday", "tod"].includes(key) && !timeOfDay)
+      else if (["time", "clock", "currenttime"].includes(key)) {
+        if (CLOCK_VAL_RE.test(val) && !time3)
+          time3 = val.match(CLOCK_VAL_RE)[0];
+        if (!timeOfDay)
+          timeOfDay = val;
+      } else if (["timeofday", "tod"].includes(key) && !timeOfDay)
         timeOfDay = val;
+      else if (["date", "day", "calendar"].includes(key) && !date5)
+        date5 = val;
+      else if (["temperature", "temp"].includes(key) && !temperature)
+        temperature = val;
+      else if (["season"].includes(key) && !season)
+        season = val;
       else if (["atmosphere", "mood", "ambience", "ambient"].includes(key) && !atmosphere)
         atmosphere = val;
       else if (["lighting", "light"].includes(key) && !lighting)
@@ -40992,9 +41455,11 @@ function extractDetectedSceneMetadata(content) {
     if (match[1])
       structuredBlocks.push(match[1]);
   }
-  for (const match of content.matchAll(/\[(?:Scene|Location|Setting|Environment|Atmosphere|Chapter)\b[:\s]([^\]]+)\]/gi)) {
-    if (match[1])
-      structuredBlocks.push(match[1]);
+  for (const match of content.matchAll(/\[(?:Scene|Location|Setting|Environment|Atmosphere|Chapter|Time|Date|Weather|Temp(?:erature)?)\b[:\s]([^\]]+)\]/gi)) {
+    if (match[1]) {
+      const fullTag = match[0].slice(1, -1);
+      structuredBlocks.push(/^(?:Time|Date|Weather|Temp(?:erature)?)\s*:/i.test(fullTag) ? fullTag : match[1]);
+    }
   }
   for (const block2 of structuredBlocks) {
     const locMatch = block2.match(/(?:location|place|setting|area)\s*[:=]\s*([^|\n;]+)/i);
@@ -41003,24 +41468,41 @@ function extractDetectedSceneMetadata(content) {
     const titleMatch = block2.match(/(?:title|chapter[-_]?title)\s*[:=]\s*([^|\n;]+)/i);
     if (titleMatch && !title)
       title = cleanAttributeOrText(titleMatch[1]);
-    const timeMatch = block2.match(/(?:time(?:_of_day)?|tod)\s*[:=]\s*([^|\n,;]+)/i);
-    if (timeMatch && !timeOfDay)
-      timeOfDay = cleanAttributeOrText(timeMatch[1]);
+    const timeMatch = block2.match(/(?:time(?:_of_day)?|tod|clock)\s*[:=]\s*([^|\n,;]+)/i);
+    if (timeMatch) {
+      const cleanedTime = cleanAttributeOrText(timeMatch[1]);
+      if (cleanedTime) {
+        const cMatch = cleanedTime.match(CLOCK_VAL_RE);
+        if (cMatch && !time3)
+          time3 = cMatch[0];
+        if (!timeOfDay)
+          timeOfDay = cleanedTime;
+      }
+    }
+    const dateMatch = block2.match(/(?:date|day|calendar)\s*[:=]\s*([^|\n,;\u2022]+)/i);
+    if (dateMatch && !date5)
+      date5 = cleanAttributeOrText(dateMatch[1]);
+    const tempMatch = block2.match(/(?:temperature|temp)\s*[:=]\s*([^|\n,;\u2022]+)/i);
+    if (tempMatch && !temperature)
+      temperature = cleanAttributeOrText(tempMatch[1]);
+    const seasonMatch = block2.match(/(?:season)\s*[:=]\s*([^|\n,;\u2022]+)/i);
+    if (seasonMatch && !season)
+      season = cleanAttributeOrText(seasonMatch[1]);
     const atmoMatch = block2.match(/(?:atmosphere|mood|ambience|ambient)\s*[:=]\s*([^|\n,;]+)/i);
     if (atmoMatch && !atmosphere)
       atmosphere = cleanAttributeOrText(atmoMatch[1]);
     const lightMatch = block2.match(/(?:lighting|light)\s*[:=]\s*([^|\n,;]+)/i);
     if (lightMatch && !lighting)
       lighting = cleanAttributeOrText(lightMatch[1]);
-    const weatherMatch = block2.match(/(?:weather)\s*[:=]\s*([^|\n,;]+)/i);
+    const weatherMatch = block2.match(/(?:weather|forecast)\s*[:=]\s*([^|\n,;]+)/i);
     if (weatherMatch && !weather)
       weather = cleanAttributeOrText(weatherMatch[1]);
-    if (!location && !locMatch) {
+    if (!location && !locMatch && !/^(?:time|date|temp(?:erature)?|weather|lighting|atmosphere)\s*[:=]/i.test(block2.trim())) {
       const parts = block2.split(/[|,]/).map((p) => p.trim()).filter(Boolean);
-      if (parts[0] && !/^(?:time|lighting|weather|atmosphere)/i.test(parts[0])) {
+      if (parts[0] && !/^(?:time|lighting|weather|atmosphere|date|temp)/i.test(parts[0])) {
         location = cleanAttributeOrText(parts[0]);
       }
-      if (parts[1] && !timeOfDay && !/^(?:lighting|weather|atmosphere)/i.test(parts[1])) {
+      if (parts[1] && !timeOfDay && !/^(?:lighting|weather|atmosphere|date|temp)/i.test(parts[1])) {
         timeOfDay = cleanAttributeOrText(parts[1]);
       }
     }
@@ -41043,14 +41525,57 @@ function extractDetectedSceneMetadata(content) {
       }
     }
   }
-  if (!location && !title && !timeOfDay && !atmosphere && !lighting && !weather)
+  if (!location && !title && !timeOfDay && !time3 && !date5 && !temperature && !season && !atmosphere && !lighting && !weather)
     return;
   return {
     ...location ? { location } : {},
     ...title ? { title } : {},
     ...timeOfDay ? { timeOfDay } : {},
+    ...time3 ? { time: time3 } : {},
+    ...date5 ? { date: date5 } : {},
+    ...temperature ? { temperature } : {},
+    ...season ? { season } : {},
     ...atmosphere ? { atmosphere } : {},
     ...lighting ? { lighting } : {},
+    ...weather ? { weather } : {}
+  };
+}
+function extractProseAtmosphereDelta(text3) {
+  const proseOnly = text3.replace(/\u201C[^\u201D]*\u201D/g, " ").replace(/"[^"]*"/g, " ").trim();
+  if (!proseOnly)
+    return {};
+  const timeMatch = proseOnly.match(/\b((?:[01]?\d|2[0-3]):[0-5]\d(?:\s*[AP]\.?M\.?)?|(?:[1-9]|1[0-2])\s*(?:a\.m\.|p\.m\.|AM|PM)|midnight|noon|dawn|dusk|twilight)\b/i);
+  let time3;
+  let timeOfDay;
+  if (timeMatch?.[1]) {
+    const raw = timeMatch[1].trim();
+    if (/^\d/.test(raw))
+      time3 = raw;
+    else
+      timeOfDay = raw.toLowerCase();
+  }
+  const tempMatch = proseOnly.match(/([-+]?\d+(?:\.\d+)?)\s*(?:\u00B0\s*([CF])|degrees?\s*(Celsius|Fahrenheit|C|F))\b/i);
+  const temperature = tempMatch ? `${tempMatch[1]}\xB0${(tempMatch[2] || tempMatch[3] || "").charAt(0).toUpperCase()}` : undefined;
+  const dateMatch = proseOnly.match(/\b((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s*\d{4})?|(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)(?:\s+(?:morning|afternoon|evening|night))?)\b/i);
+  const date5 = dateMatch?.[1]?.trim();
+  const weatherMatch = proseOnly.match(/\b(heavy\s+rain|steady\s+(?:cold\s+)?rain|light\s+rain|pouring\s+rain|thunderstorm|lightning\s+storm|drizzle|rain\s+hammered|raining|blizzard|snowstorm|heavy\s+snow|snowfall|snowing|dense\s+fog|heavy\s+mist|fog\s+rolled|clear\s+night|clear\s+sky|overcast(?:\s+skies)?|freezing\s+sleet|hailstorm)\b/i);
+  let weather;
+  if (weatherMatch?.[1]) {
+    const w = weatherMatch[1].toLowerCase().trim();
+    if (w === "rain hammered" || w === "raining")
+      weather = "Rain";
+    else if (w === "snowing")
+      weather = "Snow";
+    else if (w === "fog rolled")
+      weather = "Fog";
+    else
+      weather = w.charAt(0).toUpperCase() + w.slice(1);
+  }
+  return {
+    ...time3 ? { time: time3 } : {},
+    ...timeOfDay ? { timeOfDay } : {},
+    ...date5 ? { date: date5 } : {},
+    ...temperature ? { temperature } : {},
     ...weather ? { weather } : {}
   };
 }
@@ -42878,6 +43403,10 @@ var init_schemas3 = __esm(() => {
     description: exports_external.string().trim().min(1).optional(),
     lighting: exports_external.string().trim().nullable().optional(),
     timeOfDay: exports_external.string().trim().nullable().optional(),
+    time: exports_external.string().trim().max(48).nullable().optional(),
+    date: exports_external.string().trim().max(64).nullable().optional(),
+    temperature: exports_external.string().trim().max(32).nullable().optional(),
+    season: exports_external.string().trim().max(32).nullable().optional(),
     weather: exports_external.string().trim().nullable().optional(),
     addElements: exports_external.array(exports_external.string().trim().min(1)).default([]),
     removeElements: exports_external.array(exports_external.string().trim().min(1)).default([]),
@@ -42892,6 +43421,10 @@ var init_schemas3 = __esm(() => {
   PlannerEnvironmentInputSchema = exports_external.object({
     location: exports_external.string().trim().min(1).default("the current setting"),
     timeOfDay: exports_external.string().trim().nullable().default(null),
+    time: exports_external.string().trim().max(48).nullable().optional(),
+    date: exports_external.string().trim().max(64).nullable().optional(),
+    temperature: exports_external.string().trim().max(32).nullable().optional(),
+    season: exports_external.string().trim().max(32).nullable().optional(),
     weather: exports_external.string().trim().nullable().default(null),
     lighting: exports_external.string().trim().nullable().default(null),
     description: exports_external.string().trim().min(1).default("A coherent visual-novel environment in a visual novel scene."),
@@ -43163,8 +43696,8 @@ function plannerInstruction(config2, _visualContext, promptProfile, _paragraphCo
     inputTemplateInstructions(config2),
     imageDetailGuidance(config2, promptProfile),
     "basePrompt must be concise comma-separated Danbooru-style scene tags for persistent location, time, weather, lighting, and background elements. Include no camera or composition prose, character names, or character description. Keep each person's appearance in their separate characters entry; ensemble cues list their names in visibleCharacters.",
-    "environment: For an initial scene or true location change, specify full details: location, timeOfDay, weather, lighting, description, persistentElements. For continuing scenes, retain the established setting without rewriting it with generic atmospheric fluff that drops established props.",
-    "environmentChanges: On continuing scenes, use 'environmentChanges' for intentional visual state mutations: {description?, lighting?, timeOfDay?, weather?, addElements?, removeElements?, replaceElements?: [{from, to}], clearElements?, clearLighting?, clearWeather?}. Setting lighting, timeOfDay, or weather to null (or using clearLighting/clearWeather) explicitly clears the field. Setting description replaces it (it cannot be cleared; when lighting/time/weather change without a description, the scene description is re-synthesized automatically). Location changes belong only in boundary and environment.location.",
+    "environment: For an initial scene or true location change, specify full details: location, timeOfDay, time?, date?, temperature?, weather, lighting, description, persistentElements. Include exact explicit clock time (e.g. '21:48', '9:48 PM'), date, or temperature (e.g. '54\xB0F', '12\xB0C') ONLY when stated in text/headers/SimTracker; otherwise null/omit.",
+    "environmentChanges: On continuing scenes, use 'environmentChanges' for intentional visual state mutations: {description?, lighting?, timeOfDay?, time?, date?, temperature?, weather?, addElements?, removeElements?, replaceElements?: [{from, to}], clearElements?, clearLighting?, clearWeather?}. Setting lighting, timeOfDay, or weather to null (or using clearLighting/clearWeather) explicitly clears the field. Setting description replaces it (it cannot be cleared; when lighting/time/weather change without a description, the scene description is re-synthesized automatically). Location changes belong only in boundary and environment.location.",
     "cues selects paragraph indexes where illustration updates should occur. For each cue, select an expression from the expression catalogue matching the companion's emotional reaction at that moment: [idle, speak, smile, smirk, laugh, think, sad, angry, surprise, wave, shy, listen, pouting, teary_pouting, nervous, nervous_pouting, blushing_shyly, full_face_blush, lovestruck, aroused, lustful, excited, joyful, giggling, happy_smiling, happy_tears, playful_winking, bored, confused, curious, depressed, determined, disappointed, disgusted, embarrassed, enraged, exhausted, flustered, forced_smiling, guilty, indifferent, jealous, melancholic, relieved, scared, seductive_smiling, serious, shocked, sleepy, smug, suspicious, taunting, thinking, worried, acting_cute, acting_coy, admiring, cozy].",
     config2.maxImagesPerTurn > 0 ? `Distribute distinct cues evenly across key dialogue or action beats up to the user-specified TARGET_CUES count (max budget: ${config2.maxImagesPerTurn}), always including paragraph 0 as the opening cue.` : "Generate cues spread across distinct visual or emotional beats (unlimited). Always include paragraph 0.",
     `effect: Use sparse one-shot accents for meaningful story beats, usually 1\u20133 when the text calls for them; quiet turns need none. Choose ids from: ${StageEffectSchema.options.join(", ")}. Impact/explosion -> shake_hard; earthquake/collapsing ground -> rumble; energy blast/sonic boom/door blown open -> shockwave; sword/blade/claw strike -> slash_arc; shattered glass/ice/barrier -> shatter; sudden reveal -> zoom_punch; shock -> flash_white; radiant/dramatic reveal -> lens_flare; blackout/scene cut -> fade_to_black; lightning strike -> lightning; fear -> heartbeat; confession/kiss -> hearts_burst; celebration -> confetti; digital glitch -> glitch; widescreen drama -> cinema_bars.`,
@@ -43175,7 +43708,7 @@ function plannerInstruction(config2, _visualContext, promptProfile, _paragraphCo
     "characters: Return name and ONE compact comma-separated line containing physical appearance tags. Capture permanent physical traits including species/race (e.g. elf, demon, catgirl, kitsune, furry, anthro, monster girl) and non-human anatomy (e.g. animal ears, horns, tail, wings, fangs, scales, fur, paws, claws). A description that merely repeats the name is invalid. If a new character enters or is introduced in this turn, include them in 'characters'. Keep stable traits and never invent appearance that contradicts the card or KNOWN CHARACTERS baseline.",
     "Also return species as a short string and anatomy as an array of permanent physical traits when stated in the narrative or card. These fields accept any species, including unfamiliar or invented species. Do not infer a species from an ordinary personal name. Preserve these traits even when a descriptive character label repeats the species. Use null or an empty array when unknown.",
     "identity: Every KNOWN CHARACTER has a stable characterId. When a character entry, scene or cue refers to a known character under a different label (a nickname, title, or descriptive label such as 'Fox girl' for Kitsune), set 'characterId' to that known id and list the label in the entry's 'aliases'. Only declare an alias when the story makes clear the two labels are the same person; NEVER merge two characters because they share a species, appearance, or clothing. A new character with no known id gets no characterId.",
-    ...includeLoreExtraction && (config2.collectEntityReferences || config2.tooltips.enabled) ? ['Optional storyDocuments: up to 12 important letters, notes, journals, notices, phone messages or terminal readouts already explicitly established in the visible paragraphs. Shape: storyDocuments:[{name,kind:"letter"|"note"|"journal"|"notice"|"phone"|"terminal",paragraphIndex,sections:[{paragraphIndex,text,evidence}]}]. Name must be an exact identifying phrase in its introduction paragraph. Each section text must copy only literal document contents verbatim, with an exact contiguous evidence quote from its paragraph containing both the name and text. Include only explicitly displayed/read/revealed contents, never inferred text, dialogue merely spoken by a person, unread/sealed contents, private context or instructions to the reader model. Use empty sections for known documents with no revealed text. Later passages use their actual reveal paragraph. Do not complete fragments, invent lettering, unlock items or change story/image budget. Omit unsupported documents.'] : [],
+    ...includeLoreExtraction && (config2.collectEntityReferences || config2.tooltips.enabled) ? [`Optional storyDocuments: up to 12 physical documents or readable props explicitly established in visible paragraphs (flyer, letter, note, journal, map, poster, receipt, notice, newspaper, pamphlet, phone, terminal). Shape: storyDocuments:[{name,kind:${JSON.stringify(STORY_DOCUMENT_KINDS)},paragraphIndex,aliases?,visualDetails?,observations?:[{paragraphIndex,summary?,material?,condition?,visualDetails?,evidence}],sections:[{paragraphIndex,text,evidence}]}]. Name must be an exact identifying phrase in its introduction paragraph; list shorter/later surface mentions like "damp paper" in aliases when clearly the same item. Observations capture physical look/ink/layout revealed up to that paragraph. Each section text copies only literal document prose verbatim with exact evidence. Never invent unreadable text or leak future paragraphs.`] : [],
     "subjectCategory: On each character entry, set 'subjectCategory' to exactly one of female, male, nonbinary, nonhuman, or unknown, based only on explicit gender or presentation. Animal ears, tails, fur, horns, or species (kitsune, catgirl, wolf) never make a character nonhuman; use nonhuman only for a creature, animal, robot, or object that is not a person.",
     "cast & active character: Set 'character' on every scene and cue to the name of the character on screen. If a new or different character enters or speaks, set 'character' to that character. Apply changes only at the paragraph where they happen, never to earlier paragraphs.",
     "When the on-screen character is a KNOWN CHARACTER, also set 'characterId' on that scene or cue to the known id, even if the text calls them by a nickname or descriptive label. Keep 'character' as the label used in the text.",
@@ -43318,10 +43851,24 @@ function normalizeEnvironmentChanges(value) {
     from: String(x?.from || "").trim(),
     to: String(x?.to || "").trim()
   })).filter((x) => Boolean(x.from && x.to)) : [];
+  const cleanOptionalScalar = (val, max) => {
+    if (val === null)
+      return null;
+    if (typeof val !== "string")
+      return;
+    const s = val.trim().slice(0, max);
+    if (!s)
+      return;
+    return isExplicitClear(s) ? null : s;
+  };
   return {
     description: desc,
     lighting: light,
     timeOfDay: tod,
+    time: cleanOptionalScalar(record3.time, 48),
+    date: cleanOptionalScalar(record3.date, 64),
+    temperature: cleanOptionalScalar(record3.temperature, 32),
+    season: cleanOptionalScalar(record3.season, 32),
     weather: w,
     addElements: add,
     removeElements: rem,
@@ -43344,13 +43891,27 @@ function normalizeEnvironment(value, defaultLoc) {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return fallback;
   const record3 = value;
+  const cleanOpt = (val, max) => {
+    if (typeof val !== "string")
+      return;
+    const s = val.trim().slice(0, max);
+    return s && !isExplicitClear(s) ? s : undefined;
+  };
   const persistent = Array.isArray(record3.persistentElements) ? record3.persistentElements.map((item) => typeof item === "string" ? item.trim() : String(item)).filter(Boolean) : typeof record3.persistentElements === "string" ? record3.persistentElements.split(",").map((item) => item.trim()).filter(Boolean) : [];
   const removed = Array.isArray(record3.removedElements) ? record3.removedElements.map((item) => typeof item === "string" ? item.trim() : String(item)).filter(Boolean) : typeof record3.removedElements === "string" ? record3.removedElements.split(",").map((item) => item.trim()).filter(Boolean) : [];
   const rawChanges = record3.changes ?? record3.environmentChanges;
   const changes = normalizeEnvironmentChanges(rawChanges);
+  const time3 = cleanOpt(record3.time, 48);
+  const date5 = cleanOpt(record3.date, 64);
+  const temperature = cleanOpt(record3.temperature, 32);
+  const season = cleanOpt(record3.season, 32);
   return {
     location: typeof record3.location === "string" && record3.location.trim() && !isGenericLocation(record3.location) ? record3.location.trim() : fallback.location,
     timeOfDay: normalizeTimeOfDay(record3.timeOfDay),
+    ...time3 ? { time: time3 } : {},
+    ...date5 ? { date: date5 } : {},
+    ...temperature ? { temperature } : {},
+    ...season ? { season } : {},
     weather: normalizeWeather(record3.weather),
     lighting: typeof record3.lighting === "string" && !isExplicitClear(record3.lighting) ? record3.lighting.trim() : null,
     description: typeof record3.description === "string" && record3.description.trim() ? record3.description.trim() : fallback.description,
@@ -44272,9 +44833,28 @@ function mergeEnvironment(base, proposal, changes) {
   if (weather && (weather.toLowerCase() === "none" || weather.toLowerCase() === "reset")) {
     weather = null;
   }
+  const mergeMetaField = (prevVal, propVal, changeVal) => {
+    if (changeVal === null)
+      return;
+    if (typeof changeVal === "string" && changeVal.trim())
+      return changeVal.trim();
+    if (typeof propVal === "string" && propVal.trim())
+      return propVal.trim();
+    if (typeof prevVal === "string" && prevVal.trim())
+      return prevVal.trim();
+    return;
+  };
+  const resolvedTime = mergeMetaField(base.time, proposal.time, changes?.time);
+  const resolvedDate = mergeMetaField(base.date, proposal.date, changes?.date);
+  const resolvedTemp = mergeMetaField(base.temperature, proposal.temperature, changes?.temperature);
+  const resolvedSeason = mergeMetaField(base.season, proposal.season, changes?.season);
   return SceneEnvironmentSchema.parse({
     location,
     timeOfDay,
+    ...resolvedTime ? { time: resolvedTime } : {},
+    ...resolvedDate ? { date: resolvedDate } : {},
+    ...resolvedTemp ? { temperature: resolvedTemp } : {},
+    ...resolvedSeason ? { season: resolvedSeason } : {},
     weather,
     lighting,
     description,
@@ -44621,7 +45201,9 @@ async function planTurn(spindle2, input2) {
     const parts = [
       meta3.location ? `Location: ${meta3.location}` : "",
       meta3.title ? `Chapter Title: ${meta3.title}` : "",
-      meta3.timeOfDay ? `Time: ${meta3.timeOfDay}` : "",
+      meta3.time ? `Clock: ${meta3.time}` : meta3.timeOfDay ? `Time: ${meta3.timeOfDay}` : "",
+      meta3.date ? `Date: ${meta3.date}` : "",
+      meta3.temperature ? `Temperature: ${meta3.temperature}` : "",
       meta3.atmosphere ? `Atmosphere: ${meta3.atmosphere}` : "",
       meta3.lighting ? `Lighting: ${meta3.lighting}` : "",
       meta3.weather ? `Weather: ${meta3.weather}` : ""
@@ -44878,11 +45460,16 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
     if (sceneCast.length === 0 && protagonistName)
       sceneCast.push(protagonistName);
     const detected = narrative.detectedSceneMetadata;
+    const simAtmo = input2.simTrackerEvidence?.worldAtmosphere;
     const baseEnv = previous !== null && !decision.startsNewScene ? previous.environment : null;
     const resolvedProposalEnv = {
       ...proposal.environment,
       ...detected?.location && (isGenericLocation(proposal.environment.location) || !proposal.environment.location) ? { location: detected.location } : {},
       ...detected?.timeOfDay && !proposal.environment.timeOfDay ? { timeOfDay: detected.timeOfDay } : {},
+      ...simAtmo?.time || detected?.time || proposal.environment.time ? { time: simAtmo?.time ?? detected?.time ?? proposal.environment.time ?? null } : {},
+      ...simAtmo?.date || detected?.date || proposal.environment.date ? { date: simAtmo?.date ?? detected?.date ?? proposal.environment.date ?? null } : {},
+      ...simAtmo?.temperature || detected?.temperature || proposal.environment.temperature ? { temperature: simAtmo?.temperature ?? detected?.temperature ?? proposal.environment.temperature ?? null } : {},
+      ...simAtmo?.season || detected?.season || proposal.environment.season ? { season: simAtmo?.season ?? detected?.season ?? proposal.environment.season ?? null } : {},
       ...detected?.weather && !proposal.environment.weather ? { weather: detected.weather } : {},
       ...detected?.lighting && !proposal.environment.lighting ? { lighting: detected.lighting } : {},
       ...detected?.atmosphere && !proposal.environment.description.includes(detected.atmosphere) ? { description: `${proposal.environment.description} ${detected.atmosphere}` } : {}
@@ -44890,6 +45477,10 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
     const mergedEnv = baseEnv ? mergeEnvironment(baseEnv, resolvedProposalEnv, proposal.environmentChanges) : SceneEnvironmentSchema.parse({
       location: resolvedProposalEnv.location,
       timeOfDay: resolvedProposalEnv.timeOfDay,
+      ...resolvedProposalEnv.time ? { time: resolvedProposalEnv.time } : {},
+      ...resolvedProposalEnv.date ? { date: resolvedProposalEnv.date } : {},
+      ...resolvedProposalEnv.temperature ? { temperature: resolvedProposalEnv.temperature } : {},
+      ...resolvedProposalEnv.season ? { season: resolvedProposalEnv.season } : {},
       weather: resolvedProposalEnv.weather === "none" || resolvedProposalEnv.weather === "reset" ? null : resolvedProposalEnv.weather,
       lighting: resolvedProposalEnv.lighting,
       description: resolvedProposalEnv.description,
@@ -45211,11 +45802,24 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
   const continuityDeltas = timeline.deltas;
   const terminalContinuity = reduceContinuity(continuity, continuityDeltas);
   const terminalSnapshot = timeline.snapshots.at(-1);
+  const worldAtmosphereTimeline = buildWorldAtmosphereTimeline({
+    paragraphs: narrative.paragraphs,
+    scenes,
+    ...input2.simTrackerEvidence?.worldAtmosphere ? { simTrackerAtmosphere: input2.simTrackerEvidence.worldAtmosphere } : {},
+    ...narrative.detectedSceneMetadata ? { detectedMeta: narrative.detectedSceneMetadata } : {},
+    previousEnvironment: input2.previousScene?.environment ?? null
+  });
+  const loreEnabled = input2.config.collectEntityReferences || input2.config.tooltips.enabled;
+  const malformedDocs = planner.storyDocuments !== undefined && !Array.isArray(planner.storyDocuments);
+  const llmDocs = normalizeStoryDocuments(planner.storyDocuments, promptParagraphs);
+  const sensedDocs = senseDocumentsDeterministically(promptParagraphs);
+  const resolvedStoryDocuments = loreEnabled && !malformedDocs ? !input2.splitHorizonLore ? mergeStoryDocuments(llmDocs, sensedDocs) : Array.isArray(planner.storyDocuments) && planner.storyDocuments.length > 0 ? mergeStoryDocuments(llmDocs, sensedDocs) : sensedDocs.length > 0 ? sensedDocs : undefined : loreEnabled && malformedDocs ? [] : undefined;
   let plan = validateTurnPlan(TurnPlanSchema.parse({
     schemaVersion: 1,
     key,
     ...(input2.config.collectEntityReferences || input2.config.tooltips.enabled) && (!input2.splitHorizonLore || Array.isArray(planner.storyReferences) && planner.storyReferences.length > 0) ? { storyReferences: normalizeStoryReferences(planner.storyReferences, promptParagraphs).filter((r) => !(cardRole === "scenario" && r.kind === "npc" && Boolean(scenarioReferenceName) && characterAppearanceKey(r.name) === scenarioReferenceName)) } : {},
-    ...(input2.config.collectEntityReferences || input2.config.tooltips.enabled) && (!input2.splitHorizonLore || Array.isArray(planner.storyDocuments) && planner.storyDocuments.length > 0) ? { storyDocuments: normalizeStoryDocuments(planner.storyDocuments, promptParagraphs) } : {},
+    ...resolvedStoryDocuments !== undefined ? { storyDocuments: resolvedStoryDocuments } : {},
+    ...worldAtmosphereTimeline.length > 0 ? { worldAtmosphereTimeline } : {},
     paragraphs: narrative.paragraphs,
     panels: narrative.panels,
     panelSource: resolvedContent.slice(0, 200000),
@@ -45290,7 +45894,7 @@ async function extractTurnLoreAsync(spindle2, params) {
 `);
   const systemPrompt = [
     params.config.referencePromptOverride?.trim() || MASTER_LORE_REFERENCE_PROMPT,
-    'Also extract optional storyDocuments: up to 12 explicit letters, notes, journals, notices, phone messages or terminal readouts with shape storyDocuments:[{name,kind:"letter"|"note"|"journal"|"notice"|"phone"|"terminal",paragraphIndex,sections:[{paragraphIndex,text,evidence}]}].',
+    `Also extract optional storyDocuments: up to 12 physical documents or readable props with shape storyDocuments:[{name,kind:${JSON.stringify(STORY_DOCUMENT_KINDS)},paragraphIndex,aliases?,visualDetails?,observations?:[{paragraphIndex,summary?,material?,condition?,visualDetails?,evidence}],sections:[{paragraphIndex,text,evidence}]}].`,
     'Return one JSON object { "storyReferences": [...], "storyDocuments": [...] } and no prose.'
   ].join(`
 
@@ -45308,18 +45912,88 @@ async function extractTurnLoreAsync(spindle2, params) {
   });
   throwIfAborted(params.signal);
   const rawContent = extractResponseContent(response);
+  const sensedDocs = senseDocumentsDeterministically(params.paragraphs);
   if (typeof rawContent !== "string" && (!rawContent || typeof rawContent !== "object")) {
-    return { storyReferences: [], storyDocuments: [] };
+    return { storyReferences: [], storyDocuments: sensedDocs };
   }
   const parsed = jsonObject(rawContent);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return { storyReferences: [], storyDocuments: [] };
+    return { storyReferences: [], storyDocuments: sensedDocs };
   }
   const rec = parsed;
   const scenarioRef = params.scenarioReferenceName;
   const storyReferences = normalizeStoryReferences(rec.storyReferences, params.paragraphs).filter((r) => !(params.cardRole === "scenario" && r.kind === "npc" && Boolean(scenarioRef) && characterAppearanceKey(r.name) === scenarioRef));
-  const storyDocuments = normalizeStoryDocuments(rec.storyDocuments, params.paragraphs);
+  const storyDocuments = mergeStoryDocuments(normalizeStoryDocuments(rec.storyDocuments, params.paragraphs), sensedDocs);
   return { storyReferences, storyDocuments };
+}
+function buildWorldAtmosphereTimeline(params) {
+  const sceneAt = new Map;
+  for (const s of params.scenes)
+    sceneAt.set(s.startParagraph, s);
+  const firstEnv = params.scenes[0]?.environment;
+  const sim = params.simTrackerAtmosphere;
+  const hdr = params.detectedMeta;
+  const prev = params.previousEnvironment;
+  const cleanWeather = (val) => {
+    if (!val)
+      return;
+    const s = val.trim();
+    return s && !/^(?:none|reset|default|n\/a)$/i.test(s) ? s : undefined;
+  };
+  const initialSource = sim && (sim.time || sim.date || sim.temperature || sim.weather || sim.timeOfDay) ? "simtracker" : hdr && (hdr.time || hdr.date || hdr.temperature || hdr.weather || hdr.timeOfDay) ? "header" : firstEnv && (firstEnv.time || firstEnv.date || firstEnv.temperature || firstEnv.weather || firstEnv.timeOfDay) ? "planner" : "carried";
+  let current = {
+    ...sim?.time ?? hdr?.time ?? firstEnv?.time ?? prev?.time ? { time: sim?.time ?? hdr?.time ?? firstEnv?.time ?? prev?.time ?? undefined } : {},
+    ...sim?.timeOfDay ?? hdr?.timeOfDay ?? firstEnv?.timeOfDay ?? prev?.timeOfDay ? { timeOfDay: sim?.timeOfDay ?? hdr?.timeOfDay ?? firstEnv?.timeOfDay ?? prev?.timeOfDay ?? undefined } : {},
+    ...sim?.date ?? hdr?.date ?? firstEnv?.date ?? prev?.date ? { date: sim?.date ?? hdr?.date ?? firstEnv?.date ?? prev?.date ?? undefined } : {},
+    ...sim?.temperature ?? hdr?.temperature ?? firstEnv?.temperature ?? prev?.temperature ? { temperature: sim?.temperature ?? hdr?.temperature ?? firstEnv?.temperature ?? prev?.temperature ?? undefined } : {},
+    ...cleanWeather(sim?.weather ?? hdr?.weather ?? firstEnv?.weather ?? prev?.weather) ? { weather: cleanWeather(sim?.weather ?? hdr?.weather ?? firstEnv?.weather ?? prev?.weather) } : {},
+    ...sim?.season ?? hdr?.season ?? firstEnv?.season ?? prev?.season ? { season: sim?.season ?? hdr?.season ?? firstEnv?.season ?? prev?.season ?? undefined } : {},
+    ...firstEnv ? { indoor: isEnclosedInterior(firstEnv.location, firstEnv.description) } : {},
+    source: initialSource
+  };
+  const timeline = [];
+  const hasAny = (s) => Boolean(s.time || s.timeOfDay || s.date || s.temperature || s.weather || s.season);
+  const keyOf = (s) => JSON.stringify([s.time, s.timeOfDay, s.date, s.temperature, s.weather, s.season, s.indoor]);
+  let lastKey = "";
+  for (const p of params.paragraphs) {
+    const sc = sceneAt.get(p.index);
+    if (sc && p.index > 0) {
+      const env = sc.environment;
+      const indoor = isEnclosedInterior(env.location, env.description);
+      const nextWeather = cleanWeather(env.weather) ?? current.weather;
+      current = {
+        ...current,
+        ...env.time ? { time: env.time } : {},
+        ...env.timeOfDay ? { timeOfDay: env.timeOfDay } : {},
+        ...env.date ? { date: env.date } : {},
+        ...env.temperature ? { temperature: env.temperature } : {},
+        ...nextWeather ? { weather: nextWeather } : {},
+        ...env.season ? { season: env.season } : {},
+        indoor,
+        source: "planner"
+      };
+    }
+    const proseDelta = extractProseAtmosphereDelta(stripTextEffectTags(p.text));
+    if (proseDelta.time || proseDelta.timeOfDay || proseDelta.date || proseDelta.temperature || proseDelta.weather) {
+      current = {
+        ...current,
+        ...(p.index > 0 || !current.time) && proseDelta.time ? { time: proseDelta.time } : {},
+        ...(p.index > 0 || !current.timeOfDay) && proseDelta.timeOfDay ? { timeOfDay: proseDelta.timeOfDay } : {},
+        ...(p.index > 0 || !current.date) && proseDelta.date ? { date: proseDelta.date } : {},
+        ...(p.index > 0 || !current.temperature) && proseDelta.temperature ? { temperature: proseDelta.temperature } : {},
+        ...(p.index > 0 || !current.weather) && proseDelta.weather ? { weather: proseDelta.weather } : {},
+        ...p.index > 0 ? { source: "prose" } : {}
+      };
+    }
+    if (hasAny(current)) {
+      const nextKey = keyOf(current);
+      if (nextKey !== lastKey || p.index === 0) {
+        timeline.push({ paragraphIndex: p.index, ...current });
+        lastKey = nextKey;
+      }
+    }
+  }
+  return timeline;
 }
 function fingerprintForMessage(message) {
   return stableHash(`${message.id}\x00${message.swipe_id}\x00${message.content}`);
@@ -46147,13 +46821,15 @@ function isFrontendRequest(value) {
     return SetCardRoleRequestSchema.safeParse(value).success;
   if (value.type === "vn_delete_image")
     return DeleteImageRequestSchema.safeParse(value).success;
+  if (value.type === "vn_generate_document_image")
+    return GenerateDocumentImageRequestSchema.safeParse(value).success;
   if (value.type === "vn_get_turn_snapshot")
     return exports_external.object({ type: exports_external.literal("vn_get_turn_snapshot"), chatId: exports_external.string().min(1).max(128), messageId: exports_external.string().min(1).max(128), swipeId: exports_external.number().int().min(0).optional(), requestId: exports_external.string().min(1).max(128).optional() }).strict().safeParse(value).success;
   if (value.type === "vn_reading_position")
     return ReadingPositionSchema.safeParse(value.position).success;
   return typeof value.type === "string" && String(value.type).startsWith("vn_");
 }
-var recoveryScope, CorrectImageSubjectRequestSchema, SetCardRoleRequestSchema, ReplanTurnRequestSchema, ContextSourcesRequestSchema, RecoverImagesRequestSchema, imageOperationScope, imageOperationEdits, imagePromptOperation, RewriteImagePromptRequestSchema, ManualLightingSchema, PrepareImageRequestSchema, RestorePreviousImageRequestSchema, DeleteImageRequestSchema, REFERENCE_IMAGE_MAX_BYTES, REFERENCE_IMAGE_MIMES;
+var recoveryScope, CorrectImageSubjectRequestSchema, SetCardRoleRequestSchema, ReplanTurnRequestSchema, ContextSourcesRequestSchema, RecoverImagesRequestSchema, imageOperationScope, imageOperationEdits, imagePromptOperation, RewriteImagePromptRequestSchema, ManualLightingSchema, PrepareImageRequestSchema, RestorePreviousImageRequestSchema, DeleteImageRequestSchema, GenerateDocumentImageRequestSchema, REFERENCE_IMAGE_MAX_BYTES, REFERENCE_IMAGE_MIMES;
 var init_protocol = __esm(() => {
   init_story_dna();
   init_character_dna_workflow();
@@ -46183,8 +46859,101 @@ var init_protocol = __esm(() => {
   PrepareImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_prepare_image"), ...imageOperationScope, jobId: exports_external.string().min(1).max(200), templateId: exports_external.string().min(1).max(100).optional(), ...imagePromptOperation, regeneratePrompt: exports_external.boolean().optional(), promptOperation: exports_external.enum(["rewrite", "enrich"]).optional(), reframe: exports_external.boolean().optional(), relight: exports_external.boolean().optional(), lockContinuity: exports_external.boolean().optional(), styleId: exports_external.string().max(100).optional(), fitToModel: exports_external.boolean().optional(), model: exports_external.string().max(200).optional(), connectionId: exports_external.string().max(200).optional(), quickGenerate: exports_external.boolean().optional(), manualCamera: exports_external.object({ shotSize: exports_external.string().optional(), angle: exports_external.string().optional(), lensFeel: exports_external.string().optional(), composition: exports_external.string().optional(), depth: exports_external.string().optional(), dialogueSafeArea: exports_external.enum(["auto", "always", "off"]).optional(), focalPoint: exports_external.object({ x: exports_external.number().min(0).max(100), y: exports_external.number().min(0).max(100) }).strict().optional() }).strict().optional(), manualLighting: ManualLightingSchema.optional() }).strict();
   RestorePreviousImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_restore_previous_image"), ...imageOperationScope, swipeId: exports_external.number().int().nonnegative().nullable(), revision: exports_external.number().int().nonnegative(), jobId: exports_external.string().min(1).max(200), versionId: exports_external.string().min(1).max(256) }).strict();
   DeleteImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_delete_image"), chatId: exports_external.string().min(1).max(256), imageId: exports_external.string().min(1).max(256).optional(), imageUrl: exports_external.string().min(1).max(2048).optional(), jobId: exports_external.string().min(1).max(256).optional() }).strict();
+  GenerateDocumentImageRequestSchema = exports_external.object({
+    type: exports_external.literal("vn_generate_document_image"),
+    chatId: exports_external.string().min(1).max(200),
+    messageId: exports_external.string().min(1).max(200),
+    swipeId: exports_external.number().int().nonnegative(),
+    sourceFingerprint: exports_external.string().min(1).max(200),
+    revision: exports_external.number().int().nonnegative(),
+    documentId: exports_external.string().min(1).max(200),
+    throughParagraphIndex: exports_external.number().int().nonnegative(),
+    requestId: exports_external.string().min(1).max(100),
+    forceRegenerate: exports_external.boolean().optional()
+  }).strict();
   REFERENCE_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
   REFERENCE_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/avif"]);
+});
+
+// src/shared/image-payload-sanitizer.ts
+function estimateBase64Bytes(base643) {
+  if (!base643)
+    return 0;
+  const comma = base643.indexOf(",");
+  const clean2 = comma >= 0 ? base643.slice(comma + 1) : base643;
+  let padding = 0;
+  if (clean2.endsWith("=="))
+    padding = 2;
+  else if (clean2.endsWith("="))
+    padding = 1;
+  return Math.max(0, Math.floor(clean2.length * 3 / 4) - padding);
+}
+function isStrictTextToImageModel(provider, model) {
+  if (!model)
+    return false;
+  const norm = model.toLowerCase();
+  if (norm.includes("text-to-image") || norm.includes("txt2img")) {
+    return true;
+  }
+  return false;
+}
+function stripDanglingImageReferences(parameters) {
+  const result = { ...parameters };
+  const keysToRemove = [
+    "resolvedReferenceImages",
+    "resolvedSourceImages",
+    "referenceImages",
+    "input_image",
+    "image",
+    "source_image",
+    "init_image"
+  ];
+  for (const key of keysToRemove) {
+    if (key in result) {
+      delete result[key];
+    }
+  }
+  return result;
+}
+function isPositiveOnlyModel(model) {
+  if (!model)
+    return false;
+  const lower = model.toLowerCase();
+  return lower.includes("ideogram") || lower.includes("flux-3/klein") || lower.includes("flux-3-klein") || lower.includes("nano-banana") || lower.includes("recraft");
+}
+function sanitizeImagePayloadParameters(parameters, provider, model) {
+  if (!parameters || typeof parameters !== "object")
+    return parameters;
+  let result = { ...parameters };
+  if (isPositiveOnlyModel(model)) {
+    delete result.negativePrompt;
+    delete result.negative_prompt;
+    delete result.negative;
+    delete result.uc;
+  }
+  if (provider?.toLowerCase() === "nanogpt" && isStrictTextToImageModel(provider, model)) {
+    result = stripDanglingImageReferences(result);
+  }
+  let totalBytes = 0;
+  const references = result.resolvedReferenceImages ?? result.resolvedSourceImages ?? result.referenceImages;
+  if (Array.isArray(references)) {
+    for (const ref of references) {
+      if (typeof ref === "string") {
+        totalBytes += estimateBase64Bytes(ref);
+      } else if (ref && typeof ref === "object" && "data" in ref && typeof ref.data === "string") {
+        totalBytes += estimateBase64Bytes(ref.data);
+      }
+    }
+  }
+  if (provider?.toLowerCase() === "nanogpt" && totalBytes >= NANO_GPT_PAYLOAD_LIMIT_BYTES) {
+    return stripDanglingImageReferences(result);
+  }
+  return result;
+}
+var MAX_SAFE_REFERENCE_BYTES, NANO_GPT_PAYLOAD_LIMIT_BYTES;
+var init_image_payload_sanitizer = __esm(() => {
+  MAX_SAFE_REFERENCE_BYTES = 1.5 * 1024 * 1024;
+  NANO_GPT_PAYLOAD_LIMIT_BYTES = 10 * 1024 * 1024;
 });
 
 // src/backend/runtime/image-output-plan.ts
@@ -46236,10 +47005,10 @@ function matchesCharacterToken(candidate, target2) {
 function findSubjectClue(subjectName, spatialRelationships, narrativeClauses) {
   const fullName = subjectName.trim();
   const firstName = fullName.split(/\s+/)[0] || fullName;
-  const matchName = (text4) => {
-    if (fullName.length >= 2 && new RegExp(`\\b${escapeRegex2(fullName)}\\b`, "i").test(text4))
+  const matchName = (text3) => {
+    if (fullName.length >= 2 && new RegExp(`\\b${escapeRegex2(fullName)}\\b`, "i").test(text3))
       return true;
-    if (firstName.length >= 2 && new RegExp(`\\b${escapeRegex2(firstName)}\\b`, "i").test(text4))
+    if (firstName.length >= 2 && new RegExp(`\\b${escapeRegex2(firstName)}\\b`, "i").test(text3))
       return true;
     return false;
   };
@@ -46722,87 +47491,6 @@ var init_reference_plan = __esm(() => {
   }).strict();
 });
 
-// src/shared/image-payload-sanitizer.ts
-function estimateBase64Bytes(base643) {
-  if (!base643)
-    return 0;
-  const comma = base643.indexOf(",");
-  const clean2 = comma >= 0 ? base643.slice(comma + 1) : base643;
-  let padding = 0;
-  if (clean2.endsWith("=="))
-    padding = 2;
-  else if (clean2.endsWith("="))
-    padding = 1;
-  return Math.max(0, Math.floor(clean2.length * 3 / 4) - padding);
-}
-function isStrictTextToImageModel(provider, model) {
-  if (!model)
-    return false;
-  const norm = model.toLowerCase();
-  if (norm.includes("text-to-image") || norm.includes("txt2img")) {
-    return true;
-  }
-  return false;
-}
-function stripDanglingImageReferences(parameters) {
-  const result = { ...parameters };
-  const keysToRemove = [
-    "resolvedReferenceImages",
-    "resolvedSourceImages",
-    "referenceImages",
-    "input_image",
-    "image",
-    "source_image",
-    "init_image"
-  ];
-  for (const key of keysToRemove) {
-    if (key in result) {
-      delete result[key];
-    }
-  }
-  return result;
-}
-function isPositiveOnlyModel(model) {
-  if (!model)
-    return false;
-  const lower = model.toLowerCase();
-  return lower.includes("ideogram") || lower.includes("flux-3/klein") || lower.includes("flux-3-klein") || lower.includes("nano-banana") || lower.includes("recraft");
-}
-function sanitizeImagePayloadParameters(parameters, provider, model) {
-  if (!parameters || typeof parameters !== "object")
-    return parameters;
-  let result = { ...parameters };
-  if (isPositiveOnlyModel(model)) {
-    delete result.negativePrompt;
-    delete result.negative_prompt;
-    delete result.negative;
-    delete result.uc;
-  }
-  if (provider?.toLowerCase() === "nanogpt" && isStrictTextToImageModel(provider, model)) {
-    result = stripDanglingImageReferences(result);
-  }
-  let totalBytes = 0;
-  const references = result.resolvedReferenceImages ?? result.resolvedSourceImages ?? result.referenceImages;
-  if (Array.isArray(references)) {
-    for (const ref of references) {
-      if (typeof ref === "string") {
-        totalBytes += estimateBase64Bytes(ref);
-      } else if (ref && typeof ref === "object" && "data" in ref && typeof ref.data === "string") {
-        totalBytes += estimateBase64Bytes(ref.data);
-      }
-    }
-  }
-  if (provider?.toLowerCase() === "nanogpt" && totalBytes >= NANO_GPT_PAYLOAD_LIMIT_BYTES) {
-    return stripDanglingImageReferences(result);
-  }
-  return result;
-}
-var MAX_SAFE_REFERENCE_BYTES, NANO_GPT_PAYLOAD_LIMIT_BYTES;
-var init_image_payload_sanitizer = __esm(() => {
-  MAX_SAFE_REFERENCE_BYTES = 1.5 * 1024 * 1024;
-  NANO_GPT_PAYLOAD_LIMIT_BYTES = 10 * 1024 * 1024;
-});
-
 // src/backend/runtime/reference-plan.ts
 function hydrateDataUrl(raw, mimeType = "image/png") {
   const clean2 = raw?.trim();
@@ -47098,7 +47786,7 @@ function createPromptDocument(dialect, sections = [], negativeSections = [], par
 function assemblePromptSections(sections, separator = `
 
 `) {
-  return sections.map((s) => s.text.trim()).filter((text4) => text4.length > 0).join(separator);
+  return sections.map((s) => s.text.trim()).filter((text3) => text3.length > 0).join(separator);
 }
 var PromptPrioritySchema, PromptSectionSchema, PromptDocumentSchema;
 var init_prompt_document = __esm(() => {
@@ -47168,10 +47856,10 @@ function cleanActionAndDirection(rawAction, rawDirection) {
   }
   return `${act}, ${cleanDir}`;
 }
-function sanitizeQuoteAndUnitNotation(text4) {
-  if (!text4)
+function sanitizeQuoteAndUnitNotation(text3) {
+  if (!text3)
     return "";
-  return text4.replace(/\b(\d+)'\s*(\d+)(?:"|''|\u2019\u2019)?\b/g, "$1 ft $2 in").replace(/\b(\d+)'\b/g, "$1 ft").replace(/\b(\d+)"\b/g, "$1 inches").replace(/"/g, "'").replace(/,\s*\./g, ".").replace(/;\s*\./g, ".").replace(/,\s*,/g, ",").replace(/;\s*;/g, ";").trim();
+  return text3.replace(/\b(\d+)'\s*(\d+)(?:"|''|\u2019\u2019)?\b/g, "$1 ft $2 in").replace(/\b(\d+)'\b/g, "$1 ft").replace(/\b(\d+)"\b/g, "$1 inches").replace(/"/g, "'").replace(/,\s*\./g, ".").replace(/;\s*\./g, ".").replace(/,\s*,/g, ",").replace(/;\s*;/g, ";").trim();
 }
 function formatSceneProse(sceneText) {
   if (!sceneText)
@@ -47408,35 +48096,35 @@ function resolveKleinPlacement(placement, idx) {
   };
 }
 function isPhotographicMedium(styleDNA, brief) {
-  const text4 = `${styleDNA?.medium || ""} ${styleDNA?.prefix || ""} ${brief?.scene || ""}`.toLowerCase();
-  if (/\b(?:photo|photograph|candid|35mm|film|dslr|smartphone|camera roll|snapshot|raw photo)\b/.test(text4)) {
+  const text3 = `${styleDNA?.medium || ""} ${styleDNA?.prefix || ""} ${brief?.scene || ""}`.toLowerCase();
+  if (/\b(?:photo|photograph|candid|35mm|film|dslr|smartphone|camera roll|snapshot|raw photo)\b/.test(text3)) {
     return true;
   }
-  if (/\b(?:illustration|anime|manga|cel[- ]shaded|drawing|digital art|painting|watercolor|gouache|comic)\b/.test(text4)) {
+  if (/\b(?:illustration|anime|manga|cel[- ]shaded|drawing|digital art|painting|watercolor|gouache|comic)\b/.test(text3)) {
     return false;
   }
   return false;
 }
-function extractQuotedText(text4) {
-  const match = text4.match(/['"]([^'"]{1,50})['"]/);
+function extractQuotedText(text3) {
+  const match = text3.match(/['"]([^'"]{1,50})['"]/);
   return match && match[1] ? match[1].trim() : null;
 }
 function resolveKleinMediumPrefix(isPhoto, styleDNA, brief, shotSize) {
   if (isPhoto) {
-    const text4 = `${styleDNA?.prefix || ""} ${brief?.scene || ""}`.toLowerCase();
+    const text3 = `${styleDNA?.prefix || ""} ${brief?.scene || ""}`.toLowerCase();
     if (shotSize === "close-up" || shotSize === "macro" || shotSize === "extreme-close-up") {
       return "Close-up photograph";
     }
-    if (/\b(?:smartphone|candid|phone|snapshot|casual|camera roll)\b/.test(text4)) {
+    if (/\b(?:smartphone|candid|phone|snapshot|casual|camera roll)\b/.test(text3)) {
       return "Candid handheld smartphone photograph";
     }
-    if (/\b(?:studio|portrait session|backdrop)\b/.test(text4)) {
+    if (/\b(?:studio|portrait session|backdrop)\b/.test(text3)) {
       return "Studio photograph";
     }
-    if (/\b(?:outside|outdoor|nature|street|garden|forest|park|beach|sky|harbor|alley|road)\b/.test(text4)) {
+    if (/\b(?:outside|outdoor|nature|street|garden|forest|park|beach|sky|harbor|alley|road)\b/.test(text3)) {
       return "Full-color outdoor photograph";
     }
-    if (/\b(?:room|loft|library|indoor|interior|kitchen|bedroom|parlor|cafe|laundromat|hall)\b/.test(text4)) {
+    if (/\b(?:room|loft|library|indoor|interior|kitchen|bedroom|parlor|cafe|laundromat|hall)\b/.test(text3)) {
       return "Full-color indoor photograph";
     }
     return "Full-color photograph";
@@ -49021,23 +49709,23 @@ function extractIdeogramPalette(brief, styleDNA) {
       return hexes.slice(0, 6);
     }
   }
-  const text4 = `${brief.lighting || ""} ${brief.scene || ""}`.toLowerCase();
-  if (/\b(?:night|midnight|moon|dark|shadow|rain|storm)\b/.test(text4)) {
+  const text3 = `${brief.lighting || ""} ${brief.scene || ""}`.toLowerCase();
+  if (/\b(?:night|midnight|moon|dark|shadow|rain|storm)\b/.test(text3)) {
     return ["#0B1021", "#1C2541", "#3A86FF", "#60A5FA", "#E2E8F0"];
   }
-  if (/\b(?:sunset|dusk|twilight|golden hour|evening)\b/.test(text4)) {
+  if (/\b(?:sunset|dusk|twilight|golden hour|evening)\b/.test(text3)) {
     return ["#1C1917", "#7C2D12", "#D97706", "#F59E0B", "#FEF3C7"];
   }
-  if (/\b(?:neon|cyber|cyberpunk|scifi|sci-fi)\b/.test(text4)) {
+  if (/\b(?:neon|cyber|cyberpunk|scifi|sci-fi)\b/.test(text3)) {
     return ["#0D0221", "#0F084B", "#FF2A85", "#00F0FF", "#F4F4F9"];
   }
-  if (/\b(?:forest|nature|wood|tree|garden|autumn)\b/.test(text4)) {
+  if (/\b(?:forest|nature|wood|tree|garden|autumn)\b/.test(text3)) {
     return ["#052E16", "#14532D", "#16A34A", "#CA8A04", "#FEF08A"];
   }
-  if (/\b(?:indoor|candle|lamp|warm|interior|library|parlor)\b/.test(text4)) {
+  if (/\b(?:indoor|candle|lamp|warm|interior|library|parlor)\b/.test(text3)) {
     return ["#18181B", "#3F3F46", "#B45309", "#F59E0B", "#FEF08A"];
   }
-  if (/\b(?:dawn|morning|sun|sunny|bright|day)\b/.test(text4)) {
+  if (/\b(?:dawn|morning|sun|sunny|bright|day)\b/.test(text3)) {
     return ["#0F172A", "#1E3A8A", "#38BDF8", "#FDE047", "#F8FAFC"];
   }
   return ["#0F172A", "#334155", "#64748B", "#94A3B8", "#F8FAFC"];
@@ -49054,8 +49742,8 @@ function isPhotographicMedium2(styleDNA, brief) {
   }
   return false;
 }
-function extractQuotedText2(text4) {
-  const match = text4.match(/['"]([^'"]{1,40})['"]/);
+function extractQuotedText2(text3) {
+  const match = text3.match(/['"]([^'"]{1,40})['"]/);
   return match && match[1] ? match[1].trim() : null;
 }
 function findPlacementForSubject(subjectName, shotSpec) {
@@ -50295,8 +50983,8 @@ function assertPromptProtection(prompt, protection) {
   }
 }
 var canonical = (value) => value.normalize("NFKC").toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim().replace(/\s+/g, " "), tokenize = (value) => {
-  const text4 = canonical(value);
-  return text4 ? text4.split(" ") : [];
+  const text3 = canonical(value);
+  return text3 ? text3.split(" ") : [];
 };
 
 // src/backend/runtime/prompt-anchors.ts
@@ -50318,7 +51006,7 @@ function createPromptAnchors(prompt, protection, pinnedClauses, options3) {
   let namespace = 0;
   while (prompt.includes(`[[LG_CAST_${namespace}_`) || prompt.includes(`[[LG_PIN_${namespace}_`))
     namespace++;
-  const entries = blocks.map((text4, index) => ({ token: `[[LG_CAST_${namespace}_${index}]]`, text: text4 }));
+  const entries = blocks.map((text3, index) => ({ token: `[[LG_CAST_${namespace}_${index}]]`, text: text3 }));
   let maskedPrompt = prompt;
   for (const entry of [...entries].sort((a, b) => b.text.length - a.text.length)) {
     if (maskedPrompt.includes(entry.text)) {
@@ -50340,27 +51028,27 @@ function createPromptAnchors(prompt, protection, pinnedClauses, options3) {
   let usedPinnedChars = 0;
   const seenPinned = new Set;
   for (const rawClause of pinnedClauses ?? []) {
-    const text4 = sanitizePinnedClauseForDialect(rawClause, options3?.dialect);
-    if (!text4)
+    const text3 = sanitizePinnedClauseForDialect(rawClause, options3?.dialect);
+    if (!text3)
       continue;
-    const key = text4.toLowerCase();
+    const key = text3.toLowerCase();
     if (seenPinned.has(key))
       continue;
     if (entries.some((e) => e.text.toLowerCase().includes(key)))
       continue;
-    if (usedPinnedChars > 0 && usedPinnedChars + text4.length > maxPinnedBudget)
+    if (usedPinnedChars > 0 && usedPinnedChars + text3.length > maxPinnedBudget)
       continue;
     seenPinned.add(key);
     const token = `[[LG_PIN_${namespace}_${pinnedEntries.length}]]`;
-    if (maskedPrompt.includes(text4)) {
-      maskedPrompt = maskedPrompt.split(text4).join(token);
+    if (maskedPrompt.includes(text3)) {
+      maskedPrompt = maskedPrompt.split(text3).join(token);
     } else if (rawClause.trim() && maskedPrompt.includes(rawClause.trim())) {
       maskedPrompt = maskedPrompt.split(rawClause.trim()).join(token);
     } else {
       maskedPrompt = maskedPrompt.trim() ? `${maskedPrompt.trim()}, ${token}` : token;
     }
-    pinnedEntries.push({ token, text: text4 });
-    usedPinnedChars += text4.length;
+    pinnedEntries.push({ token, text: text3 });
+    usedPinnedChars += text3.length;
   }
   const allEntries = [...entries, ...pinnedEntries];
   return {
@@ -50443,14 +51131,14 @@ function promptWriterFields(value, fallbackNegative) {
     }))
       return fail(`${kind} must be text.`);
     const strings = values.map((item) => item && typeof item === "object" ? JSON.stringify(item) : String(item));
-    if (new Set(strings.map((text5) => text5.trim())).size > 1)
+    if (new Set(strings.map((text4) => text4.trim())).size > 1)
       return fail(`conflicting ${kind} fields; return one version.`);
-    const text4 = strings[0];
-    if (text4 === undefined)
+    const text3 = strings[0];
+    if (text3 === undefined)
       return optional2 ? undefined : fail(`${kind} must be text.`);
-    if (text4.length > 65000)
+    if (text3.length > 65000)
       return fail(`${kind} exceeds the internal 65,000-character safety limit.`);
-    return text4;
+    return text3;
   };
   const prompt = read3(positive, "positive prompt", false);
   if (!prompt.trim())
@@ -50460,12 +51148,12 @@ function promptWriterFields(value, fallbackNegative) {
 }
 
 // src/shared/prompt-scene-evidence.ts
-function containsWording(prompt, text4) {
+function containsWording(prompt, text3) {
   let from = 0, index;
-  while ((index = prompt.indexOf(text4, from)) !== -1) {
+  while ((index = prompt.indexOf(text3, from)) !== -1) {
     const before = index ? prompt[index - 1] : "";
-    const after = prompt[index + text4.length] ?? "";
-    if (!(word(text4[0]) && word(before)) && !(word(text4.at(-1)) && word(after)))
+    const after = prompt[index + text3.length] ?? "";
+    if (!(word(text3[0]) && word(before)) && !(word(text3.at(-1)) && word(after)))
       return true;
     from = index + 1;
   }
@@ -50474,9 +51162,9 @@ function containsWording(prompt, text4) {
 function retainedSceneEvidence(prompt, brief) {
   const evidence = [];
   for (const field of ["action", "composition"]) {
-    const text4 = brief?.[field]?.trim();
-    if (text4 && text4.length >= 12 && text4.length <= 400 && containsWording(prompt, text4))
-      evidence.push({ field, text: text4 });
+    const text3 = brief?.[field]?.trim();
+    if (text3 && text3.length >= 12 && text3.length <= 400 && containsWording(prompt, text3))
+      evidence.push({ field, text: text3 });
   }
   return evidence;
 }
@@ -50496,8 +51184,8 @@ function content(value) {
   return typeof body2 === "string" ? body2 : Array.isArray(body2) ? body2.filter((part) => part?.type === "text" && typeof part.text === "string").map((part) => part.text).join(`
 `) : "";
 }
-function promptObject(text4) {
-  const clean2 = text4.trim().replace(/^<think>[\s\S]*?<\/think>\s*/i, "");
+function promptObject(text3) {
+  const clean2 = text3.trim().replace(/^<think>[\s\S]*?<\/think>\s*/i, "");
   try {
     return JSON.parse(clean2);
   } catch {}
@@ -50742,10 +51430,10 @@ First shorten repetitive style/template prose and verbose negative lists: merge 
     if (signal.aborted)
       throw cancelled();
     try {
-      const text4 = content(response);
-      if (typeof text4 !== "string" || text4.length > 150000)
+      const text3 = content(response);
+      if (typeof text3 !== "string" || text3.length > 150000)
         throw new Error("No usable prompt text was returned.");
-      const parsed = output2.parse(promptWriterFields(promptObject(text4), profile.negativeMode === "positive-only" || isIdeogram || isFluxKlein ? "" : request.negativePrompt ?? ""));
+      const parsed = output2.parse(promptWriterFields(promptObject(text3), profile.negativeMode === "positive-only" || isIdeogram || isFluxKlein ? "" : request.negativePrompt ?? ""));
       previousCandidate = parsed;
       parsed.negativePrompt = compactNegativePrompt(parsed.negativePrompt);
       const expanded = expandPromptAnchors(parsed.prompt, anchors, parsed.negativePrompt);
@@ -50871,10 +51559,10 @@ async function enrichImagePrompt(spindle2, request, metadata, config2, userId, s
     if (signal.aborted)
       throw cancelled();
     try {
-      const text4 = content(response);
-      if (!text4)
+      const text3 = content(response);
+      if (!text3)
         throw new Error("No prompt text returned");
-      const parsed = output2.parse(promptWriterFields(promptObject(text4), profile.negativeMode === "positive-only" || isIdeogram || isFluxKlein ? "" : request.negativePrompt ?? ""));
+      const parsed = output2.parse(promptWriterFields(promptObject(text3), profile.negativeMode === "positive-only" || isIdeogram || isFluxKlein ? "" : request.negativePrompt ?? ""));
       parsed.negativePrompt = compactNegativePrompt(parsed.negativePrompt);
       const expanded = expandPromptAnchors(parsed.prompt, anchors, parsed.negativePrompt);
       parsed.prompt = expanded.prompt;
@@ -50917,13 +51605,13 @@ function novelAiCapabilities(model) {
   const minor = Number(version2?.[2] ?? 0);
   return { structured: major >= 4, numeric: major >= 4, negativeNumeric: major > 4 || major === 4 && minor >= 5 };
 }
-function renderNovelAiEmphasis(text4, model) {
+function renderNovelAiEmphasis(text3, model) {
   const caps = novelAiCapabilities(model);
-  if (!caps.negativeNumeric && /(?:^|[\s,])-\d+(?:\.\d+)?::/.test(text4)) {
+  if (!caps.negativeNumeric && /(?:^|[\s,])-\d+(?:\.\d+)?::/.test(text3)) {
     throw new Error("Negative numerical emphasis requires NovelAI V4.5 or newer.");
   }
   if (!caps.numeric) {
-    const legacy = text4.replace(/(-?\d+(?:\.\d+)?)::([\s\S]*?)::/g, (_, weight, body2) => `(${body2}:${weight})`);
+    const legacy = text3.replace(/(-?\d+(?:\.\d+)?)::([\s\S]*?)::/g, (_, weight, body2) => `(${body2}:${weight})`);
     return serializePromptWeights(legacy, "nai");
   }
   const render = (source, inherited = 1) => {
@@ -50969,7 +51657,7 @@ function renderNovelAiEmphasis(text4, model) {
     flush();
     return out;
   };
-  return render(text4);
+  return render(text3);
 }
 function novelAiQualityTags(model) {
   if (/^nai-diffusion-5(?:-|$)/.test(model ?? ""))
@@ -52482,8 +53170,8 @@ function castAppearanceIdentity(scene, cue, appearance) {
   const visual = resolveCueCharacterVisualState(scene, cue, appearance);
   if (!visual.characterName.trim() || !visual.baseIdentity.trim())
     return null;
-  const text4 = canonicalJson([visual.characterId, visual.baseIdentity, visual.attire]);
-  return { character: visual.characterName, fingerprint: `look:${hash3(text4)}${hashReverse(text4)}` };
+  const text3 = canonicalJson([visual.characterId, visual.baseIdentity, visual.attire]);
+  return { character: visual.characterName, fingerprint: `look:${hash3(text3)}${hashReverse(text3)}` };
 }
 function castArtIdentityFor(config2, scene, cue, appearance, provider, profileRevision, characterDNALibrary, storyDNASet) {
   if (!config2.persistentCastArt || provider === null || cue.imageTemplate?.category !== "portrait" || cue.imageTemplate.subjectMode !== "one")
@@ -53606,14 +54294,14 @@ function classifySubject(identity2, subjectCategory = "unknown") {
   const persisted = subjectPromptFor(subjectCategory);
   if (persisted)
     return persisted;
-  const text4 = identity2.toLowerCase();
-  if (/\b1boy\b/.test(text4))
+  const text3 = identity2.toLowerCase();
+  if (/\b1boy\b/.test(text3))
     return ["boy", "1boy, solo"];
-  if (/\b1girl\b/.test(text4))
+  if (/\b1girl\b/.test(text3))
     return ["girl", "1girl, solo"];
-  if (/\b1other\b/.test(text4))
+  if (/\b1other\b/.test(text3))
     return ["other", "1other, solo"];
-  let cleaned = text4.replace(/\b\w+'s\b/gi, "");
+  let cleaned = text3.replace(/\b\w+'s\b/gi, "");
   cleaned = cleaned.replace(/\bmaid\s+uniform\b/gi, "uniform");
   cleaned = cleaned.replace(/\bfake\s+(?:mustache|beard)\b/gi, "");
   const isNonbinary = /\b(?:nonbinary|non-binary|agender|genderless)\b/i.test(cleaned);
@@ -55190,6 +55878,371 @@ class ContextSourceSession {
 
 // src/backend/runtime/controller.ts
 init_protocol();
+
+// src/backend/runtime/document-art.ts
+init_zod();
+init_image_shot_spec();
+init_image_payload_sanitizer();
+init_image_prompt_profile_v2();
+init_style_dna();
+init_story_documents();
+init_scene_image_cache();
+init_images();
+init_image_prompt_profile2();
+init_image_output_plan2();
+init_model_prompt_compiler();
+init_template_output();
+init_storage();
+init_visual_brief();
+var DocumentArtRecordSchema = exports_external.object({
+  id: exports_external.string().min(1).max(120),
+  documentId: exports_external.string().min(1).max(120),
+  documentName: exports_external.string().min(1).max(200),
+  contentHash: exports_external.string().min(8).max(80),
+  sceneSurfaceKey: exports_external.string().max(240),
+  imageId: exports_external.string().min(1).max(256),
+  createdAt: exports_external.string(),
+  lastUsedAt: exports_external.number().optional()
+}).strict();
+var DocumentArtLibrarySchema = exports_external.object({
+  version: exports_external.literal(1),
+  entries: exports_external.array(DocumentArtRecordSchema).max(64)
+}).strict();
+var runtimes4 = new WeakMap;
+function runtime3(api2) {
+  let r = runtimes4.get(api2);
+  if (!r) {
+    r = { tails: new Map };
+    runtimes4.set(api2, r);
+  }
+  return r;
+}
+function scope3(chatId, userId) {
+  return canonicalJson([userId ?? null, chatId]);
+}
+function storagePath(chatId) {
+  return `chats/${encodeURIComponent(chatId).replaceAll("%", "_")}/document-art.json`;
+}
+function storageOptions(userId) {
+  return userId ? { userId } : undefined;
+}
+async function transaction3(api2, chatId, userId, work) {
+  const r = runtime3(api2);
+  const key = scope3(chatId, userId);
+  const previous = r.tails.get(key) ?? Promise.resolve();
+  const current = previous.then(work, work);
+  const tail = current.then(() => {
+    return;
+  }, () => {
+    return;
+  });
+  r.tails.set(key, tail);
+  try {
+    return await current;
+  } finally {
+    if (r.tails.get(key) === tail)
+      r.tails.delete(key);
+  }
+}
+function stableHash64(source) {
+  let left = 2166136261;
+  let right = 2654435769;
+  for (let i = 0;i < source.length; i++) {
+    const c = source.charCodeAt(i);
+    left = Math.imul(left ^ c, 16777619) >>> 0;
+    right = Math.imul(right ^ c + i, 2246822507) >>> 0;
+  }
+  return `${left.toString(16).padStart(8, "0")}${right.toString(16).padStart(8, "0")}`;
+}
+async function loadDocumentArt(api2, chatId, userId) {
+  if (!api2.userStorage)
+    return { version: 1, entries: [] };
+  const raw = await api2.userStorage.getJson(storagePath(chatId), { fallback: null, ...storageOptions(userId) });
+  if (raw === null)
+    return { version: 1, entries: [] };
+  const parsed = DocumentArtLibrarySchema.safeParse(raw);
+  if (!parsed.success)
+    return { version: 1, entries: [] };
+  return parsed.data;
+}
+function activeSceneForParagraph(plan, paragraphIndex) {
+  let active = plan.scenes[0];
+  for (const scene of plan.scenes) {
+    if (scene.startParagraph <= paragraphIndex)
+      active = scene;
+  }
+  return active;
+}
+function inferRestingSurface(doc2, scene) {
+  const obsText = (doc2.observations ?? []).map((o) => `${o.evidence} ${o.summary ?? ""} ${o.material ?? ""}`).join(" ").toLowerCase();
+  const envDesc = `${scene?.environment.location ?? ""} ${scene?.environment.description ?? ""} ${scene?.environment.persistentElements.join(" ") ?? ""}`.toLowerCase();
+  const combined = `${obsText} ${envDesc}`;
+  if (/\b(?:flagstone|cobblestone|puddle|wet stone|stairwell|pavement|sidewalk)\b/.test(combined)) {
+    return /\bwet|damp|rain|puddle\b/.test(combined) ? "wet dark stone flagstones with thin rain puddles" : "weathered stone flagstones";
+  }
+  if (/\b(?:desk|table|counter|oak|mahogany|wooden)\b/.test(combined)) {
+    return "worn timber table surface";
+  }
+  if (/\b(?:wall|board|bulletin|post|door)\b/.test(combined) && doc2.kind === "poster") {
+    return "weathered notice board surface";
+  }
+  return scene?.environment.location ? `resting surface in ${scene.environment.location}` : "weathered surface";
+}
+var KIND_MATERIAL_HINTS = {
+  flyer: "creased printed paper handbill",
+  letter: "folded stationery sheet",
+  note: "small torn slip of handwritten paper",
+  journal: "open bound cloth-covered field journal page",
+  map: "creased parchment cartographic sheet",
+  poster: "broadside printed sheet",
+  receipt: "narrow thermal or ink-stamped paper receipt",
+  notice: "official stamped paper decree",
+  newspaper: "folded newsprint column sheet",
+  pamphlet: "creased trifold booklet page",
+  phone: "lit handheld smartphone screen showing readable message thread",
+  terminal: "glowing monospace CRT or rugged terminal screen"
+};
+function buildDocumentPropPromptInput(params) {
+  const maxIndex = Math.max(0, Math.min(params.plan.paragraphs.length - 1, params.throughParagraphIndex));
+  const [gatedDoc] = visibleStoryDocuments([params.doc], maxIndex);
+  if (!gatedDoc) {
+    throw new Error(`Document "${params.doc.name}" has not been revealed at paragraph ${maxIndex + 1}.`);
+  }
+  const scene = activeSceneForParagraph(params.plan, maxIndex);
+  const surface = inferRestingSurface(gatedDoc, scene);
+  const sceneSurfaceKey = [
+    scene?.environment.location ?? "",
+    surface,
+    scene?.environment.timeOfDay ?? "",
+    scene?.environment.weather ?? "",
+    scene?.environment.lighting ?? ""
+  ].join("|");
+  const physicalDetails = [
+    ...(gatedDoc.observations ?? []).flatMap((o) => [o.material, o.condition, o.summary, ...o.visualDetails ?? []]),
+    gatedDoc.visualDetails
+  ].filter((v) => Boolean(v && v.trim()));
+  const uniqueDetails = [...new Set(physicalDetails.map((s) => s.trim()))].slice(0, 8);
+  const visibleQuotes = gatedDoc.sections.map((s) => s.text.trim()).filter(Boolean).slice(0, 2).map((quote) => `"${quote.slice(0, 110)}"`);
+  const contentHash = stableHash64(canonicalJson({
+    id: gatedDoc.id,
+    kind: gatedDoc.kind,
+    name: gatedDoc.name,
+    visualDetails: uniqueDetails,
+    sections: visibleQuotes,
+    sceneSurfaceKey,
+    styleId: params.config.selectedSharedStyleId,
+    modelId: params.modelId ?? params.config.imageModel ?? null
+  }));
+  const keyframe = deriveColorScriptKeyframe({
+    baseLighting: scene?.environment.lighting ?? null,
+    location: scene?.environment.location ?? null,
+    timeOfDay: scene?.environment.timeOfDay ?? null,
+    weather: scene?.environment.weather ?? null,
+    description: scene?.environment.description ?? null,
+    chromaticLutEnabled: params.config.chromaticLutEnabled !== false
+  });
+  const propSubject = [
+    `Extreme close-up macro prop study of ${gatedDoc.name} (${KIND_MATERIAL_HINTS[gatedDoc.kind]})`,
+    uniqueDetails.length ? `physical details: ${uniqueDetails.join(", ")}` : "",
+    visibleQuotes.length ? `clearly visible legible ink lettering showing ${visibleQuotes.join(" and ")}` : "",
+    gatedDoc.kind !== "phone" && gatedDoc.kind !== "terminal" ? "tactile paper grain, ink bleed, realistic creases" : ""
+  ].filter(Boolean).join(", ");
+  const brief = {
+    scene: sanitizeVisualNarrativeDescription([
+      `Resting on ${surface}`,
+      scene?.environment.weather ? `ambient weather: ${scene.environment.weather}` : "",
+      "tightly cropped macro still-life object focus, no unmentioned characters or bystanders"
+    ].filter(Boolean).join(", ")),
+    subjects: "",
+    action: propSubject,
+    composition: "Overhead 45-degree macro angle filling frame cleanly with subtle edge breathing room, shallow depth of field isolating the document surface",
+    lighting: keyframe.lighting || scene?.environment.lighting || "moody directional ambient light",
+    subjectMode: "none",
+    framing: "close-up",
+    referencePolicy: "none",
+    sources: [`storyDocument:${gatedDoc.id}`],
+    conflicts: []
+  };
+  const shotSpec = createDefaultShotSpec({
+    intent: "detail",
+    output: {
+      requestedRatio: "4:3",
+      actualRatio: "4:3",
+      orientation: "landscape"
+    },
+    camera: {
+      shotSize: "macro",
+      angle: "overhead",
+      lens: "macro",
+      depthOfField: "shallow",
+      focusTarget: gatedDoc.name
+    },
+    composition: {
+      mode: "centered",
+      subjectPlacements: [{ subject: gatedDoc.name, depth: "foreground", scale: "dominant" }],
+      stagingNote: "Macro still-life inspection view of document prop, zero people or faces."
+    },
+    source: "deterministic-fallback"
+  });
+  const effectiveModel = params.modelId?.trim() || params.config.imageModel?.trim() || undefined;
+  const profile = params.profileV2 ?? resolveImagePromptProfileV2(null, effectiveModel);
+  const styleDNA = resolveStyleDNA(params.config, params.config.selectedSharedStyleId).styleDNA;
+  const outputPlan = resolveImageOutputPlan({
+    capabilities: profile.outputCapabilities,
+    parameters: {},
+    requestedRatio: "4:3",
+    source: profile.capabilitySource,
+    modelId: effectiveModel
+  });
+  const compiled = compileModelPrompt({
+    brief,
+    shotSpec,
+    styleDNA,
+    profile,
+    outputPlan,
+    detailLevel: "compact",
+    modelId: effectiveModel
+  });
+  const extraNegative = params.config.negativePrompt?.trim() ? `${compiled.negativePrompt ? `${compiled.negativePrompt}, ` : ""}${params.config.negativePrompt.trim()}, person, human face, portrait` : `${compiled.negativePrompt ? `${compiled.negativePrompt}, ` : ""}person, human face, portrait`;
+  return {
+    document: gatedDoc,
+    contentHash,
+    sceneSurfaceKey,
+    prompt: compiled.prompt,
+    ...compiled.negativePrompt ? { negativePrompt: extraNegative } : {}
+  };
+}
+async function findCachedDocumentArt(api2, chatId, documentId, contentHash, userId) {
+  const library = await loadDocumentArt(api2, chatId, userId).catch(() => ({ version: 1, entries: [] }));
+  const hit = library.entries.find((e) => e.documentId === documentId && e.contentHash === contentHash);
+  if (!hit)
+    return null;
+  try {
+    const img = await api2.images.get(hit.imageId, userId);
+    if (!img)
+      return null;
+  } catch {
+    return null;
+  }
+  return {
+    documentId,
+    contentHash,
+    imageId: hit.imageId,
+    imageUrl: `/api/v1/images/${encodeURIComponent(hit.imageId)}`
+  };
+}
+async function listTurnDocumentAssets(api2, chatId, plan, throughParagraphIndex, userId) {
+  const docs = plan.storyDocuments ?? [];
+  if (!docs.length || !api2.userStorage)
+    return {};
+  const library = await loadDocumentArt(api2, chatId, userId).catch(() => ({ version: 1, entries: [] }));
+  if (!library.entries.length)
+    return {};
+  const config2 = await loadConfig(api2, userId).catch(() => null);
+  if (!config2)
+    return {};
+  const out = {};
+  const visible = visibleStoryDocuments(docs, throughParagraphIndex);
+  for (const doc2 of visible) {
+    try {
+      const built = buildDocumentPropPromptInput({ doc: doc2, plan, throughParagraphIndex, config: config2 });
+      const match = library.entries.find((e) => e.documentId === doc2.id && e.contentHash === built.contentHash);
+      if (!match)
+        continue;
+      const exists = await api2.images.get(match.imageId, userId).catch(() => null);
+      if (!exists)
+        continue;
+      out[doc2.id] = {
+        documentId: doc2.id,
+        contentHash: match.contentHash,
+        imageId: match.imageId,
+        imageUrl: `/api/v1/images/${encodeURIComponent(match.imageId)}`
+      };
+    } catch {}
+  }
+  return out;
+}
+async function generateDocumentPropArtwork(params) {
+  const { spindle: spindle2, chatId, plan, documentId, throughParagraphIndex, regenerate = false, userId } = params;
+  const targetDoc = (plan.storyDocuments ?? []).find((d) => d.id === documentId || d.name.toLowerCase() === documentId.toLowerCase());
+  if (!targetDoc) {
+    throw new Error(`Document "${documentId}" was not found in this turn.`);
+  }
+  const config2 = await loadConfig(spindle2, userId);
+  const { connectionId, workflowId } = splitConnectionSelection(config2.imageConnectionId);
+  const selected = connectionId && typeof spindle2.imageGen?.getConnection === "function" ? await spindle2.imageGen.getConnection(connectionId, userId) : undefined;
+  const provider = selected?.provider?.trim().toLowerCase() ?? null;
+  const model = config2.imageModel?.trim() || selected?.model || undefined;
+  const profileV2 = await loadImagePromptProfileV2(spindle2, config2, provider, model, {
+    ...config2.imageParameters,
+    ...workflowId ? { workflow_id: workflowId } : {}
+  });
+  const built = buildDocumentPropPromptInput({
+    doc: targetDoc,
+    plan,
+    throughParagraphIndex,
+    config: config2,
+    profileV2,
+    ...model ? { modelId: model } : {}
+  });
+  if (!regenerate) {
+    const cached2 = await findCachedDocumentArt(spindle2, chatId, targetDoc.id, built.contentHash, userId);
+    if (cached2)
+      return { ...cached2, cached: true };
+  }
+  if (!spindle2.imageGen || typeof spindle2.imageGen.generate !== "function") {
+    throw new Error("Image generation is unavailable for this connection.");
+  }
+  const rawParams = providerOutputParameters(modelOutputParameters(provider, model, globalOutputParameters(config2.imageOutputAspectRatio !== "default" ? config2.imageOutputAspectRatio : "4:3", provider, model, {
+    ...selected?.default_parameters ?? {},
+    ...config2.imageParameters,
+    ...workflowId ? { workflow_id: workflowId } : {}
+  })));
+  const safeParams = sanitizeImagePayloadParameters(rawParams, provider ?? undefined, model);
+  const req = {
+    prompt: built.prompt,
+    ...built.negativePrompt && profileV2.negativePolicy !== "positive-only" ? { negativePrompt: built.negativePrompt } : {},
+    ...connectionId ? { connection_id: connectionId } : {},
+    ...model ? { model } : {},
+    parameters: safeParams,
+    owner_chat_id: chatId
+  };
+  const generated = await spindle2.imageGen.generate(req);
+  if (!generated?.imageId) {
+    throw new Error("Document prop image generation finished without an image ID.");
+  }
+  const now2 = Date.now();
+  await transaction3(spindle2, chatId, userId, async () => {
+    if (!spindle2.userStorage)
+      return;
+    const library = await loadDocumentArt(spindle2, chatId, userId);
+    const filtered = library.entries.filter((e) => !(e.documentId === targetDoc.id && e.contentHash === built.contentHash));
+    filtered.push({
+      id: `docart-${targetDoc.id}-${built.contentHash.slice(0, 8)}`,
+      documentId: targetDoc.id,
+      documentName: targetDoc.name,
+      contentHash: built.contentHash,
+      sceneSurfaceKey: built.sceneSurfaceKey.slice(0, 240),
+      imageId: generated.imageId,
+      createdAt: new Date(now2).toISOString(),
+      lastUsedAt: now2
+    });
+    if (filtered.length > 64) {
+      filtered.sort((a, b) => (a.lastUsedAt ?? 0) - (b.lastUsedAt ?? 0));
+      filtered.splice(0, filtered.length - 64);
+    }
+    await spindle2.userStorage.setJson(storagePath(chatId), DocumentArtLibrarySchema.parse({ version: 1, entries: filtered }), storageOptions(userId));
+  }).catch(() => {});
+  return {
+    documentId: targetDoc.id,
+    contentHash: built.contentHash,
+    imageId: generated.imageId,
+    imageUrl: `/api/v1/images/${encodeURIComponent(generated.imageId)}`,
+    cached: false
+  };
+}
+
+// src/backend/runtime/controller.ts
 init_entity_projection();
 init_template_output();
 
@@ -55332,7 +56385,7 @@ function createExternalImages(spindle2, deps = pipeline, timeoutMs = 300000, act
         emit({ ...value, status: "error", error: "Invalid scene image request; appearance and pose overrides are not supported." }, userId);
       return;
     }
-    const scope3 = key(r.chatId, userId), completedKey = JSON.stringify([scope3, r.requestId]);
+    const scope4 = key(r.chatId, userId), completedKey = JSON.stringify([scope4, r.requestId]);
     for (const [id9, entry] of completed)
       if (Date.now() - entry.at > 300000)
         completed.delete(id9);
@@ -55341,17 +56394,17 @@ function createExternalImages(spindle2, deps = pipeline, timeoutMs = 300000, act
       emit(done.result, userId);
       return;
     }
-    const existing = active.get(scope3);
+    const existing = active.get(scope4);
     if (existing?.request.requestId === r.requestId) {
       emit({ ...identity2(r), status: "accepted" }, userId);
       return;
     }
     existing?.controller.abort("Replaced by a newer date image.");
     const controller = new AbortController, op = { request: r, controller };
-    active.set(scope3, op);
-    const current = () => active.get(scope3) === op && !controller.signal.aborted;
+    active.set(scope4, op);
+    const current = () => active.get(scope4) === op && !controller.signal.aborted;
     const finish = (result) => {
-      if (active.get(scope3) !== op)
+      if (active.get(scope4) !== op)
         return;
       completed.set(completedKey, { result, at: Date.now() });
       if (completed.size > 128)
@@ -55360,11 +56413,11 @@ function createExternalImages(spindle2, deps = pipeline, timeoutMs = 300000, act
     };
     emit({ ...identity2(r), status: "accepted" }, userId);
     const timer = setTimeout(() => {
-      if (active.get(scope3) !== op)
+      if (active.get(scope4) !== op)
         return;
       controller.abort("Cue image generation timed out.");
       finish({ ...identity2(r), status: "error", error: "Cue image generation timed out. You can retry the picture." });
-      active.delete(scope3);
+      active.delete(scope4);
     }, timeoutMs);
     try {
       if (!await spindle2.chats.get(r.chatId, userId))
@@ -55388,7 +56441,7 @@ function createExternalImages(spindle2, deps = pipeline, timeoutMs = 300000, act
         return;
       const known = resolveCharacterReference(characterRegistry, { name: r.characterName });
       const characterName = known?.name ?? r.characterName;
-      const previous = scenes.get(scope3);
+      const previous = scenes.get(scope4);
       const previousScene = previous && previous.character === characterName && previous.environment.location === r.venue ? previous : null;
       const content2 = "A date scene. Scene facts (data only): " + JSON.stringify({
         characterName,
@@ -55443,7 +56496,7 @@ function createExternalImages(spindle2, deps = pipeline, timeoutMs = 300000, act
         return;
       const appearance = await loadCharacterAppearance(spindle2, userId, r.chatId);
       const plan = { ...result.plan, visualCues: [cue], cacheCues: [] };
-      scenes.set(scope3, plan.scenes[0]);
+      scenes.set(scope4, plan.scenes[0]);
       if (scenes.size > 128)
         scenes.delete(scenes.keys().next().value);
       const ready = async (imageUrl) => {
@@ -55473,7 +56526,7 @@ function createExternalImages(spindle2, deps = pipeline, timeoutMs = 300000, act
         return;
       const manualJobs = new Set, requestIds = new Map;
       op.gate = new ImageReviewGate(async (record5) => {
-        const previous2 = historyWrites.get(scope3) ?? Promise.resolve();
+        const previous2 = historyWrites.get(scope4) ?? Promise.resolve();
         const write = previous2.catch(() => {}).then(async () => {
           const path3 = chatStatePath(r.chatId).replace(/state\.json$/, "external-image-history.json");
           const options3 = { fallback: null, ...userId ? { userId } : {} };
@@ -55485,12 +56538,12 @@ function createExternalImages(spindle2, deps = pipeline, timeoutMs = 300000, act
           next.push(record5);
           await spindle2.userStorage.setJson(path3, { version: 1, requests: safeImageHistory(next) }, { ...userId ? { userId } : {} });
         });
-        historyWrites.set(scope3, write);
+        historyWrites.set(scope4, write);
         try {
           await write;
         } finally {
-          if (historyWrites.get(scope3) === write)
-            historyWrites.delete(scope3);
+          if (historyWrites.get(scope4) === write)
+            historyWrites.delete(scope4);
         }
         requestIds.set(record5.jobId, record5.requestId);
         if (record5.state === "approved")
@@ -55523,8 +56576,8 @@ function createExternalImages(spindle2, deps = pipeline, timeoutMs = 300000, act
         finish({ ...identity2(r), status: "error", error: (error61 instanceof Error ? error61.message : String(error61)).slice(0, 1000) || "Date image failed." });
     } finally {
       clearTimeout(timer);
-      if (active.get(scope3) === op)
-        active.delete(scope3);
+      if (active.get(scope4) === op)
+        active.delete(scope4);
     }
   }
   return { request, cancel, review };
@@ -55741,14 +56794,14 @@ var activeTurnKeys = new Map;
 var sceneCache = new SceneImageCache;
 var activeChatByUser = new Map;
 function releaseSceneCacheAdmission(spindle2, userId, chatId, reason) {
-  const scope3 = sceneImageScope(userId, chatId);
-  const epoch = sceneCache.bumpEpoch(scope3, reason);
-  dbg(spindle2, userId, `scene-cache admission released scope=${scope3} epoch=${epoch} reason=${reason}`);
+  const scope4 = sceneImageScope(userId, chatId);
+  const epoch = sceneCache.bumpEpoch(scope4, reason);
+  dbg(spindle2, userId, `scene-cache admission released scope=${scope4} epoch=${epoch} reason=${reason}`);
 }
 function releaseSceneCacheScope(spindle2, userId, chatId, reason) {
-  const scope3 = sceneImageScope(userId, chatId);
-  const dropped = sceneCache.invalidateScope(scope3, reason);
-  dbg(spindle2, userId, `scene-cache scope released scope=${scope3} reason=${reason} dropped=${dropped} generation=${sceneCache.generation(scope3)}`);
+  const scope4 = sceneImageScope(userId, chatId);
+  const dropped = sceneCache.invalidateScope(scope4, reason);
+  dbg(spindle2, userId, `scene-cache scope released scope=${scope4} reason=${reason} dropped=${dropped} generation=${sceneCache.generation(scope4)}`);
 }
 function noteActiveChat(spindle2, userId, chatId) {
   const userKey = userId ?? "owner";
@@ -55767,12 +56820,12 @@ function runtimeKey(userId, chatId) {
 var views = new ViewRegistry;
 var imageRuntimes = new WeakMap;
 function imageRuntime(spindle2) {
-  let runtime3 = imageRuntimes.get(spindle2);
-  if (!runtime3) {
-    runtime3 = { ledger: new ImageUsageLedger, policy: new ImageDispatchPolicy };
-    imageRuntimes.set(spindle2, runtime3);
+  let runtime4 = imageRuntimes.get(spindle2);
+  if (!runtime4) {
+    runtime4 = { ledger: new ImageUsageLedger, policy: new ImageDispatchPolicy };
+    imageRuntimes.set(spindle2, runtime4);
   }
-  return runtime3;
+  return runtime4;
 }
 function publishImageActivity(spindle2, userId, chatId, event) {
   const ledger = imageRuntime(spindle2).ledger;
@@ -56036,6 +57089,13 @@ async function turnViewWithAudio(spindle2, record5, userId) {
   const view = turnView(record5);
   const config2 = await decorateCastAssets(spindle2, record5, view.assets, userId);
   try {
+    if (record5.plan.storyDocuments?.length) {
+      const docAssets = await listTurnDocumentAssets(spindle2, record5.plan.key.chatId, record5.plan, Math.max(0, record5.plan.paragraphs.length - 1), userId);
+      if (Object.keys(docAssets).length)
+        view.documentAssets = docAssets;
+    }
+  } catch {}
+  try {
     if (config2?.tooltips.enabled && config2.tooltips.rememberReferences) {
       const history = await readReferenceHistory(spindle2, record5, userId);
       if (history)
@@ -56089,6 +57149,7 @@ function turnView(record5) {
   return {
     ...presentation ? { presentation } : {},
     sceneLocations: record5.plan.scenes.filter((scene) => scene.startParagraph >= 0 && scene.startParagraph < record5.plan.paragraphs.length).map((scene) => ({ paragraphIndex: scene.startParagraph, location: scene.environment.location.slice(0, 1000) })),
+    ...record5.plan.worldAtmosphereTimeline?.length ? { worldAtmosphere: record5.plan.worldAtmosphereTimeline } : {},
     chatId: record5.plan.key.chatId,
     messageId: record5.plan.key.assistantMessageId,
     swipeId: typeof swipe === "number" ? swipe : Number(swipe ?? 0) || 0,
@@ -56357,8 +57418,8 @@ async function startAssets(spindle2, record5, path3, userId, options3 = {}) {
     return;
   }
   releaseSceneCacheAdmission(spindle2, userId, record5.plan.key.chatId, "batch_start");
-  const scope3 = sceneImageScope(userId, record5.plan.key.chatId);
-  const admission = sceneCache.admission(scope3);
+  const scope4 = sceneImageScope(userId, record5.plan.key.chatId);
+  const admission = sceneCache.admission(scope4);
   const ownsBatch = () => assetControllers.get(key) === controller && compareTurnKeys(activeTurnKeys.get(key) ?? null, record5.plan.key).accepted;
   if (JSON.stringify(current.jobs) !== JSON.stringify(record5.jobs)) {
     const revision = operations.revision, view = await turnViewWithAudio(spindle2, current, userId);
@@ -56851,8 +57912,8 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
     } else if (config2.generateImages) {
       jobs = await prepareAssetJobs(spindle2, result.plan, config2, characterAppearance, sceneCache, userId, sourceTextOption({ resolvedSourceText: resolved }));
       if (result.plan.cacheCues?.length) {
-        const scope3 = sceneImageScope(userId, chatId);
-        retainPlanEpisodes(sceneCache, scope3, result.plan);
+        const scope4 = sceneImageScope(userId, chatId);
+        retainPlanEpisodes(sceneCache, scope4, result.plan);
         const extra = await resolveCacheCues(spindle2, result.plan, config2, characterAppearance, jobs, sceneCache, userId, {
           log: (line2) => dbg(spindle2, userId, line2),
           ...sourceTextOption({ resolvedSourceText: resolved })
@@ -56926,7 +57987,7 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
       return;
     const prevLocationName = replacesGreeting ? null : isReswipeOrReplan ? priorTurnRecord?.plan.scenes.at(-1)?.environment.location ?? null : chatState.latestScene?.environment.location ?? null;
     spindle2.sendToFrontend({ type: "vn_turn", turn: view }, userId);
-    if (!(record5.plan.storyReferences?.length || record5.plan.storyDocuments?.length)) {
+    if (!record5.plan.storyReferences?.length) {
       scheduleSplitHorizonLore(spindle2, {
         ...userId ? { userId } : {},
         chatId,
@@ -56940,6 +58001,41 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
         prevLocationName,
         messages
       });
+    }
+    if (!config2.useNativeCardImages && config2.generateImages && !config2.dataSaverMode && config2.documentImageMode === "auto" && record5.plan.storyDocuments?.length) {
+      const autoDocs = record5.plan.storyDocuments.slice(0, 3);
+      (async () => {
+        for (const doc2 of autoDocs) {
+          if (operation.controller.signal.aborted || (intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch)
+            return;
+          try {
+            const art = await generateDocumentPropArtwork({
+              spindle: spindle2,
+              chatId,
+              plan: record5.plan,
+              documentId: doc2.id,
+              throughParagraphIndex: Math.max(0, record5.plan.paragraphs.length - 1),
+              ...userId ? { userId } : {}
+            });
+            if (operation.controller.signal.aborted || (intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch)
+              return;
+            spindle2.sendToFrontend({
+              type: "vn_document_image",
+              chatId,
+              messageId: record5.plan.key.assistantMessageId,
+              swipeId: Number(record5.plan.key.swipeId ?? 0) || 0,
+              sourceFingerprint: record5.plan.key.sourceFingerprint,
+              revision: record5.plan.key.revision,
+              documentId: art.documentId,
+              contentHash: art.contentHash,
+              status: "ready",
+              cached: art.cached,
+              imageId: art.imageId,
+              imageUrl: art.imageUrl
+            }, userId);
+          } catch {}
+        }
+      })();
     }
     if (!config2.useNativeCardImages && config2.generateImages) {
       startAssets(spindle2, record5, path3, userId).catch((error61) => {
@@ -57131,9 +58227,9 @@ async function submitOnce(spindle2, request, userId) {
   }
 }
 async function markAssetReady(spindle2, request, userId) {
-  const scope3 = runtimeKey(userId, request.chatId);
-  const epoch = intakeEpochs.get(scope3) ?? 0;
-  const isCurrent = () => (intakeEpochs.get(scope3) ?? 0) === epoch;
+  const scope4 = runtimeKey(userId, request.chatId);
+  const epoch = intakeEpochs.get(scope4) ?? 0;
+  const isCurrent = () => (intakeEpochs.get(scope4) ?? 0) === epoch;
   const chatState = await loadChatState(spindle2, request.chatId, userId);
   if (!chatState.activeTurnPath || !isCurrent())
     return;
@@ -57156,8 +58252,8 @@ async function markAssetReady(spindle2, request, userId) {
     dbg(spindle2, userId, `asset ${readyJob2.jobId} p${readyJob2.paragraphIndex} -> browser_ready (decoded in browser)`);
     const jobs = record5.jobs.map((candidate, candidateIndex) => candidateIndex === index ? readyJob2 : candidate);
     const readyRecord = { ...record5, jobs, updatedAt: readyAt };
-    const batch = assetBatchOperations.get(scope3);
-    if (batch?.overrides.has(readyJob2.jobId) && assetControllers.get(scope3) === batch.owner)
+    const batch = assetBatchOperations.get(scope4);
+    if (batch?.overrides.has(readyJob2.jobId) && assetControllers.get(scope4) === batch.owner)
       batch.applyRestore(readyRecord, readyJob2);
     return readyRecord;
   }, isCurrent);
@@ -57175,9 +58271,9 @@ async function markAssetReady(spindle2, request, userId) {
   }, userId);
 }
 async function restorePreviousImage(spindle2, request, userId) {
-  const scope3 = runtimeKey(userId, request.chatId);
-  const epoch = intakeEpochs.get(scope3) ?? 0;
-  const isCurrent = () => (intakeEpochs.get(scope3) ?? 0) === epoch && views.isOpen(userId, request.chatId);
+  const scope4 = runtimeKey(userId, request.chatId);
+  const epoch = intakeEpochs.get(scope4) ?? 0;
+  const isCurrent = () => (intakeEpochs.get(scope4) ?? 0) === epoch && views.isOpen(userId, request.chatId);
   const chatState = await loadChatState(spindle2, request.chatId, userId);
   if (!chatState.activeTurnPath || !isCurrent())
     return;
@@ -57217,7 +58313,7 @@ async function restorePreviousImage(spindle2, request, userId) {
       const jobs = record5.jobs.map((c, i) => i === index ? restoredJob2 : c);
       const restoreCue = (cue) => cue.assetJobId === job.jobId ? version2.cue : cue;
       const restored = { ...record5, plan: { ...record5.plan, visualCues: record5.plan.visualCues.map(restoreCue), ...record5.plan.cacheCues ? { cacheCues: record5.plan.cacheCues.map(restoreCue) } : {} }, jobs, previousVersions, imageRequests: [...(record5.imageRequests ?? []).filter((entry) => entry.requestId !== version2.request.requestId).map((entry) => entry.jobId === job.jobId && ["review", "prepared"].includes(entry.state) ? { ...entry, state: "cancelled" } : entry), version2.request], updatedAt: restoredAt };
-      const batch = assetBatchOperations.get(scope3);
+      const batch = assetBatchOperations.get(scope4);
       if (batch && turnKeyEquals(batch.key, record5.plan.key)) {
         batch.revision++;
         batch.pendingRestores++;
@@ -57232,7 +58328,7 @@ async function restorePreviousImage(spindle2, request, userId) {
       return restored;
     }, isCurrent);
     if (next && isCurrent()) {
-      const batch = assetBatchOperations.get(scope3), restored = next.jobs.find((job) => job.jobId === request.jobId);
+      const batch = assetBatchOperations.get(scope4), restored = next.jobs.find((job) => job.jobId === request.jobId);
       if (batch && turnKeyEquals(batch.key, next.plan.key)) {
         batch.applyRestore(next, restored);
         batch.cancelJob?.(restored.jobId);
@@ -57350,8 +58446,8 @@ async function retryTurn(spindle2, chatId, message, userId) {
     imageOutputAspectRatio: config2.imageOutputAspectRatio
   };
   if (config2.generateImages && !config2.useNativeCardImages && (existing.plan.cacheCues?.length || existing.plan.classifierVisuals)) {
-    const scope3 = sceneImageScope(userId, chatId);
-    retainPlanEpisodes(sceneCache, scope3, existing.plan);
+    const scope4 = sceneImageScope(userId, chatId);
+    retainPlanEpisodes(sceneCache, scope4, existing.plan);
     const extra = await resolveCacheCues(spindle2, existing.plan, config2, characterAppearance, updatedJobs, sceneCache, userId, {
       log: (line2) => dbg(spindle2, userId, line2),
       ...sourceTextOption(existing)
@@ -57638,11 +58734,11 @@ async function queueImageRetries(spindle2, raw, userId) {
   const state = await loadChatState(spindle2, action.chatId, userId), record5 = await loadTurnRecord(spindle2, state.activeTurnPath, userId);
   if (!record5 || record5.plan.key.chatId !== action.chatId || record5.plan.key.assistantMessageId !== action.messageId || record5.plan.key.sourceFingerprint !== action.sourceFingerprint || record5.plan.key.revision !== action.revision || Number(record5.plan.key.swipeId ?? 0) !== action.swipeId)
     throw new Error("This queue belongs to an older reply.");
-  const scope3 = JSON.stringify(record5.plan.key);
+  const scope4 = JSON.stringify(record5.plan.key);
   let entry = imageRetryQueues.get(key);
   if (action.action === "clear") {
     imageRetryEpochs.set(key, (imageRetryEpochs.get(key) ?? 0) + 1);
-    if (entry?.scope === scope3) {
+    if (entry?.scope === scope4) {
       entry.approvedJobIds.clear();
       entry.queue.clearPending();
     } else
@@ -57659,7 +58755,7 @@ async function queueImageRetries(spindle2, raw, userId) {
   if (action.jobIds.some((id9) => !record5.jobs.some((j) => j.jobId === id9 && j.provider !== CACHE_JOB_PROVIDER)))
     throw new Error("Choose generated picture slots from this reply.");
   entry = imageRetryQueues.get(key);
-  if (entry && entry.scope !== scope3) {
+  if (entry && entry.scope !== scope4) {
     entry.queue.cancel();
     imageRetryQueues.delete(key);
     entry = undefined;
@@ -57672,7 +58768,7 @@ async function queueImageRetries(spindle2, raw, userId) {
         return;
       spindle2.sendToFrontend({ type: "vn_image_retry_queue", queue: { chatId: action.chatId, messageId: action.messageId, sourceFingerprint: action.sourceFingerprint, swipeId: action.swipeId, revision: action.revision, ...queue.snapshot() } }, userId);
     }, (_jobId, error61) => spindle2.sendToFrontend({ type: "vn_error", chatId: action.chatId, operation: "queue_image_retry", error: errorText2(error61) }, userId));
-    entry = { scope: scope3, queue, approvedJobIds: new Set };
+    entry = { scope: scope4, queue, approvedJobIds: new Set };
     imageRetryQueues.set(key, entry);
   }
   if (entry.queue.hasRequest(action.requestId))
@@ -57927,6 +59023,84 @@ async function handleFrontendMessage(spindle2, request, userId) {
     }
     case "vn_story_dna": {
       await handleStoryDnaRequest(spindle2, request, userId);
+      return;
+    }
+    case "vn_generate_document_image": {
+      const action = GenerateDocumentImageRequestSchema.parse(request);
+      const recordPath = turnPath(action.chatId, action.messageId, action.swipeId);
+      const loaded = await loadTurnRecord(spindle2, recordPath, userId).catch(() => null);
+      const fallbackState = !loaded ? await loadChatState(spindle2, action.chatId, userId).catch(() => null) : null;
+      const fallbackRecord = !loaded && fallbackState?.activeTurnPath ? await loadTurnRecord(spindle2, fallbackState.activeTurnPath, userId).catch(() => null) : null;
+      const record5 = (loaded && loaded.plan.key.chatId === action.chatId ? loaded : null) ?? (fallbackRecord && fallbackRecord.plan.key.chatId === action.chatId ? fallbackRecord : null);
+      if (!record5 || record5.plan.key.sourceFingerprint !== action.sourceFingerprint) {
+        spindle2.sendToFrontend({
+          type: "vn_document_image",
+          chatId: action.chatId,
+          messageId: action.messageId,
+          swipeId: action.swipeId,
+          sourceFingerprint: action.sourceFingerprint,
+          revision: action.revision,
+          documentId: action.documentId,
+          contentHash: "",
+          status: "failed",
+          error: "This document belongs to an outdated or unavailable turn.",
+          ...action.requestId ? { requestId: action.requestId } : {}
+        }, userId);
+        return;
+      }
+      spindle2.sendToFrontend({
+        type: "vn_document_image",
+        chatId: action.chatId,
+        messageId: action.messageId,
+        swipeId: action.swipeId,
+        sourceFingerprint: action.sourceFingerprint,
+        revision: action.revision,
+        documentId: action.documentId,
+        contentHash: "",
+        status: "generating",
+        ...action.requestId ? { requestId: action.requestId } : {}
+      }, userId);
+      try {
+        const through = Math.min(Math.max(0, record5.plan.paragraphs.length - 1), action.throughParagraphIndex);
+        const result = await generateDocumentPropArtwork({
+          spindle: spindle2,
+          chatId: action.chatId,
+          plan: record5.plan,
+          documentId: action.documentId,
+          throughParagraphIndex: through,
+          ...action.forceRegenerate ? { regenerate: true } : {},
+          ...userId ? { userId } : {}
+        });
+        spindle2.sendToFrontend({
+          type: "vn_document_image",
+          chatId: action.chatId,
+          messageId: action.messageId,
+          swipeId: action.swipeId,
+          sourceFingerprint: action.sourceFingerprint,
+          revision: action.revision,
+          documentId: result.documentId,
+          contentHash: result.contentHash,
+          status: "ready",
+          cached: result.cached,
+          imageId: result.imageId,
+          imageUrl: result.imageUrl,
+          ...action.requestId ? { requestId: action.requestId } : {}
+        }, userId);
+      } catch (error61) {
+        spindle2.sendToFrontend({
+          type: "vn_document_image",
+          chatId: action.chatId,
+          messageId: action.messageId,
+          swipeId: action.swipeId,
+          sourceFingerprint: action.sourceFingerprint,
+          revision: action.revision,
+          documentId: action.documentId,
+          contentHash: "",
+          status: "failed",
+          error: errorText2(error61),
+          ...action.requestId ? { requestId: action.requestId } : {}
+        }, userId);
+      }
       return;
     }
     case "vn_character_dna": {

@@ -28,7 +28,8 @@ import {LocationArtRequestSchema} from '../../shared/stage-assets.js';
 import {manageLocationArt} from './location-art.js';
 import { ContextSourceSession } from './context-providers/session.js';
 import type { VisualNovelConfig } from '../../config.js';
-import { ContextSourcesRequestSchema } from '../../protocol.js';
+import { ContextSourcesRequestSchema, GenerateDocumentImageRequestSchema } from '../../protocol.js';
+import { generateDocumentPropArtwork, listTurnDocumentAssets } from './document-art.js';
 const contextSourceSession = new ContextSourceSession();
 const contextConfigSaves = new Map<string, Promise<VisualNovelConfig>>();
 import { readerPresentationFor } from "./entity-projection.js";
@@ -734,6 +735,7 @@ export async function turnViewWithAudio(spindle: SpindleAPI, record: StoredTurnR
   }
   const view=turnView(record);
   const config=await decorateCastAssets(spindle,record,view.assets,userId);
+  try{if(record.plan.storyDocuments?.length){const docAssets=await listTurnDocumentAssets(spindle,record.plan.key.chatId,record.plan,Math.max(0,record.plan.paragraphs.length-1),userId);if(Object.keys(docAssets).length)view.documentAssets=docAssets;}}catch{/* Optional document prop cache lookup never blocks reading. */}
   try{if(config?.tooltips.enabled&&config.tooltips.rememberReferences){const history=await readReferenceHistory(spindle,record,userId);if(history)view.referenceHistory=history;}}catch{/* Optional references never block primary reading. */}
   return view;
 }
@@ -783,6 +785,7 @@ export function turnView(record: StoredTurnRecord): TurnView {
   return {
     ...(presentation ? {presentation} : {}),
     sceneLocations: record.plan.scenes.filter(scene=>scene.startParagraph>=0&&scene.startParagraph<record.plan.paragraphs.length).map(scene=>({paragraphIndex:scene.startParagraph,location:scene.environment.location.slice(0,1000)})),
+    ...(record.plan.worldAtmosphereTimeline?.length ? { worldAtmosphere: record.plan.worldAtmosphereTimeline } : {}),
     chatId: record.plan.key.chatId,
     messageId: record.plan.key.assistantMessageId,
     swipeId: typeof swipe === "number" ? swipe : Number(swipe ?? 0) || 0,
@@ -1643,7 +1646,7 @@ async function processAssistantMessage(
         ? (priorTurnRecord?.plan.scenes.at(-1)?.environment.location ?? null)
         : (chatState.latestScene?.environment.location ?? null);
     spindle.sendToFrontend({ type: "vn_turn", turn: view }, userId);
-    if (!(record.plan.storyReferences?.length || record.plan.storyDocuments?.length)) {
+    if (!record.plan.storyReferences?.length) {
       scheduleSplitHorizonLore(spindle, {
         ...(userId ? { userId } : {}),
         chatId,
@@ -1657,6 +1660,39 @@ async function processAssistantMessage(
         prevLocationName,
         messages,
       });
+    }
+    if (!config.useNativeCardImages && config.generateImages && !config.dataSaverMode && config.documentImageMode === "auto" && record.plan.storyDocuments?.length) {
+      const autoDocs = record.plan.storyDocuments.slice(0, 3);
+      void (async () => {
+        for (const doc of autoDocs) {
+          if (operation.controller.signal.aborted || (intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch) return;
+          try {
+            const art = await generateDocumentPropArtwork({
+              spindle,
+              chatId,
+              plan: record.plan,
+              documentId: doc.id,
+              throughParagraphIndex: Math.max(0, record.plan.paragraphs.length - 1),
+              ...(userId ? { userId } : {}),
+            });
+            if (operation.controller.signal.aborted || (intakeEpochs.get(intakeKey) ?? 0) !== intakeEpoch) return;
+            spindle.sendToFrontend({
+              type: "vn_document_image",
+              chatId,
+              messageId: record.plan.key.assistantMessageId,
+              swipeId: Number(record.plan.key.swipeId ?? 0) || 0,
+              sourceFingerprint: record.plan.key.sourceFingerprint,
+              revision: record.plan.key.revision,
+              documentId: art.documentId,
+              contentHash: art.contentHash,
+              status: "ready",
+              cached: art.cached,
+              imageId: art.imageId,
+              imageUrl: art.imageUrl,
+            }, userId);
+          } catch {}
+        }
+      })();
     }
     if (!config.useNativeCardImages && config.generateImages) {
       void startAssets(spindle, record, path, userId).catch((error) => {
@@ -2534,6 +2570,87 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
     }
     case "vn_story_dna": {
       await handleStoryDnaRequest(spindle, request, userId);
+      return;
+    }
+    case "vn_generate_document_image": {
+      const action = GenerateDocumentImageRequestSchema.parse(request);
+      const recordPath = turnPath(action.chatId, action.messageId, action.swipeId);
+      const loaded = await loadTurnRecord(spindle, recordPath, userId).catch(() => null);
+      const fallbackState = !loaded ? await loadChatState(spindle, action.chatId, userId).catch(() => null) : null;
+      const fallbackRecord = !loaded && fallbackState?.activeTurnPath
+        ? await loadTurnRecord(spindle, fallbackState.activeTurnPath, userId).catch(() => null)
+        : null;
+      const record = (loaded && loaded.plan.key.chatId === action.chatId ? loaded : null)
+        ?? (fallbackRecord && fallbackRecord.plan.key.chatId === action.chatId ? fallbackRecord : null);
+      if (!record || record.plan.key.sourceFingerprint !== action.sourceFingerprint) {
+        spindle.sendToFrontend({
+          type: "vn_document_image",
+          chatId: action.chatId,
+          messageId: action.messageId,
+          swipeId: action.swipeId,
+          sourceFingerprint: action.sourceFingerprint,
+          revision: action.revision,
+          documentId: action.documentId,
+          contentHash: "",
+          status: "failed",
+          error: "This document belongs to an outdated or unavailable turn.",
+          ...(action.requestId ? { requestId: action.requestId } : {}),
+        }, userId);
+        return;
+      }
+      spindle.sendToFrontend({
+        type: "vn_document_image",
+        chatId: action.chatId,
+        messageId: action.messageId,
+        swipeId: action.swipeId,
+        sourceFingerprint: action.sourceFingerprint,
+        revision: action.revision,
+        documentId: action.documentId,
+        contentHash: "",
+        status: "generating",
+        ...(action.requestId ? { requestId: action.requestId } : {}),
+      }, userId);
+      try {
+        const through = Math.min(Math.max(0, record.plan.paragraphs.length - 1), action.throughParagraphIndex);
+        const result = await generateDocumentPropArtwork({
+          spindle,
+          chatId: action.chatId,
+          plan: record.plan,
+          documentId: action.documentId,
+          throughParagraphIndex: through,
+          ...(action.forceRegenerate ? { regenerate: true } : {}),
+          ...(userId ? { userId } : {}),
+        });
+        spindle.sendToFrontend({
+          type: "vn_document_image",
+          chatId: action.chatId,
+          messageId: action.messageId,
+          swipeId: action.swipeId,
+          sourceFingerprint: action.sourceFingerprint,
+          revision: action.revision,
+          documentId: result.documentId,
+          contentHash: result.contentHash,
+          status: "ready",
+          cached: result.cached,
+          imageId: result.imageId,
+          imageUrl: result.imageUrl,
+          ...(action.requestId ? { requestId: action.requestId } : {}),
+        }, userId);
+      } catch (error) {
+        spindle.sendToFrontend({
+          type: "vn_document_image",
+          chatId: action.chatId,
+          messageId: action.messageId,
+          swipeId: action.swipeId,
+          sourceFingerprint: action.sourceFingerprint,
+          revision: action.revision,
+          documentId: action.documentId,
+          contentHash: "",
+          status: "failed",
+          error: errorText(error),
+          ...(action.requestId ? { requestId: action.requestId } : {}),
+        }, userId);
+      }
       return;
     }
     case "vn_character_dna": {

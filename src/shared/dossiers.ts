@@ -4,6 +4,7 @@ import {referenceHistoryFor,type ReferenceHistory,type HistoricalReference} from
 import {samePresentationTurn,type ReaderPresentation,type PresentationSnapshot,type PresentationEntity,type EntityFact} from './presentation-entities.js';
 import {presentationTurnKey} from './presentation-selectors.js';
 import {isScenarioTitle} from './card-role.js';
+import { isIdiomaticDocumentMention } from './story-documents.js';
 const OverrideSchema=z.object({chatId:z.string().min(1).max(256),kind:z.enum(['npc','place','object']),name:z.string().min(1).max(256),suppressed:z.boolean().default(false),pinned:z.boolean().default(false),note:z.string().max(600).default(''),factEdits:z.record(z.string().min(1).max(64),z.string().max(600).nullable()).optional()}).strict();
 export type DossierOverride=z.infer<typeof OverrideSchema>;
 export const TooltipPreferencesSchema=z.object({enabled:z.boolean().default(false),rememberReferences:z.boolean().default(true),actionsEnabled:z.boolean().default(false),categories:z.object({npcs:z.boolean().default(true),locations:z.boolean().default(true),objects:z.boolean().default(true)}).default({npcs:true,locations:true,objects:true}),fieldGroups:z.record(z.string(),z.boolean()).default({}),detail:z.enum(['brief','standard','expanded']).default('brief'),linking:z.enum(['important','all-known','menu-only']).default('important'),maxLinksPerParagraph:z.number().int().min(1).max(6).default(3),maxFactsPerEntity:z.number().int().min(1).max(32).default(8),maxFactChars:z.number().int().min(80).max(1200).default(320),overrides:z.array(OverrideSchema).max(64).default([])});
@@ -54,6 +55,7 @@ export function linkEntityMentions(text:string,entities:readonly PresentationEnt
   const nameRe=new RegExp(name.trim().replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'giu');let m:RegExpExecArray|null;let scanned=0;
   while((m=nameRe.exec(text))&&scanned++<12) {if(m[0].length===0){nameRe.lastIndex++;continue;}const start=m.index;
    const end=start+(m[0].length), before=Array.from(text.slice(Math.max(0,start-2),start)).at(-1)??'',after=Array.from(text.slice(end,end+2))[0]??'';
+   if(e.kind==='object'&&isIdiomaticDocumentMention(text,start,end))continue;
    if(!/[\p{L}\p{N}_]/u.test(before)&&!/[\p{L}\p{N}_]/u.test(after)&&!excluded.some(([a,b])=>start>=a!&&start<b!))candidates.push({start,end,entityId:e.id,pinned:entityOverride(prefs,chatId,e)?.pinned===true});
 
   }

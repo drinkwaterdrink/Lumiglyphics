@@ -168,13 +168,53 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
   right: 0 !important;
   height: auto !important;
   display: flex !important;
+  flex-wrap: wrap !important;
   align-items: center !important;
   justify-content: space-between !important;
+  row-gap: 4px !important;
   padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 8px !important;
   background: linear-gradient(180deg, color-mix(in srgb, var(--vn-shell-panel, #060f16) 76%, transparent), transparent) !important;
   border: 0 !important;
   border-bottom: 0 !important;
   z-index: 35 !important;
+}
+[data-vn-world-strip][hidden] {
+  display: none !important;
+}
+[data-vn-world-strip] {
+  flex: 1 0 100% !important;
+  order: 10 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex-wrap: nowrap !important;
+  overflow: hidden !important;
+  padding: 2px 10px 2px 42px !important;
+  margin: 0 !important;
+  font-size: 11px !important;
+  line-height: 1.3 !important;
+  letter-spacing: 0.02em !important;
+  color: color-mix(in srgb, var(--aperture-text, #f4f7f5) 88%, transparent) !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.72) !important;
+  pointer-events: none !important;
+}
+[data-vn-world-strip] .vn-world-glyph {
+  display: inline-flex !important;
+  align-items: center !important;
+  color: var(--vn-accent, #a8d3c8) !important;
+  flex: none !important;
+}
+[data-vn-world-strip] .vn-world-time {
+  font-variant-numeric: tabular-nums !important;
+  font-weight: 650 !important;
+}
+[data-vn-world-strip] .vn-world-sep {
+  opacity: 0.48 !important;
+}
+[data-vn-world-strip] .vn-world-weather {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 [data-vn-reader-header] [data-reader-header-actions],
 .topbar-actions {
@@ -321,10 +361,13 @@ aside[data-vn-workspace] {
 .caption-edge {
   position: absolute;
   top: 0;
-  left: 20px;
-  right: 20px;
+  left: 12%;
+  right: 12%;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--vn-edge-glow, var(--aperture-accent, rgba(224, 238, 177, 0.46))), transparent);
+  transform: scaleY(0.65);
+  transform-origin: top;
+  background: linear-gradient(90deg, transparent, var(--vn-edge-glow, var(--aperture-accent, rgba(224, 238, 177, 0.48))), transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--vn-edge-glow, var(--aperture-accent, #dcebad)) 55%, transparent);
   pointer-events: none;
 }
 

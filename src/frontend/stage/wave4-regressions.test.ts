@@ -76,8 +76,7 @@ describe("Wave 4 P5 #1: Mobile 3-Detent DialogueSheet", () => {
     );
 
     const expandBtn = root.querySelector('[data-action="caption-expand"]');
-    expect(expandBtn).toBeTruthy();
-    expect(expandBtn?.hidden).toBe(false);
+    expect(expandBtn).toBeNull();
 
     sheet.snapToDetent("compact");
     expect(sheet.getDetent()).toBe("compact");
@@ -159,7 +158,7 @@ describe("Wave 4 Seat 3: 44px Touch Floor, Keyboard Insets & Aria Live Decouplin
     expect(libraryCss).toContain("min-height: 44px");
 
     expect(APERTURE_CSS_ROUTE_BAR_READER).not.toMatch(/\[data-vn-clean-restore\],/);
-    expect(APERTURE_CSS_LENS_FOLIO).not.toMatch(/\[data-action="caption-expand"\]\s*\{\s*display:\s*none/);
+    expect(APERTURE_CSS_LENS_FOLIO).toContain("backdrop-filter: blur(");
     const speakerBlocks = APERTURE_CSS_LENS_FOLIO.match(/[^\n{}]*\[data-vn-speaker\][^{]*\{[^}]*\}/g) ?? [];
     expect(speakerBlocks.length).toBeGreaterThan(0);
     for (const block of speakerBlocks) {

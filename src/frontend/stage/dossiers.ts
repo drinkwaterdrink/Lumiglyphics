@@ -16,7 +16,8 @@ import {
   type StoryDNASet,
 } from '../../shared/story-dna.js';
 import { findCharacterDNA, type CharacterDNA } from '../../shared/character-dna.js';
-import type {AssetView,TurnView} from '../../protocol.js';
+import type {AssetView,DocumentAssetView,TurnView} from '../../protocol.js';
+import type { StoryDocument } from '../../shared/story-documents.js';
 import {applyEntityAnchors,clearEntityAnchors,protectedEntityRanges} from './entity-anchors.js';
 import {DossierCard,DOSSIER_CSS,DOCKED_DOSSIER_CSS,type DossierSceneHubContext,type DossierVisualContext} from './dossier-card.js';
 export class StageDossiers {
@@ -28,6 +29,11 @@ export class StageDossiers {
  private characterDnaSaver?:(dna:CharacterDNA)=>void;
  private tooltipPopover:HTMLElement|null=null;
  private tooltipDismissCleanup:(()=>void)|null=null;
+ private documentAssets:Record<string,DocumentAssetView>={};
+ private documentArtBusy=new Set<string>();
+ private documentArtErrors=new Map<string,string>();
+ private documentArtRequester?:(documentId:string,throughParagraphIndex:number,forceRegenerate?:boolean)=>void;
+ private lightboxOpener?:(imageUrl:string,alt:string)=>void;
  private snapshotAt:(index:number)=>PresentationSnapshot|undefined=()=>undefined;
  private priorLinks:(index:number)=>{used:number;priorIds:Set<string>}=()=>({used:0,priorIds:new Set()});
  private resetLinkBudget():void{this.priorLinks=this.presentation?createReferenceLinkBudget(this.presentation,this.paragraphs,this.prefs):()=>({used:0,priorIds:new Set()});}
@@ -37,6 +43,22 @@ export class StageDossiers {
  constructor(private root:HTMLElement,private text:HTMLElement,controls:HTMLElement,private hold:()=>void,private release:()=>void,private save:(prefs:TooltipPreferences)=>void,private draftTools?:{current:()=>string;apply:(text:string)=>boolean;focus:()=>void},documentOpen?:(open:boolean)=>void,private dossierOpen?:(open:boolean)=>void,private displayedImageUrl?:()=>string|null) {
   const style=document.createElement('style');style.textContent=DOSSIER_CSS;root.append(style);
   this.card=new DossierCard(root,()=>{this.dossierOpen?.(false);this.workspace?.toolClosed("story");this.release();},(entity,patch)=>this.updateOverride(entity,patch),documentOpen);
+  this.card.setDocumentOptionsResolver((docId)=>({
+   asset:this.documentAssets[docId]??null,
+   busy:this.documentArtBusy.has(docId),
+   ...(this.documentArtErrors.get(docId)?{error:this.documentArtErrors.get(docId)!}:{}),
+   ...(this.documentArtRequester?{
+    onGenerate:(regenerate:boolean)=>{
+     this.documentArtBusy.add(docId);
+     this.documentArtErrors.delete(docId);
+     this.card.refreshDocumentStage(docId);
+     this.documentArtRequester?.(docId,Math.max(0,this.index),regenerate);
+    },
+   }:{}),
+   ...(this.lightboxOpener?{
+    onLightbox:(asset)=>this.lightboxOpener?.(asset.imageUrl,'Document closeup'),
+   }:{}),
+  }));
   this.tray.type='button';this.tray.dataset.vnReferences='';this.tray.dataset.vnControl='references';this.tray.innerHTML='<span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M12 5.5c-3-2-6.5-2-9-1v14c2.5-1 6-1 9 1 3-2 6.5-2 9-1v-14c-2.5-1-6-1-9 1Z"/><path d="M12 5.5v14M6 8h3M6 11h3M15 8h3M15 11h3"/></svg></span>';this.tray.title='Scene references';this.tray.setAttribute('aria-label','Scene references');this.tray.hidden=true;
   this.tray.onclick=event=>{event.stopPropagation();this.dismissTooltipPopover();if(this.workspace)this.workspace.open('story',this.tray);else this.openReferences();};controls.append(this.tray);
  }
@@ -50,6 +72,33 @@ export class StageDossiers {
  }
  setStoryDnaError(error:string):void {
   this.card.setStoryDnaError(error);
+ }
+ setDocumentArtRequester(fn:(documentId:string,throughParagraphIndex:number,forceRegenerate?:boolean)=>void):void {
+  this.documentArtRequester=fn;
+ }
+ setLightboxOpener(fn:(imageUrl:string,alt:string)=>void):void {
+  this.lightboxOpener=fn;
+ }
+ applyDocumentImageStatus(msg:{documentId:string;contentHash:string;status:'generating'|'ready'|'failed';imageId?:string;imageUrl?:string;error?:string}):void {
+  if(msg.status==='generating'){
+   this.documentArtBusy.add(msg.documentId);
+   this.documentArtErrors.delete(msg.documentId);
+  }else if(msg.status==='ready'&&msg.imageId&&msg.imageUrl){
+   this.documentArtBusy.delete(msg.documentId);
+   this.documentArtErrors.delete(msg.documentId);
+   this.documentAssets={
+    ...this.documentAssets,
+    [msg.documentId]:{documentId:msg.documentId,contentHash:msg.contentHash,imageId:msg.imageId,imageUrl:msg.imageUrl},
+   };
+   if(this.tooltipPopover?.dataset.docId===msg.documentId){
+    const thumb=this.tooltipPopover.querySelector<HTMLElement>('.vn-inline-tooltip-thumb');
+    if(thumb){thumb.replaceChildren();const img=document.createElement('img');img.src=msg.imageUrl;img.alt='';thumb.append(img);}
+   }
+  }else if(msg.status==='failed'){
+   this.documentArtBusy.delete(msg.documentId);
+   if(msg.error)this.documentArtErrors.set(msg.documentId,msg.error);
+  }
+  this.card.refreshDocumentStage(msg.documentId);
  }
  setCharacterDnaLibrary(library:Record<string,CharacterDNA>):void {
   this.characterDnaLibrary={...library};
@@ -100,9 +149,12 @@ export class StageDossiers {
    },
   };
  }
- private matchStoryDocument(entity: PresentationEntity, docs: readonly import('../../shared/story-documents.js').StoryDocument[]): import('../../shared/story-documents.js').StoryDocument | undefined {
+ private matchStoryDocument(entity: PresentationEntity, docs: readonly StoryDocument[]): StoryDocument | undefined {
   const names = new Set([entity.name, ...entity.aliases].map((n) => n.trim().toLocaleLowerCase()).filter(Boolean));
-  return docs.find((d) => names.has(d.name.trim().toLocaleLowerCase()));
+  return docs.find((d) => {
+   if (names.has(d.name.trim().toLocaleLowerCase())) return true;
+   return (d.aliases ?? []).some((a) => names.has(a.trim().toLocaleLowerCase()));
+  });
  }
  setFolioOpener(fn: (charName: string) => void): void {
   this.folioOpener = fn;
@@ -190,7 +242,15 @@ export class StageDossiers {
   return this.presentation.availableThrough<this.presentation.paragraphCount-1?`Story references are available through paragraph ${this.presentation.availableThrough+1} of ${this.presentation.paragraphCount} for this long reply.`:'Some additional story references were omitted in this long reply.';
  }
  isOpen():boolean{return this.card.isOpen();}
- setTurnMedia(turn:TurnView|null):void{this.turnMedia=turn;}
+ setTurnMedia(turn:TurnView|null):void{
+  this.turnMedia=turn;
+  this.setDocumentAssets(turn?.documentAssets);
+ }
+ setDocumentAssets(assets?:Record<string,DocumentAssetView>):void{
+  this.documentAssets={...(assets??{})};
+  this.documentArtBusy.clear();
+  this.documentArtErrors.clear();
+ }
  openTrayFromStage():boolean{
   const snapshot=this.snapshot();if(this.tray.hidden&&!Object.keys(this.storyDna.locations).length&&!Object.keys(this.storyDna.items).length)return false;
   const entries=this.mergedTrayEntries(snapshot);if(!entries.length)return false;
@@ -247,19 +307,26 @@ export class StageDossiers {
   const selected=applyOverrideFactEdits(rawSelected,entityOverride(this.prefs,snapshot.at.key.chatId,rawSelected.entity));
   const entity=selected.entity;
   const visual=this.resolveVisualContext(entity);
+  const matchedDoc=current&&entity.kind==='object'
+   ? this.matchStoryDocument(entity,visibleStoryDocuments(this.presentation?.documents??[],Math.max(0,this.index)))
+   : undefined;
+  const docAsset=matchedDoc?this.documentAssets[matchedDoc.id]:undefined;
+
   const pop=document.createElement('div');
   pop.className='vn-inline-tooltip-popover';
   pop.dataset.entityId=id;
+  if(matchedDoc)pop.dataset.docId=matchedDoc.id;
   pop.setAttribute('role','dialog');
   pop.setAttribute('aria-label',`${entity.name} quick summary`);
   pop.addEventListener('click',e=>e.stopPropagation());
   const head=document.createElement('div');head.className='vn-inline-tooltip-head';
   const thumb=document.createElement('div');thumb.className='vn-inline-tooltip-thumb';
-  if(visual.imageUrl){const img=document.createElement('img');img.src=visual.imageUrl;img.alt='';thumb.append(img);}
-  else thumb.textContent=entity.kind==='npc'?'👤':entity.kind==='place'?'📍':'✦';
+  const thumbUrl=docAsset?.imageUrl??visual.imageUrl;
+  if(thumbUrl){const img=document.createElement('img');img.src=thumbUrl;img.alt='';thumb.append(img);}
+  else thumb.textContent=matchedDoc?'📄':entity.kind==='npc'?'👤':entity.kind==='place'?'📍':'✦';
   const title=document.createElement('div');title.className='vn-inline-tooltip-title';
   const strong=document.createElement('strong');strong.textContent=entity.name;
-  const small=document.createElement('small');small.textContent=entity.kind==='npc'?'Character':entity.kind==='place'?'Location DNA':'Item / Artifact';
+  const small=document.createElement('small');small.textContent=matchedDoc?`${matchedDoc.kind.charAt(0).toUpperCase()+matchedDoc.kind.slice(1)} · Document`:entity.kind==='npc'?'Character':entity.kind==='place'?'Location DNA':'Item / Artifact';
   title.append(strong,small);
   const closeBtn=document.createElement('button');closeBtn.type='button';closeBtn.className='vn-inline-tooltip-close';closeBtn.textContent='×';closeBtn.setAttribute('aria-label','Close summary');closeBtn.onclick=()=>this.dismissTooltipPopover();
   head.append(thumb,title,closeBtn);
@@ -267,12 +334,20 @@ export class StageDossiers {
   const matchedLoc=entity.kind==='place'?findMatchingLocation(this.storyDna.locations,entity.name):undefined;
   const matchedItem=entity.kind==='object'?findMatchingItem(this.storyDna.items,entity.name):undefined;
   const dnaSummary=matchedLoc?formatLocationDNAToPromptClause(matchedLoc):matchedItem?formatItemDNAToPromptClause(matchedItem):'';
+  const docObsSummary=matchedDoc?(matchedDoc.visualDetails||matchedDoc.observations?.find(o=>Boolean(o.summary))?.summary||''):'';
+  const docQuote=matchedDoc?.sections[0]?.text?`“${matchedDoc.sections[0].text.slice(0,140)}”`:'';
   const factLines=selected.facts.slice(0,2).map(f=>f.value);
-  body.textContent=[dnaSummary,...factLines].filter(Boolean).slice(0,2).join('\n')||(visual.summarySnippet??'Established story reference.');
+  body.textContent=(matchedDoc?[docObsSummary,docQuote,...factLines]:[dnaSummary,...factLines]).filter(Boolean).slice(0,2).join('\n')||(visual.summarySnippet??'Established story reference.');
   const cta=document.createElement('button');cta.type='button';cta.className='vn-inline-tooltip-cta';
-  cta.textContent=entity.kind==='npc'?'Open in Character Folio →':'Inspect & Edit DNA in World Lens →';
+  cta.textContent=matchedDoc?'Inspect / Read Document →':entity.kind==='npc'?'Open in Character Folio →':'Inspect & Edit DNA in World Lens →';
   cta.onclick=()=>{
    this.dismissTooltipPopover();
+   if(matchedDoc){
+    this.hold();this.dossierOpen?.(true);
+    if(this.workspace&&this.workspace.destination!=='story'){this.workspace.open('story',trigger);this.card.clearBack();}
+    this.card.openDocument(matchedDoc,()=>this.open(id,trigger),trigger);
+    return;
+   }
    if(entity.kind==='npc'&&this.folioOpener){
     this.npcActionToolsHandler?.(this.buildNpcActionTools(entity.name), entity.name);
     this.folioOpener(entity.name);
@@ -283,12 +358,22 @@ export class StageDossiers {
   pop.append(head,body,cta);
   this.root.append(pop);
   const rect=typeof trigger.getBoundingClientRect==='function'?trigger.getBoundingClientRect():null;
+  const stageRect=typeof this.root.getBoundingClientRect==='function'?this.root.getBoundingClientRect():null;
+  const viewW=(stageRect&&stageRect.width>0)?stageRect.right:(typeof window!=='undefined'?window.innerWidth:1024);
+  const viewLeft=(stageRect&&stageRect.width>0)?stageRect.left:0;
+  const viewTop=(stageRect&&stageRect.height>0)?stageRect.top:0;
+  const viewBottom=(stageRect&&stageRect.height>0)?stageRect.bottom:(typeof window!=='undefined'?window.innerHeight:720);
+  const popW=pop.offsetWidth||310;
+  const popH=pop.offsetHeight||168;
   if(rect&&(rect.width>0||rect.height>0)){
-   const top=Math.max(12,Math.min((typeof window!=='undefined'?window.innerHeight:720)-180,rect.bottom+8));
-   const left=Math.max(12,Math.min((typeof window!=='undefined'?window.innerWidth:1024)-336,rect.left));
+   const fitsAbove=(rect.top-viewTop)>=(popH+18);
+   const top=fitsAbove
+    ? Math.max(viewTop+10,rect.top-popH-10)
+    : Math.min(viewBottom-popH-10,Math.max(viewTop+10,rect.bottom+8));
+   const left=Math.max(viewLeft+10,Math.min(viewW-popW-10,rect.left));
    pop.style.top=`${top}px`;pop.style.left=`${left}px`;
   }else{
-   pop.style.top='56px';pop.style.left='16px';
+   pop.style.top=`${viewTop+56}px`;pop.style.left=`${viewLeft+16}px`;
   }
   this.tooltipPopover=pop;
   const doc=this.root.ownerDocument;
@@ -304,12 +389,14 @@ export class StageDossiers {
   this.tray.hidden=!snapshot||!this.mergedTrayEntries(snapshot).length;if(!snapshot||!eligible.length||this.prefs.linking==='menu-only')return;
   // Global deterministic 24-link reply cap, evaluated only through this cursor.
   const {used,priorIds}=this.priorLinks(index);
+  const visibleDocs=visibleStoryDocuments(this.presentation?.documents??[],Math.max(0,index));
+  const docEntityIds=new Set(eligible.filter(e=>e.kind==='object'&&Boolean(this.matchStoryDocument(e,visibleDocs))).map(e=>e.id));
   const anchors=linkEntityMentions(this.text.textContent??'',snapshot.entities,this.prefs,snapshot.at.key.chatId,Math.min(this.prefs.maxLinksPerParagraph,24-used),protectedEntityRanges(this.text),this.prefs.linking==='important'?priorIds:new Set());
   applyEntityAnchors(this.text,anchors,(id,trigger)=>this.showTooltipPopover(id,trigger),id=>{
    const raw=selectReaderDossier(id,snapshot,'brief',this.prefs.fieldGroups);
    const edited=raw?applyOverrideFactEdits(raw,entityOverride(this.prefs,snapshot.at.key.chatId,raw.entity)):undefined;
    return edited?.facts[0]?.value??'View established story information';
-  });
+  },id=>docEntityIds.has(id));
  }
  private resolveVisualContext(entity:PresentationEntity):DossierVisualContext {
   const snapshot=this.snapshot();

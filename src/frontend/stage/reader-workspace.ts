@@ -46,6 +46,7 @@ export class ReaderWorkspace {
   private readonly subtitle: HTMLElement;
   private readonly closeButton: HTMLButtonElement;
   private readonly backButton: HTMLButtonElement;
+  readonly worldStrip: HTMLElement;
   private readonly more: HTMLElement;
   private readonly search: HTMLDialogElement;
   private readonly input: HTMLInputElement;
@@ -125,6 +126,13 @@ export class ReaderWorkspace {
     shell.append(...Array.from(wrapper.childNodes));
     const q = <T extends Element>(s: string) => shell.querySelector<T>(s)!;
     this.nav = q('[data-vn-navigation]'); this.header = q('[data-vn-reader-header]');
+    const existingStrip = this.header.querySelector<HTMLElement>('[data-vn-world-strip]');
+    const stripEl = existingStrip ?? document.createElement('div');
+    stripEl.dataset.vnWorldStrip = '';
+    stripEl.hidden = true;
+    stripEl.setAttribute('aria-label', 'In-world time and weather');
+    if (!existingStrip) this.header.append(stripEl);
+    this.worldStrip = stripEl;
     this.panel = q('[data-vn-workspace]'); this.content = q('[data-workspace-content]');
     this.title = q('[data-workspace-title]'); this.subtitle = q('[data-workspace-subtitle]');
     this.closeButton = q('[data-workspace-close]');

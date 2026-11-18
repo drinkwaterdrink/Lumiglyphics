@@ -108,7 +108,19 @@ export function projectTurnPresentation(plan:TurnPlan, options?: ProjectPresenta
         }
       }
     }
-    for(const document of documentsAt.get(at)??[]){const docEntity=entity('object',document.name,at);if(docEntity){const preview=document.sections.map(s=>s.text.trim()).filter(Boolean).join(' ').slice(0,320);fact(docEntity,at,'significance',preview||`${document.kind} revealed in scene`);}}
+    for(const document of documentsAt.get(at)??[]){
+      const docEntity=entity('object',document.name,at);
+      if(docEntity){
+        if(document.aliases?.length){
+          const seen=new Set([docEntity.name.toLowerCase(),...docEntity.aliases.map(a=>a.toLowerCase())]);
+          for(const alias of document.aliases){const k=alias.toLowerCase();if(!seen.has(k)){seen.add(k);docEntity.aliases.push(alias);}}
+        }
+        const obsNote=document.observations?.find(o=>o.paragraphIndex===at)?.summary||document.visualDetails;
+        if(obsNote)fact(docEntity,at,'appearance',obsNote.slice(0,320));
+        const preview=document.sections.map(s=>s.text.trim()).filter(Boolean).join(' ').slice(0,320);
+        fact(docEntity,at,'significance',preview||obsNote||`${document.kind} noticed in scene`);
+      }
+    }
     for(const reference of referencesAt.get(at)??[]) {
       const subject=entity(reference.kind,reference.name,at);
       if(subject){

@@ -1,9 +1,33 @@
 import type {TurnView} from '../protocol.js';
-import type {AmbientEffect} from './contracts.js';
+import type {AmbientEffect,SceneAtmosphereEntry,WorldAtmosphereSnapshot} from './contracts.js';
+export type {SceneAtmosphereEntry,WorldAtmosphereSnapshot};
 export type MusicTransitionPolicy='cue'|'location';
 export type SceneLocation={paragraphIndex:number;location:string};
 const locationKey=(value:string|null|undefined)=>{const key=value?.trim().replace(/\s+/g,' ').toLocaleLowerCase()||null;return key&&/^(unknown|unspecified|none|null|n\/a)$/.test(key)?null:key;};
 export function locationForPosition(turn:TurnView,index:number):string|null{if(turn.sceneLocations){let location:string|null=null;for(const entry of turn.sceneLocations)if(Number.isInteger(entry.paragraphIndex)&&entry.paragraphIndex>=0&&entry.paragraphIndex<=index)location=entry.location.trim()||null;return location;}return turn.location?.trim()||null;}
+export function atmosphereForPosition(turn:Pick<TurnView,'worldAtmosphere'>,index:number):WorldAtmosphereSnapshot|null {
+  const entries = turn.worldAtmosphere;
+  if (!entries?.length) return null;
+  let current: WorldAtmosphereSnapshot | null = null;
+  for (const entry of entries) {
+    if (Number.isInteger(entry.paragraphIndex) && entry.paragraphIndex >= 0 && entry.paragraphIndex <= index) {
+      current = {
+        ...(current ?? {}),
+        ...(entry.time !== undefined ? { time: entry.time } : {}),
+        ...(entry.timeOfDay !== undefined ? { timeOfDay: entry.timeOfDay } : {}),
+        ...(entry.date !== undefined ? { date: entry.date } : {}),
+        ...(entry.temperature !== undefined ? { temperature: entry.temperature } : {}),
+        ...(entry.weather !== undefined ? { weather: entry.weather } : {}),
+        ...(entry.season !== undefined ? { season: entry.season } : {}),
+        ...(entry.indoor !== undefined ? { indoor: entry.indoor } : {}),
+        ...(entry.source !== undefined ? { source: entry.source } : {}),
+      };
+    }
+  }
+  if (!current) return null;
+  const hasAny = Boolean(current.time || current.timeOfDay || current.date || current.temperature || current.weather);
+  return hasAny ? current : null;
+}
 /** Replay recorded cues from the opening anchor, so backwards seeks use the same policy. */
 export function musicTrackForPosition(input:{turn:TurnView;index:number;policy:MusicTransitionPolicy;openingTrack?:string|null;openingLocation?:string|null;manualTrack?:string|null}):string|null {
  if(input.manualTrack)return input.manualTrack;

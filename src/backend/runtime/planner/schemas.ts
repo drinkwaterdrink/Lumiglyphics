@@ -13,6 +13,10 @@ export const PlannerEnvironmentChangesSchema = z.object({
   description: z.string().trim().min(1).optional(),
   lighting: z.string().trim().nullable().optional(),
   timeOfDay: z.string().trim().nullable().optional(),
+  time: z.string().trim().max(48).nullable().optional(),
+  date: z.string().trim().max(64).nullable().optional(),
+  temperature: z.string().trim().max(32).nullable().optional(),
+  season: z.string().trim().max(32).nullable().optional(),
   weather: z.string().trim().nullable().optional(),
   addElements: z.array(z.string().trim().min(1)).default([]),
   removeElements: z.array(z.string().trim().min(1)).default([]),
@@ -29,6 +33,10 @@ export type PlannerEnvironmentChanges = z.infer<typeof PlannerEnvironmentChanges
 export const PlannerEnvironmentInputSchema = z.object({
   location: z.string().trim().min(1).default("the current setting"),
   timeOfDay: z.string().trim().nullable().default(null),
+  time: z.string().trim().max(48).nullable().optional(),
+  date: z.string().trim().max(64).nullable().optional(),
+  temperature: z.string().trim().max(32).nullable().optional(),
+  season: z.string().trim().max(32).nullable().optional(),
   weather: z.string().trim().nullable().default(null),
   lighting: z.string().trim().nullable().default(null),
   description: z.string().trim().min(1).default("A coherent visual-novel environment in a visual novel scene."),
@@ -40,6 +48,10 @@ export type PlannerEnvironmentInput = z.infer<typeof PlannerEnvironmentInputSche
 export type PlannerEnvironmentProposal = {
   location?: string | undefined;
   timeOfDay?: string | null | undefined;
+  time?: string | null | undefined;
+  date?: string | null | undefined;
+  temperature?: string | null | undefined;
+  season?: string | null | undefined;
   weather?: string | null | undefined;
   lighting?: string | null | undefined;
   description?: string | undefined;

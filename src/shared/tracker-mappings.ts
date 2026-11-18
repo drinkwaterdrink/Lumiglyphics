@@ -1,11 +1,20 @@
 import { z } from 'zod';
-export const TRACKER_MAPPING_FIELDS = ['identity','attire','sceneState','world'] as const;
+export const TRACKER_MAPPING_FIELDS = ['identity','attire','sceneState','world','time','date','temperature','weather'] as const;
 const blocked = new Set(['__proto__','constructor','prototype']);
 const pathSchema = z.string().trim().min(1).max(128).refine(path => {
  const parts=path.split('.');return parts.length<=6 && parts.every(part=>/^[a-zA-Z_][a-zA-Z0-9_ -]*$/.test(part)&&!blocked.has(part.toLowerCase()));
 },'Use dotted field names, without expressions or reserved properties.');
 const paths = z.array(pathSchema).max(6).default([]);
-export const TrackerMappingsSchema=z.object({identity:paths,attire:paths,sceneState:paths,world:paths}).strict();
+export const TrackerMappingsSchema=z.object({
+  identity:paths,
+  attire:paths,
+  sceneState:paths,
+  world:paths,
+  time:paths.optional().default([]),
+  date:paths.optional().default([]),
+  temperature:paths.optional().default([]),
+  weather:paths.optional().default([]),
+}).strict();
 export type TrackerMappings=z.infer<typeof TrackerMappingsSchema>;
 export function normalizeTrackerMappings(value:unknown):TrackerMappings {
  const input=value && typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};

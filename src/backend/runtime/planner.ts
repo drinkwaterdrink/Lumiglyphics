@@ -1,10 +1,10 @@
 import {jsonObject,type JsonParseTrace} from './planner/json-repair.js';
 export {repairJsonString,type JsonParseTrace} from './planner/json-repair.js';
-import {resolveSceneAmbient} from '../../shared/scene-atmosphere.js';
+import {isEnclosedInterior,resolveSceneAmbient} from '../../shared/scene-atmosphere.js';
 import {plannerImagePromptProfile} from "./image-prompt-profile.js";
 import type {ImagePromptProfile} from "../../shared/image-prompt-profile.js";
 import {freshPlanPreferences} from './presentation-rules.js';
-import { normalizeStoryDocuments } from '../../shared/story-documents.js';
+import { mergeStoryDocuments, normalizeStoryDocuments, senseDocumentsDeterministically, STORY_DOCUMENT_KINDS } from '../../shared/story-documents.js';
 import { MASTER_LORE_REFERENCE_PROMPT } from '../../shared/master-system-prompts.js';
 import {imageDetailGuidance} from './prompt-detail.js';
 import { normalizeStoryReferences } from "../../shared/story-references.js";
@@ -32,10 +32,12 @@ import {
   type CharacterContinuity,
   type IndexedContinuityDelta,
   type PlannerShotHint,
+  type SceneAtmosphereEntry,
   type SceneEnvironment,
   type SceneState,
   type StageEffect,
-  type TurnPlan
+  type TurnPlan,
+  type WorldAtmosphereSnapshot
 } from "../../shared/contracts.js";
 import { normalizeActionProp, ActionPropSchema } from "../../shared/action-prop.js";
 import { CameraAngleSchema, CompositionModeSchema, ShotIntentSchema, ShotSizeSchema } from "../../shared/image-shot-spec.js";
@@ -43,7 +45,7 @@ import { reduceContinuity } from "../core/continuity.js";
 import { resolveCueTimeline } from "../core/cue-state.js";
 import { repairScenarioSubjects } from "./scenario-subjects.js";
 import {scenarioPersonaSubject} from './scenario-persona.js';
-import { prepareNarrative } from "../core/paragraphs.js";
+import { extractProseAtmosphereDelta, prepareNarrative } from "../core/paragraphs.js";
 import { decideSceneBoundary } from "../core/scene-boundary.js";
 import { validateTurnPlan } from "../core/turn-plan.js";
 import { singleCharacterTagBlock } from "../core/visual-state.js";
@@ -217,8 +219,8 @@ function plannerInstruction(
     inputTemplateInstructions(config),
     imageDetailGuidance(config,promptProfile),
     "basePrompt must be concise comma-separated Danbooru-style scene tags for persistent location, time, weather, lighting, and background elements. Include no camera or composition prose, character names, or character description. Keep each person's appearance in their separate characters entry; ensemble cues list their names in visibleCharacters.",
-    "environment: For an initial scene or true location change, specify full details: location, timeOfDay, weather, lighting, description, persistentElements. For continuing scenes, retain the established setting without rewriting it with generic atmospheric fluff that drops established props.",
-    "environmentChanges: On continuing scenes, use 'environmentChanges' for intentional visual state mutations: {description?, lighting?, timeOfDay?, weather?, addElements?, removeElements?, replaceElements?: [{from, to}], clearElements?, clearLighting?, clearWeather?}. Setting lighting, timeOfDay, or weather to null (or using clearLighting/clearWeather) explicitly clears the field. Setting description replaces it (it cannot be cleared; when lighting/time/weather change without a description, the scene description is re-synthesized automatically). Location changes belong only in boundary and environment.location.",
+    "environment: For an initial scene or true location change, specify full details: location, timeOfDay, time?, date?, temperature?, weather, lighting, description, persistentElements. Include exact explicit clock time (e.g. '21:48', '9:48 PM'), date, or temperature (e.g. '54°F', '12°C') ONLY when stated in text/headers/SimTracker; otherwise null/omit.",
+    "environmentChanges: On continuing scenes, use 'environmentChanges' for intentional visual state mutations: {description?, lighting?, timeOfDay?, time?, date?, temperature?, weather?, addElements?, removeElements?, replaceElements?: [{from, to}], clearElements?, clearLighting?, clearWeather?}. Setting lighting, timeOfDay, or weather to null (or using clearLighting/clearWeather) explicitly clears the field. Setting description replaces it (it cannot be cleared; when lighting/time/weather change without a description, the scene description is re-synthesized automatically). Location changes belong only in boundary and environment.location.",
     "cues selects paragraph indexes where illustration updates should occur. For each cue, select an expression from the expression catalogue matching the companion's emotional reaction at that moment: [idle, speak, smile, smirk, laugh, think, sad, angry, surprise, wave, shy, listen, pouting, teary_pouting, nervous, nervous_pouting, blushing_shyly, full_face_blush, lovestruck, aroused, lustful, excited, joyful, giggling, happy_smiling, happy_tears, playful_winking, bored, confused, curious, depressed, determined, disappointed, disgusted, embarrassed, enraged, exhausted, flustered, forced_smiling, guilty, indifferent, jealous, melancholic, relieved, scared, seductive_smiling, serious, shocked, sleepy, smug, suspicious, taunting, thinking, worried, acting_cute, acting_coy, admiring, cozy].",
     config.maxImagesPerTurn > 0
       ? `Distribute distinct cues evenly across key dialogue or action beats up to the user-specified TARGET_CUES count (max budget: ${config.maxImagesPerTurn}), always including paragraph 0 as the opening cue.`
@@ -233,7 +235,7 @@ function plannerInstruction(
     "characters: Return name and ONE compact comma-separated line containing physical appearance tags. Capture permanent physical traits including species/race (e.g. elf, demon, catgirl, kitsune, furry, anthro, monster girl) and non-human anatomy (e.g. animal ears, horns, tail, wings, fangs, scales, fur, paws, claws). A description that merely repeats the name is invalid. If a new character enters or is introduced in this turn, include them in 'characters'. Keep stable traits and never invent appearance that contradicts the card or KNOWN CHARACTERS baseline.",
     "Also return species as a short string and anatomy as an array of permanent physical traits when stated in the narrative or card. These fields accept any species, including unfamiliar or invented species. Do not infer a species from an ordinary personal name. Preserve these traits even when a descriptive character label repeats the species. Use null or an empty array when unknown.",
     "identity: Every KNOWN CHARACTER has a stable characterId. When a character entry, scene or cue refers to a known character under a different label (a nickname, title, or descriptive label such as 'Fox girl' for Kitsune), set 'characterId' to that known id and list the label in the entry's 'aliases'. Only declare an alias when the story makes clear the two labels are the same person; NEVER merge two characters because they share a species, appearance, or clothing. A new character with no known id gets no characterId.",
-    ...(includeLoreExtraction && (config.collectEntityReferences || config.tooltips.enabled) ? ['Optional storyDocuments: up to 12 important letters, notes, journals, notices, phone messages or terminal readouts already explicitly established in the visible paragraphs. Shape: storyDocuments:[{name,kind:"letter"|"note"|"journal"|"notice"|"phone"|"terminal",paragraphIndex,sections:[{paragraphIndex,text,evidence}]}]. Name must be an exact identifying phrase in its introduction paragraph. Each section text must copy only literal document contents verbatim, with an exact contiguous evidence quote from its paragraph containing both the name and text. Include only explicitly displayed/read/revealed contents, never inferred text, dialogue merely spoken by a person, unread/sealed contents, private context or instructions to the reader model. Use empty sections for known documents with no revealed text. Later passages use their actual reveal paragraph. Do not complete fragments, invent lettering, unlock items or change story/image budget. Omit unsupported documents.'] : []),
+    ...(includeLoreExtraction && (config.collectEntityReferences || config.tooltips.enabled) ? [`Optional storyDocuments: up to 12 physical documents or readable props explicitly established in visible paragraphs (flyer, letter, note, journal, map, poster, receipt, notice, newspaper, pamphlet, phone, terminal). Shape: storyDocuments:[{name,kind:${JSON.stringify(STORY_DOCUMENT_KINDS)},paragraphIndex,aliases?,visualDetails?,observations?:[{paragraphIndex,summary?,material?,condition?,visualDetails?,evidence}],sections:[{paragraphIndex,text,evidence}]}]. Name must be an exact identifying phrase in its introduction paragraph; list shorter/later surface mentions like "damp paper" in aliases when clearly the same item. Observations capture physical look/ink/layout revealed up to that paragraph. Each section text copies only literal document prose verbatim with exact evidence. Never invent unreadable text or leak future paragraphs.`] : []),
     "subjectCategory: On each character entry, set 'subjectCategory' to exactly one of female, male, nonbinary, nonhuman, or unknown, based only on explicit gender or presentation. Animal ears, tails, fur, horns, or species (kitsune, catgirl, wolf) never make a character nonhuman; use nonhuman only for a creature, animal, robot, or object that is not a person.",
     "cast & active character: Set 'character' on every scene and cue to the name of the character on screen. If a new or different character enters or speaks, set 'character' to that character. Apply changes only at the paragraph where they happen, never to earlier paragraphs.",
     "When the on-screen character is a KNOWN CHARACTER, also set 'characterId' on that scene or cue to the known id, even if the text calls them by a nickname or descriptive label. Keep 'character' as the label used in the text.",
@@ -399,10 +401,21 @@ export function normalizeEnvironmentChanges(value: unknown): PlannerEnvironmentC
     from: String(x?.from || "").trim(),
     to: String(x?.to || "").trim()
   })).filter((x) => Boolean(x.from && x.to)) : [];
+  const cleanOptionalScalar = (val: unknown, max: number): string | null | undefined => {
+    if (val === null) return null;
+    if (typeof val !== "string") return undefined;
+    const s = val.trim().slice(0, max);
+    if (!s) return undefined;
+    return isExplicitClear(s) ? null : s;
+  };
   return {
     description: desc,
     lighting: light,
     timeOfDay: tod,
+    time: cleanOptionalScalar(record.time, 48),
+    date: cleanOptionalScalar(record.date, 64),
+    temperature: cleanOptionalScalar(record.temperature, 32),
+    season: cleanOptionalScalar(record.season, 32),
     weather: w,
     addElements: add,
     removeElements: rem,
@@ -425,6 +438,11 @@ function normalizeEnvironment(value: unknown, defaultLoc?: string): unknown {
   };
   if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
   const record = value as Record<string, unknown>;
+  const cleanOpt = (val: unknown, max: number): string | undefined => {
+    if (typeof val !== "string") return undefined;
+    const s = val.trim().slice(0, max);
+    return s && !isExplicitClear(s) ? s : undefined;
+  };
   const persistent = Array.isArray(record.persistentElements)
     ? record.persistentElements.map((item) => typeof item === "string" ? item.trim() : String(item)).filter(Boolean)
     : (typeof record.persistentElements === "string"
@@ -437,11 +455,19 @@ function normalizeEnvironment(value: unknown, defaultLoc?: string): unknown {
       : []);
   const rawChanges = record.changes ?? record.environmentChanges;
   const changes = normalizeEnvironmentChanges(rawChanges);
+  const time = cleanOpt(record.time, 48);
+  const date = cleanOpt(record.date, 64);
+  const temperature = cleanOpt(record.temperature, 32);
+  const season = cleanOpt(record.season, 32);
   return {
     location: typeof record.location === "string" && record.location.trim() && !isGenericLocation(record.location)
       ? record.location.trim()
       : fallback.location,
     timeOfDay: normalizeTimeOfDay(record.timeOfDay),
+    ...(time ? { time } : {}),
+    ...(date ? { date } : {}),
+    ...(temperature ? { temperature } : {}),
+    ...(season ? { season } : {}),
     weather: normalizeWeather(record.weather),
     lighting: typeof record.lighting === "string" && !isExplicitClear(record.lighting) ? record.lighting.trim() : null,
     description: typeof record.description === "string" && record.description.trim() ? record.description.trim() : fallback.description,
@@ -1574,9 +1600,25 @@ export function mergeEnvironment(
     weather = null;
   }
 
+  const mergeMetaField = (prevVal: string | null | undefined, propVal: string | null | undefined, changeVal: string | null | undefined): string | undefined => {
+    if (changeVal === null) return undefined;
+    if (typeof changeVal === "string" && changeVal.trim()) return changeVal.trim();
+    if (typeof propVal === "string" && propVal.trim()) return propVal.trim();
+    if (typeof prevVal === "string" && prevVal.trim()) return prevVal.trim();
+    return undefined;
+  };
+  const resolvedTime = mergeMetaField(base.time, proposal.time, changes?.time);
+  const resolvedDate = mergeMetaField(base.date, proposal.date, changes?.date);
+  const resolvedTemp = mergeMetaField(base.temperature, proposal.temperature, changes?.temperature);
+  const resolvedSeason = mergeMetaField(base.season, proposal.season, changes?.season);
+
   return SceneEnvironmentSchema.parse({
     location,
     timeOfDay,
+    ...(resolvedTime ? { time: resolvedTime } : {}),
+    ...(resolvedDate ? { date: resolvedDate } : {}),
+    ...(resolvedTemp ? { temperature: resolvedTemp } : {}),
+    ...(resolvedSeason ? { season: resolvedSeason } : {}),
     weather,
     lighting,
     description,
@@ -2041,7 +2083,9 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     const parts = [
       meta.location ? `Location: ${meta.location}` : '',
       meta.title ? `Chapter Title: ${meta.title}` : '',
-      meta.timeOfDay ? `Time: ${meta.timeOfDay}` : '',
+      meta.time ? `Clock: ${meta.time}` : (meta.timeOfDay ? `Time: ${meta.timeOfDay}` : ''),
+      meta.date ? `Date: ${meta.date}` : '',
+      meta.temperature ? `Temperature: ${meta.temperature}` : '',
       meta.atmosphere ? `Atmosphere: ${meta.atmosphere}` : '',
       meta.lighting ? `Lighting: ${meta.lighting}` : '',
       meta.weather ? `Weather: ${meta.weather}` : ''
@@ -2328,6 +2372,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     if (sceneCast.length === 0 && protagonistName) sceneCast.push(protagonistName);
 
     const detected = narrative.detectedSceneMetadata;
+    const simAtmo = input.simTrackerEvidence?.worldAtmosphere;
     const baseEnv = previous !== null && !decision.startsNewScene ? previous.environment : null;
     const resolvedProposalEnv = {
       ...proposal.environment,
@@ -2335,6 +2380,10 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
         ? { location: detected.location }
         : {}),
       ...(detected?.timeOfDay && !proposal.environment.timeOfDay ? { timeOfDay: detected.timeOfDay } : {}),
+      ...(simAtmo?.time || detected?.time || proposal.environment.time ? { time: simAtmo?.time ?? detected?.time ?? proposal.environment.time ?? null } : {}),
+      ...(simAtmo?.date || detected?.date || proposal.environment.date ? { date: simAtmo?.date ?? detected?.date ?? proposal.environment.date ?? null } : {}),
+      ...(simAtmo?.temperature || detected?.temperature || proposal.environment.temperature ? { temperature: simAtmo?.temperature ?? detected?.temperature ?? proposal.environment.temperature ?? null } : {}),
+      ...(simAtmo?.season || detected?.season || proposal.environment.season ? { season: simAtmo?.season ?? detected?.season ?? proposal.environment.season ?? null } : {}),
       ...(detected?.weather && !proposal.environment.weather ? { weather: detected.weather } : {}),
       ...(detected?.lighting && !proposal.environment.lighting ? { lighting: detected.lighting } : {}),
       ...(detected?.atmosphere && !proposal.environment.description.includes(detected.atmosphere)
@@ -2346,6 +2395,10 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
       : SceneEnvironmentSchema.parse({
           location: resolvedProposalEnv.location,
           timeOfDay: resolvedProposalEnv.timeOfDay,
+          ...(resolvedProposalEnv.time ? { time: resolvedProposalEnv.time } : {}),
+          ...(resolvedProposalEnv.date ? { date: resolvedProposalEnv.date } : {}),
+          ...(resolvedProposalEnv.temperature ? { temperature: resolvedProposalEnv.temperature } : {}),
+          ...(resolvedProposalEnv.season ? { season: resolvedProposalEnv.season } : {}),
           weather: resolvedProposalEnv.weather === "none" || resolvedProposalEnv.weather === "reset" ? null : resolvedProposalEnv.weather,
           lighting: resolvedProposalEnv.lighting,
           description: resolvedProposalEnv.description,
@@ -2686,12 +2739,32 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   const terminalContinuity = reduceContinuity(continuity, continuityDeltas);
   const terminalSnapshot = timeline.snapshots.at(-1);
 
+  const worldAtmosphereTimeline = buildWorldAtmosphereTimeline({
+    paragraphs: narrative.paragraphs,
+    scenes,
+    ...(input.simTrackerEvidence?.worldAtmosphere ? { simTrackerAtmosphere: input.simTrackerEvidence.worldAtmosphere } : {}),
+    ...(narrative.detectedSceneMetadata ? { detectedMeta: narrative.detectedSceneMetadata } : {}),
+    previousEnvironment: input.previousScene?.environment ?? null,
+  });
+
+  const loreEnabled = input.config.collectEntityReferences || input.config.tooltips.enabled;
+  const malformedDocs = planner.storyDocuments !== undefined && !Array.isArray(planner.storyDocuments);
+  const llmDocs = normalizeStoryDocuments(planner.storyDocuments, promptParagraphs);
+  const sensedDocs = senseDocumentsDeterministically(promptParagraphs);
+  const resolvedStoryDocuments = loreEnabled && !malformedDocs
+    ? (!input.splitHorizonLore
+        ? mergeStoryDocuments(llmDocs, sensedDocs)
+        : (Array.isArray(planner.storyDocuments) && planner.storyDocuments.length > 0
+            ? mergeStoryDocuments(llmDocs, sensedDocs)
+            : (sensedDocs.length > 0 ? sensedDocs : undefined)))
+    : (loreEnabled && malformedDocs ? [] : undefined);
 
   let plan = validateTurnPlan(TurnPlanSchema.parse({
     schemaVersion: 1,
     key,
     ...((input.config.collectEntityReferences || input.config.tooltips.enabled) && (!input.splitHorizonLore || (Array.isArray(planner.storyReferences) && planner.storyReferences.length > 0)) ? { storyReferences: normalizeStoryReferences(planner.storyReferences, promptParagraphs).filter(r => !(cardRole === "scenario" && r.kind === "npc" && Boolean(scenarioReferenceName) && characterAppearanceKey(r.name) === scenarioReferenceName)) } : {}),
-    ...((input.config.collectEntityReferences || input.config.tooltips.enabled) && (!input.splitHorizonLore || (Array.isArray(planner.storyDocuments) && planner.storyDocuments.length > 0)) ? { storyDocuments: normalizeStoryDocuments(planner.storyDocuments, promptParagraphs) } : {}),
+    ...(resolvedStoryDocuments !== undefined ? { storyDocuments: resolvedStoryDocuments } : {}),
+    ...(worldAtmosphereTimeline.length > 0 ? { worldAtmosphereTimeline } : {}),
     paragraphs: narrative.paragraphs,
     panels: narrative.panels,
     panelSource: resolvedContent.slice(0, 200_000),
@@ -2778,7 +2851,7 @@ export async function extractTurnLoreAsync(
   const paragraphText = params.paragraphs.map((p) => `[${p.index}] ${p.text}`).join("\n");
   const systemPrompt = [
     params.config.referencePromptOverride?.trim() || MASTER_LORE_REFERENCE_PROMPT,
-    'Also extract optional storyDocuments: up to 12 explicit letters, notes, journals, notices, phone messages or terminal readouts with shape storyDocuments:[{name,kind:"letter"|"note"|"journal"|"notice"|"phone"|"terminal",paragraphIndex,sections:[{paragraphIndex,text,evidence}]}].',
+    `Also extract optional storyDocuments: up to 12 physical documents or readable props with shape storyDocuments:[{name,kind:${JSON.stringify(STORY_DOCUMENT_KINDS)},paragraphIndex,aliases?,visualDetails?,observations?:[{paragraphIndex,summary?,material?,condition?,visualDetails?,evidence}],sections:[{paragraphIndex,text,evidence}]}].`,
     'Return one JSON object { "storyReferences": [...], "storyDocuments": [...] } and no prose.'
   ].join("\n\n");
 
@@ -2798,20 +2871,105 @@ export async function extractTurnLoreAsync(
   throwIfAborted(params.signal);
 
   const rawContent = extractResponseContent(response);
+  const sensedDocs = senseDocumentsDeterministically(params.paragraphs);
   if (typeof rawContent !== "string" && (!rawContent || typeof rawContent !== "object")) {
-    return { storyReferences: [], storyDocuments: [] };
+    return { storyReferences: [], storyDocuments: sensedDocs };
   }
   const parsed = jsonObject(rawContent);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return { storyReferences: [], storyDocuments: [] };
+    return { storyReferences: [], storyDocuments: sensedDocs };
   }
   const rec = parsed as Record<string, unknown>;
   const scenarioRef = params.scenarioReferenceName;
   const storyReferences = normalizeStoryReferences(rec.storyReferences, params.paragraphs).filter(
     (r) => !(params.cardRole === "scenario" && r.kind === "npc" && Boolean(scenarioRef) && characterAppearanceKey(r.name) === scenarioRef),
   );
-  const storyDocuments = normalizeStoryDocuments(rec.storyDocuments, params.paragraphs);
+  const storyDocuments = mergeStoryDocuments(normalizeStoryDocuments(rec.storyDocuments, params.paragraphs), sensedDocs);
   return { storyReferences, storyDocuments };
+}
+
+function buildWorldAtmosphereTimeline(params: {
+  paragraphs: readonly { index: number; text: string }[];
+  scenes: readonly SceneState[];
+  simTrackerAtmosphere?: WorldAtmosphereSnapshot;
+  detectedMeta?: { time?: string; timeOfDay?: string; date?: string; temperature?: string; weather?: string; season?: string };
+  previousEnvironment?: SceneEnvironment | null;
+}): SceneAtmosphereEntry[] {
+  const sceneAt = new Map<number, SceneState>();
+  for (const s of params.scenes) sceneAt.set(s.startParagraph, s);
+  const firstEnv = params.scenes[0]?.environment;
+  const sim = params.simTrackerAtmosphere;
+  const hdr = params.detectedMeta;
+  const prev = params.previousEnvironment;
+  const cleanWeather = (val: string | null | undefined): string | undefined => {
+    if (!val) return undefined;
+    const s = val.trim();
+    return s && !/^(?:none|reset|default|n\/a)$/i.test(s) ? s : undefined;
+  };
+
+  const initialSource: WorldAtmosphereSnapshot["source"] =
+    (sim && (sim.time || sim.date || sim.temperature || sim.weather || sim.timeOfDay)) ? "simtracker"
+    : (hdr && (hdr.time || hdr.date || hdr.temperature || hdr.weather || hdr.timeOfDay)) ? "header"
+    : (firstEnv && (firstEnv.time || firstEnv.date || firstEnv.temperature || firstEnv.weather || firstEnv.timeOfDay)) ? "planner"
+    : "carried";
+
+  let current: WorldAtmosphereSnapshot = {
+    ...(sim?.time ?? hdr?.time ?? firstEnv?.time ?? prev?.time ? { time: sim?.time ?? hdr?.time ?? firstEnv?.time ?? prev?.time ?? undefined } : {}),
+    ...(sim?.timeOfDay ?? hdr?.timeOfDay ?? firstEnv?.timeOfDay ?? prev?.timeOfDay ? { timeOfDay: sim?.timeOfDay ?? hdr?.timeOfDay ?? firstEnv?.timeOfDay ?? prev?.timeOfDay ?? undefined } : {}),
+    ...(sim?.date ?? hdr?.date ?? firstEnv?.date ?? prev?.date ? { date: sim?.date ?? hdr?.date ?? firstEnv?.date ?? prev?.date ?? undefined } : {}),
+    ...(sim?.temperature ?? hdr?.temperature ?? firstEnv?.temperature ?? prev?.temperature ? { temperature: sim?.temperature ?? hdr?.temperature ?? firstEnv?.temperature ?? prev?.temperature ?? undefined } : {}),
+    ...(cleanWeather(sim?.weather ?? hdr?.weather ?? firstEnv?.weather ?? prev?.weather) ? { weather: cleanWeather(sim?.weather ?? hdr?.weather ?? firstEnv?.weather ?? prev?.weather) } : {}),
+    ...(sim?.season ?? hdr?.season ?? firstEnv?.season ?? prev?.season ? { season: sim?.season ?? hdr?.season ?? firstEnv?.season ?? prev?.season ?? undefined } : {}),
+    ...(firstEnv ? { indoor: isEnclosedInterior(firstEnv.location, firstEnv.description) } : {}),
+    source: initialSource,
+  };
+
+  const timeline: SceneAtmosphereEntry[] = [];
+  const hasAny = (s: WorldAtmosphereSnapshot) => Boolean(s.time || s.timeOfDay || s.date || s.temperature || s.weather || s.season);
+  const keyOf = (s: WorldAtmosphereSnapshot) => JSON.stringify([s.time, s.timeOfDay, s.date, s.temperature, s.weather, s.season, s.indoor]);
+  let lastKey = "";
+
+  for (const p of params.paragraphs) {
+    const sc = sceneAt.get(p.index);
+    if (sc && p.index > 0) {
+      const env = sc.environment;
+      const indoor = isEnclosedInterior(env.location, env.description);
+      const nextWeather = cleanWeather(env.weather) ?? current.weather;
+      current = {
+        ...current,
+        ...(env.time ? { time: env.time } : {}),
+        ...(env.timeOfDay ? { timeOfDay: env.timeOfDay } : {}),
+        ...(env.date ? { date: env.date } : {}),
+        ...(env.temperature ? { temperature: env.temperature } : {}),
+        ...(nextWeather ? { weather: nextWeather } : {}),
+        ...(env.season ? { season: env.season } : {}),
+        indoor,
+        source: "planner",
+      };
+    }
+
+    const proseDelta = extractProseAtmosphereDelta(stripTextEffectTags(p.text));
+    if (proseDelta.time || proseDelta.timeOfDay || proseDelta.date || proseDelta.temperature || proseDelta.weather) {
+      current = {
+        ...current,
+        ...((p.index > 0 || !current.time) && proseDelta.time ? { time: proseDelta.time } : {}),
+        ...((p.index > 0 || !current.timeOfDay) && proseDelta.timeOfDay ? { timeOfDay: proseDelta.timeOfDay } : {}),
+        ...((p.index > 0 || !current.date) && proseDelta.date ? { date: proseDelta.date } : {}),
+        ...((p.index > 0 || !current.temperature) && proseDelta.temperature ? { temperature: proseDelta.temperature } : {}),
+        ...((p.index > 0 || !current.weather) && proseDelta.weather ? { weather: proseDelta.weather } : {}),
+        ...(p.index > 0 ? { source: "prose" as const } : {}),
+      };
+    }
+
+    if (hasAny(current)) {
+      const nextKey = keyOf(current);
+      if (nextKey !== lastKey || p.index === 0) {
+        timeline.push({ paragraphIndex: p.index, ...current });
+        lastKey = nextKey;
+      }
+    }
+  }
+  return timeline;
 }
 
 export function fingerprintForMessage(message: Pick<ChatMessageDTO, "id" | "swipe_id" | "content">): string {

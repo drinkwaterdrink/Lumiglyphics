@@ -11,7 +11,6 @@ export class DialogueSheet {
   private readonly header: HTMLElement;
   private readonly auto: HTMLButtonElement;
   private readonly hide: HTMLButtonElement;
-  private readonly expand: HTMLButtonElement;
   private readonly observer: ResizeObserver;
   private readonly abort = new AbortController();
 
@@ -31,10 +30,8 @@ export class DialogueSheet {
     this.tools.dataset.vnSheetTools = "";
     this.tools.className = "caption-head-actions";
     this.tools.innerHTML = `<button type="button" class="caption-tool" data-action="caption-auto" aria-pressed="false" title="Toggle auto-play (A)" aria-label="Toggle auto-play"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg></button>
-      <button type="button" class="caption-tool" data-action="caption-expand" aria-pressed="false" aria-label="Cycle dialogue sheet height" title="Resize dialogue sheet"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 15 7-7 7 7"/></svg></button>
       <button type="button" class="caption-tool" data-vn-hide-text aria-pressed="false" aria-label="Hide text reader to view full artwork" title="Hide text reader"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>`;
     this.auto = this.tools.querySelector("[data-action='caption-auto']")!;
-    this.expand = this.tools.querySelector("[data-action='caption-expand']")!;
     this.hide = this.tools.querySelector("[data-vn-hide-text]")!;
 
     this.show = document.createElement("button");
@@ -62,14 +59,6 @@ export class DialogueSheet {
     this.tools.addEventListener("click", event => event.stopPropagation(), { signal });
     this.auto.addEventListener("click", () => this.onToggleAutoPlay?.(), { signal });
     this.hide.addEventListener("click", () => this.setHidden(!this.hidden), { signal });
-    this.expand.addEventListener("click", () => {
-      const order: ReaderPreferences["sheetSize"][] = this.isMobileViewport()
-        ? ["compact", "reading", "expanded"]
-        : ["reading", "expanded"];
-      const idx = order.indexOf(this.preferences.sheetSize);
-      const next = order[(idx + 1) % order.length]!;
-      this.snapToDetent(next);
-    }, { signal });
     this.show.addEventListener("click", event => { event.stopPropagation(); this.setHidden(false); this.handle.focus(); }, { signal });
 
     const onMove = (clientY: number) => {
@@ -209,9 +198,21 @@ export class DialogueSheet {
     this.root.style.setProperty("--vn-sheet-height", `${heightPx}px`);
     this.root.style.setProperty("--caption-height", `${heightPx}px`);
     this.dialogue.style.setProperty("--caption-height", `${heightPx}px`);
-    this.dialogue.style.height = `${heightPx}px`;
+    const autoFitReading =
+      !this.hidden &&
+      !this.drag &&
+      this.preferences.heightRatio === undefined &&
+      this.preferences.sheetSize === "reading";
+    if (autoFitReading) {
+      this.dialogue.style.height = "auto";
+      this.dialogue.style.minHeight = "76px";
+      this.dialogue.style.maxHeight = `${Math.max(112, Math.min(184, heightPx + 26))}px`;
+    } else {
+      this.dialogue.style.minHeight = "";
+      this.dialogue.style.maxHeight = "";
+      this.dialogue.style.height = `${heightPx}px`;
+    }
     this.dialogue.classList?.toggle?.("large-caption", activeDetent === "expanded");
-    this.expand.setAttribute("aria-pressed", String(activeDetent === "expanded"));
   }
   getDetent(): ReaderPreferences["sheetSize"] {
     return this.preferences.sheetSize;
@@ -266,7 +267,6 @@ export class DialogueSheet {
     this.root.style.setProperty("--vn-sheet-opacity", String(this.preferences.backgroundOpacity));
     this.root.style.setProperty("--caption-opacity", String(this.preferences.backgroundOpacity));
     this.tools.hidden = false;
-    this.expand.hidden = false;
     this.hide.hidden = false;
     this.resize();
   }

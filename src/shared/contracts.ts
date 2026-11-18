@@ -101,9 +101,30 @@ export const IndexedContinuityDeltaSchema = z.object({
 }).strict();
 export type IndexedContinuityDelta = z.infer<typeof IndexedContinuityDeltaSchema>;
 
+export const WorldAtmosphereSnapshotSchema = z.object({
+  time: z.string().trim().max(64).nullable().optional(),
+  timeOfDay: z.string().trim().max(64).nullable().optional(),
+  date: z.string().trim().max(80).nullable().optional(),
+  temperature: z.string().trim().max(48).nullable().optional(),
+  weather: z.string().trim().max(120).nullable().optional(),
+  season: z.string().trim().max(48).nullable().optional(),
+  indoor: z.boolean().optional(),
+  source: z.enum(["simtracker", "header", "planner", "prose", "carried"]).optional(),
+}).strict();
+export type WorldAtmosphereSnapshot = z.infer<typeof WorldAtmosphereSnapshotSchema>;
+
+export const SceneAtmosphereEntrySchema = WorldAtmosphereSnapshotSchema.extend({
+  paragraphIndex: NonNegativeIntegerSchema,
+}).strict();
+export type SceneAtmosphereEntry = z.infer<typeof SceneAtmosphereEntrySchema>;
+
 export const SceneEnvironmentSchema = z.object({
   location: TextSchema,
   timeOfDay: z.string().trim().nullable().default(null),
+  time: z.string().trim().max(64).nullable().optional(),
+  date: z.string().trim().max(80).nullable().optional(),
+  temperature: z.string().trim().max(48).nullable().optional(),
+  season: z.string().trim().max(48).nullable().optional(),
   weather: z.string().trim().nullable().default(null),
   lighting: z.string().trim().nullable().default(null),
   description: TextSchema,
@@ -388,6 +409,7 @@ export const TurnPlanSchema = z.object({
   }).optional(),
   planningStatus: PlanningStatusSchema,
   rpgState: RpgStateSchema.optional(),
+  worldAtmosphereTimeline: z.array(SceneAtmosphereEntrySchema).max(64).optional(),
   resolvedThreads: z.array(z.string().trim().min(1).max(160)).max(8).optional(),
   createdAt: TimestampSchema
 }).strict().superRefine((plan, context) => {

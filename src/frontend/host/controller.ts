@@ -295,6 +295,8 @@ export function stageTurnInput(
     preserveImage,
     ...(presentation ? {presentation} : {}),
     ...(referenceHistory?{referenceHistory}:{}),
+    ...(next.worldAtmosphere ? { worldAtmosphere: next.worldAtmosphere } : {}),
+    ...(next.documentAssets ? { documentAssets: next.documentAssets } : {}),
     ...(next.ambients !== undefined ? { ambient: firstAmbient(next, intensity) } : {}),
     ...(next.location ? { location: next.location } : {})
   };
@@ -804,6 +806,21 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   });
   stage.setStoryDnaRequester((body) => sendStoryDna(body));
   stage.setCharacterDnaSaver((dna) => sendDna({ action: 'save', dna, revision: dnaRevision }));
+  stage.setDocumentArtRequester?.((documentId, throughParagraphIndex, forceRegenerate) => {
+    if (!turn) return;
+    ctx.sendToBackend({
+      type: "vn_generate_document_image",
+      chatId: turn.chatId,
+      messageId: turn.messageId,
+      swipeId: turn.swipeId,
+      sourceFingerprint: turn.sourceFingerprint,
+      revision: turn.revision,
+      documentId,
+      throughParagraphIndex,
+      requestId: createUiId(),
+      ...(forceRegenerate ? { forceRegenerate: true } : {}),
+    });
+  });
   const panelRequests = new Map<string, { resolve: (template: string) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   panels.onResolveTemplate = (template) => new Promise((resolve, reject) => {
     const requestId = createUiId();
@@ -1409,6 +1426,25 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
         presentation: message.presentation,
         referenceHistory: message.referenceHistory,
       });
+      return;
+    }
+    if (type === "vn_document_image" && message.type === "vn_document_image") {
+      if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId || turn.swipeId !== message.swipeId || turn.sourceFingerprint !== message.sourceFingerprint) return;
+      if (message.status === "ready" && message.imageId && message.imageUrl) {
+        turn = {
+          ...turn,
+          documentAssets: {
+            ...(turn.documentAssets ?? {}),
+            [message.documentId]: {
+              documentId: message.documentId,
+              contentHash: message.contentHash,
+              imageId: message.imageId,
+              imageUrl: message.imageUrl,
+            },
+          },
+        };
+      }
+      stage.applyDocumentImageStatus?.(message);
       return;
     }
     if (type === "vn_asset" && message.type === "vn_asset") {

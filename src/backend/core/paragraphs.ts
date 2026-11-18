@@ -13,6 +13,10 @@ export type DetectedSceneMetadata = {
   location?: string;
   title?: string;
   timeOfDay?: string;
+  time?: string;
+  date?: string;
+  temperature?: string;
+  season?: string;
   atmosphere?: string;
   lighting?: string;
   weather?: string;
@@ -113,9 +117,15 @@ export function extractDetectedSceneMetadata(content: string): DetectedSceneMeta
   let location: string | undefined;
   let title: string | undefined;
   let timeOfDay: string | undefined;
+  let time: string | undefined;
+  let date: string | undefined;
+  let temperature: string | undefined;
+  let season: string | undefined;
   let atmosphere: string | undefined;
   let lighting: string | undefined;
   let weather: string | undefined;
+
+  const CLOCK_VAL_RE = /\b(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?(?:\s*[AP]\.?M\.?)?\b/i;
 
   // 1. XML attribute-style tags: <scene_header location="..." time="..." ...>
   const tagAttrRegex = /<(?:[a-zA-Z0-9_-]+_)?(?:scene[-_]?header|scene[-_]?info|scene|setting|location[-_]?header|environment|atmosphere|chapter[-_]?header|chapter)\b([^>]*)\/?>/gi;
@@ -127,7 +137,13 @@ export function extractDetectedSceneMetadata(content: string): DetectedSceneMeta
       if (!val) continue;
       if (["location", "place", "setting", "area"].includes(key) && !location) location = val;
       else if (["title", "chaptertitle"].includes(key) && !title) title = val;
-      else if (["time", "timeofday", "tod"].includes(key) && !timeOfDay) timeOfDay = val;
+      else if (["time", "clock", "currenttime"].includes(key)) {
+        if (CLOCK_VAL_RE.test(val) && !time) time = val.match(CLOCK_VAL_RE)![0];
+        if (!timeOfDay) timeOfDay = val;
+      } else if (["timeofday", "tod"].includes(key) && !timeOfDay) timeOfDay = val;
+      else if (["date", "day", "calendar"].includes(key) && !date) date = val;
+      else if (["temperature", "temp"].includes(key) && !temperature) temperature = val;
+      else if (["season"].includes(key) && !season) season = val;
       else if (["atmosphere", "mood", "ambience", "ambient"].includes(key) && !atmosphere) atmosphere = val;
       else if (["lighting", "light"].includes(key) && !lighting) lighting = val;
       else if (["weather"].includes(key) && !weather) weather = val;
@@ -140,8 +156,11 @@ export function extractDetectedSceneMetadata(content: string): DetectedSceneMeta
   for (const match of content.matchAll(/<(?:[a-zA-Z0-9_-]+_)?(?:scene[-_]?header|scene[-_]?info|scene|setting|location[-_]?header|environment|atmosphere|chapter[-_]?header|chapter)\b[^>]*>([\s\S]*?)<\/(?:[a-zA-Z0-9_-]+_)?(?:scene[-_]?header|scene[-_]?info|scene|setting|location[-_]?header|environment|atmosphere|chapter[-_]?header|chapter)>/gi)) {
     if (match[1]) structuredBlocks.push(match[1]);
   }
-  for (const match of content.matchAll(/\[(?:Scene|Location|Setting|Environment|Atmosphere|Chapter)\b[:\s]([^\]]+)\]/gi)) {
-    if (match[1]) structuredBlocks.push(match[1]);
+  for (const match of content.matchAll(/\[(?:Scene|Location|Setting|Environment|Atmosphere|Chapter|Time|Date|Weather|Temp(?:erature)?)\b[:\s]([^\]]+)\]/gi)) {
+    if (match[1]) {
+      const fullTag = match[0].slice(1, -1);
+      structuredBlocks.push(/^(?:Time|Date|Weather|Temp(?:erature)?)\s*:/i.test(fullTag) ? fullTag : match[1]);
+    }
   }
 
   for (const block of structuredBlocks) {
@@ -151,8 +170,24 @@ export function extractDetectedSceneMetadata(content: string): DetectedSceneMeta
     const titleMatch = block.match(/(?:title|chapter[-_]?title)\s*[:=]\s*([^|\n;]+)/i);
     if (titleMatch && !title) title = cleanAttributeOrText(titleMatch[1]);
 
-    const timeMatch = block.match(/(?:time(?:_of_day)?|tod)\s*[:=]\s*([^|\n,;]+)/i);
-    if (timeMatch && !timeOfDay) timeOfDay = cleanAttributeOrText(timeMatch[1]);
+    const timeMatch = block.match(/(?:time(?:_of_day)?|tod|clock)\s*[:=]\s*([^|\n,;]+)/i);
+    if (timeMatch) {
+      const cleanedTime = cleanAttributeOrText(timeMatch[1]);
+      if (cleanedTime) {
+        const cMatch = cleanedTime.match(CLOCK_VAL_RE);
+        if (cMatch && !time) time = cMatch[0];
+        if (!timeOfDay) timeOfDay = cleanedTime;
+      }
+    }
+
+    const dateMatch = block.match(/(?:date|day|calendar)\s*[:=]\s*([^|\n,;•]+)/i);
+    if (dateMatch && !date) date = cleanAttributeOrText(dateMatch[1]);
+
+    const tempMatch = block.match(/(?:temperature|temp)\s*[:=]\s*([^|\n,;•]+)/i);
+    if (tempMatch && !temperature) temperature = cleanAttributeOrText(tempMatch[1]);
+
+    const seasonMatch = block.match(/(?:season)\s*[:=]\s*([^|\n,;•]+)/i);
+    if (seasonMatch && !season) season = cleanAttributeOrText(seasonMatch[1]);
 
     const atmoMatch = block.match(/(?:atmosphere|mood|ambience|ambient)\s*[:=]\s*([^|\n,;]+)/i);
     if (atmoMatch && !atmosphere) atmosphere = cleanAttributeOrText(atmoMatch[1]);
@@ -160,15 +195,15 @@ export function extractDetectedSceneMetadata(content: string): DetectedSceneMeta
     const lightMatch = block.match(/(?:lighting|light)\s*[:=]\s*([^|\n,;]+)/i);
     if (lightMatch && !lighting) lighting = cleanAttributeOrText(lightMatch[1]);
 
-    const weatherMatch = block.match(/(?:weather)\s*[:=]\s*([^|\n,;]+)/i);
+    const weatherMatch = block.match(/(?:weather|forecast)\s*[:=]\s*([^|\n,;]+)/i);
     if (weatherMatch && !weather) weather = cleanAttributeOrText(weatherMatch[1]);
 
-    if (!location && !locMatch) {
+    if (!location && !locMatch && !/^(?:time|date|temp(?:erature)?|weather|lighting|atmosphere)\s*[:=]/i.test(block.trim())) {
       const parts = block.split(/[|,]/).map((p) => p.trim()).filter(Boolean);
-      if (parts[0] && !/^(?:time|lighting|weather|atmosphere)/i.test(parts[0])) {
+      if (parts[0] && !/^(?:time|lighting|weather|atmosphere|date|temp)/i.test(parts[0])) {
         location = cleanAttributeOrText(parts[0]);
       }
-      if (parts[1] && !timeOfDay && !/^(?:lighting|weather|atmosphere)/i.test(parts[1])) {
+      if (parts[1] && !timeOfDay && !/^(?:lighting|weather|atmosphere|date|temp)/i.test(parts[1])) {
         timeOfDay = cleanAttributeOrText(parts[1]);
       }
     }
@@ -194,13 +229,68 @@ export function extractDetectedSceneMetadata(content: string): DetectedSceneMeta
     }
   }
 
-  if (!location && !title && !timeOfDay && !atmosphere && !lighting && !weather) return undefined;
+  if (!location && !title && !timeOfDay && !time && !date && !temperature && !season && !atmosphere && !lighting && !weather) return undefined;
   return {
     ...(location ? { location } : {}),
     ...(title ? { title } : {}),
     ...(timeOfDay ? { timeOfDay } : {}),
+    ...(time ? { time } : {}),
+    ...(date ? { date } : {}),
+    ...(temperature ? { temperature } : {}),
+    ...(season ? { season } : {}),
     ...(atmosphere ? { atmosphere } : {}),
     ...(lighting ? { lighting } : {}),
+    ...(weather ? { weather } : {}),
+  };
+}
+
+/** Extract time, date, temperature, or weather cues from non-dialogue narrative prose. */
+export function extractProseAtmosphereDelta(text: string): {
+  time?: string;
+  timeOfDay?: string;
+  date?: string;
+  temperature?: string;
+  weather?: string;
+} {
+  // Strip quoted speech so dialogue about past/hypothetical weather or times never mutates live world state.
+  const proseOnly = text
+    .replace(/“[^”]*”/g, " ")
+    .replace(/"[^"]*"/g, " ")
+    .trim();
+  if (!proseOnly) return {};
+
+  const timeMatch = proseOnly.match(/\b((?:[01]?\d|2[0-3]):[0-5]\d(?:\s*[AP]\.?M\.?)?|(?:[1-9]|1[0-2])\s*(?:a\.m\.|p\.m\.|AM|PM)|midnight|noon|dawn|dusk|twilight)\b/i);
+  let time: string | undefined;
+  let timeOfDay: string | undefined;
+  if (timeMatch?.[1]) {
+    const raw = timeMatch[1].trim();
+    if (/^\d/.test(raw)) time = raw;
+    else timeOfDay = raw.toLowerCase();
+  }
+
+  const tempMatch = proseOnly.match(/([-+]?\d+(?:\.\d+)?)\s*(?:°\s*([CF])|degrees?\s*(Celsius|Fahrenheit|C|F))\b/i);
+  const temperature = tempMatch
+    ? `${tempMatch[1]}°${(tempMatch[2] || tempMatch[3] || "").charAt(0).toUpperCase()}`
+    : undefined;
+
+  const dateMatch = proseOnly.match(/\b((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s*\d{4})?|(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)(?:\s+(?:morning|afternoon|evening|night))?)\b/i);
+  const date = dateMatch?.[1]?.trim();
+
+  const weatherMatch = proseOnly.match(/\b(heavy\s+rain|steady\s+(?:cold\s+)?rain|light\s+rain|pouring\s+rain|thunderstorm|lightning\s+storm|drizzle|rain\s+hammered|raining|blizzard|snowstorm|heavy\s+snow|snowfall|snowing|dense\s+fog|heavy\s+mist|fog\s+rolled|clear\s+night|clear\s+sky|overcast(?:\s+skies)?|freezing\s+sleet|hailstorm)\b/i);
+  let weather: string | undefined;
+  if (weatherMatch?.[1]) {
+    const w = weatherMatch[1].toLowerCase().trim();
+    if (w === "rain hammered" || w === "raining") weather = "Rain";
+    else if (w === "snowing") weather = "Snow";
+    else if (w === "fog rolled") weather = "Fog";
+    else weather = w.charAt(0).toUpperCase() + w.slice(1);
+  }
+
+  return {
+    ...(time ? { time } : {}),
+    ...(timeOfDay ? { timeOfDay } : {}),
+    ...(date ? { date } : {}),
+    ...(temperature ? { temperature } : {}),
     ...(weather ? { weather } : {}),
   };
 }

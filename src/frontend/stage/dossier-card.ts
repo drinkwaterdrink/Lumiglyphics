@@ -1,4 +1,4 @@
-import { createDocumentReader, DOCUMENT_READER_CSS } from './document-reader.js';
+import { createDocumentReader, DOCUMENT_READER_CSS, populateDocumentArtStage, type DocumentReaderOptions } from './document-reader.js';
 import { APERTURE_ICONS } from '../theme/aperture-theme.js';
 import { html } from '../dom/html.js';
 import type { StoryDocument } from '../../shared/story-documents.js';
@@ -105,9 +105,50 @@ export class DossierCard {
   } | null = null;
   private awaitingDnaSync = false;
   private folioOpener: ((characterName: string) => void) | null = null;
+  private documentOptionsResolver: ((docId: string) => DocumentReaderOptions) | null = null;
+  private activeDocumentRecord: StoryDocument | null = null;
 
   setFolioOpener(fn: (characterName: string) => void): void {
     this.folioOpener = fn;
+  }
+
+  setDocumentOptionsResolver(fn: (docId: string) => DocumentReaderOptions): void {
+    this.documentOptionsResolver = fn;
+  }
+
+  openDocument(storyDocument: StoryDocument, back: () => void, trigger?: HTMLElement): void {
+    if (trigger) this.returnFocus = trigger;
+    this.activeDocumentRecord = storyDocument;
+    const opts = this.documentOptionsResolver?.(storyDocument.id) ?? {};
+    const reader = createDocumentReader(
+      storyDocument,
+      () => {
+        if (this.host.hidden || reader.parentElement !== this.host) return;
+        this.activeDocumentRecord = null;
+        back();
+      },
+      () => {
+        if (!this.host.hidden && reader.parentElement === this.host) {
+          this.activeDocumentRecord = null;
+          this.close();
+        }
+      },
+      opts,
+    );
+    if (this.host.dataset.vnWorkspaceTool) reader.removeAttribute('aria-modal');
+    this.documentState(true);
+    this.host.replaceChildren(reader);
+    this.host.hidden = false;
+    reader.querySelector<HTMLElement>('button')?.focus();
+  }
+
+  refreshDocumentStage(documentId: string): void {
+    if (this.host.hidden || !this.activeDocumentRecord || this.activeDocumentRecord.id !== documentId) return;
+    const reader = this.host.querySelector<HTMLElement>('[data-vn-document-reader]');
+    const stage = reader?.querySelector<HTMLElement>('[data-document-art-stage]');
+    if (!reader || reader.dataset.vnDocId !== documentId || !stage) return;
+    const opts = this.documentOptionsResolver?.(documentId) ?? {};
+    populateDocumentArtStage(stage, this.activeDocumentRecord, opts);
   }
 
   setStoryDna(storyDna: StoryDNASet): void {
@@ -708,35 +749,24 @@ export class DossierCard {
     }
 
     if (storyDocument) {
-      if (storyDocument.sections.length) {
-        const read = document.createElement('button');
-        read.type = 'button';
-        read.textContent = 'Read revealed text';
-        read.dataset.vnReadDocument = '';
-        read.onclick = () => {
-          if (this.host.hidden || panel.parentElement !== this.host) return;
-          const reader = createDocumentReader(
-            storyDocument,
-            () => {
-              if (this.host.hidden || reader.parentElement !== this.host) return;
-              this.open(dossier, prefs, chatId, trigger, actions, storyDocument, visual);
-              this.host.querySelector<HTMLElement>('[data-vn-read-document]')?.focus();
-            },
-            () => {
-              if (!this.host.hidden && reader.parentElement === this.host) this.close();
-            }
-          );
-          if (this.host.dataset.vnWorkspaceTool) reader.removeAttribute('aria-modal');
-          this.documentState(true);
-          this.host.replaceChildren(reader);
-          reader.querySelector<HTMLElement>('button')?.focus();
-        };
-        panel.append(read);
-      } else {
-        const missing = document.createElement('p');
-        missing.textContent = 'No document text has been revealed. Examining the item is a story action; opening this card does not unlock it.';
-        panel.append(missing);
-      }
+      const read = document.createElement('button');
+      read.type = 'button';
+      read.textContent = storyDocument.sections.length
+        ? 'Read revealed text & view closeup'
+        : 'Inspect document & view closeup';
+      read.dataset.vnReadDocument = '';
+      read.onclick = () => {
+        if (this.host.hidden || panel.parentElement !== this.host) return;
+        this.openDocument(
+          storyDocument,
+          () => {
+            this.open(dossier, prefs, chatId, trigger, actions, storyDocument, visual);
+            this.host.querySelector<HTMLElement>('[data-vn-read-document]')?.focus();
+          },
+          trigger,
+        );
+      };
+      panel.append(read);
     }
 
     if (actions?.drafts.length) {
@@ -1947,6 +1977,8 @@ export const DOSSIER_CSS = `
 [data-vn-root] [data-vn-references]{min-width:44px!important;min-height:44px!important;width:44px;height:44px;padding:0!important;display:inline-flex;align-items:center;justify-content:center}
 [data-vn-references] svg{width:20px;height:20px;display:block;flex:none}
 [data-vn-root] [data-entity-anchor]{font:inherit;font-weight:650;color:inherit;background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 16%,transparent);border:0;text-decoration:underline 1.5px color-mix(in srgb,var(--vn-accent,#9ec6f0) 80%,transparent);text-underline-offset:3px;border-radius:.15em;padding:0;cursor:pointer;text-align:inherit;display:inline;line-height:inherit;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+[data-vn-root] [data-entity-anchor][data-entity-doc="true"]{background:color-mix(in srgb,#e8c987 18%,var(--vn-accent,#9ec6f0) 10%);text-decoration:underline dotted 1.5px color-mix(in srgb,#e8c987 82%,var(--vn-accent,#9ec6f0))}
+[data-vn-root] [data-entity-anchor][data-entity-doc="true"]::after{content:" 🗏";font-size:.78em;opacity:.72;vertical-align:0.05em}
 [data-vn-root] [data-entity-anchor]:hover{background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 28%,transparent)}
 [data-entity-anchor]:focus-visible{outline:2px solid var(--vn-accent,#9ec6f0);outline-offset:3px}
 [data-vn-dossier][hidden]{display:none!important}

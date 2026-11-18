@@ -1,35 +1,260 @@
-import type {StoryDocument} from '../../shared/story-documents.js';
-const kinds:Record<StoryDocument['kind'],string>={letter:'Letter',note:'Note',journal:'Journal',notice:'Notice',phone:'Phone messages',terminal:'Terminal'};
-/** Literal text only. No HTML, remote assets, generation or story mutations. */
-export function createDocumentReader(documentRecord:StoryDocument,back:()=>void,close:()=>void):HTMLElement{
- const panel=document.createElement('section');panel.dataset.vnDossierCard='';panel.dataset.vnDocumentReader='';panel.dataset.documentKind=documentRecord.kind;
- panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label',`Read ${documentRecord.name}`);
- const header=document.createElement('header'),backButton=document.createElement('button'),title=document.createElement('h2'),closeButton=document.createElement('button');
- backButton.type=closeButton.type='button';backButton.textContent='‹';backButton.title='Back to item';backButton.setAttribute('aria-label','Back to item');backButton.onclick=back;
- title.textContent=documentRecord.name;closeButton.textContent='×';closeButton.title='Close document';closeButton.setAttribute('aria-label','Close document');closeButton.onclick=close;header.append(backButton,title,closeButton);
- const meta=document.createElement('p');meta.dataset.documentMeta='';meta.textContent=`${kinds[documentRecord.kind]} · Revealed story text`;
- const body=document.createElement('div');body.dataset.documentBody='';body.tabIndex=0;body.setAttribute('aria-label','Document text');
- for(const section of documentRecord.sections){const passage=document.createElement('section'),text=document.createElement('p'),source=document.createElement('small');text.textContent=section.text;source.textContent=`Story · paragraph ${section.paragraphIndex+1}`;passage.append(text,source);body.append(passage);}
- const footer=document.createElement('footer'),copy=document.createElement('button'),status=document.createElement('span');status.setAttribute('role','status');
- copy.type='button';copy.textContent='Copy text';copy.title='Copy revealed text';copy.setAttribute('aria-label','Copy revealed text');copy.onclick=async()=>{
-  if(!panel.isConnected)return;
-  try{await navigator.clipboard.writeText(documentRecord.sections.map(s=>s.text).join('\n\n'));if(panel.isConnected)status.textContent='Copied.';}
-  catch{if(panel.isConnected)status.textContent='Copy unavailable. Select the text to copy it.';}
- };
- footer.append(copy,status);panel.append(header,meta,body,footer);return panel;
+import type { DocumentAssetView } from '../../protocol.js';
+import type { StoryDocument } from '../../shared/story-documents.js';
+
+const kinds: Record<StoryDocument['kind'], string> = {
+  flyer: 'Flyer',
+  letter: 'Letter',
+  note: 'Note',
+  journal: 'Journal',
+  map: 'Map',
+  poster: 'Poster',
+  receipt: 'Receipt',
+  notice: 'Notice',
+  newspaper: 'Newspaper',
+  pamphlet: 'Pamphlet',
+  phone: 'Phone messages',
+  terminal: 'Terminal',
+};
+
+export type DocumentReaderOptions = {
+  asset?: DocumentAssetView | null;
+  busy?: boolean;
+  error?: string;
+  onGenerate?: (regenerate: boolean) => void;
+  onLightbox?: (asset: DocumentAssetView) => void;
+};
+
+export function populateDocumentArtStage(
+  stage: HTMLElement,
+  documentRecord: StoryDocument,
+  options: DocumentReaderOptions = {},
+): void {
+  stage.replaceChildren();
+  stage.dataset.busy = options.busy ? 'true' : 'false';
+  const asset = options.asset;
+
+  if (asset?.imageUrl) {
+    const figure = document.createElement('div');
+    figure.dataset.documentArtFrame = '';
+
+    const imgBtn = document.createElement('button');
+    imgBtn.type = 'button';
+    imgBtn.dataset.documentArtZoom = '';
+    imgBtn.setAttribute('aria-label', `Inspect full closeup of ${documentRecord.name}`);
+    const img = document.createElement('img');
+    img.src = asset.imageUrl;
+    img.alt = `Closeup artwork of ${documentRecord.name}`;
+    img.loading = 'eager';
+    const zoomHint = document.createElement('span');
+    zoomHint.dataset.documentZoomBadge = '';
+    zoomHint.textContent = 'Expand';
+    imgBtn.append(img, zoomHint);
+    imgBtn.onclick = () => options.onLightbox?.(asset);
+    figure.append(imgBtn);
+
+    if (options.onGenerate) {
+      const bar = document.createElement('div');
+      bar.dataset.documentArtActions = '';
+      const regen = document.createElement('button');
+      regen.type = 'button';
+      regen.dataset.documentArtGen = '';
+      regen.disabled = Boolean(options.busy);
+      regen.textContent = options.busy ? 'Rendering closeup…' : '↻ Regenerate';
+      regen.onclick = () => options.onGenerate?.(true);
+      bar.append(regen);
+      figure.append(bar);
+    }
+    stage.append(figure);
+  } else if (options.onGenerate) {
+    const empty = document.createElement('div');
+    empty.dataset.documentArtEmpty = '';
+    const note = document.createElement('p');
+    note.textContent = options.busy
+      ? 'Rendering close-up inspection artwork from revealed details…'
+      : 'Render a close-up inspection view grounded in the revealed scene.';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.dataset.documentArtGen = '';
+    btn.disabled = Boolean(options.busy);
+    btn.textContent = options.busy ? 'Generating View…' : '✨ Generate Document View';
+    btn.onclick = () => options.onGenerate?.(false);
+    empty.append(note, btn);
+    stage.append(empty);
+  }
+
+  if (options.error) {
+    const err = document.createElement('p');
+    err.dataset.documentArtError = '';
+    err.textContent = options.error;
+    stage.append(err);
+  }
 }
-export const DOCUMENT_READER_CSS=`
+
+/** Literal text & revealed observations only. No HTML, remote assets, or story mutations. */
+export function createDocumentReader(
+  documentRecord: StoryDocument,
+  back: () => void,
+  close: () => void,
+  options: DocumentReaderOptions = {},
+): HTMLElement {
+  const panel = document.createElement('section');
+  panel.dataset.vnDossierCard = '';
+  panel.dataset.vnDocumentReader = '';
+  panel.dataset.vnDocId = documentRecord.id;
+  panel.dataset.documentKind = documentRecord.kind;
+  panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-modal', 'true');
+  panel.setAttribute('aria-label', `Read ${documentRecord.name}`);
+
+  const header = document.createElement('header');
+  const backButton = document.createElement('button');
+  const title = document.createElement('h2');
+  const closeButton = document.createElement('button');
+  backButton.type = closeButton.type = 'button';
+  backButton.textContent = '‹';
+  backButton.title = 'Back to item';
+  backButton.setAttribute('aria-label', 'Back to item');
+  backButton.onclick = back;
+  title.textContent = documentRecord.name;
+  closeButton.textContent = '×';
+  closeButton.title = 'Close document';
+  closeButton.setAttribute('aria-label', 'Close document');
+  closeButton.onclick = close;
+  header.append(backButton, title, closeButton);
+
+  const meta = document.createElement('p');
+  meta.dataset.documentMeta = '';
+  meta.textContent = `${kinds[documentRecord.kind]} · Revealed story view`;
+
+  const scrollWrap = document.createElement('div');
+  scrollWrap.dataset.documentBody = '';
+  scrollWrap.tabIndex = 0;
+  scrollWrap.setAttribute('aria-label', 'Document inspection and text');
+
+  if (options.asset?.imageUrl || options.onGenerate) {
+    const artStage = document.createElement('div');
+    artStage.dataset.documentArtStage = '';
+    populateDocumentArtStage(artStage, documentRecord, options);
+    scrollWrap.append(artStage);
+  }
+
+  const obs = documentRecord.observations ?? [];
+  const hasVisualSummary = Boolean(documentRecord.visualDetails) || obs.some(o => Boolean(o.summary || o.visualDetails?.length || o.condition || o.material));
+  if (hasVisualSummary) {
+    const obsBox = document.createElement('div');
+    obsBox.dataset.documentObservations = '';
+    const heading = document.createElement('h3');
+    heading.textContent = 'Observed Physicality';
+    obsBox.append(heading);
+
+    const seenLines = new Set<string>();
+    for (const item of obs) {
+      const parts = [
+        item.material,
+        item.condition,
+        item.summary,
+        ...(item.visualDetails ?? []),
+      ].filter((v): v is string => Boolean(v && v.trim()));
+      const line = [...new Set(parts)].join(' · ');
+      if (!line || seenLines.has(line.toLowerCase())) continue;
+      seenLines.add(line.toLowerCase());
+      const p = document.createElement('p');
+      p.textContent = line;
+      const src = document.createElement('small');
+      src.textContent = `Noticed · paragraph ${item.paragraphIndex + 1}`;
+      obsBox.append(p, src);
+    }
+    if (!seenLines.size && documentRecord.visualDetails) {
+      const p = document.createElement('p');
+      p.textContent = documentRecord.visualDetails;
+      obsBox.append(p);
+    }
+    if (obsBox.children.length > 1) scrollWrap.append(obsBox);
+  }
+
+  const transcript = document.createElement('div');
+  transcript.dataset.documentTranscript = '';
+  if (documentRecord.sections.length) {
+    if (hasVisualSummary) {
+      const heading = document.createElement('h3');
+      heading.textContent = 'Revealed Text';
+      transcript.append(heading);
+    }
+    for (const section of documentRecord.sections) {
+      const passage = document.createElement('section');
+      const text = document.createElement('p');
+      const source = document.createElement('small');
+      text.textContent = section.text;
+      source.textContent = `Story · paragraph ${section.paragraphIndex + 1}`;
+      passage.append(text, source);
+      transcript.append(passage);
+    }
+  } else {
+    const emptyText = document.createElement('p');
+    emptyText.dataset.documentEmptyText = '';
+    emptyText.textContent = 'No verbatim text transcribed yet. Visual cues above reflect what has been seen so far.';
+    transcript.append(emptyText);
+  }
+  scrollWrap.append(transcript);
+
+  const footer = document.createElement('footer');
+  const copy = document.createElement('button');
+  const status = document.createElement('span');
+  status.setAttribute('role', 'status');
+  copy.type = 'button';
+  copy.textContent = 'Copy text';
+  copy.title = 'Copy revealed text';
+  copy.setAttribute('aria-label', 'Copy revealed text');
+  copy.disabled = documentRecord.sections.length === 0;
+  copy.onclick = async () => {
+    if (!panel.isConnected || !documentRecord.sections.length) return;
+    try {
+      await navigator.clipboard.writeText(documentRecord.sections.map(s => s.text).join('\n\n'));
+      if (panel.isConnected) status.textContent = 'Copied.';
+    } catch {
+      if (panel.isConnected) status.textContent = 'Copy unavailable. Select the text to copy it.';
+    }
+  };
+  footer.append(copy, status);
+
+  panel.append(header, meta, scrollWrap, footer);
+  return panel;
+}
+
+export const DOCUMENT_READER_CSS = `
 [data-vn-document-reader]{display:flex;flex-direction:column;overflow:hidden;padding:16px;max-height:calc(100dvh - max(32px,env(safe-area-inset-top)) - max(32px,env(safe-area-inset-bottom)));transition:background .22s ease,border-color .22s ease}
 [data-vn-document-reader] header{flex:none;gap:8px;border-bottom:1px solid var(--vn-panel-border,#666);padding-bottom:8px}
 [data-vn-document-reader] header h2{flex:1;font-size:1.05em;line-height:1.3}
 [data-vn-document-reader] header button{flex:none;min-width:44px;padding:8px;margin:0;font-size:1.3em}
 [data-document-meta]{flex:none;font-size:.75em;opacity:.85;margin:10px 0;letter-spacing:.04em;text-transform:uppercase}
 [data-document-body]{min-height:0;overflow:auto;overscroll-behavior:contain;user-select:text;-webkit-user-select:text;cursor:text;touch-action:pan-y;line-height:1.68;font-size:max(16px,1em);padding:12px 14px 16px;background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 4%,transparent);border-radius:10px;overflow-wrap:anywhere;border:1px solid color-mix(in srgb,var(--vn-panel-border,#666) 45%,transparent)}
+[data-document-art-stage]{margin:0 0 14px;border-radius:10px;overflow:hidden;border:1px solid color-mix(in srgb,var(--vn-accent,#9ec6f0) 24%,var(--vn-panel-border,#666));background:color-mix(in srgb,var(--vn-panel-solid,#111622) 82%,transparent)}
+[data-document-art-stage][data-busy="true"]{opacity:.88}
+[data-document-art-frame]{position:relative;display:flex;flex-direction:column}
+[data-document-art-zoom]{position:relative;display:block;width:100%;padding:0;margin:0;border:0;background:transparent;cursor:zoom-in;overflow:hidden;border-radius:0}
+[data-document-art-zoom] img{display:block;width:100%;max-height:240px;object-fit:contain;background:rgba(4,7,14,.55)}
+[data-document-zoom-badge]{position:absolute;right:8px;bottom:8px;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.03em;background:rgba(10,14,24,.78);color:#f3f7ff;border:1px solid rgba(255,255,255,.22);pointer-events:none}
+[data-document-art-actions]{display:flex;justify-content:flex-end;padding:6px 8px;border-top:1px solid color-mix(in srgb,var(--vn-panel-border,#666) 40%,transparent);background:rgba(0,0,0,.18)}
+[data-document-art-empty]{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px}
+[data-document-art-empty] p{margin:0;font-size:.82em;opacity:.85;flex:1 1 180px;line-height:1.45}
+[data-document-art-gen]{margin:0;min-height:36px;padding:6px 12px;border-radius:999px;font-size:.8em;font-weight:600;cursor:pointer;border:1px solid color-mix(in srgb,var(--vn-accent,#9ec6f0) 48%,transparent);background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 16%,transparent);color:inherit}
+[data-document-art-gen]:disabled{opacity:.58;cursor:wait}
+[data-document-art-error]{margin:0;padding:6px 12px 10px;font-size:.78em;color:#fca5a5}
+[data-document-observations]{margin:0 0 14px;padding:10px 12px;border-radius:8px;background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 8%,transparent);border:1px dashed color-mix(in srgb,var(--vn-accent,#9ec6f0) 32%,transparent)}
+[data-document-observations] h3,[data-document-transcript] h3{margin:0 0 6px;font-size:.72em;letter-spacing:.07em;text-transform:uppercase;opacity:.78;font-family:inherit}
+[data-document-observations] p{margin:4px 0 2px;font-size:.9em;line-height:1.5}
+[data-document-empty-text]{font-size:.88em;opacity:.76;font-style:italic;margin:6px 0}
 [data-document-body] p{white-space:pre-wrap;margin:8px 0}
-[data-document-body] section+section{border-top:1px solid var(--vn-panel-border,#666);margin-top:18px;padding-top:10px}
-[data-document-body] small{display:block;font:inherit;font-size:.7em;opacity:.85;margin-top:4px}
+[data-document-transcript] section+section{border-top:1px solid var(--vn-panel-border,#666);margin-top:18px;padding-top:10px}
+[data-document-body] small{display:block;font:inherit;font-size:.7em;opacity:.78;margin-top:3px;margin-bottom:6px}
 [data-vn-document-reader][data-document-kind="letter"] [data-document-body],
 [data-vn-document-reader][data-document-kind="note"] [data-document-body]{font-family:"Iowan Old Style","Palatino Linotype","Book Antiqua",Georgia,serif;background:linear-gradient(180deg,color-mix(in srgb,#e8d5b5 12%,var(--vn-panel-solid,#171b26)),color-mix(in srgb,#c8a97e 8%,var(--vn-panel-solid,#171b26)));border-color:color-mix(in srgb,#d6b588 38%,var(--vn-panel-border,#666));box-shadow:inset 0 1px 0 rgba(255,244,224,.08)}
+[data-vn-document-reader][data-document-kind="flyer"] [data-document-body],
+[data-vn-document-reader][data-document-kind="pamphlet"] [data-document-body]{font-family:"Iowan Old Style",Georgia,serif;background:linear-gradient(170deg,color-mix(in srgb,#e9dfc8 11%,var(--vn-panel-solid,#171b26)),color-mix(in srgb,#b9a88e 7%,var(--vn-panel-solid,#171b26)));border:1px solid color-mix(in srgb,#d6b588 32%,var(--vn-panel-border,#666))}
+[data-vn-document-reader][data-document-kind="poster"] [data-document-body]{border:2px solid color-mix(in srgb,var(--vn-accent,#9ec6f0) 42%,var(--vn-panel-border,#666));background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 6%,var(--vn-panel-solid,#171b26))}
+[data-vn-document-reader][data-document-kind="newspaper"] [data-document-body]{font-family:Georgia,"Times New Roman",serif;background:linear-gradient(180deg,color-mix(in srgb,#d6d3cb 11%,var(--vn-panel-solid,#171b26)),color-mix(in srgb,#a8a49c 7%,var(--vn-panel-solid,#171b26)));border-color:color-mix(in srgb,#c4c0b6 34%,var(--vn-panel-border,#666))}
+[data-vn-document-reader][data-document-kind="map"] [data-document-body]{font-family:"Iowan Old Style",Georgia,serif;background:linear-gradient(180deg,color-mix(in srgb,#dfc89e 13%,var(--vn-panel-solid,#171b26)),color-mix(in srgb,#9e835a 9%,var(--vn-panel-solid,#171b26)));border:1px dashed color-mix(in srgb,#d6b588 45%,var(--vn-panel-border,#666))}
+[data-vn-document-reader][data-document-kind="receipt"] [data-document-body]{font-family:ui-monospace,"Cascadia Mono","Fira Code",monospace;font-size:.92em;background:linear-gradient(180deg,color-mix(in srgb,#e2e8f0 10%,var(--vn-panel-solid,#171b26)),color-mix(in srgb,#cbd5e1 6%,var(--vn-panel-solid,#171b26)));border-style:dotted}
 [data-vn-document-reader][data-document-kind="journal"] [data-document-body]{font-family:"Iowan Old Style",Georgia,serif;background:repeating-linear-gradient(180deg,transparent 0,transparent 27px,color-mix(in srgb,var(--vn-accent,#9ec6f0) 8%,transparent) 28px),color-mix(in srgb,#d8c3a5 7%,var(--vn-panel-solid,#171b26));border-left:3px solid color-mix(in srgb,#d69e5c 55%,var(--vn-accent,#9ec6f0))}
 [data-vn-document-reader][data-document-kind="notice"] [data-document-body]{border:2px double color-mix(in srgb,var(--vn-accent,#9ec6f0) 45%,var(--vn-panel-border,#666));padding:16px}
 [data-vn-document-reader][data-document-kind="phone"] [data-document-body]{font-family:system-ui,-apple-system,sans-serif;background:color-mix(in srgb,#0b101b 75%,var(--vn-panel-solid,#171b26));border-radius:16px;padding:14px}

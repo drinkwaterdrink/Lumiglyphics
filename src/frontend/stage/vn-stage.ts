@@ -9,6 +9,9 @@ import type {NarrativePreview} from '../../shared/preparation-preview.js';
 import type {ReferenceHistory} from '../../shared/reference-history.js';
 import type {TurnView,AssetView} from "../../protocol.js";
 import { StageDossiers } from "./dossiers.js";
+import { FullscreenLightbox } from "./fullscreen-lightbox.js";
+import { renderWorldAtmosphereStrip } from "./world-strip.js";
+import { atmosphereForPosition } from "../../shared/scene-atmosphere.js";
 import type { TooltipPreferences } from "../../shared/dossiers.js";
 import type { StoryDnaActionBody, StoryDNASet } from "../../shared/story-dna.js";
 import { findCharacterDNA, type CharacterDNA } from "../../shared/character-dna.js";
@@ -426,9 +429,18 @@ export class VnStage {
       focus:()=>{if(selectVnStageView(this.state).showStandardInput)this.input.focus();else{this.setActivity('Action saved for Your turn.','success');this.focus();}}
     },onDocumentToggle,onDossierToggle,()=>this.state.displayedImage?.url??null);
     this.dossiers.connectWorkspace(this.workspace, shell);
+    this.dossiers.setLightboxOpener((src, title) => FullscreenLightbox.open({ src, title, subtitle: "Document Close-up Inspection", themeSource: this.root }));
     this.bindEvents();
     this.updateControlButtons();
     this.render(null);
+  }
+
+  setDocumentArtRequester(fn: (documentId: string, throughParagraphIndex: number, forceRegenerate?: boolean) => void): void {
+    this.dossiers.setDocumentArtRequester(fn);
+  }
+
+  applyDocumentImageStatus(msg: { documentId: string; contentHash: string; status: "generating" | "ready" | "failed"; imageId?: string; imageUrl?: string; error?: string }): void {
+    this.dossiers.applyDocumentImageStatus(msg);
   }
 
   setFolioOpener(fn: (charName: string) => void): void {
@@ -1109,6 +1121,7 @@ export class VnStage {
 
 
     this.setCleanView(false);
+    renderWorldAtmosphereStrip(this.workspace.worldStrip, null);
     this.backlogEntries.length = 0; this.readParagraphIds.clear(); this.dispatch({ type: "reset" });
   }
 
@@ -1129,6 +1142,7 @@ export class VnStage {
     this.rpgState = null;
     this.rpgHud.update(this.rpgMode, null);
     this.dossiers.setTurnMedia(null);this.dossiers.setContext(turn.presentation,turn.paragraphs.map(p=>p.text),turn.referenceHistory);
+    if(turn.documentAssets)this.dossiers.setDocumentAssets(turn.documentAssets);
     if (turn.rpgMode !== undefined) this.rpgMode = turn.rpgMode;
     this.rpgState = turn.rpgState ?? null;
     this.rpgHud.update(this.rpgMode, this.rpgState);
@@ -2361,7 +2375,12 @@ export class VnStage {
     this.scrubber.replaceChildren(...dots);
   }
 
-  private renderSceneHud(): void { if (!this.sceneHud) return;
+  private renderSceneHud(): void {
+    const atmo = this.narrative.hidden || !this.state.worldAtmosphere?.length
+      ? null
+      : atmosphereForPosition({ worldAtmosphere: [...this.state.worldAtmosphere] }, this.state.currentParagraphIndex);
+    renderWorldAtmosphereStrip(this.workspace.worldStrip, atmo);
+    if (!this.sceneHud) return;
     const entries = this.dossiers.sceneHudEntries();
     if (!entries.length || this.narrative.hidden) {
       this.sceneHud.hidden = true;
@@ -2843,6 +2862,7 @@ export class VnStage {
     }
     this.currentRenderedParagraphId = paragraph.id;
     this.currentRenderedFormatted = formatted;
+    this.renderSceneHud();
     this.recordBacklogAndRead(paragraph.id, paragraph.speaker, cleanText, formatted, this.state.currentParagraphIndex);
     if (!this.isRewinding) {
       this.triggerParagraphEffects(paragraph);

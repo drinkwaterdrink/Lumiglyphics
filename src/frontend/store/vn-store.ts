@@ -1,5 +1,7 @@
 import type { ReaderPresentation } from "../../shared/presentation-entities.js";
 import type {ReferenceHistory} from '../../shared/reference-history.js';
+import type { SceneAtmosphereEntry } from "../../shared/scene-atmosphere.js";
+import type { DocumentAssetView } from "../../protocol.js";
 import type { SkillCheck, RpgState, RpgMode } from "../../shared/rpg-state.js";
 export type VnMode = "cyoa" | "standard";
 
@@ -129,6 +131,7 @@ export interface VnStageState {
   showRerollPrompt: boolean;
   isUserTurn?: boolean;
   ambient: AmbientEffect | null;
+  worldAtmosphere?: readonly SceneAtmosphereEntry[];
   /**
    * Highest paragraph index the reader has already seen in this turn. While an
    * error card is shown (phase "error") the reader may move Previous/Continue
@@ -149,6 +152,8 @@ export interface VnTurnInput {
   preserveImage?: boolean;
   ambient?: AmbientEffect | null;
   location?: string;
+  worldAtmosphere?: readonly SceneAtmosphereEntry[];
+  documentAssets?: Record<string, DocumentAssetView>;
   rpgMode?: RpgMode;
   rpgState?: RpgState | null;
 }
@@ -279,6 +284,7 @@ export const reduceVnStage = (
         showRerollPrompt: hasNoParagraphs,
         isUserTurn: false,
         ambient: action.turn.ambient !== undefined ? action.turn.ambient : state.ambient,
+        ...(action.turn.worldAtmosphere ? { worldAtmosphere: [...action.turn.worldAtmosphere] } : { worldAtmosphere: [] }),
         highestRevealedIndex: cursor,
       };
     }

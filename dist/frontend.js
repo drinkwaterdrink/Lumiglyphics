@@ -18729,10 +18729,53 @@ function date4(params) {
   return _coercedDate(ZodDate, params);
 }
 // src/shared/story-documents.ts
-var DocumentIdentitySchema = exports_external.object({ name: exports_external.string().trim().min(1).max(256), kind: exports_external.enum(["letter", "note", "journal", "notice", "phone", "terminal"]), paragraphIndex: exports_external.number().int().nonnegative() }).strict();
-var PassageProposalSchema = exports_external.object({ paragraphIndex: exports_external.number().int().nonnegative(), text: exports_external.string().min(1).max(6000), evidence: exports_external.string().min(1).max(1e4) }).strict();
+var STORY_DOCUMENT_KINDS = [
+  "flyer",
+  "letter",
+  "note",
+  "journal",
+  "map",
+  "poster",
+  "receipt",
+  "notice",
+  "newspaper",
+  "pamphlet",
+  "phone",
+  "terminal"
+];
+var DocumentIdentitySchema = exports_external.object({
+  name: exports_external.string().trim().min(1).max(256),
+  kind: exports_external.enum(STORY_DOCUMENT_KINDS),
+  paragraphIndex: exports_external.number().int().nonnegative(),
+  aliases: exports_external.array(exports_external.string().trim().min(2).max(160)).max(8).optional(),
+  visualDetails: exports_external.string().trim().min(1).max(400).optional()
+}).strict();
+var PassageProposalSchema = exports_external.object({
+  paragraphIndex: exports_external.number().int().nonnegative(),
+  text: exports_external.string().min(1).max(6000),
+  evidence: exports_external.string().min(1).max(1e4)
+}).strict();
+var DocumentObservationSchema = exports_external.object({
+  paragraphIndex: exports_external.number().int().nonnegative(),
+  summary: exports_external.string().trim().min(1).max(500).optional(),
+  visualDetails: exports_external.array(exports_external.string().trim().min(1).max(160)).max(8).optional(),
+  material: exports_external.string().trim().min(1).max(120).optional(),
+  condition: exports_external.string().trim().min(1).max(120).optional(),
+  evidence: exports_external.string().min(1).max(1200)
+}).strict();
 var StoryDocumentSectionSchema = exports_external.object({ paragraphIndex: exports_external.number().int().nonnegative(), start: exports_external.number().int().nonnegative(), end: exports_external.number().int().positive(), text: exports_external.string().min(1).max(6000) }).strict();
-var StoryDocumentSchema = DocumentIdentitySchema.extend({ id: exports_external.string().min(1).max(256), sections: exports_external.array(StoryDocumentSectionSchema).max(16) }).strict();
+var StoryDocumentSchema = DocumentIdentitySchema.extend({
+  id: exports_external.string().min(1).max(256),
+  sections: exports_external.array(StoryDocumentSectionSchema).max(16),
+  observations: exports_external.array(DocumentObservationSchema).max(16).optional()
+}).strict();
+var IDIOMATIC_SURFACE_RE = /\b(?:on\s+paper|paper\s+trail|paper\s+tiger|paper\s+over|pushing\s+paper|(?:mak(?:e|es|ing)|made|tak(?:e|es|ing)|took)\s+(?:a\s+)?(?:mental\s+)?note\b|mental\s+note|side\s+note|note\s+to\s+self|note\s+of\s+(?:panic|fear|alarm|warning|sadness|hope|doubt|surprise)|letter\s+of\s+the\s+law|to\s+the\s+letter|red[- ]letter\s+day|map\s+out|on\s+the\s+map|playing\s+card|trump\s+card|short\s+notice|until\s+further\s+notice|at\s+a\s+moment'?s\s+notice|terminal\s+(?:illness|velocity|stage|station))\b/i;
+function isIdiomaticDocumentMention(paragraphText, start, end) {
+  const winStart = Math.max(0, start - 28);
+  const winEnd = Math.min(paragraphText.length, end + 28);
+  const snippet = paragraphText.slice(winStart, winEnd);
+  return IDIOMATIC_SURFACE_RE.test(snippet);
+}
 function validateStoryDocuments(value, paragraphs) {
   if (!Array.isArray(value))
     return [];
@@ -18744,7 +18787,8 @@ function validateStoryDocuments(value, paragraphs) {
     if (!parsed.success)
       continue;
     const d = parsed.data;
-    if (ids.has(d.id) || names.has(d.name) || !paragraphs[d.paragraphIndex]?.text.includes(d.name))
+    const introText = paragraphs[d.paragraphIndex]?.text;
+    if (ids.has(d.id) || names.has(d.name.toLocaleLowerCase()) || !introText || !introText.toLocaleLowerCase().includes(d.name.toLocaleLowerCase()))
       continue;
     const sections = d.sections.filter((s) => {
       if (s.paragraphIndex < d.paragraphIndex || s.end !== s.start + s.text.length || paragraphs[s.paragraphIndex]?.text.slice(s.start, s.end) !== s.text || characters + s.text.length > 24000)
@@ -18752,14 +18796,19 @@ function validateStoryDocuments(value, paragraphs) {
       characters += s.text.length;
       return true;
     });
+    const observations = (d.observations ?? []).filter((o) => o.paragraphIndex >= d.paragraphIndex && Boolean(paragraphs[o.paragraphIndex]?.text.includes(o.evidence)));
     ids.add(d.id);
-    names.add(d.name);
-    result.push({ ...d, sections });
+    names.add(d.name.toLocaleLowerCase());
+    result.push({ ...d, sections, ...observations.length ? { observations } : {} });
   }
   return result;
 }
 function visibleStoryDocuments(documents, paragraphIndex) {
-  return documents.filter((d) => d.paragraphIndex <= paragraphIndex).map((d) => ({ ...d, sections: d.sections.filter((s) => s.paragraphIndex <= paragraphIndex).map((s) => ({ ...s })) }));
+  return documents.filter((d) => d.paragraphIndex <= paragraphIndex).map((d) => ({
+    ...d,
+    sections: d.sections.filter((s) => s.paragraphIndex <= paragraphIndex).map((s) => ({ ...s })),
+    ...d.observations ? { observations: d.observations.filter((o) => o.paragraphIndex <= paragraphIndex).map((o) => ({ ...o })) } : {}
+  }));
 }
 
 // src/shared/presentation-rules.ts
@@ -21167,9 +21216,26 @@ var IndexedContinuityDeltaSchema = exports_external.object({
   paragraphIndex: NonNegativeIntegerSchema,
   delta: ContinuityDeltaSchema
 }).strict();
+var WorldAtmosphereSnapshotSchema = exports_external.object({
+  time: exports_external.string().trim().max(64).nullable().optional(),
+  timeOfDay: exports_external.string().trim().max(64).nullable().optional(),
+  date: exports_external.string().trim().max(80).nullable().optional(),
+  temperature: exports_external.string().trim().max(48).nullable().optional(),
+  weather: exports_external.string().trim().max(120).nullable().optional(),
+  season: exports_external.string().trim().max(48).nullable().optional(),
+  indoor: exports_external.boolean().optional(),
+  source: exports_external.enum(["simtracker", "header", "planner", "prose", "carried"]).optional()
+}).strict();
+var SceneAtmosphereEntrySchema = WorldAtmosphereSnapshotSchema.extend({
+  paragraphIndex: NonNegativeIntegerSchema
+}).strict();
 var SceneEnvironmentSchema = exports_external.object({
   location: TextSchema,
   timeOfDay: exports_external.string().trim().nullable().default(null),
+  time: exports_external.string().trim().max(64).nullable().optional(),
+  date: exports_external.string().trim().max(80).nullable().optional(),
+  temperature: exports_external.string().trim().max(48).nullable().optional(),
+  season: exports_external.string().trim().max(48).nullable().optional(),
   weather: exports_external.string().trim().nullable().default(null),
   lighting: exports_external.string().trim().nullable().default(null),
   description: TextSchema,
@@ -21413,6 +21479,7 @@ var TurnPlanSchema = exports_external.object({
   }).optional(),
   planningStatus: PlanningStatusSchema,
   rpgState: RpgStateSchema.optional(),
+  worldAtmosphereTimeline: exports_external.array(SceneAtmosphereEntrySchema).max(64).optional(),
   resolvedThreads: exports_external.array(exports_external.string().trim().min(1).max(160)).max(8).optional(),
   createdAt: TimestampSchema
 }).strict().superRefine((plan, context) => {
@@ -22302,6 +22369,31 @@ function locationForPosition(turn, index) {
     return location;
   }
   return turn.location?.trim() || null;
+}
+function atmosphereForPosition(turn, index) {
+  const entries = turn.worldAtmosphere;
+  if (!entries?.length)
+    return null;
+  let current = null;
+  for (const entry of entries) {
+    if (Number.isInteger(entry.paragraphIndex) && entry.paragraphIndex >= 0 && entry.paragraphIndex <= index) {
+      current = {
+        ...current ?? {},
+        ...entry.time !== undefined ? { time: entry.time } : {},
+        ...entry.timeOfDay !== undefined ? { timeOfDay: entry.timeOfDay } : {},
+        ...entry.date !== undefined ? { date: entry.date } : {},
+        ...entry.temperature !== undefined ? { temperature: entry.temperature } : {},
+        ...entry.weather !== undefined ? { weather: entry.weather } : {},
+        ...entry.season !== undefined ? { season: entry.season } : {},
+        ...entry.indoor !== undefined ? { indoor: entry.indoor } : {},
+        ...entry.source !== undefined ? { source: entry.source } : {}
+      };
+    }
+  }
+  if (!current)
+    return null;
+  const hasAny = Boolean(current.time || current.timeOfDay || current.date || current.temperature || current.weather);
+  return hasAny ? current : null;
 }
 function musicTrackForPosition(input2) {
   if (input2.manualTrack)
@@ -23253,6 +23345,18 @@ var ManualLightingSchema = exports_external.object({
 var PrepareImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_prepare_image"), ...imageOperationScope, jobId: exports_external.string().min(1).max(200), templateId: exports_external.string().min(1).max(100).optional(), ...imagePromptOperation, regeneratePrompt: exports_external.boolean().optional(), promptOperation: exports_external.enum(["rewrite", "enrich"]).optional(), reframe: exports_external.boolean().optional(), relight: exports_external.boolean().optional(), lockContinuity: exports_external.boolean().optional(), styleId: exports_external.string().max(100).optional(), fitToModel: exports_external.boolean().optional(), model: exports_external.string().max(200).optional(), connectionId: exports_external.string().max(200).optional(), quickGenerate: exports_external.boolean().optional(), manualCamera: exports_external.object({ shotSize: exports_external.string().optional(), angle: exports_external.string().optional(), lensFeel: exports_external.string().optional(), composition: exports_external.string().optional(), depth: exports_external.string().optional(), dialogueSafeArea: exports_external.enum(["auto", "always", "off"]).optional(), focalPoint: exports_external.object({ x: exports_external.number().min(0).max(100), y: exports_external.number().min(0).max(100) }).strict().optional() }).strict().optional(), manualLighting: ManualLightingSchema.optional() }).strict();
 var RestorePreviousImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_restore_previous_image"), ...imageOperationScope, swipeId: exports_external.number().int().nonnegative().nullable(), revision: exports_external.number().int().nonnegative(), jobId: exports_external.string().min(1).max(200), versionId: exports_external.string().min(1).max(256) }).strict();
 var DeleteImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_delete_image"), chatId: exports_external.string().min(1).max(256), imageId: exports_external.string().min(1).max(256).optional(), imageUrl: exports_external.string().min(1).max(2048).optional(), jobId: exports_external.string().min(1).max(256).optional() }).strict();
+var GenerateDocumentImageRequestSchema = exports_external.object({
+  type: exports_external.literal("vn_generate_document_image"),
+  chatId: exports_external.string().min(1).max(200),
+  messageId: exports_external.string().min(1).max(200),
+  swipeId: exports_external.number().int().nonnegative(),
+  sourceFingerprint: exports_external.string().min(1).max(200),
+  revision: exports_external.number().int().nonnegative(),
+  documentId: exports_external.string().min(1).max(200),
+  throughParagraphIndex: exports_external.number().int().nonnegative(),
+  requestId: exports_external.string().min(1).max(100),
+  forceRegenerate: exports_external.boolean().optional()
+}).strict();
 var REFERENCE_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
 var REFERENCE_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/avif"]);
 
@@ -24050,6 +24154,7 @@ var SETTINGS_FIELD_PAGES = {
   imageGenerationTrigger: "images",
   useNativeCardImages: "images",
   reviewImages: "images",
+  documentImageMode: "images",
   imageConnectionId: "images",
   maxImagesPerTurn: "images",
   imageOutputAspectRatio: "images",
@@ -24607,13 +24712,53 @@ var APERTURE_CSS_ROUTE_BAR_READER = `/* ========================================
   right: 0 !important;
   height: auto !important;
   display: flex !important;
+  flex-wrap: wrap !important;
   align-items: center !important;
   justify-content: space-between !important;
+  row-gap: 4px !important;
   padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 8px !important;
   background: linear-gradient(180deg, color-mix(in srgb, var(--vn-shell-panel, #060f16) 76%, transparent), transparent) !important;
   border: 0 !important;
   border-bottom: 0 !important;
   z-index: 35 !important;
+}
+[data-vn-world-strip][hidden] {
+  display: none !important;
+}
+[data-vn-world-strip] {
+  flex: 1 0 100% !important;
+  order: 10 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex-wrap: nowrap !important;
+  overflow: hidden !important;
+  padding: 2px 10px 2px 42px !important;
+  margin: 0 !important;
+  font-size: 11px !important;
+  line-height: 1.3 !important;
+  letter-spacing: 0.02em !important;
+  color: color-mix(in srgb, var(--aperture-text, #f4f7f5) 88%, transparent) !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.72) !important;
+  pointer-events: none !important;
+}
+[data-vn-world-strip] .vn-world-glyph {
+  display: inline-flex !important;
+  align-items: center !important;
+  color: var(--vn-accent, #a8d3c8) !important;
+  flex: none !important;
+}
+[data-vn-world-strip] .vn-world-time {
+  font-variant-numeric: tabular-nums !important;
+  font-weight: 650 !important;
+}
+[data-vn-world-strip] .vn-world-sep {
+  opacity: 0.48 !important;
+}
+[data-vn-world-strip] .vn-world-weather {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 [data-vn-reader-header] [data-reader-header-actions],
 .topbar-actions {
@@ -24760,10 +24905,13 @@ aside[data-vn-workspace] {
 .caption-edge {
   position: absolute;
   top: 0;
-  left: 20px;
-  right: 20px;
+  left: 12%;
+  right: 12%;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--vn-edge-glow, var(--aperture-accent, rgba(224, 238, 177, 0.46))), transparent);
+  transform: scaleY(0.65);
+  transform-origin: top;
+  background: linear-gradient(90deg, transparent, var(--vn-edge-glow, var(--aperture-accent, rgba(224, 238, 177, 0.48))), transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--vn-edge-glow, var(--aperture-accent, #dcebad)) 55%, transparent);
   pointer-events: none;
 }
 
@@ -25618,14 +25766,14 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   margin: 0 !important;
   box-sizing: border-box !important;
   top: auto !important;
-  bottom: calc(88px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
+  bottom: calc(104px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
   height: var(--caption-height, 146px);
   min-height: 48px;
-  max-height: calc(100% - 140px) !important;
-  padding: 10px 14px 10px !important;
+  max-height: calc(100% - 148px) !important;
+  padding: 8px 14px 9px !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 2px !important;
+  gap: 3px !important;
   overflow: hidden !important;
   pointer-events: auto !important;
   touch-action: pan-y !important;
@@ -25638,17 +25786,17 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   background: var(--aperture-dialogue-bg, var(--vn-dialogue-bg, rgba(8, 18, 15, var(--caption-opacity, 0.82))));
   -webkit-backdrop-filter: blur(var(--caption-blur, 14px));
   backdrop-filter: blur(var(--caption-blur, 14px));
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 
 /* Draggable Top Resize Grip */
 .resize-grip,
 [data-vn-sheet-handle] {
   position: absolute !important;
-  top: -14px;
+  top: -20px;
   left: 50% !important;
   transform: translateX(-50%) !important;
-  min-width: 44px;
+  min-width: 72px;
   height: 44px;
   cursor: ns-resize !important;
   display: flex !important;
@@ -25660,31 +25808,31 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 
 .resize-grip span {
   display: block !important;
-  width: 32px !important;
-  height: 3px !important;
+  width: 28px !important;
+  height: 2.5px !important;
   border-radius: var(--vn-scrubber-radius, 2px) !important;
-  background: color-mix(in srgb, var(--aperture-accent, #dcebad) 50%, transparent) !important;
+  background: color-mix(in srgb, var(--aperture-accent, #dcebad) 58%, transparent) !important;
 }
 
-/* Dialogue Header (Speaker, Scene, Expand, Minimize) */
+/* Dialogue Header (Speaker, Scene, Auto, Minimize) */
 .caption-head,
 [data-vn-sheet-header] {
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
-  min-height: 44px !important;
+  min-height: 26px !important;
   touch-action: none !important;
-  margin-top: 2px !important;
-  margin-bottom: 4px !important;
+  margin-top: 0 !important;
+  margin-bottom: 3px !important;
   padding-bottom: 4px !important;
-  border-bottom: 1px solid color-mix(in srgb, var(--aperture-accent, #dcebad) 20%, transparent) !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--aperture-accent, #dcebad) 16%, transparent) !important;
   flex: none !important;
 }
 
 .caption-head .speaker {
   display: flex !important;
   align-items: center !important;
-  gap: 4px !important;
+  gap: 5px !important;
 }
 
 .caption-head [data-vn-speaker] {
@@ -25696,12 +25844,12 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 }
 
 .caption-head .caption-split {
-  color: color-mix(in srgb, var(--aperture-accent, #dcebad) 45%, transparent) !important;
-  font-size: 10px !important;
+  color: color-mix(in srgb, var(--aperture-accent, #dcebad) 42%, transparent) !important;
+  font-size: 9px !important;
 }
 
 .caption-head [data-vn-caption-scene] {
-  font-size: 10px !important;
+  font-size: 9.5px !important;
   color: var(--aperture-muted, #9cb5a8) !important;
   letter-spacing: 0.06em !important;
 }
@@ -25713,42 +25861,54 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   width: auto !important;
   display: inline-flex !important;
   align-items: center !important;
-  gap: 6px !important;
+  gap: 2px !important;
   margin-left: auto !important;
+  padding: 1px 3px !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--aperture-button-bg, #0e1e18) 38%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #dcebad) 18%, transparent) !important;
 }
 
 .caption-tool,
 [data-vn-hide-text],
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-sheet-tools] button,
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-hide-text] {
-  position: static !important;
-  width: 44px !important;
-  height: 44px !important;
-  min-width: 44px !important;
-  min-height: 44px !important;
-  border-radius: min(var(--vn-shell-radius, 8px), 10px) !important;
-  border: 1px solid var(--aperture-button-border, rgba(255, 255, 255, 0.22)) !important;
-  background: color-mix(in srgb, var(--aperture-button-bg, #0e1e18) 55%, transparent) !important;
+  position: relative !important;
+  width: 28px;
+  height: 24px;
+  min-width: 28px;
+  min-height: 24px;
+  border-radius: 999px !important;
+  border: 0 !important;
+  background: transparent !important;
   color: var(--aperture-button-text, #edf3ea) !important;
+  opacity: 0.82 !important;
   display: grid !important;
   place-items: center !important;
   padding: 0 !important;
   cursor: pointer !important;
-  transition: all 0.15s ease !important;
+  transition: color 0.15s ease, background-color 0.15s ease, opacity 0.15s ease !important;
+}
+
+.caption-tool::after,
+[data-vn-hide-text]::after {
+  content: "";
+  position: absolute;
+  inset: -10px -8px;
 }
 
 .caption-tool:hover,
 [data-vn-hide-text]:hover,
 .caption-tool[data-active="true"] {
   background: color-mix(in srgb, var(--aperture-accent, #dcebad) 22%, transparent) !important;
-  border-color: var(--aperture-accent, #dcebad) !important;
   color: var(--aperture-accent, #dcebad) !important;
+  opacity: 1 !important;
 }
 
 .caption-tool svg,
 [data-vn-hide-text] svg {
-  width: 15px !important;
-  height: 15px !important;
+  width: 13.5px !important;
+  height: 13.5px !important;
 }
 
 /* Scrollable Copy */
@@ -25764,7 +25924,9 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   overscroll-behavior: contain !important;
   scrollbar-width: thin !important;
   scrollbar-color: color-mix(in srgb, var(--aperture-accent, #dcebad) 45%, transparent) transparent !important;
-  padding: 2px 2px 8px !important;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 4px, #000 calc(100% - 8px), transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, #000 4px, #000 calc(100% - 8px), transparent 100%);
+  padding: 2px 2px 6px !important;
   margin: 0 !important;
 }
 
@@ -25952,7 +26114,7 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 }
 
 :where([data-vn-root]) [data-vn-dialogue] {
-  box-shadow: 0 4px 28px var(--vn-atmosphere-glow, rgba(0, 0, 0, 0.5)), 0 1px 3px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--vn-dialogue-shadow, 0 18px 46px rgba(0, 0, 0, 0.45)), 0 4px 28px var(--vn-atmosphere-glow, rgba(0, 0, 0, 0.32)), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 [data-vn-dialogue] {
@@ -26274,18 +26436,19 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   inset: auto !important;
   transform: none !important;
   margin: 0 !important;
-  padding: 0 !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  background: transparent !important;
+  padding: 2px 8px !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #dcebad) 24%, transparent) !important;
+  border-radius: var(--vn-scrubber-radius, 999px) !important;
+  background: color-mix(in srgb, var(--aperture-accent, #dcebad) 11%, transparent) !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  display: inline-block !important;
+  display: inline-flex !important;
+  align-items: center !important;
   font-size: 12px !important;
   font-weight: 750 !important;
-  letter-spacing: 0.105em !important;
-  line-height: 1.4 !important;
+  letter-spacing: 0.08em !important;
+  line-height: 1.2 !important;
 }
 
 :where([data-vn-root]) [data-vn-speaker] {
@@ -26302,12 +26465,33 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
 }
 
 .caption-head [data-vn-speaker] {
-  display: inline !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 3px !important;
+  padding: 2px 8px !important;
+  border-radius: var(--vn-scrubber-radius, 999px) !important;
+  background: color-mix(in srgb, var(--aperture-accent, #dcebad) 12%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #dcebad) 26%, transparent) !important;
 }
 
-/* Keep current reader controls tappable without crowding narrow headers.
-   Artwork stays in the header; History is in navigation. */
-[data-vn-reader-header] .round-ghost { width:44px!important;height:44px!important;min-width:44px!important;min-height:44px!important;flex-shrink:0!important; }
+/* Compact sleek header action icons with generous invisible 44px touch reach */
+[data-vn-reader-header] .round-ghost {
+  position: relative !important;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  flex-shrink: 0 !important;
+}
+[data-vn-reader-header] .round-ghost::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+[data-vn-reader-header] .round-ghost svg {
+  width: 15px !important;
+  height: 15px !important;
+}
 @media(max-width:600px){
  [data-vn-reader-header] .reading-heading { min-width:0;overflow:hidden; }
 }
@@ -27864,21 +28048,28 @@ ${VN_SHELL_PRESET_TOKENS_CSS}
 }
 [data-vn-root][data-vn-preset="literature-club"] [data-vn-speaker]::before { content: "♡ "; }
 
-/* 8. Astral Glass — Frosted Celestial Prism & Starlight Brackets */
+/* 8. Astral Glass — Layered Optical Prism & Starlight Brackets */
 [data-vn-root][data-vn-preset="astral-glass"] [data-vn-dialogue] {
   border-radius: 16px;
-  border-color: rgba(82, 213, 255, 0.45);
+  border-color: rgba(110, 218, 255, 0.34);
   background: radial-gradient(ellipse at 0% 0%, rgba(82, 213, 255, 0.14), transparent 48%), radial-gradient(ellipse at 100% 100%, rgba(167, 139, 250, 0.12), transparent 52%), rgba(8, 20, 38, var(--caption-opacity, 0.86));
-  outline: 1px solid rgba(167, 139, 250, 0.25);
-  outline-offset: -5px;
-  box-shadow: 0 18px 46px rgba(3, 14, 34, 0.55), inset 0 1px 0 rgba(186, 230, 253, 0.25);
+  --vn-dialogue-shadow: 0 20px 50px rgba(3, 14, 34, 0.58), inset 0 1px 0 rgba(224, 244, 255, 0.32), inset 0 -1px 0 rgba(139, 155, 250, 0.16), inset 0 0 0 1px rgba(186, 230, 253, 0.08);
+  box-shadow: var(--vn-dialogue-shadow);
+}
+[data-vn-root][data-vn-preset="astral-glass"] [data-vn-dialogue]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(186, 230, 253, 0.09) 0%, rgba(167, 139, 250, 0.03) 34%, transparent 62%);
+  pointer-events: none;
 }
 [data-vn-root][data-vn-preset="astral-glass"] [data-vn-dialogue]::after {
   content: '';
   position: absolute;
-  inset: 7px;
-  border: 1px solid rgba(141, 228, 255, 0.55);
-  clip-path: polygon(0 0, 18px 0, 18px 1px, 1px 1px, 1px 18px, 0 18px, 0 0, 100% 0, 100% 18px, calc(100% - 1px) 18px, calc(100% - 1px) 1px, calc(100% - 18px) 1px, calc(100% - 18px) 0, 100% 0, 100% 100%, calc(100% - 18px) 100%, calc(100% - 18px) calc(100% - 1px), calc(100% - 1px) calc(100% - 1px), calc(100% - 1px) calc(100% - 18px), 100% calc(100% - 18px), 100% 100%, 0 100%, 0 calc(100% - 18px), 1px calc(100% - 18px), 1px calc(100% - 1px), 18px calc(100% - 1px), 18px 100%, 0 100%);
+  inset: 5px;
+  border: 1px solid rgba(141, 228, 255, 0.42);
+  clip-path: polygon(0 0, 10px 0, 10px 1px, 1px 1px, 1px 10px, 0 10px, 0 0, 100% 0, 100% 10px, calc(100% - 1px) 10px, calc(100% - 1px) 1px, calc(100% - 10px) 1px, calc(100% - 10px) 0, 100% 0, 100% 100%, calc(100% - 10px) 100%, calc(100% - 10px) calc(100% - 1px), calc(100% - 1px) calc(100% - 1px), calc(100% - 1px) calc(100% - 10px), 100% calc(100% - 10px), 100% 100%, 0 100%, 0 calc(100% - 10px), 1px calc(100% - 10px), 1px calc(100% - 1px), 10px calc(100% - 1px), 10px 100%, 0 100%);
   pointer-events: none;
 }
 [data-vn-root][data-vn-preset="astral-glass"] [data-vn-dialogue-text] {
@@ -27928,7 +28119,7 @@ ${VN_SHELL_PRESET_TOKENS_CSS}
 [data-vn-root][data-vn-dialogue-style="cinema-bar"] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]) {
   left: 0 !important;
   right: 0 !important;
-  bottom: calc(56px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
   border-radius: 0 !important;
   border-left: 0 !important;
   border-right: 0 !important;
@@ -28045,6 +28236,7 @@ class ReaderWorkspace {
   subtitle;
   closeButton;
   backButton;
+  worldStrip;
   more;
   search;
   input;
@@ -28128,6 +28320,14 @@ class ReaderWorkspace {
     const q = (s) => shell.querySelector(s);
     this.nav = q("[data-vn-navigation]");
     this.header = q("[data-vn-reader-header]");
+    const existingStrip = this.header.querySelector("[data-vn-world-strip]");
+    const stripEl = existingStrip ?? document.createElement("div");
+    stripEl.dataset.vnWorldStrip = "";
+    stripEl.hidden = true;
+    stripEl.setAttribute("aria-label", "In-world time and weather");
+    if (!existingStrip)
+      this.header.append(stripEl);
+    this.worldStrip = stripEl;
     this.panel = q("[data-vn-workspace]");
     this.content = q("[data-workspace-content]");
     this.title = q("[data-workspace-title]");
@@ -29443,6 +29643,8 @@ function linkEntityMentions(text, entities, prefs, chatId = "", limit = prefs.ma
         }
         const start = m.index;
         const end = start + m[0].length, before = Array.from(text.slice(Math.max(0, start - 2), start)).at(-1) ?? "", after = Array.from(text.slice(end, end + 2))[0] ?? "";
+        if (e.kind === "object" && isIdiomaticDocumentMention(text, start, end))
+          continue;
         if (!/[\p{L}\p{N}_]/u.test(before) && !/[\p{L}\p{N}_]/u.test(after) && !excluded.some(([a, b]) => start >= a && start < b))
           candidates.push({ start, end, entityId: e.id, pinned: entityOverride(prefs, chatId, e)?.pinned === true });
       }
@@ -29550,7 +29752,7 @@ function clearEntityAnchors(root) {
     button.replaceWith(...button.childNodes);
   root.normalize();
 }
-function applyEntityAnchors(root, anchors, open2, preview) {
+function applyEntityAnchors(root, anchors, open2, preview, isDocument) {
   clearEntityAnchors(root);
   const doc2 = root.ownerDocument ?? (typeof document !== "undefined" ? document : undefined);
   if (!doc2 || typeof doc2.createTreeWalker !== "function")
@@ -29574,6 +29776,8 @@ function applyEntityAnchors(root, anchors, open2, preview) {
     const button = doc2.createElement("button");
     button.type = "button";
     button.dataset.entityAnchor = a.entityId;
+    if (isDocument?.(a.entityId))
+      button.dataset.entityDoc = "true";
     button.textContent = label.data;
     button.setAttribute("aria-label", `About ${label.data}`);
     button.setAttribute("aria-haspopup", "dialog");
@@ -29602,16 +29806,88 @@ function protectedEntityRanges(root) {
 }
 
 // src/frontend/stage/document-reader.ts
-var kinds = { letter: "Letter", note: "Note", journal: "Journal", notice: "Notice", phone: "Phone messages", terminal: "Terminal" };
-function createDocumentReader(documentRecord, back, close) {
+var kinds = {
+  flyer: "Flyer",
+  letter: "Letter",
+  note: "Note",
+  journal: "Journal",
+  map: "Map",
+  poster: "Poster",
+  receipt: "Receipt",
+  notice: "Notice",
+  newspaper: "Newspaper",
+  pamphlet: "Pamphlet",
+  phone: "Phone messages",
+  terminal: "Terminal"
+};
+function populateDocumentArtStage(stage, documentRecord, options = {}) {
+  stage.replaceChildren();
+  stage.dataset.busy = options.busy ? "true" : "false";
+  const asset = options.asset;
+  if (asset?.imageUrl) {
+    const figure = document.createElement("div");
+    figure.dataset.documentArtFrame = "";
+    const imgBtn = document.createElement("button");
+    imgBtn.type = "button";
+    imgBtn.dataset.documentArtZoom = "";
+    imgBtn.setAttribute("aria-label", `Inspect full closeup of ${documentRecord.name}`);
+    const img = document.createElement("img");
+    img.src = asset.imageUrl;
+    img.alt = `Closeup artwork of ${documentRecord.name}`;
+    img.loading = "eager";
+    const zoomHint = document.createElement("span");
+    zoomHint.dataset.documentZoomBadge = "";
+    zoomHint.textContent = "Expand";
+    imgBtn.append(img, zoomHint);
+    imgBtn.onclick = () => options.onLightbox?.(asset);
+    figure.append(imgBtn);
+    if (options.onGenerate) {
+      const bar = document.createElement("div");
+      bar.dataset.documentArtActions = "";
+      const regen = document.createElement("button");
+      regen.type = "button";
+      regen.dataset.documentArtGen = "";
+      regen.disabled = Boolean(options.busy);
+      regen.textContent = options.busy ? "Rendering closeup…" : "↻ Regenerate";
+      regen.onclick = () => options.onGenerate?.(true);
+      bar.append(regen);
+      figure.append(bar);
+    }
+    stage.append(figure);
+  } else if (options.onGenerate) {
+    const empty = document.createElement("div");
+    empty.dataset.documentArtEmpty = "";
+    const note = document.createElement("p");
+    note.textContent = options.busy ? "Rendering close-up inspection artwork from revealed details…" : "Render a close-up inspection view grounded in the revealed scene.";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.dataset.documentArtGen = "";
+    btn.disabled = Boolean(options.busy);
+    btn.textContent = options.busy ? "Generating View…" : "✨ Generate Document View";
+    btn.onclick = () => options.onGenerate?.(false);
+    empty.append(note, btn);
+    stage.append(empty);
+  }
+  if (options.error) {
+    const err = document.createElement("p");
+    err.dataset.documentArtError = "";
+    err.textContent = options.error;
+    stage.append(err);
+  }
+}
+function createDocumentReader(documentRecord, back, close, options = {}) {
   const panel = document.createElement("section");
   panel.dataset.vnDossierCard = "";
   panel.dataset.vnDocumentReader = "";
+  panel.dataset.vnDocId = documentRecord.id;
   panel.dataset.documentKind = documentRecord.kind;
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-modal", "true");
   panel.setAttribute("aria-label", `Read ${documentRecord.name}`);
-  const header = document.createElement("header"), backButton = document.createElement("button"), title = document.createElement("h2"), closeButton = document.createElement("button");
+  const header = document.createElement("header");
+  const backButton = document.createElement("button");
+  const title = document.createElement("h2");
+  const closeButton = document.createElement("button");
   backButton.type = closeButton.type = "button";
   backButton.textContent = "‹";
   backButton.title = "Back to item";
@@ -29625,26 +29901,86 @@ function createDocumentReader(documentRecord, back, close) {
   header.append(backButton, title, closeButton);
   const meta3 = document.createElement("p");
   meta3.dataset.documentMeta = "";
-  meta3.textContent = `${kinds[documentRecord.kind]} · Revealed story text`;
-  const body2 = document.createElement("div");
-  body2.dataset.documentBody = "";
-  body2.tabIndex = 0;
-  body2.setAttribute("aria-label", "Document text");
-  for (const section of documentRecord.sections) {
-    const passage = document.createElement("section"), text = document.createElement("p"), source = document.createElement("small");
-    text.textContent = section.text;
-    source.textContent = `Story · paragraph ${section.paragraphIndex + 1}`;
-    passage.append(text, source);
-    body2.append(passage);
+  meta3.textContent = `${kinds[documentRecord.kind]} · Revealed story view`;
+  const scrollWrap = document.createElement("div");
+  scrollWrap.dataset.documentBody = "";
+  scrollWrap.tabIndex = 0;
+  scrollWrap.setAttribute("aria-label", "Document inspection and text");
+  if (options.asset?.imageUrl || options.onGenerate) {
+    const artStage = document.createElement("div");
+    artStage.dataset.documentArtStage = "";
+    populateDocumentArtStage(artStage, documentRecord, options);
+    scrollWrap.append(artStage);
   }
-  const footer = document.createElement("footer"), copy = document.createElement("button"), status = document.createElement("span");
+  const obs = documentRecord.observations ?? [];
+  const hasVisualSummary = Boolean(documentRecord.visualDetails) || obs.some((o) => Boolean(o.summary || o.visualDetails?.length || o.condition || o.material));
+  if (hasVisualSummary) {
+    const obsBox = document.createElement("div");
+    obsBox.dataset.documentObservations = "";
+    const heading = document.createElement("h3");
+    heading.textContent = "Observed Physicality";
+    obsBox.append(heading);
+    const seenLines = new Set;
+    for (const item of obs) {
+      const parts = [
+        item.material,
+        item.condition,
+        item.summary,
+        ...item.visualDetails ?? []
+      ].filter((v) => Boolean(v && v.trim()));
+      const line = [...new Set(parts)].join(" · ");
+      if (!line || seenLines.has(line.toLowerCase()))
+        continue;
+      seenLines.add(line.toLowerCase());
+      const p = document.createElement("p");
+      p.textContent = line;
+      const src = document.createElement("small");
+      src.textContent = `Noticed · paragraph ${item.paragraphIndex + 1}`;
+      obsBox.append(p, src);
+    }
+    if (!seenLines.size && documentRecord.visualDetails) {
+      const p = document.createElement("p");
+      p.textContent = documentRecord.visualDetails;
+      obsBox.append(p);
+    }
+    if (obsBox.children.length > 1)
+      scrollWrap.append(obsBox);
+  }
+  const transcript = document.createElement("div");
+  transcript.dataset.documentTranscript = "";
+  if (documentRecord.sections.length) {
+    if (hasVisualSummary) {
+      const heading = document.createElement("h3");
+      heading.textContent = "Revealed Text";
+      transcript.append(heading);
+    }
+    for (const section of documentRecord.sections) {
+      const passage = document.createElement("section");
+      const text = document.createElement("p");
+      const source = document.createElement("small");
+      text.textContent = section.text;
+      source.textContent = `Story · paragraph ${section.paragraphIndex + 1}`;
+      passage.append(text, source);
+      transcript.append(passage);
+    }
+  } else {
+    const emptyText = document.createElement("p");
+    emptyText.dataset.documentEmptyText = "";
+    emptyText.textContent = "No verbatim text transcribed yet. Visual cues above reflect what has been seen so far.";
+    transcript.append(emptyText);
+  }
+  scrollWrap.append(transcript);
+  const footer = document.createElement("footer");
+  const copy = document.createElement("button");
+  const status = document.createElement("span");
   status.setAttribute("role", "status");
   copy.type = "button";
   copy.textContent = "Copy text";
   copy.title = "Copy revealed text";
   copy.setAttribute("aria-label", "Copy revealed text");
+  copy.disabled = documentRecord.sections.length === 0;
   copy.onclick = async () => {
-    if (!panel.isConnected)
+    if (!panel.isConnected || !documentRecord.sections.length)
       return;
     try {
       await navigator.clipboard.writeText(documentRecord.sections.map((s) => s.text).join(`
@@ -29658,7 +29994,7 @@ function createDocumentReader(documentRecord, back, close) {
     }
   };
   footer.append(copy, status);
-  panel.append(header, meta3, body2, footer);
+  panel.append(header, meta3, scrollWrap, footer);
   return panel;
 }
 var DOCUMENT_READER_CSS = `
@@ -29668,11 +30004,33 @@ var DOCUMENT_READER_CSS = `
 [data-vn-document-reader] header button{flex:none;min-width:44px;padding:8px;margin:0;font-size:1.3em}
 [data-document-meta]{flex:none;font-size:.75em;opacity:.85;margin:10px 0;letter-spacing:.04em;text-transform:uppercase}
 [data-document-body]{min-height:0;overflow:auto;overscroll-behavior:contain;user-select:text;-webkit-user-select:text;cursor:text;touch-action:pan-y;line-height:1.68;font-size:max(16px,1em);padding:12px 14px 16px;background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 4%,transparent);border-radius:10px;overflow-wrap:anywhere;border:1px solid color-mix(in srgb,var(--vn-panel-border,#666) 45%,transparent)}
+[data-document-art-stage]{margin:0 0 14px;border-radius:10px;overflow:hidden;border:1px solid color-mix(in srgb,var(--vn-accent,#9ec6f0) 24%,var(--vn-panel-border,#666));background:color-mix(in srgb,var(--vn-panel-solid,#111622) 82%,transparent)}
+[data-document-art-stage][data-busy="true"]{opacity:.88}
+[data-document-art-frame]{position:relative;display:flex;flex-direction:column}
+[data-document-art-zoom]{position:relative;display:block;width:100%;padding:0;margin:0;border:0;background:transparent;cursor:zoom-in;overflow:hidden;border-radius:0}
+[data-document-art-zoom] img{display:block;width:100%;max-height:240px;object-fit:contain;background:rgba(4,7,14,.55)}
+[data-document-zoom-badge]{position:absolute;right:8px;bottom:8px;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.03em;background:rgba(10,14,24,.78);color:#f3f7ff;border:1px solid rgba(255,255,255,.22);pointer-events:none}
+[data-document-art-actions]{display:flex;justify-content:flex-end;padding:6px 8px;border-top:1px solid color-mix(in srgb,var(--vn-panel-border,#666) 40%,transparent);background:rgba(0,0,0,.18)}
+[data-document-art-empty]{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px}
+[data-document-art-empty] p{margin:0;font-size:.82em;opacity:.85;flex:1 1 180px;line-height:1.45}
+[data-document-art-gen]{margin:0;min-height:36px;padding:6px 12px;border-radius:999px;font-size:.8em;font-weight:600;cursor:pointer;border:1px solid color-mix(in srgb,var(--vn-accent,#9ec6f0) 48%,transparent);background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 16%,transparent);color:inherit}
+[data-document-art-gen]:disabled{opacity:.58;cursor:wait}
+[data-document-art-error]{margin:0;padding:6px 12px 10px;font-size:.78em;color:#fca5a5}
+[data-document-observations]{margin:0 0 14px;padding:10px 12px;border-radius:8px;background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 8%,transparent);border:1px dashed color-mix(in srgb,var(--vn-accent,#9ec6f0) 32%,transparent)}
+[data-document-observations] h3,[data-document-transcript] h3{margin:0 0 6px;font-size:.72em;letter-spacing:.07em;text-transform:uppercase;opacity:.78;font-family:inherit}
+[data-document-observations] p{margin:4px 0 2px;font-size:.9em;line-height:1.5}
+[data-document-empty-text]{font-size:.88em;opacity:.76;font-style:italic;margin:6px 0}
 [data-document-body] p{white-space:pre-wrap;margin:8px 0}
-[data-document-body] section+section{border-top:1px solid var(--vn-panel-border,#666);margin-top:18px;padding-top:10px}
-[data-document-body] small{display:block;font:inherit;font-size:.7em;opacity:.85;margin-top:4px}
+[data-document-transcript] section+section{border-top:1px solid var(--vn-panel-border,#666);margin-top:18px;padding-top:10px}
+[data-document-body] small{display:block;font:inherit;font-size:.7em;opacity:.78;margin-top:3px;margin-bottom:6px}
 [data-vn-document-reader][data-document-kind="letter"] [data-document-body],
 [data-vn-document-reader][data-document-kind="note"] [data-document-body]{font-family:"Iowan Old Style","Palatino Linotype","Book Antiqua",Georgia,serif;background:linear-gradient(180deg,color-mix(in srgb,#e8d5b5 12%,var(--vn-panel-solid,#171b26)),color-mix(in srgb,#c8a97e 8%,var(--vn-panel-solid,#171b26)));border-color:color-mix(in srgb,#d6b588 38%,var(--vn-panel-border,#666));box-shadow:inset 0 1px 0 rgba(255,244,224,.08)}
+[data-vn-document-reader][data-document-kind="flyer"] [data-document-body],
+[data-vn-document-reader][data-document-kind="pamphlet"] [data-document-body]{font-family:"Iowan Old Style",Georgia,serif;background:linear-gradient(170deg,color-mix(in srgb,#e9dfc8 11%,var(--vn-panel-solid,#171b26)),color-mix(in srgb,#b9a88e 7%,var(--vn-panel-solid,#171b26)));border:1px solid color-mix(in srgb,#d6b588 32%,var(--vn-panel-border,#666))}
+[data-vn-document-reader][data-document-kind="poster"] [data-document-body]{border:2px solid color-mix(in srgb,var(--vn-accent,#9ec6f0) 42%,var(--vn-panel-border,#666));background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 6%,var(--vn-panel-solid,#171b26))}
+[data-vn-document-reader][data-document-kind="newspaper"] [data-document-body]{font-family:Georgia,"Times New Roman",serif;background:linear-gradient(180deg,color-mix(in srgb,#d6d3cb 11%,var(--vn-panel-solid,#171b26)),color-mix(in srgb,#a8a49c 7%,var(--vn-panel-solid,#171b26)));border-color:color-mix(in srgb,#c4c0b6 34%,var(--vn-panel-border,#666))}
+[data-vn-document-reader][data-document-kind="map"] [data-document-body]{font-family:"Iowan Old Style",Georgia,serif;background:linear-gradient(180deg,color-mix(in srgb,#dfc89e 13%,var(--vn-panel-solid,#171b26)),color-mix(in srgb,#9e835a 9%,var(--vn-panel-solid,#171b26)));border:1px dashed color-mix(in srgb,#d6b588 45%,var(--vn-panel-border,#666))}
+[data-vn-document-reader][data-document-kind="receipt"] [data-document-body]{font-family:ui-monospace,"Cascadia Mono","Fira Code",monospace;font-size:.92em;background:linear-gradient(180deg,color-mix(in srgb,#e2e8f0 10%,var(--vn-panel-solid,#171b26)),color-mix(in srgb,#cbd5e1 6%,var(--vn-panel-solid,#171b26)));border-style:dotted}
 [data-vn-document-reader][data-document-kind="journal"] [data-document-body]{font-family:"Iowan Old Style",Georgia,serif;background:repeating-linear-gradient(180deg,transparent 0,transparent 27px,color-mix(in srgb,var(--vn-accent,#9ec6f0) 8%,transparent) 28px),color-mix(in srgb,#d8c3a5 7%,var(--vn-panel-solid,#171b26));border-left:3px solid color-mix(in srgb,#d69e5c 55%,var(--vn-accent,#9ec6f0))}
 [data-vn-document-reader][data-document-kind="notice"] [data-document-body]{border:2px double color-mix(in srgb,var(--vn-accent,#9ec6f0) 45%,var(--vn-panel-border,#666));padding:16px}
 [data-vn-document-reader][data-document-kind="phone"] [data-document-body]{font-family:system-ui,-apple-system,sans-serif;background:color-mix(in srgb,#0b101b 75%,var(--vn-panel-solid,#171b26));border-radius:16px;padding:14px}
@@ -29842,8 +30200,46 @@ class DossierCard {
   activeDossierContext = null;
   awaitingDnaSync = false;
   folioOpener = null;
+  documentOptionsResolver = null;
+  activeDocumentRecord = null;
   setFolioOpener(fn) {
     this.folioOpener = fn;
+  }
+  setDocumentOptionsResolver(fn) {
+    this.documentOptionsResolver = fn;
+  }
+  openDocument(storyDocument, back, trigger) {
+    if (trigger)
+      this.returnFocus = trigger;
+    this.activeDocumentRecord = storyDocument;
+    const opts = this.documentOptionsResolver?.(storyDocument.id) ?? {};
+    const reader = createDocumentReader(storyDocument, () => {
+      if (this.host.hidden || reader.parentElement !== this.host)
+        return;
+      this.activeDocumentRecord = null;
+      back();
+    }, () => {
+      if (!this.host.hidden && reader.parentElement === this.host) {
+        this.activeDocumentRecord = null;
+        this.close();
+      }
+    }, opts);
+    if (this.host.dataset.vnWorkspaceTool)
+      reader.removeAttribute("aria-modal");
+    this.documentState(true);
+    this.host.replaceChildren(reader);
+    this.host.hidden = false;
+    reader.querySelector("button")?.focus();
+  }
+  refreshDocumentStage(documentId) {
+    if (this.host.hidden || !this.activeDocumentRecord || this.activeDocumentRecord.id !== documentId)
+      return;
+    const reader = this.host.querySelector("[data-vn-document-reader]");
+    const stage = reader?.querySelector("[data-document-art-stage]");
+    if (!reader || reader.dataset.vnDocId !== documentId || !stage)
+      return;
+    const opts = this.documentOptionsResolver?.(documentId) ?? {};
+    populateDocumentArtStage(stage, this.activeDocumentRecord, opts);
   }
   setStoryDna(storyDna) {
     this.storyDna = storyDna;
@@ -30378,35 +30774,19 @@ class DossierCard {
       panel.append(sources);
     }
     if (storyDocument) {
-      if (storyDocument.sections.length) {
-        const read = document.createElement("button");
-        read.type = "button";
-        read.textContent = "Read revealed text";
-        read.dataset.vnReadDocument = "";
-        read.onclick = () => {
-          if (this.host.hidden || panel.parentElement !== this.host)
-            return;
-          const reader = createDocumentReader(storyDocument, () => {
-            if (this.host.hidden || reader.parentElement !== this.host)
-              return;
-            this.open(dossier, prefs, chatId, trigger, actions, storyDocument, visual);
-            this.host.querySelector("[data-vn-read-document]")?.focus();
-          }, () => {
-            if (!this.host.hidden && reader.parentElement === this.host)
-              this.close();
-          });
-          if (this.host.dataset.vnWorkspaceTool)
-            reader.removeAttribute("aria-modal");
-          this.documentState(true);
-          this.host.replaceChildren(reader);
-          reader.querySelector("button")?.focus();
-        };
-        panel.append(read);
-      } else {
-        const missing = document.createElement("p");
-        missing.textContent = "No document text has been revealed. Examining the item is a story action; opening this card does not unlock it.";
-        panel.append(missing);
-      }
+      const read = document.createElement("button");
+      read.type = "button";
+      read.textContent = storyDocument.sections.length ? "Read revealed text & view closeup" : "Inspect document & view closeup";
+      read.dataset.vnReadDocument = "";
+      read.onclick = () => {
+        if (this.host.hidden || panel.parentElement !== this.host)
+          return;
+        this.openDocument(storyDocument, () => {
+          this.open(dossier, prefs, chatId, trigger, actions, storyDocument, visual);
+          this.host.querySelector("[data-vn-read-document]")?.focus();
+        }, trigger);
+      };
+      panel.append(read);
     }
     if (actions?.drafts.length) {
       panel.append(new InteractionTray(actions.drafts, actions.current, (draft, mode) => {
@@ -31532,6 +31912,8 @@ var DOSSIER_CSS = `
 [data-vn-root] [data-vn-references]{min-width:44px!important;min-height:44px!important;width:44px;height:44px;padding:0!important;display:inline-flex;align-items:center;justify-content:center}
 [data-vn-references] svg{width:20px;height:20px;display:block;flex:none}
 [data-vn-root] [data-entity-anchor]{font:inherit;font-weight:650;color:inherit;background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 16%,transparent);border:0;text-decoration:underline 1.5px color-mix(in srgb,var(--vn-accent,#9ec6f0) 80%,transparent);text-underline-offset:3px;border-radius:.15em;padding:0;cursor:pointer;text-align:inherit;display:inline;line-height:inherit;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+[data-vn-root] [data-entity-anchor][data-entity-doc="true"]{background:color-mix(in srgb,#e8c987 18%,var(--vn-accent,#9ec6f0) 10%);text-decoration:underline dotted 1.5px color-mix(in srgb,#e8c987 82%,var(--vn-accent,#9ec6f0))}
+[data-vn-root] [data-entity-anchor][data-entity-doc="true"]::after{content:" \uD83D\uDDCF";font-size:.78em;opacity:.72;vertical-align:0.05em}
 [data-vn-root] [data-entity-anchor]:hover{background:color-mix(in srgb,var(--vn-accent,#9ec6f0) 28%,transparent)}
 [data-entity-anchor]:focus-visible{outline:2px solid var(--vn-accent,#9ec6f0);outline-offset:3px}
 [data-vn-dossier][hidden]{display:none!important}
@@ -31716,6 +32098,11 @@ class StageDossiers {
   characterDnaSaver;
   tooltipPopover = null;
   tooltipDismissCleanup = null;
+  documentAssets = {};
+  documentArtBusy = new Set;
+  documentArtErrors = new Map;
+  documentArtRequester;
+  lightboxOpener;
   snapshotAt = () => {
     return;
   };
@@ -31746,6 +32133,22 @@ class StageDossiers {
       this.workspace?.toolClosed("story");
       this.release();
     }, (entity, patch) => this.updateOverride(entity, patch), documentOpen);
+    this.card.setDocumentOptionsResolver((docId) => ({
+      asset: this.documentAssets[docId] ?? null,
+      busy: this.documentArtBusy.has(docId),
+      ...this.documentArtErrors.get(docId) ? { error: this.documentArtErrors.get(docId) } : {},
+      ...this.documentArtRequester ? {
+        onGenerate: (regenerate) => {
+          this.documentArtBusy.add(docId);
+          this.documentArtErrors.delete(docId);
+          this.card.refreshDocumentStage(docId);
+          this.documentArtRequester?.(docId, Math.max(0, this.index), regenerate);
+        }
+      } : {},
+      ...this.lightboxOpener ? {
+        onLightbox: (asset) => this.lightboxOpener?.(asset.imageUrl, "Document closeup")
+      } : {}
+    }));
     this.tray.type = "button";
     this.tray.dataset.vnReferences = "";
     this.tray.dataset.vnControl = "references";
@@ -31773,6 +32176,40 @@ class StageDossiers {
   }
   setStoryDnaError(error61) {
     this.card.setStoryDnaError(error61);
+  }
+  setDocumentArtRequester(fn) {
+    this.documentArtRequester = fn;
+  }
+  setLightboxOpener(fn) {
+    this.lightboxOpener = fn;
+  }
+  applyDocumentImageStatus(msg) {
+    if (msg.status === "generating") {
+      this.documentArtBusy.add(msg.documentId);
+      this.documentArtErrors.delete(msg.documentId);
+    } else if (msg.status === "ready" && msg.imageId && msg.imageUrl) {
+      this.documentArtBusy.delete(msg.documentId);
+      this.documentArtErrors.delete(msg.documentId);
+      this.documentAssets = {
+        ...this.documentAssets,
+        [msg.documentId]: { documentId: msg.documentId, contentHash: msg.contentHash, imageId: msg.imageId, imageUrl: msg.imageUrl }
+      };
+      if (this.tooltipPopover?.dataset.docId === msg.documentId) {
+        const thumb = this.tooltipPopover.querySelector(".vn-inline-tooltip-thumb");
+        if (thumb) {
+          thumb.replaceChildren();
+          const img = document.createElement("img");
+          img.src = msg.imageUrl;
+          img.alt = "";
+          thumb.append(img);
+        }
+      }
+    } else if (msg.status === "failed") {
+      this.documentArtBusy.delete(msg.documentId);
+      if (msg.error)
+        this.documentArtErrors.set(msg.documentId, msg.error);
+    }
+    this.card.refreshDocumentStage(msg.documentId);
   }
   setCharacterDnaLibrary(library) {
     this.characterDnaLibrary = { ...library };
@@ -31838,7 +32275,11 @@ class StageDossiers {
   }
   matchStoryDocument(entity, docs) {
     const names = new Set([entity.name, ...entity.aliases].map((n) => n.trim().toLocaleLowerCase()).filter(Boolean));
-    return docs.find((d) => names.has(d.name.trim().toLocaleLowerCase()));
+    return docs.find((d) => {
+      if (names.has(d.name.trim().toLocaleLowerCase()))
+        return true;
+      return (d.aliases ?? []).some((a) => names.has(a.trim().toLocaleLowerCase()));
+    });
   }
   setFolioOpener(fn) {
     this.folioOpener = fn;
@@ -31937,6 +32378,12 @@ class StageDossiers {
   }
   setTurnMedia(turn) {
     this.turnMedia = turn;
+    this.setDocumentAssets(turn?.documentAssets);
+  }
+  setDocumentAssets(assets) {
+    this.documentAssets = { ...assets ?? {} };
+    this.documentArtBusy.clear();
+    this.documentArtErrors.clear();
   }
   openTrayFromStage() {
     const snapshot = this.snapshot();
@@ -32074,9 +32521,13 @@ class StageDossiers {
     const selected = applyOverrideFactEdits(rawSelected, entityOverride(this.prefs, snapshot.at.key.chatId, rawSelected.entity));
     const entity = selected.entity;
     const visual = this.resolveVisualContext(entity);
+    const matchedDoc = current && entity.kind === "object" ? this.matchStoryDocument(entity, visibleStoryDocuments(this.presentation?.documents ?? [], Math.max(0, this.index))) : undefined;
+    const docAsset = matchedDoc ? this.documentAssets[matchedDoc.id] : undefined;
     const pop = document.createElement("div");
     pop.className = "vn-inline-tooltip-popover";
     pop.dataset.entityId = id6;
+    if (matchedDoc)
+      pop.dataset.docId = matchedDoc.id;
     pop.setAttribute("role", "dialog");
     pop.setAttribute("aria-label", `${entity.name} quick summary`);
     pop.addEventListener("click", (e) => e.stopPropagation());
@@ -32084,19 +32535,20 @@ class StageDossiers {
     head.className = "vn-inline-tooltip-head";
     const thumb = document.createElement("div");
     thumb.className = "vn-inline-tooltip-thumb";
-    if (visual.imageUrl) {
+    const thumbUrl = docAsset?.imageUrl ?? visual.imageUrl;
+    if (thumbUrl) {
       const img = document.createElement("img");
-      img.src = visual.imageUrl;
+      img.src = thumbUrl;
       img.alt = "";
       thumb.append(img);
     } else
-      thumb.textContent = entity.kind === "npc" ? "\uD83D\uDC64" : entity.kind === "place" ? "\uD83D\uDCCD" : "✦";
+      thumb.textContent = matchedDoc ? "\uD83D\uDCC4" : entity.kind === "npc" ? "\uD83D\uDC64" : entity.kind === "place" ? "\uD83D\uDCCD" : "✦";
     const title = document.createElement("div");
     title.className = "vn-inline-tooltip-title";
     const strong = document.createElement("strong");
     strong.textContent = entity.name;
     const small = document.createElement("small");
-    small.textContent = entity.kind === "npc" ? "Character" : entity.kind === "place" ? "Location DNA" : "Item / Artifact";
+    small.textContent = matchedDoc ? `${matchedDoc.kind.charAt(0).toUpperCase() + matchedDoc.kind.slice(1)} · Document` : entity.kind === "npc" ? "Character" : entity.kind === "place" ? "Location DNA" : "Item / Artifact";
     title.append(strong, small);
     const closeBtn = document.createElement("button");
     closeBtn.type = "button";
@@ -32110,15 +32562,27 @@ class StageDossiers {
     const matchedLoc = entity.kind === "place" ? findMatchingLocation(this.storyDna.locations, entity.name) : undefined;
     const matchedItem = entity.kind === "object" ? findMatchingItem(this.storyDna.items, entity.name) : undefined;
     const dnaSummary = matchedLoc ? formatLocationDNAToPromptClause(matchedLoc) : matchedItem ? formatItemDNAToPromptClause(matchedItem) : "";
+    const docObsSummary = matchedDoc ? matchedDoc.visualDetails || matchedDoc.observations?.find((o) => Boolean(o.summary))?.summary || "" : "";
+    const docQuote = matchedDoc?.sections[0]?.text ? `“${matchedDoc.sections[0].text.slice(0, 140)}”` : "";
     const factLines = selected.facts.slice(0, 2).map((f) => f.value);
-    body2.textContent = [dnaSummary, ...factLines].filter(Boolean).slice(0, 2).join(`
+    body2.textContent = (matchedDoc ? [docObsSummary, docQuote, ...factLines] : [dnaSummary, ...factLines]).filter(Boolean).slice(0, 2).join(`
 `) || (visual.summarySnippet ?? "Established story reference.");
     const cta = document.createElement("button");
     cta.type = "button";
     cta.className = "vn-inline-tooltip-cta";
-    cta.textContent = entity.kind === "npc" ? "Open in Character Folio →" : "Inspect & Edit DNA in World Lens →";
+    cta.textContent = matchedDoc ? "Inspect / Read Document →" : entity.kind === "npc" ? "Open in Character Folio →" : "Inspect & Edit DNA in World Lens →";
     cta.onclick = () => {
       this.dismissTooltipPopover();
+      if (matchedDoc) {
+        this.hold();
+        this.dossierOpen?.(true);
+        if (this.workspace && this.workspace.destination !== "story") {
+          this.workspace.open("story", trigger);
+          this.card.clearBack();
+        }
+        this.card.openDocument(matchedDoc, () => this.open(id6, trigger), trigger);
+        return;
+      }
       if (entity.kind === "npc" && this.folioOpener) {
         this.npcActionToolsHandler?.(this.buildNpcActionTools(entity.name), entity.name);
         this.folioOpener(entity.name);
@@ -32129,14 +32593,22 @@ class StageDossiers {
     pop.append(head, body2, cta);
     this.root.append(pop);
     const rect = typeof trigger.getBoundingClientRect === "function" ? trigger.getBoundingClientRect() : null;
+    const stageRect = typeof this.root.getBoundingClientRect === "function" ? this.root.getBoundingClientRect() : null;
+    const viewW = stageRect && stageRect.width > 0 ? stageRect.right : typeof window !== "undefined" ? window.innerWidth : 1024;
+    const viewLeft = stageRect && stageRect.width > 0 ? stageRect.left : 0;
+    const viewTop = stageRect && stageRect.height > 0 ? stageRect.top : 0;
+    const viewBottom = stageRect && stageRect.height > 0 ? stageRect.bottom : typeof window !== "undefined" ? window.innerHeight : 720;
+    const popW = pop.offsetWidth || 310;
+    const popH = pop.offsetHeight || 168;
     if (rect && (rect.width > 0 || rect.height > 0)) {
-      const top = Math.max(12, Math.min((typeof window !== "undefined" ? window.innerHeight : 720) - 180, rect.bottom + 8));
-      const left = Math.max(12, Math.min((typeof window !== "undefined" ? window.innerWidth : 1024) - 336, rect.left));
+      const fitsAbove = rect.top - viewTop >= popH + 18;
+      const top = fitsAbove ? Math.max(viewTop + 10, rect.top - popH - 10) : Math.min(viewBottom - popH - 10, Math.max(viewTop + 10, rect.bottom + 8));
+      const left = Math.max(viewLeft + 10, Math.min(viewW - popW - 10, rect.left));
       pop.style.top = `${top}px`;
       pop.style.left = `${left}px`;
     } else {
-      pop.style.top = "56px";
-      pop.style.left = "16px";
+      pop.style.top = `${viewTop + 56}px`;
+      pop.style.left = `${viewLeft + 16}px`;
     }
     this.tooltipPopover = pop;
     const doc2 = this.root.ownerDocument;
@@ -32164,12 +32636,14 @@ class StageDossiers {
     if (!snapshot || !eligible.length || this.prefs.linking === "menu-only")
       return;
     const { used, priorIds } = this.priorLinks(index);
+    const visibleDocs = visibleStoryDocuments(this.presentation?.documents ?? [], Math.max(0, index));
+    const docEntityIds = new Set(eligible.filter((e) => e.kind === "object" && Boolean(this.matchStoryDocument(e, visibleDocs))).map((e) => e.id));
     const anchors = linkEntityMentions(this.text.textContent ?? "", snapshot.entities, this.prefs, snapshot.at.key.chatId, Math.min(this.prefs.maxLinksPerParagraph, 24 - used), protectedEntityRanges(this.text), this.prefs.linking === "important" ? priorIds : new Set);
     applyEntityAnchors(this.text, anchors, (id6, trigger) => this.showTooltipPopover(id6, trigger), (id6) => {
       const raw = selectReaderDossier(id6, snapshot, "brief", this.prefs.fieldGroups);
       const edited = raw ? applyOverrideFactEdits(raw, entityOverride(this.prefs, snapshot.at.key.chatId, raw.entity)) : undefined;
       return edited?.facts[0]?.value ?? "View established story information";
-    });
+    }, (id6) => docEntityIds.has(id6));
   }
   resolveVisualContext(entity) {
     const snapshot = this.snapshot();
@@ -32342,6 +32816,624 @@ class StageDossiers {
     this.card.destroy();
     this.tray.remove();
   }
+}
+
+// src/frontend/stage/fullscreen-lightbox.ts
+var LIGHTBOX_CSS = `
+.vn-lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  display: none;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--vn-shell-panel, #04080c) 94%, #000);
+  color: var(--vn-shell-text, #f4f6fb);
+  font-family: var(--vn-shell-family, system-ui);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  user-select: none;
+  touch-action: none;
+}
+.vn-lightbox-backdrop.open {
+  display: flex !important;
+  animation: vn-lightbox-fade-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.vn-lightbox-backdrop[hidden] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+@keyframes vn-lightbox-fade-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+.vn-lightbox-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: max(12px, env(safe-area-inset-top)) 16px 12px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.4) 70%, transparent 100%);
+  pointer-events: auto;
+}
+.vn-lightbox-title-group {
+  min-width: 0;
+  color: #f4f6fb;
+}
+.vn-lightbox-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vn-lightbox-subtitle {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vn-lightbox-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 12px;
+  flex-shrink: 0;
+}
+.vn-lightbox-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.25));
+  background: var(--vn-shell-button, rgba(255, 255, 255, 0.12));
+  color: var(--vn-shell-text, #fff);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 120ms ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.vn-lightbox-btn:hover {
+  background: color-mix(in srgb, var(--vn-shell-accent, #9ec6f0) 20%, var(--vn-shell-button, rgba(255, 255, 255, 0.25)));
+  border-color: var(--vn-shell-accent, rgba(255, 255, 255, 0.45));
+}
+.vn-lightbox-btn.active {
+  background: var(--vn-shell-accent, #7c9cff);
+  border-color: var(--vn-shell-accent, #7c9cff);
+  color: var(--vn-shell-accent-contrast, #0d121f);
+}
+.vn-lightbox-close {
+  min-width: 44px;
+  min-height: 44px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+.vn-lightbox-close:hover,
+.vn-lightbox-close:active {
+  background: rgba(255, 80, 80, 0.75);
+  border-color: rgba(255, 80, 80, 0.9);
+}
+.vn-lightbox-viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  padding: 68px 16px 24px;
+  cursor: zoom-in;
+  touch-action: none;
+}
+.vn-lightbox-viewport.zoomed {
+  cursor: grab;
+}
+.vn-lightbox-viewport.zoomed:active {
+  cursor: grabbing;
+}
+.vn-lightbox-img {
+  max-width: 95vw;
+  max-height: 82vh;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+  transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: center center;
+  will-change: transform;
+}
+.vn-lightbox-rail {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 16px max(12px, env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--vn-shell-panel, #080c12) 88%, #000);
+  border-top: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.14));
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.vn-lightbox-rail::-webkit-scrollbar {
+  display: none;
+}
+.vn-lightbox-rail[hidden] {
+  display: none !important;
+}
+.vn-lightbox-rail-item {
+  flex: 0 0 auto;
+  min-width: 48px;
+  min-height: 48px;
+  width: 56px;
+  height: 56px;
+  padding: 2px;
+  border-radius: 8px;
+  border: 2px solid var(--vn-shell-border, rgba(255, 255, 255, 0.2));
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+}
+.vn-lightbox-rail-item[aria-current="true"] {
+  border-color: var(--vn-shell-accent, #9ec6f0);
+  box-shadow: 0 0 0 1px var(--vn-shell-accent, #9ec6f0);
+}
+.vn-lightbox-rail-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 5px;
+  display: block;
+}
+.vn-lightbox-info-drawer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 16px 20px max(16px, env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--vn-shell-panel, #0a1018) 96%, #000);
+  border-top: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.14));
+  color: var(--vn-shell-text, #e0e5ed);
+  font-size: 13px;
+  line-height: 1.5;
+  backdrop-filter: blur(20px);
+  z-index: 25;
+  animation: vn-lightbox-slide-up 180ms ease;
+}
+@keyframes vn-lightbox-slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.vn-lightbox-info-drawer pre {
+  margin: 6px 0 0;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #a8b8d0;
+}
+`;
+
+class FullscreenLightbox {
+  static instance = null;
+  backdrop;
+  img;
+  titleEl;
+  subtitleEl;
+  infoDrawer;
+  railEl;
+  zoomLevel = 1;
+  panX = 0;
+  panY = 0;
+  infoOpen = false;
+  currentOptions = null;
+  galleryItems = [];
+  galleryIndex = 0;
+  touchStartY = 0;
+  touchStartX = 0;
+  panStartX = 0;
+  panStartY = 0;
+  isPanning = false;
+  pinchStartDist = 0;
+  pinchStartZoom = 1;
+  constructor() {
+    this.backdrop = document.createElement("div");
+    this.backdrop.className = "vn-lightbox-backdrop";
+    this.backdrop.hidden = true;
+    this.backdrop.style.display = "none";
+    const style = document.createElement("style");
+    style.textContent = LIGHTBOX_CSS;
+    const content = document.createElement("div");
+    content.style.display = "contents";
+    content.innerHTML = `
+      <div class="vn-lightbox-header">
+        <div class="vn-lightbox-title-group">
+          <h3 class="vn-lightbox-title"></h3>
+          <div class="vn-lightbox-subtitle"></div>
+        </div>
+        <div class="vn-lightbox-actions">
+          <button type="button" class="vn-lightbox-btn" data-action="zoom-toggle" title="Toggle zoom">100%</button>
+          <button type="button" class="vn-lightbox-btn" data-action="info-toggle" title="Prompt details">Info</button>
+          <button type="button" class="vn-lightbox-btn vn-lightbox-close" data-action="close" aria-label="Close" title="Close (Esc)">✕</button>
+        </div>
+      </div>
+      <div class="vn-lightbox-viewport" data-viewport>
+        <img class="vn-lightbox-img" alt="Fullscreen image" />
+      </div>
+      <div class="vn-lightbox-rail" hidden data-rail aria-label="Gallery navigation"></div>
+      <div class="vn-lightbox-info-drawer" hidden data-drawer></div>
+    `;
+    this.backdrop.append(style, content);
+    this.titleEl = this.backdrop.querySelector(".vn-lightbox-title");
+    this.subtitleEl = this.backdrop.querySelector(".vn-lightbox-subtitle");
+    this.img = this.backdrop.querySelector(".vn-lightbox-img");
+    this.railEl = this.backdrop.querySelector("[data-rail]");
+    this.infoDrawer = this.backdrop.querySelector("[data-drawer]");
+    this.wireEvents();
+  }
+  static open(options) {
+    if (!FullscreenLightbox.instance) {
+      FullscreenLightbox.instance = new FullscreenLightbox;
+    }
+    FullscreenLightbox.instance.show(options);
+    return FullscreenLightbox.instance;
+  }
+  handleKeyDown = (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      this.close();
+    } else if (e.key === "+" || e.key === "=") {
+      this.setZoom(Math.min(4, this.zoomLevel + 0.5));
+    } else if (e.key === "-") {
+      this.setZoom(Math.max(1, this.zoomLevel - 0.5));
+    } else if (e.key === "ArrowRight" && this.galleryItems.length > 1) {
+      e.preventDefault();
+      this.selectGalleryItem((this.galleryIndex + 1) % this.galleryItems.length);
+    } else if (e.key === "ArrowLeft" && this.galleryItems.length > 1) {
+      e.preventDefault();
+      this.selectGalleryItem((this.galleryIndex - 1 + this.galleryItems.length) % this.galleryItems.length);
+    }
+  };
+  wireEvents() {
+    const viewport = this.backdrop.querySelector("[data-viewport]");
+    const zoomBtn = this.backdrop.querySelector('[data-action="zoom-toggle"]');
+    const infoBtn = this.backdrop.querySelector('[data-action="info-toggle"]');
+    const closeBtn = this.backdrop.querySelector('[data-action="close"]');
+    closeBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.close();
+    });
+    let suppressNextClick = false;
+    viewport.addEventListener("click", (e) => {
+      if (suppressNextClick) {
+        suppressNextClick = false;
+        return;
+      }
+      if (e.target === viewport) {
+        this.close();
+      } else if (e.target === this.img) {
+        this.toggleZoom();
+      }
+    });
+    this.backdrop.addEventListener("click", (e) => {
+      if (e.target === this.backdrop) {
+        this.close();
+      }
+    });
+    zoomBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.toggleZoom();
+    });
+    infoBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.toggleInfo();
+    });
+    const touchDist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    viewport.addEventListener("touchstart", (e) => {
+      if (e.touches.length === 2) {
+        this.isPanning = false;
+        this.pinchStartDist = touchDist(e.touches);
+        this.pinchStartZoom = this.zoomLevel;
+      } else if (e.touches.length === 1) {
+        this.pinchStartDist = 0;
+        this.touchStartY = e.touches[0].clientY;
+        this.touchStartX = e.touches[0].clientX;
+        if (this.zoomLevel > 1) {
+          this.isPanning = true;
+          this.panStartX = this.panX;
+          this.panStartY = this.panY;
+        }
+      }
+    }, { passive: true });
+    viewport.addEventListener("touchmove", (e) => {
+      if (e.touches.length === 2 && this.pinchStartDist > 0) {
+        const nextZoom = Math.min(4, Math.max(1, this.pinchStartZoom * (touchDist(e.touches) / this.pinchStartDist)));
+        this.setZoom(nextZoom);
+      } else if (e.touches.length === 1 && this.isPanning && this.zoomLevel > 1) {
+        const dx = e.touches[0].clientX - this.touchStartX;
+        const dy = e.touches[0].clientY - this.touchStartY;
+        if (Math.hypot(dx, dy) > 6)
+          suppressNextClick = true;
+        this.panX = this.panStartX + dx;
+        this.panY = this.panStartY + dy;
+        this.applyTransform();
+      }
+    }, { passive: true });
+    viewport.addEventListener("touchend", (e) => {
+      if (e.touches.length < 2)
+        this.pinchStartDist = 0;
+      if (e.touches.length === 0)
+        this.isPanning = false;
+      if (e.changedTouches.length === 1 && this.zoomLevel === 1) {
+        const deltaY = e.changedTouches[0].clientY - this.touchStartY;
+        const deltaX = e.changedTouches[0].clientX - this.touchStartX;
+        if (deltaY > 70 && Math.abs(deltaY) > Math.abs(deltaX) * 1.4) {
+          this.close();
+          return;
+        }
+        if (this.galleryItems.length > 1 && Math.abs(deltaX) > 60 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+          suppressNextClick = true;
+          const nextIdx = deltaX < 0 ? (this.galleryIndex + 1) % this.galleryItems.length : (this.galleryIndex - 1 + this.galleryItems.length) % this.galleryItems.length;
+          this.selectGalleryItem(nextIdx);
+        }
+      }
+    }, { passive: true });
+  }
+  applyTransform() {
+    if (this.zoomLevel > 1) {
+      this.img.style.transform = `translate3d(${this.panX}px, ${this.panY}px, 0) scale(${this.zoomLevel})`;
+    } else {
+      this.img.style.transform = "translate3d(0, 0, 0) scale(1)";
+    }
+  }
+  setZoom(level) {
+    this.zoomLevel = level;
+    if (level <= 1) {
+      this.panX = 0;
+      this.panY = 0;
+    }
+    const viewport = this.backdrop.querySelector("[data-viewport]");
+    const zoomBtn = this.backdrop.querySelector('[data-action="zoom-toggle"]');
+    this.applyTransform();
+    if (level > 1) {
+      viewport.classList.add("zoomed");
+      zoomBtn.textContent = `${Math.round(level * 100)}%`;
+    } else {
+      viewport.classList.remove("zoomed");
+      zoomBtn.textContent = "Fit";
+    }
+  }
+  toggleZoom() {
+    if (this.zoomLevel === 1) {
+      this.setZoom(2);
+    } else {
+      this.setZoom(1);
+    }
+  }
+  toggleInfo() {
+    this.infoOpen = !this.infoOpen;
+    const infoBtn = this.backdrop.querySelector('[data-action="info-toggle"]');
+    infoBtn.classList.toggle("active", this.infoOpen);
+    this.infoDrawer.hidden = !this.infoOpen;
+  }
+  applyThemeTokens(themeSource) {
+    if (typeof getComputedStyle !== "function")
+      return;
+    const source = themeSource ?? document.querySelector("[data-vn-root], [data-vn-shell]") ?? document.documentElement;
+    if (!source)
+      return;
+    const style = getComputedStyle(source);
+    const props = [
+      "--vn-shell-bg",
+      "--vn-shell-panel",
+      "--vn-shell-button",
+      "--vn-shell-text",
+      "--vn-shell-muted",
+      "--vn-shell-border",
+      "--vn-shell-accent",
+      "--vn-shell-accent-contrast",
+      "--vn-shell-family"
+    ];
+    for (const prop of props) {
+      const value = style.getPropertyValue(prop).trim();
+      if (value)
+        this.backdrop.style.setProperty(prop, value);
+    }
+  }
+  renderGalleryRail() {
+    if (this.galleryItems.length <= 1) {
+      this.railEl.hidden = true;
+      this.railEl.replaceChildren();
+      return;
+    }
+    this.railEl.hidden = false;
+    this.railEl.replaceChildren(...this.galleryItems.map((item, idx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "vn-lightbox-rail-item";
+      btn.setAttribute("aria-label", item.title || `Image ${idx + 1}`);
+      btn.setAttribute("aria-current", idx === this.galleryIndex ? "true" : "false");
+      const thumb = document.createElement("img");
+      thumb.src = item.src;
+      thumb.alt = "";
+      btn.append(thumb);
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        this.selectGalleryItem(idx);
+      };
+      return btn;
+    }));
+  }
+  selectGalleryItem(index) {
+    const item = this.galleryItems[index];
+    if (!item)
+      return;
+    this.galleryIndex = index;
+    this.presentItem(item);
+    this.renderGalleryRail();
+  }
+  presentItem(item) {
+    this.titleEl.textContent = item.title ?? "Story Artwork";
+    this.subtitleEl.textContent = item.subtitle ?? "";
+    this.subtitleEl.hidden = !item.subtitle;
+    this.img.src = item.src;
+    this.setZoom(1);
+    this.infoOpen = false;
+    this.infoDrawer.hidden = true;
+    let infoHtml = "";
+    if (item.prompt) {
+      infoHtml += `<strong>Positive Prompt:</strong><pre>${this.escapeHtml(item.prompt)}</pre>`;
+    }
+    if (item.negativePrompt) {
+      infoHtml += `<div style="margin-top:10px"><strong>Negative Prompt:</strong><pre>${this.escapeHtml(item.negativePrompt)}</pre></div>`;
+    }
+    this.infoDrawer.innerHTML = infoHtml || "<p style='margin:0;opacity:0.7'>No recorded prompt metadata.</p>";
+    const infoBtn = this.backdrop.querySelector('[data-action="info-toggle"]');
+    infoBtn.classList.remove("active");
+    infoBtn.hidden = !item.prompt && !item.negativePrompt;
+  }
+  show(options) {
+    this.currentOptions = options;
+    this.applyThemeTokens(options.themeSource);
+    this.galleryItems = options.gallery && options.gallery.length > 0 ? options.gallery : [];
+    const requestedIdx = options.galleryIndex ?? 0;
+    this.galleryIndex = this.galleryItems.length > 0 ? Math.min(Math.max(0, requestedIdx), this.galleryItems.length - 1) : 0;
+    this.presentItem(options);
+    this.renderGalleryRail();
+    if (!this.backdrop.parentNode) {
+      document.body.appendChild(this.backdrop);
+    }
+    this.backdrop.hidden = false;
+    this.backdrop.classList.add("open");
+    this.backdrop.style.display = "flex";
+    this.backdrop.style.pointerEvents = "auto";
+    this.backdrop.tabIndex = -1;
+    this.backdrop.focus();
+    window.removeEventListener("keydown", this.handleKeyDown);
+    window.addEventListener("keydown", this.handleKeyDown);
+  }
+  close() {
+    window.removeEventListener("keydown", this.handleKeyDown);
+    this.backdrop.classList.remove("open");
+    this.backdrop.hidden = true;
+    this.backdrop.style.display = "none";
+    this.backdrop.style.pointerEvents = "none";
+    this.img.removeAttribute("src");
+    this.currentOptions = null;
+    if (this.backdrop.parentNode) {
+      this.backdrop.parentNode.removeChild(this.backdrop);
+    }
+  }
+  escapeHtml(str) {
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+}
+
+// src/frontend/stage/world-strip.ts
+var WEATHER_GLYPHS = {
+  storm: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.2 10.5H3.5a2.5 2.5 0 0 1-.2-5 3.6 3.6 0 0 1 6.9-.9A2.6 2.6 0 0 1 12.6 10.5h-.9"/><path d="M8.5 8.5 6.8 11.5h2.2l-1.5 3"/></svg>',
+  rain: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 9.8A2.4 2.4 0 0 1 3.3 5a3.6 3.6 0 0 1 6.8-.9 2.6 2.6 0 0 1 2.5 5.7"/><path d="m5.3 11.8-.9 2M8.3 11.8l-.9 2M11.3 11.8l-.9 2"/></svg>',
+  snow: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.2v11.6M3 5.1l10 5.8M13 5.1l-10 5.8"/><circle cx="8" cy="8" r="1.3"/></svg>',
+  fog: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" aria-hidden="true"><path d="M2.5 6h9.5M4 9h9.5M2 12h8.5"/></svg>',
+  overcast: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12h7.6a2.4 2.4 0 0 0 .3-4.8 3.6 3.6 0 0 0-6.8-1A2.7 2.7 0 0 0 4.5 12Z"/></svg>',
+  moon: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.2 10.2A4.8 4.8 0 0 1 6 3.8a5 5 0 1 0 6.2 6.4Z"/></svg>',
+  sun: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2.7"/><path d="M8 2v1.3M8 12.7V14M2 8h1.3M12.7 8H14M3.8 3.8l.9.9M11.3 11.3l.9.9M12.2 3.8l-.9.9M4.7 11.3l-.9.9"/></svg>'
+};
+function selectWeatherGlyph(snapshot) {
+  const weather = (snapshot.weather ?? "").toLowerCase();
+  const tod = (snapshot.timeOfDay ?? snapshot.time ?? "").toLowerCase();
+  if (/(?:thunder|storm|lightning|tempest|squall)/.test(weather))
+    return "storm";
+  if (/(?:rain|drizzle|downpour|shower|sleet)/.test(weather))
+    return "rain";
+  if (/(?:snow|blizzard|frost|flurr|hail)/.test(weather))
+    return "snow";
+  if (/\b(?:fog|mist|haze|smog)\b/.test(weather))
+    return "fog";
+  if (/\b(?:overcast|cloud|gloom|gray|grey)\b/.test(weather))
+    return "overcast";
+  if (/\b(?:night|midnight|moon|late)\b/.test(tod) || /\b(?:20|21|22|23|00|01|02|03|04):\d{2}|(?:8|9|10|11)\s*p\.?m\.?/i.test(tod)) {
+    return "moon";
+  }
+  return "sun";
+}
+function capitalizeWord(value) {
+  const trimmed = value.trim();
+  return trimmed ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1) : "";
+}
+function renderWorldAtmosphereStrip(strip, snapshot) {
+  if (!strip)
+    return;
+  if (!snapshot) {
+    strip.hidden = true;
+    strip.replaceChildren();
+    return;
+  }
+  const timeText = snapshot.time?.trim() || (snapshot.timeOfDay ? capitalizeWord(snapshot.timeOfDay) : "");
+  const dateText = snapshot.date?.trim() || (snapshot.season ? capitalizeWord(snapshot.season) : "");
+  const tempText = snapshot.temperature?.trim() || "";
+  const weatherText = snapshot.weather?.trim() ? capitalizeWord(snapshot.weather) : "";
+  if (!timeText && !dateText && !tempText && !weatherText) {
+    strip.hidden = true;
+    strip.replaceChildren();
+    return;
+  }
+  strip.replaceChildren();
+  const glyphWrap = document.createElement("span");
+  glyphWrap.className = "vn-world-glyph";
+  glyphWrap.setAttribute("aria-hidden", "true");
+  glyphWrap.innerHTML = WEATHER_GLYPHS[selectWeatherGlyph(snapshot)];
+  strip.append(glyphWrap);
+  const tokens = [];
+  if (timeText)
+    tokens.push({ kind: "time", text: timeText });
+  if (dateText)
+    tokens.push({ kind: "date", text: dateText });
+  if (tempText)
+    tokens.push({ kind: "temp", text: tempText });
+  if (weatherText) {
+    tokens.push({
+      kind: "weather",
+      text: snapshot.indoor ? `${weatherText} outside` : weatherText
+    });
+  }
+  tokens.forEach((tok, idx) => {
+    if (idx > 0) {
+      const dot = document.createElement("span");
+      dot.className = "vn-world-sep";
+      dot.setAttribute("aria-hidden", "true");
+      dot.textContent = "·";
+      strip.append(dot);
+    }
+    const span = document.createElement("span");
+    span.className = `vn-world-token vn-world-${tok.kind}`;
+    span.textContent = tok.text;
+    strip.append(span);
+  });
+  if (snapshot.source) {
+    strip.dataset.worldSource = snapshot.source;
+  }
+  strip.hidden = false;
 }
 
 // src/shared/game-moves.ts
@@ -32775,7 +33867,6 @@ class DialogueSheet {
   header;
   auto;
   hide;
-  expand;
   observer;
   abort = new AbortController;
   constructor(root, dialogue, pause, save, onToggleAutoPlay) {
@@ -32796,10 +33887,8 @@ class DialogueSheet {
     this.tools.dataset.vnSheetTools = "";
     this.tools.className = "caption-head-actions";
     this.tools.innerHTML = `<button type="button" class="caption-tool" data-action="caption-auto" aria-pressed="false" title="Toggle auto-play (A)" aria-label="Toggle auto-play"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg></button>
-      <button type="button" class="caption-tool" data-action="caption-expand" aria-pressed="false" aria-label="Cycle dialogue sheet height" title="Resize dialogue sheet"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 15 7-7 7 7"/></svg></button>
       <button type="button" class="caption-tool" data-vn-hide-text aria-pressed="false" aria-label="Hide text reader to view full artwork" title="Hide text reader"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>`;
     this.auto = this.tools.querySelector("[data-action='caption-auto']");
-    this.expand = this.tools.querySelector("[data-action='caption-expand']");
     this.hide = this.tools.querySelector("[data-vn-hide-text]");
     this.show = document.createElement("button");
     this.show.type = "button";
@@ -32824,12 +33913,6 @@ class DialogueSheet {
     this.tools.addEventListener("click", (event) => event.stopPropagation(), { signal });
     this.auto.addEventListener("click", () => this.onToggleAutoPlay?.(), { signal });
     this.hide.addEventListener("click", () => this.setHidden(!this.hidden), { signal });
-    this.expand.addEventListener("click", () => {
-      const order = this.isMobileViewport() ? ["compact", "reading", "expanded"] : ["reading", "expanded"];
-      const idx = order.indexOf(this.preferences.sheetSize);
-      const next = order[(idx + 1) % order.length];
-      this.snapToDetent(next);
-    }, { signal });
     this.show.addEventListener("click", (event) => {
       event.stopPropagation();
       this.setHidden(false);
@@ -32985,9 +34068,17 @@ class DialogueSheet {
     this.root.style.setProperty("--vn-sheet-height", `${heightPx}px`);
     this.root.style.setProperty("--caption-height", `${heightPx}px`);
     this.dialogue.style.setProperty("--caption-height", `${heightPx}px`);
-    this.dialogue.style.height = `${heightPx}px`;
+    const autoFitReading = !this.hidden && !this.drag && this.preferences.heightRatio === undefined && this.preferences.sheetSize === "reading";
+    if (autoFitReading) {
+      this.dialogue.style.height = "auto";
+      this.dialogue.style.minHeight = "76px";
+      this.dialogue.style.maxHeight = `${Math.max(112, Math.min(184, heightPx + 26))}px`;
+    } else {
+      this.dialogue.style.minHeight = "";
+      this.dialogue.style.maxHeight = "";
+      this.dialogue.style.height = `${heightPx}px`;
+    }
     this.dialogue.classList?.toggle?.("large-caption", activeDetent === "expanded");
-    this.expand.setAttribute("aria-pressed", String(activeDetent === "expanded"));
   }
   getDetent() {
     return this.preferences.sheetSize;
@@ -33034,7 +34125,6 @@ class DialogueSheet {
     this.root.style.setProperty("--vn-sheet-opacity", String(this.preferences.backgroundOpacity));
     this.root.style.setProperty("--caption-opacity", String(this.preferences.backgroundOpacity));
     this.tools.hidden = false;
-    this.expand.hidden = false;
     this.hide.hidden = false;
     this.resize();
   }
@@ -33277,6 +34367,7 @@ var reduceVnStage = (state, action) => {
         showRerollPrompt: hasNoParagraphs,
         isUserTurn: false,
         ambient: action.turn.ambient !== undefined ? action.turn.ambient : state.ambient,
+        ...action.turn.worldAtmosphere ? { worldAtmosphere: [...action.turn.worldAtmosphere] } : { worldAtmosphere: [] },
         highestRevealedIndex: cursor
       };
     }
@@ -39744,14 +40835,23 @@ var VN_ORNAMENT_LAYER_MARKUP = `
     </svg>
   </div>`;
 // src/shared/tracker-mappings.ts
-var TRACKER_MAPPING_FIELDS = ["identity", "attire", "sceneState", "world"];
+var TRACKER_MAPPING_FIELDS = ["identity", "attire", "sceneState", "world", "time", "date", "temperature", "weather"];
 var blocked = new Set(["__proto__", "constructor", "prototype"]);
 var pathSchema = exports_external.string().trim().min(1).max(128).refine((path) => {
   const parts = path.split(".");
   return parts.length <= 6 && parts.every((part) => /^[a-zA-Z_][a-zA-Z0-9_ -]*$/.test(part) && !blocked.has(part.toLowerCase()));
 }, "Use dotted field names, without expressions or reserved properties.");
 var paths2 = exports_external.array(pathSchema).max(6).default([]);
-var TrackerMappingsSchema = exports_external.object({ identity: paths2, attire: paths2, sceneState: paths2, world: paths2 }).strict();
+var TrackerMappingsSchema = exports_external.object({
+  identity: paths2,
+  attire: paths2,
+  sceneState: paths2,
+  world: paths2,
+  time: paths2.optional().default([]),
+  date: paths2.optional().default([]),
+  temperature: paths2.optional().default([]),
+  weather: paths2.optional().default([])
+}).strict();
 function normalizeTrackerMappings(value) {
   const input2 = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   return Object.fromEntries(TRACKER_MAPPING_FIELDS.map((field) => [field, Array.isArray(input2[field]) ? [...new Set(input2[field].slice(0, 64).filter((p) => pathSchema.safeParse(p).success).map((p) => p.trim()))].slice(0, 6) : []]));
@@ -39866,6 +40966,7 @@ var DEFAULT_CONFIG = {
   collectEntityReferences: false,
   persistentLocationArt: false,
   persistentCastArt: false,
+  documentImageMode: "on-click",
   tooltips: normalizeTooltipPreferences({}),
   includeSimTrackerContext: true,
   simTrackerMappings: normalizeTrackerMappings({}),
@@ -42103,9 +43204,16 @@ class VnStage {
       }
     }, onDocumentToggle, onDossierToggle, () => this.state.displayedImage?.url ?? null);
     this.dossiers.connectWorkspace(this.workspace, shell);
+    this.dossiers.setLightboxOpener((src, title) => FullscreenLightbox.open({ src, title, subtitle: "Document Close-up Inspection", themeSource: this.root }));
     this.bindEvents();
     this.updateControlButtons();
     this.render(null);
+  }
+  setDocumentArtRequester(fn) {
+    this.dossiers.setDocumentArtRequester(fn);
+  }
+  applyDocumentImageStatus(msg) {
+    this.dossiers.applyDocumentImageStatus(msg);
   }
   setFolioOpener(fn) {
     this.folioOpenCallback = fn;
@@ -42786,6 +43894,7 @@ class VnStage {
     this.updateControlButtons();
     this.updateContinueButton();
     this.setCleanView(false);
+    renderWorldAtmosphereStrip(this.workspace.worldStrip, null);
     this.backlogEntries.length = 0;
     this.readParagraphIds.clear();
     this.dispatch({ type: "reset" });
@@ -42813,6 +43922,8 @@ class VnStage {
     this.rpgHud.update(this.rpgMode, null);
     this.dossiers.setTurnMedia(null);
     this.dossiers.setContext(turn.presentation, turn.paragraphs.map((p) => p.text), turn.referenceHistory);
+    if (turn.documentAssets)
+      this.dossiers.setDocumentAssets(turn.documentAssets);
     if (turn.rpgMode !== undefined)
       this.rpgMode = turn.rpgMode;
     this.rpgState = turn.rpgState ?? null;
@@ -44071,6 +45182,8 @@ class VnStage {
     this.scrubber.replaceChildren(...dots);
   }
   renderSceneHud() {
+    const atmo = this.narrative.hidden || !this.state.worldAtmosphere?.length ? null : atmosphereForPosition({ worldAtmosphere: [...this.state.worldAtmosphere] }, this.state.currentParagraphIndex);
+    renderWorldAtmosphereStrip(this.workspace.worldStrip, atmo);
     if (!this.sceneHud)
       return;
     const entries = this.dossiers.sceneHudEntries();
@@ -44559,6 +45672,7 @@ class VnStage {
     }
     this.currentRenderedParagraphId = paragraph.id;
     this.currentRenderedFormatted = formatted;
+    this.renderSceneHud();
     this.recordBacklogAndRead(paragraph.id, paragraph.speaker, cleanText, formatted, this.state.currentParagraphIndex);
     if (!this.isRewinding) {
       this.triggerParagraphEffects(paragraph);
@@ -49661,6 +50775,14 @@ class VisualNovelSettingsPanel {
                 </select>
                 <small>Controls how descriptive the V2 compiler is when writing atmosphere, secondary lighting, and textures.</small>
               </label>
+              <label data-field ${find("Document closeup artwork", "document flyer closeup prop image generation on click auto")}>
+                <span>Document closeup artwork</span>
+                <select name="documentImageMode">
+                  <option value="on-click">On click (Generate when opened — recommended)</option>
+                  <option value="auto">Auto (Render sensed documents in background)</option>
+                </select>
+                <small>Renders close-up macro inspection artwork for flyers, letters, notes, and maps revealed in the story.</small>
+              </label>
               <label data-check><input name="automaticImagePromptSettings" type="checkbox"><span>Automatic model settings<small>Uses model-specific wording guidance and published prompt limits. Existing size controls still apply.</small></span></label>
               <label data-check ${find("3+N spatial frustum & OTS framing", "spatial frustum layout boxes over the shoulder dorsal ots ensemble")}><input name="spatialFrustumEnabled" type="checkbox" /><span>3+N spatial frustum &amp; OTS framing<small>Bound 1–3 primary subjects in 2D layout boxes, group extras into background silhouettes, and enforce dorsal over-the-shoulder framing</small></span></label>
               <label data-check ${find("Chromatic lighting LUT & affirmative rewriter", "chromatic lighting lut color temperature affirmative anti drift negation")}><input name="chromaticLutEnabled" type="checkbox" /><span>Chromatic lighting LUT &amp; affirmative rewriter<small>Inject cinematic color-temperature tokens per atmosphere and rewrite literary negations into affirmative visual phrasing</small></span></label>
@@ -50702,6 +51824,8 @@ class VisualNovelSettingsPanel {
         return { dialogueSafeArea: target2.value === "always" ? "always" : target2.value === "off" ? "off" : "auto" };
       case "imagePromptDetail":
         return { imagePromptDetail: target2.value === "compact" || target2.value === "standard" || target2.value === "detailed" ? target2.value : "auto" };
+      case "documentImageMode":
+        return { documentImageMode: target2.value === "auto" ? "auto" : "on-click" };
       case "persistentCastArt":
         return { persistentCastArt: checked };
       case "persistentLocationArt":
@@ -51300,6 +52424,7 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
   }
   syncFromConfig(config2) {
     this.control("imageOutputAspectRatio").value = config2.imageOutputAspectRatio;
+    this.control("documentImageMode").value = config2.documentImageMode === "auto" ? "auto" : "on-click";
     this.control("persistentCastArt").checked = config2.persistentCastArt;
     this.control("persistentLocationArt").checked = config2.persistentLocationArt;
     this.control("collectEntityReferences").checked = config2.collectEntityReferences;
@@ -53095,7 +54220,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.159";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.160";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -53259,537 +54384,6 @@ function trapFocusWithin(container, event, active) {
   } else if (!event.shiftKey && active === last) {
     event.preventDefault();
     first.focus({ preventScroll: true });
-  }
-}
-
-// src/frontend/stage/fullscreen-lightbox.ts
-var LIGHTBOX_CSS = `
-.vn-lightbox-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 999999;
-  display: none;
-  flex-direction: column;
-  background: color-mix(in srgb, var(--vn-shell-panel, #04080c) 94%, #000);
-  color: var(--vn-shell-text, #f4f6fb);
-  font-family: var(--vn-shell-family, system-ui);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  user-select: none;
-  touch-action: none;
-}
-.vn-lightbox-backdrop.open {
-  display: flex !important;
-  animation: vn-lightbox-fade-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.vn-lightbox-backdrop[hidden] {
-  display: none !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-}
-@keyframes vn-lightbox-fade-in {
-  from { opacity: 0; transform: scale(0.98); }
-  to { opacity: 1; transform: scale(1); }
-}
-.vn-lightbox-header {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: max(12px, env(safe-area-inset-top)) 16px 12px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.4) 70%, transparent 100%);
-  pointer-events: auto;
-}
-.vn-lightbox-title-group {
-  min-width: 0;
-  color: #f4f6fb;
-}
-.vn-lightbox-title {
-  font-size: 15px;
-  font-weight: 700;
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.vn-lightbox-subtitle {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
-  margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.vn-lightbox-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-left: 12px;
-  flex-shrink: 0;
-}
-.vn-lightbox-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 44px;
-  min-height: 44px;
-  height: 44px;
-  padding: 0 14px;
-  border-radius: 999px;
-  border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.25));
-  background: var(--vn-shell-button, rgba(255, 255, 255, 0.12));
-  color: var(--vn-shell-text, #fff);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 120ms ease;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-.vn-lightbox-btn:hover {
-  background: color-mix(in srgb, var(--vn-shell-accent, #9ec6f0) 20%, var(--vn-shell-button, rgba(255, 255, 255, 0.25)));
-  border-color: var(--vn-shell-accent, rgba(255, 255, 255, 0.45));
-}
-.vn-lightbox-btn.active {
-  background: var(--vn-shell-accent, #7c9cff);
-  border-color: var(--vn-shell-accent, #7c9cff);
-  color: var(--vn-shell-accent-contrast, #0d121f);
-}
-.vn-lightbox-close {
-  min-width: 44px;
-  min-height: 44px;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  font-size: 20px;
-  line-height: 1;
-  background: rgba(255, 255, 255, 0.18);
-  border-color: rgba(255, 255, 255, 0.35);
-}
-.vn-lightbox-close:hover,
-.vn-lightbox-close:active {
-  background: rgba(255, 80, 80, 0.75);
-  border-color: rgba(255, 80, 80, 0.9);
-}
-.vn-lightbox-viewport {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  overscroll-behavior: contain;
-  padding: 68px 16px 24px;
-  cursor: zoom-in;
-  touch-action: none;
-}
-.vn-lightbox-viewport.zoomed {
-  cursor: grab;
-}
-.vn-lightbox-viewport.zoomed:active {
-  cursor: grabbing;
-}
-.vn-lightbox-img {
-  max-width: 95vw;
-  max-height: 82vh;
-  object-fit: contain;
-  border-radius: 6px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
-  transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
-  transform-origin: center center;
-  will-change: transform;
-}
-.vn-lightbox-rail {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 8px 16px max(12px, env(safe-area-inset-bottom));
-  background: color-mix(in srgb, var(--vn-shell-panel, #080c12) 88%, #000);
-  border-top: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.14));
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-.vn-lightbox-rail::-webkit-scrollbar {
-  display: none;
-}
-.vn-lightbox-rail[hidden] {
-  display: none !important;
-}
-.vn-lightbox-rail-item {
-  flex: 0 0 auto;
-  min-width: 48px;
-  min-height: 48px;
-  width: 56px;
-  height: 56px;
-  padding: 2px;
-  border-radius: 8px;
-  border: 2px solid var(--vn-shell-border, rgba(255, 255, 255, 0.2));
-  background: transparent;
-  cursor: pointer;
-  overflow: hidden;
-}
-.vn-lightbox-rail-item[aria-current="true"] {
-  border-color: var(--vn-shell-accent, #9ec6f0);
-  box-shadow: 0 0 0 1px var(--vn-shell-accent, #9ec6f0);
-}
-.vn-lightbox-rail-item img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 5px;
-  display: block;
-}
-.vn-lightbox-info-drawer {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  max-height: 40vh;
-  overflow-y: auto;
-  padding: 16px 20px max(16px, env(safe-area-inset-bottom));
-  background: color-mix(in srgb, var(--vn-shell-panel, #0a1018) 96%, #000);
-  border-top: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.14));
-  color: var(--vn-shell-text, #e0e5ed);
-  font-size: 13px;
-  line-height: 1.5;
-  backdrop-filter: blur(20px);
-  z-index: 25;
-  animation: vn-lightbox-slide-up 180ms ease;
-}
-@keyframes vn-lightbox-slide-up {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
-}
-.vn-lightbox-info-drawer pre {
-  margin: 6px 0 0;
-  font-family: ui-monospace, monospace;
-  font-size: 12px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: #a8b8d0;
-}
-`;
-
-class FullscreenLightbox {
-  static instance = null;
-  backdrop;
-  img;
-  titleEl;
-  subtitleEl;
-  infoDrawer;
-  railEl;
-  zoomLevel = 1;
-  panX = 0;
-  panY = 0;
-  infoOpen = false;
-  currentOptions = null;
-  galleryItems = [];
-  galleryIndex = 0;
-  touchStartY = 0;
-  touchStartX = 0;
-  panStartX = 0;
-  panStartY = 0;
-  isPanning = false;
-  pinchStartDist = 0;
-  pinchStartZoom = 1;
-  constructor() {
-    this.backdrop = document.createElement("div");
-    this.backdrop.className = "vn-lightbox-backdrop";
-    this.backdrop.hidden = true;
-    this.backdrop.style.display = "none";
-    const style = document.createElement("style");
-    style.textContent = LIGHTBOX_CSS;
-    const content = document.createElement("div");
-    content.style.display = "contents";
-    content.innerHTML = `
-      <div class="vn-lightbox-header">
-        <div class="vn-lightbox-title-group">
-          <h3 class="vn-lightbox-title"></h3>
-          <div class="vn-lightbox-subtitle"></div>
-        </div>
-        <div class="vn-lightbox-actions">
-          <button type="button" class="vn-lightbox-btn" data-action="zoom-toggle" title="Toggle zoom">100%</button>
-          <button type="button" class="vn-lightbox-btn" data-action="info-toggle" title="Prompt details">Info</button>
-          <button type="button" class="vn-lightbox-btn vn-lightbox-close" data-action="close" aria-label="Close" title="Close (Esc)">✕</button>
-        </div>
-      </div>
-      <div class="vn-lightbox-viewport" data-viewport>
-        <img class="vn-lightbox-img" alt="Fullscreen image" />
-      </div>
-      <div class="vn-lightbox-rail" hidden data-rail aria-label="Gallery navigation"></div>
-      <div class="vn-lightbox-info-drawer" hidden data-drawer></div>
-    `;
-    this.backdrop.append(style, content);
-    this.titleEl = this.backdrop.querySelector(".vn-lightbox-title");
-    this.subtitleEl = this.backdrop.querySelector(".vn-lightbox-subtitle");
-    this.img = this.backdrop.querySelector(".vn-lightbox-img");
-    this.railEl = this.backdrop.querySelector("[data-rail]");
-    this.infoDrawer = this.backdrop.querySelector("[data-drawer]");
-    this.wireEvents();
-  }
-  static open(options) {
-    if (!FullscreenLightbox.instance) {
-      FullscreenLightbox.instance = new FullscreenLightbox;
-    }
-    FullscreenLightbox.instance.show(options);
-    return FullscreenLightbox.instance;
-  }
-  handleKeyDown = (e) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      this.close();
-    } else if (e.key === "+" || e.key === "=") {
-      this.setZoom(Math.min(4, this.zoomLevel + 0.5));
-    } else if (e.key === "-") {
-      this.setZoom(Math.max(1, this.zoomLevel - 0.5));
-    } else if (e.key === "ArrowRight" && this.galleryItems.length > 1) {
-      e.preventDefault();
-      this.selectGalleryItem((this.galleryIndex + 1) % this.galleryItems.length);
-    } else if (e.key === "ArrowLeft" && this.galleryItems.length > 1) {
-      e.preventDefault();
-      this.selectGalleryItem((this.galleryIndex - 1 + this.galleryItems.length) % this.galleryItems.length);
-    }
-  };
-  wireEvents() {
-    const viewport = this.backdrop.querySelector("[data-viewport]");
-    const zoomBtn = this.backdrop.querySelector('[data-action="zoom-toggle"]');
-    const infoBtn = this.backdrop.querySelector('[data-action="info-toggle"]');
-    const closeBtn = this.backdrop.querySelector('[data-action="close"]');
-    closeBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      this.close();
-    });
-    let suppressNextClick = false;
-    viewport.addEventListener("click", (e) => {
-      if (suppressNextClick) {
-        suppressNextClick = false;
-        return;
-      }
-      if (e.target === viewport) {
-        this.close();
-      } else if (e.target === this.img) {
-        this.toggleZoom();
-      }
-    });
-    this.backdrop.addEventListener("click", (e) => {
-      if (e.target === this.backdrop) {
-        this.close();
-      }
-    });
-    zoomBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      this.toggleZoom();
-    });
-    infoBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      this.toggleInfo();
-    });
-    const touchDist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-    viewport.addEventListener("touchstart", (e) => {
-      if (e.touches.length === 2) {
-        this.isPanning = false;
-        this.pinchStartDist = touchDist(e.touches);
-        this.pinchStartZoom = this.zoomLevel;
-      } else if (e.touches.length === 1) {
-        this.pinchStartDist = 0;
-        this.touchStartY = e.touches[0].clientY;
-        this.touchStartX = e.touches[0].clientX;
-        if (this.zoomLevel > 1) {
-          this.isPanning = true;
-          this.panStartX = this.panX;
-          this.panStartY = this.panY;
-        }
-      }
-    }, { passive: true });
-    viewport.addEventListener("touchmove", (e) => {
-      if (e.touches.length === 2 && this.pinchStartDist > 0) {
-        const nextZoom = Math.min(4, Math.max(1, this.pinchStartZoom * (touchDist(e.touches) / this.pinchStartDist)));
-        this.setZoom(nextZoom);
-      } else if (e.touches.length === 1 && this.isPanning && this.zoomLevel > 1) {
-        const dx = e.touches[0].clientX - this.touchStartX;
-        const dy = e.touches[0].clientY - this.touchStartY;
-        if (Math.hypot(dx, dy) > 6)
-          suppressNextClick = true;
-        this.panX = this.panStartX + dx;
-        this.panY = this.panStartY + dy;
-        this.applyTransform();
-      }
-    }, { passive: true });
-    viewport.addEventListener("touchend", (e) => {
-      if (e.touches.length < 2)
-        this.pinchStartDist = 0;
-      if (e.touches.length === 0)
-        this.isPanning = false;
-      if (e.changedTouches.length === 1 && this.zoomLevel === 1) {
-        const deltaY = e.changedTouches[0].clientY - this.touchStartY;
-        const deltaX = e.changedTouches[0].clientX - this.touchStartX;
-        if (deltaY > 70 && Math.abs(deltaY) > Math.abs(deltaX) * 1.4) {
-          this.close();
-          return;
-        }
-        if (this.galleryItems.length > 1 && Math.abs(deltaX) > 60 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
-          suppressNextClick = true;
-          const nextIdx = deltaX < 0 ? (this.galleryIndex + 1) % this.galleryItems.length : (this.galleryIndex - 1 + this.galleryItems.length) % this.galleryItems.length;
-          this.selectGalleryItem(nextIdx);
-        }
-      }
-    }, { passive: true });
-  }
-  applyTransform() {
-    if (this.zoomLevel > 1) {
-      this.img.style.transform = `translate3d(${this.panX}px, ${this.panY}px, 0) scale(${this.zoomLevel})`;
-    } else {
-      this.img.style.transform = "translate3d(0, 0, 0) scale(1)";
-    }
-  }
-  setZoom(level) {
-    this.zoomLevel = level;
-    if (level <= 1) {
-      this.panX = 0;
-      this.panY = 0;
-    }
-    const viewport = this.backdrop.querySelector("[data-viewport]");
-    const zoomBtn = this.backdrop.querySelector('[data-action="zoom-toggle"]');
-    this.applyTransform();
-    if (level > 1) {
-      viewport.classList.add("zoomed");
-      zoomBtn.textContent = `${Math.round(level * 100)}%`;
-    } else {
-      viewport.classList.remove("zoomed");
-      zoomBtn.textContent = "Fit";
-    }
-  }
-  toggleZoom() {
-    if (this.zoomLevel === 1) {
-      this.setZoom(2);
-    } else {
-      this.setZoom(1);
-    }
-  }
-  toggleInfo() {
-    this.infoOpen = !this.infoOpen;
-    const infoBtn = this.backdrop.querySelector('[data-action="info-toggle"]');
-    infoBtn.classList.toggle("active", this.infoOpen);
-    this.infoDrawer.hidden = !this.infoOpen;
-  }
-  applyThemeTokens(themeSource) {
-    if (typeof getComputedStyle !== "function")
-      return;
-    const source = themeSource ?? document.querySelector("[data-vn-root], [data-vn-shell]") ?? document.documentElement;
-    if (!source)
-      return;
-    const style = getComputedStyle(source);
-    const props = [
-      "--vn-shell-bg",
-      "--vn-shell-panel",
-      "--vn-shell-button",
-      "--vn-shell-text",
-      "--vn-shell-muted",
-      "--vn-shell-border",
-      "--vn-shell-accent",
-      "--vn-shell-accent-contrast",
-      "--vn-shell-family"
-    ];
-    for (const prop of props) {
-      const value = style.getPropertyValue(prop).trim();
-      if (value)
-        this.backdrop.style.setProperty(prop, value);
-    }
-  }
-  renderGalleryRail() {
-    if (this.galleryItems.length <= 1) {
-      this.railEl.hidden = true;
-      this.railEl.replaceChildren();
-      return;
-    }
-    this.railEl.hidden = false;
-    this.railEl.replaceChildren(...this.galleryItems.map((item, idx) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "vn-lightbox-rail-item";
-      btn.setAttribute("aria-label", item.title || `Image ${idx + 1}`);
-      btn.setAttribute("aria-current", idx === this.galleryIndex ? "true" : "false");
-      const thumb = document.createElement("img");
-      thumb.src = item.src;
-      thumb.alt = "";
-      btn.append(thumb);
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        this.selectGalleryItem(idx);
-      };
-      return btn;
-    }));
-  }
-  selectGalleryItem(index) {
-    const item = this.galleryItems[index];
-    if (!item)
-      return;
-    this.galleryIndex = index;
-    this.presentItem(item);
-    this.renderGalleryRail();
-  }
-  presentItem(item) {
-    this.titleEl.textContent = item.title ?? "Story Artwork";
-    this.subtitleEl.textContent = item.subtitle ?? "";
-    this.subtitleEl.hidden = !item.subtitle;
-    this.img.src = item.src;
-    this.setZoom(1);
-    this.infoOpen = false;
-    this.infoDrawer.hidden = true;
-    let infoHtml = "";
-    if (item.prompt) {
-      infoHtml += `<strong>Positive Prompt:</strong><pre>${this.escapeHtml(item.prompt)}</pre>`;
-    }
-    if (item.negativePrompt) {
-      infoHtml += `<div style="margin-top:10px"><strong>Negative Prompt:</strong><pre>${this.escapeHtml(item.negativePrompt)}</pre></div>`;
-    }
-    this.infoDrawer.innerHTML = infoHtml || "<p style='margin:0;opacity:0.7'>No recorded prompt metadata.</p>";
-    const infoBtn = this.backdrop.querySelector('[data-action="info-toggle"]');
-    infoBtn.classList.remove("active");
-    infoBtn.hidden = !item.prompt && !item.negativePrompt;
-  }
-  show(options) {
-    this.currentOptions = options;
-    this.applyThemeTokens(options.themeSource);
-    this.galleryItems = options.gallery && options.gallery.length > 0 ? options.gallery : [];
-    const requestedIdx = options.galleryIndex ?? 0;
-    this.galleryIndex = this.galleryItems.length > 0 ? Math.min(Math.max(0, requestedIdx), this.galleryItems.length - 1) : 0;
-    this.presentItem(options);
-    this.renderGalleryRail();
-    if (!this.backdrop.parentNode) {
-      document.body.appendChild(this.backdrop);
-    }
-    this.backdrop.hidden = false;
-    this.backdrop.classList.add("open");
-    this.backdrop.style.display = "flex";
-    this.backdrop.style.pointerEvents = "auto";
-    this.backdrop.tabIndex = -1;
-    this.backdrop.focus();
-    window.removeEventListener("keydown", this.handleKeyDown);
-    window.addEventListener("keydown", this.handleKeyDown);
-  }
-  close() {
-    window.removeEventListener("keydown", this.handleKeyDown);
-    this.backdrop.classList.remove("open");
-    this.backdrop.hidden = true;
-    this.backdrop.style.display = "none";
-    this.backdrop.style.pointerEvents = "none";
-    this.img.removeAttribute("src");
-    this.currentOptions = null;
-    if (this.backdrop.parentNode) {
-      this.backdrop.parentNode.removeChild(this.backdrop);
-    }
-  }
-  escapeHtml(str) {
-    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 }
 
@@ -64307,6 +64901,8 @@ function stageTurnInput(next, mode, preserveImage, intensity = "full") {
     preserveImage,
     ...presentation ? { presentation } : {},
     ...referenceHistory ? { referenceHistory } : {},
+    ...next.worldAtmosphere ? { worldAtmosphere: next.worldAtmosphere } : {},
+    ...next.documentAssets ? { documentAssets: next.documentAssets } : {},
     ...next.ambients !== undefined ? { ambient: firstAmbient(next, intensity) } : {},
     ...next.location ? { location: next.location } : {}
   };
@@ -64855,6 +65451,22 @@ function setupVisualNovelFrontend(baseContext) {
   });
   stage.setStoryDnaRequester((body2) => sendStoryDna(body2));
   stage.setCharacterDnaSaver((dna) => sendDna({ action: "save", dna, revision: dnaRevision }));
+  stage.setDocumentArtRequester?.((documentId, throughParagraphIndex, forceRegenerate) => {
+    if (!turn)
+      return;
+    ctx.sendToBackend({
+      type: "vn_generate_document_image",
+      chatId: turn.chatId,
+      messageId: turn.messageId,
+      swipeId: turn.swipeId,
+      sourceFingerprint: turn.sourceFingerprint,
+      revision: turn.revision,
+      documentId,
+      throughParagraphIndex,
+      requestId: createUiId(),
+      ...forceRegenerate ? { forceRegenerate: true } : {}
+    });
+  });
   const panelRequests = new Map;
   panels.onResolveTemplate = (template) => new Promise((resolve, reject) => {
     const requestId = createUiId();
@@ -65597,6 +66209,26 @@ function setupVisualNovelFrontend(baseContext) {
         presentation: message.presentation,
         referenceHistory: message.referenceHistory
       });
+      return;
+    }
+    if (type === "vn_document_image" && message.type === "vn_document_image") {
+      if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId || turn.swipeId !== message.swipeId || turn.sourceFingerprint !== message.sourceFingerprint)
+        return;
+      if (message.status === "ready" && message.imageId && message.imageUrl) {
+        turn = {
+          ...turn,
+          documentAssets: {
+            ...turn.documentAssets ?? {},
+            [message.documentId]: {
+              documentId: message.documentId,
+              contentHash: message.contentHash,
+              imageId: message.imageId,
+              imageUrl: message.imageUrl
+            }
+          }
+        };
+      }
+      stage.applyDocumentImageStatus?.(message);
       return;
     }
     if (type === "vn_asset" && message.type === "vn_asset") {
