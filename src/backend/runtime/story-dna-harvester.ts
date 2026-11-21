@@ -1,7 +1,7 @@
 import type { SpindleAPI } from 'lumiverse-spindle-types';
 import { z } from 'zod';
 import type { TurnPlan } from '../../shared/contracts.js';
-import { isScenarioTitle } from '../../shared/card-role.js';
+import { isMetaScenarioWrapper } from '../../shared/card-role.js';
 import {
   createItemId,
   createLocationId,
@@ -40,12 +40,12 @@ const COMMON_MUNDANE_MODIFIERS = new Set([
   'warm', 'cool', 'dark', 'heavy', 'lightweight', 'ordinary', 'standard', 'plastic', 'ceramic',
 ]);
 
-const SIGNIFICANCE_HINT_RE = /\b(heirloom|artifact|relic|enchanted|cursed|rune|runic|sigil|cipher|letter|journal|grimoire|talisman|amulet|medallion|locket|codex|scroll|crest|signet|royal|ancient|sacred|blessed|forbidden)\b/i;
+const SIGNIFICANCE_HINT_RE = /\b(heirloom|artifact|relic|enchanted|cursed|rune|runic|sigil|cipher|letter|journal|grimoire|talisman|amulet|medallion|locket|codex|scroll|crest|signet|royal|ancient|sacred|blessed|forbidden|brass|iron|silver|gold|bloody|blood[- ]?stained|burner|poisoned|folded|stamped|wax[- ]?sealed|tarnished|engraved|key|token|slip|ledger|form|pass|permit|badge|dossier|notice|flier|flyer|poster|map|ticket|receipt|diary|blueprint|cracked)\b/i;
 
 export function isSignificantStoryItem(name: string, contextText?: string): boolean {
   const trimmed = name.trim();
   if (trimmed.length < 3 || trimmed.length > 160) return false;
-  if (isScenarioTitle(trimmed)) return false;
+  if (isMetaScenarioWrapper(trimmed)) return false;
 
   const words = trimmed.toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length === 0) return false;
@@ -81,7 +81,14 @@ export function filterStoryDnaForActiveBranch(
   for (const [id, item] of Object.entries(set.items)) {
     if (isStoryEntryActiveOnBranch(item, activeTags)) items[id] = item;
   }
-  return { ...set, locations, items };
+  let documents: StoryDNASet['documents'];
+  if (set.documents) {
+    documents = Object.create(null);
+    for (const [id, doc] of Object.entries(set.documents)) {
+      if (isStoryEntryActiveOnBranch(doc, activeTags)) documents![id] = doc;
+    }
+  }
+  return { ...set, locations, items, ...(documents !== undefined ? { documents } : {}) };
 }
 
 function recordSwipeTag(
@@ -125,7 +132,7 @@ export function harvestTurnStoryDNA(
 
   for (const scene of plan.scenes) {
     const locName = scene.environment.location?.trim();
-    if (!locName || isScenarioTitle(locName)) continue;
+    if (!locName || isMetaScenarioWrapper(locName)) continue;
     const deletedMatch = findMatchingLocation(set.deletedLocations ?? {}, locName)
       ?? set.deletedLocations?.[createLocationId(locName)];
     if (deletedMatch) continue;
@@ -237,14 +244,55 @@ export function harvestTurnStoryDNA(
   }
 
   for (const ref of plan.storyReferences ?? []) {
-    if (ref.kind === 'place') {
-      const match = findMatchingLocation(set.locations, ref.name);
-      if (match && !match.locked && ref.value?.trim()) {
-        if (!match.environmentDescription && (ref.field === 'description' || ref.field === 'surroundings' || ref.field === 'layout')) {
-          match.environmentDescription = ref.value.trim().slice(0, 2000);
+    if (ref.kind !== 'place') continue;
+    const placeName = ref.name.trim();
+    if (!placeName || isMetaScenarioWrapper(placeName)) continue;
+    const deletedMatch = findMatchingLocation(set.deletedLocations ?? {}, placeName)
+      ?? set.deletedLocations?.[createLocationId(placeName)];
+    if (deletedMatch) continue;
+
+    let match = findMatchingLocation(set.locations, placeName);
+    if (!match) {
+      const id = createLocationId(placeName);
+      match = {
+        id,
+        name: placeName,
+        aliases: deriveShortAliases(placeName),
+        persistentElements: [],
+        connectedLocations: [],
+        autoDiscovered: true,
+        seenInSwipes: swipeTag ? [swipeTag] : [],
+        lastUpdated: Date.now(),
+      };
+      set.locations[id] = match;
+      changed = true;
+    } else if (recordSwipeTag(match, swipeTag)) {
+      changed = true;
+    }
+
+    if (!match.locked && ref.value?.trim()) {
+      const val = ref.value.trim();
+      if ((ref.field === 'description' || ref.field === 'surroundings' || ref.field === 'layout') && !match.environmentDescription) {
+        match.environmentDescription = val.slice(0, 2000);
+        changed = true;
+      } else if (ref.field === 'lighting' && !match.lighting) {
+        match.lighting = val.slice(0, 500);
+        changed = true;
+      } else if (ref.field === 'atmosphere' && !match.atmosphere) {
+        match.atmosphere = val.slice(0, 500);
+        changed = true;
+      } else if (ref.field === 'persistentElements') {
+        if (!match.persistentElements.some((p) => p.toLowerCase() === val.toLowerCase())) {
+          match.persistentElements = [...match.persistentElements, val.slice(0, 300)].slice(0, 24);
           changed = true;
-        } else if (!match.loreText && (ref.field === 'history' || ref.field === 'significance' || ref.field === 'customs')) {
-          match.loreText = ref.value.trim().slice(0, 4000);
+        }
+      } else if (ref.field === 'publicHistory' || ref.field === 'routes' || ref.field === 'services' || ref.field === 'risks' || ref.field === 'customs' || ref.field === 'history' || ref.field === 'significance') {
+        const line = `${ref.field}: ${val}`;
+        if (!match.loreText) {
+          match.loreText = line.slice(0, 4000);
+          changed = true;
+        } else if (!match.loreText.toLowerCase().includes(val.toLowerCase()) && match.loreText.length + line.length + 2 <= 4000) {
+          match.loreText = `${match.loreText}\n${line}`;
           changed = true;
         }
       }
@@ -259,6 +307,9 @@ export function harvestTurnStoryDNA(
       heldBy?: string | undefined;
       loreText?: string | undefined;
       feature?: string | undefined;
+      materials?: string | undefined;
+      color?: string | undefined;
+      aliases?: readonly string[] | undefined;
     }
   ) => {
     const cleanName = name.trim();
@@ -273,11 +324,12 @@ export function harvestTurnStoryDNA(
       item = {
         id,
         name: cleanName,
-        aliases: deriveShortAliases(cleanName),
+        aliases: deriveShortAliases(cleanName, patch.aliases),
         ...(patch.itemType ? { itemType: patch.itemType.slice(0, 100) } : {}),
         description: (patch.description?.trim() || cleanName).slice(0, 2000),
+        ...(patch.materials ? { materials: patch.materials.slice(0, 500) } : {}),
         distinctiveFeatures: patch.feature ? [patch.feature.slice(0, 300)] : [],
-        colors: [],
+        colors: patch.color ? [patch.color.slice(0, 60)] : [],
         ...(patch.heldBy ? { heldBy: patch.heldBy.slice(0, 160) } : {}),
         ...(patch.loreText ? { loreText: patch.loreText.slice(0, 4000) } : {}),
         autoDiscovered: true,
@@ -291,7 +343,7 @@ export function harvestTurnStoryDNA(
 
     if (recordSwipeTag(item, swipeTag)) changed = true;
     if (item.locked) return;
-    const nextAliases = deriveShortAliases(item.name, item.aliases);
+    const nextAliases = deriveShortAliases(item.name, [...item.aliases, ...(patch.aliases ?? [])]);
     if (nextAliases.length > item.aliases.length) {
       item.aliases = nextAliases;
       changed = true;
@@ -302,6 +354,10 @@ export function harvestTurnStoryDNA(
     }
     if (!item.itemType && patch.itemType) {
       item.itemType = patch.itemType.slice(0, 100);
+      changed = true;
+    }
+    if (!item.materials && patch.materials) {
+      item.materials = patch.materials.slice(0, 500);
       changed = true;
     }
     if (!item.heldBy && patch.heldBy) {
@@ -316,15 +372,120 @@ export function harvestTurnStoryDNA(
       item.distinctiveFeatures = [...item.distinctiveFeatures, patch.feature.slice(0, 300)].slice(0, 24);
       changed = true;
     }
+    if (patch.color && !item.colors.some((c) => c.toLowerCase() === patch.color!.toLowerCase())) {
+      item.colors = [...item.colors, patch.color.slice(0, 60)].slice(0, 12);
+      changed = true;
+    }
   };
 
   for (const doc of plan.storyDocuments ?? []) {
-    const body = doc.sections.map((s) => s.text.trim()).filter(Boolean).join(' ');
+    const body = doc.sections.map((s) => s.text.trim()).filter(Boolean).join('\n');
+    const obsSummary = (doc.observations ?? []).map((o) => o.summary?.trim()).filter(Boolean).join('; ');
+    const materials = (doc.observations ?? []).map((o) => o.material?.trim()).filter(Boolean).join(', ');
     upsertItem(doc.name, {
       itemType: doc.kind,
-      description: body || `${doc.kind}: ${doc.name}`,
-      loreText: body || undefined,
+      description: doc.visualDetails || obsSummary || body || `${doc.kind}: ${doc.name}`,
+      ...(materials ? { materials } : {}),
+      ...(body || obsSummary ? { loreText: body || obsSummary } : {}),
+      ...(doc.aliases ? { aliases: doc.aliases } : {}),
     });
+
+    // Persist multi-turn DocumentLedger entry so clues accumulate across turns
+    const docLedger = (set.documents ??= {});
+    const docNames = new Set([doc.name, ...(doc.aliases ?? [])].map((n) => n.trim().toLowerCase()).filter(Boolean));
+    let existingEntry = docLedger[doc.id]
+      ?? Object.values(docLedger).find((entry) => {
+        const existingNames = [entry.name, ...(entry.aliases ?? [])].map((n) => n.trim().toLowerCase());
+        return existingNames.some((n) => docNames.has(n));
+      });
+    const msgId = plan.key?.assistantMessageId;
+    if (!existingEntry) {
+      existingEntry = {
+        id: doc.id,
+        name: doc.name,
+        kind: doc.kind,
+        aliases: [...(doc.aliases ?? [])].slice(0, 16),
+        ...(doc.visualDetails ? { visualDetails: doc.visualDetails.slice(0, 800) } : {}),
+        ...(doc.observations?.length ? {
+          observations: doc.observations.slice(0, 32).map((o) => ({
+            paragraphIndex: o.paragraphIndex,
+            ...(o.summary ? { summary: o.summary.slice(0, 500) } : {}),
+            ...(o.visualDetails ? { visualDetails: o.visualDetails.slice(0, 8) } : {}),
+            ...(o.material ? { material: o.material.slice(0, 120) } : {}),
+            ...(o.condition ? { condition: o.condition.slice(0, 120) } : {}),
+            evidence: o.evidence.slice(0, 1200),
+          })),
+        } : {}),
+        sections: doc.sections.slice(0, 64).map((s) => ({
+          paragraphIndex: s.paragraphIndex,
+          text: s.text,
+          ...(msgId ? { messageId: msgId } : {}),
+        })),
+        ...(msgId ? { sourceMessageIds: [msgId] } : {}),
+        autoDiscovered: true,
+        seenInSwipes: swipeTag ? [swipeTag] : [],
+        lastUpdated: Date.now(),
+      };
+      docLedger[existingEntry.id] = existingEntry;
+      changed = true;
+    } else {
+      if (recordSwipeTag(existingEntry, swipeTag)) changed = true;
+      if (msgId) {
+        const msgIds = existingEntry.sourceMessageIds ?? [];
+        if (!msgIds.includes(msgId)) {
+          existingEntry.sourceMessageIds = [...msgIds, msgId].slice(-64);
+          changed = true;
+        }
+      }
+      if (doc.aliases?.length) {
+        const knownAliases = new Set([existingEntry.name, ...existingEntry.aliases].map((a) => a.toLowerCase()));
+        for (const a of doc.aliases) {
+          const clean = a.trim();
+          if (clean && !knownAliases.has(clean.toLowerCase()) && existingEntry.aliases.length < 16) {
+            existingEntry.aliases = [...existingEntry.aliases, clean];
+            knownAliases.add(clean.toLowerCase());
+            changed = true;
+          }
+        }
+      }
+      if (!existingEntry.visualDetails && doc.visualDetails) {
+        existingEntry.visualDetails = doc.visualDetails.slice(0, 800);
+        changed = true;
+      }
+      if (doc.observations?.length) {
+        existingEntry.observations = existingEntry.observations ?? [];
+        for (const obs of doc.observations) {
+          const dup = existingEntry.observations.some(
+            (o) => o.evidence.slice(0, 80).toLowerCase() === obs.evidence.slice(0, 80).toLowerCase()
+          );
+          if (!dup && existingEntry.observations.length < 32) {
+            existingEntry.observations.push({
+              paragraphIndex: obs.paragraphIndex,
+              ...(obs.summary ? { summary: obs.summary.slice(0, 500) } : {}),
+              ...(obs.visualDetails ? { visualDetails: obs.visualDetails.slice(0, 8) } : {}),
+              ...(obs.material ? { material: obs.material.slice(0, 120) } : {}),
+              ...(obs.condition ? { condition: obs.condition.slice(0, 120) } : {}),
+              evidence: obs.evidence.slice(0, 1200),
+            });
+            changed = true;
+          }
+        }
+      }
+      for (const sec of doc.sections) {
+        const dup = existingEntry.sections.some(
+          (s) => (s.messageId ?? '') === (msgId ?? '') && s.paragraphIndex === sec.paragraphIndex && s.text.trim().toLowerCase() === sec.text.trim().toLowerCase()
+        );
+        if (!dup && existingEntry.sections.length < 64) {
+          existingEntry.sections = [...existingEntry.sections, {
+            paragraphIndex: sec.paragraphIndex,
+            text: sec.text,
+            ...(msgId ? { messageId: msgId } : {}),
+          }];
+          changed = true;
+        }
+      }
+      existingEntry.lastUpdated = Date.now();
+    }
   }
 
   for (const ref of plan.storyReferences ?? []) {
@@ -333,10 +494,12 @@ export function harvestTurnStoryDNA(
     upsertItem(ref.name, {
       ...(ref.field === 'owner' ? { heldBy: ref.value } : {}),
       ...(ref.field === 'description' || ref.field === 'appearance' ? { description: ref.value } : {}),
-      ...(ref.field === 'significance' || ref.field === 'provenance' || ref.field === 'history' || ref.field === 'function'
+      ...(ref.field === 'materials' ? { materials: ref.value } : {}),
+      ...(ref.field === 'colors' ? { color: ref.value } : {}),
+      ...(ref.field === 'distinctiveFeatures' || ref.field === 'condition' ? { feature: ref.value } : {}),
+      ...(ref.field === 'significance' || ref.field === 'provenance' || ref.field === 'history' || ref.field === 'function' || ref.field === 'revealedContents' || ref.field === 'access' || ref.field === 'limits'
         ? { loreText: ref.value, description: ref.value }
         : {}),
-      ...(ref.field === 'condition' ? { feature: ref.value } : {}),
     });
   }
 

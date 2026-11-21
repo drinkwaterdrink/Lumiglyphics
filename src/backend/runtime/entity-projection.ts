@@ -38,14 +38,16 @@ export function projectTurnPresentation(plan:TurnPlan, options?: ProjectPresenta
   const anchor=(paragraphIndex:number)=>({key:plan.key,paragraphIndex});
   const entity=(kind:PresentationEntity['kind'],name:string,at:number):PresentationEntity|null=>{
     const trimmed=name.trim();if(!trimmed||trimmed.length>256||(kind==='npc'&&isScenarioTitle(trimmed)))return null;
-    const mapKey=`${kind}:${trimmed}`;
-    const existing=byName.get(mapKey);
-    if(existing){existing.firstParagraph=Math.min(existing.firstParagraph,at);return existing;}
+    const stripped=trimmed.replace(/^(?:the|an?)\s+/i,'').trim();
+    const mapKey=`${kind}:${trimmed.toLowerCase()}`;
+    const strippedKey=kind==='npc'?null:`${kind}:${stripped.toLowerCase()}`;
+    const existing=byName.get(mapKey) ?? (strippedKey ? byName.get(strippedKey) : undefined);
+    if(existing){existing.firstParagraph=Math.min(existing.firstParagraph,at);byName.set(mapKey,existing);return existing;}
     if(entities.length>=32){warnings.add('entity-budget');return null;}
-    // Exact names only. Case variants/ambiguous aliases are not silently merged.
     const value:PresentationEntity={id:`e${entities.length+1}`,kind,name:trimmed,aliases:deriveShortAliases(trimmed),firstParagraph:at,facts:[]};
     entities.push(value);byName.set(mapKey,value);
-    const prior=kind==='npc' ? continuity.characters[trimmed] : undefined;
+    if(strippedKey&&strippedKey!==mapKey&&!byName.has(strippedKey))byName.set(strippedKey,value);
+    const prior=kind==='npc' ? (continuity.characters[trimmed] ?? Object.entries(continuity.characters).find(([k])=>k.toLowerCase()===trimmed.toLowerCase())?.[1]) : undefined;
     baseline[value.id]=prior ? {appearance:describe(prior.appearance),outfit:describe(prior.wardrobe)} : {};
     return value;
   };
@@ -54,8 +56,13 @@ export function projectTurnPresentation(plan:TurnPlan, options?: ProjectPresenta
   const fact=(e:PresentationEntity,at:number,field:string,value:string)=>{
     if(value.trim()){if(factCount<128)e.facts.push({id:`f${++factCount}`,entityId:e.id,field,value:value.slice(0,1200),visibility:'observed',source,revealedAt:anchor(at)});else warnings.add('fact-budget');}
   };
-  const documents=validateStoryDocuments(plan.storyDocuments,plan.paragraphs.map(p=>({text:stripTextEffectTags(p.text)})));
-  const references=normalizeStoryReferences(plan.storyReferences,plan.paragraphs.map(p=>({text:stripTextEffectTags(p.text)})));
+  const strippedParagraphs=plan.paragraphs.map(p=>({text:stripTextEffectTags(p.text)}));
+  const documents=validateStoryDocuments(plan.storyDocuments,strippedParagraphs);
+  const references=normalizeStoryReferences(plan.storyReferences,strippedParagraphs,{
+    paragraphSpeakers:plan.paragraphSpeakers,
+    detectedLocation:plan.scenes[0]?.environment.location??null,
+    sourceIndexes:plan.paragraphs.map(p=>p.sourceIndex),
+  });
   const itemStates:Array<{entityId:string;at:number;field:'owner'|'condition';value:string}>=[];
   const beats:PresentationBeat[]=[];
   let locationId:string|null=null;let drawableEntityId:string|null=null;
@@ -89,7 +96,7 @@ export function projectTurnPresentation(plan:TurnPlan, options?: ProjectPresenta
         if(patch.wardrobe)changes.outfit=describe(continuity.characters[name]!.wardrobe);
         if(Object.keys(changes).length)change(person,at,changes);
       }
-      for(const name of delta.delta.forgetCharacters){const person=byName.get(`npc:${name}`);if(person){change(person,at,{presence:'absent',location:null});cast.delete(person.id);}}
+      for(const name of delta.delta.forgetCharacters){const person=byName.get(`npc:${name.toLowerCase()}`)??byName.get(`npc:${name}`);if(person){change(person,at,{presence:'absent',location:null});cast.delete(person.id);}}
     }
     const speaker=plan.paragraphSpeakers[at];
     const speaking=speaker ? entity('npc',speaker,at) : null;
@@ -142,7 +149,7 @@ export function projectTurnPresentation(plan:TurnPlan, options?: ProjectPresenta
           e.aliases.some(a => a.trim().toLocaleLowerCase() === target.name.toLocaleLowerCase()))
       );
       let added = 0;
-      for (const { entity: propEntity, provider, updatedAt } of matchingEntities) {
+      for (const { entity: propEntity, provider } of matchingEntities) {
         for (const prop of propEntity.facts) {
           if (added >= maxCompanionFacts || factCount >= 128) break;
           if (!COMPANION_CODEX_FIELDS.has(prop.field)) continue;

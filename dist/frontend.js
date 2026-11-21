@@ -18728,6 +18728,263 @@ function bigint3(params) {
 function date4(params) {
   return _coercedDate(ZodDate, params);
 }
+// src/shared/grounding.ts
+var GROUNDING_STOPWORDS = new Set([
+  "the",
+  "and",
+  "for",
+  "with",
+  "from",
+  "into",
+  "onto",
+  "that",
+  "this",
+  "these",
+  "those",
+  "was",
+  "were",
+  "are",
+  "is",
+  "be",
+  "been",
+  "being",
+  "has",
+  "had",
+  "have",
+  "her",
+  "his",
+  "him",
+  "she",
+  "he",
+  "they",
+  "them",
+  "their",
+  "its",
+  "you",
+  "your",
+  "our",
+  "who",
+  "whom",
+  "whose",
+  "not",
+  "but",
+  "out",
+  "off",
+  "all",
+  "one",
+  "two",
+  "can",
+  "may",
+  "will",
+  "would",
+  "could",
+  "should",
+  "way",
+  "day",
+  "too",
+  "very",
+  "over",
+  "under",
+  "near",
+  "about",
+  "after",
+  "before",
+  "between",
+  "through"
+]);
+var WIDE_SPACE_RE = /[\u2800\u00A0\u2000-\u200B\u202F\u205F\u3000\uFEFF]/;
+var BENIGN_INLINE_TAG_RE = /^<\/?(?:i|b|em|strong|u|s|span|small|sub|sup|mark|font|cornflower|amber|crimson|emerald|violet|silver|gold)\b[^>]*>/i;
+function normalizeChar(ch) {
+  if (ch === "‘" || ch === "’" || ch === "‚" || ch === "′")
+    return "'";
+  if (ch === "“" || ch === "”" || ch === "„" || ch === "″")
+    return '"';
+  if (ch === "—" || ch === "–" || ch === "−")
+    return "-";
+  if (ch === "…")
+    return "...";
+  if (ch === "\r" || ch === `
+` || ch === "\t" || WIDE_SPACE_RE.test(ch))
+    return " ";
+  return ch;
+}
+function isWordOrNumChar(ch) {
+  return Boolean(ch && /[\p{L}\p{N}]/u.test(ch));
+}
+function isWordSpace(ch) {
+  return !ch || /\s/.test(normalizeChar(ch));
+}
+function normalizeForGroundMatch(text) {
+  if (!text)
+    return "";
+  const { normalized } = buildNormalizedIndexMap(text);
+  return normalized.trim();
+}
+function buildNormalizedIndexMap(raw) {
+  const hasBrailleLetters = /[\u2801-\u28FF]/.test(raw);
+  const chars = [];
+  const indexMap = [];
+  let pendingSpaceIndex = -1;
+  for (let i = 0;i < raw.length; i += 1) {
+    const ch = raw[i];
+    if (ch === "<") {
+      const slice = raw.slice(i, i + 128);
+      const tagMatch = BENIGN_INLINE_TAG_RE.exec(slice);
+      if (tagMatch) {
+        i += tagMatch[0].length - 1;
+        continue;
+      }
+    }
+    if (ch === "*" || ch === "_" || ch === "~") {
+      const prev = i > 0 ? raw[i - 1] : undefined;
+      const next = i + 1 < raw.length ? raw[i + 1] : undefined;
+      const atLeftBoundary = isWordSpace(prev) || /[(\["'“‘]/.test(prev ?? "");
+      const atRightBoundary = isWordSpace(next) || /[.,!?;:\])"'”’]/.test(next ?? "");
+      if (atLeftBoundary || atRightBoundary || next === ch || prev === ch) {
+        if (ch === "_" && isWordOrNumChar(prev) && isWordOrNumChar(next)) {} else {
+          continue;
+        }
+      }
+    }
+    const effective = ch === "⠀" && hasBrailleLetters ? ch : normalizeChar(ch);
+    if (effective === " ") {
+      if (chars.length > 0 && pendingSpaceIndex < 0) {
+        pendingSpaceIndex = i;
+      }
+      continue;
+    }
+    if (pendingSpaceIndex >= 0) {
+      chars.push(" ");
+      indexMap.push(pendingSpaceIndex);
+      pendingSpaceIndex = -1;
+    }
+    const lowered = effective.toLowerCase();
+    for (let k = 0;k < lowered.length; k += 1) {
+      chars.push(lowered[k]);
+      indexMap.push(i);
+    }
+  }
+  return { normalized: chars.join(""), indexMap };
+}
+function overlapsAny(start, end, claimed) {
+  if (!claimed?.length)
+    return false;
+  return claimed.some((r) => start < r.end && end > r.start);
+}
+function tokenizeWithSpans(raw) {
+  const tokens = [];
+  const tokenRe = /[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu;
+  let m;
+  while ((m = tokenRe.exec(raw)) !== null) {
+    const token = normalizeForGroundMatch(m[0]);
+    if (!token)
+      continue;
+    tokens.push({ token, start: m.index, end: m.index + m[0].length });
+  }
+  return tokens;
+}
+function alignSpanInParagraph(paragraphText, needle, options = {}) {
+  if (!paragraphText || !needle?.trim())
+    return null;
+  const claimed = options.claimedSpans;
+  let searchFrom = 0;
+  while (searchFrom <= paragraphText.length - needle.length) {
+    const idx = paragraphText.indexOf(needle, searchFrom);
+    if (idx < 0)
+      break;
+    const end = idx + needle.length;
+    if (!overlapsAny(idx, end, claimed)) {
+      return { start: idx, end, text: needle, matchType: "exact" };
+    }
+    searchFrom = idx + 1;
+  }
+  const normNeedle = normalizeForGroundMatch(needle);
+  if (!normNeedle)
+    return null;
+  const { normalized, indexMap } = buildNormalizedIndexMap(paragraphText);
+  let normFrom = 0;
+  while (normFrom <= normalized.length - normNeedle.length) {
+    const idx = normalized.indexOf(normNeedle, normFrom);
+    if (idx < 0)
+      break;
+    const normEnd = idx + normNeedle.length - 1;
+    const rawStart = indexMap[idx];
+    const rawLast = indexMap[normEnd];
+    if (rawStart !== undefined && rawLast !== undefined) {
+      let rawEnd = rawLast + 1;
+      while (rawEnd < paragraphText.length && /[\*_'”’"]/.test(paragraphText[rawEnd]) && needle.trimEnd().endsWith(paragraphText[rawEnd])) {
+        rawEnd += 1;
+      }
+      if (rawEnd > rawStart && !overlapsAny(rawStart, rawEnd, claimed)) {
+        return {
+          start: rawStart,
+          end: rawEnd,
+          text: paragraphText.slice(rawStart, rawEnd),
+          matchType: "normalized"
+        };
+      }
+    }
+    normFrom = idx + 1;
+  }
+  const minScore = options.minFuzzyScore ?? 0.82;
+  const needleTokens = tokenizeWithSpans(needle).map((t) => t.token);
+  if (needleTokens.length < 3)
+    return null;
+  const paraTokens = tokenizeWithSpans(paragraphText);
+  if (paraTokens.length < Math.ceil(needleTokens.length * minScore))
+    return null;
+  const needleSet = new Set(needleTokens);
+  const minWin = Math.max(2, Math.floor(needleTokens.length * 0.75));
+  const maxWin = Math.min(paraTokens.length, needleTokens.length + 4);
+  let bestScore = 0;
+  let bestRange = null;
+  for (let i = 0;i < paraTokens.length; i += 1) {
+    for (let len = minWin;len <= maxWin && i + len <= paraTokens.length; len += 1) {
+      const spanStart = paraTokens[i].start;
+      const spanEnd = paraTokens[i + len - 1].end;
+      if (overlapsAny(spanStart, spanEnd, claimed))
+        continue;
+      const winTokens = paraTokens.slice(i, i + len).map((t) => t.token);
+      let hits = 0;
+      const seenWin = new Set;
+      for (const wt of winTokens) {
+        if (!seenWin.has(wt) && needleSet.has(wt)) {
+          hits += 1;
+        }
+        seenWin.add(wt);
+      }
+      const recall = hits / needleSet.size;
+      const precision = hits / Math.max(1, seenWin.size);
+      let nIdx = 0;
+      for (const wt of winTokens) {
+        if (nIdx < needleTokens.length && wt === needleTokens[nIdx])
+          nIdx += 1;
+      }
+      const orderRatio = nIdx / needleTokens.length;
+      const score = recall * 0.55 + precision * 0.25 + orderRatio * 0.2;
+      if (score >= minScore && score > bestScore) {
+        bestScore = score;
+        bestRange = { start: spanStart, end: spanEnd };
+      }
+    }
+  }
+  if (bestRange) {
+    let end = bestRange.end;
+    const trimmedNeedle = needle.trimEnd();
+    const tailChar = paragraphText[end];
+    if (tailChar && /[.!?]/.test(tailChar) && /[.!?]$/.test(trimmedNeedle)) {
+      end += 1;
+    }
+    return {
+      start: bestRange.start,
+      end,
+      text: paragraphText.slice(bestRange.start, end),
+      matchType: "fuzzy"
+    };
+  }
+  return null;
+}
+
 // src/shared/story-documents.ts
 var STORY_DOCUMENT_KINDS = [
   "flyer",
@@ -18763,24 +19020,123 @@ var DocumentObservationSchema = exports_external.object({
   condition: exports_external.string().trim().min(1).max(120).optional(),
   evidence: exports_external.string().min(1).max(1200)
 }).strict();
-var StoryDocumentSectionSchema = exports_external.object({ paragraphIndex: exports_external.number().int().nonnegative(), start: exports_external.number().int().nonnegative(), end: exports_external.number().int().positive(), text: exports_external.string().min(1).max(6000) }).strict();
+var StoryDocumentSectionSchema = exports_external.object({
+  paragraphIndex: exports_external.number().int().nonnegative(),
+  start: exports_external.number().int().nonnegative(),
+  end: exports_external.number().int().positive(),
+  text: exports_external.string().min(1).max(6000)
+}).strict();
 var StoryDocumentSchema = DocumentIdentitySchema.extend({
   id: exports_external.string().min(1).max(256),
   sections: exports_external.array(StoryDocumentSectionSchema).max(16),
   observations: exports_external.array(DocumentObservationSchema).max(16).optional()
 }).strict();
-var IDIOMATIC_SURFACE_RE = /\b(?:on\s+paper|paper\s+trail|paper\s+tiger|paper\s+over|pushing\s+paper|(?:mak(?:e|es|ing)|made|tak(?:e|es|ing)|took)\s+(?:a\s+)?(?:mental\s+)?note\b|mental\s+note|side\s+note|note\s+to\s+self|note\s+of\s+(?:panic|fear|alarm|warning|sadness|hope|doubt|surprise)|letter\s+of\s+the\s+law|to\s+the\s+letter|red[- ]letter\s+day|map\s+out|on\s+the\s+map|playing\s+card|trump\s+card|short\s+notice|until\s+further\s+notice|at\s+a\s+moment'?s\s+notice|terminal\s+(?:illness|velocity|stage|station))\b/i;
+var IDIOMATIC_SURFACE_RE = /\b(?:on\s+paper|paper\s+trail|paper\s+tiger|paper\s+over|pushing\s+paper|(?:mak(?:e|es|ing)|made|tak(?:e|es|ing)|took)\s+(?:a\s+)?(?:mental\s+)?note\b|mental\s+note|side\s+note|note\s+to\s+self|note\s+of\s+(?:panic|fear|alarm|warning|sadness|hope|doubt|surprise)|letter\s+of\s+the\s+law|to\s+the\s+letter|red[- ]letter\s+day|map\s+out|on\s+the\s+map|playing\s+card|trump\s+card|short\s+notice|until\s+further\s+notice|at\s+a\s+moment'?s\s+notice|terminal\s+(?:illness|velocity|stage|station))\b/gi;
 function isIdiomaticDocumentMention(paragraphText, start, end) {
   const winStart = Math.max(0, start - 28);
   const winEnd = Math.min(paragraphText.length, end + 28);
   const snippet = paragraphText.slice(winStart, winEnd);
-  return IDIOMATIC_SURFACE_RE.test(snippet);
+  IDIOMATIC_SURFACE_RE.lastIndex = 0;
+  let match;
+  while ((match = IDIOMATIC_SURFACE_RE.exec(snippet)) !== null) {
+    const mStart = winStart + match.index;
+    const mEnd = mStart + match[0].length;
+    if (mStart < end && mEnd > start) {
+      return true;
+    }
+  }
+  return false;
 }
+var DOC_KIND_SYNONYMS = {
+  flyer: "flyer",
+  flier: "flyer",
+  leaflet: "flyer",
+  handbill: "flyer",
+  pamphlet: "pamphlet",
+  brochure: "pamphlet",
+  poster: "poster",
+  sign: "poster",
+  signboard: "poster",
+  plaque: "poster",
+  bulletin: "poster",
+  "bulletin board": "poster",
+  notice: "notice",
+  missive: "notice",
+  decree: "notice",
+  edict: "notice",
+  warrant: "notice",
+  contract: "notice",
+  deed: "notice",
+  permit: "notice",
+  certificate: "notice",
+  letter: "letter",
+  envelope: "letter",
+  postcard: "letter",
+  invitation: "letter",
+  telegram: "letter",
+  dispatch: "letter",
+  note: "note",
+  slip: "note",
+  memo: "note",
+  "sticky note": "note",
+  "post-it": "note",
+  inscription: "note",
+  journal: "journal",
+  diary: "journal",
+  ledger: "journal",
+  logbook: "journal",
+  notebook: "journal",
+  book: "journal",
+  tome: "journal",
+  grimoire: "journal",
+  codex: "journal",
+  register: "journal",
+  roster: "journal",
+  dossier: "journal",
+  file: "journal",
+  folder: "journal",
+  report: "journal",
+  map: "map",
+  blueprint: "schematic" in {} ? "map" : "map",
+  schematic: "map",
+  receipt: "receipt",
+  ticket: "receipt",
+  voucher: "receipt",
+  manifest: "receipt",
+  invoice: "receipt",
+  menu: "receipt",
+  passport: "receipt",
+  timetable: "receipt",
+  schedule: "receipt",
+  form: "receipt",
+  "racing form": "receipt",
+  "intake sheet": "receipt",
+  newspaper: "newspaper",
+  gazette: "newspaper",
+  clipping: "newspaper",
+  article: "newspaper",
+  phone: "phone",
+  smartphone: "phone",
+  cellphone: "phone",
+  handset: "phone",
+  tablet: "phone",
+  pager: "phone",
+  "text message": "phone",
+  sms: "phone",
+  email: "phone",
+  "chat log": "phone",
+  terminal: "terminal",
+  datapad: "terminal",
+  transcript: "terminal",
+  whiteboard: "terminal",
+  clipboard: "note"
+};
 function validateStoryDocuments(value, paragraphs) {
   if (!Array.isArray(value))
     return [];
   const result = [];
-  const ids = new Set, names = new Set;
+  const ids = new Set;
+  const names = new Set;
   let characters = 0;
   for (const raw of value.slice(0, 12)) {
     const parsed = StoryDocumentSchema.safeParse(raw);
@@ -18788,7 +19144,15 @@ function validateStoryDocuments(value, paragraphs) {
       continue;
     const d = parsed.data;
     const introText = paragraphs[d.paragraphIndex]?.text;
-    if (ids.has(d.id) || names.has(d.name.toLocaleLowerCase()) || !introText || !introText.toLocaleLowerCase().includes(d.name.toLocaleLowerCase()))
+    if (ids.has(d.id) || names.has(d.name.toLowerCase()) || !introText)
+      continue;
+    const normIntro = normalizeForGroundMatch(introText);
+    const aliases = [d.name, ...d.aliases ?? []];
+    const introMatched = aliases.some((a) => {
+      const n = normalizeForGroundMatch(a);
+      return Boolean(n && normIntro.includes(n));
+    });
+    if (!introMatched)
       continue;
     const sections = d.sections.filter((s) => {
       if (s.paragraphIndex < d.paragraphIndex || s.end !== s.start + s.text.length || paragraphs[s.paragraphIndex]?.text.slice(s.start, s.end) !== s.text || characters + s.text.length > 24000)
@@ -18796,9 +19160,9 @@ function validateStoryDocuments(value, paragraphs) {
       characters += s.text.length;
       return true;
     });
-    const observations = (d.observations ?? []).filter((o) => o.paragraphIndex >= d.paragraphIndex && Boolean(paragraphs[o.paragraphIndex]?.text.includes(o.evidence)));
+    const observations = (d.observations ?? []).filter((o) => o.paragraphIndex >= d.paragraphIndex && Boolean(paragraphs[o.paragraphIndex]?.text && alignSpanInParagraph(paragraphs[o.paragraphIndex].text, o.evidence) !== null));
     ids.add(d.id);
-    names.add(d.name.toLocaleLowerCase());
+    names.add(d.name.toLowerCase());
     result.push({ ...d, sections, ...observations.length ? { observations } : {} });
   }
   return result;
@@ -18810,6 +19174,36 @@ function visibleStoryDocuments(documents, paragraphIndex) {
     ...d.observations ? { observations: d.observations.filter((o) => o.paragraphIndex <= paragraphIndex).map((o) => ({ ...o })) } : {}
   }));
 }
+var AMBIGUOUS_BARE_WORDS = new Set([
+  "note",
+  "notes",
+  "notice",
+  "notices",
+  "file",
+  "files",
+  "book",
+  "books",
+  "sign",
+  "signs",
+  "slip",
+  "slips",
+  "form",
+  "forms",
+  "post",
+  "posts",
+  "card",
+  "cards",
+  "email",
+  "emails",
+  "phone",
+  "phones",
+  "report",
+  "reports",
+  "record",
+  "records",
+  "pass",
+  "deed"
+]);
 
 // src/shared/presentation-rules.ts
 var id = exports_external.string().trim().min(1).max(128);
@@ -18919,9 +19313,45 @@ var NpcBeliefSchema = exports_external.object({
   seenInSwipes: exports_external.array(exports_external.string().trim().max(160)).max(64).optional(),
   updatedAt: exports_external.number().int().nonnegative().default(() => Date.now())
 }).strict();
+var StoryDocumentLedgerEntrySchema = exports_external.object({
+  id: exports_external.string().trim().min(1).max(256),
+  name: exports_external.string().trim().min(1).max(256),
+  kind: exports_external.string().trim().min(1).max(60),
+  aliases: exports_external.array(exports_external.string().trim().max(160)).max(16).default([]),
+  visualDetails: exports_external.string().trim().max(800).optional(),
+  observations: exports_external.array(exports_external.object({
+    paragraphIndex: exports_external.number().int().nonnegative(),
+    summary: exports_external.string().trim().max(500).optional(),
+    visualDetails: exports_external.array(exports_external.string().trim().max(160)).max(8).optional(),
+    material: exports_external.string().trim().max(120).optional(),
+    condition: exports_external.string().trim().max(120).optional(),
+    evidence: exports_external.string().max(1200)
+  }).strict()).max(32).optional(),
+  sections: exports_external.array(exports_external.object({
+    paragraphIndex: exports_external.number().int().nonnegative(),
+    text: exports_external.string().min(1).max(6000),
+    messageId: exports_external.string().trim().max(160).optional()
+  }).strict()).max(64).default([]),
+  customNotes: exports_external.string().trim().max(4000).optional(),
+  sourceMessageIds: exports_external.array(exports_external.string().trim().max(160)).max(64).optional(),
+  cachedAsset: exports_external.object({
+    imageId: exports_external.string().trim().min(1).max(256),
+    imageUrl: exports_external.string().trim().min(1).max(2048),
+    contentHash: exports_external.string().trim().min(1).max(160)
+  }).strict().optional(),
+  locked: exports_external.boolean().optional(),
+  autoDiscovered: exports_external.boolean().optional(),
+  seenInSwipes: exports_external.array(exports_external.string().trim().max(160)).max(64).optional(),
+  lastUpdated: exports_external.number().int().nonnegative().default(() => Date.now())
+}).strict();
 var StoryDNASetSchema = exports_external.object({
   locations: exports_external.record(exports_external.string(), LocationDNASchema).default({}),
   items: exports_external.record(exports_external.string(), ItemDNASchema).default({}),
+  documents: exports_external.record(exports_external.string(), StoryDocumentLedgerEntrySchema).optional(),
+  customLexicon: exports_external.array(exports_external.object({
+    term: exports_external.string().trim().min(2).max(160),
+    kind: exports_external.enum(["document", "place", "item", "npc"])
+  }).strict()).max(64).optional(),
   thoughtCabinet: exports_external.array(ThoughtCabinetEntrySchema).max(40).optional(),
   chapterCodex: exports_external.array(ChapterCodexEntrySchema).max(40).optional(),
   npcBeliefs: exports_external.record(exports_external.string(), exports_external.array(NpcBeliefSchema).max(12)).optional(),
@@ -19081,6 +19511,42 @@ var TRAILING_CONTAINER_SUFFIXES = new Set([
   "ring",
   "satchel"
 ]);
+var BOUNDARY_SHORT_STOPWORDS = new Set([
+  "the",
+  "and",
+  "for",
+  "with",
+  "from",
+  "into",
+  "this",
+  "that",
+  "was",
+  "were",
+  "are",
+  "her",
+  "his",
+  "him",
+  "she",
+  "you",
+  "not",
+  "but",
+  "out",
+  "off",
+  "all",
+  "one",
+  "two",
+  "can",
+  "had",
+  "has",
+  "its",
+  "our",
+  "who",
+  "way",
+  "day",
+  "man",
+  "men"
+]);
+var PERSONAL_HONORIFIC_RE = /^(?:mr|mrs|ms|miss|dr|prof|professor|lady|lord|sir|dame|capt|captain|insp|inspector|det|detective|lt|lieutenant|sgt|sergeant|rev|father|sister|brother)\.?$/i;
 function deriveShortAliases(name, existing = []) {
   const baseName = name.trim();
   const baseLower = baseName.toLowerCase();
@@ -19093,7 +19559,7 @@ function deriveShortAliases(name, existing = []) {
     const lower = clean.toLowerCase();
     if (!clean || seen.has(lower))
       return;
-    if (!allowShort && (clean.length < 4 || GENERIC_ALIAS_WORDS.has(lower)))
+    if (!allowShort && (clean.length < 3 || GENERIC_ALIAS_WORDS.has(lower) || BOUNDARY_SHORT_STOPWORDS.has(lower)))
       return;
     seen.add(lower);
     out.push(clean);
@@ -19106,6 +19572,14 @@ function deriveShortAliases(name, existing = []) {
     const parenClean = baseName.replace(/\s*\([^)]*\)\s*$/, "").replace(/\s*(?:,|—|–|\s-\s).*$/, "").trim();
     if (parenClean && parenClean !== baseName)
       push(parenClean);
+    const splitParts = baseName.replace(/\s*\([^)]*\)\s*$/, "").split(/\s*(?:—|–|\s-\s|:\s+)\s*/).map((s) => s.trim()).filter(Boolean);
+    if (splitParts.length >= 2) {
+      for (const part of splitParts) {
+        if (part.length >= 4 && !GENERIC_ALIAS_WORDS.has(part.toLowerCase())) {
+          push(part);
+        }
+      }
+    }
     const noArticle = (parenClean || baseName).replace(/^(?:the|an?)\s+/i, "").trim();
     if (noArticle && noArticle.toLowerCase() !== baseLower) {
       push(noArticle);
@@ -19124,6 +19598,26 @@ function deriveShortAliases(name, existing = []) {
       const prefix = words.slice(0, -1).join(" ");
       if (TRAILING_CONTAINER_SUFFIXES.has(lastWord) && prefix.length >= 5 && !prefix.includes("'s") && !prefix.includes("’s") && !GENERIC_ALIAS_WORDS.has(prefix.toLowerCase())) {
         push(prefix);
+      } else {
+        const withoutHonorifics = words.filter((w) => !PERSONAL_HONORIFIC_RE.test(w));
+        const looksLikePlaceOrObject = words.some((w) => {
+          const wl = w.toLowerCase().replace(/[^a-z']/g, "");
+          return TRAILING_CONTAINER_SUFFIXES.has(wl) || GENERIC_ALIAS_WORDS.has(wl);
+        });
+        if (!looksLikePlaceOrObject && withoutHonorifics.length >= 1 && withoutHonorifics.length <= 4) {
+          const strippedFull = withoutHonorifics.join(" ");
+          if (strippedFull.toLowerCase() !== working.toLowerCase()) {
+            push(strippedFull);
+          }
+          if (withoutHonorifics.length >= 2 && withoutHonorifics.every((w) => /^[\p{Lu}]/u.test(w))) {
+            for (const part of withoutHonorifics) {
+              const cleanPart = part.replace(/[.,;:!?]+$/, "");
+              if (cleanPart.length >= 3 && !GENERIC_ALIAS_WORDS.has(cleanPart.toLowerCase()) && !BOUNDARY_SHORT_STOPWORDS.has(cleanPart.toLowerCase())) {
+                push(cleanPart, true);
+              }
+            }
+          }
+        }
       }
     }
   }
@@ -19138,12 +19632,12 @@ function matchesBoundaryCandidate(queryLower, candidateRaw) {
     return false;
   if (candidate === queryLower)
     return true;
-  if (candidate.length >= 5 && !GENERIC_ALIAS_WORDS.has(candidate)) {
+  if (candidate.length >= 3 && !GENERIC_ALIAS_WORDS.has(candidate) && !BOUNDARY_SHORT_STOPWORDS.has(candidate)) {
     const candidateRe = new RegExp(`(?:^|[^\\p{L}\\p{N}_])${escapeRegExp(candidate)}(?:$|[^\\p{L}\\p{N}_])`, "iu");
     if (candidateRe.test(queryLower))
       return true;
   }
-  if (queryLower.length >= 5 && !GENERIC_ALIAS_WORDS.has(queryLower)) {
+  if (queryLower.length >= 3 && !GENERIC_ALIAS_WORDS.has(queryLower) && !BOUNDARY_SHORT_STOPWORDS.has(queryLower)) {
     const queryRe = new RegExp(`(?:^|[^\\p{L}\\p{N}_])${escapeRegExp(queryLower)}(?:$|[^\\p{L}\\p{N}_])`, "iu");
     if (queryRe.test(candidate))
       return true;
@@ -19344,10 +19838,16 @@ var REFERENCE_FIELDS = [
   "layout",
   "routes",
   "surroundings",
+  "lighting",
+  "atmosphere",
+  "persistentElements",
   "customs",
   "services",
   "publicHistory",
   "risks",
+  "materials",
+  "distinctiveFeatures",
+  "colors",
   "provenance",
   "function",
   "limits",
@@ -19371,10 +19871,16 @@ var fields = {
   layout: ["Layout", "setting", false],
   routes: ["Routes", "setting", false],
   surroundings: ["Surroundings", "setting", false],
+  lighting: ["Lighting", "setting", false],
+  atmosphere: ["Atmosphere", "setting", false],
+  persistentElements: ["Persistent elements", "setting", false],
   customs: ["Customs", "setting", false],
   services: ["Services", "use", false],
   publicHistory: ["Public history", "history", false],
   risks: ["Known risks", "setting", false],
+  materials: ["Materials", "appearance", false],
+  distinctiveFeatures: ["Distinctive features", "appearance", false],
+  colors: ["Colors", "appearance", false],
   provenance: ["Provenance", "history", false],
   function: ["Function", "use", false],
   limits: ["Limits", "use", false],
@@ -19394,8 +19900,8 @@ function referenceFieldInfo(field) {
 }
 var specificFields = {
   npc: new Set(["role", "affiliations", "relationships", "mannerisms", "voice", "statedGoals", "history"]),
-  place: new Set(["layout", "routes", "surroundings", "customs", "services", "publicHistory", "risks"]),
-  object: new Set(["provenance", "function", "limits", "access", "revealedContents", "owner", "significance"])
+  place: new Set(["layout", "routes", "surroundings", "lighting", "atmosphere", "persistentElements", "customs", "services", "publicHistory", "risks"]),
+  object: new Set(["materials", "distinctiveFeatures", "colors", "provenance", "function", "limits", "access", "revealedContents", "owner", "significance"])
 };
 function referenceFieldMatchesKind(field, kind) {
   return field === "description" || field === "appearance" || field === "outfit" || field === "condition" || specificFields[kind].has(field);
@@ -21831,7 +22337,36 @@ function sceneHistoryFor(turn, through) {
 // src/shared/reference-history.ts
 var digest = exports_external.string().regex(/^[a-f0-9]{64}$/);
 var ReferenceLineageSchema = exports_external.object({ version: exports_external.literal(1), key: TurnKeySchema, messageCount: exports_external.number().int().min(1).max(1024), prefixDigest: digest, paragraphDigest: digest }).strict();
-var retainedFields = new Set(["description", "appearance", "role", "affiliations", "relationships", "mannerisms", "voice", "history", "layout", "surroundings", "customs", "publicHistory", "provenance", "function", "limits", "significance"]);
+var retainedFields = new Set([
+  "description",
+  "appearance",
+  "role",
+  "affiliations",
+  "relationships",
+  "mannerisms",
+  "voice",
+  "statedGoals",
+  "history",
+  "layout",
+  "routes",
+  "surroundings",
+  "lighting",
+  "atmosphere",
+  "persistentElements",
+  "customs",
+  "services",
+  "publicHistory",
+  "risks",
+  "materials",
+  "distinctiveFeatures",
+  "colors",
+  "provenance",
+  "function",
+  "limits",
+  "access",
+  "revealedContents",
+  "significance"
+]);
 function retainableReferenceField(field) {
   return retainedFields.has(field);
 }
@@ -46589,49 +47124,49 @@ var MASTER_LORE_REFERENCE_PROMPT = `You are the Master Story Lore & World Lens I
 Your mission is to extract an accurate, permanent descriptive profile of important explicitly named NPCs, locations, and unique artifacts throughout the visible story text.
 
 ### Grounding & Extraction Principles
-1. Zero Hallucination: Extract ONLY facts explicitly established in the text. Never invent backstories, family relations, unrevealed secrets, or future discoveries.
-2. Fact vs Guesswork: If a detail is not stated, leave it out. A concise set of 3 verified facts is infinitely more valuable than 10 inferred guesses.
-3. Quotation Grounding: Every observation must carry an exact quote as evidence from the paragraph where it appears.
+1. Zero Hallucination: Extract ONLY facts explicitly established in the visible numbered paragraphs. Never invent backstories, unrevealed secrets, or future discoveries.
+2. Fact vs Guesswork: If a detail is not stated, leave it out. A concise set of verified facts is infinitely more valuable than inferred guesses.
+3. Quotation Grounding: Every observation MUST carry an exact contiguous quote (evidence) from paragraphs[paragraphIndex] containing the fact (value), using wording taken directly from evidence.
+4. Exact Taxonomy Keys: Use ONLY the exact kind and field names listed below.
 
-### Taxonomy & Detail Focus
+### Taxonomy & Allowed Fields
 
 #### A. NPCs & Characters (kind: "npc")
-Focus on permanent visual traits and immediate narrative facts:
+Allowed fields: description, appearance, outfit, condition, role, affiliations, relationships, mannerisms, voice, statedGoals, history:
 - "appearance": Biological visual invariants—height, build, skin tone, eye color/shape, hair color/length/texture, facial features, scars, markings, fantasy traits (horns, animal ears, wings).
 - "outfit": Exact clothing, fabrics, footwear, accessories, jewelry, and condition observed in this scene.
-- "mannerisms": Physical habits, posture, gesture style, facial ticks, gait, gaze direction.
+- "mannerisms": Physical habits, posture, gesture style, gait, gaze direction.
 - "voice": Tone, pitch, cadence, accent, vocal volume.
-- "affiliations" / "role": Formal title, occupation, allegiance, stated purpose.
-- "relationships": Explicitly declared connections to user or other characters.
+- "role" / "affiliations" / "relationships" / "statedGoals" / "history": Formal title, occupation, allegiance, declared bonds, stated plans, established past.
 
 #### B. Places & Environments (kind: "place")
-Extract rich environmental data that will populate Location DNA for consistent image generation:
+Allowed fields: description, appearance, condition, layout, routes, surroundings, lighting, atmosphere, persistentElements, customs, services, publicHistory, risks:
 - "layout": Spatial architecture, room dimensions, structural materials (cedar beams, stone masonry, steel rivets).
-- "surroundings": Exterior environment, views through windows, neighborhood context, adjacent rooms.
-- "lighting": Directional light sources, ambient glow, window exposure, shadow depth, color cast.
-- "atmosphere": Air quality, dust motes, temperature, humidity, smell, auditory backdrop.
-- "persistentElements": Fixed furniture, permanent fixtures, distinctive clutter.
+- "surroundings" / "routes": Exterior views, neighborhood context, adjacent rooms, stairs, exits, connecting roads.
+- "lighting" / "atmosphere": Light sources, glow, shadows, air quality, temperature, smell, soundscape.
+- "persistentElements": Fixed furniture, permanent fixtures, distinctive clutter, bulletin boards, signs.
+- "customs" / "services" / "publicHistory" / "risks": Rules, hours, goods provided, local history, visible hazards.
 
 #### C. Unique Objects & Artifacts (kind: "object")
-Extract distinctive items (weapons, relics, heirlooms, tools, key documents) that will populate Item DNA:
-- "description": Exact physical form, dimensions, craftsmanship, decorative carvings, emblems.
-- "materials": Primary components (e.g. "carved yew wood", "raw diamonds", "tarnished brass", "living green vines").
-- "distinctiveFeatures": Unique visual anomalies, wear patterns, engravings, glow, moving parts.
-- "colors": Specific hues and color interplay.
-- "provenance" / "function": Known creator, origin, purpose, limits, or mechanical operation.
+Allowed fields: description, appearance, condition, materials, distinctiveFeatures, colors, provenance, function, limits, access, revealedContents, owner, significance:
+- "description" / "materials" / "colors" / "distinctiveFeatures": Physical form, components, hues, engravings, wear, moving parts.
+- "provenance" / "function" / "limits" / "access" / "revealedContents" / "owner" / "condition" / "significance": Origin, purpose, constraints, who holds it, visible inscriptions/contents, narrative importance.
 
 ### Output JSON Format
-Return an array under "storyReferences":
-[
-  {
-    "kind": "npc" | "place" | "object",
-    "name": "Canonical Entity Name",
-    "paragraphIndex": 0,
-    "field": "appearance" | "outfit" | "layout" | "materials" | "lighting" | "function",
-    "value": "Exact descriptive fact extracted from the text",
-    "evidence": "Contiguous quote containing both the name and the fact"
-  }
-]`;
+Return a single JSON object { "storyReferences": [...], "storyDocuments": [...] }:
+{
+  "storyReferences": [
+    {
+      "kind": "npc" | "place" | "object",
+      "name": "Canonical Entity Name",
+      "paragraphIndex": 0,
+      "field": "appearance" | "outfit" | "layout" | "lighting" | "atmosphere" | "persistentElements" | "materials" | "distinctiveFeatures" | "colors" | "function",
+      "value": "Descriptive fact worded directly from evidence",
+      "evidence": "Verbatim quote from paragraphs[paragraphIndex]"
+    }
+  ],
+  "storyDocuments": []
+}`;
 var MASTER_CHARACTER_DNA_PROMPT = `You are the Master Anatomical & Visual DNA Extraction Engine.
 Your mission is to establish precise visual DNA for ONE target character based on story evidence.
 

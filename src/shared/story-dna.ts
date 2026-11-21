@@ -84,9 +84,47 @@ export const NpcBeliefSchema = z.object({
 }).strict();
 export type NpcBelief = z.infer<typeof NpcBeliefSchema>;
 
+export const StoryDocumentLedgerEntrySchema = z.object({
+  id: z.string().trim().min(1).max(256),
+  name: z.string().trim().min(1).max(256),
+  kind: z.string().trim().min(1).max(60),
+  aliases: z.array(z.string().trim().max(160)).max(16).default([]),
+  visualDetails: z.string().trim().max(800).optional(),
+  observations: z.array(z.object({
+    paragraphIndex: z.number().int().nonnegative(),
+    summary: z.string().trim().max(500).optional(),
+    visualDetails: z.array(z.string().trim().max(160)).max(8).optional(),
+    material: z.string().trim().max(120).optional(),
+    condition: z.string().trim().max(120).optional(),
+    evidence: z.string().max(1200),
+  }).strict()).max(32).optional(),
+  sections: z.array(z.object({
+    paragraphIndex: z.number().int().nonnegative(),
+    text: z.string().min(1).max(6000),
+    messageId: z.string().trim().max(160).optional(),
+  }).strict()).max(64).default([]),
+  customNotes: z.string().trim().max(4000).optional(),
+  sourceMessageIds: z.array(z.string().trim().max(160)).max(64).optional(),
+  cachedAsset: z.object({
+    imageId: z.string().trim().min(1).max(256),
+    imageUrl: z.string().trim().min(1).max(2048),
+    contentHash: z.string().trim().min(1).max(160),
+  }).strict().optional(),
+  locked: z.boolean().optional(),
+  autoDiscovered: z.boolean().optional(),
+  seenInSwipes: z.array(z.string().trim().max(160)).max(64).optional(),
+  lastUpdated: z.number().int().nonnegative().default(() => Date.now()),
+}).strict();
+export type StoryDocumentLedgerEntry = z.infer<typeof StoryDocumentLedgerEntrySchema>;
+
 export const StoryDNASetSchema = z.object({
   locations: z.record(z.string(), LocationDNASchema).default({}),
   items: z.record(z.string(), ItemDNASchema).default({}),
+  documents: z.record(z.string(), StoryDocumentLedgerEntrySchema).optional(),
+  customLexicon: z.array(z.object({
+    term: z.string().trim().min(2).max(160),
+    kind: z.enum(['document', 'place', 'item', 'npc']),
+  }).strict()).max(64).optional(),
   thoughtCabinet: z.array(ThoughtCabinetEntrySchema).max(40).optional(),
   chapterCodex: z.array(ChapterCodexEntrySchema).max(40).optional(),
   npcBeliefs: z.record(z.string(), z.array(NpcBeliefSchema).max(12)).optional(),
@@ -129,6 +167,14 @@ const TRAILING_CONTAINER_SUFFIXES = new Set([
   'codex', 'crown', 'scepter', 'sceptre', 'medallion', 'ring', 'satchel',
 ]);
 
+const BOUNDARY_SHORT_STOPWORDS = new Set([
+  'the', 'and', 'for', 'with', 'from', 'into', 'this', 'that', 'was', 'were',
+  'are', 'her', 'his', 'him', 'she', 'you', 'not', 'but', 'out', 'off', 'all',
+  'one', 'two', 'can', 'had', 'has', 'its', 'our', 'who', 'way', 'day', 'man', 'men',
+]);
+
+const PERSONAL_HONORIFIC_RE = /^(?:mr|mrs|ms|miss|dr|prof|professor|lady|lord|sir|dame|capt|captain|insp|inspector|det|detective|lt|lieutenant|sgt|sergeant|rev|father|sister|brother)\.?$/i;
+
 export function deriveShortAliases(name: string, existing: readonly string[] = []): string[] {
   const baseName = name.trim();
   const baseLower = baseName.toLowerCase();
@@ -140,7 +186,7 @@ export function deriveShortAliases(name: string, existing: readonly string[] = [
     const clean = raw.replace(/\s+/g, ' ').trim();
     const lower = clean.toLowerCase();
     if (!clean || seen.has(lower)) return;
-    if (!allowShort && (clean.length < 4 || GENERIC_ALIAS_WORDS.has(lower))) return;
+    if (!allowShort && (clean.length < 3 || GENERIC_ALIAS_WORDS.has(lower) || BOUNDARY_SHORT_STOPWORDS.has(lower))) return;
     seen.add(lower);
     out.push(clean);
   };
@@ -155,6 +201,20 @@ export function deriveShortAliases(name: string, existing: readonly string[] = [
       .replace(/\s*(?:,|—|–|\s-\s).*$/, '')
       .trim();
     if (parenClean && parenClean !== baseName) push(parenClean);
+
+    // Split multi-part dash/colon location or title phrases ("Marten House - Fourth Floor Corridor")
+    const splitParts = baseName
+      .replace(/\s*\([^)]*\)\s*$/, '')
+      .split(/\s*(?:—|–|\s-\s|:\s+)\s*/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (splitParts.length >= 2) {
+      for (const part of splitParts) {
+        if (part.length >= 4 && !GENERIC_ALIAS_WORDS.has(part.toLowerCase())) {
+          push(part);
+        }
+      }
+    }
 
     const noArticle = (parenClean || baseName).replace(/^(?:the|an?)\s+/i, '').trim();
     if (noArticle && noArticle.toLowerCase() !== baseLower) {
@@ -182,6 +242,27 @@ export function deriveShortAliases(name: string, existing: readonly string[] = [
         !GENERIC_ALIAS_WORDS.has(prefix.toLowerCase())
       ) {
         push(prefix);
+      } else {
+        // Multi-word personal names ("Naomi Vance", "Dr. Marcus Thorne"): derive short name tokens
+        const withoutHonorifics = words.filter((w) => !PERSONAL_HONORIFIC_RE.test(w));
+        const looksLikePlaceOrObject = words.some((w) => {
+          const wl = w.toLowerCase().replace(/[^a-z']/g, '');
+          return TRAILING_CONTAINER_SUFFIXES.has(wl) || GENERIC_ALIAS_WORDS.has(wl);
+        });
+        if (!looksLikePlaceOrObject && withoutHonorifics.length >= 1 && withoutHonorifics.length <= 4) {
+          const strippedFull = withoutHonorifics.join(' ');
+          if (strippedFull.toLowerCase() !== working.toLowerCase()) {
+            push(strippedFull);
+          }
+          if (withoutHonorifics.length >= 2 && withoutHonorifics.every((w) => /^[\p{Lu}]/u.test(w))) {
+            for (const part of withoutHonorifics) {
+              const cleanPart = part.replace(/[.,;:!?]+$/, '');
+              if (cleanPart.length >= 3 && !GENERIC_ALIAS_WORDS.has(cleanPart.toLowerCase()) && !BOUNDARY_SHORT_STOPWORDS.has(cleanPart.toLowerCase())) {
+                push(cleanPart, true);
+              }
+            }
+          }
+        }
       }
     }
   }
@@ -207,11 +288,11 @@ export function matchesBoundaryCandidate(queryLower: string, candidateRaw: strin
   const candidate = candidateRaw.trim().toLowerCase();
   if (!candidate) return false;
   if (candidate === queryLower) return true;
-  if (candidate.length >= 5 && !GENERIC_ALIAS_WORDS.has(candidate)) {
+  if (candidate.length >= 3 && !GENERIC_ALIAS_WORDS.has(candidate) && !BOUNDARY_SHORT_STOPWORDS.has(candidate)) {
     const candidateRe = new RegExp(`(?:^|[^\\p{L}\\p{N}_])${escapeRegExp(candidate)}(?:$|[^\\p{L}\\p{N}_])`, 'iu');
     if (candidateRe.test(queryLower)) return true;
   }
-  if (queryLower.length >= 5 && !GENERIC_ALIAS_WORDS.has(queryLower)) {
+  if (queryLower.length >= 3 && !GENERIC_ALIAS_WORDS.has(queryLower) && !BOUNDARY_SHORT_STOPWORDS.has(queryLower)) {
     const queryRe = new RegExp(`(?:^|[^\\p{L}\\p{N}_])${escapeRegExp(queryLower)}(?:$|[^\\p{L}\\p{N}_])`, 'iu');
     if (queryRe.test(candidate)) return true;
   }
@@ -425,6 +506,13 @@ export function scrubStoryDNASwipes(
   for (const [id, item] of Object.entries(set.items)) {
     if (isSwipeEntryActive(item, activeMessageSwipes)) nextItems[id] = item;
   }
+  let nextDocuments: Record<string, StoryDocumentLedgerEntry> | undefined;
+  if (set.documents) {
+    nextDocuments = {};
+    for (const [id, doc] of Object.entries(set.documents)) {
+      if (isSwipeEntryActive(doc, activeMessageSwipes)) nextDocuments[id] = doc;
+    }
+  }
   const nextThoughtCabinet = set.thoughtCabinet?.filter((t) =>
     !t.seenInSwipes?.length || isSwipeEntryActive({ autoDiscovered: true, seenInSwipes: t.seenInSwipes }, activeMessageSwipes)
   );
@@ -445,6 +533,7 @@ export function scrubStoryDNASwipes(
     ...set,
     locations: nextLocations,
     items: nextItems,
+    ...(nextDocuments !== undefined ? { documents: nextDocuments } : {}),
     ...(nextThoughtCabinet !== undefined ? { thoughtCabinet: nextThoughtCabinet } : {}),
     ...(nextChapterCodex !== undefined ? { chapterCodex: nextChapterCodex } : {}),
     ...(nextNpcBeliefs !== undefined ? { npcBeliefs: nextNpcBeliefs } : {}),

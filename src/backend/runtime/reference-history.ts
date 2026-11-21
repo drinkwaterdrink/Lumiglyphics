@@ -3,6 +3,7 @@ import type {TurnPlan} from '../../shared/contracts.js';
 import {ReferenceLineageSchema,ReferenceHistorySchema,retainableReferenceField,type ReferenceLineage,type ReferenceHistory,type HistoricalReference} from '../../shared/reference-history.js';
 import {samePresentationTurn} from '../../shared/presentation-entities.js';
 import {normalizeStoryReferences} from '../../shared/story-references.js';
+import {normalizeForGroundMatch} from '../../shared/grounding.js';
 import {stripTextEffectTags} from '../../shared/text-effects.js';
 import {loadTurnRecord,turnPath,type StoredTurnRecord} from './storage.js';
 import {fingerprintForMessage} from './planner.js';
@@ -121,8 +122,14 @@ async function collect(api:SpindleAPI,target:StoredTurnRecord,userId:string|unde
   if(!isCurrent())return undefined;
   const record=loaded.get(index),frame=selected[index]!;if(!record)continue;
   if(record.plan.key.chatId!==key.chatId||needsResolution(frame.message.content)||record.plan.key.sourceFingerprint!==fingerprintForMessage(frame.message)||!await matches(record,frame))continue;
-  const plainMessage=stripTextEffectTags(frame.message.content);  for(const reference of normalizeStoryReferences(record.plan.storyReferences,record.plan.paragraphs.map(p=>({text:stripTextEffectTags(p.text)}))).reverse()){
-   if(!retainableReferenceField(reference.field)||!plainMessage.includes(reference.evidence))continue;
+  const plainMessage=normalizeForGroundMatch(stripTextEffectTags(frame.message.content));
+  const strippedParagraphs=record.plan.paragraphs.map(p=>({text:stripTextEffectTags(p.text)}));
+  for(const reference of normalizeStoryReferences(record.plan.storyReferences,strippedParagraphs,{
+    paragraphSpeakers:record.plan.paragraphSpeakers,
+    detectedLocation:record.plan.scenes[0]?.environment.location??null,
+    sourceIndexes:record.plan.paragraphs.map(p=>p.sourceIndex),
+  }).reverse()){
+   if(!retainableReferenceField(reference.field)||!plainMessage.includes(normalizeForGroundMatch(reference.evidence)))continue;
    const identity=JSON.stringify([reference.kind,reference.name,reference.field]);if(seen.has(identity))continue;seen.add(identity);
    if(entries.length>=128){truncated=true;continue;}
    entries.push({sourceKey:record.plan.key,replyNumber:frame.replyNumber,reference});

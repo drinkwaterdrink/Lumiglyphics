@@ -8,6 +8,16 @@ export const StoredCardRoleSchema = z.object({
 
 export const SCENARIO_KEYWORD_RE = /\b(?:academy|rpg|adventure|simulator|simulation|chronicles|campaign|setting|universe|guild|tavern|inn|empire|kingdom|city|realm|station|dungeon|manor|estate|school|university|sanctuary|asylum|narrator|storyteller|game\s*master|dm|gm|cyoa|sandbox)\b/i;
 
+/** Genuine meta/RPG host wrappers only (never blocks ordinary in-world places like Tavern, Manor, Academy, or Station). */
+export const META_WRAPPER_SCENARIO_RE = /\b(?:rpg|simulator|simulation|chronicles|campaign|narrator|storyteller|game\s*master|dm|gm|cyoa|sandbox)\b/i;
+
+export function isMetaScenarioWrapper(name: string | null | undefined): boolean {
+  if (!name) return false;
+  const trimmed = name.trim();
+  if (!trimmed) return false;
+  return META_WRAPPER_SCENARIO_RE.test(trimmed) || isTechnicalWrapperName(trimmed);
+}
+
 export const SCENARIO_TAG_RE = /^(?:scenario|narrator|rpg|cyoa|sandbox|world|setting|location|adventure|storyteller|gm|dm)$/i;
 
 /** Wrapper/internal preset card handles or technical placeholders that must never surface as story speakers. */

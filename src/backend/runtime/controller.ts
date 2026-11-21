@@ -7,11 +7,15 @@ import type {ImageActivityInput} from '../../shared/image-usage.js';
 import {resolveSceneAmbient} from '../../shared/scene-atmosphere.js';
 import { createEmptyCharacterDNA, findCharacterDNA, isGenericAttire, scrubCharacterDNASwipes, swipeTurnTag } from '../../shared/character-dna.js';
 import { scrubStoryDNASwipes } from '../../shared/story-dna.js';
+import { mergeStoryDocuments } from '../../shared/story-documents.js';
+import { stripTextEffectTags } from '../../shared/text-effects.js';
+import { characterAppearanceKey } from '../../shared/identity.js';
+import type { StructuredTurnHints } from '../core/paragraphs.js';
 import type { AssetScheduler } from '../core/asset-scheduler.js';
 import { mutateCharacterDnaLibrary } from './character-dna-store.js';
 import { handleCharacterDnaRequest } from './character-dna-workflow.js';
 import {handleStoryDnaRequest} from './story-dna-workflow.js';
-import { mutateStoryDNASet } from './story-dna-store.js';
+import { loadStoryDNASet, mutateStoryDNASet } from './story-dna-store.js';
 import { filterStoryDnaForActiveBranch, harvestTurnStoryDNA } from './story-dna-harvester.js';
 import { activeBranchSwipeTags } from './character-dna-workflow.js';
 import { fitPromptToBudget } from "../../shared/prompt-length.js";
@@ -175,10 +179,13 @@ export function scheduleSplitHorizonLore(
     turnKey: StoredTurnRecord["plan"]["key"];
     intakeEpoch: number;
     config: VisualNovelConfig;
-    paragraphs: readonly { index: number; text: string }[];
+    paragraphs: readonly { index: number; sourceIndex?: number; text: string }[];
     cardRole?: StoredTurnRecord["cardRole"];
     scenarioReferenceName?: string;
     prevLocationName: string | null;
+    knownCast?: readonly string[];
+    structuredHints?: StructuredTurnHints;
+    paragraphSpeakers?: readonly (string | null)[];
     messages: readonly ChatMessageDTO[];
     delayMs?: number;
   }
@@ -197,24 +204,60 @@ export function scheduleSplitHorizonLore(
   const run = async () => {
     try {
       if (!isCurrent()) return;
+      let openDocumentTitles: string[] | undefined;
+      if (spindle.userStorage) {
+        try {
+          const existingDna = await loadStoryDNASet(spindle, params.chatId, params.userId);
+          const titles = Object.values(existingDna.documents ?? {}).map((d) => d.name).filter(Boolean);
+          if (titles.length > 0) openDocumentTitles = titles.slice(-16);
+        } catch {}
+      }
+      if (!isCurrent()) return;
+      const strippedParagraphs = paragraphs.map((p) => ({
+        index: p.index,
+        ...(p.sourceIndex !== undefined ? { sourceIndex: p.sourceIndex } : {}),
+        text: stripTextEffectTags(p.text),
+      }));
       const lore = await extractTurnLoreAsync(spindle, {
         config,
-        paragraphs,
+        paragraphs: strippedParagraphs,
         ...(params.cardRole ? { cardRole: params.cardRole } : {}),
         ...(params.scenarioReferenceName ? { scenarioReferenceName: params.scenarioReferenceName } : {}),
+        ...(params.prevLocationName !== undefined ? { previousLocation: params.prevLocationName } : {}),
+        ...(params.knownCast?.length ? { knownCast: params.knownCast } : {}),
+        ...(params.structuredHints ? { structuredHints: params.structuredHints } : {}),
+        ...(openDocumentTitles?.length ? { openDocumentTitles } : {}),
+        ...(params.paragraphSpeakers ? { paragraphSpeakers: params.paragraphSpeakers } : {}),
+        ...(params.paragraphs.some((p) => p.sourceIndex !== undefined) ? { sourceIndexes: params.paragraphs.map((p, idx) => p.sourceIndex ?? idx) } : {}),
         ...(params.userId ? { userId: params.userId } : {}),
         signal: controller.signal,
       });
       if (!isCurrent()) return;
       if (lore.storyReferences.length === 0 && lore.storyDocuments.length === 0) return;
-      const updated = await mutateActiveTurnRecord(spindle, params.chatId, params.path, params.userId, (current) => ({
-        ...current,
-        plan: {
-          ...current.plan,
-          ...(lore.storyReferences.length ? { storyReferences: lore.storyReferences } : {}),
-          ...(lore.storyDocuments.length ? { storyDocuments: lore.storyDocuments } : {}),
-        },
-      }), isCurrent);
+      let previousDocIds = new Set<string>();
+      const updated = await mutateActiveTurnRecord(spindle, params.chatId, params.path, params.userId, (current) => {
+        previousDocIds = new Set((current.plan.storyDocuments ?? []).map((d) => d.id));
+        const mergedRefs = [...(current.plan.storyReferences ?? [])];
+        const seenRef = new Set(mergedRefs.map((r) => JSON.stringify(r)));
+        for (const ref of lore.storyReferences) {
+          const k = JSON.stringify(ref);
+          if (!seenRef.has(k) && mergedRefs.length < 32) {
+            seenRef.add(k);
+            mergedRefs.push(ref);
+          }
+        }
+        const mergedDocs = lore.storyDocuments.length > 0 || current.plan.storyDocuments?.length
+          ? mergeStoryDocuments(lore.storyDocuments, current.plan.storyDocuments ?? [])
+          : undefined;
+        return {
+          ...current,
+          plan: {
+            ...current.plan,
+            ...(mergedRefs.length ? { storyReferences: mergedRefs } : {}),
+            ...(mergedDocs?.length ? { storyDocuments: mergedDocs } : {}),
+          },
+        };
+      }, isCurrent);
       if (!updated || !isCurrent()) return;
       if (spindle.userStorage) {
         try {
@@ -250,6 +293,38 @@ export function scheduleSplitHorizonLore(
         ...(presentation ? { presentation } : {}),
         ...(referenceHistory ? { referenceHistory } : {}),
       }, params.userId);
+      if (!config.useNativeCardImages && config.generateImages && !config.dataSaverMode && config.documentImageMode === "auto" && updated.plan.storyDocuments?.length) {
+        const remainingSlots = Math.max(0, 3 - previousDocIds.size);
+        const newDocs = updated.plan.storyDocuments.filter((d) => !previousDocIds.has(d.id)).slice(0, remainingSlots);
+        for (const doc of newDocs) {
+          if (!isCurrent()) break;
+          try {
+            const art = await generateDocumentPropArtwork({
+              spindle,
+              chatId: params.chatId,
+              plan: updated.plan,
+              documentId: doc.id,
+              throughParagraphIndex: Math.max(0, updated.plan.paragraphs.length - 1),
+              ...(params.userId ? { userId: params.userId } : {}),
+            });
+            if (!isCurrent()) break;
+            spindle.sendToFrontend({
+              type: "vn_document_image",
+              chatId: params.chatId,
+              messageId: updated.plan.key.assistantMessageId,
+              swipeId: Number(updated.plan.key.swipeId ?? 0) || 0,
+              sourceFingerprint: updated.plan.key.sourceFingerprint,
+              revision: updated.plan.key.revision,
+              documentId: art.documentId,
+              contentHash: art.contentHash,
+              status: "ready",
+              cached: art.cached,
+              imageId: art.imageId,
+              imageUrl: art.imageUrl,
+            }, params.userId);
+          } catch {}
+        }
+      }
     } catch (error) {
       if (!isAbortError(error, controller.signal)) {
         dbg(spindle, params.userId, `split-horizon lore extraction failed: ${errorText(error)}`);
@@ -1646,21 +1721,25 @@ async function processAssistantMessage(
         ? (priorTurnRecord?.plan.scenes.at(-1)?.environment.location ?? null)
         : (chatState.latestScene?.environment.location ?? null);
     spindle.sendToFrontend({ type: "vn_turn", turn: view }, userId);
-    if (!record.plan.storyReferences?.length) {
-      scheduleSplitHorizonLore(spindle, {
-        ...(userId ? { userId } : {}),
-        chatId,
-        path,
-        turnKey: record.plan.key,
-        intakeEpoch,
-        config,
-        paragraphs: record.plan.paragraphs,
-        ...(record.cardRole ? { cardRole: record.cardRole } : {}),
-        ...(message.name ? { scenarioReferenceName: message.name } : {}),
-        prevLocationName,
-        messages,
-      });
-    }
+    const knownCastForLore = Array.from(new Set(
+      Object.values(result.characterRegistry).map((entry) => entry.name).filter(Boolean)
+    ));
+    scheduleSplitHorizonLore(spindle, {
+      ...(userId ? { userId } : {}),
+      chatId,
+      path,
+      turnKey: record.plan.key,
+      intakeEpoch,
+      config,
+      paragraphs: record.plan.paragraphs,
+      ...(record.cardRole ? { cardRole: record.cardRole } : {}),
+      ...(message.name ? { scenarioReferenceName: characterAppearanceKey(message.name) } : {}),
+      prevLocationName,
+      knownCast: knownCastForLore,
+      ...(result.structuredHints ? { structuredHints: result.structuredHints } : {}),
+      paragraphSpeakers: record.plan.paragraphSpeakers,
+      messages,
+    });
     if (!config.useNativeCardImages && config.generateImages && !config.dataSaverMode && config.documentImageMode === "auto" && record.plan.storyDocuments?.length) {
       const autoDocs = record.plan.storyDocuments.slice(0, 3);
       void (async () => {
@@ -2324,8 +2403,11 @@ async function replanCurrentTurn(spindle: SpindleAPI, request: Extract<FrontendR
         config,
         paragraphs: plan.paragraphs,
         ...(record.cardRole ? { cardRole: record.cardRole } : {}),
-        ...(latest.name ? { scenarioReferenceName: latest.name } : {}),
+        ...(latest.name ? { scenarioReferenceName: characterAppearanceKey(latest.name) } : {}),
         prevLocationName: replanPriorRecord?.plan.scenes.at(-1)?.environment.location ?? null,
+        knownCast: Object.values(result.characterRegistry).map((entry) => entry.name).filter(Boolean),
+        ...(result.structuredHints ? { structuredHints: result.structuredHints } : {}),
+        paragraphSpeakers: plan.paragraphSpeakers,
         messages: freshMessages,
       });
       if (!config.useNativeCardImages && config.generateImages) void startAssets(spindle,record,state.activeTurnPath!,userId,{forceReview:true}).catch(error => {

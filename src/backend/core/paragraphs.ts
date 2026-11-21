@@ -352,12 +352,92 @@ export function extractProseAtmosphereDelta(text: string): {
   };
 }
 
+export type StructuredTurnHints = {
+  location?: string;
+  presentNpcs: string[];
+  inventoryItems: string[];
+  knownDocuments: string[];
+};
+
+export function extractStructuredTurnHints(
+  rawContent: string,
+  detectedMeta?: DetectedSceneMetadata,
+): StructuredTurnHints | undefined {
+  if (!rawContent) return undefined;
+  // Strip private/secret internal monologue and offscreen agenda blocks first
+  // so no hidden character thoughts or secret motives can ever enter hints.
+  const publicOnly = rawContent
+    .replace(/<(true[-_]?thoughts?|state:thoughts?|state:vent|state:offscreen[-_]?agendas?|state:hidden|thoughts?|secrets?|agenda|why)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, " ");
+
+  const location = detectedMeta?.location?.trim() || undefined;
+  const npcSet = new Map<string, string>();
+  const addNpc = (raw: string | undefined) => {
+    const clean = raw?.replace(/<[^>]+>/g, "").trim();
+    if (!clean || clean.length < 2 || clean.length > 100 || /^(?:∅|none|null|n\/a|unknown)$/i.test(clean)) return;
+    const k = clean.toLowerCase();
+    if (!npcSet.has(k)) npcSet.set(k, clean);
+  };
+
+  // Onscreen entities (`<state:onscreen>`, `<ent_on>`, `<scene_cast>`)
+  for (const m of publicOnly.matchAll(/<(?:state:onscreen|ent_on|scene_cast)\b[^>]*>([\s\S]*?)<\/(?:state:onscreen|ent_on|scene_cast)\s*>/gi)) {
+    const body = m[1] ?? "";
+    for (const nm of body.matchAll(/<name\b[^>]*>([^<]+)<\/name>/gi)) {
+      addNpc(nm[1]);
+    }
+    for (const line of body.split(/\r?\n/)) {
+      const colonName = /^(?:[-*•]\s*)?(?:Name|Character|NPC)\s*[:=]\s*([^|\n,]+)/i.exec(line.trim());
+      if (colonName) addNpc(colonName[1]);
+    }
+  }
+  const focusLine = publicOnly.match(/(?:^|\n)\s*Focus\s*[:=]\s*([^\n<]+)/i);
+  if (focusLine?.[1]) {
+    for (const part of focusLine[1].split(/[|,]/)) addNpc(part);
+  }
+
+  const itemSet = new Map<string, string>();
+  const docHintSet = new Map<string, string>();
+  const addItem = (raw: string | undefined) => {
+    const clean = raw?.replace(/<[^>]+>/g, "").replace(/\(\d+\)$/, "").trim();
+    if (!clean || clean.length < 2 || clean.length > 120 || /^(?:∅|none|null|empty|n\/a)$/i.test(clean)) return;
+    const k = clean.toLowerCase();
+    if (!itemSet.has(k)) itemSet.set(k, clean);
+    if (/\b(?:notice|fl[yi]er|letter|note|ledger|journal|diary|map|receipt|ticket|form|dossier|scroll|book|phone|pass|permit|warrant|slip)\b/i.test(clean) && !docHintSet.has(k)) {
+      docHintSet.set(k, clean);
+    }
+  };
+
+  for (const invMatch of publicOnly.matchAll(/<inventory\b[^>]*>([\s\S]*?)<\/inventory\s*>/gi)) {
+    const body = invMatch[1] ?? "";
+    for (const piece of body.split(/[\n,|]+/)) addItem(piece);
+  }
+  for (const bracketInv of publicOnly.matchAll(/\[Inventory\s*:\s*([^\]]+)\]/gi)) {
+    for (const piece of bracketInv[1]!.split(/[|,/]+/)) addItem(piece);
+  }
+  for (const featMatch of publicOnly.matchAll(/<features\b[^>]*>([^<]+)<\/features\s*>/gi)) {
+    for (const piece of featMatch[1]!.split(/[,;|]+/)) addItem(piece);
+  }
+
+  const presentNpcs = [...npcSet.values()].slice(0, 24);
+  const inventoryItems = [...itemSet.values()].slice(0, 24);
+  const knownDocuments = [...docHintSet.values()].slice(0, 12);
+  if (!location && presentNpcs.length === 0 && inventoryItems.length === 0 && knownDocuments.length === 0) {
+    return undefined;
+  }
+  return {
+    ...(location ? { location } : {}),
+    presentNpcs,
+    inventoryItems,
+    knownDocuments,
+  };
+}
+
 export type PreparedNarrative = {
   paragraphs: Paragraph[];
   choices: Choice[];
   panels: PanelArtifact[];
   detectedSceneMetadata?: DetectedSceneMetadata;
   detectedSpeakers?: DetectedSpeakerInfo[];
+  structuredHints?: StructuredTurnHints;
 };
 
 type RawChoice = { id?: string | undefined; label: string; submission: string };
@@ -554,7 +634,7 @@ function cleanNarrativeBlock(block: string, smartProseFilter = true): string {
       const trimmed = line.trim();
       if (!trimmed) return false;
       if (/^\s*\|\s*$/.test(trimmed)) return false;
-      if (/^\[(?:Scene|Location|Setting|Time|Atmosphere|Environment|Lighting|Weather|System|Status|OOC|Date|FLOOR|RESERVEDFLOOR|Note)\b/i.test(trimmed)) return false;
+      if (/^\[(?:Scene|Location|Setting|Time|Atmosphere|Environment|Lighting|Weather|System|Status|OOC|Date|FLOOR|RESERVEDFLOOR|(?:Author'?s?|GM|OOC|System)\s+Note)\b/i.test(trimmed)) return false;
       if (/^<\s*(?:scene[-_]?header|scene[-_\s]+header|scene[-_]?info|location[-_]?header|setting|environment|atmosphere|suggestion|scene\s+seed=|check|think|thought|reasoning|reflection|metadata|ooc|narrative[-_]?notes|author[-_]?note)\b/i.test(trimmed)) return false;
       if (/^<[A-Za-z_-]+(?:\s+[A-Za-z_-]+)*\s*:[^>]+>$/i.test(trimmed)) return false;
       if (smartProseFilter) {
@@ -563,9 +643,9 @@ function cleanNarrativeBlock(block: string, smartProseFilter = true): string {
         if (/^\[(?:Affinity|Stats?|Status|Inventory|Roll|Dice|Check|Turn|Take|Dynamic|Clock|Track|HP|MP|EXP|Level)\b[^\]]*\]$/i.test(trimmed)) return false;
         if (/^\[(?:[^\]\n]*\|){2,}[^\]\n]*\]$/.test(trimmed)) return false;
         if (/^\[[\s\uFE0F]*(?:🕰|🕒|⏰|🗓|📅|📆|📍|🌧|⛈|🌤|☀|☁|❄|🌫|🌨)/u.test(trimmed)) return false;
-        if (/^\[[^\]]+:\s*[^\]]+\]$/.test(trimmed)) return false;
+        if (/^\[[^\]]+:\s*[^\]]+\]$/.test(trimmed) && !/^\[(?:NOTICE|NOTE|MEMO|TO|FROM|SUBJECT|RE|ATTN|WARNING|PASSCODE|ACCESS|ERROR|TERMINAL)\b/i.test(trimmed)) return false;
         if (/^<\/?(?:details|summary|div|span|p|section|header|footer|aside)\b[^>]*>$/i.test(trimmed)) return false;
-        if (/^<\/?(?:(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|hud|matrix|protocol|state|quest|log|chapter)|internal[-_]?states?|state:[a-zA-Z0-9_-]+)\b[^>]*>$/i.test(trimmed)) return false;
+        if (/^<\/?(?:(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|hud|matrix|protocol|state|quest|log|chapter)|internal[-_]?states?|state:[a-zA-Z0-9_-]+)\b[^>]*>$/i.test(trimmed) && !/^<\/?(?:ship[-_]?log|captain[-_]?log|lab[-_]?notes?|field[-_]?notes?|journal[-_]?notes?)\b/i.test(trimmed)) return false;
       }
       return true;
     })
@@ -584,12 +664,21 @@ function stableChoiceId(label: string, index: number): string {
   return `choice-${hash.toString(16).padStart(8, "0")}`;
 }
 
+const DIEGETIC_DOCUMENT_TAGS = new Set([
+  "letter", "note", "notice", "email", "memo", "flyer", "poster", "receipt",
+  "newspaper", "journal", "diary", "terminal", "phone", "sms", "text_message",
+  "dossier", "scroll", "parchment", "plaque", "sign", "transcript", "document",
+  "book", "page", "ship_log", "ship-log", "captain_log", "captain-log",
+  "lab_notes", "lab-notes", "field_notes", "field-notes", "journal_notes", "journal-notes",
+]);
+
 /** Tags whose blocks are never treated as structured sidecars: panels and
- *  status cards (handled elsewhere), choices, images and speech tags. */
+ *  status cards (handled elsewhere), choices, images, speech and diegetic documents. */
 const SIDECAR_EXEMPT_TAGS = new Set([
   "choice", "img", "pimg", "panel", "card", "details", "summary", "think", "thought",
   "status", "stats", "inventory", "hero", "world_voice", "tracker", "dialogue", "speech",
   "say", "line", "voice", "quote", "talk", "message",
+  ...DIEGETIC_DOCUMENT_TAGS,
 ]);
 
 const STRUCTURED_LINE_PATTERNS: readonly RegExp[] = [
@@ -786,7 +875,7 @@ function segmentBeatTexts(text: string): string[] {
 const DYNAMIC_METADATA_TAG_SOURCE =
   "(?:[a-zA-Z0-9_-]+_)?(?:trace|dock|archive|status|stats|inventory|spine|feed|ledger|tracker|variables|metadata|params|memory|context|audit|matrix|protocol|analysis|scratchpad|hud|state|system|ooc|notes|log|reflection|reasoning|pre_response|inner_monologue|true_thoughts?|true-thoughts?|world_info|quest|chapter)|internal[-_]?states?|state:[a-zA-Z0-9_-]+";
 
-type MatchedXmlTagRange = { start: number; end: number; isBoundaryClose?: boolean };
+type MatchedXmlTagRange = { start: number; end: number; tagName?: string; isBoundaryClose?: boolean };
 
 /**
  * Matches XML-style blocks where opening and closing tag names match (balanced
@@ -830,7 +919,7 @@ function findBalancedXmlTagRanges(
     }
 
     if (selfClosing) {
-      ranges.push({ start, end });
+      ranges.push({ start, end, tagName: key });
       continue;
     }
 
@@ -844,7 +933,7 @@ function findBalancedXmlTagRanges(
     } else {
       const list = stacks.get(key);
       if (list && list.length > 0) {
-        ranges.push({ start: list.pop()!, end });
+        ranges.push({ start: list.pop()!, end, tagName: key });
       }
     }
   }
@@ -861,6 +950,7 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
   const smartBeatSegmentation = options.smartBeatSegmentation !== false;
 
   const detectedSceneMetadata = extractDetectedSceneMetadata(content);
+  const structuredHints = extractStructuredTurnHints(content, detectedSceneMetadata);
 
   // 1. Extract custom preset dialogue/thought tags before masking/tag-stripping
   const extractedSpeakers = new Map<string, string>();
@@ -927,6 +1017,7 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
       hidden.push({ start: match.index, end: match.index + match[0].length });
     }
     for (const range of findBalancedXmlTagRanges(content, DYNAMIC_METADATA_TAG_SOURCE, { respectProseBoundary: true })) {
+      if (range.tagName && DIEGETIC_DOCUMENT_TAGS.has(range.tagName)) continue;
       hidden.push({ start: range.start, end: range.end });
     }
   }
@@ -1057,5 +1148,6 @@ export function prepareNarrative(content: string, options: PrepareNarrativeOptio
     panels,
     ...(detectedSceneMetadata ? { detectedSceneMetadata } : {}),
     ...(detectedSpeakers.length > 0 ? { detectedSpeakers } : {}),
+    ...(structuredHints ? { structuredHints } : {}),
   };
 }

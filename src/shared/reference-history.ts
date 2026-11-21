@@ -5,7 +5,11 @@ import {samePresentationTurn} from './presentation-entities.js';
 const digest=z.string().regex(/^[a-f0-9]{64}$/);
 export const ReferenceLineageSchema=z.object({version:z.literal(1),key:TurnKeySchema,messageCount:z.number().int().min(1).max(1024),prefixDigest:digest,paragraphDigest:digest}).strict();
 export type ReferenceLineage=z.infer<typeof ReferenceLineageSchema>;
-const retainedFields=new Set(['description','appearance','role','affiliations','relationships','mannerisms','voice','history','layout','surroundings','customs','publicHistory','provenance','function','limits','significance']);
+const retainedFields=new Set([
+ 'description','appearance','role','affiliations','relationships','mannerisms','voice','statedGoals','history',
+ 'layout','routes','surroundings','lighting','atmosphere','persistentElements','customs','services','publicHistory','risks',
+ 'materials','distinctiveFeatures','colors','provenance','function','limits','access','revealedContents','significance',
+]);
 export function retainableReferenceField(field:string):boolean{return retainedFields.has(field);}
 export const HistoricalReferenceSchema=z.object({sourceKey:TurnKeySchema,replyNumber:z.number().int().min(1).max(1024),reference:StoryReferenceSchema}).strict().refine(entry=>retainableReferenceField(entry.reference.field));
 export type HistoricalReference=z.infer<typeof HistoricalReferenceSchema>;

@@ -15,6 +15,8 @@ import {
   type LocationDNA,
   type ItemDNA
 } from './story-dna.js';
+import { harvestTurnStoryDNA } from '../backend/runtime/story-dna-harvester.js';
+import { TurnPlanSchema } from './contracts.js';
 
 test('creates stable ids from names', () => {
   expect(createLocationId('Flat 3')).toBe('flat-3');
@@ -140,4 +142,55 @@ test('derives short aliases and filters active-branch swipe entries', () => {
   expect(scrubbed.locations['swipe0-only']).toBeUndefined();
   expect(scrubbed.locations['swipe1-kept']).toBeDefined();
   expect(scrubbed.locations['locked-kept']).toBeDefined();
+});
+
+test('Wave 1: preserves taverns/manors/stations in Location DNA, splits personal names, harvests mentioned places and multi-turn DocumentLedger', () => {
+  expect(deriveShortAliases('Naomi Vance')).toEqual(expect.arrayContaining(['Naomi', 'Vance']));
+  expect(deriveShortAliases('Marten House - Fourth Floor Corridor')).toEqual(expect.arrayContaining(['Marten House', 'Fourth Floor Corridor']));
+
+  const set = StoryDNASetSchema.parse({ locations: {}, items: {}, revision: 0 });
+  const sceneBase = {
+    sceneId: 's1', revision: 0, startParagraph: 0,
+    environment: { location: 'The Rusty Anchor Tavern', description: 'Warm hearthstone taproom.', lighting: 'amber lanterns', timeOfDay: 'evening', weather: 'rain', persistentElements: ['oak bar'] },
+    cast: ['Naomi Vance'], continuity: { revision: 0, characters: {}, facts: {} },
+    basePrompt: 'tavern', cameraLock: { framing: 'wide', angle: 'eye level', perspective: 'fixed', lens: '50mm', subjectAnchor: 'center', horizon: 'upper third', safeDialogueRegion: 'lower third', aspectRatio: '16:9' },
+    compositionLock: 'centered', activeAssetId: null, priorSceneId: null,
+  };
+  const plan1 = TurnPlanSchema.parse({
+    schemaVersion: 1,
+    key: { chatId: 'c1', assistantMessageId: 'msg-1', swipeId: 0, sourceFingerprint: 'fp-12345678', revision: 0 },
+    paragraphs: [{ index: 0, sourceIndex: 0, text: 'At The Rusty Anchor Tavern, a crumpled flyer mentions Grand Central Station.' }],
+    scenes: [sceneBase],
+    visualCues: [],
+    choices: [],
+    initialContinuity: { revision: 0, characters: {}, facts: {} },
+    continuityDeltas: [],
+    terminalContinuity: { revision: 0, characters: {}, facts: {} },
+    storyReferences: [
+      { kind: 'place', name: 'Grand Central Station', paragraphIndex: 0, field: 'publicHistory', value: 'Grand Central Station', evidence: 'At The Rusty Anchor Tavern, a crumpled flyer mentions Grand Central Station.' },
+    ],
+    storyDocuments: [
+      { id: 'doc-flyer-1', name: 'Crumpled Flyer', kind: 'flyer', paragraphIndex: 0, aliases: ['flyer'], sections: [] },
+    ],
+    planningStatus: 'planned',
+    createdAt: new Date().toISOString(),
+  });
+  harvestTurnStoryDNA(plan1, set, 'msg-1::0', null);
+  expect(findMatchingLocation(set.locations, 'The Rusty Anchor Tavern')?.name).toBe('The Rusty Anchor Tavern');
+  expect(findMatchingLocation(set.locations, 'Grand Central Station')?.loreText).toContain('publicHistory');
+  expect(set.documents?.['doc-flyer-1']?.sections).toEqual([]);
+
+  // Turn 2 reads the back of the same flyer — sections accumulate onto the existing DocumentLedger entry!
+  const plan2 = TurnPlanSchema.parse({
+    ...plan1,
+    key: { chatId: 'c1', assistantMessageId: 'msg-2', swipeId: 0, sourceFingerprint: 'fp-22345678', revision: 0 },
+    paragraphs: [{ index: 0, sourceIndex: 0, text: 'You flip the flyer over: "Track 9 closes at midnight."' }],
+    storyReferences: [],
+    storyDocuments: [
+      { id: 'doc-flyer-1', name: 'Crumpled Flyer', kind: 'flyer', paragraphIndex: 0, aliases: ['flyer'], sections: [{ paragraphIndex: 0, start: 23, end: 52, text: 'Track 9 closes at midnight.' }] },
+    ],
+  });
+  harvestTurnStoryDNA(plan2, set, 'msg-2::0', 'The Rusty Anchor Tavern');
+  expect(set.documents?.['doc-flyer-1']?.sections.map((s) => s.text)).toEqual(['Track 9 closes at midnight.']);
+  expect(set.documents?.['doc-flyer-1']?.sourceMessageIds).toEqual(['msg-1', 'msg-2']);
 });

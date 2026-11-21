@@ -514,4 +514,41 @@ You\u2800stop\u2800outside\u2800the\u2800dark\u2800wooden\u2800door\u2800marked\
       "Story beat one."
     ]);
   });
+
+  test("Wave 1: preserves diegetic document blocks (<letter>, <ship_log>, [NOTICE: ...]) and extracts spoiler-free structuredHints without leaking thoughts", () => {
+    const sample = [
+      "<letter>",
+      "From: Naomi Vance",
+      "To: Occupant of Room 47",
+      "Keep the radiator bleed valve cracked open tonight.",
+      "</letter>",
+      "",
+      "[NOTICE: Hot water off after midnight.]",
+      "",
+      "<ship_log>",
+      "Entry 14: Cold mountain rain continues.",
+      "</ship_log>",
+      "",
+      "<!-- GFX_START -->",
+      "<internal_states>",
+      "<state:world><loc>Marten House Lobby</loc><features>oak desk, sign-in ledger</features></state:world>",
+      "<state:onscreen><ent_on><name>Orin Vance</name></ent_on></state:onscreen>",
+      "<state:thoughts><ent_think><name>Secret Mole</name><why>Hidden betrayal plot</why></ent_think></state:thoughts>",
+      "<inventory>brass key, folded slip</inventory>",
+      "</internal_states>",
+      "<!-- GFX_END -->",
+    ].join("\n");
+
+    const prepared = prepareNarrative(sample);
+    const joined = prepared.paragraphs.map((p) => p.text).join("\n");
+    expect(joined).toContain("From: Naomi Vance");
+    expect(joined).toContain("Keep the radiator bleed valve cracked open tonight.");
+    expect(joined).toContain("[NOTICE: Hot water off after midnight.]");
+    expect(joined).toContain("Entry 14: Cold mountain rain continues.");
+    expect(prepared.structuredHints?.location).toBe("Marten House Lobby");
+    expect(prepared.structuredHints?.presentNpcs).toContain("Orin Vance");
+    expect(prepared.structuredHints?.presentNpcs).not.toContain("Secret Mole");
+    expect(prepared.structuredHints?.inventoryItems).toContain("brass key");
+    expect(prepared.structuredHints?.knownDocuments).toEqual(expect.arrayContaining(["sign-in ledger", "folded slip"]));
+  });
 });

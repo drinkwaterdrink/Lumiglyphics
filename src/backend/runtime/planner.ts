@@ -45,7 +45,7 @@ import { reduceContinuity } from "../core/continuity.js";
 import { resolveCueTimeline } from "../core/cue-state.js";
 import { repairScenarioSubjects } from "./scenario-subjects.js";
 import {scenarioPersonaSubject} from './scenario-persona.js';
-import { extractProseAtmosphereDelta, prepareNarrative } from "../core/paragraphs.js";
+import { extractProseAtmosphereDelta, prepareNarrative, type StructuredTurnHints } from "../core/paragraphs.js";
 import { decideSceneBoundary } from "../core/scene-boundary.js";
 import { validateTurnPlan } from "../core/turn-plan.js";
 import { singleCharacterTagBlock } from "../core/visual-state.js";
@@ -956,23 +956,13 @@ export function buildOutboundDramaticBrief(params: {
   return `${joined.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
 }
 
-async function requestPlannerOutput(
-  spindle: SpindleAPI,
-  input: PlanTurnInput,
-  paragraphText: string,
-  visualContext: VisualContextSnapshot,
-  connection: ResolvedPlannerConnection | null,
-  registry: CharacterRegistry = {},
-  paragraphCount = 0,
-  retryFeedback?: string,
-  storyDNASet?: StoryDNASet | null
-): Promise<z.infer<typeof PlannerOutputSchema>> {
-  const promptProfile=await plannerImagePromptProfile(spindle,input.config,input.userId);
-  const scaledMaxTokens = paragraphCount <= 12
-    ? 16000
-    : Math.min(32000, 16000 + (paragraphCount - 12) * 800);
+export function structuredJsonParametersFor(
+  connection: ResolvedPlannerConnection | null | undefined,
+  maxTokens: number,
+  parserParameters?: Record<string, unknown>,
+): Record<string, unknown> {
   const defaultParameters: Record<string, unknown> = {
-    max_tokens: scaledMaxTokens
+    max_tokens: maxTokens,
   };
   const provider = connection?.provider?.toLowerCase();
   const model = connection?.model ?? "";
@@ -1001,10 +991,28 @@ async function requestPlannerOutput(
   ) {
     defaultParameters.response_format = { type: "json_object" };
   }
-  const parameters = {
+  return {
     ...defaultParameters,
-    ...input.config.parserParameters
+    ...parserParameters,
   };
+}
+
+async function requestPlannerOutput(
+  spindle: SpindleAPI,
+  input: PlanTurnInput,
+  paragraphText: string,
+  visualContext: VisualContextSnapshot,
+  connection: ResolvedPlannerConnection | null,
+  registry: CharacterRegistry = {},
+  paragraphCount = 0,
+  retryFeedback?: string,
+  storyDNASet?: StoryDNASet | null
+): Promise<z.infer<typeof PlannerOutputSchema>> {
+  const promptProfile=await plannerImagePromptProfile(spindle,input.config,input.userId);
+  const scaledMaxTokens = paragraphCount <= 12
+    ? 16000
+    : Math.min(32000, 16000 + (paragraphCount - 12) * 800);
+  const parameters = structuredJsonParametersFor(connection, scaledMaxTokens, input.config.parserParameters);
 
   const activeCast = [input.previousScene?.character, ...(input.previousScene?.cast ?? [])].filter((c): c is string => Boolean(c));
   const personaName = visualContext.personaIdentity?.name?.trim() || "the User";
@@ -2047,6 +2055,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   cardRole: CardRole;
   cardId?: string;
   personaName?: string;
+  structuredHints?: StructuredTurnHints;
   contextDiagnostics: VisualContextDiagnostics;
   singleCharacter: SingleCharacterState;
   extractedCharacters?: Array<{ name: string; description: string }>;
@@ -2748,21 +2757,25 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   });
 
   const loreEnabled = input.config.collectEntityReferences || input.config.tooltips.enabled;
-  const malformedDocs = planner.storyDocuments !== undefined && !Array.isArray(planner.storyDocuments);
-  const llmDocs = normalizeStoryDocuments(planner.storyDocuments, promptParagraphs);
-  const sensedDocs = senseDocumentsDeterministically(promptParagraphs);
-  const resolvedStoryDocuments = loreEnabled && !malformedDocs
-    ? (!input.splitHorizonLore
+  const malformedDocs = loreEnabled && planner.storyDocuments !== undefined && !Array.isArray(planner.storyDocuments);
+  const llmDocs = loreEnabled && !malformedDocs ? normalizeStoryDocuments(planner.storyDocuments, promptParagraphs) : [];
+  const sensedDocs = malformedDocs ? [] : senseDocumentsDeterministically(promptParagraphs);
+  const resolvedStoryDocuments = malformedDocs
+    ? []
+    : (llmDocs.length > 0
         ? mergeStoryDocuments(llmDocs, sensedDocs)
-        : (Array.isArray(planner.storyDocuments) && planner.storyDocuments.length > 0
-            ? mergeStoryDocuments(llmDocs, sensedDocs)
-            : (sensedDocs.length > 0 ? sensedDocs : undefined)))
-    : (loreEnabled && malformedDocs ? [] : undefined);
+        : (sensedDocs.length > 0 ? sensedDocs : undefined));
+
+  const normRefOptions = {
+    paragraphSpeakers,
+    detectedLocation: scenes[0]?.environment.location ?? narrative.detectedSceneMetadata?.location ?? null,
+    sourceIndexes: promptParagraphs.map((p) => p.sourceIndex),
+  };
 
   let plan = validateTurnPlan(TurnPlanSchema.parse({
     schemaVersion: 1,
     key,
-    ...((input.config.collectEntityReferences || input.config.tooltips.enabled) && (!input.splitHorizonLore || (Array.isArray(planner.storyReferences) && planner.storyReferences.length > 0)) ? { storyReferences: normalizeStoryReferences(planner.storyReferences, promptParagraphs).filter(r => !(cardRole === "scenario" && r.kind === "npc" && Boolean(scenarioReferenceName) && characterAppearanceKey(r.name) === scenarioReferenceName)) } : {}),
+    ...(loreEnabled && (!input.splitHorizonLore || (Array.isArray(planner.storyReferences) && planner.storyReferences.length > 0)) ? { storyReferences: normalizeStoryReferences(planner.storyReferences, promptParagraphs, normRefOptions).filter(r => !(cardRole === "scenario" && r.kind === "npc" && Boolean(scenarioReferenceName) && characterAppearanceKey(r.name) === scenarioReferenceName)) } : {}),
     ...(resolvedStoryDocuments !== undefined ? { storyDocuments: resolvedStoryDocuments } : {}),
     ...(worldAtmosphereTimeline.length > 0 ? { worldAtmosphereTimeline } : {}),
     paragraphs: narrative.paragraphs,
@@ -2816,7 +2829,7 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
     }
   }
   return {
-    plan, usedFallback, cardRole, ...(visualContext.cardId ? {cardId:visualContext.cardId} : {}), ...(personaName ? { personaName } : {}), contextDiagnostics: visualContext.diagnostics, singleCharacter,
+    plan, usedFallback, cardRole, ...(visualContext.cardId ? {cardId:visualContext.cardId} : {}), ...(personaName ? { personaName } : {}), ...(narrative.structuredHints ? { structuredHints: narrative.structuredHints } : {}), contextDiagnostics: visualContext.diagnostics, singleCharacter,
     extractedCharacters: planner.characters.map((character) => ({ name: character.name, description: character.description })),
     characterRegistry: registry,
     rejectedAliases: registryReport.rejectedAliases,
@@ -2833,9 +2846,15 @@ export async function extractTurnLoreAsync(
   spindle: SpindleAPI,
   params: {
     config: VisualNovelConfig;
-    paragraphs: readonly { index: number; text: string }[];
+    paragraphs: readonly { index: number; sourceIndex?: number; text: string }[];
     cardRole?: CardRole;
     scenarioReferenceName?: string;
+    previousLocation?: string | null;
+    knownCast?: readonly string[];
+    structuredHints?: StructuredTurnHints;
+    openDocumentTitles?: readonly string[];
+    paragraphSpeakers?: readonly (string | null)[];
+    sourceIndexes?: readonly number[];
     userId?: string;
     signal?: AbortSignal;
   },
@@ -2849,22 +2868,43 @@ export async function extractTurnLoreAsync(
   throwIfAborted(params.signal);
   const connection = await resolvePlannerConnection(spindle, params.config, params.userId);
   const paragraphText = params.paragraphs.map((p) => `[${p.index}] ${p.text}`).join("\n");
+  const contextLines: string[] = [];
+  const hintLocation = params.structuredHints?.location || params.previousLocation || undefined;
+  if (hintLocation) contextLines.push(`- Active location hint: ${hintLocation}`);
+  const castHints = Array.from(new Set([
+    ...(params.structuredHints?.presentNpcs ?? []),
+    ...(params.knownCast ?? []),
+  ].map((s) => s.trim()).filter(Boolean))).slice(0, 16);
+  if (castHints.length > 0) contextLines.push(`- Known characters (disambiguation only): ${castHints.join(", ")}`);
+  if (params.structuredHints?.inventoryItems?.length) {
+    contextLines.push(`- Visible carried/room items: ${params.structuredHints.inventoryItems.slice(0, 12).join(", ")}`);
+  }
+  if (params.openDocumentTitles?.length) {
+    contextLines.push(`- Previously opened story documents: ${params.openDocumentTitles.slice(0, 12).join(", ")}`);
+  }
+  const userMessage = contextLines.length > 0
+    ? `Context hints (disambiguation only — extract ONLY facts explicitly stated in the numbered paragraphs below):\n${contextLines.join("\n")}\n\nVisible paragraphs:\n${paragraphText}`
+    : paragraphText;
+
   const systemPrompt = [
     params.config.referencePromptOverride?.trim() || MASTER_LORE_REFERENCE_PROMPT,
-    `Also extract optional storyDocuments: up to 12 physical documents or readable props with shape storyDocuments:[{name,kind:${JSON.stringify(STORY_DOCUMENT_KINDS)},paragraphIndex,aliases?,visualDetails?,observations?:[{paragraphIndex,summary?,material?,condition?,visualDetails?,evidence}],sections:[{paragraphIndex,text,evidence}]}].`,
+    `Also extract optional storyDocuments: up to 12 physical documents or readable props (including plurals or phones/messages) with shape storyDocuments:[{name,kind:${JSON.stringify(STORY_DOCUMENT_KINDS)},paragraphIndex,aliases?,visualDetails?,observations?:[{paragraphIndex,summary?,material?,condition?,visualDetails?,evidence}],sections:[{paragraphIndex,text,evidence}]}]. Anchor name/aliases to the paragraph where introduced and copy literal document prose verbatim into sections.`,
     'Return one JSON object { "storyReferences": [...], "storyDocuments": [...] } and no prose.'
   ].join("\n\n");
+
+  const maxTokens = Math.min(12000, 4000 + params.paragraphs.length * 300);
+  const parameters = structuredJsonParametersFor(connection, maxTokens, params.config.parserParameters);
 
   const response = await spindle.generate.raw({
     type: "raw",
     messages: [
       { role: "system", content: systemPrompt },
-      { role: "user", content: paragraphText },
+      { role: "user", content: userMessage },
     ],
     ...(connection
       ? { provider: connection.provider, model: connection.model, connection_id: connection.id }
       : {}),
-    parameters: { max_tokens: 4000, ...params.config.parserParameters },
+    parameters,
     reasoning: { source: "off" },
     ...(params.userId ? { userId: params.userId } : {}),
   });
@@ -2875,13 +2915,22 @@ export async function extractTurnLoreAsync(
   if (typeof rawContent !== "string" && (!rawContent || typeof rawContent !== "object")) {
     return { storyReferences: [], storyDocuments: sensedDocs };
   }
-  const parsed = jsonObject(rawContent);
+  let parsed: unknown;
+  try {
+    parsed = jsonObject(rawContent);
+  } catch {
+    return { storyReferences: [], storyDocuments: sensedDocs };
+  }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     return { storyReferences: [], storyDocuments: sensedDocs };
   }
   const rec = parsed as Record<string, unknown>;
-  const scenarioRef = params.scenarioReferenceName;
-  const storyReferences = normalizeStoryReferences(rec.storyReferences, params.paragraphs).filter(
+  const scenarioRef = params.scenarioReferenceName ? characterAppearanceKey(params.scenarioReferenceName) : "";
+  const storyReferences = normalizeStoryReferences(rec.storyReferences, params.paragraphs, {
+    paragraphSpeakers: params.paragraphSpeakers,
+    detectedLocation: params.structuredHints?.location ?? params.previousLocation ?? null,
+    sourceIndexes: params.sourceIndexes ?? params.paragraphs.map((p, idx) => p.sourceIndex ?? idx),
+  }).filter(
     (r) => !(params.cardRole === "scenario" && r.kind === "npc" && Boolean(scenarioRef) && characterAppearanceKey(r.name) === scenarioRef),
   );
   const storyDocuments = mergeStoryDocuments(normalizeStoryDocuments(rec.storyDocuments, params.paragraphs), sensedDocs);

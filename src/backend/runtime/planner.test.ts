@@ -1320,9 +1320,9 @@ test('optional documents are literal, source-scoped and never trigger a repair c
   const spindle={generate:{raw:async(request:any)=>{calls++;instruction=JSON.stringify(request);return {content:JSON.stringify({scenes:[],cues:[],characters:[],speakers:[],storyDocuments:malformed?{bad:true}:[proposed]})};}},log:{warn(){}}} as unknown as SpindleAPI;
   const result=await planTurn(spindle,{chatId:'chat-1',message:{...message,content},content,previousScene:null,previousContinuity:null,recentMessages:[],config:{...DEFAULT_CONFIG,collectEntityReferences:enabled},singleCharacter:emptySingleCharacter(),characterAppearance:{}});
   assert.equal(calls,1);assert.equal(instruction.includes('Optional storyDocuments'),enabled);
-  assert.equal(result.plan.storyDocuments?.length,enabled&&!malformed?1:enabled?0:undefined);
+  assert.equal(result.plan.storyDocuments?.length,enabled&&malformed?0:1);
   const presentation=projectTurnPresentation(result.plan);
-  assert.equal(presentation?.documents?.[0]?.sections.length,enabled&&!malformed?1:undefined);
+  assert.equal(presentation?.documents?.[0]?.sections.length,enabled&&malformed?undefined:enabled?1:0);
   assert.equal(JSON.stringify(presentation).includes('Invented secret'),false);
   if(enabled&&!malformed){
    assert.equal((presentation?selectPresentationSnapshot(presentation,0):undefined)?.entities.some(e=>e.kind==='object'&&e.name==='letter'),true);

@@ -127,3 +127,24 @@ test('optional history bounds concurrent reads and stops before parsing late rec
  const started=reads;releases.forEach(release=>release());await new Promise(resolve=>setTimeout(resolve,15));
  expect(started).toBeGreaterThan(0);expect(started).toBeLessThanOrEqual(2);expect(reads).toBe(started);expect(parsed).toBe(0);
 });
+
+test('Wave 1: retains ReferenceHistory across Braille blank spacers and preset color tags', async () => {
+ const messages = [
+  msg('m1', '<cornflower>Mira\u2800Vance\u2800carries\u2800a\u2800brass\u2800key\u2800in\u2800Marten\u2800House.</cornflower>'),
+  msg('u1', 'Continue.', true),
+  msg('m2', 'Mira\u2800opens\u2800door\u280047.'),
+ ];
+ const old = plan(messages[0]!);
+ old.paragraphs = [{ index: 0, sourceIndex: 0, text: 'Mira Vance carries a brass key in Marten House.' }];
+ old.storyReferences = [
+  { kind: 'object', name: 'brass key', paragraphIndex: 0, field: 'materials', value: 'brass', evidence: 'Mira Vance carries a brass key in Marten House.' },
+  { kind: 'npc', name: 'Mira Vance', paragraphIndex: 0, field: 'role', value: 'carries a brass key', evidence: 'Mira Vance carries a brass key in Marten House.' },
+ ];
+ const current = plan(messages[2]!);
+ const prior: StoredTurnRecord = { schemaVersion: 1, status: 'ready', speaker: 'Narrator', jobs: [], plan: old, updatedAt: old.createdAt, referenceLineage: await captureReferenceLineage(messages, old) };
+ const target: StoredTurnRecord = { schemaVersion: 1, status: 'ready', speaker: 'Narrator', jobs: [], plan: current, updatedAt: current.createdAt, referenceLineage: await captureReferenceLineage(messages, current) };
+ const data = new Map([[turnPath('c', 'm1', 0), prior]]);
+ const api = { chat: { getMessages: async () => messages }, userStorage: { getJson: async (p: string, o: any) => data.get(p) ?? o.fallback } } as unknown as SpindleAPI;
+ const history = await readReferenceHistory(api, target, 'user');
+ expect(history?.entries.map((e) => `${e.reference.name}:${e.reference.field}`)).toEqual(['Mira Vance:role', 'brass key:materials']);
+});

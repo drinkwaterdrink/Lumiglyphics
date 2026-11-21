@@ -15,8 +15,8 @@ export const REFERENCE_FIELD_GROUPS = [
 export const REFERENCE_FIELDS = [
  'description','appearance','outfit','condition',
  'role','affiliations','relationships','mannerisms','voice','statedGoals','history',
- 'layout','routes','surroundings','customs','services','publicHistory','risks',
- 'provenance','function','limits','access','revealedContents','owner','significance',
+ 'layout','routes','surroundings','lighting','atmosphere','persistentElements','customs','services','publicHistory','risks',
+ 'materials','distinctiveFeatures','colors','provenance','function','limits','access','revealedContents','owner','significance',
 ] as const;
 export type ReferenceField = typeof REFERENCE_FIELDS[number];
 type FieldGroup = typeof REFERENCE_FIELD_GROUPS[number]['id'];
@@ -36,10 +36,16 @@ const fields:Record<ReferenceField,readonly [label:string,section:FieldGroup,liv
  layout:['Layout','setting',false],
  routes:['Routes','setting',false],
  surroundings:['Surroundings','setting',false],
+ lighting:['Lighting','setting',false],
+ atmosphere:['Atmosphere','setting',false],
+ persistentElements:['Persistent elements','setting',false],
  customs:['Customs','setting',false],
  services:['Services','use',false],
  publicHistory:['Public history','history',false],
  risks:['Known risks','setting',false],
+ materials:['Materials','appearance',false],
+ distinctiveFeatures:['Distinctive features','appearance',false],
+ colors:['Colors','appearance',false],
  provenance:['Provenance','history',false],
  function:['Function','use',false],
  limits:['Limits','use',false],
@@ -61,8 +67,8 @@ export function referenceFieldInfo(field:string):ReferenceFieldInfo {
 
 const specificFields = {
  npc:new Set<string>(['role','affiliations','relationships','mannerisms','voice','statedGoals','history']),
- place:new Set<string>(['layout','routes','surroundings','customs','services','publicHistory','risks']),
- object:new Set<string>(['provenance','function','limits','access','revealedContents','owner','significance']),
+ place:new Set<string>(['layout','routes','surroundings','lighting','atmosphere','persistentElements','customs','services','publicHistory','risks']),
+ object:new Set<string>(['materials','distinctiveFeatures','colors','provenance','function','limits','access','revealedContents','owner','significance']),
 };
 /** All four original fields remain valid for every category. */
 export function referenceFieldMatchesKind(field:ReferenceField,kind:'npc'|'place'|'object'):boolean {
