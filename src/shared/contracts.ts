@@ -2,6 +2,7 @@ import {PresentationRuleTraceSchema} from './presentation-rules.js';
 import { StoryDocumentSchema } from './story-documents.js';
 import { StoryReferenceSchema } from "./story-references.js";
 import { z } from "zod";
+import { ReplyUsageSchema } from "./reply-usage.js";
 import { ActionPropFieldSchema, ActionPropSchema, type ActionProp } from "./action-prop.js";
 import { PanelArtifactSchema } from "./panels.js";
 import { ImageTemplateSnapshotSchema } from "./image-templates.js";
@@ -417,6 +418,7 @@ export const TurnPlanSchema = z.object({
   rpgState: RpgStateSchema.optional(),
   worldAtmosphereTimeline: z.array(SceneAtmosphereEntrySchema).max(64).optional(),
   resolvedThreads: z.array(z.string().trim().min(1).max(160)).max(8).optional(),
+  replyUsage: ReplyUsageSchema.optional(),
   createdAt: TimestampSchema
 }).strict().superRefine((plan, context) => {
   for (const [index, paragraph] of plan.paragraphs.entries()) {

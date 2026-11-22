@@ -810,6 +810,11 @@ export async function turnViewWithAudio(spindle: SpindleAPI, record: StoredTurnR
   }
   const view=turnView(record);
   const config=await decorateCastAssets(spindle,record,view.assets,userId);
+  const effectiveConfig=config??await loadConfig(spindle,userId).catch(()=>null);
+  if(effectiveConfig?.showReplyCost&&record.plan.replyUsage){
+    const imagesGenerated=record.jobs.filter(j=>(j.status==='generated'||j.status==='browser_ready')&&j.provider!=='cache').length;
+    view.replyCost={usage:record.plan.replyUsage,imagesGenerated};
+  }
   try{if(record.plan.storyDocuments?.length){const docAssets=await listTurnDocumentAssets(spindle,record.plan.key.chatId,record.plan,Math.max(0,record.plan.paragraphs.length-1),userId);if(Object.keys(docAssets).length)view.documentAssets=docAssets;}}catch{/* Optional document prop cache lookup never blocks reading. */}
   try{if(config?.tooltips.enabled&&config.tooltips.rememberReferences){const history=await readReferenceHistory(spindle,record,userId);if(history)view.referenceHistory=history;}}catch{/* Optional references never block primary reading. */}
   return view;

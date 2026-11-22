@@ -1,6 +1,7 @@
 import {ParagraphReadAlong,type SpeechPlaybackProgress} from '../speech/read-along.js';
 import {DisplayRuleExecutor,type DisplayEvaluation} from './display-rule-executor.js';
 import {prepareDialogueSource} from './rich-text.js';
+import {formatReplyUsage} from '../../shared/reply-usage.js';
 import { ReaderWorkspace } from "./reader-workspace.js";
 import {presentEffect} from '../host/effect-presentation.js';
 import {CastStage} from "./cast-stage.js";
@@ -195,6 +196,7 @@ export class VnStage {
   private readonly speaker: HTMLElement;
   private readonly dialogueText: HTMLElement;
   private readonly dialogueLive: HTMLElement | null;
+  private readonly replyCostEl = document.createElement("div");
   private dossiers!: StageDossiers;
   readonly workspace: ReaderWorkspace;
   private readonly progress: HTMLElement;
@@ -1163,6 +1165,8 @@ export class VnStage {
     this.speechReadAlong.setParagraph('',-1);
     this.workspace.setResume(null);
     this.resetDisplayEvaluation();
+    this.replyCostEl.hidden = true;
+    this.replyCostEl.textContent = "";
     this.sceneLoad?.abort();this.sceneLoad=null;
     this.workspace.suspend();
     this.preparationPreview.clear();
@@ -1202,6 +1206,18 @@ export class VnStage {
     this.speechReadAlong.setParagraph('',-1);
     this.resetDisplayEvaluation();
     this.sceneLoad?.abort();this.sceneLoad=null;
+    if (!this.replyCostEl.parentElement) {
+      this.replyCostEl.dataset.vnReplyCost = "";
+      this.replyCostEl.style.cssText = "font-size:11px;line-height:1.35;margin-top:6px;opacity:.72;";
+      this.dialogueText.after(this.replyCostEl);
+    }
+    if (turn.replyCost) {
+      this.replyCostEl.hidden = false;
+      this.replyCostEl.textContent = turn.replyCost;
+    } else {
+      this.replyCostEl.hidden = true;
+      this.replyCostEl.textContent = "";
+    }
     this.turnLocation = turn.location ?? null;
     if (turn.rpgMode !== undefined) this.rpgMode = turn.rpgMode;
     this.rpgState = turn.rpgState ?? null;

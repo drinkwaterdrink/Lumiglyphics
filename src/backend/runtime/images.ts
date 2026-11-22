@@ -1841,10 +1841,11 @@ export async function generateAssets(
           frozen=adaptation.request;
           const promptWasRewritten=adaptation.rewritten;
           if(adaptation.error)baseMetadata.promptAdaptationError=adaptation.error;
-          if(!config.reviewImages && !cacheOptions.skipAutomaticPromptRepair && frozen.promptProfile) {
-            const maxAllowed = frozen.promptProfileV2?.hardMaxCharacters ?? frozen.promptProfile.maxCharacters;
-            if (frozen.prompt.length + (frozen.negativePrompt?.length ?? 0) > maxAllowed || (frozen.promptProfile.negativeMode === 'positive-only' && Boolean(frozen.negativePrompt?.trim()))) {
-              const autoFitted = fitPromptToBudget(frozen.prompt, frozen.negativePrompt ?? '', maxAllowed, frozen.promptProfile.negativeMode);
+          if(!config.reviewImages && !cacheOptions.skipAutomaticPromptRepair && (frozen.promptProfileV2 || frozen.promptProfile)) {
+            const maxAllowed = frozen.promptProfileV2?.hardMaxCharacters ?? frozen.promptProfile?.maxCharacters ?? 3000;
+            const negMode = frozen.promptProfileV2 ? (frozen.promptProfileV2.negativePolicy === 'positive-only' ? 'positive-only' : 'dual') : (frozen.promptProfile?.negativeMode ?? 'dual');
+            if (frozen.prompt.length + (frozen.negativePrompt?.length ?? 0) > maxAllowed || (negMode === 'positive-only' && Boolean(frozen.negativePrompt?.trim()))) {
+              const autoFitted = fitPromptToBudget(frozen.prompt, frozen.negativePrompt ?? '', maxAllowed, negMode);
               frozen = applyImageEdits({ ...frozen, prompt: autoFitted.prompt, negativePrompt: autoFitted.negativePrompt }, {});
             }
           }

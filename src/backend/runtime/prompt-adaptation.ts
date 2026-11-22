@@ -7,8 +7,11 @@ import {rewriteImagePrompt} from './prompt-rewrite.js';
 /** One adaptation policy for new pictures and template replacements. Failure
  * returns the intact draft to review; it never starts an image request. */
 export async function adaptImagePrompt(spindle:SpindleAPI,input:ImageGenerationRequest,metadata:ImagePromptMetadata|undefined,config:VisualNovelConfig,userId:string|undefined,signal:AbortSignal,skip=false):Promise<{request:ImageGenerationRequest;rewritten:boolean;error?:string}>{
- const request=compactImageRequest(input),profile=request.promptProfile;
- if(skip||!(request.prompt.length+(request.negativePrompt?.length??0)>(profile?.maxCharacters??3000)||profile?.negativeMode==='positive-only'&&Boolean(request.negativePrompt?.trim())))return {request,rewritten:false};
+ const request=compactImageRequest(input);
+ const v2=request.promptProfileV2,v1=request.promptProfile;
+ const maxChars=v2?.hardMaxCharacters??v1?.maxCharacters??3000;
+ const isPosOnly=v2?.negativePolicy==='positive-only'||v1?.negativeMode==='positive-only';
+ if(skip||!(request.prompt.length+(request.negativePrompt?.length??0)>maxChars||(isPosOnly&&Boolean(request.negativePrompt?.trim()))))return {request,rewritten:false};
  try{
   return {request:await rewriteImagePrompt(spindle,request,metadata,config,userId,signal,'fit'),rewritten:true};
  }catch(error){

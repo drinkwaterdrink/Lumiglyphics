@@ -152,6 +152,7 @@ export interface VnTurnInput {
   preserveImage?: boolean;
   ambient?: AmbientEffect | null;
   location?: string;
+  replyCost?: string | undefined;
   worldAtmosphere?: readonly SceneAtmosphereEntry[];
   documentAssets?: Record<string, DocumentAssetView>;
   rpgMode?: RpgMode;

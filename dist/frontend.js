@@ -20505,6 +20505,31 @@ var StoryReferenceSchema = exports_external.object({
   evidence: exports_external.string().trim().min(1).max(1200)
 }).strict().refine((reference) => referenceFieldMatchesKind(reference.field, reference.kind), { message: "Reference field does not apply to this entity category." });
 
+// src/shared/reply-usage.ts
+var ReplyUsageSchema = exports_external.object({
+  plannerCalls: exports_external.number().int().nonnegative(),
+  systemOneCalls: exports_external.number().int().nonnegative(),
+  promptTokens: exports_external.number().int().nonnegative().nullable(),
+  completionTokens: exports_external.number().int().nonnegative().nullable()
+}).strict();
+var count = (value) => value.toLocaleString("en-US");
+function formatReplyUsage(usage, imagesGenerated) {
+  const calls = usage.plannerCalls + usage.systemOneCalls;
+  const parts = [];
+  const callParts = [
+    usage.plannerCalls ? `${usage.plannerCalls} planner ${usage.plannerCalls === 1 ? "call" : "calls"}` : "",
+    usage.systemOneCalls ? `${usage.systemOneCalls} System One ${usage.systemOneCalls === 1 ? "call" : "calls"}` : ""
+  ].filter(Boolean);
+  parts.push(calls ? `Text: ${callParts.join(", ")}` : "Text: no model calls (deterministic plan)");
+  if (usage.promptTokens !== null || usage.completionTokens !== null) {
+    parts.push(`${count(usage.promptTokens ?? 0)} prompt / ${count(usage.completionTokens ?? 0)} completion tokens`);
+  } else if (calls) {
+    parts.push("token counts not reported by the provider");
+  }
+  parts.push(`${count(imagesGenerated)} ${imagesGenerated === 1 ? "image" : "images"} generated`);
+  return parts.join(" · ");
+}
+
 // src/shared/action-prop.ts
 var ALLOWED_ACTIONS = [
   "holding",
@@ -22581,6 +22606,7 @@ var TurnPlanSchema = exports_external.object({
   rpgState: RpgStateSchema.optional(),
   worldAtmosphereTimeline: exports_external.array(SceneAtmosphereEntrySchema).max(64).optional(),
   resolvedThreads: exports_external.array(exports_external.string().trim().min(1).max(160)).max(8).optional(),
+  replyUsage: ReplyUsageSchema.optional(),
   createdAt: TimestampSchema
 }).strict().superRefine((plan, context) => {
   for (const [index, paragraph] of plan.paragraphs.entries()) {
@@ -29910,14 +29936,14 @@ class ReaderWorkspace {
         footChapter.textContent = title.toUpperCase();
     }
   }
-  setAttention(count) {
+  setAttention(count2) {
     const badge = this.nav.querySelector("[data-reader-attention]");
-    badge.hidden = count <= 0;
-    badge.textContent = String(count);
-    badge.setAttribute("aria-label", `${count} pictures need review`);
+    badge.hidden = count2 <= 0;
+    badge.textContent = String(count2);
+    badge.setAttribute("aria-label", `${count2} pictures need review`);
     const button = this.nav.querySelector('[data-reader-destination="artwork"]');
-    if (count > 0)
-      button.setAttribute("aria-description", `${count} picture${count === 1 ? "" : "s"} need${count === 1 ? "s" : ""} review`);
+    if (count2 > 0)
+      button.setAttribute("aria-description", `${count2} picture${count2 === 1 ? "" : "s"} need${count2 === 1 ? "s" : ""} review`);
     else
       button.removeAttribute("aria-description");
   }
@@ -30164,16 +30190,16 @@ function swapCastPortrait(media, image, signal, motionEnabled = true) {
 function visualSubjectPolicy(input2) {
   const mode = input2.mode ?? input2.template?.subjectMode ?? null;
   const page = input2.intent === "manga-page" || input2.presentation === "page" || input2.template?.intent === "manga-page";
-  let count = mode === "none" ? 0 : mode === "one" ? 1 : null;
+  let count2 = mode === "none" ? 0 : mode === "one" ? 1 : null;
   if (mode === "ensemble") {
     if (input2.members)
-      count = input2.members.length;
+      count2 = input2.members.length;
     else {
       const lines = (input2.subjectText ?? "").split(/\r?\n/).filter((line) => /^\s*[^:]+:/.test(line));
-      count = lines.length || null;
+      count2 = lines.length || null;
     }
   }
-  return { mode, count, page, layeredPortrait: !page && mode === "one" && input2.template?.category === "portrait" };
+  return { mode, count: count2, page, layeredPortrait: !page && mode === "one" && input2.template?.category === "portrait" };
 }
 
 // src/shared/cast-composition.ts
@@ -32596,13 +32622,13 @@ class DossierCard {
     countBadge.style.cssText = "font-size:9px;opacity:0.65;font-weight:600;";
     sectionHead.append(sectionHeadLabel, countBadge);
     panel.append(sectionHead);
-    const count = document.createElement("p");
-    count.dataset.referenceCount = "";
-    count.setAttribute("role", "status");
-    count.style.display = "none";
+    const count2 = document.createElement("p");
+    count2.dataset.referenceCount = "";
+    count2.setAttribute("role", "status");
+    count2.style.display = "none";
     const list = document.createElement("div");
     list.dataset.referenceList = "";
-    panel.append(count, list);
+    panel.append(count2, list);
     const hiddenDrawerHost = document.createElement("div");
     panel.append(hiddenDrawerHost);
     const render2 = () => {
@@ -32637,11 +32663,11 @@ class DossierCard {
       const filtered = entries.filter(({ entity }) => entity.kind !== "npc" && (this.scope === "all" || !entity.id.startsWith("earlier:")) && (this.category === "all" || !isDocumentMode && entity.kind === this.category) && (!qLower || [entity.name, ...entity.aliases].some((name) => name.toLocaleLowerCase().includes(qLower)))).sort((a, b) => Number(b.current) - Number(a.current) || Number(b.pinned) - Number(a.pinned) || a.entity.name.localeCompare(b.entity.name));
       if (isDocumentMode) {
         sectionHeadLabel.textContent = "Revealed Documents";
-        count.textContent = filteredDocs.length ? `${filteredDocs.length} document${filteredDocs.length === 1 ? "" : "s"}` : "No revealed documents match.";
+        count2.textContent = filteredDocs.length ? `${filteredDocs.length} document${filteredDocs.length === 1 ? "" : "s"}` : "No revealed documents match.";
         countBadge.textContent = `${filteredDocs.length} DOCUMENTS`;
       } else {
         sectionHeadLabel.textContent = "Known in Story";
-        count.textContent = filtered.length ? `${filtered.length} reference${filtered.length === 1 ? "" : "s"}` : "No locations or items match. Try another filter.";
+        count2.textContent = filtered.length ? `${filtered.length} reference${filtered.length === 1 ? "" : "s"}` : "No locations or items match. Try another filter.";
         countBadge.textContent = `${filtered.length} FOUND`;
         if (!filtered.some((e) => e.entity.id === this.selectedEntityId)) {
           this.selectedEntityId = filtered[0]?.entity.id ?? null;
@@ -35918,19 +35944,19 @@ function collectPlainTextNodes(node2, out) {
   }
 }
 function existingLetterCount(span) {
-  let count = 0;
+  let count2 = 0;
   const walk = (node2) => {
     for (const child of Array.from(node2.childNodes)) {
       if (!isElement(child))
         continue;
       if (child.hasAttribute(TEXT_EFFECT_LETTER_ATTRIBUTE))
-        count += 1;
+        count2 += 1;
       else
         walk(child);
     }
   };
   walk(span);
-  return count;
+  return count2;
 }
 function splitTextNode(textNode, startIndex, spanLimit, budget) {
   const text = textNode.textContent ?? "";
@@ -38837,9 +38863,9 @@ function pseudo(seed, index, min, max) {
   const v = h / 4294967295;
   return min + v * (max - min);
 }
-function strat(seed, index, count, min, max) {
+function strat(seed, index, count2, min, max) {
   const jitter = pseudo(seed, index, 0.06, 0.94);
-  return min + (index + jitter) / count * (max - min);
+  return min + (index + jitter) / count2 * (max - min);
 }
 function n(value, digits = 1) {
   return Number(value.toFixed(digits)).toString();
@@ -39068,16 +39094,16 @@ function generateSakuraMarkup() {
   return `<div class="vn-sakura-light"></div>${group(far, "far")}${group(mid, "mid")}${group(near, "near")}`;
 }
 function generateFirefliesMarkup() {
-  const count = 26;
+  const count2 = 26;
   const flies = [];
-  for (let i = 0;i < count; i++) {
+  for (let i = 0;i < count2; i++) {
     const near = i % 5 === 2;
     const far = i % 3 === 0 && !near;
     const wander = pseudo(56, i, 12, 20);
     const blink = pseudo(57, i, 2.6, 4.8);
     const offset = (seed) => `${n(pseudo(seed, i, -46, 46))}px ${n(pseudo(seed + 1, i, -34, 34))}px`;
     flies.push(`<i class="vn-pt vn-firefly${near ? " vn-firefly--near" : far ? " vn-firefly--far" : ""}" style="${vars({
-      left: `${n(strat(50, i, count, 2, 98))}%`,
+      left: `${n(strat(50, i, count2, 2, 98))}%`,
       top: `${n(pseudo(51, i, near ? 30 : 14, 88))}%`,
       "--sz": `${n(near ? pseudo(52, i, 44, 64) : far ? pseudo(52, i, 12, 16) : pseudo(52, i, 20, 30))}px`,
       "--wd": `${n(wander, 2)}s`,
@@ -39092,14 +39118,14 @@ function generateFirefliesMarkup() {
   return `<div class="vn-firefly-haze"></div><div class="vn-fx-layer vn-fireflies">${flies.join("")}</div>`;
 }
 function generateEmbersMarkup() {
-  const count = 44;
+  const count2 = 44;
   const sparks = [];
-  for (let i = 0;i < count; i++) {
+  for (let i = 0;i < count2; i++) {
     const kind = i % 7 === 3 ? "bokeh" : i % 3 === 1 ? "streak" : i % 2 === 0 ? "far" : "spark";
     const rise = kind === "bokeh" ? pseudo(63, i, 5.5, 7.5) : kind === "far" ? pseudo(63, i, 5.2, 7.2) : pseudo(63, i, 3.2, 5.2);
     const size = kind === "bokeh" ? pseudo(61, i, 26, 40) : kind === "far" ? pseudo(61, i, 5, 8) : pseudo(61, i, 9, 14);
     sparks.push(`<i class="vn-pt vn-ember vn-ember--${kind}" style="${vars({
-      left: `${n(strat(60, i, count, 1, 99))}%`,
+      left: `${n(strat(60, i, count2, 1, 99))}%`,
       "--y": `${n(pseudo(64, i, 8, 92))}cqh`,
       "--sz": `${n(size)}px`,
       "--fd": `${n(rise, 2)}s`,
@@ -39123,10 +39149,10 @@ function generateFogMarkup() {
 var BURST_SVG_ATTRS = `viewBox="0 0 800 600" preserveAspectRatio="none" aria-hidden="true"`;
 function generateSpeedLinesMarkup(instanceId) {
   const focusId = instanceId !== undefined ? `vn-sl-focus-${instanceId}` : "vn-sl-focus";
-  const count = 76;
+  const count2 = 76;
   const sets = [[], []];
-  for (let i = 0;i < count; i++) {
-    const angle = (i + pseudo(70, i, -0.35, 0.35)) / count * Math.PI * 2;
+  for (let i = 0;i < count2; i++) {
+    const angle = (i + pseudo(70, i, -0.35, 0.35)) / count2 * Math.PI * 2;
     const inner = pseudo(71, i, 0.5, 0.78);
     const half = pseudo(72, i, 0.25, 1.15) * Math.PI / 180;
     const outer = 1.35;
@@ -39145,10 +39171,10 @@ function burstParticle(cls, style) {
   return `<i class="vn-pt ${cls}" style="${vars(style)}"></i>`;
 }
 function generateSparkleBurstMarkup() {
-  const count = 22;
+  const count2 = 22;
   const out = [];
-  for (let i = 0;i < count; i++) {
-    const angle = (i + pseudo(80, i, -0.3, 0.3)) / count * Math.PI * 2;
+  for (let i = 0;i < count2; i++) {
+    const angle = (i + pseudo(80, i, -0.3, 0.3)) / count2 * Math.PI * 2;
     const dist = pseudo(81, i, 16, 42);
     out.push(burstParticle(`vn-sparkle vn-sparkle--${"abcd"[i % 4]}`, {
       "--tx": `${n(Math.cos(angle) * dist)}cqmin`,
@@ -39172,11 +39198,11 @@ function generateSparkleBurstMarkup() {
   return `<div class="vn-burst vn-burst--sparkle"><b class="vn-burst-bloom"></b><b class="vn-burst-ring"></b>${out.join("")}</div>`;
 }
 function generateHeartsBurstMarkup() {
-  const count = 16;
+  const count2 = 16;
   const out = [];
-  for (let i = 0;i < count; i++) {
+  for (let i = 0;i < count2; i++) {
     const soft = i % 5 === 4;
-    const x = strat(90, i, count, -34, 34);
+    const x = strat(90, i, count2, -34, 34);
     out.push(burstParticle(`vn-heart vn-heart--${"abc"[i % 3]}${soft ? " vn-heart--soft" : ""}`, {
       "--tx": `${n(x)}cqmin`,
       "--ty": `${n(-pseudo(91, i, 22, 46))}cqh`,
@@ -39189,12 +39215,12 @@ function generateHeartsBurstMarkup() {
   return `<div class="vn-burst vn-burst--hearts"><b class="vn-burst-bloom"></b>${out.join("")}</div>`;
 }
 function generateConfettiMarkup() {
-  const count = 46;
+  const count2 = 46;
   const shapes = ["rect", "ribbon", "rect", "dot", "square"];
   const out = [];
-  for (let i = 0;i < count; i++) {
+  for (let i = 0;i < count2; i++) {
     out.push(`<i class="vn-pt vn-confetti-piece vn-confetti--${shapes[i % shapes.length]} vn-confetti--c${i % 6}" style="${vars({
-      left: `${n(strat(100, i, count, 4, 96))}%`,
+      left: `${n(strat(100, i, count2, 4, 96))}%`,
       top: `${n(pseudo(101, i, 4, 40))}%`,
       "--kx": `${n(pseudo(102, i, -4, 4))}cqw`,
       "--ky": `${n(-pseudo(103, i, 2, 6))}cqh`,
@@ -39237,14 +39263,14 @@ function generateLightningMarkup() {
   </svg></div>`.replace(/\n\s*/g, "");
 }
 function generateSunbeamsMarkup() {
-  const count = 28;
+  const count2 = 28;
   const motes = [];
-  for (let i = 0;i < count; i++) {
+  for (let i = 0;i < count2; i++) {
     const sz = pseudo(81, i, 2.5, 6);
     const dur = pseudo(82, i, 6.5, 12);
     const sway = pseudo(83, i, 4, 8);
     motes.push(`<i class="vn-pt vn-mote" style="${vars({
-      left: `${n(strat(80, i, count, 2, 98))}%`,
+      left: `${n(strat(80, i, count2, 2, 98))}%`,
       top: `${n(pseudo(84, i, 4, 94))}%`,
       "--sz": `${n(sz)}px`,
       "--o": n(pseudo(85, i, 0.45, 0.95), 2),
@@ -39258,13 +39284,13 @@ function generateSunbeamsMarkup() {
   return `<div class="vn-sunbeams-light"></div><div class="vn-fx-layer vn-sunbeams-motes">${motes.join("")}</div>`;
 }
 function generateShootingStarsMarkup() {
-  const count = 12;
+  const count2 = 12;
   const stars = [];
-  for (let i = 0;i < count; i++) {
+  for (let i = 0;i < count2; i++) {
     const dur = pseudo(91, i, 1.8, 3.2);
     const len = pseudo(92, i, 60, 110);
     stars.push(`<i class="vn-pt vn-shooting-star" style="${vars({
-      left: `${n(strat(90, i, count, 5, 85))}%`,
+      left: `${n(strat(90, i, count2, 5, 85))}%`,
       top: `${n(pseudo(93, i, 2, 50))}%`,
       "--sz": `${n(len)}px`,
       "--fd": `${n(dur, 2)}s`,
@@ -39277,14 +39303,14 @@ function generateShootingStarsMarkup() {
   return `<div class="vn-stars-sky"></div><div class="vn-fx-layer vn-shooting-stars">${stars.join("")}</div>`;
 }
 function generateAutumnLeavesMarkup() {
-  const count = 28;
+  const count2 = 28;
   const leaves = [];
-  for (let i = 0;i < count; i++) {
+  for (let i = 0;i < count2; i++) {
     const fall = pseudo(101, i, 6.5, 11);
     const sway = pseudo(102, i, 2.8, 5);
     const ax = n(pseudo(103, i, 0.3, 0.9), 2);
     const ay = n(pseudo(104, i, -0.7, 0.8), 2);
-    leaves.push(fallingParticle(`vn-leaf vn-leaf--${"abc"[i % 3]}`, { cls: "", seed: 100, count, size: [16, 28], fall: [6.5, 11], opacity: [0.8, 0.98] }, i, {
+    leaves.push(fallingParticle(`vn-leaf vn-leaf--${"abc"[i % 3]}`, { cls: "", seed: 100, count: count2, size: [16, 28], fall: [6.5, 11], opacity: [0.8, 0.98] }, i, {
       "--rd": `${n(pseudo(105, i, 2.5, 4.8), 2)}s`,
       "--ax": `${ax} ${ay} 0.8`,
       "--r0": `${Math.round(pseudo(106, i, -70, 70))}deg`,
@@ -39295,13 +39321,13 @@ function generateAutumnLeavesMarkup() {
   return `<div class="vn-autumn-light"></div><div class="vn-fx-layer vn-autumn-leaves">${leaves.join("")}</div>`;
 }
 function generateUnderwaterBubblesMarkup() {
-  const count = 26;
+  const count2 = 26;
   const bubbles = [];
-  for (let i = 0;i < count; i++) {
+  for (let i = 0;i < count2; i++) {
     const rise = pseudo(111, i, 4.5, 9);
     const wobble = pseudo(112, i, 1.8, 3.4);
     bubbles.push(`<i class="vn-pt vn-bubble vn-bubble--${"ab"[i % 2]}" style="${vars({
-      left: `${n(strat(110, i, count, 2, 98))}%`,
+      left: `${n(strat(110, i, count2, 2, 98))}%`,
       "--sz": `${n(pseudo(113, i, 8, 26))}px`,
       "--o": n(pseudo(114, i, 0.5, 0.92), 2),
       "--fd": `${n(rise, 2)}s`,
@@ -39315,12 +39341,12 @@ function generateUnderwaterBubblesMarkup() {
   return `<div class="vn-underwater-caustic"></div><div class="vn-fx-layer vn-bubbles">${bubbles.join("")}</div>`;
 }
 function generateFloatingRunesMarkup() {
-  const count = 20;
+  const count2 = 20;
   const runes = [];
-  for (let i = 0;i < count; i++) {
+  for (let i = 0;i < count2; i++) {
     const rise = pseudo(121, i, 6, 12);
     runes.push(`<i class="vn-pt vn-rune vn-rune--${"abcd"[i % 4]}" style="${vars({
-      left: `${n(strat(120, i, count, 4, 96))}%`,
+      left: `${n(strat(120, i, count2, 4, 96))}%`,
       "--sz": `${n(pseudo(122, i, 18, 32))}px`,
       "--o": n(pseudo(123, i, 0.45, 0.9), 2),
       "--fd": `${n(rise, 2)}s`,
@@ -39332,12 +39358,12 @@ function generateFloatingRunesMarkup() {
   return `<div class="vn-runes-glow"></div><div class="vn-fx-layer vn-floating-runes">${runes.join("")}</div>`;
 }
 function generateSnowstormMarkup() {
-  const count = 48;
+  const count2 = 48;
   const shards = [];
-  for (let i = 0;i < count; i++) {
+  for (let i = 0;i < count2; i++) {
     const gust = pseudo(131, i, 1.2, 2.6);
     shards.push(`<i class="vn-pt vn-snowstorm-shard" style="${vars({
-      left: `${n(strat(130, i, count, -10, 110))}%`,
+      left: `${n(strat(130, i, count2, -10, 110))}%`,
       top: `${n(pseudo(132, i, -10, 100))}%`,
       "--sz": `${n(pseudo(133, i, 14, 38))}px`,
       "--o": n(pseudo(134, i, 0.6, 0.95), 2),
@@ -39354,13 +39380,13 @@ function generateCinemaBarsMarkup() {
   return `<div class="vn-cinema-bar vn-cinema-bar--top"></div><div class="vn-cinema-bar vn-cinema-bar--bottom"></div>`;
 }
 function generateSandstormMarkup() {
-  const count = 42;
+  const count2 = 42;
   const grains = [];
-  for (let i = 0;i < count; i++) {
+  for (let i = 0;i < count2; i++) {
     const dur = pseudo(141, i, 0.9, 2);
     grains.push(`<i class="vn-pt vn-sand-grain" style="${vars({
       left: `${n(pseudo(140, i, -15, 25))}%`,
-      top: `${n(strat(142, i, count, 2, 98))}%`,
+      top: `${n(strat(142, i, count2, 2, 98))}%`,
       "--sz": `${n(pseudo(143, i, 12, 34))}px`,
       "--o": n(pseudo(144, i, 0.4, 0.85), 2),
       "--fd": `${n(dur, 2)}s`,
@@ -39370,12 +39396,12 @@ function generateSandstormMarkup() {
   return `<div class="vn-sandstorm-haze"></div><div class="vn-fx-layer vn-sandstorm-gusts">${grains.join("")}</div>`;
 }
 function generateSporesMarkup() {
-  const count = 30;
+  const count2 = 30;
   const spores = [];
-  for (let i = 0;i < count; i++) {
+  for (let i = 0;i < count2; i++) {
     const dur = pseudo(151, i, 6.5, 13);
     spores.push(`<i class="vn-pt vn-spore vn-spore--${i % 2 === 0 ? "emerald" : "cyan"}" style="${vars({
-      left: `${n(strat(150, i, count, 2, 98))}%`,
+      left: `${n(strat(150, i, count2, 2, 98))}%`,
       top: `${n(pseudo(152, i, 18, 96))}%`,
       "--sz": `${n(pseudo(153, i, 4, 10))}px`,
       "--dx": `${n(pseudo(154, i, -36, 36))}px`,
@@ -39388,11 +39414,11 @@ function generateSporesMarkup() {
 }
 function generateAuroraMarkup() {
   const glints = [];
-  const count = 20;
-  for (let i = 0;i < count; i++) {
+  const count2 = 20;
+  for (let i = 0;i < count2; i++) {
     const dur = pseudo(161, i, 2.8, 5.5);
     glints.push(`<i class="vn-pt vn-aurora-star" style="${vars({
-      left: `${n(strat(160, i, count, 3, 97))}%`,
+      left: `${n(strat(160, i, count2, 3, 97))}%`,
       top: `${n(pseudo(162, i, 3, 46))}%`,
       "--sz": `${n(pseudo(163, i, 3, 6))}px`,
       "--o": n(pseudo(164, i, 0.35, 0.85), 2),
@@ -39403,12 +39429,12 @@ function generateAuroraMarkup() {
   return `<div class="vn-aurora-veil"><div class="vn-aurora-band vn-aurora-band--1"></div><div class="vn-aurora-band vn-aurora-band--2"></div><div class="vn-aurora-band vn-aurora-band--3"></div></div><div class="vn-fx-layer vn-aurora">${glints.join("")}</div>`;
 }
 function generateCandlelightMarkup() {
-  const count = 22;
+  const count2 = 22;
   const motes = [];
-  for (let i = 0;i < count; i++) {
+  for (let i = 0;i < count2; i++) {
     const dur = pseudo(171, i, 5.5, 11);
     motes.push(`<i class="vn-pt vn-candle-mote" style="${vars({
-      left: `${n(strat(170, i, count, 6, 94))}%`,
+      left: `${n(strat(170, i, count2, 6, 94))}%`,
       top: `${n(pseudo(172, i, 30, 96))}%`,
       "--sz": `${n(pseudo(173, i, 3.2, 6.5))}px`,
       "--dx": `${n(pseudo(174, i, -18, 18))}px`,
@@ -39420,12 +39446,12 @@ function generateCandlelightMarkup() {
   return `<div class="vn-candle-glow"></div><div class="vn-fx-layer vn-candle-motes">${motes.join("")}</div>`;
 }
 function generateNeonHazeMarkup() {
-  const count = 18;
+  const count2 = 18;
   const prisms = [];
-  for (let i = 0;i < count; i++) {
+  for (let i = 0;i < count2; i++) {
     const dur = pseudo(181, i, 5, 9.5);
     prisms.push(`<i class="vn-pt vn-neon-prism vn-neon-prism--${i % 2 === 0 ? "cyan" : "magenta"}" style="${vars({
-      left: `${n(strat(180, i, count, 4, 96))}%`,
+      left: `${n(strat(180, i, count2, 4, 96))}%`,
       top: `${n(pseudo(182, i, 8, 92))}%`,
       "--sz": `${n(pseudo(183, i, 3.5, 8))}px`,
       "--dx": `${n(pseudo(184, i, -22, 22))}px`,
@@ -45326,6 +45352,7 @@ class VnStage {
   speaker;
   dialogueText;
   dialogueLive;
+  replyCostEl = document.createElement("div");
   dossiers;
   workspace;
   progress;
@@ -46302,6 +46329,8 @@ class VnStage {
     this.speechReadAlong.setParagraph("", -1);
     this.workspace.setResume(null);
     this.resetDisplayEvaluation();
+    this.replyCostEl.hidden = true;
+    this.replyCostEl.textContent = "";
     this.sceneLoad?.abort();
     this.sceneLoad = null;
     this.workspace.suspend();
@@ -46345,6 +46374,18 @@ class VnStage {
     this.resetDisplayEvaluation();
     this.sceneLoad?.abort();
     this.sceneLoad = null;
+    if (!this.replyCostEl.parentElement) {
+      this.replyCostEl.dataset.vnReplyCost = "";
+      this.replyCostEl.style.cssText = "font-size:11px;line-height:1.35;margin-top:6px;opacity:.72;";
+      this.dialogueText.after(this.replyCostEl);
+    }
+    if (turn.replyCost) {
+      this.replyCostEl.hidden = false;
+      this.replyCostEl.textContent = turn.replyCost;
+    } else {
+      this.replyCostEl.hidden = true;
+      this.replyCostEl.textContent = "";
+    }
     this.turnLocation = turn.location ?? null;
     if (turn.rpgMode !== undefined)
       this.rpgMode = turn.rpgMode;
@@ -47596,10 +47637,10 @@ class VnStage {
     if (stepRight)
       stepRight.textContent = total > 0 ? `${Math.round((current + 1) / total * 100)}%` : "0%";
     this.scrubber.hidden = false;
-    const count = total > 0 ? total : 4;
+    const count2 = total > 0 ? total : 4;
     const dots = [];
-    const start = Math.max(0, Math.min(current - 20, count - 40));
-    for (let idx = start;idx < Math.min(count, start + 40); idx++) {
+    const start = Math.max(0, Math.min(current - 20, count2 - 40));
+    for (let idx = start;idx < Math.min(count2, start + 40); idx++) {
       const p = this.state.paragraphs[idx];
       const btn = document.createElement("button");
       btn.type = "button";
@@ -47614,7 +47655,7 @@ class VnStage {
       if (isRead && p && (p.cue || p.effect || p.ambient !== undefined))
         btn.dataset.hasCue = "true";
       btn.disabled = !isRead;
-      const label = `Paragraph ${idx + 1} of ${count}${isRead && p?.speaker ? ` (${p.speaker})` : ""}`;
+      const label = `Paragraph ${idx + 1} of ${count2}${isRead && p?.speaker ? ` (${p.speaker})` : ""}`;
       btn.setAttribute("aria-label", label);
       btn.title = label;
       if (isActive)
@@ -50126,9 +50167,9 @@ Refresh to verify saved state. Your draft is kept.`);
       list.append(p);
       return;
     }
-    const count = document.createElement("small");
-    count.textContent = `${doc2.rules.length} / 48 rules · ${this.scope === "chat" ? "This chat" : "All my chats"}`;
-    list.append(count);
+    const count2 = document.createElement("small");
+    count2.textContent = `${doc2.rules.length} / 48 rules · ${this.scope === "chat" ? "This chat" : "All my chats"}`;
+    list.append(count2);
     if (!doc2.rules.length) {
       const p = document.createElement("p");
       p.textContent = "No rules in this scope. Add one or choose a remixable starter pack below.";
@@ -55297,10 +55338,10 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
     }
     for (const tab of this.root.querySelectorAll("[data-tab]")) {
       const badge = tab.querySelector("[data-tab-badge]");
-      const count = perSection.get(tab.dataset.tab) ?? 0;
-      badge.hidden = count === 0;
-      badge.textContent = String(count);
-      badge.setAttribute("aria-label", `${count} unapplied`);
+      const count2 = perSection.get(tab.dataset.tab) ?? 0;
+      badge.hidden = count2 === 0;
+      badge.textContent = String(count2);
+      badge.setAttribute("aria-label", `${count2} unapplied`);
     }
     if (this.pendingAdvanced.size && this.advancedSaveUnconfirmed)
       this.setStatus("Save is unconfirmed. Your draft is kept; retry Apply or wait for confirmation.", "error");
@@ -55355,13 +55396,13 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
     this.pendingAdvanced.clear();
     this.advancedSaveRequestId = undefined;
     this.advancedSaveUnconfirmed = false;
-    const keys = this.currentDraftKeys(), count = keys.length;
+    const keys = this.currentDraftKeys(), count2 = keys.length;
     for (const key of keys)
       this.drafts.delete(key);
     this.syncFromConfig(this.config);
     this.refreshStatus();
-    if (count > 0)
-      this.setStatus(`Discarded ${count} change${count === 1 ? "" : "s"}.`, "saved", 3000);
+    if (count2 > 0)
+      this.setStatus(`Discarded ${count2} change${count2 === 1 ? "" : "s"}.`, "saved", 3000);
   }
   readAdvanced(keys = ADVANCED_KEYS) {
     if (keys.includes("displayRegexRules")) {
@@ -55890,7 +55931,7 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
     const empty = library.bgmCount === 0 && library.sfxCount === 0;
     this.root.querySelector("[data-sound-empty]").hidden = !empty;
     this.root.querySelector("[data-sound-ready]").hidden = empty;
-    const plural = (count, noun) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+    const plural = (count2, noun) => `${count2} ${noun}${count2 === 1 ? "" : "s"}`;
     this.root.querySelector("[data-sound-counts]").textContent = `${plural(library.bgmCount, "music track")} and ${plural(library.sfxCount, "sound effect")} ready.`;
     this.updateSummaries(this.config);
   }
@@ -56057,8 +56098,8 @@ var READER_SETTINGS_CSS = `
 // src/shared/image-usage.ts
 var ImageActivityKindSchema = exports_external.enum(["provider-start", "provider-success", "provider-failure", "cancel-unknown", "held", "skipped", "cache-reuse", "restore"]);
 var ImageActivityEventSchema = exports_external.object({ key: TurnKeySchema, jobId: exports_external.string().min(1).max(256), requestId: exports_external.string().max(256).optional(), attemptId: exports_external.string().max(256).optional(), kind: ImageActivityKindSchema, at: exports_external.string().max(64) }).strict();
-var count = exports_external.number().int().nonnegative();
-var ImageActivitySchema = exports_external.object({ version: exports_external.literal(1), sessionId: exports_external.string().max(128), since: exports_external.string().max(64), totals: exports_external.object({ attempts: count, succeeded: count, failed: count, cancelUnknown: count, inFlight: count, held: count, skipped: count, cacheReuses: count, restores: count }).strict(), price: exports_external.literal("unavailable"), events: exports_external.array(ImageActivityEventSchema).max(128) }).strict();
+var count2 = exports_external.number().int().nonnegative();
+var ImageActivitySchema = exports_external.object({ version: exports_external.literal(1), sessionId: exports_external.string().max(128), since: exports_external.string().max(64), totals: exports_external.object({ attempts: count2, succeeded: count2, failed: count2, cancelUnknown: count2, inFlight: count2, held: count2, skipped: count2, cacheReuses: count2, restores: count2 }).strict(), price: exports_external.literal("unavailable"), events: exports_external.array(ImageActivityEventSchema).max(128) }).strict();
 
 // src/frontend/image-review/image-activity.ts
 class ImageActivityPanel {
@@ -57255,7 +57296,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.169";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.170";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -66811,8 +66852,8 @@ function retryScopeForTurn(turn) {
   }
   return { scope: "unfinished-images", unfinished: assets.length - kept, kept, automatic: false };
 }
-function plural(count2, noun) {
-  return `${count2} ${noun}${count2 === 1 ? "" : "s"}`;
+function plural(count3, noun) {
+  return `${count3} ${noun}${count3 === 1 ? "" : "s"}`;
 }
 function describeRetryScope(retry) {
   if (retry.scope === "replan-turn") {
@@ -68254,31 +68295,6 @@ class SpeechSettingsSection {
       }
     }
   }
-}
-
-// src/shared/reply-usage.ts
-var ReplyUsageSchema = exports_external.object({
-  plannerCalls: exports_external.number().int().nonnegative(),
-  systemOneCalls: exports_external.number().int().nonnegative(),
-  promptTokens: exports_external.number().int().nonnegative().nullable(),
-  completionTokens: exports_external.number().int().nonnegative().nullable()
-}).strict();
-var count2 = (value) => value.toLocaleString("en-US");
-function formatReplyUsage(usage, imagesGenerated) {
-  const calls = usage.plannerCalls + usage.systemOneCalls;
-  const parts = [];
-  const callParts = [
-    usage.plannerCalls ? `${usage.plannerCalls} planner ${usage.plannerCalls === 1 ? "call" : "calls"}` : "",
-    usage.systemOneCalls ? `${usage.systemOneCalls} System One ${usage.systemOneCalls === 1 ? "call" : "calls"}` : ""
-  ].filter(Boolean);
-  parts.push(calls ? `Text: ${callParts.join(", ")}` : "Text: no model calls (deterministic plan)");
-  if (usage.promptTokens !== null || usage.completionTokens !== null) {
-    parts.push(`${count2(usage.promptTokens ?? 0)} prompt / ${count2(usage.completionTokens ?? 0)} completion tokens`);
-  } else if (calls) {
-    parts.push("token counts not reported by the provider");
-  }
-  parts.push(`${count2(imagesGenerated)} ${imagesGenerated === 1 ? "image" : "images"} generated`);
-  return parts.join(" · ");
 }
 
 // src/frontend/stage/display-rule-probe.ts

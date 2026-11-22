@@ -57,13 +57,26 @@ export function buildV2ImageRequest(input:V2ImageRequestInput):{request:ImageGen
  const {config,cue,profile,rebuild}=input;
  const request={...input.request,parameters:{...input.request.parameters}};
  const metadata=input.metadata?structuredClone(input.metadata):undefined;
- const outputPlan=resolveImageOutputPlan({capabilities:profile.outputCapabilities,parameters:input.planParameters??request.parameters,requestedRatio:config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined,resolutionPreference:config.imageResolutionPreference,source:profile.capabilitySource,modelId:request.model});
- const styleSnapshot=resolveStyleDNA(config,input.styleId);
+ const effectiveRatio=cue.preferredAspectRatio??(config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined);
+ const outputPlan=resolveImageOutputPlan({capabilities:profile.outputCapabilities,parameters:input.planParameters??request.parameters,requestedRatio:effectiveRatio,resolutionPreference:config.imageResolutionPreference,source:profile.capabilitySource,modelId:request.model});
+ const effectiveStyleId=(!rebuild?.styleId&&config.presentationRulesAllowStyleOverride&&cue.preferredStyleId)?cue.preferredStyleId:input.styleId;
+ const styleSnapshot=resolveStyleDNA(config,effectiveStyleId);
  const effectiveStyleDNA:StyleDNA={...styleSnapshot.styleDNA};
  if(cue.imageTemplate&&!input.styleId&&cue.imageTemplate.positive.includes('{{style}}')&&!cue.imageTemplate.positive.includes('{{suffix}}')){
   delete effectiveStyleDNA.suffix;
  }
  const overrides=manualCameraOverrides(rebuild?.manualCamera);
+ const framingToShotSize: Record<string, ShotDirectorInput['manualOverrides'] extends infer T ? T extends { shotSize?: infer S } ? S : never : never> = {
+   'wide': 'wide',
+   'close-up': 'close-up',
+   'full body': 'full-body',
+   'upper body': 'medium',
+   'portrait': 'medium-close-up',
+ };
+ const ruleFramingShotSize = cue.preferredFraming ? framingToShotSize[cue.preferredFraming] : undefined;
+ const effectiveOverrides = (overrides || ruleFramingShotSize)
+   ? { ...(ruleFramingShotSize ? { shotSize: ruleFramingShotSize } : {}), ...(overrides ?? {}) }
+   : undefined;
  const previous=input.previousShot;
  const scenePrev=input.previousSceneShot;
  const parsedPrevious=previous?ImageShotSpecSchema.safeParse(previous.shotSpec):undefined;
@@ -77,7 +90,8 @@ export function buildV2ImageRequest(input:V2ImageRequestInput):{request:ImageGen
  const continuity=prevParsed?.success&&prevSource&&(!rebuild?.reframe||input.shotTransitionMode==='reframe')&&cue.imageTemplate?.cameraPolicy!=='fixed'&&
   JSON.stringify(prevSource.styleDNA)===JSON.stringify(styleSnapshot.styleDNA)&&prevParsed.data.output.orientation===outputPlan.orientation&&prevParsed.data.output.actualRatio===outputPlan.actualRatio
   ?prevParsed.data:undefined;
- const shotSpec=resolveShotSpec({brief:input.brief,outputPlan,template:cue.imageTemplate,cue,styleDNA:effectiveStyleDNA,dialogueSafeAreaSetting:rebuild?.manualCamera?.dialogueSafeArea??config.dialogueSafeArea,...(continuity?{previousShot:continuity,shotTransitionMode}:{}),isDialogueOverlayTarget:!cue.visualSources?.includes('location art')&&!cue.visualSources?.includes('cast art'),revision:(input.previousShotRevision??0)+(rebuild?.reframe?1:0),...(overrides&&Object.keys(overrides).length?{manualOverrides:overrides}:{})});
+ const directedTemplate=cue.imageTemplate&&cue.preferredFraming?{...cue.imageTemplate,framing:cue.preferredFraming}:cue.imageTemplate;
+ const shotSpec=resolveShotSpec({brief:input.brief,outputPlan,template:directedTemplate,cue,styleDNA:effectiveStyleDNA,dialogueSafeAreaSetting:rebuild?.manualCamera?.dialogueSafeArea??config.dialogueSafeArea,...(continuity?{previousShot:continuity,shotTransitionMode}:{}),isDialogueOverlayTarget:!cue.visualSources?.includes('location art')&&!cue.visualSources?.includes('cast art'),revision:(input.previousShotRevision??0)+(rebuild?.reframe?1:0),...(effectiveOverrides&&Object.keys(effectiveOverrides).length?{manualOverrides:effectiveOverrides}:{})});
  request.promptProfileV2=profile;request.outputPlan=outputPlan;request.shotSpec=shotSpec;request.styleSnapshot=styleSnapshot.styleDNA;
  request.parameters={...request.parameters,...outputPlan.parameters};
  let builtReferencePlan: ReturnType<typeof resolveReferencePlan> | undefined;
@@ -86,7 +100,7 @@ export function buildV2ImageRequest(input:V2ImageRequestInput):{request:ImageGen
   const referencePayloadSupported=!isTextToImageModel&&(profile.features.references===true||profile.dialect==='novelai'||['comfyui','swarmui'].some(p=>(profile.family??'').toLowerCase().includes(p)));
   const referencePlan=referencePayloadSupported?resolveReferencePlan({brief:input.metadata?.brief,cue,portraits:input.portraits,characterDNALibrary:input.characterDNALibrary}):createReferencePlan([]);
   builtReferencePlan=referencePlan;
-  const compiled=compileModelPrompt({brief:input.brief,shotSpec,styleDNA:effectiveStyleDNA,profile,outputPlan,referencePlan,detailLevel:rebuild?.fitToModel?'compact':config.imagePromptDetail,promptExpansionEnabled:profile.promptExpansion?.enabled,userBudgetOverride:rebuild?.fitToModel?Math.min(profile.softBudgets.standard[0],profile.hardMaxCharacters):config.imagePromptBudgetOverride?config.imagePromptBudget:null,cue,template:cue.imageTemplate,modelId:request.model,denoiseStrength:typeof request.parameters?.strength==='number'?request.parameters.strength:typeof request.parameters?.denoise==='number'?request.parameters.denoise:undefined});
+  const compiled=compileModelPrompt({brief:input.brief,shotSpec,styleDNA:effectiveStyleDNA,profile,outputPlan,referencePlan,detailLevel:rebuild?.fitToModel?'compact':config.imagePromptDetail,promptExpansionEnabled:profile.promptExpansion?.enabled,userBudgetOverride:rebuild?.fitToModel?Math.min(profile.softBudgets.standard[0],profile.hardMaxCharacters):config.imagePromptBudgetOverride?config.imagePromptBudget:null,cue,template:directedTemplate,modelId:request.model,denoiseStrength:typeof request.parameters?.strength==='number'?request.parameters.strength:typeof request.parameters?.denoise==='number'?request.parameters.denoise:undefined,originalReference:config.originalReference,originalCreationName:config.originalCreationName});
   request.prompt=compiled.prompt;
   if(compiled.negativePrompt!==undefined){
     request.negativePrompt=compiled.negativePrompt;

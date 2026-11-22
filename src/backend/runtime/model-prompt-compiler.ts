@@ -32,6 +32,8 @@ export interface ModelPromptCompilerInput {
   template?: ImageTemplate | undefined;
   modelId?: string | undefined;
   denoiseStrength?: number | undefined;
+  originalReference?: boolean | undefined;
+  originalCreationName?: string | undefined;
 }
 
 export function resolveSubjectPromptMode(input: {
@@ -186,6 +188,8 @@ export function compileModelPrompt(input: ModelPromptCompilerInput): ModelPrompt
     cue,
     modelId,
     denoiseStrength,
+    originalReference,
+    originalCreationName,
   } = input;
 
   const subjectPromptMode = resolveSubjectPromptMode({
@@ -278,6 +282,23 @@ export function compileModelPrompt(input: ModelPromptCompilerInput): ModelPrompt
         ...sections.slice(cleanPrefix ? 1 : 0)
       ];
     }
+  }
+
+  if (originalReference && !isIdeogramJson) {
+    const cleanOrig = originalCreationName?.trim();
+    const origText = isTagDialect
+      ? (cleanOrig ? `original, ${cleanOrig}` : 'original')
+      : (cleanOrig ? `Original creation: ${cleanOrig}.` : 'Original character and world design.');
+    sections = [
+      ...sections,
+      {
+        id: 'original-reference',
+        priority: 1,
+        required: false,
+        compressible: false,
+        text: origText,
+      },
+    ];
   }
 
   const rawSuffix = styleDNA.suffix?.trim() ?? '';

@@ -21660,6 +21660,37 @@ var init_story_references = __esm(() => {
   };
 });
 
+// src/shared/reply-usage.ts
+function createReplyUsage() {
+  return { plannerCalls: 0, systemOneCalls: 0, promptTokens: null, completionTokens: null };
+}
+function recordPlannerAttempt(usage) {
+  usage.plannerCalls += 1;
+}
+function addPlannerTokens(usage, reported) {
+  if (typeof reported?.prompt_tokens === "number" && Number.isFinite(reported.prompt_tokens)) {
+    usage.promptTokens = (usage.promptTokens ?? 0) + Math.max(0, Math.round(reported.prompt_tokens));
+  }
+  if (typeof reported?.completion_tokens === "number" && Number.isFinite(reported.completion_tokens)) {
+    usage.completionTokens = (usage.completionTokens ?? 0) + Math.max(0, Math.round(reported.completion_tokens));
+  }
+}
+function addSystemOneUsage(usage, batches, inputTokens) {
+  usage.systemOneCalls += Math.max(0, Math.round(batches));
+  if (typeof inputTokens === "number" && Number.isFinite(inputTokens) && inputTokens >= 0)
+    usage.promptTokens = (usage.promptTokens ?? 0) + Math.round(inputTokens);
+}
+var ReplyUsageSchema;
+var init_reply_usage = __esm(() => {
+  init_zod();
+  ReplyUsageSchema = exports_external.object({
+    plannerCalls: exports_external.number().int().nonnegative(),
+    systemOneCalls: exports_external.number().int().nonnegative(),
+    promptTokens: exports_external.number().int().nonnegative().nullable(),
+    completionTokens: exports_external.number().int().nonnegative().nullable()
+  }).strict();
+});
+
 // src/shared/action-prop.ts
 function validateVisibleObject(val) {
   const clean = val.trim().toLowerCase().replace(/\s+/g, " ");
@@ -24193,6 +24224,7 @@ var init_contracts = __esm(() => {
   init_story_documents();
   init_story_references();
   init_zod();
+  init_reply_usage();
   init_action_prop();
   init_panels();
   init_image_templates();
@@ -24535,6 +24567,7 @@ var init_contracts = __esm(() => {
     rpgState: RpgStateSchema.optional(),
     worldAtmosphereTimeline: exports_external.array(SceneAtmosphereEntrySchema).max(64).optional(),
     resolvedThreads: exports_external.array(exports_external.string().trim().min(1).max(160)).max(8).optional(),
+    replyUsage: ReplyUsageSchema.optional(),
     createdAt: TimestampSchema
   }).strict().superRefine((plan, context) => {
     for (const [index, paragraph] of plan.paragraphs.entries()) {
@@ -34727,37 +34760,6 @@ var init_image_prompt_profile2 = __esm(() => {
   init_model_output_capabilities();
   init_image_prompt_profile_v2();
   caches = new WeakMap;
-});
-
-// src/shared/reply-usage.ts
-function createReplyUsage() {
-  return { plannerCalls: 0, systemOneCalls: 0, promptTokens: null, completionTokens: null };
-}
-function recordPlannerAttempt(usage) {
-  usage.plannerCalls += 1;
-}
-function addPlannerTokens(usage, reported) {
-  if (typeof reported?.prompt_tokens === "number" && Number.isFinite(reported.prompt_tokens)) {
-    usage.promptTokens = (usage.promptTokens ?? 0) + Math.max(0, Math.round(reported.prompt_tokens));
-  }
-  if (typeof reported?.completion_tokens === "number" && Number.isFinite(reported.completion_tokens)) {
-    usage.completionTokens = (usage.completionTokens ?? 0) + Math.max(0, Math.round(reported.completion_tokens));
-  }
-}
-function addSystemOneUsage(usage, batches, inputTokens) {
-  usage.systemOneCalls += Math.max(0, Math.round(batches));
-  if (typeof inputTokens === "number" && Number.isFinite(inputTokens) && inputTokens >= 0)
-    usage.promptTokens = (usage.promptTokens ?? 0) + Math.round(inputTokens);
-}
-var ReplyUsageSchema;
-var init_reply_usage = __esm(() => {
-  init_zod();
-  ReplyUsageSchema = exports_external.object({
-    plannerCalls: exports_external.number().int().nonnegative(),
-    systemOneCalls: exports_external.number().int().nonnegative(),
-    promptTokens: exports_external.number().int().nonnegative().nullable(),
-    completionTokens: exports_external.number().int().nonnegative().nullable()
-  }).strict();
 });
 
 // src/backend/core/continuity.ts
@@ -52863,7 +52865,9 @@ function compileModelPrompt(input2) {
     userBudgetOverride,
     cue,
     modelId,
-    denoiseStrength
+    denoiseStrength,
+    originalReference,
+    originalCreationName
   } = input2;
   const subjectPromptMode = resolveSubjectPromptMode({
     profile,
@@ -52930,6 +52934,20 @@ function compileModelPrompt(input2) {
         ...sections.slice(cleanPrefix ? 1 : 0)
       ];
     }
+  }
+  if (originalReference && !isIdeogramJson) {
+    const cleanOrig = originalCreationName?.trim();
+    const origText = isTagDialect ? cleanOrig ? `original, ${cleanOrig}` : "original" : cleanOrig ? `Original creation: ${cleanOrig}.` : "Original character and world design.";
+    sections = [
+      ...sections,
+      {
+        id: "original-reference",
+        priority: 1,
+        required: false,
+        compressible: false,
+        text: origText
+      }
+    ];
   }
   const rawSuffix = styleDNA.suffix?.trim() ?? "";
   const cleanSuffix = profile.dialect === "flux3-klein" ? rawSuffix.replace(/\bphotorealistic\b/gi, "lifelike natural") : rawSuffix;
@@ -53033,13 +53051,24 @@ function buildV2ImageRequest(input2) {
   const { config: config2, cue, profile, rebuild } = input2;
   const request = { ...input2.request, parameters: { ...input2.request.parameters } };
   const metadata = input2.metadata ? structuredClone(input2.metadata) : undefined;
-  const outputPlan = resolveImageOutputPlan({ capabilities: profile.outputCapabilities, parameters: input2.planParameters ?? request.parameters, requestedRatio: config2.imageOutputAspectRatio !== "default" ? config2.imageOutputAspectRatio : cue.imageTemplate?.outputAspectRatio === "9:16" ? "9:16" : undefined, resolutionPreference: config2.imageResolutionPreference, source: profile.capabilitySource, modelId: request.model });
-  const styleSnapshot = resolveStyleDNA(config2, input2.styleId);
+  const effectiveRatio = cue.preferredAspectRatio ?? (config2.imageOutputAspectRatio !== "default" ? config2.imageOutputAspectRatio : cue.imageTemplate?.outputAspectRatio === "9:16" ? "9:16" : undefined);
+  const outputPlan = resolveImageOutputPlan({ capabilities: profile.outputCapabilities, parameters: input2.planParameters ?? request.parameters, requestedRatio: effectiveRatio, resolutionPreference: config2.imageResolutionPreference, source: profile.capabilitySource, modelId: request.model });
+  const effectiveStyleId = !rebuild?.styleId && config2.presentationRulesAllowStyleOverride && cue.preferredStyleId ? cue.preferredStyleId : input2.styleId;
+  const styleSnapshot = resolveStyleDNA(config2, effectiveStyleId);
   const effectiveStyleDNA = { ...styleSnapshot.styleDNA };
   if (cue.imageTemplate && !input2.styleId && cue.imageTemplate.positive.includes("{{style}}") && !cue.imageTemplate.positive.includes("{{suffix}}")) {
     delete effectiveStyleDNA.suffix;
   }
   const overrides = manualCameraOverrides(rebuild?.manualCamera);
+  const framingToShotSize = {
+    wide: "wide",
+    "close-up": "close-up",
+    "full body": "full-body",
+    "upper body": "medium",
+    portrait: "medium-close-up"
+  };
+  const ruleFramingShotSize = cue.preferredFraming ? framingToShotSize[cue.preferredFraming] : undefined;
+  const effectiveOverrides = overrides || ruleFramingShotSize ? { ...ruleFramingShotSize ? { shotSize: ruleFramingShotSize } : {}, ...overrides ?? {} } : undefined;
   const previous = input2.previousShot;
   const scenePrev = input2.previousSceneShot;
   const parsedPrevious = previous ? ImageShotSpecSchema.safeParse(previous.shotSpec) : undefined;
@@ -53050,7 +53079,8 @@ function buildV2ImageRequest(input2) {
   const prevSource = samePicture ? previous : sameSceneBeat ? scenePrev : input2.shotTransitionMode === "reframe" ? previous : undefined;
   const prevParsed = samePicture ? parsedPrevious : sameSceneBeat ? parsedScenePrev : input2.shotTransitionMode === "reframe" ? parsedPrevious : undefined;
   const continuity = prevParsed?.success && prevSource && (!rebuild?.reframe || input2.shotTransitionMode === "reframe") && cue.imageTemplate?.cameraPolicy !== "fixed" && JSON.stringify(prevSource.styleDNA) === JSON.stringify(styleSnapshot.styleDNA) && prevParsed.data.output.orientation === outputPlan.orientation && prevParsed.data.output.actualRatio === outputPlan.actualRatio ? prevParsed.data : undefined;
-  const shotSpec = resolveShotSpec({ brief: input2.brief, outputPlan, template: cue.imageTemplate, cue, styleDNA: effectiveStyleDNA, dialogueSafeAreaSetting: rebuild?.manualCamera?.dialogueSafeArea ?? config2.dialogueSafeArea, ...continuity ? { previousShot: continuity, shotTransitionMode } : {}, isDialogueOverlayTarget: !cue.visualSources?.includes("location art") && !cue.visualSources?.includes("cast art"), revision: (input2.previousShotRevision ?? 0) + (rebuild?.reframe ? 1 : 0), ...overrides && Object.keys(overrides).length ? { manualOverrides: overrides } : {} });
+  const directedTemplate = cue.imageTemplate && cue.preferredFraming ? { ...cue.imageTemplate, framing: cue.preferredFraming } : cue.imageTemplate;
+  const shotSpec = resolveShotSpec({ brief: input2.brief, outputPlan, template: directedTemplate, cue, styleDNA: effectiveStyleDNA, dialogueSafeAreaSetting: rebuild?.manualCamera?.dialogueSafeArea ?? config2.dialogueSafeArea, ...continuity ? { previousShot: continuity, shotTransitionMode } : {}, isDialogueOverlayTarget: !cue.visualSources?.includes("location art") && !cue.visualSources?.includes("cast art"), revision: (input2.previousShotRevision ?? 0) + (rebuild?.reframe ? 1 : 0), ...effectiveOverrides && Object.keys(effectiveOverrides).length ? { manualOverrides: effectiveOverrides } : {} });
   request.promptProfileV2 = profile;
   request.outputPlan = outputPlan;
   request.shotSpec = shotSpec;
@@ -53062,7 +53092,7 @@ function buildV2ImageRequest(input2) {
     const referencePayloadSupported = !isTextToImageModel && (profile.features.references === true || profile.dialect === "novelai" || ["comfyui", "swarmui"].some((p) => (profile.family ?? "").toLowerCase().includes(p)));
     const referencePlan = referencePayloadSupported ? resolveReferencePlan({ brief: input2.metadata?.brief, cue, portraits: input2.portraits, characterDNALibrary: input2.characterDNALibrary }) : createReferencePlan([]);
     builtReferencePlan = referencePlan;
-    const compiled = compileModelPrompt({ brief: input2.brief, shotSpec, styleDNA: effectiveStyleDNA, profile, outputPlan, referencePlan, detailLevel: rebuild?.fitToModel ? "compact" : config2.imagePromptDetail, promptExpansionEnabled: profile.promptExpansion?.enabled, userBudgetOverride: rebuild?.fitToModel ? Math.min(profile.softBudgets.standard[0], profile.hardMaxCharacters) : config2.imagePromptBudgetOverride ? config2.imagePromptBudget : null, cue, template: cue.imageTemplate, modelId: request.model, denoiseStrength: typeof request.parameters?.strength === "number" ? request.parameters.strength : typeof request.parameters?.denoise === "number" ? request.parameters.denoise : undefined });
+    const compiled = compileModelPrompt({ brief: input2.brief, shotSpec, styleDNA: effectiveStyleDNA, profile, outputPlan, referencePlan, detailLevel: rebuild?.fitToModel ? "compact" : config2.imagePromptDetail, promptExpansionEnabled: profile.promptExpansion?.enabled, userBudgetOverride: rebuild?.fitToModel ? Math.min(profile.softBudgets.standard[0], profile.hardMaxCharacters) : config2.imagePromptBudgetOverride ? config2.imagePromptBudget : null, cue, template: directedTemplate, modelId: request.model, denoiseStrength: typeof request.parameters?.strength === "number" ? request.parameters.strength : typeof request.parameters?.denoise === "number" ? request.parameters.denoise : undefined, originalReference: config2.originalReference, originalCreationName: config2.originalCreationName });
     request.prompt = compiled.prompt;
     if (compiled.negativePrompt !== undefined) {
       request.negativePrompt = compiled.negativePrompt;
@@ -54401,8 +54431,11 @@ var init_asset_scheduler = __esm(() => {
 
 // src/backend/runtime/prompt-adaptation.ts
 async function adaptImagePrompt(spindle2, input2, metadata, config2, userId, signal, skip = false) {
-  const request = compactImageRequest(input2), profile = request.promptProfile;
-  if (skip || !(request.prompt.length + (request.negativePrompt?.length ?? 0) > (profile?.maxCharacters ?? 3000) || profile?.negativeMode === "positive-only" && Boolean(request.negativePrompt?.trim())))
+  const request = compactImageRequest(input2);
+  const { promptProfileV2: v2, promptProfile: v1 } = request;
+  const maxChars = v2?.hardMaxCharacters ?? v1?.maxCharacters ?? 3000;
+  const isPosOnly = v2?.negativePolicy === "positive-only" || v1?.negativeMode === "positive-only";
+  if (skip || !(request.prompt.length + (request.negativePrompt?.length ?? 0) > maxChars || isPosOnly && Boolean(request.negativePrompt?.trim())))
     return { request, rewritten: false };
   try {
     return { request: await rewriteImagePrompt(spindle2, request, metadata, config2, userId, signal, "fit"), rewritten: true };
@@ -56434,10 +56467,11 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
             const promptWasRewritten = adaptation.rewritten;
             if (adaptation.error)
               baseMetadata.promptAdaptationError = adaptation.error;
-            if (!config2.reviewImages && !cacheOptions.skipAutomaticPromptRepair && frozen.promptProfile) {
-              const maxAllowed = frozen.promptProfileV2?.hardMaxCharacters ?? frozen.promptProfile.maxCharacters;
-              if (frozen.prompt.length + (frozen.negativePrompt?.length ?? 0) > maxAllowed || frozen.promptProfile.negativeMode === "positive-only" && Boolean(frozen.negativePrompt?.trim())) {
-                const autoFitted = fitPromptToBudget(frozen.prompt, frozen.negativePrompt ?? "", maxAllowed, frozen.promptProfile.negativeMode);
+            if (!config2.reviewImages && !cacheOptions.skipAutomaticPromptRepair && (frozen.promptProfileV2 || frozen.promptProfile)) {
+              const maxAllowed = frozen.promptProfileV2?.hardMaxCharacters ?? frozen.promptProfile?.maxCharacters ?? 3000;
+              const negMode = frozen.promptProfileV2 ? frozen.promptProfileV2.negativePolicy === "positive-only" ? "positive-only" : "dual" : frozen.promptProfile?.negativeMode ?? "dual";
+              if (frozen.prompt.length + (frozen.negativePrompt?.length ?? 0) > maxAllowed || negMode === "positive-only" && Boolean(frozen.negativePrompt?.trim())) {
+                const autoFitted = fitPromptToBudget(frozen.prompt, frozen.negativePrompt ?? "", maxAllowed, negMode);
                 frozen = applyImageEdits({ ...frozen, prompt: autoFitted.prompt, negativePrompt: autoFitted.negativePrompt }, {});
               }
             }
@@ -59783,6 +59817,11 @@ async function turnViewWithAudio(spindle2, record5, userId) {
   } catch {}
   const view = turnView(record5);
   const config2 = await decorateCastAssets(spindle2, record5, view.assets, userId);
+  const effectiveConfig = config2 ?? await loadConfig(spindle2, userId).catch(() => null);
+  if (effectiveConfig?.showReplyCost && record5.plan.replyUsage) {
+    const imagesGenerated = record5.jobs.filter((j) => (j.status === "generated" || j.status === "browser_ready") && j.provider !== "cache").length;
+    view.replyCost = { usage: record5.plan.replyUsage, imagesGenerated };
+  }
   try {
     if (record5.plan.storyDocuments?.length) {
       const docAssets = await listTurnDocumentAssets(spindle2, record5.plan.key.chatId, record5.plan, Math.max(0, record5.plan.paragraphs.length - 1), userId);
