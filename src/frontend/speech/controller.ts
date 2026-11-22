@@ -440,7 +440,7 @@ export class SpeechController {
     const bind=(type:string,listener:()=>void)=>{audio.addEventListener(type,listener);this.audioListeners.push({type,listener});};
     for(const type of ['timeupdate','durationchange','loadedmetadata','seeked'])bind(type,()=>{if(owns())this.publishProgress();});
     bind('seeking',()=>{if(owns())this.onProgress(null);});
-    bind('pause',()=>{if(owns()&&audio.paused===true&&this.playState==='playing'){this.playState='paused';this.publish({kind:'paused',...this.speakerLabel()});}});
+    bind('pause',()=>{if(owns()&&audio.paused===true&&!audio.ended&&this.playState==='playing'){this.playState='paused';this.publish({kind:'paused',...this.speakerLabel()});}});
     bind('ended',()=>{if(!owns()||audio.ended===false)return;this.playState='stopped';this.publishBaseline();});
     bind('error',()=>{if(!owns())return;this.stop('media-error');this.publish({kind:'error',message:'Paragraph audio could not be played. Press Play to try again.'});});
   }

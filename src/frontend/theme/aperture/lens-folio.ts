@@ -271,20 +271,22 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   box-shadow: 0 20px 48px rgba(0, 0, 0, calc(var(--caption-opacity, 0.84) * 0.62)), 0 0 24px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 8%, transparent), inset 0 1px 0 rgba(255, 255, 255, calc(var(--caption-opacity, 0.84) * 0.2));
 }
 
-/* Draggable Top Resize Grip */
+/* Draggable Top Resize Grip — narrow centered handle so it never blocks top-right Play/Hide tools */
 .resize-grip,
 [data-vn-sheet-handle] {
   position: absolute !important;
-  top: -20px;
+  top: -10px !important;
   left: 50% !important;
+  right: auto !important;
+  width: 68px !important;
   transform: translateX(-50%) !important;
-  min-width: 72px;
-  height: 44px;
+  min-width: 68px;
+  height: 22px;
   cursor: ns-resize !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  z-index: 35 !important;
+  z-index: 25 !important;
   touch-action: none !important;
 }
 
@@ -299,6 +301,8 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 /* Dialogue Header (Speaker Avatar, Speaker Name, Location Pin & Scene, Play/Hide Pill) */
 .caption-head,
 [data-vn-sheet-header] {
+  position: relative !important;
+  z-index: 38 !important;
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
@@ -381,7 +385,9 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 .caption-head-actions,
 [data-vn-sheet-tools],
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-sheet-tools] {
-  position: static !important;
+  position: relative !important;
+  z-index: 45 !important;
+  pointer-events: auto !important;
   width: auto !important;
   display: inline-flex !important;
   align-items: center !important;
@@ -456,16 +462,14 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   margin: 0 !important;
 }
 
-/* Word-by-word TTS & Auto-Read highlight effect */
+/* Word-by-word TTS & Auto-Read highlight effect — single soft aura pill */
 ::highlight(vn-tts-word) {
-  background-color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 32%, transparent);
+  background-color: transparent;
   color: #ffffff;
-  text-decoration: underline;
-  text-decoration-color: var(--aperture-accent, #c4b5fd);
 }
 
 ::highlight(vn-tts-spoken) {
-  color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 35%, var(--aperture-text, #ffffff));
+  color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 24%, var(--aperture-text, #ffffff));
 }
 
 .vn-tts-word-aura,
@@ -474,12 +478,12 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   top: 0 !important;
   left: 0 !important;
   pointer-events: none !important;
-  z-index: 2 !important;
-  border-radius: 6px !important;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--aperture-accent, #c4b5fd) 14%, transparent), color-mix(in srgb, var(--aperture-accent, #c4b5fd) 30%, transparent)) !important;
-  border-bottom: 2px solid var(--aperture-accent, #c4b5fd) !important;
-  box-shadow: 0 2px 14px var(--aperture-accent-glow, rgba(167, 139, 250, 0.52)), 0 0 6px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 38%, transparent) !important;
-  transition: transform 80ms cubic-bezier(0.22, 1, 0.36, 1), width 80ms ease, height 80ms ease !important;
+  z-index: 0 !important;
+  border-radius: 5px !important;
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 17%, transparent) !important;
+  border-bottom: 1.5px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 72%, transparent) !important;
+  box-shadow: 0 1px 10px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, transparent) !important;
+  transition: transform 72ms cubic-bezier(0.22, 1, 0.36, 1), width 72ms ease, height 72ms ease, opacity 120ms ease !important;
 }
 
 .vn-tts-word-aura[hidden] {

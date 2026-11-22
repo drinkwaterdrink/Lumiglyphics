@@ -56,9 +56,17 @@ export class DialogueSheet {
     root.append(this.show);
 
     const signal = this.abort.signal;
+    this.tools.addEventListener("pointerdown", event => event.stopPropagation(), { signal });
+    this.tools.addEventListener("touchstart", event => event.stopPropagation(), { signal, passive: true });
     this.tools.addEventListener("click", event => event.stopPropagation(), { signal });
-    this.auto.addEventListener("click", () => this.onToggleAutoPlay?.(), { signal });
-    this.hide.addEventListener("click", () => this.setHidden(!this.hidden), { signal });
+    this.auto.addEventListener("click", event => {
+      event.stopPropagation();
+      this.onToggleAutoPlay?.();
+    }, { signal });
+    this.hide.addEventListener("click", event => {
+      event.stopPropagation();
+      this.setHidden(!this.hidden);
+    }, { signal });
     this.show.addEventListener("click", event => { event.stopPropagation(); this.setHidden(false); this.handle.focus(); }, { signal });
 
     const onMove = (clientY: number) => {

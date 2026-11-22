@@ -551,13 +551,15 @@ aside[data-vn-workspace] {
   pointer-events: none;
 }
 
-/* Draggable Top Resize Grip */
+/* Draggable Top Resize Grip — centered pill only so it never covers top-right tools */
 .resize-grip {
   position: absolute !important;
-  top: -12px;
-  left: 0 !important;
-  right: 0 !important;
-  height: 44px; min-height: 44px;
+  top: -10px !important;
+  left: 50% !important;
+  right: auto !important;
+  width: 68px !important;
+  transform: translateX(-50%) !important;
+  height: 22px; min-height: 22px;
   display: flex !important;
   justify-content: center !important;
   align-items: center !important;
@@ -946,9 +948,7 @@ aside[data-vn-workspace] {
   box-sizing: border-box !important;
 }
 
-.reader-action-row > .action:not(.nav-step-btn),
-[data-vn-root][data-vn-preset] [data-vn-controls] > [data-vn-control]:not(.nav-step-btn),
-[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-controls] > [data-vn-control]:not(.nav-step-btn) {
+.reader-action-row > .action:not(.nav-step-btn) {
   position: relative !important;
   height: 38px !important;
   width: 38px !important;
@@ -964,6 +964,15 @@ aside[data-vn-workspace] {
   cursor: pointer !important;
   padding: 0 !important;
   transition: color 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease !important;
+}
+
+/* Strictly limit bottom toolbar to the 4 primary icons: Settings, World Lens, Char Folio, History */
+[data-vn-controls] > :not([data-vn-control="settings"]):not([data-vn-control="lens"]):not([data-vn-control="cast"]):not([data-vn-control="log"]),
+[data-vn-root] [data-vn-controls] > :not([data-vn-control="settings"]):not([data-vn-control="lens"]):not([data-vn-control="cast"]):not([data-vn-control="log"]),
+[data-vn-root][data-vn-preset] [data-vn-controls] > :not([data-vn-control="settings"]):not([data-vn-control="lens"]):not([data-vn-control="cast"]):not([data-vn-control="log"]),
+[data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-controls] > :not([data-vn-control="settings"]):not([data-vn-control="lens"]):not([data-vn-control="cast"]):not([data-vn-control="log"]),
+[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-controls] > :not([data-vn-control="settings"]):not([data-vn-control="lens"]):not([data-vn-control="cast"]):not([data-vn-control="log"]) {
+  display: none !important;
 }
 
 .reader-action-row > .action:not(.nav-step-btn)::after {

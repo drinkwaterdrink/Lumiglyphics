@@ -315,7 +315,7 @@ export class SpeechDock {
   }
 
   private sync(): void {
-    const isOpen = this.overlayActive && (this.popoverOpen || this.playing);
+    const isOpen = this.overlayActive && this.popoverOpen;
     this.host.dataset.open = isOpen ? "true" : "false";
     this.host.style.display = isOpen ? "block" : "none";
   }

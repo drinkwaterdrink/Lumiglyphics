@@ -993,12 +993,18 @@ export class VnStage {
       this.completeTypewriter();
     }
     this.clearAutoPlayTimer();
+    this.speechReadAlong.clear();
     const view = selectVnStageView(this.state);
     if (!view.canAdvance) {
       this.toggleAutoPlay(false);
       return;
     }
-    this.startAutoCountdown(240);
+    this.autoPlayTimer = setTimeout(() => {
+      this.autoPlayTimer = null;
+      if (!this.destroyed && this.isAutoPlay) {
+        this.advance();
+      }
+    }, 110);
   }
 
   toggleAutoPlay(force?: boolean): void {
@@ -1012,15 +1018,16 @@ export class VnStage {
       this.clearSkipTimer();
       this.settleSceneCrossfade();
       this.updateControlButtons();
-      if (changed) this.callbacks.onAutoPlayChange?.(true);
       if (this.isTyping) {
         this.completeTypewriter();
-      } else {
+      }
+      if (changed) this.callbacks.onAutoPlayChange?.(true);
+      if (!this.isTyping) {
         this.onTextRenderFinished();
       }
     } else {
       this.clearAutoPlayTimer();
-      this.speechReadAlong.setFraction(null);
+      this.speechReadAlong.clear();
       this.updateControlButtons();
       if (changed) this.callbacks.onAutoPlayChange?.(false);
     }
@@ -2927,18 +2934,18 @@ export class VnStage {
     }
     this.resetAutoRing();
 
-    if (delayMs >= 400 && this.dialogueText.dataset.vnSpeechSpeaking !== "true") {
+    if (delayMs >= 800 && !this.isAutoAdvanceHeld?.() && !this.isTypewriterAudioMuted?.() && this.dialogueText.dataset.vnSpeechSpeaking !== "true") {
       const startAt = Date.now();
       this.speechReadAlong.setFraction(0);
       this.autoReadAlongTimer = setInterval(() => {
-        if (this.destroyed || !this.isAutoPlay || this.dialogueText.dataset.vnSpeechSpeaking === "true") {
+        if (this.destroyed || !this.isAutoPlay || this.isAutoAdvanceHeld?.() || this.isTypewriterAudioMuted?.() || this.dialogueText.dataset.vnSpeechSpeaking === "true") {
           if (this.autoReadAlongTimer !== null) {
             clearInterval(this.autoReadAlongTimer);
             this.autoReadAlongTimer = null;
           }
           return;
         }
-        const frac = Math.min(1, (Date.now() - startAt) / Math.max(1, delayMs * 0.88));
+        const frac = Math.min(1, (Date.now() - startAt) / Math.max(1, delayMs * 0.9));
         this.speechReadAlong.setFraction(frac);
       }, 65);
     }
@@ -3096,7 +3103,7 @@ export class VnStage {
     this.dialogueText.innerHTML = formatted;
     // Split effect letters first so the typewriter reveals them one by one.
     applyTextEffects(this.dialogueText);
-    if (!this.typewriter.prepare(this.dialogueText)) {
+    if ((this.isAutoPlay && this.isTypewriterAudioMuted?.()) || !this.typewriter.prepare(this.dialogueText)) {
       this.isTyping = false;
       this.updateContinueButton();
       this.onTextRenderFinished();

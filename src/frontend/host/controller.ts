@@ -744,8 +744,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   speechDock = new SpeechDock({
     mount: stage.panelMount,
     onPlay: () => { void speech.playCurrent(); },
-    onPause: () => speech.pause(),
-    onStop: () => speech.stop("user-stop"),
+    onPause: () => { stage.toggleAutoPlay(false); speech.pause(); },
+    onStop: () => { stage.toggleAutoPlay(false); speech.stop("user-stop"); },
     onEnableAndPlay: () => {
       if (configRef.current && !configRef.current.speech.enabled) {
         const nextSpeech = { ...configRef.current.speech, enabled: true };

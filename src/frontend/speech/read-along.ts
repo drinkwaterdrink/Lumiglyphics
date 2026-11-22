@@ -178,7 +178,10 @@ export class ParagraphReadAlong {
     if (typeof this.target.style?.setProperty === 'function') {
       this.target.style.setProperty('--vn-tts-progress', `${Math.round(fraction * 1000) / 10}%`);
     }
-    if (this.words.length === 0) return;
+    if (this.words.length === 0 || fraction >= 0.992) {
+      if (this.auraEl) this.auraEl.hidden = true;
+      return;
+    }
     let picked = this.words[this.words.length - 1]!;
     for (const w of this.words) {
       if (fraction <= w.cumEnd) {

@@ -23628,8 +23628,11 @@ class ParagraphReadAlong {
     if (typeof this.target.style?.setProperty === "function") {
       this.target.style.setProperty("--vn-tts-progress", `${Math.round(fraction * 1000) / 10}%`);
     }
-    if (this.words.length === 0)
+    if (this.words.length === 0 || fraction >= 0.992) {
+      if (this.auraEl)
+        this.auraEl.hidden = true;
       return;
+    }
     let picked = this.words[this.words.length - 1];
     for (const w of this.words) {
       if (fraction <= w.cumEnd) {
@@ -26401,13 +26404,15 @@ aside[data-vn-workspace] {
   pointer-events: none;
 }
 
-/* Draggable Top Resize Grip */
+/* Draggable Top Resize Grip — centered pill only so it never covers top-right tools */
 .resize-grip {
   position: absolute !important;
-  top: -12px;
-  left: 0 !important;
-  right: 0 !important;
-  height: 44px; min-height: 44px;
+  top: -10px !important;
+  left: 50% !important;
+  right: auto !important;
+  width: 68px !important;
+  transform: translateX(-50%) !important;
+  height: 22px; min-height: 22px;
   display: flex !important;
   justify-content: center !important;
   align-items: center !important;
@@ -26796,9 +26801,7 @@ aside[data-vn-workspace] {
   box-sizing: border-box !important;
 }
 
-.reader-action-row > .action:not(.nav-step-btn),
-[data-vn-root][data-vn-preset] [data-vn-controls] > [data-vn-control]:not(.nav-step-btn),
-[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-controls] > [data-vn-control]:not(.nav-step-btn) {
+.reader-action-row > .action:not(.nav-step-btn) {
   position: relative !important;
   height: 38px !important;
   width: 38px !important;
@@ -26814,6 +26817,15 @@ aside[data-vn-workspace] {
   cursor: pointer !important;
   padding: 0 !important;
   transition: color 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease !important;
+}
+
+/* Strictly limit bottom toolbar to the 4 primary icons: Settings, World Lens, Char Folio, History */
+[data-vn-controls] > :not([data-vn-control="settings"]):not([data-vn-control="lens"]):not([data-vn-control="cast"]):not([data-vn-control="log"]),
+[data-vn-root] [data-vn-controls] > :not([data-vn-control="settings"]):not([data-vn-control="lens"]):not([data-vn-control="cast"]):not([data-vn-control="log"]),
+[data-vn-root][data-vn-preset] [data-vn-controls] > :not([data-vn-control="settings"]):not([data-vn-control="lens"]):not([data-vn-control="cast"]):not([data-vn-control="log"]),
+[data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-controls] > :not([data-vn-control="settings"]):not([data-vn-control="lens"]):not([data-vn-control="cast"]):not([data-vn-control="log"]),
+[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-controls] > :not([data-vn-control="settings"]):not([data-vn-control="lens"]):not([data-vn-control="cast"]):not([data-vn-control="log"]) {
+  display: none !important;
 }
 
 .reader-action-row > .action:not(.nav-step-btn)::after {
@@ -27428,20 +27440,22 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   box-shadow: 0 20px 48px rgba(0, 0, 0, calc(var(--caption-opacity, 0.84) * 0.62)), 0 0 24px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 8%, transparent), inset 0 1px 0 rgba(255, 255, 255, calc(var(--caption-opacity, 0.84) * 0.2));
 }
 
-/* Draggable Top Resize Grip */
+/* Draggable Top Resize Grip — narrow centered handle so it never blocks top-right Play/Hide tools */
 .resize-grip,
 [data-vn-sheet-handle] {
   position: absolute !important;
-  top: -20px;
+  top: -10px !important;
   left: 50% !important;
+  right: auto !important;
+  width: 68px !important;
   transform: translateX(-50%) !important;
-  min-width: 72px;
-  height: 44px;
+  min-width: 68px;
+  height: 22px;
   cursor: ns-resize !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  z-index: 35 !important;
+  z-index: 25 !important;
   touch-action: none !important;
 }
 
@@ -27456,6 +27470,8 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 /* Dialogue Header (Speaker Avatar, Speaker Name, Location Pin & Scene, Play/Hide Pill) */
 .caption-head,
 [data-vn-sheet-header] {
+  position: relative !important;
+  z-index: 38 !important;
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
@@ -27538,7 +27554,9 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 .caption-head-actions,
 [data-vn-sheet-tools],
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-sheet-tools] {
-  position: static !important;
+  position: relative !important;
+  z-index: 45 !important;
+  pointer-events: auto !important;
   width: auto !important;
   display: inline-flex !important;
   align-items: center !important;
@@ -27613,16 +27631,14 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   margin: 0 !important;
 }
 
-/* Word-by-word TTS & Auto-Read highlight effect */
+/* Word-by-word TTS & Auto-Read highlight effect — single soft aura pill */
 ::highlight(vn-tts-word) {
-  background-color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 32%, transparent);
+  background-color: transparent;
   color: #ffffff;
-  text-decoration: underline;
-  text-decoration-color: var(--aperture-accent, #c4b5fd);
 }
 
 ::highlight(vn-tts-spoken) {
-  color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 35%, var(--aperture-text, #ffffff));
+  color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 24%, var(--aperture-text, #ffffff));
 }
 
 .vn-tts-word-aura,
@@ -27631,12 +27647,12 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   top: 0 !important;
   left: 0 !important;
   pointer-events: none !important;
-  z-index: 2 !important;
-  border-radius: 6px !important;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--aperture-accent, #c4b5fd) 14%, transparent), color-mix(in srgb, var(--aperture-accent, #c4b5fd) 30%, transparent)) !important;
-  border-bottom: 2px solid var(--aperture-accent, #c4b5fd) !important;
-  box-shadow: 0 2px 14px var(--aperture-accent-glow, rgba(167, 139, 250, 0.52)), 0 0 6px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 38%, transparent) !important;
-  transition: transform 80ms cubic-bezier(0.22, 1, 0.36, 1), width 80ms ease, height 80ms ease !important;
+  z-index: 0 !important;
+  border-radius: 5px !important;
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 17%, transparent) !important;
+  border-bottom: 1.5px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 72%, transparent) !important;
+  box-shadow: 0 1px 10px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, transparent) !important;
+  transition: transform 72ms cubic-bezier(0.22, 1, 0.36, 1), width 72ms ease, height 72ms ease, opacity 120ms ease !important;
 }
 
 .vn-tts-word-aura[hidden] {
@@ -37082,9 +37098,17 @@ class DialogueSheet {
     header.append(this.tools);
     root.append(this.show);
     const signal = this.abort.signal;
+    this.tools.addEventListener("pointerdown", (event) => event.stopPropagation(), { signal });
+    this.tools.addEventListener("touchstart", (event) => event.stopPropagation(), { signal, passive: true });
     this.tools.addEventListener("click", (event) => event.stopPropagation(), { signal });
-    this.auto.addEventListener("click", () => this.onToggleAutoPlay?.(), { signal });
-    this.hide.addEventListener("click", () => this.setHidden(!this.hidden), { signal });
+    this.auto.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.onToggleAutoPlay?.();
+    }, { signal });
+    this.hide.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.setHidden(!this.hidden);
+    }, { signal });
     this.show.addEventListener("click", (event) => {
       event.stopPropagation();
       this.setHidden(false);
@@ -47101,12 +47125,18 @@ class VnStage {
       this.completeTypewriter();
     }
     this.clearAutoPlayTimer();
+    this.speechReadAlong.clear();
     const view = selectVnStageView(this.state);
     if (!view.canAdvance) {
       this.toggleAutoPlay(false);
       return;
     }
-    this.startAutoCountdown(240);
+    this.autoPlayTimer = setTimeout(() => {
+      this.autoPlayTimer = null;
+      if (!this.destroyed && this.isAutoPlay) {
+        this.advance();
+      }
+    }, 110);
   }
   toggleAutoPlay(force) {
     if (this.destroyed)
@@ -47120,16 +47150,17 @@ class VnStage {
       this.clearSkipTimer();
       this.settleSceneCrossfade();
       this.updateControlButtons();
-      if (changed)
-        this.callbacks.onAutoPlayChange?.(true);
       if (this.isTyping) {
         this.completeTypewriter();
-      } else {
+      }
+      if (changed)
+        this.callbacks.onAutoPlayChange?.(true);
+      if (!this.isTyping) {
         this.onTextRenderFinished();
       }
     } else {
       this.clearAutoPlayTimer();
-      this.speechReadAlong.setFraction(null);
+      this.speechReadAlong.clear();
       this.updateControlButtons();
       if (changed)
         this.callbacks.onAutoPlayChange?.(false);
@@ -49048,18 +49079,18 @@ class VnStage {
       this.autoReadAlongTimer = null;
     }
     this.resetAutoRing();
-    if (delayMs >= 400 && this.dialogueText.dataset.vnSpeechSpeaking !== "true") {
+    if (delayMs >= 800 && !this.isAutoAdvanceHeld?.() && !this.isTypewriterAudioMuted?.() && this.dialogueText.dataset.vnSpeechSpeaking !== "true") {
       const startAt = Date.now();
       this.speechReadAlong.setFraction(0);
       this.autoReadAlongTimer = setInterval(() => {
-        if (this.destroyed || !this.isAutoPlay || this.dialogueText.dataset.vnSpeechSpeaking === "true") {
+        if (this.destroyed || !this.isAutoPlay || this.isAutoAdvanceHeld?.() || this.isTypewriterAudioMuted?.() || this.dialogueText.dataset.vnSpeechSpeaking === "true") {
           if (this.autoReadAlongTimer !== null) {
             clearInterval(this.autoReadAlongTimer);
             this.autoReadAlongTimer = null;
           }
           return;
         }
-        const frac = Math.min(1, (Date.now() - startAt) / Math.max(1, delayMs * 0.88));
+        const frac = Math.min(1, (Date.now() - startAt) / Math.max(1, delayMs * 0.9));
         this.speechReadAlong.setFraction(frac);
       }, 65);
     }
@@ -49200,7 +49231,7 @@ class VnStage {
       this.dialogueLive.textContent = "";
     this.dialogueText.innerHTML = formatted;
     applyTextEffects(this.dialogueText);
-    if (!this.typewriter.prepare(this.dialogueText)) {
+    if (this.isAutoPlay && this.isTypewriterAudioMuted?.() || !this.typewriter.prepare(this.dialogueText)) {
       this.isTyping = false;
       this.updateContinueButton();
       this.onTextRenderFinished();
@@ -58513,7 +58544,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.179";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.180";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -68239,7 +68270,7 @@ class SpeechController {
         this.onProgress(null);
     });
     bind("pause", () => {
-      if (owns() && audio.paused === true && this.playState === "playing") {
+      if (owns() && audio.paused === true && !audio.ended && this.playState === "playing") {
         this.playState = "paused";
         this.publish({ kind: "paused", ...this.speakerLabel() });
       }
@@ -68666,7 +68697,7 @@ class SpeechDock {
     this.host.remove();
   }
   sync() {
-    const isOpen = this.overlayActive && (this.popoverOpen || this.playing);
+    const isOpen = this.overlayActive && this.popoverOpen;
     this.host.dataset.open = isOpen ? "true" : "false";
     this.host.style.display = isOpen ? "block" : "none";
   }
@@ -69824,8 +69855,14 @@ function setupVisualNovelFrontend(baseContext) {
     onPlay: () => {
       speech.playCurrent();
     },
-    onPause: () => speech.pause(),
-    onStop: () => speech.stop("user-stop"),
+    onPause: () => {
+      stage.toggleAutoPlay(false);
+      speech.pause();
+    },
+    onStop: () => {
+      stage.toggleAutoPlay(false);
+      speech.stop("user-stop");
+    },
     onEnableAndPlay: () => {
       if (configRef.current && !configRef.current.speech.enabled) {
         const nextSpeech = { ...configRef.current.speech, enabled: true };
