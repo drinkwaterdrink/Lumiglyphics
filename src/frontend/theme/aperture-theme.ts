@@ -45,5 +45,10 @@ import { APERTURE_CSS_WORKSPACE_SETTINGS } from "./aperture/workspace-settings.j
 import { APERTURE_CSS_LENS_FOLIO } from "./aperture/lens-folio.js";
 import { APERTURE_CSS_SHEETS_STAGE_PALETTES } from "./aperture/sheets-stage-palettes.js";
 
-/** Full stylesheet: the parts concatenate to the original text, unchanged. */
+/** Shadow-root-scoped Aperture CSS bundles so each shadow boundary loads only its own rules. */
+export const APERTURE_SETTINGS_CSS = [APERTURE_CSS_FOUNDATION, APERTURE_CSS_WORKSPACE_SETTINGS].join("");
+export const APERTURE_OUTER_CSS = [APERTURE_CSS_FOUNDATION, APERTURE_CSS_ROUTE_BAR_READER, APERTURE_CSS_WORKSPACE_SETTINGS, APERTURE_CSS_SHEETS_STAGE_PALETTES].join("");
+export const APERTURE_STAGE_CSS = [APERTURE_CSS_FOUNDATION, APERTURE_CSS_LENS_FOLIO, APERTURE_CSS_SHEETS_STAGE_PALETTES].join("");
+
+/** Full stylesheet: retained for backwards compatibility. */
 export const APERTURE_THEME_CSS = [APERTURE_CSS_FOUNDATION, APERTURE_CSS_ROUTE_BAR_READER, APERTURE_CSS_WORKSPACE_SETTINGS, APERTURE_CSS_LENS_FOLIO, APERTURE_CSS_SHEETS_STAGE_PALETTES].join("");

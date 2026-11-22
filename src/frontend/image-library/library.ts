@@ -379,24 +379,24 @@ export class ImageLibrary{
  destroy(){this.close();this.host.remove();}
 }
 
-const DOCKED_LIBRARY_CSS=`
+export const DOCKED_LIBRARY_CSS=`
 :host([data-vn-workspace-tool]:not([data-open="true"])),
 :host([data-vn-workspace-tool][hidden]),
 :host([data-vn-workspace-tool]) section[hidden] {
   display: none !important;
 }
 :host([data-vn-workspace-tool]) {
-  position: relative !important;
-  inset: auto !important;
-  display: flex !important;
-  flex-direction: column !important;
-  flex: 1 1 auto !important;
-  min-height: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  z-index: auto !important;
-  pointer-events: auto !important;
-  background: transparent !important;
+  position: relative;
+  inset: auto;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  z-index: auto;
+  pointer-events: auto;
+  background: transparent;
 }
 :host([data-vn-workspace-tool]) [data-library-launch],
 :host([data-vn-workspace-tool]) [data-library-close],
@@ -404,107 +404,107 @@ const DOCKED_LIBRARY_CSS=`
   display: none !important;
 }
 :host([data-vn-workspace-tool]) section:not([hidden]) {
-  position: relative !important;
-  inset: auto !important;
-  display: flex !important;
-  flex-direction: column !important;
-  flex: 1 1 auto !important;
-  min-height: 0 !important;
-  width: 100% !important;
-  max-width: none !important;
-  height: 100% !important;
-  max-height: none !important;
-  margin: 0 !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  background: transparent !important;
+  position: relative;
+  inset: auto;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
 }
 :host([data-vn-workspace-tool]) header { display: none !important; }
 :host([data-vn-workspace-tool]) [data-history-views] {
-  margin: 6px 14px 10px !important;
-  flex-shrink: 0 !important;
-  border-color: var(--vn-shell-border, rgba(160, 205, 185, 0.25)) !important;
+  margin: 6px 14px 10px;
+  flex-shrink: 0;
+  border-color: var(--vn-shell-border, rgba(160, 205, 185, 0.25));
 }
 :host([data-vn-workspace-tool]) [data-history-view] {
-  color: var(--vn-shell-muted, #a6bfae) !important;
+  color: var(--vn-shell-muted, #a6bfae);
 }
 :host([data-vn-workspace-tool]) [data-history-view][aria-pressed=true] {
-  background: var(--vn-shell-accent, #dcebad) !important;
-  color: var(--vn-shell-accent-contrast, #0e1e18) !important;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.3) !important;
+  background: var(--vn-shell-accent, #dcebad);
+  color: var(--vn-shell-accent-contrast, #0e1e18);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
 }
 :host([data-vn-workspace-tool]) details {
-  margin: 0 14px 10px !important;
+  margin: 0 14px 10px;
 }
 :host([data-vn-workspace-tool]) .body {
-  padding: 8px 14px 16px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  flex: 1 1 auto !important;
-  min-height: 0 !important;
-  height: 100% !important;
-  overflow-y: auto !important;
-  -webkit-overflow-scrolling: touch !important;
+  padding: 8px 14px 16px;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 :host([data-vn-workspace-tool]) [data-browse] {
-  display: flex !important;
-  flex-direction: column !important;
-  flex: 0 0 auto !important;
-  min-height: auto !important;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  min-height: auto;
 }
 :host([data-vn-workspace-tool]) [data-reading-history] { flex: 0 0 auto; }
 :host([data-vn-workspace-tool]) [data-reply] {
-  background: var(--vn-shell-field, rgba(18, 38, 30, 0.55)) !important;
-  border: 1px solid var(--vn-shell-border, rgba(160, 205, 185, 0.22)) !important;
-  border-left: 3px solid var(--vn-shell-accent, #dcebad) !important;
-  color: var(--vn-shell-text, #f3f7ee) !important;
+  background: var(--vn-shell-field, rgba(18, 38, 30, 0.55));
+  border: 1px solid var(--vn-shell-border, rgba(160, 205, 185, 0.22));
+  border-left: 3px solid var(--vn-shell-accent, #dcebad);
+  color: var(--vn-shell-text, #f3f7ee);
 }
 :host([data-vn-workspace-tool]) [data-reply] h3 {
-  background: color-mix(in srgb, var(--vn-shell-accent, #dcebad) 18%, transparent) !important;
-  color: var(--vn-shell-accent, #dcebad) !important;
+  background: color-mix(in srgb, var(--vn-shell-accent, #dcebad) 18%, transparent);
+  color: var(--vn-shell-accent, #dcebad);
 }
 :host([data-vn-workspace-tool]) [data-reply] details strong {
-  background: color-mix(in srgb, var(--vn-shell-accent, #dcebad) 15%, transparent) !important;
-  color: var(--vn-shell-accent, #dcebad) !important;
+  background: color-mix(in srgb, var(--vn-shell-accent, #dcebad) 15%, transparent);
+  color: var(--vn-shell-accent, #dcebad);
 }
 :host([data-vn-workspace-tool]) [data-vn-backlog-jump] {
-  background: color-mix(in srgb, var(--vn-shell-accent, #dcebad) 14%, transparent) !important;
-  border: 1px solid var(--vn-shell-border, rgba(220, 238, 173, 0.35)) !important;
-  color: var(--vn-shell-accent, #dcebad) !important;
+  background: color-mix(in srgb, var(--vn-shell-accent, #dcebad) 14%, transparent);
+  border: 1px solid var(--vn-shell-border, rgba(220, 238, 173, 0.35));
+  color: var(--vn-shell-accent, #dcebad);
 }
 :host([data-vn-workspace-tool]) footer[data-library-footer] {
-  margin-top: auto !important;
-  margin-bottom: 0 !important;
-  flex: 0 0 auto !important;
-  min-height: 56px !important;
-  max-height: none !important;
-  height: auto !important;
-  background: var(--vn-shell-panel, rgba(9, 19, 15, 0.94)) !important;
-  backdrop-filter: blur(14px) !important;
-  -webkit-backdrop-filter: blur(14px) !important;
-  border-top: 1px solid var(--vn-shell-border, rgba(160, 205, 185, 0.2)) !important;
-  padding: 6px 14px calc(6px + env(safe-area-inset-bottom, 0px)) !important;
-  box-sizing: border-box !important;
-  z-index: 10 !important;
+  margin-top: auto;
+  margin-bottom: 0;
+  flex: 0 0 auto;
+  min-height: 56px;
+  max-height: none;
+  height: auto;
+  background: var(--vn-shell-panel, rgba(9, 19, 15, 0.94));
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-top: 1px solid var(--vn-shell-border, rgba(160, 205, 185, 0.2));
+  padding: 6px 14px calc(6px + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+  z-index: 10;
 }
 :host([data-vn-workspace-tool]) footer[data-library-footer] button {
   min-height: 44px;
   min-width: 44px;
-  border-radius: 999px !important;
-  padding: 4px 14px !important;
-  background: var(--vn-shell-button, rgba(22, 46, 36, 0.8)) !important;
-  border: 1px solid var(--vn-shell-border, rgba(160, 205, 185, 0.25)) !important;
-  color: var(--vn-shell-text, #f4f7ee) !important;
-  font-weight: 650 !important;
-  font-size: 12px !important;
+  border-radius: 999px;
+  padding: 4px 14px;
+  background: var(--vn-shell-button, rgba(22, 46, 36, 0.8));
+  border: 1px solid var(--vn-shell-border, rgba(160, 205, 185, 0.25));
+  color: var(--vn-shell-text, #f4f7ee);
+  font-weight: 650;
+  font-size: 12px;
 }
 :host([data-vn-workspace-tool]) footer[data-library-footer] button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--vn-shell-accent, #dcebad) 18%, var(--vn-shell-button, rgba(35, 75, 57, 0.9))) !important;
-  border-color: var(--vn-shell-accent, #dcebad) !important;
-  color: var(--vn-shell-accent, #dcebad) !important;
+  background: color-mix(in srgb, var(--vn-shell-accent, #dcebad) 18%, var(--vn-shell-button, rgba(35, 75, 57, 0.9)));
+  border-color: var(--vn-shell-accent, #dcebad);
+  color: var(--vn-shell-accent, #dcebad);
 }
-:host([data-vn-workspace-tool]) .filters { grid-template-columns: 1fr !important; }
-:host([data-vn-workspace-tool]) [data-grid] { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)) !important; }
-:host([data-vn-workspace-tool]) [data-detail-back] { font-size: 24px !important; }
+:host([data-vn-workspace-tool]) .filters { grid-template-columns: 1fr; }
+:host([data-vn-workspace-tool]) [data-grid] { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+:host([data-vn-workspace-tool]) [data-detail-back] { font-size: 24px; }
 `;

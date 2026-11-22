@@ -12,6 +12,7 @@ import {
 } from "../../shared/rpg-state.js";
 import type { VnChoice } from "../store/vn-store.js";
 import { trapFocusWithin } from "../image-review/focus-trap.js";
+import { escapeHtml as esc } from "../../shared/html-escape.js";
 
 export const RPG_HUD_CSS = `
 [data-vn-choice-check] {
@@ -239,14 +240,6 @@ const TIER_LABELS: Record<SkillCheckOutcome["tier"], string> = {
   failure: "FAILURE",
   critical_failure: "CRITICAL FAILURE (NAT 1)",
 };
-
-function esc(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 /** Format an itemized skill-check roll breakdown string for UI and tooltips. */
 export function formatSkillCheckBreakdown(

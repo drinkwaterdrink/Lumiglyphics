@@ -59499,6 +59499,65 @@ init_image_library2();
 init_system_one();
 init_audio_catalog();
 init_storage();
+
+// src/backend/runtime/audio-import.ts
+var AUDIO_IMPORT_TTL_MS = 5 * 60 * 1000;
+var MAX_AUDIO_IMPORT_BUFFERS = 16;
+var audioImportBuffers = new Map;
+function pruneAudioImportBuffers(now2 = Date.now()) {
+  for (const [key, entry] of audioImportBuffers) {
+    if (now2 - entry.updatedAt > AUDIO_IMPORT_TTL_MS) {
+      audioImportBuffers.delete(key);
+    }
+  }
+  while (audioImportBuffers.size >= MAX_AUDIO_IMPORT_BUFFERS) {
+    const oldestKey = audioImportBuffers.keys().next().value;
+    if (!oldestKey)
+      break;
+    audioImportBuffers.delete(oldestKey);
+  }
+}
+var MAX_AUDIO_IMPORT_BASE64 = 40 * 1024 * 1024;
+function acceptAudioImportChunk(bufferKey, part) {
+  const chunkCount = part.chunkCount && part.chunkCount > 1 ? Math.floor(part.chunkCount) : 1;
+  if (chunkCount === 1) {
+    if (part.dataBase64.length > MAX_AUDIO_IMPORT_BASE64)
+      throw new Error("Audio file too large to import (30 MB max).");
+    return part.dataBase64;
+  }
+  const index = Math.floor(part.chunkIndex ?? 0);
+  if (index < 0 || index >= chunkCount)
+    return null;
+  const now2 = Date.now();
+  pruneAudioImportBuffers(now2);
+  const buffer = audioImportBuffers.get(bufferKey) ?? { chunks: new Array(chunkCount), received: 0, updatedAt: now2 };
+  if (buffer.chunks.length !== chunkCount) {
+    audioImportBuffers.delete(bufferKey);
+    return null;
+  }
+  if (buffer.chunks[index] === undefined)
+    buffer.received += 1;
+  buffer.chunks[index] = part.dataBase64;
+  buffer.updatedAt = now2;
+  const assembledSoFar = buffer.chunks.reduce((total, chunk) => total + (chunk?.length ?? 0), 0);
+  if (assembledSoFar > MAX_AUDIO_IMPORT_BASE64) {
+    audioImportBuffers.delete(bufferKey);
+    throw new Error("Audio file too large to import (30 MB max).");
+  }
+  audioImportBuffers.set(bufferKey, buffer);
+  if (buffer.received < chunkCount)
+    return null;
+  audioImportBuffers.delete(bufferKey);
+  return buffer.chunks.join("");
+}
+function clearAudioImportBuffers(userKey) {
+  for (const key of [...audioImportBuffers.keys()]) {
+    if (key.startsWith(`${userKey}:`))
+      audioImportBuffers.delete(key);
+  }
+}
+
+// src/backend/runtime/controller.ts
 var contextSourceSession = new ContextSourceSession;
 var contextConfigSaves = new Map;
 var imageReviewGates = new Map;
@@ -59879,61 +59938,6 @@ function errorText2(error61) {
 }
 var debugFlags = new Map;
 var pendingAudioImports = new Map;
-var AUDIO_IMPORT_TTL_MS = 5 * 60 * 1000;
-var MAX_AUDIO_IMPORT_BUFFERS = 16;
-var audioImportBuffers = new Map;
-function pruneAudioImportBuffers(now2 = Date.now()) {
-  for (const [key, entry] of audioImportBuffers) {
-    if (now2 - entry.updatedAt > AUDIO_IMPORT_TTL_MS) {
-      audioImportBuffers.delete(key);
-    }
-  }
-  while (audioImportBuffers.size >= MAX_AUDIO_IMPORT_BUFFERS) {
-    const oldestKey = audioImportBuffers.keys().next().value;
-    if (!oldestKey)
-      break;
-    audioImportBuffers.delete(oldestKey);
-  }
-}
-var MAX_AUDIO_IMPORT_BASE64 = 40 * 1024 * 1024;
-function acceptAudioImportChunk(bufferKey, part) {
-  const chunkCount = part.chunkCount && part.chunkCount > 1 ? Math.floor(part.chunkCount) : 1;
-  if (chunkCount === 1) {
-    if (part.dataBase64.length > MAX_AUDIO_IMPORT_BASE64)
-      throw new Error("Audio file too large to import (30 MB max).");
-    return part.dataBase64;
-  }
-  const index = Math.floor(part.chunkIndex ?? 0);
-  if (index < 0 || index >= chunkCount)
-    return null;
-  const now2 = Date.now();
-  pruneAudioImportBuffers(now2);
-  const buffer = audioImportBuffers.get(bufferKey) ?? { chunks: new Array(chunkCount), received: 0, updatedAt: now2 };
-  if (buffer.chunks.length !== chunkCount) {
-    audioImportBuffers.delete(bufferKey);
-    return null;
-  }
-  if (buffer.chunks[index] === undefined)
-    buffer.received += 1;
-  buffer.chunks[index] = part.dataBase64;
-  buffer.updatedAt = now2;
-  const assembledSoFar = buffer.chunks.reduce((total, chunk) => total + (chunk?.length ?? 0), 0);
-  if (assembledSoFar > MAX_AUDIO_IMPORT_BASE64) {
-    audioImportBuffers.delete(bufferKey);
-    throw new Error("Audio file too large to import (30 MB max).");
-  }
-  audioImportBuffers.set(bufferKey, buffer);
-  if (buffer.received < chunkCount)
-    return null;
-  audioImportBuffers.delete(bufferKey);
-  return buffer.chunks.join("");
-}
-function clearAudioImportBuffers(userKey) {
-  for (const key of [...audioImportBuffers.keys()]) {
-    if (key.startsWith(`${userKey}:`))
-      audioImportBuffers.delete(key);
-  }
-}
 function sanitizeAudioImportPath(relativePath) {
   const normalized = relativePath.replace(/\\/g, "/").replace(/^[A-Za-z]:\//, "").replace(/^\/+/, "");
   const parts = normalized.split("/").map((part) => part.trim()).filter((part) => part && part !== "." && part !== "..");

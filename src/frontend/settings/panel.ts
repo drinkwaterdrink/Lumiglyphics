@@ -6,11 +6,12 @@ import {
 } from '../../shared/master-system-prompts.js';
 import {renderAdvancedRoutes} from './advanced-routes.js';
 import {resolveImagePromptProfile,promptProfileSummary} from "../../shared/image-prompt-profile.js";
-import {compileDisplayRules} from '../../shared/display-rules.js';
+import { compileDisplayRules } from '../../shared/display-rules.js';
+import { escapeHtml as esc } from '../../shared/html-escape.js';
 import { createUiId } from "../request-id.js";
 import {SETTINGS_PAGES,SETTINGS_HOME_GROUPS,SETTINGS_FIELD_PAGES,settingsPage,type SettingsPageId} from "./routes.js";
 import {WORKSPACE_CSS} from "./workspace-css.js";
-import {APERTURE_THEME_CSS} from "../theme/aperture-theme.js";
+import { APERTURE_SETTINGS_CSS } from "../theme/aperture-theme.js";
 import {PresentationRulesPanel} from './presentation-rules.js';
 import type {PresentationRuleRequest,PresentationRuleCatalog} from '../../shared/presentation-rules.js';
 import {CastArtPanel} from './cast-art.js';
@@ -380,10 +381,6 @@ input, select, textarea, button { scroll-margin: 4.5rem 0 8.5rem; }
 
 type StatusKind = "idle" | "saved" | "saving" | "dirty" | "error";
 
-function esc(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
-}
-
 function segments(name: string, steps: ReadonlyArray<{ label: string; value: number | string }>, withCustom: boolean): string {
   const items = steps.map((step) => `<label><input type="radio" name="${name}" value="${step.value}" />${esc(step.label)}</label>`);
   if (withCustom) items.push(`<label><input type="radio" name="${name}" value="custom" />Custom</label>`);
@@ -511,7 +508,7 @@ export class VisualNovelSettingsPanel {
     this.host.setAttribute("data-vn-settings", "");
     this.root = this.host.attachShadow({ mode: "open" });
     const style = document.createElement("style");
-    style.textContent = PANEL_CSS + WORKSPACE_CSS + READER_SETTINGS_CSS + APERTURE_THEME_CSS;
+    style.textContent = PANEL_CSS + WORKSPACE_CSS + READER_SETTINGS_CSS + APERTURE_SETTINGS_CSS;
     const body = document.createElement("div");
     body.innerHTML = this.template();
     this.root.append(style, ...Array.from(body.childNodes));

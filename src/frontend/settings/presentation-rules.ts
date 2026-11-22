@@ -343,11 +343,41 @@ export class PresentationRulesPanel {
 
   guardNavigation(navigate: () => void): boolean {
     if (!this.dirty) { navigate(); return true; }
-    if (confirm('You have unsaved Scene Direction changes. Leave without saving?')) {
+    let banner = this.root.querySelector<HTMLElement>('[data-rule-nav-confirm]');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.dataset.ruleNavConfirm = '';
+      banner.setAttribute('role', 'alertdialog');
+      banner.setAttribute('aria-label', 'Unsaved Scene Direction changes');
+      banner.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin:8px 0;padding:10px 12px;border-radius:10px;border:1px solid var(--vn-shell-border,rgba(255,255,255,.22));background:var(--vn-shell-panel,rgba(15,23,42,.92));';
+      const msg = document.createElement('span');
+      msg.textContent = 'You have unsaved Scene Direction changes. Leave without saving?';
+      const actions = document.createElement('div');
+      actions.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
+      const stayBtn = document.createElement('button');
+      stayBtn.type = 'button';
+      stayBtn.dataset.ruleNavStay = '';
+      stayBtn.textContent = 'Keep editing';
+      stayBtn.style.cssText = 'min-height:44px;min-width:44px;padding:6px 12px;';
+      const leaveBtn = document.createElement('button');
+      leaveBtn.type = 'button';
+      leaveBtn.dataset.ruleNavLeave = '';
+      leaveBtn.textContent = 'Leave without saving';
+      leaveBtn.style.cssText = 'min-height:44px;min-width:44px;padding:6px 12px;';
+      actions.append(stayBtn, leaveBtn);
+      banner.append(msg, actions);
+      this.root.prepend(banner);
+    }
+    banner.hidden = false;
+    const stayBtn = banner.querySelector<HTMLButtonElement>('[data-rule-nav-stay]')!;
+    const leaveBtn = banner.querySelector<HTMLButtonElement>('[data-rule-nav-leave]')!;
+    stayBtn.onclick = () => { banner!.hidden = true; };
+    leaveBtn.onclick = () => {
+      banner!.hidden = true;
       this.closeDraft();
       navigate();
-      return true;
-    }
+    };
+    stayBtn.focus?.();
     return false;
   }
 

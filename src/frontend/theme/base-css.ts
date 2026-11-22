@@ -1,7 +1,7 @@
 import { READER_STAGE_CSS } from "./reader-shell-css.js";
 import { VN_EFFECTS_CSS } from "./effects-css.js";
 import { VN_TEXT_EFFECTS_CSS } from "./text-effects-css.js";
-import { APERTURE_THEME_CSS } from "./aperture-theme.js";
+import { APERTURE_STAGE_CSS } from "./aperture-theme.js";
 
 const LEGACY_BASE_CSS = `
 :host {
@@ -2319,4 +2319,4 @@ ${VN_TEXT_EFFECTS_CSS}
 }
 `;
 
-export const VN_BASE_CSS = LEGACY_BASE_CSS + READER_STAGE_CSS + APERTURE_THEME_CSS;
+export const VN_BASE_CSS = LEGACY_BASE_CSS + READER_STAGE_CSS + APERTURE_STAGE_CSS;

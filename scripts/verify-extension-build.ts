@@ -23,6 +23,9 @@ const patterns = {
 };
 const matches = Object.entries(patterns).filter(([, pattern]) => pattern.test(backend)).map(([name]) => name);
 assert.deepEqual(matches, [], "Backend contains patterns requiring investigation");
+const frontend = readFileSync(manifest.entry_frontend, "utf8");
+assert.ok(!/\bcrypto\s*\.\s*randomUUID\s*\(/.test(backend), "Backend bundle must use spindle.uuid / getRandomValues, not crypto.randomUUID()");
+assert.ok(!/\bcrypto\s*\.\s*randomUUID\s*\(/.test(frontend), "Frontend bundle must use ctx.uuid / getRandomValues, not crypto.randomUUID()");
 // Lumiverse builds the backend with --target bun. YAML's Node binary helper
 // needs the documented declaration even when only the core schema is used.
 // This is a conservative local check, not a replacement for the host scanner.

@@ -2,6 +2,7 @@
  * Edge-to-edge Fullscreen Image Lightbox for History & Artwork Review Studio.
  */
 import { trapFocusWithin } from "../image-review/focus-trap.js";
+import { escapeHtml } from "../../shared/html-escape.js";
 
 export interface LightboxGalleryItem {
   src: string;
@@ -556,10 +557,10 @@ export class FullscreenLightbox {
 
     let infoHtml = "";
     if (item.prompt) {
-      infoHtml += `<strong>Positive Prompt:</strong><pre>${this.escapeHtml(item.prompt)}</pre>`;
+      infoHtml += `<strong>Positive Prompt:</strong><pre>${escapeHtml(item.prompt)}</pre>`;
     }
     if (item.negativePrompt) {
-      infoHtml += `<div style="margin-top:10px"><strong>Negative Prompt:</strong><pre>${this.escapeHtml(item.negativePrompt)}</pre></div>`;
+      infoHtml += `<div style="margin-top:10px"><strong>Negative Prompt:</strong><pre>${escapeHtml(item.negativePrompt)}</pre></div>`;
     }
     this.infoDrawer.innerHTML = infoHtml || "<p style='margin:0;opacity:0.7'>No recorded prompt metadata.</p>";
 
@@ -617,9 +618,5 @@ export class FullscreenLightbox {
     const returnTo = this.previousFocus;
     this.previousFocus = null;
     returnTo?.focus?.();
-  }
-
-  private escapeHtml(str: string): string {
-    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 }
