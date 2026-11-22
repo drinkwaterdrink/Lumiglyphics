@@ -731,9 +731,8 @@ export class StageDossiers {
    if(bg&&urlOf(bg)){imageUrl=urlOf(bg);imageCaption=`Location view · ${entity.name}`;}
    else if(isActiveLocation&&this.displayedImageUrl?.()){imageUrl=this.displayedImageUrl()!;imageCaption=`Current location · ${entity.name}`;}
   }else if(!imageUrl){
-   const prop=[...pool].reverse().find(a=>a.paragraphIndex===entity.firstParagraph||this.snapshotAt(a.paragraphIndex)?.drawableEntityId===entity.id);
+   const prop=[...pool].reverse().find(a=>this.snapshotAt(a.paragraphIndex)?.drawableEntityId===entity.id);
    if(prop&&urlOf(prop)){imageUrl=urlOf(prop);imageCaption=`Scene detail · ${entity.name}`;}
-   else if(isPresent&&this.displayedImageUrl?.()){imageUrl=this.displayedImageUrl()!;imageCaption=`Current scene · ${entity.name}`;}
   }
   const briefRaw=snapshot?selectReaderDossier(entity.id,snapshot,'brief',this.prefs.fieldGroups):undefined;
   const briefEdited=briefRaw&&snapshot?applyOverrideFactEdits(briefRaw,entityOverride(this.prefs,snapshot.at.key.chatId,entity)):briefRaw;

@@ -4,7 +4,7 @@ import { DOCKED_DOSSIER_CSS, DOSSIER_CSS } from "./dossier-card.js";
 import { DOCUMENT_READER_CSS } from "./document-reader.js";
 import { RPG_HUD_CSS, RpgStageController } from "./rpg-hud.js";
 import { APERTURE_CSS_ROUTE_BAR_READER } from "../theme/aperture/route-bar-reader.js";
-import { APERTURE_STAGE_CSS } from "../theme/aperture-theme.js";
+import { APERTURE_OUTER_CSS, APERTURE_STAGE_CSS } from "../theme/aperture-theme.js";
 import { CharacterFolio } from "./character-folio.js";
 import { createEmptyCharacterDNA } from "../../shared/character-dna.js";
 
@@ -31,7 +31,10 @@ describe("Wave 2 & 3 mobile touch targets, docked header dedup, Folio filter & R
     expect(APERTURE_CSS_ROUTE_BAR_READER).toContain("[data-vn-scene-postcard] button.vn-postcard-pill {\n  min-height: 44px !important;");
     expect(APERTURE_CSS_ROUTE_BAR_READER).toContain("@media (max-width: 390px)");
     expect(APERTURE_STAGE_CSS).toContain(".route-bar {");
-    expect(DOSSIER_CSS).toContain(".world-lens.world-lens-preview{flex-direction:column;");
+    expect(APERTURE_OUTER_CSS).toContain("[data-vn-dialogue]");
+    expect(DOSSIER_CSS).toContain(".world-scene-banner{");
+    expect(DOSSIER_CSS).toContain("[data-reference-thumb]{");
+    expect(DOSSIER_CSS).toContain(".world-lens.world-lens-preview{display:flex;flex-direction:column;");
   });
 
   test("CharacterFolio renders roster search & In Scene filter when cast exceeds 4", () => {
