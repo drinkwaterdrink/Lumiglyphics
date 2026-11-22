@@ -118,6 +118,7 @@ export class ReaderWorkspace {
           <button type="button" data-aperture-route="workspace" class="aperture-link"><span class="number">07</span><span>Workspace</span>${APERTURE_ICONS.layers}</button>
           <button type="button" data-action="cast-toggle" class="aperture-link" style="min-height:44px"><span class="number">08</span><span>Toggle cast portraits</span>${APERTURE_ICONS.cast}</button>
           <button type="button" data-action="quick-tuner" class="aperture-link" style="min-height:44px"><span class="number">09</span><span>Quick Look &amp; Audio</span>${APERTURE_ICONS.settings}</button>
+          <button type="button" data-action="quick-director" class="aperture-link" style="min-height:44px"><span class="number">10</span><span>Director: Steer Scene</span>${APERTURE_ICONS.image}</button>
           <button type="button" data-aperture-route="chat" class="aperture-link"><span class="number">→</span><span>Back to Lumiverse chat</span>${APERTURE_ICONS.chat}</button>
         </div>
         <div class="aperture-foot"><span data-aperture-chapter>CURRENT SCENE</span><span>EVERY DETAIL HAS A PLACE</span></div>
@@ -239,6 +240,12 @@ export class ReaderWorkspace {
       if (tunerBtn) {
         this.toggleAperture(false);
         this.shell.dispatchEvent(new CustomEvent('lumiglyphics:quick-tuner', { bubbles: true, detail: { opener: openMenuBtn } }));
+        return;
+      }
+      const directorBtn = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-action="quick-director"]') : null;
+      if (directorBtn) {
+        this.toggleAperture(false);
+        this.shell.dispatchEvent(new CustomEvent('lumiglyphics:quick-director', { bubbles: true, detail: { opener: openMenuBtn } }));
         return;
       }
       const link = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-aperture-route]') : null;

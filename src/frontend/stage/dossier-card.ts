@@ -214,6 +214,13 @@ export class DossierCard {
     const mergedOpts: DocumentReaderOptions = {
       ...opts,
       ...(opts.customNote !== undefined ? {} : ledgerEntry?.customNotes ? { customNote: ledgerEntry.customNotes } : {}),
+      ...(opts.onQuoteInReply ? {} : this.sceneHubContext?.onDraftAction ? {
+        onQuoteInReply: (quote: string) => {
+          this.activeDocumentRecord = null;
+          this.close();
+          this.sceneHubContext?.onDraftAction?.(quote);
+        },
+      } : {}),
     };
     const reader = createDocumentReader(
       storyDocument,
@@ -1911,13 +1918,14 @@ export class DossierCard {
         worldSheet.append(threadsCard);
       }
 
-      if (beliefNpcs.length > 0 && (this.hubView === 'atlas' || this.sceneHubContext?.presentCast.length)) {
+      if (beliefNpcs.length > 0 || this.hubView === 'atlas') {
         const perspCard = document.createElement('div');
-        perspCard.className = 'world-threads-card';
+        perspCard.className = 'world-threads-card secrets-board';
         perspCard.dataset.worldPerspectivesSection = '';
+        perspCard.dataset.secretsBoard = '';
         const pHdr = document.createElement('div');
-        pHdr.style.cssText = 'font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#93c5fd;margin-bottom:6px;';
-        pHdr.textContent = `👁️ Perspectives · Who Believes What`;
+        pHdr.style.cssText = 'font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--vn-shell-info-ink,#93c5fd);margin-bottom:6px;';
+        pHdr.textContent = '👁️ Secrets & Beliefs · Who Knows What';
         const pFilterRow = document.createElement('div');
         pFilterRow.className = 'chip-row';
         for (const npc of ['all', ...beliefNpcs.map(([n]) => n)]) {
@@ -1930,18 +1938,52 @@ export class DossierCard {
           pFilterRow.append(btn);
         }
         const bList = document.createElement('div');
-        bList.style.cssText = 'display:flex;flex-direction:column;gap:5px;';
-        for (const [npc, items] of beliefNpcs) {
-          if (this.perspectiveFilter !== 'all' && this.perspectiveFilter !== npc) continue;
-          for (const item of items) {
-            const row = document.createElement('div');
-            row.style.cssText = 'font-size:11.5px;padding:6px 8px;border-radius:6px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.22);color:#e0f2fe;';
-            const strong = document.createElement('strong');
-            strong.textContent = `${npc} · ${item.topic}: `;
-            const span = document.createElement('span');
-            span.textContent = item.belief;
-            row.append(strong, span);
-            bList.append(row);
+        bList.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
+        if (beliefNpcs.length === 0) {
+          const emptySecrets = document.createElement('p');
+          emptySecrets.className = 'world-scene-empty';
+          emptySecrets.textContent = 'No character beliefs or hidden secrets recorded yet in this chat.';
+          bList.append(emptySecrets);
+        } else {
+          for (const [npc, items] of beliefNpcs) {
+            if (this.perspectiveFilter !== 'all' && this.perspectiveFilter !== npc) continue;
+            for (const item of items) {
+              const row = document.createElement('div');
+              row.className = 'secret-card-row';
+              const head = document.createElement('div');
+              head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;';
+              const strong = document.createElement('strong');
+              strong.textContent = `${npc} · ${item.topic}`;
+              const rawState = (item as { knowsSecret?: boolean }).knowsSecret === true || /\b(knows|aware|witnessed|saw)\b/i.test(item.belief)
+                ? 'knows'
+                : /\b(suspect|wonder|doubt|clue|rumor)\b/i.test(item.belief)
+                  ? 'suspects'
+                  : 'unaware';
+              const chip = document.createElement('span');
+              chip.className = 'secret-chip';
+              chip.dataset.state = rawState;
+              chip.textContent = rawState === 'knows' ? 'Knows' : rawState === 'suspects' ? 'Suspects' : 'Unaware';
+              head.append(strong, chip);
+
+              const body = document.createElement('div');
+              body.style.cssText = 'font-size:11.5px;line-height:1.4;color:var(--vn-shell-text,#f4f7ee);';
+              body.textContent = item.belief;
+
+              row.append(head, body);
+              if (this.sceneHubContext?.onDraftAction) {
+                const askBtn = document.createElement('button');
+                askBtn.type = 'button';
+                askBtn.className = 'secret-action-btn';
+                askBtn.dataset.secretAsk = '';
+                askBtn.textContent = `Reveal / Ask ${npc} about this`;
+                askBtn.onclick = () => {
+                  this.close();
+                  this.sceneHubContext?.onDraftAction?.(`Ask ${npc} about ${item.topic}: "${item.belief}" `);
+                };
+                row.append(askBtn);
+              }
+              bList.append(row);
+            }
           }
         }
         perspCard.append(pHdr, pFilterRow, bList);

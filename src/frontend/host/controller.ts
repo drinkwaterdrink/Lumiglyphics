@@ -23,6 +23,7 @@ import { REFERENCE_IMAGE_MAX_BYTES, REFERENCE_IMAGE_MIMES } from "../../protocol
 import type { AssetView, BackendResponse, ConnectionCatalogOption, FrontendRequest, TurnView } from "../../protocol.js";
 import { AudioEngine, VnStage, isAmbientEffect, isStageEffect } from "../stage/index.js";
 import { QuickTunerDrawer } from "../stage/quick-tuner.js";
+import { QuickDirectorPopover } from "../stage/quick-director.js";
 import type { AmbientEffect, StageEffect } from "../store/index.js";
 import { VisualNovelSettingsPanel } from "../settings/panel.js";
 import { ImageStudio } from "../image-review/studio.js";
@@ -566,6 +567,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   let speech: SpeechController;
   let speechDock: SpeechDock;
   let quickTuner: QuickTunerDrawer;
+  let quickDirector: QuickDirectorPopover;
 
   const isSpeechHoldingAuto = (): boolean => {
     if (!speech) return false;
@@ -785,6 +787,46 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     quickTuner.open(opener);
   };
   stage.panelMount.closest("[data-vn-shell]")?.addEventListener("lumiglyphics:quick-tuner", onQuickTunerEvent);
+
+  quickDirector = new QuickDirectorPopover({
+    mount: stage.panelMount,
+    onDirect: (cmd) => {
+      if (!turn) {
+        stage.setActivity?.("Open a story passage first to steer its scene art.", "warning");
+        return;
+      }
+      const pIdx = stage.getState().currentParagraphIndex;
+      const matchingAsset = (turn.assets ?? []).find((a) => a.paragraphIndex === pIdx) ?? turn.assets?.[0];
+      if (!matchingAsset) {
+        stage.setActivity?.("No generated image job on this passage yet.", "warning");
+        return;
+      }
+      if (cmd.kind === "outfit") {
+        stage.setActivity?.(`Directing outfit swap: ${cmd.label}…`, "loading");
+      } else {
+        stage.setActivity?.(`Directing scene (${cmd.label})…`, "loading");
+      }
+      ctx.sendToBackend({
+        type: "vn_prepare_image",
+        chatId: turn.chatId,
+        messageId: turn.messageId,
+        sourceFingerprint: turn.sourceFingerprint,
+        jobId: matchingAsset.jobId,
+        regeneratePrompt: true,
+        promptOperation: "rewrite",
+        guidance: cmd.guidance,
+        reframe: cmd.kind === "shot",
+        relight: cmd.kind === "relight",
+        quickGenerate: true,
+      });
+    },
+  });
+  const onQuickDirectorEvent = (event: Event) => {
+    const opener = (event as CustomEvent<{ opener?: HTMLElement }>).detail?.opener ?? null;
+    if (configRef.current) quickDirector.setPreset(configRef.current.themePreset);
+    quickDirector.open(opener);
+  };
+  stage.panelMount.closest("[data-vn-shell]")?.addEventListener("lumiglyphics:quick-director", onQuickDirectorEvent);
 
   speechDock = new SpeechDock({
     mount: stage.panelMount,
@@ -1506,6 +1548,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       speechSettings?.setConfig(configRef.current.speech);
       settingsPanel?.setConfig(configRef.current);
       quickTuner.setConfig(configRef.current);
+      quickDirector.setPreset(configRef.current.themePreset);
       if (configRef.current?.autoEnter && !active) activate();
       if (bootPending) {
         // The boot request said nothing about the view. Now that the config is
@@ -1557,6 +1600,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       speechSettings?.setConfig(configRef.current.speech);
       settingsPanel?.setConfig(configRef.current, message.requestId);
       quickTuner.setConfig(configRef.current);
+      quickDirector.setPreset(configRef.current.themePreset);
       settingsPanel?.setSaveStatus?.({ kind: "saved" }, message.requestId);
       return;
     }
@@ -1809,6 +1853,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     speech.dispose();
     speechDock.destroy();
     quickTuner.destroy();
+    quickDirector.destroy();
     speechSettings?.destroy();
     settingsPanel?.destroy();
     imageStudio.destroy();

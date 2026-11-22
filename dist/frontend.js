@@ -29979,6 +29979,7 @@ class ReaderWorkspace {
           <button type="button" data-aperture-route="workspace" class="aperture-link"><span class="number">07</span><span>Workspace</span>${APERTURE_ICONS.layers}</button>
           <button type="button" data-action="cast-toggle" class="aperture-link" style="min-height:44px"><span class="number">08</span><span>Toggle cast portraits</span>${APERTURE_ICONS.cast}</button>
           <button type="button" data-action="quick-tuner" class="aperture-link" style="min-height:44px"><span class="number">09</span><span>Quick Look &amp; Audio</span>${APERTURE_ICONS.settings}</button>
+          <button type="button" data-action="quick-director" class="aperture-link" style="min-height:44px"><span class="number">10</span><span>Director: Steer Scene</span>${APERTURE_ICONS.image}</button>
           <button type="button" data-aperture-route="chat" class="aperture-link"><span class="number">→</span><span>Back to Lumiverse chat</span>${APERTURE_ICONS.chat}</button>
         </div>
         <div class="aperture-foot"><span data-aperture-chapter>CURRENT SCENE</span><span>EVERY DETAIL HAS A PLACE</span></div>
@@ -30126,6 +30127,12 @@ class ReaderWorkspace {
       if (tunerBtn) {
         this.toggleAperture(false);
         this.shell.dispatchEvent(new CustomEvent("lumiglyphics:quick-tuner", { bubbles: true, detail: { opener: openMenuBtn } }));
+        return;
+      }
+      const directorBtn = event.target instanceof Element ? event.target.closest('[data-action="quick-director"]') : null;
+      if (directorBtn) {
+        this.toggleAperture(false);
+        this.shell.dispatchEvent(new CustomEvent("lumiglyphics:quick-director", { bubbles: true, detail: { opener: openMenuBtn } }));
         return;
       }
       const link = event.target instanceof Element ? event.target.closest("[data-aperture-route]") : null;
@@ -32240,6 +32247,15 @@ var kinds = {
   phone: "Phone messages",
   terminal: "Terminal"
 };
+function documentSurfaceForKind(kind) {
+  if (kind === "letter" || kind === "journal" || kind === "flyer" || kind === "pamphlet")
+    return "parchment";
+  if (kind === "receipt" || kind === "map" || kind === "newspaper")
+    return "ledger";
+  if (kind === "terminal" || kind === "phone")
+    return "terminal";
+  return "memo";
+}
 var TITLE_SMALL_WORDS = new Set(["a", "an", "and", "at", "by", "for", "from", "in", "of", "on", "or", "the", "to", "with"]);
 function formatDocumentDisplayTitle(rawName, kind) {
   const clean = rawName.trim();
@@ -32316,6 +32332,7 @@ function createDocumentReader(documentRecord, back, close, options = {}) {
   panel.dataset.vnDocumentReader = "";
   panel.dataset.vnDocId = documentRecord.id;
   panel.dataset.documentKind = documentRecord.kind;
+  panel.dataset.documentSurface = documentSurfaceForKind(documentRecord.kind);
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-modal", "true");
   panel.setAttribute("aria-label", `Read ${displayTitle}`);
@@ -32502,6 +32519,19 @@ function createDocumentReader(documentRecord, back, close, options = {}) {
     };
     footer.append(editNoteBtn);
   }
+  if (options.onQuoteInReply) {
+    const quoteBtn = document.createElement("button");
+    quoteBtn.type = "button";
+    quoteBtn.dataset.documentQuote = "";
+    quoteBtn.textContent = "❝ Quote in Reply";
+    quoteBtn.title = "Insert a contextual quote from this document into your reply";
+    quoteBtn.onclick = () => {
+      const rawSnippet = (documentRecord.sections?.[0]?.text || documentRecord.observations?.[0]?.summary || documentRecord.observations?.[0]?.evidence || "").replace(/\s+/g, " ").trim().slice(0, 140);
+      const formatted = rawSnippet ? `Regarding ${displayTitle}: "${rawSnippet}" ` : `Regarding ${displayTitle}: `;
+      options.onQuoteInReply?.(formatted);
+    };
+    footer.append(quoteBtn);
+  }
   if (options.onExamineCloser) {
     const examineBtn = document.createElement("button");
     examineBtn.type = "button";
@@ -32519,6 +32549,10 @@ function createDocumentReader(documentRecord, back, close, options = {}) {
 }
 var DOCUMENT_READER_CSS = `
 [data-vn-document-reader]{display:flex;flex-direction:column;overflow:hidden;padding:16px;max-height:calc(100dvh - max(32px,env(safe-area-inset-top)) - max(32px,env(safe-area-inset-bottom)));transition:background .22s ease,border-color .22s ease}
+[data-vn-document-reader][data-document-surface="parchment"] [data-document-body]{background:linear-gradient(175deg,color-mix(in srgb,#e9d9b8 14%,var(--vn-shell-panel,#161c22)),color-mix(in srgb,#d2b886 8%,var(--vn-shell-field,#0f1419)));border-color:color-mix(in srgb,#d2b886 38%,var(--vn-shell-border,#555));font-family:Georgia,"Iowan Old Style",serif}
+[data-vn-document-reader][data-document-surface="ledger"] [data-document-body]{background:repeating-linear-gradient(to bottom,transparent 0 26px,color-mix(in srgb,var(--vn-shell-accent,#9ec6f0) 10%,transparent) 26px 27px),var(--vn-shell-field,rgba(12,18,24,0.88));border-style:dashed}
+[data-vn-document-reader][data-document-surface="terminal"] [data-document-body]{background:rgba(4,12,10,0.92);color:#a7f3d0;border-color:rgba(52,211,153,0.42);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+[data-document-quote]{min-height:44px;min-width:44px;padding:8px 14px;border-radius:999px;border:1px solid var(--vn-shell-accent,#dcebad);background:var(--vn-shell-accent,#dcebad);color:var(--vn-shell-accent-contrast,#0d1f17);font-weight:750;cursor:pointer}
 [data-vn-document-reader] header{flex:none;gap:8px;border-bottom:1px solid var(--vn-panel-border,#666);padding-bottom:8px}
 [data-vn-document-reader] header h2{flex:1;font-size:1.05em;line-height:1.3}
 [data-vn-document-reader] header button{flex:none;min-width:44px;padding:8px;margin:0;font-size:1.3em}
@@ -32846,6 +32880,12 @@ section[data-reference-current] h3,section[data-reference-observations] h3{font-
 .vn-inline-tooltip-cta{width:100%;min-height:44px;padding:8px 12px;border-radius:min(var(--vn-shell-radius,8px),10px);border:none;background:var(--vn-shell-accent,#a8d3c8);color:var(--vn-shell-accent-contrast,#0e1e1a);font-weight:750;font-size:12px;cursor:pointer;text-align:center}
 [data-vn-track-selection]{position:fixed;z-index:262;display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:6px 10px;border-radius:12px;background:var(--vn-shell-panel,rgba(12,22,28,.96));border:1px solid var(--vn-shell-border-strong,rgba(168,211,200,.45));box-shadow:0 12px 32px rgba(0,0,0,.58);color:var(--vn-shell-text,#eef4f1);font-size:11.5px}
 [data-vn-track-selection] button{min-height:44px;min-width:44px;padding:6px 10px;border-radius:8px;border:1px solid var(--vn-shell-border,rgba(255,255,255,.2));background:rgba(255,255,255,.08);color:inherit;font-size:11px;font-weight:650;cursor:pointer}
+.secret-card-row{display:flex;flex-direction:column;gap:5px;padding:8px 10px;border-radius:10px;background:var(--vn-shell-field,rgba(18,30,44,.55));border:1px solid var(--vn-shell-border,rgba(148,163,184,.25))}
+.secret-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:750;text-transform:uppercase;letter-spacing:.04em;border:1px solid currentColor}
+.secret-chip[data-state="knows"]{color:var(--vn-shell-success-ink,#86efac)}
+.secret-chip[data-state="suspects"]{color:var(--vn-shell-info-ink,#93c5fd)}
+.secret-chip[data-state="unaware"]{color:var(--vn-shell-danger-ink,#fca5a5)}
+.secret-action-btn{align-self:flex-start;min-height:44px;min-width:44px;padding:6px 12px;border-radius:999px;border:1px solid var(--vn-shell-border-strong,var(--vn-shell-border));background:var(--vn-shell-button,rgba(255,255,255,.08));color:var(--vn-shell-text,inherit);font-size:11.5px;font-weight:650;cursor:pointer}
 ` + DOCUMENT_READER_CSS;
 var DOCKED_DOSSIER_CSS = `
 [data-vn-dossier][data-vn-workspace-tool="story"]{position:relative;inset:auto;display:flex;align-items:stretch;padding:0;background:transparent;height:100%;z-index:auto}
@@ -32996,7 +33036,14 @@ class DossierCard {
     const ledgerEntry = this.storyDna.documents?.[storyDocument.id] ?? Object.values(this.storyDna.documents ?? {}).find((l) => l.name.trim().toLowerCase() === storyDocument.name.trim().toLowerCase());
     const mergedOpts = {
       ...opts,
-      ...opts.customNote !== undefined ? {} : ledgerEntry?.customNotes ? { customNote: ledgerEntry.customNotes } : {}
+      ...opts.customNote !== undefined ? {} : ledgerEntry?.customNotes ? { customNote: ledgerEntry.customNotes } : {},
+      ...opts.onQuoteInReply ? {} : this.sceneHubContext?.onDraftAction ? {
+        onQuoteInReply: (quote) => {
+          this.activeDocumentRecord = null;
+          this.close();
+          this.sceneHubContext?.onDraftAction?.(quote);
+        }
+      } : {}
     };
     const reader = createDocumentReader(storyDocument, () => {
       if (this.host.hidden || reader.parentElement !== this.host)
@@ -34539,13 +34586,14 @@ class DossierCard {
       if (this.hubView === "atlas" || threads.length > 0) {
         worldSheet.append(threadsCard);
       }
-      if (beliefNpcs.length > 0 && (this.hubView === "atlas" || this.sceneHubContext?.presentCast.length)) {
+      if (beliefNpcs.length > 0 || this.hubView === "atlas") {
         const perspCard = document.createElement("div");
-        perspCard.className = "world-threads-card";
+        perspCard.className = "world-threads-card secrets-board";
         perspCard.dataset.worldPerspectivesSection = "";
+        perspCard.dataset.secretsBoard = "";
         const pHdr = document.createElement("div");
-        pHdr.style.cssText = "font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#93c5fd;margin-bottom:6px;";
-        pHdr.textContent = `\uD83D\uDC41️ Perspectives · Who Believes What`;
+        pHdr.style.cssText = "font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--vn-shell-info-ink,#93c5fd);margin-bottom:6px;";
+        pHdr.textContent = "\uD83D\uDC41️ Secrets & Beliefs · Who Knows What";
         const pFilterRow = document.createElement("div");
         pFilterRow.className = "chip-row";
         for (const npc of ["all", ...beliefNpcs.map(([n]) => n)]) {
@@ -34561,19 +34609,47 @@ class DossierCard {
           pFilterRow.append(btn);
         }
         const bList = document.createElement("div");
-        bList.style.cssText = "display:flex;flex-direction:column;gap:5px;";
-        for (const [npc, items] of beliefNpcs) {
-          if (this.perspectiveFilter !== "all" && this.perspectiveFilter !== npc)
-            continue;
-          for (const item of items) {
-            const row = document.createElement("div");
-            row.style.cssText = "font-size:11.5px;padding:6px 8px;border-radius:6px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.22);color:#e0f2fe;";
-            const strong = document.createElement("strong");
-            strong.textContent = `${npc} · ${item.topic}: `;
-            const span = document.createElement("span");
-            span.textContent = item.belief;
-            row.append(strong, span);
-            bList.append(row);
+        bList.style.cssText = "display:flex;flex-direction:column;gap:6px;";
+        if (beliefNpcs.length === 0) {
+          const emptySecrets = document.createElement("p");
+          emptySecrets.className = "world-scene-empty";
+          emptySecrets.textContent = "No character beliefs or hidden secrets recorded yet in this chat.";
+          bList.append(emptySecrets);
+        } else {
+          for (const [npc, items] of beliefNpcs) {
+            if (this.perspectiveFilter !== "all" && this.perspectiveFilter !== npc)
+              continue;
+            for (const item of items) {
+              const row = document.createElement("div");
+              row.className = "secret-card-row";
+              const head = document.createElement("div");
+              head.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;";
+              const strong = document.createElement("strong");
+              strong.textContent = `${npc} · ${item.topic}`;
+              const rawState = item.knowsSecret === true || /\b(knows|aware|witnessed|saw)\b/i.test(item.belief) ? "knows" : /\b(suspect|wonder|doubt|clue|rumor)\b/i.test(item.belief) ? "suspects" : "unaware";
+              const chip = document.createElement("span");
+              chip.className = "secret-chip";
+              chip.dataset.state = rawState;
+              chip.textContent = rawState === "knows" ? "Knows" : rawState === "suspects" ? "Suspects" : "Unaware";
+              head.append(strong, chip);
+              const body2 = document.createElement("div");
+              body2.style.cssText = "font-size:11.5px;line-height:1.4;color:var(--vn-shell-text,#f4f7ee);";
+              body2.textContent = item.belief;
+              row.append(head, body2);
+              if (this.sceneHubContext?.onDraftAction) {
+                const askBtn = document.createElement("button");
+                askBtn.type = "button";
+                askBtn.className = "secret-action-btn";
+                askBtn.dataset.secretAsk = "";
+                askBtn.textContent = `Reveal / Ask ${npc} about this`;
+                askBtn.onclick = () => {
+                  this.close();
+                  this.sceneHubContext?.onDraftAction?.(`Ask ${npc} about ${item.topic}: "${item.belief}" `);
+                };
+                row.append(askBtn);
+              }
+              bList.append(row);
+            }
           }
         }
         perspCard.append(pHdr, pFilterRow, bList);
@@ -51154,6 +51230,285 @@ class QuickTunerDrawer {
   }
 }
 
+// src/frontend/stage/quick-director.ts
+var DIRECTOR_CSS = `
+${VN_SHELL_PRESET_TOKENS_CSS}
+:host {
+  position: absolute;
+  inset: 0;
+  z-index: 91;
+  pointer-events: none;
+  font: 13px/1.4 var(--vn-shell-family, system-ui, -apple-system, sans-serif);
+  color: var(--vn-shell-text, #f4f7ee);
+}
+:host(:not([data-open="true"])) {
+  display: none !important;
+}
+.dir-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.28);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 12px 12px calc(74px + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+}
+.dir-sheet {
+  width: min(440px, 100%);
+  max-height: 70dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: min(var(--vn-shell-radius, 18px), 20px);
+  border: 1px solid var(--vn-shell-border-strong, var(--vn-shell-border, rgba(255, 255, 255, 0.22)));
+  background: var(--vn-shell-surface-gradient, var(--vn-shell-panel, rgba(14, 20, 26, 0.96)));
+  box-shadow: var(--vn-shell-shadow, 0 18px 46px rgba(0, 0, 0, 0.6));
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dir-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.dir-title {
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--vn-shell-accent, #dcebad);
+}
+.dir-close {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.16));
+  background: var(--vn-shell-button, rgba(255, 255, 255, 0.08));
+  color: var(--vn-shell-text, #f4f7ee);
+  font-size: 18px;
+  cursor: pointer;
+}
+.dir-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--vn-shell-muted, #9cb5a8);
+}
+.dir-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.dir-pill {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.18));
+  background: var(--vn-shell-field, rgba(255, 255, 255, 0.06));
+  color: var(--vn-shell-text, #f4f7ee);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dir-pill.primary,
+.dir-pill[aria-pressed="true"] {
+  background: var(--vn-shell-accent, #dcebad);
+  color: var(--vn-shell-accent-contrast, #0d1f17);
+  border-color: transparent;
+  font-weight: 750;
+}
+.dir-empty {
+  font-size: 12px;
+  color: var(--vn-shell-muted, #9cb5a8);
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+`;
+
+class QuickDirectorPopover {
+  options;
+  host;
+  shadow;
+  closeBtn;
+  outfitRow;
+  openState = false;
+  opener = null;
+  constructor(options) {
+    this.options = options;
+    this.host = document.createElement("div");
+    this.host.dataset.vnQuickDirector = "";
+    this.host.dataset.open = "false";
+    this.host.style.display = "none";
+    this.shadow = this.host.attachShadow({ mode: "open" });
+    const style = document.createElement("style");
+    style.textContent = DIRECTOR_CSS;
+    const backdrop = document.createElement("div");
+    backdrop.className = "dir-backdrop";
+    backdrop.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (event.target === backdrop)
+        this.close();
+    });
+    const sheet = document.createElement("div");
+    sheet.className = "dir-sheet";
+    sheet.setAttribute("role", "dialog");
+    sheet.setAttribute("aria-modal", "true");
+    sheet.setAttribute("aria-label", "Quick Director");
+    sheet.addEventListener("click", (event) => event.stopPropagation());
+    sheet.addEventListener("keydown", (event) => {
+      event.stopPropagation();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.close();
+      }
+    });
+    const head = document.createElement("div");
+    head.className = "dir-head";
+    const title = document.createElement("span");
+    title.className = "dir-title";
+    title.textContent = "Steer / Reshoot Scene";
+    this.closeBtn = document.createElement("button");
+    this.closeBtn.type = "button";
+    this.closeBtn.className = "dir-close";
+    this.closeBtn.setAttribute("aria-label", "Close Quick Director");
+    this.closeBtn.textContent = "×";
+    this.closeBtn.addEventListener("click", () => this.close());
+    head.append(title, this.closeBtn);
+    const regenRow = document.createElement("div");
+    regenRow.className = "dir-row";
+    const regenBtn = document.createElement("button");
+    regenBtn.type = "button";
+    regenBtn.className = "dir-pill primary";
+    regenBtn.dataset.dirAction = "regenerate";
+    regenBtn.textContent = "↻ Regenerate Scene";
+    regenBtn.addEventListener("click", () => {
+      this.options.onDirect({ kind: "regenerate", label: "Regenerate", guidance: "Fresh composition with stronger detail" });
+      this.close();
+    });
+    regenRow.appendChild(regenBtn);
+    const makeGroup = (heading, items) => {
+      const wrap = document.createElement("div");
+      const lbl = document.createElement("div");
+      lbl.className = "dir-label";
+      lbl.textContent = heading;
+      const row = document.createElement("div");
+      row.className = "dir-row";
+      for (const item of items) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "dir-pill";
+        btn.dataset.dirKind = item.kind;
+        btn.dataset.dirLabel = item.label;
+        btn.textContent = item.label;
+        btn.addEventListener("click", () => {
+          this.options.onDirect({ kind: item.kind, label: item.label, guidance: item.guidance });
+          this.close();
+        });
+        row.appendChild(btn);
+      }
+      wrap.append(lbl, row);
+      return wrap;
+    };
+    const shotGroup = makeGroup("Switch Shot", [
+      { label: "Close-up", kind: "shot", guidance: "Frame as an intimate close-up portrait focusing on facial expression" },
+      { label: "Medium", kind: "shot", guidance: "Frame as a balanced medium waist-up shot showing gesture and posture" },
+      { label: "Wide", kind: "shot", guidance: "Frame as a wide establishing shot showcasing the full environment" },
+      { label: "Over-Shoulder", kind: "shot", guidance: "Frame as a dramatic over-the-shoulder perspective shot" }
+    ]);
+    const relightGroup = makeGroup("Relight", [
+      { label: "Golden Hour", kind: "relight", guidance: "Relight with warm golden hour sunlight and long soft shadows" },
+      { label: "Noir", kind: "relight", guidance: "Relight in high-contrast noir chiaroscuro shadows and crisp rim light" },
+      { label: "Candlelight", kind: "relight", guidance: "Relight with warm flickering candlelight glow and intimate shadows" },
+      { label: "Moonlit", kind: "relight", guidance: "Relight with cool silver moonlight and soft nocturnal contrast" }
+    ]);
+    const outfitWrap = document.createElement("div");
+    const outfitLbl = document.createElement("div");
+    outfitLbl.className = "dir-label";
+    outfitLbl.textContent = "Swap Outfit";
+    this.outfitRow = document.createElement("div");
+    this.outfitRow.className = "dir-row";
+    outfitWrap.append(outfitLbl, this.outfitRow);
+    sheet.append(head, regenRow, shotGroup, relightGroup, outfitWrap);
+    backdrop.appendChild(sheet);
+    this.shadow.append(style, backdrop);
+    options.mount.appendChild(this.host);
+    this.setOutfits([]);
+  }
+  setOutfits(outfits) {
+    this.outfitRow.replaceChildren();
+    if (outfits.length === 0) {
+      const empty = document.createElement("span");
+      empty.className = "dir-empty";
+      empty.textContent = "No wardrobe states saved for the active speaker yet.";
+      this.outfitRow.appendChild(empty);
+      return;
+    }
+    for (const opt of outfits) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "dir-pill";
+      btn.dataset.dirOutfit = opt.key;
+      btn.setAttribute("aria-pressed", opt.active ? "true" : "false");
+      btn.textContent = `${opt.charName}: ${opt.key}`;
+      btn.addEventListener("click", () => {
+        this.options.onDirect({
+          kind: "outfit",
+          label: opt.key,
+          guidance: `Change ${opt.charName}'s outfit to: ${opt.outfit}`,
+          charId: opt.charId,
+          wardrobeKey: opt.key,
+          outfit: opt.outfit
+        });
+        this.close();
+      });
+      this.outfitRow.appendChild(btn);
+    }
+  }
+  setPreset(preset) {
+    this.host.dataset.vnPreset = preset;
+  }
+  isOpen() {
+    return this.openState;
+  }
+  getShadowRoot() {
+    return this.shadow;
+  }
+  open(opener) {
+    this.opener = opener ?? null;
+    this.openState = true;
+    this.host.dataset.open = "true";
+    this.host.style.display = "block";
+    this.closeBtn.focus?.({ preventScroll: true });
+  }
+  close(restoreFocus = true) {
+    if (!this.openState)
+      return;
+    this.openState = false;
+    this.host.dataset.open = "false";
+    this.host.style.display = "none";
+    if (restoreFocus)
+      this.opener?.focus?.({ preventScroll: true });
+    this.opener = null;
+  }
+  destroy() {
+    this.host.remove();
+  }
+}
+
 // src/shared/master-system-prompts.ts
 var MASTER_SCENE_PLANNER_PROMPT = `You are the Master Narrative Director and Scene Staging Engine for a visual novel presentation.
 Your mission is to read the story reply, structure its narrative flow into visual novel beats, orchestrate camera framings, assign audio cues, trigger stage effects, and schedule visual illustrations.
@@ -59561,7 +59916,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.183";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.184";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -71032,6 +71387,7 @@ function setupVisualNovelFrontend(baseContext) {
   let speech;
   let speechDock;
   let quickTuner;
+  let quickDirector;
   const isSpeechHoldingAuto = () => {
     if (!speech)
       return false;
@@ -71280,6 +71636,46 @@ function setupVisualNovelFrontend(baseContext) {
     quickTuner.open(opener);
   };
   stage.panelMount.closest("[data-vn-shell]")?.addEventListener("lumiglyphics:quick-tuner", onQuickTunerEvent);
+  quickDirector = new QuickDirectorPopover({
+    mount: stage.panelMount,
+    onDirect: (cmd) => {
+      if (!turn) {
+        stage.setActivity?.("Open a story passage first to steer its scene art.", "warning");
+        return;
+      }
+      const pIdx = stage.getState().currentParagraphIndex;
+      const matchingAsset = (turn.assets ?? []).find((a) => a.paragraphIndex === pIdx) ?? turn.assets?.[0];
+      if (!matchingAsset) {
+        stage.setActivity?.("No generated image job on this passage yet.", "warning");
+        return;
+      }
+      if (cmd.kind === "outfit") {
+        stage.setActivity?.(`Directing outfit swap: ${cmd.label}…`, "loading");
+      } else {
+        stage.setActivity?.(`Directing scene (${cmd.label})…`, "loading");
+      }
+      ctx.sendToBackend({
+        type: "vn_prepare_image",
+        chatId: turn.chatId,
+        messageId: turn.messageId,
+        sourceFingerprint: turn.sourceFingerprint,
+        jobId: matchingAsset.jobId,
+        regeneratePrompt: true,
+        promptOperation: "rewrite",
+        guidance: cmd.guidance,
+        reframe: cmd.kind === "shot",
+        relight: cmd.kind === "relight",
+        quickGenerate: true
+      });
+    }
+  });
+  const onQuickDirectorEvent = (event) => {
+    const opener = event.detail?.opener ?? null;
+    if (configRef.current)
+      quickDirector.setPreset(configRef.current.themePreset);
+    quickDirector.open(opener);
+  };
+  stage.panelMount.closest("[data-vn-shell]")?.addEventListener("lumiglyphics:quick-director", onQuickDirectorEvent);
   speechDock = new SpeechDock({
     mount: stage.panelMount,
     onPlay: () => {
@@ -72242,6 +72638,7 @@ function setupVisualNovelFrontend(baseContext) {
       speechSettings?.setConfig(configRef.current.speech);
       settingsPanel?.setConfig(configRef.current);
       quickTuner.setConfig(configRef.current);
+      quickDirector.setPreset(configRef.current.themePreset);
       if (configRef.current?.autoEnter && !active)
         activate();
       if (bootPending) {
@@ -72298,6 +72695,7 @@ function setupVisualNovelFrontend(baseContext) {
       speechSettings?.setConfig(configRef.current.speech);
       settingsPanel?.setConfig(configRef.current, message.requestId);
       quickTuner.setConfig(configRef.current);
+      quickDirector.setPreset(configRef.current.themePreset);
       settingsPanel?.setSaveStatus?.({ kind: "saved" }, message.requestId);
       return;
     }
@@ -72581,6 +72979,7 @@ function setupVisualNovelFrontend(baseContext) {
     speech.dispose();
     speechDock.destroy();
     quickTuner.destroy();
+    quickDirector.destroy();
     speechSettings?.destroy();
     settingsPanel?.destroy();
     imageStudio.destroy();

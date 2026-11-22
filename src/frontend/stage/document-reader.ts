@@ -25,7 +25,17 @@ export type DocumentReaderOptions = {
   onLightbox?: (asset: DocumentAssetView) => void;
   onSaveNote?: (note: string) => void;
   onExamineCloser?: () => void;
+  onQuoteInReply?: (quote: string) => void;
 };
+
+export type DocumentSurfaceKind = 'parchment' | 'ledger' | 'memo' | 'terminal';
+
+export function documentSurfaceForKind(kind: StoryDocument['kind']): DocumentSurfaceKind {
+  if (kind === 'letter' || kind === 'journal' || kind === 'flyer' || kind === 'pamphlet') return 'parchment';
+  if (kind === 'receipt' || kind === 'map' || kind === 'newspaper') return 'ledger';
+  if (kind === 'terminal' || kind === 'phone') return 'terminal';
+  return 'memo';
+}
 
 const TITLE_SMALL_WORDS = new Set(['a', 'an', 'and', 'at', 'by', 'for', 'from', 'in', 'of', 'on', 'or', 'the', 'to', 'with']);
 
@@ -122,6 +132,7 @@ export function createDocumentReader(
   panel.dataset.vnDocumentReader = '';
   panel.dataset.vnDocId = documentRecord.id;
   panel.dataset.documentKind = documentRecord.kind;
+  panel.dataset.documentSurface = documentSurfaceForKind(documentRecord.kind);
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-modal', 'true');
   panel.setAttribute('aria-label', `Read ${displayTitle}`);
@@ -312,6 +323,22 @@ export function createDocumentReader(
     footer.append(editNoteBtn);
   }
 
+  if (options.onQuoteInReply) {
+    const quoteBtn = document.createElement('button');
+    quoteBtn.type = 'button';
+    quoteBtn.dataset.documentQuote = '';
+    quoteBtn.textContent = '❝ Quote in Reply';
+    quoteBtn.title = 'Insert a contextual quote from this document into your reply';
+    quoteBtn.onclick = () => {
+      const rawSnippet = (documentRecord.sections?.[0]?.text || documentRecord.observations?.[0]?.summary || documentRecord.observations?.[0]?.evidence || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+      const formatted = rawSnippet
+        ? `Regarding ${displayTitle}: "${rawSnippet}" `
+        : `Regarding ${displayTitle}: `;
+      options.onQuoteInReply?.(formatted);
+    };
+    footer.append(quoteBtn);
+  }
+
   if (options.onExamineCloser) {
     const examineBtn = document.createElement('button');
     examineBtn.type = 'button';
@@ -332,6 +359,10 @@ export function createDocumentReader(
 
 export const DOCUMENT_READER_CSS = `
 [data-vn-document-reader]{display:flex;flex-direction:column;overflow:hidden;padding:16px;max-height:calc(100dvh - max(32px,env(safe-area-inset-top)) - max(32px,env(safe-area-inset-bottom)));transition:background .22s ease,border-color .22s ease}
+[data-vn-document-reader][data-document-surface="parchment"] [data-document-body]{background:linear-gradient(175deg,color-mix(in srgb,#e9d9b8 14%,var(--vn-shell-panel,#161c22)),color-mix(in srgb,#d2b886 8%,var(--vn-shell-field,#0f1419)));border-color:color-mix(in srgb,#d2b886 38%,var(--vn-shell-border,#555));font-family:Georgia,"Iowan Old Style",serif}
+[data-vn-document-reader][data-document-surface="ledger"] [data-document-body]{background:repeating-linear-gradient(to bottom,transparent 0 26px,color-mix(in srgb,var(--vn-shell-accent,#9ec6f0) 10%,transparent) 26px 27px),var(--vn-shell-field,rgba(12,18,24,0.88));border-style:dashed}
+[data-vn-document-reader][data-document-surface="terminal"] [data-document-body]{background:rgba(4,12,10,0.92);color:#a7f3d0;border-color:rgba(52,211,153,0.42);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+[data-document-quote]{min-height:44px;min-width:44px;padding:8px 14px;border-radius:999px;border:1px solid var(--vn-shell-accent,#dcebad);background:var(--vn-shell-accent,#dcebad);color:var(--vn-shell-accent-contrast,#0d1f17);font-weight:750;cursor:pointer}
 [data-vn-document-reader] header{flex:none;gap:8px;border-bottom:1px solid var(--vn-panel-border,#666);padding-bottom:8px}
 [data-vn-document-reader] header h2{flex:1;font-size:1.05em;line-height:1.3}
 [data-vn-document-reader] header button{flex:none;min-width:44px;padding:8px;margin:0;font-size:1.3em}
