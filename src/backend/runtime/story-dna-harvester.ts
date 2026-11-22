@@ -88,7 +88,31 @@ export function filterStoryDnaForActiveBranch(
       if (isStoryEntryActiveOnBranch(doc, activeTags)) documents![id] = doc;
     }
   }
-  return { ...set, locations, items, ...(documents !== undefined ? { documents } : {}) };
+  const thoughtCabinet = set.thoughtCabinet?.filter(
+    (entry) => !entry.seenInSwipes?.length || entry.seenInSwipes.some((t) => activeTags.has(t))
+  );
+  const chapterCodex = set.chapterCodex?.filter(
+    (entry) => !entry.seenInSwipes?.length || entry.seenInSwipes.some((t) => activeTags.has(t))
+  );
+  let npcBeliefs: StoryDNASet['npcBeliefs'];
+  if (set.npcBeliefs) {
+    npcBeliefs = Object.create(null);
+    for (const [npcKey, beliefs] of Object.entries(set.npcBeliefs)) {
+      const kept = beliefs.filter(
+        (b) => !b.seenInSwipes?.length || b.seenInSwipes.some((t) => activeTags.has(t))
+      );
+      if (kept.length > 0) npcBeliefs![npcKey] = kept;
+    }
+  }
+  return {
+    ...set,
+    locations,
+    items,
+    ...(documents !== undefined ? { documents } : {}),
+    ...(thoughtCabinet !== undefined ? { thoughtCabinet } : {}),
+    ...(chapterCodex !== undefined ? { chapterCodex } : {}),
+    ...(npcBeliefs !== undefined ? { npcBeliefs } : {}),
+  };
 }
 
 function recordSwipeTag(
@@ -525,11 +549,24 @@ export function harvestTurnStoryDNA(
 
   if (options?.mindLedgerEnabled !== false) {
     const ledger = [...(set.thoughtCabinet ?? [])];
-    const narrativeText = (plan.paragraphs ?? []).map((p) => p.text).join(' ').toLowerCase();
+    // Deduplicate any legacy colliding IDs while keeping every entry distinct
+    const seenLedgerIds = new Set<string>();
+    for (const existing of ledger) {
+      if (seenLedgerIds.has(existing.id)) {
+        let suffix = 2;
+        while (seenLedgerIds.has(`${existing.id}-${suffix}`)) suffix += 1;
+        existing.id = `${existing.id}-${suffix}`.slice(0, 250);
+        changed = true;
+      }
+      seenLedgerIds.add(existing.id);
+    }
+    const paragraphTexts = (plan.paragraphs ?? []).map((p) => p.text.toLowerCase());
+    const narrativeText = paragraphTexts.join(' ');
     const completedQuests = (plan.rpgState?.quests ?? [])
       .filter((q) => q.status === 'completed')
-      .map((q) => q.title.toLowerCase());
+      .map((q) => q.title.trim().toLowerCase());
     const explicitlyResolved = (plan.resolvedThreads ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean);
+    const RESOLUTION_VERBS = /\b(?:solved|uncovered|revealed|confessed|resolved|truth came out|mystery ended)\b/i;
     // 1. Advance existing Thought Cabinet threads (germinating -> internalized -> resolved)
     for (const entry of ledger) {
       if (entry.status === 'resolved') continue;
@@ -537,14 +574,25 @@ export function harvestTurnStoryDNA(
         .toLowerCase()
         .split(/[^a-z0-9]+/)
         .filter((w) => w.length >= 4);
+      const minKw = Math.min(2, keywords.length);
       const mentioned = keywords.some((kw) => narrativeText.includes(kw));
-      const questResolved = completedQuests.some((qt) => keywords.some((kw) => qt.includes(kw)));
-      const entryTitleLower = entry.title.toLowerCase();
-      const entryIdLower = entry.id.toLowerCase();
+      const entryTitleLower = entry.title.trim().toLowerCase();
+      const entryIdLower = entry.id.trim().toLowerCase();
+      const questResolved = completedQuests.some((qt) => {
+        if (qt === entryTitleLower) return true;
+        if (minKw === 0) return false;
+        const hits = keywords.filter((kw) => qt.includes(kw)).length;
+        return hits >= minKw;
+      });
       const threadExplicitlyResolved = explicitlyResolved.some(
-        (t) => t === entryIdLower || t === entryTitleLower || entryTitleLower.includes(t) || t.includes(entryTitleLower)
+        (t) => t === entryIdLower || t === entryTitleLower
       );
-      if (threadExplicitlyResolved || questResolved || (mentioned && /\b(?:solved|uncovered|revealed|confessed|resolved|truth came out|mystery ended)\b/.test(narrativeText))) {
+      const sameParagraphResolved = minKw > 0 && paragraphTexts.some((pText) => {
+        if (!RESOLUTION_VERBS.test(pText)) return false;
+        const hits = keywords.filter((kw) => pText.includes(kw)).length;
+        return hits >= minKw;
+      });
+      if (threadExplicitlyResolved || questResolved || sameParagraphResolved) {
         entry.status = 'resolved';
         entry.updatedAt = Date.now();
         changed = true;
@@ -592,7 +640,14 @@ export function harvestTurnStoryDNA(
         continue;
       }
       const category = ref.field === 'risks' ? 'foreshadowing' : ref.field === 'statedGoals' ? 'promise' : ref.field === 'significance' ? 'clue' : 'secret';
-      const entryId = `tc-${createItemId(ref.name)}-${ledger.length + 1}`.slice(0, 250);
+      let seq = 1;
+      const baseTcId = `tc-${createItemId(ref.name)}`;
+      let entryId = `${baseTcId}-${seq}`.slice(0, 250);
+      while (seenLedgerIds.has(entryId)) {
+        seq += 1;
+        entryId = `${baseTcId}-${seq}`.slice(0, 250);
+      }
+      seenLedgerIds.add(entryId);
       ledger.push({
         id: entryId,
         title,

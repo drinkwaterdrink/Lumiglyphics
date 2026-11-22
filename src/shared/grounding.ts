@@ -284,3 +284,51 @@ export function hasTokenOverlap(haystack: string, needle: string, minRatio = 0.8
   }
   return matched / needleTokens.length >= minRatio;
 }
+
+const NEGATION_CUES_REGEX = /\b(?:not|never|no|none|neither|nor|without|refused|denied|failed\s+to|didn['’]t|doesn['’]t|don['’]t|wasn['’]t|weren['’]t|won['’]t|wouldn['’]t|couldn['’]t|can['’]t|cannot|hasn['’]t|haven['’]t|hadn['’]t)\b/i;
+const DIRECTIONAL_ACTION_REGEX = /\b([A-Z][a-zA-Z'’\-]+)\b[^.!?]{0,40}?\b(handed|gave|gives|told|tells|promised|promises|killed|kills|attacked|attacks|stole|steals|sent|sends|owed|owes|betrayed|betrays|warned|warns|accused|accuses|forgave|forgives|struck|strikes)\b[^.!?]{0,40}?\b([A-Z][a-zA-Z'’\-]+)\b/;
+
+function bestMatchingClause(haystack: string, needle: string): string {
+  const clauses = haystack.split(/(?<=[.!?;])\s+/).map((s) => s.trim()).filter(Boolean);
+  if (clauses.length <= 1) return haystack;
+  const needleTokens = tokenizeContent(needle);
+  let best = clauses[0]!;
+  let bestScore = -1;
+  for (const clause of clauses) {
+    const lower = normalizeForGroundMatch(clause);
+    let score = 0;
+    for (const tok of needleTokens) {
+      if (lower.includes(tok)) score += 1;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      best = clause;
+    }
+  }
+  return best;
+}
+
+/**
+ * Validates that a claimed fact is grounded in haystack without flipping
+ * negation polarity or reversing directional participant roles (e.g. A handed B vs B handed A).
+ */
+export function isClaimGroundedInEvidence(haystack: string, needle: string, minRatio = 0.8): boolean {
+  if (!hasTokenOverlap(haystack, needle, minRatio)) return false;
+  const clause = bestMatchingClause(haystack, needle);
+  const hayNegated = NEGATION_CUES_REGEX.test(clause);
+  const needleNegated = NEGATION_CUES_REGEX.test(needle);
+  if (hayNegated !== needleNegated) return false;
+
+  const needleDir = DIRECTIONAL_ACTION_REGEX.exec(needle);
+  const hayDir = DIRECTIONAL_ACTION_REGEX.exec(clause);
+  if (needleDir && hayDir) {
+    const nSubj = needleDir[1]!.toLowerCase();
+    const nObj = needleDir[3]!.toLowerCase();
+    const hSubj = hayDir[1]!.toLowerCase();
+    const hObj = hayDir[3]!.toLowerCase();
+    if (nSubj !== nObj && nSubj === hObj && nObj === hSubj) {
+      return false;
+    }
+  }
+  return true;
+}

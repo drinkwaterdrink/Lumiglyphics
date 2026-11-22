@@ -44,7 +44,7 @@ function stringHash(str: string): number {
   return hash >>> 0;
 }
 
-const ACTION_VERBS_REGEX = /\b(?:fight|strike|slash|parry|draws?|fires?|shoots?|runs?|sprints?|lunges?|jumps?|leaps?|dodges?|escapes?|climbs?|dances?|swords?|combat|spells?|attacks?|throws?|rushes?|charges?)\b/i;
+const ACTION_VERBS_REGEX = /\b(?:fight|strike|slash|parry|draws?\s+(?:a|the|his|her|their|its)?\s*(?:sword|blade|dagger|knife|gun|pistol|rifle|weapon|bow|wand|steel)|fires?\s+(?:a|the|his|her|their|its)?\s*(?:gun|pistol|rifle|shot|arrow|bolt|weapon|spell|at)|shoots?|runs?|sprints?|lunges?|jumps?|leaps?|dodges?|escapes?|climbs?|dances?|swords?|combat|spells?|attacks?|throws?|rushes?|charges?)\b/i;
 const REACTION_WORDS_REGEX = /\b(?:gasps?|shock|shocks?|cries?|crying|smiles?|grins?|freezes?|frozen|blushes?|blushing|tears?|glances?|stares?|staring|wide-eyed|stunned|awe|trembles?|hesitates?|flinches?|winces?)\b/i;
 const DIALOGUE_WORDS_REGEX = /\b(?:says?|tells?|asks?|speaks?|whispers?|murmurs?|mutters?|answers?|replies?|explains?|argues?|confesses?|calls out)\b/i;
 const CONFRONTATION_WORDS_REGEX = /\b(?:glare|glares?|confronts?|threatens?|corners?|surrounds?|draws? weapon|standoff|face-off|blocks? the path|points? (?:a|his|her) (?:blade|gun|wand))\b/i;

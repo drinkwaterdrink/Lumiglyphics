@@ -57255,7 +57255,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.168";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.169";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -62186,27 +62186,38 @@ function clampCropRect(rect) {
 function aspectRatioValue(aspect) {
   return aspect === "1:1" ? 1 : aspect === "3:4" ? 3 / 4 : aspect === "2:3" ? 2 / 3 : null;
 }
+function clampAspectCropRect(rect, imgWidth, imgHeight, aspect) {
+  const ratio2 = aspectRatioValue(aspect);
+  if (!ratio2)
+    return clampCropRect(rect);
+  const wImg = Math.max(1, Number.isFinite(imgWidth) ? imgWidth : 1000);
+  const hImg = Math.max(1, Number.isFinite(imgHeight) ? imgHeight : 1000);
+  const fin = (v, d) => Number.isFinite(v) ? v : d;
+  const maxPxW = Math.min(wImg, hImg * ratio2);
+  const minShortPx = Math.max(1, Math.min(wImg, hImg) * MIN_SIZE);
+  const minPxW = Math.min(maxPxW, Math.max(minShortPx, minShortPx * ratio2));
+  const desiredPxW = fin(rect.width, 1) * wImg;
+  const pxW = Math.max(minPxW, Math.min(maxPxW, desiredPxW));
+  const pxH = pxW / ratio2;
+  const width = Math.min(1, pxW / wImg);
+  const height = Math.min(1, pxH / hImg);
+  const x = Math.max(0, Math.min(1 - width, fin(rect.x, 0)));
+  const y = Math.max(0, Math.min(1 - height, fin(rect.y, 0)));
+  return { x: round4(x), y: round4(y), width: round4(width), height: round4(height) };
+}
 function fitAspectCropRect(imgWidth, imgHeight, aspect, center = { x: 0.5, y: 0.42 }, scale = 0.78) {
   const s = Math.max(0.15, Math.min(1, scale));
   const ratio2 = aspectRatioValue(aspect);
   if (!ratio2)
     return clampCropRect({ x: center.x - s / 2, y: center.y - s / 2, width: s, height: s });
-  const normRatio = ratio2 / (Math.max(1, imgWidth) / Math.max(1, imgHeight));
-  let width = s;
-  let height = width / normRatio;
-  if (height > s) {
-    height = s;
-    width = height * normRatio;
-  }
-  if (width > 1) {
-    width = 1;
-    height = width / normRatio;
-  }
-  if (height > 1) {
-    height = 1;
-    width = height * normRatio;
-  }
-  return clampCropRect({ x: center.x - width / 2, y: center.y - height / 2, width, height });
+  const wImg = Math.max(1, imgWidth);
+  const hImg = Math.max(1, imgHeight);
+  const maxPxW = Math.min(wImg, hImg * ratio2);
+  const pxW = maxPxW * s;
+  const pxH = pxW / ratio2;
+  const width = pxW / wImg;
+  const height = pxH / hImg;
+  return clampAspectCropRect({ x: center.x - width / 2, y: center.y - height / 2, width, height }, wImg, hImg, aspect);
 }
 function computeExportDimensions(cropPxW, cropPxH, maxEdge = 1024) {
   const w = Math.max(1, Math.round(cropPxW));
@@ -62279,7 +62290,7 @@ function openReferenceCropperModal(options) {
   zoom.style.cssText = "flex:1;min-height:44px;";
   zoomRow.append(zoom);
   const sync = () => {
-    rect = clampCropRect(rect);
+    rect = clampAspectCropRect(rect, imgW, imgH, aspect);
     box.style.left = `${rect.x * 100}%`;
     box.style.top = `${rect.y * 100}%`;
     box.style.width = `${rect.width * 100}%`;
@@ -62329,7 +62340,7 @@ function openReferenceCropperModal(options) {
       const width = Math.max(MIN_SIZE, Math.min(1 - start.x, start.width + dx));
       const ratio2 = aspectRatioValue(aspect);
       const height = ratio2 ? width / (ratio2 / (imgW / imgH)) : Math.max(MIN_SIZE, Math.min(1 - start.y, start.height + dy));
-      rect = { x: start.x, y: start.y, width, height: Math.min(1 - start.y, height) };
+      rect = clampAspectCropRect({ x: start.x, y: start.y, width: Math.min(1 - start.x, Math.max(MIN_SIZE, start.width + dx)), height: ratio2 ? Math.min(1 - start.x, Math.max(MIN_SIZE, start.width + dx)) * imgW / ratio2 / imgH : Math.min(1 - start.y, Math.max(MIN_SIZE, start.height + dy)) }, imgW, imgH, aspect);
     }
     sync();
   });

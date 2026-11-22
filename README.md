@@ -1,6 +1,6 @@
 # Lumiglyphics
 
-Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. This is a testing build, version `0.2.0-beta.58`, based on upstream commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance and [STATUS.md](STATUS.md) for the current delivered/pending matrix.
+Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. The current release version is tracked in [spindle.json](spindle.json); upstream base commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance and [STATUS.md](STATUS.md) for the current delivered/pending matrix.
 
 **Reader and image review:** When supported by the current view session, parsed reply prose is readable while the story reader prepares pictures and references. The temporary preview keeps its position when the exact final reply arrives; it does not save read progress, submit replies, or start extra generation. Image prompts separates planning, review, generation, failure, reuse and older-picture states, with one main action and advanced controls in disclosures. **Rewrite prompt** uses text tokens; **Generate picture** starts the image request. Editing keeps the combined 3,000-character guard and offers previous wording after a rewrite.
 

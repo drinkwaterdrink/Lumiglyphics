@@ -19748,7 +19748,49 @@ function hasTokenOverlap(haystack, needle, minRatio = 0.8) {
   }
   return matched / needleTokens.length >= minRatio;
 }
-var GROUNDING_STOPWORDS, WIDE_SPACE_RE, BENIGN_INLINE_TAG_RE;
+function bestMatchingClause(haystack, needle) {
+  const clauses = haystack.split(/(?<=[.!?;])\s+/).map((s) => s.trim()).filter(Boolean);
+  if (clauses.length <= 1)
+    return haystack;
+  const needleTokens = tokenizeContent(needle);
+  let best = clauses[0];
+  let bestScore = -1;
+  for (const clause of clauses) {
+    const lower = normalizeForGroundMatch(clause);
+    let score = 0;
+    for (const tok of needleTokens) {
+      if (lower.includes(tok))
+        score += 1;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      best = clause;
+    }
+  }
+  return best;
+}
+function isClaimGroundedInEvidence(haystack, needle, minRatio = 0.8) {
+  if (!hasTokenOverlap(haystack, needle, minRatio))
+    return false;
+  const clause = bestMatchingClause(haystack, needle);
+  const hayNegated = NEGATION_CUES_REGEX.test(clause);
+  const needleNegated = NEGATION_CUES_REGEX.test(needle);
+  if (hayNegated !== needleNegated)
+    return false;
+  const needleDir = DIRECTIONAL_ACTION_REGEX.exec(needle);
+  const hayDir = DIRECTIONAL_ACTION_REGEX.exec(clause);
+  if (needleDir && hayDir) {
+    const nSubj = needleDir[1].toLowerCase();
+    const nObj = needleDir[3].toLowerCase();
+    const hSubj = hayDir[1].toLowerCase();
+    const hObj = hayDir[3].toLowerCase();
+    if (nSubj !== nObj && nSubj === hObj && nObj === hSubj) {
+      return false;
+    }
+  }
+  return true;
+}
+var GROUNDING_STOPWORDS, WIDE_SPACE_RE, BENIGN_INLINE_TAG_RE, NEGATION_CUES_REGEX, DIRECTIONAL_ACTION_REGEX;
 var init_grounding = __esm(() => {
   GROUNDING_STOPWORDS = new Set([
     "the",
@@ -19815,6 +19857,8 @@ var init_grounding = __esm(() => {
   ]);
   WIDE_SPACE_RE = /[\u2800\u00A0\u2000-\u200B\u202F\u205F\u3000\uFEFF]/;
   BENIGN_INLINE_TAG_RE = /^<\/?(?:i|b|em|strong|u|s|span|small|sub|sup|mark|font|cornflower|amber|crimson|emerald|violet|silver|gold)\b[^>]*>/i;
+  NEGATION_CUES_REGEX = /\b(?:not|never|no|none|neither|nor|without|refused|denied|failed\s+to|didn['\u2019]t|doesn['\u2019]t|don['\u2019]t|wasn['\u2019]t|weren['\u2019]t|won['\u2019]t|wouldn['\u2019]t|couldn['\u2019]t|can['\u2019]t|cannot|hasn['\u2019]t|haven['\u2019]t|hadn['\u2019]t)\b/i;
+  DIRECTIONAL_ACTION_REGEX = /\b([A-Z][a-zA-Z'\u2019\-]+)\b[^.!?]{0,40}?\b(handed|gave|gives|told|tells|promised|promises|killed|kills|attacked|attacks|stole|steals|sent|sends|owed|owes|betrayed|betrays|warned|warns|accused|accuses|forgave|forgives|struck|strikes)\b[^.!?]{0,40}?\b([A-Z][a-zA-Z'\u2019\-]+)\b/;
 });
 
 // src/shared/story-documents.ts
@@ -21547,7 +21591,7 @@ function normalizeStoryReferences(value, paragraphs, options = {}) {
         trace.ungroundedName += 1;
       continue;
     }
-    const valGrounded = hasTokenOverlap(r.evidence, r.value, 0.8) || hasTokenOverlap(paragraph, r.value, 0.8);
+    const valGrounded = isClaimGroundedInEvidence(r.evidence, r.value, 0.8) || isClaimGroundedInEvidence(paragraph, r.value, 0.8);
     if (!valGrounded) {
       if (trace)
         trace.ungroundedValue += 1;
@@ -35452,7 +35496,26 @@ function filterStoryDnaForActiveBranch(set2, activeTags) {
         documents[id4] = doc2;
     }
   }
-  return { ...set2, locations, items, ...documents !== undefined ? { documents } : {} };
+  const thoughtCabinet = set2.thoughtCabinet?.filter((entry) => !entry.seenInSwipes?.length || entry.seenInSwipes.some((t) => activeTags.has(t)));
+  const chapterCodex = set2.chapterCodex?.filter((entry) => !entry.seenInSwipes?.length || entry.seenInSwipes.some((t) => activeTags.has(t)));
+  let npcBeliefs;
+  if (set2.npcBeliefs) {
+    npcBeliefs = Object.create(null);
+    for (const [npcKey, beliefs] of Object.entries(set2.npcBeliefs)) {
+      const kept = beliefs.filter((b) => !b.seenInSwipes?.length || b.seenInSwipes.some((t) => activeTags.has(t)));
+      if (kept.length > 0)
+        npcBeliefs[npcKey] = kept;
+    }
+  }
+  return {
+    ...set2,
+    locations,
+    items,
+    ...documents !== undefined ? { documents } : {},
+    ...thoughtCabinet !== undefined ? { thoughtCabinet } : {},
+    ...chapterCodex !== undefined ? { chapterCodex } : {},
+    ...npcBeliefs !== undefined ? { npcBeliefs } : {}
+  };
 }
 function recordSwipeTag(entry, swipeTag) {
   if (!entry.autoDiscovered || !swipeTag)
@@ -35854,19 +35917,46 @@ ${line2}`;
   }
   if (options?.mindLedgerEnabled !== false) {
     const ledger = [...set2.thoughtCabinet ?? []];
-    const narrativeText = (plan.paragraphs ?? []).map((p) => p.text).join(" ").toLowerCase();
-    const completedQuests = (plan.rpgState?.quests ?? []).filter((q) => q.status === "completed").map((q) => q.title.toLowerCase());
+    const seenLedgerIds = new Set;
+    for (const existing of ledger) {
+      if (seenLedgerIds.has(existing.id)) {
+        let suffix = 2;
+        while (seenLedgerIds.has(`${existing.id}-${suffix}`))
+          suffix += 1;
+        existing.id = `${existing.id}-${suffix}`.slice(0, 250);
+        changed = true;
+      }
+      seenLedgerIds.add(existing.id);
+    }
+    const paragraphTexts = (plan.paragraphs ?? []).map((p) => p.text.toLowerCase());
+    const narrativeText = paragraphTexts.join(" ");
+    const completedQuests = (plan.rpgState?.quests ?? []).filter((q) => q.status === "completed").map((q) => q.title.trim().toLowerCase());
     const explicitlyResolved = (plan.resolvedThreads ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean);
+    const RESOLUTION_VERBS = /\b(?:solved|uncovered|revealed|confessed|resolved|truth came out|mystery ended)\b/i;
     for (const entry of ledger) {
       if (entry.status === "resolved")
         continue;
       const keywords = entry.title.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4);
+      const minKw = Math.min(2, keywords.length);
       const mentioned = keywords.some((kw) => narrativeText.includes(kw));
-      const questResolved = completedQuests.some((qt) => keywords.some((kw) => qt.includes(kw)));
-      const entryTitleLower = entry.title.toLowerCase();
-      const entryIdLower = entry.id.toLowerCase();
-      const threadExplicitlyResolved = explicitlyResolved.some((t) => t === entryIdLower || t === entryTitleLower || entryTitleLower.includes(t) || t.includes(entryTitleLower));
-      if (threadExplicitlyResolved || questResolved || mentioned && /\b(?:solved|uncovered|revealed|confessed|resolved|truth came out|mystery ended)\b/.test(narrativeText)) {
+      const entryTitleLower = entry.title.trim().toLowerCase();
+      const entryIdLower = entry.id.trim().toLowerCase();
+      const questResolved = completedQuests.some((qt) => {
+        if (qt === entryTitleLower)
+          return true;
+        if (minKw === 0)
+          return false;
+        const hits = keywords.filter((kw) => qt.includes(kw)).length;
+        return hits >= minKw;
+      });
+      const threadExplicitlyResolved = explicitlyResolved.some((t) => t === entryIdLower || t === entryTitleLower);
+      const sameParagraphResolved = minKw > 0 && paragraphTexts.some((pText) => {
+        if (!RESOLUTION_VERBS.test(pText))
+          return false;
+        const hits = keywords.filter((kw) => pText.includes(kw)).length;
+        return hits >= minKw;
+      });
+      if (threadExplicitlyResolved || questResolved || sameParagraphResolved) {
         entry.status = "resolved";
         entry.updatedAt = Date.now();
         changed = true;
@@ -35915,7 +36005,14 @@ ${line2}`;
         continue;
       }
       const category = ref.field === "risks" ? "foreshadowing" : ref.field === "statedGoals" ? "promise" : ref.field === "significance" ? "clue" : "secret";
-      const entryId = `tc-${createItemId(ref.name)}-${ledger.length + 1}`.slice(0, 250);
+      let seq = 1;
+      const baseTcId = `tc-${createItemId(ref.name)}`;
+      let entryId = `${baseTcId}-${seq}`.slice(0, 250);
+      while (seenLedgerIds.has(entryId)) {
+        seq += 1;
+        entryId = `${baseTcId}-${seq}`.slice(0, 250);
+      }
+      seenLedgerIds.add(entryId);
       ledger.push({
         id: entryId,
         title,
@@ -49718,7 +49815,7 @@ function resolveShotSpec(input2) {
 var ACTION_VERBS_REGEX, REACTION_WORDS_REGEX, DIALOGUE_WORDS_REGEX, CONFRONTATION_WORDS_REGEX, FOREGROUND_DEPTH_REGEX, BACKGROUND_DEPTH_REGEX, MIDGROUND_DEPTH_REGEX, EXPLICIT_LINEUP_REGEX;
 var init_shot_director = __esm(() => {
   init_image_shot_spec();
-  ACTION_VERBS_REGEX = /\b(?:fight|strike|slash|parry|draws?|fires?|shoots?|runs?|sprints?|lunges?|jumps?|leaps?|dodges?|escapes?|climbs?|dances?|swords?|combat|spells?|attacks?|throws?|rushes?|charges?)\b/i;
+  ACTION_VERBS_REGEX = /\b(?:fight|strike|slash|parry|draws?\s+(?:a|the|his|her|their|its)?\s*(?:sword|blade|dagger|knife|gun|pistol|rifle|weapon|bow|wand|steel)|fires?\s+(?:a|the|his|her|their|its)?\s*(?:gun|pistol|rifle|shot|arrow|bolt|weapon|spell|at)|shoots?|runs?|sprints?|lunges?|jumps?|leaps?|dodges?|escapes?|climbs?|dances?|swords?|combat|spells?|attacks?|throws?|rushes?|charges?)\b/i;
   REACTION_WORDS_REGEX = /\b(?:gasps?|shock|shocks?|cries?|crying|smiles?|grins?|freezes?|frozen|blushes?|blushing|tears?|glances?|stares?|staring|wide-eyed|stunned|awe|trembles?|hesitates?|flinches?|winces?)\b/i;
   DIALOGUE_WORDS_REGEX = /\b(?:says?|tells?|asks?|speaks?|whispers?|murmurs?|mutters?|answers?|replies?|explains?|argues?|confesses?|calls out)\b/i;
   CONFRONTATION_WORDS_REGEX = /\b(?:glare|glares?|confronts?|threatens?|corners?|surrounds?|draws? weapon|standoff|face-off|blocks? the path|points? (?:a|his|her) (?:blade|gun|wand))\b/i;

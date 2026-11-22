@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { deriveShortAliases, matchesBoundaryCandidate } from './story-dna.js';
 import { REFERENCE_FIELDS, referenceFieldMatchesKind, type ReferenceField } from './reference-fields.js';
-import { GROUNDING_STOPWORDS, alignSpanInParagraph, hasTokenOverlap, normalizeForGroundMatch } from './grounding.js';
+import { GROUNDING_STOPWORDS, alignSpanInParagraph, isClaimGroundedInEvidence, normalizeForGroundMatch } from './grounding.js';
 
 export const StoryReferenceSchema = z.object({
  kind: z.enum(['npc','place','object']), name: z.string().trim().min(1).max(256),
@@ -185,7 +185,7 @@ export function normalizeStoryReferences(
       continue;
     }
 
-    const valGrounded = hasTokenOverlap(r.evidence, r.value, 0.8) || hasTokenOverlap(paragraph, r.value, 0.8);
+    const valGrounded = isClaimGroundedInEvidence(r.evidence, r.value, 0.8) || isClaimGroundedInEvidence(paragraph, r.value, 0.8);
     if (!valGrounded) {
       if (trace) trace.ungroundedValue += 1;
       continue;
