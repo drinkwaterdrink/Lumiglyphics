@@ -140,7 +140,7 @@ export async function handleStoryDnaRequest(
         messageId: request.messageId,
         set: current,
       });
-      const storyDna = await saveLocationDNA(spindle, request.chatId, drafted, userId);
+      const storyDna = await saveLocationDNA(spindle, request.chatId, drafted, userId, current.revision ?? 0);
       await reply(storyDna);
       return;
     }
@@ -164,7 +164,7 @@ export async function handleStoryDnaRequest(
         messageId: request.messageId,
         set: current,
       });
-      const storyDna = await saveItemDNA(spindle, request.chatId, drafted, userId);
+      const storyDna = await saveItemDNA(spindle, request.chatId, drafted, userId, current.revision ?? 0);
       await reply(storyDna);
       return;
     }

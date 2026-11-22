@@ -331,6 +331,19 @@ describe("delivery tag gating by actual profile model", () => {
 });
 
 describe("lifecycle boundaries and late completions", () => {
+  test("pause during synthesis prevents the late response from playing", async () => {
+    const { transport, audio, controller, created } = rig();
+    controller.setCursor(cursor());
+    const { done } = await dispatchPlay(controller);
+    const request = transport.requests[0]!;
+    controller.pause();
+    expect(request.signal.aborted).toBe(true);
+    request.resolve(audioBlob());
+    await done;
+    expect(audio.playCalls).toBe(0);
+    expect(created).toHaveLength(0);
+  });
+
   test("cursor change aborts the in-flight request; its late resolution never plays or caches", async () => {
     const { transport, audio, controller, created } = rig();
     controller.setCursor(cursor());

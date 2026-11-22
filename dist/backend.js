@@ -52,79 +52,79 @@ var activeBackendUuidProvider = null;
 // node_modules/zod/v4/core/util.js
 var exports_util = {};
 __export(exports_util, {
-  unwrapMessage: () => unwrapMessage,
-  uint8ArrayToHex: () => uint8ArrayToHex,
-  uint8ArrayToBase64url: () => uint8ArrayToBase64url,
-  uint8ArrayToBase64: () => uint8ArrayToBase64,
-  toZod: () => toZod,
-  stringifyPrimitive: () => stringifyPrimitive,
-  slugify: () => slugify,
-  shallowClone: () => shallowClone,
-  safeExtend: () => safeExtend,
-  required: () => required,
-  randomString: () => randomString,
-  propertyKeyTypes: () => propertyKeyTypes,
-  promiseAllObject: () => promiseAllObject,
-  primitiveTypes: () => primitiveTypes,
-  prefixIssues: () => prefixIssues,
-  pick: () => pick,
-  partial: () => partial,
-  parsedType: () => parsedType,
-  own: () => own,
-  optionalKeys: () => optionalKeys,
-  omit: () => omit,
-  objectClone: () => objectClone,
-  numKeys: () => numKeys,
-  nullish: () => nullish,
-  normalizeParams: () => normalizeParams,
-  mergeDefs: () => mergeDefs,
-  merge: () => merge,
-  members: () => members,
-  jsonStringifyReplacer: () => jsonStringifyReplacer,
-  joinValues: () => joinValues,
-  issue: () => issue,
-  isPlainObject: () => isPlainObject,
-  isObject: () => isObject,
-  installLazyProp: () => installLazyProp,
-  hide: () => hide,
-  hexToUint8Array: () => hexToUint8Array,
-  getSizableOrigin: () => getSizableOrigin,
-  getParsedType: () => getParsedType,
-  getLengthableOrigin: () => getLengthableOrigin,
-  getEnumValues: () => getEnumValues,
-  getElementAtPath: () => getElementAtPath,
-  floatSafeRemainder: () => floatSafeRemainder,
-  finalizeIssue: () => finalizeIssue,
-  extend: () => extend,
-  explicitlyAborted: () => explicitlyAborted,
-  escapeRegex: () => escapeRegex,
-  esc: () => esc,
-  defineLazyInternal: () => defineLazyInternal,
-  defineLazy: () => defineLazy,
-  createTransparentProxy: () => createTransparentProxy,
-  constantCatch: () => constantCatch,
-  codePointLength: () => codePointLength,
-  cloneDef: () => cloneDef,
-  clone: () => clone,
-  cleanRegex: () => cleanRegex,
-  cleanEnum: () => cleanEnum,
-  captureStackTrace: () => captureStackTrace,
-  cached: () => cached,
-  base64urlToUint8Array: () => base64urlToUint8Array,
-  base64ToUint8Array: () => base64ToUint8Array,
-  attachSchema: () => attachSchema,
-  assignProp: () => assignProp,
-  assertNotEqual: () => assertNotEqual,
-  assertNever: () => assertNever,
-  assertIs: () => assertIs,
-  assertEqual: () => assertEqual,
-  assert: () => assert,
-  allowsEval: () => allowsEval,
-  aborted: () => aborted,
-  NUMBER_FORMAT_RANGES: () => NUMBER_FORMAT_RANGES,
-  Class: () => Class,
+  BIGINT_FORMAT_RANGES: () => BIGINT_FORMAT_RANGES,
   CONSTANT_CATCH: () => CONSTANT_CATCH,
-  BIGINT_FORMAT_RANGES: () => BIGINT_FORMAT_RANGES
+  Class: () => Class,
+  NUMBER_FORMAT_RANGES: () => NUMBER_FORMAT_RANGES,
+  aborted: () => aborted,
+  allowsEval: () => allowsEval,
+  assert: () => assert,
+  assertEqual: () => assertEqual,
+  assertIs: () => assertIs,
+  assertNever: () => assertNever,
+  assertNotEqual: () => assertNotEqual,
+  assignProp: () => assignProp,
+  attachSchema: () => attachSchema,
+  base64ToUint8Array: () => base64ToUint8Array,
+  base64urlToUint8Array: () => base64urlToUint8Array,
+  cached: () => cached,
+  captureStackTrace: () => captureStackTrace,
+  cleanEnum: () => cleanEnum,
+  cleanRegex: () => cleanRegex,
+  clone: () => clone,
+  cloneDef: () => cloneDef,
+  codePointLength: () => codePointLength,
+  constantCatch: () => constantCatch,
+  createTransparentProxy: () => createTransparentProxy,
+  defineLazy: () => defineLazy,
+  defineLazyInternal: () => defineLazyInternal,
+  esc: () => esc,
+  escapeRegex: () => escapeRegex,
+  explicitlyAborted: () => explicitlyAborted,
+  extend: () => extend,
+  finalizeIssue: () => finalizeIssue,
+  floatSafeRemainder: () => floatSafeRemainder,
+  getElementAtPath: () => getElementAtPath,
+  getEnumValues: () => getEnumValues,
+  getLengthableOrigin: () => getLengthableOrigin,
+  getParsedType: () => getParsedType,
+  getSizableOrigin: () => getSizableOrigin,
+  hexToUint8Array: () => hexToUint8Array,
+  hide: () => hide,
+  installLazyProp: () => installLazyProp,
+  isObject: () => isObject,
+  isPlainObject: () => isPlainObject,
+  issue: () => issue,
+  joinValues: () => joinValues,
+  jsonStringifyReplacer: () => jsonStringifyReplacer,
+  members: () => members,
+  merge: () => merge,
+  mergeDefs: () => mergeDefs,
+  normalizeParams: () => normalizeParams,
+  nullish: () => nullish,
+  numKeys: () => numKeys,
+  objectClone: () => objectClone,
+  omit: () => omit,
+  optionalKeys: () => optionalKeys,
+  own: () => own,
+  parsedType: () => parsedType,
+  partial: () => partial,
+  pick: () => pick,
+  prefixIssues: () => prefixIssues,
+  primitiveTypes: () => primitiveTypes,
+  promiseAllObject: () => promiseAllObject,
+  propertyKeyTypes: () => propertyKeyTypes,
+  randomString: () => randomString,
+  required: () => required,
+  safeExtend: () => safeExtend,
+  shallowClone: () => shallowClone,
+  slugify: () => slugify,
+  stringifyPrimitive: () => stringifyPrimitive,
+  toZod: () => toZod,
+  uint8ArrayToBase64: () => uint8ArrayToBase64,
+  uint8ArrayToBase64url: () => uint8ArrayToBase64url,
+  uint8ArrayToHex: () => uint8ArrayToHex,
+  unwrapMessage: () => unwrapMessage
 });
 function assertEqual(val) {
   return val;
@@ -1347,67 +1347,67 @@ var init_parse = __esm(() => {
 // node_modules/zod/v4/core/regexes.js
 var exports_regexes = {};
 __export(exports_regexes, {
-  xid: () => xid,
-  uuid7: () => uuid7,
-  uuid6: () => uuid6,
-  uuid4: () => uuid4,
-  uuid: () => uuid,
-  uppercase: () => uppercase,
-  unicodeEmail: () => unicodeEmail,
-  undefined: () => _undefined,
-  ulid: () => ulid,
-  time: () => time,
-  string: () => string,
-  sha512_hex: () => sha512_hex,
-  sha512_base64url: () => sha512_base64url,
-  sha512_base64: () => sha512_base64,
-  sha384_hex: () => sha384_hex,
-  sha384_base64url: () => sha384_base64url,
-  sha384_base64: () => sha384_base64,
-  sha256_hex: () => sha256_hex,
-  sha256_base64url: () => sha256_base64url,
-  sha256_base64: () => sha256_base64,
-  sha1_hex: () => sha1_hex,
-  sha1_base64url: () => sha1_base64url,
-  sha1_base64: () => sha1_base64,
-  rfc5322Email: () => rfc5322Email,
-  number: () => number,
-  null: () => _null,
-  nanoidOfLength: () => nanoidOfLength,
-  nanoid: () => nanoid,
-  md5_hex: () => md5_hex,
-  md5_base64url: () => md5_base64url,
-  md5_base64: () => md5_base64,
-  mac: () => mac,
-  lowercase: () => lowercase,
-  ksuid: () => ksuid,
-  ipv6: () => ipv6,
-  ipv4: () => ipv4,
-  integer: () => integer,
-  idnEmail: () => idnEmail,
-  httpProtocol: () => httpProtocol,
-  html5Email: () => html5Email,
-  hostname: () => hostname,
-  hex: () => hex,
-  guid: () => guid,
-  extendedDuration: () => extendedDuration,
-  emoji: () => emoji,
-  email: () => email,
-  e164: () => e164,
-  duration: () => duration,
-  domain: () => domain,
-  datetime: () => datetime,
-  date: () => date,
-  cuid2: () => cuid2,
-  cuid: () => cuid,
-  creditCard: () => creditCard,
-  cidrv6: () => cidrv6,
-  cidrv4: () => cidrv4,
-  browserEmail: () => browserEmail,
-  boolean: () => boolean,
-  bigint: () => bigint,
+  base64: () => base64,
   base64url: () => base64url,
-  base64: () => base64
+  bigint: () => bigint,
+  boolean: () => boolean,
+  browserEmail: () => browserEmail,
+  cidrv4: () => cidrv4,
+  cidrv6: () => cidrv6,
+  creditCard: () => creditCard,
+  cuid: () => cuid,
+  cuid2: () => cuid2,
+  date: () => date,
+  datetime: () => datetime,
+  domain: () => domain,
+  duration: () => duration,
+  e164: () => e164,
+  email: () => email,
+  emoji: () => emoji,
+  extendedDuration: () => extendedDuration,
+  guid: () => guid,
+  hex: () => hex,
+  hostname: () => hostname,
+  html5Email: () => html5Email,
+  httpProtocol: () => httpProtocol,
+  idnEmail: () => idnEmail,
+  integer: () => integer,
+  ipv4: () => ipv4,
+  ipv6: () => ipv6,
+  ksuid: () => ksuid,
+  lowercase: () => lowercase,
+  mac: () => mac,
+  md5_base64: () => md5_base64,
+  md5_base64url: () => md5_base64url,
+  md5_hex: () => md5_hex,
+  nanoid: () => nanoid,
+  nanoidOfLength: () => nanoidOfLength,
+  null: () => _null,
+  number: () => number,
+  rfc5322Email: () => rfc5322Email,
+  sha1_base64: () => sha1_base64,
+  sha1_base64url: () => sha1_base64url,
+  sha1_hex: () => sha1_hex,
+  sha256_base64: () => sha256_base64,
+  sha256_base64url: () => sha256_base64url,
+  sha256_hex: () => sha256_hex,
+  sha384_base64: () => sha384_base64,
+  sha384_base64url: () => sha384_base64url,
+  sha384_hex: () => sha384_hex,
+  sha512_base64: () => sha512_base64,
+  sha512_base64url: () => sha512_base64url,
+  sha512_hex: () => sha512_hex,
+  string: () => string,
+  time: () => time,
+  ulid: () => ulid,
+  undefined: () => _undefined,
+  unicodeEmail: () => unicodeEmail,
+  uppercase: () => uppercase,
+  uuid: () => uuid,
+  uuid4: () => uuid4,
+  uuid6: () => uuid6,
+  uuid7: () => uuid7,
+  xid: () => xid
 });
 function nanoidOfLength(length) {
   return new RegExp(`^[a-zA-Z0-9_-]{${length}}$`);
@@ -12042,68 +12042,68 @@ var init_yo = __esm(() => {
 // node_modules/zod/v4/locales/index.js
 var exports_locales = {};
 __export(exports_locales, {
-  zhTW: () => zh_TW_default,
-  zhCN: () => zh_CN_default,
-  yo: () => yo_default,
-  vi: () => vi_default,
-  uz: () => uz_default,
-  ur: () => ur_default,
-  uk: () => uk_default,
-  ua: () => ua_default,
-  tr: () => tr_default,
-  tk: () => tk_default,
-  th: () => th_default,
-  ta: () => ta_default,
-  sv: () => sv_default,
-  sl: () => sl_default,
-  sk: () => sk_default,
-  ru: () => ru_default,
-  ro: () => ro_default,
-  ptBR: () => pt_BR_default,
-  pt: () => pt_default,
-  ps: () => ps_default,
-  pl: () => pl_default,
-  ota: () => ota_default,
-  no: () => no_default,
-  nn: () => nn_default,
-  nl: () => nl_default,
-  ne: () => ne_default,
-  ms: () => ms_default,
-  mk: () => mk_default,
-  lt: () => lt_default,
-  ko: () => ko_default,
-  kn: () => kn_default,
-  km: () => km_default,
-  kh: () => kh_default,
-  ka: () => ka_default,
-  ja: () => ja_default,
-  it: () => it_default,
-  is: () => is_default,
-  id: () => id_default,
-  hy: () => hy_default,
-  hu: () => hu_default,
-  hr: () => hr_default,
-  hi: () => hi_default,
-  he: () => he_default,
-  gu: () => gu_default,
-  frCA: () => fr_CA_default,
-  fr: () => fr_default,
-  fi: () => fi_default,
-  fa: () => fa_default,
-  es: () => es_default,
-  eo: () => eo_default,
-  en: () => en_default,
-  el: () => el_default,
-  de: () => de_default,
-  da: () => da_default,
-  cs: () => cs_default,
-  ckb: () => ckb_default,
-  ca: () => ca_default,
-  bn: () => bn_default,
-  bg: () => bg_default,
-  be: () => be_default,
+  ar: () => ar_default,
   az: () => az_default,
-  ar: () => ar_default
+  be: () => be_default,
+  bg: () => bg_default,
+  bn: () => bn_default,
+  ca: () => ca_default,
+  ckb: () => ckb_default,
+  cs: () => cs_default,
+  da: () => da_default,
+  de: () => de_default,
+  el: () => el_default,
+  en: () => en_default,
+  eo: () => eo_default,
+  es: () => es_default,
+  fa: () => fa_default,
+  fi: () => fi_default,
+  fr: () => fr_default,
+  frCA: () => fr_CA_default,
+  gu: () => gu_default,
+  he: () => he_default,
+  hi: () => hi_default,
+  hr: () => hr_default,
+  hu: () => hu_default,
+  hy: () => hy_default,
+  id: () => id_default,
+  is: () => is_default,
+  it: () => it_default,
+  ja: () => ja_default,
+  ka: () => ka_default,
+  kh: () => kh_default,
+  km: () => km_default,
+  kn: () => kn_default,
+  ko: () => ko_default,
+  lt: () => lt_default,
+  mk: () => mk_default,
+  ms: () => ms_default,
+  ne: () => ne_default,
+  nl: () => nl_default,
+  nn: () => nn_default,
+  no: () => no_default,
+  ota: () => ota_default,
+  pl: () => pl_default,
+  ps: () => ps_default,
+  pt: () => pt_default,
+  ptBR: () => pt_BR_default,
+  ro: () => ro_default,
+  ru: () => ru_default,
+  sk: () => sk_default,
+  sl: () => sl_default,
+  sv: () => sv_default,
+  ta: () => ta_default,
+  th: () => th_default,
+  tk: () => tk_default,
+  tr: () => tr_default,
+  ua: () => ua_default,
+  uk: () => uk_default,
+  ur: () => ur_default,
+  uz: () => uz_default,
+  vi: () => vi_default,
+  yo: () => yo_default,
+  zhCN: () => zh_CN_default,
+  zhTW: () => zh_TW_default
 });
 var init_locales = __esm(() => {
   init_ar();
@@ -15933,308 +15933,308 @@ var init_json_schema = () => {};
 // node_modules/zod/v4/core/index.js
 var exports_core2 = {};
 __export(exports_core2, {
-  version: () => version,
-  validateAsync: () => validateAsync,
-  validate: () => validate,
-  util: () => exports_util,
-  urlProtocolOk: () => urlProtocolOk,
-  urlHostnameOk: () => urlHostnameOk,
-  treeifyError: () => treeifyError,
-  toZod: () => toZod,
-  toJSONSchema: () => toJSONSchema,
-  toDotPath: () => toDotPath,
-  stripTabAndNewline: () => stripTabAndNewline,
-  standardProps: () => standardProps,
-  safeParseAsync: () => safeParseAsync,
-  safeParse: () => safeParse,
-  safeEncodeAsync: () => safeEncodeAsync,
-  safeEncode: () => safeEncode,
-  safeDecodeAsync: () => safeDecodeAsync,
-  safeDecode: () => safeDecode,
-  registry: () => registry,
-  regexes: () => exports_regexes,
-  process: () => process,
-  prettifyError: () => prettifyError,
-  parseURLObject: () => parseURLObject,
-  parseAsync: () => parseAsync,
-  parse: () => parse,
-  meta: () => meta,
-  mergeValues: () => mergeValues,
-  memoizer: () => memoizer,
-  locales: () => exports_locales,
-  isValidJWT: () => isValidJWT,
-  isValidIPv6: () => isValidIPv6,
-  isValidCreditCard: () => isValidCreditCard,
-  isValidCIDRv6: () => isValidCIDRv6,
-  isValidBase64URL: () => isValidBase64URL,
-  isValidBase64: () => isValidBase64,
-  isRecursiveSchema: () => isRecursiveSchema,
-  isBackEdge: () => isBackEdge,
-  initializeContext: () => initializeContext,
-  handleUnrepresentable: () => handleUnrepresentable,
-  globalRegistry: () => globalRegistry,
-  globalConfig: () => globalConfig,
-  getDiscriminatedOption: () => getDiscriminatedOption,
-  formatError: () => formatError,
-  flattenError: () => flattenError,
-  finalize: () => finalize,
-  extractDefs: () => extractDefs,
-  encodeAsync: () => encodeAsync,
-  encode: () => encode,
-  describe: () => describe,
-  decodeAsync: () => decodeAsync,
-  decode: () => decode,
-  createToJSONSchemaMethod: () => createToJSONSchemaMethod,
-  createStandardJSONSchemaMethod: () => createStandardJSONSchemaMethod,
-  config: () => config,
-  compileFn: () => compileFn,
-  compile: () => compile,
-  clone: () => clone,
-  _xor: () => _xor,
-  _xid: () => _xid,
-  _void: () => _void,
-  _uuidv7: () => _uuidv7,
-  _uuidv6: () => _uuidv6,
-  _uuidv4: () => _uuidv4,
-  _uuid: () => _uuid,
-  _url: () => _url,
-  _uppercase: () => _uppercase,
-  _unknown: () => _unknown,
-  _union: () => _union,
-  _undefined: () => _undefined2,
-  _ulid: () => _ulid,
-  _uint64: () => _uint64,
-  _uint32: () => _uint32,
-  _tuple: () => _tuple,
-  _trim: () => _trim,
-  _transform: () => _transform,
-  _toUpperCase: () => _toUpperCase,
-  _toLowerCase: () => _toLowerCase,
-  _templateLiteral: () => _templateLiteral,
-  _symbol: () => _symbol,
-  _superRefine: () => _superRefine,
-  _success: () => _success,
-  _stringbool: () => _stringbool,
-  _stringFormat: () => _stringFormat,
-  _string: () => _string,
-  _startsWith: () => _startsWith,
-  _slugify: () => _slugify,
-  _size: () => _size,
-  _set: () => _set,
-  _safeParseAsync: () => _safeParseAsync,
-  _safeParse: () => _safeParse,
-  _safeEncodeAsync: () => _safeEncodeAsync,
-  _safeEncode: () => _safeEncode,
-  _safeDecodeAsync: () => _safeDecodeAsync,
-  _safeDecode: () => _safeDecode,
-  _regex: () => _regex,
-  _refine: () => _refine,
-  _record: () => _record,
-  _readonly: () => _readonly,
-  _property: () => _property,
-  _properties: () => _properties,
-  _promise: () => _promise,
-  _positive: () => _positive,
-  _pipe: () => _pipe,
-  _parseAsync: () => _parseAsync,
-  _parse: () => _parse,
-  _overwrite: () => _overwrite,
-  _optional: () => _optional,
-  _number: () => _number,
-  _nullable: () => _nullable,
-  _null: () => _null2,
-  _normalize: () => _normalize,
-  _nonpositive: () => _nonpositive,
-  _nonoptional: () => _nonoptional,
-  _nonnegative: () => _nonnegative,
-  _never: () => _never,
-  _negative: () => _negative,
-  _nativeEnum: () => _nativeEnum,
-  _nanoid: () => _nanoid,
-  _nan: () => _nan,
-  _multipleOf: () => _multipleOf,
-  _minSize: () => _minSize,
-  _minLength: () => _minLength,
-  _min: () => _gte,
-  _mime: () => _mime,
-  _maxSize: () => _maxSize,
-  _maxLength: () => _maxLength,
-  _max: () => _lte,
-  _map: () => _map,
-  _mac: () => _mac,
-  _lte: () => _lte,
-  _lt: () => _lt,
-  _lowercase: () => _lowercase,
-  _literal: () => _literal,
-  _length: () => _length,
-  _lazy: () => _lazy,
-  _ksuid: () => _ksuid,
-  _jwt: () => _jwt,
-  _isoTime: () => _isoTime,
-  _isoDuration: () => _isoDuration,
-  _isoDateTime: () => _isoDateTime,
-  _isoDate: () => _isoDate,
-  _ipv6: () => _ipv6,
-  _ipv4: () => _ipv4,
-  _intersection: () => _intersection,
-  _int64: () => _int64,
-  _int32: () => _int32,
-  _int: () => _int,
-  _includes: () => _includes,
-  _guid: () => _guid,
-  _gte: () => _gte,
-  _gt: () => _gt,
-  _float64: () => _float64,
-  _float32: () => _float32,
-  _file: () => _file,
-  _enum: () => _enum,
-  _endsWith: () => _endsWith,
-  _encodeAsync: () => _encodeAsync,
-  _encode: () => _encode,
-  _emoji: () => _emoji2,
-  _email: () => _email,
-  _e164: () => _e164,
-  _discriminatedUnion: () => _discriminatedUnion,
-  _default: () => _default,
-  _decodeAsync: () => _decodeAsync,
-  _decode: () => _decode,
-  _date: () => _date,
-  _custom: () => _custom,
-  _cuid2: () => _cuid2,
-  _cuid: () => _cuid,
-  _creditCard: () => _creditCard,
-  _coercedString: () => _coercedString,
-  _coercedNumber: () => _coercedNumber,
-  _coercedDate: () => _coercedDate,
-  _coercedBoolean: () => _coercedBoolean,
-  _coercedBigint: () => _coercedBigint,
-  _cidrv6: () => _cidrv6,
-  _cidrv4: () => _cidrv4,
-  _check: () => _check,
-  _catch: () => _catch,
-  _boolean: () => _boolean,
-  _bigint: () => _bigint,
-  _base64url: () => _base64url,
-  _base64: () => _base64,
-  _array: () => _array,
-  _any: () => _any,
-  ZodCompileUnsupportedError: () => ZodCompileUnsupportedError,
-  ZodCompileAsyncError: () => ZodCompileAsyncError,
-  URL_UNPARSEABLE: () => URL_UNPARSEABLE,
-  URL_BAD_FORMAT: () => URL_BAD_FORMAT,
-  TimePrecision: () => TimePrecision,
-  NEVER: () => NEVER,
-  JSONSchemaGenerator: () => JSONSchemaGenerator,
-  JSONSchema: () => exports_json_schema,
-  INVALID: () => INVALID,
-  Doc: () => Doc,
-  $output: () => $output,
-  $input: () => $input,
-  $constructor: () => $constructor,
-  $brand: () => $brand,
-  $ZodXor: () => $ZodXor,
-  $ZodXID: () => $ZodXID,
-  $ZodVoid: () => $ZodVoid,
-  $ZodUnknown: () => $ZodUnknown,
-  $ZodUnion: () => $ZodUnion,
-  $ZodUndefined: () => $ZodUndefined,
-  $ZodUUID: () => $ZodUUID,
-  $ZodURL: () => $ZodURL,
-  $ZodULID: () => $ZodULID,
-  $ZodType: () => $ZodType,
-  $ZodTuple: () => $ZodTuple,
-  $ZodTransform: () => $ZodTransform,
-  $ZodTemplateLiteral: () => $ZodTemplateLiteral,
-  $ZodSymbol: () => $ZodSymbol,
-  $ZodSuccess: () => $ZodSuccess,
-  $ZodStringFormat: () => $ZodStringFormat,
-  $ZodString: () => $ZodString,
-  $ZodSet: () => $ZodSet,
-  $ZodRegistry: () => $ZodRegistry,
-  $ZodRecord: () => $ZodRecord,
-  $ZodRealError: () => $ZodRealError,
-  $ZodReadonly: () => $ZodReadonly,
-  $ZodPromise: () => $ZodPromise,
-  $ZodPreprocess: () => $ZodPreprocess,
-  $ZodPrefault: () => $ZodPrefault,
-  $ZodPipe: () => $ZodPipe,
-  $ZodOptional: () => $ZodOptional,
-  $ZodObjectJIT: () => $ZodObjectJIT,
-  $ZodObject: () => $ZodObject,
-  $ZodNumberFormat: () => $ZodNumberFormat,
-  $ZodNumber: () => $ZodNumber,
-  $ZodNullable: () => $ZodNullable,
-  $ZodNull: () => $ZodNull,
-  $ZodNonOptional: () => $ZodNonOptional,
-  $ZodNever: () => $ZodNever,
-  $ZodNanoID: () => $ZodNanoID,
-  $ZodNaN: () => $ZodNaN,
-  $ZodMap: () => $ZodMap,
-  $ZodMAC: () => $ZodMAC,
-  $ZodLiteral: () => $ZodLiteral,
-  $ZodLazy: () => $ZodLazy,
-  $ZodKSUID: () => $ZodKSUID,
-  $ZodJWT: () => $ZodJWT,
-  $ZodIntersection: () => $ZodIntersection,
-  $ZodISOTime: () => $ZodISOTime,
-  $ZodISODuration: () => $ZodISODuration,
-  $ZodISODateTime: () => $ZodISODateTime,
-  $ZodISODate: () => $ZodISODate,
-  $ZodIPv6: () => $ZodIPv6,
-  $ZodIPv4: () => $ZodIPv4,
-  $ZodGUID: () => $ZodGUID,
-  $ZodFunction: () => $ZodFunction,
-  $ZodFile: () => $ZodFile,
-  $ZodExactOptional: () => $ZodExactOptional,
-  $ZodError: () => $ZodError,
-  $ZodEnum: () => $ZodEnum,
-  $ZodEncodeError: () => $ZodEncodeError,
-  $ZodEmoji: () => $ZodEmoji,
-  $ZodEmail: () => $ZodEmail,
-  $ZodE164: () => $ZodE164,
-  $ZodDiscriminatedUnion: () => $ZodDiscriminatedUnion,
-  $ZodDefault: () => $ZodDefault,
-  $ZodDate: () => $ZodDate,
-  $ZodCyclicError: () => $ZodCyclicError,
-  $ZodCustomStringFormat: () => $ZodCustomStringFormat,
-  $ZodCustom: () => $ZodCustom,
-  $ZodCreditCard: () => $ZodCreditCard,
-  $ZodCodec: () => $ZodCodec,
-  $ZodCheckUpperCase: () => $ZodCheckUpperCase,
-  $ZodCheckStringFormat: () => $ZodCheckStringFormat,
-  $ZodCheckStartsWith: () => $ZodCheckStartsWith,
-  $ZodCheckSizeEquals: () => $ZodCheckSizeEquals,
-  $ZodCheckRegex: () => $ZodCheckRegex,
-  $ZodCheckProperty: () => $ZodCheckProperty,
-  $ZodCheckOverwrite: () => $ZodCheckOverwrite,
-  $ZodCheckNumberFormat: () => $ZodCheckNumberFormat,
-  $ZodCheckMultipleOf: () => $ZodCheckMultipleOf,
-  $ZodCheckMinSize: () => $ZodCheckMinSize,
-  $ZodCheckMinLength: () => $ZodCheckMinLength,
-  $ZodCheckMimeType: () => $ZodCheckMimeType,
-  $ZodCheckMaxSize: () => $ZodCheckMaxSize,
-  $ZodCheckMaxLength: () => $ZodCheckMaxLength,
-  $ZodCheckLowerCase: () => $ZodCheckLowerCase,
-  $ZodCheckLessThan: () => $ZodCheckLessThan,
-  $ZodCheckLengthEquals: () => $ZodCheckLengthEquals,
-  $ZodCheckIncludes: () => $ZodCheckIncludes,
-  $ZodCheckGreaterThan: () => $ZodCheckGreaterThan,
-  $ZodCheckEndsWith: () => $ZodCheckEndsWith,
-  $ZodCheckBigIntFormat: () => $ZodCheckBigIntFormat,
-  $ZodCheck: () => $ZodCheck,
-  $ZodCatch: () => $ZodCatch,
-  $ZodCUID2: () => $ZodCUID2,
-  $ZodCUID: () => $ZodCUID,
-  $ZodCIDRv6: () => $ZodCIDRv6,
-  $ZodCIDRv4: () => $ZodCIDRv4,
-  $ZodBoolean: () => $ZodBoolean,
-  $ZodBigIntFormat: () => $ZodBigIntFormat,
-  $ZodBigInt: () => $ZodBigInt,
-  $ZodBase64URL: () => $ZodBase64URL,
-  $ZodBase64: () => $ZodBase64,
-  $ZodAsyncError: () => $ZodAsyncError,
+  $ZodAny: () => $ZodAny,
   $ZodArray: () => $ZodArray,
-  $ZodAny: () => $ZodAny
+  $ZodAsyncError: () => $ZodAsyncError,
+  $ZodBase64: () => $ZodBase64,
+  $ZodBase64URL: () => $ZodBase64URL,
+  $ZodBigInt: () => $ZodBigInt,
+  $ZodBigIntFormat: () => $ZodBigIntFormat,
+  $ZodBoolean: () => $ZodBoolean,
+  $ZodCIDRv4: () => $ZodCIDRv4,
+  $ZodCIDRv6: () => $ZodCIDRv6,
+  $ZodCUID: () => $ZodCUID,
+  $ZodCUID2: () => $ZodCUID2,
+  $ZodCatch: () => $ZodCatch,
+  $ZodCheck: () => $ZodCheck,
+  $ZodCheckBigIntFormat: () => $ZodCheckBigIntFormat,
+  $ZodCheckEndsWith: () => $ZodCheckEndsWith,
+  $ZodCheckGreaterThan: () => $ZodCheckGreaterThan,
+  $ZodCheckIncludes: () => $ZodCheckIncludes,
+  $ZodCheckLengthEquals: () => $ZodCheckLengthEquals,
+  $ZodCheckLessThan: () => $ZodCheckLessThan,
+  $ZodCheckLowerCase: () => $ZodCheckLowerCase,
+  $ZodCheckMaxLength: () => $ZodCheckMaxLength,
+  $ZodCheckMaxSize: () => $ZodCheckMaxSize,
+  $ZodCheckMimeType: () => $ZodCheckMimeType,
+  $ZodCheckMinLength: () => $ZodCheckMinLength,
+  $ZodCheckMinSize: () => $ZodCheckMinSize,
+  $ZodCheckMultipleOf: () => $ZodCheckMultipleOf,
+  $ZodCheckNumberFormat: () => $ZodCheckNumberFormat,
+  $ZodCheckOverwrite: () => $ZodCheckOverwrite,
+  $ZodCheckProperty: () => $ZodCheckProperty,
+  $ZodCheckRegex: () => $ZodCheckRegex,
+  $ZodCheckSizeEquals: () => $ZodCheckSizeEquals,
+  $ZodCheckStartsWith: () => $ZodCheckStartsWith,
+  $ZodCheckStringFormat: () => $ZodCheckStringFormat,
+  $ZodCheckUpperCase: () => $ZodCheckUpperCase,
+  $ZodCodec: () => $ZodCodec,
+  $ZodCreditCard: () => $ZodCreditCard,
+  $ZodCustom: () => $ZodCustom,
+  $ZodCustomStringFormat: () => $ZodCustomStringFormat,
+  $ZodCyclicError: () => $ZodCyclicError,
+  $ZodDate: () => $ZodDate,
+  $ZodDefault: () => $ZodDefault,
+  $ZodDiscriminatedUnion: () => $ZodDiscriminatedUnion,
+  $ZodE164: () => $ZodE164,
+  $ZodEmail: () => $ZodEmail,
+  $ZodEmoji: () => $ZodEmoji,
+  $ZodEncodeError: () => $ZodEncodeError,
+  $ZodEnum: () => $ZodEnum,
+  $ZodError: () => $ZodError,
+  $ZodExactOptional: () => $ZodExactOptional,
+  $ZodFile: () => $ZodFile,
+  $ZodFunction: () => $ZodFunction,
+  $ZodGUID: () => $ZodGUID,
+  $ZodIPv4: () => $ZodIPv4,
+  $ZodIPv6: () => $ZodIPv6,
+  $ZodISODate: () => $ZodISODate,
+  $ZodISODateTime: () => $ZodISODateTime,
+  $ZodISODuration: () => $ZodISODuration,
+  $ZodISOTime: () => $ZodISOTime,
+  $ZodIntersection: () => $ZodIntersection,
+  $ZodJWT: () => $ZodJWT,
+  $ZodKSUID: () => $ZodKSUID,
+  $ZodLazy: () => $ZodLazy,
+  $ZodLiteral: () => $ZodLiteral,
+  $ZodMAC: () => $ZodMAC,
+  $ZodMap: () => $ZodMap,
+  $ZodNaN: () => $ZodNaN,
+  $ZodNanoID: () => $ZodNanoID,
+  $ZodNever: () => $ZodNever,
+  $ZodNonOptional: () => $ZodNonOptional,
+  $ZodNull: () => $ZodNull,
+  $ZodNullable: () => $ZodNullable,
+  $ZodNumber: () => $ZodNumber,
+  $ZodNumberFormat: () => $ZodNumberFormat,
+  $ZodObject: () => $ZodObject,
+  $ZodObjectJIT: () => $ZodObjectJIT,
+  $ZodOptional: () => $ZodOptional,
+  $ZodPipe: () => $ZodPipe,
+  $ZodPrefault: () => $ZodPrefault,
+  $ZodPreprocess: () => $ZodPreprocess,
+  $ZodPromise: () => $ZodPromise,
+  $ZodReadonly: () => $ZodReadonly,
+  $ZodRealError: () => $ZodRealError,
+  $ZodRecord: () => $ZodRecord,
+  $ZodRegistry: () => $ZodRegistry,
+  $ZodSet: () => $ZodSet,
+  $ZodString: () => $ZodString,
+  $ZodStringFormat: () => $ZodStringFormat,
+  $ZodSuccess: () => $ZodSuccess,
+  $ZodSymbol: () => $ZodSymbol,
+  $ZodTemplateLiteral: () => $ZodTemplateLiteral,
+  $ZodTransform: () => $ZodTransform,
+  $ZodTuple: () => $ZodTuple,
+  $ZodType: () => $ZodType,
+  $ZodULID: () => $ZodULID,
+  $ZodURL: () => $ZodURL,
+  $ZodUUID: () => $ZodUUID,
+  $ZodUndefined: () => $ZodUndefined,
+  $ZodUnion: () => $ZodUnion,
+  $ZodUnknown: () => $ZodUnknown,
+  $ZodVoid: () => $ZodVoid,
+  $ZodXID: () => $ZodXID,
+  $ZodXor: () => $ZodXor,
+  $brand: () => $brand,
+  $constructor: () => $constructor,
+  $input: () => $input,
+  $output: () => $output,
+  Doc: () => Doc,
+  INVALID: () => INVALID,
+  JSONSchema: () => exports_json_schema,
+  JSONSchemaGenerator: () => JSONSchemaGenerator,
+  NEVER: () => NEVER,
+  TimePrecision: () => TimePrecision,
+  URL_BAD_FORMAT: () => URL_BAD_FORMAT,
+  URL_UNPARSEABLE: () => URL_UNPARSEABLE,
+  ZodCompileAsyncError: () => ZodCompileAsyncError,
+  ZodCompileUnsupportedError: () => ZodCompileUnsupportedError,
+  _any: () => _any,
+  _array: () => _array,
+  _base64: () => _base64,
+  _base64url: () => _base64url,
+  _bigint: () => _bigint,
+  _boolean: () => _boolean,
+  _catch: () => _catch,
+  _check: () => _check,
+  _cidrv4: () => _cidrv4,
+  _cidrv6: () => _cidrv6,
+  _coercedBigint: () => _coercedBigint,
+  _coercedBoolean: () => _coercedBoolean,
+  _coercedDate: () => _coercedDate,
+  _coercedNumber: () => _coercedNumber,
+  _coercedString: () => _coercedString,
+  _creditCard: () => _creditCard,
+  _cuid: () => _cuid,
+  _cuid2: () => _cuid2,
+  _custom: () => _custom,
+  _date: () => _date,
+  _decode: () => _decode,
+  _decodeAsync: () => _decodeAsync,
+  _default: () => _default,
+  _discriminatedUnion: () => _discriminatedUnion,
+  _e164: () => _e164,
+  _email: () => _email,
+  _emoji: () => _emoji2,
+  _encode: () => _encode,
+  _encodeAsync: () => _encodeAsync,
+  _endsWith: () => _endsWith,
+  _enum: () => _enum,
+  _file: () => _file,
+  _float32: () => _float32,
+  _float64: () => _float64,
+  _gt: () => _gt,
+  _gte: () => _gte,
+  _guid: () => _guid,
+  _includes: () => _includes,
+  _int: () => _int,
+  _int32: () => _int32,
+  _int64: () => _int64,
+  _intersection: () => _intersection,
+  _ipv4: () => _ipv4,
+  _ipv6: () => _ipv6,
+  _isoDate: () => _isoDate,
+  _isoDateTime: () => _isoDateTime,
+  _isoDuration: () => _isoDuration,
+  _isoTime: () => _isoTime,
+  _jwt: () => _jwt,
+  _ksuid: () => _ksuid,
+  _lazy: () => _lazy,
+  _length: () => _length,
+  _literal: () => _literal,
+  _lowercase: () => _lowercase,
+  _lt: () => _lt,
+  _lte: () => _lte,
+  _mac: () => _mac,
+  _map: () => _map,
+  _max: () => _lte,
+  _maxLength: () => _maxLength,
+  _maxSize: () => _maxSize,
+  _mime: () => _mime,
+  _min: () => _gte,
+  _minLength: () => _minLength,
+  _minSize: () => _minSize,
+  _multipleOf: () => _multipleOf,
+  _nan: () => _nan,
+  _nanoid: () => _nanoid,
+  _nativeEnum: () => _nativeEnum,
+  _negative: () => _negative,
+  _never: () => _never,
+  _nonnegative: () => _nonnegative,
+  _nonoptional: () => _nonoptional,
+  _nonpositive: () => _nonpositive,
+  _normalize: () => _normalize,
+  _null: () => _null2,
+  _nullable: () => _nullable,
+  _number: () => _number,
+  _optional: () => _optional,
+  _overwrite: () => _overwrite,
+  _parse: () => _parse,
+  _parseAsync: () => _parseAsync,
+  _pipe: () => _pipe,
+  _positive: () => _positive,
+  _promise: () => _promise,
+  _properties: () => _properties,
+  _property: () => _property,
+  _readonly: () => _readonly,
+  _record: () => _record,
+  _refine: () => _refine,
+  _regex: () => _regex,
+  _safeDecode: () => _safeDecode,
+  _safeDecodeAsync: () => _safeDecodeAsync,
+  _safeEncode: () => _safeEncode,
+  _safeEncodeAsync: () => _safeEncodeAsync,
+  _safeParse: () => _safeParse,
+  _safeParseAsync: () => _safeParseAsync,
+  _set: () => _set,
+  _size: () => _size,
+  _slugify: () => _slugify,
+  _startsWith: () => _startsWith,
+  _string: () => _string,
+  _stringFormat: () => _stringFormat,
+  _stringbool: () => _stringbool,
+  _success: () => _success,
+  _superRefine: () => _superRefine,
+  _symbol: () => _symbol,
+  _templateLiteral: () => _templateLiteral,
+  _toLowerCase: () => _toLowerCase,
+  _toUpperCase: () => _toUpperCase,
+  _transform: () => _transform,
+  _trim: () => _trim,
+  _tuple: () => _tuple,
+  _uint32: () => _uint32,
+  _uint64: () => _uint64,
+  _ulid: () => _ulid,
+  _undefined: () => _undefined2,
+  _union: () => _union,
+  _unknown: () => _unknown,
+  _uppercase: () => _uppercase,
+  _url: () => _url,
+  _uuid: () => _uuid,
+  _uuidv4: () => _uuidv4,
+  _uuidv6: () => _uuidv6,
+  _uuidv7: () => _uuidv7,
+  _void: () => _void,
+  _xid: () => _xid,
+  _xor: () => _xor,
+  clone: () => clone,
+  compile: () => compile,
+  compileFn: () => compileFn,
+  config: () => config,
+  createStandardJSONSchemaMethod: () => createStandardJSONSchemaMethod,
+  createToJSONSchemaMethod: () => createToJSONSchemaMethod,
+  decode: () => decode,
+  decodeAsync: () => decodeAsync,
+  describe: () => describe,
+  encode: () => encode,
+  encodeAsync: () => encodeAsync,
+  extractDefs: () => extractDefs,
+  finalize: () => finalize,
+  flattenError: () => flattenError,
+  formatError: () => formatError,
+  getDiscriminatedOption: () => getDiscriminatedOption,
+  globalConfig: () => globalConfig,
+  globalRegistry: () => globalRegistry,
+  handleUnrepresentable: () => handleUnrepresentable,
+  initializeContext: () => initializeContext,
+  isBackEdge: () => isBackEdge,
+  isRecursiveSchema: () => isRecursiveSchema,
+  isValidBase64: () => isValidBase64,
+  isValidBase64URL: () => isValidBase64URL,
+  isValidCIDRv6: () => isValidCIDRv6,
+  isValidCreditCard: () => isValidCreditCard,
+  isValidIPv6: () => isValidIPv6,
+  isValidJWT: () => isValidJWT,
+  locales: () => exports_locales,
+  memoizer: () => memoizer,
+  mergeValues: () => mergeValues,
+  meta: () => meta,
+  parse: () => parse,
+  parseAsync: () => parseAsync,
+  parseURLObject: () => parseURLObject,
+  prettifyError: () => prettifyError,
+  process: () => process,
+  regexes: () => exports_regexes,
+  registry: () => registry,
+  safeDecode: () => safeDecode,
+  safeDecodeAsync: () => safeDecodeAsync,
+  safeEncode: () => safeEncode,
+  safeEncodeAsync: () => safeEncodeAsync,
+  safeParse: () => safeParse,
+  safeParseAsync: () => safeParseAsync,
+  standardProps: () => standardProps,
+  stripTabAndNewline: () => stripTabAndNewline,
+  toDotPath: () => toDotPath,
+  toJSONSchema: () => toJSONSchema,
+  toZod: () => toZod,
+  treeifyError: () => treeifyError,
+  urlHostnameOk: () => urlHostnameOk,
+  urlProtocolOk: () => urlProtocolOk,
+  util: () => exports_util,
+  validate: () => validate,
+  validateAsync: () => validateAsync,
+  version: () => version
 });
 var init_core2 = __esm(() => {
   init_util();
@@ -16260,36 +16260,36 @@ var init_core2 = __esm(() => {
 // node_modules/zod/v4/classic/checks.js
 var exports_checks2 = {};
 __export(exports_checks2, {
-  uppercase: () => _uppercase,
-  trim: () => _trim,
-  toUpperCase: () => _toUpperCase,
-  toLowerCase: () => _toLowerCase,
-  startsWith: () => _startsWith,
-  slugify: () => _slugify,
-  size: () => _size,
-  regex: () => _regex,
-  property: () => _property,
-  properties: () => _properties,
-  positive: () => _positive,
-  overwrite: () => _overwrite,
-  normalize: () => _normalize,
-  nonpositive: () => _nonpositive,
-  nonnegative: () => _nonnegative,
-  negative: () => _negative,
-  multipleOf: () => _multipleOf,
-  minSize: () => _minSize,
-  minLength: () => _minLength,
-  mime: () => _mime,
-  maxSize: () => _maxSize,
-  maxLength: () => _maxLength,
-  lte: () => _lte,
-  lt: () => _lt,
-  lowercase: () => _lowercase,
-  length: () => _length,
-  includes: () => _includes,
-  gte: () => _gte,
+  endsWith: () => _endsWith,
   gt: () => _gt,
-  endsWith: () => _endsWith
+  gte: () => _gte,
+  includes: () => _includes,
+  length: () => _length,
+  lowercase: () => _lowercase,
+  lt: () => _lt,
+  lte: () => _lte,
+  maxLength: () => _maxLength,
+  maxSize: () => _maxSize,
+  mime: () => _mime,
+  minLength: () => _minLength,
+  minSize: () => _minSize,
+  multipleOf: () => _multipleOf,
+  negative: () => _negative,
+  nonnegative: () => _nonnegative,
+  nonpositive: () => _nonpositive,
+  normalize: () => _normalize,
+  overwrite: () => _overwrite,
+  positive: () => _positive,
+  properties: () => _properties,
+  property: () => _property,
+  regex: () => _regex,
+  size: () => _size,
+  slugify: () => _slugify,
+  startsWith: () => _startsWith,
+  toLowerCase: () => _toLowerCase,
+  toUpperCase: () => _toUpperCase,
+  trim: () => _trim,
+  uppercase: () => _uppercase
 });
 var init_checks2 = __esm(() => {
   init_core2();
@@ -16369,178 +16369,178 @@ var init_parse2 = __esm(() => {
 // node_modules/zod/v4/classic/schemas.js
 var exports_schemas2 = {};
 __export(exports_schemas2, {
-  xor: () => xor,
-  xid: () => xid2,
-  void: () => _void2,
-  uuidv7: () => uuidv7,
-  uuidv6: () => uuidv6,
-  uuidv4: () => uuidv4,
-  uuid: () => uuid2,
-  url: () => url,
-  unknown: () => unknown,
-  union: () => union,
-  undefined: () => _undefined3,
-  ulid: () => ulid2,
-  uint64: () => uint64,
-  uint32: () => uint32,
-  tuple: () => tuple,
-  transform: () => transform,
-  templateLiteral: () => templateLiteral,
-  symbol: () => symbol,
-  superRefine: () => superRefine,
-  success: () => success,
-  stringbool: () => stringbool,
-  stringFormat: () => stringFormat,
-  string: () => string2,
-  strictObject: () => strictObject,
-  set: () => set,
-  refine: () => refine,
-  record: () => record,
-  readonly: () => readonly,
-  promise: () => promise,
-  preprocess: () => preprocess,
-  prefault: () => prefault,
-  pipe: () => pipe,
-  partialRecord: () => partialRecord,
-  optional: () => optional,
-  object: () => object,
-  number: () => number2,
-  nullish: () => nullish2,
-  nullable: () => nullable,
-  null: () => _null3,
-  nonoptional: () => nonoptional,
-  never: () => never,
-  nativeEnum: () => nativeEnum,
-  nanoid: () => nanoid2,
-  nan: () => nan,
-  meta: () => meta2,
-  map: () => map,
-  mac: () => mac2,
-  looseRecord: () => looseRecord,
-  looseObject: () => looseObject,
-  literal: () => literal,
-  lazy: () => lazy,
-  ksuid: () => ksuid2,
-  keyof: () => keyof,
-  jwt: () => jwt,
-  json: () => json,
-  ipv6: () => ipv62,
-  ipv4: () => ipv42,
-  invertCodec: () => invertCodec,
-  intersection: () => intersection,
-  int64: () => int64,
-  int32: () => int32,
-  int: () => int,
-  instanceof: () => _instanceof,
-  httpUrl: () => httpUrl,
-  hostname: () => hostname2,
-  hex: () => hex2,
-  hash: () => hash,
-  guid: () => guid2,
-  function: () => _function,
-  float64: () => float64,
-  float32: () => float32,
-  file: () => file,
-  exactOptional: () => exactOptional,
-  enum: () => _enum2,
-  emoji: () => emoji2,
-  email: () => email2,
-  e164: () => e1642,
-  discriminatedUnion: () => discriminatedUnion,
-  describe: () => describe2,
-  date: () => date2,
-  custom: () => custom,
-  cuid2: () => cuid22,
-  cuid: () => cuid3,
-  creditCard: () => creditCard2,
-  codec: () => codec,
-  cidrv6: () => cidrv62,
-  cidrv4: () => cidrv42,
-  check: () => check,
-  catch: () => _catch2,
-  boolean: () => boolean2,
-  bigint: () => bigint2,
-  base64url: () => base64url2,
-  base64: () => base642,
-  array: () => array,
-  any: () => any,
-  _function: () => _function,
-  _default: () => _default2,
-  _ZodString: () => _ZodString,
-  ZodXor: () => ZodXor,
-  ZodXID: () => ZodXID,
-  ZodVoid: () => ZodVoid,
-  ZodUnknown: () => ZodUnknown,
-  ZodUnion: () => ZodUnion,
-  ZodUndefined: () => ZodUndefined,
-  ZodUUID: () => ZodUUID,
-  ZodURL: () => ZodURL,
-  ZodULID: () => ZodULID,
-  ZodType: () => ZodType,
-  ZodTuple: () => ZodTuple,
-  ZodTransform: () => ZodTransform,
-  ZodTemplateLiteral: () => ZodTemplateLiteral,
-  ZodSymbol: () => ZodSymbol,
-  ZodSuccess: () => ZodSuccess,
-  ZodStringFormat: () => ZodStringFormat,
-  ZodString: () => ZodString,
-  ZodSet: () => ZodSet,
-  ZodRecord: () => ZodRecord,
-  ZodReadonly: () => ZodReadonly,
-  ZodPromise: () => ZodPromise,
-  ZodPreprocess: () => ZodPreprocess,
-  ZodPrefault: () => ZodPrefault,
-  ZodPipe: () => ZodPipe,
-  ZodOptional: () => ZodOptional,
-  ZodObject: () => ZodObject,
-  ZodNumberFormat: () => ZodNumberFormat,
-  ZodNumber: () => ZodNumber,
-  ZodNullable: () => ZodNullable,
-  ZodNull: () => ZodNull,
-  ZodNonOptional: () => ZodNonOptional,
-  ZodNever: () => ZodNever,
-  ZodNanoID: () => ZodNanoID,
-  ZodNaN: () => ZodNaN,
-  ZodMap: () => ZodMap,
-  ZodMAC: () => ZodMAC,
-  ZodLiteral: () => ZodLiteral,
-  ZodLazy: () => ZodLazy,
-  ZodKSUID: () => ZodKSUID,
-  ZodJWT: () => ZodJWT,
-  ZodIntersection: () => ZodIntersection,
-  ZodISOTime: () => ZodISOTime,
-  ZodISODuration: () => ZodISODuration,
-  ZodISODateTime: () => ZodISODateTime,
-  ZodISODate: () => ZodISODate,
-  ZodIPv6: () => ZodIPv6,
-  ZodIPv4: () => ZodIPv4,
-  ZodGUID: () => ZodGUID,
-  ZodFunction: () => ZodFunction,
-  ZodFile: () => ZodFile,
-  ZodExactOptional: () => ZodExactOptional,
-  ZodEnum: () => ZodEnum,
-  ZodEmoji: () => ZodEmoji,
-  ZodEmail: () => ZodEmail,
-  ZodE164: () => ZodE164,
-  ZodDiscriminatedUnion: () => ZodDiscriminatedUnion,
-  ZodDefault: () => ZodDefault,
-  ZodDate: () => ZodDate,
-  ZodCustomStringFormat: () => ZodCustomStringFormat,
-  ZodCustom: () => ZodCustom,
-  ZodCreditCard: () => ZodCreditCard,
-  ZodCodec: () => ZodCodec,
-  ZodCatch: () => ZodCatch,
-  ZodCUID2: () => ZodCUID2,
-  ZodCUID: () => ZodCUID,
-  ZodCIDRv6: () => ZodCIDRv6,
-  ZodCIDRv4: () => ZodCIDRv4,
-  ZodBoolean: () => ZodBoolean,
-  ZodBigIntFormat: () => ZodBigIntFormat,
-  ZodBigInt: () => ZodBigInt,
-  ZodBase64URL: () => ZodBase64URL,
-  ZodBase64: () => ZodBase64,
+  ZodAny: () => ZodAny,
   ZodArray: () => ZodArray,
-  ZodAny: () => ZodAny
+  ZodBase64: () => ZodBase64,
+  ZodBase64URL: () => ZodBase64URL,
+  ZodBigInt: () => ZodBigInt,
+  ZodBigIntFormat: () => ZodBigIntFormat,
+  ZodBoolean: () => ZodBoolean,
+  ZodCIDRv4: () => ZodCIDRv4,
+  ZodCIDRv6: () => ZodCIDRv6,
+  ZodCUID: () => ZodCUID,
+  ZodCUID2: () => ZodCUID2,
+  ZodCatch: () => ZodCatch,
+  ZodCodec: () => ZodCodec,
+  ZodCreditCard: () => ZodCreditCard,
+  ZodCustom: () => ZodCustom,
+  ZodCustomStringFormat: () => ZodCustomStringFormat,
+  ZodDate: () => ZodDate,
+  ZodDefault: () => ZodDefault,
+  ZodDiscriminatedUnion: () => ZodDiscriminatedUnion,
+  ZodE164: () => ZodE164,
+  ZodEmail: () => ZodEmail,
+  ZodEmoji: () => ZodEmoji,
+  ZodEnum: () => ZodEnum,
+  ZodExactOptional: () => ZodExactOptional,
+  ZodFile: () => ZodFile,
+  ZodFunction: () => ZodFunction,
+  ZodGUID: () => ZodGUID,
+  ZodIPv4: () => ZodIPv4,
+  ZodIPv6: () => ZodIPv6,
+  ZodISODate: () => ZodISODate,
+  ZodISODateTime: () => ZodISODateTime,
+  ZodISODuration: () => ZodISODuration,
+  ZodISOTime: () => ZodISOTime,
+  ZodIntersection: () => ZodIntersection,
+  ZodJWT: () => ZodJWT,
+  ZodKSUID: () => ZodKSUID,
+  ZodLazy: () => ZodLazy,
+  ZodLiteral: () => ZodLiteral,
+  ZodMAC: () => ZodMAC,
+  ZodMap: () => ZodMap,
+  ZodNaN: () => ZodNaN,
+  ZodNanoID: () => ZodNanoID,
+  ZodNever: () => ZodNever,
+  ZodNonOptional: () => ZodNonOptional,
+  ZodNull: () => ZodNull,
+  ZodNullable: () => ZodNullable,
+  ZodNumber: () => ZodNumber,
+  ZodNumberFormat: () => ZodNumberFormat,
+  ZodObject: () => ZodObject,
+  ZodOptional: () => ZodOptional,
+  ZodPipe: () => ZodPipe,
+  ZodPrefault: () => ZodPrefault,
+  ZodPreprocess: () => ZodPreprocess,
+  ZodPromise: () => ZodPromise,
+  ZodReadonly: () => ZodReadonly,
+  ZodRecord: () => ZodRecord,
+  ZodSet: () => ZodSet,
+  ZodString: () => ZodString,
+  ZodStringFormat: () => ZodStringFormat,
+  ZodSuccess: () => ZodSuccess,
+  ZodSymbol: () => ZodSymbol,
+  ZodTemplateLiteral: () => ZodTemplateLiteral,
+  ZodTransform: () => ZodTransform,
+  ZodTuple: () => ZodTuple,
+  ZodType: () => ZodType,
+  ZodULID: () => ZodULID,
+  ZodURL: () => ZodURL,
+  ZodUUID: () => ZodUUID,
+  ZodUndefined: () => ZodUndefined,
+  ZodUnion: () => ZodUnion,
+  ZodUnknown: () => ZodUnknown,
+  ZodVoid: () => ZodVoid,
+  ZodXID: () => ZodXID,
+  ZodXor: () => ZodXor,
+  _ZodString: () => _ZodString,
+  _default: () => _default2,
+  _function: () => _function,
+  any: () => any,
+  array: () => array,
+  base64: () => base642,
+  base64url: () => base64url2,
+  bigint: () => bigint2,
+  boolean: () => boolean2,
+  catch: () => _catch2,
+  check: () => check,
+  cidrv4: () => cidrv42,
+  cidrv6: () => cidrv62,
+  codec: () => codec,
+  creditCard: () => creditCard2,
+  cuid: () => cuid3,
+  cuid2: () => cuid22,
+  custom: () => custom,
+  date: () => date2,
+  describe: () => describe2,
+  discriminatedUnion: () => discriminatedUnion,
+  e164: () => e1642,
+  email: () => email2,
+  emoji: () => emoji2,
+  enum: () => _enum2,
+  exactOptional: () => exactOptional,
+  file: () => file,
+  float32: () => float32,
+  float64: () => float64,
+  function: () => _function,
+  guid: () => guid2,
+  hash: () => hash,
+  hex: () => hex2,
+  hostname: () => hostname2,
+  httpUrl: () => httpUrl,
+  instanceof: () => _instanceof,
+  int: () => int,
+  int32: () => int32,
+  int64: () => int64,
+  intersection: () => intersection,
+  invertCodec: () => invertCodec,
+  ipv4: () => ipv42,
+  ipv6: () => ipv62,
+  json: () => json,
+  jwt: () => jwt,
+  keyof: () => keyof,
+  ksuid: () => ksuid2,
+  lazy: () => lazy,
+  literal: () => literal,
+  looseObject: () => looseObject,
+  looseRecord: () => looseRecord,
+  mac: () => mac2,
+  map: () => map,
+  meta: () => meta2,
+  nan: () => nan,
+  nanoid: () => nanoid2,
+  nativeEnum: () => nativeEnum,
+  never: () => never,
+  nonoptional: () => nonoptional,
+  null: () => _null3,
+  nullable: () => nullable,
+  nullish: () => nullish2,
+  number: () => number2,
+  object: () => object,
+  optional: () => optional,
+  partialRecord: () => partialRecord,
+  pipe: () => pipe,
+  prefault: () => prefault,
+  preprocess: () => preprocess,
+  promise: () => promise,
+  readonly: () => readonly,
+  record: () => record,
+  refine: () => refine,
+  set: () => set,
+  strictObject: () => strictObject,
+  string: () => string2,
+  stringFormat: () => stringFormat,
+  stringbool: () => stringbool,
+  success: () => success,
+  superRefine: () => superRefine,
+  symbol: () => symbol,
+  templateLiteral: () => templateLiteral,
+  transform: () => transform,
+  tuple: () => tuple,
+  uint32: () => uint32,
+  uint64: () => uint64,
+  ulid: () => ulid2,
+  undefined: () => _undefined3,
+  union: () => union,
+  unknown: () => unknown,
+  url: () => url,
+  uuid: () => uuid2,
+  uuidv4: () => uuidv4,
+  uuidv6: () => uuidv6,
+  uuidv7: () => uuidv7,
+  void: () => _void2,
+  xid: () => xid2,
+  xor: () => xor
 });
 function _ensureDefaultLocale() {
   if (!globalConfig.localeError)
@@ -17986,14 +17986,14 @@ var init_compat = __esm(() => {
 // node_modules/zod/v4/classic/iso.js
 var exports_iso = {};
 __export(exports_iso, {
-  time: () => time2,
-  duration: () => duration2,
-  datetime: () => datetime2,
-  date: () => date3,
-  ZodISOTime: () => ZodISOTime,
-  ZodISODuration: () => ZodISODuration,
+  ZodISODate: () => ZodISODate,
   ZodISODateTime: () => ZodISODateTime,
-  ZodISODate: () => ZodISODate
+  ZodISODuration: () => ZodISODuration,
+  ZodISOTime: () => ZodISOTime,
+  date: () => date3,
+  datetime: () => datetime2,
+  duration: () => duration2,
+  time: () => time2
 });
 function datetime2(params) {
   return _isoDateTime(ZodISODateTime, params);
@@ -18756,11 +18756,11 @@ var init_in_out = __esm(() => {
 // node_modules/zod/v4/classic/coerce.js
 var exports_coerce = {};
 __export(exports_coerce, {
-  string: () => string3,
-  number: () => number3,
-  date: () => date4,
+  bigint: () => bigint3,
   boolean: () => boolean3,
-  bigint: () => bigint3
+  date: () => date4,
+  number: () => number3,
+  string: () => string3
 });
 function string3(params) {
   return _coercedString(ZodString, params);
@@ -18785,258 +18785,258 @@ var init_coerce = __esm(() => {
 // node_modules/zod/v4/classic/external.js
 var exports_external = {};
 __export(exports_external, {
-  xor: () => xor,
-  xid: () => xid2,
-  void: () => _void2,
-  validateAsync: () => validateAsync,
-  validate: () => validate,
-  uuidv7: () => uuidv7,
-  uuidv6: () => uuidv6,
-  uuidv4: () => uuidv4,
-  uuid: () => uuid2,
-  util: () => exports_util,
-  url: () => url,
-  uppercase: () => _uppercase,
-  unknown: () => unknown,
-  union: () => union,
-  undefined: () => _undefined3,
-  ulid: () => ulid2,
-  uint64: () => uint64,
-  uint32: () => uint32,
-  tuple: () => tuple,
-  trim: () => _trim,
-  treeifyError: () => treeifyError,
-  transform: () => transform,
-  toZod: () => toZod,
-  toUpperCase: () => _toUpperCase,
-  toLowerCase: () => _toLowerCase,
-  toJSONSchema: () => toJSONSchema,
-  templateLiteral: () => templateLiteral,
-  symbol: () => symbol,
-  superRefine: () => superRefine,
-  success: () => success,
-  stringbool: () => stringbool,
-  stringFormat: () => stringFormat,
-  string: () => string2,
-  strictObject: () => strictObject,
-  startsWith: () => _startsWith,
-  slugify: () => _slugify,
-  size: () => _size,
-  setErrorMap: () => setErrorMap,
-  set: () => set,
-  safeParseAsync: () => safeParseAsync2,
-  safeParse: () => safeParse2,
-  safeEncodeAsync: () => safeEncodeAsync2,
-  safeEncode: () => safeEncode2,
-  safeDecodeAsync: () => safeDecodeAsync2,
-  safeDecode: () => safeDecode2,
-  registry: () => registry,
-  regexes: () => exports_regexes,
-  regex: () => _regex,
-  refine: () => refine,
-  record: () => record,
-  readonly: () => readonly,
-  property: () => _property,
-  properties: () => _properties,
-  promise: () => promise,
-  prettifyError: () => prettifyError,
-  preprocess: () => preprocess,
-  prefault: () => prefault,
-  positive: () => _positive,
-  pipe: () => pipe,
-  partialRecord: () => partialRecord,
-  parseAsync: () => parseAsync2,
-  parse: () => parse3,
-  overwrite: () => _overwrite,
-  output: () => output,
-  optional: () => optional,
-  object: () => object,
-  number: () => number2,
-  nullish: () => nullish2,
-  nullable: () => nullable,
-  null: () => _null3,
-  normalize: () => _normalize,
-  nonpositive: () => _nonpositive,
-  nonoptional: () => nonoptional,
-  nonnegative: () => _nonnegative,
-  never: () => never,
-  negative: () => _negative,
-  nativeEnum: () => nativeEnum,
-  nanoid: () => nanoid2,
-  nan: () => nan,
-  multipleOf: () => _multipleOf,
-  minSize: () => _minSize,
-  minLength: () => _minLength,
-  mime: () => _mime,
-  meta: () => meta2,
-  memoizer: () => memoizer,
-  maxSize: () => _maxSize,
-  maxLength: () => _maxLength,
-  map: () => map,
-  mac: () => mac2,
-  lte: () => _lte,
-  lt: () => _lt,
-  lowercase: () => _lowercase,
-  looseRecord: () => looseRecord,
-  looseObject: () => looseObject,
-  locales: () => exports_locales,
-  literal: () => literal,
-  length: () => _length,
-  lazy: () => lazy,
-  ksuid: () => ksuid2,
-  keyof: () => keyof,
-  jwt: () => jwt,
-  json: () => json,
-  iso: () => exports_iso,
-  ipv6: () => ipv62,
-  ipv4: () => ipv42,
-  invertCodec: () => invertCodec,
-  intersection: () => intersection,
-  int64: () => int64,
-  int32: () => int32,
-  int: () => int,
-  instanceof: () => _instanceof,
-  input: () => input,
-  includes: () => _includes,
-  httpUrl: () => httpUrl,
-  hostname: () => hostname2,
-  hex: () => hex2,
-  hash: () => hash,
-  guid: () => guid2,
-  gte: () => _gte,
-  gt: () => _gt,
-  globalRegistry: () => globalRegistry,
-  getErrorMap: () => getErrorMap,
-  getDiscriminatedOption: () => getDiscriminatedOption,
-  function: () => _function,
-  fromJSONSchema: () => fromJSONSchema,
-  formatError: () => formatError,
-  float64: () => float64,
-  float32: () => float32,
-  flattenError: () => flattenError,
-  file: () => file,
-  exactOptional: () => exactOptional,
-  enum: () => _enum2,
-  endsWith: () => _endsWith,
-  encodeAsync: () => encodeAsync2,
-  encode: () => encode2,
-  emoji: () => emoji2,
-  email: () => email2,
-  e164: () => e1642,
-  discriminatedUnion: () => discriminatedUnion,
-  describe: () => describe2,
-  deepPartial: () => deepPartial,
-  decodeAsync: () => decodeAsync2,
-  decode: () => decode2,
-  date: () => date2,
-  custom: () => custom,
-  cuid2: () => cuid22,
-  cuid: () => cuid3,
-  creditCard: () => creditCard2,
-  core: () => exports_core2,
-  config: () => config,
-  compile: () => compile,
-  coerce: () => exports_coerce,
-  codec: () => codec,
-  clone: () => clone,
-  cidrv6: () => cidrv62,
-  cidrv4: () => cidrv42,
-  check: () => check,
-  catch: () => _catch2,
-  boolean: () => boolean2,
-  bigint: () => bigint2,
-  base64url: () => base64url2,
-  base64: () => base642,
-  array: () => array,
-  any: () => any,
-  _function: () => _function,
-  _default: () => _default2,
-  _ZodString: () => _ZodString,
-  ZodXor: () => ZodXor,
-  ZodXID: () => ZodXID,
-  ZodVoid: () => ZodVoid,
-  ZodUnknown: () => ZodUnknown,
-  ZodUnion: () => ZodUnion,
-  ZodUndefined: () => ZodUndefined,
-  ZodUUID: () => ZodUUID,
-  ZodURL: () => ZodURL,
-  ZodULID: () => ZodULID,
-  ZodType: () => ZodType,
-  ZodTuple: () => ZodTuple,
-  ZodTransform: () => ZodTransform,
-  ZodTemplateLiteral: () => ZodTemplateLiteral,
-  ZodSymbol: () => ZodSymbol,
-  ZodSuccess: () => ZodSuccess,
-  ZodStringFormat: () => ZodStringFormat,
-  ZodString: () => ZodString,
-  ZodSet: () => ZodSet,
-  ZodRecord: () => ZodRecord,
-  ZodRealError: () => ZodRealError,
-  ZodReadonly: () => ZodReadonly,
-  ZodPromise: () => ZodPromise,
-  ZodPreprocess: () => ZodPreprocess,
-  ZodPrefault: () => ZodPrefault,
-  ZodPipe: () => ZodPipe,
-  ZodOptional: () => ZodOptional,
-  ZodObject: () => ZodObject,
-  ZodNumberFormat: () => ZodNumberFormat,
-  ZodNumber: () => ZodNumber,
-  ZodNullable: () => ZodNullable,
-  ZodNull: () => ZodNull,
-  ZodNonOptional: () => ZodNonOptional,
-  ZodNever: () => ZodNever,
-  ZodNanoID: () => ZodNanoID,
-  ZodNaN: () => ZodNaN,
-  ZodMap: () => ZodMap,
-  ZodMAC: () => ZodMAC,
-  ZodLiteral: () => ZodLiteral,
-  ZodLazy: () => ZodLazy,
-  ZodKSUID: () => ZodKSUID,
-  ZodJWT: () => ZodJWT,
-  ZodIssueCode: () => ZodIssueCode,
-  ZodIntersection: () => ZodIntersection,
-  ZodISOTime: () => ZodISOTime,
-  ZodISODuration: () => ZodISODuration,
-  ZodISODateTime: () => ZodISODateTime,
-  ZodISODate: () => ZodISODate,
-  ZodIPv6: () => ZodIPv6,
-  ZodIPv4: () => ZodIPv4,
-  ZodGUID: () => ZodGUID,
-  ZodFunction: () => ZodFunction,
-  ZodFirstPartyTypeKind: () => ZodFirstPartyTypeKind,
-  ZodFile: () => ZodFile,
-  ZodExactOptional: () => ZodExactOptional,
-  ZodError: () => ZodError,
-  ZodEnum: () => ZodEnum,
-  ZodEmoji: () => ZodEmoji,
-  ZodEmail: () => ZodEmail,
-  ZodE164: () => ZodE164,
-  ZodDiscriminatedUnion: () => ZodDiscriminatedUnion,
-  ZodDefault: () => ZodDefault,
-  ZodDate: () => ZodDate,
-  ZodCustomStringFormat: () => ZodCustomStringFormat,
-  ZodCustom: () => ZodCustom,
-  ZodCreditCard: () => ZodCreditCard,
-  ZodCompileUnsupportedError: () => ZodCompileUnsupportedError,
-  ZodCompileAsyncError: () => ZodCompileAsyncError,
-  ZodCodec: () => ZodCodec,
-  ZodCatch: () => ZodCatch,
-  ZodCUID2: () => ZodCUID2,
-  ZodCUID: () => ZodCUID,
-  ZodCIDRv6: () => ZodCIDRv6,
-  ZodCIDRv4: () => ZodCIDRv4,
-  ZodBoolean: () => ZodBoolean,
-  ZodBigIntFormat: () => ZodBigIntFormat,
-  ZodBigInt: () => ZodBigInt,
-  ZodBase64URL: () => ZodBase64URL,
-  ZodBase64: () => ZodBase64,
-  ZodArray: () => ZodArray,
-  ZodAny: () => ZodAny,
-  TimePrecision: () => TimePrecision,
-  NEVER: () => NEVER,
-  $output: () => $output,
+  $brand: () => $brand,
   $input: () => $input,
-  $brand: () => $brand
+  $output: () => $output,
+  NEVER: () => NEVER,
+  TimePrecision: () => TimePrecision,
+  ZodAny: () => ZodAny,
+  ZodArray: () => ZodArray,
+  ZodBase64: () => ZodBase64,
+  ZodBase64URL: () => ZodBase64URL,
+  ZodBigInt: () => ZodBigInt,
+  ZodBigIntFormat: () => ZodBigIntFormat,
+  ZodBoolean: () => ZodBoolean,
+  ZodCIDRv4: () => ZodCIDRv4,
+  ZodCIDRv6: () => ZodCIDRv6,
+  ZodCUID: () => ZodCUID,
+  ZodCUID2: () => ZodCUID2,
+  ZodCatch: () => ZodCatch,
+  ZodCodec: () => ZodCodec,
+  ZodCompileAsyncError: () => ZodCompileAsyncError,
+  ZodCompileUnsupportedError: () => ZodCompileUnsupportedError,
+  ZodCreditCard: () => ZodCreditCard,
+  ZodCustom: () => ZodCustom,
+  ZodCustomStringFormat: () => ZodCustomStringFormat,
+  ZodDate: () => ZodDate,
+  ZodDefault: () => ZodDefault,
+  ZodDiscriminatedUnion: () => ZodDiscriminatedUnion,
+  ZodE164: () => ZodE164,
+  ZodEmail: () => ZodEmail,
+  ZodEmoji: () => ZodEmoji,
+  ZodEnum: () => ZodEnum,
+  ZodError: () => ZodError,
+  ZodExactOptional: () => ZodExactOptional,
+  ZodFile: () => ZodFile,
+  ZodFirstPartyTypeKind: () => ZodFirstPartyTypeKind,
+  ZodFunction: () => ZodFunction,
+  ZodGUID: () => ZodGUID,
+  ZodIPv4: () => ZodIPv4,
+  ZodIPv6: () => ZodIPv6,
+  ZodISODate: () => ZodISODate,
+  ZodISODateTime: () => ZodISODateTime,
+  ZodISODuration: () => ZodISODuration,
+  ZodISOTime: () => ZodISOTime,
+  ZodIntersection: () => ZodIntersection,
+  ZodIssueCode: () => ZodIssueCode,
+  ZodJWT: () => ZodJWT,
+  ZodKSUID: () => ZodKSUID,
+  ZodLazy: () => ZodLazy,
+  ZodLiteral: () => ZodLiteral,
+  ZodMAC: () => ZodMAC,
+  ZodMap: () => ZodMap,
+  ZodNaN: () => ZodNaN,
+  ZodNanoID: () => ZodNanoID,
+  ZodNever: () => ZodNever,
+  ZodNonOptional: () => ZodNonOptional,
+  ZodNull: () => ZodNull,
+  ZodNullable: () => ZodNullable,
+  ZodNumber: () => ZodNumber,
+  ZodNumberFormat: () => ZodNumberFormat,
+  ZodObject: () => ZodObject,
+  ZodOptional: () => ZodOptional,
+  ZodPipe: () => ZodPipe,
+  ZodPrefault: () => ZodPrefault,
+  ZodPreprocess: () => ZodPreprocess,
+  ZodPromise: () => ZodPromise,
+  ZodReadonly: () => ZodReadonly,
+  ZodRealError: () => ZodRealError,
+  ZodRecord: () => ZodRecord,
+  ZodSet: () => ZodSet,
+  ZodString: () => ZodString,
+  ZodStringFormat: () => ZodStringFormat,
+  ZodSuccess: () => ZodSuccess,
+  ZodSymbol: () => ZodSymbol,
+  ZodTemplateLiteral: () => ZodTemplateLiteral,
+  ZodTransform: () => ZodTransform,
+  ZodTuple: () => ZodTuple,
+  ZodType: () => ZodType,
+  ZodULID: () => ZodULID,
+  ZodURL: () => ZodURL,
+  ZodUUID: () => ZodUUID,
+  ZodUndefined: () => ZodUndefined,
+  ZodUnion: () => ZodUnion,
+  ZodUnknown: () => ZodUnknown,
+  ZodVoid: () => ZodVoid,
+  ZodXID: () => ZodXID,
+  ZodXor: () => ZodXor,
+  _ZodString: () => _ZodString,
+  _default: () => _default2,
+  _function: () => _function,
+  any: () => any,
+  array: () => array,
+  base64: () => base642,
+  base64url: () => base64url2,
+  bigint: () => bigint2,
+  boolean: () => boolean2,
+  catch: () => _catch2,
+  check: () => check,
+  cidrv4: () => cidrv42,
+  cidrv6: () => cidrv62,
+  clone: () => clone,
+  codec: () => codec,
+  coerce: () => exports_coerce,
+  compile: () => compile,
+  config: () => config,
+  core: () => exports_core2,
+  creditCard: () => creditCard2,
+  cuid: () => cuid3,
+  cuid2: () => cuid22,
+  custom: () => custom,
+  date: () => date2,
+  decode: () => decode2,
+  decodeAsync: () => decodeAsync2,
+  deepPartial: () => deepPartial,
+  describe: () => describe2,
+  discriminatedUnion: () => discriminatedUnion,
+  e164: () => e1642,
+  email: () => email2,
+  emoji: () => emoji2,
+  encode: () => encode2,
+  encodeAsync: () => encodeAsync2,
+  endsWith: () => _endsWith,
+  enum: () => _enum2,
+  exactOptional: () => exactOptional,
+  file: () => file,
+  flattenError: () => flattenError,
+  float32: () => float32,
+  float64: () => float64,
+  formatError: () => formatError,
+  fromJSONSchema: () => fromJSONSchema,
+  function: () => _function,
+  getDiscriminatedOption: () => getDiscriminatedOption,
+  getErrorMap: () => getErrorMap,
+  globalRegistry: () => globalRegistry,
+  gt: () => _gt,
+  gte: () => _gte,
+  guid: () => guid2,
+  hash: () => hash,
+  hex: () => hex2,
+  hostname: () => hostname2,
+  httpUrl: () => httpUrl,
+  includes: () => _includes,
+  input: () => input,
+  instanceof: () => _instanceof,
+  int: () => int,
+  int32: () => int32,
+  int64: () => int64,
+  intersection: () => intersection,
+  invertCodec: () => invertCodec,
+  ipv4: () => ipv42,
+  ipv6: () => ipv62,
+  iso: () => exports_iso,
+  json: () => json,
+  jwt: () => jwt,
+  keyof: () => keyof,
+  ksuid: () => ksuid2,
+  lazy: () => lazy,
+  length: () => _length,
+  literal: () => literal,
+  locales: () => exports_locales,
+  looseObject: () => looseObject,
+  looseRecord: () => looseRecord,
+  lowercase: () => _lowercase,
+  lt: () => _lt,
+  lte: () => _lte,
+  mac: () => mac2,
+  map: () => map,
+  maxLength: () => _maxLength,
+  maxSize: () => _maxSize,
+  memoizer: () => memoizer,
+  meta: () => meta2,
+  mime: () => _mime,
+  minLength: () => _minLength,
+  minSize: () => _minSize,
+  multipleOf: () => _multipleOf,
+  nan: () => nan,
+  nanoid: () => nanoid2,
+  nativeEnum: () => nativeEnum,
+  negative: () => _negative,
+  never: () => never,
+  nonnegative: () => _nonnegative,
+  nonoptional: () => nonoptional,
+  nonpositive: () => _nonpositive,
+  normalize: () => _normalize,
+  null: () => _null3,
+  nullable: () => nullable,
+  nullish: () => nullish2,
+  number: () => number2,
+  object: () => object,
+  optional: () => optional,
+  output: () => output,
+  overwrite: () => _overwrite,
+  parse: () => parse3,
+  parseAsync: () => parseAsync2,
+  partialRecord: () => partialRecord,
+  pipe: () => pipe,
+  positive: () => _positive,
+  prefault: () => prefault,
+  preprocess: () => preprocess,
+  prettifyError: () => prettifyError,
+  promise: () => promise,
+  properties: () => _properties,
+  property: () => _property,
+  readonly: () => readonly,
+  record: () => record,
+  refine: () => refine,
+  regex: () => _regex,
+  regexes: () => exports_regexes,
+  registry: () => registry,
+  safeDecode: () => safeDecode2,
+  safeDecodeAsync: () => safeDecodeAsync2,
+  safeEncode: () => safeEncode2,
+  safeEncodeAsync: () => safeEncodeAsync2,
+  safeParse: () => safeParse2,
+  safeParseAsync: () => safeParseAsync2,
+  set: () => set,
+  setErrorMap: () => setErrorMap,
+  size: () => _size,
+  slugify: () => _slugify,
+  startsWith: () => _startsWith,
+  strictObject: () => strictObject,
+  string: () => string2,
+  stringFormat: () => stringFormat,
+  stringbool: () => stringbool,
+  success: () => success,
+  superRefine: () => superRefine,
+  symbol: () => symbol,
+  templateLiteral: () => templateLiteral,
+  toJSONSchema: () => toJSONSchema,
+  toLowerCase: () => _toLowerCase,
+  toUpperCase: () => _toUpperCase,
+  toZod: () => toZod,
+  transform: () => transform,
+  treeifyError: () => treeifyError,
+  trim: () => _trim,
+  tuple: () => tuple,
+  uint32: () => uint32,
+  uint64: () => uint64,
+  ulid: () => ulid2,
+  undefined: () => _undefined3,
+  union: () => union,
+  unknown: () => unknown,
+  uppercase: () => _uppercase,
+  url: () => url,
+  util: () => exports_util,
+  uuid: () => uuid2,
+  uuidv4: () => uuidv4,
+  uuidv6: () => uuidv6,
+  uuidv7: () => uuidv7,
+  validate: () => validate,
+  validateAsync: () => validateAsync,
+  void: () => _void2,
+  xid: () => xid2,
+  xor: () => xor
 });
 var init_external = __esm(() => {
   init_core2();
@@ -26355,7 +26355,7 @@ var init_character_dna_store = __esm(() => {
 });
 
 // node_modules/yaml/dist/nodes/identity.js
-var require_identity = __commonJS((exports) => {
+var require_identity = __commonJS(function(exports) {
   var ALIAS = Symbol.for("yaml.alias");
   var DOC = Symbol.for("yaml.document");
   var MAP = Symbol.for("yaml.map");
@@ -26409,7 +26409,7 @@ var require_identity = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/visit.js
-var require_visit = __commonJS((exports) => {
+var require_visit = __commonJS(function(exports) {
   var identity = require_identity();
   var BREAK = Symbol("break visit");
   var SKIP = Symbol("skip children");
@@ -26564,7 +26564,7 @@ var require_visit = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/doc/directives.js
-var require_directives = __commonJS((exports) => {
+var require_directives = __commonJS(function(exports) {
   var identity = require_identity();
   var visit2 = require_visit();
   var escapeChars = {
@@ -26716,7 +26716,7 @@ var require_directives = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/doc/anchors.js
-var require_anchors = __commonJS((exports) => {
+var require_anchors = __commonJS(function(exports) {
   var identity = require_identity();
   var visit2 = require_visit();
   function anchorIsValid(anchor2) {
@@ -26778,7 +26778,7 @@ var require_anchors = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/doc/applyReviver.js
-var require_applyReviver = __commonJS((exports) => {
+var require_applyReviver = __commonJS(function(exports) {
   function applyReviver(reviver, obj, key, val) {
     if (val && typeof val === "object") {
       if (Array.isArray(val)) {
@@ -26825,7 +26825,7 @@ var require_applyReviver = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/nodes/toJS.js
-var require_toJS = __commonJS((exports) => {
+var require_toJS = __commonJS(function(exports) {
   var identity = require_identity();
   function toJS(value, arg, ctx) {
     if (Array.isArray(value))
@@ -26852,7 +26852,7 @@ var require_toJS = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/nodes/Node.js
-var require_Node = __commonJS((exports) => {
+var require_Node = __commonJS(function(exports) {
   var applyReviver = require_applyReviver();
   var identity = require_identity();
   var toJS = require_toJS();
@@ -26889,7 +26889,7 @@ var require_Node = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/nodes/Alias.js
-var require_Alias = __commonJS((exports) => {
+var require_Alias = __commonJS(function(exports) {
   var anchors = require_anchors();
   var visit2 = require_visit();
   var identity = require_identity();
@@ -27001,7 +27001,7 @@ var require_Alias = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/nodes/Scalar.js
-var require_Scalar = __commonJS((exports) => {
+var require_Scalar = __commonJS(function(exports) {
   var identity = require_identity();
   var Node = require_Node();
   var toJS = require_toJS();
@@ -27029,7 +27029,7 @@ var require_Scalar = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/doc/createNode.js
-var require_createNode = __commonJS((exports) => {
+var require_createNode = __commonJS(function(exports) {
   var Alias = require_Alias();
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -27101,7 +27101,7 @@ var require_createNode = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/nodes/Collection.js
-var require_Collection = __commonJS((exports) => {
+var require_Collection = __commonJS(function(exports) {
   var createNode = require_createNode();
   var identity = require_identity();
   var Node = require_Node();
@@ -27216,7 +27216,7 @@ var require_Collection = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/stringify/stringifyComment.js
-var require_stringifyComment = __commonJS((exports) => {
+var require_stringifyComment = __commonJS(function(exports) {
   var stringifyComment = (str) => str.replace(/^(?!$)(?: $)?/gm, "#");
   function indentComment(comment, indent) {
     if (/^\n+$/.test(comment))
@@ -27233,7 +27233,7 @@ var require_stringifyComment = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/stringify/foldFlowLines.js
-var require_foldFlowLines = __commonJS((exports) => {
+var require_foldFlowLines = __commonJS(function(exports) {
   var FOLD_FLOW = "flow";
   var FOLD_BLOCK = "block";
   var FOLD_QUOTED = "quoted";
@@ -27370,7 +27370,7 @@ ${indent}${text.slice(fold + 1, end2)}`;
 });
 
 // node_modules/yaml/dist/stringify/stringifyString.js
-var require_stringifyString = __commonJS((exports) => {
+var require_stringifyString = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   var foldFlowLines = require_foldFlowLines();
   var getFoldOptions = (ctx, isBlock) => ({
@@ -27668,7 +27668,7 @@ ${indent}`);
 });
 
 // node_modules/yaml/dist/stringify/stringify.js
-var require_stringify = __commonJS((exports) => {
+var require_stringify = __commonJS(function(exports) {
   var anchors = require_anchors();
   var identity = require_identity();
   var stringifyComment = require_stringifyComment();
@@ -27789,7 +27789,7 @@ ${ctx.indent}${str}`;
 });
 
 // node_modules/yaml/dist/stringify/stringifyPair.js
-var require_stringifyPair = __commonJS((exports) => {
+var require_stringifyPair = __commonJS(function(exports) {
   var identity = require_identity();
   var Scalar = require_Scalar();
   var stringify = require_stringify();
@@ -27925,7 +27925,7 @@ ${ctx.indent}`;
 });
 
 // node_modules/yaml/dist/log.js
-var require_log = __commonJS((exports) => {
+var require_log = __commonJS(function(exports) {
   var node_process = __require("process");
   function debug(logLevel, ...messages) {
     if (logLevel === "debug")
@@ -27944,7 +27944,7 @@ var require_log = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/schema/yaml-1.1/merge.js
-var require_merge = __commonJS((exports) => {
+var require_merge = __commonJS(function(exports) {
   var identity = require_identity();
   var Scalar = require_Scalar();
   var MERGE_KEY = "<<";
@@ -28001,7 +28001,7 @@ var require_merge = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/nodes/addPairToJSMap.js
-var require_addPairToJSMap = __commonJS((exports) => {
+var require_addPairToJSMap = __commonJS(function(exports) {
   var log = require_log();
   var merge2 = require_merge();
   var stringify = require_stringify();
@@ -28062,7 +28062,7 @@ var require_addPairToJSMap = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/nodes/Pair.js
-var require_Pair = __commonJS((exports) => {
+var require_Pair = __commonJS(function(exports) {
   var createNode = require_createNode();
   var stringifyPair = require_stringifyPair();
   var addPairToJSMap = require_addPairToJSMap();
@@ -28100,7 +28100,7 @@ var require_Pair = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/stringify/stringifyCollection.js
-var require_stringifyCollection = __commonJS((exports) => {
+var require_stringifyCollection = __commonJS(function(exports) {
   var identity = require_identity();
   var stringify = require_stringify();
   var stringifyComment = require_stringifyComment();
@@ -28252,7 +28252,7 @@ ${indent}${end}`;
 });
 
 // node_modules/yaml/dist/nodes/YAMLMap.js
-var require_YAMLMap = __commonJS((exports) => {
+var require_YAMLMap = __commonJS(function(exports) {
   var stringifyCollection = require_stringifyCollection();
   var addPairToJSMap = require_addPairToJSMap();
   var Collection = require_Collection();
@@ -28379,7 +28379,7 @@ var require_YAMLMap = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/schema/common/map.js
-var require_map = __commonJS((exports) => {
+var require_map = __commonJS(function(exports) {
   var identity = require_identity();
   var YAMLMap = require_YAMLMap();
   var map2 = {
@@ -28398,7 +28398,7 @@ var require_map = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/nodes/YAMLSeq.js
-var require_YAMLSeq = __commonJS((exports) => {
+var require_YAMLSeq = __commonJS(function(exports) {
   var createNode = require_createNode();
   var stringifyCollection = require_stringifyCollection();
   var Collection = require_Collection();
@@ -28491,7 +28491,7 @@ var require_YAMLSeq = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/schema/common/seq.js
-var require_seq = __commonJS((exports) => {
+var require_seq = __commonJS(function(exports) {
   var identity = require_identity();
   var YAMLSeq = require_YAMLSeq();
   var seq = {
@@ -28510,7 +28510,7 @@ var require_seq = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/schema/common/string.js
-var require_string = __commonJS((exports) => {
+var require_string = __commonJS(function(exports) {
   var stringifyString = require_stringifyString();
   var string4 = {
     identify: (value) => typeof value === "string",
@@ -28526,7 +28526,7 @@ var require_string = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/schema/common/null.js
-var require_null = __commonJS((exports) => {
+var require_null = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   var nullTag = {
     identify: (value) => value == null,
@@ -28541,7 +28541,7 @@ var require_null = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/schema/core/bool.js
-var require_bool = __commonJS((exports) => {
+var require_bool = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   var boolTag = {
     identify: (value) => typeof value === "boolean",
@@ -28562,7 +28562,7 @@ var require_bool = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/stringify/stringifyNumber.js
-var require_stringifyNumber = __commonJS((exports) => {
+var require_stringifyNumber = __commonJS(function(exports) {
   function stringifyNumber({ format, minFractionDigits, tag, value }) {
     if (typeof value === "bigint")
       return String(value);
@@ -28586,7 +28586,7 @@ var require_stringifyNumber = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/schema/core/float.js
-var require_float = __commonJS((exports) => {
+var require_float = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
   var floatNaN = {
@@ -28629,7 +28629,7 @@ var require_float = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/schema/core/int.js
-var require_int = __commonJS((exports) => {
+var require_int = __commonJS(function(exports) {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
   var intResolve = (str, offset, radix, { intAsBigInt }) => intAsBigInt ? BigInt(str) : parseInt(str.substring(offset), radix);
@@ -28671,7 +28671,7 @@ var require_int = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/schema/core/schema.js
-var require_schema = __commonJS((exports) => {
+var require_schema = __commonJS(function(exports) {
   var map2 = require_map();
   var _null4 = require_null();
   var seq = require_seq();
@@ -28696,7 +28696,7 @@ var require_schema = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/schema/json/schema.js
-var require_schema2 = __commonJS((exports) => {
+var require_schema2 = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   var map2 = require_map();
   var seq = require_seq();
@@ -28760,7 +28760,7 @@ var require_schema2 = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/schema/yaml-1.1/binary.js
-var require_binary = __commonJS((exports) => {
+var require_binary = __commonJS(function(exports) {
   var node_buffer = __require("buffer");
   var Scalar = require_Scalar();
   var stringifyString = require_stringifyString();
@@ -28815,7 +28815,7 @@ var require_binary = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/schema/yaml-1.1/pairs.js
-var require_pairs = __commonJS((exports) => {
+var require_pairs = __commonJS(function(exports) {
   var identity = require_identity();
   var Pair = require_Pair();
   var Scalar = require_Scalar();
@@ -28890,7 +28890,7 @@ ${cn.comment}` : item.comment;
 });
 
 // node_modules/yaml/dist/schema/yaml-1.1/omap.js
-var require_omap = __commonJS((exports) => {
+var require_omap = __commonJS(function(exports) {
   var identity = require_identity();
   var toJS = require_toJS();
   var YAMLMap = require_YAMLMap();
@@ -28962,7 +28962,7 @@ var require_omap = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/schema/yaml-1.1/bool.js
-var require_bool2 = __commonJS((exports) => {
+var require_bool2 = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   function boolStringify({ value, source }, ctx) {
     const boolObj = value ? trueTag : falseTag;
@@ -28991,7 +28991,7 @@ var require_bool2 = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/schema/yaml-1.1/float.js
-var require_float2 = __commonJS((exports) => {
+var require_float2 = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
   var floatNaN = {
@@ -29037,7 +29037,7 @@ var require_float2 = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/schema/yaml-1.1/int.js
-var require_int2 = __commonJS((exports) => {
+var require_int2 = __commonJS(function(exports) {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
   function intResolve(str, offset, radix, { intAsBigInt }) {
@@ -29113,7 +29113,7 @@ var require_int2 = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/schema/yaml-1.1/set.js
-var require_set = __commonJS((exports) => {
+var require_set = __commonJS(function(exports) {
   var identity = require_identity();
   var Pair = require_Pair();
   var YAMLMap = require_YAMLMap();
@@ -29196,7 +29196,7 @@ var require_set = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
-var require_timestamp = __commonJS((exports) => {
+var require_timestamp = __commonJS(function(exports) {
   var stringifyNumber = require_stringifyNumber();
   function parseSexagesimal(str, asBigInt) {
     const sign = str[0];
@@ -29278,7 +29278,7 @@ var require_timestamp = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/schema/yaml-1.1/schema.js
-var require_schema3 = __commonJS((exports) => {
+var require_schema3 = __commonJS(function(exports) {
   var map2 = require_map();
   var _null4 = require_null();
   var seq = require_seq();
@@ -29319,7 +29319,7 @@ var require_schema3 = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/schema/tags.js
-var require_tags = __commonJS((exports) => {
+var require_tags = __commonJS(function(exports) {
   var map2 = require_map();
   var _null4 = require_null();
   var seq = require_seq();
@@ -29410,7 +29410,7 @@ var require_tags = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/schema/Schema.js
-var require_Schema = __commonJS((exports) => {
+var require_Schema = __commonJS(function(exports) {
   var identity = require_identity();
   var map2 = require_map();
   var seq = require_seq();
@@ -29440,7 +29440,7 @@ var require_Schema = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/stringify/stringifyDocument.js
-var require_stringifyDocument = __commonJS((exports) => {
+var require_stringifyDocument = __commonJS(function(exports) {
   var identity = require_identity();
   var stringify = require_stringify();
   var stringifyComment = require_stringifyComment();
@@ -29520,7 +29520,7 @@ var require_stringifyDocument = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/doc/Document.js
-var require_Document = __commonJS((exports) => {
+var require_Document = __commonJS(function(exports) {
   var Alias = require_Alias();
   var Collection = require_Collection();
   var identity = require_identity();
@@ -29755,7 +29755,7 @@ var require_Document = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/errors.js
-var require_errors = __commonJS((exports) => {
+var require_errors = __commonJS(function(exports) {
   class YAMLError extends Error {
     constructor(name, pos, code, message) {
       super();
@@ -29820,7 +29820,7 @@ ${pointer}
 });
 
 // node_modules/yaml/dist/compose/resolve-props.js
-var require_resolve_props = __commonJS((exports) => {
+var require_resolve_props = __commonJS(function(exports) {
   function resolveProps(tokens, { flow, indicator, next, offset, onError, parentIndent, startOnNewline }) {
     let spaceBefore = false;
     let atNewline = startOnNewline;
@@ -29950,7 +29950,7 @@ var require_resolve_props = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/compose/util-contains-newline.js
-var require_util_contains_newline = __commonJS((exports) => {
+var require_util_contains_newline = __commonJS(function(exports) {
   function containsNewline(key) {
     if (!key)
       return null;
@@ -29990,7 +29990,7 @@ var require_util_contains_newline = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/compose/util-flow-indent-check.js
-var require_util_flow_indent_check = __commonJS((exports) => {
+var require_util_flow_indent_check = __commonJS(function(exports) {
   var utilContainsNewline = require_util_contains_newline();
   function flowIndentCheck(indent, fc, onError) {
     if (fc?.type === "flow-collection") {
@@ -30005,7 +30005,7 @@ var require_util_flow_indent_check = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/compose/util-map-includes.js
-var require_util_map_includes = __commonJS((exports) => {
+var require_util_map_includes = __commonJS(function(exports) {
   var identity = require_identity();
   function mapIncludes(ctx, items, search) {
     const { uniqueKeys } = ctx.options;
@@ -30018,7 +30018,7 @@ var require_util_map_includes = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/compose/resolve-block-map.js
-var require_resolve_block_map = __commonJS((exports) => {
+var require_resolve_block_map = __commonJS(function(exports) {
   var Pair = require_Pair();
   var YAMLMap = require_YAMLMap();
   var resolveProps = require_resolve_props();
@@ -30125,7 +30125,7 @@ var require_resolve_block_map = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/compose/resolve-block-seq.js
-var require_resolve_block_seq = __commonJS((exports) => {
+var require_resolve_block_seq = __commonJS(function(exports) {
   var YAMLSeq = require_YAMLSeq();
   var resolveProps = require_resolve_props();
   var utilFlowIndentCheck = require_util_flow_indent_check();
@@ -30173,7 +30173,7 @@ var require_resolve_block_seq = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/compose/resolve-end.js
-var require_resolve_end = __commonJS((exports) => {
+var require_resolve_end = __commonJS(function(exports) {
   function resolveEnd(end, offset, reqSpace, onError) {
     let comment = "";
     if (end) {
@@ -30213,7 +30213,7 @@ var require_resolve_end = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/compose/resolve-flow-collection.js
-var require_resolve_flow_collection = __commonJS((exports) => {
+var require_resolve_flow_collection = __commonJS(function(exports) {
   var identity = require_identity();
   var Pair = require_Pair();
   var YAMLMap = require_YAMLMap();
@@ -30404,7 +30404,7 @@ var require_resolve_flow_collection = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/compose/compose-collection.js
-var require_compose_collection = __commonJS((exports) => {
+var require_compose_collection = __commonJS(function(exports) {
   var identity = require_identity();
   var Scalar = require_Scalar();
   var YAMLMap = require_YAMLMap();
@@ -30466,7 +30466,7 @@ var require_compose_collection = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/compose/resolve-block-scalar.js
-var require_resolve_block_scalar = __commonJS((exports) => {
+var require_resolve_block_scalar = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   function resolveBlockScalar(ctx, scalar, onError) {
     const start = scalar.offset;
@@ -30659,7 +30659,7 @@ var require_resolve_block_scalar = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/compose/resolve-flow-scalar.js
-var require_resolve_flow_scalar = __commonJS((exports) => {
+var require_resolve_flow_scalar = __commonJS(function(exports) {
   var Scalar = require_Scalar();
   var resolveEnd = require_resolve_end();
   function resolveFlowScalar(scalar, strict, onError) {
@@ -30875,7 +30875,7 @@ var require_resolve_flow_scalar = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/compose/compose-scalar.js
-var require_compose_scalar = __commonJS((exports) => {
+var require_compose_scalar = __commonJS(function(exports) {
   var identity = require_identity();
   var Scalar = require_Scalar();
   var resolveBlockScalar = require_resolve_block_scalar();
@@ -30953,7 +30953,7 @@ var require_compose_scalar = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/compose/util-empty-scalar-position.js
-var require_util_empty_scalar_position = __commonJS((exports) => {
+var require_util_empty_scalar_position = __commonJS(function(exports) {
   function emptyScalarPosition(offset, before, pos) {
     if (before) {
       pos ?? (pos = before.length);
@@ -30980,7 +30980,7 @@ var require_util_empty_scalar_position = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/compose/compose-node.js
-var require_compose_node = __commonJS((exports) => {
+var require_compose_node = __commonJS(function(exports) {
   var Alias = require_Alias();
   var identity = require_identity();
   var composeCollection = require_compose_collection();
@@ -31083,7 +31083,7 @@ var require_compose_node = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/compose/compose-doc.js
-var require_compose_doc = __commonJS((exports) => {
+var require_compose_doc = __commonJS(function(exports) {
   var Document = require_Document();
   var composeNode = require_compose_node();
   var resolveEnd = require_resolve_end();
@@ -31123,7 +31123,7 @@ var require_compose_doc = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/compose/composer.js
-var require_composer = __commonJS((exports) => {
+var require_composer = __commonJS(function(exports) {
   var node_process = __require("process");
   var directives = require_directives();
   var Document = require_Document();
@@ -31314,7 +31314,7 @@ ${end.comment}` : end.comment;
 });
 
 // node_modules/yaml/dist/parse/cst-scalar.js
-var require_cst_scalar = __commonJS((exports) => {
+var require_cst_scalar = __commonJS(function(exports) {
   var resolveBlockScalar = require_resolve_block_scalar();
   var resolveFlowScalar = require_resolve_flow_scalar();
   var errors3 = require_errors();
@@ -31504,7 +31504,7 @@ var require_cst_scalar = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/parse/cst-stringify.js
-var require_cst_stringify = __commonJS((exports) => {
+var require_cst_stringify = __commonJS(function(exports) {
   var stringify = (cst) => ("type" in cst) ? stringifyToken(cst) : stringifyItem(cst);
   function stringifyToken(token) {
     switch (token.type) {
@@ -31562,7 +31562,7 @@ var require_cst_stringify = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/parse/cst-visit.js
-var require_cst_visit = __commonJS((exports) => {
+var require_cst_visit = __commonJS(function(exports) {
   var BREAK = Symbol("break visit");
   var SKIP = Symbol("skip children");
   var REMOVE = Symbol("remove item");
@@ -31621,7 +31621,7 @@ var require_cst_visit = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/parse/cst.js
-var require_cst = __commonJS((exports) => {
+var require_cst = __commonJS(function(exports) {
   var cstScalar = require_cst_scalar();
   var cstStringify = require_cst_stringify();
   var cstVisit = require_cst_visit();
@@ -31722,7 +31722,7 @@ var require_cst = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/parse/lexer.js
-var require_lexer = __commonJS((exports) => {
+var require_lexer = __commonJS(function(exports) {
   var cst = require_cst();
   function isEmpty(ch) {
     switch (ch) {
@@ -32319,7 +32319,7 @@ var require_lexer = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/parse/line-counter.js
-var require_line_counter = __commonJS((exports) => {
+var require_line_counter = __commonJS(function(exports) {
   class LineCounter {
     constructor() {
       this.lineStarts = [];
@@ -32347,7 +32347,7 @@ var require_line_counter = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/parse/parser.js
-var require_parser = __commonJS((exports) => {
+var require_parser = __commonJS(function(exports) {
   var node_process = __require("process");
   var cst = require_cst();
   var lexer = require_lexer();
@@ -33203,7 +33203,7 @@ var require_parser = __commonJS((exports) => {
 });
 
 // node_modules/yaml/dist/public-api.js
-var require_public_api = __commonJS((exports) => {
+var require_public_api = __commonJS(function(exports) {
   var composer = require_composer();
   var Document = require_Document();
   var errors3 = require_errors();
@@ -35698,11 +35698,16 @@ function linkLocationEdge(a, b) {
 }
 function harvestTurnStoryDNA(plan, set2, swipeTag, prevLocationName, options) {
   let changed = false;
+  let skippedNames = 0;
   let lastLoc = prevLocationName ? findMatchingLocation(set2.locations, prevLocationName) : undefined;
   for (const scene of plan.scenes) {
     const locName = scene.environment.location?.trim();
     if (!locName || isMetaScenarioWrapper(locName))
       continue;
+    if (!LocationDNASchema.shape.name.safeParse(locName).success) {
+      skippedNames++;
+      continue;
+    }
     const deletedMatch = findMatchingLocation(set2.deletedLocations ?? {}, locName) ?? set2.deletedLocations?.[createLocationId(locName)];
     if (deletedMatch)
       continue;
@@ -35813,6 +35818,10 @@ function harvestTurnStoryDNA(plan, set2, swipeTag, prevLocationName, options) {
     const placeName = ref.name.trim();
     if (!placeName || isMetaScenarioWrapper(placeName))
       continue;
+    if (!LocationDNASchema.shape.name.safeParse(placeName).success) {
+      skippedNames++;
+      continue;
+    }
     const deletedMatch = findMatchingLocation(set2.deletedLocations ?? {}, placeName) ?? set2.deletedLocations?.[createLocationId(placeName)];
     if (deletedMatch)
       continue;
@@ -35867,6 +35876,10 @@ ${line2}`;
     const cleanName = name.trim();
     if (!cleanName)
       return;
+    if (!ItemDNASchema.shape.name.safeParse(cleanName).success) {
+      skippedNames++;
+      return;
+    }
     const deleted = findMatchingItem(set2.deletedItems ?? {}, cleanName) ?? set2.deletedItems?.[createItemId(cleanName)];
     if (deleted)
       return;
@@ -36252,6 +36265,8 @@ ${line2}`;
       set2.thoughtCabinet = ledger.slice(-40);
     }
   }
+  if (skippedNames > 0)
+    options?.onSkippedNames?.(skippedNames);
   return changed;
 }
 function responseText(value) {
@@ -45970,19 +45985,20 @@ var init_schemas3 = __esm(() => {
 });
 
 // src/backend/runtime/story-dna-store.ts
-async function read2(spindle2, chatId, userId) {
-  const raw = await spindle2.userStorage?.getJson(pathFor2(chatId), { fallback: null, ...userId ? { userId } : {} });
+async function loadStoryDNASet(spindle2, chatId, userId) {
+  const storage = spindle2.userStorage;
+  const path2 = pathFor2(chatId);
+  const raw = await storage?.getJson(path2, { fallback: null, ...userId ? { userId } : {} });
   if (raw === null || raw === undefined) {
-    return { raw: null, set: { locations: {}, items: {}, revision: 0 } };
+    const stat = await storage?.stat?.(path2, userId);
+    if (!stat?.exists)
+      return { locations: {}, items: {}, revision: 0 };
   }
   const parsed = StoryDNASetSchema.safeParse(raw);
-  if (parsed.success) {
-    return { raw, set: parsed.data };
+  if (!parsed.success) {
+    throw new Error("Saved Story DNA could not be read. The stored data has been preserved.");
   }
-  return { raw, set: { locations: {}, items: {}, revision: 0 } };
-}
-async function loadStoryDNASet(spindle2, chatId, userId) {
-  return (await read2(spindle2, chatId, userId)).set;
+  return parsed.data;
 }
 async function mutateStoryDNASet(spindle2, chatId, userId, expectedRevision, mutation) {
   if (!spindle2.userStorage)
@@ -45995,15 +46011,19 @@ async function mutateStoryDNASet(spindle2, chatId, userId, expectedRevision, mut
   const key = JSON.stringify([userId ?? null, chatId]);
   const previous = scopes.get(key) ?? Promise.resolve();
   const pending = previous.catch(() => {}).then(async () => {
-    const { set: set2 } = await read2(spindle2, chatId, userId);
+    const set2 = await loadStoryDNASet(spindle2, chatId, userId);
     if (expectedRevision !== undefined && expectedRevision !== (set2.revision ?? 0)) {
       throw new Error("Story DNA changed. Reload the latest data before saving.");
     }
     mutation(set2);
     set2.revision = (set2.revision ?? 0) + 1;
+    const candidate = StoryDNASetSchema.safeParse(set2);
+    if (!candidate.success) {
+      throw new Error("Story DNA update contains invalid fields. No changes were saved.");
+    }
     const options2 = { indent: 2, ...userId ? { userId } : {} };
-    await spindle2.userStorage.setJson(pathFor2(chatId), set2, options2);
-    return set2;
+    await spindle2.userStorage.setJson(pathFor2(chatId), candidate.data, options2);
+    return candidate.data;
   });
   scopes.set(key, pending);
   try {
@@ -49036,12 +49056,12 @@ function normalizedScript(value, scope2, now) {
     return sourceStatus("lumiscript", "invalid");
   return proposalEvidence("lumiscript", parsed.data, now);
 }
-async function collectContextSources(read3, config2, scope2, signal, options2 = {}) {
+async function collectContextSources(read2, config2, scope2, signal, options2 = {}) {
   const now = options2.now ?? Date.now();
   const one = async (provider, endpoint) => {
     if (!endpoint)
       return sourceStatus(provider, "disabled");
-    if (!read3 || signal.aborted)
+    if (!read2 || signal.aborted)
       return sourceStatus(provider, "unavailable");
     let timer;
     let timedOut = false;
@@ -49054,7 +49074,7 @@ async function collectContextSources(read3, config2, scope2, signal, options2 = 
       abort = () => resolve(sourceStatus(provider, "unavailable"));
       signal.addEventListener("abort", abort, { once: true });
     });
-    const result = Promise.resolve().then(() => read3(endpoint)).then((value) => {
+    const result = Promise.resolve().then(() => read2(endpoint)).then((value) => {
       if (timedOut || signal.aborted)
         return sourceStatus(provider, "unavailable");
       try {
@@ -49169,7 +49189,7 @@ async function collectCharacterDnaEvidence(spindle2, input2) {
     for (const passage of targetDnaPassages(m.content, [target2.name, ...target2.aliases]))
       add(`Story ${m.id}`, passage);
   if (config2.includeSimTrackerContext) {
-    const trackerScope = visible.length ? visible : messages.length ? messages : [];
+    const trackerScope = visible;
     const latest = trackerScope.at(-1);
     if (latest) {
       const tracker = scanTrackerCastHistory(trackerScope, latest.id, config2.simTrackerMappings);
@@ -53867,7 +53887,7 @@ function promptWriterFields(value, fallbackNegative) {
   const auxiliary = ["explanation", "notes", "reasoning", "character_count", "characterCount", "combinedCharacters", "totalCharacters"];
   if (Object.keys(object3).some((key) => ![...positive, ...negative, ...auxiliary].includes(key)))
     return fail("unexpected fields; return prompt and negativePrompt only.");
-  const read3 = (keys, kind, optional2) => {
+  const read2 = (keys, kind, optional2) => {
     const values = keys.filter((key) => object3[key] !== undefined && object3[key] !== null).map((key) => object3[key]);
     if (values.some((item) => {
       if (item && typeof item === "object" && !Array.isArray(item) && "high_level_description" in item) {
@@ -53886,11 +53906,11 @@ function promptWriterFields(value, fallbackNegative) {
       return fail(`${kind} exceeds the internal 65,000-character safety limit.`);
     return text3;
   };
-  const prompt = read3(positive, "positive prompt", false);
+  const prompt = read2(positive, "positive prompt", false);
   if (!prompt.trim())
     return fail("positive prompt must be non-empty text.");
   const isIdeogramPrompt = prompt.trim().startsWith("{") && prompt.includes("high_level_description");
-  return { prompt: prompt.trim(), negativePrompt: isIdeogramPrompt ? "" : read3(negative, "negative prompt", true) ?? fallbackNegative };
+  return { prompt: prompt.trim(), negativePrompt: isIdeogramPrompt ? "" : read2(negative, "negative prompt", true) ?? fallbackNegative };
 }
 
 // src/shared/prompt-scene-evidence.ts
@@ -54857,7 +54877,7 @@ var init_protocol = __esm(() => {
     keyLightDirection: exports_external.enum(["left", "right", "backlit", "overhead", "ambient"]).optional(),
     mood: exports_external.string().trim().max(64).optional()
   }).strict();
-  PrepareImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_prepare_image"), ...imageOperationScope, jobId: exports_external.string().min(1).max(200), templateId: exports_external.string().min(1).max(100).optional(), ...imagePromptOperation, regeneratePrompt: exports_external.boolean().optional(), promptOperation: exports_external.enum(["rewrite", "enrich"]).optional(), reframe: exports_external.boolean().optional(), relight: exports_external.boolean().optional(), lockContinuity: exports_external.boolean().optional(), styleId: exports_external.string().max(100).optional(), fitToModel: exports_external.boolean().optional(), model: exports_external.string().max(200).optional(), connectionId: exports_external.string().max(200).optional(), quickGenerate: exports_external.boolean().optional(), manualCamera: exports_external.object({ shotSize: exports_external.string().optional(), angle: exports_external.string().optional(), lensFeel: exports_external.string().optional(), composition: exports_external.string().optional(), depth: exports_external.string().optional(), dialogueSafeArea: exports_external.enum(["auto", "always", "off"]).optional(), focalPoint: exports_external.object({ x: exports_external.number().min(0).max(100), y: exports_external.number().min(0).max(100) }).strict().optional() }).strict().optional(), manualLighting: ManualLightingSchema.optional() }).strict();
+  PrepareImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_prepare_image"), ...imageOperationScope, jobId: exports_external.string().min(1).max(200), directorScope: exports_external.object({ swipeId: exports_external.number().int().nonnegative(), revision: exports_external.number().int().nonnegative(), paragraphIndex: exports_external.number().int().nonnegative() }).strict().optional(), templateId: exports_external.string().min(1).max(100).optional(), ...imagePromptOperation, regeneratePrompt: exports_external.boolean().optional(), promptOperation: exports_external.enum(["rewrite", "enrich"]).optional(), reframe: exports_external.boolean().optional(), relight: exports_external.boolean().optional(), lockContinuity: exports_external.boolean().optional(), styleId: exports_external.string().max(100).optional(), fitToModel: exports_external.boolean().optional(), model: exports_external.string().max(200).optional(), connectionId: exports_external.string().max(200).optional(), quickGenerate: exports_external.boolean().optional(), manualCamera: exports_external.object({ shotSize: exports_external.string().optional(), angle: exports_external.string().optional(), lensFeel: exports_external.string().optional(), composition: exports_external.string().optional(), depth: exports_external.string().optional(), dialogueSafeArea: exports_external.enum(["auto", "always", "off"]).optional(), focalPoint: exports_external.object({ x: exports_external.number().min(0).max(100), y: exports_external.number().min(0).max(100) }).strict().optional() }).strict().optional(), manualLighting: ManualLightingSchema.optional() }).strict();
   RestorePreviousImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_restore_previous_image"), ...imageOperationScope, swipeId: exports_external.number().int().nonnegative().nullable(), revision: exports_external.number().int().nonnegative(), jobId: exports_external.string().min(1).max(200), versionId: exports_external.string().min(1).max(256) }).strict();
   DeleteImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_delete_image"), chatId: exports_external.string().min(1).max(256), imageId: exports_external.string().min(1).max(256).optional(), imageUrl: exports_external.string().min(1).max(2048).optional(), jobId: exports_external.string().min(1).max(256).optional() }).strict();
   GenerateDocumentImageRequestSchema = exports_external.object({
@@ -55431,44 +55451,44 @@ var init_reference_source = __esm(() => {
 // src/backend/runtime/images.ts
 var exports_images = {};
 __export(exports_images, {
-  splitConnectionSelection: () => splitConnectionSelection,
-  sceneImageIdentityFor: () => sceneImageIdentityFor,
-  sceneForCue: () => sceneForCue,
-  retainPlanEpisodes: () => retainPlanEpisodes,
-  resolveSceneImageProvider: () => resolveSceneImageProvider,
-  resolveCueCharacterVisualState: () => resolveCueCharacterVisualState,
-  resolveCacheCues: () => resolveCacheCues,
-  referenceParametersFor: () => referenceParametersFor,
-  referenceAnchoringEnabled: () => referenceAnchoringEnabled,
-  prepareAssetJobs: () => prepareAssetJobs,
-  portraitIdentityFingerprint: () => portraitIdentityFingerprint,
-  parseDataUrl: () => parseDataUrl,
-  multiReferenceParametersFor: () => multiReferenceParametersFor,
-  locationArtIdentityFor: () => locationArtIdentityFor,
-  isClothingTag: () => isClothingTag,
-  hydrateDnaReferenceImages: () => hydrateDnaReferenceImages,
-  generateAssets: () => generateAssets,
-  describeCue: () => describeCue,
-  defaultSceneImageVerifier: () => defaultSceneImageVerifier,
-  cueUsesCharacterReference: () => cueUsesCharacterReference,
-  cueCharacterName: () => cueCharacterName,
-  createAssetJobs: () => createAssetJobs,
-  computeDeterministicV2Plan: () => computeDeterministicV2Plan,
-  compileTemplateCue: () => compileTemplateCue,
-  compileNovelAiRequest: () => compileNovelAiRequest,
-  compileNegativePrompt: () => compileNegativePrompt,
-  compileImagePrompt: () => compileImagePrompt,
-  compatiblePortrait: () => compatiblePortrait,
-  cleanClothingFromPhrase: () => cleanClothingFromPhrase,
-  classifySubject: () => classifySubject,
-  castArtIdentityFor: () => castArtIdentityFor,
-  castAppearanceIdentity: () => castAppearanceIdentity,
-  cardReferenceForCache: () => cardReferenceForCache,
-  cardPortraitKey: () => cardPortraitKey,
-  cardPortraitFor: () => cardPortraitFor,
-  cacheEligibleCue: () => cacheEligibleCue,
+  CACHE_JOB_PROVIDER: () => CACHE_JOB_PROVIDER,
   applyAttireOverride: () => applyAttireOverride,
-  CACHE_JOB_PROVIDER: () => CACHE_JOB_PROVIDER
+  cacheEligibleCue: () => cacheEligibleCue,
+  cardPortraitFor: () => cardPortraitFor,
+  cardPortraitKey: () => cardPortraitKey,
+  cardReferenceForCache: () => cardReferenceForCache,
+  castAppearanceIdentity: () => castAppearanceIdentity,
+  castArtIdentityFor: () => castArtIdentityFor,
+  classifySubject: () => classifySubject,
+  cleanClothingFromPhrase: () => cleanClothingFromPhrase,
+  compatiblePortrait: () => compatiblePortrait,
+  compileImagePrompt: () => compileImagePrompt,
+  compileNegativePrompt: () => compileNegativePrompt,
+  compileNovelAiRequest: () => compileNovelAiRequest,
+  compileTemplateCue: () => compileTemplateCue,
+  computeDeterministicV2Plan: () => computeDeterministicV2Plan,
+  createAssetJobs: () => createAssetJobs,
+  cueCharacterName: () => cueCharacterName,
+  cueUsesCharacterReference: () => cueUsesCharacterReference,
+  defaultSceneImageVerifier: () => defaultSceneImageVerifier,
+  describeCue: () => describeCue,
+  generateAssets: () => generateAssets,
+  hydrateDnaReferenceImages: () => hydrateDnaReferenceImages,
+  isClothingTag: () => isClothingTag,
+  locationArtIdentityFor: () => locationArtIdentityFor,
+  multiReferenceParametersFor: () => multiReferenceParametersFor,
+  parseDataUrl: () => parseDataUrl,
+  portraitIdentityFingerprint: () => portraitIdentityFingerprint,
+  prepareAssetJobs: () => prepareAssetJobs,
+  referenceAnchoringEnabled: () => referenceAnchoringEnabled,
+  referenceParametersFor: () => referenceParametersFor,
+  resolveCacheCues: () => resolveCacheCues,
+  resolveCueCharacterVisualState: () => resolveCueCharacterVisualState,
+  resolveSceneImageProvider: () => resolveSceneImageProvider,
+  retainPlanEpisodes: () => retainPlanEpisodes,
+  sceneForCue: () => sceneForCue,
+  sceneImageIdentityFor: () => sceneImageIdentityFor,
+  splitConnectionSelection: () => splitConnectionSelection
 });
 function hash2(source) {
   let value = 2166136261;
@@ -58603,7 +58623,7 @@ async function handleStoryDnaRequest(spindle2, rawRequest, userId) {
         messageId: request.messageId,
         set: current
       });
-      const storyDna = await saveLocationDNA(spindle2, request.chatId, drafted, userId);
+      const storyDna = await saveLocationDNA(spindle2, request.chatId, drafted, userId, current.revision ?? 0);
       await reply(storyDna);
       return;
     }
@@ -58627,7 +58647,7 @@ async function handleStoryDnaRequest(spindle2, rawRequest, userId) {
         messageId: request.messageId,
         set: current
       });
-      const storyDna = await saveItemDNA(spindle2, request.chatId, drafted, userId);
+      const storyDna = await saveItemDNA(spindle2, request.chatId, drafted, userId, current.revision ?? 0);
       await reply(storyDna);
       return;
     }
@@ -60079,6 +60099,7 @@ function scheduleSplitHorizonLore(spindle2, params) {
             harvestTurnStoryDNA(updated.plan, set2, swipeTag, params.prevLocationName, {
               mindLedgerEnabled: config2.mindLedgerEnabled,
               chapterCodexEnabled: config2.chapterCodexEnabled,
+              onSkippedNames: (count2) => spindle2.log.warn(`Story DNA skipped ${count2} invalid inferred names.`),
               sidecar: {
                 npcBeliefs: lore.npcBeliefs,
                 threadUpdates: lore.threadUpdates
@@ -61042,6 +61063,10 @@ async function prepareSingleImageUnlocked(spindle2, request, userId, quick) {
   const job = record5.jobs.find((entry) => entry.jobId === request.jobId);
   if (!job || ![...record5.plan.visualCues, ...record5.plan.cacheCues ?? []].some((cue) => cue.assetJobId === job.jobId))
     throw new Error("This picture cannot be prepared from this turn.");
+  const directorScope = request.type === "vn_prepare_image" ? request.directorScope : undefined;
+  if (directorScope && (directorScope.swipeId !== record5.plan.key.swipeId || directorScope.revision !== record5.plan.key.revision || directorScope.paragraphIndex !== job.paragraphIndex)) {
+    throw new Error("This Director request belongs to an older passage.");
+  }
   if (job.provider === CACHE_JOB_PROVIDER)
     throw new Error("This is a reuse-only picture outside the image budget. Choose one of this reply\u2019s generated pictures instead.");
   const previousImages = { ...record5.previousImages };
@@ -61079,7 +61104,7 @@ async function prepareSingleImageUnlocked(spindle2, request, userId, quick) {
     return;
   spindle2.sendToFrontend({ type: "vn_turn", turn: view }, userId);
   const rebuildOpts = request.type === "vn_prepare_image" && (request.reframe || request.relight || request.lockContinuity || request.manualLighting || request.styleId || request.fitToModel || request.model || request.connectionId || request.manualCamera) ? { ...request.reframe !== undefined ? { reframe: request.reframe } : {}, ...request.relight !== undefined ? { relight: request.relight } : {}, ...request.lockContinuity !== undefined ? { lockContinuity: request.lockContinuity } : {}, ...request.manualLighting !== undefined ? { manualLighting: request.manualLighting } : {}, ...request.styleId !== undefined ? { styleId: request.styleId } : {}, ...request.fitToModel !== undefined ? { fitToModel: request.fitToModel } : {}, ...request.model !== undefined ? { model: request.model } : {}, ...request.connectionId !== undefined ? { connectionId: request.connectionId } : {}, ...request.manualCamera !== undefined ? { manualCamera: request.manualCamera } : {} } : undefined;
-  await startAssets(spindle2, next, path3, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId], ...quick || request.type === "vn_prepare_image" && request.quickGenerate ? { quickGenerate: true } : {}, ...request.type === "vn_prepare_image" && request.edits ? { initialEdits: request.edits } : {}, ...request.type === "vn_prepare_image" && (request.regeneratePrompt === true || request.promptOperation) ? { regeneratePrompt: true, ...request.promptOperation ? { promptOperation: request.promptOperation } : {}, ...request.guidance ? { guidance: request.guidance } : {}, ...request.pinnedClauses?.length ? { pinnedClauses: request.pinnedClauses } : {} } : {}, ...rebuildOpts ? { rebuild: rebuildOpts } : {} });
+  await startAssets(spindle2, next, path3, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId], ...quick || request.type === "vn_prepare_image" && !directorScope && request.quickGenerate ? { quickGenerate: true } : {}, ...request.type === "vn_prepare_image" && request.edits ? { initialEdits: request.edits } : {}, ...request.type === "vn_prepare_image" && (request.regeneratePrompt === true || request.promptOperation) ? { regeneratePrompt: true, ...request.promptOperation ? { promptOperation: request.promptOperation } : {}, ...request.guidance ? { guidance: request.guidance } : {}, ...request.pinnedClauses?.length ? { pinnedClauses: request.pinnedClauses } : {} } : {}, ...rebuildOpts ? { rebuild: rebuildOpts } : {} });
 }
 async function processAssistantMessage(spindle2, chatId, message, content2, userId, options3) {
   if (!content2.trim() || message.is_user)
@@ -61510,7 +61535,11 @@ async function processAssistantMessage(spindle2, chatId, message, content2, user
           });
         }
         await mutateStoryDNASet(spindle2, chatId, userId, undefined, (set2) => {
-          harvestTurnStoryDNA(record5.plan, set2, swipeTag, prevLocationName, { mindLedgerEnabled: config2.mindLedgerEnabled, chapterCodexEnabled: config2.chapterCodexEnabled });
+          harvestTurnStoryDNA(record5.plan, set2, swipeTag, prevLocationName, {
+            mindLedgerEnabled: config2.mindLedgerEnabled,
+            chapterCodexEnabled: config2.chapterCodexEnabled,
+            onSkippedNames: (count2) => spindle2.log.warn(`Story DNA skipped ${count2} invalid inferred names.`)
+          });
           if (isSameSwipeReplan) {
             const scrubbed = scrubStoryDNASwipes(set2, { [record5.plan.key.assistantMessageId]: swipeTag });
             set2.locations = scrubbed.locations;

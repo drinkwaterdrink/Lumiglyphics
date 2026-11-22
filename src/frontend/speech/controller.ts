@@ -80,11 +80,11 @@ const DEFAULT_MAX_CACHE_ITEMS = 16;
 const DEFAULT_MAX_CACHE_BYTES = 32 * 1024 * 1024;
 const PROFILE_MEMO_TTL_MS = 30_000;
 
-/** Splits long passages on sentence boundaries so synthesis never exceeds provider limits. */
+/** Prefer sentences and words, but honor the transport limit even for a single long token. */
 export function splitSpeechChunks(text: string, maxChars = 1900): string[] {
   const trimmed = text.trim();
   if (!trimmed || trimmed.length <= maxChars) return trimmed ? [trimmed] : [];
-  const sentences = trimmed.match(/[^.!?]+(?:[.!?]+|$)/g) ?? [trimmed];
+  const sentences = trimmed.split(/(?<=[.!?])\s+/u);
   const chunks: string[] = [];
   let current = "";
   for (const rawSentence of sentences) {
@@ -92,10 +92,18 @@ export function splitSpeechChunks(text: string, maxChars = 1900): string[] {
     if (!sentence) continue;
     if (current && current.length + 1 + sentence.length > maxChars) {
       chunks.push(current);
-      current = sentence;
-    } else {
-      current = current ? `${current} ${sentence}` : sentence;
+      current = "";
     }
+    let remaining = sentence;
+    while (remaining.length > maxChars) {
+      const space = remaining.slice(0, maxChars + 1).search(/\s+\S*$/u);
+      let end = space > 0 ? space : maxChars;
+      const last = remaining.charCodeAt(end - 1);
+      if (end > 1 && last >= 0xd800 && last <= 0xdbff) end--;
+      chunks.push(remaining.slice(0, end));
+      remaining = remaining.slice(end).trimStart();
+    }
+    if (remaining) current = current ? `${current} ${remaining}` : remaining;
   }
   if (current) chunks.push(current);
   return chunks.length > 0 ? chunks : [trimmed];
@@ -238,6 +246,10 @@ export class SpeechController {
       this.audio?.pause();
       this.playState = "paused";
       this.publish({ kind: "paused", ...this.speakerLabel() });
+      return;
+    }
+    if (this.inflight) {
+      this.stop("paused during synthesis");
       return;
     }
     if (this.playState !== "playing") return;
@@ -492,9 +504,6 @@ export class SpeechController {
       return this.transport.synthesize({ ref, text: outbound }, signal);
     }
     const chunks = splitSpeechChunks(outbound, 1900);
-    if (chunks.length <= 1) {
-      return this.transport.synthesize({ ref, text: outbound }, signal);
-    }
     const blobs: Blob[] = [];
     for (const chunk of chunks) {
       if (signal.aborted) break;

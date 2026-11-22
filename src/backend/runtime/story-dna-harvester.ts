@@ -9,6 +9,8 @@ import {
   findMatchingItem,
   findMatchingLocation,
   isStoryEntryActiveOnBranch,
+  ItemDNASchema,
+  LocationDNASchema,
   type ItemDNA,
   type LocationDNA,
   type NpcBelief,
@@ -151,6 +153,7 @@ export function harvestTurnStoryDNA(
   options?: {
     mindLedgerEnabled?: boolean;
     chapterCodexEnabled?: boolean;
+    onSkippedNames?: (count: number) => void;
     sidecar?: {
       npcBeliefs?: readonly { npc: string; topic: string; belief: string; status: 'knows' | 'suspects' | 'unaware' }[];
       threadUpdates?: readonly { title: string; action: 'open' | 'advance' | 'resolve'; summary?: string }[];
@@ -158,6 +161,7 @@ export function harvestTurnStoryDNA(
   }
 ): boolean {
   let changed = false;
+  let skippedNames = 0;
   let lastLoc: LocationDNA | undefined = prevLocationName
     ? findMatchingLocation(set.locations, prevLocationName)
     : undefined;
@@ -165,6 +169,7 @@ export function harvestTurnStoryDNA(
   for (const scene of plan.scenes) {
     const locName = scene.environment.location?.trim();
     if (!locName || isMetaScenarioWrapper(locName)) continue;
+    if (!LocationDNASchema.shape.name.safeParse(locName).success) { skippedNames++; continue; }
     const deletedMatch = findMatchingLocation(set.deletedLocations ?? {}, locName)
       ?? set.deletedLocations?.[createLocationId(locName)];
     if (deletedMatch) continue;
@@ -279,6 +284,7 @@ export function harvestTurnStoryDNA(
     if (ref.kind !== 'place') continue;
     const placeName = ref.name.trim();
     if (!placeName || isMetaScenarioWrapper(placeName)) continue;
+    if (!LocationDNASchema.shape.name.safeParse(placeName).success) { skippedNames++; continue; }
     const deletedMatch = findMatchingLocation(set.deletedLocations ?? {}, placeName)
       ?? set.deletedLocations?.[createLocationId(placeName)];
     if (deletedMatch) continue;
@@ -346,6 +352,7 @@ export function harvestTurnStoryDNA(
   ) => {
     const cleanName = name.trim();
     if (!cleanName) return;
+    if (!ItemDNASchema.shape.name.safeParse(cleanName).success) { skippedNames++; return; }
     const deleted = findMatchingItem(set.deletedItems ?? {}, cleanName)
       ?? set.deletedItems?.[createItemId(cleanName)];
     if (deleted) return;
@@ -739,6 +746,7 @@ export function harvestTurnStoryDNA(
     }
   }
 
+  if (skippedNames > 0) options?.onSkippedNames?.(skippedNames);
   return changed;
 }
 

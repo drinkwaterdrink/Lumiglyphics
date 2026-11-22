@@ -1,5 +1,29 @@
 # Lumiglyphics
 
+Lumiglyphics is a Lumiverse Spindle extension for reading chat stories as a visual novel. Start with a text-only reader, then enable optional artwork, narration, or CYOA as your story needs them.
+
+## Quick start
+
+1. Use a Lumiverse build with Spindle extension support and Bun 1.4.0 or newer. [Install and enable the extension](#test-in-lumiverse).
+2. In Lumiglyphics settings, select a story-reader connection. Configure an image connection only if you want generated artwork. Speech has its own settings and voice selection.
+3. Open a chat with an assistant reply and choose **Visual novel** in the chat header, or **Composer Extras → Open visual novel**. Use Previous and Continue to read the reply, then write your next message in the usual reply area.
+4. Start in Standard mode. Choose CYOA in settings if you want generated choices. Use **World Lens** for available story references and **History** for earlier replies.
+
+| I want to… | Start here |
+|---|---|
+| Read a story without pictures | Leave generated pictures disabled and open **Visual novel** after the first assistant reply. |
+| Review a new picture before generating it | Enable picture review and open **Image prompts**. [Image prompting guide](docs/image-prompting.md) |
+| View artwork I already have | Choose **Browse saved artwork** in Artwork, or open **History** to browse by reply. |
+| Listen to a passage | Configure a voice and enable speech. [Speech setup and troubleshooting](SPEECH.md) |
+| Diagnose installation or build issues | [Local staging installation](#install-into-a-local-lumiverse-staging-checkout) · [Development checks](#development) |
+
+### If something is missing
+
+- **The reader has nothing to show.** Open a chat with an assistant reply and verify that the story-reader connection is available. A new chat needs its first assistant reply before the reader can open a passage.
+- **A picture is waiting.** Open **Image prompts** and check whether the draft is waiting for approval. Browse Saved Artwork and History only show pictures that already have saved records.
+- **Narration stays silent.** Check that speech is enabled, a voice is selected, and the selected voice connection is available. Reader Auto may advance silently. Use the speech controls for manual playback.
+- **A Story DNA save reports a conflict.** Refresh the current data before retrying autofill. If the saved library cannot be read, preserve the file for recovery before attempting any repair.
+
 Lumiglyphics extends [Cue — Living Novel by japolino](https://github.com/japolino/cue-living-novel) with image prompt inspection and optional approval before generation. The current release version is tracked in [spindle.json](spindle.json); upstream base commit `842d397d34bbb2952153f33739c8b13e70d5177b`. See [UPSTREAM.md](UPSTREAM.md) for provenance and [STATUS.md](STATUS.md) for the current delivered/pending matrix.
 
 **Reader and image review:** When supported by the current view session, parsed reply prose is readable while the story reader prepares pictures and references. The temporary preview keeps its position when the exact final reply arrives; it does not save read progress, submit replies, or start extra generation. Image prompts separates planning, review, generation, failure, reuse and older-picture states, with one main action and advanced controls in disclosures. **Rewrite prompt** uses text tokens; **Generate picture** starts the image request. Editing keeps the combined 3,000-character guard and offers previous wording after a rewrite.
@@ -77,7 +101,7 @@ The build writes `dist/backend.js` and `dist/frontend.js`, referenced by `spindl
 
 ## Test in Lumiverse
 
-Install from `https://github.com/drinkwaterdrink/Lumiglyphics` using the `Testing` branch in Lumiverse's extension installer. Approve the requested permissions, enable Lumiglyphics, and disable Cue during testing. Open the Lumiglyphics settings, select your existing planning and image connections, and enable generated pictures. Start with one picture per reply and review enabled, then open the visual novel and choose **Image prompts** to edit and generate a waiting picture.
+Install from `https://github.com/drinkwaterdrink/Lumiglyphics` in Lumiverse's extension installer. Use `Testing-(Codex)` to test this phase roadmap. Grant the requested permissions, enable Lumiglyphics, and disable Cue if you are testing Lumiglyphics as its replacement. For a first artwork test, select an image connection, enable generated pictures, and start with one picture per reply and review enabled.
 
 The host builds the repository's TypeScript source during installation; Bun 1.4.0 or newer is required by the pinned dependencies. If installation fails, keep the build/error log so the failing host step can be diagnosed. The local build checks do not replace testing inside your Lumiverse installation.
 

@@ -17,20 +17,20 @@ import {
 const pathFor = (chatId: string) => `chats/${encodeURIComponent(chatId).replace(/%/g, '_')}/story-dna.json`;
 const queues = new WeakMap<object, Map<string, Promise<unknown>>>();
 
-async function read(spindle: SpindleAPI, chatId: string, userId?: string): Promise<{ raw: unknown; set: StoryDNASet }> {
-  const raw = await spindle.userStorage?.getJson<unknown>(pathFor(chatId), { fallback: null, ...(userId ? { userId } : {}) });
+export async function loadStoryDNASet(spindle: SpindleAPI, chatId: string, userId?: string): Promise<StoryDNASet> {
+  const storage = spindle.userStorage;
+  const path = pathFor(chatId);
+  const raw = await storage?.getJson<unknown>(path, { fallback: null, ...(userId ? { userId } : {}) });
   if (raw === null || raw === undefined) {
-    return { raw: null, set: { locations: {}, items: {}, revision: 0 } };
+    // A JSON null or a read fallback can also come from an existing file.
+    const stat = await storage?.stat?.(path, userId);
+    if (!stat?.exists) return { locations: {}, items: {}, revision: 0 };
   }
   const parsed = StoryDNASetSchema.safeParse(raw);
-  if (parsed.success) {
-    return { raw, set: parsed.data };
+  if (!parsed.success) {
+    throw new Error('Saved Story DNA could not be read. The stored data has been preserved.');
   }
-  return { raw, set: { locations: {}, items: {}, revision: 0 } };
-}
-
-export async function loadStoryDNASet(spindle: SpindleAPI, chatId: string, userId?: string): Promise<StoryDNASet> {
-  return (await read(spindle, chatId, userId)).set;
+  return parsed.data;
 }
 
 export async function mutateStoryDNASet(
@@ -49,15 +49,19 @@ export async function mutateStoryDNASet(
   const key = JSON.stringify([userId ?? null, chatId]);
   const previous = scopes.get(key) ?? Promise.resolve();
   const pending = previous.catch(() => {}).then(async () => {
-    const { set } = await read(spindle, chatId, userId);
+    const set = await loadStoryDNASet(spindle, chatId, userId);
     if (expectedRevision !== undefined && expectedRevision !== (set.revision ?? 0)) {
       throw new Error('Story DNA changed. Reload the latest data before saving.');
     }
     mutation(set);
     set.revision = (set.revision ?? 0) + 1;
+    const candidate = StoryDNASetSchema.safeParse(set);
+    if (!candidate.success) {
+      throw new Error('Story DNA update contains invalid fields. No changes were saved.');
+    }
     const options = { indent: 2, ...(userId ? { userId } : {}) };
-    await spindle.userStorage!.setJson(pathFor(chatId), set, options);
-    return set;
+    await spindle.userStorage!.setJson(pathFor(chatId), candidate.data, options);
+    return candidate.data;
   });
   scopes.set(key, pending);
   try {

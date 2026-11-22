@@ -63,7 +63,7 @@ export async function collectCharacterDnaEvidence(spindle:SpindleAPI,input:Input
  const names=[target.name,...target.aliases].map(dnaNameKey);
  for(const m of visible.slice(-12))for(const passage of targetDnaPassages(m.content,[target.name,...target.aliases]))add(`Story ${m.id}`,passage);
  if(config.includeSimTrackerContext){
-  const trackerScope=visible.length?visible:(messages.length?messages:[]);
+  const trackerScope=visible;
   const latest=trackerScope.at(-1);
   if(latest){
    const tracker=scanTrackerCastHistory(trackerScope,latest.id,config.simTrackerMappings);

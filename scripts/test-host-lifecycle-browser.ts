@@ -19,6 +19,14 @@ try{
     return s.getState();
   });
   assert.equal(revised.currentParagraphIndex,1);assert.equal(revised.draft,'Keep this unsent reply');assert.notEqual(revised.phase,'planning');assert.equal(revised.paragraphs[1].speaker,'Jo');assert.equal(revised.choices[0].label,'Ask Jo');
+  const afterOptionalRevoke = await page.evaluate(()=>{
+    const f=(window as any).hostFixture;
+    const start=f.sent.length;
+    f.revoke('image_gen');
+    return {draft:f.stage().getState().draft,closed:f.sent.slice(start).some((m:any)=>m.type==='vn_view'&&m.open===false)};
+  });
+  assert.equal(afterOptionalRevoke.draft,'Keep this unsent reply');
+  assert.equal(afterOptionalRevoke.closed,false,'revoking optional image access keeps the reader open');
   const stale=await page.evaluate(()=>{const f=(window as any).hostFixture;const old=f.sent.filter((m:any)=>m.type==='vn_get_state').at(-1).requestId;f.changeChat('B');f.state(f.turn('B'));const before=f.stage().getState();f.state(null,'A',old);return {before,after:f.stage().getState(),old};});
   assert.deepEqual(stale.after,stale.before,'late old-chat state cannot clear the active reader');
   const sameChat=await page.evaluate(()=>{const f=(window as any).hostFixture;const old=f.sent.filter((m:any)=>m.type==='vn_get_state').at(-1).requestId;f.changeChat('A');f.changeChat('B');f.state(f.turn('B'));const before=f.stage().getState();f.state(null,'B',old);return{before,after:f.stage().getState()};});
@@ -56,6 +64,18 @@ try{
   assert.equal(await dialog.isVisible(),true);
   await page.evaluate(()=>window.dispatchEvent(new CustomEvent('vn-scene-image-cancel-v1',{detail:{version:1,provider:'warp',chatId:'B',requestId:'external-1'}})));
   assert.equal(await dialog.isVisible(),false,'source-side cancellation closes the approval surface');
+  await page.reload();
+  await page.waitForFunction(()=>Boolean((window as any).hostFixture));
+  const permissionEnd=await page.evaluate(()=>{
+    const f=(window as any).hostFixture;
+    f.state(f.turn());f.open();f.state(f.turn());
+    const start=f.sent.length;
+    f.revoke('chats');f.revoke('chats');
+    const closures=f.sent.slice(start).filter((m:any)=>m.type==='vn_view'&&m.open===false).length;
+    f.cleanup();
+    return {closures,listeners:f.permissionListeners()};
+  });
+  assert.deepEqual(permissionEnd,{closures:1,listeners:0});
   assert.deepEqual(errors,[]);
   console.log('Real host controller: revised presentation/draft/cursor, stale chats/state attempts, replacement acknowledgements and close suspension passed.');
 }finally{await browser.close();await server.stop();}

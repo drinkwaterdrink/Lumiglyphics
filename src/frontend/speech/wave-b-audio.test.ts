@@ -195,3 +195,9 @@ describe("Wave B — Zero-Gap Audiobook, Procedural Audio & Auto-Cast", () => {
     expect(result.nextOverrides["chat::chat-9::rowan"]?.voice).toBe("v-m1");
   });
 });
+test("speech chunks stay within the transport limit without sentence breaks", () => {
+  const text = "x".repeat(2001);
+  const chunks = splitSpeechChunks(text, 1900);
+  expect(chunks.every(chunk => chunk.length <= 1900)).toBe(true);
+  expect(chunks.join("")).toBe(text);
+});

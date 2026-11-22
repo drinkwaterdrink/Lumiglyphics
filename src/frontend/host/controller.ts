@@ -578,7 +578,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const syncSpeechCursor = (view: TurnView | null, paragraphIndex: number): void => {
     const nextCursor = view && view.status === "ready" ? speechCursorFor(view, paragraphIndex) : null;
     speech?.setCursor(nextCursor);
-    if (nextCursor && stage?.isAutoPlaying() && configRef.current?.speech.enabled) {
+    if (nextCursor && stage?.isAutoPlaying() && configRef.current?.speech.enabled && configRef.current.speech.autoplay) {
       const kind = speech?.getStatus().kind;
       if (kind === "idle" || kind === "paused") {
         void speech?.playCurrent();
@@ -659,24 +659,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     onAutoPlayChange: (autoActive) => {
       if (!speech) return;
       if (autoActive) {
-        if (configRef.current && !configRef.current.speech.enabled) {
-          const sp = configRef.current.speech;
-          const hasConfiguredVoices = Boolean(
-            sp.narrator ||
-            sp.characterDefault ||
-            Object.keys(sp.characters ?? {}).length > 0
-          );
-          if (hasConfiguredVoices) {
-            const nextSpeech = { ...sp, enabled: true };
-            configRef.current = { ...configRef.current, speech: nextSpeech };
-            speech.setSettings(nextSpeech);
-            speechDock?.setEnabled(true);
-            ctx.sendToBackend({ type: "vn_set_config", patch: { speech: nextSpeech }, chatId: chatId() ?? "" });
-          }
-        }
-        if (configRef.current?.speech.enabled) {
+        if (configRef.current?.speech.enabled && configRef.current.speech.autoplay) {
           syncSpeechCursor(turn, stage.getState().currentParagraphIndex);
-          void speech.playCurrent();
         }
       } else {
         const kind = speech.getStatus().kind;
@@ -788,6 +772,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   };
   stage.panelMount.closest("[data-vn-shell]")?.addEventListener("lumiglyphics:quick-tuner", onQuickTunerEvent);
 
+  let directorScope: { token: string; paragraphIndex: number } | null = null;
   quickDirector = new QuickDirectorPopover({
     mount: stage.panelMount,
     onDirect: (cmd) => {
@@ -796,9 +781,16 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
         return;
       }
       const pIdx = stage.getState().currentParagraphIndex;
-      const matchingAsset = (turn.assets ?? []).find((a) => a.paragraphIndex === pIdx) ?? turn.assets?.[0];
+      const scope = directorScope;
+      directorScope = null;
+      if (!scope || scope.token !== referenceTurnToken(turn) || scope.paragraphIndex !== pIdx) {
+        stage.setActivity?.("This passage changed. Reopen Quick Director to continue.", "warning");
+        return;
+      }
+      const candidates = (turn.assets ?? []).filter(asset => asset.paragraphIndex === pIdx);
+      const matchingAsset = candidates.length === 1 ? candidates[0] : undefined;
       if (!matchingAsset) {
-        stage.setActivity?.("No generated image job on this passage yet.", "warning");
+        stage.setActivity?.("Open Artwork Studio to choose or prepare a picture for this passage.", "warning");
         return;
       }
       if (cmd.kind === "outfit") {
@@ -812,18 +804,19 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
         messageId: turn.messageId,
         sourceFingerprint: turn.sourceFingerprint,
         jobId: matchingAsset.jobId,
+        directorScope: { swipeId: turn.swipeId, revision: turn.revision, paragraphIndex: pIdx },
         regeneratePrompt: true,
         promptOperation: "rewrite",
         guidance: cmd.guidance,
         reframe: cmd.kind === "shot",
         relight: cmd.kind === "relight",
-        quickGenerate: true,
       });
     },
   });
   const onQuickDirectorEvent = (event: Event) => {
     const opener = (event as CustomEvent<{ opener?: HTMLElement }>).detail?.opener ?? null;
     if (configRef.current) quickDirector.setPreset(configRef.current.themePreset);
+    directorScope = turn ? { token: referenceTurnToken(turn), paragraphIndex: stage.getState().currentParagraphIndex } : null;
     quickDirector.open(opener);
   };
   stage.panelMount.closest("[data-vn-shell]")?.addEventListener("lumiglyphics:quick-director", onQuickDirectorEvent);
@@ -1732,22 +1725,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       return;
     }
     if (type === "vn_permission" && message.type === "vn_permission") {
-      if (!message.granted) {
-        const corePermissions = new Set(["app_manipulation", "chat_mutation", "chats"]);
-        if (corePermissions.has(message.permission)) {
-          externalReview.cancel(); imageBridge.cancelAll();
-          deactivate();
-          reportStageError({
-            message: "Visual novel mode needs a permission that was turned off.",
-            detail: `Permission revoked: ${message.permission}. Re-enable it before reopening visual novel mode.`,
-            source: "permission",
-            retryable: false,
-          });
-        } else {
-          if (message.permission === "image_gen") imageBridge.cancelAll();
-          stage.setActivity?.(`Optional permission "${message.permission}" was turned off — continuing in degraded mode.`, "warning");
-        }
-      }
+      if (!message.granted) handlePermissionRevoked(message.permission);
       return;
     }
     if (type === "vn_error" && message.type === "vn_error") {
@@ -1820,10 +1798,26 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   };
   const unsubChat = ctx.events.on("CHAT_SWITCHED", () => resetChatState(true));
   const unsubFork = ctx.events.on("CHAT_FORKED", () => resetChatState(false));
+  function handlePermissionRevoked(permission: string): void {
+    if (permission === "app_manipulation" || permission === "chat_mutation" || permission === "chats") {
+      externalReview.cancel();
+      imageBridge.cancelAll();
+      deactivate();
+      reportStageError({
+        message: "Visual novel mode needs a permission that was turned off.",
+        detail: "Permission revoked: " + permission + ". Re-enable it before reopening visual novel mode.",
+        source: "permission",
+        retryable: false,
+      });
+    } else {
+      if (permission === "image_gen") imageBridge.cancelAll();
+      stage.setActivity?.('Optional permission "' + permission + '" was turned off. Reading can continue.', "warning");
+    }
+  }
   const unsubPermission = ctx.events.on("PERMISSION_CHANGED", (payload) => {
     if (!payload || typeof payload !== "object") return;
     const detail = payload as { permission?: unknown; granted?: unknown };
-    if (detail.granted === false) { externalReview.cancel(); imageBridge.cancelAll(); deactivate(); }
+    if (detail.granted === false && typeof detail.permission === "string") handlePermissionRevoked(detail.permission);
   });
 
   requestConnectionCatalog();

@@ -675,7 +675,11 @@ describe("image review controller lifecycle", () => {
     f.gates[0]!.resolve({ imageId: "original", imageUrl: "/original" });
     await waitFor(() => record().jobs[0]?.status === "generated");
     await new Promise(resolve => setTimeout(resolve, 5));
-    f.request({ type: "vn_prepare_image", ...scope, jobId: first.jobId, templateId: "manga-page" });
+    const directorScope = { swipeId: 0, revision: record().plan.key.revision, paragraphIndex: record().jobs[0]!.paragraphIndex };
+    f.request({ type: "vn_prepare_image", ...scope, jobId: first.jobId, directorScope: { ...directorScope, paragraphIndex: directorScope.paragraphIndex + 1 } });
+    await waitFor(() => f.sent.some((m: any) => m.type === "vn_error" && m.error.includes("older passage")));
+    expect(latest()?.requestId).toBe(first.requestId);
+    f.request({ type: "vn_prepare_image", ...scope, jobId: first.jobId, templateId: "manga-page", directorScope, quickGenerate: true });
     await waitFor(() => latest()?.requestId !== first.requestId && latest()?.state === "review");
     expect(latest()?.imagePromptMetadata?.template.id).toBe("manga-page");
     expect(f.gates).toHaveLength(1);

@@ -42,6 +42,8 @@ function state(view:TurnView|null, chatId=activeChat, requestId=sent.filter(m=>m
 Object.assign(window,{hostFixture:{
   sent, config, turn, receive:(message:unknown)=>receive(message), state,
   open:()=>toggle(), stage:()=>stage,
+  revoke:(permission:string)=>{for(const handler of events.get('PERMISSION_CHANGED')??[])handler({permission,granted:false});},
+  permissionListeners:()=>events.get('PERMISSION_CHANGED')?.size??0,
   changeChat:(chatId:string)=>{activeChat=chatId;for(const handler of events.get('CHAT_SWITCHED')??[])handler({chatId});},
   cleanup,
 }});

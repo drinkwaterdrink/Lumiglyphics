@@ -170,6 +170,7 @@ test('isSignificantStoryItem filters mundane props and harvestTurnStoryDNA harve
 test('handleStoryDnaRequest > autofill_location and autofill_item extract context and save unlocked DNA', async () => {
   const store = new Map<string, unknown>();
   const messages: Array<{ message: any; userId?: string }> = [];
+  let beforeGenerate = async (): Promise<void> => {};
 
   const mockSpindle = {
     userStorage: {
@@ -199,6 +200,7 @@ test('handleStoryDnaRequest > autofill_location and autofill_item extract contex
     },
     generate: {
       async raw(opts: any) {
+        await beforeGenerate();
         const sys = opts.messages?.[0]?.content || '';
         if (sys.includes('Scenery DNA')) {
           return {
@@ -249,6 +251,28 @@ test('handleStoryDnaRequest > autofill_location and autofill_item extract contex
   expect(messages).toHaveLength(2);
   expect(messages[0]!.message.storyDna.locations['flat-3']?.environmentDescription).toContain('Cedar-beamed harbor loft');
   expect(messages[1]!.message.storyDna.items['carved-yew-staff']?.materials).toContain('yew wood');
+
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  beforeGenerate = async () => { entered.resolve(); await release.promise; };
+  const pending = handleStoryDnaRequest(mockSpindle, {
+    type: 'vn_story_dna', action: 'autofill_item', chatId: 'c1', requestId: 'stale-autofill',
+    itemId: 'carved-yew-staff', itemName: 'Carved Yew Staff',
+  }, 'u1');
+  await entered.promise;
+  try {
+    await handleStoryDnaRequest(mockSpindle, {
+      type: 'vn_story_dna', action: 'delete_item', chatId: 'c1', requestId: 'delete-item',
+      itemId: 'carved-yew-staff',
+    }, 'u1');
+  } finally {
+    release.resolve();
+  }
+  await pending;
+  expect(messages.at(-1)!.message).toMatchObject({ type: 'vn_error', requestId: 'stale-autofill' });
+  const persisted = store.get('chats/c1/story-dna.json') as StoryDNASet;
+  expect(persisted.items['carved-yew-staff']).toBeUndefined();
+  expect(persisted.deletedItems?.['carved-yew-staff']).toBeDefined();
 });
 
 test('Wave 2 > findMatchingLocation separates composite rooms while preserving exact aliases', () => {

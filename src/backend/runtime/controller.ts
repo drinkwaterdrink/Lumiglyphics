@@ -275,6 +275,7 @@ export function scheduleSplitHorizonLore(
             harvestTurnStoryDNA(updated.plan, set, swipeTag, params.prevLocationName, {
               mindLedgerEnabled: config.mindLedgerEnabled,
               chapterCodexEnabled: config.chapterCodexEnabled,
+              onSkippedNames: count => spindle.log.warn(`Story DNA skipped ${count} invalid inferred names.`),
               sidecar: {
                 npcBeliefs: lore.npcBeliefs,
                 threadUpdates: lore.threadUpdates,
@@ -1347,6 +1348,11 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
   if(correction && Number(record.plan.key.swipeId??0)!==correction.swipeId) throw new Error('This correction belongs to an older swipe.');
   const job = record.jobs.find((entry) => entry.jobId === request.jobId);
   if (!job || ![...record.plan.visualCues, ...(record.plan.cacheCues ?? [])].some((cue) => cue.assetJobId === job.jobId)) throw new Error("This picture cannot be prepared from this turn.");
+  const directorScope = request.type === "vn_prepare_image" ? request.directorScope : undefined;
+  if (directorScope && (directorScope.swipeId !== record.plan.key.swipeId ||
+      directorScope.revision !== record.plan.key.revision || directorScope.paragraphIndex !== job.paragraphIndex)) {
+    throw new Error("This Director request belongs to an older passage.");
+  }
   if(job.provider===CACHE_JOB_PROVIDER) throw new Error("This is a reuse-only picture outside the image budget. Choose one of this reply’s generated pictures instead.");
   const previousImages = { ...record.previousImages };
   let previousVersions = normalizeImageVersionHistory(record.previousVersions);
@@ -1376,7 +1382,7 @@ async function prepareSingleImageUnlocked(spindle: SpindleAPI, request: Extract<
   if(!isCurrent())return;
   spindle.sendToFrontend({ type: "vn_turn", turn:view }, userId);
   const rebuildOpts = request.type === 'vn_prepare_image' && (request.reframe || request.relight || request.lockContinuity || request.manualLighting || request.styleId || request.fitToModel || request.model || request.connectionId || request.manualCamera) ? { ...(request.reframe !== undefined ? { reframe: request.reframe } : {}), ...(request.relight !== undefined ? { relight: request.relight } : {}), ...(request.lockContinuity !== undefined ? { lockContinuity: request.lockContinuity } : {}), ...(request.manualLighting !== undefined ? { manualLighting: request.manualLighting } : {}), ...(request.styleId !== undefined ? { styleId: request.styleId } : {}), ...(request.fitToModel !== undefined ? { fitToModel: request.fitToModel } : {}), ...(request.model !== undefined ? { model: request.model } : {}), ...(request.connectionId !== undefined ? { connectionId: request.connectionId } : {}), ...(request.manualCamera !== undefined ? { manualCamera: request.manualCamera } : {}) } : undefined;
-  await startAssets(spindle, next, path, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId],...((quick || (request.type === "vn_prepare_image" && request.quickGenerate)) ? { quickGenerate: true } : {}),...(request.type === 'vn_prepare_image' && request.edits ? {initialEdits:request.edits} : {}),...(request.type==='vn_prepare_image' && (request.regeneratePrompt===true||request.promptOperation) ? {regeneratePrompt:true,...(request.promptOperation?{promptOperation:request.promptOperation}:{}),...(request.guidance?{guidance:request.guidance}:{}),...(request.pinnedClauses?.length?{pinnedClauses:request.pinnedClauses}:{})} : {}),...(rebuildOpts?{rebuild:rebuildOpts}:{}) });
+  await startAssets(spindle, next, path, userId, { onlyJobId: job.jobId, bypassJobIds: [job.jobId],...((quick || (request.type === "vn_prepare_image" && !directorScope && request.quickGenerate)) ? { quickGenerate: true } : {}),...(request.type === 'vn_prepare_image' && request.edits ? {initialEdits:request.edits} : {}),...(request.type==='vn_prepare_image' && (request.regeneratePrompt===true||request.promptOperation) ? {regeneratePrompt:true,...(request.promptOperation?{promptOperation:request.promptOperation}:{}),...(request.guidance?{guidance:request.guidance}:{}),...(request.pinnedClauses?.length?{pinnedClauses:request.pinnedClauses}:{})} : {}),...(rebuildOpts?{rebuild:rebuildOpts}:{}) });
 }
 
 async function processAssistantMessage(
@@ -1852,7 +1858,11 @@ async function processAssistantMessage(
           });
         }
         await mutateStoryDNASet(spindle, chatId, userId, undefined, (set) => {
-          harvestTurnStoryDNA(record.plan, set, swipeTag, prevLocationName, { mindLedgerEnabled: config.mindLedgerEnabled, chapterCodexEnabled: config.chapterCodexEnabled });
+          harvestTurnStoryDNA(record.plan, set, swipeTag, prevLocationName, {
+            mindLedgerEnabled: config.mindLedgerEnabled,
+            chapterCodexEnabled: config.chapterCodexEnabled,
+            onSkippedNames: count => spindle.log.warn(`Story DNA skipped ${count} invalid inferred names.`),
+          });
           if (isSameSwipeReplan) {
             const scrubbed = scrubStoryDNASwipes(set, { [record.plan.key.assistantMessageId]: swipeTag });
             set.locations = scrubbed.locations;

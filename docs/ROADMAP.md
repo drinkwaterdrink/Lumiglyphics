@@ -1,6 +1,20 @@
 # Remaining Lumiglyphics roadmap
 
-Current scope: beta.74 on Testing. This page summarizes unfinished work; [STATUS.md](../STATUS.md) is the delivered-feature matrix. Earlier dated plans retain their original checklists and should not be read as the current completion count.
+## Testing-(Codex) delivery
+
+1. Protect Story DNA, autofill saves, speech consent, host lifecycle, and Director artwork targeting.
+2. Ground Sidecar output and make saved story data branch-aware.
+3. Improve the reader layout, navigation, overlays, and presentation preferences.
+4. Polish World Lens, the Folio, Director Studio, and the existing Saved Artwork and History views. Add field-by-field autofill review here.
+5. Add opt-in CYOA enhancements and optional Sidecar profiles.
+6. Add Branch Chronicle, Living World clocks, and Scene Rehearsal.
+7. Verify integration, compatibility, and release readiness.
+
+After each completed phase, increment the patch version in `package.json`, `spindle.json`, and `src/shared/build-info.ts`. Update the [README](../README.md) with the installed behavior, setup, permissions, and troubleshooting guidance for that phase. Run the build, bundle verification, and unit suite before committing and pushing to `Testing-(Codex)`.
+
+## Earlier Testing roadmap
+
+The notes below reflect the beta.74 Testing scope. See [STATUS.md](../STATUS.md) for the delivered-feature matrix.
 
 beta.58 refines image prompting and recovery: protected identity anchors, shared adaptation for new/replacement templates, useful-detail targets separate from provider limits, and primary repair controls. The [pipeline audit](image-pipeline-audit.md) records verified behavior and remaining runtime/quality limits. This maintenance increment does not complete the physical-device/provider benchmark work below.
 
