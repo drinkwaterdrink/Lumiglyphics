@@ -4,7 +4,7 @@ import {
   type SpeechVoiceRef,
 } from "../../speech-config.js";
 import { GEMINI_AUDIO_TAG_SUGGESTIONS } from "./delivery.js";
-import { characterOverrideKey, speakerNameKey } from "./voice-resolution.js";
+import { autoCastVoicesForCast, characterOverrideKey, speakerNameKey, type AutoCastMember, type AutoCastVoiceOption } from "./voice-resolution.js";
 import type { SafeTtsProfile, VoiceOption } from "./transport.js";
 import { SETTINGS_TOKENS_CSS } from "../settings/controls-css.js";
 import { createUiId } from "../request-id.js";
@@ -30,6 +30,8 @@ export type SpeechSettingsSectionOptions = {
   listVoices: (connectionId: string) => Promise<VoiceOption[]>;
   /** Active chat id, used to scope per-character overrides. Empty = no chat. */
   getChatId: () => string;
+  /** Discovered cast members for the active chat (used by Auto-Cast Voices). */
+  getCast?: () => ReadonlyArray<AutoCastMember>;
 };
 
 const SECTION_CSS = `${SETTINGS_TOKENS_CSS}
@@ -104,6 +106,8 @@ export class SpeechSettingsSection {
   private activeDrafts = new Map<string, string>();
   /** Tracked chat id to clear uncommitted name drafts on chat switch. */
   private lastChatId = "";
+  private previousOverridesBackup: Record<string, SpeechVoiceRef> | null = null;
+  private autoCastMessage = "";
   private destroyed = false;
 
   constructor(private readonly options: SpeechSettingsSectionOptions) {
@@ -476,6 +480,79 @@ export class SpeechSettingsSection {
       const spacer = document.createElement("span");
       addRow.append(addName, spacer, addButton);
       overrides.appendChild(addRow);
+
+      const autoCastRow = document.createElement("div");
+      autoCastRow.className = "row";
+      const autoCastBtn = document.createElement("button");
+      autoCastBtn.type = "button";
+      autoCastBtn.setAttribute("data-speech-field", "auto-cast-voices");
+      autoCastBtn.textContent = "Auto-Cast Voices";
+      autoCastBtn.addEventListener("click", () => {
+        const cast = this.options.getCast?.() ?? [];
+        const available: AutoCastVoiceOption[] = [];
+        for (const [connectionId, voices] of this.voiceOptions.entries()) {
+          for (const v of voices) {
+            const label = (v as { label?: string; name?: string }).label ?? v.name;
+            available.push({ connectionId, voiceId: v.id, ...(label ? { label } : {}) });
+          }
+        }
+        if (cast.length === 0) {
+          this.autoCastMessage = "No discovered cast members in this chat yet.";
+          this.render();
+          return;
+        }
+        if (available.length === 0) {
+          this.autoCastMessage = "Load voices for a profile above first so Auto-Cast can pick distinct voices.";
+          this.render();
+          return;
+        }
+        const backup = { ...settings.characters };
+        const result = autoCastVoicesForCast({
+          chatId,
+          cast,
+          availableVoices: available,
+          existingOverrides: settings.characters,
+        });
+        if (result.assignedCount === 0) {
+          this.autoCastMessage = "Every discovered cast member already has an override.";
+          this.render();
+          return;
+        }
+        this.previousOverridesBackup = backup;
+        this.autoCastMessage = `Assigned ${result.assignedCount} voice(s) without overwriting existing overrides.`;
+        this.save((next) => {
+          next.characters = result.nextOverrides;
+        });
+      });
+      autoCastRow.appendChild(autoCastBtn);
+
+      if (this.previousOverridesBackup) {
+        const undoBtn = document.createElement("button");
+        undoBtn.type = "button";
+        undoBtn.setAttribute("data-speech-field", "auto-cast-undo");
+        undoBtn.textContent = "Undo";
+        undoBtn.addEventListener("click", () => {
+          const restore = this.previousOverridesBackup;
+          this.previousOverridesBackup = null;
+          this.autoCastMessage = "Restored previous character voice overrides.";
+          if (restore) {
+            this.save((next) => {
+              next.characters = restore;
+            });
+          } else {
+            this.render();
+          }
+        });
+        autoCastRow.appendChild(undoBtn);
+      }
+
+      overrides.appendChild(autoCastRow);
+      if (this.autoCastMessage) {
+        const autoCastStatus = document.createElement("small");
+        autoCastStatus.setAttribute("data-speech-auto-cast-status", "");
+        autoCastStatus.textContent = this.autoCastMessage;
+        overrides.appendChild(autoCastStatus);
+      }
     }
 
     // Delivery mode

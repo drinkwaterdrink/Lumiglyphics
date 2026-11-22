@@ -39133,6 +39133,8 @@ function normalizeConfigUncached(input2) {
     audioDirectory: stringValue(input2.audioDirectory, DEFAULT_CONFIG.audioDirectory).trim(),
     bgmVolume: floatBetween(input2.bgmVolume, 0, 1, DEFAULT_CONFIG.bgmVolume),
     sfxVolume: floatBetween(input2.sfxVolume, 0, 1, DEFAULT_CONFIG.sfxVolume),
+    ambientVolume: floatBetween(input2.ambientVolume, 0, 1, DEFAULT_CONFIG.ambientVolume),
+    builtInAudioEnabled: typeof input2.builtInAudioEnabled === "boolean" ? input2.builtInAudioEnabled : DEFAULT_CONFIG.builtInAudioEnabled,
     speech: normalizeSpeechSettings(input2.speech)
   };
 }
@@ -39258,6 +39260,8 @@ var init_config = __esm(() => {
     audioDirectory: "",
     bgmVolume: 0.7,
     sfxVolume: 0.8,
+    ambientVolume: 0.45,
+    builtInAudioEnabled: true,
     speech: DEFAULT_SPEECH_SETTINGS
   };
   configMemo = new Map;
@@ -47598,15 +47602,18 @@ async function planTurn(spindle2, input2) {
   try {
     input2.onNarrativePrepared?.(narrative.paragraphs.map((paragraph) => paragraph.text));
   } catch {}
-  const visualContext = await loadVisualContext(spindle2, {
-    chatId: input2.chatId,
-    target: [recentContext(input2.recentMessages, input2.config.includeRecentMessages), stripTextEffectTags(input2.content)].filter(Boolean).join(`
+  const [visualContext, storyDNAResult] = await Promise.all([
+    loadVisualContext(spindle2, {
+      chatId: input2.chatId,
+      target: [recentContext(input2.recentMessages, input2.config.includeRecentMessages), stripTextEffectTags(input2.content)].filter(Boolean).join(`
 
 `),
-    config: input2.config,
-    ...input2.simTrackerEvidence ? { trackerEvidence: input2.simTrackerEvidence } : {},
-    ...input2.userId ? { userId: input2.userId } : {}
-  });
+      config: input2.config,
+      ...input2.simTrackerEvidence ? { trackerEvidence: input2.simTrackerEvidence } : {},
+      ...input2.userId ? { userId: input2.userId } : {}
+    }),
+    loadStoryDNASet(spindle2, input2.chatId, input2.userId).catch(() => null)
+  ]);
   if (narrative.detectedSceneMetadata) {
     const meta3 = narrative.detectedSceneMetadata;
     const parts = [
@@ -47626,37 +47633,39 @@ Detected scene header: ${parts.join(" | ")}. Ensure your environment reflects th
   }
   let loadedStoryDnaSet = null;
   try {
-    const storyDNASet = await loadStoryDNASet(spindle2, input2.chatId, input2.userId);
-    loadedStoryDnaSet = storyDNASet;
-    const activeLocName = (narrative.detectedSceneMetadata?.location || input2.previousScene?.environment.location || "").trim().toLowerCase();
-    const matchedLocation = activeLocName ? Object.values(storyDNASet.locations).find((loc) => loc.name.trim().toLowerCase() === activeLocName || loc.aliases.some((alias) => alias.trim().toLowerCase() === activeLocName)) : undefined;
-    if (matchedLocation && (matchedLocation.locked || matchedLocation.architecture || matchedLocation.persistentElements.length > 0)) {
-      const dnaParts = [
-        matchedLocation.environmentDescription ? `setting=${matchedLocation.environmentDescription}` : "",
-        matchedLocation.architecture ? `architecture=${matchedLocation.architecture}` : "",
-        matchedLocation.lighting ? `lighting=${matchedLocation.lighting}` : "",
-        matchedLocation.persistentElements.length > 0 ? `persistent_props=${matchedLocation.persistentElements.join("; ")}` : ""
-      ].filter(Boolean);
-      if (dnaParts.length > 0) {
-        visualContext.plannerContext += `
+    const storyDNASet = storyDNAResult;
+    if (storyDNASet) {
+      loadedStoryDnaSet = storyDNASet;
+      const activeLocName = (narrative.detectedSceneMetadata?.location || input2.previousScene?.environment.location || "").trim().toLowerCase();
+      const matchedLocation = activeLocName ? Object.values(storyDNASet.locations).find((loc) => loc.name.trim().toLowerCase() === activeLocName || loc.aliases.some((alias) => alias.trim().toLowerCase() === activeLocName)) : undefined;
+      if (matchedLocation && (matchedLocation.locked || matchedLocation.architecture || matchedLocation.persistentElements.length > 0)) {
+        const dnaParts = [
+          matchedLocation.environmentDescription ? `setting=${matchedLocation.environmentDescription}` : "",
+          matchedLocation.architecture ? `architecture=${matchedLocation.architecture}` : "",
+          matchedLocation.lighting ? `lighting=${matchedLocation.lighting}` : "",
+          matchedLocation.persistentElements.length > 0 ? `persistent_props=${matchedLocation.persistentElements.join("; ")}` : ""
+        ].filter(Boolean);
+        if (dnaParts.length > 0) {
+          visualContext.plannerContext += `
 Established Location DNA (${matchedLocation.name}): ${dnaParts.join(" | ")}. Preserve these canonical physical details unless the narrative explicitly alters them.`;
-      }
-    }
-    const recentCodex = (storyDNASet.chapterCodex ?? []).slice(-3);
-    if (recentCodex.length > 0) {
-      const codexLines = recentCodex.map((c) => {
-        if (c.who?.length || c.whatChanged?.length || c.where) {
-          const who = c.who?.length ? `Who: ${c.who.join(", ")}` : "";
-          const where = c.where || c.location || "Scene";
-          const changed = c.whatChanged?.length ? `Changed: ${c.whatChanged.join("; ")}` : c.summary.slice(0, 180);
-          return `- [${where}] ${[who, changed].filter(Boolean).join(" | ")}`;
         }
-        return `- [${c.location || "Scene"}] ${c.title}: ${c.summary}`;
-      });
-      visualContext.plannerContext += `
+      }
+      const recentCodex = (storyDNASet.chapterCodex ?? []).slice(-3);
+      if (recentCodex.length > 0) {
+        const codexLines = recentCodex.map((c) => {
+          if (c.who?.length || c.whatChanged?.length || c.where) {
+            const who = c.who?.length ? `Who: ${c.who.join(", ")}` : "";
+            const where = c.where || c.location || "Scene";
+            const changed = c.whatChanged?.length ? `Changed: ${c.whatChanged.join("; ")}` : c.summary.slice(0, 180);
+            return `- [${where}] ${[who, changed].filter(Boolean).join(" | ")}`;
+          }
+          return `- [${c.location || "Scene"}] ${c.title}: ${c.summary}`;
+        });
+        visualContext.plannerContext += `
 Recent Chapter Memory:
 ${codexLines.join(`
 `)}`;
+      }
     }
   } catch {}
   const loadedRole = input2.cardRole ?? await loadCardRole(spindle2, input2.chatId, visualContext.cardId, input2.userId);
@@ -56172,6 +56181,25 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
   }
   const cardContext = cardSource ? await loadCardReferenceContext(spindle2, plan, userId, cacheOptions).catch(() => null) : null;
   const cardFetchPromises = new Map;
+  const connectionMemo = new Map;
+  async function resolveImageConnectionSnapshot(connId) {
+    if (connId && typeof spindle2.imageGen.getConnection === "function") {
+      return spindle2.imageGen.getConnection(connId, userId);
+    }
+    if (typeof spindle2.imageGen.listConnections === "function") {
+      return (await spindle2.imageGen.listConnections(userId)).find((entry) => entry.is_default) ?? null;
+    }
+    return null;
+  }
+  const getBatchConnection = (connId) => {
+    const key = connId ?? "__default__";
+    let pending = connectionMemo.get(key);
+    if (!pending) {
+      pending = resolveImageConnectionSnapshot(connId);
+      connectionMemo.set(key, pending);
+    }
+    return pending;
+  };
   const rawFetchTimeout = Number(config2.imageParameters.referenceFetchTimeoutMs);
   const cardFetchTimeoutMs = Number.isFinite(rawFetchTimeout) && rawFetchTimeout > 0 ? rawFetchTimeout : undefined;
   const acquireCardPortrait = (characterName, characterKey, resolution) => {
@@ -56485,7 +56513,7 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
               throw abortError3(signal);
             if (jobSignal.aborted)
               throw abortError3(jobSignal);
-            const selected = connectionId && typeof spindle2.imageGen.getConnection === "function" ? await spindle2.imageGen.getConnection(connectionId, userId) : typeof spindle2.imageGen.listConnections === "function" ? (await spindle2.imageGen.listConnections(userId)).find((entry) => entry.is_default) ?? null : null;
+            const selected = await getBatchConnection(connectionId ?? null);
             const input2 = {
               ...connectionId ? { connection_id: connectionId } : {},
               prompt,

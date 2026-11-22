@@ -1020,10 +1020,12 @@ export class VisualNovelSettingsPanel {
               <small data-audio-status role="status" aria-live="polite"></small>
             `, { find: find("Music library", "import audio folder bgm sfx scan check") })}
             <label data-field ${find('Music transitions','soundtrack location cue track')}><span>Music transitions</span><select name="musicTransitionPolicy"><option value="cue">Follow story cues (default)</option><option value="location">Keep music within a location</option></select><small>Location mode accepts the first recorded track for each location. Unknown locations follow cues. Choose a recorded track manually in the reader workspace.</small></label>
-            ${group("Volume", `
+            ${group("Volume & built-in audio", `
+              <label data-check ${find("Built-in procedural soundscapes", "built in audio soundscape foley ambient synth")}><span><input name="builtInAudioEnabled" type="checkbox" />Built-in procedural soundscapes &amp; foley</span><small>Plays subtle offline Web Audio weather beds (with indoor muffling) and tactile UI foley when no custom track is active.</small></label>
               <div data-row>
                 <label data-field ${find("Music volume", "bgm loudness audio")}><span>Music volume <span data-bgm-val>70%</span></span><input name="bgmVolume" type="range" min="0" max="1" step="0.05" /></label>
                 <label data-field ${find("Sound effects volume", "sfx loudness audio")}><span>Sound effects volume <span data-sfx-val>80%</span></span><input name="sfxVolume" type="range" min="0" max="1" step="0.05" /></label>
+                <label data-field ${find("Ambient soundscape volume", "ambient loudness soundscape weather")}><span>Ambient volume <span data-ambient-val>45%</span></span><input name="ambientVolume" type="range" min="0" max="1" step="0.05" /></label>
               </div>
             `, { find: "" })}
           `)}
@@ -1495,7 +1497,7 @@ export class VisualNovelSettingsPanel {
       if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
       if (this.isAdvanced(target.name)) { this.markDraft(target.name); return; }
       // Sliders and number fields preview while dragging or typing; the save happens on change.
-      if (target.name === "bgmVolume" || target.name === "sfxVolume") this.updateVolumeLabels();
+      if (target.name === "bgmVolume" || target.name === "sfxVolume" || target.name === "ambientVolume") this.updateVolumeLabels();
       if (target.name === "textSpeed") this.restartSample();
       if (target.name === "textScale") {
         const val = clamp(Number(target.value), TEXT_SCALE_MIN, TEXT_SCALE_MAX, this.config.textScale);
@@ -1924,6 +1926,8 @@ export class VisualNovelSettingsPanel {
       
       case "bgmVolume": return { bgmVolume: clamp(Number(target.value), 0, 1, DEFAULT_CONFIG.bgmVolume) };
       case "sfxVolume": return { sfxVolume: clamp(Number(target.value), 0, 1, DEFAULT_CONFIG.sfxVolume) };
+      case "ambientVolume": return { ambientVolume: clamp(Number(target.value), 0, 1, DEFAULT_CONFIG.ambientVolume) };
+      case "builtInAudioEnabled": return { builtInAudioEnabled: checked };
       case "imageSource":
       case "setupImageSource":
         return imageSourcePatch(target.value as ImageSource);
@@ -2543,6 +2547,8 @@ export class VisualNovelSettingsPanel {
 
     this.control<HTMLInputElement>("bgmVolume").value = String(config.bgmVolume);
     this.control<HTMLInputElement>("sfxVolume").value = String(config.sfxVolume);
+    this.control<HTMLInputElement>("ambientVolume").value = String(config.ambientVolume);
+    this.control<HTMLInputElement>("builtInAudioEnabled").checked = config.builtInAudioEnabled;
     this.updateVolumeLabels();
 
     this.renderConnectionSelects("planner", config.parserConnectionId);
@@ -2560,8 +2566,11 @@ export class VisualNovelSettingsPanel {
   private updateVolumeLabels(): void {
     const bgm = this.control<HTMLInputElement>("bgmVolume");
     const sfx = this.control<HTMLInputElement>("sfxVolume");
+    const ambient = this.control<HTMLInputElement>("ambientVolume");
     this.root.querySelector("[data-bgm-val]")!.textContent = `${Math.round(Number(bgm.value) * 100)}%`;
     this.root.querySelector("[data-sfx-val]")!.textContent = `${Math.round(Number(sfx.value) * 100)}%`;
+    const ambEl = this.root.querySelector("[data-ambient-val]");
+    if (ambEl) ambEl.textContent = `${Math.round(Number(ambient.value) * 100)}%`;
   }
 
   private updateSummaries(config: VisualNovelConfig): void {

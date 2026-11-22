@@ -1,10 +1,10 @@
 import {speechPlaybackProgress,type SpeechPlaybackProgress} from './read-along.js';
 import type { SpeechSettings } from "../../speech-config.js";
 import { DEFAULT_SPEECH_SETTINGS } from "../../speech-config.js";
-import { DELIVERY_ADAPTER_VERSION, deliveryTagAllowedForModel, formatOutboundText } from "./delivery.js";
+import { DELIVERY_ADAPTER_VERSION, deliveryTagAllowedForModel, formatOutboundText, inferAutoDeliveryTag } from "./delivery.js";
 import { resolveVoiceForParagraph } from "./voice-resolution.js";
 import { prepareSpeechText } from "../../shared/text-effects.js";
-import { SpeechTransportError, type TtsTransport } from "./transport.js";
+import { SpeechTransportError, type TtsProfileSnapshot, type TtsTransport } from "./transport.js";
 
 /**
  * Frontend speech player for the CURRENT assistant paragraph.
@@ -37,6 +37,7 @@ export type SpeechCursor = {
   paragraphSpeaker: string | null | undefined;
   turnSpeaker: string;
   aliases?: readonly string[];
+  poseExpressionId?: string | null;
 };
 
 export type SpeechStatus =
@@ -53,6 +54,7 @@ export type SpeechStatus =
 export type SpeechAudioElement = {
   src: string;
   volume: number;
+  playbackRate?: number;
   currentTime: number;
   duration?:number;
   paused?:boolean;
@@ -76,6 +78,28 @@ export type SpeechControllerOptions = {
 
 const DEFAULT_MAX_CACHE_ITEMS = 16;
 const DEFAULT_MAX_CACHE_BYTES = 32 * 1024 * 1024;
+const PROFILE_MEMO_TTL_MS = 30_000;
+
+/** Splits long passages on sentence boundaries so synthesis never exceeds provider limits. */
+export function splitSpeechChunks(text: string, maxChars = 1900): string[] {
+  const trimmed = text.trim();
+  if (!trimmed || trimmed.length <= maxChars) return trimmed ? [trimmed] : [];
+  const sentences = trimmed.match(/[^.!?]+(?:[.!?]+|$)/g) ?? [trimmed];
+  const chunks: string[] = [];
+  let current = "";
+  for (const rawSentence of sentences) {
+    const sentence = rawSentence.trim();
+    if (!sentence) continue;
+    if (current && current.length + 1 + sentence.length > maxChars) {
+      chunks.push(current);
+      current = sentence;
+    } else {
+      current = current ? `${current} ${sentence}` : sentence;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks.length > 0 ? chunks : [trimmed];
+}
 
 function sameCursorIdentity(left: SpeechCursor, right: SpeechCursor): boolean {
   return left.chatId === right.chatId
@@ -108,6 +132,9 @@ export class SpeechController {
   /** Any boundary bump invalidates in-flight work and late completions. */
   private epoch = 0;
   private inflight: AbortController | null = null;
+  private prefetchAbort: AbortController | null = null;
+  private readonly profileMemo = new Map<string, { snapshot: TtsProfileSnapshot; fetchedAt: number }>();
+  private playbackRate = 1;
   /** Session LRU: cache key -> revocable object URL. Never stores failures. */
   private readonly cache = new Map<string, { url: string; bytes: number }>();
   private cacheBytes = 0;
@@ -148,6 +175,7 @@ export class SpeechController {
       !== JSON.stringify({ ...next, volume: 0, autoplay: false });
     if (voicesChanged) {
       // A profile/voice/delivery change invalidates everything synthesized so far.
+      this.profileMemo.clear();
       this.stop("settings-changed");
       this.clearCache();
       this.publishBaseline();
@@ -280,9 +308,10 @@ export class SpeechController {
     // the cache key includes updated_at + model + effective voice + default-
     // parameter fingerprint, so a host-side profile edit can never silently
     // replay audio synthesized under the previous revision.
-    let snapshot;
+    let snapshot: TtsProfileSnapshot;
     try {
       snapshot = await this.transport.getProfile(resolved.ref.connectionId, abort.signal);
+      this.profileMemo.set(resolved.ref.connectionId, { snapshot, fetchedAt: Date.now() });
     } catch (error) {
       if (this.inflight === abort) this.inflight = null;
       if (this.disposed || myEpoch !== this.epoch) return;
@@ -309,8 +338,9 @@ export class SpeechController {
     );
     // Text effect tags (<shake>, <whisper>, ...) and HTML/Markdown markup: never read them aloud.
     const spoken = prepareSpeechText(cursor.text);
+    const effectiveTag = this.settings.deliveryTag.trim() || inferAutoDeliveryTag(cursor.text, cursor.poseExpressionId);
     const outbound = tagAllowed
-      ? formatOutboundText(spoken, this.settings.deliveryMode, this.settings.deliveryTag)
+      ? formatOutboundText(spoken, this.settings.deliveryMode, effectiveTag)
       : spoken;
     const effectiveVoice = resolved.ref.voice || snapshot.voice;
     const key = [
@@ -336,7 +366,7 @@ export class SpeechController {
 
     let blob: Blob;
     try {
-      blob = await this.transport.synthesize({ ref: resolved.ref, text: outbound }, abort.signal);
+      blob = await this.synthesizePossiblyChunked(resolved.ref, outbound, abort.signal);
     } catch (error) {
       if (this.inflight === abort) this.inflight = null;
       if (this.disposed || myEpoch !== this.epoch) return; // superseded: stay quiet
@@ -367,7 +397,116 @@ export class SpeechController {
     await this.playUrl(url, key, myEpoch, options.auto === true);
   }
 
+  setPlaybackRate(rate: number): void {
+    const clamped = Math.max(0.5, Math.min(2, Number.isFinite(rate) ? rate : 1));
+    this.playbackRate = clamped;
+    if (this.audio && "playbackRate" in this.audio) {
+      try { this.audio.playbackRate = clamped; } catch { /* ignore */ }
+    }
+  }
+
+  getPlaybackRate(): number {
+    return this.playbackRate;
+  }
+
+  /**
+   * Explicit lookahead prefetch for Zero-Gap Audiobook playback.
+   * Strict guard: no-ops unless actively playing, visible, enabled, and not disposed.
+   */
+  prefetchCursor(nextCursor: SpeechCursor | null): void {
+    if (this.disposed || !this.active || !this.visible || !this.settings.enabled || this.playState !== "playing" || !nextCursor) {
+      return;
+    }
+    const resolved = resolveVoiceForParagraph(this.settings, {
+      chatId: nextCursor.chatId,
+      paragraphSpeaker: nextCursor.paragraphSpeaker,
+      turnSpeaker: nextCursor.turnSpeaker,
+      ...(nextCursor.aliases !== undefined ? { aliases: nextCursor.aliases } : {}),
+    });
+    if (!resolved.ref) return;
+    if (this.prefetchAbort) {
+      this.prefetchAbort.abort("superseded-prefetch");
+    }
+    const abort = new AbortController();
+    this.prefetchAbort = abort;
+    const myEpoch = this.epoch;
+    const ref = resolved.ref;
+
+    void (async () => {
+      try {
+        const snapshot = await this.getProfileCached(ref.connectionId, abort.signal);
+        if (this.disposed || myEpoch !== this.epoch || abort.signal.aborted) return;
+        const tagAllowed = deliveryTagAllowedForModel(
+          this.settings.deliveryMode,
+          snapshot.model,
+          this.settings.deliveryAllProviders,
+        );
+        const spoken = prepareSpeechText(nextCursor.text);
+        if (!spoken.trim()) return;
+        const effectiveTag = this.settings.deliveryTag.trim() || inferAutoDeliveryTag(nextCursor.text, nextCursor.poseExpressionId);
+        const outbound = tagAllowed
+          ? formatOutboundText(spoken, this.settings.deliveryMode, effectiveTag)
+          : spoken;
+        const effectiveVoice = ref.voice || snapshot.voice;
+        const key = [
+          "v" + DELIVERY_ADAPTER_VERSION,
+          ref.connectionId,
+          snapshot.updatedAt,
+          snapshot.model,
+          effectiveVoice,
+          ref.parameters?.speed ?? "",
+          snapshot.parametersFingerprint,
+          outbound,
+        ].join("\u0000");
+        if (this.cache.has(key)) return;
+        const blob = await this.synthesizePossiblyChunked(ref, outbound, abort.signal);
+        if (this.disposed || myEpoch !== this.epoch || abort.signal.aborted || blob.size === 0) return;
+        const url = this.createObjectUrl(blob);
+        this.cache.set(key, { url, bytes: blob.size });
+        this.cacheBytes += blob.size;
+        this.evictOverflow(key);
+      } catch {
+        // Prefetch failures are silently ignored; never affect active playback or cache.
+      } finally {
+        if (this.prefetchAbort === abort) this.prefetchAbort = null;
+      }
+    })();
+  }
+
+  private async getProfileCached(connectionId: string, signal: AbortSignal): Promise<TtsProfileSnapshot> {
+    const hit = this.profileMemo.get(connectionId);
+    if (hit && Date.now() - hit.fetchedAt < PROFILE_MEMO_TTL_MS) {
+      return hit.snapshot;
+    }
+    const snapshot = await this.transport.getProfile(connectionId, signal);
+    this.profileMemo.set(connectionId, { snapshot, fetchedAt: Date.now() });
+    return snapshot;
+  }
+
+  private async synthesizePossiblyChunked(
+    ref: Parameters<TtsTransport["synthesize"]>[0]["ref"],
+    outbound: string,
+    signal: AbortSignal,
+  ): Promise<Blob> {
+    if (outbound.length <= 2000) {
+      return this.transport.synthesize({ ref, text: outbound }, signal);
+    }
+    const chunks = splitSpeechChunks(outbound, 1900);
+    if (chunks.length <= 1) {
+      return this.transport.synthesize({ ref, text: outbound }, signal);
+    }
+    const blobs: Blob[] = [];
+    for (const chunk of chunks) {
+      if (signal.aborted) break;
+      const part = await this.transport.synthesize({ ref, text: chunk }, signal);
+      if (part.size > 0) blobs.push(part);
+    }
+    if (blobs.length === 0) return new Blob([]);
+    return new Blob(blobs, { type: blobs[0]?.type || "audio/mpeg" });
+  }
+
   dispose(): void {
+    this.profileMemo.clear();
     if (this.disposed) return;
     this.pauseRequested = false;
     this.starting = false;
@@ -421,6 +560,11 @@ export class SpeechController {
       this.inflight = null;
       controller.abort(reason);
     }
+    if (this.prefetchAbort) {
+      const pre = this.prefetchAbort;
+      this.prefetchAbort = null;
+      pre.abort(reason);
+    }
   }
 
   private ensureAudio(): SpeechAudioElement {
@@ -429,6 +573,9 @@ export class SpeechController {
 
     }
     this.audio.volume = this.settings.volume;
+    if ("playbackRate" in this.audio) {
+      try { this.audio.playbackRate = this.playbackRate; } catch { /* ignore */ }
+    }
     return this.audio;
   }
 

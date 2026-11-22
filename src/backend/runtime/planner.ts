@@ -2080,13 +2080,16 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   // Preview delivery is optional enrichment; a disconnected frontend must not fail planning.
   try{input.onNarrativePrepared?.(narrative.paragraphs.map(paragraph=>paragraph.text));}catch{}
 
-  const visualContext = await loadVisualContext(spindle, {
-    chatId: input.chatId,
-    target: [recentContext(input.recentMessages, input.config.includeRecentMessages), stripTextEffectTags(input.content)].filter(Boolean).join("\n\n"),
-    config: input.config,
-    ...(input.simTrackerEvidence ? { trackerEvidence: input.simTrackerEvidence } : {}),
-    ...(input.userId ? { userId: input.userId } : {})
-  });
+  const [visualContext, storyDNAResult] = await Promise.all([
+    loadVisualContext(spindle, {
+      chatId: input.chatId,
+      target: [recentContext(input.recentMessages, input.config.includeRecentMessages), stripTextEffectTags(input.content)].filter(Boolean).join("\n\n"),
+      config: input.config,
+      ...(input.simTrackerEvidence ? { trackerEvidence: input.simTrackerEvidence } : {}),
+      ...(input.userId ? { userId: input.userId } : {})
+    }),
+    loadStoryDNASet(spindle, input.chatId, input.userId).catch(() => null),
+  ]);
 
   if (narrative.detectedSceneMetadata) {
     const meta = narrative.detectedSceneMetadata;
@@ -2107,38 +2110,40 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
 
   let loadedStoryDnaSet: StoryDNASet | null = null;
   try {
-    const storyDNASet = await loadStoryDNASet(spindle, input.chatId, input.userId);
-    loadedStoryDnaSet = storyDNASet;
-    const activeLocName = (narrative.detectedSceneMetadata?.location || input.previousScene?.environment.location || '').trim().toLowerCase();
-    const matchedLocation = activeLocName
-      ? Object.values(storyDNASet.locations).find((loc) =>
-          loc.name.trim().toLowerCase() === activeLocName ||
-          loc.aliases.some((alias) => alias.trim().toLowerCase() === activeLocName)
-        )
-      : undefined;
-    if (matchedLocation && (matchedLocation.locked || matchedLocation.architecture || matchedLocation.persistentElements.length > 0)) {
-      const dnaParts = [
-        matchedLocation.environmentDescription ? `setting=${matchedLocation.environmentDescription}` : '',
-        matchedLocation.architecture ? `architecture=${matchedLocation.architecture}` : '',
-        matchedLocation.lighting ? `lighting=${matchedLocation.lighting}` : '',
-        matchedLocation.persistentElements.length > 0 ? `persistent_props=${matchedLocation.persistentElements.join('; ')}` : ''
-      ].filter(Boolean);
-      if (dnaParts.length > 0) {
-        visualContext.plannerContext += `\nEstablished Location DNA (${matchedLocation.name}): ${dnaParts.join(' | ')}. Preserve these canonical physical details unless the narrative explicitly alters them.`;
-      }
-    }
-    const recentCodex = (storyDNASet.chapterCodex ?? []).slice(-3);
-    if (recentCodex.length > 0) {
-      const codexLines = recentCodex.map((c) => {
-        if (c.who?.length || c.whatChanged?.length || c.where) {
-          const who = c.who?.length ? `Who: ${c.who.join(', ')}` : '';
-          const where = c.where || c.location || 'Scene';
-          const changed = c.whatChanged?.length ? `Changed: ${c.whatChanged.join('; ')}` : c.summary.slice(0, 180);
-          return `- [${where}] ${[who, changed].filter(Boolean).join(' | ')}`;
+    const storyDNASet = storyDNAResult;
+    if (storyDNASet) {
+      loadedStoryDnaSet = storyDNASet;
+      const activeLocName = (narrative.detectedSceneMetadata?.location || input.previousScene?.environment.location || '').trim().toLowerCase();
+      const matchedLocation = activeLocName
+        ? Object.values(storyDNASet.locations).find((loc) =>
+            loc.name.trim().toLowerCase() === activeLocName ||
+            loc.aliases.some((alias) => alias.trim().toLowerCase() === activeLocName)
+          )
+        : undefined;
+      if (matchedLocation && (matchedLocation.locked || matchedLocation.architecture || matchedLocation.persistentElements.length > 0)) {
+        const dnaParts = [
+          matchedLocation.environmentDescription ? `setting=${matchedLocation.environmentDescription}` : '',
+          matchedLocation.architecture ? `architecture=${matchedLocation.architecture}` : '',
+          matchedLocation.lighting ? `lighting=${matchedLocation.lighting}` : '',
+          matchedLocation.persistentElements.length > 0 ? `persistent_props=${matchedLocation.persistentElements.join('; ')}` : ''
+        ].filter(Boolean);
+        if (dnaParts.length > 0) {
+          visualContext.plannerContext += `\nEstablished Location DNA (${matchedLocation.name}): ${dnaParts.join(' | ')}. Preserve these canonical physical details unless the narrative explicitly alters them.`;
         }
-        return `- [${c.location || 'Scene'}] ${c.title}: ${c.summary}`;
-      });
-      visualContext.plannerContext += `\nRecent Chapter Memory:\n${codexLines.join('\n')}`;
+      }
+      const recentCodex = (storyDNASet.chapterCodex ?? []).slice(-3);
+      if (recentCodex.length > 0) {
+        const codexLines = recentCodex.map((c) => {
+          if (c.who?.length || c.whatChanged?.length || c.where) {
+            const who = c.who?.length ? `Who: ${c.who.join(', ')}` : '';
+            const where = c.where || c.location || 'Scene';
+            const changed = c.whatChanged?.length ? `Changed: ${c.whatChanged.join('; ')}` : c.summary.slice(0, 180);
+            return `- [${where}] ${[who, changed].filter(Boolean).join(' | ')}`;
+          }
+          return `- [${c.location || 'Scene'}] ${c.title}: ${c.summary}`;
+        });
+        visualContext.plannerContext += `\nRecent Chapter Memory:\n${codexLines.join('\n')}`;
+      }
     }
   } catch {
     // Story DNA enrichment is opportunistic; planner continues if storage is unavailable.

@@ -25494,6 +25494,8 @@ var SETTINGS_FIELD_PAGES = {
   imageConcurrency: "generation",
   bgmVolume: "music",
   sfxVolume: "music",
+  ambientVolume: "music",
+  builtInAudioEnabled: "music",
   speech: "speech",
   parserConnectionId: "connections",
   parserParameters: "parameters",
@@ -27647,6 +27649,16 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   color: var(--aperture-accent, #c4b5fd) !important;
   box-shadow: 0 0 12px var(--aperture-accent-glow, rgba(167, 139, 250, 0.48)) !important;
   opacity: 1 !important;
+  animation: vn-auto-pulse 1.8s ease-in-out infinite !important;
+}
+
+@keyframes vn-auto-pulse {
+  0%, 100% {
+    box-shadow: 0 0 10px var(--aperture-accent-glow, rgba(167, 139, 250, 0.42));
+  }
+  50% {
+    box-shadow: 0 0 18px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 65%, transparent);
+  }
 }
 
 [data-vn-dialogue-text],
@@ -39509,6 +39521,14 @@ var VN_EFFECTS_CSS = `
   animation: vn-shatter-shard-fly 640ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* Enclosure awareness: soften outdoor weather layers when viewing an indoor scene */
+[data-vn-ambient][data-vn-indoor="true"].vn-ambient-rain,
+[data-vn-ambient][data-vn-indoor="true"].vn-ambient-heavy_rain,
+[data-vn-ambient][data-vn-indoor="true"].vn-ambient-snow,
+[data-vn-ambient][data-vn-indoor="true"].vn-ambient-snowstorm {
+  opacity: 0.34;
+}
+
 `;
 
 // src/frontend/stage/procedural-particles.ts
@@ -44200,6 +44220,8 @@ var DEFAULT_CONFIG = {
   audioDirectory: "",
   bgmVolume: 0.7,
   sfxVolume: 0.8,
+  ambientVolume: 0.45,
+  builtInAudioEnabled: true,
   speech: DEFAULT_SPEECH_SETTINGS
 };
 var configMemo = new Map;
@@ -48621,6 +48643,7 @@ class VnStage {
   }
   renderSceneHud() {
     const atmo = this.narrative.hidden || !this.state.worldAtmosphere?.length ? null : atmosphereForPosition({ worldAtmosphere: [...this.state.worldAtmosphere] }, this.state.currentParagraphIndex);
+    this.ambientOverlay.dataset.vnIndoor = atmo?.indoor ? "true" : "false";
     renderWorldAtmosphereStrip(this.workspace.worldStrip, atmo, {
       documentCount: this.dossiers.scenePostcardSummary().documents.length,
       expanded: Boolean(this.scenePostcardEl)
@@ -49670,6 +49693,436 @@ class VnStage {
     this.submitButton.disabled = isBusy || this.state.draft.trim().length === 0;
   }
 }
+// src/frontend/stage/ambient-synth.ts
+var KNOWN_PRESETS = new Set([
+  "rain",
+  "heavy_rain",
+  "storm",
+  "candlelight_warmth",
+  "embers",
+  "snow",
+  "snowstorm",
+  "cold_mist",
+  "fog",
+  "fireflies",
+  "forest",
+  "ocean",
+  "underwater_bubbles",
+  "room_tone",
+  "tavern",
+  "neon_haze"
+]);
+function normalizeAmbientPreset(raw) {
+  if (!raw || typeof raw !== "string")
+    return null;
+  const cleaned = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (!cleaned || cleaned === "none" || cleaned === "off" || cleaned === "clear")
+    return null;
+  if (KNOWN_PRESETS.has(cleaned))
+    return cleaned;
+  if (cleaned.includes("thunder") || cleaned.includes("storm"))
+    return "storm";
+  if (cleaned.includes("heavy") && cleaned.includes("rain"))
+    return "heavy_rain";
+  if (cleaned.includes("rain") || cleaned.includes("drizzle"))
+    return "rain";
+  if (cleaned.includes("snow") || cleaned.includes("blizzard"))
+    return "snow";
+  if (cleaned.includes("mist") || cleaned.includes("frost"))
+    return "cold_mist";
+  if (cleaned.includes("fog"))
+    return "fog";
+  if (cleaned.includes("ember") || cleaned.includes("fire") || cleaned.includes("hearth"))
+    return "embers";
+  if (cleaned.includes("candle"))
+    return "candlelight_warmth";
+  if (cleaned.includes("underwater") || cleaned.includes("bubble"))
+    return "underwater_bubbles";
+  if (cleaned.includes("ocean") || cleaned.includes("sea") || cleaned.includes("wave"))
+    return "ocean";
+  if (cleaned.includes("forest") || cleaned.includes("woods"))
+    return "forest";
+  if (cleaned.includes("firefl") || cleaned.includes("night"))
+    return "fireflies";
+  if (cleaned.includes("tavern") || cleaned.includes("inn") || cleaned.includes("pub"))
+    return "tavern";
+  if (cleaned.includes("neon") || cleaned.includes("cyber") || cleaned.includes("synth"))
+    return "neon_haze";
+  if (cleaned.includes("room") || cleaned.includes("indoor") || cleaned.includes("quiet"))
+    return "room_tone";
+  return null;
+}
+
+class AmbientSynth {
+  ctx = null;
+  masterGain = null;
+  enclosureFilter = null;
+  duckGain = null;
+  bedNodes = [];
+  bedTimers = [];
+  activePreset = null;
+  indoor = false;
+  enabled = true;
+  volume = 0.45;
+  duckFactor = 1;
+  userTrackActive = false;
+  disposed = false;
+  setEnabled(enabled) {
+    this.enabled = Boolean(enabled);
+    if (!this.enabled) {
+      this.teardownBed();
+    } else if (this.activePreset && !this.userTrackActive) {
+      this.rebuildBed();
+    }
+    this.updateGainTargets();
+  }
+  setVolume(volume) {
+    this.volume = Math.max(0, Math.min(1, Number.isFinite(volume) ? volume : 0.45));
+    this.updateGainTargets();
+  }
+  setSpeechDucking(active) {
+    this.duckFactor = active ? 0.38 : 1;
+    this.updateGainTargets();
+  }
+  setUserTrackActive(active) {
+    if (this.userTrackActive === active)
+      return;
+    this.userTrackActive = active;
+    if (active) {
+      this.updateGainTargets();
+    } else if (this.enabled && this.activePreset) {
+      if (this.bedNodes.length === 0)
+        this.rebuildBed();
+      this.updateGainTargets();
+    }
+  }
+  setAtmosphere(preset, options = {}) {
+    if (this.disposed)
+      return;
+    const normalized = normalizeAmbientPreset(preset);
+    const nextIndoor = Boolean(options.indoor);
+    const presetChanged = normalized !== this.activePreset;
+    const indoorChanged = nextIndoor !== this.indoor;
+    this.activePreset = normalized;
+    this.indoor = nextIndoor;
+    if (!normalized || !this.enabled) {
+      this.teardownBed();
+      return;
+    }
+    if (presetChanged || this.bedNodes.length === 0) {
+      this.rebuildBed();
+    }
+    if (presetChanged || indoorChanged) {
+      this.updateEnclosureFilter();
+      this.updateGainTargets();
+    }
+  }
+  playFoley(kind, sfxVolume = 0.8) {
+    if (this.disposed || !this.enabled || sfxVolume <= 0)
+      return;
+    const ctx = this.ensureContext();
+    if (!ctx)
+      return;
+    const vol = Math.max(0, Math.min(1, sfxVolume)) * 0.25;
+    const now = ctx.currentTime;
+    if (kind === "bond_chime") {
+      for (const [idx, freq] of [523.25, 659.25, 783.99].entries()) {
+        const osc = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, now + idx * 0.045);
+        gain2.gain.setValueAtTime(0.0001, now + idx * 0.045);
+        gain2.gain.exponentialRampToValueAtTime(vol * 0.35, now + idx * 0.045 + 0.03);
+        gain2.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.045 + 0.55);
+        osc.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc.start(now + idx * 0.045);
+        osc.stop(now + idx * 0.045 + 0.6);
+      }
+      return;
+    }
+    if (kind === "dice_roll") {
+      for (const offset of [0, 0.055, 0.12]) {
+        const osc = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(240 + offset * 600, now + offset);
+        osc.frequency.exponentialRampToValueAtTime(90, now + offset + 0.035);
+        gain2.gain.setValueAtTime(vol * 0.5, now + offset);
+        gain2.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.04);
+        osc.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.05);
+      }
+      return;
+    }
+    const duration3 = kind === "parchment" ? 0.22 : 0.12;
+    const buf = this.createNoiseBuffer(ctx, duration3, "pink");
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.setValueAtTime(kind === "parchment" ? 2100 : 1600, now);
+    filter.Q.setValueAtTime(1.4, now);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(vol * 0.45, now + 0.025);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration3);
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    src.start(now);
+    src.stop(now + duration3 + 0.02);
+  }
+  stop() {
+    this.activePreset = null;
+    this.teardownBed();
+  }
+  dispose() {
+    if (this.disposed)
+      return;
+    this.disposed = true;
+    this.stop();
+    if (this.ctx) {
+      try {
+        this.ctx.close();
+      } catch {}
+      this.ctx = null;
+    }
+    this.masterGain = null;
+    this.enclosureFilter = null;
+    this.duckGain = null;
+  }
+  ensureContext() {
+    if (this.disposed)
+      return null;
+    if (this.ctx) {
+      if (this.ctx.state === "suspended") {
+        try {
+          this.ctx.resume();
+        } catch {}
+      }
+      return this.ctx;
+    }
+    const g = globalThis;
+    const Ctor = g.AudioContext ?? g.webkitAudioContext;
+    if (!Ctor)
+      return null;
+    try {
+      const ctx = new Ctor;
+      const filter = ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = this.indoor ? 650 : 18000;
+      const duck = ctx.createGain();
+      duck.gain.value = this.duckFactor;
+      const master = ctx.createGain();
+      master.gain.value = 0;
+      filter.connect(duck);
+      duck.connect(master);
+      master.connect(ctx.destination);
+      this.ctx = ctx;
+      this.enclosureFilter = filter;
+      this.duckGain = duck;
+      this.masterGain = master;
+      return ctx;
+    } catch {
+      return null;
+    }
+  }
+  updateEnclosureFilter() {
+    if (!this.ctx || !this.enclosureFilter)
+      return;
+    const targetFreq = this.indoor ? 650 : 18000;
+    try {
+      this.enclosureFilter.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.25);
+    } catch {
+      this.enclosureFilter.frequency.value = targetFreq;
+    }
+  }
+  updateGainTargets() {
+    if (!this.ctx || !this.masterGain || !this.duckGain)
+      return;
+    const indoorScale = this.indoor ? 0.68 : 1;
+    const targetMaster = !this.enabled || this.userTrackActive || !this.activePreset ? 0 : this.volume * 0.26 * indoorScale;
+    try {
+      this.masterGain.gain.setTargetAtTime(targetMaster, this.ctx.currentTime, 0.2);
+      this.duckGain.gain.setTargetAtTime(this.duckFactor, this.ctx.currentTime, 0.15);
+    } catch {
+      this.masterGain.gain.value = targetMaster;
+      this.duckGain.gain.value = this.duckFactor;
+    }
+  }
+  teardownBed() {
+    for (const timer of this.bedTimers)
+      clearInterval(timer);
+    this.bedTimers = [];
+    for (const node2 of this.bedNodes) {
+      try {
+        node2.stop?.();
+      } catch {}
+      try {
+        node2.disconnect();
+      } catch {}
+    }
+    this.bedNodes = [];
+  }
+  createNoiseBuffer(ctx, seconds, color) {
+    const length = Math.max(1, Math.floor(ctx.sampleRate * seconds));
+    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    let b0 = 0, b1 = 0, b2 = 0, lastOut = 0;
+    for (let i = 0;i < length; i++) {
+      const white = Math.random() * 2 - 1;
+      if (color === "brown") {
+        lastOut = (lastOut + 0.02 * white) / 1.02;
+        data[i] = Math.max(-1, Math.min(1, lastOut * 3.2));
+      } else {
+        b0 = 0.99765 * b0 + white * 0.099046;
+        b1 = 0.963 * b1 + white * 0.2965164;
+        b2 = 0.57 * b2 + white * 1.0526913;
+        data[i] = Math.max(-1, Math.min(1, (b0 + b1 + b2 + white * 0.1848) * 0.14));
+      }
+    }
+    return buffer;
+  }
+  rebuildBed() {
+    this.teardownBed();
+    if (!this.activePreset || !this.enabled || this.disposed)
+      return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.enclosureFilter)
+      return;
+    const preset = this.activePreset;
+    const out = this.enclosureFilter;
+    if (preset === "rain" || preset === "heavy_rain" || preset === "storm") {
+      const noise2 = ctx.createBufferSource();
+      noise2.buffer = this.createNoiseBuffer(ctx, 3, "pink");
+      noise2.loop = true;
+      const bp = ctx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.value = preset === "rain" ? 1300 : 1750;
+      bp.Q.value = 0.6;
+      const gain2 = ctx.createGain();
+      gain2.gain.value = preset === "rain" ? 0.7 : 1;
+      noise2.connect(bp);
+      bp.connect(gain2);
+      gain2.connect(out);
+      noise2.start();
+      this.bedNodes.push(noise2, bp, gain2);
+      if (preset === "storm") {
+        const thunderTimer = setInterval(() => {
+          if (this.disposed || !this.ctx || !this.enclosureFilter || !this.enabled || this.userTrackActive)
+            return;
+          const now = this.ctx.currentTime;
+          const sub = this.ctx.createOscillator();
+          const g = this.ctx.createGain();
+          sub.type = "triangle";
+          sub.frequency.setValueAtTime(62, now);
+          sub.frequency.exponentialRampToValueAtTime(34, now + 2.4);
+          g.gain.setValueAtTime(0.0001, now);
+          g.gain.exponentialRampToValueAtTime(0.42, now + 0.35);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + 2.6);
+          sub.connect(g);
+          g.connect(this.enclosureFilter);
+          sub.start(now);
+          sub.stop(now + 2.7);
+        }, 11000);
+        this.bedTimers.push(thunderTimer);
+      }
+      return;
+    }
+    if (preset === "candlelight_warmth" || preset === "embers") {
+      const noise2 = ctx.createBufferSource();
+      noise2.buffer = this.createNoiseBuffer(ctx, 3, "brown");
+      noise2.loop = true;
+      const lp2 = ctx.createBiquadFilter();
+      lp2.type = "lowpass";
+      lp2.frequency.value = 420;
+      const gain2 = ctx.createGain();
+      gain2.gain.value = 0.75;
+      noise2.connect(lp2);
+      lp2.connect(gain2);
+      gain2.connect(out);
+      noise2.start();
+      this.bedNodes.push(noise2, lp2, gain2);
+      const crackleTimer = setInterval(() => {
+        if (this.disposed || !this.ctx || !this.enclosureFilter || !this.enabled || this.userTrackActive)
+          return;
+        if (Math.random() > 0.55)
+          return;
+        const now = this.ctx.currentTime;
+        const pop = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        pop.type = "square";
+        pop.frequency.setValueAtTime(1400 + Math.random() * 1800, now);
+        g.gain.setValueAtTime(0.08, now);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.028);
+        pop.connect(g);
+        g.connect(this.enclosureFilter);
+        pop.start(now);
+        pop.stop(now + 0.032);
+      }, 420);
+      this.bedTimers.push(crackleTimer);
+      return;
+    }
+    if (preset === "snow" || preset === "snowstorm" || preset === "cold_mist" || preset === "fog" || preset === "ocean" || preset === "underwater_bubbles") {
+      const noise2 = ctx.createBufferSource();
+      noise2.buffer = this.createNoiseBuffer(ctx, 4, preset === "underwater_bubbles" ? "brown" : "pink");
+      noise2.loop = true;
+      const filter = ctx.createBiquadFilter();
+      filter.type = preset === "ocean" || preset === "underwater_bubbles" ? "lowpass" : "bandpass";
+      filter.frequency.value = preset === "underwater_bubbles" ? 320 : preset === "ocean" ? 520 : 680;
+      filter.Q.value = preset === "ocean" ? 0.9 : 1.5;
+      const lfo = ctx.createOscillator();
+      const lfoGain = ctx.createGain();
+      lfo.type = "sine";
+      lfo.frequency.value = preset === "ocean" ? 0.14 : 0.09;
+      lfoGain.gain.value = preset === "underwater_bubbles" ? 120 : 280;
+      lfo.connect(lfoGain);
+      lfoGain.connect(filter.frequency);
+      const gain2 = ctx.createGain();
+      gain2.gain.value = preset === "snowstorm" ? 0.85 : 0.6;
+      noise2.connect(filter);
+      filter.connect(gain2);
+      gain2.connect(out);
+      noise2.start();
+      lfo.start();
+      this.bedNodes.push(noise2, lfo, lfoGain, filter, gain2);
+      return;
+    }
+    if (preset === "neon_haze") {
+      const osc = ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.value = 110;
+      const lp2 = ctx.createBiquadFilter();
+      lp2.type = "lowpass";
+      lp2.frequency.value = 380;
+      const gain2 = ctx.createGain();
+      gain2.gain.value = 0.25;
+      osc.connect(lp2);
+      lp2.connect(gain2);
+      gain2.connect(out);
+      osc.start();
+      this.bedNodes.push(osc, lp2, gain2);
+      return;
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = this.createNoiseBuffer(ctx, 3, "brown");
+    noise.loop = true;
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = preset === "forest" || preset === "fireflies" ? 900 : 480;
+    const gain = ctx.createGain();
+    gain.gain.value = 0.42;
+    noise.connect(lp);
+    lp.connect(gain);
+    gain.connect(out);
+    noise.start();
+    this.bedNodes.push(noise, lp, gain);
+  }
+}
+
 // src/frontend/stage/audio-engine.ts
 function createMockAudioPlayer(src) {
   const listeners = new Map;
@@ -49748,9 +50201,12 @@ class AudioEngine {
   activeBgm = null;
   activeSfx = new Set;
   destroyed = false;
+  ambientSynth = new AmbientSynth;
   constructor(options = {}) {
     this.bgmVolume = Math.max(0, Math.min(1, options.bgmVolume ?? 0.7));
     this.sfxVolume = Math.max(0, Math.min(1, options.sfxVolume ?? 0.8));
+    this.ambientSynth.setVolume(options.ambientVolume ?? 0.45);
+    this.ambientSynth.setEnabled(options.builtInAudioEnabled ?? true);
     this.crossfadeDuration = options.crossfadeDuration ?? DEFAULT_CROSSFADE_DURATION_MS;
     this.attenuationRampMs = options.attenuationRampMs ?? DEFAULT_ATTENUATION_RAMP_MS;
     this.audioFactory = options.audioFactory ?? defaultAudioFactory;
@@ -49804,6 +50260,7 @@ class AudioEngine {
   setSpeechDucking(active) {
     if (this.destroyed)
       return;
+    this.ambientSynth.setSpeechDucking(active);
     const next = active ? 0.38 : 1;
     if (this.speechDucking === next)
       return;
@@ -49838,6 +50295,26 @@ class AudioEngine {
     item.gain = Math.max(0, Math.min(1, gain));
     item.player.volume = item.gain * this.bgmVolume * item.speechLevel * item.attenLevel;
   }
+  setAmbientVolume(volume) {
+    if (this.destroyed)
+      return;
+    this.ambientSynth.setVolume(volume);
+  }
+  setBuiltInAudioEnabled(enabled) {
+    if (this.destroyed)
+      return;
+    this.ambientSynth.setEnabled(enabled);
+  }
+  setAtmosphere(preset, options = {}) {
+    if (this.destroyed)
+      return;
+    this.ambientSynth.setAtmosphere(preset, options);
+  }
+  playFoley(kind) {
+    if (this.destroyed)
+      return;
+    this.ambientSynth.playFoley(kind, this.sfxVolume);
+  }
   getSfxVolume() {
     return this.sfxVolume;
   }
@@ -49858,6 +50335,7 @@ class AudioEngine {
       this.stopBgm(options);
       return;
     }
+    this.ambientSynth.setUserTrackActive(true);
     const duration3 = options.crossfadeDuration ?? this.crossfadeDuration;
     if (this.activeBgm && this.activeBgm.src === cleanSrc) {
       if (this.activeBgm.player.paused) {
@@ -49899,6 +50377,7 @@ class AudioEngine {
       this.fadeOutAndCleanup(item, duration3);
     }
     this.activeBgm = null;
+    this.ambientSynth.setUserTrackActive(false);
   }
   playSfx(src, options = {}) {
     if (this.destroyed)
@@ -49942,10 +50421,12 @@ class AudioEngine {
       sfx.pause();
     }
     this.activeSfx.clear();
+    this.ambientSynth.stop();
   }
   destroy() {
     this.destroyed = true;
     this.stopAll();
+    this.ambientSynth.dispose();
   }
   clearFade(item) {
     if (item.fadeTimer !== undefined) {
@@ -55033,10 +55514,12 @@ class VisualNovelSettingsPanel {
               <small data-audio-status role="status" aria-live="polite"></small>
             `, { find: find("Music library", "import audio folder bgm sfx scan check") })}
             <label data-field ${find("Music transitions", "soundtrack location cue track")}><span>Music transitions</span><select name="musicTransitionPolicy"><option value="cue">Follow story cues (default)</option><option value="location">Keep music within a location</option></select><small>Location mode accepts the first recorded track for each location. Unknown locations follow cues. Choose a recorded track manually in the reader workspace.</small></label>
-            ${group("Volume", `
+            ${group("Volume & built-in audio", `
+              <label data-check ${find("Built-in procedural soundscapes", "built in audio soundscape foley ambient synth")}><span><input name="builtInAudioEnabled" type="checkbox" />Built-in procedural soundscapes &amp; foley</span><small>Plays subtle offline Web Audio weather beds (with indoor muffling) and tactile UI foley when no custom track is active.</small></label>
               <div data-row>
                 <label data-field ${find("Music volume", "bgm loudness audio")}><span>Music volume <span data-bgm-val>70%</span></span><input name="bgmVolume" type="range" min="0" max="1" step="0.05" /></label>
                 <label data-field ${find("Sound effects volume", "sfx loudness audio")}><span>Sound effects volume <span data-sfx-val>80%</span></span><input name="sfxVolume" type="range" min="0" max="1" step="0.05" /></label>
+                <label data-field ${find("Ambient soundscape volume", "ambient loudness soundscape weather")}><span>Ambient volume <span data-ambient-val>45%</span></span><input name="ambientVolume" type="range" min="0" max="1" step="0.05" /></label>
               </div>
             `, { find: "" })}
           `)}
@@ -55624,7 +56107,7 @@ class VisualNovelSettingsPanel {
         this.markDraft(target2.name);
         return;
       }
-      if (target2.name === "bgmVolume" || target2.name === "sfxVolume")
+      if (target2.name === "bgmVolume" || target2.name === "sfxVolume" || target2.name === "ambientVolume")
         this.updateVolumeLabels();
       if (target2.name === "textSpeed")
         this.restartSample();
@@ -56124,6 +56607,10 @@ class VisualNovelSettingsPanel {
         return { bgmVolume: clamp(Number(target2.value), 0, 1, DEFAULT_CONFIG.bgmVolume) };
       case "sfxVolume":
         return { sfxVolume: clamp(Number(target2.value), 0, 1, DEFAULT_CONFIG.sfxVolume) };
+      case "ambientVolume":
+        return { ambientVolume: clamp(Number(target2.value), 0, 1, DEFAULT_CONFIG.ambientVolume) };
+      case "builtInAudioEnabled":
+        return { builtInAudioEnabled: checked };
       case "imageSource":
       case "setupImageSource":
         return imageSourcePatch(target2.value);
@@ -56826,6 +57313,8 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
     this.root.querySelector("[data-budget-help]").textContent = config2.systemOneMode === "on" && !config2.useNativeCardImages ? `${config2.maxImagesPerTurn > 0 ? `Up to ${config2.maxImagesPerTurn} new pictures per reply.` : "No limit on new pictures."} With confident System One expressions, cached pictures can appear on additional paragraphs without using this allowance.` : describeBudget(config2.maxImagesPerTurn);
     this.control("bgmVolume").value = String(config2.bgmVolume);
     this.control("sfxVolume").value = String(config2.sfxVolume);
+    this.control("ambientVolume").value = String(config2.ambientVolume);
+    this.control("builtInAudioEnabled").checked = config2.builtInAudioEnabled;
     this.updateVolumeLabels();
     this.renderConnectionSelects("planner", config2.parserConnectionId);
     this.renderConnectionSelects("image", config2.imageConnectionId);
@@ -56841,8 +57330,12 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
   updateVolumeLabels() {
     const bgm = this.control("bgmVolume");
     const sfx = this.control("sfxVolume");
+    const ambient = this.control("ambientVolume");
     this.root.querySelector("[data-bgm-val]").textContent = `${Math.round(Number(bgm.value) * 100)}%`;
     this.root.querySelector("[data-sfx-val]").textContent = `${Math.round(Number(sfx.value) * 100)}%`;
+    const ambEl = this.root.querySelector("[data-ambient-val]");
+    if (ambEl)
+      ambEl.textContent = `${Math.round(Number(ambient.value) * 100)}%`;
   }
   updateSummaries(config2) {
     const summary = (section, text) => {
@@ -58397,7 +58890,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.181";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.182";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -67766,6 +68259,34 @@ function formatOutboundText(text3, mode, tag) {
     return text3;
   return `[${safe}] ${text3}`;
 }
+var POSE_TO_GEMINI_TAG = [
+  [/whisper|hush|secret/i, "whispers"],
+  [/shout|yell|furious|angry|rage/i, "shouting"],
+  [/sad|cry|weep|sob|sorrow/i, "crying"],
+  [/laugh|giggle|chuckle|joy|happy|delight/i, "laughs"],
+  [/gasp|shock|surpris|startl/i, "gasp"],
+  [/nervous|trembl|fear|scared|anxious|panic/i, "trembling"],
+  [/sarcas|smug|teas|smirk/i, "sarcastic"],
+  [/sigh|tired|weary|exhaust/i, "sighs"],
+  [/excit|enthus/i, "excited"]
+];
+function inferAutoDeliveryTag(text3, poseExpressionId) {
+  const lower = text3.toLowerCase();
+  if (/<whisper\b/i.test(lower))
+    return "whispers";
+  if (/<shout\b|<yell\b/i.test(lower))
+    return "shouting";
+  if (/<sigh\b/i.test(lower))
+    return "sighs";
+  const pose = (poseExpressionId ?? "").trim();
+  if (!pose)
+    return "";
+  for (const [pattern, tag] of POSE_TO_GEMINI_TAG) {
+    if (pattern.test(pose))
+      return tag;
+  }
+  return "";
+}
 
 // src/frontend/speech/voice-resolution.ts
 function speakerNameKey(name) {
@@ -67806,10 +68327,83 @@ function resolveVoiceForParagraph(settings, input2) {
     return { ref: settings.narrator, source: "narrator", role: "character", speakerName: name };
   return { ref: null, source: "none", role: "character", speakerName: name };
 }
+var FEMALE_RE = /\b(female|woman|girl|lady|she|her|feminine|soprano|alto|princess|queen)\b/i;
+var MALE_RE = /\b(male|man|boy|gentleman|he|him|masculine|baritone|bass|tenor|prince|king)\b/i;
+function autoCastVoicesForCast(input2) {
+  const nextOverrides = { ...input2.existingOverrides };
+  const assignments = [];
+  if (!input2.chatId || input2.cast.length === 0 || input2.availableVoices.length === 0) {
+    return { nextOverrides, assignedCount: 0, assignments };
+  }
+  const usedVoiceKeys = new Set(Object.values(input2.existingOverrides).map((ref) => `${ref.connectionId}\x00${ref.voice}`));
+  for (const member of input2.cast) {
+    const cleanName = member.name.trim();
+    if (!cleanName || !speakerNameKey(cleanName))
+      continue;
+    const key = characterOverrideKey(input2.chatId, cleanName);
+    if (nextOverrides[key])
+      continue;
+    const traitText = `${member.gender ?? ""} ${member.age ?? ""} ${member.demeanor ?? ""}`.trim();
+    const wantsFemale = FEMALE_RE.test(traitText);
+    const wantsMale = !wantsFemale && MALE_RE.test(traitText);
+    let bestVoice = null;
+    let bestScore = -Infinity;
+    for (const voice of input2.availableVoices) {
+      const voiceKey = `${voice.connectionId}\x00${voice.voiceId}`;
+      const voiceMeta = `${voice.gender ?? ""} ${voice.label ?? ""} ${voice.voiceId}`.trim();
+      let score = usedVoiceKeys.has(voiceKey) ? -10 : 10;
+      if (wantsFemale && FEMALE_RE.test(voiceMeta))
+        score += 6;
+      else if (wantsFemale && MALE_RE.test(voiceMeta))
+        score -= 4;
+      if (wantsMale && MALE_RE.test(voiceMeta))
+        score += 6;
+      else if (wantsMale && FEMALE_RE.test(voiceMeta))
+        score -= 4;
+      if (score > bestScore) {
+        bestScore = score;
+        bestVoice = voice;
+      }
+    }
+    if (bestVoice) {
+      usedVoiceKeys.add(`${bestVoice.connectionId}\x00${bestVoice.voiceId}`);
+      nextOverrides[key] = { connectionId: bestVoice.connectionId, voice: bestVoice.voiceId };
+      assignments.push({ name: cleanName, connectionId: bestVoice.connectionId, voice: bestVoice.voiceId });
+    }
+  }
+  return {
+    nextOverrides,
+    assignedCount: assignments.length,
+    assignments
+  };
+}
 
 // src/frontend/speech/controller.ts
 var DEFAULT_MAX_CACHE_ITEMS = 16;
 var DEFAULT_MAX_CACHE_BYTES = 32 * 1024 * 1024;
+var PROFILE_MEMO_TTL_MS = 30000;
+function splitSpeechChunks(text3, maxChars = 1900) {
+  const trimmed = text3.trim();
+  if (!trimmed || trimmed.length <= maxChars)
+    return trimmed ? [trimmed] : [];
+  const sentences = trimmed.match(/[^.!?]+(?:[.!?]+|$)/g) ?? [trimmed];
+  const chunks = [];
+  let current = "";
+  for (const rawSentence of sentences) {
+    const sentence = rawSentence.trim();
+    if (!sentence)
+      continue;
+    if (current && current.length + 1 + sentence.length > maxChars) {
+      chunks.push(current);
+      current = sentence;
+    } else {
+      current = current ? `${current} ${sentence}` : sentence;
+    }
+  }
+  if (current)
+    chunks.push(current);
+  return chunks.length > 0 ? chunks : [trimmed];
+}
 function sameCursorIdentity(left, right) {
   return left.chatId === right.chatId && left.messageId === right.messageId && (left.swipeId ?? 0) === (right.swipeId ?? 0) && left.sourceFingerprint === right.sourceFingerprint && left.paragraphIndex === right.paragraphIndex && left.text === right.text && (left.paragraphSpeaker ?? null) === (right.paragraphSpeaker ?? null) && left.turnSpeaker === right.turnSpeaker;
 }
@@ -67832,6 +68426,9 @@ class SpeechController {
   disposed = false;
   epoch = 0;
   inflight = null;
+  prefetchAbort = null;
+  profileMemo = new Map;
+  playbackRate = 1;
   cache = new Map;
   cacheBytes = 0;
   audio = null;
@@ -67868,6 +68465,7 @@ class SpeechController {
       this.audio.volume = next.volume;
     const voicesChanged = JSON.stringify({ ...previous, volume: 0, autoplay: false }) !== JSON.stringify({ ...next, volume: 0, autoplay: false });
     if (voicesChanged) {
+      this.profileMemo.clear();
       this.stop("settings-changed");
       this.clearCache();
       this.publishBaseline();
@@ -67991,6 +68589,7 @@ class SpeechController {
     let snapshot;
     try {
       snapshot = await this.transport.getProfile(resolved.ref.connectionId, abort.signal);
+      this.profileMemo.set(resolved.ref.connectionId, { snapshot, fetchedAt: Date.now() });
     } catch (error61) {
       if (this.inflight === abort)
         this.inflight = null;
@@ -68011,7 +68610,8 @@ class SpeechController {
       return;
     const tagAllowed = deliveryTagAllowedForModel(this.settings.deliveryMode, snapshot.model, this.settings.deliveryAllProviders);
     const spoken = prepareSpeechText(cursor.text);
-    const outbound = tagAllowed ? formatOutboundText(spoken, this.settings.deliveryMode, this.settings.deliveryTag) : spoken;
+    const effectiveTag = this.settings.deliveryTag.trim() || inferAutoDeliveryTag(cursor.text, cursor.poseExpressionId);
+    const outbound = tagAllowed ? formatOutboundText(spoken, this.settings.deliveryMode, effectiveTag) : spoken;
     const effectiveVoice = resolved.ref.voice || snapshot.voice;
     const key = [
       "v" + DELIVERY_ADAPTER_VERSION,
@@ -68034,7 +68634,7 @@ class SpeechController {
     }
     let blob;
     try {
-      blob = await this.transport.synthesize({ ref: resolved.ref, text: outbound }, abort.signal);
+      blob = await this.synthesizePossiblyChunked(resolved.ref, outbound, abort.signal);
     } catch (error61) {
       if (this.inflight === abort)
         this.inflight = null;
@@ -68065,7 +68665,105 @@ class SpeechController {
     this.evictOverflow(key);
     await this.playUrl(url3, key, myEpoch, options.auto === true);
   }
+  setPlaybackRate(rate) {
+    const clamped = Math.max(0.5, Math.min(2, Number.isFinite(rate) ? rate : 1));
+    this.playbackRate = clamped;
+    if (this.audio && "playbackRate" in this.audio) {
+      try {
+        this.audio.playbackRate = clamped;
+      } catch {}
+    }
+  }
+  getPlaybackRate() {
+    return this.playbackRate;
+  }
+  prefetchCursor(nextCursor) {
+    if (this.disposed || !this.active || !this.visible || !this.settings.enabled || this.playState !== "playing" || !nextCursor) {
+      return;
+    }
+    const resolved = resolveVoiceForParagraph(this.settings, {
+      chatId: nextCursor.chatId,
+      paragraphSpeaker: nextCursor.paragraphSpeaker,
+      turnSpeaker: nextCursor.turnSpeaker,
+      ...nextCursor.aliases !== undefined ? { aliases: nextCursor.aliases } : {}
+    });
+    if (!resolved.ref)
+      return;
+    if (this.prefetchAbort) {
+      this.prefetchAbort.abort("superseded-prefetch");
+    }
+    const abort = new AbortController;
+    this.prefetchAbort = abort;
+    const myEpoch = this.epoch;
+    const ref = resolved.ref;
+    (async () => {
+      try {
+        const snapshot = await this.getProfileCached(ref.connectionId, abort.signal);
+        if (this.disposed || myEpoch !== this.epoch || abort.signal.aborted)
+          return;
+        const tagAllowed = deliveryTagAllowedForModel(this.settings.deliveryMode, snapshot.model, this.settings.deliveryAllProviders);
+        const spoken = prepareSpeechText(nextCursor.text);
+        if (!spoken.trim())
+          return;
+        const effectiveTag = this.settings.deliveryTag.trim() || inferAutoDeliveryTag(nextCursor.text, nextCursor.poseExpressionId);
+        const outbound = tagAllowed ? formatOutboundText(spoken, this.settings.deliveryMode, effectiveTag) : spoken;
+        const effectiveVoice = ref.voice || snapshot.voice;
+        const key = [
+          "v" + DELIVERY_ADAPTER_VERSION,
+          ref.connectionId,
+          snapshot.updatedAt,
+          snapshot.model,
+          effectiveVoice,
+          ref.parameters?.speed ?? "",
+          snapshot.parametersFingerprint,
+          outbound
+        ].join("\x00");
+        if (this.cache.has(key))
+          return;
+        const blob = await this.synthesizePossiblyChunked(ref, outbound, abort.signal);
+        if (this.disposed || myEpoch !== this.epoch || abort.signal.aborted || blob.size === 0)
+          return;
+        const url3 = this.createObjectUrl(blob);
+        this.cache.set(key, { url: url3, bytes: blob.size });
+        this.cacheBytes += blob.size;
+        this.evictOverflow(key);
+      } catch {} finally {
+        if (this.prefetchAbort === abort)
+          this.prefetchAbort = null;
+      }
+    })();
+  }
+  async getProfileCached(connectionId, signal) {
+    const hit = this.profileMemo.get(connectionId);
+    if (hit && Date.now() - hit.fetchedAt < PROFILE_MEMO_TTL_MS) {
+      return hit.snapshot;
+    }
+    const snapshot = await this.transport.getProfile(connectionId, signal);
+    this.profileMemo.set(connectionId, { snapshot, fetchedAt: Date.now() });
+    return snapshot;
+  }
+  async synthesizePossiblyChunked(ref, outbound, signal) {
+    if (outbound.length <= 2000) {
+      return this.transport.synthesize({ ref, text: outbound }, signal);
+    }
+    const chunks = splitSpeechChunks(outbound, 1900);
+    if (chunks.length <= 1) {
+      return this.transport.synthesize({ ref, text: outbound }, signal);
+    }
+    const blobs = [];
+    for (const chunk of chunks) {
+      if (signal.aborted)
+        break;
+      const part = await this.transport.synthesize({ ref, text: chunk }, signal);
+      if (part.size > 0)
+        blobs.push(part);
+    }
+    if (blobs.length === 0)
+      return new Blob([]);
+    return new Blob(blobs, { type: blobs[0]?.type || "audio/mpeg" });
+  }
   dispose() {
+    this.profileMemo.clear();
     if (this.disposed)
       return;
     this.pauseRequested = false;
@@ -68111,12 +68809,22 @@ class SpeechController {
       this.inflight = null;
       controller.abort(reason);
     }
+    if (this.prefetchAbort) {
+      const pre = this.prefetchAbort;
+      this.prefetchAbort = null;
+      pre.abort(reason);
+    }
   }
   ensureAudio() {
     if (!this.audio) {
       this.audio = this.createAudio();
     }
     this.audio.volume = this.settings.volume;
+    if ("playbackRate" in this.audio) {
+      try {
+        this.audio.playbackRate = this.playbackRate;
+      } catch {}
+    }
     return this.audio;
   }
   publishProgress() {
@@ -68395,6 +69103,34 @@ button:disabled { opacity: 0.42; cursor: default; }
 }
 [data-status]:empty { display: none; }
 [data-status][data-tone="error"] { color: var(--lumiverse-danger, #ff9aa8); }
+.tts-speed-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tts-speed-label {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--vn-shell-muted, var(--aperture-muted, rgba(235, 242, 230, 0.78)));
+  margin-right: auto;
+}
+button[data-tts-speed] {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 9px;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  border-radius: 999px;
+  background: var(--vn-shell-field, rgba(255, 255, 255, 0.06));
+  border-color: var(--vn-shell-border, rgba(255, 255, 255, 0.14));
+}
+button[data-tts-speed][aria-pressed="true"] {
+  background: var(--vn-shell-accent, var(--aperture-accent, #dcebad));
+  color: var(--vn-shell-accent-contrast, var(--aperture-accent-fg, #0d1f17));
+  border-color: transparent;
+  font-weight: 750;
+}
 @media (prefers-reduced-motion: reduce) {
   [data-dock] { animation: none; }
   button { transition: none; }
@@ -68483,6 +69219,31 @@ class SpeechDock {
       }));
     });
     controls.append(this.playButton, this.stopButton, this.settingsButton);
+    const speedRow = document.createElement("div");
+    speedRow.className = "tts-speed-row";
+    speedRow.setAttribute("role", "group");
+    speedRow.setAttribute("aria-label", "Playback speed");
+    const speedLabel = document.createElement("span");
+    speedLabel.className = "tts-speed-label";
+    speedLabel.textContent = "Speed";
+    speedRow.appendChild(speedLabel);
+    const speedRates = [0.85, 1, 1.15, 1.3];
+    const speedButtons = [];
+    for (const rate of speedRates) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.dataset.ttsSpeed = String(rate);
+      btn.setAttribute("aria-pressed", rate === 1 ? "true" : "false");
+      btn.textContent = `${rate}×`;
+      btn.addEventListener("click", () => {
+        for (const other of speedButtons) {
+          other.setAttribute("aria-pressed", other === btn ? "true" : "false");
+        }
+        this.options.onSpeedChange?.(rate);
+      });
+      speedButtons.push(btn);
+      speedRow.appendChild(btn);
+    }
     this.statusEl = document.createElement("span");
     this.statusEl.setAttribute("data-status", "");
     this.statusEl.setAttribute("role", "status");
@@ -68510,7 +69271,7 @@ class SpeechDock {
         this.sync();
       }
     });
-    dock.append(head, controls, this.statusEl, this.progressWrap);
+    dock.append(head, controls, speedRow, this.statusEl, this.progressWrap);
     shadow.append(style, dock);
     this.setStatus({ kind: "off" });
     this.sync();
@@ -68665,6 +69426,8 @@ class SpeechSettingsSection {
   draftAddName = "";
   activeDrafts = new Map;
   lastChatId = "";
+  previousOverridesBackup = null;
+  autoCastMessage = "";
   destroyed = false;
   constructor(options) {
     this.options = options;
@@ -69011,6 +69774,76 @@ class SpeechSettingsSection {
       const spacer = document.createElement("span");
       addRow.append(addName, spacer, addButton);
       overrides.appendChild(addRow);
+      const autoCastRow = document.createElement("div");
+      autoCastRow.className = "row";
+      const autoCastBtn = document.createElement("button");
+      autoCastBtn.type = "button";
+      autoCastBtn.setAttribute("data-speech-field", "auto-cast-voices");
+      autoCastBtn.textContent = "Auto-Cast Voices";
+      autoCastBtn.addEventListener("click", () => {
+        const cast = this.options.getCast?.() ?? [];
+        const available = [];
+        for (const [connectionId, voices] of this.voiceOptions.entries()) {
+          for (const v of voices) {
+            const label = v.label ?? v.name;
+            available.push({ connectionId, voiceId: v.id, ...label ? { label } : {} });
+          }
+        }
+        if (cast.length === 0) {
+          this.autoCastMessage = "No discovered cast members in this chat yet.";
+          this.render();
+          return;
+        }
+        if (available.length === 0) {
+          this.autoCastMessage = "Load voices for a profile above first so Auto-Cast can pick distinct voices.";
+          this.render();
+          return;
+        }
+        const backup = { ...settings.characters };
+        const result = autoCastVoicesForCast({
+          chatId,
+          cast,
+          availableVoices: available,
+          existingOverrides: settings.characters
+        });
+        if (result.assignedCount === 0) {
+          this.autoCastMessage = "Every discovered cast member already has an override.";
+          this.render();
+          return;
+        }
+        this.previousOverridesBackup = backup;
+        this.autoCastMessage = `Assigned ${result.assignedCount} voice(s) without overwriting existing overrides.`;
+        this.save((next) => {
+          next.characters = result.nextOverrides;
+        });
+      });
+      autoCastRow.appendChild(autoCastBtn);
+      if (this.previousOverridesBackup) {
+        const undoBtn = document.createElement("button");
+        undoBtn.type = "button";
+        undoBtn.setAttribute("data-speech-field", "auto-cast-undo");
+        undoBtn.textContent = "Undo";
+        undoBtn.addEventListener("click", () => {
+          const restore = this.previousOverridesBackup;
+          this.previousOverridesBackup = null;
+          this.autoCastMessage = "Restored previous character voice overrides.";
+          if (restore) {
+            this.save((next) => {
+              next.characters = restore;
+            });
+          } else {
+            this.render();
+          }
+        });
+        autoCastRow.appendChild(undoBtn);
+      }
+      overrides.appendChild(autoCastRow);
+      if (this.autoCastMessage) {
+        const autoCastStatus = document.createElement("small");
+        autoCastStatus.setAttribute("data-speech-auto-cast-status", "");
+        autoCastStatus.textContent = this.autoCastMessage;
+        overrides.appendChild(autoCastStatus);
+      }
     }
     const delivery = document.createElement("fieldset");
     const deliveryLegend = document.createElement("legend");
@@ -69521,7 +70354,9 @@ function setupVisualNovelFrontend(baseContext) {
   let destroyed = false;
   const audioEngine = new AudioEngine({
     bgmVolume: configRef.current?.bgmVolume ?? 0.7,
-    sfxVolume: configRef.current?.sfxVolume ?? 0.8
+    sfxVolume: configRef.current?.sfxVolume ?? 0.8,
+    ambientVolume: configRef.current?.ambientVolume ?? 0.45,
+    builtInAudioEnabled: configRef.current?.builtInAudioEnabled ?? true
   });
   let speech;
   let speechDock;
@@ -69571,6 +70406,9 @@ function setupVisualNovelFrontend(baseContext) {
   }
   function syncAudioForParagraph(activeTurn, paragraphIndex, playSfx = true) {
     audioEngine.setBgmAttenuation(musicAttenuationForParagraph(activeTurn, paragraphIndex));
+    const atmo = activeTurn.worldAtmosphere?.length ? atmosphereForPosition({ worldAtmosphere: [...activeTurn.worldAtmosphere] }, paragraphIndex) : null;
+    const ambientCue = activeTurn.ambients?.[paragraphIndex] ?? activeTurn.ambients?.[0] ?? null;
+    audioEngine.setAtmosphere(ambientCue ?? atmo?.weather ?? (atmo?.indoor ? "room_tone" : null), { indoor: Boolean(atmo?.indoor) });
     const bgmSrc = musicTrackForPosition({ turn: activeTurn, index: paragraphIndex, policy: configRef.current?.musicTransitionPolicy ?? "cue", openingTrack: turnOpeningBgm, openingLocation: turnOpeningLocation, manualTrack: manualMusicTrack });
     if (bgmSrc !== currentBgm) {
       currentBgm = bgmSrc;
@@ -69747,6 +70585,9 @@ function setupVisualNovelFrontend(baseContext) {
       stage.toggleAutoPlay(false);
       speech.stop("user-stop");
     },
+    onSpeedChange: (rate) => {
+      speech.setPlaybackRate(rate);
+    },
     onEnableAndPlay: () => {
       if (configRef.current && !configRef.current.speech.enabled) {
         const nextSpeech = { ...configRef.current.speech, enabled: true };
@@ -69774,6 +70615,13 @@ function setupVisualNovelFrontend(baseContext) {
       if (status.kind === "loading" || status.kind === "playing") {
         wasSpeechPlaying = true;
         stage.holdAutoPlay();
+        if (status.kind === "playing" && stage.isAutoPlaying()) {
+          const loaded = loadedReadingCursor.turn;
+          const nextIdx = stage.getState().currentParagraphIndex + 1;
+          if (loaded && !stage.isReadingUserParagraph() && nextIdx < loaded.paragraphs.length) {
+            speech.prefetchCursor(speechCursorFor(loaded, nextIdx));
+          }
+        }
       } else if (status.kind === "paused") {
         wasSpeechPlaying = false;
         stage.holdAutoPlay();
@@ -70104,6 +70952,8 @@ function setupVisualNovelFrontend(baseContext) {
         applyVisualConfigToStage(stage, next);
         audioEngine.setBgmVolume(next.bgmVolume);
         audioEngine.setSfxVolume(next.sfxVolume);
+        audioEngine.setAmbientVolume(next.ambientVolume);
+        audioEngine.setBuiltInAudioEnabled(next.builtInAudioEnabled);
       }
       ctx.sendToBackend({ type: "vn_set_config", patch, chatId: chatId(), requestId });
     }
@@ -70124,7 +70974,23 @@ function setupVisualNovelFrontend(baseContext) {
     },
     listProfiles: () => speechTransport.listProfiles(new AbortController().signal),
     listVoices: (connectionId) => speechTransport.listVoices(connectionId, new AbortController().signal),
-    getChatId: () => chatId()
+    getChatId: () => chatId(),
+    getCast: () => {
+      if (!turn)
+        return [];
+      const names = new Set;
+      if (turn.speaker?.trim())
+        names.add(turn.speaker.trim());
+      for (const sp of turn.paragraphSpeakers ?? []) {
+        if (sp && sp.trim())
+          names.add(sp.trim());
+      }
+      for (const c of turn.rpgState?.vitals?.companions ?? []) {
+        if (c?.name?.trim())
+          names.add(c.name.trim());
+      }
+      return [...names].map((name) => ({ name }));
+    }
   });
   function chatId() {
     return ctx.getActiveChat().chatId ?? "";
@@ -70658,6 +71524,8 @@ function setupVisualNovelFrontend(baseContext) {
         syncReadingHistory();
       audioEngine.setBgmVolume(configRef.current.bgmVolume);
       audioEngine.setSfxVolume(configRef.current.sfxVolume);
+      audioEngine.setAmbientVolume(configRef.current.ambientVolume);
+      audioEngine.setBuiltInAudioEnabled(configRef.current.builtInAudioEnabled);
       if (turn && active)
         syncAudioForParagraph(turn, stage.getState().currentParagraphIndex, false);
       speech.setSettings(configRef.current.speech);
@@ -70711,6 +71579,8 @@ function setupVisualNovelFrontend(baseContext) {
         syncImageForParagraph(stage.getState().currentParagraphIndex);
       audioEngine.setBgmVolume(configRef.current.bgmVolume);
       audioEngine.setSfxVolume(configRef.current.sfxVolume);
+      audioEngine.setAmbientVolume(configRef.current.ambientVolume);
+      audioEngine.setBuiltInAudioEnabled(configRef.current.builtInAudioEnabled);
       if (turn && active)
         syncAudioForParagraph(turn, stage.getState().currentParagraphIndex, false);
       speech.setSettings(configRef.current.speech);

@@ -1,3 +1,5 @@
+import { AmbientSynth, type FoleyKind } from "./ambient-synth.js";
+
 export interface AudioPlayerElement {
   src: string;
   volume: number;
@@ -78,6 +80,8 @@ export type TimerHandle = unknown;
 export interface AudioEngineOptions {
   bgmVolume?: number;
   sfxVolume?: number;
+  ambientVolume?: number;
+  builtInAudioEnabled?: boolean;
   crossfadeDuration?: number;
   /** F12: duration of the eased presentation-duck ramp. 0 restores instant steps. */
   attenuationRampMs?: number;
@@ -122,10 +126,13 @@ export class AudioEngine {
   private activeBgm: ActiveBgm | null = null;
   private activeSfx = new Set<AudioPlayerElement>();
   private destroyed = false;
+  private readonly ambientSynth = new AmbientSynth();
 
   constructor(options: AudioEngineOptions = {}) {
     this.bgmVolume = Math.max(0, Math.min(1, options.bgmVolume ?? 0.7));
     this.sfxVolume = Math.max(0, Math.min(1, options.sfxVolume ?? 0.8));
+    this.ambientSynth.setVolume(options.ambientVolume ?? 0.45);
+    this.ambientSynth.setEnabled(options.builtInAudioEnabled ?? true);
     this.crossfadeDuration = options.crossfadeDuration ?? DEFAULT_CROSSFADE_DURATION_MS;
     this.attenuationRampMs = options.attenuationRampMs ?? DEFAULT_ATTENUATION_RAMP_MS;
     this.audioFactory = options.audioFactory ?? defaultAudioFactory;
@@ -190,6 +197,7 @@ export class AudioEngine {
   /** Duck BGM while speech/TTS playback is active, then restore cleanly. */
   setSpeechDucking(active:boolean):void {
     if(this.destroyed)return;
+    this.ambientSynth.setSpeechDucking(active);
     const next=active?0.38:1;if(this.speechDucking===next)return;this.speechDucking=next;
     for(const item of this.bgmTracks){
       this.clearSpeech(item);const start=item.speechLevel,startedAt=this.now(),duration=this.attenuationRampMs;
@@ -202,6 +210,26 @@ export class AudioEngine {
   private setTrackVolume(item:ActiveBgm,gain:number):void {
     item.gain=Math.max(0,Math.min(1,gain));
     item.player.volume=item.gain*this.bgmVolume*item.speechLevel*item.attenLevel;  }
+
+  setAmbientVolume(volume: number): void {
+    if (this.destroyed) return;
+    this.ambientSynth.setVolume(volume);
+  }
+
+  setBuiltInAudioEnabled(enabled: boolean): void {
+    if (this.destroyed) return;
+    this.ambientSynth.setEnabled(enabled);
+  }
+
+  setAtmosphere(preset?: string | null, options: { indoor?: boolean } = {}): void {
+    if (this.destroyed) return;
+    this.ambientSynth.setAtmosphere(preset, options);
+  }
+
+  playFoley(kind: FoleyKind): void {
+    if (this.destroyed) return;
+    this.ambientSynth.playFoley(kind, this.sfxVolume);
+  }
 
   getSfxVolume(): number {
     return this.sfxVolume;
@@ -230,6 +258,7 @@ export class AudioEngine {
       this.stopBgm(options);
       return;
     }
+    this.ambientSynth.setUserTrackActive(true);
 
     const duration = options.crossfadeDuration ?? this.crossfadeDuration;
 
@@ -289,6 +318,7 @@ export class AudioEngine {
       this.fadeOutAndCleanup(item, duration);
     }
     this.activeBgm = null;
+    this.ambientSynth.setUserTrackActive(false);
   }
 
   /**
@@ -338,11 +368,13 @@ export class AudioEngine {
       sfx.pause();
     }
     this.activeSfx.clear();
+    this.ambientSynth.stop();
   }
 
   destroy(): void {
     this.destroyed = true;
     this.stopAll();
+    this.ambientSynth.dispose();
   }
 
   private clearFade(item: ActiveBgm): void {

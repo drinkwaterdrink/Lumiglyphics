@@ -189,6 +189,8 @@ export type VisualNovelConfig = {
   audioDirectory: string;
   bgmVolume: number;
   sfxVolume: number;
+  ambientVolume: number;
+  builtInAudioEnabled: boolean;
   /** Default-off speech (TTS) settings. See src/speech-config.ts. */
   speech: SpeechSettings;
 };
@@ -289,6 +291,8 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   audioDirectory: "",
   bgmVolume: 0.7,
   sfxVolume: 0.8,
+  ambientVolume: 0.45,
+  builtInAudioEnabled: true,
   speech: DEFAULT_SPEECH_SETTINGS,
 };
 
@@ -540,6 +544,8 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     audioDirectory: stringValue(input.audioDirectory, DEFAULT_CONFIG.audioDirectory).trim(),
     bgmVolume: floatBetween(input.bgmVolume, 0, 1, DEFAULT_CONFIG.bgmVolume),
     sfxVolume: floatBetween(input.sfxVolume, 0, 1, DEFAULT_CONFIG.sfxVolume),
+    ambientVolume: floatBetween(input.ambientVolume, 0, 1, DEFAULT_CONFIG.ambientVolume),
+    builtInAudioEnabled: typeof input.builtInAudioEnabled === "boolean" ? input.builtInAudioEnabled : DEFAULT_CONFIG.builtInAudioEnabled,
     speech: normalizeSpeechSettings(input.speech),
   };
 }

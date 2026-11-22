@@ -15,6 +15,7 @@ export type SpeechDockOptions = {
   onPause: () => void;
   onStop: () => void;
   onEnableAndPlay?: () => void;
+  onSpeedChange?: (rate: number) => void;
 };
 
 const DOCK_CSS = `
@@ -144,6 +145,34 @@ button:disabled { opacity: 0.42; cursor: default; }
 }
 [data-status]:empty { display: none; }
 [data-status][data-tone="error"] { color: var(--lumiverse-danger, #ff9aa8); }
+.tts-speed-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tts-speed-label {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--vn-shell-muted, var(--aperture-muted, rgba(235, 242, 230, 0.78)));
+  margin-right: auto;
+}
+button[data-tts-speed] {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 9px;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  border-radius: 999px;
+  background: var(--vn-shell-field, rgba(255, 255, 255, 0.06));
+  border-color: var(--vn-shell-border, rgba(255, 255, 255, 0.14));
+}
+button[data-tts-speed][aria-pressed="true"] {
+  background: var(--vn-shell-accent, var(--aperture-accent, #dcebad));
+  color: var(--vn-shell-accent-contrast, var(--aperture-accent-fg, #0d1f17));
+  border-color: transparent;
+  font-weight: 750;
+}
 @media (prefers-reduced-motion: reduce) {
   [data-dock] { animation: none; }
   button { transition: none; }
@@ -239,6 +268,32 @@ export class SpeechDock {
 
     controls.append(this.playButton, this.stopButton, this.settingsButton);
 
+    const speedRow = document.createElement("div");
+    speedRow.className = "tts-speed-row";
+    speedRow.setAttribute("role", "group");
+    speedRow.setAttribute("aria-label", "Playback speed");
+    const speedLabel = document.createElement("span");
+    speedLabel.className = "tts-speed-label";
+    speedLabel.textContent = "Speed";
+    speedRow.appendChild(speedLabel);
+    const speedRates = [0.85, 1, 1.15, 1.3];
+    const speedButtons: HTMLButtonElement[] = [];
+    for (const rate of speedRates) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.dataset.ttsSpeed = String(rate);
+      btn.setAttribute("aria-pressed", rate === 1 ? "true" : "false");
+      btn.textContent = `${rate}×`;
+      btn.addEventListener("click", () => {
+        for (const other of speedButtons) {
+          other.setAttribute("aria-pressed", other === btn ? "true" : "false");
+        }
+        this.options.onSpeedChange?.(rate);
+      });
+      speedButtons.push(btn);
+      speedRow.appendChild(btn);
+    }
+
     this.statusEl = document.createElement("span");
     this.statusEl.setAttribute("data-status", "");
     this.statusEl.setAttribute("role", "status");
@@ -257,7 +312,7 @@ export class SpeechDock {
         this.sync();
       }
     });
-    dock.append(head, controls, this.statusEl,this.progressWrap);
+    dock.append(head, controls, speedRow, this.statusEl,this.progressWrap);
     shadow.append(style, dock);
     this.setStatus({ kind: "off" });
     this.sync();

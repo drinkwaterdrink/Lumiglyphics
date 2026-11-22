@@ -2,7 +2,7 @@
 import {RelationshipTracker} from '../stage/relationship-tracker.js';
 import {sceneHistoryFor,turnHistoryKey} from '../../shared/scene-history.js';
 import {progressForCursor} from '../speech/read-along.js';
-import {musicTrackForPosition,locationForPosition} from '../../shared/scene-atmosphere.js';
+import {musicTrackForPosition,locationForPosition,atmosphereForPosition} from '../../shared/scene-atmosphere.js';
 import {resumeCardModel} from '../stage/resume-card.js';
 import {DnaRequestSchema,DNA_FIELD_LABELS,type DnaRequest,type DnaField} from '../../shared/character-dna-workflow.js';
 import { StoryDnaRequestSchema, type StoryDnaActionBody } from '../../shared/story-dna.js';
@@ -558,6 +558,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const audioEngine = new AudioEngine({
     bgmVolume: configRef.current?.bgmVolume ?? 0.7,
     sfxVolume: configRef.current?.sfxVolume ?? 0.8,
+    ambientVolume: configRef.current?.ambientVolume ?? 0.45,
+    builtInAudioEnabled: configRef.current?.builtInAudioEnabled ?? true,
   });
 
   let speech: SpeechController;
@@ -592,6 +594,11 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
 
   function syncAudioForParagraph(activeTurn: TurnView, paragraphIndex: number,playSfx=true): void {
     audioEngine.setBgmAttenuation(musicAttenuationForParagraph(activeTurn,paragraphIndex));
+    const atmo = activeTurn.worldAtmosphere?.length
+      ? atmosphereForPosition({ worldAtmosphere: [...activeTurn.worldAtmosphere] }, paragraphIndex)
+      : null;
+    const ambientCue = activeTurn.ambients?.[paragraphIndex] ?? activeTurn.ambients?.[0] ?? null;
+    audioEngine.setAtmosphere(ambientCue ?? atmo?.weather ?? (atmo?.indoor ? "room_tone" : null), { indoor: Boolean(atmo?.indoor) });
     const bgmSrc=musicTrackForPosition({turn:activeTurn,index:paragraphIndex,policy:configRef.current?.musicTransitionPolicy??'cue',openingTrack:turnOpeningBgm,openingLocation:turnOpeningLocation,manualTrack:manualMusicTrack});
     if(bgmSrc!==currentBgm){currentBgm=bgmSrc;if(bgmSrc)audioEngine.playBgm(bgmSrc);else audioEngine.stopBgm();}
     const cue=activeTurn.audioCues?.find(c=>c.paragraphIndex===paragraphIndex);
@@ -746,6 +753,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     onPlay: () => { void speech.playCurrent(); },
     onPause: () => { stage.toggleAutoPlay(false); speech.pause(); },
     onStop: () => { stage.toggleAutoPlay(false); speech.stop("user-stop"); },
+    onSpeedChange: (rate) => { speech.setPlaybackRate(rate); },
     onEnableAndPlay: () => {
       if (configRef.current && !configRef.current.speech.enabled) {
         const nextSpeech = { ...configRef.current.speech, enabled: true };
@@ -767,6 +775,13 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       if (status.kind === "loading" || status.kind === "playing") {
         wasSpeechPlaying = true;
         stage.holdAutoPlay();
+        if (status.kind === "playing" && stage.isAutoPlaying()) {
+          const loaded = loadedReadingCursor.turn;
+          const nextIdx = stage.getState().currentParagraphIndex + 1;
+          if (loaded && !stage.isReadingUserParagraph() && nextIdx < loaded.paragraphs.length) {
+            speech.prefetchCursor(speechCursorFor(loaded, nextIdx));
+          }
+        }
       } else if (status.kind === "paused") {
         wasSpeechPlaying = false;
         stage.holdAutoPlay();
@@ -1009,6 +1024,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
         applyVisualConfigToStage(stage, next);
         audioEngine.setBgmVolume(next.bgmVolume);
         audioEngine.setSfxVolume(next.sfxVolume);
+        audioEngine.setAmbientVolume(next.ambientVolume);
+        audioEngine.setBuiltInAudioEnabled(next.builtInAudioEnabled);
         // Preview stage changes locally; only backend messages confirm persistence.
       }
       ctx.sendToBackend({ type: "vn_set_config", patch, chatId: chatId(), requestId });
@@ -1029,6 +1046,18 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     listProfiles: () => speechTransport.listProfiles(new AbortController().signal),
     listVoices: (connectionId) => speechTransport.listVoices(connectionId, new AbortController().signal),
     getChatId: () => chatId(),
+    getCast: () => {
+      if (!turn) return [];
+      const names = new Set<string>();
+      if (turn.speaker?.trim()) names.add(turn.speaker.trim());
+      for (const sp of turn.paragraphSpeakers ?? []) {
+        if (sp && sp.trim()) names.add(sp.trim());
+      }
+      for (const c of turn.rpgState?.vitals?.companions ?? []) {
+        if (c?.name?.trim()) names.add(c.name.trim());
+      }
+      return [...names].map((name) => ({ name }));
+    },
   });
 
   function chatId(): string {
@@ -1430,6 +1459,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
 
       audioEngine.setBgmVolume(configRef.current.bgmVolume);
       audioEngine.setSfxVolume(configRef.current.sfxVolume);
+      audioEngine.setAmbientVolume(configRef.current.ambientVolume);
+      audioEngine.setBuiltInAudioEnabled(configRef.current.builtInAudioEnabled);
       if(turn&&active)syncAudioForParagraph(turn,stage.getState().currentParagraphIndex,false);
       speech.setSettings(configRef.current.speech);
       speechDock.setEnabled(configRef.current.speech.enabled);
@@ -1478,6 +1509,8 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       if(turn && active)void syncImageForParagraph(stage.getState().currentParagraphIndex);
       audioEngine.setBgmVolume(configRef.current.bgmVolume);
       audioEngine.setSfxVolume(configRef.current.sfxVolume);
+      audioEngine.setAmbientVolume(configRef.current.ambientVolume);
+      audioEngine.setBuiltInAudioEnabled(configRef.current.builtInAudioEnabled);
       if(turn&&active)syncAudioForParagraph(turn,stage.getState().currentParagraphIndex,false);
       speech.setSettings(configRef.current.speech);
       speechDock.setEnabled(configRef.current.speech.enabled);

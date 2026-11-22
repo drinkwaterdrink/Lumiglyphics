@@ -2089,4 +2089,12 @@ export const VN_EFFECTS_CSS = `
   animation: vn-shatter-shard-fly 640ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* Enclosure awareness: soften outdoor weather layers when viewing an indoor scene */
+[data-vn-ambient][data-vn-indoor="true"].vn-ambient-rain,
+[data-vn-ambient][data-vn-indoor="true"].vn-ambient-heavy_rain,
+[data-vn-ambient][data-vn-indoor="true"].vn-ambient-snow,
+[data-vn-ambient][data-vn-indoor="true"].vn-ambient-snowstorm {
+  opacity: 0.34;
+}
+
 `;

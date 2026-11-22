@@ -1422,6 +1422,25 @@ export async function generateAssets(
     ? await loadCardReferenceContext(spindle, plan, userId, cacheOptions).catch(() => null)
     : null;
   const cardFetchPromises = new Map<string, Promise<StoredPortrait | null>>();
+  const connectionMemo = new Map<string, ReturnType<typeof resolveImageConnectionSnapshot>>();
+  async function resolveImageConnectionSnapshot(connId: string | null) {
+    if (connId && typeof spindle.imageGen.getConnection === "function") {
+      return spindle.imageGen.getConnection(connId, userId);
+    }
+    if (typeof spindle.imageGen.listConnections === "function") {
+      return (await spindle.imageGen.listConnections(userId)).find((entry) => entry.is_default) ?? null;
+    }
+    return null;
+  }
+  const getBatchConnection = (connId: string | null) => {
+    const key = connId ?? "__default__";
+    let pending = connectionMemo.get(key);
+    if (!pending) {
+      pending = resolveImageConnectionSnapshot(connId);
+      connectionMemo.set(key, pending);
+    }
+    return pending;
+  };
   // Test escape hatch mirroring `referenceStrength`: not a provider parameter.
   const rawFetchTimeout = Number(config.imageParameters.referenceFetchTimeoutMs);
   const cardFetchTimeoutMs = Number.isFinite(rawFetchTimeout) && rawFetchTimeout > 0 ? rawFetchTimeout : undefined;
@@ -1759,9 +1778,7 @@ export async function generateAssets(
           // Never start paid work after either the batch or job was cancelled.
           if (signal.aborted) throw abortError(signal);
           if (jobSignal.aborted) throw abortError(jobSignal);
-          const selected = connectionId && typeof spindle.imageGen.getConnection === "function"
-            ? await spindle.imageGen.getConnection(connectionId, userId)
-            : typeof spindle.imageGen.listConnections === "function" ? (await spindle.imageGen.listConnections(userId)).find((entry) => entry.is_default) ?? null : null;
+          const selected = await getBatchConnection(connectionId ?? null);
           const input: ImageGenerationRequest = {
             ...(connectionId ? { connection_id: connectionId } : {}),
             prompt,

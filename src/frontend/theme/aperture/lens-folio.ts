@@ -505,6 +505,16 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   color: var(--aperture-accent, #c4b5fd) !important;
   box-shadow: 0 0 12px var(--aperture-accent-glow, rgba(167, 139, 250, 0.48)) !important;
   opacity: 1 !important;
+  animation: vn-auto-pulse 1.8s ease-in-out infinite !important;
+}
+
+@keyframes vn-auto-pulse {
+  0%, 100% {
+    box-shadow: 0 0 10px var(--aperture-accent-glow, rgba(167, 139, 250, 0.42));
+  }
+  50% {
+    box-shadow: 0 0 18px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 65%, transparent);
+  }
 }
 
 [data-vn-dialogue-text],

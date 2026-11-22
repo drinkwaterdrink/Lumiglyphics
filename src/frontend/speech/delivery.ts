@@ -58,3 +58,32 @@ export function formatOutboundText(text: string, mode: SpeechDeliveryMode, tag: 
   if (!safe) return text;
   return `[${safe}] ${text}`;
 }
+
+const POSE_TO_GEMINI_TAG: ReadonlyArray<[RegExp, string]> = [
+  [/whisper|hush|secret/i, "whispers"],
+  [/shout|yell|furious|angry|rage/i, "shouting"],
+  [/sad|cry|weep|sob|sorrow/i, "crying"],
+  [/laugh|giggle|chuckle|joy|happy|delight/i, "laughs"],
+  [/gasp|shock|surpris|startl/i, "gasp"],
+  [/nervous|trembl|fear|scared|anxious|panic/i, "trembling"],
+  [/sarcas|smug|teas|smirk/i, "sarcastic"],
+  [/sigh|tired|weary|exhaust/i, "sighs"],
+  [/excit|enthus/i, "excited"],
+];
+
+/**
+ * Infers a Gemini inline audio expression tag from explicit `<whisper>` / `<shout>` / `<sigh>`
+ * prose cues or the current speaker's `poseExpressionId`, returning `""` when neutral.
+ */
+export function inferAutoDeliveryTag(text: string, poseExpressionId?: string | null): string {
+  const lower = text.toLowerCase();
+  if (/<whisper\b/i.test(lower)) return "whispers";
+  if (/<shout\b|<yell\b/i.test(lower)) return "shouting";
+  if (/<sigh\b/i.test(lower)) return "sighs";
+  const pose = (poseExpressionId ?? "").trim();
+  if (!pose) return "";
+  for (const [pattern, tag] of POSE_TO_GEMINI_TAG) {
+    if (pattern.test(pose)) return tag;
+  }
+  return "";
+}

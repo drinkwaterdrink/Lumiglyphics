@@ -2612,6 +2612,7 @@ export class VnStage {
     const atmo = this.narrative.hidden || !this.state.worldAtmosphere?.length
       ? null
       : atmosphereForPosition({ worldAtmosphere: [...this.state.worldAtmosphere] }, this.state.currentParagraphIndex);
+    this.ambientOverlay.dataset.vnIndoor = atmo?.indoor ? "true" : "false";
     renderWorldAtmosphereStrip(this.workspace.worldStrip, atmo, {
       documentCount: this.dossiers.scenePostcardSummary().documents.length,
       expanded: Boolean(this.scenePostcardEl),
