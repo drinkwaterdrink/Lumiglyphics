@@ -14,7 +14,7 @@ aside[data-vn-workspace] {
   margin: 0 !important;
   border: 0 !important;
   border-radius: 0 !important;
-  z-index: 60 !important;
+  z-index: 120 !important;
   background: var(--vn-shell-surface-gradient, var(--aperture-workspace-bg, #101a1e)) !important;
   color: var(--vn-shell-text, var(--aperture-text, #eff4e9)) !important;
   display: flex !important;

@@ -42,6 +42,10 @@ export const DOSSIER_CSS = `
 .chip-row .chip[aria-pressed="true"]{background:var(--vn-shell-accent,#a8d3c8);color:var(--vn-shell-accent-contrast,#0b1922);border-color:var(--vn-shell-accent,#a8d3c8)}
 .world-lens{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:min(var(--vn-shell-radius,10px),12px);border:1px solid var(--vn-shell-border,rgba(255,255,255,.14));background:var(--vn-shell-panel,rgba(255,255,255,.04));margin-bottom:8px;cursor:pointer;text-align:left;width:100%;min-height:44px;color:inherit;transition:border-color .14s ease,background-color .14s ease}
 .world-lens:hover{border-color:var(--vn-shell-accent,#a8d3c8);background:color-mix(in srgb,var(--vn-shell-accent,#a8d3c8) 8%,var(--vn-shell-panel,rgba(255,255,255,.04)))}
+.world-lens.world-lens-preview{flex-direction:column;align-items:stretch;gap:8px;cursor:default}
+.world-lens.world-lens-preview h3{margin:0;font-size:14px;line-height:1.3;letter-spacing:.02em}
+.world-lens.world-lens-preview p{margin:0;font-size:12px;line-height:1.45;opacity:.9}
+.world-lens-preview-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .world-lens-thumb{width:46px;height:46px;border-radius:9px;background:var(--vn-shell-button,rgba(255,255,255,.08));overflow:hidden;flex:none;display:grid;place-items:center;font-size:18px}
 .world-lens-thumb img{width:100%;height:100%;object-fit:cover}
 .world-lens-meta{flex:1;min-width:0}

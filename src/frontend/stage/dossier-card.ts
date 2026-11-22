@@ -1992,7 +1992,7 @@ export class DossierCard {
 
       // Single World Lens Preview Card right below the hub
       const lensCard = document.createElement('div');
-      lensCard.className = 'world-lens';
+      lensCard.className = 'world-lens world-lens-preview';
       if (isDocumentMode && filteredDocs.length > 0) {
         const selectedDoc = filteredDocs.find((d) => d.doc.id === this.selectedEntityId)?.doc ?? filteredDocs[0]!.doc;
         this.selectedEntityId = selectedDoc.id;
@@ -2049,21 +2049,25 @@ export class DossierCard {
             render();
           }
         };
-        lensCard.append(lensTitle, lensDesc, ctaBtn);
+        const actionsRow = document.createElement('div');
+        actionsRow.className = 'world-lens-preview-actions';
+        actionsRow.append(ctaBtn);
         if (activeEntry.entity.kind === 'place' && !vis?.isActiveLocation && this.sceneHubContext?.actionsEnabled && this.sceneHubContext.onDraftAction) {
           const goBtn = document.createElement('button');
           goBtn.type = 'button';
           goBtn.className = 'world-lens-cta';
-          goBtn.style.marginLeft = '6px';
           goBtn.dataset.worldLensGoTo = activeEntry.entity.name;
           goBtn.textContent = `Head to ${activeEntry.entity.name}`;
           goBtn.onclick = () => {
             this.sceneHubContext?.onDraftAction?.(`I head to ${activeEntry.entity.name}.`);
             this.close();
           };
-          lensCard.append(goBtn);
+          actionsRow.append(goBtn);
         }
-        lensCard.append(hideBtn);
+        hideBtn.style.marginLeft = '0';
+        hideBtn.style.marginTop = '0';
+        actionsRow.append(hideBtn);
+        lensCard.append(lensTitle, lensDesc, actionsRow);
       } else {
         lensCard.innerHTML = isDocumentMode
           ? '<h3>No revealed documents yet</h3><p>Letters, notes, flyers, receipts, and screens spotted in narration will collect here across turns.</p>'

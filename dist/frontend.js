@@ -28257,7 +28257,7 @@ aside[data-vn-workspace] {
   margin: 0 !important;
   border: 0 !important;
   border-radius: 0 !important;
-  z-index: 60 !important;
+  z-index: 120 !important;
   background: var(--vn-shell-surface-gradient, var(--aperture-workspace-bg, #101a1e)) !important;
   color: var(--vn-shell-text, var(--aperture-text, #eff4e9)) !important;
   display: flex !important;
@@ -29464,7 +29464,7 @@ var APERTURE_ICONS = {
 };
 var APERTURE_SETTINGS_CSS = [APERTURE_CSS_FOUNDATION, APERTURE_CSS_WORKSPACE_SETTINGS].join("");
 var APERTURE_OUTER_CSS = [APERTURE_CSS_FOUNDATION, APERTURE_CSS_ROUTE_BAR_READER, APERTURE_CSS_WORKSPACE_SETTINGS, APERTURE_CSS_SHEETS_STAGE_PALETTES].join("");
-var APERTURE_STAGE_CSS = [APERTURE_CSS_FOUNDATION, APERTURE_CSS_LENS_FOLIO, APERTURE_CSS_SHEETS_STAGE_PALETTES].join("");
+var APERTURE_STAGE_CSS = [APERTURE_CSS_FOUNDATION, APERTURE_CSS_ROUTE_BAR_READER, APERTURE_CSS_LENS_FOLIO, APERTURE_CSS_SHEETS_STAGE_PALETTES].join("");
 var APERTURE_THEME_CSS = [APERTURE_CSS_FOUNDATION, APERTURE_CSS_ROUTE_BAR_READER, APERTURE_CSS_WORKSPACE_SETTINGS, APERTURE_CSS_LENS_FOLIO, APERTURE_CSS_SHEETS_STAGE_PALETTES].join("");
 
 // src/frontend/stage/reader-workspace.ts
@@ -32275,6 +32275,10 @@ var DOSSIER_CSS = `
 .chip-row .chip[aria-pressed="true"]{background:var(--vn-shell-accent,#a8d3c8);color:var(--vn-shell-accent-contrast,#0b1922);border-color:var(--vn-shell-accent,#a8d3c8)}
 .world-lens{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:min(var(--vn-shell-radius,10px),12px);border:1px solid var(--vn-shell-border,rgba(255,255,255,.14));background:var(--vn-shell-panel,rgba(255,255,255,.04));margin-bottom:8px;cursor:pointer;text-align:left;width:100%;min-height:44px;color:inherit;transition:border-color .14s ease,background-color .14s ease}
 .world-lens:hover{border-color:var(--vn-shell-accent,#a8d3c8);background:color-mix(in srgb,var(--vn-shell-accent,#a8d3c8) 8%,var(--vn-shell-panel,rgba(255,255,255,.04)))}
+.world-lens.world-lens-preview{flex-direction:column;align-items:stretch;gap:8px;cursor:default}
+.world-lens.world-lens-preview h3{margin:0;font-size:14px;line-height:1.3;letter-spacing:.02em}
+.world-lens.world-lens-preview p{margin:0;font-size:12px;line-height:1.45;opacity:.9}
+.world-lens-preview-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .world-lens-thumb{width:46px;height:46px;border-radius:9px;background:var(--vn-shell-button,rgba(255,255,255,.08));overflow:hidden;flex:none;display:grid;place-items:center;font-size:18px}
 .world-lens-thumb img{width:100%;height:100%;object-fit:cover}
 .world-lens-meta{flex:1;min-width:0}
@@ -34117,7 +34121,7 @@ class DossierCard {
         worldSheet.append(codexCard);
       }
       const lensCard = document.createElement("div");
-      lensCard.className = "world-lens";
+      lensCard.className = "world-lens world-lens-preview";
       if (isDocumentMode && filteredDocs.length > 0) {
         const selectedDoc = filteredDocs.find((d) => d.doc.id === this.selectedEntityId)?.doc ?? filteredDocs[0].doc;
         this.selectedEntityId = selectedDoc.id;
@@ -34164,21 +34168,25 @@ class DossierCard {
             render2();
           }
         };
-        lensCard.append(lensTitle, lensDesc, ctaBtn);
+        const actionsRow = document.createElement("div");
+        actionsRow.className = "world-lens-preview-actions";
+        actionsRow.append(ctaBtn);
         if (activeEntry.entity.kind === "place" && !vis?.isActiveLocation && this.sceneHubContext?.actionsEnabled && this.sceneHubContext.onDraftAction) {
           const goBtn = document.createElement("button");
           goBtn.type = "button";
           goBtn.className = "world-lens-cta";
-          goBtn.style.marginLeft = "6px";
           goBtn.dataset.worldLensGoTo = activeEntry.entity.name;
           goBtn.textContent = `Head to ${activeEntry.entity.name}`;
           goBtn.onclick = () => {
             this.sceneHubContext?.onDraftAction?.(`I head to ${activeEntry.entity.name}.`);
             this.close();
           };
-          lensCard.append(goBtn);
+          actionsRow.append(goBtn);
         }
-        lensCard.append(hideBtn);
+        hideBtn.style.marginLeft = "0";
+        hideBtn.style.marginTop = "0";
+        actionsRow.append(hideBtn);
+        lensCard.append(lensTitle, lensDesc, actionsRow);
       } else {
         lensCard.innerHTML = isDocumentMode ? "<h3>No revealed documents yet</h3><p>Letters, notes, flyers, receipts, and screens spotted in narration will collect here across turns.</p>" : "<h3>No matching references</h3><p>Try another category or clear the search.</p>";
         const resetBtn = document.createElement("button");
@@ -57858,7 +57866,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.175";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.176";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -62690,6 +62698,7 @@ function openReferenceCropperModal(options) {
 class CharacterFolio {
   handlers;
   element;
+  rosterControls;
   rosterCarousel;
   detailContainer;
   library = Object.create(null);
@@ -63147,6 +63156,10 @@ class CharacterFolio {
         .folio-action-btn:hover {
           background: var(--vn-shell-bg-hover, rgba(255, 255, 255, 0.12));
         }
+        .folio-action-btn:disabled {
+          opacity: 0.48;
+          cursor: not-allowed;
+        }
         .folio-action-btn.btn-accent {
           background: var(--vn-shell-accent, #6ee7b7);
           color: var(--vn-shell-accent-contrast, #0b1114);
@@ -63510,9 +63523,11 @@ class CharacterFolio {
           gap: 8px;
         }
       </style>
+      <div class="folio-roster-controls" data-folio-roster-controls hidden style="display:flex;align-items:center;gap:6px;padding:8px 14px 2px;background:color-mix(in srgb,var(--vn-shell-field,#0d161a) 72%,transparent);flex-shrink:0;"></div>
       <div class="folio-roster-carousel" data-folio-roster></div>
       <div class="folio-scroll-body" data-folio-body></div>
     `;
+    this.rosterControls = this.element.querySelector("[data-folio-roster-controls]");
     this.rosterCarousel = this.element.querySelector("[data-folio-roster]");
     this.detailContainer = this.element.querySelector("[data-folio-body]");
   }
@@ -63883,12 +63898,11 @@ class CharacterFolio {
   rosterQuery = "";
   rosterInSceneOnly = false;
   renderRoster() {
+    this.rosterControls.replaceChildren();
     this.rosterCarousel.replaceChildren();
     const characters = Object.values(this.library);
     if (characters.length > 4) {
-      const controls = document.createElement("div");
-      controls.className = "folio-roster-controls";
-      controls.style.cssText = "display:flex;align-items:center;gap:6px;width:100%;flex:0 0 100%;margin-bottom:4px;";
+      this.rosterControls.hidden = false;
       const search = document.createElement("input");
       search.type = "search";
       search.setAttribute("data-folio-roster-search", "");
@@ -63899,7 +63913,7 @@ class CharacterFolio {
       search.oninput = () => {
         this.rosterQuery = search.value;
         this.renderRoster();
-        const nextInput = this.rosterCarousel.querySelector("[data-folio-roster-search]");
+        const nextInput = this.rosterControls.querySelector("[data-folio-roster-search]");
         if (nextInput) {
           nextInput.focus();
           nextInput.setSelectionRange?.(this.rosterQuery.length, this.rosterQuery.length);
@@ -63915,8 +63929,9 @@ class CharacterFolio {
         this.rosterInSceneOnly = !this.rosterInSceneOnly;
         this.renderRoster();
       };
-      controls.append(search, inSceneBtn);
-      this.rosterCarousel.append(controls);
+      this.rosterControls.append(search, inSceneBtn);
+    } else {
+      this.rosterControls.hidden = true;
     }
     const q = this.rosterQuery.trim().toLowerCase();
     const visibleCharacters = characters.filter((char) => {

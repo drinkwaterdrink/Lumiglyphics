@@ -53,6 +53,7 @@ export interface CharacterSceneActionTools {
 
 export class CharacterFolio implements WorkspaceSurface {
   readonly element: HTMLElement;
+  private readonly rosterControls: HTMLElement;
   private readonly rosterCarousel: HTMLElement;
   private readonly detailContainer: HTMLElement;
   private library: Record<string, CharacterDNA> = Object.create(null);
@@ -448,6 +449,10 @@ export class CharacterFolio implements WorkspaceSurface {
         .folio-action-btn:hover {
           background: var(--vn-shell-bg-hover, rgba(255, 255, 255, 0.12));
         }
+        .folio-action-btn:disabled {
+          opacity: 0.48;
+          cursor: not-allowed;
+        }
         .folio-action-btn.btn-accent {
           background: var(--vn-shell-accent, #6ee7b7);
           color: var(--vn-shell-accent-contrast, #0b1114);
@@ -811,10 +816,12 @@ export class CharacterFolio implements WorkspaceSurface {
           gap: 8px;
         }
       </style>
+      <div class="folio-roster-controls" data-folio-roster-controls hidden style="display:flex;align-items:center;gap:6px;padding:8px 14px 2px;background:color-mix(in srgb,var(--vn-shell-field,#0d161a) 72%,transparent);flex-shrink:0;"></div>
       <div class="folio-roster-carousel" data-folio-roster></div>
       <div class="folio-scroll-body" data-folio-body></div>
     `;
 
+    this.rosterControls = this.element.querySelector('[data-folio-roster-controls]')!;
     this.rosterCarousel = this.element.querySelector('[data-folio-roster]')!;
     this.detailContainer = this.element.querySelector('[data-folio-body]')!;
 
@@ -1096,14 +1103,12 @@ export class CharacterFolio implements WorkspaceSurface {
   private rosterInSceneOnly = false;
 
   private renderRoster(): void {
+    this.rosterControls.replaceChildren();
     this.rosterCarousel.replaceChildren();
     const characters = Object.values(this.library);
 
     if (characters.length > 4) {
-      const controls = document.createElement('div');
-      controls.className = 'folio-roster-controls';
-      controls.style.cssText = 'display:flex;align-items:center;gap:6px;width:100%;flex:0 0 100%;margin-bottom:4px;';
-
+      this.rosterControls.hidden = false;
       const search = document.createElement('input');
       search.type = 'search';
       search.setAttribute('data-folio-roster-search', '');
@@ -1114,7 +1119,7 @@ export class CharacterFolio implements WorkspaceSurface {
       search.oninput = () => {
         this.rosterQuery = search.value;
         this.renderRoster();
-        const nextInput = this.rosterCarousel.querySelector<HTMLInputElement>('[data-folio-roster-search]');
+        const nextInput = this.rosterControls.querySelector<HTMLInputElement>('[data-folio-roster-search]');
         if (nextInput) {
           nextInput.focus();
           nextInput.setSelectionRange?.(this.rosterQuery.length, this.rosterQuery.length);
@@ -1132,8 +1137,9 @@ export class CharacterFolio implements WorkspaceSurface {
         this.renderRoster();
       };
 
-      controls.append(search, inSceneBtn);
-      this.rosterCarousel.append(controls);
+      this.rosterControls.append(search, inSceneBtn);
+    } else {
+      this.rosterControls.hidden = true;
     }
 
     const q = this.rosterQuery.trim().toLowerCase();
