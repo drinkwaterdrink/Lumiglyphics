@@ -1,4 +1,5 @@
 import type { CropAspect, NormalizedCropRect, ReferenceCropMeta } from '../../shared/character-dna.js';
+import { trapFocusWithin } from '../image-review/focus-trap.js';
 
 export type { CropAspect, NormalizedCropRect, ReferenceCropMeta };
 
@@ -101,6 +102,8 @@ export function openReferenceCropperModal(options: ReferenceCropperOptions): { c
   let rect: NormalizedCropRect = options.initialMeta?.rect ? clampCropRect(options.initialMeta.rect) : fitAspectCropRect(imgW, imgH, aspect);
   let loaded: HTMLImageElement | null = null;
   let objectUrl: string | null = null;
+  let closed = false;
+  const fetchAbort = typeof AbortController === 'function' ? new AbortController() : null;
   const previousFocus = (document as any).activeElement as HTMLElement | null;
   const slotLabel = options.slot === 'face' ? 'Face' : 'Outfit';
   const title = `Crop ${slotLabel} Reference${options.characterName ? ` · ${options.characterName}` : ''}`;
@@ -219,8 +222,8 @@ export function openReferenceCropperModal(options: ReferenceCropperOptions): { c
   box.addEventListener('pointerup', end);
   box.addEventListener('pointercancel', end);
 
-  const render = (r: NormalizedCropRect): string => {
-    if (!loaded) return options.sourceUrl;
+  const render = (r: NormalizedCropRect): string | null => {
+    if (!loaded) return null;
     try {
       const px = Math.round(r.x * imgW), py = Math.round(r.y * imgH);
       const pw = Math.max(1, Math.min(imgW - px, Math.round(r.width * imgW)));
@@ -230,15 +233,21 @@ export function openReferenceCropperModal(options: ReferenceCropperOptions): { c
       canvas.width = dims.width;
       canvas.height = dims.height;
       const ctx = canvas.getContext?.('2d');
-      if (!ctx) return options.sourceUrl;
+      if (!ctx) return null;
       ctx.drawImage(loaded, px, py, pw, ph, 0, 0, dims.width, dims.height);
       const webp = canvas.toDataURL('image/webp', 0.9);
       if (webp.startsWith('data:image/webp')) return webp;
       return canvas.toDataURL('image/png');
     } catch {
-      return options.sourceUrl;
+      return null;
     }
   };
+
+  const statusEl = document.createElement('div');
+  statusEl.dataset.cropperStatus = '';
+  statusEl.setAttribute('role', 'status');
+  statusEl.style.cssText = 'font-size:12px;color:var(--vn-shell-muted,#94a3b8);min-height:16px;';
+  statusEl.textContent = 'Loading image…';
 
   const footer = document.createElement('div');
   footer.style.cssText = 'display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;';
@@ -255,24 +264,54 @@ export function openReferenceCropperModal(options: ReferenceCropperOptions): { c
   const applyBtn = document.createElement('button');
   applyBtn.type = 'button';
   applyBtn.dataset.cropperApply = '';
-  applyBtn.textContent = `✂️ Apply ${slotLabel} Crop`;
+  applyBtn.disabled = true;
+  applyBtn.textContent = 'Loading image…';
   applyBtn.style.cssText = BTN + 'background:var(--vn-shell-accent,#38bdf8);color:var(--vn-shell-accent-contrast,#041624);border:none;';
   const right = document.createElement('div');
   right.style.cssText = 'display:flex;gap:8px;';
   right.append(cancelBtn, applyBtn);
   footer.append(fullBtn, right);
 
-  modal.append(header, hint, aspectRow, viewport, zoomRow, footer);
+  modal.append(header, hint, aspectRow, viewport, zoomRow, statusEl, footer);
   overlay.append(modal);
 
+  const onWindowKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      cancel();
+      return;
+    }
+    if (e.key === 'Tab') {
+      trapFocusWithin(modal, e, (document as any).activeElement ?? null);
+    }
+  };
+
   const close = () => {
+    if (closed) return;
+    closed = true;
+    try { fetchAbort?.abort(); } catch { /* ignore */ }
+    if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+      window.removeEventListener('keydown', onWindowKeyDown, true);
+    }
     if (objectUrl) { try { URL.revokeObjectURL(objectUrl); } catch { /* ignore */ } objectUrl = null; }
     overlay.remove();
     previousFocus?.focus?.();
   };
   const cancel = () => { close(); options.onCancel?.(); };
   const confirm = (r: NormalizedCropRect, full: boolean) => {
-    const dataUrl = render(r);
+    let dataUrl: string;
+    if (full) {
+      dataUrl = options.sourceUrl;
+    } else {
+      const rendered = render(r);
+      if (!rendered) {
+        statusEl.textContent = 'Unable to export cropped region (image still loading or cross-origin restricted). Try "Use Full Image".';
+        statusEl.style.color = '#f87171';
+        return;
+      }
+      dataUrl = rendered;
+    }
     close();
     options.onConfirm({
       dataUrl,
@@ -289,12 +328,17 @@ export function openReferenceCropperModal(options: ReferenceCropperOptions): { c
   cancelBtn.onclick = cancel;
   fullBtn.onclick = () => confirm({ x: 0, y: 0, width: 1, height: 1 }, true);
   applyBtn.onclick = () => confirm(clampCropRect(rect), false);
-  overlay.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancel(); }
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) cancel();
   });
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('keydown', onWindowKeyDown, true);
+  }
 
   const show = (src: string) => {
+    if (closed) return;
     img.onload = () => {
+      if (closed) return;
       loaded = img;
       imgW = Math.max(1, img.naturalWidth || 1000);
       imgH = Math.max(1, img.naturalHeight || 1000);
@@ -302,7 +346,18 @@ export function openReferenceCropperModal(options: ReferenceCropperOptions): { c
       stageBox.style.width = `${imgW >= imgH ? edge : Math.round((imgW / imgH) * edge)}px`;
       stageBox.style.height = `${imgW >= imgH ? Math.round((imgH / imgW) * edge) : edge}px`;
       if (!options.initialMeta?.rect) rect = fitAspectCropRect(imgW, imgH, aspect);
+      applyBtn.disabled = false;
+      applyBtn.textContent = `✂️ Apply ${slotLabel} Crop`;
+      statusEl.textContent = `${imgW} × ${imgH}px ready`;
+      statusEl.style.color = 'var(--vn-shell-muted,#94a3b8)';
       sync();
+    };
+    img.onerror = () => {
+      if (closed) return;
+      applyBtn.disabled = true;
+      applyBtn.textContent = `✂️ Apply ${slotLabel} Crop`;
+      statusEl.textContent = 'Image failed to load for cropping. You can still use Full Image or Cancel.';
+      statusEl.style.color = '#f87171';
     };
     img.src = src;
   };
@@ -310,14 +365,19 @@ export function openReferenceCropperModal(options: ReferenceCropperOptions): { c
     show(options.sourceUrl);
   } else {
     // Fetching as a same-origin Blob keeps the canvas untainted so it can be exported.
-    fetch(options.sourceUrl, { credentials: 'include' })
+    fetch(options.sourceUrl, { credentials: 'include', ...(fetchAbort ? { signal: fetchAbort.signal } : {}) })
       .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
-      .then((blob) => { objectUrl = URL.createObjectURL(blob); show(objectUrl); })
-      .catch(() => show(options.sourceUrl));
+      .then((blob) => {
+        const created = URL.createObjectURL(blob);
+        if (closed) { try { URL.revokeObjectURL(created); } catch { /* ignore */ } return; }
+        objectUrl = created;
+        show(objectUrl);
+      })
+      .catch(() => { if (!closed) show(options.sourceUrl); });
   }
 
   sync();
   (options.mount ?? document.body ?? document.documentElement)?.append(overlay);
-  applyBtn.focus?.();
+  (applyBtn.disabled ? fullBtn : applyBtn).focus?.();
   return { close, element: overlay };
 }

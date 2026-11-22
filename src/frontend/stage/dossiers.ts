@@ -373,6 +373,12 @@ export class StageDossiers {
  }
  setDocumentAssets(assets?:Record<string,DocumentAssetView>):void{
   this.documentAssets={...(assets??{})};
+  for(const docId of Object.keys(this.documentAssets)){
+   this.documentArtBusy.delete(docId);
+   this.documentArtErrors.delete(docId);
+  }
+ }
+ clearDocumentArtState():void{
   this.documentArtBusy.clear();
   this.documentArtErrors.clear();
  }

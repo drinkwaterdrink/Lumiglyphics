@@ -1,4 +1,5 @@
 import {isFluxKleinModel} from '../../shared/image-model-output.js';
+import { generateBackendUuid } from '../core/uuid.js';
 import {buildV2ImageRequest} from './v2-request-builder.js';
 import type {ImageActivityInput} from '../../shared/image-usage.js';
 import {castAllocationCandidates} from './cast-allocation.js';
@@ -2011,7 +2012,7 @@ export async function generateAssets(
           if(cacheOptions.waitForDispatch){do{await cacheOptions.waitForDispatch(scheduledJob,jobSignal);}while(cacheOptions.canDispatch&&!cacheOptions.canDispatch(scheduledJob));}
           else if(config.dataSaverMode)throw Object.assign(new Error('Automatic pictures are paused by data saver.'),{name:'AbortError'});
           if(signal.aborted)throw abortError(signal);if(jobSignal.aborted)throw abortError(jobSignal);
-          const requestId=cacheOptions.requestIdForJob?.(scheduledJob.jobId)??crypto.randomUUID(),attemptId=crypto.randomUUID();
+          const requestId=cacheOptions.requestIdForJob?.(scheduledJob.jobId)??await generateBackendUuid(),attemptId=await generateBackendUuid();
           const recordActivity=(kind:ImageActivityInput['kind'])=>cacheOptions.onActivity?.({key:scheduledJob.ownerTurnKey,jobId:scheduledJob.jobId,requestId,attemptId,kind});
           const generationStarted=Date.now();
           let providerSettled=false;const onProviderAbort=()=>{if(!providerSettled)recordActivity('cancel-unknown');};

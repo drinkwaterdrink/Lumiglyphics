@@ -1,4 +1,5 @@
 import type {VisualNovelConfig} from '../../config.js';
+import { createUiId } from '../request-id.js';
 import type {TurnPlan} from '../../shared/contracts.js';
 import {
   PresentationRuleCatalogSchema,
@@ -283,13 +284,7 @@ export class PresentationRulesPanel {
       </form>`;
 
     // Dual-editor sync event listener
-    window.addEventListener('lumiglyphics:presentation-rules-updated', (event: Event) => {
-      const detail = (event as CustomEvent).detail;
-      if (detail && detail.catalog && (detail.chatId === this.getChat() || detail.scope === 'user')) {
-        this.catalog = detail.catalog;
-        this.renderList();
-      }
-    });
+    window.addEventListener('lumiglyphics:presentation-rules-updated', this.onRulesUpdated);
 
     this.el<HTMLSelectElement>('[data-scope]').onchange = () => {
       if (this.dirty || this.pending) {
@@ -457,7 +452,7 @@ export class PresentationRulesPanel {
       this.status('Open a chat before saving a chat preference.');
       return;
     }
-    const id = `preference-${Date.now()}-${Math.random().toString(36).slice(2)}`, chat = this.getChat();
+    const id = `preference-${createUiId()}`, chat = this.getChat();
     const request = {
       ...action,
       type: 'vn_presentation_rules',
@@ -634,7 +629,7 @@ export class PresentationRulesPanel {
       this.status('Save or discard your current draft first.');
       return;
     }
-    this.editingId = rule?.id ?? `rule-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    this.editingId = rule?.id ?? `rule-${createUiId()}`;
     this.el<HTMLFormElement>('form').hidden = false;
     this.el('[data-preference-heading]').textContent = rule ? 'Edit Scene Direction Rule' : 'New Scene Direction Rule';
     this.el<HTMLInputElement>('[data-preference-name]').value = rule?.name ?? '';
@@ -682,7 +677,7 @@ export class PresentationRulesPanel {
 
     this.el<HTMLInputElement>('[data-priority]').value = String(rule?.priority ?? 50);
     this.el<HTMLInputElement>('[data-preference-enabled]').checked = rule?.enabled ?? true;
-    this.dirty = true;
+    this.dirty = !rule;
     this.syncConditionFields();
     this.preview();
     this.ensureLoaded();
@@ -779,7 +774,8 @@ export class PresentationRulesPanel {
     } else if (kind === 'cast_present' || kind === 'speaker_name') {
       when = { kind, name: this.el<HTMLInputElement>('[data-subject-name]').value.trim() };
     } else if (kind === 'cast_count') {
-      when = { kind: 'cast_count', op: this.el<HTMLSelectElement>('[data-cond-op]').value as any, count: Number(this.el<HTMLInputElement>('[data-cond-val]').value) || 1 };
+      const parsedCount = Number(this.el<HTMLInputElement>('[data-cond-val]').value);
+      when = { kind: 'cast_count', op: this.el<HTMLSelectElement>('[data-cond-op]').value as any, count: Number.isFinite(parsedCount) ? parsedCount : 1 };
     } else if (kind === 'time_of_day') {
       when = { kind: 'time_of_day', value: (this.el<HTMLInputElement>('[data-cond-val]').value.trim() || 'night') as any };
     } else if (kind === 'weather') {
@@ -829,11 +825,12 @@ export class PresentationRulesPanel {
       then = { kind: 'prefer_template', templateId: 'portrait' };
     }
 
+    const parsedPriority = Number(this.el<HTMLInputElement>('[data-priority]').value);
     const parsed = PresentationRuleDraftSchema.safeParse({
       id: this.editingId,
       name,
       enabled: this.el<HTMLInputElement>('[data-preference-enabled]').checked,
-      priority: Number(this.el<HTMLInputElement>('[data-priority]').value) || 50,
+      priority: Number.isFinite(parsedPriority) ? parsedPriority : 50,
       when,
       then
     });
@@ -955,8 +952,17 @@ export class PresentationRulesPanel {
     this.renderList();
   }
 
+  private readonly onRulesUpdated = (event: Event) => {
+    const detail = (event as CustomEvent).detail;
+    if (detail && detail.catalog && (detail.chatId === this.getChat() || detail.scope === 'user')) {
+      this.catalog = detail.catalog;
+      this.renderList();
+    }
+  };
+
   destroy() {
     this.destroyed = true;
+    window.removeEventListener('lumiglyphics:presentation-rules-updated', this.onRulesUpdated);
     this.clear();
     this.host.remove();
   }

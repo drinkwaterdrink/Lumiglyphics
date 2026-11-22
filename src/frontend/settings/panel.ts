@@ -1655,7 +1655,7 @@ export class VisualNovelSettingsPanel {
       const promptEngineerOverride = this.control<HTMLTextAreaElement>("promptEngineerOverride").value;
 
       const existingKey = Object.keys(this.systemPromptProfiles).find(k => this.systemPromptProfiles[k]?.name.toLowerCase() === name.toLowerCase());
-      const id = existingKey ?? `profile-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      const id = existingKey ?? `profile-${createUiId()}`;
       this.systemPromptProfiles[id] = {
         id,
         name,
@@ -1737,7 +1737,7 @@ export class VisualNovelSettingsPanel {
         existing.negative = negative;
         id = existing.id;
       } else {
-        id = `preset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+        id = `preset-${createUiId()}`;
         this.promptPresets.push({ id, name, positive, suffix, negative });
       }
       this.control<HTMLInputElement>("selectedSharedStyleId").value=id;

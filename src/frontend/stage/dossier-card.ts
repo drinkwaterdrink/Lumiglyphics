@@ -273,6 +273,15 @@ export class DossierCard {
   setStoryDnaError(error: string): void {
     this.storyDnaError = error;
     this.awaitingDnaSync = false;
+    const itemArtBtn = this.host.querySelector<HTMLButtonElement>('[data-generate-item-art]');
+    if (itemArtBtn) {
+      itemArtBtn.disabled = false;
+      itemArtBtn.textContent = '✨ Generate Item Art';
+    }
+    const autofillBtn = this.host.querySelector<HTMLButtonElement>('[data-story-dna-autofill]');
+    if (autofillBtn) {
+      autofillBtn.disabled = false;
+    }
     const statusEl = this.host.querySelector<HTMLElement>('[data-story-dna-status]');
     if (statusEl) {
       statusEl.textContent = error;
@@ -2411,13 +2420,13 @@ export class DossierCard {
       };
       saveBtn.onclick = () => {
         const nextLoc = buildLoc();
-        this.storyDnaRequester?.({ action: 'save_location', location: nextLoc });
+        this.storyDnaRequester?.({ action: 'save_location', location: nextLoc, revision: this.storyDna.revision });
         status.textContent = 'Saving Scenery DNA...';
         status.hidden = false;
       };
       delBtn.onclick = () => {
         if (existingLoc) {
-          this.storyDnaRequester?.({ action: 'delete_location', locationId: existingLoc.id });
+          this.storyDnaRequester?.({ action: 'delete_location', locationId: existingLoc.id, revision: this.storyDna.revision });
           if (this.trayReturn) this.trayReturn();
           else this.close();
         }
@@ -2446,7 +2455,7 @@ export class DossierCard {
         mergeBtn.onclick = () => {
           const targetId = mergeSel.value;
           if (!targetId) return;
-          this.storyDnaRequester?.({ action: 'merge_location', sourceId: existingLoc.id, targetId });
+          this.storyDnaRequester?.({ action: 'merge_location', sourceId: existingLoc.id, targetId, revision: this.storyDna.revision });
           if (this.trayReturn) this.trayReturn();
         };
         mergeRow.append(mergeSel, mergeBtn);
@@ -2573,11 +2582,11 @@ export class DossierCard {
       [aliasesIn, typeIn, descIn, matIn, featIn, colIn, heldIn, loreIn, notesIn].forEach(el => el.addEventListener('input', refreshPreview));
       refreshPreview();
 
-      saveBtn.before(genItemArtBtn);
+      footer.insertBefore(genItemArtBtn, saveBtn);
       genItemArtBtn.onclick = () => {
         if (!existingItem) {
           const saved = buildItem();
-          this.storyDnaRequester?.({ action: 'save_item', item: saved });
+          this.storyDnaRequester?.({ action: 'save_item', item: saved, revision: this.storyDna.revision });
           status.textContent = 'Saving item first, then click Generate Item Art.';
           status.hidden = false;
           return;
@@ -2601,13 +2610,13 @@ export class DossierCard {
       };
       saveBtn.onclick = () => {
         const nextItem = buildItem();
-        this.storyDnaRequester?.({ action: 'save_item', item: nextItem });
+        this.storyDnaRequester?.({ action: 'save_item', item: nextItem, revision: this.storyDna.revision });
         status.textContent = 'Saving Item DNA...';
         status.hidden = false;
       };
       delBtn.onclick = () => {
         if (existingItem) {
-          this.storyDnaRequester?.({ action: 'delete_item', itemId: existingItem.id });
+          this.storyDnaRequester?.({ action: 'delete_item', itemId: existingItem.id, revision: this.storyDna.revision });
           if (this.trayReturn) this.trayReturn();
           else this.close();
         }
@@ -2636,7 +2645,7 @@ export class DossierCard {
         mergeBtn.onclick = () => {
           const targetId = mergeSel.value;
           if (!targetId) return;
-          this.storyDnaRequester?.({ action: 'merge_item', sourceId: existingItem.id, targetId });
+          this.storyDnaRequester?.({ action: 'merge_item', sourceId: existingItem.id, targetId, revision: this.storyDna.revision });
           if (this.trayReturn) this.trayReturn();
         };
         mergeRow.append(mergeSel, mergeBtn);

@@ -1,4 +1,5 @@
 import {fingerprintForMessage} from './planner.js';
+import {generateBackendUuid} from '../core/uuid.js';
 import type {SpindleAPI} from 'lumiverse-spindle-types';
 import type {VisualNovelConfig} from '../../config.js';
 import {z} from 'zod';
@@ -121,7 +122,7 @@ export async function proposeCharacterDna(spindle:SpindleAPI,input:Input&{revisi
   try{const text=responseText(result);if(text.length>24000)throw new Error('Response too large');const parsed=schema.parse(JSON.parse(text.replace(/^\s*```(?:json)?\s*/i,'').replace(/\s*```\s*$/,'')));const seen=new Set<string>();
    for(const change of parsed.changes){if(!fields.includes(change.path)||seen.has(change.path))throw new Error('Unexpected or duplicate field');seen.add(change.path);if(change.sourceRefs.some(id=>!input.evidence.evidence.some(e=>e.id===id)))throw new Error('Unknown evidence reference');if(change.classification!=='generated'&&!change.sourceRefs.length)throw new Error('Evidence or inference needs a source');if(change.classification==='generated')change.sourceRefs=[];if((change.path==='signatureOutfit'||change.path==='activeOutfit')&&typeof change.value==='string'&&isGenericAttire(change.value)){change.value='';}if(change.path==='build.gender'&&typeof change.value==='string'){const g=change.value.toLowerCase();change.value=/^(female|girl|woman)$/.test(g)?'woman':/^(male|boy|man)$/.test(g)?'man':change.value;}}
    applyDnaChanges(input.target,parsed.changes);
-   return{id:crypto.randomUUID(),characterId:input.target.id,baseRevision:input.revision,changes:parsed.changes,...input.evidence};
+   return{id:await generateBackendUuid(),characterId:input.target.id,baseRevision:input.revision,changes:parsed.changes,...input.evidence};
   }catch(reason){error=reason instanceof Error?reason.message:'Invalid response';}
  }
  throw new Error(`Auto-fill returned an invalid proposal (${error.slice(0,200)}). Saved DNA and edits are unchanged.`);

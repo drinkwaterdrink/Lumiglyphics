@@ -1,6 +1,7 @@
 /**
  * Edge-to-edge Fullscreen Image Lightbox for History & Artwork Review Studio.
  */
+import { trapFocusWithin } from "../image-review/focus-trap.js";
 
 export interface LightboxGalleryItem {
   src: string;
@@ -206,7 +207,7 @@ const LIGHTBOX_CSS = `
   bottom: 0;
   left: 0;
   right: 0;
-  max-height: 40vh;
+  max-height: 40dvh;
   overflow-y: auto;
   padding: 16px 20px max(16px, env(safe-area-inset-bottom));
   background: color-mix(in srgb, var(--vn-shell-panel, #0a1018) 96%, #000);
@@ -254,10 +255,14 @@ export class FullscreenLightbox {
   private isPanning = false;
   private pinchStartDist = 0;
   private pinchStartZoom = 1;
+  private previousFocus: HTMLElement | null = null;
 
   constructor() {
     this.backdrop = document.createElement("div");
     this.backdrop.className = "vn-lightbox-backdrop";
+    this.backdrop.setAttribute("role", "dialog");
+    this.backdrop.setAttribute("aria-modal", "true");
+    this.backdrop.setAttribute("aria-label", "Image viewer");
     this.backdrop.hidden = true;
     this.backdrop.style.display = "none";
 
@@ -277,7 +282,7 @@ export class FullscreenLightbox {
           <button type="button" class="vn-lightbox-btn" data-action="outfit-ref" hidden title="Set as outfit reference">Outfit Ref</button>
           <button type="button" class="vn-lightbox-btn" data-action="delete" hidden title="Delete image">Delete</button>
           <button type="button" class="vn-lightbox-btn" data-action="zoom-toggle" title="Toggle zoom">100%</button>
-          <button type="button" class="vn-lightbox-btn" data-action="info-toggle" title="Prompt details">Info</button>
+          <button type="button" class="vn-lightbox-btn" data-action="info-toggle" aria-expanded="false" title="Prompt details">Info</button>
           <button type="button" class="vn-lightbox-btn vn-lightbox-close" data-action="close" aria-label="Close" title="Close (Esc)">✕</button>
         </div>
       </div>
@@ -312,6 +317,8 @@ export class FullscreenLightbox {
       e.preventDefault();
       e.stopPropagation();
       this.close();
+    } else if (e.key === "Tab") {
+      trapFocusWithin(this.backdrop, e, (document as unknown as { activeElement?: Element | null }).activeElement ?? null);
     } else if (e.key === "+" || e.key === "=") {
       this.setZoom(Math.min(4, this.zoomLevel + 0.5));
     } else if (e.key === "-") {
@@ -478,6 +485,7 @@ export class FullscreenLightbox {
     this.infoOpen = !this.infoOpen;
     const infoBtn = this.backdrop.querySelector('[data-action="info-toggle"]') as HTMLButtonElement;
     infoBtn.classList.toggle("active", this.infoOpen);
+    infoBtn.setAttribute("aria-expanded", String(this.infoOpen));
     this.infoDrawer.hidden = !this.infoOpen;
   }
 
@@ -561,6 +569,7 @@ export class FullscreenLightbox {
   }
 
   public show(options: LightboxOptions): void {
+    this.previousFocus = (document as unknown as { activeElement?: HTMLElement | null }).activeElement ?? null;
     this.currentOptions = options;
     const faceBtn = this.backdrop.querySelector('[data-action="face-ref"]') as HTMLButtonElement | null;
     const outfitBtn = this.backdrop.querySelector('[data-action="outfit-ref"]') as HTMLButtonElement | null;
@@ -605,6 +614,9 @@ export class FullscreenLightbox {
     if (this.backdrop.parentNode) {
       this.backdrop.parentNode.removeChild(this.backdrop);
     }
+    const returnTo = this.previousFocus;
+    this.previousFocus = null;
+    returnTo?.focus?.();
   }
 
   private escapeHtml(str: string): string {

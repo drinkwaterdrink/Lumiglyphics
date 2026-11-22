@@ -10,7 +10,8 @@ import {inspectorState,pictureStateSummary} from '../image-review/inspector-mode
 import {scopedPictureOperations,type LocalPictureOperations} from '../image-review/local-operations.js';
 import type {ImageRetryQueueView} from '../../shared/image-retries.js';
 import {selectHeldBackground} from '../../shared/background-hold.js';
-import {createUiId} from '../request-id.js';
+import { bindFrontendUuidProvider, createUiId, unbindFrontendUuidProvider, type FrontendUuidContext } from '../request-id.js';
+import { parseReaderPresentation, selectPresentationSnapshot } from '../../shared/presentation-selectors.js';
 import {NarrativePreviewSchema} from '../../shared/preparation-preview.js';
 import {referenceHistoryFor} from '../../shared/reference-history.js';
 import { samePresentationTurn } from "../../shared/presentation-entities.js";
@@ -520,6 +521,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   });
   app.setVisible(false);
 
+  bindFrontendUuidProvider(ctx as unknown as FrontendUuidContext);
   let active = false;
   const configRef: { current: VisualNovelConfig | null } = { current: null };
   // Browser-console mirror of the backend "listening" trace. Gated by the same
@@ -540,7 +542,11 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     savedReadingPosition = position;
     if (readingPositionTimer) clearTimeout(readingPositionTimer);
     readingPositionTimer = null;
-    const send = () => { readingPositionTimer = null; ctx.sendToBackend({ type: "vn_reading_position", position }); };
+    const send = () => {
+      readingPositionTimer = null;
+      if (destroyed) return;
+      ctx.sendToBackend({ type: "vn_reading_position", position });
+    };
     if (immediate) send(); else readingPositionTimer = setTimeout(send, 250);
   }
   let pendingNextTurn: TurnView | null = null;
@@ -815,8 +821,19 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     ctx.sendToBackend({ type: 'vn_location_art', version: 1, chatId: owner, requestId: createUiId(), ...action });
   });
   stage.setCharacterDnaSaver((dna) => sendDna({ action: 'save', dna, revision: dnaRevision }));
+  const documentArtRequests = new Map<string, { documentId: string; chatId: string; messageId: string; swipeId: number; sourceFingerprint: string; revision: number }>();
   stage.setDocumentArtRequester?.((documentId, throughParagraphIndex, forceRegenerate) => {
     if (!turn) return;
+    const requestId = createUiId();
+    if (documentArtRequests.size > 64) documentArtRequests.delete(documentArtRequests.keys().next().value!);
+    documentArtRequests.set(requestId, {
+      documentId,
+      chatId: turn.chatId,
+      messageId: turn.messageId,
+      swipeId: turn.swipeId,
+      sourceFingerprint: turn.sourceFingerprint,
+      revision: turn.revision,
+    });
     ctx.sendToBackend({
       type: "vn_generate_document_image",
       chatId: turn.chatId,
@@ -826,7 +843,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       revision: turn.revision,
       documentId,
       throughParagraphIndex,
-      requestId: createUiId(),
+      requestId,
       ...(forceRegenerate ? { forceRegenerate: true } : {}),
     });
   });
@@ -851,10 +868,17 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     subtitle: "Open this chat in the full-screen visual novel view",
     enabled: true
   });
-  const headerLauncher = createVnHeaderLauncher(
-    ctx.ui.mount("chat_header_right"),
-    () => toggleVisualNovel(),
-  );
+  let headerLauncherMounted = false;
+  let headerLauncher = createVnHeaderLauncher(null, () => toggleVisualNovel());
+  function ensureHeaderLauncher(): void {
+    if (destroyed || headerLauncherMounted) return;
+    const mount = ctx.ui.mount("chat_header_right");
+    if (!mount) return;
+    headerLauncher = createVnHeaderLauncher(mount, () => toggleVisualNovel());
+    headerLauncherMounted = true;
+    headerLauncher.setActive(active);
+  }
+  ensureHeaderLauncher();
   const settingsHandle = ctx.ui.registerSettingsTab?.({
     id: "lumiglyphics",
     title: "Lumiglyphics",
@@ -905,7 +929,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
             ctx.sendToBackend({ type: "vn_import_audio_file", relativePath, dataBase64 });
           } else {
             const chunkCount = Math.ceil(dataBase64.length / chunkSize);
-            const transferId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+            const transferId = createUiId();
             for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
               ctx.sendToBackend({
                 type: "vn_import_audio_file",
@@ -1036,6 +1060,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     panelCapture = captureMessageId ? { chatId: chatId(), messageId: captureMessageId, fingerprint: turn?.sourceFingerprint ?? null, cards: captureSimTrackerCards(ctx.dom.findMessageElement(captureMessageId), document) } : null;
     registerOverrides();
     app.setVisible(true);
+    ensureHeaderLauncher();
     action.setLabel("Exit visual novel");
     headerLauncher.setActive(true);
     const activeChatId = chatId();
@@ -1089,7 +1114,7 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     if (!activeChatId) throw new Error("No chat is active.");
     const trimmed = content.trim();
     if (!trimmed) throw new Error("Enter a response first.");
-    const requestId = globalThis.crypto?.randomUUID?.() ?? `vn-submit-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const requestId = createUiId();
     ctx.sendToBackend({ type: "vn_submit", chatId: activeChatId, content: trimmed, requestId });
   }
 
@@ -1438,7 +1463,9 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       return;
     }
     if (type === "vn_document_image" && message.type === "vn_document_image") {
+      if (message.requestId) documentArtRequests.delete(message.requestId);
       if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId || turn.swipeId !== message.swipeId || turn.sourceFingerprint !== message.sourceFingerprint) return;
+      if (message.revision !== undefined && message.revision !== turn.revision) return;
       if (message.status === "ready" && message.imageId && message.imageUrl) {
         turn = {
           ...turn,
@@ -1568,6 +1595,19 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
         imageStudio.setConnectionCatalog({ status: "error", options: [], error: message.error });
         return;
       }
+      if (message.operation === "vn_generate_document_image") {
+        const pending = message.requestId ? documentArtRequests.get(message.requestId) : undefined;
+        if (message.requestId) documentArtRequests.delete(message.requestId);
+        if (pending && turn && pending.chatId === turn.chatId && pending.messageId === turn.messageId && pending.swipeId === turn.swipeId && pending.sourceFingerprint === turn.sourceFingerprint) {
+          stage.applyDocumentImageStatus?.({
+            documentId: pending.documentId,
+            contentHash: "",
+            status: "failed",
+            error: message.error,
+          });
+          return;
+        }
+      }
       if (!message.chatId || message.chatId === chatId()) {
         reportStageError(describeOperationError(message.operation, message.error, turn));
       }
@@ -1576,17 +1616,23 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
 
   const unsubBackend = ctx.onBackendMessage(routeBackend);
   const unsubAction = action.onClick(toggleVisualNovel);
-  const unsubChat = ctx.events.on("CHAT_SWITCHED", () => {
-    characterFolio.setContext(null);dnaRequests.clear();dnaTurnToken='';dnaChangedThisTurn=false;
-    preparationActive=false;
-    externalReview.cancel(); imageBridge.cancelAll();
+  const resetChatState = (ensureLauncher = false): void => {
+    characterFolio.setContext(null);
+    dnaRequests.clear();
+    dnaTurnToken = "";
+    dnaChangedThisTurn = false;
+    documentArtRequests.clear();
+    preparationActive = false;
+    stage.clearPreparationPreview();
+    externalReview.cancel();
+    imageBridge.cancelAll();
     settingsPanel?.clearCastArt();
     settingsPanel?.clearPresentationRules();
     settingsPanel?.clearLocationArt();
     settingsPanel?.clearContextSources();
     imageStudio.setTurn(null);
-    imageLibrary.setContext(null,0);
-      settingsPanel?.setImagePreviewMetadata();
+    imageLibrary.setContext(null, 0);
+    settingsPanel?.setImagePreviewMetadata();
     panelCapture = null;
     panels.setTurn(null);
     turn = null;
@@ -1594,27 +1640,11 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     speech.onChatChanged();
     loadedReadingCursor.load(null);
     stage.reset();
+    if (ensureLauncher) ensureHeaderLauncher();
     requestState();
-  });
-  const unsubFork = ctx.events.on("CHAT_FORKED", () => {
-    preparationActive=false;stage.clearPreparationPreview();
-    externalReview.cancel(); imageBridge.cancelAll();
-    settingsPanel?.clearCastArt();
-    settingsPanel?.clearPresentationRules();
-    settingsPanel?.clearLocationArt();
-    settingsPanel?.clearContextSources();
-    imageStudio.setTurn(null);
-    imageLibrary.setContext(null,0);
-      settingsPanel?.setImagePreviewMetadata();
-    panelCapture = null;
-    panels.setTurn(null);
-    turn = null;
-    pendingNextTurn = null;
-    speech.onChatChanged();
-    loadedReadingCursor.load(null);
-    stage.reset();
-    requestState();
-  });
+  };
+  const unsubChat = ctx.events.on("CHAT_SWITCHED", () => resetChatState(true));
+  const unsubFork = ctx.events.on("CHAT_FORKED", () => resetChatState(false));
   const unsubPermission = ctx.events.on("PERMISSION_CHANGED", (payload) => {
     if (!payload || typeof payload !== "object") return;
     const detail = payload as { permission?: unknown; granted?: unknown };
@@ -1628,10 +1658,15 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
 
   const cleanup = (): void => {
     if (destroyed) return;
-    characterFolio.setContext(null);dnaRequests.clear();dnaTurnToken='';dnaChangedThisTurn=false;
+    if (readingPositionTimer) {
+      clearTimeout(readingPositionTimer);
+      readingPositionTimer = null;
+    }
+    characterFolio.setContext(null);dnaRequests.clear();dnaTurnToken='';dnaChangedThisTurn=false;documentArtRequests.clear();
     deactivate();
     stage.workspace.destroy();
     destroyed = true;
+    unbindFrontendUuidProvider();
     unsubBackend();
     unsubAction();
     unsubChat();
@@ -1665,4 +1700,3 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   (globalThis as Record<PropertyKey, unknown>)[CLEANUP_KEY] = cleanup;
   return cleanup;
 }
-import {parseReaderPresentation,selectPresentationSnapshot} from '../../shared/presentation-selectors.js';

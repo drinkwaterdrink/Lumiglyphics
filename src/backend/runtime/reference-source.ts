@@ -1,4 +1,5 @@
 import type { CharacterDTO, SpindleAPI } from "lumiverse-spindle-types";
+import { generateBackendUuidSync } from "../core/uuid.js";
 import type { TurnPlan } from "../../shared/contracts.js";
 import { REFERENCE_IMAGE_MAX_BYTES } from "../../protocol.js";
 import { extractInlineCardImagesWithParagraphs } from "../core/paragraphs.js";
@@ -466,7 +467,7 @@ export async function fetchReferenceImageViaFrontend(
     ? Math.min(30000, Math.max(250, options.timeoutMs))
     : REFERENCE_FETCH_TIMEOUT_MS;
   if (options.signal?.aborted) return null;
-  const requestId = crypto.randomUUID();
+  const requestId = generateBackendUuidSync();
   const reply = await new Promise<RelayReply | null>((resolve) => {
     let settled = false;
     const cleanup = (): void => {

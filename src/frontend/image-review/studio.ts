@@ -1,4 +1,5 @@
 import {ImageActivityPanel} from './image-activity.js';
+import {createUiId} from '../request-id.js';
 import {VersionComparison} from './version-comparison.js';
 import {PromptHistory,type PromptEditSnapshot} from './prompt-history.js';
 import {lintCompiledPrompt} from '../../shared/prompt-lint.js';
@@ -1803,7 +1804,7 @@ export class ImageStudio {
     if(caps.ratios)fill('[data-output-ratio]',caps.ratios,parameters?.aspectRatio??parameters?.aspect_ratio);
   }
 
-  private recoveryScope() {return {chatId:this.turn!.chatId,messageId:this.turn!.messageId,swipeId:this.turn!.swipeId,sourceFingerprint:this.turn!.sourceFingerprint,requestId:globalThis.crypto?.randomUUID?.() ?? `vn-recovery-${Date.now()}-${Math.random().toString(36).slice(2)}`};}
+  private recoveryScope() {return {chatId:this.turn!.chatId,messageId:this.turn!.messageId,swipeId:this.turn!.swipeId,sourceFingerprint:this.turn!.sourceFingerprint,requestId:createUiId()};}
   private renderRecoveryMode():void {
     this.updateCorrectionScope();
     const environment=this.el<HTMLSelectElement>('[data-subject-mode]').value==='environment';

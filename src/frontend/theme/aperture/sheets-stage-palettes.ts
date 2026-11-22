@@ -24,13 +24,13 @@ aside[data-vn-workspace] {
 
 [data-workspace-heading],
 aside[data-vn-workspace] > header {
-  height: 56px !important;
-  min-height: 56px !important;
+  height: auto !important;
+  min-height: calc(56px + env(safe-area-inset-top, 0px)) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
   gap: 10px !important;
-  padding: 0 16px !important;
+  padding: env(safe-area-inset-top, 0px) max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px)) !important;
   background: var(--vn-shell-panel, rgba(15, 23, 42, 0.96)) !important;
   border-bottom: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.14)) !important;
   backdrop-filter: blur(16px) !important;

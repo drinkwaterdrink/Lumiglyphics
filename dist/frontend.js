@@ -24352,9 +24352,39 @@ function selectHeldBackground(turn, index, current) {
 
 // src/frontend/request-id.ts
 var sequence = 0;
+var activeUuidProvider = null;
+function bindFrontendUuidProvider(ctx) {
+  if ((ctx?.host?.capabilities?.["frontend-uuid-v1"] ?? 0) >= 1 && typeof ctx?.uuid?.v4 === "function") {
+    const uuidApi = ctx.uuid;
+    activeUuidProvider = () => uuidApi.v4();
+    return;
+  }
+  activeUuidProvider = null;
+}
+function unbindFrontendUuidProvider() {
+  activeUuidProvider = null;
+}
+function formatUuidV4FromRandomValues(getRandomValues) {
+  const bytes = new Uint8Array(16);
+  getRandomValues(bytes);
+  bytes[6] = bytes[6] & 15 | 64;
+  bytes[8] = bytes[8] & 63 | 128;
+  let hex3 = "";
+  for (let i = 0;i < bytes.length; i += 1) {
+    hex3 += bytes[i].toString(16).padStart(2, "0");
+  }
+  return `${hex3.slice(0, 8)}-${hex3.slice(8, 12)}-${hex3.slice(12, 16)}-${hex3.slice(16, 20)}-${hex3.slice(20)}`;
+}
 function createUiId(source = globalThis.crypto ?? null) {
+  const defaultSource = globalThis.crypto ?? null;
+  if (source === defaultSource && activeUuidProvider) {
+    return activeUuidProvider();
+  }
   if (source?.randomUUID)
     return source.randomUUID();
+  if (source?.getRandomValues) {
+    return formatUuidV4FromRandomValues((arr) => source.getRandomValues(arr));
+  }
   sequence++;
   return `lg-${Date.now().toString(36)}-${sequence.toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
@@ -28218,13 +28248,13 @@ aside[data-vn-workspace] {
 
 [data-workspace-heading],
 aside[data-vn-workspace] > header {
-  height: 56px !important;
-  min-height: 56px !important;
+  height: auto !important;
+  min-height: calc(56px + env(safe-area-inset-top, 0px)) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
   gap: 10px !important;
-  padding: 0 16px !important;
+  padding: env(safe-area-inset-top, 0px) max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px)) !important;
   background: var(--vn-shell-panel, rgba(15, 23, 42, 0.96)) !important;
   border-bottom: 1px solid var(--vn-shell-border, rgba(255, 255, 255, 0.14)) !important;
   backdrop-filter: blur(16px) !important;
@@ -31103,6 +31133,36 @@ function protectedEntityRanges(root) {
   return result;
 }
 
+// src/frontend/image-review/focus-trap.ts
+var MOBILE_CONTAINER_MAX_WIDTH_PX = 600;
+function isMobileWidth(host) {
+  const width = host.getBoundingClientRect().width;
+  return width > 0 && width <= MOBILE_CONTAINER_MAX_WIDTH_PX;
+}
+var FOCUSABLE_SELECTOR = [
+  "button:not(:disabled)",
+  "select:not(:disabled)",
+  "input:not(:disabled)",
+  "textarea:not(:disabled)",
+  "summary",
+  "a[href]",
+  '[tabindex]:not([tabindex="-1"])'
+].join(",");
+function trapFocusWithin(container, event, active) {
+  const focusable = [...container.querySelectorAll(FOCUSABLE_SELECTOR)].filter((el) => !el.hidden && !el.closest("[hidden]") && (typeof el.getClientRects !== "function" || el.getClientRects().length > 0));
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  if (!first || !last)
+    return;
+  if (event.shiftKey && active === first) {
+    event.preventDefault();
+    last.focus({ preventScroll: true });
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault();
+    first.focus({ preventScroll: true });
+  }
+}
+
 // src/frontend/stage/fullscreen-lightbox.ts
 var LIGHTBOX_CSS = `
 .vn-lightbox-backdrop {
@@ -31291,7 +31351,7 @@ var LIGHTBOX_CSS = `
   bottom: 0;
   left: 0;
   right: 0;
-  max-height: 40vh;
+  max-height: 40dvh;
   overflow-y: auto;
   padding: 16px 20px max(16px, env(safe-area-inset-bottom));
   background: color-mix(in srgb, var(--vn-shell-panel, #0a1018) 96%, #000);
@@ -31339,9 +31399,13 @@ class FullscreenLightbox {
   isPanning = false;
   pinchStartDist = 0;
   pinchStartZoom = 1;
+  previousFocus = null;
   constructor() {
     this.backdrop = document.createElement("div");
     this.backdrop.className = "vn-lightbox-backdrop";
+    this.backdrop.setAttribute("role", "dialog");
+    this.backdrop.setAttribute("aria-modal", "true");
+    this.backdrop.setAttribute("aria-label", "Image viewer");
     this.backdrop.hidden = true;
     this.backdrop.style.display = "none";
     const style = document.createElement("style");
@@ -31359,7 +31423,7 @@ class FullscreenLightbox {
           <button type="button" class="vn-lightbox-btn" data-action="outfit-ref" hidden title="Set as outfit reference">Outfit Ref</button>
           <button type="button" class="vn-lightbox-btn" data-action="delete" hidden title="Delete image">Delete</button>
           <button type="button" class="vn-lightbox-btn" data-action="zoom-toggle" title="Toggle zoom">100%</button>
-          <button type="button" class="vn-lightbox-btn" data-action="info-toggle" title="Prompt details">Info</button>
+          <button type="button" class="vn-lightbox-btn" data-action="info-toggle" aria-expanded="false" title="Prompt details">Info</button>
           <button type="button" class="vn-lightbox-btn vn-lightbox-close" data-action="close" aria-label="Close" title="Close (Esc)">✕</button>
         </div>
       </div>
@@ -31389,6 +31453,8 @@ class FullscreenLightbox {
       e.preventDefault();
       e.stopPropagation();
       this.close();
+    } else if (e.key === "Tab") {
+      trapFocusWithin(this.backdrop, e, document.activeElement ?? null);
     } else if (e.key === "+" || e.key === "=") {
       this.setZoom(Math.min(4, this.zoomLevel + 0.5));
     } else if (e.key === "-") {
@@ -31550,6 +31616,7 @@ class FullscreenLightbox {
     this.infoOpen = !this.infoOpen;
     const infoBtn = this.backdrop.querySelector('[data-action="info-toggle"]');
     infoBtn.classList.toggle("active", this.infoOpen);
+    infoBtn.setAttribute("aria-expanded", String(this.infoOpen));
     this.infoDrawer.hidden = !this.infoOpen;
   }
   applyThemeTokens(themeSource) {
@@ -31629,6 +31696,7 @@ class FullscreenLightbox {
     infoBtn.hidden = !item.prompt && !item.negativePrompt;
   }
   show(options) {
+    this.previousFocus = document.activeElement ?? null;
     this.currentOptions = options;
     const faceBtn = this.backdrop.querySelector('[data-action="face-ref"]');
     const outfitBtn = this.backdrop.querySelector('[data-action="outfit-ref"]');
@@ -31668,6 +31736,9 @@ class FullscreenLightbox {
     if (this.backdrop.parentNode) {
       this.backdrop.parentNode.removeChild(this.backdrop);
     }
+    const returnTo = this.previousFocus;
+    this.previousFocus = null;
+    returnTo?.focus?.();
   }
   escapeHtml(str) {
     return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -31896,7 +31967,7 @@ function createDocumentReader(documentRecord, back, close, options = {}) {
       renderCustomNote();
       noteEditor.hidden = true;
       options.onSaveNote?.(currentNote);
-      status.textContent = currentNote ? "Transcript note saved." : "Transcript note cleared.";
+      status.textContent = currentNote ? "Saving transcript note…" : "Clearing transcript note…";
     };
     cancelNoteBtn.onclick = () => {
       textarea.value = currentNote;
@@ -32328,6 +32399,15 @@ class DossierCard {
   setStoryDnaError(error61) {
     this.storyDnaError = error61;
     this.awaitingDnaSync = false;
+    const itemArtBtn = this.host.querySelector("[data-generate-item-art]");
+    if (itemArtBtn) {
+      itemArtBtn.disabled = false;
+      itemArtBtn.textContent = "✨ Generate Item Art";
+    }
+    const autofillBtn = this.host.querySelector("[data-story-dna-autofill]");
+    if (autofillBtn) {
+      autofillBtn.disabled = false;
+    }
     const statusEl = this.host.querySelector("[data-story-dna-status]");
     if (statusEl) {
       statusEl.textContent = error61;
@@ -34277,13 +34357,13 @@ class DossierCard {
       };
       saveBtn.onclick = () => {
         const nextLoc = buildLoc();
-        this.storyDnaRequester?.({ action: "save_location", location: nextLoc });
+        this.storyDnaRequester?.({ action: "save_location", location: nextLoc, revision: this.storyDna.revision });
         status.textContent = "Saving Scenery DNA...";
         status.hidden = false;
       };
       delBtn.onclick = () => {
         if (existingLoc) {
-          this.storyDnaRequester?.({ action: "delete_location", locationId: existingLoc.id });
+          this.storyDnaRequester?.({ action: "delete_location", locationId: existingLoc.id, revision: this.storyDna.revision });
           if (this.trayReturn)
             this.trayReturn();
           else
@@ -34314,7 +34394,7 @@ class DossierCard {
           const targetId = mergeSel.value;
           if (!targetId)
             return;
-          this.storyDnaRequester?.({ action: "merge_location", sourceId: existingLoc.id, targetId });
+          this.storyDnaRequester?.({ action: "merge_location", sourceId: existingLoc.id, targetId, revision: this.storyDna.revision });
           if (this.trayReturn)
             this.trayReturn();
         };
@@ -34436,11 +34516,11 @@ class DossierCard {
       };
       [aliasesIn, typeIn, descIn, matIn, featIn, colIn, heldIn, loreIn, notesIn].forEach((el) => el.addEventListener("input", refreshPreview));
       refreshPreview();
-      saveBtn.before(genItemArtBtn);
+      footer.insertBefore(genItemArtBtn, saveBtn);
       genItemArtBtn.onclick = () => {
         if (!existingItem) {
           const saved = buildItem();
-          this.storyDnaRequester?.({ action: "save_item", item: saved });
+          this.storyDnaRequester?.({ action: "save_item", item: saved, revision: this.storyDna.revision });
           status.textContent = "Saving item first, then click Generate Item Art.";
           status.hidden = false;
           return;
@@ -34464,13 +34544,13 @@ class DossierCard {
       };
       saveBtn.onclick = () => {
         const nextItem = buildItem();
-        this.storyDnaRequester?.({ action: "save_item", item: nextItem });
+        this.storyDnaRequester?.({ action: "save_item", item: nextItem, revision: this.storyDna.revision });
         status.textContent = "Saving Item DNA...";
         status.hidden = false;
       };
       delBtn.onclick = () => {
         if (existingItem) {
-          this.storyDnaRequester?.({ action: "delete_item", itemId: existingItem.id });
+          this.storyDnaRequester?.({ action: "delete_item", itemId: existingItem.id, revision: this.storyDna.revision });
           if (this.trayReturn)
             this.trayReturn();
           else
@@ -34501,7 +34581,7 @@ class DossierCard {
           const targetId = mergeSel.value;
           if (!targetId)
             return;
-          this.storyDnaRequester?.({ action: "merge_item", sourceId: existingItem.id, targetId });
+          this.storyDnaRequester?.({ action: "merge_item", sourceId: existingItem.id, targetId, revision: this.storyDna.revision });
           if (this.trayReturn)
             this.trayReturn();
         };
@@ -35140,6 +35220,12 @@ class StageDossiers {
   }
   setDocumentAssets(assets) {
     this.documentAssets = { ...assets ?? {} };
+    for (const docId of Object.keys(this.documentAssets)) {
+      this.documentArtBusy.delete(docId);
+      this.documentArtErrors.delete(docId);
+    }
+  }
+  clearDocumentArtState() {
     this.documentArtBusy.clear();
     this.documentArtErrors.clear();
   }
@@ -45883,19 +45969,21 @@ class VnStage {
     if (this.composeToggle && this.quickReplyDrawer) {
       this.composeToggle.addEventListener("click", (e) => {
         e.stopPropagation();
-        const nextOpen = this.quickReplyDrawer.hidden;
-        this.quickReplyDrawer.hidden = !nextOpen;
-        if (nextOpen && this.quickReplyInput) {
-          this.quickReplyInput.value = this.state.draft;
-          this.quickReplyInput.focus();
-        }
+        this.toggleQuickReplyDrawer();
       });
     }
     this.quickReplyDrawer?.addEventListener("click", (e) => e.stopPropagation());
     this.quickReplyDrawer?.addEventListener("keydown", (e) => {
       e.stopPropagation();
       if (e.key === "Escape") {
-        this.quickReplyDrawer.hidden = true;
+        this.closeQuickReplyDrawer(true);
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        const text = (this.quickReplyInput?.value ?? this.state.draft).trim();
+        if (text)
+          this.submitQuickReply(text);
       }
     });
     this.quickReplyInput?.addEventListener("input", () => {
@@ -45903,8 +45991,7 @@ class VnStage {
       this.syncComposeUi();
     });
     quickReplyClose?.addEventListener("click", () => {
-      if (this.quickReplyDrawer)
-        this.quickReplyDrawer.hidden = true;
+      this.closeQuickReplyDrawer(true);
     });
     quickReplyClear?.addEventListener("click", () => {
       this.storeReplyDraft("");
@@ -45916,10 +46003,7 @@ class VnStage {
       const text = (this.quickReplyInput?.value ?? this.state.draft).trim();
       if (!text)
         return;
-      if (this.quickReplyDrawer)
-        this.quickReplyDrawer.hidden = true;
-      this.storeReplyDraft(text);
-      this.submitDraft();
+      this.submitQuickReply(text);
     });
     this.bindEvents();
     this.updateControlButtons();
@@ -46782,7 +46866,7 @@ class VnStage {
     this.dispatch({
       type: "present-user-paragraph",
       paragraph: {
-        id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        id: `user-${createUiId()}`,
         text,
         speaker
       }
@@ -47799,6 +47883,11 @@ class VnStage {
         return;
       }
       if (event.key === "r" || event.key === "R") {
+        event.preventDefault();
+        this.toggleQuickReplyDrawer();
+        return;
+      }
+      if (event.key === "w" || event.key === "W") {
         if (this.dossiers.openTrayFromStage())
           event.preventDefault();
         return;
@@ -48133,6 +48222,46 @@ class VnStage {
     this.dispatch({ type: "submit-started" });
     try {
       await this.callbacks.onGameChoice(choice);
+    } catch (error61) {
+      this.dispatch({ type: "submit-failed", error: errorMessage(error61) });
+    }
+  }
+  toggleQuickReplyDrawer() {
+    if (!this.quickReplyDrawer)
+      return;
+    const nextOpen = this.quickReplyDrawer.hidden;
+    this.quickReplyDrawer.hidden = !nextOpen;
+    if (nextOpen && this.quickReplyInput) {
+      this.quickReplyInput.value = this.state.draft;
+      this.quickReplyInput.focus();
+    } else if (!nextOpen) {
+      this.composeToggle?.focus?.();
+    }
+  }
+  closeQuickReplyDrawer(restoreFocus = false) {
+    if (!this.quickReplyDrawer || this.quickReplyDrawer.hidden)
+      return;
+    const hadFocus = this.quickReplyDrawer.contains(document.activeElement);
+    this.quickReplyDrawer.hidden = true;
+    if (restoreFocus || hadFocus) {
+      this.composeToggle?.focus?.();
+    }
+  }
+  async submitQuickReply(text) {
+    const trimmed = text.trim();
+    if (!trimmed || !this.callbacks.onSubmit)
+      return;
+    const view = selectVnStageView(this.state);
+    if (view.isBusy) {
+      this.storeReplyDraft(trimmed);
+      this.dispatch({ type: "submit-failed", error: "Waiting for current response — draft saved." });
+      return;
+    }
+    this.closeQuickReplyDrawer(false);
+    this.storeReplyDraft(trimmed);
+    this.dispatch({ type: "submit-started" });
+    try {
+      await this.callbacks.onSubmit(trimmed);
     } catch (error61) {
       this.dispatch({ type: "submit-failed", error: errorMessage(error61) });
     }
@@ -50272,13 +50401,7 @@ class PresentationRulesPanel {
           </div>
         </fieldset>
       </form>`;
-    window.addEventListener("lumiglyphics:presentation-rules-updated", (event) => {
-      const detail = event.detail;
-      if (detail && detail.catalog && (detail.chatId === this.getChat() || detail.scope === "user")) {
-        this.catalog = detail.catalog;
-        this.renderList();
-      }
-    });
+    window.addEventListener("lumiglyphics:presentation-rules-updated", this.onRulesUpdated);
     this.el("[data-scope]").onchange = () => {
       if (this.dirty || this.pending) {
         this.el("[data-scope]").value = this.scope;
@@ -50430,7 +50553,7 @@ class PresentationRulesPanel {
       this.status("Open a chat before saving a chat preference.");
       return;
     }
-    const id6 = `preference-${Date.now()}-${Math.random().toString(36).slice(2)}`, chat = this.getChat();
+    const id6 = `preference-${createUiId()}`, chat = this.getChat();
     const request = {
       ...action,
       type: "vn_presentation_rules",
@@ -50593,7 +50716,7 @@ Refresh to verify saved state. Your draft is kept.`);
       this.status("Save or discard your current draft first.");
       return;
     }
-    this.editingId = rule?.id ?? `rule-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    this.editingId = rule?.id ?? `rule-${createUiId()}`;
     this.el("form").hidden = false;
     this.el("[data-preference-heading]").textContent = rule ? "Edit Scene Direction Rule" : "New Scene Direction Rule";
     this.el("[data-preference-name]").value = rule?.name ?? "";
@@ -50646,7 +50769,7 @@ Refresh to verify saved state. Your draft is kept.`);
     }
     this.el("[data-priority]").value = String(rule?.priority ?? 50);
     this.el("[data-preference-enabled]").checked = rule?.enabled ?? true;
-    this.dirty = true;
+    this.dirty = !rule;
     this.syncConditionFields();
     this.preview();
     this.ensureLoaded();
@@ -50740,7 +50863,8 @@ Refresh to verify saved state. Your draft is kept.`);
     } else if (kind === "cast_present" || kind === "speaker_name") {
       when = { kind, name: this.el("[data-subject-name]").value.trim() };
     } else if (kind === "cast_count") {
-      when = { kind: "cast_count", op: this.el("[data-cond-op]").value, count: Number(this.el("[data-cond-val]").value) || 1 };
+      const parsedCount = Number(this.el("[data-cond-val]").value);
+      when = { kind: "cast_count", op: this.el("[data-cond-op]").value, count: Number.isFinite(parsedCount) ? parsedCount : 1 };
     } else if (kind === "time_of_day") {
       when = { kind: "time_of_day", value: this.el("[data-cond-val]").value.trim() || "night" };
     } else if (kind === "weather") {
@@ -50788,11 +50912,12 @@ Refresh to verify saved state. Your draft is kept.`);
     } else {
       then = { kind: "prefer_template", templateId: "portrait" };
     }
+    const parsedPriority = Number(this.el("[data-priority]").value);
     const parsed = PresentationRuleDraftSchema.safeParse({
       id: this.editingId,
       name,
       enabled: this.el("[data-preference-enabled]").checked,
-      priority: Number(this.el("[data-priority]").value) || 50,
+      priority: Number.isFinite(parsedPriority) ? parsedPriority : 50,
       when,
       then
     });
@@ -50902,8 +51027,16 @@ Scope: ${this.scope === "chat" ? "This chat" : "All my chats"} · Priority: ${ru
     this.status("");
     this.renderList();
   }
+  onRulesUpdated = (event) => {
+    const detail = event.detail;
+    if (detail && detail.catalog && (detail.chatId === this.getChat() || detail.scope === "user")) {
+      this.catalog = detail.catalog;
+      this.renderList();
+    }
+  };
   destroy() {
     this.destroyed = true;
+    window.removeEventListener("lumiglyphics:presentation-rules-updated", this.onRulesUpdated);
     this.clear();
     this.host.remove();
   }
@@ -55054,7 +55187,7 @@ class VisualNovelSettingsPanel {
       const characterDnaPromptOverride = this.control("characterDnaPromptOverride").value;
       const promptEngineerOverride = this.control("promptEngineerOverride").value;
       const existingKey = Object.keys(this.systemPromptProfiles).find((k) => this.systemPromptProfiles[k]?.name.toLowerCase() === name.toLowerCase());
-      const id7 = existingKey ?? `profile-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      const id7 = existingKey ?? `profile-${createUiId()}`;
       this.systemPromptProfiles[id7] = {
         id: id7,
         name,
@@ -55136,7 +55269,7 @@ class VisualNovelSettingsPanel {
         existing.negative = negative;
         id7 = existing.id;
       } else {
-        id7 = `preset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+        id7 = `preset-${createUiId()}`;
         this.promptPresets.push({ id: id7, name, positive, suffix, negative });
       }
       this.control("selectedSharedStyleId").value = id7;
@@ -57660,7 +57793,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.172";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.173";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -57795,36 +57928,6 @@ function fitPromptToBudget(prompt, negative = "", maxCharacters = IMAGE_PROMPT_M
     negativePrompt: effectiveNegative.trim(),
     fitted: true
   };
-}
-
-// src/frontend/image-review/focus-trap.ts
-var MOBILE_CONTAINER_MAX_WIDTH_PX = 600;
-function isMobileWidth(host) {
-  const width = host.getBoundingClientRect().width;
-  return width > 0 && width <= MOBILE_CONTAINER_MAX_WIDTH_PX;
-}
-var FOCUSABLE_SELECTOR = [
-  "button:not(:disabled)",
-  "select:not(:disabled)",
-  "input:not(:disabled)",
-  "textarea:not(:disabled)",
-  "summary",
-  "a[href]",
-  '[tabindex]:not([tabindex="-1"])'
-].join(",");
-function trapFocusWithin(container, event, active) {
-  const focusable = [...container.querySelectorAll(FOCUSABLE_SELECTOR)].filter((el) => !el.hidden && !el.closest("[hidden]") && (typeof el.getClientRects !== "function" || el.getClientRects().length > 0));
-  const first = focusable[0];
-  const last = focusable.at(-1);
-  if (!first || !last)
-    return;
-  if (event.shiftKey && active === first) {
-    event.preventDefault();
-    last.focus({ preventScroll: true });
-  } else if (!event.shiftKey && active === last) {
-    event.preventDefault();
-    first.focus({ preventScroll: true });
-  }
 }
 
 // src/frontend/image-review/studio.ts
@@ -59967,7 +60070,7 @@ class ImageStudio {
       fill("[data-output-ratio]", caps.ratios, parameters?.aspectRatio ?? parameters?.aspect_ratio);
   }
   recoveryScope() {
-    return { chatId: this.turn.chatId, messageId: this.turn.messageId, swipeId: this.turn.swipeId, sourceFingerprint: this.turn.sourceFingerprint, requestId: globalThis.crypto?.randomUUID?.() ?? `vn-recovery-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+    return { chatId: this.turn.chatId, messageId: this.turn.messageId, swipeId: this.turn.swipeId, sourceFingerprint: this.turn.sourceFingerprint, requestId: createUiId() };
   }
   renderRecoveryMode() {
     this.updateCorrectionScope();
@@ -62131,9 +62234,9 @@ var DOCKED_LIBRARY_CSS = `
   margin-top: auto !important;
   margin-bottom: 0 !important;
   flex: 0 0 auto !important;
-  min-height: 50px !important;
-  max-height: 52px !important;
-  height: 52px !important;
+  min-height: 56px !important;
+  max-height: none !important;
+  height: auto !important;
   background: var(--vn-shell-panel, rgba(9, 19, 15, 0.94)) !important;
   backdrop-filter: blur(14px) !important;
   -webkit-backdrop-filter: blur(14px) !important;
@@ -62225,6 +62328,8 @@ function openReferenceCropperModal(options) {
   let rect = options.initialMeta?.rect ? clampCropRect(options.initialMeta.rect) : fitAspectCropRect(imgW, imgH, aspect);
   let loaded = null;
   let objectUrl = null;
+  let closed = false;
+  const fetchAbort = typeof AbortController === "function" ? new AbortController : null;
   const previousFocus = document.activeElement;
   const slotLabel = options.slot === "face" ? "Face" : "Outfit";
   const title = `Crop ${slotLabel} Reference${options.characterName ? ` · ${options.characterName}` : ""}`;
@@ -62342,7 +62447,7 @@ function openReferenceCropperModal(options) {
   box.addEventListener("pointercancel", end);
   const render2 = (r) => {
     if (!loaded)
-      return options.sourceUrl;
+      return null;
     try {
       const px = Math.round(r.x * imgW), py = Math.round(r.y * imgH);
       const pw = Math.max(1, Math.min(imgW - px, Math.round(r.width * imgW)));
@@ -62353,16 +62458,21 @@ function openReferenceCropperModal(options) {
       canvas.height = dims.height;
       const ctx = canvas.getContext?.("2d");
       if (!ctx)
-        return options.sourceUrl;
+        return null;
       ctx.drawImage(loaded, px, py, pw, ph, 0, 0, dims.width, dims.height);
       const webp = canvas.toDataURL("image/webp", 0.9);
       if (webp.startsWith("data:image/webp"))
         return webp;
       return canvas.toDataURL("image/png");
     } catch {
-      return options.sourceUrl;
+      return null;
     }
   };
+  const statusEl = document.createElement("div");
+  statusEl.dataset.cropperStatus = "";
+  statusEl.setAttribute("role", "status");
+  statusEl.style.cssText = "font-size:12px;color:var(--vn-shell-muted,#94a3b8);min-height:16px;";
+  statusEl.textContent = "Loading image…";
   const footer = document.createElement("div");
   footer.style.cssText = "display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;";
   const fullBtn = document.createElement("button");
@@ -62378,15 +62488,36 @@ function openReferenceCropperModal(options) {
   const applyBtn = document.createElement("button");
   applyBtn.type = "button";
   applyBtn.dataset.cropperApply = "";
-  applyBtn.textContent = `✂️ Apply ${slotLabel} Crop`;
+  applyBtn.disabled = true;
+  applyBtn.textContent = "Loading image…";
   applyBtn.style.cssText = BTN + "background:var(--vn-shell-accent,#38bdf8);color:var(--vn-shell-accent-contrast,#041624);border:none;";
   const right = document.createElement("div");
   right.style.cssText = "display:flex;gap:8px;";
   right.append(cancelBtn, applyBtn);
   footer.append(fullBtn, right);
-  modal.append(header, hint, aspectRow, viewport, zoomRow, footer);
+  modal.append(header, hint, aspectRow, viewport, zoomRow, statusEl, footer);
   overlay.append(modal);
+  const onWindowKeyDown = (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      cancel();
+      return;
+    }
+    if (e.key === "Tab") {
+      trapFocusWithin(modal, e, document.activeElement ?? null);
+    }
+  };
   const close = () => {
+    if (closed)
+      return;
+    closed = true;
+    try {
+      fetchAbort?.abort();
+    } catch {}
+    if (typeof window !== "undefined" && typeof window.removeEventListener === "function") {
+      window.removeEventListener("keydown", onWindowKeyDown, true);
+    }
     if (objectUrl) {
       try {
         URL.revokeObjectURL(objectUrl);
@@ -62401,7 +62532,18 @@ function openReferenceCropperModal(options) {
     options.onCancel?.();
   };
   const confirm2 = (r, full) => {
-    const dataUrl = render2(r);
+    let dataUrl;
+    if (full) {
+      dataUrl = options.sourceUrl;
+    } else {
+      const rendered = render2(r);
+      if (!rendered) {
+        statusEl.textContent = 'Unable to export cropped region (image still loading or cross-origin restricted). Try "Use Full Image".';
+        statusEl.style.color = "#f87171";
+        return;
+      }
+      dataUrl = rendered;
+    }
     close();
     options.onConfirm({
       dataUrl,
@@ -62418,15 +62560,19 @@ function openReferenceCropperModal(options) {
   cancelBtn.onclick = cancel;
   fullBtn.onclick = () => confirm2({ x: 0, y: 0, width: 1, height: 1 }, true);
   applyBtn.onclick = () => confirm2(clampCropRect(rect), false);
-  overlay.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay)
       cancel();
-    }
   });
+  if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+    window.addEventListener("keydown", onWindowKeyDown, true);
+  }
   const show = (src) => {
+    if (closed)
+      return;
     img.onload = () => {
+      if (closed)
+        return;
       loaded = img;
       imgW = Math.max(1, img.naturalWidth || 1000);
       imgH = Math.max(1, img.naturalHeight || 1000);
@@ -62435,21 +62581,43 @@ function openReferenceCropperModal(options) {
       stageBox.style.height = `${imgW >= imgH ? Math.round(imgH / imgW * edge) : edge}px`;
       if (!options.initialMeta?.rect)
         rect = fitAspectCropRect(imgW, imgH, aspect);
+      applyBtn.disabled = false;
+      applyBtn.textContent = `✂️ Apply ${slotLabel} Crop`;
+      statusEl.textContent = `${imgW} × ${imgH}px ready`;
+      statusEl.style.color = "var(--vn-shell-muted,#94a3b8)";
       sync();
+    };
+    img.onerror = () => {
+      if (closed)
+        return;
+      applyBtn.disabled = true;
+      applyBtn.textContent = `✂️ Apply ${slotLabel} Crop`;
+      statusEl.textContent = "Image failed to load for cropping. You can still use Full Image or Cancel.";
+      statusEl.style.color = "#f87171";
     };
     img.src = src;
   };
   if (options.sourceUrl.startsWith("data:") || typeof fetch !== "function") {
     show(options.sourceUrl);
   } else {
-    fetch(options.sourceUrl, { credentials: "include" }).then((r) => r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))).then((blob) => {
-      objectUrl = URL.createObjectURL(blob);
+    fetch(options.sourceUrl, { credentials: "include", ...fetchAbort ? { signal: fetchAbort.signal } : {} }).then((r) => r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))).then((blob) => {
+      const created = URL.createObjectURL(blob);
+      if (closed) {
+        try {
+          URL.revokeObjectURL(created);
+        } catch {}
+        return;
+      }
+      objectUrl = created;
       show(objectUrl);
-    }).catch(() => show(options.sourceUrl));
+    }).catch(() => {
+      if (!closed)
+        show(options.sourceUrl);
+    });
   }
   sync();
   (options.mount ?? document.body ?? document.documentElement)?.append(overlay);
-  applyBtn.focus?.();
+  (applyBtn.disabled ? fullBtn : applyBtn).focus?.();
   return { close, element: overlay };
 }
 
@@ -67895,7 +68063,7 @@ class SpeechSettingsSection {
     const draftVoice = this.activeDrafts.get(fieldKey);
     input2.value = draftVoice !== undefined ? draftVoice : selected?.voice ?? "";
     input2.disabled = !selected;
-    const listId = `voices-${Math.random().toString(36).slice(2, 8)}`;
+    const listId = `voices-${createUiId()}`;
     const datalist = document.createElement("datalist");
     datalist.id = listId;
     input2.setAttribute("list", listId);
@@ -68612,6 +68780,7 @@ function setupVisualNovelFrontend(baseContext) {
     zIndex: "9990"
   });
   app.setVisible(false);
+  bindFrontendUuidProvider(ctx);
   let active = false;
   const configRef = { current: null };
   const vnDebug = (...parts) => {
@@ -68636,6 +68805,8 @@ function setupVisualNovelFrontend(baseContext) {
     readingPositionTimer = null;
     const send = () => {
       readingPositionTimer = null;
+      if (destroyed)
+        return;
       ctx.sendToBackend({ type: "vn_reading_position", position });
     };
     if (immediate)
@@ -69037,9 +69208,21 @@ function setupVisualNovelFrontend(baseContext) {
     ctx.sendToBackend({ type: "vn_location_art", version: 1, chatId: owner, requestId: createUiId(), ...action2 });
   });
   stage.setCharacterDnaSaver((dna) => sendDna({ action: "save", dna, revision: dnaRevision }));
+  const documentArtRequests = new Map;
   stage.setDocumentArtRequester?.((documentId, throughParagraphIndex, forceRegenerate) => {
     if (!turn)
       return;
+    const requestId = createUiId();
+    if (documentArtRequests.size > 64)
+      documentArtRequests.delete(documentArtRequests.keys().next().value);
+    documentArtRequests.set(requestId, {
+      documentId,
+      chatId: turn.chatId,
+      messageId: turn.messageId,
+      swipeId: turn.swipeId,
+      sourceFingerprint: turn.sourceFingerprint,
+      revision: turn.revision
+    });
     ctx.sendToBackend({
       type: "vn_generate_document_image",
       chatId: turn.chatId,
@@ -69049,7 +69232,7 @@ function setupVisualNovelFrontend(baseContext) {
       revision: turn.revision,
       documentId,
       throughParagraphIndex,
-      requestId: createUiId(),
+      requestId,
       ...forceRegenerate ? { forceRegenerate: true } : {}
     });
   });
@@ -69078,7 +69261,19 @@ function setupVisualNovelFrontend(baseContext) {
     subtitle: "Open this chat in the full-screen visual novel view",
     enabled: true
   });
-  const headerLauncher = createVnHeaderLauncher(ctx.ui.mount("chat_header_right"), () => toggleVisualNovel());
+  let headerLauncherMounted = false;
+  let headerLauncher = createVnHeaderLauncher(null, () => toggleVisualNovel());
+  function ensureHeaderLauncher() {
+    if (destroyed || headerLauncherMounted)
+      return;
+    const mount = ctx.ui.mount("chat_header_right");
+    if (!mount)
+      return;
+    headerLauncher = createVnHeaderLauncher(mount, () => toggleVisualNovel());
+    headerLauncherMounted = true;
+    headerLauncher.setActive(active);
+  }
+  ensureHeaderLauncher();
   const settingsHandle = ctx.ui.registerSettingsTab?.({
     id: "lumiglyphics",
     title: "Lumiglyphics",
@@ -69127,7 +69322,7 @@ function setupVisualNovelFrontend(baseContext) {
             ctx.sendToBackend({ type: "vn_import_audio_file", relativePath, dataBase64 });
           } else {
             const chunkCount = Math.ceil(dataBase64.length / chunkSize);
-            const transferId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+            const transferId = createUiId();
             for (let chunkIndex = 0;chunkIndex < chunkCount; chunkIndex += 1) {
               ctx.sendToBackend({
                 type: "vn_import_audio_file",
@@ -69250,6 +69445,7 @@ function setupVisualNovelFrontend(baseContext) {
     panelCapture = captureMessageId ? { chatId: chatId(), messageId: captureMessageId, fingerprint: turn?.sourceFingerprint ?? null, cards: captureSimTrackerCards(ctx.dom.findMessageElement(captureMessageId), document) } : null;
     registerOverrides();
     app.setVisible(true);
+    ensureHeaderLauncher();
     action.setLabel("Exit visual novel");
     headerLauncher.setActive(true);
     const activeChatId = chatId();
@@ -69321,7 +69517,7 @@ function setupVisualNovelFrontend(baseContext) {
     const trimmed = content.trim();
     if (!trimmed)
       throw new Error("Enter a response first.");
-    const requestId = globalThis.crypto?.randomUUID?.() ?? `vn-submit-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const requestId = createUiId();
     ctx.sendToBackend({ type: "vn_submit", chatId: activeChatId, content: trimmed, requestId });
   }
   async function handleUserSubmission(content) {
@@ -69800,7 +69996,11 @@ function setupVisualNovelFrontend(baseContext) {
       return;
     }
     if (type === "vn_document_image" && message.type === "vn_document_image") {
+      if (message.requestId)
+        documentArtRequests.delete(message.requestId);
       if (!turn || turn.chatId !== message.chatId || turn.messageId !== message.messageId || turn.swipeId !== message.swipeId || turn.sourceFingerprint !== message.sourceFingerprint)
+        return;
+      if (message.revision !== undefined && message.revision !== turn.revision)
         return;
       if (message.status === "ready" && message.imageId && message.imageUrl) {
         turn = {
@@ -69948,6 +70148,20 @@ function setupVisualNovelFrontend(baseContext) {
         imageStudio.setConnectionCatalog({ status: "error", options: [], error: message.error });
         return;
       }
+      if (message.operation === "vn_generate_document_image") {
+        const pending = message.requestId ? documentArtRequests.get(message.requestId) : undefined;
+        if (message.requestId)
+          documentArtRequests.delete(message.requestId);
+        if (pending && turn && pending.chatId === turn.chatId && pending.messageId === turn.messageId && pending.swipeId === turn.swipeId && pending.sourceFingerprint === turn.sourceFingerprint) {
+          stage.applyDocumentImageStatus?.({
+            documentId: pending.documentId,
+            contentHash: "",
+            status: "failed",
+            error: message.error
+          });
+          return;
+        }
+      }
       if (!message.chatId || message.chatId === chatId()) {
         reportStageError(describeOperationError(message.operation, message.error, turn));
       }
@@ -69955,31 +70169,12 @@ function setupVisualNovelFrontend(baseContext) {
   }
   const unsubBackend = ctx.onBackendMessage(routeBackend);
   const unsubAction = action.onClick(toggleVisualNovel);
-  const unsubChat = ctx.events.on("CHAT_SWITCHED", () => {
+  const resetChatState = (ensureLauncher = false) => {
     characterFolio.setContext(null);
     dnaRequests.clear();
     dnaTurnToken = "";
     dnaChangedThisTurn = false;
-    preparationActive = false;
-    externalReview.cancel();
-    imageBridge.cancelAll();
-    settingsPanel?.clearCastArt();
-    settingsPanel?.clearPresentationRules();
-    settingsPanel?.clearLocationArt();
-    settingsPanel?.clearContextSources();
-    imageStudio.setTurn(null);
-    imageLibrary.setContext(null, 0);
-    settingsPanel?.setImagePreviewMetadata();
-    panelCapture = null;
-    panels.setTurn(null);
-    turn = null;
-    pendingNextTurn = null;
-    speech.onChatChanged();
-    loadedReadingCursor.load(null);
-    stage.reset();
-    requestState();
-  });
-  const unsubFork = ctx.events.on("CHAT_FORKED", () => {
+    documentArtRequests.clear();
     preparationActive = false;
     stage.clearPreparationPreview();
     externalReview.cancel();
@@ -69998,8 +70193,12 @@ function setupVisualNovelFrontend(baseContext) {
     speech.onChatChanged();
     loadedReadingCursor.load(null);
     stage.reset();
+    if (ensureLauncher)
+      ensureHeaderLauncher();
     requestState();
-  });
+  };
+  const unsubChat = ctx.events.on("CHAT_SWITCHED", () => resetChatState(true));
+  const unsubFork = ctx.events.on("CHAT_FORKED", () => resetChatState(false));
   const unsubPermission = ctx.events.on("PERMISSION_CHANGED", (payload) => {
     if (!payload || typeof payload !== "object")
       return;
@@ -70017,13 +70216,19 @@ function setupVisualNovelFrontend(baseContext) {
   const cleanup = () => {
     if (destroyed)
       return;
+    if (readingPositionTimer) {
+      clearTimeout(readingPositionTimer);
+      readingPositionTimer = null;
+    }
     characterFolio.setContext(null);
     dnaRequests.clear();
     dnaTurnToken = "";
     dnaChangedThisTurn = false;
+    documentArtRequests.clear();
     deactivate();
     stage.workspace.destroy();
     destroyed = true;
+    unbindFrontendUuidProvider();
     unsubBackend();
     unsubAction();
     unsubChat();

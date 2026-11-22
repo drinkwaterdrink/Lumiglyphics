@@ -7,6 +7,7 @@ import { GEMINI_AUDIO_TAG_SUGGESTIONS } from "./delivery.js";
 import { characterOverrideKey, speakerNameKey } from "./voice-resolution.js";
 import type { SafeTtsProfile, VoiceOption } from "./transport.js";
 import { SETTINGS_TOKENS_CSS } from "../settings/controls-css.js";
+import { createUiId } from "../request-id.js";
 
 /**
  * Self-contained speech settings. The host controller mounts it inside the
@@ -211,7 +212,7 @@ export class SpeechSettingsSection {
     const draftVoice = this.activeDrafts.get(fieldKey);
     input.value = draftVoice !== undefined ? draftVoice : (selected?.voice ?? "");
     input.disabled = !selected;
-    const listId = `voices-${Math.random().toString(36).slice(2, 8)}`;
+    const listId = `voices-${createUiId()}`;
     const datalist = document.createElement("datalist");
     datalist.id = listId;
     input.setAttribute("list", listId);

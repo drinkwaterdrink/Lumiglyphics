@@ -1,4 +1,5 @@
 import {ParagraphReadAlong,type SpeechPlaybackProgress} from '../speech/read-along.js';
+import { createUiId } from '../request-id.js';
 import {DisplayRuleExecutor,type DisplayEvaluation} from './display-rule-executor.js';
 import {prepareDialogueSource} from './rich-text.js';
 import {formatReplyUsage} from '../../shared/reply-usage.js';
@@ -450,19 +451,20 @@ export class VnStage {
     if (this.composeToggle && this.quickReplyDrawer) {
       this.composeToggle.addEventListener("click", (e) => {
         e.stopPropagation();
-        const nextOpen = this.quickReplyDrawer!.hidden;
-        this.quickReplyDrawer!.hidden = !nextOpen;
-        if (nextOpen && this.quickReplyInput) {
-          this.quickReplyInput.value = this.state.draft;
-          this.quickReplyInput.focus();
-        }
+        this.toggleQuickReplyDrawer();
       });
     }
     this.quickReplyDrawer?.addEventListener("click", (e) => e.stopPropagation());
     this.quickReplyDrawer?.addEventListener("keydown", (e) => {
       e.stopPropagation();
       if (e.key === "Escape") {
-        this.quickReplyDrawer!.hidden = true;
+        this.closeQuickReplyDrawer(true);
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        const text = (this.quickReplyInput?.value ?? this.state.draft).trim();
+        if (text) void this.submitQuickReply(text);
       }
     });
     this.quickReplyInput?.addEventListener("input", () => {
@@ -470,7 +472,7 @@ export class VnStage {
       this.syncComposeUi();
     });
     quickReplyClose?.addEventListener("click", () => {
-      if (this.quickReplyDrawer) this.quickReplyDrawer.hidden = true;
+      this.closeQuickReplyDrawer(true);
     });
     quickReplyClear?.addEventListener("click", () => {
       this.storeReplyDraft("");
@@ -480,9 +482,7 @@ export class VnStage {
     quickReplySend?.addEventListener("click", () => {
       const text = (this.quickReplyInput?.value ?? this.state.draft).trim();
       if (!text) return;
-      if (this.quickReplyDrawer) this.quickReplyDrawer.hidden = true;
-      this.storeReplyDraft(text);
-      void this.submitDraft();
+      void this.submitQuickReply(text);
     });
     this.bindEvents();
     this.updateControlButtons();
@@ -1331,7 +1331,7 @@ export class VnStage {
     this.dispatch({
       type: "present-user-paragraph",
       paragraph: {
-        id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        id: `user-${createUiId()}`,
         text,
         speaker,
       },
@@ -2337,7 +2337,8 @@ export class VnStage {
       if (this.isCleanView && (event.key === "Escape" || event.key === "h" || event.key === "H")) { event.preventDefault(); this.setCleanView(false); return; }
       if (isInteractiveTarget(event.target)) return;
       if (event.key === "h" || event.key === "H") { event.preventDefault(); this.setCleanView(!this.isCleanView); return; }
-      if (event.key === "r" || event.key === "R") { if (this.dossiers.openTrayFromStage()) event.preventDefault(); return; }
+      if (event.key === "r" || event.key === "R") { event.preventDefault(); this.toggleQuickReplyDrawer(); return; }
+      if (event.key === "w" || event.key === "W") { if (this.dossiers.openTrayFromStage()) event.preventDefault(); return; }
       if (event.key === "ArrowLeft") {
         event.preventDefault();
         this.previous();
@@ -2665,6 +2666,46 @@ export class VnStage {
     this.dispatch({ type: "submit-started" });
     try {
       await this.callbacks.onGameChoice(choice);
+    } catch (error) {
+      this.dispatch({ type: "submit-failed", error: errorMessage(error) });
+    }
+  }
+
+  private toggleQuickReplyDrawer(): void {
+    if (!this.quickReplyDrawer) return;
+    const nextOpen = this.quickReplyDrawer.hidden;
+    this.quickReplyDrawer.hidden = !nextOpen;
+    if (nextOpen && this.quickReplyInput) {
+      this.quickReplyInput.value = this.state.draft;
+      this.quickReplyInput.focus();
+    } else if (!nextOpen) {
+      this.composeToggle?.focus?.();
+    }
+  }
+
+  private closeQuickReplyDrawer(restoreFocus = false): void {
+    if (!this.quickReplyDrawer || this.quickReplyDrawer.hidden) return;
+    const hadFocus = this.quickReplyDrawer.contains(document.activeElement);
+    this.quickReplyDrawer.hidden = true;
+    if (restoreFocus || hadFocus) {
+      this.composeToggle?.focus?.();
+    }
+  }
+
+  private async submitQuickReply(text: string): Promise<void> {
+    const trimmed = text.trim();
+    if (!trimmed || !this.callbacks.onSubmit) return;
+    const view = selectVnStageView(this.state);
+    if (view.isBusy) {
+      this.storeReplyDraft(trimmed);
+      this.dispatch({ type: "submit-failed", error: "Waiting for current response — draft saved." });
+      return;
+    }
+    this.closeQuickReplyDrawer(false);
+    this.storeReplyDraft(trimmed);
+    this.dispatch({ type: "submit-started" });
+    try {
+      await this.callbacks.onSubmit(trimmed);
     } catch (error) {
       this.dispatch({ type: "submit-failed", error: errorMessage(error) });
     }

@@ -477,9 +477,9 @@ const DOCKED_LIBRARY_CSS=`
   margin-top: auto !important;
   margin-bottom: 0 !important;
   flex: 0 0 auto !important;
-  min-height: 50px !important;
-  max-height: 52px !important;
-  height: 52px !important;
+  min-height: 56px !important;
+  max-height: none !important;
+  height: auto !important;
   background: var(--vn-shell-panel, rgba(9, 19, 15, 0.94)) !important;
   backdrop-filter: blur(14px) !important;
   -webkit-backdrop-filter: blur(14px) !important;

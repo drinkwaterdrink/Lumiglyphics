@@ -25,13 +25,14 @@ export type ScheduledPlanning<T> = {
   reused: boolean;
 };
 
+import { generateBackendUuidSync } from "./uuid.js";
+
 function compoundKey(parts: readonly (string | null | undefined)[]): string {
   return JSON.stringify(parts.map((part) => part ?? null));
 }
 
 function operationId(): string {
-  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
-  return `vn-plan-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return generateBackendUuidSync();
 }
 
 export function abortError(reason: unknown = "Planning cancelled."): Error {

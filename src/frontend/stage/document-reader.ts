@@ -261,7 +261,7 @@ export function createDocumentReader(
       renderCustomNote();
       noteEditor.hidden = true;
       options.onSaveNote?.(currentNote);
-      status.textContent = currentNote ? 'Transcript note saved.' : 'Transcript note cleared.';
+      status.textContent = currentNote ? 'Saving transcript note…' : 'Clearing transcript note…';
     };
     cancelNoteBtn.onclick = () => {
       textarea.value = currentNote;

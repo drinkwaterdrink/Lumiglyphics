@@ -17,6 +17,38 @@ var __export = (target, all) => {
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
 var __require = import.meta.require;
 
+// src/backend/core/uuid.ts
+function bindBackendUuidProvider(spindle2) {
+  if ((spindle2?.host?.capabilities?.["uuid-v1"] ?? 0) >= 1 && typeof spindle2?.uuid?.v4 === "function") {
+    const uuidApi = spindle2.uuid;
+    activeBackendUuidProvider = () => uuidApi.v4();
+    return;
+  }
+  activeBackendUuidProvider = null;
+}
+function generateBackendUuidSync() {
+  const cryptoObj = globalThis.crypto;
+  if (cryptoObj?.getRandomValues) {
+    const bytes = new Uint8Array(16);
+    cryptoObj.getRandomValues(bytes);
+    bytes[6] = bytes[6] & 15 | 64;
+    bytes[8] = bytes[8] & 63 | 128;
+    let hex = "";
+    for (let i = 0;i < bytes.length; i += 1) {
+      hex += bytes[i].toString(16).padStart(2, "0");
+    }
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  return `lg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+async function generateBackendUuid() {
+  if (activeBackendUuidProvider) {
+    return activeBackendUuidProvider();
+  }
+  return generateBackendUuidSync();
+}
+var activeBackendUuidProvider = null;
+
 // node_modules/zod/v4/core/util.js
 var exports_util = {};
 __export(exports_util, {
@@ -37231,7 +37263,7 @@ function reviewRecord(jobId, paragraphIndex, request, metadata, review) {
     canRegeneratePrompt: Boolean(metadata.regeneratePrompt),
     ...metadata.promptAdaptationError ? { promptAdaptationError: metadata.promptAdaptationError.slice(0, 1000) } : {},
     ...request.promptProfile ? { promptProfile: request.promptProfile } : {},
-    requestId: crypto.randomUUID(),
+    requestId: generateBackendUuidSync(),
     jobId,
     paragraphIndex,
     state: review ? "review" : "prepared",
@@ -45328,9 +45360,7 @@ function compoundKey(parts) {
   return JSON.stringify(parts.map((part) => part ?? null));
 }
 function operationId() {
-  if (globalThis.crypto?.randomUUID)
-    return globalThis.crypto.randomUUID();
-  return `vn-plan-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return generateBackendUuidSync();
 }
 function abortError2(reason = "Planning cancelled.") {
   if (reason instanceof Error)
@@ -48911,7 +48941,7 @@ async function proposeCharacterDna(spindle2, input2) {
         }
       }
       applyDnaChanges(input2.target, parsed.changes);
-      return { id: crypto.randomUUID(), characterId: input2.target.id, baseRevision: input2.revision, changes: parsed.changes, ...input2.evidence };
+      return { id: await generateBackendUuid(), characterId: input2.target.id, baseRevision: input2.revision, changes: parsed.changes, ...input2.evidence };
     } catch (reason) {
       error61 = reason instanceof Error ? reason.message : "Invalid response";
     }
@@ -54949,7 +54979,7 @@ async function fetchReferenceImageViaFrontend(spindle2, options3) {
   const timeoutMs = options3.timeoutMs !== undefined && Number.isFinite(options3.timeoutMs) ? Math.min(30000, Math.max(250, options3.timeoutMs)) : REFERENCE_FETCH_TIMEOUT_MS;
   if (options3.signal?.aborted)
     return null;
-  const requestId = crypto.randomUUID();
+  const requestId = generateBackendUuidSync();
   const reply = await new Promise((resolve) => {
     let settled2 = false;
     const cleanup = () => {
@@ -56658,7 +56688,7 @@ async function generateAssets(spindle2, plan, initialJobs, config2, signal, onUp
               throw abortError3(signal);
             if (jobSignal.aborted)
               throw abortError3(jobSignal);
-            const requestId = cacheOptions.requestIdForJob?.(scheduledJob.jobId) ?? crypto.randomUUID(), attemptId = crypto.randomUUID();
+            const requestId = cacheOptions.requestIdForJob?.(scheduledJob.jobId) ?? await generateBackendUuid(), attemptId = await generateBackendUuid();
             const recordActivity = (kind) => cacheOptions.onActivity?.({ key: scheduledJob.ownerTurnKey, jobId: scheduledJob.jobId, requestId, attemptId, kind });
             const generationStarted = Date.now();
             let providerSettled = false;
@@ -56887,7 +56917,6 @@ var init_images = __esm(() => {
   CUE_CAMERA = { framing: "upper body", angle: "eye level", perspective: "straight-on" };
   REFERENCE_PROVIDERS = new Set(["novelai", "comfyui", "swarmui"]);
 });
-
 // src/backend/runtime/controller.ts
 init_card_role();
 
@@ -56924,7 +56953,7 @@ function archiveCurrentImageVersion(record2, job, history) {
   const cue = [...record2.plan.visualCues, ...record2.plan.cacheCues ?? []].find((cue2) => cue2.assetJobId === job.jobId);
   const request = record2.imageRequests?.filter((request2) => request2.jobId === job.jobId && request2.state === "approved").at(-1);
   return archiveImageVersion(history, job.jobId, {
-    versionId: crypto.randomUUID(),
+    versionId: generateBackendUuidSync(),
     imageId: job.imageId,
     imageUrl: job.imageUrl,
     timestamp: job.generatedAt ?? new Date().toISOString(),
@@ -57020,7 +57049,7 @@ class ImageUsageLedger {
     const token = JSON.stringify([user ?? null, chat]);
     let scope = this.scopes.get(token);
     if (!scope) {
-      scope = { snapshot: { version: 1, sessionId: crypto.randomUUID(), since: new Date().toISOString(), totals: { attempts: 0, succeeded: 0, failed: 0, cancelUnknown: 0, inFlight: 0, held: 0, skipped: 0, cacheReuses: 0, restores: 0 }, price: "unavailable", events: [] }, seen: new Set, attempts: new Map };
+      scope = { snapshot: { version: 1, sessionId: generateBackendUuidSync(), since: new Date().toISOString(), totals: { attempts: 0, succeeded: 0, failed: 0, cancelUnknown: 0, inFlight: 0, held: 0, skipped: 0, cacheReuses: 0, restores: 0 }, price: "unavailable", events: [] }, seen: new Set, attempts: new Map };
       this.scopes.set(token, scope);
       if (this.scopes.size > 32)
         this.scopes.delete(this.scopes.keys().next().value);
@@ -59850,7 +59879,22 @@ function errorText2(error61) {
 }
 var debugFlags = new Map;
 var pendingAudioImports = new Map;
+var AUDIO_IMPORT_TTL_MS = 5 * 60 * 1000;
+var MAX_AUDIO_IMPORT_BUFFERS = 16;
 var audioImportBuffers = new Map;
+function pruneAudioImportBuffers(now2 = Date.now()) {
+  for (const [key, entry] of audioImportBuffers) {
+    if (now2 - entry.updatedAt > AUDIO_IMPORT_TTL_MS) {
+      audioImportBuffers.delete(key);
+    }
+  }
+  while (audioImportBuffers.size >= MAX_AUDIO_IMPORT_BUFFERS) {
+    const oldestKey = audioImportBuffers.keys().next().value;
+    if (!oldestKey)
+      break;
+    audioImportBuffers.delete(oldestKey);
+  }
+}
 var MAX_AUDIO_IMPORT_BASE64 = 40 * 1024 * 1024;
 function acceptAudioImportChunk(bufferKey, part) {
   const chunkCount = part.chunkCount && part.chunkCount > 1 ? Math.floor(part.chunkCount) : 1;
@@ -59862,7 +59906,9 @@ function acceptAudioImportChunk(bufferKey, part) {
   const index = Math.floor(part.chunkIndex ?? 0);
   if (index < 0 || index >= chunkCount)
     return null;
-  const buffer = audioImportBuffers.get(bufferKey) ?? { chunks: new Array(chunkCount), received: 0 };
+  const now2 = Date.now();
+  pruneAudioImportBuffers(now2);
+  const buffer = audioImportBuffers.get(bufferKey) ?? { chunks: new Array(chunkCount), received: 0, updatedAt: now2 };
   if (buffer.chunks.length !== chunkCount) {
     audioImportBuffers.delete(bufferKey);
     return null;
@@ -59870,6 +59916,7 @@ function acceptAudioImportChunk(bufferKey, part) {
   if (buffer.chunks[index] === undefined)
     buffer.received += 1;
   buffer.chunks[index] = part.dataBase64;
+  buffer.updatedAt = now2;
   const assembledSoFar = buffer.chunks.reduce((total, chunk) => total + (chunk?.length ?? 0), 0);
   if (assembledSoFar > MAX_AUDIO_IMPORT_BASE64) {
     audioImportBuffers.delete(bufferKey);
@@ -62333,4 +62380,5 @@ function registerVisualNovelBackend(spindle2) {
 }
 
 // src/backend.ts
+bindBackendUuidProvider(spindle);
 registerVisualNovelBackend(spindle);

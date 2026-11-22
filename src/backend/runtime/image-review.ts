@@ -1,4 +1,5 @@
 import {ImagePromptProfileSchema,PROMPT_STORAGE_MAX} from "../../shared/image-prompt-profile.js";
+import { generateBackendUuidSync } from "../core/uuid.js";
 import type {ImagePromptProfile} from "../../shared/image-prompt-profile.js";
 import type {ImagePromptProfileV2} from "../../shared/image-prompt-profile-v2.js";
 import type {ImageOutputPlan} from "../../shared/image-output-plan.js";
@@ -166,7 +167,7 @@ function reviewRecord(jobId: string, paragraphIndex: number, request: ImageGener
     canRegeneratePrompt: Boolean(metadata.regeneratePrompt),
     ...(metadata.promptAdaptationError?{promptAdaptationError:metadata.promptAdaptationError.slice(0,1000)}:{}),
     ...(request.promptProfile?{promptProfile:request.promptProfile}:{}),
-    requestId: crypto.randomUUID(), jobId, paragraphIndex, state: review ? "review" : "prepared",
+    requestId: generateBackendUuidSync(), jobId, paragraphIndex, state: review ? "review" : "prepared",
     prompt: request.prompt, negativePrompt: request.negativePrompt ?? "", model: request.model ?? "Host default",
     provider: metadata.provider, connectionId: request.connection_id ?? "Host default",
     ...(metadata.connectionRevision !== undefined ? { connectionRevision: metadata.connectionRevision } : {}),

@@ -1,11 +1,12 @@
 import {ImageActivityEventSchema,type ImageActivity,type ImageActivityInput} from '../../shared/image-usage.js';
+import {generateBackendUuidSync} from '../core/uuid.js';
 type Scope={snapshot:ImageActivity;seen:Set<string>;attempts:Map<string,string>};
 /** Memory-only, per-user/chat session segments. Eviction starts a visibly new segment. */
 export class ImageUsageLedger {
  private scopes=new Map<string,Scope>();
  private scope(user:string|undefined,chat:string):Scope {
   const token=JSON.stringify([user??null,chat]);let scope=this.scopes.get(token);
-  if(!scope){scope={snapshot:{version:1,sessionId:crypto.randomUUID(),since:new Date().toISOString(),totals:{attempts:0,succeeded:0,failed:0,cancelUnknown:0,inFlight:0,held:0,skipped:0,cacheReuses:0,restores:0},price:'unavailable',events:[]},seen:new Set(),attempts:new Map()};this.scopes.set(token,scope);if(this.scopes.size>32)this.scopes.delete(this.scopes.keys().next().value!);}
+  if(!scope){scope={snapshot:{version:1,sessionId:generateBackendUuidSync(),since:new Date().toISOString(),totals:{attempts:0,succeeded:0,failed:0,cancelUnknown:0,inFlight:0,held:0,skipped:0,cacheReuses:0,restores:0},price:'unavailable',events:[]},seen:new Set(),attempts:new Map()};this.scopes.set(token,scope);if(this.scopes.size>32)this.scopes.delete(this.scopes.keys().next().value!);}
   return scope;
  }
  record(user:string|undefined,input:ImageActivityInput):ImageActivity {
