@@ -34,7 +34,7 @@ export function settingsPage(value:unknown):typeof SETTINGS_PAGES[number]{
 export const SETTINGS_FIELD_PAGES={
  dataSaverMode:'images',relationshipTrackerEnabled:'reading',autoEnter:'reading',mode:'reading',rpgMode:'reading',generateChoices:'reading',textSpeed:'reading',autoPlayDelay:'reading',skipMode:'reading',tooltips:'reading',collectEntityReferences:'reading',mindLedgerEnabled:'reading',chapterCodexEnabled:'reading',
  themePreset:'appearance',sceneImageFit:'appearance',castMode:'appearance',castAbsenceDisplay:'appearance',musicTransitionPolicy:'music',effectIntensity:'appearance',filmGrain:'appearance',disabledSceneEffects:'appearance',textEffects:'appearance',textScale:'appearance',readerPreferences:'appearance',
- automaticImagePromptSettings:'images',imagePromptBudgetOverride:'images',imagePromptBudget:'images',generateImages:'images',imageGenerationTrigger:'images',useNativeCardImages:'images',reviewImages:'images',documentImageMode:'images',imageConnectionId:'images',maxImagesPerTurn:'images',imageOutputAspectRatio:'images',imageResolutionPreference:'images',dialogueSafeArea:'images',imageFramingDirector:'images',imagePromptDetail:'images',imagePromptEngineVersion:'images',ideogramPromptMode:'images',flux3KleinPromptMode:'images',spatialFrustumEnabled:'images',chromaticLutEnabled:'images',
+ automaticImagePromptSettings:'images',imagePromptBudgetOverride:'images',imagePromptBudget:'images',generateImages:'images',imageGenerationTrigger:'images',useNativeCardImages:'images',reviewImages:'images',documentImageMode:'images',documentImageConnectionId:'images',documentImageModel:'images',imageConnectionId:'images',maxImagesPerTurn:'images',imageOutputAspectRatio:'images',imageResolutionPreference:'images',dialogueSafeArea:'images',imageFramingDirector:'images',imagePromptDetail:'images',imagePromptEngineVersion:'images',ideogramPromptMode:'images',flux3KleinPromptMode:'images',spatialFrustumEnabled:'images',chromaticLutEnabled:'images',
  dynamicImageTemplates:'templates',defaultImageTemplateId:'templates',imageTemplates:'templates',imagePromptFormat:'templates',promptPrefix:'style',promptSuffix:'style',negativePrompt:'style',promptPresets:'style',selectedSharedStyleId:'style',originalReference:'style',originalCreationName:'style',novelAiQualityTags:'style',novelAiUseDefaultNegative:'style',
  persistentLocationArt:'consistency',persistentCastArt:'consistency',referenceAnchoring:'consistency',referenceSource:'consistency',imageModel:'generation',imageParameters:'generation',imageConcurrency:'generation',
  bgmVolume:'music',sfxVolume:'music',speech:'speech',parserConnectionId:'connections',parserParameters:'parameters',systemOneMode:'system-one',systemOneApiUrl:'system-one',systemOneModel:'system-one',
@@ -46,6 +46,6 @@ export const SETTINGS_FIELD_PAGES={
 export const SETTINGS_HOME_GROUPS = [
  {title:'Reading', sections:['reading']},
  {title:'Look & sound', sections:['look','sound']},
- {title:'Artwork', sections:['pictures','characters']},
+ {title:'Artwork', sections:['pictures']},
  {title:'Setup & advanced', sections:['connections','advanced']},
 ] as const;

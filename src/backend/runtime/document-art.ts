@@ -9,6 +9,7 @@ import { resolveImagePromptProfileV2, type ImagePromptProfileV2 } from '../../sh
 import type { VisualBrief } from '../../shared/image-templates.js';
 import { resolveStyleDNA } from '../../shared/style-dna.js';
 import { visibleStoryDocuments, type StoryDocument } from '../../shared/story-documents.js';
+import { loadStoryDNASet, saveItemDNA } from './story-dna-store.js';
 import { canonicalJson } from '../core/scene-image-cache.js';
 import { splitConnectionSelection } from './images.js';
 import { loadImagePromptProfileV2 } from './image-prompt-profile.js';
@@ -142,6 +143,27 @@ export type BuiltDocumentPropPrompt = {
 };
 
 /** Build a strictly spoiler-gated macro close-up prompt grounded in active scene lighting & resting surface. */
+function kindTypographyDirective(doc: StoryDocument): string {
+  const lowerName = doc.name.toLowerCase();
+  if (doc.kind === 'phone') {
+    return 'Straight-on front-facing macro close-up of a lit smartphone screen filling 90% of the frame, crisp legible dark-mode chat/message UI bubbles, clear timestamps, sharp high-contrast typography';
+  }
+  if (doc.kind === 'terminal') {
+    return 'Straight-on front-facing close-up of a glowing monospace terminal display filling 90% of the frame, crisp legible green or amber phosphor text rows, sharp scanlines';
+  }
+  if (doc.kind === 'journal' || /\b(?:ledger|register|account|logbook|book)\b/.test(lowerName)) {
+    return 'Straight-on top-down flat-lay open double-page spread filling 90% of the frame, flat open pages with ruled ledger columns, handwritten ink entries, dates, and figures clearly legible edge-to-edge, never a closed book';
+  }
+  if (doc.kind === 'map' || /\b(?:timetable|schedule|chart|blueprint)\b/.test(lowerName)) {
+    return 'Straight-on top-down flat-lay sheet filling 90% of the frame, crisp printed gridlines, clear legible labels, routes, times, and ink annotations';
+  }
+  if (doc.kind === 'notice' || doc.kind === 'poster' || doc.kind === 'flyer' || doc.kind === 'newspaper' || doc.kind === 'receipt' || doc.kind === 'pamphlet') {
+    return 'Straight-on front-facing flat-lay printed document filling 90% of the frame, bold legible headline, clean printed body copy and stamps sharp from corner to corner';
+  }
+  return 'Straight-on top-down flat-lay open stationery sheet filling 90% of the frame, crisp legible handwritten ink or printed lettering sharp across the entire page';
+}
+
+/** Build a strictly spoiler-gated, typography-first flat-lay close-up prompt for readable document props. */
 export function buildDocumentPropPromptInput(params: {
   doc: StoryDocument;
   plan: TurnPlan;
@@ -150,7 +172,7 @@ export function buildDocumentPropPromptInput(params: {
   profileV2?: ImagePromptProfileV2;
   modelId?: string;
 }): BuiltDocumentPropPrompt {
-  const maxIndex = Math.max(0, Math.min(params.plan.paragraphs.length - 1, params.throughParagraphIndex));
+  const maxIndex = Math.max(0, Math.min(Math.max(0, params.plan.paragraphs.length - 1), params.throughParagraphIndex));
   const [gatedDoc] = visibleStoryDocuments([params.doc], maxIndex);
   if (!gatedDoc) {
     throw new Error(`Document "${params.doc.name}" has not been revealed at paragraph ${maxIndex + 1}.`);
@@ -175,8 +197,8 @@ export function buildDocumentPropPromptInput(params: {
   const visibleQuotes = gatedDoc.sections
     .map((s) => s.text.trim())
     .filter(Boolean)
-    .slice(0, 2)
-    .map((quote) => `"${quote.slice(0, 110)}"`);
+    .slice(0, 6)
+    .map((quote) => `"${quote.slice(0, 140)}"`);
 
   const contentHash = stableHash64(canonicalJson({
     id: gatedDoc.id,
@@ -186,7 +208,8 @@ export function buildDocumentPropPromptInput(params: {
     sections: visibleQuotes,
     sceneSurfaceKey,
     styleId: params.config.selectedSharedStyleId,
-    modelId: params.modelId ?? params.config.imageModel ?? null,
+    modelId: params.modelId ?? params.config.documentImageModel ?? params.config.imageModel ?? null,
+    v: 2,
   }));
 
   const keyframe = deriveColorScriptKeyframe({
@@ -198,23 +221,27 @@ export function buildDocumentPropPromptInput(params: {
     chromaticLutEnabled: params.config.chromaticLutEnabled !== false,
   });
 
+  const framingDirective = kindTypographyDirective(gatedDoc);
+  const textContentDirective = visibleQuotes.length
+    ? `Exact legible text clearly visible on the surface: ${visibleQuotes.join(' | ')}`
+    : `Legible in-universe ${gatedDoc.name} layout with crisp readable headings, lines, and entries matching its format`;
+
   const propSubject = [
-    `Extreme close-up macro prop study of ${gatedDoc.name} (${KIND_MATERIAL_HINTS[gatedDoc.kind]})`,
-    uniqueDetails.length ? `physical details: ${uniqueDetails.join(', ')}` : '',
-    visibleQuotes.length ? `clearly visible legible ink lettering showing ${visibleQuotes.join(' and ')}` : '',
-    gatedDoc.kind !== 'phone' && gatedDoc.kind !== 'terminal' ? 'tactile paper grain, ink bleed, realistic creases' : '',
-  ].filter(Boolean).join(', ');
+    framingDirective,
+    `Subject: ${gatedDoc.name} (${KIND_MATERIAL_HINTS[gatedDoc.kind]})`,
+    uniqueDetails.length ? `Physical details: ${uniqueDetails.join(', ')}` : '',
+    textContentDirective,
+  ].filter(Boolean).join('. ');
 
   const brief: VisualBrief = {
     scene: sanitizeVisualNarrativeDescription([
-      `Resting on ${surface}`,
-      scene?.environment.weather ? `ambient weather: ${scene.environment.weather}` : '',
-      'tightly cropped macro still-life object focus, no unmentioned characters or bystanders',
-    ].filter(Boolean).join(', ')),
+      `Flat-lay inspection surface (${surface}) barely visible at the outer edges`,
+      'zero people, no hands obstructing text, razor-sharp focus from corner to corner',
+    ].join(', ')),
     subjects: '',
     action: propSubject,
-    composition: 'Overhead 45-degree macro angle filling frame cleanly with subtle edge breathing room, shallow depth of field isolating the document surface',
-    lighting: keyframe.lighting || scene?.environment.lighting || 'moody directional ambient light',
+    composition: 'Straight-on orthographic 90-degree flat-lay close-up filling 90% of the frame, deep focus, zero tilt or blur',
+    lighting: keyframe.lighting || scene?.environment.lighting || 'even clear directional reading light with crisp contrast on text',
     subjectMode: 'none',
     framing: 'close-up',
     referencePolicy: 'none',
@@ -233,20 +260,26 @@ export function buildDocumentPropPromptInput(params: {
       shotSize: 'macro',
       angle: 'overhead',
       lens: 'macro',
-      depthOfField: 'shallow',
+      depthOfField: 'deep',
       focusTarget: gatedDoc.name,
     },
     composition: {
       mode: 'centered',
       subjectPlacements: [{ subject: gatedDoc.name, depth: 'foreground', scale: 'dominant' }],
-      stagingNote: 'Macro still-life inspection view of document prop, zero people or faces.',
+      stagingNote: 'Straight-on readable flat-lay document view with sharp legible typography, zero people or hands.',
     },
     source: 'deterministic-fallback',
   });
 
-  const effectiveModel = params.modelId?.trim() || params.config.imageModel?.trim() || undefined;
+  const effectiveModel = params.modelId?.trim() || params.config.documentImageModel?.trim() || params.config.imageModel?.trim() || undefined;
   const profile = params.profileV2 ?? resolveImagePromptProfileV2(null, effectiveModel);
-  const styleDNA = resolveStyleDNA(params.config, params.config.selectedSharedStyleId).styleDNA;
+  const baseStyle = resolveStyleDNA(params.config, params.config.selectedSharedStyleId).styleDNA;
+  // Preserve legible document clarity: strip blur/softening styling in favor of crisp typography
+  const docStyleDNA = {
+    ...baseStyle,
+    rendering: ['crisp high-resolution typography', 'sharp flat-lay document clarity', 'deep focus'],
+    avoidIntent: [...(baseStyle.avoidIntent ?? []), 'blurry text', 'illegible scribbles', 'shallow depth of field', 'bokeh', 'closed book'],
+  };
   const outputPlan = resolveImageOutputPlan({
     capabilities: profile.outputCapabilities,
     parameters: {},
@@ -258,23 +291,24 @@ export function buildDocumentPropPromptInput(params: {
   const compiled = compileModelPrompt({
     brief,
     shotSpec,
-    styleDNA,
+    styleDNA: docStyleDNA,
     profile,
     outputPlan,
-    detailLevel: 'compact',
+    detailLevel: 'detailed',
     modelId: effectiveModel,
   });
 
+  const docNegatives = 'closed book, zoomed out, distant view, blurry text, illegible scribbles, shallow depth of field, bokeh, out of focus, hands covering text, person, human face, portrait';
   const extraNegative = params.config.negativePrompt?.trim()
-    ? `${compiled.negativePrompt ? `${compiled.negativePrompt}, ` : ''}${params.config.negativePrompt.trim()}, person, human face, portrait`
-    : `${compiled.negativePrompt ? `${compiled.negativePrompt}, ` : ''}person, human face, portrait`;
+    ? `${compiled.negativePrompt ? `${compiled.negativePrompt}, ` : ''}${params.config.negativePrompt.trim()}, ${docNegatives}`
+    : `${compiled.negativePrompt ? `${compiled.negativePrompt}, ` : ''}${docNegatives}`;
 
   return {
     document: gatedDoc,
     contentHash,
     sceneSurfaceKey,
     prompt: compiled.prompt,
-    ...(compiled.negativePrompt ? { negativePrompt: extraNegative } : {}),
+    ...(compiled.negativePrompt || profile.negativePolicy !== 'positive-only' ? { negativePrompt: extraNegative } : {}),
   };
 }
 
@@ -348,15 +382,39 @@ export async function generateDocumentPropArtwork(params: {
   userId?: string;
 }): Promise<DocumentAssetView & { cached: boolean }> {
   const { spindle, chatId, plan, documentId, throughParagraphIndex, regenerate = false, userId } = params;
-  const targetDoc = (plan.storyDocuments ?? []).find(
+  let targetDoc = (plan.storyDocuments ?? []).find(
     (d) => d.id === documentId || d.name.toLowerCase() === documentId.toLowerCase(),
   );
   if (!targetDoc) {
-    throw new Error(`Document "${documentId}" was not found in this turn.`);
+    const storyDna = await loadStoryDNASet(spindle, chatId, userId).catch(() => null);
+    const dnaDoc = storyDna?.documents
+      ? Object.values(storyDna.documents).find((d) => d.id === documentId || d.name.toLowerCase() === documentId.toLowerCase())
+      : undefined;
+    if (dnaDoc) {
+      const mappedSections = (dnaDoc.sections ?? []).map((s, idx) => ({
+        paragraphIndex: typeof s.paragraphIndex === 'number' ? s.paragraphIndex : idx,
+        start: 0,
+        end: s.text.length,
+        text: s.text,
+      }));
+      const noteText = dnaDoc.customNotes?.trim();
+      targetDoc = {
+        id: dnaDoc.id,
+        name: dnaDoc.name,
+        kind: (dnaDoc.kind as StoryDocument['kind']) || 'note',
+        paragraphIndex: 0,
+        sections: mappedSections.length > 0 ? mappedSections : (noteText ? [{ paragraphIndex: 0, start: 0, end: noteText.length, text: noteText }] : []),
+        ...(dnaDoc.visualDetails ? { visualDetails: dnaDoc.visualDetails } : {}),
+      };
+    }
+  }
+  if (!targetDoc) {
+    throw new Error(`Document "${documentId}" was not found in this turn or World Lens.`);
   }
 
   const config = await loadConfig(spindle, userId);
-  const { connectionId, workflowId } = splitConnectionSelection(config.imageConnectionId);
+  const preferredConn = config.documentImageConnectionId?.trim() || config.imageConnectionId;
+  const { connectionId, workflowId } = splitConnectionSelection(preferredConn);
   const selected = connectionId && typeof spindle.imageGen?.getConnection === 'function'
     ? await spindle.imageGen.getConnection(connectionId, userId)
     : typeof spindle.imageGen?.listConnections === 'function'
@@ -364,7 +422,7 @@ export async function generateDocumentPropArtwork(params: {
       : undefined;
   const effectiveConnectionId = connectionId || selected?.id;
   const provider = selected?.provider?.trim().toLowerCase() ?? null;
-  const model = config.imageModel?.trim() || selected?.model || undefined;
+  const model = config.documentImageModel?.trim() || config.imageModel?.trim() || selected?.model || undefined;
 
   const profileV2 = await loadImagePromptProfileV2(spindle, config, provider, model, {
     ...config.imageParameters,
@@ -458,4 +516,126 @@ export async function generateDocumentPropArtwork(params: {
     imageUrl: `/api/v1/images/${encodeURIComponent(generated.imageId)}`,
     cached: false,
   };
+}
+
+
+export async function generateItemPropArtwork(params: {
+  spindle: SpindleAPI;
+  chatId: string;
+  itemId: string;
+  userId?: string;
+}) {
+  const { spindle, chatId, itemId, userId } = params;
+  const storyDna = await loadStoryDNASet(spindle, chatId, userId);
+  const item = storyDna.items[itemId] ?? Object.values(storyDna.items).find((i) => i.id === itemId || i.name.toLowerCase() === itemId.toLowerCase());
+  if (!item) {
+    throw new Error(`Item "${itemId}" was not found in World Lens.`);
+  }
+  if (!spindle.imageGen || typeof spindle.imageGen.generate !== 'function') {
+    throw new Error('Image generation is unavailable for this connection.');
+  }
+
+  const config = await loadConfig(spindle, userId);
+  const preferredConn = config.documentImageConnectionId?.trim() || config.imageConnectionId;
+  const { connectionId, workflowId } = splitConnectionSelection(preferredConn);
+  const selected = connectionId && typeof spindle.imageGen?.getConnection === 'function'
+    ? await spindle.imageGen.getConnection(connectionId, userId)
+    : typeof spindle.imageGen?.listConnections === 'function'
+      ? (await spindle.imageGen.listConnections(userId)).find((entry) => entry.is_default) ?? undefined
+      : undefined;
+  const effectiveConnectionId = connectionId || selected?.id;
+  const provider = selected?.provider?.trim().toLowerCase() ?? null;
+  const model = config.documentImageModel?.trim() || config.imageModel?.trim() || selected?.model || undefined;
+
+  const profileV2 = await loadImagePromptProfileV2(spindle, config, provider, model, {
+    ...config.imageParameters,
+    ...(workflowId ? { workflow_id: workflowId } : {}),
+  });
+
+  const detailClauses = [
+    item.description,
+    item.itemType ? `type: ${item.itemType}` : '',
+    item.materials ? `materials: ${item.materials}` : '',
+    item.distinctiveFeatures?.length ? `distinctive features: ${item.distinctiveFeatures.join(', ')}` : '',
+    item.colors?.length ? `colors: ${item.colors.join(', ')}` : '',
+  ].filter(Boolean).join('. ');
+
+  const brief: VisualBrief = {
+    scene: 'Clean atmospheric studio-lit pedestal or dark neutral slate backdrop isolating the artifact, zero people or hands',
+    subjects: '',
+    action: `Centered hero close-up prop illustration of ${item.name}${detailClauses ? `: ${detailClauses}` : ''}. Intricate craft, dramatic rim lighting showcasing silhouette, textures, and elemental or magical effects`,
+    composition: 'Centered studio artifact hero shot filling the frame with clean margins',
+    lighting: 'Dramatic studio key light with subtle rim highlights on textures and materials',
+    subjectMode: 'none',
+    framing: 'close-up',
+    referencePolicy: 'none',
+    sources: [`itemDna:${item.id}`],
+    conflicts: [],
+  };
+
+  const shotSpec = createDefaultShotSpec({
+    intent: 'detail',
+    output: { requestedRatio: '1:1', actualRatio: '1:1', orientation: 'square' },
+    camera: { shotSize: 'close-up', angle: 'eye-level', lens: 'macro', depthOfField: 'shallow', focusTarget: item.name },
+    composition: {
+      mode: 'centered',
+      subjectPlacements: [{ subject: item.name, depth: 'foreground', scale: 'dominant' }],
+      stagingNote: 'Isolated centered artifact hero prop study, zero people or faces.',
+    },
+    source: 'deterministic-fallback',
+  });
+
+  const styleDNA = resolveStyleDNA(config, config.selectedSharedStyleId).styleDNA;
+  const outputPlan = resolveImageOutputPlan({
+    capabilities: profileV2.outputCapabilities,
+    parameters: {},
+    requestedRatio: '1:1',
+    source: profileV2.capabilitySource,
+    modelId: model,
+  });
+
+  const compiled = compileModelPrompt({
+    brief,
+    shotSpec,
+    styleDNA,
+    profile: profileV2,
+    outputPlan,
+    detailLevel: 'standard',
+    modelId: model,
+  });
+
+  const mergedBaseParams: Record<string, unknown> = {
+    ...(selected?.default_parameters ?? {}),
+    ...config.imageParameters,
+    ...(workflowId ? { workflow_id: workflowId } : {}),
+  };
+  let shapedParams: Record<string, unknown>;
+  try {
+    shapedParams = globalOutputParameters('1:1', provider, model, mergedBaseParams);
+  } catch {
+    shapedParams = mergedBaseParams;
+  }
+  const safeParams = sanitizeImagePayloadParameters(
+    providerOutputParameters(modelOutputParameters(provider, model, shapedParams)),
+    provider ?? undefined,
+    model,
+  );
+
+  const neg = `${compiled.negativePrompt ? `${compiled.negativePrompt}, ` : ''}person, human, character portrait, hands holding, crowd`;
+  const generated = await spindle.imageGen.generate({
+    prompt: compiled.prompt,
+    ...(profileV2.negativePolicy !== 'positive-only' ? { negativePrompt: neg } : {}),
+    ...(effectiveConnectionId ? { connection_id: effectiveConnectionId } : {}),
+    ...(model ? { model } : {}),
+    parameters: safeParams,
+    owner_chat_id: chatId,
+    ...(userId ? { userId } : {}),
+  });
+
+  if (!generated?.imageId) {
+    throw new Error('Item prop image generation finished without an image ID.');
+  }
+
+  const referenceImageUrl = `/api/v1/images/${encodeURIComponent(generated.imageId)}`;
+  return saveItemDNA(spindle, chatId, { ...item, referenceImageUrl, lastUpdated: Date.now() }, userId);
 }

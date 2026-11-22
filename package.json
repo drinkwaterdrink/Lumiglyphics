@@ -1,6 +1,6 @@
 {
   "name": "lumiglyphics",
-  "version": "0.2.11-beta.171",
+  "version": "0.2.11-beta.172",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.0",

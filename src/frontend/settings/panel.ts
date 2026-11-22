@@ -920,8 +920,19 @@ export class VisualNovelSettingsPanel {
                   <option value="on-click">On click (Generate when opened — recommended)</option>
                   <option value="auto">Auto (Render sensed documents in background)</option>
                 </select>
-                <small>Renders close-up macro inspection artwork for flyers, letters, notes, and maps revealed in the story.</small>
+                <small>Renders close-up typography-first artwork for flyers, letters, ledgers, phone screens, and maps.</small>
               </label>
+              <div data-row>
+                <label data-field ${find('Document image connection','document model connection ideogram gpt text prop')}>
+                  <span>Document & prop connection (optional)</span>
+                  <input type="text" name="documentImageConnectionId" placeholder="Same as scene image connection" />
+                </label>
+                <label data-field ${find('Document image model','document model override ideogram gpt qwen seedream')}>
+                  <span>Document & prop model (optional)</span>
+                  <input type="text" name="documentImageModel" placeholder="e.g. ideogram-v4, gpt-image-1" />
+                  <small>Leave blank to use your main image model. Text-strong models (Ideogram, GPT Image, Qwen) render sharper legible lettering.</small>
+                </label>
+              </div>
               <label data-check><input name="automaticImagePromptSettings" type="checkbox"><span>Automatic model settings<small>Uses model-specific wording guidance and published prompt limits. Existing size controls still apply.</small></span></label>
               <label data-check ${find("3+N spatial frustum & OTS framing", "spatial frustum layout boxes over the shoulder dorsal ots ensemble") }><input name="spatialFrustumEnabled" type="checkbox" /><span>3+N spatial frustum &amp; OTS framing<small>Bound 1–3 primary subjects in 2D layout boxes, group extras into background silhouettes, and enforce dorsal over-the-shoulder framing</small></span></label>
               <label data-check ${find("Chromatic lighting LUT & affirmative rewriter", "chromatic lighting lut color temperature affirmative anti drift negation") }><input name="chromaticLutEnabled" type="checkbox" /><span>Chromatic lighting LUT &amp; affirmative rewriter<small>Inject cinematic color-temperature tokens per atmosphere and rewrite literary negations into affirmative visual phrasing</small></span></label>
@@ -990,7 +1001,7 @@ export class VisualNovelSettingsPanel {
               </section>
             </section>
           `)}
-          ${pane("characters", `<div data-character-tabs><button type="button" data-entity-tab="cast" aria-pressed="true">Characters</button><button type="button" data-entity-tab="places" aria-pressed="false">Places</button></div><div data-cast-mount ${find('Characters & places','cast npc character appearance outfits portrait gallery scan context voice')}></div><div data-places-mount hidden></div>`)}
+          ${pane("characters", `<div style="padding:12px;margin-bottom:12px;border:1px solid var(--set-border,#444);border-radius:10px;background:var(--set-field,#181925)"><strong>Tip: Character Folio & World Lens</strong><small>Character appearances, Cropper, Wardrobes, Locations, Items, and Documents now live directly in the reader's <strong>Cast (Character Folio)</strong> and <strong>Lens (World Lens)</strong> panels. Legacy controls below remain available for compatibility.</small></div><div data-character-tabs><button type="button" data-entity-tab="cast" aria-pressed="true">Characters</button><button type="button" data-entity-tab="places" aria-pressed="false">Places</button></div><div data-cast-mount ${find('Characters & places','cast npc character appearance outfits portrait gallery scan context voice')}></div><div data-places-mount hidden></div>`)}
           ${pane("sound", `
             <section data-workspace-page="audio"><div data-page-links>${this.pageLink('speech')}${this.pageLink('music')}</div></section>
             ${group("Typewriter sound effects", `
@@ -1828,6 +1839,8 @@ export class VisualNovelSettingsPanel {
       case "dialogueSafeArea": return { dialogueSafeArea: target.value === "always" ? "always" : target.value === "off" ? "off" : "auto" };
       case "imagePromptDetail": return { imagePromptDetail: target.value === "compact" || target.value === "standard" || target.value === "detailed" ? target.value : "auto" };
       case "documentImageMode": return { documentImageMode: target.value === "auto" ? "auto" : "on-click" };
+      case "documentImageConnectionId": return { documentImageConnectionId: target.value.trim() };
+      case "documentImageModel": return { documentImageModel: target.value.trim() };
       case "persistentCastArt": return {persistentCastArt:checked};
       case "persistentLocationArt": return {persistentLocationArt:checked};
       case "collectEntityReferences": return { collectEntityReferences: checked };
@@ -2359,6 +2372,8 @@ export class VisualNovelSettingsPanel {
   private syncFromConfig(config: VisualNovelConfig): void {
     this.control<HTMLSelectElement>("imageOutputAspectRatio").value = config.imageOutputAspectRatio;
     this.control<HTMLSelectElement>("documentImageMode").value = config.documentImageMode === "auto" ? "auto" : "on-click";
+    this.control<HTMLInputElement>("documentImageConnectionId").value = config.documentImageConnectionId ?? "";
+    this.control<HTMLInputElement>("documentImageModel").value = config.documentImageModel ?? "";
     this.control<HTMLInputElement>("persistentCastArt").checked = config.persistentCastArt;
     this.control<HTMLInputElement>("persistentLocationArt").checked = config.persistentLocationArt;
     this.control<HTMLInputElement>("collectEntityReferences").checked = config.collectEntityReferences;

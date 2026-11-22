@@ -1,3 +1,4 @@
+import { renderEntityStockIcon } from './entity-icons.js';
 import { sceneImageUrlFor } from "./image-loader.js";
 import type { ReaderWorkspace } from "./reader-workspace.js";
 import {validateStoryDocuments,visibleStoryDocuments} from '../../shared/story-documents.js';
@@ -587,9 +588,9 @@ export class StageDossiers {
   pop.addEventListener('click',e=>e.stopPropagation());
   const head=document.createElement('div');head.className='vn-inline-tooltip-head';
   const thumb=document.createElement('div');thumb.className='vn-inline-tooltip-thumb';
-  const thumbUrl=docAsset?.imageUrl??visual.imageUrl;
+  const thumbUrl=matchedDoc?docAsset?.imageUrl:visual.imageUrl;
   if(thumbUrl){const img=document.createElement('img');img.src=thumbUrl;img.alt='';thumb.append(img);}
-  else thumb.textContent=matchedDoc?'📄':entity.kind==='npc'?'👤':entity.kind==='place'?'📍':'✦';
+  else thumb.innerHTML=renderEntityStockIcon(matchedDoc?'document':entity.kind,matchedDoc?matchedDoc.kind:entity.name);
   const title=document.createElement('div');title.className='vn-inline-tooltip-title';
   const strong=document.createElement('strong');strong.textContent=entity.name;
   const small=document.createElement('small');small.textContent=matchedDoc?`${matchedDoc.kind.charAt(0).toUpperCase()+matchedDoc.kind.slice(1)} · Document`:entity.kind==='npc'?'Character':entity.kind==='place'?'Location DNA':'Item / Artifact';

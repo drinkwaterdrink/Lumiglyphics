@@ -126,6 +126,8 @@ export type VisualNovelConfig = {
   persistentLocationArt: boolean;
   persistentCastArt: boolean;
   documentImageMode?: "on-click" | "auto";
+  documentImageConnectionId?: string;
+  documentImageModel?: string;
   tooltips: TooltipPreferences;
   includeSimTrackerContext: boolean;
   simTrackerMappings: TrackerMappings;
@@ -230,6 +232,8 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   persistentLocationArt: false,
   persistentCastArt: false,
   documentImageMode: "on-click",
+  documentImageConnectionId: "",
+  documentImageModel: "",
   tooltips: normalizeTooltipPreferences({}),
   includeSimTrackerContext: true,
   simTrackerMappings: normalizeTrackerMappings({}),
@@ -477,6 +481,8 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     persistentLocationArt: input.persistentLocationArt === true,
     persistentCastArt: input.persistentCastArt === true,
     documentImageMode: input.documentImageMode === "auto" ? "auto" : "on-click",
+    documentImageConnectionId: typeof input.documentImageConnectionId === "string" ? input.documentImageConnectionId.trim() : "",
+    documentImageModel: typeof input.documentImageModel === "string" ? input.documentImageModel.trim() : "",
     includeSimTrackerContext: bool(input.includeSimTrackerContext, true),
     simTrackerMappings: normalizeTrackerMappings(input.simTrackerMappings),
     contextSources: normalizeContextSources(input.contextSources),

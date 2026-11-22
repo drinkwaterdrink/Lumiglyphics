@@ -97,9 +97,24 @@ export const THEME_MARKUP = `
     </div>
 
     <section data-vn-narrative hidden aria-label="Dialogue">
+      <div data-vn-quick-reply hidden role="dialog" aria-label="Quick reply composer">
+        <div data-vn-quick-reply-head>
+          <span>Reply Draft</span>
+          <button type="button" data-vn-quick-reply-close aria-label="Close reply composer">×</button>
+        </div>
+        <textarea data-vn-quick-reply-input rows="3" placeholder="Write or edit your reply at any point in the scene…"></textarea>
+        <div data-vn-quick-reply-actions>
+          <button type="button" data-vn-quick-reply-clear>Clear</button>
+          <button type="button" data-vn-quick-reply-send>Send Reply →</button>
+        </div>
+      </div>
       <div data-vn-dialogue class="reader-caption refined-caption">
         <div class="caption-head" data-vn-sheet-header>
           <div class="speaker"><span data-vn-speaker></span><span class="caption-split">/</span><span data-vn-caption-scene>SCENE</span></div>
+          <button type="button" data-vn-compose-toggle aria-label="Compose or edit reply" title="Reply Draft (R)">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            <span data-vn-compose-badge hidden aria-hidden="true"></span>
+          </button>
         </div>
         <div class="scroll-copy">
           <p data-vn-dialogue-text></p>

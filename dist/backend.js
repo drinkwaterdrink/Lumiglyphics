@@ -21303,6 +21303,13 @@ var init_story_dna = __esm(() => {
     }),
     exports_external.object({
       type: exports_external.literal("vn_story_dna"),
+      action: exports_external.literal("generate_item_art"),
+      chatId: exports_external.string(),
+      requestId: exports_external.string().optional(),
+      itemId: exports_external.string()
+    }),
+    exports_external.object({
+      type: exports_external.literal("vn_story_dna"),
       action: exports_external.literal("restore_location"),
       chatId: exports_external.string(),
       requestId: exports_external.string().optional(),
@@ -39039,6 +39046,8 @@ function normalizeConfigUncached(input2) {
     persistentLocationArt: input2.persistentLocationArt === true,
     persistentCastArt: input2.persistentCastArt === true,
     documentImageMode: input2.documentImageMode === "auto" ? "auto" : "on-click",
+    documentImageConnectionId: typeof input2.documentImageConnectionId === "string" ? input2.documentImageConnectionId.trim() : "",
+    documentImageModel: typeof input2.documentImageModel === "string" ? input2.documentImageModel.trim() : "",
     includeSimTrackerContext: bool(input2.includeSimTrackerContext, true),
     simTrackerMappings: normalizeTrackerMappings(input2.simTrackerMappings),
     contextSources: normalizeContextSources(input2.contextSources),
@@ -39160,6 +39169,8 @@ var init_config = __esm(() => {
     persistentLocationArt: false,
     persistentCastArt: false,
     documentImageMode: "on-click",
+    documentImageConnectionId: "",
+    documentImageModel: "",
     tooltips: normalizeTooltipPreferences({}),
     includeSimTrackerContext: true,
     simTrackerMappings: normalizeTrackerMappings({}),
@@ -48922,325 +48933,6 @@ var init_character_dna_autofill = __esm(() => {
   init_presentation_entities();
 });
 
-// src/shared/image-retries.ts
-var id7, QueueImageRetriesSchema;
-var init_image_retries = __esm(() => {
-  init_zod();
-  id7 = exports_external.string().trim().min(1).max(256);
-  QueueImageRetriesSchema = exports_external.object({ type: exports_external.literal("vn_queue_image_retries"), version: exports_external.literal(1), chatId: id7, messageId: id7, sourceFingerprint: id7, swipeId: exports_external.number().int().nonnegative(), revision: exports_external.number().int().nonnegative(), requestId: id7, action: exports_external.enum(["enqueue", "clear"]), jobIds: exports_external.array(id7).min(1).max(24).optional(), priorityJobIds: exports_external.array(id7).min(1).max(24).optional() }).strict().refine((r) => r.action === "clear" || Boolean(r.jobIds?.length), "Choose at least one picture.");
-});
-
-// src/shared/stage-assets.ts
-var id8, StageAssetRoleSchema, LocationArtVariantSchema, LocationArtRecordSchema, LocationArtLibrarySchema, LocationArtRequestSchema;
-var init_stage_assets = __esm(() => {
-  init_zod();
-  id8 = exports_external.string().trim().min(1).max(256);
-  StageAssetRoleSchema = exports_external.enum(["scene", "background", "portrait"]);
-  LocationArtVariantSchema = exports_external.object({
-    id: id8,
-    imageId: id8,
-    requestFingerprint: id8,
-    environmentFingerprint: id8,
-    approved: exports_external.literal(true),
-    createdAt: exports_external.string().max(64),
-    lastUsedAt: exports_external.number().nonnegative().optional(),
-    pinned: exports_external.boolean().optional()
-  }).strict();
-  LocationArtRecordSchema = exports_external.object({
-    entityId: id8,
-    name: id8,
-    artRevision: exports_external.number().int().nonnegative(),
-    description: exports_external.string().max(4000),
-    preferredVariantId: id8.nullable().default(null),
-    variants: exports_external.array(LocationArtVariantSchema).max(8)
-  }).strict();
-  LocationArtLibrarySchema = exports_external.object({ version: exports_external.literal(1), locations: exports_external.array(LocationArtRecordSchema).max(128) }).strict();
-  LocationArtRequestSchema = exports_external.object({
-    type: exports_external.literal("vn_location_art"),
-    version: exports_external.literal(1),
-    chatId: id8,
-    requestId: id8,
-    action: exports_external.enum(["list", "select", "forget", "reset"]),
-    locationId: id8.optional(),
-    variantId: id8.optional()
-  }).strict().superRefine((value, ctx) => {
-    if ((value.action === "select" || value.action === "forget") && !value.locationId)
-      ctx.addIssue({ code: "custom", path: ["locationId"], message: "Choose a location." });
-    if (value.action === "select" && !value.variantId)
-      ctx.addIssue({ code: "custom", path: ["variantId"], message: "Choose a variant." });
-  });
-});
-
-// src/backend/runtime/location-art.ts
-function runtime2(api2) {
-  let r = runtimes2.get(api2);
-  if (!r) {
-    r = { tails: new Map, epochs: new Map };
-    runtimes2.set(api2, r);
-  }
-  return r;
-}
-function scope2(chat, user) {
-  return canonicalJson([user ?? null, chat]);
-}
-function path2(chat) {
-  return `chats/${encodeURIComponent(chat).replaceAll("%", "_")}/location-art.json`;
-}
-function options2(userId) {
-  return userId ? { userId } : undefined;
-}
-function locationArtToken(api2, chat, user) {
-  return runtime2(api2).epochs.get(scope2(chat, user)) ?? 0;
-}
-async function transaction2(api2, chat, user, work) {
-  const r = runtime2(api2), key = scope2(chat, user), previous = r.tails.get(key) ?? Promise.resolve();
-  const current = previous.then(work, work), tail = current.then(() => {
-    return;
-  }, () => {
-    return;
-  });
-  r.tails.set(key, tail);
-  try {
-    return await current;
-  } finally {
-    if (r.tails.get(key) === tail)
-      r.tails.delete(key);
-  }
-}
-async function loadLocationArt(api2, chat, user) {
-  const raw = await api2.userStorage.getJson(path2(chat), { fallback: null, ...options2(user) });
-  if (raw === null)
-    return { version: 1, locations: [] };
-  const parsed = LocationArtLibrarySchema.safeParse(raw);
-  if (!parsed.success)
-    throw new Error("Saved location art has an unsupported or invalid format; it was preserved.");
-  return parsed.data;
-}
-function variantId2(art) {
-  const text3 = canonicalJson(art);
-  const hash3 = (source) => {
-    let value = 2166136261;
-    for (let i = 0;i < source.length; i++)
-      value = Math.imul(value ^ source.charCodeAt(i), 16777619) >>> 0;
-    return value.toString(16).padStart(8, "0");
-  };
-  return `place:${hash3(text3)}${hash3(text3.split("").reverse().join(""))}:${text3.length}`;
-}
-async function findLocationArt(api2, chat, identity2, user) {
-  const token = locationArtToken(api2, chat, user);
-  const library = await loadLocationArt(api2, chat, user);
-  if (token !== locationArtToken(api2, chat, user))
-    return null;
-  const record4 = library.locations.find((r) => r.entityId === locationId(identity2.location));
-  if (!record4)
-    return null;
-  const compatible = record4.variants.filter((v) => v.requestFingerprint === identity2.requestFingerprint && v.environmentFingerprint === identity2.environmentFingerprint);
-  compatible.sort((a, b) => Number(b.id === record4.preferredVariantId) - Number(a.id === record4.preferredVariantId) || (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0) || b.createdAt.localeCompare(a.createdAt));
-  for (const v of compatible) {
-    if (token !== locationArtToken(api2, chat, user))
-      return null;
-    try {
-      const image = await api2.images.get(v.imageId, user);
-      if (token !== locationArtToken(api2, chat, user))
-        return null;
-      if (image) {
-        const touchedAt = Date.now();
-        transaction2(api2, chat, user, async () => {
-          if (token !== locationArtToken(api2, chat, user))
-            return;
-          const latest = await loadLocationArt(api2, chat, user);
-          const rec = latest.locations.find((r) => r.entityId === record4.entityId);
-          const target2 = rec?.variants.find((item) => item.id === v.id);
-          if (!target2)
-            return;
-          target2.lastUsedAt = touchedAt;
-          await api2.userStorage.setJson(path2(chat), LocationArtLibrarySchema.parse(latest), options2(user));
-        }).catch(() => {});
-        return { imageId: v.imageId, imageUrl: `/api/v1/images/${encodeURIComponent(v.imageId)}` };
-      }
-    } catch {}
-  }
-  return null;
-}
-async function saveLocationArt(api2, chat, art, user, guard = {}) {
-  const token = guard.token ?? locationArtToken(api2, chat, user);
-  return transaction2(api2, chat, user, async () => {
-    if (guard.signal?.aborted || token !== locationArtToken(api2, chat, user))
-      return false;
-    const library = await loadLocationArt(api2, chat, user), entityId = locationId(art.location);
-    let record4 = library.locations.find((r) => r.entityId === entityId);
-    if (!record4) {
-      if (library.locations.length >= 128)
-        throw new Error("Location art limit reached (128 places). Forget a place to make room.");
-      record4 = { entityId, name: art.location, artRevision: 0, description: art.description, preferredVariantId: null, variants: [] };
-      library.locations.push(record4);
-    }
-    const existing = record4.variants.find((v) => v.imageId === art.imageId && v.requestFingerprint === art.requestFingerprint && v.environmentFingerprint === art.environmentFingerprint);
-    if (existing) {
-      existing.lastUsedAt = Date.now();
-      await api2.userStorage.setJson(path2(chat), LocationArtLibrarySchema.parse(library), options2(user));
-      return true;
-    }
-    if (record4.variants.length >= 8) {
-      const evictable = record4.variants.filter((v) => !v.pinned && v.id !== record4.preferredVariantId);
-      if (evictable.length === 0)
-        throw new Error("Location art limit reached (8 variants per place, all pinned). Unpin a variant to make room.");
-      evictable.sort((a, b) => (a.lastUsedAt ?? Date.parse(a.createdAt) ?? 0) - (b.lastUsedAt ?? Date.parse(b.createdAt) ?? 0));
-      const victim = evictable[0];
-      record4.variants = record4.variants.filter((v) => v.id !== victim.id);
-    }
-    const now = Date.now();
-    const createdAt = new Date(now).toISOString();
-    record4.variants.push({ id: variantId2(art), imageId: art.imageId, requestFingerprint: art.requestFingerprint, environmentFingerprint: art.environmentFingerprint, approved: true, createdAt, lastUsedAt: now });
-    record4.artRevision++;
-    if (guard.signal?.aborted || token !== locationArtToken(api2, chat, user))
-      return false;
-    await api2.userStorage.setJson(path2(chat), LocationArtLibrarySchema.parse(library), options2(user));
-    return true;
-  });
-}
-async function manageLocationArt(api2, chat, action, user) {
-  if (action.action === "list")
-    return transaction2(api2, chat, user, () => loadLocationArt(api2, chat, user));
-  const r = runtime2(api2), key = scope2(chat, user);
-  r.epochs.set(key, locationArtToken(api2, chat, user) + 1);
-  return transaction2(api2, chat, user, async () => {
-    const library = await loadLocationArt(api2, chat, user);
-    if (action.action === "reset")
-      library.locations = [];
-    else {
-      const record4 = library.locations.find((r2) => r2.entityId === action.locationId);
-      if (!record4)
-        throw new Error("This location is no longer saved. Refresh the list.");
-      if (action.action === "select") {
-        if (!record4.variants.some((v) => v.id === action.variantId))
-          throw new Error("This variant is no longer saved. Refresh the list.");
-        record4.preferredVariantId = action.variantId;
-      } else if (action.variantId) {
-        record4.variants = record4.variants.filter((v) => v.id !== action.variantId);
-        if (record4.preferredVariantId === action.variantId)
-          record4.preferredVariantId = null;
-        if (!record4.variants.length)
-          library.locations = library.locations.filter((r2) => r2 !== record4);
-      } else
-        library.locations = library.locations.filter((r2) => r2 !== record4);
-    }
-    await api2.userStorage.setJson(path2(chat), LocationArtLibrarySchema.parse(library), options2(user));
-    return library;
-  });
-}
-var runtimes2, locationId = (name) => name.trim().toLowerCase();
-var init_location_art = __esm(() => {
-  init_stage_assets();
-  init_scene_image_cache();
-  runtimes2 = new WeakMap;
-});
-
-// src/shared/subject-correction.ts
-var SubjectCorrectionSchema;
-var init_subject_correction = __esm(() => {
-  init_zod();
-  SubjectCorrectionSchema = exports_external.discriminatedUnion("kind", [
-    exports_external.object({
-      kind: exports_external.literal("character"),
-      name: exports_external.string().trim().min(1).max(160),
-      appearance: exports_external.string().trim().max(2000).optional(),
-      saveAppearance: exports_external.boolean()
-    }).strict(),
-    exports_external.object({ kind: exports_external.literal("environment"), templateId: exports_external.string().trim().min(1).max(100) }).strict()
-  ]);
-});
-
-// src/protocol.ts
-function isFrontendRequest(value) {
-  if (value?.type === "vn_story_dna")
-    return StoryDnaRequestSchema.safeParse(value).success;
-  if (value?.type === "vn_character_dna")
-    return DnaRequestSchema.safeParse(value).success;
-  if (value?.type === "vn_queue_image_retries")
-    return QueueImageRetriesSchema.safeParse(value).success;
-  if (value?.type === "vn_presentation_rules")
-    return PresentationRuleRequestSchema.safeParse(value).success;
-  if (value === null || typeof value !== "object")
-    return false;
-  if (["vn_regenerate_image_prompt", "vn_enrich_image_prompt"].includes(String(value.type)))
-    return RewriteImagePromptRequestSchema.safeParse(value).success;
-  if (value.type === "vn_prepare_image")
-    return PrepareImageRequestSchema.safeParse(value).success;
-  if (value.type === "vn_restore_previous_image")
-    return RestorePreviousImageRequestSchema.safeParse(value).success;
-  if (value.type === "vn_external_image_review")
-    return exports_external.object({ type: exports_external.literal("vn_external_image_review"), chatId: exports_external.string().min(1).max(128), requestId: exports_external.string().min(1).max(128), reviewRequestId: exports_external.string().min(1).max(100), action: exports_external.enum(["generate", "skip"]), edits: exports_external.object({ prompt: exports_external.string().min(1).max(65000).optional(), negativePrompt: exports_external.string().max(65000).optional(), parameters: exports_external.record(exports_external.string(), exports_external.unknown()).optional() }).strict().optional() }).strict().safeParse(value).success;
-  if (value.type === "vn_image_library")
-    return ImageLibraryRequestSchema.safeParse(value).success;
-  if (value.type === "vn_cast_gallery")
-    return CastGalleryRequestSchema.safeParse(value).success;
-  if (value.type === "vn_cast_art")
-    return CastArtRequestSchema.safeParse(value).success;
-  if (value.type === "vn_get_context_sources")
-    return ContextSourcesRequestSchema.safeParse(value).success;
-  if (value.type === "vn_replan_turn")
-    return ReplanTurnRequestSchema.safeParse(value).success;
-  if (value.type === "vn_correct_image_subject")
-    return CorrectImageSubjectRequestSchema.safeParse(value).success;
-  if (value.type === "vn_set_card_role")
-    return SetCardRoleRequestSchema.safeParse(value).success;
-  if (value.type === "vn_delete_image")
-    return DeleteImageRequestSchema.safeParse(value).success;
-  if (value.type === "vn_generate_document_image")
-    return GenerateDocumentImageRequestSchema.safeParse(value).success;
-  if (value.type === "vn_get_turn_snapshot")
-    return exports_external.object({ type: exports_external.literal("vn_get_turn_snapshot"), chatId: exports_external.string().min(1).max(128), messageId: exports_external.string().min(1).max(128), swipeId: exports_external.number().int().min(0).optional(), requestId: exports_external.string().min(1).max(128).optional() }).strict().safeParse(value).success;
-  if (value.type === "vn_reading_position")
-    return ReadingPositionSchema.safeParse(value.position).success;
-  return typeof value.type === "string" && String(value.type).startsWith("vn_");
-}
-var recoveryScope, CorrectImageSubjectRequestSchema, SetCardRoleRequestSchema, ReplanTurnRequestSchema, ContextSourcesRequestSchema, RecoverImagesRequestSchema, imageOperationScope, imageOperationEdits, imagePromptOperation, RewriteImagePromptRequestSchema, ManualLightingSchema, PrepareImageRequestSchema, RestorePreviousImageRequestSchema, DeleteImageRequestSchema, GenerateDocumentImageRequestSchema, REFERENCE_IMAGE_MAX_BYTES, REFERENCE_IMAGE_MIMES;
-var init_protocol = __esm(() => {
-  init_story_dna();
-  init_character_dna_workflow();
-  init_image_retries();
-  init_presentation_rules();
-  init_cast_art();
-  init_image_library();
-  init_zod();
-  init_card_role();
-  init_subject_correction();
-  init_reading_position();
-  recoveryScope = { version: exports_external.literal(1), chatId: exports_external.string().min(1).max(200), messageId: exports_external.string().min(1).max(200), swipeId: exports_external.number().int().min(0), sourceFingerprint: exports_external.string().min(1).max(200), requestId: exports_external.string().min(1).max(100) };
-  CorrectImageSubjectRequestSchema = exports_external.object({ type: exports_external.literal("vn_correct_image_subject"), ...recoveryScope, jobId: exports_external.string().min(1).max(200), templateId: exports_external.string().min(1).max(100).optional(), subject: SubjectCorrectionSchema }).strict();
-  SetCardRoleRequestSchema = exports_external.object({ type: exports_external.literal("vn_set_card_role"), ...recoveryScope, role: CardRoleSchema }).strict();
-  ReplanTurnRequestSchema = exports_external.object({ type: exports_external.literal("vn_replan_turn"), ...recoveryScope }).strict();
-  ContextSourcesRequestSchema = exports_external.object({ type: exports_external.literal("vn_get_context_sources"), chatId: exports_external.string().min(1).max(256), requestId: exports_external.string().min(1).max(100) }).strict();
-  RecoverImagesRequestSchema = exports_external.object({ type: exports_external.literal("vn_recover_images"), ...recoveryScope, revision: exports_external.number().int().nonnegative(), action: exports_external.enum(["stop", "retry"]) }).strict();
-  imageOperationScope = { chatId: exports_external.string().min(1).max(128), messageId: exports_external.string().min(1).max(128), sourceFingerprint: exports_external.string().min(1).max(256) };
-  imageOperationEdits = exports_external.object({ prompt: exports_external.string().trim().min(1).max(65000).optional(), negativePrompt: exports_external.string().max(65000).optional(), parameters: exports_external.record(exports_external.string(), exports_external.unknown()).optional() }).strict();
-  imagePromptOperation = { guidance: exports_external.string().max(400).optional(), edits: imageOperationEdits.optional(), pinnedClauses: exports_external.array(exports_external.string().trim().min(1).max(300)).max(8).optional() };
-  RewriteImagePromptRequestSchema = exports_external.object({ type: exports_external.enum(["vn_regenerate_image_prompt", "vn_enrich_image_prompt"]), ...imageOperationScope, requestId: exports_external.string().min(1).max(100), ...imagePromptOperation }).strict();
-  ManualLightingSchema = exports_external.object({
-    timeOfDay: exports_external.string().trim().max(64).optional(),
-    keyLightDirection: exports_external.enum(["left", "right", "backlit", "overhead", "ambient"]).optional(),
-    mood: exports_external.string().trim().max(64).optional()
-  }).strict();
-  PrepareImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_prepare_image"), ...imageOperationScope, jobId: exports_external.string().min(1).max(200), templateId: exports_external.string().min(1).max(100).optional(), ...imagePromptOperation, regeneratePrompt: exports_external.boolean().optional(), promptOperation: exports_external.enum(["rewrite", "enrich"]).optional(), reframe: exports_external.boolean().optional(), relight: exports_external.boolean().optional(), lockContinuity: exports_external.boolean().optional(), styleId: exports_external.string().max(100).optional(), fitToModel: exports_external.boolean().optional(), model: exports_external.string().max(200).optional(), connectionId: exports_external.string().max(200).optional(), quickGenerate: exports_external.boolean().optional(), manualCamera: exports_external.object({ shotSize: exports_external.string().optional(), angle: exports_external.string().optional(), lensFeel: exports_external.string().optional(), composition: exports_external.string().optional(), depth: exports_external.string().optional(), dialogueSafeArea: exports_external.enum(["auto", "always", "off"]).optional(), focalPoint: exports_external.object({ x: exports_external.number().min(0).max(100), y: exports_external.number().min(0).max(100) }).strict().optional() }).strict().optional(), manualLighting: ManualLightingSchema.optional() }).strict();
-  RestorePreviousImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_restore_previous_image"), ...imageOperationScope, swipeId: exports_external.number().int().nonnegative().nullable(), revision: exports_external.number().int().nonnegative(), jobId: exports_external.string().min(1).max(200), versionId: exports_external.string().min(1).max(256) }).strict();
-  DeleteImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_delete_image"), chatId: exports_external.string().min(1).max(256), imageId: exports_external.string().min(1).max(256).optional(), imageUrl: exports_external.string().min(1).max(2048).optional(), jobId: exports_external.string().min(1).max(256).optional() }).strict();
-  GenerateDocumentImageRequestSchema = exports_external.object({
-    type: exports_external.literal("vn_generate_document_image"),
-    chatId: exports_external.string().min(1).max(200),
-    messageId: exports_external.string().min(1).max(200),
-    swipeId: exports_external.number().int().nonnegative(),
-    sourceFingerprint: exports_external.string().min(1).max(200),
-    revision: exports_external.number().int().nonnegative(),
-    documentId: exports_external.string().min(1).max(200),
-    throughParagraphIndex: exports_external.number().int().nonnegative(),
-    requestId: exports_external.string().min(1).max(100),
-    forceRegenerate: exports_external.boolean().optional()
-  }).strict();
-  REFERENCE_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
-  REFERENCE_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/avif"]);
-});
-
 // src/shared/image-payload-sanitizer.ts
 function estimateBase64Bytes(base643) {
   if (!base643)
@@ -49345,11 +49037,11 @@ function visualSubjectPolicy(input2) {
 
 // src/backend/runtime/shot-director.ts
 function stringHash(str) {
-  let hash3 = 2166136261;
+  let hash2 = 2166136261;
   for (let i = 0;i < str.length; i++) {
-    hash3 = Math.imul(hash3 ^ str.charCodeAt(i), 16777619);
+    hash2 = Math.imul(hash2 ^ str.charCodeAt(i), 16777619);
   }
-  return hash3 >>> 0;
+  return hash2 >>> 0;
 }
 function escapeRegex2(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -49467,8 +49159,8 @@ function resolveShotSpec(input2) {
   const intent = resolveShotIntent(brief, template, cue, manualOverrides.intent);
   const seedString = `${cueHash ?? brief.scene + "|" + brief.subjects + "|" + brief.action}:${revision}:${intent}`;
   const seed = stringHash(seedString);
-  const pick2 = (options3, offset = 0) => {
-    return options3[Math.abs(seed + offset) % options3.length];
+  const pick2 = (options2, offset = 0) => {
+    return options2[Math.abs(seed + offset) % options2.length];
   };
   const isFixedTemplate = template?.cameraPolicy === "fixed";
   let shotSize;
@@ -49875,11 +49567,11 @@ function hydrateDataUrlDetailed(raw, fallbackMime = "image/png") {
 function hydrateDataUrl(raw, mimeType = "image/png") {
   return hydrateDataUrlDetailed(raw, mimeType)?.dataUrl;
 }
-function gatherReferenceCandidates(options3) {
+function gatherReferenceCandidates(options2) {
   const candidates = [];
-  if (options3.referenceImages && options3.referenceImages.length > 0) {
-    for (let i = 0;i < options3.referenceImages.length; i++) {
-      const item = options3.referenceImages[i];
+  if (options2.referenceImages && options2.referenceImages.length > 0) {
+    for (let i = 0;i < options2.referenceImages.length; i++) {
+      const item = options2.referenceImages[i];
       const mimeType = item.mimeType ?? "image/png";
       const dataUrl = hydrateDataUrl(item.data, mimeType);
       if (!dataUrl)
@@ -49896,12 +49588,12 @@ function gatherReferenceCandidates(options3) {
     }
     return candidates;
   }
-  const chars = options3.characterDNALibrary ? "characters" in options3.characterDNALibrary ? options3.characterDNALibrary.characters : options3.characterDNALibrary : undefined;
+  const chars = options2.characterDNALibrary ? "characters" in options2.characterDNALibrary ? options2.characterDNALibrary.characters : options2.characterDNALibrary : undefined;
   const findPortraitFor = (name) => {
-    if (!options3.portraits || !name)
+    if (!options2.portraits || !name)
       return;
     const normalized = normalizeCharacterName(name);
-    return Object.entries(options3.portraits).find(([key, p]) => {
+    return Object.entries(options2.portraits).find(([key, p]) => {
       if (!p)
         return false;
       const strippedKey = key.replace(/^card:/, "");
@@ -49909,8 +49601,8 @@ function gatherReferenceCandidates(options3) {
       return normalizedKey === normalized || areNamesEquivalent(strippedKey, name);
     })?.[1];
   };
-  if (options3.cue) {
-    const characterName = options3.cue.character || options3.brief?.subjectPreparation?.name;
+  if (options2.cue) {
+    const characterName = options2.cue.character || options2.brief?.subjectPreparation?.name;
     if (characterName) {
       const normalized = normalizeCharacterName(characterName);
       if (chars) {
@@ -49957,8 +49649,8 @@ function gatherReferenceCandidates(options3) {
         }
       }
     }
-    if (options3.cue.ensembleSubjects && options3.cue.ensembleSubjects.length > 0) {
-      for (const member of options3.cue.ensembleSubjects) {
+    if (options2.cue.ensembleSubjects && options2.cue.ensembleSubjects.length > 0) {
+      for (const member of options2.cue.ensembleSubjects) {
         if (!member.name || candidates.some((r) => r.subject && areNamesEquivalent(r.subject, member.name)))
           continue;
         if (chars) {
@@ -50004,11 +49696,11 @@ function finalizeAttachedRefs(items, maxRefs = MAX_ATTACHED_REFS) {
   }));
   return createReferencePlan(capped);
 }
-function resolveReferencePlan(options3) {
-  const maxPerRef = options3.maxPerRefBytes ?? MAX_SAFE_REFERENCE_BYTES;
-  const maxTotal = options3.maxTotalBytes ?? NANO_GPT_PAYLOAD_LIMIT_BYTES;
-  const maxRefs = options3.maxRefs ?? MAX_ATTACHED_REFS;
-  const ordered = gatherReferenceCandidates(options3).sort((a, b) => a.priority - b.priority);
+function resolveReferencePlan(options2) {
+  const maxPerRef = options2.maxPerRefBytes ?? MAX_SAFE_REFERENCE_BYTES;
+  const maxTotal = options2.maxTotalBytes ?? NANO_GPT_PAYLOAD_LIMIT_BYTES;
+  const maxRefs = options2.maxRefs ?? MAX_ATTACHED_REFS;
+  const ordered = gatherReferenceCandidates(options2).sort((a, b) => a.priority - b.priority);
   const kept = [];
   let totalBytes = 0;
   for (const candidate of ordered) {
@@ -50039,8 +49731,8 @@ var init_reference_plan2 = __esm(() => {
 });
 
 // src/backend/runtime/prompt-budget.ts
-function classifySceneComplexity(options3) {
-  const { brief, shotSpec, cue } = options3;
+function classifySceneComplexity(options2) {
+  const { brief, shotSpec, cue } = options2;
   if (brief.subjectMode === "none") {
     if (shotSpec?.intent === "detail" || shotSpec?.camera.shotSize === "macro") {
       return "simple";
@@ -52674,9 +52366,9 @@ var init_prompt_fit_v2 = __esm(() => {
 });
 
 // src/shared/prompt-lint.ts
-function lintCompiledPrompt(options3) {
-  const { prompt, negativePrompt, profile, referencePlan } = options3;
-  const brief = options3.brief ?? { subjectMode: "none", subjects: "" };
+function lintCompiledPrompt(options2) {
+  const { prompt, negativePrompt, profile, referencePlan } = options2;
+  const brief = options2.brief ?? { subjectMode: "none", subjects: "" };
   const errors4 = [];
   const warnings = [];
   const totalLength = prompt.length + (negativePrompt?.length ?? 0);
@@ -52736,7 +52428,7 @@ function lintCompiledPrompt(options3) {
     }
   }
   const referencesAttached = referencePlan?.references && referencePlan.references.length > 0;
-  if (options3.referenceAttachmentKnown !== false && !referencesAttached && /reference image \d+|use the reference/i.test(prompt)) {
+  if (options2.referenceAttachmentKnown !== false && !referencesAttached && /reference image \d+|use the reference/i.test(prompt)) {
     warnings.push("Prompt refers to reference images, but no reference images are attached to this request.");
   }
   const lower = prompt.toLowerCase();
@@ -53182,11 +52874,11 @@ function castAllocationCandidates(plan, config2, appearances) {
     if (!background) {
       let suffix = 0;
       const unique2 = (kind) => {
-        let id9 = `cast-${kind}-${sceneIndex}-${plan.key.revision}`;
-        while (usedIds.has(id9))
-          id9 = `cast-${kind}-${sceneIndex}-${plan.key.revision}-${++suffix}`;
-        usedIds.add(id9);
-        return id9;
+        let id7 = `cast-${kind}-${sceneIndex}-${plan.key.revision}`;
+        while (usedIds.has(id7))
+          id7 = `cast-${kind}-${sceneIndex}-${plan.key.revision}-${++suffix}`;
+        usedIds.add(id7);
+        return id7;
       };
       background = VisualCueSchema.parse({ cueId: unique2("background-cue"), assetJobId: unique2("background-job"), paragraphIndex: scene.startParagraph, sceneId: scene.sceneId, sceneRevision: scene.revision, kind: "background", action: null, expression: null, promptDelta: "", character: null, resolvedIdentity: "", resolvedAttire: null, imageTemplate: templateSnapshot(environment), imageTemplateReason: "Cast view: independent background", visualSources: [] });
     }
@@ -53205,6 +52897,212 @@ var init_cast_allocation = __esm(() => {
   init_visual_brief();
   init_entity_projection();
   init_presentation_selectors();
+});
+
+// src/shared/stage-assets.ts
+var id7, StageAssetRoleSchema, LocationArtVariantSchema, LocationArtRecordSchema, LocationArtLibrarySchema, LocationArtRequestSchema;
+var init_stage_assets = __esm(() => {
+  init_zod();
+  id7 = exports_external.string().trim().min(1).max(256);
+  StageAssetRoleSchema = exports_external.enum(["scene", "background", "portrait"]);
+  LocationArtVariantSchema = exports_external.object({
+    id: id7,
+    imageId: id7,
+    requestFingerprint: id7,
+    environmentFingerprint: id7,
+    approved: exports_external.literal(true),
+    createdAt: exports_external.string().max(64),
+    lastUsedAt: exports_external.number().nonnegative().optional(),
+    pinned: exports_external.boolean().optional()
+  }).strict();
+  LocationArtRecordSchema = exports_external.object({
+    entityId: id7,
+    name: id7,
+    artRevision: exports_external.number().int().nonnegative(),
+    description: exports_external.string().max(4000),
+    preferredVariantId: id7.nullable().default(null),
+    variants: exports_external.array(LocationArtVariantSchema).max(8)
+  }).strict();
+  LocationArtLibrarySchema = exports_external.object({ version: exports_external.literal(1), locations: exports_external.array(LocationArtRecordSchema).max(128) }).strict();
+  LocationArtRequestSchema = exports_external.object({
+    type: exports_external.literal("vn_location_art"),
+    version: exports_external.literal(1),
+    chatId: id7,
+    requestId: id7,
+    action: exports_external.enum(["list", "select", "forget", "reset"]),
+    locationId: id7.optional(),
+    variantId: id7.optional()
+  }).strict().superRefine((value, ctx) => {
+    if ((value.action === "select" || value.action === "forget") && !value.locationId)
+      ctx.addIssue({ code: "custom", path: ["locationId"], message: "Choose a location." });
+    if (value.action === "select" && !value.variantId)
+      ctx.addIssue({ code: "custom", path: ["variantId"], message: "Choose a variant." });
+  });
+});
+
+// src/backend/runtime/location-art.ts
+function runtime2(api2) {
+  let r = runtimes2.get(api2);
+  if (!r) {
+    r = { tails: new Map, epochs: new Map };
+    runtimes2.set(api2, r);
+  }
+  return r;
+}
+function scope2(chat, user) {
+  return canonicalJson([user ?? null, chat]);
+}
+function path2(chat) {
+  return `chats/${encodeURIComponent(chat).replaceAll("%", "_")}/location-art.json`;
+}
+function options2(userId) {
+  return userId ? { userId } : undefined;
+}
+function locationArtToken(api2, chat, user) {
+  return runtime2(api2).epochs.get(scope2(chat, user)) ?? 0;
+}
+async function transaction2(api2, chat, user, work) {
+  const r = runtime2(api2), key = scope2(chat, user), previous = r.tails.get(key) ?? Promise.resolve();
+  const current = previous.then(work, work), tail = current.then(() => {
+    return;
+  }, () => {
+    return;
+  });
+  r.tails.set(key, tail);
+  try {
+    return await current;
+  } finally {
+    if (r.tails.get(key) === tail)
+      r.tails.delete(key);
+  }
+}
+async function loadLocationArt(api2, chat, user) {
+  const raw = await api2.userStorage.getJson(path2(chat), { fallback: null, ...options2(user) });
+  if (raw === null)
+    return { version: 1, locations: [] };
+  const parsed = LocationArtLibrarySchema.safeParse(raw);
+  if (!parsed.success)
+    throw new Error("Saved location art has an unsupported or invalid format; it was preserved.");
+  return parsed.data;
+}
+function variantId2(art) {
+  const text3 = canonicalJson(art);
+  const hash2 = (source) => {
+    let value = 2166136261;
+    for (let i = 0;i < source.length; i++)
+      value = Math.imul(value ^ source.charCodeAt(i), 16777619) >>> 0;
+    return value.toString(16).padStart(8, "0");
+  };
+  return `place:${hash2(text3)}${hash2(text3.split("").reverse().join(""))}:${text3.length}`;
+}
+async function findLocationArt(api2, chat, identity2, user) {
+  const token = locationArtToken(api2, chat, user);
+  const library = await loadLocationArt(api2, chat, user);
+  if (token !== locationArtToken(api2, chat, user))
+    return null;
+  const record4 = library.locations.find((r) => r.entityId === locationId(identity2.location));
+  if (!record4)
+    return null;
+  const compatible = record4.variants.filter((v) => v.requestFingerprint === identity2.requestFingerprint && v.environmentFingerprint === identity2.environmentFingerprint);
+  compatible.sort((a, b) => Number(b.id === record4.preferredVariantId) - Number(a.id === record4.preferredVariantId) || (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0) || b.createdAt.localeCompare(a.createdAt));
+  for (const v of compatible) {
+    if (token !== locationArtToken(api2, chat, user))
+      return null;
+    try {
+      const image = await api2.images.get(v.imageId, user);
+      if (token !== locationArtToken(api2, chat, user))
+        return null;
+      if (image) {
+        const touchedAt = Date.now();
+        transaction2(api2, chat, user, async () => {
+          if (token !== locationArtToken(api2, chat, user))
+            return;
+          const latest = await loadLocationArt(api2, chat, user);
+          const rec = latest.locations.find((r) => r.entityId === record4.entityId);
+          const target2 = rec?.variants.find((item) => item.id === v.id);
+          if (!target2)
+            return;
+          target2.lastUsedAt = touchedAt;
+          await api2.userStorage.setJson(path2(chat), LocationArtLibrarySchema.parse(latest), options2(user));
+        }).catch(() => {});
+        return { imageId: v.imageId, imageUrl: `/api/v1/images/${encodeURIComponent(v.imageId)}` };
+      }
+    } catch {}
+  }
+  return null;
+}
+async function saveLocationArt(api2, chat, art, user, guard = {}) {
+  const token = guard.token ?? locationArtToken(api2, chat, user);
+  return transaction2(api2, chat, user, async () => {
+    if (guard.signal?.aborted || token !== locationArtToken(api2, chat, user))
+      return false;
+    const library = await loadLocationArt(api2, chat, user), entityId = locationId(art.location);
+    let record4 = library.locations.find((r) => r.entityId === entityId);
+    if (!record4) {
+      if (library.locations.length >= 128)
+        throw new Error("Location art limit reached (128 places). Forget a place to make room.");
+      record4 = { entityId, name: art.location, artRevision: 0, description: art.description, preferredVariantId: null, variants: [] };
+      library.locations.push(record4);
+    }
+    const existing = record4.variants.find((v) => v.imageId === art.imageId && v.requestFingerprint === art.requestFingerprint && v.environmentFingerprint === art.environmentFingerprint);
+    if (existing) {
+      existing.lastUsedAt = Date.now();
+      await api2.userStorage.setJson(path2(chat), LocationArtLibrarySchema.parse(library), options2(user));
+      return true;
+    }
+    if (record4.variants.length >= 8) {
+      const evictable = record4.variants.filter((v) => !v.pinned && v.id !== record4.preferredVariantId);
+      if (evictable.length === 0)
+        throw new Error("Location art limit reached (8 variants per place, all pinned). Unpin a variant to make room.");
+      evictable.sort((a, b) => (a.lastUsedAt ?? Date.parse(a.createdAt) ?? 0) - (b.lastUsedAt ?? Date.parse(b.createdAt) ?? 0));
+      const victim = evictable[0];
+      record4.variants = record4.variants.filter((v) => v.id !== victim.id);
+    }
+    const now = Date.now();
+    const createdAt = new Date(now).toISOString();
+    record4.variants.push({ id: variantId2(art), imageId: art.imageId, requestFingerprint: art.requestFingerprint, environmentFingerprint: art.environmentFingerprint, approved: true, createdAt, lastUsedAt: now });
+    record4.artRevision++;
+    if (guard.signal?.aborted || token !== locationArtToken(api2, chat, user))
+      return false;
+    await api2.userStorage.setJson(path2(chat), LocationArtLibrarySchema.parse(library), options2(user));
+    return true;
+  });
+}
+async function manageLocationArt(api2, chat, action, user) {
+  if (action.action === "list")
+    return transaction2(api2, chat, user, () => loadLocationArt(api2, chat, user));
+  const r = runtime2(api2), key = scope2(chat, user);
+  r.epochs.set(key, locationArtToken(api2, chat, user) + 1);
+  return transaction2(api2, chat, user, async () => {
+    const library = await loadLocationArt(api2, chat, user);
+    if (action.action === "reset")
+      library.locations = [];
+    else {
+      const record4 = library.locations.find((r2) => r2.entityId === action.locationId);
+      if (!record4)
+        throw new Error("This location is no longer saved. Refresh the list.");
+      if (action.action === "select") {
+        if (!record4.variants.some((v) => v.id === action.variantId))
+          throw new Error("This variant is no longer saved. Refresh the list.");
+        record4.preferredVariantId = action.variantId;
+      } else if (action.variantId) {
+        record4.variants = record4.variants.filter((v) => v.id !== action.variantId);
+        if (record4.preferredVariantId === action.variantId)
+          record4.preferredVariantId = null;
+        if (!record4.variants.length)
+          library.locations = library.locations.filter((r2) => r2 !== record4);
+      } else
+        library.locations = library.locations.filter((r2) => r2 !== record4);
+    }
+    await api2.userStorage.setJson(path2(chat), LocationArtLibrarySchema.parse(library), options2(user));
+    return library;
+  });
+}
+var runtimes2, locationId = (name) => name.trim().toLowerCase();
+var init_location_art = __esm(() => {
+  init_stage_assets();
+  init_scene_image_cache();
+  runtimes2 = new WeakMap;
 });
 
 // src/backend/runtime/scene-art-index.ts
@@ -53258,8 +53156,8 @@ async function findBackdropArt(api2, chatId, backdropDigest, userId) {
   if (!backdropDigest.trim())
     return null;
   const index = await loadSceneArtIndex(api2, chatId, userId);
-  const matches2 = index.entries.filter((entry) => entry.backdropDigest === backdropDigest).sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt));
-  for (const entry of matches2) {
+  const matches = index.entries.filter((entry) => entry.backdropDigest === backdropDigest).sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt));
+  for (const entry of matches) {
     try {
       const image = await api2.images.get(entry.imageId, userId);
       if (image) {
@@ -54456,6 +54354,119 @@ var init_prompt_adaptation = __esm(() => {
   init_prompt_rewrite();
 });
 
+// src/shared/image-retries.ts
+var id8, QueueImageRetriesSchema;
+var init_image_retries = __esm(() => {
+  init_zod();
+  id8 = exports_external.string().trim().min(1).max(256);
+  QueueImageRetriesSchema = exports_external.object({ type: exports_external.literal("vn_queue_image_retries"), version: exports_external.literal(1), chatId: id8, messageId: id8, sourceFingerprint: id8, swipeId: exports_external.number().int().nonnegative(), revision: exports_external.number().int().nonnegative(), requestId: id8, action: exports_external.enum(["enqueue", "clear"]), jobIds: exports_external.array(id8).min(1).max(24).optional(), priorityJobIds: exports_external.array(id8).min(1).max(24).optional() }).strict().refine((r) => r.action === "clear" || Boolean(r.jobIds?.length), "Choose at least one picture.");
+});
+
+// src/shared/subject-correction.ts
+var SubjectCorrectionSchema;
+var init_subject_correction = __esm(() => {
+  init_zod();
+  SubjectCorrectionSchema = exports_external.discriminatedUnion("kind", [
+    exports_external.object({
+      kind: exports_external.literal("character"),
+      name: exports_external.string().trim().min(1).max(160),
+      appearance: exports_external.string().trim().max(2000).optional(),
+      saveAppearance: exports_external.boolean()
+    }).strict(),
+    exports_external.object({ kind: exports_external.literal("environment"), templateId: exports_external.string().trim().min(1).max(100) }).strict()
+  ]);
+});
+
+// src/protocol.ts
+function isFrontendRequest(value) {
+  if (value?.type === "vn_story_dna")
+    return StoryDnaRequestSchema.safeParse(value).success;
+  if (value?.type === "vn_character_dna")
+    return DnaRequestSchema.safeParse(value).success;
+  if (value?.type === "vn_queue_image_retries")
+    return QueueImageRetriesSchema.safeParse(value).success;
+  if (value?.type === "vn_presentation_rules")
+    return PresentationRuleRequestSchema.safeParse(value).success;
+  if (value === null || typeof value !== "object")
+    return false;
+  if (["vn_regenerate_image_prompt", "vn_enrich_image_prompt"].includes(String(value.type)))
+    return RewriteImagePromptRequestSchema.safeParse(value).success;
+  if (value.type === "vn_prepare_image")
+    return PrepareImageRequestSchema.safeParse(value).success;
+  if (value.type === "vn_restore_previous_image")
+    return RestorePreviousImageRequestSchema.safeParse(value).success;
+  if (value.type === "vn_external_image_review")
+    return exports_external.object({ type: exports_external.literal("vn_external_image_review"), chatId: exports_external.string().min(1).max(128), requestId: exports_external.string().min(1).max(128), reviewRequestId: exports_external.string().min(1).max(100), action: exports_external.enum(["generate", "skip"]), edits: exports_external.object({ prompt: exports_external.string().min(1).max(65000).optional(), negativePrompt: exports_external.string().max(65000).optional(), parameters: exports_external.record(exports_external.string(), exports_external.unknown()).optional() }).strict().optional() }).strict().safeParse(value).success;
+  if (value.type === "vn_image_library")
+    return ImageLibraryRequestSchema.safeParse(value).success;
+  if (value.type === "vn_cast_gallery")
+    return CastGalleryRequestSchema.safeParse(value).success;
+  if (value.type === "vn_cast_art")
+    return CastArtRequestSchema.safeParse(value).success;
+  if (value.type === "vn_get_context_sources")
+    return ContextSourcesRequestSchema.safeParse(value).success;
+  if (value.type === "vn_replan_turn")
+    return ReplanTurnRequestSchema.safeParse(value).success;
+  if (value.type === "vn_correct_image_subject")
+    return CorrectImageSubjectRequestSchema.safeParse(value).success;
+  if (value.type === "vn_set_card_role")
+    return SetCardRoleRequestSchema.safeParse(value).success;
+  if (value.type === "vn_delete_image")
+    return DeleteImageRequestSchema.safeParse(value).success;
+  if (value.type === "vn_generate_document_image")
+    return GenerateDocumentImageRequestSchema.safeParse(value).success;
+  if (value.type === "vn_get_turn_snapshot")
+    return exports_external.object({ type: exports_external.literal("vn_get_turn_snapshot"), chatId: exports_external.string().min(1).max(128), messageId: exports_external.string().min(1).max(128), swipeId: exports_external.number().int().min(0).optional(), requestId: exports_external.string().min(1).max(128).optional() }).strict().safeParse(value).success;
+  if (value.type === "vn_reading_position")
+    return ReadingPositionSchema.safeParse(value.position).success;
+  return typeof value.type === "string" && String(value.type).startsWith("vn_");
+}
+var recoveryScope, CorrectImageSubjectRequestSchema, SetCardRoleRequestSchema, ReplanTurnRequestSchema, ContextSourcesRequestSchema, RecoverImagesRequestSchema, imageOperationScope, imageOperationEdits, imagePromptOperation, RewriteImagePromptRequestSchema, ManualLightingSchema, PrepareImageRequestSchema, RestorePreviousImageRequestSchema, DeleteImageRequestSchema, GenerateDocumentImageRequestSchema, REFERENCE_IMAGE_MAX_BYTES, REFERENCE_IMAGE_MIMES;
+var init_protocol = __esm(() => {
+  init_story_dna();
+  init_character_dna_workflow();
+  init_image_retries();
+  init_presentation_rules();
+  init_cast_art();
+  init_image_library();
+  init_zod();
+  init_card_role();
+  init_subject_correction();
+  init_reading_position();
+  recoveryScope = { version: exports_external.literal(1), chatId: exports_external.string().min(1).max(200), messageId: exports_external.string().min(1).max(200), swipeId: exports_external.number().int().min(0), sourceFingerprint: exports_external.string().min(1).max(200), requestId: exports_external.string().min(1).max(100) };
+  CorrectImageSubjectRequestSchema = exports_external.object({ type: exports_external.literal("vn_correct_image_subject"), ...recoveryScope, jobId: exports_external.string().min(1).max(200), templateId: exports_external.string().min(1).max(100).optional(), subject: SubjectCorrectionSchema }).strict();
+  SetCardRoleRequestSchema = exports_external.object({ type: exports_external.literal("vn_set_card_role"), ...recoveryScope, role: CardRoleSchema }).strict();
+  ReplanTurnRequestSchema = exports_external.object({ type: exports_external.literal("vn_replan_turn"), ...recoveryScope }).strict();
+  ContextSourcesRequestSchema = exports_external.object({ type: exports_external.literal("vn_get_context_sources"), chatId: exports_external.string().min(1).max(256), requestId: exports_external.string().min(1).max(100) }).strict();
+  RecoverImagesRequestSchema = exports_external.object({ type: exports_external.literal("vn_recover_images"), ...recoveryScope, revision: exports_external.number().int().nonnegative(), action: exports_external.enum(["stop", "retry"]) }).strict();
+  imageOperationScope = { chatId: exports_external.string().min(1).max(128), messageId: exports_external.string().min(1).max(128), sourceFingerprint: exports_external.string().min(1).max(256) };
+  imageOperationEdits = exports_external.object({ prompt: exports_external.string().trim().min(1).max(65000).optional(), negativePrompt: exports_external.string().max(65000).optional(), parameters: exports_external.record(exports_external.string(), exports_external.unknown()).optional() }).strict();
+  imagePromptOperation = { guidance: exports_external.string().max(400).optional(), edits: imageOperationEdits.optional(), pinnedClauses: exports_external.array(exports_external.string().trim().min(1).max(300)).max(8).optional() };
+  RewriteImagePromptRequestSchema = exports_external.object({ type: exports_external.enum(["vn_regenerate_image_prompt", "vn_enrich_image_prompt"]), ...imageOperationScope, requestId: exports_external.string().min(1).max(100), ...imagePromptOperation }).strict();
+  ManualLightingSchema = exports_external.object({
+    timeOfDay: exports_external.string().trim().max(64).optional(),
+    keyLightDirection: exports_external.enum(["left", "right", "backlit", "overhead", "ambient"]).optional(),
+    mood: exports_external.string().trim().max(64).optional()
+  }).strict();
+  PrepareImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_prepare_image"), ...imageOperationScope, jobId: exports_external.string().min(1).max(200), templateId: exports_external.string().min(1).max(100).optional(), ...imagePromptOperation, regeneratePrompt: exports_external.boolean().optional(), promptOperation: exports_external.enum(["rewrite", "enrich"]).optional(), reframe: exports_external.boolean().optional(), relight: exports_external.boolean().optional(), lockContinuity: exports_external.boolean().optional(), styleId: exports_external.string().max(100).optional(), fitToModel: exports_external.boolean().optional(), model: exports_external.string().max(200).optional(), connectionId: exports_external.string().max(200).optional(), quickGenerate: exports_external.boolean().optional(), manualCamera: exports_external.object({ shotSize: exports_external.string().optional(), angle: exports_external.string().optional(), lensFeel: exports_external.string().optional(), composition: exports_external.string().optional(), depth: exports_external.string().optional(), dialogueSafeArea: exports_external.enum(["auto", "always", "off"]).optional(), focalPoint: exports_external.object({ x: exports_external.number().min(0).max(100), y: exports_external.number().min(0).max(100) }).strict().optional() }).strict().optional(), manualLighting: ManualLightingSchema.optional() }).strict();
+  RestorePreviousImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_restore_previous_image"), ...imageOperationScope, swipeId: exports_external.number().int().nonnegative().nullable(), revision: exports_external.number().int().nonnegative(), jobId: exports_external.string().min(1).max(200), versionId: exports_external.string().min(1).max(256) }).strict();
+  DeleteImageRequestSchema = exports_external.object({ type: exports_external.literal("vn_delete_image"), chatId: exports_external.string().min(1).max(256), imageId: exports_external.string().min(1).max(256).optional(), imageUrl: exports_external.string().min(1).max(2048).optional(), jobId: exports_external.string().min(1).max(256).optional() }).strict();
+  GenerateDocumentImageRequestSchema = exports_external.object({
+    type: exports_external.literal("vn_generate_document_image"),
+    chatId: exports_external.string().min(1).max(200),
+    messageId: exports_external.string().min(1).max(200),
+    swipeId: exports_external.number().int().nonnegative(),
+    sourceFingerprint: exports_external.string().min(1).max(200),
+    revision: exports_external.number().int().nonnegative(),
+    documentId: exports_external.string().min(1).max(200),
+    throughParagraphIndex: exports_external.number().int().nonnegative(),
+    requestId: exports_external.string().min(1).max(100),
+    forceRegenerate: exports_external.boolean().optional()
+  }).strict();
+  REFERENCE_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
+  REFERENCE_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/avif"]);
+});
+
 // src/backend/runtime/native-assets.ts
 function matchesAssetName(key, normalized, nameWithoutExt) {
   const normKey = key.trim().toLowerCase();
@@ -54658,11 +54669,11 @@ function assetNameMatches(assetName, candidateName) {
   const rest = asset.slice(name.length).replace(/^[0-9]+/, "");
   return rest === "" || rest.startsWith(" ");
 }
-function chooseCardAssetName(matches2, candidateName) {
-  if (matches2.length === 0)
+function chooseCardAssetName(matches, candidateName) {
+  if (matches.length === 0)
     return null;
   const name = normalizeAssetText(candidateName);
-  const scored = matches2.map((original) => {
+  const scored = matches.map((original) => {
     const norm = normalizeAssetText(stripExtension(original));
     const bareExact = norm === name;
     const bareNumbered = !bareExact && norm.replace(/[0-9]+$/, "") === name && /[0-9]$/.test(norm);
@@ -55050,7 +55061,7 @@ __export(exports_images, {
   applyAttireOverride: () => applyAttireOverride,
   CACHE_JOB_PROVIDER: () => CACHE_JOB_PROVIDER
 });
-function hash3(source) {
+function hash2(source) {
   let value = 2166136261;
   for (let index = 0;index < source.length; index += 1) {
     value = Math.imul(value ^ source.charCodeAt(index), 16777619) >>> 0;
@@ -55073,7 +55084,7 @@ function sceneForCue(plan, cue) {
 function portraitIdentityFingerprint(name, identity2, config2, provider) {
   if (!identity2.trim())
     return "";
-  return hash3(JSON.stringify(["identity-v2", characterAppearanceKey(name), identity2.split(",").map((tag) => tag.trim().toLowerCase()).filter(Boolean).sort(), provider, config2.imageConnectionId, config2.imageModel]));
+  return hash2(JSON.stringify(["identity-v2", characterAppearanceKey(name), identity2.split(",").map((tag) => tag.trim().toLowerCase()).filter(Boolean).sort(), provider, config2.imageConnectionId, config2.imageModel]));
 }
 function compatiblePortrait(portrait, fingerprint) {
   if (portrait?.source === "card")
@@ -55619,7 +55630,7 @@ function locationArtIdentityFor(config2, scene, cue, appearance, provider, profi
     return null;
   const identity2 = sceneImageIdentityFor(config2, scene, cue, appearance, provider, { source: "none" }, profileRevision, characterDNALibrary, storyDNASet);
   const environment = canonicalJson(scene.environment);
-  return { location: scene.environment.location, description: scene.environment.description.slice(0, 4000), requestFingerprint: sceneImageCacheKey(identity2), environmentFingerprint: `env:${hash3(environment)}${hashReverse(environment)}` };
+  return { location: scene.environment.location, description: scene.environment.description.slice(0, 4000), requestFingerprint: sceneImageCacheKey(identity2), environmentFingerprint: `env:${hash2(environment)}${hashReverse(environment)}` };
 }
 function castAppearanceIdentity(scene, cue, appearance) {
   if (cue.imageTemplate?.category !== "portrait" || cue.imageTemplate.subjectMode !== "one" || cue.resolvedIdentity !== undefined && !cue.resolvedIdentity.trim())
@@ -55628,7 +55639,7 @@ function castAppearanceIdentity(scene, cue, appearance) {
   if (!visual.characterName.trim() || !visual.baseIdentity.trim())
     return null;
   const text3 = canonicalJson([visual.characterId, visual.baseIdentity, visual.attire]);
-  return { character: visual.characterName, fingerprint: `look:${hash3(text3)}${hashReverse(text3)}` };
+  return { character: visual.characterName, fingerprint: `look:${hash2(text3)}${hashReverse(text3)}` };
 }
 function castArtIdentityFor(config2, scene, cue, appearance, provider, profileRevision, characterDNALibrary, storyDNASet) {
   if (!config2.persistentCastArt || provider === null || cue.imageTemplate?.category !== "portrait" || cue.imageTemplate.subjectMode !== "one")
@@ -55663,7 +55674,7 @@ function castArtIdentityFor(config2, scene, cue, appearance, provider, profileRe
   };
   const identity2 = sceneImageIdentityFor(config2, canonicalScene, canonicalCue, appearance, provider, { source: "none" }, profileRevision, characterDNALibrary, storyDNASet);
   const description = canonicalJson([visual.characterId, visual.baseIdentity, visual.attire]);
-  return { character: visual.characterName, description: visual.identity.slice(0, 4000), requestFingerprint: sceneImageCacheKey(identity2), appearanceFingerprint: `look:${hash3(description)}${hashReverse(description)}` };
+  return { character: visual.characterName, description: visual.identity.slice(0, 4000), requestFingerprint: sceneImageCacheKey(identity2), appearanceFingerprint: `look:${hash2(description)}${hashReverse(description)}` };
 }
 function locationArtJob(plan, cue, art, key) {
   const timestamp = new Date().toISOString();
@@ -55681,7 +55692,7 @@ function createAssetJobs(plan, config2, characterAppearance) {
       sceneId: cue.sceneId,
       sceneRevision: cue.sceneRevision,
       paragraphIndex: cue.paragraphIndex,
-      promptFingerprint: `${hash3(promptIdentity)}${hashReverse(promptIdentity)}`,
+      promptFingerprint: `${hash2(promptIdentity)}${hashReverse(promptIdentity)}`,
       provider: "pending",
       priority: index === 0 ? "visible" : index === 1 ? "next" : "background",
       status: "queued",
@@ -57537,6 +57548,527 @@ async function handleCharacterDnaRequest(spindle2, request, userId) {
 // src/backend/runtime/story-dna-workflow.ts
 init_story_dna();
 init_story_dna_store();
+
+// src/backend/runtime/document-art.ts
+init_zod();
+init_image_shot_spec();
+init_image_payload_sanitizer();
+init_image_prompt_profile_v2();
+init_style_dna();
+init_story_documents();
+init_story_dna_store();
+init_scene_image_cache();
+init_images();
+init_image_prompt_profile2();
+init_image_output_plan2();
+init_model_prompt_compiler();
+init_template_output();
+init_storage();
+init_visual_brief();
+var DocumentArtRecordSchema = exports_external.object({
+  id: exports_external.string().min(1).max(120),
+  documentId: exports_external.string().min(1).max(120),
+  documentName: exports_external.string().min(1).max(200),
+  contentHash: exports_external.string().min(8).max(80),
+  sceneSurfaceKey: exports_external.string().max(240),
+  imageId: exports_external.string().min(1).max(256),
+  createdAt: exports_external.string(),
+  lastUsedAt: exports_external.number().optional()
+}).strict();
+var DocumentArtLibrarySchema = exports_external.object({
+  version: exports_external.literal(1),
+  entries: exports_external.array(DocumentArtRecordSchema).max(64)
+}).strict();
+var runtimes4 = new WeakMap;
+function runtime3(api2) {
+  let r = runtimes4.get(api2);
+  if (!r) {
+    r = { tails: new Map };
+    runtimes4.set(api2, r);
+  }
+  return r;
+}
+function scope3(chatId, userId) {
+  return canonicalJson([userId ?? null, chatId]);
+}
+function storagePath(chatId) {
+  return `chats/${encodeURIComponent(chatId).replaceAll("%", "_")}/document-art.json`;
+}
+function storageOptions(userId) {
+  return userId ? { userId } : undefined;
+}
+async function transaction3(api2, chatId, userId, work) {
+  const r = runtime3(api2);
+  const key = scope3(chatId, userId);
+  const previous = r.tails.get(key) ?? Promise.resolve();
+  const current = previous.then(work, work);
+  const tail = current.then(() => {
+    return;
+  }, () => {
+    return;
+  });
+  r.tails.set(key, tail);
+  try {
+    return await current;
+  } finally {
+    if (r.tails.get(key) === tail)
+      r.tails.delete(key);
+  }
+}
+function stableHash64(source) {
+  let left = 2166136261;
+  let right = 2654435769;
+  for (let i = 0;i < source.length; i++) {
+    const c = source.charCodeAt(i);
+    left = Math.imul(left ^ c, 16777619) >>> 0;
+    right = Math.imul(right ^ c + i, 2246822507) >>> 0;
+  }
+  return `${left.toString(16).padStart(8, "0")}${right.toString(16).padStart(8, "0")}`;
+}
+async function loadDocumentArt(api2, chatId, userId) {
+  if (!api2.userStorage)
+    return { version: 1, entries: [] };
+  const raw = await api2.userStorage.getJson(storagePath(chatId), { fallback: null, ...storageOptions(userId) });
+  if (raw === null)
+    return { version: 1, entries: [] };
+  const parsed = DocumentArtLibrarySchema.safeParse(raw);
+  if (!parsed.success)
+    return { version: 1, entries: [] };
+  return parsed.data;
+}
+function activeSceneForParagraph(plan, paragraphIndex) {
+  let active = plan.scenes[0];
+  for (const scene of plan.scenes) {
+    if (scene.startParagraph <= paragraphIndex)
+      active = scene;
+  }
+  return active;
+}
+function inferRestingSurface(doc2, scene) {
+  const obsText = (doc2.observations ?? []).map((o) => `${o.evidence} ${o.summary ?? ""} ${o.material ?? ""}`).join(" ").toLowerCase();
+  const envDesc = `${scene?.environment.location ?? ""} ${scene?.environment.description ?? ""} ${scene?.environment.persistentElements.join(" ") ?? ""}`.toLowerCase();
+  const combined = `${obsText} ${envDesc}`;
+  if (/\b(?:flagstone|cobblestone|puddle|wet stone|stairwell|pavement|sidewalk)\b/.test(combined)) {
+    return /\bwet|damp|rain|puddle\b/.test(combined) ? "wet dark stone flagstones with thin rain puddles" : "weathered stone flagstones";
+  }
+  if (/\b(?:desk|table|counter|oak|mahogany|wooden)\b/.test(combined)) {
+    return "worn timber table surface";
+  }
+  if (/\b(?:wall|board|bulletin|post|door)\b/.test(combined) && doc2.kind === "poster") {
+    return "weathered notice board surface";
+  }
+  return scene?.environment.location ? `resting surface in ${scene.environment.location}` : "weathered surface";
+}
+var KIND_MATERIAL_HINTS = {
+  flyer: "creased printed paper handbill",
+  letter: "folded stationery sheet",
+  note: "small torn slip of handwritten paper",
+  journal: "open bound cloth-covered field journal page",
+  map: "creased parchment cartographic sheet",
+  poster: "broadside printed sheet",
+  receipt: "narrow thermal or ink-stamped paper receipt",
+  notice: "official stamped paper decree",
+  newspaper: "folded newsprint column sheet",
+  pamphlet: "creased trifold booklet page",
+  phone: "lit handheld smartphone screen showing readable message thread",
+  terminal: "glowing monospace CRT or rugged terminal screen"
+};
+function kindTypographyDirective(doc2) {
+  const lowerName = doc2.name.toLowerCase();
+  if (doc2.kind === "phone") {
+    return "Straight-on front-facing macro close-up of a lit smartphone screen filling 90% of the frame, crisp legible dark-mode chat/message UI bubbles, clear timestamps, sharp high-contrast typography";
+  }
+  if (doc2.kind === "terminal") {
+    return "Straight-on front-facing close-up of a glowing monospace terminal display filling 90% of the frame, crisp legible green or amber phosphor text rows, sharp scanlines";
+  }
+  if (doc2.kind === "journal" || /\b(?:ledger|register|account|logbook|book)\b/.test(lowerName)) {
+    return "Straight-on top-down flat-lay open double-page spread filling 90% of the frame, flat open pages with ruled ledger columns, handwritten ink entries, dates, and figures clearly legible edge-to-edge, never a closed book";
+  }
+  if (doc2.kind === "map" || /\b(?:timetable|schedule|chart|blueprint)\b/.test(lowerName)) {
+    return "Straight-on top-down flat-lay sheet filling 90% of the frame, crisp printed gridlines, clear legible labels, routes, times, and ink annotations";
+  }
+  if (doc2.kind === "notice" || doc2.kind === "poster" || doc2.kind === "flyer" || doc2.kind === "newspaper" || doc2.kind === "receipt" || doc2.kind === "pamphlet") {
+    return "Straight-on front-facing flat-lay printed document filling 90% of the frame, bold legible headline, clean printed body copy and stamps sharp from corner to corner";
+  }
+  return "Straight-on top-down flat-lay open stationery sheet filling 90% of the frame, crisp legible handwritten ink or printed lettering sharp across the entire page";
+}
+function buildDocumentPropPromptInput(params) {
+  const maxIndex = Math.max(0, Math.min(Math.max(0, params.plan.paragraphs.length - 1), params.throughParagraphIndex));
+  const [gatedDoc] = visibleStoryDocuments([params.doc], maxIndex);
+  if (!gatedDoc) {
+    throw new Error(`Document "${params.doc.name}" has not been revealed at paragraph ${maxIndex + 1}.`);
+  }
+  const scene = activeSceneForParagraph(params.plan, maxIndex);
+  const surface = inferRestingSurface(gatedDoc, scene);
+  const sceneSurfaceKey = [
+    scene?.environment.location ?? "",
+    surface,
+    scene?.environment.timeOfDay ?? "",
+    scene?.environment.weather ?? "",
+    scene?.environment.lighting ?? ""
+  ].join("|");
+  const physicalDetails = [
+    ...(gatedDoc.observations ?? []).flatMap((o) => [o.material, o.condition, o.summary, ...o.visualDetails ?? []]),
+    gatedDoc.visualDetails
+  ].filter((v) => Boolean(v && v.trim()));
+  const uniqueDetails = [...new Set(physicalDetails.map((s) => s.trim()))].slice(0, 8);
+  const visibleQuotes = gatedDoc.sections.map((s) => s.text.trim()).filter(Boolean).slice(0, 6).map((quote) => `"${quote.slice(0, 140)}"`);
+  const contentHash = stableHash64(canonicalJson({
+    id: gatedDoc.id,
+    kind: gatedDoc.kind,
+    name: gatedDoc.name,
+    visualDetails: uniqueDetails,
+    sections: visibleQuotes,
+    sceneSurfaceKey,
+    styleId: params.config.selectedSharedStyleId,
+    modelId: params.modelId ?? params.config.documentImageModel ?? params.config.imageModel ?? null,
+    v: 2
+  }));
+  const keyframe = deriveColorScriptKeyframe({
+    baseLighting: scene?.environment.lighting ?? null,
+    location: scene?.environment.location ?? null,
+    timeOfDay: scene?.environment.timeOfDay ?? null,
+    weather: scene?.environment.weather ?? null,
+    description: scene?.environment.description ?? null,
+    chromaticLutEnabled: params.config.chromaticLutEnabled !== false
+  });
+  const framingDirective = kindTypographyDirective(gatedDoc);
+  const textContentDirective = visibleQuotes.length ? `Exact legible text clearly visible on the surface: ${visibleQuotes.join(" | ")}` : `Legible in-universe ${gatedDoc.name} layout with crisp readable headings, lines, and entries matching its format`;
+  const propSubject = [
+    framingDirective,
+    `Subject: ${gatedDoc.name} (${KIND_MATERIAL_HINTS[gatedDoc.kind]})`,
+    uniqueDetails.length ? `Physical details: ${uniqueDetails.join(", ")}` : "",
+    textContentDirective
+  ].filter(Boolean).join(". ");
+  const brief = {
+    scene: sanitizeVisualNarrativeDescription([
+      `Flat-lay inspection surface (${surface}) barely visible at the outer edges`,
+      "zero people, no hands obstructing text, razor-sharp focus from corner to corner"
+    ].join(", ")),
+    subjects: "",
+    action: propSubject,
+    composition: "Straight-on orthographic 90-degree flat-lay close-up filling 90% of the frame, deep focus, zero tilt or blur",
+    lighting: keyframe.lighting || scene?.environment.lighting || "even clear directional reading light with crisp contrast on text",
+    subjectMode: "none",
+    framing: "close-up",
+    referencePolicy: "none",
+    sources: [`storyDocument:${gatedDoc.id}`],
+    conflicts: []
+  };
+  const shotSpec = createDefaultShotSpec({
+    intent: "detail",
+    output: {
+      requestedRatio: "4:3",
+      actualRatio: "4:3",
+      orientation: "landscape"
+    },
+    camera: {
+      shotSize: "macro",
+      angle: "overhead",
+      lens: "macro",
+      depthOfField: "deep",
+      focusTarget: gatedDoc.name
+    },
+    composition: {
+      mode: "centered",
+      subjectPlacements: [{ subject: gatedDoc.name, depth: "foreground", scale: "dominant" }],
+      stagingNote: "Straight-on readable flat-lay document view with sharp legible typography, zero people or hands."
+    },
+    source: "deterministic-fallback"
+  });
+  const effectiveModel = params.modelId?.trim() || params.config.documentImageModel?.trim() || params.config.imageModel?.trim() || undefined;
+  const profile = params.profileV2 ?? resolveImagePromptProfileV2(null, effectiveModel);
+  const baseStyle = resolveStyleDNA(params.config, params.config.selectedSharedStyleId).styleDNA;
+  const docStyleDNA = {
+    ...baseStyle,
+    rendering: ["crisp high-resolution typography", "sharp flat-lay document clarity", "deep focus"],
+    avoidIntent: [...baseStyle.avoidIntent ?? [], "blurry text", "illegible scribbles", "shallow depth of field", "bokeh", "closed book"]
+  };
+  const outputPlan = resolveImageOutputPlan({
+    capabilities: profile.outputCapabilities,
+    parameters: {},
+    requestedRatio: "4:3",
+    source: profile.capabilitySource,
+    modelId: effectiveModel
+  });
+  const compiled = compileModelPrompt({
+    brief,
+    shotSpec,
+    styleDNA: docStyleDNA,
+    profile,
+    outputPlan,
+    detailLevel: "detailed",
+    modelId: effectiveModel
+  });
+  const docNegatives = "closed book, zoomed out, distant view, blurry text, illegible scribbles, shallow depth of field, bokeh, out of focus, hands covering text, person, human face, portrait";
+  const extraNegative = params.config.negativePrompt?.trim() ? `${compiled.negativePrompt ? `${compiled.negativePrompt}, ` : ""}${params.config.negativePrompt.trim()}, ${docNegatives}` : `${compiled.negativePrompt ? `${compiled.negativePrompt}, ` : ""}${docNegatives}`;
+  return {
+    document: gatedDoc,
+    contentHash,
+    sceneSurfaceKey,
+    prompt: compiled.prompt,
+    ...compiled.negativePrompt || profile.negativePolicy !== "positive-only" ? { negativePrompt: extraNegative } : {}
+  };
+}
+async function findCachedDocumentArt(api2, chatId, documentId, contentHash, userId) {
+  const library = await loadDocumentArt(api2, chatId, userId).catch(() => ({ version: 1, entries: [] }));
+  const hit = library.entries.find((e) => e.documentId === documentId && e.contentHash === contentHash);
+  if (!hit)
+    return null;
+  try {
+    const img = await api2.images.get(hit.imageId, userId);
+    if (!img)
+      return null;
+  } catch {
+    return null;
+  }
+  return {
+    documentId,
+    contentHash,
+    imageId: hit.imageId,
+    imageUrl: `/api/v1/images/${encodeURIComponent(hit.imageId)}`
+  };
+}
+async function listTurnDocumentAssets(api2, chatId, plan, throughParagraphIndex, userId) {
+  const docs = plan.storyDocuments ?? [];
+  if (!docs.length || !api2.userStorage)
+    return {};
+  const library = await loadDocumentArt(api2, chatId, userId).catch(() => ({ version: 1, entries: [] }));
+  if (!library.entries.length)
+    return {};
+  const config2 = await loadConfig(api2, userId).catch(() => null);
+  if (!config2)
+    return {};
+  const out = {};
+  const visible = visibleStoryDocuments(docs, throughParagraphIndex);
+  for (const doc2 of visible) {
+    try {
+      const built = buildDocumentPropPromptInput({ doc: doc2, plan, throughParagraphIndex, config: config2 });
+      const match = library.entries.find((e) => e.documentId === doc2.id && e.contentHash === built.contentHash);
+      if (!match)
+        continue;
+      const exists = await api2.images.get(match.imageId, userId).catch(() => null);
+      if (!exists)
+        continue;
+      out[doc2.id] = {
+        documentId: doc2.id,
+        contentHash: match.contentHash,
+        imageId: match.imageId,
+        imageUrl: `/api/v1/images/${encodeURIComponent(match.imageId)}`
+      };
+    } catch {}
+  }
+  return out;
+}
+async function generateDocumentPropArtwork(params) {
+  const { spindle: spindle2, chatId, plan, documentId, throughParagraphIndex, regenerate = false, userId } = params;
+  let targetDoc = (plan.storyDocuments ?? []).find((d) => d.id === documentId || d.name.toLowerCase() === documentId.toLowerCase());
+  if (!targetDoc) {
+    const storyDna = await loadStoryDNASet(spindle2, chatId, userId).catch(() => null);
+    const dnaDoc = storyDna?.documents ? Object.values(storyDna.documents).find((d) => d.id === documentId || d.name.toLowerCase() === documentId.toLowerCase()) : undefined;
+    if (dnaDoc) {
+      const mappedSections = (dnaDoc.sections ?? []).map((s, idx) => ({
+        paragraphIndex: typeof s.paragraphIndex === "number" ? s.paragraphIndex : idx,
+        start: 0,
+        end: s.text.length,
+        text: s.text
+      }));
+      const noteText = dnaDoc.customNotes?.trim();
+      targetDoc = {
+        id: dnaDoc.id,
+        name: dnaDoc.name,
+        kind: dnaDoc.kind || "note",
+        paragraphIndex: 0,
+        sections: mappedSections.length > 0 ? mappedSections : noteText ? [{ paragraphIndex: 0, start: 0, end: noteText.length, text: noteText }] : [],
+        ...dnaDoc.visualDetails ? { visualDetails: dnaDoc.visualDetails } : {}
+      };
+    }
+  }
+  if (!targetDoc) {
+    throw new Error(`Document "${documentId}" was not found in this turn or World Lens.`);
+  }
+  const config2 = await loadConfig(spindle2, userId);
+  const preferredConn = config2.documentImageConnectionId?.trim() || config2.imageConnectionId;
+  const { connectionId, workflowId } = splitConnectionSelection(preferredConn);
+  const selected = connectionId && typeof spindle2.imageGen?.getConnection === "function" ? await spindle2.imageGen.getConnection(connectionId, userId) : typeof spindle2.imageGen?.listConnections === "function" ? (await spindle2.imageGen.listConnections(userId)).find((entry) => entry.is_default) ?? undefined : undefined;
+  const effectiveConnectionId = connectionId || selected?.id;
+  const provider = selected?.provider?.trim().toLowerCase() ?? null;
+  const model = config2.documentImageModel?.trim() || config2.imageModel?.trim() || selected?.model || undefined;
+  const profileV2 = await loadImagePromptProfileV2(spindle2, config2, provider, model, {
+    ...config2.imageParameters,
+    ...workflowId ? { workflow_id: workflowId } : {}
+  });
+  const built = buildDocumentPropPromptInput({
+    doc: targetDoc,
+    plan,
+    throughParagraphIndex,
+    config: config2,
+    profileV2,
+    ...model ? { modelId: model } : {}
+  });
+  if (!regenerate) {
+    const cached2 = await findCachedDocumentArt(spindle2, chatId, targetDoc.id, built.contentHash, userId);
+    if (cached2)
+      return { ...cached2, cached: true };
+  }
+  if (!spindle2.imageGen || typeof spindle2.imageGen.generate !== "function") {
+    throw new Error("Image generation is unavailable for this connection.");
+  }
+  const mergedBaseParams = {
+    ...selected?.default_parameters ?? {},
+    ...config2.imageParameters,
+    ...workflowId ? { workflow_id: workflowId } : {}
+  };
+  const desiredRatio = config2.imageOutputAspectRatio !== "default" ? config2.imageOutputAspectRatio : provider === "openrouter" || provider === "nanogpt" || provider === "novelai" ? "4:3" : "default";
+  let shapedParams;
+  try {
+    shapedParams = globalOutputParameters(desiredRatio, provider, model, mergedBaseParams);
+  } catch {
+    shapedParams = mergedBaseParams;
+  }
+  const rawParams = providerOutputParameters(modelOutputParameters(provider, model, shapedParams));
+  const safeParams = sanitizeImagePayloadParameters(rawParams, provider ?? undefined, model);
+  const req = {
+    prompt: built.prompt,
+    ...built.negativePrompt && profileV2.negativePolicy !== "positive-only" ? { negativePrompt: built.negativePrompt } : {},
+    ...effectiveConnectionId ? { connection_id: effectiveConnectionId } : {},
+    ...model ? { model } : {},
+    parameters: safeParams,
+    owner_chat_id: chatId,
+    ...userId ? { userId } : {}
+  };
+  const generated = await spindle2.imageGen.generate(req);
+  if (!generated?.imageId) {
+    throw new Error("Document prop image generation finished without an image ID.");
+  }
+  const now2 = Date.now();
+  await transaction3(spindle2, chatId, userId, async () => {
+    if (!spindle2.userStorage)
+      return;
+    const library = await loadDocumentArt(spindle2, chatId, userId);
+    const filtered = library.entries.filter((e) => !(e.documentId === targetDoc.id && e.contentHash === built.contentHash));
+    filtered.push({
+      id: `docart-${targetDoc.id}-${built.contentHash.slice(0, 8)}`,
+      documentId: targetDoc.id,
+      documentName: targetDoc.name,
+      contentHash: built.contentHash,
+      sceneSurfaceKey: built.sceneSurfaceKey.slice(0, 240),
+      imageId: generated.imageId,
+      createdAt: new Date(now2).toISOString(),
+      lastUsedAt: now2
+    });
+    if (filtered.length > 64) {
+      filtered.sort((a, b) => (a.lastUsedAt ?? 0) - (b.lastUsedAt ?? 0));
+      filtered.splice(0, filtered.length - 64);
+    }
+    await spindle2.userStorage.setJson(storagePath(chatId), DocumentArtLibrarySchema.parse({ version: 1, entries: filtered }), storageOptions(userId));
+  }).catch(() => {});
+  return {
+    documentId: targetDoc.id,
+    contentHash: built.contentHash,
+    imageId: generated.imageId,
+    imageUrl: `/api/v1/images/${encodeURIComponent(generated.imageId)}`,
+    cached: false
+  };
+}
+async function generateItemPropArtwork(params) {
+  const { spindle: spindle2, chatId, itemId, userId } = params;
+  const storyDna = await loadStoryDNASet(spindle2, chatId, userId);
+  const item = storyDna.items[itemId] ?? Object.values(storyDna.items).find((i) => i.id === itemId || i.name.toLowerCase() === itemId.toLowerCase());
+  if (!item) {
+    throw new Error(`Item "${itemId}" was not found in World Lens.`);
+  }
+  if (!spindle2.imageGen || typeof spindle2.imageGen.generate !== "function") {
+    throw new Error("Image generation is unavailable for this connection.");
+  }
+  const config2 = await loadConfig(spindle2, userId);
+  const preferredConn = config2.documentImageConnectionId?.trim() || config2.imageConnectionId;
+  const { connectionId, workflowId } = splitConnectionSelection(preferredConn);
+  const selected = connectionId && typeof spindle2.imageGen?.getConnection === "function" ? await spindle2.imageGen.getConnection(connectionId, userId) : typeof spindle2.imageGen?.listConnections === "function" ? (await spindle2.imageGen.listConnections(userId)).find((entry) => entry.is_default) ?? undefined : undefined;
+  const effectiveConnectionId = connectionId || selected?.id;
+  const provider = selected?.provider?.trim().toLowerCase() ?? null;
+  const model = config2.documentImageModel?.trim() || config2.imageModel?.trim() || selected?.model || undefined;
+  const profileV2 = await loadImagePromptProfileV2(spindle2, config2, provider, model, {
+    ...config2.imageParameters,
+    ...workflowId ? { workflow_id: workflowId } : {}
+  });
+  const detailClauses = [
+    item.description,
+    item.itemType ? `type: ${item.itemType}` : "",
+    item.materials ? `materials: ${item.materials}` : "",
+    item.distinctiveFeatures?.length ? `distinctive features: ${item.distinctiveFeatures.join(", ")}` : "",
+    item.colors?.length ? `colors: ${item.colors.join(", ")}` : ""
+  ].filter(Boolean).join(". ");
+  const brief = {
+    scene: "Clean atmospheric studio-lit pedestal or dark neutral slate backdrop isolating the artifact, zero people or hands",
+    subjects: "",
+    action: `Centered hero close-up prop illustration of ${item.name}${detailClauses ? `: ${detailClauses}` : ""}. Intricate craft, dramatic rim lighting showcasing silhouette, textures, and elemental or magical effects`,
+    composition: "Centered studio artifact hero shot filling the frame with clean margins",
+    lighting: "Dramatic studio key light with subtle rim highlights on textures and materials",
+    subjectMode: "none",
+    framing: "close-up",
+    referencePolicy: "none",
+    sources: [`itemDna:${item.id}`],
+    conflicts: []
+  };
+  const shotSpec = createDefaultShotSpec({
+    intent: "detail",
+    output: { requestedRatio: "1:1", actualRatio: "1:1", orientation: "square" },
+    camera: { shotSize: "close-up", angle: "eye-level", lens: "macro", depthOfField: "shallow", focusTarget: item.name },
+    composition: {
+      mode: "centered",
+      subjectPlacements: [{ subject: item.name, depth: "foreground", scale: "dominant" }],
+      stagingNote: "Isolated centered artifact hero prop study, zero people or faces."
+    },
+    source: "deterministic-fallback"
+  });
+  const styleDNA = resolveStyleDNA(config2, config2.selectedSharedStyleId).styleDNA;
+  const outputPlan = resolveImageOutputPlan({
+    capabilities: profileV2.outputCapabilities,
+    parameters: {},
+    requestedRatio: "1:1",
+    source: profileV2.capabilitySource,
+    modelId: model
+  });
+  const compiled = compileModelPrompt({
+    brief,
+    shotSpec,
+    styleDNA,
+    profile: profileV2,
+    outputPlan,
+    detailLevel: "standard",
+    modelId: model
+  });
+  const mergedBaseParams = {
+    ...selected?.default_parameters ?? {},
+    ...config2.imageParameters,
+    ...workflowId ? { workflow_id: workflowId } : {}
+  };
+  let shapedParams;
+  try {
+    shapedParams = globalOutputParameters("1:1", provider, model, mergedBaseParams);
+  } catch {
+    shapedParams = mergedBaseParams;
+  }
+  const safeParams = sanitizeImagePayloadParameters(providerOutputParameters(modelOutputParameters(provider, model, shapedParams)), provider ?? undefined, model);
+  const neg = `${compiled.negativePrompt ? `${compiled.negativePrompt}, ` : ""}person, human, character portrait, hands holding, crowd`;
+  const generated = await spindle2.imageGen.generate({
+    prompt: compiled.prompt,
+    ...profileV2.negativePolicy !== "positive-only" ? { negativePrompt: neg } : {},
+    ...effectiveConnectionId ? { connection_id: effectiveConnectionId } : {},
+    ...model ? { model } : {},
+    parameters: safeParams,
+    owner_chat_id: chatId,
+    ...userId ? { userId } : {}
+  });
+  if (!generated?.imageId) {
+    throw new Error("Item prop image generation finished without an image ID.");
+  }
+  const referenceImageUrl = `/api/v1/images/${encodeURIComponent(generated.imageId)}`;
+  return saveItemDNA(spindle2, chatId, { ...item, referenceImageUrl, lastUpdated: Date.now() }, userId);
+}
+
+// src/backend/runtime/story-dna-workflow.ts
 init_story_dna_harvester();
 async function handleStoryDnaRequest(spindle2, rawRequest, userId) {
   const request = StoryDnaRequestSchema.parse(rawRequest);
@@ -57643,6 +58175,16 @@ async function handleStoryDnaRequest(spindle2, rawRequest, userId) {
       await reply(storyDna);
       return;
     }
+    if (request.action === "generate_item_art") {
+      const storyDna = await generateItemPropArtwork({
+        spindle: spindle2,
+        chatId: request.chatId,
+        itemId: request.itemId,
+        userId
+      });
+      await reply(storyDna);
+      return;
+    }
     if (request.action === "autofill_item") {
       const current = await loadStoryDNASet(spindle2, request.chatId, userId);
       const drafted = await autofillItemDNA(spindle2, {
@@ -57724,7 +58266,7 @@ class ImageRetryQueue {
   enqueue(requestId, jobIds, priorityJobIds) {
     if (this.cancelled || this.requests.has(requestId))
       return;
-    const additions = [...new Set(jobIds)].filter((id7) => id7 !== this.active && !this.jobs.includes(id7));
+    const additions = [...new Set(jobIds)].filter((id9) => id9 !== this.active && !this.jobs.includes(id9));
     if (additions.length === 0)
       return;
     if (this.jobs.length + additions.length + (this.active ? 1 : 0) > 24)
@@ -57732,9 +58274,9 @@ class ImageRetryQueue {
     if (this.requests.size >= 128)
       throw new Error("This retry session has reached its request limit. Reopen the reader.");
     this.requests.add(requestId);
-    const priorityMap = new Map((priorityJobIds ?? []).map((id7, idx) => [id7, idx]));
-    for (const id7 of additions) {
-      this.jobPriority.set(id7, priorityMap.has(id7) ? priorityMap.get(id7) : 1e6 + ++this.seq);
+    const priorityMap = new Map((priorityJobIds ?? []).map((id9, idx) => [id9, idx]));
+    for (const id9 of additions) {
+      this.jobPriority.set(id9, priorityMap.has(id9) ? priorityMap.get(id9) : 1e6 + ++this.seq);
     }
     this.jobs.push(...additions);
     this.jobs.sort((a, b) => (this.jobPriority.get(a) ?? Number.MAX_SAFE_INTEGER) - (this.jobPriority.get(b) ?? Number.MAX_SAFE_INTEGER));
@@ -57915,7 +58457,7 @@ function maskVolatileMacros(text3) {
   if (!source.includes("{{"))
     return { template: source, tokens: [], stableSelection: true };
   const tokens = [];
-  let output2 = "";
+  let output3 = "";
   let cursor = 0;
   while (cursor < source.length) {
     const start = source.indexOf("{{", cursor);
@@ -57925,16 +58467,16 @@ function maskVolatileMacros(text3) {
     if (end < 0)
       break;
     const token = source.slice(start, end);
-    output2 += source.slice(cursor, start);
+    output3 += source.slice(cursor, start);
     if (isSafePureSubtree(token)) {
-      output2 += `${MASK}${tokens.length}${MASK}`;
+      output3 += `${MASK}${tokens.length}${MASK}`;
       tokens.push(token);
     } else {
-      output2 += token;
+      output3 += token;
     }
     cursor = end;
   }
-  const template = output2 + source.slice(cursor);
+  const template = output3 + source.slice(cursor);
   const remainingNames = extractMacroNames(template);
   const unmaskedVolatile = remainingNames.some((name) => ALL_VOLATILE_MACROS.has(name));
   return { template, tokens, stableSelection: !unmaskedVolatile };
@@ -58005,28 +58547,28 @@ function stripMacroBlocks(text3) {
   for (const opener of stack)
     removals.push({ start: opener.start, end: opener.end });
   removals.sort((left, right) => left.start - right.start);
-  let output2 = "";
+  let output3 = "";
   let cursor = 0;
   for (const removal of removals) {
     if (removal.start < cursor)
       continue;
-    output2 += text3.slice(cursor, removal.start);
+    output3 += text3.slice(cursor, removal.start);
     cursor = removal.end;
   }
-  return output2 + text3.slice(cursor);
+  return output3 + text3.slice(cursor);
 }
 function stripResidualTokens(text3) {
   if (!hasMacroSyntax(text3))
     return text3;
-  let output2 = "";
+  let output3 = "";
   let cursor = 0;
   while (cursor < text3.length) {
     const start = text3.indexOf("{{", cursor);
     if (start < 0) {
-      output2 += text3.slice(cursor);
+      output3 += text3.slice(cursor);
       break;
     }
-    output2 += text3.slice(cursor, start);
+    output3 += text3.slice(cursor, start);
     const end = tokenEnd(text3, start);
     if (end < 0) {
       cursor = start + 2;
@@ -58034,40 +58576,40 @@ function stripResidualTokens(text3) {
     }
     const token = text3.slice(start, end);
     if (keepToken(token))
-      output2 += token;
+      output3 += token;
     cursor = end;
   }
-  return output2;
+  return output3;
 }
 function stripInlineTokens(text3) {
-  let output2 = text3;
+  let output3 = text3;
   for (let pass = 0;pass < 16; pass += 1) {
     let changed = false;
-    output2 = output2.replace(/\{\{[^{}]*\}\}/g, (token) => {
+    output3 = output3.replace(/\{\{[^{}]*\}\}/g, (token) => {
       if (keepToken(token))
         return token;
       changed = true;
       return "";
     });
     if (!changed)
-      return output2;
+      return output3;
   }
-  return output2;
+  return output3;
 }
 function cleanResolvedText(text3) {
-  let output2 = stripMacroBlocks(text3);
-  output2 = stripInlineTokens(output2);
-  output2 = stripResidualTokens(output2);
-  output2 = output2.replace(/\r\n?/g, `
+  let output3 = stripMacroBlocks(text3);
+  output3 = stripInlineTokens(output3);
+  output3 = stripResidualTokens(output3);
+  output3 = output3.replace(/\r\n?/g, `
 `).split(`
 `).filter((line2) => !PLACEHOLDER_LINE.test(line2)).map((line2) => line2.trimEnd()).join(`
 `).replace(/\n{3,}/g, `
 
 `).trim();
-  return output2;
+  return output3;
 }
-async function resolveMessageText(spindle2, chatId, content, userId) {
-  return (await resolveMessageIntake(spindle2, chatId, content, userId)).text;
+async function resolveMessageText(spindle2, chatId, content2, userId) {
+  return (await resolveMessageIntake(spindle2, chatId, content2, userId)).text;
 }
 async function hostResolve(spindle2, chatId, template, userId) {
   if (typeof spindle2.macros?.resolve !== "function")
@@ -58079,14 +58621,14 @@ async function hostResolve(spindle2, chatId, template, userId) {
     return null;
   }
 }
-async function resolveMessageIntake(spindle2, chatId, content, userId) {
-  if (!needsResolution(content))
-    return { text: content, selectionText: content, resolved: true, stableSelection: true };
-  if (!hasMacroSyntax(content)) {
-    const cleaned = cleanResolvedText(content);
+async function resolveMessageIntake(spindle2, chatId, content2, userId) {
+  if (!needsResolution(content2))
+    return { text: content2, selectionText: content2, resolved: true, stableSelection: true };
+  if (!hasMacroSyntax(content2)) {
+    const cleaned = cleanResolvedText(content2);
     return { text: cleaned, selectionText: cleaned, resolved: true, stableSelection: true };
   }
-  const masked = maskVolatileMacros(content);
+  const masked = maskVolatileMacros(content2);
   const hostText = await hostResolve(spindle2, chatId, masked.template, userId);
   const resolved = hostText !== null && !hasMacroBlocks(hostText);
   const base = hostText ?? masked.template;
@@ -58165,7 +58707,7 @@ function preserveReferenceLineage(previous, next) {
   return previous !== undefined && previous?.version !== 1 ? previous : next;
 }
 function referenceMessages(messages, targetId) {
-  const output2 = [];
+  const output3 = [];
   let size = 0;
   const ids = new Set;
   for (const raw of messages) {
@@ -58187,16 +58729,16 @@ function referenceMessages(messages, targetId) {
     if (macros.includes("{{") || macros.includes("}}"))
       return;
     size += m.content.length;
-    if (size > MAX_TEXT || output2.length >= MAX_PREFIX)
+    if (size > MAX_TEXT || output3.length >= MAX_PREFIX)
       return;
     ids.add(m.id);
-    output2.push({ id: m.id, content: m.content, name: typeof m.name === "string" ? m.name : "", role, is_user: role === "user" || m.is_user === true, swipe_id: swipe, parent_message_id: typeof m.parent_message_id === "string" ? m.parent_message_id : null, branch_id: typeof m.branch_id === "string" ? m.branch_id : null });
+    output3.push({ id: m.id, content: m.content, name: typeof m.name === "string" ? m.name : "", role, is_user: role === "user" || m.is_user === true, swipe_id: swipe, parent_message_id: typeof m.parent_message_id === "string" ? m.parent_message_id : null, branch_id: typeof m.branch_id === "string" ? m.branch_id : null });
     if (m.id === targetId)
-      return output2;
+      return output3;
   }
   return;
 }
-async function hash2(text3) {
+async function hash3(text3) {
   const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text3));
   return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
@@ -58223,7 +58765,7 @@ function paragraphDigest(paragraphs) {
   const cached2 = memoGet(paragraphMemo, key);
   if (cached2)
     return cached2;
-  const promise2 = hash2(serialized).catch((error61) => {
+  const promise2 = hash3(serialized).catch((error61) => {
     paragraphMemo.delete(key);
     throw error61;
   });
@@ -58231,7 +58773,7 @@ function paragraphDigest(paragraphs) {
   return promise2;
 }
 async function frames(messages, chatId, deadline = Number.POSITIVE_INFINITY) {
-  let prefix = await hash2(JSON.stringify([1, chatId])), replyNumber = 0;
+  let prefix = await hash3(JSON.stringify([1, chatId])), replyNumber = 0;
   const result = [];
   for (const [index, message] of messages.entries()) {
     if (Date.now() >= deadline)
@@ -58241,7 +58783,7 @@ async function frames(messages, chatId, deadline = Number.POSITIVE_INFINITY) {
     if (cached2 !== undefined)
       prefix = cached2;
     else {
-      prefix = await hash2(JSON.stringify([prefix, message]));
+      prefix = await hash3(JSON.stringify([prefix, message]));
       memoSet(prefixMemo, memoKey, prefix, PREFIX_MEMO_LIMIT);
     }
     if (!message.is_user && message.role !== "system")
@@ -58432,13 +58974,13 @@ async function scanCastContext(api2, chatId, userId, characterId2) {
   const position = await loadReadingPosition(api2, chatId, userId).catch(() => null);
   const referenceMessage = position ? messages.find((m) => m.id === position.key.assistantMessageId && String(m.swipe_id ?? 0) === String(position.key.swipeId ?? 0)) ?? latest : latest;
   if (referenceMessage) {
-    const path2 = turnPath(chatId, referenceMessage.id, referenceMessage.swipe_id);
-    const saved = await loadTurnRecord(api2, path2, userId).catch(() => {
+    const path3 = turnPath(chatId, referenceMessage.id, referenceMessage.swipe_id);
+    const saved = await loadTurnRecord(api2, path3, userId).catch(() => {
       referenceNotice = "Saved story references could not be read; tracker suggestions remain available.";
       return null;
     });
     if (saved && saved.plan.key.chatId === chatId && saved.plan.key.assistantMessageId === referenceMessage.id && String(saved.plan.key.swipeId ?? 0) === String(referenceMessage.swipe_id ?? 0) && (saved.source?.rawFingerprint ?? saved.plan.key.sourceFingerprint) === fingerprintForMessage(referenceMessage)) {
-      referenceScope = { path: path2, key: JSON.stringify(saved.plan.key), position: JSON.stringify(position) };
+      referenceScope = { path: path3, key: JSON.stringify(saved.plan.key), position: JSON.stringify(position) };
       const index = position && samePresentationTurn(position.key, saved.plan.key) ? position.paragraphIndex : 0;
       let presentation;
       try {
@@ -58475,7 +59017,7 @@ async function scanCastContext(api2, chatId, userId, characterId2) {
   for (const record4 of library.characters)
     if (record4.setup) {
       const s = record4.setup;
-      add(record4.name, s.appearance, s.aliases, "", "Saved setup", { appearance: s.appearance, aliases: s.aliases, outfits: s.outfits.map(({ id: id8, name, description }) => ({ id: id8, name, description })), defaultOutfitId: s.defaultOutfitId });
+      add(record4.name, s.appearance, s.aliases, "", "Saved setup", { appearance: s.appearance, aliases: s.aliases, outfits: s.outfits.map(({ id: id9, name, description }) => ({ id: id9, name, description })), defaultOutfitId: s.defaultOutfitId });
     }
   if (referenceScope) {
     const fresh = await loadTurnRecord(api2, referenceScope.path, userId).catch(() => null), currentPosition = await loadReadingPosition(api2, chatId, userId).catch(() => null);
@@ -58527,381 +59069,6 @@ class ContextSourceSession {
 
 // src/backend/runtime/controller.ts
 init_protocol();
-
-// src/backend/runtime/document-art.ts
-init_zod();
-init_image_shot_spec();
-init_image_payload_sanitizer();
-init_image_prompt_profile_v2();
-init_style_dna();
-init_story_documents();
-init_scene_image_cache();
-init_images();
-init_image_prompt_profile2();
-init_image_output_plan2();
-init_model_prompt_compiler();
-init_template_output();
-init_storage();
-init_visual_brief();
-var DocumentArtRecordSchema = exports_external.object({
-  id: exports_external.string().min(1).max(120),
-  documentId: exports_external.string().min(1).max(120),
-  documentName: exports_external.string().min(1).max(200),
-  contentHash: exports_external.string().min(8).max(80),
-  sceneSurfaceKey: exports_external.string().max(240),
-  imageId: exports_external.string().min(1).max(256),
-  createdAt: exports_external.string(),
-  lastUsedAt: exports_external.number().optional()
-}).strict();
-var DocumentArtLibrarySchema = exports_external.object({
-  version: exports_external.literal(1),
-  entries: exports_external.array(DocumentArtRecordSchema).max(64)
-}).strict();
-var runtimes4 = new WeakMap;
-function runtime3(api2) {
-  let r = runtimes4.get(api2);
-  if (!r) {
-    r = { tails: new Map };
-    runtimes4.set(api2, r);
-  }
-  return r;
-}
-function scope3(chatId, userId) {
-  return canonicalJson([userId ?? null, chatId]);
-}
-function storagePath(chatId) {
-  return `chats/${encodeURIComponent(chatId).replaceAll("%", "_")}/document-art.json`;
-}
-function storageOptions(userId) {
-  return userId ? { userId } : undefined;
-}
-async function transaction3(api2, chatId, userId, work) {
-  const r = runtime3(api2);
-  const key = scope3(chatId, userId);
-  const previous = r.tails.get(key) ?? Promise.resolve();
-  const current = previous.then(work, work);
-  const tail = current.then(() => {
-    return;
-  }, () => {
-    return;
-  });
-  r.tails.set(key, tail);
-  try {
-    return await current;
-  } finally {
-    if (r.tails.get(key) === tail)
-      r.tails.delete(key);
-  }
-}
-function stableHash64(source) {
-  let left = 2166136261;
-  let right = 2654435769;
-  for (let i = 0;i < source.length; i++) {
-    const c = source.charCodeAt(i);
-    left = Math.imul(left ^ c, 16777619) >>> 0;
-    right = Math.imul(right ^ c + i, 2246822507) >>> 0;
-  }
-  return `${left.toString(16).padStart(8, "0")}${right.toString(16).padStart(8, "0")}`;
-}
-async function loadDocumentArt(api2, chatId, userId) {
-  if (!api2.userStorage)
-    return { version: 1, entries: [] };
-  const raw = await api2.userStorage.getJson(storagePath(chatId), { fallback: null, ...storageOptions(userId) });
-  if (raw === null)
-    return { version: 1, entries: [] };
-  const parsed = DocumentArtLibrarySchema.safeParse(raw);
-  if (!parsed.success)
-    return { version: 1, entries: [] };
-  return parsed.data;
-}
-function activeSceneForParagraph(plan, paragraphIndex) {
-  let active = plan.scenes[0];
-  for (const scene of plan.scenes) {
-    if (scene.startParagraph <= paragraphIndex)
-      active = scene;
-  }
-  return active;
-}
-function inferRestingSurface(doc2, scene) {
-  const obsText = (doc2.observations ?? []).map((o) => `${o.evidence} ${o.summary ?? ""} ${o.material ?? ""}`).join(" ").toLowerCase();
-  const envDesc = `${scene?.environment.location ?? ""} ${scene?.environment.description ?? ""} ${scene?.environment.persistentElements.join(" ") ?? ""}`.toLowerCase();
-  const combined = `${obsText} ${envDesc}`;
-  if (/\b(?:flagstone|cobblestone|puddle|wet stone|stairwell|pavement|sidewalk)\b/.test(combined)) {
-    return /\bwet|damp|rain|puddle\b/.test(combined) ? "wet dark stone flagstones with thin rain puddles" : "weathered stone flagstones";
-  }
-  if (/\b(?:desk|table|counter|oak|mahogany|wooden)\b/.test(combined)) {
-    return "worn timber table surface";
-  }
-  if (/\b(?:wall|board|bulletin|post|door)\b/.test(combined) && doc2.kind === "poster") {
-    return "weathered notice board surface";
-  }
-  return scene?.environment.location ? `resting surface in ${scene.environment.location}` : "weathered surface";
-}
-var KIND_MATERIAL_HINTS = {
-  flyer: "creased printed paper handbill",
-  letter: "folded stationery sheet",
-  note: "small torn slip of handwritten paper",
-  journal: "open bound cloth-covered field journal page",
-  map: "creased parchment cartographic sheet",
-  poster: "broadside printed sheet",
-  receipt: "narrow thermal or ink-stamped paper receipt",
-  notice: "official stamped paper decree",
-  newspaper: "folded newsprint column sheet",
-  pamphlet: "creased trifold booklet page",
-  phone: "lit handheld smartphone screen showing readable message thread",
-  terminal: "glowing monospace CRT or rugged terminal screen"
-};
-function buildDocumentPropPromptInput(params) {
-  const maxIndex = Math.max(0, Math.min(params.plan.paragraphs.length - 1, params.throughParagraphIndex));
-  const [gatedDoc] = visibleStoryDocuments([params.doc], maxIndex);
-  if (!gatedDoc) {
-    throw new Error(`Document "${params.doc.name}" has not been revealed at paragraph ${maxIndex + 1}.`);
-  }
-  const scene = activeSceneForParagraph(params.plan, maxIndex);
-  const surface = inferRestingSurface(gatedDoc, scene);
-  const sceneSurfaceKey = [
-    scene?.environment.location ?? "",
-    surface,
-    scene?.environment.timeOfDay ?? "",
-    scene?.environment.weather ?? "",
-    scene?.environment.lighting ?? ""
-  ].join("|");
-  const physicalDetails = [
-    ...(gatedDoc.observations ?? []).flatMap((o) => [o.material, o.condition, o.summary, ...o.visualDetails ?? []]),
-    gatedDoc.visualDetails
-  ].filter((v) => Boolean(v && v.trim()));
-  const uniqueDetails = [...new Set(physicalDetails.map((s) => s.trim()))].slice(0, 8);
-  const visibleQuotes = gatedDoc.sections.map((s) => s.text.trim()).filter(Boolean).slice(0, 2).map((quote) => `"${quote.slice(0, 110)}"`);
-  const contentHash = stableHash64(canonicalJson({
-    id: gatedDoc.id,
-    kind: gatedDoc.kind,
-    name: gatedDoc.name,
-    visualDetails: uniqueDetails,
-    sections: visibleQuotes,
-    sceneSurfaceKey,
-    styleId: params.config.selectedSharedStyleId,
-    modelId: params.modelId ?? params.config.imageModel ?? null
-  }));
-  const keyframe = deriveColorScriptKeyframe({
-    baseLighting: scene?.environment.lighting ?? null,
-    location: scene?.environment.location ?? null,
-    timeOfDay: scene?.environment.timeOfDay ?? null,
-    weather: scene?.environment.weather ?? null,
-    description: scene?.environment.description ?? null,
-    chromaticLutEnabled: params.config.chromaticLutEnabled !== false
-  });
-  const propSubject = [
-    `Extreme close-up macro prop study of ${gatedDoc.name} (${KIND_MATERIAL_HINTS[gatedDoc.kind]})`,
-    uniqueDetails.length ? `physical details: ${uniqueDetails.join(", ")}` : "",
-    visibleQuotes.length ? `clearly visible legible ink lettering showing ${visibleQuotes.join(" and ")}` : "",
-    gatedDoc.kind !== "phone" && gatedDoc.kind !== "terminal" ? "tactile paper grain, ink bleed, realistic creases" : ""
-  ].filter(Boolean).join(", ");
-  const brief = {
-    scene: sanitizeVisualNarrativeDescription([
-      `Resting on ${surface}`,
-      scene?.environment.weather ? `ambient weather: ${scene.environment.weather}` : "",
-      "tightly cropped macro still-life object focus, no unmentioned characters or bystanders"
-    ].filter(Boolean).join(", ")),
-    subjects: "",
-    action: propSubject,
-    composition: "Overhead 45-degree macro angle filling frame cleanly with subtle edge breathing room, shallow depth of field isolating the document surface",
-    lighting: keyframe.lighting || scene?.environment.lighting || "moody directional ambient light",
-    subjectMode: "none",
-    framing: "close-up",
-    referencePolicy: "none",
-    sources: [`storyDocument:${gatedDoc.id}`],
-    conflicts: []
-  };
-  const shotSpec = createDefaultShotSpec({
-    intent: "detail",
-    output: {
-      requestedRatio: "4:3",
-      actualRatio: "4:3",
-      orientation: "landscape"
-    },
-    camera: {
-      shotSize: "macro",
-      angle: "overhead",
-      lens: "macro",
-      depthOfField: "shallow",
-      focusTarget: gatedDoc.name
-    },
-    composition: {
-      mode: "centered",
-      subjectPlacements: [{ subject: gatedDoc.name, depth: "foreground", scale: "dominant" }],
-      stagingNote: "Macro still-life inspection view of document prop, zero people or faces."
-    },
-    source: "deterministic-fallback"
-  });
-  const effectiveModel = params.modelId?.trim() || params.config.imageModel?.trim() || undefined;
-  const profile = params.profileV2 ?? resolveImagePromptProfileV2(null, effectiveModel);
-  const styleDNA = resolveStyleDNA(params.config, params.config.selectedSharedStyleId).styleDNA;
-  const outputPlan = resolveImageOutputPlan({
-    capabilities: profile.outputCapabilities,
-    parameters: {},
-    requestedRatio: "4:3",
-    source: profile.capabilitySource,
-    modelId: effectiveModel
-  });
-  const compiled = compileModelPrompt({
-    brief,
-    shotSpec,
-    styleDNA,
-    profile,
-    outputPlan,
-    detailLevel: "compact",
-    modelId: effectiveModel
-  });
-  const extraNegative = params.config.negativePrompt?.trim() ? `${compiled.negativePrompt ? `${compiled.negativePrompt}, ` : ""}${params.config.negativePrompt.trim()}, person, human face, portrait` : `${compiled.negativePrompt ? `${compiled.negativePrompt}, ` : ""}person, human face, portrait`;
-  return {
-    document: gatedDoc,
-    contentHash,
-    sceneSurfaceKey,
-    prompt: compiled.prompt,
-    ...compiled.negativePrompt ? { negativePrompt: extraNegative } : {}
-  };
-}
-async function findCachedDocumentArt(api2, chatId, documentId, contentHash, userId) {
-  const library = await loadDocumentArt(api2, chatId, userId).catch(() => ({ version: 1, entries: [] }));
-  const hit = library.entries.find((e) => e.documentId === documentId && e.contentHash === contentHash);
-  if (!hit)
-    return null;
-  try {
-    const img = await api2.images.get(hit.imageId, userId);
-    if (!img)
-      return null;
-  } catch {
-    return null;
-  }
-  return {
-    documentId,
-    contentHash,
-    imageId: hit.imageId,
-    imageUrl: `/api/v1/images/${encodeURIComponent(hit.imageId)}`
-  };
-}
-async function listTurnDocumentAssets(api2, chatId, plan, throughParagraphIndex, userId) {
-  const docs = plan.storyDocuments ?? [];
-  if (!docs.length || !api2.userStorage)
-    return {};
-  const library = await loadDocumentArt(api2, chatId, userId).catch(() => ({ version: 1, entries: [] }));
-  if (!library.entries.length)
-    return {};
-  const config2 = await loadConfig(api2, userId).catch(() => null);
-  if (!config2)
-    return {};
-  const out = {};
-  const visible = visibleStoryDocuments(docs, throughParagraphIndex);
-  for (const doc2 of visible) {
-    try {
-      const built = buildDocumentPropPromptInput({ doc: doc2, plan, throughParagraphIndex, config: config2 });
-      const match = library.entries.find((e) => e.documentId === doc2.id && e.contentHash === built.contentHash);
-      if (!match)
-        continue;
-      const exists = await api2.images.get(match.imageId, userId).catch(() => null);
-      if (!exists)
-        continue;
-      out[doc2.id] = {
-        documentId: doc2.id,
-        contentHash: match.contentHash,
-        imageId: match.imageId,
-        imageUrl: `/api/v1/images/${encodeURIComponent(match.imageId)}`
-      };
-    } catch {}
-  }
-  return out;
-}
-async function generateDocumentPropArtwork(params) {
-  const { spindle: spindle2, chatId, plan, documentId, throughParagraphIndex, regenerate = false, userId } = params;
-  const targetDoc = (plan.storyDocuments ?? []).find((d) => d.id === documentId || d.name.toLowerCase() === documentId.toLowerCase());
-  if (!targetDoc) {
-    throw new Error(`Document "${documentId}" was not found in this turn.`);
-  }
-  const config2 = await loadConfig(spindle2, userId);
-  const { connectionId, workflowId } = splitConnectionSelection(config2.imageConnectionId);
-  const selected = connectionId && typeof spindle2.imageGen?.getConnection === "function" ? await spindle2.imageGen.getConnection(connectionId, userId) : typeof spindle2.imageGen?.listConnections === "function" ? (await spindle2.imageGen.listConnections(userId)).find((entry) => entry.is_default) ?? undefined : undefined;
-  const effectiveConnectionId = connectionId || selected?.id;
-  const provider = selected?.provider?.trim().toLowerCase() ?? null;
-  const model = config2.imageModel?.trim() || selected?.model || undefined;
-  const profileV2 = await loadImagePromptProfileV2(spindle2, config2, provider, model, {
-    ...config2.imageParameters,
-    ...workflowId ? { workflow_id: workflowId } : {}
-  });
-  const built = buildDocumentPropPromptInput({
-    doc: targetDoc,
-    plan,
-    throughParagraphIndex,
-    config: config2,
-    profileV2,
-    ...model ? { modelId: model } : {}
-  });
-  if (!regenerate) {
-    const cached2 = await findCachedDocumentArt(spindle2, chatId, targetDoc.id, built.contentHash, userId);
-    if (cached2)
-      return { ...cached2, cached: true };
-  }
-  if (!spindle2.imageGen || typeof spindle2.imageGen.generate !== "function") {
-    throw new Error("Image generation is unavailable for this connection.");
-  }
-  const mergedBaseParams = {
-    ...selected?.default_parameters ?? {},
-    ...config2.imageParameters,
-    ...workflowId ? { workflow_id: workflowId } : {}
-  };
-  const desiredRatio = config2.imageOutputAspectRatio !== "default" ? config2.imageOutputAspectRatio : provider === "openrouter" || provider === "nanogpt" || provider === "novelai" ? "4:3" : "default";
-  let shapedParams;
-  try {
-    shapedParams = globalOutputParameters(desiredRatio, provider, model, mergedBaseParams);
-  } catch {
-    shapedParams = mergedBaseParams;
-  }
-  const rawParams = providerOutputParameters(modelOutputParameters(provider, model, shapedParams));
-  const safeParams = sanitizeImagePayloadParameters(rawParams, provider ?? undefined, model);
-  const req = {
-    prompt: built.prompt,
-    ...built.negativePrompt && profileV2.negativePolicy !== "positive-only" ? { negativePrompt: built.negativePrompt } : {},
-    ...effectiveConnectionId ? { connection_id: effectiveConnectionId } : {},
-    ...model ? { model } : {},
-    parameters: safeParams,
-    owner_chat_id: chatId,
-    ...userId ? { userId } : {}
-  };
-  const generated = await spindle2.imageGen.generate(req);
-  if (!generated?.imageId) {
-    throw new Error("Document prop image generation finished without an image ID.");
-  }
-  const now2 = Date.now();
-  await transaction3(spindle2, chatId, userId, async () => {
-    if (!spindle2.userStorage)
-      return;
-    const library = await loadDocumentArt(spindle2, chatId, userId);
-    const filtered = library.entries.filter((e) => !(e.documentId === targetDoc.id && e.contentHash === built.contentHash));
-    filtered.push({
-      id: `docart-${targetDoc.id}-${built.contentHash.slice(0, 8)}`,
-      documentId: targetDoc.id,
-      documentName: targetDoc.name,
-      contentHash: built.contentHash,
-      sceneSurfaceKey: built.sceneSurfaceKey.slice(0, 240),
-      imageId: generated.imageId,
-      createdAt: new Date(now2).toISOString(),
-      lastUsedAt: now2
-    });
-    if (filtered.length > 64) {
-      filtered.sort((a, b) => (a.lastUsedAt ?? 0) - (b.lastUsedAt ?? 0));
-      filtered.splice(0, filtered.length - 64);
-    }
-    await spindle2.userStorage.setJson(storagePath(chatId), DocumentArtLibrarySchema.parse({ version: 1, entries: filtered }), storageOptions(userId));
-  }).catch(() => {});
-  return {
-    documentId: targetDoc.id,
-    contentHash: built.contentHash,
-    imageId: generated.imageId,
-    imageUrl: `/api/v1/images/${encodeURIComponent(generated.imageId)}`,
-    cached: false
-  };
-}
-
-// src/backend/runtime/controller.ts
 init_entity_projection();
 init_template_output();
 

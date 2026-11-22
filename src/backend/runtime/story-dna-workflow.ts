@@ -23,6 +23,7 @@ import {
   mutateStoryDNASet,
 } from './story-dna-store.js';
 import { activeBranchSwipeTags, activeMessageSwipeMap } from './character-dna-workflow.js';
+import { generateItemPropArtwork } from './document-art.js';
 import {
   autofillItemDNA,
   autofillLocationDNA,
@@ -140,6 +141,16 @@ export async function handleStoryDnaRequest(
         set: current,
       });
       const storyDna = await saveLocationDNA(spindle, request.chatId, drafted, userId);
+      await reply(storyDna);
+      return;
+    }
+    if (request.action === 'generate_item_art') {
+      const storyDna = await generateItemPropArtwork({
+        spindle,
+        chatId: request.chatId,
+        itemId: request.itemId,
+        userId,
+      });
       await reply(storyDna);
       return;
     }

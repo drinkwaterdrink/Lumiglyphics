@@ -512,6 +512,13 @@ export const StoryDnaRequestSchema = z.discriminatedUnion('action', [
   }),
   z.object({
     type: z.literal('vn_story_dna'),
+    action: z.literal('generate_item_art'),
+    chatId: z.string(),
+    requestId: z.string().optional(),
+    itemId: z.string(),
+  }),
+  z.object({
+    type: z.literal('vn_story_dna'),
     action: z.literal('restore_location'),
     chatId: z.string(),
     requestId: z.string().optional(),

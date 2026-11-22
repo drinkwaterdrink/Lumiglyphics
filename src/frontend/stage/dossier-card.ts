@@ -1,6 +1,8 @@
+import { FullscreenLightbox } from './fullscreen-lightbox.js';
 import { createDocumentReader, DOCUMENT_READER_CSS, populateDocumentArtStage, formatDocumentDisplayTitle, type DocumentReaderOptions } from './document-reader.js';
 import { APERTURE_ICONS } from '../theme/aperture-theme.js';
 import { html } from '../dom/html.js';
+import { renderEntityStockIcon } from './entity-icons.js';
 import type { StoryDocument, StoryDocumentKind } from '../../shared/story-documents.js';
 import type { LocationArtAction, LocationArtLibrary } from '../../shared/stage-assets.js';
 import { InteractionTray } from './interaction-tray.js';
@@ -2112,7 +2114,16 @@ export class DossierCard {
 
           const thumb = document.createElement('span');
           thumb.dataset.referenceThumb = 'object';
-          thumb.textContent = '📄';
+          const docImgUrl = this.documentOptionsResolver?.(doc.id)?.asset?.imageUrl;
+          if (docImgUrl) {
+            const img = document.createElement('img');
+            img.src = docImgUrl;
+            img.alt = '';
+            img.loading = 'lazy';
+            thumb.append(img);
+          } else {
+            thumb.innerHTML = renderEntityStockIcon('document', doc.kind);
+          }
 
           const body = document.createElement('span');
           body.dataset.referenceRowBody = '';
@@ -2142,14 +2153,16 @@ export class DossierCard {
 
           const thumb = document.createElement('span');
           thumb.dataset.referenceThumb = entity.kind;
-          if (vis?.imageUrl) {
+          const itemRefUrl = entity.kind === 'object' ? findMatchingItem(this.storyDna.items, entity.name)?.referenceImageUrl : undefined;
+          const entityThumbUrl = vis?.imageUrl ?? itemRefUrl;
+          if (entityThumbUrl) {
             const img = document.createElement('img');
-            img.src = vis.imageUrl;
+            img.src = entityThumbUrl;
             img.alt = '';
             img.loading = 'lazy';
             thumb.append(img);
           } else {
-            thumb.textContent = entity.kind === 'npc' ? entityInitials(entity.name) : entity.kind === 'place' ? '📍' : '✦';
+            thumb.innerHTML = renderEntityStockIcon(entity.kind, entity.name);
           }
 
           const body = document.createElement('span');
@@ -2509,6 +2522,22 @@ export class DossierCard {
         form.append(artBox);
       }
     } else {
+      if (existingItem?.referenceImageUrl) {
+        const artWrap = document.createElement('div');
+        artWrap.style.cssText = 'margin-bottom:10px;border-radius:10px;overflow:hidden;border:1px solid var(--vn-shell-border,rgba(255,255,255,0.16));background:rgba(0,0,0,0.28);display:flex;justify-content:center;';
+        const artImg = document.createElement('img');
+        artImg.src = existingItem.referenceImageUrl;
+        artImg.alt = existingItem.name;
+        artImg.style.cssText = 'max-width:100%;max-height:240px;object-fit:contain;cursor:zoom-in;display:block;';
+        artImg.onclick = () => FullscreenLightbox.open({ src: existingItem.referenceImageUrl!, title: existingItem.name, themeSource: this.host });
+        artWrap.append(artImg);
+        form.append(artWrap);
+      }
+      const genItemArtBtn = document.createElement('button');
+      genItemArtBtn.type = 'button';
+      genItemArtBtn.dataset.generateItemArt = '';
+      genItemArtBtn.textContent = existingItem?.referenceImageUrl ? '🔄 Regenerate Item Art' : '✨ Generate Item Art';
+      genItemArtBtn.style.cssText = 'min-height:44px;padding:8px 12px;border-radius:8px;border:1px solid color-mix(in srgb,var(--vn-shell-accent,#86dbb2) 55%,transparent);background:color-mix(in srgb,var(--vn-shell-accent,#86dbb2) 16%,transparent);color:inherit;font-size:12px;font-weight:700;cursor:pointer;';
       const aliasesIn = addField('aliases', 'Short Aliases (comma-separated)', (existingItem?.aliases ?? dossier.entity.aliases ?? []).join(', '));
       const typeIn = addField('itemType', 'Item Type / Category', existingItem?.itemType ?? '');
       const descIn = addField('description', 'Visual Description (Prompt Injection)', existingItem?.description ?? factVal('description', 'appearance', 'significance') ?? dossier.entity.name, true);
@@ -2544,6 +2573,22 @@ export class DossierCard {
       [aliasesIn, typeIn, descIn, matIn, featIn, colIn, heldIn, loreIn, notesIn].forEach(el => el.addEventListener('input', refreshPreview));
       refreshPreview();
 
+      saveBtn.before(genItemArtBtn);
+      genItemArtBtn.onclick = () => {
+        if (!existingItem) {
+          const saved = buildItem();
+          this.storyDnaRequester?.({ action: 'save_item', item: saved });
+          status.textContent = 'Saving item first, then click Generate Item Art.';
+          status.hidden = false;
+          return;
+        }
+        this.awaitingDnaSync = true;
+        genItemArtBtn.disabled = true;
+        genItemArtBtn.textContent = 'Generating Item Art…';
+        status.textContent = 'Rendering artifact close-up artwork…';
+        status.hidden = false;
+        this.storyDnaRequester?.({ action: 'generate_item_art', itemId: existingItem.id });
+      };
       autofillBtn.onclick = () => {
         this.awaitingDnaSync = true;
         status.textContent = 'Scanning story for artifact details...';

@@ -197,6 +197,11 @@ export class VnStage {
   private readonly dialogueText: HTMLElement;
   private readonly dialogueLive: HTMLElement | null;
   private readonly replyCostEl = document.createElement("div");
+  private activityTimer: ReturnType<typeof setTimeout> | undefined;
+  private composeToggle: HTMLButtonElement | null = null;
+  private composeBadge: HTMLElement | null = null;
+  private quickReplyDrawer: HTMLElement | null = null;
+  private quickReplyInput: HTMLTextAreaElement | null = null;
   private dossiers!: StageDossiers;
   readonly workspace: ReaderWorkspace;
   private readonly progress: HTMLElement;
@@ -431,10 +436,54 @@ export class VnStage {
     this.dossiers=new StageDossiers(this.root,this.dialogueText,queryRequired(this.themeRoot,"[data-vn-controls]"),()=>{this.toggleSkip(false);this.holdAutoPlay();},()=>this.checkAutoPlay(),prefs=>this.callbacks.onTooltipPreferencesChange?.(prefs),{
       current:()=>this.state.draft,
       apply:text=>this.storeReplyDraft(text),
-      focus:()=>{if(selectVnStageView(this.state).showStandardInput)this.input.focus();else{this.setActivity('Action saved for Your turn.','success');this.focus();}}
-    },onDocumentToggle,onDossierToggle,()=>this.state.displayedImage?.url??null);
+      focus:()=>{this.syncComposeUi();if(selectVnStageView(this.state).showStandardInput)this.input.focus();else{const p=this.state.draft.trim().slice(0,36);this.setActivity(p?`Drafted: "${p}…" (tap ✎ to edit/send)`:'Action saved to Reply Draft (tap ✎ to edit).','success');this.focus();}}
+    },onDocumentToggle,onDossierToggle,()=>null);
     this.dossiers.connectWorkspace(this.workspace, shell);
     this.dossiers.setLightboxOpener((src, title) => FullscreenLightbox.open({ src, title, subtitle: "Document Close-up Inspection", themeSource: this.root }));
+    this.composeToggle = this.themeRoot.querySelector<HTMLButtonElement>("[data-vn-compose-toggle]");
+    this.composeBadge = this.themeRoot.querySelector<HTMLElement>("[data-vn-compose-badge]");
+    this.quickReplyDrawer = this.themeRoot.querySelector<HTMLElement>("[data-vn-quick-reply]");
+    this.quickReplyInput = this.themeRoot.querySelector<HTMLTextAreaElement>("[data-vn-quick-reply-input]");
+    const quickReplyClose = this.themeRoot.querySelector<HTMLButtonElement>("[data-vn-quick-reply-close]");
+    const quickReplyClear = this.themeRoot.querySelector<HTMLButtonElement>("[data-vn-quick-reply-clear]");
+    const quickReplySend = this.themeRoot.querySelector<HTMLButtonElement>("[data-vn-quick-reply-send]");
+    if (this.composeToggle && this.quickReplyDrawer) {
+      this.composeToggle.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const nextOpen = this.quickReplyDrawer!.hidden;
+        this.quickReplyDrawer!.hidden = !nextOpen;
+        if (nextOpen && this.quickReplyInput) {
+          this.quickReplyInput.value = this.state.draft;
+          this.quickReplyInput.focus();
+        }
+      });
+    }
+    this.quickReplyDrawer?.addEventListener("click", (e) => e.stopPropagation());
+    this.quickReplyDrawer?.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        this.quickReplyDrawer!.hidden = true;
+      }
+    });
+    this.quickReplyInput?.addEventListener("input", () => {
+      this.storeReplyDraft(this.quickReplyInput!.value);
+      this.syncComposeUi();
+    });
+    quickReplyClose?.addEventListener("click", () => {
+      if (this.quickReplyDrawer) this.quickReplyDrawer.hidden = true;
+    });
+    quickReplyClear?.addEventListener("click", () => {
+      this.storeReplyDraft("");
+      if (this.quickReplyInput) this.quickReplyInput.value = "";
+      this.syncComposeUi();
+    });
+    quickReplySend?.addEventListener("click", () => {
+      const text = (this.quickReplyInput?.value ?? this.state.draft).trim();
+      if (!text) return;
+      if (this.quickReplyDrawer) this.quickReplyDrawer.hidden = true;
+      this.storeReplyDraft(text);
+      void this.submitDraft();
+    });
     this.bindEvents();
     this.updateControlButtons();
     this.render(null);
@@ -1167,6 +1216,9 @@ export class VnStage {
     this.resetDisplayEvaluation();
     this.replyCostEl.hidden = true;
     this.replyCostEl.textContent = "";
+    if (this.quickReplyDrawer) this.quickReplyDrawer.hidden = true;
+    if (this.activityTimer !== undefined) { clearTimeout(this.activityTimer); this.activityTimer = undefined; }
+    this.syncComposeUi();
     this.sceneLoad?.abort();this.sceneLoad=null;
     this.workspace.suspend();
     this.preparationPreview.clear();
@@ -1319,14 +1371,32 @@ export class VnStage {
     if(sceneSpan&&activePlace)sceneSpan.textContent=activePlace.trim().toUpperCase();
   }
 
+  private syncComposeUi(): void {
+    const hasDraft = Boolean(this.state.draft.trim());
+    if (this.composeBadge) this.composeBadge.hidden = !hasDraft;
+    if (this.quickReplyInput && document.activeElement !== this.quickReplyInput) {
+      this.quickReplyInput.value = this.state.draft;
+    }
+  }
+
   setActivity(
     label: string | null,
     kind: "loading" | "error" | "success" | "warning" | "reroll" | "prompt" = "loading",
   ): void {
+    if (this.activityTimer !== undefined) {
+      clearTimeout(this.activityTimer);
+      this.activityTimer = undefined;
+    }
     this.dispatch({
       type: "set-activity",
       activity: label ? { kind, label } : null,
     });
+    if (label && (kind === "success" || kind === "warning")) {
+      this.activityTimer = setTimeout(() => {
+        this.activityTimer = undefined;
+        this.setActivity(null);
+      }, 3600);
+    }
   }
 
   setAssetProgress(progress: VnAssetProgress | null): void {
@@ -2671,6 +2741,7 @@ export class VnStage {
     this.renderSceneHud();
     this.updateContinueButton();
 
+    this.syncComposeUi();
     this.renderStatus();
     this.renderInteraction(view.showChoices, view.showStandardInput, view.isBusy);
 
@@ -3122,10 +3193,12 @@ export class VnStage {
               : actKind === "reroll" || actKind === "prompt"
                 ? "reroll"
                 : "spinner";
+      const canDismiss = actKind === "success" || actKind === "warning" || actKind === "error";
       badges.push({
         kind: actKind === "prompt" ? "reroll" : actKind,
-        label: this.state.activity.label,
+        label: canDismiss ? `${this.state.activity.label}  ×` : this.state.activity.label,
         icon,
+        ...(canDismiss ? { interactive: true, action: () => this.setActivity(null) } : {}),
       });
     }
 
