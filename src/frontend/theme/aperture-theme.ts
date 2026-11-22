@@ -6,7 +6,8 @@
  */
 
 export const APERTURE_ICONS = {
-  menu: `<svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>`,
+  pyramid: `<svg viewBox="0 0 24 24" class="icon vn-pyramid-logo" aria-hidden="true"><path d="M12 2.4 16.4 10.2 12 11.8 7.6 10.2Z" fill="currentColor" fill-opacity="0.22" stroke="none"/><path d="M12 2.4 21.2 18.4 12 21.4 2.8 18.4Z"/><path d="M12 2.4v19"/><path d="M7.4 10.3 12 12l4.6-1.7"/><circle cx="12" cy="7.3" r="1.05" fill="currentColor" stroke="none"/></svg>`,
+  menu: `<svg viewBox="0 0 24 24" class="icon vn-pyramid-logo" aria-hidden="true"><path d="M12 2.4 16.4 10.2 12 11.8 7.6 10.2Z" fill="currentColor" fill-opacity="0.22" stroke="none"/><path d="M12 2.4 21.2 18.4 12 21.4 2.8 18.4Z"/><path d="M12 2.4v19"/><path d="M7.4 10.3 12 12l4.6-1.7"/><circle cx="12" cy="7.3" r="1.05" fill="currentColor" stroke="none"/></svg>`,
   close: `<svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>`,
   back: `<svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>`,
   arrow: `<svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>`,

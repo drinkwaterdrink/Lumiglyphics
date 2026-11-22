@@ -425,22 +425,39 @@ describe("Council Wave 6: Split-Horizon Lore Patch, One-Thumb Stage, Theme Bridg
     lb.close();
   });
 
-  test("#7 Revamped Reader View replaces quick-draft button with permanent inline message bar, renders circular speaker avatar, and toggles Panels menu", async () => {
+  test("#7 Revamped Reader View replaces quick-draft button with permanent inline message bar, renders circular speaker avatar, pyramid menu logo, word-highlight auto-read, and shared opacity", async () => {
     const mount = new FakeNode("div");
     const submitted: string[] = [];
+    const autoChanges: boolean[] = [];
     const stage = new VnStage({
       mount: mount as unknown as HTMLElement,
       textSpeed: 0,
+      onAutoPlayChange: (active) => {
+        autoChanges.push(active);
+      },
       onSubmit: async (text) => {
         submitted.push(text);
       },
     });
     try {
       const themeRoot = (stage as unknown as { themeRoot: FakeNode }).themeRoot;
+      const root = (stage as unknown as { root: FakeNode }).root;
       const shell = stage.panelMount as unknown as FakeNode;
 
-      // Quick draft button removed; permanent inline message composer present
+      // Quick draft button removed; duplicate bottom studio icon removed; permanent inline message composer present
       expect(themeRoot.querySelector("[data-vn-compose-toggle]")).toBeNull();
+      expect(themeRoot.querySelector("[data-vn-control='studio']")).toBeNull();
+      expect(shell.querySelector('[data-action="studio-toggle"]')).not.toBeNull();
+      const pyramidMenu = shell.querySelector("[data-aperture-open]")!;
+      expect(pyramidMenu.innerHTML).toContain("vn-pyramid-logo");
+
+      // Step nav (< and >) lives inside .reader-progress > .reader-step-nav inside [data-vn-dialogue]
+      const dialogue = themeRoot.querySelector("[data-vn-dialogue]")!;
+      const stepNav = dialogue.querySelector(".reader-progress .reader-step-nav")!;
+      expect(stepNav).not.toBeNull();
+      expect(stepNav.querySelector("[data-vn-control='previous']")).not.toBeNull();
+      expect(stepNav.querySelector("[data-vn-continue]")).not.toBeNull();
+
       const composer = themeRoot.querySelector("[data-vn-inline-composer]");
       const input = themeRoot.querySelector("[data-vn-inline-message]") as FakeNode & { value: string };
       const sendBtn = themeRoot.querySelector("[data-vn-inline-send]");
@@ -456,16 +473,47 @@ describe("Council Wave 6: Split-Horizon Lore Patch, One-Thumb Stage, Theme Bridg
       stage.setShowPanelsMenu(false);
       expect(panelsBtn.hidden).toBe(true);
 
+      // Opacity slider updates both root (dialogue + bottom bar) and shell (topbar)
+      stage.setReaderPreferences(normalizeReaderPreferences({ backgroundOpacity: 0.42 }));
+      expect((root.style as unknown as Record<string, string>)["--caption-opacity"]).toBe("0.42");
+      expect((shell.style as unknown as Record<string, string>)["--caption-opacity"]).toBe("0.42");
+
       // Speaker avatar populates when a speaker is present
       stage.loadTurn({
         mode: "standard",
         paragraphs: [
-          { id: "p1", text: "Hello there.", speaker: "Sable Thorne" },
+          { id: "fp:0", text: "Hello there friend.", speaker: "Sable Thorne" },
+          { id: "fp:1", text: "Second line.", speaker: "Sable Thorne" },
         ],
       });
       const avatar = themeRoot.querySelector("[data-vn-speaker-avatar]")!;
       expect(avatar.hidden).toBe(false);
       expect(avatar.textContent).toBe("S");
+
+      // Play button to the left of Hide Eye toggles Auto-Read & fires onAutoPlayChange
+      const playBtn = dialogue.querySelector("[data-action='caption-auto']")!;
+      playBtn.click();
+      expect(stage.isAutoPlaying()).toBe(true);
+      expect(autoChanges).toEqual([true]);
+      expect(playBtn.getAttribute("aria-pressed")).toBe("true");
+
+      // Speech progress highlights words and sets --vn-tts-progress
+      stage.setSpeechProgress({
+        cursor: {
+          chatId: "c1",
+          messageId: "m1",
+          sourceFingerprint: "fp",
+          paragraphIndex: 0,
+          swipeId: 0,
+          revision: 0,
+        },
+        elapsedSeconds: 1.5,
+        durationSeconds: 3.0,
+        timing: "none",
+      });
+      const dialogueText = themeRoot.querySelector("[data-vn-dialogue-text]")!;
+      expect(dialogueText.getAttribute("data-vn-speech-speaking")).toBe("true");
+      expect((dialogueText.style as unknown as Record<string, string>)["--vn-tts-progress"]).toBe("50%");
 
       // Submitting from the permanent inline composer sends reply
       input.value = "I step into the dorm.";

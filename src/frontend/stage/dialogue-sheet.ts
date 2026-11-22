@@ -266,6 +266,11 @@ export class DialogueSheet {
     this.root.dataset.vnReaderLayout = this.preferences.layout;
     this.root.style.setProperty("--vn-sheet-opacity", String(this.preferences.backgroundOpacity));
     this.root.style.setProperty("--caption-opacity", String(this.preferences.backgroundOpacity));
+    const shell = this.root.closest?.<HTMLElement>("[data-vn-shell]") ?? this.root.parentElement;
+    if (shell && typeof shell.style?.setProperty === "function") {
+      shell.style.setProperty("--vn-sheet-opacity", String(this.preferences.backgroundOpacity));
+      shell.style.setProperty("--caption-opacity", String(this.preferences.backgroundOpacity));
+    }
     this.tools.hidden = false;
     this.hide.hidden = false;
     this.resize();
@@ -281,6 +286,11 @@ export class DialogueSheet {
   isHidden(): boolean { return this.hidden; }
   setAutoPlayActive(active: boolean): void {
     this.auto.setAttribute("aria-pressed", String(active));
+    this.auto.title = active ? "Pause auto-read & TTS (A)" : "Auto-read & TTS (A)";
+    this.auto.setAttribute("aria-label", active ? "Pause auto-read and speech" : "Start auto-read and speech");
+    this.auto.innerHTML = active
+      ? '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" stroke="none"><rect x="6.5" y="5" width="3.8" height="14" rx="1.4"/><rect x="13.7" y="5" width="3.8" height="14" rx="1.4"/></svg>'
+      : '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg>';
     if (active) this.auto.dataset.active = "true";
     else delete this.auto.dataset.active;
   }

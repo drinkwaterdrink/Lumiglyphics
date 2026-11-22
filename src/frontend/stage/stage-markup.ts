@@ -120,36 +120,35 @@ export const THEME_MARKUP = `
           <small data-vn-step-left>1 / 1</small>
           <div data-vn-scrubber class="ticks" role="group" aria-label="Paragraph timeline"></div>
           <small data-vn-step-right hidden>100%</small>
+          <div class="reader-step-nav">
+            <button data-vn-control="previous" class="action icon-action nav-step-btn" type="button" aria-label="Previous paragraph" aria-keyshortcuts="ArrowLeft" title="Previous paragraph (Left Arrow)">
+              <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></span><span data-vn-control-label style="display:none">Previous</span>
+            </button>
+            <button
+              data-vn-continue
+              class="action advance nav-step-btn"
+              type="button"
+              aria-label="Continue"
+              aria-keyshortcuts="Enter Space ArrowRight"
+              title="Continue (Enter)"
+            ><span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span></button>
+          </div>
         </div>
       </div>
       <footer class="reader-actions">
         <nav data-vn-controls class="reader-action-row" aria-label="Reading controls">
-          <button data-vn-control="previous" class="action icon-action nav-step-btn" type="button" aria-label="Previous paragraph" aria-keyshortcuts="ArrowLeft" title="Previous paragraph (Left Arrow)">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></span><span data-vn-control-label style="display:none">Previous</span>
-          </button>
           <button data-vn-control="settings" class="action icon-action" type="button" aria-label="Extension settings" title="Settings">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg></span><span data-vn-control-label>Settings</span>
-          </button>
-          <button data-vn-control="studio" class="action icon-action" type="button" aria-label="Art Studio" title="Art Studio">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></span><span data-vn-control-label>Art</span>
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="7" r="2.6" fill="currentColor" fill-opacity="0.18"/><circle cx="15" cy="17" r="2.6" fill="currentColor" fill-opacity="0.18"/></svg></span><span data-vn-control-label>Settings</span>
           </button>
           <button data-vn-control="lens" class="action icon-action" type="button" aria-label="World Lens" title="World Lens">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9Z"/><path d="M5 3v4M3 5h4M19 17v4M17 19h4"/></svg></span><span data-vn-control-label>Lens</span>
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4.1" ry="9"/><path d="M3.6 9h16.8M3.6 15h16.8"/></svg></span><span data-vn-control-label>Lens</span>
           </button>
           <button data-vn-control="cast" class="action icon-action" type="button" aria-label="Open Cast and Character Folio" title="Cast & Characters">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><circle cx="16.5" cy="10" r="2.5"/><path d="M3.5 19c0-3 3-5 5.5-5s5.5 2 5.5 5M15 14c2.2 0 4.5 1.4 4.5 4.5"/></svg></span><span data-vn-control-label>Cast</span>
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9.2" cy="8" r="3.3"/><path d="M3.4 19.2c0-3.1 2.7-5.2 5.8-5.2s5.8 2.1 5.8 5.2"/><circle cx="16.8" cy="9.4" r="2.4"/><path d="M15.6 14.4c2.4.2 4.7 1.7 5 4.6"/></svg></span><span data-vn-control-label>Cast</span>
           </button>
           <button data-vn-control="log" class="action icon-action" type="button" aria-label="Open history" aria-keyshortcuts="L" title="History (L)">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg></span><span data-vn-control-label>History</span>
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6.2A2.2 2.2 0 0 1 4.2 4h5.3a2.5 2.5 0 0 1 2.5 2.5v13.3a2 2 0 0 0-2-2H4.2A2.2 2.2 0 0 1 2 15.6Z"/><path d="M22 6.2A2.2 2.2 0 0 0 19.8 4h-5.3A2.5 2.5 0 0 0 12 6.5v13.3a2 2 0 0 1 2-2h5.8a2.2 2.2 0 0 0 2.2-2.2Z"/></svg></span><span data-vn-control-label>History</span>
           </button>
-          <button
-            data-vn-continue
-            class="action advance nav-step-btn"
-            type="button"
-            aria-label="Continue"
-            aria-keyshortcuts="Enter Space ArrowRight"
-            title="Continue (Enter)"
-          ><span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span></button>
 
           <button data-vn-control="auto" class="vn-aux-control" type="button" aria-label="Auto play" aria-pressed="false" aria-keyshortcuts="A" title="Auto play (A)" style="display:none">
             <span data-vn-auto-ring aria-hidden="true">

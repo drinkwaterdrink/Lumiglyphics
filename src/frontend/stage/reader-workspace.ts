@@ -82,7 +82,7 @@ export class ReaderWorkspace {
       <button type="button" data-reader-destination="more" aria-label="More" aria-expanded="false">${readerIcon('more')}<span>More</span></button>
     </nav>
     <header data-vn-reader-header class="reader-topbar">
-      <button type="button" class="round-ghost" data-aperture-open aria-label="Open APERTURE navigation" title="Open APERTURE navigation">${APERTURE_ICONS.menu}</button>
+      <button type="button" class="round-ghost vn-pyramid-menu-btn" data-aperture-open aria-label="Open Lumiglyphics APERTURE navigation" title="Lumiglyphics Menu">${APERTURE_ICONS.pyramid}</button>
       <div class="reading-heading" style="padding-left:4px">
         <strong data-reader-caption-strong>Current Scene</strong>
         <small data-reader-caption-small data-reader-caption>Visual novel</small>

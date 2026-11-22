@@ -116,13 +116,13 @@ describe("reading UX", () => {
   test("Previous never leaves the reading toolbar, even at Your turn", () => {
     const s = create();
     s.loadTurn({ mode: "cyoa", paragraphs: paragraphs(2), choices: [{ id: "a", label: "A", value: "a" }] });
-    const controls = q(s, "[data-vn-controls]");
+    const stepNav = q(s, ".reader-step-nav");
     const previous = q(s, "[data-vn-control='previous']");
-    expect(previous.parentNode).toBe(controls);
+    expect(previous.parentNode).toBe(stepNav);
     advance(s);
     advance(s);
     expect(s.getState().phase).toBe("awaiting-input");
-    expect(previous.parentNode).toBe(controls);
+    expect(previous.parentNode).toBe(stepNav);
     expect(q(s, "[data-vn-interaction]").querySelector("[data-vn-control='previous']")).toBeNull();
     expect(previous.disabled).toBe(false);
   });

@@ -1893,6 +1893,8 @@ export class VisualNovelSettingsPanel {
       case "readerBackgroundOpacity": {
         const opacity = Number(target.value);
         this.host.style.setProperty("--caption-opacity", String(opacity));
+        const shell = this.host.closest?.<HTMLElement>("[data-vn-shell]");
+        if (shell) shell.style.setProperty("--caption-opacity", String(opacity));
         const out = this.root.querySelector<HTMLElement>("[data-opacity-output]");
         if (out) out.textContent = `${Math.round(opacity * 100)}%`;
         const mini = this.root.querySelector<HTMLElement>("[data-mini-caption-preview]");

@@ -566,11 +566,18 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
   const isSpeechHoldingAuto = (): boolean => {
     if (!speech) return false;
     const s = speech.getStatus();
-    return s.kind === "loading" || s.kind === "playing" || s.kind === "paused";
+    return s.kind === "loading" || s.kind === "playing";
   };
 
   const syncSpeechCursor = (view: TurnView | null, paragraphIndex: number): void => {
-    speech?.setCursor(view && view.status === "ready" ? speechCursorFor(view, paragraphIndex) : null);
+    const nextCursor = view && view.status === "ready" ? speechCursorFor(view, paragraphIndex) : null;
+    speech?.setCursor(nextCursor);
+    if (nextCursor && stage?.isAutoPlaying() && configRef.current?.speech.enabled) {
+      const kind = speech?.getStatus().kind;
+      if (kind === "idle" || kind === "paused") {
+        void speech?.playCurrent();
+      }
+    }
   };
   const onVisibilityChanged = (): void => {
     if (speech) speech.setVisible(!document.hidden);
@@ -623,6 +630,35 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     onTooltipPreferencesChange: tooltips => { ctx.sendToBackend({type:"vn_set_config",patch:{tooltips},chatId:chatId()}); },
     onReaderPreferencesChange: readerPreferences => {
       ctx.sendToBackend({ type: "vn_set_config", patch: { readerPreferences }, chatId: chatId() });
+    },
+    onAutoPlayChange: (autoActive) => {
+      if (!speech) return;
+      if (autoActive) {
+        if (configRef.current && !configRef.current.speech.enabled) {
+          const sp = configRef.current.speech;
+          const hasConfiguredVoices = Boolean(
+            sp.narrator ||
+            sp.characterDefault ||
+            Object.keys(sp.characters ?? {}).length > 0
+          );
+          if (hasConfiguredVoices) {
+            const nextSpeech = { ...sp, enabled: true };
+            configRef.current = { ...configRef.current, speech: nextSpeech };
+            speech.setSettings(nextSpeech);
+            speechDock?.setEnabled(true);
+            ctx.sendToBackend({ type: "vn_set_config", patch: { speech: nextSpeech }, chatId: chatId() ?? "" });
+          }
+        }
+        if (configRef.current?.speech.enabled) {
+          syncSpeechCursor(turn, stage.getState().currentParagraphIndex);
+          void speech.playCurrent();
+        }
+      } else {
+        const kind = speech.getStatus().kind;
+        if (kind === "playing" || kind === "loading") {
+          speech.pause();
+        }
+      }
     },
     onPrevious: (paragraphIndex) => {
       saveCursor(paragraphIndex);
@@ -721,16 +757,29 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
       void speech.playCurrent();
     },
   });
+  let wasSpeechPlaying = false;
   speech = new SpeechController({
     transport: createSpeechTransport(),
     onProgress:progress=>{const loaded=loadedReadingCursor.turn;const current=loaded&&!stage.isReadingUserParagraph()?speechCursorFor(loaded,stage.getState().currentParagraphIndex):null;const valid=progressForCursor(progress,current);stage.setSpeechProgress(valid);speechDock.setProgress(valid);},
     onStatus: (status) => {
       speechDock.setStatus(status);
       audioEngine.setSpeechDucking(status.kind === "playing");
-      if (status.kind === "loading" || status.kind === "playing" || status.kind === "paused") {
+      if (status.kind === "loading" || status.kind === "playing") {
+        wasSpeechPlaying = true;
+        stage.holdAutoPlay();
+      } else if (status.kind === "paused") {
+        wasSpeechPlaying = false;
         stage.holdAutoPlay();
       } else if (active) {
-        stage.checkAutoPlay();
+        const finishedSpeakingParagraph = wasSpeechPlaying && status.kind === "idle";
+        wasSpeechPlaying = false;
+        if (finishedSpeakingParagraph && stage.isAutoPlaying()) {
+          stage.advanceAfterSpeech();
+        } else {
+          stage.checkAutoPlay();
+        }
+      } else {
+        wasSpeechPlaying = false;
       }
     },
   });

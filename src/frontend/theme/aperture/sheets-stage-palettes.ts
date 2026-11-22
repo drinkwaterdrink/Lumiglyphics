@@ -1142,7 +1142,7 @@ ${VN_SHELL_PRESET_TOKENS_CSS}
 [data-vn-root][data-vn-dialogue-style="cinema-bar"] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]) {
   left: 0 !important;
   right: 0 !important;
-  bottom: calc(96px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
+  bottom: calc(66px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
   border-radius: 0 !important;
   border-left: 0 !important;
   border-right: 0 !important;

@@ -23495,6 +23495,15 @@ class ParagraphReadAlong {
   target;
   paragraphId = "";
   index = -1;
+  cachedText = "";
+  words = [];
+  totalWeight = 0;
+  activeWordIndex = -1;
+  auraEl = null;
+  rafId = null;
+  lastAnchorTime = 0;
+  lastElapsed = 0;
+  lastDuration = 0;
   constructor(target) {
     this.target = target;
   }
@@ -23503,17 +23512,206 @@ class ParagraphReadAlong {
       this.clear();
     this.paragraphId = id3;
     this.index = index;
+    this.cachedText = "";
+    this.words = [];
+    this.totalWeight = 0;
+    this.activeWordIndex = -1;
   }
   update(progress) {
     const active = Boolean(progress && progress.cursor.paragraphIndex === this.index && this.paragraphId === `${progress.cursor.sourceFingerprint}:${this.index}`);
-    if (active)
-      this.target.dataset.vnSpeechSpeaking = "true";
-    else
+    if (!active || !progress) {
       this.clear();
-    return active;
+      return false;
+    }
+    this.target.dataset.vnSpeechSpeaking = "true";
+    this.ensureWordsIndexed();
+    const estimatedDuration = Math.max(2, (this.target.textContent?.length ?? 40) / 14.5);
+    const duration3 = progress.durationSeconds && progress.durationSeconds > 0 ? progress.durationSeconds : estimatedDuration;
+    const fraction = Math.max(0, Math.min(1, progress.elapsedSeconds / duration3));
+    this.lastElapsed = progress.elapsedSeconds;
+    this.lastDuration = duration3;
+    this.lastAnchorTime = typeof performance !== "undefined" ? performance.now() : Date.now();
+    this.applyWordFraction(fraction);
+    this.startInterpolationLoop();
+    return true;
+  }
+  setFraction(fraction) {
+    if (fraction === null || !Number.isFinite(fraction) || fraction < 0) {
+      if (this.target.dataset.vnSpeechSpeaking !== "true") {
+        this.clearVisualHighlights();
+      }
+      return;
+    }
+    this.stopInterpolationLoop();
+    this.target.dataset.vnAutoReading = "true";
+    this.ensureWordsIndexed();
+    this.applyWordFraction(Math.max(0, Math.min(1, fraction)));
   }
   clear() {
+    this.stopInterpolationLoop();
     delete this.target.dataset.vnSpeechSpeaking;
+    delete this.target.dataset.vnAutoReading;
+    delete this.target.dataset.vnSpeechWordIndex;
+    this.activeWordIndex = -1;
+    this.clearVisualHighlights();
+  }
+  startInterpolationLoop() {
+    if (this.rafId !== null || typeof requestAnimationFrame !== "function")
+      return;
+    const tick = () => {
+      this.rafId = null;
+      if (this.target.dataset.vnSpeechSpeaking !== "true" || this.lastDuration <= 0)
+        return;
+      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+      const dt = Math.max(0, (now - this.lastAnchorTime) / 1000);
+      const interpolated = Math.min(1, (this.lastElapsed + dt) / this.lastDuration);
+      this.applyWordFraction(interpolated);
+      if (interpolated < 1) {
+        this.rafId = requestAnimationFrame(tick);
+      }
+    };
+    this.rafId = requestAnimationFrame(tick);
+  }
+  stopInterpolationLoop() {
+    if (this.rafId !== null && typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(this.rafId);
+    }
+    this.rafId = null;
+  }
+  ensureWordsIndexed() {
+    const raw = this.target.textContent ?? "";
+    if (raw === this.cachedText && this.words.length > 0)
+      return;
+    this.cachedText = raw;
+    this.words = [];
+    this.totalWeight = 0;
+    const doc2 = this.target.ownerDocument;
+    if (!doc2 || typeof doc2.createTreeWalker !== "function")
+      return;
+    const NodeFilterShowText = 4;
+    const walker = doc2.createTreeWalker(this.target, NodeFilterShowText);
+    const rawTokens = [];
+    let current = walker.nextNode();
+    while (current) {
+      const value = current.nodeValue ?? "";
+      const regex = /\S+/g;
+      let match;
+      while ((match = regex.exec(value)) !== null) {
+        const wordText = match[0];
+        const start = match.index;
+        const end = start + wordText.length;
+        const pauseBonus = /[.!?…]["'”’)]*$/.test(wordText) ? 5.5 : /[,;:—–]["'”’)]*$/.test(wordText) ? 2.8 : 0;
+        const weight = Math.max(1.5, wordText.length * 0.85 + pauseBonus);
+        rawTokens.push({ node: current, start, end, weight });
+        this.totalWeight += weight;
+      }
+      current = walker.nextNode();
+    }
+    if (this.totalWeight <= 0)
+      return;
+    let acc = 0;
+    this.words = rawTokens.map((tok, index) => {
+      const cumStart = acc / this.totalWeight;
+      acc += tok.weight;
+      const cumEnd = acc / this.totalWeight;
+      return {
+        node: tok.node,
+        start: tok.start,
+        end: tok.end,
+        cumStart,
+        cumEnd,
+        index
+      };
+    });
+  }
+  applyWordFraction(fraction) {
+    if (typeof this.target.style?.setProperty === "function") {
+      this.target.style.setProperty("--vn-tts-progress", `${Math.round(fraction * 1000) / 10}%`);
+    }
+    if (this.words.length === 0)
+      return;
+    let picked = this.words[this.words.length - 1];
+    for (const w of this.words) {
+      if (fraction <= w.cumEnd) {
+        picked = w;
+        break;
+      }
+    }
+    if (picked.index === this.activeWordIndex)
+      return;
+    this.activeWordIndex = picked.index;
+    this.target.dataset.vnSpeechWordIndex = String(picked.index);
+    const doc2 = this.target.ownerDocument;
+    if (!doc2 || typeof doc2.createRange !== "function")
+      return;
+    try {
+      const activeRange = doc2.createRange();
+      activeRange.setStart(picked.node, picked.start);
+      activeRange.setEnd(picked.node, picked.end);
+      const first = this.words[0];
+      const spokenRange = doc2.createRange();
+      spokenRange.setStart(first.node, first.start);
+      spokenRange.setEnd(picked.node, picked.end);
+      const cssAny = globalThis;
+      if (cssAny.CSS?.highlights && typeof cssAny.Highlight === "function") {
+        cssAny.CSS.highlights.set("vn-tts-word", new cssAny.Highlight(activeRange));
+        cssAny.CSS.highlights.set("vn-tts-spoken", new cssAny.Highlight(spokenRange));
+      }
+      this.updateWordAuraAndScroll(activeRange);
+    } catch {}
+  }
+  updateWordAuraAndScroll(activeRange) {
+    const scrollCopy = this.target.parentElement;
+    if (!scrollCopy || typeof activeRange.getBoundingClientRect !== "function" || typeof scrollCopy.getBoundingClientRect !== "function") {
+      return;
+    }
+    const rects = typeof activeRange.getClientRects === "function" ? activeRange.getClientRects() : null;
+    const wordRect = rects && rects.length > 0 ? rects[0] : activeRange.getBoundingClientRect();
+    const containerRect = scrollCopy.getBoundingClientRect();
+    if (!wordRect || !containerRect || wordRect.width <= 0 || wordRect.height <= 0 || containerRect.height <= 0) {
+      return;
+    }
+    if (!this.auraEl || this.auraEl.parentElement !== scrollCopy) {
+      this.auraEl?.remove();
+      const el = this.target.ownerDocument.createElement("span");
+      el.className = "vn-tts-word-aura";
+      el.setAttribute("data-vn-tts-aura", "");
+      el.setAttribute("aria-hidden", "true");
+      scrollCopy.append(el);
+      this.auraEl = el;
+    }
+    const relTop = wordRect.top - containerRect.top + scrollCopy.scrollTop;
+    const relLeft = wordRect.left - containerRect.left + scrollCopy.scrollLeft;
+    this.auraEl.hidden = false;
+    this.auraEl.style.transform = `translate3d(${Math.round(relLeft - 3)}px, ${Math.round(relTop - 1)}px, 0)`;
+    this.auraEl.style.width = `${Math.round(wordRect.width + 6)}px`;
+    this.auraEl.style.height = `${Math.round(wordRect.height + 2)}px`;
+    const visibleTop = wordRect.top - containerRect.top;
+    const visibleBottom = wordRect.bottom - containerRect.top;
+    const viewHeight = containerRect.height;
+    if (scrollCopy.scrollHeight > viewHeight + 4) {
+      if (visibleBottom > viewHeight * 0.68 || visibleTop < viewHeight * 0.14) {
+        const desiredTop = Math.max(0, relTop - viewHeight * 0.36);
+        if (typeof scrollCopy.scrollTo === "function") {
+          scrollCopy.scrollTo({ top: desiredTop, behavior: "smooth" });
+        } else {
+          scrollCopy.scrollTop = desiredTop;
+        }
+      }
+    }
+  }
+  clearVisualHighlights() {
+    if (typeof this.target.style?.removeProperty === "function") {
+      this.target.style.removeProperty("--vn-tts-progress");
+    }
+    const cssAny = globalThis;
+    if (cssAny.CSS?.highlights) {
+      cssAny.CSS.highlights.delete("vn-tts-word");
+      cssAny.CSS.highlights.delete("vn-tts-spoken");
+    }
+    if (this.auraEl) {
+      this.auraEl.hidden = true;
+    }
   }
 }
 
@@ -25830,7 +26028,7 @@ var APERTURE_CSS_ROUTE_BAR_READER = `/* ========================================
   border-radius: 0 !important;
 }
 
-/* Reader topbar — unified frosted pill bar */
+/* Reader topbar — unified frosted pill bar that follows --caption-opacity */
 .reader-topbar,
 [data-vn-reader-header].reader-topbar {
   position: absolute !important;
@@ -25838,20 +26036,21 @@ var APERTURE_CSS_ROUTE_BAR_READER = `/* ========================================
   left: 10px !important;
   right: 10px !important;
   height: auto !important;
-  min-height: 44px !important;
+  min-height: 46px !important;
   display: flex !important;
   flex-wrap: nowrap !important;
   align-items: center !important;
   justify-content: space-between !important;
   gap: 6px !important;
-  padding: 4px 10px !important;
+  padding: 4px 8px !important;
   border-radius: 999px !important;
-  background: color-mix(in srgb, var(--aperture-bottom-bar-bg, var(--vn-shell-panel, #0a1018)) 82%, rgba(8, 12, 20, 0.68)) !important;
-  -webkit-backdrop-filter: blur(18px) !important;
-  backdrop-filter: blur(18px) !important;
-  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, rgba(255, 255, 255, 0.14)) !important;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
+  background: color-mix(in srgb, var(--aperture-bottom-bar-bg, var(--vn-shell-panel, #0a1018)) calc(var(--caption-opacity, 0.84) * 100%), transparent) !important;
+  -webkit-backdrop-filter: blur(calc(var(--caption-opacity, 0.84) * 20px)) !important;
+  backdrop-filter: blur(calc(var(--caption-opacity, 0.84) * 20px)) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) calc(var(--caption-opacity, 0.84) * 26%), rgba(255, 255, 255, 0.1)) !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, calc(var(--caption-opacity, 0.84) * 0.55)), inset 0 1px 0 rgba(255, 255, 255, calc(var(--caption-opacity, 0.84) * 0.18)) !important;
   z-index: 35 !important;
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease !important;
 }
 [data-vn-reader-header]:has([data-vn-world-strip]:not([hidden])) .reading-heading {
   display: none !important;
@@ -26157,36 +26356,36 @@ aside[data-vn-workspace] {
   pointer-events: none !important;
 }
 
-/* Dock dialogue firmly to bottom of viewport above bottom action bar */
+/* Dock dialogue firmly above bottom action bar with a clean 8px gap */
 [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]),
 [data-vn-root] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]),
 [data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]),
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]) {
   position: absolute !important;
-  z-index: 22 !important;
-  left: 15px !important;
-  right: 15px !important;
+  z-index: 30 !important;
+  left: 10px !important;
+  right: 10px !important;
   top: auto !important;
-  bottom: calc(96px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
-  height: var(--caption-height, 142px);
-  min-height: 48px;
-  max-height: calc(100% - 160px) !important;
-  padding: 16px 14px 8px !important;
+  bottom: calc(66px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
+  height: var(--caption-height, 184px);
+  min-height: 76px;
+  max-height: calc(100% - 130px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+  padding: 12px 16px 11px !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 4px !important;
+  gap: 6px !important;
   overflow: hidden !important;
   pointer-events: auto !important;
   transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
 }
 
 :where([data-vn-root]) [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]) {
-  border: 1px solid var(--aperture-dialogue-border, var(--vn-dialogue-border, rgba(224, 238, 217, 0.32)));
-  border-radius: min(var(--vn-shell-radius, 16px), 18px);
-  background: var(--aperture-dialogue-bg, var(--vn-dialogue-bg, rgba(4, 13, 17, var(--caption-opacity, 0.72))));
-  -webkit-backdrop-filter: blur(var(--caption-blur, 10px));
-  backdrop-filter: blur(var(--caption-blur, 10px));
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 24%, var(--aperture-dialogue-border, var(--vn-dialogue-border, rgba(255, 255, 255, 0.16))));
+  border-radius: min(var(--vn-shell-radius, 20px), 22px);
+  background: var(--aperture-dialogue-bg, var(--vn-dialogue-bg, rgba(8, 14, 22, var(--caption-opacity, 0.84))));
+  -webkit-backdrop-filter: blur(calc(var(--caption-opacity, 0.84) * 20px));
+  backdrop-filter: blur(calc(var(--caption-opacity, 0.84) * 20px));
+  box-shadow: 0 20px 48px rgba(0, 0, 0, calc(var(--caption-opacity, 0.84) * 0.62)), 0 0 24px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 8%, transparent), inset 0 1px 0 rgba(255, 255, 255, calc(var(--caption-opacity, 0.84) * 0.2));
 }
 
 .caption-edge {
@@ -26482,6 +26681,41 @@ aside[data-vn-workspace] {
   color: var(--aperture-accent-contrast, #11241c) !important;
 }
 
+[data-vn-reader-header] .round-ghost {
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  color: color-mix(in srgb, var(--aperture-text, #f7f9f3) 86%, transparent) !important;
+}
+
+[data-vn-reader-header] .round-ghost:hover {
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 16%, transparent) !important;
+  border-color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 34%, transparent) !important;
+  color: var(--aperture-accent, #c4b5fd) !important;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 24%, transparent) !important;
+}
+
+[data-vn-reader-header] .round-ghost.vn-pyramid-menu-btn {
+  color: var(--aperture-accent, #c4b5fd) !important;
+  background: radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, transparent), transparent 72%) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 34%, rgba(255, 255, 255, 0.12)) !important;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 20%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+}
+
+[data-vn-reader-header] .round-ghost.vn-pyramid-menu-btn svg {
+  width: 18px !important;
+  height: 18px !important;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 48%, transparent));
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), filter 0.22s ease !important;
+}
+
+[data-vn-reader-header] .round-ghost.vn-pyramid-menu-btn:hover svg {
+  transform: translateY(-1px) scale(1.08);
+  filter: drop-shadow(0 0 8px var(--aperture-accent, #c4b5fd));
+}
+
 .round-ghost[hidden] {
   display: none !important;
 }
@@ -26506,23 +26740,24 @@ aside[data-vn-workspace] {
   inset: auto 10px calc(8px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) 10px !important;
   left: 10px !important;
   right: 10px !important;
-  height: 52px !important;
+  height: 50px !important;
   z-index: 40 !important;
   display: flex !important;
   flex-direction: row !important;
   align-items: center !important;
   justify-content: space-between !important;
-  gap: 8px !important;
-  padding: 0 7px 0 10px !important;
+  gap: 10px !important;
+  padding: 0 6px 0 12px !important;
   margin: 0 !important;
   border-radius: 999px !important;
   pointer-events: auto !important;
-  background: color-mix(in srgb, var(--aperture-bottom-bar-bg, var(--vn-shell-panel, #0b1018)) 88%, rgba(8, 12, 20, 0.78)) !important;
-  -webkit-backdrop-filter: blur(18px) !important;
-  backdrop-filter: blur(18px) !important;
-  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, rgba(255, 255, 255, 0.14)) !important;
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.56), 0 0 20px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 6%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
+  background: color-mix(in srgb, var(--aperture-bottom-bar-bg, var(--vn-shell-panel, #0b1018)) calc(var(--caption-opacity, 0.84) * 100%), transparent) !important;
+  -webkit-backdrop-filter: blur(calc(var(--caption-opacity, 0.84) * 20px)) !important;
+  backdrop-filter: blur(calc(var(--caption-opacity, 0.84) * 20px)) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) calc(var(--caption-opacity, 0.84) * 24%), rgba(255, 255, 255, 0.1)) !important;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, calc(var(--caption-opacity, 0.84) * 0.58)), 0 0 20px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 6%, transparent), inset 0 1px 0 rgba(255, 255, 255, calc(var(--caption-opacity, 0.84) * 0.18)) !important;
   box-sizing: border-box !important;
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease !important;
 }
 
 /* Hide legacy clean-restore unless active, and hide dialogue footer passage label */
@@ -26532,40 +26767,53 @@ aside[data-vn-workspace] {
   display: none !important;
 }
 
-/* Left icon navigation cluster inside bottom bar */
+/* Left icon navigation cluster inside bottom bar — seamless, no nested box */
 .reader-action-row,
-[data-vn-controls] {
+[data-vn-controls],
+[data-vn-root] [data-vn-controls],
+[data-vn-root][data-vn-preset] [data-vn-controls],
+[data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-controls],
+[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-controls] {
   position: static !important;
   transform: none !important;
   display: inline-flex !important;
   flex-direction: row !important;
   justify-content: flex-start !important;
   align-items: center !important;
-  gap: 2px !important;
+  gap: 4px !important;
   flex: 0 0 auto !important;
   width: auto !important;
   max-width: none !important;
   margin: 0 !important;
   padding: 0 !important;
   height: 100% !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
   box-sizing: border-box !important;
 }
 
-.reader-action-row > .action:not(.nav-step-btn) {
+.reader-action-row > .action:not(.nav-step-btn),
+[data-vn-root][data-vn-preset] [data-vn-controls] > [data-vn-control]:not(.nav-step-btn),
+[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-controls] > [data-vn-control]:not(.nav-step-btn) {
   position: relative !important;
   height: 38px !important;
   width: 38px !important;
-  min-width: 36px !important;
+  min-width: 38px !important;
   max-width: 40px !important;
   display: grid !important;
   place-items: center !important;
   border-radius: 50% !important;
   background: transparent !important;
   border: 1px solid transparent !important;
-  color: color-mix(in srgb, var(--aperture-text, #f1f5f9) 82%, transparent) !important;
+  box-shadow: none !important;
+  color: color-mix(in srgb, var(--aperture-text, #f1f5f9) 84%, transparent) !important;
   cursor: pointer !important;
   padding: 0 !important;
-  transition: color 0.16s ease, background-color 0.16s ease, border-color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease !important;
+  transition: color 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease !important;
 }
 
 .reader-action-row > .action:not(.nav-step-btn)::after {
@@ -27143,7 +27391,7 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
    APERTURE UNIFIED READER DIALOGUE & INTEGRATED CONTROLS
    ========================================================================= */
 
-/* Symmetrical, perfectly centered dialogue card */
+/* Symmetrical, perfectly centered dialogue card with 8px gap above bottom bar */
 [data-vn-dialogue],
 [data-vn-root] [data-vn-dialogue],
 [data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-dialogue],
@@ -27157,11 +27405,11 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   margin: 0 !important;
   box-sizing: border-box !important;
   top: auto !important;
-  bottom: calc(68px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
+  bottom: calc(66px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
   height: var(--caption-height, 184px);
   min-height: 76px;
-  max-height: calc(100% - 132px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
-  padding: 11px 15px 11px !important;
+  max-height: calc(100% - 130px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+  padding: 12px 16px 11px !important;
   display: flex !important;
   flex-direction: column !important;
   gap: 6px !important;
@@ -27174,10 +27422,10 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 :where([data-vn-root]) [data-vn-dialogue] {
   border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 24%, var(--aperture-dialogue-border, var(--vn-dialogue-border, rgba(255, 255, 255, 0.16))));
   border-radius: min(var(--vn-shell-radius, 20px), 22px);
-  background: var(--aperture-dialogue-bg, var(--vn-dialogue-bg, rgba(8, 18, 15, var(--caption-opacity, 0.86))));
+  background: var(--aperture-dialogue-bg, var(--vn-dialogue-bg, rgba(8, 14, 22, var(--caption-opacity, 0.84))));
   -webkit-backdrop-filter: blur(var(--caption-blur, 18px));
   backdrop-filter: blur(var(--caption-blur, 18px));
-  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.56), 0 0 24px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 8%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, calc(var(--caption-opacity, 0.84) * 0.62)), 0 0 24px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 8%, transparent), inset 0 1px 0 rgba(255, 255, 255, calc(var(--caption-opacity, 0.84) * 0.2));
 }
 
 /* Draggable Top Resize Grip */
@@ -27348,6 +27596,7 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 /* Scrollable Copy */
 .scroll-copy,
 [data-vn-dialogue] .scroll-copy {
+  position: relative !important;
   flex: 1 1 auto !important;
   min-height: 0 !important;
   max-height: 100% !important;
@@ -27360,8 +27609,45 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   scrollbar-color: color-mix(in srgb, var(--aperture-accent, #dcebad) 45%, transparent) transparent !important;
   -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 4px, #000 calc(100% - 8px), transparent 100%);
   mask-image: linear-gradient(180deg, transparent 0, #000 4px, #000 calc(100% - 8px), transparent 100%);
-  padding: 4px 2px 4px !important;
+  padding: 5px 4px 5px !important;
   margin: 0 !important;
+}
+
+/* Word-by-word TTS & Auto-Read highlight effect */
+::highlight(vn-tts-word) {
+  background-color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 32%, transparent);
+  color: #ffffff;
+  text-decoration: underline;
+  text-decoration-color: var(--aperture-accent, #c4b5fd);
+}
+
+::highlight(vn-tts-spoken) {
+  color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 35%, var(--aperture-text, #ffffff));
+}
+
+.vn-tts-word-aura,
+[data-vn-tts-aura] {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  pointer-events: none !important;
+  z-index: 2 !important;
+  border-radius: 6px !important;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--aperture-accent, #c4b5fd) 14%, transparent), color-mix(in srgb, var(--aperture-accent, #c4b5fd) 30%, transparent)) !important;
+  border-bottom: 2px solid var(--aperture-accent, #c4b5fd) !important;
+  box-shadow: 0 2px 14px var(--aperture-accent-glow, rgba(167, 139, 250, 0.52)), 0 0 6px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 38%, transparent) !important;
+  transition: transform 80ms cubic-bezier(0.22, 1, 0.36, 1), width 80ms ease, height 80ms ease !important;
+}
+
+.vn-tts-word-aura[hidden] {
+  display: none !important;
+}
+
+.caption-tool[data-action="caption-auto"][data-active="true"] {
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 26%, transparent) !important;
+  color: var(--aperture-accent, #c4b5fd) !important;
+  box-shadow: 0 0 12px var(--aperture-accent-glow, rgba(167, 139, 250, 0.48)) !important;
+  opacity: 1 !important;
 }
 
 [data-vn-dialogue-text],
@@ -27369,6 +27655,8 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 [data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-dialogue-text],
 [data-vn-root]:not([data-vn-adjustable-sheet="true"]) [data-vn-dialogue-text] {
+  position: relative !important;
+  z-index: 1 !important;
   overflow: visible !important;
   overflow-y: visible !important;
   overscroll-behavior: auto !important;
@@ -27378,8 +27666,8 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   touch-action: pan-y !important;
   user-select: text !important;
   font-size: var(--reader-font, 16px) !important;
-  line-height: 1.46;
-  letter-spacing: 0;
+  line-height: 1.5;
+  letter-spacing: 0.005em;
   word-spacing: normal;
   font-kerning: normal;
   text-align: left;
@@ -27392,18 +27680,19 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
-/* Integrated Progress Scrubber & Step Navigation Row inside Dialogue Card Footer */
+/* Integrated Luminous Constellation Progress Track & Step Navigation Row inside Dialogue Card Footer */
 .reader-progress {
   position: static !important;
   width: 100% !important;
   max-width: none !important;
-  height: 34px !important;
+  height: 36px !important;
   display: flex !important;
   align-items: center !important;
-  justify-content: flex-start !important;
+  justify-content: space-between !important;
   gap: 12px !important;
   margin: 2px 0 0 !important;
-  padding: 4px 80px 0 0 !important;
+  padding: 5px 0 0 !important;
+  border-top: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 10%, rgba(255, 255, 255, 0.05)) !important;
   box-sizing: border-box !important;
   flex: none !important;
   z-index: 45 !important;
@@ -27413,14 +27702,15 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 .reader-progress [data-vn-step-left] {
   padding: 4px 12px !important;
   border-radius: 999px !important;
-  background: color-mix(in srgb, var(--aperture-button-bg, #131a26) 76%, rgba(255, 255, 255, 0.05)) !important;
-  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, rgba(255, 255, 255, 0.14)) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  background: color-mix(in srgb, var(--aperture-button-bg, #131a26) 78%, rgba(255, 255, 255, 0.05)) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 24%, rgba(255, 255, 255, 0.14)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
   color: var(--aperture-text, #f1f5f9) !important;
-  opacity: 0.95 !important;
+  opacity: 0.96 !important;
   font-size: 11.5px !important;
-  font-weight: 650 !important;
-  letter-spacing: 0.03em !important;
+  font-weight: 700 !important;
+  font-variant-numeric: tabular-nums !important;
+  letter-spacing: 0.04em !important;
   white-space: nowrap !important;
   flex: none !important;
 }
@@ -27430,6 +27720,7 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 }
 
 .reader-progress [data-vn-scrubber] {
+  position: relative !important;
   flex: 1 1 auto !important;
   min-width: 48px !important;
   max-width: 260px !important;
@@ -27438,51 +27729,92 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   align-items: center !important;
   justify-content: center !important;
   gap: 5px !important;
-  overflow: hidden !important;
-  height: 22px !important;
+  overflow: visible !important;
+  height: 24px !important;
+  padding: 0 4px !important;
   margin: 0 auto !important;
 }
 
+.reader-progress [data-vn-scrubber]::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 50%;
+  height: 1.5px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--aperture-accent, #c4b5fd) 34%, transparent), rgba(255, 255, 255, 0.08));
+  pointer-events: none;
+  z-index: 0;
+}
+
 .reader-progress [data-vn-scrub-dot] {
+  position: relative !important;
+  z-index: 1 !important;
   flex: 1 1 0 !important;
   width: auto !important;
-  min-width: 5px !important;
+  min-width: 6px !important;
   max-width: 11px !important;
-  height: 5px !important;
-  min-height: 5px !important;
+  height: 5.5px !important;
+  min-height: 5.5px !important;
   border-radius: var(--vn-scrubber-radius, 999px) !important;
   padding: 0 !important;
   border: 0 !important;
-  background: color-mix(in srgb, var(--aperture-text, #ffffff) 22%, transparent) !important;
-  transition: flex 0.2s ease, background-color 0.18s ease, box-shadow 0.18s ease !important;
+  background: color-mix(in srgb, var(--aperture-text, #ffffff) 22%, rgba(15, 23, 42, 0.7)) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35) !important;
+  transition: flex 0.24s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease !important;
+}
+
+.reader-progress [data-vn-scrub-dot]:hover:not(:disabled) {
+  transform: scaleY(1.3) !important;
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 75%, #ffffff) !important;
 }
 
 .reader-progress [data-vn-scrub-dot][data-read="true"] {
-  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 52%, transparent) !important;
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 56%, rgba(15, 23, 42, 0.4)) !important;
+}
+
+.reader-progress [data-vn-scrub-dot][data-has-cue="true"]:not([data-active="true"]) {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 62%, transparent), 0 0 6px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 28%, transparent) !important;
 }
 
 .reader-progress [data-vn-scrub-dot][data-active="true"] {
-  flex: 3 1 0 !important;
-  min-width: 20px !important;
-  max-width: 38px !important;
-  height: 6px !important;
-  background: linear-gradient(90deg, var(--aperture-accent, #a78bfa), color-mix(in srgb, var(--aperture-accent, #a78bfa) 68%, #ffffff)) !important;
-  box-shadow: 0 0 12px var(--aperture-accent-glow, rgba(167, 139, 250, 0.72)), 0 0 4px rgba(255, 255, 255, 0.55) !important;
+  flex: 3.4 1 0 !important;
+  min-width: 24px !important;
+  max-width: 42px !important;
+  height: 6.5px !important;
+  background: linear-gradient(90deg, var(--aperture-accent, #a78bfa), color-mix(in srgb, var(--aperture-accent, #a78bfa) 62%, #ffffff)) !important;
+  box-shadow: 0 0 14px var(--aperture-accent-glow, rgba(167, 139, 250, 0.82)), 0 0 4px rgba(255, 255, 255, 0.7) !important;
 }
 
-/* Previous & Continue circular buttons paired on the right side of the dialogue card footer */
+/* Previous & Continue circular buttons paired cleanly on the right side of the dialogue card footer */
+.reader-step-nav {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex: none !important;
+}
+
+.reader-step-nav > [data-vn-control="previous"].nav-step-btn,
+.reader-step-nav > [data-vn-continue].nav-step-btn,
+[data-vn-root][data-vn-adjustable-sheet="true"] .reader-step-nav > [data-vn-continue],
 [data-vn-control="previous"].nav-step-btn,
-[data-vn-controls] > [data-vn-control="previous"].nav-step-btn,
 [data-vn-continue].nav-step-btn,
 [data-vn-continue].action.advance {
-  position: fixed !important;
+  position: relative !important;
+  inset: auto !important;
   left: auto !important;
-  bottom: calc(79px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
+  right: auto !important;
+  top: auto !important;
+  bottom: auto !important;
+  transform: none !important;
   width: 32px !important;
   height: 32px !important;
   min-width: 32px !important;
   min-height: 32px !important;
   padding: 0 !important;
+  margin: 0 !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -27494,16 +27826,6 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   cursor: pointer !important;
   z-index: 45 !important;
   transition: background 0.16s ease, transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease !important;
-}
-
-[data-vn-control="previous"].nav-step-btn,
-[data-vn-controls] > [data-vn-control="previous"].nav-step-btn {
-  right: 64px !important;
-}
-
-[data-vn-continue].nav-step-btn,
-[data-vn-continue].action.advance {
-  right: 24px !important;
 }
 
 [data-vn-control="previous"].nav-step-btn::after,
@@ -27524,7 +27846,8 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 }
 
 [data-vn-continue]::before,
-[data-vn-continue]::after {
+[data-vn-continue]::after,
+[data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-continue]::before {
   display: none !important;
 }
 
@@ -29511,7 +29834,7 @@ ${VN_SHELL_PRESET_TOKENS_CSS}
 [data-vn-root][data-vn-dialogue-style="cinema-bar"] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]) {
   left: 0 !important;
   right: 0 !important;
-  bottom: calc(96px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
+  bottom: calc(66px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
   border-radius: 0 !important;
   border-left: 0 !important;
   border-right: 0 !important;
@@ -29556,7 +29879,8 @@ ${VN_SHELL_PRESET_TOKENS_CSS}
 
 // src/frontend/theme/aperture-theme.ts
 var APERTURE_ICONS = {
-  menu: `<svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>`,
+  pyramid: `<svg viewBox="0 0 24 24" class="icon vn-pyramid-logo" aria-hidden="true"><path d="M12 2.4 16.4 10.2 12 11.8 7.6 10.2Z" fill="currentColor" fill-opacity="0.22" stroke="none"/><path d="M12 2.4 21.2 18.4 12 21.4 2.8 18.4Z"/><path d="M12 2.4v19"/><path d="M7.4 10.3 12 12l4.6-1.7"/><circle cx="12" cy="7.3" r="1.05" fill="currentColor" stroke="none"/></svg>`,
+  menu: `<svg viewBox="0 0 24 24" class="icon vn-pyramid-logo" aria-hidden="true"><path d="M12 2.4 16.4 10.2 12 11.8 7.6 10.2Z" fill="currentColor" fill-opacity="0.22" stroke="none"/><path d="M12 2.4 21.2 18.4 12 21.4 2.8 18.4Z"/><path d="M12 2.4v19"/><path d="M7.4 10.3 12 12l4.6-1.7"/><circle cx="12" cy="7.3" r="1.05" fill="currentColor" stroke="none"/></svg>`,
   close: `<svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>`,
   back: `<svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>`,
   arrow: `<svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>`,
@@ -29670,7 +29994,7 @@ class ReaderWorkspace {
       <button type="button" data-reader-destination="more" aria-label="More" aria-expanded="false">${readerIcon("more")}<span>More</span></button>
     </nav>
     <header data-vn-reader-header class="reader-topbar">
-      <button type="button" class="round-ghost" data-aperture-open aria-label="Open APERTURE navigation" title="Open APERTURE navigation">${APERTURE_ICONS.menu}</button>
+      <button type="button" class="round-ghost vn-pyramid-menu-btn" data-aperture-open aria-label="Open Lumiglyphics APERTURE navigation" title="Lumiglyphics Menu">${APERTURE_ICONS.pyramid}</button>
       <div class="reading-heading" style="padding-left:4px">
         <strong data-reader-caption-strong>Current Scene</strong>
         <small data-reader-caption-small data-reader-caption>Visual novel</small>
@@ -36972,6 +37296,11 @@ class DialogueSheet {
     this.root.dataset.vnReaderLayout = this.preferences.layout;
     this.root.style.setProperty("--vn-sheet-opacity", String(this.preferences.backgroundOpacity));
     this.root.style.setProperty("--caption-opacity", String(this.preferences.backgroundOpacity));
+    const shell = this.root.closest?.("[data-vn-shell]") ?? this.root.parentElement;
+    if (shell && typeof shell.style?.setProperty === "function") {
+      shell.style.setProperty("--vn-sheet-opacity", String(this.preferences.backgroundOpacity));
+      shell.style.setProperty("--caption-opacity", String(this.preferences.backgroundOpacity));
+    }
     this.tools.hidden = false;
     this.hide.hidden = false;
     this.resize();
@@ -36992,6 +37321,9 @@ class DialogueSheet {
   }
   setAutoPlayActive(active) {
     this.auto.setAttribute("aria-pressed", String(active));
+    this.auto.title = active ? "Pause auto-read & TTS (A)" : "Auto-read & TTS (A)";
+    this.auto.setAttribute("aria-label", active ? "Pause auto-read and speech" : "Start auto-read and speech");
+    this.auto.innerHTML = active ? '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" stroke="none"><rect x="6.5" y="5" width="3.8" height="14" rx="1.4"/><rect x="13.7" y="5" width="3.8" height="14" rx="1.4"/></svg>' : '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg>';
     if (active)
       this.auto.dataset.active = "true";
     else
@@ -45703,36 +46035,35 @@ var THEME_MARKUP = `
           <small data-vn-step-left>1 / 1</small>
           <div data-vn-scrubber class="ticks" role="group" aria-label="Paragraph timeline"></div>
           <small data-vn-step-right hidden>100%</small>
+          <div class="reader-step-nav">
+            <button data-vn-control="previous" class="action icon-action nav-step-btn" type="button" aria-label="Previous paragraph" aria-keyshortcuts="ArrowLeft" title="Previous paragraph (Left Arrow)">
+              <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></span><span data-vn-control-label style="display:none">Previous</span>
+            </button>
+            <button
+              data-vn-continue
+              class="action advance nav-step-btn"
+              type="button"
+              aria-label="Continue"
+              aria-keyshortcuts="Enter Space ArrowRight"
+              title="Continue (Enter)"
+            ><span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span></button>
+          </div>
         </div>
       </div>
       <footer class="reader-actions">
         <nav data-vn-controls class="reader-action-row" aria-label="Reading controls">
-          <button data-vn-control="previous" class="action icon-action nav-step-btn" type="button" aria-label="Previous paragraph" aria-keyshortcuts="ArrowLeft" title="Previous paragraph (Left Arrow)">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></span><span data-vn-control-label style="display:none">Previous</span>
-          </button>
           <button data-vn-control="settings" class="action icon-action" type="button" aria-label="Extension settings" title="Settings">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg></span><span data-vn-control-label>Settings</span>
-          </button>
-          <button data-vn-control="studio" class="action icon-action" type="button" aria-label="Art Studio" title="Art Studio">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></span><span data-vn-control-label>Art</span>
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="7" r="2.6" fill="currentColor" fill-opacity="0.18"/><circle cx="15" cy="17" r="2.6" fill="currentColor" fill-opacity="0.18"/></svg></span><span data-vn-control-label>Settings</span>
           </button>
           <button data-vn-control="lens" class="action icon-action" type="button" aria-label="World Lens" title="World Lens">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9Z"/><path d="M5 3v4M3 5h4M19 17v4M17 19h4"/></svg></span><span data-vn-control-label>Lens</span>
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4.1" ry="9"/><path d="M3.6 9h16.8M3.6 15h16.8"/></svg></span><span data-vn-control-label>Lens</span>
           </button>
           <button data-vn-control="cast" class="action icon-action" type="button" aria-label="Open Cast and Character Folio" title="Cast & Characters">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><circle cx="16.5" cy="10" r="2.5"/><path d="M3.5 19c0-3 3-5 5.5-5s5.5 2 5.5 5M15 14c2.2 0 4.5 1.4 4.5 4.5"/></svg></span><span data-vn-control-label>Cast</span>
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9.2" cy="8" r="3.3"/><path d="M3.4 19.2c0-3.1 2.7-5.2 5.8-5.2s5.8 2.1 5.8 5.2"/><circle cx="16.8" cy="9.4" r="2.4"/><path d="M15.6 14.4c2.4.2 4.7 1.7 5 4.6"/></svg></span><span data-vn-control-label>Cast</span>
           </button>
           <button data-vn-control="log" class="action icon-action" type="button" aria-label="Open history" aria-keyshortcuts="L" title="History (L)">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg></span><span data-vn-control-label>History</span>
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6.2A2.2 2.2 0 0 1 4.2 4h5.3a2.5 2.5 0 0 1 2.5 2.5v13.3a2 2 0 0 0-2-2H4.2A2.2 2.2 0 0 1 2 15.6Z"/><path d="M22 6.2A2.2 2.2 0 0 0 19.8 4h-5.3A2.5 2.5 0 0 0 12 6.5v13.3a2 2 0 0 1 2-2h5.8a2.2 2.2 0 0 0 2.2-2.2Z"/></svg></span><span data-vn-control-label>History</span>
           </button>
-          <button
-            data-vn-continue
-            class="action advance nav-step-btn"
-            type="button"
-            aria-label="Continue"
-            aria-keyshortcuts="Enter Space ArrowRight"
-            title="Continue (Enter)"
-          ><span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span></button>
 
           <button data-vn-control="auto" class="vn-aux-control" type="button" aria-label="Auto play" aria-pressed="false" aria-keyshortcuts="A" title="Auto play (A)" style="display:none">
             <span data-vn-auto-ring aria-hidden="true">
@@ -46022,6 +46353,7 @@ class VnStage {
   isTyping = false;
   typewriterTimer = null;
   autoPlayTimer = null;
+  autoReadAlongTimer = null;
   skipTimer = null;
   crossfadeTimer = null;
   currentDisplayedUrl = null;
@@ -46253,6 +46585,13 @@ class VnStage {
       };
       inlineComposer.addEventListener("submit", triggerInlineSubmit);
       inlineSend?.addEventListener("click", triggerInlineSubmit);
+    }
+    if (!this.dialogueSheet) {
+      this.dialogueSheet = new DialogueSheet(this.root, queryRequired(this.themeRoot, "[data-vn-dialogue]"), () => {
+        this.toggleAutoPlay(false);
+        this.toggleSkip(false);
+      }, (next) => this.callbacks.onReaderPreferencesChange?.(next), () => this.toggleAutoPlay());
+      this.dialogueSheet.setAutoPlayActive(this.isAutoPlay);
     }
     this.bindEvents();
     this.updateControlButtons();
@@ -46662,6 +47001,8 @@ class VnStage {
     if (typeof preferences.backgroundOpacity === "number") {
       this.root.style.setProperty("--vn-sheet-opacity", String(preferences.backgroundOpacity));
       this.root.style.setProperty("--caption-opacity", String(preferences.backgroundOpacity));
+      this.panelMount.style.setProperty("--vn-sheet-opacity", String(preferences.backgroundOpacity));
+      this.panelMount.style.setProperty("--caption-opacity", String(preferences.backgroundOpacity));
     }
     if (!this.dialogueSheet) {
       this.dialogueSheet = new DialogueSheet(this.root, queryRequired(this.themeRoot, "[data-vn-dialogue]"), () => {
@@ -46750,22 +47091,48 @@ class VnStage {
   getTextEffects() {
     return this.textEffectMode;
   }
+  isAutoPlaying() {
+    return this.isAutoPlay;
+  }
+  advanceAfterSpeech() {
+    if (this.destroyed || !this.isAutoPlay || this.isSkipping)
+      return;
+    if (this.isTyping) {
+      this.completeTypewriter();
+    }
+    this.clearAutoPlayTimer();
+    const view = selectVnStageView(this.state);
+    if (!view.canAdvance) {
+      this.toggleAutoPlay(false);
+      return;
+    }
+    this.startAutoCountdown(240);
+  }
   toggleAutoPlay(force) {
     if (this.destroyed)
       return;
     this.lastSkipStop = null;
-    this.isAutoPlay = force !== undefined ? force : !this.isAutoPlay;
+    const next = force !== undefined ? force : !this.isAutoPlay;
+    const changed = next !== this.isAutoPlay;
+    this.isAutoPlay = next;
     if (this.isAutoPlay) {
       this.isSkipping = false;
       this.clearSkipTimer();
       this.settleSceneCrossfade();
       this.updateControlButtons();
-      if (!this.isTyping) {
+      if (changed)
+        this.callbacks.onAutoPlayChange?.(true);
+      if (this.isTyping) {
+        this.completeTypewriter();
+      } else {
         this.onTextRenderFinished();
       }
     } else {
       this.clearAutoPlayTimer();
+      this.speechReadAlong.setFraction(null);
       this.updateControlButtons();
+      if (changed)
+        this.callbacks.onAutoPlayChange?.(false);
     }
   }
   toggleSkip(force) {
@@ -48658,6 +49025,10 @@ class VnStage {
       clearTimeout(this.autoPlayTimer);
       this.autoPlayTimer = null;
     }
+    if (this.autoReadAlongTimer !== null) {
+      clearInterval(this.autoReadAlongTimer);
+      this.autoReadAlongTimer = null;
+    }
     this.resetAutoRing();
   }
   resetAutoRing() {
@@ -48672,7 +49043,26 @@ class VnStage {
       clearTimeout(this.autoPlayTimer);
       this.autoPlayTimer = null;
     }
+    if (this.autoReadAlongTimer !== null) {
+      clearInterval(this.autoReadAlongTimer);
+      this.autoReadAlongTimer = null;
+    }
     this.resetAutoRing();
+    if (delayMs >= 400 && this.dialogueText.dataset.vnSpeechSpeaking !== "true") {
+      const startAt = Date.now();
+      this.speechReadAlong.setFraction(0);
+      this.autoReadAlongTimer = setInterval(() => {
+        if (this.destroyed || !this.isAutoPlay || this.dialogueText.dataset.vnSpeechSpeaking === "true") {
+          if (this.autoReadAlongTimer !== null) {
+            clearInterval(this.autoReadAlongTimer);
+            this.autoReadAlongTimer = null;
+          }
+          return;
+        }
+        const frac = Math.min(1, (Date.now() - startAt) / Math.max(1, delayMs * 0.88));
+        this.speechReadAlong.setFraction(frac);
+      }, 65);
+    }
     if (this.autoBar) {
       const circumference = 37.7;
       const bar = this.autoBar;
@@ -55800,6 +56190,9 @@ class VisualNovelSettingsPanel {
       case "readerBackgroundOpacity": {
         const opacity = Number(target2.value);
         this.host.style.setProperty("--caption-opacity", String(opacity));
+        const shell = this.host.closest?.("[data-vn-shell]");
+        if (shell)
+          shell.style.setProperty("--caption-opacity", String(opacity));
         const out = this.root.querySelector("[data-opacity-output]");
         if (out)
           out.textContent = `${Math.round(opacity * 100)}%`;
@@ -58120,7 +58513,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.178";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.179";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -69221,10 +69614,17 @@ function setupVisualNovelFrontend(baseContext) {
     if (!speech)
       return false;
     const s = speech.getStatus();
-    return s.kind === "loading" || s.kind === "playing" || s.kind === "paused";
+    return s.kind === "loading" || s.kind === "playing";
   };
   const syncSpeechCursor = (view, paragraphIndex) => {
-    speech?.setCursor(view && view.status === "ready" ? speechCursorFor(view, paragraphIndex) : null);
+    const nextCursor = view && view.status === "ready" ? speechCursorFor(view, paragraphIndex) : null;
+    speech?.setCursor(nextCursor);
+    if (nextCursor && stage?.isAutoPlaying() && configRef.current?.speech.enabled) {
+      const kind = speech?.getStatus().kind;
+      if (kind === "idle" || kind === "paused") {
+        speech?.playCurrent();
+      }
+    }
   };
   const onVisibilityChanged = () => {
     if (speech)
@@ -69303,6 +69703,32 @@ function setupVisualNovelFrontend(baseContext) {
     },
     onReaderPreferencesChange: (readerPreferences) => {
       ctx.sendToBackend({ type: "vn_set_config", patch: { readerPreferences }, chatId: chatId() });
+    },
+    onAutoPlayChange: (autoActive) => {
+      if (!speech)
+        return;
+      if (autoActive) {
+        if (configRef.current && !configRef.current.speech.enabled) {
+          const sp = configRef.current.speech;
+          const hasConfiguredVoices = Boolean(sp.narrator || sp.characterDefault || Object.keys(sp.characters ?? {}).length > 0);
+          if (hasConfiguredVoices) {
+            const nextSpeech = { ...sp, enabled: true };
+            configRef.current = { ...configRef.current, speech: nextSpeech };
+            speech.setSettings(nextSpeech);
+            speechDock?.setEnabled(true);
+            ctx.sendToBackend({ type: "vn_set_config", patch: { speech: nextSpeech }, chatId: chatId() ?? "" });
+          }
+        }
+        if (configRef.current?.speech.enabled) {
+          syncSpeechCursor(turn, stage.getState().currentParagraphIndex);
+          speech.playCurrent();
+        }
+      } else {
+        const kind = speech.getStatus().kind;
+        if (kind === "playing" || kind === "loading") {
+          speech.pause();
+        }
+      }
     },
     onPrevious: (paragraphIndex) => {
       saveCursor(paragraphIndex);
@@ -69411,6 +69837,7 @@ function setupVisualNovelFrontend(baseContext) {
       speech.playCurrent();
     }
   });
+  let wasSpeechPlaying = false;
   speech = new SpeechController({
     transport: createSpeechTransport(),
     onProgress: (progress) => {
@@ -69423,10 +69850,22 @@ function setupVisualNovelFrontend(baseContext) {
     onStatus: (status) => {
       speechDock.setStatus(status);
       audioEngine.setSpeechDucking(status.kind === "playing");
-      if (status.kind === "loading" || status.kind === "playing" || status.kind === "paused") {
+      if (status.kind === "loading" || status.kind === "playing") {
+        wasSpeechPlaying = true;
+        stage.holdAutoPlay();
+      } else if (status.kind === "paused") {
+        wasSpeechPlaying = false;
         stage.holdAutoPlay();
       } else if (active) {
-        stage.checkAutoPlay();
+        const finishedSpeakingParagraph = wasSpeechPlaying && status.kind === "idle";
+        wasSpeechPlaying = false;
+        if (finishedSpeakingParagraph && stage.isAutoPlaying()) {
+          stage.advanceAfterSpeech();
+        } else {
+          stage.checkAutoPlay();
+        }
+      } else {
+        wasSpeechPlaying = false;
       }
     }
   });

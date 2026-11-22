@@ -100,6 +100,7 @@ export interface VnGameChoice extends GameMoveSnapshot {
 export interface VnStageCallbacks {
   onTooltipPreferencesChange?: (preferences: TooltipPreferences) => void;
   onReaderPreferencesChange?: (preferences: ReaderPreferences) => void;
+  onAutoPlayChange?: (active: boolean) => void;
   onAdvance?: (paragraphIndex: number, inputUnlocked: boolean) => void;
   onPrevious?: (paragraphIndex: number) => void;
   onChoice?: (choice: VnChoice) => void | Promise<void>;
@@ -267,6 +268,7 @@ export class VnStage {
   private isTyping = false;
   private typewriterTimer: ReturnType<typeof setInterval> | null = null;
   private autoPlayTimer: ReturnType<typeof setTimeout> | null = null;
+  private autoReadAlongTimer: ReturnType<typeof setInterval> | null = null;
   private skipTimer: ReturnType<typeof setTimeout> | null = null;
   private crossfadeTimer: ReturnType<typeof setTimeout> | null = null;
   private currentDisplayedUrl: string | null = null;
@@ -480,6 +482,13 @@ export class VnStage {
       };
       inlineComposer.addEventListener("submit", triggerInlineSubmit);
       inlineSend?.addEventListener("click", triggerInlineSubmit);
+    }
+    if (!this.dialogueSheet) {
+      this.dialogueSheet = new DialogueSheet(this.root, queryRequired(this.themeRoot, "[data-vn-dialogue]"), () => {
+        this.toggleAutoPlay(false);
+        this.toggleSkip(false);
+      }, next => this.callbacks.onReaderPreferencesChange?.(next), () => this.toggleAutoPlay());
+      this.dialogueSheet.setAutoPlayActive(this.isAutoPlay);
     }
     this.bindEvents();
     this.updateControlButtons();
@@ -864,6 +873,8 @@ export class VnStage {
     if (typeof preferences.backgroundOpacity === "number") {
       this.root.style.setProperty("--vn-sheet-opacity", String(preferences.backgroundOpacity));
       this.root.style.setProperty("--caption-opacity", String(preferences.backgroundOpacity));
+      this.panelMount.style.setProperty("--vn-sheet-opacity", String(preferences.backgroundOpacity));
+      this.panelMount.style.setProperty("--caption-opacity", String(preferences.backgroundOpacity));
     }
     if (!this.dialogueSheet) {
       this.dialogueSheet = new DialogueSheet(this.root, queryRequired(this.themeRoot, "[data-vn-dialogue]"), () => {
@@ -972,21 +983,46 @@ export class VnStage {
     return this.textEffectMode;
   }
 
+  isAutoPlaying(): boolean {
+    return this.isAutoPlay;
+  }
+
+  advanceAfterSpeech(): void {
+    if (this.destroyed || !this.isAutoPlay || this.isSkipping) return;
+    if (this.isTyping) {
+      this.completeTypewriter();
+    }
+    this.clearAutoPlayTimer();
+    const view = selectVnStageView(this.state);
+    if (!view.canAdvance) {
+      this.toggleAutoPlay(false);
+      return;
+    }
+    this.startAutoCountdown(240);
+  }
+
   toggleAutoPlay(force?: boolean): void {
     if (this.destroyed) return;
     this.lastSkipStop = null;
-    this.isAutoPlay = force !== undefined ? force : !this.isAutoPlay;
+    const next = force !== undefined ? force : !this.isAutoPlay;
+    const changed = next !== this.isAutoPlay;
+    this.isAutoPlay = next;
     if (this.isAutoPlay) {
       this.isSkipping = false;
       this.clearSkipTimer();
-    this.settleSceneCrossfade();
+      this.settleSceneCrossfade();
       this.updateControlButtons();
-      if (!this.isTyping) {
+      if (changed) this.callbacks.onAutoPlayChange?.(true);
+      if (this.isTyping) {
+        this.completeTypewriter();
+      } else {
         this.onTextRenderFinished();
       }
     } else {
       this.clearAutoPlayTimer();
+      this.speechReadAlong.setFraction(null);
       this.updateControlButtons();
+      if (changed) this.callbacks.onAutoPlayChange?.(false);
     }
   }
 
@@ -2865,6 +2901,10 @@ export class VnStage {
       clearTimeout(this.autoPlayTimer);
       this.autoPlayTimer = null;
     }
+    if (this.autoReadAlongTimer !== null) {
+      clearInterval(this.autoReadAlongTimer);
+      this.autoReadAlongTimer = null;
+    }
     this.resetAutoRing();
   }
 
@@ -2881,7 +2921,27 @@ export class VnStage {
       clearTimeout(this.autoPlayTimer);
       this.autoPlayTimer = null;
     }
+    if (this.autoReadAlongTimer !== null) {
+      clearInterval(this.autoReadAlongTimer);
+      this.autoReadAlongTimer = null;
+    }
     this.resetAutoRing();
+
+    if (delayMs >= 400 && this.dialogueText.dataset.vnSpeechSpeaking !== "true") {
+      const startAt = Date.now();
+      this.speechReadAlong.setFraction(0);
+      this.autoReadAlongTimer = setInterval(() => {
+        if (this.destroyed || !this.isAutoPlay || this.dialogueText.dataset.vnSpeechSpeaking === "true") {
+          if (this.autoReadAlongTimer !== null) {
+            clearInterval(this.autoReadAlongTimer);
+            this.autoReadAlongTimer = null;
+          }
+          return;
+        }
+        const frac = Math.min(1, (Date.now() - startAt) / Math.max(1, delayMs * 0.88));
+        this.speechReadAlong.setFraction(frac);
+      }, 65);
+    }
 
     if (this.autoBar) {
       const circumference = 37.7;

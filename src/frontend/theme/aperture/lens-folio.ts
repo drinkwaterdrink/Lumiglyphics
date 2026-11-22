@@ -234,7 +234,7 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
    APERTURE UNIFIED READER DIALOGUE & INTEGRATED CONTROLS
    ========================================================================= */
 
-/* Symmetrical, perfectly centered dialogue card */
+/* Symmetrical, perfectly centered dialogue card with 8px gap above bottom bar */
 [data-vn-dialogue],
 [data-vn-root] [data-vn-dialogue],
 [data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-dialogue],
@@ -248,11 +248,11 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   margin: 0 !important;
   box-sizing: border-box !important;
   top: auto !important;
-  bottom: calc(68px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
+  bottom: calc(66px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
   height: var(--caption-height, 184px);
   min-height: 76px;
-  max-height: calc(100% - 132px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
-  padding: 11px 15px 11px !important;
+  max-height: calc(100% - 130px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+  padding: 12px 16px 11px !important;
   display: flex !important;
   flex-direction: column !important;
   gap: 6px !important;
@@ -265,10 +265,10 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 :where([data-vn-root]) [data-vn-dialogue] {
   border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 24%, var(--aperture-dialogue-border, var(--vn-dialogue-border, rgba(255, 255, 255, 0.16))));
   border-radius: min(var(--vn-shell-radius, 20px), 22px);
-  background: var(--aperture-dialogue-bg, var(--vn-dialogue-bg, rgba(8, 18, 15, var(--caption-opacity, 0.86))));
+  background: var(--aperture-dialogue-bg, var(--vn-dialogue-bg, rgba(8, 14, 22, var(--caption-opacity, 0.84))));
   -webkit-backdrop-filter: blur(var(--caption-blur, 18px));
   backdrop-filter: blur(var(--caption-blur, 18px));
-  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.56), 0 0 24px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 8%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, calc(var(--caption-opacity, 0.84) * 0.62)), 0 0 24px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 8%, transparent), inset 0 1px 0 rgba(255, 255, 255, calc(var(--caption-opacity, 0.84) * 0.2));
 }
 
 /* Draggable Top Resize Grip */
@@ -439,6 +439,7 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 /* Scrollable Copy */
 .scroll-copy,
 [data-vn-dialogue] .scroll-copy {
+  position: relative !important;
   flex: 1 1 auto !important;
   min-height: 0 !important;
   max-height: 100% !important;
@@ -451,8 +452,45 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   scrollbar-color: color-mix(in srgb, var(--aperture-accent, #dcebad) 45%, transparent) transparent !important;
   -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 4px, #000 calc(100% - 8px), transparent 100%);
   mask-image: linear-gradient(180deg, transparent 0, #000 4px, #000 calc(100% - 8px), transparent 100%);
-  padding: 4px 2px 4px !important;
+  padding: 5px 4px 5px !important;
   margin: 0 !important;
+}
+
+/* Word-by-word TTS & Auto-Read highlight effect */
+::highlight(vn-tts-word) {
+  background-color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 32%, transparent);
+  color: #ffffff;
+  text-decoration: underline;
+  text-decoration-color: var(--aperture-accent, #c4b5fd);
+}
+
+::highlight(vn-tts-spoken) {
+  color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 35%, var(--aperture-text, #ffffff));
+}
+
+.vn-tts-word-aura,
+[data-vn-tts-aura] {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  pointer-events: none !important;
+  z-index: 2 !important;
+  border-radius: 6px !important;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--aperture-accent, #c4b5fd) 14%, transparent), color-mix(in srgb, var(--aperture-accent, #c4b5fd) 30%, transparent)) !important;
+  border-bottom: 2px solid var(--aperture-accent, #c4b5fd) !important;
+  box-shadow: 0 2px 14px var(--aperture-accent-glow, rgba(167, 139, 250, 0.52)), 0 0 6px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 38%, transparent) !important;
+  transition: transform 80ms cubic-bezier(0.22, 1, 0.36, 1), width 80ms ease, height 80ms ease !important;
+}
+
+.vn-tts-word-aura[hidden] {
+  display: none !important;
+}
+
+.caption-tool[data-action="caption-auto"][data-active="true"] {
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 26%, transparent) !important;
+  color: var(--aperture-accent, #c4b5fd) !important;
+  box-shadow: 0 0 12px var(--aperture-accent-glow, rgba(167, 139, 250, 0.48)) !important;
+  opacity: 1 !important;
 }
 
 [data-vn-dialogue-text],
@@ -460,6 +498,8 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 [data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-dialogue-text],
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-dialogue-text],
 [data-vn-root]:not([data-vn-adjustable-sheet="true"]) [data-vn-dialogue-text] {
+  position: relative !important;
+  z-index: 1 !important;
   overflow: visible !important;
   overflow-y: visible !important;
   overscroll-behavior: auto !important;
@@ -469,8 +509,8 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   touch-action: pan-y !important;
   user-select: text !important;
   font-size: var(--reader-font, 16px) !important;
-  line-height: 1.46;
-  letter-spacing: 0;
+  line-height: 1.5;
+  letter-spacing: 0.005em;
   word-spacing: normal;
   font-kerning: normal;
   text-align: left;
@@ -483,18 +523,19 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
-/* Integrated Progress Scrubber & Step Navigation Row inside Dialogue Card Footer */
+/* Integrated Luminous Constellation Progress Track & Step Navigation Row inside Dialogue Card Footer */
 .reader-progress {
   position: static !important;
   width: 100% !important;
   max-width: none !important;
-  height: 34px !important;
+  height: 36px !important;
   display: flex !important;
   align-items: center !important;
-  justify-content: flex-start !important;
+  justify-content: space-between !important;
   gap: 12px !important;
   margin: 2px 0 0 !important;
-  padding: 4px 80px 0 0 !important;
+  padding: 5px 0 0 !important;
+  border-top: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 10%, rgba(255, 255, 255, 0.05)) !important;
   box-sizing: border-box !important;
   flex: none !important;
   z-index: 45 !important;
@@ -504,14 +545,15 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 .reader-progress [data-vn-step-left] {
   padding: 4px 12px !important;
   border-radius: 999px !important;
-  background: color-mix(in srgb, var(--aperture-button-bg, #131a26) 76%, rgba(255, 255, 255, 0.05)) !important;
-  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, rgba(255, 255, 255, 0.14)) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  background: color-mix(in srgb, var(--aperture-button-bg, #131a26) 78%, rgba(255, 255, 255, 0.05)) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 24%, rgba(255, 255, 255, 0.14)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
   color: var(--aperture-text, #f1f5f9) !important;
-  opacity: 0.95 !important;
+  opacity: 0.96 !important;
   font-size: 11.5px !important;
-  font-weight: 650 !important;
-  letter-spacing: 0.03em !important;
+  font-weight: 700 !important;
+  font-variant-numeric: tabular-nums !important;
+  letter-spacing: 0.04em !important;
   white-space: nowrap !important;
   flex: none !important;
 }
@@ -521,6 +563,7 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 }
 
 .reader-progress [data-vn-scrubber] {
+  position: relative !important;
   flex: 1 1 auto !important;
   min-width: 48px !important;
   max-width: 260px !important;
@@ -529,51 +572,92 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   align-items: center !important;
   justify-content: center !important;
   gap: 5px !important;
-  overflow: hidden !important;
-  height: 22px !important;
+  overflow: visible !important;
+  height: 24px !important;
+  padding: 0 4px !important;
   margin: 0 auto !important;
 }
 
+.reader-progress [data-vn-scrubber]::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 50%;
+  height: 1.5px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--aperture-accent, #c4b5fd) 34%, transparent), rgba(255, 255, 255, 0.08));
+  pointer-events: none;
+  z-index: 0;
+}
+
 .reader-progress [data-vn-scrub-dot] {
+  position: relative !important;
+  z-index: 1 !important;
   flex: 1 1 0 !important;
   width: auto !important;
-  min-width: 5px !important;
+  min-width: 6px !important;
   max-width: 11px !important;
-  height: 5px !important;
-  min-height: 5px !important;
+  height: 5.5px !important;
+  min-height: 5.5px !important;
   border-radius: var(--vn-scrubber-radius, 999px) !important;
   padding: 0 !important;
   border: 0 !important;
-  background: color-mix(in srgb, var(--aperture-text, #ffffff) 22%, transparent) !important;
-  transition: flex 0.2s ease, background-color 0.18s ease, box-shadow 0.18s ease !important;
+  background: color-mix(in srgb, var(--aperture-text, #ffffff) 22%, rgba(15, 23, 42, 0.7)) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35) !important;
+  transition: flex 0.24s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease !important;
+}
+
+.reader-progress [data-vn-scrub-dot]:hover:not(:disabled) {
+  transform: scaleY(1.3) !important;
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 75%, #ffffff) !important;
 }
 
 .reader-progress [data-vn-scrub-dot][data-read="true"] {
-  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 52%, transparent) !important;
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 56%, rgba(15, 23, 42, 0.4)) !important;
+}
+
+.reader-progress [data-vn-scrub-dot][data-has-cue="true"]:not([data-active="true"]) {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 62%, transparent), 0 0 6px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 28%, transparent) !important;
 }
 
 .reader-progress [data-vn-scrub-dot][data-active="true"] {
-  flex: 3 1 0 !important;
-  min-width: 20px !important;
-  max-width: 38px !important;
-  height: 6px !important;
-  background: linear-gradient(90deg, var(--aperture-accent, #a78bfa), color-mix(in srgb, var(--aperture-accent, #a78bfa) 68%, #ffffff)) !important;
-  box-shadow: 0 0 12px var(--aperture-accent-glow, rgba(167, 139, 250, 0.72)), 0 0 4px rgba(255, 255, 255, 0.55) !important;
+  flex: 3.4 1 0 !important;
+  min-width: 24px !important;
+  max-width: 42px !important;
+  height: 6.5px !important;
+  background: linear-gradient(90deg, var(--aperture-accent, #a78bfa), color-mix(in srgb, var(--aperture-accent, #a78bfa) 62%, #ffffff)) !important;
+  box-shadow: 0 0 14px var(--aperture-accent-glow, rgba(167, 139, 250, 0.82)), 0 0 4px rgba(255, 255, 255, 0.7) !important;
 }
 
-/* Previous & Continue circular buttons paired on the right side of the dialogue card footer */
+/* Previous & Continue circular buttons paired cleanly on the right side of the dialogue card footer */
+.reader-step-nav {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex: none !important;
+}
+
+.reader-step-nav > [data-vn-control="previous"].nav-step-btn,
+.reader-step-nav > [data-vn-continue].nav-step-btn,
+[data-vn-root][data-vn-adjustable-sheet="true"] .reader-step-nav > [data-vn-continue],
 [data-vn-control="previous"].nav-step-btn,
-[data-vn-controls] > [data-vn-control="previous"].nav-step-btn,
 [data-vn-continue].nav-step-btn,
 [data-vn-continue].action.advance {
-  position: fixed !important;
+  position: relative !important;
+  inset: auto !important;
   left: auto !important;
-  bottom: calc(79px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
+  right: auto !important;
+  top: auto !important;
+  bottom: auto !important;
+  transform: none !important;
   width: 32px !important;
   height: 32px !important;
   min-width: 32px !important;
   min-height: 32px !important;
   padding: 0 !important;
+  margin: 0 !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -585,16 +669,6 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   cursor: pointer !important;
   z-index: 45 !important;
   transition: background 0.16s ease, transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease !important;
-}
-
-[data-vn-control="previous"].nav-step-btn,
-[data-vn-controls] > [data-vn-control="previous"].nav-step-btn {
-  right: 64px !important;
-}
-
-[data-vn-continue].nav-step-btn,
-[data-vn-continue].action.advance {
-  right: 24px !important;
 }
 
 [data-vn-control="previous"].nav-step-btn::after,
@@ -615,7 +689,8 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 }
 
 [data-vn-continue]::before,
-[data-vn-continue]::after {
+[data-vn-continue]::after,
+[data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-continue]::before {
   display: none !important;
 }
 

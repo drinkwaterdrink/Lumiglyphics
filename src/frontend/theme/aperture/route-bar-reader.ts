@@ -178,7 +178,7 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
   border-radius: 0 !important;
 }
 
-/* Reader topbar — unified frosted pill bar */
+/* Reader topbar — unified frosted pill bar that follows --caption-opacity */
 .reader-topbar,
 [data-vn-reader-header].reader-topbar {
   position: absolute !important;
@@ -186,20 +186,21 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
   left: 10px !important;
   right: 10px !important;
   height: auto !important;
-  min-height: 44px !important;
+  min-height: 46px !important;
   display: flex !important;
   flex-wrap: nowrap !important;
   align-items: center !important;
   justify-content: space-between !important;
   gap: 6px !important;
-  padding: 4px 10px !important;
+  padding: 4px 8px !important;
   border-radius: 999px !important;
-  background: color-mix(in srgb, var(--aperture-bottom-bar-bg, var(--vn-shell-panel, #0a1018)) 82%, rgba(8, 12, 20, 0.68)) !important;
-  -webkit-backdrop-filter: blur(18px) !important;
-  backdrop-filter: blur(18px) !important;
-  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, rgba(255, 255, 255, 0.14)) !important;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
+  background: color-mix(in srgb, var(--aperture-bottom-bar-bg, var(--vn-shell-panel, #0a1018)) calc(var(--caption-opacity, 0.84) * 100%), transparent) !important;
+  -webkit-backdrop-filter: blur(calc(var(--caption-opacity, 0.84) * 20px)) !important;
+  backdrop-filter: blur(calc(var(--caption-opacity, 0.84) * 20px)) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) calc(var(--caption-opacity, 0.84) * 26%), rgba(255, 255, 255, 0.1)) !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, calc(var(--caption-opacity, 0.84) * 0.55)), inset 0 1px 0 rgba(255, 255, 255, calc(var(--caption-opacity, 0.84) * 0.18)) !important;
   z-index: 35 !important;
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease !important;
 }
 [data-vn-reader-header]:has([data-vn-world-strip]:not([hidden])) .reading-heading {
   display: none !important;
@@ -505,36 +506,36 @@ aside[data-vn-workspace] {
   pointer-events: none !important;
 }
 
-/* Dock dialogue firmly to bottom of viewport above bottom action bar */
+/* Dock dialogue firmly above bottom action bar with a clean 8px gap */
 [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]),
 [data-vn-root] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]),
 [data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]),
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]) {
   position: absolute !important;
-  z-index: 22 !important;
-  left: 15px !important;
-  right: 15px !important;
+  z-index: 30 !important;
+  left: 10px !important;
+  right: 10px !important;
   top: auto !important;
-  bottom: calc(96px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
-  height: var(--caption-height, 142px);
-  min-height: 48px;
-  max-height: calc(100% - 160px) !important;
-  padding: 16px 14px 8px !important;
+  bottom: calc(66px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
+  height: var(--caption-height, 184px);
+  min-height: 76px;
+  max-height: calc(100% - 130px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+  padding: 12px 16px 11px !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 4px !important;
+  gap: 6px !important;
   overflow: hidden !important;
   pointer-events: auto !important;
   transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
 }
 
 :where([data-vn-root]) [data-vn-dialogue]:not([hidden]):not([data-hidden="true"]) {
-  border: 1px solid var(--aperture-dialogue-border, var(--vn-dialogue-border, rgba(224, 238, 217, 0.32)));
-  border-radius: min(var(--vn-shell-radius, 16px), 18px);
-  background: var(--aperture-dialogue-bg, var(--vn-dialogue-bg, rgba(4, 13, 17, var(--caption-opacity, 0.72))));
-  -webkit-backdrop-filter: blur(var(--caption-blur, 10px));
-  backdrop-filter: blur(var(--caption-blur, 10px));
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 24%, var(--aperture-dialogue-border, var(--vn-dialogue-border, rgba(255, 255, 255, 0.16))));
+  border-radius: min(var(--vn-shell-radius, 20px), 22px);
+  background: var(--aperture-dialogue-bg, var(--vn-dialogue-bg, rgba(8, 14, 22, var(--caption-opacity, 0.84))));
+  -webkit-backdrop-filter: blur(calc(var(--caption-opacity, 0.84) * 20px));
+  backdrop-filter: blur(calc(var(--caption-opacity, 0.84) * 20px));
+  box-shadow: 0 20px 48px rgba(0, 0, 0, calc(var(--caption-opacity, 0.84) * 0.62)), 0 0 24px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 8%, transparent), inset 0 1px 0 rgba(255, 255, 255, calc(var(--caption-opacity, 0.84) * 0.2));
 }
 
 .caption-edge {
@@ -830,6 +831,41 @@ aside[data-vn-workspace] {
   color: var(--aperture-accent-contrast, #11241c) !important;
 }
 
+[data-vn-reader-header] .round-ghost {
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  color: color-mix(in srgb, var(--aperture-text, #f7f9f3) 86%, transparent) !important;
+}
+
+[data-vn-reader-header] .round-ghost:hover {
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 16%, transparent) !important;
+  border-color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 34%, transparent) !important;
+  color: var(--aperture-accent, #c4b5fd) !important;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 24%, transparent) !important;
+}
+
+[data-vn-reader-header] .round-ghost.vn-pyramid-menu-btn {
+  color: var(--aperture-accent, #c4b5fd) !important;
+  background: radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, transparent), transparent 72%) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 34%, rgba(255, 255, 255, 0.12)) !important;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 20%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+}
+
+[data-vn-reader-header] .round-ghost.vn-pyramid-menu-btn svg {
+  width: 18px !important;
+  height: 18px !important;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 48%, transparent));
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), filter 0.22s ease !important;
+}
+
+[data-vn-reader-header] .round-ghost.vn-pyramid-menu-btn:hover svg {
+  transform: translateY(-1px) scale(1.08);
+  filter: drop-shadow(0 0 8px var(--aperture-accent, #c4b5fd));
+}
+
 .round-ghost[hidden] {
   display: none !important;
 }
@@ -854,23 +890,24 @@ aside[data-vn-workspace] {
   inset: auto 10px calc(8px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) 10px !important;
   left: 10px !important;
   right: 10px !important;
-  height: 52px !important;
+  height: 50px !important;
   z-index: 40 !important;
   display: flex !important;
   flex-direction: row !important;
   align-items: center !important;
   justify-content: space-between !important;
-  gap: 8px !important;
-  padding: 0 7px 0 10px !important;
+  gap: 10px !important;
+  padding: 0 6px 0 12px !important;
   margin: 0 !important;
   border-radius: 999px !important;
   pointer-events: auto !important;
-  background: color-mix(in srgb, var(--aperture-bottom-bar-bg, var(--vn-shell-panel, #0b1018)) 88%, rgba(8, 12, 20, 0.78)) !important;
-  -webkit-backdrop-filter: blur(18px) !important;
-  backdrop-filter: blur(18px) !important;
-  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, rgba(255, 255, 255, 0.14)) !important;
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.56), 0 0 20px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 6%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
+  background: color-mix(in srgb, var(--aperture-bottom-bar-bg, var(--vn-shell-panel, #0b1018)) calc(var(--caption-opacity, 0.84) * 100%), transparent) !important;
+  -webkit-backdrop-filter: blur(calc(var(--caption-opacity, 0.84) * 20px)) !important;
+  backdrop-filter: blur(calc(var(--caption-opacity, 0.84) * 20px)) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) calc(var(--caption-opacity, 0.84) * 24%), rgba(255, 255, 255, 0.1)) !important;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, calc(var(--caption-opacity, 0.84) * 0.58)), 0 0 20px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 6%, transparent), inset 0 1px 0 rgba(255, 255, 255, calc(var(--caption-opacity, 0.84) * 0.18)) !important;
   box-sizing: border-box !important;
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease !important;
 }
 
 /* Hide legacy clean-restore unless active, and hide dialogue footer passage label */
@@ -880,40 +917,53 @@ aside[data-vn-workspace] {
   display: none !important;
 }
 
-/* Left icon navigation cluster inside bottom bar */
+/* Left icon navigation cluster inside bottom bar — seamless, no nested box */
 .reader-action-row,
-[data-vn-controls] {
+[data-vn-controls],
+[data-vn-root] [data-vn-controls],
+[data-vn-root][data-vn-preset] [data-vn-controls],
+[data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-controls],
+[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-controls] {
   position: static !important;
   transform: none !important;
   display: inline-flex !important;
   flex-direction: row !important;
   justify-content: flex-start !important;
   align-items: center !important;
-  gap: 2px !important;
+  gap: 4px !important;
   flex: 0 0 auto !important;
   width: auto !important;
   max-width: none !important;
   margin: 0 !important;
   padding: 0 !important;
   height: 100% !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
   box-sizing: border-box !important;
 }
 
-.reader-action-row > .action:not(.nav-step-btn) {
+.reader-action-row > .action:not(.nav-step-btn),
+[data-vn-root][data-vn-preset] [data-vn-controls] > [data-vn-control]:not(.nav-step-btn),
+[data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-controls] > [data-vn-control]:not(.nav-step-btn) {
   position: relative !important;
   height: 38px !important;
   width: 38px !important;
-  min-width: 36px !important;
+  min-width: 38px !important;
   max-width: 40px !important;
   display: grid !important;
   place-items: center !important;
   border-radius: 50% !important;
   background: transparent !important;
   border: 1px solid transparent !important;
-  color: color-mix(in srgb, var(--aperture-text, #f1f5f9) 82%, transparent) !important;
+  box-shadow: none !important;
+  color: color-mix(in srgb, var(--aperture-text, #f1f5f9) 84%, transparent) !important;
   cursor: pointer !important;
   padding: 0 !important;
-  transition: color 0.16s ease, background-color 0.16s ease, border-color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease !important;
+  transition: color 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease !important;
 }
 
 .reader-action-row > .action:not(.nav-step-btn)::after {
