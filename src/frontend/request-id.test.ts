@@ -1,8 +1,16 @@
 import { expect, test } from "bun:test";
 import { bindFrontendUuidProvider, createUiId, unbindFrontendUuidProvider } from "./request-id.js";
 
-test("uses native UUIDs where available", () => {
-  expect(createUiId({ randomUUID: () => "native-id" })).toBe("native-id");
+test("never relies on crypto.randomUUID() for plain-HTTP safety", () => {
+  const id = createUiId({
+    randomUUID: () => "should-not-be-called",
+    getRandomValues(arr) {
+      for (let i = 0; i < arr.length; i += 1) arr[i] = i + 1;
+      return arr;
+    },
+  });
+  expect(id).not.toBe("should-not-be-called");
+  expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 });
 
 test("uses Spindle ctx.uuid.v4() when frontend-uuid-v1 is available and falls back cleanly on unbind", () => {

@@ -99,7 +99,13 @@ export class PanelDock {
     this.host.addEventListener("lumiglyphics:panels-toggle", () => this.toggle());
     // This layer is outside the stage's narrative root. Also stop host-level shortcuts.
     for (const event of ["click", "pointerdown", "keydown", "wheel"]) this.host.addEventListener(event, (e) => e.stopPropagation());
-    this.root.addEventListener("keydown", (event) => { if ((event as KeyboardEvent).key === "Escape") { this.toggle(false); this.launcher.focus(); } });
+    this.root.addEventListener("keydown", (event) => {
+      if ((event as KeyboardEvent).key === "Escape") {
+        this.toggle(false);
+        const panelsBtn = mount.closest?.<HTMLElement>("[data-vn-shell]")?.querySelector<HTMLButtonElement>('[data-action="panels-toggle"]');
+        if (panelsBtn && !panelsBtn.hidden) panelsBtn.focus();
+      }
+    });
     this.observer = new ResizeObserver(() => this.layout()); this.observer.observe(mount);
     window.addEventListener("vn-panel-export-v1", this.receiveBridge);
   }
@@ -224,9 +230,11 @@ export class PanelDock {
   private renderLists(): void {
     this.list.replaceChildren();
     this.candidateRows.clear();
-    if (!this.candidates.length) {
+    if (!this.candidates.some((card) => card.paragraphIndex <= this.cursor)) {
       const p = document.createElement("p");
-      p.textContent = "No cards to pin yet. Keep reading: supported cards appear here when you reach them in a new reply. Not every reply contains a card, and older saved replies may not have any available.";
+      p.textContent = this.candidates.length
+        ? "No cards have appeared up to this reading position yet. Continue reading to reveal more."
+        : "No cards to pin yet. Keep reading: supported cards appear here when you reach them in a new reply. Not every reply contains a card, and older saved replies may not have any available.";
       this.list.append(p);
     }
     for (const card of this.candidates) {

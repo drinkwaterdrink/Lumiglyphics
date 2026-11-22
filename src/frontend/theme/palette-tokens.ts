@@ -484,6 +484,12 @@ export const THEME_PALETTE_SPECS: Record<VisualNovelThemePreset, ThemePaletteSpe
 
 function renderPresetTokenVariables(spec: ThemePaletteSpec): string {
   return `
+  color-scheme: ${spec.mode};
+  --aperture-tts-word-ink: ${spec.mode === "light" ? spec.text : "#ffffff"};
+  --aperture-text-shadow: ${spec.mode === "light" ? "none" : "0 1px 3px rgba(0, 0, 0, 0.8)"};
+  --vn-shell-danger-ink: ${spec.mode === "light" ? "#991b1b" : "#fca5a5"};
+  --vn-shell-info-ink: ${spec.mode === "light" ? "#1d4ed8" : "#93c5fd"};
+  --vn-shell-success-ink: ${spec.mode === "light" ? "#166534" : "#86efac"};
   --vn-shell-bg: ${spec.panel};
   --vn-shell-bg-hover: ${spec.hoverBg};
   --vn-shell-panel: ${spec.panel};

@@ -259,7 +259,10 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   overflow: hidden !important;
   pointer-events: auto !important;
   touch-action: pan-y !important;
-  transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  transition: box-shadow 0.4s ease, border-color 0.4s ease, opacity 0.24s ease, transform 0.24s ease !important;
 }
 
 :where([data-vn-root]) [data-vn-dialogue] {
@@ -268,7 +271,7 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   background: var(--aperture-dialogue-bg, var(--vn-dialogue-bg, rgba(8, 14, 22, var(--caption-opacity, 0.84))));
   -webkit-backdrop-filter: blur(var(--caption-blur, 18px));
   backdrop-filter: blur(var(--caption-blur, 18px));
-  box-shadow: 0 20px 48px rgba(0, 0, 0, calc(var(--caption-opacity, 0.84) * 0.62)), 0 0 24px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 8%, transparent), inset 0 1px 0 rgba(255, 255, 255, calc(var(--caption-opacity, 0.84) * 0.2));
+  box-shadow: var(--vn-dialogue-shadow, 0 18px 46px rgba(0, 0, 0, 0.45)), 0 4px 28px var(--vn-atmosphere-glow, rgba(0, 0, 0, 0.32)), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 /* Draggable Top Resize Grip — narrow centered handle so it never blocks top-right Play/Hide tools */
@@ -320,6 +323,7 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   display: inline-flex !important;
   align-items: center !important;
   gap: 7px !important;
+  white-space: nowrap !important;
   min-width: 0 !important;
   overflow: hidden !important;
 }
@@ -335,8 +339,8 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   flex: none !important;
   display: inline-grid !important;
   place-items: center !important;
-  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 18%, rgba(15, 23, 42, 0.85)) !important;
-  border: 1.5px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 68%, rgba(255, 255, 255, 0.45)) !important;
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 18%, var(--vn-shell-panel, rgba(15, 23, 42, 0.85))) !important;
+  border: 1.5px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 68%, var(--vn-shell-border-strong, rgba(255, 255, 255, 0.45))) !important;
   box-shadow: 0 0 12px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 34%, transparent) !important;
   color: var(--aperture-accent, #c4b5fd) !important;
   font-size: 13px !important;
@@ -356,6 +360,12 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 }
 
 .caption-head [data-vn-speaker] {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
   font-size: 13.5px !important;
   font-weight: 700 !important;
   color: var(--aperture-text, #f8fafc) !important;
@@ -465,7 +475,7 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 /* Word-by-word TTS & Auto-Read highlight effect — single soft aura pill */
 ::highlight(vn-tts-word) {
   background-color: transparent;
-  color: #ffffff;
+  color: var(--aperture-tts-word-ink, #ffffff);
 }
 
 ::highlight(vn-tts-spoken) {
@@ -524,7 +534,7 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 :where([data-vn-root]) [data-vn-dialogue-text] {
   color: var(--aperture-text, var(--vn-text, #f9faf6));
   font-family: var(--vn-font-family, Georgia, 'Times New Roman', serif);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  text-shadow: var(--aperture-text-shadow, 0 1px 3px rgba(0, 0, 0, 0.8));
 }
 
 /* Integrated Luminous Constellation Progress Track & Step Navigation Row inside Dialogue Card Footer */
@@ -693,7 +703,6 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 }
 
 [data-vn-continue]::before,
-[data-vn-continue]::after,
 [data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-continue]::before {
   display: none !important;
 }
@@ -721,14 +730,6 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   pointer-events: none !important;
   transform: translateY(-8px) !important;
   transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
-}
-
-:where([data-vn-root]) [data-vn-dialogue] {
-  box-shadow: var(--vn-dialogue-shadow, 0 18px 46px rgba(0, 0, 0, 0.45)), 0 4px 28px var(--vn-atmosphere-glow, rgba(0, 0, 0, 0.32)), inset 0 1px 0 rgba(255, 255, 255, 0.22);
-}
-
-[data-vn-dialogue] {
-  transition: box-shadow 0.4s ease, border-color 0.4s ease, opacity 0.24s ease, transform 0.24s ease !important;
 }
 
 [data-vn-status-stack] {
@@ -1005,24 +1006,6 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   color: var(--aperture-text, var(--vn-text, #f8fafc));
 }
 
-.caption-head .speaker {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 7px !important;
-  white-space: nowrap !important;
-  min-width: 0 !important;
-  overflow: hidden !important;
-}
-
-.caption-head [data-vn-speaker] {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 4px !important;
-  padding: 0 !important;
-  background: transparent !important;
-  border: 0 !important;
-}
-
 [data-vn-root] [data-vn-dialogue] [data-vn-speaker][hidden],
 [data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-speaker][hidden],
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-speaker][hidden],
@@ -1033,24 +1016,6 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   display: none !important;
 }
 
-/* Compact sleek header action icons with generous invisible 44px touch reach */
-[data-vn-reader-header] .round-ghost {
-  position: relative !important;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
-  flex-shrink: 0 !important;
-}
-[data-vn-reader-header] .round-ghost::after {
-  content: "";
-  position: absolute;
-  inset: -6px;
-}
-[data-vn-reader-header] .round-ghost svg {
-  width: 15px !important;
-  height: 15px !important;
-}
 @media(max-width:600px){
  [data-vn-reader-header] .reading-heading { min-width:0;overflow:hidden; }
 }

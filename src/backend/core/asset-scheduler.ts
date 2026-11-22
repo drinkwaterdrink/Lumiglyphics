@@ -83,15 +83,16 @@ export class AssetScheduler {
     const matchingJobId = this.promptOwners.get(promptKey);
     const matching = matchingJobId ? this.scheduled.get(matchingJobId) : undefined;
 
-    if (matching && matching.job.status === "generated") {
+    if (matching && (matching.job.status === "generated" || matching.job.status === "browser_ready")) {
       const timestamp = now();
       const reusedJob = AssetJobSchema.parse({
         ...job,
-        status: "generated",
+        status: matching.job.status,
         imageId: matching.job.imageId,
         imageUrl: matching.job.imageUrl,
         startedAt: timestamp,
         generatedAt: timestamp,
+        readyAt: matching.job.readyAt,
         finishedAt: matching.job.finishedAt
       });
       const result = deferred<AssetJob>();
@@ -247,8 +248,20 @@ export class AssetScheduler {
       void this.run(item).finally(() => {
         const nextRunning = Math.max(0, (this.runningByProvider.get(provider) ?? 1) - 1);
         this.runningByProvider.set(provider, nextRunning);
+        this.pruneTerminalJobs();
         this.drain(provider);
       });
+    }
+  }
+
+  private pruneTerminalJobs(maxEntries = 256): void {
+    if (this.scheduled.size <= maxEntries) return;
+    const ownerIds = new Set(this.promptOwners.values());
+    for (const [jobId, item] of this.scheduled) {
+      if (this.scheduled.size <= maxEntries) break;
+      if (terminal(item.job.status) && !ownerIds.has(jobId)) {
+        this.scheduled.delete(jobId);
+      }
     }
   }
 

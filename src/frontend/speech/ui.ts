@@ -169,6 +169,7 @@ export class SpeechDock {
   constructor(private readonly options: SpeechDockOptions) {
     this.host = document.createElement("div");
     this.host.className = "vn-speech-dock";
+    this.host.dataset.vnSpeechDock = "";
     const shadow = this.host.attachShadow({ mode: "open" });
     const style = document.createElement("style");
     style.textContent = DOCK_CSS;
@@ -248,6 +249,14 @@ export class SpeechDock {
     this.progressLabel=document.createElement('span');this.progressLabel.dataset.speechElapsed='';this.progressLabel.style.cssText='font-variant-numeric:tabular-nums;font-size:12px';
     const timing=document.createElement('small');timing.textContent='Paragraph tracking · word timing unavailable';timing.style.cssText='display:block;margin-top:4px;opacity:.8';
     this.progressWrap.append(this.progressLabel,this.progressBar,timing);
+    dock.addEventListener("click", (event) => event.stopPropagation());
+    dock.addEventListener("keydown", (event) => {
+      event.stopPropagation();
+      if (event.key === "Escape" && this.popoverOpen) {
+        this.popoverOpen = false;
+        this.sync();
+      }
+    });
     dock.append(head, controls, this.statusEl,this.progressWrap);
     shadow.append(style, dock);
     this.setStatus({ kind: "off" });
@@ -299,7 +308,7 @@ export class SpeechDock {
         detail: { playing: this.playing }
       }));
     }
-    this.playButton.textContent = this.playing ? "❚❚ Pause" : "▶ Start";
+    this.playButton.textContent = status.kind === "loading" ? "… Loading" : this.playing ? "❚❚ Pause" : "▶ Start";
     this.playButton.setAttribute("aria-label", this.playing ? "Pause speech" : "Play this paragraph");
     this.playButton.disabled = status.kind === "loading";
     this.stopButton.disabled = status.kind === "off" || status.kind === "idle";

@@ -191,7 +191,8 @@ export class ReaderWorkspace {
         speechHost.dispatchEvent(new CustomEvent("lumiglyphics:speech-toggle", { bubbles: true }));
       } else {
         this.open('settings');
-        const settingsHost = this.shell.querySelector<HTMLElement>('[data-vn-settings-panel]');
+        this.onSettingsPage?.('speech');
+        const settingsHost = this.shell.querySelector<HTMLElement>('[data-vn-settings]');
         settingsHost?.dispatchEvent(new CustomEvent("lumiglyphics:navigate", { detail: { page: "speech" } }));
       }
     }, {signal});
@@ -298,10 +299,16 @@ export class ReaderWorkspace {
     const isOpen = forceOpen !== undefined ? forceOpen : !this.apertureOverlay.classList.contains('open');
     if (isOpen) {
       this.apertureOverlay.classList.add('open');
+      this.apertureOverlay.setAttribute('aria-hidden', 'false');
+      this.apertureOverlay.querySelector<HTMLButtonElement>('[data-action="aperture-close"]')?.focus?.({ preventScroll: true });
     } else {
+      const hadFocus = typeof document !== 'undefined' && this.apertureOverlay.contains(document.activeElement);
       this.apertureOverlay.classList.remove('open');
+      this.apertureOverlay.setAttribute('aria-hidden', 'true');
+      if (hadFocus) {
+        this.header.querySelector<HTMLButtonElement>('[data-aperture-open]')?.focus?.({ preventScroll: true });
+      }
     }
-    this.apertureOverlay.setAttribute('aria-hidden', String(!isOpen));
   }
 
   register(id: ReaderDestination, surface: WorkspaceSurface): void {

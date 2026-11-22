@@ -1087,6 +1087,7 @@ async function requestPlannerOutput(
       : {}),
     parameters,
     reasoning: { source: "off" },
+    ...(input.signal ? { signal: input.signal } : {}),
     ...(input.userId ? { userId: input.userId } : {})
   });
   if (input.usage) addPlannerTokens(input.usage, (response as { usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } } | null | undefined)?.usage);
@@ -2906,6 +2907,7 @@ export async function extractTurnLoreAsync(
       : {}),
     parameters,
     reasoning: { source: "off" },
+    ...(params.signal ? { signal: params.signal } : {}),
     ...(params.userId ? { userId: params.userId } : {}),
   });
   throwIfAborted(params.signal);

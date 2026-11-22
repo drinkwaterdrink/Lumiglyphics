@@ -1546,7 +1546,10 @@ export async function generateAssets(
     const scheduledCues = plan.classifierVisuals
       ? plan.visualCues.filter((cue) => initialJobs.some((job) => job.jobId === cue.assetJobId))
       : plan.visualCues;
-    const sceneShotChain = new Map<string, Promise<{ cue: VisualCue; shotSpec: ImageShotSpec; styleDNA: StyleDNA } | undefined>>();
+    const sceneShotChain = new Map<string, { jobId: string; promise: Promise<{ cue: VisualCue; shotSpec: ImageShotSpec; styleDNA: StyleDNA } | undefined> }>();
+    const startedOrDoneJobIds = new Set<string>(
+      initialJobs.filter((j) => j.status === "generated" || j.status === "browser_ready").map((j) => j.jobId),
+    );
     const promises = scheduledCues.map((cue) => {
       const existing = initialJobs.find((job) => job.jobId === cue.assetJobId);
       if (!existing) throw new Error(`Missing asset job ${cue.assetJobId}.`);
@@ -1554,11 +1557,15 @@ export async function generateAssets(
       // re-scheduled (the scheduler only accepts queued jobs).
       if (existing.status === "generated" || existing.status === "browser_ready") return Promise.resolve(existing);
       const sceneScopeKey = `${cue.sceneId}:${cue.sceneRevision}`;
-      const priorSceneShotPromise = sceneShotChain.get(sceneScopeKey);
+      const priorSceneShot = sceneShotChain.get(sceneScopeKey);
       let resolveSceneShot: ((value: { cue: VisualCue; shotSpec: ImageShotSpec; styleDNA: StyleDNA } | undefined) => void) | undefined;
-      sceneShotChain.set(sceneScopeKey, new Promise((resolve) => { resolveSceneShot = resolve; }));
+      sceneShotChain.set(sceneScopeKey, {
+        jobId: existing.jobId,
+        promise: new Promise((resolve) => { resolveSceneShot = resolve; }),
+      });
       const job = AssetJobSchema.parse({ ...existing, provider: providerKey });
       const scheduled=scheduler.schedule(job, async (scheduledJob, jobSignal) => {
+        startedOrDoneJobIds.add(scheduledJob.jobId);
         let settledShotChain = false;
         const releaseSceneShot = (value?: { cue: VisualCue; shotSpec: ImageShotSpec; styleDNA: StyleDNA }) => {
           if (!settledShotChain) {
@@ -1805,7 +1812,9 @@ export async function generateAssets(
           frozen.promptProfile=await loadImagePromptProfile(spindle,config,selected?.provider??provider,frozen.model);
           frozen=prepareCapabilityOutput(frozen,config.imageOutputAspectRatio!=='default'?config.imageOutputAspectRatio:cue.imageTemplate?.outputAspectRatio==='9:16'?'9:16':undefined,config.automaticImagePromptSettings&&isFluxKleinModel(frozen.model)?'standard':config.imageResolutionPreference);
           if (config.imagePromptEngineVersion === 2 && cue.imageTemplate) {
-            const previousSceneShot = priorSceneShotPromise ? await priorSceneShotPromise : undefined;
+            const previousSceneShot = priorSceneShot && startedOrDoneJobIds.has(priorSceneShot.jobId)
+              ? await priorSceneShot.promise
+              : undefined;
             const profileV2=await loadImagePromptProfileV2(spindle,config,selected?.provider??provider,frozen.model,frozen.parameters);
             const built=buildV2ImageRequest({
               config,

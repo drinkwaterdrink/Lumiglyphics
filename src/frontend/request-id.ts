@@ -43,7 +43,6 @@ export function createUiId(
   if (source === defaultSource && activeUuidProvider) {
     return activeUuidProvider();
   }
-  if (source?.randomUUID) return source.randomUUID();
   if (source?.getRandomValues) {
     return formatUuidV4FromRandomValues((arr) => source.getRandomValues!(arr));
   }

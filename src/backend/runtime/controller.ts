@@ -2748,8 +2748,17 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       const write = (async () => {
         const bytes = Uint8Array.from(atob(dataBase64), (character) => character.charCodeAt(0));
         const directory = target.split("/").slice(0, -1).join("/");
-        if (directory) await spindle.storage.mkdir(directory).catch(() => {});
-        await spindle.storage.writeBinary(target, bytes);
+        const userStore = spindle.userStorage as unknown as {
+          mkdir?: (dir: string, opts?: { userId?: string }) => Promise<void>;
+          writeBinary?: (path: string, data: Uint8Array, opts?: { userId?: string }) => Promise<void>;
+        } | undefined;
+        if (userStore && typeof userStore.writeBinary === "function") {
+          if (directory && typeof userStore.mkdir === "function") await userStore.mkdir(directory, userId ? { userId } : undefined).catch(() => {});
+          await userStore.writeBinary(target, bytes, userId ? { userId } : undefined);
+        } else {
+          if (directory) await spindle.storage.mkdir(directory).catch(() => {});
+          await spindle.storage.writeBinary(target, bytes);
+        }
         dbg(spindle, userId, `audio imported ${target} (${bytes.length} bytes)`);
       })();
       const pendingKey = userId ?? "owner";
@@ -2768,8 +2777,8 @@ async function handleFrontendMessage(spindle: SpindleAPI, request: FrontendReque
       pendingAudioImports.delete(pendingKey);
       await Promise.allSettled(pending);
       const config = await loadConfig(spindle, userId);
-      clearAudioCatalogCache();
-      const catalog = await scanAudioCatalog(spindle, config.audioDirectory || "audio");
+      clearAudioCatalogCache(userId);
+      const catalog = await scanAudioCatalog(spindle, config.audioDirectory || "audio", userId);
       dbg(spindle, userId, `audio import finished: ${request.fileCount} file(s) sent, catalog now ${catalog.bgm.length} BGM / ${catalog.sfx.length} SFX`);
       spindle.sendToFrontend({
         type: "vn_audio_scanned",
@@ -2934,14 +2943,33 @@ function reconcileMessageEvent(spindle: SpindleAPI, payload: unknown, userId?: s
 }
 
 export function registerVisualNovelBackend(spindle: SpindleAPI): void {
-  spindle.on("PERMISSION_CHANGED", (payload) => {
+  spindle.on("PERMISSION_CHANGED", (payload: { permission: string; granted: boolean }, userId?: string) => {
+    if (!payload.granted) {
+      const scopePrefix = runtimeKey(userId, "");
+      if (payload.permission === "image_gen") {
+        for (const key of activeTurnKeys.keys()) {
+          if (key.startsWith(scopePrefix)) {
+            abortAssetBatch(key, "Image generation permission was turned off.");
+          }
+        }
+      } else if (payload.permission === "generation") {
+        for (const key of activeTurnKeys.keys()) {
+          if (key.startsWith(scopePrefix)) {
+            const chatId = key.slice(scopePrefix.length);
+            planningQueue.cancelChat(userId, chatId, undefined, "Text generation permission was turned off.");
+          }
+        }
+      }
+    }
     spindle.sendToFrontend({
       type: "vn_permission",
       permission: payload.permission,
       granted: payload.granted
-    });
+    }, userId);
   });
   spindle.on("GENERATION_STARTED", (payload, userId) => {
+    const genType = (payload as { generationType?: string }).generationType;
+    if (genType === "impersonate" || genType === "quiet") return;
     generatingChats.add(runtimeKey(userId,payload.chatId));
     dbg(spindle, userId, `event GENERATION_STARTED chat=${payload.chatId}`);
     // A new generation is starting (a user message was submitted). Drop any
@@ -2958,12 +2986,16 @@ export function registerVisualNovelBackend(spindle: SpindleAPI): void {
     spindle.sendToFrontend({ type: "vn_generation", chatId: payload.chatId, active: true }, userId);
   });
   spindle.on("GENERATION_ENDED", (payload, userId) => {
+    const genType = (payload as { generationType?: string }).generationType;
+    if (genType === "impersonate" || genType === "quiet") return;
     void generationEnded(spindle, payload, userId).catch((error) => {
       spindle.log.error(`Visual novel turn failed: ${errorText(error)}`);
       spindle.sendToFrontend({ type: "vn_error", chatId: payload.chatId, operation: "generation_ended", error: errorText(error) }, userId);
     });
   });
   spindle.on("GENERATION_STOPPED", (payload, userId) => {
+    const genType = (payload as { generationType?: string }).generationType;
+    if (genType === "impersonate" || genType === "quiet") return;
     generatingChats.delete(runtimeKey(userId,payload.chatId));
     dbg(spindle, userId, `event GENERATION_STOPPED chat=${payload.chatId}`);
     spindle.sendToFrontend({ type: "vn_generation", chatId: payload.chatId, active: false }, userId);

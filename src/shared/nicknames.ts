@@ -47,13 +47,13 @@ const NICKNAME_CLUSTERS: ReadonlyArray<ReadonlySet<string>> = [
 ];
 
 const LOOKUP_MAP = new Map<string, Set<string>>();
-for (const cluster of NICKNAME_CLUSTERS) {
-  for (const name of cluster) {
+for (const group of NICKNAME_CLUSTERS) {
+  for (const name of group) {
     const existing = LOOKUP_MAP.get(name);
     if (!existing) {
-      LOOKUP_MAP.set(name, new Set(cluster));
+      LOOKUP_MAP.set(name, new Set(group));
     } else {
-      for (const item of cluster) {
+      for (const item of group) {
         existing.add(item);
       }
     }

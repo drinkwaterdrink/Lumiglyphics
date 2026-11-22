@@ -213,7 +213,7 @@ export class StageDossiers {
   this.workspace=workspace;this.workspaceMounted=true;
   const style=document.createElement('style');style.textContent=DOSSIER_CSS+DOCKED_DOSSIER_CSS;mount.append(style);
   this.card.setDocked();
-  if(this.folioOpener)this.card.setFolioOpener((charName)=>{this.workspace?.open('character');this.folioOpener?.(charName);});
+  if(this.folioOpener)this.card.setFolioOpener((charName)=>{this.npcActionToolsHandler?.(this.buildNpcActionTools(charName),charName);this.workspace?.open('character');this.folioOpener?.(charName);});
   workspace.register('story',{element:this.card.host,hideAtHome:true,enter:()=>this.openReferences(),leave:()=>this.card.close(),back:()=>this.card.back()});
  }
  private folioOpener?: (charName: string) => void;
@@ -515,7 +515,12 @@ export class StageDossiers {
   this.text.addEventListener?.('keyup',onPointerOrKeyUp);
   const doc=this.root.ownerDocument;
   doc?.addEventListener?.('pointerdown',onDocClick);
-  this.trackCleanup=()=>{doc?.removeEventListener?.('pointerdown',onDocClick);};
+  this.trackCleanup=()=>{
+   this.text.removeEventListener?.('pointerup',onPointerOrKeyUp);
+   this.text.removeEventListener?.('mouseup',onPointerOrKeyUp);
+   this.text.removeEventListener?.('keyup',onPointerOrKeyUp);
+   doc?.removeEventListener?.('pointerdown',onDocClick);
+  };
  }
  showTrackSelectionPill(phrase:string,rect?:{left:number;top:number;bottom:number}|null):void {
   const clean=phrase.replace(/\s+/g,' ').trim();
@@ -554,7 +559,8 @@ export class StageDossiers {
   bar.append(closeBtn);
   const stageRect=typeof this.root.getBoundingClientRect==='function'?this.root.getBoundingClientRect():null;
   const top=rect&&rect.top>54?rect.top-48:((stageRect?.top??0)+54);
-  const left=rect?Math.max(12,rect.left):((stageRect?.left??0)+16);
+  const maxLeft = Math.max(12, (typeof window !== 'undefined' ? window.innerWidth : 400) - 240);
+  const left=rect?Math.min(maxLeft, Math.max(12,rect.left)):((stageRect?.left??0)+16);
   bar.style.top=`${top}px`;
   bar.style.left=`${left}px`;
   this.root.append(bar);

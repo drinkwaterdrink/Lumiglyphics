@@ -74,6 +74,8 @@ aside[data-vn-workspace],
 [data-workspace-content] {
   position: relative;
   isolation: isolate;
+  background: var(--vn-shell-surface-gradient, var(--aperture-workspace-bg, #101a1e)) !important;
+  color: var(--vn-shell-text, #eff4e9) !important;
 }
 
 [data-surface]:before,
@@ -154,20 +156,6 @@ aside[data-vn-workspace]:before,
   background:
     var(--vn-shell-card-pattern, none),
     repeating-radial-gradient(ellipse at 102% 96%, transparent 0 59px, var(--vn-shell-ring, var(--aperture-ring-color, rgba(160, 205, 185, 0.08))) 60px, transparent 61px);
-}
-
-/* Unified theme surface gradients driven strictly by active preset tokens */
-[data-surface],
-[data-vn-settings],
-.settings-page,
-[data-settings-route],
-[data-vn-reference-sheet],
-[data-vn-dossier-card],
-[data-vn-cast-root],
-aside[data-vn-workspace],
-[data-workspace-content] {
-  background: var(--vn-shell-surface-gradient, var(--aperture-workspace-bg, #101a1e)) !important;
-  color: var(--vn-shell-text, #eff4e9) !important;
 }
 
 /* =========================================================================

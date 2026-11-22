@@ -196,7 +196,12 @@ export class CharacterFolio implements WorkspaceSurface {
         .character-folio-surface .folio-prompt-header span {display:block;margin-bottom:4px;}
         .folio-source-status {font-size:11px;opacity:.8;}
         .character-folio-surface .btn-field-autofill {min-width:44px;min-height:44px;}
+        .character-folio-surface button {min-height:44px;min-width:44px;}
         .character-folio-surface .folio-field input {min-height:44px;box-sizing:border-box;}
+        @media (pointer: coarse) {
+          .character-folio-surface input,
+          .character-folio-surface textarea {font-size:16px !important;}
+        }
         .character-folio-surface .folio-hero-avatar {width:60px;height:60px;}
 
         .character-folio-surface {
@@ -2757,7 +2762,7 @@ export class CharacterFolio implements WorkspaceSurface {
         const deleteBtn = document.createElement('button');
         deleteBtn.type = 'button';
         deleteBtn.className = 'folio-action-btn';
-        deleteBtn.style.cssText = 'font-size:11px;padding:4px 8px;background:rgba(239,68,68,0.18);color:#fca5a5;border:1px solid rgba(239,68,68,0.35);';
+        deleteBtn.style.cssText = 'font-size:11px;padding:4px 8px;background:rgba(239,68,68,0.18);color:var(--vn-shell-danger-ink,#fca5a5);border:1px solid rgba(239,68,68,0.35);';
         deleteBtn.textContent = '🗑️ Delete';
         deleteBtn.title = 'Delete this picture';
         let deleteArmed = false;

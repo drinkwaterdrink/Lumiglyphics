@@ -269,6 +269,7 @@ export class VnStage {
   private typewriterTimer: ReturnType<typeof setInterval> | null = null;
   private autoPlayTimer: ReturnType<typeof setTimeout> | null = null;
   private autoReadAlongTimer: ReturnType<typeof setInterval> | null = null;
+  private longPressTimer: ReturnType<typeof setTimeout> | null = null;
   private skipTimer: ReturnType<typeof setTimeout> | null = null;
   private crossfadeTimer: ReturnType<typeof setTimeout> | null = null;
   private currentDisplayedUrl: string | null = null;
@@ -663,15 +664,15 @@ export class VnStage {
     const el = document.createElement("div");
     el.dataset.vnBondBanner = "";
     el.setAttribute("role", "status");
-    el.style.cssText = "position:absolute;top:16px;right:16px;z-index:26;max-width:min(320px,85vw);padding:10px 14px;border-radius:10px;border:1px solid rgba(110,231,183,0.45);background:linear-gradient(135deg,rgba(15,23,42,0.94),rgba(30,41,59,0.92));color:#f8fafc;box-shadow:0 12px 28px rgba(0,0,0,0.45);backdrop-filter:blur(10px);display:flex;flex-direction:column;gap:2px;pointer-events:auto;";
+    el.style.cssText = "position:absolute;top:calc(64px + env(safe-area-inset-top, 0px));right:14px;z-index:34;max-width:min(320px,85vw);padding:10px 14px;border-radius:14px;border:1px solid var(--vn-shell-border-strong, rgba(160,205,185,0.45));background:var(--vn-shell-panel, rgba(15,23,42,0.94));color:var(--vn-shell-text, #f8fafc);box-shadow:var(--vn-shell-shadow, 0 12px 28px rgba(0,0,0,0.45));backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);display:flex;flex-direction:column;gap:2px;pointer-events:auto;";
     const eyebrow = document.createElement("div");
-    eyebrow.style.cssText = "font-size:10px;text-transform:uppercase;letter-spacing:0.12em;color:#6ee7b7;font-weight:700;";
+    eyebrow.style.cssText = "font-size:10px;text-transform:uppercase;letter-spacing:0.12em;color:var(--vn-shell-accent, #6ee7b7);font-weight:700;";
     eyebrow.textContent = `Bond Resonance · ${info.tier}`;
     const title = document.createElement("div");
-    title.style.cssText = "font-size:13px;font-weight:700;color:#ffffff;";
+    title.style.cssText = "font-size:13px;font-weight:700;color:var(--vn-shell-text, #ffffff);";
     title.textContent = `${info.name} → ${info.target}`;
     const meta = document.createElement("div");
-    meta.style.cssText = "font-size:11px;color:rgba(226,232,240,0.85);";
+    meta.style.cssText = "font-size:11px;color:var(--vn-shell-muted, rgba(226,232,240,0.85));";
     meta.textContent = `${info.label} (${info.affinity >= 0 ? `+${info.affinity}` : info.affinity})`;
     el.append(eyebrow, title, meta);
     el.addEventListener("click", (e) => { e.stopPropagation(); el.remove(); });
@@ -696,19 +697,19 @@ export class VnStage {
     const char = findCharacterDNA(this.characterDnaLibrary, name);
     const card = document.createElement("div");
     card.dataset.vnSpeakerPeek = "";
-    card.style.cssText = "position:relative;margin-top:6px;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.16);background:rgba(15,23,42,0.95);color:#f8fafc;box-shadow:0 12px 28px rgba(0,0,0,0.45);display:flex;flex-direction:column;gap:8px;max-width:340px;z-index:24;";
+    card.style.cssText = "position:relative;margin-top:6px;padding:10px 12px;border-radius:12px;border:1px solid var(--vn-shell-border, rgba(255,255,255,0.16));background:var(--vn-shell-panel, rgba(15,23,42,0.95));color:var(--vn-shell-text, #f8fafc);box-shadow:var(--vn-shell-shadow, 0 12px 28px rgba(0,0,0,0.45));display:flex;flex-direction:column;gap:8px;max-width:340px;z-index:24;";
     card.addEventListener("click", (e) => e.stopPropagation());
 
     const head = document.createElement("div");
     head.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;";
     const title = document.createElement("strong");
-    title.style.cssText = "font-size:13px;color:#fff;";
+    title.style.cssText = "font-size:13px;color:var(--vn-shell-text, #fff);";
     title.textContent = char ? char.name : name;
     const closeBtn = document.createElement("button");
     closeBtn.type = "button";
     closeBtn.textContent = "×";
     closeBtn.setAttribute("aria-label", "Close quick peek");
-    closeBtn.style.cssText = "border:none;background:transparent;color:#94a3b8;font-size:16px;cursor:pointer;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;padding:0 10px;";
+    closeBtn.style.cssText = "border:none;background:transparent;color:var(--vn-shell-muted, #94a3b8);font-size:16px;cursor:pointer;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;padding:0 10px;";
     closeBtn.addEventListener("click", () => this.closeSpeakerPeek());
     head.append(title, closeBtn);
     card.append(head);
@@ -1420,7 +1421,8 @@ export class VnStage {
     }
     const inlineInput = this.themeRoot.querySelector<HTMLInputElement>("[data-vn-inline-message]");
     const inlineSend = this.themeRoot.querySelector<HTMLButtonElement>("[data-vn-inline-send]");
-    if (inlineInput && document.activeElement !== inlineInput) {
+    const activeShadowEl = (this.themeRoot as unknown as { activeElement?: Element | null }).activeElement;
+    if (inlineInput && activeShadowEl !== inlineInput && inlineInput.value !== this.state.draft) {
       inlineInput.value = this.state.draft;
     }
     if (inlineSend) {
@@ -2276,13 +2278,12 @@ export class VnStage {
     let touchStartY = 0;
     let touchStartTime = 0;
     let isTouchSwiping = false;
-    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
     let longPressHandled = false;
     let longPressStart: { id: number; x: number; y: number } | null = null;
     const cancelLongPress = () => {
-      if (longPressTimer !== null) {
-        globalThis.clearTimeout(longPressTimer);
-        longPressTimer = null;
+      if (this.longPressTimer !== null) {
+        globalThis.clearTimeout(this.longPressTimer);
+        this.longPressTimer = null;
       }
       longPressStart = null;
     };
@@ -2330,8 +2331,8 @@ export class VnStage {
       longPressHandled = false;
       if (event.button === 0 && !this.workspace.isOpen() && !this.isBacklogOpen && !this.dossiers.isOpen() && !isInteractiveTarget(event.target)) {
         longPressStart = { id: event.pointerId, x: event.clientX, y: event.clientY };
-        longPressTimer = globalThis.setTimeout(() => {
-          longPressTimer = null;
+        this.longPressTimer = globalThis.setTimeout(() => {
+          this.longPressTimer = null;
           longPressStart = null;
           longPressHandled = true;
           if (sheetGesture) sheetGesture.moved = true;
@@ -2476,6 +2477,7 @@ export class VnStage {
     this.state = reduceVnStage(this.state, action);
     if (previousIndex !== this.state.currentParagraphIndex) {
       this.dialogueText.scrollTop = 0;
+      if (this.dialogueText.parentElement) this.dialogueText.parentElement.scrollTop = 0;
       this.resumeNotice?.remove();
       this.resumeNotice = null;
     }
@@ -2554,6 +2556,7 @@ export class VnStage {
         this.state = reduceVnStage(this.state, { type: "advance" });
       }
       this.dialogueText.scrollTop = 0;
+      if (this.dialogueText.parentElement) this.dialogueText.parentElement.scrollTop = 0;
       this.resumeNotice?.remove();
       this.resumeNotice = null;
       this.render(previousPhase);
@@ -2885,6 +2888,10 @@ export class VnStage {
   }
 
   private clearAllTimers(): void {
+    if (this.longPressTimer !== null) {
+      globalThis.clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
+    }
     this.clearTypewriter();
     this.clearAutoPlayTimer();
     this.clearSkipTimer();

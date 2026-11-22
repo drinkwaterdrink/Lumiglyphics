@@ -205,7 +205,8 @@ export function serializeFlux3Klein(input: SerializerInput): SerializerResult {
     const ensembleClauses: string[] = [];
 
     primarySubjects.forEach((s, i) => {
-      const label = `character_${s.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+      const slug = s.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || `subject_${i + 1}`;
+      const label = `character_${slug}`;
       const attireStr = s.attire ? `, wearing ${s.attire}` : '';
       const otsRole = isOts && i === 0
         ? '; in out-of-focus foreground frame edge, dorsal over-the-shoulder silhouette'

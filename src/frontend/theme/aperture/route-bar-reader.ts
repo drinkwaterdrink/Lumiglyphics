@@ -19,9 +19,6 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   box-shadow: 0 12px 32px rgba(18, 45, 31, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-}
-
-.route-bar {
   background: var(--aperture-bottom-bar-bg, rgba(16, 24, 30, 0.95));
   color: var(--aperture-text, #eaf3e4);
   border: 1px solid var(--aperture-bottom-bar-border, rgba(160, 205, 185, 0.24));
@@ -227,7 +224,7 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
   line-height: 1.3 !important;
   letter-spacing: 0.01em !important;
   color: color-mix(in srgb, var(--aperture-text, #f4f7f5) 92%, transparent) !important;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.72) !important;
+  text-shadow: var(--aperture-text-shadow, 0 1px 3px rgba(0, 0, 0, 0.72)) !important;
   pointer-events: auto !important;
   cursor: pointer !important;
   border-radius: 999px !important;
@@ -253,7 +250,7 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
   opacity: 0.88 !important;
 }
 [data-vn-world-strip] .vn-world-sep {
-  opacity: 0.26 !important;
+  opacity: 0.48 !important;
   font-weight: 300 !important;
   margin: 0 1px !important;
   flex: none !important;
@@ -377,18 +374,9 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
   font-size: 12px !important;
   cursor: pointer !important;
 }
-[data-vn-world-strip] .vn-world-glyph {
-  display: inline-flex !important;
-  align-items: center !important;
-  color: var(--vn-accent, #a8d3c8) !important;
-  flex: none !important;
-}
 [data-vn-world-strip] .vn-world-time {
   font-variant-numeric: tabular-nums !important;
   font-weight: 650 !important;
-}
-[data-vn-world-strip] .vn-world-sep {
-  opacity: 0.48 !important;
 }
 [data-vn-world-strip] .vn-world-weather {
   white-space: nowrap !important;
@@ -454,9 +442,6 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
 }
 
 /* Workspace bottom padding */
-aside[data-vn-workspace] {
-  padding-bottom: 0 !important;
-}
 .page-padding {
   padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px)) !important;
 }
@@ -566,16 +551,6 @@ aside[data-vn-workspace] {
   cursor: ns-resize !important;
   touch-action: none !important;
   z-index: 25 !important;
-}
-
-.resize-grip span {
-  width: 48px;
-  height: 4px;
-  border-radius: var(--vn-scrubber-radius, 999px);
-  background: color-mix(in srgb, var(--aperture-accent, #dcebad) 48%, transparent);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
-  transition: background 0.2s ease, width 0.2s ease, transform 0.2s ease;
-  pointer-events: none;
 }
 
 .resize-grip:hover span,
@@ -704,12 +679,6 @@ aside[data-vn-workspace] {
   overflow-wrap: break-word !important;
 }
 
-:where([data-vn-root]) [data-vn-dialogue-text] {
-  color: var(--aperture-text, var(--vn-text, #f9faf6));
-  font-family: var(--vn-font-family, Georgia, 'Times New Roman', serif);
-  text-shadow: 0 2px 7px rgba(0, 0, 0, 0.82), 0 1px 1px black;
-}
-
 /* Dialogue Footer */
 [data-vn-dialogue-footer],
 .caption-foot {
@@ -717,10 +686,6 @@ aside[data-vn-workspace] {
 }
 
 /* Dialogue Restore Button (when minimized) */
-[data-vn-show-text][hidden],
-.caption-restore[hidden] {
-  display: none !important;
-}
 [data-vn-clean-restore]:not([hidden]),
 .caption-restore:not([hidden]),
 [data-vn-show-text]:not([hidden]) {
@@ -834,12 +799,29 @@ aside[data-vn-workspace] {
 }
 
 [data-vn-reader-header] .round-ghost {
+  position: relative !important;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  flex-shrink: 0 !important;
   border-color: transparent !important;
   background: transparent !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   color: color-mix(in srgb, var(--aperture-text, #f7f9f3) 86%, transparent) !important;
+}
+
+[data-vn-reader-header] .round-ghost::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+
+[data-vn-reader-header] .round-ghost svg {
+  width: 15px !important;
+  height: 15px !important;
 }
 
 [data-vn-reader-header] .round-ghost:hover {
@@ -1046,6 +1028,11 @@ aside[data-vn-workspace] {
 
 [data-vn-inline-message]::placeholder {
   color: color-mix(in srgb, var(--aperture-muted, #94a3b8) 78%, transparent) !important;
+}
+@media (pointer: coarse) {
+  [data-vn-inline-message] {
+    font-size: 16px !important;
+  }
 }
 
 [data-vn-inline-send] {

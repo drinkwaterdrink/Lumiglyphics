@@ -574,7 +574,7 @@ export function buildRpgTurnSnapshot(
   packSegment("Q:", activeQuests);
 
   const openThoughts = (options?.thoughtCabinet ?? [])
-    .filter((t) => t.status === "open" || t.status === "unresolved")
+    .filter((t) => t.status !== "resolved")
     .slice(0, 3)
     .map((t) => t.title.trim().slice(0, 24))
     .filter(Boolean);

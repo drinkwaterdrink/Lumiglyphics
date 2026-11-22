@@ -1615,14 +1615,20 @@ export function setupVisualNovelFrontend(baseContext: SpindleFrontendContext): (
     }
     if (type === "vn_permission" && message.type === "vn_permission") {
       if (!message.granted) {
-        externalReview.cancel(); imageBridge.cancelAll();
-        deactivate();
-        reportStageError({
-          message: "Visual novel mode needs a permission that was turned off.",
-          detail: `Permission revoked: ${message.permission}. Re-enable it before reopening visual novel mode.`,
-          source: "permission",
-          retryable: false,
-        });
+        const corePermissions = new Set(["app_manipulation", "chat_mutation", "chats"]);
+        if (corePermissions.has(message.permission)) {
+          externalReview.cancel(); imageBridge.cancelAll();
+          deactivate();
+          reportStageError({
+            message: "Visual novel mode needs a permission that was turned off.",
+            detail: `Permission revoked: ${message.permission}. Re-enable it before reopening visual novel mode.`,
+            source: "permission",
+            retryable: false,
+          });
+        } else {
+          if (message.permission === "image_gen") imageBridge.cancelAll();
+          stage.setActivity?.(`Optional permission "${message.permission}" was turned off — continuing in degraded mode.`, "warning");
+        }
       }
       return;
     }

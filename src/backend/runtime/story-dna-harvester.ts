@@ -18,6 +18,7 @@ import { loadConfig, loadTurnRecord, turnPath } from './storage.js';
 import { extractSimTracker } from './simtracker.js';
 import { targetDnaPassages } from './character-dna-autofill.js';
 import { resolvePlannerConnection } from './connections.js';
+import { structuredJsonParametersFor } from './planner.js';
 import { jsonObject } from './planner/json-repair.js';
 import { loadVisualContext } from './context.js';
 
@@ -796,7 +797,7 @@ export async function autofillLocationDNA(
           ...{ connection_id: connection.id, provider: connection.provider, model: connection.model },
           userId: params.userId,
           reasoning: { source: 'off' },
-          parameters: { max_tokens: 1500 },
+          parameters: structuredJsonParametersFor(connection, 1500),
           messages: [
             {
               role: 'system',
@@ -920,7 +921,7 @@ export async function autofillItemDNA(
           ...{ connection_id: connection.id, provider: connection.provider, model: connection.model },
           userId: params.userId,
           reasoning: { source: 'off' },
-          parameters: { max_tokens: 1200 },
+          parameters: structuredJsonParametersFor(connection, 1200),
           messages: [
             {
               role: 'system',

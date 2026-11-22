@@ -1976,7 +1976,7 @@ ${VN_TEXT_EFFECTS_CSS}
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-dialogue]::before {
   content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
   display: block; width: 100%; height: 100%; margin: 0; border: 0; transform: none; animation: none; box-shadow: none;
-  background: color-mix(in srgb, var(--vn-dialogue-bg) calc(var(--caption-opacity, var(--vn-sheet-opacity, 0.9)) * 100%), transparent); opacity: var(--vn-sheet-opacity); pointer-events: none;
+  background: var(--vn-dialogue-bg); opacity: var(--caption-opacity, var(--vn-sheet-opacity, 0.9)); pointer-events: none;
 }
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-dialogue]::after { display: none; }
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-controls] {

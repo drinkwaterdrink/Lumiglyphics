@@ -195,7 +195,7 @@ const GOLDEN_HOUR_CSS = `
   content: "Continue";
   transform: none;
 }
-[data-vn-root][data-vn-preset="golden-hour"] [data-vn-continue]::after { color: #f8d0a9; content: "»"; font-size: 1.15rem; letter-spacing: -0.08em; line-height: 0.75; text-shadow: 0 0 6px rgba(248, 208, 169, 0.6); }
+[data-vn-root][data-vn-preset="golden-hour"]:not([data-vn-adjustable-sheet="true"]) [data-vn-continue]::after { color: #f8d0a9; content: "»"; font-size: 1.15rem; letter-spacing: -0.08em; line-height: 0.75; text-shadow: 0 0 6px rgba(248, 208, 169, 0.6); }
 [data-vn-root][data-vn-preset="golden-hour"] [data-vn-continue][data-vn-ready="true"]:hover { border-color: #ffd58d; color: #ffd58d; box-shadow: 0 0 0.9rem rgba(226, 176, 106, 0.35); }
 [data-vn-root][data-vn-preset="golden-hour"] [data-vn-interaction] {
   background:
@@ -298,7 +298,7 @@ const GOLDEN_HOUR_CSS = `
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
-[data-vn-root][data-vn-preset="golden-hour"] [data-vn-control] + [data-vn-control]::before {
+[data-vn-root][data-vn-preset="golden-hour"]:not([data-vn-adjustable-sheet="true"]) [data-vn-control] + [data-vn-control]::before {
   position: absolute;
   top: 28%;
   bottom: 28%;
@@ -755,7 +755,7 @@ const PAPER_NOVEL_CSS = `
   letter-spacing: 0.06em;
   text-transform: lowercase;
 }
-[data-vn-root][data-vn-preset="paper-novel"] [data-vn-control] + [data-vn-control]::before {
+[data-vn-root][data-vn-preset="paper-novel"]:not([data-vn-adjustable-sheet="true"]) [data-vn-control] + [data-vn-control]::before {
   position: absolute;
   top: 30%;
   bottom: 30%;
@@ -1003,7 +1003,7 @@ const MIDNIGHT_NOIR_CSS = `
   text-transform: uppercase;
 }
 /* The tab underline lights in amber on hover and while a mode runs. */
-[data-vn-root][data-vn-preset="midnight-noir"] [data-vn-control]::after {
+[data-vn-root][data-vn-preset="midnight-noir"]:not([data-vn-adjustable-sheet="true"]) [data-vn-control]::after {
   position: absolute;
   right: 0.6rem;
   bottom: 0.15rem;
@@ -1212,7 +1212,7 @@ const YAMAKU_CLASSIC_CSS = `
   content: none !important;
   display: none !important;
 }
-[data-vn-root][data-vn-preset="yamaku-classic"] [data-vn-continue]::after {
+[data-vn-root][data-vn-preset="yamaku-classic"]:not([data-vn-adjustable-sheet="true"]) [data-vn-continue]::after {
   content: "➔";
   color: inherit;
   font-family: "Segoe UI Symbol", "Arial Unicode MS", sans-serif;
@@ -1397,7 +1397,6 @@ const LITERATURE_CLUB_CSS = `
   letter-spacing: 0.02em;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
 }
-[data-vn-root][data-vn-preset="literature-club"] [data-vn-control-icon] { display: none; }
 [data-vn-root][data-vn-preset="literature-club"] [data-vn-control]:hover:not(:disabled) {
   background: transparent;
   color: #ffffff;
@@ -1450,7 +1449,7 @@ const LITERATURE_CLUB_CSS = `
   content: none !important;
   display: none !important;
 }
-[data-vn-root][data-vn-preset="literature-club"] [data-vn-continue]::after {
+[data-vn-root][data-vn-preset="literature-club"]:not([data-vn-adjustable-sheet="true"]) [data-vn-continue]::after {
   content: "▶";
   color: inherit;
   font-size: 1.1rem;

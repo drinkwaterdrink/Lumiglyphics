@@ -213,66 +213,6 @@ aside[data-vn-workspace] > header > div {
   outline: none !important;
 }
 
-/* Character Folio Hero Card Edge-to-Edge */
-.folio-hero-card {
-  height: 280px !important;
-  margin: -12px -18px 14px -18px !important;
-  border-radius: 0 !important;
-  position: relative !important;
-  overflow: hidden !important;
-}
-
-.folio-hero-card [data-dossier-media] {
-  position: absolute !important;
-  inset: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  border-radius: 0 !important;
-  border: 0 !important;
-  background: transparent !important;
-}
-
-.folio-hero-card img {
-  position: absolute !important;
-  inset: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: cover !important;
-  object-position: center 18% !important;
-}
-
-.folio-hero-card:after {
-  content: '' !important;
-  position: absolute !important;
-  inset: 0 !important;
-  background: linear-gradient(transparent 25%, rgba(7, 13, 18, 0.25) 55%, rgba(5, 13, 15, 0.92) 100%) !important;
-  pointer-events: none !important;
-  z-index: 1 !important;
-}
-
-.folio-hero-label {
-  position: absolute !important;
-  bottom: 28px !important;
-  left: 20px !important;
-  font-family: Georgia, serif !important;
-  font-size: 38px !important;
-  letter-spacing: -0.05em !important;
-  color: #fff !important;
-  text-shadow: 0 3px 12px rgba(0, 0, 0, 0.8) !important;
-  z-index: 2 !important;
-}
-
-.folio-hero-sub {
-  position: absolute !important;
-  left: 21px !important;
-  bottom: 10px !important;
-  font-size: 10px !important;
-  letter-spacing: 0.08em !important;
-  color: #deebdb !important;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8) !important;
-  z-index: 2 !important;
-}
-
 /* Orbital Lines Unconditional Visibility in Dark and Light Modes */
 aside[data-vn-workspace]:before,
 [data-workspace-content]:before,
@@ -328,76 +268,10 @@ aside[data-vn-workspace]:before,
   display: none !important;
 }
 
-/* Dialogue box layout & footer */
-[data-vn-dialogue] {
-  display: flex !important;
-  flex-direction: column !important;
-  justify-content: space-between !important;
-}
+/* Dialogue box footer */
 .caption-foot,
 [data-vn-dialogue-footer] {
   display: none !important;
-}
-
-/* World Lens active node, lens preview card, and CTA */
-.map-node-pill {
-  background: var(--aperture-accent-surface, rgba(20, 32, 28, 0.95)) !important;
-  color: var(--aperture-text, #eff4e9) !important;
-  border: 1px solid var(--aperture-button-border, rgba(160, 205, 185, 0.3)) !important;
-}
-.map-node-pill b {
-  color: var(--aperture-text, #eff4e9) !important;
-}
-.map-node-pill small {
-  color: var(--aperture-muted, #9cb5a8) !important;
-}
-.map-node-pill.active {
-  background: var(--aperture-accent, #dce9b5) !important;
-  color: var(--aperture-accent-contrast, #1b342b) !important;
-  border-color: var(--aperture-accent, #ecf4cc) !important;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.42), 0 0 0 2px var(--aperture-accent-glow, rgba(220, 238, 173, 0.35)) !important;
-}
-.map-node-pill.active b {
-  color: var(--aperture-accent-contrast, #1b342b) !important;
-}
-.map-node-pill.active small {
-  color: var(--aperture-accent-contrast, #385b4b) !important;
-  opacity: 0.82 !important;
-}
-.map-node-pill.active .index-dot {
-  background: var(--aperture-accent, #dce9b5) !important;
-  border-color: var(--aperture-accent-contrast, #19382f) !important;
-}
-.world-lens {
-  position: relative !important;
-  inset: auto !important;
-  margin: 10px 0 8px !important;
-  width: 100% !important;
-  box-sizing: border-box !important;
-  border-radius: 12px !important;
-  padding: 12px 14px !important;
-  background: var(--aperture-workspace-bg, rgba(17, 41, 35, 0.96)) !important;
-  color: var(--aperture-text, #f4f7ee) !important;
-  border: 1px solid var(--aperture-button-border, #5c8674) !important;
-  box-shadow: 0 13px 25px rgba(0, 0, 0, 0.33) !important;
-  backdrop-filter: blur(13px) !important;
-}
-.world-lens h3 {
-  color: var(--aperture-text, #f7faf0) !important;
-}
-.world-lens p {
-  color: var(--aperture-muted, #c3d7c8) !important;
-}
-.world-lens-cta {
-  color: var(--aperture-accent, #dfedb1) !important;
-  background: transparent !important;
-  border: 0 !important;
-  text-decoration: underline !important;
-  text-underline-offset: 3px !important;
-  cursor: pointer !important;
-  font-weight: 700 !important;
-  font-size: 11px !important;
-  padding: 0 !important;
 }
 
 /* World Lens Sheet layout override */
@@ -1181,6 +1055,14 @@ ${VN_SHELL_PRESET_TOKENS_CSS}
   backdrop-filter: blur(18px) saturate(1.2) !important;
   -webkit-backdrop-filter: blur(18px) saturate(1.2) !important;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.24) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 `;

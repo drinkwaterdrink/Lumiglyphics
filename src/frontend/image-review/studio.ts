@@ -92,9 +92,10 @@ section[data-typing="true"] [data-scene],section[data-typing="true"] .studio-her
 .studio-vf-safe-curtain{position:absolute;left:0;right:0;bottom:0;height:25%;background:repeating-linear-gradient(-45deg,color-mix(in srgb,var(--accent) 14%,transparent),color-mix(in srgb,var(--accent) 14%,transparent) 6px,rgba(0,0,0,.35) 6px,rgba(0,0,0,.35) 12px);border-top:1px dashed var(--accent);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--accent);letter-spacing:.03em;pointer-events:none}
 .studio-vf-subjects{position:absolute;inset:8px 8px 26% 8px;pointer-events:none;display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap}
 .studio-vf-subject-chip{pointer-events:auto;min-height:44px;padding:6px 12px;border-radius:999px;background:var(--vn-shell-panel,rgba(15,24,34,.86));border:1px solid var(--accent);color:var(--vn-shell-text,#fff);font-size:11px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.4)}
-.studio-vf-pill-row{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;-webkit-overflow-scrolling:touch}.studio-vf-pill-row::-webkit-overflow-scrolling:touch;scrollbar-width:none}.studio-vf-pill-row::-webkit-scrollbar{display:none}
+.studio-vf-pill-row{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;-webkit-overflow-scrolling:touch}.studio-vf-pill-row::-webkit-scrollbar{display:none}
 .studio-vf-pill{flex:0 0 auto;min-height:44px;min-width:44px;padding:6px 12px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid var(--edge);background:rgba(255,255,255,.04)}.studio-vf-pill[aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 22%,var(--vn-shell-button,#252632));color:var(--accent);font-weight:700}
 @container(max-width:600px){section{width:auto}[data-context]{gap:10px}[data-studio-body]{padding:10px}[data-thumbnail]{width:74px;height:96px}}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:0.01ms!important;animation-iteration-count:1!important;transition-duration:0.01ms!important}}
 `;
 
 export class ImageStudio {
@@ -620,7 +621,8 @@ export class ImageStudio {
         title,
         subtitle,
         prompt: record?.prompt,
-        negativePrompt: record?.negativePrompt
+        negativePrompt: record?.negativePrompt,
+        themeSource: this.host,
       });
     };
     context.querySelector('[data-thumbnail]')!.addEventListener('click', openHeroFullscreen);
@@ -2579,7 +2581,7 @@ export class ImageStudio {
 
   setPresentationRules(chat:string,id:string,catalog:PresentationRuleCatalog){return this.preferences.receive(chat,id,catalog);}
   presentationRulesError(error:string,id?:string){this.preferences.error(error,id);}
-  destroy(): void { this.tabObserver?.disconnect(); this.tabObserver=null; this.comparison.destroy();if(this.lintTimer)clearTimeout(this.lintTimer);this.editHistories.clear();this.previewLoad?.abort();this.previewLoad=null;this.setOpen(false);this.preferences.destroy(); this.drafts.clear(); this.host.remove(); }
+  destroy(): void { this.tabObserver?.disconnect(); this.tabObserver=null; this.comparison.destroy();if(this.lintTimer)clearTimeout(this.lintTimer);if(this.renderHeavyTimeout)clearTimeout(this.renderHeavyTimeout);this.renderHeavyTimeout=undefined;this.editHistories.clear();this.previewLoad?.abort();this.previewLoad=null;this.setOpen(false);this.preferences.destroy(); this.drafts.clear(); this.host.remove(); }
 }
 
 function friendlyStatus(status: string): string { return ({ browser_ready: "Ready", generated: "Ready", queued: "Waiting", generating: "Generating", review: "Awaiting review", approved: "Approved", cancelled: "Cancelled", skipped: "Skipped", failed: "Failed" } as Record<string, string>)[status] ?? status; }

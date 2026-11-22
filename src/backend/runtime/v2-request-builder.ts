@@ -113,8 +113,11 @@ export function buildV2ImageRequest(input:V2ImageRequestInput):{request:ImageGen
     }
   }
   if(compiled.parameterHints)request.parameters={...request.parameters,...compiled.parameterHints};
-  if(config.spatialFrustumEnabled===false&&request.parameters&&'layout_boxes' in request.parameters){
-   delete request.parameters.layout_boxes;
+  if(config.spatialFrustumEnabled===false){
+   if(request.parameters&&'layout_boxes' in request.parameters){
+    delete request.parameters.layout_boxes;
+   }
+   request.prompt=request.prompt.replace(/<(?:character_[a-z0-9_]+|scene_typography)>\s*/gi,'').replace(/\s{2,}/g,' ').trim();
   }
   if(metadata){
    metadata.budgetSummary={complexity:compiled.budgetPlan.complexity,softRange:compiled.budgetPlan.softRange,hardLimit:compiled.budgetPlan.hardLimit,finalCharacters:request.prompt.length+(request.negativePrompt?.length??0)};
