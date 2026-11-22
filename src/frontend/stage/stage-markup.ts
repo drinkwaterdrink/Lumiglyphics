@@ -97,24 +97,14 @@ export const THEME_MARKUP = `
     </div>
 
     <section data-vn-narrative hidden aria-label="Dialogue">
-      <div data-vn-quick-reply hidden role="dialog" aria-label="Quick reply composer">
-        <div data-vn-quick-reply-head>
-          <span>Reply Draft</span>
-          <button type="button" data-vn-quick-reply-close aria-label="Close reply composer">×</button>
-        </div>
-        <textarea data-vn-quick-reply-input rows="3" placeholder="Write or edit your reply at any point in the scene…"></textarea>
-        <div data-vn-quick-reply-actions>
-          <button type="button" data-vn-quick-reply-clear>Clear</button>
-          <button type="button" data-vn-quick-reply-send>Send Reply →</button>
-        </div>
-      </div>
       <div data-vn-dialogue class="reader-caption refined-caption">
         <div class="caption-head" data-vn-sheet-header>
-          <div class="speaker"><span data-vn-speaker></span><span class="caption-split">/</span><span data-vn-caption-scene>SCENE</span></div>
-          <button type="button" data-vn-compose-toggle aria-label="Compose or edit reply" title="Reply Draft (R)">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-            <span data-vn-compose-badge hidden aria-hidden="true"></span>
-          </button>
+          <div class="speaker">
+            <span class="speaker-avatar" data-vn-speaker-avatar hidden aria-hidden="true"></span>
+            <span data-vn-speaker></span>
+            <span class="caption-split" aria-hidden="true"><svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 14s4.5-4.3 4.5-7.7a4.5 4.5 0 1 0-9 0C3.5 9.7 8 14 8 14Z"/><circle cx="8" cy="6.3" r="1.5"/></svg></span>
+            <span data-vn-caption-scene>SCENE</span>
+          </div>
         </div>
         <div class="scroll-copy">
           <p data-vn-dialogue-text></p>
@@ -126,28 +116,31 @@ export const THEME_MARKUP = `
           <span data-vn-footer-speaker></span>
           <span data-vn-reading-state aria-live="polite" style="display:none"></span>
         </div>
-      </div>
-      <footer class="reader-actions">
         <div class="reader-progress">
           <small data-vn-step-left>1 / 1</small>
           <div data-vn-scrubber class="ticks" role="group" aria-label="Paragraph timeline"></div>
-          <small data-vn-step-right>100%</small>
+          <small data-vn-step-right hidden>100%</small>
         </div>
+      </div>
+      <footer class="reader-actions">
         <nav data-vn-controls class="reader-action-row" aria-label="Reading controls">
           <button data-vn-control="previous" class="action icon-action nav-step-btn" type="button" aria-label="Previous paragraph" aria-keyshortcuts="ArrowLeft" title="Previous paragraph (Left Arrow)">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></span><span data-vn-control-label style="display:none">Previous</span>
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></span><span data-vn-control-label style="display:none">Previous</span>
           </button>
-          <button data-vn-control="log" class="action icon-action" type="button" aria-label="Open history" aria-keyshortcuts="L" title="History (L)">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 1 3 7M3 5v7h7M12 7v5l4 2"/></svg></span><span data-vn-control-label>History</span>
+          <button data-vn-control="settings" class="action icon-action" type="button" aria-label="Extension settings" title="Settings">
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg></span><span data-vn-control-label>Settings</span>
+          </button>
+          <button data-vn-control="studio" class="action icon-action" type="button" aria-label="Art Studio" title="Art Studio">
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></span><span data-vn-control-label>Art</span>
           </button>
           <button data-vn-control="lens" class="action icon-action" type="button" aria-label="World Lens" title="World Lens">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M11.5 3a17 17 0 0 0 0 18M12.5 3a17 17 0 0 1 0 18"/></svg></span><span data-vn-control-label>Lens</span>
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9Z"/><path d="M5 3v4M3 5h4M19 17v4M17 19h4"/></svg></span><span data-vn-control-label>Lens</span>
           </button>
           <button data-vn-control="cast" class="action icon-action" type="button" aria-label="Open Cast and Character Folio" title="Cast & Characters">
             <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><circle cx="16.5" cy="10" r="2.5"/><path d="M3.5 19c0-3 3-5 5.5-5s5.5 2 5.5 5M15 14c2.2 0 4.5 1.4 4.5 4.5"/></svg></span><span data-vn-control-label>Cast</span>
           </button>
-          <button data-vn-control="settings" class="action icon-action" type="button" aria-label="Extension settings" title="Settings">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg></span><span data-vn-control-label>Settings</span>
+          <button data-vn-control="log" class="action icon-action" type="button" aria-label="Open history" aria-keyshortcuts="L" title="History (L)">
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg></span><span data-vn-control-label>History</span>
           </button>
           <button
             data-vn-continue
@@ -156,9 +149,9 @@ export const THEME_MARKUP = `
             aria-label="Continue"
             aria-keyshortcuts="Enter Space ArrowRight"
             title="Continue (Enter)"
-          ><span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span></button>
+          ><span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span></button>
 
-          <button data-vn-control="auto" type="button" aria-label="Auto play" aria-pressed="false" aria-keyshortcuts="A" title="Auto play (A)">
+          <button data-vn-control="auto" class="vn-aux-control" type="button" aria-label="Auto play" aria-pressed="false" aria-keyshortcuts="A" title="Auto play (A)" style="display:none">
             <span data-vn-auto-ring aria-hidden="true">
               <svg viewBox="0 0 16 16" width="14" height="14">
                 <circle class="vn-auto-track" cx="8" cy="8" r="6" fill="none" stroke-width="2" />
@@ -167,11 +160,17 @@ export const THEME_MARKUP = `
             </span>
             <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" focusable="false" fill="currentColor" stroke="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3.2v9.6L12.6 8z" /></svg></span><span data-vn-control-label>Auto</span>
           </button>
-          <button data-vn-control="skip" type="button" aria-label="Skip" aria-pressed="false" aria-describedby="vn-skip-description" aria-keyshortcuts="S" title="Skip (S)">
+          <button data-vn-control="skip" class="vn-aux-control" type="button" aria-label="Skip" aria-pressed="false" aria-describedby="vn-skip-description" aria-keyshortcuts="S" title="Skip (S)" style="display:none">
             <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" focusable="false" fill="currentColor" stroke="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3.5v9L7.6 8z" /><path d="M8.2 3.5v9L13.8 8z" /></svg></span><span data-vn-control-label>Skip</span>
           </button>
           <span id="vn-skip-description" data-vn-skip-description hidden></span>
         </nav>
+        <form class="reader-inline-composer" data-vn-inline-composer>
+          <input type="text" data-vn-inline-message placeholder="Message…" aria-label="Send a message" autocomplete="off" />
+          <button type="submit" data-vn-inline-send aria-label="Send message" title="Send message">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4Z"/></svg>
+          </button>
+        </form>
       </footer>
     </section>
 

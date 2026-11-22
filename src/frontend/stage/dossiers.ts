@@ -265,7 +265,31 @@ export class StageDossiers {
     this.workspace?.open('character');
   });
  }
- private buildSceneHubContext(snapshot:PresentationSnapshot|undefined):DossierSceneHubContext {
+  speakerAvatarUrl(speakerName: string): string | null {
+   const needle = speakerName.trim().toLocaleLowerCase();
+   if (!needle) return null;
+   const matchedChar = findCharacterDNA(this.characterDnaLibrary, speakerName);
+   if (matchedChar?.referenceImageUrl) return matchedChar.referenceImageUrl;
+   const snapshot = this.snapshot();
+   if (snapshot) {
+    const npc = snapshot.entities.find((e) =>
+     e.kind === 'npc' && (e.name.trim().toLocaleLowerCase() === needle || e.aliases.some((a) => a.trim().toLocaleLowerCase() === needle))
+    );
+    if (npc) {
+     const resolved = this.resolveVisualContext(npc).imageUrl;
+     if (resolved) return resolved;
+    }
+   }
+   const urlOf = (a: AssetView) => a.stageAsset?.displayImageUrl ?? sceneImageUrlFor(a) ?? undefined;
+   const portrait = [...(this.turnMedia?.assets ?? [])].reverse().find((a) =>
+    (a.status === 'generated' || a.status === 'browser_ready') &&
+    a.stageAsset?.role === 'portrait' &&
+    a.stageAsset.character?.trim().toLocaleLowerCase() === needle &&
+    Boolean(urlOf(a))
+   );
+   return portrait ? urlOf(portrait) ?? null : null;
+  }
+  private buildSceneHubContext(snapshot:PresentationSnapshot|undefined):DossierSceneHubContext {
   const eligible=snapshot?eligibleEntities(snapshot.entities,this.prefs,snapshot.at.key.chatId):[];
   const activePlace=snapshot?.locationId?eligible.find(e=>e.kind==='place'&&e.id===snapshot.locationId):eligible.find(e=>e.kind==='place');
   const firstStoredLoc=Object.values(this.storyDna.locations)[0];

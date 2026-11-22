@@ -89,10 +89,10 @@ export class ReaderWorkspace {
       </div>
       <div data-reader-header-actions class="topbar-actions" style="display:flex;align-items:center;gap:6px;margin-left:auto">
         <button type="button" class="round-ghost" data-action="cast-toggle" title="Cast portraits" aria-label="Show cast portraits">${APERTURE_ICONS.cast}</button>
-        <button type="button" class="round-ghost" data-action="panels-toggle" title="Panels" aria-label="Open Panels">${APERTURE_ICONS.panel}</button>
+        <button type="button" class="round-ghost" data-action="panels-toggle" title="Pin a card from this reply" aria-label="Open Panels" hidden>${APERTURE_ICONS.panel}</button>
         <button type="button" class="round-ghost" data-action="voice-toggle" title="Voice controls" aria-label="Voice controls">${APERTURE_ICONS.speaker}</button>
         <button type="button" class="round-ghost" data-action="studio-toggle" title="Art Studio" aria-label="Open Art Studio">${APERTURE_ICONS.image}</button>
-        <button type="button" data-reader-search aria-label="Search menus and settings (/)" style="display:none">${readerIcon('search')}<span>Find</span><kbd>/</kbd></button>
+        <button type="button" class="round-ghost" data-reader-search title="Search menus and settings (/)" aria-label="Search menus and settings (/)">${readerIcon('search')}</button>
         <button type="button" data-reader-focus aria-label="Hide navigation ([)" aria-keyshortcuts="[" style="display:none">${readerIcon('focus')}<span>Hide chrome</span><kbd>[</kbd></button>
         <button type="button" class="round-ghost" data-action="chat-exit" title="Back to chat" aria-label="Back to Lumiverse chat">${APERTURE_ICONS.chat}</button>
       </div>
@@ -359,6 +359,11 @@ export class ReaderWorkspace {
   }
   /** A tool's own close button should close its workspace, not a different destination. */
   toolClosed(id: ReaderDestination): void { if (!this.changing && this.current === id) this.close(); }
+  setShowPanelsMenu(enabled: boolean): void {
+    const btn = this.header.querySelector<HTMLButtonElement>('[data-action="panels-toggle"]');
+    if (btn) btn.hidden = !enabled;
+    this.shell.dataset.vnShowPanels = enabled ? 'true' : 'false';
+  }
   private openMore(trigger: HTMLElement, pushHistory = true): void {
     if (this.destroyed || this.changing) return;
     if (pushHistory && this.current && this.current !== 'more') {

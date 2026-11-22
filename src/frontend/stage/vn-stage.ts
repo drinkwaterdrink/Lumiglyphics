@@ -445,45 +445,42 @@ export class VnStage {
     this.composeBadge = this.themeRoot.querySelector<HTMLElement>("[data-vn-compose-badge]");
     this.quickReplyDrawer = this.themeRoot.querySelector<HTMLElement>("[data-vn-quick-reply]");
     this.quickReplyInput = this.themeRoot.querySelector<HTMLTextAreaElement>("[data-vn-quick-reply-input]");
-    const quickReplyClose = this.themeRoot.querySelector<HTMLButtonElement>("[data-vn-quick-reply-close]");
-    const quickReplyClear = this.themeRoot.querySelector<HTMLButtonElement>("[data-vn-quick-reply-clear]");
-    const quickReplySend = this.themeRoot.querySelector<HTMLButtonElement>("[data-vn-quick-reply-send]");
-    if (this.composeToggle && this.quickReplyDrawer) {
-      this.composeToggle.addEventListener("click", (e) => {
+    const inlineComposer = this.themeRoot.querySelector<HTMLFormElement>("[data-vn-inline-composer]");
+    const inlineInput = this.themeRoot.querySelector<HTMLInputElement>("[data-vn-inline-message]");
+    const inlineSend = this.themeRoot.querySelector<HTMLButtonElement>("[data-vn-inline-send]");
+    if (inlineComposer && inlineInput) {
+      inlineComposer.addEventListener("click", (e) => e.stopPropagation());
+      inlineInput.addEventListener("keydown", (e) => {
         e.stopPropagation();
-        this.toggleQuickReplyDrawer();
+        if (e.key === "Escape") {
+          inlineInput.blur();
+          return;
+        }
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          const text = (inlineInput.value || this.state.draft).trim();
+          if (!text) return;
+          inlineInput.value = "";
+          if (inlineSend) inlineSend.disabled = true;
+          void this.submitQuickReply(text);
+        }
       });
-    }
-    this.quickReplyDrawer?.addEventListener("click", (e) => e.stopPropagation());
-    this.quickReplyDrawer?.addEventListener("keydown", (e) => {
-      e.stopPropagation();
-      if (e.key === "Escape") {
-        this.closeQuickReplyDrawer(true);
-        return;
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      inlineInput.addEventListener("input", () => {
+        this.storeReplyDraft(inlineInput.value);
+        if (inlineSend) inlineSend.disabled = !inlineInput.value.trim();
+      });
+      const triggerInlineSubmit = (e: Event) => {
         e.preventDefault();
-        const text = (this.quickReplyInput?.value ?? this.state.draft).trim();
-        if (text) void this.submitQuickReply(text);
-      }
-    });
-    this.quickReplyInput?.addEventListener("input", () => {
-      this.storeReplyDraft(this.quickReplyInput!.value);
-      this.syncComposeUi();
-    });
-    quickReplyClose?.addEventListener("click", () => {
-      this.closeQuickReplyDrawer(true);
-    });
-    quickReplyClear?.addEventListener("click", () => {
-      this.storeReplyDraft("");
-      if (this.quickReplyInput) this.quickReplyInput.value = "";
-      this.syncComposeUi();
-    });
-    quickReplySend?.addEventListener("click", () => {
-      const text = (this.quickReplyInput?.value ?? this.state.draft).trim();
-      if (!text) return;
-      void this.submitQuickReply(text);
-    });
+        e.stopPropagation();
+        const text = (inlineInput.value || this.state.draft).trim();
+        if (!text) return;
+        inlineInput.value = "";
+        if (inlineSend) inlineSend.disabled = true;
+        void this.submitQuickReply(text);
+      };
+      inlineComposer.addEventListener("submit", triggerInlineSubmit);
+      inlineSend?.addEventListener("click", triggerInlineSubmit);
+    }
     this.bindEvents();
     this.updateControlButtons();
     this.render(null);
@@ -1195,6 +1192,7 @@ export class VnStage {
 
   setCastAbsenceDisplay(value:'hide'|'dim'):void{this.castStage.setAbsenceDisplay(value);}
   setCastMode(enabled:boolean):void {this.castStage.setEnabled(enabled);}
+  setShowPanelsMenu(enabled: boolean): void { this.workspace.setShowPanelsMenu(enabled); }
   setRpgMode(mode: RpgMode): void {
     this.rpgMode = mode;
     this.rpgHud.update(this.rpgMode, this.rpgState);
@@ -1368,7 +1366,7 @@ export class VnStage {
     this.renderSceneHud();
     const sceneSpan=this.themeRoot.querySelector<HTMLElement>("[data-vn-caption-scene]");
     const activePlace=this.dossiers.sceneHudEntries().find(e=>e.kind==="place")?.name;
-    if(sceneSpan&&activePlace)sceneSpan.textContent=activePlace.trim().toUpperCase();
+    if(sceneSpan&&activePlace)sceneSpan.textContent=activePlace.trim();
   }
 
   private syncComposeUi(): void {
@@ -1376,6 +1374,14 @@ export class VnStage {
     if (this.composeBadge) this.composeBadge.hidden = !hasDraft;
     if (this.quickReplyInput && document.activeElement !== this.quickReplyInput) {
       this.quickReplyInput.value = this.state.draft;
+    }
+    const inlineInput = this.themeRoot.querySelector<HTMLInputElement>("[data-vn-inline-message]");
+    const inlineSend = this.themeRoot.querySelector<HTMLButtonElement>("[data-vn-inline-send]");
+    if (inlineInput && document.activeElement !== inlineInput) {
+      inlineInput.value = this.state.draft;
+    }
+    if (inlineSend) {
+      inlineSend.disabled = !hasDraft;
     }
   }
 
@@ -2181,6 +2187,12 @@ export class VnStage {
       this.workspace.open("settings", settingsBtn);
     });
 
+    const studioBtn = this.themeRoot.querySelector<HTMLButtonElement>("[data-vn-control='studio']");
+    studioBtn?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.workspace.open("artwork", studioBtn);
+    });
+
     this.autoButton.addEventListener("click", (event) => {
       event.stopPropagation();
       this.toggleAutoPlay();
@@ -2337,7 +2349,13 @@ export class VnStage {
       if (this.isCleanView && (event.key === "Escape" || event.key === "h" || event.key === "H")) { event.preventDefault(); this.setCleanView(false); return; }
       if (isInteractiveTarget(event.target)) return;
       if (event.key === "h" || event.key === "H") { event.preventDefault(); this.setCleanView(!this.isCleanView); return; }
-      if (event.key === "r" || event.key === "R") { event.preventDefault(); this.toggleQuickReplyDrawer(); return; }
+      if (event.key === "r" || event.key === "R") {
+        event.preventDefault();
+        const inlineInput = this.themeRoot.querySelector<HTMLInputElement>("[data-vn-inline-message]");
+        if (inlineInput) inlineInput.focus();
+        else this.toggleQuickReplyDrawer();
+        return;
+      }
       if (event.key === "w" || event.key === "W") { if (this.dossiers.openTrayFromStage()) event.preventDefault(); return; }
       if (event.key === "ArrowLeft") {
         event.preventDefault();
@@ -2706,6 +2724,8 @@ export class VnStage {
     this.dispatch({ type: "submit-started" });
     try {
       await this.callbacks.onSubmit(trimmed);
+      this.storeReplyDraft("");
+      this.syncComposeUi();
     } catch (error) {
       this.dispatch({ type: "submit-failed", error: errorMessage(error) });
     }
@@ -2762,15 +2782,38 @@ export class VnStage {
     this.workspace.setCaption(speaker ? `${speaker} · ${view.paragraphNumber} / ${view.paragraphCount}` : view.paragraph ? `Reading · ${view.paragraphNumber} / ${view.paragraphCount}` : "Visual novel");
     this.speaker.title = speaker;
     this.speaker.hidden = !view.paragraph?.speaker;
+    const avatarEl = this.themeRoot.querySelector<HTMLElement>("[data-vn-speaker-avatar]");
+    if (avatarEl) {
+      if (!speaker) {
+        avatarEl.hidden = true;
+        avatarEl.replaceChildren();
+      } else {
+        const avatarUrl = this.dossiers.speakerAvatarUrl(speaker);
+        avatarEl.hidden = false;
+        avatarEl.replaceChildren();
+        if (avatarUrl) {
+          const img = document.createElement("img");
+          img.src = avatarUrl;
+          img.alt = "";
+          img.decoding = "async";
+          avatarEl.append(img);
+          avatarEl.classList.remove("is-monogram");
+        } else {
+          const initial = speaker.trim().charAt(0).toUpperCase() || "•";
+          avatarEl.textContent = initial;
+          avatarEl.classList.add("is-monogram");
+        }
+      }
+    }
     const sceneSpan = this.themeRoot.querySelector<HTMLElement>("[data-vn-caption-scene]");
     const splitSpan = this.themeRoot.querySelector<HTMLElement>(".caption-split");
     const activePlace = this.dossiers.sceneHudEntries().find(e => e.kind === "place")?.name;
     const sceneLoc = (activePlace || "SCENE").trim();
     if (sceneSpan) {
-      sceneSpan.textContent = sceneLoc.toUpperCase();
+      sceneSpan.textContent = sceneLoc;
     }
     if (splitSpan) {
-      splitSpan.hidden = !speaker;
+      splitSpan.hidden = !sceneLoc;
     }
     const progress = view.paragraph
       ? `PASSAGE ${String(view.paragraphNumber).padStart(2, '0')}`

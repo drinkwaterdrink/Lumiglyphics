@@ -241,21 +241,21 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-dialogue] {
   position: absolute !important;
   z-index: 30 !important;
-  left: 14px !important;
-  right: 14px !important;
+  left: 10px !important;
+  right: 10px !important;
   width: auto !important;
   max-width: none !important;
   margin: 0 !important;
   box-sizing: border-box !important;
   top: auto !important;
-  bottom: calc(104px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
-  height: var(--caption-height, 146px);
-  min-height: 48px;
-  max-height: calc(100% - 168px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
-  padding: 8px 14px 9px !important;
+  bottom: calc(68px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
+  height: var(--caption-height, 184px);
+  min-height: 76px;
+  max-height: calc(100% - 132px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+  padding: 11px 15px 11px !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 3px !important;
+  gap: 6px !important;
   overflow: hidden !important;
   pointer-events: auto !important;
   touch-action: pan-y !important;
@@ -263,12 +263,12 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 }
 
 :where([data-vn-root]) [data-vn-dialogue] {
-  border: 1px solid var(--aperture-dialogue-border, var(--vn-dialogue-border, rgba(160, 205, 185, 0.28)));
-  border-radius: min(var(--vn-shell-radius, 16px), 18px);
-  background: var(--aperture-dialogue-bg, var(--vn-dialogue-bg, rgba(8, 18, 15, var(--caption-opacity, 0.82))));
-  -webkit-backdrop-filter: blur(var(--caption-blur, 14px));
-  backdrop-filter: blur(var(--caption-blur, 14px));
-  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 24%, var(--aperture-dialogue-border, var(--vn-dialogue-border, rgba(255, 255, 255, 0.16))));
+  border-radius: min(var(--vn-shell-radius, 20px), 22px);
+  background: var(--aperture-dialogue-bg, var(--vn-dialogue-bg, rgba(8, 18, 15, var(--caption-opacity, 0.86))));
+  -webkit-backdrop-filter: blur(var(--caption-blur, 18px));
+  backdrop-filter: blur(var(--caption-blur, 18px));
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.56), 0 0 24px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 8%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
 /* Draggable Top Resize Grip */
@@ -290,50 +290,92 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 
 .resize-grip span {
   display: block !important;
-  width: 28px !important;
-  height: 2.5px !important;
-  border-radius: var(--vn-scrubber-radius, 2px) !important;
-  background: color-mix(in srgb, var(--aperture-accent, #dcebad) 58%, transparent) !important;
+  width: 32px !important;
+  height: 3px !important;
+  border-radius: var(--vn-scrubber-radius, 999px) !important;
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 48%, transparent) !important;
 }
 
-/* Dialogue Header (Speaker, Scene, Auto, Minimize) */
+/* Dialogue Header (Speaker Avatar, Speaker Name, Location Pin & Scene, Play/Hide Pill) */
 .caption-head,
 [data-vn-sheet-header] {
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
-  min-height: 26px !important;
+  gap: 8px !important;
+  min-height: 34px !important;
   touch-action: none !important;
   margin-top: 0 !important;
-  margin-bottom: 3px !important;
-  padding-bottom: 4px !important;
-  border-bottom: 1px solid color-mix(in srgb, var(--aperture-accent, #dcebad) 16%, transparent) !important;
+  margin-bottom: 2px !important;
+  padding-bottom: 6px !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 14%, rgba(255, 255, 255, 0.08)) !important;
   flex: none !important;
 }
 
 .caption-head .speaker {
-  display: flex !important;
+  display: inline-flex !important;
   align-items: center !important;
-  gap: 5px !important;
+  gap: 7px !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+.speaker-avatar,
+[data-vn-speaker-avatar] {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
+  border-radius: 50% !important;
+  overflow: hidden !important;
+  flex: none !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 18%, rgba(15, 23, 42, 0.85)) !important;
+  border: 1.5px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 68%, rgba(255, 255, 255, 0.45)) !important;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 34%, transparent) !important;
+  color: var(--aperture-accent, #c4b5fd) !important;
+  font-size: 13px !important;
+  font-weight: 750 !important;
+}
+
+[data-vn-speaker-avatar][hidden] {
+  display: none !important;
+}
+
+[data-vn-speaker-avatar] img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center 20% !important;
+  display: block !important;
 }
 
 .caption-head [data-vn-speaker] {
-  font-size: 12px !important;
-  font-weight: 750 !important;
-  color: var(--aperture-accent, #dcebad) !important;
-  letter-spacing: 0.08em !important;
-  text-transform: uppercase !important;
+  font-size: 13.5px !important;
+  font-weight: 700 !important;
+  color: var(--aperture-text, #f8fafc) !important;
+  letter-spacing: 0.01em !important;
+  text-transform: none !important;
 }
 
 .caption-head .caption-split {
-  color: color-mix(in srgb, var(--aperture-accent, #dcebad) 42%, transparent) !important;
-  font-size: 9px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  color: color-mix(in srgb, var(--aperture-muted, #94a3b8) 85%, transparent) !important;
+  margin-left: 3px !important;
+  flex: none !important;
 }
 
 .caption-head [data-vn-caption-scene] {
-  font-size: 9.5px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
   color: var(--aperture-muted, #9cb5a8) !important;
-  letter-spacing: 0.06em !important;
+  letter-spacing: 0.01em !important;
+  text-transform: none !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 
 .caption-head-actions,
@@ -345,10 +387,11 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   align-items: center !important;
   gap: 2px !important;
   margin-left: auto !important;
-  padding: 1px 3px !important;
+  padding: 2px 5px !important;
   border-radius: 999px !important;
-  background: color-mix(in srgb, var(--aperture-button-bg, #0e1e18) 38%, transparent) !important;
-  border: 1px solid color-mix(in srgb, var(--aperture-accent, #dcebad) 18%, transparent) !important;
+  background: color-mix(in srgb, var(--aperture-button-bg, #131b26) 72%, rgba(255, 255, 255, 0.05)) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, rgba(255, 255, 255, 0.14)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
 }
 
 .caption-tool,
@@ -356,15 +399,15 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-sheet-tools] button,
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-hide-text] {
   position: relative !important;
-  width: 28px;
-  height: 24px;
-  min-width: 28px;
-  min-height: 24px;
+  width: 30px;
+  height: 26px;
+  min-width: 30px;
+  min-height: 26px;
   border-radius: 999px !important;
   border: 0 !important;
   background: transparent !important;
   color: var(--aperture-button-text, #edf3ea) !important;
-  opacity: 0.82 !important;
+  opacity: 0.86 !important;
   display: grid !important;
   place-items: center !important;
   padding: 0 !important;
@@ -382,15 +425,15 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
 .caption-tool:hover,
 [data-vn-hide-text]:hover,
 .caption-tool[data-active="true"] {
-  background: color-mix(in srgb, var(--aperture-accent, #dcebad) 22%, transparent) !important;
-  color: var(--aperture-accent, #dcebad) !important;
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, transparent) !important;
+  color: var(--aperture-accent, #c4b5fd) !important;
   opacity: 1 !important;
 }
 
 .caption-tool svg,
 [data-vn-hide-text] svg {
-  width: 13.5px !important;
-  height: 13.5px !important;
+  width: 14px !important;
+  height: 14px !important;
 }
 
 /* Scrollable Copy */
@@ -408,7 +451,7 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   scrollbar-color: color-mix(in srgb, var(--aperture-accent, #dcebad) 45%, transparent) transparent !important;
   -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 4px, #000 calc(100% - 8px), transparent 100%);
   mask-image: linear-gradient(180deg, transparent 0, #000 4px, #000 calc(100% - 8px), transparent 100%);
-  padding: 2px 2px 6px !important;
+  padding: 4px 2px 4px !important;
   margin: 0 !important;
 }
 
@@ -425,8 +468,8 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   flex: none !important;
   touch-action: pan-y !important;
   user-select: text !important;
-  font-size: var(--reader-font, 15px) !important;
-  line-height: 1.42;
+  font-size: var(--reader-font, 16px) !important;
+  line-height: 1.46;
   letter-spacing: 0;
   word-spacing: normal;
   font-kerning: normal;
@@ -440,132 +483,134 @@ export const APERTURE_CSS_LENS_FOLIO = `/* =====================================
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
-/* Integrated Progress Scrubber docked inside Dialogue Card */
+/* Integrated Progress Scrubber & Step Navigation Row inside Dialogue Card Footer */
 .reader-progress {
-  position: absolute !important;
-  bottom: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
-  left: 72px !important;
-  right: 72px !important;
-  width: auto !important;
-  max-width: calc(100% - 144px) !important;
-  height: 44px !important;
+  position: static !important;
+  width: 100% !important;
+  max-width: none !important;
+  height: 34px !important;
   display: flex !important;
   align-items: center !important;
-  justify-content: center !important;
-  gap: 8px !important;
-  margin: 0 auto !important;
+  justify-content: flex-start !important;
+  gap: 12px !important;
+  margin: 2px 0 0 !important;
+  padding: 4px 80px 0 0 !important;
+  box-sizing: border-box !important;
+  flex: none !important;
   z-index: 45 !important;
   pointer-events: auto !important;
 }
 
-.reader-progress [data-vn-step-left],
-.reader-progress [data-vn-step-right],
-.reader-progress small {
-  color: var(--aperture-text, #edf3ea) !important;
-  opacity: 0.85 !important;
-  font-size: 9.5px !important;
-  font-weight: 700 !important;
-  letter-spacing: 0.08em !important;
+.reader-progress [data-vn-step-left] {
+  padding: 4px 12px !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--aperture-button-bg, #131a26) 76%, rgba(255, 255, 255, 0.05)) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, rgba(255, 255, 255, 0.14)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  color: var(--aperture-text, #f1f5f9) !important;
+  opacity: 0.95 !important;
+  font-size: 11.5px !important;
+  font-weight: 650 !important;
+  letter-spacing: 0.03em !important;
   white-space: nowrap !important;
   flex: none !important;
+}
+
+.reader-progress [data-vn-step-right] {
+  display: none !important;
 }
 
 .reader-progress [data-vn-scrubber] {
   flex: 1 1 auto !important;
   min-width: 48px !important;
-  max-width: 210px !important;
+  max-width: 260px !important;
   display: flex !important;
   flex-wrap: nowrap !important;
   align-items: center !important;
   justify-content: center !important;
-  gap: 3px !important;
+  gap: 5px !important;
   overflow: hidden !important;
-  height: 18px !important;
+  height: 22px !important;
+  margin: 0 auto !important;
 }
 
 .reader-progress [data-vn-scrub-dot] {
   flex: 1 1 0 !important;
   width: auto !important;
-  min-width: 3px !important;
-  max-width: 9px !important;
+  min-width: 5px !important;
+  max-width: 11px !important;
   height: 5px !important;
   min-height: 5px !important;
   border-radius: var(--vn-scrubber-radius, 999px) !important;
   padding: 0 !important;
   border: 0 !important;
-  background: color-mix(in srgb, var(--aperture-text, #ffffff) 24%, transparent) !important;
-  transition: flex 0.18s ease, background-color 0.16s ease, box-shadow 0.16s ease !important;
+  background: color-mix(in srgb, var(--aperture-text, #ffffff) 22%, transparent) !important;
+  transition: flex 0.2s ease, background-color 0.18s ease, box-shadow 0.18s ease !important;
 }
 
 .reader-progress [data-vn-scrub-dot][data-read="true"] {
-  background: color-mix(in srgb, var(--aperture-accent, #dcebad) 52%, transparent) !important;
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 52%, transparent) !important;
 }
 
 .reader-progress [data-vn-scrub-dot][data-active="true"] {
-  flex: 2.4 1 0 !important;
-  min-width: 10px !important;
-  max-width: 20px !important;
+  flex: 3 1 0 !important;
+  min-width: 20px !important;
+  max-width: 38px !important;
   height: 6px !important;
-  background: var(--aperture-accent, #dcebad) !important;
-  box-shadow: 0 0 8px var(--aperture-accent-glow, rgba(220, 238, 173, 0.45)) !important;
+  background: linear-gradient(90deg, var(--aperture-accent, #a78bfa), color-mix(in srgb, var(--aperture-accent, #a78bfa) 68%, #ffffff)) !important;
+  box-shadow: 0 0 12px var(--aperture-accent-glow, rgba(167, 139, 250, 0.72)), 0 0 4px rgba(255, 255, 255, 0.55) !important;
 }
 
-/* Previous & Continue buttons integrated inside dialogue card at bottom left & right */
-[data-vn-controls] > [data-vn-control="previous"].nav-step-btn {
-  position: absolute !important;
-  left: 10px !important;
-  right: auto !important;
-  bottom: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
-  width: 44px !important;
-  height: 44px !important;
-  min-width: 44px !important;
-  min-height: 44px !important;
+/* Previous & Continue circular buttons paired on the right side of the dialogue card footer */
+[data-vn-control="previous"].nav-step-btn,
+[data-vn-controls] > [data-vn-control="previous"].nav-step-btn,
+[data-vn-continue].nav-step-btn,
+[data-vn-continue].action.advance {
+  position: fixed !important;
+  left: auto !important;
+  bottom: calc(79px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
   padding: 0 !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   border-radius: 50% !important;
-  background: var(--aperture-button-bg, rgba(14, 30, 24, 0.92)) !important;
-  border: 1px solid var(--aperture-button-border, rgba(160, 205, 185, 0.3)) !important;
-  color: var(--aperture-button-text, #edf3ea) !important;
+  background: color-mix(in srgb, var(--aperture-button-bg, rgba(19, 26, 38, 0.85)) 78%, rgba(255, 255, 255, 0.05)) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 26%, rgba(255, 255, 255, 0.16)) !important;
+  color: var(--aperture-button-text, #f8fafc) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 2px 8px rgba(0, 0, 0, 0.35) !important;
   cursor: pointer !important;
   z-index: 45 !important;
-  transition: background 0.16s ease, transform 0.16s ease, border-color 0.16s ease !important;
+  transition: background 0.16s ease, transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease !important;
 }
 
-[data-vn-controls] > [data-vn-control="previous"].nav-step-btn:hover:not(:disabled) {
-  background: var(--aperture-button-hover-bg, rgba(35, 75, 57, 0.95)) !important;
-  border-color: var(--aperture-accent, #dcebad) !important;
+[data-vn-control="previous"].nav-step-btn,
+[data-vn-controls] > [data-vn-control="previous"].nav-step-btn {
+  right: 64px !important;
 }
 
 [data-vn-continue].nav-step-btn,
 [data-vn-continue].action.advance {
-  position: absolute !important;
-  right: 10px !important;
-  left: auto !important;
-  bottom: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
-  width: 44px !important;
-  height: 44px !important;
-  min-width: 44px !important;
-  min-height: 44px !important;
-  padding: 0 !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  border-radius: 50% !important;
-  background: var(--aperture-accent, #dcebad) !important;
-  border: 1px solid var(--aperture-accent, #dcebad) !important;
-  color: var(--aperture-accent-contrast, #11241c) !important;
-  cursor: pointer !important;
-  font-weight: 700 !important;
-  z-index: 45 !important;
-  box-shadow: 0 2px 10px var(--aperture-accent-glow, rgba(220, 238, 173, 0.35)) !important;
-  transition: background 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease !important;
+  right: 24px !important;
 }
 
+[data-vn-control="previous"].nav-step-btn::after,
+[data-vn-continue].nav-step-btn::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+
+[data-vn-control="previous"].nav-step-btn:hover:not(:disabled),
 [data-vn-continue].nav-step-btn:hover:not(:disabled),
 [data-vn-continue].action.advance:hover:not(:disabled) {
-  background: var(--aperture-accent-hover, #ecf8cd) !important;
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, var(--aperture-button-hover-bg, rgba(30, 41, 59, 0.92))) !important;
+  border-color: var(--aperture-accent, #c4b5fd) !important;
+  color: var(--aperture-accent, #c4b5fd) !important;
+  box-shadow: 0 0 12px var(--aperture-accent-glow, rgba(167, 139, 250, 0.38)) !important;
   transform: scale(1.06) !important;
 }
 
@@ -846,68 +891,6 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   display: none !important;
 }
 
-/* Dialogue caption head & speaker */
-.caption-head {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  gap: 6px !important;
-  min-height: 22px !important;
-  border-bottom: 1px solid rgba(228, 240, 218, 0.15) !important;
-  padding-bottom: 3px !important;
-  margin-bottom: 4px !important;
-}
-
-[data-vn-speaker], .speaker {
-  font-size: 12px !important;
-  line-height: 1.4 !important;
-  letter-spacing: 0.105em !important;
-  font-weight: 750 !important;
-  color: var(--aperture-accent, #dcebad) !important;
-  white-space: nowrap !important;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8) !important;
-}
-
-.caption-split {
-  opacity: 0.35 !important;
-  padding: 0 4px !important;
-  color: var(--aperture-accent, #dcebad) !important;
-}
-
-[data-vn-caption-scene] {
-  color: var(--aperture-muted, #c9d5b7) !important;
-  font-size: 9px !important;
-  letter-spacing: 0.08em !important;
-  opacity: 0.8 !important;
-}
-
-.caption-head-actions {
-  display: flex !important;
-  align-items: center !important;
-  gap: 3px !important;
-}
-
-.caption-tool {
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
-  min-height: 44px;
-  display: grid !important;
-  place-items: center !important;
-  color: var(--aperture-text, #dfefd8) !important;
-  opacity: 0.78 !important;
-  border-radius: min(var(--vn-shell-radius, 8px), 10px) !important;
-  border: 0 !important;
-  background: transparent !important;
-  cursor: pointer !important;
-  padding: 0 !important;
-}
-.caption-tool:hover {
-  background: color-mix(in srgb, var(--aperture-accent, #ffffff) 16%, transparent) !important;
-  color: var(--aperture-accent, #ffffff) !important;
-  opacity: 1 !important;
-}
-
 /* Override any high-specificity legacy speaker positioning */
 [data-vn-root] [data-vn-dialogue] [data-vn-speaker],
 [data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-speaker],
@@ -922,42 +905,43 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   inset: auto !important;
   transform: none !important;
   margin: 0 !important;
-  padding: 2px 8px !important;
-  border: 1px solid color-mix(in srgb, var(--aperture-accent, #dcebad) 24%, transparent) !important;
-  border-radius: var(--vn-scrubber-radius, 999px) !important;
-  background: color-mix(in srgb, var(--aperture-accent, #dcebad) 11%, transparent) !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   display: inline-flex !important;
   align-items: center !important;
-  font-size: 12px !important;
-  font-weight: 750 !important;
-  letter-spacing: 0.08em !important;
-  line-height: 1.2 !important;
+  font-size: 13.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.01em !important;
+  text-transform: none !important;
+  line-height: 1.25 !important;
+  white-space: nowrap !important;
 }
 
 :where([data-vn-root]) [data-vn-speaker] {
-  color: var(--aperture-accent, var(--vn-accent, #dcebad));
+  color: var(--aperture-text, var(--vn-text, #f8fafc));
 }
-
-
 
 .caption-head .speaker {
   display: inline-flex !important;
   align-items: center !important;
-  gap: 2px !important;
+  gap: 7px !important;
   white-space: nowrap !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
 }
 
 .caption-head [data-vn-speaker] {
   display: inline-flex !important;
   align-items: center !important;
-  gap: 3px !important;
-  padding: 2px 8px !important;
-  border-radius: var(--vn-scrubber-radius, 999px) !important;
-  background: color-mix(in srgb, var(--aperture-accent, #dcebad) 12%, transparent) !important;
-  border: 1px solid color-mix(in srgb, var(--aperture-accent, #dcebad) 26%, transparent) !important;
+  gap: 4px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
 }
 
 [data-vn-root] [data-vn-dialogue] [data-vn-speaker][hidden],

@@ -96,7 +96,7 @@ describe("Council Wave 6: Split-Horizon Lore Patch, One-Thumb Stage, Theme Bridg
 
       const sceneCaption = (stage as unknown as { themeRoot: FakeNode }).themeRoot.querySelector("[data-vn-caption-scene]");
       if (sceneCaption) {
-        expect(sceneCaption.textContent).toBe("KESTREL KEEP");
+        expect(sceneCaption.textContent).toBe("Kestrel Keep");
       }
     } finally {
       stage.destroy();
@@ -423,5 +423,58 @@ describe("Council Wave 6: Split-Horizon Lore Patch, One-Thumb Stage, Theme Bridg
     expect(backdrop.querySelector(".vn-lightbox-title")!.textContent).toBe("Beat 1");
 
     lb.close();
+  });
+
+  test("#7 Revamped Reader View replaces quick-draft button with permanent inline message bar, renders circular speaker avatar, and toggles Panels menu", async () => {
+    const mount = new FakeNode("div");
+    const submitted: string[] = [];
+    const stage = new VnStage({
+      mount: mount as unknown as HTMLElement,
+      textSpeed: 0,
+      onSubmit: async (text) => {
+        submitted.push(text);
+      },
+    });
+    try {
+      const themeRoot = (stage as unknown as { themeRoot: FakeNode }).themeRoot;
+      const shell = stage.panelMount as unknown as FakeNode;
+
+      // Quick draft button removed; permanent inline message composer present
+      expect(themeRoot.querySelector("[data-vn-compose-toggle]")).toBeNull();
+      const composer = themeRoot.querySelector("[data-vn-inline-composer]");
+      const input = themeRoot.querySelector("[data-vn-inline-message]") as FakeNode & { value: string };
+      const sendBtn = themeRoot.querySelector("[data-vn-inline-send]");
+      expect(composer).not.toBeNull();
+      expect(input).not.toBeNull();
+      expect(sendBtn).not.toBeNull();
+
+      // Panels menu button hidden by default, toggleable via setShowPanelsMenu
+      const panelsBtn = shell.querySelector('[data-action="panels-toggle"]')!;
+      expect(panelsBtn.hidden).toBe(true);
+      stage.setShowPanelsMenu(true);
+      expect(panelsBtn.hidden).toBe(false);
+      stage.setShowPanelsMenu(false);
+      expect(panelsBtn.hidden).toBe(true);
+
+      // Speaker avatar populates when a speaker is present
+      stage.loadTurn({
+        mode: "standard",
+        paragraphs: [
+          { id: "p1", text: "Hello there.", speaker: "Sable Thorne" },
+        ],
+      });
+      const avatar = themeRoot.querySelector("[data-vn-speaker-avatar]")!;
+      expect(avatar.hidden).toBe(false);
+      expect(avatar.textContent).toBe("S");
+
+      // Submitting from the permanent inline composer sends reply
+      input.value = "I step into the dorm.";
+      input.dispatchEvent(new FakeEvent("input", { bubbles: true }));
+      composer!.dispatchEvent(new FakeEvent("submit", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 10));
+      expect(submitted).toEqual(["I step into the dorm."]);
+    } finally {
+      stage.destroy();
+    }
   });
 });

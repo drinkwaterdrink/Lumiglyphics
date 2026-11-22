@@ -25318,6 +25318,7 @@ var SETTINGS_FIELD_PAGES = {
   presentationRulesAllowStyleOverride: "rules",
   debugLogging: "storage",
   showReplyCost: "reading",
+  showPanelsMenu: "reading",
   customCss: "css",
   ignoredTags: "filtering",
   displayRegexRules: "filtering",
@@ -25829,48 +25830,88 @@ var APERTURE_CSS_ROUTE_BAR_READER = `/* ========================================
   border-radius: 0 !important;
 }
 
-/* Reader topbar */
+/* Reader topbar — unified frosted pill bar */
 .reader-topbar,
 [data-vn-reader-header].reader-topbar {
   position: absolute !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
+  top: calc(8px + env(safe-area-inset-top, 0px)) !important;
+  left: 10px !important;
+  right: 10px !important;
   height: auto !important;
+  min-height: 44px !important;
   display: flex !important;
-  flex-wrap: wrap !important;
+  flex-wrap: nowrap !important;
   align-items: center !important;
   justify-content: space-between !important;
-  row-gap: 4px !important;
-  padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 8px !important;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--vn-shell-panel, #060f16) 76%, transparent), transparent) !important;
-  border: 0 !important;
-  border-bottom: 0 !important;
+  gap: 6px !important;
+  padding: 4px 10px !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--aperture-bottom-bar-bg, var(--vn-shell-panel, #0a1018)) 82%, rgba(8, 12, 20, 0.68)) !important;
+  -webkit-backdrop-filter: blur(18px) !important;
+  backdrop-filter: blur(18px) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, rgba(255, 255, 255, 0.14)) !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
   z-index: 35 !important;
+}
+[data-vn-reader-header]:has([data-vn-world-strip]:not([hidden])) .reading-heading {
+  display: none !important;
 }
 [data-vn-world-strip][hidden] {
   display: none !important;
 }
 [data-vn-world-strip] {
-  flex: 1 0 100% !important;
-  order: 10 !important;
+  flex: 1 1 auto !important;
+  order: 1 !important;
+  min-width: 0 !important;
   display: inline-flex !important;
   align-items: center !important;
-  gap: 6px !important;
+  gap: 8px !important;
   flex-wrap: nowrap !important;
-  overflow: hidden !important;
-  padding: 4px 10px 4px 42px !important;
-  min-height: 28px !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  scrollbar-width: none !important;
+  padding: 4px 8px !important;
+  min-height: 30px !important;
   margin: 0 !important;
-  font-size: 11px !important;
+  font-size: 11.5px !important;
+  font-weight: 500 !important;
   line-height: 1.3 !important;
-  letter-spacing: 0.02em !important;
-  color: color-mix(in srgb, var(--aperture-text, #f4f7f5) 90%, transparent) !important;
+  letter-spacing: 0.01em !important;
+  color: color-mix(in srgb, var(--aperture-text, #f4f7f5) 92%, transparent) !important;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.72) !important;
   pointer-events: auto !important;
   cursor: pointer !important;
   border-radius: 999px !important;
   transition: background 0.15s ease !important;
+}
+[data-vn-world-strip]::-webkit-scrollbar {
+  display: none !important;
+}
+[data-vn-world-strip] .vn-world-glyph {
+  display: none !important;
+}
+[data-vn-world-strip] .vn-world-token {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  white-space: nowrap !important;
+  flex: none !important;
+}
+[data-vn-world-strip] .vn-world-token-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 85%, var(--aperture-text, #ffffff)) !important;
+  opacity: 0.88 !important;
+}
+[data-vn-world-strip] .vn-world-sep {
+  opacity: 0.26 !important;
+  font-weight: 300 !important;
+  margin: 0 1px !important;
+  flex: none !important;
+}
+[data-reader-header-actions] {
+  order: 2 !important;
+  flex: none !important;
 }
 [data-vn-world-strip]:hover,
 [data-vn-world-strip][aria-expanded="true"] {
@@ -26441,8 +26482,11 @@ aside[data-vn-workspace] {
   color: var(--aperture-accent-contrast, #11241c) !important;
 }
 
-/* Hide desktop-only search and focus shortcuts from mobile header */
-[data-reader-search],
+.round-ghost[hidden] {
+  display: none !important;
+}
+
+/* Hide desktop-only focus shortcut from mobile header */
 [data-reader-focus] {
   display: none !important;
   visibility: hidden !important;
@@ -26453,30 +26497,31 @@ aside[data-vn-workspace] {
 }
 
 /* =========================================================================
-   APERTURE DEDICATED BOTTOM BAR (History, World Lens, Cast, Settings)
+   APERTURE DEDICATED BOTTOM BAR (Left Icons + Permanent Inline Message Bar)
    ========================================================================= */
 
 .reader-actions,
 [data-vn-root] .reader-actions {
   position: absolute !important;
-  inset: auto 0 0 !important;
-  bottom: var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px)) !important;
-  left: 0 !important;
-  right: 0 !important;
-  height: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
+  inset: auto 10px calc(8px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) 10px !important;
+  left: 10px !important;
+  right: 10px !important;
+  height: 52px !important;
   z-index: 40 !important;
   display: flex !important;
   flex-direction: row !important;
   align-items: center !important;
-  justify-content: center !important;
-  padding: 0 12px calc(env(safe-area-inset-bottom, 0px)) !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  padding: 0 7px 0 10px !important;
   margin: 0 !important;
+  border-radius: 999px !important;
   pointer-events: auto !important;
-  background: var(--aperture-bottom-bar-bg, rgba(7, 16, 13, 0.94)) !important;
-  -webkit-backdrop-filter: blur(16px) !important;
-  backdrop-filter: blur(16px) !important;
-  border-top: 1px solid var(--aperture-bottom-bar-border, rgba(160, 205, 185, 0.16)) !important;
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.45) !important;
+  background: color-mix(in srgb, var(--aperture-bottom-bar-bg, var(--vn-shell-panel, #0b1018)) 88%, rgba(8, 12, 20, 0.78)) !important;
+  -webkit-backdrop-filter: blur(18px) !important;
+  backdrop-filter: blur(18px) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, rgba(255, 255, 255, 0.14)) !important;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.56), 0 0 20px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 6%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
   box-sizing: border-box !important;
 }
 
@@ -26487,17 +26532,18 @@ aside[data-vn-workspace] {
   display: none !important;
 }
 
-/* Symmetrical 4-button navigation inside bottom bar */
+/* Left icon navigation cluster inside bottom bar */
 .reader-action-row,
 [data-vn-controls] {
   position: static !important;
   transform: none !important;
-  display: flex !important;
+  display: inline-flex !important;
   flex-direction: row !important;
-  justify-content: center !important;
+  justify-content: flex-start !important;
   align-items: center !important;
-  gap: 8px !important;
-  width: 100% !important;
+  gap: 2px !important;
+  flex: 0 0 auto !important;
+  width: auto !important;
   max-width: none !important;
   margin: 0 !important;
   padding: 0 !important;
@@ -26506,36 +26552,42 @@ aside[data-vn-workspace] {
 }
 
 .reader-action-row > .action:not(.nav-step-btn) {
-  height: 44px !important;
-  width: 68px !important;
-  min-width: 58px !important;
-  max-width: 76px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 3px !important;
-  border-radius: 8px !important;
+  position: relative !important;
+  height: 38px !important;
+  width: 38px !important;
+  min-width: 36px !important;
+  max-width: 40px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 50% !important;
   background: transparent !important;
-  border: 0 !important;
-  color: var(--aperture-muted, #9cb5a8) !important;
+  border: 1px solid transparent !important;
+  color: color-mix(in srgb, var(--aperture-text, #f1f5f9) 82%, transparent) !important;
   cursor: pointer !important;
   padding: 0 !important;
-  transition: all 0.15s ease !important;
+  transition: color 0.16s ease, background-color 0.16s ease, border-color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease !important;
+}
+
+.reader-action-row > .action:not(.nav-step-btn)::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
 }
 
 .reader-action-row > .action:not(.nav-step-btn):hover {
-  background: var(--aperture-button-hover-bg, rgba(220, 238, 177, 0.08)) !important;
-  color: var(--aperture-accent, #dcebad) !important;
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 14%, transparent) !important;
+  border-color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 32%, transparent) !important;
+  color: var(--aperture-accent, #c4b5fd) !important;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, transparent) !important;
+  transform: translateY(-1px) !important;
+}
+
+.reader-action-row > .action:not(.nav-step-btn):active {
+  transform: scale(0.94) !important;
 }
 
 .reader-action-row > .action:not(.nav-step-btn) [data-vn-control-label] {
-  display: block !important;
-  font-size: 9.5px !important;
-  font-weight: 650 !important;
-  letter-spacing: 0.03em !important;
-  line-height: 1.05 !important;
-  white-space: nowrap !important;
+  display: none !important;
 }
 
 .reader-action-row > .action:not(.nav-step-btn) [data-vn-control-icon] svg {
@@ -26543,9 +26595,99 @@ aside[data-vn-workspace] {
   height: 18px !important;
 }
 
-[data-vn-controls] > .nav-step-btn:disabled,
-[data-vn-controls] > .nav-step-btn[aria-disabled="true"] {
-  opacity: 0.3 !important;
+/* Right permanent inline Message pill */
+.reader-inline-composer,
+[data-vn-inline-composer] {
+  flex: 1 1 auto !important;
+  min-width: 118px !important;
+  height: 38px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 3px 4px 3px 14px !important;
+  margin: 0 !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--vn-shell-field, #141b26) 76%, rgba(255, 255, 255, 0.05)) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, rgba(255, 255, 255, 0.14)) !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.36) !important;
+  box-sizing: border-box !important;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease !important;
+}
+
+.reader-inline-composer:focus-within,
+[data-vn-inline-composer]:focus-within {
+  border-color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 68%, rgba(255, 255, 255, 0.35)) !important;
+  box-shadow: 0 0 16px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 26%, transparent), inset 0 1px 2px rgba(0, 0, 0, 0.25) !important;
+  background: color-mix(in srgb, var(--vn-shell-field, #141b26) 88%, rgba(255, 255, 255, 0.07)) !important;
+}
+
+[data-vn-inline-message] {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  color: var(--aperture-text, #f8fafc) !important;
+  font-size: 13px !important;
+  font-family: inherit !important;
+  line-height: 1.2 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+[data-vn-inline-message]::placeholder {
+  color: color-mix(in srgb, var(--aperture-muted, #94a3b8) 78%, transparent) !important;
+}
+
+[data-vn-inline-send] {
+  position: relative !important;
+  width: 30px !important;
+  height: 30px !important;
+  min-width: 30px !important;
+  min-height: 30px !important;
+  border-radius: 50% !important;
+  border: 0 !important;
+  flex: none !important;
+  display: grid !important;
+  place-items: center !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  background: linear-gradient(135deg, var(--aperture-accent, #a78bfa), color-mix(in srgb, var(--aperture-accent, #a78bfa) 74%, #818cf8)) !important;
+  color: var(--aperture-accent-contrast, #0f172a) !important;
+  box-shadow: 0 2px 12px var(--aperture-accent-glow, rgba(167, 139, 250, 0.45)), inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease !important;
+}
+
+[data-vn-inline-send]::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+}
+
+[data-vn-inline-send] svg {
+  width: 14px !important;
+  height: 14px !important;
+  transform: translate(-0.5px, 0.5px);
+}
+
+[data-vn-inline-send]:hover:not(:disabled) {
+  transform: scale(1.06) !important;
+  box-shadow: 0 4px 16px var(--aperture-accent-glow, rgba(167, 139, 250, 0.68)), inset 0 1px 0 rgba(255, 255, 255, 0.45) !important;
+}
+
+[data-vn-inline-send]:active:not(:disabled) {
+  transform: scale(0.94) !important;
+}
+
+[data-vn-inline-send]:disabled {
+  opacity: 0.78 !important;
+}
+
+.nav-step-btn:disabled,
+.nav-step-btn[aria-disabled="true"] {
+  opacity: 0.32 !important;
   pointer-events: none !important;
 }
 
@@ -27008,21 +27150,21 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-dialogue] {
   position: absolute !important;
   z-index: 30 !important;
-  left: 14px !important;
-  right: 14px !important;
+  left: 10px !important;
+  right: 10px !important;
   width: auto !important;
   max-width: none !important;
   margin: 0 !important;
   box-sizing: border-box !important;
   top: auto !important;
-  bottom: calc(104px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
-  height: var(--caption-height, 146px);
-  min-height: 48px;
-  max-height: calc(100% - 168px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
-  padding: 8px 14px 9px !important;
+  bottom: calc(68px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
+  height: var(--caption-height, 184px);
+  min-height: 76px;
+  max-height: calc(100% - 132px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+  padding: 11px 15px 11px !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 3px !important;
+  gap: 6px !important;
   overflow: hidden !important;
   pointer-events: auto !important;
   touch-action: pan-y !important;
@@ -27030,12 +27172,12 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 }
 
 :where([data-vn-root]) [data-vn-dialogue] {
-  border: 1px solid var(--aperture-dialogue-border, var(--vn-dialogue-border, rgba(160, 205, 185, 0.28)));
-  border-radius: min(var(--vn-shell-radius, 16px), 18px);
-  background: var(--aperture-dialogue-bg, var(--vn-dialogue-bg, rgba(8, 18, 15, var(--caption-opacity, 0.82))));
-  -webkit-backdrop-filter: blur(var(--caption-blur, 14px));
-  backdrop-filter: blur(var(--caption-blur, 14px));
-  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 24%, var(--aperture-dialogue-border, var(--vn-dialogue-border, rgba(255, 255, 255, 0.16))));
+  border-radius: min(var(--vn-shell-radius, 20px), 22px);
+  background: var(--aperture-dialogue-bg, var(--vn-dialogue-bg, rgba(8, 18, 15, var(--caption-opacity, 0.86))));
+  -webkit-backdrop-filter: blur(var(--caption-blur, 18px));
+  backdrop-filter: blur(var(--caption-blur, 18px));
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.56), 0 0 24px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 8%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
 /* Draggable Top Resize Grip */
@@ -27057,50 +27199,92 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 
 .resize-grip span {
   display: block !important;
-  width: 28px !important;
-  height: 2.5px !important;
-  border-radius: var(--vn-scrubber-radius, 2px) !important;
-  background: color-mix(in srgb, var(--aperture-accent, #dcebad) 58%, transparent) !important;
+  width: 32px !important;
+  height: 3px !important;
+  border-radius: var(--vn-scrubber-radius, 999px) !important;
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 48%, transparent) !important;
 }
 
-/* Dialogue Header (Speaker, Scene, Auto, Minimize) */
+/* Dialogue Header (Speaker Avatar, Speaker Name, Location Pin & Scene, Play/Hide Pill) */
 .caption-head,
 [data-vn-sheet-header] {
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
-  min-height: 26px !important;
+  gap: 8px !important;
+  min-height: 34px !important;
   touch-action: none !important;
   margin-top: 0 !important;
-  margin-bottom: 3px !important;
-  padding-bottom: 4px !important;
-  border-bottom: 1px solid color-mix(in srgb, var(--aperture-accent, #dcebad) 16%, transparent) !important;
+  margin-bottom: 2px !important;
+  padding-bottom: 6px !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 14%, rgba(255, 255, 255, 0.08)) !important;
   flex: none !important;
 }
 
 .caption-head .speaker {
-  display: flex !important;
+  display: inline-flex !important;
   align-items: center !important;
-  gap: 5px !important;
+  gap: 7px !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+.speaker-avatar,
+[data-vn-speaker-avatar] {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
+  border-radius: 50% !important;
+  overflow: hidden !important;
+  flex: none !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 18%, rgba(15, 23, 42, 0.85)) !important;
+  border: 1.5px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 68%, rgba(255, 255, 255, 0.45)) !important;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 34%, transparent) !important;
+  color: var(--aperture-accent, #c4b5fd) !important;
+  font-size: 13px !important;
+  font-weight: 750 !important;
+}
+
+[data-vn-speaker-avatar][hidden] {
+  display: none !important;
+}
+
+[data-vn-speaker-avatar] img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center 20% !important;
+  display: block !important;
 }
 
 .caption-head [data-vn-speaker] {
-  font-size: 12px !important;
-  font-weight: 750 !important;
-  color: var(--aperture-accent, #dcebad) !important;
-  letter-spacing: 0.08em !important;
-  text-transform: uppercase !important;
+  font-size: 13.5px !important;
+  font-weight: 700 !important;
+  color: var(--aperture-text, #f8fafc) !important;
+  letter-spacing: 0.01em !important;
+  text-transform: none !important;
 }
 
 .caption-head .caption-split {
-  color: color-mix(in srgb, var(--aperture-accent, #dcebad) 42%, transparent) !important;
-  font-size: 9px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  color: color-mix(in srgb, var(--aperture-muted, #94a3b8) 85%, transparent) !important;
+  margin-left: 3px !important;
+  flex: none !important;
 }
 
 .caption-head [data-vn-caption-scene] {
-  font-size: 9.5px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
   color: var(--aperture-muted, #9cb5a8) !important;
-  letter-spacing: 0.06em !important;
+  letter-spacing: 0.01em !important;
+  text-transform: none !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 
 .caption-head-actions,
@@ -27112,10 +27296,11 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   align-items: center !important;
   gap: 2px !important;
   margin-left: auto !important;
-  padding: 1px 3px !important;
+  padding: 2px 5px !important;
   border-radius: 999px !important;
-  background: color-mix(in srgb, var(--aperture-button-bg, #0e1e18) 38%, transparent) !important;
-  border: 1px solid color-mix(in srgb, var(--aperture-accent, #dcebad) 18%, transparent) !important;
+  background: color-mix(in srgb, var(--aperture-button-bg, #131b26) 72%, rgba(255, 255, 255, 0.05)) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, rgba(255, 255, 255, 0.14)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
 }
 
 .caption-tool,
@@ -27123,15 +27308,15 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-sheet-tools] button,
 [data-vn-root][data-vn-adjustable-sheet="true"][data-vn-reader-layout] [data-vn-hide-text] {
   position: relative !important;
-  width: 28px;
-  height: 24px;
-  min-width: 28px;
-  min-height: 24px;
+  width: 30px;
+  height: 26px;
+  min-width: 30px;
+  min-height: 26px;
   border-radius: 999px !important;
   border: 0 !important;
   background: transparent !important;
   color: var(--aperture-button-text, #edf3ea) !important;
-  opacity: 0.82 !important;
+  opacity: 0.86 !important;
   display: grid !important;
   place-items: center !important;
   padding: 0 !important;
@@ -27149,15 +27334,15 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
 .caption-tool:hover,
 [data-vn-hide-text]:hover,
 .caption-tool[data-active="true"] {
-  background: color-mix(in srgb, var(--aperture-accent, #dcebad) 22%, transparent) !important;
-  color: var(--aperture-accent, #dcebad) !important;
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, transparent) !important;
+  color: var(--aperture-accent, #c4b5fd) !important;
   opacity: 1 !important;
 }
 
 .caption-tool svg,
 [data-vn-hide-text] svg {
-  width: 13.5px !important;
-  height: 13.5px !important;
+  width: 14px !important;
+  height: 14px !important;
 }
 
 /* Scrollable Copy */
@@ -27175,7 +27360,7 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   scrollbar-color: color-mix(in srgb, var(--aperture-accent, #dcebad) 45%, transparent) transparent !important;
   -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 4px, #000 calc(100% - 8px), transparent 100%);
   mask-image: linear-gradient(180deg, transparent 0, #000 4px, #000 calc(100% - 8px), transparent 100%);
-  padding: 2px 2px 6px !important;
+  padding: 4px 2px 4px !important;
   margin: 0 !important;
 }
 
@@ -27192,8 +27377,8 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   flex: none !important;
   touch-action: pan-y !important;
   user-select: text !important;
-  font-size: var(--reader-font, 15px) !important;
-  line-height: 1.42;
+  font-size: var(--reader-font, 16px) !important;
+  line-height: 1.46;
   letter-spacing: 0;
   word-spacing: normal;
   font-kerning: normal;
@@ -27207,132 +27392,134 @@ var APERTURE_CSS_LENS_FOLIO = `/* ==============================================
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
-/* Integrated Progress Scrubber docked inside Dialogue Card */
+/* Integrated Progress Scrubber & Step Navigation Row inside Dialogue Card Footer */
 .reader-progress {
-  position: absolute !important;
-  bottom: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
-  left: 72px !important;
-  right: 72px !important;
-  width: auto !important;
-  max-width: calc(100% - 144px) !important;
-  height: 44px !important;
+  position: static !important;
+  width: 100% !important;
+  max-width: none !important;
+  height: 34px !important;
   display: flex !important;
   align-items: center !important;
-  justify-content: center !important;
-  gap: 8px !important;
-  margin: 0 auto !important;
+  justify-content: flex-start !important;
+  gap: 12px !important;
+  margin: 2px 0 0 !important;
+  padding: 4px 80px 0 0 !important;
+  box-sizing: border-box !important;
+  flex: none !important;
   z-index: 45 !important;
   pointer-events: auto !important;
 }
 
-.reader-progress [data-vn-step-left],
-.reader-progress [data-vn-step-right],
-.reader-progress small {
-  color: var(--aperture-text, #edf3ea) !important;
-  opacity: 0.85 !important;
-  font-size: 9.5px !important;
-  font-weight: 700 !important;
-  letter-spacing: 0.08em !important;
+.reader-progress [data-vn-step-left] {
+  padding: 4px 12px !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--aperture-button-bg, #131a26) 76%, rgba(255, 255, 255, 0.05)) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, rgba(255, 255, 255, 0.14)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  color: var(--aperture-text, #f1f5f9) !important;
+  opacity: 0.95 !important;
+  font-size: 11.5px !important;
+  font-weight: 650 !important;
+  letter-spacing: 0.03em !important;
   white-space: nowrap !important;
   flex: none !important;
+}
+
+.reader-progress [data-vn-step-right] {
+  display: none !important;
 }
 
 .reader-progress [data-vn-scrubber] {
   flex: 1 1 auto !important;
   min-width: 48px !important;
-  max-width: 210px !important;
+  max-width: 260px !important;
   display: flex !important;
   flex-wrap: nowrap !important;
   align-items: center !important;
   justify-content: center !important;
-  gap: 3px !important;
+  gap: 5px !important;
   overflow: hidden !important;
-  height: 18px !important;
+  height: 22px !important;
+  margin: 0 auto !important;
 }
 
 .reader-progress [data-vn-scrub-dot] {
   flex: 1 1 0 !important;
   width: auto !important;
-  min-width: 3px !important;
-  max-width: 9px !important;
+  min-width: 5px !important;
+  max-width: 11px !important;
   height: 5px !important;
   min-height: 5px !important;
   border-radius: var(--vn-scrubber-radius, 999px) !important;
   padding: 0 !important;
   border: 0 !important;
-  background: color-mix(in srgb, var(--aperture-text, #ffffff) 24%, transparent) !important;
-  transition: flex 0.18s ease, background-color 0.16s ease, box-shadow 0.16s ease !important;
+  background: color-mix(in srgb, var(--aperture-text, #ffffff) 22%, transparent) !important;
+  transition: flex 0.2s ease, background-color 0.18s ease, box-shadow 0.18s ease !important;
 }
 
 .reader-progress [data-vn-scrub-dot][data-read="true"] {
-  background: color-mix(in srgb, var(--aperture-accent, #dcebad) 52%, transparent) !important;
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 52%, transparent) !important;
 }
 
 .reader-progress [data-vn-scrub-dot][data-active="true"] {
-  flex: 2.4 1 0 !important;
-  min-width: 10px !important;
-  max-width: 20px !important;
+  flex: 3 1 0 !important;
+  min-width: 20px !important;
+  max-width: 38px !important;
   height: 6px !important;
-  background: var(--aperture-accent, #dcebad) !important;
-  box-shadow: 0 0 8px var(--aperture-accent-glow, rgba(220, 238, 173, 0.45)) !important;
+  background: linear-gradient(90deg, var(--aperture-accent, #a78bfa), color-mix(in srgb, var(--aperture-accent, #a78bfa) 68%, #ffffff)) !important;
+  box-shadow: 0 0 12px var(--aperture-accent-glow, rgba(167, 139, 250, 0.72)), 0 0 4px rgba(255, 255, 255, 0.55) !important;
 }
 
-/* Previous & Continue buttons integrated inside dialogue card at bottom left & right */
-[data-vn-controls] > [data-vn-control="previous"].nav-step-btn {
-  position: absolute !important;
-  left: 10px !important;
-  right: auto !important;
-  bottom: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
-  width: 44px !important;
-  height: 44px !important;
-  min-width: 44px !important;
-  min-height: 44px !important;
+/* Previous & Continue circular buttons paired on the right side of the dialogue card footer */
+[data-vn-control="previous"].nav-step-btn,
+[data-vn-controls] > [data-vn-control="previous"].nav-step-btn,
+[data-vn-continue].nav-step-btn,
+[data-vn-continue].action.advance {
+  position: fixed !important;
+  left: auto !important;
+  bottom: calc(79px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) !important;
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
   padding: 0 !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   border-radius: 50% !important;
-  background: var(--aperture-button-bg, rgba(14, 30, 24, 0.92)) !important;
-  border: 1px solid var(--aperture-button-border, rgba(160, 205, 185, 0.3)) !important;
-  color: var(--aperture-button-text, #edf3ea) !important;
+  background: color-mix(in srgb, var(--aperture-button-bg, rgba(19, 26, 38, 0.85)) 78%, rgba(255, 255, 255, 0.05)) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 26%, rgba(255, 255, 255, 0.16)) !important;
+  color: var(--aperture-button-text, #f8fafc) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 2px 8px rgba(0, 0, 0, 0.35) !important;
   cursor: pointer !important;
   z-index: 45 !important;
-  transition: background 0.16s ease, transform 0.16s ease, border-color 0.16s ease !important;
+  transition: background 0.16s ease, transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease !important;
 }
 
-[data-vn-controls] > [data-vn-control="previous"].nav-step-btn:hover:not(:disabled) {
-  background: var(--aperture-button-hover-bg, rgba(35, 75, 57, 0.95)) !important;
-  border-color: var(--aperture-accent, #dcebad) !important;
+[data-vn-control="previous"].nav-step-btn,
+[data-vn-controls] > [data-vn-control="previous"].nav-step-btn {
+  right: 64px !important;
 }
 
 [data-vn-continue].nav-step-btn,
 [data-vn-continue].action.advance {
-  position: absolute !important;
-  right: 10px !important;
-  left: auto !important;
-  bottom: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
-  width: 44px !important;
-  height: 44px !important;
-  min-width: 44px !important;
-  min-height: 44px !important;
-  padding: 0 !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  border-radius: 50% !important;
-  background: var(--aperture-accent, #dcebad) !important;
-  border: 1px solid var(--aperture-accent, #dcebad) !important;
-  color: var(--aperture-accent-contrast, #11241c) !important;
-  cursor: pointer !important;
-  font-weight: 700 !important;
-  z-index: 45 !important;
-  box-shadow: 0 2px 10px var(--aperture-accent-glow, rgba(220, 238, 173, 0.35)) !important;
-  transition: background 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease !important;
+  right: 24px !important;
 }
 
+[data-vn-control="previous"].nav-step-btn::after,
+[data-vn-continue].nav-step-btn::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+
+[data-vn-control="previous"].nav-step-btn:hover:not(:disabled),
 [data-vn-continue].nav-step-btn:hover:not(:disabled),
 [data-vn-continue].action.advance:hover:not(:disabled) {
-  background: var(--aperture-accent-hover, #ecf8cd) !important;
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, var(--aperture-button-hover-bg, rgba(30, 41, 59, 0.92))) !important;
+  border-color: var(--aperture-accent, #c4b5fd) !important;
+  color: var(--aperture-accent, #c4b5fd) !important;
+  box-shadow: 0 0 12px var(--aperture-accent-glow, rgba(167, 139, 250, 0.38)) !important;
   transform: scale(1.06) !important;
 }
 
@@ -27613,68 +27800,6 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   display: none !important;
 }
 
-/* Dialogue caption head & speaker */
-.caption-head {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  gap: 6px !important;
-  min-height: 22px !important;
-  border-bottom: 1px solid rgba(228, 240, 218, 0.15) !important;
-  padding-bottom: 3px !important;
-  margin-bottom: 4px !important;
-}
-
-[data-vn-speaker], .speaker {
-  font-size: 12px !important;
-  line-height: 1.4 !important;
-  letter-spacing: 0.105em !important;
-  font-weight: 750 !important;
-  color: var(--aperture-accent, #dcebad) !important;
-  white-space: nowrap !important;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8) !important;
-}
-
-.caption-split {
-  opacity: 0.35 !important;
-  padding: 0 4px !important;
-  color: var(--aperture-accent, #dcebad) !important;
-}
-
-[data-vn-caption-scene] {
-  color: var(--aperture-muted, #c9d5b7) !important;
-  font-size: 9px !important;
-  letter-spacing: 0.08em !important;
-  opacity: 0.8 !important;
-}
-
-.caption-head-actions {
-  display: flex !important;
-  align-items: center !important;
-  gap: 3px !important;
-}
-
-.caption-tool {
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
-  min-height: 44px;
-  display: grid !important;
-  place-items: center !important;
-  color: var(--aperture-text, #dfefd8) !important;
-  opacity: 0.78 !important;
-  border-radius: min(var(--vn-shell-radius, 8px), 10px) !important;
-  border: 0 !important;
-  background: transparent !important;
-  cursor: pointer !important;
-  padding: 0 !important;
-}
-.caption-tool:hover {
-  background: color-mix(in srgb, var(--aperture-accent, #ffffff) 16%, transparent) !important;
-  color: var(--aperture-accent, #ffffff) !important;
-  opacity: 1 !important;
-}
-
 /* Override any high-specificity legacy speaker positioning */
 [data-vn-root] [data-vn-dialogue] [data-vn-speaker],
 [data-vn-root][data-vn-adjustable-sheet="true"] [data-vn-speaker],
@@ -27689,42 +27814,43 @@ body[data-vn-gallery-open="true"] [data-vn-reader-header] {
   inset: auto !important;
   transform: none !important;
   margin: 0 !important;
-  padding: 2px 8px !important;
-  border: 1px solid color-mix(in srgb, var(--aperture-accent, #dcebad) 24%, transparent) !important;
-  border-radius: var(--vn-scrubber-radius, 999px) !important;
-  background: color-mix(in srgb, var(--aperture-accent, #dcebad) 11%, transparent) !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   display: inline-flex !important;
   align-items: center !important;
-  font-size: 12px !important;
-  font-weight: 750 !important;
-  letter-spacing: 0.08em !important;
-  line-height: 1.2 !important;
+  font-size: 13.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.01em !important;
+  text-transform: none !important;
+  line-height: 1.25 !important;
+  white-space: nowrap !important;
 }
 
 :where([data-vn-root]) [data-vn-speaker] {
-  color: var(--aperture-accent, var(--vn-accent, #dcebad));
+  color: var(--aperture-text, var(--vn-text, #f8fafc));
 }
-
-
 
 .caption-head .speaker {
   display: inline-flex !important;
   align-items: center !important;
-  gap: 2px !important;
+  gap: 7px !important;
   white-space: nowrap !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
 }
 
 .caption-head [data-vn-speaker] {
   display: inline-flex !important;
   align-items: center !important;
-  gap: 3px !important;
-  padding: 2px 8px !important;
-  border-radius: var(--vn-scrubber-radius, 999px) !important;
-  background: color-mix(in srgb, var(--aperture-accent, #dcebad) 12%, transparent) !important;
-  border: 1px solid color-mix(in srgb, var(--aperture-accent, #dcebad) 26%, transparent) !important;
+  gap: 4px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
 }
 
 [data-vn-root] [data-vn-dialogue] [data-vn-speaker][hidden],
@@ -29551,10 +29677,10 @@ class ReaderWorkspace {
       </div>
       <div data-reader-header-actions class="topbar-actions" style="display:flex;align-items:center;gap:6px;margin-left:auto">
         <button type="button" class="round-ghost" data-action="cast-toggle" title="Cast portraits" aria-label="Show cast portraits">${APERTURE_ICONS.cast}</button>
-        <button type="button" class="round-ghost" data-action="panels-toggle" title="Panels" aria-label="Open Panels">${APERTURE_ICONS.panel}</button>
+        <button type="button" class="round-ghost" data-action="panels-toggle" title="Pin a card from this reply" aria-label="Open Panels" hidden>${APERTURE_ICONS.panel}</button>
         <button type="button" class="round-ghost" data-action="voice-toggle" title="Voice controls" aria-label="Voice controls">${APERTURE_ICONS.speaker}</button>
         <button type="button" class="round-ghost" data-action="studio-toggle" title="Art Studio" aria-label="Open Art Studio">${APERTURE_ICONS.image}</button>
-        <button type="button" data-reader-search aria-label="Search menus and settings (/)" style="display:none">${readerIcon("search")}<span>Find</span><kbd>/</kbd></button>
+        <button type="button" class="round-ghost" data-reader-search title="Search menus and settings (/)" aria-label="Search menus and settings (/)">${readerIcon("search")}</button>
         <button type="button" data-reader-focus aria-label="Hide navigation ([)" aria-keyshortcuts="[" style="display:none">${readerIcon("focus")}<span>Hide chrome</span><kbd>[</kbd></button>
         <button type="button" class="round-ghost" data-action="chat-exit" title="Back to chat" aria-label="Back to Lumiverse chat">${APERTURE_ICONS.chat}</button>
       </div>
@@ -29886,6 +30012,12 @@ class ReaderWorkspace {
   toolClosed(id6) {
     if (!this.changing && this.current === id6)
       this.close();
+  }
+  setShowPanelsMenu(enabled) {
+    const btn = this.header.querySelector('[data-action="panels-toggle"]');
+    if (btn)
+      btn.hidden = !enabled;
+    this.shell.dataset.vnShowPanels = enabled ? "true" : "false";
   }
   openMore(trigger, pushHistory = true) {
     if (this.destroyed || this.changing)
@@ -35170,6 +35302,26 @@ class StageDossiers {
       this.workspace?.open("character");
     });
   }
+  speakerAvatarUrl(speakerName) {
+    const needle = speakerName.trim().toLocaleLowerCase();
+    if (!needle)
+      return null;
+    const matchedChar = findCharacterDNA(this.characterDnaLibrary, speakerName);
+    if (matchedChar?.referenceImageUrl)
+      return matchedChar.referenceImageUrl;
+    const snapshot = this.snapshot();
+    if (snapshot) {
+      const npc = snapshot.entities.find((e) => e.kind === "npc" && (e.name.trim().toLocaleLowerCase() === needle || e.aliases.some((a) => a.trim().toLocaleLowerCase() === needle)));
+      if (npc) {
+        const resolved = this.resolveVisualContext(npc).imageUrl;
+        if (resolved)
+          return resolved;
+      }
+    }
+    const urlOf = (a) => a.stageAsset?.displayImageUrl ?? sceneImageUrlFor(a) ?? undefined;
+    const portrait = [...this.turnMedia?.assets ?? []].reverse().find((a) => (a.status === "generated" || a.status === "browser_ready") && a.stageAsset?.role === "portrait" && a.stageAsset.character?.trim().toLocaleLowerCase() === needle && Boolean(urlOf(a)));
+    return portrait ? urlOf(portrait) ?? null : null;
+  }
   buildSceneHubContext(snapshot) {
     const eligible = snapshot ? eligibleEntities(snapshot.entities, this.prefs, snapshot.at.key.chatId) : [];
     const activePlace = snapshot?.locationId ? eligible.find((e) => e.kind === "place" && e.id === snapshot.locationId) : eligible.find((e) => e.kind === "place");
@@ -35935,6 +36087,11 @@ var WEATHER_GLYPHS = {
   moon: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.2 10.2A4.8 4.8 0 0 1 6 3.8a5 5 0 1 0 6.2 6.4Z"/></svg>',
   sun: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2.7"/><path d="M8 2v1.3M8 12.7V14M2 8h1.3M12.7 8H14M3.8 3.8l.9.9M11.3 11.3l.9.9M12.2 3.8l-.9.9M4.7 11.3l-.9.9"/></svg>'
 };
+var TOKEN_GLYPHS = {
+  time: '<svg viewBox="0 0 16 16" width="12.5" height="12.5" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="5.8"/><path d="M8 4.6V8l2.2 1.4"/></svg>',
+  date: '<svg viewBox="0 0 16 16" width="12.5" height="12.5" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.2" y="3.2" width="11.6" height="10.4" rx="1.8"/><path d="M5.2 1.8v2.6M10.8 1.8v2.6M2.2 6.4h11.6"/></svg>',
+  temp: '<svg viewBox="0 0 16 16" width="12.5" height="12.5" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.4 9.5V3.4a1.4 1.4 0 0 0-2.8 0v6.1a2.6 2.6 0 1 0 2.8 0Z"/><path d="M8 6.4v4.1"/></svg>'
+};
 function selectWeatherGlyph(snapshot) {
   const weather = (snapshot.weather ?? "").toLowerCase();
   const tod = (snapshot.timeOfDay ?? snapshot.time ?? "").toLowerCase();
@@ -35985,22 +36142,24 @@ function renderWorldAtmosphereStrip(strip, snapshot, options) {
   strip.tabIndex = 0;
   strip.setAttribute("aria-expanded", String(Boolean(options?.expanded)));
   strip.setAttribute("aria-haspopup", "dialog");
+  const weatherGlyphHtml = WEATHER_GLYPHS[selectWeatherGlyph(snapshot)];
   const glyphWrap = document.createElement("span");
   glyphWrap.className = "vn-world-glyph";
   glyphWrap.setAttribute("aria-hidden", "true");
-  glyphWrap.innerHTML = WEATHER_GLYPHS[selectWeatherGlyph(snapshot)];
+  glyphWrap.innerHTML = weatherGlyphHtml;
   strip.append(glyphWrap);
   const tokens = [];
   if (timeText)
-    tokens.push({ kind: "time", text: timeText });
+    tokens.push({ kind: "time", text: timeText, iconHtml: TOKEN_GLYPHS.time });
   if (dateText)
-    tokens.push({ kind: "date", text: dateText });
+    tokens.push({ kind: "date", text: dateText, iconHtml: TOKEN_GLYPHS.date });
   if (tempText)
-    tokens.push({ kind: "temp", text: tempText });
+    tokens.push({ kind: "temp", text: tempText, iconHtml: TOKEN_GLYPHS.temp });
   if (weatherText) {
     tokens.push({
       kind: "weather",
-      text: snapshot.indoor ? `${weatherText} outside` : weatherText
+      text: snapshot.indoor ? `${weatherText} outside` : weatherText,
+      iconHtml: weatherGlyphHtml
     });
   }
   tokens.forEach((tok, idx) => {
@@ -36008,12 +36167,18 @@ function renderWorldAtmosphereStrip(strip, snapshot, options) {
       const dot = document.createElement("span");
       dot.className = "vn-world-sep";
       dot.setAttribute("aria-hidden", "true");
-      dot.textContent = "·";
+      dot.textContent = "|";
       strip.append(dot);
     }
     const span = document.createElement("span");
     span.className = `vn-world-token vn-world-${tok.kind}`;
-    span.textContent = tok.text;
+    const icon = document.createElement("span");
+    icon.className = "vn-world-token-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.innerHTML = tok.iconHtml;
+    const text = document.createElement("span");
+    text.textContent = tok.text;
+    span.append(icon, text);
     strip.append(span);
   });
   if (options?.documentCount && options.documentCount > 0) {
@@ -43752,6 +43917,7 @@ var DEFAULT_CONFIG = {
   musicTransitionPolicy: "cue",
   debugLogging: false,
   showReplyCost: false,
+  showPanelsMenu: false,
   generateImages: true,
   imageGenerationTrigger: "per-beat",
   reviewImages: true,
@@ -45514,24 +45680,14 @@ var THEME_MARKUP = `
     </div>
 
     <section data-vn-narrative hidden aria-label="Dialogue">
-      <div data-vn-quick-reply hidden role="dialog" aria-label="Quick reply composer">
-        <div data-vn-quick-reply-head>
-          <span>Reply Draft</span>
-          <button type="button" data-vn-quick-reply-close aria-label="Close reply composer">×</button>
-        </div>
-        <textarea data-vn-quick-reply-input rows="3" placeholder="Write or edit your reply at any point in the scene…"></textarea>
-        <div data-vn-quick-reply-actions>
-          <button type="button" data-vn-quick-reply-clear>Clear</button>
-          <button type="button" data-vn-quick-reply-send>Send Reply →</button>
-        </div>
-      </div>
       <div data-vn-dialogue class="reader-caption refined-caption">
         <div class="caption-head" data-vn-sheet-header>
-          <div class="speaker"><span data-vn-speaker></span><span class="caption-split">/</span><span data-vn-caption-scene>SCENE</span></div>
-          <button type="button" data-vn-compose-toggle aria-label="Compose or edit reply" title="Reply Draft (R)">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-            <span data-vn-compose-badge hidden aria-hidden="true"></span>
-          </button>
+          <div class="speaker">
+            <span class="speaker-avatar" data-vn-speaker-avatar hidden aria-hidden="true"></span>
+            <span data-vn-speaker></span>
+            <span class="caption-split" aria-hidden="true"><svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 14s4.5-4.3 4.5-7.7a4.5 4.5 0 1 0-9 0C3.5 9.7 8 14 8 14Z"/><circle cx="8" cy="6.3" r="1.5"/></svg></span>
+            <span data-vn-caption-scene>SCENE</span>
+          </div>
         </div>
         <div class="scroll-copy">
           <p data-vn-dialogue-text></p>
@@ -45543,28 +45699,31 @@ var THEME_MARKUP = `
           <span data-vn-footer-speaker></span>
           <span data-vn-reading-state aria-live="polite" style="display:none"></span>
         </div>
-      </div>
-      <footer class="reader-actions">
         <div class="reader-progress">
           <small data-vn-step-left>1 / 1</small>
           <div data-vn-scrubber class="ticks" role="group" aria-label="Paragraph timeline"></div>
-          <small data-vn-step-right>100%</small>
+          <small data-vn-step-right hidden>100%</small>
         </div>
+      </div>
+      <footer class="reader-actions">
         <nav data-vn-controls class="reader-action-row" aria-label="Reading controls">
           <button data-vn-control="previous" class="action icon-action nav-step-btn" type="button" aria-label="Previous paragraph" aria-keyshortcuts="ArrowLeft" title="Previous paragraph (Left Arrow)">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></span><span data-vn-control-label style="display:none">Previous</span>
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></span><span data-vn-control-label style="display:none">Previous</span>
           </button>
-          <button data-vn-control="log" class="action icon-action" type="button" aria-label="Open history" aria-keyshortcuts="L" title="History (L)">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 1 3 7M3 5v7h7M12 7v5l4 2"/></svg></span><span data-vn-control-label>History</span>
+          <button data-vn-control="settings" class="action icon-action" type="button" aria-label="Extension settings" title="Settings">
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg></span><span data-vn-control-label>Settings</span>
+          </button>
+          <button data-vn-control="studio" class="action icon-action" type="button" aria-label="Art Studio" title="Art Studio">
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></span><span data-vn-control-label>Art</span>
           </button>
           <button data-vn-control="lens" class="action icon-action" type="button" aria-label="World Lens" title="World Lens">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M11.5 3a17 17 0 0 0 0 18M12.5 3a17 17 0 0 1 0 18"/></svg></span><span data-vn-control-label>Lens</span>
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9Z"/><path d="M5 3v4M3 5h4M19 17v4M17 19h4"/></svg></span><span data-vn-control-label>Lens</span>
           </button>
           <button data-vn-control="cast" class="action icon-action" type="button" aria-label="Open Cast and Character Folio" title="Cast & Characters">
             <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><circle cx="16.5" cy="10" r="2.5"/><path d="M3.5 19c0-3 3-5 5.5-5s5.5 2 5.5 5M15 14c2.2 0 4.5 1.4 4.5 4.5"/></svg></span><span data-vn-control-label>Cast</span>
           </button>
-          <button data-vn-control="settings" class="action icon-action" type="button" aria-label="Extension settings" title="Settings">
-            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg></span><span data-vn-control-label>Settings</span>
+          <button data-vn-control="log" class="action icon-action" type="button" aria-label="Open history" aria-keyshortcuts="L" title="History (L)">
+            <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg></span><span data-vn-control-label>History</span>
           </button>
           <button
             data-vn-continue
@@ -45573,9 +45732,9 @@ var THEME_MARKUP = `
             aria-label="Continue"
             aria-keyshortcuts="Enter Space ArrowRight"
             title="Continue (Enter)"
-          ><span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span></button>
+          ><span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span></button>
 
-          <button data-vn-control="auto" type="button" aria-label="Auto play" aria-pressed="false" aria-keyshortcuts="A" title="Auto play (A)">
+          <button data-vn-control="auto" class="vn-aux-control" type="button" aria-label="Auto play" aria-pressed="false" aria-keyshortcuts="A" title="Auto play (A)" style="display:none">
             <span data-vn-auto-ring aria-hidden="true">
               <svg viewBox="0 0 16 16" width="14" height="14">
                 <circle class="vn-auto-track" cx="8" cy="8" r="6" fill="none" stroke-width="2" />
@@ -45584,11 +45743,17 @@ var THEME_MARKUP = `
             </span>
             <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" focusable="false" fill="currentColor" stroke="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3.2v9.6L12.6 8z" /></svg></span><span data-vn-control-label>Auto</span>
           </button>
-          <button data-vn-control="skip" type="button" aria-label="Skip" aria-pressed="false" aria-describedby="vn-skip-description" aria-keyshortcuts="S" title="Skip (S)">
+          <button data-vn-control="skip" class="vn-aux-control" type="button" aria-label="Skip" aria-pressed="false" aria-describedby="vn-skip-description" aria-keyshortcuts="S" title="Skip (S)" style="display:none">
             <span data-vn-control-icon aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" focusable="false" fill="currentColor" stroke="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3.5v9L7.6 8z" /><path d="M8.2 3.5v9L13.8 8z" /></svg></span><span data-vn-control-label>Skip</span>
           </button>
           <span id="vn-skip-description" data-vn-skip-description hidden></span>
         </nav>
+        <form class="reader-inline-composer" data-vn-inline-composer>
+          <input type="text" data-vn-inline-message placeholder="Message…" aria-label="Send a message" autocomplete="off" />
+          <button type="submit" data-vn-inline-send aria-label="Send message" title="Send message">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4Z"/></svg>
+          </button>
+        </form>
       </footer>
     </section>
 
@@ -46048,48 +46213,47 @@ class VnStage {
     this.composeBadge = this.themeRoot.querySelector("[data-vn-compose-badge]");
     this.quickReplyDrawer = this.themeRoot.querySelector("[data-vn-quick-reply]");
     this.quickReplyInput = this.themeRoot.querySelector("[data-vn-quick-reply-input]");
-    const quickReplyClose = this.themeRoot.querySelector("[data-vn-quick-reply-close]");
-    const quickReplyClear = this.themeRoot.querySelector("[data-vn-quick-reply-clear]");
-    const quickReplySend = this.themeRoot.querySelector("[data-vn-quick-reply-send]");
-    if (this.composeToggle && this.quickReplyDrawer) {
-      this.composeToggle.addEventListener("click", (e) => {
+    const inlineComposer = this.themeRoot.querySelector("[data-vn-inline-composer]");
+    const inlineInput = this.themeRoot.querySelector("[data-vn-inline-message]");
+    const inlineSend = this.themeRoot.querySelector("[data-vn-inline-send]");
+    if (inlineComposer && inlineInput) {
+      inlineComposer.addEventListener("click", (e) => e.stopPropagation());
+      inlineInput.addEventListener("keydown", (e) => {
         e.stopPropagation();
-        this.toggleQuickReplyDrawer();
-      });
-    }
-    this.quickReplyDrawer?.addEventListener("click", (e) => e.stopPropagation());
-    this.quickReplyDrawer?.addEventListener("keydown", (e) => {
-      e.stopPropagation();
-      if (e.key === "Escape") {
-        this.closeQuickReplyDrawer(true);
-        return;
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-        e.preventDefault();
-        const text = (this.quickReplyInput?.value ?? this.state.draft).trim();
-        if (text)
+        if (e.key === "Escape") {
+          inlineInput.blur();
+          return;
+        }
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          const text = (inlineInput.value || this.state.draft).trim();
+          if (!text)
+            return;
+          inlineInput.value = "";
+          if (inlineSend)
+            inlineSend.disabled = true;
           this.submitQuickReply(text);
-      }
-    });
-    this.quickReplyInput?.addEventListener("input", () => {
-      this.storeReplyDraft(this.quickReplyInput.value);
-      this.syncComposeUi();
-    });
-    quickReplyClose?.addEventListener("click", () => {
-      this.closeQuickReplyDrawer(true);
-    });
-    quickReplyClear?.addEventListener("click", () => {
-      this.storeReplyDraft("");
-      if (this.quickReplyInput)
-        this.quickReplyInput.value = "";
-      this.syncComposeUi();
-    });
-    quickReplySend?.addEventListener("click", () => {
-      const text = (this.quickReplyInput?.value ?? this.state.draft).trim();
-      if (!text)
-        return;
-      this.submitQuickReply(text);
-    });
+        }
+      });
+      inlineInput.addEventListener("input", () => {
+        this.storeReplyDraft(inlineInput.value);
+        if (inlineSend)
+          inlineSend.disabled = !inlineInput.value.trim();
+      });
+      const triggerInlineSubmit = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const text = (inlineInput.value || this.state.draft).trim();
+        if (!text)
+          return;
+        inlineInput.value = "";
+        if (inlineSend)
+          inlineSend.disabled = true;
+        this.submitQuickReply(text);
+      };
+      inlineComposer.addEventListener("submit", triggerInlineSubmit);
+      inlineSend?.addEventListener("click", triggerInlineSubmit);
+    }
     this.bindEvents();
     this.updateControlButtons();
     this.render(null);
@@ -46799,6 +46963,9 @@ class VnStage {
   setCastMode(enabled) {
     this.castStage.setEnabled(enabled);
   }
+  setShowPanelsMenu(enabled) {
+    this.workspace.setShowPanelsMenu(enabled);
+  }
   setRpgMode(mode) {
     this.rpgMode = mode;
     this.rpgHud.update(this.rpgMode, this.rpgState);
@@ -46993,7 +47160,7 @@ class VnStage {
     const sceneSpan = this.themeRoot.querySelector("[data-vn-caption-scene]");
     const activePlace = this.dossiers.sceneHudEntries().find((e) => e.kind === "place")?.name;
     if (sceneSpan && activePlace)
-      sceneSpan.textContent = activePlace.trim().toUpperCase();
+      sceneSpan.textContent = activePlace.trim();
   }
   syncComposeUi() {
     const hasDraft = Boolean(this.state.draft.trim());
@@ -47001,6 +47168,14 @@ class VnStage {
       this.composeBadge.hidden = !hasDraft;
     if (this.quickReplyInput && document.activeElement !== this.quickReplyInput) {
       this.quickReplyInput.value = this.state.draft;
+    }
+    const inlineInput = this.themeRoot.querySelector("[data-vn-inline-message]");
+    const inlineSend = this.themeRoot.querySelector("[data-vn-inline-send]");
+    if (inlineInput && document.activeElement !== inlineInput) {
+      inlineInput.value = this.state.draft;
+    }
+    if (inlineSend) {
+      inlineSend.disabled = !hasDraft;
     }
   }
   setActivity(label, kind = "loading") {
@@ -47779,6 +47954,11 @@ class VnStage {
       event.stopPropagation();
       this.workspace.open("settings", settingsBtn);
     });
+    const studioBtn = this.themeRoot.querySelector("[data-vn-control='studio']");
+    studioBtn?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.workspace.open("artwork", studioBtn);
+    });
     this.autoButton.addEventListener("click", (event) => {
       event.stopPropagation();
       this.toggleAutoPlay();
@@ -47969,7 +48149,11 @@ class VnStage {
       }
       if (event.key === "r" || event.key === "R") {
         event.preventDefault();
-        this.toggleQuickReplyDrawer();
+        const inlineInput = this.themeRoot.querySelector("[data-vn-inline-message]");
+        if (inlineInput)
+          inlineInput.focus();
+        else
+          this.toggleQuickReplyDrawer();
         return;
       }
       if (event.key === "w" || event.key === "W") {
@@ -48347,6 +48531,8 @@ class VnStage {
     this.dispatch({ type: "submit-started" });
     try {
       await this.callbacks.onSubmit(trimmed);
+      this.storeReplyDraft("");
+      this.syncComposeUi();
     } catch (error61) {
       this.dispatch({ type: "submit-failed", error: errorMessage(error61) });
     }
@@ -48393,15 +48579,38 @@ class VnStage {
     this.workspace.setCaption(speaker ? `${speaker} · ${view.paragraphNumber} / ${view.paragraphCount}` : view.paragraph ? `Reading · ${view.paragraphNumber} / ${view.paragraphCount}` : "Visual novel");
     this.speaker.title = speaker;
     this.speaker.hidden = !view.paragraph?.speaker;
+    const avatarEl = this.themeRoot.querySelector("[data-vn-speaker-avatar]");
+    if (avatarEl) {
+      if (!speaker) {
+        avatarEl.hidden = true;
+        avatarEl.replaceChildren();
+      } else {
+        const avatarUrl = this.dossiers.speakerAvatarUrl(speaker);
+        avatarEl.hidden = false;
+        avatarEl.replaceChildren();
+        if (avatarUrl) {
+          const img = document.createElement("img");
+          img.src = avatarUrl;
+          img.alt = "";
+          img.decoding = "async";
+          avatarEl.append(img);
+          avatarEl.classList.remove("is-monogram");
+        } else {
+          const initial = speaker.trim().charAt(0).toUpperCase() || "•";
+          avatarEl.textContent = initial;
+          avatarEl.classList.add("is-monogram");
+        }
+      }
+    }
     const sceneSpan = this.themeRoot.querySelector("[data-vn-caption-scene]");
     const splitSpan = this.themeRoot.querySelector(".caption-split");
     const activePlace = this.dossiers.sceneHudEntries().find((e) => e.kind === "place")?.name;
     const sceneLoc = (activePlace || "SCENE").trim();
     if (sceneSpan) {
-      sceneSpan.textContent = sceneLoc.toUpperCase();
+      sceneSpan.textContent = sceneLoc;
     }
     if (splitSpan) {
-      splitSpan.hidden = !speaker;
+      splitSpan.hidden = !sceneLoc;
     }
     const progress = view.paragraph ? `PASSAGE ${String(view.paragraphNumber).padStart(2, "0")}` : "";
     if (this.progress.textContent !== progress)
@@ -54290,6 +54499,7 @@ class VisualNovelSettingsPanel {
             ${group("Starting", `
               <label data-check ${find("Open automatically", "auto enter open novel view chat start")}><input name="autoEnter" type="checkbox" /><span>Open the novel view automatically when a chat opens</span></label>
               <label data-check ${find("Show reply cost", "cost tokens price billing reply usage estimated")}><input name="showReplyCost" type="checkbox" /><span>Show reply cost<small>Display estimated token usage and model cost for each generated reply</small></span></label>
+              <label data-check ${find("Show pin card panels menu", "panels pin card reply menu topbar reader")}><input name="showPanelsMenu" type="checkbox" /><span>Show "Pin a card" menu<small>Display the Panels button next to Voice in the reader top bar to pin cards from a reply</small></span></label>
             `)}
           `)}
 
@@ -55452,6 +55662,8 @@ class VisualNovelSettingsPanel {
         return { generateChoices: checked };
       case "showReplyCost":
         return { showReplyCost: checked };
+      case "showPanelsMenu":
+        return { showPanelsMenu: checked };
       case "autoEnter":
         return { autoEnter: checked };
       case "referenceAnchoring":
@@ -56245,6 +56457,7 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
     this.control("generateChoices").checked = config2.generateChoices;
     this.control("autoEnter").checked = config2.autoEnter;
     this.control("showReplyCost").checked = config2.showReplyCost;
+    this.control("showPanelsMenu").checked = config2.showPanelsMenu;
     this.control("referenceAnchoring").checked = config2.referenceAnchoring;
     this.control("reviewImages").checked = config2.reviewImages;
     this.control("dynamicImageTemplates").checked = config2.dynamicImageTemplates;
@@ -57907,7 +58120,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.177";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.178";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -68908,6 +69121,7 @@ function applyVisualConfigToStage(stage, config2) {
   stage.setTextEffects?.(config2.textEffects);
   stage.setFilmGrain?.(config2.filmGrain !== false);
   stage.setDisabledSceneEffects?.(config2.disabledSceneEffects ?? []);
+  stage.setShowPanelsMenu?.(config2.showPanelsMenu === true);
 }
 function connectionCatalogStates(message) {
   const forKind = (kind) => {

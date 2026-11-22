@@ -760,6 +760,7 @@ export class VisualNovelSettingsPanel {
             ${group("Starting", `
               <label data-check ${find("Open automatically", "auto enter open novel view chat start")}><input name="autoEnter" type="checkbox" /><span>Open the novel view automatically when a chat opens</span></label>
               <label data-check ${find("Show reply cost", "cost tokens price billing reply usage estimated")}><input name="showReplyCost" type="checkbox" /><span>Show reply cost<small>Display estimated token usage and model cost for each generated reply</small></span></label>
+              <label data-check ${find("Show pin card panels menu", "panels pin card reply menu topbar reader")}><input name="showPanelsMenu" type="checkbox" /><span>Show "Pin a card" menu<small>Display the Panels button next to Voice in the reader top bar to pin cards from a reply</small></span></label>
             `)}
           `)}
 
@@ -1803,6 +1804,7 @@ export class VisualNovelSettingsPanel {
       case "skipMode": return { skipMode: target.value === "all" ? "all" : "read" };
       case "generateChoices": return { generateChoices: checked };
       case "showReplyCost": return { showReplyCost: checked };
+      case "showPanelsMenu": return { showPanelsMenu: checked };
       case "autoEnter": return { autoEnter: checked };
       case "referenceAnchoring": return { referenceAnchoring: checked };
       case "reviewImages": return { reviewImages: checked };
@@ -2447,6 +2449,7 @@ export class VisualNovelSettingsPanel {
     this.control<HTMLInputElement>("generateChoices").checked = config.generateChoices;
     this.control<HTMLInputElement>("autoEnter").checked = config.autoEnter;
     this.control<HTMLInputElement>("showReplyCost").checked = config.showReplyCost;
+    this.control<HTMLInputElement>("showPanelsMenu").checked = config.showPanelsMenu;
     this.control<HTMLInputElement>("referenceAnchoring").checked = config.referenceAnchoring;
     this.control<HTMLInputElement>("reviewImages").checked = config.reviewImages;
     this.control<HTMLInputElement>("dynamicImageTemplates").checked = config.dynamicImageTemplates;

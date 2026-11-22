@@ -99,6 +99,8 @@ export type VisualNovelConfig = {
   debugLogging: boolean;
   /** Show a per-reply line of model calls, tokens and images in the reader. Off by default. */
   showReplyCost: boolean;
+  /** Show the "Pin a card from this reply" panels menu button in the reader topbar. Off by default. */
+  showPanelsMenu: boolean;
   generateImages: boolean;
   imageGenerationTrigger: ImageGenerationTrigger;
   reviewImages: boolean;
@@ -205,6 +207,7 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   musicTransitionPolicy:"cue",
   debugLogging: false,
   showReplyCost: false,
+  showPanelsMenu: false,
   generateImages: true,
   imageGenerationTrigger: "per-beat",
   reviewImages: true,
@@ -453,6 +456,7 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     musicTransitionPolicy:input.musicTransitionPolicy==="location"?"location":"cue",
     debugLogging: bool(input.debugLogging, DEFAULT_CONFIG.debugLogging),
     showReplyCost: bool(input.showReplyCost, DEFAULT_CONFIG.showReplyCost),
+    showPanelsMenu: bool(input.showPanelsMenu, DEFAULT_CONFIG.showPanelsMenu),
     generateImages: bool(input.generateImages, DEFAULT_CONFIG.generateImages),
     imageGenerationTrigger: input.imageGenerationTrigger === "scene-change" ? "scene-change" : "per-beat",
     reviewImages: bool(input.reviewImages, DEFAULT_CONFIG.reviewImages),

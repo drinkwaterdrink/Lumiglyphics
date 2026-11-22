@@ -10,6 +10,12 @@ const WEATHER_GLYPHS = {
   sun: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2.7"/><path d="M8 2v1.3M8 12.7V14M2 8h1.3M12.7 8H14M3.8 3.8l.9.9M11.3 11.3l.9.9M12.2 3.8l-.9.9M4.7 11.3l-.9.9"/></svg>',
 } as const;
 
+const TOKEN_GLYPHS = {
+  time: '<svg viewBox="0 0 16 16" width="12.5" height="12.5" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="5.8"/><path d="M8 4.6V8l2.2 1.4"/></svg>',
+  date: '<svg viewBox="0 0 16 16" width="12.5" height="12.5" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.2" y="3.2" width="11.6" height="10.4" rx="1.8"/><path d="M5.2 1.8v2.6M10.8 1.8v2.6M2.2 6.4h11.6"/></svg>',
+  temp: '<svg viewBox="0 0 16 16" width="12.5" height="12.5" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.4 9.5V3.4a1.4 1.4 0 0 0-2.8 0v6.1a2.6 2.6 0 1 0 2.8 0Z"/><path d="M8 6.4v4.1"/></svg>',
+} as const;
+
 type GlyphKey = keyof typeof WEATHER_GLYPHS;
 
 export function selectWeatherGlyph(snapshot: WorldAtmosphereSnapshot): GlyphKey {
@@ -72,20 +78,22 @@ export function renderWorldAtmosphereStrip(
   strip.setAttribute('aria-expanded', String(Boolean(options?.expanded)));
   strip.setAttribute('aria-haspopup', 'dialog');
 
+  const weatherGlyphHtml = WEATHER_GLYPHS[selectWeatherGlyph(snapshot)];
   const glyphWrap = document.createElement('span');
   glyphWrap.className = 'vn-world-glyph';
   glyphWrap.setAttribute('aria-hidden', 'true');
-  glyphWrap.innerHTML = WEATHER_GLYPHS[selectWeatherGlyph(snapshot)];
+  glyphWrap.innerHTML = weatherGlyphHtml;
   strip.append(glyphWrap);
 
-  const tokens: Array<{ kind: string; text: string }> = [];
-  if (timeText) tokens.push({ kind: 'time', text: timeText });
-  if (dateText) tokens.push({ kind: 'date', text: dateText });
-  if (tempText) tokens.push({ kind: 'temp', text: tempText });
+  const tokens: Array<{ kind: string; text: string; iconHtml: string }> = [];
+  if (timeText) tokens.push({ kind: 'time', text: timeText, iconHtml: TOKEN_GLYPHS.time });
+  if (dateText) tokens.push({ kind: 'date', text: dateText, iconHtml: TOKEN_GLYPHS.date });
+  if (tempText) tokens.push({ kind: 'temp', text: tempText, iconHtml: TOKEN_GLYPHS.temp });
   if (weatherText) {
     tokens.push({
       kind: 'weather',
       text: snapshot.indoor ? `${weatherText} outside` : weatherText,
+      iconHtml: weatherGlyphHtml,
     });
   }
 
@@ -94,12 +102,18 @@ export function renderWorldAtmosphereStrip(
       const dot = document.createElement('span');
       dot.className = 'vn-world-sep';
       dot.setAttribute('aria-hidden', 'true');
-      dot.textContent = '·';
+      dot.textContent = '|';
       strip.append(dot);
     }
     const span = document.createElement('span');
     span.className = `vn-world-token vn-world-${tok.kind}`;
-    span.textContent = tok.text;
+    const icon = document.createElement('span');
+    icon.className = 'vn-world-token-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.innerHTML = tok.iconHtml;
+    const text = document.createElement('span');
+    text.textContent = tok.text;
+    span.append(icon, text);
     strip.append(span);
   });
 

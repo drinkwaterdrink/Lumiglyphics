@@ -178,48 +178,88 @@ export const APERTURE_CSS_ROUTE_BAR_READER = `/* ===============================
   border-radius: 0 !important;
 }
 
-/* Reader topbar */
+/* Reader topbar — unified frosted pill bar */
 .reader-topbar,
 [data-vn-reader-header].reader-topbar {
   position: absolute !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
+  top: calc(8px + env(safe-area-inset-top, 0px)) !important;
+  left: 10px !important;
+  right: 10px !important;
   height: auto !important;
+  min-height: 44px !important;
   display: flex !important;
-  flex-wrap: wrap !important;
+  flex-wrap: nowrap !important;
   align-items: center !important;
   justify-content: space-between !important;
-  row-gap: 4px !important;
-  padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 8px !important;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--vn-shell-panel, #060f16) 76%, transparent), transparent) !important;
-  border: 0 !important;
-  border-bottom: 0 !important;
+  gap: 6px !important;
+  padding: 4px 10px !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--aperture-bottom-bar-bg, var(--vn-shell-panel, #0a1018)) 82%, rgba(8, 12, 20, 0.68)) !important;
+  -webkit-backdrop-filter: blur(18px) !important;
+  backdrop-filter: blur(18px) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, rgba(255, 255, 255, 0.14)) !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
   z-index: 35 !important;
+}
+[data-vn-reader-header]:has([data-vn-world-strip]:not([hidden])) .reading-heading {
+  display: none !important;
 }
 [data-vn-world-strip][hidden] {
   display: none !important;
 }
 [data-vn-world-strip] {
-  flex: 1 0 100% !important;
-  order: 10 !important;
+  flex: 1 1 auto !important;
+  order: 1 !important;
+  min-width: 0 !important;
   display: inline-flex !important;
   align-items: center !important;
-  gap: 6px !important;
+  gap: 8px !important;
   flex-wrap: nowrap !important;
-  overflow: hidden !important;
-  padding: 4px 10px 4px 42px !important;
-  min-height: 28px !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  scrollbar-width: none !important;
+  padding: 4px 8px !important;
+  min-height: 30px !important;
   margin: 0 !important;
-  font-size: 11px !important;
+  font-size: 11.5px !important;
+  font-weight: 500 !important;
   line-height: 1.3 !important;
-  letter-spacing: 0.02em !important;
-  color: color-mix(in srgb, var(--aperture-text, #f4f7f5) 90%, transparent) !important;
+  letter-spacing: 0.01em !important;
+  color: color-mix(in srgb, var(--aperture-text, #f4f7f5) 92%, transparent) !important;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.72) !important;
   pointer-events: auto !important;
   cursor: pointer !important;
   border-radius: 999px !important;
   transition: background 0.15s ease !important;
+}
+[data-vn-world-strip]::-webkit-scrollbar {
+  display: none !important;
+}
+[data-vn-world-strip] .vn-world-glyph {
+  display: none !important;
+}
+[data-vn-world-strip] .vn-world-token {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  white-space: nowrap !important;
+  flex: none !important;
+}
+[data-vn-world-strip] .vn-world-token-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 85%, var(--aperture-text, #ffffff)) !important;
+  opacity: 0.88 !important;
+}
+[data-vn-world-strip] .vn-world-sep {
+  opacity: 0.26 !important;
+  font-weight: 300 !important;
+  margin: 0 1px !important;
+  flex: none !important;
+}
+[data-reader-header-actions] {
+  order: 2 !important;
+  flex: none !important;
 }
 [data-vn-world-strip]:hover,
 [data-vn-world-strip][aria-expanded="true"] {
@@ -790,8 +830,11 @@ aside[data-vn-workspace] {
   color: var(--aperture-accent-contrast, #11241c) !important;
 }
 
-/* Hide desktop-only search and focus shortcuts from mobile header */
-[data-reader-search],
+.round-ghost[hidden] {
+  display: none !important;
+}
+
+/* Hide desktop-only focus shortcut from mobile header */
 [data-reader-focus] {
   display: none !important;
   visibility: hidden !important;
@@ -802,30 +845,31 @@ aside[data-vn-workspace] {
 }
 
 /* =========================================================================
-   APERTURE DEDICATED BOTTOM BAR (History, World Lens, Cast, Settings)
+   APERTURE DEDICATED BOTTOM BAR (Left Icons + Permanent Inline Message Bar)
    ========================================================================= */
 
 .reader-actions,
 [data-vn-root] .reader-actions {
   position: absolute !important;
-  inset: auto 0 0 !important;
-  bottom: var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px)) !important;
-  left: 0 !important;
-  right: 0 !important;
-  height: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
+  inset: auto 10px calc(8px + env(safe-area-inset-bottom, 0px) + var(--reader-keyboard-inset, var(--vn-sheet-keyboard-inset, 0px))) 10px !important;
+  left: 10px !important;
+  right: 10px !important;
+  height: 52px !important;
   z-index: 40 !important;
   display: flex !important;
   flex-direction: row !important;
   align-items: center !important;
-  justify-content: center !important;
-  padding: 0 12px calc(env(safe-area-inset-bottom, 0px)) !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  padding: 0 7px 0 10px !important;
   margin: 0 !important;
+  border-radius: 999px !important;
   pointer-events: auto !important;
-  background: var(--aperture-bottom-bar-bg, rgba(7, 16, 13, 0.94)) !important;
-  -webkit-backdrop-filter: blur(16px) !important;
-  backdrop-filter: blur(16px) !important;
-  border-top: 1px solid var(--aperture-bottom-bar-border, rgba(160, 205, 185, 0.16)) !important;
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.45) !important;
+  background: color-mix(in srgb, var(--aperture-bottom-bar-bg, var(--vn-shell-panel, #0b1018)) 88%, rgba(8, 12, 20, 0.78)) !important;
+  -webkit-backdrop-filter: blur(18px) !important;
+  backdrop-filter: blur(18px) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, rgba(255, 255, 255, 0.14)) !important;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.56), 0 0 20px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 6%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
   box-sizing: border-box !important;
 }
 
@@ -836,17 +880,18 @@ aside[data-vn-workspace] {
   display: none !important;
 }
 
-/* Symmetrical 4-button navigation inside bottom bar */
+/* Left icon navigation cluster inside bottom bar */
 .reader-action-row,
 [data-vn-controls] {
   position: static !important;
   transform: none !important;
-  display: flex !important;
+  display: inline-flex !important;
   flex-direction: row !important;
-  justify-content: center !important;
+  justify-content: flex-start !important;
   align-items: center !important;
-  gap: 8px !important;
-  width: 100% !important;
+  gap: 2px !important;
+  flex: 0 0 auto !important;
+  width: auto !important;
   max-width: none !important;
   margin: 0 !important;
   padding: 0 !important;
@@ -855,36 +900,42 @@ aside[data-vn-workspace] {
 }
 
 .reader-action-row > .action:not(.nav-step-btn) {
-  height: 44px !important;
-  width: 68px !important;
-  min-width: 58px !important;
-  max-width: 76px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 3px !important;
-  border-radius: 8px !important;
+  position: relative !important;
+  height: 38px !important;
+  width: 38px !important;
+  min-width: 36px !important;
+  max-width: 40px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 50% !important;
   background: transparent !important;
-  border: 0 !important;
-  color: var(--aperture-muted, #9cb5a8) !important;
+  border: 1px solid transparent !important;
+  color: color-mix(in srgb, var(--aperture-text, #f1f5f9) 82%, transparent) !important;
   cursor: pointer !important;
   padding: 0 !important;
-  transition: all 0.15s ease !important;
+  transition: color 0.16s ease, background-color 0.16s ease, border-color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease !important;
+}
+
+.reader-action-row > .action:not(.nav-step-btn)::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
 }
 
 .reader-action-row > .action:not(.nav-step-btn):hover {
-  background: var(--aperture-button-hover-bg, rgba(220, 238, 177, 0.08)) !important;
-  color: var(--aperture-accent, #dcebad) !important;
+  background: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 14%, transparent) !important;
+  border-color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 32%, transparent) !important;
+  color: var(--aperture-accent, #c4b5fd) !important;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, transparent) !important;
+  transform: translateY(-1px) !important;
+}
+
+.reader-action-row > .action:not(.nav-step-btn):active {
+  transform: scale(0.94) !important;
 }
 
 .reader-action-row > .action:not(.nav-step-btn) [data-vn-control-label] {
-  display: block !important;
-  font-size: 9.5px !important;
-  font-weight: 650 !important;
-  letter-spacing: 0.03em !important;
-  line-height: 1.05 !important;
-  white-space: nowrap !important;
+  display: none !important;
 }
 
 .reader-action-row > .action:not(.nav-step-btn) [data-vn-control-icon] svg {
@@ -892,9 +943,99 @@ aside[data-vn-workspace] {
   height: 18px !important;
 }
 
-[data-vn-controls] > .nav-step-btn:disabled,
-[data-vn-controls] > .nav-step-btn[aria-disabled="true"] {
-  opacity: 0.3 !important;
+/* Right permanent inline Message pill */
+.reader-inline-composer,
+[data-vn-inline-composer] {
+  flex: 1 1 auto !important;
+  min-width: 118px !important;
+  height: 38px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 3px 4px 3px 14px !important;
+  margin: 0 !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--vn-shell-field, #141b26) 76%, rgba(255, 255, 255, 0.05)) !important;
+  border: 1px solid color-mix(in srgb, var(--aperture-accent, #c4b5fd) 22%, rgba(255, 255, 255, 0.14)) !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.36) !important;
+  box-sizing: border-box !important;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease !important;
+}
+
+.reader-inline-composer:focus-within,
+[data-vn-inline-composer]:focus-within {
+  border-color: color-mix(in srgb, var(--aperture-accent, #c4b5fd) 68%, rgba(255, 255, 255, 0.35)) !important;
+  box-shadow: 0 0 16px color-mix(in srgb, var(--aperture-accent, #c4b5fd) 26%, transparent), inset 0 1px 2px rgba(0, 0, 0, 0.25) !important;
+  background: color-mix(in srgb, var(--vn-shell-field, #141b26) 88%, rgba(255, 255, 255, 0.07)) !important;
+}
+
+[data-vn-inline-message] {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  color: var(--aperture-text, #f8fafc) !important;
+  font-size: 13px !important;
+  font-family: inherit !important;
+  line-height: 1.2 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+[data-vn-inline-message]::placeholder {
+  color: color-mix(in srgb, var(--aperture-muted, #94a3b8) 78%, transparent) !important;
+}
+
+[data-vn-inline-send] {
+  position: relative !important;
+  width: 30px !important;
+  height: 30px !important;
+  min-width: 30px !important;
+  min-height: 30px !important;
+  border-radius: 50% !important;
+  border: 0 !important;
+  flex: none !important;
+  display: grid !important;
+  place-items: center !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  background: linear-gradient(135deg, var(--aperture-accent, #a78bfa), color-mix(in srgb, var(--aperture-accent, #a78bfa) 74%, #818cf8)) !important;
+  color: var(--aperture-accent-contrast, #0f172a) !important;
+  box-shadow: 0 2px 12px var(--aperture-accent-glow, rgba(167, 139, 250, 0.45)), inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease !important;
+}
+
+[data-vn-inline-send]::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+}
+
+[data-vn-inline-send] svg {
+  width: 14px !important;
+  height: 14px !important;
+  transform: translate(-0.5px, 0.5px);
+}
+
+[data-vn-inline-send]:hover:not(:disabled) {
+  transform: scale(1.06) !important;
+  box-shadow: 0 4px 16px var(--aperture-accent-glow, rgba(167, 139, 250, 0.68)), inset 0 1px 0 rgba(255, 255, 255, 0.45) !important;
+}
+
+[data-vn-inline-send]:active:not(:disabled) {
+  transform: scale(0.94) !important;
+}
+
+[data-vn-inline-send]:disabled {
+  opacity: 0.78 !important;
+}
+
+.nav-step-btn:disabled,
+.nav-step-btn[aria-disabled="true"] {
+  opacity: 0.32 !important;
   pointer-events: none !important;
 }
 

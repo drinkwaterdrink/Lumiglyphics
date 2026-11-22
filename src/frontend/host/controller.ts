@@ -390,6 +390,7 @@ export type VisualStageThemeTarget = Pick<
   setTextEffects?: (mode: VisualNovelTextEffectMode) => void;
   setFilmGrain?: (enabled: boolean) => void;
   setDisabledSceneEffects?: (disabled: string[]) => void;
+  setShowPanelsMenu?: (enabled: boolean) => void;
 };
 
 /**
@@ -431,6 +432,7 @@ export function applyVisualConfigToStage(
   stage.setTextEffects?.(config.textEffects);
   stage.setFilmGrain?.(config.filmGrain !== false);
   stage.setDisabledSceneEffects?.(config.disabledSceneEffects ?? []);
+  stage.setShowPanelsMenu?.(config.showPanelsMenu === true);
 }
 
 /**
