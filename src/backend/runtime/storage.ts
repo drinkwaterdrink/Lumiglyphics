@@ -764,18 +764,36 @@ export async function saveChatState(
   }) : Promise.resolve());
 }
 
-/** Recover only optional, unfunded overlap proposals written by older allocation.
+/** Recover only optional, unfunded overlap proposals or oversized document arrays written by older builds.
  * Never discard a job, relax primary validation, or mutate the stored input. */
+function clampStoredStoryDocuments(rawDocs: unknown): unknown {
+  if (!Array.isArray(rawDocs)) return rawDocs;
+  return rawDocs.slice(0, 12).map((doc) => {
+    if (!doc || typeof doc !== 'object') return doc;
+    const rec = doc as Record<string, unknown>;
+    return {
+      ...rec,
+      ...(Array.isArray(rec.sections) ? { sections: rec.sections.slice(0, 16) } : {}),
+      ...(Array.isArray(rec.observations) ? { observations: rec.observations.slice(0, 16) } : {}),
+    };
+  });
+}
+
 function storedTurnPlan(raw:unknown,jobs:unknown,onRecovery:()=>void):TurnPlan{
   const original=TurnPlanSchema.safeParse(raw);
   if(original.success)return original.data;
   const overlap='Cache cues cannot share a paragraph with a budgeted visual cue.';
-  if(!original.error.issues.every(issue=>issue.path[0]==='cacheCues'&&issue.message===overlap))throw original.error;
+  const onlyRecoverable=original.error.issues.every(issue=>
+    (issue.path[0]==='cacheCues'&&issue.message===overlap)
+    || issue.path[0]==='storyDocuments'
+  );
+  if(!onlyRecoverable)throw original.error;
   const plan=raw as TurnPlan;
-  const occupied=new Set(plan.visualCues.map(cue=>cue.paragraphIndex));
+  const occupied=new Set(Array.isArray(plan.visualCues)?plan.visualCues.map(cue=>cue.paragraphIndex):[]);
   const savedIds=new Set(Array.isArray(jobs)?jobs.flatMap(job=>job&&typeof job==='object'&&typeof job.jobId==='string'?[job.jobId]:[]):[]);
   const cacheCues=(plan.cacheCues??[]).filter(cue=>!occupied.has(cue.paragraphIndex)||savedIds.has(cue.assetJobId));
-  const recovered=TurnPlanSchema.safeParse({...plan,cacheCues});
+  const storyDocuments=plan.storyDocuments!==undefined?clampStoredStoryDocuments(plan.storyDocuments):undefined;
+  const recovered=TurnPlanSchema.safeParse({...plan,cacheCues,...(storyDocuments!==undefined?{storyDocuments}:{})});
   if(!recovered.success)throw original.error;
   onRecovery();return recovered.data;
 }

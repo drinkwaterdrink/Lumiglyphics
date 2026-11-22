@@ -109,6 +109,31 @@ export async function resolvePlannerConnection(
   return { id: fallback.id, provider: fallback.provider, model: fallback.model };
 }
 
+/**
+ * Resolve the dedicated Sidecar Curator LLM connection (falling back to the main planner connection),
+ * with optional model override when `sidecarModel` is specified.
+ */
+export async function resolveSidecarConnection(
+  spindle: SpindleAPI,
+  config: { parserConnectionId: string | null; sidecarConnectionId?: string | null; sidecarModel?: string },
+  userId?: string
+): Promise<ResolvedPlannerConnection | null> {
+  const targetId = config.sidecarConnectionId?.trim() || null;
+  let resolved: ResolvedPlannerConnection | null = null;
+  if (targetId) {
+    const candidate = await resolvePlannerConnection(spindle, { parserConnectionId: targetId }, userId);
+    if (candidate && candidate.id === targetId) {
+      resolved = candidate;
+    }
+  }
+  if (!resolved) {
+    resolved = await resolvePlannerConnection(spindle, { parserConnectionId: config.parserConnectionId }, userId);
+  }
+  if (!resolved) return null;
+  const modelOverride = typeof config.sidecarModel === "string" ? config.sidecarModel.trim() : "";
+  return modelOverride ? { ...resolved, model: modelOverride } : resolved;
+}
+
 export async function loadConnectionCatalog(spindle: SpindleAPI, userId?: string): Promise<ConnectionCatalog> {
   const [plannerResult, imageResult] = await Promise.allSettled([
     spindle.connections.list(userId),

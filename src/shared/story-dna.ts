@@ -79,7 +79,7 @@ export type ChapterCodexEntry = z.infer<typeof ChapterCodexEntrySchema>;
 export const NpcBeliefSchema = z.object({
   topic: z.string().trim().min(1).max(120),
   belief: z.string().trim().min(1).max(400),
-  knowsSecret: z.literal(false).default(false),
+  knowsSecret: z.boolean().default(false),
   seenInSwipes: z.array(z.string().trim().max(160)).max(64).optional(),
   updatedAt: z.number().int().nonnegative().default(() => Date.now()),
 }).strict();

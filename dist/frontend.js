@@ -19204,6 +19204,56 @@ var AMBIGUOUS_BARE_WORDS = new Set([
   "pass",
   "deed"
 ]);
+var GENERIC_BARE_DOCUMENT_NOUNS = new Set([
+  "note",
+  "notes",
+  "letter",
+  "letters",
+  "page",
+  "pages",
+  "paper",
+  "papers",
+  "sheet",
+  "sheets",
+  "card",
+  "cards",
+  "book",
+  "books",
+  "file",
+  "files",
+  "record",
+  "records",
+  "document",
+  "documents",
+  "list",
+  "lists",
+  "message",
+  "messages",
+  "entry",
+  "entries",
+  "line",
+  "lines",
+  "word",
+  "words",
+  "text",
+  "sign",
+  "signs",
+  "label",
+  "labels",
+  "form",
+  "forms",
+  "report",
+  "reports",
+  "script",
+  "scripts",
+  "post",
+  "posts",
+  "mail",
+  "draft",
+  "drafts",
+  "copy",
+  "copies"
+]);
 
 // src/shared/display-rules.ts
 var MAX_DISPLAY_RULE_PATTERN = 1000;
@@ -19792,7 +19842,7 @@ var ChapterCodexEntrySchema = exports_external.object({
 var NpcBeliefSchema = exports_external.object({
   topic: exports_external.string().trim().min(1).max(120),
   belief: exports_external.string().trim().min(1).max(400),
-  knowsSecret: exports_external.literal(false).default(false),
+  knowsSecret: exports_external.boolean().default(false),
   seenInSwipes: exports_external.array(exports_external.string().trim().max(160)).max(64).optional(),
   updatedAt: exports_external.number().int().nonnegative().default(() => Date.now())
 }).strict();
@@ -25436,6 +25486,7 @@ var SETTINGS_FIELD_PAGES = {
   autoPlayDelay: "reading",
   skipMode: "reading",
   tooltips: "reading",
+  strictDocumentSensing: "reading",
   collectEntityReferences: "reading",
   mindLedgerEnabled: "reading",
   chapterCodexEnabled: "reading",
@@ -25498,6 +25549,9 @@ var SETTINGS_FIELD_PAGES = {
   builtInAudioEnabled: "music",
   speech: "speech",
   parserConnectionId: "connections",
+  sidecarConnectionId: "connections",
+  sidecarModel: "connections",
+  sidecarUseForAutofill: "connections",
   parserParameters: "parameters",
   systemOneMode: "system-one",
   systemOneApiUrl: "system-one",
@@ -44449,6 +44503,7 @@ var DEFAULT_CONFIG = {
   documentImageConnectionId: "",
   documentImageModel: "",
   tooltips: normalizeTooltipPreferences({}),
+  strictDocumentSensing: true,
   includeSimTrackerContext: true,
   simTrackerMappings: normalizeTrackerMappings({}),
   contextSources: normalizeContextSources({}),
@@ -44456,6 +44511,9 @@ var DEFAULT_CONFIG = {
   referenceSource: "captured",
   generateChoices: true,
   parserConnectionId: null,
+  sidecarConnectionId: null,
+  sidecarModel: "",
+  sidecarUseForAutofill: true,
   systemOneMode: "off",
   systemOneApiUrl: "https://api.typesafe.ai",
   systemOneModel: "jev-latest",
@@ -56035,7 +56093,7 @@ class VisualNovelSettingsPanel {
     this.composePanels();
     this.tooltipSettingsPanel = new TooltipSettingsPanel((value) => this.save({ tooltips: value }));
     const reading = this.root.querySelector('[data-pane="reading"]');
-    reading.insertAdjacentHTML("beforeend", '<label data-check><input name="collectEntityReferences" type="checkbox"><span>Prepare story references<small>Collect visible NPC, place and object facts within the existing story-reader response.</small></span></label>');
+    reading.insertAdjacentHTML("beforeend", '<label data-check><input name="collectEntityReferences" type="checkbox"><span>Prepare story references<small>Collect visible NPC, place and object facts within the existing story-reader response.</small></span></label><label data-check><input name="strictDocumentSensing" type="checkbox"><span>Strict readable documents only<small>Only create document tooltips when a prop is explicitly read, quoted, or inspected (suppresses casual noun false positives).</small></span></label>');
     reading.append(this.tooltipSettingsPanel.host);
     this.renderTextEffectCards();
     this.wire();
@@ -56565,6 +56623,21 @@ class VisualNovelSettingsPanel {
                 <small>Reads the conversation to choose pictures and speakers. Saves when changed.</small>
               </div>
             `, { find: find("Story reader connection", "planner parser model llm connection") })}
+            ${group("Sidecar curator (fast post-reply model)", `
+              <label data-field>
+                <span>Sidecar connection</span>
+                <select name="sidecarConnectionId" data-connection-select="sidecar" aria-label="Sidecar curator connection"><option value="">Same as Story reader (default)</option></select>
+                <small>Optional smaller/faster model connection that runs asynchronously after a reply renders to curate .reference tooltips, readable documents, NPC secrets, story threads, and wardrobe changes.</small>
+              </label>
+              <label data-field>
+                <span>Sidecar model override (optional)</span>
+                <input name="sidecarModel" type="text" placeholder="Leave blank to use connection default">
+              </label>
+              <label data-check>
+                <input name="sidecarUseForAutofill" type="checkbox">
+                <span>Use Sidecar for manual DNA &amp; Lore Auto-Fill buttons<small>Route Character, Location, and Item DNA auto-fill requests through the Sidecar connection when configured.</small></span>
+              </label>
+            `, { find: find("Sidecar curator connection", "sidecar fast model tooltips references documents lore autofill") })}
             ${group("Image connection", `
               <div data-actions><small><span data-image-connection-summary>Image connection is listed in Images.</span></small><button type="button" data-goto="pictures" data-goto-target="imageConnectionId">Go to Images</button></div>
             `, { find: "" })}
@@ -57512,6 +57585,8 @@ class VisualNovelSettingsPanel {
         return { persistentLocationArt: checked };
       case "collectEntityReferences":
         return { collectEntityReferences: checked };
+      case "strictDocumentSensing":
+        return { strictDocumentSensing: checked };
       case "includeSimTrackerContext":
         return { includeSimTrackerContext: checked };
       case "defaultImageTemplateId":
@@ -57643,6 +57718,12 @@ class VisualNovelSettingsPanel {
       case "parserConnectionId":
       case "setupParserConnectionId":
         return { parserConnectionId: target2.value.trim() || null };
+      case "sidecarConnectionId":
+        return { sidecarConnectionId: target2.value.trim() || null };
+      case "sidecarModel":
+        return { sidecarModel: target2.value.trim() };
+      case "sidecarUseForAutofill":
+        return { sidecarUseForAutofill: checked };
       case "imageConnectionId":
       case "setupImageConnectionId": {
         const imageConnectionId = target2.value.trim() || null;
@@ -58117,6 +58198,9 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
     this.control("persistentCastArt").checked = config2.persistentCastArt;
     this.control("persistentLocationArt").checked = config2.persistentLocationArt;
     this.control("collectEntityReferences").checked = config2.collectEntityReferences;
+    this.control("strictDocumentSensing").checked = config2.strictDocumentSensing;
+    this.control("sidecarModel").value = config2.sidecarModel ?? "";
+    this.control("sidecarUseForAutofill").checked = config2.sidecarUseForAutofill;
     this.templateEditor.setConfig(config2);
     this.presentationRules.setConfig(config2);
     this.contextSourcesPanel.setConfig(config2.contextSources);
@@ -58479,6 +58563,21 @@ More invalid rows follow.` : ""}` : result.rules.length ? `${result.rules.length
         return option;
       }));
       select.value = selectedId ?? "";
+    }
+    if (kind === "planner") {
+      const sidecarId = this.config.sidecarConnectionId;
+      const sidecarOptions = buildConnectionSelectOptions(state.options, sidecarId);
+      for (const select of this.root.querySelectorAll('select[data-connection-select="sidecar"]')) {
+        select.replaceChildren(...sidecarOptions.map((item) => {
+          const option = document.createElement("option");
+          option.value = item.value;
+          option.textContent = item.value === "" ? "Same as Story reader (default)" : item.label;
+          if (item.missing)
+            option.dataset.missing = "true";
+          return option;
+        }));
+        select.value = sidecarId ?? "";
+      }
     }
     const readiness = connectionReadiness(kind, state, selectedId);
     for (const row of this.root.querySelectorAll(`[data-readiness="${kind}"]`)) {
@@ -59916,7 +60015,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.184";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.185";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;

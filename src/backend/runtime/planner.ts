@@ -4,8 +4,8 @@ import {isEnclosedInterior,resolveSceneAmbient} from '../../shared/scene-atmosph
 import {plannerImagePromptProfile} from "./image-prompt-profile.js";
 import type {ImagePromptProfile} from "../../shared/image-prompt-profile.js";
 import {freshPlanPreferences} from './presentation-rules.js';
-import { mergeStoryDocuments, normalizeStoryDocuments, senseDocumentsDeterministically, STORY_DOCUMENT_KINDS } from '../../shared/story-documents.js';
-import { MASTER_LORE_REFERENCE_PROMPT } from '../../shared/master-system-prompts.js';
+import { filterStrictStoryDocuments, mergeStoryDocuments, normalizeStoryDocuments, senseDocumentsDeterministically, STORY_DOCUMENT_KINDS } from '../../shared/story-documents.js';
+import { MASTER_LORE_REFERENCE_PROMPT, MASTER_SIDECAR_CURATOR_PROMPT } from '../../shared/master-system-prompts.js';
 import {imageDetailGuidance} from './prompt-detail.js';
 import { normalizeStoryReferences } from "../../shared/story-references.js";
 import { loadCardRole } from "./storage.js";
@@ -74,7 +74,7 @@ import {
 import { loadVisualContext, type VisualContextDiagnostics, type VisualContextSnapshot } from "./context.js";
 import type { SimTrackerEvidence } from "./simtracker.js";
 import { resolveImageTemplate,templateSnapshot } from "../../shared/image-templates.js";
-import { resolvePlannerConnection, type ResolvedPlannerConnection } from "./connections.js";
+import { resolvePlannerConnection, resolveSidecarConnection, type ResolvedPlannerConnection } from "./connections.js";
 import { normalizeStageEffect, normalizeAmbientEffect } from "./planner-effects.js";
 import { getAudioCatalog, getAudioCatalogPromptSummary } from "./audio-catalog.js";
 import { debugErrorSummary, debugJson, debugQuote, plannerDebugLogger, type PlannerDebugScope } from "./debug-trace.js";
@@ -2765,7 +2765,10 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
   const loreEnabled = input.config.collectEntityReferences || input.config.tooltips.enabled;
   const malformedDocs = loreEnabled && planner.storyDocuments !== undefined && !Array.isArray(planner.storyDocuments);
   const llmDocs = loreEnabled && !malformedDocs ? normalizeStoryDocuments(planner.storyDocuments, promptParagraphs) : [];
-  const sensedDocs = malformedDocs ? [] : senseDocumentsDeterministically(promptParagraphs);
+  const rawSensedDocs = malformedDocs ? [] : senseDocumentsDeterministically(promptParagraphs);
+  const sensedDocs = input.config.strictDocumentSensing !== false
+    ? filterStrictStoryDocuments(rawSensedDocs)
+    : rawSensedDocs;
   const resolvedStoryDocuments = malformedDocs
     ? []
     : (llmDocs.length > 0
@@ -2848,6 +2851,79 @@ export async function planTurn(spindle: SpindleAPI, input: PlanTurnInput): Promi
  * Background Split-Horizon extraction for World Lens references and documents.
  * Runs post-commit off the critical path; callers fence writes against active TurnKey + intakeEpoch.
  */
+export interface SidecarNpcBelief {
+  npc: string;
+  topic: string;
+  belief: string;
+  status: "knows" | "suspects" | "unaware";
+}
+
+export interface SidecarThreadUpdate {
+  title: string;
+  action: "open" | "advance" | "resolve";
+  summary?: string;
+}
+
+export interface SidecarWardrobeDelta {
+  character: string;
+  activeOutfit: string;
+}
+
+export interface SidecarCuratorResult {
+  storyReferences: ReturnType<typeof normalizeStoryReferences>;
+  storyDocuments: ReturnType<typeof normalizeStoryDocuments>;
+  sidecarSucceeded: boolean;
+  suppressedDocumentNouns: string[];
+  npcBeliefs: SidecarNpcBelief[];
+  threadUpdates: SidecarThreadUpdate[];
+  wardrobeDeltas: SidecarWardrobeDelta[];
+}
+
+function parseSidecarNpcBeliefs(raw: unknown): SidecarNpcBelief[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SidecarNpcBelief[] = [];
+  for (const item of raw) {
+    if (out.length >= 24) break;
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    const npc = typeof rec.npc === "string" ? rec.npc.trim().slice(0, 120) : "";
+    const topic = typeof rec.topic === "string" ? rec.topic.trim().slice(0, 120) : "";
+    const belief = typeof rec.belief === "string" ? rec.belief.trim().slice(0, 400) : "";
+    const status = rec.status === "knows" || rec.status === "suspects" || rec.status === "unaware" ? rec.status : "unaware";
+    if (npc && topic && belief) out.push({ npc, topic, belief, status });
+  }
+  return out;
+}
+
+function parseSidecarThreadUpdates(raw: unknown): SidecarThreadUpdate[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SidecarThreadUpdate[] = [];
+  for (const item of raw) {
+    if (out.length >= 16) break;
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    const title = typeof rec.title === "string" ? rec.title.trim().slice(0, 160) : "";
+    const action = rec.action === "open" || rec.action === "advance" || rec.action === "resolve" ? rec.action : "advance";
+    const summary = typeof rec.summary === "string" ? rec.summary.trim().slice(0, 400) : undefined;
+    if (title) out.push({ title, action, ...(summary ? { summary } : {}) });
+  }
+  return out;
+}
+
+function parseSidecarWardrobeDeltas(raw: unknown): SidecarWardrobeDelta[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SidecarWardrobeDelta[] = [];
+  for (const item of raw) {
+    if (out.length >= 16) break;
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    const character = typeof rec.character === "string" ? rec.character.trim().slice(0, 120) : "";
+    const activeOutfit = typeof rec.activeOutfit === "string" ? rec.activeOutfit.trim().slice(0, 320) : "";
+    if (character && activeOutfit) out.push({ character, activeOutfit });
+  }
+  return out;
+}
+
 export async function extractTurnLoreAsync(
   spindle: SpindleAPI,
   params: {
@@ -2864,15 +2940,22 @@ export async function extractTurnLoreAsync(
     userId?: string;
     signal?: AbortSignal;
   },
-): Promise<{
-  storyReferences: ReturnType<typeof normalizeStoryReferences>;
-  storyDocuments: ReturnType<typeof normalizeStoryDocuments>;
-}> {
+): Promise<SidecarCuratorResult> {
+  const emptyResult = (docs: ReturnType<typeof normalizeStoryDocuments>): SidecarCuratorResult => ({
+    storyReferences: [],
+    storyDocuments: docs,
+    sidecarSucceeded: false,
+    suppressedDocumentNouns: [],
+    npcBeliefs: [],
+    threadUpdates: [],
+    wardrobeDeltas: [],
+  });
+  const strict = params.config.strictDocumentSensing !== false;
   if (!params.paragraphs.length || (!params.config.collectEntityReferences && !params.config.tooltips.enabled)) {
-    return { storyReferences: [], storyDocuments: [] };
+    return emptyResult([]);
   }
   throwIfAborted(params.signal);
-  const connection = await resolvePlannerConnection(spindle, params.config, params.userId);
+  const connection = await resolveSidecarConnection(spindle, params.config, params.userId);
   const paragraphText = params.paragraphs.map((p) => `[${p.index}] ${p.text}`).join("\n");
   const contextLines: string[] = [];
   const hintLocation = params.structuredHints?.location || params.previousLocation || undefined;
@@ -2893,9 +2976,10 @@ export async function extractTurnLoreAsync(
     : paragraphText;
 
   const systemPrompt = [
-    params.config.referencePromptOverride?.trim() || MASTER_LORE_REFERENCE_PROMPT,
-    `Also extract optional storyDocuments: up to 12 physical documents or readable props (including plurals or phones/messages) with shape storyDocuments:[{name,kind:${JSON.stringify(STORY_DOCUMENT_KINDS)},paragraphIndex,aliases?,visualDetails?,observations?:[{paragraphIndex,summary?,material?,condition?,visualDetails?,evidence}],sections:[{paragraphIndex,text,evidence}]}]. Anchor name/aliases to the paragraph where introduced and copy literal document prose verbatim into sections.`,
-    'Return one JSON object { "storyReferences": [...], "storyDocuments": [...] } and no prose.'
+    params.config.referencePromptOverride?.trim() || MASTER_SIDECAR_CURATOR_PROMPT,
+    MASTER_LORE_REFERENCE_PROMPT,
+    `Extract optional storyDocuments: up to 12 physical/digital readable documents or inspected props with shape storyDocuments:[{name,kind:${JSON.stringify(STORY_DOCUMENT_KINDS)},paragraphIndex,aliases?,visualDetails?,observations?:[{paragraphIndex,summary?,material?,condition?,visualDetails?,evidence}],sections:[{paragraphIndex,text,evidence}]}]. Anchor name/aliases to the paragraph where introduced and copy literal document prose verbatim into sections.`,
+    'Return one JSON object { "storyReferences": [...], "storyDocuments": [...], "suppressedDocumentNouns": [...], "npcBeliefs": [{npc,topic,belief,status:"knows"|"suspects"|"unaware"}], "threadUpdates": [{title,action:"open"|"advance"|"resolve",summary?}], "wardrobeDeltas": [{character,activeOutfit}] } and no prose.'
   ].join("\n\n");
 
   const maxTokens = Math.min(12000, 4000 + params.paragraphs.length * 300);
@@ -2918,18 +3002,21 @@ export async function extractTurnLoreAsync(
   throwIfAborted(params.signal);
 
   const rawContent = extractResponseContent(response);
-  const sensedDocs = senseDocumentsDeterministically(params.paragraphs);
+  const rawSensedDocs = senseDocumentsDeterministically(params.paragraphs);
+  const fallbackDocs = strict
+    ? filterStrictStoryDocuments(rawSensedDocs, { ...(params.openDocumentTitles ? { knownDocumentNames: params.openDocumentTitles } : {}) })
+    : rawSensedDocs;
   if (typeof rawContent !== "string" && (!rawContent || typeof rawContent !== "object")) {
-    return { storyReferences: [], storyDocuments: sensedDocs };
+    return emptyResult(fallbackDocs);
   }
   let parsed: unknown;
   try {
     parsed = jsonObject(rawContent);
   } catch {
-    return { storyReferences: [], storyDocuments: sensedDocs };
+    return emptyResult(fallbackDocs);
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return { storyReferences: [], storyDocuments: sensedDocs };
+    return emptyResult(fallbackDocs);
   }
   const rec = parsed as Record<string, unknown>;
   const scenarioRef = params.scenarioReferenceName ? characterAppearanceKey(params.scenarioReferenceName) : "";
@@ -2940,8 +3027,28 @@ export async function extractTurnLoreAsync(
   }).filter(
     (r) => !(params.cardRole === "scenario" && r.kind === "npc" && Boolean(scenarioRef) && characterAppearanceKey(r.name) === scenarioRef),
   );
-  const storyDocuments = mergeStoryDocuments(normalizeStoryDocuments(rec.storyDocuments, params.paragraphs), sensedDocs);
-  return { storyReferences, storyDocuments };
+  const suppressedDocumentNouns = Array.isArray(rec.suppressedDocumentNouns)
+    ? rec.suppressedDocumentNouns.filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((x) => x.trim()).slice(0, 24)
+    : [];
+  const llmDocs = normalizeStoryDocuments(rec.storyDocuments, params.paragraphs);
+  const storyDocuments = strict
+    ? mergeStoryDocuments(
+        filterStrictStoryDocuments(llmDocs, { suppressedNouns: suppressedDocumentNouns, fromSidecarLlm: true }),
+        filterStrictStoryDocuments(rawSensedDocs, {
+          ...(params.openDocumentTitles ? { knownDocumentNames: params.openDocumentTitles } : {}),
+          suppressedNouns: suppressedDocumentNouns,
+        }),
+      )
+    : mergeStoryDocuments(llmDocs, rawSensedDocs);
+  return {
+    storyReferences,
+    storyDocuments,
+    sidecarSucceeded: true,
+    suppressedDocumentNouns,
+    npcBeliefs: parseSidecarNpcBeliefs(rec.npcBeliefs),
+    threadUpdates: parseSidecarThreadUpdates(rec.threadUpdates),
+    wardrobeDeltas: parseSidecarWardrobeDeltas(rec.wardrobeDeltas),
+  };
 }
 
 function buildWorldAtmosphereTimeline(params: {

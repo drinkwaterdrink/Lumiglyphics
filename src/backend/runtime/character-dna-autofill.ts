@@ -14,7 +14,7 @@ import {loadReadingPosition,loadTurnRecord,turnPath} from './storage.js';
 import {readerPresentationFor} from './entity-projection.js';
 import {selectPresentationSnapshot} from '../../shared/presentation-selectors.js';
 import {samePresentationTurn} from '../../shared/presentation-entities.js';
-import {resolvePlannerConnection} from './connections.js';
+import {resolvePlannerConnection,resolveSidecarConnection} from './connections.js';
 type Input={chatId:string;userId:string;target:CharacterDNA;config:VisualNovelConfig;signal:AbortSignal};
 export type DnaContext={evidence:DnaEvidence[];statuses:DnaSourceStatus[];contextKey?:string};
 function aborted(signal:AbortSignal){if(signal.aborted)throw new Error('Character auto-fill cancelled.');}
@@ -113,7 +113,7 @@ function responseText(value:unknown):string{if(typeof value==='string')return va
 export async function proposeCharacterDna(spindle:SpindleAPI,input:Input&{revision:number;evidence:DnaContext;fields?:DnaField[]}):Promise<DnaProposal>{
  aborted(input.signal);
  if(input.target.locked)throw new Error('Unlock this character’s DNA before auto-filling.');
- const connection=await bounded(resolvePlannerConnection(spindle,input.config,input.userId),input.signal);if(!connection)throw new Error('Choose a story-reader text connection in Settings to auto-fill DNA.');
+ const connection=await bounded(input.config.sidecarUseForAutofill!==false?resolveSidecarConnection(spindle,input.config,input.userId):resolvePlannerConnection(spindle,input.config,input.userId),input.signal);if(!connection)throw new Error('Choose a story-reader text connection in Settings to auto-fill DNA.');
  const fields=input.fields??[...DNA_FIELDS];const schema=z.object({changes:z.array(DnaChangeSchema).max(19)}).strict();
  let error='Invalid JSON';
  for(let attempt=0;attempt<2;attempt++){

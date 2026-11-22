@@ -519,7 +519,7 @@ export class VisualNovelSettingsPanel {
     this.composePanels();
     this.tooltipSettingsPanel=new TooltipSettingsPanel(value=>this.save({tooltips:value}));
     const reading=this.root.querySelector('[data-pane="reading"]')!;
-    reading.insertAdjacentHTML("beforeend",'<label data-check><input name="collectEntityReferences" type="checkbox"><span>Prepare story references<small>Collect visible NPC, place and object facts within the existing story-reader response.</small></span></label>');
+    reading.insertAdjacentHTML("beforeend",'<label data-check><input name="collectEntityReferences" type="checkbox"><span>Prepare story references<small>Collect visible NPC, place and object facts within the existing story-reader response.</small></span></label><label data-check><input name="strictDocumentSensing" type="checkbox"><span>Strict readable documents only<small>Only create document tooltips when a prop is explicitly read, quoted, or inspected (suppresses casual noun false positives).</small></span></label>');
     reading.append(this.tooltipSettingsPanel.host);
     this.renderTextEffectCards();
     this.wire();
@@ -1045,6 +1045,21 @@ export class VisualNovelSettingsPanel {
                 <small>Reads the conversation to choose pictures and speakers. Saves when changed.</small>
               </div>
             `, { find: find("Story reader connection", "planner parser model llm connection") })}
+            ${group("Sidecar curator (fast post-reply model)", `
+              <label data-field>
+                <span>Sidecar connection</span>
+                <select name="sidecarConnectionId" data-connection-select="sidecar" aria-label="Sidecar curator connection"><option value="">Same as Story reader (default)</option></select>
+                <small>Optional smaller/faster model connection that runs asynchronously after a reply renders to curate .reference tooltips, readable documents, NPC secrets, story threads, and wardrobe changes.</small>
+              </label>
+              <label data-field>
+                <span>Sidecar model override (optional)</span>
+                <input name="sidecarModel" type="text" placeholder="Leave blank to use connection default">
+              </label>
+              <label data-check>
+                <input name="sidecarUseForAutofill" type="checkbox">
+                <span>Use Sidecar for manual DNA &amp; Lore Auto-Fill buttons<small>Route Character, Location, and Item DNA auto-fill requests through the Sidecar connection when configured.</small></span>
+              </label>
+            `, { find: find("Sidecar curator connection", "sidecar fast model tooltips references documents lore autofill") })}
             ${group("Image connection", `
               <div data-actions><small><span data-image-connection-summary>Image connection is listed in Images.</span></small><button type="button" data-goto="pictures" data-goto-target="imageConnectionId">Go to Images</button></div>
             `, { find: "" })}
@@ -1845,6 +1860,7 @@ export class VisualNovelSettingsPanel {
       case "persistentCastArt": return {persistentCastArt:checked};
       case "persistentLocationArt": return {persistentLocationArt:checked};
       case "collectEntityReferences": return { collectEntityReferences: checked };
+      case "strictDocumentSensing": return { strictDocumentSensing: checked };
       case "includeSimTrackerContext": return { includeSimTrackerContext: checked };
       case "defaultImageTemplateId": return { defaultImageTemplateId: target.value };
       case "imagePromptFormat": return { imagePromptFormat: target.value === "tags" ? "tags" : "description" };
@@ -1934,6 +1950,12 @@ export class VisualNovelSettingsPanel {
       case "parserConnectionId":
       case "setupParserConnectionId":
         return { parserConnectionId: target.value.trim() || null };
+      case "sidecarConnectionId":
+        return { sidecarConnectionId: target.value.trim() || null };
+      case "sidecarModel":
+        return { sidecarModel: target.value.trim() };
+      case "sidecarUseForAutofill":
+        return { sidecarUseForAutofill: checked };
       case "imageConnectionId":
       case "setupImageConnectionId": {
         const imageConnectionId = target.value.trim() || null;
@@ -2382,6 +2404,9 @@ export class VisualNovelSettingsPanel {
     this.control<HTMLInputElement>("persistentCastArt").checked = config.persistentCastArt;
     this.control<HTMLInputElement>("persistentLocationArt").checked = config.persistentLocationArt;
     this.control<HTMLInputElement>("collectEntityReferences").checked = config.collectEntityReferences;
+    this.control<HTMLInputElement>("strictDocumentSensing").checked = config.strictDocumentSensing;
+    this.control<HTMLInputElement>("sidecarModel").value = config.sidecarModel ?? "";
+    this.control<HTMLInputElement>("sidecarUseForAutofill").checked = config.sidecarUseForAutofill;
     this.templateEditor.setConfig(config);
     this.presentationRules.setConfig(config);
     this.contextSourcesPanel.setConfig(config.contextSources);
@@ -2696,6 +2721,20 @@ export class VisualNovelSettingsPanel {
         return option;
       }));
       select.value = selectedId ?? "";
+    }
+    if (kind === "planner") {
+      const sidecarId = this.config.sidecarConnectionId;
+      const sidecarOptions = buildConnectionSelectOptions(state.options, sidecarId);
+      for (const select of this.root.querySelectorAll<HTMLSelectElement>('select[data-connection-select="sidecar"]')) {
+        select.replaceChildren(...sidecarOptions.map((item) => {
+          const option = document.createElement("option");
+          option.value = item.value;
+          option.textContent = item.value === "" ? "Same as Story reader (default)" : item.label;
+          if (item.missing) option.dataset.missing = "true";
+          return option;
+        }));
+        select.value = sidecarId ?? "";
+      }
     }
     const readiness = connectionReadiness(kind, state, selectedId);
     for (const row of this.root.querySelectorAll<HTMLElement>(`[data-readiness="${kind}"]`)) {

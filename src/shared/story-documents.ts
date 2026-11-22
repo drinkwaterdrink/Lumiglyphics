@@ -429,6 +429,7 @@ function captureDocumentQuotes(
     const end = start + clean.length;
     if (claimed.some((r) => start < r.end && end > r.start)) return;
     if (doc.sections.some((s) => s.paragraphIndex === paragraphIndex && s.text === clean)) return;
+    if (doc.sections.length >= 16) return;
     doc.sections.push({ paragraphIndex, start, end, text: clean });
     claimed.push({ start, end });
   };
@@ -639,7 +640,7 @@ export function senseDocumentsDeterministically(paragraphs: readonly { text: str
         if (visualMatches.length) {
           target.visualDetails = [target.visualDetails, ...visualMatches].filter(Boolean).join(', ').slice(0, 380);
           target.observations = target.observations ?? [];
-          if (!target.observations.some((o) => o.paragraphIndex === i)) {
+          if (target.observations.length < 16 && !target.observations.some((o) => o.paragraphIndex === i)) {
             target.observations.push({
               paragraphIndex: i,
               summary: visualMatches.join('; ').slice(0, 480),
@@ -657,7 +658,11 @@ export function senseDocumentsDeterministically(paragraphs: readonly { text: str
       }
     }
   }
-  return detected.map((d) => d.doc);
+  return detected.slice(0, 12).map((d) => ({
+    ...d.doc,
+    sections: d.doc.sections.slice(0, 16),
+    ...(d.doc.observations ? { observations: d.doc.observations.slice(0, 16) } : {}),
+  }));
 }
 
 /** Merge two validated StoryDocument arrays without duplicating identical or aliased physical props. */
@@ -665,11 +670,11 @@ export function mergeStoryDocuments(
   primary: readonly StoryDocument[],
   secondary: readonly StoryDocument[],
 ): StoryDocument[] {
-  const merged: StoryDocument[] = primary.map((doc) => ({
+  const merged: StoryDocument[] = primary.slice(0, 12).map((doc) => ({
     ...doc,
-    sections: doc.sections.map((s) => ({ ...s })),
+    sections: doc.sections.slice(0, 16).map((s) => ({ ...s })),
     ...(doc.aliases ? { aliases: [...doc.aliases] } : {}),
-    ...(doc.observations ? { observations: doc.observations.map((o) => ({ ...o })) } : {}),
+    ...(doc.observations ? { observations: doc.observations.slice(0, 16).map((o) => ({ ...o })) } : {}),
   }));
   const usedIds = new Set(merged.map((d) => d.id));
 
@@ -711,9 +716,9 @@ export function mergeStoryDocuments(
         merged.push({
           ...extra,
           id: nextId,
-          sections: extra.sections.map((s) => ({ ...s })),
+          sections: extra.sections.slice(0, 16).map((s) => ({ ...s })),
           ...(extra.aliases ? { aliases: [...extra.aliases] } : {}),
-          ...(extra.observations ? { observations: extra.observations.map((o) => ({ ...o })) } : {}),
+          ...(extra.observations ? { observations: extra.observations.slice(0, 16).map((o) => ({ ...o })) } : {}),
         });
       }
       continue;
@@ -735,12 +740,14 @@ export function mergeStoryDocuments(
     if (extra.observations?.length) {
       match.observations = match.observations ?? [];
       for (const obs of extra.observations) {
+        if (match.observations.length >= 16) break;
         if (!match.observations.some((o) => o.paragraphIndex === obs.paragraphIndex)) {
           match.observations.push({ ...obs });
         }
       }
     }
     for (const sec of extra.sections) {
+      if (match.sections.length >= 16) break;
       if (!match.sections.some((s) => s.paragraphIndex === sec.paragraphIndex && s.text === sec.text)) {
         match.sections.push({ ...sec });
       }
@@ -748,4 +755,75 @@ export function mergeStoryDocuments(
   }
 
   return merged;
+}
+
+export interface StrictStoryDocumentFilterOptions {
+  knownDocumentNames?: readonly string[];
+  suppressedNouns?: readonly string[];
+  fromSidecarLlm?: boolean;
+}
+
+const GENERIC_BARE_DOCUMENT_NOUNS = new Set([
+  'note', 'notes', 'letter', 'letters', 'page', 'pages', 'paper', 'papers',
+  'sheet', 'sheets', 'card', 'cards', 'book', 'books', 'file', 'files',
+  'record', 'records', 'document', 'documents', 'list', 'lists',
+  'message', 'messages', 'entry', 'entries', 'line', 'lines',
+  'word', 'words', 'text', 'sign', 'signs', 'label', 'labels',
+  'form', 'forms', 'report', 'reports', 'script', 'scripts',
+  'post', 'posts', 'mail', 'draft', 'drafts', 'copy', 'copies',
+]);
+
+/**
+ * Filter StoryDocuments for strict readable/inspected quality, removing suppressed nouns
+ * and bare generic regex false positives while enforcing schema array bounds.
+ */
+export function filterStrictStoryDocuments(
+  docs: readonly StoryDocument[],
+  options: StrictStoryDocumentFilterOptions = {},
+): StoryDocument[] {
+  const suppressed = new Set(
+    (options.suppressedNouns ?? [])
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const known = new Set(
+    (options.knownDocumentNames ?? [])
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+  );
+
+  const result: StoryDocument[] = [];
+  for (const doc of docs) {
+    if (result.length >= 12) break;
+    const lowerName = doc.name.trim().toLowerCase();
+    if (!lowerName) continue;
+    if (suppressed.has(lowerName) || doc.aliases?.some((a) => suppressed.has(a.trim().toLowerCase()))) {
+      continue;
+    }
+
+    const normalized: StoryDocument = {
+      ...doc,
+      sections: doc.sections.slice(0, 16),
+      ...(doc.observations ? { observations: doc.observations.slice(0, 16) } : {}),
+    };
+
+    if (options.fromSidecarLlm) {
+      result.push(normalized);
+      continue;
+    }
+
+    const bareName = lowerName.replace(/^(?:the|a|an|this|that|my|his|her|their)\s+/i, '').trim();
+    const isKnown = known.has(lowerName) || known.has(bareName) || Boolean(doc.aliases?.some((a) => known.has(a.trim().toLowerCase())));
+    if (isKnown || normalized.sections.length > 0 || (normalized.observations?.length ?? 0) > 0) {
+      result.push(normalized);
+      continue;
+    }
+
+    if (GENERIC_BARE_DOCUMENT_NOUNS.has(bareName)) {
+      continue;
+    }
+
+    result.push(normalized);
+  }
+  return result;
 }

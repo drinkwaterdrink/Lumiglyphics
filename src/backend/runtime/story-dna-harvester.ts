@@ -17,7 +17,7 @@ import {
 import { loadConfig, loadTurnRecord, turnPath } from './storage.js';
 import { extractSimTracker } from './simtracker.js';
 import { targetDnaPassages } from './character-dna-autofill.js';
-import { resolvePlannerConnection } from './connections.js';
+import { resolvePlannerConnection, resolveSidecarConnection } from './connections.js';
 import { structuredJsonParametersFor } from './planner.js';
 import { jsonObject } from './planner/json-repair.js';
 import { loadVisualContext } from './context.js';
@@ -148,7 +148,14 @@ export function harvestTurnStoryDNA(
   set: StoryDNASet,
   swipeTag: string,
   prevLocationName?: string | null,
-  options?: { mindLedgerEnabled?: boolean; chapterCodexEnabled?: boolean }
+  options?: {
+    mindLedgerEnabled?: boolean;
+    chapterCodexEnabled?: boolean;
+    sidecar?: {
+      npcBeliefs?: readonly { npc: string; topic: string; belief: string; status: 'knows' | 'suspects' | 'unaware' }[];
+      threadUpdates?: readonly { title: string; action: 'open' | 'advance' | 'resolve'; summary?: string }[];
+    };
+  }
 ): boolean {
   let changed = false;
   let lastLoc: LocationDNA | undefined = prevLocationName
@@ -660,6 +667,70 @@ export function harvestTurnStoryDNA(
       });
       changed = true;
     }
+    for (const belief of options?.sidecar?.npcBeliefs ?? []) {
+      const npcKey = belief.npc.trim().slice(0, 120);
+      const topic = belief.topic.trim().slice(0, 120);
+      const text = belief.belief.trim().slice(0, 400);
+      if (!npcKey || !topic || !text) continue;
+      const list = [...(nextBeliefs[npcKey] ?? [])];
+      const knowsSecret = belief.status === 'knows';
+      const existingIdx = list.findIndex((b) => b.topic.toLowerCase() === topic.toLowerCase() && b.belief.toLowerCase() === text.toLowerCase());
+      const existingItem = existingIdx >= 0 ? list[existingIdx] : undefined;
+      if (existingItem) {
+        if (existingItem.knowsSecret !== knowsSecret) {
+          list[existingIdx] = { ...existingItem, knowsSecret, updatedAt: Date.now() };
+          nextBeliefs[npcKey] = list;
+          changed = true;
+        }
+      } else {
+        list.push({
+          topic,
+          belief: text,
+          knowsSecret,
+          seenInSwipes: swipeTag ? [swipeTag] : [],
+          updatedAt: Date.now(),
+        });
+        nextBeliefs[npcKey] = list.slice(-12);
+        changed = true;
+      }
+    }
+    for (const thread of options?.sidecar?.threadUpdates ?? []) {
+      const title = thread.title.trim().slice(0, 160);
+      if (!title) continue;
+      const lowerTitle = title.toLowerCase();
+      const match = ledger.find((e) => e.title.toLowerCase() === lowerTitle || e.title.toLowerCase().includes(lowerTitle));
+      if (match) {
+        if (thread.action === 'resolve' && match.status !== 'resolved') {
+          match.status = 'resolved';
+          match.updatedAt = Date.now();
+          changed = true;
+        } else if (thread.action === 'advance') {
+          if (match.status === 'germinating') match.status = 'internalized';
+          if (thread.summary?.trim()) match.description = thread.summary.trim().slice(0, 1500);
+          match.updatedAt = Date.now();
+          changed = true;
+        }
+      } else if (thread.action === 'open' || thread.action === 'advance') {
+        let seq = 1;
+        const baseTcId = `tc-${createItemId(title)}`;
+        let entryId = `${baseTcId}-${seq}`.slice(0, 250);
+        while (seenLedgerIds.has(entryId)) {
+          seq += 1;
+          entryId = `${baseTcId}-${seq}`.slice(0, 250);
+        }
+        seenLedgerIds.add(entryId);
+        ledger.push({
+          id: entryId,
+          title,
+          category: 'clue',
+          description: (thread.summary?.trim() || title).slice(0, 1500),
+          status: thread.action === 'advance' ? 'internalized' : 'germinating',
+          seenInSwipes: swipeTag ? [swipeTag] : [],
+          updatedAt: Date.now(),
+        });
+        changed = true;
+      }
+    }
     if (Object.keys(nextBeliefs).length > 0) {
       set.npcBeliefs = nextBeliefs;
     }
@@ -790,7 +861,9 @@ export async function autofillLocationDNA(
 
   if (evidenceParts.length > 0 && config && typeof spindle.generate?.raw === 'function') {
     try {
-      const connection = await resolvePlannerConnection(spindle, config, params.userId);
+      const connection = config.sidecarUseForAutofill !== false
+        ? await resolveSidecarConnection(spindle, config, params.userId)
+        : await resolvePlannerConnection(spindle, config, params.userId);
       if (connection) {
         const res = await spindle.generate.raw({
           type: 'raw',
@@ -914,7 +987,9 @@ export async function autofillItemDNA(
 
   if (evidenceParts.length > 0 && config && typeof spindle.generate?.raw === 'function') {
     try {
-      const connection = await resolvePlannerConnection(spindle, config, params.userId);
+      const connection = config.sidecarUseForAutofill !== false
+        ? await resolveSidecarConnection(spindle, config, params.userId)
+        : await resolvePlannerConnection(spindle, config, params.userId);
       if (connection) {
         const res = await spindle.generate.raw({
           type: 'raw',

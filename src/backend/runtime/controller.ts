@@ -233,7 +233,14 @@ export function scheduleSplitHorizonLore(
         signal: controller.signal,
       });
       if (!isCurrent()) return;
-      if (lore.storyReferences.length === 0 && lore.storyDocuments.length === 0) return;
+      if (
+        lore.storyReferences.length === 0
+        && lore.storyDocuments.length === 0
+        && lore.npcBeliefs.length === 0
+        && lore.threadUpdates.length === 0
+        && lore.wardrobeDeltas.length === 0
+        && !lore.sidecarSucceeded
+      ) return;
       let previousDocIds = new Set<string>();
       const updated = await mutateActiveTurnRecord(spindle, params.chatId, params.path, params.userId, (current) => {
         previousDocIds = new Set((current.plan.storyDocuments ?? []).map((d) => d.id));
@@ -246,15 +253,17 @@ export function scheduleSplitHorizonLore(
             mergedRefs.push(ref);
           }
         }
-        const mergedDocs = lore.storyDocuments.length > 0 || current.plan.storyDocuments?.length
-          ? mergeStoryDocuments(lore.storyDocuments, current.plan.storyDocuments ?? [])
-          : undefined;
+        const mergedDocs = lore.sidecarSucceeded && config.strictDocumentSensing !== false
+          ? lore.storyDocuments
+          : (lore.storyDocuments.length > 0 || current.plan.storyDocuments?.length
+              ? mergeStoryDocuments(lore.storyDocuments, current.plan.storyDocuments ?? [])
+              : undefined);
         return {
           ...current,
           plan: {
             ...current.plan,
             ...(mergedRefs.length ? { storyReferences: mergedRefs } : {}),
-            ...(mergedDocs?.length ? { storyDocuments: mergedDocs } : {}),
+            ...(mergedDocs !== undefined ? { storyDocuments: mergedDocs } : {}),
           },
         };
       }, isCurrent);
@@ -266,8 +275,25 @@ export function scheduleSplitHorizonLore(
             harvestTurnStoryDNA(updated.plan, set, swipeTag, params.prevLocationName, {
               mindLedgerEnabled: config.mindLedgerEnabled,
               chapterCodexEnabled: config.chapterCodexEnabled,
+              sidecar: {
+                npcBeliefs: lore.npcBeliefs,
+                threadUpdates: lore.threadUpdates,
+              },
             });
           });
+          if (lore.wardrobeDeltas.length > 0) {
+            await mutateCharacterDnaLibrary(spindle, params.chatId, params.userId, undefined, (lib) => {
+              let libChanged = false;
+              for (const delta of lore.wardrobeDeltas) {
+                const existingChar = findCharacterDNA(lib.characters, delta.character);
+                if (existingChar && !existingChar.locked && delta.activeOutfit.trim()) {
+                  existingChar.activeOutfit = delta.activeOutfit.trim();
+                  libChanged = true;
+                }
+              }
+              return libChanged;
+            });
+          }
           if (isCurrent()) {
             const filtered = filterStoryDnaForActiveBranch(nextStoryDna, activeBranchSwipeTags(params.messages));
             spindle.sendToFrontend({ type: "vn_story_dna", chatId: params.chatId, storyDna: filtered }, params.userId);

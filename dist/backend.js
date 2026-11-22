@@ -20211,6 +20211,8 @@ function captureDocumentQuotes(text, paragraphIndex, doc2, claimed) {
       return;
     if (doc2.sections.some((s) => s.paragraphIndex === paragraphIndex && s.text === clean))
       return;
+    if (doc2.sections.length >= 16)
+      return;
     doc2.sections.push({ paragraphIndex, start, end, text: clean });
     claimed.push({ start, end });
   };
@@ -20406,7 +20408,7 @@ function senseDocumentsDeterministically(paragraphs) {
         if (visualMatches.length) {
           target.visualDetails = [target.visualDetails, ...visualMatches].filter(Boolean).join(", ").slice(0, 380);
           target.observations = target.observations ?? [];
-          if (!target.observations.some((o) => o.paragraphIndex === i)) {
+          if (target.observations.length < 16 && !target.observations.some((o) => o.paragraphIndex === i)) {
             target.observations.push({
               paragraphIndex: i,
               summary: visualMatches.join("; ").slice(0, 480),
@@ -20424,14 +20426,18 @@ function senseDocumentsDeterministically(paragraphs) {
       }
     }
   }
-  return detected.map((d) => d.doc);
+  return detected.slice(0, 12).map((d) => ({
+    ...d.doc,
+    sections: d.doc.sections.slice(0, 16),
+    ...d.doc.observations ? { observations: d.doc.observations.slice(0, 16) } : {}
+  }));
 }
 function mergeStoryDocuments(primary, secondary) {
-  const merged = primary.map((doc2) => ({
+  const merged = primary.slice(0, 12).map((doc2) => ({
     ...doc2,
-    sections: doc2.sections.map((s) => ({ ...s })),
+    sections: doc2.sections.slice(0, 16).map((s) => ({ ...s })),
     ...doc2.aliases ? { aliases: [...doc2.aliases] } : {},
-    ...doc2.observations ? { observations: doc2.observations.map((o) => ({ ...o })) } : {}
+    ...doc2.observations ? { observations: doc2.observations.slice(0, 16).map((o) => ({ ...o })) } : {}
   }));
   const usedIds = new Set(merged.map((d) => d.id));
   const docTokens = (doc2) => new Set([doc2.name, ...doc2.aliases ?? []].join(" ").toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && w !== doc2.kind));
@@ -20462,9 +20468,9 @@ function mergeStoryDocuments(primary, secondary) {
         merged.push({
           ...extra,
           id: nextId,
-          sections: extra.sections.map((s) => ({ ...s })),
+          sections: extra.sections.slice(0, 16).map((s) => ({ ...s })),
           ...extra.aliases ? { aliases: [...extra.aliases] } : {},
-          ...extra.observations ? { observations: extra.observations.map((o) => ({ ...o })) } : {}
+          ...extra.observations ? { observations: extra.observations.slice(0, 16).map((o) => ({ ...o })) } : {}
         });
       }
       continue;
@@ -20486,12 +20492,16 @@ function mergeStoryDocuments(primary, secondary) {
     if (extra.observations?.length) {
       match.observations = match.observations ?? [];
       for (const obs of extra.observations) {
+        if (match.observations.length >= 16)
+          break;
         if (!match.observations.some((o) => o.paragraphIndex === obs.paragraphIndex)) {
           match.observations.push({ ...obs });
         }
       }
     }
     for (const sec of extra.sections) {
+      if (match.sections.length >= 16)
+        break;
       if (!match.sections.some((s) => s.paragraphIndex === sec.paragraphIndex && s.text === sec.text)) {
         match.sections.push({ ...sec });
       }
@@ -20499,7 +20509,42 @@ function mergeStoryDocuments(primary, secondary) {
   }
   return merged;
 }
-var STORY_DOCUMENT_KINDS, DocumentIdentitySchema, PassageProposalSchema, DocumentObservationSchema, StoryDocumentSectionSchema, StoryDocumentSchema, IDIOMATIC_SURFACE_RE, DOC_KIND_SYNONYMS, DOC_MEDIA_NOUN_RE, DOC_MATERIAL_CUE_RE, SECONDARY_PAPER_ALIAS_RE, AMBIGUOUS_BARE_WORDS, CONDITION_MODIFIER_RE, DIALOGUE_ATTRIBUTION_RE, READING_CUE_RE;
+function filterStrictStoryDocuments(docs, options = {}) {
+  const suppressed = new Set((options.suppressedNouns ?? []).map((s) => s.trim().toLowerCase()).filter(Boolean));
+  const known = new Set((options.knownDocumentNames ?? []).map((s) => s.trim().toLowerCase()).filter(Boolean));
+  const result = [];
+  for (const doc2 of docs) {
+    if (result.length >= 12)
+      break;
+    const lowerName = doc2.name.trim().toLowerCase();
+    if (!lowerName)
+      continue;
+    if (suppressed.has(lowerName) || doc2.aliases?.some((a) => suppressed.has(a.trim().toLowerCase()))) {
+      continue;
+    }
+    const normalized = {
+      ...doc2,
+      sections: doc2.sections.slice(0, 16),
+      ...doc2.observations ? { observations: doc2.observations.slice(0, 16) } : {}
+    };
+    if (options.fromSidecarLlm) {
+      result.push(normalized);
+      continue;
+    }
+    const bareName = lowerName.replace(/^(?:the|a|an|this|that|my|his|her|their)\s+/i, "").trim();
+    const isKnown = known.has(lowerName) || known.has(bareName) || Boolean(doc2.aliases?.some((a) => known.has(a.trim().toLowerCase())));
+    if (isKnown || normalized.sections.length > 0 || (normalized.observations?.length ?? 0) > 0) {
+      result.push(normalized);
+      continue;
+    }
+    if (GENERIC_BARE_DOCUMENT_NOUNS.has(bareName)) {
+      continue;
+    }
+    result.push(normalized);
+  }
+  return result;
+}
+var STORY_DOCUMENT_KINDS, DocumentIdentitySchema, PassageProposalSchema, DocumentObservationSchema, StoryDocumentSectionSchema, StoryDocumentSchema, IDIOMATIC_SURFACE_RE, DOC_KIND_SYNONYMS, DOC_MEDIA_NOUN_RE, DOC_MATERIAL_CUE_RE, SECONDARY_PAPER_ALIAS_RE, AMBIGUOUS_BARE_WORDS, CONDITION_MODIFIER_RE, DIALOGUE_ATTRIBUTION_RE, READING_CUE_RE, GENERIC_BARE_DOCUMENT_NOUNS;
 var init_story_documents = __esm(() => {
   init_zod();
   init_grounding();
@@ -20669,6 +20714,56 @@ var init_story_documents = __esm(() => {
   CONDITION_MODIFIER_RE = /\b(crumpled|folded|damp|wet|soaked|torn|ripped|yellowed|faded|stained|sealed|handwritten|printed|tattered|creased|glowing|cracked|curled|chalked|crooked|charred|smudged)\b/i;
   DIALOGUE_ATTRIBUTION_RE = /^\s*(?:,?\s*(?:he|she|they|it|someone|a\s+voice|[A-Z][\p{L}']+))\s+(?:said|says|asks?|asked|replied|whispers?|whispered|murmurs?|murmured|mutters?|muttered|adds?|added|calls?|called|snaps?|snapped)\b/u;
   READING_CUE_RE = /\b(?:reads?|reading|says?|printed|written|inscribed|scrawled|scribbled|etched|stamped|titled|labeled|labelled|marked|headed|displays?|displaying|shows?|showing|bears?|lists?|lettering|headline|text)\b/i;
+  GENERIC_BARE_DOCUMENT_NOUNS = new Set([
+    "note",
+    "notes",
+    "letter",
+    "letters",
+    "page",
+    "pages",
+    "paper",
+    "papers",
+    "sheet",
+    "sheets",
+    "card",
+    "cards",
+    "book",
+    "books",
+    "file",
+    "files",
+    "record",
+    "records",
+    "document",
+    "documents",
+    "list",
+    "lists",
+    "message",
+    "messages",
+    "entry",
+    "entries",
+    "line",
+    "lines",
+    "word",
+    "words",
+    "text",
+    "sign",
+    "signs",
+    "label",
+    "labels",
+    "form",
+    "forms",
+    "report",
+    "reports",
+    "script",
+    "scripts",
+    "post",
+    "posts",
+    "mail",
+    "draft",
+    "drafts",
+    "copy",
+    "copies"
+  ]);
 });
 
 // src/shared/story-dna.ts
@@ -21036,7 +21131,7 @@ var init_story_dna = __esm(() => {
   NpcBeliefSchema = exports_external.object({
     topic: exports_external.string().trim().min(1).max(120),
     belief: exports_external.string().trim().min(1).max(400),
-    knowsSecret: exports_external.literal(false).default(false),
+    knowsSecret: exports_external.boolean().default(false),
     seenInSwipes: exports_external.array(exports_external.string().trim().max(160)).max(64).optional(),
     updatedAt: exports_external.number().int().nonnegative().default(() => Date.now())
   }).strict();
@@ -35198,6 +35293,23 @@ async function resolvePlannerConnection(spindle2, config2, userId) {
     return null;
   return { id: fallback.id, provider: fallback.provider, model: fallback.model };
 }
+async function resolveSidecarConnection(spindle2, config2, userId) {
+  const targetId = config2.sidecarConnectionId?.trim() || null;
+  let resolved = null;
+  if (targetId) {
+    const candidate = await resolvePlannerConnection(spindle2, { parserConnectionId: targetId }, userId);
+    if (candidate && candidate.id === targetId) {
+      resolved = candidate;
+    }
+  }
+  if (!resolved) {
+    resolved = await resolvePlannerConnection(spindle2, { parserConnectionId: config2.parserConnectionId }, userId);
+  }
+  if (!resolved)
+    return null;
+  const modelOverride = typeof config2.sidecarModel === "string" ? config2.sidecarModel.trim() : "";
+  return modelOverride ? { ...resolved, model: modelOverride } : resolved;
+}
 async function loadConnectionCatalog(spindle2, userId) {
   const [plannerResult, imageResult] = await Promise.allSettled([
     spindle2.connections.list(userId),
@@ -36065,6 +36177,74 @@ ${line2}`;
       });
       changed = true;
     }
+    for (const belief of options?.sidecar?.npcBeliefs ?? []) {
+      const npcKey = belief.npc.trim().slice(0, 120);
+      const topic = belief.topic.trim().slice(0, 120);
+      const text2 = belief.belief.trim().slice(0, 400);
+      if (!npcKey || !topic || !text2)
+        continue;
+      const list = [...nextBeliefs[npcKey] ?? []];
+      const knowsSecret = belief.status === "knows";
+      const existingIdx = list.findIndex((b) => b.topic.toLowerCase() === topic.toLowerCase() && b.belief.toLowerCase() === text2.toLowerCase());
+      const existingItem = existingIdx >= 0 ? list[existingIdx] : undefined;
+      if (existingItem) {
+        if (existingItem.knowsSecret !== knowsSecret) {
+          list[existingIdx] = { ...existingItem, knowsSecret, updatedAt: Date.now() };
+          nextBeliefs[npcKey] = list;
+          changed = true;
+        }
+      } else {
+        list.push({
+          topic,
+          belief: text2,
+          knowsSecret,
+          seenInSwipes: swipeTag ? [swipeTag] : [],
+          updatedAt: Date.now()
+        });
+        nextBeliefs[npcKey] = list.slice(-12);
+        changed = true;
+      }
+    }
+    for (const thread of options?.sidecar?.threadUpdates ?? []) {
+      const title = thread.title.trim().slice(0, 160);
+      if (!title)
+        continue;
+      const lowerTitle = title.toLowerCase();
+      const match = ledger.find((e) => e.title.toLowerCase() === lowerTitle || e.title.toLowerCase().includes(lowerTitle));
+      if (match) {
+        if (thread.action === "resolve" && match.status !== "resolved") {
+          match.status = "resolved";
+          match.updatedAt = Date.now();
+          changed = true;
+        } else if (thread.action === "advance") {
+          if (match.status === "germinating")
+            match.status = "internalized";
+          if (thread.summary?.trim())
+            match.description = thread.summary.trim().slice(0, 1500);
+          match.updatedAt = Date.now();
+          changed = true;
+        }
+      } else if (thread.action === "open" || thread.action === "advance") {
+        let seq = 1;
+        const baseTcId = `tc-${createItemId(title)}`;
+        let entryId = `${baseTcId}-${seq}`.slice(0, 250);
+        while (seenLedgerIds.has(entryId)) {
+          seq += 1;
+          entryId = `${baseTcId}-${seq}`.slice(0, 250);
+        }
+        seenLedgerIds.add(entryId);
+        ledger.push({
+          id: entryId,
+          title,
+          category: "clue",
+          description: (thread.summary?.trim() || title).slice(0, 1500),
+          status: thread.action === "advance" ? "internalized" : "germinating",
+          seenInSwipes: swipeTag ? [swipeTag] : [],
+          updatedAt: Date.now()
+        });
+        changed = true;
+      }
+    }
     if (Object.keys(nextBeliefs).length > 0) {
       set2.npcBeliefs = nextBeliefs;
     }
@@ -36153,7 +36333,7 @@ ${ctx.plannerContext.slice(0, 4000)}`);
   } catch {}
   if (evidenceParts.length > 0 && config2 && typeof spindle2.generate?.raw === "function") {
     try {
-      const connection = await resolvePlannerConnection(spindle2, config2, params.userId);
+      const connection = config2.sidecarUseForAutofill !== false ? await resolveSidecarConnection(spindle2, config2, params.userId) : await resolvePlannerConnection(spindle2, config2, params.userId);
       if (connection) {
         const res = await spindle2.generate.raw({
           type: "raw",
@@ -36265,7 +36445,7 @@ async function autofillItemDNA(spindle2, params) {
   }
   if (evidenceParts.length > 0 && config2 && typeof spindle2.generate?.raw === "function") {
     try {
-      const connection = await resolvePlannerConnection(spindle2, config2, params.userId);
+      const connection = config2.sidecarUseForAutofill !== false ? await resolveSidecarConnection(spindle2, config2, params.userId) : await resolvePlannerConnection(spindle2, config2, params.userId);
       if (connection) {
         const res = await spindle2.generate.raw({
           type: "raw",
@@ -39079,6 +39259,7 @@ function normalizeConfigUncached(input2) {
     imageResolutionPreference: input2.imageResolutionPreference === "high" || input2.imageResolutionPreference === "ultra" ? input2.imageResolutionPreference : "standard",
     collectEntityReferences: input2.collectEntityReferences === true,
     tooltips: normalizeTooltipPreferences(input2.tooltips),
+    strictDocumentSensing: bool(input2.strictDocumentSensing, DEFAULT_CONFIG.strictDocumentSensing),
     persistentLocationArt: input2.persistentLocationArt === true,
     persistentCastArt: input2.persistentCastArt === true,
     documentImageMode: input2.documentImageMode === "auto" ? "auto" : "on-click",
@@ -39091,6 +39272,9 @@ function normalizeConfigUncached(input2) {
     referenceSource: referenceSource(input2.referenceSource),
     generateChoices: bool(input2.generateChoices, DEFAULT_CONFIG.generateChoices),
     parserConnectionId: nullableString(input2.parserConnectionId),
+    sidecarConnectionId: nullableString(input2.sidecarConnectionId),
+    sidecarModel: stringValue(input2.sidecarModel, DEFAULT_CONFIG.sidecarModel).trim(),
+    sidecarUseForAutofill: bool(input2.sidecarUseForAutofill, DEFAULT_CONFIG.sidecarUseForAutofill),
     systemOneMode: input2.systemOneMode === "compare" || input2.systemOneMode === "on" ? input2.systemOneMode : "off",
     systemOneApiUrl: stringValue(input2.systemOneApiUrl, DEFAULT_CONFIG.systemOneApiUrl).trim() || DEFAULT_CONFIG.systemOneApiUrl,
     systemOneModel: stringValue(input2.systemOneModel, DEFAULT_CONFIG.systemOneModel).trim() || DEFAULT_CONFIG.systemOneModel,
@@ -39211,6 +39395,7 @@ var init_config = __esm(() => {
     documentImageConnectionId: "",
     documentImageModel: "",
     tooltips: normalizeTooltipPreferences({}),
+    strictDocumentSensing: true,
     includeSimTrackerContext: true,
     simTrackerMappings: normalizeTrackerMappings({}),
     contextSources: normalizeContextSources({}),
@@ -39218,6 +39403,9 @@ var init_config = __esm(() => {
     referenceSource: "captured",
     generateChoices: true,
     parserConnectionId: null,
+    sidecarConnectionId: null,
+    sidecarModel: "",
+    sidecarUseForAutofill: true,
     systemOneMode: "off",
     systemOneApiUrl: "https://api.typesafe.ai",
     systemOneModel: "jev-latest",
@@ -40437,18 +40625,34 @@ async function saveChatState(spindle2, chatId, state, userId, isCurrent = () => 
     ...userOptions(userId) ?? {}
   }) : Promise.resolve());
 }
+function clampStoredStoryDocuments(rawDocs) {
+  if (!Array.isArray(rawDocs))
+    return rawDocs;
+  return rawDocs.slice(0, 12).map((doc2) => {
+    if (!doc2 || typeof doc2 !== "object")
+      return doc2;
+    const rec = doc2;
+    return {
+      ...rec,
+      ...Array.isArray(rec.sections) ? { sections: rec.sections.slice(0, 16) } : {},
+      ...Array.isArray(rec.observations) ? { observations: rec.observations.slice(0, 16) } : {}
+    };
+  });
+}
 function storedTurnPlan(raw, jobs, onRecovery) {
   const original = TurnPlanSchema.safeParse(raw);
   if (original.success)
     return original.data;
   const overlap = "Cache cues cannot share a paragraph with a budgeted visual cue.";
-  if (!original.error.issues.every((issue2) => issue2.path[0] === "cacheCues" && issue2.message === overlap))
+  const onlyRecoverable = original.error.issues.every((issue2) => issue2.path[0] === "cacheCues" && issue2.message === overlap || issue2.path[0] === "storyDocuments");
+  if (!onlyRecoverable)
     throw original.error;
   const plan = raw;
-  const occupied = new Set(plan.visualCues.map((cue) => cue.paragraphIndex));
+  const occupied = new Set(Array.isArray(plan.visualCues) ? plan.visualCues.map((cue) => cue.paragraphIndex) : []);
   const savedIds = new Set(Array.isArray(jobs) ? jobs.flatMap((job) => job && typeof job === "object" && typeof job.jobId === "string" ? [job.jobId] : []) : []);
   const cacheCues = (plan.cacheCues ?? []).filter((cue) => !occupied.has(cue.paragraphIndex) || savedIds.has(cue.assetJobId));
-  const recovered = TurnPlanSchema.safeParse({ ...plan, cacheCues });
+  const storyDocuments = plan.storyDocuments !== undefined ? clampStoredStoryDocuments(plan.storyDocuments) : undefined;
+  const recovered = TurnPlanSchema.safeParse({ ...plan, cacheCues, ...storyDocuments !== undefined ? { storyDocuments } : {} });
   if (!recovered.success)
     throw original.error;
   onRecovery();
@@ -43125,7 +43329,28 @@ Return a single JSON object { "storyReferences": [...], "storyDocuments": [...] 
     }
   ],
   "storyDocuments": []
-}`;
+}`, MASTER_SIDECAR_CURATOR_PROMPT = `You are the Master Narrative Sidecar Curator for an interactive visual novel engine.
+Your job is to inspect a completed story turn asynchronously and curate 6 high-signal narrative intelligence outputs without adding latency to the reader.
+
+### 1. Salience-Filtered Story References (storyReferences)
+- Extract ONLY genuinely story-relevant entities, props, locations, factions, or lore concepts worth surfacing as interactive .reference tooltips.
+- Resolve pronouns and short aliases ("he", "the captain", "she") to their canonical character/entity name.
+- Skip generic filler nouns, background furniture, or transient mannerisms.
+
+### 2. Strict Readable/Inspected Documents (storyDocuments & suppressedDocumentNouns)
+- Include a storyDocument ONLY if it is a tangible physical or digital readable artifact (letter, ledger, dossier, book, flyer, plaque, contract, phone/terminal message) that is explicitly read, inspected, quoted, or handed over.
+- If a word like "note", "letter", "page", or "paper" appears idiomatically or casually (e.g., "a note of sarcasm", "turn the page") and is NOT a readable prop, add that surface noun to suppressedDocumentNouns.
+
+### 3. Dramatic Irony & NPC Beliefs (npcBeliefs)
+- Track what key NPCs explicitly "knows", "suspects", or is "unaware" of regarding secrets, motives, or hidden events in this turn.
+
+### 4. Semantic Story Threads (threadUpdates)
+- Open, advance, or resolve meaningful narrative mysteries, quests, or promises.
+
+### 5. Live Wardrobe & Physical State Drift (wardrobeDeltas)
+- Record activeOutfit updates ONLY when a character visibly changes clothes, puts on/removes outerwear/armor, or suffers clear outfit state changes.
+
+Return ONLY one valid JSON object matching the requested schema and no prose.`;
 
 // src/backend/runtime/prompt-detail.ts
 function imageDirectionBudgets(config2, profile) {
@@ -48234,7 +48459,8 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
   const loreEnabled = input2.config.collectEntityReferences || input2.config.tooltips.enabled;
   const malformedDocs = loreEnabled && planner.storyDocuments !== undefined && !Array.isArray(planner.storyDocuments);
   const llmDocs = loreEnabled && !malformedDocs ? normalizeStoryDocuments(planner.storyDocuments, promptParagraphs) : [];
-  const sensedDocs = malformedDocs ? [] : senseDocumentsDeterministically(promptParagraphs);
+  const rawSensedDocs = malformedDocs ? [] : senseDocumentsDeterministically(promptParagraphs);
+  const sensedDocs = input2.config.strictDocumentSensing !== false ? filterStrictStoryDocuments(rawSensedDocs) : rawSensedDocs;
   const resolvedStoryDocuments = malformedDocs ? [] : llmDocs.length > 0 ? mergeStoryDocuments(llmDocs, sensedDocs) : sensedDocs.length > 0 ? sensedDocs : undefined;
   const normRefOptions = {
     paragraphSpeakers,
@@ -48312,12 +48538,76 @@ Card role: scenario/world/narrator. The card title is a wrapper, not a drawable 
     usage: input2.usage ?? createReplyUsage()
   };
 }
+function parseSidecarNpcBeliefs(raw) {
+  if (!Array.isArray(raw))
+    return [];
+  const out = [];
+  for (const item of raw) {
+    if (out.length >= 24)
+      break;
+    if (!item || typeof item !== "object")
+      continue;
+    const rec = item;
+    const npc = typeof rec.npc === "string" ? rec.npc.trim().slice(0, 120) : "";
+    const topic = typeof rec.topic === "string" ? rec.topic.trim().slice(0, 120) : "";
+    const belief = typeof rec.belief === "string" ? rec.belief.trim().slice(0, 400) : "";
+    const status = rec.status === "knows" || rec.status === "suspects" || rec.status === "unaware" ? rec.status : "unaware";
+    if (npc && topic && belief)
+      out.push({ npc, topic, belief, status });
+  }
+  return out;
+}
+function parseSidecarThreadUpdates(raw) {
+  if (!Array.isArray(raw))
+    return [];
+  const out = [];
+  for (const item of raw) {
+    if (out.length >= 16)
+      break;
+    if (!item || typeof item !== "object")
+      continue;
+    const rec = item;
+    const title = typeof rec.title === "string" ? rec.title.trim().slice(0, 160) : "";
+    const action = rec.action === "open" || rec.action === "advance" || rec.action === "resolve" ? rec.action : "advance";
+    const summary = typeof rec.summary === "string" ? rec.summary.trim().slice(0, 400) : undefined;
+    if (title)
+      out.push({ title, action, ...summary ? { summary } : {} });
+  }
+  return out;
+}
+function parseSidecarWardrobeDeltas(raw) {
+  if (!Array.isArray(raw))
+    return [];
+  const out = [];
+  for (const item of raw) {
+    if (out.length >= 16)
+      break;
+    if (!item || typeof item !== "object")
+      continue;
+    const rec = item;
+    const character2 = typeof rec.character === "string" ? rec.character.trim().slice(0, 120) : "";
+    const activeOutfit = typeof rec.activeOutfit === "string" ? rec.activeOutfit.trim().slice(0, 320) : "";
+    if (character2 && activeOutfit)
+      out.push({ character: character2, activeOutfit });
+  }
+  return out;
+}
 async function extractTurnLoreAsync(spindle2, params) {
+  const emptyResult = (docs) => ({
+    storyReferences: [],
+    storyDocuments: docs,
+    sidecarSucceeded: false,
+    suppressedDocumentNouns: [],
+    npcBeliefs: [],
+    threadUpdates: [],
+    wardrobeDeltas: []
+  });
+  const strict = params.config.strictDocumentSensing !== false;
   if (!params.paragraphs.length || !params.config.collectEntityReferences && !params.config.tooltips.enabled) {
-    return { storyReferences: [], storyDocuments: [] };
+    return emptyResult([]);
   }
   throwIfAborted(params.signal);
-  const connection = await resolvePlannerConnection(spindle2, params.config, params.userId);
+  const connection = await resolveSidecarConnection(spindle2, params.config, params.userId);
   const paragraphText = params.paragraphs.map((p) => `[${p.index}] ${p.text}`).join(`
 `);
   const contextLines = [];
@@ -48343,9 +48633,10 @@ ${contextLines.join(`
 Visible paragraphs:
 ${paragraphText}` : paragraphText;
   const systemPrompt = [
-    params.config.referencePromptOverride?.trim() || MASTER_LORE_REFERENCE_PROMPT,
-    `Also extract optional storyDocuments: up to 12 physical documents or readable props (including plurals or phones/messages) with shape storyDocuments:[{name,kind:${JSON.stringify(STORY_DOCUMENT_KINDS)},paragraphIndex,aliases?,visualDetails?,observations?:[{paragraphIndex,summary?,material?,condition?,visualDetails?,evidence}],sections:[{paragraphIndex,text,evidence}]}]. Anchor name/aliases to the paragraph where introduced and copy literal document prose verbatim into sections.`,
-    'Return one JSON object { "storyReferences": [...], "storyDocuments": [...] } and no prose.'
+    params.config.referencePromptOverride?.trim() || MASTER_SIDECAR_CURATOR_PROMPT,
+    MASTER_LORE_REFERENCE_PROMPT,
+    `Extract optional storyDocuments: up to 12 physical/digital readable documents or inspected props with shape storyDocuments:[{name,kind:${JSON.stringify(STORY_DOCUMENT_KINDS)},paragraphIndex,aliases?,visualDetails?,observations?:[{paragraphIndex,summary?,material?,condition?,visualDetails?,evidence}],sections:[{paragraphIndex,text,evidence}]}]. Anchor name/aliases to the paragraph where introduced and copy literal document prose verbatim into sections.`,
+    'Return one JSON object { "storyReferences": [...], "storyDocuments": [...], "suppressedDocumentNouns": [...], "npcBeliefs": [{npc,topic,belief,status:"knows"|"suspects"|"unaware"}], "threadUpdates": [{title,action:"open"|"advance"|"resolve",summary?}], "wardrobeDeltas": [{character,activeOutfit}] } and no prose.'
   ].join(`
 
 `);
@@ -48365,18 +48656,19 @@ ${paragraphText}` : paragraphText;
   });
   throwIfAborted(params.signal);
   const rawContent = extractResponseContent(response);
-  const sensedDocs = senseDocumentsDeterministically(params.paragraphs);
+  const rawSensedDocs = senseDocumentsDeterministically(params.paragraphs);
+  const fallbackDocs = strict ? filterStrictStoryDocuments(rawSensedDocs, { ...params.openDocumentTitles ? { knownDocumentNames: params.openDocumentTitles } : {} }) : rawSensedDocs;
   if (typeof rawContent !== "string" && (!rawContent || typeof rawContent !== "object")) {
-    return { storyReferences: [], storyDocuments: sensedDocs };
+    return emptyResult(fallbackDocs);
   }
   let parsed;
   try {
     parsed = jsonObject(rawContent);
   } catch {
-    return { storyReferences: [], storyDocuments: sensedDocs };
+    return emptyResult(fallbackDocs);
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return { storyReferences: [], storyDocuments: sensedDocs };
+    return emptyResult(fallbackDocs);
   }
   const rec = parsed;
   const scenarioRef = params.scenarioReferenceName ? characterAppearanceKey(params.scenarioReferenceName) : "";
@@ -48385,8 +48677,21 @@ ${paragraphText}` : paragraphText;
     detectedLocation: params.structuredHints?.location ?? params.previousLocation ?? null,
     sourceIndexes: params.sourceIndexes ?? params.paragraphs.map((p, idx) => p.sourceIndex ?? idx)
   }).filter((r) => !(params.cardRole === "scenario" && r.kind === "npc" && Boolean(scenarioRef) && characterAppearanceKey(r.name) === scenarioRef));
-  const storyDocuments = mergeStoryDocuments(normalizeStoryDocuments(rec.storyDocuments, params.paragraphs), sensedDocs);
-  return { storyReferences, storyDocuments };
+  const suppressedDocumentNouns = Array.isArray(rec.suppressedDocumentNouns) ? rec.suppressedDocumentNouns.filter((x) => typeof x === "string" && x.trim().length > 0).map((x) => x.trim()).slice(0, 24) : [];
+  const llmDocs = normalizeStoryDocuments(rec.storyDocuments, params.paragraphs);
+  const storyDocuments = strict ? mergeStoryDocuments(filterStrictStoryDocuments(llmDocs, { suppressedNouns: suppressedDocumentNouns, fromSidecarLlm: true }), filterStrictStoryDocuments(rawSensedDocs, {
+    ...params.openDocumentTitles ? { knownDocumentNames: params.openDocumentTitles } : {},
+    suppressedNouns: suppressedDocumentNouns
+  })) : mergeStoryDocuments(llmDocs, rawSensedDocs);
+  return {
+    storyReferences,
+    storyDocuments,
+    sidecarSucceeded: true,
+    suppressedDocumentNouns,
+    npcBeliefs: parseSidecarNpcBeliefs(rec.npcBeliefs),
+    threadUpdates: parseSidecarThreadUpdates(rec.threadUpdates),
+    wardrobeDeltas: parseSidecarWardrobeDeltas(rec.wardrobeDeltas)
+  };
 }
 function buildWorldAtmosphereTimeline(params) {
   const sceneAt = new Map;
@@ -48961,7 +49266,7 @@ async function proposeCharacterDna(spindle2, input2) {
   aborted4(input2.signal);
   if (input2.target.locked)
     throw new Error("Unlock this character\u2019s DNA before auto-filling.");
-  const connection = await bounded(resolvePlannerConnection(spindle2, input2.config, input2.userId), input2.signal);
+  const connection = await bounded(input2.config.sidecarUseForAutofill !== false ? resolveSidecarConnection(spindle2, input2.config, input2.userId) : resolvePlannerConnection(spindle2, input2.config, input2.userId), input2.signal);
   if (!connection)
     throw new Error("Choose a story-reader text connection in Settings to auto-fill DNA.");
   const fields2 = input2.fields ?? [...DNA_FIELDS];
@@ -59741,7 +60046,7 @@ function scheduleSplitHorizonLore(spindle2, params) {
       });
       if (!isCurrent())
         return;
-      if (lore.storyReferences.length === 0 && lore.storyDocuments.length === 0)
+      if (lore.storyReferences.length === 0 && lore.storyDocuments.length === 0 && lore.npcBeliefs.length === 0 && lore.threadUpdates.length === 0 && lore.wardrobeDeltas.length === 0 && !lore.sidecarSucceeded)
         return;
       let previousDocIds = new Set;
       const updated = await mutateActiveTurnRecord(spindle2, params.chatId, params.path, params.userId, (current) => {
@@ -59755,13 +60060,13 @@ function scheduleSplitHorizonLore(spindle2, params) {
             mergedRefs.push(ref);
           }
         }
-        const mergedDocs = lore.storyDocuments.length > 0 || current.plan.storyDocuments?.length ? mergeStoryDocuments(lore.storyDocuments, current.plan.storyDocuments ?? []) : undefined;
+        const mergedDocs = lore.sidecarSucceeded && config2.strictDocumentSensing !== false ? lore.storyDocuments : lore.storyDocuments.length > 0 || current.plan.storyDocuments?.length ? mergeStoryDocuments(lore.storyDocuments, current.plan.storyDocuments ?? []) : undefined;
         return {
           ...current,
           plan: {
             ...current.plan,
             ...mergedRefs.length ? { storyReferences: mergedRefs } : {},
-            ...mergedDocs?.length ? { storyDocuments: mergedDocs } : {}
+            ...mergedDocs !== undefined ? { storyDocuments: mergedDocs } : {}
           }
         };
       }, isCurrent);
@@ -59773,9 +60078,26 @@ function scheduleSplitHorizonLore(spindle2, params) {
           const nextStoryDna = await mutateStoryDNASet(spindle2, params.chatId, params.userId, undefined, (set2) => {
             harvestTurnStoryDNA(updated.plan, set2, swipeTag, params.prevLocationName, {
               mindLedgerEnabled: config2.mindLedgerEnabled,
-              chapterCodexEnabled: config2.chapterCodexEnabled
+              chapterCodexEnabled: config2.chapterCodexEnabled,
+              sidecar: {
+                npcBeliefs: lore.npcBeliefs,
+                threadUpdates: lore.threadUpdates
+              }
             });
           });
+          if (lore.wardrobeDeltas.length > 0) {
+            await mutateCharacterDnaLibrary(spindle2, params.chatId, params.userId, undefined, (lib) => {
+              let libChanged = false;
+              for (const delta of lore.wardrobeDeltas) {
+                const existingChar = findCharacterDNA(lib.characters, delta.character);
+                if (existingChar && !existingChar.locked && delta.activeOutfit.trim()) {
+                  existingChar.activeOutfit = delta.activeOutfit.trim();
+                  libChanged = true;
+                }
+              }
+              return libChanged;
+            });
+          }
           if (isCurrent()) {
             const filtered = filterStoryDnaForActiveBranch(nextStoryDna, activeBranchSwipeTags(params.messages));
             spindle2.sendToFrontend({ type: "vn_story_dna", chatId: params.chatId, storyDna: filtered }, params.userId);

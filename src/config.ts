@@ -131,6 +131,7 @@ export type VisualNovelConfig = {
   documentImageConnectionId?: string;
   documentImageModel?: string;
   tooltips: TooltipPreferences;
+  strictDocumentSensing: boolean;
   includeSimTrackerContext: boolean;
   simTrackerMappings: TrackerMappings;
   contextSources: ContextSourcesConfig;
@@ -140,6 +141,9 @@ export type VisualNovelConfig = {
   referenceSource: VisualNovelReferenceSource;
   generateChoices: boolean;
   parserConnectionId: string | null;
+  sidecarConnectionId: string | null;
+  sidecarModel: string;
+  sidecarUseForAutofill: boolean;
   systemOneMode: "off" | "compare" | "on";
   systemOneApiUrl: string;
   systemOneModel: string;
@@ -240,6 +244,7 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   documentImageConnectionId: "",
   documentImageModel: "",
   tooltips: normalizeTooltipPreferences({}),
+  strictDocumentSensing: true,
   includeSimTrackerContext: true,
   simTrackerMappings: normalizeTrackerMappings({}),
   contextSources: normalizeContextSources({}),
@@ -247,6 +252,9 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   referenceSource: "captured",
   generateChoices: true,
   parserConnectionId: null,
+  sidecarConnectionId: null,
+  sidecarModel: "",
+  sidecarUseForAutofill: true,
   systemOneMode: "off",
   systemOneApiUrl: "https://api.typesafe.ai",
   systemOneModel: "jev-latest",
@@ -486,6 +494,7 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     imageResolutionPreference: input.imageResolutionPreference === "high" || input.imageResolutionPreference === "ultra" ? input.imageResolutionPreference : "standard",
     collectEntityReferences: input.collectEntityReferences === true,
     tooltips: normalizeTooltipPreferences(input.tooltips),
+    strictDocumentSensing: bool(input.strictDocumentSensing, DEFAULT_CONFIG.strictDocumentSensing),
     persistentLocationArt: input.persistentLocationArt === true,
     persistentCastArt: input.persistentCastArt === true,
     documentImageMode: input.documentImageMode === "auto" ? "auto" : "on-click",
@@ -498,6 +507,9 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     referenceSource: referenceSource(input.referenceSource),
     generateChoices: bool(input.generateChoices, DEFAULT_CONFIG.generateChoices),
     parserConnectionId: nullableString(input.parserConnectionId),
+    sidecarConnectionId: nullableString(input.sidecarConnectionId),
+    sidecarModel: stringValue(input.sidecarModel, DEFAULT_CONFIG.sidecarModel).trim(),
+    sidecarUseForAutofill: bool(input.sidecarUseForAutofill, DEFAULT_CONFIG.sidecarUseForAutofill),
     systemOneMode: input.systemOneMode === "compare" || input.systemOneMode === "on" ? input.systemOneMode : "off",
     systemOneApiUrl: stringValue(input.systemOneApiUrl, DEFAULT_CONFIG.systemOneApiUrl).trim() || DEFAULT_CONFIG.systemOneApiUrl,
     systemOneModel: stringValue(input.systemOneModel, DEFAULT_CONFIG.systemOneModel).trim() || DEFAULT_CONFIG.systemOneModel,

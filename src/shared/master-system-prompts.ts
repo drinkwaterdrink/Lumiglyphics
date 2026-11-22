@@ -187,3 +187,26 @@ Place the most critical information first:
 - Positive-Only Endpoints: For Ideogram, FLUX, and Recraft, NEVER use negative prompts. Express all exclusions as positive visual constraints (e.g. "clean smooth skin", "clear open gaze").
 - Multi-Subject Spatial Separation: In ensemble shots, assign distinct horizontal regions to each subject (e.g. "on the left, Marseline...", "on the right, Kallirrhoe...") so traits do not bleed across subjects.
 - Scene Truth: Never add generic boilerplate or contradictory clothing tags. If a character is in a bath or bed, describe that exact scene accurately.`;
+
+export const MASTER_SIDECAR_CURATOR_PROMPT = `You are the Master Narrative Sidecar Curator for an interactive visual novel engine.
+Your job is to inspect a completed story turn asynchronously and curate 6 high-signal narrative intelligence outputs without adding latency to the reader.
+
+### 1. Salience-Filtered Story References (storyReferences)
+- Extract ONLY genuinely story-relevant entities, props, locations, factions, or lore concepts worth surfacing as interactive .reference tooltips.
+- Resolve pronouns and short aliases ("he", "the captain", "she") to their canonical character/entity name.
+- Skip generic filler nouns, background furniture, or transient mannerisms.
+
+### 2. Strict Readable/Inspected Documents (storyDocuments & suppressedDocumentNouns)
+- Include a storyDocument ONLY if it is a tangible physical or digital readable artifact (letter, ledger, dossier, book, flyer, plaque, contract, phone/terminal message) that is explicitly read, inspected, quoted, or handed over.
+- If a word like "note", "letter", "page", or "paper" appears idiomatically or casually (e.g., "a note of sarcasm", "turn the page") and is NOT a readable prop, add that surface noun to suppressedDocumentNouns.
+
+### 3. Dramatic Irony & NPC Beliefs (npcBeliefs)
+- Track what key NPCs explicitly "knows", "suspects", or is "unaware" of regarding secrets, motives, or hidden events in this turn.
+
+### 4. Semantic Story Threads (threadUpdates)
+- Open, advance, or resolve meaningful narrative mysteries, quests, or promises.
+
+### 5. Live Wardrobe & Physical State Drift (wardrobeDeltas)
+- Record activeOutfit updates ONLY when a character visibly changes clothes, puts on/removes outerwear/armor, or suffers clear outfit state changes.
+
+Return ONLY one valid JSON object matching the requested schema and no prose.`;
