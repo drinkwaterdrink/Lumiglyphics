@@ -19089,64 +19089,434 @@ var init_card_role = __esm(() => {
   TECHNICAL_WRAPPER_NAME_RE = /^(?:setup\s*inherit|inherit|default|system|assistant|user|card|template|wrapper|preset|character|unknown|none|null|undefined|scene|narrator(?:\s*bot)?)$/i;
 });
 
+// src/shared/display-rules.ts
+function findReDoSHazard(source) {
+  let inCharacterClass = false;
+  let afterOpenParen = false;
+  const stack = [];
+  let closed = null;
+  let previousWasQuantifier = false;
+  for (let index = 0;index < source.length; index += 1) {
+    const char = source[index];
+    if (inCharacterClass) {
+      if (char === "\\")
+        index += 1;
+      else if (char === "]")
+        inCharacterClass = false;
+      continue;
+    }
+    if (char === "\\") {
+      index += 1;
+      previousWasQuantifier = false;
+      closed = null;
+      continue;
+    }
+    if (char === "[") {
+      inCharacterClass = true;
+      previousWasQuantifier = false;
+      closed = null;
+      continue;
+    }
+    if (char === "(") {
+      stack.push({ hasQuantifier: false, hasAlternation: false });
+      afterOpenParen = true;
+      closed = null;
+      previousWasQuantifier = false;
+      continue;
+    }
+    if (char === ")") {
+      closed = stack.pop() ?? null;
+      if (closed?.hasQuantifier && stack.at(-1))
+        stack.at(-1).hasQuantifier = true;
+      afterOpenParen = false;
+      previousWasQuantifier = false;
+      continue;
+    }
+    if (char === "|") {
+      const group = stack.at(-1);
+      if (group)
+        group.hasAlternation = true;
+      previousWasQuantifier = false;
+      continue;
+    }
+    const braceMatch = char === "{" ? /^\{\d+(?:,\d*)?\}/.exec(source.slice(index)) : null;
+    const isQuantifier = char === "+" || char === "*" || char === "?" || braceMatch !== null;
+    if (isQuantifier) {
+      const groupModifier = char === "?" && afterOpenParen;
+      const lazinessMarker = char === "?" && previousWasQuantifier;
+      if (!groupModifier && !lazinessMarker) {
+        if (closed && (closed.hasQuantifier || closed.hasAlternation)) {
+          return "Repeated group contains repetition or alternation, which can freeze the reader with catastrophic backtracking. Simplify or unroll the pattern.";
+        }
+        const parent = stack.at(-1);
+        if (parent)
+          parent.hasQuantifier = true;
+      }
+      if (braceMatch)
+        index += braceMatch[0].length - 1;
+      previousWasQuantifier = true;
+      afterOpenParen = false;
+      closed = null;
+      continue;
+    }
+    previousWasQuantifier = false;
+    afterOpenParen = false;
+    closed = null;
+  }
+  return null;
+}
+
 // src/shared/presentation-rules.ts
+function normalizeText(value) {
+  return value?.trim().toLowerCase().replace(/\s+/g, " ") ?? "";
+}
+function nameMatches(candidate, target, aliases) {
+  const normCand = normalizeText(candidate);
+  const normTarget = normalizeText(target);
+  if (!normCand || !normTarget)
+    return false;
+  if (normCand === normTarget)
+    return true;
+  if (aliases) {
+    for (const [canonical, list] of Object.entries(aliases)) {
+      const normCanon = normalizeText(canonical);
+      const isTarget = normTarget === normCanon || list.some((a) => normalizeText(a) === normTarget);
+      if (isTarget) {
+        if (normCand === normCanon || list.some((a) => normalizeText(a) === normCand))
+          return true;
+      }
+    }
+  }
+  return false;
+}
+function matchCondition(condition, input2) {
+  switch (condition.kind) {
+    case "dialogue":
+      return input2.isDialogue;
+    case "location_changed":
+      return input2.locationChanged;
+    case "scene_opening":
+      return Boolean(input2.isSceneOpening);
+    case "template":
+      return condition.templateId === input2.templateId;
+    case "subject": {
+      if (!input2.subjects?.length)
+        return false;
+      const targetNorm = normalizeText(condition.name);
+      return input2.subjects.some((s) => {
+        if (s.kind !== condition.subjectKind)
+          return false;
+        const candNorm = normalizeText(s.name);
+        if (condition.partialMatch && s.kind === "place") {
+          return candNorm.includes(targetNorm) || targetNorm.includes(candNorm);
+        }
+        if (s.kind === "npc") {
+          return nameMatches(s.name, condition.name, input2.characterAliases);
+        }
+        return candNorm === targetNorm;
+      });
+    }
+    case "time_of_day": {
+      if (condition.value === "any")
+        return Boolean(input2.timeOfDay?.trim());
+      return normalizeText(input2.timeOfDay) === normalizeText(condition.value);
+    }
+    case "weather": {
+      const normW = normalizeText(input2.weather);
+      const targetW = normalizeText(condition.value);
+      return Boolean(normW && (normW === targetW || normW.includes(targetW) || targetW.includes(normW)));
+    }
+    case "ambient": {
+      const normA = normalizeText(input2.ambient);
+      const targetA = normalizeText(condition.value);
+      return Boolean(normA && (normA === targetA || normA.includes(targetA) || targetA.includes(normA)));
+    }
+    case "cast_present": {
+      if (!input2.cast?.length)
+        return false;
+      return input2.cast.some((member) => nameMatches(member, condition.name, input2.characterAliases));
+    }
+    case "cast_count": {
+      const actual = input2.castCount ?? input2.cast?.length ?? 0;
+      if (condition.op === "gte")
+        return actual >= condition.count;
+      if (condition.op === "eq")
+        return actual === condition.count;
+      return actual <= condition.count;
+    }
+    case "speaker_name": {
+      if (!input2.speakerName?.trim())
+        return false;
+      return nameMatches(input2.speakerName, condition.name, input2.characterAliases);
+    }
+    case "outfit_matches": {
+      const normO = normalizeText(input2.activeOutfit);
+      const targetO = normalizeText(condition.outfit);
+      return Boolean(normO && (normO.includes(targetO) || targetO.includes(normO)));
+    }
+    case "document_revealed": {
+      if (!input2.revealedDocumentKinds?.length)
+        return false;
+      if (!condition.documentKind || condition.documentKind === "any")
+        return true;
+      const targetKind = normalizeText(condition.documentKind);
+      return input2.revealedDocumentKinds.some((k) => normalizeText(k) === targetKind);
+    }
+    case "shot_intent":
+      return normalizeText(input2.shotIntent) === normalizeText(condition.intent);
+    case "prose_contains": {
+      if (!input2.paragraphText)
+        return false;
+      if (condition.isRegex) {
+        if (findReDoSHazard(condition.pattern))
+          return false;
+        try {
+          const re = new RegExp(condition.pattern, "i");
+          return re.test(input2.paragraphText);
+        } catch {
+          return false;
+        }
+      }
+      return normalizeText(input2.paragraphText).includes(normalizeText(condition.pattern));
+    }
+    case "rpg_state": {
+      if (!input2.rpgState)
+        return false;
+      const val = input2.rpgState[condition.key];
+      if (val === undefined)
+        return false;
+      if (!condition.op || condition.op === "is")
+        return String(val).toLowerCase() === String(condition.value ?? "").toLowerCase();
+      if (condition.op === "not")
+        return String(val).toLowerCase() !== String(condition.value ?? "").toLowerCase();
+      const numVal = Number(val);
+      const targetNum = Number(condition.value);
+      if (isNaN(numVal) || isNaN(targetNum))
+        return false;
+      if (condition.op === "gte")
+        return numVal >= targetNum;
+      if (condition.op === "lte")
+        return numVal <= targetNum;
+      return false;
+    }
+    case "tracker_field": {
+      if (!input2.trackerFields)
+        return false;
+      const val = input2.trackerFields[condition.field];
+      if (val === undefined)
+        return false;
+      if (!condition.value)
+        return Boolean(val);
+      return String(val).toLowerCase() === condition.value.toLowerCase();
+    }
+    case "all":
+      return condition.conditions.every((c) => matchCondition(c, input2));
+    case "any":
+      return condition.conditions.some((c) => matchCondition(c, input2));
+    case "not":
+      return !matchCondition(condition.condition, input2);
+    default:
+      return false;
+  }
+}
 function evaluatePresentationRules(input2, rules) {
   const decision = { matchedRuleIds: [], diagnostics: [] };
   const ordered = [...rules].sort((a, b) => Number(a.scope === "chat") - Number(b.scope === "chat") || a.priority - b.priority || a.savedOrder - b.savedOrder || a.id.localeCompare(b.id));
   for (const rule of ordered) {
     if (!rule.enabled)
       continue;
-    const condition = rule.when;
-    const matches = condition.kind === "dialogue" ? input2.isDialogue : condition.kind === "location_changed" ? input2.locationChanged : condition.kind === "template" ? condition.templateId === input2.templateId : input2.subjects?.some((subject) => subject.kind === condition.subjectKind && subject.name.trim().toLowerCase() === condition.name.trim().toLowerCase()) === true;
-    if (!matches)
+    if (!matchCondition(rule.when, input2))
       continue;
     decision.matchedRuleIds.push(rule.id);
-    if (rule.then.kind === "hold_background") {
-      decision.holdBackground = true;
-      continue;
+    switch (rule.then.kind) {
+      case "hold_background":
+        decision.holdBackground = true;
+        decision.holdBackgroundMode = rule.then.mode ?? "stage_backdrop";
+        break;
+      case "limit_music":
+        decision.musicLevel = rule.then.level;
+        decision.selectedMusicRuleId = rule.id;
+        decision.selectedMusicScope = rule.scope;
+        break;
+      case "limit_effects":
+        decision.effectIntensity = rule.then.intensity;
+        decision.selectedEffectRuleId = rule.id;
+        decision.selectedEffectScope = rule.scope;
+        break;
+      case "prefer_aspect_ratio":
+        decision.preferredAspectRatio = rule.then.ratio;
+        break;
+      case "prefer_cast_mode":
+        decision.preferredCastMode = rule.then.mode;
+        break;
+      case "prefer_framing":
+        decision.preferredFraming = rule.then.framing;
+        break;
+      case "auto_render_document":
+        decision.autoRenderDocument = rule.then.render ?? true;
+        break;
+      case "skip_image_generation":
+        decision.skipImageGeneration = rule.then.skip ?? true;
+        break;
+      case "prefer_style":
+        if (input2.allowStyleOverride !== true) {
+          decision.diagnostics.push(`${rule.name}: Style override disabled globally; skipped.`);
+        } else {
+          decision.preferredStyleId = rule.then.styleId;
+          decision.selectedStyleRuleId = rule.id;
+          decision.selectedStyleScope = rule.scope;
+        }
+        break;
+      case "prefer_template":
+        if (!input2.enabledTemplateIds.includes(rule.then.templateId)) {
+          decision.diagnostics.push(`${rule.name}: preferred template is disabled or unavailable; skipped.`);
+        } else {
+          decision.preferredTemplateId = rule.then.templateId;
+          decision.selectedRuleId = rule.id;
+          decision.selectedScope = rule.scope;
+        }
+        break;
     }
-    if (rule.then.kind === "limit_music") {
-      decision.musicLevel = rule.then.level;
-      decision.selectedMusicRuleId = rule.id;
-      decision.selectedMusicScope = rule.scope;
-      continue;
-    }
-    if (rule.then.kind === "limit_effects") {
-      decision.effectIntensity = rule.then.intensity;
-      decision.selectedEffectRuleId = rule.id;
-      decision.selectedEffectScope = rule.scope;
-      continue;
-    }
-    if (!input2.enabledTemplateIds.includes(rule.then.templateId)) {
-      decision.diagnostics.push(`${rule.name}: preferred template is disabled or unavailable; skipped.`);
-      continue;
-    }
-    decision.preferredTemplateId = rule.then.templateId;
-    decision.selectedRuleId = rule.id;
-    decision.selectedScope = rule.scope;
   }
   return decision;
 }
 function describePresentationCondition(condition, name = (id2) => id2) {
-  return condition.kind === "dialogue" ? "During attributed dialogue" : condition.kind === "location_changed" ? "At a confirmed location change" : condition.kind === "template" ? `When ${name(condition.templateId)} would otherwise be chosen` : condition.subjectKind === "npc" ? `When ${condition.name.trim()} is the selected picture subject` : condition.subjectKind === "place" ? `At ${condition.name.trim()}` : `When ${condition.name.trim()} is described in the picture paragraph`;
+  switch (condition.kind) {
+    case "dialogue":
+      return "During attributed dialogue";
+    case "location_changed":
+      return "At a confirmed location change";
+    case "scene_opening":
+      return "At the opening of a scene or turn";
+    case "template":
+      return `When ${name(condition.templateId)} would otherwise be chosen`;
+    case "subject":
+      if (condition.subjectKind === "npc")
+        return `When ${condition.name.trim()} is the picture subject`;
+      if (condition.subjectKind === "place")
+        return `At ${condition.name.trim()}${condition.partialMatch ? " (partial match)" : ""}`;
+      return `When ${condition.name.trim()} is described in the picture paragraph`;
+    case "time_of_day":
+      return `During ${condition.value}`;
+    case "weather":
+      return `When weather is ${condition.value}`;
+    case "ambient":
+      return `When ambient audio is ${condition.value}`;
+    case "cast_present":
+      return `When ${condition.name} is present in the scene`;
+    case "cast_count":
+      return `When cast size ${condition.op === "gte" ? "\u2265" : condition.op === "lte" ? "\u2264" : "="} ${condition.count}`;
+    case "speaker_name":
+      return `When ${condition.name} is speaking`;
+    case "outfit_matches":
+      return `When outfit matches ${condition.outfit}`;
+    case "document_revealed":
+      return condition.documentKind ? `When a ${condition.documentKind} is revealed` : "When any document is revealed";
+    case "shot_intent":
+      return `When shot intent is ${condition.intent}`;
+    case "prose_contains":
+      return `When prose contains ${condition.isRegex ? `/${condition.pattern}/` : `"${condition.pattern}"`}`;
+    case "rpg_state":
+      return `When RPG state [${condition.key}] ${condition.op ?? "is"} ${condition.value ?? "set"}`;
+    case "tracker_field":
+      return `When tracker field [${condition.field}] ${condition.value ? `= ${condition.value}` : "is set"}`;
+    case "all":
+      return condition.conditions.map((c) => describePresentationCondition(c, name)).join(" AND ");
+    case "any":
+      return condition.conditions.map((c) => describePresentationCondition(c, name)).join(" OR ");
+    case "not":
+      return `NOT (${describePresentationCondition(condition.condition, name)})`;
+    default:
+      return "When condition matches";
+  }
 }
-var id, RuleConditionSchema, draftShape, PresentationRuleDraftSchema, PresentationRuleSchema, PresentationRuleDocumentSchema, PresentationRuleCatalogSchema, PresentationRuleTraceSchema, PresentationRuleRequestSchema;
+var id, BaseRuleConditionSchema, Level1ConditionSchema, RuleConditionSchema, RuleActionSchema, draftShape, PresentationRuleDraftSchema, PresentationRuleSchema, PresentationRuleDocumentSchema, PresentationRuleCatalogSchema, PresentationRuleTraceSchema, PresentationRuleRequestSchema;
 var init_presentation_rules = __esm(() => {
   init_zod();
   id = exports_external.string().trim().min(1).max(128);
-  RuleConditionSchema = exports_external.discriminatedUnion("kind", [
+  BaseRuleConditionSchema = exports_external.discriminatedUnion("kind", [
     exports_external.object({ kind: exports_external.literal("dialogue") }).strict(),
     exports_external.object({ kind: exports_external.literal("location_changed") }).strict(),
+    exports_external.object({ kind: exports_external.literal("scene_opening") }).strict(),
     exports_external.object({ kind: exports_external.literal("template"), templateId: id }).strict(),
-    exports_external.object({ kind: exports_external.literal("subject"), subjectKind: exports_external.enum(["npc", "place", "object"]), name: exports_external.string().trim().min(1).max(256) }).strict()
+    exports_external.object({ kind: exports_external.literal("subject"), subjectKind: exports_external.enum(["npc", "place", "object"]), name: exports_external.string().trim().min(1).max(256), partialMatch: exports_external.boolean().optional() }).strict(),
+    exports_external.object({ kind: exports_external.literal("time_of_day"), value: exports_external.enum(["dawn", "day", "dusk", "night", "any"]) }).strict(),
+    exports_external.object({ kind: exports_external.literal("weather"), value: exports_external.string().trim().min(1).max(80) }).strict(),
+    exports_external.object({ kind: exports_external.literal("ambient"), value: exports_external.string().trim().min(1).max(80) }).strict(),
+    exports_external.object({ kind: exports_external.literal("cast_present"), name: exports_external.string().trim().min(1).max(256) }).strict(),
+    exports_external.object({ kind: exports_external.literal("cast_count"), op: exports_external.enum(["gte", "eq", "lte"]), count: exports_external.number().int().min(0).max(20) }).strict(),
+    exports_external.object({ kind: exports_external.literal("speaker_name"), name: exports_external.string().trim().min(1).max(256) }).strict(),
+    exports_external.object({ kind: exports_external.literal("outfit_matches"), outfit: exports_external.string().trim().min(1).max(256) }).strict(),
+    exports_external.object({ kind: exports_external.literal("document_revealed"), documentKind: exports_external.string().trim().max(80).optional() }).strict(),
+    exports_external.object({ kind: exports_external.literal("shot_intent"), intent: exports_external.string().trim().min(1).max(80) }).strict(),
+    exports_external.object({ kind: exports_external.literal("prose_contains"), pattern: exports_external.string().trim().min(1).max(256), isRegex: exports_external.boolean().optional() }).strict(),
+    exports_external.object({ kind: exports_external.literal("rpg_state"), key: exports_external.string().trim().min(1).max(80), op: exports_external.enum(["is", "not", "gte", "lte"]).optional(), value: exports_external.string().trim().max(80).optional() }).strict(),
+    exports_external.object({ kind: exports_external.literal("tracker_field"), field: exports_external.string().trim().min(1).max(80), value: exports_external.string().trim().max(120).optional() }).strict()
   ]);
-  draftShape = { id, name: exports_external.string().trim().min(1).max(80), enabled: exports_external.boolean(), priority: exports_external.number().int().min(0).max(100), when: RuleConditionSchema, then: exports_external.discriminatedUnion("kind", [exports_external.object({ kind: exports_external.literal("prefer_template"), templateId: id }).strict(), exports_external.object({ kind: exports_external.literal("limit_effects"), intensity: exports_external.enum(["gentle", "off"]) }).strict(), exports_external.object({ kind: exports_external.literal("limit_music"), level: exports_external.enum(["quiet", "mute"]) }).strict(), exports_external.object({ kind: exports_external.literal("hold_background") }).strict()]) };
+  Level1ConditionSchema = exports_external.union([
+    BaseRuleConditionSchema,
+    exports_external.object({ kind: exports_external.literal("all"), conditions: exports_external.array(BaseRuleConditionSchema).min(1).max(8) }).strict(),
+    exports_external.object({ kind: exports_external.literal("any"), conditions: exports_external.array(BaseRuleConditionSchema).min(1).max(8) }).strict(),
+    exports_external.object({ kind: exports_external.literal("not"), condition: BaseRuleConditionSchema }).strict()
+  ]);
+  RuleConditionSchema = exports_external.union([
+    BaseRuleConditionSchema,
+    exports_external.object({ kind: exports_external.literal("all"), conditions: exports_external.array(Level1ConditionSchema).min(1).max(8) }).strict(),
+    exports_external.object({ kind: exports_external.literal("any"), conditions: exports_external.array(Level1ConditionSchema).min(1).max(8) }).strict(),
+    exports_external.object({ kind: exports_external.literal("not"), condition: Level1ConditionSchema }).strict()
+  ]);
+  RuleActionSchema = exports_external.discriminatedUnion("kind", [
+    exports_external.object({ kind: exports_external.literal("prefer_template"), templateId: id }).strict(),
+    exports_external.object({ kind: exports_external.literal("limit_effects"), intensity: exports_external.enum(["gentle", "off"]) }).strict(),
+    exports_external.object({ kind: exports_external.literal("limit_music"), level: exports_external.enum(["quiet", "mute"]) }).strict(),
+    exports_external.object({ kind: exports_external.literal("hold_background"), mode: exports_external.enum(["stage_backdrop", "skip_generation"]).default("stage_backdrop").optional() }).strict(),
+    exports_external.object({ kind: exports_external.literal("prefer_aspect_ratio"), ratio: exports_external.enum(["16:9", "9:16", "1:1", "3:2", "4:3", "4:5"]) }).strict(),
+    exports_external.object({ kind: exports_external.literal("prefer_cast_mode"), mode: exports_external.enum(["layered", "illustrated_scene"]) }).strict(),
+    exports_external.object({ kind: exports_external.literal("prefer_framing"), framing: exports_external.enum(["portrait", "upper body", "full body", "wide", "close-up"]) }).strict(),
+    exports_external.object({ kind: exports_external.literal("auto_render_document"), render: exports_external.boolean().default(true).optional() }).strict(),
+    exports_external.object({ kind: exports_external.literal("skip_image_generation"), skip: exports_external.boolean().default(true).optional() }).strict(),
+    exports_external.object({ kind: exports_external.literal("prefer_style"), styleId: id }).strict()
+  ]);
+  draftShape = {
+    id,
+    name: exports_external.string().trim().min(1).max(80),
+    enabled: exports_external.boolean(),
+    priority: exports_external.number().int().min(0).max(100),
+    when: RuleConditionSchema,
+    then: RuleActionSchema
+  };
   PresentationRuleDraftSchema = exports_external.object(draftShape).strict().refine((r) => r.when.kind !== "template" || r.then.kind !== "prefer_template" || r.when.templateId !== r.then.templateId, "Choose a different preferred template, or another condition.");
-  PresentationRuleSchema = exports_external.object({ ...draftShape, scope: exports_external.enum(["user", "chat"]), savedOrder: exports_external.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER) }).strict();
-  PresentationRuleDocumentSchema = exports_external.object({ version: exports_external.literal(1), revision: exports_external.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), rules: exports_external.array(PresentationRuleSchema).max(12).refine((rows) => new Set(rows.map((r) => r.id)).size === rows.length, "Rule IDs must be distinct.") }).strict();
-  PresentationRuleCatalogSchema = exports_external.object({ user: PresentationRuleDocumentSchema.nullable(), chat: PresentationRuleDocumentSchema.nullable(), diagnostics: exports_external.array(exports_external.string().max(300)).max(4) }).strict();
-  PresentationRuleTraceSchema = exports_external.object({ matchedRuleIds: exports_external.array(id).max(24), summary: exports_external.string().max(4000) }).strict();
-  PresentationRuleRequestSchema = exports_external.object({ type: exports_external.literal("vn_presentation_rules"), version: exports_external.literal(1), requestId: id, chatId: id.optional(), action: exports_external.enum(["list", "save", "delete", "toggle"]), scope: exports_external.enum(["user", "chat"]).optional(), expectedRevision: exports_external.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(), rule: PresentationRuleDraftSchema.optional(), id: id.optional(), enabled: exports_external.boolean().optional() }).strict().superRefine((r, ctx) => {
+  PresentationRuleSchema = exports_external.object({
+    ...draftShape,
+    scope: exports_external.enum(["user", "chat"]),
+    savedOrder: exports_external.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+  }).strict();
+  PresentationRuleDocumentSchema = exports_external.object({
+    version: exports_external.literal(1),
+    revision: exports_external.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    rules: exports_external.array(PresentationRuleSchema).max(48).refine((rows) => new Set(rows.map((r) => r.id)).size === rows.length, "Rule IDs must be distinct.")
+  }).strict();
+  PresentationRuleCatalogSchema = exports_external.object({
+    user: PresentationRuleDocumentSchema.nullable(),
+    chat: PresentationRuleDocumentSchema.nullable(),
+    diagnostics: exports_external.array(exports_external.string().max(300)).max(8)
+  }).strict();
+  PresentationRuleTraceSchema = exports_external.object({
+    matchedRuleIds: exports_external.array(id).max(48),
+    summary: exports_external.string().max(4000)
+  }).strict();
+  PresentationRuleRequestSchema = exports_external.object({
+    type: exports_external.literal("vn_presentation_rules"),
+    version: exports_external.literal(1),
+    requestId: id,
+    chatId: id.optional(),
+    action: exports_external.enum(["list", "save", "delete", "toggle"]),
+    scope: exports_external.enum(["user", "chat"]).optional(),
+    expectedRevision: exports_external.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+    rule: PresentationRuleDraftSchema.optional(),
+    id: id.optional(),
+    enabled: exports_external.boolean().optional()
+  }).strict().superRefine((r, ctx) => {
     if (r.action === "list")
       return;
     if (!r.scope || r.expectedRevision === undefined)
@@ -24015,7 +24385,13 @@ var init_contracts = __esm(() => {
     promptDelta: exports_external.string().trim().default(""),
     assetJobId: IdentifierSchema,
     bgm: exports_external.string().trim().nullable().optional(),
-    sfx: exports_external.string().trim().nullable().optional()
+    sfx: exports_external.string().trim().nullable().optional(),
+    preferredStyleId: exports_external.string().trim().min(1).max(128).optional(),
+    preferredAspectRatio: exports_external.enum(["16:9", "9:16", "1:1", "3:2", "4:3", "4:5"]).optional(),
+    preferredCastMode: exports_external.enum(["layered", "illustrated_scene"]).optional(),
+    preferredFraming: exports_external.enum(["portrait", "upper body", "full body", "wide", "close-up"]).optional(),
+    autoRenderDocument: exports_external.boolean().optional(),
+    skipImageGeneration: exports_external.boolean().optional()
   }).strict();
   AssetJobStatusSchema = exports_external.enum([
     "queued",
@@ -38542,6 +38918,7 @@ function normalizeConfigUncached(input2) {
     dynamicImageTemplates: bool(input2.dynamicImageTemplates, false),
     defaultImageTemplateId: nullableString(input2.defaultImageTemplateId) ?? "portrait",
     imageTemplates: input2.imageTemplates === undefined ? migrateImageTemplates(promptPresetList(input2.promptPresets)) : upgradeImageTemplates(input2.imageTemplates),
+    presentationRulesAllowStyleOverride: bool(input2.presentationRulesAllowStyleOverride, false),
     imagePromptEngineVersion: input2.imagePromptEngineVersion === 1 ? 1 : 2,
     ideogramPromptMode: input2.ideogramPromptMode === "json" || input2.ideogramPromptMode === "structured-prose" || input2.ideogramPromptMode === "off" ? input2.ideogramPromptMode : "auto",
     flux3KleinPromptMode: input2.flux3KleinPromptMode === "pup-caption" || input2.flux3KleinPromptMode === "off" ? input2.flux3KleinPromptMode : "auto",
@@ -38663,6 +39040,7 @@ var init_config = __esm(() => {
     dynamicImageTemplates: false,
     defaultImageTemplateId: "portrait",
     imageTemplates: BUILTIN_IMAGE_TEMPLATES.map((template) => ({ ...template })),
+    presentationRulesAllowStyleOverride: false,
     imagePromptEngineVersion: 2,
     ideogramPromptMode: "auto",
     flux3KleinPromptMode: "auto",
@@ -39424,10 +39802,18 @@ function userOptions(userId) {
 function presentationRulePath(scope2, chatId) {
   if (scope2 === "chat" && !chatId)
     throw new Error("Open a chat to manage chat preferences.");
-  return scope2 === "user" ? "presentation-rules.json" : `chats/${safeSegment(chatId)}/presentation-entities.json`;
+  return scope2 === "user" ? "presentation-rules.json" : `chats/${safeSegment(chatId)}/presentation-rules.json`;
 }
 async function loadPresentationRuleDocument(spindle2, scope2, chatId, userId) {
-  const raw = await spindle2.userStorage.getJson(presentationRulePath(scope2, chatId), { fallback: { version: 1, revision: 0, rules: [] }, userId });
+  const path2 = presentationRulePath(scope2, chatId);
+  let raw = await spindle2.userStorage.getJson(path2, { fallback: null, userId });
+  if (!raw && scope2 === "chat" && chatId) {
+    const legacyPath = `chats/${safeSegment(chatId)}/presentation-entities.json`;
+    raw = await spindle2.userStorage.getJson(legacyPath, { fallback: null, userId });
+  }
+  if (!raw) {
+    raw = { version: 1, revision: 0, rules: [] };
+  }
   const value = PresentationRuleDocumentSchema.safeParse(raw);
   if (!value.success || value.data.rules.some((rule) => rule.scope !== scope2))
     throw new Error(`${scope2 === "chat" ? "Chat" : "Account"} presentation preferences are unavailable or use an unsupported format. Stored data was preserved.`);
@@ -42338,6 +42724,7 @@ function applyTemplatePreferences(plan, config2, rules, previous, appearances, d
   for (const cue of [...plan.visualCues, ...plan.cacheCues ?? []].sort((a, b) => a.paragraphIndex - b.paragraphIndex))
     if (!first2.has(sceneKey(cue)))
       first2.set(sceneKey(cue), cue.cueId);
+  const characterAliases = {};
   const apply = (cue) => {
     if (!cue.imageTemplate || cue.imageTemplateReason === "Manual template selection" || cue.visualSources?.includes("manual subject correction"))
       return cue;
@@ -42354,7 +42741,30 @@ function applyTemplatePreferences(plan, config2, rules, previous, appearances, d
     if (cue.character?.trim())
       subjects.push({ kind: "npc", name: cue.character });
     subjects.push(...itemReferences.filter((r) => r.paragraphIndex === cue.paragraphIndex).map((r) => ({ kind: r.kind, name: r.name })));
-    const decision = evaluatePresentationRules({ isDialogue: Boolean(plan.paragraphSpeakers[cue.paragraphIndex]?.trim()), locationChanged: Boolean(location && before && location !== before && first2.get(sceneKey(cue)) === cue.cueId), templateId: cue.imageTemplate.id, enabledTemplateIds: enabled.map((t) => t.id), subjects }, rules.filter((rule) => rule.then.kind === "prefer_template"));
+    const isSceneOpening = cue.paragraphIndex === 0 || scene.startParagraph === cue.paragraphIndex;
+    const revealedDocs = plan.storyReferences?.filter((r) => r.kind === "object" && r.paragraphIndex === cue.paragraphIndex).map((r) => r.name) ?? [];
+    const directionRules = rules.filter((rule) => rule.then.kind !== "limit_effects" && rule.then.kind !== "limit_music" && rule.then.kind !== "hold_background");
+    const decision = evaluatePresentationRules({
+      isDialogue: Boolean(plan.paragraphSpeakers?.[cue.paragraphIndex]?.trim()),
+      locationChanged: Boolean(location && before && location !== before && first2.get(sceneKey(cue)) === cue.cueId),
+      isSceneOpening,
+      templateId: cue.imageTemplate.id,
+      enabledTemplateIds: enabled.map((t) => t.id),
+      subjects,
+      ...scene.environment.timeOfDay || scene.environment.time ? { timeOfDay: scene.environment.timeOfDay ?? scene.environment.time } : {},
+      ...scene.environment.weather ? { weather: scene.environment.weather } : {},
+      ...scene.ambient ? { ambient: scene.ambient } : {},
+      cast: scene.cast,
+      castCount: scene.cast?.length ?? 0,
+      ...plan.paragraphSpeakers?.[cue.paragraphIndex] ? { speakerName: plan.paragraphSpeakers?.[cue.paragraphIndex] } : {},
+      characterAliases,
+      ...cue.resolvedAttire || cue.attire ? { activeOutfit: cue.resolvedAttire ?? cue.attire } : {},
+      revealedDocumentKinds: revealedDocs,
+      ...cue.imageTemplate.intent ? { shotIntent: cue.imageTemplate.intent } : {},
+      ...plan.paragraphs?.[cue.paragraphIndex]?.text ? { paragraphText: plan.paragraphs?.[cue.paragraphIndex].text } : {},
+      ...plan.rpgState ? { rpgState: plan.rpgState } : {},
+      allowStyleOverride: config2.presentationRulesAllowStyleOverride === true
+    }, directionRules);
     if (!decision.matchedRuleIds.length && !diagnostics.length)
       return cue;
     const target2 = enabled.find((t) => t.id === decision.preferredTemplateId);
@@ -42362,7 +42772,17 @@ function applyTemplatePreferences(plan, config2, rules, previous, appearances, d
     const outcome = target2 ? `Applied ${target2.name}${winning ? ` from ${winning.name} (${winning.scope === "chat" ? "this chat" : "all chats"}) \u2014 ${describePresentationCondition(winning.when, (id6) => config2.imageTemplates.find((t) => t.id === id6)?.name ?? id6)}` : ""}.` : "Kept the planner template.";
     const summary = [outcome, ...diagnostics, ...decision.diagnostics, ...!usable && decision.matchedRuleIds.some((id6) => rules.some((r) => r.id === id6 && config2.imageTemplates.some((t) => r.then.kind === "prefer_template" && t.id === r.then.templateId && t.subjectMode === "one"))) ? ["Character preferences need a usable identity; existing subject guidance was kept."] : []].join(`
 `).slice(0, 4000);
-    return { ...cue, ...target2 ? { imageTemplate: templateSnapshot(target2), imageTemplateReason: `Saved preference: ${target2.name}`.slice(0, 300) } : {}, presentationRuleTrace: { matchedRuleIds: decision.matchedRuleIds, summary } };
+    return {
+      ...cue,
+      ...target2 ? { imageTemplate: templateSnapshot(target2), imageTemplateReason: `Saved preference: ${target2.name}`.slice(0, 300) } : {},
+      ...decision.preferredAspectRatio ? { preferredAspectRatio: decision.preferredAspectRatio } : {},
+      ...decision.preferredCastMode ? { preferredCastMode: decision.preferredCastMode } : {},
+      ...decision.preferredFraming ? { preferredFraming: decision.preferredFraming } : {},
+      ...decision.preferredStyleId ? { preferredStyleId: decision.preferredStyleId } : {},
+      ...decision.autoRenderDocument !== undefined ? { autoRenderDocument: decision.autoRenderDocument } : {},
+      ...decision.skipImageGeneration !== undefined ? { skipImageGeneration: decision.skipImageGeneration } : {},
+      presentationRuleTrace: { matchedRuleIds: decision.matchedRuleIds, summary }
+    };
   };
   const effectRules = rules.filter((rule) => rule.then.kind === "limit_effects" || rule.then.kind === "limit_music" || rule.then.kind === "hold_background");
   const effectDecisions = effectRules.length ? plan.paragraphs.map((_, paragraphIndex) => {
@@ -42373,7 +42793,28 @@ function applyTemplatePreferences(plan, config2, rules, previous, appearances, d
     if (cue?.character)
       subjects.push({ kind: "npc", name: cue.character });
     subjects.push(...itemReferences.filter((r) => r.paragraphIndex === paragraphIndex).map((r) => ({ kind: r.kind, name: r.name })));
-    return evaluatePresentationRules({ isDialogue: Boolean(plan.paragraphSpeakers[paragraphIndex]?.trim()), locationChanged: Boolean(scene && scene.startParagraph === paragraphIndex && normalize(scene.environment.location) && normalize(prior?.environment.location) && normalize(scene.environment.location) !== normalize(prior?.environment.location)), templateId: cue?.imageTemplate?.id ?? "", enabledTemplateIds: [], subjects }, effectRules);
+    const isSceneOpening = paragraphIndex === 0 || (scene ? scene.startParagraph === paragraphIndex : false);
+    const revealedDocs = plan.storyReferences?.filter((r) => r.kind === "object" && r.paragraphIndex === paragraphIndex).map((r) => r.name) ?? [];
+    return evaluatePresentationRules({
+      isDialogue: Boolean(plan.paragraphSpeakers?.[paragraphIndex]?.trim()),
+      locationChanged: Boolean(scene && scene.startParagraph === paragraphIndex && normalize(scene.environment.location) && normalize(prior?.environment.location) && normalize(scene.environment.location) !== normalize(prior?.environment.location)),
+      isSceneOpening,
+      templateId: cue?.imageTemplate?.id ?? "",
+      enabledTemplateIds: [],
+      subjects,
+      ...scene?.environment.timeOfDay || scene?.environment.time ? { timeOfDay: scene.environment.timeOfDay ?? scene.environment.time } : {},
+      ...scene?.environment.weather ? { weather: scene.environment.weather } : {},
+      ...scene?.ambient ? { ambient: scene.ambient } : {},
+      ...scene?.cast ? { cast: scene.cast, castCount: scene.cast.length } : { castCount: 0 },
+      ...plan.paragraphSpeakers?.[paragraphIndex] ? { speakerName: plan.paragraphSpeakers?.[paragraphIndex] } : {},
+      characterAliases,
+      ...cue?.resolvedAttire || cue?.attire ? { activeOutfit: cue.resolvedAttire ?? cue.attire } : {},
+      revealedDocumentKinds: revealedDocs,
+      ...cue?.imageTemplate?.intent ? { shotIntent: cue.imageTemplate.intent } : {},
+      ...plan.paragraphs?.[paragraphIndex]?.text ? { paragraphText: plan.paragraphs?.[paragraphIndex].text } : {},
+      ...plan.rpgState ? { rpgState: plan.rpgState } : {},
+      allowStyleOverride: config2.presentationRulesAllowStyleOverride === true
+    }, effectRules);
   }) : [];
   let holdStart = null;
   let holdScene = "";
@@ -42454,9 +42895,9 @@ async function managePresentationRules(api2, raw, userId) {
       const id6 = request.action === "save" ? request.rule.id : request.id;
       const index = rules.findIndex((rule) => rule.id === id6);
       if (request.action === "save") {
-        if (index < 0 && rules.length >= 12)
-          throw new Error("This scope already has 12 preferences. Remove one to make room.");
-        const savedOrder = Math.max(0, ...rules.map((rule2) => rule2.savedOrder)) + 1;
+        if (index < 0 && rules.length >= 48)
+          throw new Error("This scope already has 48 preferences. Remove one to make room.");
+        const savedOrder = index >= 0 ? rules[index].savedOrder : Math.max(0, ...rules.map((rule2) => rule2.savedOrder)) + 1;
         const rule = { ...request.rule, scope: request.scope, savedOrder };
         if (index < 0)
           rules.push(rule);
@@ -52276,6 +52717,30 @@ function applyDeltaOnlySubjectBrief(brief, referencePlan) {
   }
   return brief;
 }
+function extractTemplateDirective(template) {
+  if (!template)
+    return {};
+  const builtin = BUILTIN_IMAGE_TEMPLATES.find((b) => b.id === template.id);
+  let positiveDirective;
+  let negativeDirective;
+  if (!builtin || template.positive !== builtin.positive) {
+    const stripped = template.positive.replace(/\{\{(?:style|scene|subjects|action|composition|lighting|suffix|negative)\}\}/gi, "").replace(/^\s*(?:SUBJECT|CAST|SETTING|ACTION|MOMENT|INTERACTION|LIGHTING|SCENE):\s*$/gim, "").split(`
+`).map((line2) => line2.trim()).filter((line2) => line2.length > 0).join(" ").trim();
+    if (stripped.length > 0) {
+      positiveDirective = stripped;
+    }
+  }
+  if (!builtin || template.negative !== builtin.negative) {
+    const strippedNeg = template.negative.replace(/\{\{negative\}\}/gi, "").split(/[,;\n]+/).map((part) => part.trim()).filter((part) => part.length > 0).join(", ").trim();
+    if (strippedNeg.length > 0) {
+      negativeDirective = strippedNeg;
+    }
+  }
+  return {
+    ...positiveDirective !== undefined ? { positiveDirective } : {},
+    ...negativeDirective !== undefined ? { negativeDirective } : {}
+  };
+}
 function formatProseSentence(raw, capitalizeStart = false) {
   let cleaned = raw.trim().replace(/^[,;:\s]+/, "").replace(/[,;:\s]+$/, "").trim();
   if (!cleaned)
@@ -52351,6 +52816,24 @@ function compileModelPrompt(input2) {
       ];
     }
   }
+  const activeTemplate = input2.template ?? cue?.imageTemplate;
+  const templateDirective = extractTemplateDirective(activeTemplate);
+  if (templateDirective.positiveDirective && !isIdeogramJson) {
+    const directiveText = isTagDialect ? templateDirective.positiveDirective.replace(/[,;:\s]+$/, "") : formatProseSentence(templateDirective.positiveDirective, true);
+    if (directiveText) {
+      sections = [
+        ...sections.slice(0, cleanPrefix ? 1 : 0),
+        {
+          id: "template-directive",
+          priority: 0,
+          required: true,
+          compressible: false,
+          text: directiveText
+        },
+        ...sections.slice(cleanPrefix ? 1 : 0)
+      ];
+    }
+  }
   const rawSuffix = styleDNA.suffix?.trim() ?? "";
   const cleanSuffix = profile.dialect === "flux3-klein" ? rawSuffix.replace(/\bphotorealistic\b/gi, "lifelike natural") : rawSuffix;
   if (cleanSuffix && !isIdeogramJson) {
@@ -52385,6 +52868,9 @@ function compileModelPrompt(input2) {
     if (customNeg) {
       effectiveNegativePrompt = effectiveNegativePrompt ? `${customNeg}, ${effectiveNegativePrompt}` : customNeg;
     }
+    if (templateDirective.negativeDirective) {
+      effectiveNegativePrompt = effectiveNegativePrompt ? `${templateDirective.negativeDirective}, ${effectiveNegativePrompt}` : templateDirective.negativeDirective;
+    }
   }
   const negativeLen = effectiveNegativePrompt ? effectiveNegativePrompt.length : 0;
   const positiveTarget = Math.max(100, Math.min(budgetPlan.maxTarget, profile.hardMaxCharacters - negativeLen));
@@ -52416,6 +52902,7 @@ function compileModelPrompt(input2) {
 }
 var STYLE_SECTION_IDS;
 var init_model_prompt_compiler = __esm(() => {
+  init_image_templates();
   init_prompt_budget();
   init_prompt_serializers();
   init_prompt_fit_v2();
@@ -52478,7 +52965,7 @@ function buildV2ImageRequest(input2) {
     const referencePayloadSupported = !isTextToImageModel && (profile.features.references === true || profile.dialect === "novelai" || ["comfyui", "swarmui"].some((p) => (profile.family ?? "").toLowerCase().includes(p)));
     const referencePlan = referencePayloadSupported ? resolveReferencePlan({ brief: input2.metadata?.brief, cue, portraits: input2.portraits, characterDNALibrary: input2.characterDNALibrary }) : createReferencePlan([]);
     builtReferencePlan = referencePlan;
-    const compiled = compileModelPrompt({ brief: input2.brief, shotSpec, styleDNA: effectiveStyleDNA, profile, outputPlan, referencePlan, detailLevel: rebuild?.fitToModel ? "compact" : config2.imagePromptDetail, promptExpansionEnabled: profile.promptExpansion?.enabled, userBudgetOverride: rebuild?.fitToModel ? Math.min(profile.softBudgets.standard[0], profile.hardMaxCharacters) : config2.imagePromptBudgetOverride ? config2.imagePromptBudget : null, cue, modelId: request.model, denoiseStrength: typeof request.parameters?.strength === "number" ? request.parameters.strength : typeof request.parameters?.denoise === "number" ? request.parameters.denoise : undefined });
+    const compiled = compileModelPrompt({ brief: input2.brief, shotSpec, styleDNA: effectiveStyleDNA, profile, outputPlan, referencePlan, detailLevel: rebuild?.fitToModel ? "compact" : config2.imagePromptDetail, promptExpansionEnabled: profile.promptExpansion?.enabled, userBudgetOverride: rebuild?.fitToModel ? Math.min(profile.softBudgets.standard[0], profile.hardMaxCharacters) : config2.imagePromptBudgetOverride ? config2.imagePromptBudget : null, cue, template: cue.imageTemplate, modelId: request.model, denoiseStrength: typeof request.parameters?.strength === "number" ? request.parameters.strength : typeof request.parameters?.denoise === "number" ? request.parameters.denoise : undefined });
     request.prompt = compiled.prompt;
     if (compiled.negativePrompt !== undefined) {
       request.negativePrompt = compiled.negativePrompt;

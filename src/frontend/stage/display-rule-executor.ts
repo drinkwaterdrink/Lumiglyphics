@@ -7,25 +7,30 @@ function displayWorkerProgram(){
  const host=globalThis as any,limit=100000;
  host.onmessage=({data}:any)=>{
   let text=data.text as string;const issues:any[]=[];
-  try{for(const rule of data.rules){
-   const pattern=new RegExp(rule.source,rule.flags);let size=0,end=0;
-   text=text.replace(pattern,(...args:any[])=>{
-    const groups=typeof args.at(-1)==='object'?args.at(-1):undefined;
-    const offset=args.at(groups?-3:-2) as number,original=args.at(groups?-2:-1) as string;
-    const captures=args.slice(1,groups?-3:-2);const match=args[0] as string;
-    size+=offset-end;end=offset+match.length;let expanded='',cursor=0;
-    const append=(part:string)=>{size+=part.length;if(size>limit)throw new Error('output-limit');expanded+=part;};
-    for(const token of (rule.replacement as string).matchAll(/\$(\$|&|`|'|<[^>]*>|[0-9]{1,2})/g)){
-     append(rule.replacement.slice(cursor,token.index));const t=token[1]!;let value=token[0];
-     if(t==='$')value='$';else if(t==='&')value=match;else if(t==='`')value=original.slice(0,offset);else if(t==="'")value=original.slice(end);
-     else if(t.startsWith('<')){if(groups)value=groups[t.slice(1,-1)]??'';}
-     else{const n=Number(t);if(n>0&&n<=captures.length)value=captures[n-1]??'';else if(t.length===2&&Number(t[0])>0&&Number(t[0])<=captures.length)value=(captures[Number(t[0])-1]??'')+t[1];}
-     append(value);cursor=token.index!+token[0].length;
-    }
-    append(rule.replacement.slice(cursor));return expanded;
-   });
-   if(text.length>limit)throw new Error('output-limit');
-  }}catch(error){text=data.text;issues.push({line:0,message:error instanceof Error&&error.message==='output-limit'?'Display rule output exceeded the 100,000-character limit.':'A display rule could not run.'});}
+  for(const rule of data.rules){
+   try{
+    const pattern=new RegExp(rule.source,rule.flags);let size=0,end=0;
+    const nextText=text.replace(pattern,(...args:any[])=>{
+     const groups=typeof args.at(-1)==='object'?args.at(-1):undefined;
+     const offset=args.at(groups?-3:-2) as number,original=args.at(groups?-2:-1) as string;
+     const captures=args.slice(1,groups?-3:-2);const match=args[0] as string;
+     size+=offset-end;end=offset+match.length;let expanded='',cursor=0;
+     const append=(part:string)=>{size+=part.length;if(size>limit)throw new Error('output-limit');expanded+=part;};
+     for(const token of (rule.replacement as string).matchAll(/\$(\$|&|`|'|<[^>]*>|[0-9]{1,2})/g)){
+      append(rule.replacement.slice(cursor,token.index));const t=token[1]!;let value=token[0];
+      if(t==='$')value='$';else if(t==='&')value=match;else if(t==='`')value=original.slice(0,offset);else if(t==="'")value=original.slice(end);
+      else if(t.startsWith('<')){if(groups)value=groups[t.slice(1,-1)]??'';}
+      else{const n=Number(t);if(n>0&&n<=captures.length)value=captures[n-1]??'';else if(t.length===2&&Number(t[0])>0&&Number(t[0])<=captures.length)value=(captures[Number(t[0])-1]??'')+t[1];}
+      append(value);cursor=token.index!+token[0].length;
+     }
+     append(rule.replacement.slice(cursor));return expanded;
+    });
+    if(nextText.length>limit)throw new Error('output-limit');
+    text=nextText;
+   }catch(error){
+    issues.push({line:Number.isInteger(rule.line)?rule.line:0,message:error instanceof Error&&error.message==='output-limit'?'Display rule output exceeded the 100,000-character limit.':'A display rule could not run.'});
+   }
+  }
   host.postMessage({text,issues,generation:data.generation});
  };
  host.postMessage({ready:true});

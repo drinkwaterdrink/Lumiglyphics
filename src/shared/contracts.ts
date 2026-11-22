@@ -283,7 +283,13 @@ export const VisualCueSchema = z.object({
   promptDelta: z.string().trim().default(""),
   assetJobId: IdentifierSchema,
   bgm: z.string().trim().nullable().optional(),
-  sfx: z.string().trim().nullable().optional()
+  sfx: z.string().trim().nullable().optional(),
+  preferredStyleId: z.string().trim().min(1).max(128).optional(),
+  preferredAspectRatio: z.enum(["16:9", "9:16", "1:1", "3:2", "4:3", "4:5"]).optional(),
+  preferredCastMode: z.enum(["layered", "illustrated_scene"]).optional(),
+  preferredFraming: z.enum(["portrait", "upper body", "full body", "wide", "close-up"]).optional(),
+  autoRenderDocument: z.boolean().optional(),
+  skipImageGeneration: z.boolean().optional()
 }).strict();
 export type VisualCue = z.infer<typeof VisualCueSchema>;
 

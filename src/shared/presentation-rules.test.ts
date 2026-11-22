@@ -54,7 +54,7 @@ test('conditions use confirmed input; preferences do not chain through changed t
 test('strict documents and commands reject unsupported actions, duplicate IDs and oversized scopes',()=>{
  expect(PresentationRuleDocumentSchema.safeParse({version:2,revision:0,rules:[]}).success).toBe(false);
  expect(PresentationRuleDocumentSchema.safeParse({version:1,revision:0,rules:[rule('same','user'),rule('same','user')]}).success).toBe(false);
- expect(PresentationRuleDocumentSchema.safeParse({version:1,revision:0,rules:Array.from({length:13},(_,i)=>rule(String(i),'user'))}).success).toBe(false);
+ expect(PresentationRuleDocumentSchema.safeParse({version:1,revision:0,rules:Array.from({length:49},(_,i)=>rule(String(i),'user'))}).success).toBe(false);
  expect(PresentationRuleRequestSchema.safeParse({type:'vn_presentation_rules',version:1,requestId:'r',action:'delete',scope:'chat',id:'x',expectedRevision:0}).success).toBe(false);
  expect(PresentationRuleRequestSchema.safeParse({type:'vn_presentation_rules',version:1,requestId:'r',action:'save',scope:'user',expectedRevision:0,rule:{...rule('r','user'),then:{kind:'motion_cap',intensity:'off'}}}).success).toBe(false);
 });
@@ -65,4 +65,99 @@ test('background hold validates independently of image templates and other actio
  expect(evaluatePresentationRules(input,[rule('template','chat'),hold]).holdBackground).toBe(true);
  expect(evaluatePresentationRules({...input,isDialogue:false},[hold]).holdBackground).toBeUndefined();
  expect(evaluatePresentationRules(input,[{...hold,enabled:false}]).holdBackground).toBeUndefined();
+});
+
+
+test('compound all/any/not conditions, scene_opening, partial place match, and alias-aware speaker/npc matching', () => {
+  const compoundRule: PresentationRule = {
+    id: 'compound',
+    name: 'Noir Rain Dialogue',
+    scope: 'chat',
+    enabled: true,
+    priority: 80,
+    savedOrder: 1,
+    when: {
+      kind: 'all',
+      conditions: [
+        { kind: 'weather', value: 'rain' },
+        {
+          kind: 'any',
+          conditions: [
+            { kind: 'speaker_name', name: 'Evelyn' },
+            { kind: 'scene_opening' },
+          ],
+        },
+        { kind: 'not', condition: { kind: 'time_of_day', value: 'day' } },
+      ],
+    },
+    then: { kind: 'prefer_aspect_ratio', ratio: '16:9' },
+  };
+
+  const matched = evaluatePresentationRules({
+    ...input,
+    weather: 'Cold Mountain Rain',
+    timeOfDay: 'night',
+    speakerName: 'Eve',
+    characterAliases: { Evelyn: ['Eve', 'Ms. Vance'] },
+  }, [compoundRule]);
+  expect(matched.preferredAspectRatio).toBe('16:9');
+  expect(matched.matchedRuleIds).toContain('compound');
+
+  const dayBlocked = evaluatePresentationRules({
+    ...input,
+    weather: 'rain',
+    timeOfDay: 'day',
+    speakerName: 'Eve',
+    characterAliases: { Evelyn: ['Eve'] },
+  }, [compoundRule]);
+  expect(dayBlocked.preferredAspectRatio).toBeUndefined();
+
+  const partialPlaceRule: PresentationRule = {
+    id: 'place-partial',
+    name: 'Marten House Wide',
+    scope: 'chat',
+    enabled: true,
+    priority: 60,
+    savedOrder: 2,
+    when: { kind: 'subject', subjectKind: 'place', name: 'Marten House', partialMatch: true },
+    then: { kind: 'prefer_framing', framing: 'wide' },
+  };
+  const placeRes = evaluatePresentationRules({
+    ...input,
+    subjects: [{ kind: 'place', name: 'Marten House - Fourth Floor Corridor' }],
+  }, [partialPlaceRule]);
+  expect(placeRes.preferredFraming).toBe('wide');
+});
+
+test('prefer_style is strictly gated by allowStyleOverride and hold_background preserves mode', () => {
+  const styleRule: PresentationRule = {
+    id: 'style-noir',
+    name: 'Noir Style',
+    scope: 'chat',
+    enabled: true,
+    priority: 70,
+    savedOrder: 1,
+    when: { kind: 'weather', value: 'rain' },
+    then: { kind: 'prefer_style', styleId: 'noir' },
+  };
+  const disabledRes = evaluatePresentationRules({ ...input, weather: 'rain', allowStyleOverride: false }, [styleRule]);
+  expect(disabledRes.preferredStyleId).toBeUndefined();
+  expect(disabledRes.diagnostics.join(' ')).toMatch(/disabled globally/i);
+
+  const enabledRes = evaluatePresentationRules({ ...input, weather: 'rain', allowStyleOverride: true }, [styleRule]);
+  expect(enabledRes.preferredStyleId).toBe('noir');
+
+  const holdSkipRule: PresentationRule = {
+    id: 'hold-skip',
+    name: 'Hold and Skip',
+    scope: 'chat',
+    enabled: true,
+    priority: 75,
+    savedOrder: 2,
+    when: { kind: 'dialogue' },
+    then: { kind: 'hold_background', mode: 'skip_generation' },
+  };
+  const holdRes = evaluatePresentationRules(input, [holdSkipRule]);
+  expect(holdRes.holdBackground).toBe(true);
+  expect(holdRes.holdBackgroundMode).toBe('skip_generation');
 });

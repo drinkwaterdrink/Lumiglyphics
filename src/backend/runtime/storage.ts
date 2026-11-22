@@ -126,10 +126,18 @@ function userOptions(userId?: string): { userId: string } | undefined {
 
 function presentationRulePath(scope:'user'|'chat',chatId?:string):string{
  if(scope==='chat'&&!chatId)throw new Error('Open a chat to manage chat preferences.');
- return scope==='user'?'presentation-rules.json':`chats/${safeSegment(chatId!)}/presentation-entities.json`;
+ return scope==='user'?'presentation-rules.json':`chats/${safeSegment(chatId!)}/presentation-rules.json`;
 }
 export async function loadPresentationRuleDocument(spindle:SpindleAPI,scope:'user'|'chat',chatId:string|undefined,userId:string):Promise<PresentationRuleDocument>{
- const raw=await spindle.userStorage.getJson(presentationRulePath(scope,chatId),{fallback:{version:1,revision:0,rules:[]},userId});
+ const path = presentationRulePath(scope, chatId);
+ let raw: unknown = await spindle.userStorage.getJson(path, {fallback: null, userId});
+ if (!raw && scope === 'chat' && chatId) {
+  const legacyPath = `chats/${safeSegment(chatId)}/presentation-entities.json`;
+  raw = await spindle.userStorage.getJson(legacyPath, {fallback: null, userId});
+ }
+ if (!raw) {
+  raw = {version: 1, revision: 0, rules: []};
+ }
  const value=PresentationRuleDocumentSchema.safeParse(raw);
  if(!value.success||value.data.rules.some(rule=>rule.scope!==scope))throw new Error(`${scope==='chat'?'Chat':'Account'} presentation preferences are unavailable or use an unsupported format. Stored data was preserved.`);
  return value.data;

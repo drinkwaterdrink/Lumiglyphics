@@ -1,4 +1,4 @@
-import type { VisualBrief } from '../../shared/image-templates.js';
+import { BUILTIN_IMAGE_TEMPLATES, type VisualBrief, type ImageTemplate } from '../../shared/image-templates.js';
 import type { ImageShotSpec } from '../../shared/image-shot-spec.js';
 import type { StyleDNA } from '../../shared/style-dna.js';
 import type { ImagePromptProfileV2 } from '../../shared/image-prompt-profile-v2.js';
@@ -29,6 +29,7 @@ export interface ModelPromptCompilerInput {
   promptExpansionEnabled?: boolean | undefined;
   userBudgetOverride?: number | null | undefined;
   cue?: VisualCue | undefined;
+  template?: ImageTemplate | undefined;
   modelId?: string | undefined;
   denoiseStrength?: number | undefined;
 }
@@ -114,6 +115,46 @@ const STYLE_SECTION_IDS = new Set([
   'sec-visual-treatment',
   'style-tags'
 ]);
+
+
+function extractTemplateDirective(template?: ImageTemplate | null): { positiveDirective?: string; negativeDirective?: string } {
+  if (!template) return {};
+  const builtin = BUILTIN_IMAGE_TEMPLATES.find(b => b.id === template.id);
+  let positiveDirective: string | undefined;
+  let negativeDirective: string | undefined;
+
+  if (!builtin || template.positive !== builtin.positive) {
+    const stripped = template.positive
+      .replace(/\{\{(?:style|scene|subjects|action|composition|lighting|suffix|negative)\}\}/gi, '')
+      .replace(/^\s*(?:SUBJECT|CAST|SETTING|ACTION|MOMENT|INTERACTION|LIGHTING|SCENE):\s*$/gim, '')
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .join(' ')
+      .trim();
+    if (stripped.length > 0) {
+      positiveDirective = stripped;
+    }
+  }
+
+  if (!builtin || template.negative !== builtin.negative) {
+    const strippedNeg = template.negative
+      .replace(/\{\{negative\}\}/gi, '')
+      .split(/[,;\n]+/)
+      .map(part => part.trim())
+      .filter(part => part.length > 0)
+      .join(', ')
+      .trim();
+    if (strippedNeg.length > 0) {
+      negativeDirective = strippedNeg;
+    }
+  }
+
+  return {
+    ...(positiveDirective !== undefined ? { positiveDirective } : {}),
+    ...(negativeDirective !== undefined ? { negativeDirective } : {}),
+  };
+}
 
 function formatProseSentence(raw: string, capitalizeStart = false): string {
   let cleaned = raw.trim().replace(/^[,;:\s]+/, '').replace(/[,;:\s]+$/, '').trim();
@@ -218,6 +259,27 @@ export function compileModelPrompt(input: ModelPromptCompilerInput): ModelPrompt
     }
   }
 
+  const activeTemplate = input.template ?? cue?.imageTemplate;
+  const templateDirective = extractTemplateDirective(activeTemplate);
+  if (templateDirective.positiveDirective && !isIdeogramJson) {
+    const directiveText = isTagDialect
+      ? templateDirective.positiveDirective.replace(/[,;:\s]+$/, '')
+      : formatProseSentence(templateDirective.positiveDirective, true);
+    if (directiveText) {
+      sections = [
+        ...sections.slice(0, cleanPrefix ? 1 : 0),
+        {
+          id: 'template-directive',
+          priority: 0,
+          required: true,
+          compressible: false,
+          text: directiveText
+        },
+        ...sections.slice(cleanPrefix ? 1 : 0)
+      ];
+    }
+  }
+
   const rawSuffix = styleDNA.suffix?.trim() ?? '';
   const cleanSuffix = profile.dialect === 'flux3-klein'
     ? rawSuffix.replace(/\bphotorealistic\b/gi, 'lifelike natural')
@@ -250,7 +312,7 @@ export function compileModelPrompt(input: ModelPromptCompilerInput): ModelPrompt
     sections
   };
 
-  // 3c. Merge custom negative prompt when supported
+  // 3c. Merge custom negative prompt and template negative when supported
   let effectiveNegativePrompt = serialized.negativePrompt;
   if (profile.negativePolicy !== 'positive-only') {
     const customNeg = styleDNA.negative?.trim();
@@ -258,6 +320,11 @@ export function compileModelPrompt(input: ModelPromptCompilerInput): ModelPrompt
       effectiveNegativePrompt = effectiveNegativePrompt
         ? `${ customNeg }, ${ effectiveNegativePrompt }`
         : customNeg;
+    }
+    if (templateDirective.negativeDirective) {
+      effectiveNegativePrompt = effectiveNegativePrompt
+        ? `${ templateDirective.negativeDirective }, ${ effectiveNegativePrompt }`
+        : templateDirective.negativeDirective;
     }
   }
 

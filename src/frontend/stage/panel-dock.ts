@@ -61,8 +61,11 @@ export class PanelDock {
   private dead = false;
   private observer: ResizeObserver;
   private bridgeRevision = new Map<string, number>();
+  private editingRuleId = "";
+  private ruleFormRefs: { details: HTMLDetailsElement; title: HTMLInputElement; pattern: HTMLTextAreaElement; flags: HTMLInputElement; template: HTMLTextAreaElement } | null = null;
   onCapture: (() => Capture[]) | undefined;
   onResolveTemplate: ((template: string) => Promise<string>) | undefined;
+  onSaveRules: ((rules: PanelRule[]) => void) | undefined;
 
   constructor(mount: HTMLElement) {
     this.host.setAttribute("data-vn-panel-layer", "");
@@ -113,7 +116,10 @@ export class PanelDock {
   private storageKey(): string { return `vn-panels-v1:${this.chat}`; }
   private save(): void {
     if (!this.chat) return;
-    try { localStorage.setItem(this.storageKey(), JSON.stringify({ pins: this.pins, rules: this.rules })); }
+    try {
+      localStorage.setItem(this.storageKey(), JSON.stringify({ pins: this.pins, rules: this.rules }));
+      this.onSaveRules?.(this.rules);
+    }
     catch { this.error("Browser storage is full or unavailable. These changes will last only for this session."); }
   }
   private load(): void {
@@ -236,14 +242,34 @@ export class PanelDock {
     this.ruleRows.clear();
     for (const rule of this.rules) {
       const row = document.createElement("div"); row.className = "candidate";
-      const label = document.createElement("span"); label.textContent = `Rule: ${rule.title} `;
-      row.append(label, this.button("Remove rule", () => {
+      const enabled = rule.enabled !== false;
+      const label = document.createElement("span"); label.textContent = `Rule: ${rule.title}${enabled ? "" : " (off)"} `;
+      const toggleBtn = this.button(enabled ? "Disable" : "Enable", () => {
+        rule.enabled = !enabled;
+        if (!rule.enabled) {
+          this.candidates = this.candidates.filter((c) => !c.id.startsWith(`rule:${rule.id}:`));
+        }
+        this.epoch++; this.save(); void this.runRules(); this.renderLists(); this.refresh();
+      });
+      const editBtn = this.button("Edit", () => {
+        if (!this.ruleFormRefs) return;
+        this.editingRuleId = rule.id;
+        this.ruleFormRefs.title.value = rule.title;
+        this.ruleFormRefs.pattern.value = rule.pattern;
+        this.ruleFormRefs.flags.value = rule.flags;
+        this.ruleFormRefs.template.value = rule.template;
+        this.ruleFormRefs.details.open = true;
+        this.ruleFormRefs.title.focus();
+      });
+      const removeBtn = this.button("Remove rule", () => {
         this.rules = this.rules.filter((r) => r.id !== rule.id);
         this.candidates = this.candidates.filter((c) => !c.id.startsWith(`rule:${rule.id}:`));
+        if (this.editingRuleId === rule.id) this.editingRuleId = "";
         this.epoch++;
         for (const pin of this.pins) if (pin.follow === `rule:${rule.id}`) { pin.fingerprint = ""; this.removePinNode(pin.key); }
         this.save(); this.renderLists(); this.refresh();
-      }));
+      });
+      row.append(label, toggleBtn, editBtn, removeBtn);
       this.ruleList.append(row);
       this.ruleRows.set(rule.id, row);
     }
@@ -334,23 +360,57 @@ export class PanelDock {
   private ruleForm(): HTMLElement {
     const details = document.createElement("details"); const summary = document.createElement("summary"); summary.textContent = "Add status template rule";
     const help = document.createElement("p"); help.textContent = "Rules create panels from this chat's source text (first 200,000 characters). They do not hide dialogue or exclude image planning. Use Ignored tags for that. Matches appear at the end of the turn to avoid spoilers. Language and other host macros are resolved without committing variable changes. Multiple matches are snapshots; use a more specific pattern to follow one entity.";
-    const field = (label: string, multiline = false) => { const wrapper = document.createElement("label"); wrapper.textContent = label; const input = document.createElement(multiline ? "textarea" : "input"); wrapper.append(input); details.append(wrapper); return input; };
+    const field = <T extends HTMLInputElement | HTMLTextAreaElement>(label: string, multiline = false): T => { const wrapper = document.createElement("label"); wrapper.textContent = label; const input = document.createElement(multiline ? "textarea" : "input") as T; wrapper.append(input); details.append(wrapper); return input; };
     details.append(summary, help);
-    const title = field("Rule name"); const pattern = field("Regex pattern (without / delimiters)", true); const flags = field("Flags"); flags.value = "gi";
-    const template = field("HTML replacement ($1, $2, ... $36)", true);
-    details.append(this.button("Save and test rule", () => {
-      if (!this.turn) { this.error("Open an assistant turn before saving a panel rule."); return; }
-      if (!title.value.trim() || !pattern.value || !template.value) { this.error("Fill in the rule name, pattern, and HTML replacement."); return; }
-      if (this.rules.length >= 12) { this.error("Remove a rule before adding another. The limit is 12."); return; }
-      const rule: PanelRule = { id: createUiId(), title: title.value.trim().slice(0, 120), pattern: pattern.value, flags: flags.value, template: template.value };
-      this.rules.push(rule); this.epoch++; this.save(); void this.runRules();
-    }));
+    const title = field<HTMLInputElement>("Rule name");
+    const pattern = field<HTMLTextAreaElement>("Regex pattern (without / delimiters)", true);
+    const flags = field<HTMLInputElement>("Flags"); flags.value = "gi";
+    const template = field<HTMLTextAreaElement>("HTML replacement ($1, $2, ... $36)", true);
+    this.ruleFormRefs = { details, title, pattern, flags, template };
+    const actions = document.createElement("div"); actions.className = "row";
+    actions.append(
+      this.button("Test rule", async () => {
+        if (!this.turn) { this.error("Open an assistant turn before testing a panel rule."); return; }
+        if (!pattern.value || !template.value) { this.error("Fill in the pattern and HTML replacement to test."); return; }
+        try {
+          let resolvedTemplate = template.value;
+          if (resolvedTemplate.includes("{{")) {
+            if (!this.onResolveTemplate) throw new Error("Host macro resolution is unavailable. Paste rendered HTML instead.");
+            resolvedTemplate = await this.onResolveTemplate(resolvedTemplate);
+          }
+          const testRule: PanelRule = { id: "test", title: title.value.trim() || "Test rule", pattern: pattern.value, flags: flags.value, template: resolvedTemplate };
+          const cards = await renderPanelRule(this.turn.panelSource ?? this.turn.paragraphs.join("\n\n"), testRule, Math.max(0, this.turn.paragraphs.length - 1));
+          this.error(cards.length ? `Test matched ${cards.length} card(s). Ready to save.` : "Test ran cleanly with 0 matches in this turn.");
+        } catch (error) { this.error(error); }
+      }),
+      this.button("Save and test rule", () => {
+        if (!this.turn) { this.error("Open an assistant turn before saving a panel rule."); return; }
+        if (!title.value.trim() || !pattern.value || !template.value) { this.error("Fill in the rule name, pattern, and HTML replacement."); return; }
+        const existingIdx = this.editingRuleId ? this.rules.findIndex((r) => r.id === this.editingRuleId) : -1;
+        if (existingIdx < 0 && this.rules.length >= 12) { this.error("Remove a rule before adding another. The limit is 12."); return; }
+        const rule: PanelRule = {
+          id: existingIdx >= 0 ? this.editingRuleId : createUiId(),
+          title: title.value.trim().slice(0, 120),
+          pattern: pattern.value,
+          flags: flags.value,
+          template: template.value,
+          enabled: existingIdx >= 0 ? this.rules[existingIdx]!.enabled !== false : true,
+        };
+        if (existingIdx >= 0) this.rules[existingIdx] = rule;
+        else this.rules.push(rule);
+        this.editingRuleId = "";
+        this.epoch++; this.save(); void this.runRules();
+      }),
+    );
+    details.append(actions);
     return details;
   }
   private async runRules(): Promise<void> {
     const turn = this.turn; if (!turn) return;
     const epoch = this.epoch;
+    const notices: string[] = [];
     for (const rule of this.rules) {
+      if (rule.enabled === false) continue;
       try {
         let resolvedRule = rule;
         if (rule.template.includes("{{")) {
@@ -362,10 +422,15 @@ export class PanelDock {
         if (this.dead || epoch !== this.epoch) return;
         this.candidates = this.candidates.filter((c) => !c.id.startsWith(`rule:${rule.id}:`));
         this.candidates.push(...cards);
-        if (!cards.length) this.error(`No match for rule "${rule.title}" in this turn.`);
-      } catch (error) { if (epoch === this.epoch && !this.dead) this.error(error); }
+        if (!cards.length) notices.push(`No match for rule "${rule.title}" in this turn.`);
+      } catch (error) {
+        if (epoch === this.epoch && !this.dead) notices.push(error instanceof Error ? error.message : String(error));
+      }
     }
-    if (epoch === this.epoch && !this.dead) { this.renderLists(); this.refresh(); }
+    if (epoch === this.epoch && !this.dead) {
+      if (notices.length) this.error(notices.join("\n"));
+      this.renderLists(); this.refresh();
+    }
   }
   private capture(): void {
     const cards = this.onCapture?.() ?? [];

@@ -1,6 +1,7 @@
+import { findReDoSHazard } from "../../shared/display-rules.js";
 import type { PanelArtifact } from "../../shared/panels.js";
 
-export type PanelRule = { id: string; title: string; pattern: string; flags: string; template: string };
+export type PanelRule = { id: string; title: string; pattern: string; flags: string; template: string; enabled?: boolean };
 
 /** This function is serialized into a disposable worker; keep it self-contained. */
 export function evaluatePanelRule(source: string, rule: PanelRule): Array<{ html: string; end: number }> {
@@ -31,6 +32,8 @@ export function evaluatePanelRule(source: string, rule: PanelRule): Array<{ html
 }
 
 export function renderPanelRule(source: string, rule: PanelRule, paragraphIndex: number): Promise<PanelArtifact[]> {
+  const hazard = findReDoSHazard(rule.pattern);
+  if (hazard) return Promise.reject(new Error(`Panel rule "${rule.title}" has potential catastrophic backtracking: ${hazard}`));
   return new Promise((resolve, reject) => {
     const code = `const evaluate = ${evaluatePanelRule.toString()}; onmessage = ({data}) => { try { postMessage({items:evaluate(data.source,data.rule)}); } catch(e) {postMessage({error:String(e.message || e)})} };`;
     const url = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));

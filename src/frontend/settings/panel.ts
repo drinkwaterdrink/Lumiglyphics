@@ -538,6 +538,7 @@ export class VisualNovelSettingsPanel {
   /* ---------------------------------------------------------------------- */
 
   setImagePreviewMetadata(metadata?: ImagePromptMetadata): void { this.templateEditor.setPreviewMetadata(metadata); }
+  setTurn(turn: Parameters<PresentationRulesPanel['setTurn']>[0]): void { this.presentationRules.setTurn(turn); }
 
   private composePanels(): void {
     const mount=(selector:string)=>this.root.querySelector<HTMLElement>(selector)!;
@@ -546,7 +547,7 @@ export class VisualNovelSettingsPanel {
     this.locationArtPanel=new LocationArtPanel(()=>this.options.getChatId?.()??'',(chat,id,action)=>this.options.onLocationArt?.(chat,id,action));
     mount('[data-places-mount]').append(this.locationArtPanel.host);
     this.templateEditor=new ImageTemplateEditor(mount('[data-templates-mount]'),patch=>this.save(patch),()=>{});
-    this.presentationRules=new PresentationRulesPanel(()=>this.options.getChatId?.()??'',request=>this.options.onPresentationRules?.(request));
+    this.presentationRules=new PresentationRulesPanel(()=>this.options.getChatId?.()??'',request=>this.options.onPresentationRules?.(request),patch=>this.save(patch));
     mount('[data-rules-mount]').append(this.presentationRules.host);
     this.trackerMappingsPanel=new TrackerMappingsPanel(value=>this.save({simTrackerMappings:value}));
     mount('[data-tracker-mount]').append(this.trackerMappingsPanel.host);
@@ -642,7 +643,7 @@ export class VisualNovelSettingsPanel {
                   <label data-field ${find("Prompt engineer override", "prompt engineer override rewrite prompt system instructions")}><span>Custom prompt engineer override</span><textarea name="promptEngineerOverride" placeholder="Override or customize visual diffusion prompt engineering instructions..."></textarea></label>
                 </div>
               </details>
-            `, { id: "system-prompts", apply: true });
+            `, { id: "system-prompts", apply: true });
     const tabs = SETTINGS_SECTIONS.map(({ id, label }) => `
           <button type="button" role="tab" id="tab-${id}" data-tab="${id}" aria-controls="pane-${id}" aria-selected="false" tabindex="-1" aria-labelledby="tab-${id}-label" aria-describedby="tab-${id}-summary">
             ${icon(ICONS[id])}<span data-tab-text><span id="tab-${id}-label" data-tab-label>${esc(label)}</span><span id="tab-${id}-summary" data-tab-summary></span></span>${id === "connections" ? '<span data-tab-dot data-level="loading" aria-hidden="true"></span>' : ""}<span data-tab-badge hidden></span>
@@ -1101,6 +1102,7 @@ export class VisualNovelSettingsPanel {
     if(next.id===this.page){proceed();return;}
     if(this.page==='characters'){this.castArtPanel.guardNavigation(proceed);return;}
     if(this.page==='templates'){this.templateEditor.guardNavigation(proceed);return;}
+    if(this.page==='rules'){this.presentationRules.guardNavigation(proceed);return;}
     if(this.currentDraftKeys().length){
       this.deferredNavigation=proceed;
       const dialog=this.root.querySelector<HTMLDialogElement>('[data-leave-dialog]')!;

@@ -105,6 +105,7 @@ export type VisualNovelConfig = {
   dynamicImageTemplates: boolean;
   defaultImageTemplateId: string;
   imageTemplates: ImageTemplate[];
+  presentationRulesAllowStyleOverride?: boolean;
   imagePromptEngineVersion?: 1 | 2;
   ideogramPromptMode?: IdeogramPromptMode;
   flux3KleinPromptMode?: Flux3KleinPromptMode;
@@ -208,6 +209,7 @@ export const DEFAULT_CONFIG: VisualNovelConfig = {
   dynamicImageTemplates: false,
   defaultImageTemplateId: "portrait",
   imageTemplates: BUILTIN_IMAGE_TEMPLATES.map(template => ({ ...template })),
+  presentationRulesAllowStyleOverride: false,
   imagePromptEngineVersion: 2,
   ideogramPromptMode: "auto",
   flux3KleinPromptMode: "auto",
@@ -453,6 +455,7 @@ function normalizeConfigUncached(input: Record<string, unknown>): VisualNovelCon
     dynamicImageTemplates: bool(input.dynamicImageTemplates, false),
     defaultImageTemplateId: nullableString(input.defaultImageTemplateId) ?? "portrait",
     imageTemplates: input.imageTemplates === undefined ? migrateImageTemplates(promptPresetList(input.promptPresets)) : upgradeImageTemplates(input.imageTemplates),
+    presentationRulesAllowStyleOverride: bool(input.presentationRulesAllowStyleOverride, false),
     imagePromptEngineVersion: input.imagePromptEngineVersion === 1 ? 1 : 2,
     ideogramPromptMode: input.ideogramPromptMode === "json" || input.ideogramPromptMode === "structured-prose" || input.ideogramPromptMode === "off" ? input.ideogramPromptMode : "auto",
     flux3KleinPromptMode: input.flux3KleinPromptMode === "pup-caption" || input.flux3KleinPromptMode === "off" ? input.flux3KleinPromptMode : "auto",

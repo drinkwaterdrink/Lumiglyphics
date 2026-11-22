@@ -19205,21 +19205,222 @@ var AMBIGUOUS_BARE_WORDS = new Set([
   "deed"
 ]);
 
+// src/shared/display-rules.ts
+var MAX_DISPLAY_RULE_PATTERN = 1000;
+function findReDoSHazard(source) {
+  let inCharacterClass = false;
+  let afterOpenParen = false;
+  const stack = [];
+  let closed = null;
+  let previousWasQuantifier = false;
+  for (let index = 0;index < source.length; index += 1) {
+    const char = source[index];
+    if (inCharacterClass) {
+      if (char === "\\")
+        index += 1;
+      else if (char === "]")
+        inCharacterClass = false;
+      continue;
+    }
+    if (char === "\\") {
+      index += 1;
+      previousWasQuantifier = false;
+      closed = null;
+      continue;
+    }
+    if (char === "[") {
+      inCharacterClass = true;
+      previousWasQuantifier = false;
+      closed = null;
+      continue;
+    }
+    if (char === "(") {
+      stack.push({ hasQuantifier: false, hasAlternation: false });
+      afterOpenParen = true;
+      closed = null;
+      previousWasQuantifier = false;
+      continue;
+    }
+    if (char === ")") {
+      closed = stack.pop() ?? null;
+      if (closed?.hasQuantifier && stack.at(-1))
+        stack.at(-1).hasQuantifier = true;
+      afterOpenParen = false;
+      previousWasQuantifier = false;
+      continue;
+    }
+    if (char === "|") {
+      const group = stack.at(-1);
+      if (group)
+        group.hasAlternation = true;
+      previousWasQuantifier = false;
+      continue;
+    }
+    const braceMatch = char === "{" ? /^\{\d+(?:,\d*)?\}/.exec(source.slice(index)) : null;
+    const isQuantifier = char === "+" || char === "*" || char === "?" || braceMatch !== null;
+    if (isQuantifier) {
+      const groupModifier = char === "?" && afterOpenParen;
+      const lazinessMarker = char === "?" && previousWasQuantifier;
+      if (!groupModifier && !lazinessMarker) {
+        if (closed && (closed.hasQuantifier || closed.hasAlternation)) {
+          return "Repeated group contains repetition or alternation, which can freeze the reader with catastrophic backtracking. Simplify or unroll the pattern.";
+        }
+        const parent = stack.at(-1);
+        if (parent)
+          parent.hasQuantifier = true;
+      }
+      if (braceMatch)
+        index += braceMatch[0].length - 1;
+      previousWasQuantifier = true;
+      afterOpenParen = false;
+      closed = null;
+      continue;
+    }
+    previousWasQuantifier = false;
+    afterOpenParen = false;
+    closed = null;
+  }
+  return null;
+}
+function compileDisplayRules(input2) {
+  const rules = [], issues = [];
+  if ((input2?.length ?? 0) > 20000)
+    return { rules, issues: [{ line: 0, message: "Display rule source is limited to 20,000 characters." }] };
+  for (const [index, line] of (input2 ?? "").split(/\r?\n/).entries()) {
+    if (rules.length >= 128) {
+      issues.push({ line: index + 1, message: "Display rules are limited to 128 rows." });
+      break;
+    }
+    const text = line.trim();
+    if (!text || text.startsWith("#") || text.startsWith("//"))
+      continue;
+    const issue2 = (message) => issues.push({ line: index + 1, message });
+    let source, flags = "g", replacement;
+    if (text.startsWith("/")) {
+      const match = text.match(/^\/(.+)\/([a-z]*)\s*=>\s*(.*)$/);
+      if (!match) {
+        issue2("Use /pattern/flags => replacement.");
+        continue;
+      }
+      source = match[1];
+      flags = match[2] || "g";
+      replacement = match[3] ?? "";
+    } else {
+      const separator = text.indexOf("=>");
+      if (separator < 0) {
+        issue2("Add => between the pattern and replacement.");
+        continue;
+      }
+      source = text.slice(0, separator).trim();
+      replacement = text.slice(separator + 2).trim();
+      if (!source) {
+        issue2("Enter a pattern before =>.");
+        continue;
+      }
+    }
+    if (source.length > MAX_DISPLAY_RULE_PATTERN) {
+      issue2(`Display rule patterns are limited to ${MAX_DISPLAY_RULE_PATTERN} characters.`);
+      continue;
+    }
+    const hazard = findReDoSHazard(source);
+    if (hazard) {
+      issue2(hazard);
+      continue;
+    }
+    try {
+      rules.push({ pattern: new RegExp(source, flags), replacement, line: index + 1 });
+    } catch {
+      issue2("Invalid pattern or flags. Check brackets, escapes and repeated flags.");
+    }
+  }
+  return { rules, issues };
+}
+
 // src/shared/presentation-rules.ts
 var id = exports_external.string().trim().min(1).max(128);
-var RuleConditionSchema = exports_external.discriminatedUnion("kind", [
+var BaseRuleConditionSchema = exports_external.discriminatedUnion("kind", [
   exports_external.object({ kind: exports_external.literal("dialogue") }).strict(),
   exports_external.object({ kind: exports_external.literal("location_changed") }).strict(),
+  exports_external.object({ kind: exports_external.literal("scene_opening") }).strict(),
   exports_external.object({ kind: exports_external.literal("template"), templateId: id }).strict(),
-  exports_external.object({ kind: exports_external.literal("subject"), subjectKind: exports_external.enum(["npc", "place", "object"]), name: exports_external.string().trim().min(1).max(256) }).strict()
+  exports_external.object({ kind: exports_external.literal("subject"), subjectKind: exports_external.enum(["npc", "place", "object"]), name: exports_external.string().trim().min(1).max(256), partialMatch: exports_external.boolean().optional() }).strict(),
+  exports_external.object({ kind: exports_external.literal("time_of_day"), value: exports_external.enum(["dawn", "day", "dusk", "night", "any"]) }).strict(),
+  exports_external.object({ kind: exports_external.literal("weather"), value: exports_external.string().trim().min(1).max(80) }).strict(),
+  exports_external.object({ kind: exports_external.literal("ambient"), value: exports_external.string().trim().min(1).max(80) }).strict(),
+  exports_external.object({ kind: exports_external.literal("cast_present"), name: exports_external.string().trim().min(1).max(256) }).strict(),
+  exports_external.object({ kind: exports_external.literal("cast_count"), op: exports_external.enum(["gte", "eq", "lte"]), count: exports_external.number().int().min(0).max(20) }).strict(),
+  exports_external.object({ kind: exports_external.literal("speaker_name"), name: exports_external.string().trim().min(1).max(256) }).strict(),
+  exports_external.object({ kind: exports_external.literal("outfit_matches"), outfit: exports_external.string().trim().min(1).max(256) }).strict(),
+  exports_external.object({ kind: exports_external.literal("document_revealed"), documentKind: exports_external.string().trim().max(80).optional() }).strict(),
+  exports_external.object({ kind: exports_external.literal("shot_intent"), intent: exports_external.string().trim().min(1).max(80) }).strict(),
+  exports_external.object({ kind: exports_external.literal("prose_contains"), pattern: exports_external.string().trim().min(1).max(256), isRegex: exports_external.boolean().optional() }).strict(),
+  exports_external.object({ kind: exports_external.literal("rpg_state"), key: exports_external.string().trim().min(1).max(80), op: exports_external.enum(["is", "not", "gte", "lte"]).optional(), value: exports_external.string().trim().max(80).optional() }).strict(),
+  exports_external.object({ kind: exports_external.literal("tracker_field"), field: exports_external.string().trim().min(1).max(80), value: exports_external.string().trim().max(120).optional() }).strict()
 ]);
-var draftShape = { id, name: exports_external.string().trim().min(1).max(80), enabled: exports_external.boolean(), priority: exports_external.number().int().min(0).max(100), when: RuleConditionSchema, then: exports_external.discriminatedUnion("kind", [exports_external.object({ kind: exports_external.literal("prefer_template"), templateId: id }).strict(), exports_external.object({ kind: exports_external.literal("limit_effects"), intensity: exports_external.enum(["gentle", "off"]) }).strict(), exports_external.object({ kind: exports_external.literal("limit_music"), level: exports_external.enum(["quiet", "mute"]) }).strict(), exports_external.object({ kind: exports_external.literal("hold_background") }).strict()]) };
+var Level1ConditionSchema = exports_external.union([
+  BaseRuleConditionSchema,
+  exports_external.object({ kind: exports_external.literal("all"), conditions: exports_external.array(BaseRuleConditionSchema).min(1).max(8) }).strict(),
+  exports_external.object({ kind: exports_external.literal("any"), conditions: exports_external.array(BaseRuleConditionSchema).min(1).max(8) }).strict(),
+  exports_external.object({ kind: exports_external.literal("not"), condition: BaseRuleConditionSchema }).strict()
+]);
+var RuleConditionSchema = exports_external.union([
+  BaseRuleConditionSchema,
+  exports_external.object({ kind: exports_external.literal("all"), conditions: exports_external.array(Level1ConditionSchema).min(1).max(8) }).strict(),
+  exports_external.object({ kind: exports_external.literal("any"), conditions: exports_external.array(Level1ConditionSchema).min(1).max(8) }).strict(),
+  exports_external.object({ kind: exports_external.literal("not"), condition: Level1ConditionSchema }).strict()
+]);
+var RuleActionSchema = exports_external.discriminatedUnion("kind", [
+  exports_external.object({ kind: exports_external.literal("prefer_template"), templateId: id }).strict(),
+  exports_external.object({ kind: exports_external.literal("limit_effects"), intensity: exports_external.enum(["gentle", "off"]) }).strict(),
+  exports_external.object({ kind: exports_external.literal("limit_music"), level: exports_external.enum(["quiet", "mute"]) }).strict(),
+  exports_external.object({ kind: exports_external.literal("hold_background"), mode: exports_external.enum(["stage_backdrop", "skip_generation"]).default("stage_backdrop").optional() }).strict(),
+  exports_external.object({ kind: exports_external.literal("prefer_aspect_ratio"), ratio: exports_external.enum(["16:9", "9:16", "1:1", "3:2", "4:3", "4:5"]) }).strict(),
+  exports_external.object({ kind: exports_external.literal("prefer_cast_mode"), mode: exports_external.enum(["layered", "illustrated_scene"]) }).strict(),
+  exports_external.object({ kind: exports_external.literal("prefer_framing"), framing: exports_external.enum(["portrait", "upper body", "full body", "wide", "close-up"]) }).strict(),
+  exports_external.object({ kind: exports_external.literal("auto_render_document"), render: exports_external.boolean().default(true).optional() }).strict(),
+  exports_external.object({ kind: exports_external.literal("skip_image_generation"), skip: exports_external.boolean().default(true).optional() }).strict(),
+  exports_external.object({ kind: exports_external.literal("prefer_style"), styleId: id }).strict()
+]);
+var draftShape = {
+  id,
+  name: exports_external.string().trim().min(1).max(80),
+  enabled: exports_external.boolean(),
+  priority: exports_external.number().int().min(0).max(100),
+  when: RuleConditionSchema,
+  then: RuleActionSchema
+};
 var PresentationRuleDraftSchema = exports_external.object(draftShape).strict().refine((r) => r.when.kind !== "template" || r.then.kind !== "prefer_template" || r.when.templateId !== r.then.templateId, "Choose a different preferred template, or another condition.");
-var PresentationRuleSchema = exports_external.object({ ...draftShape, scope: exports_external.enum(["user", "chat"]), savedOrder: exports_external.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER) }).strict();
-var PresentationRuleDocumentSchema = exports_external.object({ version: exports_external.literal(1), revision: exports_external.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), rules: exports_external.array(PresentationRuleSchema).max(12).refine((rows) => new Set(rows.map((r) => r.id)).size === rows.length, "Rule IDs must be distinct.") }).strict();
-var PresentationRuleCatalogSchema = exports_external.object({ user: PresentationRuleDocumentSchema.nullable(), chat: PresentationRuleDocumentSchema.nullable(), diagnostics: exports_external.array(exports_external.string().max(300)).max(4) }).strict();
-var PresentationRuleTraceSchema = exports_external.object({ matchedRuleIds: exports_external.array(id).max(24), summary: exports_external.string().max(4000) }).strict();
-var PresentationRuleRequestSchema = exports_external.object({ type: exports_external.literal("vn_presentation_rules"), version: exports_external.literal(1), requestId: id, chatId: id.optional(), action: exports_external.enum(["list", "save", "delete", "toggle"]), scope: exports_external.enum(["user", "chat"]).optional(), expectedRevision: exports_external.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(), rule: PresentationRuleDraftSchema.optional(), id: id.optional(), enabled: exports_external.boolean().optional() }).strict().superRefine((r, ctx) => {
+var PresentationRuleSchema = exports_external.object({
+  ...draftShape,
+  scope: exports_external.enum(["user", "chat"]),
+  savedOrder: exports_external.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+}).strict();
+var PresentationRuleDocumentSchema = exports_external.object({
+  version: exports_external.literal(1),
+  revision: exports_external.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  rules: exports_external.array(PresentationRuleSchema).max(48).refine((rows) => new Set(rows.map((r) => r.id)).size === rows.length, "Rule IDs must be distinct.")
+}).strict();
+var PresentationRuleCatalogSchema = exports_external.object({
+  user: PresentationRuleDocumentSchema.nullable(),
+  chat: PresentationRuleDocumentSchema.nullable(),
+  diagnostics: exports_external.array(exports_external.string().max(300)).max(8)
+}).strict();
+var PresentationRuleTraceSchema = exports_external.object({
+  matchedRuleIds: exports_external.array(id).max(48),
+  summary: exports_external.string().max(4000)
+}).strict();
+var PresentationRuleRequestSchema = exports_external.object({
+  type: exports_external.literal("vn_presentation_rules"),
+  version: exports_external.literal(1),
+  requestId: id,
+  chatId: id.optional(),
+  action: exports_external.enum(["list", "save", "delete", "toggle"]),
+  scope: exports_external.enum(["user", "chat"]).optional(),
+  expectedRevision: exports_external.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+  rule: PresentationRuleDraftSchema.optional(),
+  id: id.optional(),
+  enabled: exports_external.boolean().optional()
+}).strict().superRefine((r, ctx) => {
   if (r.action === "list")
     return;
   if (!r.scope || r.expectedRevision === undefined)
@@ -19233,11 +19434,292 @@ var PresentationRuleRequestSchema = exports_external.object({ type: exports_exte
   if (r.action === "toggle" && r.enabled === undefined)
     ctx.addIssue({ code: "custom", message: "Choose enabled or disabled." });
 });
+function normalizeText(value) {
+  return value?.trim().toLowerCase().replace(/\s+/g, " ") ?? "";
+}
+function nameMatches(candidate, target, aliases) {
+  const normCand = normalizeText(candidate);
+  const normTarget = normalizeText(target);
+  if (!normCand || !normTarget)
+    return false;
+  if (normCand === normTarget)
+    return true;
+  if (aliases) {
+    for (const [canonical, list] of Object.entries(aliases)) {
+      const normCanon = normalizeText(canonical);
+      const isTarget = normTarget === normCanon || list.some((a) => normalizeText(a) === normTarget);
+      if (isTarget) {
+        if (normCand === normCanon || list.some((a) => normalizeText(a) === normCand))
+          return true;
+      }
+    }
+  }
+  return false;
+}
+function matchCondition(condition, input2) {
+  switch (condition.kind) {
+    case "dialogue":
+      return input2.isDialogue;
+    case "location_changed":
+      return input2.locationChanged;
+    case "scene_opening":
+      return Boolean(input2.isSceneOpening);
+    case "template":
+      return condition.templateId === input2.templateId;
+    case "subject": {
+      if (!input2.subjects?.length)
+        return false;
+      const targetNorm = normalizeText(condition.name);
+      return input2.subjects.some((s) => {
+        if (s.kind !== condition.subjectKind)
+          return false;
+        const candNorm = normalizeText(s.name);
+        if (condition.partialMatch && s.kind === "place") {
+          return candNorm.includes(targetNorm) || targetNorm.includes(candNorm);
+        }
+        if (s.kind === "npc") {
+          return nameMatches(s.name, condition.name, input2.characterAliases);
+        }
+        return candNorm === targetNorm;
+      });
+    }
+    case "time_of_day": {
+      if (condition.value === "any")
+        return Boolean(input2.timeOfDay?.trim());
+      return normalizeText(input2.timeOfDay) === normalizeText(condition.value);
+    }
+    case "weather": {
+      const normW = normalizeText(input2.weather);
+      const targetW = normalizeText(condition.value);
+      return Boolean(normW && (normW === targetW || normW.includes(targetW) || targetW.includes(normW)));
+    }
+    case "ambient": {
+      const normA = normalizeText(input2.ambient);
+      const targetA = normalizeText(condition.value);
+      return Boolean(normA && (normA === targetA || normA.includes(targetA) || targetA.includes(normA)));
+    }
+    case "cast_present": {
+      if (!input2.cast?.length)
+        return false;
+      return input2.cast.some((member) => nameMatches(member, condition.name, input2.characterAliases));
+    }
+    case "cast_count": {
+      const actual = input2.castCount ?? input2.cast?.length ?? 0;
+      if (condition.op === "gte")
+        return actual >= condition.count;
+      if (condition.op === "eq")
+        return actual === condition.count;
+      return actual <= condition.count;
+    }
+    case "speaker_name": {
+      if (!input2.speakerName?.trim())
+        return false;
+      return nameMatches(input2.speakerName, condition.name, input2.characterAliases);
+    }
+    case "outfit_matches": {
+      const normO = normalizeText(input2.activeOutfit);
+      const targetO = normalizeText(condition.outfit);
+      return Boolean(normO && (normO.includes(targetO) || targetO.includes(normO)));
+    }
+    case "document_revealed": {
+      if (!input2.revealedDocumentKinds?.length)
+        return false;
+      if (!condition.documentKind || condition.documentKind === "any")
+        return true;
+      const targetKind = normalizeText(condition.documentKind);
+      return input2.revealedDocumentKinds.some((k) => normalizeText(k) === targetKind);
+    }
+    case "shot_intent":
+      return normalizeText(input2.shotIntent) === normalizeText(condition.intent);
+    case "prose_contains": {
+      if (!input2.paragraphText)
+        return false;
+      if (condition.isRegex) {
+        if (findReDoSHazard(condition.pattern))
+          return false;
+        try {
+          const re = new RegExp(condition.pattern, "i");
+          return re.test(input2.paragraphText);
+        } catch {
+          return false;
+        }
+      }
+      return normalizeText(input2.paragraphText).includes(normalizeText(condition.pattern));
+    }
+    case "rpg_state": {
+      if (!input2.rpgState)
+        return false;
+      const val = input2.rpgState[condition.key];
+      if (val === undefined)
+        return false;
+      if (!condition.op || condition.op === "is")
+        return String(val).toLowerCase() === String(condition.value ?? "").toLowerCase();
+      if (condition.op === "not")
+        return String(val).toLowerCase() !== String(condition.value ?? "").toLowerCase();
+      const numVal = Number(val);
+      const targetNum = Number(condition.value);
+      if (isNaN(numVal) || isNaN(targetNum))
+        return false;
+      if (condition.op === "gte")
+        return numVal >= targetNum;
+      if (condition.op === "lte")
+        return numVal <= targetNum;
+      return false;
+    }
+    case "tracker_field": {
+      if (!input2.trackerFields)
+        return false;
+      const val = input2.trackerFields[condition.field];
+      if (val === undefined)
+        return false;
+      if (!condition.value)
+        return Boolean(val);
+      return String(val).toLowerCase() === condition.value.toLowerCase();
+    }
+    case "all":
+      return condition.conditions.every((c) => matchCondition(c, input2));
+    case "any":
+      return condition.conditions.some((c) => matchCondition(c, input2));
+    case "not":
+      return !matchCondition(condition.condition, input2);
+    default:
+      return false;
+  }
+}
+function evaluatePresentationRules(input2, rules) {
+  const decision = { matchedRuleIds: [], diagnostics: [] };
+  const ordered = [...rules].sort((a, b) => Number(a.scope === "chat") - Number(b.scope === "chat") || a.priority - b.priority || a.savedOrder - b.savedOrder || a.id.localeCompare(b.id));
+  for (const rule of ordered) {
+    if (!rule.enabled)
+      continue;
+    if (!matchCondition(rule.when, input2))
+      continue;
+    decision.matchedRuleIds.push(rule.id);
+    switch (rule.then.kind) {
+      case "hold_background":
+        decision.holdBackground = true;
+        decision.holdBackgroundMode = rule.then.mode ?? "stage_backdrop";
+        break;
+      case "limit_music":
+        decision.musicLevel = rule.then.level;
+        decision.selectedMusicRuleId = rule.id;
+        decision.selectedMusicScope = rule.scope;
+        break;
+      case "limit_effects":
+        decision.effectIntensity = rule.then.intensity;
+        decision.selectedEffectRuleId = rule.id;
+        decision.selectedEffectScope = rule.scope;
+        break;
+      case "prefer_aspect_ratio":
+        decision.preferredAspectRatio = rule.then.ratio;
+        break;
+      case "prefer_cast_mode":
+        decision.preferredCastMode = rule.then.mode;
+        break;
+      case "prefer_framing":
+        decision.preferredFraming = rule.then.framing;
+        break;
+      case "auto_render_document":
+        decision.autoRenderDocument = rule.then.render ?? true;
+        break;
+      case "skip_image_generation":
+        decision.skipImageGeneration = rule.then.skip ?? true;
+        break;
+      case "prefer_style":
+        if (input2.allowStyleOverride !== true) {
+          decision.diagnostics.push(`${rule.name}: Style override disabled globally; skipped.`);
+        } else {
+          decision.preferredStyleId = rule.then.styleId;
+          decision.selectedStyleRuleId = rule.id;
+          decision.selectedStyleScope = rule.scope;
+        }
+        break;
+      case "prefer_template":
+        if (!input2.enabledTemplateIds.includes(rule.then.templateId)) {
+          decision.diagnostics.push(`${rule.name}: preferred template is disabled or unavailable; skipped.`);
+        } else {
+          decision.preferredTemplateId = rule.then.templateId;
+          decision.selectedRuleId = rule.id;
+          decision.selectedScope = rule.scope;
+        }
+        break;
+    }
+  }
+  return decision;
+}
 function describePresentationCondition(condition, name = (id2) => id2) {
-  return condition.kind === "dialogue" ? "During attributed dialogue" : condition.kind === "location_changed" ? "At a confirmed location change" : condition.kind === "template" ? `When ${name(condition.templateId)} would otherwise be chosen` : condition.subjectKind === "npc" ? `When ${condition.name.trim()} is the selected picture subject` : condition.subjectKind === "place" ? `At ${condition.name.trim()}` : `When ${condition.name.trim()} is described in the picture paragraph`;
+  switch (condition.kind) {
+    case "dialogue":
+      return "During attributed dialogue";
+    case "location_changed":
+      return "At a confirmed location change";
+    case "scene_opening":
+      return "At the opening of a scene or turn";
+    case "template":
+      return `When ${name(condition.templateId)} would otherwise be chosen`;
+    case "subject":
+      if (condition.subjectKind === "npc")
+        return `When ${condition.name.trim()} is the picture subject`;
+      if (condition.subjectKind === "place")
+        return `At ${condition.name.trim()}${condition.partialMatch ? " (partial match)" : ""}`;
+      return `When ${condition.name.trim()} is described in the picture paragraph`;
+    case "time_of_day":
+      return `During ${condition.value}`;
+    case "weather":
+      return `When weather is ${condition.value}`;
+    case "ambient":
+      return `When ambient audio is ${condition.value}`;
+    case "cast_present":
+      return `When ${condition.name} is present in the scene`;
+    case "cast_count":
+      return `When cast size ${condition.op === "gte" ? "≥" : condition.op === "lte" ? "≤" : "="} ${condition.count}`;
+    case "speaker_name":
+      return `When ${condition.name} is speaking`;
+    case "outfit_matches":
+      return `When outfit matches ${condition.outfit}`;
+    case "document_revealed":
+      return condition.documentKind ? `When a ${condition.documentKind} is revealed` : "When any document is revealed";
+    case "shot_intent":
+      return `When shot intent is ${condition.intent}`;
+    case "prose_contains":
+      return `When prose contains ${condition.isRegex ? `/${condition.pattern}/` : `"${condition.pattern}"`}`;
+    case "rpg_state":
+      return `When RPG state [${condition.key}] ${condition.op ?? "is"} ${condition.value ?? "set"}`;
+    case "tracker_field":
+      return `When tracker field [${condition.field}] ${condition.value ? `= ${condition.value}` : "is set"}`;
+    case "all":
+      return condition.conditions.map((c) => describePresentationCondition(c, name)).join(" AND ");
+    case "any":
+      return condition.conditions.map((c) => describePresentationCondition(c, name)).join(" OR ");
+    case "not":
+      return `NOT (${describePresentationCondition(condition.condition, name)})`;
+    default:
+      return "When condition matches";
+  }
 }
 function describePresentationAction(action, name = (id2) => id2) {
-  return action.kind === "hold_background" ? "keep the background until the scene changes" : action.kind === "prefer_template" ? `prefer ${name(action.templateId)}` : action.kind === "limit_music" ? action.level === "quiet" ? "lower background music to 35% of its saved volume" : "mute background music" : action.intensity === "gentle" ? "limit one-shot effects to Gentle" : "disable one-shot effects";
+  switch (action.kind) {
+    case "hold_background":
+      return action.mode === "skip_generation" ? "hold background & skip redundant image generation" : "keep the background until the scene changes";
+    case "prefer_template":
+      return `prefer ${name(action.templateId)}`;
+    case "limit_music":
+      return action.level === "quiet" ? "lower background music to 35% of its saved volume" : "mute background music";
+    case "limit_effects":
+      return action.intensity === "gentle" ? "limit one-shot effects to Gentle" : "disable one-shot effects";
+    case "prefer_aspect_ratio":
+      return `prefer aspect ratio ${action.ratio}`;
+    case "prefer_cast_mode":
+      return `prefer cast mode ${action.mode === "layered" ? "Layered Sprites" : "Illustrated Scene"}`;
+    case "prefer_framing":
+      return `prefer ${action.framing} framing`;
+    case "auto_render_document":
+      return "auto-render revealed document";
+    case "skip_image_generation":
+      return "skip image generation for this beat";
+    case "prefer_style":
+      return `prefer style ${action.styleId} (optional)`;
+  }
 }
 
 // src/shared/story-dna.ts
@@ -21992,7 +22474,13 @@ var VisualCueSchema = exports_external.object({
   promptDelta: exports_external.string().trim().default(""),
   assetJobId: IdentifierSchema,
   bgm: exports_external.string().trim().nullable().optional(),
-  sfx: exports_external.string().trim().nullable().optional()
+  sfx: exports_external.string().trim().nullable().optional(),
+  preferredStyleId: exports_external.string().trim().min(1).max(128).optional(),
+  preferredAspectRatio: exports_external.enum(["16:9", "9:16", "1:1", "3:2", "4:3", "4:5"]).optional(),
+  preferredCastMode: exports_external.enum(["layered", "illustrated_scene"]).optional(),
+  preferredFraming: exports_external.enum(["portrait", "upper body", "full body", "wide", "close-up"]).optional(),
+  autoRenderDocument: exports_external.boolean().optional(),
+  skipImageGeneration: exports_external.boolean().optional()
 }).strict();
 var AssetJobStatusSchema = exports_external.enum([
   "queued",
@@ -24167,137 +24655,6 @@ var sceneImageCandidatesFor = (asset) => {
 var sceneImageUrlFor = (asset) => {
   return sceneImageCandidatesFor(asset)[0] ?? null;
 };
-// src/shared/display-rules.ts
-var MAX_DISPLAY_RULE_PATTERN = 1000;
-function findReDoSHazard(source) {
-  let inCharacterClass = false;
-  let afterOpenParen = false;
-  const stack = [];
-  let closed = null;
-  let previousWasQuantifier = false;
-  for (let index = 0;index < source.length; index += 1) {
-    const char = source[index];
-    if (inCharacterClass) {
-      if (char === "\\")
-        index += 1;
-      else if (char === "]")
-        inCharacterClass = false;
-      continue;
-    }
-    if (char === "\\") {
-      index += 1;
-      previousWasQuantifier = false;
-      closed = null;
-      continue;
-    }
-    if (char === "[") {
-      inCharacterClass = true;
-      previousWasQuantifier = false;
-      closed = null;
-      continue;
-    }
-    if (char === "(") {
-      stack.push({ hasQuantifier: false, hasAlternation: false });
-      afterOpenParen = true;
-      closed = null;
-      previousWasQuantifier = false;
-      continue;
-    }
-    if (char === ")") {
-      closed = stack.pop() ?? null;
-      if (closed?.hasQuantifier && stack.at(-1))
-        stack.at(-1).hasQuantifier = true;
-      afterOpenParen = false;
-      previousWasQuantifier = false;
-      continue;
-    }
-    if (char === "|") {
-      const group = stack.at(-1);
-      if (group)
-        group.hasAlternation = true;
-      previousWasQuantifier = false;
-      continue;
-    }
-    const braceMatch = char === "{" ? /^\{\d+(?:,\d*)?\}/.exec(source.slice(index)) : null;
-    const isQuantifier = char === "+" || char === "*" || char === "?" || braceMatch !== null;
-    if (isQuantifier) {
-      const groupModifier = char === "?" && afterOpenParen;
-      const lazinessMarker = char === "?" && previousWasQuantifier;
-      if (!groupModifier && !lazinessMarker) {
-        if (closed && (closed.hasQuantifier || closed.hasAlternation)) {
-          return "Repeated group contains repetition or alternation, which can freeze the reader with catastrophic backtracking. Simplify or unroll the pattern.";
-        }
-        const parent = stack.at(-1);
-        if (parent)
-          parent.hasQuantifier = true;
-      }
-      if (braceMatch)
-        index += braceMatch[0].length - 1;
-      previousWasQuantifier = true;
-      afterOpenParen = false;
-      closed = null;
-      continue;
-    }
-    previousWasQuantifier = false;
-    afterOpenParen = false;
-    closed = null;
-  }
-  return null;
-}
-function compileDisplayRules(input2) {
-  const rules = [], issues = [];
-  if ((input2?.length ?? 0) > 20000)
-    return { rules, issues: [{ line: 0, message: "Display rule source is limited to 20,000 characters." }] };
-  for (const [index, line] of (input2 ?? "").split(/\r?\n/).entries()) {
-    if (rules.length >= 128) {
-      issues.push({ line: index + 1, message: "Display rules are limited to 128 rows." });
-      break;
-    }
-    const text = line.trim();
-    if (!text || text.startsWith("#") || text.startsWith("//"))
-      continue;
-    const issue2 = (message) => issues.push({ line: index + 1, message });
-    let source, flags = "g", replacement;
-    if (text.startsWith("/")) {
-      const match = text.match(/^\/(.+)\/([a-z]*)\s*=>\s*(.*)$/);
-      if (!match) {
-        issue2("Use /pattern/flags => replacement.");
-        continue;
-      }
-      source = match[1];
-      flags = match[2] || "g";
-      replacement = match[3] ?? "";
-    } else {
-      const separator = text.indexOf("=>");
-      if (separator < 0) {
-        issue2("Add => between the pattern and replacement.");
-        continue;
-      }
-      source = text.slice(0, separator).trim();
-      replacement = text.slice(separator + 2).trim();
-      if (!source) {
-        issue2("Enter a pattern before =>.");
-        continue;
-      }
-    }
-    if (source.length > MAX_DISPLAY_RULE_PATTERN) {
-      issue2(`Display rule patterns are limited to ${MAX_DISPLAY_RULE_PATTERN} characters.`);
-      continue;
-    }
-    const hazard = findReDoSHazard(source);
-    if (hazard) {
-      issue2(hazard);
-      continue;
-    }
-    try {
-      rules.push({ pattern: new RegExp(source, flags), replacement, line: index + 1 });
-    } catch {
-      issue2("Invalid pattern or flags. Check brackets, escapes and repeated flags.");
-    }
-  }
-  return { rules, issues };
-}
-
 // src/frontend/stage/display-rule-executor.ts
 var DISPLAY_EXECUTION_LIMIT = 1e5;
 function displayWorkerProgram() {
@@ -24305,11 +24662,11 @@ function displayWorkerProgram() {
   host.onmessage = ({ data }) => {
     let text = data.text;
     const issues = [];
-    try {
-      for (const rule of data.rules) {
+    for (const rule of data.rules) {
+      try {
         const pattern = new RegExp(rule.source, rule.flags);
         let size = 0, end = 0;
-        text = text.replace(pattern, (...args) => {
+        const nextText = text.replace(pattern, (...args) => {
           const groups = typeof args.at(-1) === "object" ? args.at(-1) : undefined;
           const offset = args.at(groups ? -3 : -2), original = args.at(groups ? -2 : -1);
           const captures = args.slice(1, groups ? -3 : -2);
@@ -24351,12 +24708,12 @@ function displayWorkerProgram() {
           append(rule.replacement.slice(cursor));
           return expanded;
         });
-        if (text.length > limit)
+        if (nextText.length > limit)
           throw new Error("output-limit");
+        text = nextText;
+      } catch (error61) {
+        issues.push({ line: Number.isInteger(rule.line) ? rule.line : 0, message: error61 instanceof Error && error61.message === "output-limit" ? "Display rule output exceeded the 100,000-character limit." : "A display rule could not run." });
       }
-    } catch (error61) {
-      text = data.text;
-      issues.push({ line: 0, message: error61 instanceof Error && error61.message === "output-limit" ? "Display rule output exceeded the 100,000-character limit." : "A display rule could not run." });
     }
     host.postMessage({ text, issues, generation: data.generation });
   };
@@ -24893,6 +25250,7 @@ var SETTINGS_FIELD_PAGES = {
   systemPromptProfiles: "context",
   activeSystemPromptProfileId: "context",
   enabled: "home",
+  presentationRulesAllowStyleOverride: "rules",
   debugLogging: "storage",
   showReplyCost: "reading",
   customCss: "css",
@@ -42956,6 +43314,7 @@ var DEFAULT_CONFIG = {
   dynamicImageTemplates: false,
   defaultImageTemplateId: "portrait",
   imageTemplates: BUILTIN_IMAGE_TEMPLATES.map((template) => ({ ...template })),
+  presentationRulesAllowStyleOverride: false,
   imagePromptEngineVersion: 2,
   ideogramPromptMode: "auto",
   flux3KleinPromptMode: "auto",
@@ -49259,7 +49618,49 @@ dialog p{margin:12px 0 20px}
 `;
 
 // src/frontend/settings/presentation-rules.ts
-var CSS2 = `:host{display:block;color:var(--set-text,var(--vn-shell-text,#eee));font:15px/1.5 var(--lumiverse-font-family,var(--vn-shell-family,system-ui,sans-serif));min-width:0}*{box-sizing:border-box}[hidden]{display:none!important}p{line-height:1.5;margin:8px 0;overflow-wrap:anywhere}small{display:block;color:var(--set-muted,var(--vn-shell-muted,#bbc));line-height:1.5}label{display:block;margin:12px 0}label>span{display:block;margin-bottom:5px;font-weight:600}button,input,select{font:inherit;color:inherit;max-width:100%}button,select,input{min-height:44px;border:1px solid var(--set-border,var(--vn-shell-border,#646575));border-radius:9px;background:var(--set-field,var(--vn-shell-field,#181925));padding:9px 12px}input,select{width:100%;font-size:16px}button{cursor:pointer}button:disabled{opacity:.5;cursor:default}button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--set-accent,var(--vn-shell-accent,#c1b0eb));outline-offset:2px}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.row>*{flex:1 1 auto}.rule{padding:12px;border:1px solid var(--set-border,var(--vn-shell-border,#646575));border-radius:12px;margin:10px 0}.rule h4{margin:0 0 5px;font-size:1em;overflow-wrap:anywhere}.rule .row{margin-top:10px}.check{display:flex;gap:9px;align-items:center}.check input{width:20px;min-height:20px}.check span{margin:0}summary{min-height:44px;cursor:pointer;display:flex;align-items:center;gap:8px;font-weight:600}summary::before{content:"▸";color:var(--set-accent,var(--vn-shell-accent,#c1b0eb))}details[open]>summary::before{content:"▾"}h4{margin:8px 0}fieldset{border:0;padding:0;margin:0;min-width:0}form{margin-top:16px;padding-top:8px;border-top:1px solid var(--set-border,var(--vn-shell-border,#646575))}[data-preference-preview]{padding:12px;border-left:3px solid var(--set-accent,var(--vn-shell-accent,#c1b0eb));background:var(--set-surface,transparent);white-space:pre-wrap}[data-preference-status]{color:var(--set-accent,var(--vn-shell-accent,#c1b0eb));white-space:pre-wrap}[data-preference-save]{border-color:var(--set-accent,var(--vn-shell-accent,#c1b0eb))}`;
+var CSS2 = `
+:host { display:block; color:var(--set-text,var(--vn-shell-text,#eee)); font:15px/1.5 var(--lumiverse-font-family,var(--vn-shell-family,system-ui,sans-serif)); min-width:0; }
+* { box-sizing:border-box; }
+[hidden] { display:none!important; }
+p { line-height:1.5; margin:8px 0; overflow-wrap:anywhere; }
+small { display:block; color:var(--set-muted,var(--vn-shell-muted,#bbc)); line-height:1.5; }
+label { display:block; margin:12px 0; }
+label > span { display:block; margin-bottom:5px; font-weight:600; }
+button, input, select { font:inherit; color:inherit; max-width:100%; }
+button, select, input { min-height:44px; border:1px solid var(--set-border,var(--vn-shell-border,#646575)); border-radius:9px; background:var(--set-field,var(--vn-shell-field,#181925)); padding:9px 12px; }
+input, select { width:100%; font-size:16px; }
+button { cursor:pointer; }
+button:disabled { opacity:.5; cursor:default; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline:2px solid var(--set-accent,var(--vn-shell-accent,#c1b0eb)); outline-offset:2px; }
+.row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.row > * { flex:1 1 auto; }
+.rule { padding:12px; border:1px solid var(--set-border,var(--vn-shell-border,#646575)); border-radius:12px; margin:10px 0; }
+.rule h4 { margin:0 0 5px; font-size:1em; overflow-wrap:anywhere; }
+.rule .row { margin-top:10px; }
+.check { display:flex; gap:9px; align-items:center; }
+.check input { width:20px; min-height:20px; }
+.check span { margin:0; }
+.badge { display:inline-block; font-size:0.75em; padding:2px 7px; border-radius:6px; font-weight:600; text-transform:uppercase; margin-left:6px; }
+.badge-chat { background:color-mix(in srgb,var(--set-accent,#c1b0eb) 25%,transparent); color:var(--set-accent,#c1b0eb); }
+.badge-user { background:color-mix(in srgb,#888 25%,transparent); color:#ccc; }
+.badge-conflict { background:color-mix(in srgb,#f87171 25%,transparent); color:#f87171; }
+.badge-warning { background:color-mix(in srgb,#fbbf24 25%,transparent); color:#fbbf24; }
+.sim-fired { color:#4ade80; font-weight:600; }
+.sim-outranked { color:#fbbf24; }
+.sim-missed { color:#94a3b8; }
+summary { min-height:44px; cursor:pointer; display:flex; align-items:center; gap:8px; font-weight:600; }
+summary::before { content:"▸"; color:var(--set-accent,var(--vn-shell-accent,#c1b0eb)); }
+details[open] > summary::before { content:"▾"; }
+h4 { margin:8px 0; }
+fieldset { border:0; padding:0; margin:0; min-width:0; }
+form { margin-top:16px; padding-top:8px; border-top:1px solid var(--set-border,var(--vn-shell-border,#646575)); }
+[data-preference-preview] { padding:12px; border-left:3px solid var(--set-accent,var(--vn-shell-accent,#c1b0eb)); background:var(--set-surface,transparent); white-space:pre-wrap; }
+[data-preference-status] { color:var(--set-accent,var(--vn-shell-accent,#c1b0eb)); white-space:pre-wrap; }
+[data-preference-save] { border-color:var(--set-accent,var(--vn-shell-accent,#c1b0eb)); }
+.hub-pillars { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; margin-block:14px; }
+.hub-pillar { padding:12px; border:1px solid var(--set-border,#444); border-radius:10px; background:var(--set-field,#14151e); font-size:0.9em; }
+.hub-pillar strong { display:block; color:var(--set-accent,#c1b0eb); margin-bottom:4px; font-size:1.05em; }
+`;
 
 class PresentationRulesPanel {
   getChat;
@@ -49274,14 +49675,222 @@ class PresentationRulesPanel {
   timer;
   editingId = "";
   dirty = false;
-  previewed = false;
   destroyed = false;
-  constructor(getChat, send) {
+  currentTurnPlan = null;
+  onSaveConfigCallback;
+  constructor(getChat, send, onSaveConfig) {
     this.getChat = getChat;
     this.send = send;
+    this.onSaveConfigCallback = onSaveConfig;
     this.host.dataset.presentationRules = "";
     this.root = this.host.attachShadow({ mode: "open" });
-    this.root.innerHTML = `<style>${CSS2}</style><p>Teach the reader which template, background, effect level or music volume you prefer in a situation.</p><small>Optional. Applies to future reply preparations only. No extra images or model calls; appearance guidance and picture budgets stay intact.</small><label><span>Applies to</span><select data-scope aria-label="Preference scope"><option value="chat">This chat</option><option value="user">All my chats</option></select></label><div class="row"><button type="button" data-refresh>Refresh preferences</button><button type="button" data-new>New preference</button></div><p data-preference-status role="status" aria-live="polite"></p><div data-list></div><details data-examples><summary>Start from an example</summary><div class="row"><button type="button" data-example="location_changed">Environment on arrival</button><button type="button" data-example="dialogue">Portrait during dialogue</button></div><small>Examples open a draft. Preview and save to enable one.</small></details><form hidden><h4 data-preference-heading>New preference</h4><fieldset><label><span>Name</span><input data-preference-name aria-label="Preference name" maxlength="80" autocomplete="off"></label><label><span>When</span><select data-condition aria-label="Preference condition"><option value="dialogue">During attributed dialogue</option><option value="location_changed">At a confirmed location change</option><option value="template">When a template would otherwise be chosen</option><option value="npc">When an NPC is the selected picture subject</option><option value="place">At a named location</option><option value="object">When an item is described</option></select></label><label data-source-label hidden><span>Original template</span><select data-source aria-label="Original template"></select></label><label data-subject-label hidden><span>Subject name</span><input data-subject-name aria-label="Subject name" maxlength="256" autocomplete="off"><small data-subject-help></small></label><label><span>Then</span><select data-action aria-label="Preference action"><option value="prefer_template">Prefer an image template</option><option value="limit_effects">Limit stage effects</option><option value="limit_music">Quiet background music</option><option value="hold_background">Keep the current background</option></select></label><label data-target-label><span>Prefer template</span><select data-target aria-label="Preferred template"></select></label><label data-effect-label hidden><span>Effect limit</span><select data-effect-limit aria-label="Effect limit"><option value="gentle">Gentle effects</option><option value="off">No one-shot effects</option></select><small>Dialogue, location and item conditions can match without a picture. NPC and template conditions need an assigned picture cue. Global effects and OS reduced-motion settings can reduce this further. Text effects, weather overlays and audio keep their own controls; danger pulses become a static vignette.</small></label><label data-music-label hidden><span>Music level</span><select data-music-level aria-label="Music level"><option value="quiet">Quiet (35% of saved volume)</option><option value="mute">Mute music</option></select><small>Only background music is reduced. Speech and sound effects keep their own volume. Normal music volume returns outside matching paragraphs; volume changes keep the track’s position. NPC/template conditions need an assigned picture cue.</small></label><label class="check"><input data-preference-enabled type="checkbox" checked><span>Enabled after saving</span></label><details><summary>Priority and precedence</summary><small>Template, effect and music preferences resolve separately. This chat overrides All my chats. Within a scope, higher priority wins; the last saved rule breaks ties. Conditions use the planner's original choice and do not chain.</small><label><span>Priority (0–100)</span><input data-priority type="number" min="0" max="100" value="50" aria-label="Preference priority"></label></details><p data-preference-preview hidden></p><div class="row"><button type="button" data-preference-preview-button>Preview preference</button><button type="submit" data-preference-save disabled>Save preference</button><button type="button" data-preference-discard>Discard draft</button></div></fieldset></form>`;
+    this.root.innerHTML = `<style>${CSS2}</style>
+      <div class="hub-pillars">
+        <div class="hub-pillar">
+          <strong>1. Scene Direction</strong>
+          <span>Presentation Rules, Smart Framing, and Optional Style Overrides.</span>
+        </div>
+        <div class="hub-pillar">
+          <strong>2. Text & Prose Polish</strong>
+          <span>Display Regex Rules, Spoilers, and Character Formatting.</span>
+        </div>
+        <div class="hub-pillar">
+          <strong>3. Live Cards & Trackers</strong>
+          <span>Panel Dock, SimTracker Mappings, and Live Badges.</span>
+        </div>
+      </div>
+
+      <label class="check" style="margin-block:12px;padding:8px 12px;border:1px solid var(--set-border,#444);border-radius:8px;background:var(--set-field,#181925)">
+        <input data-allow-style-override type="checkbox">
+        <span><strong>Allow rules to override active Shared Style</strong> (strictly optional, disabled by default)</span>
+      </label>
+
+      <p>Direct the stage camera, templates, backgrounds, audio levels, and visual styles based on live story context.</p>
+      <small>Applies during turn planning. Respects model dialects and character identity authorities.</small>
+
+      <label><span>Applies to</span>
+        <select data-scope aria-label="Preference scope">
+          <option value="chat">This chat</option>
+          <option value="user">All my chats</option>
+        </select>
+      </label>
+
+      <div class="row">
+        <button type="button" data-refresh>Refresh preferences</button>
+        <button type="button" data-new>New direction rule</button>
+        <button type="button" data-test-scene>⚡ Test Against Current Scene</button>
+      </div>
+
+      <p data-preference-status role="status" aria-live="polite"></p>
+      <div data-sim-results hidden style="margin-block:12px;padding:12px;border:1px solid var(--set-border,#444);border-radius:10px;background:var(--set-field,#14151e)"></div>
+      <div data-list></div>
+
+      <details data-examples>
+        <summary>Remixable starter packs</summary>
+        <div class="row" style="margin-top:8px">
+          <button type="button" data-pack="noir_rain">\uD83C\uDF27️ Noir Rain</button>
+          <button type="button" data-pack="flashback">\uD83D\uDD6F️ Flashback & Memory</button>
+          <button type="button" data-pack="doc_focus">\uD83D\uDCDC Document & Clue Focus</button>
+          <button type="button" data-pack="action_16_9">\uD83C\uDFAC Action Widescreen 16:9</button>
+          <button type="button" data-pack="two_shot">\uD83D\uDC65 Two-Shot Dialogue</button>
+          <button type="button" data-pack="manga_climax">\uD83D\uDCA5 Manga Climax</button>
+        </div>
+        <small style="margin-top:6px">Click any pack to pre-fill a tested direction rule. Preview and save to add it.</small>
+      </details>
+
+      <form hidden>
+        <h4 data-preference-heading>New Scene Direction Rule</h4>
+        <fieldset>
+          <label><span>Rule Name</span><input data-preference-name aria-label="Rule name" maxlength="80" autocomplete="off"></label>
+
+          <label><span>When (Condition)</span>
+            <select data-condition aria-label="Rule condition">
+              <optgroup label="Scene & Narrative Beats">
+                <option value="dialogue">During attributed dialogue</option>
+                <option value="location_changed">At a confirmed location change</option>
+                <option value="scene_opening">At scene or turn opening</option>
+                <option value="template">When a template would otherwise be chosen</option>
+              </optgroup>
+              <optgroup label="Subjects & Cast">
+                <option value="npc">When an NPC is the picture subject</option>
+                <option value="place">At a named location (Place)</option>
+                <option value="object">When an item/clue is described</option>
+                <option value="cast_present">When a specific cast member is present</option>
+                <option value="cast_count">When visible cast count matches</option>
+                <option value="speaker_name">When a specific character speaks</option>
+                <option value="outfit_matches">When subject outfit matches</option>
+              </optgroup>
+              <optgroup label="Environment & Atmosphere">
+                <option value="time_of_day">During time of day</option>
+                <option value="weather">When weather matches</option>
+                <option value="ambient">When ambient audio matches</option>
+              </optgroup>
+              <optgroup label="Dramatic & RPG Context">
+                <option value="document_revealed">When a document/clue is revealed</option>
+                <option value="shot_intent">When shot intent matches</option>
+                <option value="prose_contains">When paragraph prose contains text/regex</option>
+                <option value="rpg_state">When RPG state flag matches</option>
+                <option value="tracker_field">When SimTracker field matches</option>
+              </optgroup>
+            </select>
+          </label>
+
+          <label data-source-label hidden><span>Original template</span><select data-source aria-label="Original template"></select></label>
+          <label data-subject-label hidden>
+            <span data-subject-title>Subject Name</span>
+            <input data-subject-name aria-label="Subject name" maxlength="256" autocomplete="off">
+            <small data-subject-help></small>
+          </label>
+          <label class="check" data-partial-match-label hidden>
+            <input data-partial-match type="checkbox">
+            <span>Allow partial substring match (e.g. "Marten House" matches "Marten House - 4th Floor")</span>
+          </label>
+
+          <div data-condition-params hidden>
+            <label data-val-label hidden><span data-val-title>Value</span><input data-cond-val aria-label="Condition value" maxlength="120"></label>
+            <label data-op-label hidden><span>Comparison</span>
+              <select data-cond-op aria-label="Condition operator">
+                <option value="gte">Greater or equal (≥)</option>
+                <option value="eq">Equal (=)</option>
+                <option value="lte">Less or equal (≤)</option>
+              </select>
+            </label>
+          </div>
+
+          <label><span>Then (Action)</span>
+            <select data-action aria-label="Rule action">
+              <optgroup label="Camera & Templates">
+                <option value="prefer_template">Prefer an image template</option>
+                <option value="prefer_aspect_ratio">Prefer aspect ratio</option>
+                <option value="prefer_cast_mode">Prefer cast staging mode</option>
+                <option value="prefer_framing">Prefer camera framing</option>
+              </optgroup>
+              <optgroup label="Stage & Multimedia">
+                <option value="limit_effects">Limit stage effects</option>
+                <option value="limit_music">Quiet background music</option>
+                <option value="hold_background">Hold background</option>
+              </optgroup>
+              <optgroup label="Documents & Generation Budget">
+                <option value="auto_render_document">Auto-render revealed document</option>
+                <option value="skip_image_generation">Skip image generation for this beat</option>
+              </optgroup>
+              <optgroup label="Visual Style (Optional)">
+                <option value="prefer_style">Prefer visual style (Optional Style DNA)</option>
+              </optgroup>
+            </select>
+          </label>
+
+          <label data-target-label><span>Prefer template</span><select data-target aria-label="Preferred template"></select></label>
+          <label data-ratio-label hidden><span>Aspect ratio</span>
+            <select data-ratio aria-label="Preferred aspect ratio">
+              <option value="16:9">Widescreen 16:9</option>
+              <option value="9:16">Tall Portrait 9:16</option>
+              <option value="1:1">Square 1:1</option>
+              <option value="3:2">Photo 3:2</option>
+              <option value="4:3">Classic 4:3</option>
+              <option value="4:5">Portrait 4:5</option>
+            </select>
+          </label>
+          <label data-cast-mode-label hidden><span>Cast staging mode</span>
+            <select data-cast-mode aria-label="Preferred cast mode">
+              <option value="layered">Layered Sprites</option>
+              <option value="illustrated_scene">Illustrated Scene</option>
+            </select>
+          </label>
+          <label data-framing-label hidden><span>Camera framing</span>
+            <select data-framing aria-label="Preferred framing">
+              <option value="portrait">Portrait</option>
+              <option value="upper body">Upper body</option>
+              <option value="full body">Full body</option>
+              <option value="wide">Wide</option>
+              <option value="close-up">Close-up</option>
+            </select>
+          </label>
+          <label data-effect-label hidden><span>Effect limit</span>
+            <select data-effect-limit aria-label="Effect limit">
+              <option value="gentle">Gentle effects</option>
+              <option value="off">No one-shot effects</option>
+            </select>
+          </label>
+          <label data-music-label hidden><span>Music level</span>
+            <select data-music-level aria-label="Music level">
+              <option value="quiet">Quiet (35% of saved volume)</option>
+              <option value="mute">Mute music</option>
+            </select>
+          </label>
+          <label data-hold-mode-label hidden><span>Hold background mode</span>
+            <select data-hold-mode aria-label="Hold background mode">
+              <option value="stage_backdrop">Keep stage backdrop until scene changes</option>
+              <option value="skip_generation">Hold background & skip redundant image generation</option>
+            </select>
+          </label>
+          <label data-style-label hidden><span>Visual style ID / Name</span>
+            <input data-style-id aria-label="Style ID" maxlength="120" placeholder="e.g. noir, anime-shinkai, watercolor">
+            <small>Active only when "Allow rules to override active Shared Style" is checked.</small>
+          </label>
+
+          <label class="check"><input data-preference-enabled type="checkbox" checked><span>Enabled after saving</span></label>
+
+          <details>
+            <summary>Priority and Precedence</summary>
+            <small>Higher priority wins; the last saved rule breaks ties. This chat overrides All my chats.</small>
+            <label><span>Priority (0–100)</span><input data-priority type="number" min="0" max="100" value="50" aria-label="Rule priority"></label>
+          </details>
+
+          <p data-preference-preview hidden></p>
+          <div class="row">
+            <button type="submit" data-preference-save>Save rule</button>
+            <button type="button" data-preference-discard>Discard draft</button>
+          </div>
+        </fieldset>
+      </form>`;
+    window.addEventListener("lumiglyphics:presentation-rules-updated", (event) => {
+      const detail = event.detail;
+      if (detail && detail.catalog && (detail.chatId === this.getChat() || detail.scope === "user")) {
+        this.catalog = detail.catalog;
+        this.renderList();
+      }
+    });
     this.el("[data-scope]").onchange = () => {
       if (this.dirty || this.pending) {
         this.el("[data-scope]").value = this.scope;
@@ -49293,23 +49902,28 @@ class PresentationRulesPanel {
       this.renderList();
       this.ensureLoaded();
     };
+    const styleOverrideCheckbox = this.el("[data-allow-style-override]");
+    styleOverrideCheckbox.onchange = () => {
+      if (this.config) {
+        this.config.presentationRulesAllowStyleOverride = styleOverrideCheckbox.checked;
+        this.onSaveConfigCallback?.({ presentationRulesAllowStyleOverride: styleOverrideCheckbox.checked });
+        this.status(styleOverrideCheckbox.checked ? "Style overrides enabled." : "Style overrides disabled globally.");
+        this.renderList();
+      }
+    };
     this.el("[data-refresh]").onclick = () => this.request({ action: "list" });
     this.el("[data-new]").onclick = () => this.begin();
-    this.root.querySelectorAll("[data-example]").forEach((button) => button.onclick = () => this.propose(button.dataset.example === "dialogue" ? "portrait" : "environment", button.dataset.example));
+    this.el("[data-test-scene]").onclick = () => this.runSceneSimulation();
+    this.root.querySelectorAll("[data-pack]").forEach((button) => {
+      button.onclick = () => this.applyStarterPack(button.dataset.pack);
+    });
     this.el("form").oninput = () => {
       this.dirty = true;
-      this.previewed = false;
-      this.el("[data-preference-preview]").hidden = true;
-      this.el("[data-preference-save]").disabled = true;
       this.syncConditionFields();
+      this.preview();
     };
-    this.el("[data-preference-preview-button]").onclick = () => this.preview();
     this.el("form").onsubmit = (e) => {
       e.preventDefault();
-      if (!this.previewed)
-        this.preview();
-      if (!this.previewed)
-        return;
       const draft = this.draft();
       if (draft)
         this.request({ action: "save", scope: this.scope, rule: draft });
@@ -49317,22 +49931,60 @@ class PresentationRulesPanel {
     this.el("[data-preference-discard]").onclick = () => {
       if (!this.pending) {
         this.closeDraft();
-        this.status("Draft discarded. Saved preferences are unchanged.");
+        this.status("Draft discarded. Saved rules are unchanged.");
       }
     };
   }
   el(selector) {
     return this.root.querySelector(selector);
   }
+  guardNavigation(navigate) {
+    if (!this.dirty) {
+      navigate();
+      return true;
+    }
+    if (confirm("You have unsaved Scene Direction changes. Leave without saving?")) {
+      this.closeDraft();
+      navigate();
+      return true;
+    }
+    return false;
+  }
+  setTurnPlan(plan) {
+    this.currentTurnPlan = plan;
+  }
+  setTurn(turn) {
+    this.currentTurnPlan = turn?.plan ?? null;
+  }
   syncConditionFields() {
     const action = this.el("[data-action]").value;
     this.el("[data-target-label]").hidden = action !== "prefer_template";
+    this.el("[data-ratio-label]").hidden = action !== "prefer_aspect_ratio";
+    this.el("[data-cast-mode-label]").hidden = action !== "prefer_cast_mode";
+    this.el("[data-framing-label]").hidden = action !== "prefer_framing";
     this.el("[data-effect-label]").hidden = action !== "limit_effects";
     this.el("[data-music-label]").hidden = action !== "limit_music";
+    this.el("[data-hold-mode-label]").hidden = action !== "hold_background";
+    this.el("[data-style-label]").hidden = action !== "prefer_style";
     const kind = this.el("[data-condition]").value;
     this.el("[data-source-label]").hidden = kind !== "template";
-    this.el("[data-subject-label]").hidden = !["npc", "place", "object"].includes(kind);
-    this.el("[data-subject-help]").textContent = (kind === "npc" ? "Matches this picture’s explicitly named subject, not everyone in the cast, an off-screen speaker or a past mention." : kind === "place" ? "Matches the current scene location at this picture." : "Matches a verified item description in this picture’s paragraph, not every carried or previously mentioned item.") + " Use the full name shown in the story. Case is ignored; aliases and partial names are not matched. This applies your selected presentation preference; it does not change the pictured subject.";
+    const isNamed = ["npc", "place", "object", "cast_present", "speaker_name"].includes(kind);
+    this.el("[data-subject-label]").hidden = !isNamed;
+    this.el("[data-partial-match-label]").hidden = kind !== "place";
+    if (isNamed) {
+      const titles = {
+        npc: "NPC Subject Name",
+        place: "Location Name",
+        object: "Item or Clue Name",
+        cast_present: "Cast Member Name",
+        speaker_name: "Speaker Character Name"
+      };
+      this.el("[data-subject-title]").textContent = titles[kind] ?? "Subject Name";
+    }
+    const needsParam = ["cast_count", "time_of_day", "weather", "ambient", "outfit_matches", "document_revealed", "shot_intent", "prose_contains", "rpg_state", "tracker_field"].includes(kind);
+    this.el("[data-condition-params]").hidden = !needsParam;
+    this.el("[data-val-label]").hidden = !needsParam;
+    this.el("[data-op-label]").hidden = kind !== "cast_count" && kind !== "rpg_state";
   }
   status(text) {
     this.el("[data-preference-status]").textContent = text;
@@ -49345,6 +49997,10 @@ class PresentationRulesPanel {
   }
   setConfig(config2) {
     this.config = config2;
+    const styleCheckbox = this.el("[data-allow-style-override]");
+    if (styleCheckbox) {
+      styleCheckbox.checked = Boolean(config2.presentationRulesAllowStyleOverride);
+    }
     for (const key of ["source", "target"]) {
       const select = this.el(`[data-${key}]`), old = select.value;
       select.replaceChildren();
@@ -49364,18 +50020,16 @@ class PresentationRulesPanel {
         missing.disabled = true;
         select.append(missing);
         select.value = old;
-      } else if (key === "target")
+      } else if (key === "target") {
         select.value = config2.imageTemplates.find((t) => t.enabled)?.id ?? "";
-    }
-    if (this.dirty) {
-      this.previewed = false;
-      this.el("[data-preference-save]").disabled = true;
+      }
     }
     this.renderList();
   }
   ensureLoaded() {
-    if (!this.pending && (!this.catalog || this.loadedChat !== this.getChat()))
+    if (!this.pending && (!this.catalog || this.loadedChat !== this.getChat())) {
       this.request({ action: "list" });
+    }
   }
   request(action) {
     if (this.destroyed || this.pending)
@@ -49389,10 +50043,17 @@ class PresentationRulesPanel {
       return;
     }
     const id6 = `preference-${Date.now()}-${Math.random().toString(36).slice(2)}`, chat = this.getChat();
-    const request = { ...action, type: "vn_presentation_rules", version: 1, requestId: id6, ...chat ? { chatId: chat } : {}, ...action.action === "list" ? {} : { expectedRevision: this.document().revision } };
+    const request = {
+      ...action,
+      type: "vn_presentation_rules",
+      version: 1,
+      requestId: id6,
+      ...chat ? { chatId: chat } : {},
+      ...action.action === "list" ? {} : { expectedRevision: this.document().revision }
+    };
     this.pending = { id: id6, chat, mutation: action.action !== "list" };
     this.busy(true);
-    this.status(action.action === "list" ? "Loading preferences…" : "Saving preference…");
+    this.status(action.action === "list" ? "Loading preferences…" : "Saving rule…");
     this.timer = setTimeout(() => {
       if (this.pending?.id !== id6)
         return;
@@ -49412,8 +50073,9 @@ class PresentationRulesPanel {
   busy(value) {
     this.el("fieldset").disabled = value;
     this.el("[data-scope]").disabled = value;
-    for (const button of this.root.querySelectorAll("[data-list] button,[data-new],[data-refresh],[data-example]"))
+    for (const button of this.root.querySelectorAll("[data-list] button,[data-new],[data-refresh],[data-pack],[data-test-scene]")) {
       button.disabled = value;
+    }
   }
   receive(chat, requestId, raw) {
     if (this.destroyed || !this.pending || this.pending.id !== requestId || this.pending.chat !== chat || this.getChat() !== chat)
@@ -49431,7 +50093,10 @@ class PresentationRulesPanel {
       this.closeDraft();
     this.renderList();
     this.status(parsed.data.diagnostics.join(`
-`) || (mutation ? "Preference saved. It applies to future reply preparations." : "Preferences are up to date."));
+`) || (mutation ? "Rule saved. Applies to future turn preparations." : "Rules are up to date."));
+    window.dispatchEvent(new CustomEvent("lumiglyphics:presentation-rules-updated", {
+      detail: { catalog: parsed.data, chatId: chat, scope: this.scope }
+    }));
     return true;
   }
   error(text, requestId) {
@@ -49454,44 +50119,67 @@ Refresh to verify saved state. Your draft is kept.`);
     const list = this.el("[data-list]");
     list.replaceChildren();
     const doc2 = this.document();
-    this.el("[data-preference-save]").disabled = Boolean(this.pending) || !this.previewed || !doc2;
+    this.el("[data-preference-save]").disabled = Boolean(this.pending) || !doc2;
     if (!doc2) {
       const p = document.createElement("p");
-      p.textContent = "Refresh to load this scope. Unavailable records are preserved.";
+      p.textContent = "Refresh to load this scope. Stored records are preserved.";
       list.append(p);
       return;
     }
     const count = document.createElement("small");
-    count.textContent = `${doc2.rules.length} / 12 preferences · ${this.scope === "chat" ? "This chat" : "All my chats"}`;
+    count.textContent = `${doc2.rules.length} / 48 rules · ${this.scope === "chat" ? "This chat" : "All my chats"}`;
     list.append(count);
     if (!doc2.rules.length) {
       const p = document.createElement("p");
-      p.textContent = "No preferences here. The planner uses your template settings.";
+      p.textContent = "No rules in this scope. Add one or choose a remixable starter pack below.";
       list.append(p);
     }
+    const allOrdered = [...this.catalog?.chat?.rules ?? [], ...this.catalog?.user?.rules ?? []].sort((a, b) => Number(a.scope === "chat") - Number(b.scope === "chat") || a.priority - b.priority || a.savedOrder - b.savedOrder || a.id.localeCompare(b.id));
     for (const rule of [...doc2.rules].sort((a, b) => b.priority - a.priority || b.savedOrder - a.savedOrder)) {
       const card = document.createElement("article");
       card.className = "rule";
       const title = document.createElement("h4");
       title.textContent = rule.name;
+      const scopeBadge = document.createElement("span");
+      scopeBadge.className = `badge ${rule.scope === "chat" ? "badge-chat" : "badge-user"}`;
+      scopeBadge.textContent = rule.scope;
+      title.append(scopeBadge);
+      const higherIndex = allOrdered.findIndex((r) => r.id === rule.id);
+      const isShadowed = allOrdered.slice(higherIndex + 1).some((higher) => higher.enabled && higher.when.kind === rule.when.kind && higher.then.kind === rule.then.kind);
+      if (isShadowed) {
+        const shadowBadge = document.createElement("span");
+        shadowBadge.className = "badge badge-conflict";
+        shadowBadge.textContent = "Shadowed";
+        title.append(shadowBadge);
+      }
+      if (rule.then.kind === "prefer_style" && !this.config?.presentationRulesAllowStyleOverride) {
+        const warnBadge = document.createElement("span");
+        warnBadge.className = "badge badge-warning";
+        warnBadge.textContent = "Style Override Off";
+        title.append(warnBadge);
+      }
       const description = document.createElement("small");
-      description.textContent = `${describePresentationCondition(rule.when, (id6) => this.name(id6))} → ${describePresentationAction(rule.then, (id6) => this.name(id6))} · ${rule.enabled ? "On" : "Off"} · priority ${rule.priority}${rule.then.kind !== "prefer_template" || this.config?.imageTemplates.some((t) => rule.then.kind === "prefer_template" && t.id === rule.then.templateId && t.enabled) ? "" : " · target unavailable; skipped"}`;
+      description.textContent = `${describePresentationCondition(rule.when, (id6) => this.name(id6))} → ${describePresentationAction(rule.then, (id6) => this.name(id6))} · ${rule.enabled ? "On" : "Off"} · priority ${rule.priority}`;
       const row = document.createElement("div");
       row.className = "row";
-      for (const [label, action] of [["Edit", () => this.begin(rule)], [rule.enabled ? "Turn off" : "Turn on", () => this.mutate({ action: "toggle", scope: this.scope, id: rule.id, enabled: !rule.enabled })], ["Remove", () => {
-        if (this.dirty) {
-          this.status("Save or discard your draft before removing a preference.");
-          return;
-        }
-        if (card.querySelector("[data-confirm]"))
-          return;
-        const confirm = document.createElement("button");
-        confirm.type = "button";
-        confirm.dataset.confirm = "";
-        confirm.textContent = "Confirm removal";
-        confirm.onclick = () => this.mutate({ action: "delete", scope: this.scope, id: rule.id });
-        row.append(confirm);
-      }]]) {
+      for (const [label, action] of [
+        ["Edit", () => this.begin(rule)],
+        [rule.enabled ? "Turn off" : "Turn on", () => this.mutate({ action: "toggle", scope: this.scope, id: rule.id, enabled: !rule.enabled })],
+        ["Remove", () => {
+          if (this.dirty) {
+            this.status("Save or discard your draft before removing a rule.");
+            return;
+          }
+          if (card.querySelector("[data-confirm]"))
+            return;
+          const confirmBtn = document.createElement("button");
+          confirmBtn.type = "button";
+          confirmBtn.dataset.confirm = "";
+          confirmBtn.textContent = "Confirm removal";
+          confirmBtn.onclick = () => this.mutate({ action: "delete", scope: this.scope, id: rule.id });
+          row.append(confirmBtn);
+        }]
+      ]) {
         const button = document.createElement("button");
         button.type = "button";
         button.textContent = label;
@@ -49505,7 +50193,7 @@ Refresh to verify saved state. Your draft is kept.`);
   }
   mutate(action) {
     if (this.dirty) {
-      this.status("Save or discard your draft before changing saved preferences.");
+      this.status("Save or discard your draft before changing saved rules.");
       return;
     }
     this.request(action);
@@ -49519,25 +50207,60 @@ Refresh to verify saved state. Your draft is kept.`);
     }
     this.editingId = rule?.id ?? `rule-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     this.el("form").hidden = false;
-    this.el("[data-preference-heading]").textContent = rule ? "Edit preference" : "New preference";
+    this.el("[data-preference-heading]").textContent = rule ? "Edit Scene Direction Rule" : "New Scene Direction Rule";
     this.el("[data-preference-name]").value = rule?.name ?? "";
-    this.el("[data-condition]").value = rule?.when.kind === "subject" ? rule.when.subjectKind : rule?.when.kind ?? "dialogue";
-    this.el("[data-subject-name]").value = rule?.when.kind === "subject" ? rule.when.name : "";
-    this.syncConditionFields();
-    if (rule?.when.kind === "template")
-      this.el("[data-source]").value = rule.when.templateId;
-    this.el("[data-action]").value = rule?.then.kind ?? "prefer_template";
-    this.el("[data-effect-limit]").value = rule?.then.kind === "limit_effects" ? rule.then.intensity : "gentle";
-    this.el("[data-music-level]").value = rule?.then.kind === "limit_music" ? rule.then.level : "quiet";
-    if (rule?.then.kind === "prefer_template")
-      this.el("[data-target]").value = rule.then.templateId;
-    this.syncConditionFields();
+    const condition = rule?.when;
+    if (condition) {
+      if (condition.kind === "subject") {
+        this.el("[data-condition]").value = condition.subjectKind;
+        this.el("[data-subject-name]").value = condition.name;
+        this.el("[data-partial-match]").checked = Boolean(condition.partialMatch);
+      } else if (condition.kind === "template") {
+        this.el("[data-condition]").value = "template";
+        this.el("[data-source]").value = condition.templateId;
+      } else if (["cast_present", "speaker_name"].includes(condition.kind)) {
+        this.el("[data-condition]").value = condition.kind;
+        this.el("[data-subject-name]").value = condition.name ?? "";
+      } else if (condition.kind === "cast_count") {
+        this.el("[data-condition]").value = "cast_count";
+        this.el("[data-cond-op]").value = condition.op;
+        this.el("[data-cond-val]").value = String(condition.count);
+      } else if (["time_of_day", "weather", "ambient", "outfit_matches", "document_revealed", "shot_intent", "prose_contains", "rpg_state", "tracker_field"].includes(condition.kind)) {
+        this.el("[data-condition]").value = condition.kind;
+        this.el("[data-cond-val]").value = String(condition.value ?? condition.pattern ?? condition.outfit ?? condition.documentKind ?? condition.intent ?? "");
+      } else {
+        this.el("[data-condition]").value = condition.kind;
+      }
+    } else {
+      this.el("[data-condition]").value = "dialogue";
+    }
+    const action = rule?.then;
+    if (action) {
+      this.el("[data-action]").value = action.kind;
+      if (action.kind === "prefer_template")
+        this.el("[data-target]").value = action.templateId;
+      if (action.kind === "prefer_aspect_ratio")
+        this.el("[data-ratio]").value = action.ratio;
+      if (action.kind === "prefer_cast_mode")
+        this.el("[data-cast-mode]").value = action.mode;
+      if (action.kind === "prefer_framing")
+        this.el("[data-framing]").value = action.framing;
+      if (action.kind === "limit_effects")
+        this.el("[data-effect-limit]").value = action.intensity;
+      if (action.kind === "limit_music")
+        this.el("[data-music-level]").value = action.level;
+      if (action.kind === "hold_background")
+        this.el("[data-hold-mode]").value = action.mode ?? "stage_backdrop";
+      if (action.kind === "prefer_style")
+        this.el("[data-style-id]").value = action.styleId;
+    } else {
+      this.el("[data-action]").value = "prefer_template";
+    }
     this.el("[data-priority]").value = String(rule?.priority ?? 50);
     this.el("[data-preference-enabled]").checked = rule?.enabled ?? true;
     this.dirty = true;
-    this.previewed = false;
-    this.el("[data-preference-preview]").hidden = true;
-    this.el("[data-preference-save]").disabled = true;
+    this.syncConditionFields();
+    this.preview();
     this.ensureLoaded();
   }
   propose(target2, condition = "dialogue", source) {
@@ -49552,35 +50275,233 @@ Refresh to verify saved state. Your draft is kept.`);
     this.syncConditionFields();
     if (source)
       this.el("[data-source]").value = source;
-    this.status("Review this draft, then preview and save. Existing pictures stay unchanged.");
+    this.preview();
+    this.status("Review this draft, then save. Existing pictures stay unchanged.");
+  }
+  applyStarterPack(packKey) {
+    if (this.dirty || this.pending) {
+      this.status("Save or discard your current draft first.");
+      return;
+    }
+    this.begin();
+    switch (packKey) {
+      case "noir_rain":
+        this.el("[data-preference-name]").value = "Noir Rain: Moody Atmospheric Beat";
+        this.el("[data-condition]").value = "weather";
+        this.el("[data-cond-val]").value = "rain";
+        this.el("[data-action]").value = "limit_music";
+        this.el("[data-music-level]").value = "quiet";
+        break;
+      case "flashback":
+        this.el("[data-preference-name]").value = "Flashback Memory: Gentle Stage Tone";
+        this.el("[data-condition]").value = "prose_contains";
+        this.el("[data-cond-val]").value = "remembered";
+        this.el("[data-action]").value = "limit_effects";
+        this.el("[data-effect-limit]").value = "gentle";
+        break;
+      case "doc_focus":
+        this.el("[data-preference-name]").value = "Document Reveal: Auto-Render Clue";
+        this.el("[data-condition]").value = "document_revealed";
+        this.el("[data-cond-val]").value = "any";
+        this.el("[data-action]").value = "auto_render_document";
+        break;
+      case "action_16_9":
+        this.el("[data-preference-name]").value = "Kinetic Action: Cinematic 16:9";
+        this.el("[data-condition]").value = "shot_intent";
+        this.el("[data-cond-val]").value = "action";
+        this.el("[data-action]").value = "prefer_aspect_ratio";
+        this.el("[data-ratio]").value = "16:9";
+        break;
+      case "two_shot":
+        this.el("[data-preference-name]").value = "Intimate Dialogue: Dynamic Two-Shot";
+        this.el("[data-condition]").value = "cast_count";
+        this.el("[data-cond-op]").value = "eq";
+        this.el("[data-cond-val]").value = "2";
+        this.el("[data-action]").value = "prefer_template";
+        this.el("[data-target]").value = "two-shot";
+        break;
+      case "manga_climax":
+        this.el("[data-preference-name]").value = "Dramatic Climax: Multi-Panel Manga Page";
+        this.el("[data-condition]").value = "shot_intent";
+        this.el("[data-cond-val]").value = "confrontation";
+        this.el("[data-action]").value = "prefer_template";
+        this.el("[data-target]").value = "manga-page";
+        break;
+    }
+    this.syncConditionFields();
+    this.preview();
+    this.status("Starter pack loaded. Review the pre-filled fields, then save.");
   }
   draft() {
     const kind = this.el("[data-condition]").value;
-    const parsed = PresentationRuleDraftSchema.safeParse({ id: this.editingId, name: this.el("[data-preference-name]").value, enabled: this.el("[data-preference-enabled]").checked, priority: Number(this.el("[data-priority]").value), when: kind === "template" ? { kind, templateId: this.el("[data-source]").value } : ["npc", "place", "object"].includes(kind) ? { kind: "subject", subjectKind: kind, name: this.el("[data-subject-name]").value } : { kind }, then: this.el("[data-action]").value === "hold_background" ? { kind: "hold_background" } : this.el("[data-action]").value === "limit_music" ? { kind: "limit_music", level: this.el("[data-music-level]").value } : this.el("[data-action]").value === "limit_effects" ? { kind: "limit_effects", intensity: this.el("[data-effect-limit]").value } : { kind: "prefer_template", templateId: this.el("[data-target]").value } });
-    if (!parsed.success) {
-      this.status(parsed.error.issues[0]?.message ?? "Check the preference fields.");
+    const name = this.el("[data-preference-name]").value.trim();
+    if (!name) {
+      this.status("Rule name is required.");
       return null;
     }
-    if (parsed.data.then.kind === "prefer_template" && !this.config?.imageTemplates.some((t) => parsed.data.then.kind === "prefer_template" && t.id === parsed.data.then.templateId && t.enabled)) {
-      this.status("Enable the target in Scene templates before choosing it.");
+    let when;
+    if (["npc", "place", "object"].includes(kind)) {
+      when = {
+        kind: "subject",
+        subjectKind: kind,
+        name: this.el("[data-subject-name]").value.trim(),
+        ...kind === "place" ? { partialMatch: this.el("[data-partial-match]").checked } : {}
+      };
+    } else if (kind === "template") {
+      when = { kind: "template", templateId: this.el("[data-source]").value };
+    } else if (kind === "cast_present" || kind === "speaker_name") {
+      when = { kind, name: this.el("[data-subject-name]").value.trim() };
+    } else if (kind === "cast_count") {
+      when = { kind: "cast_count", op: this.el("[data-cond-op]").value, count: Number(this.el("[data-cond-val]").value) || 1 };
+    } else if (kind === "time_of_day") {
+      when = { kind: "time_of_day", value: this.el("[data-cond-val]").value.trim() || "night" };
+    } else if (kind === "weather") {
+      when = { kind: "weather", value: this.el("[data-cond-val]").value.trim() || "rain" };
+    } else if (kind === "ambient") {
+      when = { kind: "ambient", value: this.el("[data-cond-val]").value.trim() || "rain" };
+    } else if (kind === "outfit_matches") {
+      when = { kind: "outfit_matches", outfit: this.el("[data-cond-val]").value.trim() || "cloak" };
+    } else if (kind === "document_revealed") {
+      const val = this.el("[data-cond-val]").value.trim();
+      when = { kind: "document_revealed", ...val && val !== "any" ? { documentKind: val } : {} };
+    } else if (kind === "shot_intent") {
+      when = { kind: "shot_intent", intent: this.el("[data-cond-val]").value.trim() || "action" };
+    } else if (kind === "prose_contains") {
+      when = { kind: "prose_contains", pattern: this.el("[data-cond-val]").value.trim() || "key" };
+    } else if (kind === "rpg_state") {
+      when = { kind: "rpg_state", key: this.el("[data-cond-val]").value.trim() || "combat" };
+    } else if (kind === "tracker_field") {
+      when = { kind: "tracker_field", field: this.el("[data-cond-val]").value.trim() || "location" };
+    } else {
+      when = { kind };
+    }
+    const actionKind = this.el("[data-action]").value;
+    let then;
+    if (actionKind === "prefer_template") {
+      then = { kind: "prefer_template", templateId: this.el("[data-target]").value };
+    } else if (actionKind === "prefer_aspect_ratio") {
+      then = { kind: "prefer_aspect_ratio", ratio: this.el("[data-ratio]").value };
+    } else if (actionKind === "prefer_cast_mode") {
+      then = { kind: "prefer_cast_mode", mode: this.el("[data-cast-mode]").value };
+    } else if (actionKind === "prefer_framing") {
+      then = { kind: "prefer_framing", framing: this.el("[data-framing]").value };
+    } else if (actionKind === "limit_effects") {
+      then = { kind: "limit_effects", intensity: this.el("[data-effect-limit]").value };
+    } else if (actionKind === "limit_music") {
+      then = { kind: "limit_music", level: this.el("[data-music-level]").value };
+    } else if (actionKind === "hold_background") {
+      then = { kind: "hold_background", mode: this.el("[data-hold-mode]").value };
+    } else if (actionKind === "auto_render_document") {
+      then = { kind: "auto_render_document", render: true };
+    } else if (actionKind === "skip_image_generation") {
+      then = { kind: "skip_image_generation", skip: true };
+    } else if (actionKind === "prefer_style") {
+      then = { kind: "prefer_style", styleId: this.el("[data-style-id]").value.trim() || "noir" };
+    } else {
+      then = { kind: "prefer_template", templateId: "portrait" };
+    }
+    const parsed = PresentationRuleDraftSchema.safeParse({
+      id: this.editingId,
+      name,
+      enabled: this.el("[data-preference-enabled]").checked,
+      priority: Number(this.el("[data-priority]").value) || 50,
+      when,
+      then
+    });
+    if (!parsed.success) {
+      this.status(parsed.error.issues[0]?.message ?? "Check the rule fields.");
       return null;
     }
     return parsed.data;
   }
   preview() {
     const rule = this.draft();
-    if (!rule)
+    if (!rule) {
+      this.el("[data-preference-preview]").hidden = true;
       return;
-    this.el("[data-preference-preview]").textContent = `${describePresentationCondition(rule.when, (id6) => this.name(id6))}, ${describePresentationAction(rule.then, (id6) => this.name(id6))}.
-Scope: ${this.scope === "chat" ? "this chat" : "all my chats"}. Priority: ${rule.priority}. ${rule.enabled ? "Enabled" : "Saved off"}.
-${rule.then.kind === "hold_background" ? "Keeps available background artwork within this reply and scene. A scene boundary, manual artwork, full-scene illustration or manga page takes priority. Missing images and failures stay visible in their usual controls. No requests are added or removed." : rule.then.kind === "limit_music" ? "Matching paragraphs only. Saved music volume remains the maximum; speech and sound effects are unchanged. Leaving a match restores music volume without restarting the track. NPC/template conditions need an assigned picture cue." : rule.then.kind === "limit_effects" ? "Matching paragraphs only. NPC and template conditions need an assigned picture cue; other conditions also work without images. Global effects and OS reduced-motion settings can only reduce this further. Text effects, weather and audio retain their controls." : "Existing picture slots only. Character templates require a usable appearance. Manual picture edits take priority."} Applies when a future reply is prepared.`;
-    this.el("[data-preference-preview]").hidden = false;
-    this.previewed = true;
+    }
+    const previewEl = this.el("[data-preference-preview]");
+    previewEl.textContent = `${describePresentationCondition(rule.when, (id6) => this.name(id6))}
+↳ Action: ${describePresentationAction(rule.then, (id6) => this.name(id6))}
+Scope: ${this.scope === "chat" ? "This chat" : "All my chats"} · Priority: ${rule.priority} · ${rule.enabled ? "Enabled" : "Saved Off"}`;
+    previewEl.hidden = false;
     this.el("[data-preference-save]").disabled = Boolean(this.pending) || !this.document();
+  }
+  runSceneSimulation() {
+    const resultsEl = this.el("[data-sim-results]");
+    resultsEl.hidden = false;
+    resultsEl.replaceChildren();
+    if (!this.currentTurnPlan || !this.currentTurnPlan.paragraphs.length) {
+      resultsEl.innerHTML = `<strong>⚡ Scene Simulator</strong><p class="sim-missed">No active turn plan loaded to test against. Open or read a story turn to simulate live rule matching.</p>`;
+      return;
+    }
+    const plan = this.currentTurnPlan;
+    const allRules = [
+      ...this.catalog?.chat?.rules ?? [],
+      ...this.catalog?.user?.rules ?? []
+    ];
+    const heading = document.createElement("strong");
+    heading.textContent = `⚡ Scene Simulator (Turn: ${plan.paragraphs.length} paragraphs, ${plan.visualCues.length} visual cues)`;
+    resultsEl.append(heading);
+    for (let i = 0;i < plan.paragraphs.length; i++) {
+      const pText = plan.paragraphs[i]?.text ?? "";
+      const cue = plan.visualCues.find((c) => c.paragraphIndex === i);
+      const scene = [...plan.scenes].reverse().find((s) => s.startParagraph <= i);
+      const decision = evaluatePresentationRules({
+        isDialogue: Boolean(plan.paragraphSpeakers[i]?.trim()),
+        locationChanged: Boolean(scene && scene.startParagraph === i),
+        isSceneOpening: i === 0,
+        templateId: cue?.imageTemplate?.id ?? "",
+        enabledTemplateIds: this.config?.imageTemplates.filter((t) => t.enabled).map((t) => t.id) ?? [],
+        subjects: scene ? [{ kind: "place", name: scene.environment.location }] : [],
+        ...scene?.environment.timeOfDay || scene?.environment.time ? { timeOfDay: scene.environment.timeOfDay ?? scene.environment.time } : {},
+        ...scene?.environment.weather ? { weather: scene.environment.weather } : {},
+        ...scene?.ambient ? { ambient: scene.ambient } : {},
+        ...scene?.cast ? { cast: scene.cast, castCount: scene.cast.length } : { castCount: 0 },
+        ...plan.paragraphSpeakers[i] ? { speakerName: plan.paragraphSpeakers[i] } : {},
+        paragraphText: pText,
+        ...plan.rpgState ? { rpgState: plan.rpgState } : {},
+        allowStyleOverride: this.config?.presentationRulesAllowStyleOverride === true
+      }, allRules);
+      const pBox = document.createElement("div");
+      pBox.style.marginBlock = "6px";
+      pBox.style.padding = "6px 8px";
+      pBox.style.borderLeft = "3px solid #64748b";
+      pBox.style.fontSize = "0.9em";
+      const pTitle = document.createElement("div");
+      pTitle.textContent = `¶${i + 1}: ${pText.slice(0, 70)}…`;
+      pBox.append(pTitle);
+      if (decision.matchedRuleIds.length > 0) {
+        const fired = document.createElement("div");
+        fired.className = "sim-fired";
+        fired.textContent = `\uD83D\uDFE2 Fired: ${decision.matchedRuleIds.length} rule(s) matched [${decision.matchedRuleIds.join(", ")}]`;
+        pBox.append(fired);
+        if (decision.preferredTemplateId) {
+          const detail = document.createElement("div");
+          detail.textContent = `   Template override: → ${this.name(decision.preferredTemplateId)}`;
+          pBox.append(detail);
+        }
+        if (decision.preferredAspectRatio) {
+          const detail = document.createElement("div");
+          detail.textContent = `   Aspect ratio: → ${decision.preferredAspectRatio}`;
+          pBox.append(detail);
+        }
+        if (decision.preferredStyleId) {
+          const detail = document.createElement("div");
+          detail.textContent = `   Style override: → ${decision.preferredStyleId}`;
+          pBox.append(detail);
+        }
+      } else {
+        const missed = document.createElement("div");
+        missed.className = "sim-missed";
+        missed.textContent = `⚪ Missed: No direction rules matched conditions for this beat.`;
+        pBox.append(missed);
+      }
+      resultsEl.append(pBox);
+    }
   }
   closeDraft() {
     this.dirty = false;
-    this.previewed = false;
     this.editingId = "";
     this.el("form").hidden = true;
     this.el("[data-preference-save]").disabled = true;
@@ -50735,13 +51656,13 @@ class LocationArtPanel {
     listMenu.innerHTML = "<summary>More list actions</summary>";
     this.host.insertBefore(listMenu, list);
     listMenu.append(this.el("[data-art-refresh]"), this.el("[data-art-reset]"));
-    const confirm = document.createElement("div");
-    confirm.dataset.placeConfirm = "";
-    confirm.hidden = true;
-    confirm.setAttribute("role", "dialog");
-    confirm.setAttribute("aria-label", "Confirm place action");
-    confirm.innerHTML = '<p data-place-confirm-text></p><button type="button" data-place-confirm-yes>Confirm removal</button><button type="button" data-place-confirm-no>Stay</button>';
-    this.host.append(confirm);
+    const confirm2 = document.createElement("div");
+    confirm2.dataset.placeConfirm = "";
+    confirm2.hidden = true;
+    confirm2.setAttribute("role", "dialog");
+    confirm2.setAttribute("aria-label", "Confirm place action");
+    confirm2.innerHTML = '<p data-place-confirm-text></p><button type="button" data-place-confirm-yes>Confirm removal</button><button type="button" data-place-confirm-no>Stay</button>';
+    this.host.append(confirm2);
     this.el("[data-place-confirm-no]").onclick = () => this.cancelConfirm();
     this.el("[data-place-confirm-yes]").onclick = () => {
       const confirmation = this.confirmation;
@@ -51268,6 +52189,7 @@ class ImageTemplateEditor {
       <div data-row><label data-field><span>Visible subjects</span><select data-t="subjectMode" aria-label="Visible subjects"><option value="one">One character</option><option value="none">No people</option><option value="ensemble">Everyone in the scene, including persona</option></select><small>Ensemble uses named scene appearances. A single portrait reference is omitted to avoid applying one face to everyone.</small></label><label data-field><span>Framing</span><select data-t="framing" aria-label="Framing"><option>portrait</option><option>upper body</option><option>full body</option><option>wide</option><option>close-up</option></select></label></div>
       <label data-field><span>Output shape</span><select data-t="outputAspectRatio" aria-label="Template output shape"><option value="connection">Use connection settings</option><option value="9:16">Tall portrait (9:16)</option></select><small>Generation → Generated image shape applies across templates. With template defaults, known models use supported sizes: Anima and Qwen Turbo keep portrait framing; Klein uses square output. Explicit parameters and model support can limit the result.</small></label>
       <label data-field><span>Reference policy</span><select data-t="referencePolicy" aria-label="Reference policy"><option value="character">Use character reference when available</option><option value="none">No image references</option></select><small>No-people templates always omit character references.</small></label>
+      <label data-field><span>Camera & Engine Policy</span><select data-t="cameraPolicy" aria-label="Camera and prompt engine policy"><option value="directed">V2 Smart Directed (Framing & Model Dialect)</option><option value="fixed">Literal Prompt Template (Exact Wording)</option></select><small>Smart Directed adapts composition and framing into the active model dialect. Literal Prompt Template compiles exact wording.</small></label>
       </div></details><label data-field><span>Positive template</span><textarea data-t="positive" aria-label="Template positive prompt" maxlength="8000" spellcheck="false"></textarea></label>
       <label data-field><span>Negative template</span><textarea data-t="negative" aria-label="Template negative prompt" maxlength="8000" spellcheck="false"></textarea></label>
       <details><summary>Placeholder guide</summary><small>Placeholders: ${IMAGE_TEMPLATE_TOKENS.map((t) => `{{${t}}}`).join(" · ")}. Scene, subjects, action, composition and lighting come from the visual brief. Style, suffix and negative come from shared settings. Omit a shared placeholder to use independent wording.</small></details>
@@ -51529,7 +52451,8 @@ class ImageTemplateEditor {
       };
       const output2 = renderImageTemplate(snapshot, values);
       const format = (text) => this.config.imagePromptFormat === "tags" ? text.replace(/[;\n]+/g, ", ") : text;
-      this.el("[data-preview-kind]").textContent = brief ? "Preview using the latest prepared scene brief and saved shared style. Changing category may need a new story-reader focus." : "Sample scene preview with saved shared style. This is not a prepared image request.";
+      const isV2 = this.config.imagePromptEngineVersion === 2 && template.cameraPolicy !== "fixed";
+      this.el("[data-preview-kind]").textContent = brief ? `Preview (${isV2 ? "V2 Smart Directed" : "Literal Template"}${this.metadata?.promptDialect ? ` · ${this.metadata.promptDialect}` : ""}) using latest scene brief and saved shared style.` : `Sample scene preview (${isV2 ? "V2 Smart Directed" : "Literal Template"}) with saved shared style. This is not a prepared image request.`;
       this.el("[data-template-preview]").textContent = `Positive
 ${format(output2.prompt)}
 
@@ -52500,6 +53423,9 @@ class VisualNovelSettingsPanel {
   setImagePreviewMetadata(metadata) {
     this.templateEditor.setPreviewMetadata(metadata);
   }
+  setTurn(turn) {
+    this.presentationRules.setTurn(turn);
+  }
   composePanels() {
     const mount = (selector) => this.root.querySelector(selector);
     this.castArtPanel = new CastArtPanel(() => this.options.getChatId?.() ?? "", (chat, id7, action) => this.options.onCastArt?.(chat, id7, action), (chat, id7, offset) => this.options.onCastGallery?.(chat, id7, offset), (name) => {
@@ -52511,7 +53437,7 @@ class VisualNovelSettingsPanel {
     this.locationArtPanel = new LocationArtPanel(() => this.options.getChatId?.() ?? "", (chat, id7, action) => this.options.onLocationArt?.(chat, id7, action));
     mount("[data-places-mount]").append(this.locationArtPanel.host);
     this.templateEditor = new ImageTemplateEditor(mount("[data-templates-mount]"), (patch) => this.save(patch), () => {});
-    this.presentationRules = new PresentationRulesPanel(() => this.options.getChatId?.() ?? "", (request) => this.options.onPresentationRules?.(request));
+    this.presentationRules = new PresentationRulesPanel(() => this.options.getChatId?.() ?? "", (request) => this.options.onPresentationRules?.(request), (patch) => this.save(patch));
     mount("[data-rules-mount]").append(this.presentationRules.host);
     this.trackerMappingsPanel = new TrackerMappingsPanel((value) => this.save({ simTrackerMappings: value }));
     mount("[data-tracker-mount]").append(this.trackerMappingsPanel.host);
@@ -53077,6 +54003,10 @@ class VisualNovelSettingsPanel {
     }
     if (this.page === "templates") {
       this.templateEditor.guardNavigation(proceed);
+      return;
+    }
+    if (this.page === "rules") {
+      this.presentationRules.guardNavigation(proceed);
       return;
     }
     if (this.currentDraftKeys().length) {
@@ -56325,7 +57255,7 @@ class PreparedBriefView {
 }
 
 // src/shared/build-info.ts
-var LUMIGLYPHICS_VERSION = "0.2.11-beta.167";
+var LUMIGLYPHICS_VERSION = "0.2.11-beta.168";
 
 // src/shared/prompt-length.ts
 var IMAGE_PROMPT_MAX_CHARS = 3000;
@@ -61468,7 +62398,7 @@ function openReferenceCropperModal(options) {
     close();
     options.onCancel?.();
   };
-  const confirm = (r, full) => {
+  const confirm2 = (r, full) => {
     const dataUrl = render2(r);
     close();
     options.onConfirm({
@@ -61484,8 +62414,8 @@ function openReferenceCropperModal(options) {
   };
   closeBtn.onclick = cancel;
   cancelBtn.onclick = cancel;
-  fullBtn.onclick = () => confirm({ x: 0, y: 0, width: 1, height: 1 }, true);
-  applyBtn.onclick = () => confirm(clampCropRect(rect), false);
+  fullBtn.onclick = () => confirm2({ x: 0, y: 0, width: 1, height: 1 }, true);
+  applyBtn.onclick = () => confirm2(clampCropRect(rect), false);
   overlay.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       e.preventDefault();
@@ -65117,6 +66047,9 @@ function evaluatePanelRule(source, rule) {
   return results;
 }
 function renderPanelRule(source, rule, paragraphIndex) {
+  const hazard = findReDoSHazard(rule.pattern);
+  if (hazard)
+    return Promise.reject(new Error(`Panel rule "${rule.title}" has potential catastrophic backtracking: ${hazard}`));
   return new Promise((resolve, reject) => {
     const code = `const evaluate = ${evaluatePanelRule.toString()}; onmessage = ({data}) => { try { postMessage({items:evaluate(data.source,data.rule)}); } catch(e) {postMessage({error:String(e.message || e)})} };`;
     const url3 = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
@@ -65201,8 +66134,11 @@ class PanelDock {
   dead = false;
   observer;
   bridgeRevision = new Map;
+  editingRuleId = "";
+  ruleFormRefs = null;
   onCapture;
   onResolveTemplate;
+  onSaveRules;
   constructor(mount) {
     this.host.setAttribute("data-vn-panel-layer", "");
     const style = document.createElement("style");
@@ -65294,6 +66230,7 @@ class PanelDock {
       return;
     try {
       localStorage.setItem(this.storageKey(), JSON.stringify({ pins: this.pins, rules: this.rules }));
+      this.onSaveRules?.(this.rules);
     } catch {
       this.error("Browser storage is full or unavailable. These changes will last only for this session.");
     }
@@ -65426,11 +66363,36 @@ class PanelDock {
     for (const rule of this.rules) {
       const row = document.createElement("div");
       row.className = "candidate";
+      const enabled = rule.enabled !== false;
       const label = document.createElement("span");
-      label.textContent = `Rule: ${rule.title} `;
-      row.append(label, this.button("Remove rule", () => {
+      label.textContent = `Rule: ${rule.title}${enabled ? "" : " (off)"} `;
+      const toggleBtn = this.button(enabled ? "Disable" : "Enable", () => {
+        rule.enabled = !enabled;
+        if (!rule.enabled) {
+          this.candidates = this.candidates.filter((c) => !c.id.startsWith(`rule:${rule.id}:`));
+        }
+        this.epoch++;
+        this.save();
+        this.runRules();
+        this.renderLists();
+        this.refresh();
+      });
+      const editBtn = this.button("Edit", () => {
+        if (!this.ruleFormRefs)
+          return;
+        this.editingRuleId = rule.id;
+        this.ruleFormRefs.title.value = rule.title;
+        this.ruleFormRefs.pattern.value = rule.pattern;
+        this.ruleFormRefs.flags.value = rule.flags;
+        this.ruleFormRefs.template.value = rule.template;
+        this.ruleFormRefs.details.open = true;
+        this.ruleFormRefs.title.focus();
+      });
+      const removeBtn = this.button("Remove rule", () => {
         this.rules = this.rules.filter((r) => r.id !== rule.id);
         this.candidates = this.candidates.filter((c) => !c.id.startsWith(`rule:${rule.id}:`));
+        if (this.editingRuleId === rule.id)
+          this.editingRuleId = "";
         this.epoch++;
         for (const pin of this.pins)
           if (pin.follow === `rule:${rule.id}`) {
@@ -65440,7 +66402,8 @@ class PanelDock {
         this.save();
         this.renderLists();
         this.refresh();
-      }));
+      });
+      row.append(label, toggleBtn, editBtn, removeBtn);
       this.ruleList.append(row);
       this.ruleRows.set(rule.id, row);
     }
@@ -65656,7 +66619,34 @@ class PanelDock {
     const flags = field("Flags");
     flags.value = "gi";
     const template = field("HTML replacement ($1, $2, ... $36)", true);
-    details.append(this.button("Save and test rule", () => {
+    this.ruleFormRefs = { details, title, pattern, flags, template };
+    const actions = document.createElement("div");
+    actions.className = "row";
+    actions.append(this.button("Test rule", async () => {
+      if (!this.turn) {
+        this.error("Open an assistant turn before testing a panel rule.");
+        return;
+      }
+      if (!pattern.value || !template.value) {
+        this.error("Fill in the pattern and HTML replacement to test.");
+        return;
+      }
+      try {
+        let resolvedTemplate = template.value;
+        if (resolvedTemplate.includes("{{")) {
+          if (!this.onResolveTemplate)
+            throw new Error("Host macro resolution is unavailable. Paste rendered HTML instead.");
+          resolvedTemplate = await this.onResolveTemplate(resolvedTemplate);
+        }
+        const testRule = { id: "test", title: title.value.trim() || "Test rule", pattern: pattern.value, flags: flags.value, template: resolvedTemplate };
+        const cards = await renderPanelRule(this.turn.panelSource ?? this.turn.paragraphs.join(`
+
+`), testRule, Math.max(0, this.turn.paragraphs.length - 1));
+        this.error(cards.length ? `Test matched ${cards.length} card(s). Ready to save.` : "Test ran cleanly with 0 matches in this turn.");
+      } catch (error61) {
+        this.error(error61);
+      }
+    }), this.button("Save and test rule", () => {
       if (!this.turn) {
         this.error("Open an assistant turn before saving a panel rule.");
         return;
@@ -65665,16 +66655,29 @@ class PanelDock {
         this.error("Fill in the rule name, pattern, and HTML replacement.");
         return;
       }
-      if (this.rules.length >= 12) {
+      const existingIdx = this.editingRuleId ? this.rules.findIndex((r) => r.id === this.editingRuleId) : -1;
+      if (existingIdx < 0 && this.rules.length >= 12) {
         this.error("Remove a rule before adding another. The limit is 12.");
         return;
       }
-      const rule = { id: createUiId(), title: title.value.trim().slice(0, 120), pattern: pattern.value, flags: flags.value, template: template.value };
-      this.rules.push(rule);
+      const rule = {
+        id: existingIdx >= 0 ? this.editingRuleId : createUiId(),
+        title: title.value.trim().slice(0, 120),
+        pattern: pattern.value,
+        flags: flags.value,
+        template: template.value,
+        enabled: existingIdx >= 0 ? this.rules[existingIdx].enabled !== false : true
+      };
+      if (existingIdx >= 0)
+        this.rules[existingIdx] = rule;
+      else
+        this.rules.push(rule);
+      this.editingRuleId = "";
       this.epoch++;
       this.save();
       this.runRules();
     }));
+    details.append(actions);
     return details;
   }
   async runRules() {
@@ -65682,7 +66685,10 @@ class PanelDock {
     if (!turn)
       return;
     const epoch = this.epoch;
+    const notices = [];
     for (const rule of this.rules) {
+      if (rule.enabled === false)
+        continue;
       try {
         let resolvedRule = rule;
         if (rule.template.includes("{{")) {
@@ -65700,13 +66706,16 @@ class PanelDock {
         this.candidates = this.candidates.filter((c) => !c.id.startsWith(`rule:${rule.id}:`));
         this.candidates.push(...cards);
         if (!cards.length)
-          this.error(`No match for rule "${rule.title}" in this turn.`);
+          notices.push(`No match for rule "${rule.title}" in this turn.`);
       } catch (error61) {
         if (epoch === this.epoch && !this.dead)
-          this.error(error61);
+          notices.push(error61 instanceof Error ? error61.message : String(error61));
       }
     }
     if (epoch === this.epoch && !this.dead) {
+      if (notices.length)
+        this.error(notices.join(`
+`));
       this.renderLists();
       this.refresh();
     }

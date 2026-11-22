@@ -20,38 +20,93 @@ export function applyTemplatePreferences(plan:TurnPlan,config:VisualNovelConfig,
   itemReferences=normalizeStoryReferences(plan.storyReferences,plan.paragraphs.map(p=>({text:stripTextEffectTags(p.text)}))).filter(r=>r.kind==='object');
  }
  for(const cue of [...plan.visualCues,...(plan.cacheCues??[])].sort((a,b)=>a.paragraphIndex-b.paragraphIndex))if(!first.has(sceneKey(cue)))first.set(sceneKey(cue),cue.cueId);
- const apply=(cue:VisualCue):VisualCue=>{
-  if(!cue.imageTemplate||cue.imageTemplateReason==='Manual template selection'||cue.visualSources?.includes('manual subject correction'))return cue;
-  const index=plan.scenes.findIndex(s=>s.sceneId===cue.sceneId&&s.revision===cue.sceneRevision);
-  const scene=plan.scenes[index]??plan.scenes.find(s=>s.sceneId===cue.sceneId);if(!scene)return cue;
-  const prior=index>0?plan.scenes[index-1]:previous;
-  const location=normalize(scene.environment.location),before=normalize(prior?.environment.location);
-  const identity=resolveTemplateIdentity(scene,cue,appearances);
-  const usable=Boolean(identity.name&&isUsableIdentity(identity.name,splitTags(identity.identity)));
-  const enabled=config.imageTemplates.filter(t=>t.enabled&&(t.subjectMode!=='one'||usable));
-  // Explicit picture subject only: scene cast and speakers do not prove presence.
-  const subjects:RuleSubject[]=[{kind:'place',name:scene.environment.location}];
-  if(cue.character?.trim())subjects.push({kind:'npc',name:cue.character});
-  subjects.push(...itemReferences.filter(r=>r.paragraphIndex===cue.paragraphIndex).map(r=>({kind:r.kind,name:r.name})));
-  const decision=evaluatePresentationRules({isDialogue:Boolean(plan.paragraphSpeakers[cue.paragraphIndex]?.trim()),locationChanged:Boolean(location&&before&&location!==before&&first.get(sceneKey(cue))===cue.cueId),templateId:cue.imageTemplate.id,enabledTemplateIds:enabled.map(t=>t.id),subjects},rules.filter(rule=>rule.then.kind==='prefer_template'));
-  if(!decision.matchedRuleIds.length&&!diagnostics.length)return cue;
-  const target=enabled.find(t=>t.id===decision.preferredTemplateId);
-  const winning=[...rules].reverse().find(r=>r.id===decision.selectedRuleId&&r.scope===decision.selectedScope&&r.then.kind==='prefer_template'&&r.then.templateId===target?.id);
-  const outcome=target?`Applied ${target.name}${winning?` from ${winning.name} (${winning.scope==='chat'?'this chat':'all chats'}) — ${describePresentationCondition(winning.when,id=>config.imageTemplates.find(t=>t.id===id)?.name??id)}`:''}.`:'Kept the planner template.';
-  const summary=[outcome,...diagnostics,...decision.diagnostics,...(!usable&&decision.matchedRuleIds.some(id=>rules.some(r=>r.id===id&&config.imageTemplates.some(t=>r.then.kind==='prefer_template'&&t.id===r.then.templateId&&t.subjectMode==='one')))?['Character preferences need a usable identity; existing subject guidance was kept.']:[])].join('\n').slice(0,4000);
-  return {...cue,...(target?{imageTemplate:templateSnapshot(target),imageTemplateReason:`Saved preference: ${target.name}`.slice(0,300)}:{}),presentationRuleTrace:{matchedRuleIds:decision.matchedRuleIds,summary}};
- };
- const effectRules=rules.filter(rule=>rule.then.kind==='limit_effects'||rule.then.kind==='limit_music'||rule.then.kind==='hold_background');
- const effectDecisions=effectRules.length?plan.paragraphs.map((_,paragraphIndex)=>{
-  const scene=[...plan.scenes].reverse().find(s=>s.startParagraph<=paragraphIndex);
-  const cue=[...plan.visualCues,...(plan.cacheCues??[])].find(c=>c.paragraphIndex===paragraphIndex);
-  const prior=scene?plan.scenes[plan.scenes.indexOf(scene)-1]??previous:null;
-  const subjects:RuleSubject[]=scene?[{kind:'place',name:scene.environment.location}]:[];
-  if(cue?.character)subjects.push({kind:'npc',name:cue.character});
-  subjects.push(...itemReferences.filter(r=>r.paragraphIndex===paragraphIndex).map(r=>({kind:r.kind,name:r.name})));
-  return evaluatePresentationRules({isDialogue:Boolean(plan.paragraphSpeakers[paragraphIndex]?.trim()),locationChanged:Boolean(scene&&scene.startParagraph===paragraphIndex&&normalize(scene.environment.location)&&normalize(prior?.environment.location)&&normalize(scene.environment.location)!==normalize(prior?.environment.location)),templateId:cue?.imageTemplate?.id??'',enabledTemplateIds:[],subjects},effectRules);
- }):[];
- let holdStart:number|null=null;let holdScene='';
+ const characterAliases: Record<string, readonly string[]> = {};
+  const apply = (cue: VisualCue): VisualCue => {
+    if (!cue.imageTemplate || cue.imageTemplateReason === 'Manual template selection' || cue.visualSources?.includes('manual subject correction')) return cue;
+    const index = plan.scenes.findIndex(s => s.sceneId === cue.sceneId && s.revision === cue.sceneRevision);
+    const scene = plan.scenes[index] ?? plan.scenes.find(s => s.sceneId === cue.sceneId);
+    if (!scene) return cue;
+    const prior = index > 0 ? plan.scenes[index - 1] : previous;
+    const location = normalize(scene.environment.location), before = normalize(prior?.environment.location);
+    const identity = resolveTemplateIdentity(scene, cue, appearances);
+    const usable = Boolean(identity.name && isUsableIdentity(identity.name, splitTags(identity.identity)));
+    const enabled = config.imageTemplates.filter(t => t.enabled && (t.subjectMode !== 'one' || usable));
+    const subjects: RuleSubject[] = [{ kind: 'place', name: scene.environment.location }];
+    if (cue.character?.trim()) subjects.push({ kind: 'npc', name: cue.character });
+    subjects.push(...itemReferences.filter(r => r.paragraphIndex === cue.paragraphIndex).map(r => ({ kind: r.kind, name: r.name })));
+    const isSceneOpening = cue.paragraphIndex === 0 || (scene.startParagraph === cue.paragraphIndex);
+    const revealedDocs = plan.storyReferences?.filter(r => r.kind === 'object' && r.paragraphIndex === cue.paragraphIndex).map(r => r.name) ?? [];
+    const directionRules = rules.filter(rule => rule.then.kind !== 'limit_effects' && rule.then.kind !== 'limit_music' && rule.then.kind !== 'hold_background');
+    const decision = evaluatePresentationRules({
+      isDialogue: Boolean(plan.paragraphSpeakers?.[cue.paragraphIndex]?.trim()),
+      locationChanged: Boolean(location && before && location !== before && first.get(sceneKey(cue)) === cue.cueId),
+      isSceneOpening,
+      templateId: cue.imageTemplate.id,
+      enabledTemplateIds: enabled.map(t => t.id),
+      subjects,
+      ...(scene.environment.timeOfDay || scene.environment.time ? { timeOfDay: (scene.environment.timeOfDay ?? scene.environment.time)! } : {}),
+      ...(scene.environment.weather ? { weather: scene.environment.weather } : {}),
+      ...(scene.ambient ? { ambient: scene.ambient } : {}),
+      cast: scene.cast,
+      castCount: scene.cast?.length ?? 0,
+      ...(plan.paragraphSpeakers?.[cue.paragraphIndex] ? { speakerName: plan.paragraphSpeakers?.[cue.paragraphIndex]! } : {}),
+      characterAliases,
+      ...(cue.resolvedAttire || cue.attire ? { activeOutfit: (cue.resolvedAttire ?? cue.attire)! } : {}),
+      revealedDocumentKinds: revealedDocs,
+      ...(cue.imageTemplate.intent ? { shotIntent: cue.imageTemplate.intent } : {}),
+      ...(plan.paragraphs?.[cue.paragraphIndex]?.text ? { paragraphText: plan.paragraphs?.[cue.paragraphIndex]!.text } : {}),
+      ...(plan.rpgState ? { rpgState: plan.rpgState as Record<string, unknown> } : {}),
+      allowStyleOverride: config.presentationRulesAllowStyleOverride === true
+    }, directionRules);
+    if (!decision.matchedRuleIds.length && !diagnostics.length) return cue;
+    const target = enabled.find(t => t.id === decision.preferredTemplateId);
+    const winning = [...rules].reverse().find(r => r.id === decision.selectedRuleId && r.scope === decision.selectedScope && r.then.kind === 'prefer_template' && r.then.templateId === target?.id);
+    const outcome = target ? `Applied ${target.name}${winning ? ` from ${winning.name} (${winning.scope === 'chat' ? 'this chat' : 'all chats'}) — ${describePresentationCondition(winning.when, id => config.imageTemplates.find(t => t.id === id)?.name ?? id)}` : ''}.` : 'Kept the planner template.';
+    const summary = [outcome, ...diagnostics, ...decision.diagnostics, ...(!usable && decision.matchedRuleIds.some(id => rules.some(r => r.id === id && config.imageTemplates.some(t => r.then.kind === 'prefer_template' && t.id === r.then.templateId && t.subjectMode === 'one'))) ? ['Character preferences need a usable identity; existing subject guidance was kept.'] : [])].join('\n').slice(0, 4000);
+    return {
+      ...cue,
+      ...(target ? { imageTemplate: templateSnapshot(target), imageTemplateReason: `Saved preference: ${target.name}`.slice(0, 300) } : {}),
+      ...(decision.preferredAspectRatio ? { preferredAspectRatio: decision.preferredAspectRatio } : {}),
+      ...(decision.preferredCastMode ? { preferredCastMode: decision.preferredCastMode } : {}),
+      ...(decision.preferredFraming ? { preferredFraming: decision.preferredFraming } : {}),
+      ...(decision.preferredStyleId ? { preferredStyleId: decision.preferredStyleId } : {}),
+      ...(decision.autoRenderDocument !== undefined ? { autoRenderDocument: decision.autoRenderDocument } : {}),
+      ...(decision.skipImageGeneration !== undefined ? { skipImageGeneration: decision.skipImageGeneration } : {}),
+      presentationRuleTrace: { matchedRuleIds: decision.matchedRuleIds, summary }
+    };
+  };
+  const effectRules = rules.filter(rule => rule.then.kind === 'limit_effects' || rule.then.kind === 'limit_music' || rule.then.kind === 'hold_background');
+  const effectDecisions = effectRules.length ? plan.paragraphs.map((_, paragraphIndex) => {
+    const scene = [...plan.scenes].reverse().find(s => s.startParagraph <= paragraphIndex);
+    const cue = [...plan.visualCues, ...(plan.cacheCues ?? [])].find(c => c.paragraphIndex === paragraphIndex);
+    const prior = scene ? plan.scenes[plan.scenes.indexOf(scene) - 1] ?? previous : null;
+    const subjects: RuleSubject[] = scene ? [{ kind: 'place', name: scene.environment.location }] : [];
+    if (cue?.character) subjects.push({ kind: 'npc', name: cue.character });
+    subjects.push(...itemReferences.filter(r => r.paragraphIndex === paragraphIndex).map(r => ({ kind: r.kind, name: r.name })));
+    const isSceneOpening = paragraphIndex === 0 || (scene ? scene.startParagraph === paragraphIndex : false);
+    const revealedDocs = plan.storyReferences?.filter(r => r.kind === 'object' && r.paragraphIndex === paragraphIndex).map(r => r.name) ?? [];
+    return evaluatePresentationRules({
+      isDialogue: Boolean(plan.paragraphSpeakers?.[paragraphIndex]?.trim()),
+      locationChanged: Boolean(scene && scene.startParagraph === paragraphIndex && normalize(scene.environment.location) && normalize(prior?.environment.location) && normalize(scene.environment.location) !== normalize(prior?.environment.location)),
+      isSceneOpening,
+      templateId: cue?.imageTemplate?.id ?? '',
+      enabledTemplateIds: [],
+      subjects,
+      ...(scene?.environment.timeOfDay || scene?.environment.time ? { timeOfDay: (scene.environment.timeOfDay ?? scene.environment.time)! } : {}),
+      ...(scene?.environment.weather ? { weather: scene.environment.weather } : {}),
+      ...(scene?.ambient ? { ambient: scene.ambient } : {}),
+      ...(scene?.cast ? { cast: scene.cast, castCount: scene.cast.length } : { castCount: 0 }),
+      ...(plan.paragraphSpeakers?.[paragraphIndex] ? { speakerName: plan.paragraphSpeakers?.[paragraphIndex]! } : {}),
+      characterAliases,
+      ...(cue?.resolvedAttire || cue?.attire ? { activeOutfit: (cue.resolvedAttire ?? cue.attire)! } : {}),
+      revealedDocumentKinds: revealedDocs,
+      ...(cue?.imageTemplate?.intent ? { shotIntent: cue.imageTemplate.intent } : {}),
+      ...(plan.paragraphs?.[paragraphIndex]?.text ? { paragraphText: plan.paragraphs?.[paragraphIndex]!.text } : {}),
+      ...(plan.rpgState ? { rpgState: plan.rpgState as Record<string, unknown> } : {}),
+      allowStyleOverride: config.presentationRulesAllowStyleOverride === true
+    }, effectRules);
+  }) : [];
+  let holdStart:number|null=null;let holdScene='';
  const backgroundHoldStarts=effectDecisions.map((decision,index)=>{
   const scene=[...plan.scenes].reverse().find(s=>s.startParagraph<=index);
   const key=scene?JSON.stringify([scene.sceneId,scene.revision]):'';
@@ -109,8 +164,8 @@ export async function managePresentationRules(api:SpindleAPI,raw:PresentationRul
    const rules=[...current.rules];const id=request.action==='save'?request.rule!.id:request.id!;
    const index=rules.findIndex(rule=>rule.id===id);
    if(request.action==='save'){
-    if(index<0&&rules.length>=12)throw new Error('This scope already has 12 preferences. Remove one to make room.');
-    const savedOrder=Math.max(0,...rules.map(rule=>rule.savedOrder))+1;
+    if(index<0&&rules.length>=48)throw new Error('This scope already has 48 preferences. Remove one to make room.');
+    const savedOrder=index>=0?rules[index]!.savedOrder:(Math.max(0,...rules.map(rule=>rule.savedOrder))+1);
     const rule={...request.rule!,scope:request.scope!,savedOrder};if(index<0)rules.push(rule);else rules[index]=rule;
    }else{
     if(index<0)throw new Error('This preference no longer exists. Refresh the list.');
